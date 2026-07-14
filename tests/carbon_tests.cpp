@@ -1,3 +1,4 @@
+#include "carbon/cascade_package.hpp"
 #include "carbon/cross_section.hpp"
 #include "carbon/reaction_package.hpp"
 #include "carbon/rng.hpp"
@@ -267,6 +268,22 @@ void test_reaction_package_loading() {
     std::filesystem::remove(invalid_path);
 }
 
+void test_cascade_package_loading() {
+    const auto source_directory = std::filesystem::path(CARBON_SOURCE_DIR);
+    const auto package_path =
+        source_directory / "validation/results/topas_200MeVu_cascade_smoke.bin";
+    const auto table = carbon::CascadePackageTable::from_binary(package_path);
+    require(table.projectiles().size() == 11, "Cascade projectile count failed");
+    require(table.cross_sections().size() == 252, "Cascade cross-section count failed");
+    require(table.interactions().size() == 58, "Cascade interaction count failed");
+    require(table.products().size() == 399, "Cascade product count failed");
+    const auto* alpha = table.find_projectile(2, 4);
+    require(alpha != nullptr && alpha->interaction_count == 9,
+            "Cascade alpha lookup failed");
+    require(table.find_projectile(5, 12) == nullptr,
+            "Cascade missing-projectile lookup failed");
+}
+
 #ifdef CARBON_HAS_SYCL
 void test_serial_sycl_cpu_match() {
     carbon::TransportConfig config;
@@ -449,6 +466,7 @@ int main() {
         test_straggling_reproducibility();
         test_primary_attenuation_energy_accounting();
         test_reaction_package_loading();
+        test_cascade_package_loading();
 #ifdef CARBON_HAS_SYCL
         test_serial_sycl_cpu_match();
         test_sycl_secondary_queue_generation();

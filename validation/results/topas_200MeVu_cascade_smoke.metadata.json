@@ -1,0 +1,72 @@
+{
+  "case": "smoke",
+  "histories": 100,
+  "entries": 457,
+  "interactions": 58,
+  "products": 399,
+  "interaction_species": {
+    "Z6A12": 33,
+    "Z2A4": 9,
+    "Z1A1": 5,
+    "Z1A2": 3,
+    "Z1A3": 2,
+    "Z4A10": 1,
+    "Z3A8": 1,
+    "Z6A11": 1,
+    "Z6A10": 1,
+    "Z3A7": 1,
+    "Z3A6": 1
+  },
+  "product_species": {
+    "Z1A1": 114,
+    "Z0A1": 97,
+    "Z2A4": 56,
+    "Z0A0": 54,
+    "Z1A2": 23,
+    "Z7A14": 8,
+    "Z6A11": 7,
+    "Z6A12": 7,
+    "Z8A15": 5,
+    "Z5A11": 4,
+    "Z2A3": 4,
+    "Z3A6": 3,
+    "Z7A15": 2,
+    "Z5A10": 2,
+    "Z1A3": 2,
+    "Z8A16": 2,
+    "Z6A14": 1,
+    "Z4A10": 1,
+    "Z8A14": 1,
+    "Z3A8": 1,
+    "Z7A16": 1,
+    "Z6A10": 1,
+    "Z9A17": 1,
+    "Z7A12": 1,
+    "Z3A7": 1
+  },
+  "process_counts": {
+    "ionInelastic": 39,
+    "alphaInelastic": 9,
+    "protonInelastic": 5,
+    "dInelastic": 3,
+    "tInelastic": 2
+  },
+  "maximum_vertex_error_mm": 0.0,
+  "inputs": {
+    "phsp_sha256": "dfe8fd0f61c09fe0b9204c021adf879fa44e2d1fe15954c9f207ebef5b80987c",
+    "header_sha256": "2eb851dc1003d79f2c2005f509cd12b14e0775c4b8b6b3df9648b7d87c4fee2f",
+    "log_sha256": "36e1ce5a23f3512854751dda26b1bca27604ba14c28feadaf19ce897d9257773"
+  },
+  "outputs": {
+    "interactions": {
+      "path": "validation/results/topas_200MeVu_cascade_smoke_interactions.csv.gz",
+      "sha256": "d7d91a66bcfc42edf4e757ce1132bfde1562dcb503fbcd8e0eba05db7ad82872"
+    },
+    "products": {
+      "path": "validation/results/topas_200MeVu_cascade_smoke_products.csv.gz",
+      "sha256": "52d888dcd8c2a4f9e061b880a0739599925230ee05c66d57fd615801f8ec1965"
+    }
+  },
+  "elapsed_real_s": 3.93128,
+  "global_scale_applied": false
+}
