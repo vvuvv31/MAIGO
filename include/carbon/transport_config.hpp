@@ -20,6 +20,8 @@ struct TransportConfig {
     double scorer_area_mm2{90'000.0};
     bool enable_energy_straggling{false};
     double straggling_scale{1.0};
+    bool enable_primary_attenuation{false};
+    double nuclear_macroscopic_cross_section_per_mm{0.0};
     std::uint64_t random_seed{20'260'714};
     std::filesystem::path stopping_power_file{"data/stopping_power_water.csv"};
     std::filesystem::path output_file{"out/cpu_depth_dose.csv"};

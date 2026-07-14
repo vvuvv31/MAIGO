@@ -15,7 +15,8 @@ double TransportResult::relative_energy_balance_error() const noexcept {
     if (initial_energy_MeV == 0.0) {
         return 0.0;
     }
-    return std::abs(initial_energy_MeV - total_deposited_energy_MeV - escaped_energy_MeV) /
+    return std::abs(initial_energy_MeV - total_deposited_energy_MeV - escaped_energy_MeV -
+                    untracked_nuclear_energy_MeV) /
            initial_energy_MeV;
 }
 
@@ -38,12 +39,23 @@ TransportResult transport_serial(const TransportConfig& config,
     const auto start = std::chrono::steady_clock::now();
     TransportResult result;
     result.backend = config.enable_energy_straggling ? "serial+straggling" : "serial";
+    if (config.enable_primary_attenuation) {
+        result.backend += "+attenuation";
+    }
     result.deposited_energy_MeV.assign(config.number_of_bins(), 0.0);
 
+    struct HistorySummary {
+        double escaped_MeV;
+        double untracked_nuclear_MeV;
+        std::uint64_t steps;
+        bool nuclear_interaction;
+    };
     const auto simulate_history = [&](std::uint64_t history_id, std::vector<double>& tally) {
         auto energy_MeV = config.initial_total_energy_MeV();
         auto position_mm = 0.0;
         std::uint64_t steps = 0;
+        auto untracked_nuclear_MeV = 0.0;
+        auto nuclear_interaction = false;
 
         while (energy_MeV > config.energy_cutoff_MeV &&
                position_mm < config.phantom_length_mm) {
@@ -85,6 +97,17 @@ TransportResult transport_serial(const TransportConfig& config,
             tally[bin] += deposited_MeV;
             energy_MeV -= deposited_MeV;
             position_mm += step_mm;
+            if (config.enable_primary_attenuation && energy_MeV > config.energy_cutoff_MeV) {
+                const auto probability = 1.0 - std::exp(
+                    -config.nuclear_macroscopic_cross_section_per_mm * step_mm);
+                const auto uniform = static_cast<double>(
+                    rng::uniform01(config.random_seed, history_id, steps, 2));
+                if (uniform < probability) {
+                    untracked_nuclear_MeV = energy_MeV;
+                    energy_MeV = 0.0;
+                    nuclear_interaction = true;
+                }
+            }
             ++steps;
         }
 
@@ -95,24 +118,28 @@ TransportResult transport_serial(const TransportConfig& config,
             tally[bin] += energy_MeV;
             energy_MeV = 0.0;
         }
-        return std::pair{energy_MeV, steps};
+        return HistorySummary{energy_MeV, untracked_nuclear_MeV, steps, nuclear_interaction};
     };
 
-    if (config.enable_energy_straggling) {
+    if (config.enable_energy_straggling || config.enable_primary_attenuation) {
         for (std::uint64_t history = 0; history < config.number_of_histories; ++history) {
-            const auto [escaped, steps] = simulate_history(history, result.deposited_energy_MeV);
-            result.escaped_energy_MeV += escaped;
-            result.total_steps += steps;
+            const auto summary = simulate_history(history, result.deposited_energy_MeV);
+            result.escaped_energy_MeV += summary.escaped_MeV;
+            result.untracked_nuclear_energy_MeV += summary.untracked_nuclear_MeV;
+            result.total_steps += summary.steps;
+            result.nuclear_interactions += summary.nuclear_interaction ? 1U : 0U;
         }
     } else {
         // Pure CSDA is deterministic, so one trajectory can be scaled exactly.
         std::vector<double> one_history(config.number_of_bins(), 0.0);
-        const auto [escaped, steps] = simulate_history(0, one_history);
+        const auto summary = simulate_history(0, one_history);
         const auto history_scale = static_cast<double>(config.number_of_histories);
         std::transform(one_history.begin(), one_history.end(), result.deposited_energy_MeV.begin(),
                        [history_scale](double value) { return value * history_scale; });
-        result.escaped_energy_MeV = escaped * history_scale;
-        result.total_steps = steps * config.number_of_histories;
+        result.escaped_energy_MeV = summary.escaped_MeV * history_scale;
+        result.untracked_nuclear_energy_MeV =
+            summary.untracked_nuclear_MeV * history_scale;
+        result.total_steps = summary.steps * config.number_of_histories;
     }
 
     result.initial_energy_MeV = config.initial_total_energy_MeV() *

@@ -48,13 +48,15 @@ TransportResult transport_sycl(const TransportConfig& config,
     auto* dose_device = sycl::malloc_device<float>(number_of_bins, queue);
     auto* deposited_device = sycl::malloc_device<float>(number_of_histories, queue);
     auto* escaped_device = sycl::malloc_device<float>(number_of_histories, queue);
+    auto* nuclear_device = sycl::malloc_device<float>(number_of_histories, queue);
     auto* steps_device = sycl::malloc_device<std::uint32_t>(number_of_histories, queue);
     if (table_device == nullptr || dose_device == nullptr || deposited_device == nullptr ||
-        escaped_device == nullptr || steps_device == nullptr) {
+        escaped_device == nullptr || nuclear_device == nullptr || steps_device == nullptr) {
         if (table_device != nullptr) sycl::free(table_device, queue);
         if (dose_device != nullptr) sycl::free(dose_device, queue);
         if (deposited_device != nullptr) sycl::free(deposited_device, queue);
         if (escaped_device != nullptr) sycl::free(escaped_device, queue);
+        if (nuclear_device != nullptr) sycl::free(nuclear_device, queue);
         if (steps_device != nullptr) sycl::free(steps_device, queue);
         throw std::runtime_error("SYCL USM device allocation failed");
     }
@@ -79,6 +81,9 @@ TransportResult transport_sycl(const TransportConfig& config,
     const auto straggling_scale = static_cast<float>(config.straggling_scale);
     const auto water_density_g_per_cm3 = static_cast<float>(config.water_density_g_per_cm3);
     const auto random_seed = config.random_seed;
+    const auto enable_primary_attenuation = config.enable_primary_attenuation;
+    const auto nuclear_macroscopic_cross_section_per_mm =
+        static_cast<float>(config.nuclear_macroscopic_cross_section_per_mm);
     const auto inverse_mass_number = 1.0f / static_cast<float>(config.mass_number);
     const auto minimum_table_energy = static_cast<float>(stopping_power.energies().front());
     const auto inverse_table_step =
@@ -95,6 +100,7 @@ TransportResult transport_sycl(const TransportConfig& config,
             auto energy_MeV = initial_energy_MeV;
             auto position_mm = 0.0f;
             auto history_deposited_MeV = 0.0f;
+            auto history_nuclear_MeV = 0.0f;
             std::uint32_t steps = 0;
             while (energy_MeV > energy_cutoff_MeV && position_mm < phantom_length_mm) {
                 const auto energy_MeVu = energy_MeV * inverse_mass_number;
@@ -159,6 +165,15 @@ TransportResult transport_sycl(const TransportConfig& config,
                 history_deposited_MeV += deposited_MeV;
                 energy_MeV -= deposited_MeV;
                 position_mm += step_mm;
+                if (enable_primary_attenuation && energy_MeV > energy_cutoff_MeV) {
+                    const auto probability = 1.0f - sycl::exp(
+                        -nuclear_macroscopic_cross_section_per_mm * step_mm);
+                    const auto uniform = rng::uniform01(random_seed, history, steps, 2);
+                    if (uniform < probability) {
+                        history_nuclear_MeV = energy_MeV;
+                        energy_MeV = 0.0f;
+                    }
+                }
                 ++steps;
             }
 
@@ -177,6 +192,7 @@ TransportResult transport_sycl(const TransportConfig& config,
             }
             deposited_device[history] = history_deposited_MeV;
             escaped_device[history] = energy_MeV;
+            nuclear_device[history] = history_nuclear_MeV;
             steps_device[history] = steps;
         });
     kernel_event.wait_and_throw();
@@ -184,21 +200,27 @@ TransportResult transport_sycl(const TransportConfig& config,
     std::vector<float> dose_host(number_of_bins);
     std::vector<float> deposited_host(number_of_histories);
     std::vector<float> escaped_host(number_of_histories);
+    std::vector<float> nuclear_host(number_of_histories);
     std::vector<std::uint32_t> steps_host(number_of_histories);
     queue.copy(dose_device, dose_host.data(), number_of_bins);
     queue.copy(deposited_device, deposited_host.data(), number_of_histories);
     queue.copy(escaped_device, escaped_host.data(), number_of_histories);
+    queue.copy(nuclear_device, nuclear_host.data(), number_of_histories);
     queue.copy(steps_device, steps_host.data(), number_of_histories).wait_and_throw();
 
     sycl::free(table_device, queue);
     sycl::free(dose_device, queue);
     sycl::free(deposited_device, queue);
     sycl::free(escaped_device, queue);
+    sycl::free(nuclear_device, queue);
     sycl::free(steps_device, queue);
 
     TransportResult result;
     result.backend = "sycl-" + device_name +
                      (config.enable_energy_straggling ? "+straggling" : "");
+    if (config.enable_primary_attenuation) {
+        result.backend += "+attenuation";
+    }
     result.deposited_energy_MeV.resize(number_of_bins);
     std::transform(dose_host.begin(), dose_host.end(), result.deposited_energy_MeV.begin(),
                    [](float value) { return static_cast<double>(value); });
@@ -208,6 +230,10 @@ TransportResult transport_sycl(const TransportConfig& config,
         std::accumulate(deposited_host.begin(), deposited_host.end(), 0.0);
     result.escaped_energy_MeV =
         std::accumulate(escaped_host.begin(), escaped_host.end(), 0.0);
+    result.untracked_nuclear_energy_MeV =
+        std::accumulate(nuclear_host.begin(), nuclear_host.end(), 0.0);
+    result.nuclear_interactions = static_cast<std::uint64_t>(std::count_if(
+        nuclear_host.begin(), nuclear_host.end(), [](float energy) { return energy > 0.0f; }));
     result.total_steps = std::accumulate(steps_host.begin(), steps_host.end(), std::uint64_t{0});
     result.elapsed_seconds =
         std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();

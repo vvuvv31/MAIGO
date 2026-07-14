@@ -83,6 +83,9 @@ int main(int argc, char* argv[]) {
                   << "Elapsed: " << result.elapsed_seconds << " s\n"
                   << "Throughput: " << histories_per_second << " histories/s\n"
                   << "Energy balance error: " << result.relative_energy_balance_error() << '\n'
+                  << "Nuclear interactions: " << result.nuclear_interactions << '\n'
+                  << "Untracked nuclear energy: " << result.untracked_nuclear_energy_MeV
+                  << " MeV\n"
                   << "Output: " << config.output_file.string() << '\n';
         return EXIT_SUCCESS;
     } catch (const std::exception& error) {

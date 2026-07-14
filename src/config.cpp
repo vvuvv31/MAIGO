@@ -131,6 +131,9 @@ void TransportConfig::validate() const {
     if (straggling_scale < 0.0) {
         throw std::invalid_argument("straggling_scale must be nonnegative");
     }
+    if (nuclear_macroscopic_cross_section_per_mm < 0.0) {
+        throw std::invalid_argument("nuclear_macroscopic_cross_section_per_mm must be nonnegative");
+    }
 }
 
 TransportConfig load_config(const std::filesystem::path& path) {
@@ -151,6 +154,11 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.enable_energy_straggling =
         parse_bool(values, "enable_energy_straggling", config.enable_energy_straggling);
     config.straggling_scale = parse_number(values, "straggling_scale", config.straggling_scale);
+    config.enable_primary_attenuation =
+        parse_bool(values, "enable_primary_attenuation", config.enable_primary_attenuation);
+    config.nuclear_macroscopic_cross_section_per_mm = parse_number(
+        values, "nuclear_macroscopic_cross_section_per_mm",
+        config.nuclear_macroscopic_cross_section_per_mm);
     config.random_seed = parse_number(values, "random_seed", config.random_seed);
     config.stopping_power_file = parse_path(values, "stopping_power_file", config.stopping_power_file);
     config.output_file = parse_path(values, "output_file", config.output_file);

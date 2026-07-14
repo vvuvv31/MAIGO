@@ -130,6 +130,33 @@ void test_straggling_reproducibility() {
             "Straggling energy balance failed");
 }
 
+void test_primary_attenuation_energy_accounting() {
+    carbon::TransportConfig config;
+    config.number_of_histories = 128;
+    config.initial_energy_MeVu = 10.0;
+    config.phantom_length_mm = 200.0;
+    config.depth_bin_width_mm = 1.0;
+    config.maximum_step_mm = 0.5;
+    config.maximum_relative_energy_loss = 0.01;
+    config.enable_primary_attenuation = true;
+    config.nuclear_macroscopic_cross_section_per_mm = 100.0;
+    const carbon::StoppingPowerTable table({0.01, 10.01, 20.01}, {2.0, 2.0, 2.0});
+    const auto result = carbon::transport_serial(config, table);
+    require(result.nuclear_interactions == config.number_of_histories,
+            "High-cross-section attenuation did not terminate every primary");
+    require(result.untracked_nuclear_energy_MeV > 0.0,
+            "Nuclear interaction energy was not accounted separately");
+    require(result.relative_energy_balance_error() < 1.0e-12,
+            "Primary attenuation energy balance failed");
+
+    config.nuclear_macroscopic_cross_section_per_mm = 0.0;
+    const auto no_attenuation = carbon::transport_serial(config, table);
+    require(no_attenuation.nuclear_interactions == 0,
+            "Zero cross section produced a nuclear interaction");
+    require(no_attenuation.relative_energy_balance_error() < 1.0e-12,
+            "Zero-cross-section energy balance failed");
+}
+
 #ifdef CARBON_HAS_SYCL
 void test_serial_sycl_cpu_match() {
     carbon::TransportConfig config;
@@ -167,6 +194,15 @@ void test_serial_sycl_cpu_match() {
     require(relative_tally_difference < 5.0e-3,
             "Serial/SYCL CPU straggling tally mismatch: relative L1=" +
                 std::to_string(relative_tally_difference));
+
+    config.enable_primary_attenuation = true;
+    config.nuclear_macroscopic_cross_section_per_mm = 0.01;
+    const auto serial_attenuation = carbon::transport_serial(config, table);
+    const auto sycl_attenuation = carbon::transport_sycl(config, table, "cpu");
+    require(serial_attenuation.nuclear_interactions == sycl_attenuation.nuclear_interactions,
+            "Serial/SYCL CPU nuclear interaction count mismatch");
+    require(sycl_attenuation.relative_energy_balance_error() < 1.0e-4,
+            "SYCL attenuation energy balance failed");
 }
 #endif
 
@@ -182,6 +218,7 @@ int main() {
         test_energy_conservation();
         test_escape_energy_conservation();
         test_straggling_reproducibility();
+        test_primary_attenuation_energy_accounting();
 #ifdef CARBON_HAS_SYCL
         test_serial_sycl_cpu_match();
 #endif

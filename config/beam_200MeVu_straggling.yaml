@@ -13,6 +13,8 @@ enable_energy_straggling: true
 # Single global calibration against the 200 MeV/u electromagnetic-only TOPAS case.
 # Keep this fixed for all later energy-validation cases.
 straggling_scale: 1.2
+enable_primary_attenuation: false
+nuclear_macroscopic_cross_section_per_mm: 0.0
 random_seed: 20260714
 stopping_power_file: data/stopping_power_water.csv
 output_file: out/cpu_straggling_depth_dose.csv

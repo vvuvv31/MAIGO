@@ -14,6 +14,8 @@ struct TransportResult {
     double initial_energy_MeV{0.0};
     double total_deposited_energy_MeV{0.0};
     double escaped_energy_MeV{0.0};
+    double untracked_nuclear_energy_MeV{0.0};
+    std::uint64_t nuclear_interactions{0};
     std::uint64_t total_steps{0};
     double elapsed_seconds{0.0};
     std::string backend;
