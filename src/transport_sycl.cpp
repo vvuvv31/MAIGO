@@ -65,6 +65,12 @@ TransportResult transport_sycl(const TransportConfig& config,
     const auto cross_section_table_size = cross_section.values().size();
     const auto number_of_bins = config.number_of_bins();
     const auto number_of_histories = config.number_of_histories;
+    const auto enable_voxel_scoring = config.enable_voxel_scoring;
+    const auto number_of_voxels =
+        enable_voxel_scoring ? config.number_of_voxels() : std::size_t{0};
+    const auto voxel_plane_size = config.voxel_bins_x * config.voxel_bins_y;
+    const auto center_voxel_index =
+        (config.voxel_bins_y / 2) * config.voxel_bins_x + config.voxel_bins_x / 2;
     const auto enable_secondary_generation = config.enable_secondary_generation;
     const auto enable_secondary_transport = config.enable_secondary_transport;
     const auto enable_fragment_cascade = config.enable_fragment_cascade;
@@ -90,6 +96,9 @@ TransportResult transport_sycl(const TransportConfig& config,
     auto* cross_section_device =
         sycl::malloc_device<float>(cross_section_table_size, queue);
     auto* dose_device = sycl::malloc_device<double>(number_of_bins, queue);
+    auto* voxel_dose_device = enable_voxel_scoring
+                                  ? sycl::malloc_device<double>(number_of_voxels, queue)
+                                  : nullptr;
     auto* deposited_device = sycl::malloc_device<float>(number_of_histories, queue);
     auto* escaped_device = sycl::malloc_device<float>(number_of_histories, queue);
     auto* nuclear_device = sycl::malloc_device<float>(number_of_histories, queue);
@@ -165,12 +174,14 @@ TransportResult transport_sycl(const TransportConfig& config,
            cascade_interactions_device == nullptr || cascade_products_device == nullptr ||
            cascade_summaries_device == nullptr)));
     if (table_device == nullptr || cross_section_device == nullptr || dose_device == nullptr ||
+        (enable_voxel_scoring && voxel_dose_device == nullptr) ||
         deposited_device == nullptr ||
         escaped_device == nullptr || nuclear_device == nullptr || steps_device == nullptr ||
         secondary_allocation_failed) {
         free_device(table_device);
         free_device(cross_section_device);
         free_device(dose_device);
+        free_device(voxel_dose_device);
         free_device(deposited_device);
         free_device(escaped_device);
         free_device(nuclear_device);
@@ -204,6 +215,9 @@ TransportResult transport_sycl(const TransportConfig& config,
                    [](double value) { return static_cast<float>(value); });
     queue.copy(cross_section_host.data(), cross_section_device, cross_section_table_size);
     queue.memset(dose_device, 0, number_of_bins * sizeof(double));
+    if (enable_voxel_scoring) {
+        queue.memset(voxel_dose_device, 0, number_of_voxels * sizeof(double));
+    }
     if (enable_secondary_generation) {
         queue.copy(reaction_packages->energy_bins().data(), reaction_bins_device,
                    reaction_packages->energy_bins().size());
@@ -345,6 +359,17 @@ TransportResult transport_sycl(const TransportConfig& config,
                                  sycl::access::address_space::global_space>
                     atomic_dose(dose_device[bin]);
                 atomic_dose.fetch_add(static_cast<double>(deposited_MeV));
+                if (enable_voxel_scoring) {
+                    sycl::atomic_ref<double,
+                                     sycl::memory_order::relaxed,
+                                     sycl::memory_scope::device,
+                                     sycl::access::address_space::global_space>
+                        atomic_voxel_dose(
+                            voxel_dose_device[static_cast<std::size_t>(bin) *
+                                                  voxel_plane_size +
+                                              center_voxel_index]);
+                    atomic_voxel_dose.fetch_add(static_cast<double>(deposited_MeV));
+                }
                 history_deposited_MeV += deposited_MeV;
                 energy_MeV -= deposited_MeV;
                 position_mm += step_mm;
@@ -487,6 +512,17 @@ TransportResult transport_sycl(const TransportConfig& config,
                                  sycl::access::address_space::global_space>
                     atomic_dose(dose_device[bin]);
                 atomic_dose.fetch_add(static_cast<double>(energy_MeV));
+                if (enable_voxel_scoring) {
+                    sycl::atomic_ref<double,
+                                     sycl::memory_order::relaxed,
+                                     sycl::memory_scope::device,
+                                     sycl::access::address_space::global_space>
+                        atomic_voxel_dose(
+                            voxel_dose_device[static_cast<std::size_t>(bin) *
+                                                  voxel_plane_size +
+                                              center_voxel_index]);
+                    atomic_voxel_dose.fetch_add(static_cast<double>(energy_MeV));
+                }
                 history_deposited_MeV += energy_MeV;
                 energy_MeV = 0.0f;
             }
@@ -560,6 +596,17 @@ TransportResult transport_sycl(const TransportConfig& config,
                                 atomic_fragment_dose(
                                     fragment_dose_device[species_index * number_of_bins + bin]);
                             atomic_fragment_dose.fetch_add(static_cast<double>(energy_MeV));
+                            if (enable_voxel_scoring) {
+                                sycl::atomic_ref<
+                                    double, sycl::memory_order::relaxed,
+                                    sycl::memory_scope::device,
+                                    sycl::access::address_space::global_space>
+                                    atomic_voxel_dose(
+                                        voxel_dose_device[static_cast<std::size_t>(bin) *
+                                                              voxel_plane_size +
+                                                          center_voxel_index]);
+                                atomic_voxel_dose.fetch_add(static_cast<double>(energy_MeV));
+                            }
                             deposited_MeV += energy_MeV;
                             energy_MeV = 0.0F;
                             break;
@@ -622,6 +669,17 @@ TransportResult transport_sycl(const TransportConfig& config,
                                 fragment_dose_device[species_index * number_of_bins + bin]);
                         atomic_fragment_dose.fetch_add(
                             static_cast<double>(step_deposited_MeV));
+                        if (enable_voxel_scoring) {
+                            sycl::atomic_ref<double, sycl::memory_order::relaxed,
+                                             sycl::memory_scope::device,
+                                             sycl::access::address_space::global_space>
+                                atomic_voxel_dose(
+                                    voxel_dose_device[static_cast<std::size_t>(bin) *
+                                                          voxel_plane_size +
+                                                      center_voxel_index]);
+                            atomic_voxel_dose.fetch_add(
+                                static_cast<double>(step_deposited_MeV));
+                        }
                         deposited_MeV += step_deposited_MeV;
                         energy_MeV -= step_deposited_MeV;
                         position_mm += direction_z * path_step_mm;
@@ -840,6 +898,17 @@ TransportResult transport_sycl(const TransportConfig& config,
                             atomic_fragment_dose(
                                 fragment_dose_device[species_index * number_of_bins + bin]);
                         atomic_fragment_dose.fetch_add(static_cast<double>(energy_MeV));
+                        if (enable_voxel_scoring) {
+                            sycl::atomic_ref<double, sycl::memory_order::relaxed,
+                                             sycl::memory_scope::device,
+                                             sycl::access::address_space::global_space>
+                                atomic_voxel_dose(
+                                    voxel_dose_device[static_cast<std::size_t>(bin) *
+                                                          voxel_plane_size +
+                                                      center_voxel_index]);
+                            atomic_voxel_dose.fetch_add(
+                                static_cast<double>(energy_MeV));
+                        }
                         deposited_MeV += energy_MeV;
                         energy_MeV = 0.0F;
                     }
@@ -865,6 +934,7 @@ TransportResult transport_sycl(const TransportConfig& config,
     }
 
     std::vector<double> dose_host(number_of_bins);
+    std::vector<double> voxel_dose_host;
     std::vector<float> deposited_host(number_of_histories);
     std::vector<float> escaped_host(number_of_histories);
     std::vector<float> nuclear_host(number_of_histories);
@@ -876,6 +946,11 @@ TransportResult transport_sycl(const TransportConfig& config,
     std::vector<std::uint32_t> secondary_steps_host;
     std::vector<CascadeTransportSummary> cascade_summaries_host;
     queue.copy(dose_device, dose_host.data(), number_of_bins);
+    if (enable_voxel_scoring) {
+        voxel_dose_host.resize(number_of_voxels);
+        queue.copy(voxel_dose_device, voxel_dose_host.data(), number_of_voxels)
+            .wait_and_throw();
+    }
     queue.copy(deposited_device, deposited_host.data(), number_of_histories);
     queue.copy(escaped_device, escaped_host.data(), number_of_histories);
     queue.copy(nuclear_device, nuclear_host.data(), number_of_histories);
@@ -911,6 +986,7 @@ TransportResult transport_sycl(const TransportConfig& config,
     free_device(table_device);
     free_device(cross_section_device);
     free_device(dose_device);
+    free_device(voxel_dose_device);
     free_device(deposited_device);
     free_device(escaped_device);
     free_device(nuclear_device);
@@ -935,6 +1011,9 @@ TransportResult transport_sycl(const TransportConfig& config,
     TransportResult result;
     result.backend = "sycl-" + device_name +
                      (config.enable_energy_straggling ? "+straggling" : "");
+    if (enable_voxel_scoring) {
+        result.backend += "+voxel-scoring";
+    }
     if (config.enable_primary_attenuation) {
         result.backend += "+attenuation";
     }
@@ -949,6 +1028,7 @@ TransportResult transport_sycl(const TransportConfig& config,
     }
     result.primary_c12_deposited_energy_MeV = dose_host;
     result.deposited_energy_MeV = std::move(dose_host);
+    result.voxel_deposited_energy_MeV = std::move(voxel_dose_host);
     result.initial_energy_MeV =
         config.initial_total_energy_MeV() * static_cast<double>(number_of_histories);
     result.total_deposited_energy_MeV =

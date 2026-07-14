@@ -44,6 +44,12 @@ TransportResult transport_serial(const TransportConfig& config,
         result.backend += "+attenuation";
     }
     result.deposited_energy_MeV.assign(config.number_of_bins(), 0.0);
+    if (config.enable_voxel_scoring) {
+        result.voxel_deposited_energy_MeV.assign(config.number_of_voxels(), 0.0);
+    }
+    const auto center_voxel_offset =
+        (config.voxel_bins_y / 2) * config.voxel_bins_x + config.voxel_bins_x / 2;
+    const auto voxel_plane_size = config.voxel_bins_x * config.voxel_bins_y;
 
     struct HistorySummary {
         double escaped_MeV;
@@ -51,7 +57,8 @@ TransportResult transport_serial(const TransportConfig& config,
         std::uint64_t steps;
         bool nuclear_interaction;
     };
-    const auto simulate_history = [&](std::uint64_t history_id, std::vector<double>& tally) {
+    const auto simulate_history = [&](std::uint64_t history_id, std::vector<double>& tally,
+                                      std::vector<double>& voxel_tally) {
         auto energy_MeV = config.initial_total_energy_MeV();
         auto position_mm = 0.0;
         std::uint64_t steps = 0;
@@ -96,6 +103,9 @@ TransportResult transport_serial(const TransportConfig& config,
                     clamp_sampled_energy_loss(mean_loss_MeV, sigma_MeV, gaussian, energy_MeV);
             }
             tally[bin] += deposited_MeV;
+            if (config.enable_voxel_scoring) {
+                voxel_tally[bin * voxel_plane_size + center_voxel_offset] += deposited_MeV;
+            }
             energy_MeV -= deposited_MeV;
             position_mm += step_mm;
             if (config.enable_primary_attenuation && energy_MeV > config.energy_cutoff_MeV) {
@@ -121,6 +131,9 @@ TransportResult transport_serial(const TransportConfig& config,
                 std::min(static_cast<std::size_t>(position_mm / config.depth_bin_width_mm),
                          config.number_of_bins() - 1);
             tally[bin] += energy_MeV;
+            if (config.enable_voxel_scoring) {
+                voxel_tally[bin * voxel_plane_size + center_voxel_offset] += energy_MeV;
+            }
             energy_MeV = 0.0;
         }
         return HistorySummary{energy_MeV, untracked_nuclear_MeV, steps, nuclear_interaction};
@@ -128,7 +141,8 @@ TransportResult transport_serial(const TransportConfig& config,
 
     if (config.enable_energy_straggling || config.enable_primary_attenuation) {
         for (std::uint64_t history = 0; history < config.number_of_histories; ++history) {
-            const auto summary = simulate_history(history, result.deposited_energy_MeV);
+            const auto summary = simulate_history(
+                history, result.deposited_energy_MeV, result.voxel_deposited_energy_MeV);
             result.escaped_energy_MeV += summary.escaped_MeV;
             result.untracked_nuclear_energy_MeV += summary.untracked_nuclear_MeV;
             result.total_steps += summary.steps;
@@ -137,10 +151,19 @@ TransportResult transport_serial(const TransportConfig& config,
     } else {
         // Pure CSDA is deterministic, so one trajectory can be scaled exactly.
         std::vector<double> one_history(config.number_of_bins(), 0.0);
-        const auto summary = simulate_history(0, one_history);
+        std::vector<double> one_history_voxels;
+        if (config.enable_voxel_scoring) {
+            one_history_voxels.assign(config.number_of_voxels(), 0.0);
+        }
+        const auto summary = simulate_history(0, one_history, one_history_voxels);
         const auto history_scale = static_cast<double>(config.number_of_histories);
         std::transform(one_history.begin(), one_history.end(), result.deposited_energy_MeV.begin(),
                        [history_scale](double value) { return value * history_scale; });
+        if (config.enable_voxel_scoring) {
+            std::transform(one_history_voxels.begin(), one_history_voxels.end(),
+                           result.voxel_deposited_energy_MeV.begin(),
+                           [history_scale](double value) { return value * history_scale; });
+        }
         result.escaped_energy_MeV = summary.escaped_MeV * history_scale;
         result.untracked_nuclear_energy_MeV =
             summary.untracked_nuclear_MeV * history_scale;

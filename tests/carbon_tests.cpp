@@ -44,6 +44,26 @@ void require_throws(Operation operation, const std::string& message) {
     throw std::runtime_error(message);
 }
 
+void require_voxel_idd_closure(const carbon::TransportConfig& config,
+                               const carbon::TransportResult& result,
+                               double tolerance_MeV_per_primary) {
+    require(result.voxel_deposited_energy_MeV.size() == config.number_of_voxels(),
+            "Voxel tally has the wrong size");
+    const auto plane_size = config.voxel_bins_x * config.voxel_bins_y;
+    const auto histories = static_cast<double>(config.number_of_histories);
+    for (std::size_t z = 0; z < config.number_of_bins(); ++z) {
+        const auto begin = result.voxel_deposited_energy_MeV.begin() +
+                           static_cast<std::ptrdiff_t>(z * plane_size);
+        const auto reconstructed =
+            std::accumulate(begin, begin + static_cast<std::ptrdiff_t>(plane_size), 0.0);
+        require_near(reconstructed / histories,
+                     result.deposited_energy_MeV[z] / histories,
+                     tolerance_MeV_per_primary,
+                     "Voxel x/y sum does not close to IDD at z bin " +
+                         std::to_string(z));
+    }
+}
+
 const carbon::CrossSectionTable& zero_cross_section() {
     static const carbon::CrossSectionTable table({0.01, 400.0}, {0.0, 0.0});
     return table;
@@ -56,9 +76,31 @@ void test_units() {
     require_near(config.initial_total_energy_MeV(), 2400.0, 1.0e-12,
                  "MeV/u to total kinetic energy conversion failed");
     require(config.number_of_bins() == 800, "Depth-bin count failed");
+    require(config.number_of_voxels() == 2'880'000, "Voxel count failed");
     config.enable_secondary_transport = true;
     require_throws([&config]() { config.validate(); },
                    "Secondary transport without generation was accepted");
+    config.enable_secondary_transport = false;
+    config.enable_voxel_scoring = true;
+    config.voxel_bins_x = 0;
+    require_throws([&config]() { config.validate(); },
+                   "Enabled voxel scorer accepted a zero x-bin count");
+}
+
+void test_serial_voxel_idd_closure() {
+    carbon::TransportConfig config;
+    config.number_of_histories = 7;
+    config.initial_energy_MeVu = 10.0;
+    config.phantom_length_mm = 200.0;
+    config.depth_bin_width_mm = 1.0;
+    config.maximum_step_mm = 0.5;
+    config.maximum_relative_energy_loss = 0.01;
+    config.enable_voxel_scoring = true;
+    config.voxel_bins_x = 5;
+    config.voxel_bins_y = 7;
+    const carbon::StoppingPowerTable table({0.01, 20.0}, {2.0, 2.0});
+    const auto result = carbon::transport_serial(config, table, zero_cross_section());
+    require_voxel_idd_closure(config, result, 1.0e-12);
 }
 
 void test_charged_dose_categories() {
@@ -305,10 +347,15 @@ void test_serial_sycl_cpu_match() {
     config.depth_bin_width_mm = 1.0;
     config.maximum_step_mm = 0.5;
     config.maximum_relative_energy_loss = 0.01;
+    config.enable_voxel_scoring = true;
+    config.voxel_bins_x = 5;
+    config.voxel_bins_y = 7;
     const carbon::StoppingPowerTable table({0.01, 10.01, 20.01}, {2.0, 2.0, 2.0});
     const auto serial = carbon::transport_serial(config, table, zero_cross_section());
     const auto sycl_cpu =
         carbon::transport_sycl(config, table, zero_cross_section(), "cpu");
+    require_voxel_idd_closure(config, serial, 1.0e-12);
+    require_voxel_idd_closure(config, sycl_cpu, 1.0e-9);
     require(sycl_cpu.relative_energy_balance_error() < 1.0e-4,
             "SYCL CPU energy balance failed");
 
@@ -489,6 +536,7 @@ void test_sycl_secondary_queue_generation() {
 int main() {
     try {
         test_units();
+        test_serial_voxel_idd_closure();
         test_charged_dose_categories();
         test_interpolation();
         test_fragment_stopping_power_scale();

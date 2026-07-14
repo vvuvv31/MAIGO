@@ -102,6 +102,9 @@ int main(int argc, char* argv[]) {
             carbon::write_fragment_species_csv(
                 config.fragment_species_output_file, config, result);
         }
+        if (config.enable_voxel_scoring) {
+            carbon::write_sparse_voxel_dose_csv(config.voxel_dose_output_file, config, result);
+        }
         const auto histories_per_second =
             result.elapsed_seconds > 0.0 ? static_cast<double>(config.number_of_histories) /
                                                result.elapsed_seconds
@@ -156,6 +159,9 @@ int main(int argc, char* argv[]) {
         std::cout << "Untracked nuclear energy: " << result.untracked_nuclear_energy_MeV
                   << " MeV\n"
                   << "Output: " << config.output_file.string() << '\n';
+        if (config.enable_voxel_scoring) {
+            std::cout << "Voxel dose output: " << config.voxel_dose_output_file.string() << '\n';
+        }
         return EXIT_SUCCESS;
     } catch (const std::exception& error) {
         std::cerr << "carbon_mc: " << error.what() << '\n';

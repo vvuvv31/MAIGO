@@ -1,8 +1,10 @@
 #include "carbon/io.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <fstream>
 #include <iomanip>
+#include <numeric>
 #include <stdexcept>
 
 namespace carbon {
@@ -85,6 +87,72 @@ void write_fragment_species_csv(const std::filesystem::path& path,
         const auto relative_total =
             maximum > 0.0 ? result.deposited_energy_MeV[bin] / maximum : 0.0;
         output << ',' << relative_total << '\n';
+    }
+}
+
+void write_sparse_voxel_dose_csv(const std::filesystem::path& path,
+                                 const TransportConfig& config,
+                                 const TransportResult& result) {
+    if (!config.enable_voxel_scoring) {
+        throw std::invalid_argument("Voxel dose output requested while voxel scoring is disabled");
+    }
+    if (result.voxel_deposited_energy_MeV.size() != config.number_of_voxels()) {
+        throw std::invalid_argument("Transport result voxel count does not match configuration");
+    }
+    const auto plane_size = config.voxel_bins_x * config.voxel_bins_y;
+    const auto histories = static_cast<double>(config.number_of_histories);
+    for (std::size_t z = 0; z < config.number_of_bins(); ++z) {
+        const auto begin = result.voxel_deposited_energy_MeV.begin() +
+                           static_cast<std::ptrdiff_t>(z * plane_size);
+        const auto reconstructed =
+            std::accumulate(begin, begin + static_cast<std::ptrdiff_t>(plane_size), 0.0);
+        if (std::abs(reconstructed - result.deposited_energy_MeV[z]) / histories > 1.0e-9) {
+            throw std::runtime_error(
+                "Voxel dose does not close to the depth-dose tally at z bin " +
+                std::to_string(z));
+        }
+    }
+    if (path.has_parent_path()) {
+        std::filesystem::create_directories(path.parent_path());
+    }
+    std::ofstream output(path, std::ios::binary);
+    if (!output) {
+        throw std::runtime_error("Cannot create voxel dose output file: " + path.string());
+    }
+    constexpr double MeV_to_joule = 1.602176634e-13;
+    const auto voxel_mass_kg = config.voxel_size_x_mm * config.voxel_size_y_mm *
+                               config.depth_bin_width_mm *
+                               config.water_density_g_per_cm3 * 1.0e-6;
+    const auto x_extent_mm =
+        static_cast<double>(config.voxel_bins_x) * config.voxel_size_x_mm;
+    const auto y_extent_mm =
+        static_cast<double>(config.voxel_bins_y) * config.voxel_size_y_mm;
+    output << "ix,iy,iz,x_mm,y_mm,z_mm,energy_deposition_MeV_per_primary,"
+              "dose_Gy_per_primary\n";
+    output << std::setprecision(12);
+    for (std::size_t z = 0; z < config.number_of_bins(); ++z) {
+        for (std::size_t y = 0; y < config.voxel_bins_y; ++y) {
+            for (std::size_t x = 0; x < config.voxel_bins_x; ++x) {
+                const auto index = z * plane_size + y * config.voxel_bins_x + x;
+                const auto energy = result.voxel_deposited_energy_MeV[index];
+                if (energy == 0.0) {
+                    continue;
+                }
+                const auto energy_per_primary = energy / histories;
+                const auto dose_per_primary =
+                    energy_per_primary * MeV_to_joule / voxel_mass_kg;
+                const auto x_mm =
+                    (static_cast<double>(x) + 0.5) * config.voxel_size_x_mm -
+                    0.5 * x_extent_mm;
+                const auto y_mm =
+                    (static_cast<double>(y) + 0.5) * config.voxel_size_y_mm -
+                    0.5 * y_extent_mm;
+                const auto z_mm =
+                    (static_cast<double>(z) + 0.5) * config.depth_bin_width_mm;
+                output << x << ',' << y << ',' << z << ',' << x_mm << ',' << y_mm << ','
+                       << z_mm << ',' << energy_per_primary << ',' << dose_per_primary << '\n';
+            }
+        }
     }
 }
 

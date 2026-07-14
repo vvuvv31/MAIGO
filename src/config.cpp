@@ -4,6 +4,7 @@
 #include <cctype>
 #include <cmath>
 #include <fstream>
+#include <limits>
 #include <stdexcept>
 #include <string_view>
 #include <type_traits>
@@ -112,6 +113,17 @@ std::size_t TransportConfig::number_of_bins() const {
     return static_cast<std::size_t>(std::ceil(phantom_length_mm / depth_bin_width_mm));
 }
 
+std::size_t TransportConfig::number_of_voxels() const {
+    const auto depth_bins = number_of_bins();
+    if (voxel_bins_y != 0 &&
+        (voxel_bins_x > std::numeric_limits<std::size_t>::max() / voxel_bins_y ||
+         voxel_bins_x * voxel_bins_y >
+             std::numeric_limits<std::size_t>::max() / depth_bins)) {
+        throw std::overflow_error("Voxel grid size exceeds the size_t runtime limit");
+    }
+    return voxel_bins_x * voxel_bins_y * depth_bins;
+}
+
 void TransportConfig::validate() const {
     if (number_of_histories == 0) {
         throw std::invalid_argument("number_of_histories must be greater than zero");
@@ -130,6 +142,15 @@ void TransportConfig::validate() const {
     }
     if (straggling_scale < 0.0) {
         throw std::invalid_argument("straggling_scale must be nonnegative");
+    }
+    if (enable_voxel_scoring &&
+        (voxel_bins_x == 0 || voxel_bins_y == 0 || voxel_size_x_mm <= 0.0 ||
+         voxel_size_y_mm <= 0.0)) {
+        throw std::invalid_argument(
+            "Enabled voxel scoring requires positive x/y bin counts and voxel sizes");
+    }
+    if (enable_voxel_scoring) {
+        static_cast<void>(number_of_voxels());
     }
     if (enable_secondary_transport && !enable_secondary_generation) {
         throw std::invalid_argument(
@@ -157,6 +178,14 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.water_density_g_per_cm3 =
         parse_number(values, "water_density_g_per_cm3", config.water_density_g_per_cm3);
     config.scorer_area_mm2 = parse_number(values, "scorer_area_mm2", config.scorer_area_mm2);
+    config.enable_voxel_scoring =
+        parse_bool(values, "enable_voxel_scoring", config.enable_voxel_scoring);
+    config.voxel_bins_x = parse_number(values, "voxel_bins_x", config.voxel_bins_x);
+    config.voxel_bins_y = parse_number(values, "voxel_bins_y", config.voxel_bins_y);
+    config.voxel_size_x_mm =
+        parse_number(values, "voxel_size_x_mm", config.voxel_size_x_mm);
+    config.voxel_size_y_mm =
+        parse_number(values, "voxel_size_y_mm", config.voxel_size_y_mm);
     config.enable_energy_straggling =
         parse_bool(values, "enable_energy_straggling", config.enable_energy_straggling);
     config.straggling_scale = parse_number(values, "straggling_scale", config.straggling_scale);
@@ -183,6 +212,12 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.output_file = parse_path(values, "output_file", config.output_file);
     config.fragment_species_output_file =
         parse_path(values, "fragment_species_output_file", config.fragment_species_output_file);
+    config.voxel_dose_output_file =
+        parse_path(values, "voxel_dose_output_file", config.voxel_dose_output_file);
+    const auto device = values.find("device");
+    if (device != values.end()) {
+        config.device = device->second;
+    }
     config.validate();
     return config;
 }

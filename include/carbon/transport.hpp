@@ -14,6 +14,7 @@ namespace carbon {
 
 struct TransportResult {
     std::vector<double> deposited_energy_MeV;
+    std::vector<double> voxel_deposited_energy_MeV;
     std::vector<double> primary_c12_deposited_energy_MeV;
     std::vector<double> secondary_carbon_deposited_energy_MeV;
     std::vector<double> boron_deposited_energy_MeV;
