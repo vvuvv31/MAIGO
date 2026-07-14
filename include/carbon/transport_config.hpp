@@ -22,6 +22,7 @@ struct TransportConfig {
     double straggling_scale{1.0};
     bool enable_primary_attenuation{false};
     bool enable_secondary_generation{false};
+    bool enable_secondary_transport{false};
     std::size_t secondary_queue_capacity{0};
     std::uint64_t random_seed{20'260'714};
     std::filesystem::path stopping_power_file{"data/stopping_power_water.csv"};
@@ -30,6 +31,8 @@ struct TransportConfig {
     std::filesystem::path reaction_package_file{
         "validation/results/topas_200MeVu_reaction_packages_development.bin"};
     std::filesystem::path output_file{"out/cpu_depth_dose.csv"};
+    std::filesystem::path fragment_species_output_file{
+        "out/gpu_fragment_species_depth_dose.csv"};
     std::string device{"serial"};
 
     [[nodiscard]] double initial_total_energy_MeV() const noexcept {

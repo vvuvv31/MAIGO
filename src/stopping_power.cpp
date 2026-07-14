@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
@@ -9,6 +10,26 @@
 #include <utility>
 
 namespace carbon {
+
+double ion_effective_charge(int atomic_number, double energy_MeVu) {
+    if (atomic_number <= 0 || energy_MeVu <= 0.0) {
+        throw std::invalid_argument("Effective charge requires positive Z and energy per nucleon");
+    }
+    constexpr double nucleon_mass_MeV = 931.49410242;
+    const auto gamma = 1.0 + energy_MeVu / nucleon_mass_MeV;
+    const auto beta_squared = std::max(0.0, 1.0 - 1.0 / (gamma * gamma));
+    const auto beta = std::sqrt(beta_squared);
+    const auto charge = static_cast<double>(atomic_number);
+    return charge *
+           (1.0 - std::exp(-125.0 * beta * std::pow(charge, -2.0 / 3.0)));
+}
+
+double stopping_power_scale_from_carbon(int atomic_number, double energy_MeVu) {
+    const auto ion_charge = ion_effective_charge(atomic_number, energy_MeVu);
+    const auto carbon_charge = ion_effective_charge(6, energy_MeVu);
+    const auto ratio = ion_charge / carbon_charge;
+    return ratio * ratio;
+}
 
 StoppingPowerTable::StoppingPowerTable(std::vector<double> energies_MeVu,
                                        std::vector<double> stopping_powers_MeV_per_mm)
@@ -86,4 +107,3 @@ const std::vector<double>& StoppingPowerTable::values() const noexcept {
 }
 
 }  // namespace carbon
-

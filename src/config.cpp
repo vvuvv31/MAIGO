@@ -131,6 +131,10 @@ void TransportConfig::validate() const {
     if (straggling_scale < 0.0) {
         throw std::invalid_argument("straggling_scale must be nonnegative");
     }
+    if (enable_secondary_transport && !enable_secondary_generation) {
+        throw std::invalid_argument(
+            "enable_secondary_transport requires enable_secondary_generation=true");
+    }
 }
 
 TransportConfig load_config(const std::filesystem::path& path) {
@@ -155,6 +159,8 @@ TransportConfig load_config(const std::filesystem::path& path) {
         parse_bool(values, "enable_primary_attenuation", config.enable_primary_attenuation);
     config.enable_secondary_generation =
         parse_bool(values, "enable_secondary_generation", config.enable_secondary_generation);
+    config.enable_secondary_transport =
+        parse_bool(values, "enable_secondary_transport", config.enable_secondary_transport);
     config.secondary_queue_capacity =
         parse_number(values, "secondary_queue_capacity", config.secondary_queue_capacity);
     config.random_seed = parse_number(values, "random_seed", config.random_seed);
@@ -164,6 +170,8 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.reaction_package_file =
         parse_path(values, "reaction_package_file", config.reaction_package_file);
     config.output_file = parse_path(values, "output_file", config.output_file);
+    config.fragment_species_output_file =
+        parse_path(values, "fragment_species_output_file", config.fragment_species_output_file);
     config.validate();
     return config;
 }

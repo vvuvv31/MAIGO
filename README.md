@@ -39,7 +39,7 @@ Level 3 使用从 TOPAS primary-C12 生存代理拟合的有效宏观衰减系�
 
 为避免 Windows oneAPI 可执行文件依赖 zlib 或在运行时解析 CSV，`validation/scripts/compile_reaction_package.py` 会把两个 gzip 表编译为版本化的小端定长二进制表。当前 5.9 MB 二进制包含 201 个 1 MeV/u 分箱、37,657 个反应头和 330,659 个精简次级粒子记录，可由 `ReactionPackageTable::from_binary` 严格校验后直接复制到 GPU。GCC 12.2 和 Windows IntelLLVM 2025.3.3 均已通过真实数据加载测试。
 
-Arc B580 的固定容量 secondary-generation queue 已接入 primary kernel。10,000-history 实测的 3,816 次核反应全部按能量分箱采样完整反应包，生成 33,260 个直接次级粒子；其中 21,357 个带电离子整包写入队列，溢出为 0，中子/光子能量单独记账。启用生成后的吞吐为 `45,672 histories/s`，相对 primary-only 下降约 `10.0%`。当前只生成和分类次级粒子，尚未输运它们，因此输出 IDD 与 primary-only 文件逐字节一致；下一阶段是带电离子 A/Z 输运和分粒种剂量评分。
+Arc B580 的固定容量 secondary-generation queue 已接入 primary kernel。10,000-history 实测的 3,816 次核反应全部按能量分箱采样完整反应包，生成 33,260 个直接次级粒子；其中 21,357 个带电离子整包写入队列，溢出为 0，中子/光子能量单独记账。generation-only 输出与 primary-only 的物理列逐 bin 数值一致；CSV 字节哈希仅因当前固定 LF 与旧 CRLF 参考不同。10k 耗时对 SYCL JIT/磁盘缓存敏感，不用于正式性能比较。
 
 生成阶段可在初始化 oneAPI 环境后运行：
 
@@ -49,6 +49,15 @@ build\oneapi-windows-release\carbon_mc.exe --config config\beam_200MeVu_fragment
 ```
 
 可复现的 B580 版本、输入哈希、队列统计和 primary-only 回归结果记录在 `validation/results/windows_b580_secondary_generation_10k.metadata.json`。
+
+第一版带电碎片输运也已接入。它按采样的 `direction_z` 做正/反向一维 CSDA，并在相同 MeV/u 下用有效电荷平方比从 C-12 表缩放任意 A/Z 离子的停止本领。100,000-history B580 运行输运 216,133 个带电次级粒子和 316,048,099 个碎片步进，队列无溢出，预热后吞吐为 `95,985 histories/s`，总能量误差为 `3.11e-8`。
+
+相对完整 TOPAS，总 IDD 的积分差为 `+0.48%`、峰值差 `-0.062%`、R80 差 `+0.104 mm`、FWHM 差 `+2.36%`、NRMSE `1.08%`、2%/2 mm gamma `97.71%`。峰后尾积分差由未输运碎片时约 `-92%` 改善为 `+10.055%`，非常接近但尚未通过 `<10%` 验收线。分粒种结果仍显示重碎片/He 偏高、proton 和 other 偏低；禁止为跨线而手工调参，下一物理任务是后续碎裂级联与中子/光子贡献。
+
+```bat
+set ONEAPI_DEVICE_SELECTOR=level_zero:0
+build\oneapi-windows-release\carbon_mc.exe --config config\beam_200MeVu_fragment_transport_100k.yaml --device gpu
+```
 
 直接截面版本的 10,000-history 原生 B580 验证得到 3,816 次核反应，serial 得到 3,818 次；曲线 NRMSE 为 `1.38e-5`、R80 差 `-3.9e-5 mm`、1%/1 mm 与 2%/2 mm gamma 均为 `100%`。这两次事件差异来自 SYCL float 与 serial double 的采样边界，不影响当前剂量曲线一致性。
 

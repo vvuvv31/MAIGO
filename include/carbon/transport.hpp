@@ -13,6 +13,14 @@ namespace carbon {
 
 struct TransportResult {
     std::vector<double> deposited_energy_MeV;
+    std::vector<double> primary_c12_deposited_energy_MeV;
+    std::vector<double> secondary_carbon_deposited_energy_MeV;
+    std::vector<double> boron_deposited_energy_MeV;
+    std::vector<double> beryllium_deposited_energy_MeV;
+    std::vector<double> lithium_deposited_energy_MeV;
+    std::vector<double> helium_deposited_energy_MeV;
+    std::vector<double> proton_deposited_energy_MeV;
+    std::vector<double> other_charged_deposited_energy_MeV;
     double initial_energy_MeV{0.0};
     double total_deposited_energy_MeV{0.0};
     double escaped_energy_MeV{0.0};
@@ -28,6 +36,10 @@ struct TransportResult {
     double untransported_neutral_energy_MeV{0.0};
     double untransported_unsupported_charged_energy_MeV{0.0};
     double nuclear_energy_not_in_direct_secondaries_MeV{0.0};
+    std::uint64_t transported_secondaries{0};
+    std::uint64_t secondary_transport_steps{0};
+    double secondary_deposited_energy_MeV{0.0};
+    double secondary_escaped_energy_MeV{0.0};
     std::uint64_t total_steps{0};
     double elapsed_seconds{0.0};
     std::string backend;

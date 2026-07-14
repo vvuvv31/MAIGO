@@ -92,9 +92,9 @@ Windows 原生
 - 对应平均自由程：`210.874 mm`；
 - 10,000-history 直接截面版本中，B580/serial 核反应数为 `3816/3818`；
 - B580 对 serial：NRMSE `1.38e-5`、R80 差 `-3.9e-5 mm`、2%/2 mm gamma `100%`；
-- 当前仍未完成带电次级碎片的 GPU 队列输运，因此完整 TOPAS 的峰后碎裂尾部尚未匹配。
+- 第一版带电次级输运已把完整 TOPAS 尾积分差从约 `-92%` 改善到 `+10.055%`；后续级联和中性粒子剂量仍未完成。
 
-下一开发目标不是重新拟合核衰减常数，而是输运 B580 队列中的带电次级离子并加入分粒种剂量评分。
+下一开发目标不是重新拟合核衰减常数；第一版带电次级输运已经完成，接下来应补充碎片后续核反应/衰变级联和中性粒子剂量贡献。
 
 ---
 
@@ -1348,10 +1348,21 @@ Arc B580 10,000-history 实测结果：
 - 21,357 个带电离子进入容量 160,000 的队列，溢出为 0；
 - 排队带电能量 5,001,525.1 MeV，中子/光子能量 553,209.49 MeV；
 - 未支持带电能量为 0；
-- 吞吐 45,671.8 histories/s，相对 primary-only 的 50,727.5 histories/s 下降 9.97%；
-- 由于尚未输运队列，primary-only IDD 与未启用生成时逐 bin 完全一致。
+- generation-only 配置不输运队列，因此其 primary-only IDD 物理列与未启用生成时逐 bin 数值一致；
+- 10k 耗时明显受 SYCL JIT/磁盘缓存状态影响，不应用于正式性能比较。
 
-下一实现任务是第 3 步：按 A/Z 输运队列中的全部带电离子，分别累计 proton、helium、Li/Be/B/C 剂量，并把队列能量从 `untracked_nuclear_energy` 转移到 deposited/escaped 账本。
+第 3 步已经完成。第一版对队列中的全部带电离子执行正/反向一维 CSDA：路径方向使用采样的 `direction_z`，停止本领按
+
+\[
+S_{A,Z}(E/u)=S_{\mathrm{C12}}(E/u)
+\left[\frac{z_{\mathrm{eff}}(Z,\beta)}{z_{\mathrm{eff}}(6,\beta)}\right]^2
+\]
+
+缩放，其中 `z_eff` 与 C-12 开发表使用同一 Hubert 型公式。输运分别累计 secondary C、B、Be、Li、He、proton 和 other charged IDD，并将已排队能量从 `untracked_nuclear_energy` 转移到 secondary deposited/escaped 账本。
+
+100,000-history Arc B580 结果：216,133 个带电次级粒子、316,048,099 个碎片步进、零队列溢出、预热后 `95,985 histories/s`、总能量误差 `3.11e-8`。相对完整 TOPAS：总积分 `+0.48%`、峰值 `-0.062%`、R80 `+0.104 mm`、FWHM `+2.36%`、NRMSE `1.08%`、2%/2 mm gamma `97.71%`、尾积分 `+10.055%`。尾部已由此前约 `-92%` 大幅改善，但仍以极小幅度未通过 `<10%` 验收线。
+
+分粒种积分揭示下一物理缺项：secondary C/B/Be/Li/He 偏高约 20--32%，proton 偏低约 31%，other 偏低约 79%。当前不包含碎片的后续核反应、衰变级联、能量涨落、多重散射以及 neutron/gamma 输运，因此不能通过经验 scale 掩盖这些差异。
 
 ---
 
@@ -2127,7 +2138,7 @@ Peak dose difference < 5%
 Tail integral difference < 10%
 ```
 
-当前状态：TOPAS 事件级反应 scorer、100-history smoke、10 万粒子正式反应包和 GPU secondary-generation queue 已完成；带电次级输运尚未完成。
+当前状态：TOPAS 事件级反应 scorer、10 万粒子正式反应包、GPU secondary-generation queue 和第一版 A/Z 带电次级输运均已完成；后续碎裂级联和中性粒子输运尚未完成。
 
 ---
 
@@ -2381,10 +2392,10 @@ energy-loss straggling 模块。
 本项目当前已经完成到第 9 步，并完成了第 10 步所需的 TOPAS 数据接口、smoke 验证和 100000-history 正式反应包。紧接着应执行：
 
 ```text
-1. 为通用 A/Z 带电离子实现 stopping-power 近似
-2. 输运 B580 secondary queue 中的正向和反向粒子
-3. 增加 proton、helium、Li/Be/B/C 分粒种剂量 tally
-4. 比较分粒种 IDD、尾积分和总能量
+1. 为带电碎片加入后续核反应和衰变级联
+2. 分解并建模 TOPAS other 中的 neutron/gamma 剂量
+3. 复查 proton 与 He/重碎片的分粒种积分
+4. 在不使用经验 scale 的条件下通过尾积分 <10%
 5. 通过后再提升到 1000000-history reference
 ```
 

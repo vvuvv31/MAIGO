@@ -1,0 +1,93 @@
+{
+  "platform": "Windows native Intel Arc B580 Level Zero",
+  "date": "2026-07-14",
+  "histories": 100000,
+  "random_seed": 20260714,
+  "software": {
+    "compiler": "IntelLLVM 2025.3.3 on Windows",
+    "visual_studio": "Visual Studio 2026 18.7.3",
+    "device": "Intel(R) Arc(TM) B580 Graphics",
+    "backend": "Level Zero",
+    "driver": "1.13.35716"
+  },
+  "physics": {
+    "primary": "calibrated straggling plus energy-dependent C-12 attenuation",
+    "reaction_final_state": "complete correlated TOPAS direct-secondary package sampled from a 1 MeV/u bin",
+    "charged_secondary_transport": "one-dimensional forward/backward CSDA using the sampled direction_z",
+    "fragment_stopping_power": "S(A,Z,E/u) = S_C12(E/u) * (z_eff(Z,beta) / z_eff(6,beta))^2",
+    "effective_charge": "z_eff = Z * (1 - exp(-125 * beta * Z^(-2/3)))",
+    "limitations": [
+      "development-only C-12 stopping-power table",
+      "no charged-secondary straggling or multiple scattering",
+      "no secondary nuclear reactions or decay cascade",
+      "no neutron or gamma transport",
+      "direct TOPAS reaction secondaries only"
+    ]
+  },
+  "inputs": {
+    "config": {
+      "path": "config/beam_200MeVu_fragment_transport_100k.yaml",
+      "sha256": "886483dcb13a2d2d73903183dcf6eb897d39ddee9e4cd54cb12ef9de6b0aeb01"
+    },
+    "reaction_package": {
+      "path": "validation/results/topas_200MeVu_reaction_packages_development.bin",
+      "sha256": "242e71a1901dfdf73043c7e9591091235328380f1258100e9fa2eb16c832a6dc",
+      "reaction_packages": 37657,
+      "direct_secondaries": 330659
+    }
+  },
+  "queue": {
+    "capacity": 1600000,
+    "queued_charged_secondaries": 216133,
+    "overflow": 0,
+    "overflow_energy_MeV": 0.0
+  },
+  "result": {
+    "elapsed_seconds": 1.041828,
+    "histories_per_second": 95985.134,
+    "relative_energy_balance_error": 3.1059362e-08,
+    "nuclear_interactions": 38607,
+    "sampled_reaction_packages": 38607,
+    "generated_direct_secondaries": 338525,
+    "generated_direct_secondary_energy_MeV": 55834718.0,
+    "queued_secondary_energy_MeV": 50374033.0,
+    "untransported_neutral_energy_MeV": 5460684.9,
+    "untransported_unsupported_charged_energy_MeV": 0.0,
+    "nuclear_energy_not_in_sampled_direct_secondaries_MeV": 2202255.3,
+    "transported_charged_secondaries": 216133,
+    "secondary_transport_steps": 316048099,
+    "secondary_deposited_energy_MeV": 48987821.0,
+    "secondary_escaped_energy_MeV": 1386209.6,
+    "untracked_nuclear_energy_MeV": 7662940.2
+  },
+  "topas_comparison": {
+    "total_integral_relative_percent": 0.48029393209132465,
+    "peak_value_relative_percent": -0.0615761111315984,
+    "R80_difference_mm": 0.10382907261111995,
+    "FWHM_relative_percent": 2.359168899975164,
+    "NRMSE": 0.010804438747128591,
+    "tail_integral_relative_percent": 10.055348980899879,
+    "gamma_1pct_1mm_percent": 97.14285714285714,
+    "gamma_2pct_2mm_percent": 97.71428571428571,
+    "tail_acceptance_target_percent": 10.0,
+    "tail_acceptance_passed": false
+  },
+  "outputs": {
+    "total_idd": {
+      "path": "validation/results/windows_b580_fragment_transport_100k.csv",
+      "sha256": "85345af6a14785020146b4a4d8786a700f7c59d720b1eff1e72ced95c97e9791"
+    },
+    "species_idd": {
+      "path": "validation/results/windows_b580_fragment_transport_species_100k.csv",
+      "sha256": "8a6575cfe12aaa90107a55615d1b2da6da44d35d335f293c96edf59089659eba"
+    },
+    "total_metrics": {
+      "path": "validation/results/windows_b580_fragment_transport_100k_vs_topas.metrics.json",
+      "sha256": "b25004c3453319664d1f66d37d7b882ea4da37abdc155c7326dcc8efab048887"
+    },
+    "species_metrics": {
+      "path": "validation/results/windows_b580_fragment_transport_species_100k_vs_topas.metrics.json",
+      "sha256": "b6df5cd123921d78ae37283fa220829f49129d2bbb5c561a1a46f0aa31b69b74"
+    }
+  }
+}

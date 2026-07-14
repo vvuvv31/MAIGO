@@ -5,6 +5,10 @@
 
 namespace carbon {
 
+[[nodiscard]] double ion_effective_charge(int atomic_number, double energy_MeVu);
+[[nodiscard]] double stopping_power_scale_from_carbon(int atomic_number,
+                                                       double energy_MeVu);
+
 class StoppingPowerTable {
 public:
     StoppingPowerTable(std::vector<double> energies_MeVu,
@@ -24,4 +28,3 @@ private:
 };
 
 }  // namespace carbon
-

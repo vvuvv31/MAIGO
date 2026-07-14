@@ -12,6 +12,7 @@
 #include <fstream>
 #include <iostream>
 #include <limits>
+#include <numeric>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -53,6 +54,9 @@ void test_units() {
     require_near(config.initial_total_energy_MeV(), 2400.0, 1.0e-12,
                  "MeV/u to total kinetic energy conversion failed");
     require(config.number_of_bins() == 800, "Depth-bin count failed");
+    config.enable_secondary_transport = true;
+    require_throws([&config]() { config.validate(); },
+                   "Secondary transport without generation was accepted");
 }
 
 void test_interpolation() {
@@ -66,6 +70,21 @@ void test_interpolation() {
                  "Cross-section interpolation failed");
     require_near(cross_section.interpolate(0.1), 0.01, 1.0e-12,
                  "Cross-section low-energy clamp failed");
+}
+
+void test_fragment_stopping_power_scale() {
+    require_near(carbon::stopping_power_scale_from_carbon(6, 200.0), 1.0, 1.0e-12,
+                 "C-12 stopping-power scale failed");
+    const auto proton_scale = carbon::stopping_power_scale_from_carbon(1, 200.0);
+    const auto helium_scale = carbon::stopping_power_scale_from_carbon(2, 200.0);
+    const auto boron_scale = carbon::stopping_power_scale_from_carbon(5, 200.0);
+    require(proton_scale > 0.0 && proton_scale < helium_scale && helium_scale < boron_scale &&
+                boron_scale < 1.0,
+            "Fragment stopping-power charge ordering failed");
+    require(carbon::stopping_power_scale_from_carbon(1, 1.0) > proton_scale,
+            "Low-energy effective-charge scaling failed");
+    require_throws([]() { (void)carbon::stopping_power_scale_from_carbon(0, 10.0); },
+                   "Invalid fragment atomic number was accepted");
 }
 
 void test_step_selection() {
@@ -364,6 +383,54 @@ void test_sycl_secondary_queue_generation() {
     require(overflow.queued_secondaries + overflow.secondary_queue_overflow <=
                 overflow.generated_direct_secondaries,
             "Secondary queue accounting exceeded direct-secondary production");
+
+    config.secondary_queue_capacity = 10'000;
+    config.enable_secondary_transport = true;
+    const auto transported = carbon::transport_sycl(
+        config, stopping_power, forced_reaction, "cpu", &reaction_packages);
+    require(transported.transported_secondaries == transported.queued_secondaries &&
+                transported.transported_secondaries > 0,
+            "Not every queued charged secondary was transported");
+    require_near(
+        transported.secondary_deposited_energy_MeV +
+            transported.secondary_escaped_energy_MeV,
+        transported.queued_secondary_energy_MeV,
+        1.0e-2, "Secondary transport energy closure failed");
+    require(transported.secondary_deposited_energy_MeV > 0.0 &&
+                transported.secondary_escaped_energy_MeV > 0.0 &&
+                transported.secondary_transport_steps > 0,
+            "Secondary transport did not record deposition, escape, and steps");
+    require(transported.relative_energy_balance_error() < 1.0e-4,
+            "Secondary transport total energy balance failed");
+    const std::vector<const std::vector<double>*> species{
+        &transported.secondary_carbon_deposited_energy_MeV,
+        &transported.boron_deposited_energy_MeV,
+        &transported.beryllium_deposited_energy_MeV,
+        &transported.lithium_deposited_energy_MeV,
+        &transported.helium_deposited_energy_MeV,
+        &transported.proton_deposited_energy_MeV,
+        &transported.other_charged_deposited_energy_MeV,
+    };
+    require(transported.primary_c12_deposited_energy_MeV.size() ==
+                config.number_of_bins(),
+            "Primary species tally has the wrong size");
+    double species_deposited_energy = 0.0;
+    for (const auto* tally : species) {
+        require(tally->size() == config.number_of_bins(),
+                "Fragment species tally has the wrong size");
+        species_deposited_energy =
+            std::accumulate(tally->begin(), tally->end(), species_deposited_energy);
+    }
+    require_near(species_deposited_energy, transported.secondary_deposited_energy_MeV,
+                 1.0e-2, "Fragment species tally energy closure failed");
+    for (std::size_t bin = 0; bin < config.number_of_bins(); ++bin) {
+        auto reconstructed = transported.primary_c12_deposited_energy_MeV[bin];
+        for (const auto* tally : species) {
+            reconstructed += (*tally)[bin];
+        }
+        require_near(reconstructed, transported.deposited_energy_MeV[bin], 1.0e-9,
+                     "Total dose bin does not close over species");
+    }
 }
 #endif
 
@@ -373,6 +440,7 @@ int main() {
     try {
         test_units();
         test_interpolation();
+        test_fragment_stopping_power_scale();
         test_step_selection();
         test_philox_rng();
         test_bohr_straggling();

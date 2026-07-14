@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <limits>
 #include <numeric>
@@ -18,6 +19,8 @@
 
 namespace carbon {
 namespace {
+
+constexpr std::size_t fragment_species_count = 7;
 
 bool is_uniform_grid(const std::vector<double>& energies) {
     const auto expected_step = energies[1] - energies[0];
@@ -59,6 +62,7 @@ TransportResult transport_sycl(const TransportConfig& config,
     const auto number_of_bins = config.number_of_bins();
     const auto number_of_histories = config.number_of_histories;
     const auto enable_secondary_generation = config.enable_secondary_generation;
+    const auto enable_secondary_transport = config.enable_secondary_transport;
     const auto automatic_queue_capacity =
         number_of_histories > std::numeric_limits<std::size_t>::max() / 16
             ? std::numeric_limits<std::size_t>::max()
@@ -90,7 +94,12 @@ TransportResult transport_sycl(const TransportConfig& config,
     ReactionSecondary* reaction_secondaries_device = nullptr;
     SecondaryParticle1D* secondary_queue_device = nullptr;
     std::uint64_t* secondary_queue_counter_device = nullptr;
+    std::uint64_t* secondary_queue_filled_device = nullptr;
     SecondaryGenerationSummary* secondary_summaries_device = nullptr;
+    double* fragment_dose_device = nullptr;
+    float* secondary_deposited_device = nullptr;
+    float* secondary_escaped_device = nullptr;
+    std::uint32_t* secondary_steps_device = nullptr;
     if (enable_secondary_generation) {
         reaction_bins_device = sycl::malloc_device<ReactionEnergyBin>(
             reaction_packages->energy_bins().size(), queue);
@@ -101,8 +110,19 @@ TransportResult transport_sycl(const TransportConfig& config,
         secondary_queue_device =
             sycl::malloc_device<SecondaryParticle1D>(secondary_queue_capacity, queue);
         secondary_queue_counter_device = sycl::malloc_device<std::uint64_t>(1, queue);
+        secondary_queue_filled_device = sycl::malloc_device<std::uint64_t>(1, queue);
         secondary_summaries_device =
             sycl::malloc_device<SecondaryGenerationSummary>(number_of_histories, queue);
+        if (enable_secondary_transport) {
+            fragment_dose_device = sycl::malloc_device<double>(
+                fragment_species_count * number_of_bins, queue);
+            secondary_deposited_device =
+                sycl::malloc_device<float>(secondary_queue_capacity, queue);
+            secondary_escaped_device =
+                sycl::malloc_device<float>(secondary_queue_capacity, queue);
+            secondary_steps_device =
+                sycl::malloc_device<std::uint32_t>(secondary_queue_capacity, queue);
+        }
     }
     const auto free_device = [&queue](auto* pointer) {
         if (pointer != nullptr) {
@@ -113,7 +133,11 @@ TransportResult transport_sycl(const TransportConfig& config,
         enable_secondary_generation &&
         (reaction_bins_device == nullptr || reactions_device == nullptr ||
          reaction_secondaries_device == nullptr || secondary_queue_device == nullptr ||
-         secondary_queue_counter_device == nullptr || secondary_summaries_device == nullptr);
+         secondary_queue_counter_device == nullptr || secondary_queue_filled_device == nullptr ||
+         secondary_summaries_device == nullptr ||
+         (enable_secondary_transport &&
+          (fragment_dose_device == nullptr || secondary_deposited_device == nullptr ||
+           secondary_escaped_device == nullptr || secondary_steps_device == nullptr)));
     if (table_device == nullptr || cross_section_device == nullptr || dose_device == nullptr ||
         deposited_device == nullptr ||
         escaped_device == nullptr || nuclear_device == nullptr || steps_device == nullptr ||
@@ -130,7 +154,12 @@ TransportResult transport_sycl(const TransportConfig& config,
         free_device(reaction_secondaries_device);
         free_device(secondary_queue_device);
         free_device(secondary_queue_counter_device);
+        free_device(secondary_queue_filled_device);
         free_device(secondary_summaries_device);
+        free_device(fragment_dose_device);
+        free_device(secondary_deposited_device);
+        free_device(secondary_escaped_device);
+        free_device(secondary_steps_device);
         throw std::runtime_error("SYCL USM device allocation failed");
     }
 
@@ -152,6 +181,11 @@ TransportResult transport_sycl(const TransportConfig& config,
         queue.copy(reaction_packages->secondaries().data(), reaction_secondaries_device,
                    reaction_packages->secondaries().size());
         queue.memset(secondary_queue_counter_device, 0, sizeof(std::uint64_t));
+        queue.memset(secondary_queue_filled_device, 0, sizeof(std::uint64_t));
+        if (enable_secondary_transport) {
+            queue.memset(fragment_dose_device, 0,
+                         fragment_species_count * number_of_bins * sizeof(double));
+        }
     }
 
     constexpr std::size_t local_size = 128;
@@ -317,7 +351,8 @@ TransportResult transport_sycl(const TransportConfig& config,
                                     reaction.secondary_offset + secondary_index];
                                 const auto is_neutral = secondary.pdg_id == 22 ||
                                                         secondary.pdg_id == 2112;
-                                const auto is_supported = secondary.atomic_number > 0;
+                                const auto is_supported = secondary.atomic_number > 0 &&
+                                                          secondary.mass_number > 0;
                                 if (is_neutral) {
                                     secondary_summary.neutral_energy_MeV +=
                                         secondary.kinetic_energy_MeV;
@@ -351,7 +386,8 @@ TransportResult transport_sycl(const TransportConfig& config,
                                         const auto secondary = reaction_secondaries_device[
                                             reaction.secondary_offset + secondary_index];
                                         const auto is_supported =
-                                            secondary.atomic_number > 0;
+                                            secondary.atomic_number > 0 &&
+                                            secondary.mass_number > 0;
                                         if (is_supported) {
                                             secondary_queue_device[output_index++] =
                                                 SecondaryParticle1D{
@@ -364,6 +400,13 @@ TransportResult transport_sycl(const TransportConfig& config,
                                                 };
                                         }
                                     }
+                                    sycl::atomic_ref<
+                                        std::uint64_t,
+                                        sycl::memory_order::relaxed,
+                                        sycl::memory_scope::device,
+                                        sycl::access::address_space::global_space>
+                                        filled_counter(*secondary_queue_filled_device);
+                                    filled_counter.fetch_add(queueable_count);
                                     secondary_summary.queued_count = queueable_count;
                                     secondary_summary.queued_energy_MeV =
                                         queueable_energy_MeV;
@@ -403,12 +446,180 @@ TransportResult transport_sycl(const TransportConfig& config,
         });
     kernel_event.wait_and_throw();
 
+    if (enable_secondary_transport) {
+        const auto secondary_global_size =
+            ((secondary_queue_capacity + local_size - 1) / local_size) * local_size;
+        auto secondary_kernel_event = queue.parallel_for(
+            sycl::nd_range<1>{sycl::range<1>{secondary_global_size},
+                              sycl::range<1>{local_size}},
+            [=](sycl::nd_item<1> item) {
+                const auto particle_index = item.get_global_linear_id();
+                if (particle_index >= secondary_queue_capacity) {
+                    return;
+                }
+                auto deposited_MeV = 0.0F;
+                auto escaped_MeV = 0.0F;
+                std::uint32_t steps = 0;
+                if (particle_index < *secondary_queue_filled_device) {
+                    const auto particle = secondary_queue_device[particle_index];
+                    auto energy_MeV = particle.kinetic_energy_MeV;
+                    auto position_mm = particle.position_mm;
+                    const auto direction_z = sycl::clamp(particle.direction_z, -1.0F, 1.0F);
+                    const auto absolute_direction_z = sycl::fabs(direction_z);
+                    const auto atomic_number = static_cast<int>(particle.atomic_number);
+                    const auto mass_number = static_cast<int>(particle.mass_number);
+                    std::size_t species_index = 6;
+                    if (atomic_number == 1 && mass_number == 1) {
+                        species_index = 5;
+                    } else if (atomic_number == 2) {
+                        species_index = 4;
+                    } else if (atomic_number == 3) {
+                        species_index = 3;
+                    } else if (atomic_number == 4) {
+                        species_index = 2;
+                    } else if (atomic_number == 5) {
+                        species_index = 1;
+                    } else if (atomic_number == 6) {
+                        species_index = 0;
+                    }
+
+                    while (energy_MeV > energy_cutoff_MeV) {
+                        const auto escaped_forward =
+                            direction_z >= 0.0F && position_mm >= phantom_length_mm;
+                        const auto escaped_backward =
+                            direction_z < 0.0F && position_mm <= 0.0F;
+                        if (escaped_forward || escaped_backward) {
+                            break;
+                        }
+
+                        auto bin = direction_z < 0.0F
+                                       ? static_cast<int>(
+                                             sycl::ceil(position_mm / depth_bin_width_mm)) - 1
+                                       : static_cast<int>(
+                                             sycl::floor(position_mm / depth_bin_width_mm));
+                        bin = sycl::max(
+                            0, sycl::min(bin, static_cast<int>(number_of_bins) - 1));
+
+                        if (absolute_direction_z < 1.0e-6F) {
+                            sycl::atomic_ref<
+                                double,
+                                sycl::memory_order::relaxed,
+                                sycl::memory_scope::device,
+                                sycl::access::address_space::global_space>
+                                atomic_fragment_dose(
+                                    fragment_dose_device[species_index * number_of_bins + bin]);
+                            atomic_fragment_dose.fetch_add(static_cast<double>(energy_MeV));
+                            deposited_MeV += energy_MeV;
+                            energy_MeV = 0.0F;
+                            break;
+                        }
+
+                        const auto energy_MeVu =
+                            energy_MeV / static_cast<float>(mass_number);
+                        auto floating_index =
+                            (energy_MeVu - minimum_table_energy) * inverse_table_step;
+                        auto index = static_cast<int>(sycl::floor(floating_index));
+                        index = sycl::max(
+                            0, sycl::min(index, static_cast<int>(table_size) - 2));
+                        const auto fraction = sycl::clamp(
+                            floating_index - static_cast<float>(index), 0.0F, 1.0F);
+                        const auto carbon_stopping_power_MeV_per_mm =
+                            table_device[index] +
+                            fraction * (table_device[index + 1] - table_device[index]);
+
+                        constexpr float nucleon_mass_MeV = 931.49410242F;
+                        const auto gamma = 1.0F + energy_MeVu / nucleon_mass_MeV;
+                        const auto beta_squared =
+                            sycl::fmax(0.0F, 1.0F - 1.0F / (gamma * gamma));
+                        const auto beta = sycl::sqrt(beta_squared);
+                        const auto charge = static_cast<float>(atomic_number);
+                        const auto effective_charge =
+                            charge *
+                            (1.0F - sycl::exp(
+                                         -125.0F * beta * sycl::pow(charge, -2.0F / 3.0F)));
+                        constexpr float carbon_charge = 6.0F;
+                        const auto carbon_effective_charge =
+                            carbon_charge *
+                            (1.0F - sycl::exp(
+                                         -125.0F * beta *
+                                         sycl::pow(carbon_charge, -2.0F / 3.0F)));
+                        const auto charge_ratio =
+                            effective_charge / carbon_effective_charge;
+                        const auto stopping_power_MeV_per_mm =
+                            carbon_stopping_power_MeV_per_mm * charge_ratio * charge_ratio;
+                        auto path_step_mm = sycl::fmin(
+                            maximum_step_mm,
+                            maximum_relative_energy_loss * energy_MeV /
+                                stopping_power_MeV_per_mm);
+                        const auto boundary_mm =
+                            direction_z < 0.0F
+                                ? static_cast<float>(bin) * depth_bin_width_mm
+                                : static_cast<float>(bin + 1) * depth_bin_width_mm;
+                        const auto distance_to_boundary_mm =
+                            direction_z < 0.0F ? position_mm - boundary_mm
+                                               : boundary_mm - position_mm;
+                        path_step_mm = sycl::fmin(
+                            path_step_mm, distance_to_boundary_mm / absolute_direction_z);
+                        const auto step_deposited_MeV = sycl::fmin(
+                            stopping_power_MeV_per_mm * path_step_mm, energy_MeV);
+                        sycl::atomic_ref<
+                            double,
+                            sycl::memory_order::relaxed,
+                            sycl::memory_scope::device,
+                            sycl::access::address_space::global_space>
+                            atomic_fragment_dose(
+                                fragment_dose_device[species_index * number_of_bins + bin]);
+                        atomic_fragment_dose.fetch_add(
+                            static_cast<double>(step_deposited_MeV));
+                        deposited_MeV += step_deposited_MeV;
+                        energy_MeV -= step_deposited_MeV;
+                        position_mm += direction_z * path_step_mm;
+                        ++steps;
+                    }
+
+                    const auto stopped_inside =
+                        energy_MeV > 0.0F && position_mm >= 0.0F &&
+                        position_mm < phantom_length_mm &&
+                        !((direction_z < 0.0F && position_mm <= 0.0F) ||
+                          (direction_z >= 0.0F && position_mm >= phantom_length_mm));
+                    if (stopped_inside) {
+                        auto bin = direction_z < 0.0F
+                                       ? static_cast<int>(
+                                             sycl::ceil(position_mm / depth_bin_width_mm)) - 1
+                                       : static_cast<int>(
+                                             sycl::floor(position_mm / depth_bin_width_mm));
+                        bin = sycl::max(
+                            0, sycl::min(bin, static_cast<int>(number_of_bins) - 1));
+                        sycl::atomic_ref<
+                            double,
+                            sycl::memory_order::relaxed,
+                            sycl::memory_scope::device,
+                            sycl::access::address_space::global_space>
+                            atomic_fragment_dose(
+                                fragment_dose_device[species_index * number_of_bins + bin]);
+                        atomic_fragment_dose.fetch_add(static_cast<double>(energy_MeV));
+                        deposited_MeV += energy_MeV;
+                        energy_MeV = 0.0F;
+                    }
+                    escaped_MeV = energy_MeV;
+                }
+                secondary_deposited_device[particle_index] = deposited_MeV;
+                secondary_escaped_device[particle_index] = escaped_MeV;
+                secondary_steps_device[particle_index] = steps;
+            });
+        secondary_kernel_event.wait_and_throw();
+    }
+
     std::vector<double> dose_host(number_of_bins);
     std::vector<float> deposited_host(number_of_histories);
     std::vector<float> escaped_host(number_of_histories);
     std::vector<float> nuclear_host(number_of_histories);
     std::vector<std::uint32_t> steps_host(number_of_histories);
     std::vector<SecondaryGenerationSummary> secondary_summaries_host;
+    std::vector<double> fragment_dose_host;
+    std::vector<float> secondary_deposited_host;
+    std::vector<float> secondary_escaped_host;
+    std::vector<std::uint32_t> secondary_steps_host;
     queue.copy(dose_device, dose_host.data(), number_of_bins);
     queue.copy(deposited_device, deposited_host.data(), number_of_histories);
     queue.copy(escaped_device, escaped_host.data(), number_of_histories);
@@ -418,6 +629,21 @@ TransportResult transport_sycl(const TransportConfig& config,
         secondary_summaries_host.resize(number_of_histories);
         queue.copy(secondary_summaries_device, secondary_summaries_host.data(),
                    number_of_histories)
+            .wait_and_throw();
+    }
+    if (enable_secondary_transport) {
+        fragment_dose_host.resize(fragment_species_count * number_of_bins);
+        secondary_deposited_host.resize(secondary_queue_capacity);
+        secondary_escaped_host.resize(secondary_queue_capacity);
+        secondary_steps_host.resize(secondary_queue_capacity);
+        queue.copy(fragment_dose_device, fragment_dose_host.data(),
+                   fragment_dose_host.size());
+        queue.copy(secondary_deposited_device, secondary_deposited_host.data(),
+                   secondary_queue_capacity);
+        queue.copy(secondary_escaped_device, secondary_escaped_host.data(),
+                   secondary_queue_capacity);
+        queue.copy(secondary_steps_device, secondary_steps_host.data(),
+                   secondary_queue_capacity)
             .wait_and_throw();
     }
 
@@ -433,7 +659,12 @@ TransportResult transport_sycl(const TransportConfig& config,
     free_device(reaction_secondaries_device);
     free_device(secondary_queue_device);
     free_device(secondary_queue_counter_device);
+    free_device(secondary_queue_filled_device);
     free_device(secondary_summaries_device);
+    free_device(fragment_dose_device);
+    free_device(secondary_deposited_device);
+    free_device(secondary_escaped_device);
+    free_device(secondary_steps_device);
 
     TransportResult result;
     result.backend = "sycl-" + device_name +
@@ -444,6 +675,10 @@ TransportResult transport_sycl(const TransportConfig& config,
     if (enable_secondary_generation) {
         result.backend += "+secondary-generation";
     }
+    if (enable_secondary_transport) {
+        result.backend += "+secondary-transport";
+    }
+    result.primary_c12_deposited_energy_MeV = dose_host;
     result.deposited_energy_MeV = std::move(dose_host);
     result.initial_energy_MeV =
         config.initial_total_energy_MeV() * static_cast<double>(number_of_histories);
@@ -477,6 +712,49 @@ TransportResult transport_sycl(const TransportConfig& config,
             result.generated_direct_secondary_energy_MeV;
     }
     result.total_steps = std::accumulate(steps_host.begin(), steps_host.end(), std::uint64_t{0});
+    if (enable_secondary_transport) {
+        const auto extract_species = [&](std::size_t species_index) {
+            const auto begin = fragment_dose_host.begin() +
+                               static_cast<std::ptrdiff_t>(species_index * number_of_bins);
+            return std::vector<double>(begin,
+                                       begin + static_cast<std::ptrdiff_t>(number_of_bins));
+        };
+        result.secondary_carbon_deposited_energy_MeV = extract_species(0);
+        result.boron_deposited_energy_MeV = extract_species(1);
+        result.beryllium_deposited_energy_MeV = extract_species(2);
+        result.lithium_deposited_energy_MeV = extract_species(3);
+        result.helium_deposited_energy_MeV = extract_species(4);
+        result.proton_deposited_energy_MeV = extract_species(5);
+        result.other_charged_deposited_energy_MeV = extract_species(6);
+        const std::vector<const std::vector<double>*> fragment_species{
+            &result.secondary_carbon_deposited_energy_MeV,
+            &result.boron_deposited_energy_MeV,
+            &result.beryllium_deposited_energy_MeV,
+            &result.lithium_deposited_energy_MeV,
+            &result.helium_deposited_energy_MeV,
+            &result.proton_deposited_energy_MeV,
+            &result.other_charged_deposited_energy_MeV,
+        };
+        for (const auto* species : fragment_species) {
+            for (std::size_t bin = 0; bin < number_of_bins; ++bin) {
+                result.deposited_energy_MeV[bin] += (*species)[bin];
+            }
+        }
+        result.transported_secondaries = result.queued_secondaries;
+        result.secondary_deposited_energy_MeV =
+            std::accumulate(secondary_deposited_host.begin(),
+                            secondary_deposited_host.end(), 0.0);
+        result.secondary_escaped_energy_MeV =
+            std::accumulate(secondary_escaped_host.begin(),
+                            secondary_escaped_host.end(), 0.0);
+        result.secondary_transport_steps =
+            std::accumulate(secondary_steps_host.begin(), secondary_steps_host.end(),
+                            std::uint64_t{0});
+        result.total_deposited_energy_MeV += result.secondary_deposited_energy_MeV;
+        result.escaped_energy_MeV += result.secondary_escaped_energy_MeV;
+        result.untracked_nuclear_energy_MeV -= result.queued_secondary_energy_MeV;
+        result.total_steps += result.secondary_transport_steps;
+    }
     result.elapsed_seconds =
         std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
     return result;

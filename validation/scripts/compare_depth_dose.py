@@ -154,14 +154,14 @@ def main() -> None:
     }
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    (args.output_dir / "metrics.json").write_text(
-        json.dumps(report, indent=2, allow_nan=True) + "\n", encoding="utf-8"
-    )
+    with (args.output_dir / "metrics.json").open(
+        "w", encoding="utf-8", newline="\n"
+    ) as stream:
+        stream.write(json.dumps(report, indent=2, allow_nan=True) + "\n")
     if args.metrics_output is not None:
         args.metrics_output.parent.mkdir(parents=True, exist_ok=True)
-        args.metrics_output.write_text(
-            json.dumps(report, indent=2, allow_nan=True) + "\n", encoding="utf-8"
-        )
+        with args.metrics_output.open("w", encoding="utf-8", newline="\n") as stream:
+            stream.write(json.dumps(report, indent=2, allow_nan=True) + "\n")
 
     topas_normalized = topas_dose / np.max(topas_dose)
     eval_normalized = eval_dose / np.max(eval_dose)

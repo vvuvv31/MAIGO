@@ -1,0 +1,60 @@
+{
+  "reference": "validation/results/topas_200MeVu_species_development.csv",
+  "evaluation": "validation/results/windows_b580_fragment_transport_species_100k.csv",
+  "species": {
+    "total": {
+      "topas_integral_MeV_mm_per_primary": 1147.220182318729,
+      "gpu_integral_MeV_mm_per_primary": 1152.730211242133,
+      "integral_relative_percent": 0.48029393209132465,
+      "nrmse_normalized_to_topas_maximum": 0.010859563767538017
+    },
+    "primary_c12": {
+      "topas_integral_MeV_mm_per_primary": 847.1654274346162,
+      "gpu_integral_MeV_mm_per_primary": 907.8032136126562,
+      "integral_relative_percent": 7.157726721882796,
+      "nrmse_normalized_to_topas_maximum": 0.012884308230948452
+    },
+    "secondary_carbon": {
+      "topas_integral_MeV_mm_per_primary": 26.353107266094376,
+      "gpu_integral_MeV_mm_per_primary": 31.80011045426302,
+      "integral_relative_percent": 20.669301472379686,
+      "nrmse_normalized_to_topas_maximum": 0.04600806452057143
+    },
+    "boron": {
+      "topas_integral_MeV_mm_per_primary": 22.857521200313723,
+      "gpu_integral_MeV_mm_per_primary": 28.866318747232313,
+      "integral_relative_percent": 26.28805413439195,
+      "nrmse_normalized_to_topas_maximum": 0.06217908384387245
+    },
+    "beryllium": {
+      "topas_integral_MeV_mm_per_primary": 6.919152797031411,
+      "gpu_integral_MeV_mm_per_primary": 8.680587885852974,
+      "integral_relative_percent": 25.457380990014954,
+      "nrmse_normalized_to_topas_maximum": 0.05948266259617274
+    },
+    "lithium": {
+      "topas_integral_MeV_mm_per_primary": 7.0175982075358165,
+      "gpu_integral_MeV_mm_per_primary": 9.24738931414907,
+      "integral_relative_percent": 31.774277191002497,
+      "nrmse_normalized_to_topas_maximum": 0.11135273162836583
+    },
+    "helium": {
+      "topas_integral_MeV_mm_per_primary": 91.99221730238331,
+      "gpu_integral_MeV_mm_per_primary": 113.13632268053318,
+      "integral_relative_percent": 22.98466761448752,
+      "nrmse_normalized_to_topas_maximum": 0.06947155367076654
+    },
+    "proton": {
+      "topas_integral_MeV_mm_per_primary": 46.250732366331924,
+      "gpu_integral_MeV_mm_per_primary": 31.986331945157165,
+      "integral_relative_percent": -30.84145848371146,
+      "nrmse_normalized_to_topas_maximum": 0.12365824418088006
+    },
+    "other": {
+      "topas_integral_MeV_mm_per_primary": 98.66442574441513,
+      "gpu_integral_MeV_mm_per_primary": 21.20993660238645,
+      "integral_relative_percent": -78.502954390745,
+      "nrmse_normalized_to_topas_maximum": 0.40582068666588805
+    }
+  }
+}

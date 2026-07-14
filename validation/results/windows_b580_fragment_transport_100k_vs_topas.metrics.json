@@ -1,0 +1,35 @@
+{
+  "topas": {
+    "peak_depth_mm": 86.75,
+    "peak_value": 55.9021875,
+    "R90_mm": 86.82384424024049,
+    "R80_mm": 86.89768848048098,
+    "R50_mm": 87.11922120120245,
+    "R20_mm": 87.47579852051504,
+    "distal_falloff_R20_minus_R80_mm": 0.578110040034062,
+    "FWHM_mm": 2.298293480877021
+  },
+  "evaluation": {
+    "peak_depth_mm": 86.75,
+    "peak_value": 55.8677651069,
+    "R90_mm": 86.87575877654605,
+    "R80_mm": 87.0015175530921,
+    "R50_mm": 87.35121805434544,
+    "R20_mm": 87.64771642233501,
+    "distal_falloff_R20_minus_R80_mm": 0.6461988692429088,
+    "FWHM_mm": 2.3525141059080283
+  },
+  "differences": {
+    "R80_mm": 0.10382907261111995,
+    "FWHM_relative_percent": 2.359168899975164,
+    "peak_value_percent": -0.0615761111315984,
+    "NRMSE": 0.010804438747128591,
+    "tail_integral_relative_percent": 10.055348980899879
+  },
+  "gamma": {
+    "1pct_1mm_pass_rate_percent": 97.14285714285714,
+    "2pct_2mm_pass_rate_percent": 97.71428571428571,
+    "threshold_percent": 10.0,
+    "normalization": "global TOPAS maximum"
+  }
+}

@@ -88,6 +88,10 @@ int main(int argc, char* argv[]) {
         }
 
         carbon::write_depth_dose_csv(config.output_file, config, result);
+        if (config.enable_secondary_transport) {
+            carbon::write_fragment_species_csv(
+                config.fragment_species_output_file, config, result);
+        }
         const auto histories_per_second =
             result.elapsed_seconds > 0.0 ? static_cast<double>(config.number_of_histories) /
                                                result.elapsed_seconds
@@ -120,6 +124,18 @@ int main(int argc, char* argv[]) {
                       << result.untransported_unsupported_charged_energy_MeV << " MeV\n"
                       << "Nuclear energy not in sampled direct secondaries: "
                       << result.nuclear_energy_not_in_direct_secondaries_MeV << " MeV\n";
+            if (config.enable_secondary_transport) {
+                std::cout << "Transported charged secondaries: "
+                          << result.transported_secondaries << '\n'
+                          << "Secondary transport steps: "
+                          << result.secondary_transport_steps << '\n'
+                          << "Secondary deposited energy: "
+                          << result.secondary_deposited_energy_MeV << " MeV\n"
+                          << "Secondary escaped energy: "
+                          << result.secondary_escaped_energy_MeV << " MeV\n"
+                          << "Fragment species output: "
+                          << config.fragment_species_output_file.string() << '\n';
+            }
         }
         std::cout << "Untracked nuclear energy: " << result.untracked_nuclear_energy_MeV
                   << " MeV\n"
