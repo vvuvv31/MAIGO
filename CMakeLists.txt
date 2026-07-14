@@ -11,6 +11,7 @@ option(CARBON_BUILD_TESTS "Build unit and integration tests" ON)
 
 add_library(carbon_core
     src/config.cpp
+    src/cross_section.cpp
     src/io.cpp
     src/stopping_power.cpp
     src/transport_cpu.cpp
@@ -44,4 +45,3 @@ if(CARBON_BUILD_TESTS)
     target_link_libraries(carbon_tests PRIVATE carbon_core)
     add_test(NAME carbon_tests COMMAND carbon_tests)
 endif()
-

@@ -43,4 +43,6 @@ validation: compare fragment-resolved idd
 - 已增加反应顶点 n-tuple，按事件保存反应前 C-12 能量及全部直接次级粒子的 A/Z、能量和方向；
 - 已用 100 粒子 smoke 作业验证扩展编译、截面闭合和反应包标准化。
 
-现在最直接的下一项工作是：让 CPU/SYCL 输运读取 `data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv` 并按当前能量插值宏观截面，替换配置中的常数 `nuclear_macroscopic_cross_section_per_mm`。完成 serial/SYCL 一致性测试后，再运行 10 万粒子 `fragment-development`，建立正式反应包数据，并实现 B580 上的预分配次级粒子队列。
+CPU/SYCL 能量相关截面接入也已完成：配置改用 `nuclear_cross_section_file`，两种后端在每一步按当前 MeV/u 插值宏观截面。10,000-history 的 B580 与 serial 曲线 NRMSE 为 `1.38e-5`，R80 差 `-3.9e-5 mm`，2%/2 mm gamma 为 `100%`。
+
+现在最直接的下一项工作是：运行 10 万粒子 `fragment-development`，建立正式反应包数据，然后实现 B580 上的预分配次级粒子队列，并按 `reaction_id` 整包采样碎片，而不是独立抽取各粒种。

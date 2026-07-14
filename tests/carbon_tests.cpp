@@ -1,3 +1,4 @@
+#include "carbon/cross_section.hpp"
 #include "carbon/rng.hpp"
 #include "carbon/stopping_power.hpp"
 #include "carbon/straggling.hpp"
@@ -26,6 +27,11 @@ void require_near(double actual, double expected, double tolerance, const std::s
     }
 }
 
+const carbon::CrossSectionTable& zero_cross_section() {
+    static const carbon::CrossSectionTable table({0.01, 400.0}, {0.0, 0.0});
+    return table;
+}
+
 void test_units() {
     carbon::TransportConfig config;
     config.initial_energy_MeVu = 200.0;
@@ -40,6 +46,12 @@ void test_interpolation() {
     require_near(table.interpolate(1.5), 10.0, 1.0e-12, "Linear interpolation failed");
     require_near(table.interpolate(0.1), 12.0, 1.0e-12, "Low-energy clamp failed");
     require_near(table.interpolate(9.0), 6.0, 1.0e-12, "High-energy clamp failed");
+
+    const carbon::CrossSectionTable cross_section({1.0, 2.0, 3.0}, {0.01, 0.02, 0.04});
+    require_near(cross_section.interpolate(2.5), 0.03, 1.0e-12,
+                 "Cross-section interpolation failed");
+    require_near(cross_section.interpolate(0.1), 0.01, 1.0e-12,
+                 "Cross-section low-energy clamp failed");
 }
 
 void test_step_selection() {
@@ -91,7 +103,7 @@ void test_energy_conservation() {
     config.maximum_step_mm = 0.5;
     config.maximum_relative_energy_loss = 0.01;
     const carbon::StoppingPowerTable table({0.01, 20.0}, {2.0, 2.0});
-    const auto result = carbon::transport_serial(config, table);
+    const auto result = carbon::transport_serial(config, table, zero_cross_section());
     require(result.relative_energy_balance_error() < 1.0e-12,
             "Stopped-particle energy balance failed");
     require_near(result.escaped_energy_MeV, 0.0, 1.0e-12, "Unexpected escape energy");
@@ -105,7 +117,7 @@ void test_escape_energy_conservation() {
     config.depth_bin_width_mm = 0.5;
     config.maximum_step_mm = 0.25;
     const carbon::StoppingPowerTable table({0.01, 20.0}, {1.0, 1.0});
-    const auto result = carbon::transport_serial(config, table);
+    const auto result = carbon::transport_serial(config, table, zero_cross_section());
     require(result.escaped_energy_MeV > 0.0, "Expected nonzero escape energy");
     require(result.relative_energy_balance_error() < 1.0e-12,
             "Escaping-particle energy balance failed");
@@ -122,8 +134,8 @@ void test_straggling_reproducibility() {
     config.enable_energy_straggling = true;
     config.random_seed = 987654321;
     const carbon::StoppingPowerTable table({0.01, 10.01, 20.01}, {2.0, 2.0, 2.0});
-    const auto first = carbon::transport_serial(config, table);
-    const auto second = carbon::transport_serial(config, table);
+    const auto first = carbon::transport_serial(config, table, zero_cross_section());
+    const auto second = carbon::transport_serial(config, table, zero_cross_section());
     require(first.deposited_energy_MeV == second.deposited_energy_MeV,
             "Straggling run was not exactly reproducible");
     require(first.relative_energy_balance_error() < 1.0e-12,
@@ -139,9 +151,9 @@ void test_primary_attenuation_energy_accounting() {
     config.maximum_step_mm = 0.5;
     config.maximum_relative_energy_loss = 0.01;
     config.enable_primary_attenuation = true;
-    config.nuclear_macroscopic_cross_section_per_mm = 100.0;
     const carbon::StoppingPowerTable table({0.01, 10.01, 20.01}, {2.0, 2.0, 2.0});
-    const auto result = carbon::transport_serial(config, table);
+    const carbon::CrossSectionTable high_cross_section({0.01, 20.01}, {100.0, 100.0});
+    const auto result = carbon::transport_serial(config, table, high_cross_section);
     require(result.nuclear_interactions == config.number_of_histories,
             "High-cross-section attenuation did not terminate every primary");
     require(result.untracked_nuclear_energy_MeV > 0.0,
@@ -149,8 +161,7 @@ void test_primary_attenuation_energy_accounting() {
     require(result.relative_energy_balance_error() < 1.0e-12,
             "Primary attenuation energy balance failed");
 
-    config.nuclear_macroscopic_cross_section_per_mm = 0.0;
-    const auto no_attenuation = carbon::transport_serial(config, table);
+    const auto no_attenuation = carbon::transport_serial(config, table, zero_cross_section());
     require(no_attenuation.nuclear_interactions == 0,
             "Zero cross section produced a nuclear interaction");
     require(no_attenuation.relative_energy_balance_error() < 1.0e-12,
@@ -167,8 +178,9 @@ void test_serial_sycl_cpu_match() {
     config.maximum_step_mm = 0.5;
     config.maximum_relative_energy_loss = 0.01;
     const carbon::StoppingPowerTable table({0.01, 10.01, 20.01}, {2.0, 2.0, 2.0});
-    const auto serial = carbon::transport_serial(config, table);
-    const auto sycl_cpu = carbon::transport_sycl(config, table, "cpu");
+    const auto serial = carbon::transport_serial(config, table, zero_cross_section());
+    const auto sycl_cpu =
+        carbon::transport_sycl(config, table, zero_cross_section(), "cpu");
     require(sycl_cpu.relative_energy_balance_error() < 1.0e-4,
             "SYCL CPU energy balance failed");
 
@@ -182,8 +194,10 @@ void test_serial_sycl_cpu_match() {
 
     config.enable_energy_straggling = true;
     config.random_seed = 42;
-    const auto serial_straggling = carbon::transport_serial(config, table);
-    const auto sycl_straggling = carbon::transport_sycl(config, table, "cpu");
+    const auto serial_straggling =
+        carbon::transport_serial(config, table, zero_cross_section());
+    const auto sycl_straggling =
+        carbon::transport_sycl(config, table, zero_cross_section(), "cpu");
     absolute_difference = 0.0;
     for (std::size_t bin = 0; bin < serial_straggling.deposited_energy_MeV.size(); ++bin) {
         absolute_difference += std::abs(serial_straggling.deposited_energy_MeV[bin] -
@@ -196,9 +210,12 @@ void test_serial_sycl_cpu_match() {
                 std::to_string(relative_tally_difference));
 
     config.enable_primary_attenuation = true;
-    config.nuclear_macroscopic_cross_section_per_mm = 0.01;
-    const auto serial_attenuation = carbon::transport_serial(config, table);
-    const auto sycl_attenuation = carbon::transport_sycl(config, table, "cpu");
+    const carbon::CrossSectionTable attenuation_cross_section(
+        {0.01, 20.01}, {0.01, 0.01});
+    const auto serial_attenuation =
+        carbon::transport_serial(config, table, attenuation_cross_section);
+    const auto sycl_attenuation =
+        carbon::transport_sycl(config, table, attenuation_cross_section, "cpu");
     require(serial_attenuation.nuclear_interactions == sycl_attenuation.nuclear_interactions,
             "Serial/SYCL CPU nuclear interaction count mismatch");
     require(sycl_attenuation.relative_energy_balance_error() < 1.0e-4,

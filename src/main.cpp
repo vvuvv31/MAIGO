@@ -1,3 +1,4 @@
+#include "carbon/cross_section.hpp"
 #include "carbon/io.hpp"
 #include "carbon/stopping_power.hpp"
 #include "carbon/transport.hpp"
@@ -53,16 +54,18 @@ int main(int argc, char* argv[]) {
         config.validate();
 
         const auto stopping_power = carbon::StoppingPowerTable::from_csv(config.stopping_power_file);
+        const auto cross_section =
+            carbon::CrossSectionTable::from_csv(config.nuclear_cross_section_file);
         carbon::TransportResult result;
         if (config.device == "serial") {
-            result = carbon::transport_serial(config, stopping_power);
+            result = carbon::transport_serial(config, stopping_power, cross_section);
         } else {
 #ifdef CARBON_HAS_SYCL
             if (config.device != "cpu" && config.device != "gpu" && config.device != "default") {
                 throw std::invalid_argument("SYCL device must be cpu, gpu, or default");
             }
             std::cout << "SYCL device: " << carbon::describe_sycl_device(config.device) << '\n';
-            result = carbon::transport_sycl(config, stopping_power, config.device);
+            result = carbon::transport_sycl(config, stopping_power, cross_section, config.device);
 #else
             throw std::runtime_error(
                 "This binary was built without SYCL. Reconfigure with CARBON_ENABLE_SYCL=ON and icpx.");

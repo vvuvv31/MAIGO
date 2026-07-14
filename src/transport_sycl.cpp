@@ -32,33 +32,42 @@ bool is_uniform_grid(const std::vector<double>& energies) {
 
 TransportResult transport_sycl(const TransportConfig& config,
                                const StoppingPowerTable& stopping_power,
+                               const CrossSectionTable& cross_section,
                                const std::string& device_name) {
     config.validate();
     if (!is_uniform_grid(stopping_power.energies())) {
         throw std::invalid_argument("The current SYCL backend requires a uniform stopping-power grid");
     }
+    if (!is_uniform_grid(cross_section.energies())) {
+        throw std::invalid_argument("The current SYCL backend requires a uniform cross-section grid");
+    }
 
     auto queue = make_sycl_queue(device_name);
     const auto start = std::chrono::steady_clock::now();
     const auto table_size = stopping_power.values().size();
+    const auto cross_section_table_size = cross_section.values().size();
     const auto number_of_bins = config.number_of_bins();
     const auto number_of_histories = config.number_of_histories;
 
-    auto* table_device = sycl::malloc_device<float>(table_size, queue);
     const auto& device = queue.get_device();
     if (!device.has(sycl::aspect::fp64) || !device.has(sycl::aspect::atomic64)) {
         throw std::runtime_error(
             "The current accurate SYCL scorer requires fp64 and atomic64 device aspects");
     }
 
+    auto* table_device = sycl::malloc_device<float>(table_size, queue);
+    auto* cross_section_device =
+        sycl::malloc_device<float>(cross_section_table_size, queue);
     auto* dose_device = sycl::malloc_device<double>(number_of_bins, queue);
     auto* deposited_device = sycl::malloc_device<float>(number_of_histories, queue);
     auto* escaped_device = sycl::malloc_device<float>(number_of_histories, queue);
     auto* nuclear_device = sycl::malloc_device<float>(number_of_histories, queue);
     auto* steps_device = sycl::malloc_device<std::uint32_t>(number_of_histories, queue);
-    if (table_device == nullptr || dose_device == nullptr || deposited_device == nullptr ||
+    if (table_device == nullptr || cross_section_device == nullptr || dose_device == nullptr ||
+        deposited_device == nullptr ||
         escaped_device == nullptr || nuclear_device == nullptr || steps_device == nullptr) {
         if (table_device != nullptr) sycl::free(table_device, queue);
+        if (cross_section_device != nullptr) sycl::free(cross_section_device, queue);
         if (dose_device != nullptr) sycl::free(dose_device, queue);
         if (deposited_device != nullptr) sycl::free(deposited_device, queue);
         if (escaped_device != nullptr) sycl::free(escaped_device, queue);
@@ -71,6 +80,11 @@ TransportResult transport_sycl(const TransportConfig& config,
     std::transform(stopping_power.values().begin(), stopping_power.values().end(), table_host.begin(),
                    [](double value) { return static_cast<float>(value); });
     queue.copy(table_host.data(), table_device, table_size);
+    std::vector<float> cross_section_host(cross_section_table_size);
+    std::transform(cross_section.values().begin(), cross_section.values().end(),
+                   cross_section_host.begin(),
+                   [](double value) { return static_cast<float>(value); });
+    queue.copy(cross_section_host.data(), cross_section_device, cross_section_table_size);
     queue.memset(dose_device, 0, number_of_bins * sizeof(double));
 
     constexpr std::size_t local_size = 128;
@@ -88,12 +102,14 @@ TransportResult transport_sycl(const TransportConfig& config,
     const auto water_density_g_per_cm3 = static_cast<float>(config.water_density_g_per_cm3);
     const auto random_seed = config.random_seed;
     const auto enable_primary_attenuation = config.enable_primary_attenuation;
-    const auto nuclear_macroscopic_cross_section_per_mm =
-        static_cast<float>(config.nuclear_macroscopic_cross_section_per_mm);
     const auto inverse_mass_number = 1.0f / static_cast<float>(config.mass_number);
     const auto minimum_table_energy = static_cast<float>(stopping_power.energies().front());
     const auto inverse_table_step =
         1.0f / static_cast<float>(stopping_power.energies()[1] - stopping_power.energies()[0]);
+    const auto minimum_cross_section_energy =
+        static_cast<float>(cross_section.energies().front());
+    const auto inverse_cross_section_step =
+        1.0f / static_cast<float>(cross_section.energies()[1] - cross_section.energies()[0]);
 
     auto kernel_event = queue.parallel_for(
         sycl::nd_range<1>{sycl::range<1>{global_size}, sycl::range<1>{local_size}},
@@ -172,8 +188,25 @@ TransportResult transport_sycl(const TransportConfig& config,
                 energy_MeV -= deposited_MeV;
                 position_mm += step_mm;
                 if (enable_primary_attenuation && energy_MeV > energy_cutoff_MeV) {
+                    const auto post_step_energy_MeVu = energy_MeV * inverse_mass_number;
+                    auto cross_section_floating_index =
+                        (post_step_energy_MeVu - minimum_cross_section_energy) *
+                        inverse_cross_section_step;
+                    auto cross_section_index =
+                        static_cast<int>(sycl::floor(cross_section_floating_index));
+                    cross_section_index = sycl::max(
+                        0, sycl::min(cross_section_index,
+                                     static_cast<int>(cross_section_table_size) - 2));
+                    const auto cross_section_fraction = sycl::clamp(
+                        cross_section_floating_index - static_cast<float>(cross_section_index),
+                        0.0f, 1.0f);
+                    const auto macroscopic_cross_section_per_mm =
+                        cross_section_device[cross_section_index] +
+                        cross_section_fraction *
+                            (cross_section_device[cross_section_index + 1] -
+                             cross_section_device[cross_section_index]);
                     const auto probability = 1.0f - sycl::exp(
-                        -nuclear_macroscopic_cross_section_per_mm * step_mm);
+                        -macroscopic_cross_section_per_mm * step_mm);
                     const auto uniform = rng::uniform01(random_seed, history, steps, 2);
                     if (uniform < probability) {
                         history_nuclear_MeV = energy_MeV;
@@ -215,6 +248,7 @@ TransportResult transport_sycl(const TransportConfig& config,
     queue.copy(steps_device, steps_host.data(), number_of_histories).wait_and_throw();
 
     sycl::free(table_device, queue);
+    sycl::free(cross_section_device, queue);
     sycl::free(dose_device, queue);
     sycl::free(deposited_device, queue);
     sycl::free(escaped_device, queue);

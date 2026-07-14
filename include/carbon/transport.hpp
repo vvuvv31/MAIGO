@@ -1,5 +1,6 @@
 #pragma once
 
+#include "carbon/cross_section.hpp"
 #include "carbon/stopping_power.hpp"
 #include "carbon/transport_config.hpp"
 
@@ -29,11 +30,13 @@ struct TransportResult {
                                     double maximum_relative_energy_loss);
 
 TransportResult transport_serial(const TransportConfig& config,
-                                 const StoppingPowerTable& stopping_power);
+                                 const StoppingPowerTable& stopping_power,
+                                 const CrossSectionTable& cross_section);
 
 #ifdef CARBON_HAS_SYCL
 TransportResult transport_sycl(const TransportConfig& config,
                                const StoppingPowerTable& stopping_power,
+                               const CrossSectionTable& cross_section,
                                const std::string& device_name);
 std::string describe_sycl_device(const std::string& device_name);
 #endif

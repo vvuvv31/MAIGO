@@ -34,7 +34,8 @@ double choose_step_mm(double energy_MeV,
 }
 
 TransportResult transport_serial(const TransportConfig& config,
-                                 const StoppingPowerTable& stopping_power) {
+                                 const StoppingPowerTable& stopping_power,
+                                 const CrossSectionTable& cross_section) {
     config.validate();
     const auto start = std::chrono::steady_clock::now();
     TransportResult result;
@@ -98,8 +99,12 @@ TransportResult transport_serial(const TransportConfig& config,
             energy_MeV -= deposited_MeV;
             position_mm += step_mm;
             if (config.enable_primary_attenuation && energy_MeV > config.energy_cutoff_MeV) {
+                const auto post_step_energy_MeVu =
+                    energy_MeV / static_cast<double>(config.mass_number);
+                const auto macroscopic_cross_section_per_mm =
+                    cross_section.interpolate(post_step_energy_MeVu);
                 const auto probability = 1.0 - std::exp(
-                    -config.nuclear_macroscopic_cross_section_per_mm * step_mm);
+                    -macroscopic_cross_section_per_mm * step_mm);
                 const auto uniform = static_cast<double>(
                     rng::uniform01(config.random_seed, history_id, steps, 2));
                 if (uniform < probability) {

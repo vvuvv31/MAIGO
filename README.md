@@ -13,6 +13,7 @@
 - 每初级粒子的能量沉积与剂量 CSV；
 - 可选 Intel oneAPI/SYCL 后端；
 - CPU/SYCL 共用配置和物理数据；
+- 从 TOPAS/Geant4 直接导出的能量相关 C-12 水中非弹性截面；
 - 无第三方 C++ 测试依赖的基础测试。
 
 ## 已验证环境与当前结果
@@ -31,7 +32,9 @@
 
 Level 3 使用从 TOPAS primary-C12 生存代理拟合的有效宏观衰减系数 `0.0050613 mm^-1`。相对 primary-C12 scorer，峰值差 `+4.94%`、FWHM 差 `-1.76%`、R80 差 `+0.101 mm`、2%/2 mm gamma `98.29%`。这仍是过渡模型：反应后的剩余能量只记入 `untracked_nuclear_energy`，尚未生成碎片；完整 TOPAS 的尾积分因此仍低约 `92.4%`。
 
-项目现已通过 TOPAS 自定义计分器直接查询同一 Geant4 物理列表中的 C-12 非弹性截面，得到 1--400 MeV/u 的 H、O 微观截面和水中宏观截面表。200 MeV/u 时水中宏观截面为 `0.00474216 mm^-1`，平均自由程为 `210.874 mm`。下一版 GPU 输运应读取该能量相关表，替换上述拟合常数。反应末态使用事件级 n-tuple；相同 `reaction_id` 的碎片保持多重性、能量和方向相关性并作为整体采样。
+项目现已通过 TOPAS 自定义计分器直接查询同一 Geant4 物理列表中的 C-12 非弹性截面，得到 1--400 MeV/u 的 H、O 微观截面和水中宏观截面表。200 MeV/u 时水中宏观截面为 `0.00474216 mm^-1`，平均自由程为 `210.874 mm`。CPU 和 SYCL 输运均已按当前能量插值该表并替换上述拟合常数。反应末态使用事件级 n-tuple；相同 `reaction_id` 的碎片保持多重性、能量和方向相关性并作为整体采样。
+
+直接截面版本的 10,000-history 原生 B580 验证得到 3,816 次核反应，serial 得到 3,818 次；曲线 NRMSE 为 `1.38e-5`、R80 差 `-3.9e-5 mm`、1%/1 mm 与 2%/2 mm gamma 均为 `100%`。这两次事件差异来自 SYCL float 与 serial double 的采样边界，不影响当前剂量曲线一致性。
 
 ## WSL 构建
 
@@ -94,5 +97,7 @@ depth_mm,energy_deposition_MeV_per_primary,dose_Gy_per_primary,relative_dose
 `data/stopping_power_water.csv` 是用于软件联调的透明、可再生 Bethe-Bloch + 有效电荷近似表，不是 ICRU 或 Geant4 参考数据。第一个物理校准任务是从可信数据源生成正式表，并用 TOPAS 的 R80 对它进行验证；禁止通过逐能量手工调参替代该步骤。
 
 `data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv` 是由项目内的 TOPAS 扩展在物理初始化后直接调用 `G4HadronicProcessStore` 生成的截面表；配套 JSON 记录 TOPAS/Geant4 版本、原始文件哈希和 200 MeV/u 参考点。它不是从 IDD 衰减曲线拟合得到的数据。
+
+输运配置通过 `nuclear_cross_section_file` 指向该表；启用 `enable_primary_attenuation` 后，serial 与 SYCL kernel 都在每一步按 C-12 当前 MeV/u 线性插值水中宏观截面。
 
 TOPAS 开发参考曲线、版本元数据和当前 CSDA 指标位于 `validation/results/`。原始 TOPAS scorer 文件和完整运行日志位于忽略目录 `validation/topas/output/`。

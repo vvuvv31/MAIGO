@@ -14,7 +14,7 @@ enable_energy_straggling: true
 # Keep this fixed for all later energy-validation cases.
 straggling_scale: 1.2
 enable_primary_attenuation: false
-nuclear_macroscopic_cross_section_per_mm: 0.0
 random_seed: 20260714
 stopping_power_file: data/stopping_power_water.csv
+nuclear_cross_section_file: data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv
 output_file: out/cpu_straggling_depth_dose.csv

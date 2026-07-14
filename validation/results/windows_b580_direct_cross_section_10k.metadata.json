@@ -1,0 +1,34 @@
+{
+  "platform": "Windows native Arc validation with WSL serial reference",
+  "histories": 10000,
+  "physics": "straggling plus energy-dependent primary attenuation from direct TOPAS/Geant4 cross sections",
+  "cross_section_table": "data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv",
+  "serial": {
+    "compiler": "IntelLLVM 2026.1.0 in WSL",
+    "elapsed_seconds": 0.76694965,
+    "histories_per_second": 13038.666,
+    "nuclear_interactions": 3818,
+    "relative_energy_balance_error": 4.6566129e-16,
+    "output_sha256": "b8fce84229dcc7d4073994970cccb138e0c18a276496bd2612df1c056e3cca36"
+  },
+  "gpu": {
+    "device": "Intel Arc B580 Graphics",
+    "backend": "Level Zero",
+    "driver": "1.13.35716",
+    "compiler": "IntelLLVM 2025.3.3 on Windows",
+    "elapsed_seconds": 0.1971319,
+    "histories_per_second": 50727.457,
+    "nuclear_interactions": 3816,
+    "relative_energy_balance_error": 2.301681e-08,
+    "output_sha256": "d761bf342783a285737f2ed284d219e2ecde73d218259e32fb18eface03e4bf3"
+  },
+  "gpu_vs_serial": {
+    "nuclear_interaction_difference": -2,
+    "NRMSE": 1.3782032769171197e-05,
+    "R80_difference_mm": -3.922866953587345e-05,
+    "FWHM_relative_percent": -0.0031306071249288282,
+    "tail_integral_relative_percent": -0.00010717163108538017,
+    "gamma_1pct_1mm_percent": 100.0,
+    "gamma_2pct_2mm_percent": 100.0
+  }
+}
