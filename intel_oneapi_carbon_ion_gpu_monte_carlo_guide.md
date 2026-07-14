@@ -62,11 +62,15 @@
 本仓库已经不再处于“从零搭框架”阶段。当前实际架构是：
 
 ```text
-WSL Debian
-  └─ TOPAS 4.2.p3 / Geant4 11.3.p2
+远程 Linux：v@192.168.31.5:~/gpu（最多 56 线程）
+  └─ TOPAS 4.1.p1 / Geant4 11.1.3 MT
      ├─ 生成总 IDD、分粒种 IDD
+     ├─ 生成 60x60x800 祖先归属 3D dose/IDD
      ├─ 直接导出 C-12+H/O 非弹性截面
      └─ 生成事件级反应末态 n-tuple
+
+WSL Debian
+  └─ 仅保留历史开发环境和 TOPAS 数据访问辅助，不再提交新的 TOPAS 作业
 
 Windows 原生
   └─ Intel oneAPI/SYCL + Level Zero + Intel Arc B580
@@ -85,6 +89,8 @@ Windows 原生
 - 反应包标准化脚本和 OriginCount 独立 QA scorer；
 - 10 万粒子正式事件级反应包：37,657 次主 C-12 非弹性反应和 330,659 个直接次级粒子；
 - B580 事件包联合采样、fixed-capacity `atomic64` 带电次级生成队列和溢出/能量记账。
+- TOPAS `CarbonDoseOrigin` 祖先归属 3D scorer、100-history smoke 和远程 56 线程 100000-history 正式基准；
+- 祖先归属 TOPAS 与当前 B580 分粒种 IDD 的无 scale 比较。
 
 关键验证结果：
 
@@ -95,8 +101,11 @@ Windows 原生
 - 第一版带电次级输运已把完整 TOPAS 尾积分差从约 `-92%` 改善到 `+10.055%`；
 - TOPAS `other` 细分显示其中 `78.61%` 是电子/正电子直接轨迹，gamma+neutron 直接沉积积分仅 `0.00407 MeV·mm/primary`；
 - 扣除计分归属不同的 TOPAS 电子项后，GPU `other` 全深度差 `+0.50%`、90 mm 后尾部差 `+4.10%`。
+- 祖先归属正式基准逐 bin 类别闭合最大误差 `6.395e-14 MeV/primary/bin`；与独立 TOPAS total 的最大差 `7.882e-7 MeV/primary/bin`；
+- GPU 对原始 TOPAS total：全深度积分 `+0.402%`，90 mm 后尾部 `+15.452%`；
+- 祖先对齐后仍存在明确的带电碎片偏差：He 全深度/尾部 `+36.55%/+50.14%`，proton `-24.86%/-34.15%`。
 
-下一开发目标不是重新拟合核衰减常数，也不是根据原始 `other -78.5%` 直接添加中性粒子输运。第一版带电次级输运已经完成，接下来应先建立 TOPAS 祖先归属 scorer，把电子沉积回归到母粒子类别并重新比较；然后才根据剩余偏差决定碎片级联和中性粒子模型的优先级。
+下一开发目标不是重新拟合核衰减常数，也不是调整全局 scale。祖先归属已经证明 He 偏高、proton 偏低并非电子计分归属造成；下一步应实现带电碎片的后续核反应与衰变级联，再复核各类别和 90 mm 后尾部。TOPAS 中性来源只占总积分 `0.711%`、尾部 `5.779%`，暂不作为第一优先级。
 
 ---
 
@@ -104,11 +113,12 @@ Windows 原生
 
 ## 3. 推荐软件环境
 
-本项目采用 Windows 与 WSL 分工，而不是要求 WSL 直接运行 Intel GPU：
+本项目采用 Windows 与远程 Linux 分工；WSL 不再承担新的 TOPAS 计算：
 
 - Windows：Visual Studio 2026、Intel oneAPI、Level Zero、Arc B580；
-- WSL Debian：TOPAS/Geant4 参考模拟和 Linux 侧 CPU/SYCL 正确性测试；
-- VS Code：打开同一工作区，可分别使用 Windows 终端和 WSL 终端。
+- 远程 Linux `v@192.168.31.5:~/gpu`：TOPAS/Geant4 参考模拟，最多 56 线程；
+- WSL Debian：仅作历史环境和必要的数据访问辅助；
+- VS Code：打开 Windows 工作区；通过 SSH 脚本提交远程 TOPAS 作业。
 
 推荐组件：
 
@@ -157,7 +167,7 @@ WSL 中检查 SYCL 设备：
 sycl-ls
 ```
 
-当前 WSL 只看到 Intel CPU OpenCL 是允许的，因为 TOPAS 数据生成和 SYCL CPU 正确性测试都可在 WSL 完成。不要把 WSL 看不到 Level Zero GPU 当成项目阻塞条件。
+当前 WSL 只看到 Intel CPU OpenCL 是允许的。Intel GPU kernel 在 Windows 原生 Level Zero/Arc B580 上运行；新的 TOPAS 数据在远程 Linux 主机生成。不要把 WSL 看不到 Level Zero GPU 当成项目阻塞条件。
 
 Windows oneAPI 终端中运行：
 
@@ -1636,44 +1646,47 @@ scripts\run_windows_b580.cmd --histories 10000
 out/windows_b580_attenuation_depth_dose.csv
 ```
 
-在 WSL 运行 TOPAS 开发基准：
+新的 TOPAS 作业只在远程主机运行。先将仓库中的 TOPAS 输入、扩展和脚本同步到 `v@192.168.31.5:~/gpu`，再在远端构建扩展：
 
 ```bash
-cd /mnt/d/OneDrive/DoctorDocuments/myproject/carbonGPU
-export TOPAS_G4_DATA_DIR="$HOME/Applications/GEANT4/G4DATA"
-export TOPAS_EXECUTABLE="$HOME/Applications/TOPAS/OpenTOPAS-install/bin/topas"
-./validation/topas/run_topas.sh development
+ssh v@192.168.31.5
+cd ~/gpu
+./validation/topas/build_extensions_remote.sh
 ```
 
-原始 TOPAS scorer 位于 `validation/topas/output/`。标准化参考曲线位于 `validation/results/`，GPU 曲线位于 `out/`。比较并生成 IDD、峰区和尾部图：
+100-history smoke 和 100000-history 正式 3D 基准分别运行：
 
 ```bash
-python3 validation/scripts/compare_depth_dose.py \
-  validation/results/topas_200MeVu_development.csv \
-  out/windows_b580_attenuation_depth_dose.csv \
-  --output-dir out/compare_topas_b580
+cd ~/gpu
+./validation/topas/run_ancestor_remote.sh smoke
+
+nohup ./validation/topas/run_ancestor_remote.sh development \
+  > validation/topas/output/ancestor_development.remote.log 2>&1 &
 ```
 
-查看按粒种 TOPAS IDD 时，使用 `validation/results/topas_200MeVu_species_development.csv`。该文件保留 total、primary C-12、secondary C、B、Be、Li、He、proton 和 other 兼容列，并新增 electron/positron、gamma、neutron、deuteron、triton、alpha、He-3、other helium 和 unclassified。运行与标准化命令为：
+远程脚本固定使用 56 线程，并调用安装在远端的 TOPAS 4.1.p1 / Geant4 11.1.3 MT。原始 scorer 位于远端 `~/gpu/validation/topas/output/`；正式标准化结果同步回本地 `validation/results/`。
+
+祖先归属 3D scorer 使用 `60 x 60 x 800` 网格，体素为 `5 x 5 x 0.5 mm^3`，覆盖整个 `300 x 300 x 400 mm^3` 水模体。它输出 12 个互斥来源类别，并把电子/正电子沉积归回其带电母粒子；neutron/gamma 及其后代保留为中性来源。标准化命令为：
 
 ```bash
-TOPAS_G4_DATA_DIR="$HOME/Applications/GEANT4/G4DATA" \
-TOPAS_EXECUTABLE="$HOME/Applications/TOPAS/OpenTOPAS-install/bin/topas" \
-./validation/topas/run_topas.sh species-development
+python3 validation/scripts/prepare_topas_ancestor_dose.py \
+  --case development --histories 100000 --seed 20260714 \
+  --execution-host vv \
+  --output-npz validation/results/topas_200MeVu_ancestor_dose_3d_development.npz \
+  --output-idd validation/results/topas_200MeVu_ancestor_dose_3d_development.idd.csv \
+  --metadata validation/results/topas_200MeVu_ancestor_dose_3d_development.metadata.json \
+  --plot validation/results/topas_200MeVu_ancestor_dose_3d_development.png
 
-python3 validation/scripts/prepare_topas_species.py \
-  --case development --histories 100000 \
-  --output-csv validation/results/topas_200MeVu_species_development.csv \
-  --metadata validation/results/topas_200MeVu_species_development.metadata.json \
-  --plot validation/results/topas_200MeVu_species_development.png
-
-python3 validation/scripts/compare_species_depth_dose.py \
-  validation/results/topas_200MeVu_species_development.csv \
+python3 validation/scripts/compare_ancestor_attributed_idd.py \
+  validation/results/topas_200MeVu_ancestor_dose_3d_development.idd.csv \
   validation/results/windows_b580_fragment_transport_species_100k.csv \
-  --metrics-output validation/results/windows_b580_fragment_transport_species_100k_vs_topas.metrics.json
+  --metrics-output validation/results/windows_b580_ancestor_attributed_100k_vs_topas.metrics.json \
+  --plot validation/results/windows_b580_ancestor_attributed_100k_vs_topas.png
 ```
 
-这些列仍是“发生沉积的直接轨迹”分类：gamma/neutron 转移给电子或反冲离子的能量记在后者名下。metrics 中的 `attribution_adjusted` 会额外比较 TOPAS `other-electron_positron` 与 GPU `other`；祖先归属中性粒子剂量需要单独的 provenance scorer，不能把 direct gamma/neutron 列当作完整中性粒子贡献。
+正式基准验收结果：所有祖先类别逐 bin 求和的最大闭合误差为 `6.395e-14 MeV/primary/bin`；与未改动的独立 TOPAS total scorer 最大差为 `7.882e-7 MeV/primary/bin`；`unresolved=0`。这同时证明新 scorer 没有改变原始 TOPAS total IDD，且没有使用全局 scale。
+
+比较时 GPU `other` 只对应 TOPAS `other_charged`；TOPAS 的 `neutron/gamma/neutral_other` 来源单独报告。GPU 对原始 TOPAS total 的全深度积分差为 `+0.402%`，90 mm 后为 `+15.452%`。祖先对齐后的 He 为 `+36.55%/+50.14%`，proton 为 `-24.86%/-34.15%`（全深度/90 mm 后），所以后续工作应转向带电碎片的再反应和衰变级联。
 
 ---
 
@@ -2161,7 +2174,7 @@ Peak dose difference < 5%
 Tail integral difference < 10%
 ```
 
-当前状态：TOPAS 事件级反应 scorer、10 万粒子正式反应包、GPU secondary-generation queue 和第一版 A/Z 带电次级输运均已完成。TOPAS `other` 直接轨迹细分与归属修正比较也已完成；尾积分仍为 `+10.055%`。下一项是祖先归属剂量 scorer，之后再决定后续碎裂级联和中性粒子输运。
+当前状态：TOPAS 事件级反应 scorer、10 万粒子正式反应包、GPU secondary-generation queue、第一版 A/Z 带电次级输运，以及 TOPAS 祖先归属 3D dose scorer 和 10 万粒子正式基准均已完成。归属对齐后，GPU 对原始 TOPAS total 的尾积分差为 `+15.452%`，He 尾部 `+50.14%`、proton 尾部 `-34.15%`。下一项是带电碎片的后续核反应与衰变级联；不得用全局 scale 掩盖偏差。
 
 ---
 
@@ -2378,7 +2391,11 @@ energy-loss straggling 模块。
 - [x] absolute energy-deposition normalization；
 - [x] 分粒种 TOPAS IDD 10 万粒子基准；
 - [x] 事件级反应 n-tuple smoke；
-- [ ] 事件级反应 n-tuple 10 万粒子正式基准。
+- [x] 事件级反应 n-tuple 10 万粒子正式基准；
+- [x] 祖先归属 3D dose scorer 100-history smoke；
+- [x] 祖先归属 3D dose scorer 10 万粒子正式基准；
+- [x] 祖先类别逐 bin 闭合与独立 total 不变性验证；
+- [x] GPU/TOPAS 祖先归属 IDD 无 scale 比较。
 
 ## 79. 性能实验
 
@@ -2417,12 +2434,12 @@ energy-loss straggling 模块。
 15. 整理论文实验
 ```
 
-本项目当前已经完成到第 9 步，并完成了第 10 步所需的 TOPAS 数据接口、smoke 验证和 100000-history 正式反应包。紧接着应执行：
+本项目已经完成第 10 步的第一版带电次级输运，并完成 TOPAS 祖先归属 3D scorer、100-history smoke、100000-history 正式基准及 GPU/TOPAS 对齐比较。紧接着应执行：
 
 ```text
-1. 增加 TOPAS 祖先归属 scorer，把电子沉积回归到母粒子类别
-2. 生成 100000-history 祖先归属 IDD，并重新比较 proton 与 He/重碎片
-3. 根据对齐后的剩余差异决定带电碎片级联和 neutron/gamma 模型优先级
+1. 实现带电碎片的后续核反应与衰变级联
+2. 复核 He、proton、重碎片以及 90 mm 后尾部
+3. 根据级联后的剩余差异决定 neutron/gamma 来源输运优先级
 4. 在不使用经验 scale 的条件下通过尾积分 <10%
 5. 通过后再提升到 1000000-history reference
 ```

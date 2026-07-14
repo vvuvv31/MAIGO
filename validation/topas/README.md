@@ -2,17 +2,26 @@
 
 `carbon_200MeVu_water.txt` fixes the first benchmark case: 2400 MeV total kinetic energy for fully stripped C-12, a 400 mm long `Water_75eV` phantom, 0.5 mm depth bins, a monoenergetic pencil beam, and one million histories.
 
-Run from WSL:
+New TOPAS jobs run on the dedicated Linux host `v@192.168.31.5`, not in WSL. The
+remote working tree is `~/gpu`, and the host provides 56 logical CPUs. Windows
+remains the native oneAPI/Arc B580 execution environment.
+
+Build and run the remote extension after synchronizing the required files:
 
 ```bash
-TOPAS_EXECUTABLE=/path/to/topas ./validation/topas/run_topas.sh development
+ssh v@192.168.31.5
+cd ~/gpu
+bash validation/topas/build_extensions_remote.sh
+bash validation/topas/run_ancestor_remote.sh smoke
 ```
 
-Validate syntax and geometry first with only 100 histories:
+The formal 100,000-history job uses the explicit 56-thread overlay and should be
+detached so that a Windows restart cannot terminate it:
 
 ```bash
-cd validation/topas
-./run_topas.sh smoke
+cd ~/gpu
+nohup bash validation/topas/run_ancestor_remote.sh development \
+  > validation/topas/output/ancestor-development_nohup.log 2>&1 < /dev/null &
 ```
 
 Available total-IDD cases are `smoke` (100 histories), `development` (10,000), and `reference` (1,000,000). The runner saves the full TOPAS/Geant4 console output as `output/<case>_topas.log`.
@@ -43,6 +52,53 @@ The species curves represent energy deposited directly on each particle track. G
 
 The metadata also records SHA-256 hashes for every raw scorer and the TOPAS log, the detected Geant4 version and elapsed wall time, integrated species fractions, and species fractions in the tail beginning at 90 mm. Change the analysis boundary with `--tail-start-mm` only when a different boundary is recorded for the comparison.
 
+## Ancestor-attributed 3D dose baseline
+
+`CarbonDoseOrigin` maintains an event-local `track_id -> origin` map beginning
+before transport. Electron and positron dose inherits the charged parent origin;
+neutron, gamma, and other-neutral lineages retain their neutral source. The 12
+mutually exclusive categories are primary C-12, secondary carbon, B, Be, Li, He,
+proton, other charged, neutron, gamma, other neutral, and unresolved.
+
+The full 300 x 300 x 400 mm water phantom is scored on a `60 x 60 x 800` grid,
+corresponding to `5 x 5 x 0.5 mm3` voxels. TOPAS writes sparse 3D CSV files. The
+postprocessor packages a dense total plus sparse category arrays in NPZ, derives
+an 800-bin IDD from the 3D dose, and checks both category closure and the
+independent TOPAS `DoseToMedium` total.
+
+The accepted reference was run on host `vv` with TOPAS 4.1.p1, Geant4
+11.1.3, seed `20260714`, 56 threads, and 100,000 primaries:
+
+```bash
+cd ~/gpu
+python3 validation/scripts/prepare_topas_ancestor_dose.py \
+  --case development --histories 100000 \
+  --seed 20260714 --execution-host vv \
+  --output-npz validation/results/topas_200MeVu_ancestor_dose_3d_development.npz \
+  --output-idd validation/results/topas_200MeVu_ancestor_dose_3d_development.idd.csv \
+  --metadata validation/results/topas_200MeVu_ancestor_dose_3d_development.metadata.json \
+  --plot validation/results/topas_200MeVu_ancestor_dose_3d_development.png
+```
+
+The formal result closes at `6.395e-14 MeV/primary/bin`; the separately
+accumulated TOPAS total differs by at most `7.882e-7 MeV/primary/bin`, unresolved
+dose is zero, and no global scale is applied. Total wall time was 1022.56 s.
+
+Compare the derived TOPAS IDD with the existing Windows B580 result using:
+
+```bash
+python3 validation/scripts/compare_ancestor_attributed_idd.py \
+  validation/results/topas_200MeVu_ancestor_dose_3d_development.idd.csv \
+  validation/results/windows_b580_fragment_transport_species_100k.csv \
+  --metrics-output validation/results/windows_b580_ancestor_attributed_100k_vs_topas.metrics.json \
+  --plot validation/results/windows_b580_ancestor_attributed_100k_vs_topas.png
+```
+
+GPU `other` is compared only with TOPAS `other_charged`. Neutron/gamma lineage
+dose remains separate because the current GPU model has no spatial neutral
+transport. The current GPU output is IDD-only, so a GPU-vs-TOPAS 3D spatial
+comparison is not yet available.
+
 ## Direct cross-section and reaction-final-state extraction
 
 The attenuation probability and the fragmentation final state are extracted separately from the same TOPAS/Geant4 physics configuration:
@@ -51,7 +107,9 @@ The attenuation probability and the fragmentation final state are extracted sepa
 - `CarbonReactionNtuple` records the primary C-12 inelastic reaction header and every direct secondary in the same event, including incident energy, vertex, particle identity, kinetic energy, direction, creator process, and model ID. Rows with one `reaction_id` must be sampled jointly.
 - the OriginCount and species-resolved IDD scorers are independent QA observables; they must not replace correlated event-level final-state sampling.
 
-Build the extension-enabled TOPAS executable in WSL (all generated source/build/install files remain under the ignored project `build/` directory):
+The command below is the legacy WSL extension build used for already completed
+cross-section and reaction-package datasets. Do not use it for new TOPAS jobs;
+new validation runs use `build_extensions_remote.sh` on `v@192.168.31.5`.
 
 ```bash
 bash validation/topas/build_extensions.sh
