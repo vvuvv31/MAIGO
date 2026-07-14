@@ -1,23 +1,23 @@
 {
   "reference": "validation/results/topas_200MeVu_ancestor_dose_3d_development.idd.csv",
   "evaluation": "validation/results/windows_b580_fragment_cascade_100k_species.csv",
-  "semantics": "TOPAS electrons/positrons inherit charged-parent ancestry; neutron/gamma descendants remain neutral-source lineages. GPU other is compared with TOPAS other_charged.",
+  "semantics": "TOPAS electrons/positrons inherit their charged parent category; charged nuclear products are classified by their own Z/A; neutral-source lineages remain separate. GPU other is compared with TOPAS other_charged.",
   "global_scale_applied": false,
   "tail_start_mm": 90.0,
   "all_depth": {
     "gpu_vs_topas_raw_total": {
       "topas_deposited_MeV_per_primary": 2300.265768606223,
-      "gpu_deposited_MeV_per_primary": 2279.0397703377093,
-      "gpu_minus_topas_MeV_per_primary": -21.22599826851365,
-      "relative_difference_percent": -0.9227628632397122,
-      "nrmse_normalized_to_topas_maximum": 0.011094085334741844
+      "gpu_deposited_MeV_per_primary": 2278.823534343285,
+      "gpu_minus_topas_MeV_per_primary": -21.4422342629382,
+      "relative_difference_percent": -0.9321633419746345,
+      "nrmse_normalized_to_topas_maximum": 0.011092764485480973
     },
     "gpu_vs_topas_charged_origin_total": {
       "topas_deposited_MeV_per_primary": 2283.913324195065,
-      "gpu_deposited_MeV_per_primary": 2279.0397703377093,
-      "gpu_minus_topas_MeV_per_primary": -4.873553857355546,
-      "relative_difference_percent": -0.21338611258696627,
-      "nrmse_normalized_to_topas_maximum": 0.011089495437231431
+      "gpu_deposited_MeV_per_primary": 2278.823534343285,
+      "gpu_minus_topas_MeV_per_primary": -5.089789851780097,
+      "relative_difference_percent": -0.22285389720618776,
+      "nrmse_normalized_to_topas_maximum": 0.011087922483555985
     },
     "topas_neutral_origin_deposited_MeV_per_primary": 16.352444412003976,
     "topas_neutral_origin_fraction_of_total_percent": 0.7108936991186131,
@@ -25,79 +25,79 @@
     "categories": {
       "primary_c12": {
         "topas_deposited_MeV_per_primary": 1830.4507705175215,
-        "gpu_deposited_MeV_per_primary": 1819.6302716669074,
-        "gpu_minus_topas_MeV_per_primary": -10.820498850614058,
-        "relative_difference_percent": -0.5911384793787611,
-        "nrmse_normalized_to_topas_maximum": 0.011415569047854625
+        "gpu_deposited_MeV_per_primary": 1819.6302716669077,
+        "gpu_minus_topas_MeV_per_primary": -10.82049885061383,
+        "relative_difference_percent": -0.59113847937875,
+        "nrmse_normalized_to_topas_maximum": 0.011415569047854623
       },
       "secondary_carbon": {
         "topas_deposited_MeV_per_primary": 62.85267824517619,
-        "gpu_deposited_MeV_per_primary": 62.18878740576252,
-        "gpu_minus_topas_MeV_per_primary": -0.6638908394136749,
-        "relative_difference_percent": -1.0562649960976445,
-        "nrmse_normalized_to_topas_maximum": 0.013317287061835617
+        "gpu_deposited_MeV_per_primary": 57.00824554580844,
+        "gpu_minus_topas_MeV_per_primary": -5.844432699367751,
+        "relative_difference_percent": -9.298621574357968,
+        "nrmse_normalized_to_topas_maximum": 0.01999476763607395
       },
       "boron": {
         "topas_deposited_MeV_per_primary": 64.92410058857074,
-        "gpu_deposited_MeV_per_primary": 55.43977996822139,
-        "gpu_minus_topas_MeV_per_primary": -9.48432062034935,
-        "relative_difference_percent": -14.608320383908369,
-        "nrmse_normalized_to_topas_maximum": 0.04745158134866952
+        "gpu_deposited_MeV_per_primary": 48.50143611755089,
+        "gpu_minus_topas_MeV_per_primary": -16.42266447101985,
+        "relative_difference_percent": -25.295174399244434,
+        "nrmse_normalized_to_topas_maximum": 0.05713664516314138
       },
       "beryllium": {
         "topas_deposited_MeV_per_primary": 14.421524407868707,
-        "gpu_deposited_MeV_per_primary": 16.66460966074672,
-        "gpu_minus_topas_MeV_per_primary": 2.2430852528780125,
-        "relative_difference_percent": 15.5537319733976,
-        "nrmse_normalized_to_topas_maximum": 0.02819216716497969
+        "gpu_deposited_MeV_per_primary": 15.751053226366748,
+        "gpu_minus_topas_MeV_per_primary": 1.3295288184980407,
+        "relative_difference_percent": 9.219058824132498,
+        "nrmse_normalized_to_topas_maximum": 0.024548010896366608
       },
       "lithium": {
         "topas_deposited_MeV_per_primary": 19.991611663989584,
-        "gpu_deposited_MeV_per_primary": 17.111497127900602,
-        "gpu_minus_topas_MeV_per_primary": -2.880114536088982,
-        "relative_difference_percent": -14.40661505683838,
-        "nrmse_normalized_to_topas_maximum": 0.07704971660769258
+        "gpu_deposited_MeV_per_primary": 15.104676794058516,
+        "gpu_minus_topas_MeV_per_primary": -4.886934869931068,
+        "relative_difference_percent": -24.444926962711,
+        "nrmse_normalized_to_topas_maximum": 0.08651322746720895
       },
       "helium": {
-        "topas_deposited_MeV_per_primary": 165.71363979906607,
-        "gpu_deposited_MeV_per_primary": 206.7953904085791,
-        "gpu_minus_topas_MeV_per_primary": 41.08175060951302,
-        "relative_difference_percent": 24.790808203432245,
-        "nrmse_normalized_to_topas_maximum": 0.07542695790534967
+        "topas_deposited_MeV_per_primary": 165.7136397990661,
+        "gpu_deposited_MeV_per_primary": 192.0409257506367,
+        "gpu_minus_topas_MeV_per_primary": 26.327285951570587,
+        "relative_difference_percent": 15.887217240230434,
+        "nrmse_normalized_to_topas_maximum": 0.058178392340397844
       },
       "proton": {
         "topas_deposited_MeV_per_primary": 85.14968351971807,
-        "gpu_deposited_MeV_per_primary": 61.8330595743062,
-        "gpu_minus_topas_MeV_per_primary": -23.31662394541187,
-        "relative_difference_percent": -27.383101124518504,
-        "nrmse_normalized_to_topas_maximum": 0.10916126581572018
+        "gpu_deposited_MeV_per_primary": 86.04778519281054,
+        "gpu_minus_topas_MeV_per_primary": 0.8981016730924694,
+        "relative_difference_percent": 1.054732837479655,
+        "nrmse_normalized_to_topas_maximum": 0.010086498420699391
       },
       "other_charged": {
         "topas_deposited_MeV_per_primary": 40.4093154531541,
-        "gpu_deposited_MeV_per_primary": 39.37637452521308,
-        "gpu_minus_topas_MeV_per_primary": -1.03294092794102,
-        "relative_difference_percent": -2.5561950663046784,
-        "nrmse_normalized_to_topas_maximum": 0.043896218669163836
+        "gpu_deposited_MeV_per_primary": 44.73914004878478,
+        "gpu_minus_topas_MeV_per_primary": 4.329824595630683,
+        "relative_difference_percent": 10.714916961783683,
+        "nrmse_normalized_to_topas_maximum": 0.048117084131480366
       }
     }
   },
   "tail": {
     "gpu_vs_topas_raw_total": {
       "topas_deposited_MeV_per_primary": 219.783877550313,
-      "gpu_deposited_MeV_per_primary": 229.15874801855938,
-      "gpu_minus_topas_MeV_per_primary": 9.374870468246371,
-      "relative_difference_percent": 4.2654950730406815,
-      "nrmse_normalized_to_topas_maximum": 0.01086058912227874
+      "gpu_deposited_MeV_per_primary": 229.007171662505,
+      "gpu_minus_topas_MeV_per_primary": 9.22329411219198,
+      "relative_difference_percent": 4.196528978828562,
+      "nrmse_normalized_to_topas_maximum": 0.010989699723867182
     },
     "gpu_vs_topas_charged_origin_total": {
-      "topas_deposited_MeV_per_primary": 207.0824434232693,
-      "gpu_deposited_MeV_per_primary": 229.15874801855938,
-      "gpu_minus_topas_MeV_per_primary": 22.076304595290082,
-      "relative_difference_percent": 10.660635556712506,
-      "nrmse_normalized_to_topas_maximum": 0.019704283990423524
+      "topas_deposited_MeV_per_primary": 207.08244342326932,
+      "gpu_deposited_MeV_per_primary": 229.007171662505,
+      "gpu_minus_topas_MeV_per_primary": 21.924728239235662,
+      "relative_difference_percent": 10.587439416301603,
+      "nrmse_normalized_to_topas_maximum": 0.019702619948714563
     },
-    "topas_neutral_origin_deposited_MeV_per_primary": 12.701434127017592,
-    "topas_neutral_origin_fraction_of_total_percent": 5.779056347802388,
+    "topas_neutral_origin_deposited_MeV_per_primary": 12.70143412701759,
+    "topas_neutral_origin_fraction_of_total_percent": 5.7790563478023875,
     "topas_unresolved_MeV_per_primary": 0.0,
     "categories": {
       "primary_c12": {
@@ -108,55 +108,56 @@
         "nrmse_normalized_to_topas_maximum": null
       },
       "secondary_carbon": {
-        "topas_deposited_MeV_per_primary": 0.35663764065476494,
-        "gpu_deposited_MeV_per_primary": 2.773280484996588,
-        "gpu_minus_topas_MeV_per_primary": 2.416642844341823,
-        "relative_difference_percent": 677.6185598090584,
-        "nrmse_normalized_to_topas_maximum": 1.080628392375381
+        "topas_deposited_MeV_per_primary": 0.356637640654765,
+        "gpu_deposited_MeV_per_primary": 0.41914389763813364,
+        "gpu_minus_topas_MeV_per_primary": 0.06250625698336865,
+        "relative_difference_percent": 17.52654511414189,
+        "nrmse_normalized_to_topas_maximum": 0.08444193597311474
       },
       "boron": {
-        "topas_deposited_MeV_per_primary": 13.86383122677787,
-        "gpu_deposited_MeV_per_primary": 15.72679588294541,
-        "gpu_minus_topas_MeV_per_primary": 1.8629646561675397,
-        "relative_difference_percent": 13.43758897301952,
-        "nrmse_normalized_to_topas_maximum": 0.02399499041676816
+        "topas_deposited_MeV_per_primary": 13.863831226777872,
+        "gpu_deposited_MeV_per_primary": 10.851307693719518,
+        "gpu_minus_topas_MeV_per_primary": -3.0125235330583546,
+        "relative_difference_percent": -21.729372521786694,
+        "nrmse_normalized_to_topas_maximum": 0.031567037186721845
       },
       "beryllium": {
         "topas_deposited_MeV_per_primary": 4.154478823065907,
-        "gpu_deposited_MeV_per_primary": 5.607561836451919,
-        "gpu_minus_topas_MeV_per_primary": 1.4530830133860118,
-        "relative_difference_percent": 34.97630088564685,
-        "nrmse_normalized_to_topas_maximum": 0.03467271128969324
+        "gpu_deposited_MeV_per_primary": 4.541713796089847,
+        "gpu_minus_topas_MeV_per_primary": 0.38723497302393994,
+        "relative_difference_percent": 9.320903764727095,
+        "nrmse_normalized_to_topas_maximum": 0.02479941860745135
       },
       "lithium": {
-        "topas_deposited_MeV_per_primary": 10.784655597488621,
-        "gpu_deposited_MeV_per_primary": 10.423340540202151,
-        "gpu_minus_topas_MeV_per_primary": -0.36131505728647006,
-        "relative_difference_percent": -3.3502697793206138,
-        "nrmse_normalized_to_topas_maximum": 0.05645720806972057
+        "topas_deposited_MeV_per_primary": 10.784655597488623,
+        "gpu_deposited_MeV_per_primary": 8.618124898234226,
+        "gpu_minus_topas_MeV_per_primary": -2.1665306992543965,
+        "relative_difference_percent": -20.089011463276652,
+        "nrmse_normalized_to_topas_maximum": 0.06793278977663532
       },
       "helium": {
-        "topas_deposited_MeV_per_primary": 107.43181385775928,
-        "gpu_deposited_MeV_per_primary": 140.7337210663028,
-        "gpu_minus_topas_MeV_per_primary": 33.30190720854351,
-        "relative_difference_percent": 30.99818015977609,
-        "nrmse_normalized_to_topas_maximum": 0.08553206362515586
+        "topas_deposited_MeV_per_primary": 107.4318138577593,
+        "gpu_deposited_MeV_per_primary": 127.38318542337826,
+        "gpu_minus_topas_MeV_per_primary": 19.95137156561897,
+        "relative_difference_percent": 18.571194927449298,
+        "nrmse_normalized_to_topas_maximum": 0.06181879344524431
       },
       "proton": {
-        "topas_deposited_MeV_per_primary": 44.287895262516564,
-        "gpu_deposited_MeV_per_primary": 26.94425075063323,
-        "gpu_minus_topas_MeV_per_primary": -17.343644511883333,
-        "relative_difference_percent": -39.16113965018852,
-        "nrmse_normalized_to_topas_maximum": 0.1256165430121978
+        "topas_deposited_MeV_per_primary": 44.28789526251657,
+        "gpu_deposited_MeV_per_primary": 45.6592113665895,
+        "gpu_minus_topas_MeV_per_primary": 1.3713161040729318,
+        "relative_difference_percent": 3.0963677455080107,
+        "nrmse_normalized_to_topas_maximum": 0.010400782794876594
       },
       "other_charged": {
         "topas_deposited_MeV_per_primary": 26.2031310150063,
-        "gpu_deposited_MeV_per_primary": 26.949797457031497,
-        "gpu_minus_topas_MeV_per_primary": 0.746666442025198,
-        "relative_difference_percent": 2.849531384618076,
-        "nrmse_normalized_to_topas_maximum": 0.03331319779072723
+        "gpu_deposited_MeV_per_primary": 31.5344845868536,
+        "gpu_minus_topas_MeV_per_primary": 5.331353571847302,
+        "relative_difference_percent": 20.34624628939985,
+        "nrmse_normalized_to_topas_maximum": 0.09229207186001576
       }
     }
   },
+  "gpu_species_max_bin_closure_MeV_per_primary": 7.699796356064326e-11,
   "gpu_spatial_3d_comparison_available": false
 }
