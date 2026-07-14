@@ -2240,7 +2240,7 @@ Peak dose difference < 5%
 Tail integral difference < 10%
 ```
 
-当前状态：同位素/代际 QA、统一 TOPAS/Geant4 primary package 和 GPU total voxel tally 框架已完成。Arc B580 对 charged-origin total 的全深度/尾部差为 `-0.11%/+2.93%`，所有带电类别尾部偏差均小于 `7%`。下一项是横向坐标/三维方向输运、体素边界步进和多重散射；之后完成 3D category closure，再实现 neutron/gamma 来源输运。不得用全局 scale 掩盖空间或中性来源偏差。
+当前状态：同位素/代际 QA、统一 TOPAS/Geant4 primary package、GPU total voxel tally 和无散射三维带电次级输运已完成。Arc B580 对 charged-origin total 的全深度/尾部差为 `-0.11%/+2.93%`，所有带电类别尾部偏差均小于 `7%`。下一项是带电粒子多重散射；之后完成 3D category closure，再实现 neutron/gamma 来源输运。不得用全局 scale 掩盖空间或中性来源偏差。
 
 ---
 
@@ -2463,7 +2463,8 @@ energy-loss straggling 模块。
 - [x] 祖先类别逐 bin 闭合与独立 total 不变性验证；
 - [x] GPU/TOPAS 祖先归属 IDD 无 scale 比较。
 - [x] GPU `60 x 60 x 800` total voxel tally 与 100-history B580 smoke；
-- [ ] GPU 真实三维轨迹、多重散射和 3D category closure。
+- [x] GPU 带电次级真实三维方向与 x/y/z voxel 边界输运；
+- [ ] GPU 多重散射和 3D category closure。
 
 ## 79. 性能实验
 
@@ -2494,7 +2495,13 @@ C++ 加载器同时接受 v1 和 v2。v1 中不存在的 `direction_x/y` 被展�
 reaction、323,901 个直接产物，以及 71,089 个可用级联相互作用、511,019 个级联产物。
 Windows oneAPI 全量构建和 v1/v2 加载测试通过。Arc B580 上的 100-history 全级联 voxel
 smoke 能量平衡误差为 `3.43e-8`，800 个非零中心轴 voxel 对 800-bin IDD 的最大闭合误差
-为 `0 MeV/primary/bin`。仍只有中心轴剂量是预期结果，因为运行时粒子状态尚未三维化。
+为 `0 MeV/primary/bin`。这是运行时三维化前的数据边界基线。
+
+随后 `SecondaryParticle3D` 将队列扩展为 `x/y/z + dx/dy/dz`，v2 局部产物方向会旋转到
+当前母粒子方向，物理步长受 x/y/z 最近 voxel 面共同限制；边界上的 float 舍入使用
+`nextafter` 精确跨面，不引入无计分 nudge。最终 Arc B580 100-history smoke 的能量平衡
+误差为 `2.76e-8`，次级步数 297,274；15,448 个非零 voxel 在 x/y 上覆盖 38/51 个索引，
+逐 z 汇总对 IDD 的最大 CSV 闭合差为 `9.27e-11 MeV/primary/bin`。多重散射尚未启用。
 
 ---
 

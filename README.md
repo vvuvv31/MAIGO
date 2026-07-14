@@ -1,6 +1,6 @@
 # carbon-oneapi-mc
 
-面向 Intel oneAPI/SYCL 的碳离子水中 condensed-history 蒙特卡洛剂量引擎。当前物理输运仍为一维，已经具备 `60 x 60 x 800` GPU total voxel scorer 框架，并以 TOPAS/Geant4 为参考逐步扩展到真实三维。
+面向 Intel oneAPI/SYCL 的碳离子水中 condensed-history 蒙特卡洛剂量引擎。带电反应产物已支持三维方向、x/y/z voxel 边界和 `60 x 60 x 800` GPU total dose；主束多重散射尚未实现。
 
 > 研究用途：当前阻止本领模型和输运结果尚未完成 TOPAS 验证，不能用于临床或治疗计划。
 
@@ -54,7 +54,7 @@ build\oneapi-windows-release\carbon_mc.exe --config config\beam_200MeVu_fragment
 
 相对完整 TOPAS，总 IDD 的积分差为 `+0.48%`、峰值差 `-0.062%`、R80 差 `+0.104 mm`、FWHM 差 `+2.36%`、NRMSE `1.08%`、2%/2 mm gamma `97.71%`。峰后尾积分差由未输运碎片时约 `-92%` 改善为 `+10.055%`，非常接近但尚未通过 `<10%` 验收线；禁止为跨线而手工调参。
 
-TOPAS 祖先归属 scorer、带电碎片两代级联和统一版本反应包现已完成。统一参考后，B580 charged-origin total 全深度/90 mm 后差为 `-0.11%/+2.93%`，带电类别尾部最大偏差为 Be `+6.67%`。GPU total voxel tally 第一阶段也已通过 100-history B580 smoke；当前全部剂量仍位于中心 x/y voxel，下一任务是真实三维方向、体素边界步进与多重库仑散射。
+TOPAS 祖先归属 scorer、带电碎片两代级联和统一版本反应包现已完成。统一参考后，B580 charged-origin total 全深度/90 mm 后差为 `-0.11%/+2.93%`，带电类别尾部最大偏差为 Be `+6.67%`。带电次级的真实三维方向与 voxel 边界步进已通过 B580 smoke；下一任务是带电粒子的多重库仑散射与 3D category closure。
 
 ```bat
 set ONEAPI_DEVICE_SELECTOR=level_zero:0
@@ -131,7 +131,7 @@ Arc B580 的 100-history smoke 可直接运行：
 build\oneapi-windows-release\carbon_mc.exe --config config\beam_200MeVu_voxel_smoke.yaml
 ```
 
-当前 scorer 会在写文件前检查每个 z 层的 x/y 能量和是否还原 IDD。此阶段物理轨迹仍是一维，因此非零项都在中心体素；横向剂量必须等三维方向和多重散射完成后再与 TOPAS 比较。
+scorer 会在写文件前检查每个 z 层的 x/y 能量和是否还原 IDD。v2 反应产物已沿三维方向跨越真实 voxel；主 C-12 仍在中心轴，必须加入多重散射后才可把横向宽度与 TOPAS 作物理比较。
 
 三维开发数据使用 binary v2：每个 reaction/cascade 产物保存相对入射母粒子的局部
 `direction_x/y/z`。加载器继续接受 v1，并把缺失的横向方向置为 NaN，避免误当成
