@@ -1,0 +1,908 @@
+{
+  "sources": {
+    "primary_metadata": "validation/results/topas_200MeVu_reaction_packages_development.metadata.json",
+    "cascade_metadata": "validation/results/topas_200MeVu_cascade_100k.metadata.json"
+  },
+  "lineage_reconstruction": {
+    "interactions": 71091,
+    "generation_counts": {
+      "0": 38436,
+      "1": 27193,
+      "2": 5043,
+      "3": 410,
+      "4": 9
+    },
+    "maximum_generation": 4,
+    "duplicate_charged_track_birth_records": 0,
+    "unlinked_generation_zero_non_primary_projectiles": {
+      "proton": 708,
+      "deuteron": 26,
+      "triton": 2,
+      "He3": 1,
+      "alpha": 25,
+      "Li6": 2,
+      "Li7": 1,
+      "Be7": 1,
+      "Be9": 1,
+      "B10": 1,
+      "B11": 4,
+      "C11": 2,
+      "Z8A16": 1
+    }
+  },
+  "primary_table_vs_cascade_generation0_c12": {
+    "proton": {
+      "Z": 1,
+      "A": 1,
+      "primary_table_products_per_interaction": 2.4812651034336244,
+      "cascade_generation0_products_per_interaction": 2.527920129577016,
+      "cascade_over_primary_yield_ratio": 1.0188029187525467,
+      "primary_table_energy_MeV_per_interaction": 169.61583296139494,
+      "cascade_generation0_energy_MeV_per_interaction": 178.1526764455129,
+      "cascade_over_primary_energy_ratio": 1.050330463465996
+    },
+    "deuteron": {
+      "Z": 1,
+      "A": 2,
+      "primary_table_products_per_interaction": 0.41168972568181217,
+      "cascade_generation0_products_per_interaction": 0.37959693051166987,
+      "cascade_over_primary_yield_ratio": 0.9220461595999453,
+      "primary_table_energy_MeV_per_interaction": 77.37735806978502,
+      "cascade_generation0_energy_MeV_per_interaction": 70.11244724563629,
+      "cascade_over_primary_energy_ratio": 0.9061106374606812
+    },
+    "triton": {
+      "Z": 1,
+      "A": 3,
+      "primary_table_products_per_interaction": 0.1813474254454683,
+      "cascade_generation0_products_per_interaction": 0.1346751281166193,
+      "cascade_over_primary_yield_ratio": 0.7426360081252794,
+      "primary_table_energy_MeV_per_interaction": 52.48903449273693,
+      "cascade_generation0_energy_MeV_per_interaction": 36.547304857757275,
+      "cascade_over_primary_energy_ratio": 0.696284570881456
+    },
+    "He3": {
+      "Z": 2,
+      "A": 3,
+      "primary_table_products_per_interaction": 0.21276256738455002,
+      "cascade_generation0_products_per_interaction": 0.14423408831417117,
+      "cascade_over_primary_yield_ratio": 0.6779110164311962,
+      "primary_table_energy_MeV_per_interaction": 60.30918576617911,
+      "cascade_generation0_energy_MeV_per_interaction": 39.7383625162089,
+      "cascade_over_primary_energy_ratio": 0.6589106122287236
+    },
+    "alpha": {
+      "Z": 2,
+      "A": 4,
+      "primary_table_products_per_interaction": 1.4896035265687655,
+      "cascade_generation0_products_per_interaction": 1.210323677013356,
+      "cascade_over_primary_yield_ratio": 0.8125139712855555,
+      "primary_table_energy_MeV_per_interaction": 529.6824112936908,
+      "cascade_generation0_energy_MeV_per_interaction": 458.0624800145343,
+      "cascade_over_primary_energy_ratio": 0.8647870313378299
+    },
+    "Li6": {
+      "Z": 3,
+      "A": 6,
+      "primary_table_products_per_interaction": 0.036646573014313406,
+      "cascade_generation0_products_per_interaction": 0.07941902764132656,
+      "cascade_over_primary_yield_ratio": 2.167161104267706,
+      "primary_table_energy_MeV_per_interaction": 20.112128383886155,
+      "cascade_generation0_energy_MeV_per_interaction": 40.79425527325358,
+      "cascade_over_primary_energy_ratio": 2.028341033559529
+    },
+    "Li7": {
+      "Z": 3,
+      "A": 7,
+      "primary_table_products_per_interaction": 0.03818679130042223,
+      "cascade_generation0_products_per_interaction": 0.03358912402750856,
+      "cascade_over_primary_yield_ratio": 0.8796005865812865,
+      "primary_table_energy_MeV_per_interaction": 28.139942181798837,
+      "cascade_generation0_energy_MeV_per_interaction": 23.474615171716092,
+      "cascade_over_primary_energy_ratio": 0.8342097869305389
+    },
+    "Li8": {
+      "Z": 3,
+      "A": 8,
+      "primary_table_products_per_interaction": 0.0030007701091430542,
+      "cascade_generation0_products_per_interaction": 0.0029738987281272404,
+      "cascade_over_primary_yield_ratio": 0.991045171726438,
+      "primary_table_energy_MeV_per_interaction": 1.1770828407732954,
+      "cascade_generation0_energy_MeV_per_interaction": 1.048850817025571,
+      "cascade_over_primary_energy_ratio": 0.8910594740609071
+    },
+    "Li9": {
+      "Z": 3,
+      "A": 9,
+      "primary_table_products_per_interaction": 0.000584220729213692,
+      "cascade_generation0_products_per_interaction": 0.00013276333607710895,
+      "cascade_over_primary_yield_ratio": 0.22724858848434962,
+      "primary_table_energy_MeV_per_interaction": 0.1376113365376955,
+      "cascade_generation0_energy_MeV_per_interaction": 0.021321481107777276,
+      "cascade_over_primary_energy_ratio": 0.15493985920220127
+    },
+    "B8": {
+      "Z": 5,
+      "A": 8,
+      "primary_table_products_per_interaction": 0.0022837719414717053,
+      "cascade_generation0_products_per_interaction": 0.0016993707017869946,
+      "cascade_over_primary_yield_ratio": 0.7441070060138704,
+      "primary_table_energy_MeV_per_interaction": 1.4618688363385295,
+      "cascade_generation0_energy_MeV_per_interaction": 0.9018412517458378,
+      "cascade_over_primary_energy_ratio": 0.6169098275633503
+    },
+    "B10": {
+      "Z": 5,
+      "A": 10,
+      "primary_table_products_per_interaction": 0.05385452903842579,
+      "cascade_generation0_products_per_interaction": 0.08645548445341335,
+      "cascade_over_primary_yield_ratio": 1.6053521588077844,
+      "primary_table_energy_MeV_per_interaction": 55.106187223783046,
+      "cascade_generation0_energy_MeV_per_interaction": 96.13848611454827,
+      "cascade_over_primary_energy_ratio": 1.744604207947384
+    },
+    "B11": {
+      "Z": 5,
+      "A": 11,
+      "primary_table_products_per_interaction": 0.07770135698542104,
+      "cascade_generation0_products_per_interaction": 0.09046493720294203,
+      "cascade_over_primary_yield_ratio": 1.1642645728814724,
+      "primary_table_energy_MeV_per_interaction": 93.8302777665242,
+      "cascade_generation0_energy_MeV_per_interaction": 108.75443383401932,
+      "cascade_over_primary_energy_ratio": 1.1590548000361947
+    },
+    "B12": {
+      "Z": 5,
+      "A": 12,
+      "primary_table_products_per_interaction": 0.003452213399899089,
+      "cascade_generation0_products_per_interaction": 0.003425294070789411,
+      "cascade_over_primary_yield_ratio": 0.9922022986439758,
+      "primary_table_energy_MeV_per_interaction": 0.29265970682741593,
+      "cascade_generation0_energy_MeV_per_interaction": 0.28599008496853506,
+      "cascade_over_primary_energy_ratio": 0.9772103172958688
+    },
+    "B13": {
+      "Z": 5,
+      "A": 13,
+      "primary_table_products_per_interaction": 0.0028945481583769286,
+      "cascade_generation0_products_per_interaction": 0.0016197127001407292,
+      "cascade_over_primary_yield_ratio": 0.5595735885247655,
+      "primary_table_energy_MeV_per_interaction": 0.26710398491648296,
+      "cascade_generation0_energy_MeV_per_interaction": 0.14463080640450338,
+      "cascade_over_primary_energy_ratio": 0.5414775314929351
+    },
+    "B14": {
+      "Z": 5,
+      "A": 14,
+      "primary_table_products_per_interaction": 0.00018588841384072018,
+      "cascade_generation0_products_per_interaction": 0.0006372640131701229,
+      "cascade_over_primary_yield_ratio": 3.42820727770676,
+      "primary_table_energy_MeV_per_interaction": 0.01576218498552726,
+      "cascade_generation0_energy_MeV_per_interaction": 0.05926861474735137,
+      "cascade_over_primary_energy_ratio": 3.7601775897041843
+    },
+    "B15": {
+      "Z": 5,
+      "A": 15,
+      "primary_table_products_per_interaction": 0.00010622195076612582,
+      "cascade_generation0_products_per_interaction": 0.00010621066886168716,
+      "cascade_over_primary_yield_ratio": 0.9998937893311384,
+      "primary_table_energy_MeV_per_interaction": 0.012994059537403404,
+      "cascade_generation0_energy_MeV_per_interaction": 0.010069759167308356,
+      "cascade_over_primary_energy_ratio": 0.7749509795859063
+    }
+  },
+  "top_cascade_focus_channel_energy": {
+    "proton": [
+      {
+        "stage": "cascade_generation_1",
+        "parent": "Be4",
+        "product": "proton",
+        "energy_MeV_per_interaction": 407.25361,
+        "products_per_interaction": 5.5
+      },
+      {
+        "stage": "cascade_generation_3",
+        "parent": "Be7",
+        "product": "proton",
+        "energy_MeV_per_interaction": 231.0015,
+        "products_per_interaction": 4.0
+      },
+      {
+        "stage": "cascade_generation_0",
+        "parent": "B11",
+        "product": "proton",
+        "energy_MeV_per_interaction": 210.04310999999998,
+        "products_per_interaction": 2.5
+      },
+      {
+        "stage": "cascade_generation_2",
+        "parent": "C10",
+        "product": "proton",
+        "energy_MeV_per_interaction": 206.44544545454545,
+        "products_per_interaction": 4.2727272727272725
+      },
+      {
+        "stage": "cascade_generation_1",
+        "parent": "C9",
+        "product": "proton",
+        "energy_MeV_per_interaction": 191.03286666666668,
+        "products_per_interaction": 2.6666666666666665
+      },
+      {
+        "stage": "cascade_generation_0",
+        "parent": "C12",
+        "product": "proton",
+        "energy_MeV_per_interaction": 178.1526764455129,
+        "products_per_interaction": 2.527920129577016
+      },
+      {
+        "stage": "cascade_generation_1",
+        "parent": "C10",
+        "product": "proton",
+        "energy_MeV_per_interaction": 171.0107134166668,
+        "products_per_interaction": 3.013888888888889
+      },
+      {
+        "stage": "cascade_generation_1",
+        "parent": "C11",
+        "product": "proton",
+        "energy_MeV_per_interaction": 154.02092670266978,
+        "products_per_interaction": 2.587378640776699
+      },
+      {
+        "stage": "cascade_generation_1",
+        "parent": "Z7A12",
+        "product": "proton",
+        "energy_MeV_per_interaction": 149.15692443749995,
+        "products_per_interaction": 3.1875
+      },
+      {
+        "stage": "cascade_generation_1",
+        "parent": "Be6",
+        "product": "proton",
+        "energy_MeV_per_interaction": 145.87035642857145,
+        "products_per_interaction": 2.5
+      },
+      {
+        "stage": "cascade_generation_2",
+        "parent": "Be6",
+        "product": "proton",
+        "energy_MeV_per_interaction": 145.0974766666667,
+        "products_per_interaction": 3.0
+      },
+      {
+        "stage": "cascade_generation_1",
+        "parent": "He3",
+        "product": "proton",
+        "energy_MeV_per_interaction": 143.76133859335488,
+        "products_per_interaction": 2.3572984749455337
+      },
+      {
+        "stage": "cascade_generation_1",
+        "parent": "Be7",
+        "product": "proton",
+        "energy_MeV_per_interaction": 134.37766105439331,
+        "products_per_interaction": 2.426778242677824
+      },
+      {
+        "stage": "cascade_generation_1",
+        "parent": "B10",
+        "product": "proton",
+        "energy_MeV_per_interaction": 122.09545820060417,
+        "products_per_interaction": 2.2447129909365557
+      },
+      {
+        "stage": "cascade_generation_2",
+        "parent": "B10",
+        "product": "proton",
+        "energy_MeV_per_interaction": 114.2576635,
+        "products_per_interaction": 2.235294117647059
+      },
+      {
+        "stage": "cascade_generation_1",
+        "parent": "Li6",
+        "product": "proton",
+        "energy_MeV_per_interaction": 111.55203924278429,
+        "products_per_interaction": 1.9422750424448216
+      },
+      {
+        "stage": "cascade_generation_2",
+        "parent": "Li7",
+        "product": "proton",
+        "energy_MeV_per_interaction": 104.83486375000001,
+        "products_per_interaction": 2.125
+      },
+      {
+        "stage": "cascade_generation_2",
+        "parent": "Li8",
+        "product": "proton",
+        "energy_MeV_per_interaction": 104.51917628571428,
+        "products_per_interaction": 2.7142857142857144
+      },
+      {
+        "stage": "cascade_generation_1",
+        "parent": "B11",
+        "product": "proton",
+        "energy_MeV_per_interaction": 99.61593077217948,
+        "products_per_interaction": 1.9243589743589744
+      },
+      {
+        "stage": "cascade_generation_0",
+        "parent": "triton",
+        "product": "proton",
+        "energy_MeV_per_interaction": 98.5231,
+        "products_per_interaction": 1.0
+      }
+    ],
+    "other_charged": [
+      {
+        "stage": "cascade_generation_0",
+        "parent": "Li6",
+        "product": "deuteron",
+        "energy_MeV_per_interaction": 325.7525,
+        "products_per_interaction": 1.0
+      },
+      {
+        "stage": "cascade_generation_1",
+        "parent": "Li8",
+        "product": "triton",
+        "energy_MeV_per_interaction": 196.0787777777778,
+        "products_per_interaction": 0.7777777777777778
+      },
+      {
+        "stage": "cascade_generation_0",
+        "parent": "B11",
+        "product": "deuteron",
+        "energy_MeV_per_interaction": 167.28525,
+        "products_per_interaction": 0.5
+      },
+      {
+        "stage": "cascade_generation_2",
+        "parent": "Li8",
+        "product": "deuteron",
+        "energy_MeV_per_interaction": 109.42662857142857,
+        "products_per_interaction": 1.0
+      },
+      {
+        "stage": "cascade_generation_1",
+        "parent": "Z2A6",
+        "product": "triton",
+        "energy_MeV_per_interaction": 73.70649999999999,
+        "products_per_interaction": 0.16666666666666666
+      },
+      {
+        "stage": "cascade_generation_1",
+        "parent": "Be10",
+        "product": "triton",
+        "energy_MeV_per_interaction": 72.74828800000002,
+        "products_per_interaction": 0.32
+      },
+      {
+        "stage": "cascade_generation_2",
+        "parent": "Be9",
+        "product": "triton",
+        "energy_MeV_per_interaction": 70.50712666666666,
+        "products_per_interaction": 0.4666666666666667
+      },
+      {
+        "stage": "cascade_generation_0",
+        "parent": "C12",
+        "product": "deuteron",
+        "energy_MeV_per_interaction": 70.11244724563629,
+        "products_per_interaction": 0.37959693051166987
+      },
+      {
+        "stage": "cascade_generation_1",
+        "parent": "alpha",
+        "product": "deuteron",
+        "energy_MeV_per_interaction": 66.56075172227808,
+        "products_per_interaction": 0.4930647919437583
+      },
+      {
+        "stage": "cascade_generation_1",
+        "parent": "Li8",
+        "product": "deuteron",
+        "energy_MeV_per_interaction": 56.003322222222224,
+        "products_per_interaction": 0.4444444444444444
+      },
+      {
+        "stage": "cascade_generation_1",
+        "parent": "Li7",
+        "product": "deuteron",
+        "energy_MeV_per_interaction": 55.1746985384615,
+        "products_per_interaction": 0.47435897435897434
+      },
+      {
+        "stage": "cascade_generation_1",
+        "parent": "triton",
+        "product": "deuteron",
+        "energy_MeV_per_interaction": 55.092326478065225,
+        "products_per_interaction": 0.4566929133858268
+      },
+      {
+        "stage": "cascade_generation_2",
+        "parent": "Be6",
+        "product": "deuteron",
+        "energy_MeV_per_interaction": 55.05515555555555,
+        "products_per_interaction": 0.7777777777777778
+      },
+      {
+        "stage": "cascade_generation_4",
+        "parent": "He3",
+        "product": "deuteron",
+        "energy_MeV_per_interaction": 54.296,
+        "products_per_interaction": 0.5
+      },
+      {
+        "stage": "cascade_generation_2",
+        "parent": "Z2A6",
+        "product": "deuteron",
+        "energy_MeV_per_interaction": 53.209839,
+        "products_per_interaction": 0.8
+      },
+      {
+        "stage": "cascade_generation_1",
+        "parent": "Z7A12",
+        "product": "deuteron",
+        "energy_MeV_per_interaction": 52.3054875,
+        "products_per_interaction": 0.4375
+      },
+      {
+        "stage": "cascade_generation_2",
+        "parent": "Be10",
+        "product": "triton",
+        "energy_MeV_per_interaction": 50.716725,
+        "products_per_interaction": 0.3125
+      },
+      {
+        "stage": "cascade_generation_1",
+        "parent": "Be7",
+        "product": "deuteron",
+        "energy_MeV_per_interaction": 50.093999330543916,
+        "products_per_interaction": 0.4769874476987448
+      },
+      {
+        "stage": "cascade_generation_1",
+        "parent": "C12",
+        "product": "deuteron",
+        "energy_MeV_per_interaction": 47.683323488372075,
+        "products_per_interaction": 0.3953488372093023
+      },
+      {
+        "stage": "cascade_generation_1",
+        "parent": "Li6",
+        "product": "deuteron",
+        "energy_MeV_per_interaction": 45.059347288624814,
+        "products_per_interaction": 0.41935483870967744
+      }
+    ],
+    "helium": [
+      {
+        "stage": "cascade_generation_0",
+        "parent": "B11",
+        "product": "alpha",
+        "energy_MeV_per_interaction": 522.858125,
+        "products_per_interaction": 1.25
+      },
+      {
+        "stage": "cascade_generation_0",
+        "parent": "Be9",
+        "product": "alpha",
+        "energy_MeV_per_interaction": 512.56905,
+        "products_per_interaction": 3.0
+      },
+      {
+        "stage": "cascade_generation_0",
+        "parent": "C12",
+        "product": "alpha",
+        "energy_MeV_per_interaction": 458.0624800145343,
+        "products_per_interaction": 1.210323677013356
+      },
+      {
+        "stage": "cascade_generation_1",
+        "parent": "B10",
+        "product": "alpha",
+        "energy_MeV_per_interaction": 449.5523204274921,
+        "products_per_interaction": 1.5181268882175227
+      },
+      {
+        "stage": "cascade_generation_2",
+        "parent": "B10",
+        "product": "alpha",
+        "energy_MeV_per_interaction": 410.8049585294118,
+        "products_per_interaction": 1.6470588235294117
+      },
+      {
+        "stage": "cascade_generation_1",
+        "parent": "Be9",
+        "product": "alpha",
+        "energy_MeV_per_interaction": 376.46265290999986,
+        "products_per_interaction": 1.46
+      },
+      {
+        "stage": "cascade_generation_2",
+        "parent": "C11",
+        "product": "alpha",
+        "energy_MeV_per_interaction": 337.26924999999994,
+        "products_per_interaction": 1.25
+      },
+      {
+        "stage": "cascade_generation_1",
+        "parent": "B11",
+        "product": "alpha",
+        "energy_MeV_per_interaction": 329.1064076025641,
+        "products_per_interaction": 1.2128205128205127
+      },
+      {
+        "stage": "cascade_generation_1",
+        "parent": "C11",
+        "product": "alpha",
+        "energy_MeV_per_interaction": 316.0092862815533,
+        "products_per_interaction": 1.1929611650485437
+      },
+      {
+        "stage": "cascade_generation_1",
+        "parent": "Be10",
+        "product": "alpha",
+        "energy_MeV_per_interaction": 289.85071280000005,
+        "products_per_interaction": 0.98
+      },
+      {
+        "stage": "cascade_generation_1",
+        "parent": "C10",
+        "product": "alpha",
+        "energy_MeV_per_interaction": 276.09094733333336,
+        "products_per_interaction": 1.2083333333333333
+      },
+      {
+        "stage": "cascade_generation_2",
+        "parent": "Be9",
+        "product": "alpha",
+        "energy_MeV_per_interaction": 272.8484693333333,
+        "products_per_interaction": 1.8
+      },
+      {
+        "stage": "cascade_generation_2",
+        "parent": "C10",
+        "product": "alpha",
+        "energy_MeV_per_interaction": 266.6584481818182,
+        "products_per_interaction": 1.3636363636363635
+      },
+      {
+        "stage": "cascade_generation_2",
+        "parent": "Be10",
+        "product": "alpha",
+        "energy_MeV_per_interaction": 250.3666325,
+        "products_per_interaction": 1.4375
+      },
+      {
+        "stage": "cascade_generation_1",
+        "parent": "Z2A6",
+        "product": "alpha",
+        "energy_MeV_per_interaction": 248.5376666666667,
+        "products_per_interaction": 0.8333333333333334
+      },
+      {
+        "stage": "cascade_generation_1",
+        "parent": "C12",
+        "product": "alpha",
+        "energy_MeV_per_interaction": 236.79425348837208,
+        "products_per_interaction": 0.8604651162790697
+      },
+      {
+        "stage": "cascade_generation_1",
+        "parent": "Li6",
+        "product": "alpha",
+        "energy_MeV_per_interaction": 220.51295791680832,
+        "products_per_interaction": 0.9898132427843803
+      },
+      {
+        "stage": "cascade_generation_2",
+        "parent": "Li6",
+        "product": "alpha",
+        "energy_MeV_per_interaction": 212.06466068181817,
+        "products_per_interaction": 0.8409090909090909
+      },
+      {
+        "stage": "cascade_generation_1",
+        "parent": "C9",
+        "product": "alpha",
+        "energy_MeV_per_interaction": 203.09099999999998,
+        "products_per_interaction": 0.6666666666666666
+      },
+      {
+        "stage": "cascade_generation_2",
+        "parent": "Li9",
+        "product": "alpha",
+        "energy_MeV_per_interaction": 196.032,
+        "products_per_interaction": 0.3333333333333333
+      }
+    ],
+    "lithium": [
+      {
+        "stage": "cascade_generation_2",
+        "parent": "B11",
+        "product": "Li8",
+        "energy_MeV_per_interaction": 100.82140000000001,
+        "products_per_interaction": 0.2
+      },
+      {
+        "stage": "cascade_generation_1",
+        "parent": "C12",
+        "product": "Li6",
+        "energy_MeV_per_interaction": 65.9417011627907,
+        "products_per_interaction": 0.12790697674418605
+      },
+      {
+        "stage": "cascade_generation_1",
+        "parent": "Li7",
+        "product": "Li6",
+        "energy_MeV_per_interaction": 60.2878458102564,
+        "products_per_interaction": 0.13846153846153847
+      },
+      {
+        "stage": "cascade_generation_2",
+        "parent": "Be10",
+        "product": "Li9",
+        "energy_MeV_per_interaction": 57.1950625,
+        "products_per_interaction": 0.0625
+      },
+      {
+        "stage": "cascade_generation_1",
+        "parent": "Be10",
+        "product": "Li7",
+        "energy_MeV_per_interaction": 55.596059999999994,
+        "products_per_interaction": 0.1
+      },
+      {
+        "stage": "cascade_generation_1",
+        "parent": "Be10",
+        "product": "Li8",
+        "energy_MeV_per_interaction": 49.4942,
+        "products_per_interaction": 0.04
+      },
+      {
+        "stage": "cascade_generation_2",
+        "parent": "Be9",
+        "product": "Li7",
+        "energy_MeV_per_interaction": 49.47893333333333,
+        "products_per_interaction": 0.06666666666666667
+      },
+      {
+        "stage": "cascade_generation_1",
+        "parent": "Li8",
+        "product": "Li7",
+        "energy_MeV_per_interaction": 47.220555555555556,
+        "products_per_interaction": 0.1111111111111111
+      },
+      {
+        "stage": "cascade_generation_1",
+        "parent": "Be10",
+        "product": "Li9",
+        "energy_MeV_per_interaction": 44.73522,
+        "products_per_interaction": 0.04
+      },
+      {
+        "stage": "cascade_generation_0",
+        "parent": "C12",
+        "product": "Li6",
+        "energy_MeV_per_interaction": 40.79425527325358,
+        "products_per_interaction": 0.07941902764132656
+      },
+      {
+        "stage": "cascade_generation_1",
+        "parent": "C11",
+        "product": "Li6",
+        "energy_MeV_per_interaction": 31.422462942961168,
+        "products_per_interaction": 0.10315533980582524
+      },
+      {
+        "stage": "cascade_generation_1",
+        "parent": "Be7",
+        "product": "Li6",
+        "energy_MeV_per_interaction": 31.27777677824269,
+        "products_per_interaction": 0.09205020920502092
+      },
+      {
+        "stage": "cascade_generation_1",
+        "parent": "Be9",
+        "product": "Li8",
+        "energy_MeV_per_interaction": 30.891350000000003,
+        "products_per_interaction": 0.03
+      },
+      {
+        "stage": "cascade_generation_1",
+        "parent": "Z7A12",
+        "product": "Li6",
+        "energy_MeV_per_interaction": 28.636760624999997,
+        "products_per_interaction": 0.1875
+      },
+      {
+        "stage": "cascade_generation_1",
+        "parent": "Be9",
+        "product": "Li7",
+        "energy_MeV_per_interaction": 24.9475,
+        "products_per_interaction": 0.04
+      },
+      {
+        "stage": "cascade_generation_0",
+        "parent": "C12",
+        "product": "Li7",
+        "energy_MeV_per_interaction": 23.474615171716092,
+        "products_per_interaction": 0.03358912402750856
+      },
+      {
+        "stage": "cascade_generation_1",
+        "parent": "Be9",
+        "product": "Li6",
+        "energy_MeV_per_interaction": 22.421317000000002,
+        "products_per_interaction": 0.06
+      },
+      {
+        "stage": "cascade_generation_1",
+        "parent": "C10",
+        "product": "Li6",
+        "energy_MeV_per_interaction": 21.49851111111111,
+        "products_per_interaction": 0.08333333333333333
+      },
+      {
+        "stage": "cascade_generation_1",
+        "parent": "B11",
+        "product": "Li6",
+        "energy_MeV_per_interaction": 19.84183583333333,
+        "products_per_interaction": 0.07179487179487179
+      },
+      {
+        "stage": "cascade_generation_1",
+        "parent": "B10",
+        "product": "Li6",
+        "energy_MeV_per_interaction": 16.463955166163146,
+        "products_per_interaction": 0.07250755287009064
+      }
+    ],
+    "boron": [
+      {
+        "stage": "cascade_generation_0",
+        "parent": "B11",
+        "product": "B10",
+        "energy_MeV_per_interaction": 374.835,
+        "products_per_interaction": 0.25
+      },
+      {
+        "stage": "cascade_generation_1",
+        "parent": "C9",
+        "product": "B8",
+        "energy_MeV_per_interaction": 278.48966666666666,
+        "products_per_interaction": 0.3333333333333333
+      },
+      {
+        "stage": "cascade_generation_1",
+        "parent": "B11",
+        "product": "B10",
+        "energy_MeV_per_interaction": 130.11777612820518,
+        "products_per_interaction": 0.14871794871794872
+      },
+      {
+        "stage": "cascade_generation_0",
+        "parent": "C12",
+        "product": "B11",
+        "energy_MeV_per_interaction": 108.75443383401932,
+        "products_per_interaction": 0.09046493720294203
+      },
+      {
+        "stage": "cascade_generation_0",
+        "parent": "C12",
+        "product": "B10",
+        "energy_MeV_per_interaction": 96.13848611454827,
+        "products_per_interaction": 0.08645548445341335
+      },
+      {
+        "stage": "cascade_generation_1",
+        "parent": "C12",
+        "product": "B11",
+        "energy_MeV_per_interaction": 92.07356860465116,
+        "products_per_interaction": 0.09302325581395349
+      },
+      {
+        "stage": "cascade_generation_1",
+        "parent": "C11",
+        "product": "B10",
+        "energy_MeV_per_interaction": 80.7905027463592,
+        "products_per_interaction": 0.10194174757281553
+      },
+      {
+        "stage": "cascade_generation_1",
+        "parent": "Z7A12",
+        "product": "B10",
+        "energy_MeV_per_interaction": 79.09029375,
+        "products_per_interaction": 0.125
+      },
+      {
+        "stage": "cascade_generation_1",
+        "parent": "C12",
+        "product": "B10",
+        "energy_MeV_per_interaction": 61.22783255813954,
+        "products_per_interaction": 0.09302325581395349
+      },
+      {
+        "stage": "cascade_generation_1",
+        "parent": "C10",
+        "product": "B8",
+        "energy_MeV_per_interaction": 27.52607777777778,
+        "products_per_interaction": 0.041666666666666664
+      },
+      {
+        "stage": "cascade_generation_1",
+        "parent": "B11",
+        "product": "B11",
+        "energy_MeV_per_interaction": 18.543608974358975,
+        "products_per_interaction": 0.03205128205128205
+      },
+      {
+        "stage": "cascade_generation_2",
+        "parent": "B10",
+        "product": "B10",
+        "energy_MeV_per_interaction": 15.568311764705882,
+        "products_per_interaction": 0.058823529411764705
+      },
+      {
+        "stage": "cascade_generation_2",
+        "parent": "C10",
+        "product": "B12",
+        "energy_MeV_per_interaction": 14.254454545454546,
+        "products_per_interaction": 0.09090909090909091
+      },
+      {
+        "stage": "cascade_generation_1",
+        "parent": "Be4",
+        "product": "B11",
+        "energy_MeV_per_interaction": 14.1332,
+        "products_per_interaction": 0.5
+      },
+      {
+        "stage": "cascade_generation_1",
+        "parent": "B10",
+        "product": "B10",
+        "energy_MeV_per_interaction": 10.36253246223565,
+        "products_per_interaction": 0.030211480362537766
+      },
+      {
+        "stage": "cascade_generation_1",
+        "parent": "Li8",
+        "product": "B11",
+        "energy_MeV_per_interaction": 9.790555555555555,
+        "products_per_interaction": 0.1111111111111111
+      },
+      {
+        "stage": "cascade_generation_2",
+        "parent": "Li8",
+        "product": "B11",
+        "energy_MeV_per_interaction": 6.9149142857142865,
+        "products_per_interaction": 0.14285714285714285
+      },
+      {
+        "stage": "cascade_generation_1",
+        "parent": "C12",
+        "product": "B8",
+        "energy_MeV_per_interaction": 6.02053488372093,
+        "products_per_interaction": 0.011627906976744186
+      },
+      {
+        "stage": "cascade_generation_1",
+        "parent": "Be10",
+        "product": "B10",
+        "energy_MeV_per_interaction": 2.486256,
+        "products_per_interaction": 0.04
+      },
+      {
+        "stage": "cascade_generation_2",
+        "parent": "Be9",
+        "product": "B11",
+        "energy_MeV_per_interaction": 2.3642666666666665,
+        "products_per_interaction": 0.06666666666666667
+      }
+    ]
+  },
+  "global_scale_applied": false
+}
