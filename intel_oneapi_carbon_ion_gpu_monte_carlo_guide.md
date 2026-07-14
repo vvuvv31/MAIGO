@@ -1253,7 +1253,8 @@ E_{\mathrm{residual}}
 python3 validation/scripts/prepare_topas_reactions.py \
   --case smoke \
   --histories 100 \
-  --output-csv validation/topas/output/fragment_smoke_reaction_sampling.csv \
+  --reactions-output validation/topas/output/fragment_smoke_reactions.csv.gz \
+  --secondaries-output validation/topas/output/fragment_smoke_secondaries.csv.gz \
   --metadata validation/topas/output/fragment_smoke_reaction_sampling.metadata.json
 ```
 
@@ -1265,11 +1266,12 @@ python3 validation/scripts/prepare_topas_reactions.py \
 python3 validation/scripts/prepare_topas_reactions.py \
   --case development \
   --histories 100000 \
-  --output-csv validation/results/topas_200MeVu_reaction_packages_development.csv \
+  --reactions-output validation/results/topas_200MeVu_reactions_development.csv.gz \
+  --secondaries-output validation/results/topas_200MeVu_secondaries_development.csv.gz \
   --metadata validation/results/topas_200MeVu_reaction_packages_development.metadata.json
 ```
 
-标准化脚本把 TOPAS 全局 `z=-200...200 mm` 转成水深 `0...400 mm`，并检查每个 secondary 都有且只有一个 primary reaction header、顶点一致、反应前能量一致。
+标准化脚本把 TOPAS 全局 `z=-200...200 mm` 转成水深 `0...400 mm`。压缩反应表每个 `reaction_id` 只保存一次入射能量和顶点，并用 `secondary_offset_zero_based + secondary_count` 定位次级粒子表中的连续反应包。脚本还检查 TOPAS header 的 history/entry 数、每个 secondary 的唯一 reaction header、顶点和反应前能量一致性以及方向归一化。
 
 ---
 

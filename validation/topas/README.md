@@ -72,11 +72,12 @@ Run and validate a 100-history reaction-final-state smoke case:
 ./validation/topas/run_topas.sh fragment-smoke
 python3 validation/scripts/prepare_topas_reactions.py \
   --case smoke --histories 100 \
-  --output-csv validation/topas/output/fragment_smoke_reaction_sampling.csv \
+  --reactions-output validation/topas/output/fragment_smoke_reactions.csv.gz \
+  --secondaries-output validation/topas/output/fragment_smoke_secondaries.csv.gz \
   --metadata validation/topas/output/fragment_smoke_reaction_sampling.metadata.json
 ```
 
-Use `fragment-development` with 100,000 histories for the calibration dataset and `fragment-reference` for the one-million-history promotion run. The standardizer converts TOPAS global `z=-200...200 mm` to water depth `0...400 mm`, checks that every secondary has exactly one primary-reaction header, and verifies reaction-vertex and incident-energy consistency.
+Use `fragment-development` with 100,000 histories for the calibration dataset and `fragment-reference` for the one-million-history promotion run. The compact outputs separate one-row-per-reaction headers from secondaries, link them through `reaction_id` plus a zero-based offset/count pair, and support deterministic gzip compression. The standardizer converts TOPAS global `z=-200...200 mm` to water depth `0...400 mm`, checks the header history/entry counts, verifies that every secondary has exactly one primary-reaction header, and validates reaction vertices, incident energies, and direction normalization. `--output-csv` remains available only when a redundant flat QA table is useful.
 
 If `topas` is already on PATH, omit `TOPAS_EXECUTABLE`. Raw files are written below `validation/topas/output/` and intentionally ignored by Git.
 
