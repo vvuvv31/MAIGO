@@ -45,7 +45,13 @@ TransportResult transport_sycl(const TransportConfig& config,
     const auto number_of_histories = config.number_of_histories;
 
     auto* table_device = sycl::malloc_device<float>(table_size, queue);
-    auto* dose_device = sycl::malloc_device<float>(number_of_bins, queue);
+    const auto& device = queue.get_device();
+    if (!device.has(sycl::aspect::fp64) || !device.has(sycl::aspect::atomic64)) {
+        throw std::runtime_error(
+            "The current accurate SYCL scorer requires fp64 and atomic64 device aspects");
+    }
+
+    auto* dose_device = sycl::malloc_device<double>(number_of_bins, queue);
     auto* deposited_device = sycl::malloc_device<float>(number_of_histories, queue);
     auto* escaped_device = sycl::malloc_device<float>(number_of_histories, queue);
     auto* nuclear_device = sycl::malloc_device<float>(number_of_histories, queue);
@@ -65,7 +71,7 @@ TransportResult transport_sycl(const TransportConfig& config,
     std::transform(stopping_power.values().begin(), stopping_power.values().end(), table_host.begin(),
                    [](double value) { return static_cast<float>(value); });
     queue.copy(table_host.data(), table_device, table_size);
-    queue.memset(dose_device, 0, number_of_bins * sizeof(float));
+    queue.memset(dose_device, 0, number_of_bins * sizeof(double));
 
     constexpr std::size_t local_size = 128;
     const auto global_size =
@@ -156,12 +162,12 @@ TransportResult transport_sycl(const TransportConfig& config,
                     deposited_MeV = sycl::clamp(
                         mean_loss_MeV + sigma_MeV * gaussian, 0.0f, energy_MeV);
                 }
-                sycl::atomic_ref<float,
+                sycl::atomic_ref<double,
                                  sycl::memory_order::relaxed,
                                  sycl::memory_scope::device,
                                  sycl::access::address_space::global_space>
                     atomic_dose(dose_device[bin]);
-                atomic_dose.fetch_add(deposited_MeV);
+                atomic_dose.fetch_add(static_cast<double>(deposited_MeV));
                 history_deposited_MeV += deposited_MeV;
                 energy_MeV -= deposited_MeV;
                 position_mm += step_mm;
@@ -181,12 +187,12 @@ TransportResult transport_sycl(const TransportConfig& config,
                 const auto bin = sycl::min(
                     static_cast<int>(position_mm / depth_bin_width_mm),
                     static_cast<int>(number_of_bins) - 1);
-                sycl::atomic_ref<float,
+                sycl::atomic_ref<double,
                                  sycl::memory_order::relaxed,
                                  sycl::memory_scope::device,
                                  sycl::access::address_space::global_space>
                     atomic_dose(dose_device[bin]);
-                atomic_dose.fetch_add(energy_MeV);
+                atomic_dose.fetch_add(static_cast<double>(energy_MeV));
                 history_deposited_MeV += energy_MeV;
                 energy_MeV = 0.0f;
             }
@@ -197,7 +203,7 @@ TransportResult transport_sycl(const TransportConfig& config,
         });
     kernel_event.wait_and_throw();
 
-    std::vector<float> dose_host(number_of_bins);
+    std::vector<double> dose_host(number_of_bins);
     std::vector<float> deposited_host(number_of_histories);
     std::vector<float> escaped_host(number_of_histories);
     std::vector<float> nuclear_host(number_of_histories);
@@ -221,9 +227,7 @@ TransportResult transport_sycl(const TransportConfig& config,
     if (config.enable_primary_attenuation) {
         result.backend += "+attenuation";
     }
-    result.deposited_energy_MeV.resize(number_of_bins);
-    std::transform(dose_host.begin(), dose_host.end(), result.deposited_energy_MeV.begin(),
-                   [](float value) { return static_cast<double>(value); });
+    result.deposited_energy_MeV = std::move(dose_host);
     result.initial_energy_MeV =
         config.initial_total_energy_MeV() * static_cast<double>(number_of_histories);
     result.total_deposited_energy_MeV =
