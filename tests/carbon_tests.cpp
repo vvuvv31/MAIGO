@@ -7,6 +7,7 @@
 #include <iostream>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace {
 
@@ -75,6 +76,31 @@ void test_escape_energy_conservation() {
             "Escaping-particle energy balance failed");
 }
 
+#ifdef CARBON_HAS_SYCL
+void test_serial_sycl_cpu_match() {
+    carbon::TransportConfig config;
+    config.number_of_histories = 64;
+    config.initial_energy_MeVu = 10.0;
+    config.phantom_length_mm = 200.0;
+    config.depth_bin_width_mm = 1.0;
+    config.maximum_step_mm = 0.5;
+    config.maximum_relative_energy_loss = 0.01;
+    const carbon::StoppingPowerTable table({0.01, 10.01, 20.01}, {2.0, 2.0, 2.0});
+    const auto serial = carbon::transport_serial(config, table);
+    const auto sycl_cpu = carbon::transport_sycl(config, table, "cpu");
+    require(sycl_cpu.relative_energy_balance_error() < 1.0e-4,
+            "SYCL CPU energy balance failed");
+
+    double absolute_difference = 0.0;
+    for (std::size_t bin = 0; bin < serial.deposited_energy_MeV.size(); ++bin) {
+        absolute_difference +=
+            std::abs(serial.deposited_energy_MeV[bin] - sycl_cpu.deposited_energy_MeV[bin]);
+    }
+    require(absolute_difference / serial.total_deposited_energy_MeV < 1.0e-4,
+            "Serial/SYCL CPU dose tally mismatch");
+}
+#endif
+
 }  // namespace
 
 int main() {
@@ -84,6 +110,9 @@ int main() {
         test_step_selection();
         test_energy_conservation();
         test_escape_energy_conservation();
+#ifdef CARBON_HAS_SYCL
+        test_serial_sycl_cpu_match();
+#endif
         std::cout << "All carbon_tests passed\n";
         return EXIT_SUCCESS;
     } catch (const std::exception& error) {
@@ -91,4 +120,3 @@ int main() {
         return EXIT_FAILURE;
     }
 }
-

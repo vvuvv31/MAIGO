@@ -77,7 +77,7 @@ TransportResult transport_sycl(const TransportConfig& config,
     const auto inverse_table_step =
         1.0f / static_cast<float>(stopping_power.energies()[1] - stopping_power.energies()[0]);
 
-    const auto kernel_event = queue.parallel_for(
+    auto kernel_event = queue.parallel_for(
         sycl::nd_range<1>{sycl::range<1>{global_size}, sycl::range<1>{local_size}},
         [=](sycl::nd_item<1> item) {
             const auto history = item.get_global_linear_id();
@@ -172,4 +172,3 @@ TransportResult transport_sycl(const TransportConfig& config,
 }  // namespace carbon
 
 #endif
-
