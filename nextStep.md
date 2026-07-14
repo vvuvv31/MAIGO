@@ -10,7 +10,9 @@ TOPAS 祖先归属 3D dose scorer、全带电离子级联 scorer 和两个 10 �
 
 GPU 3D scorer 的第一阶段框架已完成：CPU/SYCL 支持可选 `60 x 60 x 800` double-atomic total voxel tally、稀疏 CSV 输出和逐 z 的 x/y→IDD 闭合检查。Arc B580 的 100-history 全级联 smoke 产生 800 个 IDD bin 和 800 个中心轴非零体素，最大闭合误差为 `0 MeV/primary/bin`；完整 oneAPI 测试通过。当前粒子输运仍是一维，因此这些非零体素全部位于 `(ix,iy)=(30,30)`，不能把它当成已完成横向剂量验证。
 
-下一步明确为：把粒子和反应包状态扩展到 x/y/z 与三维方向，沿真实路径跨越体素边界，并加入带电粒子的多重库仑散射。随后增加 3D 分类别闭合并与现有 TOPAS `60 x 60 x 800` 祖先归属剂量逐 voxel/切片比较。带电 3D scorer 稳定后再实现 neutron/gamma 来源输运。新的 TOPAS 作业仍只允许在 `v@192.168.31.5:~/gpu` 上运行，最多 56 线程，禁止使用 WSL 运行 TOPAS。
+三维方向数据边界已完成：reaction/cascade binary v2 保存相对入射母粒子的局部 `x/y/z` 单位方向，C++ 加载器仍兼容 v1，并以 NaN 明确标记 v1 缺失的横向分量。已从现有 TOPAS 100k/smoke gzip 表生成独立 `_3d` 数据；Arc B580 100-history 全级联 smoke 能量平衡误差为 `3.43e-8`，voxel→IDD 最大闭合误差为 `0 MeV/primary/bin`。旧 v1 文件和正式一维配置保持不变。
+
+下一步明确为：把运行时粒子队列从 `position_mm/direction_z` 扩展到 `x/y/z + dx/dy/dz`，将局部产物方向旋转到当前母粒子方向，并沿真实路径跨越 x/y/z 体素边界。先完成无散射的三维几何与能量/IDD 闭合，再单独加入带电粒子的多重库仑散射，随后进行 3D 分类别闭合和 TOPAS `60 x 60 x 800` 逐 voxel/切片比较。新的 TOPAS 作业仍只允许在 `v@192.168.31.5:~/gpu` 上运行，最多 56 线程，禁止使用 WSL 运行 TOPAS。
 
 ---
 

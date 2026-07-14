@@ -2478,6 +2478,24 @@ energy-loss straggling 模块。
 - [ ] transfer time；
 - [ ] VTune report。
 
+## 80. 三维方向数据边界（2026-07-14）
+
+reaction package 与 charged-fragment cascade package 已升级为 binary v2。产物记录由
+`pdg/Z/A/energy/direction_z` 扩展为 `pdg/Z/A/energy/direction_x/direction_y/direction_z`，
+方向坐标定义为相对发生反应时入射母粒子的右手局部正交基。编译器先验证 TOPAS 全局
+方向为单位向量，再投影到该局部基；运行时应将局部方向旋转到当前母粒子方向，而不能
+把它当成固定实验室坐标。
+
+C++ 加载器同时接受 v1 和 v2。v1 中不存在的 `direction_x/y` 被展开为 NaN，测试会检查
+该哨兵；v2 则要求三个方向分量有限且模长平方与 1 的差小于 `2e-3`。旧 v1 二进制和正式
+一维基准配置没有覆盖，新生成的 `_3d.bin` 只用于三维开发与回归。
+
+从已保存的 TOPAS 100000-history/smoke gzip 表生成的 v2 数据包含 37,661 个 primary C-12
+reaction、323,901 个直接产物，以及 71,089 个可用级联相互作用、511,019 个级联产物。
+Windows oneAPI 全量构建和 v1/v2 加载测试通过。Arc B580 上的 100-history 全级联 voxel
+smoke 能量平衡误差为 `3.43e-8`，800 个非零中心轴 voxel 对 800-bin IDD 的最大闭合误差
+为 `0 MeV/primary/bin`。仍只有中心轴剂量是预期结果，因为运行时粒子状态尚未三维化。
+
 ---
 
 # 结论

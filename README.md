@@ -133,6 +133,12 @@ build\oneapi-windows-release\carbon_mc.exe --config config\beam_200MeVu_voxel_sm
 
 当前 scorer 会在写文件前检查每个 z 层的 x/y 能量和是否还原 IDD。此阶段物理轨迹仍是一维，因此非零项都在中心体素；横向剂量必须等三维方向和多重散射完成后再与 TOPAS 比较。
 
+三维开发数据使用 binary v2：每个 reaction/cascade 产物保存相对入射母粒子的局部
+`direction_x/y/z`。加载器继续接受 v1，并把缺失的横向方向置为 NaN，避免误当成
+零偏转。`beam_200MeVu_voxel_smoke.yaml` 使用独立 `_3d.bin`；正式一维基准仍使用
+原 v1 文件。v2 的 Arc B580 100-history smoke 能量平衡误差为 `3.43e-8`，800 个
+voxel z 层逐 bin 还原 IDD 的最大误差为 `0 MeV/primary/bin`。
+
 ## 物理数据状态
 
 `data/stopping_power_water.csv` 是用于软件联调的透明、可再生 Bethe-Bloch + 有效电荷近似表，不是 ICRU 或 Geant4 参考数据。第一个物理校准任务是从可信数据源生成正式表，并用 TOPAS 的 R80 对它进行验证；禁止通过逐能量手工调参替代该步骤。
