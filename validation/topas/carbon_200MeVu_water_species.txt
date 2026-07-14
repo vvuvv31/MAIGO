@@ -1,8 +1,8 @@
 includeFile = carbon_200MeVu_water.txt
 
-# Species-resolved direct energy deposition. Categories are mutually exclusive.
-# "Other" is reconstructed as Total minus these categories during normalization,
-# so electrons, photons, neutrons, and unlisted ions remain energy-accounted.
+# Species-resolved direct energy deposition. The legacy broad categories remain
+# mutually exclusive. Additional named-particle scorers decompose the legacy
+# "Other" residual and split helium into alpha, He3, and remaining Z=2 ions.
 s:Sc/DepthEnergy/OutputFile = "output/species_reference_total_energy_deposit"
 s:Sc/DepthDose/OutputFile = "output/species_reference_total_dose"
 s:Sc/PrimaryC12Energy/OutputFile = "output/species_reference_legacy_c12_energy_deposit"
@@ -91,3 +91,87 @@ i:Sc/SpeciesProtonEnergy/ZBins = 800
 sv:Sc/SpeciesProtonEnergy/Report = 2 "Sum" "Standard_Deviation"
 sv:Sc/SpeciesProtonEnergy/OnlyIncludeParticlesNamed = 1 "proton"
 s:Sc/SpeciesProtonEnergy/OnlyIncludeParticlesOfGeneration = "Secondary"
+
+s:Sc/SpeciesElectronPositronEnergy/Quantity = "EnergyDeposit"
+s:Sc/SpeciesElectronPositronEnergy/Component = "Phantom"
+s:Sc/SpeciesElectronPositronEnergy/OutputFile = "output/species_reference_electron_positron_energy_deposit"
+s:Sc/SpeciesElectronPositronEnergy/OutputType = "csv"
+s:Sc/SpeciesElectronPositronEnergy/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/SpeciesElectronPositronEnergy/XBins = 1
+i:Sc/SpeciesElectronPositronEnergy/YBins = 1
+i:Sc/SpeciesElectronPositronEnergy/ZBins = 800
+sv:Sc/SpeciesElectronPositronEnergy/Report = 2 "Sum" "Standard_Deviation"
+sv:Sc/SpeciesElectronPositronEnergy/OnlyIncludeParticlesNamed = 2 "e-" "e+"
+s:Sc/SpeciesElectronPositronEnergy/OnlyIncludeParticlesOfGeneration = "Secondary"
+
+s:Sc/SpeciesGammaEnergy/Quantity = "EnergyDeposit"
+s:Sc/SpeciesGammaEnergy/Component = "Phantom"
+s:Sc/SpeciesGammaEnergy/OutputFile = "output/species_reference_gamma_energy_deposit"
+s:Sc/SpeciesGammaEnergy/OutputType = "csv"
+s:Sc/SpeciesGammaEnergy/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/SpeciesGammaEnergy/XBins = 1
+i:Sc/SpeciesGammaEnergy/YBins = 1
+i:Sc/SpeciesGammaEnergy/ZBins = 800
+sv:Sc/SpeciesGammaEnergy/Report = 2 "Sum" "Standard_Deviation"
+sv:Sc/SpeciesGammaEnergy/OnlyIncludeParticlesNamed = 1 "gamma"
+s:Sc/SpeciesGammaEnergy/OnlyIncludeParticlesOfGeneration = "Secondary"
+
+s:Sc/SpeciesNeutronEnergy/Quantity = "EnergyDeposit"
+s:Sc/SpeciesNeutronEnergy/Component = "Phantom"
+s:Sc/SpeciesNeutronEnergy/OutputFile = "output/species_reference_neutron_energy_deposit"
+s:Sc/SpeciesNeutronEnergy/OutputType = "csv"
+s:Sc/SpeciesNeutronEnergy/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/SpeciesNeutronEnergy/XBins = 1
+i:Sc/SpeciesNeutronEnergy/YBins = 1
+i:Sc/SpeciesNeutronEnergy/ZBins = 800
+sv:Sc/SpeciesNeutronEnergy/Report = 2 "Sum" "Standard_Deviation"
+sv:Sc/SpeciesNeutronEnergy/OnlyIncludeParticlesNamed = 1 "neutron"
+s:Sc/SpeciesNeutronEnergy/OnlyIncludeParticlesOfGeneration = "Secondary"
+
+s:Sc/SpeciesDeuteronEnergy/Quantity = "EnergyDeposit"
+s:Sc/SpeciesDeuteronEnergy/Component = "Phantom"
+s:Sc/SpeciesDeuteronEnergy/OutputFile = "output/species_reference_deuteron_energy_deposit"
+s:Sc/SpeciesDeuteronEnergy/OutputType = "csv"
+s:Sc/SpeciesDeuteronEnergy/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/SpeciesDeuteronEnergy/XBins = 1
+i:Sc/SpeciesDeuteronEnergy/YBins = 1
+i:Sc/SpeciesDeuteronEnergy/ZBins = 800
+sv:Sc/SpeciesDeuteronEnergy/Report = 2 "Sum" "Standard_Deviation"
+sv:Sc/SpeciesDeuteronEnergy/OnlyIncludeParticlesNamed = 1 "deuteron"
+s:Sc/SpeciesDeuteronEnergy/OnlyIncludeParticlesOfGeneration = "Secondary"
+
+s:Sc/SpeciesTritonEnergy/Quantity = "EnergyDeposit"
+s:Sc/SpeciesTritonEnergy/Component = "Phantom"
+s:Sc/SpeciesTritonEnergy/OutputFile = "output/species_reference_triton_energy_deposit"
+s:Sc/SpeciesTritonEnergy/OutputType = "csv"
+s:Sc/SpeciesTritonEnergy/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/SpeciesTritonEnergy/XBins = 1
+i:Sc/SpeciesTritonEnergy/YBins = 1
+i:Sc/SpeciesTritonEnergy/ZBins = 800
+sv:Sc/SpeciesTritonEnergy/Report = 2 "Sum" "Standard_Deviation"
+sv:Sc/SpeciesTritonEnergy/OnlyIncludeParticlesNamed = 1 "triton"
+s:Sc/SpeciesTritonEnergy/OnlyIncludeParticlesOfGeneration = "Secondary"
+
+s:Sc/SpeciesAlphaEnergy/Quantity = "EnergyDeposit"
+s:Sc/SpeciesAlphaEnergy/Component = "Phantom"
+s:Sc/SpeciesAlphaEnergy/OutputFile = "output/species_reference_alpha_energy_deposit"
+s:Sc/SpeciesAlphaEnergy/OutputType = "csv"
+s:Sc/SpeciesAlphaEnergy/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/SpeciesAlphaEnergy/XBins = 1
+i:Sc/SpeciesAlphaEnergy/YBins = 1
+i:Sc/SpeciesAlphaEnergy/ZBins = 800
+sv:Sc/SpeciesAlphaEnergy/Report = 2 "Sum" "Standard_Deviation"
+sv:Sc/SpeciesAlphaEnergy/OnlyIncludeParticlesNamed = 1 "alpha"
+s:Sc/SpeciesAlphaEnergy/OnlyIncludeParticlesOfGeneration = "Secondary"
+
+s:Sc/SpeciesHelium3Energy/Quantity = "EnergyDeposit"
+s:Sc/SpeciesHelium3Energy/Component = "Phantom"
+s:Sc/SpeciesHelium3Energy/OutputFile = "output/species_reference_helium3_energy_deposit"
+s:Sc/SpeciesHelium3Energy/OutputType = "csv"
+s:Sc/SpeciesHelium3Energy/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/SpeciesHelium3Energy/XBins = 1
+i:Sc/SpeciesHelium3Energy/YBins = 1
+i:Sc/SpeciesHelium3Energy/ZBins = 800
+sv:Sc/SpeciesHelium3Energy/Report = 2 "Sum" "Standard_Deviation"
+sv:Sc/SpeciesHelium3Energy/OnlyIncludeParticlesNamed = 1 "He3"
+s:Sc/SpeciesHelium3Energy/OnlyIncludeParticlesOfGeneration = "Secondary"

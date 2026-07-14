@@ -21,7 +21,7 @@ Available total-IDD cases are `smoke` (100 histories), `development` (10,000), a
 
 ## Species-resolved fragmentation baseline
 
-The species cases score mutually exclusive, direct track energy deposition from primary C-12, secondary carbon, boron, beryllium, lithium, helium, and protons. The postprocessor reconstructs `other` as total minus those categories; it therefore retains electrons, photons, neutrons, and unlisted ions and verifies bin-by-bin energy closure.
+The species cases score mutually exclusive, direct track energy deposition from primary C-12, secondary carbon, boron, beryllium, lithium, helium, and protons. Additional scorers split the legacy `other` residual into electron/positron, gamma, neutron, deuteron, triton, and a remaining unclassified category. Alpha and He-3 scorers also partition the broad helium category without changing the legacy columns used by GPU comparisons. The postprocessor verifies both the legacy and detailed bin-by-bin energy closures.
 
 Run the 100-history syntax/filter smoke test:
 
@@ -39,7 +39,7 @@ python3 validation/scripts/prepare_topas_species.py \
 
 After smoke QA, build the 100,000-history calibration baseline by replacing `species-smoke`, `smoke`, and `100` above with `species-development`, `development`, and `100000`. Use `species-reference` for the one-million-history promotion run. The random seed remains fixed at `20260714` in the base parameter file.
 
-The species curves represent energy deposited directly on each particle track. Energy deposited by delta electrons or other descendants appears in `other`; this definition is explicit in the generated metadata and must remain fixed when calibrating the GPU fragmentation model.
+The species curves represent energy deposited directly on each particle track. Gamma and neutron tracks usually deposit little or no energy directly: energy transferred to recoil ions or electrons is attributed to those charged descendant tracks. The explicit gamma/neutron columns therefore do not represent ancestor-attributed neutral dose. This definition is recorded in metadata and must remain fixed when calibrating the GPU fragmentation model; ancestor-attributed neutral dose requires a separate provenance scorer.
 
 The metadata also records SHA-256 hashes for every raw scorer and the TOPAS log, the detected Geant4 version and elapsed wall time, integrated species fractions, and species fractions in the tail beginning at 90 mm. Change the analysis boundary with `--tail-start-mm` only when a different boundary is recorded for the comparison.
 
