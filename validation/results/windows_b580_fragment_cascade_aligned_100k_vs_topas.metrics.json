@@ -1,0 +1,163 @@
+{
+  "reference": "validation/results/topas_200MeVu_ancestor_dose_3d_development.idd.csv",
+  "evaluation": "validation/results/windows_b580_fragment_cascade_aligned_100k_species.csv",
+  "semantics": "TOPAS electrons/positrons inherit their charged parent category; charged nuclear products are classified by their own Z/A; neutral-source lineages remain separate. GPU other is compared with TOPAS other_charged.",
+  "global_scale_applied": false,
+  "tail_start_mm": 90.0,
+  "all_depth": {
+    "gpu_vs_topas_raw_total": {
+      "topas_deposited_MeV_per_primary": 2300.265768606223,
+      "gpu_deposited_MeV_per_primary": 2281.2986271423047,
+      "gpu_minus_topas_MeV_per_primary": -18.967141463918324,
+      "relative_difference_percent": -0.8245630449654873,
+      "nrmse_normalized_to_topas_maximum": 0.010901657606758382
+    },
+    "gpu_vs_topas_charged_origin_total": {
+      "topas_deposited_MeV_per_primary": 2283.913324195065,
+      "gpu_deposited_MeV_per_primary": 2281.2986271423047,
+      "gpu_minus_topas_MeV_per_primary": -2.6146970527602207,
+      "relative_difference_percent": -0.11448319973709209,
+      "nrmse_normalized_to_topas_maximum": 0.010899716603772414
+    },
+    "topas_neutral_origin_deposited_MeV_per_primary": 16.352444412003976,
+    "topas_neutral_origin_fraction_of_total_percent": 0.7108936991186131,
+    "topas_unresolved_MeV_per_primary": 0.0,
+    "categories": {
+      "primary_c12": {
+        "topas_deposited_MeV_per_primary": 1830.4507705175215,
+        "gpu_deposited_MeV_per_primary": 1819.6302716670075,
+        "gpu_minus_topas_MeV_per_primary": -10.820498850514014,
+        "relative_difference_percent": -0.5911384793732988,
+        "nrmse_normalized_to_topas_maximum": 0.011415569047852596
+      },
+      "secondary_carbon": {
+        "topas_deposited_MeV_per_primary": 62.85267824517619,
+        "gpu_deposited_MeV_per_primary": 65.04955010965791,
+        "gpu_minus_topas_MeV_per_primary": 2.1968718644817216,
+        "relative_difference_percent": 3.4952716826356145,
+        "nrmse_normalized_to_topas_maximum": 0.008047405112878447
+      },
+      "boron": {
+        "topas_deposited_MeV_per_primary": 64.92410058857074,
+        "gpu_deposited_MeV_per_primary": 67.44250900629271,
+        "gpu_minus_topas_MeV_per_primary": 2.5184084177219717,
+        "relative_difference_percent": 3.8790039367373463,
+        "nrmse_normalized_to_topas_maximum": 0.011594340552949898
+      },
+      "beryllium": {
+        "topas_deposited_MeV_per_primary": 14.421524407868707,
+        "gpu_deposited_MeV_per_primary": 14.870172780968703,
+        "gpu_minus_topas_MeV_per_primary": 0.4486483730999957,
+        "relative_difference_percent": 3.1109635875608443,
+        "nrmse_normalized_to_topas_maximum": 0.011967588900489465
+      },
+      "lithium": {
+        "topas_deposited_MeV_per_primary": 19.991611663989584,
+        "gpu_deposited_MeV_per_primary": 20.757434623218828,
+        "gpu_minus_topas_MeV_per_primary": 0.7658229592292436,
+        "relative_difference_percent": 3.830721465086784,
+        "nrmse_normalized_to_topas_maximum": 0.018038983966758092
+      },
+      "helium": {
+        "topas_deposited_MeV_per_primary": 165.7136397990661,
+        "gpu_deposited_MeV_per_primary": 165.38505550093709,
+        "gpu_minus_topas_MeV_per_primary": -0.3285842981290159,
+        "relative_difference_percent": -0.19828440104715517,
+        "nrmse_normalized_to_topas_maximum": 0.01672695234105195
+      },
+      "proton": {
+        "topas_deposited_MeV_per_primary": 85.14968351971807,
+        "gpu_deposited_MeV_per_primary": 86.34724932721728,
+        "gpu_minus_topas_MeV_per_primary": 1.1975658074992168,
+        "relative_difference_percent": 1.4064242613678113,
+        "nrmse_normalized_to_topas_maximum": 0.008721156852266869
+      },
+      "other_charged": {
+        "topas_deposited_MeV_per_primary": 40.4093154531541,
+        "gpu_deposited_MeV_per_primary": 41.81638412655542,
+        "gpu_minus_topas_MeV_per_primary": 1.4070686734013194,
+        "relative_difference_percent": 3.4820403603038397,
+        "nrmse_normalized_to_topas_maximum": 0.023417657717771052
+      }
+    }
+  },
+  "tail": {
+    "gpu_vs_topas_raw_total": {
+      "topas_deposited_MeV_per_primary": 219.783877550313,
+      "gpu_deposited_MeV_per_primary": 213.1423488161946,
+      "gpu_minus_topas_MeV_per_primary": -6.6415287341183955,
+      "relative_difference_percent": -3.0218452818942643,
+      "nrmse_normalized_to_topas_maximum": 0.009044290363808721
+    },
+    "gpu_vs_topas_charged_origin_total": {
+      "topas_deposited_MeV_per_primary": 207.08244342326932,
+      "gpu_deposited_MeV_per_primary": 213.1423488161946,
+      "gpu_minus_topas_MeV_per_primary": 6.0599053929252875,
+      "relative_difference_percent": 2.926325038834432,
+      "nrmse_normalized_to_topas_maximum": 0.0083896722466438
+    },
+    "topas_neutral_origin_deposited_MeV_per_primary": 12.70143412701759,
+    "topas_neutral_origin_fraction_of_total_percent": 5.7790563478023875,
+    "topas_unresolved_MeV_per_primary": 0.0,
+    "categories": {
+      "primary_c12": {
+        "topas_deposited_MeV_per_primary": 0.0,
+        "gpu_deposited_MeV_per_primary": 0.0,
+        "gpu_minus_topas_MeV_per_primary": 0.0,
+        "relative_difference_percent": null,
+        "nrmse_normalized_to_topas_maximum": null
+      },
+      "secondary_carbon": {
+        "topas_deposited_MeV_per_primary": 0.356637640654765,
+        "gpu_deposited_MeV_per_primary": 0.377291136467848,
+        "gpu_minus_topas_MeV_per_primary": 0.02065349581308301,
+        "relative_difference_percent": 5.79117105394833,
+        "nrmse_normalized_to_topas_maximum": 0.07560960702425987
+      },
+      "boron": {
+        "topas_deposited_MeV_per_primary": 13.863831226777872,
+        "gpu_deposited_MeV_per_primary": 14.426312941970195,
+        "gpu_minus_topas_MeV_per_primary": 0.5624817151923232,
+        "relative_difference_percent": 4.057188132136913,
+        "nrmse_normalized_to_topas_maximum": 0.007836615344352508
+      },
+      "beryllium": {
+        "topas_deposited_MeV_per_primary": 4.154478823065907,
+        "gpu_deposited_MeV_per_primary": 4.431526188172209,
+        "gpu_minus_topas_MeV_per_primary": 0.2770473651063021,
+        "relative_difference_percent": 6.668643093524018,
+        "nrmse_normalized_to_topas_maximum": 0.012727635210512135
+      },
+      "lithium": {
+        "topas_deposited_MeV_per_primary": 10.784655597488623,
+        "gpu_deposited_MeV_per_primary": 11.185546353712796,
+        "gpu_minus_topas_MeV_per_primary": 0.4008907562241735,
+        "relative_difference_percent": 3.7172328091545914,
+        "nrmse_normalized_to_topas_maximum": 0.017063143868522302
+      },
+      "helium": {
+        "topas_deposited_MeV_per_primary": 107.4318138577593,
+        "gpu_deposited_MeV_per_primary": 110.2020083319285,
+        "gpu_minus_topas_MeV_per_primary": 2.7701944741692017,
+        "relative_difference_percent": 2.5785606466972366,
+        "nrmse_normalized_to_topas_maximum": 0.01586806939586521
+      },
+      "proton": {
+        "topas_deposited_MeV_per_primary": 44.28789526251657,
+        "gpu_deposited_MeV_per_primary": 45.5448507352273,
+        "gpu_minus_topas_MeV_per_primary": 1.2569554727107288,
+        "relative_difference_percent": 2.8381467786177783,
+        "nrmse_normalized_to_topas_maximum": 0.009281024041673136
+      },
+      "other_charged": {
+        "topas_deposited_MeV_per_primary": 26.2031310150063,
+        "gpu_deposited_MeV_per_primary": 26.9748131287288,
+        "gpu_minus_topas_MeV_per_primary": 0.7716821137225018,
+        "relative_difference_percent": 2.944999638709467,
+        "nrmse_normalized_to_topas_maximum": 0.019026279837702022
+      }
+    }
+  },
+  "gpu_species_max_bin_closure_MeV_per_primary": 9.799805411603302e-11,
+  "gpu_spatial_3d_comparison_available": false
+}
