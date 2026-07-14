@@ -18,6 +18,8 @@ struct TransportConfig {
     double energy_cutoff_MeV{0.1};
     double water_density_g_per_cm3{1.0};
     double scorer_area_mm2{90'000.0};
+    bool enable_energy_straggling{false};
+    double straggling_scale{1.0};
     std::uint64_t random_seed{20'260'714};
     std::filesystem::path stopping_power_file{"data/stopping_power_water.csv"};
     std::filesystem::path output_file{"out/cpu_depth_dose.csv"};
@@ -34,4 +36,3 @@ struct TransportConfig {
 TransportConfig load_config(const std::filesystem::path& path);
 
 }  // namespace carbon
-

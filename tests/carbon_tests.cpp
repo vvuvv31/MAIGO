@@ -1,4 +1,6 @@
+#include "carbon/rng.hpp"
 #include "carbon/stopping_power.hpp"
+#include "carbon/straggling.hpp"
 #include "carbon/transport.hpp"
 #include "carbon/transport_config.hpp"
 
@@ -47,6 +49,39 @@ void test_step_selection() {
                  "Maximum-step limit failed");
 }
 
+void test_philox_rng() {
+    const auto block = carbon::rng::philox4x32_10({0U, 0U, 0U, 0U}, 0U, 0U);
+    require(block[0] == 0x6627E8D5U && block[1] == 0xE169C58DU &&
+                block[2] == 0xBC57AC4CU && block[3] == 0x9B00DBD8U,
+            "Philox4x32-10 reference vector failed");
+
+    constexpr std::size_t samples = 100'000;
+    double sum = 0.0;
+    double squared_sum = 0.0;
+    for (std::size_t index = 0; index < samples; ++index) {
+        const auto value = static_cast<double>(carbon::rng::uniform01(1234, index, 0, 0));
+        require(value > 0.0 && value < 1.0, "Uniform RNG left the open unit interval");
+        sum += value;
+        squared_sum += value * value;
+    }
+    const auto mean = sum / static_cast<double>(samples);
+    const auto variance = squared_sum / static_cast<double>(samples) - mean * mean;
+    require_near(mean, 0.5, 0.003, "Uniform RNG mean failed");
+    require_near(variance, 1.0 / 12.0, 0.001, "Uniform RNG variance failed");
+}
+
+void test_bohr_straggling() {
+    const auto sigma_half_mm = carbon::bohr_straggling_sigma_MeV(200.0, 0.5, 1.0);
+    const auto sigma_two_mm = carbon::bohr_straggling_sigma_MeV(200.0, 2.0, 1.0);
+    require(sigma_half_mm > 0.0, "Bohr straggling sigma must be positive");
+    require_near(sigma_two_mm / sigma_half_mm, 2.0, 1.0e-12,
+                 "Bohr sigma must scale with sqrt(step length)");
+    require_near(carbon::clamp_sampled_energy_loss(1.0, 2.0, -2.0, 10.0), 0.0,
+                 1.0e-12, "Negative sampled loss clamp failed");
+    require_near(carbon::clamp_sampled_energy_loss(9.0, 2.0, 2.0, 10.0), 10.0,
+                 1.0e-12, "Available-energy clamp failed");
+}
+
 void test_energy_conservation() {
     carbon::TransportConfig config;
     config.number_of_histories = 7;
@@ -76,6 +111,25 @@ void test_escape_energy_conservation() {
             "Escaping-particle energy balance failed");
 }
 
+void test_straggling_reproducibility() {
+    carbon::TransportConfig config;
+    config.number_of_histories = 32;
+    config.initial_energy_MeVu = 10.0;
+    config.phantom_length_mm = 200.0;
+    config.depth_bin_width_mm = 1.0;
+    config.maximum_step_mm = 0.5;
+    config.maximum_relative_energy_loss = 0.01;
+    config.enable_energy_straggling = true;
+    config.random_seed = 987654321;
+    const carbon::StoppingPowerTable table({0.01, 10.01, 20.01}, {2.0, 2.0, 2.0});
+    const auto first = carbon::transport_serial(config, table);
+    const auto second = carbon::transport_serial(config, table);
+    require(first.deposited_energy_MeV == second.deposited_energy_MeV,
+            "Straggling run was not exactly reproducible");
+    require(first.relative_energy_balance_error() < 1.0e-12,
+            "Straggling energy balance failed");
+}
+
 #ifdef CARBON_HAS_SYCL
 void test_serial_sycl_cpu_match() {
     carbon::TransportConfig config;
@@ -98,6 +152,21 @@ void test_serial_sycl_cpu_match() {
     }
     require(absolute_difference / serial.total_deposited_energy_MeV < 1.0e-4,
             "Serial/SYCL CPU dose tally mismatch");
+
+    config.enable_energy_straggling = true;
+    config.random_seed = 42;
+    const auto serial_straggling = carbon::transport_serial(config, table);
+    const auto sycl_straggling = carbon::transport_sycl(config, table, "cpu");
+    absolute_difference = 0.0;
+    for (std::size_t bin = 0; bin < serial_straggling.deposited_energy_MeV.size(); ++bin) {
+        absolute_difference += std::abs(serial_straggling.deposited_energy_MeV[bin] -
+                                        sycl_straggling.deposited_energy_MeV[bin]);
+    }
+    const auto relative_tally_difference =
+        absolute_difference / serial_straggling.total_deposited_energy_MeV;
+    require(relative_tally_difference < 5.0e-3,
+            "Serial/SYCL CPU straggling tally mismatch: relative L1=" +
+                std::to_string(relative_tally_difference));
 }
 #endif
 
@@ -108,8 +177,11 @@ int main() {
         test_units();
         test_interpolation();
         test_step_selection();
+        test_philox_rng();
+        test_bohr_straggling();
         test_energy_conservation();
         test_escape_energy_conservation();
+        test_straggling_reproducibility();
 #ifdef CARBON_HAS_SYCL
         test_serial_sycl_cpu_match();
 #endif

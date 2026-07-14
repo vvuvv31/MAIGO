@@ -1,4 +1,5 @@
 #include "carbon/device.hpp"
+#include "carbon/rng.hpp"
 #include "carbon/transport.hpp"
 
 #ifdef CARBON_HAS_SYCL
@@ -45,12 +46,14 @@ TransportResult transport_sycl(const TransportConfig& config,
 
     auto* table_device = sycl::malloc_device<float>(table_size, queue);
     auto* dose_device = sycl::malloc_device<float>(number_of_bins, queue);
+    auto* deposited_device = sycl::malloc_device<float>(number_of_histories, queue);
     auto* escaped_device = sycl::malloc_device<float>(number_of_histories, queue);
     auto* steps_device = sycl::malloc_device<std::uint32_t>(number_of_histories, queue);
-    if (table_device == nullptr || dose_device == nullptr || escaped_device == nullptr ||
-        steps_device == nullptr) {
+    if (table_device == nullptr || dose_device == nullptr || deposited_device == nullptr ||
+        escaped_device == nullptr || steps_device == nullptr) {
         if (table_device != nullptr) sycl::free(table_device, queue);
         if (dose_device != nullptr) sycl::free(dose_device, queue);
+        if (deposited_device != nullptr) sycl::free(deposited_device, queue);
         if (escaped_device != nullptr) sycl::free(escaped_device, queue);
         if (steps_device != nullptr) sycl::free(steps_device, queue);
         throw std::runtime_error("SYCL USM device allocation failed");
@@ -72,6 +75,10 @@ TransportResult transport_sycl(const TransportConfig& config,
     const auto maximum_relative_energy_loss =
         static_cast<float>(config.maximum_relative_energy_loss);
     const auto energy_cutoff_MeV = static_cast<float>(config.energy_cutoff_MeV);
+    const auto enable_energy_straggling = config.enable_energy_straggling;
+    const auto straggling_scale = static_cast<float>(config.straggling_scale);
+    const auto water_density_g_per_cm3 = static_cast<float>(config.water_density_g_per_cm3);
+    const auto random_seed = config.random_seed;
     const auto inverse_mass_number = 1.0f / static_cast<float>(config.mass_number);
     const auto minimum_table_energy = static_cast<float>(stopping_power.energies().front());
     const auto inverse_table_step =
@@ -87,6 +94,7 @@ TransportResult transport_sycl(const TransportConfig& config,
 
             auto energy_MeV = initial_energy_MeV;
             auto position_mm = 0.0f;
+            auto history_deposited_MeV = 0.0f;
             std::uint32_t steps = 0;
             while (energy_MeV > energy_cutoff_MeV && position_mm < phantom_length_mm) {
                 const auto energy_MeVu = energy_MeV * inverse_mass_number;
@@ -110,14 +118,45 @@ TransportResult transport_sycl(const TransportConfig& config,
                 step_mm = sycl::fmin(step_mm, next_bin_boundary_mm - position_mm);
                 step_mm = sycl::fmin(step_mm, phantom_length_mm - position_mm);
 
-                const auto deposited_MeV =
-                    sycl::fmin(stopping_power_MeV_per_mm * step_mm, energy_MeV);
+                const auto mean_loss_MeV = stopping_power_MeV_per_mm * step_mm;
+                auto deposited_MeV = sycl::fmin(mean_loss_MeV, energy_MeV);
+                if (enable_energy_straggling) {
+                    const auto uniform1 = sycl::fmax(
+                        rng::uniform01(random_seed, history, steps, 0), 1.0e-12f);
+                    const auto uniform2 = rng::uniform01(random_seed, history, steps, 1);
+                    constexpr float two_pi = 6.2831853071795864769f;
+                    const auto gaussian = sycl::sqrt(-2.0f * sycl::log(uniform1)) *
+                                          sycl::cos(two_pi * uniform2);
+
+                    constexpr float nucleon_mass_MeV = 931.49410242f;
+                    constexpr float carbon_atomic_number = 6.0f;
+                    constexpr float carbon_charge_power = 0.30285343214f;
+                    const auto gamma = 1.0f + energy_MeVu / nucleon_mass_MeV;
+                    const auto beta_squared =
+                        sycl::fmax(0.0f, 1.0f - 1.0f / (gamma * gamma));
+                    const auto beta = sycl::sqrt(beta_squared);
+                    const auto effective_charge =
+                        carbon_atomic_number *
+                        (1.0f - sycl::exp(-125.0f * beta * carbon_charge_power));
+                    constexpr float bethe_K_MeV_cm2_per_g = 0.307075f;
+                    constexpr float electron_mass_MeV = 0.51099895f;
+                    constexpr float water_Z_over_A = 0.55509f;
+                    const auto variance_MeV2 =
+                        bethe_K_MeV_cm2_per_g * electron_mass_MeV * effective_charge *
+                        effective_charge * water_Z_over_A * water_density_g_per_cm3 *
+                        (step_mm / 10.0f);
+                    const auto sigma_MeV =
+                        straggling_scale * sycl::sqrt(sycl::fmax(0.0f, variance_MeV2));
+                    deposited_MeV = sycl::clamp(
+                        mean_loss_MeV + sigma_MeV * gaussian, 0.0f, energy_MeV);
+                }
                 sycl::atomic_ref<float,
                                  sycl::memory_order::relaxed,
                                  sycl::memory_scope::device,
                                  sycl::access::address_space::global_space>
                     atomic_dose(dose_device[bin]);
                 atomic_dose.fetch_add(deposited_MeV);
+                history_deposited_MeV += deposited_MeV;
                 energy_MeV -= deposited_MeV;
                 position_mm += step_mm;
                 ++steps;
@@ -133,34 +172,40 @@ TransportResult transport_sycl(const TransportConfig& config,
                                  sycl::access::address_space::global_space>
                     atomic_dose(dose_device[bin]);
                 atomic_dose.fetch_add(energy_MeV);
+                history_deposited_MeV += energy_MeV;
                 energy_MeV = 0.0f;
             }
+            deposited_device[history] = history_deposited_MeV;
             escaped_device[history] = energy_MeV;
             steps_device[history] = steps;
         });
     kernel_event.wait_and_throw();
 
     std::vector<float> dose_host(number_of_bins);
+    std::vector<float> deposited_host(number_of_histories);
     std::vector<float> escaped_host(number_of_histories);
     std::vector<std::uint32_t> steps_host(number_of_histories);
     queue.copy(dose_device, dose_host.data(), number_of_bins);
+    queue.copy(deposited_device, deposited_host.data(), number_of_histories);
     queue.copy(escaped_device, escaped_host.data(), number_of_histories);
     queue.copy(steps_device, steps_host.data(), number_of_histories).wait_and_throw();
 
     sycl::free(table_device, queue);
     sycl::free(dose_device, queue);
+    sycl::free(deposited_device, queue);
     sycl::free(escaped_device, queue);
     sycl::free(steps_device, queue);
 
     TransportResult result;
-    result.backend = "sycl-" + device_name;
+    result.backend = "sycl-" + device_name +
+                     (config.enable_energy_straggling ? "+straggling" : "");
     result.deposited_energy_MeV.resize(number_of_bins);
     std::transform(dose_host.begin(), dose_host.end(), result.deposited_energy_MeV.begin(),
                    [](float value) { return static_cast<double>(value); });
     result.initial_energy_MeV =
         config.initial_total_energy_MeV() * static_cast<double>(number_of_histories);
     result.total_deposited_energy_MeV =
-        std::accumulate(result.deposited_energy_MeV.begin(), result.deposited_energy_MeV.end(), 0.0);
+        std::accumulate(deposited_host.begin(), deposited_host.end(), 0.0);
     result.escaped_energy_MeV =
         std::accumulate(escaped_host.begin(), escaped_host.end(), 0.0);
     result.total_steps = std::accumulate(steps_host.begin(), steps_host.end(), std::uint64_t{0});

@@ -87,6 +87,25 @@ std::filesystem::path parse_path(const std::unordered_map<std::string, std::stri
     return iterator == values.end() ? fallback : std::filesystem::path(iterator->second);
 }
 
+bool parse_bool(const std::unordered_map<std::string, std::string>& values,
+                const std::string& key,
+                bool fallback) {
+    const auto iterator = values.find(key);
+    if (iterator == values.end()) {
+        return fallback;
+    }
+    auto value = iterator->second;
+    std::transform(value.begin(), value.end(), value.begin(),
+                   [](unsigned char character) { return static_cast<char>(std::tolower(character)); });
+    if (value == "true" || value == "yes" || value == "1") {
+        return true;
+    }
+    if (value == "false" || value == "no" || value == "0") {
+        return false;
+    }
+    throw std::runtime_error("Invalid boolean for '" + key + "': " + iterator->second);
+}
+
 }  // namespace
 
 std::size_t TransportConfig::number_of_bins() const {
@@ -109,6 +128,9 @@ void TransportConfig::validate() const {
     if (energy_cutoff_MeV < 0.0 || water_density_g_per_cm3 <= 0.0 || scorer_area_mm2 <= 0.0) {
         throw std::invalid_argument("cutoff must be nonnegative; density and scorer area must be positive");
     }
+    if (straggling_scale < 0.0) {
+        throw std::invalid_argument("straggling_scale must be nonnegative");
+    }
 }
 
 TransportConfig load_config(const std::filesystem::path& path) {
@@ -126,6 +148,9 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.water_density_g_per_cm3 =
         parse_number(values, "water_density_g_per_cm3", config.water_density_g_per_cm3);
     config.scorer_area_mm2 = parse_number(values, "scorer_area_mm2", config.scorer_area_mm2);
+    config.enable_energy_straggling =
+        parse_bool(values, "enable_energy_straggling", config.enable_energy_straggling);
+    config.straggling_scale = parse_number(values, "straggling_scale", config.straggling_scale);
     config.random_seed = parse_number(values, "random_seed", config.random_seed);
     config.stopping_power_file = parse_path(values, "stopping_power_file", config.stopping_power_file);
     config.output_file = parse_path(values, "output_file", config.output_file);

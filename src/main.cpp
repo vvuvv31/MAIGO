@@ -14,7 +14,8 @@ namespace {
 
 void print_usage(const char* executable) {
     std::cout << "Usage: " << executable
-              << " [--config FILE] [--device serial|cpu|gpu] [--histories N] [--output FILE]\n";
+              << " [--config FILE] [--device serial|cpu|gpu] [--histories N]"
+                 " [--straggling-scale X] [--output FILE]\n";
 }
 
 }  // namespace
@@ -41,6 +42,8 @@ int main(int argc, char* argv[]) {
                 config.device = argv[++index];
             } else if (argument == "--histories" && index + 1 < argc) {
                 config.number_of_histories = std::stoull(argv[++index]);
+            } else if (argument == "--straggling-scale" && index + 1 < argc) {
+                config.straggling_scale = std::stod(argv[++index]);
             } else if (argument == "--output" && index + 1 < argc) {
                 config.output_file = argv[++index];
             } else if (argument != "--help" && argument != "-h") {
@@ -87,4 +90,3 @@ int main(int argc, char* argv[]) {
         return EXIT_FAILURE;
     }
 }
-
