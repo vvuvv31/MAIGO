@@ -23,6 +23,8 @@ struct TransportConfig {
     bool enable_primary_attenuation{false};
     bool enable_secondary_generation{false};
     bool enable_secondary_transport{false};
+    bool enable_fragment_cascade{false};
+    std::uint32_t maximum_cascade_generations{0};
     std::size_t secondary_queue_capacity{0};
     std::uint64_t random_seed{20'260'714};
     std::filesystem::path stopping_power_file{"data/stopping_power_water.csv"};
@@ -30,6 +32,8 @@ struct TransportConfig {
         "data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv"};
     std::filesystem::path reaction_package_file{
         "validation/results/topas_200MeVu_reaction_packages_development.bin"};
+    std::filesystem::path cascade_package_file{
+        "validation/results/topas_200MeVu_cascade_100k.bin"};
     std::filesystem::path output_file{"out/cpu_depth_dose.csv"};
     std::filesystem::path fragment_species_output_file{
         "out/gpu_fragment_species_depth_dose.csv"};

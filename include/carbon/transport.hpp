@@ -1,5 +1,6 @@
 #pragma once
 
+#include "carbon/cascade_package.hpp"
 #include "carbon/cross_section.hpp"
 #include "carbon/reaction_package.hpp"
 #include "carbon/stopping_power.hpp"
@@ -40,6 +41,12 @@ struct TransportResult {
     std::uint64_t secondary_transport_steps{0};
     double secondary_deposited_energy_MeV{0.0};
     double secondary_escaped_energy_MeV{0.0};
+    std::uint64_t cascade_interactions{0};
+    std::uint64_t generated_cascade_products{0};
+    std::uint64_t queued_cascade_secondaries{0};
+    std::uint64_t cascade_queue_overflow{0};
+    double queued_cascade_energy_MeV{0.0};
+    double cascade_nuclear_energy_MeV{0.0};
     std::uint64_t total_steps{0};
     double elapsed_seconds{0.0};
     std::string backend;
@@ -61,7 +68,8 @@ TransportResult transport_sycl(const TransportConfig& config,
                                const StoppingPowerTable& stopping_power,
                                const CrossSectionTable& cross_section,
                                const std::string& device_name,
-                               const ReactionPackageTable* reaction_packages = nullptr);
+                               const ReactionPackageTable* reaction_packages = nullptr,
+                               const CascadePackageTable* cascade_packages = nullptr);
 std::string describe_sycl_device(const std::string& device_name);
 #endif
 

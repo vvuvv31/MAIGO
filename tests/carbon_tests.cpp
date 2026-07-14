@@ -448,6 +448,27 @@ void test_sycl_secondary_queue_generation() {
         require_near(reconstructed, transported.deposited_energy_MeV[bin], 1.0e-9,
                      "Total dose bin does not close over species");
     }
+
+    const auto cascade_path = std::filesystem::path(CARBON_SOURCE_DIR) /
+                              "validation/results/topas_200MeVu_cascade_smoke.bin";
+    const auto cascade_packages = carbon::CascadePackageTable::from_binary(cascade_path);
+    config.enable_fragment_cascade = true;
+    config.maximum_cascade_generations = 1;
+    config.secondary_queue_capacity = 100'000;
+    const auto cascaded = carbon::transport_sycl(
+        config, stopping_power, forced_reaction, "cpu", &reaction_packages,
+        &cascade_packages);
+    require(cascaded.cascade_interactions > 0 &&
+                cascaded.generated_cascade_products > 0 &&
+                cascaded.queued_cascade_secondaries > 0,
+            "Fragment cascade did not generate a second interaction generation");
+    require(cascaded.cascade_queue_overflow == 0,
+            "Unexpected fragment cascade queue overflow");
+    require(cascaded.transported_secondaries ==
+                cascaded.queued_secondaries + cascaded.queued_cascade_secondaries,
+            "Cascade queue generation count did not close");
+    require(cascaded.relative_energy_balance_error() < 1.0e-4,
+            "Fragment cascade total energy balance failed");
 }
 #endif
 

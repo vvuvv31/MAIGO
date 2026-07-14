@@ -1,3 +1,4 @@
+#include "carbon/cascade_package.hpp"
 #include "carbon/cross_section.hpp"
 #include "carbon/io.hpp"
 #include "carbon/reaction_package.hpp"
@@ -59,12 +60,20 @@ int main(int argc, char* argv[]) {
         const auto cross_section =
             carbon::CrossSectionTable::from_csv(config.nuclear_cross_section_file);
         std::optional<carbon::ReactionPackageTable> reaction_packages;
+        std::optional<carbon::CascadePackageTable> cascade_packages;
         if (config.enable_secondary_generation) {
             reaction_packages =
                 carbon::ReactionPackageTable::from_binary(config.reaction_package_file);
             std::cout << "Reaction packages: " << reaction_packages->reactions().size()
                       << "; direct secondaries: " << reaction_packages->secondaries().size()
                       << '\n';
+        }
+        if (config.enable_fragment_cascade) {
+            cascade_packages =
+                carbon::CascadePackageTable::from_binary(config.cascade_package_file);
+            std::cout << "Cascade projectiles: " << cascade_packages->projectiles().size()
+                      << "; interactions: " << cascade_packages->interactions().size()
+                      << "; products: " << cascade_packages->products().size() << '\n';
         }
         carbon::TransportResult result;
         if (config.device == "serial") {
@@ -80,7 +89,8 @@ int main(int argc, char* argv[]) {
             }
             std::cout << "SYCL device: " << carbon::describe_sycl_device(config.device) << '\n';
             result = carbon::transport_sycl(config, stopping_power, cross_section, config.device,
-                                            reaction_packages ? &*reaction_packages : nullptr);
+                                            reaction_packages ? &*reaction_packages : nullptr,
+                                            cascade_packages ? &*cascade_packages : nullptr);
 #else
             throw std::runtime_error(
                 "This binary was built without SYCL. Reconfigure with CARBON_ENABLE_SYCL=ON and icpx.");
@@ -133,6 +143,12 @@ int main(int argc, char* argv[]) {
                           << result.secondary_deposited_energy_MeV << " MeV\n"
                           << "Secondary escaped energy: "
                           << result.secondary_escaped_energy_MeV << " MeV\n"
+                          << "Cascade interactions: " << result.cascade_interactions << '\n'
+                          << "Generated cascade products: "
+                          << result.generated_cascade_products << '\n'
+                          << "Queued cascade secondaries: "
+                          << result.queued_cascade_secondaries << '\n'
+                          << "Cascade queue overflow: " << result.cascade_queue_overflow << '\n'
                           << "Fragment species output: "
                           << config.fragment_species_output_file.string() << '\n';
             }
