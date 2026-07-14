@@ -1,0 +1,101 @@
+{
+  "case": "development",
+  "histories": 100000,
+  "seed": 20260714,
+  "topas_version": "4.2.p3",
+  "parameter_file": "carbon_200MeVu_water_species_development.txt",
+  "bin_width_mm": 0.5,
+  "bin_count": 800,
+  "scoring_semantics": "direct energy deposition by mutually exclusive particle-track categories",
+  "other_semantics": "total minus classified; includes electrons, photons, neutrons, and unlisted ions",
+  "total_deposited_MeV_per_primary": 2298.4135810791013,
+  "component_deposited_MeV_per_primary": {
+    "primary_c12": 1697.9192036192323,
+    "secondary_carbon": 52.713092700605394,
+    "boron": 45.71808348400668,
+    "beryllium": 13.839786437873055,
+    "lithium": 14.035821868266613,
+    "helium": 183.9938912295532,
+    "proton": 92.51796818237304,
+    "other": 197.67573355719136
+  },
+  "component_fraction_of_deposited_energy": {
+    "primary_c12": 0.7387352814118259,
+    "secondary_carbon": 0.02293455500548195,
+    "boron": 0.019891147468134137,
+    "beryllium": 0.006021451731665847,
+    "lithium": 0.006106743357162386,
+    "helium": 0.08005256005456093,
+    "proton": 0.040252967935795095,
+    "other": 0.08600529303537396
+  },
+  "classified_fraction_before_other": 0.9139947069646263,
+  "peak_depth_mm": 86.75,
+  "peak_MeV_per_primary_per_bin": 56.285225,
+  "tail_start_mm": 90.0,
+  "tail_deposited_MeV_per_primary": 234.73320186035156,
+  "tail_component_deposited_MeV_per_primary": {
+    "primary_c12": 0.0,
+    "secondary_carbon": 0.5475113904857636,
+    "boron": 10.585251397825035,
+    "beryllium": 4.066833953131847,
+    "lithium": 8.094315875148327,
+    "helium": 120.65878839141845,
+    "proton": 51.75481143554687,
+    "other": 39.02568941679526
+  },
+  "tail_component_fraction": {
+    "primary_c12": 0.0,
+    "secondary_carbon": 0.002332483799251762,
+    "boron": 0.045094819624717834,
+    "beryllium": 0.017325346056291196,
+    "lithium": 0.03448304633088859,
+    "helium": 0.5140252313484024,
+    "proton": 0.22048355761081065,
+    "other": 0.16625551522963752
+  },
+  "minimum_raw_other_MeV_per_primary_per_bin": 0.017131572856903074,
+  "closure_max_abs_MeV_per_primary_per_bin": 0.0,
+  "input_files": {
+    "total": {
+      "path": "validation/topas/output/species_development_total_energy_deposit.csv",
+      "sha256": "92c0466af43933028ddb52c75434e6802328b28c028a0a79c88786226df641c2"
+    },
+    "primary_c12": {
+      "path": "validation/topas/output/species_development_primary_c12_energy_deposit.csv",
+      "sha256": "8071fa862e8ae4de9082325841cf979f3964386b5c0dff152924185a2ad1a5fd"
+    },
+    "secondary_carbon": {
+      "path": "validation/topas/output/species_development_secondary_carbon_energy_deposit.csv",
+      "sha256": "c20d69eb8a1a3ecf579b1611214d969bd09509c5a26ef9d5132f658d26f0befc"
+    },
+    "boron": {
+      "path": "validation/topas/output/species_development_boron_energy_deposit.csv",
+      "sha256": "9d3e081b79c9a1cb62207481d18cbca571ef5e5eec31f78f7151577f48f17446"
+    },
+    "beryllium": {
+      "path": "validation/topas/output/species_development_beryllium_energy_deposit.csv",
+      "sha256": "a625ed6d088acc3172894c39b12b96cfaaace4c78e478850ae4c7dfc077e29d1"
+    },
+    "lithium": {
+      "path": "validation/topas/output/species_development_lithium_energy_deposit.csv",
+      "sha256": "3027d72ecb9f6707ec0ab9cb216524a97f01461ffd04eb76f1976a45511c7ab5"
+    },
+    "helium": {
+      "path": "validation/topas/output/species_development_helium_energy_deposit.csv",
+      "sha256": "bc96d4c6e417a512ba79298b575b1748db45ef51dad8a2e00c8f32bc33856b66"
+    },
+    "proton": {
+      "path": "validation/topas/output/species_development_proton_energy_deposit.csv",
+      "sha256": "e935c61db287bed2346151f1cc7a3951fb917d6dd3ab55553f7e781def41f442"
+    }
+  },
+  "topas_log": {
+    "path": "validation/topas/output/species-development_topas.log",
+    "sha256": "42d25bc832226aa3f75a37cf1ea7a9b5a5582ba4070945e5b2492eac75f30512",
+    "geant4_version": "geant4-11-03-patch-02",
+    "elapsed_real_s": 823.235
+  },
+  "output_csv": "validation/results/topas_200MeVu_species_development.csv",
+  "plot": "validation/results/topas_200MeVu_species_development.png"
+}

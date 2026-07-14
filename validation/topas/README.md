@@ -41,6 +41,8 @@ After smoke QA, build the 100,000-history calibration baseline by replacing `spe
 
 The species curves represent energy deposited directly on each particle track. Energy deposited by delta electrons or other descendants appears in `other`; this definition is explicit in the generated metadata and must remain fixed when calibrating the GPU fragmentation model.
 
+The metadata also records SHA-256 hashes for every raw scorer and the TOPAS log, the detected Geant4 version and elapsed wall time, integrated species fractions, and species fractions in the tail beginning at 90 mm. Change the analysis boundary with `--tail-start-mm` only when a different boundary is recorded for the comparison.
+
 If `topas` is already on PATH, omit `TOPAS_EXECUTABLE`. Raw files are written below `validation/topas/output/` and intentionally ignored by Git.
 
 If TOPAS is available only through an interactive-shell alias, pass the real executable and Geant4 data directory explicitly, for example:
