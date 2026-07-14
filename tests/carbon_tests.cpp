@@ -301,6 +301,70 @@ void test_serial_sycl_cpu_match() {
     require(sycl_attenuation.relative_energy_balance_error() < 1.0e-4,
             "SYCL attenuation energy balance failed");
 }
+
+void test_sycl_secondary_queue_generation() {
+    const auto package_path = std::filesystem::path(CARBON_SOURCE_DIR) /
+                              "validation/results/"
+                              "topas_200MeVu_reaction_packages_development.bin";
+    const auto reaction_packages = carbon::ReactionPackageTable::from_binary(package_path);
+    carbon::TransportConfig config;
+    config.number_of_histories = 64;
+    config.initial_energy_MeVu = 10.0;
+    config.phantom_length_mm = 200.0;
+    config.depth_bin_width_mm = 1.0;
+    config.maximum_step_mm = 0.5;
+    config.maximum_relative_energy_loss = 0.01;
+    config.enable_primary_attenuation = true;
+    config.enable_secondary_generation = true;
+    config.secondary_queue_capacity = 10'000;
+    config.random_seed = 31415926;
+    const carbon::StoppingPowerTable stopping_power(
+        {0.01, 10.01, 20.01}, {2.0, 2.0, 2.0});
+    const carbon::CrossSectionTable forced_reaction(
+        {0.01, 20.01}, {100.0, 100.0});
+
+    const auto first = carbon::transport_sycl(
+        config, stopping_power, forced_reaction, "cpu", &reaction_packages);
+    const auto second = carbon::transport_sycl(
+        config, stopping_power, forced_reaction, "cpu", &reaction_packages);
+    require(first.nuclear_interactions == config.number_of_histories,
+            "Secondary-generation test did not force every reaction");
+    require(first.sampled_reaction_packages == first.nuclear_interactions,
+            "Not every nuclear interaction sampled a reaction package");
+    require(first.generated_direct_secondaries > first.queued_secondaries,
+            "Direct-secondary classification did not retain untransported particles");
+    require(first.queued_secondaries > 0 && first.queued_secondary_energy_MeV > 0.0,
+            "Secondary queue remained empty");
+    require(first.secondary_queue_overflow == 0 &&
+                first.secondary_queue_overflow_energy_MeV == 0.0,
+            "Unexpected secondary queue overflow");
+    require(first.untransported_neutral_energy_MeV > 0.0,
+            "Untransported neutral energy was not recorded");
+    require(first.untransported_unsupported_charged_energy_MeV == 0.0,
+            "A charged ion was not accepted by the generic secondary queue");
+    require_near(
+        first.generated_direct_secondary_energy_MeV,
+        first.queued_secondary_energy_MeV + first.untransported_neutral_energy_MeV,
+        1.0e-5, "Direct-secondary energy category closure failed");
+    require(first.relative_energy_balance_error() < 1.0e-4,
+            "Secondary generation changed primary energy accounting");
+    require(first.generated_direct_secondaries == second.generated_direct_secondaries &&
+                first.queued_secondaries == second.queued_secondaries &&
+                first.queued_secondary_energy_MeV == second.queued_secondary_energy_MeV &&
+                first.untransported_neutral_energy_MeV ==
+                    second.untransported_neutral_energy_MeV,
+            "Secondary generation was not deterministic");
+
+    config.secondary_queue_capacity = 1;
+    const auto overflow = carbon::transport_sycl(
+        config, stopping_power, forced_reaction, "cpu", &reaction_packages);
+    require(overflow.secondary_queue_overflow > 0 &&
+                overflow.secondary_queue_overflow_energy_MeV > 0.0,
+            "A one-particle queue did not report whole-package overflow");
+    require(overflow.queued_secondaries + overflow.secondary_queue_overflow <=
+                overflow.generated_direct_secondaries,
+            "Secondary queue accounting exceeded direct-secondary production");
+}
 #endif
 
 }  // namespace
@@ -319,6 +383,7 @@ int main() {
         test_reaction_package_loading();
 #ifdef CARBON_HAS_SYCL
         test_serial_sycl_cpu_match();
+        test_sycl_secondary_queue_generation();
 #endif
         std::cout << "All carbon_tests passed\n";
         return EXIT_SUCCESS;

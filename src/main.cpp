@@ -1,5 +1,6 @@
 #include "carbon/cross_section.hpp"
 #include "carbon/io.hpp"
+#include "carbon/reaction_package.hpp"
 #include "carbon/stopping_power.hpp"
 #include "carbon/transport.hpp"
 #include "carbon/transport_config.hpp"
@@ -8,6 +9,7 @@
 #include <filesystem>
 #include <iomanip>
 #include <iostream>
+#include <optional>
 #include <stdexcept>
 #include <string>
 
@@ -56,8 +58,20 @@ int main(int argc, char* argv[]) {
         const auto stopping_power = carbon::StoppingPowerTable::from_csv(config.stopping_power_file);
         const auto cross_section =
             carbon::CrossSectionTable::from_csv(config.nuclear_cross_section_file);
+        std::optional<carbon::ReactionPackageTable> reaction_packages;
+        if (config.enable_secondary_generation) {
+            reaction_packages =
+                carbon::ReactionPackageTable::from_binary(config.reaction_package_file);
+            std::cout << "Reaction packages: " << reaction_packages->reactions().size()
+                      << "; direct secondaries: " << reaction_packages->secondaries().size()
+                      << '\n';
+        }
         carbon::TransportResult result;
         if (config.device == "serial") {
+            if (config.enable_secondary_generation) {
+                throw std::invalid_argument(
+                    "Secondary generation is currently implemented only by the SYCL backend");
+            }
             result = carbon::transport_serial(config, stopping_power, cross_section);
         } else {
 #ifdef CARBON_HAS_SYCL
@@ -65,7 +79,8 @@ int main(int argc, char* argv[]) {
                 throw std::invalid_argument("SYCL device must be cpu, gpu, or default");
             }
             std::cout << "SYCL device: " << carbon::describe_sycl_device(config.device) << '\n';
-            result = carbon::transport_sycl(config, stopping_power, cross_section, config.device);
+            result = carbon::transport_sycl(config, stopping_power, cross_section, config.device,
+                                            reaction_packages ? &*reaction_packages : nullptr);
 #else
             throw std::runtime_error(
                 "This binary was built without SYCL. Reconfigure with CARBON_ENABLE_SYCL=ON and icpx.");
@@ -86,8 +101,27 @@ int main(int argc, char* argv[]) {
                   << "Elapsed: " << result.elapsed_seconds << " s\n"
                   << "Throughput: " << histories_per_second << " histories/s\n"
                   << "Energy balance error: " << result.relative_energy_balance_error() << '\n'
-                  << "Nuclear interactions: " << result.nuclear_interactions << '\n'
-                  << "Untracked nuclear energy: " << result.untracked_nuclear_energy_MeV
+                  << "Nuclear interactions: " << result.nuclear_interactions << '\n';
+        if (config.enable_secondary_generation) {
+            std::cout << "Sampled reaction packages: " << result.sampled_reaction_packages << '\n'
+                      << "Generated direct secondaries: "
+                      << result.generated_direct_secondaries << '\n'
+                      << "Generated direct-secondary energy: "
+                      << result.generated_direct_secondary_energy_MeV << " MeV\n"
+                      << "Queued charged secondaries: " << result.queued_secondaries << '\n'
+                      << "Secondary queue overflow: " << result.secondary_queue_overflow << '\n'
+                      << "Queued secondary energy: " << result.queued_secondary_energy_MeV
+                      << " MeV\n"
+                      << "Secondary queue overflow energy: "
+                      << result.secondary_queue_overflow_energy_MeV << " MeV\n"
+                      << "Untransported neutral energy: "
+                      << result.untransported_neutral_energy_MeV << " MeV\n"
+                      << "Untransported unsupported charged energy: "
+                      << result.untransported_unsupported_charged_energy_MeV << " MeV\n"
+                      << "Nuclear energy not in sampled direct secondaries: "
+                      << result.nuclear_energy_not_in_direct_secondaries_MeV << " MeV\n";
+        }
+        std::cout << "Untracked nuclear energy: " << result.untracked_nuclear_energy_MeV
                   << " MeV\n"
                   << "Output: " << config.output_file.string() << '\n';
         return EXIT_SUCCESS;

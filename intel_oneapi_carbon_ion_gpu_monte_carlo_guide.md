@@ -83,7 +83,8 @@ Windows 原生
 - CPU/SYCL 按当前 MeV/u 插值能量相关截面并采样初级核反应；
 - TOPAS 自定义 `CarbonReactionNtuple`，按事件记录反应前 C-12 能量和全部直接次级粒子；
 - 反应包标准化脚本和 OriginCount 独立 QA scorer；
-- 10 万粒子正式事件级反应包：37,657 次主 C-12 非弹性反应和 330,659 个直接次级粒子。
+- 10 万粒子正式事件级反应包：37,657 次主 C-12 非弹性反应和 330,659 个直接次级粒子；
+- B580 事件包联合采样、fixed-capacity `atomic64` 带电次级生成队列和溢出/能量记账。
 
 关键验证结果：
 
@@ -93,7 +94,7 @@ Windows 原生
 - B580 对 serial：NRMSE `1.38e-5`、R80 差 `-3.9e-5 mm`、2%/2 mm gamma `100%`；
 - 当前仍未完成带电次级碎片的 GPU 队列输运，因此完整 TOPAS 的峰后碎裂尾部尚未匹配。
 
-下一开发目标不是重新拟合核衰减常数，而是在 B580 上实现固定容量次级粒子队列、溢出检测和整包采样。
+下一开发目标不是重新拟合核衰减常数，而是输运 B580 队列中的带电次级离子并加入分粒种剂量评分。
 
 ---
 
@@ -1291,7 +1292,7 @@ python3 validation/scripts/compile_reaction_package.py \
 
 version 1 格式由 64-byte header、201 个 8-byte 能量分箱、37,657 个 16-byte 反应头和 330,659 个 16-byte 次级粒子记录组成，总计 `5,894,728` bytes。次级记录只保留运行时需要的 PDG、Z、A、动能和 z 方向；完整三维方向仍保留在源 gzip 表中。每个 1 MeV/u 分箱至少有 2 个、最多有 358 个完整反应包。
 
-`ReactionPackageTable::from_binary` 独立验证 magic/version、ABI record size、文件长度、能量分箱覆盖、反应到次级 offset/count 闭合、能量和方向范围。真实正式数据测试已经同时通过 GCC 12.2 和 Windows IntelLLVM 2025.3.3。此处只完成了主机加载边界；下一步仍需把三个定长数组复制到 SYCL USM，并实现可检测溢出的 secondary queue。
+`ReactionPackageTable::from_binary` 独立验证 magic/version、ABI record size、文件长度、能量分箱覆盖、反应到次级 offset/count 闭合、能量和方向范围。真实正式数据测试已经同时通过 GCC 12.2 和 Windows IntelLLVM 2025.3.3。
 
 ---
 
@@ -1337,6 +1338,20 @@ heavy-fragment queue
 3. 第一版只输运沿束流方向的带电碎片；
 4. 分别统计队列溢出、未输运中子/光子能量和残核能量；
 5. 通过 OriginCount、分粒种 IDD、尾积分和总能量同时验收。
+
+当前已完成第 1、2 步以及生成阶段的第 4 步记账。实现使用一次 `atomic64` reservation 为一个反应包的全部带电离子预留连续空间；容量不足时整组拒绝，禁止写入半个相关反应包。所有 `Z>0` 的离子都进入通用 A/Z 队列，包括 proton、deuteron、triton、He3、alpha 和 Z=3--6 碎片；不能只保留 proton/alpha，否则本次 10k 样本会遗漏 `796,679.75 MeV` 的带电次级动能。
+
+Arc B580 10,000-history 实测结果：
+
+- 3,816 次核反应，3,816 个完整反应包；
+- 33,260 个直接次级粒子，直接次级动能 5,554,734.6 MeV；
+- 21,357 个带电离子进入容量 160,000 的队列，溢出为 0；
+- 排队带电能量 5,001,525.1 MeV，中子/光子能量 553,209.49 MeV；
+- 未支持带电能量为 0；
+- 吞吐 45,671.8 histories/s，相对 primary-only 的 50,727.5 histories/s 下降 9.97%；
+- 由于尚未输运队列，primary-only IDD 与未启用生成时逐 bin 完全一致。
+
+下一实现任务是第 3 步：按 A/Z 输运队列中的全部带电离子，分别累计 proton、helium、Li/Be/B/C 剂量，并把队列能量从 `untracked_nuclear_energy` 转移到 deposited/escaped 账本。
 
 ---
 
@@ -1624,7 +1639,7 @@ python3 validation/scripts/compare_depth_dose.py \
   --output-dir out/compare_topas_b580
 ```
 
-查看按粒种 TOPAS IDD 时，使用 `validation/results/topas_200MeVu_species_development.csv`；该文件包含 total、primary C-12、secondary C、B、Be、Li、He、proton 和 other。完整 TOPAS 与当前 GPU 比较时，峰后尾部仍会明显不足，这是尚未实现 secondary queue 的已知物理缺项，而不是绘图错误。
+查看按粒种 TOPAS IDD 时，使用 `validation/results/topas_200MeVu_species_development.csv`；该文件包含 total、primary C-12、secondary C、B、Be、Li、He、proton 和 other。完整 TOPAS 与当前 GPU 比较时，峰后尾部仍会明显不足；secondary-generation queue 已实现，但队列粒子尚未输运，所以这仍是已知物理缺项，而不是绘图错误。
 
 ---
 
@@ -2112,7 +2127,7 @@ Peak dose difference < 5%
 Tail integral difference < 10%
 ```
 
-当前状态：TOPAS 事件级反应 scorer、100-history smoke 和 10 万粒子正式反应包已完成；GPU secondary queue 尚未完成。
+当前状态：TOPAS 事件级反应 scorer、100-history smoke、10 万粒子正式反应包和 GPU secondary-generation queue 已完成；带电次级输运尚未完成。
 
 ---
 
@@ -2366,9 +2381,9 @@ energy-loss straggling 模块。
 本项目当前已经完成到第 9 步，并完成了第 10 步所需的 TOPAS 数据接口、smoke 验证和 100000-history 正式反应包。紧接着应执行：
 
 ```text
-1. 将二进制 reaction package 数组复制到 SYCL USM
-2. 实现 B580 固定容量 secondary queue 和溢出检测
-3. 按 reaction_id 联合采样带电碎片
+1. 为通用 A/Z 带电离子实现 stopping-power 近似
+2. 输运 B580 secondary queue 中的正向和反向粒子
+3. 增加 proton、helium、Li/Be/B/C 分粒种剂量 tally
 4. 比较分粒种 IDD、尾积分和总能量
 5. 通过后再提升到 1000000-history reference
 ```

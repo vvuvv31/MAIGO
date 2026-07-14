@@ -1,0 +1,63 @@
+{
+  "platform": "Windows native Intel Arc B580 Level Zero",
+  "date": "2026-07-14",
+  "histories": 10000,
+  "physics": "straggling plus energy-dependent primary attenuation plus TOPAS reaction-package secondary generation; no secondary transport",
+  "random_seed": 20260714,
+  "software": {
+    "compiler": "IntelLLVM 2025.3.3 on Windows",
+    "visual_studio": "Visual Studio 2026 18.7.3",
+    "device": "Intel(R) Arc(TM) B580 Graphics",
+    "backend": "Level Zero",
+    "driver": "1.13.35716"
+  },
+  "inputs": {
+    "config": {
+      "path": "config/beam_200MeVu_fragment_generation.yaml",
+      "sha256": "8191543672b7a3612b312c22386218d119d6b7d8ae778fe1b173cff0453915fa"
+    },
+    "reaction_package": {
+      "path": "validation/results/topas_200MeVu_reaction_packages_development.bin",
+      "sha256": "242e71a1901dfdf73043c7e9591091235328380f1258100e9fa2eb16c832a6dc",
+      "energy_bins": 201,
+      "reaction_packages": 37657,
+      "direct_secondaries": 330659
+    }
+  },
+  "queue": {
+    "capacity": 160000,
+    "reservation": "one atomic64 reservation per correlated package; reject the complete charged subset on overflow",
+    "accepted_particles": "all direct ions with atomic_number_Z > 0",
+    "untransported_particles": "neutrons, gammas, and any non-ion direct secondary"
+  },
+  "result": {
+    "elapsed_seconds": 0.2189535,
+    "histories_per_second": 45671.798,
+    "relative_energy_balance_error": 2.301681e-08,
+    "nuclear_interactions": 3816,
+    "sampled_reaction_packages": 3816,
+    "generated_direct_secondaries": 33260,
+    "generated_direct_secondary_energy_MeV": 5554734.6,
+    "queued_charged_secondaries": 21357,
+    "queued_secondary_energy_MeV": 5001525.1,
+    "secondary_queue_overflow": 0,
+    "secondary_queue_overflow_energy_MeV": 0.0,
+    "untransported_neutral_energy_MeV": 553209.49,
+    "untransported_unsupported_charged_energy_MeV": 0.0,
+    "nuclear_energy_not_in_sampled_direct_secondaries_MeV": 215972.0,
+    "untracked_nuclear_energy_MeV": 5770706.6
+  },
+  "primary_only_regression": {
+    "reference": "out/windows_b580_attenuation_depth_dose.csv",
+    "generated": "out/gpu_fragment_generation_depth_dose.csv",
+    "reference_sha256": "d761bf342783a285737f2ed284d219e2ecde73d218259e32fb18eface03e4bf3",
+    "generated_sha256": "d761bf342783a285737f2ed284d219e2ecde73d218259e32fb18eface03e4bf3",
+    "maximum_absolute_bin_difference": 0.0,
+    "note": "Secondary particles are generated and classified but not transported, so the primary-only IDD must remain identical."
+  },
+  "performance_vs_primary_only": {
+    "primary_only_histories_per_second": 50727.457,
+    "secondary_generation_histories_per_second": 45671.798,
+    "relative_change_percent": -9.96631666357728
+  }
+}

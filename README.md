@@ -14,6 +14,7 @@
 - 可选 Intel oneAPI/SYCL 后端；
 - CPU/SYCL 共用配置和物理数据；
 - 从 TOPAS/Geant4 直接导出的能量相关 C-12 水中非弹性截面；
+- TOPAS 事件级反应包的 GPU 联合采样和固定容量带电次级队列；
 - 无第三方 C++ 测试依赖的基础测试。
 
 ## 已验证环境与当前结果
@@ -34,9 +35,20 @@ Level 3 使用从 TOPAS primary-C12 生存代理拟合的有效宏观衰减系�
 
 项目现已通过 TOPAS 自定义计分器直接查询同一 Geant4 物理列表中的 C-12 非弹性截面，得到 1--400 MeV/u 的 H、O 微观截面和水中宏观截面表。200 MeV/u 时水中宏观截面为 `0.00474216 mm^-1`，平均自由程为 `210.874 mm`。CPU 和 SYCL 输运均已按当前能量插值该表并替换上述拟合常数。反应末态使用事件级 n-tuple；相同 `reaction_id` 的碎片保持多重性、能量和方向相关性并作为整体采样。
 
-100,000-history `fragment-development` 正式反应包已固化：37,657 次主 C-12 非弹性反应、330,659 个直接次级粒子，反应率 `37.657%`，平均多重性 `8.781`。两个没有直接可见次级粒子的低能反应以零长度反应包保留。压缩表、运行版本、耗时、输入/输出哈希及完整闭合检查记录在 `validation/results/topas_200MeVu_reaction_packages_development.metadata.json`；下一阶段是在 Arc B580 上实现固定容量次级粒子队列。
+100,000-history `fragment-development` 正式反应包已固化：37,657 次主 C-12 非弹性反应、330,659 个直接次级粒子，反应率 `37.657%`，平均多重性 `8.781`。两个没有直接可见次级粒子的低能反应以零长度反应包保留。压缩表、运行版本、耗时、输入/输出哈希及完整闭合检查记录在 `validation/results/topas_200MeVu_reaction_packages_development.metadata.json`。
 
 为避免 Windows oneAPI 可执行文件依赖 zlib 或在运行时解析 CSV，`validation/scripts/compile_reaction_package.py` 会把两个 gzip 表编译为版本化的小端定长二进制表。当前 5.9 MB 二进制包含 201 个 1 MeV/u 分箱、37,657 个反应头和 330,659 个精简次级粒子记录，可由 `ReactionPackageTable::from_binary` 严格校验后直接复制到 GPU。GCC 12.2 和 Windows IntelLLVM 2025.3.3 均已通过真实数据加载测试。
+
+Arc B580 的固定容量 secondary-generation queue 已接入 primary kernel。10,000-history 实测的 3,816 次核反应全部按能量分箱采样完整反应包，生成 33,260 个直接次级粒子；其中 21,357 个带电离子整包写入队列，溢出为 0，中子/光子能量单独记账。启用生成后的吞吐为 `45,672 histories/s`，相对 primary-only 下降约 `10.0%`。当前只生成和分类次级粒子，尚未输运它们，因此输出 IDD 与 primary-only 文件逐字节一致；下一阶段是带电离子 A/Z 输运和分粒种剂量评分。
+
+生成阶段可在初始化 oneAPI 环境后运行：
+
+```bat
+set ONEAPI_DEVICE_SELECTOR=level_zero:0
+build\oneapi-windows-release\carbon_mc.exe --config config\beam_200MeVu_fragment_generation.yaml --device gpu
+```
+
+可复现的 B580 版本、输入哈希、队列统计和 primary-only 回归结果记录在 `validation/results/windows_b580_secondary_generation_10k.metadata.json`。
 
 直接截面版本的 10,000-history 原生 B580 验证得到 3,816 次核反应，serial 得到 3,818 次；曲线 NRMSE 为 `1.38e-5`、R80 差 `-3.9e-5 mm`、1%/1 mm 与 2%/2 mm gamma 均为 `100%`。这两次事件差异来自 SYCL float 与 serial double 的采样边界，不影响当前剂量曲线一致性。
 

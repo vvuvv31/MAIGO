@@ -153,10 +153,16 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.straggling_scale = parse_number(values, "straggling_scale", config.straggling_scale);
     config.enable_primary_attenuation =
         parse_bool(values, "enable_primary_attenuation", config.enable_primary_attenuation);
+    config.enable_secondary_generation =
+        parse_bool(values, "enable_secondary_generation", config.enable_secondary_generation);
+    config.secondary_queue_capacity =
+        parse_number(values, "secondary_queue_capacity", config.secondary_queue_capacity);
     config.random_seed = parse_number(values, "random_seed", config.random_seed);
     config.stopping_power_file = parse_path(values, "stopping_power_file", config.stopping_power_file);
     config.nuclear_cross_section_file =
         parse_path(values, "nuclear_cross_section_file", config.nuclear_cross_section_file);
+    config.reaction_package_file =
+        parse_path(values, "reaction_package_file", config.reaction_package_file);
     config.output_file = parse_path(values, "output_file", config.output_file);
     config.validate();
     return config;
