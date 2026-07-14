@@ -87,7 +87,7 @@
     },
     "species_metrics": {
       "path": "validation/results/windows_b580_fragment_transport_species_100k_vs_topas.metrics.json",
-      "sha256": "b6df5cd123921d78ae37283fa220829f49129d2bbb5c561a1a46f0aa31b69b74"
+      "sha256": "e8d9b809c2c27f7ec1201166c3a360990edd02cad22c912423fc6d7edeca4ef4"
     }
   }
 }

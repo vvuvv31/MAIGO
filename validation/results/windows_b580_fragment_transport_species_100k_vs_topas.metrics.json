@@ -56,5 +56,23 @@
       "integral_relative_percent": -78.502954390745,
       "nrmse_normalized_to_topas_maximum": 0.40582068666588805
     }
+  },
+  "attribution_adjusted": {
+    "semantics": "TOPAS other excluding direct electron/positron tracks is compared with GPU other. The condensed-history GPU assigns electronic stopping locally to the transported ion instead of a separate electron category.",
+    "topas_electron_positron_fraction_of_other_percent": 78.6106322474465,
+    "other_excluding_electron_positron": {
+      "topas_integral_MeV_mm_per_primary": 21.10369686341802,
+      "gpu_integral_MeV_mm_per_primary": 21.20993660238645,
+      "integral_relative_percent": 0.5034176696907977,
+      "nrmse_normalized_to_topas_maximum": 0.05627122957292241
+    },
+    "tail_start_mm": 90.0,
+    "tail_other_excluding_electron_positron": {
+      "topas_integral_MeV_mm_per_primary": 14.68412425529507,
+      "gpu_integral_MeV_mm_per_primary": 15.286242655767225,
+      "integral_relative_percent": 4.100471979151443,
+      "nrmse_normalized_to_topas_maximum": 0.0995572067118744
+    },
+    "topas_gamma_neutron_direct_integral_MeV_mm_per_primary": 0.004070927592830503
   }
 }

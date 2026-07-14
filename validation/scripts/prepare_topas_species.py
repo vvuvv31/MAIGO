@@ -457,7 +457,8 @@ def main() -> None:
         "plot": args.plot.as_posix(),
     }
     args.metadata.parent.mkdir(parents=True, exist_ok=True)
-    args.metadata.write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
+    with args.metadata.open("w", encoding="utf-8", newline="\n") as stream:
+        stream.write(json.dumps(metadata, indent=2) + "\n")
 
     print(f"Wrote {args.output_csv}")
     print(f"Wrote {args.metadata}")

@@ -7,7 +7,26 @@
   "bin_width_mm": 0.5,
   "bin_count": 800,
   "scoring_semantics": "direct energy deposition by mutually exclusive particle-track categories",
-  "other_semantics": "total minus classified; includes electrons, photons, neutrons, and unlisted ions",
+  "other_semantics": "legacy total minus broad classified categories; partitioned within scorer roundoff into electron_positron, gamma, neutron, deuteron, triton, and unclassified",
+  "helium_semantics": "legacy Z=2 secondary category; partitioned within scorer roundoff into alpha, helium3, and helium_other",
+  "neutral_scorer_semantics": "gamma and neutron columns contain direct track energy deposition only; energy transferred to charged descendants is scored on those descendant tracks",
+  "detailed_closure_components": [
+    "primary_c12",
+    "secondary_carbon",
+    "boron",
+    "beryllium",
+    "lithium",
+    "alpha",
+    "helium3",
+    "helium_other",
+    "proton",
+    "deuteron",
+    "triton",
+    "electron_positron",
+    "gamma",
+    "neutron",
+    "unclassified"
+  ],
   "total_deposited_MeV_per_primary": 2298.4135810791013,
   "component_deposited_MeV_per_primary": {
     "primary_c12": 1697.9192036192323,
@@ -54,47 +73,122 @@
     "proton": 0.22048355761081065,
     "other": 0.16625551522963752
   },
+  "detail_deposited_MeV_per_primary": {
+    "electron_positron": 155.44872624954226,
+    "gamma": 0.006210183984041214,
+    "neutron": 0.0019410054953023794,
+    "deuteron": 24.89628049041748,
+    "triton": 10.181031964683532,
+    "unclassified": 7.141543663068791,
+    "alpha": 160.39287411136627,
+    "helium3": 23.12029392439723,
+    "helium_other": 0.48072319593071977
+  },
+  "other_breakdown_fraction": {
+    "electron_positron": 0.7863824428635191,
+    "gamma": 3.141601587756086e-05,
+    "neutron": 9.819138952332808e-06,
+    "deuteron": 0.1259450517390619,
+    "triton": 0.05150370144820009,
+    "unclassified": 0.036127568794389255
+  },
+  "helium_breakdown_fraction": {
+    "alpha": 0.871729344053374,
+    "helium3": 0.12565794315177586,
+    "helium_other": 0.002612712806486402
+  },
+  "tail_detail_deposited_MeV_per_primary": {
+    "electron_positron": 9.594397436065675,
+    "gamma": 0.0013576145148277282,
+    "neutron": 0.001393783961944282,
+    "deuteron": 20.115933244018553,
+    "triton": 8.165532502441406,
+    "unclassified": 1.147074835792853,
+    "alpha": 106.03491867801667,
+    "helium3": 14.303019416493177,
+    "helium_other": 0.3208502990496165
+  },
+  "tail_other_breakdown_fraction": {
+    "electron_positron": 0.24584824969002572,
+    "gamma": 3.478771381405653e-05,
+    "neutron": 3.5714525041662617e-05,
+    "deuteron": 0.5154536292537955,
+    "triton": 0.20923480467528277,
+    "unclassified": 0.029392814142040324
+  },
   "minimum_raw_other_MeV_per_primary_per_bin": 0.017131572856903074,
+  "minimum_raw_unclassified_MeV_per_primary_per_bin": 0.0001937767034582774,
+  "minimum_raw_helium_other_MeV_per_primary_per_bin": -1.239776614703203e-10,
   "closure_max_abs_MeV_per_primary_per_bin": 0.0,
+  "detailed_closure_max_abs_MeV_per_primary_per_bin": 1.239776545314264e-10,
+  "detailed_closure_tolerance_MeV_per_primary_per_bin": 0.00022514089999999998,
   "input_files": {
     "total": {
       "path": "validation/topas/output/species_development_total_energy_deposit.csv",
-      "sha256": "92c0466af43933028ddb52c75434e6802328b28c028a0a79c88786226df641c2"
+      "sha256": "a67613bfe1de2a2b8f3aff1abdb9d19535c4f0fae691d88892ea937c07fefad3"
     },
     "primary_c12": {
       "path": "validation/topas/output/species_development_primary_c12_energy_deposit.csv",
-      "sha256": "8071fa862e8ae4de9082325841cf979f3964386b5c0dff152924185a2ad1a5fd"
+      "sha256": "7f2748a5aa28792691e8b4460617b0606fcea0264b6e30a2cafad9b3053e25bd"
     },
     "secondary_carbon": {
       "path": "validation/topas/output/species_development_secondary_carbon_energy_deposit.csv",
-      "sha256": "c20d69eb8a1a3ecf579b1611214d969bd09509c5a26ef9d5132f658d26f0befc"
+      "sha256": "83debf02c2dca57e1df96cb0f0e12e3452f10c7f759c92542b0b7655fe535e0e"
     },
     "boron": {
       "path": "validation/topas/output/species_development_boron_energy_deposit.csv",
-      "sha256": "9d3e081b79c9a1cb62207481d18cbca571ef5e5eec31f78f7151577f48f17446"
+      "sha256": "0204582fa1c05c67578f17daf6824ba2c5b2180a4d746f3a7032eea22499c007"
     },
     "beryllium": {
       "path": "validation/topas/output/species_development_beryllium_energy_deposit.csv",
-      "sha256": "a625ed6d088acc3172894c39b12b96cfaaace4c78e478850ae4c7dfc077e29d1"
+      "sha256": "fcd401606d340f6afbd8302ee361583bbcf46a06b8fa991e66a23a783edcfc4b"
     },
     "lithium": {
       "path": "validation/topas/output/species_development_lithium_energy_deposit.csv",
-      "sha256": "3027d72ecb9f6707ec0ab9cb216524a97f01461ffd04eb76f1976a45511c7ab5"
+      "sha256": "16f9d3a10baed277ea9e4477431e50c22ad6c28151b2517b354cba5cd7867fb2"
     },
     "helium": {
       "path": "validation/topas/output/species_development_helium_energy_deposit.csv",
-      "sha256": "bc96d4c6e417a512ba79298b575b1748db45ef51dad8a2e00c8f32bc33856b66"
+      "sha256": "2af0df20d34e4aca9ed4ab77327cb08577d819275226b8fb7611182b661fbabe"
     },
     "proton": {
       "path": "validation/topas/output/species_development_proton_energy_deposit.csv",
-      "sha256": "e935c61db287bed2346151f1cc7a3951fb917d6dd3ab55553f7e781def41f442"
+      "sha256": "2b831870cce50e02b7f5a8189b2fa2a95569f2c6f0f526cc6a0233e60f8828a2"
+    },
+    "electron_positron": {
+      "path": "validation/topas/output/species_development_electron_positron_energy_deposit.csv",
+      "sha256": "d6d1967f5b14f6815d6fde84006fc88eaf62f934bcd238efdf6261ef7c93ccd4"
+    },
+    "gamma": {
+      "path": "validation/topas/output/species_development_gamma_energy_deposit.csv",
+      "sha256": "86981b915976f967dd81421318ebc175e6628d79f80af3b910ca8ebbe74a604a"
+    },
+    "neutron": {
+      "path": "validation/topas/output/species_development_neutron_energy_deposit.csv",
+      "sha256": "288a55e8ab75cf2c6acd5a36781d57bc795ed025e4541e3b2924a069c7bd8396"
+    },
+    "deuteron": {
+      "path": "validation/topas/output/species_development_deuteron_energy_deposit.csv",
+      "sha256": "e28789a32818398f03d5fee4b5235388664e460b4265b1aa9ad05caf8913160b"
+    },
+    "triton": {
+      "path": "validation/topas/output/species_development_triton_energy_deposit.csv",
+      "sha256": "3ab00941b5f15f27eea478d46050efa3c0500cbf56e78019610e98b3c0baa5d0"
+    },
+    "alpha": {
+      "path": "validation/topas/output/species_development_alpha_energy_deposit.csv",
+      "sha256": "55aba1394e3581ac354086b45d8456c5776e053f781815e475843007444854e8"
+    },
+    "helium3": {
+      "path": "validation/topas/output/species_development_helium3_energy_deposit.csv",
+      "sha256": "ca000d03399716c7ccedd7e508577a8ab8f97a7b642cec9c24325911e879dd52"
     }
   },
   "topas_log": {
     "path": "validation/topas/output/species-development_topas.log",
-    "sha256": "42d25bc832226aa3f75a37cf1ea7a9b5a5582ba4070945e5b2492eac75f30512",
+    "sha256": "bb9570ae2c2523d85d325f639fe9796e84ef110baa9e118f6a84ca8c16bddd5a",
     "geant4_version": "geant4-11-03-patch-02",
-    "elapsed_real_s": 823.235
+    "elapsed_real_s": 984.241
   },
   "output_csv": "validation/results/topas_200MeVu_species_development.csv",
   "plot": "validation/results/topas_200MeVu_species_development.png"
