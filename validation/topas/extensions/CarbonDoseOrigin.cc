@@ -196,6 +196,13 @@ CarbonDoseOrigin::CarbonDoseOrigin(
 
 CarbonDoseOrigin::~CarbonDoseOrigin() = default;
 
+void CarbonDoseOrigin::UserHookForBeginOfTrack(const G4Track* track) {
+    // Register every track before transport, including parents that never enter
+    // the scored phantom. This is required to attribute electrons created in
+    // upstream/world material to their actual charged or neutral-source lineage.
+    ResolveOrigin(track, GetEventID());
+}
+
 G4bool CarbonDoseOrigin::ProcessHits(G4Step* step, G4TouchableHistory*) {
     if (!fIsActive) {
         ++fSkippedWhileInactive;

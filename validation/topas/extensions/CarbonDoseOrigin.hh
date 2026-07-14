@@ -18,6 +18,7 @@ public:
 
     ~CarbonDoseOrigin() override;
 
+    void UserHookForBeginOfTrack(const G4Track*) override;
     G4bool ProcessHits(G4Step*, G4TouchableHistory*) override;
 
 private:

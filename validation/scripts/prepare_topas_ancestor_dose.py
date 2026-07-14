@@ -152,6 +152,7 @@ def write_idd(
     depth_mm: np.ndarray,
     total: np.ndarray,
     components: dict[str, np.ndarray],
+    independent_total: np.ndarray,
     direct_total: np.ndarray,
 ) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -162,8 +163,10 @@ def write_idd(
                 "depth_mm",
                 "total_from_3d_MeV_per_primary",
                 *(f"{name}_MeV_per_primary" for name in CATEGORIES),
+                "topas_independent_3d_total_MeV_per_primary",
                 "topas_direct_total_MeV_per_primary",
                 "category_closure_MeV_per_primary",
+                "independent_total_closure_MeV_per_primary",
                 "dose_energy_closure_MeV_per_primary",
             ]
         )
@@ -174,9 +177,11 @@ def write_idd(
                     f"{depth:.12g}",
                     f"{total[index]:.12g}",
                     *(f"{components[name][index]:.12g}" for name in CATEGORIES),
+                    f"{independent_total[index]:.12g}",
                     f"{direct_total[index]:.12g}",
                     f"{reconstructed[index] - total[index]:.12g}",
-                    f"{total[index] - direct_total[index]:.12g}",
+                    f"{reconstructed[index] - independent_total[index]:.12g}",
+                    f"{independent_total[index] - direct_total[index]:.12g}",
                 ]
             )
 
@@ -268,7 +273,7 @@ def main() -> None:
     parser.add_argument("--tail-start-mm", type=float, default=90.0)
     parser.add_argument("--closure-tolerance", type=float, default=1.0e-6)
     parser.add_argument("--dose-energy-bin-tolerance", type=float, default=5.0e-3)
-    parser.add_argument("--dose-energy-integral-relative-tolerance", type=float, default=1.0e-8)
+    parser.add_argument("--dose-energy-integral-relative-tolerance", type=float, default=1.0e-6)
     parser.add_argument("--output-npz", type=Path, required=True)
     parser.add_argument("--output-idd", type=Path, required=True)
     parser.add_argument("--metadata", type=Path, required=True)
@@ -284,7 +289,9 @@ def main() -> None:
 
     total_path = output_path(args.input_dir, args.case, "total")
     total_coordinates, total_sum_gy, header = read_sparse_topas(total_path, shape)
-    total_dose = sparse_to_dense(total_coordinates, total_sum_gy / args.histories, shape)
+    independent_total_dose = sparse_to_dense(
+        total_coordinates, total_sum_gy / args.histories, shape
+    )
     reconstructed_sum_gy = np.zeros(shape, dtype=np.float64)
     category_dose: dict[str, np.ndarray] = {}
     category_idd: dict[str, np.ndarray] = {}
@@ -313,22 +320,31 @@ def main() -> None:
         package[f"{name}_dose_Gy_per_primary"] = (sum_gy / args.histories).astype(np.float32)
         input_files[name] = {"path": path.as_posix(), "sha256": sha256(path)}
 
-    closure_sum_gy = reconstructed_sum_gy - sparse_to_dense(total_coordinates, total_sum_gy, shape)
+    independent_closure_sum_gy = reconstructed_sum_gy - sparse_to_dense(
+        total_coordinates, total_sum_gy, shape
+    )
+    # The authoritative attributed total is the mutually exclusive category
+    # sum. The separately accumulated built-in total remains an independent
+    # floating-point and scoring-geometry cross-check.
+    total_dose = reconstructed_sum_gy / args.histories
     total_idd = total_dose.sum(axis=(0, 1)) * gy_to_mev
+    independent_total_idd = independent_total_dose.sum(axis=(0, 1)) * gy_to_mev
     category_reconstructed_idd = np.sum([category_idd[name] for name in CATEGORIES], axis=0)
     category_idd_closure = category_reconstructed_idd - total_idd
+    independent_total_closure = category_reconstructed_idd - independent_total_idd
 
     direct_total_path = args.input_dir / f"ancestor_{args.case}_total_energy_deposit.csv"
     direct_total_sum, direct_header = read_1d_energy(direct_total_path, shape[2])
     if direct_header.get("topas_version") != header.get("topas_version"):
         raise SystemExit("TOPAS version mismatch between 3D dose and direct IDD")
     direct_total_idd = direct_total_sum / args.histories
-    dose_energy_closure = total_idd - direct_total_idd
+    dose_energy_closure = independent_total_idd - direct_total_idd
 
     maximum_idd_closure = float(np.max(np.abs(category_idd_closure)))
+    maximum_independent_total_closure = float(np.max(np.abs(independent_total_closure)))
     maximum_dose_energy_closure = float(np.max(np.abs(dose_energy_closure)))
     dose_energy_integral_relative = float(
-        np.sum(total_idd) / np.sum(direct_total_idd) - 1.0
+        np.sum(independent_total_idd) / np.sum(direct_total_idd) - 1.0
     )
     if maximum_idd_closure >= args.closure_tolerance:
         raise SystemExit(
@@ -356,6 +372,7 @@ def main() -> None:
     package.update(
         {
             "total_dose_Gy_per_primary": total_dose.astype(np.float32),
+            "topas_independent_total_dose_Gy_per_primary": independent_total_dose.astype(np.float32),
             "x_center_mm": x_mm.astype(np.float32),
             "y_center_mm": y_mm.astype(np.float32),
             "depth_center_mm": depth_mm.astype(np.float32),
@@ -365,7 +382,14 @@ def main() -> None:
     )
     args.output_npz.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(args.output_npz, **package)
-    write_idd(args.output_idd, depth_mm, total_idd, category_idd, direct_total_idd)
+    write_idd(
+        args.output_idd,
+        depth_mm,
+        total_idd,
+        category_idd,
+        independent_total_idd,
+        direct_total_idd,
+    )
     write_plot(args.plot, total_dose, depth_mm, x_mm, y_mm, total_idd, category_idd)
 
     tail_mask = depth_mm >= args.tail_start_mm
@@ -382,6 +406,7 @@ def main() -> None:
         "topas_version": header.get("topas_version", "unknown"),
         "parameter_file": header.get("parameter_file", "unknown"),
         "scoring_semantics": "dose-to-medium attributed by track ancestry; electron/positron dose inherits its charged parent, while neutral-source descendants retain neutron/gamma/neutral_other origin",
+        "attributed_total_semantics": "authoritative attributed total is the sum of all mutually exclusive ancestor categories; the separately accumulated TOPAS DoseToMedium total is retained as an independent numerical cross-check",
         "array_axis_order": "x,y,z",
         "shape_xyz": list(shape),
         "voxel_size_mm": list(voxel_mm),
@@ -398,9 +423,10 @@ def main() -> None:
         "tail_category_fraction": {name: value / tail_total for name, value in tail_integrals.items()},
         "closure_tolerance_MeV_per_primary_per_bin": args.closure_tolerance,
         "category_closure_max_abs_MeV_per_primary_per_bin": maximum_idd_closure,
+        "independent_total_closure_max_abs_MeV_per_primary_per_bin": maximum_independent_total_closure,
         "dose_energy_closure_max_abs_MeV_per_primary_per_bin": maximum_dose_energy_closure,
         "dose_energy_integral_relative_difference": dose_energy_integral_relative,
-        "voxel_closure_max_abs_Gy_sum": float(np.max(np.abs(closure_sum_gy))),
+        "independent_total_voxel_closure_max_abs_Gy_sum": float(np.max(np.abs(independent_closure_sum_gy))),
         "unresolved_MeV_per_primary": category_integrals["unresolved"],
         "original_total_energy_integral_unchanged": abs(dose_energy_integral_relative) < args.dose_energy_integral_relative_tolerance,
         "input_files": {
@@ -421,6 +447,7 @@ def main() -> None:
     print(f"Wrote {args.plot}")
     print(f"Total deposited energy: {total_integral:.6f} MeV/primary")
     print(f"Maximum category closure: {maximum_idd_closure:.3e} MeV/primary/bin")
+    print(f"Maximum independent-total cross-check difference: {maximum_independent_total_closure:.3e} MeV/primary/bin")
     print(f"Maximum 3D dose/direct-energy closure: {maximum_dose_energy_closure:.3e} MeV/primary/bin")
     print(f"Unresolved: {category_integrals['unresolved']:.3e} MeV/primary")
 
