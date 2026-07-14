@@ -1,0 +1,50 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 22,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "cpu-debug",
+      "displayName": "CPU debug",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/cpu-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CARBON_ENABLE_SYCL": "OFF",
+        "CARBON_BUILD_TESTS": "ON"
+      }
+    },
+    {
+      "name": "oneapi-release",
+      "displayName": "Intel oneAPI SYCL release",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/oneapi-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_CXX_COMPILER": "icpx",
+        "CARBON_ENABLE_SYCL": "ON",
+        "CARBON_BUILD_TESTS": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "cpu-debug", "configurePreset": "cpu-debug" },
+    { "name": "oneapi-release", "configurePreset": "oneapi-release" }
+  ],
+  "testPresets": [
+    {
+      "name": "cpu-debug",
+      "configurePreset": "cpu-debug",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "oneapi-release",
+      "configurePreset": "oneapi-release",
+      "output": { "outputOnFailure": true }
+    }
+  ]
+}
+

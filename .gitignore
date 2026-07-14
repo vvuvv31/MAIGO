@@ -1,0 +1,12 @@
+build/
+build-*/
+out/
+*.log
+*.vtk
+*.root
+validation/results/*
+!validation/results/.gitkeep
+validation/topas/output/*
+!validation/topas/output/.gitkeep
+.vscode/settings.json
+
