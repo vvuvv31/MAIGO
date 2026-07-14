@@ -92,9 +92,11 @@ Windows 原生
 - 对应平均自由程：`210.874 mm`；
 - 10,000-history 直接截面版本中，B580/serial 核反应数为 `3816/3818`；
 - B580 对 serial：NRMSE `1.38e-5`、R80 差 `-3.9e-5 mm`、2%/2 mm gamma `100%`；
-- 第一版带电次级输运已把完整 TOPAS 尾积分差从约 `-92%` 改善到 `+10.055%`；后续级联和中性粒子剂量仍未完成。
+- 第一版带电次级输运已把完整 TOPAS 尾积分差从约 `-92%` 改善到 `+10.055%`；
+- TOPAS `other` 细分显示其中 `78.61%` 是电子/正电子直接轨迹，gamma+neutron 直接沉积积分仅 `0.00407 MeV·mm/primary`；
+- 扣除计分归属不同的 TOPAS 电子项后，GPU `other` 全深度差 `+0.50%`、90 mm 后尾部差 `+4.10%`。
 
-下一开发目标不是重新拟合核衰减常数；第一版带电次级输运已经完成，接下来应补充碎片后续核反应/衰变级联和中性粒子剂量贡献。
+下一开发目标不是重新拟合核衰减常数，也不是根据原始 `other -78.5%` 直接添加中性粒子输运。第一版带电次级输运已经完成，接下来应先建立 TOPAS 祖先归属 scorer，把电子沉积回归到母粒子类别并重新比较；然后才根据剩余偏差决定碎片级联和中性粒子模型的优先级。
 
 ---
 
@@ -1362,7 +1364,9 @@ S_{A,Z}(E/u)=S_{\mathrm{C12}}(E/u)
 
 100,000-history Arc B580 结果：216,133 个带电次级粒子、316,048,099 个碎片步进、零队列溢出、预热后 `95,985 histories/s`、总能量误差 `3.11e-8`。相对完整 TOPAS：总积分 `+0.48%`、峰值 `-0.062%`、R80 `+0.104 mm`、FWHM `+2.36%`、NRMSE `1.08%`、2%/2 mm gamma `97.71%`、尾积分 `+10.055%`。尾部已由此前约 `-92%` 大幅改善，但仍以极小幅度未通过 `<10%` 验收线。
 
-分粒种积分揭示下一物理缺项：secondary C/B/Be/Li/He 偏高约 20--32%，proton 偏低约 31%，other 偏低约 79%。当前不包含碎片的后续核反应、衰变级联、能量涨落、多重散射以及 neutron/gamma 输运，因此不能通过经验 scale 掩盖这些差异。
+原始分粒种积分显示 secondary C/B/Be/Li/He 偏高约 20--32%、proton 偏低约 31%、other 偏低约 79%，但细分 scorer 证明最后一项主要是计分归属差异。TOPAS 的 `other` 中 electron/positron、deuteron、triton、unclassified 分别占 `78.61%`、`12.59%`、`5.15%`、`3.61%`，gamma+neutron 的直接轨迹沉积积分仅 `0.00407 MeV·mm/primary`。GPU condensed-history 不显式输运 delta electron，而是把电子阻止能量局部计入母离子；扣除 TOPAS electron/positron 后，GPU `other` 全深度只差 `+0.50%`，90 mm 后尾部差 `+4.10%`。
+
+因此当前数据不能直接证明 neutron/gamma 输运是 `other` 差异的主因，也不能把所有重碎片偏高解释为真实产额偏高。应先用祖先归属 scorer 将 TOPAS 的电子沉积回归到母粒子，再评估碎片后续核反应、衰变级联、能量涨落、多重散射和中性粒子输运。经验 scale 仍然禁止。
 
 ---
 
@@ -1650,7 +1654,26 @@ python3 validation/scripts/compare_depth_dose.py \
   --output-dir out/compare_topas_b580
 ```
 
-查看按粒种 TOPAS IDD 时，使用 `validation/results/topas_200MeVu_species_development.csv`；该文件包含 total、primary C-12、secondary C、B、Be、Li、He、proton 和 other。完整 TOPAS 与当前 GPU 比较时，峰后尾部仍会明显不足；secondary-generation queue 已实现，但队列粒子尚未输运，所以这仍是已知物理缺项，而不是绘图错误。
+查看按粒种 TOPAS IDD 时，使用 `validation/results/topas_200MeVu_species_development.csv`。该文件保留 total、primary C-12、secondary C、B、Be、Li、He、proton 和 other 兼容列，并新增 electron/positron、gamma、neutron、deuteron、triton、alpha、He-3、other helium 和 unclassified。运行与标准化命令为：
+
+```bash
+TOPAS_G4_DATA_DIR="$HOME/Applications/GEANT4/G4DATA" \
+TOPAS_EXECUTABLE="$HOME/Applications/TOPAS/OpenTOPAS-install/bin/topas" \
+./validation/topas/run_topas.sh species-development
+
+python3 validation/scripts/prepare_topas_species.py \
+  --case development --histories 100000 \
+  --output-csv validation/results/topas_200MeVu_species_development.csv \
+  --metadata validation/results/topas_200MeVu_species_development.metadata.json \
+  --plot validation/results/topas_200MeVu_species_development.png
+
+python3 validation/scripts/compare_species_depth_dose.py \
+  validation/results/topas_200MeVu_species_development.csv \
+  validation/results/windows_b580_fragment_transport_species_100k.csv \
+  --metrics-output validation/results/windows_b580_fragment_transport_species_100k_vs_topas.metrics.json
+```
+
+这些列仍是“发生沉积的直接轨迹”分类：gamma/neutron 转移给电子或反冲离子的能量记在后者名下。metrics 中的 `attribution_adjusted` 会额外比较 TOPAS `other-electron_positron` 与 GPU `other`；祖先归属中性粒子剂量需要单独的 provenance scorer，不能把 direct gamma/neutron 列当作完整中性粒子贡献。
 
 ---
 
@@ -2138,7 +2161,7 @@ Peak dose difference < 5%
 Tail integral difference < 10%
 ```
 
-当前状态：TOPAS 事件级反应 scorer、10 万粒子正式反应包、GPU secondary-generation queue 和第一版 A/Z 带电次级输运均已完成；后续碎裂级联和中性粒子输运尚未完成。
+当前状态：TOPAS 事件级反应 scorer、10 万粒子正式反应包、GPU secondary-generation queue 和第一版 A/Z 带电次级输运均已完成。TOPAS `other` 直接轨迹细分与归属修正比较也已完成；尾积分仍为 `+10.055%`。下一项是祖先归属剂量 scorer，之后再决定后续碎裂级联和中性粒子输运。
 
 ---
 
@@ -2171,6 +2194,11 @@ Tail integral difference < 10%
 74cc153  data: 100k species-resolved TOPAS baseline
 51963db  topas: extract cross sections and reaction final states
 a32ff10  physics: use TOPAS energy-dependent reaction cross sections
+5dbf1b6  data: add GPU-ready reaction package loader
+3bda906  sycl: add correlated secondary generation queue
+6c7fd2b  sycl: transport charged reaction fragments
+d477929  topas: decompose residual particle dose
+51541a4  validation: add particle-dose attribution baseline
 ```
 
 每次新增正式 TOPAS 数据集、物理模块、SYCL 队列结构或验证结果，均应单独提交，且 metadata 必须记录输入哈希、软件版本、随机种子和运行统计。
@@ -2392,9 +2420,9 @@ energy-loss straggling 模块。
 本项目当前已经完成到第 9 步，并完成了第 10 步所需的 TOPAS 数据接口、smoke 验证和 100000-history 正式反应包。紧接着应执行：
 
 ```text
-1. 为带电碎片加入后续核反应和衰变级联
-2. 分解并建模 TOPAS other 中的 neutron/gamma 剂量
-3. 复查 proton 与 He/重碎片的分粒种积分
+1. 增加 TOPAS 祖先归属 scorer，把电子沉积回归到母粒子类别
+2. 生成 100000-history 祖先归属 IDD，并重新比较 proton 与 He/重碎片
+3. 根据对齐后的剩余差异决定带电碎片级联和 neutron/gamma 模型优先级
 4. 在不使用经验 scale 的条件下通过尾积分 <10%
 5. 通过后再提升到 1000000-history reference
 ```

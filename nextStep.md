@@ -1,3 +1,13 @@
+# 当前下一步
+
+当前不应直接根据旧的 `other -79%` 结论增加 neutron/gamma 输运。10 万粒子 TOPAS 细分基准已经证明：`other` 中 `78.61%` 是电子/正电子直接轨迹；gamma+neutron 的直接沉积积分只有 `0.00407 MeV·mm/primary`。GPU condensed-history 将电子阻止能量局部记到母离子，导致两端按粒种比较的归属口径不同。
+
+现在最直接的工作是增加 TOPAS 祖先归属剂量 scorer：追踪电子/正电子的母链，把其沉积回归到 primary C-12、secondary C、B、Be、Li、He、proton 或 other charged。然后生成新的 10 万粒子祖先归属 IDD，并与 GPU 当前的离子归属 IDD 比较。验收要求为逐 bin 总剂量闭合、祖先类别互斥、总 IDD 不变，并报告全深度和 90 mm 后尾部的分粒种积分差。
+
+对齐后再决定物理开发顺序：若重碎片/He 与 proton 偏差仍显著，再加入带电碎片后续核反应/衰变级联；若祖先归属的 neutron/gamma 剂量显著，再实现中性粒子模型。不得用全局 scale 强行跨过尾积分 `<10%` 门槛。
+
+---
+
 下一步应进入“次级碎片输运”阶段。当前射程、峰宽和主碳离子衰减已经较好，但布拉格峰后的尾部低约 92%，主要缺失正是核反应产生的碎片。
 建议按以下顺序推进：
 在 WSL/TOPAS 中增加按粒子种类计分的 IDD：
@@ -55,4 +65,8 @@ B580 fixed-capacity queue 也已完成首轮验证。10,000 个初级粒子产�
 
 上述 A/Z 输运现已完成第一版。100,000-history B580 基准输运 216,133 个带电次级粒子，碎片沉积与逃逸能量闭合，队列溢出为 0，总能量误差为 `3.11e-8`。相对完整 TOPAS，总积分差 `+0.48%`、峰值差 `-0.062%`、R80 差 `+0.104 mm`、FWHM 差 `+2.36%`、NRMSE `1.08%`、2%/2 mm gamma `97.71%`；尾积分差为 `+10.055%`，尚未通过 `<10%` 门槛。
 
-下一步不应通过调整全局 scale 强行跨过 10% 门槛。分粒种积分显示 secondary C/B/Be/Li/He 偏高约 20--32%，proton 偏低约 31%，other 偏低约 79%。应优先加入带电碎片的后续核反应/衰变级联，并明确 TOPAS `other` 中中子、光子及其他粒子的剂量贡献；完成后再复查尾积分。
+随后完成的 10 万粒子细分 scorer 将 `other` 分为 electron/positron、gamma、neutron、deuteron、triton 和 unclassified，并把 helium 分为 alpha、He-3 和其他 Z=2 离子。旧 broad species 列与原基准逐 bin 完全一致，详细闭合最大误差为 `1.24e-10 MeV/primary/bin`。
+
+全深度 `other` 中 electron/positron 占 `78.61%`，deuteron 占 `12.59%`，triton 占 `5.15%`，unclassified 占 `3.61%`，gamma 与 neutron 的直接轨迹沉积合计仅约 `0.004%`。90 mm 后 `other` 中 deuteron、triton、electron/positron 分别占 `51.55%`、`20.92%`、`24.58%`。扣除 TOPAS electron/positron 后，GPU `other` 全深度只高 `0.50%`，尾部高 `4.10%`。
+
+因此下一步已修正为“统一剂量归属语义”，而不是立即调参或实现 neutron/gamma 输运。应先做 TOPAS 祖先归属 scorer，再依据对齐后的差异决定后续级联模型。
