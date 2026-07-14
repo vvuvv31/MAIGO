@@ -8,7 +8,9 @@ TOPAS 祖先归属 3D dose scorer、全带电离子级联 scorer 和两个 10 �
 
 统一参考后的 B580 结果：charged-origin total 全深度/90 mm 后为 `-0.11%/+2.93%`；He `-0.20%/+2.58%`、proton `+1.41%/+2.84%`、B `+3.88%/+4.06%`、Li `+3.83%/+3.72%`。所有带电类别尾部最大偏差为 Be `+6.67%`，逐 bin 闭合为 `9.80e-11 MeV/primary/bin`，未使用全局 scale。
 
-下一步明确为：开发 GPU 3D voxel dose scorer，把粒子状态扩展到 x/y/z 和三维方向，加入多重库仑散射并与 TOPAS `60 x 60 x 800` 祖先归属剂量逐 voxel/切片比较。带电 3D scorer 稳定后再实现 neutron/gamma 来源输运。新的 TOPAS 作业仍只允许在 `v@192.168.31.5:~/gpu` 上运行，最多 56 线程，禁止使用 WSL 运行 TOPAS。
+GPU 3D scorer 的第一阶段框架已完成：CPU/SYCL 支持可选 `60 x 60 x 800` double-atomic total voxel tally、稀疏 CSV 输出和逐 z 的 x/y→IDD 闭合检查。Arc B580 的 100-history 全级联 smoke 产生 800 个 IDD bin 和 800 个中心轴非零体素，最大闭合误差为 `0 MeV/primary/bin`；完整 oneAPI 测试通过。当前粒子输运仍是一维，因此这些非零体素全部位于 `(ix,iy)=(30,30)`，不能把它当成已完成横向剂量验证。
+
+下一步明确为：把粒子和反应包状态扩展到 x/y/z 与三维方向，沿真实路径跨越体素边界，并加入带电粒子的多重库仑散射。随后增加 3D 分类别闭合并与现有 TOPAS `60 x 60 x 800` 祖先归属剂量逐 voxel/切片比较。带电 3D scorer 稳定后再实现 neutron/gamma 来源输运。新的 TOPAS 作业仍只允许在 `v@192.168.31.5:~/gpu` 上运行，最多 56 线程，禁止使用 WSL 运行 TOPAS。
 
 ---
 

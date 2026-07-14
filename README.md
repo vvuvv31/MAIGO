@@ -1,6 +1,6 @@
 # carbon-oneapi-mc
 
-面向 Intel oneAPI/SYCL 的碳离子水中一维 condensed-history 蒙特卡洛剂量引擎。当前阶段聚焦 200 MeV/u C-12、均匀水模体和 pristine Bragg curve，并以 TOPAS/Geant4 为参考。
+面向 Intel oneAPI/SYCL 的碳离子水中 condensed-history 蒙特卡洛剂量引擎。当前物理输运仍为一维，已经具备 `60 x 60 x 800` GPU total voxel scorer 框架，并以 TOPAS/Geant4 为参考逐步扩展到真实三维。
 
 > 研究用途：当前阻止本领模型和输运结果尚未完成 TOPAS 验证，不能用于临床或治疗计划。
 
@@ -15,19 +15,19 @@
 - CPU/SYCL 共用配置和物理数据；
 - 从 TOPAS/Geant4 直接导出的能量相关 C-12 水中非弹性截面；
 - TOPAS 事件级反应包的 GPU 联合采样和固定容量带电次级队列；
+- 可选 `60 x 60 x 800` double-atomic total voxel tally、稀疏 CSV 和 voxel→IDD 闭合检查；
 - 无第三方 C++ 测试依赖的基础测试。
 
 ## 已验证环境与当前结果
 
-本仓库已在以下本机 WSL 环境实际验证：
+当前计算架构已经实际验证：
 
-- Debian WSL2；
-- GCC 12.2 CPU 构建；
-- Intel oneAPI DPC++ 2026.1；
-- Intel OpenCL CPU device（Core i5-14600K）；
-- TOPAS 4.2.p3 / Geant4 11.3.p2。
+- 远程 `v@192.168.31.5:~/gpu`：TOPAS 4.1.p1 / Geant4 11.1.3 MT，最多 56 线程；
+- Windows：Visual Studio 2026、Intel oneAPI DPC++ 2026.1；
+- Windows Level Zero：Intel Arc B580；
+- WSL：仅用于历史开发和数据访问辅助，不再运行新的 TOPAS 作业。
 
-运行架构已明确分开：WSL 仅运行 TOPAS/Geant4 并生成参考数据；Windows 原生 oneAPI 通过 Level Zero 驱动 Intel Arc B580 执行 SYCL kernel。10,000-history TOPAS 开发基准与 CSDA 的比较为：R80 差 `+0.075 mm`、FWHM 相对差 `-29.9%`、峰值差 `+69.4%`、尾积分差 `-89.9%`。射程已经接近，峰宽、峰高和碎裂尾部仍是后续物理模块的工作，不应把这些差异解释为最终准确度。
+新的 TOPAS 脚本只传到远程 `~/gpu` 并在那里运行；Windows 原生 oneAPI 通过 Level Zero 驱动 Arc B580 执行 SYCL kernel。禁止在 WSL 提交新的 TOPAS 计算。
 
 另有 10,000-history 的 TOPAS 电磁物理隔离基准。使用一次性全局校准 `straggling_scale=1.2` 后，Level 2 结果为：R80 差 `+0.105 mm`、FWHM 相对差 `+2.29%`、峰值差 `+0.12%`、2%/2 mm gamma `97.28%`。后续 100–400 MeV/u 验证必须固定此参数。
 
@@ -54,7 +54,7 @@ build\oneapi-windows-release\carbon_mc.exe --config config\beam_200MeVu_fragment
 
 相对完整 TOPAS，总 IDD 的积分差为 `+0.48%`、峰值差 `-0.062%`、R80 差 `+0.104 mm`、FWHM 差 `+2.36%`、NRMSE `1.08%`、2%/2 mm gamma `97.71%`。峰后尾积分差由未输运碎片时约 `-92%` 改善为 `+10.055%`，非常接近但尚未通过 `<10%` 验收线；禁止为跨线而手工调参。
 
-10 万粒子 TOPAS 细分 scorer 进一步表明，原 `other` 的 `78.61%` 来自电子/正电子直接轨迹，gamma+neutron 的直接轨迹沉积积分仅 `0.00407 MeV·mm/primary`。GPU condensed-history 把电子阻止能量记在母离子类别，因此原始 `other -78.50%` 主要是计分归属不一致。扣除 TOPAS 电子/正电子后，GPU `other` 的全深度积分差为 `+0.50%`，90 mm 后尾部差为 `+4.10%`。下一任务是增加 TOPAS 祖先归属 scorer，把电子沉积回归到母粒子后重新比较各粒种；只有对齐计分语义后仍存在的差异才用于决定碎片级联或中性粒子输运优先级。
+TOPAS 祖先归属 scorer、带电碎片两代级联和统一版本反应包现已完成。统一参考后，B580 charged-origin total 全深度/90 mm 后差为 `-0.11%/+2.93%`，带电类别尾部最大偏差为 Be `+6.67%`。GPU total voxel tally 第一阶段也已通过 100-history B580 smoke；当前全部剂量仍位于中心 x/y voxel，下一任务是真实三维方向、体素边界步进与多重库仑散射。
 
 ```bat
 set ONEAPI_DEVICE_SELECTOR=level_zero:0
@@ -63,9 +63,9 @@ build\oneapi-windows-release\carbon_mc.exe --config config\beam_200MeVu_fragment
 
 直接截面版本的 10,000-history 原生 B580 验证得到 3,816 次核反应，serial 得到 3,818 次；曲线 NRMSE 为 `1.38e-5`、R80 差 `-3.9e-5 mm`、1%/1 mm 与 2%/2 mm gamma 均为 `100%`。这两次事件差异来自 SYCL float 与 serial double 的采样边界，不影响当前剂量曲线一致性。
 
-## WSL 构建
+## WSL CPU 调试构建
 
-WSL 主要用于 TOPAS；也可在 VS Code 的 WSL 窗口中进行 CPU 调试构建：
+WSL 只保留 CPU/SYCL 调试和数据访问用途，不运行新的 TOPAS 作业。可在 VS Code 的 WSL 窗口中构建：
 
 ```bash
 cmake --preset cpu-debug
@@ -118,6 +118,20 @@ depth_mm,energy_deposition_MeV_per_primary,dose_Gy_per_primary,relative_dose
 ```
 
 剂量按配置中的 scorer 横截面积、水密度和深度 bin 质量计算。绝对剂量比较时，TOPAS 必须使用完全相同的 scorer 体素体积。
+
+启用 `enable_voxel_scoring: true` 后，还会写出只包含非零体素的稀疏 CSV：
+
+```text
+ix,iy,iz,x_mm,y_mm,z_mm,energy_deposition_MeV_per_primary,dose_Gy_per_primary
+```
+
+Arc B580 的 100-history smoke 可直接运行：
+
+```bat
+build\oneapi-windows-release\carbon_mc.exe --config config\beam_200MeVu_voxel_smoke.yaml
+```
+
+当前 scorer 会在写文件前检查每个 z 层的 x/y 能量和是否还原 IDD。此阶段物理轨迹仍是一维，因此非零项都在中心体素；横向剂量必须等三维方向和多重散射完成后再与 TOPAS 比较。
 
 ## 物理数据状态
 
