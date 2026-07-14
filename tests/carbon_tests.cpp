@@ -1,5 +1,6 @@
 #include "carbon/cascade_package.hpp"
 #include "carbon/cross_section.hpp"
+#include "carbon/particle.hpp"
 #include "carbon/reaction_package.hpp"
 #include "carbon/rng.hpp"
 #include "carbon/stopping_power.hpp"
@@ -58,6 +59,17 @@ void test_units() {
     config.enable_secondary_transport = true;
     require_throws([&config]() { config.validate(); },
                    "Secondary transport without generation was accepted");
+}
+
+void test_charged_dose_categories() {
+    require(carbon::charged_dose_category(6, 12) == 0, "Carbon category failed");
+    require(carbon::charged_dose_category(5, 11) == 1, "Boron category failed");
+    require(carbon::charged_dose_category(4, 9) == 2, "Beryllium category failed");
+    require(carbon::charged_dose_category(3, 7) == 3, "Lithium category failed");
+    require(carbon::charged_dose_category(2, 4) == 4, "Helium category failed");
+    require(carbon::charged_dose_category(1, 1) == 5, "Proton category failed");
+    require(carbon::charged_dose_category(1, 2) == 6, "Deuteron category failed");
+    require(carbon::charged_dose_category(7, 14) == 6, "Other charged category failed");
 }
 
 void test_interpolation() {
@@ -477,6 +489,7 @@ void test_sycl_secondary_queue_generation() {
 int main() {
     try {
         test_units();
+        test_charged_dose_categories();
         test_interpolation();
         test_fragment_stopping_power_scale();
         test_step_selection();

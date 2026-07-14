@@ -436,21 +436,10 @@ TransportResult transport_sycl(const TransportConfig& config,
                                             secondary.atomic_number > 0 &&
                                             secondary.mass_number > 0;
                                         if (is_supported) {
-                                            std::uint8_t origin_category = 6;
-                                            if (secondary.atomic_number == 1 &&
-                                                secondary.mass_number == 1) {
-                                                origin_category = 5;
-                                            } else if (secondary.atomic_number == 2) {
-                                                origin_category = 4;
-                                            } else if (secondary.atomic_number == 3) {
-                                                origin_category = 3;
-                                            } else if (secondary.atomic_number == 4) {
-                                                origin_category = 2;
-                                            } else if (secondary.atomic_number == 5) {
-                                                origin_category = 1;
-                                            } else if (secondary.atomic_number == 6) {
-                                                origin_category = 0;
-                                            }
+                                            const auto origin_category =
+                                                charged_dose_category(
+                                                    secondary.atomic_number,
+                                                    secondary.mass_number);
                                             secondary_queue_device[output_index++] =
                                                 SecondaryParticle1D{
                                                     position_mm,
@@ -801,7 +790,9 @@ TransportResult transport_sycl(const TransportConfig& config,
                                                             product.pdg_id,
                                                             product.atomic_number,
                                                             product.mass_number,
-                                                            particle.origin_category,
+                                                            charged_dose_category(
+                                                                product.atomic_number,
+                                                                product.mass_number),
                                                             static_cast<std::uint8_t>(
                                                                 particle.generation + 1),
                                                             0,

@@ -4,6 +4,17 @@
 
 namespace carbon {
 
+constexpr std::uint8_t charged_dose_category(const int atomic_number,
+                                             const int mass_number) noexcept {
+    if (atomic_number == 1 && mass_number == 1) {
+        return 5;
+    }
+    if (atomic_number >= 2 && atomic_number <= 6) {
+        return static_cast<std::uint8_t>(6 - atomic_number);
+    }
+    return 6;
+}
+
 struct Particle1D {
     double position_mm{0.0};
     double kinetic_energy_MeV{0.0};
