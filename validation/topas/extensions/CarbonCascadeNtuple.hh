@@ -24,6 +24,7 @@ private:
 
     G4String record_kind_;
     G4int run_id_ = 0;
+    G4int thread_id_ = 0;
     G4int event_id_ = 0;
     G4int interaction_track_id_ = 0;
     G4int track_id_ = 0;

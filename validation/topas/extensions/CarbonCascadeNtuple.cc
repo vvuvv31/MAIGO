@@ -7,6 +7,7 @@
 #include "G4Material.hh"
 #include "G4Step.hh"
 #include "G4SystemOfUnits.hh"
+#include "G4Threading.hh"
 #include "G4Track.hh"
 #include "G4VProcess.hh"
 
@@ -40,6 +41,7 @@ CarbonCascadeNtuple::CarbonCascadeNtuple(
                       output_file, is_sub_scorer) {
     fNtuple->RegisterColumnS(&record_kind_, "Record Kind");
     fNtuple->RegisterColumnI(&run_id_, "Run ID");
+    fNtuple->RegisterColumnI(&thread_id_, "Thread ID");
     fNtuple->RegisterColumnI(&event_id_, "Event ID");
     fNtuple->RegisterColumnI(&interaction_track_id_, "Interaction Track ID");
     fNtuple->RegisterColumnI(&track_id_, "Track ID");
@@ -124,6 +126,7 @@ G4bool CarbonCascadeNtuple::ProcessHits(G4Step* step, G4TouchableHistory*) {
     }
 
     run_id_ = GetRunID();
+    thread_id_ = G4Threading::G4GetThreadId();
     event_id_ = event_id;
     track_id_ = track->GetTrackID();
     parent_id_ = track->GetParentID();
