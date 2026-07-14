@@ -15,9 +15,31 @@ cd validation/topas
 ./run_topas.sh smoke
 ```
 
-Available cases are `smoke` (100 histories), `development` (10,000), and `reference` (1,000,000). The runner saves the full TOPAS/Geant4 console output as `output/<case>_topas.log`.
+Available total-IDD cases are `smoke` (100 histories), `development` (10,000), and `reference` (1,000,000). The runner saves the full TOPAS/Geant4 console output as `output/<case>_topas.log`.
 
 `em-smoke` and `em-development` use only `g4em-standard_opt4`. They isolate electromagnetic stopping and energy-loss fluctuations from nuclear attenuation and secondary fragments, and are the appropriate references for Level 1/2 validation.
+
+## Species-resolved fragmentation baseline
+
+The species cases score mutually exclusive, direct track energy deposition from primary C-12, secondary carbon, boron, beryllium, lithium, helium, and protons. The postprocessor reconstructs `other` as total minus those categories; it therefore retains electrons, photons, neutrons, and unlisted ions and verifies bin-by-bin energy closure.
+
+Run the 100-history syntax/filter smoke test:
+
+```bash
+TOPAS_EXECUTABLE="$HOME/Applications/TOPAS/OpenTOPAS-install/bin/topas" \
+TOPAS_G4_DATA_DIR="$HOME/Applications/GEANT4/G4DATA" \
+./validation/topas/run_topas.sh species-smoke
+
+python3 validation/scripts/prepare_topas_species.py \
+  --case smoke --histories 100 \
+  --output-csv validation/results/topas_200MeVu_species_smoke.csv \
+  --metadata validation/results/topas_200MeVu_species_smoke.metadata.json \
+  --plot validation/results/topas_200MeVu_species_smoke.png
+```
+
+After smoke QA, build the 100,000-history calibration baseline by replacing `species-smoke`, `smoke`, and `100` above with `species-development`, `development`, and `100000`. Use `species-reference` for the one-million-history promotion run. The random seed remains fixed at `20260714` in the base parameter file.
+
+The species curves represent energy deposited directly on each particle track. Energy deposited by delta electrons or other descendants appears in `other`; this definition is explicit in the generated metadata and must remain fixed when calibrating the GPU fragmentation model.
 
 If `topas` is already on PATH, omit `TOPAS_EXECUTABLE`. Raw files are written below `validation/topas/output/` and intentionally ignored by Git.
 

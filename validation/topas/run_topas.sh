@@ -11,8 +11,11 @@ case "${case_name}" in
     reference) parameter_file="carbon_200MeVu_water.txt" ;;
     em-smoke) parameter_file="carbon_200MeVu_water_em_only_smoke.txt" ;;
     em-development) parameter_file="carbon_200MeVu_water_em_only_development.txt" ;;
+    species-smoke) parameter_file="carbon_200MeVu_water_species_smoke.txt" ;;
+    species-development) parameter_file="carbon_200MeVu_water_species_development.txt" ;;
+    species-reference) parameter_file="carbon_200MeVu_water_species.txt" ;;
     *)
-        printf 'Usage: %s [smoke|development|reference|em-smoke|em-development]\n' "$0" >&2
+        printf 'Usage: %s [smoke|development|reference|em-smoke|em-development|species-smoke|species-development|species-reference]\n' "$0" >&2
         exit 2
         ;;
 esac

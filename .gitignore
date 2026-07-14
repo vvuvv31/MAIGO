@@ -4,6 +4,8 @@ out/
 *.log
 *.vtk
 *.root
+__pycache__/
+*.pyc
 validation/results/*
 !validation/results/.gitkeep
 !validation/results/*.csv
