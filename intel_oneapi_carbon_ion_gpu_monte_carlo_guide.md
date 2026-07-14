@@ -57,13 +57,54 @@
 
 不要一开始同时调整所有物理模块。
 
+### 2.1 当前项目状态（2026-07-14）
+
+本仓库已经不再处于“从零搭框架”阶段。当前实际架构是：
+
+```text
+WSL Debian
+  └─ TOPAS 4.2.p3 / Geant4 11.3.p2
+     ├─ 生成总 IDD、分粒种 IDD
+     ├─ 直接导出 C-12+H/O 非弹性截面
+     └─ 生成事件级反应末态 n-tuple
+
+Windows 原生
+  └─ Intel oneAPI/SYCL + Level Zero + Intel Arc B580
+     ├─ serial / SYCL CPU / SYCL GPU 共用物理表
+     └─ 执行和验证输运 kernel
+```
+
+已经完成：
+
+- 200 MeV/u C-12 水中 TOPAS 总 IDD、电磁隔离 IDD 和 10 万粒子分粒种 IDD；
+- CPU 一维 CSDA、自适应步长、Bohr straggling 和 Philox counter-based RNG；
+- Windows 原生 Arc B580 Level Zero kernel；
+- TOPAS 自定义 `CarbonCrossSectionNtuple`，直接从 `G4HadronicProcessStore` 导出 1--400 MeV/u 的 C-12+H、C-12+O 及水中宏观非弹性截面；
+- CPU/SYCL 按当前 MeV/u 插值能量相关截面并采样初级核反应；
+- TOPAS 自定义 `CarbonReactionNtuple`，按事件记录反应前 C-12 能量和全部直接次级粒子；
+- 反应包标准化脚本和 OriginCount 独立 QA scorer。
+
+关键验证结果：
+
+- 200 MeV/u 水中宏观非弹性截面：`0.00474216 mm^-1`；
+- 对应平均自由程：`210.874 mm`；
+- 10,000-history 直接截面版本中，B580/serial 核反应数为 `3816/3818`；
+- B580 对 serial：NRMSE `1.38e-5`、R80 差 `-3.9e-5 mm`、2%/2 mm gamma `100%`；
+- 当前仍未完成带电次级碎片的 GPU 队列输运，因此完整 TOPAS 的峰后碎裂尾部尚未匹配。
+
+下一开发目标不是重新拟合核衰减常数，而是运行 10 万粒子 `fragment-development` 正式反应包，并在 B580 上实现预分配次级粒子队列。
+
 ---
 
 # 第一部分：开发环境
 
 ## 3. 推荐软件环境
 
-建议优先使用 Linux。
+本项目采用 Windows 与 WSL 分工，而不是要求 WSL 直接运行 Intel GPU：
+
+- Windows：Visual Studio 2026、Intel oneAPI、Level Zero、Arc B580；
+- WSL Debian：TOPAS/Geant4 参考模拟和 Linux 侧 CPU/SYCL 正确性测试；
+- VS Code：打开同一工作区，可分别使用 Windows 终端和 WSL 终端。
 
 推荐组件：
 
@@ -94,7 +135,7 @@
 
 ## 4. 检查 oneAPI 环境
 
-加载 oneAPI 环境：
+WSL 中加载 oneAPI 环境，用于 SYCL CPU 编译检查：
 
 ```bash
 source /opt/intel/oneapi/setvars.sh
@@ -106,16 +147,24 @@ source /opt/intel/oneapi/setvars.sh
 icpx --version
 ```
 
-检查 SYCL 设备：
+WSL 中检查 SYCL 设备：
 
 ```bash
 sycl-ls
 ```
 
-预期可以看到 Intel GPU，例如：
+当前 WSL 只看到 Intel CPU OpenCL 是允许的，因为 TOPAS 数据生成和 SYCL CPU 正确性测试都可在 WSL 完成。不要把 WSL 看不到 Level Zero GPU 当成项目阻塞条件。
+
+Windows oneAPI 终端中运行：
+
+```bat
+sycl-ls
+```
+
+Windows 必须能看到 Arc B580，例如：
 
 ```text
-[level_zero:gpu][level_zero:0] Intel(R) Arc(TM) Graphics
+[level_zero:gpu][level_zero:0] Intel(R) Arc(TM) B580 Graphics
 ```
 
 ---
@@ -197,8 +246,10 @@ Phantom length: 40 cm
 Beam direction: +z
 Beam type: Monoenergetic pencil beam
 Depth bin: 0.5 mm
-Histories: 1e6 for development
-Histories: 1e7 or higher for final reference
+Histories: 100 for syntax/filter smoke test
+Histories: 1e4 for total-IDD development
+Histories: 1e5 for species/reaction calibration development
+Histories: 1e6 for promoted reference
 ```
 
 必须记录：
@@ -238,6 +289,9 @@ secondary_proton_energy_deposition
 secondary_alpha_energy_deposition
 secondary_heavy_ion_energy_deposition
 primary_C12_survival
+C12_H_O_inelastic_cross_sections
+primary_C12_reaction_headers
+correlated_reaction_secondaries
 ```
 
 这样可以分别验证：
@@ -246,6 +300,21 @@ primary_C12_survival
 - 初级碳离子衰减；
 - 次级碎片剂量；
 - Bragg 峰后尾部。
+
+截面、反应末态和 IDD 的职责必须分开：
+
+```text
+Geant4/TOPAS 截面查询
+  → 决定 GPU 上“何时发生反应”
+
+事件级反应 n-tuple
+  → 决定一次反应“共同产生哪些粒子及其联合运动学”
+
+OriginCount / 分粒种 IDD
+  → 独立验证产额、深度分布和最终剂量
+```
+
+不能仅用分粒种直方图独立抽取每个碎片，否则会破坏同一反应内的多重性、能量和方向相关性。
 
 ---
 
@@ -281,51 +350,55 @@ primary_C12_survival
 ## 9. 推荐目录
 
 ```text
-carbon-oneapi-mc/
+carbonGPU/
 ├── CMakeLists.txt
+├── CMakePresets.json
 ├── README.md
+├── nextStep.md
 ├── config/
 │   ├── beam_200MeVu.yaml
+│   ├── beam_200MeVu_straggling.yaml
+│   ├── beam_200MeVu_attenuation.yaml
 │   └── water_phantom.yaml
 ├── data/
 │   ├── stopping_power_water.csv
-│   ├── nuclear_cross_section_h.csv
-│   ├── nuclear_cross_section_o.csv
-│   └── fragmentation_tables/
-├── include/
+│   ├── c12_inelastic_cross_sections_water_geant4_11_3_2.csv
+│   └── c12_inelastic_cross_sections_water_geant4_11_3_2.metadata.json
+├── include/carbon/
+│   ├── cross_section.hpp
+│   ├── device.hpp
+│   ├── io.hpp
 │   ├── particle.hpp
-│   ├── transport_config.hpp
-│   ├── material.hpp
+│   ├── rng.hpp
 │   ├── stopping_power.hpp
 │   ├── straggling.hpp
-│   ├── scattering.hpp
-│   ├── nuclear.hpp
-│   ├── scoring.hpp
-│   ├── rng.hpp
-│   └── device.hpp
+│   ├── transport.hpp
+│   └── transport_config.hpp
 ├── src/
-│   ├── main.cpp
+│   ├── config.cpp
+│   ├── cross_section.cpp
 │   ├── device.cpp
-│   ├── transport_cpu.cpp
-│   ├── transport_sycl.cpp
 │   ├── io.cpp
-│   └── scoring.cpp
-├── kernels/
-│   ├── transport_kernel.hpp
-│   ├── scoring_kernel.hpp
-│   └── queue_compaction.hpp
+│   ├── main.cpp
+│   ├── stopping_power.cpp
+│   ├── transport_cpu.cpp
+│   └── transport_sycl.cpp
 ├── tests/
-│   ├── test_units.cpp
-│   ├── test_interpolation.cpp
-│   ├── test_rng.cpp
-│   ├── test_energy_conservation.cpp
-│   ├── test_cpu_gpu_match.cpp
-│   └── test_step_convergence.cpp
+│   └── carbon_tests.cpp
 ├── validation/
 │   ├── topas/
+│   │   ├── extensions/
+│   │   ├── build_extensions.sh
+│   │   └── run_topas.sh
 │   ├── scripts/
+│   │   ├── compare_depth_dose.py
+│   │   ├── prepare_topas_cross_sections.py
+│   │   ├── prepare_topas_reactions.py
+│   │   └── prepare_topas_species.py
 │   └── results/
-└── paper/
+└── scripts/
+    ├── build_windows_oneapi.cmd
+    └── run_windows_b580.cmd
 ```
 
 ---
@@ -370,16 +443,29 @@ struct Particle3D {
 
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
+#include <string>
 
 struct TransportConfig {
-    std::size_t number_of_histories;
-    float initial_energy_MeVu;
-    float phantom_length_mm;
-    float depth_bin_width_mm;
-    float maximum_step_mm;
-    float maximum_relative_energy_loss;
-    float energy_cutoff_MeV;
-    std::uint64_t random_seed;
+    std::size_t number_of_histories{10'000};
+    double initial_energy_MeVu{200.0};
+    int mass_number{12};
+    double phantom_length_mm{400.0};
+    double depth_bin_width_mm{0.5};
+    double maximum_step_mm{0.5};
+    double maximum_relative_energy_loss{0.005};
+    double energy_cutoff_MeV{0.1};
+    double water_density_g_per_cm3{1.0};
+    bool enable_energy_straggling{false};
+    double straggling_scale{1.0};
+    bool enable_primary_attenuation{false};
+    std::uint64_t random_seed{20'260'714};
+    std::filesystem::path stopping_power_file{
+        "data/stopping_power_water.csv"};
+    std::filesystem::path nuclear_cross_section_file{
+        "data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv"};
+    std::filesystem::path output_file{"out/cpu_depth_dose.csv"};
+    std::string device{"serial"};
 };
 ```
 
@@ -461,6 +547,39 @@ energy_MeVu,stopping_power_MeV_per_mm
 - 不需要二分搜索；
 - 可直接计算 index；
 - 易于 CPU/GPU 一致性验证。
+
+当前 `data/stopping_power_water.csv` 仍是用于软件联调的透明 Bethe-Bloch + 有效电荷近似表，不应描述为最终 ICRU/临床物理数据。它已用 TOPAS 射程验证，但后续多能量研究仍需固定数据来源和版本。
+
+### 13.1 核反应截面数据表
+
+当前正式表为：
+
+```text
+data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv
+```
+
+标准列为：
+
+```csv
+energy_MeV_per_u,total_kinetic_energy_MeV,c12_h_inelastic_cross_section_barn,c12_o_inelastic_cross_section_barn,hydrogen_macroscopic_cross_section_per_mm,oxygen_macroscopic_cross_section_per_mm,water_macroscopic_cross_section_per_mm,water_mean_free_path_mm
+```
+
+这张表不是从 IDD 生存曲线拟合得到的。TOPAS 完成物理初始化后，自定义 scorer 直接调用：
+
+```cpp
+G4HadronicProcessStore::GetInelasticCrossSectionPerAtom(...)
+G4HadronicProcessStore::GetInelasticCrossSectionPerVolume(...)
+```
+
+其中 H/O 微观截面与原子数密度相乘后，必须满足：
+
+\[
+\Sigma_{water}(E)
+=
+\Sigma_H(E)+\Sigma_O(E)
+\]
+
+标准化脚本会检查该闭合关系，并记录原始 n-tuple、header、TOPAS 日志的 SHA-256、TOPAS/Geant4 版本和参考能量点。
 
 ---
 
@@ -636,7 +755,10 @@ sycl::queue create_queue(const std::string& device_name) {
         return sycl::queue{
             sycl::gpu_selector_v,
             async_handler,
-            sycl::property::queue::enable_profiling{}
+            sycl::property_list{
+                sycl::property::queue::enable_profiling{},
+                sycl::property::queue::in_order{}
+            }
         };
     }
 
@@ -672,7 +794,7 @@ sycl::queue create_queue(const std::string& device_name) {
 使用 shared USM：
 
 ```cpp
-float* dose = sycl::malloc_shared<float>(
+double* dose = sycl::malloc_shared<double>(
     number_of_bins,
     queue
 );
@@ -680,10 +802,10 @@ float* dose = sycl::malloc_shared<float>(
 
 ### 性能版
 
-使用 device USM：
+使用 device USM。当前剂量数组使用 `double`，因为大统计量下 `float` 原子累积会产生可见舍入误差：
 
 ```cpp
-float* dose_device = sycl::malloc_device<float>(
+double* dose_device = sycl::malloc_device<double>(
     number_of_bins,
     queue
 );
@@ -695,7 +817,7 @@ float* dose_device = sycl::malloc_device<float>(
 queue.memset(
     dose_device,
     0,
-    number_of_bins * sizeof(float)
+    number_of_bins * sizeof(double)
 ).wait();
 ```
 
@@ -705,7 +827,7 @@ queue.memset(
 queue.memcpy(
     dose_host.data(),
     dose_device,
-    number_of_bins * sizeof(float)
+    number_of_bins * sizeof(double)
 ).wait();
 ```
 
@@ -730,14 +852,18 @@ queue.submit([&](sycl::handler& handler) {
 
             float position_mm = 0.0f;
             float energy_MeV = initial_energy_MeV;
+            float inverse_mass_number = 1.0f / 12.0f;
 
             while (
                 energy_MeV > energy_cutoff_MeV &&
                 position_mm < phantom_length_mm
             ) {
+                float energy_MeVu =
+                    energy_MeV * inverse_mass_number;
+
                 float stopping_power =
                     interpolate_uniform_table(
-                        energy_MeV,
+                        energy_MeVu,
                         stopping_power_table,
                         stopping_power_table_size,
                         minimum_table_energy,
@@ -772,14 +898,14 @@ queue.submit([&](sycl::handler& handler) {
                     depth_bin < number_of_bins
                 ) {
                     sycl::atomic_ref<
-                        float,
+                        double,
                         sycl::memory_order::relaxed,
                         sycl::memory_scope::device,
                         sycl::access::address_space::global_space
                     > atomic_dose(dose_device[depth_bin]);
 
                     atomic_dose.fetch_add(
-                        deposited_energy
+                        static_cast<double>(deposited_energy)
                     );
                 }
 
@@ -997,6 +1123,36 @@ if (uniform_random < nuclear_probability) {
 
 第一版只终止初级 C-12，不生成次级粒子。
 
+当前实现不再接受单一常数 `nuclear_macroscopic_cross_section_per_mm`。配置使用：
+
+```yaml
+enable_primary_attenuation: true
+nuclear_cross_section_file: data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv
+```
+
+serial 与 SYCL kernel 在每一步完成电磁能损后，用 C-12 当前 MeV/u 线性插值 `water_macroscopic_cross_section_per_mm`。200 MeV/u 的直接值为 `0.00474216 mm^-1`，而早期从 primary survival 拟合的过渡常数是 `0.0050613 mm^-1`，高约 6.7%，因此旧常数不得再用于后续验证。
+
+### 28.1 从 TOPAS 直接生成截面表
+
+首次构建扩展版 TOPAS：
+
+```bash
+cd /mnt/d/OneDrive/DoctorDocuments/myproject/carbonGPU
+bash validation/topas/build_extensions.sh
+```
+
+导出并标准化截面：
+
+```bash
+export TOPAS_EXECUTABLE="$PWD/build/opentopas-extension-install/bin/topas"
+export TOPAS_G4_DATA_DIR="$HOME/Applications/GEANT4/G4DATA"
+
+./validation/topas/run_topas.sh cross-sections
+python3 validation/scripts/prepare_topas_cross_sections.py
+```
+
+原始 `.header`、`.phsp` 和 TOPAS 日志保存在忽略目录 `validation/topas/output/`；标准 CSV 和 metadata JSON 位于 `data/` 并进入 Git。
+
 ---
 
 ## 29. 第一阶段核模型的意义
@@ -1008,11 +1164,11 @@ if (uniform_random < nuclear_probability) {
 - 入口到峰值比例；
 - 深度方向 primary fluence。
 
-但会产生问题：
+在当前最小模型中会产生以下限制：
 
-- 发生反应后的能量消失；
+- 发生反应后的能量进入 `untracked_nuclear_energy`，能量账目仍闭合，但不会贡献次级粒子剂量；
 - 峰后尾部偏低；
-- 总能量不守恒。
+- 不能预测分粒种产额和碎裂尾部。
 
 因此它只是碎裂模型前的过渡版本。
 
@@ -1039,7 +1195,7 @@ N_C(z) / N_C(0)
 
 ## 31. 需要处理的主要粒子
 
-第一版可考虑：
+第一版带电次级输运可考虑：
 
 - proton；
 - alpha；
@@ -1048,7 +1204,7 @@ N_C(z) / N_C(0)
 - B；
 - carbon fragments。
 
-中子可先采用：
+事件级 TOPAS 数据还会保留 neutron、gamma 和反应残核，用于完整能量账目。中子可先采用：
 
 - 能量逃逸；
 - 简化局部沉积；
@@ -1062,11 +1218,11 @@ N_C(z) / N_C(0)
 
 发生核反应后：
 
-1. 选择碎裂通道；
-2. 采样碎片种类；
-3. 采样碎片数量；
-4. 分配动能；
-5. 采样方向；
+1. 根据反应前 C-12 能量选择相邻的事件样本区间；
+2. 抽取一个完整 `reaction_id`；
+3. 一次性读取该反应包内的全部碎片；
+4. 保留包内的粒种、多重性、能量和方向相关性；
+5. 根据一维或三维模型处理方向；
 6. 写入 secondary queue；
 7. 输运带电次级粒子；
 8. 记录逃逸能量和沉积能量。
@@ -1084,6 +1240,36 @@ E_{\mathrm{escape}}
 +
 E_{\mathrm{residual}}
 \]
+
+禁止从 proton、alpha、Li、Be、B 等独立直方图分别采样数量和能量。这种做法虽然可能重现单粒种边缘分布，却会破坏事件内相关性和能量守恒。
+
+### 32.1 生成事件级反应包
+
+100-history smoke 测试：
+
+```bash
+./validation/topas/run_topas.sh fragment-smoke
+
+python3 validation/scripts/prepare_topas_reactions.py \
+  --case smoke \
+  --histories 100 \
+  --output-csv validation/topas/output/fragment_smoke_reaction_sampling.csv \
+  --metadata validation/topas/output/fragment_smoke_reaction_sampling.metadata.json
+```
+
+已验证的 smoke 数据包含 `33/100` 个初级非弹性反应、`271` 个直接次级粒子，平均每个反应包 `8.21` 个次级粒子。正式标定使用：
+
+```bash
+./validation/topas/run_topas.sh fragment-development
+
+python3 validation/scripts/prepare_topas_reactions.py \
+  --case development \
+  --histories 100000 \
+  --output-csv validation/results/topas_200MeVu_reaction_packages_development.csv \
+  --metadata validation/results/topas_200MeVu_reaction_packages_development.metadata.json
+```
+
+标准化脚本把 TOPAS 全局 `z=-200...200 mm` 转成水深 `0...400 mm`，并检查每个 secondary 都有且只有一个 primary reaction header、顶点一致、反应前能量一致。
 
 ---
 
@@ -1122,23 +1308,31 @@ heavy-fragment queue
 - 不同步长策略混杂；
 - 不同核过程混杂。
 
+实现顺序应为：
+
+1. 先建立固定容量、可检测溢出的 secondary queue；
+2. 将 `reaction_id` 作为联合采样单元；
+3. 第一版只输运沿束流方向的带电碎片；
+4. 分别统计队列溢出、未输运中子/光子能量和残核能量；
+5. 通过 OriginCount、分粒种 IDD、尾积分和总能量同时验收。
+
 ---
 
 # 第十三部分：剂量评分
 
 ## 34. Global atomic 版本
 
-第一版直接使用：
+当前准确度版本直接使用 double atomic：
 
 ```cpp
 sycl::atomic_ref<
-    float,
+    double,
     sycl::memory_order::relaxed,
     sycl::memory_scope::device,
     sycl::access::address_space::global_space
 > atomic_dose(dose[bin]);
 
-atomic_dose.fetch_add(deposited_energy);
+atomic_dose.fetch_add(static_cast<double>(deposited_energy));
 ```
 
 优点：
@@ -1151,6 +1345,8 @@ atomic_dose.fetch_add(deposited_energy);
 - Bragg 峰附近原子冲突严重；
 - 大量线程写入相同 bin；
 - GPU 利用率下降。
+
+Arc B580 支持所需的 `fp64` 和 `atomic64`。程序启动后会检查这两个 SYCL aspect；不满足时应明确报错，不能静默退回 float。此前 10 万粒子测试已经确认，double atomic 可把 B580 与 serial 的剂量累积误差压到可忽略水平。
 
 ---
 
@@ -1183,63 +1379,41 @@ two-stage reduction
 
 # 第十四部分：CMake
 
-## 36. 最小 CMakeLists.txt
+## 36. 当前 CMake Presets
 
-```cmake
-cmake_minimum_required(VERSION 3.22)
+项目已提供三个 preset：
 
-project(carbon_oneapi_mc LANGUAGES CXX)
-
-set(CMAKE_CXX_STANDARD 20)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
-
-add_executable(
-    carbon_mc
-    src/main.cpp
-    src/device.cpp
-    src/transport_sycl.cpp
-    src/scoring.cpp
-    src/io.cpp
-)
-
-target_include_directories(
-    carbon_mc
-    PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/include
-)
-
-target_compile_options(
-    carbon_mc
-    PRIVATE
-    -fsycl
-    -O3
-)
-
-target_link_options(
-    carbon_mc
-    PRIVATE
-    -fsycl
-)
+```text
+cpu-debug                 WSL/Linux GCC CPU
+oneapi-release            WSL/Linux oneAPI SYCL CPU
+oneapi-windows-release    Windows oneAPI + Arc GPU
 ```
 
-构建：
+WSL CPU 调试构建：
+
+```bash
+cmake --preset cpu-debug
+cmake --build --preset cpu-debug
+ctest --preset cpu-debug
+```
+
+WSL oneAPI 正确性构建：
 
 ```bash
 source /opt/intel/oneapi/setvars.sh
-
-cmake -S . -B build \
-  -DCMAKE_CXX_COMPILER=icpx \
-  -DCMAKE_BUILD_TYPE=Release
-
-cmake --build build -j
+cmake --preset oneapi-release
+cmake --build --preset oneapi-release
+ctest --preset oneapi-release
 ```
 
-运行：
+Windows 原生 Arc B580 构建和运行：
 
-```bash
-./build/carbon_mc --device gpu
+```bat
+scripts\build_windows_oneapi.cmd
+scripts\run_windows_b580.cmd --histories 10000
 ```
+
+运行脚本固定 `ONEAPI_DEVICE_SELECTOR=level_zero:0`，避免误选 OpenCL CPU。当前 Windows `latest` 编译器实际报告 IntelLLVM 2025.3.3，而 WSL 验证编译器为 IntelLLVM 2026.1.0；论文和 metadata 必须分别记录，不能笼统写成同一版本。
 
 ---
 
@@ -1396,6 +1570,40 @@ GPU 与 TOPAS 必须使用相同：
 
 不要只展示归一化曲线。
 
+### 43.1 当前项目的运行与查看方式
+
+在 Windows 原生终端运行 B580：
+
+```bat
+scripts\run_windows_b580.cmd --histories 10000
+```
+
+结果写入：
+
+```text
+out/windows_b580_attenuation_depth_dose.csv
+```
+
+在 WSL 运行 TOPAS 开发基准：
+
+```bash
+cd /mnt/d/OneDrive/DoctorDocuments/myproject/carbonGPU
+export TOPAS_G4_DATA_DIR="$HOME/Applications/GEANT4/G4DATA"
+export TOPAS_EXECUTABLE="$HOME/Applications/TOPAS/OpenTOPAS-install/bin/topas"
+./validation/topas/run_topas.sh development
+```
+
+原始 TOPAS scorer 位于 `validation/topas/output/`。标准化参考曲线位于 `validation/results/`，GPU 曲线位于 `out/`。比较并生成 IDD、峰区和尾部图：
+
+```bash
+python3 validation/scripts/compare_depth_dose.py \
+  validation/results/topas_200MeVu_development.csv \
+  out/windows_b580_attenuation_depth_dose.csv \
+  --output-dir out/compare_topas_b580
+```
+
+查看按粒种 TOPAS IDD 时，使用 `validation/results/topas_200MeVu_species_development.csv`；该文件包含 total、primary C-12、secondary C、B、Be、Li、He、proton 和 other。完整 TOPAS 与当前 GPU 比较时，峰后尾部仍会明显不足，这是尚未实现 secondary queue 的已知物理缺项，而不是绘图错误。
+
 ---
 
 ## 44. R80 等指标
@@ -1514,6 +1722,13 @@ Distal falloff difference < 1 mm
 Peak dose difference < 5%
 Primary survival curve difference < 5%
 ```
+
+同时要求：
+
+- 截面来自可追溯的 TOPAS/Geant4 直接查询；
+- H/O 分量与水中总宏观截面闭合；
+- 禁止使用逐能量单独拟合的衰减常数；
+- serial/SYCL 的核反应统计和剂量曲线一致。
 
 ---
 
@@ -1859,6 +2074,8 @@ FWHM difference < 5%
 Peak dose difference < 5%
 ```
 
+当前状态：已完成能量相关截面的 TOPAS 直接提取和 CPU/SYCL/B580 接入；初级反应后能量仍记入 `untracked_nuclear_energy`，等待里程碑 6 的次级输运。
+
 ---
 
 ## 67. 里程碑 6
@@ -1872,6 +2089,8 @@ Peak dose difference < 5%
 ```text
 Tail integral difference < 10%
 ```
+
+当前状态：TOPAS 事件级反应 scorer 和 100-history smoke 已完成；10 万粒子正式反应包及 GPU secondary queue 尚未完成。
 
 ---
 
@@ -1894,6 +2113,19 @@ Tail integral difference < 10%
 ```text
 完成 VTune 性能优化和论文图表
 ```
+
+### 69.1 当前 Git 里程碑
+
+与本 guide 当前状态对应的重要提交包括：
+
+```text
+3f152e2  topas: species-resolved fragment scorers
+74cc153  data: 100k species-resolved TOPAS baseline
+51963db  topas: extract cross sections and reaction final states
+a32ff10  physics: use TOPAS energy-dependent reaction cross sections
+```
+
+每次新增正式 TOPAS 数据集、物理模块、SYCL 队列结构或验证结果，均应单独提交，且 metadata 必须记录输入哈希、软件版本、随机种子和运行统计。
 
 ---
 
@@ -2033,49 +2265,55 @@ energy-loss straggling 模块。
 
 ## 76. 物理正确性
 
-- [ ] MeV/u 与总动能区分正确；
-- [ ] stopping power 单位正确；
-- [ ] 水密度正确；
+- [x] MeV/u 与总动能区分正确；
+- [x] stopping power 单位正确；
+- [x] 水密度正确；
 - [ ] 步长收敛；
-- [ ] 能量守恒；
-- [ ] RNG 独立；
-- [ ] straggling 方差合理；
-- [ ] 核反应概率小于等于 1；
+- [x] 当前 primary-only 模型能量账目闭合；
+- [x] Philox RNG 由 seed/history/step/dimension 唯一确定；
+- [x] Bohr straggling 已完成 200 MeV/u 电磁隔离验证；
+- [x] 核反应概率小于等于 1；
+- [x] 核截面由 TOPAS/Geant4 直接提取并通过 H/O 闭合检查；
 - [ ] 碎片能量守恒；
-- [ ] scorer 范围一致。
+- [x] 当前 200 MeV/u TOPAS/GPU scorer 深度 bin 一致。
 
 ## 77. CPU/GPU 一致性
 
 - [ ] 单粒子逐步一致；
-- [ ] stopping-power interpolation 一致；
-- [ ] 固定随机数时可复现；
+- [x] stopping-power interpolation 一致；
+- [x] cross-section interpolation 一致；
+- [x] 固定随机数时可复现；
 - [ ] 不同 work-group size 统计稳定；
-- [ ] 无越界访问；
-- [ ] 无 NaN；
-- [ ] 无未初始化 USM。
+- [x] 当前测试未发现越界访问；
+- [x] 无 NaN；
+- [x] 无未初始化 USM；
+- [x] Windows Arc B580 Level Zero 实际运行通过。
 
 ## 78. TOPAS 匹配
 
-- [ ] entrance region；
-- [ ] plateau；
-- [ ] peak position；
-- [ ] peak width；
-- [ ] peak height；
-- [ ] distal falloff；
+- [x] entrance region；
+- [x] plateau；
+- [x] peak position；
+- [x] peak width（Level 2 电磁隔离）；
+- [x] primary peak height（Level 3）；
+- [x] distal falloff（Level 2 电磁隔离）；
 - [ ] fragmentation tail；
-- [ ] primary survival；
-- [ ] absolute normalization。
+- [x] primary attenuation/survival proxy；
+- [x] absolute energy-deposition normalization；
+- [x] 分粒种 TOPAS IDD 10 万粒子基准；
+- [x] 事件级反应 n-tuple smoke；
+- [ ] 事件级反应 n-tuple 10 万粒子正式基准。
 
 ## 79. 性能实验
 
-- [ ] CPU serial；
-- [ ] SYCL CPU；
-- [ ] Intel GPU；
+- [x] CPU serial；
+- [x] SYCL CPU；
+- [x] Intel Arc B580 GPU；
 - [ ] TOPAS single-thread；
-- [ ] TOPAS multi-thread；
-- [ ] histories/s；
-- [ ] steps/s；
-- [ ] kernel time；
+- [x] TOPAS multi-thread；
+- [x] histories/s；
+- [x] total steps；
+- [x] kernel elapsed time；
 - [ ] transfer time；
 - [ ] VTune report。
 
@@ -2101,6 +2339,17 @@ energy-loss straggling 模块。
 13. 做步长和统计收敛
 14. 使用 VTune 优化
 15. 整理论文实验
+```
+
+本项目当前已经完成到第 9 步，并完成了第 10 步所需的 TOPAS 数据接口和 smoke 验证。紧接着应执行：
+
+```text
+1. 运行 100000-history fragment-development
+2. 固化事件级 reaction package CSV/metadata
+3. 实现 B580 固定容量 secondary queue 和溢出检测
+4. 按 reaction_id 联合采样带电碎片
+5. 比较分粒种 IDD、尾积分和总能量
+6. 通过后再提升到 1000000-history reference
 ```
 
 第一篇论文的合理边界是：
