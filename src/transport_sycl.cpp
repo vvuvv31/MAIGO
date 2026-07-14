@@ -33,6 +33,53 @@ bool is_uniform_grid(const std::vector<double>& energies) {
     return true;
 }
 
+struct Direction3F {
+    float x;
+    float y;
+    float z;
+};
+
+Direction3F rotate_local_direction(const float local_x,
+                                   const float local_y,
+                                   const float local_z,
+                                   const Direction3F parent_direction) noexcept {
+    if (!sycl::isfinite(local_x) || !sycl::isfinite(local_y)) {
+        return Direction3F{0.0F, 0.0F,
+                           sycl::clamp(local_z, -1.0F, 1.0F) *
+                               (parent_direction.z < 0.0F ? -1.0F : 1.0F)};
+    }
+
+    const auto parent_norm = sycl::sqrt(parent_direction.x * parent_direction.x +
+                                        parent_direction.y * parent_direction.y +
+                                        parent_direction.z * parent_direction.z);
+    const auto inverse_parent_norm = parent_norm > 0.0F ? 1.0F / parent_norm : 1.0F;
+    const Direction3F w{parent_direction.x * inverse_parent_norm,
+                        parent_direction.y * inverse_parent_norm,
+                        parent_norm > 0.0F ? parent_direction.z * inverse_parent_norm : 1.0F};
+    const Direction3F reference =
+        sycl::fabs(w.x) < 0.9F ? Direction3F{1.0F, 0.0F, 0.0F}
+                               : Direction3F{0.0F, 1.0F, 0.0F};
+    const auto projection = reference.x * w.x + reference.y * w.y + reference.z * w.z;
+    Direction3F u{reference.x - projection * w.x,
+                  reference.y - projection * w.y,
+                  reference.z - projection * w.z};
+    const auto inverse_u_norm =
+        1.0F / sycl::sqrt(u.x * u.x + u.y * u.y + u.z * u.z);
+    u = Direction3F{u.x * inverse_u_norm, u.y * inverse_u_norm, u.z * inverse_u_norm};
+    const Direction3F v{w.y * u.z - w.z * u.y,
+                        w.z * u.x - w.x * u.z,
+                        w.x * u.y - w.y * u.x};
+    Direction3F output{local_x * u.x + local_y * v.x + local_z * w.x,
+                       local_x * u.y + local_y * v.y + local_z * w.y,
+                       local_x * u.z + local_y * v.z + local_z * w.z};
+    const auto inverse_output_norm =
+        1.0F / sycl::sqrt(output.x * output.x + output.y * output.y + output.z * output.z);
+    output = Direction3F{output.x * inverse_output_norm,
+                         output.y * inverse_output_norm,
+                         output.z * inverse_output_norm};
+    return output;
+}
+
 }  // namespace
 
 TransportResult transport_sycl(const TransportConfig& config,
@@ -69,6 +116,14 @@ TransportResult transport_sycl(const TransportConfig& config,
     const auto number_of_voxels =
         enable_voxel_scoring ? config.number_of_voxels() : std::size_t{0};
     const auto voxel_plane_size = config.voxel_bins_x * config.voxel_bins_y;
+    const auto voxel_bins_x = config.voxel_bins_x;
+    const auto voxel_bins_y = config.voxel_bins_y;
+    const auto voxel_size_x_mm = static_cast<float>(config.voxel_size_x_mm);
+    const auto voxel_size_y_mm = static_cast<float>(config.voxel_size_y_mm);
+    const auto voxel_min_x_mm = -0.5F * static_cast<float>(voxel_bins_x) * voxel_size_x_mm;
+    const auto voxel_max_x_mm = -voxel_min_x_mm;
+    const auto voxel_min_y_mm = -0.5F * static_cast<float>(voxel_bins_y) * voxel_size_y_mm;
+    const auto voxel_max_y_mm = -voxel_min_y_mm;
     const auto center_voxel_index =
         (config.voxel_bins_y / 2) * config.voxel_bins_x + config.voxel_bins_x / 2;
     const auto enable_secondary_generation = config.enable_secondary_generation;
@@ -106,7 +161,7 @@ TransportResult transport_sycl(const TransportConfig& config,
     ReactionEnergyBin* reaction_bins_device = nullptr;
     ReactionPackage* reactions_device = nullptr;
     ReactionSecondary* reaction_secondaries_device = nullptr;
-    SecondaryParticle1D* secondary_queue_device = nullptr;
+    SecondaryParticle3D* secondary_queue_device = nullptr;
     std::uint64_t* secondary_queue_counter_device = nullptr;
     std::uint64_t* secondary_queue_filled_device = nullptr;
     SecondaryGenerationSummary* secondary_summaries_device = nullptr;
@@ -127,7 +182,7 @@ TransportResult transport_sycl(const TransportConfig& config,
         reaction_secondaries_device = sycl::malloc_device<ReactionSecondary>(
             reaction_packages->secondaries().size(), queue);
         secondary_queue_device =
-            sycl::malloc_device<SecondaryParticle1D>(secondary_queue_capacity, queue);
+            sycl::malloc_device<SecondaryParticle3D>(secondary_queue_capacity, queue);
         secondary_queue_counter_device = sycl::malloc_device<std::uint64_t>(1, queue);
         secondary_queue_filled_device = sycl::malloc_device<std::uint64_t>(1, queue);
         secondary_summaries_device =
@@ -465,11 +520,20 @@ TransportResult transport_sycl(const TransportConfig& config,
                                                 charged_dose_category(
                                                     secondary.atomic_number,
                                                     secondary.mass_number);
+                                            const auto child_direction = rotate_local_direction(
+                                                secondary.direction_x,
+                                                secondary.direction_y,
+                                                secondary.direction_z,
+                                                Direction3F{0.0F, 0.0F, 1.0F});
                                             secondary_queue_device[output_index++] =
-                                                SecondaryParticle1D{
+                                                SecondaryParticle3D{
+                                                    0.0F,
+                                                    0.0F,
                                                     position_mm,
                                                     secondary.kinetic_energy_MeV,
-                                                    secondary.direction_z,
+                                                    child_direction.x,
+                                                    child_direction.y,
+                                                    child_direction.z,
                                                     secondary.pdg_id,
                                                     secondary.atomic_number,
                                                     secondary.mass_number,
@@ -561,8 +625,14 @@ TransportResult transport_sycl(const TransportConfig& config,
                 if (particle_index < generation_end) {
                     const auto particle = secondary_queue_device[particle_index];
                     auto energy_MeV = particle.kinetic_energy_MeV;
-                    auto position_mm = particle.position_mm;
+                    auto position_x_mm = particle.position_x_mm;
+                    auto position_y_mm = particle.position_y_mm;
+                    auto position_z_mm = particle.position_z_mm;
+                    const auto direction_x = particle.direction_x;
+                    const auto direction_y = particle.direction_y;
                     const auto direction_z = sycl::clamp(particle.direction_z, -1.0F, 1.0F);
+                    const auto absolute_direction_x = sycl::fabs(direction_x);
+                    const auto absolute_direction_y = sycl::fabs(direction_y);
                     const auto absolute_direction_z = sycl::fabs(direction_z);
                     const auto atomic_number = static_cast<int>(particle.atomic_number);
                     const auto mass_number = static_cast<int>(particle.mass_number);
@@ -571,23 +641,47 @@ TransportResult transport_sycl(const TransportConfig& config,
                                   fragment_species_count - 1);
 
                     while (energy_MeV > energy_cutoff_MeV) {
-                        const auto escaped_forward =
-                            direction_z >= 0.0F && position_mm >= phantom_length_mm;
-                        const auto escaped_backward =
-                            direction_z < 0.0F && position_mm <= 0.0F;
-                        if (escaped_forward || escaped_backward) {
+                        const auto escaped_z =
+                            position_z_mm < 0.0F || position_z_mm >= phantom_length_mm;
+                        const auto escaped_xy =
+                            enable_voxel_scoring &&
+                            (position_x_mm < voxel_min_x_mm || position_x_mm >= voxel_max_x_mm ||
+                             position_y_mm < voxel_min_y_mm || position_y_mm >= voxel_max_y_mm);
+                        if (escaped_z || escaped_xy) {
                             break;
                         }
 
                         auto bin = direction_z < 0.0F
                                        ? static_cast<int>(
-                                             sycl::ceil(position_mm / depth_bin_width_mm)) - 1
+                                             sycl::ceil(position_z_mm / depth_bin_width_mm)) - 1
                                        : static_cast<int>(
-                                             sycl::floor(position_mm / depth_bin_width_mm));
+                                             sycl::floor(position_z_mm / depth_bin_width_mm));
                         bin = sycl::max(
                             0, sycl::min(bin, static_cast<int>(number_of_bins) - 1));
+                        auto voxel_x = static_cast<int>(voxel_bins_x / 2);
+                        auto voxel_y = static_cast<int>(voxel_bins_y / 2);
+                        if (enable_voxel_scoring) {
+                            const auto x_coordinate =
+                                (position_x_mm - voxel_min_x_mm) / voxel_size_x_mm;
+                            const auto y_coordinate =
+                                (position_y_mm - voxel_min_y_mm) / voxel_size_y_mm;
+                            voxel_x = direction_x < 0.0F
+                                          ? static_cast<int>(sycl::ceil(x_coordinate)) - 1
+                                          : static_cast<int>(sycl::floor(x_coordinate));
+                            voxel_y = direction_y < 0.0F
+                                          ? static_cast<int>(sycl::ceil(y_coordinate)) - 1
+                                          : static_cast<int>(sycl::floor(y_coordinate));
+                            voxel_x = sycl::max(
+                                0, sycl::min(voxel_x, static_cast<int>(voxel_bins_x) - 1));
+                            voxel_y = sycl::max(
+                                0, sycl::min(voxel_y, static_cast<int>(voxel_bins_y) - 1));
+                        }
+                        const auto voxel_index = static_cast<std::size_t>(bin) * voxel_plane_size +
+                                                 static_cast<std::size_t>(voxel_y) * voxel_bins_x +
+                                                 static_cast<std::size_t>(voxel_x);
 
-                        if (absolute_direction_z < 1.0e-6F) {
+                        if (absolute_direction_x < 1.0e-6F &&
+                            absolute_direction_y < 1.0e-6F && absolute_direction_z < 1.0e-6F) {
                             sycl::atomic_ref<
                                 double,
                                 sycl::memory_order::relaxed,
@@ -602,9 +696,7 @@ TransportResult transport_sycl(const TransportConfig& config,
                                     sycl::memory_scope::device,
                                     sycl::access::address_space::global_space>
                                     atomic_voxel_dose(
-                                        voxel_dose_device[static_cast<std::size_t>(bin) *
-                                                              voxel_plane_size +
-                                                          center_voxel_index]);
+                                        voxel_dose_device[voxel_index]);
                                 atomic_voxel_dose.fetch_add(static_cast<double>(energy_MeV));
                             }
                             deposited_MeV += energy_MeV;
@@ -649,15 +741,74 @@ TransportResult transport_sycl(const TransportConfig& config,
                             maximum_step_mm,
                             maximum_relative_energy_loss * energy_MeV /
                                 stopping_power_MeV_per_mm);
-                        const auto boundary_mm =
+                        const auto boundary_z_mm =
                             direction_z < 0.0F
                                 ? static_cast<float>(bin) * depth_bin_width_mm
                                 : static_cast<float>(bin + 1) * depth_bin_width_mm;
                         const auto distance_to_boundary_mm =
-                            direction_z < 0.0F ? position_mm - boundary_mm
-                                               : boundary_mm - position_mm;
+                            direction_z < 0.0F ? position_z_mm - boundary_z_mm
+                                               : boundary_z_mm - position_z_mm;
                         path_step_mm = sycl::fmin(
                             path_step_mm, distance_to_boundary_mm / absolute_direction_z);
+                        if (enable_voxel_scoring && absolute_direction_x >= 1.0e-6F) {
+                            const auto boundary_x_mm =
+                                voxel_min_x_mm +
+                                static_cast<float>(voxel_x + (direction_x > 0.0F ? 1 : 0)) *
+                                    voxel_size_x_mm;
+                            const auto distance_to_boundary_x_mm =
+                                (boundary_x_mm - position_x_mm) / direction_x;
+                            path_step_mm = sycl::fmin(path_step_mm, distance_to_boundary_x_mm);
+                        }
+                        if (enable_voxel_scoring && absolute_direction_y >= 1.0e-6F) {
+                            const auto boundary_y_mm =
+                                voxel_min_y_mm +
+                                static_cast<float>(voxel_y + (direction_y > 0.0F ? 1 : 0)) *
+                                    voxel_size_y_mm;
+                            const auto distance_to_boundary_y_mm =
+                                (boundary_y_mm - position_y_mm) / direction_y;
+                            path_step_mm = sycl::fmin(path_step_mm, distance_to_boundary_y_mm);
+                        }
+                        if (path_step_mm <= 1.0e-6F) {
+                            constexpr auto infinity =
+                                std::numeric_limits<float>::infinity();
+                            auto snapped_to_boundary = false;
+                            if (absolute_direction_z >= 1.0e-6F &&
+                                distance_to_boundary_mm / absolute_direction_z <= 1.0e-6F) {
+                                position_z_mm = sycl::nextafter(
+                                    boundary_z_mm, direction_z > 0.0F ? infinity : -infinity);
+                                snapped_to_boundary = true;
+                            }
+                            if (enable_voxel_scoring && absolute_direction_x >= 1.0e-6F) {
+                                const auto boundary_x_mm =
+                                    voxel_min_x_mm +
+                                    static_cast<float>(
+                                        voxel_x + (direction_x > 0.0F ? 1 : 0)) *
+                                        voxel_size_x_mm;
+                                if ((boundary_x_mm - position_x_mm) / direction_x <= 1.0e-6F) {
+                                    position_x_mm = sycl::nextafter(
+                                        boundary_x_mm,
+                                        direction_x > 0.0F ? infinity : -infinity);
+                                    snapped_to_boundary = true;
+                                }
+                            }
+                            if (enable_voxel_scoring && absolute_direction_y >= 1.0e-6F) {
+                                const auto boundary_y_mm =
+                                    voxel_min_y_mm +
+                                    static_cast<float>(
+                                        voxel_y + (direction_y > 0.0F ? 1 : 0)) *
+                                        voxel_size_y_mm;
+                                if ((boundary_y_mm - position_y_mm) / direction_y <= 1.0e-6F) {
+                                    position_y_mm = sycl::nextafter(
+                                        boundary_y_mm,
+                                        direction_y > 0.0F ? infinity : -infinity);
+                                    snapped_to_boundary = true;
+                                }
+                            }
+                            if (snapped_to_boundary) {
+                                ++steps;
+                                continue;
+                            }
+                        }
                         const auto step_deposited_MeV = sycl::fmin(
                             stopping_power_MeV_per_mm * path_step_mm, energy_MeV);
                         sycl::atomic_ref<
@@ -674,15 +825,15 @@ TransportResult transport_sycl(const TransportConfig& config,
                                              sycl::memory_scope::device,
                                              sycl::access::address_space::global_space>
                                 atomic_voxel_dose(
-                                    voxel_dose_device[static_cast<std::size_t>(bin) *
-                                                          voxel_plane_size +
-                                                      center_voxel_index]);
+                                    voxel_dose_device[voxel_index]);
                             atomic_voxel_dose.fetch_add(
                                 static_cast<double>(step_deposited_MeV));
                         }
                         deposited_MeV += step_deposited_MeV;
                         energy_MeV -= step_deposited_MeV;
-                        position_mm += direction_z * path_step_mm;
+                        position_x_mm += direction_x * path_step_mm;
+                        position_y_mm += direction_y * path_step_mm;
+                        position_z_mm += direction_z * path_step_mm;
 
                         if (enable_fragment_cascade &&
                             particle.generation < maximum_cascade_generations &&
@@ -835,16 +986,23 @@ TransportResult transport_sycl(const TransportConfig& config,
                                                     interaction.product_offset + product_index];
                                                 if (product.atomic_number > 0 &&
                                                     product.mass_number > 0) {
-                                                    const auto child_direction = sycl::clamp(
-                                                        product.direction_z *
-                                                            (direction_z < 0.0F ? -1.0F : 1.0F),
-                                                        -1.0F, 1.0F);
+                                                    const auto child_direction =
+                                                        rotate_local_direction(
+                                                            product.direction_x,
+                                                            product.direction_y,
+                                                            product.direction_z,
+                                                            Direction3F{direction_x, direction_y,
+                                                                        direction_z});
                                                     secondary_queue_device[output_index++] =
-                                                        SecondaryParticle1D{
-                                                            position_mm,
+                                                        SecondaryParticle3D{
+                                                            position_x_mm,
+                                                            position_y_mm,
+                                                            position_z_mm,
                                                             product.kinetic_energy_MeV *
                                                                 energy_scale,
-                                                            child_direction,
+                                                            child_direction.x,
+                                                            child_direction.y,
+                                                            child_direction.z,
                                                             product.pdg_id,
                                                             product.atomic_number,
                                                             product.mass_number,
@@ -878,18 +1036,42 @@ TransportResult transport_sycl(const TransportConfig& config,
                     }
 
                     const auto stopped_inside =
-                        energy_MeV > 0.0F && position_mm >= 0.0F &&
-                        position_mm < phantom_length_mm &&
-                        !((direction_z < 0.0F && position_mm <= 0.0F) ||
-                          (direction_z >= 0.0F && position_mm >= phantom_length_mm));
+                        energy_MeV > 0.0F && position_z_mm >= 0.0F &&
+                        position_z_mm < phantom_length_mm &&
+                        (!enable_voxel_scoring ||
+                         (position_x_mm >= voxel_min_x_mm && position_x_mm < voxel_max_x_mm &&
+                          position_y_mm >= voxel_min_y_mm && position_y_mm < voxel_max_y_mm)) &&
+                        !((direction_z < 0.0F && position_z_mm <= 0.0F) ||
+                          (direction_z >= 0.0F && position_z_mm >= phantom_length_mm));
                     if (stopped_inside) {
                         auto bin = direction_z < 0.0F
                                        ? static_cast<int>(
-                                             sycl::ceil(position_mm / depth_bin_width_mm)) - 1
+                                             sycl::ceil(position_z_mm / depth_bin_width_mm)) - 1
                                        : static_cast<int>(
-                                             sycl::floor(position_mm / depth_bin_width_mm));
+                                             sycl::floor(position_z_mm / depth_bin_width_mm));
                         bin = sycl::max(
                             0, sycl::min(bin, static_cast<int>(number_of_bins) - 1));
+                        auto voxel_x = static_cast<int>(voxel_bins_x / 2);
+                        auto voxel_y = static_cast<int>(voxel_bins_y / 2);
+                        if (enable_voxel_scoring) {
+                            const auto x_coordinate =
+                                (position_x_mm - voxel_min_x_mm) / voxel_size_x_mm;
+                            const auto y_coordinate =
+                                (position_y_mm - voxel_min_y_mm) / voxel_size_y_mm;
+                            voxel_x = direction_x < 0.0F
+                                          ? static_cast<int>(sycl::ceil(x_coordinate)) - 1
+                                          : static_cast<int>(sycl::floor(x_coordinate));
+                            voxel_y = direction_y < 0.0F
+                                          ? static_cast<int>(sycl::ceil(y_coordinate)) - 1
+                                          : static_cast<int>(sycl::floor(y_coordinate));
+                            voxel_x = sycl::max(
+                                0, sycl::min(voxel_x, static_cast<int>(voxel_bins_x) - 1));
+                            voxel_y = sycl::max(
+                                0, sycl::min(voxel_y, static_cast<int>(voxel_bins_y) - 1));
+                        }
+                        const auto voxel_index = static_cast<std::size_t>(bin) * voxel_plane_size +
+                                                 static_cast<std::size_t>(voxel_y) * voxel_bins_x +
+                                                 static_cast<std::size_t>(voxel_x);
                         sycl::atomic_ref<
                             double,
                             sycl::memory_order::relaxed,
@@ -903,9 +1085,7 @@ TransportResult transport_sycl(const TransportConfig& config,
                                              sycl::memory_scope::device,
                                              sycl::access::address_space::global_space>
                                 atomic_voxel_dose(
-                                    voxel_dose_device[static_cast<std::size_t>(bin) *
-                                                          voxel_plane_size +
-                                                      center_voxel_index]);
+                                    voxel_dose_device[voxel_index]);
                             atomic_voxel_dose.fetch_add(
                                 static_cast<double>(energy_MeV));
                         }

@@ -22,9 +22,13 @@ struct Particle1D {
     bool alive{true};
 };
 
-struct SecondaryParticle1D {
-    float position_mm{0.0F};
+struct SecondaryParticle3D {
+    float position_x_mm{0.0F};
+    float position_y_mm{0.0F};
+    float position_z_mm{0.0F};
     float kinetic_energy_MeV{0.0F};
+    float direction_x{0.0F};
+    float direction_y{0.0F};
     float direction_z{0.0F};
     std::int32_t pdg_id{0};
     std::int16_t atomic_number{0};
@@ -34,7 +38,7 @@ struct SecondaryParticle1D {
     std::uint16_t reserved{0};
 };
 
-static_assert(sizeof(SecondaryParticle1D) == 24);
+static_assert(sizeof(SecondaryParticle3D) == 40);
 
 struct SecondaryGenerationSummary {
     std::uint32_t direct_count{0};

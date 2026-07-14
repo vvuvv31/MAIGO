@@ -1,7 +1,7 @@
-# 100-history GPU smoke for the first 60x60x800 voxel scorer milestone.
-# The current transport remains 1D, so dose is intentionally deposited in the
-# central x/y voxel. Summing x/y must reconstruct the existing 800-bin IDD.
-# The _3d v2 packages preserve projectile-local x/y/z directions for the next stage.
+# 100-history GPU smoke for charged-secondary 3D direction and voxel transport.
+# The primary remains on axis until MCS is enabled; reaction/cascade products use
+# projectile-local v2 x/y/z directions and cross exact x/y/z voxel boundaries.
+# Summing x/y must reconstruct the existing 800-bin IDD without a global scale.
 number_of_histories: 100
 initial_energy_MeVu: 200.0
 mass_number: 12
