@@ -34,6 +34,8 @@ Level 3 使用从 TOPAS primary-C12 生存代理拟合的有效宏观衰减系�
 
 项目现已通过 TOPAS 自定义计分器直接查询同一 Geant4 物理列表中的 C-12 非弹性截面，得到 1--400 MeV/u 的 H、O 微观截面和水中宏观截面表。200 MeV/u 时水中宏观截面为 `0.00474216 mm^-1`，平均自由程为 `210.874 mm`。CPU 和 SYCL 输运均已按当前能量插值该表并替换上述拟合常数。反应末态使用事件级 n-tuple；相同 `reaction_id` 的碎片保持多重性、能量和方向相关性并作为整体采样。
 
+100,000-history `fragment-development` 正式反应包已固化：37,657 次主 C-12 非弹性反应、330,659 个直接次级粒子，反应率 `37.657%`，平均多重性 `8.781`。两个没有直接可见次级粒子的低能反应以零长度反应包保留。压缩表、运行版本、耗时、输入/输出哈希及完整闭合检查记录在 `validation/results/topas_200MeVu_reaction_packages_development.metadata.json`；下一阶段是在 Arc B580 上实现固定容量次级粒子队列。
+
 直接截面版本的 10,000-history 原生 B580 验证得到 3,816 次核反应，serial 得到 3,818 次；曲线 NRMSE 为 `1.38e-5`、R80 差 `-3.9e-5 mm`、1%/1 mm 与 2%/2 mm gamma 均为 `100%`。这两次事件差异来自 SYCL float 与 serial double 的采样边界，不影响当前剂量曲线一致性。
 
 ## WSL 构建

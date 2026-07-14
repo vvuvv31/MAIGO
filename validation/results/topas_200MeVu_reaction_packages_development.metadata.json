@@ -1,0 +1,156 @@
+{
+  "case": "development",
+  "histories": 100000,
+  "reaction_definition": "first primary C-12 ionInelastic final state",
+  "sampling_semantics": "Rows sharing reaction_id are one correlated final-state package and must be sampled jointly",
+  "coordinate_semantics": "reaction_depth_mm = TOPAS global vertex_z + 200 mm",
+  "input_header_counts": {
+    "histories": 100000,
+    "entries": 368316
+  },
+  "input_entry_closure": {
+    "reaction_headers": 37657,
+    "secondary_records": 330659,
+    "total_parsed_entries": 368316,
+    "matches_header": true
+  },
+  "reaction_count": 37657,
+  "secondary_count": 330659,
+  "empty_reaction_package_count": 2,
+  "empty_reaction_package_run_event_ids": [
+    [
+      0,
+      75620
+    ],
+    [
+      0,
+      96793
+    ]
+  ],
+  "fraction_of_histories_with_primary_inelastic_reaction": 0.37657,
+  "secondary_multiplicity": {
+    "minimum": 0,
+    "maximum": 28,
+    "mean": 8.7808110045941
+  },
+  "reaction_depth_mm": {
+    "minimum": 0.0,
+    "maximum": 87.566
+  },
+  "incident_c12_energy_MeV_per_u": {
+    "minimum": 0.03366608333333333,
+    "maximum": 200.0
+  },
+  "maximum_direction_norm_error": 8.44303856384343e-07,
+  "particle_counts": {
+    "Al26": 2,
+    "Al26[228.305]": 2,
+    "Al27": 1,
+    "B10": 2028,
+    "B11": 2926,
+    "B12": 130,
+    "B13": 109,
+    "B14": 7,
+    "B15": 4,
+    "B8": 86,
+    "Be10": 313,
+    "Be11": 11,
+    "Be12": 28,
+    "Be4": 4,
+    "Be6": 236,
+    "Be7": 1459,
+    "Be9": 276,
+    "C10": 480,
+    "C11": 4049,
+    "C12": 3113,
+    "C13": 1074,
+    "C14": 716,
+    "C15": 40,
+    "C16": 14,
+    "C9": 28,
+    "F17": 46,
+    "F18": 55,
+    "F18[1121.360]": 3,
+    "F19": 5,
+    "F19[197.143]": 7,
+    "F20": 5,
+    "F21": 1,
+    "He3": 8012,
+    "He6": 200,
+    "He8": 3,
+    "Li6": 1380,
+    "Li7": 1438,
+    "Li8": 113,
+    "Li9": 22,
+    "Mg23": 1,
+    "Mg24": 14,
+    "Mg25": 11,
+    "Mg26": 7,
+    "N12": 244,
+    "N13": 497,
+    "N14": 1872,
+    "N15": 2695,
+    "N16": 132,
+    "N16[120.420]": 112,
+    "N17": 7,
+    "Na22": 8,
+    "Na22[583.050]": 6,
+    "Na23": 27,
+    "Na24": 1,
+    "Na24[472.207]": 5,
+    "Na25": 1,
+    "Ne16": 18,
+    "Ne17": 7,
+    "Ne18": 3,
+    "Ne19": 1,
+    "Ne20": 26,
+    "Ne21": 25,
+    "Ne22": 12,
+    "O13": 68,
+    "O14": 646,
+    "O15": 2882,
+    "O16": 1551,
+    "O17": 81,
+    "O18": 10,
+    "Si27": 1,
+    "alpha": 56094,
+    "deuteron": 15503,
+    "gamma": 38733,
+    "neutron": 80666,
+    "proton": 93437,
+    "triton": 6829
+  },
+  "input_files": {
+    "ntuple": {
+      "path": "validation/topas/output/fragment_development_reaction_vertices.phsp",
+      "sha256": "1c785bd74da22a90ab4ee0531147ebd5a7727b92b6fbd7a8672f2945f87a0a3c"
+    },
+    "header": {
+      "path": "validation/topas/output/fragment_development_reaction_vertices.header",
+      "sha256": "236afe381e9417b5e63a03cd7abf6be078f28de68c56ef937ece116770915a90"
+    },
+    "topas_log": {
+      "path": "validation/topas/output/fragment-development_topas.log",
+      "sha256": "6a3b833d5b7a818553b2bd2c4db004835be122c7078bc6917686f27c78f72acc",
+      "topas_version": "4.2.p3",
+      "geant4_version": "geant4-11-03-patch-02",
+      "elapsed_real_s": 814.858
+    }
+  },
+  "output_files": {
+    "reactions": {
+      "path": "validation/results/topas_200MeVu_reactions_development.csv.gz",
+      "sha256": "ab3801f13839a73683f8c3a1ec865062c498f6dee5b1bdff384912d396f80e25",
+      "bytes": 1677422,
+      "rows": 37657,
+      "compression": "gzip"
+    },
+    "secondaries": {
+      "path": "validation/results/topas_200MeVu_secondaries_development.csv.gz",
+      "sha256": "560d4690c43d8482dd51e8f028a85bcd9d9fef6b38c9c009ab8e51ca6496933c",
+      "bytes": 8942249,
+      "rows": 330659,
+      "compression": "gzip"
+    }
+  }
+}

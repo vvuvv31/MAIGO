@@ -186,8 +186,6 @@ def main() -> None:
     empty_keys = sorted(set(reactions) - set(secondaries))
     if orphan_keys:
         raise SystemExit(f"Secondary records without reaction headers: {orphan_keys[:5]}")
-    if empty_keys:
-        raise SystemExit(f"Reaction headers without secondary records: {empty_keys[:5]}")
 
     flat_rows: list[list[object]] = []
     reaction_rows: list[list[object]] = []
@@ -379,8 +377,17 @@ def main() -> None:
         "coordinate_semantics": (
             f"reaction_depth_mm = TOPAS global vertex_z + {args.phantom_half_length_mm:g} mm"
         ),
+        "input_header_counts": header_counts,
+        "input_entry_closure": {
+            "reaction_headers": len(reactions),
+            "secondary_records": len(secondary_rows),
+            "total_parsed_entries": parsed_entries,
+            "matches_header": parsed_entries == header_counts["entries"],
+        },
         "reaction_count": len(reactions),
         "secondary_count": len(secondary_rows),
+        "empty_reaction_package_count": len(empty_keys),
+        "empty_reaction_package_run_event_ids": [list(key) for key in empty_keys],
         "fraction_of_histories_with_primary_inelastic_reaction": len(reactions) / args.histories,
         "secondary_multiplicity": {
             "minimum": min(multiplicities) if multiplicities else 0,

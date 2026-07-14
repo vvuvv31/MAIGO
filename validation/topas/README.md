@@ -79,6 +79,8 @@ python3 validation/scripts/prepare_topas_reactions.py \
 
 Use `fragment-development` with 100,000 histories for the calibration dataset and `fragment-reference` for the one-million-history promotion run. The compact outputs separate one-row-per-reaction headers from secondaries, link them through `reaction_id` plus a zero-based offset/count pair, and support deterministic gzip compression. The standardizer converts TOPAS global `z=-200...200 mm` to water depth `0...400 mm`, checks the header history/entry counts, verifies that every secondary has exactly one primary-reaction header, and validates reaction vertices, incident energies, and direction normalization. `--output-csv` remains available only when a redundant flat QA table is useful.
 
+The completed 100,000-history development baseline contains 37,657 primary C-12 inelastic reactions and 330,659 direct secondaries (mean multiplicity 8.781). Two low-energy reaction headers have no direct visible secondary row; they are valid zero-length packages and remain in the reaction table with `secondary_count=0`. The parser rejects orphan secondaries, but it must not discard these empty packages because doing so would bias the reaction probability. The two gzip tables and their metadata are stored in `validation/results/`.
+
 If `topas` is already on PATH, omit `TOPAS_EXECUTABLE`. Raw files are written below `validation/topas/output/` and intentionally ignored by Git.
 
 If TOPAS is available only through an interactive-shell alias, pass the real executable and Geant4 data directory explicitly, for example:

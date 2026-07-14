@@ -82,7 +82,8 @@ Windows 原生
 - TOPAS 自定义 `CarbonCrossSectionNtuple`，直接从 `G4HadronicProcessStore` 导出 1--400 MeV/u 的 C-12+H、C-12+O 及水中宏观非弹性截面；
 - CPU/SYCL 按当前 MeV/u 插值能量相关截面并采样初级核反应；
 - TOPAS 自定义 `CarbonReactionNtuple`，按事件记录反应前 C-12 能量和全部直接次级粒子；
-- 反应包标准化脚本和 OriginCount 独立 QA scorer。
+- 反应包标准化脚本和 OriginCount 独立 QA scorer；
+- 10 万粒子正式事件级反应包：37,657 次主 C-12 非弹性反应和 330,659 个直接次级粒子。
 
 关键验证结果：
 
@@ -92,7 +93,7 @@ Windows 原生
 - B580 对 serial：NRMSE `1.38e-5`、R80 差 `-3.9e-5 mm`、2%/2 mm gamma `100%`；
 - 当前仍未完成带电次级碎片的 GPU 队列输运，因此完整 TOPAS 的峰后碎裂尾部尚未匹配。
 
-下一开发目标不是重新拟合核衰减常数，而是运行 10 万粒子 `fragment-development` 正式反应包，并在 B580 上实现预分配次级粒子队列。
+下一开发目标不是重新拟合核衰减常数，而是在 B580 上实现固定容量次级粒子队列、溢出检测和整包采样。
 
 ---
 
@@ -1273,6 +1274,8 @@ python3 validation/scripts/prepare_topas_reactions.py \
 
 标准化脚本把 TOPAS 全局 `z=-200...200 mm` 转成水深 `0...400 mm`。压缩反应表每个 `reaction_id` 只保存一次入射能量和顶点，并用 `secondary_offset_zero_based + secondary_count` 定位次级粒子表中的连续反应包。脚本还检查 TOPAS header 的 history/entry 数、每个 secondary 的唯一 reaction header、顶点和反应前能量一致性以及方向归一化。
 
+正式开发基准已经完成。TOPAS 4.2.p3 / Geant4 11.3.p2 在 100,000 个初级粒子中记录到 `37,657` 次主 C-12 非弹性反应和 `330,659` 个直接次级粒子，反应率为 `37.657%`，平均多重性为 `8.781`。运行耗时 `814.858 s`。其中两个低能反应没有直接可见次级粒子；它们以 `secondary_count=0` 保留，不能删除，否则会系统性低估反应概率。反应头与次级记录之和为 `368,316`，与 TOPAS header 完全闭合；压缩文件 SHA-256、行数及 offset/count 连续性也已验证。
+
 ---
 
 ## 33. GPU 队列设计
@@ -2092,7 +2095,7 @@ Peak dose difference < 5%
 Tail integral difference < 10%
 ```
 
-当前状态：TOPAS 事件级反应 scorer 和 100-history smoke 已完成；10 万粒子正式反应包及 GPU secondary queue 尚未完成。
+当前状态：TOPAS 事件级反应 scorer、100-history smoke 和 10 万粒子正式反应包已完成；GPU secondary queue 尚未完成。
 
 ---
 
@@ -2343,15 +2346,14 @@ energy-loss straggling 模块。
 15. 整理论文实验
 ```
 
-本项目当前已经完成到第 9 步，并完成了第 10 步所需的 TOPAS 数据接口和 smoke 验证。紧接着应执行：
+本项目当前已经完成到第 9 步，并完成了第 10 步所需的 TOPAS 数据接口、smoke 验证和 100000-history 正式反应包。紧接着应执行：
 
 ```text
-1. 运行 100000-history fragment-development
-2. 固化事件级 reaction package CSV/metadata
-3. 实现 B580 固定容量 secondary queue 和溢出检测
-4. 按 reaction_id 联合采样带电碎片
-5. 比较分粒种 IDD、尾积分和总能量
-6. 通过后再提升到 1000000-history reference
+1. 实现主机端压缩 reaction package 加载器
+2. 实现 B580 固定容量 secondary queue 和溢出检测
+3. 按 reaction_id 联合采样带电碎片
+4. 比较分粒种 IDD、尾积分和总能量
+5. 通过后再提升到 1000000-history reference
 ```
 
 第一篇论文的合理边界是：
