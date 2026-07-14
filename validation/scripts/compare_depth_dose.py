@@ -94,6 +94,11 @@ def main() -> None:
         "--column", default="energy_deposition_MeV_per_primary"
     )
     parser.add_argument("--gamma-threshold-percent", type=float, default=10.0)
+    parser.add_argument(
+        "--metrics-output",
+        type=Path,
+        help="Also write the metrics JSON to this path.",
+    )
     args = parser.parse_args()
 
     topas_depth, topas_dose = load_curve(args.topas, args.column)
@@ -152,6 +157,11 @@ def main() -> None:
     (args.output_dir / "metrics.json").write_text(
         json.dumps(report, indent=2, allow_nan=True) + "\n", encoding="utf-8"
     )
+    if args.metrics_output is not None:
+        args.metrics_output.parent.mkdir(parents=True, exist_ok=True)
+        args.metrics_output.write_text(
+            json.dumps(report, indent=2, allow_nan=True) + "\n", encoding="utf-8"
+        )
 
     topas_normalized = topas_dose / np.max(topas_dose)
     eval_normalized = eval_dose / np.max(eval_dose)
@@ -196,4 +206,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

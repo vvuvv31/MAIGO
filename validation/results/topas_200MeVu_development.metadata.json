@@ -1,0 +1,27 @@
+{
+  "status": "development-statistics reference; not final publication reference",
+  "particle": "GenericIon(6,12)",
+  "energy_MeVu": 200.0,
+  "total_kinetic_energy_MeV": 2400.0,
+  "material": "TOPAS Water_75eV",
+  "phantom_mm": [300.0, 300.0, 400.0],
+  "depth_bin_width_mm": 0.5,
+  "histories": 10000,
+  "seed": 20260714,
+  "topas_version": "4.2.p3",
+  "geant4_version": "11.3.p2",
+  "threads": 20,
+  "physics_modules": [
+    "g4em-standard_opt4",
+    "g4h-phy_QGSP_BIC_HP",
+    "g4decay",
+    "g4ion-binarycascade",
+    "g4h-elastic_HP",
+    "g4stopping"
+  ],
+  "cut_for_all_particles_mm": 0.05,
+  "phantom_max_step_mm": 0.1,
+  "wall_time_seconds": 81.8949,
+  "raw_output": "validation/topas/output/development_energy_deposit.csv",
+  "parameter_file": "validation/topas/carbon_200MeVu_water_development.txt"
+}

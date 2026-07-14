@@ -5,10 +5,27 @@
 Run from WSL:
 
 ```bash
-TOPAS_EXECUTABLE=/path/to/topas ./validation/topas/run_topas.sh
+TOPAS_EXECUTABLE=/path/to/topas ./validation/topas/run_topas.sh development
 ```
 
+Validate syntax and geometry first with only 100 histories:
+
+```bash
+cd validation/topas
+./run_topas.sh smoke
+```
+
+Available cases are `smoke` (100 histories), `development` (10,000), and `reference` (1,000,000). The runner saves the full TOPAS/Geant4 console output as `output/<case>_topas.log`.
+
 If `topas` is already on PATH, omit `TOPAS_EXECUTABLE`. Raw files are written below `validation/topas/output/` and intentionally ignored by Git.
+
+If TOPAS is available only through an interactive-shell alias, pass the real executable and Geant4 data directory explicitly, for example:
+
+```bash
+TOPAS_EXECUTABLE="$HOME/Applications/TOPAS/OpenTOPAS-install/bin/topas" \
+TOPAS_G4_DATA_DIR="$HOME/Applications/GEANT4/G4DATA" \
+./validation/topas/run_topas.sh development
+```
 
 Before accepting this as the reference, record the exact TOPAS and Geant4 versions printed by the local installation and archive the TOPAS console log. The parameter syntax follows the official TOPAS documentation for [ion particle names](https://topas.readthedocs.io/en/3.7.0/parameters/source/intro.html), [beam sources](https://topas.readthedocs.io/en/3.7.0/parameters/source/beam.html), [default ion-capable physics modules](https://topas.readthedocs.io/en/3.7.0/parameters/defaults.html), [step limits](https://topas.readthedocs.io/en/3.7.0/parameters/physics/misc.html), and [CSV scorer output](https://topas.readthedocs.io/en/3.7.0/parameters/scoring/output.html).
 
@@ -22,4 +39,3 @@ python3 validation/scripts/normalize_topas_csv.py \
 ```
 
 The column numbers above are zero-based examples; use the indices shown by the actual local TOPAS output header.
-
