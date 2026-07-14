@@ -1,0 +1,175 @@
+#include "carbon/device.hpp"
+#include "carbon/transport.hpp"
+
+#ifdef CARBON_HAS_SYCL
+
+#include <sycl/sycl.hpp>
+
+#include <algorithm>
+#include <chrono>
+#include <cmath>
+#include <cstdint>
+#include <numeric>
+#include <stdexcept>
+#include <vector>
+
+namespace carbon {
+namespace {
+
+bool is_uniform_grid(const std::vector<double>& energies) {
+    const auto expected_step = energies[1] - energies[0];
+    for (std::size_t index = 2; index < energies.size(); ++index) {
+        const auto actual_step = energies[index] - energies[index - 1];
+        if (std::abs(actual_step - expected_step) > 1.0e-6 * expected_step) {
+            return false;
+        }
+    }
+    return true;
+}
+
+}  // namespace
+
+TransportResult transport_sycl(const TransportConfig& config,
+                               const StoppingPowerTable& stopping_power,
+                               const std::string& device_name) {
+    config.validate();
+    if (!is_uniform_grid(stopping_power.energies())) {
+        throw std::invalid_argument("The current SYCL backend requires a uniform stopping-power grid");
+    }
+
+    auto queue = make_sycl_queue(device_name);
+    const auto start = std::chrono::steady_clock::now();
+    const auto table_size = stopping_power.values().size();
+    const auto number_of_bins = config.number_of_bins();
+    const auto number_of_histories = config.number_of_histories;
+
+    auto* table_device = sycl::malloc_device<float>(table_size, queue);
+    auto* dose_device = sycl::malloc_device<float>(number_of_bins, queue);
+    auto* escaped_device = sycl::malloc_device<float>(number_of_histories, queue);
+    auto* steps_device = sycl::malloc_device<std::uint32_t>(number_of_histories, queue);
+    if (table_device == nullptr || dose_device == nullptr || escaped_device == nullptr ||
+        steps_device == nullptr) {
+        if (table_device != nullptr) sycl::free(table_device, queue);
+        if (dose_device != nullptr) sycl::free(dose_device, queue);
+        if (escaped_device != nullptr) sycl::free(escaped_device, queue);
+        if (steps_device != nullptr) sycl::free(steps_device, queue);
+        throw std::runtime_error("SYCL USM device allocation failed");
+    }
+
+    std::vector<float> table_host(table_size);
+    std::transform(stopping_power.values().begin(), stopping_power.values().end(), table_host.begin(),
+                   [](double value) { return static_cast<float>(value); });
+    queue.copy(table_host.data(), table_device, table_size);
+    queue.memset(dose_device, 0, number_of_bins * sizeof(float));
+
+    constexpr std::size_t local_size = 128;
+    const auto global_size =
+        ((number_of_histories + local_size - 1) / local_size) * local_size;
+    const auto initial_energy_MeV = static_cast<float>(config.initial_total_energy_MeV());
+    const auto phantom_length_mm = static_cast<float>(config.phantom_length_mm);
+    const auto depth_bin_width_mm = static_cast<float>(config.depth_bin_width_mm);
+    const auto maximum_step_mm = static_cast<float>(config.maximum_step_mm);
+    const auto maximum_relative_energy_loss =
+        static_cast<float>(config.maximum_relative_energy_loss);
+    const auto energy_cutoff_MeV = static_cast<float>(config.energy_cutoff_MeV);
+    const auto inverse_mass_number = 1.0f / static_cast<float>(config.mass_number);
+    const auto minimum_table_energy = static_cast<float>(stopping_power.energies().front());
+    const auto inverse_table_step =
+        1.0f / static_cast<float>(stopping_power.energies()[1] - stopping_power.energies()[0]);
+
+    const auto kernel_event = queue.parallel_for(
+        sycl::nd_range<1>{sycl::range<1>{global_size}, sycl::range<1>{local_size}},
+        [=](sycl::nd_item<1> item) {
+            const auto history = item.get_global_linear_id();
+            if (history >= number_of_histories) {
+                return;
+            }
+
+            auto energy_MeV = initial_energy_MeV;
+            auto position_mm = 0.0f;
+            std::uint32_t steps = 0;
+            while (energy_MeV > energy_cutoff_MeV && position_mm < phantom_length_mm) {
+                const auto energy_MeVu = energy_MeV * inverse_mass_number;
+                auto floating_index = (energy_MeVu - minimum_table_energy) * inverse_table_step;
+                auto index = static_cast<int>(sycl::floor(floating_index));
+                index = sycl::max(0, sycl::min(index, static_cast<int>(table_size) - 2));
+                const auto fraction = sycl::clamp(floating_index - static_cast<float>(index),
+                                                  0.0f, 1.0f);
+                const auto stopping_power_MeV_per_mm =
+                    table_device[index] +
+                    fraction * (table_device[index + 1] - table_device[index]);
+
+                auto step_mm = sycl::fmin(
+                    maximum_step_mm,
+                    maximum_relative_energy_loss * energy_MeV / stopping_power_MeV_per_mm);
+                const auto bin = sycl::min(
+                    static_cast<int>(position_mm / depth_bin_width_mm),
+                    static_cast<int>(number_of_bins) - 1);
+                const auto next_bin_boundary_mm =
+                    static_cast<float>(bin + 1) * depth_bin_width_mm;
+                step_mm = sycl::fmin(step_mm, next_bin_boundary_mm - position_mm);
+                step_mm = sycl::fmin(step_mm, phantom_length_mm - position_mm);
+
+                const auto deposited_MeV =
+                    sycl::fmin(stopping_power_MeV_per_mm * step_mm, energy_MeV);
+                sycl::atomic_ref<float,
+                                 sycl::memory_order::relaxed,
+                                 sycl::memory_scope::device,
+                                 sycl::access::address_space::global_space>
+                    atomic_dose(dose_device[bin]);
+                atomic_dose.fetch_add(deposited_MeV);
+                energy_MeV -= deposited_MeV;
+                position_mm += step_mm;
+                ++steps;
+            }
+
+            if (energy_MeV > 0.0f && position_mm < phantom_length_mm) {
+                const auto bin = sycl::min(
+                    static_cast<int>(position_mm / depth_bin_width_mm),
+                    static_cast<int>(number_of_bins) - 1);
+                sycl::atomic_ref<float,
+                                 sycl::memory_order::relaxed,
+                                 sycl::memory_scope::device,
+                                 sycl::access::address_space::global_space>
+                    atomic_dose(dose_device[bin]);
+                atomic_dose.fetch_add(energy_MeV);
+                energy_MeV = 0.0f;
+            }
+            escaped_device[history] = energy_MeV;
+            steps_device[history] = steps;
+        });
+    kernel_event.wait_and_throw();
+
+    std::vector<float> dose_host(number_of_bins);
+    std::vector<float> escaped_host(number_of_histories);
+    std::vector<std::uint32_t> steps_host(number_of_histories);
+    queue.copy(dose_device, dose_host.data(), number_of_bins);
+    queue.copy(escaped_device, escaped_host.data(), number_of_histories);
+    queue.copy(steps_device, steps_host.data(), number_of_histories).wait_and_throw();
+
+    sycl::free(table_device, queue);
+    sycl::free(dose_device, queue);
+    sycl::free(escaped_device, queue);
+    sycl::free(steps_device, queue);
+
+    TransportResult result;
+    result.backend = "sycl-" + device_name;
+    result.deposited_energy_MeV.resize(number_of_bins);
+    std::transform(dose_host.begin(), dose_host.end(), result.deposited_energy_MeV.begin(),
+                   [](float value) { return static_cast<double>(value); });
+    result.initial_energy_MeV =
+        config.initial_total_energy_MeV() * static_cast<double>(number_of_histories);
+    result.total_deposited_energy_MeV =
+        std::accumulate(result.deposited_energy_MeV.begin(), result.deposited_energy_MeV.end(), 0.0);
+    result.escaped_energy_MeV =
+        std::accumulate(escaped_host.begin(), escaped_host.end(), 0.0);
+    result.total_steps = std::accumulate(steps_host.begin(), steps_host.end(), std::uint64_t{0});
+    result.elapsed_seconds =
+        std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+    return result;
+}
+
+}  // namespace carbon
+
+#endif
+
