@@ -238,7 +238,8 @@ def main() -> None:
         },
     }
     args.output_metadata.parent.mkdir(parents=True, exist_ok=True)
-    args.output_metadata.write_text(json.dumps(compiled_metadata, indent=2) + "\n", encoding="utf-8")
+    with args.output_metadata.open("w", encoding="utf-8", newline="\n") as stream:
+        stream.write(json.dumps(compiled_metadata, indent=2) + "\n")
     print(f"Wrote {args.output} ({expected_file_size} bytes)")
     print(f"Wrote {args.output_metadata}")
     print(
