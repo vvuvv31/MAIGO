@@ -97,7 +97,14 @@ def main() -> None:
     binary_interactions: list[tuple[float, int, int]] = []
     binary_products: list[tuple[int, int, int, float, float]] = []
     species_metadata: dict[str, object] = {}
+    skipped_zero_cross_section: dict[str, object] = {}
     for (z, a), species_interactions in sorted(interactions_by_species.items()):
+        if not xs_by_species_energy[(z, a)]:
+            skipped_zero_cross_section[f"Z{z}A{a}"] = {
+                "interactions": len(species_interactions),
+                "reason": "TOPAS returned no positive macroscopic inelastic cross section",
+            }
+            continue
         xs_offset = len(binary_xs)
         for energy_key, values in sorted(xs_by_species_energy[(z, a)].items()):
             binary_xs.append((energy_key * quantum, statistics.median(values)))
@@ -118,7 +125,7 @@ def main() -> None:
         xs_count = len(binary_xs) - xs_offset
         interaction_count = len(binary_interactions) - interaction_offset
         if xs_count == 0 or interaction_count == 0:
-            raise SystemExit(f"Species Z{z}A{a} has no cross sections or interactions")
+            raise SystemExit(f"Species Z{z}A{a} has no usable cross sections or interactions")
         binary_projectiles.append((z, a, xs_offset, xs_count,
                                    interaction_offset, interaction_count))
         species_metadata[f"Z{z}A{a}"] = {
@@ -159,6 +166,7 @@ def main() -> None:
                     "cross_section_samples": len(binary_xs),
                     "interactions": len(binary_interactions), "products": len(binary_products)},
         "species": species_metadata,
+        "skipped_zero_cross_section_species": skipped_zero_cross_section,
         "output": {"path": args.output.as_posix(), "bytes": expected_size,
                    "sha256": sha256(args.output)},
     }
