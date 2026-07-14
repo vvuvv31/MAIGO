@@ -120,20 +120,27 @@ The Windows B580 implementation transports at most two further generations in
 a breadth-first atomic queue. Every charged nuclear descendant is assigned to
 the dose category implied by its own Z/A, matching `CarbonDoseOrigin`; inheriting
 the original charged ancestor category is incorrect for nuclear products. The
-corrected 100,000-history run produced 36,713 cascade interactions and 129,401
-queued descendants with no overflow and `2.75e-8` relative energy-balance error.
-Raw-total tail difference at 90 mm is `+4.197%` without a global scale. Proton
-now agrees to `+1.05%` over all depths and `+3.10%` in the tail; helium remains
-high by `+15.89%/+18.57%` and is a higher-priority channel-QA target.
+isotope/generation audit then found that the original primary package used
+TOPAS 4.2.p3/Geant4 11.3.2 while the accepted ancestor/cascade reference used
+TOPAS 4.1.p1/Geant4 11.1.3. Mixing these final-state datasets caused the
+remaining species bias.
+
+`prepare_primary_reactions_from_cascade.py` extracts 37,661 primary track-1
+C-12 interactions and 323,901 correlated products from the cascade reference.
+The aligned 201-bin package brings the charged-origin total difference to
+`-0.11%/+2.93%` over all depths/after 90 mm. Helium is `-0.20%/+2.58%`, proton
+is `+1.41%/+2.84%`, and every charged category is within 7% in the tail. The
+maximum per-bin species closure is `9.80e-11 MeV/primary/bin`; no global scale
+is used.
 
 The dependency-free comparison command is:
 
 ```bash
 python3 validation/scripts/compare_ancestor_attributed_idd_portable.py \
   validation/results/topas_200MeVu_ancestor_dose_3d_development.idd.csv \
-  validation/results/windows_b580_fragment_cascade_100k_species.csv \
-  --metrics-output validation/results/windows_b580_fragment_cascade_100k_vs_topas.metrics.json \
-  --plot validation/results/windows_b580_fragment_cascade_100k_vs_topas.svg
+  validation/results/windows_b580_fragment_cascade_aligned_100k_species.csv \
+  --metrics-output validation/results/windows_b580_fragment_cascade_aligned_100k_vs_topas.metrics.json \
+  --plot validation/results/windows_b580_fragment_cascade_aligned_100k_vs_topas.svg
 ```
 
 ## Direct cross-section and reaction-final-state extraction

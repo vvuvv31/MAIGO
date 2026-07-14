@@ -107,10 +107,10 @@ Windows 原生
 - GPU 对原始 TOPAS total：全深度积分 `+0.402%`，90 mm 后尾部 `+15.452%`；
 - 祖先对齐后仍存在明确的带电碎片偏差：He 全深度/尾部 `+36.55%/+50.14%`，proton `-24.86%/-34.15%`。
 - 正式级联表包含 34 种 projectile、71,089 次可用 interaction、511,019 个产物和 13,469 个截面采样点；
-- 修正级联子粒子归属后，两代 B580 级联的原始 TOPAS 90 mm 后尾部差为 `+4.197%`；全深度 raw/charged-origin total 分别为 `-0.932%/-0.223%`；
-- proton 已改善到全深度 `+1.05%`、90 mm 后 `+3.10%`；He 仍为 `+15.89%/+18.57%`，GPU 分粒种逐 bin 闭合最大误差为 `7.70e-11 MeV/primary/bin`。
+- 同位素/代际 QA 证明旧 primary package 来自 TOPAS 4.2.p3/Geant4 11.3.2，而 ancestor/cascade reference 来自 TOPAS 4.1.p1/Geant4 11.1.3；混用末态数据是剩余粒种偏差的主因；
+- 改用 cascade reference 的 37,661 个 primary C-12 联合末态后，带电类别全深度均在约 `±4%` 内，90 mm 后最大为 Be `+6.67%`；He 为 `-0.20%/+2.58%`，proton 为 `+1.41%/+2.84%`。
 
-下一开发目标不是增加全局 scale，也不是盲目增加级联代数。带电碎片后续核反应已经让 total tail 通过 `<10%` 门槛，proton 归属偏差也已消除；下一步应对 He、B、Li 和 other charged 建立同位素/反应代数级的产生率、能谱和角分布 QA，并做更高统计量收敛。TOPAS 正式记录中没有出现 decay process；仅有 2 条 `Z4A4` 返回零非弹性截面并被显式跳过。中性来源仍暂不作为第一优先级。
+下一开发目标是 GPU 3D voxel scorer 与真实三维带电粒子输运。当前 charged-origin total 已对齐到全深度 `-0.11%`、尾部 `+2.93%`；raw total 尾部 `-3.02%` 主要反映 TOPAS 尾部 `5.779%` 的中性来源尚未空间输运。禁止用全局 scale；后续在 3D charged scorer 稳定后再加入 neutron/gamma 来源输运。
 
 ---
 
@@ -1714,14 +1714,18 @@ B580 初版正式运行暴露了一个计分语义错误：后续核反应的带
 
 修正后 100000 histories、最多两代的 B580 运行产生 36,713 次后续 interaction 和 129,401 个后代带电粒子入队，无溢出；能量平衡误差 `2.75e-8`，kernel elapsed `2.590 s`，吞吐量 `38,614 histories/s`。与祖先归属 TOPAS 比较：全深度 raw total `-0.932%`，charged-origin total `-0.223%`；90 mm 后 raw total `+4.197%`。proton 从错误归属时的 `-27.38%/-39.16%` 改善到 `+1.05%/+3.10%`（全深度/90 mm 后），He 从 `+24.79%/+31.00%` 降到 `+15.89%/+18.57%`。GPU 分粒种逐 bin 求和与 total 的最大闭合误差为 `7.70e-11 MeV/primary/bin`。
 
+进一步的同位素/反应代数 QA 恢复了 cascade reference 中 0--4 代反应谱，并发现 primary reaction package 使用 TOPAS 4.2.p3/Geant4 11.3.2，而 ancestor/cascade reference 使用 TOPAS 4.1.p1/Geant4 11.1.3。旧 primary package 相对 cascade reference 的初级 C-12 末态，alpha 能量/反应高约 `15.6%`，He-3 高约 `51.8%`，与 GPU He 偏高一致。
+
+`prepare_primary_reactions_from_cascade.py` 从同一 cascade reference 的 track-1、event-interaction-0 C-12 记录提取 37,661 个联合末态和 323,901 个产物，并编译为覆盖全部 201 个能量 bin 的 `topas_200MeVu_cascade_aligned_primary.bin`。替换初级包后，B580 100000-history 结果为：全深度 raw/charged total `-0.825%/-0.114%`，90 mm 后 `-3.022%/+2.926%`；He `-0.20%/+2.58%`、proton `+1.41%/+2.84%`、B `+3.88%/+4.06%`、Li `+3.83%/+3.72%`（全深度/尾部）。所有带电类别尾部最大偏差为 Be `+6.67%`，逐 bin 闭合为 `9.80e-11 MeV/primary/bin`，未使用全局 scale。
+
 在没有 numpy/matplotlib 的主机上可直接运行标准库版本：
 
 ```bat
 python validation\scripts\compare_ancestor_attributed_idd_portable.py ^
   validation\results\topas_200MeVu_ancestor_dose_3d_development.idd.csv ^
-  validation\results\windows_b580_fragment_cascade_100k_species.csv ^
-  --metrics-output validation\results\windows_b580_fragment_cascade_100k_vs_topas.metrics.json ^
-  --plot validation\results\windows_b580_fragment_cascade_100k_vs_topas.svg
+  validation\results\windows_b580_fragment_cascade_aligned_100k_species.csv ^
+  --metrics-output validation\results\windows_b580_fragment_cascade_aligned_100k_vs_topas.metrics.json ^
+  --plot validation\results\windows_b580_fragment_cascade_aligned_100k_vs_topas.svg
 ```
 
 ---
@@ -2210,7 +2214,7 @@ Peak dose difference < 5%
 Tail integral difference < 10%
 ```
 
-当前状态：TOPAS 事件级反应 scorer、祖先归属 3D dose scorer、全带电离子级联 scorer 及其 10 万粒子正式基准均已完成。修正带电核子代的 Z/A 类别映射后，Arc B580 两代级联对原始 TOPAS total 的尾积分差为 `+4.197%`，已经通过 `<10%`；proton 全深度/尾部为 `+1.05%/+3.10%`，He 仍高 `+15.89%/+18.57%`。下一项是 He、B、Li 和 other charged 的同位素/反应代数级 QA；不得用全局 scale 掩盖类别偏差。
+当前状态：同位素/代际 QA 和统一 TOPAS/Geant4 参考的 primary reaction package 已完成。Arc B580 对 charged-origin total 的全深度/尾部差为 `-0.11%/+2.93%`，所有带电类别尾部偏差均小于 `7%`。下一项是 GPU 3D voxel scorer、横向坐标/方向输运和多重散射；之后再实现 neutron/gamma 来源输运。不得用全局 scale 掩盖空间或中性来源偏差。
 
 ---
 
@@ -2473,11 +2477,11 @@ energy-loss straggling 模块。
 本项目已经完成第 10 步的两代带电碎片后续核反应级联、TOPAS 祖先归属 3D scorer、两个 100000-history 正式基准及 GPU/TOPAS 对齐比较。紧接着应执行：
 
 ```text
-1. 对 primary/cascade reaction package 的 He、B、Li、deuteron/triton 产生率、能谱和角分布做同位素/反应代数级 QA
-2. 定位 He 偏高以及 B/Li 偏低是否来自末态采样、同位素阻止能近似或级联深度
-3. 对级联代数、原子队列次序、队列容量和反应末态采样做可复现性与统计收敛
-4. 根据修正后的剩余差异决定 neutron/gamma 来源输运优先级
-5. 在不使用经验 scale 的条件下提升到 1000000-history reference
+1. 将一维粒子状态扩展为 x/y/z 坐标和三维方向，并实现 GPU 3D voxel dose scorer
+2. 加入带电离子的多重库仑散射与横向展宽，验证 3D category closure
+3. 将 GPU 3D 剂量与 TOPAS `60 x 60 x 800` 祖先归属体素逐 voxel/切片比较
+4. 在带电 3D scorer 稳定后加入 neutron/gamma 来源输运
+5. 做原子队列可复现性、1000000-history 统计收敛和 100--400 MeV/u 多能量验证
 ```
 
 第一篇论文的合理边界是：

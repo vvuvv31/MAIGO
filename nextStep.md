@@ -4,9 +4,11 @@ TOPAS 祖先归属 3D dose scorer、全带电离子级联 scorer 和两个 10 �
 
 正式结果的祖先类别闭合最大误差为 `6.395e-14 MeV/primary/bin`，独立 TOPAS total 交叉检查为 `7.882e-7 MeV/primary/bin`，`unresolved=0`，未使用全局 scale。TOPAS 中性来源占全深度总剂量 `0.711%`，在 90 mm 后尾部占 `5.779%`。
 
-正式级联表包含 34 种 projectile、71,089 次可用 interaction、511,019 个产物。已修复 GPU 后续核产物错误继承母类别的问题：带电核子代现在与 TOPAS 一样按自身 Z/A 分类。修正后的 10 万粒子 B580 运行中，90 mm 后 raw-total 差为 `+4.197%`，全深度 charged-origin total 为 `-0.223%`；proton 全深度/尾部从 `-27.38%/-39.16%` 改善到 `+1.05%/+3.10%`，He 从 `+24.79%/+31.00%` 降到 `+15.89%/+18.57%`。分粒种逐 bin 闭合最大误差为 `7.70e-11 MeV/primary/bin`，未使用全局 scale。
+同位素/反应代数 QA 已完成。它证明旧 primary reaction package 来自 TOPAS 4.2.p3/Geant4 11.3.2，而 ancestor/cascade reference 来自 TOPAS 4.1.p1/Geant4 11.1.3；两套末态混用是 He、B、Li 剩余偏差的主因。已从 cascade reference 提取 37,661 个 primary C-12 联合末态并编译为统一的 201-bin package。
 
-下一步明确为：对 He、B、Li、deuteron/triton 等同位素按 primary/cascade 反应代数分别统计产生率、能谱、角分布和沉积剂量，定位剩余的 He 偏高、B/Li 偏低与 other charged 偏高；随后做 100 万粒子和级联队列次序的可复现性/统计收敛。不要继续盲目增加级联代数，不实现全局 scale，中性输运仍不是第一优先级。所有新的 TOPAS 作业继续只在 `v@192.168.31.5:~/gpu` 上运行，最多 56 线程，禁止回到 WSL 运行 TOPAS。
+统一参考后的 B580 结果：charged-origin total 全深度/90 mm 后为 `-0.11%/+2.93%`；He `-0.20%/+2.58%`、proton `+1.41%/+2.84%`、B `+3.88%/+4.06%`、Li `+3.83%/+3.72%`。所有带电类别尾部最大偏差为 Be `+6.67%`，逐 bin 闭合为 `9.80e-11 MeV/primary/bin`，未使用全局 scale。
+
+下一步明确为：开发 GPU 3D voxel dose scorer，把粒子状态扩展到 x/y/z 和三维方向，加入多重库仑散射并与 TOPAS `60 x 60 x 800` 祖先归属剂量逐 voxel/切片比较。带电 3D scorer 稳定后再实现 neutron/gamma 来源输运。新的 TOPAS 作业仍只允许在 `v@192.168.31.5:~/gpu` 上运行，最多 56 线程，禁止使用 WSL 运行 TOPAS。
 
 ---
 
