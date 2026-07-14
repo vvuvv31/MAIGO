@@ -2,7 +2,7 @@
   "format": "charged-fragment cascade package",
   "version": 1,
   "source_metadata": "validation/results/topas_200MeVu_cascade_smoke.metadata.json",
-  "source_metadata_sha256": "e7ffef9957036d1cff7f3fe23ce8c83a616ee1219e5bf0825c0c1688d9a60bd1",
+  "source_metadata_sha256": "469e9ec53aab95fa51b2d4c73adcd259314462c97743fd5c1edac160f63c4990",
   "records": {
     "projectiles": 11,
     "cross_section_samples": 252,

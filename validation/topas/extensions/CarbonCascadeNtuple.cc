@@ -43,6 +43,7 @@ CarbonCascadeNtuple::CarbonCascadeNtuple(
     fNtuple->RegisterColumnI(&run_id_, "Run ID");
     fNtuple->RegisterColumnI(&thread_id_, "Thread ID");
     fNtuple->RegisterColumnI(&event_id_, "Event ID");
+    fNtuple->RegisterColumnI(&interaction_id_, "Interaction Sequence ID");
     fNtuple->RegisterColumnI(&interaction_track_id_, "Interaction Track ID");
     fNtuple->RegisterColumnI(&track_id_, "Track ID");
     fNtuple->RegisterColumnI(&parent_id_, "Parent Track ID");
@@ -82,6 +83,7 @@ G4bool CarbonCascadeNtuple::ProcessHits(G4Step* step, G4TouchableHistory*) {
     if (event_id != cached_event_id_) {
         interactions_.clear();
         cached_event_id_ = event_id;
+        next_interaction_id_ = 0;
     }
 
     const G4Track* track = step->GetTrack();
@@ -97,12 +99,14 @@ G4bool CarbonCascadeNtuple::ProcessHits(G4Step* step, G4TouchableHistory*) {
     if (charged_ion && IsCascadeProcess(post_process)) {
         record_kind_ = "interaction";
         process = post_process;
+        interaction_id_ = next_interaction_id_++;
         interaction_track_id_ = track->GetTrackID();
         vertex = step->GetPostStepPoint()->GetPosition();
         direction = step->GetPreStepPoint()->GetMomentumDirection();
         kinetic_energy_mev_ =
             static_cast<G4float>(step->GetPreStepPoint()->GetKineticEnergy() / MeV);
-        context = InteractionContext{kinetic_energy_mev_, definition->GetAtomicNumber(),
+        context = InteractionContext{interaction_id_, kinetic_energy_mev_,
+                                     definition->GetAtomicNumber(),
                                      definition->GetAtomicMass()};
         interactions_[interaction_track_id_] = context;
         creator_model_id_ = -1;
@@ -116,6 +120,7 @@ G4bool CarbonCascadeNtuple::ProcessHits(G4Step* step, G4TouchableHistory*) {
             return false;
         }
         record_kind_ = "product";
+        interaction_id_ = parent->second.interaction_id;
         interaction_track_id_ = track->GetParentID();
         vertex = track->GetVertexPosition();
         direction = track->GetVertexMomentumDirection();

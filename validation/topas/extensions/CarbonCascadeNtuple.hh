@@ -17,6 +17,7 @@ public:
 
 private:
     struct InteractionContext {
+        G4int interaction_id = 0;
         G4float incident_energy_mev = 0.0F;
         G4int projectile_z = 0;
         G4int projectile_a = 0;
@@ -26,6 +27,7 @@ private:
     G4int run_id_ = 0;
     G4int thread_id_ = 0;
     G4int event_id_ = 0;
+    G4int interaction_id_ = 0;
     G4int interaction_track_id_ = 0;
     G4int track_id_ = 0;
     G4int parent_id_ = 0;
@@ -52,6 +54,7 @@ private:
     G4int creator_model_id_ = 0;
 
     G4int cached_event_id_ = -1;
+    G4int next_interaction_id_ = 0;
     std::unordered_map<G4int, InteractionContext> interactions_;
 };
 

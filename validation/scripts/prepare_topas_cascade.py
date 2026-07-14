@@ -34,10 +34,10 @@ def parse_header(path: Path) -> dict[str, int]:
 
 def parse_row(line: str, path: Path, line_number: int) -> dict[str, object]:
     values = line.split()
-    if len(values) != 28:
-        raise ValueError(f"Expected 28 columns at {path}:{line_number}, got {len(values)}")
-    integer_indices = (1, 2, 3, 4, 5, 6, 7, 9, 10, 15, 16, 25, 26, 27)
-    float_indices = (11, 12, 13, 14, 17, 18, 19, 20, 21, 22, 23)
+    if len(values) != 29:
+        raise ValueError(f"Expected 29 columns at {path}:{line_number}, got {len(values)}")
+    integer_indices = (1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 16, 17, 26, 27, 28)
+    float_indices = (12, 13, 14, 15, 18, 19, 20, 21, 22, 23, 24)
     for index in integer_indices:
         int(values[index])
     for index in float_indices:
@@ -45,17 +45,17 @@ def parse_row(line: str, path: Path, line_number: int) -> dict[str, object]:
             raise ValueError(f"Non-finite value at {path}:{line_number}")
     return {
         "kind": values[0], "run": int(values[1]), "thread": int(values[2]),
-        "event": int(values[3]), "interaction_track": int(values[4]),
-        "track": int(values[5]), "parent": int(values[6]), "pdg": int(values[7]),
-        "name": values[8], "z": int(values[9]), "a": int(values[10]),
-        "charge": float(values[11]), "energy": float(values[12]),
-        "incident_energy": float(values[13]), "macro_xs": float(values[14]),
-        "projectile_z": int(values[15]), "projectile_a": int(values[16]),
-        "x": float(values[17]), "y": float(values[18]), "z_mm": float(values[19]),
-        "dx": float(values[20]), "dy": float(values[21]), "dz": float(values[22]),
-        "weight": float(values[23]), "process": values[24],
-        "process_type": int(values[25]), "process_subtype": int(values[26]),
-        "model": int(values[27]),
+        "event": int(values[3]), "interaction_id": int(values[4]),
+        "interaction_track": int(values[5]), "track": int(values[6]),
+        "parent": int(values[7]), "pdg": int(values[8]), "name": values[9],
+        "z": int(values[10]), "a": int(values[11]), "charge": float(values[12]),
+        "energy": float(values[13]), "incident_energy": float(values[14]),
+        "macro_xs": float(values[15]), "projectile_z": int(values[16]),
+        "projectile_a": int(values[17]), "x": float(values[18]),
+        "y": float(values[19]), "z_mm": float(values[20]), "dx": float(values[21]),
+        "dy": float(values[22]), "dz": float(values[23]), "weight": float(values[24]),
+        "process": values[25], "process_type": int(values[26]),
+        "process_subtype": int(values[27]), "model": int(values[28]),
     }
 
 
@@ -99,7 +99,7 @@ def main() -> None:
                 continue
             row = parse_row(line, phsp, line_number)
             key = (int(row["run"]), int(row["thread"]), int(row["event"]),
-                   int(row["interaction_track"]))
+                   int(row["interaction_id"]))
             if row["kind"] == "interaction":
                 if key in interactions:
                     raise SystemExit(f"Duplicate interaction key {key}")
@@ -133,7 +133,8 @@ def main() -> None:
         process_counts[str(row["process"])] += 1
         members = products[key]
         interaction_rows.append([
-            interaction_id, *key, row["pdg"], row["name"], row["projectile_z"],
+            interaction_id, key[0], key[1], key[2], key[3], row["interaction_track"],
+            row["pdg"], row["name"], row["projectile_z"],
             row["projectile_a"], row["incident_energy"],
             float(row["incident_energy"]) / int(row["projectile_a"]), row["macro_xs"],
             float(row["z_mm"]) + args.phantom_half_length_mm, row["dx"], row["dy"],
@@ -163,7 +164,8 @@ def main() -> None:
         product_offset += len(members)
 
     write_csv_gz(args.interactions_output, (
-        "interaction_id", "run_id", "thread_id", "event_id", "interaction_track_id", "projectile_pdg",
+        "interaction_id", "run_id", "thread_id", "event_id", "event_interaction_id",
+        "interaction_track_id", "projectile_pdg",
         "projectile_name", "projectile_Z", "projectile_A", "incident_energy_MeV",
         "incident_energy_MeV_per_u", "macro_inelastic_per_mm", "depth_mm",
         "direction_x", "direction_y", "direction_z", "process", "process_type",
