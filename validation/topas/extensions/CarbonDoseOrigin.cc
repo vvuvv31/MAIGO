@@ -77,10 +77,6 @@ OriginCategory ClassifyIndependentTrack(const G4Track* track, bool is_primary) {
         return OriginCategory::Gamma;
     }
 
-    const G4double charge = track->GetDynamicParticle()->GetCharge() / eplus;
-    if (std::abs(charge) < 0.5) {
-        return OriginCategory::NeutralOther;
-    }
     if (is_primary && atomic_number == 6 && atomic_mass == 12) {
         return OriginCategory::PrimaryC12;
     }
@@ -99,8 +95,18 @@ OriginCategory ClassifyIndependentTrack(const G4Track* track, bool is_primary) {
         case 2:
             return OriginCategory::Helium;
         default:
-            return OriginCategory::OtherCharged;
+            break;
     }
+
+    // In OpenTOPAS 4.1 / Geant4 11.1, a GenericIon dynamic charge can still
+    // be zero at BeginOfTrack. Nuclear identity therefore has to be resolved
+    // before consulting the dynamic charge. For non-nuclear particles the
+    // charge is initialized and remains the correct discriminator.
+    const G4double charge = track->GetDynamicParticle()->GetCharge() / eplus;
+    if (std::abs(charge) < 0.5) {
+        return OriginCategory::NeutralOther;
+    }
+    return OriginCategory::OtherCharged;
 }
 
 OriginCategory ResolveOrigin(const G4Track* track, G4int event_id) {
