@@ -92,7 +92,7 @@ Windows 原生
 - TOPAS `CarbonDoseOrigin` 祖先归属 3D scorer、100-history smoke 和远程 56 线程 100000-history 正式基准；
 - 祖先归属 TOPAS 与当前 B580 分粒种 IDD 的无 scale 比较。
 - TOPAS `CarbonCascadeNtuple` 全带电离子后续反应记录、MT-safe interaction sequence、10 万粒子正式级联包；
-- Arc B580 最多两代的 breadth-first 带电碎片级联输运与祖先类别继承。
+- Arc B580 最多两代的 breadth-first 带电碎片级联输运；带电核产物按自身 Z/A 重新分类，电子沉积仍归当前带电母粒子。
 
 关键验证结果：
 
@@ -107,10 +107,10 @@ Windows 原生
 - GPU 对原始 TOPAS total：全深度积分 `+0.402%`，90 mm 后尾部 `+15.452%`；
 - 祖先对齐后仍存在明确的带电碎片偏差：He 全深度/尾部 `+36.55%/+50.14%`，proton `-24.86%/-34.15%`。
 - 正式级联表包含 34 种 projectile、71,089 次可用 interaction、511,019 个产物和 13,469 个截面采样点；
-- 两代 B580 级联把原始 TOPAS 90 mm 后尾部差从 `+15.452%` 降至 `+4.265%`，He 尾部从 `+50.14%` 降至 `+31.00%`；
-- 级联后 proton 尾部仍为 `-39.16%`，是当前最明确的剩余物理短板。
+- 修正级联子粒子归属后，两代 B580 级联的原始 TOPAS 90 mm 后尾部差为 `+4.197%`；全深度 raw/charged-origin total 分别为 `-0.932%/-0.223%`；
+- proton 已改善到全深度 `+1.05%`、90 mm 后 `+3.10%`；He 仍为 `+15.89%/+18.57%`，GPU 分粒种逐 bin 闭合最大误差为 `7.70e-11 MeV/primary/bin`。
 
-下一开发目标不是增加全局 scale，也不是盲目增加级联代数。带电碎片后续核反应已经让 total tail 通过 `<10%` 门槛；下一步应检查 primary reaction package 与 cascade package 中 proton 的产生率、能谱和角分布，并建立同位素/通道级 QA。TOPAS 正式记录中没有出现 decay process；仅有 2 条 `Z4A4` 返回零非弹性截面并被显式跳过。中性来源仍暂不作为第一优先级。
+下一开发目标不是增加全局 scale，也不是盲目增加级联代数。带电碎片后续核反应已经让 total tail 通过 `<10%` 门槛，proton 归属偏差也已消除；下一步应对 He、B、Li 和 other charged 建立同位素/反应代数级的产生率、能谱和角分布 QA，并做更高统计量收敛。TOPAS 正式记录中没有出现 decay process；仅有 2 条 `Z4A4` 返回零非弹性截面并被显式跳过。中性来源仍暂不作为第一优先级。
 
 ---
 
@@ -1710,7 +1710,19 @@ setsid -f ./validation/topas/run_cascade_remote.sh development \
 scripts\run_windows_b580_cascade.cmd
 ```
 
-B580 正式运行 100000 histories、最多两代：36,856 次后续 interaction、129,534 个后代带电粒子入队、无溢出、能量平衡误差 `2.74e-8`，kernel elapsed `2.925 s`。与祖先归属 TOPAS 比较时不使用 scale：全深度 raw total `-0.923%`，charged-origin total `-0.213%`；90 mm 后 raw total `+4.265%`。He 尾部改善到 `+31.00%`，但 proton 尾部为 `-39.16%`，所以下一步是 proton 产生通道 QA，而不是继续增加级联代数。
+B580 初版正式运行暴露了一个计分语义错误：后续核反应的带电产物继承了原始带电祖先类别。例如 He 产生的 proton 仍被累计在 He 中，这与 `CarbonDoseOrigin` 对核产物按自身 Z/A 分类的规则不一致。修复只改变类别索引，不使用 scale，也不改变反应、阻止能或 total dose 算法。
+
+修正后 100000 histories、最多两代的 B580 运行产生 36,713 次后续 interaction 和 129,401 个后代带电粒子入队，无溢出；能量平衡误差 `2.75e-8`，kernel elapsed `2.590 s`，吞吐量 `38,614 histories/s`。与祖先归属 TOPAS 比较：全深度 raw total `-0.932%`，charged-origin total `-0.223%`；90 mm 后 raw total `+4.197%`。proton 从错误归属时的 `-27.38%/-39.16%` 改善到 `+1.05%/+3.10%`（全深度/90 mm 后），He 从 `+24.79%/+31.00%` 降到 `+15.89%/+18.57%`。GPU 分粒种逐 bin 求和与 total 的最大闭合误差为 `7.70e-11 MeV/primary/bin`。
+
+在没有 numpy/matplotlib 的主机上可直接运行标准库版本：
+
+```bat
+python validation\scripts\compare_ancestor_attributed_idd_portable.py ^
+  validation\results\topas_200MeVu_ancestor_dose_3d_development.idd.csv ^
+  validation\results\windows_b580_fragment_cascade_100k_species.csv ^
+  --metrics-output validation\results\windows_b580_fragment_cascade_100k_vs_topas.metrics.json ^
+  --plot validation\results\windows_b580_fragment_cascade_100k_vs_topas.svg
+```
 
 ---
 
@@ -2198,7 +2210,7 @@ Peak dose difference < 5%
 Tail integral difference < 10%
 ```
 
-当前状态：TOPAS 事件级反应 scorer、祖先归属 3D dose scorer、全带电离子级联 scorer 及其 10 万粒子正式基准均已完成。Arc B580 两代级联把原始 TOPAS total 的尾积分差降到 `+4.265%`，已经通过 `<10%`；He 尾部仍高 `+31.00%`，proton 尾部低 `-39.16%`。下一项是 proton 产生通道、能谱和角分布 QA；不得用全局 scale 掩盖类别偏差。
+当前状态：TOPAS 事件级反应 scorer、祖先归属 3D dose scorer、全带电离子级联 scorer 及其 10 万粒子正式基准均已完成。修正带电核子代的 Z/A 类别映射后，Arc B580 两代级联对原始 TOPAS total 的尾积分差为 `+4.197%`，已经通过 `<10%`；proton 全深度/尾部为 `+1.05%/+3.10%`，He 仍高 `+15.89%/+18.57%`。下一项是 He、B、Li 和 other charged 的同位素/反应代数级 QA；不得用全局 scale 掩盖类别偏差。
 
 ---
 
@@ -2461,9 +2473,9 @@ energy-loss straggling 模块。
 本项目已经完成第 10 步的两代带电碎片后续核反应级联、TOPAS 祖先归属 3D scorer、两个 100000-history 正式基准及 GPU/TOPAS 对齐比较。紧接着应执行：
 
 ```text
-1. 对 primary/cascade reaction package 的 proton 产生率、能谱和角分布做通道级 QA
-2. 修正 proton 偏低，同时避免重新抬高 He 和 total tail
-3. 对级联代数、队列容量和反应末态采样做统计收敛
+1. 对 primary/cascade reaction package 的 He、B、Li、deuteron/triton 产生率、能谱和角分布做同位素/反应代数级 QA
+2. 定位 He 偏高以及 B/Li 偏低是否来自末态采样、同位素阻止能近似或级联深度
+3. 对级联代数、原子队列次序、队列容量和反应末态采样做可复现性与统计收敛
 4. 根据修正后的剩余差异决定 neutron/gamma 来源输运优先级
 5. 在不使用经验 scale 的条件下提升到 1000000-history reference
 ```

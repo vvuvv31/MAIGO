@@ -56,7 +56,8 @@ The metadata also records SHA-256 hashes for every raw scorer and the TOPAS log,
 
 `CarbonDoseOrigin` maintains an event-local `track_id -> origin` map beginning
 before transport. Electron and positron dose inherits the charged parent origin;
-neutron, gamma, and other-neutral lineages retain their neutral source. The 12
+each charged nuclear descendant is classified by its own Z/A; neutron, gamma,
+and other-neutral lineages retain their neutral source. The 12
 mutually exclusive categories are primary C-12, secondary carbon, B, Be, Li, He,
 proton, other charged, neutron, gamma, other neutral, and unresolved.
 
@@ -116,12 +117,24 @@ excluded with an explicit metadata audit entry. No decay process was observed
 in this reference.
 
 The Windows B580 implementation transports at most two further generations in
-a breadth-first atomic queue. Descendants inherit the initial charged ancestor
-dose category. The 100,000-history run produced 36,856 cascade interactions and
-129,534 queued descendants with no overflow and `2.74e-8` relative energy-balance
-error. Raw-total tail difference at 90 mm improved from `+15.452%` to `+4.265%`
-without a global scale. Proton tail remains low by `39.16%` and is the next data
-QA target.
+a breadth-first atomic queue. Every charged nuclear descendant is assigned to
+the dose category implied by its own Z/A, matching `CarbonDoseOrigin`; inheriting
+the original charged ancestor category is incorrect for nuclear products. The
+corrected 100,000-history run produced 36,713 cascade interactions and 129,401
+queued descendants with no overflow and `2.75e-8` relative energy-balance error.
+Raw-total tail difference at 90 mm is `+4.197%` without a global scale. Proton
+now agrees to `+1.05%` over all depths and `+3.10%` in the tail; helium remains
+high by `+15.89%/+18.57%` and is a higher-priority channel-QA target.
+
+The dependency-free comparison command is:
+
+```bash
+python3 validation/scripts/compare_ancestor_attributed_idd_portable.py \
+  validation/results/topas_200MeVu_ancestor_dose_3d_development.idd.csv \
+  validation/results/windows_b580_fragment_cascade_100k_species.csv \
+  --metrics-output validation/results/windows_b580_fragment_cascade_100k_vs_topas.metrics.json \
+  --plot validation/results/windows_b580_fragment_cascade_100k_vs_topas.svg
+```
 
 ## Direct cross-section and reaction-final-state extraction
 
