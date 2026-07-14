@@ -270,6 +270,8 @@ def main() -> None:
     parser.add_argument("--shape", type=int, nargs=3, default=(60, 60, 800), metavar=("NX", "NY", "NZ"))
     parser.add_argument("--voxel-mm", type=float, nargs=3, default=(5.0, 5.0, 0.5), metavar=("DX", "DY", "DZ"))
     parser.add_argument("--density-kg-m3", type=float, default=1000.0)
+    parser.add_argument("--seed", type=int, default=20260714)
+    parser.add_argument("--execution-host", default="unknown")
     parser.add_argument("--tail-start-mm", type=float, default=90.0)
     parser.add_argument("--closure-tolerance", type=float, default=1.0e-6)
     parser.add_argument("--dose-energy-bin-tolerance", type=float, default=5.0e-3)
@@ -403,6 +405,8 @@ def main() -> None:
     metadata = {
         "case": args.case,
         "histories": args.histories,
+        "seed": args.seed,
+        "execution_host": args.execution_host,
         "topas_version": header.get("topas_version", "unknown"),
         "parameter_file": header.get("parameter_file", "unknown"),
         "scoring_semantics": "dose-to-medium attributed by track ancestry; electron/positron dose inherits its charged parent, while neutral-source descendants retain neutron/gamma/neutral_other origin",
