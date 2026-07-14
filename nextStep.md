@@ -48,3 +48,5 @@ CPU/SYCL 能量相关截面接入也已完成：配置改用 `nuclear_cross_sect
 10 万粒子 `fragment-development` 正式反应包已经完成：100,000 个初级粒子中有 37,657 次主 C-12 非弹性反应，共记录 330,659 个直接次级粒子，平均多重性为 8.781。两个低能反应没有直接可见次级粒子，仍以 `secondary_count=0` 的完整反应头保留。压缩反应表和次级粒子表约 10.1 MiB，header 记录数、CSV 行数、offset/count 闭合和 SHA-256 均已验证。
 
 现在最直接的下一项工作是：实现 B580 上的固定容量次级粒子队列、原子计数器和溢出检测，并按 `reaction_id` 整包采样碎片，而不是独立抽取各粒种。第一版先输运 proton、alpha 和 Z=3--6 的带电碎片；gamma、neutron 暂时计入未输运能量账本，并在结果中单独报告。
+
+主机端数据边界已经完成：gzip/CSV 可预编译为 5.9 MB、201 个 1 MeV/u 分箱的版本化二进制表，C++ `ReactionPackageTable` 会独立检查格式、分箱、offset/count 和物理值。GCC 12.2 与 Windows oneAPI IntelLLVM 2025.3.3 的真实正式数据加载测试均已通过。下一次改动从把这些定长数组复制到 SYCL USM、建立 fixed-capacity queue 开始。

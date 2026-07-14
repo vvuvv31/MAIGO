@@ -81,6 +81,19 @@ Use `fragment-development` with 100,000 histories for the calibration dataset an
 
 The completed 100,000-history development baseline contains 37,657 primary C-12 inelastic reactions and 330,659 direct secondaries (mean multiplicity 8.781). Two low-energy reaction headers have no direct visible secondary row; they are valid zero-length packages and remain in the reaction table with `secondary_count=0`. The parser rejects orphan secondaries, but it must not discard these empty packages because doing so would bias the reaction probability. The two gzip tables and their metadata are stored in `validation/results/`.
 
+Compile the validated gzip tables into the fixed-layout, little-endian runtime table with:
+
+```bash
+python3 validation/scripts/compile_reaction_package.py \
+  --metadata validation/results/topas_200MeVu_reaction_packages_development.metadata.json \
+  --reactions validation/results/topas_200MeVu_reactions_development.csv.gz \
+  --secondaries validation/results/topas_200MeVu_secondaries_development.csv.gz \
+  --output validation/results/topas_200MeVu_reaction_packages_development.bin \
+  --output-metadata validation/results/topas_200MeVu_reaction_packages_development.binary.metadata.json
+```
+
+The compiler verifies the source hashes and row counts, reaction/secondary closure and per-reaction ordering before reorganizing complete packages into 201 one-MeV/u bins. It rejects empty runtime bins instead of silently sampling a different energy. The C++ loader independently validates the magic/version, record sizes, total file size, energy-bin coverage, secondary offsets and physical value ranges.
+
 If `topas` is already on PATH, omit `TOPAS_EXECUTABLE`. Raw files are written below `validation/topas/output/` and intentionally ignored by Git.
 
 If TOPAS is available only through an interactive-shell alias, pass the real executable and Geant4 data directory explicitly, for example:

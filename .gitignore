@@ -10,6 +10,7 @@ validation/results/*
 !validation/results/.gitkeep
 !validation/results/*.csv
 !validation/results/*.csv.gz
+!validation/results/*.bin
 !validation/results/*.json
 validation/topas/output/*
 !validation/topas/output/.gitkeep

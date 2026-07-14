@@ -36,6 +36,8 @@ Level 3 使用从 TOPAS primary-C12 生存代理拟合的有效宏观衰减系�
 
 100,000-history `fragment-development` 正式反应包已固化：37,657 次主 C-12 非弹性反应、330,659 个直接次级粒子，反应率 `37.657%`，平均多重性 `8.781`。两个没有直接可见次级粒子的低能反应以零长度反应包保留。压缩表、运行版本、耗时、输入/输出哈希及完整闭合检查记录在 `validation/results/topas_200MeVu_reaction_packages_development.metadata.json`；下一阶段是在 Arc B580 上实现固定容量次级粒子队列。
 
+为避免 Windows oneAPI 可执行文件依赖 zlib 或在运行时解析 CSV，`validation/scripts/compile_reaction_package.py` 会把两个 gzip 表编译为版本化的小端定长二进制表。当前 5.9 MB 二进制包含 201 个 1 MeV/u 分箱、37,657 个反应头和 330,659 个精简次级粒子记录，可由 `ReactionPackageTable::from_binary` 严格校验后直接复制到 GPU。GCC 12.2 和 Windows IntelLLVM 2025.3.3 均已通过真实数据加载测试。
+
 直接截面版本的 10,000-history 原生 B580 验证得到 3,816 次核反应，serial 得到 3,818 次；曲线 NRMSE 为 `1.38e-5`、R80 差 `-3.9e-5 mm`、1%/1 mm 与 2%/2 mm gamma 均为 `100%`。这两次事件差异来自 SYCL float 与 serial double 的采样边界，不影响当前剂量曲线一致性。
 
 ## WSL 构建

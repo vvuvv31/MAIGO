@@ -1,0 +1,31 @@
+{
+  "format": "carbon reaction package binary",
+  "format_version": 1,
+  "byte_order": "little-endian",
+  "source_metadata": "validation/results/topas_200MeVu_reaction_packages_development.metadata.json",
+  "source_metadata_sha256": "0304b9d016e3e800ad78411e62143d63e452e4b0d042d87eb290021e5a55fda6",
+  "source_reactions_sha256": "ab3801f13839a73683f8c3a1ec865062c498f6dee5b1bdff384912d396f80e25",
+  "source_secondaries_sha256": "560d4690c43d8482dd51e8f028a85bcd9d9fef6b38c9c009ab8e51ca6496933c",
+  "energy_bins": {
+    "minimum_MeV_per_u": 0.0,
+    "width_MeV_per_u": 1.0,
+    "count": 201,
+    "minimum_packages_per_bin": 2,
+    "maximum_packages_per_bin": 358
+  },
+  "records": {
+    "reactions": 37657,
+    "secondaries": 330659
+  },
+  "record_sizes_bytes": {
+    "header": 64,
+    "energy_bin": 8,
+    "reaction": 16,
+    "secondary": 16
+  },
+  "output": {
+    "path": "validation/results/topas_200MeVu_reaction_packages_development.bin",
+    "bytes": 5894728,
+    "sha256": "242e71a1901dfdf73043c7e9591091235328380f1258100e9fa2eb16c832a6dc"
+  }
+}

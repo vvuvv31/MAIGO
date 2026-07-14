@@ -1276,6 +1276,23 @@ python3 validation/scripts/prepare_topas_reactions.py \
 
 正式开发基准已经完成。TOPAS 4.2.p3 / Geant4 11.3.p2 在 100,000 个初级粒子中记录到 `37,657` 次主 C-12 非弹性反应和 `330,659` 个直接次级粒子，反应率为 `37.657%`，平均多重性为 `8.781`。运行耗时 `814.858 s`。其中两个低能反应没有直接可见次级粒子；它们以 `secondary_count=0` 保留，不能删除，否则会系统性低估反应概率。反应头与次级记录之和为 `368,316`，与 TOPAS header 完全闭合；压缩文件 SHA-256、行数及 offset/count 连续性也已验证。
 
+### 32.2 编译为 GPU 运行时表
+
+Windows oneAPI 程序不在运行时解析 gzip/CSV。使用标准库 Python 脚本先编译为小端定长二进制：
+
+```bash
+python3 validation/scripts/compile_reaction_package.py \
+  --metadata validation/results/topas_200MeVu_reaction_packages_development.metadata.json \
+  --reactions validation/results/topas_200MeVu_reactions_development.csv.gz \
+  --secondaries validation/results/topas_200MeVu_secondaries_development.csv.gz \
+  --output validation/results/topas_200MeVu_reaction_packages_development.bin \
+  --output-metadata validation/results/topas_200MeVu_reaction_packages_development.binary.metadata.json
+```
+
+version 1 格式由 64-byte header、201 个 8-byte 能量分箱、37,657 个 16-byte 反应头和 330,659 个 16-byte 次级粒子记录组成，总计 `5,894,728` bytes。次级记录只保留运行时需要的 PDG、Z、A、动能和 z 方向；完整三维方向仍保留在源 gzip 表中。每个 1 MeV/u 分箱至少有 2 个、最多有 358 个完整反应包。
+
+`ReactionPackageTable::from_binary` 独立验证 magic/version、ABI record size、文件长度、能量分箱覆盖、反应到次级 offset/count 闭合、能量和方向范围。真实正式数据测试已经同时通过 GCC 12.2 和 Windows IntelLLVM 2025.3.3。此处只完成了主机加载边界；下一步仍需把三个定长数组复制到 SYCL USM，并实现可检测溢出的 secondary queue。
+
 ---
 
 ## 33. GPU 队列设计
@@ -2349,7 +2366,7 @@ energy-loss straggling 模块。
 本项目当前已经完成到第 9 步，并完成了第 10 步所需的 TOPAS 数据接口、smoke 验证和 100000-history 正式反应包。紧接着应执行：
 
 ```text
-1. 实现主机端压缩 reaction package 加载器
+1. 将二进制 reaction package 数组复制到 SYCL USM
 2. 实现 B580 固定容量 secondary queue 和溢出检测
 3. 按 reaction_id 联合采样带电碎片
 4. 比较分粒种 IDD、尾积分和总能量

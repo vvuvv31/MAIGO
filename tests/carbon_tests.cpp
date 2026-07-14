@@ -1,4 +1,5 @@
 #include "carbon/cross_section.hpp"
+#include "carbon/reaction_package.hpp"
 #include "carbon/rng.hpp"
 #include "carbon/stopping_power.hpp"
 #include "carbon/straggling.hpp"
@@ -7,7 +8,10 @@
 
 #include <cmath>
 #include <cstdlib>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -25,6 +29,16 @@ void require_near(double actual, double expected, double tolerance, const std::s
         throw std::runtime_error(message + ": actual=" + std::to_string(actual) +
                                  ", expected=" + std::to_string(expected));
     }
+}
+
+template <typename Operation>
+void require_throws(Operation operation, const std::string& message) {
+    try {
+        operation();
+    } catch (const std::exception&) {
+        return;
+    }
+    throw std::runtime_error(message);
 }
 
 const carbon::CrossSectionTable& zero_cross_section() {
@@ -168,6 +182,72 @@ void test_primary_attenuation_energy_accounting() {
             "Zero-cross-section energy balance failed");
 }
 
+void test_reaction_package_loading() {
+    const auto source_directory = std::filesystem::path(CARBON_SOURCE_DIR);
+    const auto package_path =
+        source_directory / "validation/results/topas_200MeVu_reaction_packages_development.bin";
+    const auto table = carbon::ReactionPackageTable::from_binary(package_path);
+    require(table.energy_bins().size() == 201, "Reaction package energy-bin count failed");
+    require(table.reactions().size() == 37'657, "Reaction package reaction count failed");
+    require(table.secondaries().size() == 330'659,
+            "Reaction package secondary count failed");
+    require_near(table.minimum_energy_MeV_per_u(), 0.0, 1.0e-7,
+                 "Reaction package minimum energy failed");
+    require_near(table.energy_bin_width_MeV_per_u(), 1.0, 1.0e-7,
+                 "Reaction package energy-bin width failed");
+    require(table.energy_bin_index(-1.0F) == 0,
+            "Reaction package low-energy clamp failed");
+    require(table.energy_bin_index(200.0F) == 200,
+            "Reaction package exact energy-bin lookup failed");
+    require(table.energy_bin_index(500.0F) == 200,
+            "Reaction package high-energy clamp failed");
+    require(table.energy_bin_index(std::numeric_limits<float>::quiet_NaN()) == 0,
+            "Reaction package non-finite energy handling failed");
+
+    std::uint64_t reactions_from_bins = 0;
+    for (const auto& bin : table.energy_bins()) {
+        require(bin.reaction_count > 0, "Reaction package contains an empty energy bin");
+        reactions_from_bins += bin.reaction_count;
+    }
+    require(reactions_from_bins == table.reactions().size(),
+            "Reaction package energy-bin closure failed");
+
+    std::uint64_t secondaries_from_reactions = 0;
+    std::size_t empty_reactions = 0;
+    for (const auto& reaction : table.reactions()) {
+        secondaries_from_reactions += reaction.secondary_count;
+        empty_reactions += reaction.secondary_count == 0 ? 1U : 0U;
+    }
+    require(secondaries_from_reactions == table.secondaries().size(),
+            "Reaction package secondary closure failed");
+    require(empty_reactions == 2, "Reaction package zero-secondary count failed");
+
+    std::size_t protons = 0;
+    std::size_t neutrons = 0;
+    std::size_t gammas = 0;
+    std::size_t alphas = 0;
+    for (const auto& secondary : table.secondaries()) {
+        protons += secondary.pdg_id == 2212 ? 1U : 0U;
+        neutrons += secondary.pdg_id == 2112 ? 1U : 0U;
+        gammas += secondary.pdg_id == 22 ? 1U : 0U;
+        alphas += secondary.atomic_number == 2 && secondary.mass_number == 4 ? 1U : 0U;
+    }
+    require(protons == 93'437 && neutrons == 80'666 && gammas == 38'733 &&
+                alphas == 56'094,
+            "Reaction package particle composition failed");
+
+    const auto invalid_path =
+        std::filesystem::temp_directory_path() / "carbon_invalid_reaction_package.bin";
+    {
+        std::ofstream invalid(invalid_path, std::ios::binary | std::ios::trunc);
+        invalid << "not a reaction package";
+    }
+    require_throws(
+        [&invalid_path]() { (void)carbon::ReactionPackageTable::from_binary(invalid_path); },
+        "Invalid reaction package was accepted");
+    std::filesystem::remove(invalid_path);
+}
+
 #ifdef CARBON_HAS_SYCL
 void test_serial_sycl_cpu_match() {
     carbon::TransportConfig config;
@@ -236,6 +316,7 @@ int main() {
         test_escape_energy_conservation();
         test_straggling_reproducibility();
         test_primary_attenuation_energy_accounting();
+        test_reaction_package_loading();
 #ifdef CARBON_HAS_SYCL
         test_serial_sycl_cpu_match();
 #endif

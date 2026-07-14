@@ -13,6 +13,7 @@ add_library(carbon_core
     src/config.cpp
     src/cross_section.cpp
     src/io.cpp
+    src/reaction_package.cpp
     src/stopping_power.cpp
     src/transport_cpu.cpp
 )
@@ -43,5 +44,8 @@ if(CARBON_BUILD_TESTS)
     enable_testing()
     add_executable(carbon_tests tests/carbon_tests.cpp)
     target_link_libraries(carbon_tests PRIVATE carbon_core)
+    target_compile_definitions(
+        carbon_tests PRIVATE CARBON_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+    )
     add_test(NAME carbon_tests COMMAND carbon_tests)
 endif()
