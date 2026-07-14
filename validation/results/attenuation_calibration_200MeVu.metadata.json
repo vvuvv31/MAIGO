@@ -1,0 +1,18 @@
+{
+  "status": "Level-3 transition model; replace with energy-dependent H/O cross sections",
+  "fit_source_numerator": "topas_200MeVu_development_primary_c12.csv",
+  "fit_source_denominator": "TOPAS electromagnetic-only primary-C12 energy-deposit scorer",
+  "fit_depth_interval_mm": [5.0, 75.0],
+  "fit_model": "log(full_primary/em_only_primary) = intercept - Sigma*z",
+  "fitted_macroscopic_cross_section_per_mm": 0.0050613026,
+  "effective_mean_free_path_mm": 197.5776,
+  "fit_intercept": 0.0066862892,
+  "histories": 10000,
+  "straggling_scale": 1.2,
+  "primary_topas_peak_value_difference_percent": 4.935273432937611,
+  "primary_topas_FWHM_relative_difference_percent": -1.759166030827915,
+  "primary_topas_R80_difference_mm": 0.10081261675325948,
+  "primary_topas_gamma_2pct_2mm_percent": 98.28571428571429,
+  "full_topas_peak_value_difference_percent": 0.19058732916311003,
+  "full_topas_tail_integral_difference_percent": -92.43206176254097
+}

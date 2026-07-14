@@ -29,6 +29,8 @@
 
 另有 10,000-history 的 TOPAS 电磁物理隔离基准。使用一次性全局校准 `straggling_scale=1.2` 后，Level 2 结果为：R80 差 `+0.105 mm`、FWHM 相对差 `+2.29%`、峰值差 `+0.12%`、2%/2 mm gamma `97.28%`。后续 100–400 MeV/u 验证必须固定此参数。
 
+Level 3 使用从 TOPAS primary-C12 生存代理拟合的有效宏观衰减系数 `0.0050613 mm^-1`。相对 primary-C12 scorer，峰值差 `+4.94%`、FWHM 差 `-1.76%`、R80 差 `+0.101 mm`、2%/2 mm gamma `98.29%`。这仍是过渡模型：反应后的剩余能量只记入 `untracked_nuclear_energy`，尚未生成碎片；完整 TOPAS 的尾积分因此仍低约 `92.4%`。多能量验证前必须换成可追溯的 H/O 能量相关截面表。
+
 ## WSL 构建
 
 在 VS Code 的 WSL 窗口中打开本目录。CPU 调试构建：
