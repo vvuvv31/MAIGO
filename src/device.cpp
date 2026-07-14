@@ -14,7 +14,8 @@ sycl::queue make_sycl_queue(const std::string& device_name) {
             std::rethrow_exception(exception);
         }
     };
-    const sycl::property_list properties{sycl::property::queue::enable_profiling{}};
+    const sycl::property_list properties{sycl::property::queue::enable_profiling{},
+                                         sycl::property::queue::in_order{}};
 
     if (device_name == "gpu") {
         return sycl::queue{sycl::gpu_selector_v, async_handler, properties};
@@ -39,4 +40,3 @@ std::string describe_sycl_device(const std::string& device_name) {
 }  // namespace carbon
 
 #endif
-
