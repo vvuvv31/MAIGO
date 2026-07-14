@@ -1,10 +1,10 @@
 # 当前下一步
 
-TOPAS 祖先归属 3D dose scorer 和 10 万粒子正式基准已经完成。新 TOPAS 作业不再使用 WSL，而是在 `v@192.168.31.5:~/gpu` 运行；正式基准使用 TOPAS 4.1.p1、Geant4 11.1.3、seed `20260714` 和 56 线程。完整水模体网格为 `60 x 60 x 800`，voxel 为 `5 x 5 x 0.5 mm3`。
+TOPAS 祖先归属 3D dose scorer、全带电离子级联 scorer 和两个 10 万粒子正式基准均已完成。新 TOPAS 作业只在 `v@192.168.31.5:~/gpu` 运行，最多使用 56 线程；Windows 原生 Arc B580 负责 SYCL kernel。
 
 正式结果的祖先类别闭合最大误差为 `6.395e-14 MeV/primary/bin`，独立 TOPAS total 交叉检查为 `7.882e-7 MeV/primary/bin`，`unresolved=0`，未使用全局 scale。TOPAS 中性来源占全深度总剂量 `0.711%`，在 90 mm 后尾部占 `5.779%`。
 
-祖先归属对齐后，GPU 相对 TOPAS total 全深度差 `+0.402%`、90 mm 后差 `+15.452%`。He 全深度/尾部分别高 `+36.55%`/`+50.14%`，proton 分别低 `-24.86%`/`-34.15%`。因此下一步明确为：实现带电碎片的后续核反应与衰变级联，优先修正 He 过高和 proton 偏低；暂不优先实现 neutron/gamma 空间输运，也不得使用全局 scale。
+正式级联表包含 34 种 projectile、71,089 次可用 interaction、511,019 个产物。两代 B580 级联把 90 mm 后 raw-total 差从 `+15.452%` 降到 `+4.265%`，He 尾部从 `+50.14%` 降到 `+31.00%`；全深度 charged-origin total 为 `-0.213%`。proton 尾部反而为 `-39.16%`，因此下一步明确为：对 primary/cascade 数据中的 proton 产生率、能谱、角分布和反应通道做独立 QA，再决定怎样修正末态采样。不要继续盲目增加级联代数，不实现全局 scale，中性输运仍不是第一优先级。
 
 ---
 

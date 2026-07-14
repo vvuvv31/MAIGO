@@ -99,6 +99,30 @@ dose remains separate because the current GPU model has no spatial neutral
 transport. The current GPU output is IDD-only, so a GPU-vs-TOPAS 3D spatial
 comparison is not yet available.
 
+## Charged-fragment reaction cascade
+
+`CarbonCascadeNtuple` records every charged projectile inelastic interaction,
+the TOPAS macroscopic inelastic cross section at that energy, and all correlated
+direct products. In MT output the stable key is `(run, thread, event,
+interaction_sequence)`; track ID alone is not unique because a surviving track
+may interact more than once.
+
+Run `run_cascade_remote.sh smoke` before the detached 100,000-history
+`development` job. Standardize and compile with `prepare_topas_cascade.py` and
+`compile_cascade_package.py`. The accepted table contains 34 projectile
+isotopes, 71,089 usable interactions, 511,019 products, and 13,469 cross-section
+samples. Two Z4A4 interactions have zero TOPAS inelastic cross section and are
+excluded with an explicit metadata audit entry. No decay process was observed
+in this reference.
+
+The Windows B580 implementation transports at most two further generations in
+a breadth-first atomic queue. Descendants inherit the initial charged ancestor
+dose category. The 100,000-history run produced 36,856 cascade interactions and
+129,534 queued descendants with no overflow and `2.74e-8` relative energy-balance
+error. Raw-total tail difference at 90 mm improved from `+15.452%` to `+4.265%`
+without a global scale. Proton tail remains low by `39.16%` and is the next data
+QA target.
+
 ## Direct cross-section and reaction-final-state extraction
 
 The attenuation probability and the fragmentation final state are extracted separately from the same TOPAS/Geant4 physics configuration:
