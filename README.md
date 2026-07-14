@@ -25,7 +25,7 @@
 - Intel OpenCL CPU device（Core i5-14600K）；
 - TOPAS 4.2.p3 / Geant4 11.3.p2。
 
-当前 WSL 的 `sycl-ls` 尚未列出 Level Zero GPU，因此 SYCL kernel 已通过 `icpx` 编译，但只在 SYCL CPU 设备上实际执行。10,000-history TOPAS 开发基准与 CSDA 的比较为：R80 差 `+0.075 mm`、FWHM 相对差 `-29.9%`、峰值差 `+69.4%`、尾积分差 `-89.9%`。射程已经接近，峰宽、峰高和碎裂尾部仍是后续物理模块的工作，不应把这些差异解释为最终准确度。
+运行架构已明确分开：WSL 仅运行 TOPAS/Geant4 并生成参考数据；Windows 原生 oneAPI 通过 Level Zero 驱动 Intel Arc B580 执行 SYCL kernel。10,000-history TOPAS 开发基准与 CSDA 的比较为：R80 差 `+0.075 mm`、FWHM 相对差 `-29.9%`、峰值差 `+69.4%`、尾积分差 `-89.9%`。射程已经接近，峰宽、峰高和碎裂尾部仍是后续物理模块的工作，不应把这些差异解释为最终准确度。
 
 另有 10,000-history 的 TOPAS 电磁物理隔离基准。使用一次性全局校准 `straggling_scale=1.2` 后，Level 2 结果为：R80 差 `+0.105 mm`、FWHM 相对差 `+2.29%`、峰值差 `+0.12%`、2%/2 mm gamma `97.28%`。后续 100–400 MeV/u 验证必须固定此参数。
 
@@ -33,7 +33,7 @@ Level 3 使用从 TOPAS primary-C12 生存代理拟合的有效宏观衰减系�
 
 ## WSL 构建
 
-在 VS Code 的 WSL 窗口中打开本目录。CPU 调试构建：
+WSL 主要用于 TOPAS；也可在 VS Code 的 WSL 窗口中进行 CPU 调试构建：
 
 ```bash
 cmake --preset cpu-debug
@@ -42,7 +42,7 @@ ctest --preset cpu-debug
 ./build/cpu-debug/carbon_mc --config config/beam_200MeVu.yaml --device serial
 ```
 
-加载 Intel oneAPI 环境后构建 SYCL 版本：
+如需在 WSL 中构建 SYCL CPU 版本：
 
 ```bash
 source /opt/intel/oneapi/setvars.sh
@@ -54,7 +54,28 @@ ctest --preset oneapi-release
 
 如果 oneAPI 不在 `/opt/intel/oneapi`，请在运行上述命令前加载实际安装位置的 `setvars.sh`；项目本身不硬编码 oneAPI 路径。
 
-VS Code 可直接使用仓库中的 CMake Presets。推荐在 Remote WSL 窗口中选择 `cpu-debug` 或 `oneapi-release` preset；`.vscode` 中已包含扩展建议和 preset 设置。
+## Windows Arc B580 构建与运行
+
+在 Windows VS Code 终端中运行：
+
+```bat
+scripts\build_windows_oneapi.cmd
+scripts\run_windows_b580.cmd
+```
+
+脚本会依次初始化 Visual Studio 2026 C++ 工具链与 Intel oneAPI，并使用独立的 `oneapi-windows-release` preset/build 目录。B580 被限制到 `ONEAPI_DEVICE_SELECTOR=level_zero:0`，不会误选 OpenCL CPU。若 oneAPI 安装在其他位置，可预先设置 `ONEAPI_SETVARS`。
+
+100,000-history Windows 原生实测结果：
+
+- serial：`14,287 histories/s`；
+- SYCL CPU：`27,265 histories/s`；
+- Arc B580 Level Zero：`110,601 histories/s`；
+- B580 相对 serial：`7.74x`；
+- B580 相对 SYCL CPU：`4.06x`。
+
+为避免大统计量下 float 原子累积误差，SYCL dose scorer 使用 double atomic。B580 与 serial 的 100k 曲线 NRMSE 为 `1.16e-6`，R80 差 `2.1e-5 mm`，2%/2 mm gamma 为 `100%`。
+
+VS Code 可直接使用仓库中的 CMake Presets；`.vscode` 中已包含扩展、preset 设置和 Windows 构建/运行任务。
 
 ## 输出
 

@@ -19,7 +19,7 @@
     },
     {
       "name": "oneapi-release",
-      "displayName": "Intel oneAPI SYCL release",
+      "displayName": "Intel oneAPI SYCL release (WSL/Linux)",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/oneapi-release",
       "cacheVariables": {
@@ -28,11 +28,24 @@
         "CARBON_ENABLE_SYCL": "ON",
         "CARBON_BUILD_TESTS": "ON"
       }
+    },
+    {
+      "name": "oneapi-windows-release",
+      "displayName": "Intel oneAPI SYCL release (Windows/Arc GPU)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/oneapi-windows-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_CXX_COMPILER": "icx-cl",
+        "CARBON_ENABLE_SYCL": "ON",
+        "CARBON_BUILD_TESTS": "ON"
+      }
     }
   ],
   "buildPresets": [
     { "name": "cpu-debug", "configurePreset": "cpu-debug" },
-    { "name": "oneapi-release", "configurePreset": "oneapi-release" }
+    { "name": "oneapi-release", "configurePreset": "oneapi-release" },
+    { "name": "oneapi-windows-release", "configurePreset": "oneapi-windows-release" }
   ],
   "testPresets": [
     {
@@ -44,7 +57,11 @@
       "name": "oneapi-release",
       "configurePreset": "oneapi-release",
       "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "oneapi-windows-release",
+      "configurePreset": "oneapi-windows-release",
+      "output": { "outputOnFailure": true }
     }
   ]
 }
-

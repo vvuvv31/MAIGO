@@ -1,0 +1,21 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "oneAPI: Build and test Windows",
+      "type": "shell",
+      "command": "${workspaceFolder}\\scripts\\build_windows_oneapi.cmd",
+      "options": { "cwd": "${workspaceFolder}" },
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "oneAPI: Run Arc B580",
+      "type": "shell",
+      "command": "${workspaceFolder}\\scripts\\run_windows_b580.cmd",
+      "options": { "cwd": "${workspaceFolder}" },
+      "dependsOn": "oneAPI: Build and test Windows",
+      "problemMatcher": []
+    }
+  ]
+}
