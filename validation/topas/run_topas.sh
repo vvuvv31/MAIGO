@@ -14,8 +14,12 @@ case "${case_name}" in
     species-smoke) parameter_file="carbon_200MeVu_water_species_smoke.txt" ;;
     species-development) parameter_file="carbon_200MeVu_water_species_development.txt" ;;
     species-reference) parameter_file="carbon_200MeVu_water_species.txt" ;;
+    fragment-smoke) parameter_file="carbon_200MeVu_water_fragment_production_smoke.txt" ;;
+    fragment-development) parameter_file="carbon_200MeVu_water_fragment_production_development.txt" ;;
+    fragment-reference) parameter_file="carbon_200MeVu_water_fragment_production.txt" ;;
+    cross-sections) parameter_file="carbon_200MeVu_water_cross_sections.txt" ;;
     *)
-        printf 'Usage: %s [smoke|development|reference|em-smoke|em-development|species-smoke|species-development|species-reference]\n' "$0" >&2
+        printf 'Usage: %s [smoke|development|reference|em-smoke|em-development|species-smoke|species-development|species-reference|fragment-smoke|fragment-development|fragment-reference|cross-sections]\n' "$0" >&2
         exit 2
         ;;
 esac

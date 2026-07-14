@@ -33,3 +33,14 @@ sycl: add secondary particle queues
 validation: compare fragment-resolved idd
 
 最直接的下一项工作是：先修改 TOPAS 配置，输出按碎片种类分解的 IDD 基准。没有这组数据，GPU 碎片模型的产额和能谱无法可靠标定。之后再实现 B580 上的次级粒子队列。
+
+## 2026-07-14 进展
+
+上述 TOPAS 数据准备已经完成到可运行阶段：
+
+- 已生成 10 万粒子的按粒种 IDD 开发基准；
+- 已增加自定义截面计分器，直接从当前 TOPAS/Geant4 物理列表导出 1--400 MeV/u 的 C-12+H、C-12+O 和水中非弹性截面；
+- 已增加反应顶点 n-tuple，按事件保存反应前 C-12 能量及全部直接次级粒子的 A/Z、能量和方向；
+- 已用 100 粒子 smoke 作业验证扩展编译、截面闭合和反应包标准化。
+
+现在最直接的下一项工作是：让 CPU/SYCL 输运读取 `data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv` 并按当前能量插值宏观截面，替换配置中的常数 `nuclear_macroscopic_cross_section_per_mm`。完成 serial/SYCL 一致性测试后，再运行 10 万粒子 `fragment-development`，建立正式反应包数据，并实现 B580 上的预分配次级粒子队列。

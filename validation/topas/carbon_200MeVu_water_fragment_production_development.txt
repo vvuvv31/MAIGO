@@ -1,0 +1,15 @@
+includeFile = carbon_200MeVu_water_fragment_production.txt
+
+i:So/CarbonBeam/NumberOfHistoriesInRun = 100000
+s:Sc/CarbonReactionVertices/OutputFile = "output/fragment_development_reaction_vertices"
+s:Sc/OriginHydrogen/OutputFile = "output/fragment_development_origin_hydrogen"
+s:Sc/OriginHelium/OutputFile = "output/fragment_development_origin_helium"
+s:Sc/OriginLithium/OutputFile = "output/fragment_development_origin_lithium"
+s:Sc/OriginBeryllium/OutputFile = "output/fragment_development_origin_beryllium"
+s:Sc/OriginBoron/OutputFile = "output/fragment_development_origin_boron"
+s:Sc/OriginSecondaryCarbon/OutputFile = "output/fragment_development_origin_secondary_carbon"
+s:Sc/OriginProtonSpectrum/OutputFile = "output/fragment_development_origin_spectrum_proton"
+s:Sc/OriginDeuteronSpectrum/OutputFile = "output/fragment_development_origin_spectrum_deuteron"
+s:Sc/OriginTritonSpectrum/OutputFile = "output/fragment_development_origin_spectrum_triton"
+s:Sc/OriginHe3Spectrum/OutputFile = "output/fragment_development_origin_spectrum_he3"
+s:Sc/OriginAlphaSpectrum/OutputFile = "output/fragment_development_origin_spectrum_alpha"

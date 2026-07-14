@@ -43,6 +43,41 @@ The species curves represent energy deposited directly on each particle track. E
 
 The metadata also records SHA-256 hashes for every raw scorer and the TOPAS log, the detected Geant4 version and elapsed wall time, integrated species fractions, and species fractions in the tail beginning at 90 mm. Change the analysis boundary with `--tail-start-mm` only when a different boundary is recorded for the comparison.
 
+## Direct cross-section and reaction-final-state extraction
+
+The attenuation probability and the fragmentation final state are extracted separately from the same TOPAS/Geant4 physics configuration:
+
+- `CarbonCrossSectionNtuple` directly queries `G4HadronicProcessStore` for C-12+H, C-12+O, and Water_75eV inelastic cross sections from 1 to 400 MeV/u. This table determines the reaction distance in the GPU transport.
+- `CarbonReactionNtuple` records the primary C-12 inelastic reaction header and every direct secondary in the same event, including incident energy, vertex, particle identity, kinetic energy, direction, creator process, and model ID. Rows with one `reaction_id` must be sampled jointly.
+- the OriginCount and species-resolved IDD scorers are independent QA observables; they must not replace correlated event-level final-state sampling.
+
+Build the extension-enabled TOPAS executable in WSL (all generated source/build/install files remain under the ignored project `build/` directory):
+
+```bash
+bash validation/topas/build_extensions.sh
+```
+
+Extract and standardize the cross-section table:
+
+```bash
+export TOPAS_EXECUTABLE="$PWD/build/opentopas-extension-install/bin/topas"
+export TOPAS_G4_DATA_DIR="$HOME/Applications/GEANT4/G4DATA"
+./validation/topas/run_topas.sh cross-sections
+python3 validation/scripts/prepare_topas_cross_sections.py
+```
+
+Run and validate a 100-history reaction-final-state smoke case:
+
+```bash
+./validation/topas/run_topas.sh fragment-smoke
+python3 validation/scripts/prepare_topas_reactions.py \
+  --case smoke --histories 100 \
+  --output-csv validation/topas/output/fragment_smoke_reaction_sampling.csv \
+  --metadata validation/topas/output/fragment_smoke_reaction_sampling.metadata.json
+```
+
+Use `fragment-development` with 100,000 histories for the calibration dataset and `fragment-reference` for the one-million-history promotion run. The standardizer converts TOPAS global `z=-200...200 mm` to water depth `0...400 mm`, checks that every secondary has exactly one primary-reaction header, and verifies reaction-vertex and incident-energy consistency.
+
 If `topas` is already on PATH, omit `TOPAS_EXECUTABLE`. Raw files are written below `validation/topas/output/` and intentionally ignored by Git.
 
 If TOPAS is available only through an interactive-shell alias, pass the real executable and Geant4 data directory explicitly, for example:
