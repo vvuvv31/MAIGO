@@ -15,7 +15,6 @@ namespace carbon {
 namespace {
 
 constexpr std::array<char, 8> expected_magic{'C', 'R', 'P', 'K', 'G', '0', '1', '\0'};
-constexpr std::uint32_t format_version = 1;
 
 struct BinaryHeader {
     char magic[8];
@@ -31,11 +30,20 @@ struct BinaryHeader {
     std::uint64_t secondary_count;
     std::uint64_t expected_file_size;
 };
+struct ReactionSecondaryV1 {
+    std::int32_t pdg_id;
+    std::int16_t atomic_number;
+    std::int16_t mass_number;
+    float kinetic_energy_MeV;
+    float direction_z;
+};
+
+static_assert(sizeof(ReactionSecondaryV1) == 16);
 
 static_assert(sizeof(BinaryHeader) == 64);
 static_assert(sizeof(ReactionEnergyBin) == 8);
 static_assert(sizeof(ReactionPackage) == 16);
-static_assert(sizeof(ReactionSecondary) == 16);
+static_assert(sizeof(ReactionSecondary) == 24);
 static_assert(std::is_trivially_copyable_v<ReactionEnergyBin>);
 static_assert(std::is_trivially_copyable_v<ReactionPackage>);
 static_assert(std::is_trivially_copyable_v<ReactionSecondary>);
@@ -64,7 +72,7 @@ void read_records(std::ifstream& input,
 
 ReactionPackageTable ReactionPackageTable::from_binary(const std::filesystem::path& path) {
     if constexpr (std::endian::native != std::endian::little) {
-        throw std::runtime_error("Reaction package version 1 requires a little-endian host");
+        throw std::runtime_error("Reaction packages require a little-endian host");
     }
     std::ifstream input(path, std::ios::binary | std::ios::ate);
     if (!input) {
@@ -84,10 +92,14 @@ ReactionPackageTable ReactionPackageTable::from_binary(const std::filesystem::pa
     if (!std::equal(expected_magic.begin(), expected_magic.end(), header.magic)) {
         throw std::runtime_error("Invalid reaction package magic: " + path.string());
     }
-    if (header.version != format_version || header.header_size != sizeof(BinaryHeader) ||
+    const auto legacy_v1 = header.version == 1;
+    const auto expected_secondary_size =
+        legacy_v1 ? sizeof(ReactionSecondaryV1) : sizeof(ReactionSecondary);
+    if ((header.version != 1 && header.version != 2) ||
+        header.header_size != sizeof(BinaryHeader) ||
         header.energy_bin_record_size != sizeof(ReactionEnergyBin) ||
         header.reaction_record_size != sizeof(ReactionPackage) ||
-        header.secondary_record_size != sizeof(ReactionSecondary)) {
+        header.secondary_record_size != expected_secondary_size) {
         throw std::runtime_error("Unsupported reaction package layout: " + path.string());
     }
     if (header.energy_bin_count == 0 || header.reaction_count == 0 ||
@@ -100,7 +112,7 @@ ReactionPackageTable ReactionPackageTable::from_binary(const std::filesystem::pa
         static_cast<std::uint64_t>(sizeof(BinaryHeader)) +
         static_cast<std::uint64_t>(header.energy_bin_count) * sizeof(ReactionEnergyBin) +
         header.reaction_count * sizeof(ReactionPackage) +
-        header.secondary_count * sizeof(ReactionSecondary);
+        header.secondary_count * header.secondary_record_size;
     if (header.expected_file_size != computed_file_size || file_size != computed_file_size) {
         throw std::runtime_error("Reaction package file-size mismatch: " + path.string());
     }
@@ -110,7 +122,19 @@ ReactionPackageTable ReactionPackageTable::from_binary(const std::filesystem::pa
     table.energy_bin_width_MeV_per_u_ = header.energy_bin_width_MeV_per_u;
     read_records(input, table.energy_bins_, header.energy_bin_count, path, "energy-bin");
     read_records(input, table.reactions_, header.reaction_count, path, "reaction");
-    read_records(input, table.secondaries_, header.secondary_count, path, "secondary");
+    if (legacy_v1) {
+        std::vector<ReactionSecondaryV1> legacy_secondaries;
+        read_records(input, legacy_secondaries, header.secondary_count, path, "secondary");
+        table.secondaries_.reserve(legacy_secondaries.size());
+        const auto missing = std::numeric_limits<float>::quiet_NaN();
+        for (const auto& secondary : legacy_secondaries) {
+            table.secondaries_.push_back(ReactionSecondary{
+                secondary.pdg_id, secondary.atomic_number, secondary.mass_number,
+                secondary.kinetic_energy_MeV, missing, missing, secondary.direction_z});
+        }
+    } else {
+        read_records(input, table.secondaries_, header.secondary_count, path, "secondary");
+    }
 
     std::uint64_t expected_reaction_offset = 0;
     for (std::size_t bin_index = 0; bin_index < table.energy_bins_.size(); ++bin_index) {
@@ -152,10 +176,19 @@ ReactionPackageTable ReactionPackageTable::from_binary(const std::filesystem::pa
                                  path.string());
     }
     for (const auto& secondary : table.secondaries_) {
+        const auto has_x = std::isfinite(secondary.direction_x);
+        const auto has_y = std::isfinite(secondary.direction_y);
+        const auto direction_norm_squared =
+            secondary.direction_x * secondary.direction_x +
+            secondary.direction_y * secondary.direction_y +
+            secondary.direction_z * secondary.direction_z;
         if (secondary.atomic_number < 0 || secondary.mass_number < 0 ||
             !std::isfinite(secondary.kinetic_energy_MeV) ||
             secondary.kinetic_energy_MeV < 0.0F || !std::isfinite(secondary.direction_z) ||
-            secondary.direction_z < -1.0001F || secondary.direction_z > 1.0001F) {
+            secondary.direction_z < -1.0001F || secondary.direction_z > 1.0001F ||
+            has_x != has_y ||
+            (has_x && (!std::isfinite(direction_norm_squared) ||
+                       std::abs(direction_norm_squared - 1.0F) > 2.0e-3F))) {
             throw std::runtime_error("Invalid reaction secondary value: " + path.string());
         }
     }

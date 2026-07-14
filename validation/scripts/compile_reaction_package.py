@@ -14,11 +14,47 @@ from pathlib import Path
 
 
 MAGIC = b"CRPKG01\0"
-VERSION = 1
+VERSION = 2
 HEADER = struct.Struct("<8sIIIIIIffQQQ")
 ENERGY_BIN = struct.Struct("<II")
 REACTION = struct.Struct("<ffII")
-SECONDARY = struct.Struct("<ihhff")
+SECONDARY = struct.Struct("<ihhffff")
+
+
+def read_unit_direction(
+    row: dict[str, str], columns: tuple[str, str, str], label: str
+) -> tuple[float, float, float]:
+    direction = tuple(float(row[column]) for column in columns)
+    norm_squared = sum(component * component for component in direction)
+    if (not all(math.isfinite(component) for component in direction)
+            or abs(norm_squared - 1.0) > 2.0e-3):
+        raise SystemExit(f"Invalid unit direction for {label}: {direction}")
+    inverse_norm = 1.0 / math.sqrt(norm_squared)
+    return tuple(component * inverse_norm for component in direction)
+
+
+def direction_in_parent_frame(
+    direction: tuple[float, float, float],
+    parent: tuple[float, float, float],
+) -> tuple[float, float, float]:
+    wx, wy, wz = parent
+    reference = (1.0, 0.0, 0.0) if abs(wx) < 0.9 else (0.0, 1.0, 0.0)
+    projection = sum(reference[index] * parent[index] for index in range(3))
+    u_raw = tuple(reference[index] - projection * parent[index] for index in range(3))
+    u_norm = math.sqrt(sum(component * component for component in u_raw))
+    u = tuple(component / u_norm for component in u_raw)
+    v = (
+        wy * u[2] - wz * u[1],
+        wz * u[0] - wx * u[2],
+        wx * u[1] - wy * u[0],
+    )
+    local = (
+        sum(direction[index] * u[index] for index in range(3)),
+        sum(direction[index] * v[index] for index in range(3)),
+        sum(direction[index] * parent[index] for index in range(3)),
+    )
+    local_norm = math.sqrt(sum(component * component for component in local))
+    return tuple(component / local_norm for component in local)
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -81,6 +117,9 @@ def main() -> None:
             "reaction_depth_mm",
             "secondary_count",
             "secondary_offset_zero_based",
+            "incident_direction_x",
+            "incident_direction_y",
+            "incident_direction_z",
         ),
         "reaction",
     )
@@ -93,6 +132,8 @@ def main() -> None:
             "atomic_number_Z",
             "mass_number_A",
             "kinetic_energy_MeV",
+            "direction_x",
+            "direction_y",
             "direction_z",
         ),
         "secondary",
@@ -135,7 +176,7 @@ def main() -> None:
         )
 
     ordered_reactions: list[tuple[float, float, int, int]] = []
-    ordered_secondaries: list[tuple[int, int, int, float, float]] = []
+    ordered_secondaries: list[tuple[int, int, int, float, float, float, float]] = []
     binary_bins: list[tuple[int, int]] = []
     for members in bins:
         binary_bins.append((len(ordered_reactions), len(members)))
@@ -143,6 +184,11 @@ def main() -> None:
             row = reaction_rows[row_index]
             source_offset = int(row["secondary_offset_zero_based"])
             count = int(row["secondary_count"])
+            incident_direction = read_unit_direction(
+                row,
+                ("incident_direction_x", "incident_direction_y", "incident_direction_z"),
+                f"reaction {row['reaction_id']} incident particle",
+            )
             output_offset = len(ordered_secondaries)
             ordered_reactions.append(
                 (
@@ -158,21 +204,26 @@ def main() -> None:
                 if not (-32768 <= atomic_number <= 32767 and -32768 <= mass_number <= 32767):
                     raise SystemExit("Secondary Z/A exceeds the binary int16 range")
                 kinetic_energy = float(secondary["kinetic_energy_MeV"])
-                direction_z = float(secondary["direction_z"])
-                if kinetic_energy < 0.0 or not -1.0001 <= direction_z <= 1.0001:
+                if kinetic_energy < 0.0 or not math.isfinite(kinetic_energy):
                     raise SystemExit("Invalid secondary energy or direction")
+                global_direction = read_unit_direction(
+                    secondary, ("direction_x", "direction_y", "direction_z"),
+                    f"reaction {row['reaction_id']} secondary",
+                )
+                local_direction = direction_in_parent_frame(
+                    global_direction, incident_direction)
                 ordered_secondaries.append(
                     (
                         int(secondary["pdg_id"]),
                         atomic_number,
                         mass_number,
                         kinetic_energy,
-                        direction_z,
+                        *local_direction,
                     )
                 )
 
     if len(ordered_reactions) > 0xFFFFFFFF or len(ordered_secondaries) > 0xFFFFFFFF:
-        raise SystemExit("Version 1 binary offsets are limited to uint32")
+        raise SystemExit("Version 2 binary offsets are limited to uint32")
     expected_file_size = (
         HEADER.size
         + len(binary_bins) * ENERGY_BIN.size
@@ -210,6 +261,8 @@ def main() -> None:
         "format": "carbon reaction package binary",
         "format_version": VERSION,
         "byte_order": "little-endian",
+        "direction_coordinates": "projectile-local orthonormal frame",
+        "direction_components": ["local_x", "local_y", "along_projectile"],
         "source_metadata": args.metadata.as_posix(),
         "source_metadata_sha256": sha256(args.metadata),
         "source_reactions_sha256": sha256(args.reactions),

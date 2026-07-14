@@ -24,6 +24,8 @@ struct ReactionSecondary {
     std::int16_t atomic_number{0};
     std::int16_t mass_number{0};
     float kinetic_energy_MeV{0.0F};
+    float direction_x{0.0F};
+    float direction_y{0.0F};
     float direction_z{0.0F};
 };
 

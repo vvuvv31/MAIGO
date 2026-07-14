@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstring>
 #include <fstream>
+#include <limits>
 #include <stdexcept>
 #include <string>
 
@@ -26,6 +27,16 @@ struct CascadeFileHeader {
     std::uint64_t product_count;
     std::uint64_t file_size;
 };
+
+struct ReactionSecondaryV1 {
+    std::int32_t pdg_id;
+    std::int16_t atomic_number;
+    std::int16_t mass_number;
+    float kinetic_energy_MeV;
+    float direction_z;
+};
+
+static_assert(sizeof(ReactionSecondaryV1) == 16);
 
 static_assert(sizeof(CascadeFileHeader) == 72);
 constexpr std::array<char, 8> cascade_magic{'C', 'C', 'A', 'S', '0', '0', '1', '\0'};
@@ -60,12 +71,16 @@ CascadePackageTable CascadePackageTable::from_binary(const std::filesystem::path
     input.seekg(0);
     CascadeFileHeader header{};
     input.read(reinterpret_cast<char*>(&header), sizeof(header));
-    if (!input || header.magic != cascade_magic || header.version != 1 ||
+    const auto legacy_v1 = header.version == 1;
+    const auto expected_product_size =
+        legacy_v1 ? sizeof(ReactionSecondaryV1) : sizeof(ReactionSecondary);
+    if (!input || header.magic != cascade_magic ||
+        (header.version != 1 && header.version != 2) ||
         header.header_size != sizeof(header) ||
         header.projectile_size != sizeof(CascadeProjectile) ||
         header.cross_section_size != sizeof(CascadeCrossSectionSample) ||
         header.interaction_size != sizeof(CascadeInteraction) ||
-        header.product_size != sizeof(ReactionSecondary) || header.projectile_count == 0) {
+        header.product_size != expected_product_size || header.projectile_count == 0) {
         throw std::runtime_error("Unsupported cascade package layout: " + path.string());
     }
     if (actual_size < 0 || header.file_size != static_cast<std::uint64_t>(actual_size)) {
@@ -76,7 +91,19 @@ CascadePackageTable CascadePackageTable::from_binary(const std::filesystem::path
     read_records(input, table.projectiles_, header.projectile_count, path, "projectile");
     read_records(input, table.cross_sections_, header.cross_section_count, path, "cross-section");
     read_records(input, table.interactions_, header.interaction_count, path, "interaction");
-    read_records(input, table.products_, header.product_count, path, "product");
+    if (legacy_v1) {
+        std::vector<ReactionSecondaryV1> legacy_products;
+        read_records(input, legacy_products, header.product_count, path, "product");
+        table.products_.reserve(legacy_products.size());
+        const auto missing = std::numeric_limits<float>::quiet_NaN();
+        for (const auto& product : legacy_products) {
+            table.products_.push_back(ReactionSecondary{
+                product.pdg_id, product.atomic_number, product.mass_number,
+                product.kinetic_energy_MeV, missing, missing, product.direction_z});
+        }
+    } else {
+        read_records(input, table.products_, header.product_count, path, "product");
+    }
 
     std::uint64_t expected_xs_offset = 0;
     std::uint64_t expected_interaction_offset = 0;
@@ -139,9 +166,17 @@ CascadePackageTable CascadePackageTable::from_binary(const std::filesystem::path
         throw std::runtime_error("Cascade product ranges do not close: " + path.string());
     }
     for (const auto& product : table.products_) {
+        const auto has_x = std::isfinite(product.direction_x);
+        const auto has_y = std::isfinite(product.direction_y);
+        const auto direction_norm_squared = product.direction_x * product.direction_x +
+                                            product.direction_y * product.direction_y +
+                                            product.direction_z * product.direction_z;
         if (!std::isfinite(product.kinetic_energy_MeV) ||
             !std::isfinite(product.direction_z) || product.kinetic_energy_MeV < 0.0F ||
-            product.direction_z < -1.0001F || product.direction_z > 1.0001F) {
+            product.direction_z < -1.0001F || product.direction_z > 1.0001F ||
+            has_x != has_y ||
+            (has_x && (!std::isfinite(direction_norm_squared) ||
+                       std::abs(direction_norm_squared - 1.0F) > 2.0e-3F))) {
             throw std::runtime_error("Invalid cascade product: " + path.string());
         }
     }

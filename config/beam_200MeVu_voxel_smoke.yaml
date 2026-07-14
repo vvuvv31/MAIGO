@@ -1,6 +1,7 @@
 # 100-history GPU smoke for the first 60x60x800 voxel scorer milestone.
 # The current transport remains 1D, so dose is intentionally deposited in the
 # central x/y voxel. Summing x/y must reconstruct the existing 800-bin IDD.
+# The _3d v2 packages preserve projectile-local x/y/z directions for the next stage.
 number_of_histories: 100
 initial_energy_MeVu: 200.0
 mass_number: 12
@@ -27,8 +28,8 @@ secondary_queue_capacity: 100000
 random_seed: 20260714
 stopping_power_file: data/stopping_power_water.csv
 nuclear_cross_section_file: data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv
-reaction_package_file: validation/results/topas_200MeVu_cascade_aligned_primary.bin
-cascade_package_file: validation/results/topas_200MeVu_cascade_100k.bin
+reaction_package_file: validation/results/topas_200MeVu_cascade_aligned_primary_3d.bin
+cascade_package_file: validation/results/topas_200MeVu_cascade_100k_3d.bin
 output_file: out/windows_b580_voxel_smoke_idd.csv
 fragment_species_output_file: out/windows_b580_voxel_smoke_species.csv
 voxel_dose_output_file: out/windows_b580_voxel_smoke_voxels.csv

@@ -81,6 +81,9 @@ def main() -> None:
             "reaction_depth_mm": interaction["depth_mm"],
             "secondary_count": len(products),
             "secondary_offset_zero_based": len(secondary_rows),
+            "incident_direction_x": interaction["direction_x"],
+            "incident_direction_y": interaction["direction_y"],
+            "incident_direction_z": interaction["direction_z"],
             "source_interaction_id": interaction_id,
             "source_event_id": interaction["event_id"],
         })
@@ -92,6 +95,8 @@ def main() -> None:
                 "atomic_number_Z": product["Z"],
                 "mass_number_A": product["A"],
                 "kinetic_energy_MeV": product["kinetic_energy_MeV"],
+                "direction_x": product["direction_x"],
+                "direction_y": product["direction_y"],
                 "direction_z": product["direction_z"],
                 "source_track_id": product["track_id"],
                 "particle_name": product["particle_name"],

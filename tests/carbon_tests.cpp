@@ -301,6 +301,8 @@ void test_reaction_package_loading() {
     std::size_t gammas = 0;
     std::size_t alphas = 0;
     for (const auto& secondary : table.secondaries()) {
+        require(std::isnan(secondary.direction_x) && std::isnan(secondary.direction_y),
+                "Reaction package v1 transverse direction sentinel failed");
         protons += secondary.pdg_id == 2212 ? 1U : 0U;
         neutrons += secondary.pdg_id == 2112 ? 1U : 0U;
         gammas += secondary.pdg_id == 22 ? 1U : 0U;
@@ -309,6 +311,22 @@ void test_reaction_package_loading() {
     require(protons == 93'437 && neutrons == 80'666 && gammas == 38'733 &&
                 alphas == 56'094,
             "Reaction package particle composition failed");
+
+    const auto v2_path = source_directory /
+                         "validation/results/topas_200MeVu_cascade_aligned_primary_3d.bin";
+    const auto v2_table = carbon::ReactionPackageTable::from_binary(v2_path);
+    require(v2_table.reactions().size() == 37'661,
+            "Reaction package v2 reaction count failed");
+    require(v2_table.secondaries().size() == 323'901,
+            "Reaction package v2 secondary count failed");
+    for (const auto& secondary : v2_table.secondaries()) {
+        require(std::isfinite(secondary.direction_x) && std::isfinite(secondary.direction_y),
+                "Reaction package v2 transverse direction is not finite");
+        const auto norm_squared = secondary.direction_x * secondary.direction_x +
+                                  secondary.direction_y * secondary.direction_y +
+                                  secondary.direction_z * secondary.direction_z;
+        require_near(norm_squared, 1.0, 2.0e-3, "Reaction package v2 direction norm failed");
+    }
 
     const auto invalid_path =
         std::filesystem::temp_directory_path() / "carbon_invalid_reaction_package.bin";
@@ -327,6 +345,10 @@ void test_cascade_package_loading() {
     const auto package_path =
         source_directory / "validation/results/topas_200MeVu_cascade_smoke.bin";
     const auto table = carbon::CascadePackageTable::from_binary(package_path);
+    for (const auto& product : table.products()) {
+        require(std::isnan(product.direction_x) && std::isnan(product.direction_y),
+                "Cascade package v1 transverse direction sentinel failed");
+    }
     require(table.projectiles().size() == 11, "Cascade projectile count failed");
     require(table.cross_sections().size() == 252, "Cascade cross-section count failed");
     require(table.interactions().size() == 58, "Cascade interaction count failed");
@@ -336,6 +358,19 @@ void test_cascade_package_loading() {
             "Cascade alpha lookup failed");
     require(table.find_projectile(5, 12) == nullptr,
             "Cascade missing-projectile lookup failed");
+
+    const auto v2_path =
+        source_directory / "validation/results/topas_200MeVu_cascade_smoke_3d.bin";
+    const auto v2_table = carbon::CascadePackageTable::from_binary(v2_path);
+    require(v2_table.products().size() == 399, "Cascade package v2 product count failed");
+    for (const auto& product : v2_table.products()) {
+        require(std::isfinite(product.direction_x) && std::isfinite(product.direction_y),
+                "Cascade package v2 transverse direction is not finite");
+        const auto norm_squared = product.direction_x * product.direction_x +
+                                  product.direction_y * product.direction_y +
+                                  product.direction_z * product.direction_z;
+        require_near(norm_squared, 1.0, 2.0e-3, "Cascade package v2 direction norm failed");
+    }
 }
 
 #ifdef CARBON_HAS_SYCL

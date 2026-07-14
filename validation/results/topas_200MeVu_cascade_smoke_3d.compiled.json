@@ -1,0 +1,92 @@
+{
+  "format": "charged-fragment cascade package",
+  "version": 2,
+  "direction_coordinates": "projectile-local orthonormal frame",
+  "direction_components": [
+    "local_x",
+    "local_y",
+    "along_projectile"
+  ],
+  "source_metadata": "validation/results/topas_200MeVu_cascade_smoke.metadata.json",
+  "source_metadata_sha256": "469e9ec53aab95fa51b2d4c73adcd259314462c97743fd5c1edac160f63c4990",
+  "records": {
+    "projectiles": 11,
+    "cross_section_samples": 252,
+    "interactions": 58,
+    "products": 399
+  },
+  "species": {
+    "Z1A1": {
+      "cross_section_samples": 105,
+      "interactions": 5,
+      "minimum_energy_MeV_per_u": 44.622,
+      "maximum_energy_MeV_per_u": 176.686
+    },
+    "Z1A2": {
+      "cross_section_samples": 25,
+      "interactions": 3,
+      "minimum_energy_MeV_per_u": 28.8119,
+      "maximum_energy_MeV_per_u": 179.916
+    },
+    "Z1A3": {
+      "cross_section_samples": 4,
+      "interactions": 2,
+      "minimum_energy_MeV_per_u": 74.8166666667,
+      "maximum_energy_MeV_per_u": 89.449
+    },
+    "Z2A4": {
+      "cross_section_samples": 60,
+      "interactions": 9,
+      "minimum_energy_MeV_per_u": 52.33275,
+      "maximum_energy_MeV_per_u": 118.3335
+    },
+    "Z3A6": {
+      "cross_section_samples": 4,
+      "interactions": 1,
+      "minimum_energy_MeV_per_u": 122.561833333,
+      "maximum_energy_MeV_per_u": 122.561833333
+    },
+    "Z3A7": {
+      "cross_section_samples": 2,
+      "interactions": 1,
+      "minimum_energy_MeV_per_u": 46.0351428571,
+      "maximum_energy_MeV_per_u": 46.0351428571
+    },
+    "Z3A8": {
+      "cross_section_samples": 2,
+      "interactions": 1,
+      "minimum_energy_MeV_per_u": 153.4475,
+      "maximum_energy_MeV_per_u": 153.4475
+    },
+    "Z4A10": {
+      "cross_section_samples": 2,
+      "interactions": 1,
+      "minimum_energy_MeV_per_u": 166.025,
+      "maximum_energy_MeV_per_u": 166.025
+    },
+    "Z6A10": {
+      "cross_section_samples": 2,
+      "interactions": 1,
+      "minimum_energy_MeV_per_u": 29.2286,
+      "maximum_energy_MeV_per_u": 29.2286
+    },
+    "Z6A11": {
+      "cross_section_samples": 8,
+      "interactions": 1,
+      "minimum_energy_MeV_per_u": 77.9842727273,
+      "maximum_energy_MeV_per_u": 77.9842727273
+    },
+    "Z6A12": {
+      "cross_section_samples": 38,
+      "interactions": 33,
+      "minimum_energy_MeV_per_u": 22.1918333333,
+      "maximum_energy_MeV_per_u": 194.841666667
+    }
+  },
+  "skipped_zero_cross_section_species": {},
+  "output": {
+    "path": "validation/results/topas_200MeVu_cascade_smoke_3d.bin",
+    "bytes": 12580,
+    "sha256": "d852b1898ee1bedc75222dbb6a5ffcd519763485c44e876c4b54f1cdc65324b9"
+  }
+}

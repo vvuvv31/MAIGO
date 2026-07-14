@@ -16,12 +16,48 @@ from pathlib import Path
 
 
 MAGIC = b"CCAS001\0"
-VERSION = 1
+VERSION = 2
 HEADER = struct.Struct("<8sIIIIIIIIQQQQ")
 PROJECTILE = struct.Struct("<hhIIII")
 XS_SAMPLE = struct.Struct("<ff")
 INTERACTION = struct.Struct("<fII")
-PRODUCT = struct.Struct("<ihhff")
+PRODUCT = struct.Struct("<ihhffff")
+
+
+def read_unit_direction(
+    row: dict[str, str], columns: tuple[str, str, str], label: str
+) -> tuple[float, float, float]:
+    direction = tuple(float(row[column]) for column in columns)
+    norm_squared = sum(component * component for component in direction)
+    if (not all(math.isfinite(component) for component in direction)
+            or abs(norm_squared - 1.0) > 2.0e-3):
+        raise SystemExit(f"Invalid unit direction for {label}: {direction}")
+    inverse_norm = 1.0 / math.sqrt(norm_squared)
+    return tuple(component * inverse_norm for component in direction)
+
+
+def direction_in_parent_frame(
+    direction: tuple[float, float, float],
+    parent: tuple[float, float, float],
+) -> tuple[float, float, float]:
+    wx, wy, wz = parent
+    reference = (1.0, 0.0, 0.0) if abs(wx) < 0.9 else (0.0, 1.0, 0.0)
+    projection = sum(reference[index] * parent[index] for index in range(3))
+    u_raw = tuple(reference[index] - projection * parent[index] for index in range(3))
+    u_norm = math.sqrt(sum(component * component for component in u_raw))
+    u = tuple(component / u_norm for component in u_raw)
+    v = (
+        wy * u[2] - wz * u[1],
+        wz * u[0] - wx * u[2],
+        wx * u[1] - wy * u[0],
+    )
+    local = (
+        sum(direction[index] * u[index] for index in range(3)),
+        sum(direction[index] * v[index] for index in range(3)),
+        sum(direction[index] * parent[index] for index in range(3)),
+    )
+    local_norm = math.sqrt(sum(component * component for component in local))
+    return tuple(component / local_norm for component in local)
 
 
 def sha256(path: Path) -> str:
@@ -95,7 +131,7 @@ def main() -> None:
     binary_projectiles: list[tuple[int, int, int, int, int, int]] = []
     binary_xs: list[tuple[float, float]] = []
     binary_interactions: list[tuple[float, int, int]] = []
-    binary_products: list[tuple[int, int, int, float, float]] = []
+    binary_products: list[tuple[int, int, int, float, float, float, float]] = []
     species_metadata: dict[str, object] = {}
     skipped_zero_cross_section: dict[str, object] = {}
     for (z, a), species_interactions in sorted(interactions_by_species.items()):
@@ -111,15 +147,24 @@ def main() -> None:
         interaction_offset = len(binary_interactions)
         for row in sorted(species_interactions, key=lambda item: float(item["incident_energy_MeV_per_u"])):
             interaction_id = int(row["interaction_id"])
+            incident_direction = read_unit_direction(
+                row, ("direction_x", "direction_y", "direction_z"),
+                f"interaction {interaction_id} incident particle",
+            )
             product_offset = len(binary_products)
             members = products_by_interaction[interaction_id]
             for product in members:
                 energy = float(product["kinetic_energy_MeV"])
-                direction_z = float(product["direction_z"])
-                if energy < 0.0 or not math.isfinite(energy) or not -1.0001 <= direction_z <= 1.0001:
+                if energy < 0.0 or not math.isfinite(energy):
                     raise SystemExit(f"Invalid product in interaction {interaction_id}")
+                global_direction = read_unit_direction(
+                    product, ("direction_x", "direction_y", "direction_z"),
+                    f"interaction {interaction_id} product",
+                )
+                local_direction = direction_in_parent_frame(
+                    global_direction, incident_direction)
                 binary_products.append((int(product["pdg_id"]), int(product["Z"]),
-                                        int(product["A"]), energy, direction_z))
+                                        int(product["A"]), energy, *local_direction))
             binary_interactions.append((float(row["incident_energy_MeV_per_u"]),
                                         product_offset, len(members)))
         xs_count = len(binary_xs) - xs_offset
@@ -160,6 +205,8 @@ def main() -> None:
 
     compiled = {
         "format": "charged-fragment cascade package", "version": VERSION,
+        "direction_coordinates": "projectile-local orthonormal frame",
+        "direction_components": ["local_x", "local_y", "along_projectile"],
         "source_metadata": args.metadata.as_posix(),
         "source_metadata_sha256": sha256(args.metadata),
         "records": {"projectiles": len(binary_projectiles),
@@ -170,7 +217,8 @@ def main() -> None:
         "output": {"path": args.output.as_posix(), "bytes": expected_size,
                    "sha256": sha256(args.output)},
     }
-    args.output_metadata.write_text(json.dumps(compiled, indent=2) + "\n", encoding="utf-8")
+    with args.output_metadata.open("w", encoding="utf-8", newline="\n") as stream:
+        stream.write(json.dumps(compiled, indent=2) + "\n")
     print(f"Compiled {len(binary_projectiles)} projectile species, "
           f"{len(binary_interactions)} interactions, and {len(binary_products)} products")
 
