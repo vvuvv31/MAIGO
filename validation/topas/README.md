@@ -17,6 +17,8 @@ cd validation/topas
 
 Available cases are `smoke` (100 histories), `development` (10,000), and `reference` (1,000,000). The runner saves the full TOPAS/Geant4 console output as `output/<case>_topas.log`.
 
+`em-smoke` and `em-development` use only `g4em-standard_opt4`. They isolate electromagnetic stopping and energy-loss fluctuations from nuclear attenuation and secondary fragments, and are the appropriate references for Level 1/2 validation.
+
 If `topas` is already on PATH, omit `TOPAS_EXECUTABLE`. Raw files are written below `validation/topas/output/` and intentionally ignored by Git.
 
 If TOPAS is available only through an interactive-shell alias, pass the real executable and Geant4 data directory explicitly, for example:

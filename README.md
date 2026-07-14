@@ -27,6 +27,8 @@
 
 当前 WSL 的 `sycl-ls` 尚未列出 Level Zero GPU，因此 SYCL kernel 已通过 `icpx` 编译，但只在 SYCL CPU 设备上实际执行。10,000-history TOPAS 开发基准与 CSDA 的比较为：R80 差 `+0.075 mm`、FWHM 相对差 `-29.9%`、峰值差 `+69.4%`、尾积分差 `-89.9%`。射程已经接近，峰宽、峰高和碎裂尾部仍是后续物理模块的工作，不应把这些差异解释为最终准确度。
 
+另有 10,000-history 的 TOPAS 电磁物理隔离基准。使用一次性全局校准 `straggling_scale=1.2` 后，Level 2 结果为：R80 差 `+0.105 mm`、FWHM 相对差 `+2.29%`、峰值差 `+0.12%`、2%/2 mm gamma `97.28%`。后续 100–400 MeV/u 验证必须固定此参数。
+
 ## WSL 构建
 
 在 VS Code 的 WSL 窗口中打开本目录。CPU 调试构建：
@@ -67,4 +69,3 @@ depth_mm,energy_deposition_MeV_per_primary,dose_Gy_per_primary,relative_dose
 `data/stopping_power_water.csv` 是用于软件联调的透明、可再生 Bethe-Bloch + 有效电荷近似表，不是 ICRU 或 Geant4 参考数据。第一个物理校准任务是从可信数据源生成正式表，并用 TOPAS 的 R80 对它进行验证；禁止通过逐能量手工调参替代该步骤。
 
 TOPAS 开发参考曲线、版本元数据和当前 CSDA 指标位于 `validation/results/`。原始 TOPAS scorer 文件和完整运行日志位于忽略目录 `validation/topas/output/`。
-

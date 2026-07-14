@@ -1,0 +1,13 @@
+{
+  "model": "Gaussian energy loss with Bohr variance and C-12 effective charge",
+  "calibration_reference": "topas_200MeVu_em_only_development.csv",
+  "calibration_energy_MeVu": 200.0,
+  "selected_global_straggling_scale": 1.2,
+  "selection_rule": "single calibration at 200 MeV/u; freeze for later energies",
+  "FWHM_relative_difference_percent": 2.29452936743168,
+  "R80_difference_mm": 0.1051654825888022,
+  "peak_value_difference_percent": 0.11613322275749048,
+  "NRMSE": 0.011761508568490196,
+  "gamma_2pct_2mm_pass_rate_percent": 97.27891156462584,
+  "gamma_threshold_percent": 10.0
+}

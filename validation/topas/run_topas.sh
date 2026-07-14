@@ -9,8 +9,10 @@ case "${case_name}" in
     smoke) parameter_file="carbon_200MeVu_water_smoke.txt" ;;
     development) parameter_file="carbon_200MeVu_water_development.txt" ;;
     reference) parameter_file="carbon_200MeVu_water.txt" ;;
+    em-smoke) parameter_file="carbon_200MeVu_water_em_only_smoke.txt" ;;
+    em-development) parameter_file="carbon_200MeVu_water_em_only_development.txt" ;;
     *)
-        printf 'Usage: %s [smoke|development|reference]\n' "$0" >&2
+        printf 'Usage: %s [smoke|development|reference|em-smoke|em-development]\n' "$0" >&2
         exit 2
         ;;
 esac
