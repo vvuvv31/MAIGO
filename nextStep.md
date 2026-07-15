@@ -1,140 +1,40 @@
 # 当前下一步
-## 2026-07-15 更新：中性输运默认方案 D（first_interaction）
 
-GPU 中性队列采用 **方案 D**：
+## 2026-07-15 更新：neutron 暂缓，进入 charged 收敛
 
-- 自由程：\(\lambda=-\ln\xi/\Sigma_{\mathrm{tot}}(E)\)
-- 仅一次能量邻近 interaction 包
-- local deposit + 带电产物正常入带电队列并输运
-- **neutron/gamma continuation 与嵌套中性产物不入队**，记 `residual_neutral_energy`
-  并回到 untracked 账本（不是当场把 \(E_n\) 沉成剂量）
-- 配置：`neutral_transport_mode: first_interaction`（默认）；`full` 可恢复多代 continuation
+**决策**：忽略 neutron/gamma 剂量闭合问题，仅写入状态报告备案，不阻塞主线。
 
-禁止把 neutron 动能直接沉在产生 voxel（kerma）；那会把 ~55 MeV/primary 错成剂量，
-而 TOPAS neutron-origin 仅 ~15.6 MeV/primary，且尾部空间形态会错。
+报告：`validation/results/status_report_2026-07-15.md`
 
-## 2026-07-15 方案 D 1k smoke 结果
+- charged-origin + MCS 100k 已完成（全深度 −0.199%，尾 +3.07%）
+- neutron 方案 D 脚手架保留；1k smoke dose-like ~33% TOPAS 中性剂量，**当前不追**
+- 已完成 **maximum_step_mm** 10k B580 收敛扫描（1.0–0.1 mm）
 
-SYCL CPU，1000 histories，无 cascade，`first_interaction`：
+### 当前任务顺序
 
-| 量（MeV/primary） | 数值 |
-|---|---|
-| charged-from-neutral | **5.33** |
-| residual continuation/nested | **25.93** |
-| neutral free-path escape | **16.49** |
-| local deposit | ~0 |
-| TOPAS neutral-origin 参考 | **16.35** |
+1. ~~`maximum_step_mm` 收敛（10k smoke）~~ **已完成阶段性**  
+2. **横向 voxel 尺寸收敛**（例如 10 / 5 / 2.5 mm，固定 0.5 mm 步长）  
+3. 100k 步长复核（可选，论文前）  
+4. 1e6 histories 统计收敛 + 可复现性  
+5. 100–400 MeV/u 多能量  
+6. （以后）neutron/gamma 正式闭合  
 
-dose-like（local + charged recoils）约 **TOPAS 中性归属剂量的 33%**。能量平衡误差 ~0.1%，
-queue overflow = 0。未把 \(E_n\) 当场 kerma 化。
+不要调 MCS scale。新 TOPAS 仅 `v@192.168.31.5`。无全局 scale。
 
-解读：方案 D 已拿到“第一次相互作用的带电反冲”，但弹性中子的 continuation 大、
-local deposit 近 0；要补齐 ~16 MeV/primary 还需二次自由程/`full` 或更高统计 + cascade。
+### 步长 10k 摘要（相对 0.1 mm）
 
-下一步：
+| step | NRMSE | ΔR80 mm | 吞吐 hist/s |
+|------|-------|---------|-------------|
+| 1.0 | 4.8e-3 | +0.059 | 41k |
+| 0.5 | 4.4e-3 | +0.053 | 28k |
+| 0.25 | 2.5e-3 | +0.024 | 21k |
+| 0.1 | ref | 0 | 11k |
 
-1. 打开 cascade smoke/100k 包后重跑方案 D，看 charged-from-neutral 是否上升；
-2. 远程 100k development neutral 采样表；
-3. 与 TOPAS 祖先 neutron/gamma IDD 比较；
-4. 若尾部仍缺，对 neutron 试有限代 continuation（例如 max 2–3），gamma 保持 D。
-
-不得把 TOPAS 中性剂量图直接当作 GPU 输运核，也不得用全局 scale 代替相互作用物理。
-
-## 2026-07-15 记录：neutral package 主机端已完成
-
-主机端 `compile_neutral_package.py` + `NeutralPackageTable` 与 smoke binary 已完成。
-
-## 2026-07-15 记录：neutral TOPAS 接口 smoke 已完成
-
-TOPAS 侧 `CarbonNeutralNtuple` 已就位；100-history 远程 smoke 与本地标准化完成。
-
-## 2026-07-15 记录：charged-origin voxel scorer 已完成
-
-GPU 已维护 8 个互斥 charged-origin 三维数组：
-`primary C-12 / secondary C / B / Be / Li / He / proton / other charged`。
-100-history smoke 与 100000-history Arc B580 正式运行均通过逐 voxel、逐 z/逐类别和
-全局闭合检查。正式最大逐 voxel 误差为 `6.70e-11 MeV/primary`，最大逐类别
-z-plane 误差为 `1.00e-10 MeV/primary/bin`，严格低于 `1e-6` 验收标准。
-
-下方旧“当前下一步”段落保留为历史记录；其中第 1 项现已完成。
-
-主 C-12 和全部输运带电碎片的三维多重库仑散射已经完成。实现使用水 `X0=36.08 g/cm²` 的 Lynch–Dahl/Highland 投影 RMS 角宽，每步采样两个独立高斯横向斜率并旋转到当前母粒子局部基；没有用于贴合 TOPAS 的散射 scale。
-
-Arc B580 100k 正式运行完成 518,207,628 个总步和 382,717,159 个碎片步，队列溢出为 0，能量平衡误差 `2.10e-9`，voxel→IDD 最大闭合差 `1.712e-10 MeV/primary/bin`。
-
-对现有 TOPAS 100k 祖先归属三维基准，严格比较 charged-origin 八类之和、绝对 `MeV/primary/voxel`、不做全局 scale。GPU/TOPAS 全深度积分差 `-0.2057%`，90 mm 后尾部差 `+3.1301%`；高剂量 voxel 平均绝对差 `3.236%`、Pearson `0.97365`，20/50/86.75 mm 横向 σ 差均小于约 `0.06 mm`。
-
-下一步明确为：
-
-1. GPU voxel scorer 增加八个 charged-origin 分类，验证逐 voxel 相加等于 total，并与现有 TOPAS 分类切片比较；
-2. 随后实现 neutron/gamma 及其后代的来源归属和三维输运；
-3. 再做 `maximum_step_mm`、横向 voxel 尺寸、100 万粒子和 100--400 MeV/u 收敛验证。
-
-不要调 MCS scale 来追逐当前差异。新的 TOPAS 作业仍只允许在 `v@192.168.31.5:~/gpu` 上运行，最多 56 线程，禁止使用 WSL 运行 TOPAS。
+生产默认保持 `maximum_step_mm: 0.5`。
 
 ---
 
-## 历史实施记录（以下项目已完成）
+## 历史：中性与 charged-origin 记录
 
-下一步应进入“次级碎片输运”阶段。当前射程、峰宽和主碳离子衰减已经较好，但布拉格峰后的尾部低约 92%，主要缺失正是核反应产生的碎片。
-建议按以下顺序推进：
-在 WSL/TOPAS 中增加按粒子种类计分的 IDD：
-主碳离子
-次级碳离子
-B、Be、Li、He
-质子
-其他粒子
-先明确每类碎片对峰区和尾部的贡献。
-
-建立 TOPAS 碎片基准数据：
-先跑 10 万粒子开发基准。
-确认计分正确后，再跑 100 万粒子正式基准。
-保存原始 CSV、归一化 CSV、运行参数和随机种子。
-
-在 GPU 端实现最小可用碎片模型：
-碳离子发生核反应时停止主粒子。
-根据 TOPAS 数据采样碎片种类、能量和数量。
-第一版只做沿束流方向的 1D 输运。
-使用预分配的 GPU 次级粒子队列，避免 kernel 内动态分配。
-
-分阶段验证：
-碎片总产生率。
-各粒子种类的 IDD。
-布拉格峰后尾部积分。
-总能量守恒。
-最终比较完整 TOPAS 与 B580 GPU IDD。
-
-每个阶段单独 Git 提交，例如：
-topas: add species-resolved fragment scorers
-physics: add fragment yield model
-sycl: add secondary particle queues
-validation: compare fragment-resolved idd
-
-按碎片种类分解的 TOPAS IDD、事件级反应包以及 B580 次级粒子生成队列均已完成。现在缺少的是队列中带电离子的实际输运与分粒种剂量评分。
-
-## 2026-07-14 进展
-
-上述 TOPAS 数据准备已经完成到可运行阶段：
-
-- 已生成 10 万粒子的按粒种 IDD 开发基准；
-- 已增加自定义截面计分器，直接从当前 TOPAS/Geant4 物理列表导出 1--400 MeV/u 的 C-12+H、C-12+O 和水中非弹性截面；
-- 已增加反应顶点 n-tuple，按事件保存反应前 C-12 能量及全部直接次级粒子的 A/Z、能量和方向；
-- 已用 100 粒子 smoke 作业验证扩展编译、截面闭合和反应包标准化。
-
-CPU/SYCL 能量相关截面接入也已完成：配置改用 `nuclear_cross_section_file`，两种后端在每一步按当前 MeV/u 插值宏观截面。10,000-history 的 B580 与 serial 曲线 NRMSE 为 `1.38e-5`，R80 差 `-3.9e-5 mm`，2%/2 mm gamma 为 `100%`。
-
-10 万粒子 `fragment-development` 正式反应包已经完成：100,000 个初级粒子中有 37,657 次主 C-12 非弹性反应，共记录 330,659 个直接次级粒子，平均多重性为 8.781。两个低能反应没有直接可见次级粒子，仍以 `secondary_count=0` 的完整反应头保留。压缩反应表和次级粒子表约 10.1 MiB，header 记录数、CSV 行数、offset/count 闭合和 SHA-256 均已验证。
-
-现在最直接的下一项工作是：实现 B580 上的固定容量次级粒子队列、原子计数器和溢出检测，并按 `reaction_id` 整包采样碎片，而不是独立抽取各粒种。带电离子统一按 A/Z 进入队列，不能遗漏 deuteron、triton、He3 等显著能量分量；gamma、neutron 暂时计入未输运能量账本，并在结果中单独报告。
-
-主机端数据边界已经完成：gzip/CSV 可预编译为 5.9 MB、201 个 1 MeV/u 分箱的版本化二进制表，C++ `ReactionPackageTable` 会独立检查格式、分箱、offset/count 和物理值。GCC 12.2 与 Windows oneAPI IntelLLVM 2025.3.3 的真实正式数据加载测试均已通过。随后这些定长数组已接入 SYCL USM 和 fixed-capacity queue。
-
-B580 fixed-capacity queue 也已完成首轮验证。10,000 个初级粒子产生 3,816 次核反应，全部采样事件包；33,260 个直接次级粒子中有 21,357 个带电离子进入队列，溢出为 0，未支持带电能量为 0。中子/光子能量 553,209.49 MeV 单独记账。generation-only 阶段的 primary-only IDD 逐 bin 完全不变。
-
-上述 A/Z 输运现已完成第一版。100,000-history B580 基准输运 216,133 个带电次级粒子，碎片沉积与逃逸能量闭合，队列溢出为 0，总能量误差为 `3.11e-8`。相对完整 TOPAS，总积分差 `+0.48%`、峰值差 `-0.062%`、R80 差 `+0.104 mm`、FWHM 差 `+2.36%`、NRMSE `1.08%`、2%/2 mm gamma `97.71%`；尾积分差为 `+10.055%`，尚未通过 `<10%` 门槛。
-
-随后完成的 10 万粒子细分 scorer 将 `other` 分为 electron/positron、gamma、neutron、deuteron、triton 和 unclassified，并把 helium 分为 alpha、He-3 和其他 Z=2 离子。旧 broad species 列与原基准逐 bin 完全一致，详细闭合最大误差为 `1.24e-10 MeV/primary/bin`。
-
-全深度 `other` 中 electron/positron 占 `78.61%`，deuteron 占 `12.59%`，triton 占 `5.15%`，unclassified 占 `3.61%`，gamma 与 neutron 的直接轨迹沉积合计仅约 `0.004%`。90 mm 后 `other` 中 deuteron、triton、electron/positron 分别占 `51.55%`、`20.92%`、`24.58%`。扣除 TOPAS electron/positron 后，GPU `other` 全深度只高 `0.50%`，尾部高 `4.10%`。
-
-因此下一步已修正为“统一剂量归属语义”，而不是立即调参或实现 neutron/gamma 输运。应先做 TOPAS 祖先归属 scorer，再依据对齐后的差异决定后续级联模型。
+见 `validation/results/status_report_2026-07-15.md` 与 git 历史  
+`a7f09e7` / `d9aa5ee`（charged-origin）、`9f6d116`–`4ec8a41`（neutral 脚手架与方案 D）。

@@ -238,3 +238,21 @@ carbon_mc.exe --config config\beam_200MeVu_neutral_smoke.yaml --device cpu --his
 1000-history SYCL CPU 方案 D 诊断（无 cascade）：charged-from-neutral **5.33 MeV/primary**，
 residual **25.9**，free-path escape **16.5**；相对 TOPAS neutral-origin **16.35**，
 dose-like 约 **33%**。细节见 `validation/results/windows_neutral_mode_d_1k.metadata.json`。
+
+**2026-07-15 决策**：neutron/gamma 闭合暂缓，仅记入
+`validation/results/status_report_2026-07-15.md`；主线改为 charged 路径步长/网格收敛。
+
+## maximum_step_mm 收敛（charged，10k B580）
+
+Neutron 关闭。配置族 `config/beam_200MeVu_step_*.yaml`，分析：
+
+```bat
+python validation\scripts\analyze_step_convergence.py ^
+  --cases 1.0=out\step_convergence\step_1p0_idd.csv 0.5=out\step_convergence\step_0p5_idd.csv ^
+         0.25=out\step_convergence\step_0p25_idd.csv 0.1=out\step_convergence\step_0p1_idd.csv ^
+  --reference-step-mm 0.1 ^
+  --output-metrics validation\results\windows_b580_step_convergence_10k.metrics.json ^
+  --output-plot validation\results\windows_b580_step_convergence_10k.png
+```
+
+相对 0.1 mm：0.5 mm 的 NRMSE ~4.4e-3、ΔR80 ~0.05 mm；生产默认仍用 **0.5 mm**。
