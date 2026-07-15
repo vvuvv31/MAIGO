@@ -15,6 +15,7 @@ add_library(carbon_core
     src/io.cpp
     src/reaction_package.cpp
     src/cascade_package.cpp
+    src/neutral_package.cpp
     src/stopping_power.cpp
     src/transport_cpu.cpp
 )

@@ -2684,7 +2684,13 @@ TOPAS 数据接口 smoke 已完成：`CarbonNeutralNtuple` 在远程主机 100-h
 `phot`、`compt`、`conv`、`Rayl`，且全部 interaction 截面为正。标准化表位于
 `validation/results/topas_200MeVu_neutral_smoke_{interactions,products}.csv.gz`。
 
-GPU 侧仍缺中性队列、自由程采样和末态 sampling kernel。实现时必须增加中性队列、
-自由程采样和带电后代生成，并保持 `neutron / gamma / neutral_other` 来源标签贯穿
-后代。TOPAS 祖先剂量 voxel 与中性 n-tuple 只用于验证和采样物理，不可直接作为
-GPU 输运概率或经验 scale。
+主机端二进制包也已完成：`compile_neutral_package.py` 写出
+`validation/results/topas_200MeVu_neutral_smoke.bin`（约 210 KB）。格式
+`CNPK001` 含 gamma/neutron 两个 projectile、140 个绝对 MeV 总截面样本、4039 次
+带 continuation 的 interaction 和 1961 个入射局部系产物。`NeutralPackageTable`
+独立校验 magic/布局/offset 闭合与截面为正；Windows IntelLLVM 2025.3.3 测试通过。
+
+GPU 侧仍缺中性队列、自由程采样和末态 sampling kernel。实现时应加载上述 binary，
+用总截面采样自由程，用能量邻近 interaction 包采样 continuation/局部沉积/产物，
+并保持 `neutron / gamma / neutral_other` 来源标签贯穿后代。TOPAS 祖先剂量 voxel
+与中性 n-tuple 只用于验证和采样物理，不可直接作为 GPU 输运概率或经验 scale。

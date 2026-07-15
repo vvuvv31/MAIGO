@@ -1,24 +1,31 @@
 # 当前下一步
-## 2026-07-15 更新：neutral TOPAS 接口 smoke 已完成
+## 2026-07-15 更新：neutral package 主机端已完成
 
-charged-origin voxel scorer 已完成并通过 100k 闭合。当前下一项是 neutron/gamma
-来源三维输运。
+charged-origin voxel scorer 与 TOPAS neutral smoke 接口均已完成。主机端中性采样
+包现已可用：
 
-TOPAS 侧 `CarbonNeutralNtuple` 已就位：记录中性相互作用 continuation、局部沉积、
-总截面和相关产物。100-history 远程 smoke 已在 `v@192.168.31.5` 成功编译运行；
-本地 `prepare_topas_neutral.py` 标准化得到 4,039 次中性相互作用、1,961 个产物。
-覆盖 neutron elastic/inelastic/capture 与 gamma photoelectric/Compton/pair/Rayleigh；
-全部 interaction 截面为正。原始 phsp 仍在忽略目录 `validation/topas/output/`，
-无需重跑远程 smoke。
+- `prepare_topas_neutral.py` 标准化 smoke → 4,039 interactions / 1,961 products；
+- `compile_neutral_package.py` 生成 `topas_200MeVu_neutral_smoke.bin`
+  （2 projectiles: gamma+neutron，140 XS samples，~210 KB）；
+- `NeutralPackageTable::from_binary` 严格校验 magic/布局/offset 闭合/截面为正；
+- Windows IntelLLVM 2025.3.3 的 `carbon_tests` 已通过真实 smoke 加载。
+
+能量单位为绝对 MeV（非 MeV/u）；截面为水中宏观总截面；产物与 continuation
+方向均在入射粒子局部坐标系。未使用全局 scale。
 
 下一步实现顺序：
 
-1. 可选：远程 100k `development` neutral 包，作为正式采样表；
-2. GPU 增加独立中性队列与 `neutron/gamma/neutral_other` 来源标签；
-3. 用水中 neutron/gamma 总截面与末态包采样自由程和带电产物；
-4. 将中性后代剂量写入 neutral-origin voxel 数组并与 TOPAS 祖先归属比较。
+1. GPU 增加独立中性队列与 `neutron/gamma/neutral_other` 来源标签；
+2. 用 `NeutralPackageTable` 总截面采样自由程，并用能量邻近 interaction 包采样
+   continuation、局部沉积和带电产物；
+3. 将中性后代剂量写入 neutral-origin voxel 数组并与 TOPAS 祖先归属比较；
+4. 可选：远程 100k `development` neutral 包替换 smoke 采样表。
 
 不得把 TOPAS 中性剂量图直接当作 GPU 输运核，也不得用全局 scale 代替相互作用物理。
+
+## 2026-07-15 记录：neutral TOPAS 接口 smoke 已完成
+
+TOPAS 侧 `CarbonNeutralNtuple` 已就位；100-history 远程 smoke 与本地标准化完成。
 
 ## 2026-07-15 记录：charged-origin voxel scorer 已完成
 

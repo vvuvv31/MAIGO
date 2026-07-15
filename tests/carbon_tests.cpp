@@ -1,4 +1,5 @@
 #include "carbon/cascade_package.hpp"
+#include "carbon/neutral_package.hpp"
 #include "carbon/cross_section.hpp"
 #include "carbon/multiple_scattering.hpp"
 #include "carbon/particle.hpp"
@@ -422,6 +423,52 @@ void test_reaction_package_loading() {
     std::filesystem::remove(invalid_path);
 }
 
+void test_neutral_package_loading() {
+    const auto source_directory = std::filesystem::path(CARBON_SOURCE_DIR);
+    const auto package_path =
+        source_directory / "validation/results/topas_200MeVu_neutral_smoke.bin";
+    const auto table = carbon::NeutralPackageTable::from_binary(package_path);
+    require(table.projectiles().size() == 2, "Neutral projectile count failed");
+    require(table.interactions().size() == 4039, "Neutral interaction count failed");
+    require(table.products().size() == 1961, "Neutral product count failed");
+    const auto* neutron = table.find_projectile(2112);
+    const auto* gamma = table.find_projectile(22);
+    require(neutron != nullptr && neutron->interaction_count == 2494,
+            "Neutral neutron lookup failed");
+    require(gamma != nullptr && gamma->interaction_count == 1545,
+            "Neutral gamma lookup failed");
+    require(table.find_projectile(111) == nullptr,
+            "Neutral missing-projectile lookup failed");
+    require(table.cross_sections().size() == neutron->cross_section_count +
+                                                 gamma->cross_section_count,
+            "Neutral cross-section range failed");
+    for (const auto& sample : table.cross_sections()) {
+        require(sample.macroscopic_total_per_mm > 0.0F,
+                "Neutral cross section is not positive");
+        require(std::isfinite(sample.energy_MeV), "Neutral cross-section energy invalid");
+    }
+    for (const auto& interaction : table.interactions()) {
+        require(interaction.incident_energy_MeV > 0.0F,
+                "Neutral interaction energy invalid");
+        require(interaction.continuation_energy_MeV >= 0.0F,
+                "Neutral continuation energy invalid");
+        require(interaction.local_deposit_MeV >= 0.0F, "Neutral local deposit invalid");
+        const auto norm_squared =
+            interaction.continuation_direction_x * interaction.continuation_direction_x +
+            interaction.continuation_direction_y * interaction.continuation_direction_y +
+            interaction.continuation_direction_z * interaction.continuation_direction_z;
+        require_near(norm_squared, 1.0, 2.0e-3, "Neutral continuation direction norm failed");
+    }
+    for (const auto& product : table.products()) {
+        require(std::isfinite(product.direction_x) && std::isfinite(product.direction_y),
+                "Neutral product transverse direction is not finite");
+        const auto norm_squared = product.direction_x * product.direction_x +
+                                  product.direction_y * product.direction_y +
+                                  product.direction_z * product.direction_z;
+        require_near(norm_squared, 1.0, 2.0e-3, "Neutral product direction norm failed");
+    }
+}
+
 void test_cascade_package_loading() {
     const auto source_directory = std::filesystem::path(CARBON_SOURCE_DIR);
     const auto package_path =
@@ -676,6 +723,7 @@ int main() {
         test_primary_attenuation_energy_accounting();
         test_reaction_package_loading();
         test_cascade_package_loading();
+        test_neutral_package_loading();
 #ifdef CARBON_HAS_SYCL
         test_serial_sycl_cpu_match();
         test_sycl_secondary_queue_generation();

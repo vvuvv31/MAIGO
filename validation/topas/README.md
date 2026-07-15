@@ -135,6 +135,21 @@ elastic/inelastic/capture and gamma photoelectric/Compton/pair/Rayleigh. This is
 the sampling reference for a future GPU neutral queue; it is not a dose map to
 copy or globally scale.
 
+Compile the host/GPU binary after standardization:
+
+```bash
+python3 validation/scripts/compile_neutral_package.py \
+  --metadata validation/results/topas_200MeVu_neutral_smoke.metadata.json \
+  --interactions validation/results/topas_200MeVu_neutral_smoke_interactions.csv.gz \
+  --products validation/results/topas_200MeVu_neutral_smoke_products.csv.gz \
+  --output validation/results/topas_200MeVu_neutral_smoke.bin \
+  --output-metadata validation/results/topas_200MeVu_neutral_smoke.compiled.json
+```
+
+The binary contains two projectiles (PDG 22 and 2112), 140 total-XS energy
+samples, 4,039 interactions with continuation kinematics, and 1,961 products in
+the incident local frame. Load with `NeutralPackageTable::from_binary`.
+
 ## Charged-fragment reaction cascade
 
 `CarbonCascadeNtuple` records every charged projectile inelastic interaction,

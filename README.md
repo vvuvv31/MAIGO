@@ -203,4 +203,19 @@ python validation\scripts\prepare_topas_neutral.py ^
 
 当前 smoke 包含 4,039 次相互作用和 1,961 个产物（2494 neutron / 1545 gamma）；
 过程覆盖 `hadElastic`、`neutronInelastic`、`nCapture`、`phot`、`compt`、`conv`、
-`Rayl`；全部 interaction 截面为正。GPU 中性队列与输运核尚未实现。
+`Rayl`；全部 interaction 截面为正。
+
+主机端可编译为 GPU 就绪二进制表：
+
+```bat
+python validation\scripts\compile_neutral_package.py ^
+  --metadata validation\results\topas_200MeVu_neutral_smoke.metadata.json ^
+  --interactions validation\results\topas_200MeVu_neutral_smoke_interactions.csv.gz ^
+  --products validation\results\topas_200MeVu_neutral_smoke_products.csv.gz ^
+  --output validation\results\topas_200MeVu_neutral_smoke.bin ^
+  --output-metadata validation\results\topas_200MeVu_neutral_smoke.compiled.json
+```
+
+`NeutralPackageTable::from_binary` 加载 gamma/neutron 两个 projectile、按绝对 MeV
+分箱的宏观总截面、带 continuation 的 interaction 以及局部系产物方向。smoke 包约
+210 KB，C++ 加载测试已通过。GPU 中性队列与输运核尚未实现。
