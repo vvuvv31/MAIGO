@@ -7,6 +7,32 @@ namespace carbon::rng {
 
 using PhiloxBlock = std::array<std::uint32_t, 4>;
 
+// Branch-tag roles for deterministic child RNG streams. Tags must not depend on
+// GPU atomic queue indices — only on parent stream identity and product order.
+inline constexpr std::uint32_t branch_role_primary_charged = 0x10000000U;
+inline constexpr std::uint32_t branch_role_primary_neutral = 0x20000000U;
+inline constexpr std::uint32_t branch_role_cascade_charged = 0x30000000U;
+inline constexpr std::uint32_t branch_role_cascade_neutral = 0x40000000U;
+inline constexpr std::uint32_t branch_role_neutral_charged = 0x50000000U;
+inline constexpr std::uint32_t branch_role_neutral_continuation = 0x60000000U;
+
+inline constexpr std::uint32_t branch_tag(const std::uint32_t role,
+                                          const std::uint32_t product_index) noexcept {
+    return role | (product_index & 0x0FFFFFFFU);
+}
+
+// SplitMix-style mix so (parent_stream, branch_tag) maps injectively enough for MC.
+// Device-friendly: no library hash, pure arithmetic.
+inline std::uint64_t child_stream(const std::uint64_t parent_stream,
+                                  const std::uint32_t tag) noexcept {
+    std::uint64_t z =
+        parent_stream + 0x9E3779B97F4A7C15ULL +
+        (static_cast<std::uint64_t>(tag) + 1ULL) * 0xD1B54A32D192ED03ULL;
+    z = (z ^ (z >> 30U)) * 0xBF58476D1CE4E5B9ULL;
+    z = (z ^ (z >> 27U)) * 0x94D049BB133111EBULL;
+    return z ^ (z >> 31U);
+}
+
 inline PhiloxBlock philox4x32_10(PhiloxBlock counter,
                                 std::uint32_t key0,
                                 std::uint32_t key1) noexcept {

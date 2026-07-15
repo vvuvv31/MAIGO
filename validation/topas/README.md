@@ -200,6 +200,29 @@ is `+1.41%/+2.84%`, and every charged category is within 7% in the tail. The
 maximum per-bin species closure is `9.80e-11 MeV/primary/bin`; no global scale
 is used.
 
+### 400 MeV/u cascade package (multi-energy high-E tail fix)
+
+For 300/400 MeV/u beams the 200 MeV/u package clamped high-energy sampling.
+Run remote cascade at 400 MeV/u (covers primary reactions ~0–400 MeV/u as the
+beam slows):
+
+```bash
+# on Windows helper (password via REMOTE_TOPAS_PASSWORD)
+python validation/scripts/_remote_cascade_e400.py upload
+python validation/scripts/_remote_cascade_e400.py smoke
+python validation/scripts/_remote_cascade_e400.py development
+python validation/scripts/_remote_cascade_e400.py status
+python validation/scripts/_remote_cascade_e400.py fetch
+validation\scripts\postprocess_cascade_e400.cmd
+```
+
+Accepted 100k table: 73,739 primary C-12 packages into **401 × 1 MeV/u bins**,
+plus multi-projectile cascade binary. Wire
+`config/beam_{300,400}MeVu_multi_energy.yaml` to
+`topas_400MeVu_cascade_aligned_primary_3d.bin` and
+`topas_400MeVu_cascade_100k_3d.bin`. After the switch, 400 MeV/u tail integral
+error improved from about −38% to −6.8% and 2%/2 mm gamma from 65% to 99%.
+
 The dependency-free comparison command is:
 
 ```bash

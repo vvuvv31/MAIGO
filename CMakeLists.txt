@@ -12,6 +12,7 @@ option(CARBON_BUILD_TESTS "Build unit and integration tests" ON)
 add_library(carbon_core
     src/config.cpp
     src/cross_section.cpp
+    src/ct_grid.cpp
     src/io.cpp
     src/reaction_package.cpp
     src/cascade_package.cpp

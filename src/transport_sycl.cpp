@@ -1,13 +1,18 @@
+#include "carbon/cross_section.hpp"
+#include "carbon/ct_grid.hpp"
 #include "carbon/device.hpp"
 #include "carbon/multiple_scattering.hpp"
 #include "carbon/particle.hpp"
 #include "carbon/rng.hpp"
+#include "carbon/slab_phantom.hpp"
+#include "carbon/stopping_power.hpp"
 #include "carbon/transport.hpp"
 
 #ifdef CARBON_HAS_SYCL
 
 #include <sycl/sycl.hpp>
 
+#include <array>
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -381,6 +386,295 @@ TransportResult transport_sycl(const TransportConfig& config,
             sycl::free(pointer, queue);
         }
     };
+
+    const auto enable_layered_phantom = config.enable_layered_phantom;
+    const auto slab_layer_count =
+        enable_layered_phantom
+            ? static_cast<std::uint32_t>(config.slab_layers.size())
+            : 0U;
+    float* slab_z_ends_device = nullptr;
+    float* slab_densities_device = nullptr;
+    if (slab_layer_count > 0) {
+        slab_z_ends_device = sycl::malloc_device<float>(slab_layer_count, queue);
+        slab_densities_device = sycl::malloc_device<float>(slab_layer_count, queue);
+        if (slab_z_ends_device == nullptr || slab_densities_device == nullptr) {
+            free_device(slab_z_ends_device);
+            free_device(slab_densities_device);
+            free_device(table_device);
+            free_device(cross_section_device);
+            free_device(dose_device);
+            free_device(voxel_dose_device);
+            free_device(charged_origin_voxel_dose_device);
+            free_device(deposited_device);
+            free_device(escaped_device);
+            free_device(nuclear_device);
+            free_device(steps_device);
+            throw std::bad_alloc();
+        }
+        std::vector<float> slab_z_host(slab_layer_count);
+        std::vector<float> slab_rho_host(slab_layer_count);
+        for (std::uint32_t index = 0; index < slab_layer_count; ++index) {
+            slab_z_host[index] =
+                static_cast<float>(config.slab_layers[index].z_end_mm);
+            slab_rho_host[index] =
+                static_cast<float>(config.slab_layers[index].density_g_per_cm3);
+        }
+        queue.memcpy(slab_z_ends_device, slab_z_host.data(),
+                     sizeof(float) * slab_layer_count)
+            .wait_and_throw();
+        queue.memcpy(slab_densities_device, slab_rho_host.data(),
+                     sizeof(float) * slab_layer_count)
+            .wait_and_throw();
+    }
+
+    // Optional absolute per-layer material tables (real bone/lung, not density-scaled water).
+    const auto use_material_tables =
+        enable_layered_phantom && !config.slab_stopping_power_files.empty();
+    const auto material_table_count =
+        use_material_tables ? static_cast<std::uint32_t>(config.slab_stopping_power_files.size())
+                            : 0U;
+    float* material_sp_device = nullptr;
+    float* material_xs_device = nullptr;
+    if (use_material_tables) {
+        if (material_table_count != slab_layer_count) {
+            throw std::invalid_argument("Material table count must match slab layer count");
+        }
+        std::vector<float> material_sp_host(static_cast<std::size_t>(material_table_count) *
+                                            table_size);
+        std::vector<float> material_xs_host(
+            static_cast<std::size_t>(material_table_count) * cross_section_table_size);
+        for (std::uint32_t mat = 0; mat < material_table_count; ++mat) {
+            const auto sp_table =
+                StoppingPowerTable::from_csv(config.slab_stopping_power_files[mat]);
+            const auto xs_table =
+                CrossSectionTable::from_csv(config.slab_cross_section_files[mat]);
+            if (sp_table.values().size() != table_size ||
+                !is_uniform_grid(sp_table.energies()) ||
+                std::abs(sp_table.energies().front() - stopping_power.energies().front()) >
+                    1.0e-9 ||
+                std::abs(sp_table.energies()[1] - sp_table.energies()[0] -
+                         (stopping_power.energies()[1] - stopping_power.energies()[0])) >
+                    1.0e-9) {
+                throw std::invalid_argument(
+                    "Slab material SP table must match the primary water energy grid");
+            }
+            if (xs_table.values().size() != cross_section_table_size ||
+                !is_uniform_grid(xs_table.energies()) ||
+                std::abs(xs_table.energies().front() - cross_section.energies().front()) >
+                    1.0e-9) {
+                throw std::invalid_argument(
+                    "Slab material XS table must match the primary water energy grid");
+            }
+            for (std::size_t i = 0; i < table_size; ++i) {
+                material_sp_host[static_cast<std::size_t>(mat) * table_size + i] =
+                    static_cast<float>(sp_table.values()[i]);
+            }
+            for (std::size_t i = 0; i < cross_section_table_size; ++i) {
+                material_xs_host[static_cast<std::size_t>(mat) * cross_section_table_size + i] =
+                    static_cast<float>(xs_table.values()[i]);
+            }
+        }
+        material_sp_device = sycl::malloc_device<float>(material_sp_host.size(), queue);
+        material_xs_device = sycl::malloc_device<float>(material_xs_host.size(), queue);
+        if (material_sp_device == nullptr || material_xs_device == nullptr) {
+            free_device(material_sp_device);
+            free_device(material_xs_device);
+            free_device(slab_z_ends_device);
+            free_device(slab_densities_device);
+            throw std::bad_alloc();
+        }
+        queue.memcpy(material_sp_device, material_sp_host.data(),
+                     sizeof(float) * material_sp_host.size())
+            .wait_and_throw();
+        queue.memcpy(material_xs_device, material_xs_host.data(),
+                     sizeof(float) * material_xs_host.size())
+            .wait_and_throw();
+    }
+
+    // 7b: single AABB insert (bone strip / cavity) in water background.
+    const auto enable_hetero_insert = config.enable_hetero_insert;
+    const auto insert_x_min = static_cast<float>(config.hetero_insert.x_min_mm);
+    const auto insert_x_max = static_cast<float>(config.hetero_insert.x_max_mm);
+    const auto insert_y_min = static_cast<float>(config.hetero_insert.y_min_mm);
+    const auto insert_y_max = static_cast<float>(config.hetero_insert.y_max_mm);
+    const auto insert_z_min = static_cast<float>(config.hetero_insert.z_min_mm);
+    const auto insert_z_max = static_cast<float>(config.hetero_insert.z_max_mm);
+    const auto insert_density_g_per_cm3 =
+        static_cast<float>(config.hetero_insert.density_g_per_cm3);
+    const auto use_insert_material_tables =
+        enable_hetero_insert && !config.insert_stopping_power_file.empty();
+    float* insert_sp_device = nullptr;
+    float* insert_xs_device = nullptr;
+    if (use_insert_material_tables) {
+        const auto insert_sp =
+            StoppingPowerTable::from_csv(config.insert_stopping_power_file);
+        const auto insert_xs =
+            CrossSectionTable::from_csv(config.insert_cross_section_file);
+        if (insert_sp.values().size() != table_size ||
+            !is_uniform_grid(insert_sp.energies()) ||
+            std::abs(insert_sp.energies().front() - stopping_power.energies().front()) >
+                1.0e-9) {
+            throw std::invalid_argument(
+                "Insert SP table must match the primary water energy grid");
+        }
+        if (insert_xs.values().size() != cross_section_table_size ||
+            !is_uniform_grid(insert_xs.energies()) ||
+            std::abs(insert_xs.energies().front() - cross_section.energies().front()) >
+                1.0e-9) {
+            throw std::invalid_argument(
+                "Insert XS table must match the primary water energy grid");
+        }
+        std::vector<float> insert_sp_host(table_size);
+        std::vector<float> insert_xs_host(cross_section_table_size);
+        for (std::size_t i = 0; i < table_size; ++i) {
+            insert_sp_host[i] = static_cast<float>(insert_sp.values()[i]);
+        }
+        for (std::size_t i = 0; i < cross_section_table_size; ++i) {
+            insert_xs_host[i] = static_cast<float>(insert_xs.values()[i]);
+        }
+        insert_sp_device = sycl::malloc_device<float>(table_size, queue);
+        insert_xs_device = sycl::malloc_device<float>(cross_section_table_size, queue);
+        if (insert_sp_device == nullptr || insert_xs_device == nullptr) {
+            free_device(insert_sp_device);
+            free_device(insert_xs_device);
+            free_device(material_sp_device);
+            free_device(material_xs_device);
+            free_device(slab_z_ends_device);
+            free_device(slab_densities_device);
+            throw std::bad_alloc();
+        }
+        queue.memcpy(insert_sp_device, insert_sp_host.data(), sizeof(float) * table_size)
+            .wait_and_throw();
+        queue
+            .memcpy(insert_xs_device, insert_xs_host.data(),
+                    sizeof(float) * cross_section_table_size)
+            .wait_and_throw();
+    }
+
+    // 7c: CT voxel density + material-id field.
+    const auto enable_ct_grid = config.enable_ct_grid;
+    CtGrid ct_grid_host{};
+    float* ct_density_device = nullptr;
+    std::uint8_t* ct_material_device = nullptr;
+    float* ct_sp_device = nullptr;  // 4 materials × table_size
+    float* ct_xs_device = nullptr;  // 4 materials × xs_size
+    float* ct_ref_density_device = nullptr;
+    std::uint32_t ct_nx = 0;
+    std::uint32_t ct_ny = 0;
+    std::uint32_t ct_nz = 0;
+    float ct_origin_x = 0.0F;
+    float ct_origin_y = 0.0F;
+    float ct_origin_z = 0.0F;
+    float ct_spacing_x = 1.0F;
+    float ct_spacing_y = 1.0F;
+    float ct_spacing_z = 1.0F;
+    const auto use_ct_material_tables =
+        enable_ct_grid && !config.ct_water_stopping_power_file.empty();
+    if (enable_ct_grid) {
+        ct_grid_host = CtGrid::from_binary(config.ct_grid_file);
+        ct_nx = ct_grid_host.nx;
+        ct_ny = ct_grid_host.ny;
+        ct_nz = ct_grid_host.nz;
+        ct_origin_x = ct_grid_host.origin_x_mm;
+        ct_origin_y = ct_grid_host.origin_y_mm;
+        ct_origin_z = ct_grid_host.origin_z_mm;
+        ct_spacing_x = ct_grid_host.spacing_x_mm;
+        ct_spacing_y = ct_grid_host.spacing_y_mm;
+        ct_spacing_z = ct_grid_host.spacing_z_mm;
+        const auto ct_count = ct_grid_host.number_of_voxels();
+        ct_density_device = sycl::malloc_device<float>(ct_count, queue);
+        ct_material_device = sycl::malloc_device<std::uint8_t>(ct_count, queue);
+        if (ct_density_device == nullptr || ct_material_device == nullptr) {
+            free_device(ct_density_device);
+            free_device(ct_material_device);
+            throw std::bad_alloc();
+        }
+        queue
+            .memcpy(ct_density_device, ct_grid_host.density_g_per_cm3.data(),
+                    sizeof(float) * ct_count)
+            .wait_and_throw();
+        queue
+            .memcpy(ct_material_device, ct_grid_host.material_id.data(),
+                    sizeof(std::uint8_t) * ct_count)
+            .wait_and_throw();
+
+        // 4 material tables: air, lung, water, bone. Default fill from water table.
+        std::vector<float> ct_sp_host(4 * table_size);
+        std::vector<float> ct_xs_host(4 * cross_section_table_size);
+        std::vector<float> ct_ref_host = {0.001205F, 0.26F, 1.0F, 1.85F};
+        for (std::uint32_t mat = 0; mat < 4; ++mat) {
+            for (std::size_t i = 0; i < table_size; ++i) {
+                ct_sp_host[mat * table_size + i] =
+                    static_cast<float>(stopping_power.values()[i]);
+            }
+            for (std::size_t i = 0; i < cross_section_table_size; ++i) {
+                ct_xs_host[mat * cross_section_table_size + i] =
+                    static_cast<float>(cross_section.values()[i]);
+            }
+        }
+        if (use_ct_material_tables) {
+            const std::array<std::filesystem::path, 4> sp_paths = {
+                config.ct_air_stopping_power_file.empty() ? config.stopping_power_file
+                                                          : config.ct_air_stopping_power_file,
+                config.ct_lung_stopping_power_file.empty()
+                    ? config.stopping_power_file
+                    : config.ct_lung_stopping_power_file,
+                config.ct_water_stopping_power_file.empty()
+                    ? config.stopping_power_file
+                    : config.ct_water_stopping_power_file,
+                config.ct_bone_stopping_power_file.empty()
+                    ? config.stopping_power_file
+                    : config.ct_bone_stopping_power_file,
+            };
+            const std::array<std::filesystem::path, 4> xs_paths = {
+                config.ct_air_cross_section_file.empty() ? config.nuclear_cross_section_file
+                                                         : config.ct_air_cross_section_file,
+                config.ct_lung_cross_section_file.empty()
+                    ? config.nuclear_cross_section_file
+                    : config.ct_lung_cross_section_file,
+                config.ct_water_cross_section_file.empty()
+                    ? config.nuclear_cross_section_file
+                    : config.ct_water_cross_section_file,
+                config.ct_bone_cross_section_file.empty()
+                    ? config.nuclear_cross_section_file
+                    : config.ct_bone_cross_section_file,
+            };
+            for (std::uint32_t mat = 0; mat < 4; ++mat) {
+                const auto sp_table = StoppingPowerTable::from_csv(sp_paths[mat]);
+                const auto xs_table = CrossSectionTable::from_csv(xs_paths[mat]);
+                if (sp_table.values().size() != table_size ||
+                    xs_table.values().size() != cross_section_table_size) {
+                    throw std::invalid_argument("CT material tables must match water grid size");
+                }
+                for (std::size_t i = 0; i < table_size; ++i) {
+                    ct_sp_host[mat * table_size + i] =
+                        static_cast<float>(sp_table.values()[i]);
+                }
+                for (std::size_t i = 0; i < cross_section_table_size; ++i) {
+                    ct_xs_host[mat * cross_section_table_size + i] =
+                        static_cast<float>(xs_table.values()[i]);
+                }
+            }
+        }
+        ct_sp_device = sycl::malloc_device<float>(ct_sp_host.size(), queue);
+        ct_xs_device = sycl::malloc_device<float>(ct_xs_host.size(), queue);
+        ct_ref_density_device = sycl::malloc_device<float>(4, queue);
+        if (ct_sp_device == nullptr || ct_xs_device == nullptr ||
+            ct_ref_density_device == nullptr) {
+            free_device(ct_sp_device);
+            free_device(ct_xs_device);
+            free_device(ct_ref_density_device);
+            free_device(ct_density_device);
+            free_device(ct_material_device);
+            throw std::bad_alloc();
+        }
+        queue.memcpy(ct_sp_device, ct_sp_host.data(), sizeof(float) * ct_sp_host.size())
+            .wait_and_throw();
+        queue.memcpy(ct_xs_device, ct_xs_host.data(), sizeof(float) * ct_xs_host.size())
+            .wait_and_throw();
+        queue.memcpy(ct_ref_density_device, ct_ref_host.data(), sizeof(float) * 4)
+            .wait_and_throw();
+    }
     const auto secondary_allocation_failed =
         enable_secondary_generation &&
         (reaction_bins_device == nullptr || reactions_device == nullptr ||
@@ -418,6 +712,17 @@ TransportResult transport_sycl(const TransportConfig& config,
         free_device(escaped_device);
         free_device(nuclear_device);
         free_device(steps_device);
+        free_device(slab_z_ends_device);
+        free_device(slab_densities_device);
+        free_device(material_sp_device);
+        free_device(material_xs_device);
+        free_device(insert_sp_device);
+        free_device(insert_xs_device);
+        free_device(ct_density_device);
+        free_device(ct_material_device);
+        free_device(ct_sp_device);
+        free_device(ct_xs_device);
+        free_device(ct_ref_density_device);
         free_device(reaction_bins_device);
         free_device(reactions_device);
         free_device(reaction_secondaries_device);
@@ -527,6 +832,19 @@ TransportResult transport_sycl(const TransportConfig& config,
     const auto enable_multiple_scattering = config.enable_multiple_scattering;
     const auto random_seed = config.random_seed;
     const auto enable_primary_attenuation = config.enable_primary_attenuation;
+    const auto enable_emittance_source = config.enable_emittance_source;
+    const auto emittance_sigma_x_mm = static_cast<float>(config.emittance_sigma_x_mm);
+    const auto emittance_sigma_y_mm = static_cast<float>(config.emittance_sigma_y_mm);
+    const auto emittance_sigma_x_prime =
+        static_cast<float>(config.emittance_sigma_x_prime);
+    const auto emittance_sigma_y_prime =
+        static_cast<float>(config.emittance_sigma_y_prime);
+    const auto emittance_correlation_x =
+        static_cast<float>(config.emittance_correlation_x);
+    const auto emittance_correlation_y =
+        static_cast<float>(config.emittance_correlation_y);
+    const auto neutral_local_kerma_fraction =
+        static_cast<float>(config.neutral_local_kerma_fraction);
     const auto inverse_mass_number = 1.0f / static_cast<float>(config.mass_number);
     const auto primary_mass_number = config.mass_number;
     const auto minimum_table_energy = static_cast<float>(stopping_power.energies().front());
@@ -574,11 +892,43 @@ TransportResult transport_sycl(const TransportConfig& config,
             auto direction_x = 0.0F;
             auto direction_y = 0.0F;
             auto direction_z = 1.0F;
+            if (enable_emittance_source) {
+                // TOPAS BiGaussian: sample (x,x') and (y,y') from bivariate normals.
+                // x' = dx/dz (unitless, rad-like). Independent axes with correlations.
+                const auto u0 = sycl::fmax(
+                    rng::uniform01(random_seed, history, 0, 30), 1.0e-12F);
+                const auto u1 = rng::uniform01(random_seed, history, 0, 31);
+                const auto u2 = sycl::fmax(
+                    rng::uniform01(random_seed, history, 0, 32), 1.0e-12F);
+                const auto u3 = rng::uniform01(random_seed, history, 0, 33);
+                constexpr float two_pi = 6.2831853071795864769F;
+                const auto g0 = sycl::sqrt(-2.0F * sycl::log(u0)) * sycl::cos(two_pi * u1);
+                const auto g1 = sycl::sqrt(-2.0F * sycl::log(u0)) * sycl::sin(two_pi * u1);
+                const auto g2 = sycl::sqrt(-2.0F * sycl::log(u2)) * sycl::cos(two_pi * u3);
+                const auto g3 = sycl::sqrt(-2.0F * sycl::log(u2)) * sycl::sin(two_pi * u3);
+                position_x_mm = emittance_sigma_x_mm * g0;
+                position_y_mm = emittance_sigma_y_mm * g2;
+                const auto rho_x = sycl::clamp(emittance_correlation_x, -0.9999F, 0.9999F);
+                const auto rho_y = sycl::clamp(emittance_correlation_y, -0.9999F, 0.9999F);
+                const auto x_prime =
+                    emittance_sigma_x_prime *
+                    (rho_x * g0 + sycl::sqrt(1.0F - rho_x * rho_x) * g1);
+                const auto y_prime =
+                    emittance_sigma_y_prime *
+                    (rho_y * g2 + sycl::sqrt(1.0F - rho_y * rho_y) * g3);
+                // Paraxial unit direction from slopes (dx/dz, dy/dz).
+                const auto inv_norm =
+                    sycl::rsqrt(1.0F + x_prime * x_prime + y_prime * y_prime);
+                direction_x = x_prime * inv_norm;
+                direction_y = y_prime * inv_norm;
+                direction_z = inv_norm;
+            }
             auto history_deposited_MeV = 0.0f;
             auto history_nuclear_MeV = 0.0f;
             SecondaryGenerationSummary secondary_summary{};
             std::uint32_t steps = 0;
-            while (energy_MeV > energy_cutoff_MeV) {
+            constexpr std::uint32_t max_primary_steps = 2'000'000U;
+            while (energy_MeV > energy_cutoff_MeV && steps < max_primary_steps) {
                 const auto escaped_z =
                     position_z_mm < 0.0F || position_z_mm >= phantom_length_mm;
                 const auto escaped_xy =
@@ -626,20 +976,105 @@ TransportResult transport_sycl(const TransportConfig& config,
                 index = sycl::max(0, sycl::min(index, static_cast<int>(table_size) - 2));
                 const auto fraction = sycl::clamp(floating_index - static_cast<float>(index),
                                                   0.0f, 1.0f);
-                const auto stopping_power_MeV_per_mm =
-                    table_device[index] +
-                    fraction * (table_device[index + 1] - table_device[index]);
+                const auto in_insert =
+                    enable_hetero_insert &&
+                    inside_hetero_insert(position_x_mm, position_y_mm, position_z_mm,
+                                         insert_x_min, insert_x_max, insert_y_min,
+                                         insert_y_max, insert_z_min, insert_z_max);
+                auto local_density_g_per_cm3 = slab_density_g_per_cm3(
+                    position_z_mm, slab_z_ends_device, slab_densities_device,
+                    slab_layer_count, water_density_g_per_cm3);
+                if (in_insert) {
+                    local_density_g_per_cm3 = insert_density_g_per_cm3;
+                }
+                std::uint8_t ct_material = 2;
+                auto in_ct = false;
+                if (enable_ct_grid) {
+                    float ct_rho = water_density_g_per_cm3;
+                    in_ct = ct_sample(position_x_mm, position_y_mm, position_z_mm,
+                                      ct_origin_x, ct_origin_y, ct_origin_z, ct_spacing_x,
+                                      ct_spacing_y, ct_spacing_z, ct_nx, ct_ny, ct_nz,
+                                      ct_density_device, ct_material_device, ct_rho,
+                                      ct_material);
+                    if (in_ct) {
+                        local_density_g_per_cm3 = ct_rho;
+                    }
+                }
+                const auto layer_for_material =
+                    slab_layer_count > 0
+                        ? slab_layer_index(position_z_mm, slab_z_ends_device,
+                                           slab_layer_count)
+                        : 0U;
+                float stopping_power_MeV_per_mm = 0.0F;
+                if (enable_ct_grid) {
+                    // Always density-scale the water SP table for CT (water-equivalent).
+                    // Multi-material tables are optional refinement loaded into ct_sp_device.
+                    const auto water_sp =
+                        table_device[index] +
+                        fraction * (table_device[index + 1] - table_device[index]);
+                    stopping_power_MeV_per_mm =
+                        water_sp * sycl::fmax(local_density_g_per_cm3, 1.0e-6F);
+                } else if (in_insert && use_insert_material_tables) {
+                    stopping_power_MeV_per_mm =
+                        insert_sp_device[static_cast<std::size_t>(index)] +
+                        fraction *
+                            (insert_sp_device[static_cast<std::size_t>(index) + 1] -
+                             insert_sp_device[static_cast<std::size_t>(index)]);
+                } else if (material_table_count > 0) {
+                    const auto base = static_cast<std::size_t>(layer_for_material) * table_size;
+                    stopping_power_MeV_per_mm =
+                        material_sp_device[base + static_cast<std::size_t>(index)] +
+                        fraction *
+                            (material_sp_device[base + static_cast<std::size_t>(index) + 1] -
+                             material_sp_device[base + static_cast<std::size_t>(index)]);
+                } else {
+                    const auto table_stopping_power_MeV_per_mm =
+                        table_device[index] +
+                        fraction * (table_device[index + 1] - table_device[index]);
+                    // Density-only hetero: scale water SP by local ρ (insert or slab).
+                    const auto scale_density =
+                        (slab_layer_count > 0 || in_insert) ? local_density_g_per_cm3
+                                                            : 1.0F;
+                    stopping_power_MeV_per_mm =
+                        (slab_layer_count > 0 || in_insert)
+                            ? table_stopping_power_MeV_per_mm * scale_density
+                            : table_stopping_power_MeV_per_mm;
+                }
 
                 auto step_mm = sycl::fmin(
                     maximum_step_mm,
-                    maximum_relative_energy_loss * energy_MeV / stopping_power_MeV_per_mm);
+                    maximum_relative_energy_loss * energy_MeV /
+                        sycl::fmax(stopping_power_MeV_per_mm, 1.0e-6F));
                 if (absolute_direction_z >= 1.0e-6F) {
                     const auto boundary_z_mm =
                         direction_z < 0.0F
                             ? static_cast<float>(bin) * depth_bin_width_mm
                             : static_cast<float>(bin + 1) * depth_bin_width_mm;
-                    step_mm = sycl::fmin(
-                        step_mm, (boundary_z_mm - position_z_mm) / direction_z);
+                    const auto dz_step = (boundary_z_mm - position_z_mm) / direction_z;
+                    if (dz_step > 0.0F) {
+                        step_mm = sycl::fmin(step_mm, dz_step);
+                    }
+                }
+                if (slab_layer_count > 0) {
+                    const auto slab_step = distance_to_slab_interface_mm(
+                        position_z_mm, direction_z, slab_z_ends_device, slab_layer_count,
+                        phantom_length_mm);
+                    step_mm = sycl::fmin(step_mm, slab_step);
+                }
+                if (enable_hetero_insert) {
+                    const auto insert_step = distance_to_insert_interface_mm(
+                        position_x_mm, position_y_mm, position_z_mm, direction_x,
+                        direction_y, direction_z, insert_x_min, insert_x_max, insert_y_min,
+                        insert_y_max, insert_z_min, insert_z_max, phantom_length_mm);
+                    step_mm = sycl::fmin(step_mm, insert_step);
+                }
+                if (enable_ct_grid && in_ct) {
+                    // Limit step to CT voxel faces (skip zero-length face hits).
+                    step_mm = clamp_step_to_ct_faces(
+                        step_mm, position_x_mm, position_y_mm, position_z_mm,
+                        direction_x, direction_y, direction_z, ct_origin_x,
+                        ct_origin_y, ct_origin_z, ct_spacing_x, ct_spacing_y,
+                        ct_spacing_z);
                 }
                 if (enable_voxel_scoring && absolute_direction_x >= 1.0e-6F) {
                     const auto boundary_x_mm =
@@ -671,6 +1106,43 @@ TransportResult transport_sycl(const TransportConfig& config,
                                 boundary_z_mm, direction_z > 0.0F ? infinity : -infinity);
                             snapped_to_boundary = true;
                         }
+                    }
+                    if (slab_layer_count > 0 && absolute_direction_z >= 1.0e-6F) {
+                        const auto layer = slab_layer_index(
+                            position_z_mm, slab_z_ends_device, slab_layer_count);
+                        const auto interface_z =
+                            direction_z > 0.0F
+                                ? slab_z_ends_device[layer]
+                                : (layer == 0U ? 0.0F : slab_z_ends_device[layer - 1U]);
+                        if (sycl::fabs((interface_z - position_z_mm) / direction_z) <=
+                            1.0e-6F) {
+                            position_z_mm = sycl::nextafter(
+                                interface_z, direction_z > 0.0F ? infinity : -infinity);
+                            snapped_to_boundary = true;
+                        }
+                    }
+                    if (enable_hetero_insert) {
+                        const auto insert_step = distance_to_insert_interface_mm(
+                            position_x_mm, position_y_mm, position_z_mm, direction_x,
+                            direction_y, direction_z, insert_x_min, insert_x_max,
+                            insert_y_min, insert_y_max, insert_z_min, insert_z_max,
+                            phantom_length_mm);
+                        if (insert_step <= 1.0e-6F) {
+                            // Nudge along the ray to leave/enter the insert AABB.
+                            constexpr float nudge = 1.0e-4F;
+                            position_x_mm += direction_x * nudge;
+                            position_y_mm += direction_y * nudge;
+                            position_z_mm += direction_z * nudge;
+                            snapped_to_boundary = true;
+                        }
+                    }
+                    if (enable_ct_grid && in_ct) {
+                        // Particle sitting on a CT face with vanishing step: nudge past.
+                        constexpr float nudge = 1.0e-4F;
+                        position_x_mm += direction_x * nudge;
+                        position_y_mm += direction_y * nudge;
+                        position_z_mm += direction_z * nudge;
+                        snapped_to_boundary = true;
                     }
                     if (enable_voxel_scoring && absolute_direction_x >= 1.0e-6F) {
                         const auto boundary_x_mm =
@@ -730,7 +1202,7 @@ TransportResult transport_sycl(const TransportConfig& config,
                     constexpr float water_Z_over_A = 0.55509f;
                     const auto variance_MeV2 =
                         bethe_K_MeV_cm2_per_g * electron_mass_MeV * effective_charge *
-                        effective_charge * water_Z_over_A * water_density_g_per_cm3 *
+                        effective_charge * water_Z_over_A * local_density_g_per_cm3 *
                         (step_mm / 10.0f);
                     const auto sigma_MeV =
                         straggling_scale * sycl::sqrt(sycl::fmax(0.0f, variance_MeV2));
@@ -770,7 +1242,7 @@ TransportResult transport_sycl(const TransportConfig& config,
                     const auto projected_rms_angle_rad =
                         highland_projected_rms_angle_device(
                             scattering_energy_MeV, 6, primary_mass_number, step_mm,
-                            water_density_g_per_cm3);
+                            local_density_g_per_cm3);
                     const auto scattered = scatter_direction(
                         Direction3F{direction_x, direction_y, direction_z},
                         projected_rms_angle_rad, random_seed, history, steps, 4);
@@ -791,11 +1263,46 @@ TransportResult transport_sycl(const TransportConfig& config,
                     const auto cross_section_fraction = sycl::clamp(
                         cross_section_floating_index - static_cast<float>(cross_section_index),
                         0.0f, 1.0f);
-                    const auto macroscopic_cross_section_per_mm =
-                        cross_section_device[cross_section_index] +
-                        cross_section_fraction *
-                            (cross_section_device[cross_section_index + 1] -
-                             cross_section_device[cross_section_index]);
+                    float macroscopic_cross_section_per_mm = 0.0F;
+                    if (enable_ct_grid) {
+                        const auto water_xs =
+                            cross_section_device[cross_section_index] +
+                            cross_section_fraction *
+                                (cross_section_device[cross_section_index + 1] -
+                                 cross_section_device[cross_section_index]);
+                        macroscopic_cross_section_per_mm =
+                            water_xs * sycl::fmax(local_density_g_per_cm3, 1.0e-6F);
+                    } else if (in_insert && use_insert_material_tables) {
+                        macroscopic_cross_section_per_mm =
+                            insert_xs_device[static_cast<std::size_t>(cross_section_index)] +
+                            cross_section_fraction *
+                                (insert_xs_device[static_cast<std::size_t>(
+                                                      cross_section_index) +
+                                                  1] -
+                                 insert_xs_device[static_cast<std::size_t>(
+                                     cross_section_index)]);
+                    } else if (material_table_count > 0) {
+                        const auto base = static_cast<std::size_t>(layer_for_material) *
+                                          cross_section_table_size;
+                        macroscopic_cross_section_per_mm =
+                            material_xs_device[base + static_cast<std::size_t>(
+                                                          cross_section_index)] +
+                            cross_section_fraction *
+                                (material_xs_device[base + static_cast<std::size_t>(
+                                                                cross_section_index) +
+                                                    1] -
+                                 material_xs_device[base + static_cast<std::size_t>(
+                                                                cross_section_index)]);
+                    } else {
+                        macroscopic_cross_section_per_mm =
+                            cross_section_device[cross_section_index] +
+                            cross_section_fraction *
+                                (cross_section_device[cross_section_index + 1] -
+                                 cross_section_device[cross_section_index]);
+                        if (slab_layer_count > 0 || in_insert) {
+                            macroscopic_cross_section_per_mm *= local_density_g_per_cm3;
+                        }
+                    }
                     const auto probability = 1.0f - sycl::exp(
                         -macroscopic_cross_section_per_mm * step_mm);
                     const auto uniform = rng::uniform01(random_seed, history, steps, 2);
@@ -838,8 +1345,46 @@ TransportResult transport_sycl(const TransportConfig& config,
                                         neutral_queueable_energy_MeV +=
                                             secondary.kinetic_energy_MeV;
                                     } else {
-                                        secondary_summary.neutral_energy_MeV +=
-                                            secondary.kinetic_energy_MeV;
+                                        const auto kerma_MeV =
+                                            secondary.kinetic_energy_MeV *
+                                            neutral_local_kerma_fraction;
+                                        const auto residual_MeV =
+                                            secondary.kinetic_energy_MeV - kerma_MeV;
+                                        secondary_summary.neutral_energy_MeV += residual_MeV;
+                                        if (kerma_MeV > 0.0F &&
+                                            fragment_dose_device != nullptr) {
+                                            // Score interim local kerma into "other" fragment
+                                            // channel so total IDD includes it without
+                                            // polluting primary C-12.
+                                            constexpr std::size_t other_species = 6;
+                                            sycl::atomic_ref<
+                                                double, sycl::memory_order::relaxed,
+                                                sycl::memory_scope::device,
+                                                sycl::access::address_space::global_space>
+                                                kerma_dose(
+                                                    fragment_dose_device
+                                                        [other_species * number_of_bins +
+                                                         static_cast<std::size_t>(bin)]);
+                                            kerma_dose.fetch_add(
+                                                static_cast<double>(kerma_MeV));
+                                            if (enable_voxel_scoring &&
+                                                voxel_dose_device != nullptr) {
+                                                const auto kerma_voxel_index =
+                                                    static_cast<std::size_t>(bin) *
+                                                        voxel_plane_size +
+                                                    static_cast<std::size_t>(voxel_y) *
+                                                        voxel_bins_x +
+                                                    static_cast<std::size_t>(voxel_x);
+                                                sycl::atomic_ref<
+                                                    double, sycl::memory_order::relaxed,
+                                                    sycl::memory_scope::device,
+                                                    sycl::access::address_space::global_space>
+                                                    kerma_voxel(
+                                                        voxel_dose_device[kerma_voxel_index]);
+                                                kerma_voxel.fetch_add(
+                                                    static_cast<double>(kerma_MeV));
+                                            }
+                                        }
                                     }
                                 } else if (is_supported) {
                                     ++queueable_count;
@@ -898,6 +1443,11 @@ TransportResult transport_sycl(const TransportConfig& config,
                                                     origin_category,
                                                     0,
                                                     charged_lineage,
+                                                    rng::child_stream(
+                                                        history,
+                                                        rng::branch_tag(
+                                                            rng::branch_role_primary_charged,
+                                                            secondary_index)),
                                                 };
                                         }
                                     }
@@ -962,6 +1512,11 @@ TransportResult transport_sycl(const TransportConfig& config,
                                                             lineage)),
                                                     0,
                                                     0,
+                                                    rng::child_stream(
+                                                        history,
+                                                        rng::branch_tag(
+                                                            rng::branch_role_primary_neutral,
+                                                            secondary_index)),
                                                 };
                                         }
                                     }
@@ -1082,6 +1637,8 @@ TransportResult transport_sycl(const TransportConfig& config,
                 CascadeTransportSummary cascade_summary{};
                 if (particle_index < generation_end) {
                     const auto particle = secondary_queue_device[particle_index];
+                    // Philox stream is particle identity, not atomic queue slot.
+                    const auto rng_stream = particle.rng_stream;
                     auto energy_MeV = particle.kinetic_energy_MeV;
                     auto position_x_mm = particle.position_x_mm;
                     auto position_y_mm = particle.position_y_mm;
@@ -1193,8 +1750,47 @@ TransportResult transport_sycl(const TransportConfig& config,
                                          sycl::pow(carbon_charge, -2.0F / 3.0F)));
                         const auto charge_ratio =
                             effective_charge / carbon_effective_charge;
-                        const auto stopping_power_MeV_per_mm =
-                            carbon_stopping_power_MeV_per_mm * charge_ratio * charge_ratio;
+                        const auto in_insert =
+                            enable_hetero_insert &&
+                            inside_hetero_insert(position_x_mm, position_y_mm, position_z_mm,
+                                                 insert_x_min, insert_x_max, insert_y_min,
+                                                 insert_y_max, insert_z_min, insert_z_max);
+                        auto local_density_g_per_cm3 = slab_density_g_per_cm3(
+                            position_z_mm, slab_z_ends_device, slab_densities_device,
+                            slab_layer_count, water_density_g_per_cm3);
+                        if (in_insert) {
+                            local_density_g_per_cm3 = insert_density_g_per_cm3;
+                        }
+                        const auto layer_for_material =
+                            slab_layer_count > 0
+                                ? slab_layer_index(position_z_mm, slab_z_ends_device,
+                                                   slab_layer_count)
+                                : 0U;
+                        float carbon_sp_local = carbon_stopping_power_MeV_per_mm;
+                        if (in_insert && use_insert_material_tables) {
+                            carbon_sp_local =
+                                insert_sp_device[static_cast<std::size_t>(index)] +
+                                fraction *
+                                    (insert_sp_device[static_cast<std::size_t>(index) + 1] -
+                                     insert_sp_device[static_cast<std::size_t>(index)]);
+                        } else if (material_table_count > 0) {
+                            const auto base =
+                                static_cast<std::size_t>(layer_for_material) * table_size;
+                            carbon_sp_local =
+                                material_sp_device[base + static_cast<std::size_t>(index)] +
+                                fraction *
+                                    (material_sp_device[base +
+                                                       static_cast<std::size_t>(index) + 1] -
+                                     material_sp_device[base +
+                                                       static_cast<std::size_t>(index)]);
+                        }
+                        auto stopping_power_MeV_per_mm =
+                            carbon_sp_local * charge_ratio * charge_ratio;
+                        if ((slab_layer_count > 0 || in_insert) &&
+                            !(in_insert && use_insert_material_tables) &&
+                            material_table_count == 0) {
+                            stopping_power_MeV_per_mm *= local_density_g_per_cm3;
+                        }
                         auto path_step_mm = sycl::fmin(
                             maximum_step_mm,
                             maximum_relative_energy_loss * energy_MeV /
@@ -1208,6 +1804,22 @@ TransportResult transport_sycl(const TransportConfig& config,
                                                : boundary_z_mm - position_z_mm;
                         path_step_mm = sycl::fmin(
                             path_step_mm, distance_to_boundary_mm / absolute_direction_z);
+                        if (slab_layer_count > 0) {
+                            path_step_mm = sycl::fmin(
+                                path_step_mm,
+                                distance_to_slab_interface_mm(
+                                    position_z_mm, direction_z, slab_z_ends_device,
+                                    slab_layer_count, phantom_length_mm));
+                        }
+                        if (enable_hetero_insert) {
+                            path_step_mm = sycl::fmin(
+                                path_step_mm,
+                                distance_to_insert_interface_mm(
+                                    position_x_mm, position_y_mm, position_z_mm, direction_x,
+                                    direction_y, direction_z, insert_x_min, insert_x_max,
+                                    insert_y_min, insert_y_max, insert_z_min, insert_z_max,
+                                    phantom_length_mm));
+                        }
                         if (enable_voxel_scoring && absolute_direction_x >= 1.0e-6F) {
                             const auto boundary_x_mm =
                                 voxel_min_x_mm +
@@ -1235,6 +1847,22 @@ TransportResult transport_sycl(const TransportConfig& config,
                                 position_z_mm = sycl::nextafter(
                                     boundary_z_mm, direction_z > 0.0F ? infinity : -infinity);
                                 snapped_to_boundary = true;
+                            }
+                            if (slab_layer_count > 0 && absolute_direction_z >= 1.0e-6F) {
+                                const auto layer = slab_layer_index(
+                                    position_z_mm, slab_z_ends_device, slab_layer_count);
+                                const auto interface_z =
+                                    direction_z > 0.0F
+                                        ? slab_z_ends_device[layer]
+                                        : (layer == 0U ? 0.0F
+                                                       : slab_z_ends_device[layer - 1U]);
+                                if (sycl::fabs((interface_z - position_z_mm) / direction_z) <=
+                                    1.0e-6F) {
+                                    position_z_mm = sycl::nextafter(
+                                        interface_z,
+                                        direction_z > 0.0F ? infinity : -infinity);
+                                    snapped_to_boundary = true;
+                                }
                             }
                             if (enable_voxel_scoring && absolute_direction_x >= 1.0e-6F) {
                                 const auto boundary_x_mm =
@@ -1288,10 +1916,10 @@ TransportResult transport_sycl(const TransportConfig& config,
                             const auto projected_rms_angle_rad =
                                 highland_projected_rms_angle_device(
                                     scattering_energy_MeV, atomic_number, mass_number,
-                                    path_step_mm, water_density_g_per_cm3);
+                                    path_step_mm, local_density_g_per_cm3);
                             const auto scattered = scatter_direction(
                                 Direction3F{direction_x, direction_y, direction_z},
-                                projected_rms_angle_rad, random_seed, particle_index,
+                                projected_rms_angle_rad, random_seed, rng_stream,
                                 steps, 10);
                             direction_x = scattered.x;
                             direction_y = scattered.y;
@@ -1355,10 +1983,14 @@ TransportResult transport_sycl(const TransportConfig& config,
                                             (upper_sample.macroscopic_cross_section_per_mm -
                                              lower_sample.macroscopic_cross_section_per_mm);
                                 }
+                                if (slab_layer_count > 0) {
+                                    macroscopic_cross_section_per_mm *=
+                                        local_density_g_per_cm3;
+                                }
                                 const auto interaction_probability =
                                     1.0F - sycl::exp(-macroscopic_cross_section_per_mm *
                                                      path_step_mm);
-                                if (rng::uniform01(random_seed, particle_index, steps, 8) <
+                                if (rng::uniform01(random_seed, rng_stream, steps, 8) <
                                     interaction_probability) {
                                     std::uint32_t nearest = 0;
                                     while (nearest + 1 < projectile.interaction_count &&
@@ -1390,7 +2022,7 @@ TransportResult transport_sycl(const TransportConfig& config,
                                         sampling_window,
                                         projectile.interaction_count - window_begin);
                                     const auto package_uniform =
-                                        rng::uniform01(random_seed, particle_index, steps, 9);
+                                        rng::uniform01(random_seed, rng_stream, steps, 9);
                                     const auto selected_in_window = sycl::min(
                                         static_cast<std::uint32_t>(package_uniform * window_count),
                                         window_count - 1U);
@@ -1425,8 +2057,43 @@ TransportResult transport_sycl(const TransportConfig& config,
                                                 ++neutral_queueable_count;
                                                 neutral_queueable_energy += scaled_energy;
                                             } else {
+                                                const auto kerma_MeV =
+                                                    scaled_energy * neutral_local_kerma_fraction;
+                                                const auto residual_MeV =
+                                                    scaled_energy - kerma_MeV;
                                                 cascade_summary.neutral_energy_MeV +=
-                                                    scaled_energy;
+                                                    residual_MeV;
+                                                if (kerma_MeV > 0.0F &&
+                                                    fragment_dose_device != nullptr) {
+                                                    constexpr std::size_t other_species = 6;
+                                                    sycl::atomic_ref<
+                                                        double, sycl::memory_order::relaxed,
+                                                        sycl::memory_scope::device,
+                                                        sycl::access::address_space::global_space>
+                                                        kerma_dose(
+                                                            fragment_dose_device
+                                                                [other_species * number_of_bins +
+                                                                 static_cast<std::size_t>(bin)]);
+                                                    kerma_dose.fetch_add(
+                                                        static_cast<double>(kerma_MeV));
+                                                    if (enable_voxel_scoring &&
+                                                        voxel_dose_device != nullptr) {
+                                                        const auto kerma_voxel_index =
+                                                            static_cast<std::size_t>(bin) *
+                                                                voxel_plane_size +
+                                                            static_cast<std::size_t>(voxel_y) *
+                                                                voxel_bins_x +
+                                                            static_cast<std::size_t>(voxel_x);
+                                                        sycl::atomic_ref<
+                                                            double, sycl::memory_order::relaxed,
+                                                            sycl::memory_scope::device,
+                                                            sycl::access::address_space::global_space>
+                                                            kerma_voxel(
+                                                                voxel_dose_device[kerma_voxel_index]);
+                                                        kerma_voxel.fetch_add(
+                                                            static_cast<double>(kerma_MeV));
+                                                    }
+                                                }
                                             }
                                         } else if (supported) {
                                             ++queueable_count;
@@ -1483,6 +2150,11 @@ TransportResult transport_sycl(const TransportConfig& config,
                                                             static_cast<std::uint8_t>(
                                                                 particle.generation + 1),
                                                             charged_lineage,
+                                                            rng::child_stream(
+                                                                rng_stream,
+                                                                rng::branch_tag(
+                                                                    rng::branch_role_cascade_charged,
+                                                                    product_index)),
                                                         };
                                                 }
                                             }
@@ -1546,6 +2218,11 @@ TransportResult transport_sycl(const TransportConfig& config,
                                                             static_cast<std::uint8_t>(
                                                                 particle.generation + 1),
                                                             0,
+                                                            rng::child_stream(
+                                                                rng_stream,
+                                                                rng::branch_tag(
+                                                                    rng::branch_role_cascade_neutral,
+                                                                    product_index)),
                                                         };
                                                 }
                                             }
@@ -1669,6 +2346,7 @@ TransportResult transport_sycl(const TransportConfig& config,
                     std::uint32_t steps = 0;
                     if (particle_index < neutral_generation_end) {
                         const auto particle = neutral_queue_device[particle_index];
+                        const auto rng_stream = particle.rng_stream;
                         auto energy_MeV = particle.kinetic_energy_MeV;
                         auto position_x_mm = particle.position_x_mm;
                         auto position_y_mm = particle.position_y_mm;
@@ -1757,12 +2435,47 @@ TransportResult transport_sycl(const TransportConfig& config,
                                 energy_MeV = 0.0F;
                                 break;
                             }
+                            const auto local_density_g_per_cm3 = slab_density_g_per_cm3(
+                                position_z_mm, slab_z_ends_device, slab_densities_device,
+                                slab_layer_count, water_density_g_per_cm3);
+                            if (slab_layer_count > 0) {
+                                macroscopic_total_per_mm *= local_density_g_per_cm3;
+                            }
 
                             const auto free_path_mm =
                                 -sycl::log(sycl::fmax(
-                                    rng::uniform01(random_seed, particle_index, steps, 20),
+                                    rng::uniform01(random_seed, rng_stream, steps, 20),
                                     1.0e-12F)) /
                                 macroscopic_total_per_mm;
+                            if (slab_layer_count > 0) {
+                                const auto to_interface = distance_to_slab_interface_mm(
+                                    position_z_mm, direction_z, slab_z_ends_device,
+                                    slab_layer_count, phantom_length_mm);
+                                if (free_path_mm > to_interface && to_interface > 0.0F) {
+                                    // Cross interface without interaction; re-sample in new layer.
+                                    constexpr auto infinity =
+                                        std::numeric_limits<float>::infinity();
+                                    position_x_mm += direction_x * to_interface;
+                                    position_y_mm += direction_y * to_interface;
+                                    position_z_mm += direction_z * to_interface;
+                                    if (sycl::fabs(direction_z) >= 1.0e-6F) {
+                                        const auto layer = slab_layer_index(
+                                            position_z_mm - direction_z * 1.0e-5F,
+                                            slab_z_ends_device, slab_layer_count);
+                                        const auto interface_z =
+                                            direction_z > 0.0F
+                                                ? slab_z_ends_device[layer]
+                                                : (layer == 0U
+                                                       ? 0.0F
+                                                       : slab_z_ends_device[layer - 1U]);
+                                        position_z_mm = sycl::nextafter(
+                                            interface_z,
+                                            direction_z > 0.0F ? infinity : -infinity);
+                                    }
+                                    ++steps;
+                                    continue;
+                                }
+                            }
                             position_x_mm += direction_x * free_path_mm;
                             position_y_mm += direction_y * free_path_mm;
                             position_z_mm += direction_z * free_path_mm;
@@ -1812,7 +2525,7 @@ TransportResult transport_sycl(const TransportConfig& config,
                                 projectile.interaction_count - window_begin);
                             const auto selected_in_window = sycl::min(
                                 static_cast<std::uint32_t>(
-                                    rng::uniform01(random_seed, particle_index, steps, 21) *
+                                    rng::uniform01(random_seed, rng_stream, steps, 21) *
                                     window_count),
                                 window_count - 1U);
                             const auto interaction = neutral_interactions_device
@@ -1926,6 +2639,11 @@ TransportResult transport_sycl(const TransportConfig& config,
                                                         product.mass_number),
                                                     particle.generation,
                                                     lineage,
+                                                    rng::child_stream(
+                                                        rng_stream,
+                                                        rng::branch_tag(
+                                                            rng::branch_role_neutral_charged,
+                                                            product_index)),
                                                 };
                                         }
                                     }
@@ -1983,6 +2701,10 @@ TransportResult transport_sycl(const TransportConfig& config,
                                         particle.origin_category,
                                         static_cast<std::uint8_t>(particle.generation + 1),
                                         0,
+                                        rng::child_stream(
+                                            rng_stream,
+                                            rng::branch_tag(
+                                                rng::branch_role_neutral_continuation, 0U)),
                                     };
                                     sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
                                                      sycl::memory_scope::device,
@@ -2139,9 +2861,56 @@ TransportResult transport_sycl(const TransportConfig& config,
                                                       sycl::pow(carbon_charge, -2.0F / 3.0F)));
                                 const auto charge_ratio =
                                     effective_charge / carbon_effective_charge;
-                                const auto stopping_power_MeV_per_mm =
-                                    carbon_stopping_power_MeV_per_mm * charge_ratio *
-                                    charge_ratio;
+                                const auto in_insert =
+                                    enable_hetero_insert &&
+                                    inside_hetero_insert(
+                                        position_x_mm, position_y_mm, position_z_mm,
+                                        insert_x_min, insert_x_max, insert_y_min,
+                                        insert_y_max, insert_z_min, insert_z_max);
+                                auto local_density_g_per_cm3 = slab_density_g_per_cm3(
+                                    position_z_mm, slab_z_ends_device, slab_densities_device,
+                                    slab_layer_count, water_density_g_per_cm3);
+                                if (in_insert) {
+                                    local_density_g_per_cm3 = insert_density_g_per_cm3;
+                                }
+                                const auto layer_for_material =
+                                    slab_layer_count > 0
+                                        ? slab_layer_index(position_z_mm, slab_z_ends_device,
+                                                           slab_layer_count)
+                                        : 0U;
+                                float carbon_sp_local = carbon_stopping_power_MeV_per_mm;
+                                if (in_insert && use_insert_material_tables) {
+                                    carbon_sp_local =
+                                        insert_sp_device[static_cast<std::size_t>(index)] +
+                                        fraction *
+                                            (insert_sp_device[static_cast<std::size_t>(
+                                                                  index) +
+                                                              1] -
+                                             insert_sp_device[static_cast<std::size_t>(
+                                                 index)]);
+                                } else if (material_table_count > 0) {
+                                    const auto base =
+                                        static_cast<std::size_t>(layer_for_material) *
+                                        table_size;
+                                    carbon_sp_local =
+                                        material_sp_device[base +
+                                                          static_cast<std::size_t>(index)] +
+                                        fraction *
+                                            (material_sp_device[base +
+                                                               static_cast<std::size_t>(
+                                                                   index) +
+                                                               1] -
+                                             material_sp_device[base +
+                                                               static_cast<std::size_t>(
+                                                                   index)]);
+                                }
+                                auto stopping_power_MeV_per_mm =
+                                    carbon_sp_local * charge_ratio * charge_ratio;
+                                if ((slab_layer_count > 0 || in_insert) &&
+                                    !(in_insert && use_insert_material_tables) &&
+                                    material_table_count == 0) {
+                                    stopping_power_MeV_per_mm *= local_density_g_per_cm3;
+                                }
                                 auto path_step_mm = sycl::fmin(
                                     maximum_step_mm,
                                     maximum_relative_energy_loss * energy_MeV /
@@ -2159,12 +2928,44 @@ TransportResult transport_sycl(const TransportConfig& config,
                                         path_step_mm,
                                         distance_to_boundary_mm / absolute_direction_z);
                                 }
+                                if (slab_layer_count > 0) {
+                                    path_step_mm = sycl::fmin(
+                                        path_step_mm,
+                                        distance_to_slab_interface_mm(
+                                            position_z_mm, direction_z, slab_z_ends_device,
+                                            slab_layer_count, phantom_length_mm));
+                                }
+                                if (enable_hetero_insert) {
+                                    path_step_mm = sycl::fmin(
+                                        path_step_mm,
+                                        distance_to_insert_interface_mm(
+                                            position_x_mm, position_y_mm, position_z_mm,
+                                            direction_x, direction_y, direction_z,
+                                            insert_x_min, insert_x_max, insert_y_min,
+                                            insert_y_max, insert_z_min, insert_z_max,
+                                            phantom_length_mm));
+                                }
                                 if (path_step_mm <= 1.0e-6F) {
                                     constexpr auto infinity =
                                         std::numeric_limits<float>::infinity();
                                     if (absolute_direction_z >= 1.0e-6F) {
                                         position_z_mm = sycl::nextafter(
                                             boundary_z_mm,
+                                            direction_z > 0.0F ? infinity : -infinity);
+                                    }
+                                    if (slab_layer_count > 0 &&
+                                        absolute_direction_z >= 1.0e-6F) {
+                                        const auto layer = slab_layer_index(
+                                            position_z_mm, slab_z_ends_device,
+                                            slab_layer_count);
+                                        const auto interface_z =
+                                            direction_z > 0.0F
+                                                ? slab_z_ends_device[layer]
+                                                : (layer == 0U
+                                                       ? 0.0F
+                                                       : slab_z_ends_device[layer - 1U]);
+                                        position_z_mm = sycl::nextafter(
+                                            interface_z,
                                             direction_z > 0.0F ? infinity : -infinity);
                                     }
                                     ++steps;
@@ -2341,6 +3142,17 @@ TransportResult transport_sycl(const TransportConfig& config,
     free_device(escaped_device);
     free_device(nuclear_device);
     free_device(steps_device);
+    free_device(slab_z_ends_device);
+    free_device(slab_densities_device);
+    free_device(material_sp_device);
+    free_device(material_xs_device);
+    free_device(insert_sp_device);
+    free_device(insert_xs_device);
+    free_device(ct_density_device);
+    free_device(ct_material_device);
+    free_device(ct_sp_device);
+    free_device(ct_xs_device);
+    free_device(ct_ref_density_device);
     free_device(reaction_bins_device);
     free_device(reactions_device);
     free_device(reaction_secondaries_device);
@@ -2373,6 +3185,16 @@ TransportResult transport_sycl(const TransportConfig& config,
                      (config.enable_energy_straggling ? "+straggling" : "");
     if (enable_multiple_scattering) {
         result.backend += "+multiple-scattering";
+    }
+    if (enable_layered_phantom) {
+        result.backend += use_material_tables ? "+layered-material" : "+layered-slab";
+    }
+    if (enable_hetero_insert) {
+        result.backend += use_insert_material_tables ? "+hetero-insert-material"
+                                                     : "+hetero-insert";
+    }
+    if (enable_ct_grid) {
+        result.backend += "+ct-grid";
     }
     if (enable_voxel_scoring) {
         result.backend += "+voxel-scoring";
@@ -2462,9 +3284,11 @@ TransportResult transport_sycl(const TransportConfig& config,
             &result.proton_deposited_energy_MeV,
             &result.other_charged_deposited_energy_MeV,
         };
+        double fragment_integral_MeV = 0.0;
         for (const auto* species : fragment_species) {
             for (std::size_t bin = 0; bin < number_of_bins; ++bin) {
                 result.deposited_energy_MeV[bin] += (*species)[bin];
+                fragment_integral_MeV += (*species)[bin];
             }
         }
         result.transported_secondaries = transported_queue_count;
@@ -2477,7 +3301,12 @@ TransportResult transport_sycl(const TransportConfig& config,
         result.secondary_transport_steps =
             std::accumulate(secondary_steps_host.begin(), secondary_steps_host.end(),
                             std::uint64_t{0});
-        result.total_deposited_energy_MeV += result.secondary_deposited_energy_MeV;
+        // Secondary-transport deposits are tracked in secondary_deposited_host.
+        // Local neutral kerma is scored only into fragment_dose; include the extra.
+        const auto neutral_kerma_deposit_MeV =
+            std::max(0.0, fragment_integral_MeV - result.secondary_deposited_energy_MeV);
+        result.total_deposited_energy_MeV +=
+            result.secondary_deposited_energy_MeV + neutral_kerma_deposit_MeV;
         result.escaped_energy_MeV += result.secondary_escaped_energy_MeV;
         result.untracked_nuclear_energy_MeV -= result.queued_secondary_energy_MeV;
         if (enable_fragment_cascade) {

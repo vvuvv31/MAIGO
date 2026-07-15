@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# Usage: run_slab_density_remote.sh [smoke|development]
+set -euo pipefail
+
+project_root="${REMOTE_PROJECT_ROOT:-${HOME}/gpu}"
+topas_dir="${project_root}/validation/topas"
+install_dir="${OPENTOPAS_EXTENSION_INSTALL_DIR:-${project_root}/build/opentopas-extension-install}"
+geant4_install="${GEANT4_INSTALL_DIR:-${HOME}/software/gate/GATE/geant4-v11.1.3-install-MT}"
+gdcm_install="${GDCM_INSTALL_DIR:-${HOME}/software/topas/gdcm-install}"
+mode="${1:-development}"
+
+export TOPAS_G4_DATA_DIR="${TOPAS_G4_DATA_DIR:-${HOME}/software/gate/G4DATA}"
+export LD_LIBRARY_PATH="${geant4_install}/lib:${install_dir}/lib:${gdcm_install}/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+
+cd "${topas_dir}"
+mkdir -p output
+
+case "$mode" in
+  smoke)
+    param=carbon_200MeVu_water_slab_density_smoke.txt
+    log=output/slab-density-smoke_topas.log
+    ;;
+  development)
+    param=carbon_200MeVu_water_slab_density_development_remote.txt
+    log=output/slab-density-development_topas.log
+    ;;
+  *)
+    echo "Usage: $0 [smoke|development]" >&2
+    exit 2
+    ;;
+esac
+
+echo "[$(date -Is)] START slab density $mode"
+"${install_dir}/bin/topas" "${param}" 2>&1 | tee "${log}"
+echo "[$(date -Is)] DONE slab density $mode"

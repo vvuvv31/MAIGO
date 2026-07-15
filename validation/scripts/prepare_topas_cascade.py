@@ -70,19 +70,36 @@ def write_csv_gz(path: Path, header: Iterable[str], rows: Iterable[Iterable[obje
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--case", choices=("smoke", "development"), required=True)
+    parser.add_argument("--case", required=True,
+                        help="Logical case name (e.g. smoke, development, e400_development)")
     parser.add_argument("--histories", type=int, required=True)
     parser.add_argument("--input-dir", type=Path, default=Path("validation/topas/output"))
+    parser.add_argument(
+        "--stem",
+        type=str,
+        default=None,
+        help="TOPAS output stem under input-dir (default: cascade_<case>_reactions)",
+    )
+    parser.add_argument(
+        "--log-name",
+        type=str,
+        default=None,
+        help="TOPAS log file name under input-dir (default: cascade-<case>_topas.log)",
+    )
     parser.add_argument("--interactions-output", type=Path, required=True)
     parser.add_argument("--products-output", type=Path, required=True)
     parser.add_argument("--metadata", type=Path, required=True)
     parser.add_argument("--phantom-half-length-mm", type=float, default=200.0)
     args = parser.parse_args()
 
-    stem = args.input_dir / f"cascade_{args.case}_reactions"
+    stem = args.input_dir / (
+        args.stem if args.stem is not None else f"cascade_{args.case}_reactions"
+    )
     phsp = stem.with_suffix(".phsp")
     header_path = stem.with_suffix(".header")
-    log_path = args.input_dir / f"cascade-{args.case}_topas.log"
+    log_path = args.input_dir / (
+        args.log_name if args.log_name is not None else f"cascade-{args.case}_topas.log"
+    )
     for path in (phsp, header_path, log_path):
         if not path.exists():
             raise SystemExit(f"Required TOPAS output not found: {path}")

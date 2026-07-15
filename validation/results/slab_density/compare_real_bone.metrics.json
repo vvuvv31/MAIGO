@@ -1,0 +1,16 @@
+{
+  "gpu": "out\\slab\\e200_real_bone_idd.csv",
+  "topas": "validation\\results\\slab_density\\topas_e200_real_bone_idd.csv",
+  "integral_gpu": 1139.2349394795401,
+  "integral_topas": 1148.4918669726578,
+  "integral_rel_percent": -0.806007230814642,
+  "R80_gpu_mm": 72.51787485081047,
+  "R80_topas_mm": 72.44666004697886,
+  "delta_R80_mm": 0.07121480383160872,
+  "peak_z_gpu_mm": 72.25,
+  "peak_z_topas_mm": 72.25,
+  "nrmse": 0.004691825299666324,
+  "dense_region_mean_gpu": 23.5121392959625,
+  "dense_region_mean_topas": 23.77525721875,
+  "dense_region_mean_rel_percent": -1.1066880175748295
+}

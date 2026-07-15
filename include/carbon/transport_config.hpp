@@ -1,9 +1,12 @@
 #pragma once
 
+#include "carbon/slab_phantom.hpp"
+
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <string>
+#include <vector>
 
 namespace carbon {
 
@@ -17,6 +20,33 @@ struct TransportConfig {
     double maximum_relative_energy_loss{0.005};
     double energy_cutoff_MeV{0.1};
     double water_density_g_per_cm3{1.0};
+    // When true, axial slabs override uniform water.
+    // Density-only mode: SP/XS water tables × local density (water-equivalent).
+    // Material mode: per-layer SP/XS CSV (absolute MeV/mm and macro 1/mm); density
+    // used for MCS/straggling only. Empty layers => uniform.
+    bool enable_layered_phantom{false};
+    std::vector<SlabLayer> slab_layers{};
+    // Optional absolute material tables, one path per slab layer (same length).
+    std::vector<std::filesystem::path> slab_stopping_power_files{};
+    std::vector<std::filesystem::path> slab_cross_section_files{};
+    // Lateral/3D insert (7b): AABB of alternate material inside water background.
+    bool enable_hetero_insert{false};
+    HeteroInsert hetero_insert{};
+    std::filesystem::path insert_stopping_power_file{};
+    std::filesystem::path insert_cross_section_file{};
+    // 7c: CT voxel grid (exclusive with layered/hetero insert).
+    bool enable_ct_grid{false};
+    std::filesystem::path ct_grid_file{};
+    // Optional absolute SP/XS for CT materials 0..3 (air/lung/water/bone).
+    // Empty → water table × local density for all materials.
+    std::filesystem::path ct_air_stopping_power_file{};
+    std::filesystem::path ct_lung_stopping_power_file{};
+    std::filesystem::path ct_water_stopping_power_file{};
+    std::filesystem::path ct_bone_stopping_power_file{};
+    std::filesystem::path ct_air_cross_section_file{};
+    std::filesystem::path ct_lung_cross_section_file{};
+    std::filesystem::path ct_water_cross_section_file{};
+    std::filesystem::path ct_bone_cross_section_file{};
     double scorer_area_mm2{90'000.0};
     bool enable_voxel_scoring{false};
     bool enable_charged_origin_voxel_scoring{false};
@@ -27,6 +57,15 @@ struct TransportConfig {
     bool enable_energy_straggling{false};
     double straggling_scale{1.0};
     bool enable_multiple_scattering{false};
+    // TOPAS-style BiGaussian emittance source on the entrance plane (z=0).
+    // Samples (x,x') and (y,y') from bivariate Gaussians; x' = dx/dz (rad-like).
+    bool enable_emittance_source{false};
+    double emittance_sigma_x_mm{0.0};
+    double emittance_sigma_y_mm{0.0};
+    double emittance_sigma_x_prime{0.0};
+    double emittance_sigma_y_prime{0.0};
+    double emittance_correlation_x{0.0};
+    double emittance_correlation_y{0.0};
     bool enable_primary_attenuation{false};
     bool enable_secondary_generation{false};
     bool enable_secondary_transport{false};
@@ -35,6 +74,11 @@ struct TransportConfig {
     // "first_interaction": free path + one package (mode D); continuation residual.
     // "full": re-queue neutral continuations up to maximum_neutral_generations.
     std::string neutral_transport_mode{"first_interaction"};
+    // When neutral transport is off, deposit this fraction of born neutron/gamma
+    // kinetic energy at the production depth bin (local kerma approximation).
+    // Calibrate on TOPAS 200 MeV/u neutron+gamma origin / untransported birth KE
+    // (~16.35 / 54.9 ≈ 0.298). Not a global dose scale of the charged IDD.
+    double neutral_local_kerma_fraction{0.0};
     std::uint32_t maximum_cascade_generations{0};
     std::uint32_t maximum_neutral_generations{1};
     std::size_t secondary_queue_capacity{0};

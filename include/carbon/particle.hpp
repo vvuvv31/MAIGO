@@ -63,9 +63,12 @@ struct SecondaryParticle3D {
     std::uint8_t origin_category{0};
     std::uint8_t generation{0};
     std::uint16_t reserved{0};  // charged_lineage / neutron_lineage / gamma_lineage
+    // Deterministic Philox stream id (not the atomic queue slot). Primary children
+    // derive from history; cascade/neutral children derive from parent stream.
+    std::uint64_t rng_stream{0};
 };
 
-static_assert(sizeof(SecondaryParticle3D) == 40);
+static_assert(sizeof(SecondaryParticle3D) == 48);
 
 struct NeutralParticle3D {
     float position_x_mm{0.0F};
@@ -79,9 +82,10 @@ struct NeutralParticle3D {
     std::uint8_t origin_category{0};  // neutron_origin_category / gamma_origin_category
     std::uint8_t generation{0};
     std::uint16_t reserved{0};
+    std::uint64_t rng_stream{0};
 };
 
-static_assert(sizeof(NeutralParticle3D) == 36);
+static_assert(sizeof(NeutralParticle3D) == 48);
 
 struct SecondaryGenerationSummary {
     std::uint32_t direct_count{0};

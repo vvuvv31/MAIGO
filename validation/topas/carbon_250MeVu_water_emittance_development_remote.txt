@@ -1,0 +1,5 @@
+includeFile = carbon_250MeVu_water_emittance.txt
+i:Ts/NumberOfThreads = 56
+i:So/CarbonBeam/NumberOfHistoriesInRun = 50000
+s:Sc/Dose3D/OutputFile = "output/emittance_250_development_dose_3d"
+s:Sc/ScorerIDD/OutputFile = "output/emittance_250_development_idd"

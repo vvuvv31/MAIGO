@@ -5,10 +5,12 @@
 #include <cmath>
 #include <fstream>
 #include <limits>
+#include <sstream>
 #include <stdexcept>
 #include <string_view>
 #include <type_traits>
 #include <unordered_map>
+#include <vector>
 
 namespace carbon {
 namespace {
@@ -107,7 +109,77 @@ bool parse_bool(const std::unordered_map<std::string, std::string>& values,
     throw std::runtime_error("Invalid boolean for '" + key + "': " + iterator->second);
 }
 
+std::vector<double> parse_double_list(const std::string& text, const std::string& key) {
+    std::vector<double> values;
+    std::stringstream stream(text);
+    std::string token;
+    while (std::getline(stream, token, ',')) {
+        token = trim(token);
+        if (token.empty()) {
+            continue;
+        }
+        std::size_t parsed = 0;
+        const auto number = std::stod(token, &parsed);
+        if (parsed != token.size()) {
+            throw std::runtime_error("Invalid number in '" + key + "': " + token);
+        }
+        values.push_back(number);
+    }
+    return values;
+}
+
+std::vector<std::filesystem::path> parse_path_list(const std::string& text) {
+    std::vector<std::filesystem::path> values;
+    std::stringstream stream(text);
+    std::string token;
+    while (std::getline(stream, token, ',')) {
+        token = trim(token);
+        if (token.empty()) {
+            continue;
+        }
+        values.emplace_back(token);
+    }
+    return values;
+}
+
 }  // namespace
+
+void validate_slab_layers(const std::vector<SlabLayer>& layers, double phantom_length_mm) {
+    if (layers.empty()) {
+        throw std::invalid_argument("enable_layered_phantom requires at least one slab layer");
+    }
+    double previous_end = 0.0;
+    for (std::size_t index = 0; index < layers.size(); ++index) {
+        const auto& layer = layers[index];
+        if (layer.density_g_per_cm3 <= 0.0) {
+            throw std::invalid_argument("slab layer density must be positive");
+        }
+        if (layer.z_end_mm <= previous_end) {
+            throw std::invalid_argument(
+                "slab_z_ends_mm must be strictly increasing from the entrance");
+        }
+        previous_end = layer.z_end_mm;
+    }
+    if (std::abs(layers.back().z_end_mm - phantom_length_mm) > 1.0e-6) {
+        throw std::invalid_argument(
+            "last slab_z_ends_mm entry must equal phantom_length_mm");
+    }
+}
+
+void validate_hetero_insert(const HeteroInsert& insert, double phantom_length_mm) {
+    if (!(insert.x_min_mm < insert.x_max_mm) || !(insert.y_min_mm < insert.y_max_mm) ||
+        !(insert.z_min_mm < insert.z_max_mm)) {
+        throw std::invalid_argument(
+            "hetero insert bounds must satisfy min < max on each axis");
+    }
+    if (insert.z_min_mm < 0.0 || insert.z_max_mm > phantom_length_mm + 1.0e-6) {
+        throw std::invalid_argument(
+            "hetero insert z range must lie within [0, phantom_length_mm]");
+    }
+    if (insert.density_g_per_cm3 <= 0.0) {
+        throw std::invalid_argument("hetero insert density must be positive");
+    }
+}
 
 std::size_t TransportConfig::number_of_bins() const {
     return static_cast<std::size_t>(std::ceil(phantom_length_mm / depth_bin_width_mm));
@@ -139,6 +211,50 @@ void TransportConfig::validate() const {
     }
     if (energy_cutoff_MeV < 0.0 || water_density_g_per_cm3 <= 0.0 || scorer_area_mm2 <= 0.0) {
         throw std::invalid_argument("cutoff must be nonnegative; density and scorer area must be positive");
+    }
+    if (enable_layered_phantom) {
+        validate_slab_layers(slab_layers, phantom_length_mm);
+        const auto has_sp = !slab_stopping_power_files.empty();
+        const auto has_xs = !slab_cross_section_files.empty();
+        if (has_sp != has_xs) {
+            throw std::invalid_argument(
+                "slab_stopping_power_files and slab_cross_section_files must both be set "
+                "or both omitted");
+        }
+        if (has_sp) {
+            if (slab_stopping_power_files.size() != slab_layers.size() ||
+                slab_cross_section_files.size() != slab_layers.size()) {
+                throw std::invalid_argument(
+                    "slab material table file lists must match slab layer count");
+            }
+        }
+    } else if (!slab_layers.empty()) {
+        throw std::invalid_argument(
+            "slab_layers is set but enable_layered_phantom=false");
+    }
+    if (enable_hetero_insert) {
+        validate_hetero_insert(hetero_insert, phantom_length_mm);
+        const auto has_sp = !insert_stopping_power_file.empty();
+        const auto has_xs = !insert_cross_section_file.empty();
+        if (has_sp != has_xs) {
+            throw std::invalid_argument(
+                "insert_stopping_power_file and insert_cross_section_file must both be set "
+                "or both omitted");
+        }
+    }
+    if (enable_hetero_insert && enable_layered_phantom) {
+        throw std::invalid_argument(
+            "enable_hetero_insert and enable_layered_phantom cannot both be true "
+            "(use one heterogeneity model per run)");
+    }
+    if (enable_ct_grid) {
+        if (ct_grid_file.empty()) {
+            throw std::invalid_argument("enable_ct_grid requires ct_grid_file");
+        }
+        if (enable_layered_phantom || enable_hetero_insert) {
+            throw std::invalid_argument(
+                "enable_ct_grid cannot combine with layered phantom or hetero insert");
+        }
     }
     if (straggling_scale < 0.0) {
         throw std::invalid_argument("straggling_scale must be nonnegative");
@@ -186,6 +302,32 @@ void TransportConfig::validate() const {
         throw std::invalid_argument(
             "neutral_transport_mode=full requires maximum_neutral_generations >= 2");
     }
+    if (neutral_local_kerma_fraction < 0.0 || neutral_local_kerma_fraction > 1.0) {
+        throw std::invalid_argument(
+            "neutral_local_kerma_fraction must be in [0, 1]");
+    }
+    if (neutral_local_kerma_fraction > 0.0 && enable_neutral_transport) {
+        throw std::invalid_argument(
+            "neutral_local_kerma_fraction is only for neutral transport off "
+            "(interim local kerma); disable enable_neutral_transport");
+    }
+    if (neutral_local_kerma_fraction > 0.0 && !enable_secondary_transport) {
+        throw std::invalid_argument(
+            "neutral_local_kerma_fraction requires enable_secondary_transport "
+            "so deposits can be scored into the fragment IDD");
+    }
+    if (enable_emittance_source) {
+        if (emittance_sigma_x_mm < 0.0 || emittance_sigma_y_mm < 0.0 ||
+            emittance_sigma_x_prime < 0.0 || emittance_sigma_y_prime < 0.0) {
+            throw std::invalid_argument(
+                "emittance sigmas must be non-negative");
+        }
+        if (emittance_correlation_x < -1.0 || emittance_correlation_x > 1.0 ||
+            emittance_correlation_y < -1.0 || emittance_correlation_y > 1.0) {
+            throw std::invalid_argument(
+                "emittance correlations must be in [-1, 1]");
+        }
+    }
 }
 
 TransportConfig load_config(const std::filesystem::path& path) {
@@ -202,6 +344,94 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.energy_cutoff_MeV = parse_number(values, "energy_cutoff_MeV", config.energy_cutoff_MeV);
     config.water_density_g_per_cm3 =
         parse_number(values, "water_density_g_per_cm3", config.water_density_g_per_cm3);
+    config.enable_layered_phantom =
+        parse_bool(values, "enable_layered_phantom", config.enable_layered_phantom);
+    {
+        const auto z_it = values.find("slab_z_ends_mm");
+        const auto d_it = values.find("slab_densities_g_per_cm3");
+        if (z_it != values.end() || d_it != values.end()) {
+            if (z_it == values.end() || d_it == values.end()) {
+                throw std::runtime_error(
+                    "slab_z_ends_mm and slab_densities_g_per_cm3 must both be set");
+            }
+            const auto z_ends = parse_double_list(z_it->second, "slab_z_ends_mm");
+            const auto densities =
+                parse_double_list(d_it->second, "slab_densities_g_per_cm3");
+            if (z_ends.size() != densities.size()) {
+                throw std::runtime_error(
+                    "slab_z_ends_mm and slab_densities_g_per_cm3 length mismatch");
+            }
+            config.slab_layers.clear();
+            config.slab_layers.reserve(z_ends.size());
+            for (std::size_t index = 0; index < z_ends.size(); ++index) {
+                config.slab_layers.push_back(
+                    SlabLayer{z_ends[index], densities[index]});
+            }
+            // Presence of slab lists implies layered mode unless explicitly false.
+            if (values.find("enable_layered_phantom") == values.end()) {
+                config.enable_layered_phantom = true;
+            }
+        }
+        const auto sp_it = values.find("slab_stopping_power_files");
+        const auto xs_it = values.find("slab_cross_section_files");
+        if (sp_it != values.end() || xs_it != values.end()) {
+            if (sp_it == values.end() || xs_it == values.end()) {
+                throw std::runtime_error(
+                    "slab_stopping_power_files and slab_cross_section_files must both be set");
+            }
+            config.slab_stopping_power_files = parse_path_list(sp_it->second);
+            config.slab_cross_section_files = parse_path_list(xs_it->second);
+            if (values.find("enable_layered_phantom") == values.end()) {
+                config.enable_layered_phantom = true;
+            }
+        }
+    }
+    config.enable_hetero_insert =
+        parse_bool(values, "enable_hetero_insert", config.enable_hetero_insert);
+    config.hetero_insert.x_min_mm =
+        parse_number(values, "insert_x_min_mm", config.hetero_insert.x_min_mm);
+    config.hetero_insert.x_max_mm =
+        parse_number(values, "insert_x_max_mm", config.hetero_insert.x_max_mm);
+    config.hetero_insert.y_min_mm =
+        parse_number(values, "insert_y_min_mm", config.hetero_insert.y_min_mm);
+    config.hetero_insert.y_max_mm =
+        parse_number(values, "insert_y_max_mm", config.hetero_insert.y_max_mm);
+    config.hetero_insert.z_min_mm =
+        parse_number(values, "insert_z_min_mm", config.hetero_insert.z_min_mm);
+    config.hetero_insert.z_max_mm =
+        parse_number(values, "insert_z_max_mm", config.hetero_insert.z_max_mm);
+    config.hetero_insert.density_g_per_cm3 = parse_number(
+        values, "insert_density_g_per_cm3", config.hetero_insert.density_g_per_cm3);
+    config.insert_stopping_power_file = parse_path(
+        values, "insert_stopping_power_file", config.insert_stopping_power_file);
+    config.insert_cross_section_file = parse_path(
+        values, "insert_cross_section_file", config.insert_cross_section_file);
+    if (values.find("insert_x_min_mm") != values.end() &&
+        values.find("enable_hetero_insert") == values.end()) {
+        config.enable_hetero_insert = true;
+    }
+    config.enable_ct_grid = parse_bool(values, "enable_ct_grid", config.enable_ct_grid);
+    config.ct_grid_file = parse_path(values, "ct_grid_file", config.ct_grid_file);
+    config.ct_air_stopping_power_file = parse_path(
+        values, "ct_air_stopping_power_file", config.ct_air_stopping_power_file);
+    config.ct_lung_stopping_power_file = parse_path(
+        values, "ct_lung_stopping_power_file", config.ct_lung_stopping_power_file);
+    config.ct_water_stopping_power_file = parse_path(
+        values, "ct_water_stopping_power_file", config.ct_water_stopping_power_file);
+    config.ct_bone_stopping_power_file = parse_path(
+        values, "ct_bone_stopping_power_file", config.ct_bone_stopping_power_file);
+    config.ct_air_cross_section_file = parse_path(
+        values, "ct_air_cross_section_file", config.ct_air_cross_section_file);
+    config.ct_lung_cross_section_file = parse_path(
+        values, "ct_lung_cross_section_file", config.ct_lung_cross_section_file);
+    config.ct_water_cross_section_file = parse_path(
+        values, "ct_water_cross_section_file", config.ct_water_cross_section_file);
+    config.ct_bone_cross_section_file = parse_path(
+        values, "ct_bone_cross_section_file", config.ct_bone_cross_section_file);
+    if (values.find("ct_grid_file") != values.end() &&
+        values.find("enable_ct_grid") == values.end()) {
+        config.enable_ct_grid = true;
+    }
     config.scorer_area_mm2 = parse_number(values, "scorer_area_mm2", config.scorer_area_mm2);
     config.enable_voxel_scoring =
         parse_bool(values, "enable_voxel_scoring", config.enable_voxel_scoring);
@@ -219,6 +449,20 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.straggling_scale = parse_number(values, "straggling_scale", config.straggling_scale);
     config.enable_multiple_scattering =
         parse_bool(values, "enable_multiple_scattering", config.enable_multiple_scattering);
+    config.enable_emittance_source =
+        parse_bool(values, "enable_emittance_source", config.enable_emittance_source);
+    config.emittance_sigma_x_mm =
+        parse_number(values, "emittance_sigma_x_mm", config.emittance_sigma_x_mm);
+    config.emittance_sigma_y_mm =
+        parse_number(values, "emittance_sigma_y_mm", config.emittance_sigma_y_mm);
+    config.emittance_sigma_x_prime =
+        parse_number(values, "emittance_sigma_x_prime", config.emittance_sigma_x_prime);
+    config.emittance_sigma_y_prime =
+        parse_number(values, "emittance_sigma_y_prime", config.emittance_sigma_y_prime);
+    config.emittance_correlation_x =
+        parse_number(values, "emittance_correlation_x", config.emittance_correlation_x);
+    config.emittance_correlation_y =
+        parse_number(values, "emittance_correlation_y", config.emittance_correlation_y);
     config.enable_primary_attenuation =
         parse_bool(values, "enable_primary_attenuation", config.enable_primary_attenuation);
     config.enable_secondary_generation =
@@ -233,6 +477,8 @@ TransportConfig load_config(const std::filesystem::path& path) {
     if (neutral_mode != values.end()) {
         config.neutral_transport_mode = neutral_mode->second;
     }
+    config.neutral_local_kerma_fraction = parse_number(
+        values, "neutral_local_kerma_fraction", config.neutral_local_kerma_fraction);
     config.maximum_cascade_generations = parse_number(
         values, "maximum_cascade_generations", config.maximum_cascade_generations);
     config.maximum_neutral_generations = parse_number(

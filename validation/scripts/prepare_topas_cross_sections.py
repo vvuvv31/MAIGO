@@ -97,6 +97,11 @@ def main() -> None:
         default=Path("data/c12_inelastic_cross_sections_water_geant4_11_3_2.metadata.json"),
     )
     parser.add_argument("--reference-energy-MeVu", type=float, default=200.0)
+    parser.add_argument(
+        "--allow-non-water-closure",
+        action="store_true",
+        help="Skip H+O==material macro closure (required for bone/lung multi-element materials).",
+    )
     args = parser.parse_args()
 
     for path in (args.input, args.header, args.log):
@@ -112,9 +117,10 @@ def main() -> None:
     max_closure = max(closure)
     max_macro = max(row[6] for row in rows)
     tolerance = max(1.0e-10, max_macro * 2.0e-5)
-    if max_closure > tolerance:
+    if max_closure > tolerance and not args.allow_non_water_closure:
         raise SystemExit(
-            f"H/O macroscopic components do not close to water: {max_closure:.6g} > {tolerance:.6g} 1/mm"
+            f"H/O macroscopic components do not close to water: {max_closure:.6g} > {tolerance:.6g} 1/mm "
+            "(use --allow-non-water-closure for multi-element materials)"
         )
 
     reference_index = min(

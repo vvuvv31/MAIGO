@@ -1,0 +1,5 @@
+includeFile = carbon_200MeVu_water_emittance.txt
+
+i:So/CarbonBeam/NumberOfHistoriesInRun = 200
+s:Sc/Dose3D/OutputFile = "output/emittance_200_smoke_dose_3d"
+s:Sc/ScorerIDD/OutputFile = "output/emittance_200_smoke_idd"

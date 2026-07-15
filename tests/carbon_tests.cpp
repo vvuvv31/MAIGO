@@ -1,4 +1,5 @@
 #include "carbon/cascade_package.hpp"
+#include "carbon/ct_grid.hpp"
 #include "carbon/neutral_package.hpp"
 #include "carbon/cross_section.hpp"
 #include "carbon/multiple_scattering.hpp"
@@ -232,6 +233,89 @@ void test_step_selection() {
                  "Maximum-step limit failed");
 }
 
+void test_slab_phantom_helpers() {
+    const float z_ends[] = {50.0F, 70.0F, 400.0F};
+    const float densities[] = {1.0F, 1.85F, 1.0F};
+    require(carbon::slab_layer_index(0.0F, z_ends, 3) == 0, "entrance layer");
+    require(carbon::slab_layer_index(49.9F, z_ends, 3) == 0, "first layer interior");
+    require(carbon::slab_layer_index(50.0F, z_ends, 3) == 1, "dense layer start");
+    require(carbon::slab_layer_index(69.9F, z_ends, 3) == 1, "dense layer interior");
+    require(carbon::slab_layer_index(70.0F, z_ends, 3) == 2, "exit water start");
+    require_near(carbon::slab_density_g_per_cm3(60.0F, z_ends, densities, 3, 1.0F), 1.85,
+                 1.0e-5, "dense slab density");
+    require_near(carbon::distance_to_slab_interface_mm(40.0F, 1.0F, z_ends, 3, 400.0F), 10.0,
+                 1.0e-4, "forward interface distance");
+    require_near(carbon::distance_to_slab_interface_mm(60.0F, -1.0F, z_ends, 3, 400.0F), 10.0,
+                 1.0e-4, "backward interface distance");
+
+    require(carbon::inside_hetero_insert(0.0F, 0.0F, 55.0F, -10.0F, 10.0F, -10.0F, 10.0F,
+                                         50.0F, 70.0F),
+            "insert interior");
+    require(!carbon::inside_hetero_insert(0.0F, 0.0F, 40.0F, -10.0F, 10.0F, -10.0F, 10.0F,
+                                          50.0F, 70.0F),
+            "insert exterior z");
+    require_near(carbon::distance_to_insert_interface_mm(
+                     0.0F, 0.0F, 40.0F, 0.0F, 0.0F, 1.0F, -10.0F, 10.0F, -10.0F, 10.0F, 50.0F,
+                     70.0F, 1.0e6F),
+                 10.0, 1.0e-4, "enter insert along +z");
+    require_near(carbon::distance_to_insert_interface_mm(
+                     0.0F, 0.0F, 55.0F, 0.0F, 0.0F, 1.0F, -10.0F, 10.0F, -10.0F, 10.0F, 50.0F,
+                     70.0F, 1.0e6F),
+                 15.0, 1.0e-4, "exit insert along +z");
+
+    carbon::TransportConfig config;
+    config.enable_layered_phantom = true;
+    config.phantom_length_mm = 400.0;
+    config.slab_layers = {{50.0, 1.0}, {70.0, 1.85}, {400.0, 1.0}};
+    config.validate();
+    require_throws(
+        []() {
+            carbon::TransportConfig bad;
+            bad.enable_layered_phantom = true;
+            bad.phantom_length_mm = 400.0;
+            bad.slab_layers = {{50.0, 1.0}, {70.0, 1.85}};  // last != phantom
+            bad.validate();
+        },
+        "mismatched last slab end was accepted");
+
+    carbon::TransportConfig insert_config;
+    insert_config.enable_hetero_insert = true;
+    insert_config.phantom_length_mm = 400.0;
+    insert_config.hetero_insert = {-10.0, 10.0, -10.0, 10.0, 50.0, 70.0, 1.85};
+    insert_config.validate();
+}
+
+void test_ct_grid_helpers() {
+    require_near(carbon::hu_to_density_g_per_cm3(0.0F), 1.0F, 1.0e-5, "HU0 density");
+    require_near(carbon::hu_to_density_g_per_cm3(-1000.0F), 0.001205F, 1.0e-6,
+                 "air density");
+    require(carbon::density_to_material_id(1.0F) == 2, "water material id");
+    require(carbon::density_to_material_id(1.85F) == 3, "bone material id");
+
+    // Face distance: interior of 1 mm voxel along +x should be ~0.7 mm.
+    require_near(carbon::distance_to_next_ct_face_1d(0.3F, 0.0F, 1.0F, 1.0F), 0.7F, 1.0e-5,
+                 "ct face +x interior");
+    // Sitting exactly on a face going +x must skip zero and return one voxel spacing.
+    require_near(carbon::distance_to_next_ct_face_1d(1.0F, 0.0F, 1.0F, 1.0F), 1.0F, 1.0e-4,
+                 "ct face +x on boundary");
+    // Sitting on face going -x should skip zero and advance to previous face.
+    require_near(carbon::distance_to_next_ct_face_1d(1.0F, 0.0F, 1.0F, -1.0F), 1.0F, 1.0e-4,
+                 "ct face -x on boundary");
+
+    const float dens[8] = {1.0F, 1.1F, 1.2F, 1.3F, 1.4F, 1.5F, 1.6F, 1.7F};
+    const std::uint8_t mats[8] = {2, 2, 2, 2, 3, 3, 3, 3};
+    float rho = 0.0F;
+    std::uint8_t mid = 0;
+    require(carbon::ct_sample(0.1F, 0.1F, 0.1F, 0.0F, 0.0F, 0.0F, 1.0F, 1.0F, 1.0F, 2, 2, 2,
+                              dens, mats, rho, mid),
+            "ct sample inside");
+    require_near(rho, 1.0F, 1.0e-6, "ct sample density");
+    require(mid == 2, "ct sample material");
+    require(!carbon::ct_sample(-0.1F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 1.0F, 1.0F, 1.0F, 2, 2,
+                               2, dens, mats, rho, mid),
+            "ct sample outside");
+}
+
 void test_philox_rng() {
     const auto block = carbon::rng::philox4x32_10({0U, 0U, 0U, 0U}, 0U, 0U);
     require(block[0] == 0x6627E8D5U && block[1] == 0xE169C58DU &&
@@ -251,6 +335,22 @@ void test_philox_rng() {
     const auto variance = squared_sum / static_cast<double>(samples) - mean * mean;
     require_near(mean, 0.5, 0.003, "Uniform RNG mean failed");
     require_near(variance, 1.0 / 12.0, 0.001, "Uniform RNG variance failed");
+
+    // Child streams: same parent+tag always equal; different tags/roles diverge.
+    const auto parent = 42ULL;
+    const auto a = carbon::rng::child_stream(
+        parent, carbon::rng::branch_tag(carbon::rng::branch_role_primary_charged, 0));
+    const auto a2 = carbon::rng::child_stream(
+        parent, carbon::rng::branch_tag(carbon::rng::branch_role_primary_charged, 0));
+    const auto b = carbon::rng::child_stream(
+        parent, carbon::rng::branch_tag(carbon::rng::branch_role_primary_charged, 1));
+    const auto n = carbon::rng::child_stream(
+        parent, carbon::rng::branch_tag(carbon::rng::branch_role_primary_neutral, 0));
+    require(a == a2 && a != 0 && a != parent, "child_stream not deterministic");
+    require(a != b && a != n, "child_stream collisions across tags");
+    require(sizeof(carbon::SecondaryParticle3D) == 48 &&
+                sizeof(carbon::NeutralParticle3D) == 48,
+            "Particle layout size changed unexpectedly");
 }
 
 void test_bohr_straggling() {
@@ -701,6 +801,80 @@ void test_sycl_secondary_queue_generation() {
             "Cascade queue generation count did not close");
     require(cascaded.relative_energy_balance_error() < 1.0e-4,
             "Fragment cascade total energy balance failed");
+
+    // Same seed + cascade: IDD must be bit-identical (RNG streams no longer use
+    // atomic queue slots).
+    const auto cascaded_repeat = carbon::transport_sycl(
+        config, stopping_power, forced_reaction, "cpu", &reaction_packages,
+        &cascade_packages);
+    require(cascaded.deposited_energy_MeV.size() ==
+                cascaded_repeat.deposited_energy_MeV.size(),
+            "Cascade reproducibility IDD size mismatch");
+    for (std::size_t bin = 0; bin < cascaded.deposited_energy_MeV.size(); ++bin) {
+        require(cascaded.deposited_energy_MeV[bin] ==
+                    cascaded_repeat.deposited_energy_MeV[bin],
+                "Cascade IDD not bit-identical at bin " + std::to_string(bin) +
+                    " a=" + std::to_string(cascaded.deposited_energy_MeV[bin]) +
+                    " b=" + std::to_string(cascaded_repeat.deposited_energy_MeV[bin]));
+    }
+    require(cascaded.cascade_interactions == cascaded_repeat.cascade_interactions &&
+                cascaded.queued_cascade_secondaries ==
+                    cascaded_repeat.queued_cascade_secondaries &&
+                cascaded.secondary_deposited_energy_MeV ==
+                    cascaded_repeat.secondary_deposited_energy_MeV,
+            "Cascade summary counters not bit-identical across same-seed runs");
+}
+
+void test_sycl_layered_slab_range_shift() {
+    // Dense insert shortens residual range vs uniform water (CSDA-level effect).
+    const auto package_path = std::filesystem::path(CARBON_SOURCE_DIR) /
+                              "validation/results/"
+                              "topas_200MeVu_reaction_packages_development.bin";
+    if (!std::filesystem::exists(package_path)) {
+        return;
+    }
+    const auto reaction_packages = carbon::ReactionPackageTable::from_binary(package_path);
+    carbon::TransportConfig config;
+    config.number_of_histories = 256;
+    config.initial_energy_MeVu = 100.0;
+    config.phantom_length_mm = 200.0;
+    config.depth_bin_width_mm = 1.0;
+    config.maximum_step_mm = 0.5;
+    config.maximum_relative_energy_loss = 0.01;
+    config.enable_primary_attenuation = true;
+    config.enable_secondary_generation = false;
+    config.enable_energy_straggling = false;
+    config.enable_multiple_scattering = false;
+    config.random_seed = 42;
+    const carbon::StoppingPowerTable stopping_power(
+        {0.01, 50.01, 100.01, 150.01}, {40.0, 20.0, 12.0, 10.0});
+    const carbon::CrossSectionTable xs({0.01, 150.01}, {1.0e-6, 1.0e-6});
+
+    config.enable_layered_phantom = false;
+    const auto uniform = carbon::transport_sycl(
+        config, stopping_power, xs, "cpu", &reaction_packages);
+
+    config.enable_layered_phantom = true;
+    config.slab_layers = {{30.0, 1.0}, {50.0, 2.0}, {200.0, 1.0}};
+    const auto layered = carbon::transport_sycl(
+        config, stopping_power, xs, "cpu", &reaction_packages);
+
+    auto r80 = [](const std::vector<double>& dose, double bin_width) {
+        const auto peak = *std::max_element(dose.begin(), dose.end());
+        require(peak > 0.0, "empty IDD in slab range-shift test");
+        const auto thr = 0.8 * peak;
+        for (std::size_t i = dose.size(); i-- > 1;) {
+            if (dose[i] <= thr && dose[i - 1] > thr) {
+                return (static_cast<double>(i) - 0.5) * bin_width;
+            }
+        }
+        return static_cast<double>(dose.size()) * bin_width;
+    };
+    const auto r80_uniform = r80(uniform.deposited_energy_MeV, config.depth_bin_width_mm);
+    const auto r80_layered = r80(layered.deposited_energy_MeV, config.depth_bin_width_mm);
+    require(r80_layered < r80_uniform - 1.0,
+            "Dense slab did not pull R80 proximal: layered=" +
+                std::to_string(r80_layered) + " uniform=" + std::to_string(r80_uniform));
 }
 
 void test_sycl_neutral_transport_smoke() {
@@ -771,6 +945,8 @@ int main() {
         test_interpolation();
         test_fragment_stopping_power_scale();
         test_step_selection();
+        test_slab_phantom_helpers();
+        test_ct_grid_helpers();
         test_philox_rng();
         test_highland_multiple_scattering();
         test_bohr_straggling();
@@ -784,6 +960,7 @@ int main() {
 #ifdef CARBON_HAS_SYCL
         test_serial_sycl_cpu_match();
         test_sycl_secondary_queue_generation();
+        test_sycl_layered_slab_range_shift();
         test_sycl_neutral_transport_smoke();
 #endif
         std::cout << "All carbon_tests passed\n";

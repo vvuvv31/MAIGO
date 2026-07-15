@@ -1,0 +1,7 @@
+includeFile = carbon_material_tables_base.txt
+s:Ge/Sample/Material = "G4_LUNG_ICRP"
+s:Sc/CarbonStoppingPower/Quantity = "CarbonStoppingPowerNtuple"
+s:Sc/CarbonStoppingPower/Component = "Sample"
+s:Sc/CarbonStoppingPower/OutputFile = "output/carbon_c12_stopping_power_lung"
+s:Sc/CarbonStoppingPower/OutputType = "ASCII"
+s:Sc/CarbonStoppingPower/IfOutputFileAlreadyExists = "Overwrite"

@@ -1,0 +1,36 @@
+{
+  "dataset": "C-12 inelastic cross sections in Water_75eV",
+  "extraction_method": "Direct G4HadronicProcessStore query after TOPAS physics initialization; not fitted from an attenuation curve",
+  "physics_context": "TOPAS default ion-capable physics from carbon_200MeVu_water.txt",
+  "energy_grid_MeV_per_u": {
+    "minimum": 1.0,
+    "maximum": 400.0,
+    "count": 400
+  },
+  "reference_point": {
+    "energy_MeV_per_u": 200.0,
+    "c12_h_inelastic_cross_section_barn": 0.243169,
+    "c12_o_inelastic_cross_section_barn": 0.932296,
+    "water_macroscopic_cross_section_per_mm": 0.00765477,
+    "water_mean_free_path_mm": 130.637
+  },
+  "maximum_h_o_closure_error_per_mm": 0.005659319999999999,
+  "input_files": {
+    "ntuple": {
+      "path": "validation/topas/output/carbon_c12_inelastic_cross_sections_bone.phsp",
+      "sha256": "48f0dec298979cb5d4ed2d7a1c084e33a90d345cd8c5244da44c68e048b4f76c"
+    },
+    "header": {
+      "path": "validation/topas/output/carbon_c12_inelastic_cross_sections_bone.header",
+      "sha256": "cebf01ecde61f5e56da81e65275a2a7301183ba32212ee04608eed4dbd316e44"
+    },
+    "topas_log": {
+      "path": "validation/topas/output/material-xs-bone_topas.log",
+      "sha256": "9fd315bb59479622d5c6ded593c4106cc996b8ca0d6b0fd9c422ea8c76073d9a",
+      "topas_version": "4.1.p1",
+      "geant4_version": "geant4-11-01-patch-03",
+      "elapsed_real_s": 3.55862
+    }
+  },
+  "output_csv": "data/c12_inelastic_cross_sections_bone_geant4_11_1_3.csv"
+}

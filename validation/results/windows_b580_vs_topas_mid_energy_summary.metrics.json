@@ -1,0 +1,133 @@
+{
+  "histories": 100000,
+  "neutral_local_kerma_fraction": 0.298,
+  "mid_energy_cases": {
+    "150": {
+      "R80_topas_mm": 52.864156520215076,
+      "R80_gpu_mm": 52.88052153235448,
+      "delta_R80_mm": 0.01636501213940278,
+      "integral_diff_percent": 0.07061870983244428,
+      "peak_diff_percent": 2.1211340600071353,
+      "NRMSE": 0.004571992785640943,
+      "tail_integral_diff_percent": 1.718202672624228,
+      "midplateau_mean_rel_percent": 0.22956932738150687,
+      "gpu_integral": 1756.4651733547714,
+      "topas_integral": 1755.225655642109
+    },
+    "250": {
+      "R80_topas_mm": 126.9454560644861,
+      "R80_gpu_mm": 127.24827562690588,
+      "delta_R80_mm": 0.3028195624197849,
+      "integral_diff_percent": 0.2832778861567742,
+      "peak_diff_percent": -0.4567251050944955,
+      "NRMSE": 0.013875389677593582,
+      "tail_integral_diff_percent": 3.885005930422226,
+      "midplateau_mean_rel_percent": 0.4550143387870277,
+      "gpu_integral": 2811.538267541745,
+      "topas_integral": 2803.5962992089762
+    },
+    "350": {
+      "R80_topas_mm": 221.6516602487889,
+      "R80_gpu_mm": 222.1581487882075,
+      "delta_R80_mm": 0.5064885394186263,
+      "integral_diff_percent": -0.9616397124494553,
+      "peak_diff_percent": -2.668315379167479,
+      "NRMSE": 0.018958354202882947,
+      "tail_integral_diff_percent": -3.0396683250600187,
+      "midplateau_mean_rel_percent": -0.07085752661771853,
+      "gpu_integral": 3548.918753830696,
+      "topas_integral": 3583.377939140625
+    }
+  },
+  "full_suite_cases": {
+    "100": {
+      "R80_topas_mm": 25.855731439804565,
+      "R80_gpu_mm": 25.857192072223008,
+      "delta_R80_mm": 0.0014606324184427422,
+      "integral_diff_percent": -0.0663857772221177,
+      "peak_diff_percent": 0.06699928984525498,
+      "NRMSE": 0.000551863949279465,
+      "tail_integral_diff_percent": -1.0863025130358923,
+      "midplateau_mean_rel_percent": 0.06508268087042632,
+      "gpu_integral": 1183.540025550358,
+      "topas_integral": 1184.3262497360909
+    },
+    "150": {
+      "R80_topas_mm": 52.864156520215076,
+      "R80_gpu_mm": 52.88052153235448,
+      "delta_R80_mm": 0.01636501213940278,
+      "integral_diff_percent": 0.07061870983244428,
+      "peak_diff_percent": 2.1211340600071353,
+      "NRMSE": 0.004571992785640943,
+      "tail_integral_diff_percent": 1.718202672624228,
+      "midplateau_mean_rel_percent": 0.22956932738150687,
+      "gpu_integral": 1756.4651733547714,
+      "topas_integral": 1755.225655642109
+    },
+    "200": {
+      "R80_topas_mm": 86.89768848048098,
+      "R80_gpu_mm": 86.99279240107279,
+      "delta_R80_mm": 0.09510392059181072,
+      "integral_diff_percent": 0.33719563160921845,
+      "peak_diff_percent": 0.8374291848597268,
+      "NRMSE": 0.010380154339924121,
+      "tail_integral_diff_percent": -4.427902183513219,
+      "midplateau_mean_rel_percent": 1.1646776411111628,
+      "gpu_integral": 2304.472048601957,
+      "topas_integral": 2296.7275835203623
+    },
+    "250": {
+      "R80_topas_mm": 126.9454560644861,
+      "R80_gpu_mm": 127.24827562690588,
+      "delta_R80_mm": 0.3028195624197849,
+      "integral_diff_percent": 0.2832778861567742,
+      "peak_diff_percent": -0.4567251050944955,
+      "NRMSE": 0.013875389677593582,
+      "tail_integral_diff_percent": 3.885005930422226,
+      "midplateau_mean_rel_percent": 0.4550143387870277,
+      "gpu_integral": 2811.538267541745,
+      "topas_integral": 2803.5962992089762
+    },
+    "300": {
+      "R80_topas_mm": 172.0781097243355,
+      "R80_gpu_mm": 172.4798704009653,
+      "delta_R80_mm": 0.40176067662980586,
+      "integral_diff_percent": -0.273925787135778,
+      "peak_diff_percent": -4.041365933865028,
+      "NRMSE": 0.016154218103833377,
+      "tail_integral_diff_percent": 0.9491616510207153,
+      "midplateau_mean_rel_percent": 0.24990003153941243,
+      "gpu_integral": 3240.201490845254,
+      "topas_integral": 3249.1016180272763
+    },
+    "350": {
+      "R80_topas_mm": 221.6516602487889,
+      "R80_gpu_mm": 222.1581487882075,
+      "delta_R80_mm": 0.5064885394186263,
+      "integral_diff_percent": -0.9616397124494553,
+      "peak_diff_percent": -2.668315379167479,
+      "NRMSE": 0.018958354202882947,
+      "tail_integral_diff_percent": -3.0396683250600187,
+      "midplateau_mean_rel_percent": -0.07085752661771853,
+      "gpu_integral": 3548.918753830696,
+      "topas_integral": 3583.377939140625
+    },
+    "400": {
+      "R80_topas_mm": 274.93918723851084,
+      "R80_gpu_mm": 275.5936558402649,
+      "delta_R80_mm": 0.6544686017540471,
+      "integral_diff_percent": -1.0052648059803453,
+      "peak_diff_percent": -3.605641679033754,
+      "NRMSE": 0.021236724069613713,
+      "tail_integral_diff_percent": -3.6167062028482375,
+      "midplateau_mean_rel_percent": -0.49948771661978547,
+      "gpu_integral": 3744.2409565815396,
+      "topas_integral": 3782.26271250002
+    }
+  },
+  "plots": {
+    "mid_overview": "validation/results/windows_b580_vs_topas_mid_energy_overview.png",
+    "mid_residual": "validation/results/windows_b580_vs_topas_mid_energy_residual.png",
+    "full_curves": "validation/results/windows_b580_vs_topas_energy_suite_curves.png"
+  }
+}

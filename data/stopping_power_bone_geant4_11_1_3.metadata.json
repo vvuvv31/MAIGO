@@ -1,0 +1,34 @@
+{
+  "dataset": "C-12 stopping power in Water_75eV",
+  "extraction_method": "G4EmCalculator via CarbonStoppingPowerNtuple",
+  "gpu_column": "electronic",
+  "topas_version": "4.1.p1",
+  "geant4_version": "geant4-11-01-patch-03",
+  "energy_grid_MeV_per_u": {
+    "minimum": 1.0,
+    "maximum": 400.0,
+    "count": 400
+  },
+  "reference_200MeVu": {
+    "electronic_MeV_per_mm": 27.8082,
+    "total_MeV_per_mm": 27.8082,
+    "csda_range_mm": 0.0
+  },
+  "input_files": {
+    "ntuple": {
+      "path": "validation/topas/output/carbon_c12_stopping_power_bone.phsp",
+      "sha256": "6e622aaabec292efd881192f47acc43d175c805f243c35599a4cbb64a8b55a79"
+    },
+    "header": {
+      "path": "validation/topas/output/carbon_c12_stopping_power_bone.header",
+      "sha256": "c91bee3e6e54cf5c3db27a44fe83f20f5e3b1533616e0da226ab9728ff807b80"
+    },
+    "log": {
+      "path": "validation/topas/output/material-sp-bone_topas.log",
+      "sha256": "4312f1af6a4b47e689753d6df0fa4c58791d2a382fcd76b3da840e0ffd4fd918"
+    }
+  },
+  "output_csv": "data/stopping_power_bone_geant4_11_1_3.csv",
+  "full_csv": "data/stopping_power_bone_geant4_11_1_3_full.csv",
+  "global_scale_applied": false
+}

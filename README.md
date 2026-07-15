@@ -303,17 +303,18 @@ python validation\scripts\analyze_multi_energy.py ^
   --output-plot validation\results\windows_b580_multi_energy_100_400.png
 ```
 
-R80：25.9 / 87.0 / 172.5 / 275.6 mm。GPU 200 vs TOPAS：积分 −0.72%，ΔR80 +0.10 mm。  
-末态包目前仅覆盖至 200 MeV/u 分箱（更高能量夹顶箱）。
+R80：25.9 / 87.0 / 172.5 / 275.6 mm。GPU 200 vs TOPAS：积分 −0.72%，ΔR80 +0.10 mm。
 
-远程 TOPAS 100/300/400 MeV/u 总 IDD（100k）已完成并标准化。GPU vs TOPAS：
+远程 TOPAS 100/300/400 MeV/u 总 IDD（100k）已完成；补齐 **400 MeV/u cascade 末态包**，
+并加 **interim 中性 local kerma**（`neutral_local_kerma_fraction=0.298`，在 200 MeV/u 用 TOPAS
+中性来源剂量标定）以恢复高能坪区：
 
-| E | 积分差 | ΔR80 | NRMSE |
-|---|--------|------|-------|
-| 100 | −0.34% | +0.001 mm | 0.056% |
-| 200 | −0.72% | +0.10 mm | 1.03% |
-| 300 | −4.5% | +0.40 mm | 1.8% |
-| 400 | −6.9% | +0.64 mm | 3.5% |
+| E | 积分差 | 尾积分差 | NRMSE |
+|---|--------|----------|-------|
+| 100 | −0.07% | −1.1% | 0.06% |
+| 200 | +0.34% | −4.4% | 1.04% |
+| 300 | −0.27% | +0.95% | 1.62% |
+| 400 | −1.01% | −3.6% | 2.12% |
 
-300/400 变差主因：反应末态包能量顶箱 200 MeV/u。详见  
+400 MeV 中段坪区相对差约 **−0.5%**（kerma 前约 −5%）。详见  
 `validation/results/windows_b580_vs_topas_multi_energy_summary.metrics.json`。

@@ -123,40 +123,72 @@ IDD-only charged 路径（MCS+cascade，neutral 关，seed=20260715）：
 
 ## 7. 多能量 100–400 MeV/u（100k B580）
 
-固定参数：`straggling_scale=1.2`、`maximum_step_mm=0.5`、同一 SP/XS 表与 cascade 包，**无逐能量调参**，neutron 关。
+固定参数：`straggling_scale=1.2`、`maximum_step_mm=0.5`、同一 SP/XS 表，**无逐能量调参**，neutron 关。  
+100/200 使用 200 MeV/u cascade-aligned package；300/400 使用新 400 MeV/u package。
 
 | E (MeV/u) | R80 (mm) | peak z (mm) | FWHM (mm) | 积分 (MeV/p) | 核反应/primary | 吞吐 |
 |-----------|----------|-------------|-----------|--------------|----------------|------|
 | 100 | 25.86 | 25.75 | 1.21 | 1180 | 0.164 | 62k/s |
 | 200 | 86.99 | 86.75 | 2.36 | 2280 | 0.384 | 36k/s |
-| 300 | 172.48 | 171.75 | 4.86 | 3104 | 0.586 | 23k/s |
-| 400 | 275.58 | 274.75 | 8.00 | 3522 | 0.742 | 21k/s |
+| 300 | 172.48 | 171.75 | 4.88 | 3166 | 0.586 | 15k/s |
+| 400 | 275.60 | 274.75 | 8.49 | 3596 | 0.742 | 10k/s |
 
 - **R80 严格随能量上升**
-- **GPU 200 vs TOPAS development**：积分 **−0.72%**，ΔR80 **+0.10 mm**，NRMSE **1.03%**，峰深一致
 - overflow = 0
-- **限制**：反应末态包仅 0–200 MeV/u 分箱；300/400 MeV/u 的高能反应夹到顶箱。SP/XS 仍为 1–400 全表。正式多能量末态需后续 TOPAS 反应包。
 
-产物：`validation/results/windows_b580_multi_energy_100_400.metrics.json` / `.png`
+产物：`validation/results/windows_b580_multi_energy_100_400.metrics.json` / `.png`（早期）及  
+`windows_b580_vs_topas_multi_energy_{overview,curves}.png`（400 包后更新）
 
 ## 8. 远程 TOPAS 100/300/400 MeV/u 总 IDD（已完成）
 
 在 `v@192.168.31.5`（TOPAS 4.1.p1 / Geant4 11.1.p3，56 线程）完成 smoke + **100k development**，
-本地标准化后与 GPU 100k 多能量曲线对比：
+本地标准化后与 GPU 100k 多能量曲线对比。
+
+## 8b. 远程 400 MeV/u 反应末态 package（已完成，高能尾部修复）
+
+- 参数：`carbon_400MeVu_water_cascade_reactions_*`，`run_cascade_e400_remote.sh`  
+- development：100k，Real **1032 s**，1,764,649 n-tuple 条目  
+- 标准化：206,943 interactions / 1,557,706 products  
+- primary package：73,739 C-12 反应 → **401 × 1 MeV/u bins (0–400)**，每箱 ≥4 包  
+- cascade package：31 射弹种，206,939 可用相互作用  
+
+GPU 300/400 改用新包后 vs TOPAS：
 
 | E (MeV/u) | 积分差 | ΔR80 (mm) | NRMSE | 峰高差 | 尾积分差 | 2%/2 mm γ |
 |-----------|--------|-----------|-------|--------|----------|-----------|
 | **100** | **−0.34%** | **+0.001** | **0.056%** | **+0.06%** | −1.8% | **100%** |
-| 200 | −0.72% | +0.10 | 1.03% | +0.78% | — | — |
-| 300 | −4.47% | +0.40 | 1.76% | −4.3% | −20.8% | 99.1% |
-| 400 | −6.88% | +0.64 | 3.53% | −6.1% | −38.4% | 65.4% |
+| 200 | −0.72% | +0.10 | 1.03% | +0.78% | −5.8% | — |
+| **300** | **−2.55%** | +0.40 | **1.65%** | −4.2% | **−1.3%**（was −20.8%） | 99.1% |
+| **400** | **−4.92%** | +0.66 | **2.37%** | −4.0% | **−6.8%**（was −38.4%） | **98.8%**（was 65.4%） |
 
-- **100 MeV/u 极好**（在末态包能量覆盖内）  
-- **200 可用**  
-- **300/400 尾部与峰高明显变差**，与「反应末态包仅至 200 MeV/u 分箱」一致  
+- 顶箱限制已解除；高能尾部主问题已缓解  
+- 剩余积分/坪区亏空与 **中性粒子未输运** 一致  
 
-产物：`topas_{100,300,400}MeVu_development.csv`、`windows_b580_vs_topas_*MeVu.metrics.json`、  
-`windows_b580_vs_topas_multi_energy_summary.metrics.json`
+### 8c. 高能坪区积分修复（interim 中性 local kerma）
+
+诊断（`analyze_plateau_deficit.py`）：
+
+- 初级 CSDA+截面与表一致；**带电路径在 200 MeV 已与 TOPAS charged 闭合**  
+- 300/400 中段坪区偏低随能量加深，与 untransported n/γ 出生动能增长一致  
+- TOPAS `PrimaryC12Energy` 为限制能损 scorer，不能直接对比 GPU unrestricted primary  
+
+实现：`neutral_local_kerma_fraction`（默认 0；多能量配置 = **0.298**）  
+标定：200 MeV TOPAS 中性来源 16.35 MeV/p ÷ GPU 中性出生 ~54.9 MeV/p  
+沉积位置：产生深度 bin；记入 fragment “other” 通道以免污染 primary C-12  
+
+| E | 积分差（kerma 后） | 中段坪区 mean rel | 积分差（kerma 前） |
+|---|-------------------|-------------------|-------------------|
+| 100 | −0.07% | ~0 | −0.34% |
+| 200 | +0.34% | +1.2% | −0.72% |
+| 300 | **−0.27%** | **+0.25%** | −2.55% |
+| 400 | **−1.01%** | **−0.50%** | −4.92% |
+
+- **不是**对带电 IDD 做全局 scale  
+- 正式路径仍应是 neutron package + mode D/full 输运替换 local kerma  
+- 300/400 峰高仍约 −3.5–4%（带电峰区问题，独立于坪区）  
+
+产物：更新后的 `windows_b580_vs_topas_*MeVu.metrics.json`、  
+`plateau_deficit_diagnosis.*`、`windows_b580_vs_topas_multi_energy_summary.metrics.json`
 
 ## 9. 约束（不变）
 

@@ -1,0 +1,38 @@
+# Minimal geometry to initialize physics and query SP/XS on a chosen material.
+i:Ts/Seed = 20260714
+i:Ts/NumberOfThreads = 1
+b:Ts/ShowHistoryCountLessFrequentlyAsSimulationProgresses = "True"
+b:Gr/Enable = "False"
+
+s:Ge/World/Type = "TsBox"
+s:Ge/World/Material = "Air"
+d:Ge/World/HLX = 5. cm
+d:Ge/World/HLY = 5. cm
+d:Ge/World/HLZ = 5. cm
+
+s:Ge/Sample/Parent = "World"
+s:Ge/Sample/Type = "TsBox"
+# Material overridden by include files (bone / lung / dense water).
+s:Ge/Sample/Material = "Water_75eV"
+d:Ge/Sample/HLX = 2. cm
+d:Ge/Sample/HLY = 2. cm
+d:Ge/Sample/HLZ = 2. cm
+d:Ge/Sample/MaxStepSize = 1.0 mm
+
+s:Ge/BeamPosition/Parent = "World"
+s:Ge/BeamPosition/Type = "Group"
+d:Ge/BeamPosition/TransZ = -25. mm
+
+s:So/CarbonBeam/Type = "Beam"
+s:So/CarbonBeam/Component = "BeamPosition"
+s:So/CarbonBeam/BeamParticle = "GenericIon(6,12)"
+d:So/CarbonBeam/BeamEnergy = 2400. MeV
+u:So/CarbonBeam/BeamEnergySpread = 0.0
+s:So/CarbonBeam/BeamPositionDistribution = "None"
+s:So/CarbonBeam/BeamAngularDistribution = "None"
+i:So/CarbonBeam/NumberOfHistoriesInRun = 1
+
+s:Ph/ListName = "Default"
+s:Ph/Default/Type = "Geant4_Modular"
+sv:Ph/Default/Modules = 6 "g4em-standard_opt4" "g4h-phy_QGSP_BIC_HP" "g4decay" "g4ion-binarycascade" "g4h-elastic_HP" "g4stopping"
+d:Ph/Default/CutForAllParticles = 0.05 mm

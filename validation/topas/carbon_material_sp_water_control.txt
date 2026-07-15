@@ -1,0 +1,7 @@
+includeFile = carbon_material_tables_base.txt
+s:Ge/Sample/Material = "Water_75eV"
+s:Sc/CarbonStoppingPower/Quantity = "CarbonStoppingPowerNtuple"
+s:Sc/CarbonStoppingPower/Component = "Sample"
+s:Sc/CarbonStoppingPower/OutputFile = "output/carbon_c12_stopping_power_water_control"
+s:Sc/CarbonStoppingPower/OutputType = "ASCII"
+s:Sc/CarbonStoppingPower/IfOutputFileAlreadyExists = "Overwrite"

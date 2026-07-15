@@ -11,20 +11,20 @@
   },
   "evaluation": {
     "peak_depth_mm": 25.75,
-    "peak_value": 95.2337758917,
-    "R90_mm": 25.803590123720316,
-    "R80_mm": 25.85718024744063,
-    "R50_mm": 26.01795061860158,
-    "R20_mm": 26.17872098976253,
-    "distal_falloff_R20_minus_R80_mm": 0.32154074232190055,
-    "FWHM_mm": 1.2093202181631888
+    "peak_value": 95.2402075389,
+    "R90_mm": 25.803596036111504,
+    "R80_mm": 25.857192072223008,
+    "R50_mm": 26.017980180557522,
+    "R20_mm": 26.178768288892037,
+    "distal_falloff_R20_minus_R80_mm": 0.3215762166690297,
+    "FWHM_mm": 1.2100997566241318
   },
   "differences": {
-    "R80_mm": 0.0014488076360663626,
-    "FWHM_relative_percent": -1.0797802397180203,
-    "peak_value_percent": 0.06024168554739641,
-    "NRMSE": 0.0005606310799517573,
-    "tail_integral_relative_percent": -1.7902143365336476
+    "R80_mm": 0.0014606324184427422,
+    "FWHM_relative_percent": -1.0160153950475157,
+    "peak_value_percent": 0.06699928984525498,
+    "NRMSE": 0.000551863949279465,
+    "tail_integral_relative_percent": -1.0863025130358923
   },
   "gamma": {
     "1pct_1mm_pass_rate_percent": 100.0,

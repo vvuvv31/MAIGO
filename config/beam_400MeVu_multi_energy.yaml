@@ -1,6 +1,6 @@
 # Multi-energy charged validation at 400 MeV/u (neutron off).
-# Fixed model: same SP/XS tables, same packages, straggling_scale=1.2, no per-energy tune.
-# Reaction final-state package bins only to 200 MeV/u; E>200 clamps to top bin.
+# Fixed model: same SP/XS tables, straggling_scale=1.2, no per-energy tune.
+# Primary/cascade packages from 400 MeV/u TOPAS cascade (0--400 MeV/u, 1 MeV/u bins).
 number_of_histories: 100000
 initial_energy_MeVu: 400.0
 mass_number: 12
@@ -21,13 +21,16 @@ enable_secondary_generation: true
 enable_secondary_transport: true
 enable_fragment_cascade: true
 enable_neutral_transport: false
+# Interim local kerma for n/γ birth energy (calibrated at 200 MeV/u to TOPAS
+# neutral-origin dose / untransported birth KE ≈ 16.35/54.9). Raises high-E plateau.
+neutral_local_kerma_fraction: 0.298
 maximum_cascade_generations: 2
 secondary_queue_capacity: 2000000
 random_seed: 20260715
-stopping_power_file: data/stopping_power_water.csv
-nuclear_cross_section_file: data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv
-reaction_package_file: validation/results/topas_200MeVu_cascade_aligned_primary_3d.bin
-cascade_package_file: validation/results/topas_200MeVu_cascade_100k_3d.bin
+stopping_power_file: data/stopping_power_water_geant4_11_1_3.csv
+nuclear_cross_section_file: data/c12_inelastic_cross_sections_water_geant4_11_1_3.csv
+reaction_package_file: validation/results/topas_400MeVu_cascade_aligned_primary_3d.bin
+cascade_package_file: validation/results/topas_400MeVu_cascade_100k_3d.bin
 output_file: out/multi_energy/e400_idd.csv
 fragment_species_output_file: out/multi_energy/e400_species.csv
 device: gpu
