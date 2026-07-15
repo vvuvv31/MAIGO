@@ -22,11 +22,23 @@
 
 已知限制：末态 reaction package 顶箱 200 MeV/u。
 
-### 再下一步（论文/扩展）
+### 远程 TOPAS 多能量 IDD（进行中）
 
-1. 远程补做 100/300/400 MeV/u TOPAS 总 IDD（及可选 reaction package）  
+参数与 runner 已入库；**本机无法 SSH 到 `v@192.168.31.5`（公钥未授权）**，需在可登录主机执行：
+
+见 `validation/topas/REMOTE_MULTI_ENERGY_IDD.md`
+
+1. `scp` 参数文件与 `run_multi_energy_idd_remote.sh`  
+2. smoke：`bash validation/topas/run_multi_energy_idd_remote.sh all smoke`  
+3. development 100k ×3（56 线程，`nohup`）  
+4. 拉回 CSV → `validation\scripts\postprocess_multi_energy_topas.cmd`  
+5. 与 `windows_b580_multi_energy_*MeVu_idd_100k.csv` 对比  
+
+### 再下一步（结果落地后）
+
+1. 完成上述 TOPAS 标准化并更新多能量 metrics  
 2. 可选：RNG 键修复 → GPU bit-reproducible  
-3. 可选：论文图（消融、多能量、性能）  
+3. 可选：论文图  
 4. （以后）neutron/gamma；异质体/CT  
 
 无 MCS scale、无全局 dose scale。TOPAS 仅 `v@192.168.31.5`。

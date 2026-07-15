@@ -139,7 +139,23 @@ IDD-only charged 路径（MCS+cascade，neutral 关，seed=20260715）：
 
 产物：`validation/results/windows_b580_multi_energy_100_400.metrics.json` / `.png`
 
-## 8. 约束（不变）
+## 8. 远程 TOPAS 100/300/400 MeV/u 总 IDD（已准备，待跑）
+
+已加入仓库（无需自定义 extension，标准 EnergyDeposit 即可）：
+
+| 能量 | 参数（smoke / development_remote 100k@56线程） |
+|------|-----------------------------------------------|
+| 100 MeV/u | `carbon_100MeVu_water_*.txt`（1200 MeV 总动能） |
+| 300 MeV/u | `carbon_300MeVu_water_*.txt`（3600 MeV） |
+| 400 MeV/u | `carbon_400MeVu_water_*.txt`（4800 MeV） |
+
+- Runner：`validation/topas/run_multi_energy_idd_remote.sh`  
+- 操作说明：`validation/topas/REMOTE_MULTI_ENERGY_IDD.md`  
+- 本地标准化：`validation/scripts/prepare_topas_multi_energy_idd.py` + `postprocess_multi_energy_topas.cmd`  
+
+**阻塞**：当前 agent 环境对 `v@192.168.31.5` 为 `Permission denied (publickey)`，无法代跑；需你在已配置密钥的终端执行第 1–5 步。
+
+## 9. 约束（不变）
 
 - 新 TOPAS 作业仅 `v@192.168.31.5`，≤56 线程；禁止 WSL TOPAS  
 - Windows 原生 oneAPI + Arc B580 为 GPU 执行环境  

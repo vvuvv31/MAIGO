@@ -1,0 +1,8 @@
+# C-12 pristine Bragg curve at 100 MeV/u.
+# BeamEnergy is TOTAL kinetic energy: 100 MeV/u * 12 = 1200 MeV.
+includeFile = carbon_200MeVu_water.txt
+
+d:So/CarbonBeam/BeamEnergy = 1200. MeV
+s:Sc/DepthEnergy/OutputFile = "output/e100_energy_deposit"
+s:Sc/DepthDose/OutputFile = "output/e100_dose"
+s:Sc/PrimaryC12Energy/OutputFile = "output/e100_primary_c12_energy_deposit"

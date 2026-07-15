@@ -1,0 +1,8 @@
+includeFile = carbon_400MeVu_water.txt
+
+# Match GPU multi-energy 100k statistics; remote host has 56 logical CPUs.
+i:Ts/NumberOfThreads = 56
+i:So/CarbonBeam/NumberOfHistoriesInRun = 100000
+s:Sc/DepthEnergy/OutputFile = "output/e400_development_energy_deposit"
+s:Sc/DepthDose/OutputFile = "output/e400_development_dose"
+s:Sc/PrimaryC12Energy/OutputFile = "output/e400_development_primary_c12_energy_deposit"

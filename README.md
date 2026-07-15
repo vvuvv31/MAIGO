@@ -305,3 +305,6 @@ python validation\scripts\analyze_multi_energy.py ^
 
 R80：25.9 / 87.0 / 172.5 / 275.6 mm。GPU 200 vs TOPAS：积分 −0.72%，ΔR80 +0.10 mm。  
 末态包目前仅覆盖至 200 MeV/u 分箱（更高能量夹顶箱）。
+
+远程 TOPAS 100/300/400 MeV/u 总 IDD 参数与 runner 已就绪（`validation/topas/REMOTE_MULTI_ENERGY_IDD.md`）。  
+在 `v@192.168.31.5` 跑完 100k 后，用 `postprocess_multi_energy_topas.cmd` 标准化并与 GPU 曲线对比。

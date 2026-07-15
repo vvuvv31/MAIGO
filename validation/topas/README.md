@@ -100,6 +100,23 @@ dose remains separate because the current GPU model has no spatial neutral
 transport. The current GPU output is IDD-only, so a GPU-vs-TOPAS 3D spatial
 comparison is not yet available.
 
+## Multi-energy total IDD (100 / 300 / 400 MeV/u)
+
+Standard EnergyDeposit/DoseToMedium scorers only (no extension rebuild required).
+Parameter overlays override `BeamEnergy` from the 200 MeV/u base water phantom.
+
+On `v@192.168.31.5`:
+
+```bash
+bash validation/topas/run_multi_energy_idd_remote.sh all smoke
+nohup bash validation/topas/run_multi_energy_idd_remote.sh 100 development \
+  > validation/topas/output/e100-development_nohup.log 2>&1 < /dev/null &
+# likewise for 300 and 400
+```
+
+Full procedure: `validation/topas/REMOTE_MULTI_ENERGY_IDD.md`.  
+After pulling CSVs to Windows, run `validation/scripts/postprocess_multi_energy_topas.cmd`.
+
 ## Neutron/gamma interaction package
 
 `CarbonNeutralNtuple` records every scored neutron or gamma interaction in water:
