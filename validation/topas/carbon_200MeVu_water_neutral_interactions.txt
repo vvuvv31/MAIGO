@@ -1,0 +1,13 @@
+includeFile = carbon_200MeVu_water.txt
+
+# Record neutron/gamma interactions, post-step continuation, local deposit,
+# total water cross section, and correlated direct products.
+b:Sc/DepthEnergy/Active = "False"
+b:Sc/DepthDose/Active = "False"
+b:Sc/PrimaryC12Energy/Active = "False"
+
+s:Sc/NeutralInteractions/Quantity = "CarbonNeutralNtuple"
+s:Sc/NeutralInteractions/Component = "Phantom"
+s:Sc/NeutralInteractions/OutputFile = "output/neutral_reference_interactions"
+s:Sc/NeutralInteractions/OutputType = "ASCII"
+s:Sc/NeutralInteractions/IfOutputFileAlreadyExists = "Overwrite"

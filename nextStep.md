@@ -1,16 +1,32 @@
 # 当前下一步
-## 2026-07-15 更新：charged-origin voxel scorer 已完成
+## 2026-07-15 更新：neutral TOPAS 接口 smoke 已完成
+
+charged-origin voxel scorer 已完成并通过 100k 闭合。当前下一项是 neutron/gamma
+来源三维输运。
+
+TOPAS 侧 `CarbonNeutralNtuple` 已就位：记录中性相互作用 continuation、局部沉积、
+总截面和相关产物。100-history 远程 smoke 已在 `v@192.168.31.5` 成功编译运行；
+本地 `prepare_topas_neutral.py` 标准化得到 4,039 次中性相互作用、1,961 个产物。
+覆盖 neutron elastic/inelastic/capture 与 gamma photoelectric/Compton/pair/Rayleigh；
+全部 interaction 截面为正。原始 phsp 仍在忽略目录 `validation/topas/output/`，
+无需重跑远程 smoke。
+
+下一步实现顺序：
+
+1. 可选：远程 100k `development` neutral 包，作为正式采样表；
+2. GPU 增加独立中性队列与 `neutron/gamma/neutral_other` 来源标签；
+3. 用水中 neutron/gamma 总截面与末态包采样自由程和带电产物；
+4. 将中性后代剂量写入 neutral-origin voxel 数组并与 TOPAS 祖先归属比较。
+
+不得把 TOPAS 中性剂量图直接当作 GPU 输运核，也不得用全局 scale 代替相互作用物理。
+
+## 2026-07-15 记录：charged-origin voxel scorer 已完成
 
 GPU 已维护 8 个互斥 charged-origin 三维数组：
 `primary C-12 / secondary C / B / Be / Li / He / proton / other charged`。
 100-history smoke 与 100000-history Arc B580 正式运行均通过逐 voxel、逐 z/逐类别和
 全局闭合检查。正式最大逐 voxel 误差为 `6.70e-11 MeV/primary`，最大逐类别
 z-plane 误差为 `1.00e-10 MeV/primary/bin`，严格低于 `1e-6` 验收标准。
-
-当前下一项已经变为 neutron/gamma 来源三维输运。应先复用现有反应包中的中性源
-位置、能量和方向，增加独立中性队列与来源标签；随后补充 neutron/gamma 在水中的
-相互作用距离和带电产物采样数据，再把其后代剂量写入 neutral-origin voxel 数组。
-不得把 TOPAS 中性剂量图直接当作 GPU 输运核，也不得用全局 scale 代替相互作用物理。
 
 下方旧“当前下一步”段落保留为历史记录；其中第 1 项现已完成。
 

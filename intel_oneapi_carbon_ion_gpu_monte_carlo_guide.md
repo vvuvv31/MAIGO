@@ -2675,7 +2675,16 @@ python validation\scripts\validate_charged_origin_voxels.py ^
 
 下一阶段是 neutron/gamma 来源三维输运。当前 reaction/cascade package 已保存中性
 产物的 PDG、能量和三维方向，100k 运行中未输运中性能量为
-`5.788e6 MeV`；但仓库内尚无 neutron/gamma 在水中的相互作用截面和末态
-sampling kernel。实现时必须增加中性队列、自由程采样和带电后代生成，并保持
-`neutron / gamma / neutral_other` 来源标签贯穿后代。TOPAS 祖先剂量 voxel 只用于
-验证，不可直接作为 GPU 输运概率或经验 scale。
+`5.788e6 MeV`。
+
+TOPAS 数据接口 smoke 已完成：`CarbonNeutralNtuple` 在远程主机 100-history 运行
+记录中性相互作用 continuation、局部沉积、宏观总截面和相关产物。本地
+`prepare_topas_neutral.py` 标准化结果为 4,039 次相互作用、1,961 个产物
+（neutron 2494 / gamma 1545），覆盖 `hadElastic`、`neutronInelastic`、`nCapture`、
+`phot`、`compt`、`conv`、`Rayl`，且全部 interaction 截面为正。标准化表位于
+`validation/results/topas_200MeVu_neutral_smoke_{interactions,products}.csv.gz`。
+
+GPU 侧仍缺中性队列、自由程采样和末态 sampling kernel。实现时必须增加中性队列、
+自由程采样和带电后代生成，并保持 `neutron / gamma / neutral_other` 来源标签贯穿
+后代。TOPAS 祖先剂量 voxel 与中性 n-tuple 只用于验证和采样物理，不可直接作为
+GPU 输运概率或经验 scale。

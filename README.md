@@ -185,3 +185,22 @@ python validation\scripts\validate_charged_origin_voxels.py ^
 `6.70e-11 MeV/primary`，最大逐分类 z-plane 闭合误差
 `1.00e-10 MeV/primary/bin`，无 secondary/cascade queue overflow。原始 97 MB
 分类 voxel CSV 被 Git 忽略，可由正式 YAML 确定性重建；指标和元数据进入版本控制。
+
+## Neutron/gamma TOPAS 接口（smoke）
+
+`CarbonNeutralNtuple` 记录 neutron/gamma 相互作用的 incident/continuation 能量、
+局部沉积、水中宏观总截面，以及相关直接产物。远程 100-history smoke 后本地标准化：
+
+```bat
+python validation\scripts\prepare_topas_neutral.py ^
+  --header validation\topas\output\neutral_smoke_interactions.header ^
+  --phsp validation\topas\output\neutral_smoke_interactions.phsp ^
+  --interactions-output validation\results\topas_200MeVu_neutral_smoke_interactions.csv.gz ^
+  --products-output validation\results\topas_200MeVu_neutral_smoke_products.csv.gz ^
+  --metadata validation\results\topas_200MeVu_neutral_smoke.metadata.json ^
+  --case smoke
+```
+
+当前 smoke 包含 4,039 次相互作用和 1,961 个产物（2494 neutron / 1545 gamma）；
+过程覆盖 `hadElastic`、`neutronInelastic`、`nCapture`、`phot`、`compt`、`conv`、
+`Rayl`；全部 interaction 截面为正。GPU 中性队列与输运核尚未实现。

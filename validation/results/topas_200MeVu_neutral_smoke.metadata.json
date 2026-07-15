@@ -1,0 +1,59 @@
+{
+  "case": "smoke",
+  "histories": 100,
+  "raw_entries": 6000,
+  "interactions": 4039,
+  "products": 1961,
+  "projectile_counts": {
+    "2112": 2494,
+    "22": 1545
+  },
+  "process_counts": {
+    "hadElastic": 2440,
+    "nCapture": 23,
+    "compt": 574,
+    "neutronInelastic": 31,
+    "phot": 894,
+    "conv": 2,
+    "Rayl": 75
+  },
+  "product_species": {
+    "11:e-": 1470,
+    "2212:proton": 245,
+    "1000080160:O16": 92,
+    "22:gamma": 60,
+    "2112:neutron": 32,
+    "1000010020:deuteron": 25,
+    "1000020040:alpha": 8,
+    "1000070150:N15": 7,
+    "1000060120:C12": 6,
+    "1000070140:N14": 6,
+    "1000060130:C13": 3,
+    "-11:e+": 2,
+    "1000010030:triton": 1,
+    "1000080150:O15": 1,
+    "1000070160:N16": 1,
+    "1000060140:C14": 1,
+    "1000050110:B11": 1
+  },
+  "all_interaction_cross_sections_positive": true,
+  "global_scale_applied": false,
+  "files": {
+    "header": {
+      "path": "validation/topas/output/neutral_smoke_interactions.header",
+      "sha256": "99a3e81e472d2cfd393ad19613f94f4dc6c707965d34ed64322e9fe7328f10f4"
+    },
+    "phsp": {
+      "path": "validation/topas/output/neutral_smoke_interactions.phsp",
+      "sha256": "cb5abf66022cd97fc606b2d4cb187e38960baf7858349ba0f4b6c84c240fcb8a"
+    },
+    "interactions": {
+      "path": "validation/results/topas_200MeVu_neutral_smoke_interactions.csv.gz",
+      "sha256": "c252f2cb8e3aa8dcad384820e4f29872ad917a45fdf72136d87fe0c8e5d4c3c0"
+    },
+    "products": {
+      "path": "validation/results/topas_200MeVu_neutral_smoke_products.csv.gz",
+      "sha256": "efa778782c6faa8b2a5d92cd8af12693e31240ffa22da81a01d59a6ff3c8b6a2"
+    }
+  }
+}

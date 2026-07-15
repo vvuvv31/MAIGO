@@ -100,6 +100,41 @@ dose remains separate because the current GPU model has no spatial neutral
 transport. The current GPU output is IDD-only, so a GPU-vs-TOPAS 3D spatial
 comparison is not yet available.
 
+## Neutron/gamma interaction package
+
+`CarbonNeutralNtuple` records every scored neutron or gamma interaction in water:
+incident and continuation kinematics, local energy deposit, macroscopic total
+cross section, and correlated direct products. The stable key under MT output is
+`(run, thread, event, interaction_sequence)`.
+
+Build/run only on `v@192.168.31.5` (never WSL):
+
+```bash
+bash validation/topas/build_extensions_remote.sh
+bash validation/topas/run_neutral_remote.sh smoke
+# optional formal table:
+# nohup bash validation/topas/run_neutral_remote.sh development \
+#   > validation/topas/output/neutral-development_nohup.log 2>&1 < /dev/null &
+```
+
+Standardize on Windows or any host that has the raw header/phsp:
+
+```bash
+python3 validation/scripts/prepare_topas_neutral.py \
+  --header validation/topas/output/neutral_smoke_interactions.header \
+  --phsp validation/topas/output/neutral_smoke_interactions.phsp \
+  --interactions-output validation/results/topas_200MeVu_neutral_smoke_interactions.csv.gz \
+  --products-output validation/results/topas_200MeVu_neutral_smoke_products.csv.gz \
+  --metadata validation/results/topas_200MeVu_neutral_smoke.metadata.json \
+  --case smoke
+```
+
+Accepted 100-history smoke package: 4,039 interactions, 1,961 products, all
+interaction macroscopic cross sections positive, covering neutron
+elastic/inelastic/capture and gamma photoelectric/Compton/pair/Rayleigh. This is
+the sampling reference for a future GPU neutral queue; it is not a dose map to
+copy or globally scale.
+
 ## Charged-fragment reaction cascade
 
 `CarbonCascadeNtuple` records every charged projectile inelastic interaction,
