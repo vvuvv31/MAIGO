@@ -1,0 +1,19 @@
+{
+  "gpu_file": "out\\ct\\e150_patient_multimat_secondary_idd.csv",
+  "topas_file": "validation\\topas\\output\\ct_patient_development_energy_deposit.csv",
+  "n_histories": 20000,
+  "gpu_R80_mm": 43.18096856655171,
+  "gpu_peak_z_mm": 42.75,
+  "gpu_entrance_0p5mm": 14.5166635365,
+  "gpu_integral_MeV": 1720.943632041101,
+  "topas_R80_mm": 43.51353548571518,
+  "topas_peak_z_mm": 43.25,
+  "topas_entrance": 14.155853125,
+  "topas_integral_MeV": 1721.0068581665041,
+  "delta_R80_mm": -0.3325669191634688,
+  "integral_rel_diff": -3.6737869522798176e-05,
+  "nrmse": 0.03281970341920771,
+  "notes": "Parallel-world IDD tube vs GPU patient CT. HU conversion differs (GPU 4-class density map vs TOPAS Schneider).",
+  "sp_model": "Schneider mass-SP factor * water_table * density",
+  "backend": "+ct-grid-mass-sp"
+}

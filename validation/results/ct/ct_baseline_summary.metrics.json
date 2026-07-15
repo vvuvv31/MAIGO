@@ -1,0 +1,25 @@
+{
+  "primary_only": {
+    "idd": "D:\\OneDrive\\DoctorDocuments\\myproject\\carbonGPU_grok\\validation\\results\\ct\\gpu_e150_patient_multimat_idd.csv",
+    "delta_R80_mm": 1.0482820612145787,
+    "integral_rel_diff": -0.12077679280178263,
+    "nrmse": 0.07620688400687094,
+    "gpu_integral_MeV": 1513.1491694472813
+  },
+  "multimat_secondary": {
+    "idd": "D:\\OneDrive\\DoctorDocuments\\myproject\\carbonGPU_grok\\validation\\results\\ct\\gpu_e150_patient_multimat_secondary_idd.csv",
+    "delta_R80_mm": 1.057345144317722,
+    "integral_rel_diff": 0.004462187903452154,
+    "nrmse": 0.07484510747175945,
+    "gpu_integral_MeV": 1728.686314150773
+  },
+  "topas_reference": "D:\\OneDrive\\DoctorDocuments\\myproject\\carbonGPU_grok\\validation\\topas\\output\\ct_patient_development_energy_deposit.csv",
+  "topas_integral_MeV": 1721.0068581665041,
+  "absolute_MeV_per_primary": true,
+  "global_dose_scale": false,
+  "commands": {
+    "primary": "carbon_mc --config config\\beam_200MeVu_ct_patient_multimat.yaml",
+    "secondary": "carbon_mc --config config\\beam_200MeVu_ct_patient_multimat_secondary.yaml",
+    "baseline": "python validation/scripts/run_ct_baseline.py"
+  }
+}

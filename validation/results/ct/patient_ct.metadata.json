@@ -1,0 +1,49 @@
+{
+  "n_slices": 35,
+  "rows": 505,
+  "cols": 417,
+  "spacing_xyz_mm": [
+    0.5,
+    0.5,
+    2.0
+  ],
+  "dicom_z_first": -814.19,
+  "dicom_z_last": -746.19,
+  "hu_min": -1000.0,
+  "hu_max": 3071.0,
+  "hu_mean": -486.4754333496094,
+  "output": "ct\\grid\\patient_ct.bin",
+  "origin_xyz_mm": [
+    -104.0,
+    -126.0,
+    0.0
+  ],
+  "hu_conversion": "Schneider",
+  "schneider_file": "ct\\HUtoMaterialSchneider.txt",
+  "material_map": {
+    "0": "air",
+    "1": "lung",
+    "2": "water",
+    "3": "bone"
+  },
+  "material_histogram": {
+    "0": 3706810,
+    "1": 762508,
+    "2": 1821713,
+    "3": 1079444
+  },
+  "density_min": 0.01131606474518776,
+  "density_max": 4.55248498916626,
+  "axis_density_first_slices": [
+    1.5613782405853271,
+    1.4870853424072266,
+    1.3417150974273682,
+    1.115628719329834,
+    1.1015230417251587,
+    1.1747232675552368,
+    1.354846715927124,
+    1.5678526163101196
+  ],
+  "phantom_length_hint_mm": 70.0,
+  "notes": "HU\u2192\u03c1/material from TOPAS HUtoMaterialSchneider.txt (same as TsDicomPatient). Material class collapses Schneider tissues to air/lung/water/bone for GPU tables. Transport frame: z=0 at first DICOM slice; xy centered."
+}

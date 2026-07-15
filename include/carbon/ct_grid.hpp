@@ -2,7 +2,6 @@
 
 #include <cstdint>
 #include <filesystem>
-#include <string>
 #include <vector>
 
 namespace carbon {
@@ -10,27 +9,38 @@ namespace carbon {
 // Binary CT grid for GPU transport (7c).
 // Coordinates: transport frame with beam along +z, entrance near z=0.
 // File magic "CCTG" little-endian.
+// v1: density float[] + material_id uint8[] (legacy 4-class 0..3)
+// v2: + n_mass_sp_factors u32 + mass_sp_factor float[n]
+//     material_id = Schneider material section index; SP uses
+//     water_table(E) * mass_sp_factor[section] * density
 struct CtGrid {
     static constexpr std::uint32_t magic_value = 0x47544343U;  // 'CCTG'
-    static constexpr std::uint32_t version_value = 1U;
+    static constexpr std::uint32_t version_value = 2U;
+    static constexpr std::uint32_t version_legacy = 1U;
 
     std::uint32_t nx{0};
     std::uint32_t ny{0};
     std::uint32_t nz{0};
-    float origin_x_mm{0.0F};  // voxel (0,0,0) corner
+    float origin_x_mm{0.0F};
     float origin_y_mm{0.0F};
     float origin_z_mm{0.0F};
     float spacing_x_mm{1.0F};
     float spacing_y_mm{1.0F};
     float spacing_z_mm{1.0F};
-    // density_g_per_cm3, length = nx*ny*nz, index = ix + nx*(iy + ny*iz)
     std::vector<float> density_g_per_cm3{};
-    // material id: 0=air, 1=lung, 2=water, 3=bone (same length)
+    // v1: 0=air,1=lung,2=water,3=bone; v2: Schneider section index
     std::vector<std::uint8_t> material_id{};
+    // Relative mass stopping-power factors (water = 1). Empty → treat as 1.
+    std::vector<float> mass_sp_factor{};
+    std::uint32_t file_version{version_value};
 
     [[nodiscard]] std::size_t number_of_voxels() const noexcept {
         return static_cast<std::size_t>(nx) * static_cast<std::size_t>(ny) *
                static_cast<std::size_t>(nz);
+    }
+
+    [[nodiscard]] bool has_mass_sp_factors() const noexcept {
+        return !mass_sp_factor.empty();
     }
 
     static CtGrid from_binary(const std::filesystem::path& path);
@@ -38,12 +48,8 @@ struct CtGrid {
 };
 
 // Legacy piecewise HU→density (tests / fallback only).
-// Production CT grids are prepared offline via Schneider
-// (validation/scripts/prepare_ct_grid.py + ct/HUtoMaterialSchneider.txt).
 float hu_to_density_g_per_cm3(float hu) noexcept;
 
-// Density → material class for SP/XS table selection (fallback).
-// Production grids store Schneider-collapsed material_id in the binary.
 std::uint8_t density_to_material_id(float density_g_per_cm3) noexcept;
 
 inline std::size_t ct_linear_index(const std::uint32_t ix,
@@ -57,7 +63,6 @@ inline std::size_t ct_linear_index(const std::uint32_t ix,
                 static_cast<std::size_t>(ny) * static_cast<std::size_t>(iz));
 }
 
-// Device-friendly lookup; returns false if outside grid.
 inline bool ct_sample(const float x_mm,
                       const float y_mm,
                       const float z_mm,
@@ -95,20 +100,23 @@ inline bool ct_sample(const float x_mm,
     return true;
 }
 
-// Positive distance (mm) along the ray to the next voxel face on one axis.
-// Skips near-zero face hits (FP / sitting on a face) by advancing one cell.
+// Mass-SP scaled water table: SP = SP_water * mass_factor * density.
+inline float ct_mass_scaled_stopping_power(const float water_sp_MeV_per_mm,
+                                           const float density_g_per_cm3,
+                                           const float mass_sp_factor) noexcept {
+    return water_sp_MeV_per_mm * mass_sp_factor *
+           (density_g_per_cm3 > 1.0e-6F ? density_g_per_cm3 : 1.0e-6F);
+}
+
 inline float distance_to_next_ct_face_1d(const float position_mm,
                                         const float origin_mm,
                                         const float spacing_mm,
                                         const float direction) noexcept {
-    // Match insert min-interface (~1e-4 mm) so MCS does not thrash on CT faces.
     constexpr float eps = 1.0e-4F;
     if (direction > -1.0e-6F && direction < 1.0e-6F) {
         return 1.0e30F;
     }
     const auto f = (position_mm - origin_mm) / spacing_mm;
-    // Truncating cast is floor for f >= 0 (CT sampling uses non-negative f inside grid).
-    // For rare negative f (outside before clamp), map toward -inf.
     const auto truncated = static_cast<int>(f);
     const auto cell =
         (f >= 0.0F || f == static_cast<float>(truncated)) ? truncated : truncated - 1;
@@ -130,7 +138,6 @@ inline float distance_to_next_ct_face_1d(const float position_mm,
     return t > 0.0F ? t : 1.0e30F;
 }
 
-// Clamp step to the nearest CT voxel face (all three axes).
 inline float clamp_step_to_ct_faces(const float step_mm,
                                     const float x_mm,
                                     const float y_mm,
@@ -158,6 +165,53 @@ inline float clamp_step_to_ct_faces(const float step_mm,
         step = tz;
     }
     return step;
+}
+
+// Skip full 3-axis face clamp when density is nearly constant over the energy
+// step (homogeneous region). Still clamps when material index would change.
+inline float clamp_step_to_ct_faces_if_needed(const float step_mm,
+                                              const float x_mm,
+                                              const float y_mm,
+                                              const float z_mm,
+                                              const float dx,
+                                              const float dy,
+                                              const float dz,
+                                              const float origin_x,
+                                              const float origin_y,
+                                              const float origin_z,
+                                              const float spacing_x,
+                                              const float spacing_y,
+                                              const float spacing_z,
+                                              const std::uint32_t nx,
+                                              const std::uint32_t ny,
+                                              const std::uint32_t nz,
+                                              const float* densities,
+                                              const std::uint8_t* materials,
+                                              const float density_here,
+                                              const std::uint8_t material_here) noexcept {
+    if (densities == nullptr || step_mm <= 1.0e-6F) {
+        return step_mm;
+    }
+    // Probe endpoint of the unconstrained step.
+    const auto x1 = x_mm + dx * step_mm;
+    const auto y1 = y_mm + dy * step_mm;
+    const auto z1 = z_mm + dz * step_mm;
+    float dens1 = density_here;
+    std::uint8_t mat1 = material_here;
+    if (!ct_sample(x1, y1, z1, origin_x, origin_y, origin_z, spacing_x, spacing_y,
+                   spacing_z, nx, ny, nz, densities, materials, dens1, mat1)) {
+        return clamp_step_to_ct_faces(step_mm, x_mm, y_mm, z_mm, dx, dy, dz, origin_x,
+                                      origin_y, origin_z, spacing_x, spacing_y, spacing_z);
+    }
+    const auto rel =
+        (dens1 > density_here ? dens1 - density_here : density_here - dens1) /
+        (density_here > 1.0e-3F ? density_here : 1.0e-3F);
+    if (mat1 == material_here && rel < 0.02F) {
+        // Homogeneous enough: skip voxel-face thrashing.
+        return step_mm;
+    }
+    return clamp_step_to_ct_faces(step_mm, x_mm, y_mm, z_mm, dx, dy, dz, origin_x,
+                                  origin_y, origin_z, spacing_x, spacing_y, spacing_z);
 }
 
 }  // namespace carbon

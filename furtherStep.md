@@ -333,22 +333,43 @@ NRMSE ≈ 0.007；积分相对差 ≈ −0.8%。相对 on-axis 骨插入（R80�
 - GPU：`prepare_ct_grid` 将首片映射为 z=0、xy 居中；对比时用**入口相对深度**
 - 平行世界 IDD 管（无 material）：0.5 mm × 240 bins，覆盖 CT + 出口水
 
-**GPU 多材料（Schneider 网格）vs TOPAS Schneider（各 20k，150 MeV/u）**
+**CT 验证一键入口**
 
-| 量 | GPU primary-only | GPU **+secondary** | TOPAS |
-|----|------------------|--------------------|-------|
-| R80 (mm) | 44.56 | **44.57** | 43.51 |
-| peak z (mm) | 44.25 | 44.25 | 43.25 |
-| 入口 (MeV/p /0.5mm) | 14.21 | 14.27 | 14.16 |
-| 积分 (MeV/p) | 1513 | **1729** | 1721 |
-| 积分相对差 | −12.1% | **+0.45%** | — |
-| NRMSE | 0.076 | **0.075** | — |
-| ΔR80 vs TOPAS | +1.05 | **+1.06** | — |
+```text
+python validation/scripts/run_ct_baseline.py
+# 或仅汇总已有 CSV：
+python validation/scripts/run_ct_baseline.py --skip-gpu
+```
 
-次级路径修复：`transport_sycl` 次级输运现采样 CT 密度/材料（先前仅用均匀水 SP）。  
-配置：`config/beam_200MeVu_ct_patient_multimat_secondary.yaml`；指标：`validation/results/ct/compare_patient_secondary.metrics.json`。
+产出：primary-only / multimat+secondary / TOPAS 三份绝对 MeV/primary IDD +  
+`validation/results/ct/ct_baseline_summary.metrics.json`（含 `delta_R80_mm`、`integral_rel_diff`、`nrmse`）。
+
+**SP 模型（CCTG v2）**
+
+`SP = SP_water(E) × mass_sp_factor[Schneider段] × ρ`  
+`mass_sp_factor` 由 Schneider 元素质量份额 Bragg Z/A 相对水（`schneider_hu.py`）。  
+Backend：`+ct-grid-mass-sp`。次级同样采样 CT 密度/段因子。
+
+**GPU mass-SP + secondary vs TOPAS（各 20k，150 MeV/u）**
+
+| 量 | GPU primary | GPU **+secondary mass-SP** | TOPAS |
+|----|-------------|----------------------------|-------|
+| R80 (mm) | ~43–44 | **43.18** | 43.51 |
+| 入口 (MeV/p /0.5mm) | ~14.5 | **14.52** | 14.16 |
+| 积分 (MeV/p) | ~1510 | **1720.9** | 1721.0 |
+| 积分相对差 | ~−12% | **≈0%** | — |
+| NRMSE | — | **0.033** | — |
+| ΔR80 | — | **−0.33 mm** | — |
+
+配置：`config/beam_200MeVu_ct_patient_multimat(_secondary).yaml`  
+指标：`validation/results/ct/compare_patient_mass_sp.metrics.json`
+
+**性能（同 20k secondary 患者）**
+
+- 同质区跳过 CT 体素面限步（`clamp_step_to_ct_faces_if_needed`）
+- 墙钟：~7.8 s → ~6.4 s（约 **−18%**），能量平衡仍 ≪1e-3
 
 **局限 / 后续**
 
-- Schneider 组织仍折叠为 4 类 SP/XS
-- 细 CT + MCS 步数偏多，性能可再优化（DDA / 合并同质素）
+- mass-SP 为能量无关 Z/A 因子（非完整 25 材料 G4 表）
+- 可再做更激进的 DDA / 同质合并

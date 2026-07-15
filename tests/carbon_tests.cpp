@@ -292,15 +292,24 @@ void test_ct_grid_helpers() {
     require(carbon::density_to_material_id(1.0F) == 2, "water material id");
     require(carbon::density_to_material_id(1.85F) == 3, "bone material id");
 
-    // Face distance: interior of 1 mm voxel along +x should be ~0.7 mm.
+    require_near(carbon::ct_mass_scaled_stopping_power(10.0F, 1.5F, 1.0F), 15.0F, 1.0e-5,
+                 "mass SP water scale");
+    require_near(carbon::ct_mass_scaled_stopping_power(10.0F, 1.85F, 0.93F), 17.205F,
+                 1.0e-3, "mass SP bone factor");
+
     require_near(carbon::distance_to_next_ct_face_1d(0.3F, 0.0F, 1.0F, 1.0F), 0.7F, 1.0e-5,
                  "ct face +x interior");
-    // Sitting exactly on a face going +x must skip zero and return one voxel spacing.
     require_near(carbon::distance_to_next_ct_face_1d(1.0F, 0.0F, 1.0F, 1.0F), 1.0F, 1.0e-4,
                  "ct face +x on boundary");
-    // Sitting on face going -x should skip zero and advance to previous face.
     require_near(carbon::distance_to_next_ct_face_1d(1.0F, 0.0F, 1.0F, -1.0F), 1.0F, 1.0e-4,
                  "ct face -x on boundary");
+
+    const float dens_h[8] = {1.0F, 1.0F, 1.0F, 1.0F, 1.0F, 1.0F, 1.0F, 1.0F};
+    const std::uint8_t mats_h[8] = {2, 2, 2, 2, 2, 2, 2, 2};
+    const auto step_h = carbon::clamp_step_to_ct_faces_if_needed(
+        0.4F, 0.1F, 0.1F, 0.1F, 0.0F, 0.0F, 1.0F, 0.0F, 0.0F, 0.0F, 1.0F, 1.0F, 1.0F, 2,
+        2, 2, dens_h, mats_h, 1.0F, 2);
+    require_near(step_h, 0.4F, 1.0e-5, "homogeneous CT step should not face-clamp");
 
     const float dens[8] = {1.0F, 1.1F, 1.2F, 1.3F, 1.4F, 1.5F, 1.6F, 1.7F};
     const std::uint8_t mats[8] = {2, 2, 2, 2, 3, 3, 3, 3};
@@ -314,6 +323,23 @@ void test_ct_grid_helpers() {
     require(!carbon::ct_sample(-0.1F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 1.0F, 1.0F, 1.0F, 2, 2,
                                2, dens, mats, rho, mid),
             "ct sample outside");
+
+    carbon::CtGrid grid;
+    grid.nx = 2;
+    grid.ny = 2;
+    grid.nz = 2;
+    grid.density_g_per_cm3 = {1.0F, 1.1F, 1.2F, 1.3F, 1.4F, 1.5F, 1.6F, 1.7F};
+    grid.material_id = {0, 1, 2, 3, 0, 1, 2, 3};
+    grid.mass_sp_factor = {1.0F, 0.99F, 1.0F, 0.93F};
+    const auto path =
+        std::filesystem::temp_directory_path() / "carbon_ct_v2_roundtrip.bin";
+    grid.write_binary(path);
+    const auto loaded = carbon::CtGrid::from_binary(path);
+    require(loaded.file_version == carbon::CtGrid::version_value, "ct v2 version");
+    require(loaded.has_mass_sp_factors() && loaded.mass_sp_factor.size() == 4,
+            "ct v2 mass factors");
+    require_near(loaded.mass_sp_factor[3], 0.93F, 1.0e-6, "ct v2 bone factor");
+    std::filesystem::remove(path);
 }
 
 void test_philox_rng() {
@@ -900,7 +926,8 @@ void test_sycl_ct_secondary_density_smoke() {
     grid.spacing_z_mm = 1.0F;
     const auto n = grid.number_of_voxels();
     grid.density_g_per_cm3.assign(n, 1.85F);
-    grid.material_id.assign(n, static_cast<std::uint8_t>(3));  // bone class
+    grid.material_id.assign(n, static_cast<std::uint8_t>(0));  // section 0
+    grid.mass_sp_factor = {0.93F};  // bone-like mass SP factor
     const auto ct_path =
         std::filesystem::temp_directory_path() / "carbon_ct_secondary_smoke.bin";
     grid.write_binary(ct_path);

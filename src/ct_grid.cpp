@@ -14,12 +14,10 @@ float hu_to_density_g_per_cm3(float hu) noexcept {
     if (hu > 3000.0F) {
         hu = 3000.0F;
     }
-    // Piecewise: air → water → bone (g/cm3).
     if (hu < -980.0F) {
         return 0.001205F;
     }
     if (hu < 0.0F) {
-        // -980..0 : ~0.02 .. 1.0
         return 0.001205F + (hu + 980.0F) * (1.0F - 0.001205F) / 980.0F;
     }
     if (hu < 1000.0F) {
@@ -30,15 +28,15 @@ float hu_to_density_g_per_cm3(float hu) noexcept {
 
 std::uint8_t density_to_material_id(float density_g_per_cm3) noexcept {
     if (density_g_per_cm3 < 0.1F) {
-        return 0;  // air
+        return 0;
     }
     if (density_g_per_cm3 < 0.7F) {
-        return 1;  // lung
+        return 1;
     }
     if (density_g_per_cm3 < 1.25F) {
-        return 2;  // water / soft tissue
+        return 2;
     }
-    return 3;  // bone
+    return 3;
 }
 
 CtGrid CtGrid::from_binary(const std::filesystem::path& path) {
@@ -50,10 +48,12 @@ CtGrid CtGrid::from_binary(const std::filesystem::path& path) {
     std::uint32_t version = 0;
     input.read(reinterpret_cast<char*>(&magic), sizeof(magic));
     input.read(reinterpret_cast<char*>(&version), sizeof(version));
-    if (magic != magic_value || version != version_value) {
+    if (magic != magic_value ||
+        (version != version_value && version != version_legacy)) {
         throw std::runtime_error("Invalid CT grid magic/version: " + path.string());
     }
     CtGrid grid;
+    grid.file_version = version;
     input.read(reinterpret_cast<char*>(&grid.nx), sizeof(grid.nx));
     input.read(reinterpret_cast<char*>(&grid.ny), sizeof(grid.ny));
     input.read(reinterpret_cast<char*>(&grid.nz), sizeof(grid.nz));
@@ -73,6 +73,19 @@ CtGrid CtGrid::from_binary(const std::filesystem::path& path) {
                static_cast<std::streamsize>(count * sizeof(float)));
     input.read(reinterpret_cast<char*>(grid.material_id.data()),
                static_cast<std::streamsize>(count * sizeof(std::uint8_t)));
+    if (version >= version_value) {
+        std::uint32_t n_factors = 0;
+        input.read(reinterpret_cast<char*>(&n_factors), sizeof(n_factors));
+        if (n_factors == 0 || n_factors > 256U) {
+            throw std::runtime_error("Invalid CT mass-SP factor count: " + path.string());
+        }
+        grid.mass_sp_factor.resize(n_factors);
+        input.read(reinterpret_cast<char*>(grid.mass_sp_factor.data()),
+                   static_cast<std::streamsize>(n_factors * sizeof(float)));
+    } else {
+        // Legacy 4-class: water-equivalent mass factor 1 for all classes.
+        grid.mass_sp_factor = {1.0F, 1.0F, 1.0F, 1.0F};
+    }
     if (!input) {
         throw std::runtime_error("Truncated CT grid file: " + path.string());
     }
@@ -105,6 +118,14 @@ void CtGrid::write_binary(const std::filesystem::path& path) const {
                  static_cast<std::streamsize>(density_g_per_cm3.size() * sizeof(float)));
     output.write(reinterpret_cast<const char*>(material_id.data()),
                  static_cast<std::streamsize>(material_id.size() * sizeof(std::uint8_t)));
+    std::vector<float> factors = mass_sp_factor;
+    if (factors.empty()) {
+        factors = {1.0F};
+    }
+    const auto n_factors = static_cast<std::uint32_t>(factors.size());
+    output.write(reinterpret_cast<const char*>(&n_factors), sizeof(n_factors));
+    output.write(reinterpret_cast<const char*>(factors.data()),
+                 static_cast<std::streamsize>(factors.size() * sizeof(float)));
 }
 
 }  // namespace carbon
