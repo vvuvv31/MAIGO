@@ -412,6 +412,8 @@ TransportConfig load_config(const std::filesystem::path& path) {
     }
     config.enable_ct_grid = parse_bool(values, "enable_ct_grid", config.enable_ct_grid);
     config.ct_grid_file = parse_path(values, "ct_grid_file", config.ct_grid_file);
+    config.ct_skip_homogeneous_face_clamp = parse_bool(
+        values, "ct_skip_homogeneous_face_clamp", config.ct_skip_homogeneous_face_clamp);
     config.ct_air_stopping_power_file = parse_path(
         values, "ct_air_stopping_power_file", config.ct_air_stopping_power_file);
     config.ct_lung_stopping_power_file = parse_path(

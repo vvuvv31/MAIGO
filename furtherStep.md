@@ -364,10 +364,12 @@ Backend：`+ct-grid-mass-sp`。次级同样采样 CT 密度/段因子。
 配置：`config/beam_200MeVu_ct_patient_multimat(_secondary).yaml`  
 指标：`validation/results/ct/compare_patient_mass_sp.metrics.json`
 
-**性能（同 20k secondary 患者）**
+**性能（同 mass-SP + secondary，20k，隔离 A/B）**
 
-- 同质区跳过 CT 体素面限步（`clamp_step_to_ct_faces_if_needed`）
-- 墙钟：~7.8 s → ~6.4 s（约 **−18%**），能量平衡仍 ≪1e-3
+- 开关：`ct_skip_homogeneous_face_clamp`（默认 true）
+- full clamp：Steps 5.883e9，**10.31 s**
+- homog skip：Steps 5.836e9（**−0.8%**），**8.02 s**（**−22%**）
+- 能量平衡均 ≪1e-3；对照配置：`…_secondary_full_clamp.yaml`
 
 **局限 / 后续**
 

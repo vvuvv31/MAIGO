@@ -14,6 +14,6 @@
   "integral_rel_diff": -3.6737869522798176e-05,
   "nrmse": 0.03281970341920771,
   "notes": "Parallel-world IDD tube vs GPU patient CT. HU conversion differs (GPU 4-class density map vs TOPAS Schneider).",
-  "sp_model": "Schneider mass-SP factor * water_table * density",
-  "backend": "+ct-grid-mass-sp"
+  "sp_model": "mass-SP",
+  "perf_ab": "isolated full_clamp vs homog_skip on mass-SP"
 }

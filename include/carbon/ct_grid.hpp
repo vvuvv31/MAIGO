@@ -169,6 +169,7 @@ inline float clamp_step_to_ct_faces(const float step_mm,
 
 // Skip full 3-axis face clamp when density is nearly constant over the energy
 // step (homogeneous region). Still clamps when material index would change.
+// When skip_homogeneous is false, always face-clamps (for isolated perf A/B).
 inline float clamp_step_to_ct_faces_if_needed(const float step_mm,
                                               const float x_mm,
                                               const float y_mm,
@@ -188,9 +189,11 @@ inline float clamp_step_to_ct_faces_if_needed(const float step_mm,
                                               const float* densities,
                                               const std::uint8_t* materials,
                                               const float density_here,
-                                              const std::uint8_t material_here) noexcept {
-    if (densities == nullptr || step_mm <= 1.0e-6F) {
-        return step_mm;
+                                              const std::uint8_t material_here,
+                                              const bool skip_homogeneous = true) noexcept {
+    if (!skip_homogeneous || densities == nullptr || step_mm <= 1.0e-6F) {
+        return clamp_step_to_ct_faces(step_mm, x_mm, y_mm, z_mm, dx, dy, dz, origin_x,
+                                      origin_y, origin_z, spacing_x, spacing_y, spacing_z);
     }
     // Probe endpoint of the unconstrained step.
     const auto x1 = x_mm + dx * step_mm;

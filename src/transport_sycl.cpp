@@ -553,6 +553,7 @@ TransportResult transport_sycl(const TransportConfig& config,
 
     // 7c: CT voxel density + material-id field.
     const auto enable_ct_grid = config.enable_ct_grid;
+    const auto ct_skip_homogeneous_face_clamp = config.ct_skip_homogeneous_face_clamp;
     CtGrid ct_grid_host{};
     float* ct_density_device = nullptr;
     std::uint8_t* ct_material_device = nullptr;
@@ -1128,13 +1129,15 @@ TransportResult transport_sycl(const TransportConfig& config,
                     step_mm = sycl::fmin(step_mm, insert_step);
                 }
                 if (enable_ct_grid && in_ct) {
-                    // Face clamp only when density/material changes along the step.
+                    // Face clamp only when density/material changes along the step
+                    // (unless ct_skip_homogeneous_face_clamp is false).
                     step_mm = clamp_step_to_ct_faces_if_needed(
                         step_mm, position_x_mm, position_y_mm, position_z_mm,
                         direction_x, direction_y, direction_z, ct_origin_x,
                         ct_origin_y, ct_origin_z, ct_spacing_x, ct_spacing_y,
                         ct_spacing_z, ct_nx, ct_ny, ct_nz, ct_density_device,
-                        ct_material_device, local_density_g_per_cm3, ct_material);
+                        ct_material_device, local_density_g_per_cm3, ct_material,
+                        ct_skip_homogeneous_face_clamp);
                 }
                 if (enable_voxel_scoring && absolute_direction_x >= 1.0e-6F) {
                     const auto boundary_x_mm =
@@ -1958,7 +1961,8 @@ TransportResult transport_sycl(const TransportConfig& config,
                                 direction_x, direction_y, direction_z, ct_origin_x,
                                 ct_origin_y, ct_origin_z, ct_spacing_x, ct_spacing_y,
                                 ct_spacing_z, ct_nx, ct_ny, ct_nz, ct_density_device,
-                                ct_material_device, local_density_g_per_cm3, ct_material);
+                                ct_material_device, local_density_g_per_cm3, ct_material,
+                                ct_skip_homogeneous_face_clamp);
                         }
                         if (enable_voxel_scoring && absolute_direction_x >= 1.0e-6F) {
                             const auto boundary_x_mm =

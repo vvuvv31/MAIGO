@@ -37,6 +37,9 @@ struct TransportConfig {
     // 7c: CT voxel grid (exclusive with layered/hetero insert).
     bool enable_ct_grid{false};
     std::filesystem::path ct_grid_file{};
+    // When true (default), skip CT voxel-face step clamps in homogeneous regions.
+    // Set false for isolated performance A/B against full face clamping.
+    bool ct_skip_homogeneous_face_clamp{true};
     // Optional absolute SP/XS for CT materials 0..3 (air/lung/water/bone).
     // Empty → water table × local density for all materials.
     std::filesystem::path ct_air_stopping_power_file{};
