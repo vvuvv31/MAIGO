@@ -289,3 +289,19 @@ python validation\scripts\analyze_stats_convergence.py ^
 相对 1e6：1e5 的 NRMSE ~2.8e-4、ΔR80 ~0.0002 mm；`NRMSE·√N` 近似常数。  
 1e6 吞吐约 **4.15×10⁴ histories/s**。同 seed 两次非 bit-identical（GPU 原子队列
 下标进入 cascade RNG），但 NRMSE ~3e-5。详见状态报告。
+
+## 多能量 100–400 MeV/u（100k B580）
+
+固定模型参数（`straggling_scale=1.2`，无逐能量调参）：
+
+```bat
+python validation\scripts\analyze_multi_energy.py ^
+  --cases 100=out\multi_energy\e100_idd.csv 200=out\multi_energy\e200_idd.csv ^
+         300=out\multi_energy\e300_idd.csv 400=out\multi_energy\e400_idd.csv ^
+  --topas-200 validation\results\topas_200MeVu_development.csv ^
+  --output-metrics validation\results\windows_b580_multi_energy_100_400.metrics.json ^
+  --output-plot validation\results\windows_b580_multi_energy_100_400.png
+```
+
+R80：25.9 / 87.0 / 172.5 / 275.6 mm。GPU 200 vs TOPAS：积分 −0.72%，ΔR80 +0.10 mm。  
+末态包目前仅覆盖至 200 MeV/u 分箱（更高能量夹顶箱）。

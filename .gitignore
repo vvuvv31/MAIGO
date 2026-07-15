@@ -21,6 +21,7 @@ validation/results/*
 !validation/results/windows_b580_step_convergence_*.png
 !validation/results/windows_b580_lateral_voxel_convergence_*.png
 !validation/results/windows_b580_stats_convergence_*.png
+!validation/results/windows_b580_multi_energy_*.png
 validation/results/*_voxels.csv
 validation/topas/output/*
 !validation/topas/output/.gitkeep

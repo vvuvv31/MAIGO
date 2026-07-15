@@ -121,7 +121,25 @@ IDD-only charged 路径（MCS+cascade，neutral 关，seed=20260715）：
 
 产物：`validation/results/windows_b580_stats_convergence_1e6.metrics.json` / `.png`
 
-## 7. 约束（不变）
+## 7. 多能量 100–400 MeV/u（100k B580）
+
+固定参数：`straggling_scale=1.2`、`maximum_step_mm=0.5`、同一 SP/XS 表与 cascade 包，**无逐能量调参**，neutron 关。
+
+| E (MeV/u) | R80 (mm) | peak z (mm) | FWHM (mm) | 积分 (MeV/p) | 核反应/primary | 吞吐 |
+|-----------|----------|-------------|-----------|--------------|----------------|------|
+| 100 | 25.86 | 25.75 | 1.21 | 1180 | 0.164 | 62k/s |
+| 200 | 86.99 | 86.75 | 2.36 | 2280 | 0.384 | 36k/s |
+| 300 | 172.48 | 171.75 | 4.86 | 3104 | 0.586 | 23k/s |
+| 400 | 275.58 | 274.75 | 8.00 | 3522 | 0.742 | 21k/s |
+
+- **R80 严格随能量上升**
+- **GPU 200 vs TOPAS development**：积分 **−0.72%**，ΔR80 **+0.10 mm**，NRMSE **1.03%**，峰深一致
+- overflow = 0
+- **限制**：反应末态包仅 0–200 MeV/u 分箱；300/400 MeV/u 的高能反应夹到顶箱。SP/XS 仍为 1–400 全表。正式多能量末态需后续 TOPAS 反应包。
+
+产物：`validation/results/windows_b580_multi_energy_100_400.metrics.json` / `.png`
+
+## 8. 约束（不变）
 
 - 新 TOPAS 作业仅 `v@192.168.31.5`，≤56 线程；禁止 WSL TOPAS  
 - Windows 原生 oneAPI + Arc B580 为 GPU 执行环境  

@@ -1,0 +1,154 @@
+{
+  "normalization": "absolute MeV/primary; no global scale; no per-energy scale",
+  "neutron_deferred": true,
+  "reaction_package_note": "Primary reaction final-state packages are binned 0--200 MeV/u from the 200 MeV/u TOPAS campaign. Beams at E>200 MeV/u clamp high-energy reaction sampling to the top bin; stopping power and nuclear cross sections still use the full 1--400 MeV/u tables.",
+  "cases": [
+    {
+      "energy_MeV_per_u": 100.0,
+      "path": "out/multi_energy/e100_idd.csv",
+      "metrics": {
+        "integral_MeV_per_primary": 1180.2500091705376,
+        "peak_depth_mm": 25.75,
+        "peak_value_MeV_per_primary": 95.2337758917,
+        "R90_mm": 25.803590123720316,
+        "R80_mm": 25.85718024744063,
+        "R50_mm": 26.01795061860158,
+        "R20_mm": 26.17872098976253,
+        "FWHM_mm": 1.2093202181631888,
+        "tail_ge_R80_MeV_per_primary": 50.26950201763758
+      },
+      "R80_over_energy_mm_per_MeVu": 0.2585718024744063,
+      "elapsed_s": 1.601149,
+      "throughput_histories_per_s": 62455.149,
+      "nuclear_interactions": 16358,
+      "nuclear_interactions_per_primary": 0.16358
+    },
+    {
+      "energy_MeV_per_u": 200.0,
+      "path": "out/multi_energy/e200_idd.csv",
+      "metrics": {
+        "integral_MeV_per_primary": 2280.3080742221423,
+        "peak_depth_mm": 86.75,
+        "peak_value_MeV_per_primary": 56.3399318932,
+        "R90_mm": 86.8713521749621,
+        "R80_mm": 86.99270434992421,
+        "R50_mm": 87.33895242334457,
+        "R20_mm": 87.64228180482922,
+        "FWHM_mm": 2.3571054852214814,
+        "tail_ge_R80_MeV_per_primary": 260.85739816884177
+      },
+      "R80_over_energy_mm_per_MeVu": 0.43496352174962105,
+      "elapsed_s": 2.7628013,
+      "throughput_histories_per_s": 36195.147,
+      "nuclear_interactions": 38387,
+      "nuclear_interactions_per_primary": 0.38387
+    },
+    {
+      "energy_MeV_per_u": 300.0,
+      "path": "out/multi_energy/e300_idd.csv",
+      "metrics": {
+        "integral_MeV_per_primary": 3103.812027803295,
+        "peak_depth_mm": 171.75,
+        "peak_value_MeV_per_primary": 30.9038166053,
+        "R90_mm": 172.34012966969524,
+        "R80_mm": 172.47829596171954,
+        "R50_mm": 172.89466346920364,
+        "R20_mm": 173.41867520844067,
+        "FWHM_mm": 4.861256517355116,
+        "tail_ge_R80_MeV_per_primary": 367.965480856755
+      },
+      "R80_over_energy_mm_per_MeVu": 0.5749276532057318,
+      "elapsed_s": 4.3210902,
+      "throughput_histories_per_s": 23142.308,
+      "nuclear_interactions": 58643,
+      "nuclear_interactions_per_primary": 0.58643
+    },
+    {
+      "energy_MeV_per_u": 400.0,
+      "path": "out/multi_energy/e400_idd.csv",
+      "metrics": {
+        "integral_MeV_per_primary": 3522.059527029651,
+        "peak_depth_mm": 274.75,
+        "peak_value_MeV_per_primary": 17.5439773299,
+        "R90_mm": 275.3496427185747,
+        "R80_mm": 275.5803932551053,
+        "R50_mm": 276.1643110692353,
+        "R20_mm": 277.025145612989,
+        "FWHM_mm": 8.000181317366184,
+        "tail_ge_R80_MeV_per_primary": 275.943575708601
+      },
+      "R80_over_energy_mm_per_MeVu": 0.6889509831377633,
+      "elapsed_s": 4.7416777,
+      "throughput_histories_per_s": 21089.582,
+      "nuclear_interactions": 74247,
+      "nuclear_interactions_per_primary": 0.74247
+    }
+  ],
+  "range_trend": {
+    "R80_mm": [
+      25.85718024744063,
+      86.99270434992421,
+      172.47829596171954,
+      275.5803932551053
+    ],
+    "energy_MeV_per_u": [
+      100.0,
+      200.0,
+      300.0,
+      400.0
+    ],
+    "R80_strictly_increasing": true
+  },
+  "topas_200_comparison": {
+    "topas_path": "validation/results/topas_200MeVu_development.csv",
+    "topas_column": "energy_deposition_MeV_per_primary",
+    "topas_metrics": {
+      "integral_MeV_per_primary": 2296.7275835203623,
+      "peak_depth_mm": 86.75,
+      "peak_value_MeV_per_primary": 55.9021875,
+      "R90_mm": 86.82384424024049,
+      "R80_mm": 86.89768848048098,
+      "R50_mm": 87.11922120120245,
+      "R20_mm": 87.47579852051504,
+      "FWHM_mm": 2.298293480877021,
+      "tail_ge_R80_MeV_per_primary": 268.292046801762
+    },
+    "gpu_vs_topas": {
+      "nrmse_to_reference_max": 0.010335841151865118,
+      "integral_signed_percent": -0.7149088736528597,
+      "peak_value_signed_percent": 0.7830541393393707,
+      "delta_R80_mm": 0.09501586944323037,
+      "delta_FWHM_mm": 0.05881200434446043,
+      "delta_peak_depth_mm": 0.0
+    }
+  },
+  "histories": 100000,
+  "device": "sycl-gpu Arc B580",
+  "seed": 20260715,
+  "straggling_scale": 1.2,
+  "enable_neutral_transport": false,
+  "overflow_all_zero": true,
+  "summary": {
+    "R80_mm": {
+      "100": 25.85718024744063,
+      "200": 86.99270434992421,
+      "300": 172.47829596171954,
+      "400": 275.5803932551053
+    },
+    "integral_MeV_per_primary": {
+      "100": 1180.2500091705376,
+      "200": 2280.3080742221423,
+      "300": 3103.812027803295,
+      "400": 3522.059527029651
+    },
+    "R80_increasing": true,
+    "gpu200_vs_topas": {
+      "nrmse_to_reference_max": 0.010335841151865118,
+      "integral_signed_percent": -0.7149088736528597,
+      "peak_value_signed_percent": 0.7830541393393707,
+      "delta_R80_mm": 0.09501586944323037,
+      "delta_FWHM_mm": 0.05881200434446043,
+      "delta_peak_depth_mm": 0.0
+    }
+  }
+}
