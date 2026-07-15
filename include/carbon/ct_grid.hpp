@@ -37,10 +37,13 @@ struct CtGrid {
     void write_binary(const std::filesystem::path& path) const;
 };
 
-// HU → density (g/cm3) piecewise clinical approx (clipped).
+// Legacy piecewise HU→density (tests / fallback only).
+// Production CT grids are prepared offline via Schneider
+// (validation/scripts/prepare_ct_grid.py + ct/HUtoMaterialSchneider.txt).
 float hu_to_density_g_per_cm3(float hu) noexcept;
 
-// Density → material class for SP/XS table selection.
+// Density → material class for SP/XS table selection (fallback).
+// Production grids store Schneider-collapsed material_id in the binary.
 std::uint8_t density_to_material_id(float density_g_per_cm3) noexcept;
 
 inline std::size_t ct_linear_index(const std::uint32_t ix,

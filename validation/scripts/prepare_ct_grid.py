@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Convert a DICOM CT series under ct/dicom into a GPU binary grid (7c).
 
+HU → density / material class uses TOPAS HUtoMaterialSchneider.txt (same table
+as TsDicomPatient), not a hand-written piecewise curve.
+
 Transport frame: beam +z, entrance near z=0; CT first slice maps to z=0.
 xy is centered on the CT volume.
 """
@@ -19,36 +22,15 @@ try:
 except ImportError as exc:  # pragma: no cover
     raise SystemExit("pydicom is required: pip install pydicom") from exc
 
+from schneider_hu import load_schneider_table, hu_to_density_material
+
 MAGIC = 0x47544343  # 'CCTG'
 VERSION = 1
-
-
-def hu_to_density(hu: np.ndarray) -> np.ndarray:
-    hu = np.clip(hu.astype(np.float32), -1000.0, 3000.0)
-    density = np.empty_like(hu, dtype=np.float32)
-    air = hu < -980.0
-    soft = (hu >= -980.0) & (hu < 0.0)
-    bone_low = (hu >= 0.0) & (hu < 1000.0)
-    bone_hi = hu >= 1000.0
-    density[air] = 0.001205
-    density[soft] = 0.001205 + (hu[soft] + 980.0) * (1.0 - 0.001205) / 980.0
-    density[bone_low] = 1.0 + 0.001 * hu[bone_low]
-    density[bone_hi] = 2.0 + 0.0005 * (hu[bone_hi] - 1000.0)
-    return density
-
-
-def density_to_material(density: np.ndarray) -> np.ndarray:
-    mid = np.full(density.shape, 2, dtype=np.uint8)  # water default
-    mid[density < 0.1] = 0  # air
-    mid[(density >= 0.1) & (density < 0.7)] = 1  # lung
-    mid[density >= 1.25] = 3  # bone
-    return mid
 
 
 def load_series(dicom_dir: Path) -> tuple[np.ndarray, dict]:
     files = sorted(dicom_dir.glob("*.dcm")) + sorted(dicom_dir.glob("IMG*"))
     files = [f for f in files if f.suffix.lower() in {".dcm", ""} or f.name.startswith("IMG")]
-    # unique by path
     files = sorted(set(files), key=lambda p: p.name)
     if not files:
         raise SystemExit(f"No DICOM files in {dicom_dir}")
@@ -70,7 +52,6 @@ def load_series(dicom_dir: Path) -> tuple[np.ndarray, dict]:
     volume = np.stack([item[1] for item in slices], axis=0)  # z,y,x
     ds0 = slices[0][2]
     spacing_row_col = [float(v) for v in ds0.PixelSpacing]
-    # PixelSpacing is row,col → y,x
     spacing_y = spacing_row_col[0]
     spacing_x = spacing_row_col[1]
     zs = np.array([item[0] for item in slices], dtype=np.float64)
@@ -91,11 +72,38 @@ def load_series(dicom_dir: Path) -> tuple[np.ndarray, dict]:
     return volume, meta
 
 
+def resolve_schneider_path(explicit: Path | None) -> Path:
+    candidates = []
+    if explicit is not None:
+        candidates.append(explicit)
+    candidates.extend(
+        [
+            Path("ct/HUtoMaterialSchneider.txt"),
+            Path("validation/topas/HUtoMaterialSchneider.txt"),
+        ]
+    )
+    for path in candidates:
+        if path.is_file():
+            return path
+    raise SystemExit(
+        "Schneider HU table not found. Place HUtoMaterialSchneider.txt under "
+        "ct/ or pass --schneider-file"
+    )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dicom-dir", type=Path, default=Path("ct/dicom"))
     parser.add_argument("--output", type=Path, default=Path("ct/grid/patient_ct.bin"))
-    parser.add_argument("--metadata", type=Path, default=Path("ct/grid/patient_ct.metadata.json"))
+    parser.add_argument(
+        "--metadata", type=Path, default=Path("ct/grid/patient_ct.metadata.json")
+    )
+    parser.add_argument(
+        "--schneider-file",
+        type=Path,
+        default=None,
+        help="TOPAS Schneider HU table (default: ct/HUtoMaterialSchneider.txt)",
+    )
     parser.add_argument(
         "--center-xy",
         action="store_true",
@@ -104,23 +112,19 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    schneider_path = resolve_schneider_path(args.schneider_file)
+    table = load_schneider_table(schneider_path)
+
     volume_zyx, meta = load_series(args.dicom_dir)
-    # volume: z,y,x → store as x-fastest: for each z,y,x
     nz, ny, nx = volume_zyx.shape
-    density = hu_to_density(volume_zyx)
-    material = density_to_material(density)
+    density, material = hu_to_density_material(volume_zyx, table)
     spacing_x, spacing_y, spacing_z = meta["spacing_xyz_mm"]
 
-    # Transport origin: first slice at z=0, xy centered
     origin_x = -0.5 * (nx - 1) * spacing_x if args.center_xy else 0.0
     origin_y = -0.5 * (ny - 1) * spacing_y if args.center_xy else 0.0
     origin_z = 0.0
 
-    # Flatten index ix + nx*(iy + ny*iz) with ix along columns (x)
-    density_flat = np.transpose(density, (0, 1, 2)).astype(np.float32)  # z,y,x
-    # actually already z,y,x; flatten with x fastest: for iz, for iy, for ix
-    density_out = np.ascontiguousarray(density_flat.transpose(0, 1, 2).reshape(-1))
-    # reshape(-1) on z,y,x is C-order: x fastest? C-order of (z,y,x) is x fastest yes.
+    density_out = np.ascontiguousarray(density.reshape(-1), dtype=np.float32)
     material_out = np.ascontiguousarray(material.reshape(-1), dtype=np.uint8)
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
@@ -141,20 +145,33 @@ def main() -> None:
         handle.write(density_out.tobytes(order="C"))
         handle.write(material_out.tobytes(order="C"))
 
+    # Sample axis density for QA
+    ix = int((0.0 - origin_x) / spacing_x)
+    iy = int((0.0 - origin_y) / spacing_y)
+    ix = min(max(ix, 0), nx - 1)
+    iy = min(max(iy, 0), ny - 1)
+    axis_dens = [
+        float(density[iz, iy, ix]) for iz in range(min(nz, 8))
+    ]
+
     meta_out = {
         **meta,
         "output": str(args.output),
         "origin_xyz_mm": [origin_x, origin_y, origin_z],
+        "hu_conversion": "Schneider",
+        "schneider_file": str(schneider_path),
         "material_map": {"0": "air", "1": "lung", "2": "water", "3": "bone"},
         "material_histogram": {
             str(i): int((material_out == i).sum()) for i in range(4)
         },
         "density_min": float(density_out.min()),
         "density_max": float(density_out.max()),
+        "axis_density_first_slices": axis_dens,
         "phantom_length_hint_mm": float(nz * spacing_z),
         "notes": (
-            "Transport frame: z=0 at first DICOM slice (superior/inferior depends on sort); "
-            "xy centered. Outside the grid the GPU uses water ρ=1."
+            "HU→ρ/material from TOPAS HUtoMaterialSchneider.txt (same as TsDicomPatient). "
+            "Material class collapses Schneider tissues to air/lung/water/bone for GPU tables. "
+            "Transport frame: z=0 at first DICOM slice; xy centered."
         ),
     }
     args.metadata.write_text(json.dumps(meta_out, indent=2) + "\n", encoding="utf-8")

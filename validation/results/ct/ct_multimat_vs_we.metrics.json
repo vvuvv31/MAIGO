@@ -1,13 +1,14 @@
 {
   "we": {
-    "R80": 37.524927802434846,
-    "entrance": 18.1265034021,
-    "peak_z": 37.25
+    "R80": 41.75,
+    "entrance": 15.26,
+    "peak_z": 41.25
   },
   "multimat": {
-    "R80": 39.544169375693514,
-    "entrance": 16.8765706051,
-    "peak_z": 39.25
+    "R80": 44.56,
+    "entrance": 14.21,
+    "peak_z": 44.25
   },
-  "delta_R80_mm": 2.019241573258668
+  "hu_conversion": "Schneider",
+  "schneider_file": "ct/HUtoMaterialSchneider.txt"
 }
