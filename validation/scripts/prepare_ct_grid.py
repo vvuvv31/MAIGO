@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Convert DICOM CT under ct/dicom into GPU binary grid (CCTG v2).
+"""Convert DICOM CT under ct/dicom into GPU binary grid (CCTG v3).
 
 Uses TOPAS HUtoMaterialSchneider.txt for density + Schneider section id +
-mass stopping-power factors (Z/A Bragg proxy vs water).
+(Z/A)_rel and Bragg mean I for energy-dependent mass-SP vs water.
 
 Transport frame: beam +z, first slice at z=0; xy centered.
 """
@@ -26,7 +26,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from schneider_hu import hu_to_density_material, load_schneider_table  # noqa: E402
 
 MAGIC = 0x47544343  # 'CCTG'
-VERSION = 2
+VERSION = 3
 
 
 def load_series(dicom_dir: Path) -> tuple[np.ndarray, dict]:
@@ -93,13 +93,13 @@ def resolve_schneider_path(explicit: Path | None) -> Path:
 
 
 def write_water_cube(output: Path, size: int = 80, spacing: float = 1.0) -> None:
-    """Synthetic unit-density water cube (section 0 mass factor 1)."""
+    """Synthetic unit-density water cube (za_rel=1, I=75 eV)."""
     n = size
     count = n * n * n
     density = np.ones(count, dtype=np.float32)
-    material = np.full(count, 0, dtype=np.uint8)  # section 0 → force factor 1
-    # Use a single mass factor entry of 1.0
-    factors = np.array([1.0], dtype=np.float32)
+    material = np.full(count, 0, dtype=np.uint8)
+    za = np.array([1.0], dtype=np.float32)
+    Iev = np.array([75.0], dtype=np.float32)
     origin = -0.5 * (n - 1) * spacing
     output.parent.mkdir(parents=True, exist_ok=True)
     with output.open("wb") as handle:
@@ -119,7 +119,8 @@ def write_water_cube(output: Path, size: int = 80, spacing: float = 1.0) -> None
         handle.write(density.tobytes(order="C"))
         handle.write(material.tobytes(order="C"))
         handle.write(struct.pack("<I", 1))
-        handle.write(factors.tobytes(order="C"))
+        handle.write(za.tobytes(order="C"))
+        handle.write(Iev.tobytes(order="C"))
     print(f"Wrote water cube {output} ({output.stat().st_size} bytes)")
 
 
@@ -156,7 +157,8 @@ def main() -> None:
 
     density_out = np.ascontiguousarray(density.reshape(-1), dtype=np.float32)
     section_out = np.ascontiguousarray(section.reshape(-1), dtype=np.uint8)
-    factors = np.ascontiguousarray(table.mass_sp_factor, dtype=np.float32)
+    za = np.ascontiguousarray(table.mass_sp_factor, dtype=np.float32)
+    Iev = np.ascontiguousarray(table.mass_sp_I_eV, dtype=np.float32)
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with args.output.open("wb") as handle:
@@ -175,8 +177,9 @@ def main() -> None:
         )
         handle.write(density_out.tobytes(order="C"))
         handle.write(section_out.tobytes(order="C"))
-        handle.write(struct.pack("<I", int(factors.size)))
-        handle.write(factors.tobytes(order="C"))
+        handle.write(struct.pack("<I", int(za.size)))
+        handle.write(za.tobytes(order="C"))
+        handle.write(Iev.tobytes(order="C"))
 
     ix = int((0.0 - origin_x) / spacing_x)
     iy = int((0.0 - origin_y) / spacing_y)
@@ -185,12 +188,14 @@ def main() -> None:
     axis = []
     for iz in range(min(nz, 8)):
         sec = int(section[iz, iy, ix])
+        si = min(sec, za.size - 1)
         axis.append(
             {
                 "z_index": iz,
                 "density": float(density[iz, iy, ix]),
                 "section": sec,
-                "mass_sp_factor": float(factors[min(sec, factors.size - 1)]),
+                "za_rel": float(za[si]),
+                "I_eV": float(Iev[si]),
             }
         )
 
@@ -199,21 +204,22 @@ def main() -> None:
         "output": str(args.output),
         "origin_xyz_mm": [origin_x, origin_y, origin_z],
         "hu_conversion": "Schneider",
-        "sp_model": "mass_sp_factor[section] * SP_water(E) * density",
+        "sp_model": "SP_water(E) * f_E(za_rel,I,E) * density",
         "schneider_file": str(schneider_path),
         "grid_version": VERSION,
         "n_material_sections": int(table.n_material_sections),
-        "mass_sp_factor": [float(x) for x in factors],
+        "mass_sp_za_rel": [float(x) for x in za],
+        "mass_sp_I_eV": [float(x) for x in Iev],
         "section_histogram": {
-            str(i): int((section_out == i).sum()) for i in range(int(factors.size))
+            str(i): int((section_out == i).sum()) for i in range(int(za.size))
         },
         "density_min": float(density_out.min()),
         "density_max": float(density_out.max()),
         "axis_samples": axis,
         "phantom_length_hint_mm": float(nz * spacing_z),
         "notes": (
-            "CCTG v2: Schneider density + section id + mass-SP factors (Z/A vs water). "
-            "GPU SP = water_table(E) * mass_sp_factor[section] * rho."
+            "CCTG v3: Schneider density + section id + (Z/A, I) for energy-dependent "
+            "mass-SP vs water. GPU SP = water_table(E) * f_E(za,I,E) * rho."
         ),
     }
     args.metadata.write_text(json.dumps(meta_out, indent=2) + "\n", encoding="utf-8")

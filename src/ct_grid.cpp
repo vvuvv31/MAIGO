@@ -49,7 +49,7 @@ CtGrid CtGrid::from_binary(const std::filesystem::path& path) {
     input.read(reinterpret_cast<char*>(&magic), sizeof(magic));
     input.read(reinterpret_cast<char*>(&version), sizeof(version));
     if (magic != magic_value ||
-        (version != version_value && version != version_legacy)) {
+        (version != version_value && version != version_v2 && version != version_legacy)) {
         throw std::runtime_error("Invalid CT grid magic/version: " + path.string());
     }
     CtGrid grid;
@@ -73,7 +73,11 @@ CtGrid CtGrid::from_binary(const std::filesystem::path& path) {
                static_cast<std::streamsize>(count * sizeof(float)));
     input.read(reinterpret_cast<char*>(grid.material_id.data()),
                static_cast<std::streamsize>(count * sizeof(std::uint8_t)));
-    if (version >= version_value) {
+    if (version == version_legacy) {
+        grid.mass_sp_za_rel = {1.0F, 1.0F, 1.0F, 1.0F};
+        grid.mass_sp_I_eV = {75.0F, 75.0F, 75.0F, 75.0F};
+        grid.mass_sp_factor = {1.0F, 1.0F, 1.0F, 1.0F};
+    } else if (version == version_v2) {
         std::uint32_t n_factors = 0;
         input.read(reinterpret_cast<char*>(&n_factors), sizeof(n_factors));
         if (n_factors == 0 || n_factors > 256U) {
@@ -82,9 +86,21 @@ CtGrid CtGrid::from_binary(const std::filesystem::path& path) {
         grid.mass_sp_factor.resize(n_factors);
         input.read(reinterpret_cast<char*>(grid.mass_sp_factor.data()),
                    static_cast<std::streamsize>(n_factors * sizeof(float)));
+        grid.mass_sp_za_rel = grid.mass_sp_factor;
+        grid.mass_sp_I_eV.assign(n_factors, 75.0F);
     } else {
-        // Legacy 4-class: water-equivalent mass factor 1 for all classes.
-        grid.mass_sp_factor = {1.0F, 1.0F, 1.0F, 1.0F};
+        std::uint32_t n_factors = 0;
+        input.read(reinterpret_cast<char*>(&n_factors), sizeof(n_factors));
+        if (n_factors == 0 || n_factors > 256U) {
+            throw std::runtime_error("Invalid CT mass-SP section count: " + path.string());
+        }
+        grid.mass_sp_za_rel.resize(n_factors);
+        grid.mass_sp_I_eV.resize(n_factors);
+        input.read(reinterpret_cast<char*>(grid.mass_sp_za_rel.data()),
+                   static_cast<std::streamsize>(n_factors * sizeof(float)));
+        input.read(reinterpret_cast<char*>(grid.mass_sp_I_eV.data()),
+                   static_cast<std::streamsize>(n_factors * sizeof(float)));
+        grid.mass_sp_factor = grid.mass_sp_za_rel;
     }
     if (!input) {
         throw std::runtime_error("Truncated CT grid file: " + path.string());
@@ -118,14 +134,26 @@ void CtGrid::write_binary(const std::filesystem::path& path) const {
                  static_cast<std::streamsize>(density_g_per_cm3.size() * sizeof(float)));
     output.write(reinterpret_cast<const char*>(material_id.data()),
                  static_cast<std::streamsize>(material_id.size() * sizeof(std::uint8_t)));
-    std::vector<float> factors = mass_sp_factor;
-    if (factors.empty()) {
-        factors = {1.0F};
+
+    std::vector<float> za = mass_sp_za_rel;
+    std::vector<float> I = mass_sp_I_eV;
+    if (za.empty() && !mass_sp_factor.empty()) {
+        za = mass_sp_factor;
+        I.assign(za.size(), 75.0F);
     }
-    const auto n_factors = static_cast<std::uint32_t>(factors.size());
+    if (za.empty()) {
+        za = {1.0F};
+        I = {75.0F};
+    }
+    if (I.size() != za.size()) {
+        I.assign(za.size(), 75.0F);
+    }
+    const auto n_factors = static_cast<std::uint32_t>(za.size());
     output.write(reinterpret_cast<const char*>(&n_factors), sizeof(n_factors));
-    output.write(reinterpret_cast<const char*>(factors.data()),
-                 static_cast<std::streamsize>(factors.size() * sizeof(float)));
+    output.write(reinterpret_cast<const char*>(za.data()),
+                 static_cast<std::streamsize>(za.size() * sizeof(float)));
+    output.write(reinterpret_cast<const char*>(I.data()),
+                 static_cast<std::streamsize>(I.size() * sizeof(float)));
 }
 
 }  // namespace carbon

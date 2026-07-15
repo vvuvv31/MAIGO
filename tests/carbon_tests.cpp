@@ -311,6 +311,22 @@ void test_ct_grid_helpers() {
         2, 2, dens_h, mats_h, 1.0F, 2);
     require_near(step_h, 0.4F, 1.0e-5, "homogeneous CT step should not face-clamp");
 
+    // Short energy-limited steps skip face clamp (C).
+    const auto step_short = carbon::clamp_step_to_ct_faces_if_needed(
+        0.05F, 0.1F, 0.1F, 0.1F, 0.0F, 0.0F, 1.0F, 0.0F, 0.0F, 0.0F, 1.0F, 1.0F, 1.0F, 2,
+        2, 2, dens_h, mats_h, 1.0F, 2, true);
+    require_near(step_short, 0.05F, 1.0e-6, "short CT step should skip face-clamp");
+
+    // Energy-dependent mass-SP: I_water → factor = za_rel; I_bone ≠ 75 shifts f_E.
+    require_near(carbon::ct_mass_sp_energy_factor(0.93F, 75.0F, 150.0F), 0.93F, 1.0e-4,
+                 "mass-SP energy factor water-I");
+    const auto f_bone_hi =
+        carbon::ct_mass_sp_energy_factor(0.93F, 106.0F, 200.0F);
+    const auto f_bone_lo =
+        carbon::ct_mass_sp_energy_factor(0.93F, 106.0F, 10.0F);
+    require(f_bone_hi < 0.93F && f_bone_hi > 0.85F, "bone f_E high-E below za");
+    require(f_bone_lo < f_bone_hi, "bone f_E decreases toward low E");
+
     const float dens[8] = {1.0F, 1.1F, 1.2F, 1.3F, 1.4F, 1.5F, 1.6F, 1.7F};
     const std::uint8_t mats[8] = {2, 2, 2, 2, 3, 3, 3, 3};
     float rho = 0.0F;
@@ -330,15 +346,17 @@ void test_ct_grid_helpers() {
     grid.nz = 2;
     grid.density_g_per_cm3 = {1.0F, 1.1F, 1.2F, 1.3F, 1.4F, 1.5F, 1.6F, 1.7F};
     grid.material_id = {0, 1, 2, 3, 0, 1, 2, 3};
-    grid.mass_sp_factor = {1.0F, 0.99F, 1.0F, 0.93F};
+    grid.mass_sp_za_rel = {1.0F, 0.99F, 1.0F, 0.93F};
+    grid.mass_sp_I_eV = {75.0F, 72.0F, 75.0F, 106.0F};
     const auto path =
-        std::filesystem::temp_directory_path() / "carbon_ct_v2_roundtrip.bin";
+        std::filesystem::temp_directory_path() / "carbon_ct_v3_roundtrip.bin";
     grid.write_binary(path);
     const auto loaded = carbon::CtGrid::from_binary(path);
-    require(loaded.file_version == carbon::CtGrid::version_value, "ct v2 version");
-    require(loaded.has_mass_sp_factors() && loaded.mass_sp_factor.size() == 4,
-            "ct v2 mass factors");
-    require_near(loaded.mass_sp_factor[3], 0.93F, 1.0e-6, "ct v2 bone factor");
+    require(loaded.file_version == carbon::CtGrid::version_value, "ct v3 version");
+    require(loaded.has_mass_sp_factors() && loaded.mass_sp_za_rel.size() == 4,
+            "ct v3 za_rel");
+    require_near(loaded.mass_sp_za_rel[3], 0.93F, 1.0e-6, "ct v3 bone za");
+    require_near(loaded.mass_sp_I_eV[3], 106.0F, 1.0e-4, "ct v3 bone I");
     std::filesystem::remove(path);
 }
 
@@ -927,7 +945,8 @@ void test_sycl_ct_secondary_density_smoke() {
     const auto n = grid.number_of_voxels();
     grid.density_g_per_cm3.assign(n, 1.85F);
     grid.material_id.assign(n, static_cast<std::uint8_t>(0));  // section 0
-    grid.mass_sp_factor = {0.93F};  // bone-like mass SP factor
+    grid.mass_sp_za_rel = {0.93F};  // bone-like Z/A rel
+    grid.mass_sp_I_eV = {106.0F};
     const auto ct_path =
         std::filesystem::temp_directory_path() / "carbon_ct_secondary_smoke.bin";
     grid.write_binary(ct_path);

@@ -98,6 +98,47 @@ scripts\run_windows_b580.cmd
 
 脚本会依次初始化 Visual Studio 2026 C++ 工具链与 Intel oneAPI，并使用独立的 `oneapi-windows-release` preset/build 目录。B580 被限制到 `ONEAPI_DEVICE_SELECTOR=level_zero:0`，不会误选 OpenCL CPU。若 oneAPI 安装在其他位置，可预先设置 `ONEAPI_SETVARS`。
 
+## 患者 CT 验证（7c）一键入口
+
+CT 网格与 DICOM 不入库（见 `.gitignore` 中 `ct/`）。本地需：
+
+- `ct/dicom/` 患者序列  
+- `ct/HUtoMaterialSchneider.txt`（与 TOPAS 同表；也可放在 `validation/topas/`）  
+- 已构建的 `build\oneapi-windows-release-grok\carbon_mc.exe`  
+- TOPAS 参考 IDD：`validation/topas/output/ct_patient_development_energy_deposit.csv`（或先远程跑 CT）
+
+**推荐流程（Windows + Arc B580）：**
+
+```bat
+scripts\windows_oneapi_env.cmd
+:: 可选：从 DICOM 重建 CCTG v3 网格（Schneider 密度 + (Z/A,I) 能量相关 mass-SP）
+python validation\scripts\prepare_ct_grid.py --schneider-file ct\HUtoMaterialSchneider.txt
+
+:: 单元测试 + primary-only / secondary / TOPAS 对比
+scripts\run_windows_b580_ct_baseline.cmd
+
+:: 仅汇总已有 GPU CSV（不跑 GPU）
+scripts\run_windows_b580_ct_baseline.cmd --skip-gpu
+```
+
+或直接：
+
+```bat
+python validation\scripts\run_ct_baseline.py
+python validation\scripts\run_ct_baseline.py --skip-gpu
+```
+
+配置：
+
+| 角色 | 路径 |
+|------|------|
+| primary-only | `config/beam_200MeVu_ct_patient_multimat.yaml` |
+| +secondary | `config/beam_200MeVu_ct_patient_multimat_secondary.yaml` |
+| full face-clamp A/B | `config/beam_200MeVu_ct_patient_multimat_secondary_full_clamp.yaml` |
+
+指标：`validation/results/ct/ct_baseline_summary.metrics.json`（绝对 MeV/primary，无全局 dose scale）。  
+物理说明见 `furtherStep.md` 7c 节。
+
 100,000-history Windows 原生实测结果：
 
 - serial：`14,287 histories/s`；

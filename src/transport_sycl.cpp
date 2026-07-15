@@ -557,8 +557,10 @@ TransportResult transport_sycl(const TransportConfig& config,
     CtGrid ct_grid_host{};
     float* ct_density_device = nullptr;
     std::uint8_t* ct_material_device = nullptr;
-    float* ct_mass_sp_factor_device = nullptr;  // Schneider section mass-SP LUT
-    float* ct_sp_device = nullptr;             // optional absolute 4-class tables
+    // Schneider section mass-SP: (Z/A)_rel and Bragg I [eV] (CCTG v2/v3).
+    float* ct_mass_sp_za_device = nullptr;
+    float* ct_mass_sp_I_device = nullptr;
+    float* ct_sp_device = nullptr;  // optional absolute 4-class tables
     float* ct_xs_device = nullptr;
     float* ct_ref_density_device = nullptr;
     std::uint32_t ct_nx = 0;
@@ -571,7 +573,7 @@ TransportResult transport_sycl(const TransportConfig& config,
     float ct_spacing_x = 1.0F;
     float ct_spacing_y = 1.0F;
     float ct_spacing_z = 1.0F;
-    // Prefer Schneider mass-SP scaling when the grid carries factors (CCTG v2).
+    // Prefer Schneider mass-SP scaling when the grid carries factors (CCTG v2/v3).
     // Absolute 4-class tables remain only if requested and no mass-SP factors.
     auto use_ct_mass_sp = false;
     auto use_ct_material_tables = false;
@@ -611,17 +613,31 @@ TransportResult transport_sycl(const TransportConfig& config,
             .wait_and_throw();
 
         if (use_ct_mass_sp) {
-            ct_n_mass_factors =
-                static_cast<std::uint32_t>(ct_grid_host.mass_sp_factor.size());
-            ct_mass_sp_factor_device =
+            const auto& za_host = !ct_grid_host.mass_sp_za_rel.empty()
+                                      ? ct_grid_host.mass_sp_za_rel
+                                      : ct_grid_host.mass_sp_factor;
+            ct_n_mass_factors = static_cast<std::uint32_t>(za_host.size());
+            std::vector<float> I_host = ct_grid_host.mass_sp_I_eV;
+            if (I_host.size() != za_host.size()) {
+                I_host.assign(za_host.size(), 75.0F);
+            }
+            ct_mass_sp_za_device =
                 sycl::malloc_device<float>(ct_n_mass_factors, queue);
-            if (ct_mass_sp_factor_device == nullptr) {
+            ct_mass_sp_I_device =
+                sycl::malloc_device<float>(ct_n_mass_factors, queue);
+            if (ct_mass_sp_za_device == nullptr || ct_mass_sp_I_device == nullptr) {
+                free_device(ct_mass_sp_za_device);
+                free_device(ct_mass_sp_I_device);
                 free_device(ct_density_device);
                 free_device(ct_material_device);
                 throw std::bad_alloc();
             }
             queue
-                .memcpy(ct_mass_sp_factor_device, ct_grid_host.mass_sp_factor.data(),
+                .memcpy(ct_mass_sp_za_device, za_host.data(),
+                        sizeof(float) * ct_n_mass_factors)
+                .wait_and_throw();
+            queue
+                .memcpy(ct_mass_sp_I_device, I_host.data(),
                         sizeof(float) * ct_n_mass_factors)
                 .wait_and_throw();
         }
@@ -695,7 +711,8 @@ TransportResult transport_sycl(const TransportConfig& config,
             free_device(ct_sp_device);
             free_device(ct_xs_device);
             free_device(ct_ref_density_device);
-            free_device(ct_mass_sp_factor_device);
+            free_device(ct_mass_sp_za_device);
+            free_device(ct_mass_sp_I_device);
             free_device(ct_density_device);
             free_device(ct_material_device);
             throw std::bad_alloc();
@@ -752,7 +769,8 @@ TransportResult transport_sycl(const TransportConfig& config,
         free_device(insert_xs_device);
         free_device(ct_density_device);
         free_device(ct_material_device);
-        free_device(ct_mass_sp_factor_device);
+        free_device(ct_mass_sp_za_device);
+        free_device(ct_mass_sp_I_device);
         free_device(ct_sp_device);
         free_device(ct_xs_device);
         free_device(ct_ref_density_device);
@@ -1043,13 +1061,16 @@ TransportResult transport_sycl(const TransportConfig& config,
                     const auto water_sp =
                         table_device[index] +
                         fraction * (table_device[index + 1] - table_device[index]);
-                    if (use_ct_mass_sp && in_ct && ct_mass_sp_factor_device != nullptr &&
-                        ct_n_mass_factors > 0) {
-                        // Schneider section mass-SP × density.
+                    if (use_ct_mass_sp && in_ct && ct_mass_sp_za_device != nullptr &&
+                        ct_mass_sp_I_device != nullptr && ct_n_mass_factors > 0) {
+                        // Schneider section energy-dep mass-SP × density (v3; v2≡I=75).
                         const auto sec = static_cast<std::uint32_t>(ct_material);
                         const auto fi =
                             sec < ct_n_mass_factors ? sec : (ct_n_mass_factors - 1U);
-                        const auto mass_factor = ct_mass_sp_factor_device[fi];
+                        const auto mass_factor = ct_mass_sp_energy_factor_impl(
+                            ct_mass_sp_za_device[fi], ct_mass_sp_I_device[fi],
+                            energy_MeVu,
+                            [](float x) { return sycl::log(x); });
                         stopping_power_MeV_per_mm = ct_mass_scaled_stopping_power(
                             water_sp, local_density_g_per_cm3, mass_factor);
                     } else if (use_ct_material_tables && in_ct && ct_sp_device != nullptr &&
@@ -1866,16 +1887,20 @@ TransportResult transport_sycl(const TransportConfig& config,
                         float carbon_sp_local = carbon_stopping_power_MeV_per_mm;
                         if (enable_ct_grid) {
                             if (use_ct_mass_sp && in_ct &&
-                                ct_mass_sp_factor_device != nullptr &&
+                                ct_mass_sp_za_device != nullptr &&
+                                ct_mass_sp_I_device != nullptr &&
                                 ct_n_mass_factors > 0) {
                                 const auto sec = static_cast<std::uint32_t>(ct_material);
                                 const auto fi = sec < ct_n_mass_factors
                                                     ? sec
                                                     : (ct_n_mass_factors - 1U);
+                                const auto mass_factor = ct_mass_sp_energy_factor_impl(
+                                    ct_mass_sp_za_device[fi], ct_mass_sp_I_device[fi],
+                                    energy_MeVu,
+                                    [](float x) { return sycl::log(x); });
                                 carbon_sp_local = ct_mass_scaled_stopping_power(
                                     carbon_stopping_power_MeV_per_mm,
-                                    local_density_g_per_cm3,
-                                    ct_mass_sp_factor_device[fi]);
+                                    local_density_g_per_cm3, mass_factor);
                             } else if (use_ct_material_tables && in_ct &&
                                        ct_sp_device != nullptr &&
                                        ct_ref_density_device != nullptr) {
@@ -3301,7 +3326,8 @@ TransportResult transport_sycl(const TransportConfig& config,
     free_device(insert_xs_device);
     free_device(ct_density_device);
     free_device(ct_material_device);
-    free_device(ct_mass_sp_factor_device);
+    free_device(ct_mass_sp_za_device);
+    free_device(ct_mass_sp_I_device);
     free_device(ct_sp_device);
     free_device(ct_xs_device);
     free_device(ct_ref_density_device);
@@ -3347,7 +3373,7 @@ TransportResult transport_sycl(const TransportConfig& config,
     }
     if (enable_ct_grid) {
         if (use_ct_mass_sp) {
-            result.backend += "+ct-grid-mass-sp";
+            result.backend += "+ct-grid-mass-sp-e";
         } else if (use_ct_material_tables) {
             result.backend += "+ct-grid-material";
         } else {

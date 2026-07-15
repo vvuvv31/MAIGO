@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cmath>
 #include <cstdint>
 #include <filesystem>
 #include <vector>
@@ -10,12 +11,13 @@ namespace carbon {
 // Coordinates: transport frame with beam along +z, entrance near z=0.
 // File magic "CCTG" little-endian.
 // v1: density float[] + material_id uint8[] (legacy 4-class 0..3)
-// v2: + n_mass_sp_factors u32 + mass_sp_factor float[n]
-//     material_id = Schneider material section index; SP uses
-//     water_table(E) * mass_sp_factor[section] * density
+// v2: + n u32 + mass_sp_factor float[n]  (energy-independent Z/A factor)
+// v3: + n u32 + za_rel float[n] + I_eV float[n]
+//     SP = SP_water(E) * mass_sp_energy_factor(za,I,E) * density
 struct CtGrid {
     static constexpr std::uint32_t magic_value = 0x47544343U;  // 'CCTG'
-    static constexpr std::uint32_t version_value = 2U;
+    static constexpr std::uint32_t version_value = 3U;
+    static constexpr std::uint32_t version_v2 = 2U;
     static constexpr std::uint32_t version_legacy = 1U;
 
     std::uint32_t nx{0};
@@ -28,9 +30,13 @@ struct CtGrid {
     float spacing_y_mm{1.0F};
     float spacing_z_mm{1.0F};
     std::vector<float> density_g_per_cm3{};
-    // v1: 0=air,1=lung,2=water,3=bone; v2: Schneider section index
+    // v1: 0=air..3=bone; v2/v3: Schneider section index
     std::vector<std::uint8_t> material_id{};
-    // Relative mass stopping-power factors (water = 1). Empty → treat as 1.
+    // (Z/A)_section / (Z/A)_water  — high-energy limit mass-SP factor
+    std::vector<float> mass_sp_za_rel{};
+    // Bragg mean excitation energy I [eV] per Schneider section
+    std::vector<float> mass_sp_I_eV{};
+    // Legacy constant factors (filled for v2 / diagnostics)
     std::vector<float> mass_sp_factor{};
     std::uint32_t file_version{version_value};
 
@@ -40,16 +46,14 @@ struct CtGrid {
     }
 
     [[nodiscard]] bool has_mass_sp_factors() const noexcept {
-        return !mass_sp_factor.empty();
+        return !mass_sp_za_rel.empty() || !mass_sp_factor.empty();
     }
 
     static CtGrid from_binary(const std::filesystem::path& path);
     void write_binary(const std::filesystem::path& path) const;
 };
 
-// Legacy piecewise HU→density (tests / fallback only).
 float hu_to_density_g_per_cm3(float hu) noexcept;
-
 std::uint8_t density_to_material_id(float density_g_per_cm3) noexcept;
 
 inline std::size_t ct_linear_index(const std::uint32_t ix,
@@ -98,6 +102,48 @@ inline bool ct_sample(const float x_mm,
     density_out = densities[index];
     material_out = materials != nullptr ? materials[index] : static_cast<std::uint8_t>(2);
     return true;
+}
+
+// Energy-dependent mass-SP factor vs liquid water (I_w = 75 eV).
+// za_rel = (Z/A)_s / (Z/A)_w. Uses a simplified Bethe stopping-number ratio.
+template <typename LogFn>
+inline float ct_mass_sp_energy_factor_impl(const float za_rel,
+                                          const float I_eV,
+                                          const float energy_MeVu,
+                                          LogFn&& log_fn) noexcept {
+    constexpr float nucleon_mass_MeV = 931.49410242F;
+    constexpr float two_me_c2_MeV = 1.0219979F;
+    constexpr float I_water_eV = 75.0F;
+    const auto e = energy_MeVu > 0.5F ? energy_MeVu : 0.5F;
+    const auto gamma = 1.0F + e / nucleon_mass_MeV;
+    const auto beta2 = 1.0F - 1.0F / (gamma * gamma);
+    const auto beta2_clamped = beta2 > 1.0e-8F ? beta2 : 1.0e-8F;
+    const auto bg2 = beta2_clamped * gamma * gamma;
+    auto stopping_number = [&](const float Iev) {
+        const auto I_MeV = (Iev > 5.0F ? Iev : 5.0F) * 1.0e-6F;
+        return log_fn(two_me_c2_MeV * bg2 / I_MeV) - beta2_clamped;
+    };
+    const auto Lw = stopping_number(I_water_eV);
+    const auto Ls = stopping_number(I_eV);
+    if (Lw < 0.05F) {
+        return za_rel;
+    }
+    auto ratio = za_rel * (Ls / Lw);
+    if (ratio < 0.5F) {
+        ratio = 0.5F;
+    }
+    if (ratio > 1.5F) {
+        ratio = 1.5F;
+    }
+    return ratio;
+}
+
+// Host/CPU path (std::log).
+inline float ct_mass_sp_energy_factor(const float za_rel,
+                                    const float I_eV,
+                                    const float energy_MeVu) noexcept {
+    return ct_mass_sp_energy_factor_impl(za_rel, I_eV, energy_MeVu,
+                                        [](float x) { return std::log(x); });
 }
 
 // Mass-SP scaled water table: SP = SP_water * mass_factor * density.
@@ -167,9 +213,7 @@ inline float clamp_step_to_ct_faces(const float step_mm,
     return step;
 }
 
-// Skip full 3-axis face clamp when density is nearly constant over the energy
-// step (homogeneous region). Still clamps when material index would change.
-// When skip_homogeneous is false, always face-clamps (for isolated perf A/B).
+// Homogeneous skip + short-step skip (energy-limited steps thrash faces at Bragg peak).
 inline float clamp_step_to_ct_faces_if_needed(const float step_mm,
                                               const float x_mm,
                                               const float y_mm,
@@ -195,7 +239,14 @@ inline float clamp_step_to_ct_faces_if_needed(const float step_mm,
         return clamp_step_to_ct_faces(step_mm, x_mm, y_mm, z_mm, dx, dy, dz, origin_x,
                                       origin_y, origin_z, spacing_x, spacing_y, spacing_z);
     }
-    // Probe endpoint of the unconstrained step.
+    // Energy-limited steps much smaller than a voxel: skip face calc (C).
+    const auto min_sp =
+        spacing_x < spacing_y
+            ? (spacing_x < spacing_z ? spacing_x : spacing_z)
+            : (spacing_y < spacing_z ? spacing_y : spacing_z);
+    if (step_mm < 0.2F * min_sp) {
+        return step_mm;
+    }
     const auto x1 = x_mm + dx * step_mm;
     const auto y1 = y_mm + dy * step_mm;
     const auto z1 = z_mm + dz * step_mm;
@@ -210,7 +261,6 @@ inline float clamp_step_to_ct_faces_if_needed(const float step_mm,
         (dens1 > density_here ? dens1 - density_here : density_here - dens1) /
         (density_here > 1.0e-3F ? density_here : 1.0e-3F);
     if (mat1 == material_here && rel < 0.02F) {
-        // Homogeneous enough: skip voxel-face thrashing.
         return step_mm;
     }
     return clamp_step_to_ct_faces(step_mm, x_mm, y_mm, z_mm, dx, dy, dz, origin_x,

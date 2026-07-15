@@ -1,5 +1,5 @@
 # 7c CT + secondary/cascade (accuracy path).
-# Schneider CCTG v2: SP = water_table(E) * mass_sp_factor[section] * density.
+# Schneider CCTG v3: SP = water_table(E) * f_E(za_rel,I,E) * density.
 # Primary-only: beam_200MeVu_ct_patient_multimat.yaml
 number_of_histories: 20000
 initial_energy_MeVu: 150.0

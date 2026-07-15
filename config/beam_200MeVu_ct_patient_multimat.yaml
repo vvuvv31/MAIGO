@@ -1,5 +1,5 @@
 # 7c CT primary-only: Schneider mass-SP × density (CCTG v2 grid).
-# SP = SP_water(E) * mass_sp_factor[section] * rho  (no absolute 4-class tables).
+# SP = SP_water(E) * f_E(za_rel,I,E) * rho  (CCTG v3; no absolute 4-class tables).
 number_of_histories: 20000
 initial_energy_MeVu: 150.0
 mass_number: 12

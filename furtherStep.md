@@ -344,34 +344,64 @@ python validation/scripts/run_ct_baseline.py --skip-gpu
 产出：primary-only / multimat+secondary / TOPAS 三份绝对 MeV/primary IDD +  
 `validation/results/ct/ct_baseline_summary.metrics.json`（含 `delta_R80_mm`、`integral_rel_diff`、`nrmse`）。
 
-**SP 模型（CCTG v2）**
+**SP 模型（CCTG v3；v2 可读兼容）**
 
-`SP = SP_water(E) × mass_sp_factor[Schneider段] × ρ`  
-`mass_sp_factor` 由 Schneider 元素质量份额 Bragg Z/A 相对水（`schneider_hu.py`）。  
-Backend：`+ct-grid-mass-sp`。次级同样采样 CT 密度/段因子。
+`SP = SP_water(E) × f_E(za_rel, I, E) × ρ`  
+- `za_rel = (Z/A)_section / (Z/A)_water`（高能极限）  
+- `I`：Bragg 平均激发能（eV），由 Schneider 元素份额  
+- `f_E`：简化 Bethe 阻止数比 `za_rel × L(I,E)/L(I_w,E)`（I_w=75 eV）  
+- CCTG v2 网格：仅存常数 `mass_sp_factor`（读入时 I≡75 → f_E = za）  
+Backend：`+ct-grid-mass-sp-e`。初级与次级均采样 CT 密度/段 (za,I)。
 
-**GPU mass-SP + secondary vs TOPAS（各 20k，150 MeV/u）**
+**GPU mass-SP-e + secondary vs TOPAS（各 20k，150 MeV/u；CCTG v3）**
 
-| 量 | GPU primary | GPU **+secondary mass-SP** | TOPAS |
-|----|-------------|----------------------------|-------|
-| R80 (mm) | ~43–44 | **43.18** | 43.51 |
-| 入口 (MeV/p /0.5mm) | ~14.5 | **14.52** | 14.16 |
-| 积分 (MeV/p) | ~1510 | **1720.9** | 1721.0 |
-| 积分相对差 | ~−12% | **≈0%** | — |
-| NRMSE | — | **0.033** | — |
-| ΔR80 | — | **−0.33 mm** | — |
+| 量 | GPU primary | GPU **+secondary mass-SP-e** | TOPAS |
+|----|-------------|------------------------------|-------|
+| R80 (mm) | 43.49 | **43.50** | 43.51 |
+| 入口 (MeV/p /0.5mm) | 14.16 | **14.22** | 14.16 |
+| 积分 (MeV/p) | 1483.6 | **1721.1** | 1721.0 |
+| 积分相对差 | ~−13.8% | **≈+0.008%** | — |
+| NRMSE | 0.020 | **0.011** | — |
+| ΔR80 | −0.02 mm | **−0.01 mm** | — |
+| Wall (s, B580) | 3.25 | **9.35** | — |
 
-配置：`config/beam_200MeVu_ct_patient_multimat(_secondary).yaml`  
-指标：`validation/results/ct/compare_patient_mass_sp.metrics.json`
+Backend：`+ct-grid-mass-sp-e`。配置：`config/beam_200MeVu_ct_patient_multimat(_secondary).yaml`  
+指标：`validation/results/ct/compare_patient_secondary.metrics.json` / `compare_patient_mass_sp.metrics.json`
 
 **性能（同 mass-SP + secondary，20k，隔离 A/B）**
 
 - 开关：`ct_skip_homogeneous_face_clamp`（默认 true）
 - full clamp：Steps 5.883e9，**10.31 s**
 - homog skip：Steps 5.836e9（**−0.8%**），**8.02 s**（**−22%**）
+- 另：步长 < 0.2×min voxel spacing 时跳过 face 计算（Bragg 峰 thrash）
 - 能量平衡均 ≪1e-3；对照配置：`…_secondary_full_clamp.yaml`
 
 **局限 / 后续**
 
-- mass-SP 为能量无关 Z/A 因子（非完整 25 材料 G4 表）
+- f_E 为简化 Bethe 比（非完整 25 材料 G4 表 / shell / density-effect 全项）
 - 可再做更激进的 DDA / 同质合并
+
+### 多角度 / 真实计划钩子（设计，未实现）
+
+当前 GPU CT 约定：**束流固定 +z，CT 首片 z=0、xy 居中**。真实计划需要：
+
+| 层级 | 内容 | 建议实现顺序 |
+|------|------|----------------|
+| 1. 单野旋转 | 配置 `beam_direction` 或 `gantry_angle_deg` + isocenter；粒子在等中心坐标系采样，CT 查询用旋转矩阵 `R^T (x - iso)` | 先只转束、不转网格 |
+| 2. 多野叠加 | 外层脚本循环角度/权重，累计绝对 MeV/primary（或 fluence 权重）IDD/3D dose | 不改核心核，脚本叠 dose |
+| 3. 计划接口 | DICOM RT Plan / spot list → 每 spot 能量、权重、角度；输出与 TOPAS 同 scorer | 对齐 TOPAS 坐标后再扩 |
+| 4. 性能 | 每野独立 seed 流；同质 face-skip / short-step 保持；可选预旋转 CT 副本（内存换查询） | 先 1 再测 |
+
+**坐标对齐要点**
+
+- TOPAS `TsDicomPatient`：isocenter 在组件原点；Gantry 转束不转 CT
+- GPU 现状：入口帧（首片 z=0）；对比时用入口相对深度
+- 多角度对比 TOPAS：统一到 **isocenter 帧** 再叠剂量；IDD 沿束轴重投影
+
+**最小下一步（未做）**
+
+1. `TransportConfig` 增加 `beam_dir_x/y/z`（默认 0,0,1）与 `isocenter_mm`
+2. 源抽样与初始方向用该方向；CT sample 仍用世界坐标（先只支持与体轴共线 ±z 的 180° 翻转作 smoke）
+3. 脚本 `run_ct_plan_angles.py`：两角度叠加 vs TOPAS 两野
+
+在精度/性能基线锁定（A–C）后再动 1–2。

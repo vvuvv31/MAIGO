@@ -34,6 +34,23 @@ _ELEMENT_Z_OVER_A: dict[str, float] = {
     "Titanium": 22.0 / 47.867,
 }
 
+# Approximate mean excitation energies I [eV] (ICRU-like).
+_ELEMENT_I_EV: dict[str, float] = {
+    "Hydrogen": 19.2,
+    "Carbon": 81.0,
+    "Nitrogen": 82.0,
+    "Oxygen": 95.0,
+    "Magnesium": 156.0,
+    "Phosphorus": 173.0,
+    "Sulfur": 180.0,
+    "Chlorine": 174.0,
+    "Argon": 188.0,
+    "Calcium": 191.0,
+    "Sodium": 149.0,
+    "Potassium": 190.0,
+    "Titanium": 233.0,
+}
+
 # Liquid water reference (ICRU-style mass fractions).
 _WATER_Z_OVER_A = 0.111894 * _ELEMENT_Z_OVER_A["Hydrogen"] + 0.888106 * _ELEMENT_Z_OVER_A[
     "Oxygen"
@@ -56,8 +73,10 @@ class SchneiderTable:
     elements: list[str] = field(default_factory=list)
     # shape (n_mat, n_elements) mass fractions
     material_weights: np.ndarray | None = None
-    # mass SP factor relative to water, length n_mat
+    # High-E mass SP factor (Z/A ratio vs water), length n_mat
     mass_sp_factor: np.ndarray = field(default_factory=lambda: np.ones(1, dtype=np.float32))
+    # Bragg mean I [eV] per section
+    mass_sp_I_eV: np.ndarray = field(default_factory=lambda: np.full(1, 75.0, dtype=np.float32))
 
     @property
     def hu_max_inclusive(self) -> int:
@@ -110,26 +129,38 @@ def _parse_string_vector(body: str) -> list[str]:
 
 
 def mass_sp_factor_from_weights(weights: np.ndarray, elements: list[str]) -> float:
-    """Bragg Z/A mass-SP factor relative to liquid water (unitless)."""
+    """Bragg Z/A mass-SP factor relative to liquid water (unitless, high-E limit)."""
+    za, _ = composition_za_and_I(weights, elements)
+    return float(za / _WATER_Z_OVER_A)
+
+
+def composition_za_and_I(
+    weights: np.ndarray, elements: list[str]
+) -> tuple[float, float]:
+    """Return ((Z/A)_eff, I_mean_eV) from mass fractions (Bragg ln I)."""
     if weights.size != len(elements):
         raise ValueError("weight/element length mismatch")
-    z_over_a = 0.0
-    wsum = 0.0
+    num_za = 0.0
+    num_lnI = 0.0
+    den = 0.0
     for w, name in zip(weights, elements):
         if w <= 0.0:
             continue
         key = name.strip()
-        if key not in _ELEMENT_Z_OVER_A:
-            # Unknown element: treat as oxygen-like
-            za = _ELEMENT_Z_OVER_A["Oxygen"]
-        else:
-            za = _ELEMENT_Z_OVER_A[key]
-        z_over_a += float(w) * za
-        wsum += float(w)
-    if wsum <= 0.0:
-        return 1.0
-    z_over_a /= wsum
-    return float(z_over_a / _WATER_Z_OVER_A)
+        za = _ELEMENT_Z_OVER_A.get(key, _ELEMENT_Z_OVER_A["Oxygen"])
+        Iev = _ELEMENT_I_EV.get(key, 95.0)
+        ww = float(w)
+        num_za += ww * za
+        num_lnI += ww * za * float(np.log(Iev))
+        den += ww * za
+    if den <= 0.0:
+        return _WATER_Z_OVER_A, 75.0
+    za_eff = num_za / max(sum(float(w) for w in weights if w > 0), 1e-30)
+    # Better: mass-weighted Z/A
+    wsum = sum(float(w) for w in weights if w > 0)
+    za_eff = num_za / wsum if wsum > 0 else _WATER_Z_OVER_A
+    I_mean = float(np.exp(num_lnI / den))
+    return za_eff, I_mean
 
 
 def load_schneider_table(path: Path) -> SchneiderTable:
@@ -203,6 +234,7 @@ def load_schneider_table(path: Path) -> SchneiderTable:
     elements = strings.get("SchneiderElements", [])
     weights = np.zeros((n_mat, max(len(elements), 1)), dtype=np.float64)
     mass_factors = np.ones(n_mat, dtype=np.float32)
+    I_eV = np.full(n_mat, 75.0, dtype=np.float32)
     if elements and weight_rows:
         for i in range(n_mat):
             row = weight_rows.get(i + 1)
@@ -216,9 +248,11 @@ def load_schneider_table(path: Path) -> SchneiderTable:
             if s > 0:
                 w = w / s
             weights[i, : len(elements)] = w
-            mass_factors[i] = mass_sp_factor_from_weights(w, elements)
-    # Titanium implant section etc. can be extreme; keep factors in a sane band.
+            za, Imean = composition_za_and_I(w, elements)
+            mass_factors[i] = float(za / _WATER_Z_OVER_A)
+            I_eV[i] = float(Imean)
     mass_factors = np.clip(mass_factors, 0.5, 1.5).astype(np.float32)
+    I_eV = np.clip(I_eV, 10.0, 500.0).astype(np.float32)
 
     return SchneiderTable(
         hu_min=hu_min,
@@ -233,6 +267,7 @@ def load_schneider_table(path: Path) -> SchneiderTable:
         elements=list(elements),
         material_weights=weights,
         mass_sp_factor=mass_factors,
+        mass_sp_I_eV=I_eV,
     )
 
 
