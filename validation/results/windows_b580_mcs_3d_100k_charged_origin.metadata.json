@@ -1,0 +1,88 @@
+{
+  "case": "windows_b580_mcs_3d_100k_charged_origin",
+  "date": "2026-07-15",
+  "histories": 100000,
+  "seed": 20260714,
+  "device": "Intel(R) Arc(TM) B580 Graphics",
+  "driver": "1.13.35716",
+  "backend": "sycl-gpu+straggling+multiple-scattering+voxel-scoring+charged-origin-voxel-scoring+attenuation+secondary-generation+secondary-transport+fragment-cascade",
+  "grid": {
+    "shape_xyz": [60, 60, 800],
+    "voxel_size_mm": [5.0, 5.0, 0.5],
+    "nonzero_voxels": 1104020
+  },
+  "transport": {
+    "elapsed_seconds_excluding_csv_write": 2.9561264,
+    "histories_per_second": 33828.053,
+    "total_steps": 517293988,
+    "secondary_transport_steps": 381803519,
+    "relative_energy_balance_error": 3.0729156e-09,
+    "nuclear_interactions": 38712,
+    "transported_charged_secondaries": 328848,
+    "cascade_interactions": 33936,
+    "secondary_queue_overflow": 0,
+    "cascade_queue_overflow": 0
+  },
+  "scoring": {
+    "layout": "category-major double atomic arrays",
+    "categories": [
+      "primary_c12",
+      "secondary_carbon",
+      "boron",
+      "beryllium",
+      "lithium",
+      "helium",
+      "proton",
+      "other_charged"
+    ],
+    "maximum_voxel_category_closure_MeV_per_primary": 6.699885091165925e-11,
+    "maximum_total_plane_closure_MeV_per_primary_per_bin": 5.213429687955795e-11,
+    "maximum_category_plane_closure_MeV_per_primary_per_bin": 1.000017846308765e-10,
+    "integrated_category_closure_MeV_per_primary": 1.2960299500264227e-10,
+    "acceptance_limit_MeV_per_primary": 1e-06,
+    "validation_limit_MeV_per_primary": 1e-09,
+    "passed": true
+  },
+  "category_integrals_MeV_per_primary": {
+    "primary_c12": 1818.3902764794939,
+    "secondary_carbon": 64.6731549069398,
+    "boron": 65.33683007549658,
+    "beryllium": 15.340584830638006,
+    "lithium": 20.678610486200853,
+    "helium": 166.316311490405,
+    "proton": 87.06991174925368,
+    "other_charged": 41.56444923577845
+  },
+  "files": {
+    "config": {
+      "path": "config/beam_200MeVu_mcs_voxel_100k.yaml",
+      "bytes": 1500,
+      "sha256": "19a5b59c11689bd8dddfb9e291cfa0f406b5c9e5ce6e581caa88d6298b7a09f0"
+    },
+    "idd": {
+      "path": "validation/results/windows_b580_mcs_3d_100k_idd.csv",
+      "bytes": 44887,
+      "sha256": "bf538607b8297981856ef8ae8a6ec43d20612975e7f865caf367e3278af71b6c"
+    },
+    "species": {
+      "path": "validation/results/windows_b580_mcs_3d_100k_species.csv",
+      "bytes": 113623,
+      "sha256": "451313bdfc4fd2c94d3ee8374a22035432cd4c5dbd5056b2d9e47ee11a05c0a8"
+    },
+    "raw_total_voxels_git_ignored": {
+      "path": "validation/results/windows_b580_mcs_3d_100k_voxels.csv",
+      "bytes": 70101888,
+      "sha256": "a03678f7c0ad4c58fdcefbb6d9ae01ce3ee2c5b8620fcd6ab056781f91e9812e"
+    },
+    "raw_charged_origin_voxels_git_ignored": {
+      "path": "validation/results/windows_b580_mcs_3d_100k_charged_origin_voxels.csv",
+      "bytes": 97261692,
+      "sha256": "8a86024b8458e536112c9485aa8d0623a51d376a58e2443762fcb0be9c426510"
+    },
+    "closure_metrics": {
+      "path": "validation/results/windows_b580_mcs_3d_100k_charged_origin_closure.metrics.json",
+      "bytes": 1189,
+      "sha256": "30d22afead544e87462957c199d8f56993eeec4604951b3feba94c7cec1be460"
+    }
+  }
+}

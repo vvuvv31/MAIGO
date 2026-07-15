@@ -5,7 +5,7 @@
   "seed": 20260714,
   "device": "Intel(R) Arc(TM) B580 Graphics",
   "driver": "1.13.35716",
-  "backend": "sycl-gpu+straggling+multiple-scattering+voxel-scoring+attenuation+secondary-generation+secondary-transport+fragment-cascade",
+  "backend": "sycl-gpu+straggling+multiple-scattering+voxel-scoring+charged-origin-voxel-scoring+attenuation+secondary-generation+secondary-transport+fragment-cascade",
   "toolchain": {
     "visual_studio": "2026 18.7.3",
     "intel_oneapi": "2026.1",
@@ -23,30 +23,30 @@
     "secondary_rng_dimensions": [10, 11]
   },
   "transport": {
-    "elapsed_seconds_excluding_csv_write": 2.8753112,
-    "histories_per_second": 34778.844,
-    "total_steps": 518207628,
-    "secondary_transport_steps": 382717159,
-    "relative_energy_balance_error": 2.1026779e-09,
+    "elapsed_seconds_excluding_csv_write": 2.9561264,
+    "histories_per_second": 33828.053,
+    "total_steps": 517293988,
+    "secondary_transport_steps": 381803519,
+    "relative_energy_balance_error": 3.0729156e-09,
     "nuclear_interactions": 38712,
-    "transported_charged_secondaries": 330145,
-    "cascade_interactions": 34313,
+    "transported_charged_secondaries": 328848,
+    "cascade_interactions": 33936,
     "secondary_queue_overflow": 0,
     "cascade_queue_overflow": 0
   },
   "comparison": {
     "semantics": "absolute GPU transported charged total versus TOPAS charged-origin ancestor categories; no global scale",
-    "full_depth_signed_percent": -0.20570489772981926,
-    "tail_ge_90mm_signed_percent": 3.130099525662411,
-    "voxel_normalized_l1_percent": 4.892739251101739,
-    "high_dose_voxel_mean_abs_percent": 3.2360498825438775,
-    "high_dose_voxel_pearson_r": 0.9736512540791231,
-    "voxel_idd_closure_max_abs_MeV_per_primary_per_bin": 1.7122658846346894e-10
+    "full_depth_signed_percent": -0.19892152068973212,
+    "tail_ge_90mm_signed_percent": 3.0691709402493217,
+    "voxel_normalized_l1_percent": 4.884596149375102,
+    "high_dose_voxel_mean_abs_percent": 3.250686311737748,
+    "high_dose_voxel_pearson_r": 0.9737026173040928,
+    "voxel_idd_closure_max_abs_MeV_per_primary_per_bin": 5.212186238168215e-11
   },
   "files": {
     "config": {
       "path": "config/beam_200MeVu_mcs_voxel_100k.yaml",
-      "sha256": "8e9ac6b8d1b376f419a3e06081c37ef84f20449bb29ace24c8954ffa7d70f166"
+      "sha256": "19a5b59c11689bd8dddfb9e291cfa0f406b5c9e5ce6e581caa88d6298b7a09f0"
     },
     "stopping_power": {
       "path": "data/stopping_power_water.csv",
@@ -66,19 +66,19 @@
     },
     "idd": {
       "path": "validation/results/windows_b580_mcs_3d_100k_idd.csv",
-      "sha256": "c27797d6e4b8e6451d725b5ea144958e274d2ae717d6f3e6a1278686fafcdd82"
+      "sha256": "bf538607b8297981856ef8ae8a6ec43d20612975e7f865caf367e3278af71b6c"
     },
     "species": {
       "path": "validation/results/windows_b580_mcs_3d_100k_species.csv",
-      "sha256": "5493c302d98542b803cf30d6bac9a2b3368c65852ae5b3f93e323d89585701ca"
+      "sha256": "451313bdfc4fd2c94d3ee8374a22035432cd4c5dbd5056b2d9e47ee11a05c0a8"
     },
     "raw_voxels_git_ignored": {
       "path": "validation/results/windows_b580_mcs_3d_100k_voxels.csv",
-      "sha256": "b8c3ef32a1391b106490e9bb6234d281bb713488700aac40a7ab734cac510f22"
+      "sha256": "a03678f7c0ad4c58fdcefbb6d9ae01ce3ee2c5b8620fcd6ab056781f91e9812e"
     },
     "metrics": {
       "path": "validation/results/windows_b580_mcs_3d_100k_vs_topas.metrics.json",
-      "sha256": "40c085b222b2cd056cbed8bf2f2c4a51a96781eb29893e1968e977d8156f5191"
+      "sha256": "2fe968f452e6c96201f70a89ebff4d331cda0907c3f1d5fc197b7b0159820bab"
     }
   }
 }

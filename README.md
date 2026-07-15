@@ -163,3 +163,25 @@ voxel z 层逐 bin 还原 IDD 的最大误差为 `0 MeV/primary/bin`。
 输运配置通过 `nuclear_cross_section_file` 指向该表；启用 `enable_primary_attenuation` 后，serial 与 SYCL kernel 都在每一步按 C-12 当前 MeV/u 线性插值水中宏观截面。
 
 TOPAS 开发参考曲线、版本元数据和当前 CSDA 指标位于 `validation/results/`。原始 TOPAS scorer 文件和完整运行日志位于忽略目录 `validation/topas/output/`。
+
+## Charged-origin 3D voxel 分类
+
+设置 `enable_charged_origin_voxel_scoring: true` 后，GPU 在 total voxel 之外维护 8 个互斥 double-atomic 数组：
+
+`primary_c12, secondary_carbon, boron, beryllium, lithium, helium, proton, other_charged`
+
+稀疏输出由 `charged_origin_voxel_output_file` 指定。每行同时包含 total 和 8 个
+`MeV/primary/voxel` 分类值；写文件前会检查逐 voxel 分类和、逐分类 z-plane 与
+IDD 的闭合，内部门槛为 `1e-9 MeV/primary`。正式 100k Arc B580 结果可再次验证：
+
+```bat
+python validation\scripts\validate_charged_origin_voxels.py ^
+  --gpu-category-voxel validation\results\windows_b580_mcs_3d_100k_charged_origin_voxels.csv ^
+  --gpu-species-idd validation\results\windows_b580_mcs_3d_100k_species.csv ^
+  --output-metrics validation\results\windows_b580_mcs_3d_100k_charged_origin_closure.metrics.json
+```
+
+该次 60×60×800 运行有 1,104,020 个非零 voxel；最大逐 voxel 闭合误差
+`6.70e-11 MeV/primary`，最大逐分类 z-plane 闭合误差
+`1.00e-10 MeV/primary/bin`，无 secondary/cascade queue overflow。原始 97 MB
+分类 voxel CSV 被 Git 忽略，可由正式 YAML 确定性重建；指标和元数据进入版本控制。

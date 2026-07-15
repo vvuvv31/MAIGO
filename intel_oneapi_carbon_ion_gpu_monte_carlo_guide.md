@@ -2612,3 +2612,70 @@ smoke 能量平衡误差为 `3.43e-8`，800 个非零中心轴 voxel 对 800-bin
 - 生物剂量。
 
 先完成一维水模体，是最容易建立正确性、可重复性和论文逻辑的路线。
+
+## 82. GPU 八类 charged-origin voxel scorer（2026-07-15）
+
+GPU scorer 现在除 total voxel 外，还维护 category-major 的 8 个 double-atomic 数组：
+
+```text
+0 primary_c12
+1 secondary_carbon
+2 boron
+3 beryllium
+4 lithium
+5 helium
+6 proton
+7 other_charged
+```
+
+主 C-12 的连续能损和停止残能写入类别 0。所有带电次级和后续级联粒子沿用
+`origin_category`，在零方向终止、连续步进和停止残能三个沉积入口写入唯一的
+类别 1--7。total 与分类数组使用相同 voxel index，但分别执行 fp64 atomic add，
+因此验证覆盖真实并行累积次序，而不是在 CPU 后处理中复制 total。
+
+配置新增：
+
+```yaml
+enable_voxel_scoring: true
+enable_charged_origin_voxel_scoring: true
+charged_origin_voxel_output_file: validation/results/windows_b580_mcs_3d_100k_charged_origin_voxels.csv
+```
+
+写出前的 C++ 门槛为 `1e-9 MeV/primary`，检查：
+
+1. 每个 voxel 的 8 类之和等于 total；
+2. 每个类别、每个 z-plane 的 x/y 和等于同类别 IDD；
+3. 现有 total voxel→IDD 闭合保持不变。
+
+独立流式复核命令为：
+
+```bat
+python validation\scripts\validate_charged_origin_voxels.py ^
+  --gpu-category-voxel validation\results\windows_b580_mcs_3d_100k_charged_origin_voxels.csv ^
+  --gpu-species-idd validation\results\windows_b580_mcs_3d_100k_species.csv ^
+  --output-metrics validation\results\windows_b580_mcs_3d_100k_charged_origin_closure.metrics.json
+```
+
+100-history Arc B580 smoke 的最大逐 voxel/category 和逐 category/z-plane 误差分别为
+`9.57e-11` 和 `8.00e-11 MeV/primary`。正式 100000-history 结果：
+
+- backend：`sycl-gpu+straggling+multiple-scattering+voxel-scoring+charged-origin-voxel-scoring+attenuation+secondary-generation+secondary-transport+fragment-cascade`；
+- 517,293,988 个总步，381,803,519 个带电次级步；
+- kernel elapsed `2.956 s`，吞吐 `33,828 histories/s`；
+- 能量平衡误差 `3.07e-9`，两个队列 overflow 都为 0；
+- 1,104,020 个非零 voxel；
+- 最大逐 voxel 八类闭合误差 `6.70e-11 MeV/primary`；
+- 最大 total z-plane→IDD 误差 `5.21e-11 MeV/primary/bin`；
+- 最大逐 category z-plane→IDD 误差 `1.00e-10 MeV/primary/bin`；
+- 全局八类积分闭合误差 `1.30e-10 MeV/primary`。
+
+验收上限是 `1e-6 MeV/primary/bin`，本结果通过约四个数量级。原始 total/category
+稀疏 CSV 分别约 70/97 MB，继续由 Git 忽略；哈希、运行统计和闭合指标记录在
+`windows_b580_mcs_3d_100k_charged_origin.metadata.json`。
+
+下一阶段是 neutron/gamma 来源三维输运。当前 reaction/cascade package 已保存中性
+产物的 PDG、能量和三维方向，100k 运行中未输运中性能量为
+`5.788e6 MeV`；但仓库内尚无 neutron/gamma 在水中的相互作用截面和末态
+sampling kernel。实现时必须增加中性队列、自由程采样和带电后代生成，并保持
+`neutron / gamma / neutral_other` 来源标签贯穿后代。TOPAS 祖先剂量 voxel 只用于
+验证，不可直接作为 GPU 输运概率或经验 scale。

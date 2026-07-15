@@ -11,41 +11,41 @@
     5.0,
     0.5
   ],
-  "gpu_voxel_idd_closure_max_abs_MeV_per_primary_per_bin": 1.7122658846346894e-10,
+  "gpu_voxel_idd_closure_max_abs_MeV_per_primary_per_bin": 5.212186238168215e-11,
   "integral": {
-    "gpu_MeV_per_primary": 2279.2152028022706,
+    "gpu_MeV_per_primary": 2279.3701292543315,
     "topas_MeV_per_primary": 2283.9133243704046,
-    "signed_percent": -0.20570489772981926
+    "signed_percent": -0.19892152068973212
   },
   "tail_ge_90mm": {
-    "gpu_MeV_per_primary": 213.56432997623807,
+    "gpu_MeV_per_primary": 213.43815757283699,
     "topas_MeV_per_primary": 207.08244339771602,
-    "signed_percent": 3.130099525662411
+    "signed_percent": 3.0691709402493217
   },
   "voxel": {
-    "normalized_L1_percent": 4.892739251101739,
-    "normalized_RMSE_to_topas_max_percent": 0.04528825769493614,
+    "normalized_L1_percent": 4.884596149375102,
+    "normalized_RMSE_to_topas_max_percent": 0.04524607201437366,
     "high_dose_threshold_percent_of_topas_max": 1.0,
     "high_dose_voxel_count": 815,
-    "high_dose_mean_abs_percent": 3.2360498825438775,
-    "high_dose_pearson_r": 0.9736512540791231
+    "high_dose_mean_abs_percent": 3.250686311737748,
+    "high_dose_pearson_r": 0.9737026173040928
   },
   "topas_peak_depth_mm": 86.75,
   "gpu_lateral_widths": {
     "19.75": {
-      "sigma_x_mm": 2.7279123694342826,
-      "sigma_y_mm": 2.7008057970742056,
-      "energy_MeV_per_primary": 8.614491070294545
+      "sigma_x_mm": 2.7396800300915016,
+      "sigma_y_mm": 2.703596398654961,
+      "energy_MeV_per_primary": 8.61539724742353
     },
     "49.75": {
-      "sigma_x_mm": 3.2572806280186204,
-      "sigma_y_mm": 3.305598011165848,
-      "energy_MeV_per_primary": 10.069943051413102
+      "sigma_x_mm": 3.255962884465882,
+      "sigma_y_mm": 3.2843879235235938,
+      "energy_MeV_per_primary": 10.070073079555938
     },
     "86.75": {
-      "sigma_x_mm": 2.864957023379155,
-      "sigma_y_mm": 2.8790683505569525,
-      "energy_MeV_per_primary": 55.9721414245287
+      "sigma_x_mm": 2.867724117710004,
+      "sigma_y_mm": 2.887527604080382,
+      "energy_MeV_per_primary": 55.98057945061744
     }
   },
   "topas_lateral_widths": {
