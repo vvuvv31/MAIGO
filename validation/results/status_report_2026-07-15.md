@@ -83,9 +83,27 @@ B580，10k histories，charged cascade + MCS，**neutral 关闭**，步长 1.0 /
 
 - `validation/results/windows_b580_step_convergence_10k.metrics.json`
 - `validation/results/windows_b580_step_convergence_10k.png`
-- `validation/results/step_*_idd.csv`
+- `validation/results/windows_b580_step_*_idd_10k.csv`
 
-## 5. 约束（不变）
+## 5. 横向 voxel 收敛（10k B580，FOV 300 mm）
+
+固定 `maximum_step_mm=0.5`，neutral 关闭，横向体素 **10 / 5 / 2.5 mm**（bin 30 / 60 / 120）。
+
+| voxel (mm) | IDD NRMSE→2.5 | 积分差 | σx@86.75 mm | Δσx vs 2.5 |
+|------------|---------------|--------|-------------|------------|
+| 10 | 2.4e-4 | −0.007% | 5.16 | +3.20 |
+| **5** | **3.9e-4** | **−0.09%** | **2.88** | **+0.91** |
+| 2.5 (ref) | 0 | 0 | 1.97 | 0 |
+
+**结论**：
+
+- **IDD 几乎不敏感**横向体素（NRMSE < 5e-4）
+- **横向宽度受分箱限制**：10 mm 不可用；5 mm 与 TOPAS 祖先网格一致，适合对比；引用“绝对 MCS 束宽”时宜用 **2.5 mm**
+- 生产 3D 比较保持 **5 mm**（与现有 TOPAS 100k 基准同网格）
+
+产物：`validation/results/windows_b580_lateral_voxel_convergence_10k.metrics.json` / `.png`
+
+## 6. 约束（不变）
 
 - 新 TOPAS 作业仅 `v@192.168.31.5`，≤56 线程；禁止 WSL TOPAS  
 - Windows 原生 oneAPI + Arc B580 为 GPU 执行环境  

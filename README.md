@@ -256,3 +256,19 @@ python validation\scripts\analyze_step_convergence.py ^
 ```
 
 相对 0.1 mm：0.5 mm 的 NRMSE ~4.4e-3、ΔR80 ~0.05 mm；生产默认仍用 **0.5 mm**。
+
+## 横向 voxel 收敛（charged，10k B580，FOV 300 mm）
+
+固定步长 0.5 mm，体素 10 / 5 / 2.5 mm：
+
+```bat
+python validation\scripts\analyze_lateral_voxel_convergence.py ^
+  --cases 10:30:30:800:out\lateral_convergence\vox_10mm_idd.csv:out\lateral_convergence\vox_10mm_voxels.csv ^
+         5:60:60:800:out\lateral_convergence\vox_5mm_idd.csv:out\lateral_convergence\vox_5mm_voxels.csv ^
+         2.5:120:120:800:out\lateral_convergence\vox_2p5mm_idd.csv:out\lateral_convergence\vox_2p5mm_voxels.csv ^
+  --reference-voxel-mm 2.5 ^
+  --output-metrics validation\results\windows_b580_lateral_voxel_convergence_10k.metrics.json ^
+  --output-plot validation\results\windows_b580_lateral_voxel_convergence_10k.png
+```
+
+IDD 几乎不变；横向 σ 受分箱限制。与 TOPAS 祖先 3D 比较保持 **5 mm**；讨论绝对 MCS 束宽时用 **2.5 mm**。
