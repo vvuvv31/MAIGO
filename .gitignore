@@ -25,3 +25,5 @@ validation/results/*
 validation/results/*_voxels.csv
 validation/topas/output/*
 !validation/topas/output/.gitkeep
+
+!validation/results/windows_b580_vs_topas_multi_energy_*.png
