@@ -232,5 +232,9 @@ python validation\scripts\compile_neutral_package.py ^
 带电 lineage 标签避免污染 charged-origin 闭合。`full` 模式可恢复多代 continuation。
 
 ```bat
-carbon_mc.exe --config config\beam_200MeVu_neutral_smoke.yaml --device cpu
+carbon_mc.exe --config config\beam_200MeVu_neutral_smoke.yaml --device cpu --histories 1000
 ```
+
+1000-history SYCL CPU 方案 D 诊断（无 cascade）：charged-from-neutral **5.33 MeV/primary**，
+residual **25.9**，free-path escape **16.5**；相对 TOPAS neutral-origin **16.35**，
+dose-like 约 **33%**。细节见 `validation/results/windows_neutral_mode_d_1k.metadata.json`。

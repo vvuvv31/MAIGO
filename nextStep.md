@@ -13,12 +13,30 @@ GPU 中性队列采用 **方案 D**：
 禁止把 neutron 动能直接沉在产生 voxel（kerma）；那会把 ~55 MeV/primary 错成剂量，
 而 TOPAS neutron-origin 仅 ~15.6 MeV/primary，且尾部空间形态会错。
 
+## 2026-07-15 方案 D 1k smoke 结果
+
+SYCL CPU，1000 histories，无 cascade，`first_interaction`：
+
+| 量（MeV/primary） | 数值 |
+|---|---|
+| charged-from-neutral | **5.33** |
+| residual continuation/nested | **25.93** |
+| neutral free-path escape | **16.49** |
+| local deposit | ~0 |
+| TOPAS neutral-origin 参考 | **16.35** |
+
+dose-like（local + charged recoils）约 **TOPAS 中性归属剂量的 33%**。能量平衡误差 ~0.1%，
+queue overflow = 0。未把 \(E_n\) 当场 kerma 化。
+
+解读：方案 D 已拿到“第一次相互作用的带电反冲”，但弹性中子的 continuation 大、
+local deposit 近 0；要补齐 ~16 MeV/primary 还需二次自由程/`full` 或更高统计 + cascade。
+
 下一步：
 
-1. 用方案 D 跑 smoke/100k，核对 residual 与 charged-from-neutral 量级；
-2. 远程 100k development neutral 包替换 smoke 采样表；
-3. 与 TOPAS 祖先 neutron/gamma 剂量比较（绝对量，无 scale）；
-4. 视尾部差异决定是否升到 `full` 或只加强 neutron 一侧。
+1. 打开 cascade smoke/100k 包后重跑方案 D，看 charged-from-neutral 是否上升；
+2. 远程 100k development neutral 采样表；
+3. 与 TOPAS 祖先 neutron/gamma IDD 比较；
+4. 若尾部仍缺，对 neutron 试有限代 continuation（例如 max 2–3），gamma 保持 D。
 
 不得把 TOPAS 中性剂量图直接当作 GPU 输运核，也不得用全局 scale 代替相互作用物理。
 
