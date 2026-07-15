@@ -103,7 +103,25 @@ B580，10k histories，charged cascade + MCS，**neutral 关闭**，步长 1.0 /
 
 产物：`validation/results/windows_b580_lateral_voxel_convergence_10k.metrics.json` / `.png`
 
-## 6. 约束（不变）
+## 6. 统计收敛与可复现性（1e4 / 1e5 / 1e6，B580）
+
+IDD-only charged 路径（MCS+cascade，neutral 关，seed=20260715）：
+
+| N | NRMSE→1e6 | 积分差 | ΔR80 (mm) | 耗时 (s) | 吞吐 (hist/s) |
+|---|-----------|--------|-----------|----------|---------------|
+| 1e4 | 8.76e-4 | −0.21% | +0.001 | 0.61 | 16k |
+| 1e5 | 2.78e-4 | +0.025% | +0.0002 | 2.81 | 36k |
+| **1e6** | 0 | 0 | 0 | **24.1** | **41.5k** |
+
+- `NRMSE · √N ≈ 0.0878` 近似常数 → **统计噪声主导，收敛正常**
+- 全部 secondary/cascade **overflow = 0**
+- 同 seed 两次 1e6：**非 bit-identical**（GPU 原子队列下标进入 cascade RNG），但  
+  NRMSE **2.9e-5**，最大 bin 差 **0.014 MeV/primary**，积分差 **−0.0013%**  
+  → **实用可复现性极好**；严格位级复现需改 RNG 键（history + secondary 序号）
+
+产物：`validation/results/windows_b580_stats_convergence_1e6.metrics.json` / `.png`
+
+## 7. 约束（不变）
 
 - 新 TOPAS 作业仅 `v@192.168.31.5`，≤56 线程；禁止 WSL TOPAS  
 - Windows 原生 oneAPI + Arc B580 为 GPU 执行环境  

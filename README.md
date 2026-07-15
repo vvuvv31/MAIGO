@@ -272,3 +272,20 @@ python validation\scripts\analyze_lateral_voxel_convergence.py ^
 ```
 
 IDD 几乎不变；横向 σ 受分箱限制。与 TOPAS 祖先 3D 比较保持 **5 mm**；讨论绝对 MCS 束宽时用 **2.5 mm**。
+
+## 统计收敛与可复现性（1e4 / 1e5 / 1e6，B580）
+
+```bat
+python validation\scripts\analyze_stats_convergence.py ^
+  --cases 10000=out\stats_convergence\n_1e4_idd.csv ^
+         100000=out\stats_convergence\n_1e5_idd.csv ^
+         1000000=out\stats_convergence\n_1e6_idd.csv ^
+  --repro out\stats_convergence\n_1e6_idd.csv out\stats_convergence\n_1e6_repro_idd.csv ^
+  --reference-histories 1000000 ^
+  --output-metrics validation\results\windows_b580_stats_convergence_1e6.metrics.json ^
+  --output-plot validation\results\windows_b580_stats_convergence_1e6.png
+```
+
+相对 1e6：1e5 的 NRMSE ~2.8e-4、ΔR80 ~0.0002 mm；`NRMSE·√N` 近似常数。  
+1e6 吞吐约 **4.15×10⁴ histories/s**。同 seed 两次非 bit-identical（GPU 原子队列
+下标进入 cascade RNG），但 NRMSE ~3e-5。详见状态报告。

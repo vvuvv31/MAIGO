@@ -1,26 +1,28 @@
 # 当前下一步
 
-## 2026-07-15：neutron 暂缓；步长与横向网格收敛阶段性完成
+## 2026-07-15：收敛阶段收束
 
 报告：`validation/results/status_report_2026-07-15.md`
 
 | 项 | 状态 |
 |----|------|
-| neutron/gamma 闭合 | **暂缓**（全深度 ~0.7%） |
-| `maximum_step_mm` 10k 扫描 | **完成** → 默认 0.5 mm |
-| 横向 voxel 10/5/2.5 mm 10k | **完成** → 对比用 5 mm，绝对束宽用 2.5 mm |
+| neutron/gamma | **暂缓** |
+| maximum_step_mm 10k | **完成** → 默认 0.5 mm |
+| 横向 voxel 10k | **完成** → 对比 5 mm / 绝对束宽 2.5 mm |
+| **1e4–1e6 统计收敛 + 同 seed 复跑** | **完成** |
+
+### 1e6 摘要
+
+- 吞吐 **~4.15×10⁴ histories/s**（B580，IDD-only charged）
+- NRMSE·√N ≈ 常数 → MC 噪声缩放正常
+- 同 seed 两次：非 bit 相同，NRMSE ~3e-5（原子队列索引影响 cascade RNG）
+- overflow = 0
 
 ### 再下一步
 
-1. **1e6 histories 统计收敛 + 可复现性**（同 seed 两次、吞吐）  
-2. 可选：步长/横向 100k 复核（论文前）  
-3. **100–400 MeV/u 多能量**  
+1. **100–400 MeV/u 多能量**（至少 100 / 200 / 300 / 400，与 TOPAS 对比）  
+2. 可选：论文前 100k 步长/横向复核  
+3. 可选：RNG 键改为 history 局部序号以实现 GPU bit-reproducible  
 4. （以后）neutron/gamma  
 
-不要调 MCS scale。无全局 scale。TOPAS 仅远程主机。
-
-### 横向收敛要点
-
-- IDD 对 10/5/2.5 mm 不敏感  
-- 峰区 σx：10 mm → ~5.2 mm；5 mm → ~2.9 mm；2.5 mm → ~2.0 mm  
-- 与 TOPAS 3D 比较保持 **5 mm** 网格  
+无 MCS scale、无全局 dose scale。TOPAS 仅远程主机。

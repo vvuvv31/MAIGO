@@ -2592,12 +2592,14 @@ smoke 能量平衡误差为 `3.43e-8`，800 个非零中心轴 voxel 对 800-bin
 2. [暂缓] neutron/gamma 来源三维输运闭合（见 validation/results/status_report_2026-07-15.md）
 3. [完成 10k] maximum_step_mm 收敛；生产默认 0.5 mm；论文前建议 100k 复核
 4. [完成 10k] 横向 voxel 10/5/2.5 mm：IDD 不敏感；与 TOPAS 比较用 5 mm，绝对束宽用 2.5 mm
-5. 原子队列可复现性、1000000-history 统计收敛和 100--400 MeV/u 多能量验证
-6. 在上述物理闭合后再进入异质体、CT 或性能优化
+5. [完成 1e6] 统计收敛：NRMSE·√N≈常数；同 seed GPU 实用可复现（非 bit-identical）
+6. 100--400 MeV/u 多能量验证
+7. 在上述物理闭合后再进入异质体、CT 或性能优化
 ```
 
 步长：`validation/results/windows_b580_step_convergence_10k.metrics.json`。  
-横向：`validation/results/windows_b580_lateral_voxel_convergence_10k.metrics.json`。
+横向：`validation/results/windows_b580_lateral_voxel_convergence_10k.metrics.json`。  
+统计：`validation/results/windows_b580_stats_convergence_1e6.metrics.json`。
 
 第一篇论文的合理边界是：
 

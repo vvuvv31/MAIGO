@@ -1,0 +1,145 @@
+{
+  "normalization": "absolute MeV/primary; no global scale",
+  "neutron_deferred": true,
+  "reference_histories": 1000000,
+  "cases": [
+    {
+      "histories": 10000,
+      "path": "out/stats_convergence/n_1e4_idd.csv",
+      "is_reference": false,
+      "metrics": {
+        "integral_MeV_per_primary": 1135.7246652192096,
+        "peak_depth_mm": 86.75,
+        "peak_value_MeV_per_primary": 55.6107499717,
+        "R80_mm": 86.99388296215386,
+        "FWHM_mm": 2.379219084587035,
+        "tail_ge_90mm_MeV_per_primary": 109.10879091650692
+      },
+      "vs_reference": {
+        "max_abs_MeV_per_primary": 0.572438478499997,
+        "mean_abs_MeV_per_primary": 0.023109223767975248,
+        "nrmse_to_b_max": 0.0008758163034551828,
+        "integral_signed_percent": -0.20871299971539836
+      },
+      "delta_R80_mm": 0.0013356429899005207,
+      "delta_FWHM_mm": 0.011212384715065582,
+      "delta_peak_depth_mm": 0.0,
+      "one_over_sqrt_N": 0.01,
+      "elapsed_s": 0.6071466,
+      "throughput_histories_per_s": 16470.487,
+      "overflow": 0
+    },
+    {
+      "histories": 100000,
+      "path": "out/stats_convergence/n_1e5_idd.csv",
+      "is_reference": false,
+      "metrics": {
+        "integral_MeV_per_primary": 1138.3931769743003,
+        "peak_depth_mm": 86.75,
+        "peak_value_MeV_per_primary": 56.3425583509,
+        "R80_mm": 86.9927238323105,
+        "FWHM_mm": 2.359421080006541,
+        "tail_ge_90mm_MeV_per_primary": 105.93124445369543
+      },
+      "vs_reference": {
+        "max_abs_MeV_per_primary": 0.23419775119999997,
+        "mean_abs_MeV_per_primary": 0.006028758164503732,
+        "nrmse_to_b_max": 0.00027849276737306546,
+        "integral_signed_percent": 0.025243677498739975
+      },
+      "delta_R80_mm": 0.000176513146541879,
+      "delta_FWHM_mm": -0.008585619865428384,
+      "delta_peak_depth_mm": 0.0,
+      "one_over_sqrt_N": 0.003162277660168379,
+      "elapsed_s": 2.8056691,
+      "throughput_histories_per_s": 35642.122,
+      "overflow": 0
+    },
+    {
+      "histories": 1000000,
+      "path": "out/stats_convergence/n_1e6_idd.csv",
+      "is_reference": true,
+      "metrics": {
+        "integral_MeV_per_primary": 1138.1053873613062,
+        "peak_depth_mm": 86.75,
+        "peak_value_MeV_per_primary": 56.1083605997,
+        "R80_mm": 86.99254731916396,
+        "FWHM_mm": 2.3680066998719695,
+        "tail_ge_90mm_MeV_per_primary": 106.48857961143607
+      },
+      "vs_reference": {
+        "max_abs_MeV_per_primary": 0.0,
+        "mean_abs_MeV_per_primary": 0.0,
+        "nrmse_to_b_max": 0.0,
+        "integral_signed_percent": 0.0
+      },
+      "delta_R80_mm": 0.0,
+      "delta_FWHM_mm": 0.0,
+      "delta_peak_depth_mm": 0.0,
+      "one_over_sqrt_N": 0.001,
+      "elapsed_s": 24.070551,
+      "throughput_histories_per_s": 41544.541,
+      "overflow": 0
+    }
+  ],
+  "noise_scaling": {
+    "pairs": [
+      {
+        "histories": 10000,
+        "nrmse_to_reference": 0.0008758163034551828,
+        "nrmse_times_sqrt_N": 0.08758163034551829
+      },
+      {
+        "histories": 100000,
+        "nrmse_to_reference": 0.00027849276737306546,
+        "nrmse_times_sqrt_N": 0.08806714567823143
+      }
+    ],
+    "nrmse_times_sqrt_N_mean": 0.08782438801187487,
+    "nrmse_times_sqrt_N_std": 0.0002427576663565703,
+    "comment": "If Monte Carlo noise dominates vs the largest-N reference, NRMSE * sqrt(N) should be roughly constant across smaller N."
+  },
+  "reproducibility": {
+    "path_a": "out/stats_convergence/n_1e6_idd.csv",
+    "path_b": "out/stats_convergence/n_1e6_repro_idd.csv",
+    "bit_identical": false,
+    "compare": {
+      "max_abs_MeV_per_primary": 0.013979031499999905,
+      "mean_abs_MeV_per_primary": 0.0009560275407556216,
+      "nrmse_to_b_max": 2.9159590677832868e-05,
+      "integral_signed_percent": -0.0013001185315745691
+    },
+    "metrics_a": {
+      "integral_MeV_per_primary": 1138.1053873613062,
+      "peak_depth_mm": 86.75,
+      "peak_value_MeV_per_primary": 56.1083605997,
+      "R80_mm": 86.99254731916396,
+      "FWHM_mm": 2.3680066998719695,
+      "tail_ge_90mm_MeV_per_primary": 106.48857961143607
+    },
+    "metrics_b": {
+      "integral_MeV_per_primary": 1138.1203364217242,
+      "peak_depth_mm": 86.75,
+      "peak_value_MeV_per_primary": 56.1047109153,
+      "R80_mm": 86.99253051008304,
+      "FWHM_mm": 2.3680858621113856,
+      "tail_ge_90mm_MeV_per_primary": 106.58035210504922
+    },
+    "note": "Same seed is not bit-identical on GPU: cascade sampling uses particle_index in the Philox stream, and atomic secondary-queue offsets assign non-deterministic indices. Primary reaction sampling is seed-stable; full-run identity requires index-free RNG keys (e.g. history_id + secondary_serial).",
+    "elapsed_s_a": 24.070551,
+    "elapsed_s_b": 23.739086,
+    "throughput_a": 41544.541,
+    "throughput_b": 42124.62
+  },
+  "device": "sycl-gpu Arc B580",
+  "seed": 20260715,
+  "enable_neutral_transport": false,
+  "summary": {
+    "n1e4_nrmse_to_1e6": 0.0008758163034551828,
+    "n1e5_nrmse_to_1e6": 0.00027849276737306546,
+    "repro_bit_identical": false,
+    "repro_nrmse": 2.9159590677832868e-05,
+    "throughput_1e6_hist_per_s": 41544.541,
+    "overflow_all_zero": true
+  }
+}
