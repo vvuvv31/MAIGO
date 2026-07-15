@@ -1,0 +1,57 @@
+{
+  "normalization": "absolute MeV/primary; no global scale",
+  "histories_topas": 100000,
+  "histories_gpu": 100000,
+  "topas_version_remote": "4.1.p1",
+  "geant4_version_remote": "geant4-11-01-patch-03",
+  "cases": [
+    {
+      "E": 100,
+      "gpu_int": 1180.2500091705376,
+      "topas_int": 1184.3262497360909,
+      "int_pct": -0.34418223580382207,
+      "R80": 0.0014488076360663626,
+      "NRMSE": 0.0005606310799517573,
+      "FWHM": -1.0797802397180203,
+      "peak_pct": 0.06024168554739641,
+      "tail": -1.7902143365336476,
+      "g2": 100.0
+    },
+    {
+      "E": 200,
+      "gpu_int": 2280.3080742221423,
+      "topas_int": 2296.7275835203623,
+      "int_pct": -0.7149088736528597,
+      "R80": 0.09501586944323037,
+      "NRMSE": 0.010335841151865118,
+      "FWHM": 0.05881200434446043,
+      "peak_pct": 0.7830541393393707
+    },
+    {
+      "E": 300,
+      "gpu_int": 3103.812027803295,
+      "topas_int": 3249.1016180272763,
+      "int_pct": -4.471685016493732,
+      "R80": 0.4001862373840481,
+      "NRMSE": 0.017567767164923274,
+      "FWHM": 6.468400792320415,
+      "peak_pct": -4.315839468928709,
+      "tail": -20.822518288938937,
+      "g2": 99.13544668587896
+    },
+    {
+      "E": 400,
+      "gpu_int": 3522.059527029651,
+      "topas_int": 3782.26271250002,
+      "int_pct": -6.879564040076388,
+      "R80": 0.6412060165944808,
+      "NRMSE": 0.03528062694991018,
+      "FWHM": -4.649711535792106,
+      "peak_pct": -6.104243184116067,
+      "tail": -38.36125321321987,
+      "g2": 65.37867078825347
+    }
+  ],
+  "reaction_package_limitation": "Primary reaction final states binned 0-200 MeV/u; 300/400 MeV beams clamp high-E sampling to top bin, degrading tail/peak agreement.",
+  "summary": "100 MeV/u excellent; 200 MeV/u good; 300/400 degrade as expected from reaction-package energy ceiling."
+}

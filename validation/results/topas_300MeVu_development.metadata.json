@@ -1,0 +1,45 @@
+{
+  "status": "multi-energy TOPAS total IDD for GPU comparison",
+  "particle": "GenericIon(6,12)",
+  "energy_MeVu": 300.0,
+  "total_kinetic_energy_MeV": 3600.0,
+  "material": "TOPAS Water_75eV",
+  "phantom_mm": [
+    300.0,
+    300.0,
+    400.0
+  ],
+  "depth_bin_width_mm": 0.5,
+  "histories": 100000,
+  "seed": 20260714,
+  "threads": 56,
+  "parameter_file": "validation/topas/carbon_300MeVu_water_development_remote.txt",
+  "raw_output": {
+    "path": "validation/topas/output/e300_development_energy_deposit.csv",
+    "sha256": "a597c20b94a60502c896b29514b92efaf848f3d9568e06caa4b7467fb12cfb7b"
+  },
+  "normalized_output": {
+    "path": "validation/results/topas_300MeVu_development.csv",
+    "sha256": "7db6d14060b8fe7f3b087710e00f9fe5803c1a9773de392cdf8d7dcc3a33c77d"
+  },
+  "metrics": {
+    "integral_MeV_per_primary": 3249.101618027344,
+    "peak_depth_mm": 171.75,
+    "peak_value_MeV_per_primary": 32.297735,
+    "R80_mm": 172.0781097243355,
+    "FWHM_mm": 4.565914845323533
+  },
+  "global_scale_applied": false,
+  "physics_modules": [
+    "g4em-standard_opt4",
+    "g4h-phy_QGSP_BIC_HP",
+    "g4decay",
+    "g4ion-binarycascade",
+    "g4h-elastic_HP",
+    "g4stopping"
+  ],
+  "log": {
+    "path": "validation/topas/output/e300-development_topas.log",
+    "sha256": "15e78471700801a6e35656fdb800015b992b799008b044cea34d78aea5580e15"
+  }
+}

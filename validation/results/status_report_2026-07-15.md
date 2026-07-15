@@ -139,21 +139,24 @@ IDD-only charged 路径（MCS+cascade，neutral 关，seed=20260715）：
 
 产物：`validation/results/windows_b580_multi_energy_100_400.metrics.json` / `.png`
 
-## 8. 远程 TOPAS 100/300/400 MeV/u 总 IDD（已准备，待跑）
+## 8. 远程 TOPAS 100/300/400 MeV/u 总 IDD（已完成）
 
-已加入仓库（无需自定义 extension，标准 EnergyDeposit 即可）：
+在 `v@192.168.31.5`（TOPAS 4.1.p1 / Geant4 11.1.p3，56 线程）完成 smoke + **100k development**，
+本地标准化后与 GPU 100k 多能量曲线对比：
 
-| 能量 | 参数（smoke / development_remote 100k@56线程） |
-|------|-----------------------------------------------|
-| 100 MeV/u | `carbon_100MeVu_water_*.txt`（1200 MeV 总动能） |
-| 300 MeV/u | `carbon_300MeVu_water_*.txt`（3600 MeV） |
-| 400 MeV/u | `carbon_400MeVu_water_*.txt`（4800 MeV） |
+| E (MeV/u) | 积分差 | ΔR80 (mm) | NRMSE | 峰高差 | 尾积分差 | 2%/2 mm γ |
+|-----------|--------|-----------|-------|--------|----------|-----------|
+| **100** | **−0.34%** | **+0.001** | **0.056%** | **+0.06%** | −1.8% | **100%** |
+| 200 | −0.72% | +0.10 | 1.03% | +0.78% | — | — |
+| 300 | −4.47% | +0.40 | 1.76% | −4.3% | −20.8% | 99.1% |
+| 400 | −6.88% | +0.64 | 3.53% | −6.1% | −38.4% | 65.4% |
 
-- Runner：`validation/topas/run_multi_energy_idd_remote.sh`  
-- 操作说明：`validation/topas/REMOTE_MULTI_ENERGY_IDD.md`  
-- 本地标准化：`validation/scripts/prepare_topas_multi_energy_idd.py` + `postprocess_multi_energy_topas.cmd`  
+- **100 MeV/u 极好**（在末态包能量覆盖内）  
+- **200 可用**  
+- **300/400 尾部与峰高明显变差**，与「反应末态包仅至 200 MeV/u 分箱」一致  
 
-**阻塞**：当前 agent 环境对 `v@192.168.31.5` 为 `Permission denied (publickey)`，无法代跑；需你在已配置密钥的终端执行第 1–5 步。
+产物：`topas_{100,300,400}MeVu_development.csv`、`windows_b580_vs_topas_*MeVu.metrics.json`、  
+`windows_b580_vs_topas_multi_energy_summary.metrics.json`
 
 ## 9. 约束（不变）
 
