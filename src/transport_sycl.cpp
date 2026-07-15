@@ -1813,13 +1813,51 @@ TransportResult transport_sycl(const TransportConfig& config,
                         if (in_insert) {
                             local_density_g_per_cm3 = insert_density_g_per_cm3;
                         }
+                        std::uint8_t ct_material = 2;
+                        auto in_ct = false;
+                        if (enable_ct_grid) {
+                            float ct_rho = water_density_g_per_cm3;
+                            in_ct = ct_sample(position_x_mm, position_y_mm, position_z_mm,
+                                              ct_origin_x, ct_origin_y, ct_origin_z,
+                                              ct_spacing_x, ct_spacing_y, ct_spacing_z,
+                                              ct_nx, ct_ny, ct_nz, ct_density_device,
+                                              ct_material_device, ct_rho, ct_material);
+                            if (in_ct) {
+                                local_density_g_per_cm3 = ct_rho;
+                            }
+                        }
                         const auto layer_for_material =
                             slab_layer_count > 0
                                 ? slab_layer_index(position_z_mm, slab_z_ends_device,
                                                    slab_layer_count)
                                 : 0U;
                         float carbon_sp_local = carbon_stopping_power_MeV_per_mm;
-                        if (in_insert && use_insert_material_tables) {
+                        if (enable_ct_grid) {
+                            if (use_ct_material_tables && in_ct && ct_sp_device != nullptr &&
+                                ct_ref_density_device != nullptr) {
+                                const auto mat = static_cast<std::uint32_t>(
+                                    sycl::min(static_cast<int>(ct_material), 3));
+                                const auto base = mat * table_size;
+                                const auto sp_abs =
+                                    ct_sp_device[base + static_cast<std::size_t>(index)] +
+                                    fraction *
+                                        (ct_sp_device[base +
+                                                     static_cast<std::size_t>(index) + 1] -
+                                         ct_sp_device[base +
+                                                     static_cast<std::size_t>(index)]);
+                                const auto ref_rho =
+                                    sycl::fmax(ct_ref_density_device[mat], 1.0e-6F);
+                                carbon_sp_local =
+                                    sp_abs *
+                                    (sycl::fmax(local_density_g_per_cm3, 1.0e-6F) /
+                                     ref_rho);
+                            } else {
+                                // Water-equivalent CT: water C-12 SP × local density.
+                                carbon_sp_local = carbon_stopping_power_MeV_per_mm *
+                                                  sycl::fmax(local_density_g_per_cm3,
+                                                             1.0e-6F);
+                            }
+                        } else if (in_insert && use_insert_material_tables) {
                             carbon_sp_local =
                                 insert_sp_device[static_cast<std::size_t>(index)] +
                                 fraction *
@@ -1838,7 +1876,9 @@ TransportResult transport_sycl(const TransportConfig& config,
                         }
                         auto stopping_power_MeV_per_mm =
                             carbon_sp_local * charge_ratio * charge_ratio;
-                        if ((slab_layer_count > 0 || in_insert) &&
+                        // Density scale only for density-only slab/insert (not absolute
+                        // material tables, not CT which already scaled carbon_sp_local).
+                        if ((slab_layer_count > 0 || in_insert) && !enable_ct_grid &&
                             !(in_insert && use_insert_material_tables) &&
                             material_table_count == 0) {
                             stopping_power_MeV_per_mm *= local_density_g_per_cm3;
@@ -1846,7 +1886,7 @@ TransportResult transport_sycl(const TransportConfig& config,
                         auto path_step_mm = sycl::fmin(
                             maximum_step_mm,
                             maximum_relative_energy_loss * energy_MeV /
-                                stopping_power_MeV_per_mm);
+                                sycl::fmax(stopping_power_MeV_per_mm, 1.0e-6F));
                         const auto boundary_z_mm =
                             direction_z < 0.0F
                                 ? static_cast<float>(bin) * depth_bin_width_mm
@@ -1871,6 +1911,13 @@ TransportResult transport_sycl(const TransportConfig& config,
                                     direction_y, direction_z, insert_x_min, insert_x_max,
                                     insert_y_min, insert_y_max, insert_z_min, insert_z_max,
                                     phantom_length_mm));
+                        }
+                        if (enable_ct_grid && in_ct) {
+                            path_step_mm = clamp_step_to_ct_faces(
+                                path_step_mm, position_x_mm, position_y_mm, position_z_mm,
+                                direction_x, direction_y, direction_z, ct_origin_x,
+                                ct_origin_y, ct_origin_z, ct_spacing_x, ct_spacing_y,
+                                ct_spacing_z);
                         }
                         if (enable_voxel_scoring && absolute_direction_x >= 1.0e-6F) {
                             const auto boundary_x_mm =
@@ -1941,6 +1988,13 @@ TransportResult transport_sycl(const TransportConfig& config,
                                         direction_y > 0.0F ? infinity : -infinity);
                                     snapped_to_boundary = true;
                                 }
+                            }
+                            if (enable_ct_grid && in_ct) {
+                                constexpr float nudge = 1.0e-4F;
+                                position_x_mm += direction_x * nudge;
+                                position_y_mm += direction_y * nudge;
+                                position_z_mm += direction_z * nudge;
+                                snapped_to_boundary = true;
                             }
                             if (snapped_to_boundary) {
                                 ++steps;

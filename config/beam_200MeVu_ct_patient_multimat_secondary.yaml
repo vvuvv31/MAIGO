@@ -1,0 +1,39 @@
+# 7c multi-material CT + secondary generation/transport/cascade (accuracy path).
+# Schneider-prepared patient grid; absolute lung/water/bone SP/XS × (ρ/ρ_ref).
+# Primary-only baseline remains: beam_200MeVu_ct_patient_multimat.yaml
+number_of_histories: 20000
+initial_energy_MeVu: 150.0
+mass_number: 12
+phantom_length_mm: 120.0
+depth_bin_width_mm: 0.5
+maximum_step_mm: 0.5
+maximum_relative_energy_loss: 0.005
+energy_cutoff_MeV: 0.1
+water_density_g_per_cm3: 1.0
+enable_ct_grid: true
+ct_grid_file: ct/grid/patient_ct.bin
+ct_lung_stopping_power_file: data/stopping_power_lung_geant4_11_1_3.csv
+ct_water_stopping_power_file: data/stopping_power_water_geant4_11_1_3.csv
+ct_bone_stopping_power_file: data/stopping_power_bone_geant4_11_1_3.csv
+ct_lung_cross_section_file: data/c12_inelastic_cross_sections_lung_geant4_11_1_3.csv
+ct_water_cross_section_file: data/c12_inelastic_cross_sections_water_geant4_11_1_3.csv
+ct_bone_cross_section_file: data/c12_inelastic_cross_sections_bone_geant4_11_1_3.csv
+scorer_area_mm2: 90000.0
+enable_voxel_scoring: false
+enable_energy_straggling: false
+enable_multiple_scattering: true
+enable_primary_attenuation: true
+enable_secondary_generation: true
+enable_secondary_transport: true
+enable_fragment_cascade: true
+enable_neutral_transport: false
+maximum_cascade_generations: 2
+secondary_queue_capacity: 500000
+random_seed: 20260715
+stopping_power_file: data/stopping_power_water_geant4_11_1_3.csv
+nuclear_cross_section_file: data/c12_inelastic_cross_sections_water_geant4_11_1_3.csv
+reaction_package_file: validation/results/topas_200MeVu_cascade_aligned_primary_3d.bin
+cascade_package_file: validation/results/topas_200MeVu_cascade_100k_3d.bin
+output_file: out/ct/e150_patient_multimat_secondary_idd.csv
+fragment_species_output_file: out/ct/e150_patient_multimat_secondary_species.csv
+device: gpu

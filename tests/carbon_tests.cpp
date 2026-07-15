@@ -877,6 +877,76 @@ void test_sycl_layered_slab_range_shift() {
                 std::to_string(r80_layered) + " uniform=" + std::to_string(r80_uniform));
 }
 
+void test_sycl_ct_secondary_density_smoke() {
+    // Secondaries must sample CT density (not water-only). Dense cube + forced
+    // nuclear reaction → queued secondaries deposit with CT-scaled SP.
+    const auto package_path = std::filesystem::path(CARBON_SOURCE_DIR) /
+                              "validation/results/"
+                              "topas_200MeVu_reaction_packages_development.bin";
+    if (!std::filesystem::exists(package_path)) {
+        return;
+    }
+    const auto reaction_packages = carbon::ReactionPackageTable::from_binary(package_path);
+
+    carbon::CtGrid grid;
+    grid.nx = 8;
+    grid.ny = 8;
+    grid.nz = 20;
+    grid.origin_x_mm = -4.0F;
+    grid.origin_y_mm = -4.0F;
+    grid.origin_z_mm = 0.0F;
+    grid.spacing_x_mm = 1.0F;
+    grid.spacing_y_mm = 1.0F;
+    grid.spacing_z_mm = 1.0F;
+    const auto n = grid.number_of_voxels();
+    grid.density_g_per_cm3.assign(n, 1.85F);
+    grid.material_id.assign(n, static_cast<std::uint8_t>(3));  // bone class
+    const auto ct_path =
+        std::filesystem::temp_directory_path() / "carbon_ct_secondary_smoke.bin";
+    grid.write_binary(ct_path);
+
+    carbon::TransportConfig config;
+    config.number_of_histories = 64;
+    config.initial_energy_MeVu = 50.0;
+    config.phantom_length_mm = 40.0;
+    config.depth_bin_width_mm = 1.0;
+    config.maximum_step_mm = 0.5;
+    config.maximum_relative_energy_loss = 0.01;
+    config.enable_ct_grid = true;
+    config.ct_grid_file = ct_path;
+    config.enable_primary_attenuation = true;
+    config.enable_secondary_generation = true;
+    config.enable_secondary_transport = true;
+    config.enable_fragment_cascade = false;
+    config.enable_energy_straggling = false;
+    config.enable_multiple_scattering = false;
+    config.secondary_queue_capacity = 50'000;
+    config.random_seed = 20260715;
+    config.validate();
+
+    const carbon::StoppingPowerTable stopping_power(
+        {0.01, 50.01, 100.01}, {20.0, 12.0, 10.0});
+    // Large XS forces nuclear reactions so secondaries are produced.
+    const carbon::CrossSectionTable forced_xs({0.01, 100.01}, {50.0, 50.0});
+    const auto result = carbon::transport_sycl(
+        config, stopping_power, forced_xs, "cpu", &reaction_packages);
+    require(result.queued_secondaries > 0 && result.transported_secondaries > 0,
+            "CT secondary smoke produced no transported secondaries");
+    require(result.secondary_deposited_energy_MeV > 0.0,
+            "CT secondary transport deposited no energy");
+    require(result.secondary_queue_overflow == 0,
+            "Unexpected secondary queue overflow on CT smoke");
+    require(result.relative_energy_balance_error() < 1.0e-3,
+            "CT secondary energy balance failed: " +
+                std::to_string(result.relative_energy_balance_error()));
+    const auto total_idd =
+        std::accumulate(result.deposited_energy_MeV.begin(),
+                        result.deposited_energy_MeV.end(), 0.0);
+    require(total_idd > 0.0 && std::isfinite(total_idd),
+            "CT secondary total IDD invalid");
+    std::filesystem::remove(ct_path);
+}
+
 void test_sycl_neutral_transport_smoke() {
     const auto source_directory = std::filesystem::path(CARBON_SOURCE_DIR);
     const auto reaction_packages = carbon::ReactionPackageTable::from_binary(
@@ -961,6 +1031,7 @@ int main() {
         test_serial_sycl_cpu_match();
         test_sycl_secondary_queue_generation();
         test_sycl_layered_slab_range_shift();
+        test_sycl_ct_secondary_density_smoke();
         test_sycl_neutral_transport_smoke();
 #endif
         std::cout << "All carbon_tests passed\n";

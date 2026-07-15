@@ -272,10 +272,12 @@ NRMSE ≈ 0.007；积分相对差 ≈ −0.8%。相对 on-axis 骨插入（R80�
 **模型**
 
 - 二进制网格 `CCTG`：`nx,ny,nz` + origin/spacing + density + material_id
-- HU→密度（分段临床近似）+ 材料类（air/lung/water/bone）
-- GPU：水 SP/XS × 局部密度（水当量 CT）；体素面限步；格外 ρ=1 水
-- 互斥：不可与 layered slab / hetero insert 同时开
-- 患者 DICOM/衍生网格 **不入库**：`.gitignore` 含 `ct/`
+- HU→密度/材料类：`prepare_ct_grid.py` 读 **TOPAS `HUtoMaterialSchneider.txt`**（默认 `ct/HUtoMaterialSchneider.txt`）
+  - 密度：Schneider 公式（与 TsDicomPatient 同表）
+  - 材料类：Schneider 组织段折叠为 air/lung/water/bone（供 GPU 4 表 SP/XS）
+- GPU 运行时只读 `ct/grid/*.bin` 的密度+material_id（不再现场做 HU 分段）
+- 水当量模式：水 SP/XS × 局部密度；多材料模式：绝对表 × ρ/ρ_ref
+- 患者 DICOM/网格 **不入库**：`.gitignore` 含 `ct/`（含用户复制的 Schneider 表）
 
 **工具 / 配置**
 
@@ -331,20 +333,22 @@ NRMSE ≈ 0.007；积分相对差 ≈ −0.8%。相对 on-axis 骨插入（R80�
 - GPU：`prepare_ct_grid` 将首片映射为 z=0、xy 居中；对比时用**入口相对深度**
 - 平行世界 IDD 管（无 material）：0.5 mm × 240 bins，覆盖 CT + 出口水
 
-**GPU 多材料 vs TOPAS Schneider（各 20k，150 MeV/u）**
+**GPU 多材料（Schneider 网格）vs TOPAS Schneider（各 20k，150 MeV/u）**
 
-| 量 | GPU multimat | TOPAS | GPU−TOPAS |
-|----|--------------|-------|-----------|
-| R80 (mm) | 39.54 | 43.51 | **−4.0 mm** |
-| peak z (mm) | 39.25 | 43.25 | −4.0 |
-| 入口 (MeV/p /0.5mm) | 16.88 | 14.16 | — |
-| 积分 (MeV/p) | 1506 | 1721 | −12.5%（GPU primary-only） |
-| NRMSE | — | — | **0.115** |
+| 量 | GPU primary-only | GPU **+secondary** | TOPAS |
+|----|------------------|--------------------|-------|
+| R80 (mm) | 44.56 | **44.57** | 43.51 |
+| peak z (mm) | 44.25 | 44.25 | 43.25 |
+| 入口 (MeV/p /0.5mm) | 14.21 | 14.27 | 14.16 |
+| 积分 (MeV/p) | 1513 | **1729** | 1721 |
+| 积分相对差 | −12.1% | **+0.45%** | — |
+| NRMSE | 0.076 | **0.075** | — |
+| ΔR80 vs TOPAS | +1.05 | **+1.06** | — |
 
-偏差主因：HU→材料（GPU 4 类分段密度 vs Schneider 连续组织表）+ GPU 关闭次级/级联。  
-形状与射程量级一致，可作半定量 CT 对波基线。
+次级路径修复：`transport_sycl` 次级输运现采样 CT 密度/材料（先前仅用均匀水 SP）。  
+配置：`config/beam_200MeVu_ct_patient_multimat_secondary.yaml`；指标：`validation/results/ct/compare_patient_secondary.metrics.json`。
 
 **局限 / 后续**
 
-- 若要对齐更紧：GPU 改 Schneider 密度/材料表，或打开次级
+- Schneider 组织仍折叠为 4 类 SP/XS
 - 细 CT + MCS 步数偏多，性能可再优化（DDA / 合并同质素）

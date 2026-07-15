@@ -1,0 +1,20 @@
+{
+  "gpu_file": "out\\ct\\e150_patient_multimat_secondary_idd.csv",
+  "topas_file": "validation\\topas\\output\\ct_patient_development_energy_deposit.csv",
+  "n_histories": 20000,
+  "gpu_R80_mm": 44.5708806300329,
+  "gpu_peak_z_mm": 44.25,
+  "gpu_entrance_0p5mm": 14.2655555974,
+  "gpu_integral_MeV": 1728.686314150773,
+  "topas_R80_mm": 43.51353548571518,
+  "topas_peak_z_mm": 43.25,
+  "topas_entrance": 14.155853125,
+  "topas_integral_MeV": 1721.0068581665041,
+  "delta_R80_mm": 1.057345144317722,
+  "integral_rel_diff": 0.004462187903452154,
+  "nrmse": 0.07484510747175945,
+  "notes": "GPU multimat Schneider CT + secondary/cascade; secondaries sample CT density/material on device.",
+  "hu_conversion": "Schneider",
+  "baseline_primary_only_integral_rel_diff": -0.1208,
+  "improvement": "integral_rel_diff from ~-12% primary-only to ~+0.45% with secondaries"
+}
