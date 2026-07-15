@@ -16,5 +16,7 @@ validation/results/*
 !validation/results/topas_200MeVu_ancestor_dose_3d_*.png
 !validation/results/windows_b580_ancestor_attributed_*_vs_topas.png
 !validation/results/windows_b580_fragment_cascade_*_vs_topas.png
+!validation/results/windows_b580_mcs_3d_*_vs_topas.png
+validation/results/*_voxels.csv
 validation/topas/output/*
 !validation/topas/output/.gitkeep

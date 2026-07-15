@@ -1,0 +1,73 @@
+{
+  "comparison_semantics": "GPU transported charged dose versus the sum of TOPAS primary_c12, secondary C/B/Be/Li/He, proton, and other_charged ancestor categories",
+  "normalization": "absolute MeV/primary; no global scale",
+  "shape_xyz": [
+    60,
+    60,
+    800
+  ],
+  "voxel_size_mm": [
+    5.0,
+    5.0,
+    0.5
+  ],
+  "gpu_voxel_idd_closure_max_abs_MeV_per_primary_per_bin": 1.7122658846346894e-10,
+  "integral": {
+    "gpu_MeV_per_primary": 2279.2152028022706,
+    "topas_MeV_per_primary": 2283.9133243704046,
+    "signed_percent": -0.20570489772981926
+  },
+  "tail_ge_90mm": {
+    "gpu_MeV_per_primary": 213.56432997623807,
+    "topas_MeV_per_primary": 207.08244339771602,
+    "signed_percent": 3.130099525662411
+  },
+  "voxel": {
+    "normalized_L1_percent": 4.892739251101739,
+    "normalized_RMSE_to_topas_max_percent": 0.04528825769493614,
+    "high_dose_threshold_percent_of_topas_max": 1.0,
+    "high_dose_voxel_count": 815,
+    "high_dose_mean_abs_percent": 3.2360498825438775,
+    "high_dose_pearson_r": 0.9736512540791231
+  },
+  "topas_peak_depth_mm": 86.75,
+  "gpu_lateral_widths": {
+    "19.75": {
+      "sigma_x_mm": 2.7279123694342826,
+      "sigma_y_mm": 2.7008057970742056,
+      "energy_MeV_per_primary": 8.614491070294545
+    },
+    "49.75": {
+      "sigma_x_mm": 3.2572806280186204,
+      "sigma_y_mm": 3.305598011165848,
+      "energy_MeV_per_primary": 10.069943051413102
+    },
+    "86.75": {
+      "sigma_x_mm": 2.864957023379155,
+      "sigma_y_mm": 2.8790683505569525,
+      "energy_MeV_per_primary": 55.9721414245287
+    }
+  },
+  "topas_lateral_widths": {
+    "19.75": {
+      "sigma_x_mm": 2.751812118000121,
+      "sigma_y_mm": 2.7566773362692145,
+      "energy_MeV_per_primary": 8.680800470065275
+    },
+    "49.75": {
+      "sigma_x_mm": 3.281220638831064,
+      "sigma_y_mm": 3.2696161369660444,
+      "energy_MeV_per_primary": 10.148421841084383
+    },
+    "86.75": {
+      "sigma_x_mm": 2.8752452352809073,
+      "sigma_y_mm": 2.8755891931752857,
+      "energy_MeV_per_primary": 56.449253485386166
+    }
+  },
+  "inputs": {
+    "gpu_voxel": "validation/results/windows_b580_mcs_3d_100k_voxels.csv",
+    "gpu_idd": "validation/results/windows_b580_mcs_3d_100k_idd.csv",
+    "topas_npz": "validation/results/topas_200MeVu_ancestor_dose_3d_development.npz"
+  }
+}
