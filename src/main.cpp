@@ -105,6 +105,10 @@ int main(int argc, char* argv[]) {
         if (config.enable_voxel_scoring) {
             carbon::write_sparse_voxel_dose_csv(config.voxel_dose_output_file, config, result);
         }
+        if (config.enable_charged_origin_voxel_scoring) {
+            carbon::write_sparse_charged_origin_voxel_dose_csv(
+                config.charged_origin_voxel_output_file, config, result);
+        }
         const auto histories_per_second =
             result.elapsed_seconds > 0.0 ? static_cast<double>(config.number_of_histories) /
                                                result.elapsed_seconds
@@ -161,6 +165,10 @@ int main(int argc, char* argv[]) {
                   << "Output: " << config.output_file.string() << '\n';
         if (config.enable_voxel_scoring) {
             std::cout << "Voxel dose output: " << config.voxel_dose_output_file.string() << '\n';
+        }
+        if (config.enable_charged_origin_voxel_scoring) {
+            std::cout << "Charged-origin voxel dose output: "
+                      << config.charged_origin_voxel_output_file.string() << '\n';
         }
         return EXIT_SUCCESS;
     } catch (const std::exception& error) {

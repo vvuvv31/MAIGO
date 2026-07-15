@@ -1,8 +1,12 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 
 namespace carbon {
+
+inline constexpr std::size_t charged_origin_category_count = 8;
+inline constexpr std::size_t primary_c12_charged_origin_category = 0;
 
 constexpr std::uint8_t charged_dose_category(const int atomic_number,
                                              const int mass_number) noexcept {
@@ -13,6 +17,11 @@ constexpr std::uint8_t charged_dose_category(const int atomic_number,
         return static_cast<std::uint8_t>(6 - atomic_number);
     }
     return 6;
+}
+
+constexpr std::size_t charged_origin_category_from_fragment(
+    const std::uint8_t fragment_category) noexcept {
+    return static_cast<std::size_t>(fragment_category) + 1;
 }
 
 struct Particle1D {

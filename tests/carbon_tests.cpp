@@ -10,6 +10,7 @@
 #include "carbon/transport_config.hpp"
 
 #include <cmath>
+#include <array>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -62,6 +63,61 @@ void require_voxel_idd_closure(const carbon::TransportConfig& config,
                      tolerance_MeV_per_primary,
                      "Voxel x/y sum does not close to IDD at z bin " +
                          std::to_string(z));
+    }
+}
+void require_charged_origin_voxel_closure(
+    const carbon::TransportConfig& config,
+    const carbon::TransportResult& result,
+    double tolerance_MeV_per_primary) {
+    const auto voxel_count = config.number_of_voxels();
+    require(result.charged_origin_voxel_deposited_energy_MeV.size() ==
+                carbon::charged_origin_category_count * voxel_count,
+            "Charged-origin voxel tally has the wrong size");
+    const std::array<const std::vector<double>*,
+                     carbon::charged_origin_category_count>
+        depth_categories{
+            &result.primary_c12_deposited_energy_MeV,
+            &result.secondary_carbon_deposited_energy_MeV,
+            &result.boron_deposited_energy_MeV,
+            &result.beryllium_deposited_energy_MeV,
+            &result.lithium_deposited_energy_MeV,
+            &result.helium_deposited_energy_MeV,
+            &result.proton_deposited_energy_MeV,
+            &result.other_charged_deposited_energy_MeV,
+        };
+    const auto histories = static_cast<double>(config.number_of_histories);
+    const auto plane_size = config.voxel_bins_x * config.voxel_bins_y;
+    for (std::size_t voxel = 0; voxel < voxel_count; ++voxel) {
+        double reconstructed = 0.0;
+        for (std::size_t category = 0;
+             category < carbon::charged_origin_category_count; ++category) {
+            reconstructed +=
+                result.charged_origin_voxel_deposited_energy_MeV[
+                    category * voxel_count + voxel];
+        }
+        require_near(reconstructed / histories,
+                     result.voxel_deposited_energy_MeV[voxel] / histories,
+                     tolerance_MeV_per_primary,
+                     "Charged-origin categories do not close at voxel " +
+                         std::to_string(voxel));
+    }
+    for (std::size_t category = 0;
+         category < carbon::charged_origin_category_count; ++category) {
+        require(depth_categories[category]->size() == config.number_of_bins(),
+                "Charged-origin depth category has the wrong size");
+        for (std::size_t z = 0; z < config.number_of_bins(); ++z) {
+            const auto begin =
+                result.charged_origin_voxel_deposited_energy_MeV.begin() +
+                static_cast<std::ptrdiff_t>(
+                    category * voxel_count + z * plane_size);
+            const auto reconstructed = std::accumulate(
+                begin, begin + static_cast<std::ptrdiff_t>(plane_size), 0.0);
+            require_near(reconstructed / histories,
+                         (*depth_categories[category])[z] / histories,
+                         tolerance_MeV_per_primary,
+                         "Charged-origin category voxel plane does not close "
+                         "to IDD");
+        }
     }
 }
 
@@ -523,11 +579,18 @@ void test_sycl_secondary_queue_generation() {
 
     config.secondary_queue_capacity = 10'000;
     config.enable_secondary_transport = true;
+    config.enable_voxel_scoring = true;
+    config.enable_charged_origin_voxel_scoring = true;
+    config.voxel_bins_x = 5;
+    config.voxel_bins_y = 7;
+    config.validate();
     const auto transported = carbon::transport_sycl(
         config, stopping_power, forced_reaction, "cpu", &reaction_packages);
     require(transported.transported_secondaries == transported.queued_secondaries &&
                 transported.transported_secondaries > 0,
             "Not every queued charged secondary was transported");
+    require_voxel_idd_closure(config, transported, 1.0e-9);
+    require_charged_origin_voxel_closure(config, transported, 1.0e-9);
     require_near(
         transported.secondary_deposited_energy_MeV +
             transported.secondary_escaped_energy_MeV,
@@ -582,6 +645,8 @@ void test_sycl_secondary_queue_generation() {
                 cascaded.generated_cascade_products > 0 &&
                 cascaded.queued_cascade_secondaries > 0,
             "Fragment cascade did not generate a second interaction generation");
+    require_voxel_idd_closure(config, cascaded, 1.0e-9);
+    require_charged_origin_voxel_closure(config, cascaded, 1.0e-9);
     require(cascaded.cascade_queue_overflow == 0,
             "Unexpected fragment cascade queue overflow");
     require(cascaded.transported_secondaries ==

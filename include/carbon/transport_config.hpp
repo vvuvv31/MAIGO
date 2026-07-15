@@ -19,6 +19,7 @@ struct TransportConfig {
     double water_density_g_per_cm3{1.0};
     double scorer_area_mm2{90'000.0};
     bool enable_voxel_scoring{false};
+    bool enable_charged_origin_voxel_scoring{false};
     std::size_t voxel_bins_x{60};
     std::size_t voxel_bins_y{60};
     double voxel_size_x_mm{5.0};
@@ -44,6 +45,8 @@ struct TransportConfig {
     std::filesystem::path fragment_species_output_file{
         "out/gpu_fragment_species_depth_dose.csv"};
     std::filesystem::path voxel_dose_output_file{"out/gpu_voxel_dose.csv"};
+    std::filesystem::path charged_origin_voxel_output_file{
+        "out/gpu_charged_origin_voxel_dose.csv"};
     std::string device{"serial"};
 
     [[nodiscard]] double initial_total_energy_MeV() const noexcept {

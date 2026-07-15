@@ -152,9 +152,17 @@ void TransportConfig::validate() const {
     if (enable_voxel_scoring) {
         static_cast<void>(number_of_voxels());
     }
+    if (enable_charged_origin_voxel_scoring && !enable_voxel_scoring) {
+        throw std::invalid_argument(
+            "enable_charged_origin_voxel_scoring requires enable_voxel_scoring=true");
+    }
     if (enable_secondary_transport && !enable_secondary_generation) {
         throw std::invalid_argument(
             "enable_secondary_transport requires enable_secondary_generation=true");
+    }
+    if (enable_charged_origin_voxel_scoring && !enable_secondary_transport) {
+        throw std::invalid_argument(
+            "charged-origin voxel scoring requires secondary transport");
     }
     if (enable_fragment_cascade &&
         (!enable_secondary_transport || maximum_cascade_generations == 0)) {
@@ -180,6 +188,9 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.scorer_area_mm2 = parse_number(values, "scorer_area_mm2", config.scorer_area_mm2);
     config.enable_voxel_scoring =
         parse_bool(values, "enable_voxel_scoring", config.enable_voxel_scoring);
+    config.enable_charged_origin_voxel_scoring = parse_bool(
+        values, "enable_charged_origin_voxel_scoring",
+        config.enable_charged_origin_voxel_scoring);
     config.voxel_bins_x = parse_number(values, "voxel_bins_x", config.voxel_bins_x);
     config.voxel_bins_y = parse_number(values, "voxel_bins_y", config.voxel_bins_y);
     config.voxel_size_x_mm =
@@ -216,6 +227,9 @@ TransportConfig load_config(const std::filesystem::path& path) {
         parse_path(values, "fragment_species_output_file", config.fragment_species_output_file);
     config.voxel_dose_output_file =
         parse_path(values, "voxel_dose_output_file", config.voxel_dose_output_file);
+    config.charged_origin_voxel_output_file = parse_path(
+        values, "charged_origin_voxel_output_file",
+        config.charged_origin_voxel_output_file);
     const auto device = values.find("device");
     if (device != values.end()) {
         config.device = device->second;

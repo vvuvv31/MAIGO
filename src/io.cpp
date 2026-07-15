@@ -1,6 +1,9 @@
 #include "carbon/io.hpp"
+#include "carbon/particle.hpp"
+
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <fstream>
 #include <iomanip>
@@ -151,6 +154,129 @@ void write_sparse_voxel_dose_csv(const std::filesystem::path& path,
                     (static_cast<double>(z) + 0.5) * config.depth_bin_width_mm;
                 output << x << ',' << y << ',' << z << ',' << x_mm << ',' << y_mm << ','
                        << z_mm << ',' << energy_per_primary << ',' << dose_per_primary << '\n';
+            }
+        }
+    }
+}
+void write_sparse_charged_origin_voxel_dose_csv(
+    const std::filesystem::path& path,
+    const TransportConfig& config,
+    const TransportResult& result) {
+    if (!config.enable_charged_origin_voxel_scoring) {
+        throw std::invalid_argument(
+            "Charged-origin voxel output requested while its scoring is disabled");
+    }
+    const auto voxel_count = config.number_of_voxels();
+    const auto expected_values = charged_origin_category_count * voxel_count;
+    if (result.voxel_deposited_energy_MeV.size() != voxel_count ||
+        result.charged_origin_voxel_deposited_energy_MeV.size() != expected_values) {
+        throw std::invalid_argument(
+            "Charged-origin voxel result size does not match configuration");
+    }
+
+    const std::array<const std::vector<double>*, charged_origin_category_count>
+        depth_categories{
+            &result.primary_c12_deposited_energy_MeV,
+            &result.secondary_carbon_deposited_energy_MeV,
+            &result.boron_deposited_energy_MeV,
+            &result.beryllium_deposited_energy_MeV,
+            &result.lithium_deposited_energy_MeV,
+            &result.helium_deposited_energy_MeV,
+            &result.proton_deposited_energy_MeV,
+            &result.other_charged_deposited_energy_MeV,
+        };
+    const auto bins = config.number_of_bins();
+    if (std::any_of(depth_categories.begin(), depth_categories.end(),
+                    [bins](const auto* category) {
+                        return category->size() != bins;
+                    })) {
+        throw std::invalid_argument(
+            "Charged-origin depth category size does not match configuration");
+    }
+
+    constexpr double closure_tolerance_MeV_per_primary = 1.0e-9;
+    const auto histories = static_cast<double>(config.number_of_histories);
+    const auto plane_size = config.voxel_bins_x * config.voxel_bins_y;
+    for (std::size_t voxel = 0; voxel < voxel_count; ++voxel) {
+        double reconstructed = 0.0;
+        for (std::size_t category = 0; category < charged_origin_category_count;
+             ++category) {
+            reconstructed += result.charged_origin_voxel_deposited_energy_MeV[
+                category * voxel_count + voxel];
+        }
+        if (std::abs(reconstructed - result.voxel_deposited_energy_MeV[voxel]) /
+                histories >
+            closure_tolerance_MeV_per_primary) {
+            throw std::runtime_error(
+                "Charged-origin categories do not close to total at voxel " +
+                std::to_string(voxel));
+        }
+    }
+    for (std::size_t category = 0; category < charged_origin_category_count;
+         ++category) {
+        const auto category_offset = category * voxel_count;
+        for (std::size_t z = 0; z < bins; ++z) {
+            const auto begin =
+                result.charged_origin_voxel_deposited_energy_MeV.begin() +
+                static_cast<std::ptrdiff_t>(category_offset + z * plane_size);
+            const auto reconstructed = std::accumulate(
+                begin, begin + static_cast<std::ptrdiff_t>(plane_size), 0.0);
+            if (std::abs(reconstructed - (*depth_categories[category])[z]) /
+                    histories >
+                closure_tolerance_MeV_per_primary) {
+                throw std::runtime_error(
+                    "Charged-origin voxel category does not close to depth tally "
+                    "for category " +
+                    std::to_string(category) + " at z bin " + std::to_string(z));
+            }
+        }
+    }
+
+    if (path.has_parent_path()) {
+        std::filesystem::create_directories(path.parent_path());
+    }
+    std::ofstream output(path, std::ios::binary);
+    if (!output) {
+        throw std::runtime_error(
+            "Cannot create charged-origin voxel dose output file: " +
+            path.string());
+    }
+    const auto x_extent_mm =
+        static_cast<double>(config.voxel_bins_x) * config.voxel_size_x_mm;
+    const auto y_extent_mm =
+        static_cast<double>(config.voxel_bins_y) * config.voxel_size_y_mm;
+    output << "ix,iy,iz,x_mm,y_mm,z_mm,total_MeV_per_primary,"
+              "primary_c12_MeV_per_primary,secondary_carbon_MeV_per_primary,"
+              "boron_MeV_per_primary,beryllium_MeV_per_primary,"
+              "lithium_MeV_per_primary,helium_MeV_per_primary,"
+              "proton_MeV_per_primary,other_charged_MeV_per_primary\n";
+    output << std::setprecision(12);
+    for (std::size_t z = 0; z < bins; ++z) {
+        for (std::size_t y = 0; y < config.voxel_bins_y; ++y) {
+            for (std::size_t x = 0; x < config.voxel_bins_x; ++x) {
+                const auto voxel = z * plane_size + y * config.voxel_bins_x + x;
+                const auto total = result.voxel_deposited_energy_MeV[voxel];
+                if (total == 0.0) {
+                    continue;
+                }
+                const auto x_mm =
+                    (static_cast<double>(x) + 0.5) * config.voxel_size_x_mm -
+                    0.5 * x_extent_mm;
+                const auto y_mm =
+                    (static_cast<double>(y) + 0.5) * config.voxel_size_y_mm -
+                    0.5 * y_extent_mm;
+                const auto z_mm =
+                    (static_cast<double>(z) + 0.5) * config.depth_bin_width_mm;
+                output << x << ',' << y << ',' << z << ',' << x_mm << ','
+                       << y_mm << ',' << z_mm << ',' << total / histories;
+                for (std::size_t category = 0;
+                     category < charged_origin_category_count; ++category) {
+                    output << ','
+                           << result.charged_origin_voxel_deposited_energy_MeV[
+                                  category * voxel_count + voxel] /
+                                  histories;
+                }
+                output << '\n';
             }
         }
     }
