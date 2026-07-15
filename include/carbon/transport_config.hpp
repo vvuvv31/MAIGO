@@ -25,6 +25,7 @@ struct TransportConfig {
     double voxel_size_y_mm{5.0};
     bool enable_energy_straggling{false};
     double straggling_scale{1.0};
+    bool enable_multiple_scattering{false};
     bool enable_primary_attenuation{false};
     bool enable_secondary_generation{false};
     bool enable_secondary_transport{false};

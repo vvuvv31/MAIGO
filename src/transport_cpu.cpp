@@ -37,6 +37,10 @@ TransportResult transport_serial(const TransportConfig& config,
                                  const StoppingPowerTable& stopping_power,
                                  const CrossSectionTable& cross_section) {
     config.validate();
+    if (config.enable_multiple_scattering) {
+        throw std::invalid_argument(
+            "Multiple scattering requires the three-dimensional SYCL backend");
+    }
     const auto start = std::chrono::steady_clock::now();
     TransportResult result;
     result.backend = config.enable_energy_straggling ? "serial+straggling" : "serial";

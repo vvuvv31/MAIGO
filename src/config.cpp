@@ -189,6 +189,8 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.enable_energy_straggling =
         parse_bool(values, "enable_energy_straggling", config.enable_energy_straggling);
     config.straggling_scale = parse_number(values, "straggling_scale", config.straggling_scale);
+    config.enable_multiple_scattering =
+        parse_bool(values, "enable_multiple_scattering", config.enable_multiple_scattering);
     config.enable_primary_attenuation =
         parse_bool(values, "enable_primary_attenuation", config.enable_primary_attenuation);
     config.enable_secondary_generation =

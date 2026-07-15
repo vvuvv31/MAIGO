@@ -1,5 +1,6 @@
 #include "carbon/cascade_package.hpp"
 #include "carbon/cross_section.hpp"
+#include "carbon/multiple_scattering.hpp"
 #include "carbon/particle.hpp"
 #include "carbon/reaction_package.hpp"
 #include "carbon/rng.hpp"
@@ -87,6 +88,27 @@ void test_units() {
                    "Enabled voxel scorer accepted a zero x-bin count");
 }
 
+void test_highland_multiple_scattering() {
+    const auto carbon_angle =
+        carbon::highland_projected_rms_angle_rad(2400.0, 6, 12, 0.5, 1.0);
+    const auto proton_angle =
+        carbon::highland_projected_rms_angle_rad(200.0, 1, 1, 0.5, 1.0);
+    const auto half_step_angle =
+        carbon::highland_projected_rms_angle_rad(2400.0, 6, 12, 0.25, 1.0);
+    require(std::isfinite(carbon_angle) && carbon_angle > 0.0,
+            "Carbon Highland angle is not finite and positive");
+    require(std::isfinite(proton_angle) && proton_angle > 0.0,
+            "Proton Highland angle is not finite and positive");
+    require(half_step_angle < carbon_angle,
+            "Highland angle did not increase with material thickness");
+    require_near(
+        carbon::highland_projected_rms_angle_rad(2400.0, 6, 12, 0.0, 1.0),
+        0.0, 0.0, "Zero-length Highland angle failed");
+    require_near(
+        carbon::highland_projected_rms_angle_rad(2400.0, 0, 12, 0.5, 1.0),
+        0.0, 0.0, "Neutral-particle Highland angle failed");
+}
+
 void test_serial_voxel_idd_closure() {
     carbon::TransportConfig config;
     config.number_of_histories = 7;
@@ -101,6 +123,10 @@ void test_serial_voxel_idd_closure() {
     const carbon::StoppingPowerTable table({0.01, 20.0}, {2.0, 2.0});
     const auto result = carbon::transport_serial(config, table, zero_cross_section());
     require_voxel_idd_closure(config, result, 1.0e-12);
+    config.enable_multiple_scattering = true;
+    require_throws(
+        [&]() { carbon::transport_serial(config, table, zero_cross_section()); },
+        "Serial backend silently accepted three-dimensional multiple scattering");
 }
 
 void test_charged_dose_categories() {
@@ -577,6 +603,7 @@ int main() {
         test_fragment_stopping_power_scale();
         test_step_selection();
         test_philox_rng();
+        test_highland_multiple_scattering();
         test_bohr_straggling();
         test_energy_conservation();
         test_escape_energy_conservation();
