@@ -169,6 +169,13 @@ void TransportConfig::validate() const {
         throw std::invalid_argument(
             "enable_fragment_cascade requires secondary transport and at least one generation");
     }
+    if (enable_neutral_transport &&
+        (!enable_secondary_generation || !enable_secondary_transport ||
+         maximum_neutral_generations == 0)) {
+        throw std::invalid_argument(
+            "enable_neutral_transport requires secondary generation/transport and at "
+            "least one neutral generation");
+    }
 }
 
 TransportConfig load_config(const std::filesystem::path& path) {
@@ -210,10 +217,16 @@ TransportConfig load_config(const std::filesystem::path& path) {
         parse_bool(values, "enable_secondary_transport", config.enable_secondary_transport);
     config.enable_fragment_cascade =
         parse_bool(values, "enable_fragment_cascade", config.enable_fragment_cascade);
+    config.enable_neutral_transport =
+        parse_bool(values, "enable_neutral_transport", config.enable_neutral_transport);
     config.maximum_cascade_generations = parse_number(
         values, "maximum_cascade_generations", config.maximum_cascade_generations);
+    config.maximum_neutral_generations = parse_number(
+        values, "maximum_neutral_generations", config.maximum_neutral_generations);
     config.secondary_queue_capacity =
         parse_number(values, "secondary_queue_capacity", config.secondary_queue_capacity);
+    config.neutral_queue_capacity =
+        parse_number(values, "neutral_queue_capacity", config.neutral_queue_capacity);
     config.random_seed = parse_number(values, "random_seed", config.random_seed);
     config.stopping_power_file = parse_path(values, "stopping_power_file", config.stopping_power_file);
     config.nuclear_cross_section_file =
@@ -222,6 +235,8 @@ TransportConfig load_config(const std::filesystem::path& path) {
         parse_path(values, "reaction_package_file", config.reaction_package_file);
     config.cascade_package_file =
         parse_path(values, "cascade_package_file", config.cascade_package_file);
+    config.neutral_package_file =
+        parse_path(values, "neutral_package_file", config.neutral_package_file);
     config.output_file = parse_path(values, "output_file", config.output_file);
     config.fragment_species_output_file =
         parse_path(values, "fragment_species_output_file", config.fragment_species_output_file);
@@ -230,6 +245,9 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.charged_origin_voxel_output_file = parse_path(
         values, "charged_origin_voxel_output_file",
         config.charged_origin_voxel_output_file);
+    config.neutral_origin_voxel_output_file = parse_path(
+        values, "neutral_origin_voxel_output_file",
+        config.neutral_origin_voxel_output_file);
     const auto device = values.find("device");
     if (device != values.end()) {
         config.device = device->second;

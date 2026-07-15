@@ -2,6 +2,7 @@
 
 #include "carbon/cascade_package.hpp"
 #include "carbon/cross_section.hpp"
+#include "carbon/neutral_package.hpp"
 #include "carbon/reaction_package.hpp"
 #include "carbon/stopping_power.hpp"
 #include "carbon/transport_config.hpp"
@@ -17,6 +18,7 @@ struct TransportResult {
     std::vector<double> voxel_deposited_energy_MeV;
     // Category-major layout: category * number_of_voxels + voxel index.
     std::vector<double> charged_origin_voxel_deposited_energy_MeV;
+    std::vector<double> neutral_origin_voxel_deposited_energy_MeV;
     std::vector<double> primary_c12_deposited_energy_MeV;
     std::vector<double> secondary_carbon_deposited_energy_MeV;
     std::vector<double> boron_deposited_energy_MeV;
@@ -25,6 +27,8 @@ struct TransportResult {
     std::vector<double> helium_deposited_energy_MeV;
     std::vector<double> proton_deposited_energy_MeV;
     std::vector<double> other_charged_deposited_energy_MeV;
+    std::vector<double> neutron_origin_deposited_energy_MeV;
+    std::vector<double> gamma_origin_deposited_energy_MeV;
     double initial_energy_MeV{0.0};
     double total_deposited_energy_MeV{0.0};
     double escaped_energy_MeV{0.0};
@@ -50,6 +54,16 @@ struct TransportResult {
     std::uint64_t cascade_queue_overflow{0};
     double queued_cascade_energy_MeV{0.0};
     double cascade_nuclear_energy_MeV{0.0};
+    std::uint64_t queued_neutrals{0};
+    std::uint64_t neutral_queue_overflow{0};
+    std::uint64_t transported_neutrals{0};
+    std::uint64_t neutral_interactions{0};
+    std::uint64_t neutral_transport_steps{0};
+    double queued_neutral_energy_MeV{0.0};
+    double neutral_queue_overflow_energy_MeV{0.0};
+    double neutral_deposited_energy_MeV{0.0};
+    double neutral_escaped_energy_MeV{0.0};
+    double charged_from_neutral_energy_MeV{0.0};
     std::uint64_t total_steps{0};
     double elapsed_seconds{0.0};
     std::string backend;
@@ -72,7 +86,8 @@ TransportResult transport_sycl(const TransportConfig& config,
                                const CrossSectionTable& cross_section,
                                const std::string& device_name,
                                const ReactionPackageTable* reaction_packages = nullptr,
-                               const CascadePackageTable* cascade_packages = nullptr);
+                               const CascadePackageTable* cascade_packages = nullptr,
+                               const NeutralPackageTable* neutral_packages = nullptr);
 std::string describe_sycl_device(const std::string& device_name);
 #endif
 

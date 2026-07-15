@@ -218,4 +218,13 @@ python validation\scripts\compile_neutral_package.py ^
 
 `NeutralPackageTable::from_binary` 加载 gamma/neutron 两个 projectile、按绝对 MeV
 分箱的宏观总截面、带 continuation 的 interaction 以及局部系产物方向。smoke 包约
-210 KB，C++ 加载测试已通过。GPU 中性队列与输运核尚未实现。
+210 KB，C++ 加载测试已通过。
+
+设置 `enable_neutral_transport: true` 后，SYCL 后端将 neutron/gamma 写入独立队列，
+用总截面采样自由程，并采样末态 local deposit / continuation / 带电产物。中性后代
+剂量进入 neutron/gamma origin IDD 与 `neutral_origin_voxel_output_file`；带电 lineage
+标签避免污染 charged-origin 闭合。smoke 配置：
+
+```bat
+carbon_mc.exe --config config\beam_200MeVu_neutral_smoke.yaml --device cpu
+```

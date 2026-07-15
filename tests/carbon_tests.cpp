@@ -702,6 +702,57 @@ void test_sycl_secondary_queue_generation() {
     require(cascaded.relative_energy_balance_error() < 1.0e-4,
             "Fragment cascade total energy balance failed");
 }
+
+void test_sycl_neutral_transport_smoke() {
+    const auto source_directory = std::filesystem::path(CARBON_SOURCE_DIR);
+    const auto reaction_packages = carbon::ReactionPackageTable::from_binary(
+        source_directory /
+        "validation/results/topas_200MeVu_reaction_packages_development.bin");
+    const auto neutral_packages = carbon::NeutralPackageTable::from_binary(
+        source_directory / "validation/results/topas_200MeVu_neutral_smoke.bin");
+    carbon::TransportConfig config;
+    config.number_of_histories = 16;
+    config.initial_energy_MeVu = 10.0;
+    config.phantom_length_mm = 200.0;
+    config.depth_bin_width_mm = 1.0;
+    config.maximum_step_mm = 0.5;
+    config.maximum_relative_energy_loss = 0.01;
+    config.enable_primary_attenuation = true;
+    config.enable_secondary_generation = true;
+    config.enable_secondary_transport = true;
+    config.enable_neutral_transport = true;
+    config.maximum_neutral_generations = 4;
+    config.secondary_queue_capacity = 20'000;
+    config.neutral_queue_capacity = 20'000;
+    config.enable_voxel_scoring = true;
+    config.voxel_bins_x = 5;
+    config.voxel_bins_y = 5;
+    config.random_seed = 20260715;
+    config.validate();
+    const carbon::StoppingPowerTable stopping_power({0.01, 10.01, 20.01}, {2.0, 2.0, 2.0});
+    const carbon::CrossSectionTable forced_reaction({0.01, 20.01}, {100.0, 100.0});
+    const auto result = carbon::transport_sycl(
+        config, stopping_power, forced_reaction, "cpu", &reaction_packages, nullptr,
+        &neutral_packages);
+    require(result.queued_neutrals > 0 && result.transported_neutrals > 0,
+            "Neutral queue remained empty");
+    require(result.neutral_queue_overflow == 0, "Unexpected neutral queue overflow");
+    require(result.neutral_interactions > 0, "Neutral transport produced no interactions");
+    require(result.neutron_origin_deposited_energy_MeV.size() == config.number_of_bins() &&
+                result.gamma_origin_deposited_energy_MeV.size() == config.number_of_bins(),
+            "Neutral-origin IDD size failed");
+    const auto neutral_idd =
+        std::accumulate(result.neutron_origin_deposited_energy_MeV.begin(),
+                        result.neutron_origin_deposited_energy_MeV.end(), 0.0) +
+        std::accumulate(result.gamma_origin_deposited_energy_MeV.begin(),
+                        result.gamma_origin_deposited_energy_MeV.end(), 0.0);
+    require(neutral_idd > 0.0 || result.neutral_escaped_energy_MeV > 0.0 ||
+                result.charged_from_neutral_energy_MeV > 0.0,
+            "Neutral transport left no deposited, escaped, or charged-product energy");
+    require(result.relative_energy_balance_error() < 5.0e-2,
+            "Neutral transport energy balance failed: " +
+                std::to_string(result.relative_energy_balance_error()));
+}
 #endif
 
 }  // namespace
@@ -727,6 +778,7 @@ int main() {
 #ifdef CARBON_HAS_SYCL
         test_serial_sycl_cpu_match();
         test_sycl_secondary_queue_generation();
+        test_sycl_neutral_transport_smoke();
 #endif
         std::cout << "All carbon_tests passed\n";
         return EXIT_SUCCESS;

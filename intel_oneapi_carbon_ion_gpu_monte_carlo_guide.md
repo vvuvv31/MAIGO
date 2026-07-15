@@ -2690,7 +2690,9 @@ TOPAS 数据接口 smoke 已完成：`CarbonNeutralNtuple` 在远程主机 100-h
 带 continuation 的 interaction 和 1961 个入射局部系产物。`NeutralPackageTable`
 独立校验 magic/布局/offset 闭合与截面为正；Windows IntelLLVM 2025.3.3 测试通过。
 
-GPU 侧仍缺中性队列、自由程采样和末态 sampling kernel。实现时应加载上述 binary，
-用总截面采样自由程，用能量邻近 interaction 包采样 continuation/局部沉积/产物，
-并保持 `neutron / gamma / neutral_other` 来源标签贯穿后代。TOPAS 祖先剂量 voxel
-与中性 n-tuple 只用于验证和采样物理，不可直接作为 GPU 输运概率或经验 scale。
+GPU 中性队列与输运脚手架已接入：`enable_neutral_transport` 加载上述 binary，用
+总截面采样自由程，用能量邻近 interaction 包采样 continuation/局部沉积/带电产物。
+中性 local deposit 与中性 lineage 带电后代写入 neutron/gamma origin IDD 及
+neutral-origin voxels；不进入 charged-origin 八类之和。嵌套中性产物当前记为
+residual/escape，不二次入队。TOPAS 祖先剂量 voxel 与中性 n-tuple 只用于验证和
+采样物理，不可直接作为 GPU 输运概率或经验 scale。

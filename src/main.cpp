@@ -1,6 +1,7 @@
 #include "carbon/cascade_package.hpp"
 #include "carbon/cross_section.hpp"
 #include "carbon/io.hpp"
+#include "carbon/neutral_package.hpp"
 #include "carbon/reaction_package.hpp"
 #include "carbon/stopping_power.hpp"
 #include "carbon/transport.hpp"
@@ -61,6 +62,7 @@ int main(int argc, char* argv[]) {
             carbon::CrossSectionTable::from_csv(config.nuclear_cross_section_file);
         std::optional<carbon::ReactionPackageTable> reaction_packages;
         std::optional<carbon::CascadePackageTable> cascade_packages;
+        std::optional<carbon::NeutralPackageTable> neutral_packages;
         if (config.enable_secondary_generation) {
             reaction_packages =
                 carbon::ReactionPackageTable::from_binary(config.reaction_package_file);
@@ -74,6 +76,13 @@ int main(int argc, char* argv[]) {
             std::cout << "Cascade projectiles: " << cascade_packages->projectiles().size()
                       << "; interactions: " << cascade_packages->interactions().size()
                       << "; products: " << cascade_packages->products().size() << '\n';
+        }
+        if (config.enable_neutral_transport) {
+            neutral_packages =
+                carbon::NeutralPackageTable::from_binary(config.neutral_package_file);
+            std::cout << "Neutral projectiles: " << neutral_packages->projectiles().size()
+                      << "; interactions: " << neutral_packages->interactions().size()
+                      << "; products: " << neutral_packages->products().size() << '\n';
         }
         carbon::TransportResult result;
         if (config.device == "serial") {
@@ -90,7 +99,8 @@ int main(int argc, char* argv[]) {
             std::cout << "SYCL device: " << carbon::describe_sycl_device(config.device) << '\n';
             result = carbon::transport_sycl(config, stopping_power, cross_section, config.device,
                                             reaction_packages ? &*reaction_packages : nullptr,
-                                            cascade_packages ? &*cascade_packages : nullptr);
+                                            cascade_packages ? &*cascade_packages : nullptr,
+                                            neutral_packages ? &*neutral_packages : nullptr);
 #else
             throw std::runtime_error(
                 "This binary was built without SYCL. Reconfigure with CARBON_ENABLE_SYCL=ON and icpx.");
@@ -158,6 +168,19 @@ int main(int argc, char* argv[]) {
                           << "Cascade queue overflow: " << result.cascade_queue_overflow << '\n'
                           << "Fragment species output: "
                           << config.fragment_species_output_file.string() << '\n';
+            }
+            if (config.enable_neutral_transport) {
+                std::cout << "Queued neutrals: " << result.queued_neutrals << '\n'
+                          << "Neutral queue overflow: " << result.neutral_queue_overflow
+                          << '\n'
+                          << "Transported neutrals: " << result.transported_neutrals << '\n'
+                          << "Neutral interactions: " << result.neutral_interactions << '\n'
+                          << "Neutral deposited energy: "
+                          << result.neutral_deposited_energy_MeV << " MeV\n"
+                          << "Neutral escaped energy: " << result.neutral_escaped_energy_MeV
+                          << " MeV\n"
+                          << "Charged-from-neutral energy: "
+                          << result.charged_from_neutral_energy_MeV << " MeV\n";
             }
         }
         std::cout << "Untracked nuclear energy: " << result.untracked_nuclear_energy_MeV

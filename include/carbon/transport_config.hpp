@@ -31,8 +31,11 @@ struct TransportConfig {
     bool enable_secondary_generation{false};
     bool enable_secondary_transport{false};
     bool enable_fragment_cascade{false};
+    bool enable_neutral_transport{false};
     std::uint32_t maximum_cascade_generations{0};
+    std::uint32_t maximum_neutral_generations{8};
     std::size_t secondary_queue_capacity{0};
+    std::size_t neutral_queue_capacity{0};
     std::uint64_t random_seed{20'260'714};
     std::filesystem::path stopping_power_file{"data/stopping_power_water.csv"};
     std::filesystem::path nuclear_cross_section_file{
@@ -41,12 +44,16 @@ struct TransportConfig {
         "validation/results/topas_200MeVu_reaction_packages_development.bin"};
     std::filesystem::path cascade_package_file{
         "validation/results/topas_200MeVu_cascade_100k.bin"};
+    std::filesystem::path neutral_package_file{
+        "validation/results/topas_200MeVu_neutral_smoke.bin"};
     std::filesystem::path output_file{"out/cpu_depth_dose.csv"};
     std::filesystem::path fragment_species_output_file{
         "out/gpu_fragment_species_depth_dose.csv"};
     std::filesystem::path voxel_dose_output_file{"out/gpu_voxel_dose.csv"};
     std::filesystem::path charged_origin_voxel_output_file{
         "out/gpu_charged_origin_voxel_dose.csv"};
+    std::filesystem::path neutral_origin_voxel_output_file{
+        "out/gpu_neutral_origin_voxel_dose.csv"};
     std::string device{"serial"};
 
     [[nodiscard]] double initial_total_energy_MeV() const noexcept {
