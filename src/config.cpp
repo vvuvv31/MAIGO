@@ -176,6 +176,16 @@ void TransportConfig::validate() const {
             "enable_neutral_transport requires secondary generation/transport and at "
             "least one neutral generation");
     }
+    if (enable_neutral_transport && neutral_transport_mode != "first_interaction" &&
+        neutral_transport_mode != "full") {
+        throw std::invalid_argument(
+            "neutral_transport_mode must be first_interaction or full");
+    }
+    if (enable_neutral_transport && neutral_transport_mode == "full" &&
+        maximum_neutral_generations < 2) {
+        throw std::invalid_argument(
+            "neutral_transport_mode=full requires maximum_neutral_generations >= 2");
+    }
 }
 
 TransportConfig load_config(const std::filesystem::path& path) {
@@ -219,6 +229,10 @@ TransportConfig load_config(const std::filesystem::path& path) {
         parse_bool(values, "enable_fragment_cascade", config.enable_fragment_cascade);
     config.enable_neutral_transport =
         parse_bool(values, "enable_neutral_transport", config.enable_neutral_transport);
+    const auto neutral_mode = values.find("neutral_transport_mode");
+    if (neutral_mode != values.end()) {
+        config.neutral_transport_mode = neutral_mode->second;
+    }
     config.maximum_cascade_generations = parse_number(
         values, "maximum_cascade_generations", config.maximum_cascade_generations);
     config.maximum_neutral_generations = parse_number(

@@ -1,25 +1,24 @@
 # 当前下一步
-## 2026-07-15 更新：GPU neutral queue + 输运已落地
+## 2026-07-15 更新：中性输运默认方案 D（first_interaction）
 
-中性主机包与 SYCL 输运脚手架均已完成：
+GPU 中性队列采用 **方案 D**：
 
-- `enable_neutral_transport` 启用独立中性队列；
-- 主反应与 cascade 的 neutron/gamma 入队（不再只记 untransported 账本）；
-- 自由程用宏观总截面，能量邻近 interaction 包采样 local deposit / continuation /
-  带电产物；
-- 中性后代剂量写入 neutron/gamma origin IDD 与 neutral-origin voxel；
-- 带电产物保留 `neutron_lineage` / `gamma_lineage`，不污染 charged-origin 闭合；
-- `carbon_tests`（IntelLLVM 2025.3.3）含 forced-reaction smoke 通过。
+- 自由程：\(\lambda=-\ln\xi/\Sigma_{\mathrm{tot}}(E)\)
+- 仅一次能量邻近 interaction 包
+- local deposit + 带电产物正常入带电队列并输运
+- **neutron/gamma continuation 与嵌套中性产物不入队**，记 `residual_neutral_energy`
+  并回到 untracked 账本（不是当场把 \(E_n\) 沉成剂量）
+- 配置：`neutral_transport_mode: first_interaction`（默认）；`full` 可恢复多代 continuation
 
-配置入口：`config/beam_200MeVu_neutral_smoke.yaml`。采样表仍为 100-history
-smoke package；无全局 scale。
+禁止把 neutron 动能直接沉在产生 voxel（kerma）；那会把 ~55 MeV/primary 错成剂量，
+而 TOPAS neutron-origin 仅 ~15.6 MeV/primary，且尾部空间形态会错。
 
 下一步：
 
-1. 远程 100k `development` neutral 包替换 smoke 采样表；
-2. 与 TOPAS 祖先归属 neutron/gamma 剂量做 IDD/3D 比较（绝对 MeV/primary，无 scale）；
-3. 再做步长/体素与 100 万粒子收敛；
-4. 可选：嵌套中性产物再入队（当前计为 residual/escape）。
+1. 用方案 D 跑 smoke/100k，核对 residual 与 charged-from-neutral 量级；
+2. 远程 100k development neutral 包替换 smoke 采样表；
+3. 与 TOPAS 祖先 neutron/gamma 剂量比较（绝对量，无 scale）；
+4. 视尾部差异决定是否升到 `full` 或只加强 neutron 一侧。
 
 不得把 TOPAS 中性剂量图直接当作 GPU 输运核，也不得用全局 scale 代替相互作用物理。
 

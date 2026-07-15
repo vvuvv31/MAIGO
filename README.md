@@ -220,10 +220,16 @@ python validation\scripts\compile_neutral_package.py ^
 分箱的宏观总截面、带 continuation 的 interaction 以及局部系产物方向。smoke 包约
 210 KB，C++ 加载测试已通过。
 
-设置 `enable_neutral_transport: true` 后，SYCL 后端将 neutron/gamma 写入独立队列，
-用总截面采样自由程，并采样末态 local deposit / continuation / 带电产物。中性后代
-剂量进入 neutron/gamma origin IDD 与 `neutral_origin_voxel_output_file`；带电 lineage
-标签避免污染 charged-origin 闭合。smoke 配置：
+设置 `enable_neutral_transport: true` 后，默认 **方案 D**
+（`neutral_transport_mode: first_interaction`）：
+
+1. 独立中性队列入队 neutron/gamma；
+2. 用总截面采样一次自由程；
+3. 采样一次末态：local deposit + 带电产物（入带电队列）；
+4. continuation / 嵌套中性 **不入队**，记 residual（不是当场沉全部 \(E_n\)）。
+
+中性后代剂量进入 neutron/gamma origin IDD 与 `neutral_origin_voxel_output_file`；
+带电 lineage 标签避免污染 charged-origin 闭合。`full` 模式可恢复多代 continuation。
 
 ```bat
 carbon_mc.exe --config config\beam_200MeVu_neutral_smoke.yaml --device cpu

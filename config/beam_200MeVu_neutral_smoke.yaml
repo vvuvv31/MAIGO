@@ -1,4 +1,5 @@
-# 64-history SYCL smoke for neutron/gamma queue + free-path transport.
+# 64-history SYCL smoke for neutron/gamma mode D:
+# free path + one interaction package; continuation is residual (not re-queued).
 # Uses the compiled neutral smoke package; no TOPAS dose-map scaling.
 number_of_histories: 64
 initial_energy_MeVu: 200.0
@@ -24,8 +25,9 @@ enable_secondary_generation: true
 enable_secondary_transport: true
 enable_fragment_cascade: true
 enable_neutral_transport: true
+neutral_transport_mode: first_interaction
 maximum_cascade_generations: 2
-maximum_neutral_generations: 8
+maximum_neutral_generations: 1
 secondary_queue_capacity: 100000
 neutral_queue_capacity: 100000
 random_seed: 20260715

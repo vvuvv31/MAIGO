@@ -245,6 +245,8 @@ TransportResult transport_sycl(const TransportConfig& config,
     const auto enable_secondary_transport = config.enable_secondary_transport;
     const auto enable_fragment_cascade = config.enable_fragment_cascade;
     const auto enable_neutral_transport = config.enable_neutral_transport;
+    const auto neutral_allow_continuation =
+        enable_neutral_transport && config.neutral_transport_mode == "full";
     const auto automatic_queue_capacity =
         number_of_histories > std::numeric_limits<std::size_t>::max() / 16
             ? std::numeric_limits<std::size_t>::max()
@@ -1940,21 +1942,23 @@ TransportResult transport_sycl(const TransportConfig& config,
                                 }
                             }
 
-                            // Nested neutral products (e.g. secondary gamma/neutron) stay
-                            // untransported in this first kernel and are counted as residual.
+                            // Nested neutral products stay residual (not re-queued in mode D).
                             for (std::uint32_t product_index = 0;
                                  product_index < interaction.product_count; ++product_index) {
                                 const auto product = neutral_products_device
                                     [interaction.product_offset + product_index];
                                 if (product.pdg_id == 22 || product.pdg_id == 2112) {
-                                    summary.escaped_energy_MeV +=
+                                    summary.residual_energy_MeV +=
                                         product.kinetic_energy_MeV * energy_scale;
                                 }
                             }
 
                             const auto continuation =
                                 interaction.continuation_energy_MeV * energy_scale;
-                            if (continuation > energy_cutoff_MeV &&
+                            // Mode D (first_interaction): free path + one package only.
+                            // Continuation kinetic energy becomes residual, not re-queued.
+                            if (continuation > 0.0F && neutral_allow_continuation &&
+                                continuation > energy_cutoff_MeV &&
                                 particle.generation + 1 < maximum_neutral_generations) {
                                 const auto child_direction = rotate_local_direction(
                                     interaction.continuation_direction_x,
@@ -1992,7 +1996,7 @@ TransportResult transport_sycl(const TransportConfig& config,
                                     summary.neutral_overflow_energy_MeV += continuation;
                                 }
                             } else if (continuation > 0.0F) {
-                                summary.escaped_energy_MeV += continuation;
+                                summary.residual_energy_MeV += continuation;
                             }
                             energy_MeV = 0.0F;
                         }
@@ -2389,7 +2393,8 @@ TransportResult transport_sycl(const TransportConfig& config,
         result.backend += "+fragment-cascade";
     }
     if (enable_neutral_transport) {
-        result.backend += "+neutral-transport";
+        result.backend += neutral_allow_continuation ? "+neutral-transport-full"
+                                                     : "+neutral-transport-first-interaction";
     }
     result.primary_c12_deposited_energy_MeV = dose_host;
     result.deposited_energy_MeV = std::move(dose_host);
@@ -2527,6 +2532,7 @@ TransportResult transport_sycl(const TransportConfig& config,
             result.neutral_interactions += summary.interaction_count;
             result.neutral_deposited_energy_MeV += summary.local_deposit_MeV;
             result.neutral_escaped_energy_MeV += summary.escaped_energy_MeV;
+            result.residual_neutral_energy_MeV += summary.residual_energy_MeV;
             result.charged_from_neutral_energy_MeV += summary.queued_charged_energy_MeV;
             result.neutral_queue_overflow += summary.neutral_overflow_count;
             result.neutral_queue_overflow_energy_MeV += summary.neutral_overflow_energy_MeV;
@@ -2537,9 +2543,11 @@ TransportResult transport_sycl(const TransportConfig& config,
             // already included in secondary_deposited_energy_MeV.
         }
         result.queued_neutrals += continuation_count;
-        // Birth neutral energy leaves the untracked nuclear residual once. Continuations
-        // are requeues of that same energy budget and must not be subtracted again.
+        // Birth neutral energy leaves untracked once. Residual continuation / nested
+        // neutrals (mode D) return to the untracked nuclear residual, not phantom escape.
         result.untracked_nuclear_energy_MeV -= result.queued_neutral_energy_MeV;
+        result.untracked_nuclear_energy_MeV += result.residual_neutral_energy_MeV;
+        result.untransported_neutral_energy_MeV += result.residual_neutral_energy_MeV;
         result.total_deposited_energy_MeV += result.neutral_deposited_energy_MeV;
         result.escaped_energy_MeV += result.neutral_escaped_energy_MeV;
     }

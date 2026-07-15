@@ -32,8 +32,11 @@ struct TransportConfig {
     bool enable_secondary_transport{false};
     bool enable_fragment_cascade{false};
     bool enable_neutral_transport{false};
+    // "first_interaction": free path + one package (mode D); continuation residual.
+    // "full": re-queue neutral continuations up to maximum_neutral_generations.
+    std::string neutral_transport_mode{"first_interaction"};
     std::uint32_t maximum_cascade_generations{0};
-    std::uint32_t maximum_neutral_generations{8};
+    std::uint32_t maximum_neutral_generations{1};
     std::size_t secondary_queue_capacity{0};
     std::size_t neutral_queue_capacity{0};
     std::uint64_t random_seed{20'260'714};

@@ -63,6 +63,7 @@ struct TransportResult {
     double neutral_queue_overflow_energy_MeV{0.0};
     double neutral_deposited_energy_MeV{0.0};
     double neutral_escaped_energy_MeV{0.0};
+    double residual_neutral_energy_MeV{0.0};
     double charged_from_neutral_energy_MeV{0.0};
     std::uint64_t total_steps{0};
     double elapsed_seconds{0.0};

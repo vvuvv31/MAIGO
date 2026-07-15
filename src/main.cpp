@@ -170,7 +170,8 @@ int main(int argc, char* argv[]) {
                           << config.fragment_species_output_file.string() << '\n';
             }
             if (config.enable_neutral_transport) {
-                std::cout << "Queued neutrals: " << result.queued_neutrals << '\n'
+                std::cout << "Neutral mode: " << config.neutral_transport_mode << '\n'
+                          << "Queued neutrals: " << result.queued_neutrals << '\n'
                           << "Neutral queue overflow: " << result.neutral_queue_overflow
                           << '\n'
                           << "Transported neutrals: " << result.transported_neutrals << '\n'
@@ -179,6 +180,8 @@ int main(int argc, char* argv[]) {
                           << result.neutral_deposited_energy_MeV << " MeV\n"
                           << "Neutral escaped energy: " << result.neutral_escaped_energy_MeV
                           << " MeV\n"
+                          << "Residual neutral energy: "
+                          << result.residual_neutral_energy_MeV << " MeV\n"
                           << "Charged-from-neutral energy: "
                           << result.charged_from_neutral_energy_MeV << " MeV\n";
             }

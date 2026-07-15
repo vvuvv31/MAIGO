@@ -126,11 +126,12 @@ struct NeutralTransportSummary {
     float local_deposit_MeV{0.0F};
     float queued_charged_energy_MeV{0.0F};
     float charged_overflow_energy_MeV{0.0F};
-    float continuation_energy_MeV{0.0F};
+    float continuation_energy_MeV{0.0F};  // requeued only in "full" mode
     float neutral_overflow_energy_MeV{0.0F};
     float escaped_energy_MeV{0.0F};
+    float residual_energy_MeV{0.0F};  // continuation/nested neutrals not re-queued
 };
 
-static_assert(sizeof(NeutralTransportSummary) == 44);
+static_assert(sizeof(NeutralTransportSummary) == 48);
 
 }  // namespace carbon

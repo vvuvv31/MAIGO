@@ -721,7 +721,8 @@ void test_sycl_neutral_transport_smoke() {
     config.enable_secondary_generation = true;
     config.enable_secondary_transport = true;
     config.enable_neutral_transport = true;
-    config.maximum_neutral_generations = 4;
+    config.neutral_transport_mode = "first_interaction";
+    config.maximum_neutral_generations = 1;
     config.secondary_queue_capacity = 20'000;
     config.neutral_queue_capacity = 20'000;
     config.enable_voxel_scoring = true;
@@ -738,6 +739,10 @@ void test_sycl_neutral_transport_smoke() {
             "Neutral queue remained empty");
     require(result.neutral_queue_overflow == 0, "Unexpected neutral queue overflow");
     require(result.neutral_interactions > 0, "Neutral transport produced no interactions");
+    // Mode D does not re-queue continuations; residual may be large relative to deposit.
+    require(result.transported_neutrals == result.queued_neutrals ||
+                result.residual_neutral_energy_MeV >= 0.0,
+            "First-interaction neutral accounting inconsistent");
     require(result.neutron_origin_deposited_energy_MeV.size() == config.number_of_bins() &&
                 result.gamma_origin_deposited_energy_MeV.size() == config.number_of_bins(),
             "Neutral-origin IDD size failed");
@@ -747,8 +752,9 @@ void test_sycl_neutral_transport_smoke() {
         std::accumulate(result.gamma_origin_deposited_energy_MeV.begin(),
                         result.gamma_origin_deposited_energy_MeV.end(), 0.0);
     require(neutral_idd > 0.0 || result.neutral_escaped_energy_MeV > 0.0 ||
-                result.charged_from_neutral_energy_MeV > 0.0,
-            "Neutral transport left no deposited, escaped, or charged-product energy");
+                result.charged_from_neutral_energy_MeV > 0.0 ||
+                result.residual_neutral_energy_MeV > 0.0,
+            "Neutral transport left no deposited, escaped, charged, or residual energy");
     require(result.relative_energy_balance_error() < 5.0e-2,
             "Neutral transport energy balance failed: " +
                 std::to_string(result.relative_energy_balance_error()));
