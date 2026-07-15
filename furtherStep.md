@@ -301,8 +301,50 @@ NRMSE ≈ 0.007；积分相对差 ≈ −0.8%。相对 on-axis 骨插入（R80�
 - CT 体素面限步在面上产生 `step≈0` → 粒子 `break` 后把剩余动能整笔倒入当前 bin（入口 ~1349 MeV/primary）。
 - 修复：`distance_to_next_ct_face_1d` 跳过零长度面 + 面上 nudge；患者 IDD 恢复物理量级。
 
+**多材料 CT（lung/water/bone 绝对表）— 已接通**
+
+- 配置：`config/beam_200MeVu_ct_patient_multimat.yaml`
+- 规则：`SP/XS = 表_mat(E) × (ρ / ρ_ref)`；ρ_ref：air/lung/water=1，bone=1.85
+- Backend：`+ct-grid-material`
+- GPU 20k 对比（同患者网格，primary-only + MCS）
+
+| 模式 | 入口 MeV/p | peak z | R80 |
+|------|------------|--------|-----|
+| 水当量 | 18.13 | 37.25 | 37.52 |
+| 多材料 | 16.88 | 39.25 | **39.54** |
+
+入口比 ≈ 0.93（骨绝对 SP/水×ρ ≈ 1.72/1.85），射程略拉长，与 7a 真实骨 vs 密度 slab 趋势一致。  
+产物：`validation/results/ct/ct_multimat_vs_we.metrics.json`、`gpu_e150_patient_multimat_idd.csv`
+
+**TOPAS 患者 CT 对波 — 已完成（20k development）**
+
+| 角色 | 路径 |
+|------|------|
+| TOPAS | `validation/topas/carbon_150MeVu_ct_patient*.txt` + `HUtoMaterialSchneider.txt` |
+| 远程 | `validation/scripts/_remote_ct_patient.py` |
+| 对比 | `validation/scripts/compare_ct_patient.py` → `validation/results/ct/compare_patient.metrics.json` |
+
+**几何约定（重要）**
+
+- TOPAS `TsDicomPatient` 把 CT **isocenter 放在组件原点**（Trans=0 → 体中心在世界原点）
+- 本 CT：nz=35×2 mm → 半深 35 mm；入口（首片）z=−35 mm；束流 (0,0,−35.1) 沿 +z
+- GPU：`prepare_ct_grid` 将首片映射为 z=0、xy 居中；对比时用**入口相对深度**
+- 平行世界 IDD 管（无 material）：0.5 mm × 240 bins，覆盖 CT + 出口水
+
+**GPU 多材料 vs TOPAS Schneider（各 20k，150 MeV/u）**
+
+| 量 | GPU multimat | TOPAS | GPU−TOPAS |
+|----|--------------|-------|-----------|
+| R80 (mm) | 39.54 | 43.51 | **−4.0 mm** |
+| peak z (mm) | 39.25 | 43.25 | −4.0 |
+| 入口 (MeV/p /0.5mm) | 16.88 | 14.16 | — |
+| 积分 (MeV/p) | 1506 | 1721 | −12.5%（GPU primary-only） |
+| NRMSE | — | — | **0.115** |
+
+偏差主因：HU→材料（GPU 4 类分段密度 vs Schneider 连续组织表）+ GPU 关闭次级/级联。  
+形状与射程量级一致，可作半定量 CT 对波基线。
+
 **局限 / 后续**
 
-- 患者路径当前为 **水当量**（未启用多材料绝对 SP 表）；多材料表接口已预留
-- 次级/级联在 CT smoke 中关闭；TOPAS CT 对波未做
-- 细 CT（0.5 mm）+ MCS 步数偏多，性能可再优化（DDA / 合并同质素）
+- 若要对齐更紧：GPU 改 Schneider 密度/材料表，或打开次级
+- 细 CT + MCS 步数偏多，性能可再优化（DDA / 合并同质素）

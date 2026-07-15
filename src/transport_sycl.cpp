@@ -568,8 +568,13 @@ TransportResult transport_sycl(const TransportConfig& config,
     float ct_spacing_x = 1.0F;
     float ct_spacing_y = 1.0F;
     float ct_spacing_z = 1.0F;
+    // Multi-material CT: any per-class SP path enables absolute tables × ρ/ρ_ref.
     const auto use_ct_material_tables =
-        enable_ct_grid && !config.ct_water_stopping_power_file.empty();
+        enable_ct_grid &&
+        (!config.ct_air_stopping_power_file.empty() ||
+         !config.ct_lung_stopping_power_file.empty() ||
+         !config.ct_water_stopping_power_file.empty() ||
+         !config.ct_bone_stopping_power_file.empty());
     if (enable_ct_grid) {
         ct_grid_host = CtGrid::from_binary(config.ct_grid_file);
         ct_nx = ct_grid_host.nx;
@@ -598,10 +603,13 @@ TransportResult transport_sycl(const TransportConfig& config,
                     sizeof(std::uint8_t) * ct_count)
             .wait_and_throw();
 
-        // 4 material tables: air, lung, water, bone. Default fill from water table.
+        // 4 material tables: air, lung, water, bone.
+        // Absolute MeV/mm (or macro 1/mm) at reference density, scaled by ρ/ρ_ref.
+        // Defaults: water table with ρ_ref=1 for all (water-equivalent).
         std::vector<float> ct_sp_host(4 * table_size);
         std::vector<float> ct_xs_host(4 * cross_section_table_size);
-        std::vector<float> ct_ref_host = {0.001205F, 0.26F, 1.0F, 1.85F};
+        // Air/lung G4 extracts used here look ~unit-density; bone is ~1.85 g/cm3 absolute.
+        std::vector<float> ct_ref_host = {1.0F, 1.0F, 1.0F, 1.85F};
         for (std::uint32_t mat = 0; mat < 4; ++mat) {
             for (std::size_t i = 0; i < table_size; ++i) {
                 ct_sp_host[mat * table_size + i] =
@@ -639,6 +647,11 @@ TransportResult transport_sycl(const TransportConfig& config,
                     ? config.nuclear_cross_section_file
                     : config.ct_bone_cross_section_file,
             };
+            // Bone absolute table is at G4_BONE_COMPACT_ICRU density; lung extract is
+            // near water magnitude → keep ρ_ref=1 for lung/air/water.
+            if (!config.ct_bone_stopping_power_file.empty()) {
+                ct_ref_host[3] = 1.85F;
+            }
             for (std::uint32_t mat = 0; mat < 4; ++mat) {
                 const auto sp_table = StoppingPowerTable::from_csv(sp_paths[mat]);
                 const auto xs_table = CrossSectionTable::from_csv(xs_paths[mat]);
@@ -1007,13 +1020,31 @@ TransportResult transport_sycl(const TransportConfig& config,
                         : 0U;
                 float stopping_power_MeV_per_mm = 0.0F;
                 if (enable_ct_grid) {
-                    // Always density-scale the water SP table for CT (water-equivalent).
-                    // Multi-material tables are optional refinement loaded into ct_sp_device.
-                    const auto water_sp =
-                        table_device[index] +
-                        fraction * (table_device[index + 1] - table_device[index]);
-                    stopping_power_MeV_per_mm =
-                        water_sp * sycl::fmax(local_density_g_per_cm3, 1.0e-6F);
+                    if (use_ct_material_tables && in_ct && ct_sp_device != nullptr &&
+                        ct_ref_density_device != nullptr) {
+                        // Absolute material SP × (local ρ / ρ_ref).
+                        const auto mat =
+                            static_cast<std::uint32_t>(sycl::min(
+                                static_cast<int>(ct_material), 3));
+                        const auto base = mat * table_size;
+                        const auto sp_abs =
+                            ct_sp_device[base + static_cast<std::size_t>(index)] +
+                            fraction *
+                                (ct_sp_device[base + static_cast<std::size_t>(index) + 1] -
+                                 ct_sp_device[base + static_cast<std::size_t>(index)]);
+                        const auto ref_rho =
+                            sycl::fmax(ct_ref_density_device[mat], 1.0e-6F);
+                        stopping_power_MeV_per_mm =
+                            sp_abs *
+                            (sycl::fmax(local_density_g_per_cm3, 1.0e-6F) / ref_rho);
+                    } else {
+                        // Water-equivalent: water SP × local density.
+                        const auto water_sp =
+                            table_device[index] +
+                            fraction * (table_device[index + 1] - table_device[index]);
+                        stopping_power_MeV_per_mm =
+                            water_sp * sycl::fmax(local_density_g_per_cm3, 1.0e-6F);
+                    }
                 } else if (in_insert && use_insert_material_tables) {
                     stopping_power_MeV_per_mm =
                         insert_sp_device[static_cast<std::size_t>(index)] +
@@ -1265,13 +1296,34 @@ TransportResult transport_sycl(const TransportConfig& config,
                         0.0f, 1.0f);
                     float macroscopic_cross_section_per_mm = 0.0F;
                     if (enable_ct_grid) {
-                        const auto water_xs =
-                            cross_section_device[cross_section_index] +
-                            cross_section_fraction *
-                                (cross_section_device[cross_section_index + 1] -
-                                 cross_section_device[cross_section_index]);
-                        macroscopic_cross_section_per_mm =
-                            water_xs * sycl::fmax(local_density_g_per_cm3, 1.0e-6F);
+                        if (use_ct_material_tables && in_ct && ct_xs_device != nullptr &&
+                            ct_ref_density_device != nullptr) {
+                            const auto mat = static_cast<std::uint32_t>(
+                                sycl::min(static_cast<int>(ct_material), 3));
+                            const auto base = mat * cross_section_table_size;
+                            const auto xs_abs =
+                                ct_xs_device[base +
+                                             static_cast<std::size_t>(cross_section_index)] +
+                                cross_section_fraction *
+                                    (ct_xs_device[base + static_cast<std::size_t>(
+                                                              cross_section_index) +
+                                                  1] -
+                                     ct_xs_device[base + static_cast<std::size_t>(
+                                                              cross_section_index)]);
+                            const auto ref_rho =
+                                sycl::fmax(ct_ref_density_device[mat], 1.0e-6F);
+                            macroscopic_cross_section_per_mm =
+                                xs_abs *
+                                (sycl::fmax(local_density_g_per_cm3, 1.0e-6F) / ref_rho);
+                        } else {
+                            const auto water_xs =
+                                cross_section_device[cross_section_index] +
+                                cross_section_fraction *
+                                    (cross_section_device[cross_section_index + 1] -
+                                     cross_section_device[cross_section_index]);
+                            macroscopic_cross_section_per_mm =
+                                water_xs * sycl::fmax(local_density_g_per_cm3, 1.0e-6F);
+                        }
                     } else if (in_insert && use_insert_material_tables) {
                         macroscopic_cross_section_per_mm =
                             insert_xs_device[static_cast<std::size_t>(cross_section_index)] +
@@ -3194,7 +3246,8 @@ TransportResult transport_sycl(const TransportConfig& config,
                                                      : "+hetero-insert";
     }
     if (enable_ct_grid) {
-        result.backend += "+ct-grid";
+        result.backend +=
+            use_ct_material_tables ? "+ct-grid-material" : "+ct-grid";
     }
     if (enable_voxel_scoring) {
         result.backend += "+voxel-scoring";

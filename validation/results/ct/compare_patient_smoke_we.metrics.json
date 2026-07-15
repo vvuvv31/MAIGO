@@ -1,0 +1,17 @@
+{
+  "gpu_file": "out\\ct\\e150_patient_idd.csv",
+  "topas_file": "validation\\topas\\output\\ct_patient_smoke_energy_deposit.csv",
+  "n_histories": 200,
+  "gpu_R80_mm": 37.524927802434846,
+  "gpu_peak_z_mm": 37.25,
+  "gpu_entrance_0p5mm": 18.1265034021,
+  "gpu_integral_MeV": 1494.060830208133,
+  "topas_R80_mm": 43.51748095617192,
+  "topas_peak_z_mm": 43.25,
+  "topas_entrance": 14.540482177734376,
+  "topas_integral_MeV": 1724.7923187351228,
+  "delta_R80_mm": -5.992553153737077,
+  "integral_rel_diff": -0.13377349030415256,
+  "nrmse": 0.13057369999638732,
+  "notes": "Parallel-world IDD tube vs GPU patient CT. HU conversion differs (GPU 4-class density map vs TOPAS Schneider)."
+}
