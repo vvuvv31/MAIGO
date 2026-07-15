@@ -1,20 +1,18 @@
 # 当前下一步
 
-TOPAS 祖先归属 3D dose scorer、全带电离子级联 scorer 和两个 10 万粒子正式基准均已完成。新 TOPAS 作业只在 `v@192.168.31.5:~/gpu` 运行，最多使用 56 线程；Windows 原生 Arc B580 负责 SYCL kernel。
+主 C-12 和全部输运带电碎片的三维多重库仑散射已经完成。实现使用水 `X0=36.08 g/cm²` 的 Lynch–Dahl/Highland 投影 RMS 角宽，每步采样两个独立高斯横向斜率并旋转到当前母粒子局部基；没有用于贴合 TOPAS 的散射 scale。
 
-正式结果的祖先类别闭合最大误差为 `6.395e-14 MeV/primary/bin`，独立 TOPAS total 交叉检查为 `7.882e-7 MeV/primary/bin`，`unresolved=0`，未使用全局 scale。TOPAS 中性来源占全深度总剂量 `0.711%`，在 90 mm 后尾部占 `5.779%`。
+Arc B580 100k 正式运行完成 518,207,628 个总步和 382,717,159 个碎片步，队列溢出为 0，能量平衡误差 `2.10e-9`，voxel→IDD 最大闭合差 `1.712e-10 MeV/primary/bin`。
 
-同位素/反应代数 QA 已完成。它证明旧 primary reaction package 来自 TOPAS 4.2.p3/Geant4 11.3.2，而 ancestor/cascade reference 来自 TOPAS 4.1.p1/Geant4 11.1.3；两套末态混用是 He、B、Li 剩余偏差的主因。已从 cascade reference 提取 37,661 个 primary C-12 联合末态并编译为统一的 201-bin package。
+对现有 TOPAS 100k 祖先归属三维基准，严格比较 charged-origin 八类之和、绝对 `MeV/primary/voxel`、不做全局 scale。GPU/TOPAS 全深度积分差 `-0.2057%`，90 mm 后尾部差 `+3.1301%`；高剂量 voxel 平均绝对差 `3.236%`、Pearson `0.97365`，20/50/86.75 mm 横向 σ 差均小于约 `0.06 mm`。
 
-统一参考后的 B580 结果：charged-origin total 全深度/90 mm 后为 `-0.11%/+2.93%`；He `-0.20%/+2.58%`、proton `+1.41%/+2.84%`、B `+3.88%/+4.06%`、Li `+3.83%/+3.72%`。所有带电类别尾部最大偏差为 Be `+6.67%`，逐 bin 闭合为 `9.80e-11 MeV/primary/bin`，未使用全局 scale。
+下一步明确为：
 
-GPU 3D scorer 的第一阶段框架已完成：CPU/SYCL 支持可选 `60 x 60 x 800` double-atomic total voxel tally、稀疏 CSV 输出和逐 z 的 x/y→IDD 闭合检查。Arc B580 的 100-history 全级联 smoke 产生 800 个 IDD bin 和 800 个中心轴非零体素，最大闭合误差为 `0 MeV/primary/bin`；完整 oneAPI 测试通过。当前粒子输运仍是一维，因此这些非零体素全部位于 `(ix,iy)=(30,30)`，不能把它当成已完成横向剂量验证。
+1. GPU voxel scorer 增加八个 charged-origin 分类，验证逐 voxel 相加等于 total，并与现有 TOPAS 分类切片比较；
+2. 随后实现 neutron/gamma 及其后代的来源归属和三维输运；
+3. 再做 `maximum_step_mm`、横向 voxel 尺寸、100 万粒子和 100--400 MeV/u 收敛验证。
 
-三维方向数据边界已完成：reaction/cascade binary v2 保存相对入射母粒子的局部 `x/y/z` 单位方向，C++ 加载器仍兼容 v1，并以 NaN 明确标记 v1 缺失的横向分量。已从现有 TOPAS 100k/smoke gzip 表生成独立 `_3d` 数据；Arc B580 100-history 全级联 smoke 能量平衡误差为 `3.43e-8`，voxel→IDD 最大闭合误差为 `0 MeV/primary/bin`。旧 v1 文件和正式一维配置保持不变。
-
-无散射三维运行时已完成：`SecondaryParticle3D` 保存 `x/y/z + dx/dy/dz`，v2 局部方向会旋转到当前母粒子方向，步长受 x/y/z 最近 voxel 面共同限制，并用 `nextafter` 跨过浮点边界。Arc B580 100-history 全级联 smoke 的能量平衡误差为 `2.76e-8`，次级步数 297,274；产生 15,448 个非零 voxel，x/y 分别覆盖 38/51 个索引，voxel→IDD 最大 CSV 闭合差为 `9.27e-11 MeV/primary/bin`。
-
-下一步明确为：加入带电粒子的多重库仑散射，使主 C-12 与碎片都产生物理横向展宽；随后实现 3D 祖先类别闭合，并与现有 TOPAS `60 x 60 x 800` 剂量逐 voxel/切片比较。当前三维分布只证明几何和方向链路正确，尚不能作为横向物理一致性结论。新的 TOPAS 作业仍只允许在 `v@192.168.31.5:~/gpu` 上运行，最多 56 线程，禁止使用 WSL 运行 TOPAS。
+不要调 MCS scale 来追逐当前差异。新的 TOPAS 作业仍只允许在 `v@192.168.31.5:~/gpu` 上运行，最多 56 线程，禁止使用 WSL 运行 TOPAS。
 
 ---
 

@@ -94,6 +94,7 @@ Windows 原生
 - TOPAS `CarbonCascadeNtuple` 全带电离子后续反应记录、MT-safe interaction sequence、10 万粒子正式级联包；
 - Arc B580 最多两代的 breadth-first 带电碎片级联输运；带电核产物按自身 Z/A 重新分类，电子沉积仍归当前带电母粒子。
 - CPU/SYCL 可选 `60 x 60 x 800` total voxel tally、稀疏剂量 CSV 和逐 z 的 voxel→IDD 闭合检查；B580 100-history smoke 已通过。
+- 主 C-12 与全部输运带电碎片的三维 voxel 边界步进、Highland 多重库仑散射和 100k GPU/TOPAS charged-origin voxel/切片比较。
 
 关键验证结果：
 
@@ -111,7 +112,7 @@ Windows 原生
 - 同位素/代际 QA 证明旧 primary package 来自 TOPAS 4.2.p3/Geant4 11.3.2，而 ancestor/cascade reference 来自 TOPAS 4.1.p1/Geant4 11.1.3；混用末态数据是剩余粒种偏差的主因；
 - 改用 cascade reference 的 37,661 个 primary C-12 联合末态后，带电类别全深度均在约 `±4%` 内，90 mm 后最大为 Be `+6.67%`；He 为 `-0.20%/+2.58%`，proton 为 `+1.41%/+2.84%`。
 
-GPU 3D voxel scorer 的内存、原子累积、CSV 输出和 IDD 闭合框架已经完成；下一开发目标是真实 x/y/z 与三维方向输运、多重库仑散射和 3D 分类别闭合。当前 charged-origin total 已对齐到全深度 `-0.11%`、尾部 `+2.93%`；raw total 尾部 `-3.02%` 主要反映 TOPAS 尾部 `5.779%` 的中性来源尚未空间输运。禁止用全局 scale；后续在 3D charged scorer 稳定后再加入 neutron/gamma 来源输运。
+GPU 3D charged scorer 已完成真实 x/y/z、局部方向继承、主 C-12/带电碎片多重散射和正式 voxel/切片比较。100k 绝对结果无全局 scale：全深度 `-0.206%`、90 mm 后 `+3.13%`，高剂量 voxel 平均绝对差 `3.24%`、Pearson `0.974`，voxel→IDD 闭合 `1.71e-10 MeV/primary/bin`。下一开发目标是分祖先类别 3D voxel 闭合与 neutron/gamma 来源空间输运。
 
 ---
 
@@ -1750,9 +1751,17 @@ Windows Arc B580 smoke：
 build\oneapi-windows-release\carbon_mc.exe --config config\beam_200MeVu_voxel_smoke.yaml
 ```
 
-YAML 中的 `device: gpu` 已由配置加载器直接解析，不再必须额外传 `--device gpu`。100-history 全级联运行选中 `Intel(R) Arc(TM) B580 Graphics`，能量平衡误差为 `4.12e-8`，输出 800 个 IDD bin 和 800 个非零体素，逐 z 的 x/y 求和与 IDD 最大差为 `0 MeV/primary/bin`。
+YAML 中的 `device: gpu` 已由配置加载器直接解析，不再必须额外传 `--device gpu`。最初的 100-history 中心轴 smoke 用于验证 scorer 内存与闭合；随后 v2 方向和三维边界版本产生 15,448 个非零 voxel，逐 z 的 x/y 求和与 IDD 最大差为 `9.27e-11 MeV/primary/bin`。
 
-这一里程碑只验证 3D scorer 的内存布局、所有沉积路径和闭合性。当前粒子状态仍只有深度和 `direction_z`，所以剂量全部落在中心 `(ix,iy)=(30,30)`；它不是物理横向剂量。下一提交必须先扩展 x/y/z 和三维方向、实现体素边界步进与多重库仑散射，再进行 TOPAS 逐 voxel/切片比较。
+MCS 配置使用：
+
+```yaml
+enable_multiple_scattering: true
+```
+
+主 C-12 与碎片都维护 `x/y/z + dx/dy/dz`。每步能损后，以步中能量计算水中的投影 RMS 角宽，采样两个独立高斯横向斜率，再通过当前方向的局部正交基旋转并归一化。核反应与后续级联在散射后的母粒子局部坐标系中产生。正式运行使用 `beam_200MeVu_mcs_voxel_100k.yaml`；比较脚本为 `validation/scripts/compare_3d_dose.py`。
+
+水的辐射长度固定为 `36.08 g/cm²`，没有引入用于贴合 TOPAS 的散射 scale。当前实现按 condensed-history step 使用 Lynch–Dahl/Highland 高斯中心近似，并在步末施加方向 kick，尚未采样步内相关横向位移；PDG 也指出不能任意把各层 Highland 宽度简单平方相加。因此当前 5 mm 横向 voxel 的一致性是阶段性验证，必须继续做 `maximum_step_mm` 收敛、亚毫米横向网格和 100--400 MeV/u 束宽验证。
 
 ---
 
@@ -2464,7 +2473,8 @@ energy-loss straggling 模块。
 - [x] GPU/TOPAS 祖先归属 IDD 无 scale 比较。
 - [x] GPU `60 x 60 x 800` total voxel tally 与 100-history B580 smoke；
 - [x] GPU 带电次级真实三维方向与 x/y/z voxel 边界输运；
-- [ ] GPU 多重散射和 3D category closure。
+- [x] GPU 主 C-12/带电碎片多重散射与 charged-origin 3D voxel/切片比较；
+- [ ] GPU 3D category closure 与 neutron/gamma 来源输运。
 
 ## 79. 性能实验
 
@@ -2501,7 +2511,55 @@ smoke 能量平衡误差为 `3.43e-8`，800 个非零中心轴 voxel 对 800-bin
 当前母粒子方向，物理步长受 x/y/z 最近 voxel 面共同限制；边界上的 float 舍入使用
 `nextafter` 精确跨面，不引入无计分 nudge。最终 Arc B580 100-history smoke 的能量平衡
 误差为 `2.76e-8`，次级步数 297,274；15,448 个非零 voxel 在 x/y 上覆盖 38/51 个索引，
-逐 z 汇总对 IDD 的最大 CSV 闭合差为 `9.27e-11 MeV/primary/bin`。多重散射尚未启用。
+逐 z 汇总对 IDD 的最大 CSV 闭合差为 `9.27e-11 MeV/primary/bin`。这是正式 MCS 比较前的无散射基线。
+
+## 81. 带电粒子 MCS 与 100k 三维比较（2026-07-15）
+
+实现采用投影角宽：
+
+\[
+\theta_0 =
+\frac{13.6\ \mathrm{MeV}}{\beta pc} z
+\sqrt{\frac{x}{X_0}}
+\left[
+1 + 0.038\ln\left(\frac{xz^2}{X_0\beta^2}\right)
+\right]
+\]
+
+其中离子总动量由每核子动能和质量数计算，`z` 为带电粒子核电荷，水的
+`X0=36.08 g/cm²`。两个独立 Box–Muller 高斯数分别作为局部 x/y 投影斜率；
+主 C-12 使用 RNG dimension 4/5，级联队列粒子使用 10/11，避免与 straggling、
+核反应和 package 选择的随机维度重叠。零长度、无电荷或无效状态返回零角宽。
+
+100-history Arc B580 smoke：
+
+- backend：`sycl-gpu+straggling+multiple-scattering+voxel-scoring+attenuation+secondary-generation+secondary-transport+fragment-cascade`；
+- 总步数 `457,456`，其中碎片步数 `311,536`；
+- 能量平衡误差 `1.08e-7`，secondary/cascade queue overflow 均为 0；
+- 11,610 个非零 voxel，逐 z 的 voxel→IDD 最大差 `7.20e-11 MeV/primary/bin`。
+
+正式 100000-history B580 运行：
+
+- 总步数 `518,207,628`，碎片步数 `382,717,159`；
+- 330,145 个输运带电次级，34,313 次后续级联反应，队列溢出为 0；
+- transport elapsed（不含 CSV 写出）`2.875 s`，能量平衡误差 `2.10e-9`；
+- voxel→IDD 最大闭合差 `1.712e-10 MeV/primary/bin`。
+
+比较严格使用 GPU transported charged total 对 TOPAS 祖先类别
+`primary_c12 + secondary_carbon + B + Be + Li + He + proton + other_charged`，
+单位为绝对 `MeV/primary/voxel`，未使用全局 scale。结果：
+
+- 全深度积分差 `-0.2057%`；
+- 90 mm 后尾部积分差 `+3.1301%`；
+- voxel normalized L1 `4.893%`；
+- TOPAS 最大 voxel 归一化 RMSE `0.0453%`；
+- TOPAS ≥1% 最大剂量的 815 个高剂量 voxel：平均绝对差 `3.236%`，Pearson `0.97365`；
+- 20/50/86.75 mm 处 GPU/TOPAS 横向 σ 差均小于约 `0.06 mm`。
+
+结果文件为 `windows_b580_mcs_3d_100k_vs_topas.metrics.json/.png`。原始 69 MB
+稀疏 voxel CSV 可由正式 YAML 重建，不进入 Git；IDD、分粒种曲线、指标和比较图保留。
+本阶段尚未生成 GPU 分祖先类别 voxel 数组，也未输运 neutron/gamma 来源剂量，因此
+下一项不是调 MCS scale，而是 3D category closure 和中性来源空间输运。
 
 ---
 
@@ -2527,15 +2585,14 @@ smoke 能量平衡误差为 `3.43e-8`，800 个非零中心轴 voxel 对 800-bin
 15. 整理论文实验
 ```
 
-本项目已经完成第 10 步的两代带电碎片后续核反应级联、TOPAS 祖先归属 3D scorer、两个 100000-history 正式基准、GPU/TOPAS 对齐比较，以及 GPU total voxel tally 的第一阶段闭合 smoke。紧接着应执行：
+本项目已经完成第 10 步的两代带电碎片后续核反应级联、TOPAS 祖先归属 3D scorer、三维方向/边界、多重散射和 charged-origin 100k voxel/切片比较。紧接着应执行：
 
 ```text
-1. 将粒子队列和反应包从 depth/direction_z 扩展为 x/y/z 坐标与三维方向
-2. 实现沿三维轨迹的体素边界步进，保证 voxel→IDD 和能量闭合
-3. 加入带电离子的多重库仑散射与横向展宽，并实现 3D category closure
-4. 将 GPU 3D 剂量与 TOPAS `60 x 60 x 800` 祖先归属体素逐 voxel/切片比较
-5. 在带电 3D scorer 稳定后加入 neutron/gamma 来源输运
-6. 做原子队列可复现性、1000000-history 统计收敛和 100--400 MeV/u 多能量验证
+1. 为 GPU voxel scorer 增加与 IDD 相同的八个 charged-origin 分类并验证逐 voxel/category closure
+2. 加入 neutron/gamma 及其后代的来源归属和三维空间输运
+3. 做 maximum_step_mm 与横向 voxel 尺寸收敛，确认逐步 Highland 近似的稳定区间
+4. 做原子队列可复现性、1000000-history 统计收敛和 100--400 MeV/u 多能量验证
+5. 在上述物理闭合后再进入异质体、CT 或性能优化
 ```
 
 第一篇论文的合理边界是：

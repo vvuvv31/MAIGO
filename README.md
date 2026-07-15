@@ -1,6 +1,6 @@
 # carbon-oneapi-mc
 
-面向 Intel oneAPI/SYCL 的碳离子水中 condensed-history 蒙特卡洛剂量引擎。带电反应产物已支持三维方向、x/y/z voxel 边界和 `60 x 60 x 800` GPU total dose；主束多重散射尚未实现。
+面向 Intel oneAPI/SYCL 的碳离子水中 condensed-history 蒙特卡洛剂量引擎。主 C-12 与带电碎片已支持三维方向、x/y/z voxel 边界、Highland 多重库仑散射和 `60 x 60 x 800` GPU total dose。
 
 > 研究用途：当前阻止本领模型和输运结果尚未完成 TOPAS 验证，不能用于临床或治疗计划。
 
@@ -16,6 +16,7 @@
 - 从 TOPAS/Geant4 直接导出的能量相关 C-12 水中非弹性截面；
 - TOPAS 事件级反应包的 GPU 联合采样和固定容量带电次级队列；
 - 可选 `60 x 60 x 800` double-atomic total voxel tally、稀疏 CSV 和 voxel→IDD 闭合检查；
+- 主 C-12 和所有输运带电碎片的逐步 Highland 投影角采样与局部三维方向更新；
 - 无第三方 C++ 测试依赖的基础测试。
 
 ## 已验证环境与当前结果
@@ -54,7 +55,7 @@ build\oneapi-windows-release\carbon_mc.exe --config config\beam_200MeVu_fragment
 
 相对完整 TOPAS，总 IDD 的积分差为 `+0.48%`、峰值差 `-0.062%`、R80 差 `+0.104 mm`、FWHM 差 `+2.36%`、NRMSE `1.08%`、2%/2 mm gamma `97.71%`。峰后尾积分差由未输运碎片时约 `-92%` 改善为 `+10.055%`，非常接近但尚未通过 `<10%` 验收线；禁止为跨线而手工调参。
 
-TOPAS 祖先归属 scorer、带电碎片两代级联和统一版本反应包现已完成。统一参考后，B580 charged-origin total 全深度/90 mm 后差为 `-0.11%/+2.93%`，带电类别尾部最大偏差为 Be `+6.67%`。带电次级的真实三维方向与 voxel 边界步进已通过 B580 smoke；下一任务是带电粒子的多重库仑散射与 3D category closure。
+TOPAS 祖先归属 scorer、带电碎片两代级联、三维方向和多重散射现已完成。100k B580/TOPAS charged-origin 绝对三维比较（无全局 scale）得到：全深度/90 mm 后积分差 `-0.206%/+3.13%`，高剂量 voxel 平均绝对差 `3.24%`、Pearson `0.974`；20/50/86.75 mm 横向 σ 与 TOPAS 的差均小于约 `0.06 mm`。下一任务是 3D 祖先类别 voxel 闭合和中性来源输运。
 
 ```bat
 set ONEAPI_DEVICE_SELECTOR=level_zero:0
@@ -125,13 +126,27 @@ depth_mm,energy_deposition_MeV_per_primary,dose_Gy_per_primary,relative_dose
 ix,iy,iz,x_mm,y_mm,z_mm,energy_deposition_MeV_per_primary,dose_Gy_per_primary
 ```
 
-Arc B580 的 100-history smoke 可直接运行：
+Arc B580 的 MCS 100-history smoke 和 100k 正式三维基准可直接运行：
 
 ```bat
-build\oneapi-windows-release\carbon_mc.exe --config config\beam_200MeVu_voxel_smoke.yaml
+build\oneapi-windows-release\carbon_mc.exe --config config\beam_200MeVu_mcs_voxel_smoke.yaml
+build\oneapi-windows-release\carbon_mc.exe --config config\beam_200MeVu_mcs_voxel_100k.yaml
 ```
 
-scorer 会在写文件前检查每个 z 层的 x/y 能量和是否还原 IDD。v2 反应产物已沿三维方向跨越真实 voxel；主 C-12 仍在中心轴，必须加入多重散射后才可把横向宽度与 TOPAS 作物理比较。
+正式比较命令：
+
+```bat
+python validation\scripts\compare_3d_dose.py ^
+  --gpu-voxel validation\results\windows_b580_mcs_3d_100k_voxels.csv ^
+  --gpu-idd validation\results\windows_b580_mcs_3d_100k_idd.csv ^
+  --topas-npz validation\results\topas_200MeVu_ancestor_dose_3d_development.npz ^
+  --output-metrics validation\results\windows_b580_mcs_3d_100k_vs_topas.metrics.json ^
+  --output-plot validation\results\windows_b580_mcs_3d_100k_vs_topas.png
+```
+
+比较口径是 GPU transported charged total 对 TOPAS 前八个 charged-origin 祖先类别之和，单位均为绝对 `MeV/primary/voxel`，禁止全局 scale。100k 运行 voxel→IDD 最大闭合误差为 `1.71e-10 MeV/primary/bin`。
+
+`enable_multiple_scattering: true` 使用水的辐射长度 `36.08 g/cm²` 和 Lynch–Dahl/Highland 投影 RMS 角宽；每步采样两个独立高斯横向斜率并旋转到当前母粒子局部基。它没有拟合散射 scale；当前在步末施加方向 kick，尚未采样步内相关横向位移，因此仍需用步长收敛、亚毫米网格和多能量束宽验证其适用性。
 
 三维开发数据使用 binary v2：每个 reaction/cascade 产物保存相对入射母粒子的局部
 `direction_x/y/z`。加载器继续接受 v1，并把缺失的横向方向置为 NaN，避免误当成
