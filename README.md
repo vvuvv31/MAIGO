@@ -1,4 +1,4 @@
-# carbon-oneapi-mc
+# Monte carlo Accelerated Ion transport on GPU for Oncology dose calculation (MAIGO)
 
 面向 Intel oneAPI/SYCL 的碳离子水中 condensed-history 蒙特卡洛剂量引擎。主 C-12 与带电碎片已支持三维方向、x/y/z voxel 边界、Highland 多重库仑散射和 `60 x 60 x 800` GPU total dose。
 
