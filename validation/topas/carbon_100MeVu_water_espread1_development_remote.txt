@@ -1,0 +1,8 @@
+includeFile = carbon_100MeVu_water_espread1.txt
+
+# Match GPU multi-energy 100k; remote host threads.
+i:Ts/NumberOfThreads = 56
+i:So/CarbonBeam/NumberOfHistoriesInRun = 100000
+s:Sc/DepthEnergy/OutputFile = "output/e100_espread1_development_energy_deposit"
+s:Sc/DepthDose/OutputFile = "output/e100_espread1_development_dose"
+s:Sc/PrimaryC12Energy/OutputFile = "output/e100_espread1_development_primary_c12_energy_deposit"

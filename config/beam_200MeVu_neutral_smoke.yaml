@@ -22,6 +22,7 @@ enable_neutral_transport: true
 neutral_transport_mode: first_interaction
 maximum_neutral_generations: 1
 secondary_queue_capacity: 20000
+max_device_memory_fraction: 0.50
 neutral_queue_capacity: 20000
 random_seed: 20260715
 stopping_power_file: data/stopping_power_water.csv

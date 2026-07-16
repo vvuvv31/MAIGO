@@ -1,0 +1,217 @@
+{
+  "format": "charged-fragment cascade package",
+  "version": 2,
+  "direction_coordinates": "projectile-local orthonormal frame",
+  "direction_components": [
+    "local_x",
+    "local_y",
+    "along_projectile"
+  ],
+  "source_metadata": "validation/results/topas_400MeVu_cascade_100k.metadata.json",
+  "source_metadata_sha256": "b43a053d2f8c55ad1a78ea541eb255ff47b47538485a0e87c9d49d52e4f4cf83",
+  "records": {
+    "projectiles": 31,
+    "cross_section_samples": 26854,
+    "interactions": 206939,
+    "products": 1557668
+  },
+  "species": {
+    "Z1A1": {
+      "cross_section_samples": 2820,
+      "interactions": 50627,
+      "minimum_energy_MeV_per_u": 3.67565,
+      "maximum_energy_MeV_per_u": 899.695
+    },
+    "Z1A2": {
+      "cross_section_samples": 2277,
+      "interactions": 13885,
+      "minimum_energy_MeV_per_u": 1.01099,
+      "maximum_energy_MeV_per_u": 664.495
+    },
+    "Z1A3": {
+      "cross_section_samples": 1962,
+      "interactions": 4963,
+      "minimum_energy_MeV_per_u": 0.628366666667,
+      "maximum_energy_MeV_per_u": 568.563333333
+    },
+    "Z2A3": {
+      "cross_section_samples": 1962,
+      "interactions": 5689,
+      "minimum_energy_MeV_per_u": 2.34904333333,
+      "maximum_energy_MeV_per_u": 538.646666667
+    },
+    "Z2A4": {
+      "cross_section_samples": 1983,
+      "interactions": 40124,
+      "minimum_energy_MeV_per_u": 0.16114625,
+      "maximum_energy_MeV_per_u": 514.1725
+    },
+    "Z2A6": {
+      "cross_section_samples": 321,
+      "interactions": 88,
+      "minimum_energy_MeV_per_u": 3.22096666667,
+      "maximum_energy_MeV_per_u": 398.423333333
+    },
+    "Z2A8": {
+      "cross_section_samples": 20,
+      "interactions": 2,
+      "minimum_energy_MeV_per_u": 223.7725,
+      "maximum_energy_MeV_per_u": 294.02625
+    },
+    "Z3A6": {
+      "cross_section_samples": 1641,
+      "interactions": 2519,
+      "minimum_energy_MeV_per_u": 1.53230333333,
+      "maximum_energy_MeV_per_u": 417.268333333
+    },
+    "Z3A7": {
+      "cross_section_samples": 1380,
+      "interactions": 1367,
+      "minimum_energy_MeV_per_u": 1.7439,
+      "maximum_energy_MeV_per_u": 411.88
+    },
+    "Z3A8": {
+      "cross_section_samples": 321,
+      "interactions": 109,
+      "minimum_energy_MeV_per_u": 15.73575,
+      "maximum_energy_MeV_per_u": 388.08875
+    },
+    "Z3A9": {
+      "cross_section_samples": 89,
+      "interactions": 24,
+      "minimum_energy_MeV_per_u": 78.4804444444,
+      "maximum_energy_MeV_per_u": 356.046666667
+    },
+    "Z4A6": {
+      "cross_section_samples": 419,
+      "interactions": 101,
+      "minimum_energy_MeV_per_u": 6.03458333333,
+      "maximum_energy_MeV_per_u": 373.32
+    },
+    "Z4A7": {
+      "cross_section_samples": 1451,
+      "interactions": 1188,
+      "minimum_energy_MeV_per_u": 5.45237142857,
+      "maximum_energy_MeV_per_u": 402.038571429
+    },
+    "Z4A9": {
+      "cross_section_samples": 1012,
+      "interactions": 593,
+      "minimum_energy_MeV_per_u": 1.5193,
+      "maximum_energy_MeV_per_u": 390.19
+    },
+    "Z4A10": {
+      "cross_section_samples": 830,
+      "interactions": 451,
+      "minimum_energy_MeV_per_u": 6.02196,
+      "maximum_energy_MeV_per_u": 387.544
+    },
+    "Z4A11": {
+      "cross_section_samples": 20,
+      "interactions": 1,
+      "minimum_energy_MeV_per_u": 225.79,
+      "maximum_energy_MeV_per_u": 225.79
+    },
+    "Z5A8": {
+      "cross_section_samples": 238,
+      "interactions": 55,
+      "minimum_energy_MeV_per_u": 17.77625,
+      "maximum_energy_MeV_per_u": 397.60875
+    },
+    "Z5A10": {
+      "cross_section_samples": 1604,
+      "interactions": 3179,
+      "minimum_energy_MeV_per_u": 3.18324,
+      "maximum_energy_MeV_per_u": 403.714
+    },
+    "Z5A11": {
+      "cross_section_samples": 1587,
+      "interactions": 3893,
+      "minimum_energy_MeV_per_u": 2.04025454545,
+      "maximum_energy_MeV_per_u": 411.141818182
+    },
+    "Z5A12": {
+      "cross_section_samples": 58,
+      "interactions": 5,
+      "minimum_energy_MeV_per_u": 0.739214166667,
+      "maximum_energy_MeV_per_u": 268.148333333
+    },
+    "Z6A9": {
+      "cross_section_samples": 98,
+      "interactions": 11,
+      "minimum_energy_MeV_per_u": 62.9616666667,
+      "maximum_energy_MeV_per_u": 259.773333333
+    },
+    "Z6A10": {
+      "cross_section_samples": 1031,
+      "interactions": 470,
+      "minimum_energy_MeV_per_u": 0.767358,
+      "maximum_energy_MeV_per_u": 393.441
+    },
+    "Z6A11": {
+      "cross_section_samples": 1606,
+      "interactions": 3419,
+      "minimum_energy_MeV_per_u": 4.10303636364,
+      "maximum_energy_MeV_per_u": 406.46
+    },
+    "Z6A12": {
+      "cross_section_samples": 1601,
+      "interactions": 74118,
+      "minimum_energy_MeV_per_u": 0.0174526666667,
+      "maximum_energy_MeV_per_u": 400.0
+    },
+    "Z6A13": {
+      "cross_section_samples": 61,
+      "interactions": 6,
+      "minimum_energy_MeV_per_u": 0.0155808461538,
+      "maximum_energy_MeV_per_u": 167.79
+    },
+    "Z7A12": {
+      "cross_section_samples": 180,
+      "interactions": 32,
+      "minimum_energy_MeV_per_u": 38.7474166667,
+      "maximum_energy_MeV_per_u": 332.826666667
+    },
+    "Z7A13": {
+      "cross_section_samples": 57,
+      "interactions": 3,
+      "minimum_energy_MeV_per_u": 0.547556923077,
+      "maximum_energy_MeV_per_u": 6.90093846154
+    },
+    "Z7A14": {
+      "cross_section_samples": 60,
+      "interactions": 8,
+      "minimum_energy_MeV_per_u": 0.190839285714,
+      "maximum_energy_MeV_per_u": 3.22535714286
+    },
+    "Z7A15": {
+      "cross_section_samples": 55,
+      "interactions": 5,
+      "minimum_energy_MeV_per_u": 0.0579754666667,
+      "maximum_energy_MeV_per_u": 5.62673333333
+    },
+    "Z8A14": {
+      "cross_section_samples": 52,
+      "interactions": 1,
+      "minimum_energy_MeV_per_u": 1.32617857143,
+      "maximum_energy_MeV_per_u": 1.32617857143
+    },
+    "Z8A16": {
+      "cross_section_samples": 58,
+      "interactions": 3,
+      "minimum_energy_MeV_per_u": 0.0304113125,
+      "maximum_energy_MeV_per_u": 0.526275625
+    }
+  },
+  "skipped_zero_cross_section_species": {
+    "Z4A4": {
+      "interactions": 4,
+      "reason": "TOPAS returned no positive macroscopic inelastic cross section"
+    }
+  },
+  "output": {
+    "path": "validation/results/topas_400MeVu_cascade_100k_3d.bin",
+    "bytes": 40082824,
+    "sha256": "ee54108367ae7e31b37eb8b945311f2836ebce14a7926245756501c3736ee112"
+  }
+}

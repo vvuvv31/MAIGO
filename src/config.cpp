@@ -203,6 +203,9 @@ void TransportConfig::validate() const {
     if (mass_number <= 0 || initial_energy_MeVu <= 0.0) {
         throw std::invalid_argument("mass_number and initial_energy_MeVu must be positive");
     }
+    if (beam_energy_spread < 0.0 || beam_energy_spread > 0.2) {
+        throw std::invalid_argument("beam_energy_spread must be in [0, 0.2] (relative RMS)");
+    }
     if (phantom_length_mm <= 0.0 || depth_bin_width_mm <= 0.0 || maximum_step_mm <= 0.0) {
         throw std::invalid_argument("phantom and step lengths must be positive");
     }
@@ -306,6 +309,34 @@ void TransportConfig::validate() const {
         throw std::invalid_argument(
             "neutral_local_kerma_fraction must be in [0, 1]");
     }
+    if (neutral_kerma_high_energy_scale < 1.0 || neutral_kerma_high_energy_scale > 2.0) {
+        throw std::invalid_argument(
+            "neutral_kerma_high_energy_scale must be in [1, 2]");
+    }
+    if (neutral_local_kerma_fraction * neutral_kerma_high_energy_scale > 1.0) {
+        throw std::invalid_argument(
+            "neutral_local_kerma_fraction * neutral_kerma_high_energy_scale must be <= 1");
+    }
+    if (neutral_kerma_mean_free_path_mm < 0.0) {
+        throw std::invalid_argument(
+            "neutral_kerma_mean_free_path_mm must be nonnegative (0 = local dump)");
+    }
+    if (max_device_memory_fraction <= 0.05 || max_device_memory_fraction > 1.0) {
+        throw std::invalid_argument(
+            "max_device_memory_fraction must be in (0.05, 1.0]");
+    }
+    if (electronic_buildup_fraction < 0.0 || electronic_buildup_fraction > 0.5) {
+        throw std::invalid_argument(
+            "electronic_buildup_fraction must be in [0, 0.5]");
+    }
+    if (electronic_buildup_mfp_mm < 0.0) {
+        throw std::invalid_argument(
+            "electronic_buildup_mfp_mm must be nonnegative");
+    }
+    if (electronic_buildup_fraction > 0.0 && electronic_buildup_mfp_mm <= 0.0) {
+        throw std::invalid_argument(
+            "electronic_buildup_fraction > 0 requires electronic_buildup_mfp_mm > 0");
+    }
     if (neutral_local_kerma_fraction > 0.0 && enable_neutral_transport) {
         throw std::invalid_argument(
             "neutral_local_kerma_fraction is only for neutral transport off "
@@ -335,6 +366,8 @@ TransportConfig load_config(const std::filesystem::path& path) {
     TransportConfig config;
     config.number_of_histories = parse_number(values, "number_of_histories", config.number_of_histories);
     config.initial_energy_MeVu = parse_number(values, "initial_energy_MeVu", config.initial_energy_MeVu);
+    config.beam_energy_spread =
+        parse_number(values, "beam_energy_spread", config.beam_energy_spread);
     config.mass_number = parse_number(values, "mass_number", config.mass_number);
     config.phantom_length_mm = parse_number(values, "phantom_length_mm", config.phantom_length_mm);
     config.depth_bin_width_mm = parse_number(values, "depth_bin_width_mm", config.depth_bin_width_mm);
@@ -481,6 +514,16 @@ TransportConfig load_config(const std::filesystem::path& path) {
     }
     config.neutral_local_kerma_fraction = parse_number(
         values, "neutral_local_kerma_fraction", config.neutral_local_kerma_fraction);
+    config.neutral_kerma_high_energy_scale = parse_number(
+        values, "neutral_kerma_high_energy_scale",
+        config.neutral_kerma_high_energy_scale);
+    config.neutral_kerma_mean_free_path_mm = parse_number(
+        values, "neutral_kerma_mean_free_path_mm",
+        config.neutral_kerma_mean_free_path_mm);
+    config.electronic_buildup_fraction = parse_number(
+        values, "electronic_buildup_fraction", config.electronic_buildup_fraction);
+    config.electronic_buildup_mfp_mm = parse_number(
+        values, "electronic_buildup_mfp_mm", config.electronic_buildup_mfp_mm);
     config.maximum_cascade_generations = parse_number(
         values, "maximum_cascade_generations", config.maximum_cascade_generations);
     config.maximum_neutral_generations = parse_number(
@@ -489,6 +532,8 @@ TransportConfig load_config(const std::filesystem::path& path) {
         parse_number(values, "secondary_queue_capacity", config.secondary_queue_capacity);
     config.neutral_queue_capacity =
         parse_number(values, "neutral_queue_capacity", config.neutral_queue_capacity);
+    config.max_device_memory_fraction = parse_number(
+        values, "max_device_memory_fraction", config.max_device_memory_fraction);
     config.random_seed = parse_number(values, "random_seed", config.random_seed);
     config.stopping_power_file = parse_path(values, "stopping_power_file", config.stopping_power_file);
     config.nuclear_cross_section_file =

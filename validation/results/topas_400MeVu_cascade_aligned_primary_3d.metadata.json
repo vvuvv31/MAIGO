@@ -1,0 +1,37 @@
+{
+  "case": "cascade-aligned-primary-c12",
+  "histories": 100000,
+  "reaction_definition": "first inelastic interaction of source track-1 primary C-12",
+  "source_cascade_metadata": "validation/results/topas_400MeVu_cascade_100k.metadata.json",
+  "source_cascade_metadata_sha256": "b43a053d2f8c55ad1a78ea541eb255ff47b47538485a0e87c9d49d52e4f4cf83",
+  "runtime_reference": {
+    "metadata": "validation/results/topas_200MeVu_ancestor_dose_3d_development.metadata.json",
+    "topas_version": "4.1.p1",
+    "geant4_version": "geant4-11-01-patch-03"
+  },
+  "reaction_count": 73739,
+  "secondary_count": 715976,
+  "selection": {
+    "projectile_Z": 6,
+    "projectile_A": 12,
+    "interaction_track_id": 1,
+    "event_interaction_id": 0
+  },
+  "output_files": {
+    "reactions": {
+      "path": "validation/results/topas_400MeVu_cascade_aligned_primary_3d_reactions.csv.gz",
+      "sha256": "8c9a4e66bb71838c42f67b8bbfddc115d7b98e7a91a97bf9d6e1fed689f54fcc",
+      "bytes": 2259240,
+      "rows": 73739,
+      "compression": "gzip"
+    },
+    "secondaries": {
+      "path": "validation/results/topas_400MeVu_cascade_aligned_primary_3d_secondaries.csv.gz",
+      "sha256": "7cf7263625fd4f0207327ba7fa5f442506f0c5f4ae85f079af9547f859ba27bb",
+      "bytes": 16834573,
+      "rows": 715976,
+      "compression": "gzip"
+    }
+  },
+  "global_scale_applied": false
+}

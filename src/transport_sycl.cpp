@@ -18,6 +18,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <iostream>
 #include <limits>
 #include <numeric>
 #include <stdexcept>
@@ -139,6 +140,109 @@ Direction3F scatter_direction(const Direction3F direction,
     return rotate_local_direction(local_x, local_y, 1.0F, direction);
 }
 
+// Deposit energy along +z with exponential attenuation from z0.
+// lambda_mm <= 0 → local dump in the production bin.
+// renormalize=true → scale so full amount is deposited in remaining phantom
+//   (used for interim neutral kerma; avoids high-E tail escape underdose).
+// renormalize=false → omit energy past phantom (electronic delta near exit).
+inline void score_exponential_depth(
+    const float amount_MeV,
+    const float z_mm,
+    const float bin_width_mm,
+    const float phantom_length_mm,
+    const std::uint32_t number_of_bins,
+    const float lambda_mm,
+    double* dose_row,
+    const bool renormalize = false) noexcept {
+    if (amount_MeV <= 0.0F || dose_row == nullptr || number_of_bins == 0 ||
+        bin_width_mm <= 0.0F) {
+        return;
+    }
+    auto z0 = z_mm;
+    if (z0 < 0.0F) {
+        z0 = 0.0F;
+    }
+    if (z0 >= phantom_length_mm) {
+        return;
+    }
+    if (lambda_mm <= 1.0e-3F) {
+        auto bin = static_cast<int>(z0 / bin_width_mm);
+        if (bin < 0) {
+            bin = 0;
+        }
+        if (bin >= static_cast<int>(number_of_bins)) {
+            bin = static_cast<int>(number_of_bins) - 1;
+        }
+        sycl::atomic_ref<double, sycl::memory_order::relaxed, sycl::memory_scope::device,
+                         sycl::access::address_space::global_space>
+            atomic_dose(dose_row[static_cast<std::size_t>(bin)]);
+        atomic_dose.fetch_add(static_cast<double>(amount_MeV));
+        return;
+    }
+    const auto inv_lambda = 1.0F / lambda_mm;
+    const auto remaining = phantom_length_mm - z0;
+    auto norm = 1.0F;
+    if (renormalize) {
+        const auto contained = 1.0F - sycl::exp(-remaining * inv_lambda);
+        if (contained > 1.0e-6F) {
+            norm = 1.0F / contained;
+        }
+    }
+    const auto start_bin = static_cast<std::uint32_t>(z0 / bin_width_mm);
+    for (std::uint32_t bin = start_bin; bin < number_of_bins; ++bin) {
+        const auto z_lo =
+            sycl::fmax(z0, static_cast<float>(bin) * bin_width_mm);
+        const auto z_hi = sycl::fmin(phantom_length_mm,
+                                     static_cast<float>(bin + 1U) * bin_width_mm);
+        if (z_hi <= z_lo) {
+            continue;
+        }
+        const auto s_lo = z_lo - z0;
+        const auto s_hi = z_hi - z0;
+        // ∫_{s_lo}^{s_hi} (1/λ) exp(-s/λ) ds
+        const auto frac =
+            (sycl::exp(-s_lo * inv_lambda) - sycl::exp(-s_hi * inv_lambda)) * norm;
+        if (frac <= 0.0F) {
+            continue;
+        }
+        sycl::atomic_ref<double, sycl::memory_order::relaxed, sycl::memory_scope::device,
+                         sycl::access::address_space::global_space>
+            atomic_dose(dose_row[bin]);
+        atomic_dose.fetch_add(static_cast<double>(amount_MeV * frac));
+        if (sycl::exp(-s_hi * inv_lambda) < 1.0e-5F) {
+            break;
+        }
+    }
+}
+
+// Energy-dependent electronic delta fraction (0 at low E → full scale at 400 MeV/u).
+inline float electronic_buildup_fraction_at_energy(
+    const float energy_MeVu, const float fraction_at_400) noexcept {
+    if (fraction_at_400 <= 0.0F) {
+        return 0.0F;
+    }
+    const auto scale = energy_MeVu > 0.0F ? energy_MeVu / 400.0F : 0.0F;
+    const auto clamped = scale < 1.0F ? scale : 1.0F;
+    return fraction_at_400 * clamped;
+}
+
+// Kerma fraction: f0 for E<=200 MeV/u; linear ramp to f0*high_scale at E>=400.
+inline float neutral_kerma_fraction_at_energy(const float energy_MeVu,
+                                               const float f0,
+                                               const float high_scale) noexcept {
+    if (f0 <= 0.0F) {
+        return 0.0F;
+    }
+    if (high_scale <= 1.0F || energy_MeVu <= 200.0F) {
+        return f0;
+    }
+    auto t = (energy_MeVu - 200.0F) / 200.0F;
+    if (t > 1.0F) {
+        t = 1.0F;
+    }
+    return f0 * (1.0F + (high_scale - 1.0F) * t);
+}
+
 void score_secondary_dose_device(
     const float amount_MeV,
     const bool is_neutral_lineage,
@@ -256,14 +360,14 @@ TransportResult transport_sycl(const TransportConfig& config,
         number_of_histories > std::numeric_limits<std::size_t>::max() / 16
             ? std::numeric_limits<std::size_t>::max()
             : number_of_histories * 16;
-    const auto secondary_queue_capacity =
+    auto secondary_queue_capacity =
         config.secondary_queue_capacity == 0 ? automatic_queue_capacity
                                              : config.secondary_queue_capacity;
     const auto automatic_neutral_queue_capacity =
         number_of_histories > std::numeric_limits<std::size_t>::max() / 32
             ? std::numeric_limits<std::size_t>::max()
             : number_of_histories * 32;
-    const auto neutral_queue_capacity =
+    auto neutral_queue_capacity =
         config.neutral_queue_capacity == 0 ? automatic_neutral_queue_capacity
                                            : config.neutral_queue_capacity;
     if (enable_secondary_generation &&
@@ -279,6 +383,148 @@ TransportResult transport_sycl(const TransportConfig& config,
     if (!device.has(sycl::aspect::fp64) || !device.has(sycl::aspect::atomic64)) {
         throw std::runtime_error(
             "The current accurate SYCL scorer requires fp64 and atomic64 device aspects");
+    }
+
+    // Soft device-memory budget: keep estimated USM under max_device_memory_fraction
+    // of global memory (default 80%). Shrink secondary/neutral queues first.
+    const auto device_global_bytes =
+        device.get_info<sycl::info::device::global_mem_size>();
+    const auto memory_budget_bytes = static_cast<std::size_t>(
+        static_cast<double>(device_global_bytes) *
+        std::min(1.0, std::max(0.05, config.max_device_memory_fraction)));
+
+    const auto estimate_device_bytes = [&](std::size_t sec_cap,
+                                          std::size_t neu_cap) -> std::size_t {
+        std::size_t bytes = 0;
+        bytes += table_size * sizeof(float);
+        bytes += cross_section_table_size * sizeof(float);
+        bytes += number_of_bins * sizeof(double);
+        bytes += number_of_histories * (3 * sizeof(float) + sizeof(std::uint32_t));
+        if (enable_voxel_scoring) {
+            bytes += number_of_voxels * sizeof(double);
+        }
+        if (enable_charged_origin_voxel_scoring) {
+            bytes += charged_origin_category_count * number_of_voxels * sizeof(double);
+        }
+        if (enable_secondary_generation && reaction_packages != nullptr) {
+            bytes += reaction_packages->energy_bins().size() * sizeof(ReactionEnergyBin);
+            bytes += reaction_packages->reactions().size() * sizeof(ReactionPackage);
+            bytes += reaction_packages->secondaries().size() * sizeof(ReactionSecondary);
+            bytes += sec_cap * sizeof(SecondaryParticle3D);
+            bytes += 2 * sizeof(std::uint64_t);
+            bytes += number_of_histories * sizeof(SecondaryGenerationSummary);
+            if (enable_secondary_transport) {
+                bytes += fragment_species_count * number_of_bins * sizeof(double);
+                bytes += sec_cap * (2 * sizeof(float) + sizeof(std::uint32_t));
+            }
+            if (enable_fragment_cascade && cascade_packages != nullptr) {
+                bytes += cascade_packages->projectiles().size() * sizeof(CascadeProjectile);
+                bytes += cascade_packages->cross_sections().size() *
+                         sizeof(CascadeCrossSectionSample);
+                bytes += cascade_packages->interactions().size() * sizeof(CascadeInteraction);
+                bytes += cascade_packages->products().size() * sizeof(ReactionSecondary);
+                bytes += sec_cap * sizeof(CascadeTransportSummary);
+            }
+        }
+        if (enable_neutral_transport && neutral_packages != nullptr) {
+            bytes += neutral_packages->projectiles().size() * sizeof(NeutralProjectile);
+            bytes += neutral_packages->cross_sections().size() *
+                     sizeof(NeutralCrossSectionSample);
+            bytes += neutral_packages->interactions().size() * sizeof(NeutralInteraction);
+            bytes += neutral_packages->products().size() * sizeof(ReactionSecondary);
+            bytes += neu_cap * sizeof(NeutralParticle3D);
+            bytes += 2 * sizeof(std::uint64_t);
+            bytes += neu_cap * sizeof(NeutralTransportSummary);
+            bytes += neutral_origin_category_count * number_of_bins * sizeof(double);
+            if (enable_voxel_scoring) {
+                bytes += neutral_origin_category_count * number_of_voxels * sizeof(double);
+            }
+        }
+        if (config.enable_ct_grid) {
+            // Conservative upper bound until grid is loaded below.
+            bytes += 64ULL * 1024ULL * 1024ULL;
+        }
+        // Driver / allocator overhead headroom.
+        bytes = bytes + bytes / 8;
+        return bytes;
+    };
+
+    {
+        auto estimated = estimate_device_bytes(secondary_queue_capacity, neutral_queue_capacity);
+        if (estimated > memory_budget_bytes) {
+            const auto fixed = estimate_device_bytes(0, 0);
+            if (fixed >= memory_budget_bytes) {
+                throw std::runtime_error(
+                    "Device memory budget exceeded by fixed buffers alone (tables/packages/"
+                    "histories). Reduce histories, disable voxels, or raise "
+                    "max_device_memory_fraction (device=" +
+                    std::to_string(device_global_bytes / (1024ULL * 1024ULL)) +
+                    " MiB, budget=" +
+                    std::to_string(memory_budget_bytes / (1024ULL * 1024ULL)) +
+                    " MiB, fixed~" + std::to_string(fixed / (1024ULL * 1024ULL)) + " MiB)");
+            }
+            const auto variable_budget = memory_budget_bytes - fixed;
+            // Per secondary slot: particle + dep/esc/steps + cascade summary.
+            std::size_t bytes_per_sec = sizeof(SecondaryParticle3D);
+            if (enable_secondary_transport) {
+                bytes_per_sec += 2 * sizeof(float) + sizeof(std::uint32_t);
+            }
+            if (enable_fragment_cascade) {
+                bytes_per_sec += sizeof(CascadeTransportSummary);
+            }
+            std::size_t bytes_per_neu = 0;
+            if (enable_neutral_transport) {
+                bytes_per_neu =
+                    sizeof(NeutralParticle3D) + sizeof(NeutralTransportSummary);
+            }
+            // Prefer keeping secondary capacity; scale both proportionally.
+            const auto total_var =
+                secondary_queue_capacity * bytes_per_sec +
+                neutral_queue_capacity * bytes_per_neu;
+            if (total_var > 0) {
+                const auto scale = static_cast<double>(variable_budget) /
+                                   static_cast<double>(total_var);
+                if (scale < 1.0) {
+                    secondary_queue_capacity = static_cast<std::size_t>(
+                        std::floor(static_cast<double>(secondary_queue_capacity) * scale));
+                    neutral_queue_capacity = static_cast<std::size_t>(
+                        std::floor(static_cast<double>(neutral_queue_capacity) * scale));
+                }
+            }
+            // Enforce minimum usable queues.
+            if (enable_secondary_generation) {
+                secondary_queue_capacity =
+                    std::max<std::size_t>(secondary_queue_capacity, number_of_histories);
+            }
+            if (enable_neutral_transport) {
+                neutral_queue_capacity =
+                    std::max<std::size_t>(neutral_queue_capacity, number_of_histories);
+            }
+            estimated = estimate_device_bytes(secondary_queue_capacity, neutral_queue_capacity);
+            if (estimated > memory_budget_bytes) {
+                throw std::runtime_error(
+                    "Unable to fit device buffers under max_device_memory_fraction=" +
+                    std::to_string(config.max_device_memory_fraction) + " (estimate " +
+                    std::to_string(estimated / (1024ULL * 1024ULL)) + " MiB > budget " +
+                    std::to_string(memory_budget_bytes / (1024ULL * 1024ULL)) + " MiB)");
+            }
+            std::cout << "Device memory budget: scaled queues to fit "
+                      << static_cast<int>(config.max_device_memory_fraction * 100.0)
+                      << "% of "
+                      << (device_global_bytes / (1024ULL * 1024ULL)) << " MiB"
+                      << " (estimate " << (estimated / (1024ULL * 1024ULL)) << " MiB;"
+                      << " secondary_queue_capacity=" << secondary_queue_capacity
+                      << "; neutral_queue_capacity=" << neutral_queue_capacity << ")\n";
+        } else {
+            std::cout << "Device memory estimate: "
+                      << (estimated / (1024ULL * 1024ULL)) << " MiB / budget "
+                      << (memory_budget_bytes / (1024ULL * 1024ULL)) << " MiB ("
+                      << static_cast<int>(config.max_device_memory_fraction * 100.0)
+                      << "% of "
+                      << (device_global_bytes / (1024ULL * 1024ULL)) << " MiB); "
+                      << "secondary_queue_capacity=" << secondary_queue_capacity
+                      << "\n";
+        }
     }
 
     auto* table_device = sycl::malloc_device<float>(table_size, queue);
@@ -871,6 +1117,7 @@ TransportResult transport_sycl(const TransportConfig& config,
     const auto global_size =
         ((number_of_histories + local_size - 1) / local_size) * local_size;
     const auto initial_energy_MeV = static_cast<float>(config.initial_total_energy_MeV());
+    const auto beam_energy_spread = static_cast<float>(config.beam_energy_spread);
     const auto phantom_length_mm = static_cast<float>(config.phantom_length_mm);
     const auto depth_bin_width_mm = static_cast<float>(config.depth_bin_width_mm);
     const auto maximum_step_mm = static_cast<float>(config.maximum_step_mm);
@@ -896,6 +1143,14 @@ TransportResult transport_sycl(const TransportConfig& config,
         static_cast<float>(config.emittance_correlation_y);
     const auto neutral_local_kerma_fraction =
         static_cast<float>(config.neutral_local_kerma_fraction);
+    const auto neutral_kerma_high_energy_scale =
+        static_cast<float>(config.neutral_kerma_high_energy_scale);
+    const auto neutral_kerma_mean_free_path_mm =
+        static_cast<float>(config.neutral_kerma_mean_free_path_mm);
+    const auto electronic_buildup_fraction =
+        static_cast<float>(config.electronic_buildup_fraction);
+    const auto electronic_buildup_mfp_mm =
+        static_cast<float>(config.electronic_buildup_mfp_mm);
     const auto inverse_mass_number = 1.0f / static_cast<float>(config.mass_number);
     const auto primary_mass_number = config.mass_number;
     const auto minimum_table_energy = static_cast<float>(stopping_power.energies().front());
@@ -937,6 +1192,19 @@ TransportResult transport_sycl(const TransportConfig& config,
             }
 
             auto energy_MeV = initial_energy_MeV;
+            if (beam_energy_spread > 0.0F) {
+                // TOPAS BeamEnergySpread: Gaussian RMS = spread * mean total KE.
+                const auto u0 = sycl::fmax(
+                    rng::uniform01(random_seed, history, 0, 40), 1.0e-12F);
+                const auto u1 = rng::uniform01(random_seed, history, 0, 41);
+                constexpr float two_pi = 6.2831853071795864769F;
+                const auto gauss =
+                    sycl::sqrt(-2.0F * sycl::log(u0)) * sycl::cos(two_pi * u1);
+                energy_MeV = initial_energy_MeV * (1.0F + beam_energy_spread * gauss);
+                if (energy_MeV < energy_cutoff_MeV) {
+                    energy_MeV = energy_cutoff_MeV;
+                }
+            }
             auto position_x_mm = 0.0F;
             auto position_y_mm = 0.0F;
             auto position_z_mm = 0.0F;
@@ -1293,13 +1561,27 @@ TransportResult transport_sycl(const TransportConfig& config,
                     deposited_MeV = sycl::clamp(
                         mean_loss_MeV + sigma_MeV * gaussian, 0.0f, energy_MeV);
                 }
+                // Electronic build-up: local (1-f)*dE + short-range delta f*dE along +z.
+                // Equilibrium dose still ≈ full unrestricted SP; surface suppressed.
+                const auto e_frac = electronic_buildup_fraction_at_energy(
+                    energy_MeVu, electronic_buildup_fraction);
+                const auto delayed_MeV = deposited_MeV * e_frac;
+                const auto local_MeV = deposited_MeV - delayed_MeV;
                 sycl::atomic_ref<double,
                                  sycl::memory_order::relaxed,
                                  sycl::memory_scope::device,
                                  sycl::access::address_space::global_space>
                     atomic_dose(dose_device[bin]);
-                atomic_dose.fetch_add(static_cast<double>(deposited_MeV));
+                atomic_dose.fetch_add(static_cast<double>(local_MeV));
+                if (delayed_MeV > 0.0F) {
+                    const auto z_mid = position_z_mm + 0.5F * direction_z * step_mm;
+                    score_exponential_depth(
+                        delayed_MeV, z_mid, depth_bin_width_mm, phantom_length_mm,
+                        static_cast<std::uint32_t>(number_of_bins),
+                        electronic_buildup_mfp_mm, dose_device);
+                }
                 if (enable_voxel_scoring) {
+                    // Voxel tallies keep full step energy (depth IDD is primary match).
                     sycl::atomic_ref<double,
                                      sycl::memory_order::relaxed,
                                      sycl::memory_scope::device,
@@ -1450,45 +1732,27 @@ TransportResult transport_sycl(const TransportConfig& config,
                                         neutral_queueable_energy_MeV +=
                                             secondary.kinetic_energy_MeV;
                                     } else {
+                                        const auto kerma_frac = neutral_kerma_fraction_at_energy(
+                                            energy_MeVu, neutral_local_kerma_fraction,
+                                            neutral_kerma_high_energy_scale);
                                         const auto kerma_MeV =
-                                            secondary.kinetic_energy_MeV *
-                                            neutral_local_kerma_fraction;
+                                            secondary.kinetic_energy_MeV * kerma_frac;
                                         const auto residual_MeV =
                                             secondary.kinetic_energy_MeV - kerma_MeV;
                                         secondary_summary.neutral_energy_MeV += residual_MeV;
                                         if (kerma_MeV > 0.0F &&
                                             fragment_dose_device != nullptr) {
-                                            // Score interim local kerma into "other" fragment
-                                            // channel so total IDD includes it without
-                                            // polluting primary C-12.
+                                            // Interim n/γ kerma into "other" fragment channel,
+                                            // distributed along +z; renormalize into phantom.
                                             constexpr std::size_t other_species = 6;
-                                            sycl::atomic_ref<
-                                                double, sycl::memory_order::relaxed,
-                                                sycl::memory_scope::device,
-                                                sycl::access::address_space::global_space>
-                                                kerma_dose(
-                                                    fragment_dose_device
-                                                        [other_species * number_of_bins +
-                                                         static_cast<std::size_t>(bin)]);
-                                            kerma_dose.fetch_add(
-                                                static_cast<double>(kerma_MeV));
-                                            if (enable_voxel_scoring &&
-                                                voxel_dose_device != nullptr) {
-                                                const auto kerma_voxel_index =
-                                                    static_cast<std::size_t>(bin) *
-                                                        voxel_plane_size +
-                                                    static_cast<std::size_t>(voxel_y) *
-                                                        voxel_bins_x +
-                                                    static_cast<std::size_t>(voxel_x);
-                                                sycl::atomic_ref<
-                                                    double, sycl::memory_order::relaxed,
-                                                    sycl::memory_scope::device,
-                                                    sycl::access::address_space::global_space>
-                                                    kerma_voxel(
-                                                        voxel_dose_device[kerma_voxel_index]);
-                                                kerma_voxel.fetch_add(
-                                                    static_cast<double>(kerma_MeV));
-                                            }
+                                            score_exponential_depth(
+                                                kerma_MeV, position_z_mm, depth_bin_width_mm,
+                                                phantom_length_mm,
+                                                static_cast<std::uint32_t>(number_of_bins),
+                                                neutral_kerma_mean_free_path_mm,
+                                                fragment_dose_device +
+                                                    other_species * number_of_bins,
+                                                true);
                                         }
                                     }
                                 } else if (is_supported) {
@@ -2073,14 +2337,28 @@ TransportResult transport_sycl(const TransportConfig& config,
                         }
                         const auto step_deposited_MeV = sycl::fmin(
                             stopping_power_MeV_per_mm * path_step_mm, energy_MeV);
+                        const auto sec_e_frac = electronic_buildup_fraction_at_energy(
+                            energy_MeVu, electronic_buildup_fraction);
+                        const auto sec_delayed = step_deposited_MeV * sec_e_frac;
+                        const auto sec_local = step_deposited_MeV - sec_delayed;
                         score_secondary_dose_device(
-                            step_deposited_MeV, is_neutral_lineage, species_index,
+                            sec_local, is_neutral_lineage, species_index,
                             neutral_origin, bin, number_of_bins, enable_voxel_scoring,
                             enable_charged_origin_voxel_scoring, voxel_index,
                             charged_origin_voxel_offset, neutral_origin_voxel_offset,
                             fragment_dose_device, voxel_dose_device,
                             charged_origin_voxel_dose_device, neutral_origin_dose_device,
                             neutral_origin_voxel_dose_device);
+                        if (sec_delayed > 0.0F && !is_neutral_lineage &&
+                            fragment_dose_device != nullptr) {
+                            const auto z_mid =
+                                position_z_mm + 0.5F * direction_z * path_step_mm;
+                            score_exponential_depth(
+                                sec_delayed, z_mid, depth_bin_width_mm, phantom_length_mm,
+                                static_cast<std::uint32_t>(number_of_bins),
+                                electronic_buildup_mfp_mm,
+                                fragment_dose_device + species_index * number_of_bins);
+                        }
                         deposited_MeV += step_deposited_MeV;
                         const auto scattering_energy_MeV =
                             energy_MeV - 0.5F * step_deposited_MeV;
@@ -2233,8 +2511,13 @@ TransportResult transport_sycl(const TransportConfig& config,
                                                 ++neutral_queueable_count;
                                                 neutral_queueable_energy += scaled_energy;
                                             } else {
+                                                const auto kerma_frac =
+                                                    neutral_kerma_fraction_at_energy(
+                                                        energy_MeVu,
+                                                        neutral_local_kerma_fraction,
+                                                        neutral_kerma_high_energy_scale);
                                                 const auto kerma_MeV =
-                                                    scaled_energy * neutral_local_kerma_fraction;
+                                                    scaled_energy * kerma_frac;
                                                 const auto residual_MeV =
                                                     scaled_energy - kerma_MeV;
                                                 cascade_summary.neutral_energy_MeV +=
@@ -2242,33 +2525,14 @@ TransportResult transport_sycl(const TransportConfig& config,
                                                 if (kerma_MeV > 0.0F &&
                                                     fragment_dose_device != nullptr) {
                                                     constexpr std::size_t other_species = 6;
-                                                    sycl::atomic_ref<
-                                                        double, sycl::memory_order::relaxed,
-                                                        sycl::memory_scope::device,
-                                                        sycl::access::address_space::global_space>
-                                                        kerma_dose(
-                                                            fragment_dose_device
-                                                                [other_species * number_of_bins +
-                                                                 static_cast<std::size_t>(bin)]);
-                                                    kerma_dose.fetch_add(
-                                                        static_cast<double>(kerma_MeV));
-                                                    if (enable_voxel_scoring &&
-                                                        voxel_dose_device != nullptr) {
-                                                        const auto kerma_voxel_index =
-                                                            static_cast<std::size_t>(bin) *
-                                                                voxel_plane_size +
-                                                            static_cast<std::size_t>(voxel_y) *
-                                                                voxel_bins_x +
-                                                            static_cast<std::size_t>(voxel_x);
-                                                        sycl::atomic_ref<
-                                                            double, sycl::memory_order::relaxed,
-                                                            sycl::memory_scope::device,
-                                                            sycl::access::address_space::global_space>
-                                                            kerma_voxel(
-                                                                voxel_dose_device[kerma_voxel_index]);
-                                                        kerma_voxel.fetch_add(
-                                                            static_cast<double>(kerma_MeV));
-                                                    }
+                                                    score_exponential_depth(
+                                                        kerma_MeV, position_z_mm,
+                                                        depth_bin_width_mm, phantom_length_mm,
+                                                        static_cast<std::uint32_t>(number_of_bins),
+                                                        neutral_kerma_mean_free_path_mm,
+                                                        fragment_dose_device +
+                                                            other_species * number_of_bins,
+                                                        true);
                                                 }
                                             }
                                         } else if (supported) {
@@ -3361,6 +3625,9 @@ TransportResult transport_sycl(const TransportConfig& config,
     TransportResult result;
     result.backend = "sycl-" + device_name +
                      (config.enable_energy_straggling ? "+straggling" : "");
+    if (config.beam_energy_spread > 0.0) {
+        result.backend += "+espread";
+    }
     if (enable_multiple_scattering) {
         result.backend += "+multiple-scattering";
     }

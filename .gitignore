@@ -34,3 +34,7 @@ validation/results/*
 validation/results/*_voxels.csv
 validation/topas/output/*
 !validation/topas/output/.gitkeep
+
+# Exclude large development files that exceed GitHub's 100MB limit
+validation/results/topas_200MeVu_neutral_development.bin
+validation/results/topas_200MeVu_neutral_development_interactions.csv.gz

@@ -30,6 +30,7 @@ enable_fragment_cascade: true
 enable_neutral_transport: false
 maximum_cascade_generations: 2
 secondary_queue_capacity: 500000
+max_device_memory_fraction: 0.50
 random_seed: 20260715
 stopping_power_file: data/stopping_power_water_geant4_11_1_3.csv
 nuclear_cross_section_file: data/c12_inelastic_cross_sections_water_geant4_11_1_3.csv

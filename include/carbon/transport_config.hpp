@@ -13,6 +13,9 @@ namespace carbon {
 struct TransportConfig {
     std::size_t number_of_histories{10'000};
     double initial_energy_MeVu{200.0};
+    // Relative RMS beam energy spread (TOPAS BeamEnergySpread percent / 100).
+    // 0.01 = 1% → sample E ~ N(E0, (0.01*E0)^2) at primary birth.
+    double beam_energy_spread{0.0};
     int mass_number{12};
     double phantom_length_mm{400.0};
     double depth_bin_width_mm{0.5};
@@ -78,14 +81,34 @@ struct TransportConfig {
     // "full": re-queue neutral continuations up to maximum_neutral_generations.
     std::string neutral_transport_mode{"first_interaction"};
     // When neutral transport is off, deposit this fraction of born neutron/gamma
-    // kinetic energy at the production depth bin (local kerma approximation).
-    // Calibrate on TOPAS 200 MeV/u neutron+gamma origin / untransported birth KE
-    // (~16.35 / 54.9 ≈ 0.298). Not a global dose scale of the charged IDD.
+    // kinetic energy as an interim kerma (calibrated ~0.298 at ≤200 MeV/u).
+    // Not a global dose scale of the charged IDD.
     double neutral_local_kerma_fraction{0.0};
+    // Multiplier of kerma fraction at E>=400 MeV/u (linear ramp from 200→400).
+    // f(E) = f0 for E<=200; f0 * scale at E>=400. High-E needs more kerma to
+    // close the plateau/integral deficit vs TOPAS.
+    double neutral_kerma_high_energy_scale{1.0};
+    // Exponential mean free path [mm] for distributing that kerma along +z from
+    // the birth depth. 0 = legacy local dump in the production bin (overpredicts
+    // entrance). Multi-energy charged suite uses ~80 mm to match TOPAS build-up.
+    // Kerma is renormalized into the remaining phantom so high-E tails are not lost.
+    double neutral_kerma_mean_free_path_mm{0.0};
+    // Short-range electronic build-up vs unrestricted CSDA local deposit.
+    // Of each continuous energy loss, fraction f is re-deposited along +z with
+    // MFP electronic_buildup_mfp_mm (delta-ray proxy). f scales with energy:
+    //   f(E) = electronic_buildup_fraction * clamp(E_MeVu / 400, 0, 1)
+    // so low-E beams are almost unchanged. 0 disables (legacy).
+    double electronic_buildup_fraction{0.0};
+    double electronic_buildup_mfp_mm{0.5};
     std::uint32_t maximum_cascade_generations{0};
     std::uint32_t maximum_neutral_generations{1};
     std::size_t secondary_queue_capacity{0};
     std::size_t neutral_queue_capacity{0};
+    // Hard soft-cap on estimated SYCL device USM vs device global memory.
+    // Default 0.50: queues are scaled down to fit; allocation still aborts if over.
+    // Pair with a host watchdog (run scripts) that kills the process if live VRAM
+    // exceeds this fraction — prevents Arc driver lockups / host freezes.
+    double max_device_memory_fraction{0.50};
     std::uint64_t random_seed{20'260'714};
     std::filesystem::path stopping_power_file{"data/stopping_power_water.csv"};
     std::filesystem::path nuclear_cross_section_file{

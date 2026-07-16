@@ -24,7 +24,8 @@ neutral_transport_mode: first_interaction
 maximum_neutral_generations: 1
 neutral_local_kerma_fraction: 0.0
 maximum_cascade_generations: 2
-secondary_queue_capacity: 2000000
+secondary_queue_capacity: 500000
+max_device_memory_fraction: 0.50
 neutral_queue_capacity: 2000000
 random_seed: 20260715
 stopping_power_file: data/stopping_power_water_geant4_11_1_3.csv

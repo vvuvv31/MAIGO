@@ -24,7 +24,8 @@ enable_secondary_generation: true
 enable_secondary_transport: true
 enable_fragment_cascade: true
 maximum_cascade_generations: 2
-secondary_queue_capacity: 1600000
+secondary_queue_capacity: 500000
+max_device_memory_fraction: 0.50
 random_seed: 20260714
 stopping_power_file: data/stopping_power_water.csv
 nuclear_cross_section_file: data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv

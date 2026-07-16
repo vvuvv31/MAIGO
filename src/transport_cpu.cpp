@@ -64,6 +64,20 @@ TransportResult transport_serial(const TransportConfig& config,
     const auto simulate_history = [&](std::uint64_t history_id, std::vector<double>& tally,
                                       std::vector<double>& voxel_tally) {
         auto energy_MeV = config.initial_total_energy_MeV();
+        if (config.beam_energy_spread > 0.0) {
+            const auto uniform1 = std::max(
+                static_cast<double>(rng::uniform01(config.random_seed, history_id, 0, 40)),
+                1.0e-12);
+            const auto uniform2 =
+                static_cast<double>(rng::uniform01(config.random_seed, history_id, 0, 41));
+            const auto gaussian =
+                std::sqrt(-2.0 * std::log(uniform1)) *
+                std::cos(2.0 * std::numbers::pi * uniform2);
+            energy_MeV *= (1.0 + config.beam_energy_spread * gaussian);
+            if (energy_MeV < config.energy_cutoff_MeV) {
+                energy_MeV = config.energy_cutoff_MeV;
+            }
+        }
         auto position_mm = 0.0;
         std::uint64_t steps = 0;
         auto untracked_nuclear_MeV = 0.0;
