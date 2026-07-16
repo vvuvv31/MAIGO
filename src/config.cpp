@@ -359,6 +359,13 @@ void TransportConfig::validate() const {
                 "emittance correlations must be in [-1, 1]");
         }
     }
+    if (spots_sad_mm <= 0.0) {
+        throw std::invalid_argument("spots_sad_mm must be positive");
+    }
+    if (spots_geometry_mode != "topas" && spots_geometry_mode != "beam_plus_z") {
+        throw std::invalid_argument(
+            "spots_geometry_mode must be topas or beam_plus_z");
+    }
 }
 
 TransportConfig load_config(const std::filesystem::path& path) {
@@ -534,6 +541,34 @@ TransportConfig load_config(const std::filesystem::path& path) {
         parse_number(values, "neutral_queue_capacity", config.neutral_queue_capacity);
     config.max_device_memory_fraction = parse_number(
         values, "max_device_memory_fraction", config.max_device_memory_fraction);
+    config.source_origin_x_mm =
+        parse_number(values, "source_origin_x_mm", config.source_origin_x_mm);
+    config.source_origin_y_mm =
+        parse_number(values, "source_origin_y_mm", config.source_origin_y_mm);
+    config.source_origin_z_mm =
+        parse_number(values, "source_origin_z_mm", config.source_origin_z_mm);
+    config.beam_ux_x = parse_number(values, "beam_ux_x", config.beam_ux_x);
+    config.beam_ux_y = parse_number(values, "beam_ux_y", config.beam_ux_y);
+    config.beam_ux_z = parse_number(values, "beam_ux_z", config.beam_ux_z);
+    config.beam_uy_x = parse_number(values, "beam_uy_x", config.beam_uy_x);
+    config.beam_uy_y = parse_number(values, "beam_uy_y", config.beam_uy_y);
+    config.beam_uy_z = parse_number(values, "beam_uy_z", config.beam_uy_z);
+    config.beam_uz_x = parse_number(values, "beam_uz_x", config.beam_uz_x);
+    config.beam_uz_y = parse_number(values, "beam_uz_y", config.beam_uz_y);
+    config.beam_uz_z = parse_number(values, "beam_uz_z", config.beam_uz_z);
+    {
+        const auto it = values.find("topas_spots_file");
+        if (it != values.end() && !it->second.empty()) {
+            config.topas_spots_file = it->second;
+        }
+    }
+    config.spots_sad_mm = parse_number(values, "spots_sad_mm", config.spots_sad_mm);
+    {
+        const auto it = values.find("spots_geometry_mode");
+        if (it != values.end() && !it->second.empty()) {
+            config.spots_geometry_mode = it->second;
+        }
+    }
     config.random_seed = parse_number(values, "random_seed", config.random_seed);
     config.stopping_power_file = parse_path(values, "stopping_power_file", config.stopping_power_file);
     config.nuclear_cross_section_file =
@@ -555,6 +590,39 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.neutral_origin_voxel_output_file = parse_path(
         values, "neutral_origin_voxel_output_file",
         config.neutral_origin_voxel_output_file);
+    // Dose (Gy) scorers. Empty string disables that Gy file (MeV scorers unchanged).
+    {
+        const auto it = values.find("dose_output_file");
+        if (it != values.end()) {
+            config.dose_output_file = it->second.empty()
+                                         ? std::filesystem::path{}
+                                         : std::filesystem::path{it->second};
+        }
+    }
+    {
+        const auto it = values.find("fragment_species_dose_output_file");
+        if (it != values.end()) {
+            config.fragment_species_dose_output_file =
+                it->second.empty() ? std::filesystem::path{}
+                                   : std::filesystem::path{it->second};
+        }
+    }
+    {
+        const auto it = values.find("voxel_dose_Gy_output_file");
+        if (it != values.end()) {
+            config.voxel_dose_Gy_output_file =
+                it->second.empty() ? std::filesystem::path{}
+                                   : std::filesystem::path{it->second};
+        }
+    }
+    {
+        const auto it = values.find("charged_origin_voxel_dose_Gy_output_file");
+        if (it != values.end()) {
+            config.charged_origin_voxel_dose_Gy_output_file =
+                it->second.empty() ? std::filesystem::path{}
+                                   : std::filesystem::path{it->second};
+        }
+    }
     const auto device = values.find("device");
     if (device != values.end()) {
         config.device = device->second;

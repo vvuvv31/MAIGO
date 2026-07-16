@@ -63,8 +63,9 @@ struct TransportConfig {
     bool enable_energy_straggling{false};
     double straggling_scale{1.0};
     bool enable_multiple_scattering{false};
-    // TOPAS-style BiGaussian emittance source on the entrance plane (z=0).
-    // Samples (x,x') and (y,y') from bivariate Gaussians; x' = dx/dz (rad-like).
+    // TOPAS-style BiGaussian emittance source.
+    // Samples (x,x') and (y,y') from bivariate Gaussians in the local beam frame;
+    // x' = dx/dz_local (rad-like). Local frame defaults to world +z beam.
     bool enable_emittance_source{false};
     double emittance_sigma_x_mm{0.0};
     double emittance_sigma_y_mm{0.0};
@@ -72,6 +73,25 @@ struct TransportConfig {
     double emittance_sigma_y_prime{0.0};
     double emittance_correlation_x{0.0};
     double emittance_correlation_y{0.0};
+    // Source pose (world mm). Origin is the beam-source point; particles start
+    // at origin + ux*x + uy*y and travel along rotated local +uz.
+    double source_origin_x_mm{0.0};
+    double source_origin_y_mm{0.0};
+    double source_origin_z_mm{0.0};
+    double beam_ux_x{1.0}, beam_ux_y{0.0}, beam_ux_z{0.0};
+    double beam_uy_x{0.0}, beam_uy_y{1.0}, beam_uy_z{0.0};
+    double beam_uz_x{0.0}, beam_uz_y{0.0}, beam_uz_z{1.0};
+    // TOPAS-format spots plan (spots_*.txt L0–L14). Input-compatible with TOPAS
+    // TimeFeature dumps; GPU does NOT simulate timeline — it just runs spots in
+    // file order and accumulates absolute energy (MeV), then normalizes by total
+    // histories across spots.
+    std::filesystem::path topas_spots_file{};
+    // |TransY| used when building spot source pose (TOPAS SAD). Default 450 mm.
+    double spots_sad_mm{450.0};
+    // "topas": full BeamPosition2 pose (Rx,Ry + SAD) for 3D/CT plans.
+    // "beam_plus_z": water-IDD convenience — force +z beam at z=0 with lateral
+    //   offsets (TransX,TransZ) as (x,y); ignores gantry for depth scoring.
+    std::string spots_geometry_mode{"topas"};
     bool enable_primary_attenuation{false};
     bool enable_secondary_generation{false};
     bool enable_secondary_transport{false};
@@ -119,6 +139,7 @@ struct TransportConfig {
         "validation/results/topas_200MeVu_cascade_100k.bin"};
     std::filesystem::path neutral_package_file{
         "validation/results/topas_200MeVu_neutral_smoke.bin"};
+    // MeV energy-deposition scorer outputs (absolute MeV → MeV/primary in writers).
     std::filesystem::path output_file{"out/cpu_depth_dose.csv"};
     std::filesystem::path fragment_species_output_file{
         "out/gpu_fragment_species_depth_dose.csv"};
@@ -127,6 +148,14 @@ struct TransportConfig {
         "out/gpu_charged_origin_voxel_dose.csv"};
     std::filesystem::path neutral_origin_voxel_output_file{
         "out/gpu_neutral_origin_voxel_dose.csv"};
+    // Dose scorers (Gy/primary). Empty path disables that dose file; MeV scorers
+    // are always written when their paths are set. Defaults write Gy alongside MeV.
+    std::filesystem::path dose_output_file{"out/cpu_depth_dose_Gy.csv"};
+    std::filesystem::path fragment_species_dose_output_file{
+        "out/gpu_fragment_species_depth_dose_Gy.csv"};
+    std::filesystem::path voxel_dose_Gy_output_file{"out/gpu_voxel_dose_Gy.csv"};
+    std::filesystem::path charged_origin_voxel_dose_Gy_output_file{
+        "out/gpu_charged_origin_voxel_dose_Gy.csv"};
     std::string device{"serial"};
 
     [[nodiscard]] double initial_total_energy_MeV() const noexcept {

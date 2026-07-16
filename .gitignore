@@ -11,6 +11,7 @@ __pycache__/
 # Patient DICOM / derived CT grids (large binary; do not commit)
 ct/
 
+tmp/
 # ---------------------------------------------------------------------------
 # Monte Carlo run outputs (TOPAS + GPU) — never commit
 # ---------------------------------------------------------------------------

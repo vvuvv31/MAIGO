@@ -1,5 +1,6 @@
 #include "carbon/cascade_package.hpp"
 #include "carbon/ct_grid.hpp"
+#include "carbon/io.hpp"
 #include "carbon/neutral_package.hpp"
 #include "carbon/cross_section.hpp"
 #include "carbon/multiple_scattering.hpp"
@@ -8,6 +9,7 @@
 #include "carbon/rng.hpp"
 #include "carbon/stopping_power.hpp"
 #include "carbon/straggling.hpp"
+#include "carbon/topas_spots.hpp"
 #include "carbon/transport.hpp"
 #include "carbon/transport_config.hpp"
 
@@ -646,6 +648,100 @@ void test_cascade_package_loading() {
     }
 }
 
+void test_dose_scorer_matches_mev_conversion() {
+    carbon::TransportConfig config;
+    config.number_of_histories = 100;
+    config.phantom_length_mm = 10.0;
+    config.depth_bin_width_mm = 5.0;
+    config.scorer_area_mm2 = 10000.0;
+    config.water_density_g_per_cm3 = 1.0;
+    config.validate();
+
+    carbon::TransportResult result;
+    result.deposited_energy_MeV = {100.0, 50.0};  // absolute MeV over all histories
+
+    const auto dir = std::filesystem::temp_directory_path() / "carbon_dose_scorer_test";
+    std::filesystem::create_directories(dir);
+    const auto mev_path = dir / "mev.csv";
+    const auto gy_path = dir / "dose_Gy.csv";
+    carbon::write_depth_dose_csv(mev_path, config, result);
+    carbon::write_depth_dose_Gy_csv(gy_path, config, result);
+
+    {
+        std::ifstream mev_in(mev_path);
+        std::ifstream gy_in(gy_path);
+        require(static_cast<bool>(mev_in) && static_cast<bool>(gy_in), "dose scorer files missing");
+        std::string mev_header;
+        std::string gy_header;
+        std::getline(mev_in, mev_header);
+        std::getline(gy_in, gy_header);
+        require(mev_header.find("energy_deposition_MeV_per_primary") != std::string::npos,
+                "MeV scorer header");
+        require(gy_header.find("dose_Gy_per_primary") != std::string::npos, "Gy scorer header");
+        require(gy_header.find("energy_deposition") == std::string::npos,
+                "pure dose scorer should not list MeV columns");
+
+        constexpr double MeV_to_joule = 1.602176634e-13;
+        const auto bin_mass_kg =
+            config.scorer_area_mm2 * config.depth_bin_width_mm *
+            config.water_density_g_per_cm3 * 1.0e-6;
+        for (std::size_t bin = 0; bin < 2; ++bin) {
+            double depth_m = 0, e_per = 0, d_mev = 0, rel_m = 0;
+            char comma = 0;
+            mev_in >> depth_m >> comma >> e_per >> comma >> d_mev >> comma >> rel_m;
+            double depth_g = 0, d_gy = 0, rel_g = 0;
+            gy_in >> depth_g >> comma >> d_gy >> comma >> rel_g;
+            const auto expected_e =
+                result.deposited_energy_MeV[bin] /
+                static_cast<double>(config.number_of_histories);
+            const auto expected_d = expected_e * MeV_to_joule / bin_mass_kg;
+            require_near(e_per, expected_e, 1.0e-12, "MeV/primary");
+            require_near(d_mev, expected_d, 1.0e-20, "MeV file dose column");
+            require_near(d_gy, expected_d, 1.0e-20, "Gy scorer dose");
+            require_near(d_gy, d_mev, 1.0e-20, "Gy scorer matches MeV-file dose column");
+        }
+    }
+    std::error_code ec;
+    std::filesystem::remove_all(dir, ec);
+}
+
+void test_topas_spots_parse_angle01() {
+    const std::filesystem::path path =
+        std::filesystem::path(CARBON_SOURCE_DIR) / "validation" / "topas" /
+        "spots_test_c_angle01.txt";
+    require(std::filesystem::exists(path),
+            "spots_test_c_angle01.txt missing under validation/topas");
+    const auto plan = carbon::TopasSpotPlan::from_file(path);
+    require(plan.spots.size() == 1, "Expected single spot in angle01 plan");
+    const auto& spot = plan.spots.front();
+    require(spot.spot_id == 445, "spot_id mismatch");
+    require_near(spot.energy_MeV, 2040.0, 1.0e-6, "BeamEnergy (total MeV)");
+    require_near(spot.energy_spread_percent, 1.0, 1.0e-6, "BeamEnergySpread percent");
+    require(spot.number_of_histories == 100000, "NumberOfHistoriesInRun");
+    require_near(spot.trans_x_mm, 0.0, 1.0e-9, "TransX");
+    require_near(spot.trans_z_mm, 0.0, 1.0e-9, "TransZ");
+    require_near(spot.rot_x_deg, 90.0, 1.0e-6, "RotX");
+    require_near(spot.rot_y_deg, 0.0, 1.0e-9, "RotY");
+    require_near(spot.sigma_x_mm, 3.4804, 1.0e-4, "SigmaX");
+    require_near(spot.sigma_x_prime, 0.0053, 1.0e-4, "SigmaXprime");
+    require_near(spot.correlation_x, 0.6855, 1.0e-4, "CorrelationX");
+    require_near(spot.sigma_y_mm, 3.4804, 1.0e-4, "SigmaY");
+    require_near(spot.sigma_y_prime, 0.0053, 1.0e-4, "SigmaYprime");
+    require_near(spot.correlation_y, 0.6855, 1.0e-4, "CorrelationY");
+    require(plan.total_histories() == 100000, "total_histories");
+
+    // TOPAS BeamPosition2: TransY=-SAD, RotX=90 → origin ≈ (0,0,-SAD), beam -Y.
+    carbon::TopasSpotPlan pose_plan = plan;
+    pose_plan.sad_mm = 450.0;
+    const auto pose = pose_plan.pose_for_spot(spot);
+    require_near(pose.origin_x_mm, 0.0, 1.0e-6, "pose origin x");
+    require_near(pose.origin_y_mm, 0.0, 1.0e-4, "pose origin y after Rx90");
+    require_near(pose.origin_z_mm, -450.0, 1.0e-4, "pose origin z after Rx90");
+    require_near(pose.uz_x, 0.0, 1.0e-6, "beam uz x");
+    require_near(pose.uz_y, -1.0, 1.0e-6, "beam uz y (local +Z after Rx90)");
+    require_near(pose.uz_z, 0.0, 1.0e-6, "beam uz z");
+}
+
 #ifdef CARBON_HAS_SYCL
 void test_serial_sycl_cpu_match() {
     carbon::TransportConfig config;
@@ -1073,6 +1169,8 @@ int main() {
         test_reaction_package_loading();
         test_cascade_package_loading();
         test_neutral_package_loading();
+        test_topas_spots_parse_angle01();
+        test_dose_scorer_matches_mev_conversion();
 #ifdef CARBON_HAS_SYCL
         test_serial_sycl_cpu_match();
         test_sycl_secondary_queue_generation();

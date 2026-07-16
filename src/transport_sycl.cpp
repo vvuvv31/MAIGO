@@ -1137,6 +1137,18 @@ TransportResult transport_sycl(const TransportConfig& config,
         static_cast<float>(config.emittance_sigma_x_prime);
     const auto emittance_sigma_y_prime =
         static_cast<float>(config.emittance_sigma_y_prime);
+    const auto source_origin_x_mm = static_cast<float>(config.source_origin_x_mm);
+    const auto source_origin_y_mm = static_cast<float>(config.source_origin_y_mm);
+    const auto source_origin_z_mm = static_cast<float>(config.source_origin_z_mm);
+    const auto beam_ux_x = static_cast<float>(config.beam_ux_x);
+    const auto beam_ux_y = static_cast<float>(config.beam_ux_y);
+    const auto beam_ux_z = static_cast<float>(config.beam_ux_z);
+    const auto beam_uy_x = static_cast<float>(config.beam_uy_x);
+    const auto beam_uy_y = static_cast<float>(config.beam_uy_y);
+    const auto beam_uy_z = static_cast<float>(config.beam_uy_z);
+    const auto beam_uz_x = static_cast<float>(config.beam_uz_x);
+    const auto beam_uz_y = static_cast<float>(config.beam_uz_y);
+    const auto beam_uz_z = static_cast<float>(config.beam_uz_z);
     const auto emittance_correlation_x =
         static_cast<float>(config.emittance_correlation_x);
     const auto emittance_correlation_y =
@@ -1205,12 +1217,12 @@ TransportResult transport_sycl(const TransportConfig& config,
                     energy_MeV = energy_cutoff_MeV;
                 }
             }
-            auto position_x_mm = 0.0F;
-            auto position_y_mm = 0.0F;
-            auto position_z_mm = 0.0F;
-            auto direction_x = 0.0F;
-            auto direction_y = 0.0F;
-            auto direction_z = 1.0F;
+            // Local beam frame (defaults: origin 0, +z beam). Emittance is local x/y.
+            auto local_x_mm = 0.0F;
+            auto local_y_mm = 0.0F;
+            auto local_dx = 0.0F;
+            auto local_dy = 0.0F;
+            auto local_dz = 1.0F;
             if (enable_emittance_source) {
                 // TOPAS BiGaussian: sample (x,x') and (y,y') from bivariate normals.
                 // x' = dx/dz (unitless, rad-like). Independent axes with correlations.
@@ -1225,8 +1237,8 @@ TransportResult transport_sycl(const TransportConfig& config,
                 const auto g1 = sycl::sqrt(-2.0F * sycl::log(u0)) * sycl::sin(two_pi * u1);
                 const auto g2 = sycl::sqrt(-2.0F * sycl::log(u2)) * sycl::cos(two_pi * u3);
                 const auto g3 = sycl::sqrt(-2.0F * sycl::log(u2)) * sycl::sin(two_pi * u3);
-                position_x_mm = emittance_sigma_x_mm * g0;
-                position_y_mm = emittance_sigma_y_mm * g2;
+                local_x_mm = emittance_sigma_x_mm * g0;
+                local_y_mm = emittance_sigma_y_mm * g2;
                 const auto rho_x = sycl::clamp(emittance_correlation_x, -0.9999F, 0.9999F);
                 const auto rho_y = sycl::clamp(emittance_correlation_y, -0.9999F, 0.9999F);
                 const auto x_prime =
@@ -1238,9 +1250,31 @@ TransportResult transport_sycl(const TransportConfig& config,
                 // Paraxial unit direction from slopes (dx/dz, dy/dz).
                 const auto inv_norm =
                     sycl::rsqrt(1.0F + x_prime * x_prime + y_prime * y_prime);
-                direction_x = x_prime * inv_norm;
-                direction_y = y_prime * inv_norm;
-                direction_z = inv_norm;
+                local_dx = x_prime * inv_norm;
+                local_dy = y_prime * inv_norm;
+                local_dz = inv_norm;
+            }
+            // World = origin + ux*x + uy*y ; dir = ux*dx + uy*dy + uz*dz
+            auto position_x_mm =
+                source_origin_x_mm + beam_ux_x * local_x_mm + beam_uy_x * local_y_mm;
+            auto position_y_mm =
+                source_origin_y_mm + beam_ux_y * local_x_mm + beam_uy_y * local_y_mm;
+            auto position_z_mm =
+                source_origin_z_mm + beam_ux_z * local_x_mm + beam_uy_z * local_y_mm;
+            auto direction_x =
+                beam_ux_x * local_dx + beam_uy_x * local_dy + beam_uz_x * local_dz;
+            auto direction_y =
+                beam_ux_y * local_dx + beam_uy_y * local_dy + beam_uz_y * local_dz;
+            auto direction_z =
+                beam_ux_z * local_dx + beam_uy_z * local_dy + beam_uz_z * local_dz;
+            {
+                const auto inv_n = sycl::rsqrt(sycl::fmax(
+                    1.0e-20F,
+                    direction_x * direction_x + direction_y * direction_y +
+                        direction_z * direction_z));
+                direction_x *= inv_n;
+                direction_y *= inv_n;
+                direction_z *= inv_n;
             }
             auto history_deposited_MeV = 0.0f;
             auto history_nuclear_MeV = 0.0f;
