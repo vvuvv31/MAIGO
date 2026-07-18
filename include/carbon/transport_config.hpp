@@ -63,6 +63,10 @@ struct TransportConfig {
     bool enable_energy_straggling{false};
     double straggling_scale{1.0};
     bool enable_multiple_scattering{false};
+    // TOPAS-style flat rectangular source in the local beam frame.
+    bool enable_flat_source{false};
+    double flat_source_half_width_x_mm{0.0};
+    double flat_source_half_width_y_mm{0.0};
     // TOPAS-style BiGaussian emittance source.
     // Samples (x,x') and (y,y') from bivariate Gaussians in the local beam frame;
     // x' = dx/dz_local (rad-like). Local frame defaults to world +z beam.

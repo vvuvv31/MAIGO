@@ -1130,6 +1130,11 @@ TransportResult transport_sycl(const TransportConfig& config,
     const auto enable_multiple_scattering = config.enable_multiple_scattering;
     const auto random_seed = config.random_seed;
     const auto enable_primary_attenuation = config.enable_primary_attenuation;
+    const auto enable_flat_source = config.enable_flat_source;
+    const auto flat_source_half_width_x_mm =
+        static_cast<float>(config.flat_source_half_width_x_mm);
+    const auto flat_source_half_width_y_mm =
+        static_cast<float>(config.flat_source_half_width_y_mm);
     const auto enable_emittance_source = config.enable_emittance_source;
     const auto emittance_sigma_x_mm = static_cast<float>(config.emittance_sigma_x_mm);
     const auto emittance_sigma_y_mm = static_cast<float>(config.emittance_sigma_y_mm);
@@ -1223,7 +1228,12 @@ TransportResult transport_sycl(const TransportConfig& config,
             auto local_dx = 0.0F;
             auto local_dy = 0.0F;
             auto local_dz = 1.0F;
-            if (enable_emittance_source) {
+            if (enable_flat_source) {
+                local_x_mm = flat_source_half_width_x_mm *
+                             (2.0F * rng::uniform01(random_seed, history, 0, 34) - 1.0F);
+                local_y_mm = flat_source_half_width_y_mm *
+                             (2.0F * rng::uniform01(random_seed, history, 0, 35) - 1.0F);
+            } else if (enable_emittance_source) {
                 // TOPAS BiGaussian: sample (x,x') and (y,y') from bivariate normals.
                 // x' = dx/dz (unitless, rad-like). Independent axes with correlations.
                 const auto u0 = sycl::fmax(
@@ -3570,23 +3580,30 @@ TransportResult transport_sycl(const TransportConfig& config,
     }
     if (enable_secondary_transport) {
         fragment_dose_host.resize(fragment_species_count * number_of_bins);
-        secondary_deposited_host.resize(secondary_queue_capacity);
-        secondary_escaped_host.resize(secondary_queue_capacity);
-        secondary_steps_host.resize(secondary_queue_capacity);
+        const auto transported_secondary_count = static_cast<std::size_t>(
+            std::min<std::uint64_t>(transported_queue_count, secondary_queue_capacity));
+        secondary_deposited_host.resize(transported_secondary_count);
+        secondary_escaped_host.resize(transported_secondary_count);
+        secondary_steps_host.resize(transported_secondary_count);
         queue.copy(fragment_dose_device, fragment_dose_host.data(),
-                   fragment_dose_host.size());
-        queue.copy(secondary_deposited_device, secondary_deposited_host.data(),
-                   secondary_queue_capacity);
-        queue.copy(secondary_escaped_device, secondary_escaped_host.data(),
-                   secondary_queue_capacity);
-        queue.copy(secondary_steps_device, secondary_steps_host.data(),
-                   secondary_queue_capacity)
+                   fragment_dose_host.size())
             .wait_and_throw();
-        if (enable_fragment_cascade) {
-            cascade_summaries_host.resize(secondary_queue_capacity);
-            queue.copy(cascade_summaries_device, cascade_summaries_host.data(),
-                       secondary_queue_capacity)
+        if (transported_secondary_count > 0) {
+            queue.copy(secondary_deposited_device, secondary_deposited_host.data(),
+                       transported_secondary_count);
+            queue.copy(secondary_escaped_device, secondary_escaped_host.data(),
+                       transported_secondary_count);
+            queue.copy(secondary_steps_device, secondary_steps_host.data(),
+                       transported_secondary_count)
                 .wait_and_throw();
+        }
+        if (enable_fragment_cascade) {
+            cascade_summaries_host.resize(transported_secondary_count);
+            if (transported_secondary_count > 0) {
+                queue.copy(cascade_summaries_device, cascade_summaries_host.data(),
+                           transported_secondary_count)
+                    .wait_and_throw();
+            }
         }
     }
     if (enable_neutral_transport) {

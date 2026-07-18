@@ -13,8 +13,9 @@
 #include "carbon/transport.hpp"
 #include "carbon/transport_config.hpp"
 
-#include <cmath>
+#include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -705,6 +706,23 @@ void test_dose_scorer_matches_mev_conversion() {
     std::filesystem::remove_all(dir, ec);
 }
 
+void test_flat_source_config_validation() {
+    carbon::TransportConfig config;
+    config.enable_flat_source = true;
+    config.flat_source_half_width_x_mm = 15.0;
+    config.flat_source_half_width_y_mm = 15.0;
+    config.validate();
+
+    config.enable_emittance_source = true;
+    require_throws([&config] { config.validate(); },
+                   "Flat and emittance sources should be mutually exclusive");
+
+    config.enable_emittance_source = false;
+    config.flat_source_half_width_x_mm = 0.0;
+    require_throws([&config] { config.validate(); },
+                   "Flat source should require positive half widths");
+}
+
 void test_topas_spots_parse_angle01() {
     const std::filesystem::path path =
         std::filesystem::path(CARBON_SOURCE_DIR) / "validation" / "topas" /
@@ -743,6 +761,54 @@ void test_topas_spots_parse_angle01() {
 }
 
 #ifdef CARBON_HAS_SYCL
+void test_sycl_flat_source_extent() {
+    carbon::TransportConfig config;
+    config.number_of_histories = 512;
+    config.initial_energy_MeVu = 10.0;
+    config.phantom_length_mm = 5.0;
+    config.depth_bin_width_mm = 1.0;
+    config.maximum_step_mm = 0.5;
+    config.maximum_relative_energy_loss = 0.01;
+    config.enable_voxel_scoring = true;
+    config.voxel_bins_x = 50;
+    config.voxel_bins_y = 50;
+    config.voxel_size_x_mm = 3.0;
+    config.voxel_size_y_mm = 3.0;
+    config.enable_flat_source = true;
+    config.flat_source_half_width_x_mm = 15.0;
+    config.flat_source_half_width_y_mm = 15.0;
+    config.random_seed = 20260716;
+    config.validate();
+
+    const carbon::StoppingPowerTable stopping_power(
+        {0.01, 10.01, 20.01}, {2.0, 2.0, 2.0});
+    const auto result = carbon::transport_sycl(
+        config, stopping_power, zero_cross_section(), "cpu");
+    require_voxel_idd_closure(config, result, 1.0e-9);
+
+    std::array<bool, 50> active_x{};
+    std::array<bool, 50> active_y{};
+    const auto plane_size = config.voxel_bins_x * config.voxel_bins_y;
+    for (std::size_t voxel = 0; voxel < result.voxel_deposited_energy_MeV.size(); ++voxel) {
+        if (result.voxel_deposited_energy_MeV[voxel] == 0.0) {
+            continue;
+        }
+        const auto in_plane = voxel % plane_size;
+        active_x[in_plane % config.voxel_bins_x] = true;
+        active_y[in_plane / config.voxel_bins_x] = true;
+    }
+    const auto active_x_count = std::count(active_x.begin(), active_x.end(), true);
+    const auto active_y_count = std::count(active_y.begin(), active_y.end(), true);
+    require(active_x_count >= 8 && active_y_count >= 8,
+            "Flat source did not populate the expected field width");
+    for (std::size_t index = 0; index < active_x.size(); ++index) {
+        if (active_x[index] || active_y[index]) {
+            require(index >= 20 && index <= 29,
+                    "Flat source deposited outside the 30 mm square field");
+        }
+    }
+}
+
 void test_serial_sycl_cpu_match() {
     carbon::TransportConfig config;
     config.number_of_histories = 64;
@@ -1169,9 +1235,11 @@ int main() {
         test_reaction_package_loading();
         test_cascade_package_loading();
         test_neutral_package_loading();
+        test_flat_source_config_validation();
         test_topas_spots_parse_angle01();
         test_dose_scorer_matches_mev_conversion();
 #ifdef CARBON_HAS_SYCL
+        test_sycl_flat_source_extent();
         test_serial_sycl_cpu_match();
         test_sycl_secondary_queue_generation();
         test_sycl_layered_slab_range_shift();

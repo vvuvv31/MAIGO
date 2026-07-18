@@ -275,6 +275,16 @@ void TransportConfig::validate() const {
         throw std::invalid_argument(
             "enable_charged_origin_voxel_scoring requires enable_voxel_scoring=true");
     }
+    if (enable_flat_source &&
+        (flat_source_half_width_x_mm <= 0.0 || flat_source_half_width_y_mm <= 0.0)) {
+        throw std::invalid_argument(
+            "enable_flat_source requires positive flat_source_half_width_x_mm and "
+            "flat_source_half_width_y_mm");
+    }
+    if (enable_flat_source && enable_emittance_source) {
+        throw std::invalid_argument(
+            "enable_flat_source and enable_emittance_source cannot both be true");
+    }
     if (enable_secondary_transport && !enable_secondary_generation) {
         throw std::invalid_argument(
             "enable_secondary_transport requires enable_secondary_generation=true");
@@ -491,6 +501,12 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.straggling_scale = parse_number(values, "straggling_scale", config.straggling_scale);
     config.enable_multiple_scattering =
         parse_bool(values, "enable_multiple_scattering", config.enable_multiple_scattering);
+    config.enable_flat_source =
+        parse_bool(values, "enable_flat_source", config.enable_flat_source);
+    config.flat_source_half_width_x_mm = parse_number(
+        values, "flat_source_half_width_x_mm", config.flat_source_half_width_x_mm);
+    config.flat_source_half_width_y_mm = parse_number(
+        values, "flat_source_half_width_y_mm", config.flat_source_half_width_y_mm);
     config.enable_emittance_source =
         parse_bool(values, "enable_emittance_source", config.enable_emittance_source);
     config.emittance_sigma_x_mm =

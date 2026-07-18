@@ -1,0 +1,85 @@
+{
+  "case": "sobp_water_3cm_5_10cm_3mm_gpu_100k",
+  "device": "Intel Arc B580",
+  "sycl_backend": "OpenCL GPU",
+  "driver": "26.22.38646.4",
+  "histories": 100000,
+  "energy_layers": 21,
+  "layer_histories": [1770, 1648, 1771, 1865, 1914, 1937, 1871, 2055, 3049, 3171, 3225, 3452, 3752, 4024, 4328, 4512, 5280, 6291, 7969, 11852, 24264],
+  "transport_elapsed_s": 3.410379,
+  "wall_elapsed_s": 3.792798,
+  "transport_histories_per_s": 29322.254,
+  "wall_histories_per_s": 26365.760,
+  "topas_56_thread_histories_per_s": 191.028536,
+  "speedup": {
+    "transport": 153.4967,
+    "end_to_end_wall": 138.0200
+  },
+  "projected_10M_s": {
+    "transport": 341.0379,
+    "end_to_end_wall": 379.2798
+  },
+  "transport_audit": {
+    "energy_balance_relative_error": 2.1396176e-5,
+    "nuclear_interactions": 38121,
+    "sampled_reaction_packages": 38121,
+    "queued_charged_secondaries": 205012,
+    "transported_charged_secondaries": 291850,
+    "secondary_queue_overflow": 0,
+    "cascade_interactions": 23544,
+    "generated_cascade_products": 138394,
+    "cascade_queue_overflow": 0
+  },
+  "voxel_model_note": "Depth-only neutral kerma and electronic buildup proxies were disabled because they are not yet voxelized; charged and cascade transport remained enabled.",
+  "dose_comparison_to_topas_10M": {
+    "integral_signed_percent": -0.68266725,
+    "normalized_voxel_L1_percent": 3.86936510,
+    "normalized_RMSE_to_topas_max_percent": 0.55677640,
+    "high_dose_mean_abs_percent": 8.30621790,
+    "high_dose_pearson_r": 0.998587328,
+    "gpu_sobp_flatness_percent": 10.57624669,
+    "topas_sobp_flatness_percent": 11.24289682,
+    "gamma_3d_global": {
+      "reference": "TOPAS 10M",
+      "evaluation": "GPU 100k",
+      "interpolation_samples_per_dta": 10,
+      "3percent_3mm_threshold10percent": {
+        "passed": 3456,
+        "evaluated": 3460,
+        "pass_rate_percent": 99.8844
+      },
+      "2percent_2mm_threshold10percent": {
+        "passed": 3265,
+        "evaluated": 3460,
+        "pass_rate_percent": 94.3642
+      },
+      "3percent_3mm_threshold1percent": {
+        "passed": 8322,
+        "evaluated": 8326,
+        "pass_rate_percent": 99.9520
+      }
+    }
+  },
+  "artifacts": {
+    "log": {
+      "path": "out/sobp_benchmark_100k/gpu_sobp_benchmark.log",
+      "sha256": "ef5cfef903bbc7bb52c86c8505a50e2ceca3754f9a4189cdc1da8a0b63ae311a"
+    },
+    "mhd": {
+      "path": "out/sobp_benchmark_100k/gpu_sobp_dose.mhd",
+      "sha256": "eb4fd5fcbd1d09bd6c69bae6521fcd193aa7c0342e5c0bd71e6f8b7ddbcd9b78"
+    },
+    "raw": {
+      "path": "out/sobp_benchmark_100k/gpu_sobp_dose.raw",
+      "sha256": "cf2436964db85faaef59be92c211439c443683a20bd4db09f223294d9e219eab"
+    },
+    "metrics": {
+      "path": "out/sobp_benchmark_100k/gpu_vs_topas.metrics.json",
+      "sha256": "afd6357b7e6892dce8603842e6f960cf228793ed94c71670f81385ccfd429dd9"
+    }
+  },
+  "physics_packages": {
+    "reaction_sha256": "4d4a6e89ed2145e506073cf4624a4f0b49b42778a6d84be621171eefa8649c48",
+    "cascade_sha256": "ee54108367ae7e31b37eb8b945311f2836ebce14a7926245756501c3736ee112"
+  }
+}

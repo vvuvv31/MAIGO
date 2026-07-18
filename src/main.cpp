@@ -130,13 +130,17 @@ void apply_spot_to_config(carbon::TransportConfig& config,
     // TOPAS BeamEnergySpread is percent (1.0 => 1%); GPU uses relative RMS.
     config.beam_energy_spread = spot.energy_spread_percent / 100.0;
 
-    config.enable_emittance_source = true;
-    config.emittance_sigma_x_mm = spot.sigma_x_mm;
-    config.emittance_sigma_y_mm = spot.sigma_y_mm;
-    config.emittance_sigma_x_prime = spot.sigma_x_prime;
-    config.emittance_sigma_y_prime = spot.sigma_y_prime;
-    config.emittance_correlation_x = spot.correlation_x;
-    config.emittance_correlation_y = spot.correlation_y;
+    // A flat field is shared by every energy layer. Otherwise apply the spot's
+    // TOPAS BiGaussian emittance values (zero values retain a pencil source).
+    config.enable_emittance_source = !config.enable_flat_source;
+    if (config.enable_emittance_source) {
+        config.emittance_sigma_x_mm = spot.sigma_x_mm;
+        config.emittance_sigma_y_mm = spot.sigma_y_mm;
+        config.emittance_sigma_x_prime = spot.sigma_x_prime;
+        config.emittance_sigma_y_prime = spot.sigma_y_prime;
+        config.emittance_correlation_x = spot.correlation_x;
+        config.emittance_correlation_y = spot.correlation_y;
+    }
 
     if (config.spots_geometry_mode == "beam_plus_z") {
         // Water-IDD convenience: beam along +z from z=0; lateral offsets only.
