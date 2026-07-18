@@ -1,0 +1,6 @@
+# Production remote overrides: 1e7 primaries from the shared layer-weight file.
+includeFile = carbon_sobp_water_3cm_5_10cm_3mm.txt
+i:Ts/NumberOfThreads = 56
+s:Sc/DepthEnergy/OutputFile = "output/sobp_water_3cm_5_10cm_3mm_idd_energy_development"
+s:Sc/Dose3mm/OutputFile = "output/sobp_water_3cm_5_10cm_3mm_dose3d_development"
+s:Sc/Energy3mm/OutputFile = "output/sobp_water_3cm_5_10cm_3mm_energy3d_development"

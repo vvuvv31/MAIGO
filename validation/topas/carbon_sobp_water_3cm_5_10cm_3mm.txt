@@ -1,0 +1,10 @@
+# Water tank 150x150x150 mm, 3x3 cm square C-12 beam, SOBP 50-100 mm.
+# Reuse the validated 21-layer SOBP weights and 3 mm scorers; override field and outputs.
+includeFile = carbon_sobp_water_5_10cm_3mm.txt
+
+d:So/CarbonBeam/BeamPositionCutoffX = 15. mm
+d:So/CarbonBeam/BeamPositionCutoffY = 15. mm
+
+s:Sc/DepthEnergy/OutputFile = "output/sobp_water_3cm_5_10cm_3mm_idd_energy"
+s:Sc/Dose3mm/OutputFile = "output/sobp_water_3cm_5_10cm_3mm_dose3d"
+s:Sc/Energy3mm/OutputFile = "output/sobp_water_3cm_5_10cm_3mm_energy3d"

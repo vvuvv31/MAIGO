@@ -1,0 +1,60 @@
+{
+  "case": "sobp_water_3cm_5_10cm_3mm_gpu_10m",
+  "device": "Intel Arc B580",
+  "sycl_backend": "OpenCL GPU",
+  "driver": "26.22.38646.4",
+  "histories": 10000000,
+  "energy_layers": 21,
+  "transport_elapsed_s": 242.23164,
+  "wall_elapsed_s": 242.710336,
+  "transport_histories_per_s": 41282.799,
+  "wall_histories_per_s": 41201.377,
+  "topas_56_thread_histories_per_s": 191.028536,
+  "speedup": {
+    "transport": 216.1080,
+    "end_to_end_wall": 215.6818
+  },
+  "energy_balance_relative_error": 3.1244484e-6,
+  "secondary_queue_overflow": 0,
+  "cascade_queue_overflow": 0,
+  "dose_comparison_to_topas_10m": {
+    "integral_signed_percent": -0.73981372,
+    "normalized_voxel_L1_percent": 1.29155521,
+    "normalized_RMSE_to_topas_max_percent": 0.17230153,
+    "high_dose_mean_abs_percent": 2.41994898,
+    "high_dose_pearson_r": 0.999928145,
+    "gamma_3percent_3mm_threshold10percent": {
+      "passed": 3460,
+      "evaluated": 3460,
+      "pass_rate_percent": 100.0
+    },
+    "gamma_2percent_2mm_threshold10percent": {
+      "passed": 3460,
+      "evaluated": 3460,
+      "pass_rate_percent": 100.0
+    },
+    "gamma_3percent_3mm_threshold1percent": {
+      "passed": 8326,
+      "evaluated": 8326,
+      "pass_rate_percent": 100.0
+    }
+  },
+  "artifacts": {
+    "log": {
+      "path": "out/sobp_benchmark/gpu_sobp_benchmark.log",
+      "sha256": "cfabc742ec9103777abf5c47363f53bd11c3ddddc38cabab0f9e652697e1f773"
+    },
+    "mhd": {
+      "path": "out/sobp_benchmark/gpu_sobp_dose.mhd",
+      "sha256": "eb4fd5fcbd1d09bd6c69bae6521fcd193aa7c0342e5c0bd71e6f8b7ddbcd9b78"
+    },
+    "raw": {
+      "path": "out/sobp_benchmark/gpu_sobp_dose.raw",
+      "sha256": "9926608283d8648904598c27a733ce41fb2b1b683b70c542b48b0db635b1824a"
+    },
+    "metrics": {
+      "path": "out/sobp_benchmark/gpu_vs_topas.metrics.json",
+      "sha256": "8b0c9950d58cdf65d6c6e89c2c501612f89625e2851007a0e0d83895e75e2d46"
+    }
+  }
+}

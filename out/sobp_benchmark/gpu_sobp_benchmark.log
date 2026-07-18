@@ -1,0 +1,82 @@
+Reaction packages: 73739; direct secondaries: 715976
+Cascade projectiles: 31; interactions: 206939; products: 1557668
+SYCL device: Intel(R) Arc(TM) B580 Graphics | Intel(R) Corporation | driver 26.22.38646.4
+TOPAS spots plan: validation/topas/spots_sobp_water_5_10cm.txt
+  spots: 21  total histories: 10000000  geometry: beam_plus_z  SAD: 450 mm
+  (sequential spot order; no TimeFeature timeline)
+  spot 1/21 id=1 E=1780.45 MeV (148.371 MeV/u) N=177000 spread=1% Tx=0 Tz=0 Rx=0 Ry=0
+Device memory estimate: 415 MiB / budget 5802 MiB (50% of 11605 MiB); secondary_queue_capacity=2832000
+  spot 2/21 id=2 E=1826.73 MeV (152.227 MeV/u) N=164800 spread=1% Tx=0 Tz=0 Rx=0 Ry=0
+Device memory estimate: 391 MiB / budget 5802 MiB (50% of 11605 MiB); secondary_queue_capacity=2636800
+  spot 3/21 id=3 E=1868.94 MeV (155.745 MeV/u) N=177100 spread=1% Tx=0 Tz=0 Rx=0 Ry=0
+Device memory estimate: 415 MiB / budget 5802 MiB (50% of 11605 MiB); secondary_queue_capacity=2833600
+  spot 4/21 id=4 E=1911.15 MeV (159.263 MeV/u) N=186500 spread=1% Tx=0 Tz=0 Rx=0 Ry=0
+Device memory estimate: 434 MiB / budget 5802 MiB (50% of 11605 MiB); secondary_queue_capacity=2984000
+  spot 5/21 id=5 E=1953.37 MeV (162.781 MeV/u) N=191400 spread=1% Tx=0 Tz=0 Rx=0 Ry=0
+Device memory estimate: 444 MiB / budget 5802 MiB (50% of 11605 MiB); secondary_queue_capacity=3062400
+  spot 6/21 id=6 E=1995.58 MeV (166.298 MeV/u) N=193700 spread=1% Tx=0 Tz=0 Rx=0 Ry=0
+Device memory estimate: 448 MiB / budget 5802 MiB (50% of 11605 MiB); secondary_queue_capacity=3099200
+  spot 7/21 id=7 E=2037.79 MeV (169.816 MeV/u) N=187100 spread=1% Tx=0 Tz=0 Rx=0 Ry=0
+Device memory estimate: 435 MiB / budget 5802 MiB (50% of 11605 MiB); secondary_queue_capacity=2993600
+  spot 8/21 id=8 E=2080.01 MeV (173.334 MeV/u) N=205500 spread=1% Tx=0 Tz=0 Rx=0 Ry=0
+Device memory estimate: 472 MiB / budget 5802 MiB (50% of 11605 MiB); secondary_queue_capacity=3288000
+  spot 9/21 id=9 E=2122.22 MeV (176.852 MeV/u) N=304900 spread=1% Tx=0 Tz=0 Rx=0 Ry=0
+Device memory estimate: 669 MiB / budget 5802 MiB (50% of 11605 MiB); secondary_queue_capacity=4878400
+  spot 10/21 id=10 E=2164.43 MeV (180.37 MeV/u) N=317100 spread=1% Tx=0 Tz=0 Rx=0 Ry=0
+Device memory estimate: 693 MiB / budget 5802 MiB (50% of 11605 MiB); secondary_queue_capacity=5073600
+  spot 11/21 id=11 E=2206.65 MeV (183.887 MeV/u) N=322500 spread=1% Tx=0 Tz=0 Rx=0 Ry=0
+Device memory estimate: 704 MiB / budget 5802 MiB (50% of 11605 MiB); secondary_queue_capacity=5160000
+  spot 12/21 id=12 E=2248.86 MeV (187.405 MeV/u) N=345200 spread=1% Tx=0 Tz=0 Rx=0 Ry=0
+Device memory estimate: 749 MiB / budget 5802 MiB (50% of 11605 MiB); secondary_queue_capacity=5523200
+  spot 13/21 id=13 E=2291.08 MeV (190.923 MeV/u) N=375200 spread=1% Tx=0 Tz=0 Rx=0 Ry=0
+Device memory estimate: 809 MiB / budget 5802 MiB (50% of 11605 MiB); secondary_queue_capacity=6003200
+  spot 14/21 id=14 E=2333.29 MeV (194.441 MeV/u) N=402400 spread=1% Tx=0 Tz=0 Rx=0 Ry=0
+Device memory estimate: 863 MiB / budget 5802 MiB (50% of 11605 MiB); secondary_queue_capacity=6438400
+  spot 15/21 id=15 E=2375.5 MeV (197.959 MeV/u) N=432800 spread=1% Tx=0 Tz=0 Rx=0 Ry=0
+Device memory estimate: 923 MiB / budget 5802 MiB (50% of 11605 MiB); secondary_queue_capacity=6924800
+  spot 16/21 id=16 E=2415.01 MeV (201.251 MeV/u) N=451200 spread=1% Tx=0 Tz=0 Rx=0 Ry=0
+Device memory estimate: 960 MiB / budget 5802 MiB (50% of 11605 MiB); secondary_queue_capacity=7219200
+  spot 17/21 id=17 E=2450.78 MeV (204.232 MeV/u) N=528000 spread=1% Tx=0 Tz=0 Rx=0 Ry=0
+Device memory estimate: 1112 MiB / budget 5802 MiB (50% of 11605 MiB); secondary_queue_capacity=8448000
+  spot 18/21 id=18 E=2486.56 MeV (207.213 MeV/u) N=629100 spread=1% Tx=0 Tz=0 Rx=0 Ry=0
+Device memory estimate: 1313 MiB / budget 5802 MiB (50% of 11605 MiB); secondary_queue_capacity=10065600
+  spot 19/21 id=19 E=2522.33 MeV (210.194 MeV/u) N=796900 spread=1% Tx=0 Tz=0 Rx=0 Ry=0
+Device memory estimate: 1647 MiB / budget 5802 MiB (50% of 11605 MiB); secondary_queue_capacity=12750400
+  spot 20/21 id=20 E=2558.1 MeV (213.175 MeV/u) N=1185200 spread=1% Tx=0 Tz=0 Rx=0 Ry=0
+Device memory estimate: 2418 MiB / budget 5802 MiB (50% of 11605 MiB); secondary_queue_capacity=18963200
+  spot 21/21 id=21 E=2593.87 MeV (216.156 MeV/u) N=2426400 spread=1% Tx=0 Tz=0 Rx=0 Ry=0
+Device memory estimate: 4884 MiB / budget 5802 MiB (50% of 11605 MiB); secondary_queue_capacity=38822400
+Backend: sycl-gpu+straggling+espread+multiple-scattering+voxel-scoring+attenuation+secondary-generation+secondary-transport+fragment-cascade
+Histories: 10000000
+Initial energy: 148.37081 MeV/u = 1780.4497 MeV per C-12
+Steps: 39526290895
+Elapsed: 242.23164 s
+Throughput: 41282.799 histories/s
+Energy balance error: 3.1244484e-06
+Nuclear interactions: 3830103
+Sampled reaction packages: 3830103
+Generated direct secondaries: 33059905
+Generated direct-secondary energy: 5.5628862e+09 MeV
+Queued charged secondaries: 20609905
+Secondary queue overflow: 0
+Queued secondary energy: 4.9784907e+09 MeV
+Secondary queue overflow energy: 0 MeV
+Untransported neutral energy: 7.6116389e+08 MeV
+Untransported unsupported charged energy: 0 MeV
+Nuclear energy not in sampled direct secondaries: 2.1767256e+08 MeV
+Transported charged secondaries: 29379509
+Secondary transport steps: 26883393958
+Secondary deposited energy: 3.6561145e+09 MeV
+Secondary escaped energy: 1.0709765e+09 MeV
+Cascade interactions: 2382247
+Generated cascade products: 13993170
+Queued cascade secondaries: 8769604
+Cascade queue overflow: 0
+Fragment species output: out/sobp_benchmark/gpu_sobp_species.csv
+Untracked nuclear energy: 1.0534676e+09 MeV
+MeV scorer output: out/sobp_benchmark/gpu_sobp_idd.csv
+Dose scorer output (Gy): out/sobp_benchmark/gpu_sobp_idd_Gy.csv
+Fragment-species dose (Gy): out/sobp_benchmark/gpu_sobp_species_Gy.csv
+Voxel MeV scorer output: out/sobp_benchmark/gpu_sobp_voxels.csv
+Voxel dose scorer (Gy): out/sobp_benchmark/gpu_sobp_voxels_Gy.csv
+WallElapsedSeconds=242.710336
