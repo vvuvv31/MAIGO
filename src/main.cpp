@@ -113,6 +113,11 @@ void accumulate_transport_result(carbon::TransportResult& total,
     total.charged_from_neutral_energy_MeV += part.charged_from_neutral_energy_MeV;
     total.total_steps += part.total_steps;
     total.elapsed_seconds += part.elapsed_seconds;
+    total.primary_kernel_seconds += part.primary_kernel_seconds;
+    total.secondary_kernel_seconds += part.secondary_kernel_seconds;
+    total.neutral_kernel_seconds += part.neutral_kernel_seconds;
+    total.charged_after_neutral_kernel_seconds +=
+        part.charged_after_neutral_kernel_seconds;
     if (total.backend.empty()) {
         total.backend = part.backend;
     }
@@ -394,6 +399,11 @@ int main(int argc, char* argv[]) {
                   << "Steps: " << result.total_steps << '\n'
                   << "Elapsed: " << result.elapsed_seconds << " s\n"
                   << "Throughput: " << histories_per_second << " histories/s\n"
+                  << "Kernel time: primary=" << result.primary_kernel_seconds
+                  << " s secondary=" << result.secondary_kernel_seconds
+                  << " s neutral=" << result.neutral_kernel_seconds
+                  << " s charged-after-neutral="
+                  << result.charged_after_neutral_kernel_seconds << " s\n"
                   << "Energy balance error: " << result.relative_energy_balance_error() << '\n'
                   << "Nuclear interactions: " << result.nuclear_interactions << '\n';
         if (config.enable_secondary_generation) {

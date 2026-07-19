@@ -70,6 +70,10 @@ struct TransportResult {
     double charged_from_neutral_energy_MeV{0.0};
     std::uint64_t total_steps{0};
     double elapsed_seconds{0.0};
+    double primary_kernel_seconds{0.0};
+    double secondary_kernel_seconds{0.0};
+    double neutral_kernel_seconds{0.0};
+    double charged_after_neutral_kernel_seconds{0.0};
     std::string backend;
 
     [[nodiscard]] double relative_energy_balance_error() const noexcept;

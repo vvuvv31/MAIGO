@@ -220,6 +220,14 @@ bool is_uniform_grid(const std::vector<double>& energies) {
     return true;
 }
 
+double event_duration_seconds(const sycl::event& event) {
+    const auto start =
+        event.get_profiling_info<sycl::info::event_profiling::command_start>();
+    const auto end =
+        event.get_profiling_info<sycl::info::event_profiling::command_end>();
+    return static_cast<double>(end - start) * 1.0e-9;
+}
+
 struct Direction3F {
     float x;
     float y;
@@ -562,7 +570,7 @@ inline std::uint32_t nearest_neutral_interaction(
 }
 
 void score_secondary_dose_device(
-    const float amount_MeV,
+    const double amount_MeV,
     const bool is_neutral_lineage,
     const std::size_t species_index,
     const std::size_t neutral_origin,
@@ -586,14 +594,14 @@ void score_secondary_dose_device(
                          sycl::access::address_space::global_space>
             atomic_origin(neutral_origin_dose_device[neutral_origin * number_of_bins +
                                                      static_cast<std::size_t>(bin)]);
-        atomic_origin.fetch_add(static_cast<double>(amount_MeV));
+        atomic_origin.fetch_add(amount_MeV);
         if (enable_voxel_scoring && neutral_origin_voxel_dose_device != nullptr) {
             sycl::atomic_ref<double, sycl::memory_order::relaxed, sycl::memory_scope::device,
                              sycl::access::address_space::global_space>
                 atomic_voxel(
                     neutral_origin_voxel_dose_device[neutral_origin_voxel_offset +
                                                      voxel_index]);
-            atomic_voxel.fetch_add(static_cast<double>(amount_MeV));
+            atomic_voxel.fetch_add(amount_MeV);
         }
         return;
     }
@@ -602,19 +610,19 @@ void score_secondary_dose_device(
         atomic_fragment(
             fragment_dose_device[species_index * number_of_bins +
                                  static_cast<std::size_t>(bin)]);
-    atomic_fragment.fetch_add(static_cast<double>(amount_MeV));
+    atomic_fragment.fetch_add(amount_MeV);
     if (enable_voxel_scoring) {
         sycl::atomic_ref<double, sycl::memory_order::relaxed, sycl::memory_scope::device,
                          sycl::access::address_space::global_space>
             atomic_voxel(voxel_dose_device[voxel_index]);
-        atomic_voxel.fetch_add(static_cast<double>(amount_MeV));
+        atomic_voxel.fetch_add(amount_MeV);
         if (enable_charged_origin_voxel_scoring) {
             sycl::atomic_ref<double, sycl::memory_order::relaxed, sycl::memory_scope::device,
                              sycl::access::address_space::global_space>
                 atomic_category(
                     charged_origin_voxel_dose_device[charged_origin_voxel_offset +
                                                      voxel_index]);
-            atomic_category.fetch_add(static_cast<double>(amount_MeV));
+            atomic_category.fetch_add(amount_MeV);
         }
     }
 }
@@ -656,6 +664,10 @@ TransportResult transport_sycl(const TransportConfig& config,
     auto queue = context != nullptr ? context->impl_->queue : make_sycl_queue(device_name);
     const auto reuse_immutable_buffers = context != nullptr;
     const auto start = std::chrono::steady_clock::now();
+    auto primary_kernel_seconds = 0.0;
+    auto secondary_kernel_seconds = 0.0;
+    auto neutral_kernel_seconds = 0.0;
+    auto charged_after_neutral_kernel_seconds = 0.0;
     const auto table_size = stopping_power.values().size();
     const auto cross_section_table_size = cross_section.values().size();
     const auto number_of_bins = config.number_of_bins();
@@ -2412,6 +2424,7 @@ TransportResult transport_sycl(const TransportConfig& config,
             }
         });
     kernel_event.wait_and_throw();
+    primary_kernel_seconds += event_duration_seconds(kernel_event);
 
     std::uint64_t transported_queue_count = 0;
     if (enable_secondary_transport) {
@@ -2479,6 +2492,9 @@ TransportResult transport_sycl(const TransportConfig& config,
                         (species_index + 1) * number_of_voxels;
                     const auto neutral_origin_voxel_offset =
                         neutral_origin * number_of_voxels;
+                    auto pending_dose_MeV = 0.0;
+                    auto pending_bin = 0;
+                    std::size_t pending_voxel_index = 0;
 
                     while (energy_MeV > energy_cutoff_MeV) {
                         const auto escaped_z =
@@ -2525,6 +2541,17 @@ TransportResult transport_sycl(const TransportConfig& config,
 
                         if (absolute_direction_x < 1.0e-6F &&
                             absolute_direction_y < 1.0e-6F && absolute_direction_z < 1.0e-6F) {
+                            score_secondary_dose_device(
+                                pending_dose_MeV, is_neutral_lineage, species_index,
+                                neutral_origin, pending_bin, number_of_bins,
+                                enable_voxel_scoring,
+                                enable_charged_origin_voxel_scoring,
+                                pending_voxel_index, charged_origin_voxel_offset,
+                                neutral_origin_voxel_offset, fragment_dose_device,
+                                voxel_dose_device, charged_origin_voxel_dose_device,
+                                neutral_origin_dose_device,
+                                neutral_origin_voxel_dose_device);
+                            pending_dose_MeV = 0.0;
                             score_secondary_dose_device(
                                 energy_MeV, is_neutral_lineage, species_index, neutral_origin,
                                 bin, number_of_bins, enable_voxel_scoring,
@@ -2786,14 +2813,26 @@ TransportResult transport_sycl(const TransportConfig& config,
                             energy_MeVu, electronic_buildup_fraction);
                         const auto sec_delayed = step_deposited_MeV * sec_e_frac;
                         const auto sec_local = step_deposited_MeV - sec_delayed;
-                        score_secondary_dose_device(
-                            sec_local, is_neutral_lineage, species_index,
-                            neutral_origin, bin, number_of_bins, enable_voxel_scoring,
-                            enable_charged_origin_voxel_scoring, voxel_index,
-                            charged_origin_voxel_offset, neutral_origin_voxel_offset,
-                            fragment_dose_device, voxel_dose_device,
-                            charged_origin_voxel_dose_device, neutral_origin_dose_device,
-                            neutral_origin_voxel_dose_device);
+                        if (pending_dose_MeV > 0.0 &&
+                            (pending_bin != bin ||
+                             pending_voxel_index != voxel_index)) {
+                            score_secondary_dose_device(
+                                pending_dose_MeV, is_neutral_lineage, species_index,
+                                neutral_origin, pending_bin, number_of_bins,
+                                enable_voxel_scoring,
+                                enable_charged_origin_voxel_scoring,
+                                pending_voxel_index, charged_origin_voxel_offset,
+                                neutral_origin_voxel_offset, fragment_dose_device,
+                                voxel_dose_device, charged_origin_voxel_dose_device,
+                                neutral_origin_dose_device,
+                                neutral_origin_voxel_dose_device);
+                            pending_dose_MeV = 0.0;
+                        }
+                        if (pending_dose_MeV == 0.0) {
+                            pending_bin = bin;
+                            pending_voxel_index = voxel_index;
+                        }
+                        pending_dose_MeV += static_cast<double>(sec_local);
                         if (sec_delayed > 0.0F && !is_neutral_lineage &&
                             fragment_dose_device != nullptr) {
                             const auto z_mid =
@@ -3105,6 +3144,16 @@ TransportResult transport_sycl(const TransportConfig& config,
                         ++steps;
                     }
 
+                    score_secondary_dose_device(
+                        pending_dose_MeV, is_neutral_lineage, species_index,
+                        neutral_origin, pending_bin, number_of_bins,
+                        enable_voxel_scoring,
+                        enable_charged_origin_voxel_scoring,
+                        pending_voxel_index, charged_origin_voxel_offset,
+                        neutral_origin_voxel_offset, fragment_dose_device,
+                        voxel_dose_device, charged_origin_voxel_dose_device,
+                        neutral_origin_dose_device,
+                        neutral_origin_voxel_dose_device);
                     const auto stopped_inside =
                         energy_MeV > 0.0F && position_z_mm >= 0.0F &&
                         position_z_mm < phantom_length_mm &&
@@ -3163,6 +3212,7 @@ TransportResult transport_sycl(const TransportConfig& config,
                 }
                 });
             secondary_kernel_event.wait_and_throw();
+            secondary_kernel_seconds += event_duration_seconds(secondary_kernel_event);
             transported_queue_count = generation_end;
             if (!enable_fragment_cascade) {
                 break;
@@ -3563,6 +3613,7 @@ TransportResult transport_sycl(const TransportConfig& config,
                     (void)steps;
                 });
             neutral_kernel_event.wait_and_throw();
+            neutral_kernel_seconds += event_duration_seconds(neutral_kernel_event);
             transported_neutral_count = neutral_generation_end;
             neutral_generation_begin = neutral_generation_end;
             queue.copy(neutral_queue_filled_device, &neutral_generation_end, 1)
@@ -3820,10 +3871,12 @@ TransportResult transport_sycl(const TransportConfig& config,
                                     break;
                                 }
                                 score_secondary_dose_device(
-                                    step_deposited_MeV, is_neutral_lineage, species_index,
-                                    neutral_origin, bin, number_of_bins, enable_voxel_scoring,
+                                    step_deposited_MeV, is_neutral_lineage,
+                                    species_index, neutral_origin, bin,
+                                    number_of_bins, enable_voxel_scoring,
                                     enable_charged_origin_voxel_scoring, voxel_index,
-                                    charged_origin_voxel_offset, neutral_origin_voxel_offset,
+                                    charged_origin_voxel_offset,
+                                    neutral_origin_voxel_offset,
                                     fragment_dose_device, voxel_dose_device,
                                     charged_origin_voxel_dose_device,
                                     neutral_origin_dose_device,
@@ -3891,6 +3944,8 @@ TransportResult transport_sycl(const TransportConfig& config,
                         secondary_steps_device[particle_index] = steps;
                     });
                 secondary_kernel_event.wait_and_throw();
+                charged_after_neutral_kernel_seconds +=
+                    event_duration_seconds(secondary_kernel_event);
                 transported_queue_count = generation_end;
             }
         }
@@ -4247,6 +4302,11 @@ TransportResult transport_sycl(const TransportConfig& config,
     }
     result.elapsed_seconds =
         std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+    result.primary_kernel_seconds = primary_kernel_seconds;
+    result.secondary_kernel_seconds = secondary_kernel_seconds;
+    result.neutral_kernel_seconds = neutral_kernel_seconds;
+    result.charged_after_neutral_kernel_seconds =
+        charged_after_neutral_kernel_seconds;
     return result;
 }
 
