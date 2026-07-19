@@ -1,0 +1,87 @@
+{
+  "case": "development",
+  "histories": 100000,
+  "raw_entries": 6802404,
+  "interactions": 4798230,
+  "products": 2004174,
+  "projectile_counts": {
+    "2112": 3303005,
+    "22": 1495225
+  },
+  "process_counts": {
+    "neutronInelastic": 36026,
+    "compt": 492431,
+    "phot": 933472,
+    "hadElastic": 3243105,
+    "nCapture": 23874,
+    "Rayl": 66976,
+    "conv": 2346
+  },
+  "product_species": {
+    "11:e-": 1428560,
+    "2212:proton": 290600,
+    "1000080160:O16": 112739,
+    "22:gamma": 57554,
+    "2112:neutron": 39151,
+    "1000010020:deuteron": 28371,
+    "1000020040:alpha": 16922,
+    "1000070150:N15": 8248,
+    "1000060120:C12": 4878,
+    "1000070140:N14": 3996,
+    "1000060130:C13": 3704,
+    "-11:e+": 2346,
+    "1000080150:O15": 1331,
+    "1000030060:Li6": 891,
+    "1000050110:B11": 794,
+    "1000010030:triton": 680,
+    "1000060140:C14": 607,
+    "1000030070:Li7": 388,
+    "1000070160:N16": 378,
+    "1000070130:N13": 331,
+    "1000080180:O18": 259,
+    "1000060110:C11": 195,
+    "1000040090:Be9": 190,
+    "1000050100:B10": 154,
+    "1000050101:B10[718.380]": 145,
+    "1000020030:He3": 135,
+    "1000040070:Be7": 126,
+    "1000070161:N16[120.420]": 113,
+    "1000020060:He6": 84,
+    "1000080170:O17": 74,
+    "1000030080:Li8": 66,
+    "1000080140:O14": 47,
+    "1000040100:Be10": 46,
+    "1000050120:B12": 19,
+    "1000060150:C15": 19,
+    "1000060151:C15[740.000]": 15,
+    "1000070170:N17": 6,
+    "1000070120:N12": 3,
+    "1000050080:B8": 2,
+    "1000040060:Be6": 2,
+    "211:pi+": 1,
+    "-211:pi-": 1,
+    "1000060100:C10": 1,
+    "1000030090:Li9": 1,
+    "1000070180:N18": 1
+  },
+  "all_interaction_cross_sections_positive": true,
+  "global_scale_applied": false,
+  "files": {
+    "header": {
+      "path": "validation/topas/output/neutral_development_interactions.header",
+      "sha256": "a37d782c274dbe986e6c2d381cc3dc04678887d97e090e35e2d6e1cbf18557d1"
+    },
+    "phsp": {
+      "path": "validation/topas/output/neutral_development_interactions.phsp",
+      "sha256": "36b09c748f08c5d12f4106275da90390cbe8aacb667978e7eafde4429cf7eaa3"
+    },
+    "interactions": {
+      "path": "validation/results/topas_200MeVu_neutral_development_interactions.csv.gz",
+      "sha256": "f82f118bc1ef09bc2f9bcef2ed0d5f3596595a0a196fe9830e0e66d5af65e3ca"
+    },
+    "products": {
+      "path": "validation/results/topas_200MeVu_neutral_development_products.csv.gz",
+      "sha256": "7841cc5f524b22fd22fac70551f6c09d9ef5a939ba43a9ecef919630d871f2e2"
+    }
+  }
+}
