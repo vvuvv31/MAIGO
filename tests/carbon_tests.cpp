@@ -867,6 +867,40 @@ void test_serial_sycl_cpu_match() {
             "SYCL attenuation energy balance failed");
 }
 
+void test_sycl_transport_context_reuse() {
+    carbon::TransportConfig config;
+    config.number_of_histories = 32;
+    config.initial_energy_MeVu = 10.0;
+    config.phantom_length_mm = 100.0;
+    config.depth_bin_width_mm = 1.0;
+    config.maximum_step_mm = 0.5;
+    config.maximum_relative_energy_loss = 0.01;
+    const carbon::StoppingPowerTable stopping_power(
+        {0.01, 10.01, 20.01}, {2.0, 2.0, 2.0});
+    const auto cross_section = zero_cross_section();
+    carbon::SyclTransportContext context("cpu");
+
+    const auto first = carbon::transport_sycl(
+        config, stopping_power, cross_section, "cpu", nullptr, nullptr, nullptr, &context);
+    const auto second = carbon::transport_sycl(
+        config, stopping_power, cross_section, "cpu", nullptr, nullptr, nullptr, &context);
+    require(first.deposited_energy_MeV.size() == second.deposited_energy_MeV.size(),
+            "Reusable SYCL context changed tally dimensions");
+    for (std::size_t bin = 0; bin < first.deposited_energy_MeV.size(); ++bin) {
+        require_near(first.deposited_energy_MeV[bin], second.deposited_energy_MeV[bin],
+                     1.0e-9, "Reusable SYCL context changed dose tally");
+    }
+
+    const carbon::StoppingPowerTable different_table(
+        {0.01, 10.01, 20.01}, {2.0, 2.0, 2.0});
+    require_throws(
+        [&]() {
+            (void)carbon::transport_sycl(config, different_table, cross_section, "cpu",
+                                         nullptr, nullptr, nullptr, &context);
+        },
+        "Reusable SYCL context accepted a different physics table");
+}
+
 void test_sycl_secondary_queue_generation() {
     const auto package_path = std::filesystem::path(CARBON_SOURCE_DIR) /
                               "validation/results/"
@@ -1241,6 +1275,7 @@ int main() {
 #ifdef CARBON_HAS_SYCL
         test_sycl_flat_source_extent();
         test_serial_sycl_cpu_match();
+        test_sycl_transport_context_reuse();
         test_sycl_secondary_queue_generation();
         test_sycl_layered_slab_range_shift();
         test_sycl_ct_secondary_density_smoke();

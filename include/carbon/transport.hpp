@@ -8,10 +8,13 @@
 #include "carbon/transport_config.hpp"
 
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
 namespace carbon {
+
+class SyclTransportContext;
 
 struct TransportResult {
     std::vector<double> deposited_energy_MeV;
@@ -82,13 +85,34 @@ TransportResult transport_serial(const TransportConfig& config,
                                  const CrossSectionTable& cross_section);
 
 #ifdef CARBON_HAS_SYCL
+class SyclTransportContext {
+public:
+    explicit SyclTransportContext(const std::string& device_name);
+    ~SyclTransportContext();
+
+    SyclTransportContext(SyclTransportContext&&) noexcept;
+    SyclTransportContext& operator=(SyclTransportContext&&) noexcept;
+    SyclTransportContext(const SyclTransportContext&) = delete;
+    SyclTransportContext& operator=(const SyclTransportContext&) = delete;
+
+private:
+    struct Impl;
+    std::unique_ptr<Impl> impl_;
+
+    friend TransportResult transport_sycl(
+        const TransportConfig&, const StoppingPowerTable&, const CrossSectionTable&,
+        const std::string&, const ReactionPackageTable*, const CascadePackageTable*,
+        const NeutralPackageTable*, SyclTransportContext*);
+};
+
 TransportResult transport_sycl(const TransportConfig& config,
                                const StoppingPowerTable& stopping_power,
                                const CrossSectionTable& cross_section,
                                const std::string& device_name,
                                const ReactionPackageTable* reaction_packages = nullptr,
                                const CascadePackageTable* cascade_packages = nullptr,
-                               const NeutralPackageTable* neutral_packages = nullptr);
+                               const NeutralPackageTable* neutral_packages = nullptr,
+                               SyclTransportContext* context = nullptr);
 std::string describe_sycl_device(const std::string& device_name);
 #endif
 

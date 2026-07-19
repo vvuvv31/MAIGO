@@ -25,6 +25,186 @@
 #include <vector>
 
 namespace carbon {
+
+struct SyclTransportContext::Impl {
+    explicit Impl(const std::string& requested_device_name)
+        : device_name(requested_device_name), queue(make_sycl_queue(requested_device_name)) {}
+
+    ~Impl() { clear(); }
+
+    void clear() noexcept {
+        const auto release = [this](auto*& pointer) {
+            if (pointer != nullptr) {
+                sycl::free(pointer, queue);
+                pointer = nullptr;
+            }
+        };
+        release(table_device);
+        release(cross_section_device);
+        release(reaction_bins_device);
+        release(reactions_device);
+        release(reaction_secondaries_device);
+        release(cascade_projectiles_device);
+        release(cascade_cross_sections_device);
+        release(cascade_interactions_device);
+        release(cascade_products_device);
+        release(neutral_projectiles_device);
+        release(neutral_cross_sections_device);
+        release(neutral_interactions_device);
+        release(neutral_products_device);
+        initialized = false;
+    }
+
+    void ensure_initialized(const StoppingPowerTable& stopping_power,
+                            const CrossSectionTable& cross_section,
+                            const ReactionPackageTable* reaction_packages,
+                            const CascadePackageTable* cascade_packages,
+                            const NeutralPackageTable* neutral_packages) {
+        if (initialized) {
+            if (stopping_power_host != &stopping_power ||
+                cross_section_host != &cross_section || reaction_packages_host != reaction_packages ||
+                cascade_packages_host != cascade_packages ||
+                neutral_packages_host != neutral_packages) {
+                throw std::invalid_argument(
+                    "SyclTransportContext cannot be reused with different physics tables");
+            }
+            return;
+        }
+
+        stopping_power_host = &stopping_power;
+        cross_section_host = &cross_section;
+        reaction_packages_host = reaction_packages;
+        cascade_packages_host = cascade_packages;
+        neutral_packages_host = neutral_packages;
+
+        try {
+            table_device = sycl::malloc_device<float>(stopping_power.values().size(), queue);
+            cross_section_device =
+                sycl::malloc_device<float>(cross_section.values().size(), queue);
+            if (reaction_packages != nullptr) {
+                reaction_bins_device = sycl::malloc_device<ReactionEnergyBin>(
+                    reaction_packages->energy_bins().size(), queue);
+                reactions_device = sycl::malloc_device<ReactionPackage>(
+                    reaction_packages->reactions().size(), queue);
+                reaction_secondaries_device = sycl::malloc_device<ReactionSecondary>(
+                    reaction_packages->secondaries().size(), queue);
+            }
+            if (cascade_packages != nullptr) {
+                cascade_projectiles_device = sycl::malloc_device<CascadeProjectile>(
+                    cascade_packages->projectiles().size(), queue);
+                cascade_cross_sections_device = sycl::malloc_device<CascadeCrossSectionSample>(
+                    cascade_packages->cross_sections().size(), queue);
+                cascade_interactions_device = sycl::malloc_device<CascadeInteraction>(
+                    cascade_packages->interactions().size(), queue);
+                cascade_products_device = sycl::malloc_device<ReactionSecondary>(
+                    cascade_packages->products().size(), queue);
+            }
+            if (neutral_packages != nullptr) {
+                neutral_projectiles_device = sycl::malloc_device<NeutralProjectile>(
+                    neutral_packages->projectiles().size(), queue);
+                neutral_cross_sections_device = sycl::malloc_device<NeutralCrossSectionSample>(
+                    neutral_packages->cross_sections().size(), queue);
+                neutral_interactions_device = sycl::malloc_device<NeutralInteraction>(
+                    neutral_packages->interactions().size(), queue);
+                neutral_products_device = sycl::malloc_device<ReactionSecondary>(
+                    neutral_packages->products().size(), queue);
+            }
+
+            const auto allocation_failed =
+                table_device == nullptr || cross_section_device == nullptr ||
+                (reaction_packages != nullptr &&
+                 (reaction_bins_device == nullptr || reactions_device == nullptr ||
+                  reaction_secondaries_device == nullptr)) ||
+                (cascade_packages != nullptr &&
+                 (cascade_projectiles_device == nullptr ||
+                  cascade_cross_sections_device == nullptr ||
+                  cascade_interactions_device == nullptr || cascade_products_device == nullptr)) ||
+                (neutral_packages != nullptr &&
+                 (neutral_projectiles_device == nullptr ||
+                  neutral_cross_sections_device == nullptr ||
+                  neutral_interactions_device == nullptr || neutral_products_device == nullptr));
+            if (allocation_failed) {
+                throw std::bad_alloc();
+            }
+
+            std::vector<float> table_host(stopping_power.values().size());
+            std::transform(stopping_power.values().begin(), stopping_power.values().end(),
+                           table_host.begin(),
+                           [](double value) { return static_cast<float>(value); });
+            std::vector<float> xs_host(cross_section.values().size());
+            std::transform(cross_section.values().begin(), cross_section.values().end(),
+                           xs_host.begin(),
+                           [](double value) { return static_cast<float>(value); });
+            queue.copy(table_host.data(), table_device, table_host.size());
+            queue.copy(xs_host.data(), cross_section_device, xs_host.size());
+            if (reaction_packages != nullptr) {
+                queue.copy(reaction_packages->energy_bins().data(), reaction_bins_device,
+                           reaction_packages->energy_bins().size());
+                queue.copy(reaction_packages->reactions().data(), reactions_device,
+                           reaction_packages->reactions().size());
+                queue.copy(reaction_packages->secondaries().data(), reaction_secondaries_device,
+                           reaction_packages->secondaries().size());
+            }
+            if (cascade_packages != nullptr) {
+                queue.copy(cascade_packages->projectiles().data(), cascade_projectiles_device,
+                           cascade_packages->projectiles().size());
+                queue.copy(cascade_packages->cross_sections().data(),
+                           cascade_cross_sections_device,
+                           cascade_packages->cross_sections().size());
+                queue.copy(cascade_packages->interactions().data(), cascade_interactions_device,
+                           cascade_packages->interactions().size());
+                queue.copy(cascade_packages->products().data(), cascade_products_device,
+                           cascade_packages->products().size());
+            }
+            if (neutral_packages != nullptr) {
+                queue.copy(neutral_packages->projectiles().data(), neutral_projectiles_device,
+                           neutral_packages->projectiles().size());
+                queue.copy(neutral_packages->cross_sections().data(),
+                           neutral_cross_sections_device,
+                           neutral_packages->cross_sections().size());
+                queue.copy(neutral_packages->interactions().data(), neutral_interactions_device,
+                           neutral_packages->interactions().size());
+                queue.copy(neutral_packages->products().data(), neutral_products_device,
+                           neutral_packages->products().size());
+            }
+            queue.wait_and_throw();
+            initialized = true;
+        } catch (...) {
+            clear();
+            throw;
+        }
+    }
+
+    std::string device_name;
+    sycl::queue queue;
+    bool initialized{false};
+    const StoppingPowerTable* stopping_power_host{nullptr};
+    const CrossSectionTable* cross_section_host{nullptr};
+    const ReactionPackageTable* reaction_packages_host{nullptr};
+    const CascadePackageTable* cascade_packages_host{nullptr};
+    const NeutralPackageTable* neutral_packages_host{nullptr};
+    float* table_device{nullptr};
+    float* cross_section_device{nullptr};
+    ReactionEnergyBin* reaction_bins_device{nullptr};
+    ReactionPackage* reactions_device{nullptr};
+    ReactionSecondary* reaction_secondaries_device{nullptr};
+    CascadeProjectile* cascade_projectiles_device{nullptr};
+    CascadeCrossSectionSample* cascade_cross_sections_device{nullptr};
+    CascadeInteraction* cascade_interactions_device{nullptr};
+    ReactionSecondary* cascade_products_device{nullptr};
+    NeutralProjectile* neutral_projectiles_device{nullptr};
+    NeutralCrossSectionSample* neutral_cross_sections_device{nullptr};
+    NeutralInteraction* neutral_interactions_device{nullptr};
+    ReactionSecondary* neutral_products_device{nullptr};
+};
+
+SyclTransportContext::SyclTransportContext(const std::string& device_name)
+    : impl_(std::make_unique<Impl>(device_name)) {}
+
+SyclTransportContext::~SyclTransportContext() = default;
+SyclTransportContext::SyclTransportContext(SyclTransportContext&&) noexcept = default;
+SyclTransportContext& SyclTransportContext::operator=(SyclTransportContext&&) noexcept = default;
+
 namespace {
 
 constexpr std::size_t fragment_species_count = 7;
@@ -243,6 +423,144 @@ inline float neutral_kerma_fraction_at_energy(const float energy_MeVu,
     return f0 * (1.0F + (high_scale - 1.0F) * t);
 }
 
+inline std::uint32_t cascade_cross_section_lower_bound(
+    const CascadeCrossSectionSample* samples,
+    const std::uint32_t offset,
+    const std::uint32_t count,
+    const float energy_MeV_per_u) noexcept {
+    std::uint32_t lower = 0;
+    std::uint32_t upper = count;
+    while (lower < upper) {
+        const auto middle = lower + (upper - lower) / 2U;
+        if (samples[offset + middle].energy_MeV_per_u < energy_MeV_per_u) {
+            lower = middle + 1U;
+        } else {
+            upper = middle;
+        }
+    }
+    return lower;
+}
+
+inline int cascade_projectile_index(const CascadeProjectile* projectiles,
+                                    const std::size_t count,
+                                    const int atomic_number,
+                                    const int mass_number) noexcept {
+    std::size_t lower = 0;
+    std::size_t upper = count;
+    while (lower < upper) {
+        const auto middle = lower + (upper - lower) / 2U;
+        const auto projectile = projectiles[middle];
+        const auto precedes_target =
+            projectile.atomic_number < atomic_number ||
+            (projectile.atomic_number == atomic_number &&
+             projectile.mass_number < mass_number);
+        if (precedes_target) {
+            lower = middle + 1U;
+        } else {
+            upper = middle;
+        }
+    }
+    if (lower < count && projectiles[lower].atomic_number == atomic_number &&
+        projectiles[lower].mass_number == mass_number) {
+        return static_cast<int>(lower);
+    }
+    return -1;
+}
+
+inline std::uint32_t cascade_interaction_lower_bound(
+    const CascadeInteraction* interactions,
+    const std::uint32_t offset,
+    const std::uint32_t count,
+    const float energy_MeV_per_u) noexcept {
+    std::uint32_t lower = 0;
+    std::uint32_t upper = count;
+    while (lower < upper) {
+        const auto middle = lower + (upper - lower) / 2U;
+        if (interactions[offset + middle].incident_energy_MeV_per_u < energy_MeV_per_u) {
+            lower = middle + 1U;
+        } else {
+            upper = middle;
+        }
+    }
+    return lower;
+}
+
+inline std::uint32_t nearest_cascade_interaction(
+    const CascadeInteraction* interactions,
+    const std::uint32_t offset,
+    const std::uint32_t count,
+    const float energy_MeV_per_u) noexcept {
+    const auto lower =
+        cascade_interaction_lower_bound(interactions, offset, count, energy_MeV_per_u);
+    if (lower == 0U) {
+        return 0U;
+    }
+    if (lower >= count) {
+        return count - 1U;
+    }
+    const auto lower_delta = sycl::fabs(
+        interactions[offset + lower - 1U].incident_energy_MeV_per_u - energy_MeV_per_u);
+    const auto upper_delta = sycl::fabs(
+        interactions[offset + lower].incident_energy_MeV_per_u - energy_MeV_per_u);
+    return upper_delta < lower_delta ? lower : lower - 1U;
+}
+
+inline std::uint32_t neutral_cross_section_lower_bound(
+    const NeutralCrossSectionSample* samples,
+    const std::uint32_t offset,
+    const std::uint32_t count,
+    const float energy_MeV) noexcept {
+    std::uint32_t lower = 0;
+    std::uint32_t upper = count;
+    while (lower < upper) {
+        const auto middle = lower + (upper - lower) / 2U;
+        if (samples[offset + middle].energy_MeV < energy_MeV) {
+            lower = middle + 1U;
+        } else {
+            upper = middle;
+        }
+    }
+    return lower;
+}
+
+inline std::uint32_t neutral_interaction_lower_bound(
+    const NeutralInteraction* interactions,
+    const std::uint32_t offset,
+    const std::uint32_t count,
+    const float energy_MeV) noexcept {
+    std::uint32_t lower = 0;
+    std::uint32_t upper = count;
+    while (lower < upper) {
+        const auto middle = lower + (upper - lower) / 2U;
+        if (interactions[offset + middle].incident_energy_MeV < energy_MeV) {
+            lower = middle + 1U;
+        } else {
+            upper = middle;
+        }
+    }
+    return lower;
+}
+
+inline std::uint32_t nearest_neutral_interaction(
+    const NeutralInteraction* interactions,
+    const std::uint32_t offset,
+    const std::uint32_t count,
+    const float energy_MeV) noexcept {
+    const auto lower =
+        neutral_interaction_lower_bound(interactions, offset, count, energy_MeV);
+    if (lower == 0U) {
+        return 0U;
+    }
+    if (lower >= count) {
+        return count - 1U;
+    }
+    const auto lower_delta = sycl::fabs(
+        interactions[offset + lower - 1U].incident_energy_MeV - energy_MeV);
+    const auto upper_delta =
+        sycl::fabs(interactions[offset + lower].incident_energy_MeV - energy_MeV);
+    return upper_delta < lower_delta ? lower : lower - 1U;
+}
+
 void score_secondary_dose_device(
     const float amount_MeV,
     const bool is_neutral_lineage,
@@ -308,7 +626,8 @@ TransportResult transport_sycl(const TransportConfig& config,
                                const std::string& device_name,
                                const ReactionPackageTable* reaction_packages,
                                const CascadePackageTable* cascade_packages,
-                               const NeutralPackageTable* neutral_packages) {
+                               const NeutralPackageTable* neutral_packages,
+                               SyclTransportContext* context) {
     config.validate();
     if (!is_uniform_grid(stopping_power.energies())) {
         throw std::invalid_argument("The current SYCL backend requires a uniform stopping-power grid");
@@ -330,7 +649,12 @@ TransportResult transport_sycl(const TransportConfig& config,
         throw std::invalid_argument("Neutral transport requires a neutral package table");
     }
 
-    auto queue = make_sycl_queue(device_name);
+    if (context != nullptr && context->impl_->device_name != device_name) {
+        throw std::invalid_argument(
+            "SyclTransportContext device does not match transport device");
+    }
+    auto queue = context != nullptr ? context->impl_->queue : make_sycl_queue(device_name);
+    const auto reuse_immutable_buffers = context != nullptr;
     const auto start = std::chrono::steady_clock::now();
     const auto table_size = stopping_power.values().size();
     const auto cross_section_table_size = cross_section.values().size();
@@ -363,10 +687,16 @@ TransportResult transport_sycl(const TransportConfig& config,
     auto secondary_queue_capacity =
         config.secondary_queue_capacity == 0 ? automatic_queue_capacity
                                              : config.secondary_queue_capacity;
+    // Production SOBP measurements use about 1.8 neutral slots/history for
+    // first-interaction mode and 2.4 for two generations. Preserve explicit
+    // headroom without allocating and clearing 32 slots/history for every spot.
+    const std::size_t automatic_neutral_slots_per_history =
+        neutral_allow_continuation ? 8U : 4U;
     const auto automatic_neutral_queue_capacity =
-        number_of_histories > std::numeric_limits<std::size_t>::max() / 32
+        number_of_histories > std::numeric_limits<std::size_t>::max() /
+                                  automatic_neutral_slots_per_history
             ? std::numeric_limits<std::size_t>::max()
-            : number_of_histories * 32;
+            : number_of_histories * automatic_neutral_slots_per_history;
     auto neutral_queue_capacity =
         config.neutral_queue_capacity == 0 ? automatic_neutral_queue_capacity
                                            : config.neutral_queue_capacity;
@@ -527,9 +857,17 @@ TransportResult transport_sycl(const TransportConfig& config,
         }
     }
 
-    auto* table_device = sycl::malloc_device<float>(table_size, queue);
+    if (reuse_immutable_buffers) {
+        context->impl_->ensure_initialized(stopping_power, cross_section, reaction_packages,
+                                           cascade_packages, neutral_packages);
+    }
+    auto* table_device = reuse_immutable_buffers
+                             ? context->impl_->table_device
+                             : sycl::malloc_device<float>(table_size, queue);
     auto* cross_section_device =
-        sycl::malloc_device<float>(cross_section_table_size, queue);
+        reuse_immutable_buffers
+            ? context->impl_->cross_section_device
+            : sycl::malloc_device<float>(cross_section_table_size, queue);
     auto* dose_device = sycl::malloc_device<double>(number_of_bins, queue);
     auto* voxel_dose_device = enable_voxel_scoring
                                   ? sycl::malloc_device<double>(number_of_voxels, queue)
@@ -570,12 +908,20 @@ TransportResult transport_sycl(const TransportConfig& config,
     double* neutral_origin_dose_device = nullptr;
     double* neutral_origin_voxel_dose_device = nullptr;
     if (enable_secondary_generation) {
-        reaction_bins_device = sycl::malloc_device<ReactionEnergyBin>(
-            reaction_packages->energy_bins().size(), queue);
-        reactions_device = sycl::malloc_device<ReactionPackage>(
-            reaction_packages->reactions().size(), queue);
-        reaction_secondaries_device = sycl::malloc_device<ReactionSecondary>(
-            reaction_packages->secondaries().size(), queue);
+        reaction_bins_device =
+            reuse_immutable_buffers
+                ? context->impl_->reaction_bins_device
+                : sycl::malloc_device<ReactionEnergyBin>(
+                      reaction_packages->energy_bins().size(), queue);
+        reactions_device = reuse_immutable_buffers
+                               ? context->impl_->reactions_device
+                               : sycl::malloc_device<ReactionPackage>(
+                                     reaction_packages->reactions().size(), queue);
+        reaction_secondaries_device =
+            reuse_immutable_buffers
+                ? context->impl_->reaction_secondaries_device
+                : sycl::malloc_device<ReactionSecondary>(
+                      reaction_packages->secondaries().size(), queue);
         secondary_queue_device =
             sycl::malloc_device<SecondaryParticle3D>(secondary_queue_capacity, queue);
         secondary_queue_counter_device = sycl::malloc_device<std::uint64_t>(1, queue);
@@ -593,27 +939,51 @@ TransportResult transport_sycl(const TransportConfig& config,
                 sycl::malloc_device<std::uint32_t>(secondary_queue_capacity, queue);
         }
         if (enable_fragment_cascade) {
-            cascade_projectiles_device = sycl::malloc_device<CascadeProjectile>(
-                cascade_packages->projectiles().size(), queue);
-            cascade_cross_sections_device = sycl::malloc_device<CascadeCrossSectionSample>(
-                cascade_packages->cross_sections().size(), queue);
-            cascade_interactions_device = sycl::malloc_device<CascadeInteraction>(
-                cascade_packages->interactions().size(), queue);
-            cascade_products_device = sycl::malloc_device<ReactionSecondary>(
-                cascade_packages->products().size(), queue);
+            cascade_projectiles_device =
+                reuse_immutable_buffers
+                    ? context->impl_->cascade_projectiles_device
+                    : sycl::malloc_device<CascadeProjectile>(
+                          cascade_packages->projectiles().size(), queue);
+            cascade_cross_sections_device =
+                reuse_immutable_buffers
+                    ? context->impl_->cascade_cross_sections_device
+                    : sycl::malloc_device<CascadeCrossSectionSample>(
+                          cascade_packages->cross_sections().size(), queue);
+            cascade_interactions_device =
+                reuse_immutable_buffers
+                    ? context->impl_->cascade_interactions_device
+                    : sycl::malloc_device<CascadeInteraction>(
+                          cascade_packages->interactions().size(), queue);
+            cascade_products_device =
+                reuse_immutable_buffers
+                    ? context->impl_->cascade_products_device
+                    : sycl::malloc_device<ReactionSecondary>(
+                          cascade_packages->products().size(), queue);
             cascade_summaries_device = sycl::malloc_device<CascadeTransportSummary>(
                 secondary_queue_capacity, queue);
         }
     }
     if (enable_neutral_transport) {
-        neutral_projectiles_device = sycl::malloc_device<NeutralProjectile>(
-            neutral_packages->projectiles().size(), queue);
-        neutral_cross_sections_device = sycl::malloc_device<NeutralCrossSectionSample>(
-            neutral_packages->cross_sections().size(), queue);
-        neutral_interactions_device = sycl::malloc_device<NeutralInteraction>(
-            neutral_packages->interactions().size(), queue);
-        neutral_products_device = sycl::malloc_device<ReactionSecondary>(
-            neutral_packages->products().size(), queue);
+        neutral_projectiles_device =
+            reuse_immutable_buffers
+                ? context->impl_->neutral_projectiles_device
+                : sycl::malloc_device<NeutralProjectile>(
+                      neutral_packages->projectiles().size(), queue);
+        neutral_cross_sections_device =
+            reuse_immutable_buffers
+                ? context->impl_->neutral_cross_sections_device
+                : sycl::malloc_device<NeutralCrossSectionSample>(
+                      neutral_packages->cross_sections().size(), queue);
+        neutral_interactions_device =
+            reuse_immutable_buffers
+                ? context->impl_->neutral_interactions_device
+                : sycl::malloc_device<NeutralInteraction>(
+                      neutral_packages->interactions().size(), queue);
+        neutral_products_device =
+            reuse_immutable_buffers
+                ? context->impl_->neutral_products_device
+                : sycl::malloc_device<ReactionSecondary>(
+                      neutral_packages->products().size(), queue);
         neutral_queue_device =
             sycl::malloc_device<NeutralParticle3D>(neutral_queue_capacity, queue);
         neutral_queue_counter_device = sycl::malloc_device<std::uint64_t>(1, queue);
@@ -632,6 +1002,11 @@ TransportResult transport_sycl(const TransportConfig& config,
             sycl::free(pointer, queue);
         }
     };
+    const auto free_immutable_device = [&](auto* pointer) {
+        if (!reuse_immutable_buffers) {
+            free_device(pointer);
+        }
+    };
 
     const auto enable_layered_phantom = config.enable_layered_phantom;
     const auto slab_layer_count =
@@ -646,8 +1021,8 @@ TransportResult transport_sycl(const TransportConfig& config,
         if (slab_z_ends_device == nullptr || slab_densities_device == nullptr) {
             free_device(slab_z_ends_device);
             free_device(slab_densities_device);
-            free_device(table_device);
-            free_device(cross_section_device);
+            free_immutable_device(table_device);
+            free_immutable_device(cross_section_device);
             free_device(dose_device);
             free_device(voxel_dose_device);
             free_device(charged_origin_voxel_dose_device);
@@ -998,8 +1373,8 @@ TransportResult transport_sycl(const TransportConfig& config,
         deposited_device == nullptr ||
         escaped_device == nullptr || nuclear_device == nullptr || steps_device == nullptr ||
         secondary_allocation_failed || neutral_allocation_failed) {
-        free_device(table_device);
-        free_device(cross_section_device);
+        free_immutable_device(table_device);
+        free_immutable_device(cross_section_device);
         free_device(dose_device);
         free_device(voxel_dose_device);
         free_device(charged_origin_voxel_dose_device);
@@ -1020,9 +1395,9 @@ TransportResult transport_sycl(const TransportConfig& config,
         free_device(ct_sp_device);
         free_device(ct_xs_device);
         free_device(ct_ref_density_device);
-        free_device(reaction_bins_device);
-        free_device(reactions_device);
-        free_device(reaction_secondaries_device);
+        free_immutable_device(reaction_bins_device);
+        free_immutable_device(reactions_device);
+        free_immutable_device(reaction_secondaries_device);
         free_device(secondary_queue_device);
         free_device(secondary_queue_counter_device);
         free_device(secondary_queue_filled_device);
@@ -1031,15 +1406,15 @@ TransportResult transport_sycl(const TransportConfig& config,
         free_device(secondary_deposited_device);
         free_device(secondary_escaped_device);
         free_device(secondary_steps_device);
-        free_device(cascade_projectiles_device);
-        free_device(cascade_cross_sections_device);
-        free_device(cascade_interactions_device);
-        free_device(cascade_products_device);
+        free_immutable_device(cascade_projectiles_device);
+        free_immutable_device(cascade_cross_sections_device);
+        free_immutable_device(cascade_interactions_device);
+        free_immutable_device(cascade_products_device);
         free_device(cascade_summaries_device);
-        free_device(neutral_projectiles_device);
-        free_device(neutral_cross_sections_device);
-        free_device(neutral_interactions_device);
-        free_device(neutral_products_device);
+        free_immutable_device(neutral_projectiles_device);
+        free_immutable_device(neutral_cross_sections_device);
+        free_immutable_device(neutral_interactions_device);
+        free_immutable_device(neutral_products_device);
         free_device(neutral_queue_device);
         free_device(neutral_queue_counter_device);
         free_device(neutral_queue_filled_device);
@@ -1049,15 +1424,19 @@ TransportResult transport_sycl(const TransportConfig& config,
         throw std::runtime_error("SYCL USM device allocation failed");
     }
 
-    std::vector<float> table_host(table_size);
-    std::transform(stopping_power.values().begin(), stopping_power.values().end(), table_host.begin(),
-                   [](double value) { return static_cast<float>(value); });
-    queue.copy(table_host.data(), table_device, table_size);
-    std::vector<float> cross_section_host(cross_section_table_size);
-    std::transform(cross_section.values().begin(), cross_section.values().end(),
-                   cross_section_host.begin(),
-                   [](double value) { return static_cast<float>(value); });
-    queue.copy(cross_section_host.data(), cross_section_device, cross_section_table_size);
+    if (!reuse_immutable_buffers) {
+        std::vector<float> table_host(table_size);
+        std::transform(stopping_power.values().begin(), stopping_power.values().end(),
+                       table_host.begin(),
+                       [](double value) { return static_cast<float>(value); });
+        queue.copy(table_host.data(), table_device, table_size);
+        std::vector<float> cross_section_host(cross_section_table_size);
+        std::transform(cross_section.values().begin(), cross_section.values().end(),
+                       cross_section_host.begin(),
+                       [](double value) { return static_cast<float>(value); });
+        queue.copy(cross_section_host.data(), cross_section_device, cross_section_table_size);
+        queue.wait_and_throw();
+    }
     queue.memset(dose_device, 0, number_of_bins * sizeof(double));
     if (enable_voxel_scoring) {
         queue.memset(voxel_dose_device, 0, number_of_voxels * sizeof(double));
@@ -1067,12 +1446,14 @@ TransportResult transport_sycl(const TransportConfig& config,
                      charged_origin_category_count * number_of_voxels * sizeof(double));
     }
     if (enable_secondary_generation) {
-        queue.copy(reaction_packages->energy_bins().data(), reaction_bins_device,
-                   reaction_packages->energy_bins().size());
-        queue.copy(reaction_packages->reactions().data(), reactions_device,
-                   reaction_packages->reactions().size());
-        queue.copy(reaction_packages->secondaries().data(), reaction_secondaries_device,
-                   reaction_packages->secondaries().size());
+        if (!reuse_immutable_buffers) {
+            queue.copy(reaction_packages->energy_bins().data(), reaction_bins_device,
+                       reaction_packages->energy_bins().size());
+            queue.copy(reaction_packages->reactions().data(), reactions_device,
+                       reaction_packages->reactions().size());
+            queue.copy(reaction_packages->secondaries().data(), reaction_secondaries_device,
+                       reaction_packages->secondaries().size());
+        }
         queue.memset(secondary_queue_counter_device, 0, sizeof(std::uint64_t));
         queue.memset(secondary_queue_filled_device, 0, sizeof(std::uint64_t));
         if (enable_secondary_transport) {
@@ -1080,27 +1461,33 @@ TransportResult transport_sycl(const TransportConfig& config,
                          fragment_species_count * number_of_bins * sizeof(double));
         }
         if (enable_fragment_cascade) {
-            queue.copy(cascade_packages->projectiles().data(), cascade_projectiles_device,
-                       cascade_packages->projectiles().size());
-            queue.copy(cascade_packages->cross_sections().data(), cascade_cross_sections_device,
-                       cascade_packages->cross_sections().size());
-            queue.copy(cascade_packages->interactions().data(), cascade_interactions_device,
-                       cascade_packages->interactions().size());
-            queue.copy(cascade_packages->products().data(), cascade_products_device,
-                       cascade_packages->products().size());
+            if (!reuse_immutable_buffers) {
+                queue.copy(cascade_packages->projectiles().data(), cascade_projectiles_device,
+                           cascade_packages->projectiles().size());
+                queue.copy(cascade_packages->cross_sections().data(),
+                           cascade_cross_sections_device,
+                           cascade_packages->cross_sections().size());
+                queue.copy(cascade_packages->interactions().data(), cascade_interactions_device,
+                           cascade_packages->interactions().size());
+                queue.copy(cascade_packages->products().data(), cascade_products_device,
+                           cascade_packages->products().size());
+            }
             queue.memset(cascade_summaries_device, 0,
                          secondary_queue_capacity * sizeof(CascadeTransportSummary));
         }
     }
     if (enable_neutral_transport) {
-        queue.copy(neutral_packages->projectiles().data(), neutral_projectiles_device,
-                   neutral_packages->projectiles().size());
-        queue.copy(neutral_packages->cross_sections().data(), neutral_cross_sections_device,
-                   neutral_packages->cross_sections().size());
-        queue.copy(neutral_packages->interactions().data(), neutral_interactions_device,
-                   neutral_packages->interactions().size());
-        queue.copy(neutral_packages->products().data(), neutral_products_device,
-                   neutral_packages->products().size());
+        if (!reuse_immutable_buffers) {
+            queue.copy(neutral_packages->projectiles().data(), neutral_projectiles_device,
+                       neutral_packages->projectiles().size());
+            queue.copy(neutral_packages->cross_sections().data(),
+                       neutral_cross_sections_device,
+                       neutral_packages->cross_sections().size());
+            queue.copy(neutral_packages->interactions().data(), neutral_interactions_device,
+                       neutral_packages->interactions().size());
+            queue.copy(neutral_packages->products().data(), neutral_products_device,
+                       neutral_packages->products().size());
+        }
         queue.memset(neutral_queue_counter_device, 0, sizeof(std::uint64_t));
         queue.memset(neutral_queue_filled_device, 0, sizeof(std::uint64_t));
         queue.memset(neutral_summaries_device, 0,
@@ -1113,7 +1500,7 @@ TransportResult transport_sycl(const TransportConfig& config,
         }
     }
 
-    constexpr std::size_t local_size = 128;
+    const std::size_t local_size = device_name == "gpu" ? 256U : 128U;
     const auto global_size =
         ((number_of_histories + local_size - 1) / local_size) * local_size;
     const auto initial_energy_MeV = static_cast<float>(config.initial_total_energy_MeV());
@@ -2061,6 +2448,25 @@ TransportResult transport_sycl(const TransportConfig& config,
                     auto direction_z = sycl::clamp(particle.direction_z, -1.0F, 1.0F);
                     const auto atomic_number = static_cast<int>(particle.atomic_number);
                     const auto mass_number = static_cast<int>(particle.mass_number);
+                    const auto inverse_mass_number_for_particle =
+                        1.0F / static_cast<float>(mass_number);
+                    const auto cascade_projectile_index_for_particle =
+                        enable_fragment_cascade &&
+                                particle.generation < maximum_cascade_generations
+                            ? cascade_projectile_index(
+                                  cascade_projectiles_device, cascade_projectile_count,
+                                  atomic_number, mass_number)
+                            : -1;
+                    CascadeProjectile cascade_projectile{};
+                    if (cascade_projectile_index_for_particle >= 0) {
+                        cascade_projectile = cascade_projectiles_device[
+                            cascade_projectile_index_for_particle];
+                    }
+                    const auto charge = static_cast<float>(atomic_number);
+                    const auto charge_power = sycl::pow(charge, -2.0F / 3.0F);
+                    constexpr float carbon_charge = 6.0F;
+                    const auto carbon_charge_power =
+                        sycl::pow(carbon_charge, -2.0F / 3.0F);
                     const auto is_neutral_lineage =
                         particle.reserved == neutron_lineage ||
                         particle.reserved == gamma_lineage;
@@ -2133,7 +2539,7 @@ TransportResult transport_sycl(const TransportConfig& config,
                         }
 
                         const auto energy_MeVu =
-                            energy_MeV / static_cast<float>(mass_number);
+                            energy_MeV * inverse_mass_number_for_particle;
                         auto floating_index =
                             (energy_MeVu - minimum_table_energy) * inverse_table_step;
                         auto index = static_cast<int>(sycl::floor(floating_index));
@@ -2150,17 +2556,12 @@ TransportResult transport_sycl(const TransportConfig& config,
                         const auto beta_squared =
                             sycl::fmax(0.0F, 1.0F - 1.0F / (gamma * gamma));
                         const auto beta = sycl::sqrt(beta_squared);
-                        const auto charge = static_cast<float>(atomic_number);
                         const auto effective_charge =
                             charge *
-                            (1.0F - sycl::exp(
-                                         -125.0F * beta * sycl::pow(charge, -2.0F / 3.0F)));
-                        constexpr float carbon_charge = 6.0F;
+                            (1.0F - sycl::exp(-125.0F * beta * charge_power));
                         const auto carbon_effective_charge =
                             carbon_charge *
-                            (1.0F - sycl::exp(
-                                         -125.0F * beta *
-                                         sycl::pow(carbon_charge, -2.0F / 3.0F)));
+                            (1.0F - sycl::exp(-125.0F * beta * carbon_charge_power));
                         const auto charge_ratio =
                             effective_charge / carbon_effective_charge;
                         const auto in_insert =
@@ -2424,31 +2825,16 @@ TransportResult transport_sycl(const TransportConfig& config,
                             direction_z = scattered.z;
                         }
 
-                        if (enable_fragment_cascade &&
-                            particle.generation < maximum_cascade_generations &&
+                        if (cascade_projectile_index_for_particle >= 0 &&
                             energy_MeV > energy_cutoff_MeV) {
-                            int projectile_index = -1;
-                            for (std::size_t candidate = 0;
-                                 candidate < cascade_projectile_count; ++candidate) {
-                                const auto projectile = cascade_projectiles_device[candidate];
-                                if (projectile.atomic_number == atomic_number &&
-                                    projectile.mass_number == mass_number) {
-                                    projectile_index = static_cast<int>(candidate);
-                                    break;
-                                }
-                            }
-                            if (projectile_index >= 0) {
-                                const auto projectile =
-                                    cascade_projectiles_device[projectile_index];
+                                const auto projectile = cascade_projectile;
                                 const auto current_energy_MeVu =
-                                    energy_MeV / static_cast<float>(mass_number);
-                                std::uint32_t upper = 0;
-                                while (upper < projectile.cross_section_count &&
-                                       cascade_cross_sections_device[
-                                           projectile.cross_section_offset + upper]
-                                               .energy_MeV_per_u < current_energy_MeVu) {
-                                    ++upper;
-                                }
+                                    energy_MeV * inverse_mass_number_for_particle;
+                                const auto upper = cascade_cross_section_lower_bound(
+                                    cascade_cross_sections_device,
+                                    projectile.cross_section_offset,
+                                    projectile.cross_section_count,
+                                    current_energy_MeVu);
                                 float macroscopic_cross_section_per_mm = 0.0F;
                                 if (upper == 0) {
                                     macroscopic_cross_section_per_mm =
@@ -2490,27 +2876,11 @@ TransportResult transport_sycl(const TransportConfig& config,
                                                      path_step_mm);
                                 if (rng::uniform01(random_seed, rng_stream, steps, 8) <
                                     interaction_probability) {
-                                    std::uint32_t nearest = 0;
-                                    while (nearest + 1 < projectile.interaction_count &&
-                                           cascade_interactions_device[
-                                               projectile.interaction_offset + nearest + 1]
-                                                   .incident_energy_MeV_per_u <
-                                               current_energy_MeVu) {
-                                        ++nearest;
-                                    }
-                                    if (nearest + 1 < projectile.interaction_count) {
-                                        const auto lower_delta = sycl::fabs(
-                                            cascade_interactions_device[
-                                                projectile.interaction_offset + nearest]
-                                                    .incident_energy_MeV_per_u -
-                                            current_energy_MeVu);
-                                        const auto upper_delta = sycl::fabs(
-                                            cascade_interactions_device[
-                                                projectile.interaction_offset + nearest + 1]
-                                                    .incident_energy_MeV_per_u -
-                                            current_energy_MeVu);
-                                        nearest += upper_delta < lower_delta ? 1U : 0U;
-                                    }
+                                    const auto nearest = nearest_cascade_interaction(
+                                        cascade_interactions_device,
+                                        projectile.interaction_offset,
+                                        projectile.interaction_count,
+                                        current_energy_MeVu);
                                     constexpr std::uint32_t sampling_window = 8;
                                     const auto window_begin =
                                         nearest > sampling_window / 2
@@ -2731,7 +3101,6 @@ TransportResult transport_sycl(const TransportConfig& config,
                                     }
                                     energy_MeV = 0.0F;
                                 }
-                            }
                         }
                         ++steps;
                     }
@@ -2876,13 +3245,11 @@ TransportResult transport_sycl(const TransportConfig& config,
                             }
                             const auto projectile =
                                 neutral_projectiles_device[projectile_index];
-                            std::uint32_t upper = 0;
-                            while (upper < projectile.cross_section_count &&
-                                   neutral_cross_sections_device
-                                           [projectile.cross_section_offset + upper]
-                                               .energy_MeV < energy_MeV) {
-                                ++upper;
-                            }
+                            const auto upper = neutral_cross_section_lower_bound(
+                                neutral_cross_sections_device,
+                                projectile.cross_section_offset,
+                                projectile.cross_section_count,
+                                energy_MeV);
                             float macroscopic_total_per_mm = 0.0F;
                             if (upper == 0) {
                                 macroscopic_total_per_mm =
@@ -2979,26 +3346,11 @@ TransportResult transport_sycl(const TransportConfig& config,
                                 break;
                             }
 
-                            std::uint32_t nearest = 0;
-                            while (nearest + 1 < projectile.interaction_count &&
-                                   neutral_interactions_device
-                                           [projectile.interaction_offset + nearest + 1]
-                                               .incident_energy_MeV < energy_MeV) {
-                                ++nearest;
-                            }
-                            if (nearest + 1 < projectile.interaction_count) {
-                                const auto lower_delta = sycl::fabs(
-                                    neutral_interactions_device
-                                        [projectile.interaction_offset + nearest]
-                                            .incident_energy_MeV -
-                                    energy_MeV);
-                                const auto upper_delta = sycl::fabs(
-                                    neutral_interactions_device
-                                        [projectile.interaction_offset + nearest + 1]
-                                            .incident_energy_MeV -
-                                    energy_MeV);
-                                nearest += upper_delta < lower_delta ? 1U : 0U;
-                            }
+                            const auto nearest = nearest_neutral_interaction(
+                                neutral_interactions_device,
+                                projectile.interaction_offset,
+                                projectile.interaction_count,
+                                energy_MeV);
                             constexpr std::uint32_t sampling_window = 8;
                             const auto window_begin =
                                 nearest > sampling_window / 2
@@ -3268,6 +3620,14 @@ TransportResult transport_sycl(const TransportConfig& config,
                             const auto atomic_number =
                                 static_cast<int>(particle.atomic_number);
                             const auto mass_number = static_cast<int>(particle.mass_number);
+                            const auto inverse_mass_number_for_particle =
+                                1.0F / static_cast<float>(mass_number);
+                            const auto charge = static_cast<float>(atomic_number);
+                            const auto charge_power =
+                                sycl::pow(charge, -2.0F / 3.0F);
+                            constexpr float carbon_charge = 6.0F;
+                            const auto carbon_charge_power =
+                                sycl::pow(carbon_charge, -2.0F / 3.0F);
 
                             while (energy_MeV > energy_cutoff_MeV) {
                                 const auto escaped_z =
@@ -3318,7 +3678,7 @@ TransportResult transport_sycl(const TransportConfig& config,
                                     static_cast<std::size_t>(voxel_y) * voxel_bins_x +
                                     static_cast<std::size_t>(voxel_x);
                                 const auto energy_MeVu =
-                                    energy_MeV / static_cast<float>(mass_number);
+                                    energy_MeV * inverse_mass_number_for_particle;
                                 auto floating_index =
                                     (energy_MeVu - minimum_table_energy) * inverse_table_step;
                                 auto index = static_cast<int>(sycl::floor(floating_index));
@@ -3334,15 +3694,13 @@ TransportResult transport_sycl(const TransportConfig& config,
                                 const auto beta_squared =
                                     sycl::fmax(0.0F, 1.0F - 1.0F / (gamma * gamma));
                                 const auto beta = sycl::sqrt(beta_squared);
-                                const auto charge = static_cast<float>(atomic_number);
                                 const auto effective_charge =
-                                    charge * (1.0F - sycl::exp(-125.0F * beta *
-                                                               sycl::pow(charge, -2.0F / 3.0F)));
-                                constexpr float carbon_charge = 6.0F;
+                                    charge *
+                                    (1.0F - sycl::exp(-125.0F * beta * charge_power));
                                 const auto carbon_effective_charge =
                                     carbon_charge *
-                                    (1.0F - sycl::exp(-125.0F * beta *
-                                                      sycl::pow(carbon_charge, -2.0F / 3.0F)));
+                                    (1.0F - sycl::exp(
+                                                -125.0F * beta * carbon_charge_power));
                                 const auto charge_ratio =
                                     effective_charge / carbon_effective_charge;
                                 const auto in_insert =
@@ -3579,15 +3937,14 @@ TransportResult transport_sycl(const TransportConfig& config,
             .wait_and_throw();
     }
     if (enable_secondary_transport) {
-        fragment_dose_host.resize(fragment_species_count * number_of_bins);
         const auto transported_secondary_count = static_cast<std::size_t>(
             std::min<std::uint64_t>(transported_queue_count, secondary_queue_capacity));
+        fragment_dose_host.resize(fragment_species_count * number_of_bins);
         secondary_deposited_host.resize(transported_secondary_count);
         secondary_escaped_host.resize(transported_secondary_count);
         secondary_steps_host.resize(transported_secondary_count);
         queue.copy(fragment_dose_device, fragment_dose_host.data(),
-                   fragment_dose_host.size())
-            .wait_and_throw();
+                   fragment_dose_host.size());
         if (transported_secondary_count > 0) {
             queue.copy(secondary_deposited_device, secondary_deposited_host.data(),
                        transported_secondary_count);
@@ -3596,6 +3953,8 @@ TransportResult transport_sycl(const TransportConfig& config,
             queue.copy(secondary_steps_device, secondary_steps_host.data(),
                        transported_secondary_count)
                 .wait_and_throw();
+        } else {
+            queue.wait_and_throw();
         }
         if (enable_fragment_cascade) {
             cascade_summaries_host.resize(transported_secondary_count);
@@ -3607,10 +3966,14 @@ TransportResult transport_sycl(const TransportConfig& config,
         }
     }
     if (enable_neutral_transport) {
-        neutral_summaries_host.resize(neutral_queue_capacity);
+        const auto transported_neutral_summary_count = static_cast<std::size_t>(
+            std::min<std::uint64_t>(transported_neutral_count, neutral_queue_capacity));
+        neutral_summaries_host.resize(transported_neutral_summary_count);
         neutral_origin_dose_host.resize(neutral_origin_category_count * number_of_bins);
-        queue.copy(neutral_summaries_device, neutral_summaries_host.data(),
-                   neutral_queue_capacity);
+        if (transported_neutral_summary_count > 0) {
+            queue.copy(neutral_summaries_device, neutral_summaries_host.data(),
+                       transported_neutral_summary_count);
+        }
         queue.copy(neutral_origin_dose_device, neutral_origin_dose_host.data(),
                    neutral_origin_dose_host.size())
             .wait_and_throw();
@@ -3624,8 +3987,8 @@ TransportResult transport_sycl(const TransportConfig& config,
         }
     }
 
-    free_device(table_device);
-    free_device(cross_section_device);
+    free_immutable_device(table_device);
+    free_immutable_device(cross_section_device);
     free_device(dose_device);
     free_device(voxel_dose_device);
     free_device(charged_origin_voxel_dose_device);
@@ -3646,9 +4009,9 @@ TransportResult transport_sycl(const TransportConfig& config,
     free_device(ct_sp_device);
     free_device(ct_xs_device);
     free_device(ct_ref_density_device);
-    free_device(reaction_bins_device);
-    free_device(reactions_device);
-    free_device(reaction_secondaries_device);
+    free_immutable_device(reaction_bins_device);
+    free_immutable_device(reactions_device);
+    free_immutable_device(reaction_secondaries_device);
     free_device(secondary_queue_device);
     free_device(secondary_queue_counter_device);
     free_device(secondary_queue_filled_device);
@@ -3657,15 +4020,15 @@ TransportResult transport_sycl(const TransportConfig& config,
     free_device(secondary_deposited_device);
     free_device(secondary_escaped_device);
     free_device(secondary_steps_device);
-    free_device(cascade_projectiles_device);
-    free_device(cascade_cross_sections_device);
-    free_device(cascade_interactions_device);
-    free_device(cascade_products_device);
+    free_immutable_device(cascade_projectiles_device);
+    free_immutable_device(cascade_cross_sections_device);
+    free_immutable_device(cascade_interactions_device);
+    free_immutable_device(cascade_products_device);
     free_device(cascade_summaries_device);
-    free_device(neutral_projectiles_device);
-    free_device(neutral_cross_sections_device);
-    free_device(neutral_interactions_device);
-    free_device(neutral_products_device);
+    free_immutable_device(neutral_projectiles_device);
+    free_immutable_device(neutral_cross_sections_device);
+    free_immutable_device(neutral_interactions_device);
+    free_immutable_device(neutral_products_device);
     free_device(neutral_queue_device);
     free_device(neutral_queue_counter_device);
     free_device(neutral_queue_filled_device);

@@ -1,4 +1,4 @@
-# Monte carlo Accelerated Ion transport on GPU for Oncology dose calculation (MAIGO)
+# carbon-oneapi-mc
 
 面向 Intel oneAPI/SYCL 的碳离子水中 condensed-history 蒙特卡洛剂量引擎。主 C-12 与带电碎片已支持三维方向、x/y/z voxel 边界、Highland 多重库仑散射和 `60 x 60 x 800` GPU total dose。
 
@@ -97,6 +97,22 @@ scripts\run_windows_b580.cmd
 ```
 
 脚本会依次初始化 Visual Studio 2026 C++ 工具链与 Intel oneAPI，并使用独立的 `oneapi-windows-release` preset/build 目录。B580 被限制到 `ONEAPI_DEVICE_SELECTOR=level_zero:0`，不会误选 OpenCL CPU。若 oneAPI 安装在其他位置，可预先设置 `ONEAPI_SETVARS`。
+
+如果使用 PowerShell，需要点加载环境脚本，让 oneAPI、Visual Studio、CMake 和 Ninja 的环境变量保留在当前终端：
+
+```powershell
+. .\scripts\enter_windows_oneapi.ps1
+icx-cl --version
+cmake --build --preset oneapi-windows-release
+ctest --preset oneapi-windows-release
+```
+
+本机 D 盘安装可使用：
+
+```powershell
+$env:ONEAPI_SETVARS = 'D:\Program Files (x86)\Intel\oneAPI\setvars.bat'
+. .\scripts\enter_windows_oneapi.ps1
+```
 
 ## 患者 CT 验证（7c）一键入口
 

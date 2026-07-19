@@ -12,6 +12,7 @@
 #include <filesystem>
 #include <iomanip>
 #include <iostream>
+#include <memory>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -182,7 +183,8 @@ carbon::TransportResult run_transport(
     const carbon::CrossSectionTable& cross_section,
     const std::optional<carbon::ReactionPackageTable>& reaction_packages,
     const std::optional<carbon::CascadePackageTable>& cascade_packages,
-    const std::optional<carbon::NeutralPackageTable>& neutral_packages) {
+    const std::optional<carbon::NeutralPackageTable>& neutral_packages,
+    carbon::SyclTransportContext* sycl_context = nullptr) {
     if (config.device == "serial") {
         if (config.enable_secondary_generation) {
             throw std::invalid_argument(
@@ -197,8 +199,10 @@ carbon::TransportResult run_transport(
     return carbon::transport_sycl(config, stopping_power, cross_section, config.device,
                                   reaction_packages ? &*reaction_packages : nullptr,
                                   cascade_packages ? &*cascade_packages : nullptr,
-                                  neutral_packages ? &*neutral_packages : nullptr);
+                                  neutral_packages ? &*neutral_packages : nullptr,
+                                  sycl_context);
 #else
+    (void)sycl_context;
     throw std::runtime_error(
         "This binary was built without SYCL. Reconfigure with CARBON_ENABLE_SYCL=ON and icpx.");
 #endif
@@ -280,6 +284,16 @@ int main(int argc, char* argv[]) {
         }
 #endif
 
+        carbon::SyclTransportContext* sycl_context = nullptr;
+#ifdef CARBON_HAS_SYCL
+        std::unique_ptr<carbon::SyclTransportContext> sycl_context_storage;
+        if (config.device != "serial" && !config.topas_spots_file.empty()) {
+            sycl_context_storage =
+                std::make_unique<carbon::SyclTransportContext>(config.device);
+            sycl_context = sycl_context_storage.get();
+        }
+#endif
+
         carbon::TransportResult result;
         const auto base_seed = config.random_seed;
 
@@ -317,7 +331,7 @@ int main(int argc, char* argv[]) {
 
                 auto spot_result =
                     run_transport(spot_config, stopping_power, cross_section, reaction_packages,
-                                  cascade_packages, neutral_packages);
+                                  cascade_packages, neutral_packages, sycl_context);
                 if (i == 0) {
                     result = std::move(spot_result);
                 } else {
