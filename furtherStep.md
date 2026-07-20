@@ -381,6 +381,18 @@ Backend：`+ct-grid-mass-sp-e`。配置：`config/beam_200MeVu_ct_patient_multim
 - f_E 为简化 Bethe 比（非完整 25 材料 G4 表 / shell / density-effect 全项）
 - 可再做更激进的 DDA / 同质合并
 
+**Future plan：允许物理近似的性能档位（当前生产配置不启用）**
+
+1. 低能次级局部沉积 A/B：测试 `energy_cutoff_MeV: 1.0` 与
+   `maximum_relative_energy_loss: 0.01`（必要时再测 0.02），将 cutoff 以下的
+   剩余能量沉积到当前 voxel。必须以当前 0.1 MeV / 0.005 结果为基准，比较
+   3D gamma、R80、D95/D2、积分剂量、峰值位置和能量闭合；通过阈值后才能作为
+   fast-dose 配置，不能直接替代最终剂量配置。
+2. 分级物理模式：提供 `preview-primary`（仅 primary）、`direct-secondary`
+   （直接带电次级、无 fragment cascade）和 `full-cascade`（当前完整模型）三档。
+   优化迭代和坐标 smoke 可使用前两档，最终报告默认使用 `full-cascade`；每档输出
+   必须记录 backend 标签和被关闭的能量通道，避免把预览剂量误当最终剂量。
+
 ### 多角度 / 真实计划钩子（设计，未实现）
 
 当前 GPU CT 约定：**束流固定 +z，CT 首片 z=0、xy 居中**。真实计划需要：

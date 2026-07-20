@@ -372,9 +372,25 @@ void TransportConfig::validate() const {
     if (spots_sad_mm <= 0.0) {
         throw std::invalid_argument("spots_sad_mm must be positive");
     }
-    if (spots_geometry_mode != "topas" && spots_geometry_mode != "beam_plus_z") {
+    if (spots_geometry_mode != "topas" && spots_geometry_mode != "beam_plus_z" &&
+        spots_geometry_mode != "tps_90") {
         throw std::invalid_argument(
-            "spots_geometry_mode must be topas or beam_plus_z");
+            "spots_geometry_mode must be topas, beam_plus_z, or tps_90");
+    }
+    if (!primary_spot_batch.empty()) {
+        std::uint64_t expected_begin = 0;
+        for (const auto& entry : primary_spot_batch) {
+            if (entry.history_begin != expected_begin ||
+                entry.history_end <= entry.history_begin) {
+                throw std::invalid_argument(
+                    "primary_spot_batch history ranges must be contiguous and non-empty");
+            }
+            expected_begin = entry.history_end;
+        }
+        if (expected_begin != number_of_histories) {
+            throw std::invalid_argument(
+                "primary_spot_batch ranges must cover number_of_histories exactly");
+        }
     }
 }
 
@@ -578,6 +594,14 @@ TransportConfig load_config(const std::filesystem::path& path) {
             config.topas_spots_file = it->second;
         }
     }
+    {
+        const auto it = values.find("topas_spots_files");
+        if (it != values.end()) {
+            config.topas_spots_files = parse_path_list(it->second);
+        }
+    }
+    config.spot_weights_file =
+        parse_path(values, "spot_weights_file", config.spot_weights_file);
     config.spots_sad_mm = parse_number(values, "spots_sad_mm", config.spots_sad_mm);
     {
         const auto it = values.find("spots_geometry_mode");
@@ -585,6 +609,16 @@ TransportConfig load_config(const std::filesystem::path& path) {
             config.spots_geometry_mode = it->second;
         }
     }
+    config.spots_patient_trans_x_mm = parse_number(
+        values, "spots_patient_trans_x_mm", config.spots_patient_trans_x_mm);
+    config.spots_patient_trans_y_mm = parse_number(
+        values, "spots_patient_trans_y_mm", config.spots_patient_trans_y_mm);
+    config.spots_patient_trans_z_mm = parse_number(
+        values, "spots_patient_trans_z_mm", config.spots_patient_trans_z_mm);
+    config.spots_patient_rot_z_deg = parse_number(
+        values, "spots_patient_rot_z_deg", config.spots_patient_rot_z_deg);
+    config.spots_ct_axis_min_mm = parse_number(
+        values, "spots_ct_axis_min_mm", config.spots_ct_axis_min_mm);
     config.random_seed = parse_number(values, "random_seed", config.random_seed);
     config.stopping_power_file = parse_path(values, "stopping_power_file", config.stopping_power_file);
     config.nuclear_cross_section_file =

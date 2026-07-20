@@ -10,6 +10,28 @@
 
 namespace carbon {
 
+// Compact per-spot source parameters consumed by one batched SYCL launch.
+// history_begin/history_end describe the half-open range in the flattened plan.
+struct PrimarySpotBatchEntry {
+    std::uint64_t history_begin{0};
+    std::uint64_t history_end{0};
+    std::uint64_t random_seed{0};
+    float initial_energy_MeV{0.0F};
+    float beam_energy_spread{0.0F};
+    float emittance_sigma_x_mm{0.0F};
+    float emittance_sigma_y_mm{0.0F};
+    float emittance_sigma_x_prime{0.0F};
+    float emittance_sigma_y_prime{0.0F};
+    float emittance_correlation_x{0.0F};
+    float emittance_correlation_y{0.0F};
+    float source_origin_x_mm{0.0F};
+    float source_origin_y_mm{0.0F};
+    float source_origin_z_mm{0.0F};
+    float beam_ux_x{1.0F}, beam_ux_y{0.0F}, beam_ux_z{0.0F};
+    float beam_uy_x{0.0F}, beam_uy_y{1.0F}, beam_uy_z{0.0F};
+    float beam_uz_x{0.0F}, beam_uz_y{0.0F}, beam_uz_z{1.0F};
+};
+
 struct TransportConfig {
     std::size_t number_of_histories{10'000};
     double initial_energy_MeVu{200.0};
@@ -85,17 +107,35 @@ struct TransportConfig {
     double beam_ux_x{1.0}, beam_ux_y{0.0}, beam_ux_z{0.0};
     double beam_uy_x{0.0}, beam_uy_y{1.0}, beam_uy_z{0.0};
     double beam_uz_x{0.0}, beam_uz_y{0.0}, beam_uz_z{1.0};
+    // Non-empty only for a flattened multi-spot SYCL plan. All entries share
+    // the physics/scorer fields above; source and energy fields come from here.
+    std::vector<PrimarySpotBatchEntry> primary_spot_batch{};
     // TOPAS-format spots plan (spots_*.txt L0–L14). Input-compatible with TOPAS
     // TimeFeature dumps; GPU does NOT simulate timeline — it just runs spots in
     // file order and accumulates absolute energy (MeV), then normalizes by total
     // histories across spots.
     std::filesystem::path topas_spots_file{};
+    // Multiple TOPAS files are concatenated in the listed order. This is used
+    // for plans split only for parallel TOPAS execution.
+    std::vector<std::filesystem::path> topas_spots_files{};
+    // Optional one-column optimization weights, one per concatenated spot.
+    // number_of_histories becomes the total plan MC budget and is allocated
+    // proportionally (rather than overriding every spot with an equal count).
+    std::filesystem::path spot_weights_file{};
     // |TransY| used when building spot source pose (TOPAS SAD). Default 450 mm.
     double spots_sad_mm{450.0};
-    // "topas": full BeamPosition2 pose (Rx,Ry + SAD) for 3D/CT plans.
+    // "topas": legacy full BeamPosition2 pose (Rx,Ry + SAD).
     // "beam_plus_z": water-IDD convenience — force +z beam at z=0 with lateral
     //   offsets (TransX,TransZ) as (x,y); ignores gantry for depth scoring.
+    // "tps_90": TPS 90-degree incidence. Spot rotations establish the fixed
+    //   TPS 0-degree source direction, while Patient RotZ=90 supplies the plan
+    //   angle. The reoriented patient local +X is GPU +Z.
     std::string spots_geometry_mode{"topas"};
+    double spots_patient_trans_x_mm{0.0};
+    double spots_patient_trans_y_mm{0.0};
+    double spots_patient_trans_z_mm{0.0};
+    double spots_patient_rot_z_deg{0.0};
+    double spots_ct_axis_min_mm{0.0};
     bool enable_primary_attenuation{false};
     bool enable_secondary_generation{false};
     bool enable_secondary_transport{false};

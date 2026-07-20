@@ -267,4 +267,85 @@ inline float clamp_step_to_ct_faces_if_needed(const float step_mm,
                                   origin_y, origin_z, spacing_x, spacing_y, spacing_z);
 }
 
+// Exact fast path for primary tracks that are nearly axial. If the proposed
+// segment provably remains in the same CT x/y column, only the next z face can
+// be the limiting CT face. Any lateral-cell change falls back to the general
+// three-axis implementation.
+inline float clamp_step_to_ct_faces_near_z_if_needed(
+    const float step_mm,
+    const float x_mm,
+    const float y_mm,
+    const float z_mm,
+    const float dx,
+    const float dy,
+    const float dz,
+    const float origin_x,
+    const float origin_y,
+    const float origin_z,
+    const float spacing_x,
+    const float spacing_y,
+    const float spacing_z,
+    const std::uint32_t nx,
+    const std::uint32_t ny,
+    const std::uint32_t nz,
+    const float* densities,
+    const std::uint8_t* materials,
+    const float density_here,
+    const std::uint8_t material_here,
+    const bool skip_homogeneous = true) noexcept {
+    if (std::fabs(dz) < 0.999F || !skip_homogeneous || densities == nullptr ||
+        step_mm <= 1.0e-6F) {
+        return clamp_step_to_ct_faces_if_needed(
+            step_mm, x_mm, y_mm, z_mm, dx, dy, dz, origin_x, origin_y, origin_z,
+            spacing_x, spacing_y, spacing_z, nx, ny, nz, densities, materials,
+            density_here, material_here, skip_homogeneous);
+    }
+    const auto min_sp =
+        spacing_x < spacing_y
+            ? (spacing_x < spacing_z ? spacing_x : spacing_z)
+            : (spacing_y < spacing_z ? spacing_y : spacing_z);
+    if (step_mm < 0.2F * min_sp) {
+        return step_mm;
+    }
+    const auto x1 = x_mm + dx * step_mm;
+    const auto y1 = y_mm + dy * step_mm;
+    const auto z1 = z_mm + dz * step_mm;
+    const auto fx0 = (x_mm - origin_x) / spacing_x;
+    const auto fy0 = (y_mm - origin_y) / spacing_y;
+    const auto fx1 = (x1 - origin_x) / spacing_x;
+    const auto fy1 = (y1 - origin_y) / spacing_y;
+    if (fx1 < 0.0F || fy1 < 0.0F || fx1 >= static_cast<float>(nx) ||
+        fy1 >= static_cast<float>(ny)) {
+        return clamp_step_to_ct_faces_if_needed(
+            step_mm, x_mm, y_mm, z_mm, dx, dy, dz, origin_x, origin_y, origin_z,
+            spacing_x, spacing_y, spacing_z, nx, ny, nz, densities, materials,
+            density_here, material_here, skip_homogeneous);
+    }
+    const auto ix0 = static_cast<int>(fx0);
+    const auto iy0 = static_cast<int>(fy0);
+    const auto ix1 = static_cast<int>(fx1);
+    const auto iy1 = static_cast<int>(fy1);
+    if (ix0 != ix1 || iy0 != iy1) {
+        return clamp_step_to_ct_faces_if_needed(
+            step_mm, x_mm, y_mm, z_mm, dx, dy, dz, origin_x, origin_y, origin_z,
+            spacing_x, spacing_y, spacing_z, nx, ny, nz, densities, materials,
+            density_here, material_here, skip_homogeneous);
+    }
+    float density_end = density_here;
+    std::uint8_t material_end = material_here;
+    if (ct_sample(x1, y1, z1, origin_x, origin_y, origin_z, spacing_x, spacing_y,
+                  spacing_z, nx, ny, nz, densities, materials, density_end,
+                  material_end)) {
+        const auto rel =
+            std::fabs(density_end - density_here) /
+            (density_here > 1.0e-3F ? density_here : 1.0e-3F);
+        if (material_end == material_here && rel < 0.02F) {
+            return step_mm;
+        }
+    }
+    const auto z_face =
+        distance_to_next_ct_face_1d(z_mm, origin_z, spacing_z, dz);
+    return z_face < step_mm ? z_face : step_mm;
+}
+
 }  // namespace carbon

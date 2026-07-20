@@ -1,4 +1,5 @@
 #include "carbon/io.hpp"
+#include "carbon/ct_grid.hpp"
 #include "carbon/particle.hpp"
 
 
@@ -26,6 +27,32 @@ double idd_bin_mass_kg(const TransportConfig& config) {
 double voxel_mass_kg(const TransportConfig& config) {
     return config.voxel_size_x_mm * config.voxel_size_y_mm * config.depth_bin_width_mm *
            config.water_density_g_per_cm3 * 1.0e-6;
+}
+
+std::vector<double> voxel_masses_kg(const TransportConfig& config) {
+    const auto count = config.number_of_voxels();
+    std::vector<double> masses(count, voxel_mass_kg(config));
+    if (!config.enable_ct_grid) {
+        return masses;
+    }
+    const auto grid = CtGrid::from_binary(config.ct_grid_file);
+    if (grid.nx != config.voxel_bins_x || grid.ny != config.voxel_bins_y ||
+        grid.nz != config.number_of_bins() ||
+        std::abs(static_cast<double>(grid.spacing_x_mm) - config.voxel_size_x_mm) > 1.0e-6 ||
+        std::abs(static_cast<double>(grid.spacing_y_mm) - config.voxel_size_y_mm) > 1.0e-6 ||
+        std::abs(static_cast<double>(grid.spacing_z_mm) - config.depth_bin_width_mm) > 1.0e-6) {
+        throw std::invalid_argument(
+            "CT dose-to-medium requires the voxel scorer grid to match the CT grid");
+    }
+    const auto volume_mm3 = config.voxel_size_x_mm * config.voxel_size_y_mm *
+                            config.depth_bin_width_mm;
+    for (std::size_t i = 0; i < count; ++i) {
+        // Keep very-low-density CT voxels finite while retaining their actual
+        // dose-to-medium mass rather than assuming unit-density water.
+        const auto density = std::max(1.0e-6, static_cast<double>(grid.density_g_per_cm3[i]));
+        masses[i] = volume_mm3 * density * 1.0e-6;
+    }
+    return masses;
 }
 
 double energy_MeV_to_dose_Gy(double energy_MeV, double mass_kg) {
@@ -237,7 +264,7 @@ void write_sparse_voxel_dose_csv(const std::filesystem::path& path,
     if (!output) {
         throw std::runtime_error("Cannot create voxel dose output file: " + path.string());
     }
-    const auto mass_kg = voxel_mass_kg(config);
+    const auto masses_kg = voxel_masses_kg(config);
     const auto x_extent_mm =
         static_cast<double>(config.voxel_bins_x) * config.voxel_size_x_mm;
     const auto y_extent_mm =
@@ -256,7 +283,7 @@ void write_sparse_voxel_dose_csv(const std::filesystem::path& path,
                 }
                 const auto energy_per_primary = energy / histories;
                 const auto dose_per_primary =
-                    energy_MeV_to_dose_Gy(energy_per_primary, mass_kg);
+                    energy_MeV_to_dose_Gy(energy_per_primary, masses_kg[index]);
                 const auto x_mm =
                     (static_cast<double>(x) + 0.5) * config.voxel_size_x_mm -
                     0.5 * x_extent_mm;
@@ -289,7 +316,7 @@ void write_sparse_voxel_dose_Gy_csv(const std::filesystem::path& path,
             "Cannot create voxel dose Gy output file: " + path.string());
     }
     const auto histories = static_cast<double>(config.number_of_histories);
-    const auto mass_kg = voxel_mass_kg(config);
+    const auto masses_kg = voxel_masses_kg(config);
     const auto plane_size = config.voxel_bins_x * config.voxel_bins_y;
     const auto x_extent_mm =
         static_cast<double>(config.voxel_bins_x) * config.voxel_size_x_mm;
@@ -306,7 +333,7 @@ void write_sparse_voxel_dose_Gy_csv(const std::filesystem::path& path,
                     continue;
                 }
                 const auto dose_per_primary =
-                    energy_MeV_to_dose_Gy(energy / histories, mass_kg);
+                    energy_MeV_to_dose_Gy(energy / histories, masses_kg[index]);
                 const auto x_mm =
                     (static_cast<double>(x) + 0.5) * config.voxel_size_x_mm -
                     0.5 * x_extent_mm;

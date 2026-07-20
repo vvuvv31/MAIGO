@@ -320,6 +320,15 @@ void test_ct_grid_helpers() {
         2, 2, dens_h, mats_h, 1.0F, 2, true);
     require_near(step_short, 0.05F, 1.0e-6, "short CT step should skip face-clamp");
 
+    const float dens_z[8] = {1.0F, 1.0F, 1.0F, 1.0F,
+                             2.0F, 2.0F, 2.0F, 2.0F};
+    const auto step_near_z = carbon::clamp_step_to_ct_faces_near_z_if_needed(
+        0.4F, 0.1F, 0.1F, 0.8F, 0.01F, 0.0F, 0.99995F,
+        0.0F, 0.0F, 0.0F, 1.0F, 1.0F, 1.0F, 2, 2, 2,
+        dens_z, mats_h, 1.0F, 2, true);
+    require_near(step_near_z, 0.20001F, 2.0e-4,
+                 "near-z CT fast path must clamp at heterogeneous z face");
+
     // Energy-dependent mass-SP: I_water → factor = za_rel; I_bone ≠ 75 shifts f_E.
     require_near(carbon::ct_mass_sp_energy_factor(0.93F, 75.0F, 150.0F), 0.93F, 1.0e-4,
                  "mass-SP energy factor water-I");
@@ -760,7 +769,91 @@ void test_topas_spots_parse_angle01() {
     require_near(pose.uz_z, 0.0, 1.0e-6, "beam uz z");
 }
 
+void test_topas_spot_weights_and_tps_90_transform() {
+    const auto plan_path = std::filesystem::path(CARBON_SOURCE_DIR) / "validation" /
+                           "topas" / "spots_test_c_angle01.txt";
+    auto plan = carbon::TopasSpotPlan::from_files({plan_path, plan_path});
+    require(plan.spots.size() == 2, "Concatenated TOPAS plan size mismatch");
+
+    const auto weights_path = std::filesystem::temp_directory_path() /
+                              "carbon_test_spot_weights.csv";
+    {
+        std::ofstream output(weights_path, std::ios::binary);
+        output << "\xEF\xBB\xBF" << "1\r\n3\r\n";
+    }
+    const auto removed = plan.apply_weights_from_csv(weights_path, 40);
+    require(removed == 0, "Positive spot weights should not remove spots");
+    require(plan.total_histories() == 40, "Weighted plan must preserve exact total histories");
+    require(plan.spots[0].number_of_histories == 11 &&
+                plan.spots[1].number_of_histories == 29,
+            "Largest-remainder spot history allocation mismatch");
+    require_near(plan.total_plan_weight, 4.0, 1.0e-12, "Spot weight sum");
+    std::error_code ec;
+    std::filesystem::remove(weights_path, ec);
+
+    carbon::TopasSpot central;
+    central.trans_x_mm = 0.0;
+    central.trans_z_mm = 0.0;
+    central.rot_x_deg = 90.0;
+    central.rot_y_deg = 0.0;
+    carbon::TopasSpotPlan pose_plan;
+    pose_plan.sad_mm = 450.0;
+    const auto world = pose_plan.tps_zero_beam_pose_for_spot(central);
+    require_near(world.origin_y_mm, -450.0, 1.0e-9, "TPS source TransY");
+    require_near(world.uz_y, 1.0, 1.0e-9, "TPS central ray points +world-Y");
+
+    const auto ct = carbon::transform_tps_90_pose_to_ct(
+        world, 0.0, 0.0, 0.0, 90.0, -104.0);
+    require_near(ct.origin_z_mm, -346.0, 1.0e-6,
+                 "TPS source upstream position in reoriented CT");
+    require_near(ct.uz_z, 1.0, 1.0e-9,
+                 "TPS central ray points +GPU-Z after CT transform");
+}
+
 #ifdef CARBON_HAS_SYCL
+void test_sycl_primary_spot_batch() {
+    carbon::TransportConfig batch;
+    batch.number_of_histories = 8;
+    batch.phantom_length_mm = 100.0;
+    batch.depth_bin_width_mm = 1.0;
+    batch.maximum_step_mm = 0.5;
+    batch.maximum_relative_energy_loss = 0.01;
+    carbon::PrimarySpotBatchEntry first{};
+    first.history_begin = 0;
+    first.history_end = 3;
+    first.random_seed = 17;
+    first.initial_energy_MeV = 120.0F;
+    carbon::PrimarySpotBatchEntry second{};
+    second.history_begin = 3;
+    second.history_end = 8;
+    second.random_seed = 29;
+    second.initial_energy_MeV = 180.0F;
+    batch.primary_spot_batch = {first, second};
+    batch.validate();
+
+    const carbon::StoppingPowerTable table(
+        {0.01, 10.01, 20.01}, {2.0, 2.0, 2.0});
+    const auto combined =
+        carbon::transport_sycl(batch, table, zero_cross_section(), "cpu");
+
+    auto part = batch;
+    part.primary_spot_batch.clear();
+    part.number_of_histories = 3;
+    part.initial_energy_MeVu = 10.0;
+    const auto a = carbon::transport_sycl(part, table, zero_cross_section(), "cpu");
+    part.number_of_histories = 5;
+    part.initial_energy_MeVu = 15.0;
+    const auto b = carbon::transport_sycl(part, table, zero_cross_section(), "cpu");
+    require_near(combined.initial_energy_MeV,
+                 a.initial_energy_MeV + b.initial_energy_MeV, 1.0e-6,
+                 "batched initial energy");
+    for (std::size_t i = 0; i < combined.deposited_energy_MeV.size(); ++i) {
+        require_near(combined.deposited_energy_MeV[i],
+                     a.deposited_energy_MeV[i] + b.deposited_energy_MeV[i],
+                     1.0e-6, "batched primary dose");
+    }
+}
+
 void test_sycl_flat_source_extent() {
     carbon::TransportConfig config;
     config.number_of_histories = 512;
@@ -1271,8 +1364,10 @@ int main() {
         test_neutral_package_loading();
         test_flat_source_config_validation();
         test_topas_spots_parse_angle01();
+        test_topas_spot_weights_and_tps_90_transform();
         test_dose_scorer_matches_mev_conversion();
 #ifdef CARBON_HAS_SYCL
+        test_sycl_primary_spot_batch();
         test_sycl_flat_source_extent();
         test_serial_sycl_cpu_match();
         test_sycl_transport_context_reuse();

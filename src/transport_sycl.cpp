@@ -672,6 +672,7 @@ TransportResult transport_sycl(const TransportConfig& config,
     const auto cross_section_table_size = cross_section.values().size();
     const auto number_of_bins = config.number_of_bins();
     const auto number_of_histories = config.number_of_histories;
+    const auto primary_spot_count = config.primary_spot_batch.size();
     const auto enable_voxel_scoring = config.enable_voxel_scoring;
     const auto enable_charged_origin_voxel_scoring =
         config.enable_charged_origin_voxel_scoring;
@@ -742,6 +743,7 @@ TransportResult transport_sycl(const TransportConfig& config,
         bytes += cross_section_table_size * sizeof(float);
         bytes += number_of_bins * sizeof(double);
         bytes += number_of_histories * (3 * sizeof(float) + sizeof(std::uint32_t));
+        bytes += primary_spot_count * sizeof(PrimarySpotBatchEntry);
         if (enable_voxel_scoring) {
             bytes += number_of_voxels * sizeof(double);
         }
@@ -893,12 +895,23 @@ TransportResult transport_sycl(const TransportConfig& config,
     auto* escaped_device = sycl::malloc_device<float>(number_of_histories, queue);
     auto* nuclear_device = sycl::malloc_device<float>(number_of_histories, queue);
     auto* steps_device = sycl::malloc_device<std::uint32_t>(number_of_histories, queue);
+    PrimarySpotBatchEntry* primary_spots_device = nullptr;
+    if (primary_spot_count > 0) {
+        primary_spots_device =
+            sycl::malloc_device<PrimarySpotBatchEntry>(primary_spot_count, queue);
+        if (primary_spots_device != nullptr) {
+            queue.copy(config.primary_spot_batch.data(), primary_spots_device,
+                       primary_spot_count)
+                .wait_and_throw();
+        }
+    }
     ReactionEnergyBin* reaction_bins_device = nullptr;
     ReactionPackage* reactions_device = nullptr;
     ReactionSecondary* reaction_secondaries_device = nullptr;
     SecondaryParticle3D* secondary_queue_device = nullptr;
     std::uint64_t* secondary_queue_counter_device = nullptr;
     std::uint64_t* secondary_queue_filled_device = nullptr;
+    std::uint64_t* secondary_work_counter_device = nullptr;
     SecondaryGenerationSummary* secondary_summaries_device = nullptr;
     double* fragment_dose_device = nullptr;
     float* secondary_deposited_device = nullptr;
@@ -941,6 +954,7 @@ TransportResult transport_sycl(const TransportConfig& config,
         secondary_summaries_device =
             sycl::malloc_device<SecondaryGenerationSummary>(number_of_histories, queue);
         if (enable_secondary_transport) {
+            secondary_work_counter_device = sycl::malloc_device<std::uint64_t>(1, queue);
             fragment_dose_device = sycl::malloc_device<double>(
                 fragment_species_count * number_of_bins, queue);
             secondary_deposited_device =
@@ -1364,7 +1378,8 @@ TransportResult transport_sycl(const TransportConfig& config,
          secondary_queue_counter_device == nullptr || secondary_queue_filled_device == nullptr ||
          secondary_summaries_device == nullptr ||
          (enable_secondary_transport &&
-           (fragment_dose_device == nullptr || secondary_deposited_device == nullptr ||
+           (secondary_work_counter_device == nullptr || fragment_dose_device == nullptr ||
+           secondary_deposited_device == nullptr ||
            secondary_escaped_device == nullptr || secondary_steps_device == nullptr)) ||
          (enable_fragment_cascade &&
           (cascade_projectiles_device == nullptr || cascade_cross_sections_device == nullptr ||
@@ -1384,6 +1399,7 @@ TransportResult transport_sycl(const TransportConfig& config,
          charged_origin_voxel_dose_device == nullptr) ||
         deposited_device == nullptr ||
         escaped_device == nullptr || nuclear_device == nullptr || steps_device == nullptr ||
+        (primary_spot_count > 0 && primary_spots_device == nullptr) ||
         secondary_allocation_failed || neutral_allocation_failed) {
         free_immutable_device(table_device);
         free_immutable_device(cross_section_device);
@@ -1394,6 +1410,7 @@ TransportResult transport_sycl(const TransportConfig& config,
         free_device(escaped_device);
         free_device(nuclear_device);
         free_device(steps_device);
+        free_device(primary_spots_device);
         free_device(slab_z_ends_device);
         free_device(slab_densities_device);
         free_device(material_sp_device);
@@ -1413,6 +1430,7 @@ TransportResult transport_sycl(const TransportConfig& config,
         free_device(secondary_queue_device);
         free_device(secondary_queue_counter_device);
         free_device(secondary_queue_filled_device);
+        free_device(secondary_work_counter_device);
         free_device(secondary_summaries_device);
         free_device(fragment_dose_device);
         free_device(secondary_deposited_device);
@@ -1513,6 +1531,9 @@ TransportResult transport_sycl(const TransportConfig& config,
     }
 
     const std::size_t local_size = device_name == "gpu" ? 256U : 128U;
+    const auto persistent_secondary_workers =
+        static_cast<std::size_t>(device.get_info<sycl::info::device::max_compute_units>()) *
+        local_size * 8U;
     const auto global_size =
         ((number_of_histories + local_size - 1) / local_size) * local_size;
     const auto initial_energy_MeV = static_cast<float>(config.initial_total_energy_MeV());
@@ -1602,21 +1623,44 @@ TransportResult transport_sycl(const TransportConfig& config,
     auto kernel_event = queue.parallel_for(
         sycl::nd_range<1>{sycl::range<1>{global_size}, sycl::range<1>{local_size}},
         [=](sycl::nd_item<1> item) {
-            const auto history = item.get_global_linear_id();
-            if (history >= number_of_histories) {
+            const auto global_history = item.get_global_linear_id();
+            if (global_history >= number_of_histories) {
                 return;
             }
 
-            auto energy_MeV = initial_energy_MeV;
-            if (beam_energy_spread > 0.0F) {
+            const PrimarySpotBatchEntry* spot = nullptr;
+            std::uint64_t rng_history = global_history;
+            if (primary_spot_count > 0) {
+                std::size_t lower = 0;
+                std::size_t upper = primary_spot_count;
+                while (lower + 1 < upper) {
+                    const auto middle = lower + (upper - lower) / 2;
+                    if (global_history < primary_spots_device[middle].history_begin) {
+                        upper = middle;
+                    } else {
+                        lower = middle;
+                    }
+                }
+                spot = primary_spots_device + lower;
+                rng_history = global_history - spot->history_begin;
+            }
+            const auto spot_seed = spot != nullptr ? spot->random_seed : random_seed;
+            const auto spot_initial_energy_MeV =
+                spot != nullptr ? spot->initial_energy_MeV : initial_energy_MeV;
+            const auto spot_energy_spread =
+                spot != nullptr ? spot->beam_energy_spread : beam_energy_spread;
+
+            auto energy_MeV = spot_initial_energy_MeV;
+            if (spot_energy_spread > 0.0F) {
                 // TOPAS BeamEnergySpread: Gaussian RMS = spread * mean total KE.
                 const auto u0 = sycl::fmax(
-                    rng::uniform01(random_seed, history, 0, 40), 1.0e-12F);
-                const auto u1 = rng::uniform01(random_seed, history, 0, 41);
+                    rng::uniform01(spot_seed, rng_history, 0, 40), 1.0e-12F);
+                const auto u1 = rng::uniform01(spot_seed, rng_history, 0, 41);
                 constexpr float two_pi = 6.2831853071795864769F;
                 const auto gauss =
                     sycl::sqrt(-2.0F * sycl::log(u0)) * sycl::cos(two_pi * u1);
-                energy_MeV = initial_energy_MeV * (1.0F + beam_energy_spread * gauss);
+                energy_MeV =
+                    spot_initial_energy_MeV * (1.0F + spot_energy_spread * gauss);
                 if (energy_MeV < energy_cutoff_MeV) {
                     energy_MeV = energy_cutoff_MeV;
                 }
@@ -1629,32 +1673,48 @@ TransportResult transport_sycl(const TransportConfig& config,
             auto local_dz = 1.0F;
             if (enable_flat_source) {
                 local_x_mm = flat_source_half_width_x_mm *
-                             (2.0F * rng::uniform01(random_seed, history, 0, 34) - 1.0F);
+                             (2.0F * rng::uniform01(spot_seed, rng_history, 0, 34) - 1.0F);
                 local_y_mm = flat_source_half_width_y_mm *
-                             (2.0F * rng::uniform01(random_seed, history, 0, 35) - 1.0F);
+                             (2.0F * rng::uniform01(spot_seed, rng_history, 0, 35) - 1.0F);
             } else if (enable_emittance_source) {
                 // TOPAS BiGaussian: sample (x,x') and (y,y') from bivariate normals.
                 // x' = dx/dz (unitless, rad-like). Independent axes with correlations.
                 const auto u0 = sycl::fmax(
-                    rng::uniform01(random_seed, history, 0, 30), 1.0e-12F);
-                const auto u1 = rng::uniform01(random_seed, history, 0, 31);
+                    rng::uniform01(spot_seed, rng_history, 0, 30), 1.0e-12F);
+                const auto u1 = rng::uniform01(spot_seed, rng_history, 0, 31);
                 const auto u2 = sycl::fmax(
-                    rng::uniform01(random_seed, history, 0, 32), 1.0e-12F);
-                const auto u3 = rng::uniform01(random_seed, history, 0, 33);
+                    rng::uniform01(spot_seed, rng_history, 0, 32), 1.0e-12F);
+                const auto u3 = rng::uniform01(spot_seed, rng_history, 0, 33);
                 constexpr float two_pi = 6.2831853071795864769F;
                 const auto g0 = sycl::sqrt(-2.0F * sycl::log(u0)) * sycl::cos(two_pi * u1);
                 const auto g1 = sycl::sqrt(-2.0F * sycl::log(u0)) * sycl::sin(two_pi * u1);
                 const auto g2 = sycl::sqrt(-2.0F * sycl::log(u2)) * sycl::cos(two_pi * u3);
                 const auto g3 = sycl::sqrt(-2.0F * sycl::log(u2)) * sycl::sin(two_pi * u3);
-                local_x_mm = emittance_sigma_x_mm * g0;
-                local_y_mm = emittance_sigma_y_mm * g2;
-                const auto rho_x = sycl::clamp(emittance_correlation_x, -0.9999F, 0.9999F);
-                const auto rho_y = sycl::clamp(emittance_correlation_y, -0.9999F, 0.9999F);
+                const auto sigma_x = spot != nullptr ? spot->emittance_sigma_x_mm
+                                                     : emittance_sigma_x_mm;
+                const auto sigma_y = spot != nullptr ? spot->emittance_sigma_y_mm
+                                                     : emittance_sigma_y_mm;
+                const auto sigma_x_prime =
+                    spot != nullptr ? spot->emittance_sigma_x_prime
+                                    : emittance_sigma_x_prime;
+                const auto sigma_y_prime =
+                    spot != nullptr ? spot->emittance_sigma_y_prime
+                                    : emittance_sigma_y_prime;
+                local_x_mm = sigma_x * g0;
+                local_y_mm = sigma_y * g2;
+                const auto rho_x = sycl::clamp(
+                    spot != nullptr ? spot->emittance_correlation_x
+                                    : emittance_correlation_x,
+                    -0.9999F, 0.9999F);
+                const auto rho_y = sycl::clamp(
+                    spot != nullptr ? spot->emittance_correlation_y
+                                    : emittance_correlation_y,
+                    -0.9999F, 0.9999F);
                 const auto x_prime =
-                    emittance_sigma_x_prime *
+                    sigma_x_prime *
                     (rho_x * g0 + sycl::sqrt(1.0F - rho_x * rho_x) * g1);
                 const auto y_prime =
-                    emittance_sigma_y_prime *
+                    sigma_y_prime *
                     (rho_y * g2 + sycl::sqrt(1.0F - rho_y * rho_y) * g3);
                 // Paraxial unit direction from slopes (dx/dz, dy/dz).
                 const auto inv_norm =
@@ -1664,18 +1724,33 @@ TransportResult transport_sycl(const TransportConfig& config,
                 local_dz = inv_norm;
             }
             // World = origin + ux*x + uy*y ; dir = ux*dx + uy*dy + uz*dz
+            const auto origin_x =
+                spot != nullptr ? spot->source_origin_x_mm : source_origin_x_mm;
+            const auto origin_y =
+                spot != nullptr ? spot->source_origin_y_mm : source_origin_y_mm;
+            const auto origin_z =
+                spot != nullptr ? spot->source_origin_z_mm : source_origin_z_mm;
+            const auto ux_x = spot != nullptr ? spot->beam_ux_x : beam_ux_x;
+            const auto ux_y = spot != nullptr ? spot->beam_ux_y : beam_ux_y;
+            const auto ux_z = spot != nullptr ? spot->beam_ux_z : beam_ux_z;
+            const auto uy_x = spot != nullptr ? spot->beam_uy_x : beam_uy_x;
+            const auto uy_y = spot != nullptr ? spot->beam_uy_y : beam_uy_y;
+            const auto uy_z = spot != nullptr ? spot->beam_uy_z : beam_uy_z;
+            const auto uz_x = spot != nullptr ? spot->beam_uz_x : beam_uz_x;
+            const auto uz_y = spot != nullptr ? spot->beam_uz_y : beam_uz_y;
+            const auto uz_z = spot != nullptr ? spot->beam_uz_z : beam_uz_z;
             auto position_x_mm =
-                source_origin_x_mm + beam_ux_x * local_x_mm + beam_uy_x * local_y_mm;
+                origin_x + ux_x * local_x_mm + uy_x * local_y_mm;
             auto position_y_mm =
-                source_origin_y_mm + beam_ux_y * local_x_mm + beam_uy_y * local_y_mm;
+                origin_y + ux_y * local_x_mm + uy_y * local_y_mm;
             auto position_z_mm =
-                source_origin_z_mm + beam_ux_z * local_x_mm + beam_uy_z * local_y_mm;
+                origin_z + ux_z * local_x_mm + uy_z * local_y_mm;
             auto direction_x =
-                beam_ux_x * local_dx + beam_uy_x * local_dy + beam_uz_x * local_dz;
+                ux_x * local_dx + uy_x * local_dy + uz_x * local_dz;
             auto direction_y =
-                beam_ux_y * local_dx + beam_uy_y * local_dy + beam_uz_y * local_dz;
+                ux_y * local_dx + uy_y * local_dy + uz_y * local_dz;
             auto direction_z =
-                beam_ux_z * local_dx + beam_uy_z * local_dy + beam_uz_z * local_dz;
+                ux_z * local_dx + uy_z * local_dy + uz_z * local_dz;
             {
                 const auto inv_n = sycl::rsqrt(sycl::fmax(
                     1.0e-20F,
@@ -1689,6 +1764,10 @@ TransportResult transport_sycl(const TransportConfig& config,
             auto history_nuclear_MeV = 0.0f;
             SecondaryGenerationSummary secondary_summary{};
             std::uint32_t steps = 0;
+            double pending_primary_depth_MeV = 0.0;
+            int pending_primary_bin = 0;
+            double pending_primary_voxel_MeV = 0.0;
+            std::size_t pending_primary_voxel = 0;
             constexpr std::uint32_t max_primary_steps = 2'000'000U;
             while (energy_MeV > energy_cutoff_MeV && steps < max_primary_steps) {
                 const auto escaped_z =
@@ -1863,7 +1942,7 @@ TransportResult transport_sycl(const TransportConfig& config,
                 if (enable_ct_grid && in_ct) {
                     // Face clamp only when density/material changes along the step
                     // (unless ct_skip_homogeneous_face_clamp is false).
-                    step_mm = clamp_step_to_ct_faces_if_needed(
+                    step_mm = clamp_step_to_ct_faces_near_z_if_needed(
                         step_mm, position_x_mm, position_y_mm, position_z_mm,
                         direction_x, direction_y, direction_z, ct_origin_x,
                         ct_origin_y, ct_origin_z, ct_spacing_x, ct_spacing_y,
@@ -1976,8 +2055,8 @@ TransportResult transport_sycl(const TransportConfig& config,
                 auto deposited_MeV = sycl::fmin(mean_loss_MeV, energy_MeV);
                 if (enable_energy_straggling) {
                     const auto uniform1 = sycl::fmax(
-                        rng::uniform01(random_seed, history, steps, 0), 1.0e-12f);
-                    const auto uniform2 = rng::uniform01(random_seed, history, steps, 1);
+                        rng::uniform01(spot_seed, rng_history, steps, 0), 1.0e-12f);
+                    const auto uniform2 = rng::uniform01(spot_seed, rng_history, steps, 1);
                     constexpr float two_pi = 6.2831853071795864769f;
                     const auto gaussian = sycl::sqrt(-2.0f * sycl::log(uniform1)) *
                                           sycl::cos(two_pi * uniform2);
@@ -2010,12 +2089,18 @@ TransportResult transport_sycl(const TransportConfig& config,
                     energy_MeVu, electronic_buildup_fraction);
                 const auto delayed_MeV = deposited_MeV * e_frac;
                 const auto local_MeV = deposited_MeV - delayed_MeV;
-                sycl::atomic_ref<double,
-                                 sycl::memory_order::relaxed,
-                                 sycl::memory_scope::device,
-                                 sycl::access::address_space::global_space>
-                    atomic_dose(dose_device[bin]);
-                atomic_dose.fetch_add(static_cast<double>(local_MeV));
+                if (pending_primary_depth_MeV > 0.0 && pending_primary_bin != bin) {
+                    sycl::atomic_ref<double, sycl::memory_order::relaxed,
+                                     sycl::memory_scope::device,
+                                     sycl::access::address_space::global_space>
+                        atomic_dose(dose_device[pending_primary_bin]);
+                    atomic_dose.fetch_add(pending_primary_depth_MeV);
+                    pending_primary_depth_MeV = 0.0;
+                }
+                if (pending_primary_depth_MeV == 0.0) {
+                    pending_primary_bin = bin;
+                }
+                pending_primary_depth_MeV += static_cast<double>(local_MeV);
                 if (delayed_MeV > 0.0F) {
                     const auto z_mid = position_z_mm + 0.5F * direction_z * step_mm;
                     score_exponential_depth(
@@ -2024,21 +2109,31 @@ TransportResult transport_sycl(const TransportConfig& config,
                         electronic_buildup_mfp_mm, dose_device);
                 }
                 if (enable_voxel_scoring) {
-                    // Voxel tallies keep full step energy (depth IDD is primary match).
-                    sycl::atomic_ref<double,
-                                     sycl::memory_order::relaxed,
-                                     sycl::memory_scope::device,
-                                     sycl::access::address_space::global_space>
-                        atomic_voxel_dose(voxel_dose_device[voxel_index]);
-                    atomic_voxel_dose.fetch_add(static_cast<double>(deposited_MeV));
-                    if (enable_charged_origin_voxel_scoring) {
+                    // Aggregate consecutive deposits in one voxel before the
+                    // expensive global FP64 atomic update.
+                    if (pending_primary_voxel_MeV > 0.0 &&
+                        pending_primary_voxel != voxel_index) {
                         sycl::atomic_ref<double, sycl::memory_order::relaxed,
                                          sycl::memory_scope::device,
                                          sycl::access::address_space::global_space>
-                            atomic_category_dose(
-                                charged_origin_voxel_dose_device[voxel_index]);
-                        atomic_category_dose.fetch_add(static_cast<double>(deposited_MeV));
+                            atomic_voxel_dose(
+                                voxel_dose_device[pending_primary_voxel]);
+                        atomic_voxel_dose.fetch_add(pending_primary_voxel_MeV);
+                        if (enable_charged_origin_voxel_scoring) {
+                            sycl::atomic_ref<double, sycl::memory_order::relaxed,
+                                             sycl::memory_scope::device,
+                                             sycl::access::address_space::global_space>
+                                atomic_category_dose(
+                                    charged_origin_voxel_dose_device[
+                                        pending_primary_voxel]);
+                            atomic_category_dose.fetch_add(pending_primary_voxel_MeV);
+                        }
+                        pending_primary_voxel_MeV = 0.0;
                     }
+                    if (pending_primary_voxel_MeV == 0.0) {
+                        pending_primary_voxel = voxel_index;
+                    }
+                    pending_primary_voxel_MeV += static_cast<double>(deposited_MeV);
                 }
                 history_deposited_MeV += deposited_MeV;
                 const auto scattering_energy_MeV =
@@ -2054,7 +2149,7 @@ TransportResult transport_sycl(const TransportConfig& config,
                             local_density_g_per_cm3);
                     const auto scattered = scatter_direction(
                         Direction3F{direction_x, direction_y, direction_z},
-                        projected_rms_angle_rad, random_seed, history, steps, 4);
+                        projected_rms_angle_rad, spot_seed, rng_history, steps, 4);
                     direction_x = scattered.x;
                     direction_y = scattered.y;
                     direction_z = scattered.z;
@@ -2135,7 +2230,7 @@ TransportResult transport_sycl(const TransportConfig& config,
                     }
                     const auto probability = 1.0f - sycl::exp(
                         -macroscopic_cross_section_per_mm * step_mm);
-                    const auto uniform = rng::uniform01(random_seed, history, steps, 2);
+                    const auto uniform = rng::uniform01(spot_seed, rng_history, steps, 2);
                     if (uniform < probability) {
                         history_nuclear_MeV = energy_MeV;
                         if (enable_secondary_generation) {
@@ -2147,7 +2242,7 @@ TransportResult transport_sycl(const TransportConfig& config,
                                              static_cast<int>(reaction_energy_bin_count) - 1));
                             const auto reaction_bin = reaction_bins_device[reaction_bin_index];
                             const auto package_uniform =
-                                rng::uniform01(random_seed, history, steps, 3);
+                                rng::uniform01(spot_seed, rng_history, steps, 3);
                             const auto package_in_bin = sycl::min(
                                 static_cast<std::uint32_t>(
                                     package_uniform * reaction_bin.reaction_count),
@@ -2256,7 +2351,7 @@ TransportResult transport_sycl(const TransportConfig& config,
                                                     0,
                                                     charged_lineage,
                                                     rng::child_stream(
-                                                        history,
+                                                        global_history,
                                                         rng::branch_tag(
                                                             rng::branch_role_primary_charged,
                                                             secondary_index)),
@@ -2325,7 +2420,7 @@ TransportResult transport_sycl(const TransportConfig& config,
                                                     0,
                                                     0,
                                                     rng::child_stream(
-                                                        history,
+                                                        global_history,
                                                         rng::branch_tag(
                                                             rng::branch_role_primary_neutral,
                                                             secondary_index)),
@@ -2415,12 +2510,34 @@ TransportResult transport_sycl(const TransportConfig& config,
                 history_deposited_MeV += energy_MeV;
                 energy_MeV = 0.0F;
             }
-            deposited_device[history] = history_deposited_MeV;
-            escaped_device[history] = energy_MeV;
-            nuclear_device[history] = history_nuclear_MeV;
-            steps_device[history] = steps;
+            if (pending_primary_depth_MeV > 0.0) {
+                sycl::atomic_ref<double, sycl::memory_order::relaxed,
+                                 sycl::memory_scope::device,
+                                 sycl::access::address_space::global_space>
+                    atomic_dose(dose_device[pending_primary_bin]);
+                atomic_dose.fetch_add(pending_primary_depth_MeV);
+            }
+            if (enable_voxel_scoring && pending_primary_voxel_MeV > 0.0) {
+                sycl::atomic_ref<double, sycl::memory_order::relaxed,
+                                 sycl::memory_scope::device,
+                                 sycl::access::address_space::global_space>
+                    atomic_voxel_dose(voxel_dose_device[pending_primary_voxel]);
+                atomic_voxel_dose.fetch_add(pending_primary_voxel_MeV);
+                if (enable_charged_origin_voxel_scoring) {
+                    sycl::atomic_ref<double, sycl::memory_order::relaxed,
+                                     sycl::memory_scope::device,
+                                     sycl::access::address_space::global_space>
+                        atomic_category_dose(
+                            charged_origin_voxel_dose_device[pending_primary_voxel]);
+                    atomic_category_dose.fetch_add(pending_primary_voxel_MeV);
+                }
+            }
+            deposited_device[global_history] = history_deposited_MeV;
+            escaped_device[global_history] = energy_MeV;
+            nuclear_device[global_history] = history_nuclear_MeV;
+            steps_device[global_history] = steps;
             if (enable_secondary_generation) {
-                secondary_summaries_device[history] = secondary_summary;
+                secondary_summaries_device[global_history] = secondary_summary;
             }
         });
     kernel_event.wait_and_throw();
@@ -2433,17 +2550,24 @@ TransportResult transport_sycl(const TransportConfig& config,
         queue.copy(secondary_queue_filled_device, &generation_end, 1).wait_and_throw();
         while (generation_begin < generation_end) {
             const auto generation_size = generation_end - generation_begin;
+            queue.copy(&generation_begin, secondary_work_counter_device, 1).wait_and_throw();
+            const auto worker_count = std::min<std::uint64_t>(
+                generation_size, persistent_secondary_workers);
             const auto secondary_global_size =
-                ((generation_size + local_size - 1) / local_size) * local_size;
+                ((worker_count + local_size - 1) / local_size) * local_size;
             auto secondary_kernel_event = queue.parallel_for(
             sycl::nd_range<1>{sycl::range<1>{secondary_global_size},
                               sycl::range<1>{local_size}},
-            [=](sycl::nd_item<1> item) {
-                const auto generation_index = item.get_global_linear_id();
-                if (generation_index >= generation_size) {
-                    return;
+            [=](sycl::nd_item<1>) {
+                while (true) {
+                sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
+                                 sycl::memory_scope::device,
+                                 sycl::access::address_space::global_space>
+                    work_counter(*secondary_work_counter_device);
+                const auto particle_index = work_counter.fetch_add(1);
+                if (particle_index >= generation_end) {
+                    break;
                 }
-                const auto particle_index = generation_begin + generation_index;
                 auto deposited_MeV = 0.0F;
                 auto escaped_MeV = 0.0F;
                 std::uint32_t steps = 0;
@@ -3209,6 +3333,7 @@ TransportResult transport_sycl(const TransportConfig& config,
                 secondary_steps_device[particle_index] = steps;
                 if (enable_fragment_cascade) {
                     cascade_summaries_device[particle_index] = cascade_summary;
+                }
                 }
                 });
             secondary_kernel_event.wait_and_throw();
@@ -4051,6 +4176,7 @@ TransportResult transport_sycl(const TransportConfig& config,
     free_device(escaped_device);
     free_device(nuclear_device);
     free_device(steps_device);
+    free_device(primary_spots_device);
     free_device(slab_z_ends_device);
     free_device(slab_densities_device);
     free_device(material_sp_device);
@@ -4070,6 +4196,7 @@ TransportResult transport_sycl(const TransportConfig& config,
     free_device(secondary_queue_device);
     free_device(secondary_queue_counter_device);
     free_device(secondary_queue_filled_device);
+    free_device(secondary_work_counter_device);
     free_device(secondary_summaries_device);
     free_device(fragment_dose_device);
     free_device(secondary_deposited_device);
@@ -4094,8 +4221,14 @@ TransportResult transport_sycl(const TransportConfig& config,
     TransportResult result;
     result.backend = "sycl-" + device_name +
                      (config.enable_energy_straggling ? "+straggling" : "");
-    if (config.beam_energy_spread > 0.0) {
+    const auto batch_has_energy_spread = std::any_of(
+        config.primary_spot_batch.begin(), config.primary_spot_batch.end(),
+        [](const auto& spot) { return spot.beam_energy_spread > 0.0F; });
+    if (config.beam_energy_spread > 0.0 || batch_has_energy_spread) {
         result.backend += "+espread";
+    }
+    if (!config.primary_spot_batch.empty()) {
+        result.backend += "+spot-batch";
     }
     if (enable_multiple_scattering) {
         result.backend += "+multiple-scattering";
@@ -4129,7 +4262,7 @@ TransportResult transport_sycl(const TransportConfig& config,
         result.backend += "+secondary-generation";
     }
     if (enable_secondary_transport) {
-        result.backend += "+secondary-transport";
+        result.backend += "+secondary-transport-persistent";
     }
     if (enable_fragment_cascade) {
         result.backend += "+fragment-cascade";
@@ -4143,8 +4276,17 @@ TransportResult transport_sycl(const TransportConfig& config,
     result.voxel_deposited_energy_MeV = std::move(voxel_dose_host);
     result.charged_origin_voxel_deposited_energy_MeV =
         std::move(charged_origin_voxel_dose_host);
-    result.initial_energy_MeV =
-        config.initial_total_energy_MeV() * static_cast<double>(number_of_histories);
+    if (config.primary_spot_batch.empty()) {
+        result.initial_energy_MeV =
+            config.initial_total_energy_MeV() * static_cast<double>(number_of_histories);
+    } else {
+        result.initial_energy_MeV = 0.0;
+        for (const auto& spot : config.primary_spot_batch) {
+            result.initial_energy_MeV +=
+                static_cast<double>(spot.initial_energy_MeV) *
+                static_cast<double>(spot.history_end - spot.history_begin);
+        }
+    }
     result.total_deposited_energy_MeV =
         std::accumulate(deposited_host.begin(), deposited_host.end(), 0.0);
     result.escaped_energy_MeV =

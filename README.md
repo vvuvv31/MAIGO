@@ -155,6 +155,37 @@ python validation\scripts\run_ct_baseline.py --skip-gpu
 指标：`validation/results/ct/ct_baseline_summary.metrics.json`（绝对 MeV/primary，无全局 dose scale）。  
 物理说明见 `furtherStep.md` 7c 节。
 
+### TPS 90° 优化 spot plan
+
+`spots_c_*.txt` 中的 `RotX/RotY` 用于把源束流建立到 TPS 0° 基准方向；
+`run_c_*.txt` 中的 `Patient/RotZ=90°` 才是治疗计划角度，因此本病例是
+**TPS 90° 入射**。GPU 不在输运中旋转稠密 CT，而是先做一次
+无插值轴置换，再按 `c_01`（1–459）→ `c_02`（460–917）的顺序读取 spot，
+并用 `ct/spotWeight.csv` 分配 histories：
+
+```bash
+python validation/scripts/reorient_ct_grid_tps_90.py
+build/cpu-make/carbon_mc \
+  --config config/beam_ct_optimized_tps_90.yaml --plan-only
+
+# oneAPI GPU build used for the Arc B580 run
+ONEAPI_DEVICE_SELECTOR=opencl:gpu build/perf-make/carbon_mc \
+  --config config/beam_ct_optimized_tps_90.yaml --device gpu
+```
+
+`number_of_histories` 是整份 plan 的 Monte Carlo 统计预算，不是每个 spot 的
+等权 histories。正权重至少分到一个 history，余数用 largest-remainder 方法分配，
+总数严格守恒；零权 spot 直接跳过。输出是优化 fluence 分布下的
+`MeV/total sampled primary` 与 `Gy/total sampled primary`。若要换算为一次治疗分次的
+绝对 Gy，还需要 TPS spot weight 到实际碳离子数/MU 的标定；仅凭当前单列权重无法
+推导该标定。与 CT 同网格的 3D Gy 输出使用逐体素 Schneider 密度计算
+dose-to-medium，不再统一按水密度除质量。
+
+SYCL 计划默认把所有有效 spot 展平成一次批量 launch；每个 history 仍从对应
+spot 的能量、源位置、方向和 emittance 参数取样。`--sequential-spots` 仅用于
+数值/性能 A/B，不建议用于正式计算。次级粒子使用 persistent worker 动态领取
+track，以降低不同 track 长度造成的 SIMD 空等。
+
 100,000-history Windows 原生实测结果：
 
 - serial：`14,287 histories/s`；

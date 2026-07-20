@@ -3,9 +3,11 @@
 #include <algorithm>
 #include <cmath>
 #include <fstream>
+#include <numeric>
 #include <regex>
 #include <sstream>
 #include <stdexcept>
+#include <tuple>
 #include <unordered_map>
 
 namespace carbon {
@@ -155,6 +157,72 @@ SpotSourcePose TopasSpotPlan::pose_for_spot(const TopasSpot& spot) const noexcep
     return pose;
 }
 
+SpotSourcePose TopasSpotPlan::tps_zero_beam_pose_for_spot(
+    const TopasSpot& spot) const noexcept {
+    SpotSourcePose pose{};
+    // Component translations are expressed in the parent (World) frame.
+    pose.origin_x_mm = spot.trans_x_mm;
+    pose.origin_y_mm = -sad_mm;
+    pose.origin_z_mm = spot.trans_z_mm;
+
+    double ux = 1.0, uy = 0.0, uz = 0.0;
+    double vx = 0.0, vy = 1.0, vz = 0.0;
+    double wx = 0.0, wy = 0.0, wz = 1.0;
+    rotate_rx_ry(-spot.rot_x_deg, -spot.rot_y_deg, ux, uy, uz);
+    rotate_rx_ry(-spot.rot_x_deg, -spot.rot_y_deg, vx, vy, vz);
+    rotate_rx_ry(-spot.rot_x_deg, -spot.rot_y_deg, wx, wy, wz);
+    pose.ux_x = ux;
+    pose.ux_y = uy;
+    pose.ux_z = uz;
+    pose.uy_x = vx;
+    pose.uy_y = vy;
+    pose.uy_z = vz;
+    pose.uz_x = wx;
+    pose.uz_y = wy;
+    pose.uz_z = wz;
+    return pose;
+}
+
+SpotSourcePose transform_tps_90_pose_to_ct(
+    const SpotSourcePose& world_pose,
+    const double patient_trans_x_mm,
+    const double patient_trans_y_mm,
+    const double patient_trans_z_mm,
+    const double patient_rot_z_deg,
+    const double ct_axis_min_mm) noexcept {
+    constexpr double deg2rad = 3.14159265358979323846 / 180.0;
+    const auto angle = -patient_rot_z_deg * deg2rad;
+    const auto c = std::cos(angle);
+    const auto s = std::sin(angle);
+
+    auto point_to_ct = [&](double x, double y, double z) {
+        x -= patient_trans_x_mm;
+        y -= patient_trans_y_mm;
+        z -= patient_trans_z_mm;
+        const auto patient_x = c * x - s * y;
+        const auto patient_y = s * x + c * y;
+        // Reoriented grid axes: (patient Y, patient Z, patient X).
+        return std::tuple{patient_y, z, patient_x - ct_axis_min_mm};
+    };
+    auto vector_to_ct = [&](const double x, const double y, const double z) {
+        const auto patient_x = c * x - s * y;
+        const auto patient_y = s * x + c * y;
+        return std::tuple{patient_y, z, patient_x};
+    };
+
+    SpotSourcePose pose{};
+    std::tie(pose.origin_x_mm, pose.origin_y_mm, pose.origin_z_mm) =
+        point_to_ct(world_pose.origin_x_mm, world_pose.origin_y_mm,
+                    world_pose.origin_z_mm);
+    std::tie(pose.ux_x, pose.ux_y, pose.ux_z) =
+        vector_to_ct(world_pose.ux_x, world_pose.ux_y, world_pose.ux_z);
+    std::tie(pose.uy_x, pose.uy_y, pose.uy_z) =
+        vector_to_ct(world_pose.uy_x, world_pose.uy_y, world_pose.uy_z);
+    std::tie(pose.uz_x, pose.uz_y, pose.uz_z) =
+        vector_to_ct(world_pose.uz_x, world_pose.uz_y, world_pose.uz_z);
+    return pose;
+}
+
 TopasSpotPlan TopasSpotPlan::from_file(const std::filesystem::path& path) {
     std::ifstream input(path);
     if (!input) {
@@ -254,6 +322,123 @@ TopasSpotPlan TopasSpotPlan::from_file(const std::filesystem::path& path) {
         throw std::runtime_error("TOPAS spots file contains no spots: " + path.string());
     }
     return plan;
+}
+
+TopasSpotPlan TopasSpotPlan::from_files(
+    const std::vector<std::filesystem::path>& paths) {
+    if (paths.empty()) {
+        throw std::invalid_argument("TOPAS spots file list is empty");
+    }
+    TopasSpotPlan combined;
+    combined.spots.clear();
+    for (const auto& path : paths) {
+        auto part = from_file(path);
+        if (combined.spots.empty()) {
+            combined.scatterer_name = part.scatterer_name;
+        }
+        combined.spots.insert(combined.spots.end(), part.spots.begin(), part.spots.end());
+    }
+    return combined;
+}
+
+std::size_t TopasSpotPlan::apply_weights_from_csv(
+    const std::filesystem::path& path,
+    const std::size_t requested_total_histories) {
+    std::ifstream input(path);
+    if (!input) {
+        throw std::runtime_error("Cannot open spot weights file: " + path.string());
+    }
+    std::vector<double> weights;
+    std::string line;
+    std::size_t line_number = 0;
+    while (std::getline(input, line)) {
+        ++line_number;
+        if (line_number == 1 && line.size() >= 3 &&
+            static_cast<unsigned char>(line[0]) == 0xEFU &&
+            static_cast<unsigned char>(line[1]) == 0xBBU &&
+            static_cast<unsigned char>(line[2]) == 0xBFU) {
+            line.erase(0, 3);
+        }
+        const auto comma = line.find(',');
+        if (comma != std::string::npos) {
+            line.resize(comma);
+        }
+        const auto first = line.find_first_not_of(" \t\r\n");
+        if (first == std::string::npos) {
+            continue;
+        }
+        const auto last = line.find_last_not_of(" \t\r\n");
+        const auto token = line.substr(first, last - first + 1);
+        std::size_t parsed = 0;
+        double weight = 0.0;
+        try {
+            weight = std::stod(token, &parsed);
+        } catch (...) {
+            throw std::runtime_error("Invalid spot weight at " + path.string() + ":" +
+                                     std::to_string(line_number));
+        }
+        if (parsed != token.size() || !std::isfinite(weight) || weight < 0.0) {
+            throw std::runtime_error("Spot weight must be a finite nonnegative number at " +
+                                     path.string() + ":" +
+                                     std::to_string(line_number));
+        }
+        weights.push_back(weight);
+    }
+    if (weights.size() != spots.size()) {
+        throw std::runtime_error("Spot weight count " + std::to_string(weights.size()) +
+                                 " does not match concatenated spot count " +
+                                 std::to_string(spots.size()));
+    }
+    total_plan_weight = std::accumulate(weights.begin(), weights.end(), 0.0);
+    const auto positive_count = static_cast<std::size_t>(
+        std::count_if(weights.begin(), weights.end(), [](double value) { return value > 0.0; }));
+    if (!(total_plan_weight > 0.0) || positive_count == 0) {
+        throw std::runtime_error("Spot weights must contain at least one positive value");
+    }
+    if (requested_total_histories < positive_count) {
+        throw std::runtime_error("Total plan histories must be at least the number of "
+                                 "positive-weight spots (" +
+                                 std::to_string(positive_count) + ")");
+    }
+
+    // Give every active spot one history, then use Hamilton/largest-remainder
+    // allocation for the remainder. This preserves the exact requested total.
+    const auto distributable = requested_total_histories - positive_count;
+    std::vector<std::size_t> allocation(weights.size(), 0);
+    std::vector<std::pair<double, std::size_t>> remainders;
+    remainders.reserve(positive_count);
+    std::size_t assigned = positive_count;
+    for (std::size_t i = 0; i < weights.size(); ++i) {
+        if (weights[i] == 0.0) {
+            continue;
+        }
+        const auto exact = static_cast<double>(distributable) * weights[i] /
+                           total_plan_weight;
+        const auto base = static_cast<std::size_t>(std::floor(exact));
+        allocation[i] = 1 + base;
+        assigned += base;
+        remainders.emplace_back(exact - static_cast<double>(base), i);
+    }
+    std::stable_sort(remainders.begin(), remainders.end(),
+                     [](const auto& left, const auto& right) {
+                         return left.first > right.first;
+                     });
+    for (std::size_t i = 0; assigned < requested_total_histories; ++i, ++assigned) {
+        ++allocation[remainders[i].second];
+    }
+
+    std::vector<TopasSpot> active;
+    active.reserve(positive_count);
+    for (std::size_t i = 0; i < spots.size(); ++i) {
+        if (allocation[i] == 0) {
+            continue;
+        }
+        spots[i].number_of_histories = allocation[i];
+        active.push_back(spots[i]);
+    }
+    const auto removed = spots.size() - active.size();
+    spots = std::move(active);
+    return removed;
 }
 
 }  // namespace carbon
