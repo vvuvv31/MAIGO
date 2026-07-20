@@ -203,7 +203,7 @@ VS Code 可直接使用仓库中的 CMake Presets；`.vscode` 中已包含扩展
 默认写入 `out/cpu_depth_dose.csv`，列为：
 
 ```text
-depth_mm,energy_deposition_MeV_per_primary,dose_Gy_per_primary,relative_dose
+depth_mm,energy_deposition_MeV,dose_Gy,relative_dose
 ```
 
 剂量按配置中的 scorer 横截面积、水密度和深度 bin 质量计算。绝对剂量比较时，TOPAS 必须使用完全相同的 scorer 体素体积。
@@ -211,7 +211,7 @@ depth_mm,energy_deposition_MeV_per_primary,dose_Gy_per_primary,relative_dose
 启用 `enable_voxel_scoring: true` 后，还会写出只包含非零体素的稀疏 CSV：
 
 ```text
-ix,iy,iz,x_mm,y_mm,z_mm,energy_deposition_MeV_per_primary,dose_Gy_per_primary
+ix,iy,iz,x_mm,y_mm,z_mm,energy_deposition_MeV,dose_Gy
 ```
 
 Arc B580 的 MCS 100-history smoke 和 100k 正式三维基准可直接运行：

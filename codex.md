@@ -1,9 +1,9 @@
 # MAIGO TPS 90° CT 优化剂量：Codex 工作记录与后续计划
 
-更新时间：2026-07-20
+更新时间：2026-07-20（P0–P3、P2 SP LUT、P8 dense MHD 完成；剂量为总 Gy）
 
 工作目录：`/home/v/project/MAIGO`
-开发基线 commit：`80f6a49 optimized spot weight`
+开发基线 commit：`6797ec9 Add optimized TPS 90 CT GPU plan`
 
 > 交接说明：仓库先从 `7991dba` fast-forward 到开发基线 `80f6a49`，本文所述的
 > TOPAS plan 接口、TPS 90° 坐标转换和 GPU 性能优化包含在与本文一起提交的后续
@@ -120,9 +120,9 @@ translation、`Patient/RotZ=90°`、SAD=450 mm 和原 CT X 轴最小坐标，用
 - double-precision dose atomic accumulation
 
 3D Gy 使用每个 CT voxel 的 Schneider density 计算 dose-to-medium，不使用统一水密度。
-当前结果单位是 `Gy / total sampled primary`。若要转换为某个治疗 fraction 的绝对
-Gy，还需要 TPS spot weight/MU 到实际碳离子数的标定；仅凭这份单列权重不能推出该
-绝对归一化。
+剂量输出已改为**全部 history 的总 Gy**（不再除以粒子数）。若要转换为某个治疗
+fraction 的临床绝对 Gy，还需要 TPS spot weight/MU 到实际碳离子数的标定；仅凭这份
+单列权重不能推出该绝对归一化。
 
 ### 2.5 正式 917k 结果与 MHD 输出
 
@@ -208,7 +208,7 @@ wavefront。长尾 track 仍会占住执行线程，这是后续还有优化空�
 - 加入 endpoint bounds 检查，避免负坐标转整数时的截断错误。
 - 当前只用于 primary，secondary 仍走通用路径。
 
-### 3.5 优化后的实测
+### 3.5 优化后的实测（smoke 9,170）
 
 在 Arc B580 OpenCL backend 上做了 9,170-history smoke：
 
@@ -223,9 +223,82 @@ wavefront。长尾 track 仍会占住执行线程，这是后续还有优化空�
 - queue overflow：0
 
 同一 9,170-history 的 sequential-spots A/B 运行超过 3 分钟仍未完成，因此主动终止；
-在这种小 histories/spot 场景下，batch 至少快约 15 倍。与旧 917k 正式运行的约
-200 histories/s 相比，smoke 达到约 3.9 倍吞吐，但两个统计规模不同，**不能把
-789 histories/s 当作完整 917k 的已验证吞吐**。优化后的 917k 正式计算尚未重跑。
+在这种小 histories/spot 场景下，batch 至少快约 15 倍。
+
+### 3.6 P0：正式 917k batch+persistent 基线（已锁定）
+
+配置：`config/beam_ct_p0_batch_persistent_917k.yaml`（输出到
+`out/ct/p0_batch_persistent_917k/`，不覆盖优化前结果）。
+
+优化前 917k 备份在 `out/ct/preopt_917k_baseline/`（由旧逐 spot launch 得到）。
+
+#### 性能（Arc B580 OpenCL）
+
+| 指标 | 优化前 (preopt) | P0 batch+persistent | 加速比 |
+| --- | ---: | ---: | ---: |
+| wall elapsed | 4590.4568 s (~76.5 min) | **144.73381 s (~2.4 min)** | **31.7×** |
+| throughput | 199.762 h/s | **6335.7692 h/s** | **31.7×** |
+| primary kernel | 871.4406 s | 67.223716 s | 13.0× |
+| secondary kernel | 3691.7352 s | 77.30176 s | 47.8× |
+| secondary 时间占比 | 80.4% | 53.4% | — |
+
+其他：
+
+- backend：`sycl-gpu+...+spot-batch+...+secondary-transport-persistent+fragment-cascade`
+- total steps：181,457,432,330（约 197.9k/history，与优化前 ~197.8k 同量级）
+- secondary steps：78,908,909,936（约 49.8k/transported secondary）
+- transported charged secondaries：1,585,029
+- nuclear interactions：195,136
+- queue overflow：0（secondary / cascade）
+- energy-balance relative error：`9.8985301e-6`（与优化前 `9.8986e-6` 一致）
+- device memory estimate：2020 MiB / budget 5802 MiB（50% of 11605 MiB）
+- host max RSS（`/usr/bin/time -v`）：475344 kB
+- wall clock with I/O（time）：2:35.62（含 CSV 写出）
+
+说明：算法 steps/history **没有**因 batch 降低；吞吐提升主要来自 launch 合并与
+secondary persistent scheduling，以及 atomic 合并 / near-Z fast path。
+
+#### 剂量对比（preopt vs P0，同 seed/config 917k）
+
+工具：`validation/scripts/compare_p0_ct_baseline.py`  
+报告：`out/ct/p0_batch_persistent_917k/compare_vs_preopt.json`
+
+IDD（Gy/primary）：
+
+- peak depth：两边均为 125.75 mm
+- peak 相对差：−0.0497%
+- R80 差：+0.0119 mm
+- 积分相对差：−0.0102%
+- NRMSE（相对 peak）：0.0217%
+- 1%/1 mm 与 2%/2 mm gamma（thr 10%）：**100%**
+
+3D voxel（MHD，505×35×417）：
+
+- 峰值索引：两边均为 `(156, 15, 206)`
+- 最大剂量相对差：−0.646%（单 voxel 峰值，MC 噪声量级）
+- 3D 积分相对差：−0.0144%
+- 非零 voxel：3,681,806 → 3,676,485
+- 全局 max 归一 RMSE：0.142%
+- ≥10% peak 区 mean |rel|：1.16%
+- 2%/2 mm gamma（thr 10%，随机抽样 50k / 182,567）：**99.994%**
+
+结论：**P0 剂量基线通过**。后续 P1–P7 性能改动应以本 917k 结果为对照，而不是优化前
+逐 spot 版本。未要求 bit-identical（secondary 调度/FP 归约顺序会变），以 gamma 与
+积分指标验收。
+
+产物（本地，git ignore）：
+
+- `out/ct/p0_batch_persistent_917k/{idd,idd_Gy,species,species_Gy,voxels,voxels_Gy}.csv`
+- `out/ct/p0_batch_persistent_917k/dose.mhd` + `dose.raw`
+- `out/ct/p0_batch_persistent_917k/run.log`、`time.txt`、`compare_vs_preopt.json`
+- `out/ct/preopt_917k_baseline/*`（优化前对照，勿删）
+
+重跑命令：
+
+```bash
+ONEAPI_DEVICE_SELECTOR='opencl:gpu' build/perf-make/carbon_mc \
+  --config config/beam_ct_p0_batch_persistent_917k.yaml --device gpu
+```
 
 ## 4. 验证状态
 
@@ -291,55 +364,176 @@ ONEAPI_DEVICE_SELECTOR='opencl:gpu' build/perf-make/carbon_mc \
 下面按收益、风险和依赖排序。建议每一步都单独做 A/B，不要同时改多个物理或输运
 路径，否则很难定位剂量差异。
 
-### P0：先锁定新的正式性能/剂量基线
+### P0：正式性能/剂量基线 — **已完成（见 §3.6）**
 
-1. 用当前 batch + persistent 版本重跑完整 917,000 histories。
-2. 记录 wall time、每个 kernel 时间、总/primary/secondary steps、各队列数量、overflow、
-   energy balance 和显存峰值。
-3. 与现存优化前 917k CSV/MHD 比较 IDD、3D gamma、R80、积分剂量、最大值和峰值位置。
-4. 只有通过该基线，后续性能改动才有可靠的比较对象。
+1. ~~用当前 batch + persistent 版本重跑完整 917,000 histories。~~
+2. ~~记录 wall time、kernel 时间、steps、队列、overflow、energy balance、显存估计。~~
+3. ~~与优化前 917k CSV/MHD 比较 IDD、3D gamma、R80、积分、峰值。~~
+4. 基线已锁定；后续改动对照 `out/ct/p0_batch_persistent_917k/`。
 
-### P1：增加低开销的 step 分类计数和 profiling
+### P1：step 分类计数和 profiling — **已完成**
 
-为 primary/secondary 分开统计：
+#### 实现
 
-- stopping-power/material lookup 次数
-- CT sample 次数
-- homogeneous skip、near-Z fast path、three-axis fallback 次数
-- face clamp 次数和 short-step 次数
-- dose atomic flush 次数
-- nuclear/MCS/straggling 分支次数
-- track step-count histogram 或分位数
+- CMake 选项：`-DCARBON_ENABLE_TRANSPORT_PROFILE=ON` → 定义 `CARBON_TRANSPORT_PROFILE=1`
+- 头文件：`include/carbon/transport_profile.hpp`
+- 源文件：`src/transport_profile.cpp`
+- CT face 路径标签：`clamp_step_to_ct_faces*` 可选 `CtClampPath* path_out`
+- SYCL kernel 内 device atomic 计数；**默认 OFF**，正式 dose 用 `build/perf-make`（profile OFF）
+- 独立 profile 构建：`build/profile-make`
+- 运行结束打印 `Transport profile counters:`（见 `main.cpp`）
 
-profiling counters 应能通过编译选项关闭，正式 dose 不承担原子计数开销。先用这些数据
-确认热点，再决定 DDA、查表或 wavefront 的优先级。
+计数项（primary/secondary 分离）：
 
-### P2：预计算 CT material/species/energy lookup table
+- steps（完整物理步，不含 boundary-nudge continue）
+- CT sample、SP table、mass-SP 查表
+- face clamp 分类：three_axis / short_step_skip / homogeneous_skip / near_z_*
+- dose atomic flush（pending 合并后）
+- straggling / MCS / nuclear / cascade
+- secondary track step-count histogram（2^b 桶，含 thrash 在内的 loop steps）
 
-将每步重复的能量相关 mass stopping power、截面及相关昂贵函数，预采样成设备常驻的
-`material/section × species × energy-bin` 表，kernel 中只做 clamp、索引和线性插值。
+构建与 smoke：
 
-实施要点：
+```bash
+# 生产（无 profile）
+cmake -S . -B build/perf-make -DCMAKE_BUILD_TYPE=Release \
+  -DCARBON_ENABLE_SYCL=ON -DCARBON_ENABLE_TRANSPORT_PROFILE=OFF \
+  -DCMAKE_CXX_COMPILER=/opt/intel/oneapi/2026.1/bin/icpx
+cmake --build build/perf-make -j
 
-- energy grid 要覆盖 plan 的 165–240 MeV/u 以及所有 secondary 能区。
-- primary C-12 和 fragment species 可分别使用不同分辨率。
-- 先用较密网格建立精度基线，再逐步减小表。
-- 验证表插值对 R80、峰值和 fragment dose 的误差。
+# profile 诊断构建
+cmake -S . -B build/profile-make -DCMAKE_BUILD_TYPE=Release \
+  -DCARBON_ENABLE_SYCL=ON -DCARBON_ENABLE_TRANSPORT_PROFILE=ON \
+  -DCMAKE_CXX_COMPILER=/opt/intel/oneapi/2026.1/bin/icpx
+cmake --build build/profile-make -j
 
-这是目前最值得优先尝试的单步计算成本优化，因为 batch 并没有降低约 199k
-steps/history 的算法工作量。
+ONEAPI_DEVICE_SELECTOR='opencl:gpu' build/profile-make/carbon_mc \
+  --config config/beam_ct_p1_profile_smoke.yaml --device gpu
+```
 
-### P3：secondary 通用 CT traversal 改为 integer DDA / homogeneous span
+#### 917-history profile smoke 关键发现（Arc B580）
 
-当前 near-Z fast path 主要帮助 primary，secondary 方向任意且仍执行通用 face 检查。
-建议为每条 track 保存当前 voxel integer index 和到下一 x/y/z face 的参数距离，使用
-Amanatides-Woo 类 DDA 更新；同 material/density section 的连续 voxel 可合并为 span。
+配置：`config/beam_ct_p1_profile_smoke.yaml`（917 histories，同生产物理）
+日志：`out/ct/p1_profile_smoke/run.log`
 
-目标：
+| 计数 | Primary | Secondary |
+| --- | ---: | ---: |
+| 完整物理 steps | 667,340 | 1,340,923 |
+| CT samples / SP lookups | ~115.5M | ~79.3M |
+| face three_axis | 114,817,517 | 77,966,992 |
+| face short_step_skip | 544,049 | 1,178,892 |
+| face homogeneous_skip | 352 | 131,158 |
+| face near_z_* | ~122k | 0（secondary 不用 near-Z） |
+| boundary_nudge_continues | **114,817,144** | （含在 loop steps） |
+| dose atomics（flush 后） | depth 99k / voxel 100k | 136k |
+| MCS | 667k | 1.34M |
 
-- 避免每一步重复 floor/除法和三轴边界重算。
-- 避免跨面后 epsilon nudge 导致的边界 thrash。
-- 必须保持不跨越异质 CT voxel，不允许以性能为由漏采样材料边界。
+解释：
+
+1. **Primary 约 99.4% 的循环是 CT face thrash**（nudge continue），不是完整 dE/dx 步。
+   `primary_steps`（完整物理）仅 0.67M，而 `primary_ct_samples` ~115M。
+2. thrash 路径被记为 `three_axis`，因为 `step_mm <= 1e-6` 时 near-Z / homogeneous
+   会提前落到通用 face clamp（见 `ct_grid.hpp`）。
+3. near-Z 快路径本身有效，但在 thrash 循环中几乎用不上（~0.1%）。
+4. Secondary 同样以 three_axis face 为主；track histogram 显示 **205 条 track 落在
+   [32k, 65k) steps**，长尾严重，支持后续 P4 wavefront。
+5. Dose atomic 已因 pending 合并降到 ~每完整步 0.15 次量级，**不是当前主瓶颈**。
+6. Profile 构建因全局 atomic 计数吞吐会明显下降（smoke ~64 h/s）；**不要用 profile
+   构建跑正式 917k dose**。
+
+#### 对后续优先级的影响
+
+| 项 | 调整 |
+| --- | --- |
+| **P3 DDA / span** | **提到最优先**。消灭 face thrash 与重复 floor/clamp，直接砍 steps/history。 |
+| **P2 lookup table** | 仍重要（每完整步都有 mass-SP + log），但完整物理步远少于 thrash 循环；DDA 后再做更划算。 |
+| **P4 wavefront** | secondary 长尾 track 已证实，DDA 降 steps 后再做。 |
+| **P5–P7** | 不变，优先级低于 P3→P2→P4。 |
+
+### P2：预计算 CT mass-SP lookup table — **已完成**
+
+实现：
+
+- 加载 CCTG mass-SP 因子时，在 host 上对每个 Schneider section × water-SP 能量点
+  预计算 `ct_mass_sp_energy_factor(za, I, E)`，上传设备常驻 LUT。
+- 布局：section-major，`size = n_sections × table_size`（本患者 25 × ~400）。
+- kernel 中只做 `clamp / index / lerp`，不再每步 `log`/Bethe 求 mass factor。
+- primary 与 secondary 共用同一 LUT；backend 标签：`+ct-grid-mass-sp-lut`。
+
+精度（917k，相对 P3 on-the-fly mass-SP）：
+
+- IDD peak 深度一致 125.75 mm
+- peak 相对差 **+0.003%**
+- NRMSE **0.0007%**
+
+性能：kernel 与 P3 同量级（~1.8 s）；首跑 JIT 冷启动可能偏慢，热跑 transport
+elapsed **~1.96 s / ~469k h/s**。
+
+### P3：CT integer DDA / homogeneous span — **已完成**
+
+实现（`include/carbon/ct_grid.hpp`）：
+
+- `CtDdaState` + `ct_dda_init` / `ct_dda_step` / `ct_dda_homogeneous_span`
+  （Amanatides–Woo）
+- face 上 t≈0 时自动进入下一 voxel，消灭 boundary thrash
+- 同 material/density 连续 voxel 合并为 span（最多 64 hop）
+- primary/secondary 的 `clamp_step_to_ct_faces*` 均走 DDA
+- CT 微步接受阈值降到 `1e-8`（避免合法微步被 nudge thrash）
+- backend 标签：`+ct-dda`
+
+#### 917-history profile（DDA 后 vs DDA 前）
+
+| 计数 | DDA 前 | DDA 后 |
+| --- | ---: | ---: |
+| total steps | 194.8M | **2.01M** |
+| primary_ct_samples | 115.5M | **0.67M** |
+| primary_boundary_nudge | 114.8M | **0** |
+| primary_face_three_axis | 114.8M | 251 |
+
+#### 正式 917k（`config/beam_ct_p3_dda_917k.yaml`）
+
+| 指标 | P0 batch+persistent | **P3 + DDA** |
+| --- | ---: | ---: |
+| elapsed | 144.7 s | **2.078 s** |
+| throughput | 6336 h/s | **441,256 h/s** |
+| primary kernel | 67.2 s | 0.961 s |
+| secondary kernel | 77.3 s | 0.913 s |
+| total steps | 181.5B | **2.061B** |
+| steps/history | ~198k | **~2248** |
+| energy balance | 9.90e-6 | 9.91e-6 |
+| overflow | 0 | 0 |
+
+相对 P0 剂量（P0 为 Gy/primary，×917k 对齐总剂量）：
+
+- peak depth 一致 125.75 mm
+- peak 相对差 **−0.098%**
+- 积分相对差 **~0%**
+- NRMSE **0.029%**
+- R80 差 **+0.019 mm**
+
+产物：`out/ct/p3_dda_917k/`（含 `dose.mhd`/`dose.raw`，单位 **Gy** 总剂量）。
+
+### 剂量输出：总剂量（不再 /histories）— **已完成**
+
+所有 CSV dose 列改为**全部 history 的总沉积**，不再除以 `number_of_histories`：
+
+- 列名：`dose_Gy`、`energy_deposition_MeV`（去掉 `_per_primary`）
+- MHD `DoseUnits = Gy`
+- 涉及：`src/io.cpp`、`include/carbon/io.hpp`、相关测试与脚本默认值
+
+说明：这是相对当前模拟统计量的绝对剂量标度；若要临床 fraction Gy，仍需 TPS MU→离子数标定。
+
+### P8：直接写 dense MHD/RAW — **已完成**
+
+- API：`write_dense_voxel_dose_mhd()`（`src/io.cpp`）
+- 配置：`voxel_dose_mhd_output_file: out/.../dose.mhd`
+- 空路径禁用任意可选输出（CSV / MHD）；`voxel_dose_output_file:` 可关掉 sparse CSV
+- 布局与旧 `sparse_dose_to_mhd.py` 一致：`DimSize X Y Z`，RAW z-major float32 LE，
+  `Offset` = 第一体素中心，单位总 **Gy**（dose-to-medium，用 CT density）
+- 生产配置 `config/beam_ct_optimized_tps_90.yaml` 与
+  `config/beam_ct_p2p8_sp_lut_mhd.yaml` 默认写 MHD、关闭 sparse voxel CSV
+
+917k 产物示例：`out/ct/p2p8_sp_lut_mhd/dose.mhd` + `dose.raw`（29,481,900 bytes）
 
 ### P4：真正的 step-level secondary wavefront
 
@@ -419,6 +613,13 @@ steps/history 的核心瓶颈，因此优先级低于 P2–P4。
 - 同时报告 wall time、kernel time、histories/s、steps/history 和每个 transported
   secondary 的 steps，避免把减少物理工作量误报为纯 GPU 加速。
 
-交给下一位开发者时，最稳妥的顺序是：**P0 完整基线 → P1 profiling → P2 lookup
-table → P3 DDA → P4 step-level wavefront**。坐标和优化权重分配已经明确，不应在性能
-重构中改变。
+交给下一位开发者时，最稳妥的顺序是：**P0–P3、P2、P8 已完成 → P4 step-level
+wavefront → P5 kernel 特化 → Future 3/4 物理近似**。坐标和优化权重分配已经明确，
+不应在性能重构中改变。
+
+已锁定事实：
+
+- 917k 热跑 transport **~2 s / ~450k+ h/s**（DDA + mass-SP LUT）。
+- steps/history **~2.2k**（原 thrash 路径 ~198k）。
+- 剂量输出为 **总 Gy**；3D 默认 **dense MHD**（不再写 380MB sparse CSV）。
+- 下一步瓶颈更接近 secondary 长尾与 SP/charge 公式本身（P4 / P5）。

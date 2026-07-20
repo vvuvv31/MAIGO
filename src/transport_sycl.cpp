@@ -26,6 +26,40 @@
 
 namespace carbon {
 
+// Device-side profile increment. Compiles to nothing unless
+// CARBON_TRANSPORT_PROFILE is defined at build time.
+inline void profile_add(std::uint64_t* counters,
+                        const TransportProfileSlot slot,
+                        const std::uint64_t n = 1) {
+#ifdef CARBON_TRANSPORT_PROFILE
+    if (counters == nullptr || n == 0) {
+        return;
+    }
+    sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed, sycl::memory_scope::device,
+                     sycl::access::address_space::global_space>
+        atomic_counter(counters[static_cast<std::size_t>(slot)]);
+    atomic_counter.fetch_add(n);
+#else
+    (void)counters;
+    (void)slot;
+    (void)n;
+#endif
+}
+
+inline void profile_face(std::uint64_t* counters,
+                         const bool is_primary,
+                         const CtClampPath path) {
+#ifdef CARBON_TRANSPORT_PROFILE
+    profile_add(counters, is_primary ? TransportProfileSlot::primary_face_clamp_calls
+                                     : TransportProfileSlot::secondary_face_clamp_calls);
+    profile_add(counters, is_primary ? primary_face_slot(path) : secondary_face_slot(path));
+#else
+    (void)counters;
+    (void)is_primary;
+    (void)path;
+#endif
+}
+
 struct SyclTransportContext::Impl {
     explicit Impl(const std::string& requested_device_name)
         : device_name(requested_device_name), queue(make_sycl_queue(requested_device_name)) {}
@@ -895,6 +929,12 @@ TransportResult transport_sycl(const TransportConfig& config,
     auto* escaped_device = sycl::malloc_device<float>(number_of_histories, queue);
     auto* nuclear_device = sycl::malloc_device<float>(number_of_histories, queue);
     auto* steps_device = sycl::malloc_device<std::uint32_t>(number_of_histories, queue);
+#ifdef CARBON_TRANSPORT_PROFILE
+    auto* profile_counters_device =
+        sycl::malloc_device<std::uint64_t>(transport_profile_slot_count(), queue);
+#else
+    std::uint64_t* profile_counters_device = nullptr;
+#endif
     PrimarySpotBatchEntry* primary_spots_device = nullptr;
     if (primary_spot_count > 0) {
         primary_spots_device =
@@ -1056,6 +1096,7 @@ TransportResult transport_sycl(const TransportConfig& config,
             free_device(escaped_device);
             free_device(nuclear_device);
             free_device(steps_device);
+            free_device(profile_counters_device);
             throw std::bad_alloc();
         }
         std::vector<float> slab_z_host(slab_layer_count);
@@ -1205,8 +1246,9 @@ TransportResult transport_sycl(const TransportConfig& config,
     float* ct_density_device = nullptr;
     std::uint8_t* ct_material_device = nullptr;
     // Schneider section mass-SP: (Z/A)_rel and Bragg I [eV] (CCTG v2/v3).
-    float* ct_mass_sp_za_device = nullptr;
-    float* ct_mass_sp_I_device = nullptr;
+    // Precomputed mass-SP factor LUT: section * table_size + energy_index.
+    // Replaces per-step Bethe log evaluation (P2).
+    float* ct_mass_sp_factor_lut_device = nullptr;
     float* ct_sp_device = nullptr;  // optional absolute 4-class tables
     float* ct_xs_device = nullptr;
     float* ct_ref_density_device = nullptr;
@@ -1268,24 +1310,30 @@ TransportResult transport_sycl(const TransportConfig& config,
             if (I_host.size() != za_host.size()) {
                 I_host.assign(za_host.size(), 75.0F);
             }
-            ct_mass_sp_za_device =
-                sycl::malloc_device<float>(ct_n_mass_factors, queue);
-            ct_mass_sp_I_device =
-                sycl::malloc_device<float>(ct_n_mass_factors, queue);
-            if (ct_mass_sp_za_device == nullptr || ct_mass_sp_I_device == nullptr) {
-                free_device(ct_mass_sp_za_device);
-                free_device(ct_mass_sp_I_device);
+            // P2: precompute mass-SP factor on the water energy grid so the
+            // kernel only does clamp/index/lerp (no log/Bethe on every step).
+            // Layout: section-major, size n_sections * table_size.
+            const auto lut_count =
+                static_cast<std::size_t>(ct_n_mass_factors) * table_size;
+            std::vector<float> mass_factor_lut(lut_count);
+            for (std::uint32_t sec = 0; sec < ct_n_mass_factors; ++sec) {
+                const auto za = za_host[sec];
+                const auto I_eV = I_host[sec];
+                const auto base = static_cast<std::size_t>(sec) * table_size;
+                for (std::size_t i = 0; i < table_size; ++i) {
+                    mass_factor_lut[base + i] = ct_mass_sp_energy_factor(
+                        za, I_eV, static_cast<float>(stopping_power.energies()[i]));
+                }
+            }
+            ct_mass_sp_factor_lut_device = sycl::malloc_device<float>(lut_count, queue);
+            if (ct_mass_sp_factor_lut_device == nullptr) {
                 free_device(ct_density_device);
                 free_device(ct_material_device);
                 throw std::bad_alloc();
             }
             queue
-                .memcpy(ct_mass_sp_za_device, za_host.data(),
-                        sizeof(float) * ct_n_mass_factors)
-                .wait_and_throw();
-            queue
-                .memcpy(ct_mass_sp_I_device, I_host.data(),
-                        sizeof(float) * ct_n_mass_factors)
+                .memcpy(ct_mass_sp_factor_lut_device, mass_factor_lut.data(),
+                        sizeof(float) * lut_count)
                 .wait_and_throw();
         }
 
@@ -1358,8 +1406,7 @@ TransportResult transport_sycl(const TransportConfig& config,
             free_device(ct_sp_device);
             free_device(ct_xs_device);
             free_device(ct_ref_density_device);
-            free_device(ct_mass_sp_za_device);
-            free_device(ct_mass_sp_I_device);
+            free_device(ct_mass_sp_factor_lut_device);
             free_device(ct_density_device);
             free_device(ct_material_device);
             throw std::bad_alloc();
@@ -1399,6 +1446,9 @@ TransportResult transport_sycl(const TransportConfig& config,
          charged_origin_voxel_dose_device == nullptr) ||
         deposited_device == nullptr ||
         escaped_device == nullptr || nuclear_device == nullptr || steps_device == nullptr ||
+#ifdef CARBON_TRANSPORT_PROFILE
+        profile_counters_device == nullptr ||
+#endif
         (primary_spot_count > 0 && primary_spots_device == nullptr) ||
         secondary_allocation_failed || neutral_allocation_failed) {
         free_immutable_device(table_device);
@@ -1410,6 +1460,7 @@ TransportResult transport_sycl(const TransportConfig& config,
         free_device(escaped_device);
         free_device(nuclear_device);
         free_device(steps_device);
+        free_device(profile_counters_device);
         free_device(primary_spots_device);
         free_device(slab_z_ends_device);
         free_device(slab_densities_device);
@@ -1419,8 +1470,7 @@ TransportResult transport_sycl(const TransportConfig& config,
         free_device(insert_xs_device);
         free_device(ct_density_device);
         free_device(ct_material_device);
-        free_device(ct_mass_sp_za_device);
-        free_device(ct_mass_sp_I_device);
+        free_device(ct_mass_sp_factor_lut_device);
         free_device(ct_sp_device);
         free_device(ct_xs_device);
         free_device(ct_ref_density_device);
@@ -1468,6 +1518,12 @@ TransportResult transport_sycl(const TransportConfig& config,
         queue.wait_and_throw();
     }
     queue.memset(dose_device, 0, number_of_bins * sizeof(double));
+#ifdef CARBON_TRANSPORT_PROFILE
+    if (profile_counters_device != nullptr) {
+        queue.memset(profile_counters_device, 0,
+                     transport_profile_slot_count() * sizeof(std::uint64_t));
+    }
+#endif
     if (enable_voxel_scoring) {
         queue.memset(voxel_dose_device, 0, number_of_voxels * sizeof(double));
     }
@@ -1837,6 +1893,8 @@ TransportResult transport_sycl(const TransportConfig& config,
                                       ct_spacing_y, ct_spacing_z, ct_nx, ct_ny, ct_nz,
                                       ct_density_device, ct_material_device, ct_rho,
                                       ct_material);
+                    profile_add(profile_counters_device,
+                                TransportProfileSlot::primary_ct_samples);
                     if (in_ct) {
                         local_density_g_per_cm3 = ct_rho;
                     }
@@ -1851,18 +1909,24 @@ TransportResult transport_sycl(const TransportConfig& config,
                     const auto water_sp =
                         table_device[index] +
                         fraction * (table_device[index + 1] - table_device[index]);
-                    if (use_ct_mass_sp && in_ct && ct_mass_sp_za_device != nullptr &&
-                        ct_mass_sp_I_device != nullptr && ct_n_mass_factors > 0) {
-                        // Schneider section energy-dep mass-SP × density (v3; v2≡I=75).
+                    profile_add(profile_counters_device,
+                                TransportProfileSlot::primary_sp_table_lookups);
+                    if (use_ct_mass_sp && in_ct && ct_mass_sp_factor_lut_device != nullptr &&
+                        ct_n_mass_factors > 0) {
+                        // Precomputed Schneider mass-SP factor LUT × density (P2).
                         const auto sec = static_cast<std::uint32_t>(ct_material);
                         const auto fi =
                             sec < ct_n_mass_factors ? sec : (ct_n_mass_factors - 1U);
-                        const auto mass_factor = ct_mass_sp_energy_factor_impl(
-                            ct_mass_sp_za_device[fi], ct_mass_sp_I_device[fi],
-                            energy_MeVu,
-                            [](float x) { return sycl::log(x); });
+                        const auto base = static_cast<std::size_t>(fi) * table_size +
+                                          static_cast<std::size_t>(index);
+                        const auto mass_factor =
+                            ct_mass_sp_factor_lut_device[base] +
+                            fraction * (ct_mass_sp_factor_lut_device[base + 1U] -
+                                        ct_mass_sp_factor_lut_device[base]);
                         stopping_power_MeV_per_mm = ct_mass_scaled_stopping_power(
                             water_sp, local_density_g_per_cm3, mass_factor);
+                        profile_add(profile_counters_device,
+                                    TransportProfileSlot::primary_mass_sp_lookups);
                     } else if (use_ct_material_tables && in_ct && ct_sp_device != nullptr &&
                                ct_ref_density_device != nullptr) {
                         // Legacy absolute material SP × (local ρ / ρ_ref).
@@ -1942,13 +2006,21 @@ TransportResult transport_sycl(const TransportConfig& config,
                 if (enable_ct_grid && in_ct) {
                     // Face clamp only when density/material changes along the step
                     // (unless ct_skip_homogeneous_face_clamp is false).
+                    CtClampPath clamp_path = CtClampPath::three_axis;
                     step_mm = clamp_step_to_ct_faces_near_z_if_needed(
                         step_mm, position_x_mm, position_y_mm, position_z_mm,
                         direction_x, direction_y, direction_z, ct_origin_x,
                         ct_origin_y, ct_origin_z, ct_spacing_x, ct_spacing_y,
                         ct_spacing_z, ct_nx, ct_ny, ct_nz, ct_density_device,
                         ct_material_device, local_density_g_per_cm3, ct_material,
-                        ct_skip_homogeneous_face_clamp);
+                        ct_skip_homogeneous_face_clamp,
+#ifdef CARBON_TRANSPORT_PROFILE
+                        &clamp_path
+#else
+                        nullptr
+#endif
+                    );
+                    profile_face(profile_counters_device, true, clamp_path);
                 }
                 if (enable_voxel_scoring && absolute_direction_x >= 1.0e-6F) {
                     const auto boundary_x_mm =
@@ -1966,7 +2038,11 @@ TransportResult transport_sycl(const TransportConfig& config,
                     step_mm = sycl::fmin(
                         step_mm, (boundary_y_mm - position_y_mm) / direction_y);
                 }
-                if (step_mm <= 1.0e-6F) {
+                // Accept CT micro-steps (DDA already avoids zero-length face clamps).
+                // Only snap/nudge when the step is non-positive or non-CT thrash.
+                const auto min_step_accept =
+                    (enable_ct_grid && in_ct) ? 1.0e-8F : 1.0e-6F;
+                if (step_mm <= min_step_accept) {
                     constexpr auto infinity =
                         std::numeric_limits<float>::infinity();
                     auto snapped_to_boundary = false;
@@ -2046,6 +2122,9 @@ TransportResult transport_sycl(const TransportConfig& config,
                     }
                     if (snapped_to_boundary) {
                         ++steps;
+                        profile_add(
+                            profile_counters_device,
+                            TransportProfileSlot::primary_boundary_nudge_continues);
                         continue;
                     }
                     break;
@@ -2054,6 +2133,8 @@ TransportResult transport_sycl(const TransportConfig& config,
                 const auto mean_loss_MeV = stopping_power_MeV_per_mm * step_mm;
                 auto deposited_MeV = sycl::fmin(mean_loss_MeV, energy_MeV);
                 if (enable_energy_straggling) {
+                    profile_add(profile_counters_device,
+                                TransportProfileSlot::primary_straggling);
                     const auto uniform1 = sycl::fmax(
                         rng::uniform01(spot_seed, rng_history, steps, 0), 1.0e-12f);
                     const auto uniform2 = rng::uniform01(spot_seed, rng_history, steps, 1);
@@ -2095,6 +2176,8 @@ TransportResult transport_sycl(const TransportConfig& config,
                                      sycl::access::address_space::global_space>
                         atomic_dose(dose_device[pending_primary_bin]);
                     atomic_dose.fetch_add(pending_primary_depth_MeV);
+                    profile_add(profile_counters_device,
+                                TransportProfileSlot::primary_dose_depth_atomics);
                     pending_primary_depth_MeV = 0.0;
                 }
                 if (pending_primary_depth_MeV == 0.0) {
@@ -2119,6 +2202,8 @@ TransportResult transport_sycl(const TransportConfig& config,
                             atomic_voxel_dose(
                                 voxel_dose_device[pending_primary_voxel]);
                         atomic_voxel_dose.fetch_add(pending_primary_voxel_MeV);
+                        profile_add(profile_counters_device,
+                                    TransportProfileSlot::primary_dose_voxel_atomics);
                         if (enable_charged_origin_voxel_scoring) {
                             sycl::atomic_ref<double, sycl::memory_order::relaxed,
                                              sycl::memory_scope::device,
@@ -2143,6 +2228,7 @@ TransportResult transport_sycl(const TransportConfig& config,
                 position_y_mm += direction_y * step_mm;
                 position_z_mm += direction_z * step_mm;
                 if (enable_multiple_scattering && energy_MeV > energy_cutoff_MeV) {
+                    profile_add(profile_counters_device, TransportProfileSlot::primary_mcs);
                     const auto projected_rms_angle_rad =
                         highland_projected_rms_angle_device(
                             scattering_energy_MeV, 6, primary_mass_number, step_mm,
@@ -2233,6 +2319,8 @@ TransportResult transport_sycl(const TransportConfig& config,
                     const auto uniform = rng::uniform01(spot_seed, rng_history, steps, 2);
                     if (uniform < probability) {
                         history_nuclear_MeV = energy_MeV;
+                        profile_add(profile_counters_device,
+                                    TransportProfileSlot::primary_nuclear);
                         if (enable_secondary_generation) {
                             auto reaction_bin_index = static_cast<int>(sycl::floor(
                                 (post_step_energy_MeVu - minimum_reaction_energy) *
@@ -2451,6 +2539,7 @@ TransportResult transport_sycl(const TransportConfig& config,
                     }
                 }
                 ++steps;
+                profile_add(profile_counters_device, TransportProfileSlot::primary_steps);
             }
 
             const auto stopped_inside =
@@ -2516,6 +2605,8 @@ TransportResult transport_sycl(const TransportConfig& config,
                                  sycl::access::address_space::global_space>
                     atomic_dose(dose_device[pending_primary_bin]);
                 atomic_dose.fetch_add(pending_primary_depth_MeV);
+                profile_add(profile_counters_device,
+                            TransportProfileSlot::primary_dose_depth_atomics);
             }
             if (enable_voxel_scoring && pending_primary_voxel_MeV > 0.0) {
                 sycl::atomic_ref<double, sycl::memory_order::relaxed,
@@ -2523,6 +2614,8 @@ TransportResult transport_sycl(const TransportConfig& config,
                                  sycl::access::address_space::global_space>
                     atomic_voxel_dose(voxel_dose_device[pending_primary_voxel]);
                 atomic_voxel_dose.fetch_add(pending_primary_voxel_MeV);
+                profile_add(profile_counters_device,
+                            TransportProfileSlot::primary_dose_voxel_atomics);
                 if (enable_charged_origin_voxel_scoring) {
                     sycl::atomic_ref<double, sycl::memory_order::relaxed,
                                      sycl::memory_scope::device,
@@ -2735,6 +2828,8 @@ TransportResult transport_sycl(const TransportConfig& config,
                                               ct_spacing_x, ct_spacing_y, ct_spacing_z,
                                               ct_nx, ct_ny, ct_nz, ct_density_device,
                                               ct_material_device, ct_rho, ct_material);
+                            profile_add(profile_counters_device,
+                                        TransportProfileSlot::secondary_ct_samples);
                             if (in_ct) {
                                 local_density_g_per_cm3 = ct_rho;
                             }
@@ -2746,21 +2841,26 @@ TransportResult transport_sycl(const TransportConfig& config,
                                 : 0U;
                         float carbon_sp_local = carbon_stopping_power_MeV_per_mm;
                         if (enable_ct_grid) {
+                            profile_add(profile_counters_device,
+                                        TransportProfileSlot::secondary_sp_table_lookups);
                             if (use_ct_mass_sp && in_ct &&
-                                ct_mass_sp_za_device != nullptr &&
-                                ct_mass_sp_I_device != nullptr &&
+                                ct_mass_sp_factor_lut_device != nullptr &&
                                 ct_n_mass_factors > 0) {
                                 const auto sec = static_cast<std::uint32_t>(ct_material);
                                 const auto fi = sec < ct_n_mass_factors
                                                     ? sec
                                                     : (ct_n_mass_factors - 1U);
-                                const auto mass_factor = ct_mass_sp_energy_factor_impl(
-                                    ct_mass_sp_za_device[fi], ct_mass_sp_I_device[fi],
-                                    energy_MeVu,
-                                    [](float x) { return sycl::log(x); });
+                                const auto base = static_cast<std::size_t>(fi) * table_size +
+                                                  static_cast<std::size_t>(index);
+                                const auto mass_factor =
+                                    ct_mass_sp_factor_lut_device[base] +
+                                    fraction * (ct_mass_sp_factor_lut_device[base + 1U] -
+                                                ct_mass_sp_factor_lut_device[base]);
                                 carbon_sp_local = ct_mass_scaled_stopping_power(
                                     carbon_stopping_power_MeV_per_mm,
                                     local_density_g_per_cm3, mass_factor);
+                                profile_add(profile_counters_device,
+                                            TransportProfileSlot::secondary_mass_sp_lookups);
                             } else if (use_ct_material_tables && in_ct &&
                                        ct_sp_device != nullptr &&
                                        ct_ref_density_device != nullptr) {
@@ -2841,13 +2941,21 @@ TransportResult transport_sycl(const TransportConfig& config,
                                     phantom_length_mm));
                         }
                         if (enable_ct_grid && in_ct) {
+                            CtClampPath clamp_path = CtClampPath::three_axis;
                             path_step_mm = clamp_step_to_ct_faces_if_needed(
                                 path_step_mm, position_x_mm, position_y_mm, position_z_mm,
                                 direction_x, direction_y, direction_z, ct_origin_x,
                                 ct_origin_y, ct_origin_z, ct_spacing_x, ct_spacing_y,
                                 ct_spacing_z, ct_nx, ct_ny, ct_nz, ct_density_device,
                                 ct_material_device, local_density_g_per_cm3, ct_material,
-                                ct_skip_homogeneous_face_clamp);
+                                ct_skip_homogeneous_face_clamp,
+#ifdef CARBON_TRANSPORT_PROFILE
+                                &clamp_path
+#else
+                                nullptr
+#endif
+                            );
+                            profile_face(profile_counters_device, false, clamp_path);
                         }
                         if (enable_voxel_scoring && absolute_direction_x >= 1.0e-6F) {
                             const auto boundary_x_mm =
@@ -2867,7 +2975,9 @@ TransportResult transport_sycl(const TransportConfig& config,
                                 (boundary_y_mm - position_y_mm) / direction_y;
                             path_step_mm = sycl::fmin(path_step_mm, distance_to_boundary_y_mm);
                         }
-                        if (path_step_mm <= 1.0e-6F) {
+                        const auto min_step_accept =
+                            (enable_ct_grid && in_ct) ? 1.0e-8F : 1.0e-6F;
+                        if (path_step_mm <= min_step_accept) {
                             constexpr auto infinity =
                                 std::numeric_limits<float>::infinity();
                             auto snapped_to_boundary = false;
@@ -2950,6 +3060,8 @@ TransportResult transport_sycl(const TransportConfig& config,
                                 voxel_dose_device, charged_origin_voxel_dose_device,
                                 neutral_origin_dose_device,
                                 neutral_origin_voxel_dose_device);
+                            profile_add(profile_counters_device,
+                                        TransportProfileSlot::secondary_dose_atomics);
                             pending_dose_MeV = 0.0;
                         }
                         if (pending_dose_MeV == 0.0) {
@@ -2975,6 +3087,8 @@ TransportResult transport_sycl(const TransportConfig& config,
                         position_y_mm += direction_y * path_step_mm;
                         position_z_mm += direction_z * path_step_mm;
                         if (enable_multiple_scattering && energy_MeV > energy_cutoff_MeV) {
+                            profile_add(profile_counters_device,
+                                        TransportProfileSlot::secondary_mcs);
                             const auto projected_rms_angle_rad =
                                 highland_projected_rms_angle_device(
                                     scattering_energy_MeV, atomic_number, mass_number,
@@ -3066,6 +3180,8 @@ TransportResult transport_sycl(const TransportConfig& config,
                                                   interaction.incident_energy_MeV_per_u
                                             : 1.0F;
                                     cascade_summary.interaction_count = 1;
+                                    profile_add(profile_counters_device,
+                                                TransportProfileSlot::secondary_cascade);
                                     cascade_summary.direct_count = interaction.product_count;
                                     cascade_summary.incident_energy_MeV = energy_MeV;
                                     std::uint32_t queueable_count = 0;
@@ -3266,6 +3382,8 @@ TransportResult transport_sycl(const TransportConfig& config,
                                 }
                         }
                         ++steps;
+                        profile_add(profile_counters_device,
+                                    TransportProfileSlot::secondary_steps);
                     }
 
                     score_secondary_dose_device(
@@ -3278,6 +3396,17 @@ TransportResult transport_sycl(const TransportConfig& config,
                         voxel_dose_device, charged_origin_voxel_dose_device,
                         neutral_origin_dose_device,
                         neutral_origin_voxel_dose_device);
+                    if (pending_dose_MeV > 0.0) {
+                        profile_add(profile_counters_device,
+                                    TransportProfileSlot::secondary_dose_atomics);
+                    }
+                    {
+                        const auto hist_base = static_cast<std::size_t>(
+                            TransportProfileSlot::secondary_track_hist_base);
+                        const auto bucket = secondary_track_hist_bucket(steps);
+                        profile_add(profile_counters_device,
+                                    static_cast<TransportProfileSlot>(hist_base + bucket));
+                    }
                     const auto stopped_inside =
                         energy_MeV > 0.0F && position_z_mm >= 0.0F &&
                         position_z_mm < phantom_length_mm &&
@@ -4167,6 +4296,21 @@ TransportResult transport_sycl(const TransportConfig& config,
         }
     }
 
+#ifdef CARBON_TRANSPORT_PROFILE
+    std::array<std::uint64_t, static_cast<std::size_t>(TransportProfileSlot::count)>
+        profile_host{};
+    auto profile_enabled = false;
+    if (profile_counters_device != nullptr) {
+        queue
+            .copy(profile_counters_device, profile_host.data(), transport_profile_slot_count())
+            .wait_and_throw();
+        profile_enabled = true;
+    }
+#else
+    const auto profile_enabled = false;
+    std::array<std::uint64_t, 1> profile_host{};
+#endif
+
     free_immutable_device(table_device);
     free_immutable_device(cross_section_device);
     free_device(dose_device);
@@ -4176,6 +4320,7 @@ TransportResult transport_sycl(const TransportConfig& config,
     free_device(escaped_device);
     free_device(nuclear_device);
     free_device(steps_device);
+    free_device(profile_counters_device);
     free_device(primary_spots_device);
     free_device(slab_z_ends_device);
     free_device(slab_densities_device);
@@ -4185,8 +4330,7 @@ TransportResult transport_sycl(const TransportConfig& config,
     free_device(insert_xs_device);
     free_device(ct_density_device);
     free_device(ct_material_device);
-    free_device(ct_mass_sp_za_device);
-    free_device(ct_mass_sp_I_device);
+    free_device(ct_mass_sp_factor_lut_device);
     free_device(ct_sp_device);
     free_device(ct_xs_device);
     free_device(ct_ref_density_device);
@@ -4221,6 +4365,16 @@ TransportResult transport_sycl(const TransportConfig& config,
     TransportResult result;
     result.backend = "sycl-" + device_name +
                      (config.enable_energy_straggling ? "+straggling" : "");
+#ifdef CARBON_TRANSPORT_PROFILE
+    if (profile_enabled) {
+        result.profile.enabled = true;
+        result.profile.counters = profile_host;
+        result.backend += "+profile";
+    }
+#else
+    (void)profile_enabled;
+    (void)profile_host;
+#endif
     const auto batch_has_energy_spread = std::any_of(
         config.primary_spot_batch.begin(), config.primary_spot_batch.end(),
         [](const auto& spot) { return spot.beam_energy_spread > 0.0F; });
@@ -4242,11 +4396,11 @@ TransportResult transport_sycl(const TransportConfig& config,
     }
     if (enable_ct_grid) {
         if (use_ct_mass_sp) {
-            result.backend += "+ct-grid-mass-sp-e";
+            result.backend += "+ct-grid-mass-sp-lut+ct-dda";
         } else if (use_ct_material_tables) {
-            result.backend += "+ct-grid-material";
+            result.backend += "+ct-grid-material+ct-dda";
         } else {
-            result.backend += "+ct-grid";
+            result.backend += "+ct-grid+ct-dda";
         }
     }
     if (enable_voxel_scoring) {

@@ -35,7 +35,7 @@ void print_usage(const char* executable) {
                  "  --plan-only          Parse/allocate/transform plan without transport\n"
                  "  --sequential-spots   Validation A/B: disable batched SYCL plan launch\n"
                  "  --output FILE        MeV energy-deposition scorer CSV\n"
-                 "  --dose-output FILE   Dose scorer CSV (Gy/primary); empty disables\n";
+                 "  --dose-output FILE   Dose scorer CSV (total Gy); empty disables\n";
 }
 
 void add_vector_in_place(std::vector<double>& total, const std::vector<double>& part) {
@@ -529,20 +529,24 @@ int main(int argc, char* argv[]) {
                                    cascade_packages, neutral_packages);
         }
 
-        // MeV energy-deposition scorers (unchanged).
-        carbon::write_depth_dose_csv(config.output_file, config, result);
-        if (config.enable_secondary_transport) {
+        // MeV energy-deposition scorers (empty path disables that file).
+        if (!config.output_file.empty()) {
+            carbon::write_depth_dose_csv(config.output_file, config, result);
+        }
+        if (config.enable_secondary_transport &&
+            !config.fragment_species_output_file.empty()) {
             carbon::write_fragment_species_csv(
                 config.fragment_species_output_file, config, result);
         }
-        if (config.enable_voxel_scoring) {
+        if (config.enable_voxel_scoring && !config.voxel_dose_output_file.empty()) {
             carbon::write_sparse_voxel_dose_csv(config.voxel_dose_output_file, config, result);
         }
-        if (config.enable_charged_origin_voxel_scoring) {
+        if (config.enable_charged_origin_voxel_scoring &&
+            !config.charged_origin_voxel_output_file.empty()) {
             carbon::write_sparse_charged_origin_voxel_dose_csv(
                 config.charged_origin_voxel_output_file, config, result);
         }
-        // Dose scorers (Gy/primary). Independent outputs; empty path skips.
+        // Dose scorers (total Gy over all histories). Independent outputs; empty path skips.
         if (!config.dose_output_file.empty()) {
             carbon::write_depth_dose_Gy_csv(config.dose_output_file, config, result);
         }
@@ -554,6 +558,10 @@ int main(int argc, char* argv[]) {
         if (config.enable_voxel_scoring && !config.voxel_dose_Gy_output_file.empty()) {
             carbon::write_sparse_voxel_dose_Gy_csv(
                 config.voxel_dose_Gy_output_file, config, result);
+        }
+        if (config.enable_voxel_scoring && !config.voxel_dose_mhd_output_file.empty()) {
+            carbon::write_dense_voxel_dose_mhd(config.voxel_dose_mhd_output_file, config,
+                                              result);
         }
         if (config.enable_charged_origin_voxel_scoring &&
             !config.charged_origin_voxel_dose_Gy_output_file.empty()) {
@@ -579,6 +587,9 @@ int main(int argc, char* argv[]) {
                   << result.charged_after_neutral_kernel_seconds << " s\n"
                   << "Energy balance error: " << result.relative_energy_balance_error() << '\n'
                   << "Nuclear interactions: " << result.nuclear_interactions << '\n';
+        if (result.profile.enabled) {
+            std::cout << result.profile.summary();
+        }
         if (config.enable_secondary_generation) {
             std::cout << "Sampled reaction packages: " << result.sampled_reaction_packages << '\n'
                       << "Generated direct secondaries: "
@@ -650,6 +661,10 @@ int main(int argc, char* argv[]) {
             if (!config.voxel_dose_Gy_output_file.empty()) {
                 std::cout << "Voxel dose scorer (Gy): "
                           << config.voxel_dose_Gy_output_file.string() << '\n';
+            }
+            if (!config.voxel_dose_mhd_output_file.empty()) {
+                std::cout << "Voxel dose MHD (Gy): "
+                          << config.voxel_dose_mhd_output_file.string() << '\n';
             }
         }
         if (config.enable_charged_origin_voxel_scoring) {

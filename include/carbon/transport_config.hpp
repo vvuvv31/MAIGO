@@ -192,14 +192,18 @@ struct TransportConfig {
         "out/gpu_charged_origin_voxel_dose.csv"};
     std::filesystem::path neutral_origin_voxel_output_file{
         "out/gpu_neutral_origin_voxel_dose.csv"};
-    // Dose scorers (Gy/primary). Empty path disables that dose file; MeV scorers
-    // are always written when their paths are set. Defaults write Gy alongside MeV.
+    // Dose scorers (total Gy over all histories). Empty path disables that dose
+    // file; MeV scorers always write when their paths are set. Defaults write Gy
+    // alongside MeV.
     std::filesystem::path dose_output_file{"out/cpu_depth_dose_Gy.csv"};
     std::filesystem::path fragment_species_dose_output_file{
         "out/gpu_fragment_species_depth_dose_Gy.csv"};
     std::filesystem::path voxel_dose_Gy_output_file{"out/gpu_voxel_dose_Gy.csv"};
     std::filesystem::path charged_origin_voxel_dose_Gy_output_file{
         "out/gpu_charged_origin_voxel_dose_Gy.csv"};
+    // Dense MetaImage MHD/RAW (total Gy). Empty disables. Skips sparse CSV I/O
+    // cost when voxel_dose_Gy_output_file is also empty.
+    std::filesystem::path voxel_dose_mhd_output_file{};
     std::string device{"serial"};
 
     [[nodiscard]] double initial_total_energy_MeV() const noexcept {

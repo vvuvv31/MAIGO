@@ -50,8 +50,9 @@ std::unordered_map<std::string, std::string> read_key_values(const std::filesyst
         }
         auto key = trim(line.substr(0, separator));
         auto value = trim(line.substr(separator + 1));
-        if (key.empty() || value.empty()) {
-            throw std::runtime_error("Empty configuration key or value at " + path.string() + ":" +
+        // Empty value is allowed (disables optional outputs such as sparse voxel CSV).
+        if (key.empty()) {
+            throw std::runtime_error("Empty configuration key at " + path.string() + ":" +
                                      std::to_string(line_number));
         }
         values[key] = value;
@@ -629,11 +630,27 @@ TransportConfig load_config(const std::filesystem::path& path) {
         parse_path(values, "cascade_package_file", config.cascade_package_file);
     config.neutral_package_file =
         parse_path(values, "neutral_package_file", config.neutral_package_file);
-    config.output_file = parse_path(values, "output_file", config.output_file);
-    config.fragment_species_output_file =
-        parse_path(values, "fragment_species_output_file", config.fragment_species_output_file);
-    config.voxel_dose_output_file =
-        parse_path(values, "voxel_dose_output_file", config.voxel_dose_output_file);
+    {
+        const auto it = values.find("output_file");
+        if (it != values.end()) {
+            config.output_file =
+                it->second.empty() ? std::filesystem::path{} : std::filesystem::path{it->second};
+        }
+    }
+    {
+        const auto it = values.find("fragment_species_output_file");
+        if (it != values.end()) {
+            config.fragment_species_output_file =
+                it->second.empty() ? std::filesystem::path{} : std::filesystem::path{it->second};
+        }
+    }
+    {
+        const auto it = values.find("voxel_dose_output_file");
+        if (it != values.end()) {
+            config.voxel_dose_output_file =
+                it->second.empty() ? std::filesystem::path{} : std::filesystem::path{it->second};
+        }
+    }
     config.charged_origin_voxel_output_file = parse_path(
         values, "charged_origin_voxel_output_file",
         config.charged_origin_voxel_output_file);
@@ -669,6 +686,14 @@ TransportConfig load_config(const std::filesystem::path& path) {
         const auto it = values.find("charged_origin_voxel_dose_Gy_output_file");
         if (it != values.end()) {
             config.charged_origin_voxel_dose_Gy_output_file =
+                it->second.empty() ? std::filesystem::path{}
+                                   : std::filesystem::path{it->second};
+        }
+    }
+    {
+        const auto it = values.find("voxel_dose_mhd_output_file");
+        if (it != values.end()) {
+            config.voxel_dose_mhd_output_file =
                 it->second.empty() ? std::filesystem::path{}
                                    : std::filesystem::path{it->second};
         }

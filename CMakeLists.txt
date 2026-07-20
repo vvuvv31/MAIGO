@@ -8,6 +8,9 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(CARBON_ENABLE_SYCL "Build the oneAPI/SYCL transport backend" OFF)
 option(CARBON_BUILD_TESTS "Build unit and integration tests" ON)
+option(CARBON_ENABLE_TRANSPORT_PROFILE
+       "Enable low-overhead SYCL step-path profiling counters (not for production dose)"
+       OFF)
 
 add_library(carbon_core
     src/config.cpp
@@ -30,15 +33,22 @@ else()
     target_compile_options(carbon_core PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
+if(CARBON_ENABLE_TRANSPORT_PROFILE)
+    target_compile_definitions(carbon_core PUBLIC CARBON_TRANSPORT_PROFILE=1)
+    message(STATUS "CARBON_ENABLE_TRANSPORT_PROFILE=ON (SYCL step counters enabled)")
+endif()
+
 if(CARBON_ENABLE_SYCL)
     if(NOT CMAKE_CXX_COMPILER_ID MATCHES "IntelLLVM")
         message(FATAL_ERROR "CARBON_ENABLE_SYCL requires Intel oneAPI icpx (IntelLLVM).")
     endif()
 
-    target_sources(carbon_core PRIVATE src/device.cpp src/transport_sycl.cpp)
+    target_sources(carbon_core PRIVATE src/device.cpp src/transport_sycl.cpp src/transport_profile.cpp)
     target_compile_definitions(carbon_core PUBLIC CARBON_HAS_SYCL=1)
     target_compile_options(carbon_core PRIVATE -fsycl)
     target_link_options(carbon_core PUBLIC -fsycl)
+else()
+    target_sources(carbon_core PRIVATE src/transport_profile.cpp)
 endif()
 
 add_executable(carbon_mc src/main.cpp)

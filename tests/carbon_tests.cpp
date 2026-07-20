@@ -329,6 +329,15 @@ void test_ct_grid_helpers() {
     require_near(step_near_z, 0.20001F, 2.0e-4,
                  "near-z CT fast path must clamp at heterogeneous z face");
 
+    // DDA: particle on a +z face must advance into the next voxel, not return ~0.
+    carbon::CtDdaState dda{};
+    require(carbon::ct_dda_init(0.5F, 0.5F, 1.0F, 0.0F, 0.0F, 1.0F, 0.0F, 0.0F, 0.0F, 1.0F,
+                                1.0F, 1.0F, 2, 2, 2, dda),
+            "DDA init on +z face");
+    require(dda.iz == 1, "DDA must enter next z cell on boundary");
+    require(carbon::ct_dda_distance_to_next_face(dda) > 0.5F,
+            "DDA distance after face snap must be positive");
+
     // Energy-dependent mass-SP: I_water → factor = za_rel; I_bone ≠ 75 shifts f_E.
     require_near(carbon::ct_mass_sp_energy_factor(0.93F, 75.0F, 150.0F), 0.93F, 1.0e-4,
                  "mass-SP energy factor water-I");
@@ -685,9 +694,13 @@ void test_dose_scorer_matches_mev_conversion() {
         std::string gy_header;
         std::getline(mev_in, mev_header);
         std::getline(gy_in, gy_header);
-        require(mev_header.find("energy_deposition_MeV_per_primary") != std::string::npos,
+        require(mev_header.find("energy_deposition_MeV") != std::string::npos,
                 "MeV scorer header");
-        require(gy_header.find("dose_Gy_per_primary") != std::string::npos, "Gy scorer header");
+        require(mev_header.find("per_primary") == std::string::npos,
+                "MeV scorer should report total tallies");
+        require(gy_header.find("dose_Gy") != std::string::npos, "Gy scorer header");
+        require(gy_header.find("per_primary") == std::string::npos,
+                "Gy scorer should report total dose");
         require(gy_header.find("energy_deposition") == std::string::npos,
                 "pure dose scorer should not list MeV columns");
 
@@ -696,21 +709,58 @@ void test_dose_scorer_matches_mev_conversion() {
             config.scorer_area_mm2 * config.depth_bin_width_mm *
             config.water_density_g_per_cm3 * 1.0e-6;
         for (std::size_t bin = 0; bin < 2; ++bin) {
-            double depth_m = 0, e_per = 0, d_mev = 0, rel_m = 0;
+            double depth_m = 0, e_total = 0, d_mev = 0, rel_m = 0;
             char comma = 0;
-            mev_in >> depth_m >> comma >> e_per >> comma >> d_mev >> comma >> rel_m;
+            mev_in >> depth_m >> comma >> e_total >> comma >> d_mev >> comma >> rel_m;
             double depth_g = 0, d_gy = 0, rel_g = 0;
             gy_in >> depth_g >> comma >> d_gy >> comma >> rel_g;
-            const auto expected_e =
-                result.deposited_energy_MeV[bin] /
-                static_cast<double>(config.number_of_histories);
+            const auto expected_e = result.deposited_energy_MeV[bin];
             const auto expected_d = expected_e * MeV_to_joule / bin_mass_kg;
-            require_near(e_per, expected_e, 1.0e-12, "MeV/primary");
+            require_near(e_total, expected_e, 1.0e-12, "total MeV");
             require_near(d_mev, expected_d, 1.0e-20, "MeV file dose column");
-            require_near(d_gy, expected_d, 1.0e-20, "Gy scorer dose");
+            require_near(d_gy, expected_d, 1.0e-20, "Gy scorer total dose");
             require_near(d_gy, d_mev, 1.0e-20, "Gy scorer matches MeV-file dose column");
         }
     }
+    std::error_code ec;
+    std::filesystem::remove_all(dir, ec);
+}
+
+void test_dense_voxel_mhd_writer() {
+    carbon::TransportConfig config;
+    config.number_of_histories = 10;
+    config.phantom_length_mm = 2.0;
+    config.depth_bin_width_mm = 1.0;
+    config.enable_voxel_scoring = true;
+    config.voxel_bins_x = 2;
+    config.voxel_bins_y = 2;
+    config.voxel_size_x_mm = 1.0;
+    config.voxel_size_y_mm = 1.0;
+    config.water_density_g_per_cm3 = 1.0;
+    config.validate();
+
+    carbon::TransportResult result;
+    result.deposited_energy_MeV = {10.0, 0.0};
+    result.voxel_deposited_energy_MeV.assign(config.number_of_voxels(), 0.0);
+    // Put energy in voxel (0,0,0) so IDD z=0 closes.
+    result.voxel_deposited_energy_MeV[0] = 10.0;
+
+    const auto dir = std::filesystem::temp_directory_path() / "carbon_mhd_test";
+    std::filesystem::create_directories(dir);
+    const auto mhd = dir / "dose.mhd";
+    carbon::write_dense_voxel_dose_mhd(mhd, config, result);
+    require(std::filesystem::exists(mhd), "MHD header missing");
+    require(std::filesystem::exists(dir / "dose.raw"), "RAW missing");
+    const auto header = [&] {
+        std::ifstream in(mhd);
+        std::string all((std::istreambuf_iterator<char>(in)), {});
+        return all;
+    }();
+    require(header.find("DimSize = 2 2 2") != std::string::npos, "DimSize");
+    require(header.find("DoseUnits = Gy") != std::string::npos, "DoseUnits");
+    require(header.find("ElementDataFile = dose.raw") != std::string::npos, "RAW name");
+    const auto raw_size = std::filesystem::file_size(dir / "dose.raw");
+    require(raw_size == 2 * 2 * 2 * sizeof(float), "RAW byte size");
     std::error_code ec;
     std::filesystem::remove_all(dir, ec);
 }
@@ -1366,6 +1416,7 @@ int main() {
         test_topas_spots_parse_angle01();
         test_topas_spot_weights_and_tps_90_transform();
         test_dose_scorer_matches_mev_conversion();
+        test_dense_voxel_mhd_writer();
 #ifdef CARBON_HAS_SYCL
         test_sycl_primary_spot_batch();
         test_sycl_flat_source_extent();

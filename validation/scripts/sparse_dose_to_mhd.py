@@ -128,7 +128,7 @@ def main() -> None:
         default=1.0,
         help="multiply every input value by this factor",
     )
-    parser.add_argument("--units", default="Gy/primary")
+    parser.add_argument("--units", default="Gy")
     args = parser.parse_args()
 
     shape = parse_triplet(args.shape, "--shape", int)

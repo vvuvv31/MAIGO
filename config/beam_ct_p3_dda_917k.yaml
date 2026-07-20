@@ -1,3 +1,4 @@
+# P3 DDA + total dose (Gy, not Gy/primary). 917000 histories.
 # Optimized 917-spot TPS 90-degree CT plan.
 #
 # Preparation (once after patient_ct.bin changes):
@@ -70,12 +71,10 @@ nuclear_cross_section_file: data/c12_inelastic_cross_sections_water_geant4_11_1_
 reaction_package_file: validation/results/topas_400MeVu_cascade_aligned_primary_3d.bin
 cascade_package_file: validation/results/topas_400MeVu_cascade_100k_3d.bin
 
-output_file: out/ct/optimized_tps_90_idd.csv
-dose_output_file: out/ct/optimized_tps_90_idd_Gy.csv
-fragment_species_output_file: out/ct/optimized_tps_90_species.csv
-fragment_species_dose_output_file: out/ct/optimized_tps_90_species_Gy.csv
-# Sparse voxel CSV is large (~380 MB). Leave empty to skip; use dense MHD instead.
-voxel_dose_output_file:
-voxel_dose_Gy_output_file:
-voxel_dose_mhd_output_file: out/ct/optimized_tps_90_dose.mhd
+output_file: out/ct/p3_dda_917k/idd.csv
+dose_output_file: out/ct/p3_dda_917k/idd_Gy.csv
+fragment_species_output_file: out/ct/p3_dda_917k/species.csv
+fragment_species_dose_output_file: out/ct/p3_dda_917k/species_Gy.csv
+voxel_dose_output_file: out/ct/p3_dda_917k/voxels.csv
+voxel_dose_Gy_output_file: out/ct/p3_dda_917k/voxels_Gy.csv
 device: gpu

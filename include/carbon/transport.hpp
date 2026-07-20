@@ -6,6 +6,7 @@
 #include "carbon/reaction_package.hpp"
 #include "carbon/stopping_power.hpp"
 #include "carbon/transport_config.hpp"
+#include "carbon/transport_profile.hpp"
 
 #include <cstdint>
 #include <memory>
@@ -75,6 +76,8 @@ struct TransportResult {
     double neutral_kernel_seconds{0.0};
     double charged_after_neutral_kernel_seconds{0.0};
     std::string backend;
+    // Populated only when built with CARBON_TRANSPORT_PROFILE=1.
+    TransportProfile profile;
 
     [[nodiscard]] double relative_energy_balance_error() const noexcept;
 };

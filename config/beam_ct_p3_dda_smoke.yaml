@@ -1,3 +1,5 @@
+# P0 baseline: current batch + persistent secondary workers, 917000 histories.
+# Do not overwrite pre-optimization baseline in out/ct/preopt_917k_baseline/.
 # Optimized 917-spot TPS 90-degree CT plan.
 #
 # Preparation (once after patient_ct.bin changes):
@@ -10,7 +12,7 @@
 # statistical budget was 917 * 100000 histories. This first GPU dose run uses
 # 1/100 of that total; histories are still redistributed proportional to the
 # optimized weights. Increase this later without changing the fluence shape.
-number_of_histories: 917000
+number_of_histories: 917
 initial_energy_MeVu: 200.0
 mass_number: 12
 
@@ -70,12 +72,10 @@ nuclear_cross_section_file: data/c12_inelastic_cross_sections_water_geant4_11_1_
 reaction_package_file: validation/results/topas_400MeVu_cascade_aligned_primary_3d.bin
 cascade_package_file: validation/results/topas_400MeVu_cascade_100k_3d.bin
 
-output_file: out/ct/optimized_tps_90_idd.csv
-dose_output_file: out/ct/optimized_tps_90_idd_Gy.csv
-fragment_species_output_file: out/ct/optimized_tps_90_species.csv
-fragment_species_dose_output_file: out/ct/optimized_tps_90_species_Gy.csv
-# Sparse voxel CSV is large (~380 MB). Leave empty to skip; use dense MHD instead.
-voxel_dose_output_file:
-voxel_dose_Gy_output_file:
-voxel_dose_mhd_output_file: out/ct/optimized_tps_90_dose.mhd
+output_file: out/ct/p3_dda_smoke/idd.csv
+dose_output_file: out/ct/p3_dda_smoke/idd_Gy.csv
+fragment_species_output_file: out/ct/p3_dda_smoke/species.csv
+fragment_species_dose_output_file: out/ct/p3_dda_smoke/species_Gy.csv
+voxel_dose_output_file: out/ct/p3_dda_smoke/voxels.csv
+voxel_dose_Gy_output_file: out/ct/p3_dda_smoke/voxels_Gy.csv
 device: gpu
