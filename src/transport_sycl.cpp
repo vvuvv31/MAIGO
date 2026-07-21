@@ -26,6 +26,17 @@
 
 namespace carbon {
 
+// Global dose scorer scalar for device atomics / USM dose buffers.
+// CARBON_DOSE_FP32=1 (CMake) uses float atomics — much faster on consumer NVIDIA
+// GPUs (Turing FP64 is ~1/32 rate). Host TransportResult remains double.
+#if defined(CARBON_DOSE_FP32)
+using DoseAtomicT = float;
+inline constexpr bool k_dose_atomic_fp32 = true;
+#else
+using DoseAtomicT = double;
+inline constexpr bool k_dose_atomic_fp32 = false;
+#endif
+
 // Device-side profile increment. Compiles to nothing unless
 // CARBON_TRANSPORT_PROFILE is defined at build time.
 inline void profile_add(std::uint64_t* counters,
@@ -374,7 +385,7 @@ inline void score_exponential_depth(
     const float phantom_length_mm,
     const std::uint32_t number_of_bins,
     const float lambda_mm,
-    double* dose_row,
+    DoseAtomicT* dose_row,
     const bool renormalize = false) noexcept {
     if (amount_MeV <= 0.0F || dose_row == nullptr || number_of_bins == 0 ||
         bin_width_mm <= 0.0F) {
@@ -395,10 +406,10 @@ inline void score_exponential_depth(
         if (bin >= static_cast<int>(number_of_bins)) {
             bin = static_cast<int>(number_of_bins) - 1;
         }
-        sycl::atomic_ref<double, sycl::memory_order::relaxed, sycl::memory_scope::device,
+        sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed, sycl::memory_scope::device,
                          sycl::access::address_space::global_space>
             atomic_dose(dose_row[static_cast<std::size_t>(bin)]);
-        atomic_dose.fetch_add(static_cast<double>(amount_MeV));
+        atomic_dose.fetch_add(static_cast<DoseAtomicT>(amount_MeV));
         return;
     }
     const auto inv_lambda = 1.0F / lambda_mm;
@@ -427,10 +438,10 @@ inline void score_exponential_depth(
         if (frac <= 0.0F) {
             continue;
         }
-        sycl::atomic_ref<double, sycl::memory_order::relaxed, sycl::memory_scope::device,
+        sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed, sycl::memory_scope::device,
                          sycl::access::address_space::global_space>
             atomic_dose(dose_row[bin]);
-        atomic_dose.fetch_add(static_cast<double>(amount_MeV * frac));
+        atomic_dose.fetch_add(static_cast<DoseAtomicT>(amount_MeV * frac));
         if (sycl::exp(-s_hi * inv_lambda) < 1.0e-5F) {
             break;
         }
@@ -481,6 +492,58 @@ inline std::uint32_t cascade_cross_section_lower_bound(
         }
     }
     return lower;
+}
+
+// Host: interpolate each cascade projectile's XS samples onto the water SP energy
+// grid so the device kernel only does clamp/index/lerp (no binary search per step).
+std::vector<float> build_cascade_xs_energy_lut(
+    const CascadePackageTable& packages,
+    const std::vector<double>& energies_MeVu) {
+    const auto projectile_count = packages.projectiles().size();
+    const auto energy_count = energies_MeVu.size();
+    std::vector<float> lut(projectile_count * energy_count, 0.0F);
+    const auto& samples = packages.cross_sections();
+    for (std::size_t projectile_index = 0; projectile_index < projectile_count;
+         ++projectile_index) {
+        const auto& projectile = packages.projectiles()[projectile_index];
+        const auto offset = projectile.cross_section_offset;
+        const auto count = projectile.cross_section_count;
+        if (count == 0) {
+            continue;
+        }
+        for (std::size_t energy_index = 0; energy_index < energy_count; ++energy_index) {
+            const auto energy = static_cast<float>(energies_MeVu[energy_index]);
+            std::uint32_t lower = 0;
+            std::uint32_t upper = count;
+            while (lower < upper) {
+                const auto middle = lower + (upper - lower) / 2U;
+                if (samples[offset + middle].energy_MeV_per_u < energy) {
+                    lower = middle + 1U;
+                } else {
+                    upper = middle;
+                }
+            }
+            float value = 0.0F;
+            if (lower == 0U) {
+                value = samples[offset].macroscopic_cross_section_per_mm;
+            } else if (lower >= count) {
+                value = samples[offset + count - 1U].macroscopic_cross_section_per_mm;
+            } else {
+                const auto& lo = samples[offset + lower - 1U];
+                const auto& hi = samples[offset + lower];
+                const auto interval = hi.energy_MeV_per_u - lo.energy_MeV_per_u;
+                const auto frac =
+                    interval > 0.0F
+                        ? std::clamp((energy - lo.energy_MeV_per_u) / interval, 0.0F, 1.0F)
+                        : 0.0F;
+                value = lo.macroscopic_cross_section_per_mm +
+                        frac * (hi.macroscopic_cross_section_per_mm -
+                                lo.macroscopic_cross_section_per_mm);
+            }
+            lut[projectile_index * energy_count + energy_index] = value;
+        }
+    }
+    return lut;
 }
 
 inline int cascade_projectile_index(const CascadeProjectile* projectiles,
@@ -604,7 +667,7 @@ inline std::uint32_t nearest_neutral_interaction(
 }
 
 void score_secondary_dose_device(
-    const double amount_MeV,
+    const DoseAtomicT amount_MeV,
     const bool is_neutral_lineage,
     const std::size_t species_index,
     const std::size_t neutral_origin,
@@ -615,22 +678,22 @@ void score_secondary_dose_device(
     const std::size_t voxel_index,
     const std::size_t charged_origin_voxel_offset,
     const std::size_t neutral_origin_voxel_offset,
-    double* fragment_dose_device,
-    double* voxel_dose_device,
-    double* charged_origin_voxel_dose_device,
-    double* neutral_origin_dose_device,
-    double* neutral_origin_voxel_dose_device) noexcept {
-    if (amount_MeV <= 0.0F) {
+    DoseAtomicT* fragment_dose_device,
+    DoseAtomicT* voxel_dose_device,
+    DoseAtomicT* charged_origin_voxel_dose_device,
+    DoseAtomicT* neutral_origin_dose_device,
+    DoseAtomicT* neutral_origin_voxel_dose_device) noexcept {
+    if (amount_MeV <= DoseAtomicT{0}) {
         return;
     }
     if (is_neutral_lineage) {
-        sycl::atomic_ref<double, sycl::memory_order::relaxed, sycl::memory_scope::device,
+        sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed, sycl::memory_scope::device,
                          sycl::access::address_space::global_space>
             atomic_origin(neutral_origin_dose_device[neutral_origin * number_of_bins +
                                                      static_cast<std::size_t>(bin)]);
         atomic_origin.fetch_add(amount_MeV);
         if (enable_voxel_scoring && neutral_origin_voxel_dose_device != nullptr) {
-            sycl::atomic_ref<double, sycl::memory_order::relaxed, sycl::memory_scope::device,
+            sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed, sycl::memory_scope::device,
                              sycl::access::address_space::global_space>
                 atomic_voxel(
                     neutral_origin_voxel_dose_device[neutral_origin_voxel_offset +
@@ -639,19 +702,19 @@ void score_secondary_dose_device(
         }
         return;
     }
-    sycl::atomic_ref<double, sycl::memory_order::relaxed, sycl::memory_scope::device,
+    sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed, sycl::memory_scope::device,
                      sycl::access::address_space::global_space>
         atomic_fragment(
             fragment_dose_device[species_index * number_of_bins +
                                  static_cast<std::size_t>(bin)]);
     atomic_fragment.fetch_add(amount_MeV);
     if (enable_voxel_scoring) {
-        sycl::atomic_ref<double, sycl::memory_order::relaxed, sycl::memory_scope::device,
+        sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed, sycl::memory_scope::device,
                          sycl::access::address_space::global_space>
             atomic_voxel(voxel_dose_device[voxel_index]);
         atomic_voxel.fetch_add(amount_MeV);
         if (enable_charged_origin_voxel_scoring) {
-            sycl::atomic_ref<double, sycl::memory_order::relaxed, sycl::memory_scope::device,
+            sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed, sycl::memory_scope::device,
                              sycl::access::address_space::global_space>
                 atomic_category(
                     charged_origin_voxel_dose_device[charged_origin_voxel_offset +
@@ -757,32 +820,79 @@ TransportResult transport_sycl(const TransportConfig& config,
     }
 
     const auto& device = queue.get_device();
-    if (!device.has(sycl::aspect::fp64) || !device.has(sycl::aspect::atomic64)) {
-        throw std::runtime_error(
-            "The current accurate SYCL scorer requires fp64 and atomic64 device aspects");
+    if constexpr (!k_dose_atomic_fp32) {
+        if (!device.has(sycl::aspect::fp64) || !device.has(sycl::aspect::atomic64)) {
+            throw std::runtime_error(
+                "The FP64 SYCL dose scorer requires fp64 and atomic64 device aspects "
+                "(rebuild with -DCARBON_DOSE_FP32=ON for float atomics)");
+        }
+    }
+
+    // CUDA (especially under WSL2) cannot host multi-minute single kernels: the
+    // WDDM/TDR path and shared GPU stack freeze the whole distro, and USM often
+    // reserves a huge host VA. Clamp queues early so estimates/allocations stay
+    // modest. Intel Level Zero keeps the original larger defaults.
+    const bool is_cuda_backend =
+        device.get_backend() == sycl::backend::ext_oneapi_cuda;
+    if (is_cuda_backend) {
+        // Hard ceiling only for pathological sizes; real limit is the device
+        // memory budget below. SOBP 10M + cascade needs ~3–4 slots/history
+        // (~30–40M) when launched as one batched plan.
+        constexpr std::size_t kCudaMaxSecondarySlots = 64ULL * 1024ULL * 1024ULL;
+        constexpr std::size_t kCudaMaxNeutralSlots = 16ULL * 1024ULL * 1024ULL;
+        const auto cuda_auto_secondary =
+            std::max(number_of_histories * 4U, std::size_t{8192});
+        if (config.secondary_queue_capacity == 0) {
+            secondary_queue_capacity =
+                std::min(secondary_queue_capacity, cuda_auto_secondary);
+        }
+        secondary_queue_capacity =
+            std::min(secondary_queue_capacity, kCudaMaxSecondarySlots);
+        if (config.neutral_queue_capacity == 0) {
+            neutral_queue_capacity =
+                std::min(neutral_queue_capacity,
+                         std::max(number_of_histories * 2U, std::size_t{4096}));
+        }
+        neutral_queue_capacity =
+            std::min(neutral_queue_capacity, kCudaMaxNeutralSlots);
+        std::cout << "CUDA backend detected: WSL-safe queue caps "
+                  << "secondary_queue_capacity=" << secondary_queue_capacity
+                  << " neutral_queue_capacity=" << neutral_queue_capacity << '\n'
+                  << std::flush;
     }
 
     // Soft device-memory budget: keep estimated USM under max_device_memory_fraction
     // of global memory (default 80%). Shrink secondary/neutral queues first.
     const auto device_global_bytes =
         device.get_info<sycl::info::device::global_mem_size>();
+    if (device_global_bytes == 0) {
+        throw std::runtime_error(
+            "SYCL device reported global_mem_size=0; refusing to allocate");
+    }
+    // Soft clamp only for extreme YAML values; large SOBP needs >35% for queues.
+    auto memory_fraction = config.max_device_memory_fraction;
+    if (is_cuda_backend && memory_fraction > 0.70) {
+        memory_fraction = 0.70;
+        std::cout << "CUDA backend: clamping max_device_memory_fraction to 0.70\n"
+                  << std::flush;
+    }
     const auto memory_budget_bytes = static_cast<std::size_t>(
         static_cast<double>(device_global_bytes) *
-        std::min(1.0, std::max(0.05, config.max_device_memory_fraction)));
+        std::min(1.0, std::max(0.05, memory_fraction)));
 
     const auto estimate_device_bytes = [&](std::size_t sec_cap,
                                           std::size_t neu_cap) -> std::size_t {
         std::size_t bytes = 0;
         bytes += table_size * sizeof(float);
         bytes += cross_section_table_size * sizeof(float);
-        bytes += number_of_bins * sizeof(double);
+        bytes += number_of_bins * sizeof(DoseAtomicT);
         bytes += number_of_histories * (3 * sizeof(float) + sizeof(std::uint32_t));
         bytes += primary_spot_count * sizeof(PrimarySpotBatchEntry);
         if (enable_voxel_scoring) {
-            bytes += number_of_voxels * sizeof(double);
+            bytes += number_of_voxels * sizeof(DoseAtomicT);
         }
         if (enable_charged_origin_voxel_scoring) {
-            bytes += charged_origin_category_count * number_of_voxels * sizeof(double);
+            bytes += charged_origin_category_count * number_of_voxels * sizeof(DoseAtomicT);
         }
         if (enable_secondary_generation && reaction_packages != nullptr) {
             bytes += reaction_packages->energy_bins().size() * sizeof(ReactionEnergyBin);
@@ -792,7 +902,7 @@ TransportResult transport_sycl(const TransportConfig& config,
             bytes += 2 * sizeof(std::uint64_t);
             bytes += number_of_histories * sizeof(SecondaryGenerationSummary);
             if (enable_secondary_transport) {
-                bytes += fragment_species_count * number_of_bins * sizeof(double);
+                bytes += fragment_species_count * number_of_bins * sizeof(DoseAtomicT);
                 bytes += sec_cap * (2 * sizeof(float) + sizeof(std::uint32_t));
             }
             if (enable_fragment_cascade && cascade_packages != nullptr) {
@@ -813,9 +923,9 @@ TransportResult transport_sycl(const TransportConfig& config,
             bytes += neu_cap * sizeof(NeutralParticle3D);
             bytes += 2 * sizeof(std::uint64_t);
             bytes += neu_cap * sizeof(NeutralTransportSummary);
-            bytes += neutral_origin_category_count * number_of_bins * sizeof(double);
+            bytes += neutral_origin_category_count * number_of_bins * sizeof(DoseAtomicT);
             if (enable_voxel_scoring) {
-                bytes += neutral_origin_category_count * number_of_voxels * sizeof(double);
+                bytes += neutral_origin_category_count * number_of_voxels * sizeof(DoseAtomicT);
             }
         }
         if (config.enable_ct_grid) {
@@ -916,13 +1026,13 @@ TransportResult transport_sycl(const TransportConfig& config,
         reuse_immutable_buffers
             ? context->impl_->cross_section_device
             : sycl::malloc_device<float>(cross_section_table_size, queue);
-    auto* dose_device = sycl::malloc_device<double>(number_of_bins, queue);
+    auto* dose_device = sycl::malloc_device<DoseAtomicT>(number_of_bins, queue);
     auto* voxel_dose_device = enable_voxel_scoring
-                                  ? sycl::malloc_device<double>(number_of_voxels, queue)
+                                  ? sycl::malloc_device<DoseAtomicT>(number_of_voxels, queue)
                                   : nullptr;
     auto* charged_origin_voxel_dose_device =
         enable_charged_origin_voxel_scoring
-            ? sycl::malloc_device<double>(
+            ? sycl::malloc_device<DoseAtomicT>(
                   charged_origin_category_count * number_of_voxels, queue)
             : nullptr;
     auto* deposited_device = sycl::malloc_device<float>(number_of_histories, queue);
@@ -953,7 +1063,7 @@ TransportResult transport_sycl(const TransportConfig& config,
     std::uint64_t* secondary_queue_filled_device = nullptr;
     std::uint64_t* secondary_work_counter_device = nullptr;
     SecondaryGenerationSummary* secondary_summaries_device = nullptr;
-    double* fragment_dose_device = nullptr;
+    DoseAtomicT* fragment_dose_device = nullptr;
     float* secondary_deposited_device = nullptr;
     float* secondary_escaped_device = nullptr;
     std::uint32_t* secondary_steps_device = nullptr;
@@ -962,6 +1072,9 @@ TransportResult transport_sycl(const TransportConfig& config,
     CascadeInteraction* cascade_interactions_device = nullptr;
     ReactionSecondary* cascade_products_device = nullptr;
     CascadeTransportSummary* cascade_summaries_device = nullptr;
+    // Projectile-major XS on water SP energy grid: size n_proj * table_size.
+    float* cascade_xs_lut_device = nullptr;
+    std::size_t cascade_xs_lut_size = 0;
     NeutralProjectile* neutral_projectiles_device = nullptr;
     NeutralCrossSectionSample* neutral_cross_sections_device = nullptr;
     NeutralInteraction* neutral_interactions_device = nullptr;
@@ -970,8 +1083,8 @@ TransportResult transport_sycl(const TransportConfig& config,
     std::uint64_t* neutral_queue_counter_device = nullptr;
     std::uint64_t* neutral_queue_filled_device = nullptr;
     NeutralTransportSummary* neutral_summaries_device = nullptr;
-    double* neutral_origin_dose_device = nullptr;
-    double* neutral_origin_voxel_dose_device = nullptr;
+    DoseAtomicT* neutral_origin_dose_device = nullptr;
+    DoseAtomicT* neutral_origin_voxel_dose_device = nullptr;
     if (enable_secondary_generation) {
         reaction_bins_device =
             reuse_immutable_buffers
@@ -995,7 +1108,7 @@ TransportResult transport_sycl(const TransportConfig& config,
             sycl::malloc_device<SecondaryGenerationSummary>(number_of_histories, queue);
         if (enable_secondary_transport) {
             secondary_work_counter_device = sycl::malloc_device<std::uint64_t>(1, queue);
-            fragment_dose_device = sycl::malloc_device<double>(
+            fragment_dose_device = sycl::malloc_device<DoseAtomicT>(
                 fragment_species_count * number_of_bins, queue);
             secondary_deposited_device =
                 sycl::malloc_device<float>(secondary_queue_capacity, queue);
@@ -1027,6 +1140,10 @@ TransportResult transport_sycl(const TransportConfig& config,
                           cascade_packages->products().size(), queue);
             cascade_summaries_device = sycl::malloc_device<CascadeTransportSummary>(
                 secondary_queue_capacity, queue);
+            cascade_xs_lut_size =
+                cascade_packages->projectiles().size() * table_size;
+            cascade_xs_lut_device =
+                sycl::malloc_device<float>(cascade_xs_lut_size, queue);
         }
     }
     if (enable_neutral_transport) {
@@ -1056,10 +1173,10 @@ TransportResult transport_sycl(const TransportConfig& config,
         neutral_queue_filled_device = sycl::malloc_device<std::uint64_t>(1, queue);
         neutral_summaries_device =
             sycl::malloc_device<NeutralTransportSummary>(neutral_queue_capacity, queue);
-        neutral_origin_dose_device = sycl::malloc_device<double>(
+        neutral_origin_dose_device = sycl::malloc_device<DoseAtomicT>(
             neutral_origin_category_count * number_of_bins, queue);
         if (enable_voxel_scoring) {
-            neutral_origin_voxel_dose_device = sycl::malloc_device<double>(
+            neutral_origin_voxel_dose_device = sycl::malloc_device<DoseAtomicT>(
                 neutral_origin_category_count * number_of_voxels, queue);
         }
     }
@@ -1431,7 +1548,7 @@ TransportResult transport_sycl(const TransportConfig& config,
          (enable_fragment_cascade &&
           (cascade_projectiles_device == nullptr || cascade_cross_sections_device == nullptr ||
            cascade_interactions_device == nullptr || cascade_products_device == nullptr ||
-           cascade_summaries_device == nullptr)));
+           cascade_summaries_device == nullptr || cascade_xs_lut_device == nullptr)));
     const auto neutral_allocation_failed =
         enable_neutral_transport &&
         (neutral_projectiles_device == nullptr || neutral_cross_sections_device == nullptr ||
@@ -1491,6 +1608,7 @@ TransportResult transport_sycl(const TransportConfig& config,
         free_immutable_device(cascade_interactions_device);
         free_immutable_device(cascade_products_device);
         free_device(cascade_summaries_device);
+        free_device(cascade_xs_lut_device);
         free_immutable_device(neutral_projectiles_device);
         free_immutable_device(neutral_cross_sections_device);
         free_immutable_device(neutral_interactions_device);
@@ -1517,7 +1635,21 @@ TransportResult transport_sycl(const TransportConfig& config,
         queue.copy(cross_section_host.data(), cross_section_device, cross_section_table_size);
         queue.wait_and_throw();
     }
-    queue.memset(dose_device, 0, number_of_bins * sizeof(double));
+    if (enable_fragment_cascade && cascade_xs_lut_device != nullptr &&
+        cascade_packages != nullptr) {
+        auto cascade_xs_lut_host =
+            build_cascade_xs_energy_lut(*cascade_packages, stopping_power.energies());
+        if (cascade_xs_lut_host.size() != cascade_xs_lut_size) {
+            free_device(cascade_xs_lut_device);
+            throw std::runtime_error("Cascade XS LUT size mismatch");
+        }
+        queue.copy(cascade_xs_lut_host.data(), cascade_xs_lut_device, cascade_xs_lut_size)
+            .wait_and_throw();
+        std::cout << "Cascade XS LUT: " << cascade_packages->projectiles().size()
+                  << " projectiles x " << table_size << " energies on water SP grid\n"
+                  << std::flush;
+    }
+    queue.memset(dose_device, 0, number_of_bins * sizeof(DoseAtomicT));
 #ifdef CARBON_TRANSPORT_PROFILE
     if (profile_counters_device != nullptr) {
         queue.memset(profile_counters_device, 0,
@@ -1525,11 +1657,11 @@ TransportResult transport_sycl(const TransportConfig& config,
     }
 #endif
     if (enable_voxel_scoring) {
-        queue.memset(voxel_dose_device, 0, number_of_voxels * sizeof(double));
+        queue.memset(voxel_dose_device, 0, number_of_voxels * sizeof(DoseAtomicT));
     }
     if (enable_charged_origin_voxel_scoring) {
         queue.memset(charged_origin_voxel_dose_device, 0,
-                     charged_origin_category_count * number_of_voxels * sizeof(double));
+                     charged_origin_category_count * number_of_voxels * sizeof(DoseAtomicT));
     }
     if (enable_secondary_generation) {
         if (!reuse_immutable_buffers) {
@@ -1544,7 +1676,7 @@ TransportResult transport_sycl(const TransportConfig& config,
         queue.memset(secondary_queue_filled_device, 0, sizeof(std::uint64_t));
         if (enable_secondary_transport) {
             queue.memset(fragment_dose_device, 0,
-                         fragment_species_count * number_of_bins * sizeof(double));
+                         fragment_species_count * number_of_bins * sizeof(DoseAtomicT));
         }
         if (enable_fragment_cascade) {
             if (!reuse_immutable_buffers) {
@@ -1579,19 +1711,81 @@ TransportResult transport_sycl(const TransportConfig& config,
         queue.memset(neutral_summaries_device, 0,
                      neutral_queue_capacity * sizeof(NeutralTransportSummary));
         queue.memset(neutral_origin_dose_device, 0,
-                     neutral_origin_category_count * number_of_bins * sizeof(double));
+                     neutral_origin_category_count * number_of_bins * sizeof(DoseAtomicT));
         if (enable_voxel_scoring) {
             queue.memset(neutral_origin_voxel_dose_device, 0,
-                         neutral_origin_category_count * number_of_voxels * sizeof(double));
+                         neutral_origin_category_count * number_of_voxels * sizeof(DoseAtomicT));
         }
     }
 
-    const std::size_t local_size = device_name == "gpu" ? 256U : 128U;
-    const auto persistent_secondary_workers =
-        static_cast<std::size_t>(device.get_info<sycl::info::device::max_compute_units>()) *
-        local_size * 8U;
-    const auto global_size =
-        ((number_of_histories + local_size - 1) / local_size) * local_size;
+    // GPU backends (CUDA / Level Zero / OpenCL GPU / --device gpu|cuda|...) use larger
+    // work-groups; SYCL CPU and other selectors stay at 128. CUDA stays at 128:
+    // the transport kernels are register-heavy (FP64 atomics + cascade) and 256
+    // often hurts occupancy while making each submit longer under WSL.
+    const bool prefer_large_workgroup =
+        !is_cuda_backend &&
+        (device.is_gpu() || device_name == "gpu" || device_name == "cuda" ||
+         device_name == "nvidia" || device_name == "level_zero" || device_name == "intel" ||
+         device_name == "arc" || device_name == "opencl");
+    const std::size_t local_size = prefer_large_workgroup ? 256U : 128U;
+    const auto compute_units = static_cast<std::size_t>(
+        std::max(1U, device.get_info<sycl::info::device::max_compute_units>()));
+    // Secondary: one particle per work-item. Large batches fill the GPU; max
+    // step caps prevent WSL freezes from thrashing tracks.
+    const std::size_t worker_multiplier = is_cuda_backend ? 4U : 8U;
+    auto persistent_secondary_workers =
+        compute_units * local_size * worker_multiplier;
+    if (is_cuda_backend) {
+        persistent_secondary_workers =
+            std::min(persistent_secondary_workers, std::size_t{32768});
+    }
+    persistent_secondary_workers =
+        std::max(persistent_secondary_workers, local_size);
+
+    std::size_t history_chunk = config.history_chunk_size;
+    if (history_chunk == 0) {
+        if (is_cuda_backend) {
+            // Prefer large primary chunks for 100k–10M plans.
+            history_chunk = number_of_histories > 1'000'000 ? 16384 : 4096;
+        } else if (device.is_gpu()) {
+            history_chunk = 8192;
+        } else {
+            history_chunk = number_of_histories;
+        }
+    }
+    history_chunk = std::max<std::size_t>(1, history_chunk);
+    if (is_cuda_backend) {
+        history_chunk = std::min(history_chunk, std::size_t{65536});
+    }
+    std::size_t secondary_batch = config.secondary_batch_size;
+    if (secondary_batch == 0) {
+        // CUDA: large batches for throughput (max_secondary_steps prevents hangs).
+        secondary_batch = is_cuda_backend
+                              ? (number_of_histories > 1'000'000 ? 16384 : 8192)
+                              : std::numeric_limits<std::size_t>::max() / 4;
+    }
+    if (is_cuda_backend) {
+        secondary_batch = std::min(secondary_batch, std::size_t{65536});
+    }
+    secondary_batch = std::max<std::size_t>(local_size, secondary_batch);
+
+    // Throttle progress I/O: 10M plans previously printed ~100k+ lines/sec of
+    // secondary batch logs, which dominated wall time on WSL.
+    const auto progress_log_every_histories =
+        std::max<std::size_t>(history_chunk, number_of_histories / 50);
+    const auto progress_log_every_secondary =
+        std::max<std::uint64_t>(static_cast<std::uint64_t>(secondary_batch),
+                                250'000ULL);
+
+    std::cout << "Launch plan: histories=" << number_of_histories
+              << " history_chunk=" << history_chunk
+              << " secondary_batch=" << secondary_batch
+              << " local_size=" << local_size
+              << " secondary_workers=" << persistent_secondary_workers
+              << (is_cuda_backend ? " [CUDA]" : "")
+              << (k_dose_atomic_fp32 ? " dose_atomic=fp32" : " dose_atomic=fp64")
+              << '\n'
+              << std::flush;
     const auto initial_energy_MeV = static_cast<float>(config.initial_total_energy_MeV());
     const auto beam_energy_spread = static_cast<float>(config.beam_energy_spread);
     const auto phantom_length_mm = static_cast<float>(config.phantom_length_mm);
@@ -1676,13 +1870,20 @@ TransportResult transport_sycl(const TransportConfig& config,
     const auto maximum_cascade_generations = config.maximum_cascade_generations;
     const auto maximum_neutral_generations = config.maximum_neutral_generations;
 
-    auto kernel_event = queue.parallel_for(
-        sycl::nd_range<1>{sycl::range<1>{global_size}, sycl::range<1>{local_size}},
+    for (std::size_t hist_offset = 0; hist_offset < number_of_histories;
+         hist_offset += history_chunk) {
+        const auto chunk_count =
+            std::min(history_chunk, number_of_histories - hist_offset);
+        const auto chunk_global =
+            ((chunk_count + local_size - 1) / local_size) * local_size;
+        auto kernel_event = queue.parallel_for(
+        sycl::nd_range<1>{sycl::range<1>{chunk_global}, sycl::range<1>{local_size}},
         [=](sycl::nd_item<1> item) {
-            const auto global_history = item.get_global_linear_id();
-            if (global_history >= number_of_histories) {
+            const auto lane = item.get_global_linear_id();
+            if (lane >= chunk_count) {
                 return;
             }
+            const auto global_history = hist_offset + lane;
 
             const PrimarySpotBatchEntry* spot = nullptr;
             std::uint64_t rng_history = global_history;
@@ -2171,11 +2372,11 @@ TransportResult transport_sycl(const TransportConfig& config,
                 const auto delayed_MeV = deposited_MeV * e_frac;
                 const auto local_MeV = deposited_MeV - delayed_MeV;
                 if (pending_primary_depth_MeV > 0.0 && pending_primary_bin != bin) {
-                    sycl::atomic_ref<double, sycl::memory_order::relaxed,
+                    sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
                                      sycl::memory_scope::device,
                                      sycl::access::address_space::global_space>
                         atomic_dose(dose_device[pending_primary_bin]);
-                    atomic_dose.fetch_add(pending_primary_depth_MeV);
+                    atomic_dose.fetch_add(static_cast<DoseAtomicT>(pending_primary_depth_MeV));
                     profile_add(profile_counters_device,
                                 TransportProfileSlot::primary_dose_depth_atomics);
                     pending_primary_depth_MeV = 0.0;
@@ -2196,22 +2397,22 @@ TransportResult transport_sycl(const TransportConfig& config,
                     // expensive global FP64 atomic update.
                     if (pending_primary_voxel_MeV > 0.0 &&
                         pending_primary_voxel != voxel_index) {
-                        sycl::atomic_ref<double, sycl::memory_order::relaxed,
+                        sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
                                          sycl::memory_scope::device,
                                          sycl::access::address_space::global_space>
                             atomic_voxel_dose(
                                 voxel_dose_device[pending_primary_voxel]);
-                        atomic_voxel_dose.fetch_add(pending_primary_voxel_MeV);
+                        atomic_voxel_dose.fetch_add(static_cast<DoseAtomicT>(pending_primary_voxel_MeV));
                         profile_add(profile_counters_device,
                                     TransportProfileSlot::primary_dose_voxel_atomics);
                         if (enable_charged_origin_voxel_scoring) {
-                            sycl::atomic_ref<double, sycl::memory_order::relaxed,
+                            sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
                                              sycl::memory_scope::device,
                                              sycl::access::address_space::global_space>
                                 atomic_category_dose(
                                     charged_origin_voxel_dose_device[
                                         pending_primary_voxel]);
-                            atomic_category_dose.fetch_add(pending_primary_voxel_MeV);
+                            atomic_category_dose.fetch_add(static_cast<DoseAtomicT>(pending_primary_voxel_MeV));
                         }
                         pending_primary_voxel_MeV = 0.0;
                     }
@@ -2556,12 +2757,12 @@ TransportResult transport_sycl(const TransportConfig& config,
                                      sycl::floor(position_z_mm / depth_bin_width_mm));
                 bin = sycl::max(
                     0, sycl::min(bin, static_cast<int>(number_of_bins) - 1));
-                sycl::atomic_ref<double,
+                sycl::atomic_ref<DoseAtomicT,
                                  sycl::memory_order::relaxed,
                                  sycl::memory_scope::device,
                                  sycl::access::address_space::global_space>
                     atomic_dose(dose_device[bin]);
-                atomic_dose.fetch_add(static_cast<double>(energy_MeV));
+                atomic_dose.fetch_add(static_cast<DoseAtomicT>(energy_MeV));
                 if (enable_voxel_scoring) {
                     const auto x_coordinate =
                         (position_x_mm - voxel_min_x_mm) / voxel_size_x_mm;
@@ -2581,48 +2782,48 @@ TransportResult transport_sycl(const TransportConfig& config,
                         static_cast<std::size_t>(bin) * voxel_plane_size +
                         static_cast<std::size_t>(voxel_y) * voxel_bins_x +
                         static_cast<std::size_t>(voxel_x);
-                    sycl::atomic_ref<double,
+                    sycl::atomic_ref<DoseAtomicT,
                                      sycl::memory_order::relaxed,
                                      sycl::memory_scope::device,
                                      sycl::access::address_space::global_space>
                         atomic_voxel_dose(voxel_dose_device[voxel_index]);
-                    atomic_voxel_dose.fetch_add(static_cast<double>(energy_MeV));
+                    atomic_voxel_dose.fetch_add(static_cast<DoseAtomicT>(energy_MeV));
                     if (enable_charged_origin_voxel_scoring) {
-                        sycl::atomic_ref<double, sycl::memory_order::relaxed,
+                        sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
                                          sycl::memory_scope::device,
                                          sycl::access::address_space::global_space>
                             atomic_category_dose(
                                 charged_origin_voxel_dose_device[voxel_index]);
-                        atomic_category_dose.fetch_add(static_cast<double>(energy_MeV));
+                        atomic_category_dose.fetch_add(static_cast<DoseAtomicT>(energy_MeV));
                     }
                 }
                 history_deposited_MeV += energy_MeV;
                 energy_MeV = 0.0F;
             }
             if (pending_primary_depth_MeV > 0.0) {
-                sycl::atomic_ref<double, sycl::memory_order::relaxed,
+                sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
                                  sycl::memory_scope::device,
                                  sycl::access::address_space::global_space>
                     atomic_dose(dose_device[pending_primary_bin]);
-                atomic_dose.fetch_add(pending_primary_depth_MeV);
+                atomic_dose.fetch_add(static_cast<DoseAtomicT>(pending_primary_depth_MeV));
                 profile_add(profile_counters_device,
                             TransportProfileSlot::primary_dose_depth_atomics);
             }
             if (enable_voxel_scoring && pending_primary_voxel_MeV > 0.0) {
-                sycl::atomic_ref<double, sycl::memory_order::relaxed,
+                sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
                                  sycl::memory_scope::device,
                                  sycl::access::address_space::global_space>
                     atomic_voxel_dose(voxel_dose_device[pending_primary_voxel]);
-                atomic_voxel_dose.fetch_add(pending_primary_voxel_MeV);
+                atomic_voxel_dose.fetch_add(static_cast<DoseAtomicT>(pending_primary_voxel_MeV));
                 profile_add(profile_counters_device,
                             TransportProfileSlot::primary_dose_voxel_atomics);
                 if (enable_charged_origin_voxel_scoring) {
-                    sycl::atomic_ref<double, sycl::memory_order::relaxed,
+                    sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
                                      sycl::memory_scope::device,
                                      sycl::access::address_space::global_space>
                         atomic_category_dose(
                             charged_origin_voxel_dose_device[pending_primary_voxel]);
-                    atomic_category_dose.fetch_add(pending_primary_voxel_MeV);
+                    atomic_category_dose.fetch_add(static_cast<DoseAtomicT>(pending_primary_voxel_MeV));
                 }
             }
             deposited_device[global_history] = history_deposited_MeV;
@@ -2633,39 +2834,57 @@ TransportResult transport_sycl(const TransportConfig& config,
                 secondary_summaries_device[global_history] = secondary_summary;
             }
         });
-    kernel_event.wait_and_throw();
-    primary_kernel_seconds += event_duration_seconds(kernel_event);
+        kernel_event.wait_and_throw();
+        primary_kernel_seconds += event_duration_seconds(kernel_event);
+        const auto primary_done = hist_offset + chunk_count;
+        if (primary_done == number_of_histories ||
+            hist_offset == 0 ||
+            (progress_log_every_histories > 0 &&
+             primary_done / progress_log_every_histories !=
+                 hist_offset / progress_log_every_histories)) {
+            std::cout << "  primary: " << primary_done << '/' << number_of_histories
+                      << " histories\n"
+                      << std::flush;
+        }
+    }
 
     std::uint64_t transported_queue_count = 0;
     if (enable_secondary_transport) {
         std::uint64_t generation_begin = 0;
         std::uint64_t generation_end = 0;
         queue.copy(secondary_queue_filled_device, &generation_end, 1).wait_and_throw();
+        std::uint32_t secondary_generation_index = 0;
         while (generation_begin < generation_end) {
-            const auto generation_size = generation_end - generation_begin;
-            queue.copy(&generation_begin, secondary_work_counter_device, 1).wait_and_throw();
-            const auto worker_count = std::min<std::uint64_t>(
-                generation_size, persistent_secondary_workers);
+            // Capture the generation limit before cascade products extend the queue.
+            const auto generation_limit = generation_end;
+            std::uint64_t batch_begin = generation_begin;
+            std::uint64_t last_logged_secondary = generation_begin;
+            std::cout << "  secondary gen " << secondary_generation_index << ": "
+                      << generation_limit - generation_begin << " particles ["
+                      << generation_begin << ',' << generation_limit << ")\n"
+                      << std::flush;
+            while (batch_begin < generation_limit) {
+            const auto batch_end = std::min<std::uint64_t>(
+                batch_begin + static_cast<std::uint64_t>(secondary_batch),
+                generation_limit);
+            const auto batch_size = batch_end - batch_begin;
+            // One secondary particle per work-item; large batches fill CUDA SMs.
             const auto secondary_global_size =
-                ((worker_count + local_size - 1) / local_size) * local_size;
+                ((batch_size + local_size - 1) / local_size) * local_size;
             auto secondary_kernel_event = queue.parallel_for(
             sycl::nd_range<1>{sycl::range<1>{secondary_global_size},
                               sycl::range<1>{local_size}},
-            [=](sycl::nd_item<1>) {
-                while (true) {
-                sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
-                                 sycl::memory_scope::device,
-                                 sycl::access::address_space::global_space>
-                    work_counter(*secondary_work_counter_device);
-                const auto particle_index = work_counter.fetch_add(1);
-                if (particle_index >= generation_end) {
-                    break;
+            [=](sycl::nd_item<1> item) {
+                const auto lane = item.get_global_linear_id();
+                if (lane >= batch_size) {
+                    return;
                 }
+                const auto particle_index = batch_begin + lane;
                 auto deposited_MeV = 0.0F;
                 auto escaped_MeV = 0.0F;
                 std::uint32_t steps = 0;
                 CascadeTransportSummary cascade_summary{};
-                if (particle_index < generation_end) {
+                {
                     const auto particle = secondary_queue_device[particle_index];
                     // Philox stream is particle identity, not atomic queue slot.
                     const auto rng_stream = particle.rng_stream;
@@ -2709,11 +2928,14 @@ TransportResult transport_sycl(const TransportConfig& config,
                         (species_index + 1) * number_of_voxels;
                     const auto neutral_origin_voxel_offset =
                         neutral_origin * number_of_voxels;
-                    auto pending_dose_MeV = 0.0;
+                    auto pending_dose_MeV = DoseAtomicT{0};
                     auto pending_bin = 0;
                     std::size_t pending_voxel_index = 0;
+                    // Primary already caps steps; secondary previously did not, so a
+                    // voxel-boundary nudge thrash could run for minutes on CUDA.
+                    constexpr std::uint32_t max_secondary_steps = 500'000U;
 
-                    while (energy_MeV > energy_cutoff_MeV) {
+                    while (energy_MeV > energy_cutoff_MeV && steps < max_secondary_steps) {
                         const auto escaped_z =
                             position_z_mm < 0.0F || position_z_mm >= phantom_length_mm;
                         const auto escaped_xy =
@@ -2768,7 +2990,7 @@ TransportResult transport_sycl(const TransportConfig& config,
                                 voxel_dose_device, charged_origin_voxel_dose_device,
                                 neutral_origin_dose_device,
                                 neutral_origin_voxel_dose_device);
-                            pending_dose_MeV = 0.0;
+                            pending_dose_MeV = DoseAtomicT{0};
                             score_secondary_dose_device(
                                 energy_MeV, is_neutral_lineage, species_index, neutral_origin,
                                 bin, number_of_bins, enable_voxel_scoring,
@@ -3062,13 +3284,13 @@ TransportResult transport_sycl(const TransportConfig& config,
                                 neutral_origin_voxel_dose_device);
                             profile_add(profile_counters_device,
                                         TransportProfileSlot::secondary_dose_atomics);
-                            pending_dose_MeV = 0.0;
+                            pending_dose_MeV = DoseAtomicT{0};
                         }
                         if (pending_dose_MeV == 0.0) {
                             pending_bin = bin;
                             pending_voxel_index = voxel_index;
                         }
-                        pending_dose_MeV += static_cast<double>(sec_local);
+                        pending_dose_MeV += static_cast<DoseAtomicT>(sec_local);
                         if (sec_delayed > 0.0F && !is_neutral_lineage &&
                             fragment_dose_device != nullptr) {
                             const auto z_mid =
@@ -3103,47 +3325,22 @@ TransportResult transport_sycl(const TransportConfig& config,
                         }
 
                         if (cascade_projectile_index_for_particle >= 0 &&
-                            energy_MeV > energy_cutoff_MeV) {
+                            energy_MeV > energy_cutoff_MeV &&
+                            cascade_xs_lut_device != nullptr) {
                                 const auto projectile = cascade_projectile;
                                 const auto current_energy_MeVu =
                                     energy_MeV * inverse_mass_number_for_particle;
-                                const auto upper = cascade_cross_section_lower_bound(
-                                    cascade_cross_sections_device,
-                                    projectile.cross_section_offset,
-                                    projectile.cross_section_count,
-                                    current_energy_MeVu);
-                                float macroscopic_cross_section_per_mm = 0.0F;
-                                if (upper == 0) {
-                                    macroscopic_cross_section_per_mm =
-                                        cascade_cross_sections_device[
-                                            projectile.cross_section_offset]
-                                            .macroscopic_cross_section_per_mm;
-                                } else if (upper >= projectile.cross_section_count) {
-                                    macroscopic_cross_section_per_mm =
-                                        cascade_cross_sections_device[
-                                            projectile.cross_section_offset +
-                                            projectile.cross_section_count - 1]
-                                            .macroscopic_cross_section_per_mm;
-                                } else {
-                                    const auto lower_sample = cascade_cross_sections_device[
-                                        projectile.cross_section_offset + upper - 1];
-                                    const auto upper_sample = cascade_cross_sections_device[
-                                        projectile.cross_section_offset + upper];
-                                    const auto interval = upper_sample.energy_MeV_per_u -
-                                                          lower_sample.energy_MeV_per_u;
-                                    const auto xs_fraction = interval > 0.0F
-                                                                 ? sycl::clamp(
-                                                                       (current_energy_MeVu -
-                                                                        lower_sample.energy_MeV_per_u) /
-                                                                           interval,
-                                                                       0.0F, 1.0F)
-                                                                 : 0.0F;
-                                    macroscopic_cross_section_per_mm =
-                                        lower_sample.macroscopic_cross_section_per_mm +
-                                        xs_fraction *
-                                            (upper_sample.macroscopic_cross_section_per_mm -
-                                             lower_sample.macroscopic_cross_section_per_mm);
-                                }
+                                // O(1) LUT on water SP energy grid (same index/fraction
+                                // as the stopping-power table).
+                                const auto lut_base =
+                                    static_cast<std::size_t>(
+                                        cascade_projectile_index_for_particle) *
+                                        table_size +
+                                    static_cast<std::size_t>(index);
+                                float macroscopic_cross_section_per_mm =
+                                    cascade_xs_lut_device[lut_base] +
+                                    fraction * (cascade_xs_lut_device[lut_base + 1U] -
+                                                cascade_xs_lut_device[lut_base]);
                                 if (slab_layer_count > 0) {
                                     macroscopic_cross_section_per_mm *=
                                         local_density_g_per_cm3;
@@ -3463,18 +3660,35 @@ TransportResult transport_sycl(const TransportConfig& config,
                 if (enable_fragment_cascade) {
                     cascade_summaries_device[particle_index] = cascade_summary;
                 }
-                }
                 });
             secondary_kernel_event.wait_and_throw();
-            secondary_kernel_seconds += event_duration_seconds(secondary_kernel_event);
-            transported_queue_count = generation_end;
+            const auto batch_seconds = event_duration_seconds(secondary_kernel_event);
+            secondary_kernel_seconds += batch_seconds;
+            if (batch_end == generation_limit ||
+                batch_end - last_logged_secondary >= progress_log_every_secondary) {
+                const auto pct =
+                    generation_limit > generation_begin
+                        ? 100.0 * static_cast<double>(batch_end - generation_begin) /
+                              static_cast<double>(generation_limit - generation_begin)
+                        : 100.0;
+                std::cout << "  secondary: " << batch_end << '/' << generation_limit
+                          << " (" << pct << "% gen" << secondary_generation_index
+                          << ", last batch " << batch_seconds << " s, cum "
+                          << secondary_kernel_seconds << " s)\n"
+                          << std::flush;
+                last_logged_secondary = batch_end;
+            }
+            batch_begin = batch_end;
+            }  // secondary batch within generation
+            transported_queue_count = generation_limit;
             if (!enable_fragment_cascade) {
                 break;
             }
-            generation_begin = generation_end;
+            generation_begin = generation_limit;
             queue.copy(secondary_queue_filled_device, &generation_end, 1).wait_and_throw();
             generation_end = std::min<std::uint64_t>(generation_end,
                                                      secondary_queue_capacity);
+            ++secondary_generation_index;
         }
     }
 
@@ -3517,8 +3731,9 @@ TransportResult transport_sycl(const TransportConfig& config,
                                           neutral_origin_category_count - 1)));
                         const auto lineage = particle.pdg_id == 22 ? gamma_lineage
                                                                    : neutron_lineage;
+                        constexpr std::uint32_t max_neutral_steps = 500'000U;
 
-                        while (energy_MeV > energy_cutoff_MeV) {
+                        while (energy_MeV > energy_cutoff_MeV && steps < max_neutral_steps) {
                             const auto escaped_z = position_z_mm < 0.0F ||
                                                    position_z_mm >= phantom_length_mm;
                             const auto escaped_xy =
@@ -3885,18 +4100,23 @@ TransportResult transport_sycl(const TransportConfig& config,
                 std::min<std::uint64_t>(generation_end, secondary_queue_capacity);
             if (generation_end > charged_after_neutral_begin) {
                 const auto generation_begin = charged_after_neutral_begin;
-                const auto generation_size = generation_end - generation_begin;
+                for (std::uint64_t batch_begin = generation_begin; batch_begin < generation_end;
+                     batch_begin += static_cast<std::uint64_t>(secondary_batch)) {
+                const auto batch_end = std::min<std::uint64_t>(
+                    batch_begin + static_cast<std::uint64_t>(secondary_batch),
+                    generation_end);
+                const auto batch_size = batch_end - batch_begin;
                 const auto secondary_global_size =
-                    ((generation_size + local_size - 1) / local_size) * local_size;
+                    ((batch_size + local_size - 1) / local_size) * local_size;
                 auto secondary_kernel_event = queue.parallel_for(
                     sycl::nd_range<1>{sycl::range<1>{secondary_global_size},
                                       sycl::range<1>{local_size}},
                     [=](sycl::nd_item<1> item) {
                         const auto generation_index = item.get_global_linear_id();
-                        if (generation_index >= generation_size) {
+                        if (generation_index >= batch_size) {
                             return;
                         }
-                        const auto particle_index = generation_begin + generation_index;
+                        const auto particle_index = batch_begin + generation_index;
                         auto deposited_MeV = 0.0F;
                         auto escaped_MeV = 0.0F;
                         std::uint32_t steps = 0;
@@ -3934,7 +4154,9 @@ TransportResult transport_sycl(const TransportConfig& config,
                             const auto carbon_charge_power =
                                 sycl::pow(carbon_charge, -2.0F / 3.0F);
 
-                            while (energy_MeV > energy_cutoff_MeV) {
+                            constexpr std::uint32_t max_secondary_steps = 500'000U;
+                            while (energy_MeV > energy_cutoff_MeV &&
+                                   steps < max_secondary_steps) {
                                 const auto escaped_z =
                                     position_z_mm < 0.0F ||
                                     position_z_mm >= phantom_length_mm;
@@ -4200,41 +4422,56 @@ TransportResult transport_sycl(const TransportConfig& config,
                 secondary_kernel_event.wait_and_throw();
                 charged_after_neutral_kernel_seconds +=
                     event_duration_seconds(secondary_kernel_event);
+                std::cout << "  charged-after-neutral: [" << batch_begin << ','
+                          << batch_end << ")/" << generation_end << '\n'
+                          << std::flush;
+                }  // batch loop
                 transported_queue_count = generation_end;
             }
         }
     }
 
-    std::vector<double> dose_host(number_of_bins);
-    std::vector<double> voxel_dose_host;
-    std::vector<double> charged_origin_voxel_dose_host;
+    // Device scorers may be FP32; promote to double for TransportResult.
+    std::vector<DoseAtomicT> dose_atomic_host(number_of_bins);
+    std::vector<DoseAtomicT> voxel_dose_atomic_host;
+    std::vector<DoseAtomicT> charged_origin_voxel_dose_atomic_host;
     std::vector<float> deposited_host(number_of_histories);
     std::vector<float> escaped_host(number_of_histories);
     std::vector<float> nuclear_host(number_of_histories);
     std::vector<std::uint32_t> steps_host(number_of_histories);
     std::vector<SecondaryGenerationSummary> secondary_summaries_host;
-    std::vector<double> fragment_dose_host;
+    std::vector<DoseAtomicT> fragment_dose_atomic_host;
     std::vector<float> secondary_deposited_host;
     std::vector<float> secondary_escaped_host;
     std::vector<std::uint32_t> secondary_steps_host;
     std::vector<CascadeTransportSummary> cascade_summaries_host;
     std::vector<NeutralTransportSummary> neutral_summaries_host;
-    std::vector<double> neutral_origin_dose_host;
-    std::vector<double> neutral_origin_voxel_dose_host;
-    queue.copy(dose_device, dose_host.data(), number_of_bins);
+    std::vector<DoseAtomicT> neutral_origin_dose_atomic_host;
+    std::vector<DoseAtomicT> neutral_origin_voxel_dose_atomic_host;
+    queue.copy(dose_device, dose_atomic_host.data(), number_of_bins);
     if (enable_voxel_scoring) {
-        voxel_dose_host.resize(number_of_voxels);
-        queue.copy(voxel_dose_device, voxel_dose_host.data(), number_of_voxels)
+        voxel_dose_atomic_host.resize(number_of_voxels);
+        queue.copy(voxel_dose_device, voxel_dose_atomic_host.data(), number_of_voxels)
             .wait_and_throw();
     }
     if (enable_charged_origin_voxel_scoring) {
-        charged_origin_voxel_dose_host.resize(
+        charged_origin_voxel_dose_atomic_host.resize(
             charged_origin_category_count * number_of_voxels);
         queue.copy(charged_origin_voxel_dose_device,
-                   charged_origin_voxel_dose_host.data(),
-                   charged_origin_voxel_dose_host.size())
+                   charged_origin_voxel_dose_atomic_host.data(),
+                   charged_origin_voxel_dose_atomic_host.size())
             .wait_and_throw();
     }
+    const auto to_double_vec = [](const std::vector<DoseAtomicT>& src) {
+        return std::vector<double>(src.begin(), src.end());
+    };
+    std::vector<double> dose_host = to_double_vec(dose_atomic_host);
+    std::vector<double> voxel_dose_host = to_double_vec(voxel_dose_atomic_host);
+    std::vector<double> charged_origin_voxel_dose_host =
+        to_double_vec(charged_origin_voxel_dose_atomic_host);
+    std::vector<double> fragment_dose_host;
+    std::vector<double> neutral_origin_dose_host;
+    std::vector<double> neutral_origin_voxel_dose_host;
     queue.copy(deposited_device, deposited_host.data(), number_of_histories);
     queue.copy(escaped_device, escaped_host.data(), number_of_histories);
     queue.copy(nuclear_device, nuclear_host.data(), number_of_histories);
@@ -4248,12 +4485,13 @@ TransportResult transport_sycl(const TransportConfig& config,
     if (enable_secondary_transport) {
         const auto transported_secondary_count = static_cast<std::size_t>(
             std::min<std::uint64_t>(transported_queue_count, secondary_queue_capacity));
-        fragment_dose_host.resize(fragment_species_count * number_of_bins);
+        fragment_dose_atomic_host.resize(fragment_species_count * number_of_bins);
         secondary_deposited_host.resize(transported_secondary_count);
         secondary_escaped_host.resize(transported_secondary_count);
         secondary_steps_host.resize(transported_secondary_count);
-        queue.copy(fragment_dose_device, fragment_dose_host.data(),
-                   fragment_dose_host.size());
+        queue.copy(fragment_dose_device, fragment_dose_atomic_host.data(),
+                   fragment_dose_atomic_host.size());
+        fragment_dose_host = to_double_vec(fragment_dose_atomic_host);
         if (transported_secondary_count > 0) {
             queue.copy(secondary_deposited_device, secondary_deposited_host.data(),
                        transported_secondary_count);
@@ -4278,21 +4516,24 @@ TransportResult transport_sycl(const TransportConfig& config,
         const auto transported_neutral_summary_count = static_cast<std::size_t>(
             std::min<std::uint64_t>(transported_neutral_count, neutral_queue_capacity));
         neutral_summaries_host.resize(transported_neutral_summary_count);
-        neutral_origin_dose_host.resize(neutral_origin_category_count * number_of_bins);
+        neutral_origin_dose_atomic_host.resize(neutral_origin_category_count * number_of_bins);
         if (transported_neutral_summary_count > 0) {
             queue.copy(neutral_summaries_device, neutral_summaries_host.data(),
                        transported_neutral_summary_count);
         }
-        queue.copy(neutral_origin_dose_device, neutral_origin_dose_host.data(),
-                   neutral_origin_dose_host.size())
+        queue.copy(neutral_origin_dose_device, neutral_origin_dose_atomic_host.data(),
+                   neutral_origin_dose_atomic_host.size())
             .wait_and_throw();
+        neutral_origin_dose_host = to_double_vec(neutral_origin_dose_atomic_host);
         if (enable_voxel_scoring) {
-            neutral_origin_voxel_dose_host.resize(
+            neutral_origin_voxel_dose_atomic_host.resize(
                 neutral_origin_category_count * number_of_voxels);
             queue.copy(neutral_origin_voxel_dose_device,
-                       neutral_origin_voxel_dose_host.data(),
-                       neutral_origin_voxel_dose_host.size())
+                       neutral_origin_voxel_dose_atomic_host.data(),
+                       neutral_origin_voxel_dose_atomic_host.size())
                 .wait_and_throw();
+            neutral_origin_voxel_dose_host =
+                to_double_vec(neutral_origin_voxel_dose_atomic_host);
         }
     }
 
@@ -4351,6 +4592,7 @@ TransportResult transport_sycl(const TransportConfig& config,
     free_immutable_device(cascade_interactions_device);
     free_immutable_device(cascade_products_device);
     free_device(cascade_summaries_device);
+    free_device(cascade_xs_lut_device);
     free_immutable_device(neutral_projectiles_device);
     free_immutable_device(neutral_cross_sections_device);
     free_immutable_device(neutral_interactions_device);
@@ -4403,6 +4645,11 @@ TransportResult transport_sycl(const TransportConfig& config,
             result.backend += "+ct-grid+ct-dda";
         }
     }
+    if constexpr (k_dose_atomic_fp32) {
+        result.backend += "+fp32-dose";
+    } else {
+        result.backend += "+fp64-dose";
+    }
     if (enable_voxel_scoring) {
         result.backend += "+voxel-scoring";
     }
@@ -4420,6 +4667,9 @@ TransportResult transport_sycl(const TransportConfig& config,
     }
     if (enable_fragment_cascade) {
         result.backend += "+fragment-cascade";
+        if (cascade_xs_lut_size > 0) {
+            result.backend += "+cascade-xs-lut";
+        }
     }
     if (enable_neutral_transport) {
         result.backend += neutral_allow_continuation ? "+neutral-transport-full"

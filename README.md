@@ -75,15 +75,47 @@ ctest --preset cpu-debug
 ./build/cpu-debug/carbon_mc --config config/beam_200MeVu.yaml --device serial
 ```
 
-如需在 WSL 中构建 SYCL CPU 版本：
+如需在 WSL/Linux 中构建 SYCL（默认 **双目标**：Intel SPIR-V + NVIDIA CUDA）：
 
 ```bash
 source /opt/intel/oneapi/setvars.sh
+# 推荐脚本（自动配置 -fsycl-targets=spir64,nvptx64-nvidia-cuda）
+scripts/build_linux_oneapi.sh
+
+# 或手动：
 cmake --preset oneapi-release
 cmake --build --preset oneapi-release
 ctest --preset oneapi-release
-./build/oneapi-release/carbon_mc --config config/beam_200MeVu.yaml --device gpu
 ```
+
+### NVIDIA CUDA 运行（oneAPI CUDA plugin）
+
+默认 `-fsycl` 只生成 SPIR-V，CUDA 插件无法加载 kernel（常见报错：
+`No kernel named ... was found`）。必须在编译期指定 `nvptx64-nvidia-cuda`。
+
+```bash
+# 构建后跑 attenuation smoke（自动 ONEAPI_DEVICE_SELECTOR=cuda:gpu）
+scripts/run_linux_nvidia.sh
+
+# 或手动选 CUDA 后端：
+export ONEAPI_DEVICE_SELECTOR=cuda:gpu
+./build/oneapi-release/carbon_mc \
+  --config config/beam_200MeVu_attenuation.yaml \
+  --device cuda \
+  --output out/linux_nvidia_attenuation_depth_dose.csv
+```
+
+| Preset / 变量 | 含义 |
+|---|---|
+| `oneapi-release` | 双目标 `spir64,nvptx64-nvidia-cuda`（Linux 默认） |
+| `oneapi-nvidia-release` | 仅 NVIDIA CUDA AOT |
+| `oneapi-intel-release` | 仅 Intel SPIR-V |
+| `CARBON_SYCL_TARGETS` | 自定义 `-fsycl-targets` |
+| `CARBON_CUDA_ARCH` | 可选 AOT 架构，如 `sm_75`（TITAN RTX） |
+
+`--device` 可选：`serial` / `cpu` / `gpu` / `default` / `cuda`|`nvidia` /
+`level_zero`|`intel`|`arc` / `opencl`。`gpu` 跟随 `ONEAPI_DEVICE_SELECTOR`；
+`cuda` 与 `level_zero` 直接锁定 SYCL backend。
 
 如果 oneAPI 不在 `/opt/intel/oneapi`，请在运行上述命令前加载实际安装位置的 `setvars.sh`；项目本身不硬编码 oneAPI 路径。
 

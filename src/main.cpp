@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <iomanip>
@@ -26,9 +27,13 @@ namespace {
 
 void print_usage(const char* executable) {
     std::cout << "Usage: " << executable
-              << " [--config FILE] [--device serial|cpu|gpu] [--histories N]"
+              << " [--config FILE] [--device DEVICE] [--histories N]"
                  " [--spots FILE] [--straggling-scale X] [--output FILE]"
                  " [--dose-output FILE] [--plan-only] [--sequential-spots]\n"
+                 "  --device DEVICE      serial | cpu | gpu | default |\n"
+                 "                       cuda|nvidia | level_zero|intel|arc | opencl\n"
+                 "                       (gpu respects ONEAPI_DEVICE_SELECTOR;\n"
+                 "                        cuda/level_zero pin the SYCL backend)\n"
                  "  --spots FILE         TOPAS-format spots_*.txt; repeat to concatenate files\n"
                  "  --spot-weights FILE  One optimization weight per concatenated spot\n"
                  "  --histories N        With weights: total plan histories; otherwise per spot\n"
@@ -298,8 +303,14 @@ carbon::TransportResult run_transport(
         return carbon::transport_serial(config, stopping_power, cross_section);
     }
 #ifdef CARBON_HAS_SYCL
-    if (config.device != "cpu" && config.device != "gpu" && config.device != "default") {
-        throw std::invalid_argument("SYCL device must be cpu, gpu, or default");
+    // serial is handled above. SYCL names are resolved in make_sycl_queue.
+    if (config.device != "cpu" && config.device != "gpu" && config.device != "default" &&
+        config.device != "cuda" && config.device != "nvidia" &&
+        config.device != "level_zero" && config.device != "intel" &&
+        config.device != "arc" && config.device != "opencl") {
+        throw std::invalid_argument(
+            "SYCL device must be cpu, gpu, default, cuda, nvidia, level_zero, intel, arc, "
+            "or opencl");
     }
     return carbon::transport_sycl(config, stopping_power, cross_section, config.device,
                                   reaction_packages ? &*reaction_packages : nullptr,
@@ -316,6 +327,9 @@ carbon::TransportResult run_transport(
 }  // namespace
 
 int main(int argc, char* argv[]) {
+    // Line-buffer stdout so progress is visible when piped (tee/logs) and during
+    // long CUDA kernels that would otherwise freeze WSL with no feedback.
+    std::setvbuf(stdout, nullptr, _IOLBF, 0);
     try {
         std::filesystem::path config_path{"config/beam_200MeVu.yaml"};
         for (int index = 1; index < argc; ++index) {

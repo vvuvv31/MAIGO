@@ -574,6 +574,10 @@ TransportConfig load_config(const std::filesystem::path& path) {
         parse_number(values, "neutral_queue_capacity", config.neutral_queue_capacity);
     config.max_device_memory_fraction = parse_number(
         values, "max_device_memory_fraction", config.max_device_memory_fraction);
+    config.history_chunk_size =
+        parse_number(values, "history_chunk_size", config.history_chunk_size);
+    config.secondary_batch_size =
+        parse_number(values, "secondary_batch_size", config.secondary_batch_size);
     config.source_origin_x_mm =
         parse_number(values, "source_origin_x_mm", config.source_origin_x_mm);
     config.source_origin_y_mm =

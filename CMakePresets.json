@@ -19,33 +19,77 @@
     },
     {
       "name": "oneapi-release",
-      "displayName": "Intel oneAPI SYCL release (WSL/Linux)",
+      "displayName": "Intel oneAPI SYCL release (Linux dual: Intel SPIR-V + NVIDIA CUDA)",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/oneapi-release",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_CXX_COMPILER": "icpx",
         "CARBON_ENABLE_SYCL": "ON",
-        "CARBON_BUILD_TESTS": "ON"
+        "CARBON_BUILD_TESTS": "ON",
+        "CARBON_SYCL_TARGETS": "spir64,nvptx64-nvidia-cuda"
+      }
+    },
+    {
+      "name": "oneapi-nvidia-release",
+      "displayName": "Intel oneAPI SYCL release (NVIDIA CUDA AOT)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/oneapi-nvidia-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_CXX_COMPILER": "icpx",
+        "CARBON_ENABLE_SYCL": "ON",
+        "CARBON_BUILD_TESTS": "ON",
+        "CARBON_SYCL_TARGETS": "nvptx64-nvidia-cuda"
+      }
+    },
+    {
+      "name": "oneapi-intel-release",
+      "displayName": "Intel oneAPI SYCL release (Intel SPIR-V only)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/oneapi-intel-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_CXX_COMPILER": "icpx",
+        "CARBON_ENABLE_SYCL": "ON",
+        "CARBON_BUILD_TESTS": "ON",
+        "CARBON_SYCL_TARGETS": "spir64"
       }
     },
     {
       "name": "oneapi-windows-release",
-      "displayName": "Intel oneAPI SYCL release (Windows/Arc GPU)",
+      "displayName": "Intel oneAPI SYCL release (Windows/Arc GPU, SPIR-V)",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/oneapi-windows-release",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_CXX_COMPILER": "icx-cl",
         "CARBON_ENABLE_SYCL": "ON",
-        "CARBON_BUILD_TESTS": "ON"
+        "CARBON_BUILD_TESTS": "ON",
+        "CARBON_SYCL_TARGETS": "spir64"
+      }
+    },
+    {
+      "name": "oneapi-windows-dual-release",
+      "displayName": "Intel oneAPI SYCL release (Windows Arc + NVIDIA; needs CUDA toolkit)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/oneapi-windows-dual-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_CXX_COMPILER": "icx-cl",
+        "CARBON_ENABLE_SYCL": "ON",
+        "CARBON_BUILD_TESTS": "ON",
+        "CARBON_SYCL_TARGETS": "spir64,nvptx64-nvidia-cuda"
       }
     }
   ],
   "buildPresets": [
     { "name": "cpu-debug", "configurePreset": "cpu-debug" },
     { "name": "oneapi-release", "configurePreset": "oneapi-release" },
-    { "name": "oneapi-windows-release", "configurePreset": "oneapi-windows-release" }
+    { "name": "oneapi-nvidia-release", "configurePreset": "oneapi-nvidia-release" },
+    { "name": "oneapi-intel-release", "configurePreset": "oneapi-intel-release" },
+    { "name": "oneapi-windows-release", "configurePreset": "oneapi-windows-release" },
+    { "name": "oneapi-windows-dual-release", "configurePreset": "oneapi-windows-dual-release" }
   ],
   "testPresets": [
     {
@@ -59,8 +103,23 @@
       "output": { "outputOnFailure": true }
     },
     {
+      "name": "oneapi-nvidia-release",
+      "configurePreset": "oneapi-nvidia-release",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "oneapi-intel-release",
+      "configurePreset": "oneapi-intel-release",
+      "output": { "outputOnFailure": true }
+    },
+    {
       "name": "oneapi-windows-release",
       "configurePreset": "oneapi-windows-release",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "oneapi-windows-dual-release",
+      "configurePreset": "oneapi-windows-dual-release",
       "output": { "outputOnFailure": true }
     }
   ]

@@ -173,6 +173,12 @@ struct TransportConfig {
     // Pair with a host watchdog (run scripts) that kills the process if live VRAM
     // exceeds this fraction — prevents Arc driver lockups / host freezes.
     double max_device_memory_fraction{0.50};
+    // Primary kernel launch chunk (histories per GPU submit). 0 = auto:
+    // CUDA defaults to a small chunk so WSL/Windows can reclaim the GPU between
+    // launches (long single kernels freeze WSL). Intel GPU uses a larger default.
+    std::size_t history_chunk_size{0};
+    // Secondary/cascade particles processed per GPU submit. 0 = auto (CUDA small).
+    std::size_t secondary_batch_size{0};
     std::uint64_t random_seed{20'260'714};
     std::filesystem::path stopping_power_file{"data/stopping_power_water.csv"};
     std::filesystem::path nuclear_cross_section_file{
