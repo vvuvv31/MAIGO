@@ -263,6 +263,10 @@ void TransportConfig::validate() const {
     if (straggling_scale < 0.0) {
         throw std::invalid_argument("straggling_scale must be nonnegative");
     }
+    if (ct_stopping_power_scale <= 0.0 || ct_stopping_power_scale > 2.0) {
+        throw std::invalid_argument(
+            "ct_stopping_power_scale must be in (0, 2]");
+    }
     if (enable_voxel_scoring &&
         (voxel_bins_x == 0 || voxel_bins_y == 0 || voxel_size_x_mm <= 0.0 ||
          voxel_size_y_mm <= 0.0)) {
@@ -497,6 +501,8 @@ TransportConfig load_config(const std::filesystem::path& path) {
         values, "ct_water_cross_section_file", config.ct_water_cross_section_file);
     config.ct_bone_cross_section_file = parse_path(
         values, "ct_bone_cross_section_file", config.ct_bone_cross_section_file);
+    config.ct_stopping_power_scale = parse_number(
+        values, "ct_stopping_power_scale", config.ct_stopping_power_scale);
     if (values.find("ct_grid_file") != values.end() &&
         values.find("enable_ct_grid") == values.end()) {
         config.enable_ct_grid = true;

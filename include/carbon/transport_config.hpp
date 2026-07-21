@@ -12,24 +12,72 @@ namespace carbon {
 
 // Compact per-spot source parameters consumed by one batched SYCL launch.
 // history_begin/history_end describe the half-open range in the flattened plan.
+//
+// Layout note: all floats live in a single contiguous `floats[]` array (not
+// separate named float members). Some SYCL device compilers have been observed
+// to disagree with the host on offsetof() when uint64_t is followed by a long
+// run of individual float fields, which silently zeroed source_origin_y while
+// leaving source_origin_x correct. A plain float array has a trivial layout.
 struct PrimarySpotBatchEntry {
     std::uint64_t history_begin{0};
     std::uint64_t history_end{0};
     std::uint64_t random_seed{0};
-    float initial_energy_MeV{0.0F};
-    float beam_energy_spread{0.0F};
-    float emittance_sigma_x_mm{0.0F};
-    float emittance_sigma_y_mm{0.0F};
-    float emittance_sigma_x_prime{0.0F};
-    float emittance_sigma_y_prime{0.0F};
-    float emittance_correlation_x{0.0F};
-    float emittance_correlation_y{0.0F};
-    float source_origin_x_mm{0.0F};
-    float source_origin_y_mm{0.0F};
-    float source_origin_z_mm{0.0F};
-    float beam_ux_x{1.0F}, beam_ux_y{0.0F}, beam_ux_z{0.0F};
-    float beam_uy_x{0.0F}, beam_uy_y{1.0F}, beam_uy_z{0.0F};
-    float beam_uz_x{0.0F}, beam_uz_y{0.0F}, beam_uz_z{1.0F};
+    // Packed floats — keep order stable; indices documented below.
+    // 0 initial_energy_MeV
+    // 1 beam_energy_spread
+    // 2-3 emittance_sigma_x/y_mm
+    // 4-5 emittance_sigma_x/y_prime
+    // 6-7 emittance_correlation_x/y
+    // 8-10 source_origin_x/y/z_mm
+    // 11-13 beam_ux_x/y/z
+    // 14-16 beam_uy_x/y/z
+    // 17-19 beam_uz_x/y/z
+    static constexpr int k_float_count = 20;
+    float floats[k_float_count]{
+        0.F, 0.F, 0.F, 0.F, 0.F, 0.F, 0.F, 0.F, 0.F, 0.F,
+        0.F, 1.F, 0.F, 0.F, 0.F, 1.F, 0.F, 0.F, 0.F, 1.F,
+    };
+
+    float& initial_energy_MeV() noexcept { return floats[0]; }
+    [[nodiscard]] float initial_energy_MeV() const noexcept { return floats[0]; }
+    float& beam_energy_spread() noexcept { return floats[1]; }
+    [[nodiscard]] float beam_energy_spread() const noexcept { return floats[1]; }
+    float& emittance_sigma_x_mm() noexcept { return floats[2]; }
+    [[nodiscard]] float emittance_sigma_x_mm() const noexcept { return floats[2]; }
+    float& emittance_sigma_y_mm() noexcept { return floats[3]; }
+    [[nodiscard]] float emittance_sigma_y_mm() const noexcept { return floats[3]; }
+    float& emittance_sigma_x_prime() noexcept { return floats[4]; }
+    [[nodiscard]] float emittance_sigma_x_prime() const noexcept { return floats[4]; }
+    float& emittance_sigma_y_prime() noexcept { return floats[5]; }
+    [[nodiscard]] float emittance_sigma_y_prime() const noexcept { return floats[5]; }
+    float& emittance_correlation_x() noexcept { return floats[6]; }
+    [[nodiscard]] float emittance_correlation_x() const noexcept { return floats[6]; }
+    float& emittance_correlation_y() noexcept { return floats[7]; }
+    [[nodiscard]] float emittance_correlation_y() const noexcept { return floats[7]; }
+    float& source_origin_x_mm() noexcept { return floats[8]; }
+    [[nodiscard]] float source_origin_x_mm() const noexcept { return floats[8]; }
+    float& source_origin_y_mm() noexcept { return floats[9]; }
+    [[nodiscard]] float source_origin_y_mm() const noexcept { return floats[9]; }
+    float& source_origin_z_mm() noexcept { return floats[10]; }
+    [[nodiscard]] float source_origin_z_mm() const noexcept { return floats[10]; }
+    float& beam_ux_x() noexcept { return floats[11]; }
+    [[nodiscard]] float beam_ux_x() const noexcept { return floats[11]; }
+    float& beam_ux_y() noexcept { return floats[12]; }
+    [[nodiscard]] float beam_ux_y() const noexcept { return floats[12]; }
+    float& beam_ux_z() noexcept { return floats[13]; }
+    [[nodiscard]] float beam_ux_z() const noexcept { return floats[13]; }
+    float& beam_uy_x() noexcept { return floats[14]; }
+    [[nodiscard]] float beam_uy_x() const noexcept { return floats[14]; }
+    float& beam_uy_y() noexcept { return floats[15]; }
+    [[nodiscard]] float beam_uy_y() const noexcept { return floats[15]; }
+    float& beam_uy_z() noexcept { return floats[16]; }
+    [[nodiscard]] float beam_uy_z() const noexcept { return floats[16]; }
+    float& beam_uz_x() noexcept { return floats[17]; }
+    [[nodiscard]] float beam_uz_x() const noexcept { return floats[17]; }
+    float& beam_uz_y() noexcept { return floats[18]; }
+    [[nodiscard]] float beam_uz_y() const noexcept { return floats[18]; }
+    float& beam_uz_z() noexcept { return floats[19]; }
+    [[nodiscard]] float beam_uz_z() const noexcept { return floats[19]; }
 };
 
 struct TransportConfig {
@@ -75,6 +123,9 @@ struct TransportConfig {
     std::filesystem::path ct_lung_cross_section_file{};
     std::filesystem::path ct_water_cross_section_file{};
     std::filesystem::path ct_bone_cross_section_file{};
+    // Global multiplier on CT mass-scaled / material stopping power (default 1).
+    // Used to absorb residual WEPL calibration vs full Geant4 material SP.
+    double ct_stopping_power_scale{1.0};
     double scorer_area_mm2{90'000.0};
     bool enable_voxel_scoring{false};
     bool enable_charged_origin_voxel_scoring{false};

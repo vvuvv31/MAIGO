@@ -191,35 +191,73 @@ SpotSourcePose transform_tps_90_pose_to_ct(
     const double patient_rot_z_deg,
     const double ct_axis_min_mm) noexcept {
     constexpr double deg2rad = 3.14159265358979323846 / 180.0;
+    // Undo Patient RotZ in world → patient-local (TOPAS placement inverse).
     const auto angle = -patient_rot_z_deg * deg2rad;
     const auto c = std::cos(angle);
     const auto s = std::sin(angle);
 
-    auto point_to_ct = [&](double x, double y, double z) {
+    auto to_patient_point = [&](double x, double y, double z) {
         x -= patient_trans_x_mm;
         y -= patient_trans_y_mm;
         z -= patient_trans_z_mm;
         const auto patient_x = c * x - s * y;
         const auto patient_y = s * x + c * y;
-        // Reoriented grid axes: (patient Y, patient Z, patient X).
-        return std::tuple{patient_y, z, patient_x - ct_axis_min_mm};
+        return std::tuple{patient_x, patient_y, z};
     };
-    auto vector_to_ct = [&](const double x, const double y, const double z) {
+    auto to_patient_vector = [&](const double x, const double y, const double z) {
         const auto patient_x = c * x - s * y;
         const auto patient_y = s * x + c * y;
-        return std::tuple{patient_y, z, patient_x};
+        return std::tuple{patient_x, patient_y, z};
     };
 
+    double ox = 0.0, oy = 0.0, oz = 0.0;
+    double uxx = 0.0, uxy = 0.0, uxz = 0.0;
+    double uyx = 0.0, uyy = 0.0, uyz = 0.0;
+    double uzx = 0.0, uzy = 0.0, uzz = 0.0;
+    std::tie(ox, oy, oz) = to_patient_point(
+        world_pose.origin_x_mm, world_pose.origin_y_mm, world_pose.origin_z_mm);
+    std::tie(uxx, uxy, uxz) =
+        to_patient_vector(world_pose.ux_x, world_pose.ux_y, world_pose.ux_z);
+    std::tie(uyx, uyy, uyz) =
+        to_patient_vector(world_pose.uy_x, world_pose.uy_y, world_pose.uy_z);
+    std::tie(uzx, uzy, uzz) =
+        to_patient_vector(world_pose.uz_x, world_pose.uz_y, world_pose.uz_z);
+
+    // Reoriented CT: GPU (x,y,z) stores patient (y, z_centered, x) with beam +GPU-Z.
+    // Lateral: GPU x = patient y (matches reorient_ct_grid_tps_90).
+    // Depth: map patient ±X into +GPU-Z so the central ray always enters z=0.
+    // For a centered CT, low/high patient-X edges are ±|ct_axis_min|.
+    const double ct_axis_max_mm = -ct_axis_min_mm;
     SpotSourcePose pose{};
-    std::tie(pose.origin_x_mm, pose.origin_y_mm, pose.origin_z_mm) =
-        point_to_ct(world_pose.origin_x_mm, world_pose.origin_y_mm,
-                    world_pose.origin_z_mm);
-    std::tie(pose.ux_x, pose.ux_y, pose.ux_z) =
-        vector_to_ct(world_pose.ux_x, world_pose.ux_y, world_pose.ux_z);
-    std::tie(pose.uy_x, pose.uy_y, pose.uy_z) =
-        vector_to_ct(world_pose.uy_x, world_pose.uy_y, world_pose.uy_z);
-    std::tie(pose.uz_x, pose.uz_y, pose.uz_z) =
-        vector_to_ct(world_pose.uz_x, world_pose.uz_y, world_pose.uz_z);
+    if (uzx >= 0.0) {
+        // Beam along +patient X: entrance at patient X = ct_axis_min.
+        pose.origin_x_mm = oy;
+        pose.origin_y_mm = oz;
+        pose.origin_z_mm = ox - ct_axis_min_mm;
+        pose.ux_x = uxy;
+        pose.ux_y = uxz;
+        pose.ux_z = uxx;
+        pose.uy_x = uyy;
+        pose.uy_y = uyz;
+        pose.uy_z = uyx;
+        pose.uz_x = uzy;
+        pose.uz_y = uzz;
+        pose.uz_z = uzx;
+    } else {
+        // Beam along -patient X: entrance at patient X = ct_axis_max.
+        pose.origin_x_mm = oy;
+        pose.origin_y_mm = oz;
+        pose.origin_z_mm = ct_axis_max_mm - ox;
+        pose.ux_x = uxy;
+        pose.ux_y = uxz;
+        pose.ux_z = -uxx;
+        pose.uy_x = uyy;
+        pose.uy_y = uyz;
+        pose.uy_z = -uyx;
+        pose.uz_x = uzy;
+        pose.uz_y = uzz;
+        pose.uz_z = -uzx;
+    }
     return pose;
 }
 

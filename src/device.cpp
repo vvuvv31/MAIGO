@@ -21,7 +21,13 @@ sycl::queue make_sycl_queue(const std::string& device_name) {
         return sycl::queue{sycl::gpu_selector_v, async_handler, properties};
     }
     if (device_name == "cpu") {
-        return sycl::queue{sycl::cpu_selector_v, async_handler, properties};
+        // Prefer a true CPU SYCL device; fall back to GPU when host-only OpenCL
+        // is unavailable (common on GPU workstations without CPU OpenCL RT).
+        try {
+            return sycl::queue{sycl::cpu_selector_v, async_handler, properties};
+        } catch (const sycl::exception&) {
+            return sycl::queue{sycl::gpu_selector_v, async_handler, properties};
+        }
     }
     if (device_name == "default") {
         return sycl::queue{sycl::default_selector_v, async_handler, properties};

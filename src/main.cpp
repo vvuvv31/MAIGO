@@ -254,31 +254,31 @@ carbon::PrimarySpotBatchEntry make_spot_batch_entry(
     entry.history_begin = history_begin;
     entry.history_end = history_begin + spot_config.number_of_histories;
     entry.random_seed = spot_config.random_seed;
-    entry.initial_energy_MeV =
+    entry.initial_energy_MeV() =
         static_cast<float>(spot_config.initial_total_energy_MeV());
-    entry.beam_energy_spread = static_cast<float>(spot_config.beam_energy_spread);
-    entry.emittance_sigma_x_mm = static_cast<float>(spot_config.emittance_sigma_x_mm);
-    entry.emittance_sigma_y_mm = static_cast<float>(spot_config.emittance_sigma_y_mm);
-    entry.emittance_sigma_x_prime =
+    entry.beam_energy_spread() = static_cast<float>(spot_config.beam_energy_spread);
+    entry.emittance_sigma_x_mm() = static_cast<float>(spot_config.emittance_sigma_x_mm);
+    entry.emittance_sigma_y_mm() = static_cast<float>(spot_config.emittance_sigma_y_mm);
+    entry.emittance_sigma_x_prime() =
         static_cast<float>(spot_config.emittance_sigma_x_prime);
-    entry.emittance_sigma_y_prime =
+    entry.emittance_sigma_y_prime() =
         static_cast<float>(spot_config.emittance_sigma_y_prime);
-    entry.emittance_correlation_x =
+    entry.emittance_correlation_x() =
         static_cast<float>(spot_config.emittance_correlation_x);
-    entry.emittance_correlation_y =
+    entry.emittance_correlation_y() =
         static_cast<float>(spot_config.emittance_correlation_y);
-    entry.source_origin_x_mm = static_cast<float>(spot_config.source_origin_x_mm);
-    entry.source_origin_y_mm = static_cast<float>(spot_config.source_origin_y_mm);
-    entry.source_origin_z_mm = static_cast<float>(spot_config.source_origin_z_mm);
-    entry.beam_ux_x = static_cast<float>(spot_config.beam_ux_x);
-    entry.beam_ux_y = static_cast<float>(spot_config.beam_ux_y);
-    entry.beam_ux_z = static_cast<float>(spot_config.beam_ux_z);
-    entry.beam_uy_x = static_cast<float>(spot_config.beam_uy_x);
-    entry.beam_uy_y = static_cast<float>(spot_config.beam_uy_y);
-    entry.beam_uy_z = static_cast<float>(spot_config.beam_uy_z);
-    entry.beam_uz_x = static_cast<float>(spot_config.beam_uz_x);
-    entry.beam_uz_y = static_cast<float>(spot_config.beam_uz_y);
-    entry.beam_uz_z = static_cast<float>(spot_config.beam_uz_z);
+    entry.source_origin_x_mm() = static_cast<float>(spot_config.source_origin_x_mm);
+    entry.source_origin_y_mm() = static_cast<float>(spot_config.source_origin_y_mm);
+    entry.source_origin_z_mm() = static_cast<float>(spot_config.source_origin_z_mm);
+    entry.beam_ux_x() = static_cast<float>(spot_config.beam_ux_x);
+    entry.beam_ux_y() = static_cast<float>(spot_config.beam_ux_y);
+    entry.beam_ux_z() = static_cast<float>(spot_config.beam_ux_z);
+    entry.beam_uy_x() = static_cast<float>(spot_config.beam_uy_x);
+    entry.beam_uy_y() = static_cast<float>(spot_config.beam_uy_y);
+    entry.beam_uy_z() = static_cast<float>(spot_config.beam_uy_z);
+    entry.beam_uz_x() = static_cast<float>(spot_config.beam_uz_x);
+    entry.beam_uz_y() = static_cast<float>(spot_config.beam_uz_y);
+    entry.beam_uz_z() = static_cast<float>(spot_config.beam_uz_z);
     return entry;
 }
 

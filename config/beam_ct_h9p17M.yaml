@@ -1,19 +1,21 @@
+# 9.17M weighted-spot TPS 90 CT production run for TOPAS physical_dose match.
+# 10x the 917k budget; still 1/10 of original TOPAS 91.7M layer budget.
 # Optimized 917-spot TPS 90-degree CT plan.
-#
-# Production geometry (aligned to physical_dose COM / IDD):
-#   RotZ = -90 (run_c_*.txt lists +90, but COM matches -90 isocenter Y≈+42.85 mm)
-#   reorient --beam-patient-x-direction negative → patient_ct_tps_90_xneg.bin
-#   match_gpu_to_physical_dose: flip_x=True (GPU z=0 is patient-X entrance face)
 #
 # Preparation (once after patient_ct.bin changes):
 #   python validation/scripts/reorient_ct_grid_tps_90.py \
 #     --beam-patient-x-direction negative \
-#     --output ct/grid/patient_ct_tps_90_xneg.bin
-# Run:
+#     --output ct/grid/patient_ct_tps_90_xneg.bin \
+#     --metadata ct/grid/patient_ct_tps_90_xneg.metadata.json
+# Run on a oneAPI GPU build:
 #   carbon_mc --config config/beam_ct_optimized_tps_90.yaml --device gpu
 #
-# Spots: c_01 then c_02; spotWeight.csv same order. Histories redistributed by weight.
-number_of_histories: 917000
+# The original TOPAS split is concatenated as c_01 (spots 1..459), then c_02
+# (460..917). spotWeight.csv follows exactly this order. The original TOPAS
+# statistical budget was 917 * 100000 histories. This first GPU dose run uses
+# 1/100 of that total; histories are still redistributed proportional to the
+# optimized weights. Increase this later without changing the fluence shape.
+number_of_histories: 9170000
 initial_energy_MeVu: 200.0
 mass_number: 12
 
@@ -48,8 +50,10 @@ enable_secondary_transport: true
 enable_fragment_cascade: true
 enable_neutral_transport: false
 maximum_cascade_generations: 2
-secondary_queue_capacity: 0
-max_device_memory_fraction: 0.50
+# Cap secondary queue explicitly: auto sizing for 9.17M exceeds Arc B580 VRAM.
+# 917k transported ~1.5e6 secondaries; 9.17M ~15e6 — use 25e6 with margin.
+secondary_queue_capacity: 25000000
+max_device_memory_fraction: 0.90
 random_seed: 20260720
 
 topas_spots_files: ct/topas/spots_c_01.txt, ct/topas/spots_c_02.txt
@@ -57,27 +61,34 @@ spot_weights_file: ct/spotWeight.csv
 spots_sad_mm: 450.0
 spots_geometry_mode: tps_90
 
-# Spot RotX/RotY = TPS 0° source basis; RotZ=-90 aligns field to physical_dose COM.
+# From run_c_01.txt/run_c_02.txt Trans. Spot RotX/RotY = TPS 0° source basis.
+# run_c lists Patient/RotZ=+90, but physical_dose COM (centered Y≈+42.85 mm) matches
+# the isocenter obtained by undoing RotZ=-90 (iso Y=+42.85), not +90 (iso Y=-42.85).
+# Use -90 so the field samples the same patient-Y side as the TOPAS-optimized dose.
 spots_patient_trans_x_mm: -42.8515
 spots_patient_trans_y_mm: -12.7636
 spots_patient_trans_z_mm: 1.3617
 spots_patient_rot_z_deg: -90.0
-# Low edge of patient-local X after TOPAS-style centering (417 * 0.5 mm).
+# Low edge of patient-local X in patient_ct.bin (first voxel edge after centering).
+# With 417 * 0.5 mm and TOPAS-style XY centering: -0.5 * 417 * 0.5 = -104.25.
 spots_ct_axis_min_mm: -104.25
 
 stopping_power_file: data/stopping_power_water_geant4_11_1_3.csv
 nuclear_cross_section_file: data/c12_inelastic_cross_sections_water_geant4_11_1_3.csv
+ct_lung_cross_section_file: data/c12_inelastic_cross_sections_lung_geant4_11_1_3.csv
+ct_water_cross_section_file: data/c12_inelastic_cross_sections_water_geant4_11_1_3.csv
+ct_bone_cross_section_file: data/c12_inelastic_cross_sections_bone_geant4_11_1_3.csv
 # Plan energies span 165--240 MeV/u, so use the 400 MeV/u package set rather
 # than clamping the highest layers to the 200 MeV/u development package.
 reaction_package_file: validation/results/topas_400MeVu_cascade_aligned_primary_3d.bin
 cascade_package_file: validation/results/topas_400MeVu_cascade_100k_3d.bin
 
-output_file: out/ct/optimized_tps_90_idd.csv
-dose_output_file: out/ct/optimized_tps_90_idd_Gy.csv
-fragment_species_output_file: out/ct/optimized_tps_90_species.csv
-fragment_species_dose_output_file: out/ct/optimized_tps_90_species_Gy.csv
+output_file: out/ct/h9p17M_xneg/idd.csv
+dose_output_file: out/ct/h9p17M_xneg/idd_Gy.csv
+fragment_species_output_file: out/ct/h9p17M_xneg/species.csv
+fragment_species_dose_output_file: out/ct/h9p17M_xneg/species_Gy.csv
 # Sparse voxel CSV is large (~380 MB). Leave empty to skip; use dense MHD instead.
 voxel_dose_output_file:
 voxel_dose_Gy_output_file:
-voxel_dose_mhd_output_file: out/ct/optimized_tps_90_dose.mhd
+voxel_dose_mhd_output_file: out/ct/h9p17M_xneg/dose.mhd
 device: gpu

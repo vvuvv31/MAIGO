@@ -523,6 +523,31 @@ elapsed **~1.96 s / ~469k h/s**。
 
 说明：这是相对当前模拟统计量的绝对剂量标度；若要临床 fraction Gy，仍需 TPS MU→离子数标定。
 
+### 与 `ct/physical_dose` 的坐标对齐
+
+参考剂量 `ct/physical_dose.mhd`：
+
+- `DimSize = 104 126 35`，`Spacing = 2 2 2`，`Offset = -102.75 -43.55 -814.19`
+- 轴为 **patient (X,Y,Z)**（与 DICOM/RAI 一致）；束流沿 **patient X** 拉长
+
+GPU 内部剂量为重排后的：
+
+- `DimSize = 505 35 417`，`Spacing = 0.5 2 0.5`
+- `GPU (x,y,z) = patient (y,z,x)`，束流沿 **GPU +Z = patient +X**
+
+因此直接对比两个 MHD 会像“角度错了”。**束流相对 CT 解剖的入射与 physical 一致**；
+需要把 GPU 剂量映回 patient 轴后再叠图：
+
+```bash
+python validation/scripts/gpu_dose_to_patient_mhd.py \
+  out/ct/p2p8_sp_lut_mhd/dose.mhd \
+  out/ct/p2p8_sp_lut_mhd/dose_patient_like_physical.mhd \
+  --like ct/physical_dose.mhd
+```
+
+该映射含 patient X/Y 翻转以匹配参考剂量；与 `physical_dose` 的 3D cosine ≈ **0.93**，
+IDD 峰值深度一致（约 bin 46–52）。绝对 Gy 标度仍取决于 MU/离子数标定，不能直接比数值大小。
+
 ### P8：直接写 dense MHD/RAW — **已完成**
 
 - API：`write_dense_voxel_dose_mhd()`（`src/io.cpp`）

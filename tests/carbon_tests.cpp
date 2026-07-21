@@ -294,6 +294,19 @@ void test_ct_grid_helpers() {
                  "air density");
     require(carbon::density_to_material_id(1.0F) == 2, "water material id");
     require(carbon::density_to_material_id(1.85F) == 3, "bone material id");
+    require(carbon::ct_material_class(0, true) == 0,
+            "Schneider section 0 must map to air");
+    require(carbon::ct_material_class(1, true) == 1,
+            "Schneider section 1 must map to lung");
+    require(carbon::ct_material_class(2, true) == 2 &&
+                carbon::ct_material_class(7, true) == 2,
+            "Schneider soft-tissue sections must map to water-like");
+    require(carbon::ct_material_class(8, true) == 3 &&
+                carbon::ct_material_class(24, true) == 3,
+            "Schneider sections >=8 must map to bone-like");
+    require(carbon::ct_material_class(2, false) == 2 &&
+                carbon::ct_material_class(9, false) == 3,
+            "Legacy CT material class mapping failed");
 
     require_near(carbon::ct_mass_scaled_stopping_power(10.0F, 1.5F, 1.0F), 15.0F, 1.0e-5,
                  "mass SP water scale");
@@ -338,8 +351,8 @@ void test_ct_grid_helpers() {
     require(carbon::ct_dda_distance_to_next_face(dda) > 0.5F,
             "DDA distance after face snap must be positive");
 
-    // Energy-dependent mass-SP: I_water → factor = za_rel; I_bone ≠ 75 shifts f_E.
-    require_near(carbon::ct_mass_sp_energy_factor(0.93F, 75.0F, 150.0F), 0.93F, 1.0e-4,
+    // Energy-dependent mass-SP: I = I_water (78 eV) → factor = za_rel.
+    require_near(carbon::ct_mass_sp_energy_factor(0.93F, 78.0F, 150.0F), 0.93F, 1.0e-4,
                  "mass-SP energy factor water-I");
     const auto f_bone_hi =
         carbon::ct_mass_sp_energy_factor(0.93F, 106.0F, 200.0F);
@@ -765,6 +778,107 @@ void test_dense_voxel_mhd_writer() {
     std::filesystem::remove_all(dir, ec);
 }
 
+void test_ct_aligned_mhd_offset_and_index_pairing() {
+    // CT transport samples density with edge origin; dose-to-medium mass and
+    // voxel tallies must use the same edge so linear indices match.
+    carbon::CtGrid grid;
+    grid.nx = 4;
+    grid.ny = 3;
+    grid.nz = 2;
+    grid.origin_x_mm = -10.0F;  // deliberately not 0-centered
+    grid.origin_y_mm = -4.0F;
+    grid.origin_z_mm = 0.0F;
+    grid.spacing_x_mm = 1.0F;
+    grid.spacing_y_mm = 2.0F;
+    grid.spacing_z_mm = 1.0F;
+    const auto n = grid.number_of_voxels();
+    grid.density_g_per_cm3.assign(n, 1.0F);
+    // Distinct density per voxel so mass pairing is observable.
+    for (std::uint32_t iz = 0; iz < grid.nz; ++iz) {
+        for (std::uint32_t iy = 0; iy < grid.ny; ++iy) {
+            for (std::uint32_t ix = 0; ix < grid.nx; ++ix) {
+                const auto i = carbon::ct_linear_index(ix, iy, iz, grid.nx, grid.ny);
+                grid.density_g_per_cm3[i] = 0.5F + 0.1F * static_cast<float>(i);
+            }
+        }
+    }
+    grid.material_id.assign(n, static_cast<std::uint8_t>(2));
+    grid.mass_sp_za_rel = {1.0F};
+    grid.mass_sp_I_eV = {75.0F};
+    const auto ct_path =
+        std::filesystem::temp_directory_path() / "carbon_ct_align_scorer.bin";
+    grid.write_binary(ct_path);
+
+    // Scorer index with CT-aligned min must equal ct_sample index.
+    const float voxel_min_x = grid.origin_x_mm;
+    const float voxel_min_y = grid.origin_y_mm;
+    const float sx = grid.spacing_x_mm;
+    const float sy = grid.spacing_y_mm;
+    for (float x = -9.75F; x < -6.1F; x += 0.5F) {
+        for (float y = -3.5F; y < 1.9F; y += 1.0F) {
+            float dens = 0.0F;
+            std::uint8_t mat = 0;
+            require(carbon::ct_sample(x, y, 0.25F, grid.origin_x_mm, grid.origin_y_mm,
+                                      grid.origin_z_mm, grid.spacing_x_mm,
+                                      grid.spacing_y_mm, grid.spacing_z_mm, grid.nx,
+                                      grid.ny, grid.nz, grid.density_g_per_cm3.data(),
+                                      grid.material_id.data(), dens, mat),
+                    "ct_sample should hit CT for interior points");
+            const auto scorer_ix =
+                static_cast<int>(std::floor((x - voxel_min_x) / sx));
+            const auto scorer_iy =
+                static_cast<int>(std::floor((y - voxel_min_y) / sy));
+            const auto ct_ix =
+                static_cast<int>(std::floor((x - grid.origin_x_mm) / grid.spacing_x_mm));
+            const auto ct_iy =
+                static_cast<int>(std::floor((y - grid.origin_y_mm) / grid.spacing_y_mm));
+            require(scorer_ix == ct_ix && scorer_iy == ct_iy,
+                    "CT-aligned scorer index must match ct_sample index");
+        }
+    }
+
+    // 0-centered scorer would disagree with CT for this origin.
+    const float centered_min_x =
+        -0.5F * static_cast<float>(grid.nx) * grid.spacing_x_mm;  // -2
+    require(std::fabs(centered_min_x - grid.origin_x_mm) > 0.5F,
+            "test CT origin must differ from 0-centered scorer");
+
+    carbon::TransportConfig config;
+    config.number_of_histories = 1;
+    config.phantom_length_mm = 2.0;
+    config.depth_bin_width_mm = 1.0;
+    config.enable_voxel_scoring = true;
+    config.voxel_bins_x = grid.nx;
+    config.voxel_bins_y = grid.ny;
+    config.voxel_size_x_mm = grid.spacing_x_mm;
+    config.voxel_size_y_mm = grid.spacing_y_mm;
+    config.enable_ct_grid = true;
+    config.ct_grid_file = ct_path;
+    config.water_density_g_per_cm3 = 1.0;
+    config.validate();
+
+    carbon::TransportResult result;
+    result.deposited_energy_MeV.assign(config.number_of_bins(), 0.0);
+    result.voxel_deposited_energy_MeV.assign(config.number_of_voxels(), 0.0);
+    result.voxel_deposited_energy_MeV[0] = 1.0;
+
+    const auto dir = std::filesystem::temp_directory_path() / "carbon_ct_mhd_align";
+    std::filesystem::create_directories(dir);
+    const auto mhd = dir / "dose.mhd";
+    carbon::write_dense_voxel_dose_mhd(mhd, config, result);
+    const auto header = [&] {
+        std::ifstream in(mhd);
+        return std::string((std::istreambuf_iterator<char>(in)), {});
+    }();
+    // First-center Offset = CT edge origin + half voxel.
+    require(header.find("Offset = -9.5 -3 0.5") != std::string::npos,
+            "MHD Offset should use CT origin + half-voxel centers, got:\n" + header);
+
+    std::error_code ec;
+    std::filesystem::remove_all(dir, ec);
+    std::filesystem::remove(ct_path, ec);
+}
+
 void test_flat_source_config_validation() {
     carbon::TransportConfig config;
     config.enable_flat_source = true;
@@ -858,6 +972,20 @@ void test_topas_spot_weights_and_tps_90_transform() {
                  "TPS source upstream position in reoriented CT");
     require_near(ct.uz_z, 1.0, 1.0e-9,
                  "TPS central ray points +GPU-Z after CT transform");
+
+    // Clinical Trans from run_c_*.txt. physical_dose COM is at centered Y≈+42.85;
+    // that matches Patient RotZ = -90° undoing (iso Y=+42.85), not +90° (iso Y=-42.85).
+    const auto ct_m90 = carbon::transform_tps_90_pose_to_ct(
+        world, -42.8515, -12.7636, 1.3617, -90.0, -104.25);
+    require(ct_m90.uz_z > 0.0, "RotZ=-90 beam must enter +GPU-Z");
+    require_near(ct_m90.origin_x_mm, 42.8515, 1.0e-6,
+                 "RotZ=-90 isocenter GPU-X = patient Y");
+
+    const auto ct_p90 = carbon::transform_tps_90_pose_to_ct(
+        world, -42.8515, -12.7636, 1.3617, 90.0, -104.25);
+    require(ct_p90.uz_z > 0.0, "RotZ=+90 beam must enter +GPU-Z");
+    require_near(ct_p90.origin_x_mm, -42.8515, 1.0e-6,
+                 "RotZ=+90 isocenter GPU-X = patient Y");
 }
 
 #ifdef CARBON_HAS_SYCL
@@ -872,12 +1000,12 @@ void test_sycl_primary_spot_batch() {
     first.history_begin = 0;
     first.history_end = 3;
     first.random_seed = 17;
-    first.initial_energy_MeV = 120.0F;
+    first.initial_energy_MeV() = 120.0F;
     carbon::PrimarySpotBatchEntry second{};
     second.history_begin = 3;
     second.history_end = 8;
     second.random_seed = 29;
-    second.initial_energy_MeV = 180.0F;
+    second.initial_energy_MeV() = 180.0F;
     batch.primary_spot_batch = {first, second};
     batch.validate();
 
@@ -1384,9 +1512,37 @@ void test_sycl_neutral_transport_smoke() {
                 result.charged_from_neutral_energy_MeV > 0.0 ||
                 result.residual_neutral_energy_MeV > 0.0,
             "Neutral transport left no deposited, escaped, charged, or residual energy");
+    const auto total_idd =
+        std::accumulate(result.deposited_energy_MeV.begin(),
+                        result.deposited_energy_MeV.end(), 0.0);
+    const auto total_voxel =
+        std::accumulate(result.voxel_deposited_energy_MeV.begin(),
+                        result.voxel_deposited_energy_MeV.end(), 0.0);
+    require(std::abs(total_idd - total_voxel) <=
+                1.0e-8 * std::max(1.0, std::abs(total_idd)),
+            "Neutral-origin dose missing from aggregate voxel scorer");
     require(result.relative_energy_balance_error() < 5.0e-2,
             "Neutral transport energy balance failed: " +
                 std::to_string(result.relative_energy_balance_error()));
+
+    // The neutral-off kerma proxy must also reach the aggregate voxel scorer;
+    // historically it was written only to the 1D "other" fragment channel.
+    auto kerma_config = config;
+    kerma_config.enable_neutral_transport = false;
+    kerma_config.neutral_local_kerma_fraction = 0.298;
+    kerma_config.neutral_kerma_mean_free_path_mm = 110.0;
+    kerma_config.validate();
+    const auto kerma_result = carbon::transport_sycl(
+        kerma_config, stopping_power, forced_reaction, "cpu", &reaction_packages);
+    const auto kerma_idd =
+        std::accumulate(kerma_result.deposited_energy_MeV.begin(),
+                        kerma_result.deposited_energy_MeV.end(), 0.0);
+    const auto kerma_voxel =
+        std::accumulate(kerma_result.voxel_deposited_energy_MeV.begin(),
+                        kerma_result.voxel_deposited_energy_MeV.end(), 0.0);
+    require(std::abs(kerma_idd - kerma_voxel) <=
+                1.0e-8 * std::max(1.0, std::abs(kerma_idd)),
+            "Neutral local kerma missing from aggregate voxel scorer");
 }
 #endif
 
@@ -1417,6 +1573,7 @@ int main() {
         test_topas_spot_weights_and_tps_90_transform();
         test_dose_scorer_matches_mev_conversion();
         test_dense_voxel_mhd_writer();
+        test_ct_aligned_mhd_offset_and_index_pairing();
 #ifdef CARBON_HAS_SYCL
         test_sycl_primary_spot_batch();
         test_sycl_flat_source_extent();
