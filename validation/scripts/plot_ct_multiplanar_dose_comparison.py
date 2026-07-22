@@ -144,12 +144,21 @@ def main() -> int:
     for column, title in enumerate(titles):
         axes[0, column].set_title(title, fontsize=12)
     assert dose_image is not None and diff_image is not None
-    fig.colorbar(dose_image, ax=axes[:, :3], location="bottom", shrink=0.55, label="Dose (Gy)")
+    dose_colorbar = fig.colorbar(
+        dose_image,
+        ax=axes[:, :3],
+        location="right",
+        shrink=0.42,
+        pad=0.015,
+        label="Dose (Gy)",
+    )
+    dose_colorbar.ax.set_title("Dose", fontsize=9, pad=8)
     fig.colorbar(
         diff_image,
         ax=axes[:, 3],
-        location="bottom",
-        shrink=0.8,
+        location="right",
+        shrink=0.42,
+        pad=0.025,
         label="Dose difference (% of reference maximum)",
     )
     fig.suptitle(
