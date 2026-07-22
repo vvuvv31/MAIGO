@@ -90,6 +90,13 @@ def main() -> None:
     parser.add_argument("--products-output", type=Path, required=True)
     parser.add_argument("--metadata", type=Path, required=True)
     parser.add_argument("--phantom-half-length-mm", type=float, default=200.0)
+    parser.add_argument(
+        "--allow-identical-duplicates",
+        action="store_true",
+        help=("Recover an interrupted/restarted TOPAS ASCII output by dropping only "
+              "records whose complete parsed fields are identical; conflicting "
+              "duplicate keys remain fatal"),
+    )
     args = parser.parse_args()
 
     stem = args.input_dir / (
@@ -110,6 +117,8 @@ def main() -> None:
     interactions: dict[tuple[int, int, int, int], dict[str, object]] = {}
     products: dict[tuple[int, int, int, int], list[dict[str, object]]] = defaultdict(list)
     parsed = 0
+    duplicate_interactions = 0
+    duplicate_products = 0
     with phsp.open(encoding="utf-8") as stream:
         for line_number, line in enumerate(stream, 1):
             if not line.strip():
@@ -119,22 +128,38 @@ def main() -> None:
                    int(row["interaction_id"]))
             if row["kind"] == "interaction":
                 if key in interactions:
-                    raise SystemExit(f"Duplicate interaction key {key}")
+                    if args.allow_identical_duplicates and interactions[key] == row:
+                        duplicate_interactions += 1
+                        parsed += 1
+                        continue
+                    raise SystemExit(f"Conflicting duplicate interaction key {key}")
                 if row["track"] != row["interaction_track"]:
                     raise SystemExit(f"Interaction track mismatch for {key}")
                 interactions[key] = row
             elif row["kind"] == "product":
                 if row["parent"] != row["interaction_track"]:
                     raise SystemExit(f"Product parent mismatch for {key}")
+                if args.allow_identical_duplicates and row in products[key]:
+                    duplicate_products += 1
+                    parsed += 1
+                    continue
                 products[key].append(row)
             else:
                 raise SystemExit(f"Unknown record kind {row['kind']}")
             parsed += 1
-    if parsed != counts["entries"]:
+    if parsed != counts["entries"] and not (
+        args.allow_identical_duplicates and parsed > counts["entries"]
+    ):
         raise SystemExit(f"Parsed {parsed} entries, header reports {counts['entries']}")
     orphaned = set(products) - set(interactions)
     if orphaned:
-        raise SystemExit(f"Products without interaction: {sorted(orphaned)[:5]}")
+        if not args.allow_identical_duplicates:
+            raise SystemExit(f"Products without interaction: {sorted(orphaned)[:5]}")
+        orphan_products_dropped = sum(len(products[key]) for key in orphaned)
+        for key in orphaned:
+            del products[key]
+    else:
+        orphan_products_dropped = 0
 
     interaction_rows: list[list[object]] = []
     product_rows: list[list[object]] = []
@@ -199,6 +224,11 @@ def main() -> None:
     elapsed = re.search(r"^\s*Total:.*?Real=([0-9.]+)s", log_text, re.MULTILINE)
     metadata = {
         "case": args.case, "histories": args.histories, "entries": parsed,
+        "header_entries": counts["entries"],
+        "unique_entries": len(interaction_rows) + len(product_rows),
+        "identical_duplicate_interactions_dropped": duplicate_interactions,
+        "identical_duplicate_products_dropped": duplicate_products,
+        "orphan_products_dropped": orphan_products_dropped,
         "interactions": len(interaction_rows), "products": len(product_rows),
         "interaction_species": dict(interaction_species.most_common()),
         "product_species": dict(product_species.most_common()),

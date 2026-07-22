@@ -1,0 +1,7 @@
+# Clean diagnostic run: unique output stem avoids TOPAS ASCII append after an
+# interrupted run. Geant4 11.3.2 data are not production 11.1.3 calibration.
+includeFile = carbon_400MeVu_bone_cascade_reactions_smoke.txt
+
+i:So/CarbonBeam/NumberOfHistoriesInRun = 20000
+i:Ts/ShowHistoryCountAtInterval = 5000
+s:Sc/CascadeReactions/OutputFile = "output/cascade_e400_bone_20k_clean_reactions"

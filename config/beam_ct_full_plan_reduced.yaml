@@ -1,9 +1,10 @@
-# Full 917-spot TPS plan using the exact optimizer weights from
-# ct/code/physical_dose_result.mat.  The strict absolute population is
-# sum_i(5e4*x_i) = 1,296,381,737.23145 histories.  This production surrogate
-# transports 10,000,000 histories with the same fluence shape; multiply its
-# unnormalised voxel-dose MHD by 129.638173723145 to report the equivalent
-# full-population dose. Monte Carlo uncertainty remains that of 10M tracks.
+# Full 917-spot TPS plan using jointly calibrated per-energy GPU/Dij response
+# factors (ridge=0.03, preserving relative spot fluence within each layer),
+# followed by a uniform MU-to-ions calibration. The calibrated absolute
+# population is sum_i(5e4*x_i) = 1,347,249,023.63508.
+# This surrogate transports 10,000,000 histories with the same fluence shape;
+# multiply its unnormalised voxel-dose MHD by 134.724902363508 to report the
+# equivalent full-population dose. Monte Carlo uncertainty remains 10M tracks.
 number_of_histories: 10000000
 initial_energy_MeVu: 200.0
 mass_number: 12
@@ -33,6 +34,7 @@ voxel_size_y_mm: 2.0
 enable_energy_straggling: true
 straggling_scale: 1.0
 enable_multiple_scattering: true
+enable_ct_material_mcs: false
 enable_primary_attenuation: true
 enable_secondary_generation: true
 enable_secondary_transport: true
@@ -51,7 +53,7 @@ random_seed: 20260722
 
 # File order is the optimizer/Dij column order: IDs 1..459, then 460..917.
 topas_spots_files: ct/topas/spots_c_01.txt, ct/topas/spots_c_02.txt
-spot_weights_file: ct/code/full_plan_weights_exact.csv
+spot_weights_file: data/ct_full_plan_weights_joint_ridge0p03_absolute.csv
 spots_sad_mm: 450.0
 spots_geometry_mode: tps_90
 
@@ -76,5 +78,5 @@ fragment_species_output_file:
 fragment_species_dose_output_file:
 voxel_dose_output_file:
 voxel_dose_Gy_output_file:
-voxel_dose_mhd_output_file: out/ct/full_plan_optimized_10M/dose_10M.mhd
+voxel_dose_mhd_output_file: out/ct/full_plan_dij_layer_joint_ridge_0p03_10M/dose_10M.mhd
 device: gpu

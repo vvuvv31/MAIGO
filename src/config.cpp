@@ -588,6 +588,8 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.straggling_scale = parse_number(values, "straggling_scale", config.straggling_scale);
     config.enable_multiple_scattering =
         parse_bool(values, "enable_multiple_scattering", config.enable_multiple_scattering);
+    config.enable_ct_material_mcs =
+        parse_bool(values, "enable_ct_material_mcs", config.enable_ct_material_mcs);
     config.enable_flat_source =
         parse_bool(values, "enable_flat_source", config.enable_flat_source);
     config.flat_source_half_width_x_mm = parse_number(

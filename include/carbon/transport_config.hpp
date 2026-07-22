@@ -139,6 +139,9 @@ struct TransportConfig {
     bool enable_energy_straggling{false};
     double straggling_scale{1.0};
     bool enable_multiple_scattering{false};
+    // Use Geant4 mass radiation lengths for CT air/lung/water/bone classes.
+    // Off preserves the historical all-water MCS model exactly.
+    bool enable_ct_material_mcs{false};
     // TOPAS-style flat rectangular source in the local beam frame.
     bool enable_flat_source{false};
     double flat_source_half_width_x_mm{0.0};

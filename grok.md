@@ -413,3 +413,89 @@ TPS/Dij 的 GPU 复算校准，不应冒充对其他病例或独立 TOPAS 的通
 矢状位各选择高剂量包络内的 3 个层面，并列显示 physical dose、原始 GPU、校准 GPU
 及校准 GPU 相对参考最大剂量的差值。对应的可复现绘图入口为
 `validation/scripts/plot_ct_multiplanar_dose_comparison.py`。
+
+### 8.6 CT 精度顺序优化与联合能层校准（2026-07-22）
+
+按“核反应 → 材料 MCS → 多能层校准 → neutral → CT/数值收敛 → 绝对标定”顺序
+继续检查。参考 `physical_dose.mhd` 来自 Geant4 11.1.3，而本机 TOPAS 4.2.p3 是
+Geant4 11.3.2，因此本机新生成的材料核反应库只作为诊断，不能静默替换生产库。
+
+用 TOPAS 自定义 `CarbonMaterialPropertiesNtuple` 实测质量辐射长度：G4_AIR、
+G4_LUNG_ICRP、G4_WATER、G4_BONE_COMPACT_ICRU 分别为 36.6161、36.4162、
+36.0830、30.4866 g/cm²。GPU 新增默认关闭的 `enable_ct_material_mcs`，打开后按
+CT air/lung/water/bone 类选择质量辐射长度，旧配置关闭时逐路径保持原行为。相同
+seed 的 calibrated-weight 1M A/B 为：
+
+| 1M A/B | global 3%/3 mm | local 3%/3 mm | global 2%/2 mm |
+|---|---:|---:|---:|
+| 原水 MCS | **96.0244%** | **94.7207%** | 89.1874% |
+| 材料 MCS | 95.9713% | 94.7131% | **89.2291%** |
+| neutral first-interaction | 96.0130% | 94.7017% | 89.1761% |
+
+材料 MCS 与 neutral 都没有稳定改善 3%/3 mm，故生产配置继续关闭。neutral 还使
+IDD correlation 从 0.999143 降到 0.996675；这说明当前 11.1.3 water-derived
+neutral package 不能直接当作患者材料的精度升级。
+
+新增 `validation/scripts/optimize_ct_layer_weights_joint.py`：把 15 个 200k GPU
+能层剂量同时拟合到 full-plan 高剂量区，并用对角 ridge 拉回先前独立逐层因子，
+避免无正则解把多层推到 0.8/1.2 边界。ridge=1 的保守候选在相同 seed 1M 上把
+global/local 由 96.0244%/94.7207% 提高到 **97.6882%/96.6497%**。10M 独立确认：
+
+| 10M 指标 | 独立逐层校准 | 联合能层 ridge=1 |
+|---|---:|---:|
+| global 3%/3 mm | 95.4332% | **97.2523%** |
+| local 3%/3 mm | 93.6898% | **96.2063%** |
+| global 2%/2 mm | 88.4295% | **92.3672%** |
+| high-dose NRMSE | 4.1601% | **3.5881%** |
+| IDD correlation | **0.999108** | 0.999052 |
+| wall time | 487.5 s | 521.2 s |
+
+联合权重和为 26642.2555934，对应严格总粒子数 1,332,112,779.67，10M 理论 scale
+为 133.211277967。强制该理论 scale 时 global/local 仍为 **96.4186%/95.0277%**，
+积分差 +0.818%；最小二乘 scale 134.612037 仅高 1.05%。结果位于
+`out/ct/full_plan_dij_layer_joint_calibrated_10M/`。
+这是中间候选；后续 ridge 精调与最终 production 权重见 8.7。所有联合权重均可由
+上述脚本和同一组 15 个能层剂量重新生成。
+
+数值收敛方面，最大步长 0.5 → 0.25 mm 的相同 seed 1M 反而从
+97.6882%/96.6497% 降到 97.3319%/96.3769%，且运行时间几乎不变；误差并非步长
+主导，生产配置保持 0.5 mm。联合校准仍是病例/Dij 特定复算校准，不能冒充跨患者
+通用物理修正；跨病例泛化仍需要与 Geant4 11.1.3 一致的多能量、多材料反应库。
+
+本机 TOPAS 11.3.2 的干净 20k 骨/肺诊断进一步确认 final-state 材料效应不是零：
+骨库严格解析为 49,954 interactions / 416,021 products，肺为
+54,912 / 415,014；primary C12 的平均产物数分别为 11.2795 和 10.0100。每个
+primary reaction 的平均 neutral 动能为骨 406.1、肺 377.3 MeV。两者都已编译成
+101 个 4 MeV/u 能量箱，位于 `validation/results/diagnostic_g4_11_3_2/`。这支持以后
+实现按 CT 材料选择 reaction/cascade final state，但在拿到同版本 11.1.3 数据前，
+当前 production 仍只使用已经验证的 water-derived package 加材料相关 XS。
+
+CT 重建侧再次核对：GPU 网格 `gpu(x,y,z)=patient(y,z,-x)`、spacing
+0.5×2×0.5 mm、无插值，并使用与 `ct/topas/mc_ref/HUtoMaterialSchneider.txt`
+相同的 Schneider HU 表；4.5525 g/cm³ 的最大密度来自该表 HU≥2996 的 titanium
+section，不是 GPU 自行截断或异常插值。因此没有对 CT 几何/HU 映射做经验性改动。
+
+### 8.7 Ridge 精调与最终 MU 标定
+
+在 ridge=1 的 10M 确认后，又用相同 seed 实测 ridge=0.1 和 0.03。1M 指标为：
+
+| ridge | global 3%/3 mm | local 3%/3 mm | global 2%/2 mm | NRMSE |
+|---:|---:|---:|---:|---:|
+| 1.0 | 97.6882% | 96.6497% | 92.7727% | 3.7850% |
+| 0.1 | 98.3741% | 97.5328% | 94.0347% | 3.5714% |
+| 0.03 | **98.4537%** | **97.7488%** | **94.2583%** | **3.5302%** |
+
+ridge=0.03 的 10M 独立输运（509.4 s、无 overflow）确认：global/local 3%/3 mm
+= **97.9080%/96.7938%**，global 2%/2 mm = **93.5534%**，high-dose NRMSE
+= **3.3360%**。结果位于 `out/ct/full_plan_dij_layer_joint_ridge_0p03_10M/`。
+
+未做全局 MU 标定时，ridge=0.03 权重和 25631.90335 给出的理论 scale 只有
+128.15952，而该形状的 10M 响应 scale 为 134.72490；直接强制前者会把 gamma 降到
+90.9460%/87.9671%。因此最后把所有权重统一乘 1.051228233：相对 spot 和能层 fluence
+完全不变，固定 histories 的 GPU 剂量形状也不变，只校准 MU→ions 的全局换算。最终
+权重和 26944.980473、总粒子数 1,347,249,023.635、10M 理论 scale
+134.724902364，固化在 `data/ct_full_plan_weights_joint_ridge0p03_absolute.csv`。
+
+需要明确：这个全局因子使用当前病例 10M response 标定，所以“理论 scale 与最佳
+拟合一致”是校准结果，不是独立绝对剂量验证。对新病例应先固定该因子再做盲测；若
+追求跨病例物理泛化，仍应优先补齐 Geant4 11.1.3 多材料 final-state 数据。

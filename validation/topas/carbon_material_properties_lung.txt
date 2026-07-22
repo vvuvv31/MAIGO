@@ -1,0 +1,3 @@
+includeFile = carbon_material_properties_water.txt
+s:Ge/Sample/Material = "G4_LUNG_ICRP"
+s:Sc/MaterialProperties/OutputFile = "output/material_properties_lung"

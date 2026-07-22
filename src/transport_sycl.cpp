@@ -324,9 +324,13 @@ float highland_projected_rms_angle_device(const float kinetic_energy_MeV,
                                           const int atomic_number,
                                           const int mass_number,
                                           const float path_length_mm,
-                                          const float density_g_per_cm3) noexcept {
+                                          const float density_g_per_cm3,
+                                          const float radiation_length_g_per_cm2 =
+                                              static_cast<float>(
+                                                  water_radiation_length_g_per_cm2)) noexcept {
     if (kinetic_energy_MeV <= 0.0F || atomic_number <= 0 || mass_number <= 0 ||
-        path_length_mm <= 0.0F || density_g_per_cm3 <= 0.0F) {
+        path_length_mm <= 0.0F || density_g_per_cm3 <= 0.0F ||
+        radiation_length_g_per_cm2 <= 0.0F) {
         return 0.0F;
     }
     const auto energy_MeV_per_u = kinetic_energy_MeV / static_cast<float>(mass_number);
@@ -340,7 +344,7 @@ float highland_projected_rms_angle_device(const float kinetic_energy_MeV,
         static_cast<float>(mass_number) * momentum_MeV_per_c_per_u;
     const auto radiation_lengths =
         density_g_per_cm3 * (path_length_mm / 10.0F) /
-        static_cast<float>(water_radiation_length_g_per_cm2);
+        radiation_length_g_per_cm2;
     if (beta <= 0.0F || momentum_MeV_per_c <= 0.0F || radiation_lengths <= 0.0F) {
         return 0.0F;
     }
@@ -2049,6 +2053,7 @@ TransportResult transport_sycl(const TransportConfig& config,
     const auto straggling_scale = static_cast<float>(config.straggling_scale);
     const auto water_density_g_per_cm3 = static_cast<float>(config.water_density_g_per_cm3);
     const auto enable_multiple_scattering = config.enable_multiple_scattering;
+    const auto enable_ct_material_mcs = config.enable_ct_material_mcs;
     const auto enable_tps_source = config.enable_tps_source;
     const auto random_seed = config.random_seed;
     const auto enable_primary_attenuation = config.enable_primary_attenuation;
@@ -2753,10 +2758,17 @@ TransportResult transport_sycl(const TransportConfig& config,
                 position_z_mm += direction_z * step_mm;
                 if (enable_multiple_scattering && energy_MeV > energy_cutoff_MeV) {
                     profile_add(profile_counters_device, TransportProfileSlot::primary_mcs);
+                    const auto mcs_radiation_length =
+                        enable_ct_material_mcs && in_ct
+                            ? static_cast<float>(ct_material_radiation_length_g_per_cm2(
+                                  ct_material_class(
+                                      ct_material,
+                                      ct_material_ids_are_schneider_sections)))
+                            : static_cast<float>(water_radiation_length_g_per_cm2);
                     const auto projected_rms_angle_rad =
                         highland_projected_rms_angle_device(
                             scattering_energy_MeV, 6, primary_mass_number, step_mm,
-                            local_density_g_per_cm3);
+                            local_density_g_per_cm3, mcs_radiation_length);
                     const auto scattered = scatter_direction(
                         Direction3F{direction_x, direction_y, direction_z},
                         projected_rms_angle_rad, spot_seed, rng_history, steps, 4);
@@ -3748,10 +3760,19 @@ TransportResult transport_sycl(const TransportConfig& config,
                         if (enable_multiple_scattering && energy_MeV > energy_cutoff_MeV) {
                             profile_add(profile_counters_device,
                                         TransportProfileSlot::secondary_mcs);
+                            const auto mcs_radiation_length =
+                                enable_ct_material_mcs && in_ct
+                                    ? static_cast<float>(
+                                          ct_material_radiation_length_g_per_cm2(
+                                              ct_material_class(
+                                                  ct_material,
+                                                  ct_material_ids_are_schneider_sections)))
+                                    : static_cast<float>(water_radiation_length_g_per_cm2);
                             const auto projected_rms_angle_rad =
                                 highland_projected_rms_angle_device(
                                     scattering_energy_MeV, atomic_number, mass_number,
-                                    path_step_mm, local_density_g_per_cm3);
+                                    path_step_mm, local_density_g_per_cm3,
+                                    mcs_radiation_length);
                             const auto scattered = scatter_direction(
                                 Direction3F{direction_x, direction_y, direction_z},
                                 projected_rms_angle_rad, random_seed, rng_stream,
@@ -5153,6 +5174,9 @@ TransportResult transport_sycl(const TransportConfig& config,
     }
     if (enable_multiple_scattering) {
         result.backend += "+multiple-scattering";
+    }
+    if (enable_ct_grid && enable_ct_material_mcs) {
+        result.backend += "+ct-material-mcs";
     }
     if (enable_layered_phantom) {
         result.backend += use_material_tables ? "+layered-material" : "+layered-slab";

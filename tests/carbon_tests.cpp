@@ -170,6 +170,19 @@ void test_highland_multiple_scattering() {
             "Proton Highland angle is not finite and positive");
     require(half_step_angle < carbon_angle,
             "Highland angle did not increase with material thickness");
+    const auto bone_angle = carbon::highland_projected_rms_angle_material_rad(
+        2400.0, 6, 12, 0.5, 1.85,
+        carbon::ct_material_radiation_length_g_per_cm2(3));
+    const auto water_at_bone_density = carbon::highland_projected_rms_angle_rad(
+        2400.0, 6, 12, 0.5, 1.85);
+    require(bone_angle > water_at_bone_density,
+            "Bone radiation length did not increase CT MCS");
+    require_near(
+        carbon::highland_projected_rms_angle_material_rad(
+            2400.0, 6, 12, 0.5, 1.0,
+            carbon::ct_material_radiation_length_g_per_cm2(2)),
+        carbon::highland_projected_rms_angle_rad(2400.0, 6, 12, 0.5, 1.0),
+        2.0e-6, "Water material MCS changed beyond TOPAS rounding tolerance");
     require_near(
         carbon::highland_projected_rms_angle_rad(2400.0, 6, 12, 0.0, 1.0),
         0.0, 0.0, "Zero-length Highland angle failed");
