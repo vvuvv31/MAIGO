@@ -191,6 +191,27 @@ struct TransportConfig {
     double spots_patient_trans_z_mm{0.0};
     double spots_patient_rot_z_deg{0.0};
     double spots_ct_axis_min_mm{0.0};
+    // Optional clinical TPS source. Disabled by default so all existing
+    // TOPAS/CT examples retain their exact source construction and RNG path.
+    // YAML accepts both `tpsSource` (public switch) and `tps_source`.
+    bool enable_tps_source{false};
+    // Optional CSV columns: spot_id,energy_MeVu,x_mm,y_mm,mu_weight plus
+    // energy_spread_percent and emittance parameters. Empty => one central
+    // spot using initial_energy_MeVu and the source defaults above.
+    std::filesystem::path tps_spots_file{};
+    double tps_gantry_angle_deg{0.0};
+    double tps_couch_angle_deg{0.0};
+    double tps_collimator_angle_deg{0.0};
+    double tps_isocenter_x_mm{0.0};
+    double tps_isocenter_y_mm{0.0};
+    double tps_isocenter_z_mm{0.0};
+    double tps_sad_mm{1000.0};
+    // HFS, HFP, FFS, or FFP. Axes are converted to the simulation's patient
+    // coordinate system; isocenter coordinates are already in that system.
+    std::string tps_patient_position{"HFS"};
+    // The current physics tables model carbon ions. Keep this explicit so a
+    // proton TPS plan cannot silently run with carbon physics.
+    std::string tps_particle_type{"carbon"};
     bool enable_primary_attenuation{false};
     bool enable_secondary_generation{false};
     bool enable_secondary_transport{false};

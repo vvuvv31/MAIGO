@@ -10,6 +10,7 @@
 #include "carbon/stopping_power.hpp"
 #include "carbon/straggling.hpp"
 #include "carbon/topas_spots.hpp"
+#include "carbon/tps_source.hpp"
 #include "carbon/transport.hpp"
 #include "carbon/transport_config.hpp"
 
@@ -1037,7 +1038,160 @@ void test_topas_spot_weights_and_tps_90_transform() {
     require(clinical_ct.origin_z_mm < 0.0, "Clinical source must be before CT entrance");
 }
 
+void test_tps_source_geometry_csv_and_switch() {
+    carbon::TransportConfig config;
+    require(!config.enable_tps_source, "TPS source must default to disabled");
+    config.enable_tps_source = true;
+    config.enable_voxel_scoring = true;
+    config.number_of_histories = 40;
+    config.tps_sad_mm = 100.0;
+    config.tps_isocenter_x_mm = 10.0;
+    config.tps_isocenter_y_mm = 20.0;
+    config.tps_isocenter_z_mm = 30.0;
+    config.tps_patient_position = "HFS";
+    config.tps_particle_type = "carbon";
+    config.validate();
+
+    carbon::TpsSourcePlan one;
+    carbon::TpsSpot central;
+    central.spot_id = 1;
+    central.energy_MeVu = 200.0;
+    central.mu_weight = 1.0;
+    one.spots = {central};
+    one.total_mu = 1.0;
+
+    auto pose = one.pose_for_spot(config, central);
+    require_near(pose.uz_x, 0.0, 1.0e-12, "TPS gantry 0 direction x");
+    require_near(pose.uz_y, 0.0, 1.0e-12, "TPS gantry 0 direction y");
+    require_near(pose.uz_z, -1.0, 1.0e-12, "TPS gantry 0 direction z");
+    require_near(pose.origin_x_mm, 10.0, 1.0e-12, "TPS gantry 0 source x");
+    require_near(pose.origin_y_mm, 20.0, 1.0e-12, "TPS gantry 0 source y");
+    require_near(pose.origin_z_mm, 130.0, 1.0e-12, "TPS gantry 0 source z");
+
+    config.tps_gantry_angle_deg = 90.0;
+    pose = one.pose_for_spot(config, central);
+    require_near(pose.uz_x, -1.0, 1.0e-12, "TPS gantry 90 direction x");
+    require_near(pose.uz_z, 0.0, 1.0e-12, "TPS gantry 90 direction z");
+    require_near(pose.origin_x_mm, 110.0, 1.0e-12, "TPS gantry 90 source x");
+
+    config.tps_gantry_angle_deg = 180.0;
+    pose = one.pose_for_spot(config, central);
+    require_near(pose.uz_z, 1.0, 1.0e-12, "TPS gantry 180 direction z");
+    require_near(pose.origin_z_mm, -70.0, 1.0e-12, "TPS gantry 180 source z");
+
+    config.tps_gantry_angle_deg = 270.0;
+    pose = one.pose_for_spot(config, central);
+    require_near(pose.uz_x, 1.0, 1.0e-12, "TPS gantry 270 direction x");
+    require_near(pose.origin_x_mm, -90.0, 1.0e-12, "TPS gantry 270 source x");
+
+    config.tps_gantry_angle_deg = 90.0;
+    config.tps_patient_position = "HFP";
+    pose = one.pose_for_spot(config, central);
+    require_near(pose.uz_x, 1.0, 1.0e-12, "HFP should invert gantry-90 X");
+
+    const auto csv_path = std::filesystem::path(CARBON_SOURCE_DIR) /
+                          "validation/tps/spots_example.csv";
+    const auto plan = carbon::TpsSourcePlan::from_csv(csv_path);
+    require(plan.spots.size() == 3, "TPS CSV spot count");
+    require(plan.active_spot_count() == 2, "TPS zero-MU spot filtering");
+    require_near(plan.total_mu, 4.0, 1.0e-12, "TPS total MU");
+    const auto allocation = plan.allocate_histories(40);
+    require(allocation == std::vector<std::size_t>({10, 30, 0}),
+            "TPS Hamilton history allocation");
+
+    config.tps_patient_position = "HFS";
+    config.tps_gantry_angle_deg = 0.0;
+    config.tps_spots_file = csv_path;
+    const auto batch = plan.make_primary_batch(config);
+    require(batch.size() == 2, "TPS batch active spot count");
+    require(batch.front().history_begin == 0 && batch.front().history_end == 10 &&
+                batch.back().history_begin == 10 && batch.back().history_end == 40,
+            "TPS batch history ranges");
+    require_near(batch.front().initial_energy_MeV(), 2400.0, 1.0e-4,
+                 "TPS carbon total energy");
+    require_near(batch.front().source_origin_x_mm(), 5.0, 1.0e-6,
+                 "TPS source-plane spot X offset");
+
+    auto invalid_plan = plan;
+    invalid_plan.spots.front().energy_spread_percent = 21.0;
+    require_throws([&invalid_plan, &config] {
+        static_cast<void>(invalid_plan.make_primary_batch(config));
+    }, "TPS per-spot source parameters must be validated");
+
+    auto conflicting = config;
+    conflicting.topas_spots_file = "legacy_spots.txt";
+    require_throws([&conflicting] { conflicting.validate(); },
+                   "TPS and legacy TOPAS sources must be exclusive");
+
+    const auto yaml_path = std::filesystem::temp_directory_path() /
+                           "carbon_tps_source_switch.yaml";
+    {
+        std::ofstream output(yaml_path);
+        output << "number_of_histories: 10\n"
+               << "tpsSource: false\n";
+    }
+    const auto disabled = carbon::load_config(yaml_path);
+    require(!disabled.enable_tps_source, "tpsSource:false parsing");
+    {
+        std::ofstream output(yaml_path);
+        output << "number_of_histories: 10\n"
+               << "tpsSource: true\n"
+               << "enable_voxel_scoring: true\n"
+               << "tps_isocenter_mm: [1, 2, 3]\n";
+    }
+    const auto vector_isocenter = carbon::load_config(yaml_path);
+    require_near(vector_isocenter.tps_isocenter_x_mm, 1.0, 1.0e-12,
+                 "TPS vector isocenter X parsing");
+    require_near(vector_isocenter.tps_isocenter_y_mm, 2.0, 1.0e-12,
+                 "TPS vector isocenter Y parsing");
+    require_near(vector_isocenter.tps_isocenter_z_mm, 3.0, 1.0e-12,
+                 "TPS vector isocenter Z parsing");
+    {
+        std::ofstream output(yaml_path);
+        output << "number_of_histories: 10\n"
+               << "tpsSource: true\n"
+               << "tps_source: false\n";
+    }
+    require_throws([&yaml_path] { static_cast<void>(carbon::load_config(yaml_path)); },
+                   "Conflicting TPS switch aliases must fail");
+    std::error_code ec;
+    std::filesystem::remove(yaml_path, ec);
+}
+
 #ifdef CARBON_HAS_SYCL
+void test_sycl_tps_source_cardinal_gantry_transport() {
+    carbon::TransportConfig config;
+    config.enable_tps_source = true;
+    config.number_of_histories = 8;
+    config.initial_energy_MeVu = 10.0;
+    config.phantom_length_mm = 100.0;
+    config.depth_bin_width_mm = 1.0;
+    config.maximum_step_mm = 0.5;
+    config.maximum_relative_energy_loss = 0.01;
+    config.enable_voxel_scoring = true;
+    config.voxel_bins_x = 40;
+    config.voxel_bins_y = 40;
+    config.voxel_size_x_mm = 5.0;
+    config.voxel_size_y_mm = 5.0;
+    config.tps_gantry_angle_deg = 90.0;
+    config.tps_isocenter_z_mm = 50.0;
+    config.tps_sad_mm = 150.0;
+    const auto plan = carbon::TpsSourcePlan::from_config(config);
+    config.primary_spot_batch = plan.make_primary_batch(config);
+    config.validate();
+
+    const carbon::StoppingPowerTable table(
+        {0.01, 10.01, 20.01}, {2.0, 2.0, 2.0});
+    const auto result = carbon::transport_sycl(
+        config, table, zero_cross_section(), "cpu");
+    require(result.backend.find("+tps-source") != std::string::npos,
+            "TPS source backend tag missing");
+    require(result.total_deposited_energy_MeV > 0.0,
+            "Gantry-90 TPS beam did not enter the voxel AABB");
+    require(result.relative_energy_balance_error() < 1.0e-6,
+            "TPS cardinal gantry energy balance failed");
+}
+
 void test_sycl_primary_spot_batch() {
     carbon::TransportConfig batch;
     batch.number_of_histories = 8;
@@ -1639,10 +1793,12 @@ int main() {
         test_secondary_optimization_config_validation();
         test_topas_spots_parse_angle01();
         test_topas_spot_weights_and_tps_90_transform();
+        test_tps_source_geometry_csv_and_switch();
         test_dose_scorer_matches_mev_conversion();
         test_dense_voxel_mhd_writer();
         test_ct_aligned_mhd_offset_and_index_pairing();
 #ifdef CARBON_HAS_SYCL
+        test_sycl_tps_source_cardinal_gantry_transport();
         test_sycl_primary_spot_batch();
         test_sycl_flat_source_extent();
         test_serial_sycl_cpu_match();

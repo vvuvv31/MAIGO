@@ -5,6 +5,7 @@
 #include "carbon/reaction_package.hpp"
 #include "carbon/stopping_power.hpp"
 #include "carbon/topas_spots.hpp"
+#include "carbon/tps_source.hpp"
 #include "carbon/transport.hpp"
 #include "carbon/transport_config.hpp"
 
@@ -435,7 +436,8 @@ int main(int argc, char* argv[]) {
         carbon::SyclTransportContext* sycl_context = nullptr;
 #ifdef CARBON_HAS_SYCL
         std::unique_ptr<carbon::SyclTransportContext> sycl_context_storage;
-        if (config.device != "serial" && !spots_files.empty()) {
+        if (config.device != "serial" &&
+            (!spots_files.empty() || config.enable_tps_source)) {
             sycl_context_storage =
                 std::make_unique<carbon::SyclTransportContext>(config.device);
             sycl_context = sycl_context_storage.get();
@@ -445,7 +447,79 @@ int main(int argc, char* argv[]) {
         carbon::TransportResult result;
         const auto base_seed = config.random_seed;
 
-        if (!spots_files.empty()) {
+        if (config.enable_tps_source) {
+            if (config.device == "serial") {
+                throw std::invalid_argument(
+                    "tpsSource=true requires a SYCL device (cpu/gpu/cuda/etc.)");
+            }
+            if (sequential_spots) {
+                throw std::invalid_argument(
+                    "tpsSource=true uses the GPU primary batch and does not support "
+                    "--sequential-spots");
+            }
+            const auto plan = carbon::TpsSourcePlan::from_config(config);
+            const auto batch = plan.make_primary_batch(config);
+            std::cout << "TPS source: "
+                      << (config.tps_spots_file.empty()
+                              ? std::string{"single YAML spot"}
+                              : config.tps_spots_file.string())
+                      << '\n'
+                      << "  spots: " << batch.size() << "/" << plan.spots.size()
+                      << " active; total histories: " << config.number_of_histories
+                      << "; total MU: " << plan.total_mu << '\n'
+                      << "  gantry/couch/collimator: "
+                      << config.tps_gantry_angle_deg << "/"
+                      << config.tps_couch_angle_deg << "/"
+                      << config.tps_collimator_angle_deg << " deg; SAD: "
+                      << config.tps_sad_mm << " mm; patient: "
+                      << config.tps_patient_position << '\n';
+            if (plan_only) {
+                double min_x = std::numeric_limits<double>::infinity();
+                double max_x = -min_x;
+                double min_y = min_x;
+                double max_y = -min_x;
+                double min_z = min_x;
+                double max_z = -min_x;
+                for (const auto& spot : plan.spots) {
+                    if (spot.mu_weight <= 0.0) {
+                        continue;
+                    }
+                    const auto pose = plan.pose_for_spot(config, spot);
+                    min_x = std::min(min_x, pose.origin_x_mm);
+                    max_x = std::max(max_x, pose.origin_x_mm);
+                    min_y = std::min(min_y, pose.origin_y_mm);
+                    max_y = std::max(max_y, pose.origin_y_mm);
+                    min_z = std::min(min_z, pose.origin_z_mm);
+                    max_z = std::max(max_z, pose.origin_z_mm);
+                }
+                const auto& direction = batch.front();
+                std::cout << "  plan-only validation passed; source bounds x=["
+                          << min_x << ", " << max_x << "] y=[" << min_y << ", "
+                          << max_y << "] z=[" << min_z << ", " << max_z << "] mm\n"
+                          << "  central direction: (" << direction.beam_uz_x() << ", "
+                          << direction.beam_uz_y() << ", "
+                          << direction.beam_uz_z() << ")\n";
+                return EXIT_SUCCESS;
+            }
+            auto batch_config = config;
+            batch_config.primary_spot_batch = batch;
+            batch_config.enable_emittance_source = std::any_of(
+                batch.begin(), batch.end(), [](const auto& entry) {
+                    return entry.emittance_sigma_x_mm() > 0.0F ||
+                           entry.emittance_sigma_y_mm() > 0.0F ||
+                           entry.emittance_sigma_x_prime() > 0.0F ||
+                           entry.emittance_sigma_y_prime() > 0.0F;
+                });
+            batch_config.validate();
+            std::cout << "  batched SYCL launch: " << batch.size() << " TPS spots, "
+                      << config.number_of_histories << " histories\n";
+            result = run_transport(batch_config, stopping_power, cross_section,
+                                   reaction_packages, cascade_packages, neutral_packages,
+                                   sycl_context);
+            if (!plan.spots.empty()) {
+                config.initial_energy_MeVu = plan.spots.front().energy_MeVu;
+            }
+        } else if (!spots_files.empty()) {
             auto plan = carbon::TopasSpotPlan::from_files(spots_files);
             plan.sad_mm = config.spots_sad_mm;
             std::size_t removed_zero_weight_spots = 0;

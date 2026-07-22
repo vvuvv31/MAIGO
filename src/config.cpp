@@ -402,6 +402,47 @@ void TransportConfig::validate() const {
         throw std::invalid_argument(
             "spots_geometry_mode must be topas, beam_plus_z, or tps_90");
     }
+    if (enable_tps_source) {
+        if (!topas_spots_file.empty() || !topas_spots_files.empty() ||
+            !spot_weights_file.empty()) {
+            throw std::invalid_argument(
+                "tpsSource=true is mutually exclusive with topas_spots_file(s) and "
+                "spot_weights_file");
+        }
+        if (enable_flat_source) {
+            throw std::invalid_argument(
+                "tpsSource=true cannot combine with enable_flat_source");
+        }
+        if (!enable_voxel_scoring) {
+            throw std::invalid_argument(
+                "tpsSource=true requires enable_voxel_scoring=true so the finite "
+                "patient-volume AABB is defined");
+        }
+        if (!(tps_sad_mm > 0.0)) {
+            throw std::invalid_argument("tps_sad_mm must be positive");
+        }
+        if (!std::isfinite(tps_gantry_angle_deg) ||
+            !std::isfinite(tps_couch_angle_deg) ||
+            !std::isfinite(tps_collimator_angle_deg) ||
+            !std::isfinite(tps_isocenter_x_mm) ||
+            !std::isfinite(tps_isocenter_y_mm) ||
+            !std::isfinite(tps_isocenter_z_mm) || !std::isfinite(tps_sad_mm)) {
+            throw std::invalid_argument(
+                "TPS angles, isocenter, and SAD must be finite");
+        }
+        if (tps_patient_position != "HFS" && tps_patient_position != "HFP" &&
+            tps_patient_position != "FFS" && tps_patient_position != "FFP") {
+            throw std::invalid_argument(
+                "tps_patient_position must be HFS, HFP, FFS, or FFP");
+        }
+        if (tps_particle_type != "carbon") {
+            throw std::invalid_argument(
+                "Only tps_particle_type=carbon is supported by the current physics tables");
+        }
+    } else if (!tps_spots_file.empty()) {
+        throw std::invalid_argument(
+            "tps_spots_file is set but tpsSource=false");
+    }
     if (!primary_spot_batch.empty()) {
         std::uint64_t expected_begin = 0;
         for (const auto& entry : primary_spot_batch) {
@@ -659,6 +700,88 @@ TransportConfig load_config(const std::filesystem::path& path) {
         values, "spots_patient_rot_z_deg", config.spots_patient_rot_z_deg);
     config.spots_ct_axis_min_mm = parse_number(
         values, "spots_ct_axis_min_mm", config.spots_ct_axis_min_mm);
+    {
+        const auto camel = values.find("tpsSource");
+        const auto snake = values.find("tps_source");
+        if (camel != values.end() && snake != values.end()) {
+            const auto camel_value = parse_bool(values, "tpsSource", false);
+            const auto snake_value = parse_bool(values, "tps_source", false);
+            if (camel_value != snake_value) {
+                throw std::runtime_error(
+                    "tpsSource and tps_source are both set with different values");
+            }
+            config.enable_tps_source = camel_value;
+        } else if (camel != values.end()) {
+            config.enable_tps_source = parse_bool(
+                values, "tpsSource", config.enable_tps_source);
+        } else if (snake != values.end()) {
+            config.enable_tps_source = parse_bool(
+                values, "tps_source", config.enable_tps_source);
+        }
+    }
+    config.tps_spots_file = parse_path(values, "tps_spots_file", config.tps_spots_file);
+    config.tps_gantry_angle_deg = parse_number(
+        values, "tps_gantry_angle_deg", config.tps_gantry_angle_deg);
+    config.tps_couch_angle_deg = parse_number(
+        values, "tps_couch_angle_deg", config.tps_couch_angle_deg);
+    config.tps_collimator_angle_deg = parse_number(
+        values, "tps_collimator_angle_deg", config.tps_collimator_angle_deg);
+    {
+        const auto vector = values.find("tps_isocenter_mm");
+        const auto has_components = values.contains("tps_isocenter_x_mm") ||
+                                    values.contains("tps_isocenter_y_mm") ||
+                                    values.contains("tps_isocenter_z_mm");
+        if (vector != values.end() && has_components) {
+            throw std::runtime_error(
+                "Use either tps_isocenter_mm or its x/y/z component keys, not both");
+        }
+        if (vector != values.end()) {
+            auto text = trim(vector->second);
+            if (text.size() >= 2 && text.front() == '[' && text.back() == ']') {
+                text = text.substr(1, text.size() - 2);
+            }
+            const auto coordinates = parse_double_list(text, "tps_isocenter_mm");
+            if (coordinates.size() != 3) {
+                throw std::runtime_error(
+                    "tps_isocenter_mm must contain exactly [x, y, z]");
+            }
+            config.tps_isocenter_x_mm = coordinates[0];
+            config.tps_isocenter_y_mm = coordinates[1];
+            config.tps_isocenter_z_mm = coordinates[2];
+        } else {
+            config.tps_isocenter_x_mm = parse_number(
+                values, "tps_isocenter_x_mm", config.tps_isocenter_x_mm);
+            config.tps_isocenter_y_mm = parse_number(
+                values, "tps_isocenter_y_mm", config.tps_isocenter_y_mm);
+            config.tps_isocenter_z_mm = parse_number(
+                values, "tps_isocenter_z_mm", config.tps_isocenter_z_mm);
+        }
+    }
+    config.tps_sad_mm = parse_number(values, "tps_sad_mm", config.tps_sad_mm);
+    {
+        const auto it = values.find("tps_patient_position");
+        if (it != values.end() && !it->second.empty()) {
+            config.tps_patient_position = it->second;
+            std::transform(config.tps_patient_position.begin(),
+                           config.tps_patient_position.end(),
+                           config.tps_patient_position.begin(),
+                           [](const unsigned char character) {
+                               return static_cast<char>(std::toupper(character));
+                           });
+        }
+    }
+    {
+        const auto it = values.find("tps_particle_type");
+        if (it != values.end() && !it->second.empty()) {
+            config.tps_particle_type = it->second;
+            std::transform(config.tps_particle_type.begin(),
+                           config.tps_particle_type.end(),
+                           config.tps_particle_type.begin(),
+                           [](const unsigned char character) {
+                               return static_cast<char>(std::tolower(character));
+                           });
+        }
+    }
     config.random_seed = parse_number(values, "random_seed", config.random_seed);
     config.stopping_power_file = parse_path(values, "stopping_power_file", config.stopping_power_file);
     config.nuclear_cross_section_file =

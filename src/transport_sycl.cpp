@@ -2049,6 +2049,7 @@ TransportResult transport_sycl(const TransportConfig& config,
     const auto straggling_scale = static_cast<float>(config.straggling_scale);
     const auto water_density_g_per_cm3 = static_cast<float>(config.water_density_g_per_cm3);
     const auto enable_multiple_scattering = config.enable_multiple_scattering;
+    const auto enable_tps_source = config.enable_tps_source;
     const auto random_seed = config.random_seed;
     const auto enable_primary_attenuation = config.enable_primary_attenuation;
     const auto enable_flat_source = config.enable_flat_source;
@@ -2268,17 +2269,60 @@ TransportResult transport_sycl(const TransportConfig& config,
                 direction_y *= inv_n;
                 direction_z *= inv_n;
             }
-            // TPS-90 entrance sampling: origin lies on the CT face (z=0) but
-            // ux/uy for a slightly tilted beam still have small z components, so
-            // origin + x*ux + y*uy leaves the z=0 plane.  Project back along the
-            // particle direction onto z=0 so births are not biased to one side
-            // of the aperture (which shifted patient-Z COM by ~3–4 mm).
-            if (sycl::fabs(direction_z) > 1.0e-8F &&
-                sycl::fabs(position_z_mm) > 1.0e-6F) {
-                const auto t_plane = -position_z_mm / direction_z;
-                position_x_mm += t_plane * direction_x;
-                position_y_mm += t_plane * direction_y;
-                position_z_mm = 0.0F;
+            if (enable_tps_source) {
+                // Clinical TPS sources live at SAD outside the transport volume.
+                // Move through vacuum to the first intersection with the scorer
+                // AABB. This supports cardinal gantry directions without changing
+                // the legacy CT/TOPAS z=0 projection below.
+                auto t_enter = 0.0F;
+                auto t_exit = 1.0e30F;
+                auto hit = true;
+                auto intersect_slab = [&](const float position, const float direction,
+                                          const float lower, const float upper) {
+                    if (sycl::fabs(direction) < 1.0e-8F) {
+                        if (position < lower || position >= upper) {
+                            hit = false;
+                        }
+                        return;
+                    }
+                    auto first = (lower - position) / direction;
+                    auto second = (upper - position) / direction;
+                    if (first > second) {
+                        const auto temporary = first;
+                        first = second;
+                        second = temporary;
+                    }
+                    t_enter = sycl::fmax(t_enter, first);
+                    t_exit = sycl::fmin(t_exit, second);
+                    if (t_exit < t_enter) {
+                        hit = false;
+                    }
+                };
+                if (enable_voxel_scoring) {
+                    intersect_slab(position_x_mm, direction_x,
+                                   voxel_min_x_mm, voxel_max_x_mm);
+                    intersect_slab(position_y_mm, direction_y,
+                                   voxel_min_y_mm, voxel_max_y_mm);
+                }
+                intersect_slab(position_z_mm, direction_z, 0.0F, phantom_length_mm);
+                if (hit && t_exit >= t_enter) {
+                    const auto entry = t_enter + 1.0e-4F;
+                    position_x_mm += entry * direction_x;
+                    position_y_mm += entry * direction_y;
+                    position_z_mm += entry * direction_z;
+                }
+            } else {
+                // TPS-90 legacy entrance sampling: origin lies on the CT face
+                // (z=0) but ux/uy for a slightly tilted beam still have small z
+                // components. Project back along the particle direction. Keeping
+                // this in the false branch preserves the validated CT example.
+                if (sycl::fabs(direction_z) > 1.0e-8F &&
+                    sycl::fabs(position_z_mm) > 1.0e-6F) {
+                    const auto t_plane = -position_z_mm / direction_z;
+                    position_x_mm += t_plane * direction_x;
+                    position_y_mm += t_plane * direction_y;
+                    position_z_mm = 0.0F;
+                }
             }
             auto history_deposited_MeV = 0.0f;
             auto history_nuclear_MeV = 0.0f;
@@ -5103,6 +5147,9 @@ TransportResult transport_sycl(const TransportConfig& config,
     }
     if (!config.primary_spot_batch.empty()) {
         result.backend += "+spot-batch";
+    }
+    if (config.enable_tps_source) {
+        result.backend += "+tps-source";
     }
     if (enable_multiple_scattering) {
         result.backend += "+multiple-scattering";
