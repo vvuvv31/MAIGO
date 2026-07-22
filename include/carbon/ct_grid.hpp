@@ -58,6 +58,24 @@ struct CtGrid {
 float hu_to_density_g_per_cm3(float hu) noexcept;
 std::uint8_t density_to_material_id(float density_g_per_cm3) noexcept;
 
+// Collapse TOPAS/Schneider sections to the legacy material tables used by the
+// current CT XS/SP implementation. Schneider bounds are:
+//   0 air, 1 lung, 2..7 soft tissue/water-like, 8+ bone-like.
+// CCTG v1 already stores these four class IDs directly.
+inline std::uint8_t ct_material_class(const std::uint8_t material_id,
+                                      const bool schneider_section_id) noexcept {
+    if (!schneider_section_id) {
+        return material_id < 4U ? material_id : 3U;
+    }
+    if (material_id == 0U) {
+        return 0U;
+    }
+    if (material_id == 1U) {
+        return 1U;
+    }
+    return material_id < 8U ? 2U : 3U;
+}
+
 inline std::size_t ct_linear_index(const std::uint32_t ix,
                                    const std::uint32_t iy,
                                    const std::uint32_t iz,
@@ -115,7 +133,9 @@ inline float ct_mass_sp_energy_factor_impl(const float za_rel,
                                           LogFn&& log_fn) noexcept {
     constexpr float nucleon_mass_MeV = 931.49410242F;
     constexpr float two_me_c2_MeV = 1.0219979F;
-    constexpr float I_water_eV = 75.0F;
+    // Match G4_WATER / ICRU mean excitation energy used by the Geant4 water SP
+    // tables under data/stopping_power_water_*.csv (not the older 75 eV value).
+    constexpr float I_water_eV = 78.0F;
     const auto e = energy_MeVu > 0.5F ? energy_MeVu : 0.5F;
     const auto gamma = 1.0F + e / nucleon_mass_MeV;
     const auto beta2 = 1.0F - 1.0F / (gamma * gamma);

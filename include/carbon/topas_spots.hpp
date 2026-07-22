@@ -89,10 +89,12 @@ struct TopasSpotPlan {
 };
 
 // Convert a TOPAS world pose into the beam-aligned CT frame used by the GPU for
-// this TPS 90-degree field. The spots rotations establish the fixed TPS 0-degree
-// source direction; Patient RotZ=90 supplies the treatment angle. The patient is
-// transformed back to its local frame, then its local +X becomes GPU +Z.
-// ct_axis_min_mm is the first CT X coordinate (for this patient: -104 mm).
+// a TPS lateral field. Spots RotX/RotY set the fixed TPS 0° source direction;
+// Patient RotZ is the plan angle. World → patient-local (undo Trans/RotZ), then:
+//   GPU x = patient y,  GPU y = patient z,
+//   GPU z along ±patient x so the beam always enters at GPU z = 0 (+GPU-Z).
+// ct_axis_min_mm is the low edge of patient X on a centered CT (e.g. -104.25 mm);
+// the high edge is taken as -ct_axis_min_mm.
 [[nodiscard]] SpotSourcePose transform_tps_90_pose_to_ct(
     const SpotSourcePose& world_pose,
     double patient_trans_x_mm,

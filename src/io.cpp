@@ -537,9 +537,25 @@ void write_dense_voxel_dose_mhd(const std::filesystem::path& mhd_path,
     const auto x_extent_mm = static_cast<double>(nx) * config.voxel_size_x_mm;
     const auto y_extent_mm = static_cast<double>(ny) * config.voxel_size_y_mm;
     // Physical coordinate of the first voxel center (same as sparse CSV).
-    const auto origin_x = 0.5 * config.voxel_size_x_mm - 0.5 * x_extent_mm;
-    const auto origin_y = 0.5 * config.voxel_size_y_mm - 0.5 * y_extent_mm;
-    const auto origin_z = 0.5 * config.depth_bin_width_mm;
+    // Default: 0-centered scorer. When a matching CT grid is enabled, use the
+    // CT low-edge origin + half-voxel so MHD axes match transport sampling.
+    double origin_x = 0.5 * config.voxel_size_x_mm - 0.5 * x_extent_mm;
+    double origin_y = 0.5 * config.voxel_size_y_mm - 0.5 * y_extent_mm;
+    double origin_z = 0.5 * config.depth_bin_width_mm;
+    if (config.enable_ct_grid && !config.ct_grid_file.empty()) {
+        const auto grid = CtGrid::from_binary(config.ct_grid_file);
+        if (grid.nx == nx && grid.ny == ny && grid.nz == nz &&
+            std::abs(static_cast<double>(grid.spacing_x_mm) - config.voxel_size_x_mm) <
+                1.0e-6 &&
+            std::abs(static_cast<double>(grid.spacing_y_mm) - config.voxel_size_y_mm) <
+                1.0e-6 &&
+            std::abs(static_cast<double>(grid.spacing_z_mm) - config.depth_bin_width_mm) <
+                1.0e-6) {
+            origin_x = static_cast<double>(grid.origin_x_mm) + 0.5 * config.voxel_size_x_mm;
+            origin_y = static_cast<double>(grid.origin_y_mm) + 0.5 * config.voxel_size_y_mm;
+            origin_z = static_cast<double>(grid.origin_z_mm) + 0.5 * config.depth_bin_width_mm;
+        }
+    }
 
     std::ofstream header(mhd, std::ios::binary);
     if (!header) {

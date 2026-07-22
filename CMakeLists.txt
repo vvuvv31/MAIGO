@@ -107,4 +107,12 @@ if(CARBON_BUILD_TESTS)
         carbon_tests PRIVATE CARBON_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
     )
     add_test(NAME carbon_tests COMMAND carbon_tests)
+    find_package(Python3 COMPONENTS Interpreter QUIET)
+    if(Python3_Interpreter_FOUND)
+        add_test(
+            NAME reorient_ct_grid_tps_90_tests
+            COMMAND ${Python3_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/validation/scripts/test_reorient_ct_grid_tps_90.py
+        )
+    endif()
 endif()

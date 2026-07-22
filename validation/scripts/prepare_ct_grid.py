@@ -4,7 +4,9 @@
 Uses TOPAS HUtoMaterialSchneider.txt for density + Schneider section id +
 (Z/A)_rel and Bragg mean I for energy-dependent mass-SP vs water.
 
-Transport frame: beam +z, first slice at z=0; xy centered.
+Transport frame: beam +z, first slice near z=0; xy centered (TOPAS-style).
+
+CCTG origin is the **low edge** of the first voxel (matches GPU ct_sample).
 """
 
 from __future__ import annotations
@@ -59,11 +61,14 @@ def load_series(dicom_dir: Path) -> tuple[np.ndarray, dict]:
     spacing_z = float(np.median(np.diff(zs))) if len(zs) > 1 else float(
         getattr(ds0, "SliceThickness", 1.0)
     )
+    ipp0 = [float(v) for v in ds0.ImagePositionPatient]
     meta = {
         "n_slices": int(volume.shape[0]),
         "rows": int(volume.shape[1]),
         "cols": int(volume.shape[2]),
         "spacing_xyz_mm": [spacing_x, spacing_y, abs(spacing_z)],
+        "dicom_x_first": ipp0[0],
+        "dicom_y_first": ipp0[1],
         "dicom_z_first": float(zs[0]),
         "dicom_z_last": float(zs[-1]),
         "hu_min": float(volume.min()),
@@ -151,9 +156,21 @@ def main() -> None:
     density, section = hu_to_density_material(volume_zyx, table, use_section_id=True)
     spacing_x, spacing_y, spacing_z = meta["spacing_xyz_mm"]
 
-    origin_x = -0.5 * (nx - 1) * spacing_x if args.center_xy else 0.0
-    origin_y = -0.5 * (ny - 1) * spacing_y if args.center_xy else 0.0
-    origin_z = 0.0
+    # TOPAS TsDicomPatient ignores IPP and places the imaging volume so its
+    # center is at the component origin (see TOPAS patient docs / furtherStep.md).
+    # First-voxel CENTER is then -0.5*(n-1)*spacing on each centered axis.
+    # CCTG stores the low EDGE of that first voxel so ct_sample's floor((x-o)/s)
+    # returns the correct index.
+    if args.center_xy:
+        first_center_x = -0.5 * (nx - 1) * spacing_x
+        first_center_y = -0.5 * (ny - 1) * spacing_y
+    else:
+        first_center_x = 0.0
+        first_center_y = 0.0
+    first_center_z = 0.0  # slice 0 center at z=0 for transport
+    origin_x = first_center_x - 0.5 * spacing_x
+    origin_y = first_center_y - 0.5 * spacing_y
+    origin_z = first_center_z - 0.5 * spacing_z
 
     density_out = np.ascontiguousarray(density.reshape(-1), dtype=np.float32)
     section_out = np.ascontiguousarray(section.reshape(-1), dtype=np.uint8)
@@ -203,6 +220,17 @@ def main() -> None:
         **meta,
         "output": str(args.output),
         "origin_xyz_mm": [origin_x, origin_y, origin_z],
+        "origin_convention": "low_edge_of_first_voxel",
+        "first_center_xyz_mm": [
+            origin_x + 0.5 * spacing_x,
+            origin_y + 0.5 * spacing_y,
+            origin_z + 0.5 * spacing_z,
+        ],
+        "dicom_ipp_first_center_xyz_mm": [
+            float(meta.get("dicom_x_first", float("nan"))),
+            float(meta.get("dicom_y_first", float("nan"))),
+            float(meta.get("dicom_z_first", float("nan"))),
+        ],
         "hu_conversion": "Schneider",
         "sp_model": "SP_water(E) * f_E(za_rel,I,E) * density",
         "schneider_file": str(schneider_path),

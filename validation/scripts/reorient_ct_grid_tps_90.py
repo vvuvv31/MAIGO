@@ -1,15 +1,19 @@
 #!/usr/bin/env python3
 """Reorient a CCTG patient grid for the TPS 90-degree carbon field.
 
-The spots RotX/RotY values establish the fixed TPS 0-degree source direction.
-The TOPAS run then rotates the patient by RotZ=90 deg, producing TPS 90-degree
-incidence. After undoing that patient rotation, the beam travels along patient +X.
-The GPU transport/scorer axis is +Z, so this utility permutes the grid as:
+Spot RotX/RotY establish the fixed TPS 0° source direction. GPU transport is
+fixed along +Z, so the grid is permuted according to the actual beam direction:
 
-    GPU (x, y, z) = patient (y, z, x)
+    patient +X beam: GPU (x, y, z) = patient (y, z, +x)
+    patient -X beam: GPU (x, y, z) = patient (y, z, -x)
 
-No interpolation is performed; density/material values and the CCTG material
-table tail are preserved bit-for-bit.
+The patient-X voxel order must be reversed for a -X beam. Reversing only the
+spot coordinates would make particles traverse a depth-mirrored anatomy.
+
+No interpolation: density, material id, and CCTG table tail are bit-preserved
+aside from the axis permutation.
+
+CCTG origin is the **low edge** of the first voxel (matches ct_sample).
 """
 
 from __future__ import annotations
@@ -35,6 +39,15 @@ def main() -> int:
         "--metadata",
         type=Path,
         default=Path("ct/grid/patient_ct_tps_90.metadata.json"),
+    )
+    parser.add_argument(
+        "--beam-patient-x-direction",
+        choices=("positive", "negative"),
+        default="positive",
+        help=(
+            "Patient-X direction of beam travel. 'negative' reverses the patient-X "
+            "voxel order so beam depth still increases along GPU +Z."
+        ),
     )
     args = parser.parse_args()
 
@@ -70,25 +83,34 @@ def main() -> int:
         density.byteswap()
     material = payload[material_begin:tail_begin]
 
-    # new[patient_x, patient_z, patient_y] = old[patient_z, patient_y, patient_x].
-    # Use only the standard library so plan preparation has no NumPy dependency.
+    # GPU (x,y,z) indices = (patient_y, patient_z, patient_x) for a +X beam,
+    # or (patient_y, patient_z, nx-1-patient_x) for a -X beam.
     density_new = array.array("f", [0.0]) * count
     material_new = bytearray(count)
     old_plane = nx * ny
     for patient_x in range(nx):
+        gpu_z = (
+            patient_x
+            if args.beam_patient_x_direction == "positive"
+            else nx - 1 - patient_x
+        )
         for patient_z in range(nz):
             old_index = patient_z * old_plane + patient_x
-            new_index = (patient_x * nz + patient_z) * ny
+            new_index = (gpu_z * nz + patient_z) * ny
             for patient_y in range(ny):
                 density_new[new_index + patient_y] = density[old_index]
                 material_new[new_index + patient_y] = material[old_index]
                 old_index += nx
+
     nx_new, ny_new, nz_new = ny, nz, nx
     spacing_new = (spacing_y, spacing_z, spacing_x)
-    # prepare_ct_grid stores the first DICOM slice at z=0. TOPAS centers the
-    # DICOM volume on the patient component, so restore the centered Z coordinate.
-    patient_z_min = origin_z - 0.5 * (nz - 1) * spacing_z
-    origin_new = (origin_y, patient_z_min, 0.0)
+    # GPU x origin = patient y low edge
+    origin_x_new = origin_y
+    # Center patient Z about 0 (edge convention)
+    volume_center_z = origin_z + 0.5 * nz * spacing_z
+    origin_y_new = origin_z - volume_center_z
+    # Patient X low edge -> GPU z = 0
+    origin_z_new = 0.0
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     header_new = HEADER.pack(
@@ -97,7 +119,9 @@ def main() -> int:
         nx_new,
         ny_new,
         nz_new,
-        *origin_new,
+        float(origin_x_new),
+        float(origin_y_new),
+        float(origin_z_new),
         *spacing_new,
     )
     with args.output.open("wb") as handle:
@@ -106,20 +130,33 @@ def main() -> int:
         if sys.byteorder != "little":
             density_bytes.byteswap()
         handle.write(density_bytes.tobytes())
-        handle.write(material_new)
+        handle.write(bytes(material_new))
         handle.write(payload[tail_begin:])
 
     metadata = {
         "input": str(args.input),
         "output": str(args.output),
         "grid_version": version,
-        "axis_mapping": "gpu(x,y,z)=patient(y,z,x)",
+        "axis_mapping": (
+            "gpu(x,y,z)=patient(y,z,x)"
+            if args.beam_patient_x_direction == "positive"
+            else "gpu(x,y,z)=patient(y,z,-x)"
+        ),
+        "beam_patient_x_direction": args.beam_patient_x_direction,
         "tps_angle_deg": 90.0,
-        "beam_axis": "TPS 90: patient +X -> GPU +Z",
+        "beam_axis": (
+            "patient +X -> GPU +Z"
+            if args.beam_patient_x_direction == "positive"
+            else "patient -X -> GPU +Z"
+        ),
         "interpolation": False,
         "shape_xyz": [nx_new, ny_new, nz_new],
-        "origin_xyz_mm": list(origin_new),
+        "origin_xyz_mm": [origin_x_new, origin_y_new, origin_z_new],
+        "origin_convention": "low_edge_of_first_voxel",
         "spacing_xyz_mm": list(spacing_new),
+        "patient_shape_xyz": [nx, ny, nz],
+        "patient_origin_xyz_mm": [origin_x, origin_y, origin_z],
+        "patient_spacing_xyz_mm": [spacing_x, spacing_y, spacing_z],
         "phantom_length_mm": nx * spacing_x,
         "voxel_count": count,
         "density_min": float(min(density_new)),
