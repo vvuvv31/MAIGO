@@ -4,13 +4,15 @@
 Reports (scale-only; no free translation):
   - IDD along patient X (depth after mapping)
   - Lateral dose: σ_rms(depth), COM_y/z(depth), FWHM, Y & Z profiles at peak
-  - **Local** gamma 3%/3 mm (and 3%/5 mm) thr ≥ 10% peak — primary metric.
-    Global gamma is reported only for reference; small FOV / sparse coverage
-    makes global dose-difference criterion inappropriate.
+  - Global gamma 3%/3 mm, threshold ≥ 10% peak — primary acceptance metric.
+  - Local gamma 3%/3 mm and 3%/5 mm — stricter diagnostic of residual
+    physics/statistical differences.
 
 Geometry: GPU (505×35×417) → patient (104×126×35) via map_gpu_to_physical.
-Prelim vs TOPAS MC (+patient-X / non-xneg / RotZ=+90): flip_x=False, flip_y=False.
-(Older xneg + RotZ=−90 production match to matRad used flip_x=True.)
+
+Prelim vs TOPAS DoseToMedium on Patient (RotZ=+90, native DICOM bins):
+  - flip_x=True  — GPU +Z is −patient-X for the xneg CT packing
+  - flip_y=False — GPU x is patient Y with the same index sense
 """
 
 from __future__ import annotations
@@ -337,19 +339,19 @@ def main() -> None:
     ap.add_argument(
         "--flip-x",
         action=argparse.BooleanOptionalAction,
-        default=False,
-        help="Flip patient X when mapping GPU (default False: +X beam / non-xneg)",
+        default=True,
+        help="Flip patient X when mapping GPU (default True for TOPAS Patient CSV)",
     )
     ap.add_argument(
         "--flip-y",
         action=argparse.BooleanOptionalAction,
         default=False,
-        help="Flip patient Y when mapping GPU (default False for RotZ=+90 prelim)",
+        help="Flip patient Y when mapping GPU (default False for TOPAS Patient CSV)",
     )
     ap.add_argument(
         "--skip-global-gamma",
         action="store_true",
-        help="Skip global gamma (not meaningful for small FOV; local is primary)",
+        help="Skip global gamma for a quick diagnostic run",
     )
     args = ap.parse_args()
     out = args.output_dir
@@ -440,7 +442,8 @@ def main() -> None:
             }
         )
 
-    # Primary: local gamma. Global is optional reference only.
+    # Global gamma is the acceptance metric; local gamma is a stricter
+    # diagnostic whose per-voxel denominator strongly amplifies MC noise.
     g_local = gamma_local(
         topas, scaled, (nx, ny, nz), spacing, 3.0, 3.0, 10.0, args.gamma_points, 0
     )
@@ -569,8 +572,10 @@ def main() -> None:
         "idd_correlation": idd_corr,
         "idd_peak_bin_topas": peak_t,
         "idd_peak_bin_gpu": peak_g,
-        "idd_peak_shift_bins": peak_g - peak_t,
-        "idd_peak_shift_mm": (peak_g - peak_t) * sx,
+        "idd_peak_shift_bins": (peak_t - peak_g) if flip_x else (peak_g - peak_t),
+        "idd_peak_shift_mm": ((peak_t - peak_g) if flip_x else (peak_g - peak_t)) * sx,
+        "patient_x_peak_shift_bins": peak_g - peak_t,
+        "patient_x_peak_shift_mm": (peak_g - peak_t) * sx,
         "lateral": {
             "sigma_mean_ratio_gpu_over_topas": mean_ratio,
             "sigma_mean_ratio_near_topas_peak_pm5bins": mean_ratio_near_peak,
@@ -593,13 +598,13 @@ def main() -> None:
             "profile_y_corr_at_topas_peak": profile_corr(prof_y_t, prof_y_g),
             "profile_z_corr_at_topas_peak": profile_corr(prof_z_t, prof_z_g),
         },
-        "gamma_primary_local_3pct_3mm_thr10": g_local,
-        "gamma_local_3pct_5mm_thr10": g_local_5,
-        "gamma_global_3pct_3mm_thr10_reference_only": g_global,
+        "gamma_primary_global_3pct_3mm_thr10": g_global,
+        "gamma_local_3pct_3mm_thr10_diagnostic": g_local,
+        "gamma_local_3pct_5mm_thr10_diagnostic": g_local_5,
         "note": (
-            "Primary acceptance metric for pencil/layer is LOCAL gamma "
-            "(dose criterion = % of local ref). Global gamma is reference-only "
-            "because sparse FOV coverage inflates/deflates global pass rates. "
+            "Primary acceptance metric is global gamma on reference voxels above "
+            "10% peak. Local gamma is retained as a stricter MC-noise/physics "
+            "diagnostic (dose criterion = % of each local reference value). "
             "Lateral metrics: sigma ratio, COM offset, FWHM Y/Z, profile corr."
         ),
     }

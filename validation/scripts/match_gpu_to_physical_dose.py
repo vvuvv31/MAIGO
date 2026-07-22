@@ -126,14 +126,12 @@ def map_gpu_to_physical(
                 oy = patient_y // by
                 if oy >= lny:
                     continue
-                value = gpu[iz * plane + iy * gx + ix]
-                if value == 0.0:
-                    continue
                 linear = oz * lnx * lny + oy * lnx + ox
+                value = gpu[iz * plane + iy * gx + ix]
                 acc[linear] += value
                 counts[linear] += 1
     for i, count in enumerate(counts):
-        if count > 1:
+        if count:
             acc[i] /= float(count)
     return acc
 

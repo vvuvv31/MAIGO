@@ -114,5 +114,10 @@ if(CARBON_BUILD_TESTS)
             COMMAND ${Python3_EXECUTABLE}
                     ${CMAKE_CURRENT_SOURCE_DIR}/validation/scripts/test_reorient_ct_grid_tps_90.py
         )
+        add_test(
+            NAME dose_mapping_geometry_tests
+            COMMAND ${Python3_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/validation/scripts/test_match_gpu_geometry.py
+        )
     endif()
 endif()

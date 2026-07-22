@@ -1,7 +1,7 @@
 # Optimized 917-spot TPS 90-degree CT plan.
 #
-# Production geometry (aligned to physical_dose COM / IDD):
-#   RotZ = -90 (run_c_*.txt lists +90, but COM matches -90 isocenter Y≈+42.85 mm)
+# Production geometry (verified against TOPAS entrance phase space):
+#   RotZ = +90 (as listed by run_c_*.txt; TOPAS component rotation is passive)
 #   reorient --beam-patient-x-direction negative → patient_ct_tps_90_xneg.bin
 #   match_gpu_to_physical_dose: flip_x=True (GPU z=0 is patient-X entrance face)
 #
@@ -57,13 +57,13 @@ spot_weights_file: ct/spotWeight.csv
 spots_sad_mm: 450.0
 spots_geometry_mode: tps_90
 
-# Spot RotX/RotY = TPS 0° source basis; RotZ=-90 aligns field to physical_dose COM.
+# Spot RotX/RotY = TPS 0° source basis; Patient RotZ=+90 supplies the plan angle.
 spots_patient_trans_x_mm: -42.8515
 spots_patient_trans_y_mm: -12.7636
 spots_patient_trans_z_mm: 1.3617
-spots_patient_rot_z_deg: -90.0
-# Low edge of patient-local X after TOPAS-style centering (417 * 0.5 mm).
-spots_ct_axis_min_mm: -104.25
+spots_patient_rot_z_deg: 90.0
+# Low patient-local X edge stored in the current patient_ct.bin header.
+spots_ct_axis_min_mm: -104.0
 
 stopping_power_file: data/stopping_power_water_geant4_11_1_3.csv
 nuclear_cross_section_file: data/c12_inelastic_cross_sections_water_geant4_11_1_3.csv

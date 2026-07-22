@@ -2,6 +2,9 @@
 build/
 build-*/
 out/
+.plot-cache/
+.plot-deps/
+.venv-plot/
 *.log
 *.vtk
 *.root

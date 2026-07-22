@@ -174,6 +174,10 @@ void apply_spot_to_config(carbon::TransportConfig& config,
         config.beam_uz_y = 0.0;
         config.beam_uz_z = 1.0;
     } else if (config.spots_geometry_mode == "tps_90") {
+        // tps_zero_beam_pose_for_spot uses inverted RotX/RotY relative to the
+        // raw TOPAS component rotation so the world beam matches Geant4's
+        // volume orientation. The patient transform determines whether the beam
+        // travels +patient-X (normal packing) or −patient-X (xneg packing).
         const auto world_pose = plan.tps_zero_beam_pose_for_spot(spot);
         auto pose = carbon::transform_tps_90_pose_to_ct(
             world_pose, config.spots_patient_trans_x_mm,
@@ -548,6 +552,7 @@ int main(int argc, char* argv[]) {
             carbon::write_depth_dose_csv(config.output_file, config, result);
         }
         if (config.enable_secondary_transport &&
+            config.enable_fragment_species_scoring &&
             !config.fragment_species_output_file.empty()) {
             carbon::write_fragment_species_csv(
                 config.fragment_species_output_file, config, result);
@@ -565,6 +570,7 @@ int main(int argc, char* argv[]) {
             carbon::write_depth_dose_Gy_csv(config.dose_output_file, config, result);
         }
         if (config.enable_secondary_transport &&
+            config.enable_fragment_species_scoring &&
             !config.fragment_species_dose_output_file.empty()) {
             carbon::write_fragment_species_dose_Gy_csv(
                 config.fragment_species_dose_output_file, config, result);
@@ -636,9 +642,13 @@ int main(int argc, char* argv[]) {
                           << result.generated_cascade_products << '\n'
                           << "Queued cascade secondaries: "
                           << result.queued_cascade_secondaries << '\n'
-                          << "Cascade queue overflow: " << result.cascade_queue_overflow << '\n'
-                          << "Fragment species output: "
-                          << config.fragment_species_output_file.string() << '\n';
+                          << "Cascade queue overflow: " << result.cascade_queue_overflow
+                          << '\n';
+                if (config.enable_fragment_species_scoring &&
+                    !config.fragment_species_output_file.empty()) {
+                    std::cout << "Fragment species output: "
+                              << config.fragment_species_output_file.string() << '\n';
+                }
             }
             if (config.enable_neutral_transport) {
                 std::cout << "Neutral mode: " << config.neutral_transport_mode << '\n'
@@ -665,6 +675,7 @@ int main(int argc, char* argv[]) {
                       << '\n';
         }
         if (config.enable_secondary_transport &&
+            config.enable_fragment_species_scoring &&
             !config.fragment_species_dose_output_file.empty()) {
             std::cout << "Fragment-species dose (Gy): "
                       << config.fragment_species_dose_output_file.string() << '\n';

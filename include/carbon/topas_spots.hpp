@@ -94,7 +94,8 @@ struct TopasSpotPlan {
 //   GPU x = patient y,  GPU y = patient z,
 //   GPU z along ±patient x so the beam always enters at GPU z = 0 (+GPU-Z).
 // ct_axis_min_mm is the low edge of patient X on a centered CT (e.g. -104.25 mm);
-// the high edge is taken as -ct_axis_min_mm.
+// the high edge is taken as -ct_axis_min_mm. The sign of the transformed beam
+// direction selects the normal or xneg CT packing; no reflection is applied.
 [[nodiscard]] SpotSourcePose transform_tps_90_pose_to_ct(
     const SpotSourcePose& world_pose,
     double patient_trans_x_mm,

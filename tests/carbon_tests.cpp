@@ -56,6 +56,10 @@ void require_voxel_idd_closure(const carbon::TransportConfig& config,
                                double tolerance_MeV_per_primary) {
     require(result.voxel_deposited_energy_MeV.size() == config.number_of_voxels(),
             "Voxel tally has the wrong size");
+#if defined(CARBON_DOSE_FP32)
+    // Float atomics accumulate plane sums with ~1e-7 relative noise.
+    tolerance_MeV_per_primary = std::max(tolerance_MeV_per_primary, 1.0e-5);
+#endif
     const auto plane_size = config.voxel_bins_x * config.voxel_bins_y;
     const auto histories = static_cast<double>(config.number_of_histories);
     for (std::size_t z = 0; z < config.number_of_bins(); ++z) {
@@ -74,6 +78,9 @@ void require_charged_origin_voxel_closure(
     const carbon::TransportConfig& config,
     const carbon::TransportResult& result,
     double tolerance_MeV_per_primary) {
+#if defined(CARBON_DOSE_FP32)
+    tolerance_MeV_per_primary = std::max(tolerance_MeV_per_primary, 1.0e-5);
+#endif
     const auto voxel_count = config.number_of_voxels();
     require(result.charged_origin_voxel_deposited_energy_MeV.size() ==
                 carbon::charged_origin_category_count * voxel_count,
@@ -896,6 +903,35 @@ void test_flat_source_config_validation() {
                    "Flat source should require positive half widths");
 }
 
+void test_secondary_optimization_config_validation() {
+    carbon::TransportConfig config;
+    config.enable_secondary_generation = true;
+    config.enable_secondary_transport = true;
+    config.enable_secondary_energy_sorting = true;
+    config.secondary_local_deposit_cutoff_MeV = 1.0;
+    config.enable_fragment_species_scoring = false;
+    config.output_file.clear();
+    config.dose_output_file.clear();
+    config.fragment_species_output_file.clear();
+    config.fragment_species_dose_output_file.clear();
+    config.validate();
+
+    auto bad_sort = config;
+    bad_sort.enable_secondary_transport = false;
+    require_throws([&bad_sort] { bad_sort.validate(); },
+                   "Secondary energy sorting should require secondary transport");
+
+    auto bad_cutoff = config;
+    bad_cutoff.secondary_local_deposit_cutoff_MeV = -1.0;
+    require_throws([&bad_cutoff] { bad_cutoff.validate(); },
+                   "Secondary local-deposit cutoff should be non-negative");
+
+    auto bad_output = config;
+    bad_output.output_file = "total_idd_would_be_incomplete.csv";
+    require_throws([&bad_output] { bad_output.validate(); },
+                   "Disabling fragment scoring should reject total IDD output");
+}
+
 void test_topas_spots_parse_angle01() {
     const std::filesystem::path path =
         std::filesystem::path(CARBON_SOURCE_DIR) / "validation" / "topas" /
@@ -973,19 +1009,32 @@ void test_topas_spot_weights_and_tps_90_transform() {
     require_near(ct.uz_z, 1.0, 1.0e-9,
                  "TPS central ray points +GPU-Z after CT transform");
 
-    // Clinical Trans from run_c_*.txt. physical_dose COM is at centered Y≈+42.85;
-    // that matches Patient RotZ = -90° undoing (iso Y=+42.85), not +90° (iso Y=-42.85).
+    // TOPAS rotations are passive. World→patient is therefore R(+RotZ):
+    // RotZ=+90 maps the clinical isocenter to patient Y=+42.8515 and −X travel.
     const auto ct_m90 = carbon::transform_tps_90_pose_to_ct(
         world, -42.8515, -12.7636, 1.3617, -90.0, -104.25);
     require(ct_m90.uz_z > 0.0, "RotZ=-90 beam must enter +GPU-Z");
-    require_near(ct_m90.origin_x_mm, 42.8515, 1.0e-6,
+    require_near(ct_m90.origin_x_mm, -42.8515, 1.0e-6,
                  "RotZ=-90 isocenter GPU-X = patient Y");
 
     const auto ct_p90 = carbon::transform_tps_90_pose_to_ct(
         world, -42.8515, -12.7636, 1.3617, 90.0, -104.25);
     require(ct_p90.uz_z > 0.0, "RotZ=+90 beam must enter +GPU-Z");
-    require_near(ct_p90.origin_x_mm, -42.8515, 1.0e-6,
+    require_near(ct_p90.origin_x_mm, 42.8515, 1.0e-6,
                  "RotZ=+90 isocenter GPU-X = patient Y");
+
+    // Lock the production single-spot path. The old one-axis reflection put
+    // this at patient Y=-28.9353 while preserving the apparent beam direction.
+    carbon::TopasSpot clinical = central;
+    clinical.trans_x_mm = -13.9162;
+    clinical.rot_x_deg = 90.138;
+    const auto clinical_world = pose_plan.tps_zero_beam_pose_for_spot(clinical);
+    const auto clinical_ct = carbon::transform_tps_90_pose_to_ct(
+        clinical_world, -42.8515, -12.7636, 1.3617, 90.0, -104.0);
+    require_near(clinical_ct.origin_x_mm, 28.9353, 1.0e-6,
+                 "Clinical spot patient-Y path");
+    require(clinical_ct.uz_z > 0.999, "Clinical spot must travel along +GPU-Z");
+    require(clinical_ct.origin_z_mm < 0.0, "Clinical source must be before CT entrance");
 }
 
 #ifdef CARBON_HAS_SYCL
@@ -1022,13 +1071,20 @@ void test_sycl_primary_spot_batch() {
     part.number_of_histories = 5;
     part.initial_energy_MeVu = 15.0;
     const auto b = carbon::transport_sycl(part, table, zero_cross_section(), "cpu");
+    // FP32 dose atomics (CARBON_DOSE_FP32) accumulate ~1e-6 relative noise.
+    constexpr double batch_tol =
+#if defined(CARBON_DOSE_FP32)
+        1.0e-4;
+#else
+        1.0e-6;
+#endif
     require_near(combined.initial_energy_MeV,
-                 a.initial_energy_MeV + b.initial_energy_MeV, 1.0e-6,
+                 a.initial_energy_MeV + b.initial_energy_MeV, batch_tol,
                  "batched initial energy");
     for (std::size_t i = 0; i < combined.deposited_energy_MeV.size(); ++i) {
         require_near(combined.deposited_energy_MeV[i],
                      a.deposited_energy_MeV[i] + b.deposited_energy_MeV[i],
-                     1.0e-6, "batched primary dose");
+                     batch_tol, "batched primary dose");
     }
 }
 
@@ -1313,20 +1369,26 @@ void test_sycl_secondary_queue_generation() {
     require(cascaded.relative_energy_balance_error() < 1.0e-4,
             "Fragment cascade total energy balance failed");
 
-    // Same seed + cascade: IDD must be bit-identical (RNG streams no longer use
-    // atomic queue slots).
+    // Same seed + cascade: IDD must match (RNG streams no longer use atomic queue
+    // slots). FP32 dose atomics can reassociate concurrent residual deposits, so
+    // allow a tiny absolute band when CARBON_DOSE_FP32 is on.
     const auto cascaded_repeat = carbon::transport_sycl(
         config, stopping_power, forced_reaction, "cpu", &reaction_packages,
         &cascade_packages);
     require(cascaded.deposited_energy_MeV.size() ==
                 cascaded_repeat.deposited_energy_MeV.size(),
             "Cascade reproducibility IDD size mismatch");
+#if defined(CARBON_DOSE_FP32)
+    constexpr double cascade_repro_tol = 1.0e-3;
+#else
+    constexpr double cascade_repro_tol = 0.0;
+#endif
     for (std::size_t bin = 0; bin < cascaded.deposited_energy_MeV.size(); ++bin) {
-        require(cascaded.deposited_energy_MeV[bin] ==
-                    cascaded_repeat.deposited_energy_MeV[bin],
-                "Cascade IDD not bit-identical at bin " + std::to_string(bin) +
-                    " a=" + std::to_string(cascaded.deposited_energy_MeV[bin]) +
-                    " b=" + std::to_string(cascaded_repeat.deposited_energy_MeV[bin]));
+        require_near(cascaded.deposited_energy_MeV[bin],
+                     cascaded_repeat.deposited_energy_MeV[bin], cascade_repro_tol,
+                     "Cascade IDD not reproducible at bin " + std::to_string(bin) +
+                         " a=" + std::to_string(cascaded.deposited_energy_MeV[bin]) +
+                         " b=" + std::to_string(cascaded_repeat.deposited_energy_MeV[bin]));
     }
     require(cascaded.cascade_interactions == cascaded_repeat.cascade_interactions &&
                 cascaded.queued_cascade_secondaries ==
@@ -1518,8 +1580,13 @@ void test_sycl_neutral_transport_smoke() {
     const auto total_voxel =
         std::accumulate(result.voxel_deposited_energy_MeV.begin(),
                         result.voxel_deposited_energy_MeV.end(), 0.0);
+#if defined(CARBON_DOSE_FP32)
+    constexpr double neutral_voxel_rel = 1.0e-5;
+#else
+    constexpr double neutral_voxel_rel = 1.0e-8;
+#endif
     require(std::abs(total_idd - total_voxel) <=
-                1.0e-8 * std::max(1.0, std::abs(total_idd)),
+                neutral_voxel_rel * std::max(1.0, std::abs(total_idd)),
             "Neutral-origin dose missing from aggregate voxel scorer");
     require(result.relative_energy_balance_error() < 5.0e-2,
             "Neutral transport energy balance failed: " +
@@ -1541,7 +1608,7 @@ void test_sycl_neutral_transport_smoke() {
         std::accumulate(kerma_result.voxel_deposited_energy_MeV.begin(),
                         kerma_result.voxel_deposited_energy_MeV.end(), 0.0);
     require(std::abs(kerma_idd - kerma_voxel) <=
-                1.0e-8 * std::max(1.0, std::abs(kerma_idd)),
+                neutral_voxel_rel * std::max(1.0, std::abs(kerma_idd)),
             "Neutral local kerma missing from aggregate voxel scorer");
 }
 #endif
@@ -1569,6 +1636,7 @@ int main() {
         test_cascade_package_loading();
         test_neutral_package_loading();
         test_flat_source_config_validation();
+        test_secondary_optimization_config_validation();
         test_topas_spots_parse_angle01();
         test_topas_spot_weights_and_tps_90_transform();
         test_dose_scorer_matches_mev_conversion();

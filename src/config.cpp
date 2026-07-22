@@ -216,6 +216,10 @@ void TransportConfig::validate() const {
     if (energy_cutoff_MeV < 0.0 || water_density_g_per_cm3 <= 0.0 || scorer_area_mm2 <= 0.0) {
         throw std::invalid_argument("cutoff must be nonnegative; density and scorer area must be positive");
     }
+    if (secondary_local_deposit_cutoff_MeV < 0.0) {
+        throw std::invalid_argument(
+            "secondary_local_deposit_cutoff_MeV must be non-negative");
+    }
     if (enable_layered_phantom) {
         validate_slab_layers(slab_layers, phantom_length_mm);
         const auto has_sp = !slab_stopping_power_files.empty();
@@ -294,6 +298,10 @@ void TransportConfig::validate() const {
         throw std::invalid_argument(
             "enable_secondary_transport requires enable_secondary_generation=true");
     }
+    if (enable_secondary_energy_sorting && !enable_secondary_transport) {
+        throw std::invalid_argument(
+            "enable_secondary_energy_sorting requires enable_secondary_transport=true");
+    }
     if (enable_charged_origin_voxel_scoring && !enable_secondary_transport) {
         throw std::invalid_argument(
             "charged-origin voxel scoring requires secondary transport");
@@ -302,6 +310,18 @@ void TransportConfig::validate() const {
         (!enable_secondary_transport || maximum_cascade_generations == 0)) {
         throw std::invalid_argument(
             "enable_fragment_cascade requires secondary transport and at least one generation");
+    }
+    if (!enable_fragment_species_scoring && enable_secondary_transport &&
+        (!output_file.empty() || !dose_output_file.empty() ||
+         !fragment_species_output_file.empty() ||
+         !fragment_species_dose_output_file.empty())) {
+        throw std::invalid_argument(
+            "fragment species scoring disabled: depth-dose and fragment output "
+            "paths must be empty (voxel dose remains available)");
+    }
+    if (!enable_fragment_species_scoring && neutral_local_kerma_fraction > 0.0) {
+        throw std::invalid_argument(
+            "neutral_local_kerma_fraction requires fragment species scoring");
     }
     if (enable_neutral_transport &&
         (!enable_secondary_generation || !enable_secondary_transport ||
@@ -413,6 +433,9 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.maximum_relative_energy_loss =
         parse_number(values, "maximum_relative_energy_loss", config.maximum_relative_energy_loss);
     config.energy_cutoff_MeV = parse_number(values, "energy_cutoff_MeV", config.energy_cutoff_MeV);
+    config.secondary_local_deposit_cutoff_MeV = parse_number(
+        values, "secondary_local_deposit_cutoff_MeV",
+        config.secondary_local_deposit_cutoff_MeV);
     config.water_density_g_per_cm3 =
         parse_number(values, "water_density_g_per_cm3", config.water_density_g_per_cm3);
     config.enable_layered_phantom =
@@ -552,6 +575,9 @@ TransportConfig load_config(const std::filesystem::path& path) {
         parse_bool(values, "enable_secondary_transport", config.enable_secondary_transport);
     config.enable_fragment_cascade =
         parse_bool(values, "enable_fragment_cascade", config.enable_fragment_cascade);
+    config.enable_fragment_species_scoring = parse_bool(
+        values, "enable_fragment_species_scoring",
+        config.enable_fragment_species_scoring);
     config.enable_neutral_transport =
         parse_bool(values, "enable_neutral_transport", config.enable_neutral_transport);
     const auto neutral_mode = values.find("neutral_transport_mode");
@@ -584,6 +610,9 @@ TransportConfig load_config(const std::filesystem::path& path) {
         parse_number(values, "history_chunk_size", config.history_chunk_size);
     config.secondary_batch_size =
         parse_number(values, "secondary_batch_size", config.secondary_batch_size);
+    config.enable_secondary_energy_sorting = parse_bool(
+        values, "enable_secondary_energy_sorting",
+        config.enable_secondary_energy_sorting);
     config.source_origin_x_mm =
         parse_number(values, "source_origin_x_mm", config.source_origin_x_mm);
     config.source_origin_y_mm =

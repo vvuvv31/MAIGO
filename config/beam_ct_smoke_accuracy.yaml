@@ -39,7 +39,8 @@ voxel_size_x_mm: 0.5
 voxel_size_y_mm: 2.0
 
 enable_energy_straggling: true
-straggling_scale: 1.2
+straggling_scale: 1.0
+ct_stopping_power_scale: 1.008
 enable_multiple_scattering: true
 enable_primary_attenuation: true
 enable_secondary_generation: true
@@ -72,10 +73,13 @@ nuclear_cross_section_file: data/c12_inelastic_cross_sections_water_geant4_11_1_
 reaction_package_file: validation/results/topas_400MeVu_cascade_aligned_primary_3d.bin
 cascade_package_file: validation/results/topas_400MeVu_cascade_100k_3d.bin
 
-output_file: out/ct/p1_profile_smoke/idd.csv
-dose_output_file: out/ct/p1_profile_smoke/idd_Gy.csv
-fragment_species_output_file: out/ct/p1_profile_smoke/species.csv
-fragment_species_dose_output_file: out/ct/p1_profile_smoke/species_Gy.csv
-voxel_dose_output_file: out/ct/p1_profile_smoke/voxels.csv
-voxel_dose_Gy_output_file: out/ct/p1_profile_smoke/voxels_Gy.csv
+output_file: out/ct/smoke_accuracy/idd.csv
+dose_output_file: out/ct/smoke_accuracy/idd_Gy.csv
+fragment_species_output_file: out/ct/smoke_accuracy/species.csv
+fragment_species_dose_output_file: out/ct/p3_dda_smoke/species_Gy.csv
+voxel_dose_output_file: out/ct/p3_dda_smoke/voxels.csv
+voxel_dose_Gy_output_file: out/ct/p3_dda_smoke/voxels_Gy.csv
 device: gpu
+ct_lung_cross_section_file: data/c12_inelastic_cross_sections_lung_geant4_11_1_3.csv
+ct_water_cross_section_file: data/c12_inelastic_cross_sections_water_geant4_11_1_3.csv
+ct_bone_cross_section_file: data/c12_inelastic_cross_sections_bone_geant4_11_1_3.csv

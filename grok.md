@@ -251,3 +251,39 @@ TITAN RTX 上 9.17M full-plan 的实测总时间约 1827 s，其中 primary kern
 每一步使用相同 seed、spot 权重和 histories 独立 A/B；先用缩小样本筛选，再以较大
 样本复核。性能以 kernel wall time 和 histories/s 为准，精度以体素总积分、中心轴/IDD
 以及 gamma 为准。最终只将通过物理回归的组合写入 full-plan 推荐配置。
+
+### 7.4 10 万 histories A/B 实测结果
+
+所有测试均使用 TITAN RTX、相同的 853 个非零权重 spot、`random_seed=20260722`，
+物理基线为 `maximum_step_mm=0.5`、`maximum_relative_energy_loss=0.005`。
+
+| 改动 | secondary kernel | 吞吐 | 结论 |
+|---|---:|---:|---|
+| batch 8k（基线） | 40.909 s | 2,414 hist/s | — |
+| batch 32k | 11.963 s | 8,019 hist/s | 显著有效 |
+| batch 64k | 8.078 s | 11,680 hist/s | 采用；相对 8k 快 4.84× |
+| rel-loss 0.01 | 7.905 s | 12,007 hist/s | 总时间无稳定收益，不采用 |
+| rel-loss 0.02 | 7.964 s | 12,029 hist/s | 总时间无稳定收益，不采用 |
+| 1 MeV 次级局部沉积 | 7.076 s | 13,283 hist/s | 采用；比 0.1 MeV 快约 12.4% |
+| 5 MeV 次级局部沉积 | 7.061 s | 13,324 hist/s | 无额外收益且改变低能级联，不采用 |
+| 1 MeV + GPU 能量分桶 | 6.801 s | 13,777 hist/s | 采用；排序开销已包含，额外约 3.9% |
+| 再关闭 fragment species scorer | 7.250 s（复测） | 12,879 hist/s | 小幅约 1.9%，用于仅输出 MHD 的 full plan |
+
+batch 8k/32k/64k 的 histories、输运步数和反应数完全一致；64k 相对 8k 的总积分差
+`−1.13e−10`，最大体素差仅为全局最大剂量的 `1.12e−7`。1 MeV 局部沉积相对
+0.1 MeV 的总积分差为 `−6.73e−5%`，2 mm 重采样后的 global/local 3%/3 mm 均为
+100%。5 MeV 虽也通过该低统计 gamma，但已减少低能级联事件，因此选择 1 MeV。
+
+rel-loss 0.01/0.02 在 2 mm 重采样后 global 3%/3 mm 分别为 99.18%/99.22%，local
+为 92.14%/91.73%；更重要的是 wall time 没有稳定下降（0.5 mm 几何步长仍主导），
+所以生产配置保留更保守的 0.005。
+
+关闭 fragment species scorer 后，总 3D MHD 积分相对开启时只差 `1.83e−9%`，最大
+体素差为全局最大剂量的 `5.59e−6%`。级联 residual local heat 现直接计入每粒子
+deposited energy，不再依赖 species scorer 间接补账；关闭 scorer 后能量守恒误差仍为
+`2.66e−5`。该模式强制禁用 IDD/species 文件，避免输出缺少次级深度剂量的假“总 IDD”。
+
+100 万 histories 的组合复核（64k + 1 MeV + energy sorting + species scorer off）耗时
+**55.48 s**，吞吐 **18,025 hist/s**，secondary kernel 52.66 s；累计输运 2,979,094
+个带电次级、1.2746e10 个次级步，queue overflow 为 0，能量守恒误差 `1.73e−5`。
+按该吞吐线性估算 9.17M 约 8.5 分钟；实际 full-plan 时间仍应以完整重跑为准。

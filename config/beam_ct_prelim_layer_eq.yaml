@@ -9,8 +9,8 @@ energy_cutoff_MeV: 0.1
 water_density_g_per_cm3: 1.0
 scorer_area_mm2: 17675.0
 enable_ct_grid: true
-# Match TOPAS prelim MC path: +patient-X beam, patient Y sign of RotZ=+90.
-ct_grid_file: ct/grid/patient_ct_tps_90.bin
+# TOPAS RotZ=+90 enters at +patient-X and travels −patient-X; use xneg packing.
+ct_grid_file: ct/grid/patient_ct_tps_90_xneg.bin
 ct_skip_homogeneous_face_clamp: true
 enable_voxel_scoring: true
 voxel_bins_x: 505
@@ -19,7 +19,7 @@ voxel_size_x_mm: 0.5
 voxel_size_y_mm: 2.0
 enable_energy_straggling: true
 straggling_scale: 1.0
-ct_stopping_power_scale: 1.008
+ct_stopping_power_scale: 1.0
 enable_multiple_scattering: true
 enable_primary_attenuation: true
 enable_secondary_generation: true
@@ -37,7 +37,7 @@ spots_patient_trans_x_mm: -42.8515
 spots_patient_trans_y_mm: -12.7636
 spots_patient_trans_z_mm: 1.3617
 spots_patient_rot_z_deg: 90.0
-spots_ct_axis_min_mm: -104.25
+spots_ct_axis_min_mm: -104.0
 stopping_power_file: data/stopping_power_water_geant4_11_1_3.csv
 nuclear_cross_section_file: data/c12_inelastic_cross_sections_water_geant4_11_1_3.csv
 ct_lung_cross_section_file: data/c12_inelastic_cross_sections_lung_geant4_11_1_3.csv

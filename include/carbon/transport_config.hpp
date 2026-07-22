@@ -92,6 +92,9 @@ struct TransportConfig {
     double maximum_step_mm{0.5};
     double maximum_relative_energy_loss{0.005};
     double energy_cutoff_MeV{0.1};
+    // Charged secondaries below this total kinetic energy are stopped and their
+    // remaining energy is deposited locally. 0 uses energy_cutoff_MeV.
+    double secondary_local_deposit_cutoff_MeV{0.0};
     double water_density_g_per_cm3{1.0};
     // When true, axial slabs override uniform water.
     // Density-only mode: SP/XS water tables × local density (water-equivalent).
@@ -180,7 +183,8 @@ struct TransportConfig {
     //   offsets (TransX,TransZ) as (x,y); ignores gantry for depth scoring.
     // "tps_90": TPS 90-degree incidence. Spot rotations establish the fixed
     //   TPS 0-degree source direction, while Patient RotZ=90 supplies the plan
-    //   angle. The reoriented patient local +X is GPU +Z.
+    //   angle. The transform maps either patient-X travel direction to GPU +Z;
+    //   use the xneg CT packing when Patient RotZ makes the beam travel −X.
     std::string spots_geometry_mode{"topas"};
     double spots_patient_trans_x_mm{0.0};
     double spots_patient_trans_y_mm{0.0};
@@ -191,6 +195,9 @@ struct TransportConfig {
     bool enable_secondary_generation{false};
     bool enable_secondary_transport{false};
     bool enable_fragment_cascade{false};
+    // Per-species secondary depth-dose scoring. Disable for voxel-only full-plan
+    // production to remove an otherwise redundant global atomic per deposit.
+    bool enable_fragment_species_scoring{true};
     bool enable_neutral_transport{false};
     // "first_interaction": free path + one package (mode D); continuation residual.
     // "full": re-queue neutral continuations up to maximum_neutral_generations.
@@ -230,6 +237,10 @@ struct TransportConfig {
     std::size_t history_chunk_size{0};
     // Secondary/cascade particles processed per GPU submit. 0 = auto (CUDA small).
     std::size_t secondary_batch_size{0};
+    // Reorder each secondary batch into contiguous initial-energy-per-nucleon
+    // buckets before transport to reduce warp divergence. Off by default until
+    // benchmarked on the target GPU.
+    bool enable_secondary_energy_sorting{false};
     std::uint64_t random_seed{20'260'714};
     std::filesystem::path stopping_power_file{"data/stopping_power_water.csv"};
     std::filesystem::path nuclear_cross_section_file{

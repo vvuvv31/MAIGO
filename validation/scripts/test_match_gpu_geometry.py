@@ -17,6 +17,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from match_gpu_to_physical_dose import map_gpu_to_physical  # noqa: E402
+from rebin_topas_patient_dose import rebin  # noqa: E402
 
 
 def _com_x(values: list[float], shape: tuple[int, int, int], thr: float) -> float:
@@ -70,6 +71,22 @@ def test_block_avg_constant_field() -> None:
     assert all(v > 0.0 for v in mapped)
 
 
+def test_sparse_block_average_includes_zero_voxels() -> None:
+    """A sparse hit is divided by the full geometric block volume."""
+    # Each output voxel covers 2 patient-X × 2 patient-Y × 1 patient-Z.
+    gpu = array.array("f", [0.0] * 16)
+    gpu[0] = 1.0
+    mapped = map_gpu_to_physical(
+        gpu, (4, 1, 4), (4, 4, 1), (2, 2, 1), False, False
+    )
+    assert abs(mapped[0] - 0.25) < 1e-7, mapped
+
+    topas = array.array("f", [0.0] * 16)
+    topas[0] = 1.0
+    rebinned = rebin(topas, (4, 4, 1), (2, 2, 1))
+    assert abs(rebinned[0] - 0.25) < 1e-7, rebinned
+
+
 def test_gamma_identity_on_self() -> None:
     """Self-match of a smooth blob must pass global 3%/3mm at thr 10%."""
     from match_gpu_to_physical_dose import fit_scale, gamma_3d
@@ -103,6 +120,7 @@ def test_gamma_identity_on_self() -> None:
 def main() -> None:
     test_flip_x_required_for_depth_face()
     test_block_avg_constant_field()
+    test_sparse_block_average_includes_zero_voxels()
     test_gamma_identity_on_self()
     print("test_match_gpu_geometry OK")
 

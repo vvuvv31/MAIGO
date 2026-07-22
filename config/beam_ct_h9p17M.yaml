@@ -61,17 +61,14 @@ spot_weights_file: ct/spotWeight.csv
 spots_sad_mm: 450.0
 spots_geometry_mode: tps_90
 
-# From run_c_01.txt/run_c_02.txt Trans. Spot RotX/RotY = TPS 0° source basis.
-# run_c lists Patient/RotZ=+90, but physical_dose COM (centered Y≈+42.85 mm) matches
-# the isocenter obtained by undoing RotZ=-90 (iso Y=+42.85), not +90 (iso Y=-42.85).
-# Use -90 so the field samples the same patient-Y side as the TOPAS-optimized dose.
+# From run_c_01.txt/run_c_02.txt. Spot RotX/RotY is the TPS 0° source basis;
+# TOPAS passive Patient/RotZ=+90 maps the beam from +patient-X toward −X.
 spots_patient_trans_x_mm: -42.8515
 spots_patient_trans_y_mm: -12.7636
 spots_patient_trans_z_mm: 1.3617
-spots_patient_rot_z_deg: -90.0
-# Low edge of patient-local X in patient_ct.bin (first voxel edge after centering).
-# With 417 * 0.5 mm and TOPAS-style XY centering: -0.5 * 417 * 0.5 = -104.25.
-spots_ct_axis_min_mm: -104.25
+spots_patient_rot_z_deg: 90.0
+# Low patient-local X edge stored in the current patient_ct.bin header.
+spots_ct_axis_min_mm: -104.0
 
 stopping_power_file: data/stopping_power_water_geant4_11_1_3.csv
 nuclear_cross_section_file: data/c12_inelastic_cross_sections_water_geant4_11_1_3.csv

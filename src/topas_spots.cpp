@@ -191,8 +191,9 @@ SpotSourcePose transform_tps_90_pose_to_ct(
     const double patient_rot_z_deg,
     const double ct_axis_min_mm) noexcept {
     constexpr double deg2rad = 3.14159265358979323846 / 180.0;
-    // Undo Patient RotZ in world → patient-local (TOPAS placement inverse).
-    const auto angle = -patient_rot_z_deg * deg2rad;
+    // TOPAS component rotations are passive: Patient local→world is R(-RotZ).
+    // Therefore its world→patient inverse is R(+RotZ), not R(-RotZ).
+    const auto angle = patient_rot_z_deg * deg2rad;
     const auto c = std::cos(angle);
     const auto s = std::sin(angle);
 
