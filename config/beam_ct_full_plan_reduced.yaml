@@ -1,10 +1,10 @@
 # Full 917-spot TPS plan using the exact optimizer weights from
 # ct/code/physical_dose_result.mat.  The strict absolute population is
 # sum_i(5e4*x_i) = 1,296,381,737.23145 histories.  This production surrogate
-# transports 9,170,000 histories with the same fluence shape; multiply its
-# unnormalised voxel-dose MHD by 141.3720542237138 to report the equivalent
-# full-population dose.  Monte Carlo uncertainty remains that of 9.17M tracks.
-number_of_histories: 9170000
+# transports 10,000,000 histories with the same fluence shape; multiply its
+# unnormalised voxel-dose MHD by 129.638173723145 to report the equivalent
+# full-population dose. Monte Carlo uncertainty remains that of 10M tracks.
+number_of_histories: 10000000
 initial_energy_MeVu: 200.0
 mass_number: 12
 
@@ -76,5 +76,5 @@ fragment_species_output_file:
 fragment_species_dose_output_file:
 voxel_dose_output_file:
 voxel_dose_Gy_output_file:
-voxel_dose_mhd_output_file: out/ct/full_plan_reduced/dose_9p17M.mhd
+voxel_dose_mhd_output_file: out/ct/full_plan_optimized_10M/dose_10M.mhd
 device: gpu

@@ -3,7 +3,7 @@
 
 Production geometry convention (do not free-translate):
   - CT: patient_ct_tps_90_xneg.bin (beam along −patient X, GPU +Z depth)
-  - spots_patient_rot_z_deg: −90 (physical_dose COM; run_c lists +90)
+  - spots_patient_rot_z_deg: +90 (TOPAS passive component rotation)
   - flip_x=True: GPU z=0 → patient X max (entrance face for xneg)
   - flip_y=False
 
@@ -27,6 +27,8 @@ import math
 import random
 import sys
 from pathlib import Path
+
+import numpy as np
 
 
 def read_mhd(path: Path) -> tuple[dict[str, str], array.array]:
@@ -171,15 +173,21 @@ def gamma_3d(
     thr_percent: float,
     max_points: int,
     seed: int,
+    local_dose: bool = False,
+    interpolation_step_mm: float = 0.5,
 ) -> dict[str, float]:
+    """3D gamma with trilinear evaluation-dose interpolation.
+
+    The dose grid is 2 mm, while a 3 mm DTA criterion requires sub-voxel
+    candidates. Searching voxel centres alone materially underestimates the
+    pass rate. ``max_points`` still provides deterministic subsampling for
+    exceptionally large grids.
+    """
     nx, ny, nz = shape
     sx, sy, sz = spacing_mm
     ref_max = max(ref)
     thr = thr_percent / 100.0 * ref_max
-    dose_crit = dose_percent / 100.0 * ref_max
-    rx = max(1, int(math.ceil(distance_mm / sx)))
-    ry = max(1, int(math.ceil(distance_mm / sy)))
-    rz = max(1, int(math.ceil(distance_mm / sz)))
+    global_dose_crit = dose_percent / 100.0 * ref_max
     selected = [i for i, v in enumerate(ref) if v >= thr]
     total_available = len(selected)
     if total_available == 0:
@@ -187,41 +195,75 @@ def gamma_3d(
     if total_available > max_points:
         rng = random.Random(seed)
         selected = rng.sample(selected, max_points)
-    passed = 0
-    for linear in selected:
-        iz = linear // (nx * ny)
-        rem = linear % (nx * ny)
-        iy = rem // nx
-        ix = rem % nx
-        ref_val = ref[linear]
-        x0 = max(0, ix - rx)
-        x1 = min(nx, ix + rx + 1)
-        y0 = max(0, iy - ry)
-        y1 = min(ny, iy + ry + 1)
-        z0 = max(0, iz - rz)
-        z1 = min(nz, iz + rz + 1)
-        best = float("inf")
-        for jx in range(x0, x1):
-            dx = (jx - ix) * sx
-            for jy in range(y0, y1):
-                dy = (jy - iy) * sy
-                for jz in range(z0, z1):
-                    dz = (jz - iz) * sz
-                    e = eval_[jz * nx * ny + jy * nx + jx]
-                    g2 = (
-                        (dx / distance_mm) ** 2
-                        + (dy / distance_mm) ** 2
-                        + (dz / distance_mm) ** 2
-                        + ((e - ref_val) / dose_crit) ** 2
-                    )
-                    if g2 < best:
-                        best = g2
-        if best <= 1.0:
-            passed += 1
+    if interpolation_step_mm <= 0.0:
+        raise ValueError("interpolation_step_mm must be positive")
+    linear = np.asarray(selected, dtype=np.int64)
+    iz = linear // (nx * ny)
+    rem = linear % (nx * ny)
+    iy = rem // nx
+    ix = rem % nx
+    ref_values = np.asarray(ref, dtype=np.float64)[linear]
+    evaluated = np.asarray(eval_, dtype=np.float64).reshape(nz, ny, nx)
+    dose_crit = (
+        np.maximum(dose_percent / 100.0 * ref_values, 1.0e-30)
+        if local_dose
+        else np.full(ref_values.shape, global_dose_crit, dtype=np.float64)
+    )
+    best = np.full(linear.size, np.inf, dtype=np.float64)
+    offsets = np.arange(
+        -distance_mm,
+        distance_mm + 0.25 * interpolation_step_mm,
+        interpolation_step_mm,
+    )
+    for dz in offsets:
+        for dy in offsets:
+            for dx in offsets:
+                distance2 = dx * dx + dy * dy + dz * dz
+                if distance2 > distance_mm * distance_mm + 1.0e-9:
+                    continue
+                qz = iz + dz / sz
+                qy = iy + dy / sy
+                qx = ix + dx / sx
+                valid = (
+                    (qz >= 0.0) & (qz <= nz - 1) &
+                    (qy >= 0.0) & (qy <= ny - 1) &
+                    (qx >= 0.0) & (qx <= nx - 1)
+                )
+                ids = np.flatnonzero(valid)
+                if ids.size == 0:
+                    continue
+                z0 = np.floor(qz[ids]).astype(np.int32)
+                y0 = np.floor(qy[ids]).astype(np.int32)
+                x0 = np.floor(qx[ids]).astype(np.int32)
+                z1 = np.minimum(z0 + 1, nz - 1)
+                y1 = np.minimum(y0 + 1, ny - 1)
+                x1 = np.minimum(x0 + 1, nx - 1)
+                fz = qz[ids] - z0
+                fy = qy[ids] - y0
+                fx = qx[ids] - x0
+                candidate = np.zeros(ids.size, dtype=np.float64)
+                for kz, zz in ((0, z0), (1, z1)):
+                    wz = fz if kz else 1.0 - fz
+                    for ky, yy in ((0, y0), (1, y1)):
+                        wy = fy if ky else 1.0 - fy
+                        for kx, xx in ((0, x0), (1, x1)):
+                            wx = fx if kx else 1.0 - fx
+                            candidate += wz * wy * wx * evaluated[zz, yy, xx]
+                g2 = distance2 / (distance_mm * distance_mm) + (
+                    (candidate - ref_values[ids]) / dose_crit[ids]
+                ) ** 2
+                best[ids] = np.minimum(best[ids], g2)
+    passed = int(np.count_nonzero(best <= 1.0))
     return {
         "pass_percent": 100.0 * passed / len(selected),
         "points": len(selected),
         "available": total_available,
+        "mode": "local" if local_dose else "global",
+        "dose_percent": dose_percent,
+        "distance_mm": distance_mm,
+        "threshold_percent": thr_percent,
+        "interpolation": "trilinear",
+        "interpolation_step_mm": interpolation_step_mm,
     }
 
 
@@ -252,6 +294,12 @@ def main() -> int:
     parser.add_argument("--patient-shape", nargs=3, type=int, default=(417, 505, 35))
     parser.add_argument("--histories", type=float, default=917000.0)
     parser.add_argument("--thr-frac", type=float, default=0.10)
+    parser.add_argument(
+        "--dose-scale-multiplier",
+        type=float,
+        default=1.0,
+        help="Sensitivity study: multiply the fitted dose scale (default 1.0)",
+    )
     parser.add_argument("--flip-x", action="store_true", default=True,
                         help="Flip patient X when mapping GPU Z (default True)")
     parser.add_argument("--flip-y", action="store_true", default=False,
@@ -261,6 +309,7 @@ def main() -> int:
     parser.add_argument("--no-flip-y", action="store_true",
                         help="Force no Y flip (default already false)")
     parser.add_argument("--gamma-points", type=int, default=50000)
+    parser.add_argument("--gamma-resolution-mm", type=float, default=0.5)
     parser.add_argument("--skip-gamma", action="store_true")
     args = parser.parse_args()
     flip_x = args.flip_x and not args.no_flip_x
@@ -286,7 +335,8 @@ def main() -> int:
         flip_x,
         flip_y,
     )
-    scale = fit_scale(mapped, phys, args.thr_frac)
+    least_squares_scale = fit_scale(mapped, phys, args.thr_frac)
+    scale = least_squares_scale * args.dose_scale_multiplier
     scaled = array.array("f", (scale * v for v in mapped))
 
     phys_max = max(phys)
@@ -326,6 +376,8 @@ def main() -> int:
         "flip_x": flip_x,
         "flip_y": flip_y,
         "scale_gpu_to_physical": scale,
+        "least_squares_scale_gpu_to_physical": least_squares_scale,
+        "dose_scale_multiplier": args.dose_scale_multiplier,
         "scale_per_history": scale / args.histories if args.histories else None,
         "threshold_fraction_of_peak": args.thr_frac,
         "high_dose_voxels": n,
@@ -356,6 +408,7 @@ def main() -> int:
             thr_percent=10.0,
             max_points=args.gamma_points,
             seed=0,
+            interpolation_step_mm=args.gamma_resolution_mm,
         )
         print("Computing 3D gamma 3%/3mm (subsample)...")
         g3 = gamma_3d(
@@ -368,9 +421,25 @@ def main() -> int:
             thr_percent=10.0,
             max_points=args.gamma_points,
             seed=0,
+            interpolation_step_mm=args.gamma_resolution_mm,
+        )
+        print("Computing local 3D gamma 3%/3mm (subsample)...")
+        g3_local = gamma_3d(
+            phys,
+            list(scaled),
+            phys_shape,
+            phys_spacing,
+            dose_percent=3.0,
+            distance_mm=3.0,
+            thr_percent=10.0,
+            max_points=args.gamma_points,
+            seed=0,
+            local_dose=True,
+            interpolation_step_mm=args.gamma_resolution_mm,
         )
         report["gamma_2pct_2mm_thr10"] = g2
         report["gamma_3pct_3mm_thr10"] = g3
+        report["gamma_local_3pct_3mm_thr10"] = g3_local
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
     out_mhd = args.output_dir / "gpu_scaled_to_physical.mhd"

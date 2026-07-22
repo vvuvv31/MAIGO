@@ -287,3 +287,129 @@ deposited energy，不再依赖 species scorer 间接补账；关闭 scorer 后�
 **55.48 s**，吞吐 **18,025 hist/s**，secondary kernel 52.66 s；累计输运 2,979,094
 个带电次级、1.2746e10 个次级步，queue overflow 为 0，能量守恒误差 `1.73e−5`。
 按该吞吐线性估算 9.17M 约 8.5 分钟；实际 full-plan 时间仍应以完整重跑为准。
+
+---
+
+## 8. CT full-plan 3%/3 mm gamma 调优（2026-07-22）
+
+### 8.1 gamma 算法修正
+
+原验证脚本只在剂量网格的整数体素中心搜索 gamma。当前 MHD 间距为 2 mm，而
+3 mm DTA 在整数网格上几乎只有 0/2 mm 两档，因而会系统性低估通过率。验证工具现改为
+在 evaluation dose 上做三线性插值，默认以 0.5 mm 间隔搜索，并同时报告：
+
+- global gamma：剂量差分母为参考最大剂量的 3%；
+- local gamma：剂量差分母为各参考体素剂量的 3%；
+- 两者均使用 10% reference-dose threshold 和 3 mm DTA。
+
+10M optimized full-plan 对 `ct/code/physical_dose.mhd`、采用最小二乘全局剂量归一化时：
+
+| 指标 | 结果 |
+|---|---:|
+| global 3%/3 mm | **94.4402%** |
+| local 3%/3 mm | **92.5832%** |
+| global 2%/2 mm | 87.3266% |
+| IDD correlation | 0.999076 |
+| IDD peak shift | 0 mm |
+| 最小二乘 scale | 134.465784 |
+
+因此独立、默认归一化的 full-plan 结果是接近但尚未达到 95%，不能把它写成已通过。
+若只做归一化敏感性检查，在最小二乘 scale 上再乘 1.02，global 3%/3 mm 为
+**95.2854%**、local 为 **93.8755%**。这个 +2% 是人为归一化扫描，不是输运物理改进，
+也不是推荐生产默认值。
+
+### 8.2 本地 TOPAS 独立交叉验证
+
+用 TOPAS 4.2.p3、40 CPU threads 运行 220 MeV/u 的 20 个等权平面内 spot，每 spot
+5000 histories（总计 100k），并在 GPU 端使用完全相同的 spot 和总历史数。修正后的
+插值 gamma 结果为：
+
+| 指标 | GPU vs TOPAS |
+|---|---:|
+| global 3%/3 mm | **99.0525%** |
+| local 3%/3 mm | **98.2946%** |
+| local 3%/5 mm | 99.7368% |
+| IDD correlation | 0.998521 |
+| IDD peak shift | 0 mm |
+
+这说明多 spot 坐标变换、束流横向模型和 220 MeV/u 输运没有显示出需要人为校准的
+整体偏差。为了追逐 `physical_dose.mhd` 而修改 CT stopping power、straggling 或束斑
+宽度，反而可能破坏与独立 MC 的一致性。
+
+### 8.3 未采用的扫描
+
+- CT stopping-power scale 0.99/1.00/1.01：1.00 最好；不修改。
+- straggling scale 0.8/1.0/1.2：1.0 最好；不修改。
+- CT origin 从 -126.0 mm 改为 -126.25 mm：gamma 略降；不修改。
+- 简单平移、模糊和整体 affine correction：不足以解释 full-plan 残余差异。
+
+按能层把 15 个 GPU basis dose 拟合到 `physical_dose.mhd` 时，弱正则拟合可以得到
+global/local 97.56%/96.63%，但低能层系数出现 1.5--3.0 等非物理变化。该结果使用了
+待比较目标本身训练，不能视为独立验证或直接写回临床权重；它更像是提示应检查
+`dij_physical_sparse_c.mat` 的逐层历史数、剂量单位、spot 列顺序及 weight 映射。
+
+### 8.4 可复现入口
+
+- `validation/scripts/match_gpu_to_physical_dose.py`：插值 global/local gamma，支持
+  `--gamma-resolution-mm`；`--dose-scale-multiplier` 仅用于显式敏感性分析。
+- `validation/scripts/compare_gpu_topas_prelim.py`：GPU/TOPAS 使用同一 gamma 实现。
+- `validation/scripts/prepare_ct_energy_layer_weights.py`、
+  `run_ct_energy_layer_scan.sh`、`fit_ct_energy_layer_response.py`：能层诊断工具。
+- `src/main.cpp`：增加 `--ct-grid`、`--ct-stopping-power-scale`、`--voxel-dose-mhd`，
+  便于在不复制配置文件的情况下做可复现 A/B。
+
+在拿到原始 `dij_physical_sparse_c.mat` 之前，不应把针对 `physical_dose.mhd` 拟合出来的
+能层修正写入输运代码。下一步最有价值的检查是逐 spot/逐能层重建优化剂量，并确认
+每一列确实对应 5e4 histories 以及与 `spots.txt` 的顺序完全一致。
+
+### 8.5 原始 Dij 审计与逐能层响应校准
+
+取得 `ct/dij_physical_sparse_c.mat` 后完成了原始矩阵审计：
+
+- `physicalDose` 是 `458640 × 917` CSC sparse double，网格为 `126×104×35`；
+- `dijChunkSpotIds` 是连续的 1--917，`topasSpotGroups` 明确分成 1--459 和
+  460--917，与 `spots_c_01.txt`、`spots_c_02.txt` 完全一致；
+- 直接流式计算 `dij.physicalDose * x` 与 `physical_dose_result.mat/d3d` 逐位相等；
+- `d3d` 到 `physical_dose.raw` 的 `[Y,X,Z] → [X,Y,Z]` 置换也正确。
+
+因此 full-plan 残余差异不是 sparse Dij 列错序、`x` 错序或 MHD 写出轴序造成的。
+TOPAS spot 文件的 L4 仍写着请求值 100000，但 Dij 实际累计为每 spot 50000；
+`prepare_full_plan_weights.py` 现增加 `--actual-histories-per-spot 50000`，避免以后再次
+把请求 histories 当成实际 histories。重新生成的理论总粒子数仍为
+**1,296,381,737**。
+
+随后用 15 个独立 GPU 能层运行，逐层比较
+`Dij[:,layer] * x[layer]`。每层只拟合一个 GPU/Dij response scalar，同一能层内所有
+spot 的相对权重保持不变；系数范围为 0.9785--1.1363。预测叠加得到 global/local
+3%/3 mm = 95.3725%/93.5761%。实际使用校准权重重跑 10M 的结果为：
+
+| 指标 | 原始权重 10M | Dij 能层校准权重 10M |
+|---|---:|---:|
+| global 3%/3 mm | 94.4402% | **95.4332%** |
+| local 3%/3 mm | 92.5832% | **93.6898%** |
+| global 2%/2 mm | 87.3266% | 88.4295% |
+| IDD correlation | 0.999076 | **0.999108** |
+| high-dose NRMSE | 4.3963% | **4.1601%** |
+| 10M wall time | 507.1 s | **487.5 s** |
+
+校准后最小二乘剂量 scale 为 134.5454。按 `50000 × 校准后权重和 / 10M` 得到的理论
+绝对 scale 为 133.2748，两者只差 0.953%，明显小于原始权重的约 3.72%。若强制理论
+绝对 scale，global/local 为 94.4213%/92.8750%；所以 95.4332% 是采用常见的全局
+最小二乘剂量归一化后的形状比较，不能表述为绝对剂量 gamma 已超过 95%。
+
+可复现工具为 `validation/scripts/calibrate_ct_weights_from_dij.py`，输出：
+
+- `out/ct/tuning/dij_layer_calibration/calibration.json`；
+- `out/ct/tuning/dij_layer_calibration/full_plan_weights_dij_layer_calibrated.csv`；
+- 实际 10M 剂量和 gamma 位于
+  `out/ct/full_plan_dij_layer_calibrated_10M/physical_compare/`。
+
+按每层总积分做校准虽然能让积分闭合到 0.00003%，但预测 global/local gamma 只有
+92.04%/90.18%，因此不采用。逐层高剂量响应校准直接依赖本病例 Dij，适合作为该
+TPS/Dij 的 GPU 复算校准，不应冒充对其他病例或独立 TOPAS 的通用物理参数。
+
+多层面可视化位于
+`validation/figures/ct_full_plan_multiplanar_dose_comparison.png`：轴位、冠状位、
+矢状位各选择高剂量包络内的 3 个层面，并列显示 physical dose、原始 GPU、校准 GPU
+及校准 GPU 相对参考最大剂量的差值。对应的可复现绘图入口为
+`validation/scripts/plot_ct_multiplanar_dose_comparison.py`。

@@ -37,10 +37,13 @@ void print_usage(const char* executable) {
                  "  --spots FILE         TOPAS-format spots_*.txt; repeat to concatenate files\n"
                  "  --spot-weights FILE  One optimization weight per concatenated spot\n"
                  "  --histories N        With weights: total plan histories; otherwise per spot\n"
+                 "  --ct-grid FILE       Override the configured CCTG patient grid\n"
+                 "  --ct-stopping-power-scale X  Override the CT mass stopping-power scale\n"
                  "  --plan-only          Parse/allocate/transform plan without transport\n"
                  "  --sequential-spots   Validation A/B: disable batched SYCL plan launch\n"
                  "  --output FILE        MeV energy-deposition scorer CSV\n"
-                 "  --dose-output FILE   Dose scorer CSV (total Gy); empty disables\n";
+                 "  --dose-output FILE   Dose scorer CSV (total Gy); empty disables\n"
+                 "  --voxel-dose-mhd FILE  Override dense voxel dose MHD output\n";
 }
 
 void add_vector_in_place(std::vector<double>& total, const std::vector<double>& part) {
@@ -359,6 +362,10 @@ int main(int argc, char* argv[]) {
             } else if (argument == "--histories" && index + 1 < argc) {
                 config.number_of_histories = std::stoull(argv[++index]);
                 histories_cli_override = true;
+            } else if (argument == "--ct-grid" && index + 1 < argc) {
+                config.ct_grid_file = argv[++index];
+            } else if (argument == "--ct-stopping-power-scale" && index + 1 < argc) {
+                config.ct_stopping_power_scale = std::stod(argv[++index]);
             } else if (argument == "--spots" && index + 1 < argc) {
                 if (config.topas_spots_files.empty()) {
                     config.topas_spots_file.clear();
@@ -374,6 +381,8 @@ int main(int argc, char* argv[]) {
                 const std::string path = argv[++index];
                 config.dose_output_file =
                     path.empty() ? std::filesystem::path{} : std::filesystem::path{path};
+            } else if (argument == "--voxel-dose-mhd" && index + 1 < argc) {
+                config.voxel_dose_mhd_output_file = argv[++index];
             } else if (argument == "--plan-only") {
                 plan_only = true;
             } else if (argument == "--sequential-spots") {

@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Validate a TOPAS spot plan and export exact matRad optimizer weights.
 
-The matRad dose is ``Dij * x``.  The TOPAS spot files contain the number of
-histories used to score each Dij column (L4), so the corresponding absolute
-Monte Carlo population is ``L4[i] * x[i]``.  This script keeps the c_01/c_02
-file order explicit and records all totals needed for a reduced-history run.
+The matRad dose is ``Dij * x``.  TOPAS L4 often records the requested number
+of histories, which is not necessarily the number actually accumulated in a
+Dij column.  ``--actual-histories-per-spot`` explicitly overrides L4 when the
+run log establishes a different value.  This script keeps the c_01/c_02 file
+order explicit and records all totals needed for a reduced-history run.
 """
 
 from __future__ import annotations
@@ -85,6 +86,11 @@ def main() -> None:
         default=9_170_000,
         help="actual histories proposed for the reduced GPU run",
     )
+    parser.add_argument(
+        "--actual-histories-per-spot",
+        type=int,
+        help="override requested TOPAS L4 using the histories actually accumulated",
+    )
     args = parser.parse_args()
 
     with h5py.File(args.mat, "r") as mat:
@@ -93,6 +99,7 @@ def main() -> None:
         weights = np.asarray(mat["x"], dtype=np.float64).reshape(-1)
 
     ids: list[int] = []
+    requested_histories: list[int] = []
     base_histories: list[int] = []
     file_counts: list[dict[str, object]] = []
     for path in args.spot_files:
@@ -107,7 +114,13 @@ def main() -> None:
         if any(float(n) != value or n <= 0 for n, value in zip(part_hist, part_hist_float)):
             raise ValueError(f"{path}: L4 histories must be positive integers")
         ids.extend(part_ids)
-        base_histories.extend(part_hist)
+        requested_histories.extend(part_hist)
+        if args.actual_histories_per_spot is not None:
+            if args.actual_histories_per_spot <= 0:
+                raise ValueError("--actual-histories-per-spot must be positive")
+            base_histories.extend([args.actual_histories_per_spot] * len(part_hist))
+        else:
+            base_histories.extend(part_hist)
         file_counts.append(
             {
                 "path": str(path),
@@ -146,20 +159,28 @@ def main() -> None:
             [
                 "spot_id",
                 "mat_weight",
-                "topas_L4_histories",
+                "topas_L4_requested_histories",
+                "actual_dij_histories",
                 "exact_weighted_histories",
                 "full_integer_histories",
                 "reduced_run_histories",
             ]
         )
-        for spot_id, weight, l4, exact, full, reduced in zip(
-            ids, weights, base_histories, exact_per_spot, full_allocation, pilot_allocation
+        for spot_id, weight, requested, actual, exact, full, reduced in zip(
+            ids,
+            weights,
+            requested_histories,
+            base_histories,
+            exact_per_spot,
+            full_allocation,
+            pilot_allocation,
         ):
             writer.writerow(
                 [
                     spot_id,
                     f"{float(weight):.17g}",
-                    l4,
+                    requested,
+                    actual,
                     f"{float(exact):.17g}",
                     int(full),
                     int(reduced),
@@ -191,6 +212,14 @@ def main() -> None:
         "zero_weight_spot_count": int(np.count_nonzero(weights == 0.0)),
         "spot_ids_contiguous_1_to_n": True,
         "base_histories": {
+            "source": (
+                "--actual-histories-per-spot override"
+                if args.actual_histories_per_spot is not None
+                else "TOPAS L4 requested histories"
+            ),
+            "topas_L4_requested_per_spot": sorted(
+                set(int(v) for v in requested_histories)
+            ),
             "total_unweighted": int(sum(base_histories)),
             "minimum_per_spot": min(base_histories),
             "maximum_per_spot": max(base_histories),
@@ -204,7 +233,7 @@ def main() -> None:
             "mean": float(np.mean(weights)),
         },
         "weighted_histories": {
-            "definition": "sum_i(TOPAS_L4_i * MAT_x_i)",
+            "definition": "sum_i(actual_Dij_histories_i * MAT_x_i)",
             "exact": exact_total,
             "rounded_full_plan": rounded_total,
             "rounded_one_tenth": int(round(exact_total / 10.0)),

@@ -22,13 +22,13 @@ import array
 import csv
 import json
 import math
-import random
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from match_gpu_to_physical_dose import (  # noqa: E402
     fit_scale,
+    gamma_3d as gamma_interpolated,
     map_gpu_to_physical,
     read_mhd,
     write_mhd,
@@ -209,126 +209,6 @@ def profile_corr(
     return num / math.sqrt(den_a * den_b)
 
 
-def gamma_local(
-    ref: array.array,
-    eval_: list[float],
-    shape: tuple[int, int, int],
-    spacing_mm: tuple[float, float, float],
-    dose_percent: float = 3.0,
-    distance_mm: float = 3.0,
-    thr_percent: float = 10.0,
-    max_points: int = 15000,
-    seed: int = 0,
-) -> dict:
-    """Local gamma: dose criterion = dose_percent% of local reference dose."""
-    nx, ny, nz = shape
-    sx, sy, sz = spacing_mm
-    ref_max = max(ref)
-    thr = thr_percent / 100.0 * ref_max
-    rx = max(1, int(math.ceil(distance_mm / sx)))
-    ry = max(1, int(math.ceil(distance_mm / sy)))
-    rz = max(1, int(math.ceil(distance_mm / sz)))
-    selected = [i for i, v in enumerate(ref) if v >= thr]
-    available = len(selected)
-    if available == 0:
-        return {"pass_percent": float("nan"), "points": 0, "available": 0, "mode": "local"}
-    if available > max_points:
-        selected = random.Random(seed).sample(selected, max_points)
-    passed = 0
-    for linear in selected:
-        iz = linear // (nx * ny)
-        rem = linear % (nx * ny)
-        iy = rem // nx
-        ix = rem % nx
-        ref_val = ref[linear]
-        dose_crit = max(dose_percent / 100.0 * ref_val, 1e-30)
-        best = float("inf")
-        for jx in range(max(0, ix - rx), min(nx, ix + rx + 1)):
-            dx = (jx - ix) * sx
-            for jy in range(max(0, iy - ry), min(ny, iy + ry + 1)):
-                dy = (jy - iy) * sy
-                for jz in range(max(0, iz - rz), min(nz, iz + rz + 1)):
-                    dz = (jz - iz) * sz
-                    e = eval_[jz * nx * ny + jy * nx + jx]
-                    g2 = (
-                        (dx / distance_mm) ** 2
-                        + (dy / distance_mm) ** 2
-                        + (dz / distance_mm) ** 2
-                        + ((e - ref_val) / dose_crit) ** 2
-                    )
-                    if g2 < best:
-                        best = g2
-        if best <= 1.0:
-            passed += 1
-    return {
-        "pass_percent": 100.0 * passed / len(selected),
-        "points": len(selected),
-        "available": available,
-        "mode": "local",
-        "dose_percent": dose_percent,
-        "distance_mm": distance_mm,
-        "thr_percent": thr_percent,
-    }
-
-
-def gamma_global(
-    ref: array.array,
-    eval_: list[float],
-    shape: tuple[int, int, int],
-    spacing_mm: tuple[float, float, float],
-    dose_percent: float = 3.0,
-    distance_mm: float = 3.0,
-    thr_percent: float = 10.0,
-    max_points: int = 15000,
-    seed: int = 0,
-) -> dict:
-    nx, ny, nz = shape
-    sx, sy, sz = spacing_mm
-    ref_max = max(ref)
-    thr = thr_percent / 100.0 * ref_max
-    dose_crit = dose_percent / 100.0 * ref_max
-    rx = max(1, int(math.ceil(distance_mm / sx)))
-    ry = max(1, int(math.ceil(distance_mm / sy)))
-    rz = max(1, int(math.ceil(distance_mm / sz)))
-    selected = [i for i, v in enumerate(ref) if v >= thr]
-    available = len(selected)
-    if available == 0:
-        return {"pass_percent": float("nan"), "points": 0, "available": 0, "mode": "global"}
-    if available > max_points:
-        selected = random.Random(seed).sample(selected, max_points)
-    passed = 0
-    for linear in selected:
-        iz = linear // (nx * ny)
-        rem = linear % (nx * ny)
-        iy = rem // nx
-        ix = rem % nx
-        ref_val = ref[linear]
-        best = float("inf")
-        for jx in range(max(0, ix - rx), min(nx, ix + rx + 1)):
-            dx = (jx - ix) * sx
-            for jy in range(max(0, iy - ry), min(ny, iy + ry + 1)):
-                dy = (jy - iy) * sy
-                for jz in range(max(0, iz - rz), min(nz, iz + rz + 1)):
-                    dz = (jz - iz) * sz
-                    e = eval_[jz * nx * ny + jy * nx + jx]
-                    g2 = (
-                        (dx / distance_mm) ** 2
-                        + (dy / distance_mm) ** 2
-                        + (dz / distance_mm) ** 2
-                        + ((e - ref_val) / dose_crit) ** 2
-                    )
-                    if g2 < best:
-                        best = g2
-        if best <= 1.0:
-            passed += 1
-    return {
-        "pass_percent": 100.0 * passed / len(selected),
-        "points": len(selected),
-        "available": available,
-        "mode": "global",
-    }
-
-
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--gpu-mhd", type=Path, required=True)
@@ -336,6 +216,7 @@ def main() -> None:
     ap.add_argument("--output-dir", type=Path, required=True)
     ap.add_argument("--tag", type=str, default="prelim")
     ap.add_argument("--gamma-points", type=int, default=12000)
+    ap.add_argument("--gamma-resolution-mm", type=float, default=0.5)
     ap.add_argument(
         "--flip-x",
         action=argparse.BooleanOptionalAction,
@@ -444,16 +325,22 @@ def main() -> None:
 
     # Global gamma is the acceptance metric; local gamma is a stricter
     # diagnostic whose per-voxel denominator strongly amplifies MC noise.
-    g_local = gamma_local(
-        topas, scaled, (nx, ny, nz), spacing, 3.0, 3.0, 10.0, args.gamma_points, 0
+    g_local = gamma_interpolated(
+        topas, scaled, (nx, ny, nz), spacing, 3.0, 3.0, 10.0,
+        args.gamma_points, 0, local_dose=True,
+        interpolation_step_mm=args.gamma_resolution_mm,
     )
-    g_local_5 = gamma_local(
-        topas, scaled, (nx, ny, nz), spacing, 3.0, 5.0, 10.0, args.gamma_points, 0
+    g_local_5 = gamma_interpolated(
+        topas, scaled, (nx, ny, nz), spacing, 3.0, 5.0, 10.0,
+        args.gamma_points, 0, local_dose=True,
+        interpolation_step_mm=args.gamma_resolution_mm,
     )
     g_global = None
     if not args.skip_global_gamma:
-        g_global = gamma_global(
-            topas, scaled, (nx, ny, nz), spacing, 3.0, 3.0, 10.0, args.gamma_points, 0
+        g_global = gamma_interpolated(
+            topas, scaled, (nx, ny, nz), spacing, 3.0, 3.0, 10.0,
+            args.gamma_points, 0,
+            interpolation_step_mm=args.gamma_resolution_mm,
         )
 
     # Lateral profiles at TOPAS IDD peak depth (same plane for both)
