@@ -279,6 +279,17 @@ struct Direction3F {
     float z;
 };
 
+inline float advance_representable(const float position,
+                                   const float direction,
+                                   const float distance) noexcept {
+    const auto advanced = position + direction * distance;
+    if (advanced != position || direction == 0.0F) {
+        return advanced;
+    }
+    constexpr auto infinity = std::numeric_limits<float>::infinity();
+    return sycl::nextafter(position, direction > 0.0F ? infinity : -infinity);
+}
+
 Direction3F rotate_local_direction(const float local_x,
                                    const float local_y,
                                    const float local_z,
@@ -3586,6 +3597,7 @@ TransportResult transport_sycl(const TransportConfig& config,
                             maximum_step_mm,
                             maximum_relative_energy_loss * energy_MeV /
                                 sycl::fmax(stopping_power_MeV_per_mm, 1.0e-6F));
+                        const auto energy_limited_step_mm = path_step_mm;
                         const auto boundary_z_mm =
                             direction_z < 0.0F
                                 ? static_cast<float>(bin) * depth_bin_width_mm
@@ -3709,8 +3721,48 @@ TransportResult transport_sycl(const TransportConfig& config,
                             }
                             if (snapped_to_boundary) {
                                 ++steps;
+                                profile_add(
+                                    profile_counters_device,
+                                    TransportProfileSlot::
+                                        secondary_boundary_nudge_continues);
                                 continue;
                             }
+                        }
+                        // A positive face-limited step can still be smaller than one
+                        // FP32 ULP at the current coordinates.  CUDA then accepts the
+                        // step but changes neither position nor energy, so the same
+                        // face is selected until max_secondary_steps is reached.
+                        // Advance by the same 1e-4 mm tolerance used by CT DDA when it
+                        // classifies a point as lying on a face.  A single nextafter
+                        // is not sufficient on CUDA because the new point can remain
+                        // inside that face tolerance and select another zero-state
+                        // step.  The nextafter fallback guarantees progress for a
+                        // very small direction component whose nudge still rounds
+                        // back to the original coordinate.
+                        const auto proposed_position_x_mm =
+                            position_x_mm + direction_x * path_step_mm;
+                        const auto proposed_position_y_mm =
+                            position_y_mm + direction_y * path_step_mm;
+                        const auto proposed_position_z_mm =
+                            position_z_mm + direction_z * path_step_mm;
+                        const auto boundary_limited =
+                            path_step_mm < energy_limited_step_mm;
+                        if (boundary_limited &&
+                            proposed_position_x_mm == position_x_mm &&
+                            proposed_position_y_mm == position_y_mm &&
+                            proposed_position_z_mm == position_z_mm) {
+                            constexpr float nudge_mm = 1.0e-4F;
+                            position_x_mm = advance_representable(
+                                position_x_mm, direction_x, nudge_mm);
+                            position_y_mm = advance_representable(
+                                position_y_mm, direction_y, nudge_mm);
+                            position_z_mm = advance_representable(
+                                position_z_mm, direction_z, nudge_mm);
+                            ++steps;
+                            profile_add(
+                                profile_counters_device,
+                                TransportProfileSlot::secondary_forced_progress_nudges);
+                            continue;
                         }
                         const auto step_deposited_MeV = sycl::fmin(
                             stopping_power_MeV_per_mm * path_step_mm, energy_MeV);
@@ -3753,10 +3805,30 @@ TransportResult transport_sycl(const TransportConfig& config,
                         deposited_MeV += step_deposited_MeV;
                         const auto scattering_energy_MeV =
                             energy_MeV - 0.5F * step_deposited_MeV;
+                        const auto previous_energy_MeV = energy_MeV;
+                        const auto previous_position_x_mm = position_x_mm;
+                        const auto previous_position_y_mm = position_y_mm;
+                        const auto previous_position_z_mm = position_z_mm;
                         energy_MeV -= step_deposited_MeV;
                         position_x_mm += direction_x * path_step_mm;
                         position_y_mm += direction_y * path_step_mm;
                         position_z_mm += direction_z * path_step_mm;
+                        if (energy_MeV == previous_energy_MeV) {
+                            profile_add(
+                                profile_counters_device,
+                                TransportProfileSlot::secondary_energy_nonprogress_steps);
+                        }
+                        const auto x_nonprogress =
+                            position_x_mm == previous_position_x_mm;
+                        const auto y_nonprogress =
+                            position_y_mm == previous_position_y_mm;
+                        const auto z_nonprogress =
+                            position_z_mm == previous_position_z_mm;
+                        if (x_nonprogress && y_nonprogress && z_nonprogress) {
+                            profile_add(
+                                profile_counters_device,
+                                TransportProfileSlot::secondary_position_nonprogress_steps);
+                        }
                         if (enable_multiple_scattering && energy_MeV > energy_cutoff_MeV) {
                             profile_add(profile_counters_device,
                                         TransportProfileSlot::secondary_mcs);
@@ -4118,6 +4190,10 @@ TransportResult transport_sycl(const TransportConfig& config,
                                     TransportProfileSlot::secondary_steps);
                     }
 
+                    if (steps == max_secondary_steps) {
+                        profile_add(profile_counters_device,
+                                    TransportProfileSlot::secondary_step_cap_hits);
+                    }
                     score_secondary_dose_device(
                         pending_dose_MeV, is_neutral_lineage, species_index,
                         neutral_origin, pending_bin, number_of_bins,

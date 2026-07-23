@@ -57,6 +57,11 @@ enum class TransportProfileSlot : std::size_t {
     secondary_straggling,
     secondary_mcs,
     secondary_cascade,
+    secondary_boundary_nudge_continues,
+    secondary_energy_nonprogress_steps,
+    secondary_position_nonprogress_steps,
+    secondary_forced_progress_nudges,
+    secondary_step_cap_hits,
 
     // Track step-count histogram for secondary tracks: bucket b holds tracks
     // whose step count is in [2^b, 2^(b+1)). Bucket 0 is [1, 2).

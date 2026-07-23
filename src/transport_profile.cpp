@@ -46,6 +46,15 @@ std::string TransportProfile::summary() const {
     p("secondary_straggling", TransportProfileSlot::secondary_straggling);
     p("secondary_mcs", TransportProfileSlot::secondary_mcs);
     p("secondary_cascade", TransportProfileSlot::secondary_cascade);
+    p("secondary_boundary_nudge_continues",
+      TransportProfileSlot::secondary_boundary_nudge_continues);
+    p("secondary_energy_nonprogress_steps",
+      TransportProfileSlot::secondary_energy_nonprogress_steps);
+    p("secondary_position_nonprogress_steps",
+      TransportProfileSlot::secondary_position_nonprogress_steps);
+    p("secondary_forced_progress_nudges",
+      TransportProfileSlot::secondary_forced_progress_nudges);
+    p("secondary_step_cap_hits", TransportProfileSlot::secondary_step_cap_hits);
 
     out << "  secondary_track_step_hist (bucket b = [2^b, 2^(b+1)) steps):\n";
     const auto base =
