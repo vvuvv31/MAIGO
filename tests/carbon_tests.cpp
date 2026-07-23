@@ -1205,6 +1205,33 @@ void test_sycl_tps_source_cardinal_gantry_transport() {
             "TPS cardinal gantry energy balance failed");
 }
 
+void test_sycl_legacy_cardinal_entrance_projection() {
+    carbon::TransportConfig config;
+    config.number_of_histories = 1024;
+    config.initial_energy_MeVu = 10.0;
+    config.phantom_length_mm = 100.0;
+    config.depth_bin_width_mm = 1.0;
+    config.maximum_step_mm = 0.5;
+    config.maximum_relative_energy_loss = 0.01;
+    config.enable_emittance_source = true;
+    config.emittance_sigma_x_mm = 3.0;
+    // Reproduce the non-zero cos(pi/2) component of an exactly cardinal
+    // TOPAS-90 transverse basis.  Without unconditional entrance projection,
+    // negative Gaussian samples begin infinitesimally below z=0 and escape.
+    config.beam_ux_z = std::cos(0.5 * 3.14159265358979323846);
+    config.validate();
+
+    const carbon::StoppingPowerTable table(
+        {0.01, 10.01, 20.01}, {2.0, 2.0, 2.0});
+    const auto result = carbon::transport_sycl(
+        config, table, zero_cross_section(), "cpu");
+    const auto initial_total =
+        static_cast<double>(config.number_of_histories) *
+        config.initial_energy_MeVu * static_cast<double>(config.mass_number);
+    require(result.total_deposited_energy_MeV > 0.95 * initial_total,
+            "Legacy cardinal source lost histories infinitesimally below z=0");
+}
+
 void test_sycl_primary_spot_batch() {
     carbon::TransportConfig batch;
     batch.number_of_histories = 8;
@@ -1812,6 +1839,7 @@ int main() {
         test_ct_aligned_mhd_offset_and_index_pairing();
 #ifdef CARBON_HAS_SYCL
         test_sycl_tps_source_cardinal_gantry_transport();
+        test_sycl_legacy_cardinal_entrance_projection();
         test_sycl_primary_spot_batch();
         test_sycl_flat_source_extent();
         test_serial_sycl_cpu_match();

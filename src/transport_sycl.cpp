@@ -2317,12 +2317,12 @@ TransportResult transport_sycl(const TransportConfig& config,
                     position_z_mm += entry * direction_z;
                 }
             } else {
-                // TPS-90 legacy entrance sampling: origin lies on the CT face
-                // (z=0) but ux/uy for a slightly tilted beam still have small z
-                // components. Project back along the particle direction. Keeping
-                // this in the false branch preserves the validated CT example.
-                if (sycl::fabs(direction_z) > 1.0e-8F &&
-                    sycl::fabs(position_z_mm) > 1.0e-6F) {
+                // TPS-90 legacy entrance sampling: project every sampled point
+                // onto the CT entrance plane.  Even an exactly cardinal pose has
+                // O(1e-16) transverse-basis z components from sin/cos.  Leaving
+                // those values untouched puts roughly half of a centred Gaussian
+                // infinitesimally below z=0, where the escape test rejects it.
+                if (sycl::fabs(direction_z) > 1.0e-8F) {
                     const auto t_plane = -position_z_mm / direction_z;
                     position_x_mm += t_plane * direction_x;
                     position_y_mm += t_plane * direction_y;

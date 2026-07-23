@@ -410,6 +410,20 @@ def main() -> int:
             seed=0,
             interpolation_step_mm=args.gamma_resolution_mm,
         )
+        print("Computing local 3D gamma 2%/2mm (subsample)...")
+        g2_local = gamma_3d(
+            phys,
+            list(scaled),
+            phys_shape,
+            phys_spacing,
+            dose_percent=2.0,
+            distance_mm=2.0,
+            thr_percent=10.0,
+            max_points=args.gamma_points,
+            seed=0,
+            local_dose=True,
+            interpolation_step_mm=args.gamma_resolution_mm,
+        )
         print("Computing 3D gamma 3%/3mm (subsample)...")
         g3 = gamma_3d(
             phys,
@@ -438,6 +452,7 @@ def main() -> int:
             interpolation_step_mm=args.gamma_resolution_mm,
         )
         report["gamma_2pct_2mm_thr10"] = g2
+        report["gamma_local_2pct_2mm_thr10"] = g2_local
         report["gamma_3pct_3mm_thr10"] = g3
         report["gamma_local_3pct_3mm_thr10"] = g3_local
 

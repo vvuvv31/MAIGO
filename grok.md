@@ -499,3 +499,93 @@ ridge=0.03 的 10M 独立输运（509.4 s、无 overflow）确认：global/local
 需要明确：这个全局因子使用当前病例 10M response 标定，所以“理论 scale 与最佳
 拟合一致”是校准结果，不是独立绝对剂量验证。对新病例应先固定该因子再做盲测；若
 追求跨病例物理泛化，仍应优先补齐 Geant4 11.1.3 多材料 final-state 数据。
+
+### 8.8 底层物理校准：基数角入口面粒子丢失修复
+
+为避免继续对当前 full plan 过拟合，本轮校准只使用独立 Dij 单 spot：180/220
+MeV/u 各 4 个 spot 作为校准集，200/240 MeV/u 各 4 个 spot 作为盲测集；允许拟合的
+参数只有一个统一绝对响应因子。最初 14/16 个 spot 的 global 2%/2 mm 已在
+97--100%，但第一射野 `TransX=TransZ=0` 的 200 和 220 MeV/u 中心 spot 都只有约
+51%，总剂量和核反应数也恰好约为正常值的一半。
+
+以下候选均被实测排除，没有写入生产物理参数：
+
+- Geant4 11.1.3 水模拟合的统一 stopping-power scale 1.002269：1M 原 TPS 权重
+  full-plan global 2%/2 mm 从 88.251% 降到 88.164%；
+- water neutral local-kerma + electronic buildup：IDD correlation 从 0.999063 降到
+  0.96843；单独 electronic buildup 也没有稳定改善；
+- stopping power +1%、+2%、+4%，中心 spot 的射程和 gamma 继续恶化；
+- CT 全 face clamp、最大步长、材料 MCS 和小幅患者坐标平移均不能恢复缺失剂量。
+
+独立本机 TOPAS 4.2.p3/Geant4 11.3.2 用完全相同的 200 MeV/u 中心 spot、50k
+histories 重跑后，与原 Dij 的积分剂量比为 1.00443、最佳 scale 0.99694、global
+2%/2 mm 为 100%、IDD correlation 0.999996。这证明 Dij 没有重复累计，错误在 GPU
+源入口处理。进一步交换中心/非中心 spot 的入射位置后，剂量减半仍跟随“精确基数角
+姿态”而非解剖路径；把 90° 临时改成 89.999° 即恢复完整剂量。
+
+根因是 `cos(90°)` 在横向基向量留下约 6e-17 的 z 分量。高斯位置采样后约一半
+粒子的初始 z 成为极小负数；旧代码因 `abs(z) < 1e-6` 跳过入口投影，下一步逃逸
+判断便立即丢弃这些粒子。修复位于 `src/transport_sycl.cpp`：legacy TPS-90 源只要
+`abs(direction_z) > 1e-8`，就无条件沿粒子方向投影到 z=0。没有加入经验角度、空间
+剂量修正或病例特定材料因子；新增 SYCL 回归测试直接复现 `cos(pi/2)` 残差，防止
+以后再次丢失半数 histories。
+
+修复后的独立 spot 结果：
+
+| spot | 修复前 global 2%/2 mm | 修复后 | 剂量积分 GPU/Dij |
+|---|---:|---:|---:|
+| 451，200 MeV/u 中心（盲测） | 51.294% | **99.621%** | 1.04145 |
+| 455，220 MeV/u 中心（校准） | 51.322% | **99.119%** | 1.04436 |
+| 146，200 MeV/u 非中心对照 | 99.828% | **99.828%** | 1.03731 |
+
+完整 16-spot 交叉验证只用校准集得到统一 GPU→Dij 响应 0.974329393。固定该值后：
+
+| split | global 2%/2 mm（均值） | local 2%/2 mm（均值） | 最低 global |
+|---|---:|---:|---:|
+| 180/220 MeV/u 校准集 | 99.412% | 97.345% | 98.573% |
+| 200/240 MeV/u 盲测集 | **99.336%** | **95.879%** | **97.571%** |
+
+最后用完全未做能层/ridge 修正的原始 TPS optimizer 权重重跑 1M full plan。自由 scale
+结果由修复前的 global/local 3%/3 mm = 95.361%/93.944%、global 2%/2 mm =
+88.251%，提高到 **99.754%/98.992% 和 98.257%**；local 2%/2 mm 为
+**95.839%**。更严格的盲绝对标定用 `sum(weights) * 50000 / histories` 再乘上述
+single-spot 响应，预测 scale=1263.102831；full-plan 自由拟合为 1262.637844，差仅
+0.0368%。固定预测 scale 后 global/local 2%/2 mm 仍为 **98.234%/95.835%**，
+global/local 3%/3 mm 为 **99.742%/98.984%**。
+
+因此先前 ridge=0.03 的 full-plan 能层权重是在该粒子丢失 bug 存在时标定的，修复后
+不再有效，也不应作为生产精度方案。生产应恢复原 TPS 权重并保留本节的入口面修复；输出和复现脚本为
+`config/beam_ct_physics_baseline_1M.yaml`、
+`validation/scripts/validate_ct_spot_physics.py`，结果位于
+`out/physics_calibration/spot_cross_validation/` 和
+`out/physics_calibration/baseline_fixed_blind_scale/`。
+
+10M 最终统计复验使用更新后的 `config/beam_ct_full_plan_reduced.yaml`，运行
+536.51 s（18,639 histories/s），31,611,408 个带电次级全部输运，primary/cascade
+queue overflow 均为 0。自由 scale=126.348104；独立 spot 校准预先给出的固定
+scale=126.310283，仅低 0.0299%。固定 scale 的 full-plan 指标为 global/local
+2%/2 mm = **97.582%/95.058%**，global/local 3%/3 mm =
+**99.200%/98.067%**，IDD correlation=0.999030，high-dose NRMSE=2.381%。
+1M 的 global 2%/2 mm 偶然更高（98.234%）是低统计噪声对离散 gamma 搜索的影响，
+最终精度判断应采用本次 10M 结果。
+
+### 8.9 CT 直接下采样到 2 mm 的性能/精度实测
+
+使用 `validation/scripts/downsample_ct_grid.py` 将 TPS-90 输运 CT 从
+505×35×417、0.5×2×0.5 mm 下采样为 126×35×104、2×2×2 mm。密度采用体积
+平均以保持完整 block 的质量，材料 section 使用密度加权众数；为保证 CT 和 dose
+scorer 都从 z=0 开始，在横向高端和束流远端各裁掉一个多余的 0.5 mm 体素。体素数
+从 7,370,475 降到 458,640（16.07 倍），CCTG 文件从 35.1 MiB 降到 2.19 MiB。
+
+同一 NVIDIA TITAN RTX、同一随机种子和完整物理模型的 1M full-plan A/B：细 CT 为
+64.260 s（15,562 histories/s），2 mm CT 为 63.842 s（15,664 histories/s），端到端
+仅快 **0.65%**。主粒子核由 3.526 s 降至 2.894 s（快 21.8%），但带电次级粒子核
+仍约 60.4 s，约占总核时间 95%，所以 CT 边界减少无法转化为明显的总加速。显存估计
+仅从 857 MiB 降到 827 MiB。
+
+对 `ct/code/physical_dose.mhd` 自由统一 scale 后，细/粗 CT 的 global 2%/2 mm 为
+98.257%/98.124%，local 2%/2 mm 为 95.839%/95.433%，global 3%/3 mm 为
+99.754%/99.731%，local 3%/3 mm 为 98.992%/99.049%；IDD correlation 分别为
+0.999030/0.998960。粗 CT 的 IDD 峰移动一个 2 mm bin。结论是：仅为性能不应替换
+细 CT；应继续优化占主导的次级粒子/cascade 输运。复现配置为
+`config/beam_ct_downsampled_2mm_1M.yaml`。
