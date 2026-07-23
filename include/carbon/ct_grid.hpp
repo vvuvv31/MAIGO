@@ -76,6 +76,32 @@ inline std::uint8_t ct_material_class(const std::uint8_t material_id,
     return material_id < 8U ? 2U : 3U;
 }
 
+// Reference densities of the Geant4 materials used to generate the optional
+// four-class macroscopic cross-section tables. The transport converts those
+// tables to a mass cross section before applying the CT voxel density.
+inline constexpr float ct_material_reference_density_g_per_cm3(
+    const std::uint8_t material_class) noexcept {
+    switch (material_class) {
+        case 0U:
+            return 0.00120479F;  // G4_AIR
+        case 1U:
+            return 1.04F;        // G4_LUNG_ICRP
+        case 3U:
+            return 1.85F;        // G4_BONE_COMPACT_ICRU
+        default:
+            return 1.0F;         // Water_75eV
+    }
+}
+
+inline std::uint8_t ct_cross_section_material_index(
+    const std::uint8_t material_id,
+    const bool schneider_section_id,
+    const bool use_schneider_cross_sections) noexcept {
+    return schneider_section_id && use_schneider_cross_sections
+               ? material_id
+               : ct_material_class(material_id, schneider_section_id);
+}
+
 inline std::size_t ct_linear_index(const std::uint32_t ix,
                                    const std::uint32_t iy,
                                    const std::uint32_t iz,
@@ -124,7 +150,7 @@ inline bool ct_sample(const float x_mm,
     return true;
 }
 
-// Energy-dependent mass-SP factor vs liquid water (I_w = 75 eV).
+// Energy-dependent mass-SP factor vs Water_75eV (I_w = 75 eV).
 // za_rel = (Z/A)_s / (Z/A)_w. Uses a simplified Bethe stopping-number ratio.
 template <typename LogFn>
 inline float ct_mass_sp_energy_factor_impl(const float za_rel,
@@ -133,9 +159,9 @@ inline float ct_mass_sp_energy_factor_impl(const float za_rel,
                                           LogFn&& log_fn) noexcept {
     constexpr float nucleon_mass_MeV = 931.49410242F;
     constexpr float two_me_c2_MeV = 1.0219979F;
-    // Match G4_WATER / ICRU mean excitation energy used by the Geant4 water SP
-    // tables under data/stopping_power_water_*.csv (not the older 75 eV value).
-    constexpr float I_water_eV = 78.0F;
+    // The reference table is generated from the explicit TOPAS Water_75eV
+    // material, not Geant4's stock G4_WATER (78 eV).
+    constexpr float I_water_eV = 75.0F;
     const auto e = energy_MeVu > 0.5F ? energy_MeVu : 0.5F;
     const auto gamma = 1.0F + e / nucleon_mass_MeV;
     const auto beta2 = 1.0F - 1.0F / (gamma * gamma);

@@ -565,6 +565,9 @@ TransportConfig load_config(const std::filesystem::path& path) {
         values, "ct_water_cross_section_file", config.ct_water_cross_section_file);
     config.ct_bone_cross_section_file = parse_path(
         values, "ct_bone_cross_section_file", config.ct_bone_cross_section_file);
+    config.ct_schneider_cross_section_file = parse_path(
+        values, "ct_schneider_cross_section_file",
+        config.ct_schneider_cross_section_file);
     config.ct_stopping_power_scale = parse_number(
         values, "ct_stopping_power_scale", config.ct_stopping_power_scale);
     if (values.find("ct_grid_file") != values.end() &&

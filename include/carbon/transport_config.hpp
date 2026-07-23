@@ -126,6 +126,9 @@ struct TransportConfig {
     std::filesystem::path ct_lung_cross_section_file{};
     std::filesystem::path ct_water_cross_section_file{};
     std::filesystem::path ct_bone_cross_section_file{};
+    // Optional energy-dependent mass XS for every Schneider section. When set
+    // on a CCTG v2/v3 grid, this supersedes the legacy four-class XS tables.
+    std::filesystem::path ct_schneider_cross_section_file{};
     // Global multiplier on CT mass-scaled / material stopping power (default 1).
     // Used to absorb residual WEPL calibration vs full Geant4 material SP.
     double ct_stopping_power_scale{1.0};

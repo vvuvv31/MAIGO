@@ -11,6 +11,8 @@ public:
                       std::vector<double> macroscopic_cross_sections_per_mm);
 
     static CrossSectionTable from_csv(const std::filesystem::path& path);
+    static std::vector<CrossSectionTable> from_schneider_csv(
+        const std::filesystem::path& path);
 
     [[nodiscard]] double interpolate(double energy_MeVu) const noexcept;
     [[nodiscard]] const std::vector<double>& energies() const noexcept;

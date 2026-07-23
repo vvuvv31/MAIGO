@@ -17,6 +17,14 @@ std::vector<std::string> split_csv(const std::string& line) {
     std::istringstream stream(line);
     std::string field;
     while (std::getline(stream, field, ',')) {
+        while (!field.empty() &&
+               std::isspace(static_cast<unsigned char>(field.front()))) {
+            field.erase(field.begin());
+        }
+        while (!field.empty() &&
+               std::isspace(static_cast<unsigned char>(field.back()))) {
+            field.pop_back();
+        }
         fields.push_back(field);
     }
     return fields;
@@ -103,6 +111,68 @@ CrossSectionTable CrossSectionTable::from_csv(const std::filesystem::path& path)
         throw std::runtime_error("Cross-section CSV header not found: " + path.string());
     }
     return CrossSectionTable(std::move(energies), std::move(cross_sections));
+}
+
+std::vector<CrossSectionTable> CrossSectionTable::from_schneider_csv(
+    const std::filesystem::path& path) {
+    std::ifstream input(path);
+    if (!input) {
+        throw std::runtime_error("Cannot open Schneider cross-section table: " +
+                                 path.string());
+    }
+    std::string line;
+    std::size_t line_number = 0;
+    std::vector<std::string> header;
+    while (std::getline(input, line)) {
+        ++line_number;
+        const auto first = line.find_first_not_of(" \t\r\n");
+        if (first != std::string::npos && line[first] != '#') {
+            header = split_csv(line);
+            break;
+        }
+    }
+    if (header.size() < 2 || header.front() != "energy_MeV_per_u") {
+        throw std::runtime_error(
+            "Schneider cross-section CSV must start with energy_MeV_per_u and "
+            "at least one section column: " +
+            path.string());
+    }
+    for (std::size_t section = 0; section + 1 < header.size(); ++section) {
+        const auto expected = "section_" + (section < 10 ? std::string{"0"} : std::string{}) +
+                              std::to_string(section) +
+                              "_mass_xs_per_mm_at_1g_cm3";
+        if (header[section + 1] != expected) {
+            throw std::runtime_error("Unexpected Schneider cross-section column '" +
+                                     header[section + 1] + "' in " + path.string());
+        }
+    }
+
+    std::vector<double> energies;
+    std::vector<std::vector<double>> section_values(header.size() - 1);
+    while (std::getline(input, line)) {
+        ++line_number;
+        const auto first = line.find_first_not_of(" \t\r\n");
+        if (first == std::string::npos || line[first] == '#') {
+            continue;
+        }
+        const auto fields = split_csv(line);
+        if (fields.size() != header.size()) {
+            throw std::runtime_error("Incomplete Schneider cross-section row at " +
+                                     path.string() + ":" + std::to_string(line_number));
+        }
+        energies.push_back(parse_number(fields[0], path, line_number));
+        for (std::size_t section = 0; section < section_values.size(); ++section) {
+            section_values[section].push_back(
+                parse_number(fields[section + 1], path, line_number));
+        }
+    }
+
+    std::vector<CrossSectionTable> tables;
+    tables.reserve(section_values.size());
+    for (auto& values : section_values) {
+        tables.emplace_back(energies, std::move(values));
+    }
+    return tables;
 }
 
 double CrossSectionTable::interpolate(double energy_MeVu) const noexcept {

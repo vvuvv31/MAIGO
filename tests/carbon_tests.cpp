@@ -58,8 +58,8 @@ void require_voxel_idd_closure(const carbon::TransportConfig& config,
     require(result.voxel_deposited_energy_MeV.size() == config.number_of_voxels(),
             "Voxel tally has the wrong size");
 #if defined(CARBON_DOSE_FP32)
-    // Float atomics accumulate plane sums with ~1e-7 relative noise.
-    tolerance_MeV_per_primary = std::max(tolerance_MeV_per_primary, 1.0e-5);
+    // Float atomics accumulate IDD and voxel planes in different orders.
+    tolerance_MeV_per_primary = std::max(tolerance_MeV_per_primary, 2.0e-5);
 #endif
     const auto plane_size = config.voxel_bins_x * config.voxel_bins_y;
     const auto histories = static_cast<double>(config.number_of_histories);
@@ -80,7 +80,7 @@ void require_charged_origin_voxel_closure(
     const carbon::TransportResult& result,
     double tolerance_MeV_per_primary) {
 #if defined(CARBON_DOSE_FP32)
-    tolerance_MeV_per_primary = std::max(tolerance_MeV_per_primary, 1.0e-5);
+    tolerance_MeV_per_primary = std::max(tolerance_MeV_per_primary, 2.0e-5);
 #endif
     const auto voxel_count = config.number_of_voxels();
     require(result.charged_origin_voxel_deposited_energy_MeV.size() ==
@@ -328,6 +328,18 @@ void test_ct_grid_helpers() {
     require(carbon::ct_material_class(2, false) == 2 &&
                 carbon::ct_material_class(9, false) == 3,
             "Legacy CT material class mapping failed");
+    require_near(carbon::ct_material_reference_density_g_per_cm3(0U), 0.00120479F,
+                 1.0e-8, "G4_AIR reference density");
+    require_near(carbon::ct_material_reference_density_g_per_cm3(1U), 1.04F, 1.0e-7,
+                 "G4_LUNG_ICRP reference density");
+    require_near(carbon::ct_material_reference_density_g_per_cm3(2U), 1.0F, 1.0e-7,
+                 "Water reference density");
+    require_near(carbon::ct_material_reference_density_g_per_cm3(3U), 1.85F, 1.0e-7,
+                 "G4_BONE_COMPACT_ICRU reference density");
+    require(carbon::ct_cross_section_material_index(15U, true, true) == 15U,
+            "Schneider XS must preserve the section index");
+    require(carbon::ct_cross_section_material_index(15U, true, false) == 3U,
+            "Legacy XS must collapse Schneider bone sections");
 
     require_near(carbon::ct_mass_scaled_stopping_power(10.0F, 1.5F, 1.0F), 15.0F, 1.0e-5,
                  "mass SP water scale");
@@ -372,8 +384,8 @@ void test_ct_grid_helpers() {
     require(carbon::ct_dda_distance_to_next_face(dda) > 0.5F,
             "DDA distance after face snap must be positive");
 
-    // Energy-dependent mass-SP: I = I_water (78 eV) → factor = za_rel.
-    require_near(carbon::ct_mass_sp_energy_factor(0.93F, 78.0F, 150.0F), 0.93F, 1.0e-4,
+    // Energy-dependent mass-SP: I = I_water (75 eV) → factor = za_rel.
+    require_near(carbon::ct_mass_sp_energy_factor(0.93F, 75.0F, 150.0F), 0.93F, 1.0e-4,
                  "mass-SP energy factor water-I");
     const auto f_bone_hi =
         carbon::ct_mass_sp_energy_factor(0.93F, 106.0F, 200.0F);

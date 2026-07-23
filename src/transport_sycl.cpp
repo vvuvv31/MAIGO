@@ -1594,6 +1594,8 @@ TransportResult transport_sycl(const TransportConfig& config,
     auto use_ct_mass_sp = false;
     auto use_ct_material_sp = false;
     auto use_ct_material_xs = false;
+    auto use_ct_schneider_xs = false;
+    std::uint32_t ct_xs_material_count = 4;
     auto ct_material_ids_are_schneider_sections = false;
     if (enable_ct_grid) {
         ct_grid_host = CtGrid::from_binary(config.ct_grid_file);
@@ -1631,6 +1633,7 @@ TransportResult transport_sycl(const TransportConfig& config,
              !config.ct_water_stopping_power_file.empty() ||
              !config.ct_bone_stopping_power_file.empty());
         use_ct_material_xs =
+            !config.ct_schneider_cross_section_file.empty() ||
             !config.ct_air_cross_section_file.empty() ||
             !config.ct_lung_cross_section_file.empty() ||
             !config.ct_water_cross_section_file.empty() ||
@@ -1705,8 +1708,27 @@ TransportResult transport_sycl(const TransportConfig& config,
 
         // Optional absolute 4-class tables (legacy path when no mass-SP LUT).
         std::vector<float> ct_sp_host(4 * table_size);
-        std::vector<float> ct_xs_host(4 * cross_section_table_size);
-        std::vector<float> ct_ref_host = {1.0F, 1.0F, 1.0F, 1.85F};
+        use_ct_schneider_xs =
+            ct_material_ids_are_schneider_sections &&
+            !config.ct_schneider_cross_section_file.empty();
+        std::vector<CrossSectionTable> schneider_xs_tables;
+        if (use_ct_schneider_xs) {
+            schneider_xs_tables = CrossSectionTable::from_schneider_csv(
+                config.ct_schneider_cross_section_file);
+            if (schneider_xs_tables.size() < ct_n_mass_factors) {
+                throw std::invalid_argument(
+                    "Schneider cross-section table has fewer sections than the CT grid");
+            }
+            ct_xs_material_count =
+                static_cast<std::uint32_t>(schneider_xs_tables.size());
+        }
+        std::vector<float> ct_xs_host(
+            static_cast<std::size_t>(ct_xs_material_count) *
+            cross_section_table_size);
+        // Each empty material path falls back to the water table, whose
+        // reference density is 1.0. Only use a material's native density when
+        // at least one native table was actually supplied for that class.
+        std::vector<float> ct_ref_host(ct_xs_material_count, 1.0F);
         for (std::uint32_t mat = 0; mat < 4; ++mat) {
             for (std::size_t i = 0; i < table_size; ++i) {
                 ct_sp_host[mat * table_size + i] =
@@ -1717,7 +1739,24 @@ TransportResult transport_sycl(const TransportConfig& config,
                     static_cast<float>(cross_section.values()[i]);
             }
         }
-        if (use_ct_material_sp || use_ct_material_xs) {
+        if (use_ct_schneider_xs) {
+            for (std::uint32_t section = 0; section < ct_xs_material_count;
+                 ++section) {
+                const auto& table = schneider_xs_tables[section];
+                if (table.values().size() != cross_section_table_size ||
+                    table.energies() != cross_section.energies()) {
+                    throw std::invalid_argument(
+                        "Schneider cross-section tables must match the water grid");
+                }
+                for (std::size_t i = 0; i < cross_section_table_size; ++i) {
+                    ct_xs_host[static_cast<std::size_t>(section) *
+                                   cross_section_table_size +
+                               i] = static_cast<float>(table.values()[i]);
+                }
+            }
+        }
+        if (use_ct_material_sp ||
+            (use_ct_material_xs && !use_ct_schneider_xs)) {
             const std::array<std::filesystem::path, 4> sp_paths = {
                 config.ct_air_stopping_power_file.empty() ? config.stopping_power_file
                                                           : config.ct_air_stopping_power_file,
@@ -1744,8 +1783,21 @@ TransportResult transport_sycl(const TransportConfig& config,
                     ? config.nuclear_cross_section_file
                     : config.ct_bone_cross_section_file,
             };
-            if (!config.ct_bone_stopping_power_file.empty()) {
-                ct_ref_host[3] = 1.85F;
+            const std::array<bool, 4> has_native_table = {
+                !config.ct_air_stopping_power_file.empty() ||
+                    !config.ct_air_cross_section_file.empty(),
+                !config.ct_lung_stopping_power_file.empty() ||
+                    !config.ct_lung_cross_section_file.empty(),
+                !config.ct_water_stopping_power_file.empty() ||
+                    !config.ct_water_cross_section_file.empty(),
+                !config.ct_bone_stopping_power_file.empty() ||
+                    !config.ct_bone_cross_section_file.empty(),
+            };
+            for (std::uint8_t mat = 0; mat < 4U; ++mat) {
+                if (has_native_table[mat]) {
+                    ct_ref_host[mat] =
+                        ct_material_reference_density_g_per_cm3(mat);
+                }
             }
             for (std::uint32_t mat = 0; mat < 4; ++mat) {
                 if (use_ct_material_sp) {
@@ -1774,7 +1826,8 @@ TransportResult transport_sycl(const TransportConfig& config,
         }
         ct_sp_device = sycl::malloc_device<float>(ct_sp_host.size(), queue);
         ct_xs_device = sycl::malloc_device<float>(ct_xs_host.size(), queue);
-        ct_ref_density_device = sycl::malloc_device<float>(4, queue);
+        ct_ref_density_device =
+            sycl::malloc_device<float>(ct_ref_host.size(), queue);
         if (ct_sp_device == nullptr || ct_xs_device == nullptr ||
             ct_ref_density_device == nullptr) {
             free_device(ct_sp_device);
@@ -1790,7 +1843,8 @@ TransportResult transport_sycl(const TransportConfig& config,
             .wait_and_throw();
         queue.memcpy(ct_xs_device, ct_xs_host.data(), sizeof(float) * ct_xs_host.size())
             .wait_and_throw();
-        queue.memcpy(ct_ref_density_device, ct_ref_host.data(), sizeof(float) * 4)
+        queue.memcpy(ct_ref_density_device, ct_ref_host.data(),
+                     sizeof(float) * ct_ref_host.size())
             .wait_and_throw();
     }
     const auto secondary_allocation_failed =
@@ -2804,8 +2858,11 @@ TransportResult transport_sycl(const TransportConfig& config,
                     if (enable_ct_grid) {
                         if (use_ct_material_xs && in_ct && ct_xs_device != nullptr &&
                             ct_ref_density_device != nullptr) {
-                            const auto mat = static_cast<std::uint32_t>(ct_material_class(
-                                ct_material, ct_material_ids_are_schneider_sections));
+                            const auto mat = static_cast<std::uint32_t>(
+                                ct_cross_section_material_index(
+                                    ct_material,
+                                    ct_material_ids_are_schneider_sections,
+                                    use_ct_schneider_xs));
                             const auto base = mat * cross_section_table_size;
                             const auto xs_abs =
                                 ct_xs_device[base +
@@ -2884,6 +2941,15 @@ TransportResult transport_sycl(const TransportConfig& config,
                                 reaction_bin.reaction_count - 1U);
                             const auto reaction =
                                 reactions_device[reaction_bin.reaction_offset + package_in_bin];
+                            // Reaction packages are grouped in 1 MeV/u bins. Preserve
+                            // their correlated final state, but scale product kinetic
+                            // energies to the actual post-step projectile energy rather
+                            // than silently using the sampled event's nearby energy.
+                            const auto reaction_energy_scale =
+                                reaction.incident_energy_MeV_per_u > 0.0F
+                                    ? post_step_energy_MeVu /
+                                          reaction.incident_energy_MeV_per_u
+                                    : 1.0F;
                             secondary_summary.direct_count = reaction.secondary_count;
 
                             std::uint32_t queueable_count = 0;
@@ -2902,20 +2968,24 @@ TransportResult transport_sycl(const TransportConfig& config,
                                                         secondary.pdg_id == 2112;
                                 const auto is_supported = secondary.atomic_number > 0 &&
                                                           secondary.mass_number > 0;
+                                const auto scaled_secondary_energy_MeV =
+                                    secondary.kinetic_energy_MeV *
+                                    reaction_energy_scale;
                                 if (is_neutral) {
-                                    package_accounted_ke_MeV += secondary.kinetic_energy_MeV;
+                                    package_accounted_ke_MeV +=
+                                        scaled_secondary_energy_MeV;
                                     if (enable_neutral_transport) {
                                         ++neutral_queueable_count;
                                         neutral_queueable_energy_MeV +=
-                                            secondary.kinetic_energy_MeV;
+                                            scaled_secondary_energy_MeV;
                                     } else {
                                         const auto kerma_frac = neutral_kerma_fraction_at_energy(
                                             energy_MeVu, neutral_local_kerma_fraction,
                                             neutral_kerma_high_energy_scale);
                                         const auto kerma_MeV =
-                                            secondary.kinetic_energy_MeV * kerma_frac;
+                                            scaled_secondary_energy_MeV * kerma_frac;
                                         const auto residual_MeV =
-                                            secondary.kinetic_energy_MeV - kerma_MeV;
+                                            scaled_secondary_energy_MeV - kerma_MeV;
                                         secondary_summary.neutral_energy_MeV += residual_MeV;
                                         if (kerma_MeV > 0.0F &&
                                             fragment_dose_device != nullptr) {
@@ -2942,9 +3012,11 @@ TransportResult transport_sycl(const TransportConfig& config,
                                         }
                                     }
                                 } else if (is_supported) {
-                                    package_accounted_ke_MeV += secondary.kinetic_energy_MeV;
+                                    package_accounted_ke_MeV +=
+                                        scaled_secondary_energy_MeV;
                                     ++queueable_count;
-                                    queueable_energy_MeV += secondary.kinetic_energy_MeV;
+                                    queueable_energy_MeV +=
+                                        scaled_secondary_energy_MeV;
                                 }
                                 // else: unsupported charged KE stays out of
                                 // package_accounted_ke_MeV → residual local heat (not
@@ -2989,7 +3061,8 @@ TransportResult transport_sycl(const TransportConfig& config,
                                                     position_x_mm,
                                                     position_y_mm,
                                                     position_z_mm,
-                                                    secondary.kinetic_energy_MeV,
+                                                    secondary.kinetic_energy_MeV *
+                                                        reaction_energy_scale,
                                                     child_direction.x,
                                                     child_direction.y,
                                                     child_direction.z,
@@ -3061,7 +3134,8 @@ TransportResult transport_sycl(const TransportConfig& config,
                                                     position_x_mm,
                                                     position_y_mm,
                                                     position_z_mm,
-                                                    secondary.kinetic_energy_MeV,
+                                                    secondary.kinetic_energy_MeV *
+                                                        reaction_energy_scale,
                                                     child_direction.x,
                                                     child_direction.y,
                                                     child_direction.z,
@@ -3896,9 +3970,10 @@ TransportResult transport_sycl(const TransportConfig& config,
                                         xs_f * (cross_section_device[xs_i + 1] -
                                                 cross_section_device[xs_i]);
                                     const auto mat = static_cast<std::uint32_t>(
-                                        ct_material_class(
+                                        ct_cross_section_material_index(
                                             ct_material,
-                                            ct_material_ids_are_schneider_sections));
+                                            ct_material_ids_are_schneider_sections,
+                                            use_ct_schneider_xs));
                                     const auto base =
                                         mat * cross_section_table_size +
                                         static_cast<std::size_t>(xs_i);
@@ -3924,13 +3999,48 @@ TransportResult transport_sycl(const TransportConfig& config,
                                         projectile.interaction_count,
                                         current_energy_MeVu);
                                     constexpr std::uint32_t sampling_window = 8;
-                                    const auto window_begin =
+                                    auto window_begin =
                                         nearest > sampling_window / 2
                                             ? nearest - sampling_window / 2
                                             : 0U;
-                                    const auto window_count = sycl::min(
+                                    auto window_count = sycl::min(
                                         sampling_window,
                                         projectile.interaction_count - window_begin);
+                                    // Rare fragment species can have multi-tens-of-MeV
+                                    // gaps between eight neighboring events. Do not mix
+                                    // such distant final states merely to fill the fixed
+                                    // sampling window. Common species retain all eight
+                                    // nearby events and therefore their event diversity.
+                                    const auto energy_bandwidth_MeVu =
+                                        sycl::fmax(1.0F, 0.01F * current_energy_MeVu);
+                                    const auto raw_window_end =
+                                        window_begin + window_count;
+                                    while (window_begin < raw_window_end &&
+                                           sycl::fabs(
+                                               cascade_interactions_device[
+                                                   projectile.interaction_offset +
+                                                   window_begin]
+                                                   .incident_energy_MeV_per_u -
+                                               current_energy_MeVu) >
+                                               energy_bandwidth_MeVu) {
+                                        ++window_begin;
+                                    }
+                                    auto window_end = raw_window_end;
+                                    while (window_end > window_begin &&
+                                           sycl::fabs(
+                                               cascade_interactions_device[
+                                                   projectile.interaction_offset +
+                                                   window_end - 1U]
+                                                   .incident_energy_MeV_per_u -
+                                               current_energy_MeVu) >
+                                               energy_bandwidth_MeVu) {
+                                        --window_end;
+                                    }
+                                    if (window_end == window_begin) {
+                                        window_begin = nearest;
+                                        window_end = nearest + 1U;
+                                    }
+                                    window_count = window_end - window_begin;
                                     const auto package_uniform =
                                         rng::uniform01(random_seed, rng_stream, steps, 9);
                                     const auto selected_in_window = sycl::min(

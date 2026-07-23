@@ -83,3 +83,4 @@ device: gpu
 ct_lung_cross_section_file: data/c12_inelastic_cross_sections_lung_geant4_11_1_3.csv
 ct_water_cross_section_file: data/c12_inelastic_cross_sections_water_geant4_11_1_3.csv
 ct_bone_cross_section_file: data/c12_inelastic_cross_sections_bone_geant4_11_1_3.csv
+ct_schneider_cross_section_file: data/c12_inelastic_cross_sections_schneider_geant4_11_1_3.csv
