@@ -14,7 +14,6 @@
 - energy straggling、multiple scattering、primary attenuation；
 - charged secondary transport 和两代 fragment cascade；
 - energy-sorted secondary batches；
-- FP64 voxel-dose atomic scoring；
 - 相同的 reaction/cascade package；
 - 相同的 `ct/code/physical_dose.mhd` Dij·x/matRad physical-dose 参考。
 
@@ -25,9 +24,13 @@ Level Zero 结果使用：
 - Intel Arc B580；
 - Level Zero driver `1.15.38646+4`；
 - Intel-only `spir64` 构建；
+- FP64 voxel-dose atomic scoring；
 - `UR_L0_V2_DISABLE_ZE_LAUNCH_KERNEL_WITH_ARGS=1`。
 
 既有 CUDA 结果来自项目历史记录中的 NVIDIA TITAN RTX oneAPI CUDA-plugin 运行。
+由于对应的 CUDA `run.log`、构建缓存和可执行文件哈希目前不可用，不能确认
+`536.51 s` 这次运行使用的是 FP32 还是 FP64 dose atomic，也不能确认其 PTX
+目标参数。剂量结果可以比较，但编译参数不能按当前 Level Zero 构建反推。
 
 ## 2. 10M 剂量验证结果
 
@@ -111,6 +114,7 @@ CUDA 版本不是手写 CUDA kernel。DPC++ 先生成 PTX，再通过 oneAPI CUD
 ```
 
 运行时将使用便携 PTX/JIT，而不是明确针对 TITAN RTX 的 AOT 目标。这可能影响寄存器分配、occupancy 和最终机器码质量。
+但历史 `536.51 s` 运行缺少匹配的构建缓存，因此目前不能确认它是否属于这种情况。
 
 ### 4.3 Work-group 设置不同
 
@@ -121,7 +125,7 @@ CUDA 版本不是手写 CUDA kernel。DPC++ 先生成 PTX，再通过 oneAPI CUD
 | CUDA | 128 |
 | Level Zero/OpenCL GPU | 256 |
 
-CUDA secondary kernel 包含大量捕获参数、FP64 atomic、cascade 逻辑和长粒子轨迹，寄存器压力较高。代码保留 CUDA `local_size=128`，因为256线程通常降低 occupancy；B580 可以使用256线程 work-group。
+CUDA secondary kernel 包含大量捕获参数、dose atomic、cascade 逻辑和长粒子轨迹，寄存器压力较高。代码保留 CUDA `local_size=128`，因为256线程通常降低 occupancy；B580 可以使用256线程 work-group。
 
 这会影响并行度，但单独不足以解释全部12倍差距。
 
@@ -139,9 +143,9 @@ CUDA secondary kernel 包含大量捕获参数、FP64 atomic、cascade 逻辑和
 
 ### 4.5 FP64 atomic voxel scoring
 
-当前生产构建使用 FP64 dose atomic。大量粒子会同时向相同或相邻 voxel 累加，造成原子竞争。TITAN RTX 的 FP64 吞吐较弱，oneAPI CUDA plugin 对大型、分歧严重且包含 FP64 atomic 的 SYCL kernel 也可能产生额外开销。
+本次 Level Zero 生产构建确认使用 FP64 dose atomic。大量粒子会同时向相同或相邻 voxel 累加，造成原子竞争。若历史 CUDA 运行也使用 FP64，TITAN RTX 的 FP64 吞吐和 oneAPI CUDA plugin 对大型、分歧严重 kernel 的代码生成都可能产生额外开销。
 
-Level Zero 运行同样使用 FP64 atomic，因此剂量精度口径一致；但两套 driver/compiler 对 atomic 和控制流的代码生成效率可能显著不同。
+但是历史 CUDA 运行的 atomic 精度目前没有原始构建记录，FP64 atomic 只能列为待验证变量，不能作为已确认根因。
 
 ### 4.6 WSL 和 CUDA 专用保护
 
@@ -234,140 +238,117 @@ inputs/input_sha256.txt
 
 `out/` 已被 Git 忽略；本文只记录可复核的结论，不提交患者输入或大体积剂量文件。
 
-## 8. 进一步代码审计：差距集中在 secondary kernel
+## 8. 进一步分析：38.25x secondary 时间差如何构成
 
-继续对照当前实现、历史 CUDA 日志和本机 CUDA 构建缓存后，可以比第4节进一步缩小
-问题范围：`12.25x` 不是整个输运流程的普遍差距，而是几乎完全来自 charged
-secondary transport。
+从 GitHub 取回的分析指出，1M 性能差距几乎全部集中在 charged secondary
+transport。现在已从 Level Zero 原始 `run.log` 补齐 step count，因此可以把差距
+进一步量化：
 
-1M 记录可以拆成：
-
-| 阶段 | TITAN RTX CUDA | Arc B580 Level Zero | CUDA / Level Zero |
+| 1M 指标 | TITAN RTX CUDA（历史记录） | Arc B580 Level Zero | CUDA / Level Zero |
 |---|---:|---:|---:|
-| 总时间 | 55.48 s | 4.57 s | 12.1x |
-| Secondary kernel | 52.66 s | 1.38 s | **38.2x** |
-| 其余时间 | 2.82 s | 3.19 s | 0.88x |
+| 总时间 | 55.48 s | 4.5684 s | 12.15x |
+| Secondary kernel | 52.66 s | 1.3768 s | **38.25x** |
+| 输运带电次级数 | 2,979,094 | 3,158,734 | 0.943x |
+| Secondary transport steps | 约 12,746,000,000 | 1,899,483,953 | **6.71x** |
+| 平均 steps/输运次级 | 4,278.5 | 601.3 | **7.11x** |
+| Secondary step throughput | 242.0 Mstep/s | 1,379.6 Mstep/s | 0.175x |
 
-Primary、初始化、队列准备和结果回传没有数量级差异。真正需要解释的是 secondary
-kernel 的约 38 倍差距，而不是泛化地讨论“CUDA 与 Level Zero 哪个更快”。
+这里有两个相乘的差异：
 
-### 8.1 当前最关键的缺失数据：Level Zero secondary step count
+1. 历史 CUDA 记录每个带电次级平均执行约 `7.11x` 更多步骤；
+2. 即使按 step 数归一化，CUDA 每步仍约慢 `5.70x`。
 
-CUDA 1M 优化记录包含约 `1.2746e10` 个 secondary steps、2,979,094 个输运带电
-次级，平均约 4,278 步/次级。当前 Level Zero 文档记录了输运次级数和 kernel time，
-但没有记录：
+`7.11 × 5.70 ≈ 40.5`，与观测到的 `38.25x` secondary kernel 时间差接近；少量
+偏差来自两端输运次级数量不同。因此 wall time 差距不是单一原因造成，至少同时
+包含“执行的底层工作量不同”和“每一步的执行效率不同”。
 
-- `Steps`；
-- `Secondary transport steps`；
-- 平均每个次级的步数；
-- secondary track-length histogram；
-- CT boundary nudge/continue 次数。
+### 8.1 已排除 straggling_scale 差异
 
-因此目前存在两个完全不同的解释：
+历史 CUDA 1M 配置使用 `straggling_scale=1.0`，当前 Level Zero full-plan 使用
+`1.2`。为判断它是否造成步数差，另外运行了仅把 Level Zero 参数改为 `1.0` 的
+1M 诊断：
 
-1. 如果 Level Zero 也执行约 `1.27e10` 步，则其 secondary 吞吐约为
-   9.2 billion steps/s，而 CUDA 约为 0.24 billion steps/s。此时应重点检查 CUDA
-   kernel 的 warp efficiency、register spill、occupancy 和 oneAPI PTX 代码生成。
-2. 如果 Level Zero 的 secondary step 数明显较少，则两端并没有执行相同数量的底层
-   工作。应优先检查浮点边界判断、`nextafter`、DDA face crossing 和 nudge 路径，
-   而不能把差距归因于硬件或 backend。
+| Level Zero 1M | scale=1.2 | scale=1.0 |
+|---|---:|---:|
+| Secondary transport steps | 1,899,483,953 | 1,899,700,770 |
+| 输运带电次级数 | 3,158,734 | 3,159,410 |
+| Secondary kernel | 1.3768 s | 1.3799 s |
+| 总时间 | 4.5684 s | 4.5636 s |
 
-代码已经明确记录 secondary 曾出现 voxel-boundary nudge thrashing，并设置每粒子
-`500000` 步的保护。小步路径会执行 `nextafter`，在 CT 内还会额外沿方向移动
-`1e-4 mm`。不同后端的浮点收缩、舍入和 `nextafter` 实现可能改变进入该路径的次数，
-而最终积分剂量仍可保持接近。所以 Level Zero 的 step count 是下一步判断根因的
-第一优先级，重要性高于再次重复10M wall-time。
+步数只变化约 `0.011%`，所以 straggling scale 不能解释 CUDA 的约 12.746B steps。
 
-### 8.2 Warp divergence 是 CUDA secondary 的高风险项
+### 8.2 目前能够确认的首要原因：历史 CUDA 执行了更多步骤
 
-当前实现为一个 work-item 完整输运一条次级轨迹。不同碎片具有不同粒子种类、能量、
-方向、CT 路径、核反应次数和终止时间。一个 NVIDIA warp 中只要仍有一条长轨迹，
-同一 warp 内已经结束的线程就无法贡献有效计算。
+CUDA 的输运次级数并没有更多，反而比 Level Zero 少约 `5.7%`；但 secondary
+steps 多 `6.71x`。这表明差异不是 queue 容量或产生了更多粒子，而是单条次级轨迹
+平均循环次数明显更多。
 
-现有 energy sorting 只按 `<2 / <10 / <50 / >=50 MeV/u` 分成4档，不能消除：
+代码中的 secondary 循环曾有 voxel-boundary nudge thrashing 风险，并设置了每粒子
+`500000` 步保护。小步路径使用 `nextafter`，在 CT 中还会沿方向移动 `1e-4 mm`。
+如果 CUDA 历史 binary 在 DDA face crossing、浮点收缩或边界判断上反复进入该
+路径，就可能产生很多几乎不改变剂量的额外循环；这与两端最终剂量高度一致并不
+矛盾。
 
-- 不同核素和电荷导致的 stopping-power/射程差异；
-- 不同方向和解剖路径导致的 track-length 差异；
-- cascade 是否发生以及发生位置的差异；
-- 少量数万到数十万步长尾轨迹。
+但“CUDA 边界抖动”目前仍不是已证实根因。历史 CUDA 数字来自优化记录，没有与
+Level Zero 完全匹配的 commit、完整 `run.log`、输入哈希和 executable hash。
+因此另一种同样需要保留的解释是：历史 CUDA binary/config 与当前 Level Zero
+代码并不完全相同，step 计数口径或输运逻辑曾经改变。必须在同一 commit 上重跑
+CUDA，才能在这两种解释之间作出判断。
 
-Arc 的实际 SIMD 宽度和线程调度方式可能让长尾轨迹造成的组内浪费较小。单独的
-SIMD/warp 差异未必足以解释38倍，但会放大寄存器压力和随机内存访问的影响。
+### 8.3 剩余约 5.70x 的单位 step 效率差
 
-### 8.3 巨型 secondary lambda 可能在 CUDA 上发生寄存器溢出
+即使暂时接受两端 step 口径一致，CUDA 仍只有约 `242.0 Mstep/s`，Level Zero 约为
+`1,379.6 Mstep/s`。代码审计显示以下因素可能叠加：
 
-Secondary kernel 是一个大型单体 lambda，同时包含 CT DDA、stopping power、
-straggling/MCS、Philox状态、核反应采样、fragment cascade、多套 scorer、队列管理
-和 summary 写回。大量捕获参数和长生命周期局部变量会增加每线程寄存器需求。
+- **Warp 长尾分歧**：一个 work-item 完整输运一条轨迹。当前 energy sorting 只按
+  四个能量区间分组，无法消除核素、方向、解剖路径、cascade 和 track length 的
+  差异；一个 NVIDIA warp 会等待最长轨迹。
+- **大型 secondary lambda 的寄存器压力/溢出**：kernel 同时包含 CT DDA、
+  stopping power、straggling/MCS、Philox、核反应、cascade、scorer 和队列管理。
+  若 PTX 发生 spill，local-memory 成本会在数千次循环中重复，并与 warp divergence
+  相互放大。
+- **编译目标和代码生成**：oneAPI CUDA plugin 的 PTX 路径与 Intel `spir64`/
+  Level Zero 路径不同，最终寄存器分配和控制流质量可能不同。
+- **Dose atomic**：FP64 atomic 和 voxel 热点竞争可能影响性能，但历史 CUDA
+  运行究竟是 FP32 还是 FP64 目前没有可核验的构建记录。
 
-如果 TITAN RTX 的生成代码发生寄存器溢出：
+以上是与观测模式一致的高优先级假设，不是已经由 profiler 证明的事实。缺少
+`ptxas` register/spill 报告和 Nsight Compute 指标时，不能准确分配这 `5.70x`。
 
-1. 每 SM 可驻留的 warp 数下降；
-2. 不足以隐藏不规则全局内存访问；
-3. 溢出变量反复访问 local memory；
-4. 长轨迹循环将 spill 成本重复数千次；
-5. warp divergence 又会进一步降低有效吞吐。
+### 8.4 不足以单独解释差距的因素
 
-这种模式可以解释“primary 接近、secondary 慢几十倍”，但目前没有保存
-`ptxas` register/spill 报告或 Nsight Compute 指标，所以仍是高优先级假设而不是
-已确认结论。
+- **Local size 128 vs 256** 会改变 occupancy，但不太可能单独造成 `38.25x`
+  secondary 时间差。
+- 启用 energy sorting 后，两端 secondary batch 都被代码限制为 `65536`。
+- 两端 queue 均无 overflow；显存 clamp 影响容量，不会直接减少实际输运步骤。
+- WSL submit/sync 有开销，但 CUDA 的主要时间位于 secondary kernel event 内。
+- Primary 阶段没有同等级差距，因此不能简单归结为 B580 对所有计算都比
+  TITAN RTX 快。
 
-### 8.4 两个原有解释需要重新核对运行来源
+此前从另一环境记录的 `CARBON_CUDA_ARCH=sm_75`、`CARBON_DOSE_FP32=ON` 和
+dual-target cache 不能证明 `536.51 s` 运行使用了这些设置：当前工作树中不存在与
+该运行匹配的 CUDA cache 或日志。本文不再把这些值当作历史运行事实。
 
-第4节提出 portable PTX/JIT 和 FP64 atomic 可能拖慢 CUDA。这个方向本身合理，但
-当前本机 `build/oneapi-release/CMakeCache.txt` 显示：
+### 8.5 最小闭环实验
 
-```text
-CARBON_CUDA_ARCH=sm_75
-CARBON_DOSE_FP32=ON
-CARBON_SYCL_TARGETS=spir64,nvptx64-nvidia-cuda
-```
+下一步不必先重复10M；在有 TITAN RTX 的环境中做同 commit、同输入的100k/1M
+CUDA A/B 即可快速定位：
 
-当前 CUDA 启动日志也报告 `dose_atomic=fp32`。这与本文第1节声称两边都使用 FP64
-voxel-dose atomic 不一致。可能的情况包括：
+1. 保存两端完整 `run.log`、`CMakeCache.txt`、compiler/plugin/driver版本、输入
+   SHA-256 和 executable hash。
+2. 固定 FP32/FP64、seed、CT、spot weights、reaction/cascade package、
+   `secondary_batch_size`、local size 和所有物理参数。
+3. 先比较 `Secondary transport steps`、steps/次级、boundary nudge 次数和
+   track-length histogram。
+4. 若同代码 CUDA 仍执行约 `6.7x` 更多 steps，集中检查 DDA face crossing、
+   `nextafter`、浮点编译选项和 nudge/thrashing。
+5. 若 steps 已一致但 CUDA 每步仍慢，使用 `ptxas`/Nsight Compute 检查
+   registers/thread、spill、achieved occupancy、warp/branch efficiency 和 atomic
+   throughput，再做 local size、FP32/FP64 与 `sm_75` AOT 的受控测试。
 
-- 536.51 s 来自更早的 FP64 binary；
-- 随后在同一 build 目录重新配置成 FP32；
-- 文档记录时混用了不同运行的构建设置。
-
-在找到对应 CUDA `run.log`、`CMakeCache.txt` 和 executable hash 之前，不能把
-FP64 atomic 或缺少 `sm_75` AOT 当作本次差距的既定原因。即使它们需要做严格A/B，
-其优先级也低于先确认两边的 secondary steps。
-
-### 8.5 不太可能单独解释12倍差距的因素
-
-- **Local size 128 vs 256**：会影响 occupancy，但单独不足以解释38倍 secondary
-  差距。
-- **Secondary batch size**：配置启用 energy sorting 后，代码会把两个后端都限制到
-  `65536`，并不是 Level Zero 整队列单次运行而 CUDA 只跑64k。
-- **Queue capacity和显存 clamp**：两端均无 overflow；它们影响可分配容量，不直接
-  减少实际输运粒子。
-- **CT分辨率/查表**：将 CT 从0.5×2×0.5 mm降至2×2×2 mm、体素减少16.07倍后，
-  CUDA 1M full plan 端到端只快0.65%，说明 CT voxel数量不是总瓶颈。
-- **WSL submit开销**：WSL和频繁同步可能有成本，但 CUDA 的大部分时间已计入
-  secondary kernel event，不能只用主机启动开销解释。
-- **纯硬件代差**：primary阶段接近，不支持“B580所有计算天然比TITAN RTX快12倍”。
-
-### 8.6 建议的最小定位实验
-
-不需要先重复10M。应在相同 commit 和输入哈希上做100k或1M受控A/B：
-
-1. 保存两端完整 `run.log`、`CMakeCache.txt`、compiler/plugin/driver版本和 executable
-   hash。
-2. 强制相同 FP32/FP64、seed、CT、spot weights、reaction/cascade package、
-   `secondary_batch_size` 和 local size。
-3. 首先比较 `Secondary transport steps` 和平均步数/次级。
-4. 用 `CARBON_ENABLE_TRANSPORT_PROFILE=ON` 比较 boundary nudge、CT DDA、
-   track-length histogram、dose atomics 和 cascade lookup次数。
-5. CUDA 使用 `ptxas`/Nsight Compute 记录 registers/thread、local-memory spill、
-   achieved occupancy、warp execution efficiency、branch efficiency 和 atomic
-   throughput。
-6. 若步数一致但 CUDA 仍慢，依次测试 local size 128/256、FP32/FP64、CUDA-only
-   `sm_75` AOT，并考虑按核素、能量和预计track length拆分 secondary kernel。
-7. 若 CUDA 步数明显更多，先修复 backend-dependent boundary nudge/thrashing，
-   再评估调度和硬件性能。
-
-当前证据下，最可能的组合原因是 CUDA warp 长尾分歧与巨型 secondary kernel 的
-寄存器压力/溢出；但在取得 Level Zero secondary step count 前，不能排除 CUDA
-特有的边界抖动产生了大量额外步骤，也不能把12.25倍差距归因于 Level Zero API
-或 B580 硬件本身。
+当前最可靠的结论是：历史 CUDA secondary kernel 的 `38.25x` 时间差中，约
+`7.1x` 来自平均 steps/次级更多，剩余约 `5.7x` 来自单位 step 吞吐更低。
+前者究竟是旧 binary/config 差异还是 CUDA 路径的边界抖动，后者究竟有多少来自
+warp divergence、register spill、atomic 或 PTX 代码生成，都需要同 commit CUDA
+重跑和 profiler 数据才能最终归因；现有证据不足以把 `12.25x` 直接归因于
+Level Zero API。
