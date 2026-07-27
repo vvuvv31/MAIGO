@@ -157,7 +157,7 @@ def main() -> None:
     spacing_x, spacing_y, spacing_z = meta["spacing_xyz_mm"]
 
     # TOPAS TsDicomPatient ignores IPP and places the imaging volume so its
-    # center is at the component origin (see TOPAS patient docs / furtherStep.md).
+    # center is at the component origin (see TOPAS patient docs / README CT section).
     # First-voxel CENTER is then -0.5*(n-1)*spacing on each centered axis.
     # CCTG stores the low EDGE of that first voxel so ct_sample's floor((x-o)/s)
     # returns the correct index.

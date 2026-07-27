@@ -2,6 +2,10 @@
 
 更新日期：2026-07-27
 
+> **角色**：本仓库**当前明确下一步**的工作记录与验收清单。  
+> 已实现总览见 [`README.md`](README.md)；其它非 LET 待办见 [`futureStep.md`](futureStep.md)。  
+> 分支：默认在 `master` 上改（[`BRANCH_WORKFLOW.md`](BRANCH_WORKFLOW.md)）。
+
 ## 目标
 
 在 MAIGO GPU 蒙特卡中实现与
