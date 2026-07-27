@@ -179,6 +179,260 @@ void write_fragment_species_csv(const std::filesystem::path& path,
     }
 }
 
+void write_letd_csv(const std::filesystem::path& path,
+                    const TransportConfig& config,
+                    const TransportResult& result) {
+    const auto bins = config.number_of_bins();
+    const std::array<const std::vector<double>*, 4> moments{
+        &result.primary_c12_letd_numerator,
+        &result.primary_c12_letd_denominator,
+        &result.all_hadron_letd_numerator,
+        &result.all_hadron_letd_denominator,
+    };
+    if (std::any_of(moments.begin(), moments.end(),
+                    [bins](const auto* values) { return values->size() != bins; })) {
+        throw std::invalid_argument("LET result bin count does not match configuration");
+    }
+    ensure_parent_directory(path);
+    std::ofstream output(path, std::ios::binary);
+    if (!output) {
+        throw std::runtime_error("Cannot create LET output file: " + path.string());
+    }
+    output << "depth_mm,primary_c12_letd_MeV_per_mm_per_g_cm3,"
+              "all_hadron_letd_MeV_per_mm_per_g_cm3,"
+              "primary_c12_numerator,primary_c12_denominator_MeV,"
+              "all_hadron_numerator,all_hadron_denominator_MeV\n";
+    output << std::setprecision(12);
+    for (std::size_t bin = 0; bin < bins; ++bin) {
+        const auto primary_denominator = result.primary_c12_letd_denominator[bin];
+        const auto all_denominator = result.all_hadron_letd_denominator[bin];
+        const auto primary_letd =
+            primary_denominator > 0.0
+                ? result.primary_c12_letd_numerator[bin] / primary_denominator
+                : 0.0;
+        const auto all_letd =
+            all_denominator > 0.0
+                ? result.all_hadron_letd_numerator[bin] / all_denominator
+                : 0.0;
+        const auto depth_center_mm =
+            (static_cast<double>(bin) + 0.5) * config.depth_bin_width_mm;
+        output << depth_center_mm << ',' << primary_letd << ',' << all_letd << ','
+               << result.primary_c12_letd_numerator[bin] << ','
+               << primary_denominator << ','
+               << result.all_hadron_letd_numerator[bin] << ','
+               << all_denominator << '\n';
+    }
+}
+
+void write_dense_voxel_letd_mhd(const std::filesystem::path& mhd_path,
+                                const TransportConfig& config,
+                                const TransportResult& result) {
+    if (!config.enable_let_scoring || !config.enable_voxel_scoring) {
+        throw std::invalid_argument(
+            "Dense voxel LET output requires LET and voxel scoring");
+    }
+    const auto count = config.number_of_voxels();
+    const std::array<const std::vector<double>*, 4> moments{
+        &result.primary_c12_voxel_letd_numerator,
+        &result.primary_c12_voxel_letd_denominator,
+        &result.all_hadron_voxel_letd_numerator,
+        &result.all_hadron_voxel_letd_denominator,
+    };
+    if (std::any_of(moments.begin(), moments.end(),
+                    [count](const auto* values) {
+                        return values->size() != count;
+                    })) {
+        throw std::invalid_argument(
+            "Voxel LET result size does not match configuration");
+    }
+    if (mhd_path.empty()) {
+        throw std::invalid_argument("Dense voxel LET MHD output path is empty");
+    }
+
+    std::filesystem::path base = mhd_path;
+    if (base.extension() == ".mhd") {
+        base.replace_extension();
+    }
+    ensure_parent_directory(base);
+
+    const auto nx = config.voxel_bins_x;
+    const auto ny = config.voxel_bins_y;
+    const auto nz = config.number_of_bins();
+    const auto x_extent_mm = static_cast<double>(nx) * config.voxel_size_x_mm;
+    const auto y_extent_mm = static_cast<double>(ny) * config.voxel_size_y_mm;
+    double origin_x = 0.5 * config.voxel_size_x_mm - 0.5 * x_extent_mm;
+    double origin_y = 0.5 * config.voxel_size_y_mm - 0.5 * y_extent_mm;
+    double origin_z = 0.5 * config.depth_bin_width_mm;
+    if (config.enable_ct_grid && !config.ct_grid_file.empty()) {
+        const auto grid = CtGrid::from_binary(config.ct_grid_file);
+        if (grid.nx == nx && grid.ny == ny && grid.nz == nz) {
+            origin_x =
+                static_cast<double>(grid.origin_x_mm) +
+                0.5 * config.voxel_size_x_mm;
+            origin_y =
+                static_cast<double>(grid.origin_y_mm) +
+                0.5 * config.voxel_size_y_mm;
+            origin_z =
+                static_cast<double>(grid.origin_z_mm) +
+                0.5 * config.depth_bin_width_mm;
+        }
+    }
+
+    const auto write_map = [&](const std::string& suffix,
+                               const std::vector<double>& numerator,
+                               const std::vector<double>& denominator) {
+        auto header_path =
+            base.parent_path() / (base.filename().string() + suffix + ".mhd");
+        const auto raw_path =
+            header_path.parent_path() / (header_path.stem().string() + ".raw");
+        std::vector<float> raw(count, 0.0F);
+        for (std::size_t index = 0; index < count; ++index) {
+            if (denominator[index] > 0.0) {
+                raw[index] = static_cast<float>(
+                    numerator[index] / denominator[index]);
+            }
+        }
+        {
+            std::ofstream raw_out(raw_path, std::ios::binary);
+            if (!raw_out) {
+                throw std::runtime_error(
+                    "Cannot create voxel LET RAW file: " + raw_path.string());
+            }
+            raw_out.write(
+                reinterpret_cast<const char*>(raw.data()),
+                static_cast<std::streamsize>(raw.size() * sizeof(float)));
+        }
+        std::ofstream header(header_path, std::ios::binary);
+        if (!header) {
+            throw std::runtime_error(
+                "Cannot create voxel LET MHD file: " + header_path.string());
+        }
+        header << std::setprecision(12)
+               << "ObjectType = Image\n"
+               << "NDims = 3\n"
+               << "BinaryData = True\n"
+               << "BinaryDataByteOrderMSB = False\n"
+               << "CompressedData = False\n"
+               << "TransformMatrix = 1 0 0 0 1 0 0 0 1\n"
+               << "Offset = " << origin_x << ' ' << origin_y << ' '
+               << origin_z << '\n'
+               << "CenterOfRotation = 0 0 0\n"
+               << "ElementSpacing = " << config.voxel_size_x_mm << ' '
+               << config.voxel_size_y_mm << ' '
+               << config.depth_bin_width_mm << '\n'
+               << "DimSize = " << nx << ' ' << ny << ' ' << nz << '\n'
+               << "ElementType = MET_FLOAT\n"
+               << "LETUnits = MeV/mm/(g/cm3)\n"
+               << "ElementDataFile = " << raw_path.filename().string() << '\n';
+    };
+
+    write_map("_primary_c12",
+              result.primary_c12_voxel_letd_numerator,
+              result.primary_c12_voxel_letd_denominator);
+    write_map("_all_hadron",
+              result.all_hadron_voxel_letd_numerator,
+              result.all_hadron_voxel_letd_denominator);
+}
+
+void write_fragment_species_letd_csv(const std::filesystem::path& path,
+                                     const TransportConfig& config,
+                                     const TransportResult& result) {
+    constexpr std::size_t categories = charged_origin_category_count;
+    const auto bins = config.number_of_bins();
+    const auto expected = categories * bins;
+    if (result.charged_origin_letd_numerator.size() != expected ||
+        result.charged_origin_letd_denominator.size() != expected) {
+        throw std::invalid_argument(
+            "Fragment-species LET result size does not match configuration");
+    }
+    ensure_parent_directory(path);
+    std::ofstream output(path, std::ios::binary);
+    if (!output) {
+        throw std::runtime_error(
+            "Cannot create fragment-species LET output file: " + path.string());
+    }
+    constexpr std::array<const char*, categories> names{
+        "primary_c12", "secondary_carbon", "boron", "beryllium",
+        "lithium", "helium", "hydrogen", "other_charged"};
+    output << "depth_mm";
+    for (const auto* name : names) {
+        output << ',' << name << "_letd_MeV_per_mm_per_g_cm3";
+    }
+    for (const auto* name : names) {
+        output << ',' << name << "_denominator_MeV";
+    }
+    output << '\n' << std::setprecision(12);
+    for (std::size_t bin = 0; bin < bins; ++bin) {
+        output << (static_cast<double>(bin) + 0.5) *
+                      config.depth_bin_width_mm;
+        for (std::size_t category = 0; category < categories; ++category) {
+            const auto index = category * bins + bin;
+            const auto denominator =
+                result.charged_origin_letd_denominator[index];
+            const auto value =
+                denominator > 0.0
+                    ? result.charged_origin_letd_numerator[index] / denominator
+                    : 0.0;
+            output << ',' << value;
+        }
+        for (std::size_t category = 0; category < categories; ++category) {
+            output << ','
+                   << result.charged_origin_letd_denominator[
+                          category * bins + bin];
+        }
+        output << '\n';
+    }
+}
+
+void write_light_isotope_letd_csv(const std::filesystem::path& path,
+                                  const TransportConfig& config,
+                                  const TransportResult& result) {
+    constexpr std::size_t categories = light_isotope_category_count;
+    const auto bins = config.number_of_bins();
+    const auto expected = categories * bins;
+    if (result.light_isotope_letd_numerator.size() != expected ||
+        result.light_isotope_letd_denominator.size() != expected) {
+        throw std::invalid_argument(
+            "Light-isotope LET result size does not match configuration");
+    }
+    ensure_parent_directory(path);
+    std::ofstream output(path, std::ios::binary);
+    if (!output) {
+        throw std::runtime_error(
+            "Cannot create light-isotope LET output file: " + path.string());
+    }
+    constexpr std::array<const char*, categories> names{
+        "proton", "deuteron", "triton", "he3", "he4"};
+    output << "depth_mm";
+    for (const auto* name : names) {
+        output << ',' << name << "_letd_MeV_per_mm_per_g_cm3";
+    }
+    for (const auto* name : names) {
+        output << ',' << name << "_denominator_MeV";
+    }
+    output << '\n' << std::setprecision(12);
+    for (std::size_t bin = 0; bin < bins; ++bin) {
+        output << (static_cast<double>(bin) + 0.5) *
+                      config.depth_bin_width_mm;
+        for (std::size_t category = 0; category < categories; ++category) {
+            const auto index = category * bins + bin;
+            const auto denominator =
+                result.light_isotope_letd_denominator[index];
+            output << ','
+                   << (denominator > 0.0
+                           ? result.light_isotope_letd_numerator[index] /
+                                 denominator
+                           : 0.0);
+        }
+        for (std::size_t category = 0; category < categories; ++category) {
+            output << ','
+                   << result.light_isotope_letd_denominator[
+                          category * bins + bin];
+        }
+        output << '\n';
+    }
+}
+
 void write_fragment_species_dose_Gy_csv(const std::filesystem::path& path,
                                         const TransportConfig& config,
                                         const TransportResult& result) {

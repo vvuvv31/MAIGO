@@ -896,6 +896,78 @@ void score_secondary_dose_device(
         }
     }
 }
+
+inline void score_letd_moments_device(
+    double* moments,
+    const std::size_t number_of_bins,
+    const std::size_t bin,
+    double* species_moments,
+    const std::size_t species_count,
+    const std::size_t species_category,
+    double* isotope_moments,
+    const std::size_t isotope_count,
+    const std::size_t isotope_category,
+    const float local_energy_deposit_MeV,
+    const float total_collisional_loss_MeV,
+    const float stopping_power_MeV_per_mm,
+    const float density_g_per_cm3,
+    const bool is_c12) noexcept {
+    if (moments == nullptr || bin >= number_of_bins ||
+        local_energy_deposit_MeV <= 0.0F || total_collisional_loss_MeV <= 0.0F ||
+        stopping_power_MeV_per_mm <= 0.0F || density_g_per_cm3 <= 0.0F) {
+        return;
+    }
+    const auto numerator =
+        static_cast<double>(local_energy_deposit_MeV) *
+        static_cast<double>(stopping_power_MeV_per_mm) /
+        static_cast<double>(density_g_per_cm3);
+    const auto denominator =
+        static_cast<double>(total_collisional_loss_MeV);
+    const auto accumulate = [&](const std::size_t offset,
+                                const double value) {
+        sycl::atomic_ref<double, sycl::memory_order::relaxed,
+                         sycl::memory_scope::device,
+                         sycl::access::address_space::global_space>
+            atomic_value(moments[offset * number_of_bins + bin]);
+        atomic_value.fetch_add(value);
+    };
+    if (is_c12) {
+        accumulate(0, numerator);
+        accumulate(1, denominator);
+    }
+    accumulate(2, numerator);
+    accumulate(3, denominator);
+    if (species_moments != nullptr && species_category < species_count) {
+        const auto species_accumulate = [&](const std::size_t moment,
+                                            const double value) {
+            const auto offset =
+                (moment * species_count + species_category) * number_of_bins +
+                bin;
+            sycl::atomic_ref<double, sycl::memory_order::relaxed,
+                             sycl::memory_scope::device,
+                             sycl::access::address_space::global_space>
+                atomic_value(species_moments[offset]);
+            atomic_value.fetch_add(value);
+        };
+        species_accumulate(0, numerator);
+        species_accumulate(1, denominator);
+    }
+    if (isotope_moments != nullptr && isotope_category < isotope_count) {
+        const auto isotope_accumulate = [&](const std::size_t moment,
+                                            const double value) {
+            const auto offset =
+                (moment * isotope_count + isotope_category) * number_of_bins +
+                bin;
+            sycl::atomic_ref<double, sycl::memory_order::relaxed,
+                             sycl::memory_scope::device,
+                             sycl::access::address_space::global_space>
+                atomic_value(isotope_moments[offset]);
+            atomic_value.fetch_add(value);
+        };
+        isotope_accumulate(0, numerator);
+        isotope_accumulate(1, denominator);
+    }
+}
 }  // namespace
 
 TransportResult transport_sycl(const TransportConfig& config,
@@ -971,6 +1043,55 @@ TransportResult transport_sycl(const TransportConfig& config,
     const auto enable_fragment_cascade = config.enable_fragment_cascade;
     const auto enable_fragment_species_scoring =
         config.enable_fragment_species_scoring && enable_secondary_transport;
+    const auto enable_let_scoring = config.enable_let_scoring;
+    const auto enable_light_isotope_let_scoring =
+        enable_let_scoring && !config.light_isotope_let_output_file.empty();
+    std::vector<float> let_delta_fraction_host;
+    if (enable_let_scoring &&
+        !config.let_delta_electron_fraction_file.empty()) {
+        const auto delta_fraction = StoppingPowerTable::from_csv(
+            config.let_delta_electron_fraction_file);
+        if (delta_fraction.values().size() != table_size ||
+            delta_fraction.energies().size() !=
+                stopping_power.energies().size()) {
+            throw std::invalid_argument(
+                "LET delta-electron fraction table must use the stopping-power grid");
+        }
+        let_delta_fraction_host.resize(table_size);
+        for (std::size_t index = 0; index < table_size; ++index) {
+            if (std::abs(delta_fraction.energies()[index] -
+                         stopping_power.energies()[index]) > 1.0e-9) {
+                throw std::invalid_argument(
+                    "LET delta-electron fraction energies differ from stopping-power grid");
+            }
+            const auto value = delta_fraction.values()[index];
+            if (!std::isfinite(value) || value < 0.0 || value >= 1.0) {
+                throw std::invalid_argument(
+                    "LET delta-electron fractions must be finite and in [0,1)");
+            }
+            let_delta_fraction_host[index] = static_cast<float>(value);
+        }
+    }
+    const auto use_let_delta_fraction_table =
+        !let_delta_fraction_host.empty();
+    const auto use_particle_specific_stopping_power =
+        config.use_particle_specific_stopping_power && enable_secondary_transport;
+    std::vector<float> particle_sp_ratio_host;
+    std::vector<float> particle_delta_fraction_host;
+    std::vector<std::uint8_t> particle_species_present_host;
+    if (use_particle_specific_stopping_power) {
+        const auto ion_tables = IonStoppingPowerTables::from_csv(
+            config.particle_stopping_power_file, stopping_power);
+        particle_sp_ratio_host = ion_tables.ratios_to_carbon();
+        particle_delta_fraction_host =
+            ion_tables.delta_electron_fractions();
+        particle_species_present_host = ion_tables.species_present();
+        std::cout << "Particle-specific stopping power: enabled ("
+                  << std::count(particle_species_present_host.begin(),
+                                particle_species_present_host.end(),
+                                std::uint8_t{1})
+                  << " isotope tables; missing isotopes fall back to C-12 scaling)\n";
+    }
     const auto enable_neutral_transport = config.enable_neutral_transport;
     const auto neutral_allow_continuation =
         enable_neutral_transport && config.neutral_transport_mode == "full";
@@ -1010,6 +1131,12 @@ TransportResult transport_sycl(const TransportConfig& config,
                 "The FP64 SYCL dose scorer requires fp64 and atomic64 device aspects "
                 "(rebuild with -DCARBON_DOSE_FP32=ON for float atomics)");
         }
+    }
+    if (enable_let_scoring &&
+        (!device.has(sycl::aspect::fp64) ||
+         !device.has(sycl::aspect::atomic64))) {
+        throw std::runtime_error(
+            "The FP64 LET_d scorer requires fp64 and atomic64 device aspects");
     }
 
     // CUDA (especially under WSL2) cannot host multi-minute single kernels: the
@@ -1069,7 +1196,27 @@ TransportResult transport_sycl(const TransportConfig& config,
         std::size_t bytes = 0;
         bytes += table_size * sizeof(float);
         bytes += cross_section_table_size * sizeof(float);
+        if (use_let_delta_fraction_table) {
+            bytes += table_size * sizeof(float);
+        }
+        if (use_particle_specific_stopping_power) {
+            bytes += particle_sp_ratio_host.size() * sizeof(float);
+            bytes += particle_delta_fraction_host.size() * sizeof(float);
+            bytes += particle_species_present_host.size() * sizeof(std::uint8_t);
+        }
         bytes += number_of_bins * sizeof(DoseAtomicT);
+        if (enable_let_scoring) {
+            bytes += 4 * number_of_bins * sizeof(double);
+            bytes += 2 * charged_origin_category_count * number_of_bins *
+                     sizeof(double);
+            if (enable_light_isotope_let_scoring) {
+                bytes += 2 * light_isotope_category_count * number_of_bins *
+                         sizeof(double);
+            }
+            if (enable_voxel_scoring) {
+                bytes += 4 * number_of_voxels * sizeof(double);
+            }
+        }
         bytes += number_of_histories * (3 * sizeof(float) + sizeof(std::uint32_t));
         bytes += primary_spot_count * sizeof(PrimarySpotBatchEntry);
         if (enable_voxel_scoring) {
@@ -1219,7 +1366,42 @@ TransportResult transport_sycl(const TransportConfig& config,
         reuse_immutable_buffers
             ? context->impl_->cross_section_device
             : sycl::malloc_device<float>(cross_section_table_size, queue);
+    auto* let_delta_fraction_device =
+        use_let_delta_fraction_table
+            ? sycl::malloc_device<float>(table_size, queue)
+            : nullptr;
+    auto* particle_sp_ratio_device =
+        use_particle_specific_stopping_power
+            ? sycl::malloc_device<float>(particle_sp_ratio_host.size(), queue)
+            : nullptr;
+    auto* particle_delta_fraction_device =
+        use_particle_specific_stopping_power
+            ? sycl::malloc_device<float>(particle_delta_fraction_host.size(), queue)
+            : nullptr;
+    auto* particle_species_present_device =
+        use_particle_specific_stopping_power
+            ? sycl::malloc_device<std::uint8_t>(
+                  particle_species_present_host.size(), queue)
+            : nullptr;
     auto* dose_device = sycl::malloc_device<DoseAtomicT>(number_of_bins, queue);
+    auto* let_moments_device =
+        enable_let_scoring
+            ? sycl::malloc_device<double>(4 * number_of_bins, queue)
+            : nullptr;
+    auto* voxel_let_moments_device =
+        enable_let_scoring && enable_voxel_scoring
+            ? sycl::malloc_device<double>(4 * number_of_voxels, queue)
+            : nullptr;
+    auto* species_let_moments_device =
+        enable_let_scoring
+            ? sycl::malloc_device<double>(
+                  2 * charged_origin_category_count * number_of_bins, queue)
+            : nullptr;
+    auto* isotope_let_moments_device =
+        enable_light_isotope_let_scoring
+            ? sycl::malloc_device<double>(
+                  2 * light_isotope_category_count * number_of_bins, queue)
+            : nullptr;
     auto* voxel_dose_device = enable_voxel_scoring
                                   ? sycl::malloc_device<DoseAtomicT>(number_of_voxels, queue)
                                   : nullptr;
@@ -1414,7 +1596,15 @@ TransportResult transport_sycl(const TransportConfig& config,
             free_device(slab_densities_device);
             free_immutable_device(table_device);
             free_immutable_device(cross_section_device);
+            free_device(let_delta_fraction_device);
+            free_device(particle_sp_ratio_device);
+            free_device(particle_delta_fraction_device);
+            free_device(particle_species_present_device);
             free_device(dose_device);
+            free_device(let_moments_device);
+            free_device(voxel_let_moments_device);
+            free_device(species_let_moments_device);
+            free_device(isotope_let_moments_device);
             free_device(voxel_dose_device);
             free_device(charged_origin_voxel_dose_device);
             free_device(deposited_device);
@@ -1875,6 +2065,17 @@ TransportResult transport_sycl(const TransportConfig& config,
          neutral_origin_dose_device == nullptr ||
          (enable_voxel_scoring && neutral_origin_voxel_dose_device == nullptr));
     if (table_device == nullptr || cross_section_device == nullptr || dose_device == nullptr ||
+        (use_let_delta_fraction_table && let_delta_fraction_device == nullptr) ||
+        (use_particle_specific_stopping_power &&
+         (particle_sp_ratio_device == nullptr ||
+          particle_delta_fraction_device == nullptr ||
+          particle_species_present_device == nullptr)) ||
+        (enable_let_scoring && let_moments_device == nullptr) ||
+        (enable_let_scoring && enable_voxel_scoring &&
+         voxel_let_moments_device == nullptr) ||
+        (enable_let_scoring && species_let_moments_device == nullptr) ||
+        (enable_light_isotope_let_scoring &&
+         isotope_let_moments_device == nullptr) ||
         (enable_voxel_scoring && voxel_dose_device == nullptr) ||
         (enable_charged_origin_voxel_scoring &&
          charged_origin_voxel_dose_device == nullptr) ||
@@ -1887,7 +2088,15 @@ TransportResult transport_sycl(const TransportConfig& config,
         secondary_allocation_failed || neutral_allocation_failed) {
         free_immutable_device(table_device);
         free_immutable_device(cross_section_device);
+        free_device(let_delta_fraction_device);
+        free_device(particle_sp_ratio_device);
+        free_device(particle_delta_fraction_device);
+        free_device(particle_species_present_device);
         free_device(dose_device);
+        free_device(let_moments_device);
+        free_device(voxel_let_moments_device);
+        free_device(species_let_moments_device);
+        free_device(isotope_let_moments_device);
         free_device(voxel_dose_device);
         free_device(charged_origin_voxel_dose_device);
         free_device(deposited_device);
@@ -1956,6 +2165,22 @@ TransportResult transport_sycl(const TransportConfig& config,
         queue.copy(cross_section_host.data(), cross_section_device, cross_section_table_size);
         queue.wait_and_throw();
     }
+    if (use_let_delta_fraction_table) {
+        queue.copy(let_delta_fraction_host.data(), let_delta_fraction_device,
+                   table_size)
+            .wait_and_throw();
+    }
+    if (use_particle_specific_stopping_power) {
+        queue.copy(particle_sp_ratio_host.data(), particle_sp_ratio_device,
+                   particle_sp_ratio_host.size());
+        queue.copy(particle_delta_fraction_host.data(),
+                   particle_delta_fraction_device,
+                   particle_delta_fraction_host.size());
+        queue.copy(particle_species_present_host.data(),
+                   particle_species_present_device,
+                   particle_species_present_host.size())
+            .wait_and_throw();
+    }
     if (enable_fragment_cascade && cascade_xs_lut_device != nullptr &&
         cascade_packages != nullptr) {
         auto cascade_xs_lut_host =
@@ -1971,6 +2196,24 @@ TransportResult transport_sycl(const TransportConfig& config,
                   << std::flush;
     }
     queue.memset(dose_device, 0, number_of_bins * sizeof(DoseAtomicT));
+    if (enable_let_scoring) {
+        queue.memset(let_moments_device, 0,
+                     4 * number_of_bins * sizeof(double));
+        if (enable_voxel_scoring) {
+            queue.memset(voxel_let_moments_device, 0,
+                         4 * number_of_voxels * sizeof(double));
+        }
+        queue.memset(
+            species_let_moments_device, 0,
+            2 * charged_origin_category_count * number_of_bins *
+                sizeof(double));
+        if (enable_light_isotope_let_scoring) {
+            queue.memset(
+                isotope_let_moments_device, 0,
+                2 * light_isotope_category_count * number_of_bins *
+                    sizeof(double));
+        }
+    }
 #ifdef CARBON_TRANSPORT_PROFILE
     if (profile_counters_device != nullptr) {
         queue.memset(profile_counters_device, 0,
@@ -2115,6 +2358,9 @@ TransportResult transport_sycl(const TransportConfig& config,
             ? config.secondary_local_deposit_cutoff_MeV
             : config.energy_cutoff_MeV);
     const auto enable_energy_straggling = config.enable_energy_straggling;
+    const auto enable_secondary_energy_straggling =
+        enable_energy_straggling &&
+        config.enable_secondary_energy_straggling;
     const auto straggling_scale = static_cast<float>(config.straggling_scale);
     const auto water_density_g_per_cm3 = static_cast<float>(config.water_density_g_per_cm3);
     const auto enable_multiple_scattering = config.enable_multiple_scattering;
@@ -2764,6 +3010,32 @@ TransportResult transport_sycl(const TransportConfig& config,
                     energy_MeVu, electronic_buildup_fraction);
                 const auto delayed_MeV = deposited_MeV * e_frac;
                 const auto local_MeV = deposited_MeV - delayed_MeV;
+                if (enable_let_scoring) {
+                    const auto let_delta_fraction =
+                        use_let_delta_fraction_table
+                            ? let_delta_fraction_device[index] +
+                                  fraction *
+                                      (let_delta_fraction_device[index + 1] -
+                                       let_delta_fraction_device[index])
+                            : e_frac;
+                    score_letd_moments_device(
+                        let_moments_device, number_of_bins,
+                        static_cast<std::size_t>(bin),
+                        species_let_moments_device,
+                        charged_origin_category_count, 0,
+                        nullptr, 0, 0,
+                        deposited_MeV * (1.0F - let_delta_fraction),
+                        deposited_MeV,
+                        stopping_power_MeV_per_mm,
+                        sycl::fmax(local_density_g_per_cm3, 1.0e-6F), true);
+                    score_letd_moments_device(
+                        voxel_let_moments_device, number_of_voxels, voxel_index,
+                        nullptr, 0, 0,
+                        nullptr, 0, 0,
+                        deposited_MeV * (1.0F - let_delta_fraction),
+                        deposited_MeV, stopping_power_MeV_per_mm,
+                        sycl::fmax(local_density_g_per_cm3, 1.0e-6F), true);
+                }
                 if (pending_primary_depth_MeV > 0.0 && pending_primary_bin != bin) {
                     sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
                                      sycl::memory_scope::device,
@@ -3432,6 +3704,19 @@ TransportResult transport_sycl(const TransportConfig& config,
                     const auto mass_number = static_cast<int>(particle.mass_number);
                     const auto inverse_mass_number_for_particle =
                         1.0F / static_cast<float>(mass_number);
+                    constexpr std::size_t particle_mass_stride = 32;
+                    const auto particle_table_species =
+                        static_cast<std::size_t>(atomic_number) *
+                            particle_mass_stride +
+                        static_cast<std::size_t>(mass_number);
+                    const auto has_particle_specific_table =
+                        use_particle_specific_stopping_power &&
+                        atomic_number > 0 && atomic_number < 10 &&
+                        mass_number > 0 && mass_number < 32 &&
+                        particle_species_present_device[
+                            particle_table_species] != 0;
+                    const auto particle_table_base =
+                        particle_table_species * table_size;
                     const auto cascade_projectile_index_for_particle =
                         enable_fragment_cascade &&
                                 particle.generation < maximum_cascade_generations
@@ -3467,6 +3752,9 @@ TransportResult transport_sycl(const TransportConfig& config,
                     // Primary already caps steps; secondary previously did not, so a
                     // voxel-boundary nudge thrash could run for minutes on CUDA.
                     constexpr std::uint32_t max_secondary_steps = 500'000U;
+                    auto last_stopping_power_MeV_per_mm = 0.0F;
+                    auto last_density_g_per_cm3 =
+                        static_cast<float>(water_density_g_per_cm3);
 
                     while (energy_MeV > secondary_local_deposit_cutoff_MeV &&
                            steps < max_secondary_steps) {
@@ -3551,19 +3839,26 @@ TransportResult transport_sycl(const TransportConfig& config,
                             table_device[index] +
                             fraction * (table_device[index + 1] - table_device[index]);
 
-                        constexpr float nucleon_mass_MeV = 931.49410242F;
-                        const auto gamma = 1.0F + energy_MeVu / nucleon_mass_MeV;
-                        const auto beta_squared =
-                            sycl::fmax(0.0F, 1.0F - 1.0F / (gamma * gamma));
-                        const auto beta = sycl::sqrt(beta_squared);
-                        const auto effective_charge =
-                            charge *
-                            (1.0F - sycl::exp(-125.0F * beta * charge_power));
-                        const auto carbon_effective_charge =
-                            carbon_charge *
-                            (1.0F - sycl::exp(-125.0F * beta * carbon_charge_power));
-                        const auto charge_ratio =
-                            effective_charge / carbon_effective_charge;
+                        auto charge_ratio = 1.0F;
+                        if (!has_particle_specific_table) {
+                            constexpr float nucleon_mass_MeV = 931.49410242F;
+                            const auto gamma =
+                                1.0F + energy_MeVu / nucleon_mass_MeV;
+                            const auto beta_squared =
+                                sycl::fmax(0.0F, 1.0F - 1.0F / (gamma * gamma));
+                            const auto beta = sycl::sqrt(beta_squared);
+                            const auto effective_charge =
+                                charge *
+                                (1.0F -
+                                 sycl::exp(-125.0F * beta * charge_power));
+                            const auto carbon_effective_charge =
+                                carbon_charge *
+                                (1.0F -
+                                 sycl::exp(-125.0F * beta *
+                                           carbon_charge_power));
+                            charge_ratio =
+                                effective_charge / carbon_effective_charge;
+                        }
                         const auto in_insert =
                             enable_hetero_insert &&
                             inside_hetero_insert(position_x_mm, position_y_mm, position_z_mm,
@@ -3660,6 +3955,25 @@ TransportResult transport_sycl(const TransportConfig& config,
                         }
                         auto stopping_power_MeV_per_mm =
                             carbon_sp_local * charge_ratio * charge_ratio;
+                        if (has_particle_specific_table) {
+                            const auto exact_ratio =
+                                particle_sp_ratio_device[
+                                    particle_table_base +
+                                    static_cast<std::size_t>(index)] +
+                                fraction *
+                                    (particle_sp_ratio_device[
+                                         particle_table_base +
+                                         static_cast<std::size_t>(index) + 1] -
+                                     particle_sp_ratio_device[
+                                         particle_table_base +
+                                         static_cast<std::size_t>(index)]);
+                            stopping_power_MeV_per_mm =
+                                carbon_sp_local * exact_ratio;
+                        }
+                        last_stopping_power_MeV_per_mm =
+                            stopping_power_MeV_per_mm;
+                        last_density_g_per_cm3 =
+                            local_density_g_per_cm3;
                         // Density scale only for density-only slab/insert (not absolute
                         // material tables, not CT which already scaled carbon_sp_local).
                         if ((slab_layer_count > 0 || in_insert) && !enable_ct_grid &&
@@ -3838,12 +4152,119 @@ TransportResult transport_sycl(const TransportConfig& config,
                                 TransportProfileSlot::secondary_forced_progress_nudges);
                             continue;
                         }
-                        const auto step_deposited_MeV = sycl::fmin(
-                            stopping_power_MeV_per_mm * path_step_mm, energy_MeV);
+                        const auto mean_step_loss_MeV =
+                            stopping_power_MeV_per_mm * path_step_mm;
+                        auto step_deposited_MeV =
+                            sycl::fmin(mean_step_loss_MeV, energy_MeV);
+                        if (enable_secondary_energy_straggling) {
+                            const auto uniform1 = sycl::fmax(
+                                rng::uniform01(random_seed, rng_stream, steps, 4),
+                                1.0e-12F);
+                            const auto uniform2 =
+                                rng::uniform01(random_seed, rng_stream, steps, 5);
+                            constexpr float two_pi = 6.2831853071795864769F;
+                            const auto gaussian =
+                                sycl::sqrt(-2.0F * sycl::log(uniform1)) *
+                                sycl::cos(two_pi * uniform2);
+                            constexpr float nucleon_mass_MeV = 931.49410242F;
+                            const auto gamma =
+                                1.0F + energy_MeVu / nucleon_mass_MeV;
+                            const auto beta_squared = sycl::fmax(
+                                0.0F, 1.0F - 1.0F / (gamma * gamma));
+                            const auto beta = sycl::sqrt(beta_squared);
+                            const auto fragment_effective_charge =
+                                charge *
+                                (1.0F -
+                                 sycl::exp(-125.0F * beta * charge_power));
+                            constexpr float bethe_K_MeV_cm2_per_g = 0.307075F;
+                            constexpr float electron_mass_MeV = 0.51099895F;
+                            constexpr float water_Z_over_A = 0.55509F;
+                            auto za_rel = 1.0F;
+                            if (enable_ct_grid && in_ct) {
+                                if (use_ct_mass_sp &&
+                                    ct_mass_sp_za_rel_device != nullptr &&
+                                    ct_n_mass_factors > 0) {
+                                    const auto section =
+                                        static_cast<std::uint32_t>(ct_material);
+                                    const auto factor_index =
+                                        section < ct_n_mass_factors
+                                            ? section
+                                            : (ct_n_mass_factors - 1U);
+                                    za_rel = sycl::clamp(
+                                        ct_mass_sp_za_rel_device[factor_index],
+                                        0.5F, 1.5F);
+                                } else {
+                                    const auto material = ct_material_class(
+                                        ct_material,
+                                        ct_material_ids_are_schneider_sections);
+                                    za_rel = material == 3U ? 0.93F : 1.0F;
+                                }
+                            }
+                            const auto variance_MeV2 =
+                                bethe_K_MeV_cm2_per_g * electron_mass_MeV *
+                                fragment_effective_charge *
+                                fragment_effective_charge * water_Z_over_A *
+                                za_rel * local_density_g_per_cm3 *
+                                (path_step_mm / 10.0F);
+                            const auto sigma_MeV =
+                                straggling_scale *
+                                sycl::sqrt(sycl::fmax(0.0F, variance_MeV2));
+                            step_deposited_MeV = sycl::clamp(
+                                mean_step_loss_MeV + sigma_MeV * gaussian,
+                                0.0F, energy_MeV);
+                        }
                         const auto sec_e_frac = electronic_buildup_fraction_at_energy(
                             energy_MeVu, electronic_buildup_fraction);
                         const auto sec_delayed = step_deposited_MeV * sec_e_frac;
                         const auto sec_local = step_deposited_MeV - sec_delayed;
+                        if (enable_let_scoring) {
+                            auto let_delta_fraction =
+                                use_let_delta_fraction_table
+                                    ? let_delta_fraction_device[index] +
+                                          fraction *
+                                              (let_delta_fraction_device[index + 1] -
+                                               let_delta_fraction_device[index])
+                                    : sec_e_frac;
+                            if (has_particle_specific_table) {
+                                let_delta_fraction =
+                                    particle_delta_fraction_device[
+                                        particle_table_base +
+                                        static_cast<std::size_t>(index)] +
+                                    fraction *
+                                        (particle_delta_fraction_device[
+                                             particle_table_base +
+                                             static_cast<std::size_t>(index) + 1] -
+                                         particle_delta_fraction_device[
+                                             particle_table_base +
+                                             static_cast<std::size_t>(index)]);
+                            }
+                            score_letd_moments_device(
+                                let_moments_device, number_of_bins,
+                                static_cast<std::size_t>(bin),
+                                species_let_moments_device,
+                                charged_origin_category_count,
+                                atomic_number >= 1 && atomic_number <= 6
+                                    ? static_cast<std::size_t>(7 - atomic_number)
+                                    : std::size_t{7},
+                                isotope_let_moments_device,
+                                light_isotope_category_count,
+                                light_isotope_category(atomic_number, mass_number),
+                                step_deposited_MeV *
+                                    (1.0F - let_delta_fraction),
+                                step_deposited_MeV, stopping_power_MeV_per_mm,
+                                sycl::fmax(local_density_g_per_cm3, 1.0e-6F),
+                                false);
+                            score_letd_moments_device(
+                                voxel_let_moments_device, number_of_voxels,
+                                voxel_index,
+                                nullptr, 0, 0,
+                                nullptr, 0, 0,
+                                step_deposited_MeV *
+                                    (1.0F - let_delta_fraction),
+                                step_deposited_MeV, stopping_power_MeV_per_mm,
+                                sycl::fmax(local_density_g_per_cm3, 1.0e-6F),
+                                false);
+                        }
                         if (pending_dose_MeV > 0.0 &&
                             (pending_bin != bin ||
                              pending_voxel_index != voxel_index)) {
@@ -4362,6 +4783,38 @@ TransportResult transport_sycl(const TransportConfig& config,
                         const auto voxel_index = static_cast<std::size_t>(bin) * voxel_plane_size +
                                                  static_cast<std::size_t>(voxel_y) * voxel_bins_x +
                                                  static_cast<std::size_t>(voxel_x);
+                        if (enable_let_scoring &&
+                            last_stopping_power_MeV_per_mm > 0.0F) {
+                            // Continue HadronLET through the locally deposited
+                            // sub-cutoff tail. TOPAS transports these ions down to
+                            // its much lower production threshold; omitting this
+                            // high-dE/dx tail biases fragment LET low.
+                            score_letd_moments_device(
+                                let_moments_device, number_of_bins,
+                                static_cast<std::size_t>(bin),
+                                species_let_moments_device,
+                                charged_origin_category_count,
+                                atomic_number >= 1 && atomic_number <= 6
+                                    ? static_cast<std::size_t>(7 - atomic_number)
+                                    : std::size_t{7},
+                                isotope_let_moments_device,
+                                light_isotope_category_count,
+                                light_isotope_category(
+                                    atomic_number, mass_number),
+                                energy_MeV, energy_MeV,
+                                last_stopping_power_MeV_per_mm,
+                                sycl::fmax(
+                                    last_density_g_per_cm3, 1.0e-6F),
+                                false);
+                            score_letd_moments_device(
+                                voxel_let_moments_device, number_of_voxels,
+                                voxel_index, nullptr, 0, 0, nullptr, 0, 0,
+                                energy_MeV, energy_MeV,
+                                last_stopping_power_MeV_per_mm,
+                                sycl::fmax(
+                                    last_density_g_per_cm3, 1.0e-6F),
+                                false);
+                        }
                         score_secondary_dose_device(
                             energy_MeV, is_neutral_lineage, species_index, neutral_origin,
                             bin, number_of_bins, enable_voxel_scoring,
@@ -4868,6 +5321,19 @@ TransportResult transport_sycl(const TransportConfig& config,
                             const auto mass_number = static_cast<int>(particle.mass_number);
                             const auto inverse_mass_number_for_particle =
                                 1.0F / static_cast<float>(mass_number);
+                            constexpr std::size_t particle_mass_stride = 32;
+                            const auto particle_table_species =
+                                static_cast<std::size_t>(atomic_number) *
+                                    particle_mass_stride +
+                                static_cast<std::size_t>(mass_number);
+                            const auto has_particle_specific_table =
+                                use_particle_specific_stopping_power &&
+                                atomic_number > 0 && atomic_number < 10 &&
+                                mass_number > 0 && mass_number < 32 &&
+                                particle_species_present_device[
+                                    particle_table_species] != 0;
+                            const auto particle_table_base =
+                                particle_table_species * table_size;
                             const auto charge = static_cast<float>(atomic_number);
                             const auto charge_power =
                                 sycl::pow(charge, -2.0F / 3.0F);
@@ -4876,6 +5342,9 @@ TransportResult transport_sycl(const TransportConfig& config,
                                 sycl::pow(carbon_charge, -2.0F / 3.0F);
 
                             constexpr std::uint32_t max_secondary_steps = 500'000U;
+                            auto last_stopping_power_MeV_per_mm = 0.0F;
+                            auto last_density_g_per_cm3 =
+                                static_cast<float>(water_density_g_per_cm3);
                             while (energy_MeV > secondary_local_deposit_cutoff_MeV &&
                                    steps < max_secondary_steps) {
                                 const auto escaped_z =
@@ -4937,20 +5406,30 @@ TransportResult transport_sycl(const TransportConfig& config,
                                 const auto carbon_stopping_power_MeV_per_mm =
                                     table_device[index] +
                                     fraction * (table_device[index + 1] - table_device[index]);
-                                constexpr float nucleon_mass_MeV = 931.49410242F;
-                                const auto gamma = 1.0F + energy_MeVu / nucleon_mass_MeV;
-                                const auto beta_squared =
-                                    sycl::fmax(0.0F, 1.0F - 1.0F / (gamma * gamma));
-                                const auto beta = sycl::sqrt(beta_squared);
-                                const auto effective_charge =
-                                    charge *
-                                    (1.0F - sycl::exp(-125.0F * beta * charge_power));
-                                const auto carbon_effective_charge =
-                                    carbon_charge *
-                                    (1.0F - sycl::exp(
-                                                -125.0F * beta * carbon_charge_power));
-                                const auto charge_ratio =
-                                    effective_charge / carbon_effective_charge;
+                                auto charge_ratio = 1.0F;
+                                if (!has_particle_specific_table) {
+                                    constexpr float nucleon_mass_MeV =
+                                        931.49410242F;
+                                    const auto gamma =
+                                        1.0F + energy_MeVu / nucleon_mass_MeV;
+                                    const auto beta_squared = sycl::fmax(
+                                        0.0F,
+                                        1.0F - 1.0F / (gamma * gamma));
+                                    const auto beta = sycl::sqrt(beta_squared);
+                                    const auto effective_charge =
+                                        charge *
+                                        (1.0F -
+                                         sycl::exp(-125.0F * beta *
+                                                   charge_power));
+                                    const auto carbon_effective_charge =
+                                        carbon_charge *
+                                        (1.0F -
+                                         sycl::exp(-125.0F * beta *
+                                                   carbon_charge_power));
+                                    charge_ratio =
+                                        effective_charge /
+                                        carbon_effective_charge;
+                                }
                                 const auto in_insert =
                                     enable_hetero_insert &&
                                     inside_hetero_insert(
@@ -4996,6 +5475,25 @@ TransportResult transport_sycl(const TransportConfig& config,
                                 }
                                 auto stopping_power_MeV_per_mm =
                                     carbon_sp_local * charge_ratio * charge_ratio;
+                                if (has_particle_specific_table) {
+                                    const auto exact_ratio =
+                                        particle_sp_ratio_device[
+                                            particle_table_base +
+                                            static_cast<std::size_t>(index)] +
+                                        fraction *
+                                            (particle_sp_ratio_device[
+                                                 particle_table_base +
+                                                 static_cast<std::size_t>(index) + 1] -
+                                             particle_sp_ratio_device[
+                                                 particle_table_base +
+                                                 static_cast<std::size_t>(index)]);
+                                    stopping_power_MeV_per_mm =
+                                        carbon_sp_local * exact_ratio;
+                                }
+                                last_stopping_power_MeV_per_mm =
+                                    stopping_power_MeV_per_mm;
+                                last_density_g_per_cm3 =
+                                    local_density_g_per_cm3;
                                 if ((slab_layer_count > 0 || in_insert) &&
                                     !(in_insert && use_insert_material_tables) &&
                                     material_table_count == 0) {
@@ -5061,11 +5559,119 @@ TransportResult transport_sycl(const TransportConfig& config,
                                     ++steps;
                                     continue;
                                 }
-                                const auto step_deposited_MeV = sycl::fmin(
-                                    stopping_power_MeV_per_mm * path_step_mm, energy_MeV);
+                                const auto mean_step_loss_MeV =
+                                    stopping_power_MeV_per_mm * path_step_mm;
+                                auto step_deposited_MeV =
+                                    sycl::fmin(mean_step_loss_MeV, energy_MeV);
+                                if (enable_secondary_energy_straggling) {
+                                    const auto uniform1 = sycl::fmax(
+                                        rng::uniform01(
+                                            random_seed, particle.rng_stream,
+                                            steps, 22),
+                                        1.0e-12F);
+                                    const auto uniform2 = rng::uniform01(
+                                        random_seed, particle.rng_stream,
+                                        steps, 23);
+                                    constexpr float two_pi =
+                                        6.2831853071795864769F;
+                                    const auto gaussian =
+                                        sycl::sqrt(-2.0F * sycl::log(uniform1)) *
+                                        sycl::cos(two_pi * uniform2);
+                                    constexpr float nucleon_mass_MeV =
+                                        931.49410242F;
+                                    const auto gamma =
+                                        1.0F + energy_MeVu / nucleon_mass_MeV;
+                                    const auto beta_squared = sycl::fmax(
+                                        0.0F,
+                                        1.0F - 1.0F / (gamma * gamma));
+                                    const auto beta =
+                                        sycl::sqrt(beta_squared);
+                                    const auto fragment_effective_charge =
+                                        charge *
+                                        (1.0F -
+                                         sycl::exp(-125.0F * beta *
+                                                   charge_power));
+                                    constexpr float bethe_K_MeV_cm2_per_g =
+                                        0.307075F;
+                                    constexpr float electron_mass_MeV =
+                                        0.51099895F;
+                                    constexpr float water_Z_over_A = 0.55509F;
+                                    const auto variance_MeV2 =
+                                        bethe_K_MeV_cm2_per_g *
+                                        electron_mass_MeV *
+                                        fragment_effective_charge *
+                                        fragment_effective_charge *
+                                        water_Z_over_A *
+                                        local_density_g_per_cm3 *
+                                        (path_step_mm / 10.0F);
+                                    const auto sigma_MeV =
+                                        straggling_scale *
+                                        sycl::sqrt(sycl::fmax(
+                                            0.0F, variance_MeV2));
+                                    step_deposited_MeV = sycl::clamp(
+                                        mean_step_loss_MeV +
+                                            sigma_MeV * gaussian,
+                                        0.0F, energy_MeV);
+                                }
                                 if (step_deposited_MeV <= 0.0F) {
                                     energy_MeV = 0.0F;
                                     break;
+                                }
+                                if (enable_let_scoring) {
+                                    const auto sec_e_frac =
+                                        electronic_buildup_fraction_at_energy(
+                                            energy_MeVu,
+                                            electronic_buildup_fraction);
+                                    auto let_delta_fraction =
+                                        use_let_delta_fraction_table
+                                            ? let_delta_fraction_device[index] +
+                                                  fraction *
+                                                      (let_delta_fraction_device[index + 1] -
+                                                       let_delta_fraction_device[index])
+                                            : sec_e_frac;
+                                    if (has_particle_specific_table) {
+                                        let_delta_fraction =
+                                            particle_delta_fraction_device[
+                                                particle_table_base +
+                                                static_cast<std::size_t>(index)] +
+                                            fraction *
+                                                (particle_delta_fraction_device[
+                                                     particle_table_base +
+                                                     static_cast<std::size_t>(index) + 1] -
+                                                 particle_delta_fraction_device[
+                                                     particle_table_base +
+                                                     static_cast<std::size_t>(index)]);
+                                    }
+                                    score_letd_moments_device(
+                                        let_moments_device, number_of_bins,
+                                        static_cast<std::size_t>(bin),
+                                        species_let_moments_device,
+                                        charged_origin_category_count,
+                                        atomic_number >= 1 && atomic_number <= 6
+                                            ? static_cast<std::size_t>(
+                                                  7 - atomic_number)
+                                            : std::size_t{7},
+                                        isotope_let_moments_device,
+                                        light_isotope_category_count,
+                                        light_isotope_category(
+                                            atomic_number, mass_number),
+                                        step_deposited_MeV *
+                                            (1.0F - let_delta_fraction),
+                                        step_deposited_MeV,
+                                        stopping_power_MeV_per_mm,
+                                        sycl::fmax(local_density_g_per_cm3, 1.0e-6F),
+                                        false);
+                                    score_letd_moments_device(
+                                        voxel_let_moments_device, number_of_voxels,
+                                        voxel_index,
+                                        nullptr, 0, 0,
+                                        nullptr, 0, 0,
+                                        step_deposited_MeV *
+                                            (1.0F - let_delta_fraction),
+                                        step_deposited_MeV,
+                                        stopping_power_MeV_per_mm,
+                                        sycl::fmax(local_density_g_per_cm3, 1.0e-6F),
+                                        false);
                                 }
                                 score_secondary_dose_device(
                                     step_deposited_MeV, is_neutral_lineage,
@@ -5122,6 +5728,39 @@ TransportResult transport_sycl(const TransportConfig& config,
                                     static_cast<std::size_t>(bin) * voxel_plane_size +
                                     static_cast<std::size_t>(voxel_y) * voxel_bins_x +
                                     static_cast<std::size_t>(voxel_x);
+                                if (enable_let_scoring &&
+                                    last_stopping_power_MeV_per_mm > 0.0F) {
+                                    score_letd_moments_device(
+                                        let_moments_device, number_of_bins,
+                                        static_cast<std::size_t>(bin),
+                                        species_let_moments_device,
+                                        charged_origin_category_count,
+                                        atomic_number >= 1 &&
+                                                atomic_number <= 6
+                                            ? static_cast<std::size_t>(
+                                                  7 - atomic_number)
+                                            : std::size_t{7},
+                                        isotope_let_moments_device,
+                                        light_isotope_category_count,
+                                        light_isotope_category(
+                                            atomic_number, mass_number),
+                                        energy_MeV, energy_MeV,
+                                        last_stopping_power_MeV_per_mm,
+                                        sycl::fmax(
+                                            last_density_g_per_cm3,
+                                            1.0e-6F),
+                                        false);
+                                    score_letd_moments_device(
+                                        voxel_let_moments_device,
+                                        number_of_voxels, voxel_index,
+                                        nullptr, 0, 0, nullptr, 0, 0,
+                                        energy_MeV, energy_MeV,
+                                        last_stopping_power_MeV_per_mm,
+                                        sycl::fmax(
+                                            last_density_g_per_cm3,
+                                            1.0e-6F),
+                                        false);
+                                }
                                 score_secondary_dose_device(
                                     energy_MeV, is_neutral_lineage, species_index,
                                     neutral_origin, bin, number_of_bins, enable_voxel_scoring,
@@ -5169,7 +5808,38 @@ TransportResult transport_sycl(const TransportConfig& config,
     std::vector<NeutralTransportSummary> neutral_summaries_host;
     std::vector<DoseAtomicT> neutral_origin_dose_atomic_host;
     std::vector<DoseAtomicT> neutral_origin_voxel_dose_atomic_host;
+    std::vector<double> let_moments_host;
+    std::vector<double> voxel_let_moments_host;
+    std::vector<double> species_let_moments_host;
+    std::vector<double> isotope_let_moments_host;
     queue.copy(dose_device, dose_atomic_host.data(), number_of_bins);
+    if (enable_let_scoring) {
+        let_moments_host.resize(4 * number_of_bins);
+        queue.copy(let_moments_device, let_moments_host.data(),
+                   let_moments_host.size())
+            .wait_and_throw();
+        if (enable_voxel_scoring) {
+            voxel_let_moments_host.resize(4 * number_of_voxels);
+            queue.copy(voxel_let_moments_device,
+                       voxel_let_moments_host.data(),
+                       voxel_let_moments_host.size())
+                .wait_and_throw();
+        }
+        species_let_moments_host.resize(
+            2 * charged_origin_category_count * number_of_bins);
+        queue.copy(species_let_moments_device,
+                   species_let_moments_host.data(),
+                   species_let_moments_host.size())
+            .wait_and_throw();
+        if (enable_light_isotope_let_scoring) {
+            isotope_let_moments_host.resize(
+                2 * light_isotope_category_count * number_of_bins);
+            queue.copy(isotope_let_moments_device,
+                       isotope_let_moments_host.data(),
+                       isotope_let_moments_host.size())
+                .wait_and_throw();
+        }
+    }
     if (enable_voxel_scoring) {
         voxel_dose_atomic_host.resize(number_of_voxels);
         queue.copy(voxel_dose_device, voxel_dose_atomic_host.data(), number_of_voxels)
@@ -5279,7 +5949,15 @@ TransportResult transport_sycl(const TransportConfig& config,
 
     free_immutable_device(table_device);
     free_immutable_device(cross_section_device);
+    free_device(let_delta_fraction_device);
+    free_device(particle_sp_ratio_device);
+    free_device(particle_delta_fraction_device);
+    free_device(particle_species_present_device);
     free_device(dose_device);
+    free_device(let_moments_device);
+    free_device(voxel_let_moments_device);
+    free_device(species_let_moments_device);
+    free_device(isotope_let_moments_device);
     free_device(voxel_dose_device);
     free_device(charged_origin_voxel_dose_device);
     free_device(deposited_device);
@@ -5336,6 +6014,9 @@ TransportResult transport_sycl(const TransportConfig& config,
     TransportResult result;
     result.backend = "sycl-" + device_name +
                      (config.enable_energy_straggling ? "+straggling" : "");
+    if (enable_secondary_energy_straggling) {
+        result.backend += "+secondary-straggling";
+    }
 #ifdef CARBON_TRANSPORT_PROFILE
     if (profile_enabled) {
         result.profile.enabled = true;
@@ -5394,6 +6075,9 @@ TransportResult transport_sycl(const TransportConfig& config,
     if (enable_charged_origin_voxel_scoring) {
         result.backend += "+charged-origin-voxel-scoring";
     }
+    if (enable_let_scoring) {
+        result.backend += "+letd-scoring";
+    }
     if (config.enable_primary_attenuation) {
         result.backend += "+attenuation";
     }
@@ -5402,6 +6086,9 @@ TransportResult transport_sycl(const TransportConfig& config,
     }
     if (enable_secondary_transport) {
         result.backend += "+secondary-transport";
+        result.backend += use_particle_specific_stopping_power
+                              ? "+isotope-stopping-tables"
+                              : "+c12-effective-charge-scaling";
         if (enable_secondary_energy_sorting) {
             result.backend += "+energy-sorted";
         }
@@ -5424,6 +6111,58 @@ TransportResult transport_sycl(const TransportConfig& config,
     result.voxel_deposited_energy_MeV = std::move(voxel_dose_host);
     result.charged_origin_voxel_deposited_energy_MeV =
         std::move(charged_origin_voxel_dose_host);
+    if (enable_let_scoring) {
+        const auto extract_let_moment = [&](const std::size_t moment) {
+            const auto begin = let_moments_host.begin() +
+                               static_cast<std::ptrdiff_t>(moment * number_of_bins);
+            return std::vector<double>(
+                begin, begin + static_cast<std::ptrdiff_t>(number_of_bins));
+        };
+        result.primary_c12_letd_numerator = extract_let_moment(0);
+        result.primary_c12_letd_denominator = extract_let_moment(1);
+        result.all_hadron_letd_numerator = extract_let_moment(2);
+        result.all_hadron_letd_denominator = extract_let_moment(3);
+        const auto species_moment_size =
+            charged_origin_category_count * number_of_bins;
+        result.charged_origin_letd_numerator.assign(
+            species_let_moments_host.begin(),
+            species_let_moments_host.begin() +
+                static_cast<std::ptrdiff_t>(species_moment_size));
+        result.charged_origin_letd_denominator.assign(
+            species_let_moments_host.begin() +
+                static_cast<std::ptrdiff_t>(species_moment_size),
+            species_let_moments_host.end());
+        if (enable_light_isotope_let_scoring) {
+            const auto isotope_moment_size =
+                light_isotope_category_count * number_of_bins;
+            result.light_isotope_letd_numerator.assign(
+                isotope_let_moments_host.begin(),
+                isotope_let_moments_host.begin() +
+                    static_cast<std::ptrdiff_t>(isotope_moment_size));
+            result.light_isotope_letd_denominator.assign(
+                isotope_let_moments_host.begin() +
+                    static_cast<std::ptrdiff_t>(isotope_moment_size),
+                isotope_let_moments_host.end());
+        }
+        if (enable_voxel_scoring) {
+            const auto extract_voxel_let_moment = [&](const std::size_t moment) {
+                const auto begin = voxel_let_moments_host.begin() +
+                                   static_cast<std::ptrdiff_t>(
+                                       moment * number_of_voxels);
+                return std::vector<double>(
+                    begin,
+                    begin + static_cast<std::ptrdiff_t>(number_of_voxels));
+            };
+            result.primary_c12_voxel_letd_numerator =
+                extract_voxel_let_moment(0);
+            result.primary_c12_voxel_letd_denominator =
+                extract_voxel_let_moment(1);
+            result.all_hadron_voxel_letd_numerator =
+                extract_voxel_let_moment(2);
+            result.all_hadron_voxel_letd_denominator =
+                extract_voxel_let_moment(3);
+        }
+    }
     if (config.primary_spot_batch.empty()) {
         result.initial_energy_MeV =
             config.initial_total_energy_MeV() * static_cast<double>(number_of_histories);

@@ -31,6 +31,23 @@ struct TransportResult {
     std::vector<double> helium_deposited_energy_MeV;
     std::vector<double> proton_deposited_energy_MeV;
     std::vector<double> other_charged_deposited_energy_MeV;
+    // HadronLET raw dose-weighted moments. Numerator unit:
+    // MeV * MeV/mm/(g/cm3); denominator unit: MeV.
+    std::vector<double> primary_c12_letd_numerator;
+    std::vector<double> primary_c12_letd_denominator;
+    std::vector<double> all_hadron_letd_numerator;
+    std::vector<double> all_hadron_letd_denominator;
+    // Category-major primary-C12, secondary C, B, Be, Li, He, p, other.
+    std::vector<double> charged_origin_letd_numerator;
+    std::vector<double> charged_origin_letd_denominator;
+    // Optional category-major p, d, t, He-3, He-4 LET moments.
+    std::vector<double> light_isotope_letd_numerator;
+    std::vector<double> light_isotope_letd_denominator;
+    // Same four moments on the optional voxel grid (z-major, x fastest).
+    std::vector<double> primary_c12_voxel_letd_numerator;
+    std::vector<double> primary_c12_voxel_letd_denominator;
+    std::vector<double> all_hadron_voxel_letd_numerator;
+    std::vector<double> all_hadron_voxel_letd_denominator;
     std::vector<double> neutron_origin_deposited_energy_MeV;
     std::vector<double> gamma_origin_deposited_energy_MeV;
     double initial_energy_MeV{0.0};

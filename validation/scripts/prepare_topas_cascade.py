@@ -222,8 +222,18 @@ def main() -> None:
 
     log_text = log_path.read_text(encoding="utf-8", errors="replace")
     elapsed = re.search(r"^\s*Total:.*?Real=([0-9.]+)s", log_text, re.MULTILINE)
+    topas_version = re.search(
+        r"Welcome to TOPAS.*?Version\s+([^\)]+)\)", log_text
+    )
+    geant4_version = re.search(r"Geant4 version Name:\s+(\S+)", log_text)
     metadata = {
         "case": args.case, "histories": args.histories, "entries": parsed,
+        "topas_version": (
+            topas_version.group(1).strip() if topas_version else None
+        ),
+        "geant4_version": (
+            geant4_version.group(1) if geant4_version else None
+        ),
         "header_entries": counts["entries"],
         "unique_entries": len(interaction_rows) + len(product_rows),
         "identical_duplicate_interactions_dropped": duplicate_interactions,

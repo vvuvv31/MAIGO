@@ -30,7 +30,8 @@ void print_usage(const char* executable) {
     std::cout << "Usage: " << executable
               << " [--config FILE] [--device DEVICE] [--histories N]"
                  " [--spots FILE] [--straggling-scale X] [--output FILE]"
-                 " [--dose-output FILE] [--plan-only] [--sequential-spots]\n"
+                 " [--dose-output FILE] [--scorer-let|--no-scorer-let]"
+                 " [--let-output FILE] [--plan-only] [--sequential-spots]\n"
                  "  --device DEVICE      serial | cpu | gpu | default |\n"
                  "                       cuda|nvidia | level_zero|intel|arc | opencl\n"
                  "                       (gpu respects ONEAPI_DEVICE_SELECTOR;\n"
@@ -44,6 +45,9 @@ void print_usage(const char* executable) {
                  "  --sequential-spots   Validation A/B: disable batched SYCL plan launch\n"
                  "  --output FILE        MeV energy-deposition scorer CSV\n"
                  "  --dose-output FILE   Dose scorer CSV (total Gy); empty disables\n"
+                 "  --scorer-let         Enable primary-C12 and all-hadron LET_d scoring\n"
+                 "  --no-scorer-let      Disable LET_d scoring (overrides YAML scorerLET)\n"
+                 "  --let-output FILE    LET_d CSV including raw numerator/denominator\n"
                  "  --voxel-dose-mhd FILE  Override dense voxel dose MHD output\n";
 }
 
@@ -83,6 +87,30 @@ void accumulate_transport_result(carbon::TransportResult& total,
     add_vector_in_place(total.proton_deposited_energy_MeV, part.proton_deposited_energy_MeV);
     add_vector_in_place(total.other_charged_deposited_energy_MeV,
                         part.other_charged_deposited_energy_MeV);
+    add_vector_in_place(total.primary_c12_letd_numerator,
+                        part.primary_c12_letd_numerator);
+    add_vector_in_place(total.primary_c12_letd_denominator,
+                        part.primary_c12_letd_denominator);
+    add_vector_in_place(total.all_hadron_letd_numerator,
+                        part.all_hadron_letd_numerator);
+    add_vector_in_place(total.all_hadron_letd_denominator,
+                        part.all_hadron_letd_denominator);
+    add_vector_in_place(total.charged_origin_letd_numerator,
+                        part.charged_origin_letd_numerator);
+    add_vector_in_place(total.charged_origin_letd_denominator,
+                        part.charged_origin_letd_denominator);
+    add_vector_in_place(total.light_isotope_letd_numerator,
+                        part.light_isotope_letd_numerator);
+    add_vector_in_place(total.light_isotope_letd_denominator,
+                        part.light_isotope_letd_denominator);
+    add_vector_in_place(total.primary_c12_voxel_letd_numerator,
+                        part.primary_c12_voxel_letd_numerator);
+    add_vector_in_place(total.primary_c12_voxel_letd_denominator,
+                        part.primary_c12_voxel_letd_denominator);
+    add_vector_in_place(total.all_hadron_voxel_letd_numerator,
+                        part.all_hadron_voxel_letd_numerator);
+    add_vector_in_place(total.all_hadron_voxel_letd_denominator,
+                        part.all_hadron_voxel_letd_denominator);
     add_vector_in_place(total.neutron_origin_deposited_energy_MeV,
                         part.neutron_origin_deposited_energy_MeV);
     add_vector_in_place(total.gamma_origin_deposited_energy_MeV,
@@ -304,6 +332,10 @@ carbon::TransportResult run_transport(
     const std::optional<carbon::NeutralPackageTable>& neutral_packages,
     carbon::SyclTransportContext* sycl_context = nullptr) {
     if (config.device == "serial") {
+        if (config.enable_let_scoring) {
+            throw std::invalid_argument(
+                "scorerLET is currently implemented only by the SYCL backend");
+        }
         if (config.enable_secondary_generation) {
             throw std::invalid_argument(
                 "Secondary generation is currently implemented only by the SYCL backend");
@@ -382,6 +414,12 @@ int main(int argc, char* argv[]) {
                 const std::string path = argv[++index];
                 config.dose_output_file =
                     path.empty() ? std::filesystem::path{} : std::filesystem::path{path};
+            } else if (argument == "--scorer-let") {
+                config.enable_let_scoring = true;
+            } else if (argument == "--no-scorer-let") {
+                config.enable_let_scoring = false;
+            } else if (argument == "--let-output" && index + 1 < argc) {
+                config.let_output_file = argv[++index];
             } else if (argument == "--voxel-dose-mhd" && index + 1 < argc) {
                 config.voxel_dose_mhd_output_file = argv[++index];
             } else if (argument == "--plan-only") {
@@ -640,6 +678,24 @@ int main(int argc, char* argv[]) {
             carbon::write_fragment_species_csv(
                 config.fragment_species_output_file, config, result);
         }
+        if (config.enable_let_scoring && !config.let_output_file.empty()) {
+            carbon::write_letd_csv(config.let_output_file, config, result);
+        }
+        if (config.enable_let_scoring &&
+            !config.fragment_species_let_output_file.empty()) {
+            carbon::write_fragment_species_letd_csv(
+                config.fragment_species_let_output_file, config, result);
+        }
+        if (config.enable_let_scoring &&
+            !config.light_isotope_let_output_file.empty()) {
+            carbon::write_light_isotope_letd_csv(
+                config.light_isotope_let_output_file, config, result);
+        }
+        if (config.enable_let_scoring && config.enable_voxel_scoring &&
+            !config.let_voxel_mhd_output_file.empty()) {
+            carbon::write_dense_voxel_letd_mhd(
+                config.let_voxel_mhd_output_file, config, result);
+        }
         if (config.enable_voxel_scoring && !config.voxel_dose_output_file.empty()) {
             carbon::write_sparse_voxel_dose_csv(config.voxel_dose_output_file, config, result);
         }
@@ -762,6 +818,25 @@ int main(int argc, char* argv[]) {
             !config.fragment_species_dose_output_file.empty()) {
             std::cout << "Fragment-species dose (Gy): "
                       << config.fragment_species_dose_output_file.string() << '\n';
+        }
+        if (config.enable_let_scoring && !config.let_output_file.empty()) {
+            std::cout << "LET_d scorer output: " << config.let_output_file.string()
+                      << '\n';
+        }
+        if (config.enable_let_scoring &&
+            !config.fragment_species_let_output_file.empty()) {
+            std::cout << "Fragment-species LET_d output: "
+                      << config.fragment_species_let_output_file.string() << '\n';
+        }
+        if (config.enable_let_scoring &&
+            !config.light_isotope_let_output_file.empty()) {
+            std::cout << "Light-isotope LET_d output: "
+                      << config.light_isotope_let_output_file.string() << '\n';
+        }
+        if (config.enable_let_scoring && config.enable_voxel_scoring &&
+            !config.let_voxel_mhd_output_file.empty()) {
+            std::cout << "Voxel LET_d MHD outputs: "
+                      << config.let_voxel_mhd_output_file.string() << '\n';
         }
         if (config.enable_voxel_scoring) {
             std::cout << "Voxel MeV scorer output: "

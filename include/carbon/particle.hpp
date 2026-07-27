@@ -7,6 +7,20 @@ namespace carbon {
 
 inline constexpr std::size_t charged_origin_category_count = 8;
 inline constexpr std::size_t primary_c12_charged_origin_category = 0;
+inline constexpr std::size_t light_isotope_category_count = 5;
+
+// Optional LET diagnostics: p, d, t, He-3, He-4. Other ions return the
+// sentinel category_count and are not accumulated.
+constexpr std::size_t light_isotope_category(const int atomic_number,
+                                             const int mass_number) noexcept {
+    if (atomic_number == 1 && mass_number >= 1 && mass_number <= 3) {
+        return static_cast<std::size_t>(mass_number - 1);
+    }
+    if (atomic_number == 2 && (mass_number == 3 || mass_number == 4)) {
+        return static_cast<std::size_t>(mass_number);
+    }
+    return light_isotope_category_count;
+}
 
 constexpr std::uint8_t charged_dose_category(const int atomic_number,
                                              const int mass_number) noexcept {

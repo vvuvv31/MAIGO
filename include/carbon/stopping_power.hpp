@@ -1,6 +1,7 @@
 #pragma once
 
 #include <filesystem>
+#include <cstdint>
 #include <vector>
 
 namespace carbon {
@@ -25,6 +26,29 @@ public:
 private:
     std::vector<double> energies_MeVu_;
     std::vector<double> stopping_powers_MeV_per_mm_;
+};
+
+class IonStoppingPowerTables {
+public:
+    static constexpr std::size_t mass_stride = 32;
+    static constexpr std::size_t atomic_number_slots = 10;
+    static constexpr std::size_t species_slots =
+        mass_stride * atomic_number_slots;
+
+    static IonStoppingPowerTables from_csv(
+        const std::filesystem::path& path,
+        const StoppingPowerTable& carbon_stopping_power);
+
+    [[nodiscard]] const std::vector<float>& ratios_to_carbon() const noexcept;
+    [[nodiscard]] const std::vector<float>& delta_electron_fractions() const noexcept;
+    [[nodiscard]] const std::vector<std::uint8_t>& species_present() const noexcept;
+    [[nodiscard]] std::size_t energy_grid_size() const noexcept;
+
+private:
+    std::size_t energy_grid_size_{};
+    std::vector<float> ratios_to_carbon_;
+    std::vector<float> delta_electron_fractions_;
+    std::vector<std::uint8_t> species_present_;
 };
 
 }  // namespace carbon

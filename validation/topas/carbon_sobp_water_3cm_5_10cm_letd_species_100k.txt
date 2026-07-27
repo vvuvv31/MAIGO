@@ -1,0 +1,81 @@
+includeFile = carbon_sobp_water_3cm_5_10cm_letd_100k.txt
+
+# Secondary charged fragments, separated by atomic number. Primary C-12 is
+# already provided by SobpPrimaryC12LETd in the included reference.
+s:Sc/SobpSecondaryCarbonLETd/Quantity = "myHadronLET"
+s:Sc/SobpSecondaryCarbonLETd/Component = "Phantom"
+s:Sc/SobpSecondaryCarbonLETd/OutputFile = "output/sobp_letd_species_100k_secondary_carbon"
+s:Sc/SobpSecondaryCarbonLETd/OutputType = "csv"
+s:Sc/SobpSecondaryCarbonLETd/IfOutputFileAlreadyExists = "Overwrite"
+s:Sc/SobpSecondaryCarbonLETd/WeightBy = "dose"
+u:Sc/SobpSecondaryCarbonLETd/Order = 1
+i:Sc/SobpSecondaryCarbonLETd/XBins = 1
+i:Sc/SobpSecondaryCarbonLETd/YBins = 1
+i:Sc/SobpSecondaryCarbonLETd/ZBins = 300
+i:Sc/SobpSecondaryCarbonLETd/OnlyIncludeParticlesOfAtomicNumber = 6
+s:Sc/SobpSecondaryCarbonLETd/OnlyIncludeParticlesOfGeneration = "Secondary"
+
+s:Sc/SobpBoronLETd/Quantity = "myHadronLET"
+s:Sc/SobpBoronLETd/Component = "Phantom"
+s:Sc/SobpBoronLETd/OutputFile = "output/sobp_letd_species_100k_boron"
+s:Sc/SobpBoronLETd/OutputType = "csv"
+s:Sc/SobpBoronLETd/IfOutputFileAlreadyExists = "Overwrite"
+s:Sc/SobpBoronLETd/WeightBy = "dose"
+u:Sc/SobpBoronLETd/Order = 1
+i:Sc/SobpBoronLETd/XBins = 1
+i:Sc/SobpBoronLETd/YBins = 1
+i:Sc/SobpBoronLETd/ZBins = 300
+i:Sc/SobpBoronLETd/OnlyIncludeParticlesOfAtomicNumber = 5
+s:Sc/SobpBoronLETd/OnlyIncludeParticlesOfGeneration = "Secondary"
+
+s:Sc/SobpBerylliumLETd/Quantity = "myHadronLET"
+s:Sc/SobpBerylliumLETd/Component = "Phantom"
+s:Sc/SobpBerylliumLETd/OutputFile = "output/sobp_letd_species_100k_beryllium"
+s:Sc/SobpBerylliumLETd/OutputType = "csv"
+s:Sc/SobpBerylliumLETd/IfOutputFileAlreadyExists = "Overwrite"
+s:Sc/SobpBerylliumLETd/WeightBy = "dose"
+u:Sc/SobpBerylliumLETd/Order = 1
+i:Sc/SobpBerylliumLETd/XBins = 1
+i:Sc/SobpBerylliumLETd/YBins = 1
+i:Sc/SobpBerylliumLETd/ZBins = 300
+i:Sc/SobpBerylliumLETd/OnlyIncludeParticlesOfAtomicNumber = 4
+s:Sc/SobpBerylliumLETd/OnlyIncludeParticlesOfGeneration = "Secondary"
+
+s:Sc/SobpLithiumLETd/Quantity = "myHadronLET"
+s:Sc/SobpLithiumLETd/Component = "Phantom"
+s:Sc/SobpLithiumLETd/OutputFile = "output/sobp_letd_species_100k_lithium"
+s:Sc/SobpLithiumLETd/OutputType = "csv"
+s:Sc/SobpLithiumLETd/IfOutputFileAlreadyExists = "Overwrite"
+s:Sc/SobpLithiumLETd/WeightBy = "dose"
+u:Sc/SobpLithiumLETd/Order = 1
+i:Sc/SobpLithiumLETd/XBins = 1
+i:Sc/SobpLithiumLETd/YBins = 1
+i:Sc/SobpLithiumLETd/ZBins = 300
+i:Sc/SobpLithiumLETd/OnlyIncludeParticlesOfAtomicNumber = 3
+s:Sc/SobpLithiumLETd/OnlyIncludeParticlesOfGeneration = "Secondary"
+
+s:Sc/SobpHeliumLETd/Quantity = "myHadronLET"
+s:Sc/SobpHeliumLETd/Component = "Phantom"
+s:Sc/SobpHeliumLETd/OutputFile = "output/sobp_letd_species_100k_helium"
+s:Sc/SobpHeliumLETd/OutputType = "csv"
+s:Sc/SobpHeliumLETd/IfOutputFileAlreadyExists = "Overwrite"
+s:Sc/SobpHeliumLETd/WeightBy = "dose"
+u:Sc/SobpHeliumLETd/Order = 1
+i:Sc/SobpHeliumLETd/XBins = 1
+i:Sc/SobpHeliumLETd/YBins = 1
+i:Sc/SobpHeliumLETd/ZBins = 300
+i:Sc/SobpHeliumLETd/OnlyIncludeParticlesOfAtomicNumber = 2
+s:Sc/SobpHeliumLETd/OnlyIncludeParticlesOfGeneration = "Secondary"
+
+s:Sc/SobpHydrogenLETd/Quantity = "myHadronLET"
+s:Sc/SobpHydrogenLETd/Component = "Phantom"
+s:Sc/SobpHydrogenLETd/OutputFile = "output/sobp_letd_species_100k_hydrogen"
+s:Sc/SobpHydrogenLETd/OutputType = "csv"
+s:Sc/SobpHydrogenLETd/IfOutputFileAlreadyExists = "Overwrite"
+s:Sc/SobpHydrogenLETd/WeightBy = "dose"
+u:Sc/SobpHydrogenLETd/Order = 1
+i:Sc/SobpHydrogenLETd/XBins = 1
+i:Sc/SobpHydrogenLETd/YBins = 1
+i:Sc/SobpHydrogenLETd/ZBins = 300
+i:Sc/SobpHydrogenLETd/OnlyIncludeParticlesOfAtomicNumber = 1
+s:Sc/SobpHydrogenLETd/OnlyIncludeParticlesOfGeneration = "Secondary"

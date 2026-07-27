@@ -140,6 +140,9 @@ struct TransportConfig {
     double voxel_size_x_mm{5.0};
     double voxel_size_y_mm{5.0};
     bool enable_energy_straggling{false};
+    // Historical validation applied straggling only to primary C-12.
+    // Enable this separately to apply Bohr straggling to charged fragments.
+    bool enable_secondary_energy_straggling{false};
     double straggling_scale{1.0};
     bool enable_multiple_scattering{false};
     // Use Geant4 mass radiation lengths for CT air/lung/water/bone classes.
@@ -225,6 +228,10 @@ struct TransportConfig {
     // Per-species secondary depth-dose scoring. Disable for voxel-only full-plan
     // production to remove an otherwise redundant global atomic per deposit.
     bool enable_fragment_species_scoring{true};
+    // Dose-averaged electronic LET scorer compatible with the
+    // Villadslj/Topas-Extension myHadronLET definition. YAML also accepts the
+    // requested camel-case alias `scorerLET`.
+    bool enable_let_scoring{false};
     bool enable_neutral_transport{false};
     // "first_interaction": free path + one package (mode D); continuation residual.
     // "full": re-queue neutral continuations up to maximum_neutral_generations.
@@ -270,6 +277,15 @@ struct TransportConfig {
     bool enable_secondary_energy_sorting{false};
     std::uint64_t random_seed{20'260'714};
     std::filesystem::path stopping_power_file{"data/stopping_power_water.csv"};
+    // Optional E_delta/(Edep+E_delta) lookup on the stopping-power energy grid.
+    // Used only by the HadronLET-compatible scorer; dose transport is unchanged.
+    std::filesystem::path let_delta_electron_fraction_file{};
+    // Accurate fragment transport: use isotope-specific G4 water dE/dx ratios and
+    // delta-electron corrections. False preserves the faster C-12 effective-charge
+    // approximation and all existing configurations.
+    bool use_particle_specific_stopping_power{false};
+    std::filesystem::path particle_stopping_power_file{
+        "data/ion_stopping_power_water_geant4_11_3_2.csv"};
     std::filesystem::path nuclear_cross_section_file{
         "data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv"};
     std::filesystem::path reaction_package_file{
@@ -282,6 +298,14 @@ struct TransportConfig {
     std::filesystem::path output_file{"out/cpu_depth_dose.csv"};
     std::filesystem::path fragment_species_output_file{
         "out/gpu_fragment_species_depth_dose.csv"};
+    std::filesystem::path let_output_file{"out/gpu_letd_depth.csv"};
+    std::filesystem::path fragment_species_let_output_file{};
+    // Optional p/d/t/He-3/He-4 depth LET diagnostics. Empty avoids the extra
+    // per-step FP64 atomics in normal production runs.
+    std::filesystem::path light_isotope_let_output_file{};
+    // Prefix/header path for dense primary-C12 and all-hadron 3D LET_d MHD maps.
+    // Requires both scorerLET and enable_voxel_scoring.
+    std::filesystem::path let_voxel_mhd_output_file{};
     std::filesystem::path voxel_dose_output_file{"out/gpu_voxel_dose.csv"};
     std::filesystem::path charged_origin_voxel_output_file{
         "out/gpu_charged_origin_voxel_dose.csv"};

@@ -7,6 +7,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <tuple>
 #include <utility>
 
 namespace carbon {
@@ -104,6 +105,112 @@ double StoppingPowerTable::maximum_energy_MeVu() const noexcept { return energie
 const std::vector<double>& StoppingPowerTable::energies() const noexcept { return energies_MeVu_; }
 const std::vector<double>& StoppingPowerTable::values() const noexcept {
     return stopping_powers_MeV_per_mm_;
+}
+
+IonStoppingPowerTables IonStoppingPowerTables::from_csv(
+    const std::filesystem::path& path,
+    const StoppingPowerTable& carbon_stopping_power) {
+    std::ifstream input(path);
+    if (!input) {
+        throw std::runtime_error("Cannot open ion stopping-power table: " + path.string());
+    }
+
+    IonStoppingPowerTables result;
+    result.energy_grid_size_ = carbon_stopping_power.energies().size();
+    const auto value_count = species_slots * result.energy_grid_size_;
+    result.ratios_to_carbon_.assign(value_count, 0.0F);
+    result.delta_electron_fractions_.assign(value_count, 0.0F);
+    result.species_present_.assign(species_slots, 0);
+    std::vector<std::size_t> samples_per_species(species_slots, 0);
+
+    std::string line;
+    std::size_t line_number = 0;
+    while (std::getline(input, line)) {
+        ++line_number;
+        const auto first = line.find_first_not_of(" \t\r\n");
+        if (first == std::string::npos || line[first] == '#' ||
+            std::isalpha(static_cast<unsigned char>(line[first]))) {
+            continue;
+        }
+        std::replace(line.begin(), line.end(), ',', ' ');
+        std::istringstream parser(line);
+        int atomic_number = 0;
+        int mass_number = 0;
+        double energy = 0.0;
+        double stopping_power = 0.0;
+        double restricted = 0.0;
+        double nuclear = 0.0;
+        double raw_delta = 0.0;
+        double delta_fraction = 0.0;
+        if (!(parser >> atomic_number >> mass_number >> energy >> stopping_power >>
+              restricted >> nuclear >> raw_delta >> delta_fraction)) {
+            throw std::runtime_error("Invalid ion stopping-power row at " +
+                                     path.string() + ":" +
+                                     std::to_string(line_number));
+        }
+        (void)restricted;
+        (void)nuclear;
+        (void)raw_delta;
+        if (atomic_number <= 0 ||
+            atomic_number >= static_cast<int>(atomic_number_slots) ||
+            mass_number <= 0 || mass_number >= static_cast<int>(mass_stride)) {
+            throw std::runtime_error("Ion species outside supported Z/A table range at " +
+                                     path.string() + ":" +
+                                     std::to_string(line_number));
+        }
+        const auto species = static_cast<std::size_t>(atomic_number) * mass_stride +
+                             static_cast<std::size_t>(mass_number);
+        const auto energy_index = samples_per_species[species]++;
+        if (energy_index >= result.energy_grid_size_ ||
+            std::abs(energy - carbon_stopping_power.energies()[energy_index]) >
+                1.0e-9) {
+            throw std::runtime_error(
+                "Ion stopping-power energy grid differs from C-12 grid at " +
+                path.string() + ":" + std::to_string(line_number));
+        }
+        if (!std::isfinite(stopping_power) || stopping_power <= 0.0 ||
+            !std::isfinite(delta_fraction) || delta_fraction < 0.0 ||
+            delta_fraction >= 1.0) {
+            throw std::runtime_error("Invalid ion stopping-power value at " +
+                                     path.string() + ":" +
+                                     std::to_string(line_number));
+        }
+        const auto offset = species * result.energy_grid_size_ + energy_index;
+        result.ratios_to_carbon_[offset] = static_cast<float>(
+            stopping_power / carbon_stopping_power.values()[energy_index]);
+        result.delta_electron_fractions_[offset] =
+            static_cast<float>(delta_fraction);
+    }
+
+    for (std::size_t species = 0; species < species_slots; ++species) {
+        if (samples_per_species[species] == 0) {
+            continue;
+        }
+        if (samples_per_species[species] != result.energy_grid_size_) {
+            throw std::runtime_error("Incomplete isotope in ion stopping-power table: " +
+                                     path.string());
+        }
+        result.species_present_[species] = 1;
+    }
+    return result;
+}
+
+const std::vector<float>& IonStoppingPowerTables::ratios_to_carbon() const noexcept {
+    return ratios_to_carbon_;
+}
+
+const std::vector<float>&
+IonStoppingPowerTables::delta_electron_fractions() const noexcept {
+    return delta_electron_fractions_;
+}
+
+const std::vector<std::uint8_t>&
+IonStoppingPowerTables::species_present() const noexcept {
+    return species_present_;
+}
+
+std::size_t IonStoppingPowerTables::energy_grid_size() const noexcept {
+    return energy_grid_size_;
 }
 
 }  // namespace carbon

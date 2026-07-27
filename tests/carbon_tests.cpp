@@ -250,6 +250,36 @@ void test_fragment_stopping_power_scale() {
                    "Invalid fragment atomic number was accepted");
 }
 
+void test_particle_specific_stopping_power_tables() {
+    const auto source_directory = std::filesystem::path(CARBON_SOURCE_DIR);
+    const auto carbon = carbon::StoppingPowerTable::from_csv(
+        source_directory /
+        "data/stopping_power_water_geant4_11_3_2.csv");
+    const auto ions = carbon::IonStoppingPowerTables::from_csv(
+        source_directory /
+            "data/ion_stopping_power_water_geant4_11_3_2.csv",
+        carbon);
+    require(ions.energy_grid_size() == 4001,
+            "Ion stopping-power energy grid size failed");
+    require(std::count(ions.species_present().begin(),
+                       ions.species_present().end(),
+                       std::uint8_t{1}) == 32,
+            "Ion stopping-power isotope count failed");
+    const auto c12 = (6 * carbon::IonStoppingPowerTables::mass_stride + 12) *
+                     ions.energy_grid_size();
+    const auto h1 = (1 * carbon::IonStoppingPowerTables::mass_stride + 1) *
+                    ions.energy_grid_size();
+    constexpr std::size_t near_100_MeVu = 1000;
+    require_near(ions.ratios_to_carbon()[c12 + near_100_MeVu], 1.0, 1.0e-7,
+                 "C-12 exact stopping-power ratio failed");
+    require_near(ions.ratios_to_carbon()[h1 + near_100_MeVu],
+                 0.027915, 1.0e-5,
+                 "H-1 exact stopping-power ratio failed");
+    require_near(ions.delta_electron_fractions()[c12 + near_100_MeVu],
+                 0.080135384373, 1.0e-7,
+                 "C-12 calibrated delta-electron fraction failed");
+}
+
 void test_step_selection() {
     require_near(carbon::choose_step_mm(100.0, 10.0, 0.5, 0.01), 0.1, 1.0e-12,
                  "Energy-limited step failed");
@@ -1828,6 +1858,7 @@ int main() {
         test_charged_dose_categories();
         test_interpolation();
         test_fragment_stopping_power_scale();
+        test_particle_specific_stopping_power_tables();
         test_step_selection();
         test_slab_phantom_helpers();
         test_ct_grid_helpers();

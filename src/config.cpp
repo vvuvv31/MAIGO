@@ -284,6 +284,20 @@ void TransportConfig::validate() const {
         throw std::invalid_argument(
             "enable_charged_origin_voxel_scoring requires enable_voxel_scoring=true");
     }
+    if (!let_voxel_mhd_output_file.empty() &&
+        (!enable_let_scoring || !enable_voxel_scoring)) {
+        throw std::invalid_argument(
+            "let_voxel_mhd_output_file requires scorerLET=true and "
+            "enable_voxel_scoring=true");
+    }
+    if (!fragment_species_let_output_file.empty() && !enable_let_scoring) {
+        throw std::invalid_argument(
+            "fragment_species_let_output_file requires scorerLET=true");
+    }
+    if (!light_isotope_let_output_file.empty() && !enable_let_scoring) {
+        throw std::invalid_argument(
+            "light_isotope_let_output_file requires scorerLET=true");
+    }
     if (enable_flat_source &&
         (flat_source_half_width_x_mm <= 0.0 || flat_source_half_width_y_mm <= 0.0)) {
         throw std::invalid_argument(
@@ -588,6 +602,9 @@ TransportConfig load_config(const std::filesystem::path& path) {
         parse_number(values, "voxel_size_y_mm", config.voxel_size_y_mm);
     config.enable_energy_straggling =
         parse_bool(values, "enable_energy_straggling", config.enable_energy_straggling);
+    config.enable_secondary_energy_straggling = parse_bool(
+        values, "enable_secondary_energy_straggling",
+        config.enable_secondary_energy_straggling);
     config.straggling_scale = parse_number(values, "straggling_scale", config.straggling_scale);
     config.enable_multiple_scattering =
         parse_bool(values, "enable_multiple_scattering", config.enable_multiple_scattering);
@@ -624,6 +641,25 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.enable_fragment_species_scoring = parse_bool(
         values, "enable_fragment_species_scoring",
         config.enable_fragment_species_scoring);
+    {
+        const auto camel = values.find("scorerLET");
+        const auto snake = values.find("enable_let_scoring");
+        if (camel != values.end() && snake != values.end()) {
+            const auto camel_value = parse_bool(values, "scorerLET", false);
+            const auto snake_value = parse_bool(values, "enable_let_scoring", false);
+            if (camel_value != snake_value) {
+                throw std::runtime_error(
+                    "scorerLET and enable_let_scoring are both set with different values");
+            }
+            config.enable_let_scoring = camel_value;
+        } else if (camel != values.end()) {
+            config.enable_let_scoring =
+                parse_bool(values, "scorerLET", config.enable_let_scoring);
+        } else if (snake != values.end()) {
+            config.enable_let_scoring =
+                parse_bool(values, "enable_let_scoring", config.enable_let_scoring);
+        }
+    }
     config.enable_neutral_transport =
         parse_bool(values, "enable_neutral_transport", config.enable_neutral_transport);
     const auto neutral_mode = values.find("neutral_transport_mode");
@@ -789,6 +825,15 @@ TransportConfig load_config(const std::filesystem::path& path) {
     }
     config.random_seed = parse_number(values, "random_seed", config.random_seed);
     config.stopping_power_file = parse_path(values, "stopping_power_file", config.stopping_power_file);
+    config.let_delta_electron_fraction_file = parse_path(
+        values, "let_delta_electron_fraction_file",
+        config.let_delta_electron_fraction_file);
+    config.use_particle_specific_stopping_power = parse_bool(
+        values, "use_particle_specific_stopping_power",
+        config.use_particle_specific_stopping_power);
+    config.particle_stopping_power_file = parse_path(
+        values, "particle_stopping_power_file",
+        config.particle_stopping_power_file);
     config.nuclear_cross_section_file =
         parse_path(values, "nuclear_cross_section_file", config.nuclear_cross_section_file);
     config.reaction_package_file =
@@ -809,6 +854,38 @@ TransportConfig load_config(const std::filesystem::path& path) {
         if (it != values.end()) {
             config.fragment_species_output_file =
                 it->second.empty() ? std::filesystem::path{} : std::filesystem::path{it->second};
+        }
+    }
+    {
+        const auto it = values.find("let_output_file");
+        if (it != values.end()) {
+            config.let_output_file =
+                it->second.empty() ? std::filesystem::path{}
+                                   : std::filesystem::path{it->second};
+        }
+    }
+    {
+        const auto it = values.find("let_voxel_mhd_output_file");
+        if (it != values.end()) {
+            config.let_voxel_mhd_output_file =
+                it->second.empty() ? std::filesystem::path{}
+                                   : std::filesystem::path{it->second};
+        }
+    }
+    {
+        const auto it = values.find("fragment_species_let_output_file");
+        if (it != values.end()) {
+            config.fragment_species_let_output_file =
+                it->second.empty() ? std::filesystem::path{}
+                                   : std::filesystem::path{it->second};
+        }
+    }
+    {
+        const auto it = values.find("light_isotope_let_output_file");
+        if (it != values.end()) {
+            config.light_isotope_let_output_file =
+                it->second.empty() ? std::filesystem::path{}
+                                   : std::filesystem::path{it->second};
         }
     }
     {

@@ -37,7 +37,7 @@ def write_gzip_csv(path: Path, fieldnames: list[str], rows: list[dict[str, objec
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--cascade-metadata", type=Path, required=True)
-    parser.add_argument("--runtime-reference-metadata", type=Path, required=True)
+    parser.add_argument("--runtime-reference-metadata", type=Path)
     parser.add_argument("--interactions", type=Path, required=True)
     parser.add_argument("--products", type=Path, required=True)
     parser.add_argument("--reactions-output", type=Path, required=True)
@@ -46,7 +46,11 @@ def main() -> None:
     args = parser.parse_args()
 
     source_metadata = json.loads(args.cascade_metadata.read_text(encoding="utf-8"))
-    runtime_metadata = json.loads(args.runtime_reference_metadata.read_text(encoding="utf-8"))
+    runtime_metadata = (
+        json.loads(args.runtime_reference_metadata.read_text(encoding="utf-8"))
+        if args.runtime_reference_metadata is not None
+        else {}
+    )
     verify(args.interactions, source_metadata["outputs"]["interactions"]["sha256"],
            "Cascade interactions")
     verify(args.products, source_metadata["outputs"]["products"]["sha256"],
@@ -112,11 +116,19 @@ def main() -> None:
         "reaction_definition": "first inelastic interaction of source track-1 primary C-12",
         "source_cascade_metadata": args.cascade_metadata.as_posix(),
         "source_cascade_metadata_sha256": sha256(args.cascade_metadata),
-        "runtime_reference": {
-            "metadata": args.runtime_reference_metadata.as_posix(),
-            "topas_version": runtime_metadata["topas_version"],
-            "geant4_version": runtime_metadata["topas_log"]["geant4_version"],
-        },
+        "runtime_reference": (
+            {
+                "metadata": args.runtime_reference_metadata.as_posix(),
+                "topas_version": runtime_metadata["topas_version"],
+                "geant4_version": runtime_metadata["topas_log"]["geant4_version"],
+            }
+            if args.runtime_reference_metadata is not None
+            else {
+                "metadata": args.cascade_metadata.as_posix(),
+                "topas_version": source_metadata.get("topas_version"),
+                "geant4_version": source_metadata.get("geant4_version"),
+            }
+        ),
         "reaction_count": len(reaction_rows),
         "secondary_count": len(secondary_rows),
         "selection": {

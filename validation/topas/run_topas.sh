@@ -3,12 +3,18 @@ set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 project_root="$(cd -- "${script_dir}/../.." && pwd)"
-topas_executable="${TOPAS_EXECUTABLE:-topas}"
+if [[ -n "${TOPAS_EXECUTABLE:-}" ]]; then
+    topas_executable="${TOPAS_EXECUTABLE}"
+elif [[ -x "${project_root}/build/opentopas-material-extension-install/bin/topas" ]]; then
+    topas_executable="${project_root}/build/opentopas-material-extension-install/bin/topas"
+else
+    topas_executable="topas"
+fi
 case_name="${1:-development}"
 
 # Make the locally built extension executable directly runnable in WSL.
-extension_install="${project_root}/build/opentopas-extension-install"
-if [[ "${topas_executable}" == "${extension_install}/bin/topas" ]]; then
+extension_install="$(cd -- "$(dirname -- "${topas_executable}")/.." 2>/dev/null && pwd || true)"
+if [[ "${topas_executable}" == "${project_root}"/build/*/bin/topas ]]; then
     export TOPAS_G4_DATA_DIR="${TOPAS_G4_DATA_DIR:-${HOME}/Applications/GEANT4/G4DATA}"
     geant4_lib="${HOME}/Applications/GEANT4/geant4-install/lib"
     gdcm_lib="${HOME}/Applications/TOPAS/OpenTOPAS/gdcm-install/lib"
@@ -31,8 +37,15 @@ case "${case_name}" in
     fragment-development) parameter_file="carbon_200MeVu_water_fragment_production_development.txt" ;;
     fragment-reference) parameter_file="carbon_200MeVu_water_fragment_production.txt" ;;
     cross-sections) parameter_file="carbon_200MeVu_water_cross_sections.txt" ;;
+    stopping-power) parameter_file="carbon_200MeVu_water_stopping_power.txt" ;;
+    delta-electron) parameter_file="carbon_200MeVu_water_delta_electron.txt" ;;
+    delta-electron-smoke) parameter_file="carbon_200MeVu_water_delta_electron_smoke.txt" ;;
+    delta-electron-1k) parameter_file="carbon_200MeVu_water_delta_electron_1k.txt" ;;
+    cascade-e400-g4-11-3-2-100k)
+        parameter_file="carbon_400MeVu_water_cascade_reactions_g4_11_3_2_100k.txt"
+        ;;
     *)
-        printf 'Usage: %s [smoke|development|reference|em-smoke|em-development|species-smoke|species-development|species-reference|ancestor-smoke|ancestor-development|ancestor-reference|fragment-smoke|fragment-development|fragment-reference|cross-sections]\n' "$0" >&2
+        printf 'Usage: %s [smoke|development|reference|em-smoke|em-development|species-smoke|species-development|species-reference|ancestor-smoke|ancestor-development|ancestor-reference|fragment-smoke|fragment-development|fragment-reference|cross-sections|stopping-power|delta-electron|delta-electron-smoke|delta-electron-1k|cascade-e400-g4-11-3-2-100k]\n' "$0" >&2
         exit 2
         ;;
 esac
