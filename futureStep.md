@@ -373,17 +373,26 @@ gen1 与 **完整 cascade package** 的粗比不能直接定罪采样：
 - 按父核切开后：vs Z≤2 residual **GPU 偏硬**；vs C12 碎裂 **GPU 偏软**  
 - gen1 **proton** 按父能量 bin 的 mean MeV/u 与 package **≈0.85–1.05**，采样大体健康  
 
+#### 已实现（2026-07-27）：LET 精度 — secondary 队列容量
+
+| 项 | 说明 |
+|----|------|
+| 根因 | CUDA auto `secondary_queue≈4N` 在 400 MeV/100k 下 **cascade 溢出 ~3.7e5** |
+| 修复 | LET 配置/脚本 `≥ max(2.5e6, 25N)`；cascade 能带优先 ≤15%；scale `[0.85,1.18]` |
+| all-hadron 中位\|rel\| | **300: 9.9%→7.0%；400: 7.2%→4.1%**；峰后 GPU/TOPAS **0.70→0.88** |
+| SOBP 50–100 mm | 仍约 **0.8%** |
+| 报告 | `validation/results/letd_accuracy_improvement_2026-07-27.md` |
+
 **仍待做**：
 
-1. 联合谱再按 **parent Z/A** 分箱（或 scorer 增加 parent Z 维）  
-2. A/B：`cascade_event_energy_scale` 对 residual 末态是否过缩放  
-3. cascade **截面/反应率** 按弹核种类 vs TOPAS（解释 Z=1/2 父核占比）  
-4. 各代 LET numerator/denominator  
-5. 确认后必要时改二进制 package 布局
+1. 联合谱再按 **parent Z/A** 分箱  
+2. cascade **截面/反应率** 按弹核 vs TOPAS  
+3. 各代 LET numerator/denominator  
+4. 高能 all-hadron 仍有 ~4–7% 中位残差：条件化 cascade package 布局  
 
 ### 第二优先级：能量条件化的 cascade package
 
-**运行时采样已部分完成**（见上：能量带宽选事件 + scale clamp）。  
+**运行时采样已部分完成**（紧能带 + 窄 scale；生产 LET 大队列）。  
 若确认仍需改数据布局，则将 cascade package 改为：
 
 ```text

@@ -710,17 +710,12 @@ inline std::uint32_t select_cascade_interaction_energy_conditioned(
         return 0U;
     }
     if (count == 1U) {
-        // Single package: accept only if energy is not wildly mismatched.
-        const auto event_E = interactions[offset].incident_energy_MeV_per_u;
-        const auto denom = sycl::fmax(energy_MeV_per_u, event_E);
-        if (denom > 0.0F &&
-            sycl::fabs(event_E - energy_MeV_per_u) / denom <= 0.15F) {
-            return 0U;
-        }
-        return count;  // invalid
+        return 0U;
     }
-    // Relative half-widths only up to 15%. Absolute floor helps sparse low-E
-    // species; absolute cap avoids huge high-E windows that re-mix topologies.
+    // Prefer a tight band (≤15%). Absolute floor helps sparse low-E species;
+    // absolute cap avoids huge high-E windows that re-mix residual/fragmentation
+    // topologies. If nothing is nearby, fall back to nearest (still scaled with
+    // a narrow clamp) so sparse smoke packages keep cascading.
     constexpr float k_rel_bandwidths[4] = {0.03F, 0.05F, 0.10F, 0.15F};
     for (const auto rel : k_rel_bandwidths) {
         const auto bandwidth_MeVu = sycl::fmin(
@@ -759,7 +754,8 @@ inline std::uint32_t select_cascade_interaction_energy_conditioned(
             window - 1U);
         return begin + pick;
     }
-    return count;  // invalid: no energy-matched package
+    return nearest_cascade_interaction(interactions, offset, count,
+                                       energy_MeV_per_u);
 }
 
 // Scale correlated final-state KE to the true projectile energy. With the
@@ -4732,33 +4728,6 @@ TransportResult transport_sycl(const TransportConfig& config,
                                             projectile.interaction_offset,
                                             projectile.interaction_count,
                                             current_energy_MeVu, package_uniform);
-                                    // No energy-matched final state: count the nuclear
-                                    // removal and deposit the projectile KE locally so
-                                    // we do not invent a distant soft/hard topology.
-                                    if (selected >= projectile.interaction_count) {
-                                        cascade_summary.interaction_count = 1;
-                                        cascade_summary.incident_energy_MeV = energy_MeV;
-                                        profile_add(
-                                            profile_counters_device,
-                                            TransportProfileSlot::secondary_cascade);
-                                        deposit_local_heat_device(
-                                            energy_MeV, position_x_mm, position_y_mm,
-                                            position_z_mm, direction_x, direction_y,
-                                            direction_z, depth_bin_width_mm,
-                                            number_of_bins, enable_voxel_scoring,
-                                            voxel_min_x_mm, voxel_min_y_mm,
-                                            voxel_size_x_mm, voxel_size_y_mm,
-                                            voxel_bins_x, voxel_bins_y, voxel_plane_size,
-                                            nullptr, fragment_dose_device, species_index,
-                                            voxel_dose_device,
-                                            enable_charged_origin_voxel_scoring,
-                                            charged_origin_voxel_dose_device,
-                                            charged_origin_voxel_offset);
-                                        cascade_summary.residual_local_MeV += energy_MeV;
-                                        deposited_MeV += energy_MeV;
-                                        energy_MeV = 0.0F;
-                                        continue;
-                                    }
                                     const auto interaction = cascade_interactions_device[
                                         projectile.interaction_offset + selected];
                                     const auto energy_scale = cascade_event_energy_scale(
