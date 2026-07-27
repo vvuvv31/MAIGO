@@ -61,6 +61,11 @@ def main() -> None:
         text = replace_scalar(
             text, "let_output_file", str(run_dir / "gpu_letd.csv")
         )
+        # Avoid CUDA auto secondary-queue caps truncating cascade products.
+        queue_cap = max(2_500_000, int(args.histories) * 25)
+        text = replace_scalar(
+            text, "secondary_queue_capacity", str(queue_cap)
+        )
         config_path = run_dir / "config.yaml"
         config_path.write_text(text)
         completed = subprocess.run(

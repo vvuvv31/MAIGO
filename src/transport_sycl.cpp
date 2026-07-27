@@ -696,9 +696,10 @@ inline std::uint32_t nearest_cascade_interaction(
 }
 
 // Energy-conditioned cascade final-state selection.
-// Prefer a pure energy window (projectile isotope × incident-E band) over a
-// fixed 8-event index window that can mix distant soft/hard topologies.
-// Expands relative bandwidth until at least one event is found, else nearest.
+// Keep a tight incident-energy band so residual-soft and fragmentation-hard
+// topologies are not mixed, then over-scaled. Returns `count` when no event
+// lies inside the maximum allowed band (caller should deposit residual heat
+// instead of inventing a distant final state).
 inline std::uint32_t select_cascade_interaction_energy_conditioned(
     const CascadeInteraction* interactions,
     const std::uint32_t offset,
@@ -709,41 +710,68 @@ inline std::uint32_t select_cascade_interaction_energy_conditioned(
         return 0U;
     }
     if (count == 1U) {
-        return 0U;
+        // Single package: accept only if energy is not wildly mismatched.
+        const auto event_E = interactions[offset].incident_energy_MeV_per_u;
+        const auto denom = sycl::fmax(energy_MeV_per_u, event_E);
+        if (denom > 0.0F &&
+            sycl::fabs(event_E - energy_MeV_per_u) / denom <= 0.15F) {
+            return 0U;
+        }
+        return count;  // invalid
     }
-    // Relative half-widths tried in order. Absolute floor keeps low-E bins usable.
-    constexpr float k_rel_bandwidths[5] = {0.05F, 0.10F, 0.20F, 0.40F, 0.80F};
+    // Relative half-widths only up to 15%. Absolute floor helps sparse low-E
+    // species; absolute cap avoids huge high-E windows that re-mix topologies.
+    constexpr float k_rel_bandwidths[4] = {0.03F, 0.05F, 0.10F, 0.15F};
     for (const auto rel : k_rel_bandwidths) {
-        const auto bandwidth_MeVu =
-            sycl::fmax(2.0F, rel * sycl::fmax(energy_MeV_per_u, 1.0F));
+        const auto bandwidth_MeVu = sycl::fmin(
+            25.0F, sycl::fmax(1.0F, rel * sycl::fmax(energy_MeV_per_u, 1.0F)));
         const auto e_lo = energy_MeV_per_u - bandwidth_MeVu;
         const auto e_hi = energy_MeV_per_u + bandwidth_MeVu;
-        const auto begin =
+        auto begin =
             cascade_interaction_lower_bound(interactions, offset, count, e_lo);
-        const auto end =
+        auto end =
             cascade_interaction_lower_bound(interactions, offset, count, e_hi);
-        if (end > begin) {
-            const auto window = end - begin;
-            const auto pick = sycl::min(
-                static_cast<std::uint32_t>(u01 * static_cast<float>(window)),
-                window - 1U);
-            return begin + pick;
+        if (end <= begin) {
+            continue;
         }
+        // Cap the number of candidates and center on the true energy so dense
+        // species do not uniform-sample a 25 MeV/u-wide plateau.
+        constexpr std::uint32_t k_max_window = 32U;
+        if (end - begin > k_max_window) {
+            const auto center = cascade_interaction_lower_bound(
+                interactions, offset, count, energy_MeV_per_u);
+            const auto half = k_max_window / 2U;
+            auto c0 = center > half ? center - half : 0U;
+            auto c1 = c0 + k_max_window;
+            if (c1 > count) {
+                c1 = count;
+                c0 = count > k_max_window ? count - k_max_window : 0U;
+            }
+            begin = sycl::max(begin, c0);
+            end = sycl::min(end, c1);
+            if (end <= begin) {
+                continue;
+            }
+        }
+        const auto window = end - begin;
+        const auto pick = sycl::min(
+            static_cast<std::uint32_t>(u01 * static_cast<float>(window)),
+            window - 1U);
+        return begin + pick;
     }
-    return nearest_cascade_interaction(interactions, offset, count,
-                                       energy_MeV_per_u);
+    return count;  // invalid: no energy-matched package
 }
 
-// Scale correlated final-state KE to the true projectile energy. Clamp so a
-// nearest-event fallback cannot turn a hard high-E topology into an extremely
-// soft (or super-hard) spectrum for a mismatched parent energy.
+// Scale correlated final-state KE to the true projectile energy. With the
+// tight selection band above, the natural scale is already near 1; keep a
+// narrow clamp so residual topologies cannot be hard-stretched.
 inline float cascade_event_energy_scale(const float current_energy_MeVu,
                                         const float event_energy_MeVu) noexcept {
     if (!(event_energy_MeVu > 0.0F) || !(current_energy_MeVu > 0.0F)) {
         return 1.0F;
     }
     const auto scale = current_energy_MeVu / event_energy_MeVu;
-    return sycl::clamp(scale, 0.25F, 4.0F);
+    return sycl::clamp(scale, 0.85F, 1.18F);
 }
 
 inline std::uint32_t neutral_cross_section_lower_bound(
@@ -4704,6 +4732,33 @@ TransportResult transport_sycl(const TransportConfig& config,
                                             projectile.interaction_offset,
                                             projectile.interaction_count,
                                             current_energy_MeVu, package_uniform);
+                                    // No energy-matched final state: count the nuclear
+                                    // removal and deposit the projectile KE locally so
+                                    // we do not invent a distant soft/hard topology.
+                                    if (selected >= projectile.interaction_count) {
+                                        cascade_summary.interaction_count = 1;
+                                        cascade_summary.incident_energy_MeV = energy_MeV;
+                                        profile_add(
+                                            profile_counters_device,
+                                            TransportProfileSlot::secondary_cascade);
+                                        deposit_local_heat_device(
+                                            energy_MeV, position_x_mm, position_y_mm,
+                                            position_z_mm, direction_x, direction_y,
+                                            direction_z, depth_bin_width_mm,
+                                            number_of_bins, enable_voxel_scoring,
+                                            voxel_min_x_mm, voxel_min_y_mm,
+                                            voxel_size_x_mm, voxel_size_y_mm,
+                                            voxel_bins_x, voxel_bins_y, voxel_plane_size,
+                                            nullptr, fragment_dose_device, species_index,
+                                            voxel_dose_device,
+                                            enable_charged_origin_voxel_scoring,
+                                            charged_origin_voxel_dose_device,
+                                            charged_origin_voxel_offset);
+                                        cascade_summary.residual_local_MeV += energy_MeV;
+                                        deposited_MeV += energy_MeV;
+                                        energy_MeV = 0.0F;
+                                        continue;
+                                    }
                                     const auto interaction = cascade_interactions_device[
                                         projectile.interaction_offset + selected];
                                     const auto energy_scale = cascade_event_energy_scale(

@@ -22,13 +22,14 @@ enable_neutral_transport: false
 electronic_buildup_fraction: 0.06
 electronic_buildup_mfp_mm: 0.5
 maximum_cascade_generations: 2
-# Scale with histories (CUDA auto = 4 slots/history) so LET does not acquire
-# a particle-count-dependent fragment truncation bias.
-secondary_queue_capacity: 0
+# CUDA auto (4/history) overflows cascade at 100k–400 MeV and truncates
+# fragment transport → all-hadron LET tail error. Keep ≥20 slots/history.
+secondary_queue_capacity: 2500000
 max_device_memory_fraction: 0.50
 random_seed: 20260715
 stopping_power_file: data/stopping_power_water_geant4_11_3_2.csv
-use_particle_specific_stopping_power: false
+# Exact isotope SP tables: required for best all-hadron LET agreement.
+use_particle_specific_stopping_power: true
 particle_stopping_power_file: data/ion_stopping_power_water_geant4_11_3_2.csv
 nuclear_cross_section_file: data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv
 reaction_package_file: validation/results/topas_400MeVu_cascade_g4_11_3_2_aligned_primary_3d.bin
