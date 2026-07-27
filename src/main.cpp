@@ -129,6 +129,8 @@ void accumulate_transport_result(carbon::TransportResult& total,
     add_vector_in_place(total.birth_cos_hist, part.birth_cos_hist);
     add_vector_in_place(total.birth_parent_mevu_hist, part.birth_parent_mevu_hist);
     add_vector_in_place(total.birth_parent_z_hist, part.birth_parent_z_hist);
+    add_vector_in_place(total.birth_parent_product_mevu_hist,
+                        part.birth_parent_product_mevu_hist);
     add_vector_in_place(total.primary_c12_voxel_letd_numerator,
                         part.primary_c12_voxel_letd_numerator);
     add_vector_in_place(total.primary_c12_voxel_letd_denominator,

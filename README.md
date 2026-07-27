@@ -40,7 +40,7 @@
 - 元素分组（C/B/Be/Li/He/H）与可选轻同位素诊断
 - 分子/分母 FP64 atomic moments，写盘前再相除
 - 与 TOPAS `myHadronLET` 对齐的定义与水中 SOBP 验证（细节见 [`futureStep.md`](futureStep.md) A 节）
-- 可选 **碎片产生能谱**（`fragment_birth_spectrum_output_file`）：p/d/t/He-3/He-4 按代数、MeV/u、深度、角度、父粒子条件直方图；多能量套件见 `validation/scripts/run_birth_spectrum_energy_suite.py`
+- 可选 **碎片产生能谱**（`fragment_birth_spectrum_output_file`）：p/d/t/He-3/He-4，**按 generation 分箱** 的 MeV/u、深度、角度、父粒子谱，以及 parent×product 联合谱；见 `validation/scripts/run_birth_spectrum_energy_suite.py`、`run_gen1_conditioned_compare.py`
 - cascade 末态采样按 **入射能量带宽** 选择事件（不再固定 8 事件 index 窗口）
 
 ### 几何与材料

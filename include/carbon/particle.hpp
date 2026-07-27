@@ -93,6 +93,38 @@ constexpr std::size_t birth_parent_z_bin(const int parent_atomic_number) noexcep
     return static_cast<std::size_t>(parent_atomic_number);
 }
 
+// Histogram layout helpers: species-major, then generation, then bin.
+// index = ((category * birth_generation_bin_count) + gen) * n_bins + bin
+constexpr std::size_t birth_hist_index(const std::size_t category,
+                                       const std::size_t generation,
+                                       const std::size_t bin,
+                                       const std::size_t n_bins) noexcept {
+    return (category * birth_generation_bin_count + generation) * n_bins + bin;
+}
+
+constexpr std::size_t birth_hist_plane_size(const std::size_t n_bins) noexcept {
+    return light_isotope_category_count * birth_generation_bin_count * n_bins;
+}
+
+// Joint parent MeV/u × product MeV/u histogram (species × generation).
+// index = birth_hist_index(cat, gen, 0, parent_bins*product_bins)
+//       + parent_bin * product_bins + product_bin
+constexpr std::size_t birth_joint_bins() noexcept {
+    return birth_parent_mevu_bin_count * birth_mevu_bin_count;
+}
+
+constexpr std::size_t birth_joint_index(const std::size_t category,
+                                        const std::size_t generation,
+                                        const std::size_t parent_bin,
+                                        const std::size_t product_bin) noexcept {
+    return birth_hist_index(category, generation, 0, birth_joint_bins()) +
+           parent_bin * birth_mevu_bin_count + product_bin;
+}
+
+constexpr std::size_t birth_joint_plane_size() noexcept {
+    return birth_hist_plane_size(birth_joint_bins());
+}
+
 constexpr std::uint8_t charged_dose_category(const int atomic_number,
                                              const int mass_number) noexcept {
     if (atomic_number == 1 && mass_number == 1) {

@@ -1032,6 +1032,7 @@ inline void score_fragment_birth_device(
     std::uint64_t* cos_hist,
     std::uint64_t* parent_mevu_hist,
     std::uint64_t* parent_z_hist,
+    std::uint64_t* parent_product_mevu_hist,
     const int atomic_number,
     const int mass_number,
     const float kinetic_energy_MeV,
@@ -1068,10 +1069,12 @@ inline void score_fragment_birth_device(
     if (mevu_hist != nullptr) {
         const auto ebin =
             birth_mevu_bin(static_cast<double>(kinetic_energy_MeV), mass_number);
+        const auto index =
+            birth_hist_index(category, gen, ebin, birth_mevu_bin_count);
         sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
                          sycl::memory_scope::device,
                          sycl::access::address_space::global_space>
-            atomic_e(mevu_hist[category * birth_mevu_bin_count + ebin]);
+            atomic_e(mevu_hist[index]);
         atomic_e.fetch_add(1ULL);
     }
     if (depth_hist != nullptr && depth_bin_count > 0 && depth_bin_width_mm > 0.0F &&
@@ -1080,36 +1083,55 @@ inline void score_fragment_birth_device(
         if (zbin >= depth_bin_count) {
             zbin = depth_bin_count - 1;
         }
+        const auto index = birth_hist_index(category, gen, zbin, depth_bin_count);
         sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
                          sycl::memory_scope::device,
                          sycl::access::address_space::global_space>
-            atomic_z(depth_hist[category * depth_bin_count + zbin]);
+            atomic_z(depth_hist[index]);
         atomic_z.fetch_add(1ULL);
     }
     if (cos_hist != nullptr) {
         const auto cbin = birth_cos_bin(static_cast<double>(direction_z));
+        const auto index =
+            birth_hist_index(category, gen, cbin, birth_cos_bin_count);
         sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
                          sycl::memory_scope::device,
                          sycl::access::address_space::global_space>
-            atomic_c(cos_hist[category * birth_cos_bin_count + cbin]);
+            atomic_c(cos_hist[index]);
         atomic_c.fetch_add(1ULL);
     }
     if (parent_mevu_hist != nullptr) {
         const auto pbin = birth_parent_mevu_bin(
             static_cast<double>(parent_kinetic_energy_MeV), parent_mass_number);
+        const auto index =
+            birth_hist_index(category, gen, pbin, birth_parent_mevu_bin_count);
         sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
                          sycl::memory_scope::device,
                          sycl::access::address_space::global_space>
-            atomic_p(parent_mevu_hist[category * birth_parent_mevu_bin_count + pbin]);
+            atomic_p(parent_mevu_hist[index]);
         atomic_p.fetch_add(1ULL);
     }
     if (parent_z_hist != nullptr) {
         const auto zbin = birth_parent_z_bin(parent_atomic_number);
+        const auto index =
+            birth_hist_index(category, gen, zbin, birth_parent_z_bin_count);
         sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
                          sycl::memory_scope::device,
                          sycl::access::address_space::global_space>
-            atomic_pz(parent_z_hist[category * birth_parent_z_bin_count + zbin]);
+            atomic_pz(parent_z_hist[index]);
         atomic_pz.fetch_add(1ULL);
+    }
+    if (parent_product_mevu_hist != nullptr) {
+        const auto pbin = birth_parent_mevu_bin(
+            static_cast<double>(parent_kinetic_energy_MeV), parent_mass_number);
+        const auto ebin =
+            birth_mevu_bin(static_cast<double>(kinetic_energy_MeV), mass_number);
+        const auto index = birth_joint_index(category, gen, pbin, ebin);
+        sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
+                         sycl::memory_scope::device,
+                         sycl::access::address_space::global_space>
+            atomic_j(parent_product_mevu_hist[index]);
+        atomic_j.fetch_add(1ULL);
     }
 }
 }  // namespace
@@ -1367,16 +1389,14 @@ TransportResult transport_sycl(const TransportConfig& config,
         if (enable_birth_spectrum) {
             bytes += light_isotope_category_count * birth_generation_bin_count *
                      (sizeof(std::uint64_t) + sizeof(double));
-            bytes += light_isotope_category_count * birth_mevu_bin_count *
-                     sizeof(std::uint64_t);
-            bytes += light_isotope_category_count * number_of_bins *
-                     sizeof(std::uint64_t);
-            bytes += light_isotope_category_count * birth_cos_bin_count *
-                     sizeof(std::uint64_t);
-            bytes += light_isotope_category_count * birth_parent_mevu_bin_count *
-                     sizeof(std::uint64_t);
-            bytes += light_isotope_category_count * birth_parent_z_bin_count *
-                     sizeof(std::uint64_t);
+            bytes += birth_hist_plane_size(birth_mevu_bin_count) * sizeof(std::uint64_t);
+            bytes += birth_hist_plane_size(number_of_bins) * sizeof(std::uint64_t);
+            bytes += birth_hist_plane_size(birth_cos_bin_count) * sizeof(std::uint64_t);
+            bytes +=
+                birth_hist_plane_size(birth_parent_mevu_bin_count) * sizeof(std::uint64_t);
+            bytes +=
+                birth_hist_plane_size(birth_parent_z_bin_count) * sizeof(std::uint64_t);
+            bytes += birth_joint_plane_size() * sizeof(std::uint64_t);
         }
         bytes += number_of_histories * (3 * sizeof(float) + sizeof(std::uint32_t));
         bytes += primary_spot_count * sizeof(PrimarySpotBatchEntry);
@@ -1565,16 +1585,14 @@ TransportResult transport_sycl(const TransportConfig& config,
             : nullptr;
     const auto birth_gen_size =
         light_isotope_category_count * birth_generation_bin_count;
-    const auto birth_mevu_size =
-        light_isotope_category_count * birth_mevu_bin_count;
-    const auto birth_depth_size =
-        light_isotope_category_count * number_of_bins;
-    const auto birth_cos_size =
-        light_isotope_category_count * birth_cos_bin_count;
+    const auto birth_mevu_size = birth_hist_plane_size(birth_mevu_bin_count);
+    const auto birth_depth_size = birth_hist_plane_size(number_of_bins);
+    const auto birth_cos_size = birth_hist_plane_size(birth_cos_bin_count);
     const auto birth_parent_mevu_size =
-        light_isotope_category_count * birth_parent_mevu_bin_count;
+        birth_hist_plane_size(birth_parent_mevu_bin_count);
     const auto birth_parent_z_size =
-        light_isotope_category_count * birth_parent_z_bin_count;
+        birth_hist_plane_size(birth_parent_z_bin_count);
+    const auto birth_joint_size = birth_joint_plane_size();
     auto* birth_counts_device =
         enable_birth_spectrum
             ? sycl::malloc_device<std::uint64_t>(birth_gen_size, queue)
@@ -1601,6 +1619,10 @@ TransportResult transport_sycl(const TransportConfig& config,
     auto* birth_parent_z_hist_device =
         enable_birth_spectrum
             ? sycl::malloc_device<std::uint64_t>(birth_parent_z_size, queue)
+            : nullptr;
+    auto* birth_parent_product_mevu_hist_device =
+        enable_birth_spectrum
+            ? sycl::malloc_device<std::uint64_t>(birth_joint_size, queue)
             : nullptr;
     auto* voxel_dose_device = enable_voxel_scoring
                                   ? sycl::malloc_device<DoseAtomicT>(number_of_voxels, queue)
@@ -1812,6 +1834,7 @@ TransportResult transport_sycl(const TransportConfig& config,
             free_device(birth_cos_hist_device);
             free_device(birth_parent_mevu_hist_device);
             free_device(birth_parent_z_hist_device);
+            free_device(birth_parent_product_mevu_hist_device);
             free_device(voxel_dose_device);
             free_device(charged_origin_voxel_dose_device);
             free_device(deposited_device);
@@ -2288,7 +2311,8 @@ TransportResult transport_sycl(const TransportConfig& config,
           birth_mevu_hist_device == nullptr || birth_depth_hist_device == nullptr ||
           birth_cos_hist_device == nullptr ||
           birth_parent_mevu_hist_device == nullptr ||
-          birth_parent_z_hist_device == nullptr)) ||
+          birth_parent_z_hist_device == nullptr ||
+          birth_parent_product_mevu_hist_device == nullptr)) ||
         (enable_voxel_scoring && voxel_dose_device == nullptr) ||
         (enable_charged_origin_voxel_scoring &&
          charged_origin_voxel_dose_device == nullptr) ||
@@ -2317,6 +2341,7 @@ TransportResult transport_sycl(const TransportConfig& config,
         free_device(birth_cos_hist_device);
         free_device(birth_parent_mevu_hist_device);
         free_device(birth_parent_z_hist_device);
+        free_device(birth_parent_product_mevu_hist_device);
         free_device(voxel_dose_device);
         free_device(charged_origin_voxel_dose_device);
         free_device(deposited_device);
@@ -2448,6 +2473,8 @@ TransportResult transport_sycl(const TransportConfig& config,
                      birth_parent_mevu_size * sizeof(std::uint64_t));
         queue.memset(birth_parent_z_hist_device, 0,
                      birth_parent_z_size * sizeof(std::uint64_t));
+        queue.memset(birth_parent_product_mevu_hist_device, 0,
+                     birth_joint_size * sizeof(std::uint64_t));
     }
 #ifdef CARBON_TRANSPORT_PROFILE
     if (profile_counters_device != nullptr) {
@@ -3539,6 +3566,7 @@ TransportResult transport_sycl(const TransportConfig& config,
                                         birth_cos_hist_device,
                                         birth_parent_mevu_hist_device,
                                         birth_parent_z_hist_device,
+                                        birth_parent_product_mevu_hist_device,
                                         secondary.atomic_number, secondary.mass_number,
                                         scaled_secondary_energy_MeV, position_z_mm,
                                         child_direction.z, /*generation=*/0,
@@ -4762,6 +4790,7 @@ TransportResult transport_sycl(const TransportConfig& config,
                                                 depth_bin_width_mm, birth_cos_hist_device,
                                                 birth_parent_mevu_hist_device,
                                                 birth_parent_z_hist_device,
+                                                birth_parent_product_mevu_hist_device,
                                                 product.atomic_number, product.mass_number,
                                                 scaled_energy, position_z_mm,
                                                 child_direction.z,
@@ -6074,6 +6103,7 @@ TransportResult transport_sycl(const TransportConfig& config,
     std::vector<std::uint64_t> birth_cos_host;
     std::vector<std::uint64_t> birth_parent_mevu_host;
     std::vector<std::uint64_t> birth_parent_z_host;
+    std::vector<std::uint64_t> birth_parent_product_mevu_host;
     if (enable_birth_spectrum) {
         birth_counts_host.resize(birth_gen_size);
         birth_ke_sum_host.resize(birth_gen_size);
@@ -6082,6 +6112,7 @@ TransportResult transport_sycl(const TransportConfig& config,
         birth_cos_host.resize(birth_cos_size);
         birth_parent_mevu_host.resize(birth_parent_mevu_size);
         birth_parent_z_host.resize(birth_parent_z_size);
+        birth_parent_product_mevu_host.resize(birth_joint_size);
         queue.copy(birth_counts_device, birth_counts_host.data(), birth_gen_size);
         queue.copy(birth_ke_sum_device, birth_ke_sum_host.data(), birth_gen_size);
         queue.copy(birth_mevu_hist_device, birth_mevu_host.data(), birth_mevu_size);
@@ -6090,7 +6121,9 @@ TransportResult transport_sycl(const TransportConfig& config,
         queue.copy(birth_parent_mevu_hist_device, birth_parent_mevu_host.data(),
                    birth_parent_mevu_size);
         queue.copy(birth_parent_z_hist_device, birth_parent_z_host.data(),
-                   birth_parent_z_size)
+                   birth_parent_z_size);
+        queue.copy(birth_parent_product_mevu_hist_device,
+                   birth_parent_product_mevu_host.data(), birth_joint_size)
             .wait_and_throw();
     }
     if (enable_voxel_scoring) {
@@ -6218,6 +6251,7 @@ TransportResult transport_sycl(const TransportConfig& config,
     free_device(birth_cos_hist_device);
     free_device(birth_parent_mevu_hist_device);
     free_device(birth_parent_z_hist_device);
+    free_device(birth_parent_product_mevu_hist_device);
     free_device(voxel_dose_device);
     free_device(charged_origin_voxel_dose_device);
     free_device(deposited_device);
@@ -6431,6 +6465,8 @@ TransportResult transport_sycl(const TransportConfig& config,
         result.birth_cos_hist = std::move(birth_cos_host);
         result.birth_parent_mevu_hist = std::move(birth_parent_mevu_host);
         result.birth_parent_z_hist = std::move(birth_parent_z_host);
+        result.birth_parent_product_mevu_hist =
+            std::move(birth_parent_product_mevu_host);
     }
     if (config.primary_spot_batch.empty()) {
         result.initial_energy_MeV =

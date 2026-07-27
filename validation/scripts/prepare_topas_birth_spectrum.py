@@ -1,16 +1,15 @@
 #!/usr/bin/env python3
 """Histogram TOPAS cascade/primary product CSVs into GPU-compatible birth spectra.
 
-No third-party dependencies (stdlib csv/gzip only).
+Stdlib only. Histogram CSVs include a generation column matching GPU output:
 
-Writes the same CSV suite as carbon_mc fragment_birth_spectrum_output_file:
+  species,generation,mevu_bin_low,mevu_bin_high,count
+  species,generation,parent_mevu_bin_low,parent_mevu_bin_high,count
 
-  <prefix>_summary.csv
-  <prefix>_mevu.csv
-  <prefix>_depth.csv
-  <prefix>_costheta.csv
-  <prefix>_parent_mevu.csv
-  <prefix>_parent_z.csv
+Cascade products default to generation=1; primary secondaries to generation=0.
+
+Optional filters for conditioned gen1 references:
+  --parent-z-min/max, --parent-mevu-min/max, --projectile-z/a
 """
 
 from __future__ import annotations
@@ -20,7 +19,7 @@ import csv
 import gzip
 from collections import defaultdict
 from pathlib import Path
-from typing import Dict, Iterable, Optional, Text, Tuple
+from typing import Dict, Iterable, Optional, Tuple
 
 SPECIES = ("proton", "deuteron", "triton", "he3", "he4")
 SPECIES_ZA = {
@@ -45,9 +44,7 @@ def open_rows(path: Path) -> Iterable[Dict[str, str]]:
     else:
         fh = open(path, "r", encoding="utf-8", newline="")
     with fh:
-        reader = csv.DictReader(fh)
-        for row in reader:
-            yield row
+        yield from csv.DictReader(fh)
 
 
 def species_name(z: int, a: int) -> Optional[str]:
@@ -82,15 +79,29 @@ def parent_z_bin(z: int) -> int:
     return min(int(z), PARENT_Z_BINS - 1)
 
 
+def _int(row: Dict[str, str], *keys: str, default: int = 0) -> int:
+    for k in keys:
+        if k in row and row[k] != "":
+            return int(float(row[k]))
+    return default
+
+
+def _float(row: Dict[str, str], *keys: str, default: float = 0.0) -> float:
+    for k in keys:
+        if k in row and row[k] != "":
+            return float(row[k])
+    return default
+
+
 def write_suite(
     prefix: Path,
     counts_gen: Dict[Tuple[str, int], int],
     ke_sum_gen: Dict[Tuple[str, int], float],
-    mevu_hist: Dict[Tuple[str, int], int],
-    depth_hist: Dict[Tuple[str, float], int],
-    cos_hist: Dict[Tuple[str, int], int],
-    parent_mevu_hist: Dict[Tuple[str, int], int],
-    parent_z_hist: Dict[Tuple[str, int], int],
+    mevu_hist: Dict[Tuple[str, int, int], int],
+    depth_hist: Dict[Tuple[str, int, float], int],
+    cos_hist: Dict[Tuple[str, int, int], int],
+    parent_mevu_hist: Dict[Tuple[str, int, int], int],
+    parent_z_hist: Dict[Tuple[str, int, int], int],
     histories: int,
 ) -> None:
     prefix.parent.mkdir(parents=True, exist_ok=True)
@@ -115,71 +126,79 @@ def write_suite(
 
     with open(f"{prefix}_mevu.csv", "w", encoding="utf-8", newline="") as f:
         w = csv.writer(f)
-        w.writerow(["species", "mevu_bin_low", "mevu_bin_high", "count"])
+        w.writerow(
+            ["species", "generation", "mevu_bin_low", "mevu_bin_high", "count"]
+        )
         for sp in SPECIES:
-            for b in range(MEVU_BINS):
-                c = mevu_hist.get((sp, b), 0)
-                if not c:
-                    continue
-                low = b * MEVU_BIN_WIDTH
-                w.writerow([sp, f"{low:.12g}", f"{low + MEVU_BIN_WIDTH:.12g}", c])
+            for gen in range(GEN_BINS):
+                for b in range(MEVU_BINS):
+                    c = mevu_hist.get((sp, gen, b), 0)
+                    if not c:
+                        continue
+                    low = b * MEVU_BIN_WIDTH
+                    w.writerow(
+                        [sp, gen, f"{low:.12g}", f"{low + MEVU_BIN_WIDTH:.12g}", c]
+                    )
 
     with open(f"{prefix}_depth.csv", "w", encoding="utf-8", newline="") as f:
         w = csv.writer(f)
-        w.writerow(["species", "depth_mm", "count"])
-        for (sp, depth), c in sorted(depth_hist.items()):
+        w.writerow(["species", "generation", "depth_mm", "count"])
+        for (sp, gen, depth), c in sorted(depth_hist.items()):
             if c:
-                w.writerow([sp, f"{depth:.12g}", c])
+                w.writerow([sp, gen, f"{depth:.12g}", c])
 
     with open(f"{prefix}_costheta.csv", "w", encoding="utf-8", newline="") as f:
         w = csv.writer(f)
-        w.writerow(["species", "cos_bin_low", "cos_bin_high", "count"])
+        w.writerow(
+            ["species", "generation", "cos_bin_low", "cos_bin_high", "count"]
+        )
         for sp in SPECIES:
-            for b in range(COS_BINS):
-                c = cos_hist.get((sp, b), 0)
-                if not c:
-                    continue
-                low = -1.0 + 2.0 * b / COS_BINS
-                high = -1.0 + 2.0 * (b + 1) / COS_BINS
-                w.writerow([sp, f"{low:.12g}", f"{high:.12g}", c])
+            for gen in range(GEN_BINS):
+                for b in range(COS_BINS):
+                    c = cos_hist.get((sp, gen, b), 0)
+                    if not c:
+                        continue
+                    low = -1.0 + 2.0 * b / COS_BINS
+                    high = -1.0 + 2.0 * (b + 1) / COS_BINS
+                    w.writerow([sp, gen, f"{low:.12g}", f"{high:.12g}", c])
 
     with open(f"{prefix}_parent_mevu.csv", "w", encoding="utf-8", newline="") as f:
         w = csv.writer(f)
         w.writerow(
-            ["species", "parent_mevu_bin_low", "parent_mevu_bin_high", "count"]
+            [
+                "species",
+                "generation",
+                "parent_mevu_bin_low",
+                "parent_mevu_bin_high",
+                "count",
+            ]
         )
         for sp in SPECIES:
-            for b in range(PARENT_MEVU_BINS):
-                c = parent_mevu_hist.get((sp, b), 0)
-                if not c:
-                    continue
-                low = b * PARENT_MEVU_BIN_WIDTH
-                w.writerow(
-                    [sp, f"{low:.12g}", f"{low + PARENT_MEVU_BIN_WIDTH:.12g}", c]
-                )
+            for gen in range(GEN_BINS):
+                for b in range(PARENT_MEVU_BINS):
+                    c = parent_mevu_hist.get((sp, gen, b), 0)
+                    if not c:
+                        continue
+                    low = b * PARENT_MEVU_BIN_WIDTH
+                    w.writerow(
+                        [
+                            sp,
+                            gen,
+                            f"{low:.12g}",
+                            f"{low + PARENT_MEVU_BIN_WIDTH:.12g}",
+                            c,
+                        ]
+                    )
 
     with open(f"{prefix}_parent_z.csv", "w", encoding="utf-8", newline="") as f:
         w = csv.writer(f)
-        w.writerow(["species", "parent_Z", "count"])
+        w.writerow(["species", "generation", "parent_Z", "count"])
         for sp in SPECIES:
-            for b in range(PARENT_Z_BINS):
-                c = parent_z_hist.get((sp, b), 0)
-                if c:
-                    w.writerow([sp, b, c])
-
-
-def _int(row: Dict[str, str], *keys: str, default: int = 0) -> int:
-    for k in keys:
-        if k in row and row[k] != "":
-            return int(float(row[k]))
-    return default
-
-
-def _float(row: Dict[str, str], *keys: str, default: float = 0.0) -> float:
-    for k in keys:
-        if k in row and row[k] != "":
-            return float(row[k])
-    return default
+            for gen in range(GEN_BINS):
+                for b in range(PARENT_Z_BINS):
+                    c = parent_z_hist.get((sp, gen, b), 0)
+                    if c:
+                        w.writerow([sp, gen, b, c])
 
 
 def process_primary(
@@ -187,6 +206,7 @@ def process_primary(
     reactions_path: Optional[Path],
     histories: int,
     prefix: Path,
+    generation: int,
 ) -> None:
     parent_ke_by_reaction: Dict[int, float] = {}
     if reactions_path is not None:
@@ -202,11 +222,11 @@ def process_primary(
 
     counts_gen: Dict[Tuple[str, int], int] = defaultdict(int)
     ke_sum_gen: Dict[Tuple[str, int], float] = defaultdict(float)
-    mevu_hist: Dict[Tuple[str, int], int] = defaultdict(int)
-    depth_hist: Dict[Tuple[str, float], int] = defaultdict(int)
-    cos_hist: Dict[Tuple[str, int], int] = defaultdict(int)
-    parent_mevu_hist: Dict[Tuple[str, int], int] = defaultdict(int)
-    parent_z_hist: Dict[Tuple[str, int], int] = defaultdict(int)
+    mevu_hist: Dict[Tuple[str, int, int], int] = defaultdict(int)
+    depth_hist: Dict[Tuple[str, int, float], int] = defaultdict(int)
+    cos_hist: Dict[Tuple[str, int, int], int] = defaultdict(int)
+    parent_mevu_hist: Dict[Tuple[str, int, int], int] = defaultdict(int)
+    parent_z_hist: Dict[Tuple[str, int, int], int] = defaultdict(int)
 
     for row in open_rows(products_path):
         z = _int(row, "atomic_number_Z", "Z")
@@ -215,16 +235,16 @@ def process_primary(
         if sp is None:
             continue
         ke = _float(row, "kinetic_energy_MeV")
-        gen = 0
+        gen = generation
         counts_gen[(sp, gen)] += 1
         ke_sum_gen[(sp, gen)] += ke
-        mevu_hist[(sp, mevu_bin(ke, a))] += 1
+        mevu_hist[(sp, gen, mevu_bin(ke, a))] += 1
         if "direction_z" in row and row["direction_z"] != "":
-            cos_hist[(sp, cos_bin(float(row["direction_z"])))] += 1
+            cos_hist[(sp, gen, cos_bin(float(row["direction_z"])))] += 1
         rid = _int(row, "reaction_id", "interaction_id", default=-1)
         parent_ke = parent_ke_by_reaction.get(rid, 0.0)
-        parent_mevu_hist[(sp, parent_mevu_bin(parent_ke, 12))] += 1
-        parent_z_hist[(sp, parent_z_bin(6))] += 1
+        parent_mevu_hist[(sp, gen, parent_mevu_bin(parent_ke, 12))] += 1
+        parent_z_hist[(sp, gen, parent_z_bin(6))] += 1
 
     write_suite(
         prefix,
@@ -244,46 +264,91 @@ def process_cascade(
     interactions_path: Optional[Path],
     histories: int,
     prefix: Path,
-) -> None:
+    generation: int,
+    parent_z_min: Optional[int],
+    parent_z_max: Optional[int],
+    parent_mevu_min: Optional[float],
+    parent_mevu_max: Optional[float],
+    projectile_z: Optional[int],
+    projectile_a: Optional[int],
+) -> Dict[str, int]:
     parent_by_interaction: Dict[int, Tuple[int, int, float]] = {}
     if interactions_path is not None:
         for row in open_rows(interactions_path):
             iid = _int(row, "interaction_id")
             pz = _int(row, "projectile_z", "projectile_Z")
             pa = _int(row, "projectile_a", "projectile_A")
-            ike = _float(row, "incident_energy_mev", "incident_energy_MeV")
+            ike = _float(
+                row,
+                "incident_energy_MeV_per_u",
+                "incident_energy_mev_per_u",
+                "incident_energy_MeV",
+            )
+            # Prefer MeV/u when present; if only total MeV given, convert later.
+            if "incident_energy_MeV_per_u" not in row and "incident_energy_mev_per_u" not in row:
+                if pa > 0 and ike > 0:
+                    # column was total MeV
+                    ike = ike / float(pa)
             parent_by_interaction[iid] = (pz, pa, ike)
 
     counts_gen: Dict[Tuple[str, int], int] = defaultdict(int)
     ke_sum_gen: Dict[Tuple[str, int], float] = defaultdict(float)
-    mevu_hist: Dict[Tuple[str, int], int] = defaultdict(int)
-    depth_hist: Dict[Tuple[str, float], int] = defaultdict(int)
-    cos_hist: Dict[Tuple[str, int], int] = defaultdict(int)
-    parent_mevu_hist: Dict[Tuple[str, int], int] = defaultdict(int)
-    parent_z_hist: Dict[Tuple[str, int], int] = defaultdict(int)
+    mevu_hist: Dict[Tuple[str, int, int], int] = defaultdict(int)
+    depth_hist: Dict[Tuple[str, int, float], int] = defaultdict(int)
+    cos_hist: Dict[Tuple[str, int, int], int] = defaultdict(int)
+    parent_mevu_hist: Dict[Tuple[str, int, int], int] = defaultdict(int)
+    parent_z_hist: Dict[Tuple[str, int, int], int] = defaultdict(int)
 
+    kept = 0
+    skipped = 0
     for row in open_rows(products_path):
         z = _int(row, "Z", "atomic_number_Z")
         a = _int(row, "A", "mass_number_A")
         sp = species_name(z, a)
         if sp is None:
             continue
-        ke = _float(row, "kinetic_energy_MeV")
-        gen = 1  # package rows treated as first cascade generation
-        counts_gen[(sp, gen)] += 1
-        ke_sum_gen[(sp, gen)] += ke
-        mevu_hist[(sp, mevu_bin(ke, a))] += 1
-        if "direction_z" in row and row["direction_z"] != "":
-            cos_hist[(sp, cos_bin(float(row["direction_z"])))] += 1
         iid = _int(row, "interaction_id", default=-1)
         if iid in parent_by_interaction:
-            pz, pa, pke = parent_by_interaction[iid]
+            pz, pa, pmevu = parent_by_interaction[iid]
+            # If stored as total MeV under wrong key, repair when pe is large and A known
+            if pmevu > 1000 and pa > 0:
+                pmevu = pmevu / float(pa)
         else:
-            pz, pa, pke = 6, 12, 0.0
-        parent_mevu_hist[(sp, parent_mevu_bin(pke, pa if pa > 0 else 12))] += 1
-        parent_z_hist[(sp, parent_z_bin(pz))] += 1
+            pz, pa, pmevu = 0, 0, 0.0
+
+        if projectile_z is not None and pz != projectile_z:
+            skipped += 1
+            continue
+        if projectile_a is not None and pa != projectile_a:
+            skipped += 1
+            continue
+        if parent_z_min is not None and pz < parent_z_min:
+            skipped += 1
+            continue
+        if parent_z_max is not None and pz > parent_z_max:
+            skipped += 1
+            continue
+        if parent_mevu_min is not None and pmevu < parent_mevu_min:
+            skipped += 1
+            continue
+        if parent_mevu_max is not None and pmevu > parent_mevu_max:
+            skipped += 1
+            continue
+
+        ke = _float(row, "kinetic_energy_MeV")
+        gen = generation
+        counts_gen[(sp, gen)] += 1
+        ke_sum_gen[(sp, gen)] += ke
+        mevu_hist[(sp, gen, mevu_bin(ke, a))] += 1
+        if "direction_z" in row and row["direction_z"] != "":
+            cos_hist[(sp, gen, cos_bin(float(row["direction_z"])))] += 1
+        # parent_mevu_bin expects total KE and A; convert MeV/u back to total.
+        parent_total_ke = pmevu * float(pa) if pa > 0 else 0.0
+        parent_mevu_hist[(sp, gen, parent_mevu_bin(parent_total_ke, pa if pa > 0 else 12))] += 1
+        parent_z_hist[(sp, gen, parent_z_bin(pz))] += 1
         if "vertex_z_mm" in row and row["vertex_z_mm"] != "":
-            depth_hist[(sp, float(row["vertex_z_mm"]))] += 1
+            depth_hist[(sp, gen, float(row["vertex_z_mm"]))] += 1
+        kept += 1
 
     write_suite(
         prefix,
@@ -296,6 +361,7 @@ def process_cascade(
         parent_z_hist,
         histories,
     )
+    return {"kept": kept, "skipped": skipped}
 
 
 def main() -> None:
@@ -304,23 +370,49 @@ def main() -> None:
     parser.add_argument("--interactions", type=Path, default=None)
     parser.add_argument("--reactions", type=Path, default=None)
     parser.add_argument(
-        "--source",
-        choices=("primary", "cascade"),
-        required=True,
+        "--source", choices=("primary", "cascade"), required=True
     )
     parser.add_argument("--histories", type=int, required=True)
     parser.add_argument("--output-prefix", type=Path, required=True)
+    parser.add_argument(
+        "--generation",
+        type=int,
+        default=None,
+        help="Generation label written to CSVs (default: 0 primary, 1 cascade)",
+    )
+    parser.add_argument("--parent-z-min", type=int, default=None)
+    parser.add_argument("--parent-z-max", type=int, default=None)
+    parser.add_argument("--parent-mevu-min", type=float, default=None)
+    parser.add_argument("--parent-mevu-max", type=float, default=None)
+    parser.add_argument("--projectile-z", type=int, default=None)
+    parser.add_argument("--projectile-a", type=int, default=None)
     args = parser.parse_args()
 
     if args.source == "primary":
+        gen = 0 if args.generation is None else args.generation
         process_primary(
-            args.products, args.reactions, args.histories, args.output_prefix
+            args.products, args.reactions, args.histories, args.output_prefix, gen
         )
+        print(f"Wrote birth spectrum suite under {args.output_prefix}_*.csv (gen={gen})")
     else:
-        process_cascade(
-            args.products, args.interactions, args.histories, args.output_prefix
+        gen = 1 if args.generation is None else args.generation
+        stats = process_cascade(
+            args.products,
+            args.interactions,
+            args.histories,
+            args.output_prefix,
+            gen,
+            args.parent_z_min,
+            args.parent_z_max,
+            args.parent_mevu_min,
+            args.parent_mevu_max,
+            args.projectile_z,
+            args.projectile_a,
         )
-    print(f"Wrote birth spectrum suite under {args.output_prefix}_*.csv")
+        print(
+            f"Wrote birth spectrum suite under {args.output_prefix}_*.csv "
+            f"(gen={gen}, kept={stats['kept']}, skipped={stats['skipped']})"
+        )
 
 
 if __name__ == "__main__":

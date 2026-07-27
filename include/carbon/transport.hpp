@@ -45,13 +45,16 @@ struct TransportResult {
     std::vector<double> light_isotope_letd_denominator;
     // Optional light-isotope birth spectra (p/d/t/He-3/He-4). Layout documented
     // in particle.hpp birth_* constants. Counts are event tallies (not /primary).
+    // Histograms are species × generation × bin (see birth_hist_index).
     std::vector<std::uint64_t> birth_counts_by_generation;  // cat * gen_bins
     std::vector<double> birth_ke_sum_MeV_by_generation;     // cat * gen_bins
-    std::vector<std::uint64_t> birth_mevu_hist;             // cat * mevu_bins
-    std::vector<std::uint64_t> birth_depth_hist;            // cat * depth_bins
-    std::vector<std::uint64_t> birth_cos_hist;              // cat * cos_bins
-    std::vector<std::uint64_t> birth_parent_mevu_hist;      // cat * parent_mevu
-    std::vector<std::uint64_t> birth_parent_z_hist;         // cat * parent_z
+    std::vector<std::uint64_t> birth_mevu_hist;             // cat*gen*mevu_bins
+    std::vector<std::uint64_t> birth_depth_hist;            // cat*gen*depth_bins
+    std::vector<std::uint64_t> birth_cos_hist;              // cat*gen*cos_bins
+    std::vector<std::uint64_t> birth_parent_mevu_hist;      // cat*gen*parent_mevu
+    std::vector<std::uint64_t> birth_parent_z_hist;         // cat*gen*parent_z
+    // cat*gen*(parent_mevu_bins * product_mevu_bins)
+    std::vector<std::uint64_t> birth_parent_product_mevu_hist;
     // Same four moments on the optional voxel grid (z-major, x fastest).
     std::vector<double> primary_c12_voxel_letd_numerator;
     std::vector<double> primary_c12_voxel_letd_denominator;

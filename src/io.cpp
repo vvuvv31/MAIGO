@@ -441,11 +441,13 @@ void write_fragment_birth_spectrum_csv(const std::filesystem::path& prefix,
         "proton", "deuteron", "triton", "he3", "he4"};
     const auto depth_bins = config.number_of_bins();
     const auto gen_size = categories * birth_generation_bin_count;
-    const auto mevu_size = categories * birth_mevu_bin_count;
-    const auto depth_size = categories * depth_bins;
-    const auto cos_size = categories * birth_cos_bin_count;
-    const auto parent_mevu_size = categories * birth_parent_mevu_bin_count;
-    const auto parent_z_size = categories * birth_parent_z_bin_count;
+    const auto mevu_size = birth_hist_plane_size(birth_mevu_bin_count);
+    const auto depth_size = birth_hist_plane_size(depth_bins);
+    const auto cos_size = birth_hist_plane_size(birth_cos_bin_count);
+    const auto parent_mevu_size =
+        birth_hist_plane_size(birth_parent_mevu_bin_count);
+    const auto parent_z_size = birth_hist_plane_size(birth_parent_z_bin_count);
+    const auto joint_size = birth_joint_plane_size();
 
     if (result.birth_counts_by_generation.size() != gen_size ||
         result.birth_ke_sum_MeV_by_generation.size() != gen_size ||
@@ -453,7 +455,8 @@ void write_fragment_birth_spectrum_csv(const std::filesystem::path& prefix,
         result.birth_depth_hist.size() != depth_size ||
         result.birth_cos_hist.size() != cos_size ||
         result.birth_parent_mevu_hist.size() != parent_mevu_size ||
-        result.birth_parent_z_hist.size() != parent_z_size) {
+        result.birth_parent_z_hist.size() != parent_z_size ||
+        result.birth_parent_product_mevu_hist.size() != joint_size) {
         throw std::invalid_argument(
             "Fragment birth-spectrum result size does not match configuration");
     }
@@ -489,89 +492,138 @@ void write_fragment_birth_spectrum_csv(const std::filesystem::path& prefix,
     }
     {
         auto output = write_open("_mevu.csv");
-        output << "species,mevu_bin_low,mevu_bin_high,count\n"
+        output << "species,generation,mevu_bin_low,mevu_bin_high,count\n"
                << std::setprecision(12);
         for (std::size_t cat = 0; cat < categories; ++cat) {
-            for (std::size_t bin = 0; bin < birth_mevu_bin_count; ++bin) {
-                const auto count =
-                    result.birth_mevu_hist[cat * birth_mevu_bin_count + bin];
-                if (count == 0) {
-                    continue;
+            for (std::size_t gen = 0; gen < birth_generation_bin_count; ++gen) {
+                for (std::size_t bin = 0; bin < birth_mevu_bin_count; ++bin) {
+                    const auto count = result.birth_mevu_hist[birth_hist_index(
+                        cat, gen, bin, birth_mevu_bin_count)];
+                    if (count == 0) {
+                        continue;
+                    }
+                    const auto low =
+                        static_cast<double>(bin) * birth_mevu_bin_width;
+                    output << names[cat] << ',' << gen << ',' << low << ','
+                           << (low + birth_mevu_bin_width) << ',' << count
+                           << '\n';
                 }
-                const auto low = static_cast<double>(bin) * birth_mevu_bin_width;
-                output << names[cat] << ',' << low << ','
-                       << (low + birth_mevu_bin_width) << ',' << count << '\n';
             }
         }
     }
     {
         auto output = write_open("_depth.csv");
-        output << "species,depth_mm,count\n" << std::setprecision(12);
+        output << "species,generation,depth_mm,count\n" << std::setprecision(12);
         for (std::size_t cat = 0; cat < categories; ++cat) {
-            for (std::size_t bin = 0; bin < depth_bins; ++bin) {
-                const auto count =
-                    result.birth_depth_hist[cat * depth_bins + bin];
-                if (count == 0) {
-                    continue;
+            for (std::size_t gen = 0; gen < birth_generation_bin_count; ++gen) {
+                for (std::size_t bin = 0; bin < depth_bins; ++bin) {
+                    const auto count = result.birth_depth_hist[birth_hist_index(
+                        cat, gen, bin, depth_bins)];
+                    if (count == 0) {
+                        continue;
+                    }
+                    output << names[cat] << ',' << gen << ','
+                           << (static_cast<double>(bin) + 0.5) *
+                                  config.depth_bin_width_mm
+                           << ',' << count << '\n';
                 }
-                output << names[cat] << ','
-                       << (static_cast<double>(bin) + 0.5) *
-                              config.depth_bin_width_mm
-                       << ',' << count << '\n';
             }
         }
     }
     {
         auto output = write_open("_costheta.csv");
-        output << "species,cos_bin_low,cos_bin_high,count\n"
+        output << "species,generation,cos_bin_low,cos_bin_high,count\n"
                << std::setprecision(12);
         for (std::size_t cat = 0; cat < categories; ++cat) {
-            for (std::size_t bin = 0; bin < birth_cos_bin_count; ++bin) {
-                const auto count =
-                    result.birth_cos_hist[cat * birth_cos_bin_count + bin];
-                if (count == 0) {
-                    continue;
+            for (std::size_t gen = 0; gen < birth_generation_bin_count; ++gen) {
+                for (std::size_t bin = 0; bin < birth_cos_bin_count; ++bin) {
+                    const auto count = result.birth_cos_hist[birth_hist_index(
+                        cat, gen, bin, birth_cos_bin_count)];
+                    if (count == 0) {
+                        continue;
+                    }
+                    const auto low =
+                        -1.0 + 2.0 * static_cast<double>(bin) / birth_cos_bin_count;
+                    const auto high = -1.0 + 2.0 * static_cast<double>(bin + 1) /
+                                                 birth_cos_bin_count;
+                    output << names[cat] << ',' << gen << ',' << low << ','
+                           << high << ',' << count << '\n';
                 }
-                const auto low =
-                    -1.0 + 2.0 * static_cast<double>(bin) / birth_cos_bin_count;
-                const auto high =
-                    -1.0 + 2.0 * static_cast<double>(bin + 1) / birth_cos_bin_count;
-                output << names[cat] << ',' << low << ',' << high << ',' << count
-                       << '\n';
             }
         }
     }
     {
         auto output = write_open("_parent_mevu.csv");
-        output << "species,parent_mevu_bin_low,parent_mevu_bin_high,count\n"
+        output << "species,generation,parent_mevu_bin_low,parent_mevu_bin_high,"
+                  "count\n"
                << std::setprecision(12);
         for (std::size_t cat = 0; cat < categories; ++cat) {
-            for (std::size_t bin = 0; bin < birth_parent_mevu_bin_count; ++bin) {
-                const auto count = result.birth_parent_mevu_hist
-                                       [cat * birth_parent_mevu_bin_count + bin];
-                if (count == 0) {
-                    continue;
+            for (std::size_t gen = 0; gen < birth_generation_bin_count; ++gen) {
+                for (std::size_t bin = 0; bin < birth_parent_mevu_bin_count;
+                     ++bin) {
+                    const auto count =
+                        result.birth_parent_mevu_hist[birth_hist_index(
+                            cat, gen, bin, birth_parent_mevu_bin_count)];
+                    if (count == 0) {
+                        continue;
+                    }
+                    const auto low =
+                        static_cast<double>(bin) * birth_parent_mevu_bin_width;
+                    output << names[cat] << ',' << gen << ',' << low << ','
+                           << (low + birth_parent_mevu_bin_width) << ',' << count
+                           << '\n';
                 }
-                const auto low =
-                    static_cast<double>(bin) * birth_parent_mevu_bin_width;
-                output << names[cat] << ',' << low << ','
-                       << (low + birth_parent_mevu_bin_width) << ',' << count
-                       << '\n';
             }
         }
     }
     {
         auto output = write_open("_parent_z.csv");
-        output << "species,parent_Z,count\n";
+        output << "species,generation,parent_Z,count\n";
         for (std::size_t cat = 0; cat < categories; ++cat) {
-            for (std::size_t bin = 0; bin < birth_parent_z_bin_count; ++bin) {
-                const auto count =
-                    result.birth_parent_z_hist[cat * birth_parent_z_bin_count +
-                                               bin];
-                if (count == 0) {
-                    continue;
+            for (std::size_t gen = 0; gen < birth_generation_bin_count; ++gen) {
+                for (std::size_t bin = 0; bin < birth_parent_z_bin_count;
+                     ++bin) {
+                    const auto count =
+                        result.birth_parent_z_hist[birth_hist_index(
+                            cat, gen, bin, birth_parent_z_bin_count)];
+                    if (count == 0) {
+                        continue;
+                    }
+                    output << names[cat] << ',' << gen << ',' << bin << ','
+                           << count << '\n';
                 }
-                output << names[cat] << ',' << bin << ',' << count << '\n';
+            }
+        }
+    }
+    {
+        // Sparse joint parent×product MeV/u histogram for conditioned spectrum
+        // comparisons (generation-aware).
+        auto output = write_open("_parent_product_mevu.csv");
+        output << "species,generation,parent_mevu_bin_low,parent_mevu_bin_high,"
+                  "product_mevu_bin_low,product_mevu_bin_high,count\n"
+               << std::setprecision(12);
+        for (std::size_t cat = 0; cat < categories; ++cat) {
+            for (std::size_t gen = 0; gen < birth_generation_bin_count; ++gen) {
+                for (std::size_t pbin = 0; pbin < birth_parent_mevu_bin_count;
+                     ++pbin) {
+                    for (std::size_t ebin = 0; ebin < birth_mevu_bin_count;
+                         ++ebin) {
+                        const auto count =
+                            result.birth_parent_product_mevu_hist[birth_joint_index(
+                                cat, gen, pbin, ebin)];
+                        if (count == 0) {
+                            continue;
+                        }
+                        const auto plow = static_cast<double>(pbin) *
+                                          birth_parent_mevu_bin_width;
+                        const auto elow =
+                            static_cast<double>(ebin) * birth_mevu_bin_width;
+                        output << names[cat] << ',' << gen << ',' << plow << ','
+                               << (plow + birth_parent_mevu_bin_width) << ','
+                               << elow << ',' << (elow + birth_mevu_bin_width)
+                               << ',' << count << '\n';
+                    }
+                }
             }
         }
     }

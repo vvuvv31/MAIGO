@@ -358,14 +358,28 @@ gen1 与 **完整 cascade package** 的粗比不能直接定罪采样：
 - `_parent_mevu` 直方图未分 generation，混有 gen0（C-12@高能）与 gen1（碎片@降能）；
 - package He-4 对父粒子能量条件极强：父 10–50 MeV/u 时 mean MeV/u ≈ 2–9，父 350–400 时 ≈ 190–240。
 
-**仍待做（细化诊断 → 再改 package 格式）**：
+#### 已实现（2026-07-27 再续）：generation 分箱 + 条件化 gen1
 
-1. birth scorer 增加 **generation × parent_MeV/u × product_MeV/u**（或至少 generation 分箱的 parent/product 谱）  
-2. TOPAS cascade 参考按 `projectile Z/A` + 入射 MeV/u 分箱，与 GPU gen1 对齐后再比产额/谱  
-3. 检查 cascade **截面 LUT / 反应率** 是否导致 gen1 产额偏低（不仅是末态形状）  
-4. 各代 LET numerator/denominator 贡献  
-5. 若 2–3 确认末态带宽仍不够：二进制 cascade package 改为显式  
-   `projectile × incident-energy bin × correlated final state` 存储
+- 直方图布局：`species × generation × bin`（mevu/depth/cos/parent_mevu/parent_z）  
+- 联合谱：`_parent_product_mevu.csv`（parent MeV/u × product MeV/u）  
+- TOPAS 过滤：`prepare_topas_birth_spectrum.py` 支持 projectile Z/A、parent MeV/u  
+- 条件化 runner：`run_gen1_conditioned_compare.py`、`compare_birth_joint_parent_product.py`  
+- 报告：`validation/results/birth_spectrum_gen1_conditioned_report.md`
+
+**关键结论（400 MeV，10k）**：
+
+- gen1 He4 父核以 **Z=1/2（~76%）** 为主，C-12 仅 ~7%  
+- 相对 **全 package** 的 He4 “过软” 主要是父核混合偏差（package 高能 bin 由 C12 碎裂主导）  
+- 按父核切开后：vs Z≤2 residual **GPU 偏硬**；vs C12 碎裂 **GPU 偏软**  
+- gen1 **proton** 按父能量 bin 的 mean MeV/u 与 package **≈0.85–1.05**，采样大体健康  
+
+**仍待做**：
+
+1. 联合谱再按 **parent Z/A** 分箱（或 scorer 增加 parent Z 维）  
+2. A/B：`cascade_event_energy_scale` 对 residual 末态是否过缩放  
+3. cascade **截面/反应率** 按弹核种类 vs TOPAS（解释 Z=1/2 父核占比）  
+4. 各代 LET numerator/denominator  
+5. 确认后必要时改二进制 package 布局
 
 ### 第二优先级：能量条件化的 cascade package
 
