@@ -10,8 +10,7 @@
 | 文档 | 作用 |
 |------|------|
 | **本 README** | 已实现能力、构建运行、验证摘要 |
-| [`LET.md`](LET.md) | **当前明确下一步**：LET_d 高能碎片 cascade 能谱与后续修复 |
-| [`futureStep.md`](futureStep.md) | 准备做 / 以后做的事项（非当前主线） |
+| [`futureStep.md`](futureStep.md) | **当前主线与后续计划**（A 节：LET_d / cascade 能谱；B–D：中性/CT/性能等） |
 | [`BRANCH_WORKFLOW.md`](BRANCH_WORKFLOW.md) | 分支约定：默认在 `master` 开发与推送 |
 | [`structure.md`](structure.md) | 代码架构与模块依赖 |
 | [`docs/archive/`](docs/archive/) | 历史工作笔记与长篇开发日志（已整合） |
@@ -40,7 +39,7 @@
 - primary C-12 / all-hadron 深度 LET_d；可选三维 MHD
 - 元素分组（C/B/Be/Li/He/H）与可选轻同位素诊断
 - 分子/分母 FP64 atomic moments，写盘前再相除
-- 与 TOPAS `myHadronLET` 对齐的定义与水中 SOBP 验证（细节见 [`LET.md`](LET.md)）
+- 与 TOPAS `myHadronLET` 对齐的定义与水中 SOBP 验证（细节见 [`futureStep.md`](futureStep.md) A 节）
 
 ### 几何与材料
 
@@ -107,9 +106,9 @@
 ### LET_d
 
 水中 SOBP all-hadron / primary C-12 已较好复现 TOPAS；低能 SP 表扩展至 0.01 MeV/u 为关键修复。  
-**剩余主误差在 300–400 MeV/u fragment tail** → 见 [`LET.md`](LET.md)。
+**剩余主误差在 300–400 MeV/u fragment tail** → 见 [`futureStep.md`](futureStep.md) **A.4 第一优先级**。
 
-中性粒子与 TOPAS 全闭合、跨病例通用多材料 final-state 包等仍属未完成项 → 见 [`futureStep.md`](futureStep.md)。
+中性粒子与 TOPAS 全闭合、跨病例通用多材料 final-state 包等 → 见 [`futureStep.md`](futureStep.md) B–D 节。
 
 ---
 

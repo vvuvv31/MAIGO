@@ -6,8 +6,7 @@
 | 现行文档 | 内容 |
 |----------|------|
 | [`../../README.md`](../../README.md) | 已实现能力、构建运行、验证摘要 |
-| [`../../LET.md`](../../LET.md) | 当前明确下一步（LET_d） |
-| [`../../futureStep.md`](../../futureStep.md) | 准备做 / 以后做 |
+| [`../../futureStep.md`](../../futureStep.md) | 当前主线（LET_d / cascade）与后续计划 |
 | [`../../structure.md`](../../structure.md) | 代码架构 |
 | [`../../BRANCH_WORKFLOW.md`](../../BRANCH_WORKFLOW.md) | 分支约定 |
 
