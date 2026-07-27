@@ -695,6 +695,57 @@ inline std::uint32_t nearest_cascade_interaction(
     return upper_delta < lower_delta ? lower : lower - 1U;
 }
 
+// Energy-conditioned cascade final-state selection.
+// Prefer a pure energy window (projectile isotope × incident-E band) over a
+// fixed 8-event index window that can mix distant soft/hard topologies.
+// Expands relative bandwidth until at least one event is found, else nearest.
+inline std::uint32_t select_cascade_interaction_energy_conditioned(
+    const CascadeInteraction* interactions,
+    const std::uint32_t offset,
+    const std::uint32_t count,
+    const float energy_MeV_per_u,
+    const float u01) noexcept {
+    if (count == 0U) {
+        return 0U;
+    }
+    if (count == 1U) {
+        return 0U;
+    }
+    // Relative half-widths tried in order. Absolute floor keeps low-E bins usable.
+    constexpr float k_rel_bandwidths[5] = {0.05F, 0.10F, 0.20F, 0.40F, 0.80F};
+    for (const auto rel : k_rel_bandwidths) {
+        const auto bandwidth_MeVu =
+            sycl::fmax(2.0F, rel * sycl::fmax(energy_MeV_per_u, 1.0F));
+        const auto e_lo = energy_MeV_per_u - bandwidth_MeVu;
+        const auto e_hi = energy_MeV_per_u + bandwidth_MeVu;
+        const auto begin =
+            cascade_interaction_lower_bound(interactions, offset, count, e_lo);
+        const auto end =
+            cascade_interaction_lower_bound(interactions, offset, count, e_hi);
+        if (end > begin) {
+            const auto window = end - begin;
+            const auto pick = sycl::min(
+                static_cast<std::uint32_t>(u01 * static_cast<float>(window)),
+                window - 1U);
+            return begin + pick;
+        }
+    }
+    return nearest_cascade_interaction(interactions, offset, count,
+                                       energy_MeV_per_u);
+}
+
+// Scale correlated final-state KE to the true projectile energy. Clamp so a
+// nearest-event fallback cannot turn a hard high-E topology into an extremely
+// soft (or super-hard) spectrum for a mismatched parent energy.
+inline float cascade_event_energy_scale(const float current_energy_MeVu,
+                                        const float event_energy_MeVu) noexcept {
+    if (!(event_energy_MeVu > 0.0F) || !(current_energy_MeVu > 0.0F)) {
+        return 1.0F;
+    }
+    const auto scale = current_energy_MeVu / event_energy_MeVu;
+    return sycl::clamp(scale, 0.25F, 4.0F);
+}
+
 inline std::uint32_t neutral_cross_section_lower_bound(
     const NeutralCrossSectionSample* samples,
     const std::uint32_t offset,
@@ -4617,67 +4668,19 @@ TransportResult transport_sycl(const TransportConfig& config,
                                                      path_step_mm);
                                 if (rng::uniform01(random_seed, rng_stream, steps, 8) <
                                     interaction_probability) {
-                                    const auto nearest = nearest_cascade_interaction(
-                                        cascade_interactions_device,
-                                        projectile.interaction_offset,
-                                        projectile.interaction_count,
-                                        current_energy_MeVu);
-                                    constexpr std::uint32_t sampling_window = 8;
-                                    auto window_begin =
-                                        nearest > sampling_window / 2
-                                            ? nearest - sampling_window / 2
-                                            : 0U;
-                                    auto window_count = sycl::min(
-                                        sampling_window,
-                                        projectile.interaction_count - window_begin);
-                                    // Rare fragment species can have multi-tens-of-MeV
-                                    // gaps between eight neighboring events. Do not mix
-                                    // such distant final states merely to fill the fixed
-                                    // sampling window. Common species retain all eight
-                                    // nearby events and therefore their event diversity.
-                                    const auto energy_bandwidth_MeVu =
-                                        sycl::fmax(1.0F, 0.01F * current_energy_MeVu);
-                                    const auto raw_window_end =
-                                        window_begin + window_count;
-                                    while (window_begin < raw_window_end &&
-                                           sycl::fabs(
-                                               cascade_interactions_device[
-                                                   projectile.interaction_offset +
-                                                   window_begin]
-                                                   .incident_energy_MeV_per_u -
-                                               current_energy_MeVu) >
-                                               energy_bandwidth_MeVu) {
-                                        ++window_begin;
-                                    }
-                                    auto window_end = raw_window_end;
-                                    while (window_end > window_begin &&
-                                           sycl::fabs(
-                                               cascade_interactions_device[
-                                                   projectile.interaction_offset +
-                                                   window_end - 1U]
-                                                   .incident_energy_MeV_per_u -
-                                               current_energy_MeVu) >
-                                               energy_bandwidth_MeVu) {
-                                        --window_end;
-                                    }
-                                    if (window_end == window_begin) {
-                                        window_begin = nearest;
-                                        window_end = nearest + 1U;
-                                    }
-                                    window_count = window_end - window_begin;
                                     const auto package_uniform =
                                         rng::uniform01(random_seed, rng_stream, steps, 9);
-                                    const auto selected_in_window = sycl::min(
-                                        static_cast<std::uint32_t>(package_uniform * window_count),
-                                        window_count - 1U);
+                                    const auto selected =
+                                        select_cascade_interaction_energy_conditioned(
+                                            cascade_interactions_device,
+                                            projectile.interaction_offset,
+                                            projectile.interaction_count,
+                                            current_energy_MeVu, package_uniform);
                                     const auto interaction = cascade_interactions_device[
-                                        projectile.interaction_offset + window_begin +
-                                        selected_in_window];
-                                    const auto energy_scale =
-                                        interaction.incident_energy_MeV_per_u > 0.0F
-                                            ? current_energy_MeVu /
-                                                  interaction.incident_energy_MeV_per_u
-                                            : 1.0F;
+                                        projectile.interaction_offset + selected];
+                                    const auto energy_scale = cascade_event_energy_scale(
+                                        current_energy_MeVu,
+                                        interaction.incident_energy_MeV_per_u);
                                     cascade_summary.interaction_count = 1;
                                     profile_add(profile_counters_device,
                                                 TransportProfileSlot::secondary_cascade);

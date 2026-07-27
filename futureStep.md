@@ -334,21 +334,43 @@ GPU 在 **queue fit 之前** 对所有产生的 p/d/t/He-3/He-4 做 atomic 直�
 | 对比 | 结果 |
 |------|------|
 | GPU gen0 vs TOPAS primary package | 产额比 ≈ 0.95–1.01，mean KE 比 ≈ 0.99–1.01 → **初级末态采样健康** |
-| GPU gen1 vs TOPAS cascade package | 产额比 ≈ 0.35–0.47；He-4 mean KE 比 ≈ **0.31** → **级联采样偏软/产额偏低，是高能 LET tail 主嫌疑** |
+| GPU gen1 vs TOPAS cascade package（全包） | 产额比 ≈ 0.35–0.47；He-4 mean KE 比 ≈ **0.31** — 见下方条件化说明 |
 
-指标：`out/birth_spectrum/compare_gpu400_gen0_vs_topas_primary_package.json`、  
-`out/birth_spectrum/compare_gpu400_gen1_vs_topas_cascade_package.json`。
+#### 已实现（2026-07-27 续）：多能量套件 + 能量条件化 cascade 采样
 
-**仍待做**：
+| 项 | 路径 |
+|----|------|
+| 多能量 runner | `validation/scripts/run_birth_spectrum_energy_suite.py` |
+| 父粒子能量分析 | `validation/scripts/analyze_cascade_parent_energy.py` |
+| 结果目录 | `validation/results/birth_spectrum_energy_suite/` |
+| 采样改动 | `select_cascade_interaction_energy_conditioned`：按 **相对能量带宽** 选事件，不再用固定 8 事件 index 窗口；`cascade_event_energy_scale` clamp 到 `[0.25, 4]` |
 
-1. 100/200/300/400 MeV/u 全套 gen0/gen1 比较（固定 seed，写入 `validation/results/`）  
-2. 按父粒子 MeV/u 条件化的 gen1 能谱（确认是否窗口过宽 / 稀有同位素填充）  
-3. 各代 LET numerator/denominator 贡献（额外 scorer）  
-4. 进入 **第二优先级**：能量条件化 cascade package
+**100/200/300/400 MeV/u 套件（10k，seed 20260727）要点**：
+
+| E | gen0 产额/KE 比（相对 **400 MeV primary package**） | gen1 说明 |
+|---|------------------------------------------------------|-----------|
+| 100–300 | 明显 <1，随 E 升高趋近 1 | **预期**：参考包来自 400 MeV TOPAS 运行；低能束核反应更少、产物更软，不宜当作 gen0 失败 |
+| 400 | gen0 ≈ **1.00** | gen0 与同版本 primary package 闭合 |
+
+gen1 与 **完整 cascade package** 的粗比不能直接定罪采样：
+
+- cascade package 含全部后续反应代数与全部弹核种类；GPU gen1 只是第一代级联；
+- `_parent_mevu` 直方图未分 generation，混有 gen0（C-12@高能）与 gen1（碎片@降能）；
+- package He-4 对父粒子能量条件极强：父 10–50 MeV/u 时 mean MeV/u ≈ 2–9，父 350–400 时 ≈ 190–240。
+
+**仍待做（细化诊断 → 再改 package 格式）**：
+
+1. birth scorer 增加 **generation × parent_MeV/u × product_MeV/u**（或至少 generation 分箱的 parent/product 谱）  
+2. TOPAS cascade 参考按 `projectile Z/A` + 入射 MeV/u 分箱，与 GPU gen1 对齐后再比产额/谱  
+3. 检查 cascade **截面 LUT / 反应率** 是否导致 gen1 产额偏低（不仅是末态形状）  
+4. 各代 LET numerator/denominator 贡献  
+5. 若 2–3 确认末态带宽仍不够：二进制 cascade package 改为显式  
+   `projectile × incident-energy bin × correlated final state` 存储
 
 ### 第二优先级：能量条件化的 cascade package
 
-如果确认当前 GPU 产物谱偏硬或偏软，应将 cascade package 改为：
+**运行时采样已部分完成**（见上：能量带宽选事件 + scale clamp）。  
+若确认仍需改数据布局，则将 cascade package 改为：
 
 ```text
 projectile isotope × incident-energy bin × correlated final state
