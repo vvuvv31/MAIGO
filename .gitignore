@@ -29,6 +29,8 @@ validation/results/**
 !validation/results/topas_200MeVu_cascade_100k*
 !validation/results/topas_200MeVu_cascade_aligned_primary*
 !validation/results/topas_200MeVu_neutral_development*
+!validation/results/topas_400MeVu_cascade_g4_11_3_2_100k_conditioned_3d.bin
+!validation/results/topas_400MeVu_cascade_g4_11_3_2_100k_conditioned_3d.metadata.json
 
 # TOPAS raw scorer dumps
 validation/topas/output/**

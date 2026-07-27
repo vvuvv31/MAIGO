@@ -16,12 +16,14 @@ from pathlib import Path
 
 
 MAGIC = b"CCAS001\0"
-VERSION = 2
+VERSION = 3
 HEADER = struct.Struct("<8sIIIIIIIIQQQQ")
 PROJECTILE = struct.Struct("<hhIIII")
 XS_SAMPLE = struct.Struct("<ff")
-INTERACTION = struct.Struct("<fII")
+INTERACTION = struct.Struct("<ffII")
 PRODUCT = struct.Struct("<ihhffff")
+CONDITION_ENERGY_BIN_MEVU = 2.0
+CONDITION_DEPTH_BIN_MM = 10.0
 
 
 def read_unit_direction(
@@ -130,7 +132,7 @@ def main() -> None:
 
     binary_projectiles: list[tuple[int, int, int, int, int, int]] = []
     binary_xs: list[tuple[float, float]] = []
-    binary_interactions: list[tuple[float, int, int]] = []
+    binary_interactions: list[tuple[float, float, int, int]] = []
     binary_products: list[tuple[int, int, int, float, float, float, float]] = []
     species_metadata: dict[str, object] = {}
     skipped_zero_cross_section: dict[str, object] = {}
@@ -145,7 +147,17 @@ def main() -> None:
         for energy_key, values in sorted(xs_by_species_energy[(z, a)].items()):
             binary_xs.append((energy_key * quantum, statistics.median(values)))
         interaction_offset = len(binary_interactions)
-        for row in sorted(species_interactions, key=lambda item: float(item["incident_energy_MeV_per_u"])):
+        def condition_key(item: dict[str, str]) -> tuple[int, int, float, float]:
+            energy = float(item["incident_energy_MeV_per_u"])
+            depth = float(item["depth_mm"])
+            return (
+                max(0, int(energy / CONDITION_ENERGY_BIN_MEVU)),
+                max(0, int(depth / CONDITION_DEPTH_BIN_MM)),
+                energy,
+                depth,
+            )
+
+        for row in sorted(species_interactions, key=condition_key):
             interaction_id = int(row["interaction_id"])
             incident_direction = read_unit_direction(
                 row, ("direction_x", "direction_y", "direction_z"),
@@ -165,8 +177,12 @@ def main() -> None:
                     global_direction, incident_direction)
                 binary_products.append((int(product["pdg_id"]), int(product["Z"]),
                                         int(product["A"]), energy, *local_direction))
-            binary_interactions.append((float(row["incident_energy_MeV_per_u"]),
-                                        product_offset, len(members)))
+            binary_interactions.append((
+                float(row["incident_energy_MeV_per_u"]),
+                float(row["depth_mm"]),
+                product_offset,
+                len(members),
+            ))
         xs_count = len(binary_xs) - xs_offset
         interaction_count = len(binary_interactions) - interaction_offset
         if xs_count == 0 or interaction_count == 0:
@@ -205,6 +221,17 @@ def main() -> None:
 
     compiled = {
         "format": "charged-fragment cascade package", "version": VERSION,
+        "final_state_conditioning": [
+            "projectile_Z",
+            "projectile_A",
+            "incident_energy_MeV_per_u",
+            "reference_depth_mm",
+        ],
+        "condition_bins": {
+            "incident_energy_MeV_per_u": CONDITION_ENERGY_BIN_MEVU,
+            "reference_depth_mm": CONDITION_DEPTH_BIN_MM,
+            "interaction_order": "projectile × energy_bin × depth_bin × exact_energy",
+        },
         "direction_coordinates": "projectile-local orthonormal frame",
         "direction_components": ["local_x", "local_y", "along_projectile"],
         "source_metadata": args.metadata.as_posix(),

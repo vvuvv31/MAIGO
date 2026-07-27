@@ -383,12 +383,87 @@ gen1 与 **完整 cascade package** 的粗比不能直接定罪采样：
 | SOBP 50–100 mm | 仍约 **0.8%** |
 | 报告 | `validation/results/letd_accuracy_improvement_2026-07-27.md` |
 
+#### 已实现（2026-07-27 续）：远端碎片产生深度与 cascade 代数
+
+重新检查 400 MeV/u 时发现，总产额和总能谱闭合会掩盖空间分布误差。
+修复 `prepare_topas_birth_spectrum.py` 后，可从 interaction/reaction 表把
+TOPAS 产物正确回填到产生深度；排除 cascade 表中重复的 source-track
+primary C-12 反应后，GPU/TOPAS 的总产额仍约为 0.97–0.99，但
+320–360 mm 的远端产生率为：
+
+| 粒子 | GPU/TOPAS 产生率 |
+|---|---:|
+| proton | 0.948 |
+| deuteron | 0.906 |
+| He-3 | 0.833 |
+| He-4 | 0.878 |
+
+这与相同深度区间 all-hadron LET_d 偏低同向。大队列下把 cascade
+上限从 2 代提高到 4 代后：
+
+| 能量 | 2 代 median \|rel\| | 4 代 median \|rel\| |
+|---|---:|---:|
+| 300 MeV/u | 7.044% | 6.949% |
+| 400 MeV/u | 4.115% | 4.025% |
+
+400 MeV/u P95 从 27.03% 降到 24.73%，cascade interaction 数从
+128924 增至 133524，更接近 TOPAS 去除 primary 后的 135271。
+运行时间由 16.59 s 变为 17.47 s（约 +5.3%）。因此 LET 生产配置
+现在默认使用：
+
+```yaml
+maximum_cascade_generations: 4
+secondary_queue_capacity: 2500000  # 100k LET validation
+use_particle_specific_stopping_power: true
+```
+
+SOBP 100k 泛化检查没有退化：50–100 mm all-hadron median |rel|
+为 0.818%，mean bias 为 −0.166%。
+
+同时排除了两个候选项：
+
+- 开启 secondary Bohr straggling 未稳定改善宽能量 LET（400 MeV/u
+  median 4.115%→4.137%），继续保持关闭；
+- 新增 `IonNuclearLETNtuple` 后确认，TOPAS 非弹性 step 的 LET
+  权重只使用该 step 的局域电离沉积，不是母粒子的全部剩余能量；
+  这些 step 仅占 400 MeV/u 全局 LET numerator 约 0.032%，不能用
+  GPU nuclear residual 直接补 LET。
+
 **仍待做**：
 
-1. 联合谱再按 **parent Z/A** 分箱  
-2. cascade **截面/反应率** 按弹核 vs TOPAS  
-3. 各代 LET numerator/denominator  
-4. 高能 all-hadron 仍有 ~4–7% 中位残差：条件化 cascade package 布局  
+1. cascade **截面/反应率** 按弹核 vs TOPAS（总率已闭合到约 1.3%，
+   仍需逐 Z/A）
+2. 各代 LET numerator/denominator
+3. 320–400 mm 远端 transported-parent population 与产生率闭合；
+   当前高能 all-hadron 仍有约 4–7% 中位残差
+
+#### 已实现（2026-07-27）：parent Z/A × energy × depth package A/B
+
+- v3 binary 为每个 interaction 保存 reference depth；
+- 数据实际重排为
+  `projectile Z/A × 2 MeV/u × 10 mm depth × exact energy`；
+- GPU 通过二分定位二维 cell，不拆散 correlated final state；
+- v1/v2 向后兼容；
+- YAML 开关：
+
+```yaml
+cascade_condition_on_reference_depth: false
+```
+
+A/B 结果表明 absolute depth 含有 400 MeV/u 水箱 case 信息：
+
+| 模式 | 300 MeV/u median \|rel\| | 400 MeV/u median \|rel\| |
+|---|---:|---:|
+| v2 energy-only | 6.949% | 4.025% |
+| v3 energy-bin-only | 6.865% | 4.139% |
+| v3 energy × absolute depth | 7.195% | 3.968% |
+
+因此 depth 模式虽然对同源 400 MeV/u 略有改善，但在实际更重要的
+300 MeV/u 上退化，判定为过拟合风险，保留为诊断开关而不设为默认。
+SOBP 的 v3 energy-only median 为 0.852%（v2 为 0.818%），差异很小。
+
+完整报告：
+`validation/results/letd_conditioned_cascade_2026-07-27.md`。
 
 ### 第二优先级：能量条件化的 cascade package
 

@@ -225,6 +225,9 @@ struct TransportConfig {
     bool enable_secondary_generation{false};
     bool enable_secondary_transport{false};
     bool enable_fragment_cascade{false};
+    // Optional v3 package mode. Absolute reference depth is diagnostic and can
+    // overfit a source energy; keep disabled unless cross-case validation wins.
+    bool cascade_condition_on_reference_depth{false};
     // Per-species secondary depth-dose scoring. Disable for voxel-only full-plan
     // production to remove an otherwise redundant global atomic per deposit.
     bool enable_fragment_species_scoring{true};

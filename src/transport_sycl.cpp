@@ -700,7 +700,7 @@ inline std::uint32_t nearest_cascade_interaction(
 // topologies are not mixed, then over-scaled. Returns `count` when no event
 // lies inside the maximum allowed band (caller should deposit residual heat
 // instead of inventing a distant final state).
-inline std::uint32_t select_cascade_interaction_energy_conditioned(
+inline std::uint32_t select_legacy_cascade_interaction_energy_conditioned(
     const CascadeInteraction* interactions,
     const std::uint32_t offset,
     const std::uint32_t count,
@@ -729,8 +729,6 @@ inline std::uint32_t select_cascade_interaction_energy_conditioned(
         if (end <= begin) {
             continue;
         }
-        // Cap the number of candidates and center on the true energy so dense
-        // species do not uniform-sample a 25 MeV/u-wide plateau.
         constexpr std::uint32_t k_max_window = 32U;
         if (end - begin > k_max_window) {
             const auto center = cascade_interaction_lower_bound(
@@ -756,6 +754,212 @@ inline std::uint32_t select_cascade_interaction_energy_conditioned(
     }
     return nearest_cascade_interaction(interactions, offset, count,
                                        energy_MeV_per_u);
+}
+
+constexpr float cascade_condition_energy_bin_width_MeVu = 2.0F;
+constexpr float cascade_condition_depth_bin_width_mm = 10.0F;
+
+inline std::uint32_t cascade_condition_energy_bin(
+    const float energy_MeV_per_u) noexcept {
+    return static_cast<std::uint32_t>(
+        sycl::fmax(0.0F, sycl::floor(
+            energy_MeV_per_u / cascade_condition_energy_bin_width_MeVu)));
+}
+
+inline std::uint32_t cascade_condition_depth_bin(
+    const float depth_mm) noexcept {
+    return static_cast<std::uint32_t>(
+        sycl::fmax(0.0F, sycl::floor(
+            depth_mm / cascade_condition_depth_bin_width_mm)));
+}
+
+inline std::uint32_t cascade_condition_cell_lower_bound(
+    const CascadeInteraction* interactions,
+    const std::uint32_t offset,
+    const std::uint32_t count,
+    const std::uint32_t energy_bin,
+    const std::uint32_t depth_bin) noexcept {
+    std::uint32_t lower = 0;
+    std::uint32_t upper = count;
+    while (lower < upper) {
+        const auto middle = lower + (upper - lower) / 2U;
+        const auto& interaction = interactions[offset + middle];
+        const auto candidate_energy_bin =
+            cascade_condition_energy_bin(
+                interaction.incident_energy_MeV_per_u);
+        const auto candidate_depth_bin =
+            cascade_condition_depth_bin(interaction.depth_mm);
+        if (candidate_energy_bin < energy_bin ||
+            (candidate_energy_bin == energy_bin &&
+             candidate_depth_bin < depth_bin)) {
+            lower = middle + 1U;
+        } else {
+            upper = middle;
+        }
+    }
+    return lower;
+}
+
+inline std::uint32_t select_depth_conditioned_cascade_interaction(
+    const CascadeInteraction* interactions,
+    const std::uint32_t offset,
+    const std::uint32_t count,
+    const float energy_MeV_per_u,
+    const float depth_mm,
+    const float u01) noexcept {
+    const auto target_energy_bin =
+        cascade_condition_energy_bin(energy_MeV_per_u);
+    const auto target_depth_bin = cascade_condition_depth_bin(depth_mm);
+    // Search the exact 2 MeV/u × 10 mm cell first, then expand in energy
+    // before depth. This retains complete correlated final states and avoids
+    // scanning the full projectile table in the device kernel.
+    constexpr std::uint32_t max_energy_radius = 13U;  // 26 MeV/u
+    constexpr std::uint32_t max_depth_radius = 8U;    // 80 mm
+    for (std::uint32_t energy_radius = 0;
+         energy_radius <= max_energy_radius; ++energy_radius) {
+        for (std::uint32_t depth_radius = 0;
+             depth_radius <= max_depth_radius; ++depth_radius) {
+            std::uint32_t total_candidates = 0;
+            std::uint32_t range_begin[4]{};
+            std::uint32_t range_count[4]{};
+            std::uint32_t range_total = 0;
+            for (std::uint32_t energy_side = 0; energy_side < 2U;
+                 ++energy_side) {
+                if (energy_radius == 0U && energy_side == 1U) {
+                    continue;
+                }
+                if (energy_side == 0U &&
+                    energy_radius > target_energy_bin) {
+                    continue;
+                }
+                const auto energy_bin =
+                    energy_side == 0U
+                        ? target_energy_bin - energy_radius
+                        : target_energy_bin + energy_radius;
+                for (std::uint32_t depth_side = 0; depth_side < 2U;
+                     ++depth_side) {
+                    if (depth_radius == 0U && depth_side == 1U) {
+                        continue;
+                    }
+                    if (depth_side == 0U &&
+                        depth_radius > target_depth_bin) {
+                        continue;
+                    }
+                    const auto depth_bin =
+                        depth_side == 0U
+                            ? target_depth_bin - depth_radius
+                            : target_depth_bin + depth_radius;
+                    const auto begin =
+                        cascade_condition_cell_lower_bound(
+                            interactions, offset, count, energy_bin,
+                            depth_bin);
+                    const auto end =
+                        cascade_condition_cell_lower_bound(
+                            interactions, offset, count, energy_bin,
+                            depth_bin + 1U);
+                    if (end > begin && range_total < 4U) {
+                        range_begin[range_total] = begin;
+                        range_count[range_total] = end - begin;
+                        total_candidates += end - begin;
+                        ++range_total;
+                    }
+                }
+            }
+            if (total_candidates == 0U) {
+                continue;
+            }
+            auto pick = sycl::min(
+                static_cast<std::uint32_t>(
+                    u01 * static_cast<float>(total_candidates)),
+                total_candidates - 1U);
+            for (std::uint32_t range = 0; range < range_total; ++range) {
+                if (pick < range_count[range]) {
+                    return range_begin[range] + pick;
+                }
+                pick -= range_count[range];
+            }
+        }
+    }
+    // Sparse projectiles outside the reference E/depth support retain a
+    // correlated event instead of silently suppressing the cascade.
+    return sycl::min(
+        static_cast<std::uint32_t>(u01 * static_cast<float>(count)),
+        count - 1U);
+}
+
+inline std::uint32_t select_binned_energy_cascade_interaction(
+    const CascadeInteraction* interactions,
+    const std::uint32_t offset,
+    const std::uint32_t count,
+    const float energy_MeV_per_u,
+    const float u01) noexcept {
+    const auto target_energy_bin =
+        cascade_condition_energy_bin(energy_MeV_per_u);
+    constexpr std::uint32_t max_energy_radius = 13U;
+    for (std::uint32_t radius = 0; radius <= max_energy_radius; ++radius) {
+        std::uint32_t range_begin[2]{};
+        std::uint32_t range_count[2]{};
+        std::uint32_t range_total = 0;
+        std::uint32_t total_candidates = 0;
+        for (std::uint32_t side = 0; side < 2U; ++side) {
+            if (radius == 0U && side == 1U) {
+                continue;
+            }
+            if (side == 0U && radius > target_energy_bin) {
+                continue;
+            }
+            const auto energy_bin =
+                side == 0U ? target_energy_bin - radius
+                           : target_energy_bin + radius;
+            const auto begin = cascade_condition_cell_lower_bound(
+                interactions, offset, count, energy_bin, 0U);
+            const auto end = cascade_condition_cell_lower_bound(
+                interactions, offset, count, energy_bin + 1U, 0U);
+            if (end > begin) {
+                range_begin[range_total] = begin;
+                range_count[range_total] = end - begin;
+                total_candidates += end - begin;
+                ++range_total;
+            }
+        }
+        if (total_candidates == 0U) {
+            continue;
+        }
+        auto pick = sycl::min(
+            static_cast<std::uint32_t>(
+                u01 * static_cast<float>(total_candidates)),
+            total_candidates - 1U);
+        for (std::uint32_t range = 0; range < range_total; ++range) {
+            if (pick < range_count[range]) {
+                return range_begin[range] + pick;
+            }
+            pick -= range_count[range];
+        }
+    }
+    return sycl::min(
+        static_cast<std::uint32_t>(u01 * static_cast<float>(count)),
+        count - 1U);
+}
+
+inline std::uint32_t select_cascade_interaction_conditioned(
+    const CascadeInteraction* interactions,
+    const std::uint32_t offset,
+    const std::uint32_t count,
+    const float energy_MeV_per_u,
+    const float depth_mm,
+    const float u01,
+    const bool binned_depth_layout,
+    const bool condition_on_reference_depth) noexcept {
+    if (!binned_depth_layout) {
+        return select_legacy_cascade_interaction_energy_conditioned(
+            interactions, offset, count, energy_MeV_per_u, u01);
+    }
+    if (condition_on_reference_depth) {
+        return select_depth_conditioned_cascade_interaction(
+            interactions, offset, count, energy_MeV_per_u, depth_mm, u01);
+    }
+    return select_binned_energy_cascade_interaction(
+        interactions, offset, count, energy_MeV_per_u, u01);
 }
 
 // Scale correlated final-state KE to the true projectile energy. With the
@@ -1184,6 +1388,12 @@ TransportResult transport_sycl(const TransportConfig& config,
     }
     if (config.enable_fragment_cascade && cascade_packages == nullptr) {
         throw std::invalid_argument("Fragment cascade requires a cascade package table");
+    }
+    if (config.cascade_condition_on_reference_depth &&
+        (cascade_packages == nullptr || cascade_packages->interactions().empty() ||
+         !std::isfinite(cascade_packages->interactions().front().depth_mm))) {
+        throw std::invalid_argument(
+            "cascade_condition_on_reference_depth requires a v3 cascade package");
     }
     if (config.enable_neutral_transport && neutral_packages == nullptr) {
         throw std::invalid_argument("Neutral transport requires a neutral package table");
@@ -2718,6 +2928,12 @@ TransportResult transport_sycl(const TransportConfig& config,
     const auto cascade_projectile_count = enable_fragment_cascade
                                               ? cascade_packages->projectiles().size()
                                               : std::size_t{0};
+    const auto cascade_depth_conditioned_layout =
+        enable_fragment_cascade &&
+        !cascade_packages->interactions().empty() &&
+        std::isfinite(cascade_packages->interactions().front().depth_mm);
+    const auto cascade_condition_on_reference_depth =
+        config.cascade_condition_on_reference_depth;
     const auto neutral_projectile_count = enable_neutral_transport
                                               ? neutral_packages->projectiles().size()
                                               : std::size_t{0};
@@ -4723,11 +4939,14 @@ TransportResult transport_sycl(const TransportConfig& config,
                                     const auto package_uniform =
                                         rng::uniform01(random_seed, rng_stream, steps, 9);
                                     const auto selected =
-                                        select_cascade_interaction_energy_conditioned(
+                                        select_cascade_interaction_conditioned(
                                             cascade_interactions_device,
                                             projectile.interaction_offset,
                                             projectile.interaction_count,
-                                            current_energy_MeVu, package_uniform);
+                                            current_energy_MeVu, position_z_mm,
+                                            package_uniform,
+                                            cascade_depth_conditioned_layout,
+                                            cascade_condition_on_reference_depth);
                                     const auto interaction = cascade_interactions_device[
                                         projectile.interaction_offset + selected];
                                     const auto energy_scale = cascade_event_energy_scale(

@@ -741,6 +741,21 @@ void test_cascade_package_loading() {
                                   product.direction_z * product.direction_z;
         require_near(norm_squared, 1.0, 2.0e-3, "Cascade package v2 direction norm failed");
     }
+
+    const auto v3_path =
+        source_directory /
+        "validation/results/"
+        "topas_400MeVu_cascade_g4_11_3_2_100k_conditioned_3d.bin";
+    const auto v3_table = carbon::CascadePackageTable::from_binary(v3_path);
+    require(v3_table.projectiles().size() == 31,
+            "Cascade package v3 projectile count failed");
+    require(v3_table.interactions().size() == 209326,
+            "Cascade package v3 interaction count failed");
+    for (const auto& interaction : v3_table.interactions()) {
+        require(std::isfinite(interaction.depth_mm) &&
+                    interaction.depth_mm >= 0.0F,
+                "Cascade package v3 reference depth invalid");
+    }
 }
 
 void test_dose_scorer_matches_mev_conversion() {

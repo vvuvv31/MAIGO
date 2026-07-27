@@ -18,10 +18,11 @@ enable_primary_attenuation: true
 enable_secondary_generation: true
 enable_secondary_transport: true
 enable_fragment_cascade: true
+cascade_condition_on_reference_depth: false
 enable_neutral_transport: false
 electronic_buildup_fraction: 0.06
 electronic_buildup_mfp_mm: 0.5
-maximum_cascade_generations: 2
+maximum_cascade_generations: 4
 # CUDA auto (4/history) overflows cascade at 100k–400 MeV and truncates
 # fragment transport → all-hadron LET tail error. Keep ≥20 slots/history.
 secondary_queue_capacity: 2500000

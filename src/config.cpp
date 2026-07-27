@@ -331,6 +331,10 @@ void TransportConfig::validate() const {
         throw std::invalid_argument(
             "enable_fragment_cascade requires secondary transport and at least one generation");
     }
+    if (cascade_condition_on_reference_depth && !enable_fragment_cascade) {
+        throw std::invalid_argument(
+            "cascade_condition_on_reference_depth requires fragment cascade");
+    }
     if (!enable_fragment_species_scoring && enable_secondary_transport &&
         (!output_file.empty() || !dose_output_file.empty() ||
          !fragment_species_output_file.empty() ||
@@ -644,6 +648,9 @@ TransportConfig load_config(const std::filesystem::path& path) {
         parse_bool(values, "enable_secondary_transport", config.enable_secondary_transport);
     config.enable_fragment_cascade =
         parse_bool(values, "enable_fragment_cascade", config.enable_fragment_cascade);
+    config.cascade_condition_on_reference_depth = parse_bool(
+        values, "cascade_condition_on_reference_depth",
+        config.cascade_condition_on_reference_depth);
     config.enable_fragment_species_scoring = parse_bool(
         values, "enable_fragment_species_scoring",
         config.enable_fragment_species_scoring);

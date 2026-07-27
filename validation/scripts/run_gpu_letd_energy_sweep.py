@@ -10,7 +10,7 @@ import subprocess
 from pathlib import Path
 
 
-ENERGIES = (100, 200, 300, 400)
+DEFAULT_ENERGIES = (100, 200, 300, 400)
 
 
 def replace_scalar(text: str, key: str, value: str) -> str:
@@ -32,9 +32,38 @@ def main() -> None:
     )
     parser.add_argument("--histories", type=int, default=100_000)
     parser.add_argument(
+        "--energies",
+        type=int,
+        nargs="+",
+        default=list(DEFAULT_ENERGIES),
+        help="Incident energies in MeV/u (default: 100 200 300 400).",
+    )
+    parser.add_argument(
+        "--maximum-cascade-generations",
+        type=int,
+        default=None,
+        help="Override the cascade generation limit from the base YAML.",
+    )
+    parser.add_argument(
+        "--cascade-package",
+        type=Path,
+        default=None,
+        help="Override cascade_package_file (for conditioned-package A/B tests).",
+    )
+    parser.add_argument(
+        "--condition-cascade-depth",
+        action="store_true",
+        help="Condition v3 cascade final states on the absolute reference depth.",
+    )
+    parser.add_argument(
         "--particle-specific",
         action="store_true",
         help="Use isotope-specific G4 stopping-power tables for fragments.",
+    )
+    parser.add_argument(
+        "--secondary-straggling",
+        action="store_true",
+        help="Enable Bohr energy-loss straggling for transported charged fragments.",
     )
     parser.add_argument(
         "--output-dir", type=Path, default=Path("out/letd_energy_sweep/gpu")
@@ -44,7 +73,7 @@ def main() -> None:
     args.output_dir.mkdir(parents=True, exist_ok=True)
     base = args.base_config.read_text()
     summaries = {}
-    for energy in ENERGIES:
+    for energy in args.energies:
         run_dir = args.output_dir / f"e{energy}"
         run_dir.mkdir(parents=True, exist_ok=True)
         text = replace_scalar(base, "number_of_histories", str(args.histories))
@@ -54,6 +83,26 @@ def main() -> None:
             text,
             "use_particle_specific_stopping_power",
             str(args.particle_specific).lower(),
+        )
+        text = replace_scalar(
+            text,
+            "enable_secondary_energy_straggling",
+            str(args.secondary_straggling).lower(),
+        )
+        if args.maximum_cascade_generations is not None:
+            text = replace_scalar(
+                text,
+                "maximum_cascade_generations",
+                str(args.maximum_cascade_generations),
+            )
+        if args.cascade_package is not None:
+            text = replace_scalar(
+                text, "cascade_package_file", str(args.cascade_package)
+            )
+        text = replace_scalar(
+            text,
+            "cascade_condition_on_reference_depth",
+            str(args.condition_cascade_depth).lower(),
         )
         text = replace_scalar(
             text, "output_file", str(run_dir / "gpu_idd.csv")
@@ -90,6 +139,14 @@ def main() -> None:
             "config": str(config_path),
             "let_csv": str(run_dir / "gpu_letd.csv"),
             "particle_specific_stopping_power": args.particle_specific,
+            "secondary_energy_straggling": args.secondary_straggling,
+            "maximum_cascade_generations": args.maximum_cascade_generations,
+            "cascade_package": (
+                str(args.cascade_package)
+                if args.cascade_package is not None
+                else None
+            ),
+            "condition_cascade_depth": args.condition_cascade_depth,
         }
         print(f"{energy} MeV/u: {summaries[str(energy)]}")
 

@@ -36,6 +36,7 @@ PARENT_MEVU_BIN_WIDTH = 10.0
 PARENT_MEVU_BINS = 40
 PARENT_Z_BINS = 9
 GEN_BINS = 3
+DEPTH_BIN_WIDTH_MM = 1.0
 
 
 def open_rows(path: Path) -> Iterable[Dict[str, str]]:
@@ -77,6 +78,12 @@ def parent_z_bin(z: int) -> int:
     if z <= 0:
         return 0
     return min(int(z), PARENT_Z_BINS - 1)
+
+
+def depth_bin_center(depth_mm: float) -> float:
+    """Match the 1 mm birth-depth histogram used by the GPU diagnostics."""
+    index = int(max(float(depth_mm), 0.0) / DEPTH_BIN_WIDTH_MM)
+    return (index + 0.5) * DEPTH_BIN_WIDTH_MM
 
 
 def _int(row: Dict[str, str], *keys: str, default: int = 0) -> int:
@@ -208,7 +215,7 @@ def process_primary(
     prefix: Path,
     generation: int,
 ) -> None:
-    parent_ke_by_reaction: Dict[int, float] = {}
+    parent_by_reaction: Dict[int, Tuple[float, float]] = {}
     if reactions_path is not None:
         for row in open_rows(reactions_path):
             rid = _int(row, "reaction_id", "interaction_id")
@@ -218,7 +225,8 @@ def process_primary(
                 "incident_kinetic_energy_MeV",
                 "projectile_kinetic_energy_MeV",
             )
-            parent_ke_by_reaction[rid] = ike
+            depth = _float(row, "depth_mm", "reaction_depth_mm", "vertex_z_mm")
+            parent_by_reaction[rid] = (ike, depth)
 
     counts_gen: Dict[Tuple[str, int], int] = defaultdict(int)
     ke_sum_gen: Dict[Tuple[str, int], float] = defaultdict(float)
@@ -242,9 +250,11 @@ def process_primary(
         if "direction_z" in row and row["direction_z"] != "":
             cos_hist[(sp, gen, cos_bin(float(row["direction_z"])))] += 1
         rid = _int(row, "reaction_id", "interaction_id", default=-1)
-        parent_ke = parent_ke_by_reaction.get(rid, 0.0)
+        parent_ke, depth = parent_by_reaction.get(rid, (0.0, 0.0))
         parent_mevu_hist[(sp, gen, parent_mevu_bin(parent_ke, 12))] += 1
         parent_z_hist[(sp, gen, parent_z_bin(6))] += 1
+        if reactions_path is not None and rid in parent_by_reaction:
+            depth_hist[(sp, gen, depth_bin_center(depth))] += 1
 
     write_suite(
         prefix,
@@ -272,7 +282,7 @@ def process_cascade(
     projectile_z: Optional[int],
     projectile_a: Optional[int],
 ) -> Dict[str, int]:
-    parent_by_interaction: Dict[int, Tuple[int, int, float]] = {}
+    parent_by_interaction: Dict[int, Tuple[int, int, float, float]] = {}
     if interactions_path is not None:
         for row in open_rows(interactions_path):
             iid = _int(row, "interaction_id")
@@ -289,7 +299,8 @@ def process_cascade(
                 if pa > 0 and ike > 0:
                     # column was total MeV
                     ike = ike / float(pa)
-            parent_by_interaction[iid] = (pz, pa, ike)
+            depth = _float(row, "depth_mm", "vertex_z_mm")
+            parent_by_interaction[iid] = (pz, pa, ike, depth)
 
     counts_gen: Dict[Tuple[str, int], int] = defaultdict(int)
     ke_sum_gen: Dict[Tuple[str, int], float] = defaultdict(float)
@@ -309,12 +320,12 @@ def process_cascade(
             continue
         iid = _int(row, "interaction_id", default=-1)
         if iid in parent_by_interaction:
-            pz, pa, pmevu = parent_by_interaction[iid]
+            pz, pa, pmevu, parent_depth = parent_by_interaction[iid]
             # If stored as total MeV under wrong key, repair when pe is large and A known
             if pmevu > 1000 and pa > 0:
                 pmevu = pmevu / float(pa)
         else:
-            pz, pa, pmevu = 0, 0, 0.0
+            pz, pa, pmevu, parent_depth = 0, 0, 0.0, 0.0
 
         if projectile_z is not None and pz != projectile_z:
             skipped += 1
@@ -346,8 +357,12 @@ def process_cascade(
         parent_total_ke = pmevu * float(pa) if pa > 0 else 0.0
         parent_mevu_hist[(sp, gen, parent_mevu_bin(parent_total_ke, pa if pa > 0 else 12))] += 1
         parent_z_hist[(sp, gen, parent_z_bin(pz))] += 1
-        if "vertex_z_mm" in row and row["vertex_z_mm"] != "":
-            depth_hist[(sp, gen, float(row["vertex_z_mm"]))] += 1
+        if iid in parent_by_interaction:
+            depth_hist[(sp, gen, depth_bin_center(parent_depth))] += 1
+        elif "vertex_z_mm" in row and row["vertex_z_mm"] != "":
+            depth_hist[
+                (sp, gen, depth_bin_center(float(row["vertex_z_mm"])))
+            ] += 1
         kept += 1
 
     write_suite(
