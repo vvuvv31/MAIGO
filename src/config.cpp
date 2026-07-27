@@ -298,6 +298,12 @@ void TransportConfig::validate() const {
         throw std::invalid_argument(
             "light_isotope_let_output_file requires scorerLET=true");
     }
+    if (!fragment_birth_spectrum_output_file.empty() &&
+        !enable_secondary_generation) {
+        throw std::invalid_argument(
+            "fragment_birth_spectrum_output_file requires "
+            "enable_secondary_generation=true");
+    }
     if (enable_flat_source &&
         (flat_source_half_width_x_mm <= 0.0 || flat_source_half_width_y_mm <= 0.0)) {
         throw std::invalid_argument(
@@ -884,6 +890,14 @@ TransportConfig load_config(const std::filesystem::path& path) {
         const auto it = values.find("light_isotope_let_output_file");
         if (it != values.end()) {
             config.light_isotope_let_output_file =
+                it->second.empty() ? std::filesystem::path{}
+                                   : std::filesystem::path{it->second};
+        }
+    }
+    {
+        const auto it = values.find("fragment_birth_spectrum_output_file");
+        if (it != values.end()) {
+            config.fragment_birth_spectrum_output_file =
                 it->second.empty() ? std::filesystem::path{}
                                    : std::filesystem::path{it->second};
         }

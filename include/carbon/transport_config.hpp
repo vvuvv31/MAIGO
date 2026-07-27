@@ -303,6 +303,11 @@ struct TransportConfig {
     // Optional p/d/t/He-3/He-4 depth LET diagnostics. Empty avoids the extra
     // per-step FP64 atomics in normal production runs.
     std::filesystem::path light_isotope_let_output_file{};
+    // Optional light-isotope birth-spectrum diagnostics (CSV prefix). Empty
+    // disables all birth-spectrum buffers and atomics.
+    // Writes: <path>_summary.csv, <path>_mevu.csv, <path>_depth.csv,
+    // <path>_costheta.csv, <path>_parent_mevu.csv, <path>_parent_z.csv
+    std::filesystem::path fragment_birth_spectrum_output_file{};
     // Prefix/header path for dense primary-C12 and all-hadron 3D LET_d MHD maps.
     // Requires both scorerLET and enable_voxel_scoring.
     std::filesystem::path let_voxel_mhd_output_file{};

@@ -968,6 +968,99 @@ inline void score_letd_moments_device(
         isotope_accumulate(1, denominator);
     }
 }
+
+// Score a light-isotope birth (p/d/t/He-3/He-4) into histogram buffers.
+// No-op when buffers are null or the product is not a light isotope.
+inline void score_fragment_birth_device(
+    std::uint64_t* counts_by_generation,
+    double* ke_sum_by_generation,
+    std::uint64_t* mevu_hist,
+    std::uint64_t* depth_hist,
+    const std::size_t depth_bin_count,
+    const float depth_bin_width_mm,
+    std::uint64_t* cos_hist,
+    std::uint64_t* parent_mevu_hist,
+    std::uint64_t* parent_z_hist,
+    const int atomic_number,
+    const int mass_number,
+    const float kinetic_energy_MeV,
+    const float position_z_mm,
+    const float direction_z,
+    const std::uint8_t generation,
+    const int parent_atomic_number,
+    const int parent_mass_number,
+    const float parent_kinetic_energy_MeV) noexcept {
+    if (counts_by_generation == nullptr || mass_number <= 0 ||
+        kinetic_energy_MeV <= 0.0F) {
+        return;
+    }
+    const auto category = light_isotope_category(atomic_number, mass_number);
+    if (category >= light_isotope_category_count) {
+        return;
+    }
+    const auto gen = birth_generation_bin(generation);
+    const auto gen_index = category * birth_generation_bin_count + gen;
+    {
+        sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
+                         sycl::memory_scope::device,
+                         sycl::access::address_space::global_space>
+            atomic_count(counts_by_generation[gen_index]);
+        atomic_count.fetch_add(1ULL);
+    }
+    if (ke_sum_by_generation != nullptr) {
+        sycl::atomic_ref<double, sycl::memory_order::relaxed,
+                         sycl::memory_scope::device,
+                         sycl::access::address_space::global_space>
+            atomic_ke(ke_sum_by_generation[gen_index]);
+        atomic_ke.fetch_add(static_cast<double>(kinetic_energy_MeV));
+    }
+    if (mevu_hist != nullptr) {
+        const auto ebin =
+            birth_mevu_bin(static_cast<double>(kinetic_energy_MeV), mass_number);
+        sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
+                         sycl::memory_scope::device,
+                         sycl::access::address_space::global_space>
+            atomic_e(mevu_hist[category * birth_mevu_bin_count + ebin]);
+        atomic_e.fetch_add(1ULL);
+    }
+    if (depth_hist != nullptr && depth_bin_count > 0 && depth_bin_width_mm > 0.0F &&
+        position_z_mm >= 0.0F) {
+        auto zbin = static_cast<std::size_t>(position_z_mm / depth_bin_width_mm);
+        if (zbin >= depth_bin_count) {
+            zbin = depth_bin_count - 1;
+        }
+        sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
+                         sycl::memory_scope::device,
+                         sycl::access::address_space::global_space>
+            atomic_z(depth_hist[category * depth_bin_count + zbin]);
+        atomic_z.fetch_add(1ULL);
+    }
+    if (cos_hist != nullptr) {
+        const auto cbin = birth_cos_bin(static_cast<double>(direction_z));
+        sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
+                         sycl::memory_scope::device,
+                         sycl::access::address_space::global_space>
+            atomic_c(cos_hist[category * birth_cos_bin_count + cbin]);
+        atomic_c.fetch_add(1ULL);
+    }
+    if (parent_mevu_hist != nullptr) {
+        const auto pbin = birth_parent_mevu_bin(
+            static_cast<double>(parent_kinetic_energy_MeV), parent_mass_number);
+        sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
+                         sycl::memory_scope::device,
+                         sycl::access::address_space::global_space>
+            atomic_p(parent_mevu_hist[category * birth_parent_mevu_bin_count + pbin]);
+        atomic_p.fetch_add(1ULL);
+    }
+    if (parent_z_hist != nullptr) {
+        const auto zbin = birth_parent_z_bin(parent_atomic_number);
+        sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
+                         sycl::memory_scope::device,
+                         sycl::access::address_space::global_space>
+            atomic_pz(parent_z_hist[category * birth_parent_z_bin_count + zbin]);
+        atomic_pz.fetch_add(1ULL);
+    }
+}
 }  // namespace
 
 TransportResult transport_sycl(const TransportConfig& config,
@@ -1046,6 +1139,9 @@ TransportResult transport_sycl(const TransportConfig& config,
     const auto enable_let_scoring = config.enable_let_scoring;
     const auto enable_light_isotope_let_scoring =
         enable_let_scoring && !config.light_isotope_let_output_file.empty();
+    const auto enable_birth_spectrum =
+        enable_secondary_generation &&
+        !config.fragment_birth_spectrum_output_file.empty();
     std::vector<float> let_delta_fraction_host;
     if (enable_let_scoring &&
         !config.let_delta_electron_fraction_file.empty()) {
@@ -1216,6 +1312,20 @@ TransportResult transport_sycl(const TransportConfig& config,
             if (enable_voxel_scoring) {
                 bytes += 4 * number_of_voxels * sizeof(double);
             }
+        }
+        if (enable_birth_spectrum) {
+            bytes += light_isotope_category_count * birth_generation_bin_count *
+                     (sizeof(std::uint64_t) + sizeof(double));
+            bytes += light_isotope_category_count * birth_mevu_bin_count *
+                     sizeof(std::uint64_t);
+            bytes += light_isotope_category_count * number_of_bins *
+                     sizeof(std::uint64_t);
+            bytes += light_isotope_category_count * birth_cos_bin_count *
+                     sizeof(std::uint64_t);
+            bytes += light_isotope_category_count * birth_parent_mevu_bin_count *
+                     sizeof(std::uint64_t);
+            bytes += light_isotope_category_count * birth_parent_z_bin_count *
+                     sizeof(std::uint64_t);
         }
         bytes += number_of_histories * (3 * sizeof(float) + sizeof(std::uint32_t));
         bytes += primary_spot_count * sizeof(PrimarySpotBatchEntry);
@@ -1401,6 +1511,45 @@ TransportResult transport_sycl(const TransportConfig& config,
         enable_light_isotope_let_scoring
             ? sycl::malloc_device<double>(
                   2 * light_isotope_category_count * number_of_bins, queue)
+            : nullptr;
+    const auto birth_gen_size =
+        light_isotope_category_count * birth_generation_bin_count;
+    const auto birth_mevu_size =
+        light_isotope_category_count * birth_mevu_bin_count;
+    const auto birth_depth_size =
+        light_isotope_category_count * number_of_bins;
+    const auto birth_cos_size =
+        light_isotope_category_count * birth_cos_bin_count;
+    const auto birth_parent_mevu_size =
+        light_isotope_category_count * birth_parent_mevu_bin_count;
+    const auto birth_parent_z_size =
+        light_isotope_category_count * birth_parent_z_bin_count;
+    auto* birth_counts_device =
+        enable_birth_spectrum
+            ? sycl::malloc_device<std::uint64_t>(birth_gen_size, queue)
+            : nullptr;
+    auto* birth_ke_sum_device =
+        enable_birth_spectrum ? sycl::malloc_device<double>(birth_gen_size, queue)
+                              : nullptr;
+    auto* birth_mevu_hist_device =
+        enable_birth_spectrum
+            ? sycl::malloc_device<std::uint64_t>(birth_mevu_size, queue)
+            : nullptr;
+    auto* birth_depth_hist_device =
+        enable_birth_spectrum
+            ? sycl::malloc_device<std::uint64_t>(birth_depth_size, queue)
+            : nullptr;
+    auto* birth_cos_hist_device =
+        enable_birth_spectrum
+            ? sycl::malloc_device<std::uint64_t>(birth_cos_size, queue)
+            : nullptr;
+    auto* birth_parent_mevu_hist_device =
+        enable_birth_spectrum
+            ? sycl::malloc_device<std::uint64_t>(birth_parent_mevu_size, queue)
+            : nullptr;
+    auto* birth_parent_z_hist_device =
+        enable_birth_spectrum
+            ? sycl::malloc_device<std::uint64_t>(birth_parent_z_size, queue)
             : nullptr;
     auto* voxel_dose_device = enable_voxel_scoring
                                   ? sycl::malloc_device<DoseAtomicT>(number_of_voxels, queue)
@@ -1605,6 +1754,13 @@ TransportResult transport_sycl(const TransportConfig& config,
             free_device(voxel_let_moments_device);
             free_device(species_let_moments_device);
             free_device(isotope_let_moments_device);
+            free_device(birth_counts_device);
+            free_device(birth_ke_sum_device);
+            free_device(birth_mevu_hist_device);
+            free_device(birth_depth_hist_device);
+            free_device(birth_cos_hist_device);
+            free_device(birth_parent_mevu_hist_device);
+            free_device(birth_parent_z_hist_device);
             free_device(voxel_dose_device);
             free_device(charged_origin_voxel_dose_device);
             free_device(deposited_device);
@@ -2076,6 +2232,12 @@ TransportResult transport_sycl(const TransportConfig& config,
         (enable_let_scoring && species_let_moments_device == nullptr) ||
         (enable_light_isotope_let_scoring &&
          isotope_let_moments_device == nullptr) ||
+        (enable_birth_spectrum &&
+         (birth_counts_device == nullptr || birth_ke_sum_device == nullptr ||
+          birth_mevu_hist_device == nullptr || birth_depth_hist_device == nullptr ||
+          birth_cos_hist_device == nullptr ||
+          birth_parent_mevu_hist_device == nullptr ||
+          birth_parent_z_hist_device == nullptr)) ||
         (enable_voxel_scoring && voxel_dose_device == nullptr) ||
         (enable_charged_origin_voxel_scoring &&
          charged_origin_voxel_dose_device == nullptr) ||
@@ -2097,6 +2259,13 @@ TransportResult transport_sycl(const TransportConfig& config,
         free_device(voxel_let_moments_device);
         free_device(species_let_moments_device);
         free_device(isotope_let_moments_device);
+        free_device(birth_counts_device);
+        free_device(birth_ke_sum_device);
+        free_device(birth_mevu_hist_device);
+        free_device(birth_depth_hist_device);
+        free_device(birth_cos_hist_device);
+        free_device(birth_parent_mevu_hist_device);
+        free_device(birth_parent_z_hist_device);
         free_device(voxel_dose_device);
         free_device(charged_origin_voxel_dose_device);
         free_device(deposited_device);
@@ -2213,6 +2382,21 @@ TransportResult transport_sycl(const TransportConfig& config,
                 2 * light_isotope_category_count * number_of_bins *
                     sizeof(double));
         }
+    }
+    if (enable_birth_spectrum) {
+        queue.memset(birth_counts_device, 0,
+                     birth_gen_size * sizeof(std::uint64_t));
+        queue.memset(birth_ke_sum_device, 0, birth_gen_size * sizeof(double));
+        queue.memset(birth_mevu_hist_device, 0,
+                     birth_mevu_size * sizeof(std::uint64_t));
+        queue.memset(birth_depth_hist_device, 0,
+                     birth_depth_size * sizeof(std::uint64_t));
+        queue.memset(birth_cos_hist_device, 0,
+                     birth_cos_size * sizeof(std::uint64_t));
+        queue.memset(birth_parent_mevu_hist_device, 0,
+                     birth_parent_mevu_size * sizeof(std::uint64_t));
+        queue.memset(birth_parent_z_hist_device, 0,
+                     birth_parent_z_size * sizeof(std::uint64_t));
     }
 #ifdef CARBON_TRANSPORT_PROFILE
     if (profile_counters_device != nullptr) {
@@ -3289,6 +3473,25 @@ TransportResult transport_sycl(const TransportConfig& config,
                                     ++queueable_count;
                                     queueable_energy_MeV +=
                                         scaled_secondary_energy_MeV;
+                                    // Birth spectrum before queue fit so overflow
+                                    // does not bias production diagnostics.
+                                    const auto child_direction = rotate_local_direction(
+                                        secondary.direction_x,
+                                        secondary.direction_y,
+                                        secondary.direction_z,
+                                        Direction3F{direction_x, direction_y,
+                                                    direction_z});
+                                    score_fragment_birth_device(
+                                        birth_counts_device, birth_ke_sum_device,
+                                        birth_mevu_hist_device, birth_depth_hist_device,
+                                        number_of_bins, depth_bin_width_mm,
+                                        birth_cos_hist_device,
+                                        birth_parent_mevu_hist_device,
+                                        birth_parent_z_hist_device,
+                                        secondary.atomic_number, secondary.mass_number,
+                                        scaled_secondary_energy_MeV, position_z_mm,
+                                        child_direction.z, /*generation=*/0,
+                                        /*parent_Z=*/6, /*parent_A=*/12, energy_MeV);
                                 }
                                 // else: unsupported charged KE stays out of
                                 // package_accounted_ke_MeV → residual local heat (not
@@ -4542,6 +4745,27 @@ TransportResult transport_sycl(const TransportConfig& config,
                                             package_accounted_ke_MeV += scaled_energy;
                                             ++queueable_count;
                                             queueable_energy += scaled_energy;
+                                            const auto child_direction =
+                                                rotate_local_direction(
+                                                    product.direction_x,
+                                                    product.direction_y,
+                                                    product.direction_z,
+                                                    Direction3F{direction_x, direction_y,
+                                                                direction_z});
+                                            score_fragment_birth_device(
+                                                birth_counts_device, birth_ke_sum_device,
+                                                birth_mevu_hist_device,
+                                                birth_depth_hist_device, number_of_bins,
+                                                depth_bin_width_mm, birth_cos_hist_device,
+                                                birth_parent_mevu_hist_device,
+                                                birth_parent_z_hist_device,
+                                                product.atomic_number, product.mass_number,
+                                                scaled_energy, position_z_mm,
+                                                child_direction.z,
+                                                static_cast<std::uint8_t>(
+                                                    particle.generation + 1),
+                                                particle.atomic_number,
+                                                particle.mass_number, energy_MeV);
                                         }
                                         // else: unsupported charged → residual local heat.
                                     }
@@ -5840,6 +6064,32 @@ TransportResult transport_sycl(const TransportConfig& config,
                 .wait_and_throw();
         }
     }
+    std::vector<std::uint64_t> birth_counts_host;
+    std::vector<double> birth_ke_sum_host;
+    std::vector<std::uint64_t> birth_mevu_host;
+    std::vector<std::uint64_t> birth_depth_host;
+    std::vector<std::uint64_t> birth_cos_host;
+    std::vector<std::uint64_t> birth_parent_mevu_host;
+    std::vector<std::uint64_t> birth_parent_z_host;
+    if (enable_birth_spectrum) {
+        birth_counts_host.resize(birth_gen_size);
+        birth_ke_sum_host.resize(birth_gen_size);
+        birth_mevu_host.resize(birth_mevu_size);
+        birth_depth_host.resize(birth_depth_size);
+        birth_cos_host.resize(birth_cos_size);
+        birth_parent_mevu_host.resize(birth_parent_mevu_size);
+        birth_parent_z_host.resize(birth_parent_z_size);
+        queue.copy(birth_counts_device, birth_counts_host.data(), birth_gen_size);
+        queue.copy(birth_ke_sum_device, birth_ke_sum_host.data(), birth_gen_size);
+        queue.copy(birth_mevu_hist_device, birth_mevu_host.data(), birth_mevu_size);
+        queue.copy(birth_depth_hist_device, birth_depth_host.data(), birth_depth_size);
+        queue.copy(birth_cos_hist_device, birth_cos_host.data(), birth_cos_size);
+        queue.copy(birth_parent_mevu_hist_device, birth_parent_mevu_host.data(),
+                   birth_parent_mevu_size);
+        queue.copy(birth_parent_z_hist_device, birth_parent_z_host.data(),
+                   birth_parent_z_size)
+            .wait_and_throw();
+    }
     if (enable_voxel_scoring) {
         voxel_dose_atomic_host.resize(number_of_voxels);
         queue.copy(voxel_dose_device, voxel_dose_atomic_host.data(), number_of_voxels)
@@ -5958,6 +6208,13 @@ TransportResult transport_sycl(const TransportConfig& config,
     free_device(voxel_let_moments_device);
     free_device(species_let_moments_device);
     free_device(isotope_let_moments_device);
+    free_device(birth_counts_device);
+    free_device(birth_ke_sum_device);
+    free_device(birth_mevu_hist_device);
+    free_device(birth_depth_hist_device);
+    free_device(birth_cos_hist_device);
+    free_device(birth_parent_mevu_hist_device);
+    free_device(birth_parent_z_hist_device);
     free_device(voxel_dose_device);
     free_device(charged_origin_voxel_dose_device);
     free_device(deposited_device);
@@ -6162,6 +6419,15 @@ TransportResult transport_sycl(const TransportConfig& config,
             result.all_hadron_voxel_letd_denominator =
                 extract_voxel_let_moment(3);
         }
+    }
+    if (enable_birth_spectrum) {
+        result.birth_counts_by_generation = std::move(birth_counts_host);
+        result.birth_ke_sum_MeV_by_generation = std::move(birth_ke_sum_host);
+        result.birth_mevu_hist = std::move(birth_mevu_host);
+        result.birth_depth_hist = std::move(birth_depth_host);
+        result.birth_cos_hist = std::move(birth_cos_host);
+        result.birth_parent_mevu_hist = std::move(birth_parent_mevu_host);
+        result.birth_parent_z_hist = std::move(birth_parent_z_host);
     }
     if (config.primary_spot_batch.empty()) {
         result.initial_energy_MeV =

@@ -67,6 +67,23 @@ void add_vector_in_place(std::vector<double>& total, const std::vector<double>& 
     }
 }
 
+void add_vector_in_place(std::vector<std::uint64_t>& total,
+                         const std::vector<std::uint64_t>& part) {
+    if (part.empty()) {
+        return;
+    }
+    if (total.empty()) {
+        total = part;
+        return;
+    }
+    if (total.size() != part.size()) {
+        throw std::runtime_error("TransportResult vector size mismatch while accumulating spots");
+    }
+    for (std::size_t i = 0; i < total.size(); ++i) {
+        total[i] += part[i];
+    }
+}
+
 void accumulate_transport_result(carbon::TransportResult& total,
                                  const carbon::TransportResult& part) {
     add_vector_in_place(total.deposited_energy_MeV, part.deposited_energy_MeV);
@@ -103,6 +120,15 @@ void accumulate_transport_result(carbon::TransportResult& total,
                         part.light_isotope_letd_numerator);
     add_vector_in_place(total.light_isotope_letd_denominator,
                         part.light_isotope_letd_denominator);
+    add_vector_in_place(total.birth_counts_by_generation,
+                        part.birth_counts_by_generation);
+    add_vector_in_place(total.birth_ke_sum_MeV_by_generation,
+                        part.birth_ke_sum_MeV_by_generation);
+    add_vector_in_place(total.birth_mevu_hist, part.birth_mevu_hist);
+    add_vector_in_place(total.birth_depth_hist, part.birth_depth_hist);
+    add_vector_in_place(total.birth_cos_hist, part.birth_cos_hist);
+    add_vector_in_place(total.birth_parent_mevu_hist, part.birth_parent_mevu_hist);
+    add_vector_in_place(total.birth_parent_z_hist, part.birth_parent_z_hist);
     add_vector_in_place(total.primary_c12_voxel_letd_numerator,
                         part.primary_c12_voxel_letd_numerator);
     add_vector_in_place(total.primary_c12_voxel_letd_denominator,
@@ -691,6 +717,10 @@ int main(int argc, char* argv[]) {
             carbon::write_light_isotope_letd_csv(
                 config.light_isotope_let_output_file, config, result);
         }
+        if (!config.fragment_birth_spectrum_output_file.empty()) {
+            carbon::write_fragment_birth_spectrum_csv(
+                config.fragment_birth_spectrum_output_file, config, result);
+        }
         if (config.enable_let_scoring && config.enable_voxel_scoring &&
             !config.let_voxel_mhd_output_file.empty()) {
             carbon::write_dense_voxel_letd_mhd(
@@ -832,6 +862,11 @@ int main(int argc, char* argv[]) {
             !config.light_isotope_let_output_file.empty()) {
             std::cout << "Light-isotope LET_d output: "
                       << config.light_isotope_let_output_file.string() << '\n';
+        }
+        if (!config.fragment_birth_spectrum_output_file.empty()) {
+            std::cout << "Fragment birth spectrum prefix: "
+                      << config.fragment_birth_spectrum_output_file.string()
+                      << '\n';
         }
         if (config.enable_let_scoring && config.enable_voxel_scoring &&
             !config.let_voxel_mhd_output_file.empty()) {

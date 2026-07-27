@@ -317,6 +317,35 @@ validation/scripts/plot_sobp_letd_profiles.py
 - 各代 LET_d numerator；
 - 各代对 all-hadron LET_d 的贡献。
 
+#### 已实现（2026-07-27）：GPU birth-spectrum scorer + 对照脚本
+
+| 项 | 路径 / 开关 |
+|----|-------------|
+| YAML | `fragment_birth_spectrum_output_file: out/.../prefix`（非空即启用） |
+| 配置示例 | `config/beam_200MeVu_birth_spectrum_smoke.yaml`、`config/beam_400MeVu_birth_spectrum_10k.yaml` |
+| 输出套件 | `<prefix>_summary.csv`、`_mevu.csv`、`_depth.csv`、`_costheta.csv`、`_parent_mevu.csv`、`_parent_z.csv` |
+| TOPAS 表→同格式 | `validation/scripts/prepare_topas_birth_spectrum.py` |
+| GPU vs TOPAS 比较 | `validation/scripts/compare_fragment_birth_spectra.py`（`--generation N`） |
+
+GPU 在 **queue fit 之前** 对所有产生的 p/d/t/He-3/He-4 做 atomic 直方图（产额×代数、MeV/u、深度、cosθ、父粒子 MeV/u 与 Z），避免队列溢出偏置谱。
+
+#### 400 MeV/u 初步结论（10k GPU，G4 11.3.2 package）
+
+| 对比 | 结果 |
+|------|------|
+| GPU gen0 vs TOPAS primary package | 产额比 ≈ 0.95–1.01，mean KE 比 ≈ 0.99–1.01 → **初级末态采样健康** |
+| GPU gen1 vs TOPAS cascade package | 产额比 ≈ 0.35–0.47；He-4 mean KE 比 ≈ **0.31** → **级联采样偏软/产额偏低，是高能 LET tail 主嫌疑** |
+
+指标：`out/birth_spectrum/compare_gpu400_gen0_vs_topas_primary_package.json`、  
+`out/birth_spectrum/compare_gpu400_gen1_vs_topas_cascade_package.json`。
+
+**仍待做**：
+
+1. 100/200/300/400 MeV/u 全套 gen0/gen1 比较（固定 seed，写入 `validation/results/`）  
+2. 按父粒子 MeV/u 条件化的 gen1 能谱（确认是否窗口过宽 / 稀有同位素填充）  
+3. 各代 LET numerator/denominator 贡献（额外 scorer）  
+4. 进入 **第二优先级**：能量条件化 cascade package
+
 ### 第二优先级：能量条件化的 cascade package
 
 如果确认当前 GPU 产物谱偏硬或偏软，应将 cascade package 改为：

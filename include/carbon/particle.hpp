@@ -22,6 +22,77 @@ constexpr std::size_t light_isotope_category(const int atomic_number,
     return light_isotope_category_count;
 }
 
+// Fragment birth-spectrum diagnostics (p/d/t/He-3/He-4) for high-energy cascade
+// validation. Generation bins: 0 = primary C-12 direct product, 1 = first cascade
+// generation, 2 = generation >= 2.
+inline constexpr std::size_t birth_generation_bin_count = 3;
+inline constexpr std::size_t birth_mevu_bin_count = 200;  // 0–400 MeV/u @ 2 MeV/u
+inline constexpr double birth_mevu_bin_width = 2.0;
+inline constexpr double birth_mevu_max = 400.0;
+inline constexpr std::size_t birth_cos_bin_count = 20;  // cosθ ∈ [-1, 1]
+inline constexpr std::size_t birth_parent_mevu_bin_count = 40;  // 0–400 @ 10 MeV/u
+inline constexpr double birth_parent_mevu_bin_width = 10.0;
+inline constexpr std::size_t birth_parent_z_bin_count = 9;  // index = clamp(Z, 0..8)
+
+constexpr std::size_t birth_generation_bin(const std::uint8_t generation) noexcept {
+    return generation >= 2 ? 2 : static_cast<std::size_t>(generation);
+}
+
+constexpr std::size_t birth_mevu_bin(const double kinetic_energy_MeV,
+                                    const int mass_number) noexcept {
+    if (mass_number <= 0 || !(kinetic_energy_MeV > 0.0)) {
+        return 0;
+    }
+    const double mevu = kinetic_energy_MeV / static_cast<double>(mass_number);
+    if (!(mevu > 0.0)) {
+        return 0;
+    }
+    auto bin = static_cast<std::size_t>(mevu / birth_mevu_bin_width);
+    if (bin >= birth_mevu_bin_count) {
+        bin = birth_mevu_bin_count - 1;
+    }
+    return bin;
+}
+
+constexpr std::size_t birth_cos_bin(const double direction_z) noexcept {
+    double c = direction_z;
+    if (c < -1.0) {
+        c = -1.0;
+    }
+    if (c > 1.0) {
+        c = 1.0;
+    }
+    auto bin = static_cast<std::size_t>(((c + 1.0) * 0.5) * birth_cos_bin_count);
+    if (bin >= birth_cos_bin_count) {
+        bin = birth_cos_bin_count - 1;
+    }
+    return bin;
+}
+
+constexpr std::size_t birth_parent_mevu_bin(const double parent_kinetic_energy_MeV,
+                                           const int parent_mass_number) noexcept {
+    if (parent_mass_number <= 0 || !(parent_kinetic_energy_MeV > 0.0)) {
+        return 0;
+    }
+    const double mevu =
+        parent_kinetic_energy_MeV / static_cast<double>(parent_mass_number);
+    auto bin = static_cast<std::size_t>(mevu / birth_parent_mevu_bin_width);
+    if (bin >= birth_parent_mevu_bin_count) {
+        bin = birth_parent_mevu_bin_count - 1;
+    }
+    return bin;
+}
+
+constexpr std::size_t birth_parent_z_bin(const int parent_atomic_number) noexcept {
+    if (parent_atomic_number <= 0) {
+        return 0;
+    }
+    if (parent_atomic_number >= static_cast<int>(birth_parent_z_bin_count)) {
+        return birth_parent_z_bin_count - 1;
+    }
+    return static_cast<std::size_t>(parent_atomic_number);
+}
+
 constexpr std::uint8_t charged_dose_category(const int atomic_number,
                                              const int mass_number) noexcept {
     if (atomic_number == 1 && mass_number == 1) {
