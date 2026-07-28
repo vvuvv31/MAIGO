@@ -1,529 +1,386 @@
-# CarbonGPU 代码架构
+# MAIGO / carbon-oneapi-mc 代码架构
+
+本文描述仓库**当前**源码结构、构建矩阵、输运路径与验证入口。  
+更细的 minibeam 设计与安全合并条件见 [`minibeamStructure.md`](minibeamStructure.md)；  
+使用与验证摘要见 [`README.md`](README.md)。
+
+---
 
 ## 1. 架构概览
 
-CarbonGPU 当前采用 **配置驱动的 Monte Carlo 输运核心 + CPU/SYCL 双后端 + TOPAS 独立验证体系**。
+系统是 **配置驱动的 condensed-history 蒙特卡洛核心**，带 **CPU serial 子集** 与 **SYCL 全功能路径**，并用 TOPAS/Geant4 表与独立脚本做对照。
 
 ```text
-CLI / 配置文件 / TOPAS spots
-             │
-             ▼
-      TransportConfig
-             │
-      ┌──────┴─────────┐
-      │ 物理数据资产加载 │
-      │ SP / XS / CT   │
-      │ reaction bins  │
-      └──────┬─────────┘
-             ▼
-    ┌───────────────────┐
-    │ Transport Backend │
-    ├───────────────────┤
-    │ Serial CPU        │
-    │ SYCL CPU / GPU    │
-    └─────────┬─────────┘
-              ▼
-       TransportResult
-              │
-              ▼
- Dose / LET / voxel / fragment
- neutral / reaction / energy ledger
+CLI / YAML 配置 / TOPAS spots / TPS source
+                    │
+                    ▼
+             TransportConfig
+                    │
+         ┌──────────┴──────────┐
+         │  物理数据与几何加载   │
+         │  SP / XS / packages │
+         │  CT / slab / insert │
+         └──────────┬──────────┘
+                    ▼
+         ┌──────────────────────┐
+         │   Transport backend  │
+         ├──────────────────────┤
+         │  serial (CPU 子集)   │
+         │  SYCL CPU / GPU      │
+         │    ├─ legacy path    │  ← 水箱 / CT / LET / TPS
+         │    └─ minibeam path  │  ← Copper 准直器 beamline（可选编译）
+         └──────────┬───────────┘
+                    ▼
+             TransportResult
+                    │
+                    ▼
+      depth / voxel / LET / fragment / neutral / ledger
 ```
 
-主要目录职责：
+### 1.1 仓库目录
 
 ```text
-carbonGPU_grok/
-├── CMakeLists.txt           构建配置
-├── include/carbon/          公共接口、数据结构与物理工具
-├── src/                     核心实现和命令行入口
-├── config/                  模拟与束流配置
-├── data/                    stopping power、截面等物理数据
-├── tests/                   单元测试和集成测试
-├── tools/                   数据生成与辅助工具
+MAIGO/
+├── CMakeLists.txt / CMakePresets.json   构建与预设
+├── include/carbon/                      公共 API 与头文件
+├── src/                                 核心实现
+│   ├── main.cpp                         CLI 入口
+│   ├── config.cpp                       配置解析与校验
+│   ├── transport_cpu.cpp                serial 输运
+│   ├── transport_sycl_legacy.cpp        master 兼容 SYCL 内核（水/CT/LET）
+│   ├── transport_sycl.cpp               minibeam Copper 路径（可选）
+│   ├── transport_sycl_dispatch.cpp      ON 时 runtime 分发
+│   ├── detail/                          共享 SyclTransportContext Impl
+│   ├── device.cpp / io.cpp / …          设备选择、写出、物理表
+│   └── topas_spots.cpp / tps_source.cpp 束流计划
+├── config/                              束流与验证 YAML
+├── data/                                SP / XS / Copper / 同位素表
+├── tests/                               carbon_tests
 ├── validation/
-│   ├── scripts/             验证、转换、比较和远程运行脚本
-│   ├── topas/               TOPAS 配置、自定义 scorer 和 spot plan
-│   └── results/             规范化参考数据、指标与报告
-└── scripts/                 构建和运行辅助脚本
+│   ├── scripts/                         对照、转换、isolation 回归
+│   ├── references/                      冻结 isolation 参考（入库）
+│   ├── results/                         本地/大文件结果（gitignore）
+│   └── topas/                           TOPAS 配置与 scorer 扩展
+├── scripts/                             构建/运行辅助
+├── ct/                                  本地 CT/DICOM（gitignore）
+├── out/                                 本地输出（gitignore）
+├── structure.md                         本文
+├── minibeamStructure.md                 minibeam 隔离设计
+├── minibeam.md                          minibeam 物理与验证笔记
+└── README.md / futureStep.md / BRANCH_WORKFLOW.md
 ```
+
+---
 
 ## 2. 构建结构
 
-CMake 构建三个主要目标：
+### 2.1 目标
 
-- `carbon_core`：输运、物理模型、数据加载和输出。
-- `carbon_mc`：命令行可执行程序。
-- `carbon_tests`：单元测试和集成测试。
+| 目标 | 作用 |
+|------|------|
+| `carbon_core` | 配置、物理表、serial/SYCL 输运、I/O |
+| `carbon_mc` | 命令行可执行程序 |
+| `carbon_tests` | 无第三方依赖的单元/集成测试 |
 
-SYCL 是编译时可选功能，由 `CARBON_ENABLE_SYCL` 控制。启用后才会编译设备管理和 SYCL 输运实现，并定义 `CARBON_HAS_SYCL`。
+### 2.2 编译开关
 
-关键位置：
+| CMake 选项 | 默认 | 含义 |
+|------------|------|------|
+| `CARBON_ENABLE_SYCL` | OFF | 编译 SYCL 后端与 `device.cpp`；定义 `CARBON_HAS_SYCL` |
+| `CARBON_ENABLE_MINIBEAM` | **OFF** | 编译 Copper minibeam 路径 + dispatch；定义 `CARBON_ENABLE_MINIBEAM` |
+| `CARBON_DOSE_FP32` | OFF* | SYCL 剂量 scorer 用 float atomic（*NVIDIA 预设默认 ON） |
+| `CARBON_ENABLE_TRANSPORT_PROFILE` | OFF | 步级 profile 计数 |
+| `CARBON_SYCL_TARGETS` | 空 | 如 `nvptx64-nvidia-cuda` 或 `spir64,nvptx64-nvidia-cuda` |
+| `CARBON_CUDA_ARCH` | 空 | 可选 AOT，如 `sm_75` |
 
-- `CMakeLists.txt:1-55`
+\* 项目面向消费级 NVIDIA 时，预设 `oneapi-nvidia-*` / `oneapi-release` 默认打开 FP32 dose。
 
-## 3. 程序入口与执行流程
+### 2.3 SYCL 源文件矩阵
 
-主入口位于 `src/main.cpp:205-479`，总体流程如下：
+| 构建 | 编译的输运源 | 导出入口 |
+|------|----------------|----------|
+| SYCL + **MINIBEAM=OFF** | `transport_sycl_legacy.cpp` | `transport_sycl` ≡ legacy |
+| SYCL + **MINIBEAM=ON** | `transport_sycl_legacy.cpp` + `transport_sycl.cpp` + `transport_sycl_dispatch.cpp` | `transport_sycl` 按 YAML 分发 |
 
-1. 加载默认配置 `config/beam_200MeVu.yaml`。
-2. 解析命令行参数并覆盖配置。
-3. 加载 stopping-power、核截面、反应、级联和中性粒子数据。
-4. 可选加载 CT grid、材料表和 TOPAS spot plan。
-5. 选择 serial 或 SYCL 后端。
-6. 执行一个束流或逐 spot 执行 SOBP 计划。
-7. 汇总 `TransportResult`。
-8. 写出 depth-dose、LET、voxel dose、fragment 和 reaction 等结果。
+共享设备上下文：
+
+- `src/detail/sycl_transport_context_impl.inc` — `SyclTransportContext::Impl`
+- `src/detail/sycl_transport_context_methods.inc` — 构造/析构（仅 legacy TU 在 ON 时定义方法，`CARBON_DEFINE_SYCL_CONTEXT`）
+
+```text
+                 CARBON_ENABLE_MINIBEAM=OFF
+                 ─────────────────────────
+                 transport_sycl_legacy.cpp
+                          │
+                          ▼
+                   transport_sycl()
+
+
+                 CARBON_ENABLE_MINIBEAM=ON
+                 ─────────────────────────
+   transport_sycl_dispatch.cpp
+            │
+            ├── minibeam:false ──► transport_sycl_legacy()
+            └── minibeam:true  ──► transport_sycl_minibeam()
+```
+
+### 2.4 推荐 presets（节选）
+
+| Preset | 角色 |
+|--------|------|
+| `cpu-debug` | 无 SYCL，调试 |
+| `oneapi-nvidia-release` | NVIDIA OFF，**FP32**，legacy only |
+| `oneapi-nvidia-minibeam` | NVIDIA ON，**FP32**，双 kernel |
+| `oneapi-nvidia-release-fp64` / `oneapi-nvidia-minibeam-fp64` | 可选 FP64 精度 |
+| `oneapi-release` | 双目标 + FP32 |
+| `oneapi-intel-release` | 仅 SPIR-V |
+
+CMake presets schema version **3**（兼容 CMake 3.22）。
+
+---
+
+## 3. 程序入口与数据流
+
+入口：`src/main.cpp`。
+
+1. 解析 `--config` / CLI 覆盖项 → `TransportConfig`
+2. `TransportConfig::validate()`（含 minibeam 编译期门控）
+3. 加载 SP / XS / reaction / cascade / neutral 等表
+4. 可选 CT grid、TOPAS spots、TPS source、spot batch
+5. `transport_serial` 或 `transport_sycl`
+6. 写出 depth / voxel MHD / LET / fragment / diagnostics
+
+配置文件扩展名为 `.yaml`，解析器是 **自定义 key-value**（非完整 YAML 库）：`src/config.cpp`。
 
 ```text
 main
-  │
-  ├── load_config
-  ├── apply CLI overrides
-  ├── load physics data
-  │     ├── stopping power
-  │     ├── cross sections
-  │     ├── reaction package
-  │     ├── cascade package
-  │     ├── neutral package
-  │     └── CT/material data
-  │
-  ├── load optional spot plan
-  │
-  ├── transport_serial
-  │          或
-  ├── transport_sycl
-  │
-  └── write scorers/results
+  ├── load_config / CLI
+  ├── validate()
+  ├── load physics tables
+  ├── load geometry / spots / TPS
+  ├── transport_serial  OR  transport_sycl
+  └── write scorers
 ```
 
-配置文件使用 `.yaml` 后缀，但当前实现是自定义 key-value 解析器，而不是完整 YAML parser：
+---
 
-- `src/config.cpp:377-519`
-- `src/config.cpp:199-375`
+## 4. 核心接口
 
-## 4. 核心接口和数据结构
+### 4.1 `TransportConfig`
 
-### 4.1 TransportConfig
+定义于 `include/carbon/transport_config.hpp`，集中存放：
 
-`TransportConfig` 是模拟输入的集中定义，包含：
+- 束流、histories、种子、步长
+- slab / insert / CT 几何
+- 次级、级联、中性、LET、voxel scorer
+- GPU 批大小 / `secondary_persistent_workers` 等
+- **minibeam** 准直器与 Copper 表路径
+- 独立门控优化项（默认 legacy 关闭）：
+  - `secondary_fp32_energy_residual`
+  - `robust_boundary_nudge`
+  - `secondary_condensed_step_mm`
+  - `electronic_buildup_lateral_sigma_mm`
+  - `dose_output_scale`
 
-- 束流参数。
-- histories 和随机种子。
-- 步长和输运限制。
-- slab、insert 和 CT 几何。
-- stopping-power 和核反应数据路径。
-- 多重散射、straggling、级联和中性粒子开关。
-- voxel、fragment、reaction 等 scorer 配置。
-- CPU/GPU 执行相关参数。
+### 4.2 `TransportResult`
 
-位置：
+定义于 `include/carbon/transport.hpp`：
 
-- `include/carbon/transport_config.hpp:13-181`
+- depth / voxel / charged-origin / LET moments
+- 核反应、级联、中性队列统计与能量账本
+- kernel 计时字段（`primary_kernel_seconds` 等）
+- 可选 `MinibeamDiagnostics`
 
-配置解析完成后，由 `TransportConfig::validate()` 检查参数范围和模型组合是否合法：
+### 4.3 模块表
 
-- `src/config.cpp:199-375`
+| 模块 | 职责 | 主要位置 |
+|------|------|----------|
+| Config | 解析与校验 | `config.cpp`, `transport_config.hpp` |
+| Stopping power / XS | 水与材料表 | `stopping_power.*`, `cross_section.*` |
+| Reaction / cascade / neutral packages | 二进制末态包 | `*_package.*` |
+| CT grid | CCTG 读写与材料 | `ct_grid.*` |
+| Spots / TPS | TOPAS plan、TPS 几何 | `topas_spots.*`, `tps_source.*` |
+| MCS / straggling / RNG | 物理工具 | `multiple_scattering.hpp`, `straggling.hpp`, `rng.hpp` |
+| Minibeam 几何 | 狭缝/铜准直纯函数 | `minibeam_collimator.hpp` |
+| I/O | CSV / MHD / 稀疏 dose | `io.*` |
+| Device | SYCL queue 选择 | `device.*` |
 
-### 4.2 TransportResult
-
-`TransportResult` 是输运后端的统一结果容器，主要包含：
-
-- depth-dose 和 LET 数据。
-- voxel scorer。
-- 粒子与碎片统计。
-- 反应和中性粒子统计。
-- 入射、沉积、逃逸和剩余能量账本。
-- 队列溢出等运行状态。
-
-位置：
-
-- `include/carbon/transport.hpp:16-73`
-
-统一后端接口：
-
-- `transport_serial(...)`
-- `transport_sycl(...)`
-
-位置：
-
-- `include/carbon/transport.hpp:75-93`
-
-### 4.3 基础领域模块
-
-| 模块 | 职责 | 位置 |
-|---|---|---|
-| Particle | 粒子类型、谱系和统计结构 | `include/carbon/particle.hpp:8-139` |
-| SlabPhantom | 分层幻影和材料区域 | `include/carbon/slab_phantom.hpp:9-178` |
-| CtGrid | CT voxel 数据和材料参数 | `include/carbon/ct_grid.hpp:10-55` |
-| MultipleScattering | 多重库仑散射 | `include/carbon/multiple_scattering.hpp:6-46` |
-| Straggling | 能量涨落 | `include/carbon/straggling.hpp:6-40` |
-| RNG | 并行可复现随机数 | `include/carbon/rng.hpp:6-85` |
+---
 
 ## 5. 输运后端
 
-### 5.1 Serial CPU
+### 5.1 Serial CPU（`transport_cpu.cpp`）
 
-Serial 后端位于 `src/transport_cpu.cpp:36-198`，主要支持：
+子集：CSDA、straggling、初级衰减。  
+**无**完整 MCS / 次级 / 级联 / 中性 / 完整 CT。  
+用途：轻量调试与能量账本子集对照。
 
-- CSDA 连续能损。
-- energy straggling。
-- primary attenuation。
-- 基础能量统计。
+### 5.2 SYCL legacy（`transport_sycl_legacy.cpp`）
 
-Serial 后端并不是完整物理后端。例如，多重散射会被明确拒绝，也没有完整的二级带电粒子、级联和中性粒子输运链路。
-
-其主要作用是：
-
-- 提供轻量 CPU 执行路径。
-- 验证基础连续能损和能量账本。
-- 作为 SYCL 共同功能子集的参考实现。
-
-### 5.2 SYCL CPU/GPU
-
-SYCL 后端位于 `src/transport_sycl.cpp:1201-3210`，是当前全功能输运路径。
-
-主要阶段：
+全功能 **水箱 / CT / TPS / LET** 路径（与隔离前 master 内核同源快照 + 共享 context）：
 
 ```text
-Primary particle kernel
-          │
-          ├── continuous energy loss
-          ├── energy straggling
-          ├── multiple scattering
-          ├── nuclear interaction
-          └── enqueue secondary particles
-          │
-          ▼
-Charged secondary / cascade kernel
-          │
-          ├── fragment transport
-          ├── cascade generation
-          └── enqueue neutral particles
-          │
-          ▼
-Neutral particle kernel
-          │
-          ▼
-Result collection and scorer reduction
+Primary kernel
+  → continuous loss / straggling / MCS / nuclear
+  → secondary queue
+Secondary / cascade kernel
+  → fragment transport / cascade
+Neutral kernel（可选）
+  → result reduction
 ```
 
-运行时通过 `--device serial|cpu|gpu|default` 选择执行路径：
+### 5.3 SYCL minibeam（`transport_sycl.cpp`，仅 MINIBEAM=ON）
 
-- `serial`：调用 `transport_serial`。
-- `cpu`：创建 SYCL CPU queue。
-- `gpu`：创建 SYCL GPU queue。
-- `default`：使用默认 SYCL selector。
-
-关键位置：
-
-- `src/main.cpp:175-201`
-- `src/device.cpp:11-38`
-
-SYCL 后端还会根据设备内存预算调整粒子队列容量：
-
-- `src/transport_sycl.cpp:333-528`
-
-### 5.3 后端不对称性
-
-Serial 和 SYCL 后端共享 `TransportConfig`、`TransportResult` 及部分物理工具，但物理能力并不完全一致：
+在 legacy 水中/CT 输运之外增加 **Copper beamline**：
 
 ```text
-                     Serial    SYCL
-CSDA                   ✓         ✓
-Energy straggling      ✓         ✓
-Primary attenuation    ✓         ✓
-Multiple scattering    ✗         ✓
-Charged secondaries    ✗         ✓
-Cascade                ✗         ✓
-Neutral transport      ✗         ✓
-完整 CT/voxel 路径      有限       ✓
+Source
+  → air / slit / Copper EM+nuclear
+  → water-entrance phase space
+  → charged/neutral product queues
+  → 下游水/CT 输运与 scorer
 ```
 
-因此 Serial 不能作为 SYCL 全功能路径的逐功能 oracle。
+`minibeam: false` 时 **不得**进入该路径：由 dispatch 调用 `transport_sycl_legacy`。
 
-## 6. 几何与材料模型
-
-当前支持三类异质模型：
-
-1. slab 分层模型。
-2. insert 局部材料模型。
-3. CT voxel 模型。
-
-配置位置：
-
-- `include/carbon/transport_config.hpp:26-55`
-- `include/carbon/transport_config.hpp:89-120`
-
-这些模型最终在 SYCL kernel 中参与当前位置到材料属性的映射：
-
-- `src/transport_sycl.cpp:1342-1474`
-- `src/transport_sycl.cpp:2177-2299`
-
-CT 使用自定义二进制格式，支持 v1、v2 和 v3。v3 增加 `(Z/A)_rel` 和 `I_eV`，用于 Schneider mass stopping-power 计算：
-
-- `include/carbon/ct_grid.hpp:10-55`
-- `src/ct_grid.cpp:42-157`
-
-模型组合和优先级主要由 `TransportConfig::validate()` 约束。CT、insert、slab、绝对材料表和 mass-SP 之间存在组合限制，维护这些限制时需要同时检查配置校验和 kernel 分支。
-
-## 7. 束流与 SOBP
-
-束流可以直接由配置指定，也可以通过 TOPAS spot plan 输入。
-
-`TopasSpotPlan::from_file()` 解析 `Tf`、`Scatterer1` 和 `L0-L14` 等字段：
-
-- `include/carbon/topas_spots.hpp:11-71`
-- `src/topas_spots.cpp:158-256`
-
-`main` 逐 spot 运行输运，并将各 spot 的 scorer 累加：
-
-- `src/main.cpp:282-330`
+### 5.4 后端能力对比
 
 ```text
-TOPAS spot plan
-  ├── spot 1 ──► transport ──► partial result
-  ├── spot 2 ──► transport ──► partial result
-  ├── ...
-  └── spot N ──► transport ──► partial result
-                                  │
-                                  ▼
-                         accumulated result
+                        Serial   SYCL legacy   SYCL minibeam
+CSDA / straggling         ✓           ✓              ✓
+MCS / secondaries         ✗           ✓              ✓
+Cascade / neutral         ✗           ✓              ✓
+CT / TPS / LET            有限         ✓              ✓
+Copper collimator         ✗           ✗              ✓
 ```
 
-因此 SOBP 是建立在单束流输运之上的调度和累加层，而不是独立的输运引擎。
+---
+
+## 6. Minibeam 编译与运行矩阵
+
+| 构建 | YAML | 路径 |
+|------|------|------|
+| MINIBEAM=OFF | 普通 CT/水 | legacy |
+| MINIBEAM=OFF | `minibeam: true` | **配置报错** |
+| MINIBEAM=ON | `minibeam: false` | **legacy**（无 Copper 寄存器压力） |
+| MINIBEAM=ON | `minibeam: true` | minibeam kernel |
+
+正式 minibeam 配置需**显式**打开 non-legacy 优化（见 `config/beam_minibeam_*.yaml`），例如：
+
+```yaml
+minibeam: true
+secondary_fp32_energy_residual: true
+robust_boundary_nudge: true
+secondary_condensed_step_mm: 0.25   # 若使用
+electronic_buildup_lateral_sigma_mm: 0.5  # 若使用
+```
+
+设计细节、验收门与历史 perf 数据：[`minibeamStructure.md`](minibeamStructure.md)。
+
+---
+
+## 7. 几何、束流与计分（摘要）
+
+- **几何**：均匀水、轴向 slab、hetero insert、CT CCTG v2/v3  
+- **束流**：emittance、TOPAS multi-spot batch、TPS 90°、可选 `tpsSource`  
+- **计分**：depth dose、dense MHD、charged-origin、LET_d、birth spectrum、minibeam diagnostics  
+
+配置样例见 `config/`；minibeam 样例为 `config/beam_minibeam_*.yaml`。
+
+---
 
 ## 8. 物理数据资产
 
-物理模型通过外部文件资产注入核心程序：
+| 类型 | 位置 |
+|------|------|
+| 水/骨/肺/空气/铜 SP | `data/stopping_power_*.csv` |
+| C-12 / 离子 / 中性 XS | `data/*cross_sections*.csv` |
+| Reaction / cascade / neutral packages | `validation/results/*.bin`（部分入库规则见 `.gitignore`） |
+| Copper reaction / neutral packages | `data/copper_*.bin` |
+| 表说明 | `data/README_physics_tables.md` |
 
-- stopping-power CSV。
-- inelastic cross-section CSV。
-- reaction binary package。
-- cascade binary package。
-- neutral binary package。
-- CT binary grid。
-- TOPAS spot plan。
+---
 
-默认 stopping-power 表由开发辅助脚本生成：
+## 9. 测试与 isolation 回归
 
-- `tools/generate_stopping_power.py:2-66`
+### 9.1 默认 CTest
 
-TOPAS 截面数据通过验证脚本规范化：
+| 测试名 | 内容 |
+|--------|------|
+| `carbon_tests` | 单元 + SYCL smoke（有 GPU 时） |
+| `reorient_ct_grid_tps_90_tests` | CT 重定向几何 |
+| `dose_mapping_geometry_tests` | dose 映射几何 |
+| `minibeam_isolation_log_parser` | isolation 脚本 log 解析（无 GPU） |
 
-- `validation/scripts/prepare_topas_cross_sections.py:72-182`
+### 9.2 三门 isolation（可选）
 
-二进制 package 具有 magic、version、endian 和尺寸校验：
+脚本：`validation/scripts/regression_minibeam_isolation.py`
 
-- `src/reaction_package.cpp:73-195`
-- `src/cascade_package.cpp:65-183`
-- `src/neutral_package.cpp:57-166`
+| 门 | 含义 |
+|----|------|
+| Gate 1 | MASTER 兼容二进制 vs MINIBEAM=OFF（同 dose 精度） |
+| Gate 2 | ON + `minibeam:false` vs OFF（legacy 路径 + 性能） |
+| Gate 3 | ON + `minibeam:true`：backend、非零 diagnostics、MHD、冻结 179.17 MeV/u 中心轴剂量 |
 
-这种设计使物理数据生成与输运核心解耦，但格式升级需要同步维护：
-
-1. 数据生成脚本。
-2. 二进制加载器。
-3. metadata。
-4. 测试和验证资产。
-
-## 9. 输出与 scorer
-
-输运结果通过 writer 层输出，主要包括：
-
-- depth-dose。
-- LET。
-- voxel dose。
-- fragment spectra/statistics。
-- reaction records。
-- neutral statistics。
-- 能量守恒账本。
-
-整体数据方向：
+冻结参考：
 
 ```text
-Transport kernels
-       │
-       ▼
-TransportResult
-       │
-       ├── depth-dose writer
-       ├── LET writer
-       ├── voxel scorer writer
-       ├── fragment writer
-       ├── reaction writer
-       └── summary / energy ledger
+validation/references/minibeam_isolation/
+  gate3_179p17_copper_em_10k_central_depth.csv
+  gate3_179p17_copper_em_10k.metadata.json
 ```
 
-集中式 `TransportResult` 便于统一输出和检查能量守恒，但也使结果结构随着 scorer 增加而持续扩大。
+启用 CTest 门（缺任一路径 configure 失败）：
 
-## 10. 验证体系
-
-`validation/` 构成相对独立的参考验证系统：
-
-```text
-TOPAS simulation
-      │
-      ├── custom scorer extensions
-      ▼
-raw phsp / csv / log
-      │
-      ├── prepare / normalize scripts
-      ▼
-normalized CSV / binary packages
-      │
-      ├── comparison scripts
-      ▼
-metrics / plots / markdown results
+```bash
+cmake -S . -B build/iso \
+  -DCARBON_RUN_ISOLATION_GATES=ON \
+  -DCARBON_MC_MASTER=/path/master_fp32/carbon_mc \
+  -DCARBON_MC_OFF=/path/off_fp32/carbon_mc \
+  -DCARBON_MC_ON=/path/on_fp32/carbon_mc
+ctest -L isolation --output-on-failure
 ```
 
-### 10.1 TOPAS 自定义 scorer
+**注意**：默认 NVIDIA 为 FP32 dose atomic，Gate1/2 以 **steps/反应数一致 + 紧 L1** 为准，不强制 CSV bitwise（FP32 atomic 顺序非确定）。FP64 配对可加 `--g1-bitwise --g2-bitwise`。
 
-- 反应 ntuple：`validation/topas/extensions/CarbonReactionNtuple.cc:11-125`
-- 截面 ntuple：`validation/topas/extensions/CarbonCrossSectionNtuple.cc:15-103`
-- 扩展构建：`validation/topas/build_extensions.sh:1-29`
+性能门使用 **`Kernel time: primary=… secondary=…` 中位数**（warmup + 重复），不用进程 wall time。
 
-### 10.2 数据规范化和比较
+---
 
-- 反应数据准备：`validation/scripts/prepare_topas_reactions.py:113-170`
-- depth-dose 比较：`validation/scripts/compare_depth_dose.py:88-205`
-- TOPAS voxel CSV 规范化：`validation/scripts/normalize_topas_csv.py:13-72`
+## 10. 关键代码路径速查
 
-### 10.3 验证结果
+| 主题 | 路径 |
+|------|------|
+| CLI | `src/main.cpp` |
+| 配置 | `src/config.cpp`, `include/carbon/transport_config.hpp` |
+| Serial | `src/transport_cpu.cpp` |
+| Legacy SYCL | `src/transport_sycl_legacy.cpp` |
+| Minibeam SYCL | `src/transport_sycl.cpp` |
+| 分发 | `src/transport_sycl_dispatch.cpp` |
+| 设备 | `src/device.cpp` |
+| 写出 | `src/io.cpp` |
+| 构建 | `CMakeLists.txt`, `CMakePresets.json` |
+| Isolation | `validation/scripts/regression_minibeam_isolation.py` |
 
-`validation/results/` 同时承担以下职责：
+---
 
-- 规范化参考数据。
-- binary package 测试资产。
-- 比较指标和图表。
-- 验证报告。
-- 来源和物理配置 metadata。
+## 11. 维护约定
 
-这使验证结果具有较好的可追溯性，但测试也会依赖部分 validation 资产。
+1. **默认生产 CT/LET 构建**：`CARBON_ENABLE_MINIBEAM=OFF`，走 legacy，不编 Copper。  
+2. **改水/CT/LET 物理**：改 `transport_sycl_legacy.cpp`（OFF 与 ON+`minibeam:false` 共用）。  
+3. **改 Copper beamline**：改 `transport_sycl.cpp` 与相关表/配置。  
+4. **legacy 与 master 快照漂移风险**：长期应将 Copper 完全拆出单一 water kernel；短期 dual 文件需同步修 bug。  
+5. **分支**：日常开发默认 `master`（见 `BRANCH_WORKFLOW.md`）。
 
-## 11. 测试结构
+---
 
-主要测试集中在 `tests/carbon_tests.cpp:133-1090`，覆盖：
+## 12. 相关文档
 
-- 单位换算。
-- RNG 和 Philox 可复现性。
-- energy straggling。
-- Serial 输运和能量守恒。
-- primary attenuation。
-- reaction、neutral 和 cascade package 加载。
-- dose writer。
-- TOPAS spot plan 解析。
-- SYCL CPU 与 Serial 共同子集对齐。
-- secondary queue 和 cascade smoke test。
-- CT 输运 smoke test。
-
-`carbon_tests` 直接链接 `carbon_core`：
-
-- `CMakeLists.txt:47-55`
-
-测试体系兼有单元测试、数据格式测试和端到端集成测试。
-
-## 12. 依赖方向
-
-当前主要依赖方向可以概括为：
-
-```text
-main / CLI
-    │
-    ▼
-config + data loaders + spot plan
-    │
-    ▼
-transport public API
-    │
-    ├── serial implementation
-    └── SYCL implementation
-           │
-           ├── geometry/material helpers
-           ├── physics helpers
-           ├── RNG
-           └── binary physics packages
-    │
-    ▼
-TransportResult
-    │
-    ▼
-I/O writers
-```
-
-验证系统从外部生成和比较数据，不应反向依赖核心模拟器实现细节；但部分规范化 binary asset 会作为核心程序和测试的运行时输入。
-
-## 13. 架构优点
-
-1. 配置、输运和结果边界较明确。
-2. CPU 与 GPU 共享领域数据结构和上层输出接口。
-3. 并行 RNG 设计有利于执行结果可复现。
-4. CT、反应、级联和中性粒子数据具有版本化格式及强校验。
-5. TOPAS 验证链独立于核心模拟器，参考结果来源可追踪。
-6. 能量账本集中在 `TransportResult`，便于检查守恒和遗漏。
-7. SOBP 复用单 spot 输运能力，没有建立第二套输运实现。
-
-## 14. 主要耦合点与维护风险
-
-### 14.1 `transport_sycl.cpp` 是巨型单体
-
-`src/transport_sycl.cpp:305-3210` 同时承担：
-
-- 设备内存预算。
-- 几何和材料选择。
-- primary transport。
-- secondary transport。
-- cascade。
-- neutral transport。
-- voxel scoring。
-- 结果回收和归并。
-
-这是当前最明显的高耦合维护热点。修改一个物理模型时，容易影响队列、内存布局、kernel 参数和 scorer。
-
-### 14.2 `TransportConfig` 职责过宽
-
-`TransportConfig` 同时包含：
-
-- 设备配置。
-- 束流配置。
-- 几何配置。
-- 物理开关。
-- 数据文件路径。
-- scorer 配置。
-
-新增功能通常需要同时修改配置结构、配置解析、校验、CLI 和 kernel 参数。
-
-### 14.3 模型组合依赖集中校验
-
-slab、insert、CT、绝对材料表和 mass-SP 的兼容关系主要由 `validate()` 维护。随着模型增多，合法组合和优先级容易变得难以推断。
-
-### 14.4 CPU/SYCL 功能不对称
-
-Serial 只能验证共同功能子集。完整二级粒子、异质材料和中性粒子链路主要依赖 SYCL 集成测试及 TOPAS 对照，定位回归时缺少完全独立的本地参考实现。
-
-### 14.5 二进制资产版本耦合
-
-二进制包依赖特定版本和 little-endian 格式。格式升级时，需要同步更新 loader、生成脚本、测试资产和验证 metadata。
-
-### 14.6 核心测试依赖验证资产
-
-部分测试直接使用 `validation/results/*.bin` 和 TOPAS spot 文件。这样能够提高端到端覆盖，但也增加了测试环境和资产版本管理成本。
-
-## 15. 总结
-
-当前架构已经形成一条完整的领域链路：
-
-```text
-配置与束流
-    → 物理数据加载
-    → CPU/SYCL 输运
-    → 二级粒子与中性粒子处理
-    → scorer 和能量账本
-    → TOPAS 独立验证
-```
-
-架构上最稳定的部分是数据格式、公共结果接口和验证链。当前扩展成本主要集中在两个位置：
-
-1. `include/carbon/transport_config.hpp` 中持续扩大的全局配置结构。
-2. `src/transport_sycl.cpp` 中集中实现的几何、物理、队列和 scorer 逻辑。
-
-后续如果进行结构重整，最值得优先控制的是 SYCL 实现内部的职责边界，同时保持现有 `TransportConfig`、`TransportResult` 和外部数据格式接口稳定。
+| 文档 | 内容 |
+|------|------|
+| [`README.md`](README.md) | 能力、构建、运行、验证摘要 |
+| [`minibeamStructure.md`](minibeamStructure.md) | 编译隔离设计、门控、验收标准 |
+| [`minibeam.md`](minibeam.md) | minibeam 物理与 TOPAS 对照笔记 |
+| [`futureStep.md`](futureStep.md) | 后续 LET/中性/性能计划 |
+| [`BRANCH_WORKFLOW.md`](BRANCH_WORKFLOW.md) | 分支约定 |
+| [`docs/archive/`](docs/archive/) | 历史开发日志 |

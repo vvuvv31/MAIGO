@@ -9,11 +9,13 @@
 
 | 文档 | 作用 |
 |------|------|
-| **本 README** | 已实现能力、构建运行、验证摘要 |
-| [`futureStep.md`](futureStep.md) | **当前主线与后续计划**（A 节：LET_d / cascade 能谱；B–D：中性/CT/性能等） |
+| **本 README** | 已实现能力、构建运行、验证摘要、整体结构 |
+| [`structure.md`](structure.md) | **代码架构**：目录、构建矩阵、legacy/minibeam 双 kernel、isolation 门 |
+| [`minibeamStructure.md`](minibeamStructure.md) | Copper minibeam 编译隔离与安全合并设计 |
+| [`minibeam.md`](minibeam.md) | Minibeam 物理与 TOPAS 对照笔记 |
+| [`futureStep.md`](futureStep.md) | 当前主线与后续计划（LET_d / 中性 / CT / 性能） |
 | [`BRANCH_WORKFLOW.md`](BRANCH_WORKFLOW.md) | 分支约定：默认在 `master` 开发与推送 |
-| [`structure.md`](structure.md) | 代码架构与模块依赖 |
-| [`docs/archive/`](docs/archive/) | 历史工作笔记与长篇开发日志（已整合） |
+| [`docs/archive/`](docs/archive/) | 历史工作笔记与长篇开发日志 |
 
 ---
 
@@ -62,7 +64,16 @@
 - 深度剂量 CSV；稀疏 voxel CSV；**dense MHD/RAW**（总 Gy 或 per-primary 视配置）
 - charged-origin 8 类 voxel 分类 + 闭合检查
 - fragment species / reaction / neutral / 能量账本
-- dose scorer 默认 **FP64 atomic**（可选编译期 FP32）
+- dose scorer：编译期 `CARBON_DOSE_FP32`（NVIDIA 预设默认 **FP32**；可选 FP64）
+
+### Copper minibeam（可选编译）
+
+- CMake：`CARBON_ENABLE_MINIBEAM`（**默认 OFF**）
+  - **OFF**：仅编译 legacy SYCL 内核（水箱 / CT / LET / TPS），与 master 兼容路径一致；`minibeam: true` 配置阶段报错
+  - **ON**：同时编译 legacy + minibeam 内核；运行时 `minibeam: false` → legacy，`true` → Copper beamline
+- 狭缝 / Copper EM + 核反应 + 中性产物；诊断计数与 water-entrance 相空间
+- 配置样例：`config/beam_minibeam_*.yaml`（正式 case 需显式打开 non-legacy 优化项）
+- 设计与验收：[`minibeamStructure.md`](minibeamStructure.md)；架构：[`structure.md`](structure.md) §2 / §5–§6 / §9
 
 ### 性能相关已落地
 
@@ -71,11 +82,13 @@
 - 线程本地 dose pending 合并；primary near-Z CT face fast path
 - CT **integer DDA** + homogeneous span；mass-SP **预计算 LUT**
 - Linux 双目标编译：`spir64` + `nvptx64-nvidia-cuda`
+- 消费级 NVIDIA：**默认 FP32 dose atomic**（`CARBON_DOSE_FP32`；可选 FP64 preset）
 
 ### 构建与测试
 
-- CMake presets：`cpu-debug`、`oneapi-release`（双目标）、`oneapi-intel-release`、`oneapi-nvidia-release` 等
-- 无第三方测试依赖的 `carbon_tests`（单元 + 集成 smoke）
+- CMake presets：`cpu-debug`、`oneapi-release`、`oneapi-nvidia-release`（OFF+FP32）、`oneapi-nvidia-minibeam`（ON+FP32）、可选 `*-fp64`
+- 无第三方测试依赖的 `carbon_tests`；`minibeam_isolation_log_parser`（无 GPU）
+- 可选三门 isolation：`validation/scripts/regression_minibeam_isolation.py`（需 MASTER/OFF/ON 三套同精度二进制）
 - 辅助脚本：`scripts/build_linux_oneapi.sh`、`scripts/run_linux_nvidia.sh`、Windows B580 系列脚本
 
 ---
@@ -130,10 +143,30 @@
 source /opt/intel/oneapi/setvars.sh   # 按实际安装路径
 scripts/build_linux_oneapi.sh        # 默认 spir64 + nvptx64-nvidia-cuda
 
-# 或
+# 或 preset（需 CMake ≥ 3.22；presets schema v3）
 cmake --preset oneapi-release
 cmake --build --preset oneapi-release
 ctest --preset oneapi-release
+```
+
+**NVIDIA 日常（默认 FP32 dose，无 minibeam）：**
+
+```bash
+cmake -S . -B build/oneapi-nvidia-release -G "Unix Makefiles" \
+  -DCMAKE_CXX_COMPILER=icpx -DCMAKE_BUILD_TYPE=Release \
+  -DCARBON_ENABLE_SYCL=ON -DCARBON_ENABLE_MINIBEAM=OFF -DCARBON_DOSE_FP32=ON \
+  -DCARBON_SYCL_TARGETS=nvptx64-nvidia-cuda -DCARBON_CUDA_ARCH=sm_75
+cmake --build build/oneapi-nvidia-release -j
+```
+
+**NVIDIA + minibeam（双 kernel，FP32）：**
+
+```bash
+cmake -S . -B build/oneapi-nvidia-minibeam -G "Unix Makefiles" \
+  -DCMAKE_CXX_COMPILER=icpx -DCMAKE_BUILD_TYPE=Release \
+  -DCARBON_ENABLE_SYCL=ON -DCARBON_ENABLE_MINIBEAM=ON -DCARBON_DOSE_FP32=ON \
+  -DCARBON_SYCL_TARGETS=nvptx64-nvidia-cuda -DCARBON_CUDA_ARCH=sm_75
+cmake --build build/oneapi-nvidia-minibeam -j
 ```
 
 CPU 调试（无 SYCL）：
@@ -143,6 +176,24 @@ cmake --preset cpu-debug && cmake --build --preset cpu-debug
 ctest --preset cpu-debug
 ./build/cpu-debug/carbon_mc --config config/beam_200MeVu.yaml --device serial
 ```
+
+### Isolation 三门回归（可选）
+
+```bash
+python3 validation/scripts/regression_minibeam_isolation.py run \
+  --master-bin /path/to/master_or_golden_fp32/carbon_mc \
+  --off-bin build/oneapi-nvidia-release/carbon_mc \
+  --on-bin build/oneapi-nvidia-minibeam/carbon_mc \
+  --outdir out/reg_isolation \
+  --warmup 1 --repeats 5
+
+# 或注册 CTest（缺 MASTER/OFF/ON 会 FATAL_ERROR）
+cmake -S . -B build/iso -DCARBON_RUN_ISOLATION_GATES=ON \
+  -DCARBON_MC_MASTER=... -DCARBON_MC_OFF=... -DCARBON_MC_ON=...
+ctest -L isolation --output-on-failure
+```
+
+Gate 含义与冻结参考路径见 [`structure.md`](structure.md) §9。
 
 ### 运行设备
 
@@ -176,9 +227,13 @@ export ONEAPI_DEVICE_SELECTOR=level_zero:gpu
 
 | 变量 / preset | 含义 |
 |----------------|------|
-| `oneapi-release` | 双目标 `spir64,nvptx64-nvidia-cuda` |
-| `oneapi-nvidia-release` | 仅 CUDA AOT |
+| `oneapi-release` | 双目标 + **FP32 dose**（默认） |
+| `oneapi-nvidia-release` | CUDA AOT、MINIBEAM=OFF、**FP32** |
+| `oneapi-nvidia-minibeam` | CUDA AOT、MINIBEAM=ON、**FP32** |
+| `oneapi-nvidia-*-fp64` | 可选 FP64 dose |
 | `oneapi-intel-release` | 仅 SPIR-V |
+| `CARBON_ENABLE_MINIBEAM` | 是否编译 Copper minibeam（默认 OFF） |
+| `CARBON_DOSE_FP32` | 剂量 scorer float atomic（NVIDIA 推荐 ON） |
 | `CARBON_SYCL_TARGETS` | 自定义 `-fsycl-targets` |
 | `CARBON_CUDA_ARCH` | 可选 AOT，如 `sm_75` |
 
@@ -228,11 +283,15 @@ python validation/scripts/run_ct_baseline.py --skip-gpu
 | 资产 | 说明 |
 |------|------|
 | `data/stopping_power_water*.csv` | 水 SP；生产验证常用 Geant4 导出表 |
+| `data/stopping_power_copper_*.csv` / `air_*.csv` | Minibeam Copper / 空气 SP |
 | `data/ion_stopping_power_water_geant4_11_3_2.csv` | 多同位素 SP（LET / 精确碎片） |
+| `data/ion_*_copper_*.csv` | Copper 内次级离子 SP/XS |
 | `data/let_delta_electron_fraction_*.csv` | delta 电子能量份额 |
-| `data/c12_inelastic_cross_sections_*.csv` | C-12 水/骨/肺宏观非弹性截面 |
+| `data/c12_inelastic_cross_sections_*.csv` | C-12 水/骨/肺/铜宏观非弹性截面 |
+| `data/copper_*.bin` | Copper reaction / neutral packages |
 | `data/ct_full_plan_weights_*.csv` | CT full-plan 权重辅助（病例相关） |
 | `validation/results/*.bin` | reaction / cascade / neutral 二进制包 |
+| `validation/references/minibeam_isolation/` | Isolation Gate3 冻结中心轴剂量 |
 | `data/README_physics_tables.md` | 表版本与选用策略 |
 
 开发用 Bethe–Bloch 近似表仅供联调；正式对照使用 TOPAS/Geant4 导出表，**禁止按能量手工贴 Bragg 曲线**。
@@ -252,21 +311,44 @@ CT plan 下 `number_of_histories` 为**整份计划**的统计预算，不是每
 
 ---
 
-## 仓库布局（简）
+## 仓库与源码结构（简）
 
 ```text
-include/carbon/   公共头文件与物理工具
-src/              配置、I/O、serial/SYCL 输运、spot/TPS source
-config/           束流与验证 YAML
-data/             物理表
-tests/            carbon_tests
-validation/       TOPAS 扩展、脚本、规范化结果与指标
-scripts/          构建与运行辅助
-out/              本地输出（git ignore）
-ct/               本地 DICOM/网格（git ignore）
+include/carbon/     公共 API：TransportConfig/Result、CT、spots、minibeam 几何…
+src/
+  main.cpp          CLI
+  config.cpp        配置解析与校验
+  transport_cpu.cpp serial 子集
+  transport_sycl_legacy.cpp   水/CT/LET legacy SYCL（默认 OFF 构建）
+  transport_sycl.cpp          minibeam Copper 路径（仅 MINIBEAM=ON）
+  transport_sycl_dispatch.cpp 运行时 minibeam:false → legacy
+  detail/                     共享 SyclTransportContext
+  device / io / packages / spots / tps_source …
+config/             束流与验证 YAML（含 beam_minibeam_*）
+data/               SP/XS/Copper 表
+tests/              carbon_tests
+validation/
+  scripts/          对照与 isolation 回归
+  references/       冻结 isolation 参考（入库）
+  topas/            TOPAS 扩展
+scripts/            构建与运行辅助
+out/  ct/           本地输出与 DICOM（gitignore）
 ```
 
-架构细节见 [`structure.md`](structure.md)。
+**构建矩阵（摘要）**
+
+| 开关 | 默认 | 作用 |
+|------|------|------|
+| `CARBON_ENABLE_SYCL` | OFF | SYCL 后端 |
+| `CARBON_ENABLE_MINIBEAM` | **OFF** | Copper minibeam 双 kernel |
+| `CARBON_DOSE_FP32` | OFF* | 剂量 float atomic（*NVIDIA 预设 ON） |
+
+```text
+MINIBEAM=OFF  →  transport_sycl ≡ legacy
+MINIBEAM=ON   →  dispatch(minibeam? minibeam : legacy)
+```
+
+完整目录职责、模块表、isolation 三门与维护约定见 **[`structure.md`](structure.md)**。
 
 ---
 
