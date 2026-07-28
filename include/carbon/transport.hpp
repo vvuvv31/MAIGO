@@ -184,6 +184,16 @@ private:
         const TransportConfig&, const StoppingPowerTable&, const CrossSectionTable&,
         const std::string&, const ReactionPackageTable*, const CascadePackageTable*,
         const NeutralPackageTable*, SyclTransportContext*);
+#if defined(CARBON_ENABLE_MINIBEAM)
+    friend TransportResult transport_sycl_legacy(
+        const TransportConfig&, const StoppingPowerTable&, const CrossSectionTable&,
+        const std::string&, const ReactionPackageTable*, const CascadePackageTable*,
+        const NeutralPackageTable*, SyclTransportContext*);
+    friend TransportResult transport_sycl_minibeam(
+        const TransportConfig&, const StoppingPowerTable&, const CrossSectionTable&,
+        const std::string&, const ReactionPackageTable*, const CascadePackageTable*,
+        const NeutralPackageTable*, SyclTransportContext*);
+#endif
 };
 
 TransportResult transport_sycl(const TransportConfig& config,
@@ -194,6 +204,24 @@ TransportResult transport_sycl(const TransportConfig& config,
                                const CascadePackageTable* cascade_packages = nullptr,
                                const NeutralPackageTable* neutral_packages = nullptr,
                                SyclTransportContext* context = nullptr);
+#if defined(CARBON_ENABLE_MINIBEAM)
+// Dual kernels: legacy is the master-compatible water/CT path; minibeam is the
+// Copper beamline path. transport_sycl() dispatches at runtime.
+TransportResult transport_sycl_legacy(
+    const TransportConfig& config, const StoppingPowerTable& stopping_power,
+    const CrossSectionTable& cross_section, const std::string& device_name,
+    const ReactionPackageTable* reaction_packages = nullptr,
+    const CascadePackageTable* cascade_packages = nullptr,
+    const NeutralPackageTable* neutral_packages = nullptr,
+    SyclTransportContext* context = nullptr);
+TransportResult transport_sycl_minibeam(
+    const TransportConfig& config, const StoppingPowerTable& stopping_power,
+    const CrossSectionTable& cross_section, const std::string& device_name,
+    const ReactionPackageTable* reaction_packages = nullptr,
+    const CascadePackageTable* cascade_packages = nullptr,
+    const NeutralPackageTable* neutral_packages = nullptr,
+    SyclTransportContext* context = nullptr);
+#endif
 std::string describe_sycl_device(const std::string& device_name);
 #endif
 

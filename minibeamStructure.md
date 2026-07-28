@@ -541,3 +541,22 @@ CI 至少构建：
 正式 minibeam YAML 显式打开 non-legacy 开关以保持 TOPAS match。
 
 三门验收命令见该脚本 `run` 子命令。
+
+## 14. P1 修复（ON 双 kernel 分发 + 回归门）
+
+1. **ON build 双 kernel**：`CARBON_ENABLE_MINIBEAM=ON` 时同时编译
+   `transport_sycl_legacy.cpp`（`transport_sycl_legacy`）与
+   `transport_sycl.cpp`（`transport_sycl_minibeam`），由
+   `transport_sycl_dispatch.cpp` 在运行时按 `minibeam` 选择。
+   `minibeam: false` 走 legacy kernel，不再把 Copper 逻辑留在执行路径中。
+2. **共享 context**：`src/detail/sycl_transport_context_impl.inc` +
+   methods.inc；仅 legacy TU 定义 `SyclTransportContext` 方法
+   （`CARBON_DEFINE_SYCL_CONTEXT`）。
+3. **Gate 3**：无条件通过已删除；强制检查 Backend 含 minibeam、diagnostics、
+   新生成且非零的 MHD/raw；`--minibeam-ref-csv` 可选做深度剂量对比。
+4. **性能门**：解析 `Steps:` / `Kernel time: primary=...`；缺字段失败；使用
+   transport kernel 时间（warmup + 中位数 repeats），不再用进程 wall time。
+5. **CTest**：`minibeam_isolation_log_parser`（默认）；
+   `minibeam_isolation_gates`（`CARBON_RUN_ISOLATION_GATES=ON` + 双二进制路径）。
+6. **Preset**：`oneapi-nvidia-minibeam` 默认 `CARBON_DOSE_FP32=ON`；
+   `oneapi-nvidia-minibeam-fp64` 供高精度。

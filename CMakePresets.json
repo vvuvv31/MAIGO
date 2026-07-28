@@ -47,7 +47,7 @@
     },
     {
       "name": "oneapi-nvidia-minibeam",
-      "displayName": "Intel oneAPI SYCL release (NVIDIA + minibeam ON)",
+      "displayName": "Intel oneAPI SYCL NVIDIA minibeam ON (FP32 dose, recommended)",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/oneapi-nvidia-minibeam",
       "cacheVariables": {
@@ -56,7 +56,8 @@
         "CARBON_ENABLE_SYCL": "ON",
         "CARBON_BUILD_TESTS": "ON",
         "CARBON_ENABLE_MINIBEAM": "ON",
-        "CARBON_SYCL_TARGETS": "nvptx64-nvidia-cuda"
+        "CARBON_SYCL_TARGETS": "nvptx64-nvidia-cuda",
+        "CARBON_DOSE_FP32": "ON"
       }
     },
     {
@@ -97,6 +98,21 @@
         "CARBON_BUILD_TESTS": "ON",
         "CARBON_SYCL_TARGETS": "spir64,nvptx64-nvidia-cuda"
       }
+    },
+    {
+      "name": "oneapi-nvidia-minibeam-fp64",
+      "displayName": "Intel oneAPI SYCL NVIDIA minibeam ON (FP64 dose, accuracy)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/oneapi-nvidia-minibeam-fp64",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_CXX_COMPILER": "icpx",
+        "CARBON_ENABLE_SYCL": "ON",
+        "CARBON_BUILD_TESTS": "ON",
+        "CARBON_ENABLE_MINIBEAM": "ON",
+        "CARBON_DOSE_FP32": "OFF",
+        "CARBON_SYCL_TARGETS": "nvptx64-nvidia-cuda"
+      }
     }
   ],
   "buildPresets": [
@@ -127,6 +143,10 @@
     {
       "name": "oneapi-windows-dual-release",
       "configurePreset": "oneapi-windows-dual-release"
+    },
+    {
+      "name": "oneapi-nvidia-minibeam-fp64",
+      "configurePreset": "oneapi-nvidia-minibeam-fp64"
     }
   ],
   "testPresets": [
@@ -175,6 +195,13 @@
     {
       "name": "oneapi-windows-dual-release",
       "configurePreset": "oneapi-windows-dual-release",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "oneapi-nvidia-minibeam-fp64",
+      "configurePreset": "oneapi-nvidia-minibeam-fp64",
       "output": {
         "outputOnFailure": true
       }

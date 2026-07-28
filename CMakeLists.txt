@@ -79,13 +79,20 @@ if(CARBON_ENABLE_SYCL)
     endif()
 
     # Dual SYCL transport sources:
-    # - OFF: transport_sycl_legacy.cpp is bit-for-bit the master kernel path.
-    # - ON:  transport_sycl.cpp includes Copper minibeam and opt-in GPU paths.
+    # - OFF: only transport_sycl_legacy.cpp (exports transport_sycl).
+    # - ON:  both legacy and minibeam TUs + runtime dispatch so
+    #        minibeam:false uses the master-compatible legacy kernel.
+    target_include_directories(carbon_core PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
     if(CARBON_ENABLE_MINIBEAM)
         target_sources(carbon_core PRIVATE
             src/device.cpp
+            src/transport_sycl_legacy.cpp
             src/transport_sycl.cpp
+            src/transport_sycl_dispatch.cpp
             src/transport_profile.cpp)
+        # Only the legacy TU owns SyclTransportContext method definitions.
+        set_property(SOURCE src/transport_sycl_legacy.cpp APPEND PROPERTY
+            COMPILE_DEFINITIONS CARBON_DEFINE_SYCL_CONTEXT=1)
     else()
         target_sources(carbon_core PRIVATE
             src/device.cpp
@@ -145,6 +152,50 @@ if(CARBON_BUILD_TESTS)
             NAME dose_mapping_geometry_tests
             COMMAND ${Python3_EXECUTABLE}
                     ${CMAKE_CURRENT_SOURCE_DIR}/validation/scripts/test_match_gpu_geometry.py
+        )
+        # Isolation regression: log-parser unit test (no GPU).
+        add_test(
+            NAME minibeam_isolation_log_parser
+            COMMAND ${Python3_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/validation/scripts/regression_minibeam_isolation.py
+                    selftest
+        )
+        set_tests_properties(minibeam_isolation_log_parser PROPERTIES
+            LABELS "isolation"
+        )
+    endif()
+endif()
+
+# Dual-binary isolation gate (optional). Configure with:
+#   -DCARBON_RUN_ISOLATION_GATES=ON
+#   -DCARBON_MC_OFF=/path/to/off/carbon_mc
+#   -DCARBON_MC_ON=/path/to/on/carbon_mc
+set(CARBON_MC_OFF "" CACHE FILEPATH "OFF-build carbon_mc for isolation gates")
+set(CARBON_MC_ON "" CACHE FILEPATH "ON-build carbon_mc for isolation gates")
+option(CARBON_RUN_ISOLATION_GATES
+       "Enable minibeam_isolation_gates CTest (needs dual OFF/ON binaries)"
+       OFF)
+if(CARBON_BUILD_TESTS AND CARBON_RUN_ISOLATION_GATES)
+    find_package(Python3 COMPONENTS Interpreter QUIET)
+    if(Python3_Interpreter_FOUND AND CARBON_MC_OFF AND CARBON_MC_ON)
+        add_test(
+            NAME minibeam_isolation_gates
+            COMMAND ${Python3_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/validation/scripts/regression_minibeam_isolation.py
+                    run
+                    --off-bin ${CARBON_MC_OFF}
+                    --on-bin ${CARBON_MC_ON}
+                    --outdir ${CMAKE_CURRENT_BINARY_DIR}/reg_isolation
+                    --warmup 1
+                    --repeats 5
+                    --g1-bitwise
+                    --g2-bitwise
+                    --g1-max-time-ratio 1.10
+                    --g2-max-time-ratio 1.10
+        )
+        set_tests_properties(minibeam_isolation_gates PROPERTIES
+            LABELS "gpu;isolation"
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
         )
     endif()
 endif()
