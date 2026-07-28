@@ -148,6 +148,7 @@ def plot_transverse(
     depths_mm: list[float],
     slab_width_mm: float,
     histories_label: str,
+    evaluation_scale: float = 1.0,
 ) -> None:
     fig, axes = plt.subplots(
         2, len(depths_mm), figsize=(5.0 * len(depths_mm), 8.0),
@@ -162,6 +163,8 @@ def plot_transverse(
         gpu_x, gpu_y, _ = transverse_profiles(
             evaluation, z, depth, slab_width_mm
         )
+        gpu_x *= evaluation_scale
+        gpu_y *= evaluation_scale
         x_profiles.append((ref_x, gpu_x, span))
         y_profiles.append((ref_y, gpu_y, span))
 
@@ -217,6 +220,12 @@ def main() -> None:
     )
     parser.add_argument("--slab-width-mm", type=float, default=1.0)
     parser.add_argument("--histories-label", default="100k")
+    parser.add_argument(
+        "--evaluation-scale",
+        type=float,
+        default=1.0,
+        help="Prescribed history-count scale applied to GPU profiles",
+    )
     args = parser.parse_args()
 
     reference, x_ref, y_ref, z_ref = load_mhd(args.reference)
@@ -230,6 +239,7 @@ def main() -> None:
             raise ValueError(f"Reference and evaluation {name} coordinates differ")
 
     ref_depth, gpu_depth = depth_profiles(reference, evaluation)
+    gpu_depth *= args.evaluation_scale
     filename_label = re.sub(r"[^A-Za-z0-9_.-]+", "_", args.histories_label)
     depth_output = args.output_dir / f"depth_dose_1d_{filename_label}.png"
     transverse_output = (
@@ -242,6 +252,7 @@ def main() -> None:
         transverse_output,
         x_ref, y_ref, z_ref, reference, evaluation,
         args.depths_mm, args.slab_width_mm, args.histories_label,
+        args.evaluation_scale,
     )
     print(depth_output)
     print(transverse_output)

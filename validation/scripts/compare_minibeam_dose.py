@@ -69,6 +69,7 @@ def compare(
     evaluation: MhdGrid,
     threshold_fraction: float,
     chunk_depth: int,
+    evaluation_scale: float = 1.0,
 ) -> dict[str, object]:
     for field in ("shape_xyz", "spacing_xyz_mm", "offset_xyz_mm"):
         left = getattr(reference, field)
@@ -79,6 +80,8 @@ def compare(
         raise ValueError("threshold fraction must be in [0, 1]")
     if chunk_depth <= 0:
         raise ValueError("chunk depth must be positive")
+    if not math.isfinite(evaluation_scale) or evaluation_scale <= 0.0:
+        raise ValueError("evaluation scale must be finite and positive")
 
     nz, ny, nx = reference.data_zyx.shape
     reference_max = 0.0
@@ -95,7 +98,10 @@ def compare(
     for start in range(0, nz, chunk_depth):
         stop = min(nz, start + chunk_depth)
         ref = np.asarray(reference.data_zyx[start:stop], dtype=np.float64)
-        eva = np.asarray(evaluation.data_zyx[start:stop], dtype=np.float64)
+        eva = (
+            np.asarray(evaluation.data_zyx[start:stop], dtype=np.float64)
+            * evaluation_scale
+        )
         if not np.isfinite(ref).all() or not np.isfinite(eva).all():
             raise ValueError("Dose grids contain non-finite values")
         if np.min(ref) < 0.0 or np.min(eva) < 0.0:
@@ -123,7 +129,10 @@ def compare(
     for start in range(0, nz, chunk_depth):
         stop = min(nz, start + chunk_depth)
         ref = np.asarray(reference.data_zyx[start:stop], dtype=np.float64)
-        eva = np.asarray(evaluation.data_zyx[start:stop], dtype=np.float64)
+        eva = (
+            np.asarray(evaluation.data_zyx[start:stop], dtype=np.float64)
+            * evaluation_scale
+        )
         delta = eva - ref
         absolute_error_sum += float(np.sum(np.abs(delta), dtype=np.float64))
         squared_error_sum += float(np.sum(delta * delta, dtype=np.float64))
@@ -210,8 +219,9 @@ def compare(
     offset_x, offset_y, offset_z = reference.offset_xyz_mm
     return {
         "normalization": (
-            "absolute Gy for equal incident histories; no fitted scale"
+            "absolute Gy; evaluation scale is prescribed, not fitted"
         ),
+        "evaluation_scale": evaluation_scale,
         "reference_mhd": reference.path.as_posix(),
         "evaluation_mhd": evaluation.path.as_posix(),
         "grid": {
@@ -288,12 +298,19 @@ def main() -> None:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--threshold-percent", type=float, default=1.0)
     parser.add_argument("--chunk-depth", type=int, default=10)
+    parser.add_argument(
+        "--evaluation-scale",
+        type=float,
+        default=1.0,
+        help="Prescribed scale applied to evaluation dose (for history-count normalization)",
+    )
     args = parser.parse_args()
     metrics = compare(
         read_mhd(args.reference),
         read_mhd(args.evaluation),
         args.threshold_percent / 100.0,
         args.chunk_depth,
+        args.evaluation_scale,
     )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(

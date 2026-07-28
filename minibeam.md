@@ -1451,3 +1451,278 @@ depth-normalized L1 均小于 `1.98%`。这说明目前的 Copper survivor 能�
 - `out/minibeam/energy_sweep_100k/multienergy_metrics_trend.png`
 - `out/minibeam/copper_neutral_center_100k_copper_step025/compare/topas_metrics.json`
 - `out/minibeam/copper_neutral_center_100k_copper_step025/compare/peak_valley.json`
+
+## 20. 异质材料初步验证：water / compact bone / water（2026-07-28）
+
+使用 200 MeV/u C-12 中心 minibeam、相同 Copper collimator、相同随机种子，
+在准直器后比较以下 phantom：
+
+```text
+0--50 mm water | 50--70 mm G4_BONE_COMPACT_ICRU | 70--150 mm water
+```
+
+TOPAS 和 GPU 均使用 100k histories；剂量是绝对 `DoseToMedium`，没有针对本
+case 拟合额外 scale。共同 scorer grid 为 `500 x 1 x 300`，即横向 0.2 mm、
+沿 slit 方向 40 mm、深度 0.5 mm。TOPAS 使用 40 CPU threads。
+
+### 20.1 已发现并修复的 dose-to-medium 质量错误
+
+原先 layered phantom 和 heterogeneous insert 虽然使用了局部材料的 stopping
+power、核反应截面和密度输运，但 MHD 输出仍统一用水的 voxel mass 将 MeV
+换算成 Gy。10k smoke 中，骨层 GPU/TOPAS 剂量比为 `1.779`，接近 compact
+bone 密度 `1.85`，由此定位到 `src/io.cpp::voxel_masses_kg()`。
+
+修复后：
+
+- layered phantom 按每个深度 voxel 与各层的实际重叠厚度计算平均质量；
+- AABB insert 按 insert 与 voxel 的精确相交体积计算 water/insert 混合质量；
+- 增加单元测试，验证相同沉积能在 2 倍密度材料中的 dose 恰为一半。
+
+该修复将全 phantom 积分偏差从 `+26.70%` 降到 `+2.43%`。
+
+### 20.2 100k 正式结果
+
+深度曲线先作 1.5 mm box smoothing，只用于抑制独立蒙卡噪声和计算下列 profile
+指标；横向 PVDR 使用 5 mm 深度 slab：
+
+| 指标 | 结果 |
+|---|---:|
+| 全 phantom 积分差 | `+2.416%` |
+| depth normalized L1 | `8.076%` |
+| depth Pearson r | `0.99009` |
+| TOPAS / GPU R80 | `72.345 / 72.015 mm` |
+| ΔR80 (GPU - TOPAS) | `-0.330 mm` |
+| depth global gamma 3%/1 mm, 10% threshold | `46.41%` |
+| depth local gamma 3%/1 mm, 10% threshold | `22.88%` |
+
+分区积分剂量差：
+
+| 区域 | GPU/TOPAS - 1 |
+|---|---:|
+| 前段 water，0--50 mm | `+8.99%` |
+| compact bone，50--70 mm | `-4.76%` |
+| 后段 water，70--150 mm | `-10.12%` |
+
+PVDR 相对差在 10、60、70、75 mm 分别为 `-14.2%`、`+22.5%`、`-0.18%`、
+`-8.0%`。尤其 70 mm 骨层出口/Bragg peak 附近的 peak/valley 形状已吻合，
+但入口、骨层内部和 post-bone tail 尚未达到 3% 精度。因此当前结果证明 range
+和总能量尺度基本正确，但不能据此宣称异质 minibeam 已完成临床精度验证。
+
+当前剩余系统误差有明确的材料模型来源：
+
+1. 现有 compact-bone stopping-power 表来自 Geant4 11.1.3，而水和 TOPAS 正式
+   运行为 Geant4 11.3.2。本次为避免直接混合绝对表，使用同版本旧表中的
+   bone/water 比值重采样到精确 11.3.2 water grid；这仍不是直接的 11.3.2
+   compact-bone 表。
+2. layered phantom 的 MCS 当前仍使用 water radiation length；代码只有 CT
+   material MCS 和 Copper MCS 支持材料 radiation length。该近似会直接影响
+   细 minibeam 的 valley dose 和 PVDR。
+3. primary C-12 已使用 bone-specific inelastic XS，但 reaction/cascade/neutral
+   final-state packages 仍从 water package 采样。骨层后的 fragment tail 因而
+   只部分具备材料条件化。
+4. minibeam 的低能 MCS 修正目前对所有非 CT phantom 生效，在 bone layer 中也
+   继续使用 water-tuned scale。
+
+在补齐同版 compact-bone SP/XS、per-layer radiation length 和 material-conditioned
+reaction packages 前，不应通过本 case 的经验 depth scale 强行提高 gamma。
+
+可复现输入和结果：
+
+- `ct/minibeam/run_hetero_bone_e200_100k.txt`
+- `config/beam_minibeam_hetero_bone_e200_100k.yaml`
+- `validation/scripts/resample_stopping_power_grid.py`
+- `validation/scripts/compare_minibeam_heterogeneous.py`
+- `out/minibeam/heterogeneous_bone_e200_100k/comparison/heterogeneous_metrics.json`
+- `out/minibeam/heterogeneous_bone_e200_100k/comparison/heterogeneous_depth.png`
+- `out/minibeam/heterogeneous_bone_e200_100k/comparison/heterogeneous_lateral.png`
+
+### 20.3 材料 MCS、同版本 SP 与 scorer/transport 解耦
+
+按上述限制逐项做相同 seed、100k histories 的 A/B 后，真正的主导误差不是
+bone radiation length 或跨版本 SP，而是横向 voxel scorer 边界错误地限制了
+物理输运步。
+
+首先将 CT 已有的材料 MCS 能力泛化到 layered phantom 和 AABB insert：
+
+```yaml
+slab_radiation_lengths_g_per_cm2: 36.0830, 30.4866, 36.0830
+insert_radiation_length_g_per_cm2: 30.4866
+```
+
+两项均为显式配置；旧 slab 配置不填写时继续使用 water radiation length，
+旧 insert 配置的默认值也是 36.08 g/cm²。两套 current/legacy kernel 均支持。
+该改动只带来小幅、混合变化：
+
+- depth global gamma 3%/1 mm：`46.41% → 49.67%`；
+- bone normalized L1：`4.83% → 4.71%`；
+- 70 mm PVDR 差：`-0.18% → -3.45%`。
+
+随后修正 `carbon_material_sp_bone.txt`：静态材料查询 scorer 的 primary 直接出生
+在 Sample 内，避免依赖 TOPAS beam-axis 约定。由本地 TOPAS 4.2.p3 /
+Geant4 11.3.2 成功导出 4001 点直接 compact-bone SP 表：
+
+- `data/stopping_power_bone_geant4_11_3_2.csv`
+- `data/stopping_power_bone_geant4_11_3_2_full.csv`
+- `data/stopping_power_bone_geant4_11_3_2.metadata.json`
+
+直接表与先前 bone/water 比值重采样表在 10--400 MeV/u 的差约 0.001% 以下。
+替换后总积分只变化 `-0.00019%`，depth profile L1 变化 `0.092%`，证明跨版本
+SP 不是当前 5--10% 系统偏差的来源。
+
+用 11.3.2 bone reaction/cascade package 替换整个 phantom 的 water package
+做了敏感性实验。post-bone 积分由 `-10.3%` 恶化到 `-13.6%`，depth L1 由
+`8.06%` 恶化到 `8.94%`。由于该实验也错误替换了 water 区域，它不作为正式模型；
+但结果不支持立即通过复杂的逐材料 package 调度来修复当前主误差。
+
+#### 主因：scorer resolution 改变了 MCS 输运
+
+相同 200 MeV/u 全水模型中，仅把横向 scorer 从一个 100 mm bin 改成 500 个
+0.2 mm bin，就观察到：
+
+- 0--50 mm total dose 增加 `7.80%`；
+- 0--50 mm primary-C12 dose 增加 `7.93%`；
+- 0--5 mm primary-C12 dose增加 `9.41%`；
+- runtime 从 `10.38 s` 增至 `103.86 s`。
+
+原因是旧实现把每个 x/y scorer face 当成 physics step boundary，并在每个短步
+重新应用 Highland MCS。scorer 本应是被动计分器，不应改变粒子轨迹。
+
+新增默认保持兼容的开关：
+
+```yaml
+voxel_scorer_clamps_transport: false
+```
+
+关闭后 x/y scorer face 不再截断物理步；z/material/CT boundaries 仍严格限步。
+当前最大物理步为 0.1 mm，小于 0.2 mm 横向 voxel，因此每步沉积记到起点 voxel
+带来的空间不确定度小于一个 voxel，而不会改变 MCS。
+
+正式异质 case 的结果变为：
+
+| 指标 | 旧 scorer clamp | scorer 解耦 |
+|---|---:|---:|
+| runtime | 126.90 s | **4.43 s** |
+| transport steps | 2.308B | **0.161B** |
+| 全体积积分差 | +2.41% | **+0.26%** |
+| depth normalized L1 | 8.05% | **1.69%** |
+| depth Pearson r | 0.9901 | **0.99922** |
+| global gamma 3%/1 mm | 49.67% | **96.08%** |
+| local gamma 3%/1 mm | 22.22% | **90.85%** |
+| ΔR80 | -0.322 mm | **-0.309 mm** |
+
+分区积分差也从 `+8.97% / -4.65% / -10.28%` 改善到：
+
+- 前段 water：`+1.14%`；
+- compact bone：`+0.67%`；
+- 后段 water：`-3.74%`。
+
+严格横向 PVDR 仍有约 8--16% 的局部差异，且 100k histories 在 0.2 mm bins
+上统计噪声明显。下一步应实现不改变物理步的线段/voxel 重叠计分或中点计分，
+再以 1M histories 验证 lateral gamma；不应重新打开 scorer face clamp。
+
+新增结果：
+
+- `out/minibeam/heterogeneous_bone_e200_100k/comparison_decoupled_scorer/heterogeneous_metrics.json`
+- `out/minibeam/heterogeneous_bone_e200_100k/comparison_decoupled_scorer/heterogeneous_depth.png`
+- `out/minibeam/heterogeneous_bone_e200_100k/comparison_decoupled_scorer/heterogeneous_lateral.png`
+
+### 20.4 1M high-statistics 验证
+
+为区分 100k histories、0.2 mm 横向 bins 的统计噪声与真实模型误差，使用同一
+seed 和完全相同几何分别运行 1M histories。GPU 的 spot 文件会覆盖 YAML 中的
+`number_of_histories`，因此可复现命令必须显式覆盖总 history 数：
+
+```bash
+./build/oneapi-nvidia-minibeam/carbon_mc \
+  --config config/beam_minibeam_hetero_bone_e200_100k.yaml \
+  --histories 1000000
+
+TOPAS_MINIBEAM_INSTALL=build/opentopas-minibeam-install \
+  bash validation/topas/run_minibeam_topas.sh \
+  run_hetero_bone_e200_1M.txt
+```
+
+NVIDIA TITAN RTX 上 GPU 用时 `33.08 s`，吞吐 `30.23k histories/s`；TOPAS
+40 threads 用时 `2346.66 s`，因此该 case 的端到端 wall-time speedup 为
+`70.94x`。GPU charged/neutral queues 均无 overflow。
+
+高统计量深度结果：
+
+| 指标 | 1M 结果 |
+|---|---:|
+| 全体积积分差 | `-0.489%` |
+| depth normalized L1 | `1.147%` |
+| depth RMSE / reference max | `0.863%` |
+| depth Pearson r | `0.999455` |
+| global gamma 3%/1 mm | `95.42%` |
+| local gamma 3%/1 mm | `93.46%` |
+| ΔR80 | `-0.193 mm` |
+
+分区积分差为前段 water `+0.53%`、bone `-0.79%`、后段 water `-3.81%`。
+前两段已经稳定进入 1% 量级；剩余深度误差集中在 Bragg peak 下降沿及
+post-bone fragment tail，不再是入口或骨材料质量换算问题。
+
+高统计量横向结果也澄清了 100k 的噪声影响：
+
+| 深度 | global gamma 3%/0.4 mm | PVDR 相对差 |
+|---:|---:|---:|
+| 10 mm | `100.00%` | `-10.33%` |
+| 60 mm | `95.92%` | `-0.10%` |
+| 70 mm | `89.47%` | `-11.98%` |
+| 75 mm | `70.97%` | `-18.50%` |
+
+因此 scorer 解耦后的横向几何和骨层内部散射已经基本正确：60 mm 的 PVDR 几乎
+完全一致。剩余误差具有明确的深度依赖，主要表现为 70--75 mm 的 peak 剂量偏低
+以及 10 mm 的 valley 略高。下一步优先检查低能 primary/fragment 在骨层出口的
+横向 MCS 与 post-bone charged-fragment source term；线段/voxel overlap scorer
+仍值得实现，但从 1M 图像看，它已不是当前 70--75 mm 系统误差的主因。
+
+1M 结果：
+
+- `out/minibeam/heterogeneous_bone_e200_1M/comparison/heterogeneous_metrics.json`
+- `out/minibeam/heterogeneous_bone_e200_1M/comparison/heterogeneous_depth.png`
+- `out/minibeam/heterogeneous_bone_e200_1M/comparison/heterogeneous_lateral.png`
+
+### 20.5 准确输运步长的性能收敛（2026-07-29）
+
+scorer 解耦后，1M profiling 显示 primary kernel 仍占 `29.56 / 33.08 s`，
+总输运步数为 `1.624B`。异质验证配置沿用了早期诊断值
+`maximum_relative_energy_loss=0.001`，比项目 production accurate 默认值
+`0.005` 严格五倍，造成大量没有物理收益的短步。
+
+使用同一个 1M TOPAS 参考、相同 seed 做步长收敛：
+
+| phantom max step / relative loss | runtime | throughput | steps | depth L1 | global γ 3%/1 mm | ΔR80 |
+|---|---:|---:|---:|---:|---:|---:|
+| 0.1 mm / 0.001 | 33.08 s | 30.23k/s | 1.624B | 1.147% | 95.42% | -0.193 mm |
+| 0.2 mm / 0.002 | 18.76 s | 53.30k/s | 0.865B | 1.075% | 95.42% | -0.176 mm |
+| **0.2 mm / 0.005** | **10.10 s** | **98.97k/s** | **0.397B** | **1.037%** | **96.08%** | **-0.130 mm** |
+
+最终设置相对原 1M 基线加速 `3.27x`，同时改善深度 L1、RMSE、R80 和
+global gamma；全体积积分差由 `-0.489%` 改善为 `-0.227%`，post-bone
+积分差由 `-3.81%` 改善为 `-2.22%`。这不是 dose scale 或 case-specific
+校准，而是移除过度保守的数值积分限步。
+
+Copper 最大步长从 0.25 mm 放宽至 0.5 mm 的 A/B 会使入口 PVDR 和骨层剂量
+退化，因此仍保持 `minibeam_copper_max_step_mm=0.25`（100 MeV/u 保持
+0.10 mm）。横向 scorer 和所有 material/z boundaries 仍严格处理。
+
+100、200、300、400 MeV/u 的独立 TOPAS 100k 泛化结果如下：
+
+| 能量 | 原 L1 | 新 L1 | 新 ΔR80 | 新积分差 |
+|---:|---:|---:|---:|---:|
+| 100 MeV/u | 1.314% | 1.313%（保留 0.001） | +0.011 mm | +0.741% |
+| 200 MeV/u | 1.775% | 1.712% | -0.011 mm | +0.085% |
+| 300 MeV/u | 1.779% | 1.650% | +0.046 mm | -0.414% |
+| 400 MeV/u | 1.999% | 1.945% | -0.073 mm | -0.609% |
+
+`prepare_minibeam_energy_sweep.py` 现在明确生成能量相关的数值精度策略：
+100 MeV/u 使用 0.001，200--400 MeV/u 使用 0.005；物理 kernel 中没有加入
+按 case 拟合的隐藏分支。
+
+优化结果：
+
+- `out/minibeam/heterogeneous_bone_e200_1M/comparison_gpu_step0p2_rel0p005/heterogeneous_metrics.json`
+- `out/minibeam/heterogeneous_bone_e200_1M/comparison_gpu_step0p2_rel0p005/heterogeneous_depth.png`
+- `out/minibeam/heterogeneous_bone_e200_1M/comparison_gpu_step0p2_rel0p005/heterogeneous_lateral.png`
+- `out/minibeam/energy_sweep_rel0p005_100k/metrics.json`

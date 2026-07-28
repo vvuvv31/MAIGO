@@ -21,6 +21,7 @@ class SyclTransportContext;
 struct MinibeamDiagnostics {
     static constexpr std::size_t slit_count = 15;
     static constexpr std::size_t touched_energy_bin_count = 12;
+    static constexpr std::size_t fragment_energy_bin_count = 20;
     bool enabled{false};
     std::uint64_t incident_histories{0};
     std::uint64_t direct_air_slit_histories{0};
@@ -46,6 +47,15 @@ struct MinibeamDiagnostics {
         direct_air_primary_c12_by_slit{};
     std::array<std::uint64_t, touched_energy_bin_count>
         copper_touched_primary_energy_histogram{};
+    // Water-entrance kinetic-energy spectra in 50 MeV bins. The final bin
+    // includes overflow. These diagnostics expose the short-range tail that
+    // controls the first few millimetres of minibeam dose.
+    std::array<std::uint64_t, fragment_energy_bin_count>
+        copper_deuteron_energy_histogram{};
+    std::array<std::uint64_t, fragment_energy_bin_count>
+        copper_triton_energy_histogram{};
+    std::array<std::uint64_t, fragment_energy_bin_count>
+        copper_helium_energy_histogram{};
     double energy_sum_MeV{0.0};
     double energy_squared_sum_MeV2{0.0};
     double x_sum_mm{0.0};

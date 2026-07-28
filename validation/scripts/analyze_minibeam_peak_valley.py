@@ -86,6 +86,7 @@ def analyze_depth(
     slit_count: int,
     window_half_width_mm: float,
     minimum_peak_fraction: float,
+    evaluation_scale: float = 1.0,
 ) -> dict[str, object]:
     ref_x, _, span = transverse_profiles(
         reference, z_mm, depth_mm, slab_width_mm
@@ -93,6 +94,7 @@ def analyze_depth(
     eval_x, _, _ = transverse_profiles(
         evaluation, z_mm, depth_mm, slab_width_mm
     )
+    eval_x *= evaluation_scale
     centers = (
         np.arange(slit_count, dtype=np.float64) - 0.5 * (slit_count - 1)
     ) * pitch_mm
@@ -175,6 +177,12 @@ def main() -> None:
     parser.add_argument("--slit-count", type=int, default=15)
     parser.add_argument("--window-half-width-mm", type=float, default=0.15)
     parser.add_argument("--minimum-peak-fraction", type=float, default=0.05)
+    parser.add_argument(
+        "--evaluation-scale",
+        type=float,
+        default=1.0,
+        help="Prescribed history-count scale applied to evaluation dose",
+    )
     args = parser.parse_args()
 
     reference, x_ref, _, z_ref = load_mhd(args.reference)
@@ -205,6 +213,7 @@ def main() -> None:
                 args.slit_count,
                 args.window_half_width_mm,
                 args.minimum_peak_fraction,
+                args.evaluation_scale,
             )
             for depth in args.depths_mm
         ],

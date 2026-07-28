@@ -81,6 +81,10 @@ struct PrimarySpotBatchEntry {
 };
 
 struct TransportConfig {
+    // Explicit transport accuracy policy. "accurate" preserves the validated
+    // legacy/minibeam behavior. "fast" is an opt-in CT dose profile and is
+    // rejected for minibeam and LET scoring.
+    std::string physics_profile{"accurate"};
     std::size_t number_of_histories{10'000};
     double initial_energy_MeVu{200.0};
     // Relative RMS beam energy spread (TOPAS BeamEnergySpread percent / 100).
@@ -111,11 +115,16 @@ struct TransportConfig {
     // Optional absolute material tables, one path per slab layer (same length).
     std::vector<std::filesystem::path> slab_stopping_power_files{};
     std::vector<std::filesystem::path> slab_cross_section_files{};
+    // Optional mass radiation length per layer (g/cm2). Empty preserves the
+    // historical all-water MCS model.
+    std::vector<double> slab_radiation_lengths_g_per_cm2{};
     // Lateral/3D insert (7b): AABB of alternate material inside water background.
     bool enable_hetero_insert{false};
     HeteroInsert hetero_insert{};
     std::filesystem::path insert_stopping_power_file{};
     std::filesystem::path insert_cross_section_file{};
+    // Water default preserves existing insert configurations.
+    double insert_radiation_length_g_per_cm2{36.08};
     // 7c: CT voxel grid (exclusive with layered/hetero insert).
     bool enable_ct_grid{false};
     std::filesystem::path ct_grid_file{};
@@ -145,6 +154,10 @@ struct TransportConfig {
     double dose_output_scale{1.0};
     bool enable_voxel_scoring{false};
     bool enable_charged_origin_voxel_scoring{false};
+    // Historical mode stops every physics step at lateral scorer faces.
+    // Disable to keep scoring resolution from changing MCS/transport; energy
+    // is then assigned to the voxel containing the step start.
+    bool voxel_scorer_clamps_transport{true};
     std::size_t voxel_bins_x{60};
     std::size_t voxel_bins_y{60};
     double voxel_size_x_mm{5.0};
@@ -232,6 +245,23 @@ struct TransportConfig {
     // Default 1.0; the minibeam value is frozen from a TOPAS/GPU primary-origin
     // R80 comparison after the water-entrance phase space has been matched.
     double minibeam_water_primary_stopping_power_scale{1.0};
+    // Optional low-energy correction to the projected Highland core in the
+    // downstream water phantom.  The scale approaches the configured value at
+    // zero energy and smoothly returns to one at transition_MeVu.  Primary
+    // C-12 continuations and charged fragments are kept separate because their
+    // distal lateral-dose sensitivities are different.  Defaults are neutral.
+    double minibeam_water_low_energy_mcs_transition_MeVu{0.0};
+    double minibeam_water_primary_low_energy_mcs_scale{1.0};
+    double minibeam_water_fragment_low_energy_mcs_scale{1.0};
+    // Optional entrance response for primary C-12 histories that touched the
+    // Copper collimator. The two smooth terms modify stopping (not scored dose),
+    // so retained kinetic energy continues downstream. Zero amplitudes are
+    // neutral and preserve all non-minibeam/default behaviour.
+    double minibeam_water_touched_primary_surface_boost{0.0};
+    double minibeam_water_touched_primary_surface_sigma_mm{0.8};
+    double minibeam_water_touched_primary_deficit{0.0};
+    double minibeam_water_touched_primary_deficit_center_mm{2.2};
+    double minibeam_water_touched_primary_deficit_sigma_mm{1.0};
     bool minibeam_copper_enable_nuclear_attenuation{false};
     std::filesystem::path minibeam_copper_cross_section_file{};
     bool minibeam_copper_enable_reaction_products{false};
@@ -344,6 +374,10 @@ struct TransportConfig {
     // so low-E beams are almost unchanged. 0 disables (legacy).
     double electronic_buildup_fraction{0.0};
     double electronic_buildup_mfp_mm{0.5};
+    // Minibeam validation can restrict the unresolved delta-electron proxy to
+    // primary C-12. This avoids applying a carbon-derived energy fraction to
+    // fragment species whose restricted/unrestricted stopping split differs.
+    bool minibeam_electronic_buildup_primary_only{false};
     // Optional transverse Gaussian sigma [mm] for the electronic fraction in
     // the dense voxel scorer.  The deposited energy is moved stochastically,
     // preserving expectation and using one voxel atomic per aggregated deposit.

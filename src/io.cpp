@@ -35,6 +35,79 @@ double voxel_mass_kg(const TransportConfig& config) {
 std::vector<double> voxel_masses_kg(const TransportConfig& config) {
     const auto count = config.number_of_voxels();
     std::vector<double> masses(count, voxel_mass_kg(config));
+    const auto nx = config.voxel_bins_x;
+    const auto ny = config.voxel_bins_y;
+    const auto nz = config.number_of_bins();
+    const auto plane_size = nx * ny;
+    const auto dx = config.voxel_size_x_mm;
+    const auto dy = config.voxel_size_y_mm;
+    const auto dz = config.depth_bin_width_mm;
+    const auto volume_mm3 = dx * dy * dz;
+
+    if (config.enable_layered_phantom) {
+        auto layer_start_mm = 0.0;
+        for (std::size_t iz = 0; iz < nz; ++iz) {
+            const auto voxel_start_mm = static_cast<double>(iz) * dz;
+            const auto voxel_end_mm = voxel_start_mm + dz;
+            auto density_integral = 0.0;
+            layer_start_mm = 0.0;
+            for (const auto& layer : config.slab_layers) {
+                const auto overlap_mm = std::max(
+                    0.0,
+                    std::min(voxel_end_mm, layer.z_end_mm) -
+                        std::max(voxel_start_mm, layer_start_mm));
+                density_integral += overlap_mm * layer.density_g_per_cm3;
+                layer_start_mm = layer.z_end_mm;
+            }
+            const auto average_density = density_integral / dz;
+            std::fill_n(
+                masses.begin() + static_cast<std::ptrdiff_t>(iz * plane_size),
+                plane_size,
+                volume_mm3 * average_density * 1.0e-6);
+        }
+        return masses;
+    }
+    if (config.enable_hetero_insert) {
+        const auto scorer_min_x = -0.5 * static_cast<double>(nx) * dx;
+        const auto scorer_min_y = -0.5 * static_cast<double>(ny) * dy;
+        const auto overlap_length = [](const double first_min,
+                                       const double first_max,
+                                       const double second_min,
+                                       const double second_max) {
+            return std::max(
+                0.0, std::min(first_max, second_max) -
+                         std::max(first_min, second_min));
+        };
+        for (std::size_t iz = 0; iz < nz; ++iz) {
+            const auto z0 = static_cast<double>(iz) * dz;
+            const auto z_overlap = overlap_length(
+                z0, z0 + dz, config.hetero_insert.z_min_mm,
+                config.hetero_insert.z_max_mm);
+            for (std::size_t iy = 0; iy < ny; ++iy) {
+                const auto y0 = scorer_min_y + static_cast<double>(iy) * dy;
+                const auto y_overlap = overlap_length(
+                    y0, y0 + dy, config.hetero_insert.y_min_mm,
+                    config.hetero_insert.y_max_mm);
+                for (std::size_t ix = 0; ix < nx; ++ix) {
+                    const auto x0 = scorer_min_x + static_cast<double>(ix) * dx;
+                    const auto x_overlap = overlap_length(
+                        x0, x0 + dx, config.hetero_insert.x_min_mm,
+                        config.hetero_insert.x_max_mm);
+                    const auto insert_volume_mm3 =
+                        x_overlap * y_overlap * z_overlap;
+                    const auto water_volume_mm3 =
+                        volume_mm3 - insert_volume_mm3;
+                    const auto index = iz * plane_size + iy * nx + ix;
+                    masses[index] =
+                        (water_volume_mm3 * config.water_density_g_per_cm3 +
+                         insert_volume_mm3 *
+                             config.hetero_insert.density_g_per_cm3) *
+                        1.0e-6;
+                }
+            }
+        }
+        return masses;
+    }
     if (!config.enable_ct_grid) {
         return masses;
     }
@@ -47,8 +120,6 @@ std::vector<double> voxel_masses_kg(const TransportConfig& config) {
         throw std::invalid_argument(
             "CT dose-to-medium requires the voxel scorer grid to match the CT grid");
     }
-    const auto volume_mm3 = config.voxel_size_x_mm * config.voxel_size_y_mm *
-                            config.depth_bin_width_mm;
     for (std::size_t i = 0; i < count; ++i) {
         // Keep very-low-density CT voxels finite while retaining their actual
         // dose-to-medium mass rather than assuming unit-density water.

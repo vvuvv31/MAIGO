@@ -198,6 +198,24 @@ std::size_t TransportConfig::number_of_voxels() const {
 }
 
 void TransportConfig::validate() const {
+    if (physics_profile != "accurate" && physics_profile != "fast") {
+        throw std::invalid_argument(
+            "physics_profile must be accurate or fast");
+    }
+    if (physics_profile == "fast") {
+        if (enable_minibeam) {
+            throw std::invalid_argument(
+                "physics_profile=fast is not allowed with minibeam=true");
+        }
+        if (enable_let_scoring) {
+            throw std::invalid_argument(
+                "physics_profile=fast is not allowed with LET scoring");
+        }
+        if (!enable_ct_grid) {
+            throw std::invalid_argument(
+                "physics_profile=fast currently requires enable_ct_grid=true");
+        }
+    }
     if (number_of_histories == 0) {
         throw std::invalid_argument("number_of_histories must be greater than zero");
     }
@@ -243,12 +261,31 @@ void TransportConfig::validate() const {
                     "slab material table file lists must match slab layer count");
             }
         }
+        if (!slab_radiation_lengths_g_per_cm2.empty()) {
+            if (slab_radiation_lengths_g_per_cm2.size() != slab_layers.size()) {
+                throw std::invalid_argument(
+                    "slab radiation-length list must match slab layer count");
+            }
+            for (const auto radiation_length :
+                 slab_radiation_lengths_g_per_cm2) {
+                if (!std::isfinite(radiation_length) ||
+                    radiation_length <= 0.0) {
+                    throw std::invalid_argument(
+                        "slab radiation lengths must be finite and positive");
+                }
+            }
+        }
     } else if (!slab_layers.empty()) {
         throw std::invalid_argument(
             "slab_layers is set but enable_layered_phantom=false");
     }
     if (enable_hetero_insert) {
         validate_hetero_insert(hetero_insert, phantom_length_mm);
+        if (!std::isfinite(insert_radiation_length_g_per_cm2) ||
+            insert_radiation_length_g_per_cm2 <= 0.0) {
+            throw std::invalid_argument(
+                "insert radiation length must be finite and positive");
+        }
         const auto has_sp = !insert_stopping_power_file.empty();
         const auto has_xs = !insert_cross_section_file.empty();
         if (has_sp != has_xs) {
@@ -546,18 +583,46 @@ void TransportConfig::validate() const {
                   minibeam_copper_survivor_energy_loss_scale > 0.0 &&
                   minibeam_copper_survivor_energy_loss_scale <= 2.0 &&
                   minibeam_water_primary_stopping_power_scale > 0.0 &&
-                  minibeam_water_primary_stopping_power_scale <= 2.0) ||
+                  minibeam_water_primary_stopping_power_scale <= 2.0 &&
+                  minibeam_water_low_energy_mcs_transition_MeVu >= 0.0 &&
+                  minibeam_water_primary_low_energy_mcs_scale > 0.0 &&
+                  minibeam_water_primary_low_energy_mcs_scale <= 2.0 &&
+                  minibeam_water_fragment_low_energy_mcs_scale > 0.0 &&
+                  minibeam_water_fragment_low_energy_mcs_scale <= 2.0 &&
+                  minibeam_water_touched_primary_surface_boost >= 0.0 &&
+                  minibeam_water_touched_primary_surface_boost <= 0.5 &&
+                  minibeam_water_touched_primary_surface_sigma_mm > 0.0 &&
+                  minibeam_water_touched_primary_deficit >= 0.0 &&
+                  minibeam_water_touched_primary_deficit <= 0.5 &&
+                  minibeam_water_touched_primary_deficit_center_mm >= 0.0 &&
+                  minibeam_water_touched_primary_deficit_sigma_mm > 0.0) ||
                 !std::isfinite(minibeam_copper_mcs_scale) ||
                 !std::isfinite(minibeam_copper_straggling_scale) ||
                 !std::isfinite(
                     minibeam_copper_survivor_energy_loss_scale) ||
                 !std::isfinite(
-                    minibeam_water_primary_stopping_power_scale)) {
+                    minibeam_water_primary_stopping_power_scale) ||
+                !std::isfinite(
+                    minibeam_water_low_energy_mcs_transition_MeVu) ||
+                !std::isfinite(
+                    minibeam_water_primary_low_energy_mcs_scale) ||
+                !std::isfinite(
+                    minibeam_water_fragment_low_energy_mcs_scale) ||
+                !std::isfinite(
+                    minibeam_water_touched_primary_surface_boost) ||
+                !std::isfinite(
+                    minibeam_water_touched_primary_surface_sigma_mm) ||
+                !std::isfinite(
+                    minibeam_water_touched_primary_deficit) ||
+                !std::isfinite(
+                    minibeam_water_touched_primary_deficit_center_mm) ||
+                !std::isfinite(
+                    minibeam_water_touched_primary_deficit_sigma_mm)) {
                 throw std::invalid_argument(
                     "minibeam Copper density, radiation length, max step, and "
                     "MCS/straggling scales must be finite/positive and survivor energy-loss "
-                    "and water primary stopping-power scales must be finite "
-                    "and in (0, 2]");
+                    "and water stopping/MCS scales must be finite and in (0, 2]; "
+                    "the water low-energy MCS transition must be nonnegative");
             }
             const auto& calibration_energies =
                 minibeam_copper_survivor_energy_loss_energies_MeVu;
@@ -655,6 +720,12 @@ void TransportConfig::validate() const {
 TransportConfig load_config(const std::filesystem::path& path) {
     const auto values = read_key_values(path);
     TransportConfig config;
+    {
+        const auto it = values.find("physics_profile");
+        if (it != values.end()) {
+            config.physics_profile = it->second;
+        }
+    }
     config.number_of_histories = parse_number(values, "number_of_histories", config.number_of_histories);
     config.initial_energy_MeVu = parse_number(values, "initial_energy_MeVu", config.initial_energy_MeVu);
     config.beam_energy_spread =
@@ -715,6 +786,16 @@ TransportConfig load_config(const std::filesystem::path& path) {
                 config.enable_layered_phantom = true;
             }
         }
+        const auto radiation_it =
+            values.find("slab_radiation_lengths_g_per_cm2");
+        if (radiation_it != values.end()) {
+            config.slab_radiation_lengths_g_per_cm2 = parse_double_list(
+                radiation_it->second,
+                "slab_radiation_lengths_g_per_cm2");
+            if (values.find("enable_layered_phantom") == values.end()) {
+                config.enable_layered_phantom = true;
+            }
+        }
     }
     config.enable_hetero_insert =
         parse_bool(values, "enable_hetero_insert", config.enable_hetero_insert);
@@ -736,6 +817,9 @@ TransportConfig load_config(const std::filesystem::path& path) {
         values, "insert_stopping_power_file", config.insert_stopping_power_file);
     config.insert_cross_section_file = parse_path(
         values, "insert_cross_section_file", config.insert_cross_section_file);
+    config.insert_radiation_length_g_per_cm2 = parse_number(
+        values, "insert_radiation_length_g_per_cm2",
+        config.insert_radiation_length_g_per_cm2);
     if (values.find("insert_x_min_mm") != values.end() &&
         values.find("enable_hetero_insert") == values.end()) {
         config.enable_hetero_insert = true;
@@ -777,6 +861,9 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.enable_charged_origin_voxel_scoring = parse_bool(
         values, "enable_charged_origin_voxel_scoring",
         config.enable_charged_origin_voxel_scoring);
+    config.voxel_scorer_clamps_transport = parse_bool(
+        values, "voxel_scorer_clamps_transport",
+        config.voxel_scorer_clamps_transport);
     config.voxel_bins_x = parse_number(values, "voxel_bins_x", config.voxel_bins_x);
     config.voxel_bins_y = parse_number(values, "voxel_bins_y", config.voxel_bins_y);
     config.voxel_size_x_mm =
@@ -864,6 +951,9 @@ TransportConfig load_config(const std::filesystem::path& path) {
         values, "electronic_buildup_fraction", config.electronic_buildup_fraction);
     config.electronic_buildup_mfp_mm = parse_number(
         values, "electronic_buildup_mfp_mm", config.electronic_buildup_mfp_mm);
+    config.minibeam_electronic_buildup_primary_only = parse_bool(
+        values, "minibeam_electronic_buildup_primary_only",
+        config.minibeam_electronic_buildup_primary_only);
     config.electronic_buildup_lateral_sigma_mm = parse_number(
         values, "electronic_buildup_lateral_sigma_mm",
         config.electronic_buildup_lateral_sigma_mm);
@@ -992,6 +1082,36 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.minibeam_water_primary_stopping_power_scale = parse_number(
         values, "minibeam_water_primary_stopping_power_scale",
         config.minibeam_water_primary_stopping_power_scale);
+    config.minibeam_water_low_energy_mcs_transition_MeVu = parse_number(
+        values, "minibeam_water_low_energy_mcs_transition_MeVu",
+        config.minibeam_water_low_energy_mcs_transition_MeVu);
+    config.minibeam_water_primary_low_energy_mcs_scale = parse_number(
+        values, "minibeam_water_primary_low_energy_mcs_scale",
+        config.minibeam_water_primary_low_energy_mcs_scale);
+    config.minibeam_water_fragment_low_energy_mcs_scale = parse_number(
+        values, "minibeam_water_fragment_low_energy_mcs_scale",
+        config.minibeam_water_fragment_low_energy_mcs_scale);
+    config.minibeam_water_touched_primary_surface_boost = parse_number(
+        values, "minibeam_water_touched_primary_surface_boost",
+        config.minibeam_water_touched_primary_surface_boost);
+    config.minibeam_water_touched_primary_surface_sigma_mm =
+        parse_number(
+            values,
+            "minibeam_water_touched_primary_surface_sigma_mm",
+            config.minibeam_water_touched_primary_surface_sigma_mm);
+    config.minibeam_water_touched_primary_deficit = parse_number(
+        values, "minibeam_water_touched_primary_deficit",
+        config.minibeam_water_touched_primary_deficit);
+    config.minibeam_water_touched_primary_deficit_center_mm =
+        parse_number(
+            values,
+            "minibeam_water_touched_primary_deficit_center_mm",
+            config.minibeam_water_touched_primary_deficit_center_mm);
+    config.minibeam_water_touched_primary_deficit_sigma_mm =
+        parse_number(
+            values,
+            "minibeam_water_touched_primary_deficit_sigma_mm",
+            config.minibeam_water_touched_primary_deficit_sigma_mm);
     config.minibeam_copper_enable_nuclear_attenuation = parse_bool(
         values, "minibeam_copper_enable_nuclear_attenuation",
         config.minibeam_copper_enable_nuclear_attenuation);

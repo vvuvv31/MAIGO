@@ -322,6 +322,7 @@ void test_slab_phantom_helpers() {
     config.enable_layered_phantom = true;
     config.phantom_length_mm = 400.0;
     config.slab_layers = {{50.0, 1.0}, {70.0, 1.85}, {400.0, 1.0}};
+    config.slab_radiation_lengths_g_per_cm2 = {36.0830, 30.4866, 36.0830};
     config.validate();
     require_throws(
         []() {
@@ -332,12 +333,37 @@ void test_slab_phantom_helpers() {
             bad.validate();
         },
         "mismatched last slab end was accepted");
+    require_throws(
+        []() {
+            carbon::TransportConfig bad;
+            bad.enable_layered_phantom = true;
+            bad.phantom_length_mm = 400.0;
+            bad.slab_layers = {{50.0, 1.0}, {70.0, 1.85}, {400.0, 1.0}};
+            bad.slab_radiation_lengths_g_per_cm2 = {36.0830, 30.4866};
+            bad.validate();
+        },
+        "mismatched slab radiation-length list was accepted");
+    require_throws(
+        []() {
+            carbon::TransportConfig bad;
+            bad.enable_layered_phantom = true;
+            bad.phantom_length_mm = 400.0;
+            bad.slab_layers = {{50.0, 1.0}, {70.0, 1.85}, {400.0, 1.0}};
+            bad.slab_radiation_lengths_g_per_cm2 = {36.0830, 0.0, 36.0830};
+            bad.validate();
+        },
+        "non-positive slab radiation length was accepted");
 
     carbon::TransportConfig insert_config;
     insert_config.enable_hetero_insert = true;
     insert_config.phantom_length_mm = 400.0;
     insert_config.hetero_insert = {-10.0, 10.0, -10.0, 10.0, 50.0, 70.0, 1.85};
+    insert_config.insert_radiation_length_g_per_cm2 = 30.4866;
     insert_config.validate();
+    insert_config.insert_radiation_length_g_per_cm2 = 0.0;
+    require_throws(
+        [&insert_config]() { insert_config.validate(); },
+        "non-positive insert radiation length was accepted");
 }
 
 void test_ct_grid_helpers() {
@@ -886,6 +912,42 @@ void test_dense_voxel_mhd_writer() {
     std::filesystem::remove_all(dir, ec);
 }
 
+void test_layered_voxel_dose_uses_local_mass() {
+    carbon::TransportConfig config;
+    config.number_of_histories = 1;
+    config.phantom_length_mm = 2.0;
+    config.depth_bin_width_mm = 1.0;
+    config.enable_voxel_scoring = true;
+    config.voxel_bins_x = 1;
+    config.voxel_bins_y = 1;
+    config.voxel_size_x_mm = 1.0;
+    config.voxel_size_y_mm = 1.0;
+    config.enable_layered_phantom = true;
+    config.slab_layers = {{1.0, 1.0}, {2.0, 2.0}};
+    config.validate();
+
+    carbon::TransportResult result;
+    result.deposited_energy_MeV = {1.0, 1.0};
+    result.voxel_deposited_energy_MeV = {1.0, 1.0};
+
+    const auto dir =
+        std::filesystem::temp_directory_path() / "carbon_layered_mass_test";
+    std::filesystem::create_directories(dir);
+    carbon::write_dense_voxel_dose_mhd(dir / "dose.mhd", config, result);
+    std::ifstream input(dir / "dose.raw", std::ios::binary);
+    std::array<float, 2> dose{};
+    input.read(
+        reinterpret_cast<char*>(dose.data()),
+        static_cast<std::streamsize>(dose.size() * sizeof(float)));
+    require(input.good(), "Layered dose RAW should contain two float voxels");
+    require_near(
+        dose[1] / dose[0], 0.5, 1.0e-6,
+        "Equal deposited energy in twice-dense material must give half dose");
+
+    std::error_code ec;
+    std::filesystem::remove_all(dir, ec);
+}
+
 void test_ct_aligned_mhd_offset_and_index_pairing() {
     // CT transport samples density with edge origin; dose-to-medium mass and
     // voxel tallies must use the same edge so linear indices match.
@@ -1163,6 +1225,33 @@ void test_secondary_optimization_config_validation() {
     bad_output.output_file = "total_idd_would_be_incomplete.csv";
     require_throws([&bad_output] { bad_output.validate(); },
                    "Disabling fragment scoring should reject total IDD output");
+
+    carbon::TransportConfig fast;
+    fast.physics_profile = "fast";
+    fast.enable_ct_grid = true;
+    fast.ct_grid_file = "synthetic-fast-profile-grid.bin";
+    fast.validate();
+
+    auto bad_fast_geometry = fast;
+    bad_fast_geometry.enable_ct_grid = false;
+    bad_fast_geometry.ct_grid_file.clear();
+    require_throws([&bad_fast_geometry] { bad_fast_geometry.validate(); },
+                   "Fast physics profile should require a CT grid");
+
+    auto bad_fast_let = fast;
+    bad_fast_let.enable_let_scoring = true;
+    require_throws([&bad_fast_let] { bad_fast_let.validate(); },
+                   "Fast physics profile should reject LET scoring");
+
+    auto bad_fast_minibeam = fast;
+    bad_fast_minibeam.enable_minibeam = true;
+    require_throws([&bad_fast_minibeam] { bad_fast_minibeam.validate(); },
+                   "Fast physics profile should reject minibeam");
+
+    auto bad_profile = fast;
+    bad_profile.physics_profile = "turbo";
+    require_throws([&bad_profile] { bad_profile.validate(); },
+                   "Unknown physics profile should be rejected");
 }
 
 void test_topas_spots_parse_angle01() {
@@ -1455,11 +1544,14 @@ void test_tps_source_geometry_csv_and_switch() {
     }
     const auto disabled = carbon::load_config(yaml_path);
     require(!disabled.enable_tps_source, "tpsSource:false parsing");
+    require(disabled.voxel_scorer_clamps_transport,
+            "voxel scorer transport clamp must remain compatibility default");
     {
         std::ofstream output(yaml_path);
         output << "number_of_histories: 10\n"
                << "tpsSource: true\n"
                << "enable_voxel_scoring: true\n"
+               << "voxel_scorer_clamps_transport: false\n"
                << "tps_angle_convention: topas_patient_rot_z\n"
                << "tps_gantry_angle_deg: 37.5\n"
                << "tps_isocenter_mm: [1, 2, 3]\n";
@@ -1473,6 +1565,8 @@ void test_tps_source_geometry_csv_and_switch() {
                  "TPS vector isocenter Z parsing");
     require(vector_isocenter.tps_angle_convention == "topas_patient_rot_z",
             "TPS angle convention parsing");
+    require(!vector_isocenter.voxel_scorer_clamps_transport,
+            "voxel_scorer_clamps_transport:false parsing");
     require_near(vector_isocenter.tps_gantry_angle_deg, 37.5, 1.0e-12,
                  "TPS arbitrary angle parsing");
     {
@@ -2158,6 +2252,7 @@ int main() {
         test_tps_source_geometry_csv_and_switch();
         test_dose_scorer_matches_mev_conversion();
         test_dense_voxel_mhd_writer();
+        test_layered_voxel_dose_uses_local_mass();
         test_ct_aligned_mhd_offset_and_index_pairing();
 #ifdef CARBON_HAS_SYCL
         test_sycl_tps_source_arbitrary_gantry_transport();

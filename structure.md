@@ -28,6 +28,8 @@ CLI / YAML 配置 / TOPAS spots / TPS source
          │  serial (CPU 子集)   │
          │  SYCL CPU / GPU      │
          │    ├─ legacy path    │  ← 水箱 / CT / LET / TPS
+         │    │   ├─ accurate   │  ← 默认、已验证物理
+         │    │   └─ fast       │  ← 显式启用、仅普通 CT dose
          │    └─ minibeam path  │  ← Copper 准直器 beamline（可选编译）
          └──────────┬───────────┘
                     ▼
@@ -171,6 +173,7 @@ main
 定义于 `include/carbon/transport_config.hpp`，集中存放：
 
 - 束流、histories、种子、步长
+- `physics_profile: accurate|fast` 输运策略（默认 `accurate`）
 - slab / insert / CT 几何
 - 次级、级联、中性、LET、voxel scorer
 - GPU 批大小 / `secondary_persistent_workers` 等
@@ -215,7 +218,7 @@ main
 **无**完整 MCS / 次级 / 级联 / 中性 / 完整 CT。  
 用途：轻量调试与能量账本子集对照。
 
-### 5.2 SYCL legacy（`transport_sycl_legacy.cpp`）
+### 5.2 SYCL legacy accurate（`transport_sycl_legacy.cpp`）
 
 全功能 **水箱 / CT / TPS / LET** 路径（与隔离前 master 内核同源快照 + 共享 context）：
 
@@ -229,7 +232,43 @@ Neutral kernel（可选）
   → result reduction
 ```
 
-### 5.3 SYCL minibeam（`transport_sycl.cpp`，仅 MINIBEAM=ON）
+`physics_profile` 未设置时为 `accurate`，因此已有 YAML、CT case 和
+minibeam isolation 的行为不变。
+
+### 5.3 普通 CT fast profile
+
+`physics_profile: fast` 是普通 CT 物理剂量的显式快速档，仍调用 legacy
+SYCL 内核，但使用独立、可审计的策略。它不是 minibeam 的低精度模式。
+
+```text
+YAML / CLI
+  → validate profile and feature compatibility
+  → CUDA primary chunk 16k（减少 host submit / wait）
+  → primary physics 不变
+  → charged-secondary step 上限 1 mm
+  → ≤2 MeV 短程 charged secondary 在当前 voxel 局部沉积
+  → CT material face / dose voxel face / energy-loss limit 仍然 clamp
+  → result.backend 追加 +physics-fast
+```
+
+其中次级步长取
+`max(maximum_step_mm, secondary_condensed_step_mm, 1 mm)`；低能局部沉积阈值取
+`max(secondary_local_deposit_cutoff_MeV, 2 MeV)`。以下安全门由
+`TransportConfig::validate()` 强制执行：
+
+| 条件 | 行为 |
+|------|------|
+| 未设置 profile | `accurate`，保持原行为 |
+| `fast` + 普通 CT dose | 允许 |
+| `fast` + minibeam | **拒绝配置** |
+| `fast` + LET scorer | **拒绝配置** |
+| `fast` + 非 CT 几何 | **拒绝配置** |
+| 未知 profile | **拒绝配置** |
+
+fast 不允许用缩小 queue 偷取速度。正式结果仍要求
+`Secondary queue overflow: 0` 和 `Cascade queue overflow: 0`。
+
+### 5.4 SYCL minibeam（`transport_sycl.cpp`，仅 MINIBEAM=ON）
 
 在 legacy 水中/CT 输运之外增加 **Copper beamline**：
 
@@ -243,15 +282,16 @@ Source
 
 `minibeam: false` 时 **不得**进入该路径：由 dispatch 调用 `transport_sycl_legacy`。
 
-### 5.4 后端能力对比
+### 5.5 后端能力对比
 
 ```text
-                        Serial   SYCL legacy   SYCL minibeam
-CSDA / straggling         ✓           ✓              ✓
-MCS / secondaries         ✗           ✓              ✓
-Cascade / neutral         ✗           ✓              ✓
-CT / TPS / LET            有限         ✓              ✓
-Copper collimator         ✗           ✗              ✓
+                        Serial   accurate   CT fast   minibeam
+CSDA / straggling         ✓         ✓          ✓          ✓
+MCS / secondaries         ✗         ✓          ✓          ✓
+Cascade / neutral         ✗         ✓          ✓          ✓
+CT / TPS dose             有限       ✓          ✓          ✓
+LET                       ✗         ✓          ✗          ✓
+Copper collimator         ✗         ✗          ✗          ✓
 ```
 
 ---
@@ -286,6 +326,20 @@ electronic_buildup_lateral_sigma_mm: 0.5  # 若使用
 - **计分**：depth dose、dense MHD、charged-origin、LET_d、birth spectrum、minibeam diagnostics  
 
 配置样例见 `config/`；minibeam 样例为 `config/beam_minibeam_*.yaml`。
+
+普通 CT 快速档可通过 YAML 或 CLI 启用：
+
+```yaml
+physics_profile: fast
+```
+
+```bash
+carbon_mc --config config/beam_ct_20022516_1M.yaml \
+  --physics-profile fast --no-scorer-let
+```
+
+正式 TOPAS match、LET、minibeam 和新病例验收仍使用默认的 `accurate`；
+`fast` 适合优化迭代、统计预跑和已经做过 accurate 交叉验证的常规 CT dose。
 
 ---
 
@@ -345,6 +399,36 @@ ctest -L isolation --output-on-failure
 
 性能门使用 **`Kernel time: primary=… secondary=…` 中位数**（warmup + 重复），不用进程 wall time。
 
+### 9.3 CT fast A/B 验证
+
+2026-07-28 在 TITAN RTX / CUDA 12.6 上，以相同随机种子、相同 20022516
+肺部 full-plan spot 权重和 1,000,000 histories 配对：
+
+| 指标 | accurate | fast | 变化 |
+|------|----------|------|------|
+| wall time | 5.123 s | 2.672 s | **1.92×** |
+| throughput | 195,192 h/s | 374,287 h/s | **+91.8%** |
+| primary kernel | 3.768 s | 1.508 s | 2.50× |
+| secondary kernel | 0.697 s | 0.573 s | 1.22× |
+| secondary steps | 1.451 B | 1.112 B | −23.4% |
+| secondary / cascade overflow | 0 / 0 | 0 / 0 | 无丢粒子 |
+
+三维剂量网格为 `0.5 × 2.0 × 0.5 mm`，以 accurate 为 reference，10% dose
+threshold，固定抽样 20,000 个 reference voxels：
+
+| 剂量指标 | fast vs accurate |
+|----------|------------------|
+| integral ratio | 1.000010 |
+| high-dose NRMSE / reference max | 0.168% |
+| global gamma 1% / 1 mm | 99.950% |
+| local gamma 1% / 1 mm | 96.285% |
+| global gamma 2% / 2 mm | 99.995% |
+| local gamma 2% / 2 mm | 99.915% |
+
+该数据只证明 fast 对当前病例的 accurate 等价程度，不替代跨病例 TOPAS 验证。
+水立方 1M、无 queue overflow 的独立 A/B 中，总速度为 1.13×、secondary
+kernel 为 1.55×，1D global gamma 1%/1 mm 与 2%/2 mm 均为 100%。
+
 ---
 
 ## 10. 关键代码路径速查
@@ -355,6 +439,7 @@ ctest -L isolation --output-on-failure
 | 配置 | `src/config.cpp`, `include/carbon/transport_config.hpp` |
 | Serial | `src/transport_cpu.cpp` |
 | Legacy SYCL | `src/transport_sycl_legacy.cpp` |
+| Accurate / fast 策略与安全门 | `src/config.cpp`, `src/transport_sycl_legacy.cpp` |
 | Minibeam SYCL | `src/transport_sycl.cpp` |
 | 分发 | `src/transport_sycl_dispatch.cpp` |
 | 设备 | `src/device.cpp` |
@@ -367,10 +452,12 @@ ctest -L isolation --output-on-failure
 ## 11. 维护约定
 
 1. **默认生产 CT/LET 构建**：`CARBON_ENABLE_MINIBEAM=OFF`，走 legacy，不编 Copper。  
-2. **改水/CT/LET 物理**：改 `transport_sycl_legacy.cpp`（OFF 与 ON+`minibeam:false` 共用）。  
-3. **改 Copper beamline**：改 `transport_sycl.cpp` 与相关表/配置。  
-4. **legacy 与 master 快照漂移风险**：长期应将 Copper 完全拆出单一 water kernel；短期 dual 文件需同步修 bug。  
-5. **分支**：日常开发默认 `master`（见 `BRANCH_WORKFLOW.md`）。
+2. **准确性默认值**：新增近似必须保持中性默认值；未设置 `physics_profile` 必须等价于 `accurate`。
+3. **fast 边界**：仅普通 CT dose；不得绕过 material/dose boundary，也不得依赖 queue overflow。
+4. **改水/CT/LET 物理**：改 `transport_sycl_legacy.cpp`（OFF 与 ON+`minibeam:false` 共用）。
+5. **改 Copper beamline**：改 `transport_sycl.cpp` 与相关表/配置。
+6. **legacy 与 master 快照漂移风险**：长期应将 Copper 完全拆出单一 water kernel；短期 dual 文件需同步修 bug。
+7. **分支**：日常开发默认 `master`（见 `BRANCH_WORKFLOW.md`）。
 
 ---
 

@@ -26,7 +26,7 @@ import numpy as np
 
 
 AXIS_RE = re.compile(
-    r"^#\s*([XYZ])\s+in\s+(\d+)\s+bins\s+of\s+"
+    r"^#\s*([XYZ])\s+in\s+(\d+)\s+bins?\s+of\s+"
     r"([0-9.eE+-]+)\s+(mm|cm)\s*$"
 )
 

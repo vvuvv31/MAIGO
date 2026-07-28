@@ -30,6 +30,7 @@ namespace {
 void print_usage(const char* executable) {
     std::cout << "Usage: " << executable
               << " [--config FILE] [--device DEVICE] [--histories N]"
+                 " [--physics-profile accurate|fast]"
                  " [--spots FILE] [--straggling-scale X] [--output FILE]"
                  " [--dose-output FILE] [--scorer-let|--no-scorer-let]"
                  " [--let-output FILE] [--plan-only] [--sequential-spots]\n"
@@ -40,8 +41,11 @@ void print_usage(const char* executable) {
                  "  --spots FILE         TOPAS-format spots_*.txt; repeat to concatenate files\n"
                  "  --spot-weights FILE  One optimization weight per concatenated spot\n"
                  "  --histories N        With weights: total plan histories; otherwise per spot\n"
+                 "  --physics-profile P  accurate (default) or opt-in CT dose fast path\n"
                  "  --ct-grid FILE       Override the configured CCTG patient grid\n"
                  "  --ct-stopping-power-scale X  Override the CT mass stopping-power scale\n"
+                 "  --secondary-queue-capacity N  Override charged secondary queue capacity\n"
+                 "  --neutral-queue-capacity N  Override neutral queue capacity\n"
                  "  --plan-only          Parse/allocate/transform plan without transport\n"
                  "  --sequential-spots   Validation A/B: disable batched SYCL plan launch\n"
                  "  --output FILE        MeV energy-deposition scorer CSV\n"
@@ -501,10 +505,18 @@ int main(int argc, char* argv[]) {
             } else if (argument == "--histories" && index + 1 < argc) {
                 config.number_of_histories = std::stoull(argv[++index]);
                 histories_cli_override = true;
+            } else if (argument == "--physics-profile" && index + 1 < argc) {
+                config.physics_profile = argv[++index];
             } else if (argument == "--ct-grid" && index + 1 < argc) {
                 config.ct_grid_file = argv[++index];
             } else if (argument == "--ct-stopping-power-scale" && index + 1 < argc) {
                 config.ct_stopping_power_scale = std::stod(argv[++index]);
+            } else if (argument == "--secondary-queue-capacity" &&
+                       index + 1 < argc) {
+                config.secondary_queue_capacity = std::stoull(argv[++index]);
+            } else if (argument == "--neutral-queue-capacity" &&
+                       index + 1 < argc) {
+                config.neutral_queue_capacity = std::stoull(argv[++index]);
             } else if (argument == "--spots" && index + 1 < argc) {
                 if (config.topas_spots_files.empty()) {
                     config.topas_spots_file.clear();
@@ -994,6 +1006,22 @@ int main(int argc, char* argv[]) {
                     << "MeV";
             }
             std::cout << '\n';
+            const auto print_fragment_histogram =
+                [](const char* label, const auto& histogram) {
+                    std::cout << "Minibeam water-entrance " << label
+                              << " energy histogram (50 MeV bins):";
+                    for (const auto count : histogram) {
+                        std::cout << ' ' << count;
+                    }
+                    std::cout << '\n';
+                };
+            print_fragment_histogram(
+                "d",
+                result.minibeam.copper_deuteron_energy_histogram);
+            print_fragment_histogram(
+                "t", result.minibeam.copper_triton_energy_histogram);
+            print_fragment_histogram(
+                "He", result.minibeam.copper_helium_energy_histogram);
         }
         if (result.profile.enabled) {
             std::cout << result.profile.summary();

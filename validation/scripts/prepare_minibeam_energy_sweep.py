@@ -156,6 +156,15 @@ def main() -> None:
             "number_of_histories": str(args.histories),
             "initial_energy_MeVu": str(energy),
             "phantom_length_mm": f"{args.depth_mm:g}",
+            # A 1M convergence A/B against TOPAS showed that 0.2 mm with the
+            # production 0.5% relative-loss limiter improves both runtime and
+            # depth-dose agreement at 200--400 MeV/u.  Keep the tighter 0.1%
+            # limiter at 100 MeV/u, where the sparse non-primary component is
+            # measurably more step-size sensitive.
+            "maximum_step_mm": "0.2",
+            "maximum_relative_energy_loss": (
+                "0.001" if energy <= 100 else "0.005"
+            ),
             # A 1x1 transverse voxel is also the finite scorer boundary.
             # scorer_area_mm2 alone only sets dose mass and does not stop
             # particles that leave TOPAS Box2 (100 x 40 mm2).

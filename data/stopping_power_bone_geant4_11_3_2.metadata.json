@@ -1,0 +1,49 @@
+{
+  "dataset": "C-12 stopping power in G4_BONE_COMPACT_ICRU",
+  "material": "G4_BONE_COMPACT_ICRU",
+  "extraction_method": "G4EmCalculator via CarbonStoppingPowerNtuple",
+  "gpu_column": "electronic",
+  "topas_version": "4.2.p3",
+  "geant4_version": "geant4-11-03-patch-02",
+  "energy_grid_MeV_per_u": {
+    "minimum": 0.01,
+    "maximum": 400.01,
+    "count": 4001
+  },
+  "reference_200MeVu": {
+    "electronic_MeV_per_mm": 27.8073,
+    "total_MeV_per_mm": 27.8073,
+    "csda_range_mm": 0.0
+  },
+  "input_files": {
+    "ntuple": {
+      "path": "validation/topas/output/carbon_c12_stopping_power_bone.phsp",
+      "sha256": "2b4b401ffdbed7d6aa4c945b155c7b8224b805d67eeab6e43a1432e2c9f38947"
+    },
+    "header": {
+      "path": "validation/topas/output/carbon_c12_stopping_power_bone.header",
+      "sha256": "f0399a26497813f07a42109955b9021851ba3074b699e34dc8b76b0cbeb3467e"
+    },
+    "log": {
+      "path": "validation/topas/output/carbon_c12_stopping_power_bone.log",
+      "sha256": "a1146bdb679d2ac18cb8592c4f4bda47e0d19c56a3c94a1a98d6e39f6cc9c905"
+    }
+  },
+  "output_csv": "data/stopping_power_bone_geant4_11_3_2.csv",
+  "full_csv": "data/stopping_power_bone_geant4_11_3_2_full.csv",
+  "global_scale_applied": false,
+  "material_properties": {
+    "geant4_name": "G4_BONE_COMPACT_ICRU",
+    "density_g_per_cm3": 1.85,
+    "radiation_length_mm": 164.793,
+    "mass_radiation_length_g_per_cm2": 30.4866,
+    "source": {
+      "path": "validation/topas/output/material_properties_bone.phsp",
+      "sha256": "33a6f8c88942bc14c3389e167641a8424278b3db3047b08a01613d56abd35e56"
+    },
+    "header": {
+      "path": "validation/topas/output/material_properties_bone.header",
+      "sha256": "2f3ce95252028cde9260d2347e8bda580d7677dc725d5969bc6d6bfd2ace0b48"
+    }
+  }
+}
