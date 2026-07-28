@@ -1056,6 +1056,11 @@ void test_minibeam_absorbing_geometry() {
     config.device = "gpu";
     config.enable_minibeam = true;
     config.spots_geometry_mode = "minibeam_topas_y";
+#if !defined(CARBON_ENABLE_MINIBEAM)
+    require_throws(
+        [&config] { config.validate(); },
+        "minibeam=true must fail when CARBON_ENABLE_MINIBEAM is OFF");
+#else
     config.validate();
 
     config.minibeam_slit_count = 14;
@@ -1128,6 +1133,7 @@ void test_minibeam_absorbing_geometry() {
     require_throws(
         [&config] { config.validate(); },
         "Out-of-range minibeam water stopping-power scale should be rejected");
+#endif
 }
 
 void test_secondary_optimization_config_validation() {

@@ -362,6 +362,15 @@ struct TransportConfig {
     // fetches tracks from the batch, reducing whole-track warp tail divergence
     // without changing per-particle Philox streams.
     std::size_t secondary_persistent_workers{0};
+    // FP32 continuous-loss residual for charged secondaries. When false, energy
+    // is subtracted exactly as on master (legacy bitwise path). When true,
+    // unrepresented FP32 ULPs are carried so scored energy is not double-counted
+    // in the escaped-energy balance. Minibeam production configs enable this.
+    bool secondary_fp32_energy_residual{false};
+    // When false, boundary snaps use sycl::nextafter (master). When true, a
+    // fixed 1e-5 mm physical nudge is used to escape CT/voxel face thrash.
+    // Minibeam 0.1 mm scorer cases should enable this explicitly.
+    bool robust_boundary_nudge{false};
     // Reorder each secondary batch into contiguous initial-energy-per-nucleon
     // buckets before transport to reduce warp divergence. Off by default until
     // benchmarked on the target GPU.

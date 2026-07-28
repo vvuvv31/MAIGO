@@ -27,7 +27,8 @@
         "CMAKE_CXX_COMPILER": "icpx",
         "CARBON_ENABLE_SYCL": "ON",
         "CARBON_BUILD_TESTS": "ON",
-        "CARBON_SYCL_TARGETS": "spir64,nvptx64-nvidia-cuda"
+        "CARBON_SYCL_TARGETS": "spir64,nvptx64-nvidia-cuda",
+        "CARBON_ENABLE_MINIBEAM": "OFF"
       }
     },
     {
@@ -40,6 +41,21 @@
         "CMAKE_CXX_COMPILER": "icpx",
         "CARBON_ENABLE_SYCL": "ON",
         "CARBON_BUILD_TESTS": "ON",
+        "CARBON_ENABLE_MINIBEAM": "OFF",
+        "CARBON_SYCL_TARGETS": "nvptx64-nvidia-cuda"
+      }
+    },
+    {
+      "name": "oneapi-nvidia-minibeam",
+      "displayName": "Intel oneAPI SYCL release (NVIDIA + minibeam ON)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/oneapi-nvidia-minibeam",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_CXX_COMPILER": "icpx",
+        "CARBON_ENABLE_SYCL": "ON",
+        "CARBON_BUILD_TESTS": "ON",
+        "CARBON_ENABLE_MINIBEAM": "ON",
         "CARBON_SYCL_TARGETS": "nvptx64-nvidia-cuda"
       }
     },
@@ -84,43 +100,84 @@
     }
   ],
   "buildPresets": [
-    { "name": "cpu-debug", "configurePreset": "cpu-debug" },
-    { "name": "oneapi-release", "configurePreset": "oneapi-release" },
-    { "name": "oneapi-nvidia-release", "configurePreset": "oneapi-nvidia-release" },
-    { "name": "oneapi-intel-release", "configurePreset": "oneapi-intel-release" },
-    { "name": "oneapi-windows-release", "configurePreset": "oneapi-windows-release" },
-    { "name": "oneapi-windows-dual-release", "configurePreset": "oneapi-windows-dual-release" }
+    {
+      "name": "cpu-debug",
+      "configurePreset": "cpu-debug"
+    },
+    {
+      "name": "oneapi-release",
+      "configurePreset": "oneapi-release"
+    },
+    {
+      "name": "oneapi-nvidia-release",
+      "configurePreset": "oneapi-nvidia-release"
+    },
+    {
+      "name": "oneapi-nvidia-minibeam",
+      "configurePreset": "oneapi-nvidia-minibeam"
+    },
+    {
+      "name": "oneapi-intel-release",
+      "configurePreset": "oneapi-intel-release"
+    },
+    {
+      "name": "oneapi-windows-release",
+      "configurePreset": "oneapi-windows-release"
+    },
+    {
+      "name": "oneapi-windows-dual-release",
+      "configurePreset": "oneapi-windows-dual-release"
+    }
   ],
   "testPresets": [
     {
       "name": "cpu-debug",
       "configurePreset": "cpu-debug",
-      "output": { "outputOnFailure": true }
+      "output": {
+        "outputOnFailure": true
+      }
     },
     {
       "name": "oneapi-release",
       "configurePreset": "oneapi-release",
-      "output": { "outputOnFailure": true }
+      "output": {
+        "outputOnFailure": true
+      }
     },
     {
       "name": "oneapi-nvidia-release",
       "configurePreset": "oneapi-nvidia-release",
-      "output": { "outputOnFailure": true }
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "oneapi-nvidia-minibeam",
+      "configurePreset": "oneapi-nvidia-minibeam",
+      "output": {
+        "outputOnFailure": true
+      }
     },
     {
       "name": "oneapi-intel-release",
       "configurePreset": "oneapi-intel-release",
-      "output": { "outputOnFailure": true }
+      "output": {
+        "outputOnFailure": true
+      }
     },
     {
       "name": "oneapi-windows-release",
       "configurePreset": "oneapi-windows-release",
-      "output": { "outputOnFailure": true }
+      "output": {
+        "outputOnFailure": true
+      }
     },
     {
       "name": "oneapi-windows-dual-release",
       "configurePreset": "oneapi-windows-dual-release",
-      "output": { "outputOnFailure": true }
+      "output": {
+        "outputOnFailure": true
+      }
     }
   ]
 }

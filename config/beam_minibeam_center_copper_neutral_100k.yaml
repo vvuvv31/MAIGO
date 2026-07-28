@@ -12,6 +12,10 @@ maximum_relative_energy_loss: 0.001
 energy_cutoff_MeV: 0.1
 secondary_local_deposit_cutoff_MeV: 1.0
 secondary_condensed_step_mm: 0.25
+# Non-legacy GPU paths required for the frozen TOPAS minibeam match.
+# Defaults stay false so OFF/legacy builds reproduce master bitwise.
+secondary_fp32_energy_residual: true
+robust_boundary_nudge: true
 water_density_g_per_cm3: 1.0
 scorer_area_mm2: 4000.0
 # Frozen independent open-field absolute-dose calibration:

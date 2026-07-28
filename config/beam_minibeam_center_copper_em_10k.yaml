@@ -10,6 +10,8 @@ maximum_step_mm: 0.1
 maximum_relative_energy_loss: 0.001
 energy_cutoff_MeV: 0.1
 secondary_local_deposit_cutoff_MeV: 1.0
+secondary_fp32_energy_residual: true
+robust_boundary_nudge: true
 water_density_g_per_cm3: 1.0
 scorer_area_mm2: 4000.0
 

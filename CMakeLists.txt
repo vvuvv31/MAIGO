@@ -14,6 +14,12 @@ option(CARBON_ENABLE_TRANSPORT_PROFILE
 # Global dose USM + device atomics as float instead of double. Much faster on
 # consumer NVIDIA GPUs (weak FP64); slightly more statistical noise for huge N.
 option(CARBON_DOSE_FP32 "Use FP32 SYCL dose scorers/atomics (faster on CUDA)" OFF)
+# Copper minibeam collimator / beamline transport. Default OFF so non-minibeam
+# CT/water/LET builds use the master-compatible legacy SYCL kernel without
+# Copper code size, register pressure, or runtime branches in the primary path.
+option(CARBON_ENABLE_MINIBEAM
+       "Build Copper minibeam transport support"
+       OFF)
 
 # Comma-separated SYCL device triple list for -fsycl-targets.
 # Empty keeps the compiler default (SPIR-V JIT; fine for Intel Level Zero/OpenCL).
@@ -60,12 +66,32 @@ else()
     message(STATUS "CARBON_DOSE_FP32=OFF (SYCL dose scorers use double atomics)")
 endif()
 
+if(CARBON_ENABLE_MINIBEAM)
+    target_compile_definitions(carbon_core PUBLIC CARBON_ENABLE_MINIBEAM=1)
+    message(STATUS "CARBON_ENABLE_MINIBEAM=ON (Copper minibeam transport compiled)")
+else()
+    message(STATUS "CARBON_ENABLE_MINIBEAM=OFF (legacy master-compatible transport)")
+endif()
+
 if(CARBON_ENABLE_SYCL)
     if(NOT CMAKE_CXX_COMPILER_ID MATCHES "IntelLLVM")
         message(FATAL_ERROR "CARBON_ENABLE_SYCL requires Intel oneAPI icpx (IntelLLVM).")
     endif()
 
-    target_sources(carbon_core PRIVATE src/device.cpp src/transport_sycl.cpp src/transport_profile.cpp)
+    # Dual SYCL transport sources:
+    # - OFF: transport_sycl_legacy.cpp is bit-for-bit the master kernel path.
+    # - ON:  transport_sycl.cpp includes Copper minibeam and opt-in GPU paths.
+    if(CARBON_ENABLE_MINIBEAM)
+        target_sources(carbon_core PRIVATE
+            src/device.cpp
+            src/transport_sycl.cpp
+            src/transport_profile.cpp)
+    else()
+        target_sources(carbon_core PRIVATE
+            src/device.cpp
+            src/transport_sycl_legacy.cpp
+            src/transport_profile.cpp)
+    endif()
     target_compile_definitions(carbon_core PUBLIC CARBON_HAS_SYCL=1)
     target_compile_options(carbon_core PRIVATE -fsycl)
     target_link_options(carbon_core PUBLIC -fsycl)

@@ -446,6 +446,11 @@ void TransportConfig::validate() const {
             "minibeam_topas_y");
     }
     if (enable_minibeam) {
+#if !defined(CARBON_ENABLE_MINIBEAM)
+        throw std::invalid_argument(
+            "minibeam=true requires a build configured with "
+            "CARBON_ENABLE_MINIBEAM=ON");
+#endif
         if (device == "serial") {
             throw std::invalid_argument(
                 "minibeam=true currently requires a SYCL device");
@@ -873,6 +878,11 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.secondary_persistent_workers = parse_number(
         values, "secondary_persistent_workers",
         config.secondary_persistent_workers);
+    config.secondary_fp32_energy_residual = parse_bool(
+        values, "secondary_fp32_energy_residual",
+        config.secondary_fp32_energy_residual);
+    config.robust_boundary_nudge = parse_bool(
+        values, "robust_boundary_nudge", config.robust_boundary_nudge);
     config.enable_secondary_energy_sorting = parse_bool(
         values, "enable_secondary_energy_sorting",
         config.enable_secondary_energy_sorting);
