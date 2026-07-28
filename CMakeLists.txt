@@ -166,36 +166,68 @@ if(CARBON_BUILD_TESTS)
     endif()
 endif()
 
-# Dual-binary isolation gate (optional). Configure with:
+# Three-binary isolation gate (optional). Configure with:
 #   -DCARBON_RUN_ISOLATION_GATES=ON
+#   -DCARBON_MC_MASTER=/path/to/master-compatible/carbon_mc
 #   -DCARBON_MC_OFF=/path/to/off/carbon_mc
 #   -DCARBON_MC_ON=/path/to/on/carbon_mc
+# Pair the same dose precision (all FP32 or all FP64). Default project
+# NVIDIA presets use FP32.
+set(CARBON_MC_MASTER "" CACHE FILEPATH
+    "Master-compatible carbon_mc for isolation Gate 1")
 set(CARBON_MC_OFF "" CACHE FILEPATH "OFF-build carbon_mc for isolation gates")
 set(CARBON_MC_ON "" CACHE FILEPATH "ON-build carbon_mc for isolation gates")
 option(CARBON_RUN_ISOLATION_GATES
-       "Enable minibeam_isolation_gates CTest (needs dual OFF/ON binaries)"
+       "Enable minibeam_isolation_gates CTest (needs MASTER+OFF+ON binaries)"
        OFF)
 if(CARBON_BUILD_TESTS AND CARBON_RUN_ISOLATION_GATES)
-    find_package(Python3 COMPONENTS Interpreter QUIET)
-    if(Python3_Interpreter_FOUND AND CARBON_MC_OFF AND CARBON_MC_ON)
-        add_test(
-            NAME minibeam_isolation_gates
-            COMMAND ${Python3_EXECUTABLE}
-                    ${CMAKE_CURRENT_SOURCE_DIR}/validation/scripts/regression_minibeam_isolation.py
-                    run
-                    --off-bin ${CARBON_MC_OFF}
-                    --on-bin ${CARBON_MC_ON}
-                    --outdir ${CMAKE_CURRENT_BINARY_DIR}/reg_isolation
-                    --warmup 1
-                    --repeats 5
-                    --g1-bitwise
-                    --g2-bitwise
-                    --g1-max-time-ratio 1.10
-                    --g2-max-time-ratio 1.10
-        )
-        set_tests_properties(minibeam_isolation_gates PROPERTIES
-            LABELS "gpu;isolation"
-            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-        )
+    if(NOT CARBON_MC_MASTER OR NOT CARBON_MC_OFF OR NOT CARBON_MC_ON)
+        message(FATAL_ERROR
+            "CARBON_RUN_ISOLATION_GATES=ON requires CARBON_MC_MASTER, "
+            "CARBON_MC_OFF, and CARBON_MC_ON (same dose precision, e.g. all FP32)")
     endif()
+    if(NOT EXISTS "${CARBON_MC_MASTER}" OR NOT EXISTS "${CARBON_MC_OFF}"
+       OR NOT EXISTS "${CARBON_MC_ON}")
+        message(FATAL_ERROR
+            "Isolation binaries not found:\n"
+            "  CARBON_MC_MASTER=${CARBON_MC_MASTER}\n"
+            "  CARBON_MC_OFF=${CARBON_MC_OFF}\n"
+            "  CARBON_MC_ON=${CARBON_MC_ON}")
+    endif()
+    find_package(Python3 COMPONENTS Interpreter REQUIRED)
+    set(_minibeam_gate3_ref
+        ${CMAKE_CURRENT_SOURCE_DIR}/validation/references/minibeam_isolation/gate3_179p17_copper_em_10k_central_depth.csv)
+    if(NOT EXISTS "${_minibeam_gate3_ref}")
+        message(FATAL_ERROR
+            "Missing Gate3 frozen reference: ${_minibeam_gate3_ref}")
+    endif()
+    add_test(
+        NAME minibeam_isolation_gates
+        COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/validation/scripts/regression_minibeam_isolation.py
+                run
+                --master-bin ${CARBON_MC_MASTER}
+                --off-bin ${CARBON_MC_OFF}
+                --on-bin ${CARBON_MC_ON}
+                --minibeam-ref-csv ${_minibeam_gate3_ref}
+                --outdir ${CMAKE_CURRENT_BINARY_DIR}/reg_isolation
+                --warmup 1
+                --repeats 5
+                # Default NVIDIA presets use FP32 dose atomics: require step/reaction
+                # identity and near-machine dose agreement, not strict bitwise CSV
+                # equality (FP32 atomic order is not deterministic).
+                --g1-integral-pct 1e-3
+                --g1-l1-pct 1e-2
+                --g2-integral-pct 1e-3
+                --g2-l1-pct 1e-2
+                --g1-max-time-ratio 1.10
+                --g2-max-time-ratio 1.10
+                --g3-integral-pct 2.0
+                --g3-l1-pct 5.0
+                --g3-r80-diff-mm 0.5
+    )
+    set_tests_properties(minibeam_isolation_gates PROPERTIES
+        LABELS "gpu;isolation"
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
 endif()

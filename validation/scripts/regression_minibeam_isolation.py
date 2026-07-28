@@ -371,6 +371,142 @@ def run_case_median(
     return last_log, last_stats, last_csv
 
 
+
+def compare_depth_grids(
+    ref_depth: List[float],
+    test_depth: List[float],
+    *,
+    label: str,
+    atol_mm: float = 1.0e-6,
+    rtol: float = 1.0e-9,
+) -> Tuple[bool, List[str]]:
+    notes: List[str] = []
+    if len(ref_depth) != len(test_depth):
+        notes.append(
+            f"{label}: depth length {len(ref_depth)} vs {len(test_depth)}"
+        )
+        return False, notes
+    for i, (a, b) in enumerate(zip(ref_depth, test_depth)):
+        if not math.isclose(a, b, rel_tol=rtol, abs_tol=atol_mm):
+            notes.append(
+                f"{label}: depth mismatch at bin {i}: ref={a} test={b}"
+            )
+            return False, notes
+    return True, notes
+
+
+def extract_central_depth_from_mhd(mhd_path: Path) -> Tuple[List[float], List[float]]:
+    """Extract (depth_mm, dose) along central voxel column (x-mid, y-mid, z)."""
+    text = mhd_path.read_text(errors="replace")
+    dims_m = re.search(r"DimSize\s*=\s*(\d+)\s+(\d+)\s+(\d+)", text)
+    if not dims_m:
+        raise RuntimeError(f"DimSize missing in {mhd_path}")
+    nx, ny, nz = (int(dims_m.group(i)) for i in range(1, 4))
+    sp_m = re.search(
+        r"ElementSpacing\s*=\s*([0-9.eE+-]+)\s+([0-9.eE+-]+)\s+([0-9.eE+-]+)",
+        text,
+    )
+    spacing = (
+        list(map(float, sp_m.groups())) if sp_m else [1.0, 1.0, 1.0]
+    )
+    off_m = re.search(
+        r"Offset\s*=\s*([0-9.eE+-]+)\s+([0-9.eE+-]+)\s+([0-9.eE+-]+)",
+        text,
+    )
+    origin = list(map(float, off_m.groups())) if off_m else [0.0, 0.0, 0.0]
+    data_m = re.search(r"ElementDataFile\s*=\s*(\S+)", text)
+    if not data_m:
+        raise RuntimeError(f"ElementDataFile missing in {mhd_path}")
+    raw_path = (mhd_path.parent / data_m.group(1)).resolve()
+    raw = raw_path.read_bytes()
+    elem_m = re.search(r"ElementType\s*=\s*(\S+)", text)
+    elem = (elem_m.group(1) if elem_m else "MET_FLOAT").upper()
+    width, fmt = (8, "<d") if "DOUBLE" in elem else (4, "<f")
+    expected = nx * ny * nz * width
+    if len(raw) < expected:
+        raise RuntimeError(f"raw too small for {mhd_path}")
+    cx, cy = nx // 2, ny // 2
+    depths: List[float] = []
+    doses: List[float] = []
+    for iz in range(nz):
+        idx = iz * (nx * ny) + cy * nx + cx
+        (val,) = struct.unpack_from(fmt, raw, idx * width)
+        depths.append(origin[2] + (iz + 0.5) * spacing[2])
+        doses.append(float(val))
+    return depths, doses
+
+
+def write_depth_csv(path: Path, depths: List[float], doses: List[float]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="") as handle:
+        handle.write("depth_mm,dose_Gy\n")
+        for z, d in zip(depths, doses):
+            handle.write(f"{z:.10g},{d:.12g}\n")
+
+
+def r80_mm(depths: List[float], doses: List[float]) -> float:
+    if not doses:
+        return float("nan")
+    peak = max(doses)
+    if peak <= 0.0:
+        return float("nan")
+    peak_i = max(range(len(doses)), key=lambda i: doses[i])
+    thresh = 0.8 * peak
+    for i in range(peak_i, len(doses)):
+        if doses[i] < thresh:
+            if i == 0:
+                return depths[i]
+            d0, d1 = doses[i - 1], doses[i]
+            z0, z1 = depths[i - 1], depths[i]
+            if d0 == d1:
+                return z1
+            return z0 + (thresh - d0) * (z1 - z0) / (d1 - d0)
+    return depths[-1]
+
+
+def parse_minibeam_activity(log: str) -> Dict[str, float]:
+    """Require numeric beamline activity, not mere presence of the word Minibeam."""
+    out: Dict[str, float] = {}
+    m = re.search(
+        r"Minibeam water entrance primary C-12 by slit:\s*([0-9/]+)", log
+    )
+    if m:
+        slits = [int(x) for x in m.group(1).split("/") if x != ""]
+        out["water_entrance_c12"] = float(sum(slits))
+    m = re.search(
+        r"Minibeam collimator entrance primary C-12 by slit:\s*([0-9/]+)", log
+    )
+    if m:
+        slits = [int(x) for x in m.group(1).split("/") if x != ""]
+        out["collimator_entrance_c12"] = float(sum(slits))
+    m = re.search(
+        r"Minibeam Copper products generated/charged-survivor/neutral-survivor:\s*"
+        r"(\d+)/(\d+)/(\d+)",
+        log,
+    )
+    if m:
+        out["copper_generated"] = float(m.group(1))
+        out["copper_charged_survivors"] = float(m.group(2))
+        out["copper_neutral_survivors"] = float(m.group(3))
+    m = re.search(r"Minibeam beamline removed energy:\s*([0-9.eE+-]+)", log)
+    if m:
+        out["beamline_removed_MeV"] = float(m.group(1))
+    m = re.search(
+        r"Minibeam Copper-touched histories[^:]*:\s*(\d+)", log, re.I
+    )
+    if m:
+        out["copper_touched_histories"] = float(m.group(1))
+    # Absorbing geometry: direct air slit counts
+    m = re.search(r"direct.air.slit|direct-air primary", log, re.I)
+    m2 = re.search(
+        r"Minibeam direct-air primary C-12 by slit:\s*([0-9/]+)", log
+    )
+    if m2:
+        slits = [int(x) for x in m2.group(1).split("/") if x != ""]
+        out["direct_air_c12"] = float(sum(slits))
+    return out
+
+
 def gate_compare_dose(
     name: str,
     ref_csv: Path,
@@ -385,9 +521,11 @@ def gate_compare_dose(
     time_key: str = "median_transport_kernel_seconds",
     require_count_match: bool = True,
 ) -> Dict[str, object]:
-    _, ref_dose = load_depth_dose_csv(ref_csv)
-    _, test_dose = load_depth_dose_csv(test_csv)
+    ref_depth, ref_dose = load_depth_dose_csv(ref_csv)
+    test_depth, test_dose = load_depth_dose_csv(test_csv)
+    depth_ok, depth_notes = compare_depth_grids(ref_depth, test_depth, label=name)
     metrics = compare_series(ref_dose, test_dose, label=name)
+    metrics["depth_ok"] = 1.0 if depth_ok else 0.0
     count_ok = True
     count_notes: List[str] = []
     if require_count_match:
@@ -418,14 +556,18 @@ def gate_compare_dose(
     dose_ok = (
         abs(metrics["integral_diff_pct"]) <= max_integral_diff_pct
         and metrics["normalized_l1_pct"] <= max_l1_pct
+        and depth_ok
     )
     if require_bitwise:
         dose_ok = dose_ok and bool(metrics["bitwise_equal"])
+    if not depth_ok:
+        count_notes.extend(depth_notes)
     passed = dose_ok and count_ok and time_ok
     return {
         "gate": name,
         "passed": passed,
         "dose_ok": dose_ok,
+        "depth_ok": depth_ok,
         "count_ok": count_ok,
         "time_ok": time_ok,
         "time_ratio": time_ratio,
@@ -458,6 +600,7 @@ def make_non_minibeam_config(src: Path, dst: Path) -> None:
     dst.write_text(text)
 
 
+
 def gate3_minibeam(
     binary: Path,
     config: Path,
@@ -466,9 +609,10 @@ def gate3_minibeam(
     ref_csv: str,
     max_integral_diff_pct: float,
     max_l1_pct: float,
+    max_r80_diff_mm: float,
+    require_ref: bool,
 ) -> Dict[str, object]:
-    out_csv = outdir / "gate3_minibeam.csv"
-    # Unique MHD path under outdir so we can verify fresh output.
+    out_csv = outdir / "gate3_minibeam_central_depth.csv"
     tmp_cfg = outdir / "gate3_minibeam_cfg.yaml"
     text = config.read_text()
     mhd_out = outdir / "gate3_minibeam_dose.mhd"
@@ -481,7 +625,6 @@ def gate3_minibeam(
         )
     else:
         text += f"\nvoxel_dose_mhd_output_file: {mhd_out.as_posix()}\n"
-    # Prefer enabling diagnostics for validation when the case is minibeam.
     if re.search(r"(?m)^minibeam_diagnostics:", text):
         text = re.sub(
             r"(?m)^minibeam_diagnostics:.*$",
@@ -492,12 +635,16 @@ def gate3_minibeam(
     else:
         text += "\nminibeam_diagnostics: true\n"
     tmp_cfg.write_text(text)
-    # Remove stale MHD so we can prove the run created a new one.
-    for stale in (mhd_out, mhd_out.with_suffix(".raw"), outdir / "gate3_minibeam_dose.raw"):
+    for stale in (
+        mhd_out,
+        mhd_out.with_suffix(".raw"),
+        outdir / "gate3_minibeam_dose.raw",
+        out_csv,
+    ):
         if stale.exists():
             stale.unlink()
 
-    log, stats, _wall = run_case(binary, tmp_cfg, out_csv)
+    log, stats, _wall = run_case(binary, tmp_cfg, outdir / "gate3_minibeam_dummy.csv")
     notes: List[str] = []
     passed = True
 
@@ -506,70 +653,112 @@ def gate3_minibeam(
         passed = False
         notes.append(f"Backend lacks minibeam marker: {backend!r}")
 
-    # Diagnostics: require some evidence of beamline activity.
-    diag_ok = False
-    if "minibeam_water_entrance_c12" in stats and stats["minibeam_water_entrance_c12"] > 0:
-        diag_ok = True
-    if re.search(r"Minibeam", log):
-        # Any minibeam diagnostic block is required.
-        if re.search(r"Minibeam water entrance|Minibeam Copper|beamline", log, re.I):
-            diag_ok = True
+    activity = parse_minibeam_activity(log)
+    activity_values = [
+        activity.get("water_entrance_c12", 0.0),
+        activity.get("collimator_entrance_c12", 0.0),
+        activity.get("copper_generated", 0.0),
+        activity.get("copper_charged_survivors", 0.0),
+        activity.get("direct_air_c12", 0.0),
+        activity.get("copper_touched_histories", 0.0),
+    ]
+    removed = activity.get("beamline_removed_MeV", 0.0)
+    diag_ok = any(v > 0.0 for v in activity_values) or removed > 0.0
     if not diag_ok:
         passed = False
-        notes.append("minibeam diagnostics missing or zero")
+        notes.append(
+            "minibeam diagnostics activity is zero "
+            f"(parsed={activity})"
+        )
 
     mhd_info: Dict[str, object] = {}
+    dose_metrics: Dict[str, object] = {}
     try:
         mhd_info = inspect_mhd_dose(mhd_out)
-    except Exception as exc:  # noqa: BLE001 - surface as gate failure
-        # Some smoke configs may not write MHD if voxel scoring off.
+        depths, doses = extract_central_depth_from_mhd(mhd_out)
+        write_depth_csv(out_csv, depths, doses)
+        test_r80 = r80_mm(depths, doses)
+        mhd_info["central_r80_mm"] = test_r80
+        mhd_info["central_integral"] = sum(doses)
+        mhd_info["central_peak"] = max(doses) if doses else 0.0
+    except Exception as exc:  # noqa: BLE001
         cfg_has_voxel = bool(
             re.search(r"(?m)^enable_voxel_scoring:[ \t]*true\s*$", text)
         )
         if cfg_has_voxel:
             passed = False
-            notes.append(f"MHD validation failed: {exc}")
+            notes.append(f"MHD/central-depth validation failed: {exc}")
         else:
             notes.append(f"MHD skipped (voxel scoring off): {exc}")
+        depths, doses = [], []
 
-    dose_metrics: Dict[str, object] = {}
-    if ref_csv:
-        if not out_csv.is_file() or out_csv.stat().st_size < 32:
-            passed = False
-            notes.append("depth CSV missing for reference compare")
-        else:
-            try:
-                _, ref_dose = load_depth_dose_csv(Path(ref_csv))
-                _, test_dose = load_depth_dose_csv(out_csv)
-                dose_metrics = compare_series(
-                    ref_dose, test_dose, label="gate3_ref"
-                )
-                if (
-                    abs(dose_metrics["integral_diff_pct"]) > max_integral_diff_pct
-                    or dose_metrics["normalized_l1_pct"] > max_l1_pct
-                ):
-                    passed = False
-                    notes.append("depth dose vs reference out of tolerance")
-            except Exception as exc:  # noqa: BLE001
-                passed = False
-                notes.append(f"reference compare failed: {exc}")
-    else:
-        notes.append(
-            "no --minibeam-ref-csv: depth reference not checked "
-            "(backend/diagnostics/MHD still required)"
+    resolved_ref = ref_csv
+    if not resolved_ref:
+        # validation/scripts -> repo root is parents[1]
+        default_ref = (
+            Path(__file__).resolve().parents[1]
+            / "references/minibeam_isolation"
+            / "gate3_179p17_copper_em_10k_central_depth.csv"
         )
+        if default_ref.is_file():
+            resolved_ref = str(default_ref)
+
+    if require_ref and not resolved_ref:
+        passed = False
+        notes.append("Gate3 requires a frozen depth reference CSV")
+    elif resolved_ref:
+        try:
+            ref_depth, ref_dose = load_depth_dose_csv(Path(resolved_ref))
+            if not depths:
+                raise RuntimeError("test central depth unavailable")
+            depth_ok, depth_notes = compare_depth_grids(
+                ref_depth, depths, label="gate3_ref"
+            )
+            dose_metrics = compare_series(ref_dose, doses, label="gate3_ref")
+            dose_metrics["depth_ok"] = 1.0 if depth_ok else 0.0
+            ref_r80 = r80_mm(ref_depth, ref_dose)
+            test_r80 = r80_mm(depths, doses)
+            dose_metrics["ref_r80_mm"] = ref_r80
+            dose_metrics["test_r80_mm"] = test_r80
+            dose_metrics["r80_diff_mm"] = test_r80 - ref_r80
+            if not depth_ok:
+                passed = False
+                notes.extend(depth_notes)
+            if (
+                abs(float(dose_metrics["integral_diff_pct"])) > max_integral_diff_pct
+                or float(dose_metrics["normalized_l1_pct"]) > max_l1_pct
+            ):
+                passed = False
+                notes.append(
+                    "depth dose vs frozen reference out of tolerance "
+                    f"(integral_diff_pct={dose_metrics['integral_diff_pct']:.4g}, "
+                    f"L1_pct={dose_metrics['normalized_l1_pct']:.4g})"
+                )
+            if abs(test_r80 - ref_r80) > max_r80_diff_mm:
+                passed = False
+                notes.append(
+                    f"|ΔR80|={abs(test_r80 - ref_r80):.4g} mm exceeds "
+                    f"{max_r80_diff_mm} mm"
+                )
+        except Exception as exc:  # noqa: BLE001
+            passed = False
+            notes.append(f"reference compare failed: {exc}")
+    else:
+        notes.append("no depth reference: physics Gate3 not fully enforced")
 
     return {
         "gate": "gate3_minibeam_true",
         "passed": passed,
         "backend": backend,
         "notes": notes,
+        "activity": activity,
         "stats": {k: v for k, v in stats.items() if not isinstance(v, str)},
-        "backend_str": backend,
         "mhd": mhd_info,
         "dose_metrics": dose_metrics,
+        "ref_csv": resolved_ref or "",
         "log_excerpt": log[-2000:],
     }
+
 
 
 def cmd_compare(args: argparse.Namespace) -> int:
@@ -637,37 +826,33 @@ def cmd_run(args: argparse.Namespace) -> int:
     if "minibeam" in str(off_stats.get("backend", "")).lower():
         raise RuntimeError(f"OFF backend unexpectedly minibeam: {off_stats.get('backend')}")
 
-    if args.master_bin:
-        master_bin = Path(args.master_bin)
-        master_log, master_stats, master_csv = run_case_median(
-            master_bin,
-            legacy_cfg,
-            outdir / "gate1_master_water.csv",
-            repeats=repeats,
-            warmup=warmup,
+    master_path = args.master_bin or os.environ.get("CARBON_MC_MASTER", "")
+    if not master_path:
+        raise SystemExit(
+            "Gate 1 requires --master-bin or CARBON_MC_MASTER "
+            "(golden master-compatible carbon_mc binary)"
         )
-        g1 = gate_compare_dose(
-            "gate1_off_vs_master",
-            master_csv,
-            off_csv,
-            max_integral_diff_pct=args.g1_integral_pct,
-            max_l1_pct=args.g1_l1_pct,
-            require_bitwise=args.g1_bitwise,
-            ref_stats=master_stats,
-            test_stats=off_stats,
-            max_time_ratio=args.g1_max_time_ratio,
-        )
-    else:
-        g1 = {
-            "gate": "gate1_off_vs_master",
-            "passed": False,
-            "note": "master binary not provided; OFF median timing stored",
-            "off_stats": {
-                k: off_stats[k]
-                for k in off_stats
-                if k.startswith("median_") or k in ("total_steps", "backend")
-            },
-        }
+    master_bin = Path(master_path)
+    if not master_bin.is_file():
+        raise SystemExit(f"master binary missing: {master_bin}")
+    master_log, master_stats, master_csv = run_case_median(
+        master_bin,
+        legacy_cfg,
+        outdir / "gate1_master_water.csv",
+        repeats=repeats,
+        warmup=warmup,
+    )
+    g1 = gate_compare_dose(
+        "gate1_off_vs_master",
+        master_csv,
+        off_csv,
+        max_integral_diff_pct=args.g1_integral_pct,
+        max_l1_pct=args.g1_l1_pct,
+        require_bitwise=args.g1_bitwise,
+        ref_stats=master_stats,
+        test_stats=off_stats,
+        max_time_ratio=args.g1_max_time_ratio,
+    )
     results.append(g1)
 
     # --- Gate 2: ON + minibeam false must use legacy kernel ---
@@ -709,6 +894,8 @@ def cmd_run(args: argparse.Namespace) -> int:
         ref_csv=args.minibeam_ref_csv,
         max_integral_diff_pct=args.g3_integral_pct,
         max_l1_pct=args.g3_l1_pct,
+        max_r80_diff_mm=args.g3_r80_diff_mm,
+        require_ref=not args.g3_allow_no_ref,
     )
     results.append(g3)
 
@@ -754,6 +941,12 @@ Minibeam water entrance primary C-12 by slit: 0/0/0/0/6/49/244/487/283/38/5/0/0/
     assert abs(float(stats["transport_kernel_seconds"]) - (0.007434849 + 0.009331966)) < 1e-12
     assert str(stats["backend"]).startswith("sycl-cuda")
     assert float(stats["minibeam_water_entrance_c12"]) == 1112.0
+    ok, notes = compare_depth_grids([0.0, 0.1], [0.0, 0.1], label="t")
+    assert ok and not notes
+    ok, notes = compare_depth_grids([0.0, 0.1], [0.0, 0.2], label="t")
+    assert not ok and notes
+    act = parse_minibeam_activity(sample)
+    assert act["water_entrance_c12"] == 1112.0
     # Missing fields must fail.
     try:
         require_log_fields({}, ["total_steps"], "empty")
@@ -785,7 +978,11 @@ def main() -> int:
     compare.set_defaults(func=cmd_compare)
 
     run = sub.add_parser("run", help="Run three-gate isolation harness")
-    run.add_argument("--master-bin", default="")
+    run.add_argument(
+        "--master-bin",
+        default=os.environ.get("CARBON_MC_MASTER", ""),
+        help="Required for Gate 1 (or set CARBON_MC_MASTER)",
+    )
     run.add_argument("--off-bin", required=True)
     run.add_argument("--on-bin", required=True)
     run.add_argument("--outdir", default="out/reg_isolation")
@@ -797,19 +994,31 @@ def main() -> int:
         "--minibeam-config",
         default="config/beam_minibeam_center_copper_em_10k.yaml",
     )
-    run.add_argument("--minibeam-ref-csv", default="")
+    run.add_argument(
+        "--minibeam-ref-csv",
+        default="",
+        help="Frozen central-depth CSV; default: validation/references/minibeam_isolation/...",
+    )
+    run.add_argument(
+        "--g3-allow-no-ref",
+        action="store_true",
+        help="Allow Gate3 without frozen depth reference (not for CI)",
+    )
+    run.add_argument("--g3-r80-diff-mm", type=float, default=0.5)
     run.add_argument("--warmup", type=int, default=1)
     run.add_argument("--repeats", type=int, default=5)
-    run.add_argument("--g1-integral-pct", type=float, default=1e-4)
-    run.add_argument("--g1-l1-pct", type=float, default=1e-3)
+    # Defaults assume FP32 dose atomics (project default on NVIDIA).
+    # Use --g1-bitwise/--g2-bitwise only for FP64↔FP64 pairs.
+    run.add_argument("--g1-integral-pct", type=float, default=1e-3)
+    run.add_argument("--g1-l1-pct", type=float, default=1e-2)
     run.add_argument("--g1-bitwise", action="store_true")
     run.add_argument("--g1-max-time-ratio", type=float, default=1.10)
     run.add_argument("--g2-integral-pct", type=float, default=1e-3)
     run.add_argument("--g2-l1-pct", type=float, default=1e-2)
     run.add_argument("--g2-bitwise", action="store_true")
     run.add_argument("--g2-max-time-ratio", type=float, default=1.10)
-    run.add_argument("--g3-integral-pct", type=float, default=1.0)
-    run.add_argument("--g3-l1-pct", type=float, default=2.5)
+    run.add_argument("--g3-integral-pct", type=float, default=2.0)
+    run.add_argument("--g3-l1-pct", type=float, default=5.0)
     run.set_defaults(func=cmd_run)
 
     args = parser.parse_args()
