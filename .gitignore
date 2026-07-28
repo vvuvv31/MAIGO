@@ -37,5 +37,11 @@ validation/topas/output/**
 !validation/topas/output/.gitkeep
 !validation/topas/output/ct_patient_development_energy_deposit.csv
 
+# Minibeam TOPAS references are regenerated locally. Keep parameter files and
+# compact headers in Git, but never stage the supplied 320 MB scorer or run
+# outputs by accident.
+ct/minibeam/dose.bin
+ct/minibeam/output/**
+
 # Local session / agent clutter
 mcps/

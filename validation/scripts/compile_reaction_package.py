@@ -212,9 +212,21 @@ def main() -> None:
                 )
                 local_direction = direction_in_parent_frame(
                     global_direction, incident_direction)
+                pdg_id = int(secondary["pdg_id"])
+                if secondary.get("particle_name") == "primary_continuation":
+                    if not (
+                        int(secondary["track_id"]) == 1
+                        and pdg_id == 1_000_060_120
+                        and atomic_number == 6
+                        and mass_number == 12
+                    ):
+                        raise SystemExit(
+                            "Invalid primary_continuation package member"
+                        )
+                    pdg_id = -pdg_id
                 ordered_secondaries.append(
                     (
-                        int(secondary["pdg_id"]),
+                        pdg_id,
                         atomic_number,
                         mass_number,
                         kinetic_energy,

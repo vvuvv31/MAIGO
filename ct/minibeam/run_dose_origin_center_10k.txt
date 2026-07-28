@@ -1,0 +1,149 @@
+# Depth-only dose-origin diagnostic for the full Copper central 10k case.
+# The beam travels along world +Y, so the 1000 Y bins are 0.1 mm deep.
+includeFile = run_dose_center_10k.txt
+
+# The full 1000 x 1000 x 40 scorer is already available from the reference
+# run. Disable it here to keep this diagnostic small and fast.
+b:Sc/DoseAtPhantomP/Active = "False"
+
+s:Sc/OriginTotal/Quantity = "DoseToMedium"
+s:Sc/OriginTotal/Component = "Box2"
+s:Sc/OriginTotal/OutputFile = "output/minibeam_origin_total_10k"
+s:Sc/OriginTotal/OutputType = "binary"
+s:Sc/OriginTotal/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/OriginTotal/XBins = 1
+i:Sc/OriginTotal/YBins = 1000
+i:Sc/OriginTotal/ZBins = 1
+sv:Sc/OriginTotal/Report = 1 "Sum"
+
+s:Sc/OriginPrimaryC12/Quantity = "CarbonDoseOrigin"
+s:Sc/OriginPrimaryC12/Component = "Box2"
+s:Sc/OriginPrimaryC12/OutputFile = "output/minibeam_origin_primary_c12_10k"
+s:Sc/OriginPrimaryC12/OutputType = "binary"
+s:Sc/OriginPrimaryC12/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/OriginPrimaryC12/XBins = 1
+i:Sc/OriginPrimaryC12/YBins = 1000
+i:Sc/OriginPrimaryC12/ZBins = 1
+sv:Sc/OriginPrimaryC12/Report = 1 "Sum"
+s:Sc/OriginPrimaryC12/OriginCategory = "primary_c12"
+
+s:Sc/OriginSecondaryCarbon/Quantity = "CarbonDoseOrigin"
+s:Sc/OriginSecondaryCarbon/Component = "Box2"
+s:Sc/OriginSecondaryCarbon/OutputFile = "output/minibeam_origin_secondary_carbon_10k"
+s:Sc/OriginSecondaryCarbon/OutputType = "binary"
+s:Sc/OriginSecondaryCarbon/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/OriginSecondaryCarbon/XBins = 1
+i:Sc/OriginSecondaryCarbon/YBins = 1000
+i:Sc/OriginSecondaryCarbon/ZBins = 1
+sv:Sc/OriginSecondaryCarbon/Report = 1 "Sum"
+s:Sc/OriginSecondaryCarbon/OriginCategory = "secondary_carbon"
+
+s:Sc/OriginBoron/Quantity = "CarbonDoseOrigin"
+s:Sc/OriginBoron/Component = "Box2"
+s:Sc/OriginBoron/OutputFile = "output/minibeam_origin_boron_10k"
+s:Sc/OriginBoron/OutputType = "binary"
+s:Sc/OriginBoron/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/OriginBoron/XBins = 1
+i:Sc/OriginBoron/YBins = 1000
+i:Sc/OriginBoron/ZBins = 1
+sv:Sc/OriginBoron/Report = 1 "Sum"
+s:Sc/OriginBoron/OriginCategory = "boron"
+
+s:Sc/OriginBeryllium/Quantity = "CarbonDoseOrigin"
+s:Sc/OriginBeryllium/Component = "Box2"
+s:Sc/OriginBeryllium/OutputFile = "output/minibeam_origin_beryllium_10k"
+s:Sc/OriginBeryllium/OutputType = "binary"
+s:Sc/OriginBeryllium/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/OriginBeryllium/XBins = 1
+i:Sc/OriginBeryllium/YBins = 1000
+i:Sc/OriginBeryllium/ZBins = 1
+sv:Sc/OriginBeryllium/Report = 1 "Sum"
+s:Sc/OriginBeryllium/OriginCategory = "beryllium"
+
+s:Sc/OriginLithium/Quantity = "CarbonDoseOrigin"
+s:Sc/OriginLithium/Component = "Box2"
+s:Sc/OriginLithium/OutputFile = "output/minibeam_origin_lithium_10k"
+s:Sc/OriginLithium/OutputType = "binary"
+s:Sc/OriginLithium/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/OriginLithium/XBins = 1
+i:Sc/OriginLithium/YBins = 1000
+i:Sc/OriginLithium/ZBins = 1
+sv:Sc/OriginLithium/Report = 1 "Sum"
+s:Sc/OriginLithium/OriginCategory = "lithium"
+
+s:Sc/OriginHelium/Quantity = "CarbonDoseOrigin"
+s:Sc/OriginHelium/Component = "Box2"
+s:Sc/OriginHelium/OutputFile = "output/minibeam_origin_helium_10k"
+s:Sc/OriginHelium/OutputType = "binary"
+s:Sc/OriginHelium/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/OriginHelium/XBins = 1
+i:Sc/OriginHelium/YBins = 1000
+i:Sc/OriginHelium/ZBins = 1
+sv:Sc/OriginHelium/Report = 1 "Sum"
+s:Sc/OriginHelium/OriginCategory = "helium"
+
+s:Sc/OriginProton/Quantity = "CarbonDoseOrigin"
+s:Sc/OriginProton/Component = "Box2"
+s:Sc/OriginProton/OutputFile = "output/minibeam_origin_proton_10k"
+s:Sc/OriginProton/OutputType = "binary"
+s:Sc/OriginProton/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/OriginProton/XBins = 1
+i:Sc/OriginProton/YBins = 1000
+i:Sc/OriginProton/ZBins = 1
+sv:Sc/OriginProton/Report = 1 "Sum"
+s:Sc/OriginProton/OriginCategory = "proton"
+
+s:Sc/OriginOtherCharged/Quantity = "CarbonDoseOrigin"
+s:Sc/OriginOtherCharged/Component = "Box2"
+s:Sc/OriginOtherCharged/OutputFile = "output/minibeam_origin_other_charged_10k"
+s:Sc/OriginOtherCharged/OutputType = "binary"
+s:Sc/OriginOtherCharged/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/OriginOtherCharged/XBins = 1
+i:Sc/OriginOtherCharged/YBins = 1000
+i:Sc/OriginOtherCharged/ZBins = 1
+sv:Sc/OriginOtherCharged/Report = 1 "Sum"
+s:Sc/OriginOtherCharged/OriginCategory = "other_charged"
+
+s:Sc/OriginNeutron/Quantity = "CarbonDoseOrigin"
+s:Sc/OriginNeutron/Component = "Box2"
+s:Sc/OriginNeutron/OutputFile = "output/minibeam_origin_neutron_10k"
+s:Sc/OriginNeutron/OutputType = "binary"
+s:Sc/OriginNeutron/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/OriginNeutron/XBins = 1
+i:Sc/OriginNeutron/YBins = 1000
+i:Sc/OriginNeutron/ZBins = 1
+sv:Sc/OriginNeutron/Report = 1 "Sum"
+s:Sc/OriginNeutron/OriginCategory = "neutron"
+
+s:Sc/OriginGamma/Quantity = "CarbonDoseOrigin"
+s:Sc/OriginGamma/Component = "Box2"
+s:Sc/OriginGamma/OutputFile = "output/minibeam_origin_gamma_10k"
+s:Sc/OriginGamma/OutputType = "binary"
+s:Sc/OriginGamma/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/OriginGamma/XBins = 1
+i:Sc/OriginGamma/YBins = 1000
+i:Sc/OriginGamma/ZBins = 1
+sv:Sc/OriginGamma/Report = 1 "Sum"
+s:Sc/OriginGamma/OriginCategory = "gamma"
+
+s:Sc/OriginNeutralOther/Quantity = "CarbonDoseOrigin"
+s:Sc/OriginNeutralOther/Component = "Box2"
+s:Sc/OriginNeutralOther/OutputFile = "output/minibeam_origin_neutral_other_10k"
+s:Sc/OriginNeutralOther/OutputType = "binary"
+s:Sc/OriginNeutralOther/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/OriginNeutralOther/XBins = 1
+i:Sc/OriginNeutralOther/YBins = 1000
+i:Sc/OriginNeutralOther/ZBins = 1
+sv:Sc/OriginNeutralOther/Report = 1 "Sum"
+s:Sc/OriginNeutralOther/OriginCategory = "neutral_other"
+
+s:Sc/OriginUnresolved/Quantity = "CarbonDoseOrigin"
+s:Sc/OriginUnresolved/Component = "Box2"
+s:Sc/OriginUnresolved/OutputFile = "output/minibeam_origin_unresolved_10k"
+s:Sc/OriginUnresolved/OutputType = "binary"
+s:Sc/OriginUnresolved/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/OriginUnresolved/XBins = 1
+i:Sc/OriginUnresolved/YBins = 1000
+i:Sc/OriginUnresolved/ZBins = 1
+sv:Sc/OriginUnresolved/Report = 1 "Sum"
+s:Sc/OriginUnresolved/OriginCategory = "unresolved"

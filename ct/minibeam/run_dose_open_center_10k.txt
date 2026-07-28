@@ -1,0 +1,10 @@
+# Phase-1 open-field reference. It reuses the exact central 10k source, water
+# scorer, physics list, Air world, and seed of the full-Copper case, but makes
+# the complete aperture Air. Large Air step limits avoid inheriting the 0.05 mm
+# Copper boundary diagnostic setting.
+includeFile = run_dose_center_10k.txt
+
+s:Ge/Aperture/Material = "Air"
+d:Ge/Aperture/MaxStepSize = 100 mm
+d:Ge/Snout/MaxStepSize = 100 mm
+s:Sc/DoseAtPhantomP/OutputFile = "output/minibeam_open_center_dose_10k"

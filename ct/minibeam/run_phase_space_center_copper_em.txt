@@ -1,0 +1,9 @@
+# Phase-3 reference: same source, Copper geometry, Air gap and phase-space
+# planes as the full-physics case, but only Geant4 electromagnetic physics.
+# This is the correct target for GPU minibeam_transport_mode=copper_em.
+includeFile = run_phase_space_center.txt
+
+sv:Ph/Default/Modules = 1 "g4em-standard_opt4"
+s:Sc/AtCollimatorEntrance/OutputFile = "output/minibeam_center_copper_em_collimator_entrance"
+s:Sc/AtCollimatorExit/OutputFile = "output/minibeam_center_copper_em_collimator_exit"
+s:Sc/AtWaterEntrance/OutputFile = "output/minibeam_center_copper_em_water_entrance"

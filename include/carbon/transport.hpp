@@ -8,6 +8,7 @@
 #include "carbon/transport_config.hpp"
 #include "carbon/transport_profile.hpp"
 
+#include <array>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -16,6 +17,46 @@
 namespace carbon {
 
 class SyclTransportContext;
+
+struct MinibeamDiagnostics {
+    static constexpr std::size_t slit_count = 15;
+    static constexpr std::size_t touched_energy_bin_count = 12;
+    bool enabled{false};
+    std::uint64_t incident_histories{0};
+    std::uint64_t direct_air_slit_histories{0};
+    std::uint64_t copper_touched_histories{0};
+    std::uint64_t copper_nuclear_interactions{0};
+    std::uint64_t copper_generated_direct_secondaries{0};
+    std::uint64_t copper_charged_survivors{0};
+    std::uint64_t copper_neutral_survivors{0};
+    std::uint64_t water_entrance_primary_c12{0};
+    double beamline_removed_energy_MeV{0.0};
+    double copper_charged_survivor_energy_MeV{0.0};
+    double copper_neutral_survivor_energy_MeV{0.0};
+    double direct_air_primary_energy_MeV{0.0};
+    double copper_touched_primary_energy_MeV{0.0};
+    // C, B, Be, Li, He, p, d, t, other.
+    std::array<std::uint64_t, 9> copper_charged_survivors_by_species{};
+    std::array<double, 9> copper_charged_survivor_energy_by_species_MeV{};
+    std::array<std::uint64_t, slit_count>
+        water_entrance_primary_c12_by_slit{};
+    std::array<std::uint64_t, slit_count>
+        collimator_entrance_primary_c12_by_slit{};
+    std::array<std::uint64_t, slit_count>
+        direct_air_primary_c12_by_slit{};
+    std::array<std::uint64_t, touched_energy_bin_count>
+        copper_touched_primary_energy_histogram{};
+    double energy_sum_MeV{0.0};
+    double energy_squared_sum_MeV2{0.0};
+    double x_sum_mm{0.0};
+    double x_squared_sum_mm2{0.0};
+    double y_sum_mm{0.0};
+    double y_squared_sum_mm2{0.0};
+    double direction_x_sum{0.0};
+    double direction_x_squared_sum{0.0};
+    double direction_y_sum{0.0};
+    double direction_y_squared_sum{0.0};
+};
 
 struct TransportResult {
     std::vector<double> deposited_energy_MeV;
@@ -65,6 +106,9 @@ struct TransportResult {
     double initial_energy_MeV{0.0};
     double total_deposited_energy_MeV{0.0};
     double escaped_energy_MeV{0.0};
+    // Energy lost/deposited/terminated before the scored phantom by the
+    // optional minibeam beamline.
+    double beamline_removed_energy_MeV{0.0};
     double untracked_nuclear_energy_MeV{0.0};
     std::uint64_t nuclear_interactions{0};
     std::uint64_t sampled_reaction_packages{0};
@@ -105,6 +149,7 @@ struct TransportResult {
     double neutral_kernel_seconds{0.0};
     double charged_after_neutral_kernel_seconds{0.0};
     std::string backend;
+    MinibeamDiagnostics minibeam;
     // Populated only when built with CARBON_TRANSPORT_PROFILE=1.
     TransportProfile profile;
 

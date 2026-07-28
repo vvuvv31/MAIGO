@@ -1,0 +1,235 @@
+
+
+s:Ge/Snout/Parent 	  = "World"
+s:Ge/Snout/Type   	  = "TsCylinder"
+s:Ge/Snout/Material 	  = "Air"
+d:Ge/Snout/RMin  	  = 0 cm
+d:Ge/Snout/RMax  	  = 6 cm
+d:Ge/Snout/HL    	  = 3 cm
+d:Ge/Snout/SPhi  	  = 0 deg
+d:Ge/Snout/DPhi  	  = 360 deg
+d:Ge/Snout/TransY	  = -3.0 cm # 6 cm air gap
+d:Ge/Snout/RotX	      =	90 deg 
+# s:Ge/Snout/Color         = "gray"
+
+
+# BRASS CYLINDER
+s:Ge/Aperture/Parent 	  = "Snout"
+s:Ge/Aperture/Type   	  = "TsCylinder"
+s:Ge/Aperture/Material 	  = "Copper"
+d:Ge/Aperture/RMin  	  = 0 cm
+d:Ge/Aperture/RMax  	  = 6 cm
+d:Ge/Aperture/HL    	  = 3 cm
+d:Ge/Aperture/SPhi  	  = 0 deg
+d:Ge/Aperture/DPhi  	  = 360 deg
+d:Ge/Aperture/TransZ	  = 0 cm # 
+d:Ge/Aperture/LowerEdge   = Ge/Aperture/TransZ + Ge/Aperture/HL cm  #OK
+s:Ge/Aperture/Color         = "yellow"
+b:Ge/Aperture/Invisible 	= "0"
+
+
+# SLIT INSERT
+dc:Ge/slit_width 		   = 0.0500 cm
+dc:Ge/ctc 		           = 3.6000 mm
+dc:Ge/height 		       = 3.0000 cm
+dc:Ge/width 		       = 2.5000 cm
+ic:Ge/Num_Tapes 			 = 0
+
+s:Ge/Aperture/SquarePart1/Hole/Parent       = "Aperture"
+s:Ge/Aperture/SquarePart1/Hole/Type         = "G4Trd"
+s:Ge/Aperture/SquarePart1/Hole/Material     = "Air"
+d:Ge/Aperture/SquarePart1/Hole/TransX       = 0 mm
+d:Ge/Aperture/SquarePart1/Hole/HLX1         = 0.5 * Ge/slit_width cm
+d:Ge/Aperture/SquarePart1/Hole/HLX2         = 0.5 * Ge/slit_width cm
+d:Ge/Aperture/SquarePart1/Hole/HLY1         = 1 * Ge/width  cm
+d:Ge/Aperture/SquarePart1/Hole/HLY2         = 1 * Ge/width  cm
+d:Ge/Aperture/SquarePart1/Hole/HLZ          = 1 * Ge/height cm
+d:Ge/Aperture/SquarePart1/Hole/RotZ         = 0 deg
+# s:Ge/Aperture/SquarePart1/Hole/DrawingStyle = "FullWireFrame"
+s:Ge/Aperture/SquarePart1/Hole/Color        = "yellow"
+
+s:Ge/Aperture/SquarePart2/Hole/Parent       = "Aperture"
+s:Ge/Aperture/SquarePart2/Hole/Type         = "G4Trd"
+s:Ge/Aperture/SquarePart2/Hole/Material     = "Air"
+d:Ge/Aperture/SquarePart2/Hole/TransX       = 1 * Ge/ctc mm
+d:Ge/Aperture/SquarePart2/Hole/HLX1         = 0.5 * Ge/slit_width cm
+d:Ge/Aperture/SquarePart2/Hole/HLX2         = 0.5 * Ge/slit_width cm
+d:Ge/Aperture/SquarePart2/Hole/HLY1         = 1 * Ge/width  cm
+d:Ge/Aperture/SquarePart2/Hole/HLY2         = 1 * Ge/width  cm
+d:Ge/Aperture/SquarePart2/Hole/HLZ          = 1 * Ge/height cm
+d:Ge/Aperture/SquarePart2/Hole/RotZ         = 0 deg
+s:Ge/Aperture/SquarePart2/Hole/Color        = "yellow"
+
+s:Ge/Aperture/SquarePart3/Hole/Parent       = "Aperture"
+s:Ge/Aperture/SquarePart3/Hole/Type         = "G4Trd"
+s:Ge/Aperture/SquarePart3/Hole/Material     = "Air"
+d:Ge/Aperture/SquarePart3/Hole/TransX       = -1 * Ge/ctc mm
+d:Ge/Aperture/SquarePart3/Hole/HLX1         = 0.5 * Ge/slit_width cm
+d:Ge/Aperture/SquarePart3/Hole/HLX2         = 0.5 * Ge/slit_width cm
+d:Ge/Aperture/SquarePart3/Hole/HLY1         = 1 * Ge/width  cm
+d:Ge/Aperture/SquarePart3/Hole/HLY2         = 1 * Ge/width  cm
+d:Ge/Aperture/SquarePart3/Hole/HLZ          = 1 * Ge/height cm
+d:Ge/Aperture/SquarePart3/Hole/RotZ         = 0 deg
+s:Ge/Aperture/SquarePart3/Hole/Color        = "yellow"
+
+s:Ge/Aperture/SquarePart4/Hole/Parent       = "Aperture"
+s:Ge/Aperture/SquarePart4/Hole/Type         = "G4Trd"
+s:Ge/Aperture/SquarePart4/Hole/Material     = "Air"
+d:Ge/Aperture/SquarePart4/Hole/TransX       = 2 * Ge/ctc mm
+d:Ge/Aperture/SquarePart4/Hole/HLX1         = 0.5 * Ge/slit_width cm
+d:Ge/Aperture/SquarePart4/Hole/HLX2         = 0.5 * Ge/slit_width cm
+d:Ge/Aperture/SquarePart4/Hole/HLY1         = 1 * Ge/width  cm
+d:Ge/Aperture/SquarePart4/Hole/HLY2         = 1 * Ge/width  cm
+d:Ge/Aperture/SquarePart4/Hole/HLZ          = 1 * Ge/height cm
+d:Ge/Aperture/SquarePart4/Hole/RotZ         = 0 deg
+s:Ge/Aperture/SquarePart4/Hole/Color        = "yellow"
+
+s:Ge/Aperture/SquarePart5/Hole/Parent       = "Aperture"
+s:Ge/Aperture/SquarePart5/Hole/Type         = "G4Trd"
+s:Ge/Aperture/SquarePart5/Hole/Material     = "Air"
+d:Ge/Aperture/SquarePart5/Hole/TransX       = -2 * Ge/ctc mm
+d:Ge/Aperture/SquarePart5/Hole/HLX1         = 0.5 * Ge/slit_width cm
+d:Ge/Aperture/SquarePart5/Hole/HLX2         = 0.5 * Ge/slit_width cm
+d:Ge/Aperture/SquarePart5/Hole/HLY1         = 1 * Ge/width  cm
+d:Ge/Aperture/SquarePart5/Hole/HLY2         = 1 * Ge/width  cm
+d:Ge/Aperture/SquarePart5/Hole/HLZ          = 1 * Ge/height cm
+d:Ge/Aperture/SquarePart5/Hole/RotZ         = 0 deg
+s:Ge/Aperture/SquarePart5/Hole/Color        = "yellow"
+
+s:Ge/Aperture/SquarePart6/Hole/Parent       = "Aperture"
+s:Ge/Aperture/SquarePart6/Hole/Type         = "G4Trd"
+s:Ge/Aperture/SquarePart6/Hole/Material     = "Air"
+d:Ge/Aperture/SquarePart6/Hole/TransX       = 3 * Ge/ctc mm
+d:Ge/Aperture/SquarePart6/Hole/HLX1         = 0.5 * Ge/slit_width cm
+d:Ge/Aperture/SquarePart6/Hole/HLX2         = 0.5 * Ge/slit_width cm
+d:Ge/Aperture/SquarePart6/Hole/HLY1         = 1 * Ge/width  cm
+d:Ge/Aperture/SquarePart6/Hole/HLY2         = 1 * Ge/width  cm
+d:Ge/Aperture/SquarePart6/Hole/HLZ          = 1 * Ge/height cm
+d:Ge/Aperture/SquarePart6/Hole/RotZ         = 0 deg
+s:Ge/Aperture/SquarePart6/Hole/Color        = "yellow"
+
+s:Ge/Aperture/SquarePart7/Hole/Parent       = "Aperture"
+s:Ge/Aperture/SquarePart7/Hole/Type         = "G4Trd"
+s:Ge/Aperture/SquarePart7/Hole/Material     = "Air"
+d:Ge/Aperture/SquarePart7/Hole/TransX       = -3 * Ge/ctc mm
+d:Ge/Aperture/SquarePart7/Hole/HLX1         = 0.5 * Ge/slit_width cm
+d:Ge/Aperture/SquarePart7/Hole/HLX2         = 0.5 * Ge/slit_width cm
+d:Ge/Aperture/SquarePart7/Hole/HLY1         = 1 * Ge/width  cm
+d:Ge/Aperture/SquarePart7/Hole/HLY2         = 1 * Ge/width  cm
+d:Ge/Aperture/SquarePart7/Hole/HLZ          = 1 * Ge/height cm
+d:Ge/Aperture/SquarePart7/Hole/RotZ         = 0 deg
+s:Ge/Aperture/SquarePart7/Hole/Color        = "yellow"
+
+s:Ge/Aperture/SquarePart8/Hole/Parent       = "Aperture"
+s:Ge/Aperture/SquarePart8/Hole/Type         = "G4Trd"
+s:Ge/Aperture/SquarePart8/Hole/Material     = "Air"
+d:Ge/Aperture/SquarePart8/Hole/TransX       = 4 * Ge/ctc mm
+d:Ge/Aperture/SquarePart8/Hole/HLX1         = 0.5 * Ge/slit_width cm
+d:Ge/Aperture/SquarePart8/Hole/HLX2         = 0.5 * Ge/slit_width cm
+d:Ge/Aperture/SquarePart8/Hole/HLY1         = 1 * Ge/width  cm
+d:Ge/Aperture/SquarePart8/Hole/HLY2         = 1 * Ge/width  cm
+d:Ge/Aperture/SquarePart8/Hole/HLZ          = 1 * Ge/height cm
+d:Ge/Aperture/SquarePart8/Hole/RotZ         = 0 deg
+s:Ge/Aperture/SquarePart8/Hole/Color        = "yellow"
+
+s:Ge/Aperture/SquarePart9/Hole/Parent       = "Aperture"
+s:Ge/Aperture/SquarePart9/Hole/Type         = "G4Trd"
+s:Ge/Aperture/SquarePart9/Hole/Material     = "Air"
+d:Ge/Aperture/SquarePart9/Hole/TransX       = -4 * Ge/ctc mm
+d:Ge/Aperture/SquarePart9/Hole/HLX1         = 0.5 * Ge/slit_width cm
+d:Ge/Aperture/SquarePart9/Hole/HLX2         = 0.5 * Ge/slit_width cm
+d:Ge/Aperture/SquarePart9/Hole/HLY1         = 1 * Ge/width  cm
+d:Ge/Aperture/SquarePart9/Hole/HLY2         = 1 * Ge/width  cm
+d:Ge/Aperture/SquarePart9/Hole/HLZ          = 1 * Ge/height cm
+d:Ge/Aperture/SquarePart9/Hole/RotZ         = 0 deg
+s:Ge/Aperture/SquarePart9/Hole/Color        = "yellow"
+
+s:Ge/Aperture/SquarePart10/Hole/Parent       = "Aperture"
+s:Ge/Aperture/SquarePart10/Hole/Type         = "G4Trd"
+s:Ge/Aperture/SquarePart10/Hole/Material     = "Air"
+d:Ge/Aperture/SquarePart10/Hole/TransX       = 5 * Ge/ctc mm
+d:Ge/Aperture/SquarePart10/Hole/HLX1         = 0.5 * Ge/slit_width cm
+d:Ge/Aperture/SquarePart10/Hole/HLX2         = 0.5 * Ge/slit_width cm
+d:Ge/Aperture/SquarePart10/Hole/HLY1         = 1 * Ge/width  cm
+d:Ge/Aperture/SquarePart10/Hole/HLY2         = 1 * Ge/width  cm
+d:Ge/Aperture/SquarePart10/Hole/HLZ          = 1 * Ge/height cm
+d:Ge/Aperture/SquarePart10/Hole/RotZ         = 0 deg
+s:Ge/Aperture/SquarePart10/Hole/Color        = "yellow"
+
+s:Ge/Aperture/SquarePart11/Hole/Parent       = "Aperture"
+s:Ge/Aperture/SquarePart11/Hole/Type         = "G4Trd"
+s:Ge/Aperture/SquarePart11/Hole/Material     = "Air"
+d:Ge/Aperture/SquarePart11/Hole/TransX       = -5 * Ge/ctc mm
+d:Ge/Aperture/SquarePart11/Hole/HLX1         = 0.5 * Ge/slit_width cm
+d:Ge/Aperture/SquarePart11/Hole/HLX2         = 0.5 * Ge/slit_width cm
+d:Ge/Aperture/SquarePart11/Hole/HLY1         = 1 * Ge/width  cm
+d:Ge/Aperture/SquarePart11/Hole/HLY2         = 1 * Ge/width  cm
+d:Ge/Aperture/SquarePart11/Hole/HLZ          = 1 * Ge/height cm
+d:Ge/Aperture/SquarePart11/Hole/RotZ         = 0 deg
+s:Ge/Aperture/SquarePart11/Hole/Color        = "yellow"
+
+s:Ge/Aperture/SquarePart12/Hole/Parent       = "Aperture"
+s:Ge/Aperture/SquarePart12/Hole/Type         = "G4Trd"
+s:Ge/Aperture/SquarePart12/Hole/Material     = "Air"
+d:Ge/Aperture/SquarePart12/Hole/TransX       = 6 * Ge/ctc mm
+d:Ge/Aperture/SquarePart12/Hole/HLX1         = 0.5 * Ge/slit_width cm
+d:Ge/Aperture/SquarePart12/Hole/HLX2         = 0.5 * Ge/slit_width cm
+d:Ge/Aperture/SquarePart12/Hole/HLY1         = 1 * Ge/width  cm
+d:Ge/Aperture/SquarePart12/Hole/HLY2         = 1 * Ge/width  cm
+d:Ge/Aperture/SquarePart12/Hole/HLZ          = 1 * Ge/height cm
+d:Ge/Aperture/SquarePart12/Hole/RotZ         = 0 deg
+s:Ge/Aperture/SquarePart12/Hole/Color        = "yellow"
+
+s:Ge/Aperture/SquarePart13/Hole/Parent       = "Aperture"
+s:Ge/Aperture/SquarePart13/Hole/Type         = "G4Trd"
+s:Ge/Aperture/SquarePart13/Hole/Material     = "Air"
+d:Ge/Aperture/SquarePart13/Hole/TransX       = -6 * Ge/ctc mm
+d:Ge/Aperture/SquarePart13/Hole/HLX1         = 0.5 * Ge/slit_width cm
+d:Ge/Aperture/SquarePart13/Hole/HLX2         = 0.5 * Ge/slit_width cm
+d:Ge/Aperture/SquarePart13/Hole/HLY1         = 1 * Ge/width  cm
+d:Ge/Aperture/SquarePart13/Hole/HLY2         = 1 * Ge/width  cm
+d:Ge/Aperture/SquarePart13/Hole/HLZ          = 1 * Ge/height cm
+d:Ge/Aperture/SquarePart13/Hole/RotZ         = 0 deg
+s:Ge/Aperture/SquarePart13/Hole/Color        = "yellow"
+
+s:Ge/Aperture/SquarePart14/Hole/Parent       = "Aperture"
+s:Ge/Aperture/SquarePart14/Hole/Type         = "G4Trd"
+s:Ge/Aperture/SquarePart14/Hole/Material     = "Air"
+d:Ge/Aperture/SquarePart14/Hole/TransX       = 7 * Ge/ctc mm
+d:Ge/Aperture/SquarePart14/Hole/HLX1         = 0.5 * Ge/slit_width cm
+d:Ge/Aperture/SquarePart14/Hole/HLX2         = 0.5 * Ge/slit_width cm
+d:Ge/Aperture/SquarePart14/Hole/HLY1         = 1 * Ge/width  cm
+d:Ge/Aperture/SquarePart14/Hole/HLY2         = 1 * Ge/width  cm
+d:Ge/Aperture/SquarePart14/Hole/HLZ          = 1 * Ge/height cm
+d:Ge/Aperture/SquarePart14/Hole/RotZ         = 0 deg
+s:Ge/Aperture/SquarePart14/Hole/Color        = "yellow"
+
+s:Ge/Aperture/SquarePart15/Hole/Parent       = "Aperture"
+s:Ge/Aperture/SquarePart15/Hole/Type         = "G4Trd"
+s:Ge/Aperture/SquarePart15/Hole/Material     = "Air"
+d:Ge/Aperture/SquarePart15/Hole/TransX       = -7 * Ge/ctc mm
+d:Ge/Aperture/SquarePart15/Hole/HLX1         = 0.5 * Ge/slit_width cm
+d:Ge/Aperture/SquarePart15/Hole/HLX2         = 0.5 * Ge/slit_width cm
+d:Ge/Aperture/SquarePart15/Hole/HLY1         = 1 * Ge/width  cm
+d:Ge/Aperture/SquarePart15/Hole/HLY2         = 1 * Ge/width  cm
+d:Ge/Aperture/SquarePart15/Hole/HLZ          = 1 * Ge/height cm
+d:Ge/Aperture/SquarePart15/Hole/RotZ         = 0 deg
+s:Ge/Aperture/SquarePart15/Hole/Color        = "yellow"
+
+d:Ge/Snout/MaxStepSize = 0.05 mm
+d:Ge/Aperture/MaxStepSize = 0.05 mm
+d:Ge/Aperture/SquarePart1/Hole/MaxStepSize = 0.05 mm
+d:Ge/Aperture/SquarePart2/Hole/MaxStepSize = 0.05 mm
+d:Ge/Aperture/SquarePart3/Hole/MaxStepSize = 0.05 mm
+d:Ge/Aperture/SquarePart4/Hole/MaxStepSize = 0.05 mm
+d:Ge/Aperture/SquarePart5/Hole/MaxStepSize = 0.05 mm
+d:Ge/Aperture/SquarePart6/Hole/MaxStepSize = 0.05 mm
+d:Ge/Aperture/SquarePart7/Hole/MaxStepSize = 0.05 mm
+d:Ge/Aperture/SquarePart8/Hole/MaxStepSize = 0.05 mm
+d:Ge/Aperture/SquarePart9/Hole/MaxStepSize = 0.05 mm
+d:Ge/Aperture/SquarePart10/Hole/MaxStepSize = 0.05 mm
+d:Ge/Aperture/SquarePart11/Hole/MaxStepSize = 0.05 mm
+d:Ge/Aperture/SquarePart12/Hole/MaxStepSize = 0.05 mm
+d:Ge/Aperture/SquarePart13/Hole/MaxStepSize = 0.05 mm
+d:Ge/Aperture/SquarePart14/Hole/MaxStepSize = 0.05 mm
+d:Ge/Aperture/SquarePart15/Hole/MaxStepSize = 0.05 mm

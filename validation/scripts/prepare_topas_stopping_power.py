@@ -61,6 +61,24 @@ def main() -> None:
         default="electronic",
         help="Which dE/dx column becomes stopping_power_MeV_per_mm for GPU",
     )
+    parser.add_argument(
+        "--material-label",
+        default="Water_75eV",
+        help="Material name recorded in comments and metadata",
+    )
+    parser.add_argument(
+        "--material-properties",
+        type=Path,
+        help=(
+            "Optional CarbonMaterialPropertiesNtuple .phsp file whose density "
+            "and radiation length are added to metadata"
+        ),
+    )
+    parser.add_argument(
+        "--material-properties-header",
+        type=Path,
+        help="Optional header paired with --material-properties",
+    )
     args = parser.parse_args()
 
     for path in (args.input, args.header, args.log):
@@ -93,7 +111,7 @@ def main() -> None:
     args.output_csv.parent.mkdir(parents=True, exist_ok=True)
     with args.output_csv.open("w", newline="", encoding="utf-8") as stream:
         stream.write(
-            "# TOPAS/Geant4 C-12 stopping power in Water_75eV "
+            f"# TOPAS/Geant4 C-12 stopping power in {args.material_label} "
             f"({args.gpu_column} dE/dx)\n"
         )
         stream.write(
@@ -103,7 +121,7 @@ def main() -> None:
         writer = csv.writer(stream, lineterminator="\n")
         writer.writerow(["energy_MeVu", "stopping_power_MeV_per_mm"])
         for row in rows:
-            writer.writerow([f"{row[0]:.1f}", f"{row[dedx_index]:.12g}"])
+            writer.writerow([f"{row[0]:.12g}", f"{row[dedx_index]:.12g}"])
 
     # Full diagnostic table
     full_csv = args.output_csv.with_name(
@@ -120,7 +138,8 @@ def main() -> None:
     geant4 = re.search(r"Geant4 version Name:\s+(\S+)", log_text)
     ref = min(rows, key=lambda r: abs(r[0] - 200.0))
     metadata = {
-        "dataset": "C-12 stopping power in Water_75eV",
+        "dataset": f"C-12 stopping power in {args.material_label}",
+        "material": args.material_label,
         "extraction_method": "G4EmCalculator via CarbonStoppingPowerNtuple",
         "gpu_column": args.gpu_column,
         "topas_version": topas.group(1).strip() if topas else None,
@@ -144,6 +163,50 @@ def main() -> None:
         "full_csv": full_csv.as_posix(),
         "global_scale_applied": False,
     }
+    if args.material_properties is not None:
+        if not args.material_properties.exists():
+            raise SystemExit(
+                f"Material-properties output not found: "
+                f"{args.material_properties}"
+            )
+        properties_lines = [
+            line.strip()
+            for line in args.material_properties.read_text(
+                encoding="utf-8"
+            ).splitlines()
+            if line.strip()
+        ]
+        if len(properties_lines) != 1:
+            raise SystemExit(
+                "Expected exactly one material-properties row, found "
+                f"{len(properties_lines)}"
+            )
+        tokens = properties_lines[0].split()
+        if len(tokens) != 4:
+            raise SystemExit(
+                "Expected material, density, radiation length, and mass "
+                "radiation length in material-properties row"
+            )
+        metadata["material_properties"] = {
+            "geant4_name": tokens[0],
+            "density_g_per_cm3": float(tokens[1]),
+            "radiation_length_mm": float(tokens[2]),
+            "mass_radiation_length_g_per_cm2": float(tokens[3]),
+            "source": {
+                "path": args.material_properties.as_posix(),
+                "sha256": sha256(args.material_properties),
+            },
+        }
+        if args.material_properties_header is not None:
+            if not args.material_properties_header.exists():
+                raise SystemExit(
+                    "Material-properties header not found: "
+                    f"{args.material_properties_header}"
+                )
+            metadata["material_properties"]["header"] = {
+                "path": args.material_properties_header.as_posix(),
+                "sha256": sha256(args.material_properties_header),
+            }
     args.metadata.write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
     print(f"Wrote {args.output_csv}")
     print(f"Wrote {full_csv}")

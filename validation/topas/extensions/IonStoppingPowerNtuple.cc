@@ -37,6 +37,9 @@ IonStoppingPowerNtuple::IonStoppingPowerNtuple(
     fNtuple->RegisterColumnD(
         &restricted_dedx_mev_per_mm_, "Restricted Electronic dE/dx (MeV/mm)", "");
     fNtuple->RegisterColumnD(
+        &transport_table_dedx_mev_per_mm_,
+        "Transport Table dE/dx (MeV/mm)", "");
+    fNtuple->RegisterColumnD(
         &nuclear_dedx_mev_per_mm_, "Nuclear dE/dx (MeV/mm)", "");
     fNtuple->RegisterColumnD(
         &delta_electron_fraction_, "Delta Electron Fraction", "");
@@ -103,6 +106,8 @@ G4bool IonStoppingPowerNtuple::ProcessHits(
                 total_energy, ion, material);
             const auto restricted = calculator.ComputeDEDXForCutInRange(
                 total_energy, ion, material, production_range_cut);
+            const auto transport_table =
+                calculator.GetDEDX(total_energy, ion, material);
             const auto nuclear =
                 calculator.ComputeNuclearDEDX(total_energy, ion, material);
 
@@ -114,6 +119,8 @@ G4bool IonStoppingPowerNtuple::ProcessHits(
                 unrestricted / (MeV / mm);
             restricted_dedx_mev_per_mm_ =
                 restricted / (MeV / mm);
+            transport_table_dedx_mev_per_mm_ =
+                transport_table / (MeV / mm);
             nuclear_dedx_mev_per_mm_ = nuclear / (MeV / mm);
             delta_electron_fraction_ =
                 unrestricted > 0.0

@@ -10,6 +10,7 @@
 #include "carbon/transport_config.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -147,6 +148,8 @@ void accumulate_transport_result(carbon::TransportResult& total,
     total.initial_energy_MeV += part.initial_energy_MeV;
     total.total_deposited_energy_MeV += part.total_deposited_energy_MeV;
     total.escaped_energy_MeV += part.escaped_energy_MeV;
+    total.beamline_removed_energy_MeV +=
+        part.beamline_removed_energy_MeV;
     total.untracked_nuclear_energy_MeV += part.untracked_nuclear_energy_MeV;
     total.nuclear_interactions += part.nuclear_interactions;
     total.sampled_reaction_packages += part.sampled_reaction_packages;
@@ -182,6 +185,52 @@ void accumulate_transport_result(carbon::TransportResult& total,
     total.neutral_escaped_energy_MeV += part.neutral_escaped_energy_MeV;
     total.residual_neutral_energy_MeV += part.residual_neutral_energy_MeV;
     total.charged_from_neutral_energy_MeV += part.charged_from_neutral_energy_MeV;
+    total.minibeam.enabled = total.minibeam.enabled || part.minibeam.enabled;
+    total.minibeam.incident_histories += part.minibeam.incident_histories;
+    total.minibeam.direct_air_slit_histories +=
+        part.minibeam.direct_air_slit_histories;
+    total.minibeam.copper_touched_histories +=
+        part.minibeam.copper_touched_histories;
+    total.minibeam.copper_nuclear_interactions +=
+        part.minibeam.copper_nuclear_interactions;
+    total.minibeam.copper_generated_direct_secondaries +=
+        part.minibeam.copper_generated_direct_secondaries;
+    total.minibeam.copper_charged_survivors +=
+        part.minibeam.copper_charged_survivors;
+    total.minibeam.copper_neutral_survivors +=
+        part.minibeam.copper_neutral_survivors;
+    total.minibeam.beamline_removed_energy_MeV +=
+        part.minibeam.beamline_removed_energy_MeV;
+    total.minibeam.copper_charged_survivor_energy_MeV +=
+        part.minibeam.copper_charged_survivor_energy_MeV;
+    total.minibeam.copper_neutral_survivor_energy_MeV +=
+        part.minibeam.copper_neutral_survivor_energy_MeV;
+    for (std::size_t category = 0;
+         category <
+         total.minibeam.copper_charged_survivors_by_species.size();
+         ++category) {
+        total.minibeam.copper_charged_survivors_by_species[category] +=
+            part.minibeam.copper_charged_survivors_by_species[category];
+        total.minibeam
+            .copper_charged_survivor_energy_by_species_MeV[category] +=
+            part.minibeam
+                .copper_charged_survivor_energy_by_species_MeV[category];
+    }
+    total.minibeam.water_entrance_primary_c12 +=
+        part.minibeam.water_entrance_primary_c12;
+    total.minibeam.energy_sum_MeV += part.minibeam.energy_sum_MeV;
+    total.minibeam.energy_squared_sum_MeV2 +=
+        part.minibeam.energy_squared_sum_MeV2;
+    total.minibeam.x_sum_mm += part.minibeam.x_sum_mm;
+    total.minibeam.x_squared_sum_mm2 += part.minibeam.x_squared_sum_mm2;
+    total.minibeam.y_sum_mm += part.minibeam.y_sum_mm;
+    total.minibeam.y_squared_sum_mm2 += part.minibeam.y_squared_sum_mm2;
+    total.minibeam.direction_x_sum += part.minibeam.direction_x_sum;
+    total.minibeam.direction_x_squared_sum +=
+        part.minibeam.direction_x_squared_sum;
+    total.minibeam.direction_y_sum += part.minibeam.direction_y_sum;
+    total.minibeam.direction_y_squared_sum +=
+        part.minibeam.direction_y_squared_sum;
     total.total_steps += part.total_steps;
     total.elapsed_seconds += part.elapsed_seconds;
     total.primary_kernel_seconds += part.primary_kernel_seconds;
@@ -296,6 +345,24 @@ void apply_spot_to_config(carbon::TransportConfig& config,
         config.beam_uz_x = pose.uz_x;
         config.beam_uz_y = pose.uz_y;
         config.beam_uz_z = pose.uz_z;
+    } else if (config.spots_geometry_mode == "minibeam_topas_y") {
+        // TOPAS reference beam travels world +Y. Preserve the source-plane
+        // emittance until the upstream collimator, then map to the canonical
+        // GPU frame: (x,y,z)_gpu = (X,Z,Y-Y_water_entry)_topas.
+        const auto world = plan.tps_zero_beam_pose_for_spot(spot);
+        config.source_origin_x_mm = world.origin_x_mm;
+        config.source_origin_y_mm = world.origin_z_mm;
+        config.source_origin_z_mm =
+            world.origin_y_mm - config.minibeam_water_entrance_world_y_mm;
+        config.beam_ux_x = world.ux_x;
+        config.beam_ux_y = world.ux_z;
+        config.beam_ux_z = world.ux_y;
+        config.beam_uy_x = world.uy_x;
+        config.beam_uy_y = world.uy_z;
+        config.beam_uy_z = world.uy_y;
+        config.beam_uz_x = world.uz_x;
+        config.beam_uz_y = world.uz_z;
+        config.beam_uz_z = world.uz_y;
     } else {
         const auto pose = plan.pose_for_spot(spot);
         config.source_origin_x_mm = pose.origin_x_mm;
@@ -778,6 +845,144 @@ int main(int argc, char* argv[]) {
                   << result.charged_after_neutral_kernel_seconds << " s\n"
                   << "Energy balance error: " << result.relative_energy_balance_error() << '\n'
                   << "Nuclear interactions: " << result.nuclear_interactions << '\n';
+        if (result.minibeam.enabled) {
+            const auto count = static_cast<double>(
+                result.minibeam.water_entrance_primary_c12);
+            const auto mean_and_std = [count](const double sum,
+                                              const double squared_sum) {
+                if (count <= 0.0) {
+                    return std::pair{0.0, 0.0};
+                }
+                const auto mean = sum / count;
+                return std::pair{
+                    mean,
+                    std::sqrt(std::max(
+                        0.0, squared_sum / count - mean * mean))};
+            };
+            const auto [energy_mean, energy_std] = mean_and_std(
+                result.minibeam.energy_sum_MeV,
+                result.minibeam.energy_squared_sum_MeV2);
+            const auto [x_mean, x_std] = mean_and_std(
+                result.minibeam.x_sum_mm,
+                result.minibeam.x_squared_sum_mm2);
+            const auto [y_mean, y_std] = mean_and_std(
+                result.minibeam.y_sum_mm,
+                result.minibeam.y_squared_sum_mm2);
+            const auto [dx_mean, dx_std] = mean_and_std(
+                result.minibeam.direction_x_sum,
+                result.minibeam.direction_x_squared_sum);
+            const auto [dy_mean, dy_std] = mean_and_std(
+                result.minibeam.direction_y_sum,
+                result.minibeam.direction_y_squared_sum);
+            std::cout
+                << "Minibeam incident/direct/Copper-touched/Copper-nuclear/"
+                   "water-primary: "
+                << result.minibeam.incident_histories << '/'
+                << result.minibeam.direct_air_slit_histories << '/'
+                << result.minibeam.copper_touched_histories << '/'
+                << result.minibeam.copper_nuclear_interactions << '/'
+                << result.minibeam.water_entrance_primary_c12 << '\n'
+                << "Minibeam beamline removed energy: "
+                << result.minibeam.beamline_removed_energy_MeV << " MeV\n"
+                << "Minibeam Copper products generated/charged-survivor/"
+                   "neutral-survivor: "
+                << result.minibeam.copper_generated_direct_secondaries << '/'
+                << result.minibeam.copper_charged_survivors << '/'
+                << result.minibeam.copper_neutral_survivors << '\n'
+                << "Minibeam Copper survivor charged/neutral energy: "
+                << result.minibeam.copper_charged_survivor_energy_MeV << '/'
+                << result.minibeam.copper_neutral_survivor_energy_MeV
+                << " MeV\n"
+                << "Minibeam water entrance primary energy mean/std: "
+                << energy_mean << '/' << energy_std << " MeV\n"
+                << "Minibeam water entrance x mean/std: "
+                << x_mean << '/' << x_std << " mm\n"
+                << "Minibeam water entrance y mean/std: "
+                << y_mean << '/' << y_std << " mm\n"
+                << "Minibeam water entrance dir-x mean/std: "
+                << dx_mean << '/' << dx_std << '\n'
+                << "Minibeam water entrance dir-y mean/std: "
+                << dy_mean << '/' << dy_std << '\n';
+            std::cout << "Minibeam water entrance primary C-12 by slit:";
+            for (std::size_t slit = 0;
+                 slit < carbon::MinibeamDiagnostics::slit_count; ++slit) {
+                std::cout
+                    << (slit == 0 ? ' ' : '/')
+                    << result.minibeam
+                           .water_entrance_primary_c12_by_slit[slit];
+            }
+            std::cout << '\n';
+            std::cout
+                << "Minibeam collimator entrance primary C-12 by slit:";
+            for (std::size_t slit = 0;
+                 slit < carbon::MinibeamDiagnostics::slit_count; ++slit) {
+                std::cout
+                    << (slit == 0 ? ' ' : '/')
+                    << result.minibeam
+                           .collimator_entrance_primary_c12_by_slit[slit];
+            }
+            std::cout << '\n';
+            std::cout << "Minibeam direct-air primary C-12 by slit:";
+            for (std::size_t slit = 0;
+                 slit < carbon::MinibeamDiagnostics::slit_count; ++slit) {
+                std::cout
+                    << (slit == 0 ? ' ' : '/')
+                    << result.minibeam
+                           .direct_air_primary_c12_by_slit[slit];
+            }
+            std::cout << '\n';
+            const auto direct_primary_count =
+                result.minibeam.direct_air_slit_histories;
+            const auto copper_touched_primary_count =
+                result.minibeam.water_entrance_primary_c12 -
+                direct_primary_count;
+            std::cout
+                << "Minibeam water entrance direct/touched primary "
+                   "energy mean: "
+                << (direct_primary_count > 0
+                        ? result.minibeam.direct_air_primary_energy_MeV /
+                              static_cast<double>(direct_primary_count)
+                        : 0.0)
+                << '/'
+                << (copper_touched_primary_count > 0
+                        ? result.minibeam
+                                  .copper_touched_primary_energy_MeV /
+                              static_cast<double>(
+                                  copper_touched_primary_count)
+                        : 0.0)
+                << " MeV\n";
+            std::cout
+                << "Minibeam Copper-touched primary energy histogram "
+                   "(200 MeV bins):";
+            for (std::size_t energy_bin = 0;
+                 energy_bin <
+                 carbon::MinibeamDiagnostics::touched_energy_bin_count;
+                 ++energy_bin) {
+                std::cout
+                    << (energy_bin == 0 ? ' ' : '/')
+                    << result.minibeam
+                           .copper_touched_primary_energy_histogram[
+                               energy_bin];
+            }
+            std::cout << '\n';
+            constexpr std::array<const char*, 9> species_labels{
+                "C", "B", "Be", "Li", "He", "p", "d", "t",
+                "other"};
+            std::cout << "Minibeam Copper charged survivors by species:";
+            for (std::size_t category = 0;
+                 category < species_labels.size(); ++category) {
+                std::cout
+                    << ' ' << species_labels[category] << '='
+                    << result.minibeam
+                           .copper_charged_survivors_by_species[category]
+                    << '/'
+                    << result.minibeam
+                           .copper_charged_survivor_energy_by_species_MeV[
+                               category]
+                    << "MeV";
+            }
+            std::cout << '\n';
+        }
         if (result.profile.enabled) {
             std::cout << result.profile.summary();
         }
@@ -844,6 +1049,10 @@ int main(int argc, char* argv[]) {
         if (!config.dose_output_file.empty()) {
             std::cout << "Dose scorer output (Gy): " << config.dose_output_file.string()
                       << '\n';
+        }
+        if (config.dose_output_scale != 1.0) {
+            std::cout << "Dose output scale (independent calibration): "
+                      << config.dose_output_scale << '\n';
         }
         if (config.enable_secondary_transport &&
             config.enable_fragment_species_scoring &&

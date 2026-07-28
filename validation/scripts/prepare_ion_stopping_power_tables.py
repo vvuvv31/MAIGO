@@ -37,31 +37,50 @@ def main() -> None:
     parser.add_argument("topas_phsp", type=Path)
     parser.add_argument("carbon_delta", type=Path)
     parser.add_argument("output_csv", type=Path)
+    parser.add_argument("--material-label", default="Water_75eV")
     parser.add_argument("--carbon-stopping-output", type=Path)
     parser.add_argument("--carbon-delta-output", type=Path)
     args = parser.parse_args()
 
-    rows: list[tuple[int, int, float, float, float, float, float]] = []
+    rows: list[
+        tuple[int, int, float, float, float, float, float, float]
+    ] = []
     with args.topas_phsp.open() as stream:
         for line_number, line in enumerate(stream, 1):
             fields = line.split()
             if not fields:
                 continue
-            if len(fields) != 7:
-                raise ValueError(f"{args.topas_phsp}:{line_number}: expected 7 fields")
+            if len(fields) != 8:
+                raise ValueError(f"{args.topas_phsp}:{line_number}: expected 8 fields")
             z, a = int(fields[0]), int(fields[1])
-            energy, unrestricted, restricted, nuclear, raw_delta = map(
+            (
+                energy,
+                unrestricted,
+                restricted,
+                transport_table,
+                nuclear,
+                raw_delta,
+            ) = map(
                 float, fields[2:]
             )
             if not (z > 0 and a >= z and energy > 0 and unrestricted > 0):
                 raise ValueError(f"{args.topas_phsp}:{line_number}: invalid ion table row")
             rows.append(
-                (z, a, energy, unrestricted, restricted, nuclear, raw_delta)
+                (
+                    z,
+                    a,
+                    energy,
+                    unrestricted,
+                    restricted,
+                    transport_table,
+                    nuclear,
+                    raw_delta,
+                )
             )
 
     carbon_raw = {
         energy: raw_delta
-        for z, a, energy, _, _, _, raw_delta in rows
+        for z, a, energy, _, _, _, _, raw_delta in rows
         if (z, a) == (6, 12)
     }
     carbon_measured = read_carbon_delta(args.carbon_delta)
@@ -73,7 +92,8 @@ def main() -> None:
     args.output_csv.parent.mkdir(parents=True, exist_ok=True)
     with args.output_csv.open("w", newline="") as stream:
         stream.write(
-            "# TOPAS 4.2.p3 / Geant4 11.3.2 Water_75eV ion electronic stopping powers.\n"
+            f"# TOPAS 4.2.p3 / Geant4 11.3.2 {args.material_label} "
+            "ion electronic stopping powers.\n"
         )
         stream.write(
             "# delta_electron_fraction preserves the measured C-12 correction and "
@@ -92,7 +112,16 @@ def main() -> None:
                 "delta_electron_fraction",
             ]
         )
-        for z, a, energy, unrestricted, restricted, nuclear, raw_delta in rows:
+        for (
+            z,
+            a,
+            energy,
+            unrestricted,
+            restricted,
+            transport_table,
+            nuclear,
+            raw_delta,
+        ) in rows:
             c_raw = carbon_raw[energy]
             measured_delta = interpolate(carbon_measured, energy)
             if c_raw > 1.0e-12:
@@ -118,7 +147,8 @@ def main() -> None:
         args.carbon_stopping_output.parent.mkdir(parents=True, exist_ok=True)
         with args.carbon_stopping_output.open("w", newline="") as stream:
             stream.write(
-                "# TOPAS/Geant4 C-12 electronic stopping power in Water_75eV; "
+                f"# TOPAS/Geant4 C-12 electronic stopping power in "
+                f"{args.material_label}; "
                 "0.01+0.1*n MeV/u grid.\n"
             )
             writer = csv.writer(stream, lineterminator="\n")

@@ -1,0 +1,17 @@
+# Higher-statistics transmission check for the central minibeam spot.
+# The downstream box is Air because only the water-entrance phase space is
+# needed; this avoids spending CPU time transporting particles in the phantom.
+includeFile = run_phase_space_center.txt
+
+i:Ts/Seed = 20260728
+i:Ts/ShowHistoryCountAtInterval = 10000
+s:Ge/Box/Material = "Air"
+
+iv:Tf/Scatterer1/L4/Values = 1 100000
+
+s:Sc/AtCollimatorEntrance/OutputFile = "output/minibeam_center_100k_collimator_entrance"
+i:Sc/AtCollimatorEntrance/OutputBufferSize = 100000
+s:Sc/AtCollimatorExit/OutputFile = "output/minibeam_center_100k_collimator_exit"
+i:Sc/AtCollimatorExit/OutputBufferSize = 100000
+s:Sc/AtWaterEntrance/OutputFile = "output/minibeam_center_100k_water_entrance"
+i:Sc/AtWaterEntrance/OutputBufferSize = 100000

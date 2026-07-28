@@ -99,6 +99,11 @@ def main() -> None:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--output-metadata", type=Path, required=True)
     parser.add_argument("--xs-energy-quantum-mev", type=float, default=0.25)
+    parser.add_argument(
+        "--material",
+        default="water",
+        help="Material represented by the sampled macroscopic cross sections",
+    )
     args = parser.parse_args()
     if args.xs_energy_quantum_mev <= 0.0:
         raise SystemExit("--xs-energy-quantum-mev must be positive")
@@ -274,7 +279,8 @@ def main() -> None:
         "format": "neutron-gamma neutral package",
         "version": VERSION,
         "energy_units": "MeV absolute (not MeV/u)",
-        "cross_section": "macroscopic total per mm in water",
+        "cross_section":
+            f"macroscopic total per mm in {args.material}",
         "direction_coordinates": "incident-projectile local orthonormal frame",
         "direction_components": ["local_x", "local_y", "along_projectile"],
         "xs_energy_quantum_MeV": args.xs_energy_quantum_mev,

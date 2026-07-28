@@ -1,0 +1,7 @@
+# Higher-statistics full-Copper dose reference for the central minibeam spot.
+includeFile = run_dose_center_10k.txt
+
+i:Ts/Seed = 20260728
+i:Ts/ShowHistoryCountAtInterval = 10000
+iv:Tf/Scatterer1/L4/Values = 1 100000
+s:Sc/DoseAtPhantomP/OutputFile = "output/minibeam_center_dose_100k"

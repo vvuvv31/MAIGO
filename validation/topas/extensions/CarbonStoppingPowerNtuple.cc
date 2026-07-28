@@ -56,15 +56,21 @@ G4bool CarbonStoppingPowerNtuple::ProcessHits(G4Step* step, G4TouchableHistory*)
     const G4Material* material = step->GetPreStepPoint()->GetMaterial();
     G4EmCalculator em_calculator;
 
-    for (G4int energy_index = 1; energy_index <= 400; ++energy_index) {
-        const G4double energy_per_u = static_cast<G4double>(energy_index) * MeV;
+    // Match the production GPU water table exactly. The low-energy offset
+    // avoids querying zero while the 0.1 MeV/u interval resolves the steep
+    // stopping-power rise near the end of range.
+    for (G4int energy_index = 0; energy_index <= 4000; ++energy_index) {
+        const G4double energy_per_u =
+            (0.01 + 0.1 * static_cast<G4double>(energy_index)) * MeV;
         const G4double total_energy = 12.0 * energy_per_u;
         const G4double electronic = em_calculator.ComputeElectronicDEDX(
             total_energy, carbon, material);
         const G4double total = em_calculator.ComputeTotalDEDX(
             total_energy, carbon, material);
-        const G4double range = em_calculator.GetCSDARange(
-            total_energy, carbon, material);
+        // CSDA tables are disabled by the reference physics list. Querying
+        // them emits one warning per grid point and does not affect the GPU
+        // transport, which integrates dE/dx directly.
+        const G4double range = 0.0;
 
         energy_mev_per_u_ = static_cast<G4float>(energy_per_u / MeV);
         total_energy_mev_ = static_cast<G4float>(total_energy / MeV);

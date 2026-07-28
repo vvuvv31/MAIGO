@@ -1,6 +1,7 @@
 #include "carbon/cascade_package.hpp"
 #include "carbon/ct_grid.hpp"
 #include "carbon/io.hpp"
+#include "carbon/minibeam_collimator.hpp"
 #include "carbon/neutral_package.hpp"
 #include "carbon/cross_section.hpp"
 #include "carbon/multiple_scattering.hpp"
@@ -710,6 +711,33 @@ void test_neutral_package_loading() {
     }
 }
 
+void test_neutral_cross_section_loading() {
+    const auto path = std::filesystem::temp_directory_path() /
+                      "carbon_neutral_cross_sections.csv";
+    {
+        std::ofstream output(path, std::ios::trunc);
+        output << "pdg_id,energy_MeV,macroscopic_total_per_mm,"
+                  "mean_free_path_mm\n"
+               << "22,0.1,0.4,2.5\n"
+               << "22,1.0,0.05,20\n"
+               << "2112,0.1,0.03,33.333333\n"
+               << "2112,1.0,0.02,50\n";
+    }
+    const auto table = carbon::NeutralCrossSectionTables::from_csv(path);
+    require(table.energy_grid_size() == 2,
+            "Neutral cross-section grid size failed");
+    require(table.values().size() == 4,
+            "Neutral cross-section value count failed");
+    require_near(table.values()[0], 0.4, 1.0e-7,
+                 "Neutral gamma cross section failed");
+    require_near(table.values()[3], 0.02, 1.0e-7,
+                 "Neutral neutron cross section failed");
+    require_near(
+        table.log_energy_step(), std::log(10.0), 1.0e-6,
+        "Neutral cross-section logarithmic grid failed");
+    std::filesystem::remove(path);
+}
+
 void test_cascade_package_loading() {
     const auto source_directory = std::filesystem::path(CARBON_SOURCE_DIR);
     const auto package_path =
@@ -765,6 +793,7 @@ void test_dose_scorer_matches_mev_conversion() {
     config.depth_bin_width_mm = 5.0;
     config.scorer_area_mm2 = 10000.0;
     config.water_density_g_per_cm3 = 1.0;
+    config.dose_output_scale = 0.5;
     config.validate();
 
     carbon::TransportResult result;
@@ -806,7 +835,8 @@ void test_dose_scorer_matches_mev_conversion() {
             double depth_g = 0, d_gy = 0, rel_g = 0;
             gy_in >> depth_g >> comma >> d_gy >> comma >> rel_g;
             const auto expected_e = result.deposited_energy_MeV[bin];
-            const auto expected_d = expected_e * MeV_to_joule / bin_mass_kg;
+            const auto expected_d =
+                expected_e * config.dose_output_scale * MeV_to_joule / bin_mass_kg;
             require_near(e_total, expected_e, 1.0e-12, "total MeV");
             require_near(d_mev, expected_d, 1.0e-20, "MeV file dose column");
             require_near(d_gy, expected_d, 1.0e-20, "Gy scorer total dose");
@@ -972,6 +1002,132 @@ void test_flat_source_config_validation() {
     config.flat_source_half_width_x_mm = 0.0;
     require_throws([&config] { config.validate(); },
                    "Flat source should require positive half widths");
+}
+
+void test_minibeam_absorbing_geometry() {
+    constexpr float cosine = 1.0F;
+    constexpr float sine = 0.0F;
+    constexpr float radius = 60.0F;
+    constexpr float thickness = 60.0F;
+    constexpr float gap = 60.0F;
+    constexpr int slit_count = 15;
+    constexpr float width = 0.5F;
+    constexpr float pitch = 3.6F;
+    constexpr float half_length = 25.0F;
+
+    const auto passes = [&](const float x, const float y, const float z,
+                            const float dx, const float dy, const float dz) {
+        return carbon::minibeam_straight_through_air_slit(
+            x, y, z, dx, dy, dz, cosine, sine, radius, thickness, gap,
+            slit_count, width, pitch, half_length);
+    };
+    require(passes(0.0F, 0.0F, -510.0F, 0.0F, 0.0F, 1.0F),
+            "Central straight ray should pass the central minibeam slit");
+    require(passes(3.6F, 0.0F, -510.0F, 0.0F, 0.0F, 1.0F),
+            "Straight ray should pass an off-axis slit center");
+    require(!passes(0.25F, 0.0F, -510.0F, 0.0F, 0.0F, 1.0F),
+            "Half-open slit edge should be Copper");
+    require(!passes(0.0F, 25.0F, -510.0F, 0.0F, 0.0F, 1.0F),
+            "Slit long-axis edge should be Copper");
+    require(!carbon::minibeam_point_in_copper(
+                0.0F, 0.0F, cosine, sine, radius, slit_count, width,
+                pitch, half_length),
+            "Central slit center should be Air");
+    require(carbon::minibeam_point_in_copper(
+                0.3F, 0.0F, cosine, sine, radius, slit_count, width,
+                pitch, half_length),
+            "Point between slits should be Copper");
+    require(!carbon::minibeam_point_in_copper(
+                radius, 0.0F, cosine, sine, radius, slit_count, width,
+                pitch, half_length),
+            "Point outside the aperture cylinder should be Air");
+    require(passes(0.0F, 0.0F, -120.0F, 0.004F, 0.0F, 1.0F),
+            "Ray staying within one slit should pass");
+    require(!passes(0.0F, 0.0F, -120.0F, 0.005F, 0.0F, 1.0F),
+            "Ray crossing a slit wall should be absorbed");
+    int slit = 0;
+    require(carbon::minibeam_point_in_slit(
+                0.0F, 3.6F, 0.0F, 1.0F, radius, slit_count, width, pitch,
+                half_length, slit) &&
+                slit == 1,
+            "A 90-degree collimator rotation should rotate the slit array");
+
+    carbon::TransportConfig config;
+    config.device = "gpu";
+    config.enable_minibeam = true;
+    config.spots_geometry_mode = "minibeam_topas_y";
+    config.validate();
+
+    config.minibeam_slit_count = 14;
+    require_throws([&config] { config.validate(); },
+                   "Even minibeam slit count should be rejected");
+    config.minibeam_slit_count = 15;
+    config.minibeam_transport_mode = "copper_em";
+    require_throws([&config] { config.validate(); },
+                   "Copper EM mode should require a stopping-power table");
+    config.minibeam_copper_stopping_power_file = "copper.csv";
+    require_throws([&config] { config.validate(); },
+                   "Copper EM mode should require an Air stopping-power table");
+    config.minibeam_air_stopping_power_file = "air.csv";
+    config.validate();
+    config.minibeam_copper_enable_nuclear_attenuation = true;
+    require_throws([&config] { config.validate(); },
+                   "Copper nuclear attenuation should require an XS table");
+    config.minibeam_copper_cross_section_file = "copper_xs.csv";
+    config.validate();
+    config.minibeam_copper_enable_reaction_products = true;
+    require_throws([&config] { config.validate(); },
+                   "Copper reaction products should require a package");
+    config.minibeam_copper_reaction_package_file = "copper_reactions.bin";
+    config.minibeam_copper_ion_stopping_power_file = "copper_ions.csv";
+    config.minibeam_copper_ion_cross_section_file = "copper_ion_xs.csv";
+    config.enable_secondary_generation = true;
+    config.enable_secondary_transport = true;
+    config.enable_primary_attenuation = true;
+    config.reaction_package_file = "water_reactions.bin";
+    config.validate();
+    config.enable_neutral_transport = true;
+    require_throws([&config] { config.validate(); },
+                   "Copper neutral transport should require a Copper XS table");
+    config.minibeam_copper_neutral_cross_section_file =
+        "copper_neutral_xs.csv";
+    require_throws([&config] { config.validate(); },
+                   "Copper neutral transport should require a Copper package");
+    config.minibeam_copper_neutral_package_file =
+        "copper_neutral_packages.bin";
+    config.validate();
+    config.minibeam_copper_mcs_scale = 0.0;
+    require_throws([&config] { config.validate(); },
+                   "Non-positive Copper MCS scale should be rejected");
+    config.minibeam_copper_mcs_scale = 1.0;
+    config.minibeam_copper_straggling_scale = 0.0;
+    require_throws(
+        [&config] { config.validate(); },
+        "Non-positive Copper straggling scale should be rejected");
+    config.minibeam_copper_straggling_scale = 1.0;
+    config.minibeam_copper_survivor_energy_loss_scale = 0.0;
+    require_throws(
+        [&config] { config.validate(); },
+        "Non-positive Copper survivor energy-loss scale should be rejected");
+    config.minibeam_copper_survivor_energy_loss_scale = 1.0;
+    config.minibeam_copper_survivor_energy_loss_energies_MeVu =
+        {100.0, 200.0};
+    require_throws(
+        [&config] { config.validate(); },
+        "Mismatched Copper survivor energy-loss lists should be rejected");
+    config.minibeam_copper_survivor_energy_loss_scales = {0.9, 1.0};
+    config.validate();
+    config.minibeam_copper_survivor_energy_loss_energies_MeVu =
+        {200.0, 100.0};
+    require_throws(
+        [&config] { config.validate(); },
+        "Non-increasing Copper survivor calibration energies should be rejected");
+    config.minibeam_copper_survivor_energy_loss_energies_MeVu.clear();
+    config.minibeam_copper_survivor_energy_loss_scales.clear();
+    config.minibeam_water_primary_stopping_power_scale = 2.1;
+    require_throws(
+        [&config] { config.validate(); },
+        "Out-of-range minibeam water stopping-power scale should be rejected");
 }
 
 void test_secondary_optimization_config_validation() {
@@ -1887,7 +2043,9 @@ int main() {
         test_reaction_package_loading();
         test_cascade_package_loading();
         test_neutral_package_loading();
+        test_neutral_cross_section_loading();
         test_flat_source_config_validation();
+        test_minibeam_absorbing_geometry();
         test_secondary_optimization_config_validation();
         test_topas_spots_parse_angle01();
         test_topas_spot_weights_and_tps_90_transform();

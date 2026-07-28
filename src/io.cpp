@@ -65,6 +65,10 @@ double energy_MeV_to_dose_Gy(double energy_MeV, double mass_kg) {
     return energy_MeV * kMeV_to_joule / mass_kg;
 }
 
+double scored_dose_Gy(const TransportConfig& config, double energy_MeV, double mass_kg) {
+    return energy_MeV_to_dose_Gy(energy_MeV * config.dose_output_scale, mass_kg);
+}
+
 void ensure_parent_directory(const std::filesystem::path& path) {
     if (path.has_parent_path()) {
         std::filesystem::create_directories(path.parent_path());
@@ -94,7 +98,7 @@ void write_depth_dose_csv(const std::filesystem::path& path,
     output << std::setprecision(12);
     for (std::size_t bin = 0; bin < result.deposited_energy_MeV.size(); ++bin) {
         const auto energy_total = result.deposited_energy_MeV[bin];
-        const auto dose_total = energy_MeV_to_dose_Gy(energy_total, bin_mass_kg);
+        const auto dose_total = scored_dose_Gy(config, energy_total, bin_mass_kg);
         const auto relative_dose = maximum > 0.0 ? energy_total / maximum : 0.0;
         const auto depth_center_mm = (static_cast<double>(bin) + 0.5) * config.depth_bin_width_mm;
         output << depth_center_mm << ',' << energy_total << ',' << dose_total << ','
@@ -117,7 +121,7 @@ void write_depth_dose_Gy_csv(const std::filesystem::path& path,
     const auto bin_mass_kg = idd_bin_mass_kg(config);
     double maximum_dose = 0.0;
     for (const auto energy_MeV : result.deposited_energy_MeV) {
-        maximum_dose = std::max(maximum_dose, energy_MeV_to_dose_Gy(energy_MeV, bin_mass_kg));
+        maximum_dose = std::max(maximum_dose, scored_dose_Gy(config, energy_MeV, bin_mass_kg));
     }
 
     // Total dose over all sampled primaries (Gy, not Gy/primary).
@@ -125,7 +129,7 @@ void write_depth_dose_Gy_csv(const std::filesystem::path& path,
     output << std::setprecision(12);
     for (std::size_t bin = 0; bin < result.deposited_energy_MeV.size(); ++bin) {
         const auto dose_total =
-            energy_MeV_to_dose_Gy(result.deposited_energy_MeV[bin], bin_mass_kg);
+            scored_dose_Gy(config, result.deposited_energy_MeV[bin], bin_mass_kg);
         const auto relative_dose =
             maximum_dose > 0.0 ? dose_total / maximum_dose : 0.0;
         const auto depth_center_mm =
@@ -658,7 +662,7 @@ void write_fragment_species_dose_Gy_csv(const std::filesystem::path& path,
     const auto bin_mass_kg = idd_bin_mass_kg(config);
     double maximum_dose = 0.0;
     for (const auto energy_MeV : result.deposited_energy_MeV) {
-        maximum_dose = std::max(maximum_dose, energy_MeV_to_dose_Gy(energy_MeV, bin_mass_kg));
+        maximum_dose = std::max(maximum_dose, scored_dose_Gy(config, energy_MeV, bin_mass_kg));
     }
 
     output << "depth_mm,total_Gy,primary_c12_Gy,"
@@ -672,10 +676,10 @@ void write_fragment_species_dose_Gy_csv(const std::filesystem::path& path,
             (static_cast<double>(bin) + 0.5) * config.depth_bin_width_mm;
         output << depth_center_mm;
         for (const auto* column : columns) {
-            output << ',' << energy_MeV_to_dose_Gy((*column)[bin], bin_mass_kg);
+            output << ',' << scored_dose_Gy(config, (*column)[bin], bin_mass_kg);
         }
         const auto total_dose =
-            energy_MeV_to_dose_Gy(result.deposited_energy_MeV[bin], bin_mass_kg);
+            scored_dose_Gy(config, result.deposited_energy_MeV[bin], bin_mass_kg);
         const auto relative_total =
             maximum_dose > 0.0 ? total_dose / maximum_dose : 0.0;
         output << ',' << relative_total << '\n';
@@ -742,7 +746,7 @@ void write_sparse_voxel_dose_csv(const std::filesystem::path& path,
                 if (energy == 0.0) {
                     continue;
                 }
-                const auto dose_total = energy_MeV_to_dose_Gy(energy, masses_kg[index]);
+                const auto dose_total = scored_dose_Gy(config, energy, masses_kg[index]);
                 const auto x_mm =
                     (static_cast<double>(x) + 0.5) * config.voxel_size_x_mm -
                     0.5 * x_extent_mm;
@@ -790,7 +794,7 @@ void write_sparse_voxel_dose_Gy_csv(const std::filesystem::path& path,
                 if (energy == 0.0) {
                     continue;
                 }
-                const auto dose_total = energy_MeV_to_dose_Gy(energy, masses_kg[index]);
+                const auto dose_total = scored_dose_Gy(config, energy, masses_kg[index]);
                 const auto x_mm =
                     (static_cast<double>(x) + 0.5) * config.voxel_size_x_mm -
                     0.5 * x_extent_mm;
@@ -963,7 +967,7 @@ void write_dense_voxel_dose_mhd(const std::filesystem::path& mhd_path,
                 const auto linear_zyx = iz * plane_size + iy * nx + ix;
                 // Same index layout as GPU scorer (z-major plane of xy).
                 raw[linear_zyx] =
-                    static_cast<float>(energy_MeV_to_dose_Gy(energy, masses_kg[index_xyz]));
+                    static_cast<float>(scored_dose_Gy(config, energy, masses_kg[index_xyz]));
             }
         }
     }
@@ -1083,11 +1087,12 @@ void write_sparse_charged_origin_voxel_dose_Gy_csv(
                     (static_cast<double>(z) + 0.5) * config.depth_bin_width_mm;
                 output << x << ',' << y << ',' << z << ',' << x_mm << ','
                        << y_mm << ',' << z_mm << ','
-                       << energy_MeV_to_dose_Gy(total, mass_kg);
+                       << scored_dose_Gy(config, total, mass_kg);
                 for (std::size_t category = 0;
                      category < charged_origin_category_count; ++category) {
                     output << ','
-                           << energy_MeV_to_dose_Gy(
+                           << scored_dose_Gy(
+                                  config,
                                   result.charged_origin_voxel_deposited_energy_MeV[
                                       category * voxel_count + voxel],
                                   mass_kg);

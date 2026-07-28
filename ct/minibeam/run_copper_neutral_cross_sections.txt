@@ -1,0 +1,9 @@
+# Extract neutron/gamma total macroscopic cross sections in Copper using the
+# exact TOPAS 4.2.p3 / Geant4 11.3.2 minibeam physics configuration.
+includeFile = run_copper_material_tables.txt
+
+s:Sc/NeutralCrossSections/Quantity = "NeutralCrossSectionNtuple"
+s:Sc/NeutralCrossSections/Component = "Sample"
+s:Sc/NeutralCrossSections/OutputFile = "output/neutral_cross_sections_copper_g4_11_3_2"
+s:Sc/NeutralCrossSections/OutputType = "ASCII"
+s:Sc/NeutralCrossSections/IfOutputFileAlreadyExists = "Overwrite"

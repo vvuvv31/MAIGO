@@ -1,0 +1,9 @@
+# Extract exact isotope-specific macroscopic inelastic cross sections in
+# Copper from TOPAS 4.2.p3 / Geant4 11.3.2.
+includeFile = run_copper_material_tables.txt
+
+s:Sc/IonCrossSections/Quantity = "IonCrossSectionNtuple"
+s:Sc/IonCrossSections/Component = "Sample"
+s:Sc/IonCrossSections/OutputFile = "output/ion_cross_sections_copper_g4_11_3_2"
+s:Sc/IonCrossSections/OutputType = "ASCII"
+s:Sc/IonCrossSections/IfOutputFileAlreadyExists = "Overwrite"

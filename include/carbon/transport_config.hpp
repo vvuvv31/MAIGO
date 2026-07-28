@@ -95,6 +95,12 @@ struct TransportConfig {
     // Charged secondaries below this total kinetic energy are stopped and their
     // remaining energy is deposited locally. 0 uses energy_cutoff_MeV.
     double secondary_local_deposit_cutoff_MeV{0.0};
+    // Optional condensed-history step for charged secondaries in a uniform
+    // phantom. 0 preserves the legacy behavior where every physics step stops
+    // at a depth-score boundary. A positive value lets MCS/straggling advance
+    // over several depth bins while continuous dose is split back into the
+    // original bins by track length.
+    double secondary_condensed_step_mm{0.0};
     double water_density_g_per_cm3{1.0};
     // When true, axial slabs override uniform water.
     // Density-only mode: SP/XS water tables × local density (water-equivalent).
@@ -133,6 +139,10 @@ struct TransportConfig {
     // Used to absorb residual WEPL calibration vs full Geant4 material SP.
     double ct_stopping_power_scale{1.0};
     double scorer_area_mm2{90'000.0};
+    // Output-only absolute dose calibration. This scales Gy scorers while
+    // preserving raw deposited-energy tallies and transport energy balance.
+    // Keep at 1.0 unless an independent open-field calibration is available.
+    double dose_output_scale{1.0};
     bool enable_voxel_scoring{false};
     bool enable_charged_origin_voxel_scoring{false};
     std::size_t voxel_bins_x{60};
@@ -170,6 +180,74 @@ struct TransportConfig {
     double beam_ux_x{1.0}, beam_ux_y{0.0}, beam_ux_z{0.0};
     double beam_uy_x{0.0}, beam_uy_y{1.0}, beam_uy_z{0.0};
     double beam_uz_x{0.0}, beam_uz_y{0.0}, beam_uz_z{1.0};
+    // Optional upstream minibeam collimator. The first implementation is an
+    // exact absorbing-geometry fast path: only straight rays that stay inside
+    // one air slit reach the phantom. Copper EM/nuclear transport is added in
+    // later modes; the default false preserves every existing source path.
+    bool enable_minibeam{false};
+    // Detailed collimator counters and beam moments are useful for validation,
+    // but their global atomics are redundant in production dose runs. Beamline
+    // removed energy is still accumulated for the global energy balance.
+    bool enable_minibeam_diagnostics{true};
+    std::string minibeam_transport_mode{"absorbing_geometry"};
+    std::string minibeam_material{"Copper"};
+    double minibeam_radius_mm{60.0};
+    double minibeam_thickness_mm{60.0};
+    double minibeam_exit_to_phantom_mm{60.0};
+    int minibeam_slit_count{15};
+    double minibeam_slit_width_mm{0.5};
+    double minibeam_slit_pitch_mm{3.6};
+    double minibeam_slit_half_length_mm{25.0};
+    double minibeam_collimator_angle_deg{0.0};
+    // Copper electromagnetic-only development mode. The table is absolute
+    // electronic dE/dx in MeV/mm at the native material density.
+    std::filesystem::path minibeam_copper_stopping_power_file{};
+    std::filesystem::path minibeam_air_stopping_power_file{};
+    double minibeam_copper_density_g_per_cm3{8.96};
+    double minibeam_copper_radiation_length_g_per_cm2{12.8628};
+    double minibeam_copper_max_step_mm{0.05};
+    bool minibeam_copper_enable_mcs{true};
+    // Sample Bohr energy-loss fluctuations step-by-step in Copper.  This is
+    // independent of downstream water straggling so legacy minibeam cases
+    // remain reproducible unless explicitly enabled.
+    bool minibeam_copper_enable_energy_straggling{false};
+    double minibeam_copper_straggling_scale{1.0};
+    // Frozen against an independent 2150 MeV C-12 Copper-foil benchmark using
+    // the same TOPAS/Geant4 release. This scales the projected Highland core.
+    double minibeam_copper_mcs_scale{0.785};
+    // Residual accumulated Copper-loss correction for primary C-12 ions that
+    // survive to the collimator exit. It is frozen from an independent
+    // water-entrance phase-space comparison and deliberately does not alter
+    // nuclear interaction probability, survival, or angular transport.
+    double minibeam_copper_survivor_energy_loss_scale{1.0};
+    // Optional piecewise-linear incident-energy calibration of the same
+    // accumulated-loss scale. Empty vectors preserve the scalar behavior.
+    // The values are constrained by Copper-touched primary C-12 phase space,
+    // independently of the downstream dose comparison.
+    std::vector<double>
+        minibeam_copper_survivor_energy_loss_energies_MeVu{};
+    std::vector<double>
+        minibeam_copper_survivor_energy_loss_scales{};
+    // Residual primary-C12 range correction in the downstream water phantom.
+    // Default 1.0; the minibeam value is frozen from a TOPAS/GPU primary-origin
+    // R80 comparison after the water-entrance phase space has been matched.
+    double minibeam_water_primary_stopping_power_scale{1.0};
+    bool minibeam_copper_enable_nuclear_attenuation{false};
+    std::filesystem::path minibeam_copper_cross_section_file{};
+    bool minibeam_copper_enable_reaction_products{false};
+    std::filesystem::path minibeam_copper_reaction_package_file{};
+    std::filesystem::path minibeam_copper_ion_stopping_power_file{};
+    std::filesystem::path minibeam_copper_ion_cross_section_file{};
+    // Total gamma/neutron macroscopic cross sections used to reject Copper
+    // products that interact before reaching a slit or the collimator exit.
+    std::filesystem::path minibeam_copper_neutral_cross_section_file{};
+    // Conditional gamma/neutron final states in Copper. These preserve the
+    // leading neutral after elastic, Compton, and Rayleigh interactions instead
+    // of treating every total-cross-section collision as absorption.
+    std::filesystem::path minibeam_copper_neutral_package_file{};
+    // Used by spots_geometry_mode=minibeam_topas_y to map TOPAS world Y to
+    // canonical GPU depth: gpu_z = world_y - this value.
+    double minibeam_water_entrance_world_y_mm{60.0};
     // Non-empty only for a flattened multi-spot SYCL plan. All entries share
     // the physics/scorer fields above; source and energy fields come from here.
     std::vector<PrimarySpotBatchEntry> primary_spot_batch{};
@@ -259,6 +337,11 @@ struct TransportConfig {
     // so low-E beams are almost unchanged. 0 disables (legacy).
     double electronic_buildup_fraction{0.0};
     double electronic_buildup_mfp_mm{0.5};
+    // Optional transverse Gaussian sigma [mm] for the electronic fraction in
+    // the dense voxel scorer.  The deposited energy is moved stochastically,
+    // preserving expectation and using one voxel atomic per aggregated deposit.
+    // 0 keeps the legacy track-local voxel scoring.
+    double electronic_buildup_lateral_sigma_mm{0.0};
     std::uint32_t maximum_cascade_generations{0};
     std::uint32_t maximum_neutral_generations{1};
     std::size_t secondary_queue_capacity{0};
@@ -274,6 +357,11 @@ struct TransportConfig {
     std::size_t history_chunk_size{0};
     // Secondary/cascade particles processed per GPU submit. 0 = auto (CUDA small).
     std::size_t secondary_batch_size{0};
+    // Persistent secondary workers per GPU submit. 0 preserves the legacy
+    // one-work-item-per-track launch. A smaller nonzero worker pool repeatedly
+    // fetches tracks from the batch, reducing whole-track warp tail divergence
+    // without changing per-particle Philox streams.
+    std::size_t secondary_persistent_workers{0};
     // Reorder each secondary batch into contiguous initial-energy-per-nucleon
     // buckets before transport to reduce warp divergence. Off by default until
     // benchmarked on the target GPU.

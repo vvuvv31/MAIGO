@@ -159,39 +159,83 @@ def main() -> None:
             f"Header reports {header_counts['histories']} histories, expected {args.histories}"
         )
 
-    reactions: dict[tuple[int, int], dict[str, object]] = {}
-    secondaries: dict[tuple[int, int], list[dict[str, object]]] = defaultdict(list)
+    reactions: dict[tuple[int, int, int], dict[str, object]] = {}
+    reactions_by_event: dict[
+        tuple[int, int], list[tuple[int, int, int]]
+    ] = defaultdict(list)
+    secondary_records: list[dict[str, object]] = []
     with input_path.open(encoding="utf-8") as stream:
         for line_number, raw_line in enumerate(stream, start=1):
             stripped = raw_line.strip()
             if stripped:
                 record = parse_row(stripped, input_path, line_number)
-                key = (int(record["run_id"]), int(record["event_id"]))
                 if record["record_kind"] == "reaction":
-                    if key in reactions:
-                        raise SystemExit(f"More than one primary reaction header for run/event {key}")
+                    event_key = (
+                        int(record["run_id"]), int(record["event_id"])
+                    )
+                    key = (*event_key, len(reactions_by_event[event_key]))
                     reactions[key] = record
+                    reactions_by_event[event_key].append(key)
                 elif record["record_kind"] == "secondary":
-                    secondaries[key].append(record)
+                    secondary_records.append(record)
                 else:
                     raise SystemExit(f"Unknown record kind: {record['record_kind']}")
 
-    parsed_entries = len(reactions) + sum(len(rows) for rows in secondaries.values())
+    secondaries: dict[
+        tuple[int, int, int], list[dict[str, object]]
+    ] = defaultdict(list)
+    vertex_tolerance_mm = 2.0e-4
+    orphan_records: list[dict[str, object]] = []
+    for record in secondary_records:
+        event_key = (int(record["run_id"]), int(record["event_id"]))
+        candidates = reactions_by_event.get(event_key, [])
+        if not candidates:
+            orphan_records.append(record)
+            continue
+        key = min(
+            candidates,
+            key=lambda candidate: max(
+                abs(
+                    float(record[coordinate])
+                    - float(reactions[candidate][coordinate])
+                )
+                for coordinate in (
+                    "vertex_x_mm", "vertex_y_mm", "vertex_z_mm"
+                )
+            ),
+        )
+        separation = max(
+            abs(
+                float(record[coordinate])
+                - float(reactions[key][coordinate])
+            )
+            for coordinate in ("vertex_x_mm", "vertex_y_mm", "vertex_z_mm")
+        )
+        if separation > vertex_tolerance_mm:
+            orphan_records.append(record)
+            continue
+        secondaries[key].append(record)
+
+    parsed_entries = len(reactions) + len(secondary_records)
     if parsed_entries != header_counts["entries"]:
         raise SystemExit(
             f"Parsed {parsed_entries} records, header reports {header_counts['entries']}"
         )
 
-    orphan_keys = sorted(set(secondaries) - set(reactions))
     empty_keys = sorted(set(reactions) - set(secondaries))
-    if orphan_keys:
-        raise SystemExit(f"Secondary records without reaction headers: {orphan_keys[:5]}")
+    if orphan_records:
+        sample = [
+            (row["run_id"], row["event_id"])
+            for row in orphan_records[:5]
+        ]
+        raise SystemExit(
+            f"Secondary records without matching reaction vertices: {sample}"
+        )
 
     flat_rows: list[list[object]] = []
     reaction_rows: list[list[object]] = []
     secondary_rows: list[list[object]] = []
     species_counts: Counter[str] = Counter()
-    vertex_tolerance_mm = 2.0e-4
     maximum_direction_norm_error = 0.0
     secondary_offset = 0
     for reaction_index, key in enumerate(sorted(reactions), start=1):

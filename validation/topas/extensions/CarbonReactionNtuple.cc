@@ -81,6 +81,50 @@ G4bool CarbonReactionNtuple::ProcessHits(G4Step* step, G4TouchableHistory*) {
         cached_reaction_event_id_ = GetEventID();
         cached_incident_energy_mev_ = incident_energy_mev_;
         creator_model_id_ = -1;
+        run_id_ = GetRunID();
+        event_id_ = GetEventID();
+        track_id_ = track->GetTrackID();
+        parent_id_ = track->GetParentID();
+        pdg_id_ = definition->GetPDGEncoding();
+        particle_name_ = definition->GetParticleName();
+        atomic_number_ = definition->GetAtomicNumber();
+        atomic_mass_ = definition->GetAtomicMass();
+        charge_e_ = static_cast<G4float>(
+            track->GetDynamicParticle()->GetCharge() / eplus);
+        vertex_x_mm_ = static_cast<G4float>(vertex.x() / mm);
+        vertex_y_mm_ = static_cast<G4float>(vertex.y() / mm);
+        vertex_z_mm_ = static_cast<G4float>(vertex.z() / mm);
+        direction_x_ = static_cast<G4float>(direction.x());
+        direction_y_ = static_cast<G4float>(direction.y());
+        direction_z_ = static_cast<G4float>(direction.z());
+        weight_ = static_cast<G4float>(track->GetWeight());
+        creator_process_ = process->GetProcessName();
+        process_type_ = process->GetProcessType();
+        process_subtype_ = process->GetProcessSubType();
+        fNtuple->Fill();
+
+        // Geant4 may retain the incident track after ionInelastic.  Record its
+        // post-step state as a correlated package member; omitting it makes a
+        // sampled GPU reaction kill a C-12 that should continue and can react
+        // again.  track_id=1 plus this explicit name is the portable marker
+        // consumed by the package compiler.
+        const auto* post = step->GetPostStepPoint();
+        if (post->GetKineticEnergy() > 0.0) {
+            record_kind_ = "secondary";
+            particle_name_ = "primary_continuation";
+            kinetic_energy_mev_ =
+                static_cast<G4float>(post->GetKineticEnergy() / MeV);
+            vertex = post->GetPosition();
+            direction = post->GetMomentumDirection();
+            vertex_x_mm_ = static_cast<G4float>(vertex.x() / mm);
+            vertex_y_mm_ = static_cast<G4float>(vertex.y() / mm);
+            vertex_z_mm_ = static_cast<G4float>(vertex.z() / mm);
+            direction_x_ = static_cast<G4float>(direction.x());
+            direction_y_ = static_cast<G4float>(direction.y());
+            direction_z_ = static_cast<G4float>(direction.z());
+            fNtuple->Fill();
+        }
+        return true;
     } else {
         if (track->GetCurrentStepNumber() != 1 || track->GetParentID() != 1) {
             return false;

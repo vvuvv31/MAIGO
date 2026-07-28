@@ -1,0 +1,37 @@
+{
+  "format": "carbon reaction package binary",
+  "format_version": 2,
+  "byte_order": "little-endian",
+  "direction_coordinates": "projectile-local orthonormal frame",
+  "direction_components": [
+    "local_x",
+    "local_y",
+    "along_projectile"
+  ],
+  "source_metadata": "data/copper_c12_reactions_e100_400_20k_each.metadata.json",
+  "source_metadata_sha256": "512d48a12b90d8b015006b7ee6d6c9ef74be3ea1302ce1a8214c6833f06fd527",
+  "source_reactions_sha256": "d82257c2afb392e02a4966f98536351256e4f938eeec81ac78ef0cc8ad6cb737",
+  "source_secondaries_sha256": "35b90f92ece593a3c44d4445997e86c6c931175155c80eb524309d5f076c4f88",
+  "energy_bins": {
+    "minimum_MeV_per_u": 0.0,
+    "width_MeV_per_u": 5.0,
+    "count": 81,
+    "minimum_packages_per_bin": 9,
+    "maximum_packages_per_bin": 422
+  },
+  "records": {
+    "reactions": 21119,
+    "secondaries": 442970
+  },
+  "record_sizes_bytes": {
+    "header": 64,
+    "energy_bin": 8,
+    "reaction": 16,
+    "secondary": 24
+  },
+  "output": {
+    "path": "data/copper_c12_reaction_packages_e100_400_20k_each.bin",
+    "bytes": 10969896,
+    "sha256": "7ea800d37f84c0521d9084866d6a56854d3dc717ec20a5bc07dc081b60b2fc09"
+  }
+}
