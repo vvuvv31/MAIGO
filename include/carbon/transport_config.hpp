@@ -272,6 +272,8 @@ struct TransportConfig {
     //   TPS 0-degree source direction, while Patient RotZ=90 supplies the plan
     //   angle. The transform maps either patient-X travel direction to GPU +Z;
     //   use the xneg CT packing when Patient RotZ makes the beam travel −X.
+    // "tps_gantry_y": TPS 0-degree incidence used by lung plans. The CT is
+    //   packed as GPU (x,y,z)=patient (x,z,+/-y), preserving each spot's L7/L8.
     std::string spots_geometry_mode{"topas"};
     double spots_patient_trans_x_mm{0.0};
     double spots_patient_trans_y_mm{0.0};
@@ -286,6 +288,11 @@ struct TransportConfig {
     // energy_spread_percent and emittance parameters. Empty => one central
     // spot using initial_energy_MeVu and the source defaults above.
     std::filesystem::path tps_spots_file{};
+    // "iec61217": historical MAIGO convention, local w=-Z and gantry about +Y.
+    // "topas_patient_rot_z": matches the CT-plan convention used in this repo:
+    // TPS 0 deg is patient +Y and angle theta gives
+    // w=(-sin(theta), cos(theta), 0), equivalent to passive Patient/RotZ.
+    std::string tps_angle_convention{"iec61217"};
     double tps_gantry_angle_deg{0.0};
     double tps_couch_angle_deg{0.0};
     double tps_collimator_angle_deg{0.0};

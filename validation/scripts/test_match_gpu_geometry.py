@@ -4,6 +4,7 @@
 Locks the production convention:
   - flip_x=True maps GPU z=0 → patient X max (xneg reorient entrance face)
   - flip_x=False leaves a large COM offset along patient X (depth)
+  - beam_y maps GPU (x,y,z) → patient (x,z,y) for TPS 0° lung cases
   - Round-trip of a synthetic field through map_gpu_to_physical is lossless
     on the coarse grid (block-average identity for constant blocks)
 """
@@ -87,6 +88,29 @@ def test_sparse_block_average_includes_zero_voxels() -> None:
     assert abs(rebinned[0] - 0.25) < 1e-7, rebinned
 
 
+def test_beam_y_axis_mapping() -> None:
+    """beam_y must map GPU (x,y,z) to patient (x,z,y) without a free shift."""
+    # Patient shape (X,Y,Z)=(4,6,2), hence GPU shape=(4,2,6).
+    patient = (4, 6, 2)
+    gpu_shape = (4, 2, 6)
+    gpu = array.array("f", [0.0] * math.prod(gpu_shape))
+    # GPU (x=3,y=1,z=4) must become patient (x=3,y=4,z=1).
+    gx, gy, _ = gpu_shape
+    gpu[4 * gx * gy + 1 * gx + 3] = 8.0
+    mapped = map_gpu_to_physical(
+        gpu,
+        gpu_shape,
+        patient,
+        patient,
+        flip_x=False,
+        flip_y=False,
+        mapping="beam_y",
+    )
+    expected = 1 * patient[0] * patient[1] + 4 * patient[0] + 3
+    assert mapped[expected] == 8.0, mapped[expected]
+    assert sum(mapped) == 8.0
+
+
 def test_gamma_identity_on_self() -> None:
     """Self-match of a smooth blob must pass global 3%/3mm at thr 10%."""
     from match_gpu_to_physical_dose import fit_scale, gamma_3d
@@ -121,6 +145,7 @@ def main() -> None:
     test_flip_x_required_for_depth_face()
     test_block_avg_constant_field()
     test_sparse_block_average_includes_zero_voxels()
+    test_beam_y_axis_mapping()
     test_gamma_identity_on_self()
     print("test_match_gpu_geometry OK")
 

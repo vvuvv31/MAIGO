@@ -99,13 +99,19 @@ def map_gpu_to_physical(
     phys_shape: tuple[int, int, int],
     flip_x: bool,
     flip_y: bool,
+    mapping: str = "tps_x",
 ) -> list[float]:
     gx, gy, gz = gpu_shape
     px_n, py_n, pz_n = patient_shape
     lnx, lny, lnz = phys_shape
-    if gz != px_n or gx != py_n or gy != pz_n:
+    expected_gpu_shape = (
+        (py_n, pz_n, px_n) if mapping == "tps_x"
+        else (px_n, pz_n, py_n)
+    )
+    if gpu_shape != expected_gpu_shape:
         raise SystemExit(
-            f"GPU shape {gpu_shape} incompatible with patient shape {patient_shape}"
+            f"GPU shape {gpu_shape} incompatible with patient shape "
+            f"{patient_shape} for mapping={mapping}; expected {expected_gpu_shape}"
         )
     bx = max(1, px_n // lnx)
     by = max(1, py_n // lny)
@@ -114,19 +120,28 @@ def map_gpu_to_physical(
     counts = [0] * (lnx * lny * lnz)
     plane = gx * gy
     for iz in range(gz):
-        patient_x = (px_n - 1 - iz) if flip_x else iz
-        ox = patient_x // bx
-        if ox >= lnx:
-            continue
+        if mapping == "tps_x":
+            patient_x = (px_n - 1 - iz) if flip_x else iz
+            patient_y_depth = None
+        else:
+            patient_x = None
+            patient_y_depth = (py_n - 1 - iz) if flip_y else iz
         for iy in range(gy):
             patient_z = iy
             oz = patient_z // bz
             if oz >= lnz:
                 continue
             for ix in range(gx):
-                patient_y = (py_n - 1 - ix) if flip_y else ix
+                if mapping == "tps_x":
+                    patient_y = (py_n - 1 - ix) if flip_y else ix
+                    mapped_patient_x = patient_x
+                else:
+                    mapped_patient_x = (px_n - 1 - ix) if flip_x else ix
+                    patient_y = patient_y_depth
+                assert mapped_patient_x is not None and patient_y is not None
+                ox = mapped_patient_x // bx
                 oy = patient_y // by
-                if oy >= lny:
+                if ox >= lnx or oy >= lny:
                     continue
                 linear = oz * lnx * lny + oy * lnx + ox
                 value = gpu[iz * plane + iy * gx + ix]
@@ -152,14 +167,20 @@ def fit_scale(gpu: list[float], ref: array.array, thr_frac: float) -> float:
     return num / den
 
 
-def idd_x(values: list[float] | array.array, shape: tuple[int, int, int]) -> list[float]:
+def idd_axis(
+    values: list[float] | array.array,
+    shape: tuple[int, int, int],
+    axis: str,
+) -> list[float]:
     nx, ny, nz = shape
-    out = [0.0] * nx
+    if axis not in {"x", "y"}:
+        raise ValueError(f"Unsupported IDD axis: {axis}")
+    out = [0.0] * (nx if axis == "x" else ny)
     for iz in range(nz):
         for iy in range(ny):
             base = iz * nx * ny + iy * nx
             for ix in range(nx):
-                out[ix] += values[base + ix]
+                out[ix if axis == "x" else iy] += values[base + ix]
     return out
 
 
@@ -267,6 +288,38 @@ def gamma_3d(
     }
 
 
+def dose_only_pass_rate(
+    ref: array.array,
+    eval_: list[float],
+    dose_percent: float,
+    thr_percent: float,
+    local_dose: bool = False,
+) -> dict[str, float]:
+    ref_max = max(ref)
+    threshold = thr_percent / 100.0 * ref_max
+    global_criterion = dose_percent / 100.0 * ref_max
+    selected = [i for i, value in enumerate(ref) if value >= threshold]
+    passed = 0
+    for index in selected:
+        criterion = (
+            max(dose_percent / 100.0 * ref[index], 1.0e-30)
+            if local_dose
+            else global_criterion
+        )
+        if abs(eval_[index] - ref[index]) <= criterion:
+            passed += 1
+    return {
+        "pass_percent": 100.0 * passed / len(selected) if selected else float("nan"),
+        "passed": passed,
+        "points": len(selected),
+        "mode": "local" if local_dose else "global",
+        "dose_percent": dose_percent,
+        "distance_mm": 0.0,
+        "threshold_percent": thr_percent,
+        "interpolation": "none; identical voxel",
+    }
+
+
 def peak_index(values: list[float] | array.array, shape: tuple[int, int, int]):
     nx, ny, nz = shape
     maximum = -1.0
@@ -292,6 +345,13 @@ def main() -> int:
         default=Path("out/ct/match_physical"),
     )
     parser.add_argument("--patient-shape", nargs=3, type=int, default=(417, 505, 35))
+    parser.add_argument(
+        "--mapping",
+        choices=("tps_x", "beam_y"),
+        default="tps_x",
+        help="GPU-to-patient axis mapping: tps_x=(patient y,z,x), "
+             "beam_y=(patient x,z,y)",
+    )
     parser.add_argument("--histories", type=float, default=917000.0)
     parser.add_argument("--thr-frac", type=float, default=0.10)
     parser.add_argument(
@@ -311,6 +371,11 @@ def main() -> int:
     parser.add_argument("--gamma-points", type=int, default=50000)
     parser.add_argument("--gamma-resolution-mm", type=float, default=0.5)
     parser.add_argument("--skip-gamma", action="store_true")
+    parser.add_argument(
+        "--strict-gamma",
+        action="store_true",
+        help="Also calculate global/local 1%%/1 mm and 3%%/0 mm",
+    )
     args = parser.parse_args()
     flip_x = args.flip_x and not args.no_flip_x
     # --flip-y stores True only when the flag is passed; default False.
@@ -334,6 +399,7 @@ def main() -> int:
         phys_shape,
         flip_x,
         flip_y,
+        args.mapping,
     )
     least_squares_scale = fit_scale(mapped, phys, args.thr_frac)
     scale = least_squares_scale * args.dose_scale_multiplier
@@ -358,8 +424,9 @@ def main() -> int:
         sbb += b * b
     cosine = sab / math.sqrt(saa * sbb) if saa > 0 and sbb > 0 else float("nan")
 
-    idd_p = idd_x(phys, phys_shape)
-    idd_g = idd_x(scaled, phys_shape)
+    depth_axis = "x" if args.mapping == "tps_x" else "y"
+    idd_p = idd_axis(phys, phys_shape, depth_axis)
+    idd_g = idd_axis(scaled, phys_shape, depth_axis)
     idd_peak_p = idd_p.index(max(idd_p))
     idd_peak_g = idd_g.index(max(idd_g))
     idd_corr = sum(a * b for a, b in zip(idd_p, idd_g)) / math.sqrt(
@@ -375,6 +442,8 @@ def main() -> int:
         "histories": args.histories,
         "flip_x": flip_x,
         "flip_y": flip_y,
+        "mapping": args.mapping,
+        "depth_axis": depth_axis,
         "scale_gpu_to_physical": scale,
         "least_squares_scale_gpu_to_physical": least_squares_scale,
         "dose_scale_multiplier": args.dose_scale_multiplier,
@@ -455,6 +524,39 @@ def main() -> int:
         report["gamma_local_2pct_2mm_thr10"] = g2_local
         report["gamma_3pct_3mm_thr10"] = g3
         report["gamma_local_3pct_3mm_thr10"] = g3_local
+        if args.strict_gamma:
+            print("Computing strict 3D gamma 1%/1mm...")
+            report["gamma_1pct_1mm_thr10"] = gamma_3d(
+                phys,
+                list(scaled),
+                phys_shape,
+                phys_spacing,
+                dose_percent=1.0,
+                distance_mm=1.0,
+                thr_percent=10.0,
+                max_points=args.gamma_points,
+                seed=0,
+                interpolation_step_mm=args.gamma_resolution_mm,
+            )
+            report["gamma_local_1pct_1mm_thr10"] = gamma_3d(
+                phys,
+                list(scaled),
+                phys_shape,
+                phys_spacing,
+                dose_percent=1.0,
+                distance_mm=1.0,
+                thr_percent=10.0,
+                max_points=args.gamma_points,
+                seed=0,
+                local_dose=True,
+                interpolation_step_mm=args.gamma_resolution_mm,
+            )
+            report["gamma_3pct_0mm_thr10"] = dose_only_pass_rate(
+                phys, list(scaled), 3.0, 10.0
+            )
+            report["gamma_local_3pct_0mm_thr10"] = dose_only_pass_rate(
+                phys, list(scaled), 3.0, 10.0, local_dose=True
+            )
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
     out_mhd = args.output_dir / "gpu_scaled_to_physical.mhd"
@@ -484,11 +586,17 @@ def main() -> int:
     # IDD CSV
     idd_path = args.output_dir / "idd_compare.csv"
     with idd_path.open("w", encoding="utf-8") as stream:
+        stream.write(f"# depth_axis={depth_axis}\n")
         stream.write("ix,x_mm,physical,gpu_scaled,gpu_unscaled\n")
-        for ix in range(phys_shape[0]):
-            x_mm = phys_offset[0] + ix * phys_spacing[0]
+        depth_size = phys_shape[0] if depth_axis == "x" else phys_shape[1]
+        depth_offset = phys_offset[0] if depth_axis == "x" else phys_offset[1]
+        depth_spacing = phys_spacing[0] if depth_axis == "x" else phys_spacing[1]
+        idd_unscaled = idd_axis(mapped, phys_shape, depth_axis)
+        for ix in range(depth_size):
+            x_mm = depth_offset + ix * depth_spacing
             stream.write(
-                f"{ix},{x_mm:.6g},{idd_p[ix]:.8g},{idd_g[ix]:.8g},{idd_x(mapped, phys_shape)[ix]:.8g}\n"
+                f"{ix},{x_mm:.6g},{idd_p[ix]:.8g},{idd_g[ix]:.8g},"
+                f"{idd_unscaled[ix]:.8g}\n"
             )
     print(f"Wrote {idd_path}")
 

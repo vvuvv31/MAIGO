@@ -1,5 +1,7 @@
 #include "carbon/tps_source.hpp"
 
+#include "carbon/ct_grid.hpp"
+
 #include <algorithm>
 #include <array>
 #include <cctype>
@@ -142,6 +144,30 @@ Matrix3 rotation_z(const double angle_deg) {
     return {{{c, -s, 0.0}, {s, c, 0.0}, {0.0, 0.0, 1.0}}};
 }
 
+Matrix3 topas_patient_rot_z_frame(const double gantry_angle_deg,
+                                  const double couch_angle_deg,
+                                  const double collimator_angle_deg) {
+    // Beam-local axes at TOPAS/TPS 0 degrees:
+    //   u=patient +X (TOPAS TransX), v=patient +Z (TOPAS TransZ),
+    //   w=patient +Y (central propagation direction).
+    // A passive Patient/RotZ=theta is equivalent, in a fixed patient CT, to
+    // actively rotating the source frame by +theta around patient +Z.
+    const auto collimator = collimator_angle_deg * k_pi / 180.0;
+    const auto cc = std::cos(collimator);
+    const auto sc = std::sin(collimator);
+    const Vec3 u0{cc, 0.0, -sc};
+    const Vec3 v0{sc, 0.0, cc};
+    const Vec3 w0{0.0, 1.0, 0.0};
+    const auto patient_z_rotation =
+        rotation_z(gantry_angle_deg + couch_angle_deg);
+    const auto u = multiply(patient_z_rotation, u0);
+    const auto v = multiply(patient_z_rotation, v0);
+    const auto w = multiply(patient_z_rotation, w0);
+    // central_pose applies the matrix to local propagation (0,0,-1), so the
+    // third column is -w.
+    return {{{u.x, v.x, -w.x}, {u.y, v.y, -w.y}, {u.z, v.z, -w.z}}};
+}
+
 Matrix3 orientation_matrix(const std::string& patient_position) {
     if (patient_position == "HFS") {
         return {{{1.0, 0.0, 0.0}, {0.0, 1.0, 0.0}, {0.0, 0.0, 1.0}}};
@@ -159,14 +185,31 @@ Matrix3 orientation_matrix(const std::string& patient_position) {
 }
 
 TpsSourcePose central_pose(const TransportConfig& config, const TpsSpot& spot) {
-    // Local beam convention from the design: u=+X, v=+Y, w=-Z. Positive
-    // collimator rotates u/v around w. Gantry rotates around patient +Y and
-    // couch around patient +Z. Patient-position conversion is applied last.
-    const auto collimator = rotation_z(-config.tps_collimator_angle_deg);
-    const auto gantry = rotation_y(config.tps_gantry_angle_deg);
-    const auto couch = rotation_z(config.tps_couch_angle_deg);
+    // The historical IEC path is unchanged. The TOPAS path uses the same
+    // Patient/RotZ convention as the validated CT plans, but rotates the beam
+    // in a fixed patient CT instead of rotating/repacking the CT.
+    Matrix3 machine{};
+    const auto gantry_angle_deg = std::isfinite(spot.gantry_angle_deg)
+                                      ? spot.gantry_angle_deg
+                                      : config.tps_gantry_angle_deg;
+    const auto couch_angle_deg = std::isfinite(spot.couch_angle_deg)
+                                     ? spot.couch_angle_deg
+                                     : config.tps_couch_angle_deg;
+    const auto collimator_angle_deg =
+        std::isfinite(spot.collimator_angle_deg)
+            ? spot.collimator_angle_deg
+            : config.tps_collimator_angle_deg;
+    if (config.tps_angle_convention == "topas_patient_rot_z") {
+        machine = topas_patient_rot_z_frame(
+            gantry_angle_deg, couch_angle_deg, collimator_angle_deg);
+    } else {
+        const auto collimator = rotation_z(-collimator_angle_deg);
+        const auto gantry = rotation_y(gantry_angle_deg);
+        const auto couch = rotation_z(couch_angle_deg);
+        machine = multiply(couch, multiply(gantry, collimator));
+    }
     const auto patient = orientation_matrix(config.tps_patient_position);
-    const auto rotation = multiply(patient, multiply(couch, multiply(gantry, collimator)));
+    const auto rotation = multiply(patient, machine);
     const auto u = multiply(rotation, Vec3{1.0, 0.0, 0.0});
     const auto v = multiply(rotation, Vec3{0.0, 1.0, 0.0});
     const auto w = multiply(rotation, Vec3{0.0, 0.0, -1.0});
@@ -270,6 +313,12 @@ TpsSourcePlan TpsSourcePlan::from_csv(const std::filesystem::path& path) {
         spot.sigma_y_prime = parse_optional(fields, columns, "sigma_y_prime");
         spot.correlation_x = parse_optional(fields, columns, "correlation_x");
         spot.correlation_y = parse_optional(fields, columns, "correlation_y");
+        spot.gantry_angle_deg =
+            parse_optional(fields, columns, "gantry_angle_deg");
+        spot.couch_angle_deg =
+            parse_optional(fields, columns, "couch_angle_deg");
+        spot.collimator_angle_deg =
+            parse_optional(fields, columns, "collimator_angle_deg");
         if (!(spot.energy_MeVu > 0.0) || spot.mu_weight < 0.0) {
             throw std::runtime_error(
                 "TPS spot energy must be positive and MU nonnegative at " +
@@ -354,6 +403,31 @@ std::vector<std::size_t> TpsSourcePlan::allocate_histories(
 std::vector<PrimarySpotBatchEntry> TpsSourcePlan::make_primary_batch(
     const TransportConfig& config) const {
     const auto allocation = allocate_histories(config.number_of_histories);
+    // The transport kernel historically uses z=[0, phantom_length] for its
+    // dense scorer. A patient-coordinate CT may have a non-zero z low edge.
+    // Rebase only the internal transport z coordinate; output MHD metadata
+    // remains in the original patient coordinates.
+    double transport_z_shift_mm = 0.0;
+    if (config.enable_ct_grid) {
+        const auto grid = CtGrid::from_binary(config.ct_grid_file);
+        const auto number_of_bins = config.number_of_bins();
+        const auto close = [](const double left, const double right) {
+            return std::abs(left - right) <=
+                   1.0e-5 * std::max({1.0, std::abs(left), std::abs(right)});
+        };
+        if (grid.nx != config.voxel_bins_x || grid.ny != config.voxel_bins_y ||
+            grid.nz != number_of_bins ||
+            !close(grid.spacing_x_mm, config.voxel_size_x_mm) ||
+            !close(grid.spacing_y_mm, config.voxel_size_y_mm) ||
+            !close(grid.spacing_z_mm, config.depth_bin_width_mm) ||
+            !close(static_cast<double>(grid.nz) * grid.spacing_z_mm,
+                   config.phantom_length_mm)) {
+            throw std::invalid_argument(
+                "tpsSource with a CT requires the voxel scorer dimensions, "
+                "spacing, depth bins, and phantom length to match the CT grid");
+        }
+        transport_z_shift_mm = -static_cast<double>(grid.origin_z_mm);
+    }
     std::vector<PrimarySpotBatchEntry> batch;
     batch.reserve(active_spot_count());
     std::uint64_t history_begin = 0;
@@ -395,7 +469,8 @@ std::vector<PrimarySpotBatchEntry> TpsSourcePlan::make_primary_batch(
         entry.emittance_correlation_y() = static_cast<float>(correlation_y);
         entry.source_origin_x_mm() = static_cast<float>(pose.origin_x_mm);
         entry.source_origin_y_mm() = static_cast<float>(pose.origin_y_mm);
-        entry.source_origin_z_mm() = static_cast<float>(pose.origin_z_mm);
+        entry.source_origin_z_mm() =
+            static_cast<float>(pose.origin_z_mm + transport_z_shift_mm);
         entry.beam_ux_x() = static_cast<float>(pose.ux_x);
         entry.beam_ux_y() = static_cast<float>(pose.ux_y);
         entry.beam_ux_z() = static_cast<float>(pose.ux_z);

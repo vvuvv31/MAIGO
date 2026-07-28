@@ -262,6 +262,66 @@ SpotSourcePose transform_tps_90_pose_to_ct(
     return pose;
 }
 
+SpotSourcePose transform_tps_y_pose_to_ct(
+    const SpotSourcePose& world_pose,
+    const double patient_trans_x_mm,
+    const double patient_trans_y_mm,
+    const double patient_trans_z_mm,
+    const double patient_rot_z_deg,
+    const double ct_axis_min_mm) noexcept {
+    constexpr double deg2rad = 3.14159265358979323846 / 180.0;
+    // As in transform_tps_90_pose_to_ct, TOPAS Patient/RotZ is passive and its
+    // world-to-patient inverse is R(+RotZ).
+    const auto angle = patient_rot_z_deg * deg2rad;
+    const auto c = std::cos(angle);
+    const auto s = std::sin(angle);
+    const auto point = [&](double x, double y, double z) {
+        x -= patient_trans_x_mm;
+        y -= patient_trans_y_mm;
+        z -= patient_trans_z_mm;
+        return std::tuple{c * x - s * y, s * x + c * y, z};
+    };
+    const auto vector = [&](const double x, const double y, const double z) {
+        return std::tuple{c * x - s * y, s * x + c * y, z};
+    };
+
+    double ox = 0.0, oy = 0.0, oz = 0.0;
+    double uxx = 0.0, uxy = 0.0, uxz = 0.0;
+    double uyx = 0.0, uyy = 0.0, uyz = 0.0;
+    double uzx = 0.0, uzy = 0.0, uzz = 0.0;
+    std::tie(ox, oy, oz) = point(
+        world_pose.origin_x_mm, world_pose.origin_y_mm, world_pose.origin_z_mm);
+    std::tie(uxx, uxy, uxz) =
+        vector(world_pose.ux_x, world_pose.ux_y, world_pose.ux_z);
+    std::tie(uyx, uyy, uyz) =
+        vector(world_pose.uy_x, world_pose.uy_y, world_pose.uy_z);
+    std::tie(uzx, uzy, uzz) =
+        vector(world_pose.uz_x, world_pose.uz_y, world_pose.uz_z);
+
+    const double ct_axis_max_mm = -ct_axis_min_mm;
+    SpotSourcePose pose{};
+    pose.origin_x_mm = ox;
+    pose.origin_y_mm = oz;
+    pose.ux_x = uxx;
+    pose.ux_y = uxz;
+    pose.uy_x = uyx;
+    pose.uy_y = uyz;
+    pose.uz_x = uzx;
+    pose.uz_y = uzz;
+    if (uzy >= 0.0) {
+        pose.origin_z_mm = oy - ct_axis_min_mm;
+        pose.ux_z = uxy;
+        pose.uy_z = uyy;
+        pose.uz_z = uzy;
+    } else {
+        pose.origin_z_mm = ct_axis_max_mm - oy;
+        pose.ux_z = -uxy;
+        pose.uy_z = -uyy;
+        pose.uz_z = -uzy;
+    }
+    return pose;
+}
+
 TopasSpotPlan TopasSpotPlan::from_file(const std::filesystem::path& path) {
     std::ifstream input(path);
     if (!input) {

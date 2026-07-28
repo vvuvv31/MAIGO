@@ -282,24 +282,35 @@ void apply_spot_to_config(carbon::TransportConfig& config,
         config.beam_uz_x = 0.0;
         config.beam_uz_y = 0.0;
         config.beam_uz_z = 1.0;
-    } else if (config.spots_geometry_mode == "tps_90") {
+    } else if (config.spots_geometry_mode == "tps_90" ||
+               config.spots_geometry_mode == "tps_gantry_y") {
         // tps_zero_beam_pose_for_spot uses inverted RotX/RotY relative to the
         // raw TOPAS component rotation so the world beam matches Geant4's
         // volume orientation. The patient transform determines whether the beam
         // travels +patient-X (normal packing) or −patient-X (xneg packing).
         const auto world_pose = plan.tps_zero_beam_pose_for_spot(spot);
-        auto pose = carbon::transform_tps_90_pose_to_ct(
-            world_pose, config.spots_patient_trans_x_mm,
-            config.spots_patient_trans_y_mm, config.spots_patient_trans_z_mm,
-            config.spots_patient_rot_z_deg, config.spots_ct_axis_min_mm);
+        auto pose =
+            config.spots_geometry_mode == "tps_90"
+                ? carbon::transform_tps_90_pose_to_ct(
+                      world_pose, config.spots_patient_trans_x_mm,
+                      config.spots_patient_trans_y_mm,
+                      config.spots_patient_trans_z_mm,
+                      config.spots_patient_rot_z_deg,
+                      config.spots_ct_axis_min_mm)
+                : carbon::transform_tps_y_pose_to_ct(
+                      world_pose, config.spots_patient_trans_x_mm,
+                      config.spots_patient_trans_y_mm,
+                      config.spots_patient_trans_z_mm,
+                      config.spots_patient_rot_z_deg,
+                      config.spots_ct_axis_min_mm);
         if (pose.uz_z <= 1.0e-6) {
             throw std::runtime_error(
-                "TPS 90-degree spot does not point into the reoriented CT (+z)");
+                "TPS spot does not point into the reoriented CT (+z)");
         }
         const auto distance_to_entrance_mm = -pose.origin_z_mm / pose.uz_z;
         if (distance_to_entrance_mm < 0.0) {
             throw std::runtime_error(
-                "TPS 90-degree source is downstream of the CT entrance plane");
+                "TPS source is downstream of the CT entrance plane");
         }
         pose.origin_x_mm += distance_to_entrance_mm * pose.uz_x;
         pose.origin_y_mm += distance_to_entrance_mm * pose.uz_y;
@@ -605,7 +616,8 @@ int main(int argc, char* argv[]) {
                       << config.tps_couch_angle_deg << "/"
                       << config.tps_collimator_angle_deg << " deg; SAD: "
                       << config.tps_sad_mm << " mm; patient: "
-                      << config.tps_patient_position << '\n';
+                      << config.tps_patient_position << "; convention: "
+                      << config.tps_angle_convention << '\n';
             if (plan_only) {
                 double min_x = std::numeric_limits<double>::infinity();
                 double max_x = -min_x;

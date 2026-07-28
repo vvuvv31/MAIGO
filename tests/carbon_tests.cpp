@@ -1268,6 +1268,17 @@ void test_topas_spot_weights_and_tps_90_transform() {
                  "Clinical spot patient-Y path");
     require(clinical_ct.uz_z > 0.999, "Clinical spot must travel along +GPU-Z");
     require(clinical_ct.origin_z_mm < 0.0, "Clinical source must be before CT entrance");
+
+    const auto lung_ct = carbon::transform_tps_y_pose_to_ct(
+        world, -69.6605, 9.3887, 0.0819, 0.0, -151.75);
+    require_near(lung_ct.origin_x_mm, 69.6605, 1.0e-6,
+                 "Lung TPS source patient-X");
+    require_near(lung_ct.origin_y_mm, -0.0819, 1.0e-6,
+                 "Lung TPS source patient-Z");
+    require_near(lung_ct.origin_z_mm, -307.6387, 1.0e-6,
+                 "Lung TPS source upstream patient-Y position");
+    require_near(lung_ct.uz_z, 1.0, 1.0e-9,
+                 "Lung TPS central ray points +GPU-Z");
 }
 
 void test_tps_source_geometry_csv_and_switch() {
@@ -1321,6 +1332,44 @@ void test_tps_source_geometry_csv_and_switch() {
     pose = one.pose_for_spot(config, central);
     require_near(pose.uz_x, 1.0, 1.0e-12, "HFP should invert gantry-90 X");
 
+    config.tps_patient_position = "HFS";
+    config.tps_angle_convention = "topas_patient_rot_z";
+    config.tps_gantry_angle_deg = 0.0;
+    pose = one.pose_for_spot(config, central);
+    require_near(pose.uz_x, 0.0, 1.0e-12, "TOPAS gantry 0 direction X");
+    require_near(pose.uz_y, 1.0, 1.0e-12, "TOPAS gantry 0 direction Y");
+    require_near(pose.uz_z, 0.0, 1.0e-12, "TOPAS gantry 0 direction Z");
+    require_near(pose.origin_y_mm, -80.0, 1.0e-12,
+                 "TOPAS gantry 0 source Y");
+
+    config.tps_gantry_angle_deg = 37.0;
+    pose = one.pose_for_spot(config, central);
+    constexpr double deg2rad = 3.14159265358979323846 / 180.0;
+    require_near(pose.uz_x, -std::sin(37.0 * deg2rad), 1.0e-12,
+                 "TOPAS arbitrary gantry direction X");
+    require_near(pose.uz_y, std::cos(37.0 * deg2rad), 1.0e-12,
+                 "TOPAS arbitrary gantry direction Y");
+    require_near(pose.uz_z, 0.0, 1.0e-12,
+                 "TOPAS arbitrary gantry direction Z");
+    require_near(pose.origin_x_mm, 10.0 + 100.0 * std::sin(37.0 * deg2rad),
+                 1.0e-12, "TOPAS arbitrary gantry source X");
+    require_near(pose.origin_y_mm, 20.0 - 100.0 * std::cos(37.0 * deg2rad),
+                 1.0e-12, "TOPAS arbitrary gantry source Y");
+    const auto arbitrary_batch = one.make_primary_batch(config);
+    require_near(arbitrary_batch.front().beam_uz_x(),
+                 -std::sin(37.0 * deg2rad), 1.0e-6,
+                 "TOPAS arbitrary batch direction X");
+    require_near(arbitrary_batch.front().beam_uz_y(),
+                 std::cos(37.0 * deg2rad), 1.0e-6,
+                 "TOPAS arbitrary batch direction Y");
+    auto per_control_point = central;
+    per_control_point.gantry_angle_deg = 123.5;
+    pose = one.pose_for_spot(config, per_control_point);
+    require_near(pose.uz_x, -std::sin(123.5 * deg2rad), 1.0e-12,
+                 "TOPAS per-control-point gantry X");
+    require_near(pose.uz_y, std::cos(123.5 * deg2rad), 1.0e-12,
+                 "TOPAS per-control-point gantry Y");
+
     const auto csv_path = std::filesystem::path(CARBON_SOURCE_DIR) /
                           "validation/tps/spots_example.csv";
     const auto plan = carbon::TpsSourcePlan::from_csv(csv_path);
@@ -1331,6 +1380,7 @@ void test_tps_source_geometry_csv_and_switch() {
     require(allocation == std::vector<std::size_t>({10, 30, 0}),
             "TPS Hamilton history allocation");
 
+    config.tps_angle_convention = "iec61217";
     config.tps_patient_position = "HFS";
     config.tps_gantry_angle_deg = 0.0;
     config.tps_spots_file = csv_path;
@@ -1343,6 +1393,47 @@ void test_tps_source_geometry_csv_and_switch() {
                  "TPS carbon total energy");
     require_near(batch.front().source_origin_x_mm(), 5.0, 1.0e-6,
                  "TPS source-plane spot X offset");
+
+    const auto ct_path = std::filesystem::temp_directory_path() /
+                         "carbon_tps_arbitrary_fixed_ct.bin";
+    carbon::CtGrid fixed_ct;
+    fixed_ct.nx = 4;
+    fixed_ct.ny = 3;
+    fixed_ct.nz = 2;
+    fixed_ct.origin_x_mm = -2.0F;
+    fixed_ct.origin_y_mm = -1.5F;
+    fixed_ct.origin_z_mm = -1.0F;
+    fixed_ct.spacing_x_mm = 1.0F;
+    fixed_ct.spacing_y_mm = 1.0F;
+    fixed_ct.spacing_z_mm = 2.0F;
+    fixed_ct.density_g_per_cm3.assign(fixed_ct.number_of_voxels(), 1.0F);
+    fixed_ct.material_id.assign(fixed_ct.number_of_voxels(), 2U);
+    fixed_ct.mass_sp_za_rel = {1.0F, 1.0F, 1.0F};
+    fixed_ct.mass_sp_I_eV = {75.0F, 75.0F, 75.0F};
+    fixed_ct.write_binary(ct_path);
+    auto fixed_ct_config = config;
+    fixed_ct_config.tps_spots_file.clear();
+    fixed_ct_config.enable_ct_grid = true;
+    fixed_ct_config.ct_grid_file = ct_path;
+    fixed_ct_config.voxel_bins_x = fixed_ct.nx;
+    fixed_ct_config.voxel_bins_y = fixed_ct.ny;
+    fixed_ct_config.voxel_size_x_mm = fixed_ct.spacing_x_mm;
+    fixed_ct_config.voxel_size_y_mm = fixed_ct.spacing_y_mm;
+    fixed_ct_config.depth_bin_width_mm = fixed_ct.spacing_z_mm;
+    fixed_ct_config.phantom_length_mm =
+        static_cast<double>(fixed_ct.nz) * fixed_ct.spacing_z_mm;
+    fixed_ct_config.number_of_histories = 1;
+    fixed_ct_config.tps_angle_convention = "topas_patient_rot_z";
+    fixed_ct_config.tps_gantry_angle_deg = 37.0;
+    fixed_ct_config.tps_isocenter_x_mm = 0.0;
+    fixed_ct_config.tps_isocenter_y_mm = 0.0;
+    fixed_ct_config.tps_isocenter_z_mm = 0.0;
+    const auto fixed_ct_plan = carbon::TpsSourcePlan::from_config(fixed_ct_config);
+    const auto fixed_ct_batch = fixed_ct_plan.make_primary_batch(fixed_ct_config);
+    require_near(fixed_ct_batch.front().source_origin_z_mm(), 1.0, 1.0e-6,
+                 "TPS fixed-CT transport z rebase");
+    std::error_code fixed_ct_ec;
+    std::filesystem::remove(ct_path, fixed_ct_ec);
 
     auto invalid_plan = plan;
     invalid_plan.spots.front().energy_spread_percent = 21.0;
@@ -1369,6 +1460,8 @@ void test_tps_source_geometry_csv_and_switch() {
         output << "number_of_histories: 10\n"
                << "tpsSource: true\n"
                << "enable_voxel_scoring: true\n"
+               << "tps_angle_convention: topas_patient_rot_z\n"
+               << "tps_gantry_angle_deg: 37.5\n"
                << "tps_isocenter_mm: [1, 2, 3]\n";
     }
     const auto vector_isocenter = carbon::load_config(yaml_path);
@@ -1378,6 +1471,10 @@ void test_tps_source_geometry_csv_and_switch() {
                  "TPS vector isocenter Y parsing");
     require_near(vector_isocenter.tps_isocenter_z_mm, 3.0, 1.0e-12,
                  "TPS vector isocenter Z parsing");
+    require(vector_isocenter.tps_angle_convention == "topas_patient_rot_z",
+            "TPS angle convention parsing");
+    require_near(vector_isocenter.tps_gantry_angle_deg, 37.5, 1.0e-12,
+                 "TPS arbitrary angle parsing");
     {
         std::ofstream output(yaml_path);
         output << "number_of_histories: 10\n"
@@ -1391,7 +1488,7 @@ void test_tps_source_geometry_csv_and_switch() {
 }
 
 #ifdef CARBON_HAS_SYCL
-void test_sycl_tps_source_cardinal_gantry_transport() {
+void test_sycl_tps_source_arbitrary_gantry_transport() {
     carbon::TransportConfig config;
     config.enable_tps_source = true;
     config.number_of_histories = 8;
@@ -1405,7 +1502,10 @@ void test_sycl_tps_source_cardinal_gantry_transport() {
     config.voxel_bins_y = 40;
     config.voxel_size_x_mm = 5.0;
     config.voxel_size_y_mm = 5.0;
-    config.tps_gantry_angle_deg = 90.0;
+    config.tps_angle_convention = "topas_patient_rot_z";
+    config.tps_gantry_angle_deg = 37.0;
+    config.tps_isocenter_x_mm = 0.0;
+    config.tps_isocenter_y_mm = 0.0;
     config.tps_isocenter_z_mm = 50.0;
     config.tps_sad_mm = 150.0;
     const auto plan = carbon::TpsSourcePlan::from_config(config);
@@ -1419,9 +1519,9 @@ void test_sycl_tps_source_cardinal_gantry_transport() {
     require(result.backend.find("+tps-source") != std::string::npos,
             "TPS source backend tag missing");
     require(result.total_deposited_energy_MeV > 0.0,
-            "Gantry-90 TPS beam did not enter the voxel AABB");
+            "Arbitrary-angle TPS beam did not enter the voxel AABB");
     require(result.relative_energy_balance_error() < 1.0e-6,
-            "TPS cardinal gantry energy balance failed");
+            "TPS arbitrary-angle gantry energy balance failed");
 }
 
 void test_sycl_legacy_cardinal_entrance_projection() {
@@ -2060,7 +2160,7 @@ int main() {
         test_dense_voxel_mhd_writer();
         test_ct_aligned_mhd_offset_and_index_pairing();
 #ifdef CARBON_HAS_SYCL
-        test_sycl_tps_source_cardinal_gantry_transport();
+        test_sycl_tps_source_arbitrary_gantry_transport();
         test_sycl_legacy_cardinal_entrance_projection();
         test_sycl_primary_spot_batch();
         test_sycl_flat_source_extent();

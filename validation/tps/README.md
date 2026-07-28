@@ -16,6 +16,7 @@ different values is an error.
 tps_spots_file: validation/tps/spots_example.csv  # optional; empty = one spot
 tps_particle_type: carbon                         # only supported primary today
 tps_patient_position: HFS                         # HFS, HFP, FFS, FFP
+tps_angle_convention: iec61217                    # or topas_patient_rot_z
 tps_gantry_angle_deg: 90
 tps_couch_angle_deg: 0
 tps_collimator_angle_deg: 0
@@ -32,6 +33,19 @@ the finite voxel scorer box, so TPS mode requires `enable_voxel_scoring: true`.
 The component keys `tps_isocenter_x_mm`, `tps_isocenter_y_mm`, and
 `tps_isocenter_z_mm` remain available as an alternative to the vector form.
 
+`tps_angle_convention: topas_patient_rot_z` selects the convention used by the
+repository's TOPAS CT plans. At 0 degrees the central beam points along patient
+`+Y`; at angle `theta`,
+`w=(-sin(theta), cos(theta), 0)`. Thus 90 degrees points along `-X` and
+270 degrees along `+X`. Angles are continuous floating-point values: 37,
+37.5, or 225 degrees do not require a cardinal-axis special case or a rotated
+CT. `u=+X` and `v=+Z` at zero degrees, matching TOPAS TransX/TransZ.
+
+When `tpsSource` is combined with a CCTG patient grid, the scorer dimensions
+and spacing must exactly match the CT. A non-zero patient CT z origin is
+rebased internally for transport and restored by the MHD output metadata, so
+the CT remains in patient coordinates.
+
 ## Spot CSV
 
 Required columns are:
@@ -44,7 +58,8 @@ Optional columns are:
 
 ```text
 spot_id,energy_spread_percent,sigma_x_mm,sigma_y_mm,
-sigma_x_prime,sigma_y_prime,correlation_x,correlation_y
+sigma_x_prime,sigma_y_prime,correlation_x,correlation_y,
+gantry_angle_deg,couch_angle_deg,collimator_angle_deg
 ```
 
 Blank optional values inherit the corresponding YAML source value. Positive MU
@@ -52,6 +67,10 @@ is converted to the exact requested `number_of_histories` with a deterministic
 Hamilton/largest-remainder allocation. Zero-MU spots are omitted. This is
 importance sampling by fluence; the current transport still models carbon
 primaries and does not silently reinterpret a proton plan.
+
+The three optional angle columns allow one CSV to contain multiple fields or
+control points. A blank angle uses the YAML default; a finite value overrides
+that angle for that row without a separate kernel launch.
 
 Run the example with:
 

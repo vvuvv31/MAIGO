@@ -440,10 +440,11 @@ void TransportConfig::validate() const {
     }
     if (spots_geometry_mode != "topas" && spots_geometry_mode != "beam_plus_z" &&
         spots_geometry_mode != "tps_90" &&
+        spots_geometry_mode != "tps_gantry_y" &&
         spots_geometry_mode != "minibeam_topas_y") {
         throw std::invalid_argument(
-            "spots_geometry_mode must be topas, beam_plus_z, tps_90, or "
-            "minibeam_topas_y");
+            "spots_geometry_mode must be topas, beam_plus_z, tps_90, "
+            "tps_gantry_y, or minibeam_topas_y");
     }
     if (enable_minibeam) {
 #if !defined(CARBON_ENABLE_MINIBEAM)
@@ -620,6 +621,11 @@ void TransportConfig::validate() const {
             tps_patient_position != "FFS" && tps_patient_position != "FFP") {
             throw std::invalid_argument(
                 "tps_patient_position must be HFS, HFP, FFS, or FFP");
+        }
+        if (tps_angle_convention != "iec61217" &&
+            tps_angle_convention != "topas_patient_rot_z") {
+            throw std::invalid_argument(
+                "tps_angle_convention must be iec61217 or topas_patient_rot_z");
         }
         if (tps_particle_type != "carbon") {
             throw std::invalid_argument(
@@ -1064,6 +1070,18 @@ TransportConfig load_config(const std::filesystem::path& path) {
         }
     }
     config.tps_spots_file = parse_path(values, "tps_spots_file", config.tps_spots_file);
+    {
+        const auto it = values.find("tps_angle_convention");
+        if (it != values.end() && !it->second.empty()) {
+            config.tps_angle_convention = it->second;
+            std::transform(config.tps_angle_convention.begin(),
+                           config.tps_angle_convention.end(),
+                           config.tps_angle_convention.begin(),
+                           [](const unsigned char character) {
+                               return static_cast<char>(std::tolower(character));
+                           });
+        }
+    }
     config.tps_gantry_angle_deg = parse_number(
         values, "tps_gantry_angle_deg", config.tps_gantry_angle_deg);
     config.tps_couch_angle_deg = parse_number(

@@ -11,6 +11,7 @@
 |------|------|
 | **本 README** | 已实现能力、构建运行、验证摘要、整体结构 |
 | [`structure.md`](structure.md) | **代码架构**：目录、构建矩阵、legacy/minibeam 双 kernel、isolation 门 |
+| [`ctplan.md`](ctplan.md) | **CT/TPS 计划几何**：TOPAS 转 CT vs 目标 GPU 等中心+机架角；扫描磁铁微倾角 |
 | [`minibeamStructure.md`](minibeamStructure.md) | Copper minibeam 编译隔离与安全合并设计 |
 | [`minibeam.md`](minibeam.md) | Minibeam 物理与 TOPAS 对照笔记 |
 | [`futureStep.md`](futureStep.md) | 当前主线与后续计划（LET_d / 中性 / CT / 性能） |
@@ -57,7 +58,9 @@
 - 单能 / 多能 / SOBP 配置；BiGaussian **emittance**
 - **TOPAS spots** 解析与多文件按序连接；`spotWeight.csv` 按优化权重分配 histories（largest-remainder）
 - **TPS 90°** 患者 CT：轴置换网格 + `Patient/RotZ` 被动旋转约定；入口面投影（含基数角 `cos(90°)` 残差修复）
-- 可选 **TPS source 模块**（`tpsSource: true`）：gantry/couch/collimator/isocenter/SAD + PBS spot CSV
+- 可选 **TPS source 模块**（`tpsSource: true`）：任意浮点 gantry 角、
+  couch/collimator/isocenter/SAD + PBS spot CSV；支持固定患者 CT 的
+  `topas_patient_rot_z` 角度约定
 
 ### 计分与输出
 

@@ -2095,6 +2095,11 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
         ct_spacing_x = ct_grid_host.spacing_x_mm;
         ct_spacing_y = ct_grid_host.spacing_y_mm;
         ct_spacing_z = ct_grid_host.spacing_z_mm;
+        if (config.enable_tps_source) {
+            // TpsSourcePlan applies the opposite shift to every source origin.
+            // Keep the fixed patient CT index-aligned with z=[0,L] internally.
+            ct_origin_z = 0.0F;
+        }
         // Align dose scorer xy bins with the CT sample grid so that:
         //   floor((x - origin) / spacing) matches for density, mass and tally.
         // Previously the scorer was forced to a 0-centered box (edge -n*s/2),

@@ -1,0 +1,81 @@
+# RT06541 full TPS plan at Patient RotZ=270 degrees. The supplied TOPAS files
+# contain global spot IDs 965..1947; omitted IDs 1..964 have exactly zero
+# optimizer weight in physical_dose_result.mat.
+number_of_histories: 10000000
+initial_energy_MeVu: 200.0
+mass_number: 12
+
+# Reoriented patient-X extent: 572 * 0.5 mm.
+phantom_length_mm: 286.0
+depth_bin_width_mm: 0.5
+maximum_step_mm: 0.5
+maximum_relative_energy_loss: 0.005
+energy_cutoff_MeV: 0.1
+secondary_local_deposit_cutoff_MeV: 1.0
+water_density_g_per_cm3: 1.0
+scorer_area_mm2: 21164.0
+
+enable_ct_grid: true
+ct_grid_file: ct/RT06541/grid/patient_ct_tps_270.bin
+ct_skip_homogeneous_face_clamp: true
+
+# GPU X=patient Y (572*0.5), GPU Y=patient Z (37*2), GPU Z=patient X (572*0.5).
+enable_voxel_scoring: true
+enable_charged_origin_voxel_scoring: false
+voxel_bins_x: 572
+voxel_bins_y: 37
+voxel_size_x_mm: 0.5
+voxel_size_y_mm: 2.0
+
+enable_energy_straggling: true
+straggling_scale: 1.2
+enable_multiple_scattering: true
+enable_ct_material_mcs: false
+enable_primary_attenuation: true
+enable_secondary_generation: true
+enable_secondary_transport: true
+enable_fragment_cascade: true
+enable_fragment_species_scoring: false
+enable_neutral_transport: false
+maximum_cascade_generations: 2
+secondary_queue_capacity: 35000000
+secondary_batch_size: 65536
+enable_secondary_energy_sorting: true
+max_device_memory_fraction: 0.90
+random_seed: 20260725
+
+# File order preserves the global optimizer/Dij order: IDs 965..1456 and
+# 1457..1947. Histories are allocated from the corresponding MAT x entries.
+topas_spots_files: ct/RT06541/spots_c_01.txt, ct/RT06541/spots_c_02.txt
+spot_weights_file: ct/RT06541/code/full_plan_weights_exact.csv
+spots_sad_mm: 450.0
+spots_geometry_mode: tps_90
+
+# Use each spot's L7/L8 steering angles. Patient RotZ=270 transforms the
+# resulting TOPAS BeamPosition2 pose into the patient +X beam frame.
+spots_patient_trans_x_mm: -40.7051
+spots_patient_trans_y_mm: 4.7835
+# TOPAS run value is -96.5199 mm, which cancels the DICOM reader's internal
+# axial-center offset. This GPU grid is already centered, so applying it again
+# would move every L6 coordinate about 96.5 mm outside the 74 mm axial extent.
+spots_patient_trans_z_mm: 0.0
+spots_patient_rot_z_deg: 270.0
+spots_ct_axis_min_mm: -143.0
+
+stopping_power_file: data/stopping_power_water_geant4_11_1_3.csv
+nuclear_cross_section_file: data/c12_inelastic_cross_sections_water_geant4_11_1_3.csv
+ct_lung_cross_section_file: data/c12_inelastic_cross_sections_lung_geant4_11_1_3.csv
+ct_water_cross_section_file: data/c12_inelastic_cross_sections_water_geant4_11_1_3.csv
+ct_bone_cross_section_file: data/c12_inelastic_cross_sections_bone_geant4_11_1_3.csv
+ct_schneider_cross_section_file: data/c12_inelastic_cross_sections_schneider_geant4_11_1_3.csv
+reaction_package_file: validation/results/topas_400MeVu_cascade_aligned_primary_3d.bin
+cascade_package_file: validation/results/topas_400MeVu_cascade_100k_3d.bin
+
+output_file:
+dose_output_file:
+fragment_species_output_file:
+fragment_species_dose_output_file:
+voxel_dose_output_file:
+voxel_dose_Gy_output_file:
+voxel_dose_mhd_output_file: out/ct/RT06541/full_plan_10M/dose_10M.mhd
+device: gpu

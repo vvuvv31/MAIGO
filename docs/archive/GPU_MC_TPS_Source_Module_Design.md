@@ -325,16 +325,19 @@ TOPAS/CT source construction remains in a separate legacy branch so historical
 CT gamma comparisons retain their source coordinates and RNG streams.
 
 The flat YAML beam definition contains gantry, couch, collimator, isocenter,
-SAD, patient position, particle type, and an optional PBS spot CSV. Required CSV
+SAD, patient position, particle type, angle convention, and an optional PBS spot CSV. Required CSV
 columns are `energy_MeVu,x_mm,y_mm,mu_weight`; optional columns carry energy
-spread and bivariate Gaussian emittance. MU is converted into an exact integer
-history allocation with the Hamilton method.
+spread, bivariate Gaussian emittance, and per-control-point
+gantry/couch/collimator angles. MU is converted into an exact integer history
+allocation with the Hamilton method.
 
 The clinical source is placed at `isocenter - SAD*w`, with spot offsets in the
 rotated local `u/v` plane. On the GPU, TPS primaries travel through vacuum to
-the first ray intersection with the finite voxel AABB. This permits cardinal
-gantry directions such as 90 and 270 degrees without applying the legacy CT
-z=0 projection. The current physics package supports carbon primaries only;
+the first ray intersection with the finite voxel AABB. Both the historical
+`iec61217` convention and the CT-plan `topas_patient_rot_z` convention accept
+continuous floating-point angles. The latter maps 0/90/270 degrees to patient
++Y/-X/+X and can use an unrotated patient CT; its z origin is rebased only
+inside transport and restored in MHD metadata. The current physics package supports carbon primaries only;
 other particle types are rejected rather than silently transported as carbon.
 
 See `config/beam_tps_source_example.yaml`, `validation/tps/spots_example.csv`,

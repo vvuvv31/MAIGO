@@ -23,6 +23,11 @@ struct TpsSpot {
     double sigma_y_prime{std::numeric_limits<double>::quiet_NaN()};
     double correlation_x{std::numeric_limits<double>::quiet_NaN()};
     double correlation_y{std::numeric_limits<double>::quiet_NaN()};
+    // Optional per-control-point angles. NaN inherits the YAML default, which
+    // permits one CSV to contain several fields at arbitrary angles.
+    double gantry_angle_deg{std::numeric_limits<double>::quiet_NaN()};
+    double couch_angle_deg{std::numeric_limits<double>::quiet_NaN()};
+    double collimator_angle_deg{std::numeric_limits<double>::quiet_NaN()};
 };
 
 struct TpsSourcePose {

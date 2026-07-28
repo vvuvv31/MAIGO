@@ -104,6 +104,19 @@ struct TopasSpotPlan {
     double patient_rot_z_deg,
     double ct_axis_min_mm) noexcept;
 
+// Convert the TPS 0-degree (+world-Y) beam into the beam-aligned CT frame used
+// by the lung case:
+//   GPU x = patient x, GPU y = patient z, GPU z = patient +/-y.
+// The sign is selected from the transformed central-ray direction so both
+// patient-Y travel directions enter at GPU z=0.
+[[nodiscard]] SpotSourcePose transform_tps_y_pose_to_ct(
+    const SpotSourcePose& world_pose,
+    double patient_trans_x_mm,
+    double patient_trans_y_mm,
+    double patient_trans_z_mm,
+    double patient_rot_z_deg,
+    double ct_axis_min_mm) noexcept;
+
 // Apply TOPAS-style Rx then Ry (degrees) to a vector.
 void rotate_rx_ry(double rx_deg, double ry_deg, double& x, double& y, double& z) noexcept;
 
