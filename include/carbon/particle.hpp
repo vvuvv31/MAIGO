@@ -7,10 +7,11 @@ namespace carbon {
 
 inline constexpr std::size_t charged_origin_category_count = 8;
 inline constexpr std::size_t primary_c12_charged_origin_category = 0;
-inline constexpr std::size_t light_isotope_category_count = 5;
+inline constexpr std::size_t light_isotope_category_count = 8;
 
-// Optional LET diagnostics: p, d, t, He-3, He-4. Other ions return the
-// sentinel category_count and are not accumulated.
+// Optional LET diagnostics: p, d, t, He-3, He-4, N, O, F.  The three target
+// recoil elements expose the dominant Z > 6 contribution in CT without
+// adding atomics to normal production runs. Other ions return the sentinel.
 constexpr std::size_t light_isotope_category(const int atomic_number,
                                              const int mass_number) noexcept {
     if (atomic_number == 1 && mass_number >= 1 && mass_number <= 3) {
@@ -19,11 +20,14 @@ constexpr std::size_t light_isotope_category(const int atomic_number,
     if (atomic_number == 2 && (mass_number == 3 || mass_number == 4)) {
         return static_cast<std::size_t>(mass_number);
     }
+    if (atomic_number >= 7 && atomic_number <= 9) {
+        return static_cast<std::size_t>(atomic_number - 2);
+    }
     return light_isotope_category_count;
 }
 
-// Fragment birth-spectrum diagnostics (p/d/t/He-3/He-4) for high-energy cascade
-// validation. Generation bins: 0 = primary C-12 direct product, 1 = first cascade
+// Fragment birth-spectrum diagnostics for the same optional categories.
+// Generation bins: 0 = primary C-12 direct product, 1 = first cascade
 // generation, 2 = generation >= 2.
 inline constexpr std::size_t birth_generation_bin_count = 3;
 inline constexpr std::size_t birth_mevu_bin_count = 200;  // 0–400 MeV/u @ 2 MeV/u

@@ -477,7 +477,8 @@ void write_light_isotope_letd_csv(const std::filesystem::path& path,
             "Cannot create light-isotope LET output file: " + path.string());
     }
     constexpr std::array<const char*, categories> names{
-        "proton", "deuteron", "triton", "he3", "he4"};
+        "proton", "deuteron", "triton", "he3", "he4",
+        "nitrogen", "oxygen", "fluorine"};
     output << "depth_mm";
     for (const auto* name : names) {
         output << ',' << name << "_letd_MeV_per_mm_per_g_cm3";
@@ -513,7 +514,8 @@ void write_fragment_birth_spectrum_csv(const std::filesystem::path& prefix,
                                        const TransportResult& result) {
     constexpr std::size_t categories = light_isotope_category_count;
     constexpr std::array<const char*, categories> names{
-        "proton", "deuteron", "triton", "he3", "he4"};
+        "proton", "deuteron", "triton", "he3", "he4",
+        "nitrogen", "oxygen", "fluorine"};
     const auto depth_bins = config.number_of_bins();
     const auto gen_size = categories * birth_generation_bin_count;
     const auto mevu_size = birth_hist_plane_size(birth_mevu_bin_count);

@@ -1073,6 +1073,73 @@ std::vector<float> build_cascade_xs_energy_lut(
     return lut;
 }
 
+// Build a material mass-XS LUT in the projectile order of the production
+// package. Sparse material packages fall back species-by-species to water.
+std::vector<float> build_aligned_material_cascade_xs_lut(
+    const CascadePackageTable& production_packages,
+    const CascadePackageTable& material_packages,
+    const std::vector<double>& energies_MeVu,
+    const float material_reference_density_g_per_cm3) {
+    auto lut =
+        build_cascade_xs_energy_lut(production_packages, energies_MeVu);
+    const auto energy_count = energies_MeVu.size();
+    const auto& samples = material_packages.cross_sections();
+    for (std::size_t projectile_index = 0;
+         projectile_index < production_packages.projectiles().size();
+         ++projectile_index) {
+        const auto& production_projectile =
+            production_packages.projectiles()[projectile_index];
+        const auto* projectile = material_packages.find_projectile(
+            production_projectile.atomic_number,
+            production_projectile.mass_number);
+        if (projectile == nullptr || projectile->cross_section_count == 0) {
+            continue;
+        }
+        const auto offset = projectile->cross_section_offset;
+        const auto count = projectile->cross_section_count;
+        for (std::size_t energy_index = 0; energy_index < energy_count;
+             ++energy_index) {
+            const auto energy =
+                static_cast<float>(energies_MeVu[energy_index]);
+            std::uint32_t lower = 0;
+            std::uint32_t upper = count;
+            while (lower < upper) {
+                const auto middle = lower + (upper - lower) / 2U;
+                if (samples[offset + middle].energy_MeV_per_u < energy) {
+                    lower = middle + 1U;
+                } else {
+                    upper = middle;
+                }
+            }
+            float value = 0.0F;
+            if (lower == 0U) {
+                value = samples[offset].macroscopic_cross_section_per_mm;
+            } else if (lower >= count) {
+                value =
+                    samples[offset + count - 1U].macroscopic_cross_section_per_mm;
+            } else {
+                const auto& lo = samples[offset + lower - 1U];
+                const auto& hi = samples[offset + lower];
+                const auto interval =
+                    hi.energy_MeV_per_u - lo.energy_MeV_per_u;
+                const auto fraction =
+                    interval > 0.0F
+                        ? std::clamp(
+                              (energy - lo.energy_MeV_per_u) / interval,
+                              0.0F, 1.0F)
+                        : 0.0F;
+                value = lo.macroscopic_cross_section_per_mm +
+                        fraction *
+                            (hi.macroscopic_cross_section_per_mm -
+                             lo.macroscopic_cross_section_per_mm);
+            }
+            lut[projectile_index * energy_count + energy_index] =
+                value / material_reference_density_g_per_cm3;
+        }
+    }
+    return lut;
+}
+
 inline int cascade_projectile_index(const CascadeProjectile* projectiles,
                                     const std::size_t count,
                                     const int atomic_number,
@@ -1777,7 +1844,7 @@ inline void score_letd_moments_device(
     }
 }
 
-// Score a light-isotope birth (p/d/t/He-3/He-4) into histogram buffers.
+// Score an optional diagnostic-species birth into histogram buffers.
 // No-op when buffers are null or the product is not a light isotope.
 inline void score_fragment_birth_device(
     std::uint64_t* counts_by_generation,
@@ -1941,6 +2008,28 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
     auto charged_after_neutral_kernel_seconds = 0.0;
     const auto table_size = stopping_power.values().size();
     const auto cross_section_table_size = cross_section.values().size();
+    std::optional<CascadePackageTable> ct_lung_cascade_xs_packages;
+    std::optional<CascadePackageTable> ct_bone_cascade_xs_packages;
+    if (config.enable_ct_grid && config.enable_fragment_cascade) {
+        if (!config.ct_lung_cascade_cross_section_package_file.empty()) {
+            ct_lung_cascade_xs_packages =
+                CascadePackageTable::from_binary(
+                    config.ct_lung_cascade_cross_section_package_file);
+        }
+        if (!config.ct_bone_cascade_cross_section_package_file.empty()) {
+            ct_bone_cascade_xs_packages =
+                CascadePackageTable::from_binary(
+                    config.ct_bone_cascade_cross_section_package_file);
+        }
+    }
+    const auto use_ct_lung_cascade_xs =
+        ct_lung_cascade_xs_packages.has_value();
+    const auto use_ct_bone_cascade_xs =
+        ct_bone_cascade_xs_packages.has_value();
+    const auto cascade_xs_material_count =
+        use_ct_lung_cascade_xs || use_ct_bone_cascade_xs
+            ? std::size_t{3}
+            : std::size_t{1};
     const auto number_of_bins = config.number_of_bins();
     const auto number_of_histories = config.number_of_histories;
     const auto primary_spot_count = config.primary_spot_batch.size();
@@ -2650,6 +2739,7 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
             cascade_summaries_device = sycl::malloc_device<CascadeTransportSummary>(
                 secondary_queue_capacity, queue);
             cascade_xs_lut_size =
+                cascade_xs_material_count *
                 cascade_packages->projectiles().size() * table_size;
             cascade_xs_lut_device =
                 sycl::malloc_device<float>(cascade_xs_lut_size, queue);
@@ -2973,7 +3063,11 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
             voxel_max_y_mm =
                 ct_origin_y + static_cast<float>(voxel_bins_y) * voxel_size_y_mm;
         }
-        use_ct_mass_sp = ct_grid_host.has_mass_sp_factors();
+        // CCTG v1 material IDs select the explicit four-class absolute tables.
+        // from_binary() supplies unit factors for legacy diagnostics, but those
+        // are not Schneider mass-SP metadata and must not shadow the material
+        // tables configured for air/lung/water/bone.
+        use_ct_mass_sp = ct_grid_host.uses_schneider_mass_sp();
         ct_material_ids_are_schneider_sections =
             ct_grid_host.file_version != CtGrid::version_legacy;
         use_ct_material_sp =
@@ -3361,6 +3455,28 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
         cascade_packages != nullptr) {
         auto cascade_xs_lut_host =
             build_cascade_xs_energy_lut(*cascade_packages, stopping_power.energies());
+        if (cascade_xs_material_count > 1) {
+            const auto water_lut = cascade_xs_lut_host;
+            const auto append_material = [&](const auto& material_packages,
+                                             const double reference_density) {
+                auto material_lut =
+                    material_packages
+                        ? build_aligned_material_cascade_xs_lut(
+                              *cascade_packages, *material_packages,
+                              stopping_power.energies(),
+                              static_cast<float>(reference_density))
+                        : water_lut;
+                cascade_xs_lut_host.insert(
+                    cascade_xs_lut_host.end(),
+                    material_lut.begin(), material_lut.end());
+            };
+            append_material(
+                ct_lung_cascade_xs_packages,
+                config.ct_lung_cascade_reference_density_g_per_cm3);
+            append_material(
+                ct_bone_cascade_xs_packages,
+                config.ct_bone_cascade_reference_density_g_per_cm3);
+        }
         if (cascade_xs_lut_host.size() != cascade_xs_lut_size) {
             free_device(cascade_xs_lut_device);
             throw std::runtime_error("Cascade XS LUT size mismatch");
@@ -3368,7 +3484,9 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
         queue.copy(cascade_xs_lut_host.data(), cascade_xs_lut_device, cascade_xs_lut_size)
             .wait_and_throw();
         std::cout << "Cascade XS LUT: " << cascade_packages->projectiles().size()
-                  << " projectiles x " << table_size << " energies on water SP grid\n"
+                  << " projectiles x " << table_size << " energies x "
+                  << cascade_xs_material_count
+                  << " material blocks on water SP grid\n"
                   << std::flush;
     }
     queue.memset(dose_device, 0, number_of_bins * sizeof(DoseAtomicT));
@@ -5523,7 +5641,13 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                         highland_projected_rms_angle_device(
                             scattering_energy_MeV, 6, primary_mass_number, step_mm,
                             local_density_g_per_cm3, mcs_radiation_length);
-                    if (enable_minibeam && !enable_ct_grid) {
+                    // The low-energy correction compensates the step-wise
+                    // Highland approximation and is a projectile correction,
+                    // not a water-only material correction.  Keep the local
+                    // CT density/radiation length above, then apply the same
+                    // validated smooth low-energy scale in explicit CT
+                    // materials as in homogeneous water.
+                    if (enable_minibeam) {
                         projected_rms_angle_rad *=
                             minibeam_water_low_energy_mcs_scale(
                                 scattering_energy_MeV,
@@ -6909,7 +7033,7 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                                     scattering_energy_MeV, atomic_number, mass_number,
                                     path_step_mm, local_density_g_per_cm3,
                                     mcs_radiation_length);
-                            if (enable_minibeam && !enable_ct_grid) {
+                            if (enable_minibeam) {
                                 const auto is_primary_continuation =
                                     species_index ==
                                     primary_c12_charged_origin_category;
@@ -6938,9 +7062,25 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                                     energy_MeV * inverse_mass_number_for_particle;
                                 // O(1) LUT on water SP energy grid (same index/fraction
                                 // as the stopping-power table).
+                                const auto ct_cascade_material =
+                                    in_ct
+                                        ? ct_material_class(
+                                              ct_material,
+                                              ct_material_ids_are_schneider_sections)
+                                        : std::uint8_t{2};
+                                const auto cascade_xs_material_index =
+                                    ct_cascade_material == 1U &&
+                                            use_ct_lung_cascade_xs
+                                        ? std::size_t{1}
+                                        : (ct_cascade_material == 3U &&
+                                                   use_ct_bone_cascade_xs
+                                               ? std::size_t{2}
+                                               : std::size_t{0});
                                 const auto lut_base =
-                                    static_cast<std::size_t>(
-                                        cascade_projectile_index_for_particle) *
+                                    (cascade_xs_material_index *
+                                         cascade_projectile_count +
+                                     static_cast<std::size_t>(
+                                         cascade_projectile_index_for_particle)) *
                                         table_size +
                                     static_cast<std::size_t>(index);
                                 float macroscopic_cross_section_per_mm =
@@ -6954,7 +7094,8 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                                 }
                                 // CT material mass-XS ratio (C-12 table) scales fragment
                                 // cascade rate vs water×ρ — bone/lung composition effect.
-                                if (use_ct_material_xs && in_ct && ct_xs_device != nullptr &&
+                                if (cascade_xs_material_index == 0U &&
+                                    use_ct_material_xs && in_ct && ct_xs_device != nullptr &&
                                     ct_ref_density_device != nullptr &&
                                     cross_section_device != nullptr) {
                                     auto xs_fi =

@@ -1,0 +1,35 @@
+{
+  "dataset": "C-12 stopping power in G4_LUNG_ICRP",
+  "material": "G4_LUNG_ICRP",
+  "extraction_method": "G4EmCalculator via CarbonStoppingPowerNtuple",
+  "gpu_column": "electronic",
+  "topas_version": "4.2.p3",
+  "geant4_version": "geant4-11-03-patch-02",
+  "energy_grid_MeV_per_u": {
+    "minimum": 0.01,
+    "maximum": 400.01,
+    "count": 4001
+  },
+  "reference_200MeVu": {
+    "electronic_MeV_per_mm": 16.6554,
+    "total_MeV_per_mm": 16.6554,
+    "csda_range_mm": 0.0
+  },
+  "input_files": {
+    "ntuple": {
+      "path": "validation/topas/output/carbon_c12_stopping_power_lung.phsp",
+      "sha256": "98643888c74afed2a70eb741d4fdd32d120789e220be1cebbc7d5c9eb85a95f3"
+    },
+    "header": {
+      "path": "validation/topas/output/carbon_c12_stopping_power_lung.header",
+      "sha256": "f0399a26497813f07a42109955b9021851ba3074b699e34dc8b76b0cbeb3467e"
+    },
+    "log": {
+      "path": "/tmp/material_sp_lung_1132.log",
+      "sha256": "2dabcfbb3d668e1b32af702602e18db8cd02970c0419ea1e5b857b8818a052d2"
+    }
+  },
+  "output_csv": "data/stopping_power_lung_geant4_11_3_2.csv",
+  "full_csv": "data/stopping_power_lung_geant4_11_3_2_full.csv",
+  "global_scale_applied": false
+}

@@ -96,7 +96,7 @@ def main() -> None:
     with h5py.File(args.mat, "r") as mat:
         if "x" not in mat:
             raise ValueError(f"{args.mat}: dataset 'x' not found")
-        weights = np.asarray(mat["x"], dtype=np.float64).reshape(-1)
+        mat_weights = np.asarray(mat["x"], dtype=np.float64).reshape(-1)
 
     ids: list[int] = []
     requested_histories: list[int] = []
@@ -130,11 +130,24 @@ def main() -> None:
             }
         )
 
-    if len(ids) != len(weights):
-        raise ValueError(f"spot count {len(ids)} != MAT weight count {len(weights)}")
-    expected_ids = list(range(1, len(ids) + 1))
-    if ids != expected_ids:
-        raise ValueError("concatenated L0 spot IDs are not exactly 1..N")
+    if ids != sorted(ids) or len(set(ids)) != len(ids):
+        raise ValueError("concatenated L0 spot IDs must be unique and increasing")
+    if not ids or ids[-1] > len(mat_weights):
+        raise ValueError(
+            f"largest spot ID {ids[-1] if ids else 0} exceeds MAT weight count "
+            f"{len(mat_weights)}"
+        )
+    selected_indices = np.asarray(ids, dtype=np.int64) - 1
+    included = np.zeros(mat_weights.size, dtype=bool)
+    included[selected_indices] = True
+    omitted_nonzero = np.flatnonzero((~included) & (mat_weights != 0.0))
+    if omitted_nonzero.size:
+        first = int(omitted_nonzero[0]) + 1
+        raise ValueError(
+            f"spot files omit {omitted_nonzero.size} nonzero MAT weights; "
+            f"first omitted global spot ID is {first}"
+        )
+    weights = mat_weights[selected_indices]
     if not np.all(np.isfinite(weights)) or np.any(weights < 0.0):
         raise ValueError("MAT weights must be finite and nonnegative")
 
@@ -206,11 +219,17 @@ def main() -> None:
     summary = {
         "mat_file": str(args.mat),
         "mat_weight_dataset": "x",
+        "mat_weight_count": int(mat_weights.size),
         "spot_files_in_concatenation_order": file_counts,
         "spot_count": len(ids),
+        "first_global_spot_id": ids[0],
+        "last_global_spot_id": ids[-1],
+        "omitted_zero_weight_count": int(mat_weights.size - len(ids)),
         "active_spot_count": int(np.count_nonzero(weights > 0.0)),
         "zero_weight_spot_count": int(np.count_nonzero(weights == 0.0)),
-        "spot_ids_contiguous_1_to_n": True,
+        "spot_ids_contiguous_1_to_n": ids == list(range(1, len(ids) + 1)),
+        "spot_ids_contiguous_global_range": ids
+        == list(range(ids[0], ids[-1] + 1)),
         "base_histories": {
             "source": (
                 "--actual-histories-per-spot override"

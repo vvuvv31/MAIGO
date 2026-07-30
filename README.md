@@ -312,6 +312,19 @@ depth_mm,energy_deposition_MeV,dose_Gy,relative_dose
 启用 voxel scoring 时：稀疏 `ix,iy,iz,...` 与/或 dense MHD（`DoseUnits = Gy`，dose-to-medium 用局部密度）。  
 CT plan 下 `number_of_histories` 为**整份计划**的统计预算，不是每 spot 等权。临床 fraction 绝对 Gy 另需 MU↔离子数标定。
 
+### CT 精度档位
+
+普通 CT full plan 支持 `physics_profile: best|medium|fast`：
+
+- `best`：最终 dose + LET，严格 0.1 mm/0.1 MeV 输运并使用粒子特异停止本领；
+- `medium`：完整 dose physics，0.5 mm/1 MeV 次级策略，验收目标为 TOPAS
+  global 2%/2 mm ≥99%；
+- `fast`：关闭 LET，1 mm/2 MeV 次级策略，验收目标为 TOPAS global
+  3%/3 mm ≥99%。
+
+gamma 是新病例必须实测的验收条件，不是无条件保证。`accurate` 保留为旧 YAML
+兼容模式。参数契约、限制和 RT07575 示例见 [`structure.md`](structure.md)。
+
 ---
 
 ## 仓库与源码结构（简）

@@ -101,6 +101,13 @@ def map_gpu_to_physical(
     flip_y: bool,
     mapping: str = "tps_x",
 ) -> list[float]:
+    if mapping == "identity":
+        if gpu_shape != phys_shape:
+            raise SystemExit(
+                f"Identity mapping requires equal shapes: "
+                f"GPU {gpu_shape} != reference {phys_shape}"
+            )
+        return list(gpu)
     gx, gy, gz = gpu_shape
     px_n, py_n, pz_n = patient_shape
     lnx, lny, lnz = phys_shape
@@ -173,14 +180,15 @@ def idd_axis(
     axis: str,
 ) -> list[float]:
     nx, ny, nz = shape
-    if axis not in {"x", "y"}:
+    if axis not in {"x", "y", "z"}:
         raise ValueError(f"Unsupported IDD axis: {axis}")
-    out = [0.0] * (nx if axis == "x" else ny)
+    out = [0.0] * (nx if axis == "x" else ny if axis == "y" else nz)
     for iz in range(nz):
         for iy in range(ny):
             base = iz * nx * ny + iy * nx
             for ix in range(nx):
-                out[ix if axis == "x" else iy] += values[base + ix]
+                target = ix if axis == "x" else iy if axis == "y" else iz
+                out[target] += values[base + ix]
     return out
 
 
@@ -196,6 +204,10 @@ def gamma_3d(
     seed: int,
     local_dose: bool = False,
     interpolation_step_mm: float = 0.5,
+    reference_uncertainty: list[float] | np.ndarray | None = None,
+    evaluation_uncertainty: list[float] | np.ndarray | None = None,
+    uncertainty_coverage: float = 0.0,
+    selection_mask: list[bool] | np.ndarray | None = None,
 ) -> dict[str, float]:
     """3D gamma with trilinear evaluation-dose interpolation.
 
@@ -206,10 +218,23 @@ def gamma_3d(
     """
     nx, ny, nz = shape
     sx, sy, sz = spacing_mm
-    ref_max = max(ref)
-    thr = thr_percent / 100.0 * ref_max
+    reference = np.asarray(ref, dtype=np.float64)
+    if selection_mask is not None:
+        external_mask = np.asarray(selection_mask, dtype=bool).reshape(-1)
+        if external_mask.size != reference.size:
+            raise ValueError(
+                f"selection_mask has {external_mask.size} entries; "
+                f"expected {reference.size}"
+            )
+        selected = np.flatnonzero(external_mask).tolist()
+        ref_max = float(np.max(reference[external_mask])) if selected else 0.0
+        threshold_source = "external selection mask"
+    else:
+        ref_max = max(ref)
+        thr = thr_percent / 100.0 * ref_max
+        selected = [i for i, v in enumerate(ref) if v >= thr]
+        threshold_source = "reference value"
     global_dose_crit = dose_percent / 100.0 * ref_max
-    selected = [i for i, v in enumerate(ref) if v >= thr]
     total_available = len(selected)
     if total_available == 0:
         return {"pass_percent": float("nan"), "points": 0, "available": 0}
@@ -223,13 +248,30 @@ def gamma_3d(
     rem = linear % (nx * ny)
     iy = rem // nx
     ix = rem % nx
-    ref_values = np.asarray(ref, dtype=np.float64)[linear]
+    ref_values = reference[linear]
     evaluated = np.asarray(eval_, dtype=np.float64).reshape(nz, ny, nx)
-    dose_crit = (
+    base_dose_crit = (
         np.maximum(dose_percent / 100.0 * ref_values, 1.0e-30)
         if local_dose
         else np.full(ref_values.shape, global_dose_crit, dtype=np.float64)
     )
+    if uncertainty_coverage < 0.0:
+        raise ValueError("uncertainty_coverage must be nonnegative")
+    use_uncertainty = (
+        uncertainty_coverage > 0.0
+        and reference_uncertainty is not None
+        and evaluation_uncertainty is not None
+    )
+    if use_uncertainty:
+        reference_sigma = np.asarray(
+            reference_uncertainty, dtype=np.float64
+        )[linear]
+        evaluated_sigma = np.asarray(
+            evaluation_uncertainty, dtype=np.float64
+        ).reshape(nz, ny, nx)
+    else:
+        reference_sigma = np.zeros(ref_values.shape, dtype=np.float64)
+        evaluated_sigma = None
     best = np.full(linear.size, np.inf, dtype=np.float64)
     offsets = np.arange(
         -distance_mm,
@@ -263,15 +305,32 @@ def gamma_3d(
                 fy = qy[ids] - y0
                 fx = qx[ids] - x0
                 candidate = np.zeros(ids.size, dtype=np.float64)
+                candidate_sigma = np.zeros(ids.size, dtype=np.float64)
                 for kz, zz in ((0, z0), (1, z1)):
                     wz = fz if kz else 1.0 - fz
                     for ky, yy in ((0, y0), (1, y1)):
                         wy = fy if ky else 1.0 - fy
                         for kx, xx in ((0, x0), (1, x1)):
                             wx = fx if kx else 1.0 - fx
-                            candidate += wz * wy * wx * evaluated[zz, yy, xx]
+                            weight = wz * wy * wx
+                            candidate += weight * evaluated[zz, yy, xx]
+                            if evaluated_sigma is not None:
+                                candidate_sigma += (
+                                    weight * evaluated_sigma[zz, yy, xx]
+                                )
+                dose_crit = base_dose_crit[ids]
+                if use_uncertainty:
+                    dose_crit = np.sqrt(
+                        dose_crit * dose_crit
+                        + uncertainty_coverage * uncertainty_coverage
+                        * (
+                            reference_sigma[ids] * reference_sigma[ids]
+                            + candidate_sigma * candidate_sigma
+                        )
+                    )
+                    dose_crit = np.maximum(dose_crit, 1.0e-30)
                 g2 = distance2 / (distance_mm * distance_mm) + (
-                    (candidate - ref_values[ids]) / dose_crit[ids]
+                    (candidate - ref_values[ids]) / dose_crit
                 ) ** 2
                 best[ids] = np.minimum(best[ids], g2)
     passed = int(np.count_nonzero(best <= 1.0))
@@ -283,8 +342,11 @@ def gamma_3d(
         "dose_percent": dose_percent,
         "distance_mm": distance_mm,
         "threshold_percent": thr_percent,
+        "selection": threshold_source,
+        "normalization_max": ref_max,
         "interpolation": "trilinear",
         "interpolation_step_mm": interpolation_step_mm,
+        "uncertainty_coverage_sigma": uncertainty_coverage,
     }
 
 
@@ -294,11 +356,25 @@ def dose_only_pass_rate(
     dose_percent: float,
     thr_percent: float,
     local_dose: bool = False,
+    selection_mask: list[bool] | np.ndarray | None = None,
 ) -> dict[str, float]:
-    ref_max = max(ref)
-    threshold = thr_percent / 100.0 * ref_max
+    reference = np.asarray(ref, dtype=np.float64)
+    if selection_mask is not None:
+        external_mask = np.asarray(selection_mask, dtype=bool).reshape(-1)
+        if external_mask.size != reference.size:
+            raise ValueError(
+                f"selection_mask has {external_mask.size} entries; "
+                f"expected {reference.size}"
+            )
+        selected = np.flatnonzero(external_mask).tolist()
+        ref_max = float(np.max(reference[external_mask])) if selected else 0.0
+        threshold_source = "external selection mask"
+    else:
+        ref_max = max(ref)
+        threshold = thr_percent / 100.0 * ref_max
+        selected = [i for i, value in enumerate(ref) if value >= threshold]
+        threshold_source = "reference value"
     global_criterion = dose_percent / 100.0 * ref_max
-    selected = [i for i, value in enumerate(ref) if value >= threshold]
     passed = 0
     for index in selected:
         criterion = (
@@ -316,6 +392,8 @@ def dose_only_pass_rate(
         "dose_percent": dose_percent,
         "distance_mm": 0.0,
         "threshold_percent": thr_percent,
+        "selection": threshold_source,
+        "normalization_max": ref_max,
         "interpolation": "none; identical voxel",
     }
 
@@ -347,10 +425,10 @@ def main() -> int:
     parser.add_argument("--patient-shape", nargs=3, type=int, default=(417, 505, 35))
     parser.add_argument(
         "--mapping",
-        choices=("tps_x", "beam_y"),
+        choices=("tps_x", "beam_y", "identity"),
         default="tps_x",
         help="GPU-to-patient axis mapping: tps_x=(patient y,z,x), "
-             "beam_y=(patient x,z,y)",
+             "beam_y=(patient x,z,y), identity=already on the same grid",
     )
     parser.add_argument("--histories", type=float, default=917000.0)
     parser.add_argument("--thr-frac", type=float, default=0.10)
@@ -359,6 +437,13 @@ def main() -> int:
         type=float,
         default=1.0,
         help="Sensitivity study: multiply the fitted dose scale (default 1.0)",
+    )
+    parser.add_argument(
+        "--absolute-scale",
+        type=float,
+        default=None,
+        help="Use this fixed GPU-to-reference scale instead of fitting. "
+             "Use 1 for equal-history absolute Monte Carlo comparisons.",
     )
     parser.add_argument("--flip-x", action="store_true", default=True,
                         help="Flip patient X when mapping GPU Z (default True)")
@@ -371,6 +456,20 @@ def main() -> int:
     parser.add_argument("--gamma-points", type=int, default=50000)
     parser.add_argument("--gamma-resolution-mm", type=float, default=0.5)
     parser.add_argument("--skip-gamma", action="store_true")
+    parser.add_argument(
+        "--gamma-criterion",
+        type=float,
+        nargs=2,
+        action="append",
+        default=[],
+        metavar=("DOSE_PERCENT", "DISTANCE_MM"),
+        help="Additional global/local 3D gamma criterion; may be repeated",
+    )
+    parser.add_argument(
+        "--only-custom-gamma",
+        action="store_true",
+        help="Skip the default 2%%/2 mm and 3%%/3 mm gamma calculations",
+    )
     parser.add_argument(
         "--strict-gamma",
         action="store_true",
@@ -402,7 +501,11 @@ def main() -> int:
         args.mapping,
     )
     least_squares_scale = fit_scale(mapped, phys, args.thr_frac)
-    scale = least_squares_scale * args.dose_scale_multiplier
+    scale = (
+        args.absolute_scale
+        if args.absolute_scale is not None
+        else least_squares_scale * args.dose_scale_multiplier
+    )
     scaled = array.array("f", (scale * v for v in mapped))
 
     phys_max = max(phys)
@@ -424,7 +527,11 @@ def main() -> int:
         sbb += b * b
     cosine = sab / math.sqrt(saa * sbb) if saa > 0 and sbb > 0 else float("nan")
 
-    depth_axis = "x" if args.mapping == "tps_x" else "y"
+    depth_axis = (
+        "x" if args.mapping == "tps_x"
+        else "y" if args.mapping == "beam_y"
+        else "z"
+    )
     idd_p = idd_axis(phys, phys_shape, depth_axis)
     idd_g = idd_axis(scaled, phys_shape, depth_axis)
     idd_peak_p = idd_p.index(max(idd_p))
@@ -447,6 +554,7 @@ def main() -> int:
         "scale_gpu_to_physical": scale,
         "least_squares_scale_gpu_to_physical": least_squares_scale,
         "dose_scale_multiplier": args.dose_scale_multiplier,
+        "absolute_scale_override": args.absolute_scale,
         "scale_per_history": scale / args.histories if args.histories else None,
         "threshold_fraction_of_peak": args.thr_frac,
         "high_dose_voxels": n,
@@ -465,7 +573,7 @@ def main() -> int:
         "integral_rel_diff": (sum(scaled) - sum(phys)) / sum(phys),
     }
 
-    if not args.skip_gamma:
+    if not args.skip_gamma and not args.only_custom_gamma:
         print("Computing 3D gamma 2%/2mm (subsample)...")
         g2 = gamma_3d(
             phys,
@@ -524,38 +632,77 @@ def main() -> int:
         report["gamma_local_2pct_2mm_thr10"] = g2_local
         report["gamma_3pct_3mm_thr10"] = g3
         report["gamma_local_3pct_3mm_thr10"] = g3_local
-        if args.strict_gamma:
-            print("Computing strict 3D gamma 1%/1mm...")
-            report["gamma_1pct_1mm_thr10"] = gamma_3d(
+    if not args.skip_gamma and args.strict_gamma:
+        print("Computing strict 3D gamma 1%/1mm...")
+        report["gamma_1pct_1mm_thr10"] = gamma_3d(
+            phys,
+            list(scaled),
+            phys_shape,
+            phys_spacing,
+            dose_percent=1.0,
+            distance_mm=1.0,
+            thr_percent=10.0,
+            max_points=args.gamma_points,
+            seed=0,
+            interpolation_step_mm=args.gamma_resolution_mm,
+        )
+        report["gamma_local_1pct_1mm_thr10"] = gamma_3d(
+            phys,
+            list(scaled),
+            phys_shape,
+            phys_spacing,
+            dose_percent=1.0,
+            distance_mm=1.0,
+            thr_percent=10.0,
+            max_points=args.gamma_points,
+            seed=0,
+            local_dose=True,
+            interpolation_step_mm=args.gamma_resolution_mm,
+        )
+        report["gamma_3pct_0mm_thr10"] = dose_only_pass_rate(
+            phys, list(scaled), 3.0, 10.0
+        )
+        report["gamma_local_3pct_0mm_thr10"] = dose_only_pass_rate(
+            phys, list(scaled), 3.0, 10.0, local_dose=True
+        )
+
+    if not args.skip_gamma:
+        for dose_percent, distance_mm in args.gamma_criterion:
+            if dose_percent <= 0.0:
+                raise ValueError("gamma dose percent must be positive")
+            if distance_mm <= 0.0:
+                raise ValueError("gamma distance must be positive")
+            dose_label = f"{dose_percent:g}".replace(".", "p")
+            distance_label = f"{distance_mm:g}".replace(".", "p")
+            key = f"gamma_{dose_label}pct_{distance_label}mm_thr10"
+            print(
+                f"Computing custom 3D gamma "
+                f"{dose_percent:g}%/{distance_mm:g}mm (subsample)..."
+            )
+            report[key] = gamma_3d(
                 phys,
                 list(scaled),
                 phys_shape,
                 phys_spacing,
-                dose_percent=1.0,
-                distance_mm=1.0,
+                dose_percent=dose_percent,
+                distance_mm=distance_mm,
                 thr_percent=10.0,
                 max_points=args.gamma_points,
                 seed=0,
                 interpolation_step_mm=args.gamma_resolution_mm,
             )
-            report["gamma_local_1pct_1mm_thr10"] = gamma_3d(
+            report[f"gamma_local_{dose_label}pct_{distance_label}mm_thr10"] = gamma_3d(
                 phys,
                 list(scaled),
                 phys_shape,
                 phys_spacing,
-                dose_percent=1.0,
-                distance_mm=1.0,
+                dose_percent=dose_percent,
+                distance_mm=distance_mm,
                 thr_percent=10.0,
                 max_points=args.gamma_points,
                 seed=0,
                 local_dose=True,
                 interpolation_step_mm=args.gamma_resolution_mm,
-            )
-            report["gamma_3pct_0mm_thr10"] = dose_only_pass_rate(
-                phys, list(scaled), 3.0, 10.0
-            )
-            report["gamma_local_3pct_0mm_thr10"] = dose_only_pass_rate(
-                phys, list(scaled), 3.0, 10.0, local_dose=True
             )
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
@@ -588,9 +735,10 @@ def main() -> int:
     with idd_path.open("w", encoding="utf-8") as stream:
         stream.write(f"# depth_axis={depth_axis}\n")
         stream.write("ix,x_mm,physical,gpu_scaled,gpu_unscaled\n")
-        depth_size = phys_shape[0] if depth_axis == "x" else phys_shape[1]
-        depth_offset = phys_offset[0] if depth_axis == "x" else phys_offset[1]
-        depth_spacing = phys_spacing[0] if depth_axis == "x" else phys_spacing[1]
+        depth_axis_index = {"x": 0, "y": 1, "z": 2}[depth_axis]
+        depth_size = phys_shape[depth_axis_index]
+        depth_offset = phys_offset[depth_axis_index]
+        depth_spacing = phys_spacing[depth_axis_index]
         idd_unscaled = idd_axis(mapped, phys_shape, depth_axis)
         for ix in range(depth_size):
             x_mm = depth_offset + ix * depth_spacing

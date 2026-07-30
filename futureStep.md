@@ -512,6 +512,196 @@ projectile isotope × incident-energy bin × correlated final state
 
 高统计量只用于最终确认，不应用于生成 case-specific 校准参数。
 
+### CT full-plan all-hadron LET_d 精度续查（2026-07-30）
+
+在 RT06423、RT07575 上保持与 TOPAS 严格相同的粒子数，并统一使用
+`RTSTRUCT BODY ∩ TOPAS dose >= BODY Dmax 的 10%` 作为统计及 LET gamma
+掩膜。以下 A/B 均未使用病例拟合系数：
+
+- cascade 最大代数 `2 -> 4`：两个病例均无改善，排除代数截断；
+- 开启 neutral first-interaction：RT07575 中位绝对相对误差
+  `10.0454% -> 10.1978%`，且 neutral queue 有明显溢出，不采用；
+- 次级局域沉积截止 `1.0 -> 0.1 MeV`：两个独立病例均小幅改善，因此
+  LET full-plan 高精度配置保留 `0.1 MeV`；
+- 新增可选的肺/骨 fragment-specific cascade XS LUT。该实现按材料包参考
+  密度转换为 mass XS，缺失同位素逐种回退水表，相关末态仍使用高统计水包。
+  RT07575 骨区 P95 `24.4538% -> 24.3844%`，但全局中位误差无实质改善，
+  所以能力保留、生产配置默认不启用。
+
+`0.1 MeV` 截止的严格验证结果：
+
+| case | all-hadron median \|rel\| | P95 \|rel\| | local 3%/3 mm | local 2%/2 mm | local 1%/1 mm | local 3%/0 mm |
+|---|---:|---:|---:|---:|---:|---:|
+| RT06423, 1.0 MeV | 8.5770% | 24.7672% | 90.9841% | 73.0092% | 41.8365% | 19.7911% |
+| RT06423, 0.1 MeV | **8.5184%** | **24.5879%** | **91.1568%** | **73.2072%** | **42.0146%** | **19.8843%** |
+| RT07575, 1.0 MeV | 10.0454% | 27.4520% | 86.1031% | 68.8561% | 38.5691% | 17.2605% |
+| RT07575, 0.1 MeV | **9.9718%** | **27.2566%** | **86.2647%** | **69.0472%** | **38.7169%** | **17.3734%** |
+
+代价是 RT07575 吞吐约 `62.0k -> 54.1k histories/s`（约慢 12.8%）。
+目前剩余主误差仍是 all-hadron 碎片混合，而不是 primary C-12
+（primary median 约 0.9--1.2%）。下一步必须在代表性 CT spot 中让
+TOPAS 与 GPU 同时输出 p/d/t/He/C/B/... 的 LET numerator、denominator，
+直接闭合各粒子剂量权重；在完成该诊断前不应继续调全局 LET scale。
+
+#### 已完成：CT 元素级 LET moments 闭合（2026-07-30）
+
+使用 RT07575 中覆盖 2160--2460 MeV 总能量和多个横向位置的 5 个 spot，
+按原相对权重精确分配 100,000 histories。TOPAS 用 40 线程运行 1336.2 s，
+GPU 用 Titan RTX 运行 3.54 s；二者使用完全相同的 spot 几何和 L4。
+对完整 Patient 积分的结果表明：
+
+- all-hadron denominator：GPU `212.086M MeV`，TOPAS `212.878M MeV`，
+  仅差 `-0.37%`；
+- primary C-12 LET：GPU `44.9706`，TOPAS `45.0167`，差约 `-0.10%`；
+- GPU/TOPAS denominator 比值：secondary C `1.114`、B `1.552`、
+  Be `1.527`、Li `1.289`、He `0.840`、H `0.731`；
+- GPU `other_charged` numerator 约 `395M`，而从 TOPAS all-hadron
+  扣除 primary C-12 及 H--C 后的剩余约 `135M`。这一项解释了约 62%
+  的总 LET numerator 偏高。
+
+这证明总剂量权重的良好闭合包含了碎片组成的抵消，不能据此认为
+all-hadron LET 已闭合。以下 A/B 均没有解决主误差：
+
+- cascade 代数 `2 -> 1`：积分 LET `44.3311 -> 44.2974`，变化很小；
+- 次级局域沉积截止 `0.1 -> 0.01 MeV`：`44.3266 -> 44.3252`，
+  不值得增加约 37% 的 secondary steps；
+- 全局 lung 末态包：`44.3266 -> 44.2603`，仅小幅变化；
+- 全局 bone 末态包：升至 `45.2331`，明显变差。
+
+额外的水中 21-layer SOBP 10k 闭合将 N/O/F 单独计分。TOPAS 的
+N/O/F 合计 numerator/denominator 为 `41.44M / 64.52k`；同一水物理下
+GPU `other_charged` 按 10k 缩放为 `40.55M / 59.64k`。numerator 只差
+约 `-2.1%`，因此重反冲输运/LET 计分本身不是 CT 中 2.9 倍 numerator
+异常的主因；剩余问题是把水反应末态用于所有 Schneider CT 材料。
+
+作为安全的小幅泛化修复，`IonStoppingPowerNtuple` 从 32 种扩展到反应包
+实际出现的全部 50 种 `Z <= 9` 同位素，消除 N-13、O-14 等常见重反冲
+回退 C-12 缩放。两个完整病例严格复跑后的结果为：
+
+| case | median \|rel\| | P95 \|rel\| | global/local 1%/1 mm | global/local 3%/0 mm |
+|---|---:|---:|---:|---:|
+| RT06423, 32 isotope | 8.5184% | 24.5879% | 82.5572% / 42.0146% | 87.9770% / 19.8843% |
+| RT06423, 50 isotope | **8.5091%** | **24.5554%** | **82.5971% / 42.0459%** | **88.0017% / 19.9055%** |
+| RT07575, 32 isotope | 9.9718% | 27.2566% | 81.7929% / 38.7169% | 88.8178% / 17.3734% |
+| RT07575, 50 isotope | **9.9615%** | **27.2246%** | **81.8321% / 38.7298%** | **88.8328% / 17.3866%** |
+
+3%/3 mm global 仍为 `99.9946%` / `99.9965%`，2%/2 mm global 仍为
+`99.9196%` / `99.9376%`。改进很小但跨两个病例同向，且来自同版本
+Geant4 确定性表，不含病例拟合。剂量积分相对原 32 同位素结果分别为
+`1.000000006` / `0.999999997`；高剂量区 NRMSE 仅 `0.00127%` /
+`0.00081% Dmax`，因此没有破坏已经匹配的物理剂量。
+
+下一项底层物理工作应提取足够统计量、按靶元素或 Schneider 材料条件化的
+**primary C-12 correlated final-state packages**，并在碰撞点按 CT 材料
+选择末态。现有 20k lung/bone 包只适合诊断，不应直接用于生产。
+
+#### 已完成：CT 软组织条件化 primary 末态（2026-07-30）
+
+实现了可选的 `ct_lung_reaction_package_file`、
+`ct_soft_tissue_reaction_package_file` 和
+`ct_bone_reaction_package_file`。碰撞发生在 CCTG v2/v3 CT 内时，GPU
+按 Schneider section 折叠后的材料类别选择 primary C-12 correlated
+final-state package；路径为空时严格回退原水包，因此现有 dose/LET 配置
+不受影响。该路径目前在非 minibeam 的生产 legacy SYCL 后端实现。
+
+TOPAS 4.2.p3 / Geant4 11.3.2 使用 `G4_TISSUE_SOFT_ICRP` 在 400 MeV/u
+入射能量下生成减速全程反应样本：
+
+- 20k：14,883 个 primary C-12 反应、147,789 个相关产物；
+- 100k：74,199 个 primary C-12 反应、739,777 个相关产物；
+- 100k TOPAS 用 40 线程耗时 1561.3 s；
+- 编译为 101 个、宽度 4 MeV/u 的能量条件化 package。
+
+严格相同 history 数、相同 BODY∩TOPAS dose 10% 掩膜的完整计划结果如下。
+20k 与 100k 的细小差异反映 package 统计涨落；二者均明显优于水末态基线，
+100k 更适合作为后续物理判断依据，不能因为 20k 在两个已知病例的某一指标
+略高就选择低统计包。
+
+| case / primary package | median \|rel\| | P95 \|rel\| | local 3%/3 mm | local 2%/2 mm | global/local 1%/1 mm | global/local 3%/0 mm |
+|---|---:|---:|---:|---:|---:|---:|
+| RT06423 / water | 8.5091% | 24.5554% | 91.1550% | 73.2188% | 82.5971% / 42.0459% | 88.0017% / 19.9055% |
+| RT06423 / soft 20k | **7.8491%** | 22.8341% | **93.3366%** | **75.7852%** | **87.3305% / 43.8844%** | 88.8802% / **21.0237%** |
+| RT06423 / soft 100k | 7.9208% | **22.6697%** | 93.2369% | 75.3424% | 87.2903% / 43.7486% | **88.9085%** / 20.9349% |
+| RT07575 / water | 9.9615% | 27.2246% | 86.2697% | 69.0444% | 81.8321% / 38.7298% | 88.8328% / 17.3866% |
+| RT07575 / soft 20k | **9.0743%** | 25.0834% | 89.1384% | **71.6903%** | 87.4777% / **40.8565%** | **89.7512% / 18.4468%** |
+| RT07575 / soft 100k | 9.0897% | **24.8166%** | **89.4456%** | 71.5099% | **87.8802%** / 40.5694% | 89.7158% / 18.3997% |
+
+100k 完整计划运行性能：
+
+- RT06423：15,108,664 histories，278.0 s，54.4k histories/s；
+- RT07575：12,963,817 histories，253.3 s，51.2k histories/s；
+- 两例 direct-secondary、cascade queue overflow 均为 0。
+
+材料/section 诊断已加入
+`validation/scripts/analyze_fullplan_let_by_material.py`。残差不是统一常数：
+
+- Schneider section 7 占有效区约 57--61%，mean relative bias 约
+  `+6.2%` / `+7.8%`；
+- section 2--6 的偏差约 `+9%` 到 `+17%`；
+- lung class 仍约 `+18%` 到 `+21%`；
+- bone sections 随密度大致为 `+6.6%` 到 `+11.4%`。
+
+尝试把 section 2--6 直接改用现有 lung 20k package，RT07575 五 spot
+积分 LET_d 从 `44.1221` 变为 `44.1381`，方向略差，已撤销该临时映射。
+这说明需要真实的 Schneider family composition，不能用密度相近的肺材料
+替代。已经准备
+`validation/topas/carbon_400MeVu_schneider_section07_cascade_reactions_20k.txt`
+作为下一项验证；它使用 section 7 的精确 H/C/N/O/P/S/Cl/Na/K 质量分数。
+本轮因沙盒外执行额度限制未能启动 TOPAS。
+
+下一步按泛化优先级：
+
+1. 先完成 section 7 的 20k package 和两个病例 A/B；
+2. 有效后升到 100k，并增加 adipose family（section 2--6 的加权代表）；
+3. 再生成 lung family 和 2--3 个 bone composition family；
+4. 最终按 Schneider section family 选择 package，而不是病例校准或 LET scale。
+
+#### 已完成：与 CT TOPAS 对齐 INCL++ 核反应模型（2026-07-30）
+
+继续做元素级闭合后确认，前述“大幅材料残差”的主要原因不是 section 7
+停止本领，而是反应模型版本不一致：
+
+- CT full-plan TOPAS 使用 `g4ion-inclxx`；
+- 原 GPU primary/cascade package 来自 `g4ion-binarycascade`；
+- 在同一 RT07575 五 spot / 100k histories 中，旧 GPU 的 N、O LET
+  numerator 分别约为 TOPAS 的 `3.01×`、`4.30×`，而 F 已基本闭合；
+- 改用同版本 Geant4 11.3.2、同一 `G4_TISSUE_SOFT_ICRP` 的 INCL++
+  correlated final states 后，积分 all-hadron LET_d 从 `44.3266`
+  降到 `42.1385`，TOPAS 为 `42.2151`，偏差从 `+5.00%` 缩小到
+  `-0.18%`。
+
+新建的 100k INCL++ 样本含 236,679 个 cascade interactions 和
+1,774,422 个 products；其中 74,199 个 primary C-12 reactions、
+760,996 个 direct secondaries。原始 783 MB TOPAS n-tuple 转换峰值内存
+约 4.34 GB，编译后的 primary/cascade package 分别约 19 MB/45 MB。
+
+同时实现了 CT 材料分辨的 isotope stopping-power ratio：water、lung、
+soft tissue、bone 各自按本材料 C-12 曲线归一化；材料表缺失的同位素逐种
+回退水表。它修正了骨区随密度增大的系统性 LET 低估，没有使用病例拟合
+scale。
+
+严格相同 histories、BODY∩TOPAS dose 10% 掩膜的 full-plan 结果：
+
+| case / package | median \|rel\| | mean rel | local 3%/3 mm | local 2%/2 mm | local 1%/1 mm | local 3%/0 mm |
+|---|---:|---:|---:|---:|---:|---:|
+| RT06423 / INCL++ 20k | 2.2546% | -1.310% | 99.0122% | 96.2458% | 77.9743% | 59.9883% |
+| RT06423 / INCL++ 100k + material ion SP | **2.2165%** | **-1.203%** | **99.3121%** | **97.0301%** | **79.6323%** | **60.4189%** |
+| RT07575 / INCL++ 20k | 2.0197% | -0.642% | 99.6006% | 98.3349% | 83.5406% | 63.0866% |
+| RT07575 / INCL++ 100k + material ion SP | **2.0130%** | **-0.565%** | **99.7007%** | **98.7073%** | **84.6318%** | **63.0923%** |
+
+对应 global gamma 仍接近饱和：两个病例 3%/3 mm 为 `99.9905%` /
+`99.9947%`，2%/2 mm 为 `99.9139%` / `99.9341%`，1%/1 mm 为
+`96.0275%` / `97.1225%`。RT07575 运行 12,963,817 histories 用
+267.0 s（48.55k histories/s），相对不启用材料 ion SP 的 263.6 s
+仅慢约 1.3%，且所有 queue overflow 为 0。
+
+注意：全局使用 soft-tissue INCL++ package 后，人体内未归一化 dose
+积分相对 TOPAS 仍高约 `1.89%`（RT06423）/`1.83%`（RT07575）。
+因此当前配置是高精度 LET 候选，尚不能无条件替换已经验证的 dose 默认
+package。下一步应生成 Schneider lung/soft/bone family 各自的 INCL++
+primary/cascade package，并同时以 dose gamma 和 LET gamma 为门禁；不要
+用全局剂量或 LET 经验乘子掩盖材料末态不匹配。
+
 ## A.5 当前结论
 
 水中 SOBP 的 primary C-12 和 all-hadron LET_d 已经可以较好复现 TOPAS。
@@ -604,18 +794,20 @@ cascade 相关性。完成这一部分后，再进行新的 SOBP 和 CT case 泛
 | **P7** 可选 FP32 batch tally + FP64 reduction | 仅 fast mode；必须过 gamma / 能量闭合 |
 | FP32 vs FP64 dose atomic 统一 A/B | Level Zero 生产多为 FP64；历史 CUDA 曾用 FP32，不可混比性能 |
 
-## D.3 分级物理 / 快速剂量（仅 preview）
+## D.3 分级物理 / 快速剂量
 
-生产默认保持 `energy_cutoff_MeV=0.1`、`maximum_relative_energy_loss=0.005`、full cascade。
+已实现 `physics_profile: best|medium|fast`，并保留 `accurate` 兼容旧 YAML：
 
-| 档位 | 用途 |
-|------|------|
-| `preview-primary` | 坐标 / 射程 smoke |
-| `direct-secondary` | 直接带电次级、无 cascade |
-| `full-cascade` | 最终报告默认 |
+| 档位 | 用途 | 状态 |
+|------|------|------|
+| `best` | 最终 dose + LET；0.1 mm、0.1 MeV、粒子特异 SP | 已实现；两例 LET A/B 已有 |
+| `medium` | 完整 dose chain；0.5 mm、1 MeV | 已实现；待 TOPAS global 2%/2 mm ≥99% 门禁 |
+| `fast` | 无 LET；1 mm、2 MeV | 已实现；已有 accurate 配对，待跨病例 TOPAS 3%/3 mm ≥99% 门禁 |
 
-另测 `energy_cutoff_MeV=1.0` 等 **fast-dose** 配置：必须过 3D γ、R80、积分、峰位、能量闭合后才能标为 preview，**不得**静默替代最终剂量。  
-每个输出记录 backend / physics-tier 与关闭的能量通道。
+三档都保持 primary cutoff 0.1 MeV、full charged-secondary/cascade、CT 材料和
+dose voxel 边界，并禁止 queue overflow。`medium/fast` 不适用于 minibeam。
+每个输出的 backend 会记录 `+physics-best/medium/fast`。在 TOPAS 跨病例门禁
+完成前，medium/fast 仍应视为已审计的 preview 档，不能静默替代 best。
 
 ## D.4 架构债（低优先级）
 

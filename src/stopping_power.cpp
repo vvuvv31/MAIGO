@@ -109,7 +109,8 @@ const std::vector<double>& StoppingPowerTable::values() const noexcept {
 
 IonStoppingPowerTables IonStoppingPowerTables::from_csv(
     const std::filesystem::path& path,
-    const StoppingPowerTable& carbon_stopping_power) {
+    const StoppingPowerTable& carbon_stopping_power,
+    const bool normalize_to_file_carbon) {
     std::ifstream input(path);
     if (!input) {
         throw std::runtime_error("Cannot open ion stopping-power table: " + path.string());
@@ -191,6 +192,36 @@ IonStoppingPowerTables IonStoppingPowerTables::from_csv(
                                      path.string());
         }
         result.species_present_[species] = 1;
+    }
+    if (normalize_to_file_carbon) {
+        const auto carbon12_species =
+            std::size_t{6} * mass_stride + std::size_t{12};
+        if (result.species_present_[carbon12_species] == 0) {
+            throw std::runtime_error(
+                "Material ion stopping-power table lacks C-12: " +
+                path.string());
+        }
+        const auto carbon12_base =
+            carbon12_species * result.energy_grid_size_;
+        for (std::size_t species = 0; species < species_slots; ++species) {
+            if (result.species_present_[species] == 0) {
+                continue;
+            }
+            const auto base = species * result.energy_grid_size_;
+            for (std::size_t energy = 0;
+                 energy < result.energy_grid_size_; ++energy) {
+                const auto material_carbon_ratio =
+                    result.ratios_to_carbon_[carbon12_base + energy];
+                if (!std::isfinite(material_carbon_ratio) ||
+                    material_carbon_ratio <= 0.0F) {
+                    throw std::runtime_error(
+                        "Invalid material C-12 stopping-power ratio in " +
+                        path.string());
+                }
+                result.ratios_to_carbon_[base + energy] /=
+                    material_carbon_ratio;
+            }
+        }
     }
     return result;
 }

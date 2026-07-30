@@ -198,24 +198,67 @@ std::size_t TransportConfig::number_of_voxels() const {
 }
 
 void TransportConfig::validate() const {
-    if (physics_profile != "accurate" && physics_profile != "fast") {
+    if (physics_profile != "accurate" && physics_profile != "best" &&
+        physics_profile != "medium" && physics_profile != "fast") {
         throw std::invalid_argument(
-            "physics_profile must be accurate or fast");
+            "physics_profile must be accurate, best, medium, or fast");
     }
-    if (physics_profile == "fast") {
+    if (physics_profile == "best") {
+        if (!enable_let_scoring) {
+            throw std::invalid_argument(
+                "physics_profile=best requires LET scoring");
+        }
+        if (!use_particle_specific_stopping_power) {
+            throw std::invalid_argument(
+                "physics_profile=best requires particle-specific stopping power");
+        }
+        if (!enable_primary_attenuation || !enable_secondary_generation ||
+            !enable_secondary_transport || !enable_fragment_cascade) {
+            throw std::invalid_argument(
+                "physics_profile=best requires attenuation, secondary transport, "
+                "and fragment cascade");
+        }
+        if (maximum_step_mm > 0.1 || maximum_relative_energy_loss > 0.001 ||
+            energy_cutoff_MeV > 0.1 ||
+            (secondary_local_deposit_cutoff_MeV > 0.0 &&
+             secondary_local_deposit_cutoff_MeV > 0.1)) {
+            throw std::invalid_argument(
+                "physics_profile=best requires maximum_step_mm<=0.1, "
+                "maximum_relative_energy_loss<=0.001, and cutoffs<=0.1 MeV");
+        }
+    }
+    if (physics_profile == "medium" || physics_profile == "fast") {
         if (enable_minibeam) {
             throw std::invalid_argument(
-                "physics_profile=fast is not allowed with minibeam=true");
-        }
-        if (enable_let_scoring) {
-            throw std::invalid_argument(
-                "physics_profile=fast is not allowed with LET scoring");
+                "physics_profile=medium/fast is not allowed with minibeam=true");
         }
         if (!enable_ct_grid) {
             throw std::invalid_argument(
-                "physics_profile=fast currently requires enable_ct_grid=true");
+                "physics_profile=medium/fast currently requires enable_ct_grid=true");
+        }
+        if (!enable_primary_attenuation || !enable_secondary_generation ||
+            !enable_secondary_transport || !enable_fragment_cascade) {
+            throw std::invalid_argument(
+                "physics_profile=medium/fast requires the complete charged dose chain");
         }
     }
+    if (physics_profile == "fast" && enable_let_scoring) {
+        throw std::invalid_argument(
+            "physics_profile=fast is not allowed with LET scoring");
+    }
+    if (physics_profile == "medium" && maximum_relative_energy_loss > 0.005) {
+        throw std::invalid_argument(
+            "physics_profile=medium requires maximum_relative_energy_loss<=0.005");
+    }
+    if (physics_profile == "fast" && maximum_relative_energy_loss > 0.01) {
+        throw std::invalid_argument(
+            "physics_profile=fast requires maximum_relative_energy_loss<=0.01");
+    }
+    if ((physics_profile == "medium" || physics_profile == "fast") &&
+        energy_cutoff_MeV > 0.1) {
+        throw std::invalid_argument(
+            "physics_profile=medium/fast keeps the primary cutoff at <=0.1 MeV");
+        }
     if (number_of_histories == 0) {
         throw std::invalid_argument("number_of_histories must be greater than zero");
     }
@@ -314,6 +357,15 @@ void TransportConfig::validate() const {
     if (ct_stopping_power_scale <= 0.0 || ct_stopping_power_scale > 2.0) {
         throw std::invalid_argument(
             "ct_stopping_power_scale must be in (0, 2]");
+    }
+    if ((!ct_lung_cascade_cross_section_package_file.empty() &&
+         (!std::isfinite(ct_lung_cascade_reference_density_g_per_cm3) ||
+          ct_lung_cascade_reference_density_g_per_cm3 <= 0.0)) ||
+        (!ct_bone_cascade_cross_section_package_file.empty() &&
+         (!std::isfinite(ct_bone_cascade_reference_density_g_per_cm3) ||
+          ct_bone_cascade_reference_density_g_per_cm3 <= 0.0))) {
+        throw std::invalid_argument(
+            "CT material cascade reference densities must be finite and positive");
     }
     if (enable_voxel_scoring &&
         (voxel_bins_x == 0 || voxel_bins_y == 0 || voxel_size_x_mm <= 0.0 ||
@@ -847,6 +899,27 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.ct_schneider_cross_section_file = parse_path(
         values, "ct_schneider_cross_section_file",
         config.ct_schneider_cross_section_file);
+    config.ct_lung_reaction_package_file = parse_path(
+        values, "ct_lung_reaction_package_file",
+        config.ct_lung_reaction_package_file);
+    config.ct_soft_tissue_reaction_package_file = parse_path(
+        values, "ct_soft_tissue_reaction_package_file",
+        config.ct_soft_tissue_reaction_package_file);
+    config.ct_bone_reaction_package_file = parse_path(
+        values, "ct_bone_reaction_package_file",
+        config.ct_bone_reaction_package_file);
+    config.ct_lung_cascade_cross_section_package_file = parse_path(
+        values, "ct_lung_cascade_cross_section_package_file",
+        config.ct_lung_cascade_cross_section_package_file);
+    config.ct_bone_cascade_cross_section_package_file = parse_path(
+        values, "ct_bone_cascade_cross_section_package_file",
+        config.ct_bone_cascade_cross_section_package_file);
+    config.ct_lung_cascade_reference_density_g_per_cm3 = parse_number(
+        values, "ct_lung_cascade_reference_density_g_per_cm3",
+        config.ct_lung_cascade_reference_density_g_per_cm3);
+    config.ct_bone_cascade_reference_density_g_per_cm3 = parse_number(
+        values, "ct_bone_cascade_reference_density_g_per_cm3",
+        config.ct_bone_cascade_reference_density_g_per_cm3);
     config.ct_stopping_power_scale = parse_number(
         values, "ct_stopping_power_scale", config.ct_stopping_power_scale);
     if (values.find("ct_grid_file") != values.end() &&
@@ -1275,6 +1348,15 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.particle_stopping_power_file = parse_path(
         values, "particle_stopping_power_file",
         config.particle_stopping_power_file);
+    config.ct_lung_particle_stopping_power_file = parse_path(
+        values, "ct_lung_particle_stopping_power_file",
+        config.ct_lung_particle_stopping_power_file);
+    config.ct_soft_tissue_particle_stopping_power_file = parse_path(
+        values, "ct_soft_tissue_particle_stopping_power_file",
+        config.ct_soft_tissue_particle_stopping_power_file);
+    config.ct_bone_particle_stopping_power_file = parse_path(
+        values, "ct_bone_particle_stopping_power_file",
+        config.ct_bone_particle_stopping_power_file);
     config.nuclear_cross_section_file =
         parse_path(values, "nuclear_cross_section_file", config.nuclear_cross_section_file);
     config.reaction_package_file =

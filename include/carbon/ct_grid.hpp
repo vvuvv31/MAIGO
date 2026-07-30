@@ -51,6 +51,10 @@ struct CtGrid {
         return !mass_sp_za_rel.empty() || !mass_sp_factor.empty();
     }
 
+    [[nodiscard]] bool uses_schneider_mass_sp() const noexcept {
+        return file_version != version_legacy && has_mass_sp_factors();
+    }
+
     static CtGrid from_binary(const std::filesystem::path& path);
     void write_binary(const std::filesystem::path& path) const;
 };

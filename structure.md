@@ -173,7 +173,7 @@ main
 定义于 `include/carbon/transport_config.hpp`，集中存放：
 
 - 束流、histories、种子、步长
-- `physics_profile: accurate|fast` 输运策略（默认 `accurate`）
+- `physics_profile: accurate|best|medium|fast` 输运策略（默认 `accurate`）
 - slab / insert / CT 几何
 - 次级、级联、中性、LET、voxel scorer
 - GPU 批大小 / `secondary_persistent_workers` 等
@@ -218,7 +218,7 @@ main
 **无**完整 MCS / 次级 / 级联 / 中性 / 完整 CT。  
 用途：轻量调试与能量账本子集对照。
 
-### 5.2 SYCL legacy accurate（`transport_sycl_legacy.cpp`）
+### 5.2 SYCL legacy CT precision profiles（`transport_sycl_legacy.cpp`）
 
 全功能 **水箱 / CT / TPS / LET** 路径（与隔离前 master 内核同源快照 + 共享 context）：
 
@@ -232,41 +232,60 @@ Neutral kernel（可选）
   → result reduction
 ```
 
-`physics_profile` 未设置时为 `accurate`，因此已有 YAML、CT case 和
-minibeam isolation 的行为不变。
+`physics_profile` 未设置时为 `accurate`，它是兼容旧 YAML 的原行为。
+新的计划级接口为 `best / medium / fast`：
 
-### 5.3 普通 CT fast profile
+| profile | 用途 | LET | 次级步长 | 局域沉积 cutoff | 验收目标 |
+|---|---|---|---:|---:|---|
+| `best` | 最终 dose + LET | 必须开启、粒子特异表 | ≤0.1 mm | ≤0.1 MeV | 尽量提高 LET；dose global 2%/2 mm ≥99% |
+| `medium` | 平衡速度/剂量 | 默认配置关闭；允许诊断开启 | 0.5 mm | 1 MeV | TOPAS dose global 2%/2 mm ≥99% |
+| `fast` | 优化迭代、最终前预跑 | 强制关闭 | 1 mm | 2 MeV | TOPAS dose global 3%/3 mm ≥99% |
+| `accurate` | 旧配置兼容 | 按 YAML | 按 YAML | 按 YAML | 保持历史行为 |
 
-`physics_profile: fast` 是普通 CT 物理剂量的显式快速档，仍调用 legacy
-SYCL 内核，但使用独立、可审计的策略。它不是 minibeam 的低精度模式。
+gamma 是每个病例相对 TOPAS 的**验收门**，不是 profile 名称自动保证的结果。
+新病例至少先用相同 histories 做一次 TOPAS 验证；任何档位都不允许通过减少
+计划粒子数、缩小 queue 或改变 dose scale 冒充加速。
+
+`best` 的配置校验强制：
+
+- primary attenuation、次级产生/输运和 fragment cascade 全开；
+- `scorerLET=true`、`use_particle_specific_stopping_power=true`；
+- `maximum_step_mm<=0.1`、`maximum_relative_energy_loss<=0.001`；
+- primary 与 secondary cutoff 均不高于 0.1 MeV。
+
+`medium` 和 `fast` 保留完整的 charged dose chain、CT 材料边界和 dose voxel
+边界。二者不是 minibeam 的低精度模式，也不能用于非 CT 几何。
 
 ```text
 YAML / CLI
   → validate profile and feature compatibility
-  → CUDA primary chunk 16k（减少 host submit / wait）
+  → medium/fast CUDA primary chunk 16k（减少 host submit / wait）
   → primary physics 不变
-  → charged-secondary step 上限 1 mm
-  → ≤2 MeV 短程 charged secondary 在当前 voxel 局部沉积
+  → medium: charged-secondary 0.5 mm / ≤1 MeV 局部沉积
+  → fast: charged-secondary 1 mm / ≤2 MeV 局部沉积
   → CT material face / dose voxel face / energy-loss limit 仍然 clamp
-  → result.backend 追加 +physics-fast
+  → result.backend 追加 +physics-best / +physics-medium / +physics-fast
 ```
-
-其中次级步长取
-`max(maximum_step_mm, secondary_condensed_step_mm, 1 mm)`；低能局部沉积阈值取
-`max(secondary_local_deposit_cutoff_MeV, 2 MeV)`。以下安全门由
-`TransportConfig::validate()` 强制执行：
 
 | 条件 | 行为 |
 |------|------|
 | 未设置 profile | `accurate`，保持原行为 |
+| `best` + LET + 完整物理 | 允许 |
+| `best` 缺 LET/粒子表/完整 cascade | **拒绝配置** |
+| `medium` + 普通 CT | 允许 |
 | `fast` + 普通 CT dose | 允许 |
-| `fast` + minibeam | **拒绝配置** |
+| `medium/fast` + minibeam 或非 CT | **拒绝配置** |
 | `fast` + LET scorer | **拒绝配置** |
-| `fast` + 非 CT 几何 | **拒绝配置** |
 | 未知 profile | **拒绝配置** |
 
-fast 不允许用缩小 queue 偷取速度。正式结果仍要求
+三个 profile 的正式结果仍要求
 `Secondary queue overflow: 0` 和 `Cascade queue overflow: 0`。
+
+RT07575 可复现配置：
+
+- `best`：`config/beam_ct_fullplan_rt07575_let_soft_tissue.yaml`
+- `medium`：`config/beam_ct_fullplan_rt07575_medium.yaml`
+- `fast`：`config/beam_ct_fullplan_rt07575_fast.yaml`
 
 ### 5.4 SYCL minibeam（`transport_sycl.cpp`，仅 MINIBEAM=ON）
 

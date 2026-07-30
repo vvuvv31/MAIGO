@@ -91,10 +91,10 @@ struct TransportResult {
     // Category-major primary-C12, secondary C, B, Be, Li, He, p, other.
     std::vector<double> charged_origin_letd_numerator;
     std::vector<double> charged_origin_letd_denominator;
-    // Optional category-major p, d, t, He-3, He-4 LET moments.
+    // Optional category-major p, d, t, He-3, He-4, N, O, F LET moments.
     std::vector<double> light_isotope_letd_numerator;
     std::vector<double> light_isotope_letd_denominator;
-    // Optional light-isotope birth spectra (p/d/t/He-3/He-4). Layout documented
+    // Optional selected-isotope/element birth spectra. Layout documented
     // in particle.hpp birth_* constants. Counts are event tallies (not /primary).
     // Histograms are species × generation × bin (see birth_hist_index).
     std::vector<std::uint64_t> birth_counts_by_generation;  // cat * gen_bins

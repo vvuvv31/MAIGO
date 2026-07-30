@@ -412,8 +412,12 @@ TopasSpotPlan TopasSpotPlan::from_file(const std::filesystem::path& path) {
             throw std::runtime_error("TOPAS spot has non-positive BeamEnergy in " +
                                      path.string());
         }
+        // Optimized full-plan exports retain inactive spots with L4=0 so the
+        // original Dij/optimizer column order remains auditable. TOPAS executes
+        // no histories for those entries; omit them from the GPU batch while
+        // preserving every positive per-spot integer allocation exactly.
         if (spot.number_of_histories == 0) {
-            throw std::runtime_error("TOPAS spot has zero histories in " + path.string());
+            continue;
         }
         plan.spots.push_back(spot);
     }

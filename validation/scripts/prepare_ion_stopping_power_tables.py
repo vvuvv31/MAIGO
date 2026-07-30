@@ -50,19 +50,27 @@ def main() -> None:
             fields = line.split()
             if not fields:
                 continue
-            if len(fields) != 8:
-                raise ValueError(f"{args.topas_phsp}:{line_number}: expected 8 fields")
+            if len(fields) not in (7, 8):
+                raise ValueError(
+                    f"{args.topas_phsp}:{line_number}: expected 7 or 8 fields"
+                )
             z, a = int(fields[0]), int(fields[1])
-            (
-                energy,
-                unrestricted,
-                restricted,
-                transport_table,
-                nuclear,
-                raw_delta,
-            ) = map(
-                float, fields[2:]
-            )
+            values = list(map(float, fields[2:]))
+            if len(fields) == 8:
+                (
+                    energy,
+                    unrestricted,
+                    restricted,
+                    transport_table,
+                    nuclear,
+                    raw_delta,
+                ) = values
+            else:
+                energy, unrestricted, restricted, nuclear, raw_delta = values
+                # Current IonStoppingPowerNtuple no longer writes the redundant
+                # transport-table dE/dx column. It is not consumed downstream,
+                # but retain an internal placeholder for old/new file parity.
+                transport_table = restricted
             if not (z > 0 and a >= z and energy > 0 and unrestricted > 0):
                 raise ValueError(f"{args.topas_phsp}:{line_number}: invalid ion table row")
             rows.append(

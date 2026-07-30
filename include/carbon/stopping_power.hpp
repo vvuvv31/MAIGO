@@ -37,7 +37,8 @@ public:
 
     static IonStoppingPowerTables from_csv(
         const std::filesystem::path& path,
-        const StoppingPowerTable& carbon_stopping_power);
+        const StoppingPowerTable& carbon_stopping_power,
+        bool normalize_to_file_carbon = false);
 
     [[nodiscard]] const std::vector<float>& ratios_to_carbon() const noexcept;
     [[nodiscard]] const std::vector<float>& delta_electron_fractions() const noexcept;

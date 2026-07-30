@@ -1,5 +1,7 @@
 validation/results/*.bin filter=lfs diff=lfs merge=lfs -text
 validation/results/*.csv.gz filter=lfs diff=lfs merge=lfs -text
+validation/results/**/*.bin filter=lfs diff=lfs merge=lfs -text
+validation/results/**/*.csv.gz filter=lfs diff=lfs merge=lfs -text
 ct/grid/*.bin filter=lfs diff=lfs merge=lfs -text
 validation/topas/output/sobp_water_3cm_5_10cm_3mm_dose3d_development.csv filter=lfs diff=lfs merge=lfs -text
 out/sobp_benchmark/*.raw filter=lfs diff=lfs merge=lfs -text

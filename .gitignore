@@ -31,6 +31,17 @@ validation/results/**
 !validation/results/topas_200MeVu_neutral_development*
 !validation/results/topas_400MeVu_cascade_g4_11_3_2_100k_conditioned_3d.bin
 !validation/results/topas_400MeVu_cascade_g4_11_3_2_100k_conditioned_3d.metadata.json
+# CT LET production packages generated with the same Geant4 11.3.2 INCL++
+# physics list as the TOPAS full-plan references. Keep compact binaries and
+# provenance metadata; raw n-tuples and intermediate CSV tables remain local.
+!validation/results/diagnostic_g4_11_3_2/
+validation/results/diagnostic_g4_11_3_2/**
+!validation/results/diagnostic_g4_11_3_2/topas_400MeVu_soft_tissue_inclxx_100k_metadata.json
+!validation/results/diagnostic_g4_11_3_2/topas_400MeVu_soft_tissue_inclxx_100k_primary.metadata.json
+!validation/results/diagnostic_g4_11_3_2/topas_400MeVu_soft_tissue_inclxx_100k_primary_3d.bin
+!validation/results/diagnostic_g4_11_3_2/topas_400MeVu_soft_tissue_inclxx_100k_primary_3d.compiled.json
+!validation/results/diagnostic_g4_11_3_2/topas_400MeVu_soft_tissue_inclxx_100k_cascade_3d.bin
+!validation/results/diagnostic_g4_11_3_2/topas_400MeVu_soft_tissue_inclxx_100k_cascade_3d.compiled.json
 
 # TOPAS raw scorer dumps
 validation/topas/output/**

@@ -264,8 +264,13 @@ void test_particle_specific_stopping_power_tables() {
             "Ion stopping-power energy grid size failed");
     require(std::count(ions.species_present().begin(),
                        ions.species_present().end(),
-                       std::uint8_t{1}) == 32,
+                       std::uint8_t{1}) == 50,
             "Ion stopping-power isotope count failed");
+    require(ions.species_present()[
+                7 * carbon::IonStoppingPowerTables::mass_stride + 13] == 1 &&
+                ions.species_present()[
+                    8 * carbon::IonStoppingPowerTables::mass_stride + 14] == 1,
+            "Heavy-recoil isotope stopping-power coverage failed");
     const auto c12 = (6 * carbon::IonStoppingPowerTables::mass_stride + 12) *
                      ions.energy_grid_size();
     const auto h1 = (1 * carbon::IonStoppingPowerTables::mass_stride + 1) *
@@ -479,6 +484,12 @@ void test_ct_grid_helpers() {
     require(loaded.file_version == carbon::CtGrid::version_value, "ct v3 version");
     require(loaded.has_mass_sp_factors() && loaded.mass_sp_za_rel.size() == 4,
             "ct v3 za_rel");
+    require(loaded.uses_schneider_mass_sp(),
+            "ct v3 Schneider mass-SP selection");
+    auto legacy = loaded;
+    legacy.file_version = carbon::CtGrid::version_legacy;
+    require(legacy.has_mass_sp_factors() && !legacy.uses_schneider_mass_sp(),
+            "ct v1 unit factors must not shadow absolute material tables");
     require_near(loaded.mass_sp_za_rel[3], 0.93F, 1.0e-6, "ct v3 bone za");
     require_near(loaded.mass_sp_I_eV[3], 106.0F, 1.0e-4, "ct v3 bone I");
     std::filesystem::remove(path);
@@ -1230,7 +1241,37 @@ void test_secondary_optimization_config_validation() {
     fast.physics_profile = "fast";
     fast.enable_ct_grid = true;
     fast.ct_grid_file = "synthetic-fast-profile-grid.bin";
+    fast.enable_primary_attenuation = true;
+    fast.enable_secondary_generation = true;
+    fast.enable_secondary_transport = true;
+    fast.enable_fragment_cascade = true;
+    fast.maximum_cascade_generations = 2;
     fast.validate();
+
+    auto medium = fast;
+    medium.physics_profile = "medium";
+    medium.enable_let_scoring = true;
+    medium.validate();
+
+    auto best = fast;
+    best.physics_profile = "best";
+    best.maximum_step_mm = 0.1;
+    best.maximum_relative_energy_loss = 0.001;
+    best.energy_cutoff_MeV = 0.1;
+    best.secondary_local_deposit_cutoff_MeV = 0.1;
+    best.enable_let_scoring = true;
+    best.use_particle_specific_stopping_power = true;
+    best.validate();
+
+    auto bad_best_let = best;
+    bad_best_let.enable_let_scoring = false;
+    require_throws([&bad_best_let] { bad_best_let.validate(); },
+                   "Best physics profile should require LET scoring");
+
+    auto bad_best_step = best;
+    bad_best_step.maximum_step_mm = 0.5;
+    require_throws([&bad_best_step] { bad_best_step.validate(); },
+                   "Best physics profile should enforce its step limit");
 
     auto bad_fast_geometry = fast;
     bad_fast_geometry.enable_ct_grid = false;
@@ -1252,6 +1293,24 @@ void test_secondary_optimization_config_validation() {
     bad_profile.physics_profile = "turbo";
     require_throws([&bad_profile] { bad_profile.validate(); },
                    "Unknown physics profile should be rejected");
+
+    const auto config_root =
+        std::filesystem::path(CARBON_SOURCE_DIR) / "config";
+    const auto best_config = carbon::load_config(
+        config_root / "beam_ct_fullplan_rt07575_let_soft_tissue.yaml");
+    const auto medium_config = carbon::load_config(
+        config_root / "beam_ct_fullplan_rt07575_medium.yaml");
+    const auto fast_config = carbon::load_config(
+        config_root / "beam_ct_fullplan_rt07575_fast.yaml");
+    require(best_config.physics_profile == "best" &&
+                best_config.enable_let_scoring,
+            "Best full-plan profile config contract");
+    require(medium_config.physics_profile == "medium" &&
+                !medium_config.enable_let_scoring,
+            "Medium full-plan profile config contract");
+    require(fast_config.physics_profile == "fast" &&
+                !fast_config.enable_let_scoring,
+            "Fast full-plan profile config contract");
 }
 
 void test_topas_spots_parse_angle01() {

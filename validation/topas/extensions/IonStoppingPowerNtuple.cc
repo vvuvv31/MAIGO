@@ -57,16 +57,21 @@ G4bool IonStoppingPowerNtuple::ProcessHits(
         return false;
     }
 
-    // Exact species present in the Geant4 11.3.2 400 MeV/u cascade package.
-    constexpr std::array<std::pair<G4int, G4int>, 32> species{{
+    // Exact transportable species present in the Geant4 11.3.2 400 MeV/u
+    // primary-reaction package.  Keep even the low-yield neutron-rich target
+    // recoils: their small dose denominator can carry a very large LET
+    // numerator near rest.  Missing entries fall back to C-12 effective-charge
+    // scaling in the GPU and disproportionately bias the Z >= 7 category.
+    constexpr std::array<std::pair<G4int, G4int>, 50> species{{
         {1, 1}, {1, 2}, {1, 3},
         {2, 3}, {2, 4}, {2, 6}, {2, 8},
         {3, 6}, {3, 7}, {3, 8}, {3, 9},
-        {4, 4}, {4, 6}, {4, 7}, {4, 9}, {4, 10},
-        {5, 8}, {5, 10}, {5, 11}, {5, 12},
-        {6, 9}, {6, 10}, {6, 11}, {6, 12}, {6, 13}, {6, 14},
-        {7, 12}, {7, 14}, {7, 15},
-        {8, 15}, {8, 16}, {9, 19},
+        {4, 4}, {4, 6}, {4, 7}, {4, 9}, {4, 10}, {4, 11}, {4, 12},
+        {5, 8}, {5, 10}, {5, 11}, {5, 12}, {5, 13}, {5, 14}, {5, 15},
+        {6, 9}, {6, 10}, {6, 11}, {6, 12}, {6, 13}, {6, 14}, {6, 15}, {6, 16},
+        {7, 12}, {7, 13}, {7, 14}, {7, 15}, {7, 16}, {7, 17}, {7, 18},
+        {8, 13}, {8, 14}, {8, 15}, {8, 16}, {8, 17}, {8, 18},
+        {9, 17}, {9, 18}, {9, 19}, {9, 21},
     }};
 
     const auto* material = step->GetPreStepPoint()->GetMaterial();

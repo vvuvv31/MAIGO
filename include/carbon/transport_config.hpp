@@ -144,6 +144,23 @@ struct TransportConfig {
     // Optional energy-dependent mass XS for every Schneider section. When set
     // on a CCTG v2/v3 grid, this supersedes the legacy four-class XS tables.
     std::filesystem::path ct_schneider_cross_section_file{};
+    // Optional material-conditioned primary C-12 correlated final states.
+    // Empty paths preserve the production water package for every CT voxel.
+    // Each package is selected only for reactions occurring in the
+    // corresponding CT material class. An empty class path falls back to
+    // reaction_package_file.
+    std::filesystem::path ct_lung_reaction_package_file{};
+    std::filesystem::path ct_soft_tissue_reaction_package_file{};
+    std::filesystem::path ct_bone_reaction_package_file{};
+    // Optional fragment-specific inelastic cross sections extracted from
+    // material cascade packages. Only their projectile XS tables are used;
+    // correlated final states continue to come from cascade_package_file.
+    // Values in the package are macroscopic at the reference density below
+    // and are converted to mass cross sections before CT-density scaling.
+    std::filesystem::path ct_lung_cascade_cross_section_package_file{};
+    std::filesystem::path ct_bone_cascade_cross_section_package_file{};
+    double ct_lung_cascade_reference_density_g_per_cm3{1.04};
+    double ct_bone_cascade_reference_density_g_per_cm3{1.85};
     // Global multiplier on CT mass-scaled / material stopping power (default 1).
     // Used to absorb residual WEPL calibration vs full Geant4 material SP.
     double ct_stopping_power_scale{1.0};
@@ -427,6 +444,13 @@ struct TransportConfig {
     bool use_particle_specific_stopping_power{false};
     std::filesystem::path particle_stopping_power_file{
         "data/ion_stopping_power_water_geant4_11_3_2.csv"};
+    // Optional isotope-specific stopping ratios in representative CT lung,
+    // soft-tissue, and bone materials. Each table is normalized to its own
+    // C-12 curve, then applied to the local Schneider C-12 stopping power.
+    // Missing species fall back to the production water ratio.
+    std::filesystem::path ct_lung_particle_stopping_power_file{};
+    std::filesystem::path ct_soft_tissue_particle_stopping_power_file{};
+    std::filesystem::path ct_bone_particle_stopping_power_file{};
     std::filesystem::path nuclear_cross_section_file{
         "data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv"};
     std::filesystem::path reaction_package_file{
@@ -441,10 +465,10 @@ struct TransportConfig {
         "out/gpu_fragment_species_depth_dose.csv"};
     std::filesystem::path let_output_file{"out/gpu_letd_depth.csv"};
     std::filesystem::path fragment_species_let_output_file{};
-    // Optional p/d/t/He-3/He-4 depth LET diagnostics. Empty avoids the extra
-    // per-step FP64 atomics in normal production runs.
+    // Optional p/d/t/He-3/He-4/N/O/F depth LET diagnostics. Empty avoids the
+    // extra per-step FP64 atomics in normal production runs.
     std::filesystem::path light_isotope_let_output_file{};
-    // Optional light-isotope birth-spectrum diagnostics (CSV prefix). Empty
+    // Optional selected-species birth-spectrum diagnostics (CSV prefix). Empty
     // disables all birth-spectrum buffers and atomics.
     // Writes: <path>_summary.csv, <path>_mevu.csv, <path>_depth.csv,
     // <path>_costheta.csv, <path>_parent_mevu.csv, <path>_parent_z.csv

@@ -21,6 +21,7 @@
 #include <iostream>
 #include <limits>
 #include <numeric>
+#include <optional>
 #include <stdexcept>
 #include <vector>
 
@@ -453,6 +454,73 @@ std::vector<float> build_cascade_xs_energy_lut(
                                 lo.macroscopic_cross_section_per_mm);
             }
             lut[projectile_index * energy_count + energy_index] = value;
+        }
+    }
+    return lut;
+}
+
+// Build a material mass-XS LUT in the projectile order of the production
+// package. Sparse material packages fall back species-by-species to water.
+std::vector<float> build_aligned_material_cascade_xs_lut(
+    const CascadePackageTable& production_packages,
+    const CascadePackageTable& material_packages,
+    const std::vector<double>& energies_MeVu,
+    const float material_reference_density_g_per_cm3) {
+    auto lut =
+        build_cascade_xs_energy_lut(production_packages, energies_MeVu);
+    const auto energy_count = energies_MeVu.size();
+    const auto& samples = material_packages.cross_sections();
+    for (std::size_t projectile_index = 0;
+         projectile_index < production_packages.projectiles().size();
+         ++projectile_index) {
+        const auto& production_projectile =
+            production_packages.projectiles()[projectile_index];
+        const auto* projectile = material_packages.find_projectile(
+            production_projectile.atomic_number,
+            production_projectile.mass_number);
+        if (projectile == nullptr || projectile->cross_section_count == 0) {
+            continue;
+        }
+        const auto offset = projectile->cross_section_offset;
+        const auto count = projectile->cross_section_count;
+        for (std::size_t energy_index = 0; energy_index < energy_count;
+             ++energy_index) {
+            const auto energy =
+                static_cast<float>(energies_MeVu[energy_index]);
+            std::uint32_t lower = 0;
+            std::uint32_t upper = count;
+            while (lower < upper) {
+                const auto middle = lower + (upper - lower) / 2U;
+                if (samples[offset + middle].energy_MeV_per_u < energy) {
+                    lower = middle + 1U;
+                } else {
+                    upper = middle;
+                }
+            }
+            float value = 0.0F;
+            if (lower == 0U) {
+                value = samples[offset].macroscopic_cross_section_per_mm;
+            } else if (lower >= count) {
+                value =
+                    samples[offset + count - 1U].macroscopic_cross_section_per_mm;
+            } else {
+                const auto& lo = samples[offset + lower - 1U];
+                const auto& hi = samples[offset + lower];
+                const auto interval =
+                    hi.energy_MeV_per_u - lo.energy_MeV_per_u;
+                const auto fraction =
+                    interval > 0.0F
+                        ? std::clamp(
+                              (energy - lo.energy_MeV_per_u) / interval,
+                              0.0F, 1.0F)
+                        : 0.0F;
+                value = lo.macroscopic_cross_section_per_mm +
+                        fraction *
+                            (hi.macroscopic_cross_section_per_mm -
+                             lo.macroscopic_cross_section_per_mm);
+            }
+            lut[projectile_index * energy_count + energy_index] =
+                value / material_reference_density_g_per_cm3;
         }
     }
     return lut;
@@ -1075,7 +1143,7 @@ inline void score_letd_moments_device(
     }
 }
 
-// Score a light-isotope birth (p/d/t/He-3/He-4) into histogram buffers.
+// Score an optional diagnostic-species birth into histogram buffers.
 // No-op when buffers are null or the product is not a light isotope.
 inline void score_fragment_birth_device(
     std::uint64_t* counts_by_generation,
@@ -1245,6 +1313,54 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
     auto charged_after_neutral_kernel_seconds = 0.0;
     const auto table_size = stopping_power.values().size();
     const auto cross_section_table_size = cross_section.values().size();
+    std::optional<ReactionPackageTable> ct_lung_reaction_packages;
+    std::optional<ReactionPackageTable> ct_soft_tissue_reaction_packages;
+    std::optional<ReactionPackageTable> ct_bone_reaction_packages;
+    if (config.enable_ct_grid && config.enable_secondary_generation) {
+        if (!config.ct_lung_reaction_package_file.empty()) {
+            ct_lung_reaction_packages =
+                ReactionPackageTable::from_binary(
+                    config.ct_lung_reaction_package_file);
+        }
+        if (!config.ct_soft_tissue_reaction_package_file.empty()) {
+            ct_soft_tissue_reaction_packages =
+                ReactionPackageTable::from_binary(
+                    config.ct_soft_tissue_reaction_package_file);
+        }
+        if (!config.ct_bone_reaction_package_file.empty()) {
+            ct_bone_reaction_packages =
+                ReactionPackageTable::from_binary(
+                    config.ct_bone_reaction_package_file);
+        }
+    }
+    const auto use_ct_lung_reaction_packages =
+        ct_lung_reaction_packages.has_value();
+    const auto use_ct_soft_tissue_reaction_packages =
+        ct_soft_tissue_reaction_packages.has_value();
+    const auto use_ct_bone_reaction_packages =
+        ct_bone_reaction_packages.has_value();
+    std::optional<CascadePackageTable> ct_lung_cascade_xs_packages;
+    std::optional<CascadePackageTable> ct_bone_cascade_xs_packages;
+    if (config.enable_ct_grid && config.enable_fragment_cascade) {
+        if (!config.ct_lung_cascade_cross_section_package_file.empty()) {
+            ct_lung_cascade_xs_packages =
+                CascadePackageTable::from_binary(
+                    config.ct_lung_cascade_cross_section_package_file);
+        }
+        if (!config.ct_bone_cascade_cross_section_package_file.empty()) {
+            ct_bone_cascade_xs_packages =
+                CascadePackageTable::from_binary(
+                    config.ct_bone_cascade_cross_section_package_file);
+        }
+    }
+    const auto use_ct_lung_cascade_xs =
+        ct_lung_cascade_xs_packages.has_value();
+    const auto use_ct_bone_cascade_xs =
+        ct_bone_cascade_xs_packages.has_value();
+    const auto cascade_xs_material_count =
+        use_ct_lung_cascade_xs || use_ct_bone_cascade_xs
+            ? std::size_t{3}
+            : std::size_t{1};
     const auto number_of_bins = config.number_of_bins();
     const auto number_of_histories = config.number_of_histories;
     const auto primary_spot_count = config.primary_spot_batch.size();
@@ -1317,6 +1433,7 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
     std::vector<float> particle_sp_ratio_host;
     std::vector<float> particle_delta_fraction_host;
     std::vector<std::uint8_t> particle_species_present_host;
+    auto particle_sp_material_count = std::size_t{1};
     if (use_particle_specific_stopping_power) {
         const auto ion_tables = IonStoppingPowerTables::from_csv(
             config.particle_stopping_power_file, stopping_power);
@@ -1324,11 +1441,67 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
         particle_delta_fraction_host =
             ion_tables.delta_electron_fractions();
         particle_species_present_host = ion_tables.species_present();
+        if (config.enable_ct_grid &&
+            (!config.ct_lung_particle_stopping_power_file.empty() ||
+             !config.ct_soft_tissue_particle_stopping_power_file.empty() ||
+             !config.ct_bone_particle_stopping_power_file.empty())) {
+            particle_sp_material_count = 4;
+            const auto water_ratios = particle_sp_ratio_host;
+            const auto water_delta = particle_delta_fraction_host;
+            const auto append_material = [&](const std::filesystem::path& path) {
+                if (path.empty()) {
+                    particle_sp_ratio_host.insert(
+                        particle_sp_ratio_host.end(),
+                        water_ratios.begin(), water_ratios.end());
+                    particle_delta_fraction_host.insert(
+                        particle_delta_fraction_host.end(),
+                        water_delta.begin(), water_delta.end());
+                    return;
+                }
+                const auto material = IonStoppingPowerTables::from_csv(
+                    path, stopping_power, true);
+                auto ratios = material.ratios_to_carbon();
+                auto delta = material.delta_electron_fractions();
+                const auto& present = material.species_present();
+                for (std::size_t species = 0;
+                     species < IonStoppingPowerTables::species_slots;
+                     ++species) {
+                    if (present[species] != 0) {
+                        continue;
+                    }
+                    const auto begin = species * table_size;
+                    std::copy_n(water_ratios.begin() +
+                                    static_cast<std::ptrdiff_t>(begin),
+                                table_size,
+                                ratios.begin() +
+                                    static_cast<std::ptrdiff_t>(begin));
+                    std::copy_n(water_delta.begin() +
+                                    static_cast<std::ptrdiff_t>(begin),
+                                table_size,
+                                delta.begin() +
+                                    static_cast<std::ptrdiff_t>(begin));
+                }
+                particle_sp_ratio_host.insert(
+                    particle_sp_ratio_host.end(),
+                    ratios.begin(), ratios.end());
+                particle_delta_fraction_host.insert(
+                    particle_delta_fraction_host.end(),
+                    delta.begin(), delta.end());
+            };
+            append_material(
+                config.ct_lung_particle_stopping_power_file);
+            append_material(
+                config.ct_soft_tissue_particle_stopping_power_file);
+            append_material(
+                config.ct_bone_particle_stopping_power_file);
+        }
         std::cout << "Particle-specific stopping power: enabled ("
                   << std::count(particle_species_present_host.begin(),
                                 particle_species_present_host.end(),
                                 std::uint8_t{1})
-                  << " isotope tables; missing isotopes fall back to C-12 scaling)\n";
+                  << " isotope tables; " << particle_sp_material_count
+                  << " material block(s); missing material isotopes fall back "
+                     "to water)\n";
     }
     const auto enable_neutral_transport = config.enable_neutral_transport;
     const auto neutral_allow_continuation =
@@ -1724,6 +1897,15 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
     ReactionEnergyBin* reaction_bins_device = nullptr;
     ReactionPackage* reactions_device = nullptr;
     ReactionSecondary* reaction_secondaries_device = nullptr;
+    ReactionEnergyBin* ct_lung_reaction_bins_device = nullptr;
+    ReactionPackage* ct_lung_reactions_device = nullptr;
+    ReactionSecondary* ct_lung_reaction_secondaries_device = nullptr;
+    ReactionEnergyBin* ct_soft_tissue_reaction_bins_device = nullptr;
+    ReactionPackage* ct_soft_tissue_reactions_device = nullptr;
+    ReactionSecondary* ct_soft_tissue_reaction_secondaries_device = nullptr;
+    ReactionEnergyBin* ct_bone_reaction_bins_device = nullptr;
+    ReactionPackage* ct_bone_reactions_device = nullptr;
+    ReactionSecondary* ct_bone_reaction_secondaries_device = nullptr;
     SecondaryParticle3D* secondary_queue_device = nullptr;
     SecondaryParticle3D* secondary_bucket_scratch_device = nullptr;
     std::uint64_t* secondary_bucket_index_device = nullptr;
@@ -1769,6 +1951,42 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                 ? context->impl_->reaction_secondaries_device
                 : sycl::malloc_device<ReactionSecondary>(
                       reaction_packages->secondaries().size(), queue);
+        if (use_ct_lung_reaction_packages) {
+            ct_lung_reaction_bins_device =
+                sycl::malloc_device<ReactionEnergyBin>(
+                    ct_lung_reaction_packages->energy_bins().size(), queue);
+            ct_lung_reactions_device =
+                sycl::malloc_device<ReactionPackage>(
+                    ct_lung_reaction_packages->reactions().size(), queue);
+            ct_lung_reaction_secondaries_device =
+                sycl::malloc_device<ReactionSecondary>(
+                    ct_lung_reaction_packages->secondaries().size(), queue);
+        }
+        if (use_ct_soft_tissue_reaction_packages) {
+            ct_soft_tissue_reaction_bins_device =
+                sycl::malloc_device<ReactionEnergyBin>(
+                    ct_soft_tissue_reaction_packages->energy_bins().size(),
+                    queue);
+            ct_soft_tissue_reactions_device =
+                sycl::malloc_device<ReactionPackage>(
+                    ct_soft_tissue_reaction_packages->reactions().size(),
+                    queue);
+            ct_soft_tissue_reaction_secondaries_device =
+                sycl::malloc_device<ReactionSecondary>(
+                    ct_soft_tissue_reaction_packages->secondaries().size(),
+                    queue);
+        }
+        if (use_ct_bone_reaction_packages) {
+            ct_bone_reaction_bins_device =
+                sycl::malloc_device<ReactionEnergyBin>(
+                    ct_bone_reaction_packages->energy_bins().size(), queue);
+            ct_bone_reactions_device =
+                sycl::malloc_device<ReactionPackage>(
+                    ct_bone_reaction_packages->reactions().size(), queue);
+            ct_bone_reaction_secondaries_device =
+                sycl::malloc_device<ReactionSecondary>(
+                    ct_bone_reaction_packages->secondaries().size(), queue);
+        }
         secondary_queue_device =
             sycl::malloc_device<SecondaryParticle3D>(secondary_queue_capacity, queue);
         secondary_queue_counter_device = sycl::malloc_device<std::uint64_t>(1, queue);
@@ -1822,6 +2040,7 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
             cascade_summaries_device = sycl::malloc_device<CascadeTransportSummary>(
                 secondary_queue_capacity, queue);
             cascade_xs_lut_size =
+                cascade_xs_material_count *
                 cascade_packages->projectiles().size() * table_size;
             cascade_xs_lut_device =
                 sycl::malloc_device<float>(cascade_xs_lut_size, queue);
@@ -2144,7 +2363,10 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
             voxel_max_y_mm =
                 ct_origin_y + static_cast<float>(voxel_bins_y) * voxel_size_y_mm;
         }
-        use_ct_mass_sp = ct_grid_host.has_mass_sp_factors();
+        // CCTG v1 material IDs select the explicit four-class absolute tables.
+        // Unit factors synthesized by from_binary() are compatibility data,
+        // not Schneider mass-SP metadata.
+        use_ct_mass_sp = ct_grid_host.uses_schneider_mass_sp();
         ct_material_ids_are_schneider_sections =
             ct_grid_host.file_version != CtGrid::version_legacy;
         use_ct_material_sp =
@@ -2372,6 +2594,18 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
         enable_secondary_generation &&
         (reaction_bins_device == nullptr || reactions_device == nullptr ||
          reaction_secondaries_device == nullptr || secondary_queue_device == nullptr ||
+         (use_ct_lung_reaction_packages &&
+          (ct_lung_reaction_bins_device == nullptr ||
+           ct_lung_reactions_device == nullptr ||
+           ct_lung_reaction_secondaries_device == nullptr)) ||
+         (use_ct_soft_tissue_reaction_packages &&
+          (ct_soft_tissue_reaction_bins_device == nullptr ||
+           ct_soft_tissue_reactions_device == nullptr ||
+           ct_soft_tissue_reaction_secondaries_device == nullptr)) ||
+         (use_ct_bone_reaction_packages &&
+          (ct_bone_reaction_bins_device == nullptr ||
+           ct_bone_reactions_device == nullptr ||
+           ct_bone_reaction_secondaries_device == nullptr)) ||
          secondary_queue_counter_device == nullptr || secondary_queue_filled_device == nullptr ||
          secondary_summaries_device == nullptr ||
          (enable_secondary_transport &&
@@ -2468,6 +2702,15 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
         free_immutable_device(reaction_bins_device);
         free_immutable_device(reactions_device);
         free_immutable_device(reaction_secondaries_device);
+        free_device(ct_lung_reaction_bins_device);
+        free_device(ct_lung_reactions_device);
+        free_device(ct_lung_reaction_secondaries_device);
+        free_device(ct_soft_tissue_reaction_bins_device);
+        free_device(ct_soft_tissue_reactions_device);
+        free_device(ct_soft_tissue_reaction_secondaries_device);
+        free_device(ct_bone_reaction_bins_device);
+        free_device(ct_bone_reactions_device);
+        free_device(ct_bone_reaction_secondaries_device);
         free_device(secondary_queue_device);
         free_device(secondary_bucket_scratch_device);
         free_device(secondary_bucket_index_device);
@@ -2532,6 +2775,28 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
         cascade_packages != nullptr) {
         auto cascade_xs_lut_host =
             build_cascade_xs_energy_lut(*cascade_packages, stopping_power.energies());
+        if (cascade_xs_material_count > 1) {
+            const auto water_lut = cascade_xs_lut_host;
+            const auto append_material = [&](const auto& material_packages,
+                                             const double reference_density) {
+                auto material_lut =
+                    material_packages
+                        ? build_aligned_material_cascade_xs_lut(
+                              *cascade_packages, *material_packages,
+                              stopping_power.energies(),
+                              static_cast<float>(reference_density))
+                        : water_lut;
+                cascade_xs_lut_host.insert(
+                    cascade_xs_lut_host.end(),
+                    material_lut.begin(), material_lut.end());
+            };
+            append_material(
+                ct_lung_cascade_xs_packages,
+                config.ct_lung_cascade_reference_density_g_per_cm3);
+            append_material(
+                ct_bone_cascade_xs_packages,
+                config.ct_bone_cascade_reference_density_g_per_cm3);
+        }
         if (cascade_xs_lut_host.size() != cascade_xs_lut_size) {
             free_device(cascade_xs_lut_device);
             throw std::runtime_error("Cascade XS LUT size mismatch");
@@ -2539,7 +2804,9 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
         queue.copy(cascade_xs_lut_host.data(), cascade_xs_lut_device, cascade_xs_lut_size)
             .wait_and_throw();
         std::cout << "Cascade XS LUT: " << cascade_packages->projectiles().size()
-                  << " projectiles x " << table_size << " energies on water SP grid\n"
+                  << " projectiles x " << table_size << " energies x "
+                  << cascade_xs_material_count
+                  << " material blocks on water SP grid\n"
                   << std::flush;
     }
     queue.memset(dose_device, 0, number_of_bins * sizeof(DoseAtomicT));
@@ -2599,6 +2866,42 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                        reaction_packages->reactions().size());
             queue.copy(reaction_packages->secondaries().data(), reaction_secondaries_device,
                        reaction_packages->secondaries().size());
+        }
+        if (use_ct_lung_reaction_packages) {
+            queue.copy(ct_lung_reaction_packages->energy_bins().data(),
+                       ct_lung_reaction_bins_device,
+                       ct_lung_reaction_packages->energy_bins().size());
+            queue.copy(ct_lung_reaction_packages->reactions().data(),
+                       ct_lung_reactions_device,
+                       ct_lung_reaction_packages->reactions().size());
+            queue.copy(ct_lung_reaction_packages->secondaries().data(),
+                       ct_lung_reaction_secondaries_device,
+                       ct_lung_reaction_packages->secondaries().size());
+        }
+        if (use_ct_soft_tissue_reaction_packages) {
+            queue.copy(
+                ct_soft_tissue_reaction_packages->energy_bins().data(),
+                ct_soft_tissue_reaction_bins_device,
+                ct_soft_tissue_reaction_packages->energy_bins().size());
+            queue.copy(
+                ct_soft_tissue_reaction_packages->reactions().data(),
+                ct_soft_tissue_reactions_device,
+                ct_soft_tissue_reaction_packages->reactions().size());
+            queue.copy(
+                ct_soft_tissue_reaction_packages->secondaries().data(),
+                ct_soft_tissue_reaction_secondaries_device,
+                ct_soft_tissue_reaction_packages->secondaries().size());
+        }
+        if (use_ct_bone_reaction_packages) {
+            queue.copy(ct_bone_reaction_packages->energy_bins().data(),
+                       ct_bone_reaction_bins_device,
+                       ct_bone_reaction_packages->energy_bins().size());
+            queue.copy(ct_bone_reaction_packages->reactions().data(),
+                       ct_bone_reactions_device,
+                       ct_bone_reaction_packages->reactions().size());
+            queue.copy(ct_bone_reaction_packages->secondaries().data(),
+                       ct_bone_reaction_secondaries_device,
+                       ct_bone_reaction_packages->secondaries().size());
         }
         queue.memset(secondary_queue_counter_device, 0, sizeof(std::uint64_t));
         queue.memset(secondary_queue_filled_device, 0, sizeof(std::uint64_t));
@@ -2663,7 +2966,8 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
             // for fewer launches. Accurate mode preserves the validated WSL
             // launch policy byte-for-byte.
             history_chunk =
-                config.physics_profile == "fast"
+                (config.physics_profile == "medium" ||
+                 config.physics_profile == "fast")
                     ? 16384
                     : (number_of_histories > 1'000'000 ? 16384 : 4096);
         } else if (device.is_gpu()) {
@@ -2722,6 +3026,7 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
     const auto maximum_relative_energy_loss =
         static_cast<float>(config.maximum_relative_energy_loss);
     const auto energy_cutoff_MeV = static_cast<float>(config.energy_cutoff_MeV);
+    const auto medium_physics_profile = config.physics_profile == "medium";
     const auto fast_physics_profile = config.physics_profile == "fast";
     const auto configured_secondary_local_deposit_cutoff_MeV = static_cast<float>(
         config.secondary_local_deposit_cutoff_MeV > 0.0
@@ -2732,7 +3037,9 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
     const auto secondary_local_deposit_cutoff_MeV =
         fast_physics_profile
             ? std::max(configured_secondary_local_deposit_cutoff_MeV, 2.0F)
-            : configured_secondary_local_deposit_cutoff_MeV;
+            : (medium_physics_profile
+                   ? std::max(configured_secondary_local_deposit_cutoff_MeV, 1.0F)
+                   : configured_secondary_local_deposit_cutoff_MeV);
     // In fast CT dose mode, secondary EM/MCS work is condensed to a larger
     // macro step. Existing CT-face and dose-voxel clamps below remain active,
     // so no step crosses a material or scoring boundary.
@@ -2744,7 +3051,14 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                       config.secondary_condensed_step_mm > 0.0
                           ? config.secondary_condensed_step_mm
                           : 1.0))
-            : maximum_step_mm;
+            : (medium_physics_profile
+                   ? std::max(
+                         maximum_step_mm,
+                         static_cast<float>(
+                             config.secondary_condensed_step_mm > 0.0
+                                 ? config.secondary_condensed_step_mm
+                                 : 0.5))
+                   : maximum_step_mm);
     std::cout << "Physics profile: " << config.physics_profile
               << "; secondary step limit=" << secondary_transport_step_mm
               << " mm; local-deposit cutoff="
@@ -2816,6 +3130,50 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
     const auto inverse_reaction_energy_bin_width =
         enable_secondary_generation
             ? 1.0F / reaction_packages->energy_bin_width_MeV_per_u()
+            : 0.0F;
+    const auto ct_lung_reaction_energy_bin_count =
+        use_ct_lung_reaction_packages
+            ? static_cast<std::uint32_t>(
+                  ct_lung_reaction_packages->energy_bins().size())
+            : 0U;
+    const auto ct_lung_minimum_reaction_energy =
+        use_ct_lung_reaction_packages
+            ? ct_lung_reaction_packages->minimum_energy_MeV_per_u()
+            : 0.0F;
+    const auto ct_lung_inverse_reaction_energy_bin_width =
+        use_ct_lung_reaction_packages
+            ? 1.0F /
+                  ct_lung_reaction_packages->energy_bin_width_MeV_per_u()
+            : 0.0F;
+    const auto ct_soft_tissue_reaction_energy_bin_count =
+        use_ct_soft_tissue_reaction_packages
+            ? static_cast<std::uint32_t>(
+                  ct_soft_tissue_reaction_packages->energy_bins().size())
+            : 0U;
+    const auto ct_soft_tissue_minimum_reaction_energy =
+        use_ct_soft_tissue_reaction_packages
+            ? ct_soft_tissue_reaction_packages
+                  ->minimum_energy_MeV_per_u()
+            : 0.0F;
+    const auto ct_soft_tissue_inverse_reaction_energy_bin_width =
+        use_ct_soft_tissue_reaction_packages
+            ? 1.0F /
+                  ct_soft_tissue_reaction_packages
+                      ->energy_bin_width_MeV_per_u()
+            : 0.0F;
+    const auto ct_bone_reaction_energy_bin_count =
+        use_ct_bone_reaction_packages
+            ? static_cast<std::uint32_t>(
+                  ct_bone_reaction_packages->energy_bins().size())
+            : 0U;
+    const auto ct_bone_minimum_reaction_energy =
+        use_ct_bone_reaction_packages
+            ? ct_bone_reaction_packages->minimum_energy_MeV_per_u()
+            : 0.0F;
+    const auto ct_bone_inverse_reaction_energy_bin_width =
+        use_ct_bone_reaction_packages
+            ? 1.0F /
+                  ct_bone_reaction_packages->energy_bin_width_MeV_per_u()
             : 0.0F;
     const auto secondary_queue_capacity_u32 =
         static_cast<std::uint32_t>(secondary_queue_capacity);
@@ -3608,13 +3966,77 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                         profile_add(profile_counters_device,
                                     TransportProfileSlot::primary_nuclear);
                         if (enable_secondary_generation) {
+                            auto* active_reaction_bins = reaction_bins_device;
+                            auto* active_reactions = reactions_device;
+                            auto* active_reaction_secondaries =
+                                reaction_secondaries_device;
+                            auto active_reaction_bin_count =
+                                reaction_energy_bin_count;
+                            auto active_minimum_reaction_energy =
+                                minimum_reaction_energy;
+                            auto active_inverse_reaction_bin_width =
+                                inverse_reaction_energy_bin_width;
+                            if (in_ct) {
+                                const auto material_class = ct_material_class(
+                                    ct_material,
+                                    ct_material_ids_are_schneider_sections);
+                                if (material_class == 1U &&
+                                    use_ct_lung_reaction_packages) {
+                                    active_reaction_bins =
+                                        ct_lung_reaction_bins_device;
+                                    active_reactions =
+                                        ct_lung_reactions_device;
+                                    active_reaction_secondaries =
+                                        ct_lung_reaction_secondaries_device;
+                                    active_reaction_bin_count =
+                                        ct_lung_reaction_energy_bin_count;
+                                    active_minimum_reaction_energy =
+                                        ct_lung_minimum_reaction_energy;
+                                    active_inverse_reaction_bin_width =
+                                        ct_lung_inverse_reaction_energy_bin_width;
+                                } else if (
+                                    material_class == 2U &&
+                                    use_ct_soft_tissue_reaction_packages) {
+                                    active_reaction_bins =
+                                        ct_soft_tissue_reaction_bins_device;
+                                    active_reactions =
+                                        ct_soft_tissue_reactions_device;
+                                    active_reaction_secondaries =
+                                        ct_soft_tissue_reaction_secondaries_device;
+                                    active_reaction_bin_count =
+                                        ct_soft_tissue_reaction_energy_bin_count;
+                                    active_minimum_reaction_energy =
+                                        ct_soft_tissue_minimum_reaction_energy;
+                                    active_inverse_reaction_bin_width =
+                                        ct_soft_tissue_inverse_reaction_energy_bin_width;
+                                } else if (
+                                    material_class == 3U &&
+                                    use_ct_bone_reaction_packages) {
+                                    active_reaction_bins =
+                                        ct_bone_reaction_bins_device;
+                                    active_reactions =
+                                        ct_bone_reactions_device;
+                                    active_reaction_secondaries =
+                                        ct_bone_reaction_secondaries_device;
+                                    active_reaction_bin_count =
+                                        ct_bone_reaction_energy_bin_count;
+                                    active_minimum_reaction_energy =
+                                        ct_bone_minimum_reaction_energy;
+                                    active_inverse_reaction_bin_width =
+                                        ct_bone_inverse_reaction_energy_bin_width;
+                                }
+                            }
                             auto reaction_bin_index = static_cast<int>(sycl::floor(
-                                (post_step_energy_MeVu - minimum_reaction_energy) *
-                                inverse_reaction_energy_bin_width));
+                                (post_step_energy_MeVu -
+                                 active_minimum_reaction_energy) *
+                                active_inverse_reaction_bin_width));
                             reaction_bin_index = sycl::max(
                                 0, sycl::min(reaction_bin_index,
-                                             static_cast<int>(reaction_energy_bin_count) - 1));
-                            const auto reaction_bin = reaction_bins_device[reaction_bin_index];
+                                             static_cast<int>(
+                                                 active_reaction_bin_count) -
+                                                 1));
+                            const auto reaction_bin =
+                                active_reaction_bins[reaction_bin_index];
                             const auto package_uniform =
                                 rng::uniform01(spot_seed, rng_history, steps, 3);
                             const auto package_in_bin = sycl::min(
@@ -3622,7 +4044,9 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                                     package_uniform * reaction_bin.reaction_count),
                                 reaction_bin.reaction_count - 1U);
                             const auto reaction =
-                                reactions_device[reaction_bin.reaction_offset + package_in_bin];
+                                active_reactions[
+                                    reaction_bin.reaction_offset +
+                                    package_in_bin];
                             // Reaction packages are grouped in 1 MeV/u bins. Preserve
                             // their correlated final state, but scale product kinetic
                             // energies to the actual post-step projectile energy rather
@@ -3644,7 +4068,7 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                             for (std::uint32_t secondary_index = 0;
                                  secondary_index < reaction.secondary_count;
                                  ++secondary_index) {
-                                const auto secondary = reaction_secondaries_device[
+                                const auto secondary = active_reaction_secondaries[
                                     reaction.secondary_offset + secondary_index];
                                 const auto is_neutral = secondary.pdg_id == 22 ||
                                                         secondary.pdg_id == 2112;
@@ -3743,7 +4167,7 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                                     for (std::uint32_t secondary_index = 0;
                                          secondary_index < reaction.secondary_count;
                                          ++secondary_index) {
-                                        const auto secondary = reaction_secondaries_device[
+                                        const auto secondary = active_reaction_secondaries[
                                             reaction.secondary_offset + secondary_index];
                                         const auto is_supported =
                                             secondary.atomic_number > 0 &&
@@ -3818,7 +4242,7 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                                     for (std::uint32_t secondary_index = 0;
                                          secondary_index < reaction.secondary_count;
                                          ++secondary_index) {
-                                        const auto secondary = reaction_secondaries_device[
+                                        const auto secondary = active_reaction_secondaries[
                                             reaction.secondary_offset + secondary_index];
                                         if (secondary.pdg_id == 22 ||
                                             secondary.pdg_id == 2112) {
@@ -4145,8 +4569,6 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                         mass_number > 0 && mass_number < 32 &&
                         particle_species_present_device[
                             particle_table_species] != 0;
-                    const auto particle_table_base =
-                        particle_table_species * table_size;
                     const auto cascade_projectile_index_for_particle =
                         enable_fragment_cascade &&
                                 particle.generation < maximum_cascade_generations
@@ -4315,6 +4737,24 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                                 local_density_g_per_cm3 = ct_rho;
                             }
                         }
+                        auto particle_sp_material = std::size_t{0};
+                        if (particle_sp_material_count > 1 && in_ct) {
+                            const auto material = ct_material_class(
+                                ct_material,
+                                ct_material_ids_are_schneider_sections);
+                            particle_sp_material =
+                                material == 1U ? std::size_t{1}
+                                : (material == 2U ? std::size_t{2}
+                                : (material == 3U ? std::size_t{3}
+                                                 : std::size_t{0}));
+                        }
+                        constexpr std::size_t particle_species_slots =
+                            10U * particle_mass_stride;
+                        const auto particle_table_base =
+                            (particle_sp_material *
+                                 particle_species_slots +
+                             particle_table_species) *
+                            table_size;
                         const auto layer_for_material =
                             slab_layer_count > 0
                                 ? slab_layer_index(position_z_mm, slab_z_ends_device,
@@ -4799,9 +5239,25 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                                     energy_MeV * inverse_mass_number_for_particle;
                                 // O(1) LUT on water SP energy grid (same index/fraction
                                 // as the stopping-power table).
+                                const auto ct_cascade_material =
+                                    in_ct
+                                        ? ct_material_class(
+                                              ct_material,
+                                              ct_material_ids_are_schneider_sections)
+                                        : std::uint8_t{2};
+                                const auto cascade_xs_material_index =
+                                    ct_cascade_material == 1U &&
+                                            use_ct_lung_cascade_xs
+                                        ? std::size_t{1}
+                                        : (ct_cascade_material == 3U &&
+                                                   use_ct_bone_cascade_xs
+                                               ? std::size_t{2}
+                                               : std::size_t{0});
                                 const auto lut_base =
-                                    static_cast<std::size_t>(
-                                        cascade_projectile_index_for_particle) *
+                                    (cascade_xs_material_index *
+                                         cascade_projectile_count +
+                                     static_cast<std::size_t>(
+                                         cascade_projectile_index_for_particle)) *
                                         table_size +
                                     static_cast<std::size_t>(index);
                                 float macroscopic_cross_section_per_mm =
@@ -4815,7 +5271,8 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                                 }
                                 // CT material mass-XS ratio (C-12 table) scales fragment
                                 // cascade rate vs water×ρ — bone/lung composition effect.
-                                if (use_ct_material_xs && in_ct && ct_xs_device != nullptr &&
+                                if (cascade_xs_material_index == 0U &&
+                                    use_ct_material_xs && in_ct && ct_xs_device != nullptr &&
                                     ct_ref_density_device != nullptr &&
                                     cross_section_device != nullptr) {
                                     auto xs_fi =
@@ -6440,6 +6897,15 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
     free_immutable_device(reaction_bins_device);
     free_immutable_device(reactions_device);
     free_immutable_device(reaction_secondaries_device);
+    free_device(ct_lung_reaction_bins_device);
+    free_device(ct_lung_reactions_device);
+    free_device(ct_lung_reaction_secondaries_device);
+    free_device(ct_soft_tissue_reaction_bins_device);
+    free_device(ct_soft_tissue_reactions_device);
+    free_device(ct_soft_tissue_reaction_secondaries_device);
+    free_device(ct_bone_reaction_bins_device);
+    free_device(ct_bone_reactions_device);
+    free_device(ct_bone_reaction_secondaries_device);
     free_device(secondary_queue_device);
     free_device(secondary_bucket_scratch_device);
     free_device(secondary_bucket_index_device);
@@ -6472,8 +6938,12 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
     TransportResult result;
     result.backend = "sycl-" + device_name +
                      (config.enable_energy_straggling ? "+straggling" : "");
-    if (fast_physics_profile) {
+    if (medium_physics_profile) {
+        result.backend += "+physics-medium";
+    } else if (fast_physics_profile) {
         result.backend += "+physics-fast";
+    } else if (config.physics_profile == "best") {
+        result.backend += "+physics-best";
     }
     if (enable_secondary_energy_straggling) {
         result.backend += "+secondary-straggling";
@@ -6547,6 +7017,11 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
     }
     if (enable_secondary_generation) {
         result.backend += "+secondary-generation";
+        if (use_ct_lung_reaction_packages ||
+            use_ct_soft_tissue_reaction_packages ||
+            use_ct_bone_reaction_packages) {
+            result.backend += "+ct-material-reaction-packages";
+        }
     }
     if (enable_secondary_transport) {
         result.backend += "+secondary-transport";

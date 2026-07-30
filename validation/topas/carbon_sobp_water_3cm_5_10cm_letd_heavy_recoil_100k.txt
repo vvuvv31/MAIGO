@@ -1,0 +1,43 @@
+includeFile = carbon_sobp_water_3cm_5_10cm_letd_100k.txt
+
+# Diagnose target-like charged recoils that are outside the C/B/Be/Li/He/H
+# split.  These particles are included by the all-hadron scorer and map to
+# GPU's "other_charged" LET category.
+s:Sc/SobpNitrogenLETd/Quantity = "myHadronLET"
+s:Sc/SobpNitrogenLETd/Component = "Phantom"
+s:Sc/SobpNitrogenLETd/OutputFile = "output/sobp_letd_heavy_100k_nitrogen"
+s:Sc/SobpNitrogenLETd/OutputType = "csv"
+s:Sc/SobpNitrogenLETd/IfOutputFileAlreadyExists = "Overwrite"
+s:Sc/SobpNitrogenLETd/WeightBy = "dose"
+u:Sc/SobpNitrogenLETd/Order = 1
+i:Sc/SobpNitrogenLETd/XBins = 1
+i:Sc/SobpNitrogenLETd/YBins = 1
+i:Sc/SobpNitrogenLETd/ZBins = 300
+i:Sc/SobpNitrogenLETd/OnlyIncludeParticlesOfAtomicNumber = 7
+s:Sc/SobpNitrogenLETd/OnlyIncludeParticlesOfGeneration = "Secondary"
+
+s:Sc/SobpOxygenLETd/Quantity = "myHadronLET"
+s:Sc/SobpOxygenLETd/Component = "Phantom"
+s:Sc/SobpOxygenLETd/OutputFile = "output/sobp_letd_heavy_100k_oxygen"
+s:Sc/SobpOxygenLETd/OutputType = "csv"
+s:Sc/SobpOxygenLETd/IfOutputFileAlreadyExists = "Overwrite"
+s:Sc/SobpOxygenLETd/WeightBy = "dose"
+u:Sc/SobpOxygenLETd/Order = 1
+i:Sc/SobpOxygenLETd/XBins = 1
+i:Sc/SobpOxygenLETd/YBins = 1
+i:Sc/SobpOxygenLETd/ZBins = 300
+i:Sc/SobpOxygenLETd/OnlyIncludeParticlesOfAtomicNumber = 8
+s:Sc/SobpOxygenLETd/OnlyIncludeParticlesOfGeneration = "Secondary"
+
+s:Sc/SobpFluorineLETd/Quantity = "myHadronLET"
+s:Sc/SobpFluorineLETd/Component = "Phantom"
+s:Sc/SobpFluorineLETd/OutputFile = "output/sobp_letd_heavy_100k_fluorine"
+s:Sc/SobpFluorineLETd/OutputType = "csv"
+s:Sc/SobpFluorineLETd/IfOutputFileAlreadyExists = "Overwrite"
+s:Sc/SobpFluorineLETd/WeightBy = "dose"
+u:Sc/SobpFluorineLETd/Order = 1
+i:Sc/SobpFluorineLETd/XBins = 1
+i:Sc/SobpFluorineLETd/YBins = 1
+i:Sc/SobpFluorineLETd/ZBins = 300
+i:Sc/SobpFluorineLETd/OnlyIncludeParticlesOfAtomicNumber = 9
+s:Sc/SobpFluorineLETd/OnlyIncludeParticlesOfGeneration = "Secondary"

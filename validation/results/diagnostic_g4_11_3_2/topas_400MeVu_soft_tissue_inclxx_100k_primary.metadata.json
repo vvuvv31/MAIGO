@@ -1,0 +1,37 @@
+{
+  "case": "cascade-aligned-primary-c12",
+  "histories": 100000,
+  "reaction_definition": "first inelastic interaction of source track-1 primary C-12",
+  "source_cascade_metadata": "validation/results/diagnostic_g4_11_3_2/topas_400MeVu_soft_tissue_inclxx_100k_metadata.json",
+  "source_cascade_metadata_sha256": "50f11f74eee2c2c8a885cf33461b0fc11b717c75eafb647ac5f19d614af9f9d2",
+  "runtime_reference": {
+    "metadata": "validation/results/diagnostic_g4_11_3_2/runtime_g4_11_3_2.metadata.json",
+    "topas_version": "4.2.p3",
+    "geant4_version": "geant4-11-03-patch-02"
+  },
+  "reaction_count": 74199,
+  "secondary_count": 760996,
+  "selection": {
+    "projectile_Z": 6,
+    "projectile_A": 12,
+    "interaction_track_id": 1,
+    "event_interaction_id": 0
+  },
+  "output_files": {
+    "reactions": {
+      "path": "validation/results/diagnostic_g4_11_3_2/topas_400MeVu_soft_tissue_inclxx_100k_primary_reactions.csv.gz",
+      "sha256": "ccb71f9ad2d5f6c4db3362cd49f9626ec20f10a989560c351c637999e318c0f4",
+      "bytes": 2272788,
+      "rows": 74199,
+      "compression": "gzip"
+    },
+    "secondaries": {
+      "path": "validation/results/diagnostic_g4_11_3_2/topas_400MeVu_soft_tissue_inclxx_100k_primary_secondaries.csv.gz",
+      "sha256": "f0a33437accd2de3ad1cbc534ec5471f8d8384498e33bb0acb887e1ae113f81f",
+      "bytes": 17974005,
+      "rows": 760996,
+      "compression": "gzip"
+    }
+  },
+  "global_scale_applied": false
+}
