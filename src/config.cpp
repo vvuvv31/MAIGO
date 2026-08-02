@@ -570,9 +570,11 @@ void TransportConfig::validate() const {
                 "minibeam_slit_width_mm must be smaller than the pitch");
         }
         if (!std::isfinite(minibeam_collimator_angle_deg) ||
+            !std::isfinite(minibeam_slit_offset_mm) ||
             !std::isfinite(minibeam_water_entrance_world_y_mm)) {
             throw std::invalid_argument(
-                "minibeam angle and water-entrance coordinate must be finite");
+                "minibeam angle, slit offset, and water-entrance coordinate "
+                "must be finite");
         }
         if (minibeam_transport_mode == "copper_em") {
             if (minibeam_copper_stopping_power_file.empty()) {
@@ -1103,6 +1105,9 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.minibeam_slit_half_length_mm = parse_number(
         values, "minibeam_slit_half_length_mm",
         config.minibeam_slit_half_length_mm);
+    config.minibeam_slit_offset_mm = parse_number(
+        values, "minibeam_slit_offset_mm",
+        config.minibeam_slit_offset_mm);
     config.minibeam_collimator_angle_deg = parse_number(
         values, "minibeam_collimator_angle_deg",
         config.minibeam_collimator_angle_deg);

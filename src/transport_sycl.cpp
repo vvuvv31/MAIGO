@@ -267,6 +267,8 @@ inline MinibeamNeutralSurvivor transport_minibeam_neutral_product(
     const float collimator_exit_z_mm,
     const float cosine_angle,
     const float sine_angle,
+    const float slit_offset_x_mm,
+    const float slit_offset_y_mm,
     const float collimator_radius_mm,
     const int slit_count,
     const float slit_width_mm,
@@ -359,7 +361,9 @@ inline MinibeamNeutralSurvivor transport_minibeam_neutral_product(
         const auto midpoint_y =
             y_mm + 0.5F * path_step_mm * direction.y;
         const auto in_copper = minibeam_point_in_copper(
-            midpoint_x, midpoint_y, cosine_angle, sine_angle,
+            midpoint_x - slit_offset_x_mm,
+            midpoint_y - slit_offset_y_mm,
+            cosine_angle, sine_angle,
             collimator_radius_mm, slit_count, slit_width_mm,
             slit_pitch_mm, slit_half_length_mm);
         if (in_copper) {
@@ -557,6 +561,8 @@ inline MinibeamChargedSurvivor transport_minibeam_charged_product(
     const float collimator_exit_z_mm,
     const float cosine_angle,
     const float sine_angle,
+    const float slit_offset_x_mm,
+    const float slit_offset_y_mm,
     const float collimator_radius_mm,
     const int slit_count,
     const float slit_width_mm,
@@ -615,7 +621,9 @@ inline MinibeamChargedSurvivor transport_minibeam_charged_product(
         const auto midpoint_y =
             y_mm + 0.5F * path_step_mm * direction.y;
         const auto in_copper = minibeam_point_in_copper(
-            midpoint_x, midpoint_y, cosine_angle, sine_angle,
+            midpoint_x - slit_offset_x_mm,
+            midpoint_y - slit_offset_y_mm,
+            cosine_angle, sine_angle,
             collimator_radius_mm, slit_count, slit_width_mm,
             slit_pitch_mm, slit_half_length_mm);
         x_mm += path_step_mm * direction.x;
@@ -2305,7 +2313,9 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
         // memory budget below. SOBP 10M + cascade needs ~3–4 slots/history
         // (~30–40M) when launched as one batched plan.
         constexpr std::size_t kCudaMaxSecondarySlots = 64ULL * 1024ULL * 1024ULL;
-        constexpr std::size_t kCudaMaxNeutralSlots = 16ULL * 1024ULL * 1024ULL;
+        // Explicit high-statistics runs may request a larger neutral queue;
+        // the device-memory budget below remains the final allocation guard.
+        constexpr std::size_t kCudaMaxNeutralSlots = 96ULL * 1024ULL * 1024ULL;
         const auto cuda_auto_secondary =
             std::max(number_of_histories * 4U, std::size_t{8192});
         if (config.secondary_queue_capacity == 0) {
@@ -2337,9 +2347,9 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
     }
     // Soft clamp only for extreme YAML values; large SOBP needs >35% for queues.
     auto memory_fraction = config.max_device_memory_fraction;
-    if (is_cuda_backend && memory_fraction > 0.70) {
-        memory_fraction = 0.70;
-        std::cout << "CUDA backend: clamping max_device_memory_fraction to 0.70\n"
+    if (is_cuda_backend && memory_fraction > 0.82) {
+        memory_fraction = 0.82;
+        std::cout << "CUDA backend: clamping max_device_memory_fraction to 0.82\n"
                   << std::flush;
     }
     const auto memory_budget_bytes = static_cast<std::size_t>(
@@ -3919,6 +3929,12 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
         static_cast<float>(config.minibeam_slit_pitch_mm);
     const auto minibeam_slit_half_length_mm =
         static_cast<float>(config.minibeam_slit_half_length_mm);
+    const auto minibeam_slit_offset_mm =
+        static_cast<float>(config.minibeam_slit_offset_mm);
+    const auto minibeam_slit_offset_x_mm =
+        minibeam_cosine_angle * minibeam_slit_offset_mm;
+    const auto minibeam_slit_offset_y_mm =
+        minibeam_sine_angle * minibeam_slit_offset_mm;
     const auto minibeam_copper_density_g_per_cm3 =
         static_cast<float>(config.minibeam_copper_density_g_per_cm3);
     const auto minibeam_copper_radiation_length_g_per_cm2 =
@@ -4293,7 +4309,9 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
             if (enable_minibeam) {
                 add_minibeam_count(0);
                 minibeam_direct = minibeam_straight_through_air_slit(
-                    position_x_mm, position_y_mm, position_z_mm, direction_x,
+                    position_x_mm - minibeam_slit_offset_x_mm,
+                    position_y_mm - minibeam_slit_offset_y_mm,
+                    position_z_mm, direction_x,
                     direction_y, direction_z, minibeam_cosine_angle,
                     minibeam_sine_angle, minibeam_radius_mm,
                     minibeam_thickness_mm, minibeam_exit_to_phantom_mm,
@@ -4341,7 +4359,8 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                 position_z_mm = collimator_entrance_z;
                 const auto entrance_slit_u_mm =
                     minibeam_cosine_angle * position_x_mm +
-                    minibeam_sine_angle * position_y_mm;
+                    minibeam_sine_angle * position_y_mm -
+                    minibeam_slit_offset_mm;
                 const auto entrance_nearest_slit = nearest_minibeam_slit(
                     entrance_slit_u_mm, minibeam_slit_pitch_mm);
                 const auto entrance_slit_array_index =
@@ -4384,7 +4403,9 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                     const auto midpoint_y =
                         position_y_mm + 0.5F * path_step_mm * direction_y;
                     const auto in_copper = minibeam_point_in_copper(
-                        midpoint_x, midpoint_y, minibeam_cosine_angle,
+                        midpoint_x - minibeam_slit_offset_x_mm,
+                        midpoint_y - minibeam_slit_offset_y_mm,
+                        minibeam_cosine_angle,
                         minibeam_sine_angle, minibeam_radius_mm,
                         minibeam_slit_count, minibeam_slit_width_mm,
                         minibeam_slit_pitch_mm,
@@ -4552,6 +4573,8 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                                         collimator_exit_z,
                                         minibeam_cosine_angle,
                                         minibeam_sine_angle,
+                                        minibeam_slit_offset_x_mm,
+                                        minibeam_slit_offset_y_mm,
                                         minibeam_radius_mm,
                                         minibeam_slit_count,
                                         minibeam_slit_width_mm,
@@ -4589,6 +4612,8 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                                         collimator_exit_z,
                                         minibeam_cosine_angle,
                                         minibeam_sine_angle,
+                                        minibeam_slit_offset_x_mm,
+                                        minibeam_slit_offset_y_mm,
                                         minibeam_radius_mm,
                                         minibeam_slit_count,
                                         minibeam_slit_width_mm,
@@ -5077,7 +5102,8 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                 }
                 const auto slit_u_mm =
                     minibeam_cosine_angle * position_x_mm +
-                    minibeam_sine_angle * position_y_mm;
+                    minibeam_sine_angle * position_y_mm -
+                    minibeam_slit_offset_mm;
                 const auto nearest_slit = nearest_minibeam_slit(
                     slit_u_mm, minibeam_slit_pitch_mm);
                 const auto slit_array_index =

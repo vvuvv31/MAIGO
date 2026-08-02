@@ -1140,6 +1140,11 @@ void test_minibeam_absorbing_geometry() {
     require_throws([&config] { config.validate(); },
                    "Even minibeam slit count should be rejected");
     config.minibeam_slit_count = 15;
+    config.minibeam_slit_offset_mm =
+        std::numeric_limits<double>::quiet_NaN();
+    require_throws([&config] { config.validate(); },
+                   "Non-finite minibeam slit offset should be rejected");
+    config.minibeam_slit_offset_mm = 0.0;
     config.minibeam_transport_mode = "copper_em";
     require_throws([&config] { config.validate(); },
                    "Copper EM mode should require a stopping-power table");
@@ -1368,6 +1373,10 @@ void test_topas_spot_weights_and_tps_90_transform() {
     require(plan.spots[0].number_of_histories == 11 &&
                 plan.spots[1].number_of_histories == 29,
             "Largest-remainder spot history allocation mismatch");
+    require_near(plan.spots[0].plan_weight, 1.0, 1.0e-12,
+                 "First optimizer weight was not retained on the spot");
+    require_near(plan.spots[1].plan_weight, 3.0, 1.0e-12,
+                 "Second optimizer weight was not retained on the spot");
     require_near(plan.total_plan_weight, 4.0, 1.0e-12, "Spot weight sum");
     std::error_code ec;
     std::filesystem::remove(weights_path, ec);

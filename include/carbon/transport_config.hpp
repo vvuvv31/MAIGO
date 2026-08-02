@@ -228,6 +228,10 @@ struct TransportConfig {
     double minibeam_slit_width_mm{0.5};
     double minibeam_slit_pitch_mm{3.6};
     double minibeam_slit_half_length_mm{25.0};
+    // Translation of the complete slit array along its periodic local-u axis.
+    // Zero preserves the historical centred array; a half-pitch offset is
+    // required by some opposed-field patient apertures.
+    double minibeam_slit_offset_mm{0.0};
     double minibeam_collimator_angle_deg{0.0};
     // Copper electromagnetic-only development mode. The table is absolute
     // electronic dE/dx in MeV/mm at the native material density.

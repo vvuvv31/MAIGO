@@ -537,6 +537,7 @@ std::size_t TopasSpotPlan::apply_weights_from_csv(
             continue;
         }
         spots[i].number_of_histories = allocation[i];
+        spots[i].plan_weight = weights[i];
         active.push_back(spots[i]);
     }
     const auto removed = spots.size() - active.size();

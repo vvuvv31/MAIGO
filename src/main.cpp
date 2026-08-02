@@ -1,5 +1,6 @@
 #include "carbon/cascade_package.hpp"
 #include "carbon/cross_section.hpp"
+#include "carbon/ct_grid.hpp"
 #include "carbon/io.hpp"
 #include "carbon/neutral_package.hpp"
 #include "carbon/reaction_package.hpp"
@@ -19,6 +20,7 @@
 #include <iostream>
 #include <limits>
 #include <memory>
+#include <numeric>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -41,6 +43,7 @@ void print_usage(const char* executable) {
                  "  --spots FILE         TOPAS-format spots_*.txt; repeat to concatenate files\n"
                  "  --spot-weights FILE  One optimization weight per concatenated spot\n"
                  "  --histories N        With weights: total plan histories; otherwise per spot\n"
+                 "  --random-seed N      Override the configured reproducible RNG seed\n"
                  "  --physics-profile P  accurate (legacy), best, medium, or fast\n"
                  "  --ct-grid FILE       Override the configured CCTG patient grid\n"
                  "  --ct-stopping-power-scale X  Override the CT mass stopping-power scale\n"
@@ -48,6 +51,11 @@ void print_usage(const char* executable) {
                  "  --neutral-queue-capacity N  Override neutral queue capacity\n"
                  "  --plan-only          Parse/allocate/transform plan without transport\n"
                  "  --sequential-spots   Validation A/B: disable batched SYCL plan launch\n"
+                 "  --dij-dose-threshold-gy X  Validation only: run every active spot\n"
+                 "                       independently and threshold its voxel dose before\n"
+                 "                       multiplying by the optimizer weight\n"
+                 "  --dij-histories-per-spot N  Histories used for every active spot in\n"
+                 "                       --dij-dose-threshold-gy mode\n"
                  "  --output FILE        MeV energy-deposition scorer CSV\n"
                  "  --dose-output FILE   Dose scorer CSV (total Gy); empty disables\n"
                  "  --scorer-let         Enable primary-C12 and all-hadron LET_d scoring\n"
@@ -87,6 +95,63 @@ void add_vector_in_place(std::vector<std::uint64_t>& total,
     for (std::size_t i = 0; i < total.size(); ++i) {
         total[i] += part[i];
     }
+}
+
+std::vector<double> voxel_dose_Gy_per_MeV(const carbon::TransportConfig& config) {
+    constexpr double MeV_to_joule = 1.602176634e-13;
+    const auto count = config.number_of_voxels();
+    const auto volume_mm3 = config.voxel_size_x_mm * config.voxel_size_y_mm *
+                            config.depth_bin_width_mm;
+    std::vector<double> density_g_per_cm3(count, config.water_density_g_per_cm3);
+    if (config.enable_ct_grid) {
+        const auto grid = carbon::CtGrid::from_binary(config.ct_grid_file);
+        if (grid.nx != config.voxel_bins_x || grid.ny != config.voxel_bins_y ||
+            grid.nz != config.number_of_bins()) {
+            throw std::invalid_argument(
+                "Dij threshold mode requires the voxel scorer to match the CT grid");
+        }
+        density_g_per_cm3.assign(grid.density_g_per_cm3.begin(),
+                                 grid.density_g_per_cm3.end());
+    }
+    std::vector<double> factors(count);
+    for (std::size_t i = 0; i < count; ++i) {
+        const auto density = std::max(1.0e-6, density_g_per_cm3[i]);
+        const auto mass_kg = volume_mm3 * density * 1.0e-6;
+        factors[i] = config.dose_output_scale * MeV_to_joule / mass_kg;
+    }
+    return factors;
+}
+
+struct DijThresholdStats {
+    std::uint64_t kept_voxels{0};
+    std::uint64_t dropped_voxels{0};
+    double kept_weighted_Gy_voxel{0.0};
+    double dropped_weighted_Gy_voxel{0.0};
+};
+
+DijThresholdStats apply_weighted_dij_dose_threshold(
+    carbon::TransportResult& result,
+    const std::vector<double>& dose_Gy_per_MeV,
+    const double threshold_Gy,
+    const double spot_weight) {
+    if (result.voxel_deposited_energy_MeV.size() != dose_Gy_per_MeV.size()) {
+        throw std::runtime_error("Dij threshold voxel tally size mismatch");
+    }
+    DijThresholdStats stats;
+    for (std::size_t i = 0; i < dose_Gy_per_MeV.size(); ++i) {
+        auto& energy = result.voxel_deposited_energy_MeV[i];
+        const auto dose_Gy = energy * dose_Gy_per_MeV[i];
+        if (dose_Gy != 0.0 && dose_Gy < threshold_Gy) {
+            ++stats.dropped_voxels;
+            stats.dropped_weighted_Gy_voxel += dose_Gy * spot_weight;
+            energy = 0.0;
+        } else if (dose_Gy != 0.0) {
+            ++stats.kept_voxels;
+            stats.kept_weighted_Gy_voxel += dose_Gy * spot_weight;
+            energy *= spot_weight;
+        }
+    }
+    return stats;
 }
 
 void accumulate_transport_result(carbon::TransportResult& total,
@@ -496,6 +561,9 @@ int main(int argc, char* argv[]) {
         bool histories_cli_override = false;
         bool plan_only = false;
         bool sequential_spots = false;
+        bool spots_cli_override = false;
+        double dij_dose_threshold_Gy = 0.0;
+        std::size_t dij_histories_per_spot = 0;
         for (int index = 1; index < argc; ++index) {
             const std::string argument = argv[index];
             if (argument == "--config") {
@@ -505,6 +573,8 @@ int main(int argc, char* argv[]) {
             } else if (argument == "--histories" && index + 1 < argc) {
                 config.number_of_histories = std::stoull(argv[++index]);
                 histories_cli_override = true;
+            } else if (argument == "--random-seed" && index + 1 < argc) {
+                config.random_seed = std::stoull(argv[++index]);
             } else if (argument == "--physics-profile" && index + 1 < argc) {
                 config.physics_profile = argv[++index];
             } else if (argument == "--ct-grid" && index + 1 < argc) {
@@ -518,8 +588,10 @@ int main(int argc, char* argv[]) {
                        index + 1 < argc) {
                 config.neutral_queue_capacity = std::stoull(argv[++index]);
             } else if (argument == "--spots" && index + 1 < argc) {
-                if (config.topas_spots_files.empty()) {
+                if (!spots_cli_override) {
                     config.topas_spots_file.clear();
+                    config.topas_spots_files.clear();
+                    spots_cli_override = true;
                 }
                 config.topas_spots_files.emplace_back(argv[++index]);
             } else if (argument == "--spot-weights" && index + 1 < argc) {
@@ -544,11 +616,24 @@ int main(int argc, char* argv[]) {
                 plan_only = true;
             } else if (argument == "--sequential-spots") {
                 sequential_spots = true;
+            } else if (argument == "--dij-dose-threshold-gy" &&
+                       index + 1 < argc) {
+                dij_dose_threshold_Gy = std::stod(argv[++index]);
+            } else if (argument == "--dij-histories-per-spot" &&
+                       index + 1 < argc) {
+                dij_histories_per_spot = std::stoull(argv[++index]);
             } else if (argument != "--help" && argument != "-h") {
                 throw std::invalid_argument("Unknown or incomplete argument: " + argument);
             }
         }
         config.validate();
+        if ((dij_dose_threshold_Gy > 0.0) != (dij_histories_per_spot > 0)) {
+            throw std::invalid_argument(
+                "--dij-dose-threshold-gy and --dij-histories-per-spot must be used together");
+        }
+        if (dij_dose_threshold_Gy > 0.0 && !std::isfinite(dij_dose_threshold_Gy)) {
+            throw std::invalid_argument("Dij dose threshold must be finite and positive");
+        }
 
         const auto stopping_power = carbon::StoppingPowerTable::from_csv(config.stopping_power_file);
         const auto cross_section =
@@ -688,6 +773,28 @@ int main(int argc, char* argv[]) {
                     spot.number_of_histories = config.number_of_histories;
                 }
             }
+            const auto threshold_dij_mode = dij_dose_threshold_Gy > 0.0;
+            if (threshold_dij_mode) {
+                if (config.spot_weights_file.empty()) {
+                    throw std::invalid_argument(
+                        "Dij dose threshold mode requires --spot-weights/YAML spot_weights_file");
+                }
+                sequential_spots = true;
+                for (auto& spot : plan.spots) {
+                    spot.number_of_histories = dij_histories_per_spot;
+                }
+                // These auxiliary scorers are not weighted/thresholded in this
+                // diagnostic. Avoid silently writing internally inconsistent
+                // files; the dense voxel dose and its reconstructed depth dose
+                // below are the supported outputs.
+                config.fragment_species_output_file.clear();
+                config.fragment_species_dose_output_file.clear();
+                config.fragment_species_let_output_file.clear();
+                config.light_isotope_let_output_file.clear();
+                config.fragment_birth_spectrum_output_file.clear();
+                config.voxel_dose_output_file.clear();
+                config.voxel_dose_Gy_output_file.clear();
+            }
             const auto total_histories = plan.total_histories();
             std::cout << "TOPAS spots plan files:";
             for (const auto& path : spots_files) {
@@ -759,6 +866,10 @@ int main(int argc, char* argv[]) {
                                        reaction_packages, cascade_packages, neutral_packages,
                                        sycl_context);
             } else {
+                const auto dose_Gy_per_MeV = threshold_dij_mode
+                    ? voxel_dose_Gy_per_MeV(config)
+                    : std::vector<double>{};
+                DijThresholdStats threshold_stats;
                 for (std::size_t i = 0; i < plan.spots.size(); ++i) {
                     const auto& spot = plan.spots[i];
                     auto spot_config = config;
@@ -767,11 +878,47 @@ int main(int argc, char* argv[]) {
                     auto spot_result = run_transport(
                         spot_config, stopping_power, cross_section, reaction_packages,
                         cascade_packages, neutral_packages, sycl_context);
+                    if (threshold_dij_mode) {
+                        const auto part = apply_weighted_dij_dose_threshold(
+                            spot_result, dose_Gy_per_MeV, dij_dose_threshold_Gy,
+                            spot.plan_weight);
+                        threshold_stats.kept_voxels += part.kept_voxels;
+                        threshold_stats.dropped_voxels += part.dropped_voxels;
+                        threshold_stats.kept_weighted_Gy_voxel +=
+                            part.kept_weighted_Gy_voxel;
+                        threshold_stats.dropped_weighted_Gy_voxel +=
+                            part.dropped_weighted_Gy_voxel;
+                    }
                     if (i == 0) {
                         result = std::move(spot_result);
                     } else {
                         accumulate_transport_result(result, spot_result);
                     }
+                    if (threshold_dij_mode &&
+                        ((i + 1) % 25 == 0 || i + 1 == plan.spots.size())) {
+                        std::cout << "  Dij threshold spots: " << (i + 1) << '/'
+                                  << plan.spots.size() << "; kept/dropped voxels: "
+                                  << threshold_stats.kept_voxels << '/'
+                                  << threshold_stats.dropped_voxels << '\n';
+                    }
+                }
+                if (threshold_dij_mode) {
+                    result.deposited_energy_MeV.assign(config.number_of_bins(), 0.0);
+                    const auto plane_size = config.voxel_bins_x * config.voxel_bins_y;
+                    for (std::size_t z = 0; z < config.number_of_bins(); ++z) {
+                        const auto begin = result.voxel_deposited_energy_MeV.begin() +
+                                           static_cast<std::ptrdiff_t>(z * plane_size);
+                        result.deposited_energy_MeV[z] = std::accumulate(
+                            begin, begin + static_cast<std::ptrdiff_t>(plane_size), 0.0);
+                    }
+                    std::cout << std::setprecision(12)
+                              << "  Dij per-spot dose threshold: "
+                              << dij_dose_threshold_Gy << " Gy at "
+                              << dij_histories_per_spot << " histories/spot\n"
+                              << "  weighted kept/dropped integral: "
+                              << threshold_stats.kept_weighted_Gy_voxel << " / "
+                              << threshold_stats.dropped_weighted_Gy_voxel
+                              << " Gy-voxel\n";
                 }
             }
             // Output writers divide by number_of_histories → absolute MeV / total primaries.

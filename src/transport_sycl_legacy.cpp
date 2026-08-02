@@ -1561,7 +1561,9 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
         // memory budget below. SOBP 10M + cascade needs ~3–4 slots/history
         // (~30–40M) when launched as one batched plan.
         constexpr std::size_t kCudaMaxSecondarySlots = 64ULL * 1024ULL * 1024ULL;
-        constexpr std::size_t kCudaMaxNeutralSlots = 16ULL * 1024ULL * 1024ULL;
+        // Explicit high-statistics runs may request a larger neutral queue;
+        // the device-memory budget below remains the final allocation guard.
+        constexpr std::size_t kCudaMaxNeutralSlots = 96ULL * 1024ULL * 1024ULL;
         const auto cuda_auto_secondary =
             std::max(number_of_histories * 4U, std::size_t{8192});
         if (config.secondary_queue_capacity == 0) {
@@ -1593,9 +1595,9 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
     }
     // Soft clamp only for extreme YAML values; large SOBP needs >35% for queues.
     auto memory_fraction = config.max_device_memory_fraction;
-    if (is_cuda_backend && memory_fraction > 0.70) {
-        memory_fraction = 0.70;
-        std::cout << "CUDA backend: clamping max_device_memory_fraction to 0.70\n"
+    if (is_cuda_backend && memory_fraction > 0.82) {
+        memory_fraction = 0.82;
+        std::cout << "CUDA backend: clamping max_device_memory_fraction to 0.82\n"
                   << std::flush;
     }
     const auto memory_budget_bytes = static_cast<std::size_t>(

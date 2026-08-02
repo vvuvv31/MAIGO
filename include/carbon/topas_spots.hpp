@@ -32,6 +32,10 @@ struct TopasSpot {
     double energy_MeV{0.0};
     double energy_spread_percent{0.0};
     std::size_t number_of_histories{0};
+    // External optimizer weight. It remains 1 unless
+    // apply_weights_from_csv() is used. Kept separately from the integer
+    // history allocation for sparse-Dij threshold diagnostics.
+    double plan_weight{1.0};
     double trans_x_mm{0.0};
     double trans_z_mm{0.0};
     double rot_x_deg{0.0};

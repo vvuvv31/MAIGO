@@ -1726,3 +1726,655 @@ Copper 最大步长从 0.25 mm 放宽至 0.5 mm 的 A/B 会使入口 PVDR 和骨
 - `out/minibeam/heterogeneous_bone_e200_1M/comparison_gpu_step0p2_rel0p005/heterogeneous_depth.png`
 - `out/minibeam/heterogeneous_bone_e200_1M/comparison_gpu_step0p2_rel0p005/heterogeneous_lateral.png`
 - `out/minibeam/energy_sweep_rel0p005_100k/metrics.json`
+
+## 21. 复杂横向/纵向异质场景（2026-07-29）
+
+为了避免只用单块 bone slab 验证，新增三个 200 MeV/u、100k histories 的
+二维显式材料 phantom。三者均采用 `500 x 1 x 300` 网格，体素为
+`0.2 x 40 x 0.5 mm3`，横向覆盖 `-50--50 mm`，深度覆盖 `0--150 mm`：
+
+1. `lateral_multimaterial`：15--95 mm 深度内，横向依次布置 lung、bone
+   和 water，用来检查同一深度不同材料中的横向散射和能量沉积。
+2. `longitudinal_multimaterial`：中心束路上依次经过 lung
+   18--38 mm、bone 52--64 mm、lung 78--96 mm，用来检查多次材料边界切换、
+   水等效射程累积和碎片输运。
+3. `combined_multimaterial`：横向和纵向均放置互相错开的 lung/bone 区域，
+   同时覆盖界面步进、横向散射和多材料级联。
+
+生成器同时写出 GPU CCTG、YAML、TOPAS 参数文件和材料 metadata：
+
+```bash
+python3 validation/scripts/prepare_minibeam_complex_heterogeneity.py \
+  --histories 100000 \
+  --output-root out/minibeam/complex_heterogeneity_100k
+```
+
+TOPAS 使用 `G4_WATER`、`G4_LUNG_ICRP`、`G4_BONE_COMPACT_ICRU`；
+GPU 使用同一 Geant4 11.3.2 导出的 absolute stopping-power 和
+inelastic-cross-section 表。TOPAS 使用 40 threads。
+
+### 21.1 修复：CCTG v1 的材料 stopping-power 表被单位因子遮蔽
+
+旧版 CCTG v1 reader 会为诊断目的填充全 1 的 `mass_sp_za_rel`。输运端此前仅
+根据数组是否非空判断 Schneider mass-SP 是否可用，导致 v1 显式 lung/bone
+网格错误地走单位相对因子，而没有使用配置中的 absolute material table。
+结果是异质场景的 R80 提前约 1.4--2.7 mm。
+
+现在 `CtGrid::uses_schneider_mass_sp()` 仅允许 CCTG v2/v3 使用 Schneider
+mass-SP；v1 始终使用按材料指定的 absolute table。current/legacy 两条输运路径
+都采用同一判定，并增加了回归测试，确认 v1 即使带有诊断因子也不会被误判。
+修复后没有加入 case-specific dose scale。
+
+### 21.2 100k GPU/TOPAS 正式结果
+
+| 场景 | GPU throughput | TOPAS 40T | depth L1 | 积分比 GPU/TOPAS | global gamma 3%/1 mm | local gamma 3%/1 mm | ΔR80 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| 横向多材料 | 54.80k/s | 234.70 s | 1.326% | 0.9996 | 100.00% | 94.44% | +0.120 mm |
+| 纵向多层 | 53.18k/s | 247.16 s | 1.288% | 1.0027 | 98.77% | 95.71% | -0.015 mm |
+| 横纵组合 | 51.89k/s | 233.53 s | 1.095% | 1.0063 | 100.00% | 96.15% | -0.024 mm |
+
+纵向积分剂量、射程和 Bragg peak 已在三套复杂场景中稳定匹配。横向
+`3%/0.4 mm` global gamma 在入口约 94.7%，随深度和局部剂量降低而下降；
+组合场景在 24、44、60、78 mm 分别为 87.5%、87.5%、79.5%、65.6%。
+曲线显示主要剩余差异位于深部低统计量 peak/valley 和材料界面后的碎片横向
+展宽，而不是中心轴射程或绝对 dose scale。要严格量化这些深部横向差异，应
+提高到 1M histories；100k 足以验证几何、材料切换和纵向物理。
+
+可复现结果：
+
+- `out/minibeam/complex_heterogeneity_100k/lateral_multimaterial/comparison/`
+- `out/minibeam/complex_heterogeneity_100k/longitudinal_multimaterial/comparison/`
+- `out/minibeam/complex_heterogeneity_100k/combined_multimaterial/comparison/`
+
+### 21.3 1M 高统计量与 CT minibeam 精度档（2026-07-29）
+
+对最复杂的 `combined_multimaterial` 提高到 1M histories。TOPAS 40 threads
+用时 `2261.86 s`；原 GPU production baseline 用时约 `10.83 s`、吞吐
+`92.36k histories/s`。仅增加统计量后，depth global/local gamma
+`3%/1 mm` 已达到 `100.00%/96.79%`，R80 偏差 `+0.024 mm`。横向
+`3%/0.4 mm` global gamma 在 10、24、44、60、78 mm 分别为
+`97.37%`、`97.50%`、`97.78%`、`89.19%`、`90.55%`。这确认此前 100k
+深部曲线的大部分锯齿来自统计噪声，但 60 mm 的 peak 偏低、valley 偏高是
+系统性横向展宽误差。
+
+#### CT 中启用已验证的低能 primary MCS 修正
+
+旧条件只在 `!enable_ct_grid` 时启用 minibeam 低能 primary MCS 修正，导致
+显式 CT 中碳离子经过 lung/bone 降能后仍使用未经修正的逐步 Highland core。
+现在材料密度和 radiation length 仍由 CT voxel 决定，但 projectile-side
+平滑修正也允许在 CT 中生效：
+
+```yaml
+minibeam_water_low_energy_mcs_transition_MeVu: 180.0
+minibeam_water_primary_low_energy_mcs_scale: 0.20
+minibeam_water_fragment_low_energy_mcs_scale: 1.00
+```
+
+这些参数来自先前 homogeneous-water 多能量验证，不是按本异质 case 新拟合的
+dose scale。production 步长 `0.2 mm / 0.005` 下，60 mm lateral L1 从
+`5.95%` 改善到 `4.64%`，R80 从 `+0.024 mm` 改善到 `-0.003 mm`；
+吞吐约 `93.83k histories/s`，入口 10--44 mm 结果基本不变。
+
+#### 可选 high-accuracy 档
+
+生成器新增显式精度选择：
+
+```bash
+python3 validation/scripts/prepare_minibeam_complex_heterogeneity.py \
+  --histories 1000000 \
+  --cases combined_multimaterial \
+  --precision high_accuracy \
+  --output-root out/minibeam/complex_heterogeneity_1M
+```
+
+`production` 使用 `0.2 mm / 0.005`；`high_accuracy` 使用
+`0.1 mm / 0.001`。后者的正式 1M 结果：
+
+| 指标 | production + CT MCS | high_accuracy |
+|---|---:|---:|
+| throughput | `93.83k/s` | `23.23k/s` |
+| depth global gamma 3%/1 mm | `100.00%` | `100.00%` |
+| depth local gamma 3%/1 mm | `96.15%` | `99.36%` |
+| depth L1 | `0.952%` | `0.971%` |
+| ΔR80 | `-0.003 mm` | `-0.035 mm` |
+| 60 mm lateral global gamma 3%/0.4 mm | `89.19%` | `97.30%` |
+| 78 mm lateral global gamma 3%/0.4 mm | `90.55%` | `86.61%` |
+
+严格步长适合 Bragg/材料界面附近的 high-accuracy reference，但约慢 `4.04x`。
+78 mm 已位于 primary C-12 消失后的低剂量碎片区；GPU 该处剂量约一半来自
+helium，其余主要为 boron/proton/light fragments。严格步长不能修复且略微
+恶化该区，说明下一项物理改进应是按 parent species、energy、depth 和
+lung/bone material 条件化 reaction/cascade final-state package，而不是继续
+缩小步长或调整全局剂量。
+
+测试过但未保留的改动：
+
+- 把 6% electronic build-up 的整段随机搬移改为 local/delayed 分别计分：
+  1M gamma 不变，吞吐下降约 1.8%。
+- primary 使用 0.1 mm、secondary 使用 0.2 mm 的独立限步：
+  78 mm gamma 进一步降到 84.25%，depth local gamma 降到 98.08%。
+
+正式输出：
+
+- `config/generated/minibeam_complex/combined_multimaterial_1000000_high_accuracy.yaml`
+- `out/minibeam/complex_heterogeneity_1M/combined_multimaterial/comparison_baseline/`
+- `out/minibeam/complex_heterogeneity_1M/combined_multimaterial/comparison_ct_mcs/`
+- `out/minibeam/complex_heterogeneity_1M/combined_multimaterial/comparison_high_accuracy/`
+
+## 22. 临床 lung CT 中的单平面 minibeam（2026-07-29）
+
+选择 `20022516` lung case，使用 TPS 0°、患者 `+Y` 入射。为避免 961 个
+time-feature spot 的 TOPAS run 切换开销，改用一个 `50 x 50 mm` 平行平面源，
+照射与水箱验证相同的 60 mm Copper 准直器：
+
+- 15 条平行 slit；
+- slit 宽 0.5 mm，pitch 3.6 mm，沿 slit 半长 25 mm；
+- 准直器厚 60 mm，出口到 CT bounding-box 入口 60 mm；
+- 200 MeV/u C-12，GPU/TOPAS 都为 100k incident histories；
+- TOPAS DoseToMedium 网格 `0.5 x 0.5 x 2 mm`；
+- LET 关闭。
+
+初次运行把 TOPAS 源/准直器中心放在 world `(0,0)`，而 GPU minibeam 几何中心
+位于 patient-local `(0,0)`。该病例 `Patient/TransX=-69.6605 mm`，两者因此
+穿过完全不同的肺路径，表现为 IDD 峰相差 103 个 0.5 mm bin、gamma 接近零。
+最终 TOPAS 将源和 Snout 一起移到
+`world X=-69.6605 mm, Z=0.0819 mm`；修复后 GPU/TOPAS IDD 峰均为
+CT 入口后 `150.25 mm`。
+
+### 22.1 绝对同粒子数结果
+
+主结果固定 GPU scale 为 1，不按 TOPAS 拟合：
+
+| 指标 | 100k 结果 |
+|---|---:|
+| 全体积积分差 GPU/TOPAS | `+3.406%` |
+| IDD cosine / Pearson correlation | `0.995840 / 0.985786` |
+| IDD 高剂量 NRMSE | `5.307%` |
+| Bragg peak 深度差 | `0.000 mm` |
+| ΔR80 | `+0.106 mm` |
+| global / local gamma 3%/3 mm | `96.15% / 83.86%` |
+| global / local gamma 2%/2 mm | `85.35% / 62.72%` |
+
+高剂量 voxel 最小二乘 scale 为 `0.88956`，仅作为诊断；窄 peak 与极低 valley
+使 voxel fit 对局部涨落很敏感，不能用它替代绝对比较。3%/3 mm 的 3 mm DTA
+接近 3.6 mm pitch，可能搜索到相邻 minibeam，也不是 minibeam 的主要验收指标。
+
+把所有 slit 长度方向和 2 mm 深度 slab 积分后，15 条 peak 的位置和形状在
+5、50、100、150 mm 均对齐。PVDR 相对差依次约为 `+20.0%`、`+106.1%`、
+`+4.3%`、`-19.7%`；其中 50 mm 的绝对 valley 只有约 `2e-4 Gy`，100k
+统计及 0.5 mm scorer（恰好等于 slit 宽）会把 PVDR 比值显著放大。相应的
+1D global gamma 3%/0.5 mm 只有 11--57%，每个平面阈值上仅 26--48 个采样点。
+因此当前 100k 足以验证 CT 坐标、射程和 minibeam 几何，但不足以把 valley/PVDR
+误差归因到具体物理过程；下一轮应提高到至少 1M，并使用 0.1--0.2 mm 横向
+scorer 或局部 fine scorer。
+
+深度曲线显示主要系统残差位于入口后约 0--50 mm：GPU 高约 10--15%；50 mm
+以后大部分深度积分进入约 ±3%，Bragg peak 和 distal falloff 很好。关闭水箱
+使用的 Copper-touched primary surface boost/deficit 几乎不改变结果，因为
+该项只影响少量穿铜后仍存活的 primary C-12；入口差异更可能来自 Copper
+charged/neutral secondary source term 或 CT 入口低密度材料中的次级剂量搬移。
+建议下一步开启 charged-origin/species scoring 做 GPU 分源，并在 TOPAS 增加
+水入口/CT入口 phase space 或 species-resolved scorer。
+
+### 22.2 速度与复现
+
+| 程序 | 配置 | 时间 | 吞吐 |
+|---|---|---:|---:|
+| GPU | TITAN RTX, accurate minibeam+CT | `3.165 s` | `31.60k histories/s` |
+| TOPAS | 40 CPU threads | `291.50 s` | `343 histories/s` |
+
+该平面 minibeam CT case 的端到端 GPU speedup 约 `92.1x`，charged/neutral
+queue 均无 overflow。TOPAS 未计分导航能量为 `5.65e-5 MeV`，可忽略。
+
+复现入口：
+
+- `ct/fullplan_local_ct_compare/20022516/run_minibeam_plane_e200_100k.txt`
+- `config/generated/beam_ct_20022516_minibeam_plane_e200_100k.yaml`
+- `validation/scripts/analyze_ct_minibeam_plane.py`
+- `out/ct/20022516/minibeam_plane_e200_100k/match_absolute_ct/`
+- `out/ct/20022516/minibeam_plane_e200_100k/profiles_absolute_ct/`
+- `out/ct/20022516/minibeam_plane_e200_100k/multiplanar_absolute_ct/`
+
+### 22.3 1M 统计收敛验证
+
+GPU 和 TOPAS 使用相同几何、相同随机 history 数重新运行 1M；最终比较继续固定
+绝对 scale 为 1，不使用最小二乘归一化。TOPAS 40 线程执行时间
+`2259.91 s`（总 wall time `2267.64 s`），GPU wall time 约 `21.1 s`，
+端到端加速约 `107x`。GPU charged/neutral queue 均无 overflow。TOPAS
+parallel-world 导航漏记能量仅 `0.001916 MeV`，对结果可忽略。
+
+| 指标 | 100k | 1M |
+|---|---:|---:|
+| 全体积积分差 GPU/TOPAS | `+3.406%` | `+5.626%` |
+| IDD cosine / Pearson correlation | `0.995840 / 0.985786` | `0.995924 / 0.986222` |
+| IDD 高剂量 NRMSE | `5.307%` | `5.657%` |
+| Bragg peak 深度差 | `0.000 mm` | `0.000 mm` |
+| ΔR80 | `+0.106 mm` | `+0.243 mm` |
+| global / local gamma 3%/3 mm | `96.15% / 83.86%` | `95.04% / 80.99%` |
+| global / local gamma 2%/2 mm | `85.35% / 62.72%` | `85.16% / 64.66%` |
+
+1M 的高剂量 voxel 诊断性最小二乘 scale 为 `0.96153`，但主结果未采用它。
+提高十倍 history 后，纯统计标准差理论上降至 100k 的 `31.6%`；整体 gamma
+没有随之明显上升，证明主要剩余误差不是 history 不足，而是系统性物理差异：
+
+- CT 入口后约 0--50 mm，GPU IDD 高约 10--15%；
+- 100 mm 深度的横向 peak/valley 已明显收敛，1D global gamma
+  3%/0.5 mm 从 `56.7%` 提升至 `93.3%`；
+- 5 和 50 mm 的 GPU peak 仍系统性偏高、valley 偏低，PVDR 相对 TOPAS
+  分别高 `36.3%` 和 `93.1%`；
+- 150 mm Bragg 区的 GPU peak 偏低，PVDR 低 `16.0%`；
+- 0.5 mm scorer 与 0.5 mm slit 等宽，每个横向平面阈值上仍只有
+  26--48 个点，因此 3%/0.5 mm 对半个体素的相位和 peak 采样非常敏感。
+
+因此，继续从 1M 单纯增加到 10M 只能降低曲线噪声，不能消除入口、valley
+和 Bragg 区的系统偏差。下一项有效工作应是：
+
+1. 用 0.1--0.2 mm 的局部横向 fine scorer 排除体素采样误差；
+2. 对 GPU 开启 Copper-touched charged/neutral secondary 的 species/origin
+   分源计分，并在 TOPAS CT 入口输出 phase space；
+3. 根据分源结果修正 Copper 后碎片的横向散射、低密度肺组织中的次级输运，
+   而不是应用 case-specific 剂量缩放。
+
+1M 复现与结果：
+
+- `ct/fullplan_local_ct_compare/20022516/run_minibeam_plane_e200_1M.txt`
+- `out/ct/20022516/minibeam_plane_e200_1M/topas/dose.mhd`
+- `out/ct/20022516/minibeam_plane_e200_1M/gpu/dose.mhd`
+- `out/ct/20022516/minibeam_plane_e200_1M/match_absolute_ct/`
+- `out/ct/20022516/minibeam_plane_e200_1M/profiles_absolute_ct/`
+- `out/ct/20022516/minibeam_plane_e200_1M/multiplanar_absolute_ct/`
+
+另外复用同一份 1M TOPAS 做了 GPU-only high-accuracy A/B：只把
+`maximum_step_mm` 从 `0.2` 收紧到 `0.1`，把
+`maximum_relative_energy_loss` 从 `0.005` 收紧到 `0.001`。
+
+| 指标 | production | high-accuracy |
+|---|---:|---:|
+| GPU 时间 / throughput | `~21.1 s / ~47.4k/s` | `57.42 s / 17.42k/s` |
+| 全体积积分差 GPU/TOPAS | `+5.626%` | `+2.742%` |
+| IDD cosine / Pearson correlation | `0.995924 / 0.986222` | `0.997998 / 0.993256` |
+| IDD 高剂量 NRMSE | `5.657%` | `3.674%` |
+| ΔR80 | `+0.243 mm` | `+0.105 mm` |
+| global / local gamma 3%/3 mm | `95.04% / 80.99%` | `92.95% / 78.91%` |
+| global / local gamma 2%/2 mm | `85.16% / 64.66%` | `82.67% / 63.88%` |
+
+严格步长改善 IDD 形状、积分、R80 和严格的 3%/0.3 mm gamma，但没有改善
+3%/3 mm；入口 5/50 mm PVDR 相对差反而增至
+`+122.7% / +131.2%`。用户当前要求优先提高精度，因此这个 lung-minibeam
+验证配置保留 high-accuracy 参数；非 minibeam 配置不受影响。结果仍指向
+Copper reaction product 的 species、角分布和 CT 低密度区输运，而不是仅靠
+继续缩小普通 charged-particle 步长。
+
+high-accuracy A/B 输出：
+
+- `out/ct/20022516/minibeam_plane_e200_1M_high_accuracy/match_absolute_ct/`
+- `out/ct/20022516/minibeam_plane_e200_1M_high_accuracy/profiles_absolute_ct/`
+
+### 22.4 严格 3%/0.3 mm gamma
+
+`match_gpu_to_physical_dose.py` 新增可重复的
+`--gamma-criterion DOSE_PERCENT DISTANCE_MM` 和 `--only-custom-gamma`，
+以 0.1 mm 三线性搜索步长、10% TOPAS 最大剂量阈值、固定随机种子的 100k
+voxel 样本计算 3D global/local gamma。剂量保持同 history 绝对 scale=1。
+
+| 1M GPU 模式 | global 3%/0.3 mm | local 3%/0.3 mm |
+|---|---:|---:|
+| production：0.2 mm / 0.005 | `89.249%` | `47.656%` |
+| high-accuracy：0.1 mm / 0.001 | `90.703%` | `48.272%` |
+
+high-accuracy 分别提高 `1.454` 和 `0.616` 个百分点。不同深度的横向 1D
+global/local 3%/0.3 mm 通过率为：
+
+| 深度 | production | high-accuracy |
+|---|---:|---:|
+| 5 mm | `11.54% / 0.00%` | `15.38% / 0.00%` |
+| 50 mm | `34.62% / 3.85%` | `34.62% / 3.85%` |
+| 100 mm | `93.33% / 56.67%` | `83.33% / 53.33%` |
+| 150 mm | `50.00% / 10.42%` | `58.33% / 14.58%` |
+
+当前 CT/TOPAS scorer 横向间距为 0.5 mm，大于 0.3 mm DTA，且恰好等于 slit
+宽度。因此以上数字适合作为固定网格上的严格回归指标，但不能当作独立的
+0.3 mm 测量分辨率结论。下一步应把束流附近局部 scorer 细化至
+0.1--0.2 mm，并让 GPU 使用同一局部 dose-to-medium mass grid 后再做正式
+亚毫米验收。
+
+输出：
+
+- `out/ct/20022516/minibeam_plane_e200_1M/gamma_3pct_0p3mm_absolute_ct/`
+- `out/ct/20022516/minibeam_plane_e200_1M_high_accuracy/gamma_3pct_0p3mm_absolute_ct/`
+- `out/ct/20022516/minibeam_plane_e200_1M_high_accuracy/multiplanar_3pct_0p3mm_absolute_ct/`
+
+### 22.5 可信 95% 的可达性与 10M 收敛
+
+先用两个独立 seed 的 1M high-accuracy GPU 结果测量统计上限。相同物理模型、
+相同绝对 history 比例下：
+
+- IDD correlation：`0.999960`；
+- 高剂量 NRMSE：`3.106%`；
+- global 3%/0.3 mm：`95.750%`；
+- local 3%/0.3 mm：`47.484%`。
+
+这说明 1M 时 global 95% 只是统计上限附近，不能期待 GPU/TOPAS 在仍有物理
+模型差异时稳定超过 95%。随后把 GPU 提高到 10M。第一次单次 10M 沿用了
+2M secondary/neutral queue，出现大量 overflow，结果作废。有效重跑显式使用
+10M/10M queue，显存估算约 3.64 GiB，最终：
+
+- secondary queue overflow：`0`；
+- cascade queue overflow：`0`；
+- neutral queue overflow：`0`；
+- transported charged secondaries：`7,048,171`；
+- transported neutrals：`7,955,473`。
+
+为了让后续 10M 命令默认安全，lung-minibeam YAML 的 secondary/neutral queue
+capacity 已提高到 10M。与现有 1M TOPAS 比较时，GPU 10M 剂量乘以严格 history
+比例 `0.1`，不做拟合归一化：
+
+| 指标 | GPU 1M | GPU 10M |
+|---|---:|---:|
+| 3D cosine | `0.972383` | `0.986627` |
+| 高剂量 NRMSE | `4.272%` | `3.144%` |
+| absolute integral difference | `+2.742%` | `+2.916%` |
+| ΔR80 | `+0.105 mm` | `+0.092 mm` |
+| global 3%/0.3 mm | `90.703%` | `92.973%` |
+| local 3%/0.3 mm | `48.272%` | `45.964%` |
+
+提高 GPU history 带来 `+2.270` 个百分点，但绝对 global 仍未达到 95%。
+诊断性剂量扫描在 effective scale=`0.103` 时可得到约 `95.36%`，但同时令
+GPU 积分剂量高约 `6.00%`；这是利用 TOPAS 1M 单 voxel 峰值提高 global gamma，
+会恶化绝对物理剂量，因此没有采用，也不能宣称为 95% match。
+
+当前结论：
+
+1. 数字上可通过错误的整体放大超过 95%，但物理上不可接受；
+2. 可信的下一步是把 TOPAS 也提高到至少 5--10M，并采用无 queue 问题的多个
+   独立 batch 累加；
+3. 正式 0.3 mm 验收还需要 GPU/TOPAS 同步的 0.1--0.2 mm 局部 scorer；
+4. 统计收敛后若仍低于 95%，再用 collimator-exit phase space 和 species/origin
+   scoring 修正 Copper reaction products，而不是调全局 dose scale。
+
+10M 有效输出：
+
+- `out/ct/20022516/minibeam_plane_e200_10M_high_accuracy_valid/gpu/dose.mhd`
+- `out/ct/20022516/minibeam_plane_e200_10M_high_accuracy_valid/gamma_3pct_0p3mm_absolute_ct/`
+- `out/ct/20022516/minibeam_plane_e200_10M_high_accuracy_valid/profiles_absolute_ct/`
+- `out/ct/20022516/minibeam_plane_e200_10M_high_accuracy_valid/multiplanar_3pct_0p3mm_absolute_ct/`
+
+### 22.6 5M TOPAS、可信 global 95% 与 local 上限
+
+5M TOPAS 使用40线程完成，execution `11034.71 s`、总 wall time
+`11042.6 s`。parallel-world 导航漏记总能量仅 `0.002175 MeV`，可忽略。
+10M GPU 对5M TOPAS采用严格 history scale=`0.5`，不做拟合归一化。对全部
+211,348个10%阈值voxel计算：
+
+| 指标 | 10M GPU vs 5M TOPAS |
+|---|---:|
+| 3D cosine | `0.990677` |
+| 高剂量 NRMSE | `2.894%` |
+| absolute integral difference | `+2.372%` |
+| peak voxel coordinate | 完全一致 |
+| global 3%/0.3 mm | `95.039%` |
+| local 3%/0.3 mm | `53.332%` |
+
+因此 global 95% 已在绝对剂量、全部阈值voxel条件下可信达到，不依赖抽样误差
+或case-specific整体缩放。
+
+local gamma 仍明显受统计噪声和peak/valley振幅影响。两个独立seed的10M
+GPU在相同物理模型、绝对scale=1条件下：
+
+| 指标 | 10M GPU vs 10M GPU |
+|---|---:|
+| IDD correlation | `0.999996` |
+| integral difference | `-0.029%` |
+| global 3%/0.3 mm | `98.653%` |
+| local 3%/0.3 mm | `67.215%` |
+
+这证明即使物理模型完全相同，当前0.5 mm窄峰voxel和10M统计下，raw local
+通过率的上限也只有约67%，不能把53%全部解释成GPU/TOPAS物理误差。
+
+两个独立10M GPU逐voxel求和形成20M后，与5M TOPAS按严格scale=`0.25`
+比较：
+
+- global 3%/0.3 mm：`95.427%`；
+- local 3%/0.3 mm：`52.968%`；
+- 3D cosine：`0.991496`。
+
+GPU继续降噪提高global但没有提高local，说明当前local主瓶颈已经转为TOPAS
+参考噪声以及系统性PVDR差异。分深度横向local 3%/0.3 mm为：
+
+- 5 mm：`0.0%`，PVDR GPU高约`110%`；
+- 50 mm：`3.85%`，PVDR GPU高约`125%`；
+- 100 mm：`73.33%`，PVDR GPU高约`22.8%`；
+- 150 mm：`14.0%`，PVDR GPU低约`14.8%`。
+
+下一步已启动第二个独立seed的5M TOPAS。完成后将：
+
+1. 计算5M TOPAS↔5M TOPAS的local统计上限；
+2. 合成10M TOPAS，与20M GPU按scale=`0.5`比较；
+3. 从两个TOPAS batch和两个GPU batch估计逐voxel不确定度，增加
+   uncertainty-aware local gamma；
+4. 统计收敛后再针对剩余PVDR误差修改Copper reaction-product角分布/MCS。
+
+新增可复现工具与输出：
+
+- `validation/scripts/combine_mhd_dose.py`
+- `ct/fullplan_local_ct_compare/20022516/run_minibeam_plane_e200_5M.txt`
+- `ct/fullplan_local_ct_compare/20022516/run_minibeam_plane_e200_5M_seed20260803.txt`
+- `out/ct/20022516/minibeam_plane_e200_10M_vs_topas_5M/`
+- `out/ct/20022516/minibeam_plane_e200_10M_gpu_gpu/`
+- `out/ct/20022516/minibeam_plane_e200_20M_vs_topas_5M/`
+
+### 22.7 10M TOPAS 最终统计收敛验证
+
+第二个独立 seed 的 5M TOPAS 已完成，execution `11001.65 s`、总 wall time
+`11009.5 s`，parallel-world 导航漏记总能量仅 `0.002905 MeV`。两批结果逐
+voxel 求和得到 10M TOPAS。两个 5M TOPAS batch 在相同物理模型下使用严格
+history scale（并仅用 `0.997857` 修正两批实际 scorer 总量差）比较：
+
+| 指标 | 5M TOPAS vs 5M TOPAS |
+|---|---:|
+| 3D cosine | `0.997795` |
+| 高剂量 NRMSE | `1.330%` |
+| integral difference | `-0.339%` |
+| IDD correlation | `0.999984` |
+| global 3%/0.3 mm | `99.095%` |
+| local 3%/0.3 mm | `59.294%` |
+
+因此，即使参考端物理完全相同，当前 5M batch、0.5 mm 横向网格和窄
+peak/valley 下，raw local 通过率也只有约 59%。它不是一个可以单独用来调底层
+物理的无噪声目标。
+
+最终 20M GPU 与合并 10M TOPAS 使用严格 history scale=`0.5`，不拟合 GPU
+剂量。全部 210,764 个 10% 阈值 voxel 的结果为：
+
+| 指标 | 20M GPU vs 10M TOPAS |
+|---|---:|
+| 3D cosine | `0.992039` |
+| 高剂量 NRMSE | `2.740%` |
+| absolute integral difference | `+2.530%` |
+| IDD correlation | `0.997880` |
+| global 3%/0.3 mm | `96.462%` |
+| local 3%/0.3 mm | `55.464%` |
+
+用两个 TOPAS batch 和两个 GPU batch 的差异估计逐 voxel 标准误差：
+
+- TOPAS relative SEM：中位数 `1.762%`，P90 `4.739%`，P95 `5.985%`；
+- GPU relative SEM：中位数 `1.540%`，P90 `4.360%`，P95 `5.677%`；
+- raw local 3%/0.3 mm：`55.464%`；
+- 允许 1σ 蒙卡统计不确定度后：`67.874%`；
+- 允许 2σ 蒙卡统计不确定度后：`81.231%`。
+
+结论是 global 已稳定超过 95%，且 GPU/TOPAS 的 raw local 与 TOPAS/TOPAS
+噪声基线接近。当前 local 的主要限制是有限 history、0.5 mm scorer 对
+0.3 mm DTA 的欠采样，以及剩余约 2.5% 的绝对积分/PVDR 系统差。不能继续通过
+case-specific 整体归一化或仅追逐 raw local 数值调参。下一步若要提高可解释的
+local 精度，应优先：
+
+1. 在 beam corridor 使用 GPU/TOPAS 一致的 0.1--0.2 mm 局部 scorer；
+2. 每侧使用更多独立 batch，把 peak/valley voxel 的 SEM 压至 1% 以下；
+3. 在收敛网格和统计下再按 depth 分析 Copper reaction-product 与 MCS 对
+   PVDR 的系统偏差。
+
+最终输出：
+
+- `out/ct/20022516/minibeam_plane_e200_10M_combined/topas/dose.mhd`
+- `out/ct/20022516/minibeam_plane_e200_20M_high_accuracy_combined/gpu/dose.mhd`
+- `out/ct/20022516/minibeam_plane_e200_5M_topas_topas/`
+- `out/ct/20022516/minibeam_plane_e200_20M_vs_topas_10M/`
+
+## 23. RT07575 full-plan sparse-Dij threshold audit（2026-08-01）
+
+复制回来的 `bio_dij_osmk_sparse_c.mat` 包含 1943 个 spot 的完整 CSC 稀疏
+物理剂量矩阵。用 `resultGUI.w` 对列积分做恒等检查，得到
+`545281.372658 Gy-voxel`，而 `resultGUI.physicalDose` 为
+`545281.372974 Gy-voxel`，相对误差仅 `5.8e-10`；spot 顺序、权重和
+physicalDose 是一致的。
+
+但 `build_bio_dij_osmk_sparse.m` 在组成矩阵前对每个 spot/voxel 使用了
+`dose_limit=2e-6 Gy`。该阈值保留 `389,709,791` 项、删除
+`2,674,181,011` 项，即原始非零项的 **87.281%** 被置零。旧 MAT 只保存了
+dropped nnz 数量，没有保存被删剂量和，因此无法从该 MAT 精确恢复无阈值剂量。
+
+该 cutoff 对严格 gamma 并不安全：
+
+- `sum(w)=43165.516`；
+- 单 voxel 累计遗漏上界为 `2e-6*sum(w)=0.08633 Gy`；
+- BODY 内参考峰为 `2.92646 Gy`，3% global tolerance 为 `0.08779 Gy`；
+- 即稀疏化允许的遗漏上界已达到 `2.950%` of peak，几乎占满全部剂量容差；
+- 被删项的加权积分上界为参考积分的 `26.24%`；只需其平均值达到 cutoff 的
+  `25.70%`，就足以解释 86M GPU 相对 thresholded reference 的全体积
+  `+6.743%` 积分差。
+
+这不能证明全部 GPU/TOPAS 差异都来自 threshold，但证明当前 thresholded
+`resultGUI.physicalDose` 不能作为 3%/0.3 mm 底层物理调参的无偏参考。尤其
+low-dose、valley 和多 spot Bragg-overlap 区会累积大量单独低于 cutoff 的贡献。
+
+已做修复：
+
+1. builder 的 Dtotal cutoff 降为 `2e-7 Gy`，对应本计划单 voxel 上界
+   `0.00863 Gy = 0.295% of peak`；若磁盘允许可设为零；
+2. 新 builder 同时保存每 spot/scorer 的 raw、kept、dropped 实际剂量和，避免
+   再次只知道删除数量；
+3. `validation/scripts/audit_sparse_dij_threshold.py` 输出可复现的阈值审计；
+4. `validation/scripts/build_unthresholded_osmk_plan_reference.py` 可在原始
+   `OSMK_Dtotal` 文件所在机器上逐 spot 乘 `resultGUI.w` 并流式累积无阈值
+   full-plan reference，无需创建几十 GB 的无阈值 sparse Dij。
+
+本地没有 1943 个原始 `OSMK_Dtotal_*_Run_*.bin`，因此下一步应在 scorer 所在
+集群运行无阈值累积脚本，再用该 reference 重算 BODY 内 3%/0.3 mm gamma。
+只有消除 threshold bias 后，才能继续判断 Bragg-overlap 剩余误差是否来自
+primary C-12 range/straggling 或 copper reaction-product lateral response。
+
+补充核对：`ct/fullplan_result/RT07575/OSMK_Dtotal_full_plan.bin` 不能用于替代
+上述无阈值 reference。它是普通 `c_01+c_02` 计划（917 spots、实际 Dij
+50k histories/spot），而本节 minibeam 计划是 `c_01--c_04`（1943 spots、
+100k histories/spot）。二者不是同一束流计划。
+
+builder 现在还会在 `code_v2/RBE_dose_result_c.mat` 存在时读取最终权重，并在
+构建开始时打印 `dose_limit*sum(abs(w))` 的保守单 voxel 遗漏上界；构建完成后
+则用新记录的实际 dropped sum 打印最终计划的 kept/dropped/raw 积分和真实
+积分损失比例。权重只用于审计，不参与 Dij 构建。这样即使未来改变 spot 数或
+优化权重，也不会继续沿用一个对该计划不安全的固定阈值而没有告警。
+
+其余 OSMK 矩阵也存在更激进的 sparsification：`weighted_zd`、
+`weighted_zd_star`、`weighted_zn` 分别删除了 `94.789%`、`91.312%`、
+`95.423%` 的原始非零项。它们不会改变固定权重下的 physicalDose 恒等式，但会
+改变 OSMK RBE 和据此重新优化出的权重。因此本轮“GPU physical dose vs 当前
+权重对应 TOPAS physical dose”只需首先消除 Dtotal threshold；如果后续要重新
+做高精度 RBE optimization，还必须分别审计这三项的实际 dropped weighted sum，
+不能沿用当前阈值只看 sparse 文件大小。
+
+final builder 的 `fail_on_missing` 已改为 `true`。当前复制回来的 MAT 中四个
+scorer 的 1943 列均有非零列，没有发现整列缺失；以后若原始 scorer 传输不全，
+构建会立即失败，而不会静默把缺失 spot 写成零剂量。
+
+## 24. GPU 使用相同逐-spot Dtotal 阈值的 A/B（2026-08-02）
+
+为了回答“如果 GPU 也使用与 sparse Dij 完全相同的阈值，gamma 是否提高”，
+增加了仅通过命令行开启的诊断模式：每个正权重 spot 独立运行 100,000 histories，
+在乘优化权重和累加前执行
+
+```text
+D_i(voxel) < 2e-6 Gy  ->  0
+D_plan = sum_i w_i * D_i
+```
+
+不能对已有 full-plan MHD 整体应用 `2e-6 Gy`，因为那时 spot 身份已经丢失，
+与 Dij builder 的处理不等价。诊断模式不改变默认 batched full-plan 路径。
+
+正式计算包含 1,617 个正权重 spot、161.7M histories。angle01/angle02 分别为
+811/806 spots，用时 11,042.047/10,881.628 s；两进程并行运行。所有 charged、
+cascade 和 neutral queue overflow 均为零。映射约定用旧四 subfield 输出逐体素
+重建验证，RMSE 仅 `8.8e-9 Gy`：angle01 flip patient X，angle02 flip patient Y。
+
+GPU 阈值删除的加权积分为：
+
+- angle01：`12,895.571 Gy-voxel`；
+- angle02：`5,141.024 Gy-voxel`；
+- 合计：`18,036.595 Gy-voxel`。
+
+阈值后的全体积 GPU 积分为 `563,834.258 Gy-voxel`。加回被删积分得到
+`581,870.853 Gy-voxel`，与此前独立 86M GPU 的 `582,049.771 Gy-voxel`
+只差约 `0.031%`，验证了逐 spot 阈值和权重实现的一致性。BODY 内积分差从
+未阈值 GPU 的 `+2.357%` 变为 `-0.165%`；高剂量 NRMSE 从 `2.916%` 小幅降为
+`2.898%`，IDD correlation 从 `0.999850` 升为 `0.999937`。
+
+但 gamma 没有随积分改善而提高：
+
+| criterion | 原 GPU global/local | GPU 同阈值 global/local | 变化（百分点） |
+|---|---:|---:|---:|
+| 3%/3 mm | 99.358 / 97.602 | 99.204 / 97.368 | -0.154 / -0.234 |
+| 2%/2 mm | 95.860 / 89.508 | 95.308 / 89.340 | -0.552 / -0.168 |
+| 1%/1 mm | 70.830 / 45.164 | 70.520 / 45.358 | -0.310 / +0.194 |
+| 3%/0 mm | 73.961 / 31.530 | 73.825 / 31.619 | -0.136 / +0.089 |
+| 3%/0.3 mm，全 317,867 voxels | 89.591 / 66.494 | 88.979 / 66.306 | -0.612 / -0.188 |
+| 3%/0.5 mm，全 317,867 voxels | — | 92.750 / 78.194 | — |
+
+因此旧 `2e-6 Gy` cutoff 的确解释了大部分绝对积分背景偏差，但不是当前严格
+gamma 的主要限制。给 GPU 和 TOPAS 同时施加相同信息损失只会让积分看起来更
+一致，并没有改善 peak/valley、Bragg overlap 和空间梯度形状。后续物理调参
+仍应使用无阈值 TOPAS reference；不应把“双边同阈值”作为提高准确率的方法。
+
+可复现输出：
+
+- `out/ct/RT07575/minibeam_plan/gpu_per_spot_threshold_2e-6_100k/summary.json`
+- `.../full_plan/dose_thresholded_like_dij.mhd`
+- `.../full_plan/compare_standard/match_metrics.json`
+- `.../full_plan/compare_submm_all/match_metrics.json`
+
+## 25. RT07575 GPU 三倍统计量双 seed 收敛（2026-08-02）
+
+为直接测量蒙卡涨落对 `3%/0.5 mm` gamma 的影响，保持物理、spot 权重、BODY
+mask 和剂量尺度不变，把每个 full-plan seed 从 `43,165,516` 增加到
+`129,496,548 histories`（严格 `3x`）。两个 seed 合计 `258,993,096`
+histories，相对单个旧 run 是 `6x`。
+
+高统计 batched angle01 的默认20M队列会发生大量截断。最终使用显式
+`secondary=58M`、`neutral=70M`，并把该验证配置的 CUDA 显存预算提高到82%。
+angle01/angle02 的估算显存分别为 `20,063 / 18,133 MiB`。两组 seed 的所有
+secondary、cascade 和 neutral overflow 均为零。为允许显式高统计 neutral
+队列，CUDA neutral hard ceiling 从16M提高到96M；默认自动容量不变，实际分配
+仍受 device-memory estimator 和预算保护。
+
+每个 seed 的角度 histories 为 `79,737,018 + 49,759,530`。seed A/B 的有效
+elapsed 分别为 `3565.21 / 3576.36 s`，两组总计 `7141.57 s`，有效吞吐
+`36.27k histories/s`。
+
+采用固定 absolute scale=1、BODY 内参考剂量至少10% peak、0.1 mm trilinear
+搜索步长和全部阈值 voxel。双向 gamma 为：
+
+| reference -> evaluated | voxels | global 3%/0.5 mm | local 3%/0.5 mm | NRMSE |
+|---|---:|---:|---:|---:|
+| seed A -> seed B | 321,241 | **99.9757%** | **98.0641%** | 0.7736% |
+| seed B -> seed A | 321,132 | **99.9757%** | **98.0606%** | 0.7722% |
+
+旧 `43.17M/seed` 基线为 global/local `99.4745% / 92.9508%`、NRMSE
+`1.3364%`。增加到3倍后 global 提高约 `0.501` 个百分点、local 提高约
+`5.11` 个百分点，NRMSE 比值 `0.579`，几乎等于理论 `1/sqrt(3)=0.577`。
+因此此前同模型 seed 间的主要差异确实是有限粒子数涨落；但 local 的实际
+收敛慢于简单均匀高斯外推，3倍统计量达到约98.06%，而不是预估的99.8%。
+
+结果：
+
+- `out/ct/RT07575/minibeam_plan/gpu_gpu_3x_seed_convergence/summary.json`
+- `.../gamma_3pct_0p5mm_all/match_metrics.json`
+- `.../gamma_3pct_0p5mm_all_reverse/match_metrics.json`
