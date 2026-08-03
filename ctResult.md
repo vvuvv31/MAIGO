@@ -270,7 +270,60 @@ dose sum；最终物理调参应使用无阈值 reference。
 残差主要是统计涨落。下一步可让 TOPAS 使用同一粒子数；若 GPU/TOPAS 明显低于
 该 GPU/GPU 上限，差异来自 TOPAS统计或物理模型，而不是 GPU history 数。
 
-## 12. 已排除或不能作为生产结论的结果
+## 12. RT07575 非 minibeam：fast/best 双 seed 粒子数收敛
+
+本节验证普通 CT 路径，不启用 minibeam。构建为
+`build/oneapi-nvidia-release/carbon_mc`，CMake 使用
+`CARBON_ENABLE_MINIBEAM=OFF`、`CARBON_DOSE_FP32=ON`。`best` 保持完整 LET
+scoring，因此其时间包含 LET tally；`fast` 关闭 LET。两档其余物理参数见第3节。
+
+seed 20260801作为reference，seed 20260802作为evaluation；相同 profile、spot
+权重、CT几何和绝对dose scale，gamma scale固定为1。每个预算均按原L4权重用
+Hamilton最大余数法分配整数 histories，并保证853个active spot各至少一个
+history。30M/60M 为避免65M secondary queue溢出，分别由3/6个独立10M batch的
+每primary剂量等权合并；所有有效batch的secondary/cascade overflow均为0。
+
+评价区域为 `BODY ∩ seed-1 dose >= 10% BODY Dmax`。33/22/11使用固定50k点、
+0.5 mm三线性搜索，30使用全部评价voxel。下表均为Global/Local：
+
+| profile | histories/seed | NRMSE | eval/ref integral | 3%/3mm | 2%/2mm | 1%/1mm | 3%/0mm |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| fast | 1M | 3.460% | 1.000178 | 99.964 / 99.940 | 99.550 / 99.180 | 89.148 / 68.292 | 68.841 / 31.030 |
+| fast | 3M | 2.072% | 1.000090 | 99.992 / 99.972 | 99.848 / 99.492 | 94.066 / 75.536 | 87.198 / 49.638 |
+| fast | 10M | 1.164% | 1.000028 | 100 / 99.992 | 99.988 / 99.656 | 97.424 / 80.678 | 97.599 / 74.700 |
+| fast | 30M | 0.684% | 0.999974 | 100 / 100 | 99.998 / 99.842 | 99.468 / 86.788 | 99.849 / 91.021 |
+| fast | 60M | 0.487% | 0.999995 | 100 / 99.994 | 100 / 99.928 | 99.804 / 90.792 | 99.997 / 96.802 |
+| best | 1M | 3.450% | 0.999977 | 99.954 / 99.916 | 99.498 / 99.030 | 88.948 / 67.786 | 68.907 / 30.834 |
+| best | 3M | 2.089% | 0.999840 | 99.984 / 99.972 | 99.852 / 99.550 | 94.238 / 75.836 | 86.813 / 48.955 |
+| best | 10M | 1.172% | 0.999895 | 100 / 99.980 | 99.974 / 99.672 | 97.436 / 80.760 | 97.588 / 74.362 |
+| best | 30M | 0.682% | 0.999956 | 100 / 100 | 100 / 99.882 | 99.438 / 86.986 | 99.864 / 91.149 |
+| best | 60M | 0.474% | 0.999938 | 100 / 100 | 100 / 99.912 | 99.862 / 91.008 | 99.996 / 96.789 |
+
+运行时间和吞吐（两个seed分别计时）：
+
+| profile | histories/seed | seed1 / seed2 time | mean throughput |
+|---|---:|---:|---:|
+| fast | 1M | 12.86 / 13.10 s | 77.0k/s |
+| fast | 3M | 34.73 / 34.23 s | 87.0k/s |
+| fast | 10M | 107.83 / 107.89 s | 92.7k/s |
+| fast | 30M | 320.13 / 318.88 s | 93.9k/s |
+| fast | 60M | 637.08 / 439.77 s | 115.3k/s |
+| best | 1M | 34.37 / 34.27 s | 29.1k/s |
+| best | 3M | 65.44 / 66.06 s | 45.6k/s |
+| best | 10M | 213.90 / 214.44 s | 46.7k/s |
+| best | 30M | 642.73 / 642.70 s | 46.7k/s |
+| best | 60M | 1278.96 / 1277.84 s | 46.9k/s |
+
+fast 的后期3个10M batch曾从约94k/s恢复至174k/317k/313k/s，因此60M两组
+聚合时间不对称；best 各batch稳定在约46–47k/s。旧profile结果的fast约339k/s，
+说明当前重新编译的非minibeam路径仍需单独做同commit/同GPU时钟的性能回退审计。
+
+NRMSE基本按 `1/sqrt(N)` 下降，fast和best的GPU–GPU收敛几乎相同。60M/seed时
+两档的local 3%/0mm都约96.8%，local 1%/1mm约91%。这说明在普通CT dose上，
+两档的seed重复性由粒子统计主导；该结果是GPU–GPU统计上限，不衡量GPU–TOPAS
+物理模型偏差。
+
+## 13. 已排除或不能作为生产结论的结果
 
 - RT06541 独立 full-plan TOPAS 数据有问题，已删除；只保留旧 Dij-shape 回归。
 - 把实际 Dij 50k/spot 误认为100k曾造成每粒子剂量约1.928倍错位；不是物理模型。
@@ -279,7 +332,7 @@ dose sum；最终物理调参应使用无阈值 reference。
 - 出现 secondary/cascade/neutral queue overflow 的高统计 run 一律作废。
 - 0.5 mm scorer 上的0.3 mm gamma是固定网格回归，不等价于0.3 mm独立测量精度。
 
-## 13. 权威输出与待办
+## 14. 权威输出与待办
 
 主要机器可读结果：
 
@@ -289,6 +342,8 @@ dose sum；最终物理调参应使用无阈值 reference。
 - `out/ct/20022516/minibeam_plane_e200_20M_vs_topas_10M/`：lung CT minibeam；
 - `out/ct/RT07575/minibeam_plan/gpu_gpu_650m_seed_convergence/summary.json`；
 - `out/ct/RT07575/minibeam_plan/gpu_gpu_650m_seed_convergence/convergence.json`。
+- `out/ct/RT07575/nonminibeam_gpu_seed_convergence_fp32/summary.json`：普通CT
+  fast/best双seed粒子数收敛；同目录含`summary.md`和趋势图。
 
 下一项应先处理 `ct/fullplan_result/20022516`：转换TOPAS dose/LET、生成BODY
 mask、运行严格相同17,717,177 histories的best GPU，然后用与两例head完全一致
