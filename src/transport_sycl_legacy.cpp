@@ -101,6 +101,49 @@ double event_duration_seconds(const sycl::event& event) {
     return static_cast<double>(end - start) * 1.0e-9;
 }
 
+// The CUDA plugin may leave a freshly idle WSL GPU at its application clock
+// (typically 1125--1350 MHz) for the first few submitted kernels.  The legacy
+// CT path is long enough to expose this as a 2--3x histories/s swing: the
+// workload and kernel event counts are unchanged, but the first transport
+// launch runs before the boost clock reaches ~1900 MHz.  A short deterministic
+// compute-only warm-up makes the clock transition happen before physics starts.
+// It is intentionally kept here, outside the minibeam TU, and writes only a
+// temporary scratch buffer; no RNG, scorer, or transport state is touched.
+double cuda_clock_warmup(sycl::queue& queue) {
+    constexpr std::size_t work_items = 262'144;
+    constexpr std::size_t local_size = 128;
+    constexpr int repetitions = 8;
+    constexpr int inner_iterations = 512;
+    auto* scratch = sycl::malloc_device<float>(work_items, queue);
+    if (scratch == nullptr) {
+        throw std::runtime_error("CUDA warm-up scratch allocation failed");
+    }
+    const auto start = std::chrono::steady_clock::now();
+    try {
+        for (int repetition = 0; repetition < repetitions; ++repetition) {
+            auto event = queue.parallel_for(
+                sycl::nd_range<1>{sycl::range<1>{work_items},
+                                  sycl::range<1>{local_size}},
+                [=](sycl::nd_item<1> item) {
+                    const auto index = item.get_global_linear_id();
+                    float value = 0.5F + static_cast<float>(index & 31U) * 1.0e-4F;
+                    for (int iteration = 0; iteration < inner_iterations; ++iteration) {
+                        value = sycl::fma(value, 1.000001F, 1.0e-6F);
+                    }
+                    scratch[index] = value;
+                });
+            event.wait_and_throw();
+        }
+    } catch (...) {
+        sycl::free(scratch, queue);
+        throw;
+    }
+    sycl::free(scratch, queue);
+    return std::chrono::duration<double>(
+               std::chrono::steady_clock::now() - start)
+        .count();
+}
+
 struct Direction3F {
     float x;
     float y;
@@ -3030,6 +3073,12 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
     const auto energy_cutoff_MeV = static_cast<float>(config.energy_cutoff_MeV);
     const auto medium_physics_profile = config.physics_profile == "medium";
     const auto fast_physics_profile = config.physics_profile == "fast";
+    if (is_cuda_backend && !config.enable_minibeam) {
+        const auto warmup_seconds = cuda_clock_warmup(queue);
+        std::cout << "CUDA non-minibeam clock warm-up: " << warmup_seconds
+                  << " s\n"
+                  << std::flush;
+    }
     const auto configured_secondary_local_deposit_cutoff_MeV = static_cast<float>(
         config.secondary_local_deposit_cutoff_MeV > 0.0
             ? config.secondary_local_deposit_cutoff_MeV
