@@ -1,9 +1,16 @@
 # CT 蒙卡结果总表
 
-本文汇总截至 **2026-08-03** 的患者 CT、CT 中 LET、CT minibeam 和
+本文汇总截至 **2026-08-04** 的患者 CT、CT 中 LET、CT minibeam 和
 RT07575 minibeam plan 验证。详细几何推导见 `ctplan.md`，minibeam 的逐步物理
 修复见 `minibeam.md`，LET 后续路线见 `futureStep.md`。本文只保留最终结果、
 关键中间结论、运行参数和可复现路径。
+
+病例分档文档：
+
+- [RT06423 head](ct/RT06423.md)
+- [RT07575 head](ct/RT07575.md)
+- [RT06541 head（TOPAS 数据无效）](ct/RT06541.md)
+- [20022516 lung](ct/20022516.md)
 
 ## 1. 结果口径
 
@@ -275,7 +282,9 @@ dose sum；最终物理调参应使用无阈值 reference。
 本节验证普通 CT 路径，不启用 minibeam。构建为
 `build/oneapi-nvidia-release/carbon_mc`，CMake 使用
 `CARBON_ENABLE_MINIBEAM=OFF`、`CARBON_DOSE_FP32=ON`。`best` 保持完整 LET
-scoring，因此其时间包含 LET tally；`fast` 关闭 LET。两档其余物理参数见第3节。
+scoring，因此其时间包含 LET tally；本节的历史 `fast` 基准关闭 LET。当前 fast
+也支持通过 `scorerLET: true` 选择性启用 LET 输出，但仍使用 1 mm/2 MeV 次级近似，
+不应与 best 的 LET 精度直接等价。两档其余物理参数见第3节。
 
 seed 20260801作为reference，seed 20260802作为evaluation；相同 profile、spot
 权重、CT几何和绝对dose scale，gamma scale固定为1。每个预算均按原L4权重用
@@ -349,3 +358,72 @@ NRMSE基本按 `1/sqrt(N)` 下降，fast和best的GPU–GPU收敛几乎相同。
 mask、运行严格相同17,717,177 histories的best GPU，然后用与两例head完全一致
 的33/22/11/30 dose和all-hadron LET gamma口径更新本文。其后再决定是否启动
 RT07575 minibeam的约650M TOPAS正式验证。
+
+## 15. 2026-08-04 病例归档与最新 CT 蒙卡比较
+
+本节是当前可直接引用的多病例摘要；每个病例的详细参数、路径和限制见本文件
+开头列出的病例文档。
+
+### 15.1 普通 CT full-plan 状态
+
+| Case | 解剖/角度 | 严格 TOPAS histories | 严格 GPU/TOPAS 状态 | 可引用的结果 |
+|---|---|---:|---|---|
+| RT06423 | head / 90° | 15.109M | **valid** | dose + primary/all-hadron LET full-plan |
+| RT07575 | head / 90° | 12.964M | **valid** | dose + primary/all-hadron LET full-plan；另有 1B fast/best profile |
+| RT06541 | head / 270° | — | **invalid reference** | 仅保留 10M Dij plan-shape 回归 |
+| 20022516 | lung / 0° | 17.717M | TOPAS 已完成，GPU strict full-plan 待完成 | 10M plan-shape与5-spot子集可引用 |
+
+### 15.2 严格 full-plan dose gamma（历史 baseline）
+
+mask 为 BODY ∩ TOPAS dose ≥ 10% BODY Dmax；单元为 Global / Local。
+
+| Case | 3%/3mm | 2%/2mm | 1%/1mm | 3%/0mm | GPU time | TOPAS wall |
+|---|---:|---:|---:|---:|---:|---:|
+| RT06423 | 99.9997 / 99.9866% | 99.9815 / 99.4565% | 91.3153 / 71.2856% | 80.7940 / 49.4963% | 237.2 s | 21.12 h |
+| RT07575 | 99.9994 / 99.9442% | 99.9040 / 98.8121% | 90.8177 / 67.9095% | 78.2618 / 41.9709% | 212.2 s | 11.81 h |
+
+两例 IDD peak bin 均一致，IDD correlation 均约 0.999998；3%/0mm 和 local gamma
+主要受逐 voxel 统计、低剂量局部容差及物理模型残差影响，不是射程错位。
+
+### 15.3 严格 full-plan all-hadron LET_d gamma
+
+LET gamma 仍使用 dose mask，不使用 LET threshold。
+
+| Case | 3%/3mm | 2%/2mm | 1%/1mm | 3%/0mm |
+|---|---:|---:|---:|---:|
+| RT06423 | 99.9946 / 90.9841% | 99.9205 / 73.0092% | 82.1993 / 41.8365% | 87.8820 / 19.7911% |
+| RT07575 | 99.9965 / 86.1031% | 99.9366 / 68.8561% | 81.3376 / 38.5691% | 88.7004 / 17.2605% |
+
+Primary C-12 LET 的 mean bias 约 −0.94%（RT06423）和 −0.56%（RT07575）；
+all-hadron LET bias 约 +8.62% 和 +10.23%，主要与低能碎片、cascade package、
+材料条件化末态和 scorer 定义有关。
+
+### 15.4 RT07575 最新 1B fast/best profile
+
+这是 GPU 1B histories 与同一 12.964M-history TOPAS reference 的比较；GPU dose
+按 `12,963,817/10,000,000` 缩放，LET 不缩放。
+
+| Profile | histories | wall time | Dose 1%/1mm G/L | Dose 3%/0mm G/L | Primary LET 1%/1mm G/L | All-hadron LET 3%/3mm G/L |
+|---|---:|---:|---:|---:|---:|---:|
+| fast seed A | 1B | 1.18 h | 87.750 / 61.820% | 79.074 / 43.172% | 94.752 / 29.118% | 99.500 / 40.372% |
+| fast seed B | 1B | 1.18 h | 87.752 / 61.842% | 79.027 / 43.148% | 94.868 / 29.162% | 99.512 / 40.362% |
+| best seed B | 1B | 5.93 h | **90.320 / 64.774%** | **80.451 / 45.219%** | **96.140 / 87.580%** | **99.762 / 98.300%** |
+
+Best seed B 的完整表（包括 LET 的 2%/2mm、1%/1mm、3%/0mm）见
+`out/ct/RT07575/fast_best_1b_three_groups/topas_gamma_summary_all.md`。
+Best dose integral/TOPAS 为 0.999947，NRMSE/Dmax 为 2.327%。TOPAS 当前只有
+12.964M 独立 histories，约比 GPU 1B 少 77 倍；这会显著放大 TOPAS voxel-level
+统计噪声，但不能单独解释所有 local gamma 差距。
+
+### 15.5 多病例结论与下一步
+
+- RT06423 和 RT07575 的 head CT 几何、dose full-plan match 已闭环；3%/3mm global
+  接近 100%，1%/1mm 与 3%/0mm 是严格的统计/局部误差指标。
+- RT07575 best profile 显著提升 primary/all-hadron LET，说明 LET 精度提升来自
+  粒子特异 stopping power、fragment/cascade package 和 scorer 路径，而不只是
+  增加 histories。
+- RT06541 不能引用严格 TOPAS match；必须重跑有效 full-plan reference。
+- 20022516 已完成 TOPAS full-plan，但 strict GPU best 和统一 gamma 尚未完成，
+  不应把 10M fitted 或 5-spot 结果当作完整 lung plan 结论。
+- 当前权威机器可读结果：`out/fullplan_result/summary.json` 与
+  `out/ct/RT07575/fast_best_1b_three_groups/topas_gamma_summary_all.json`。
