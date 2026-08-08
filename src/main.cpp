@@ -312,11 +312,18 @@ void accumulate_transport_result(carbon::TransportResult& total,
     }
 }
 
+struct UpstreamAirLossAudit {
+    double distance_to_entrance_mm{0.0};
+    double energy_loss_MeV{0.0};
+};
+
 void apply_spot_to_config(carbon::TransportConfig& config,
                           const carbon::TopasSpotPlan& plan,
                           const carbon::TopasSpot& spot,
                           std::size_t spot_index,
-                          std::uint64_t base_seed) {
+                          std::uint64_t base_seed,
+                          const carbon::StoppingPowerTable* upstream_air_stopping_power = nullptr,
+                          UpstreamAirLossAudit* upstream_air_audit = nullptr) {
     if (config.mass_number <= 0) {
         throw std::invalid_argument("mass_number must be positive for spots plans");
     }
@@ -329,10 +336,12 @@ void apply_spot_to_config(carbon::TransportConfig& config,
     // TOPAS BiGaussian emittance values (zero values retain a pencil source).
     config.enable_emittance_source = !config.enable_flat_source;
     if (config.enable_emittance_source) {
-        config.emittance_sigma_x_mm = spot.sigma_x_mm;
-        config.emittance_sigma_y_mm = spot.sigma_y_mm;
-        config.emittance_sigma_x_prime = spot.sigma_x_prime;
-        config.emittance_sigma_y_prime = spot.sigma_y_prime;
+        const auto sigma_scale = config.spots_emittance_sigma_scale;
+        const auto prime_scale = config.spots_emittance_prime_scale;
+        config.emittance_sigma_x_mm = spot.sigma_x_mm * sigma_scale;
+        config.emittance_sigma_y_mm = spot.sigma_y_mm * sigma_scale;
+        config.emittance_sigma_x_prime = spot.sigma_x_prime * prime_scale;
+        config.emittance_sigma_y_prime = spot.sigma_y_prime * prime_scale;
         config.emittance_correlation_x = spot.correlation_x;
         config.emittance_correlation_y = spot.correlation_y;
     }
@@ -381,9 +390,55 @@ void apply_spot_to_config(carbon::TransportConfig& config,
             throw std::runtime_error(
                 "TPS source is downstream of the CT entrance plane");
         }
+        const auto entrance_energy =
+            carbon::spot_entry_total_energy_after_optional_upstream_loss(
+                spot.energy_MeV, config.mass_number, distance_to_entrance_mm,
+                upstream_air_stopping_power);
+        // With no table this is exactly the legacy spot.energy_MeV assignment.
+        config.initial_energy_MeVu =
+            entrance_energy / static_cast<double>(config.mass_number);
+        if (upstream_air_audit != nullptr) {
+            upstream_air_audit->distance_to_entrance_mm = distance_to_entrance_mm;
+            upstream_air_audit->energy_loss_MeV = spot.energy_MeV - entrance_energy;
+        }
         pose.origin_x_mm += distance_to_entrance_mm * pose.uz_x;
         pose.origin_y_mm += distance_to_entrance_mm * pose.uz_y;
         pose.origin_z_mm = 0.0;
+
+        // Optional lateral YZ skew in the reoriented CT entrance plane.
+        // GPU x = patient Y, GPU y = patient Z (tps_90 packing).
+        if (config.spots_lateral_yz_skew != 0.0) {
+            pose.origin_y_mm +=
+                config.spots_lateral_yz_skew *
+                (pose.origin_x_mm - config.spots_lateral_yz_skew_pivot_mm);
+        }
+
+        // Optional rigid rotation of the entrance-plane map about the lateral
+        // pivot (GPU-x = patient Y, GPU-y = patient Z). Applied after skew so
+        // the two affine repairs compose. Also rotates beam-basis lateral
+        // components so emittance axes follow the spot map.
+        if (config.spots_lateral_yz_rotation_deg != 0.0) {
+            constexpr double kPi = 3.14159265358979323846;
+            const double th =
+                config.spots_lateral_yz_rotation_deg * (kPi / 180.0);
+            const double c = std::cos(th);
+            const double s = std::sin(th);
+            const double px = config.spots_lateral_yz_skew_pivot_mm;
+            const double py = config.spots_lateral_yz_rotation_pivot_y_mm;
+            const double dx = pose.origin_x_mm - px;
+            const double dy = pose.origin_y_mm - py;
+            pose.origin_x_mm = px + c * dx - s * dy;
+            pose.origin_y_mm = py + s * dx + c * dy;
+            const auto rot_xy = [c, s](double& vx, double& vy) {
+                const double nx = c * vx - s * vy;
+                const double ny = s * vx + c * vy;
+                vx = nx;
+                vy = ny;
+            };
+            rot_xy(pose.ux_x, pose.ux_y);
+            rot_xy(pose.uy_x, pose.uy_y);
+            rot_xy(pose.uz_x, pose.uz_y);
+        }
 
         // Propagate the source-plane emittance covariance through the air gap
         // to the CT entrance: x_entry = x + L*x' (and likewise for y).
@@ -636,6 +691,13 @@ int main(int argc, char* argv[]) {
         }
 
         const auto stopping_power = carbon::StoppingPowerTable::from_csv(config.stopping_power_file);
+        std::optional<carbon::StoppingPowerTable> upstream_air_stopping_power;
+        if (config.spots_enable_upstream_air_energy_loss) {
+            upstream_air_stopping_power = carbon::StoppingPowerTable::from_csv(
+                config.spots_upstream_air_stopping_power_file);
+        }
+        const auto* upstream_air_stopping_power_ptr =
+            upstream_air_stopping_power ? &*upstream_air_stopping_power : nullptr;
         const auto cross_section =
             carbon::CrossSectionTable::from_csv(config.nuclear_cross_section_file);
         std::optional<carbon::ReactionPackageTable> reaction_packages;
@@ -806,6 +868,11 @@ int main(int argc, char* argv[]) {
                       << "  geometry: " << config.spots_geometry_mode
                       << "  SAD: " << plan.sad_mm << " mm\n"
                       << "  (history ranges preserve file order; no TimeFeature timeline)\n";
+            if (upstream_air_stopping_power_ptr != nullptr) {
+                std::cout << "  upstream air energy loss: enabled; table "
+                          << config.spots_upstream_air_stopping_power_file.string()
+                          << "\n";
+            }
             if (!config.spot_weights_file.empty()) {
                 std::cout << "  optimization weights: "
                           << config.spot_weights_file.string()
@@ -821,18 +888,31 @@ int main(int argc, char* argv[]) {
                 double min_entry_y = min_entry_x;
                 double max_entry_y = -min_entry_x;
                 double min_direction_z = min_entry_x;
+                double min_air_path = std::numeric_limits<double>::infinity();
+                double max_air_path = -min_air_path;
+                double min_air_loss = min_air_path;
+                double max_air_loss = -min_air_path;
                 for (std::size_t i = 0; i < plan.spots.size(); ++i) {
                     const auto& spot = plan.spots[i];
                     min_histories = std::min(min_histories, spot.number_of_histories);
                     max_histories = std::max(max_histories, spot.number_of_histories);
                     auto transformed = config;
-                    apply_spot_to_config(transformed, plan, spot, i, base_seed);
+                    UpstreamAirLossAudit air_audit{};
+                    apply_spot_to_config(transformed, plan, spot, i, base_seed,
+                                         upstream_air_stopping_power_ptr,
+                                         upstream_air_stopping_power_ptr != nullptr ? &air_audit : nullptr);
                     transformed.validate();
                     min_entry_x = std::min(min_entry_x, transformed.source_origin_x_mm);
                     max_entry_x = std::max(max_entry_x, transformed.source_origin_x_mm);
                     min_entry_y = std::min(min_entry_y, transformed.source_origin_y_mm);
                     max_entry_y = std::max(max_entry_y, transformed.source_origin_y_mm);
                     min_direction_z = std::min(min_direction_z, transformed.beam_uz_z);
+                    if (upstream_air_stopping_power_ptr != nullptr) {
+                        min_air_path = std::min(min_air_path, air_audit.distance_to_entrance_mm);
+                        max_air_path = std::max(max_air_path, air_audit.distance_to_entrance_mm);
+                        min_air_loss = std::min(min_air_loss, air_audit.energy_loss_MeV);
+                        max_air_loss = std::max(max_air_loss, air_audit.energy_loss_MeV);
+                    }
                 }
                 std::cout << "  plan-only validation passed; histories/active spot min="
                           << min_histories << " max=" << max_histories << '\n'
@@ -840,17 +920,66 @@ int main(int argc, char* argv[]) {
                           << max_entry_x << "] mm y=[" << min_entry_y << ", "
                           << max_entry_y << "] mm; min beam dz=" << min_direction_z
                           << '\n';
+                if (upstream_air_stopping_power_ptr != nullptr) {
+                    std::cout << "  upstream air path=[" << min_air_path << ", "
+                              << max_air_path << "] mm; total C-12 loss=["
+                              << min_air_loss << ", " << max_air_loss << "] MeV\n";
+                }
                 return EXIT_SUCCESS;
             }
 
             if (config.device != "serial" && !sequential_spots) {
                 auto batch_config = config;
+                // History-weighted mean entrance GPU-x/y as lateral pivot
+                // (skew uses x=patient Y; rotation also needs y=patient Z).
+                if (batch_config.spots_lateral_yz_skew_auto_pivot &&
+                    (batch_config.spots_lateral_yz_skew != 0.0 ||
+                     batch_config.spots_lateral_yz_rotation_deg != 0.0)) {
+                    double sum_w = 0.0;
+                    double sum_x = 0.0;
+                    double sum_y = 0.0;
+                    for (std::size_t i = 0; i < plan.spots.size(); ++i) {
+                        auto probe = config;
+                        probe.spots_lateral_yz_skew = 0.0;
+                        probe.spots_lateral_yz_rotation_deg = 0.0;
+                        apply_spot_to_config(probe, plan, plan.spots[i], i, base_seed,
+                                             upstream_air_stopping_power_ptr);
+                        const auto w =
+                            static_cast<double>(plan.spots[i].number_of_histories);
+                        sum_w += w;
+                        sum_x += w * probe.source_origin_x_mm;
+                        sum_y += w * probe.source_origin_y_mm;
+                    }
+                    if (sum_w > 0.0) {
+                        batch_config.spots_lateral_yz_skew_pivot_mm = sum_x / sum_w;
+                        batch_config.spots_lateral_yz_rotation_pivot_y_mm =
+                            sum_y / sum_w;
+                        std::cout << "  lateral YZ auto-pivot entrance GPU "
+                                     "(patient Y,Z) = ("
+                                  << batch_config.spots_lateral_yz_skew_pivot_mm
+                                  << ", "
+                                  << batch_config.spots_lateral_yz_rotation_pivot_y_mm
+                                  << ") mm\n";
+                    }
+                }
                 batch_config.primary_spot_batch.clear();
                 batch_config.primary_spot_batch.reserve(plan.spots.size());
                 std::uint64_t history_begin = 0;
                 for (std::size_t i = 0; i < plan.spots.size(); ++i) {
+                    // Start from plan-level config with the resolved skew pivot;
+                    // do not copy batch_config (it accumulates primary_spot_batch).
                     auto spot_config = config;
-                    apply_spot_to_config(spot_config, plan, plan.spots[i], i, base_seed);
+                    spot_config.spots_lateral_yz_skew =
+                        batch_config.spots_lateral_yz_skew;
+                    spot_config.spots_lateral_yz_skew_pivot_mm =
+                        batch_config.spots_lateral_yz_skew_pivot_mm;
+                    spot_config.spots_lateral_yz_skew_auto_pivot = false;
+                    spot_config.spots_lateral_yz_rotation_deg =
+                        batch_config.spots_lateral_yz_rotation_deg;
+                    spot_config.spots_lateral_yz_rotation_pivot_y_mm =
+                        batch_config.spots_lateral_yz_rotation_pivot_y_mm;
+                    apply_spot_to_config(spot_config, plan, plan.spots[i], i, base_seed,
+                                         upstream_air_stopping_power_ptr);
                     spot_config.validate();
                     auto entry = make_spot_batch_entry(spot_config, history_begin);
                     history_begin = entry.history_end;
@@ -873,7 +1002,8 @@ int main(int argc, char* argv[]) {
                 for (std::size_t i = 0; i < plan.spots.size(); ++i) {
                     const auto& spot = plan.spots[i];
                     auto spot_config = config;
-                    apply_spot_to_config(spot_config, plan, spot, i, base_seed);
+                    apply_spot_to_config(spot_config, plan, spot, i, base_seed,
+                                         upstream_air_stopping_power_ptr);
                     spot_config.validate();
                     auto spot_result = run_transport(
                         spot_config, stopping_power, cross_section, reaction_packages,
@@ -924,10 +1054,13 @@ int main(int argc, char* argv[]) {
             // Output writers divide by number_of_histories → absolute MeV / total primaries.
             config.number_of_histories = total_histories;
             if (!plan.spots.empty()) {
-                config.initial_energy_MeVu =
-                    plan.spots.front().energy_MeV / static_cast<double>(config.mass_number);
-                config.beam_energy_spread =
-                    plan.spots.front().energy_spread_percent / 100.0;
+                // Keep the final run summary aligned with the same entry energy
+                // used by both the primary batch and sequential spot paths.
+                auto first_spot_config = config;
+                apply_spot_to_config(first_spot_config, plan, plan.spots.front(), 0,
+                                     base_seed, upstream_air_stopping_power_ptr);
+                config.initial_energy_MeVu = first_spot_config.initial_energy_MeVu;
+                config.beam_energy_spread = first_spot_config.beam_energy_spread;
             }
         } else {
             result = run_transport(config, stopping_power, cross_section, reaction_packages,

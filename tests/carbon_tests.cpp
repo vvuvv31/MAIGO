@@ -1284,10 +1284,10 @@ void test_secondary_optimization_config_validation() {
     require_throws([&bad_fast_geometry] { bad_fast_geometry.validate(); },
                    "Fast physics profile should require a CT grid");
 
-    auto bad_fast_let = fast;
-    bad_fast_let.enable_let_scoring = true;
-    require_throws([&bad_fast_let] { bad_fast_let.validate(); },
-                   "Fast physics profile should reject LET scoring");
+    auto fast_let = fast;
+    fast_let.enable_let_scoring = true;
+    fast_let.let_output_file = "fast_letd.csv";
+    fast_let.validate();
 
     auto bad_fast_minibeam = fast;
     bad_fast_minibeam.enable_minibeam = true;
@@ -1316,6 +1316,53 @@ void test_secondary_optimization_config_validation() {
     require(fast_config.physics_profile == "fast" &&
                 !fast_config.enable_let_scoring,
             "Fast full-plan profile config contract");
+    require(best_config.spots_enable_upstream_air_energy_loss &&
+                best_config.spots_upstream_air_stopping_power_file ==
+                    "data/stopping_power_air_geant4_11_3_2.csv" &&
+                best_config.ct_grid_file ==
+                    "ct/grid/patient_ct_tps_90_xneg_edge_corrected.bin" &&
+                best_config.spots_ct_axis_min_mm == -104.25,
+            "RT07575 best upstream-air/corrected-origin contract");
+    // Equal-history single-spot 1M (spot 24): residual-heat MFP + share scale
+    // raise local 3%/0mm 60.20% → 61.53%. Production defaults for RT07575 best.
+    require(best_config.nuclear_residual_heat_mfp_mm == 0.5,
+            "RT07575 best nuclear residual heat MFP production contract");
+    require(best_config.nuclear_residual_heat_scale == 0.9,
+            "RT07575 best nuclear residual heat scale production contract");
+    auto bad_residual_scale = best_config;
+    bad_residual_scale.nuclear_residual_heat_scale = -0.1;
+    require_throws([&bad_residual_scale] { bad_residual_scale.validate(); },
+                   "nuclear_residual_heat_scale must reject negatives");
+    bad_residual_scale.nuclear_residual_heat_scale = 2.5;
+    // light-ion forward mix bounds (default 0)
+    require(best_config.reaction_light_ion_forward_mix == 0.0,
+            "production reaction_light_ion_forward_mix default 0");
+    auto bad_forward_mix = best_config;
+    bad_forward_mix.reaction_light_ion_forward_mix = -0.1;
+    require_throws([&bad_forward_mix] { bad_forward_mix.validate(); },
+                   "reaction_light_ion_forward_mix must reject negatives");
+    bad_forward_mix.reaction_light_ion_forward_mix = 1.5;
+    require_throws([&bad_forward_mix] { bad_forward_mix.validate(); },
+                   "reaction_light_ion_forward_mix must reject values > 1");
+    require_throws([&bad_residual_scale] { bad_residual_scale.validate(); },
+                   "nuclear_residual_heat_scale must reject values > 2");
+    require(!medium_config.spots_enable_upstream_air_energy_loss &&
+                !fast_config.spots_enable_upstream_air_energy_loss,
+            "RT07575 medium/fast must retain upstream-air default off");
+
+    carbon::TransportConfig upstream_air;
+    require(!upstream_air.spots_enable_upstream_air_energy_loss,
+            "Upstream air energy loss must default to disabled");
+    upstream_air.spots_enable_upstream_air_energy_loss = true;
+    upstream_air.spots_geometry_mode = "tps_90";
+    require_throws([&upstream_air] { upstream_air.validate(); },
+                   "Enabled upstream air loss accepted an empty stopping table path");
+    upstream_air.spots_upstream_air_stopping_power_file = "air.csv";
+    upstream_air.spots_geometry_mode = "topas";
+    require_throws([&upstream_air] { upstream_air.validate(); },
+                   "Upstream air loss accepted a non-TPS spot geometry");
+    upstream_air.spots_geometry_mode = "tps_gantry_y";
+    upstream_air.validate();
 }
 
 void test_topas_spots_parse_angle01() {
@@ -1425,6 +1472,17 @@ void test_topas_spot_weights_and_tps_90_transform() {
                  "Clinical spot patient-Y path");
     require(clinical_ct.uz_z > 0.999, "Clinical spot must travel along +GPU-Z");
     require(clinical_ct.origin_z_mm < 0.0, "Clinical source must be before CT entrance");
+    // -patient-X clinical branch must keep a right-handed beam frame after the
+    // depth reflection (fixes ux·(uy×uz)=-1 left-handed bug).
+    const auto triple =
+        clinical_ct.ux_x * (clinical_ct.uy_y * clinical_ct.uz_z -
+                            clinical_ct.uy_z * clinical_ct.uz_y) -
+        clinical_ct.ux_y * (clinical_ct.uy_x * clinical_ct.uz_z -
+                            clinical_ct.uy_z * clinical_ct.uz_x) +
+        clinical_ct.ux_z * (clinical_ct.uy_x * clinical_ct.uz_y -
+                            clinical_ct.uy_y * clinical_ct.uz_x);
+    require_near(triple, 1.0, 1.0e-9,
+                 "Clinical tps_90 beam frame must be right-handed");
 
     const auto lung_ct = carbon::transform_tps_y_pose_to_ct(
         world, -69.6605, 9.3887, 0.0819, 0.0, -151.75);
@@ -1436,6 +1494,38 @@ void test_topas_spot_weights_and_tps_90_transform() {
                  "Lung TPS source upstream patient-Y position");
     require_near(lung_ct.uz_z, 1.0, 1.0e-9,
                  "Lung TPS central ray points +GPU-Z");
+
+    const carbon::StoppingPowerTable constant_air(
+        {0.01, 400.0}, {0.02, 0.02});
+    require(carbon::spot_entry_total_energy_after_optional_upstream_loss(
+                2460.0, 12, 333.0, nullptr) == 2460.0,
+            "Disabled upstream loss must preserve the legacy source energy exactly");
+    require_near(carbon::propagate_total_kinetic_energy_through_stopping_power(
+                     2460.0, 12, 0.0, constant_air),
+                 2460.0, 1.0e-12,
+                 "Zero-length upstream path must preserve spot energy bit-for-bit");
+    require_near(carbon::propagate_total_kinetic_energy_through_stopping_power(
+                     2460.0, 12, 333.0, constant_air),
+                 2453.34, 1.0e-8,
+                 "Constant upstream stopping-power loss");
+    require_throws([&constant_air] {
+        (void)carbon::propagate_total_kinetic_energy_through_stopping_power(
+            2460.0, 12, -1.0, constant_air);
+    }, "Upstream propagation accepted negative path length");
+    const auto real_air = carbon::StoppingPowerTable::from_csv(
+        std::filesystem::path(CARBON_SOURCE_DIR) /
+        "data/stopping_power_air_geant4_11_3_2.csv");
+    const auto entrance_energy =
+        carbon::propagate_total_kinetic_energy_through_stopping_power(
+            2460.0, 12, 332.9865545359617, real_air);
+    require_near(2460.0 - entrance_energy, 5.63837, 2.0e-4,
+                 "Validated RT07575 G4_AIR total C-12 energy loss");
+    const carbon::StoppingPowerTable too_narrow_air(
+        {1.0, 2.0}, {0.02, 0.02});
+    require_throws([&too_narrow_air] {
+        (void)carbon::propagate_total_kinetic_energy_through_stopping_power(
+            2460.0, 12, 1.0, too_narrow_air);
+    }, "Upstream propagation accepted a table outside its energy domain");
 }
 
 void test_tps_source_geometry_csv_and_switch() {

@@ -99,6 +99,12 @@ struct TransportConfig {
     // Charged secondaries below this total kinetic energy are stopped and their
     // remaining energy is deposited locally. 0 uses energy_cutoff_MeV.
     double secondary_local_deposit_cutoff_MeV{0.0};
+    // Ablation: when >0, charged reaction/cascade products with Z >= this value
+    // deposit kinetic energy as local nuclear heat at the interaction point
+    // instead of being queued for charged secondary transport. 0 disables
+    // (default: transport all supported charged secondaries). Z_min=3 deposits
+    // Li and heavier as local heat while transporting H/He fragments.
+    int secondary_heavy_local_deposit_z_min{0};
     // Optional condensed-history step for charged secondaries in a uniform
     // phantom. 0 preserves the legacy behavior where every physics step stops
     // at a depth-score boundary. A positive value lets MCS/straggling advance
@@ -153,14 +159,42 @@ struct TransportConfig {
     std::filesystem::path ct_soft_tissue_reaction_package_file{};
     std::filesystem::path ct_bone_reaction_package_file{};
     // Optional fragment-specific inelastic cross sections extracted from
-    // material cascade packages. Only their projectile XS tables are used;
-    // correlated final states continue to come from cascade_package_file.
-    // Values in the package are macroscopic at the reference density below
-    // and are converted to mass cross sections before CT-density scaling.
+    // material cascade packages. Only their projectile XS tables are used
+    // unless the matching ct_*_cascade_package_file is also set (full
+    // material-conditioned final states). Values in the package are
+    // macroscopic at the reference density below and are converted to mass
+    // cross sections before CT-density scaling.
     std::filesystem::path ct_lung_cascade_cross_section_package_file{};
     std::filesystem::path ct_bone_cascade_cross_section_package_file{};
     double ct_lung_cascade_reference_density_g_per_cm3{1.04};
     double ct_bone_cascade_reference_density_g_per_cm3{1.85};
+    // Optional material-conditioned cascade correlated final states.
+    // Empty preserves cascade_package_file for every CT voxel. When set,
+    // cascade interactions that occur in that CT material class sample
+    // final states from the material package (with fallback to the default
+    // cascade package if the projectile is missing there). Soft-tissue is
+    // the dominant residual class in head CT cases.
+    std::filesystem::path ct_lung_cascade_package_file{};
+    std::filesystem::path ct_soft_tissue_cascade_package_file{};
+    std::filesystem::path ct_bone_cascade_package_file{};
+    // Optional short-range redistribution of nuclear residual heat that is
+    // otherwise deposited at the interaction point (Q-value / missing product
+    // KE). 0 preserves the historical point deposit. A positive value is the
+    // exponential MFP along the projectile direction used as a residual-nucleus
+    // transport proxy. This does not invent new particles.
+    double nuclear_residual_heat_mfp_mm{0.0};
+    // Multiplier on nuclear residual heat scored into the dose field after a
+    // reaction (parent KE not accounted in sampled products). 1.0 is historical
+    // full local residual. Values in (0, 1) reduce entrance-local nuclear heat
+    // without changing package kinematics; 0 disables residual heat scoring.
+    // Does not apply to continuous ionization loss or queued secondaries.
+    double nuclear_residual_heat_scale{1.0};
+    // Blend light-ion (Z<=2) reaction/cascade birth directions toward the
+    // projectile axis: dir = normalize((1-f)*package_dir + f*projectile_dir).
+    // 0 keeps the correlated INCL++ angular package; values in (0,1] narrow
+    // the light-fragment cone (diagnostic residual-closure lever for multi-spot
+    // mottling / distal secondary fill). Does not change product KE.
+    double reaction_light_ion_forward_mix{0.0};
     // Global multiplier on CT mass-scaled / material stopping power (default 1).
     // Used to absorb residual WEPL calibration vs full Geant4 material SP.
     double ct_stopping_power_scale{1.0};
@@ -185,6 +219,10 @@ struct TransportConfig {
     bool enable_secondary_energy_straggling{false};
     double straggling_scale{1.0};
     bool enable_multiple_scattering{false};
+    // Multiplies Highland projected RMS angle for charged MCS (primary +
+    // secondary). 1.0 is the historical default. Values >1 increase lateral
+    // fill; keep ≤~1.5 without new validation. Not a per-patient fit.
+    double multiple_scattering_scale{1.0};
     // Use Geant4 mass radiation lengths for CT air/lung/water/bone classes.
     // Off preserves the historical all-water MCS model exactly.
     bool enable_ct_material_mcs{false};
@@ -331,6 +369,39 @@ struct TransportConfig {
     double spots_patient_trans_z_mm{0.0};
     double spots_patient_rot_z_deg{0.0};
     double spots_ct_axis_min_mm{0.0};
+    // Diagnostic/repair: after tps_90 maps the source to the CT entrance plane
+    // (GPU x=patient Y, GPU y=patient Z), apply
+    //   origin_y += skew * (origin_x - pivot)
+    // i.e. patient_Z += skew * (patient_Y - pivot). Default 0 preserves legacy.
+    // RT07575 A/B: skew≈-0.065 lifts formal ~44→68% with core protected.
+    // Prefer auto_pivot (history-weighted mean entrance GPU-x / patient Y).
+    // Keep skew=0 for other cases until the root cov_yz mismatch is explained.
+    double spots_lateral_yz_skew{0.0};
+    double spots_lateral_yz_skew_pivot_mm{0.0};
+    bool spots_lateral_yz_skew_auto_pivot{false};
+    // Optional rigid rotation of the entrance-plane spot map about the same
+    // lateral pivot (GPU x=patient Y, GPU y=patient Z):
+    //   [dx']   [ cosθ  -sinθ ] [dx]
+    //   [dy'] = [ sinθ   cosθ ] [dy]
+    // with θ = spots_lateral_yz_rotation_deg (counter-clockwise in GPU xy).
+    // Default 0 preserves legacy. RT07575 post-hoc dose rotation ≈ −3° (sample)
+    // implies source-plane +3° closes formal ~68→~79% with core protected.
+    // Beam basis (ux,uy,uz) lateral (x,y) components are rotated consistently.
+    double spots_lateral_yz_rotation_deg{0.0};
+    // Rotation pivot GPU-y (patient Z). Auto-pivot fills this with the
+    // history-weighted mean entrance GPU-y when auto_pivot is true.
+    double spots_lateral_yz_rotation_pivot_y_mm{0.0};
+    // Multiplies TOPAS BiGaussian SigmaX/Y when applying spots (position width).
+    // 1.0 = plan values. Modest >1 widens entrance/outer envelope.
+    double spots_emittance_sigma_scale{1.0};
+    // Multiplies SigmaXprime/Yprime (angular divergence).
+    double spots_emittance_prime_scale{1.0};
+    // Optional continuous C-12 energy loss through the TOPAS World air gap
+    // before the reoriented CT entrance. This is intentionally separate from
+    // CT in-grid air material handling. It applies only to TPS spot geometry
+    // modes, is disabled by default, and currently omits air MCS/straggling.
+    bool spots_enable_upstream_air_energy_loss{false};
+    std::filesystem::path spots_upstream_air_stopping_power_file{};
     // Optional clinical TPS source. Disabled by default so all existing
     // TOPAS/CT examples retain their exact source construction and RNG path.
     // YAML accepts both `tpsSource` (public switch) and `tps_source`.
@@ -364,6 +435,13 @@ struct TransportConfig {
     // Optional v3 package mode. Absolute reference depth is diagnostic and can
     // overfit a source energy; keep disabled unless cross-case validation wins.
     bool cascade_condition_on_reference_depth{false};
+    // Diagnostic / residual-closure scales for cascade macroscopic XS sampled
+    // from cascade_package_file. Applied after density / material mass-XS
+    // factors. 1.0 preserves package rates. Light ions are Z<=2 (p/d/t/He).
+    // Secondary carbons are Z==6 fragments continuing a cascade (not primary).
+    // These are not patient-specific fits; use only with equal-history A/B.
+    double cascade_light_ion_xs_scale{1.0};
+    double cascade_secondary_carbon_xs_scale{1.0};
     // Per-species secondary depth-dose scoring. Disable for voxel-only full-plan
     // production to remove an otherwise redundant global atomic per deposit.
     bool enable_fragment_species_scoring{true};

@@ -174,10 +174,12 @@ CascadePackageTable CascadePackageTable::from_binary(const std::filesystem::path
                 energy_bin > previous_energy_bin ||
                 (energy_bin == previous_energy_bin &&
                  depth_bin >= previous_depth_bin);
+            // Depth may be negative for long low-density phantoms (e.g. lung)
+            // when the cascade n-tuple records world coordinates upstream of
+            // the geometric midplane. Energy-only cascade sampling still uses
+            // these packages; only finite energy/depth are required.
             if (!std::isfinite(interaction.incident_energy_MeV_per_u) ||
-                (!legacy_interactions &&
-                 (!std::isfinite(interaction.depth_mm) ||
-                  interaction.depth_mm < 0.0F)) ||
+                (!legacy_interactions && !std::isfinite(interaction.depth_mm)) ||
                 (legacy_interactions &&
                  interaction.incident_energy_MeV_per_u < previous_energy) ||
                 !conditioned_ordered ||

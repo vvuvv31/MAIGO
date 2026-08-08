@@ -163,7 +163,10 @@ ReactionPackageTable ReactionPackageTable::from_binary(const std::filesystem::pa
 
     std::uint64_t expected_secondary_offset = 0;
     for (const auto& reaction : table.reactions_) {
-        if (!std::isfinite(reaction.reaction_depth_mm) || reaction.reaction_depth_mm < 0.0F ||
+        // Depth may be negative for long low-density material packages (lung)
+        // when the TOPAS n-tuple records world coordinates. Offsets still must
+        // form a contiguous secondary range.
+        if (!std::isfinite(reaction.reaction_depth_mm) ||
             reaction.secondary_offset != expected_secondary_offset ||
             static_cast<std::uint64_t>(reaction.secondary_offset) + reaction.secondary_count >
                 table.secondaries_.size()) {

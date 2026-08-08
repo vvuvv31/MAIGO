@@ -8,6 +8,8 @@
 
 namespace carbon {
 
+class StoppingPowerTable;
+
 // One PBS spot from a TOPAS-format "spots_*.txt" plan file (L0–L14 channels).
 // Used only as a convenient input dump matching TOPAS TimeFeature Step files;
 // carbon_mc runs spots in order (no timeline / Tf simulation).
@@ -123,5 +125,22 @@ struct TopasSpotPlan {
 
 // Apply TOPAS-style Rx then Ry (degrees) to a vector.
 void rotate_rx_ry(double rx_deg, double ry_deg, double& x, double& y, double& z) noexcept;
+
+// Continuous total-ion kinetic-energy loss through an upstream material table.
+// The table is indexed by MeV/u and gives total-ion dE/dx in MeV/mm. RK4 uses
+// bounded 0.1 mm substeps, preserving deterministic source-energy setup.
+[[nodiscard]] double propagate_total_kinetic_energy_through_stopping_power(
+    double initial_total_energy_MeV,
+    int mass_number,
+    double distance_mm,
+    const StoppingPowerTable& stopping_power);
+
+// Returns the source energy unchanged when ``stopping_power`` is null. This
+// makes disabled upstream-loss source preparation exactly the legacy path.
+[[nodiscard]] double spot_entry_total_energy_after_optional_upstream_loss(
+    double initial_total_energy_MeV,
+    int mass_number,
+    double distance_mm,
+    const StoppingPowerTable* stopping_power);
 
 }  // namespace carbon

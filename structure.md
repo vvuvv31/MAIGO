@@ -275,7 +275,7 @@ YAML / CLI
 | `medium` + 普通 CT | 允许 |
 | `fast` + 普通 CT dose | 允许 |
 | `medium/fast` + minibeam 或非 CT | **拒绝配置** |
-| `fast` + LET scorer | **拒绝配置** |
+| `fast` + LET scorer | 允许（可选；使用 fast 次级近似，LET 精度低于 best） |
 | 未知 profile | **拒绝配置** |
 
 三个 profile 的正式结果仍要求

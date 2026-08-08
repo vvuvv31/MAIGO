@@ -26,6 +26,7 @@ voxel_size_x_mm: 0.5
 voxel_size_y_mm: 2.0
 
 enable_energy_straggling: true
+enable_secondary_energy_straggling: false
 straggling_scale: 1.2
 enable_multiple_scattering: true
 enable_ct_material_mcs: false

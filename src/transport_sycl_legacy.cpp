@@ -161,6 +161,43 @@ inline float advance_representable(const float position,
     return sycl::nextafter(position, direction > 0.0F ? infinity : -infinity);
 }
 
+// Blend a lab-frame child direction toward the projectile axis. mix=0 keeps
+// the package direction; mix=1 collapses onto the projectile.
+inline Direction3F blend_direction_toward_parent(
+    const Direction3F child,
+    const Direction3F parent,
+    const float mix) noexcept {
+    if (mix <= 0.0F) {
+        return child;
+    }
+    if (mix >= 1.0F) {
+        const auto parent_norm = sycl::sqrt(
+            parent.x * parent.x + parent.y * parent.y + parent.z * parent.z);
+        if (parent_norm <= 0.0F) {
+            return child;
+        }
+        const auto inv = 1.0F / parent_norm;
+        return Direction3F{parent.x * inv, parent.y * inv, parent.z * inv};
+    }
+    const auto one_minus = 1.0F - mix;
+    Direction3F mixed{child.x * one_minus + parent.x * mix,
+                      child.y * one_minus + parent.y * mix,
+                      child.z * one_minus + parent.z * mix};
+    const auto mixed_norm = sycl::sqrt(
+        mixed.x * mixed.x + mixed.y * mixed.y + mixed.z * mixed.z);
+    if (mixed_norm <= 1.0e-12F) {
+        const auto parent_norm = sycl::sqrt(
+            parent.x * parent.x + parent.y * parent.y + parent.z * parent.z);
+        if (parent_norm <= 0.0F) {
+            return child;
+        }
+        const auto inv = 1.0F / parent_norm;
+        return Direction3F{parent.x * inv, parent.y * inv, parent.z * inv};
+    }
+    const auto inv = 1.0F / mixed_norm;
+    return Direction3F{mixed.x * inv, mixed.y * inv, mixed.z * inv};
+}
+
 Direction3F rotate_local_direction(const float local_x,
                                    const float local_y,
                                    const float local_z,
@@ -751,7 +788,7 @@ inline std::uint32_t select_depth_conditioned_cascade_interaction(
     // Search the exact 2 MeV/u × 10 mm cell first, then expand in energy
     // before depth. This retains complete correlated final states and avoids
     // scanning the full projectile table in the device kernel.
-    constexpr std::uint32_t max_energy_radius = 13U;  // 26 MeV/u
+    constexpr std::uint32_t max_energy_radius = 5U;  // ±10 MeV/u parent-energy band
     constexpr std::uint32_t max_depth_radius = 8U;    // 80 mm
     for (std::uint32_t energy_radius = 0;
          energy_radius <= max_energy_radius; ++energy_radius) {
@@ -818,11 +855,9 @@ inline std::uint32_t select_depth_conditioned_cascade_interaction(
             }
         }
     }
-    // Sparse projectiles outside the reference E/depth support retain a
-    // correlated event instead of silently suppressing the cascade.
-    return sycl::min(
-        static_cast<std::uint32_t>(u01 * static_cast<float>(count)),
-        count - 1U);
+    // Prefer nearest energy over a full-table random draw (parent-energy mix).
+    return nearest_cascade_interaction(interactions, offset, count,
+                                       energy_MeV_per_u);
 }
 
 inline std::uint32_t select_binned_energy_cascade_interaction(
@@ -833,7 +868,10 @@ inline std::uint32_t select_binned_energy_cascade_interaction(
     const float u01) noexcept {
     const auto target_energy_bin =
         cascade_condition_energy_bin(energy_MeV_per_u);
-    constexpr std::uint32_t max_energy_radius = 13U;
+    // Keep parent-energy conditioning tight: ±5 × 2 MeV/u = ±10 MeV/u.
+    // The previous ±13 (26 MeV/u) window remixed residual-soft and
+    // fragmentation-hard topologies for the same projectile Z/A.
+    constexpr std::uint32_t max_energy_radius = 5U;
     for (std::uint32_t radius = 0; radius <= max_energy_radius; ++radius) {
         std::uint32_t range_begin[2]{};
         std::uint32_t range_count[2]{};
@@ -874,9 +912,11 @@ inline std::uint32_t select_binned_energy_cascade_interaction(
             pick -= range_count[range];
         }
     }
-    return sycl::min(
-        static_cast<std::uint32_t>(u01 * static_cast<float>(count)),
-        count - 1U);
+    // Never fall back to an energy-unconditioned random draw from the full
+    // projectile table: that re-introduces the parent-energy mixture bias
+    // diagnosed in birth-spectrum gen1 comparisons. Prefer nearest energy.
+    return nearest_cascade_interaction(interactions, offset, count,
+                                       energy_MeV_per_u);
 }
 
 inline std::uint32_t select_cascade_interaction_conditioned(
@@ -900,15 +940,31 @@ inline std::uint32_t select_cascade_interaction_conditioned(
         interactions, offset, count, energy_MeV_per_u, u01);
 }
 
-// Scale correlated final-state KE to the true projectile energy. With the
-// tight selection band above, the natural scale is already near 1; keep a
-// narrow clamp so residual topologies cannot be hard-stretched.
-inline float cascade_event_energy_scale(const float current_energy_MeVu,
-                                        const float event_energy_MeVu) noexcept {
+// Scale correlated final-state KE to the true projectile energy.
+// Topology-aware clamps (birth-spectrum gen1 diagnosis):
+// - residual-like events (low product KE / projectile KE) must not be
+//   hard-stretched into fragmentation-like spectra;
+// - light parents (Z<=2) use a tighter band than heavy fragments.
+inline float cascade_event_energy_scale(
+    const float current_energy_MeVu,
+    const float event_energy_MeVu,
+    const float package_product_ke_MeV,
+    const int projectile_Z,
+    const int projectile_A) noexcept {
     if (!(event_energy_MeVu > 0.0F) || !(current_energy_MeVu > 0.0F)) {
         return 1.0F;
     }
     const auto scale = current_energy_MeVu / event_energy_MeVu;
+    const auto projectile_ke_MeV =
+        event_energy_MeVu * static_cast<float>(sycl::max(projectile_A, 1));
+    const auto product_frac =
+        package_product_ke_MeV / sycl::fmax(projectile_ke_MeV, 1.0e-6F);
+    if (product_frac < 0.35F) {
+        return sycl::clamp(scale, 0.97F, 1.03F);
+    }
+    if (projectile_Z > 0 && projectile_Z <= 2) {
+        return sycl::clamp(scale, 0.92F, 1.08F);
+    }
     return sycl::clamp(scale, 0.85F, 1.18F);
 }
 
@@ -970,6 +1026,8 @@ inline std::uint32_t nearest_neutral_interaction(
 
 // Local nuclear residual / unsupported-product heat at the interaction point
 // (heavy residual nucleus thermalization approximation, matches G4 local deposit).
+// Optional residual_heat_mfp_mm > 0 redistributes the heat along +depth with an
+// exponential residual-nucleus transport proxy (charged secondary spatial fix).
 inline void deposit_local_heat_device(
     const float residual_MeV,
     const float position_x_mm,
@@ -979,6 +1037,7 @@ inline void deposit_local_heat_device(
     const float direction_y,
     const float direction_z,
     const float depth_bin_width_mm,
+    const float phantom_length_mm,
     const std::size_t number_of_bins,
     const bool enable_voxel_scoring,
     const float voxel_min_x_mm,
@@ -994,8 +1053,62 @@ inline void deposit_local_heat_device(
     DoseAtomicT* voxel_dose_device,
     const bool enable_charged_origin_voxel_scoring,
     DoseAtomicT* charged_origin_voxel_dose_device,
-    const std::size_t charged_origin_voxel_offset) noexcept {
+    const std::size_t charged_origin_voxel_offset,
+    const float residual_heat_mfp_mm = 0.0F) noexcept {
     if (residual_MeV <= 0.0F) {
+        return;
+    }
+    // Short-range residual-nucleus proxy along the GPU depth axis. Only the
+    // forward (+z) half-space is used; reverse-beam residual heat stays local.
+    if (residual_heat_mfp_mm > 1.0e-3F && direction_z >= 0.0F) {
+        if (dose_device != nullptr) {
+            score_exponential_depth(
+                residual_MeV, position_z_mm, depth_bin_width_mm, phantom_length_mm,
+                static_cast<std::uint32_t>(number_of_bins), residual_heat_mfp_mm,
+                dose_device, true);
+        }
+        if (fragment_dose_device != nullptr) {
+            score_exponential_depth(
+                residual_MeV, position_z_mm, depth_bin_width_mm, phantom_length_mm,
+                static_cast<std::uint32_t>(number_of_bins), residual_heat_mfp_mm,
+                fragment_dose_device + species_index * number_of_bins, true);
+        }
+        if (enable_voxel_scoring && voxel_dose_device != nullptr) {
+            const auto x_coordinate =
+                (position_x_mm - voxel_min_x_mm) / voxel_size_x_mm;
+            const auto y_coordinate =
+                (position_y_mm - voxel_min_y_mm) / voxel_size_y_mm;
+            auto voxel_x =
+                direction_x < 0.0F ? static_cast<int>(sycl::ceil(x_coordinate)) - 1
+                                   : static_cast<int>(sycl::floor(x_coordinate));
+            auto voxel_y =
+                direction_y < 0.0F ? static_cast<int>(sycl::ceil(y_coordinate)) - 1
+                                   : static_cast<int>(sycl::floor(y_coordinate));
+            voxel_x =
+                sycl::max(0, sycl::min(voxel_x, static_cast<int>(voxel_bins_x) - 1));
+            voxel_y =
+                sycl::max(0, sycl::min(voxel_y, static_cast<int>(voxel_bins_y) - 1));
+            auto rbin = static_cast<int>(
+                sycl::floor(position_z_mm / depth_bin_width_mm));
+            rbin = sycl::max(0, sycl::min(rbin, static_cast<int>(number_of_bins) - 1));
+            const auto production_voxel =
+                static_cast<std::size_t>(rbin) * voxel_plane_size +
+                static_cast<std::size_t>(voxel_y) * voxel_bins_x +
+                static_cast<std::size_t>(voxel_x);
+            score_exponential_voxel_depth(
+                residual_MeV, position_z_mm, depth_bin_width_mm, phantom_length_mm,
+                static_cast<std::uint32_t>(number_of_bins), residual_heat_mfp_mm,
+                voxel_plane_size, production_voxel, voxel_dose_device, true);
+            if (enable_charged_origin_voxel_scoring &&
+                charged_origin_voxel_dose_device != nullptr) {
+                score_exponential_voxel_depth(
+                    residual_MeV, position_z_mm, depth_bin_width_mm,
+                    phantom_length_mm, static_cast<std::uint32_t>(number_of_bins),
+                    residual_heat_mfp_mm, voxel_plane_size, production_voxel,
+                    charged_origin_voxel_dose_device + charged_origin_voxel_offset,
+                    true);
+            }
+        }
         return;
     }
     auto rbin = direction_z < 0.0F
@@ -1384,6 +1497,9 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
         ct_bone_reaction_packages.has_value();
     std::optional<CascadePackageTable> ct_lung_cascade_xs_packages;
     std::optional<CascadePackageTable> ct_bone_cascade_xs_packages;
+    std::optional<CascadePackageTable> ct_lung_cascade_packages;
+    std::optional<CascadePackageTable> ct_soft_tissue_cascade_packages;
+    std::optional<CascadePackageTable> ct_bone_cascade_packages;
     if (config.enable_ct_grid && config.enable_fragment_cascade) {
         if (!config.ct_lung_cascade_cross_section_package_file.empty()) {
             ct_lung_cascade_xs_packages =
@@ -1395,11 +1511,37 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                 CascadePackageTable::from_binary(
                     config.ct_bone_cascade_cross_section_package_file);
         }
+        // Full material-conditioned cascade final states. When set, these also
+        // supply material cascade XS if the XS-only path is empty.
+        if (!config.ct_lung_cascade_package_file.empty()) {
+            ct_lung_cascade_packages = CascadePackageTable::from_binary(
+                config.ct_lung_cascade_package_file);
+            if (!ct_lung_cascade_xs_packages.has_value()) {
+                ct_lung_cascade_xs_packages = ct_lung_cascade_packages;
+            }
+        }
+        if (!config.ct_soft_tissue_cascade_package_file.empty()) {
+            ct_soft_tissue_cascade_packages = CascadePackageTable::from_binary(
+                config.ct_soft_tissue_cascade_package_file);
+        }
+        if (!config.ct_bone_cascade_package_file.empty()) {
+            ct_bone_cascade_packages = CascadePackageTable::from_binary(
+                config.ct_bone_cascade_package_file);
+            if (!ct_bone_cascade_xs_packages.has_value()) {
+                ct_bone_cascade_xs_packages = ct_bone_cascade_packages;
+            }
+        }
     }
     const auto use_ct_lung_cascade_xs =
         ct_lung_cascade_xs_packages.has_value();
     const auto use_ct_bone_cascade_xs =
         ct_bone_cascade_xs_packages.has_value();
+    const auto use_ct_lung_cascade_packages =
+        ct_lung_cascade_packages.has_value();
+    const auto use_ct_soft_tissue_cascade_packages =
+        ct_soft_tissue_cascade_packages.has_value();
+    const auto use_ct_bone_cascade_packages =
+        ct_bone_cascade_packages.has_value();
     const auto cascade_xs_material_count =
         use_ct_lung_cascade_xs || use_ct_bone_cascade_xs
             ? std::size_t{3}
@@ -1967,6 +2109,15 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
     CascadeCrossSectionSample* cascade_cross_sections_device = nullptr;
     CascadeInteraction* cascade_interactions_device = nullptr;
     ReactionSecondary* cascade_products_device = nullptr;
+    CascadeProjectile* ct_lung_cascade_projectiles_device = nullptr;
+    CascadeInteraction* ct_lung_cascade_interactions_device = nullptr;
+    ReactionSecondary* ct_lung_cascade_products_device = nullptr;
+    CascadeProjectile* ct_soft_tissue_cascade_projectiles_device = nullptr;
+    CascadeInteraction* ct_soft_tissue_cascade_interactions_device = nullptr;
+    ReactionSecondary* ct_soft_tissue_cascade_products_device = nullptr;
+    CascadeProjectile* ct_bone_cascade_projectiles_device = nullptr;
+    CascadeInteraction* ct_bone_cascade_interactions_device = nullptr;
+    ReactionSecondary* ct_bone_cascade_products_device = nullptr;
     CascadeTransportSummary* cascade_summaries_device = nullptr;
     // Projectile-major XS on water SP energy grid: size n_proj * table_size.
     float* cascade_xs_lut_device = nullptr;
@@ -2089,6 +2240,44 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                 cascade_packages->projectiles().size() * table_size;
             cascade_xs_lut_device =
                 sycl::malloc_device<float>(cascade_xs_lut_size, queue);
+            // Material cascade final-state packages are always uploaded per
+            // run (not context-cached) so optional A/B paths stay simple.
+            if (use_ct_lung_cascade_packages) {
+                ct_lung_cascade_projectiles_device =
+                    sycl::malloc_device<CascadeProjectile>(
+                        ct_lung_cascade_packages->projectiles().size(), queue);
+                ct_lung_cascade_interactions_device =
+                    sycl::malloc_device<CascadeInteraction>(
+                        ct_lung_cascade_packages->interactions().size(), queue);
+                ct_lung_cascade_products_device =
+                    sycl::malloc_device<ReactionSecondary>(
+                        ct_lung_cascade_packages->products().size(), queue);
+            }
+            if (use_ct_soft_tissue_cascade_packages) {
+                ct_soft_tissue_cascade_projectiles_device =
+                    sycl::malloc_device<CascadeProjectile>(
+                        ct_soft_tissue_cascade_packages->projectiles().size(),
+                        queue);
+                ct_soft_tissue_cascade_interactions_device =
+                    sycl::malloc_device<CascadeInteraction>(
+                        ct_soft_tissue_cascade_packages->interactions().size(),
+                        queue);
+                ct_soft_tissue_cascade_products_device =
+                    sycl::malloc_device<ReactionSecondary>(
+                        ct_soft_tissue_cascade_packages->products().size(),
+                        queue);
+            }
+            if (use_ct_bone_cascade_packages) {
+                ct_bone_cascade_projectiles_device =
+                    sycl::malloc_device<CascadeProjectile>(
+                        ct_bone_cascade_packages->projectiles().size(), queue);
+                ct_bone_cascade_interactions_device =
+                    sycl::malloc_device<CascadeInteraction>(
+                        ct_bone_cascade_packages->interactions().size(), queue);
+                ct_bone_cascade_products_device =
+                    sycl::malloc_device<ReactionSecondary>(
+                        ct_bone_cascade_packages->products().size(), queue);
+            }
         }
     }
     if (enable_neutral_transport) {
@@ -2635,6 +2824,19 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                      sizeof(float) * ct_ref_host.size())
             .wait_and_throw();
     }
+    const auto material_cascade_allocation_failed =
+        (use_ct_lung_cascade_packages &&
+         (ct_lung_cascade_projectiles_device == nullptr ||
+          ct_lung_cascade_interactions_device == nullptr ||
+          ct_lung_cascade_products_device == nullptr)) ||
+        (use_ct_soft_tissue_cascade_packages &&
+         (ct_soft_tissue_cascade_projectiles_device == nullptr ||
+          ct_soft_tissue_cascade_interactions_device == nullptr ||
+          ct_soft_tissue_cascade_products_device == nullptr)) ||
+        (use_ct_bone_cascade_packages &&
+         (ct_bone_cascade_projectiles_device == nullptr ||
+          ct_bone_cascade_interactions_device == nullptr ||
+          ct_bone_cascade_products_device == nullptr));
     const auto secondary_allocation_failed =
         enable_secondary_generation &&
         (reaction_bins_device == nullptr || reactions_device == nullptr ||
@@ -2665,7 +2867,8 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
          (enable_fragment_cascade &&
           (cascade_projectiles_device == nullptr || cascade_cross_sections_device == nullptr ||
            cascade_interactions_device == nullptr || cascade_products_device == nullptr ||
-           cascade_summaries_device == nullptr || cascade_xs_lut_device == nullptr)));
+           cascade_summaries_device == nullptr || cascade_xs_lut_device == nullptr ||
+           material_cascade_allocation_failed)));
     const auto neutral_allocation_failed =
         enable_neutral_transport &&
         (neutral_projectiles_device == nullptr || neutral_cross_sections_device == nullptr ||
@@ -2772,6 +2975,15 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
         free_immutable_device(cascade_cross_sections_device);
         free_immutable_device(cascade_interactions_device);
         free_immutable_device(cascade_products_device);
+        free_device(ct_lung_cascade_projectiles_device);
+        free_device(ct_lung_cascade_interactions_device);
+        free_device(ct_lung_cascade_products_device);
+        free_device(ct_soft_tissue_cascade_projectiles_device);
+        free_device(ct_soft_tissue_cascade_interactions_device);
+        free_device(ct_soft_tissue_cascade_products_device);
+        free_device(ct_bone_cascade_projectiles_device);
+        free_device(ct_bone_cascade_interactions_device);
+        free_device(ct_bone_cascade_products_device);
         free_device(cascade_summaries_device);
         free_device(cascade_xs_lut_device);
         free_immutable_device(neutral_projectiles_device);
@@ -2966,6 +3178,39 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                 queue.copy(cascade_packages->products().data(), cascade_products_device,
                            cascade_packages->products().size());
             }
+            if (use_ct_lung_cascade_packages) {
+                queue.copy(ct_lung_cascade_packages->projectiles().data(),
+                           ct_lung_cascade_projectiles_device,
+                           ct_lung_cascade_packages->projectiles().size());
+                queue.copy(ct_lung_cascade_packages->interactions().data(),
+                           ct_lung_cascade_interactions_device,
+                           ct_lung_cascade_packages->interactions().size());
+                queue.copy(ct_lung_cascade_packages->products().data(),
+                           ct_lung_cascade_products_device,
+                           ct_lung_cascade_packages->products().size());
+            }
+            if (use_ct_soft_tissue_cascade_packages) {
+                queue.copy(ct_soft_tissue_cascade_packages->projectiles().data(),
+                           ct_soft_tissue_cascade_projectiles_device,
+                           ct_soft_tissue_cascade_packages->projectiles().size());
+                queue.copy(ct_soft_tissue_cascade_packages->interactions().data(),
+                           ct_soft_tissue_cascade_interactions_device,
+                           ct_soft_tissue_cascade_packages->interactions().size());
+                queue.copy(ct_soft_tissue_cascade_packages->products().data(),
+                           ct_soft_tissue_cascade_products_device,
+                           ct_soft_tissue_cascade_packages->products().size());
+            }
+            if (use_ct_bone_cascade_packages) {
+                queue.copy(ct_bone_cascade_packages->projectiles().data(),
+                           ct_bone_cascade_projectiles_device,
+                           ct_bone_cascade_packages->projectiles().size());
+                queue.copy(ct_bone_cascade_packages->interactions().data(),
+                           ct_bone_cascade_interactions_device,
+                           ct_bone_cascade_packages->interactions().size());
+                queue.copy(ct_bone_cascade_packages->products().data(),
+                           ct_bone_cascade_products_device,
+                           ct_bone_cascade_packages->products().size());
+            }
             queue.memset(cascade_summaries_device, 0,
                          secondary_queue_capacity * sizeof(CascadeTransportSummary));
         }
@@ -3066,6 +3311,12 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
     const auto initial_energy_MeV = static_cast<float>(config.initial_total_energy_MeV());
     const auto beam_energy_spread = static_cast<float>(config.beam_energy_spread);
     const auto phantom_length_mm = static_cast<float>(config.phantom_length_mm);
+    const auto nuclear_residual_heat_mfp_mm =
+        static_cast<float>(config.nuclear_residual_heat_mfp_mm);
+    const auto nuclear_residual_heat_scale =
+        static_cast<float>(config.nuclear_residual_heat_scale);
+    const auto reaction_light_ion_forward_mix =
+        static_cast<float>(config.reaction_light_ion_forward_mix);
     const auto depth_bin_width_mm = static_cast<float>(config.depth_bin_width_mm);
     const auto maximum_step_mm = static_cast<float>(config.maximum_step_mm);
     const auto maximum_relative_energy_loss =
@@ -3091,6 +3342,9 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
             : (medium_physics_profile
                    ? std::max(configured_secondary_local_deposit_cutoff_MeV, 1.0F)
                    : configured_secondary_local_deposit_cutoff_MeV);
+    // 0 = transport all supported charged Z; else Z >= min deposit as local heat.
+    const auto secondary_heavy_local_deposit_z_min =
+        config.secondary_heavy_local_deposit_z_min;
     // In fast CT dose mode, secondary EM/MCS work is condensed to a larger
     // macro step. Existing CT-face and dose-voxel clamps below remain active,
     // so no step crosses a material or scoring boundary.
@@ -3119,6 +3373,8 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
         enable_energy_straggling &&
         config.enable_secondary_energy_straggling;
     const auto straggling_scale = static_cast<float>(config.straggling_scale);
+    const auto multiple_scattering_scale =
+        static_cast<float>(config.multiple_scattering_scale);
     const auto water_density_g_per_cm3 = static_cast<float>(config.water_density_g_per_cm3);
     const auto enable_multiple_scattering = config.enable_multiple_scattering;
     const auto enable_ct_material_mcs = config.enable_ct_material_mcs;
@@ -3233,12 +3489,41 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
     const auto cascade_projectile_count = enable_fragment_cascade
                                               ? cascade_packages->projectiles().size()
                                               : std::size_t{0};
+    const auto ct_lung_cascade_projectile_count =
+        use_ct_lung_cascade_packages
+            ? ct_lung_cascade_packages->projectiles().size()
+            : std::size_t{0};
+    const auto ct_soft_tissue_cascade_projectile_count =
+        use_ct_soft_tissue_cascade_packages
+            ? ct_soft_tissue_cascade_packages->projectiles().size()
+            : std::size_t{0};
+    const auto ct_bone_cascade_projectile_count =
+        use_ct_bone_cascade_packages
+            ? ct_bone_cascade_packages->projectiles().size()
+            : std::size_t{0};
     const auto cascade_depth_conditioned_layout =
         enable_fragment_cascade &&
         !cascade_packages->interactions().empty() &&
         std::isfinite(cascade_packages->interactions().front().depth_mm);
+    const auto ct_lung_cascade_depth_conditioned_layout =
+        use_ct_lung_cascade_packages &&
+        !ct_lung_cascade_packages->interactions().empty() &&
+        std::isfinite(ct_lung_cascade_packages->interactions().front().depth_mm);
+    const auto ct_soft_tissue_cascade_depth_conditioned_layout =
+        use_ct_soft_tissue_cascade_packages &&
+        !ct_soft_tissue_cascade_packages->interactions().empty() &&
+        std::isfinite(
+            ct_soft_tissue_cascade_packages->interactions().front().depth_mm);
+    const auto ct_bone_cascade_depth_conditioned_layout =
+        use_ct_bone_cascade_packages &&
+        !ct_bone_cascade_packages->interactions().empty() &&
+        std::isfinite(ct_bone_cascade_packages->interactions().front().depth_mm);
     const auto cascade_condition_on_reference_depth =
         config.cascade_condition_on_reference_depth;
+    const auto cascade_light_ion_xs_scale =
+        static_cast<float>(config.cascade_light_ion_xs_scale);
+    const auto cascade_secondary_carbon_xs_scale =
+        static_cast<float>(config.cascade_secondary_carbon_xs_scale);
     const auto neutral_projectile_count = enable_neutral_transport
                                               ? neutral_packages->projectiles().size()
                                               : std::size_t{0};
@@ -3870,7 +4155,11 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                 }
                 if (enable_voxel_scoring) {
                     // Aggregate consecutive deposits in one voxel before the
-                    // expensive global FP64 atomic update.
+                    // expensive global FP64 atomic update. Only the local
+                    // (non-buildup) fraction is voxel-batched; delayed energy
+                    // is redistributed along +z via the exponential proxy so
+                    // CT voxel dose sees the same surface suppression as the
+                    // 1D depth scorer.
                     if (pending_primary_voxel_MeV > 0.0 &&
                         pending_primary_voxel != voxel_index) {
                         sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
@@ -3895,7 +4184,26 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                     if (pending_primary_voxel_MeV == 0.0) {
                         pending_primary_voxel = voxel_index;
                     }
-                    pending_primary_voxel_MeV += static_cast<double>(deposited_MeV);
+                    pending_primary_voxel_MeV += static_cast<double>(local_MeV);
+                    if (delayed_MeV > 0.0F && voxel_dose_device != nullptr) {
+                        const auto z_mid =
+                            position_z_mm + 0.5F * direction_z * step_mm;
+                        score_exponential_voxel_depth(
+                            delayed_MeV, z_mid, depth_bin_width_mm, phantom_length_mm,
+                            static_cast<std::uint32_t>(number_of_bins),
+                            electronic_buildup_mfp_mm, voxel_plane_size, voxel_index,
+                            voxel_dose_device, false);
+                        if (enable_charged_origin_voxel_scoring &&
+                            charged_origin_voxel_dose_device != nullptr) {
+                            score_exponential_voxel_depth(
+                                delayed_MeV, z_mid, depth_bin_width_mm,
+                                phantom_length_mm,
+                                static_cast<std::uint32_t>(number_of_bins),
+                                electronic_buildup_mfp_mm, voxel_plane_size,
+                                voxel_index, charged_origin_voxel_dose_device,
+                                false);
+                        }
+                    }
                 }
                 history_deposited_MeV += deposited_MeV;
                 const auto scattering_energy_MeV =
@@ -3922,6 +4230,7 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                             slab_radiation_lengths_device[layer_for_material];
                     }
                     const auto projected_rms_angle_rad =
+                        multiple_scattering_scale *
                         highland_projected_rms_angle_device(
                             scattering_energy_MeV, 6, primary_mass_number, step_mm,
                             local_density_g_per_cm3, mcs_radiation_length);
@@ -4016,7 +4325,21 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                         history_nuclear_MeV = energy_MeV;
                         profile_add(profile_counters_device,
                                     TransportProfileSlot::primary_nuclear);
-                        if (enable_secondary_generation) {
+                        if (!enable_secondary_generation) {
+                            // Diagnostic primary-only mode: keep energy closure by
+                            // depositing the entire remaining kinetic energy at the
+                            // interaction site (no reaction package sampling).
+                            deposit_local_heat_device(
+                                energy_MeV, position_x_mm, position_y_mm,
+                                position_z_mm, direction_x, direction_y, direction_z,
+                                depth_bin_width_mm, phantom_length_mm, number_of_bins,
+                                enable_voxel_scoring, voxel_min_x_mm, voxel_min_y_mm,
+                                voxel_size_x_mm, voxel_size_y_mm, voxel_bins_x,
+                                voxel_bins_y, voxel_plane_size, dose_device, nullptr, 0,
+                                voxel_dose_device, enable_charged_origin_voxel_scoring,
+                                charged_origin_voxel_dose_device, 0,
+                                nuclear_residual_heat_mfp_mm);
+                        } else {
                             auto* active_reaction_bins = reaction_bins_device;
                             auto* active_reactions = reactions_device;
                             auto* active_reaction_secondaries =
@@ -4171,29 +4494,58 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                                 } else if (is_supported) {
                                     package_accounted_ke_MeV +=
                                         scaled_secondary_energy_MeV;
-                                    ++queueable_count;
-                                    queueable_energy_MeV +=
-                                        scaled_secondary_energy_MeV;
-                                    // Birth spectrum before queue fit so overflow
-                                    // does not bias production diagnostics.
-                                    const auto child_direction = rotate_local_direction(
-                                        secondary.direction_x,
-                                        secondary.direction_y,
-                                        secondary.direction_z,
-                                        Direction3F{direction_x, direction_y,
-                                                    direction_z});
-                                    score_fragment_birth_device(
-                                        birth_counts_device, birth_ke_sum_device,
-                                        birth_mevu_hist_device, birth_depth_hist_device,
-                                        number_of_bins, depth_bin_width_mm,
-                                        birth_cos_hist_device,
-                                        birth_parent_mevu_hist_device,
-                                        birth_parent_z_hist_device,
-                                        birth_parent_product_mevu_hist_device,
-                                        secondary.atomic_number, secondary.mass_number,
-                                        scaled_secondary_energy_MeV, position_z_mm,
-                                        child_direction.z, /*generation=*/0,
-                                        /*parent_Z=*/6, /*parent_A=*/12, energy_MeV);
+                                    const auto heavy_local =
+                                        secondary_heavy_local_deposit_z_min > 0 &&
+                                        secondary.atomic_number >=
+                                            secondary_heavy_local_deposit_z_min;
+                                    if (heavy_local) {
+                                        // Ablation: Li+ kinetic energy → local heat
+                                        // (not charged secondary transport).
+                                        deposit_local_heat_device(
+                                            scaled_secondary_energy_MeV, position_x_mm,
+                                            position_y_mm, position_z_mm, direction_x,
+                                            direction_y, direction_z, depth_bin_width_mm,
+                                            phantom_length_mm, number_of_bins,
+                                            enable_voxel_scoring, voxel_min_x_mm,
+                                            voxel_min_y_mm, voxel_size_x_mm, voxel_size_y_mm,
+                                            voxel_bins_x, voxel_bins_y, voxel_plane_size,
+                                            dose_device, nullptr, 0, voxel_dose_device,
+                                            enable_charged_origin_voxel_scoring,
+                                            charged_origin_voxel_dose_device, 0,
+                                            nuclear_residual_heat_mfp_mm);
+                                    } else {
+                                        ++queueable_count;
+                                        queueable_energy_MeV +=
+                                            scaled_secondary_energy_MeV;
+                                        // Birth spectrum before queue fit so overflow
+                                        // does not bias production diagnostics.
+                                        const auto parent_dir = Direction3F{
+                                            direction_x, direction_y, direction_z};
+                                        auto child_direction = rotate_local_direction(
+                                            secondary.direction_x,
+                                            secondary.direction_y,
+                                            secondary.direction_z,
+                                            parent_dir);
+                                        if (reaction_light_ion_forward_mix > 0.0F &&
+                                            secondary.atomic_number > 0 &&
+                                            secondary.atomic_number <= 2) {
+                                            child_direction = blend_direction_toward_parent(
+                                                child_direction, parent_dir,
+                                                reaction_light_ion_forward_mix);
+                                        }
+                                        score_fragment_birth_device(
+                                            birth_counts_device, birth_ke_sum_device,
+                                            birth_mevu_hist_device, birth_depth_hist_device,
+                                            number_of_bins, depth_bin_width_mm,
+                                            birth_cos_hist_device,
+                                            birth_parent_mevu_hist_device,
+                                            birth_parent_z_hist_device,
+                                            birth_parent_product_mevu_hist_device,
+                                            secondary.atomic_number, secondary.mass_number,
+                                            scaled_secondary_energy_MeV, position_z_mm,
+                                            child_direction.z, /*generation=*/0,
+                                            /*parent_Z=*/6, /*parent_A=*/12, energy_MeV);
+                                    }
                                 }
                                 // else: unsupported charged KE stays out of
                                 // package_accounted_ke_MeV → residual local heat (not
@@ -4223,16 +4575,29 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                                         const auto is_supported =
                                             secondary.atomic_number > 0 &&
                                             secondary.mass_number > 0;
-                                        if (is_supported) {
+                                        const auto heavy_local =
+                                            secondary_heavy_local_deposit_z_min > 0 &&
+                                            secondary.atomic_number >=
+                                                secondary_heavy_local_deposit_z_min;
+                                        if (is_supported && !heavy_local) {
                                             const auto origin_category =
                                                 charged_dose_category(
                                                     secondary.atomic_number,
                                                     secondary.mass_number);
-                                            const auto child_direction = rotate_local_direction(
+                                            const auto parent_dir = Direction3F{
+                                                direction_x, direction_y, direction_z};
+                                            auto child_direction = rotate_local_direction(
                                                 secondary.direction_x,
                                                 secondary.direction_y,
                                                 secondary.direction_z,
-                                                Direction3F{direction_x, direction_y, direction_z});
+                                                parent_dir);
+                                            if (reaction_light_ion_forward_mix > 0.0F &&
+                                                secondary.atomic_number <= 2) {
+                                                child_direction =
+                                                    blend_direction_toward_parent(
+                                                        child_direction, parent_dir,
+                                                        reaction_light_ion_forward_mix);
+                                            }
                                             secondary_queue_device[output_index++] =
                                                 SecondaryParticle3D{
                                                     position_x_mm,
@@ -4351,17 +4716,19 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                             }
                             // Residual nucleus / reaction Q / unsupported charged /
                             // overflow not re-queued: deposit locally (G4 heat approx).
-                            const auto residual_nuclear_MeV = sycl::fmax(
-                                0.0F, energy_MeV - package_accounted_ke_MeV);
+                            const auto residual_nuclear_MeV =
+                                nuclear_residual_heat_scale *
+                                sycl::fmax(0.0F, energy_MeV - package_accounted_ke_MeV);
                             deposit_local_heat_device(
                                 residual_nuclear_MeV, position_x_mm, position_y_mm,
                                 position_z_mm, direction_x, direction_y, direction_z,
-                                depth_bin_width_mm, number_of_bins, enable_voxel_scoring,
-                                voxel_min_x_mm, voxel_min_y_mm, voxel_size_x_mm,
-                                voxel_size_y_mm, voxel_bins_x, voxel_bins_y,
-                                voxel_plane_size, dose_device, nullptr, 0,
+                                depth_bin_width_mm, phantom_length_mm, number_of_bins,
+                                enable_voxel_scoring, voxel_min_x_mm, voxel_min_y_mm,
+                                voxel_size_x_mm, voxel_size_y_mm, voxel_bins_x,
+                                voxel_bins_y, voxel_plane_size, dose_device, nullptr, 0,
                                 voxel_dose_device, enable_charged_origin_voxel_scoring,
-                                charged_origin_voxel_dose_device, 0);
+                                charged_origin_voxel_dose_device, 0,
+                                nuclear_residual_heat_mfp_mm);
                         }
                         energy_MeV = 0.0f;
                     }
@@ -5212,15 +5579,40 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                             pending_voxel_index = voxel_index;
                         }
                         pending_dose_MeV += static_cast<DoseAtomicT>(sec_local);
-                        if (sec_delayed > 0.0F && !is_neutral_lineage &&
-                            fragment_dose_device != nullptr) {
+                        if (sec_delayed > 0.0F && !is_neutral_lineage) {
                             const auto z_mid =
                                 position_z_mm + 0.5F * direction_z * path_step_mm;
-                            score_exponential_depth(
-                                sec_delayed, z_mid, depth_bin_width_mm, phantom_length_mm,
-                                static_cast<std::uint32_t>(number_of_bins),
-                                electronic_buildup_mfp_mm,
-                                fragment_dose_device + species_index * number_of_bins);
+                            if (fragment_dose_device != nullptr) {
+                                score_exponential_depth(
+                                    sec_delayed, z_mid, depth_bin_width_mm,
+                                    phantom_length_mm,
+                                    static_cast<std::uint32_t>(number_of_bins),
+                                    electronic_buildup_mfp_mm,
+                                    fragment_dose_device +
+                                        species_index * number_of_bins);
+                            }
+                            // Match primary: redistribute delayed energy in the
+                            // dense CT voxel scorer (was previously local-only).
+                            if (enable_voxel_scoring && voxel_dose_device != nullptr) {
+                                score_exponential_voxel_depth(
+                                    sec_delayed, z_mid, depth_bin_width_mm,
+                                    phantom_length_mm,
+                                    static_cast<std::uint32_t>(number_of_bins),
+                                    electronic_buildup_mfp_mm, voxel_plane_size,
+                                    voxel_index, voxel_dose_device, false);
+                                if (enable_charged_origin_voxel_scoring &&
+                                    charged_origin_voxel_dose_device != nullptr) {
+                                    score_exponential_voxel_depth(
+                                        sec_delayed, z_mid, depth_bin_width_mm,
+                                        phantom_length_mm,
+                                        static_cast<std::uint32_t>(number_of_bins),
+                                        electronic_buildup_mfp_mm, voxel_plane_size,
+                                        voxel_index,
+                                        charged_origin_voxel_dose_device +
+                                            charged_origin_voxel_offset,
+                                        false);
+                                }
+                            }
                         }
                         deposited_MeV += step_deposited_MeV;
                         const auto scattering_energy_MeV =
@@ -5269,6 +5661,7 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                                         layer_for_material];
                             }
                             const auto projected_rms_angle_rad =
+                                multiple_scattering_scale *
                                 highland_projected_rms_angle_device(
                                     scattering_energy_MeV, atomic_number, mass_number,
                                     path_step_mm, local_density_g_per_cm3,
@@ -5320,6 +5713,15 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                                     macroscopic_cross_section_per_mm *=
                                         local_density_g_per_cm3;
                                 }
+                                // Parent-species cascade rate scales (diagnostic A/B).
+                                if (atomic_number > 0 && atomic_number <= 2) {
+                                    macroscopic_cross_section_per_mm *=
+                                        cascade_light_ion_xs_scale;
+                                } else if (atomic_number == 6 &&
+                                           particle.generation > 0) {
+                                    macroscopic_cross_section_per_mm *=
+                                        cascade_secondary_carbon_xs_scale;
+                                }
                                 // CT material mass-XS ratio (C-12 table) scales fragment
                                 // cascade rate vs water×ρ — bone/lung composition effect.
                                 if (cascade_xs_material_index == 0U &&
@@ -5364,22 +5766,115 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                                                      path_step_mm);
                                 if (rng::uniform01(random_seed, rng_stream, steps, 8) <
                                     interaction_probability) {
+                                    // Material-conditioned cascade final states: pick
+                                    // package by CT class at the interaction site, with
+                                    // fallback to the default cascade package when the
+                                    // projectile is missing from the material table.
+                                    auto* active_cascade_projectiles =
+                                        cascade_projectiles_device;
+                                    auto* active_cascade_interactions =
+                                        cascade_interactions_device;
+                                    auto* active_cascade_products =
+                                        cascade_products_device;
+                                    auto active_cascade_proj_count =
+                                        cascade_projectile_count;
+                                    auto active_depth_layout =
+                                        cascade_depth_conditioned_layout;
+                                    auto active_projectile = projectile;
+                                    if (in_ct) {
+                                        if (ct_cascade_material == 1U &&
+                                            use_ct_lung_cascade_packages) {
+                                            const auto mat_idx = cascade_projectile_index(
+                                                ct_lung_cascade_projectiles_device,
+                                                ct_lung_cascade_projectile_count,
+                                                atomic_number, mass_number);
+                                            if (mat_idx >= 0) {
+                                                active_cascade_projectiles =
+                                                    ct_lung_cascade_projectiles_device;
+                                                active_cascade_interactions =
+                                                    ct_lung_cascade_interactions_device;
+                                                active_cascade_products =
+                                                    ct_lung_cascade_products_device;
+                                                active_cascade_proj_count =
+                                                    ct_lung_cascade_projectile_count;
+                                                active_depth_layout =
+                                                    ct_lung_cascade_depth_conditioned_layout;
+                                                active_projectile =
+                                                    active_cascade_projectiles[mat_idx];
+                                            }
+                                        } else if (ct_cascade_material == 2U &&
+                                                   use_ct_soft_tissue_cascade_packages) {
+                                            const auto mat_idx = cascade_projectile_index(
+                                                ct_soft_tissue_cascade_projectiles_device,
+                                                ct_soft_tissue_cascade_projectile_count,
+                                                atomic_number, mass_number);
+                                            if (mat_idx >= 0) {
+                                                active_cascade_projectiles =
+                                                    ct_soft_tissue_cascade_projectiles_device;
+                                                active_cascade_interactions =
+                                                    ct_soft_tissue_cascade_interactions_device;
+                                                active_cascade_products =
+                                                    ct_soft_tissue_cascade_products_device;
+                                                active_cascade_proj_count =
+                                                    ct_soft_tissue_cascade_projectile_count;
+                                                active_depth_layout =
+                                                    ct_soft_tissue_cascade_depth_conditioned_layout;
+                                                active_projectile =
+                                                    active_cascade_projectiles[mat_idx];
+                                            }
+                                        } else if (ct_cascade_material == 3U &&
+                                                   use_ct_bone_cascade_packages) {
+                                            const auto mat_idx = cascade_projectile_index(
+                                                ct_bone_cascade_projectiles_device,
+                                                ct_bone_cascade_projectile_count,
+                                                atomic_number, mass_number);
+                                            if (mat_idx >= 0) {
+                                                active_cascade_projectiles =
+                                                    ct_bone_cascade_projectiles_device;
+                                                active_cascade_interactions =
+                                                    ct_bone_cascade_interactions_device;
+                                                active_cascade_products =
+                                                    ct_bone_cascade_products_device;
+                                                active_cascade_proj_count =
+                                                    ct_bone_cascade_projectile_count;
+                                                active_depth_layout =
+                                                    ct_bone_cascade_depth_conditioned_layout;
+                                                active_projectile =
+                                                    active_cascade_projectiles[mat_idx];
+                                            }
+                                        }
+                                    }
+                                    (void)active_cascade_projectiles;
+                                    (void)active_cascade_proj_count;
                                     const auto package_uniform =
                                         rng::uniform01(random_seed, rng_stream, steps, 9);
                                     const auto selected =
                                         select_cascade_interaction_conditioned(
-                                            cascade_interactions_device,
-                                            projectile.interaction_offset,
-                                            projectile.interaction_count,
+                                            active_cascade_interactions,
+                                            active_projectile.interaction_offset,
+                                            active_projectile.interaction_count,
                                             current_energy_MeVu, position_z_mm,
                                             package_uniform,
-                                            cascade_depth_conditioned_layout,
+                                            active_depth_layout,
                                             cascade_condition_on_reference_depth);
-                                    const auto interaction = cascade_interactions_device[
-                                        projectile.interaction_offset + selected];
+                                    const auto interaction = active_cascade_interactions[
+                                        active_projectile.interaction_offset + selected];
+                                    // Unscaled package product KE decides residual vs
+                                    // fragmentation topology for energy scaling.
+                                    auto package_product_ke_MeV = 0.0F;
+                                    for (std::uint32_t product_index = 0;
+                                         product_index < interaction.product_count;
+                                         ++product_index) {
+                                        package_product_ke_MeV +=
+                                            active_cascade_products
+                                                [interaction.product_offset + product_index]
+                                                    .kinetic_energy_MeV;
+                                    }
                                     const auto energy_scale = cascade_event_energy_scale(
                                         current_energy_MeVu,
-                                        interaction.incident_energy_MeV_per_u);
+                                        interaction.incident_energy_MeV_per_u,
+                                        package_product_ke_MeV, atomic_number,
+                                        mass_number);
                                     cascade_summary.interaction_count = 1;
                                     profile_add(profile_counters_device,
                                                 TransportProfileSlot::secondary_cascade);
@@ -5394,7 +5889,7 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                                     for (std::uint32_t product_index = 0;
                                          product_index < interaction.product_count;
                                          ++product_index) {
-                                        const auto product = cascade_products_device[
+                                        const auto product = active_cascade_products[
                                             interaction.product_offset + product_index];
                                         const auto scaled_energy =
                                             product.kinetic_energy_MeV * energy_scale;
@@ -5445,30 +5940,60 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                                             }
                                         } else if (supported) {
                                             package_accounted_ke_MeV += scaled_energy;
-                                            ++queueable_count;
-                                            queueable_energy += scaled_energy;
-                                            const auto child_direction =
-                                                rotate_local_direction(
-                                                    product.direction_x,
-                                                    product.direction_y,
-                                                    product.direction_z,
-                                                    Direction3F{direction_x, direction_y,
-                                                                direction_z});
-                                            score_fragment_birth_device(
-                                                birth_counts_device, birth_ke_sum_device,
-                                                birth_mevu_hist_device,
-                                                birth_depth_hist_device, number_of_bins,
-                                                depth_bin_width_mm, birth_cos_hist_device,
-                                                birth_parent_mevu_hist_device,
-                                                birth_parent_z_hist_device,
-                                                birth_parent_product_mevu_hist_device,
-                                                product.atomic_number, product.mass_number,
-                                                scaled_energy, position_z_mm,
-                                                child_direction.z,
-                                                static_cast<std::uint8_t>(
-                                                    particle.generation + 1),
-                                                particle.atomic_number,
-                                                particle.mass_number, energy_MeV);
+                                            const auto heavy_local =
+                                                secondary_heavy_local_deposit_z_min > 0 &&
+                                                product.atomic_number >=
+                                                    secondary_heavy_local_deposit_z_min;
+                                            if (heavy_local) {
+                                                deposit_local_heat_device(
+                                                    scaled_energy, position_x_mm,
+                                                    position_y_mm, position_z_mm,
+                                                    direction_x, direction_y, direction_z,
+                                                    depth_bin_width_mm, phantom_length_mm,
+                                                    number_of_bins, enable_voxel_scoring,
+                                                    voxel_min_x_mm, voxel_min_y_mm,
+                                                    voxel_size_x_mm, voxel_size_y_mm,
+                                                    voxel_bins_x, voxel_bins_y,
+                                                    voxel_plane_size, dose_device, nullptr, 0,
+                                                    voxel_dose_device,
+                                                    enable_charged_origin_voxel_scoring,
+                                                    charged_origin_voxel_dose_device, 0,
+                                                    nuclear_residual_heat_mfp_mm);
+                                            } else {
+                                                ++queueable_count;
+                                                queueable_energy += scaled_energy;
+                                                const auto parent_dir = Direction3F{
+                                                    direction_x, direction_y, direction_z};
+                                                auto child_direction =
+                                                    rotate_local_direction(
+                                                        product.direction_x,
+                                                        product.direction_y,
+                                                        product.direction_z,
+                                                        parent_dir);
+                                                if (reaction_light_ion_forward_mix > 0.0F &&
+                                                    product.atomic_number > 0 &&
+                                                    product.atomic_number <= 2) {
+                                                    child_direction =
+                                                        blend_direction_toward_parent(
+                                                            child_direction, parent_dir,
+                                                            reaction_light_ion_forward_mix);
+                                                }
+                                                score_fragment_birth_device(
+                                                    birth_counts_device, birth_ke_sum_device,
+                                                    birth_mevu_hist_device,
+                                                    birth_depth_hist_device, number_of_bins,
+                                                    depth_bin_width_mm, birth_cos_hist_device,
+                                                    birth_parent_mevu_hist_device,
+                                                    birth_parent_z_hist_device,
+                                                    birth_parent_product_mevu_hist_device,
+                                                    product.atomic_number, product.mass_number,
+                                                    scaled_energy, position_z_mm,
+                                                    child_direction.z,
+                                                    static_cast<std::uint8_t>(
+                                                        particle.generation + 1),
+                                                    particle.atomic_number,
+                                                    particle.mass_number, energy_MeV);
+                                            }
                                         }
                                         // else: unsupported charged → residual local heat.
                                     }
@@ -5489,17 +6014,30 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                                             for (std::uint32_t product_index = 0;
                                                  product_index < interaction.product_count;
                                                  ++product_index) {
-                                                const auto product = cascade_products_device[
+                                                const auto product = active_cascade_products[
                                                     interaction.product_offset + product_index];
+                                                const auto heavy_local =
+                                                    secondary_heavy_local_deposit_z_min > 0 &&
+                                                    product.atomic_number >=
+                                                        secondary_heavy_local_deposit_z_min;
                                                 if (product.atomic_number > 0 &&
-                                                    product.mass_number > 0) {
-                                                    const auto child_direction =
+                                                    product.mass_number > 0 &&
+                                                    !heavy_local) {
+                                                    const auto parent_dir = Direction3F{
+                                                        direction_x, direction_y, direction_z};
+                                                    auto child_direction =
                                                         rotate_local_direction(
                                                             product.direction_x,
                                                             product.direction_y,
                                                             product.direction_z,
-                                                            Direction3F{direction_x, direction_y,
-                                                                        direction_z});
+                                                            parent_dir);
+                                                    if (reaction_light_ion_forward_mix > 0.0F &&
+                                                        product.atomic_number <= 2) {
+                                                        child_direction =
+                                                            blend_direction_toward_parent(
+                                                                child_direction, parent_dir,
+                                                                reaction_light_ion_forward_mix);
+                                                    }
                                                     secondary_queue_device[output_index++] =
                                                         SecondaryParticle3D{
                                                             position_x_mm,
@@ -5560,7 +6098,7 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                                             for (std::uint32_t product_index = 0;
                                                  product_index < interaction.product_count;
                                                  ++product_index) {
-                                                const auto product = cascade_products_device[
+                                                const auto product = active_cascade_products[
                                                     interaction.product_offset + product_index];
                                                 if (product.pdg_id == 22 ||
                                                     product.pdg_id == 2112) {
@@ -5621,12 +6159,14 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                                     // overflow): was previously zeroed without scoring.
                                     // Score into the parent fragment species IDD + voxels so
                                     // charged-origin and voxel↔IDD closures stay consistent.
-                                    const auto residual_cascade_MeV = sycl::fmax(
-                                        0.0F, energy_MeV - package_accounted_ke_MeV);
+                                    const auto residual_cascade_MeV =
+                                        nuclear_residual_heat_scale *
+                                        sycl::fmax(0.0F,
+                                                   energy_MeV - package_accounted_ke_MeV);
                                     deposit_local_heat_device(
                                         residual_cascade_MeV, position_x_mm, position_y_mm,
                                         position_z_mm, direction_x, direction_y, direction_z,
-                                        depth_bin_width_mm, number_of_bins,
+                                        depth_bin_width_mm, phantom_length_mm, number_of_bins,
                                         enable_voxel_scoring, voxel_min_x_mm, voxel_min_y_mm,
                                         voxel_size_x_mm, voxel_size_y_mm, voxel_bins_x,
                                         voxel_bins_y, voxel_plane_size, nullptr,
@@ -5634,7 +6174,8 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                                         voxel_dose_device,
                                         enable_charged_origin_voxel_scoring,
                                         charged_origin_voxel_dose_device,
-                                        charged_origin_voxel_offset);
+                                        charged_origin_voxel_offset,
+                                        nuclear_residual_heat_mfp_mm);
                                     cascade_summary.residual_local_MeV += residual_cascade_MeV;
                                     // This energy is part of the transported particle's
                                     // deposited-energy balance even when the optional
@@ -6973,6 +7514,15 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
     free_immutable_device(cascade_cross_sections_device);
     free_immutable_device(cascade_interactions_device);
     free_immutable_device(cascade_products_device);
+    free_device(ct_lung_cascade_projectiles_device);
+    free_device(ct_lung_cascade_interactions_device);
+    free_device(ct_lung_cascade_products_device);
+    free_device(ct_soft_tissue_cascade_projectiles_device);
+    free_device(ct_soft_tissue_cascade_interactions_device);
+    free_device(ct_soft_tissue_cascade_products_device);
+    free_device(ct_bone_cascade_projectiles_device);
+    free_device(ct_bone_cascade_interactions_device);
+    free_device(ct_bone_cascade_products_device);
     free_device(cascade_summaries_device);
     free_device(cascade_xs_lut_device);
     free_immutable_device(neutral_projectiles_device);

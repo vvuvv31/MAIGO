@@ -242,10 +242,6 @@ void TransportConfig::validate() const {
                 "physics_profile=medium/fast requires the complete charged dose chain");
         }
     }
-    if (physics_profile == "fast" && enable_let_scoring) {
-        throw std::invalid_argument(
-            "physics_profile=fast is not allowed with LET scoring");
-    }
     if (physics_profile == "medium" && maximum_relative_energy_loss > 0.005) {
         throw std::invalid_argument(
             "physics_profile=medium requires maximum_relative_energy_loss<=0.005");
@@ -283,6 +279,12 @@ void TransportConfig::validate() const {
     if (secondary_local_deposit_cutoff_MeV < 0.0) {
         throw std::invalid_argument(
             "secondary_local_deposit_cutoff_MeV must be non-negative");
+    }
+    if (secondary_heavy_local_deposit_z_min < 0 ||
+        secondary_heavy_local_deposit_z_min > 20) {
+        throw std::invalid_argument(
+            "secondary_heavy_local_deposit_z_min must be in [0, 20] "
+            "(0 disables heavy local deposit)");
     }
     if (secondary_condensed_step_mm < 0.0) {
         throw std::invalid_argument(
@@ -354,6 +356,40 @@ void TransportConfig::validate() const {
     if (straggling_scale < 0.0) {
         throw std::invalid_argument("straggling_scale must be nonnegative");
     }
+    if (!std::isfinite(multiple_scattering_scale) ||
+        multiple_scattering_scale < 0.0 || multiple_scattering_scale > 3.0) {
+        throw std::invalid_argument(
+            "multiple_scattering_scale must be in [0, 3]");
+    }
+    if (!std::isfinite(spots_lateral_yz_skew) ||
+        spots_lateral_yz_skew < -1.0 || spots_lateral_yz_skew > 1.0) {
+        throw std::invalid_argument(
+            "spots_lateral_yz_skew must be in [-1, 1]");
+    }
+    if (!std::isfinite(spots_lateral_yz_rotation_deg) ||
+        spots_lateral_yz_rotation_deg < -15.0 ||
+        spots_lateral_yz_rotation_deg > 15.0) {
+        throw std::invalid_argument(
+            "spots_lateral_yz_rotation_deg must be in [-15, 15]");
+    }
+    if (!std::isfinite(spots_lateral_yz_rotation_pivot_y_mm)) {
+        throw std::invalid_argument(
+            "spots_lateral_yz_rotation_pivot_y_mm must be finite");
+    }
+    if (!std::isfinite(spots_emittance_sigma_scale) ||
+        spots_emittance_sigma_scale < 0.5 || spots_emittance_sigma_scale > 1.5) {
+        throw std::invalid_argument(
+            "spots_emittance_sigma_scale must be in [0.5, 1.5]");
+    }
+    if (!std::isfinite(spots_emittance_prime_scale) ||
+        spots_emittance_prime_scale < 0.5 || spots_emittance_prime_scale > 1.5) {
+        throw std::invalid_argument(
+            "spots_emittance_prime_scale must be in [0.5, 1.5]");
+    }
+    if (!std::isfinite(spots_lateral_yz_skew_pivot_mm)) {
+        throw std::invalid_argument(
+            "spots_lateral_yz_skew_pivot_mm must be finite");
+    }
     if (ct_stopping_power_scale <= 0.0 || ct_stopping_power_scale > 2.0) {
         throw std::invalid_argument(
             "ct_stopping_power_scale must be in (0, 2]");
@@ -366,6 +402,35 @@ void TransportConfig::validate() const {
           ct_bone_cascade_reference_density_g_per_cm3 <= 0.0))) {
         throw std::invalid_argument(
             "CT material cascade reference densities must be finite and positive");
+    }
+    if (!std::isfinite(nuclear_residual_heat_mfp_mm) ||
+        nuclear_residual_heat_mfp_mm < 0.0 ||
+        nuclear_residual_heat_mfp_mm > 50.0) {
+        throw std::invalid_argument(
+            "nuclear_residual_heat_mfp_mm must be in [0, 50] mm");
+    }
+    if (!std::isfinite(nuclear_residual_heat_scale) ||
+        nuclear_residual_heat_scale < 0.0 ||
+        nuclear_residual_heat_scale > 2.0) {
+        throw std::invalid_argument(
+            "nuclear_residual_heat_scale must be in [0, 2]");
+    }
+    if (!std::isfinite(reaction_light_ion_forward_mix) ||
+        reaction_light_ion_forward_mix < 0.0 ||
+        reaction_light_ion_forward_mix > 1.0) {
+        throw std::invalid_argument(
+            "reaction_light_ion_forward_mix must be in [0, 1]");
+    }
+    if (!std::isfinite(cascade_light_ion_xs_scale) ||
+        cascade_light_ion_xs_scale < 0.0 || cascade_light_ion_xs_scale > 2.0) {
+        throw std::invalid_argument(
+            "cascade_light_ion_xs_scale must be in [0, 2]");
+    }
+    if (!std::isfinite(cascade_secondary_carbon_xs_scale) ||
+        cascade_secondary_carbon_xs_scale < 0.0 ||
+        cascade_secondary_carbon_xs_scale > 2.0) {
+        throw std::invalid_argument(
+            "cascade_secondary_carbon_xs_scale must be in [0, 2]");
     }
     if (enable_voxel_scoring &&
         (voxel_bins_x == 0 || voxel_bins_y == 0 || voxel_size_x_mm <= 0.0 ||
@@ -754,6 +819,17 @@ void TransportConfig::validate() const {
         throw std::invalid_argument(
             "tps_spots_file is set but tpsSource=false");
     }
+    if (spots_enable_upstream_air_energy_loss) {
+        if (spots_geometry_mode != "tps_90" &&
+            spots_geometry_mode != "tps_gantry_y") {
+            throw std::invalid_argument(
+                "spots_enable_upstream_air_energy_loss requires spots_geometry_mode=tps_90 or tps_gantry_y");
+        }
+        if (spots_upstream_air_stopping_power_file.empty()) {
+            throw std::invalid_argument(
+                "spots_enable_upstream_air_energy_loss requires spots_upstream_air_stopping_power_file");
+        }
+    }
     if (!primary_spot_batch.empty()) {
         std::uint64_t expected_begin = 0;
         for (const auto& entry : primary_spot_batch) {
@@ -794,6 +870,9 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.secondary_local_deposit_cutoff_MeV = parse_number(
         values, "secondary_local_deposit_cutoff_MeV",
         config.secondary_local_deposit_cutoff_MeV);
+    config.secondary_heavy_local_deposit_z_min = static_cast<int>(parse_number(
+        values, "secondary_heavy_local_deposit_z_min",
+        static_cast<double>(config.secondary_heavy_local_deposit_z_min)));
     config.secondary_condensed_step_mm = parse_number(
         values, "secondary_condensed_step_mm",
         config.secondary_condensed_step_mm);
@@ -922,6 +1001,24 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.ct_bone_cascade_reference_density_g_per_cm3 = parse_number(
         values, "ct_bone_cascade_reference_density_g_per_cm3",
         config.ct_bone_cascade_reference_density_g_per_cm3);
+    config.ct_lung_cascade_package_file = parse_path(
+        values, "ct_lung_cascade_package_file",
+        config.ct_lung_cascade_package_file);
+    config.ct_soft_tissue_cascade_package_file = parse_path(
+        values, "ct_soft_tissue_cascade_package_file",
+        config.ct_soft_tissue_cascade_package_file);
+    config.ct_bone_cascade_package_file = parse_path(
+        values, "ct_bone_cascade_package_file",
+        config.ct_bone_cascade_package_file);
+    config.nuclear_residual_heat_mfp_mm = parse_number(
+        values, "nuclear_residual_heat_mfp_mm",
+        config.nuclear_residual_heat_mfp_mm);
+    config.nuclear_residual_heat_scale = parse_number(
+        values, "nuclear_residual_heat_scale",
+        config.nuclear_residual_heat_scale);
+    config.reaction_light_ion_forward_mix = parse_number(
+        values, "reaction_light_ion_forward_mix",
+        config.reaction_light_ion_forward_mix);
     config.ct_stopping_power_scale = parse_number(
         values, "ct_stopping_power_scale", config.ct_stopping_power_scale);
     if (values.find("ct_grid_file") != values.end() &&
@@ -953,6 +1050,8 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.straggling_scale = parse_number(values, "straggling_scale", config.straggling_scale);
     config.enable_multiple_scattering =
         parse_bool(values, "enable_multiple_scattering", config.enable_multiple_scattering);
+    config.multiple_scattering_scale = parse_number(
+        values, "multiple_scattering_scale", config.multiple_scattering_scale);
     config.enable_ct_material_mcs =
         parse_bool(values, "enable_ct_material_mcs", config.enable_ct_material_mcs);
     config.enable_flat_source =
@@ -986,6 +1085,12 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.cascade_condition_on_reference_depth = parse_bool(
         values, "cascade_condition_on_reference_depth",
         config.cascade_condition_on_reference_depth);
+    config.cascade_light_ion_xs_scale = parse_number(
+        values, "cascade_light_ion_xs_scale",
+        config.cascade_light_ion_xs_scale);
+    config.cascade_secondary_carbon_xs_scale = parse_number(
+        values, "cascade_secondary_carbon_xs_scale",
+        config.cascade_secondary_carbon_xs_scale);
     config.enable_fragment_species_scoring = parse_bool(
         values, "enable_fragment_species_scoring",
         config.enable_fragment_species_scoring);
@@ -1248,6 +1353,32 @@ TransportConfig load_config(const std::filesystem::path& path) {
         values, "spots_patient_rot_z_deg", config.spots_patient_rot_z_deg);
     config.spots_ct_axis_min_mm = parse_number(
         values, "spots_ct_axis_min_mm", config.spots_ct_axis_min_mm);
+    config.spots_lateral_yz_skew = parse_number(
+        values, "spots_lateral_yz_skew", config.spots_lateral_yz_skew);
+    config.spots_lateral_yz_skew_pivot_mm = parse_number(
+        values, "spots_lateral_yz_skew_pivot_mm",
+        config.spots_lateral_yz_skew_pivot_mm);
+    config.spots_lateral_yz_skew_auto_pivot = parse_bool(
+        values, "spots_lateral_yz_skew_auto_pivot",
+        config.spots_lateral_yz_skew_auto_pivot);
+    config.spots_lateral_yz_rotation_deg = parse_number(
+        values, "spots_lateral_yz_rotation_deg",
+        config.spots_lateral_yz_rotation_deg);
+    config.spots_lateral_yz_rotation_pivot_y_mm = parse_number(
+        values, "spots_lateral_yz_rotation_pivot_y_mm",
+        config.spots_lateral_yz_rotation_pivot_y_mm);
+    config.spots_emittance_sigma_scale = parse_number(
+        values, "spots_emittance_sigma_scale",
+        config.spots_emittance_sigma_scale);
+    config.spots_emittance_prime_scale = parse_number(
+        values, "spots_emittance_prime_scale",
+        config.spots_emittance_prime_scale);
+    config.spots_enable_upstream_air_energy_loss = parse_bool(
+        values, "spots_enable_upstream_air_energy_loss",
+        config.spots_enable_upstream_air_energy_loss);
+    config.spots_upstream_air_stopping_power_file = parse_path(
+        values, "spots_upstream_air_stopping_power_file",
+        config.spots_upstream_air_stopping_power_file);
     {
         const auto camel = values.find("tpsSource");
         const auto snake = values.find("tps_source");

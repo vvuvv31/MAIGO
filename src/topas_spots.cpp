@@ -1,5 +1,7 @@
 #include "carbon/topas_spots.hpp"
 
+#include "carbon/stopping_power.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <fstream>
@@ -127,6 +129,57 @@ void rotate_rx_ry(double rx_deg, double ry_deg, double& x, double& y, double& z)
     }
 }
 
+double propagate_total_kinetic_energy_through_stopping_power(
+    const double initial_total_energy_MeV,
+    const int mass_number,
+    const double distance_mm,
+    const StoppingPowerTable& stopping_power) {
+    if (!(initial_total_energy_MeV > 0.0) || mass_number <= 0 ||
+        !std::isfinite(distance_mm) || distance_mm < 0.0) {
+        throw std::invalid_argument(
+            "upstream stopping-power propagation requires positive energy/mass and finite nonnegative distance");
+    }
+    constexpr double maximum_step_mm = 0.1;
+    auto energy = initial_total_energy_MeV;
+    auto remaining = distance_mm;
+    const auto min_energy = stopping_power.minimum_energy_MeVu();
+    const auto max_energy = stopping_power.maximum_energy_MeVu();
+    const auto derivative = [&](const double total_energy) {
+        const auto energy_MeVu = total_energy / static_cast<double>(mass_number);
+        if (energy_MeVu < min_energy || energy_MeVu > max_energy) {
+            throw std::invalid_argument(
+                "upstream stopping-power propagation energy is outside the supplied table");
+        }
+        return -stopping_power.interpolate(energy_MeVu);
+    };
+    while (remaining > 1.0e-12) {
+        const auto step = std::min(maximum_step_mm, remaining);
+        const auto k1 = derivative(energy);
+        const auto k2 = derivative(energy + 0.5 * step * k1);
+        const auto k3 = derivative(energy + 0.5 * step * k2);
+        const auto k4 = derivative(energy + step * k3);
+        energy += step * (k1 + 2.0 * k2 + 2.0 * k3 + k4) / 6.0;
+        if (!(energy > 0.0) || !std::isfinite(energy)) {
+            throw std::invalid_argument(
+                "upstream stopping-power propagation exhausted the spot kinetic energy");
+        }
+        remaining -= step;
+    }
+    return energy;
+}
+
+double spot_entry_total_energy_after_optional_upstream_loss(
+    const double initial_total_energy_MeV,
+    const int mass_number,
+    const double distance_mm,
+    const StoppingPowerTable* const stopping_power) {
+    return stopping_power == nullptr
+               ? initial_total_energy_MeV
+               : propagate_total_kinetic_energy_through_stopping_power(
+                     initial_total_energy_MeV, mass_number, distance_mm,
+                     *stopping_power);
+}
+
 SpotSourcePose TopasSpotPlan::pose_for_spot(const TopasSpot& spot) const noexcept {
     // Match TOPAS BeamPosition2: origin at (TransX, -SAD, TransZ) then RotX/RotY of the
     // volume. Local beam axis is +Z of that volume; emittance lives in local X/Y.
@@ -246,15 +299,18 @@ SpotSourcePose transform_tps_90_pose_to_ct(
         pose.uz_z = uzx;
     } else {
         // Beam along -patient X: entrance at patient X = ct_axis_max.
+        // The map patient→GPU (y, z, ct_max-x) has det=-1. Negate uy so the
+        // transported beam frame stays right-handed (ux·(uy×uz)=+1), matching
+        // TOPAS BiGaussian axes and the +patient-X branch. Origins/uz unchanged.
         pose.origin_x_mm = oy;
         pose.origin_y_mm = oz;
         pose.origin_z_mm = ct_axis_max_mm - ox;
         pose.ux_x = uxy;
         pose.ux_y = uxz;
         pose.ux_z = -uxx;
-        pose.uy_x = uyy;
-        pose.uy_y = uyz;
-        pose.uy_z = -uyx;
+        pose.uy_x = -uyy;
+        pose.uy_y = -uyz;
+        pose.uy_z = uyx;
         pose.uz_x = uzy;
         pose.uz_y = uzz;
         pose.uz_z = -uzx;

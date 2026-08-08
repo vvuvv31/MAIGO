@@ -289,6 +289,36 @@ TOPAS CT full-plan 使用的七个 Geant4 modules 全部加入了参考 physics 
 
 该模型适合在明确的能量范围、CT 材料映射、剂量/LET scorer 定义和 package 覆盖范围内进行高吞吐 GPU 验证。若目标是把 GPU 变成完整 Geant4 physics list 的替代实现，下一步应优先补充材料条件化的 MCS、secondary straggling、中性粒子输运和衰变，而不是只增加 primary histories。
 
+## 10. 可选物理开关与速度门控
+
+前三项扩展已经是运行时开关，关闭时不分配中性队列、不加载中性 package，也不执行材料 radiation-length 查询或 secondary Bohr 随机采样：
+
+```yaml
+enable_ct_material_mcs: false
+enable_secondary_energy_straggling: false
+enable_neutral_transport: false
+neutral_transport_mode: first_interaction  # 仅在 neutral=true 时生效
+```
+
+对应的独立 smoke 配置见
+[`config/beam_ct_physics_extensions_smoke.yaml`](config/beam_ct_physics_extensions_smoke.yaml)。该配置默认把三项都打开，生产 `best/medium/fast` 配置则显式写出 secondary straggling 为 `false`，避免把默认值误认为物理过程已经启用。
+
+1,000 histories 的 smoke 主要测启动与分配开销，不能用于估计稳态吞吐。使用同一 37° TPS-source CT smoke、NVIDIA TITAN RTX、10M histories，并将队列扩大到 `secondary=48M`、`neutral=24M` 以保证 `overflow=0`，得到：
+
+| 开关组合 | 运行时间 | 吞吐 |
+|---|---:|---:|
+| 三项关闭 | 109.708 s | 91.15 k histories/s |
+| 仅材料条件化 MCS | 110.509 s | 90.49 k histories/s |
+| 仅 secondary straggling | 119.343 s | 83.79 k histories/s |
+| 仅 neutral first-interaction | 113.657 s | 87.98 k histories/s |
+| 三项开启 | 121.832 s | 82.08 k histories/s |
+
+相对于三项关闭，10M 稳态吞吐损失分别约为材料 MCS 0.7%、secondary straggling 8.1%、neutral first-interaction 3.5%，三项同时开启 10.0%。每次运行的 backend 标签会记录 `ct-material-mcs`、`secondary-straggling` 和 `neutral-transport-first-interaction`，可以用于结果审计。高统计运行不能继续使用 100k 的队列容量，否则会截断二级粒子并使剂量不适合验证。
+
+在三项全开启、无队列溢出的条件下，两个独立 1M seed 的 37° CT 体素剂量总和差异为 0.010%；剂量高于峰值 10% 的体素中，绝对相对差异的中位数/95 百分位为 0.34%/1.11%。同一 seed 的 1M 与 10M（按 histories 归一化）总和差异为 0.51%，说明 1M 已可用于稳态速度和基本统计检查，但 10M 更适合作为最终 benchmark。
+
+衰变目前不设置一个会被静默忽略的 YAML 开关。现有 cascade package 没有携带衰变寿命、分支和 daughter kinematics，GPU 也没有 decay queue；在取得同版本 TOPAS 的 decay package 后，应以独立 `enable_decay` 开关接入，并在开启时强制要求 package 文件和生命周期表存在。
+
 ## 参考资料
 
 1. TOPAS, *Modular Physics Lists*, https://topas.readthedocs.io/en/3.6.1/parameters/physics/modular.html

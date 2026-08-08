@@ -319,8 +319,10 @@ CT plan 下 `number_of_histories` 为**整份计划**的统计预算，不是每
 - `best`：最终 dose + LET，严格 0.1 mm/0.1 MeV 输运并使用粒子特异停止本领；
 - `medium`：完整 dose physics，0.5 mm/1 MeV 次级策略，验收目标为 TOPAS
   global 2%/2 mm ≥99%；
-- `fast`：关闭 LET，1 mm/2 MeV 次级策略，验收目标为 TOPAS global
-  3%/3 mm ≥99%。
+- `fast`：默认关闭 LET，使用 1 mm/2 MeV 次级策略，验收目标为 TOPAS global
+  3%/3 mm ≥99%。如需同时输出 LET_d，可在 fast 配置中设置
+  `scorerLET: true`；此时仍使用 fast 的步长/局部沉积近似，LET 精度不等同于
+  `best`，但可用于快速趋势和敏感性分析。
 
 gamma 是新病例必须实测的验收条件，不是无条件保证。`accurate` 保留为旧 YAML
 兼容模式。参数契约、限制和 RT07575 示例见 [`structure.md`](structure.md)。

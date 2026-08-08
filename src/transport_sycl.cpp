@@ -1330,7 +1330,7 @@ inline std::uint32_t select_depth_conditioned_cascade_interaction(
     // Search the exact 2 MeV/u × 10 mm cell first, then expand in energy
     // before depth. This retains complete correlated final states and avoids
     // scanning the full projectile table in the device kernel.
-    constexpr std::uint32_t max_energy_radius = 13U;  // 26 MeV/u
+    constexpr std::uint32_t max_energy_radius = 5U;  // ±10 MeV/u parent-energy band
     constexpr std::uint32_t max_depth_radius = 8U;    // 80 mm
     for (std::uint32_t energy_radius = 0;
          energy_radius <= max_energy_radius; ++energy_radius) {
@@ -1397,11 +1397,9 @@ inline std::uint32_t select_depth_conditioned_cascade_interaction(
             }
         }
     }
-    // Sparse projectiles outside the reference E/depth support retain a
-    // correlated event instead of silently suppressing the cascade.
-    return sycl::min(
-        static_cast<std::uint32_t>(u01 * static_cast<float>(count)),
-        count - 1U);
+    // Prefer nearest energy over a full-table random draw (parent-energy mix).
+    return nearest_cascade_interaction(interactions, offset, count,
+                                       energy_MeV_per_u);
 }
 
 inline std::uint32_t select_binned_energy_cascade_interaction(
@@ -1412,7 +1410,8 @@ inline std::uint32_t select_binned_energy_cascade_interaction(
     const float u01) noexcept {
     const auto target_energy_bin =
         cascade_condition_energy_bin(energy_MeV_per_u);
-    constexpr std::uint32_t max_energy_radius = 13U;
+    // Keep parent-energy conditioning tight: ±5 × 2 MeV/u = ±10 MeV/u.
+    constexpr std::uint32_t max_energy_radius = 5U;
     for (std::uint32_t radius = 0; radius <= max_energy_radius; ++radius) {
         std::uint32_t range_begin[2]{};
         std::uint32_t range_count[2]{};
@@ -1453,9 +1452,9 @@ inline std::uint32_t select_binned_energy_cascade_interaction(
             pick -= range_count[range];
         }
     }
-    return sycl::min(
-        static_cast<std::uint32_t>(u01 * static_cast<float>(count)),
-        count - 1U);
+    // Never fall back to energy-unconditioned random full-table sampling.
+    return nearest_cascade_interaction(interactions, offset, count,
+                                       energy_MeV_per_u);
 }
 
 inline std::uint32_t select_cascade_interaction_conditioned(
@@ -1479,15 +1478,27 @@ inline std::uint32_t select_cascade_interaction_conditioned(
         interactions, offset, count, energy_MeV_per_u, u01);
 }
 
-// Scale correlated final-state KE to the true projectile energy. With the
-// tight selection band above, the natural scale is already near 1; keep a
-// narrow clamp so residual topologies cannot be hard-stretched.
-inline float cascade_event_energy_scale(const float current_energy_MeVu,
-                                        const float event_energy_MeVu) noexcept {
+// Topology-aware cascade energy scale (see transport_sycl_legacy.cpp).
+inline float cascade_event_energy_scale(
+    const float current_energy_MeVu,
+    const float event_energy_MeVu,
+    const float package_product_ke_MeV,
+    const int projectile_Z,
+    const int projectile_A) noexcept {
     if (!(event_energy_MeVu > 0.0F) || !(current_energy_MeVu > 0.0F)) {
         return 1.0F;
     }
     const auto scale = current_energy_MeVu / event_energy_MeVu;
+    const auto projectile_ke_MeV =
+        event_energy_MeVu * static_cast<float>(sycl::max(projectile_A, 1));
+    const auto product_frac =
+        package_product_ke_MeV / sycl::fmax(projectile_ke_MeV, 1.0e-6F);
+    if (product_frac < 0.35F) {
+        return sycl::clamp(scale, 0.97F, 1.03F);
+    }
+    if (projectile_Z > 0 && projectile_Z <= 2) {
+        return sycl::clamp(scale, 0.92F, 1.08F);
+    }
     return sycl::clamp(scale, 0.85F, 1.18F);
 }
 
@@ -3886,6 +3897,9 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
         config.secondary_local_deposit_cutoff_MeV > 0.0
             ? config.secondary_local_deposit_cutoff_MeV
             : config.energy_cutoff_MeV);
+    // 0 = transport all supported charged Z; else Z >= min deposit as local heat.
+    const auto secondary_heavy_local_deposit_z_min =
+        config.secondary_heavy_local_deposit_z_min;
     const auto secondary_condensed_step_mm =
         static_cast<float>(config.secondary_condensed_step_mm);
     const auto enable_energy_straggling = config.enable_energy_straggling;
@@ -5861,29 +5875,50 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                                 } else if (is_supported) {
                                     package_accounted_ke_MeV +=
                                         scaled_secondary_energy_MeV;
-                                    ++queueable_count;
-                                    queueable_energy_MeV +=
-                                        scaled_secondary_energy_MeV;
-                                    // Birth spectrum before queue fit so overflow
-                                    // does not bias production diagnostics.
-                                    const auto child_direction = rotate_local_direction(
-                                        secondary.direction_x,
-                                        secondary.direction_y,
-                                        secondary.direction_z,
-                                        Direction3F{direction_x, direction_y,
-                                                    direction_z});
-                                    score_fragment_birth_device(
-                                        birth_counts_device, birth_ke_sum_device,
-                                        birth_mevu_hist_device, birth_depth_hist_device,
-                                        number_of_bins, depth_bin_width_mm,
-                                        birth_cos_hist_device,
-                                        birth_parent_mevu_hist_device,
-                                        birth_parent_z_hist_device,
-                                        birth_parent_product_mevu_hist_device,
-                                        secondary.atomic_number, secondary.mass_number,
-                                        scaled_secondary_energy_MeV, position_z_mm,
-                                        child_direction.z, /*generation=*/0,
-                                        /*parent_Z=*/6, /*parent_A=*/12, energy_MeV);
+                                    const auto heavy_local =
+                                        secondary_heavy_local_deposit_z_min > 0 &&
+                                        secondary.atomic_number >=
+                                            secondary_heavy_local_deposit_z_min;
+                                    if (heavy_local) {
+                                        // Ablation: Li+ kinetic energy → local heat
+                                        // (not charged secondary transport).
+                                        deposit_local_heat_device(
+                                            scaled_secondary_energy_MeV, position_x_mm,
+                                            position_y_mm, position_z_mm, direction_x,
+                                            direction_y, direction_z, depth_bin_width_mm,
+                                            number_of_bins, enable_voxel_scoring,
+                                            voxel_min_x_mm, voxel_min_y_mm, voxel_size_x_mm,
+                                            voxel_size_y_mm, voxel_bins_x, voxel_bins_y,
+                                            voxel_plane_size, dose_device, nullptr, 0,
+                                            voxel_dose_device,
+                                            enable_charged_origin_voxel_scoring,
+                                            charged_origin_voxel_dose_device, 0);
+                                    } else {
+                                        ++queueable_count;
+                                        queueable_energy_MeV +=
+                                            scaled_secondary_energy_MeV;
+                                        // Birth spectrum before queue fit so overflow
+                                        // does not bias production diagnostics.
+                                        const auto child_direction =
+                                            rotate_local_direction(
+                                                secondary.direction_x,
+                                                secondary.direction_y,
+                                                secondary.direction_z,
+                                                Direction3F{direction_x, direction_y,
+                                                            direction_z});
+                                        score_fragment_birth_device(
+                                            birth_counts_device, birth_ke_sum_device,
+                                            birth_mevu_hist_device, birth_depth_hist_device,
+                                            number_of_bins, depth_bin_width_mm,
+                                            birth_cos_hist_device,
+                                            birth_parent_mevu_hist_device,
+                                            birth_parent_z_hist_device,
+                                            birth_parent_product_mevu_hist_device,
+                                            secondary.atomic_number, secondary.mass_number,
+                                            scaled_secondary_energy_MeV, position_z_mm,
+                                            child_direction.z, /*generation=*/0,
+                                            /*parent_Z=*/6, /*parent_A=*/12, energy_MeV);
+                                    }
                                 }
                                 // else: unsupported charged KE stays out of
                                 // package_accounted_ke_MeV → residual local heat (not
@@ -5913,7 +5948,11 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                                         const auto is_supported =
                                             secondary.atomic_number > 0 &&
                                             secondary.mass_number > 0;
-                                        if (is_supported) {
+                                        const auto heavy_local =
+                                            secondary_heavy_local_deposit_z_min > 0 &&
+                                            secondary.atomic_number >=
+                                                secondary_heavy_local_deposit_z_min;
+                                        if (is_supported && !heavy_local) {
                                             const auto origin_category =
                                                 charged_dose_category(
                                                     secondary.atomic_number,
@@ -7175,9 +7214,20 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                                             cascade_condition_on_reference_depth);
                                     const auto interaction = cascade_interactions_device[
                                         projectile.interaction_offset + selected];
+                                    auto package_product_ke_MeV = 0.0F;
+                                    for (std::uint32_t product_index = 0;
+                                         product_index < interaction.product_count;
+                                         ++product_index) {
+                                        package_product_ke_MeV +=
+                                            cascade_products_device
+                                                [interaction.product_offset + product_index]
+                                                    .kinetic_energy_MeV;
+                                    }
                                     const auto energy_scale = cascade_event_energy_scale(
                                         current_energy_MeVu,
-                                        interaction.incident_energy_MeV_per_u);
+                                        interaction.incident_energy_MeV_per_u,
+                                        package_product_ke_MeV, atomic_number,
+                                        mass_number);
                                     cascade_summary.interaction_count = 1;
                                     profile_add(profile_counters_device,
                                                 TransportProfileSlot::secondary_cascade);
@@ -7243,30 +7293,49 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                                             }
                                         } else if (supported) {
                                             package_accounted_ke_MeV += scaled_energy;
-                                            ++queueable_count;
-                                            queueable_energy += scaled_energy;
-                                            const auto child_direction =
-                                                rotate_local_direction(
-                                                    product.direction_x,
-                                                    product.direction_y,
-                                                    product.direction_z,
-                                                    Direction3F{direction_x, direction_y,
-                                                                direction_z});
-                                            score_fragment_birth_device(
-                                                birth_counts_device, birth_ke_sum_device,
-                                                birth_mevu_hist_device,
-                                                birth_depth_hist_device, number_of_bins,
-                                                depth_bin_width_mm, birth_cos_hist_device,
-                                                birth_parent_mevu_hist_device,
-                                                birth_parent_z_hist_device,
-                                                birth_parent_product_mevu_hist_device,
-                                                product.atomic_number, product.mass_number,
-                                                scaled_energy, position_z_mm,
-                                                child_direction.z,
-                                                static_cast<std::uint8_t>(
-                                                    particle.generation + 1),
-                                                particle.atomic_number,
-                                                particle.mass_number, energy_MeV);
+                                            const auto heavy_local =
+                                                secondary_heavy_local_deposit_z_min > 0 &&
+                                                product.atomic_number >=
+                                                    secondary_heavy_local_deposit_z_min;
+                                            if (heavy_local) {
+                                                deposit_local_heat_device(
+                                                    scaled_energy, position_x_mm,
+                                                    position_y_mm, position_z_mm,
+                                                    direction_x, direction_y, direction_z,
+                                                    depth_bin_width_mm, number_of_bins,
+                                                    enable_voxel_scoring, voxel_min_x_mm,
+                                                    voxel_min_y_mm, voxel_size_x_mm,
+                                                    voxel_size_y_mm, voxel_bins_x,
+                                                    voxel_bins_y, voxel_plane_size,
+                                                    dose_device, nullptr, 0, voxel_dose_device,
+                                                    enable_charged_origin_voxel_scoring,
+                                                    charged_origin_voxel_dose_device, 0);
+                                            } else {
+                                                ++queueable_count;
+                                                queueable_energy += scaled_energy;
+                                                const auto child_direction =
+                                                    rotate_local_direction(
+                                                        product.direction_x,
+                                                        product.direction_y,
+                                                        product.direction_z,
+                                                        Direction3F{direction_x, direction_y,
+                                                                    direction_z});
+                                                score_fragment_birth_device(
+                                                    birth_counts_device, birth_ke_sum_device,
+                                                    birth_mevu_hist_device,
+                                                    birth_depth_hist_device, number_of_bins,
+                                                    depth_bin_width_mm, birth_cos_hist_device,
+                                                    birth_parent_mevu_hist_device,
+                                                    birth_parent_z_hist_device,
+                                                    birth_parent_product_mevu_hist_device,
+                                                    product.atomic_number, product.mass_number,
+                                                    scaled_energy, position_z_mm,
+                                                    child_direction.z,
+                                                    static_cast<std::uint8_t>(
+                                                        particle.generation + 1),
+                                                    particle.atomic_number,
+                                                    particle.mass_number, energy_MeV);
+                                            }
                                         }
                                         // else: unsupported charged → residual local heat.
                                     }
@@ -7289,8 +7358,13 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                                                  ++product_index) {
                                                 const auto product = cascade_products_device[
                                                     interaction.product_offset + product_index];
+                                                const auto heavy_local =
+                                                    secondary_heavy_local_deposit_z_min > 0 &&
+                                                    product.atomic_number >=
+                                                        secondary_heavy_local_deposit_z_min;
                                                 if (product.atomic_number > 0 &&
-                                                    product.mass_number > 0) {
+                                                    product.mass_number > 0 &&
+                                                    !heavy_local) {
                                                     const auto child_direction =
                                                         rotate_local_direction(
                                                             product.direction_x,

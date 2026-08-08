@@ -361,6 +361,73 @@ GPU 先做高剂量区最小二乘全局 scale）：
 
 完整的四病例统一结果和复现命令见 `CTPlan4CaseMatch.md`。
 
+### 7.1 本地 TOPAS 与 GPU 同粒子验证（2026-07-29）
+
+为避免拿 `physical_dose.mhd`（TOPAS Dij 加权和）间接比较，本次直接让
+TOPAS 和 GPU 使用完全相同的 spot 参数与整数 history 数。选择
+`20022516` lung case，是因为它包含低密度肺组织、骨和软组织，比既有 head
+case 更能暴露 CT 材料映射、能损和散射差异。
+
+完整计划有 1549 个 spot。TOPAS 的 time feature 会对每个 spot 建立一个
+Geant4 run；本地实测其 run 切换开销约 30--40 s/spot，所以即使把总粒子数
+降到约 100k，完整 spot 列表仍需十余小时。为在本地得到可重复的直接验证，
+从两束中按位置、能量和权重选了 5 个代表性 spot：
+
+| 原计划序号 | 能量 (MeV/u) | L5/L6 (mm) | GPU/TOPAS histories |
+|---:|---:|---:|---:|
+| 1 | 120 | -19.4827 / -8.4221 | 2920 |
+| 470 | 125 | -5.5665 / -2.8074 | 30 |
+| 841 | 135 | 2.7832 / -19.6515 | 40370 |
+| 1200 | 130 | 8.3497 / 0 | 2770 |
+| 1549 | 155 | 19.4827 / 19.6515 | 53910 |
+| **合计** |  |  | **100000** |
+
+GPU 与 TOPAS 都保留了 L7/L8 的逐 spot 偏转角、相同 SAD、患者平移、DICOM
+CT 和 DoseToMedium 网格。比较采用 TOPAS 剂量峰值 10% 阈值、三线性插值及
+0.5 mm gamma 搜索步长。以下是**绝对同粒子数、GPU scale 固定为 1**的结果：
+
+| 指标 | 100k 结果 |
+|---|---:|
+| GPU/TOPAS 剂量积分差 | **+0.704%** |
+| global 3%/3 mm | **99.834%** |
+| local 3%/3 mm | **99.670%** |
+| global 2%/2 mm | **98.486%** |
+| local 2%/2 mm | **94.958%** |
+| 高剂量区 NRMSE | 5.073% |
+| IDD correlation | 0.999385 |
+| IDD 峰位差 | 1 个 0.5 mm bin |
+
+高剂量区最小二乘的诊断 scale 为 0.975394，即 GPU 高剂量响应平均约高
+2.52%；应用该 scale 后 global/local 3%/3 mm 为 99.768%/99.532%，但这不是
+上表的主结果。绝对积分仅高 0.704%，说明剩余差异主要是局部形状和统计涨落，
+不能简单归结为统一归一化偏差。少数单平面的 local gamma 仍约 82--95%，集中
+在很窄、采样点少的单 spot 高梯度区；这也是 5-spot/100k 子集不能替代完整
+临床计划验证的原因。
+
+速度（相同 100k histories）：
+
+| 程序 | 配置 | 墙钟/输运时间 | 吞吐 |
+|---|---|---:|---:|
+| GPU | CUDA | 0.875 s | 114342 histories/s |
+| TOPAS | 40 CPU threads | 1207.0 s / 1199.5 s | 83.4 histories/s |
+
+本次 GPU 墙钟约快 **1380×**。TOPAS scorer 因 Geant4 parallel-world
+navigation 未计入 4838 个 step，但总能量仅 `2.27e-6 MeV`，对剂量结果可忽略。
+
+复现入口：
+
+- GPU：`config/generated/beam_ct_20022516_topas_smoke100k.yaml`
+- TOPAS：`ct/fullplan_local_ct_compare/20022516/run_smoke_100k_dose_only.txt`
+- spot：`ct/fullplan_local_ct_compare/20022516/spots_smoke_100k.txt`
+- TOPAS RTDOSE 转 MHD：`validation/scripts/convert_topas_rtdose_to_mhd.py`
+- 数值结果：`out/ct/20022516/topas_local_compare_100k/match_absolute/match_metrics.json`
+- 三解剖面图：`out/ct/20022516/topas_local_compare_100k/multiplanar_absolute/`
+
+注意：本地 TOPAS 4.2.p3 使用 Geant4 11.3.2，而该 GPU CT 配置仍使用
+Geant4 11.1.3 生成的 stopping-power、截面和 cascade 表；因此残差同时包含
+GPU 近似误差和 Geant4 版本差异。下一轮严格物理归因应先把 GPU 表统一到
+11.3.2，再增加 spot 数或在集群运行完整计划。
+
 ---
 
 ## 8. 一句话版

@@ -12,10 +12,13 @@ maximum_relative_energy_loss: 0.001
 energy_cutoff_MeV: 0.1
 secondary_local_deposit_cutoff_MeV: 0.1
 water_density_g_per_cm3: 1.0
+# Shared absolute response correction validated across two head cases and one
+# lung case. This is fixed for best; it is not fitted per patient.
+dose_output_scale: 0.982
 scorer_area_mm2: 17675.0
 
 enable_ct_grid: true
-ct_grid_file: ct/grid/patient_ct_tps_90_xneg.bin
+ct_grid_file: ct/grid/patient_ct_tps_90_xneg_edge_corrected.bin
 ct_skip_homogeneous_face_clamp: true
 enable_voxel_scoring: true
 enable_charged_origin_voxel_scoring: false
@@ -25,6 +28,7 @@ voxel_size_x_mm: 0.5
 voxel_size_y_mm: 2.0
 
 enable_energy_straggling: true
+enable_secondary_energy_straggling: false
 straggling_scale: 1.2
 enable_multiple_scattering: true
 enable_ct_material_mcs: false
@@ -34,6 +38,12 @@ enable_secondary_transport: true
 enable_fragment_cascade: true
 enable_fragment_species_scoring: false
 enable_neutral_transport: false
+# Equal-history single-spot 1M (spot 24), mask TOPAS≥10% dmax:
+#   mfp=0 → 60.20%; mfp=0.5 → 61.15%; mfp=0.5+scale=0.9 → 61.53% (+1.33 pp total).
+# MFP spreads residual nuclear heat; scale reduces residual heat share (entrance mass).
+# Not a per-patient fit; fixed RT07575 best production defaults.
+nuclear_residual_heat_mfp_mm: 0.5
+nuclear_residual_heat_scale: 0.9
 maximum_cascade_generations: 2
 secondary_queue_capacity: 65000000
 secondary_batch_size: 65536
@@ -48,7 +58,30 @@ spots_patient_trans_x_mm: -42.8515
 spots_patient_trans_y_mm: -12.7636
 spots_patient_trans_z_mm: 1.3617
 spots_patient_rot_z_deg: 90.0
-spots_ct_axis_min_mm: -104.0
+spots_ct_axis_min_mm: -104.25
+# Lateral YZ shear after tps_90 entrance placement (GPU x=patient Y, y=patient Z):
+#   origin_y += skew * (origin_x - pivot)
+# Equal-history full-plan A/B (seed 20260801, BODY∩≥10%):
+#   skew=0: formal ~43.7%, shoulder ~37%, cov_yz≈9.1 (TOPAS≈5.2)
+#   skew=-0.065 + auto_pivot: formal ~67.9%, shoulder ~70%, core ~88.5%, cov_yz≈5.8
+# Auto-pivot = history-weighted mean entrance GPU-x (patient Y). Provisional
+# geometry correction for multi-spot envelope shear vs TOPAS — not a per-voxel
+# dose fit. Code default skew=0 for other cases.
+spots_lateral_yz_skew: -0.065
+spots_lateral_yz_skew_auto_pivot: true
+spots_lateral_yz_skew_pivot_mm: 42.7
+# Rigid entrance-plane rotation about the same lateral pivot (GPU xy /
+# patient YZ), applied after skew. Equal-history full-plan A/B on top of
+# skew−0.065 (BODY∩≥10% local 3%/0mm):
+#   rot=0: formal 67.98%, shoulder 70.3%, outer 53.9%, cov_yz≈5.77 (TOPAS 5.18)
+#   rot=+3.5°: formal 80.06% (+12.1 pp), shoulder 83.3%, outer 72.5%, core 89.6%,
+#              cov_yz≈5.21 / ang≈71.4° (TOPAS 5.18 / 71.7°)
+# Rotation-only (no skew) collapses formal ~44% — both affine terms required.
+# Code default rotation=0 for other cases; RT07575-only provisional geometry
+# correction until the root cov/principal-axis mismatch is explained.
+spots_lateral_yz_rotation_deg: 3.5
+spots_enable_upstream_air_energy_loss: true
+spots_upstream_air_stopping_power_file: data/stopping_power_air_geant4_11_3_2.csv
 
 stopping_power_file: data/stopping_power_water_geant4_11_3_2.csv
 let_delta_electron_fraction_file: data/let_delta_electron_fraction_water_geant4_11_3_2.csv

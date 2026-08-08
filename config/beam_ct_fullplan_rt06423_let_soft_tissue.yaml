@@ -12,6 +12,9 @@ maximum_relative_energy_loss: 0.001
 energy_cutoff_MeV: 0.1
 secondary_local_deposit_cutoff_MeV: 0.1
 water_density_g_per_cm3: 1.0
+# Shared absolute response correction validated across two head cases and one
+# lung case. This is fixed for best; it is not fitted per patient.
+dose_output_scale: 0.982
 scorer_area_mm2: 14960.0
 
 enable_ct_grid: true
@@ -25,6 +28,7 @@ voxel_size_x_mm: 0.5
 voxel_size_y_mm: 2.0
 
 enable_energy_straggling: true
+enable_secondary_energy_straggling: false
 straggling_scale: 1.2
 enable_multiple_scattering: true
 enable_ct_material_mcs: false
