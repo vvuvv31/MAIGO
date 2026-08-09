@@ -1,429 +1,138 @@
-# CT 蒙卡结果总表
+# CT 患者剂量与 LET 验证结果
 
-本文汇总截至 **2026-08-04** 的患者 CT、CT 中 LET、CT minibeam 和
-RT07575 minibeam plan 验证。详细几何推导见 `ctplan.md`，minibeam 的逐步物理
-修复见 `minibeam.md`，LET 后续路线见 `futureStep.md`。本文只保留最终结果、
-关键中间结论、运行参数和可复现路径。
+本文汇总截至 **2026-08-09** 有完整证据链的患者 CT 蒙特卡罗比较。常规宽束采用独立 TOPAS
+full-plan scorer；RT07575 minibeam 采用 TOPAS 逐 spot sparse-Dij 与 matRad
+优化权重的乘积。两类参考的统计含义不同，不能直接互称为 full-plan TOPAS。
+几何与输入生成方法见 [ctplan.md](ctplan.md)。
 
-病例分档文档：
+## 1. 统一比较口径
 
-- [RT06423 head](ct/RT06423.md)
-- [RT07575 head](ct/RT07575.md)
-- [RT06541 head（TOPAS 数据无效）](ct/RT06541.md)
-- [20022516 lung](ct/20022516.md)
+当前 rotation-fixed 常规束 GPU 与 TOPAS 使用相同的正权重 spot 整数粒子分配，剂量采用绝对标度
+`scale=1`，不拟合归一化。比较前将参考和评价剂量在 RTSTRUCT BODY 外同时置零；
+评价集合为 `BODY ∩ raw TOPAS dose >= 10% BODY Dmax`。
 
-## 1. 结果口径
+当前常规束权威汇总只报告全部选择体素上的 3%/0 mm identical-voxel 通过率；
+`G/L` 分别表示以参考峰值和参考局部值定义剂量容差的 global/local 通过率，
+`E/R` 表示选择集内 evaluation/reference。机器可读结果见
+[rotation-fixed summary](out/ct/generic_rotation_fix_equal_history/final_summary.json)。
 
-不同阶段使用过两种参考，数值不能直接混表：
+Minibeam 也采用 BODY 和参考剂量 10% 阈值，但非零 DTA 只在固定 seed-0 的至多
+50,000 个选择体素上计算；0.3/0.5 mm DTA 的搜索步长为 0.1 mm，1/2/3 mm 为
+0.5 mm，0 mm 使用全部选择体素。
 
-1. **10M plan-shape 验证**：GPU 对 `physical_dose.mhd`（TOPAS 单 spot Dij
-   乘优化权重），在高剂量区拟合一个全局 scale。它验证几何、权重顺序和剂量
-   形状，不是独立 full-plan TOPAS 盲测。
-2. **严格同粒子 full-plan**：GPU 与 TOPAS 使用完全相同的正权重 spot integer
-   L4 allocation，GPU scale 固定为 1。两边先用 RTSTRUCT BODY 去除体外空气，
-   gamma mask 为 `BODY ∩ TOPAS dose >= 10% BODY Dmax`。这是当前 dose/LET 的
-   权威结果。
+## 2. 病例证据状态
 
-除非单独注明，gamma 为 3D、评价剂量三线性插值；有 DTA 的常规搜索步长为
-0.5 mm，亚毫米 minibeam 为 0.1 mm。LET gamma 使用 **TOPAS dose 的 10% mask**，
-不使用 LET 自身阈值。
+| Case | 解剖与几何 | 当前可报告状态 | 处理 |
+|---|---|---|---|
+| RT06423 | head，TPS 90° | rotation-fixed 严格同粒子常规束 dose | 纳入 |
+| RT07575 | head，TPS 90° | rotation-fixed 严格同粒子常规束 dose；另有 minibeam | 纳入并分节报告 |
+| 20022516 | lung，TPS 0° | rotation-fixed 严格同粒子常规束 dose | 纳入 |
+| RT06541 | head，TPS 270° | 已有 TOPAS full-plan 数据被确认无效 | 排除 |
 
-## 2. Case、几何与粒子预算
+RT06541 的旧 fitted-scale Dij shape 回归不能作为独立 TOPAS 验证。20022516 的
+5-spot 子集和旧 10M plan-shape 回归也不能替代这里的完整 full-plan 比较。
 
-| Case | 解剖 | TPS角 | GPU几何 | spots（active） | Dij histories/spot | 当前严格 full-plan histories |
-|---|---|---:|---|---:|---:|---:|
-| RT06423 | head | 90° | `tps_90`, patient −X depth | 1102（1015） | 50k | 15,108,664 |
-| RT07575 | head | 90° | `tps_90`, patient −X depth | 917（853） | 50k | 12,963,817 |
-| RT06541 | head | 270° | 保留 L7/L8 偏转 | 983（924） | 50k | **不采用：TOPAS数据有问题** |
-| 20022516 | lung | 0° | `tps_gantry_y`, patient +Y depth | 1549（1234） | 100k | 17,717,177（TOPAS已到，GPU待跑） |
+## 3. 常规束 full-plan
 
-20022516 完整物理计划名义粒子数为 1,771,717,720；集群 TOPAS 使用整数
-`K=100`，实际输运 17,717,177 histories，dose 乘 100，LET_d 是比值而不缩放。
-任意机架角另可使用 opt-in `tpsSource: true`；默认旧 CT example 路径不变。
+### 3.1 Rotation-fixed equal-history dose
 
-## 3. 普通 CT GPU 生产参数
-
-当前最终 dose+LET 使用 `physics_profile: best`。RT06423/RT07575 的配置分别为
-`config/beam_ct_fullplan_rt06423_let_soft_tissue.yaml` 和
-`config/beam_ct_fullplan_rt07575_let_soft_tissue.yaml`。
-
-| 参数 | best 值 |
-|---|---|
-| device | CUDA，NVIDIA TITAN RTX，driver CUDA 12.6 |
-| `maximum_step_mm` | 0.1 mm |
-| `maximum_relative_energy_loss` | 0.001 |
-| primary / secondary cutoff | 0.1 / 0.1 MeV |
-| voxel spacing | 0.5 × 0.5 × 2.0 mm³（beam frame 为 0.5 × 2 × 0.5 mm³） |
-| dose response scale | 0.982，三病例共享，不按患者拟合 |
-| straggling | enabled，scale 1.2 |
-| MCS | enabled；普通 CT 当前 `enable_ct_material_mcs=false` |
-| nuclear chain | primary attenuation + direct secondary + charged transport + cascade |
-| cascade generations | 2 |
-| neutral transport | off（正式 neutron/gamma package 尚未建立） |
-| stopping power | Geant4 11.3.2；50 isotope particle-specific tables |
-| material tables | lung / Schneider soft tissue / bone ion stopping power与截面 |
-| primary/cascade final state | 100k soft-tissue INCL++ correlated packages |
-| secondary queue | 65M；batch 65,536；energy sorting enabled |
-| memory budget | 84%；估算约 9.4 GiB |
-| LET scorer | enabled，primary C-12 与 all-hadron LET_d |
-
-`medium` 保留完整 dose chain、最大相对能损 0.005；`fast` 保留 dose chain、最大
-相对能损 0.01 并禁止 LET。两者不允许与 minibeam 同时启用，在完成更多跨病例
-TOPAS 门禁前属于 preview；最终 dose/LET 应使用 best。
-
-## 4. 严格同粒子普通 CT full-plan：dose
-
-以下是 BODY 内、absolute scale=1 的权威 GPU/TOPAS 结果：
-
-| Case | histories | NRMSE | integral Δ | G/L 3%/3mm | G/L 2%/2mm | G/L 1%/1mm | G/L 3%/0mm |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| RT06423 | 15.109M | 2.379% | +0.704% | 99.9997 / 99.9866 | 99.9815 / 99.4565 | 91.3153 / 71.2856 | 80.7940 / 49.4963 |
-| RT07575 | 12.964M | 2.484% | +0.581% | 99.9994 / 99.9442 | 99.9040 / 98.8121 | 90.8177 / 67.9095 | 78.2618 / 41.9709 |
-
-两例 IDD peak bin 完全一致，IDD correlation 分别为 0.9999977 和 0.9999984。
-严格 3%/0 mm/local 对逐体素噪声和低剂量容差非常敏感；它明显低于有 DTA 的
-gamma，但不表示几何或射程失败。
-
-### 4.1 时间与速度
-
-| Case | GPU elapsed | GPU throughput | GPU kernels（primary/secondary） | TOPAS 56T execution / wall | TOPAS throughput | wall speedup |
+| Case | GPU / TOPAS histories | GPU seed | selected voxels | NRMSE | selected E/R | G/L 3%/0mm |
 |---|---:|---:|---:|---:|---:|---:|
-| RT06423 | 237.24 s | 63.69k/s | 138.12 / 93.40 s | 76,027.65 / 76,039.1 s | 198.73/s | 320.5× |
-| RT07575 | 212.17 s | 61.10k/s | 116.00 / 90.57 s | 42,506.77 / 42,517.4 s | 304.98/s | 200.4× |
+| RT07575 | 12,963,817 / 12,963,817 | 20260801 | 318,711 | 1.000210% | 0.997578 | 98.4610 / 81.4493% |
+| RT06423 | 15,108,664 / 15,108,664 | 20260730 | 335,807 | 1.090661% | 0.997912 | 97.8491 / 80.7348% |
+| 20022516 | 17,717,177 / 17,717,177 | 20260802 | 755,302 | 1.171132% | 0.992402 | 97.6631 / 68.9863% |
 
-两例 secondary/cascade queue overflow 均为 0；GPU energy-balance error 分别为
-2.28e-6 和 4.03e-6。
+TOPAS 剂量直接读取原始 scorer；MHD 副本只用于转换完整性检查。三个 case 均采用
+`physics_profile: best`、中性的 lateral affine（skew/rotation 均为 0），并启用相同的通用 residual-heat 和
+upstream-air 设置。详细配置、history 四向核对和输入路径见
+[rotation-fixed summary](out/ct/generic_rotation_fix_equal_history/final_summary.md)。
 
-## 5. 严格同粒子普通 CT full-plan：LET_d
+### 3.2 Runtime 与当前 LET 边界
 
-定义为 dose-averaged electronic LET，单位 `MeV/mm/(g/cm3)`。当前 all-hadron
-LET 的相关性很高，但绝对均值仍系统偏高；global gamma 接近饱和，local gamma
-明显落后于 dose。
-
-| Case | TOPAS/GPU mean | mean relative bias | Pearson r | G/L 3%/3mm | G/L 2%/2mm | G/L 1%/1mm | G/L 3%/0mm |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| RT06423 | 41.898 / 43.644 | +8.624% | 0.99494 | 99.9946 / 90.9841 | 99.9205 / 73.0092 | 82.1993 / 41.8365 | 87.8820 / 19.7911 |
-| RT07575 | 39.081 / 41.147 | +10.234% | 0.99451 | 99.9965 / 86.1031 | 99.9366 / 68.8561 | 81.3376 / 38.5691 | 88.7004 / 17.2605 |
-
-primary C-12 LET 已较好：RT06423/RT07575 的 Pearson r 约 0.9965，平均偏差约
--0.94% 和同量级。all-hadron 剩余误差主要来自 fragment species、材料条件化
-末态及低能离子 LET，而不是主碳射程。
-
-已验证的 LET 改进：
-
-- secondary local-deposit cutoff 从 1.0 降至 0.1 MeV，吞吐约下降 12.8%；
-- 50 isotope 表相对 32 isotope 只有小幅增益；
-- material ion stopping power + 100k INCL++ package 是当前 best 主线；
-- case-specific LET 乘子、按患者拟合 SP/MCS 不作为生产方案。
-
-## 6. 历史四病例 10M plan-shape 验证
-
-本节使用 `physical_dose.mhd = TOPAS Dij·x`，高剂量区拟合全局 scale，因此只用于
-几何和形状回归。
-
-| Case | G/L 3%/3mm | G/L 2%/2mm | G/L 1%/1mm | G/L 3%/0mm | NRMSE |
-|---|---:|---:|---:|---:|---:|
-| RT07575 | 99.322 / 98.158 | 97.662 / 95.247 | 85.852 / 59.577 | 79.084 / 41.780 | 2.407% |
-| RT06423 | 99.858 / 98.490 | 97.943 / 92.788 | 79.694 / 53.385 | 82.451 / 45.516 | 2.275% |
-| RT06541 | 99.912 / 98.759 | 98.282 / 92.070 | 71.464 / 44.927 | 77.879 / 37.793 | 2.576% |
-| 20022516 | 99.778 / 98.969 | 98.316 / 94.853 | 79.117 / 53.565 | 79.150 / 34.485 | 2.482% |
-
-RT06541 仅保留这份历史 Dij-shape 结果；后来复制的独立 full-plan TOPAS 数据已
-确认有问题并删除，不能用来声称严格同粒子 match。
-
-20022516 10M GPU 用时 52.20 s、191.58k histories/s，primary/secondary kernel
-42.22/7.34 s，overflow=0。它证明 lung 的 `tps_gantry_y`、逐 spot L7/L8 偏转
-和低密度 CT 路径闭环成立。
-
-## 7. 20022516 lung 的直接 TOPAS/GPU 子集验证
-
-选取 5 个代表性 spot，GPU/TOPAS 严格同为 100k histories、scale=1：
-
-| 指标 | 结果 |
-|---|---:|
-| integral Δ GPU/TOPAS | +0.704% |
-| G/L 3%/3mm | 99.834 / 99.670% |
-| G/L 2%/2mm | 98.486 / 94.958% |
-| NRMSE / IDD correlation | 5.073% / 0.999385 |
-| GPU | 0.875 s，114.34k/s |
-| TOPAS 40T | 1207.0 s wall，83.4/s |
-| speedup | 约 1380× |
-
-新复制的完整 lung TOPAS 使用 17,717,177 histories、56 tasks，execution
-156,934.43 s、wall 156,950 s（43.60 h），平均约 112.90 histories/s、有效
-48.37 CPU cores。dose、primary-C12 LET 和 all-hadron LET 文件均已到本地；
-其中未计分导航能量至多 0.02198 MeV，可忽略。**尚未运行严格同粒子 best GPU
-及统一 BODY dose/LET gamma，因此不能把旧 10M 拟合结果当作该 full-plan 结果。**
-
-## 8. CT 网格、材料与性能结论
-
-- CCTG origin 必须是首体素 low edge，不是中心；旧 half-voxel 约定会造成
-  0.25 mm minibeam phase error。
-- v1 CCTG 不得把诊断用全 1 `mass_sp_za_rel` 当 Schneider mass-SP；修复后
-  lung/bone 使用配置中的 absolute material tables。
-- 2×2×2 mm CT 下采样对普通 full-plan 的端到端加速可忽略，次级输运主导；
-  不作为生产优化。
-- source 必须保留 L7/L8 微角和 SAD，不能把所有 spot 固定为理想 90°/0°。
-- GPU/TOPAS 若不使用相同 Geant4 版本的 SP、XS 和 final-state package，残差
-  同时包含版本差异，不能只归因于 GPU kernel。
-
-## 9. 异质 CT/minibeam 材料验证
-
-200 MeV/u、100k histories 的 lateral / longitudinal / combined 多材料 phantom：
-
-| 场景 | GPU throughput | TOPAS 40T | depth L1 | integral ratio | G/L 3%/1mm | ΔR80 |
-|---|---:|---:|---:|---:|---:|---:|
-| 横向多材料 | 54.80k/s | 234.70 s | 1.326% | 0.9996 | 100.00 / 94.44% | +0.120 mm |
-| 纵向多层 | 53.18k/s | 247.16 s | 1.288% | 1.0027 | 98.77 / 95.71% | -0.015 mm |
-| 横纵组合 | 51.89k/s | 233.53 s | 1.095% | 1.0063 | 100.00 / 96.15% | -0.024 mm |
-
-最复杂场景提高到 1M 后，production 为 93.83k/s、depth local 3%/1mm
-96.15%；high-accuracy 为 23.23k/s、99.36%，约慢 4.04×。严格步长改善材料
-界面和部分 lateral gamma，但不能修复深部 fragment-dominated 区域。
-
-## 10. 20022516 lung CT 单平面 minibeam
-
-共同几何：200 MeV/u，50×50 mm 平面源，60 mm 铜准直器，15 条 slit，宽
-0.5 mm、pitch 3.6 mm，准直器出口到 CT 60 mm，dose grid 0.5×0.5×2 mm³，
-LET off。必须把 TOPAS source/snout 平移到 patient-local 中心，否则会穿过
-完全不同的肺路径。
-
-| GPU 参数 | production | high-accuracy |
-|---|---:|---:|
-| `maximum_step_mm` | 0.2 mm | 0.1 mm |
-| `maximum_relative_energy_loss` | 0.005 | 0.001 |
-| copper max step | 0.25 mm | 0.25 mm |
-| copper MCS scale | 0.785 | 0.785 |
-| copper nuclear/reaction products | on | on |
-| neutral mode | first interaction | first interaction |
-| dose scale | absolute equal-history；不拟合 | absolute equal-history；不拟合 |
-
-### 10.1 统计与物理结果
-
-| 比较 | integral Δ | NRMSE | ΔR80 | G/L 3%/0.3mm | G/L 3%/0.5mm |
-|---|---:|---:|---:|---:|---:|
-| 1M GPU production vs 1M TOPAS | +5.626% | 5.657% | +0.243 mm | 89.249 / 47.656% | — |
-| 1M GPU high-accuracy vs 1M TOPAS | +2.742% | 3.674% | +0.105 mm | 90.703 / 48.272% | — |
-| 10M GPU vs 5M TOPAS | +2.372% | 2.894% | — | 95.039 / 53.332% | — |
-| 20M GPU vs 10M TOPAS | +2.530% | 2.740% | — | **96.462 / 55.464%** | **96.955 / 62.428%** |
-
-20M/10M 使用严格 history scale=0.5，不拟合 GPU。两个 5M TOPAS seed 自比的
-3%/0.3 mm 为 99.095/59.294%，两个 10M GPU seed 自比为 98.653/67.215%。
-因此 raw local 的主要限制是有限统计、0.5 mm scorer 对 0.3 mm DTA 的欠采样，
-以及约 2.5% 的 PVDR/积分系统差。uncertainty-aware local 3%/0.3 mm 为
-1σ 67.874%、2σ 81.231%。
-
-### 10.2 时间
-
-| histories | GPU | TOPAS 40T |
-|---:|---:|---:|
-| 100k | 3.165 s（31.60k/s） | 291.50 s |
-| 1M production | 约21.1 s（47.4k/s） | 2259.91 s execution |
-| 1M high-accuracy | 57.42 s（17.42k/s） | 同一1M参考 |
-| 5M | — | 11034.71 / 11001.65 s（两个seed） |
-
-## 11. RT07575 优化 minibeam full-plan
-
-计划有 1943 spots、1617 个正权重 spot、`sum(w)=43165.516`，四个 subfield
-组成两个 opposed angles。minibeam 参数：100 mm copper、17 slits、宽0.7 mm、
-pitch 3 mm、half-length 50 mm；angle02 slit array offset 1.5 mm。输运启用
-copper EM、nuclear attenuation、charged reaction products、neutral first
-interaction、4 cascade generations和粒子特异 SP。LET 本轮关闭。
-
-| GPU 参数 | 值 |
-|---|---:|
-| numerical step / relative loss | 0.1 mm / 0.001 |
-| energy cutoff / secondary local deposit | 0.1 / 1.0 MeV |
-| dose output scale | 0.9858617637 |
-| copper density / radiation length | 8.96 g/cm³ / 12.8628 g/cm² |
-| copper max step / MCS scale | 0.25 mm / 0.785 |
-| copper straggling | off |
-| copper survivor energy-loss base scale | 0.956（另有100–400 MeV/u通用能量表） |
-| water primary stopping-power scale | 0.9958 |
-| low-energy MCS transition | 180 MeV/u |
-| low-energy primary / fragment MCS scale | 0.20 / 1.00 |
-| electronic build-up | fraction 0.06，MFP 0.5 mm，lateral sigma 0.5 mm |
-| maximum cascade / neutral generations | 4 / 1 |
-
-高统计参数：每个 seed 的 angle01/angle02 为 79,737,018 + 49,759,530；
-secondary queue 58M、neutral 70M、memory fraction 0.82，估算显存
-20,063/18,133 MiB，实测约18.6 GiB，所有 overflow=0。
-
-### 11.1 sparse Dij 阈值审计
-
-旧 `dose_limit=2e-6 Gy/spot/voxel` 删除了 87.281% nnz；其单 voxel 最坏累计
-遗漏 0.08633 Gy，等于 BODY peak 的 2.950%，几乎占满 3% 容差。GPU 逐 spot
-施加相同阈值后，BODY integral 从 +2.357% 变为 -0.165%，但 gamma 没提高：
-3%/0.3 mm 从 89.591/66.494% 降到 88.979/66.306%。阈值解释背景积分，不是
-严格 gamma 的主要误差源。builder 已把 cutoff 降为 2e-7 Gy并记录实际 dropped
-dose sum；最终物理调参应使用无阈值 reference。
-
-### 11.2 GPU–GPU 粒子数收敛
-
-两组完全独立 seed，BODY、10% threshold、scale=1。0 mm 使用全部体素；
-0.3/0.5 mm 收敛表使用固定50k样本。
-
-| histories/seed | G/L 1%/0mm | G/L 2%/0mm | G/L 3%/0mm | G/L 3%/0.3mm | G/L 3%/0.5mm | NRMSE |
-|---:|---:|---:|---:|---:|---:|---:|
-| 129.50M | 83.43 / 38.26 | 97.72 / 66.35 | 99.736 / 82.522 | 99.945 / 96.219 | 99.973 / 97.998 | 0.774% |
-| 258.99M | 92.62 / 51.30 | 99.58 / 80.44 | 99.985 / 92.488 | 99.995 / 98.811 | 99.999 / 99.416 | 0.551% |
-| 388.49M | 96.11 / 59.70 | 99.89 / 87.15 | 99.999 / 96.085 | 100 / 99.540 | 100 / 99.783 | 0.451% |
-| 517.99M | 97.64 / 66.17 | 99.98 / 91.00 | 100 / 97.720 | 100 / 99.766 | 100 / 99.898 | 0.390% |
-| **647.48M** | **98.49 / 71.06** | **99.991 / 93.557** | **100 / 98.664** | **100 / 99.899** | **100 / 99.960** | **0.349%** |
-
-最终双向 exact 3%/0 mm local 为 98.6552% 和 98.6721%。新增16个角度任务
-共用时 27,771.09 s（7.714 GPU h）；连同已有 batch，每个 seed 为647,482,740，
-两组总计1,294,965,480 histories。NRMSE 基本按 `1/sqrt(N)` 下降，证明同模型
-残差主要是统计涨落。下一步可让 TOPAS 使用同一粒子数；若 GPU/TOPAS 明显低于
-该 GPU/GPU 上限，差异来自 TOPAS统计或物理模型，而不是 GPU history 数。
-
-## 12. RT07575 非 minibeam：fast/best 双 seed 粒子数收敛
-
-本节验证普通 CT 路径，不启用 minibeam。构建为
-`build/oneapi-nvidia-release/carbon_mc`，CMake 使用
-`CARBON_ENABLE_MINIBEAM=OFF`、`CARBON_DOSE_FP32=ON`。`best` 保持完整 LET
-scoring，因此其时间包含 LET tally；本节的历史 `fast` 基准关闭 LET。当前 fast
-也支持通过 `scorerLET: true` 选择性启用 LET 输出，但仍使用 1 mm/2 MeV 次级近似，
-不应与 best 的 LET 精度直接等价。两档其余物理参数见第3节。
-
-seed 20260801作为reference，seed 20260802作为evaluation；相同 profile、spot
-权重、CT几何和绝对dose scale，gamma scale固定为1。每个预算均按原L4权重用
-Hamilton最大余数法分配整数 histories，并保证853个active spot各至少一个
-history。30M/60M 为避免65M secondary queue溢出，分别由3/6个独立10M batch的
-每primary剂量等权合并；所有有效batch的secondary/cascade overflow均为0。
-
-评价区域为 `BODY ∩ seed-1 dose >= 10% BODY Dmax`。33/22/11使用固定50k点、
-0.5 mm三线性搜索，30使用全部评价voxel。下表均为Global/Local：
-
-| profile | histories/seed | NRMSE | eval/ref integral | 3%/3mm | 2%/2mm | 1%/1mm | 3%/0mm |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| fast | 1M | 3.460% | 1.000178 | 99.964 / 99.940 | 99.550 / 99.180 | 89.148 / 68.292 | 68.841 / 31.030 |
-| fast | 3M | 2.072% | 1.000090 | 99.992 / 99.972 | 99.848 / 99.492 | 94.066 / 75.536 | 87.198 / 49.638 |
-| fast | 10M | 1.164% | 1.000028 | 100 / 99.992 | 99.988 / 99.656 | 97.424 / 80.678 | 97.599 / 74.700 |
-| fast | 30M | 0.684% | 0.999974 | 100 / 100 | 99.998 / 99.842 | 99.468 / 86.788 | 99.849 / 91.021 |
-| fast | 60M | 0.487% | 0.999995 | 100 / 99.994 | 100 / 99.928 | 99.804 / 90.792 | 99.997 / 96.802 |
-| best | 1M | 3.450% | 0.999977 | 99.954 / 99.916 | 99.498 / 99.030 | 88.948 / 67.786 | 68.907 / 30.834 |
-| best | 3M | 2.089% | 0.999840 | 99.984 / 99.972 | 99.852 / 99.550 | 94.238 / 75.836 | 86.813 / 48.955 |
-| best | 10M | 1.172% | 0.999895 | 100 / 99.980 | 99.974 / 99.672 | 97.436 / 80.760 | 97.588 / 74.362 |
-| best | 30M | 0.682% | 0.999956 | 100 / 100 | 100 / 99.882 | 99.438 / 86.986 | 99.864 / 91.149 |
-| best | 60M | 0.474% | 0.999938 | 100 / 100 | 100 / 99.912 | 99.862 / 91.008 | 99.996 / 96.789 |
-
-运行时间和吞吐（两个seed分别计时）：
-
-| profile | histories/seed | seed1 / seed2 time | mean throughput |
-|---|---:|---:|---:|
-| fast | 1M | 12.86 / 13.10 s | 77.0k/s |
-| fast | 3M | 34.73 / 34.23 s | 87.0k/s |
-| fast | 10M | 107.83 / 107.89 s | 92.7k/s |
-| fast | 30M | 320.13 / 318.88 s | 93.9k/s |
-| fast | 60M | 637.08 / 439.77 s | 115.3k/s |
-| best | 1M | 34.37 / 34.27 s | 29.1k/s |
-| best | 3M | 65.44 / 66.06 s | 45.6k/s |
-| best | 10M | 213.90 / 214.44 s | 46.7k/s |
-| best | 30M | 642.73 / 642.70 s | 46.7k/s |
-| best | 60M | 1278.96 / 1277.84 s | 46.9k/s |
-
-fast 的后期3个10M batch曾从约94k/s恢复至174k/317k/313k/s，因此60M两组
-聚合时间不对称；best 各batch稳定在约46–47k/s。旧profile结果的fast约339k/s，
-说明当前重新编译的非minibeam路径仍需单独做同commit/同GPU时钟的性能回退审计。
-
-NRMSE基本按 `1/sqrt(N)` 下降，fast和best的GPU–GPU收敛几乎相同。60M/seed时
-两档的local 3%/0mm都约96.8%，local 1%/1mm约91%。这说明在普通CT dose上，
-两档的seed重复性由粒子统计主导；该结果是GPU–GPU统计上限，不衡量GPU–TOPAS
-物理模型偏差。
-
-## 13. 已排除或不能作为生产结论的结果
-
-- RT06541 独立 full-plan TOPAS 数据有问题，已删除；只保留旧 Dij-shape 回归。
-- 把实际 Dij 50k/spot 误认为100k曾造成每粒子剂量约1.928倍错位；不是物理模型。
-- 按能层、按病例拟合 scale 可抬高 gamma，但属于过拟合，不用于生产。
-- 给 GPU 和 TOPAS 同时应用旧 sparse cutoff 不能提高 gamma。
-- 出现 secondary/cascade/neutral queue overflow 的高统计 run 一律作废。
-- 0.5 mm scorer 上的0.3 mm gamma是固定网格回归，不等价于0.3 mm独立测量精度。
-
-## 14. 权威输出与待办
-
-主要机器可读结果：
-
-- `out/fullplan_result/summary.json`：RT06423/RT07575严格同粒子 dose+LET；
-- `out/ct/20022516/full_plan_10M/match_physical/match_metrics.json`：lung 10M Dij-shape；
-- `out/ct/20022516/topas_local_compare_100k/`：lung直接5-spot验证；
-- `out/ct/20022516/minibeam_plane_e200_20M_vs_topas_10M/`：lung CT minibeam；
-- `out/ct/RT07575/minibeam_plan/gpu_gpu_650m_seed_convergence/summary.json`；
-- `out/ct/RT07575/minibeam_plan/gpu_gpu_650m_seed_convergence/convergence.json`。
-- `out/ct/RT07575/nonminibeam_gpu_seed_convergence_fp32/summary.json`：普通CT
-  fast/best双seed粒子数收敛；同目录含`summary.md`和趋势图。
-
-下一项应先处理 `ct/fullplan_result/20022516`：转换TOPAS dose/LET、生成BODY
-mask、运行严格相同17,717,177 histories的best GPU，然后用与两例head完全一致
-的33/22/11/30 dose和all-hadron LET gamma口径更新本文。其后再决定是否启动
-RT07575 minibeam的约650M TOPAS正式验证。
-
-## 15. 2026-08-04 病例归档与最新 CT 蒙卡比较
-
-本节是当前可直接引用的多病例摘要；每个病例的详细参数、路径和限制见本文件
-开头列出的病例文档。
-
-### 15.1 普通 CT full-plan 状态
-
-| Case | 解剖/角度 | 严格 TOPAS histories | 严格 GPU/TOPAS 状态 | 可引用的结果 |
-|---|---|---:|---|---|
-| RT06423 | head / 90° | 15.109M | **valid** | dose + primary/all-hadron LET full-plan |
-| RT07575 | head / 90° | 12.964M | **valid** | dose + primary/all-hadron LET full-plan；另有 1B fast/best profile |
-| RT06541 | head / 270° | — | **invalid reference** | 仅保留 10M Dij plan-shape 回归 |
-| 20022516 | lung / 0° | 17.717M | TOPAS 已完成，GPU strict full-plan 待完成 | 10M plan-shape与5-spot子集可引用 |
-
-### 15.2 严格 full-plan dose gamma（历史 baseline）
-
-mask 为 BODY ∩ TOPAS dose ≥ 10% BODY Dmax；单元为 Global / Local。
-
-| Case | 3%/3mm | 2%/2mm | 1%/1mm | 3%/0mm | GPU time | TOPAS wall |
-|---|---:|---:|---:|---:|---:|---:|
-| RT06423 | 99.9997 / 99.9866% | 99.9815 / 99.4565% | 91.3153 / 71.2856% | 80.7940 / 49.4963% | 237.2 s | 21.12 h |
-| RT07575 | 99.9994 / 99.9442% | 99.9040 / 98.8121% | 90.8177 / 67.9095% | 78.2618 / 41.9709% | 212.2 s | 11.81 h |
-
-两例 IDD peak bin 均一致，IDD correlation 均约 0.999998；3%/0mm 和 local gamma
-主要受逐 voxel 统计、低剂量局部容差及物理模型残差影响，不是射程错位。
-
-### 15.3 严格 full-plan all-hadron LET_d gamma
-
-LET gamma 仍使用 dose mask，不使用 LET threshold。
-
-| Case | 3%/3mm | 2%/2mm | 1%/1mm | 3%/0mm |
+| Case | GPU transport / wall | throughput | memory estimate | overflow S/C |
 |---|---:|---:|---:|---:|
-| RT06423 | 99.9946 / 90.9841% | 99.9205 / 73.0092% | 82.1993 / 41.8365% | 87.8820 / 19.7911% |
-| RT07575 | 99.9965 / 86.1031% | 99.9366 / 68.8561% | 81.3376 / 38.5691% | 88.7004 / 17.2605% |
+| RT07575 | 271.44 / 272.89 s | 47.76k s⁻¹ | 9,399 MiB | 0/0 |
+| RT06423 | 306.38 / 307.95 s | 49.31k s⁻¹ | 9,507 MiB | 0/0 |
+| 20022516 | 349.33 / 351.56 s | 50.72k s⁻¹ | 10,366 MiB | 0/0 |
 
-Primary C-12 LET 的 mean bias 约 −0.94%（RT06423）和 −0.56%（RT07575）；
-all-hadron LET bias 约 +8.62% 和 +10.23%，主要与低能碎片、cascade package、
-材料条件化末态和 scorer 定义有关。
+这些 run 写出了 primary-C12 和 all-hadron LET_d，但当前 rotation-fixed 汇总尚未对
+它们执行统一 TOPAS-dose mask 的 LET 比较。旧 `out/fullplan_result` LET 表和旧
+RT07575 1B fast/best profile 均早于本次通用 RotX/RotY inverse-order 修复，不能
+作为 current-code LET 或 dose 结论；当前也没有可报告的 medium 结果。
 
-### 15.4 RT07575 最新 1B fast/best profile
+## 4. RT07575 rotation-fixed minibeam
 
-这是 GPU 1B histories 与同一 12.964M-history TOPAS reference 的比较；GPU dose
-按 `12,963,817/10,000,000` 缩放，LET 不缩放。
+### 4.1 参考与运行口径
 
-| Profile | histories | wall time | Dose 1%/1mm G/L | Dose 3%/0mm G/L | Primary LET 1%/1mm G/L | All-hadron LET 3%/3mm G/L |
+本节使用 commit `56b5343214f3970a9077247171060e589c628f14` 的新构建结果。计划含
+1,943 spots，其中 1,617 个权重为正；四个 subfield 组成两个 opposed angles。
+每个 GPU seed 共 129,496,548 histories，angle01/angle02 分别为
+79,737,018 / 49,759,530，相当于旧 divisor-100 GPU 预算的 3×。两个角映射回患者
+坐标后取 3× 平均并乘固定 baseline `×100`，即 `(angle01 + angle02) × 100/3`；
+不拟合归一化。
+
+参考剂量由 TOPAS 每 spot 100k-history sparse Dij 乘 matRad 优化权重得到，源为
+`RBE_dose_result_c.mat/resultGUI.physicalDose`。它不是一次独立的 TOPAS whole-plan
+scorer。1,943 个 spot 各输运 100,000 histories，原始逐 spot 预算合计 194.3M；
+这个数不是按优化权重定义的 full-plan 独立粒子数。Dij builder 使用过
+`2e-6 Gy/spot/voxel` 稀疏阈值并删除 87.281% nnz；
+本地没有原始 per-spot scorer，无法重建无阈值参考。因此以下结果可验证旋转修复、
+计划映射和当前 GPU/TOPAS-Dij 一致性，但残差同时包含 sparse-Dij 阈值和
+参考端逐 spot 有限统计，不能解释为纯粹的 GPU–TOPAS full-plan 物理差异。本轮
+没有权威 minibeam LET 结果。
+
+### 4.2 GPU–TOPAS-Dij dose
+
+| Comparison | NRMSE | selected E/R | BODY E/R | G/L 3%/3mm | G/L 2%/2mm | G/L 1%/1mm |
 |---|---:|---:|---:|---:|---:|---:|
-| fast seed A | 1B | 1.18 h | 87.750 / 61.820% | 79.074 / 43.172% | 94.752 / 29.118% | 99.500 / 40.372% |
-| fast seed B | 1B | 1.18 h | 87.752 / 61.842% | 79.027 / 43.148% | 94.868 / 29.162% | 99.512 / 40.362% |
-| best seed B | 1B | 5.93 h | **90.320 / 64.774%** | **80.451 / 45.219%** | **96.140 / 87.580%** | **99.762 / 98.300%** |
+| GPU A / TOPAS-Dij | 1.628% | 0.984766 | 1.001640 | 99.504 / 98.534% | 97.720 / 92.988% | 85.040 / 57.948% |
+| GPU B / TOPAS-Dij | 1.639% | 0.984648 | 1.001640 | 99.536 / 98.508% | 97.706 / 93.014% | 85.178 / 57.902% |
+| A/B ensemble / TOPAS-Dij | 1.586% | 0.984707 | 1.001640 | 99.444 / 98.252% | 97.494 / 92.162% | 84.894 / 57.272% |
 
-Best seed B 的完整表（包括 LET 的 2%/2mm、1%/1mm、3%/0mm）见
-`out/ct/RT07575/fast_best_1b_three_groups/topas_gamma_summary_all.md`。
-Best dose integral/TOPAS 为 0.999947，NRMSE/Dmax 为 2.327%。TOPAS 当前只有
-12.964M 独立 histories，约比 GPU 1B 少 77 倍；这会显著放大 TOPAS voxel-level
-统计噪声，但不能单独解释所有 local gamma 差距。
+| Comparison | G/L 3%/0mm | G/L 3%/0.3mm | G/L 3%/0.5mm |
+|---|---:|---:|---:|
+| GPU A / TOPAS-Dij | 92.052 / 56.840% | 95.512 / 82.376% | 96.888 / 88.836% |
+| GPU B / TOPAS-Dij | 91.966 / 56.650% | 95.366 / 82.894% | 96.716 / 88.946% |
+| A/B ensemble / TOPAS-Dij | 92.502 / 58.470% | 95.622 / 83.414% | 96.838 / 89.212% |
 
-### 15.5 多病例结论与下一步
+这里 0 mm 使用全部 317,867 个选择体素，其余 gamma 使用确定性 50,000 点。
+权威数值见 [comparison.md](out/ct/RT07575/minibeam_plan/rotation_fix_56b5343/three_x_129m_two_seed/comparison.md)
+和 [comparison.json](out/ct/RT07575/minibeam_plan/rotation_fix_56b5343/three_x_129m_two_seed/comparison.json)。
 
-- RT06423 和 RT07575 的 head CT 几何、dose full-plan match 已闭环；3%/3mm global
-  接近 100%，1%/1mm 与 3%/0mm 是严格的统计/局部误差指标。
-- RT07575 best profile 显著提升 primary/all-hadron LET，说明 LET 精度提升来自
-  粒子特异 stopping power、fragment/cascade package 和 scorer 路径，而不只是
-  增加 histories。
-- RT06541 不能引用严格 TOPAS match；必须重跑有效 full-plan reference。
-- 20022516 已完成 TOPAS full-plan，但 strict GPU best 和统一 gamma 尚未完成，
-  不应把 10M fitted 或 5-spot 结果当作完整 lung plan 结论。
-- 当前权威机器可读结果：`out/fullplan_result/summary.json` 与
-  `out/ct/RT07575/fast_best_1b_three_groups/topas_gamma_summary_all.json`。
+### 4.3 GPU–GPU 重复性
+
+以 GPU A 为 reference、GPU B 为 evaluation，选择集为
+`BODY ∩ GPU A >= 10% GPU A BODY Dmax`，共 320,030 voxels；固定绝对标度：
+
+| NRMSE | selected E/R | BODY E/R | G/L 3%/3mm | G/L 2%/2mm | G/L 1%/1mm | G/L 3%/0mm | G/L 3%/0.3mm | G/L 3%/0.5mm |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 0.777% | 0.999809 | 0.999999 | 100.000 / 99.910% | 99.992 / 98.610% | 97.414 / 75.120% | 99.693 / 82.136% | 99.952 / 96.276% | 99.976 / 98.036% |
+
+GPU–GPU 明显优于 GPU–TOPAS-Dij，说明 minibeam 当前差异不能只归因于 GPU seed
+噪声；但受上述参考限制，也不能据此把全部残差归因于输运模型。
+
+### 4.4 Runtime、显存与可复现性
+
+| Seed | Angle | Histories | random seed | elapsed | throughput | memory estimate | overflow S/C/N |
+|---|---|---:|---:|---:|---:|---:|---:|
+| A | angle01 | 79,737,018 | 20260811 | 2,264.12 s | 35.22k s⁻¹ | 20,063 MiB | 0/0/0 |
+| A | angle02 | 49,759,530 | 20260812 | 1,308.31 s | 38.03k s⁻¹ | 18,133 MiB | 0/0/0 |
+| B | angle01 | 79,737,018 | 20260821 | 2,260.37 s | 35.28k s⁻¹ | 20,063 MiB | 0/0/0 |
+| B | angle02 | 49,759,530 | 20260822 | 1,313.28 s | 37.89k s⁻¹ | 18,133 MiB | 0/0/0 |
+
+每个 seed 两角串行约 59.5 min。Manifest 记录的是设备内存估算而非采样到的峰值；
+预算为 20,151 MiB，secondary/neutral queue 容量为 58M/70M。构建二进制 SHA-256
+为 `0e1f0fc08312700a2253f85add6eb1350739c558a2ad2ef8daf102fef8f3609e`；运行时
+工作树为 dirty，但 manifest 保存了输入 hash、命令和 dirty 状态。完整证据见
+[manifest.md](out/ct/RT07575/minibeam_plan/rotation_fix_56b5343/three_x_129m_two_seed/manifest.md)
+和 [manifest.json](out/ct/RT07575/minibeam_plan/rotation_fix_56b5343/three_x_129m_two_seed/manifest.json)。
+
+## 5. 结论边界
+
+- 常规束当前有三例 rotation-fixed 严格同粒子 full-plan dose：RT06423、RT07575
+  与 20022516；当前统一汇总只支持 3%/0 mm，不能把旧 3/3、2/2 或 LET 数值当作
+  current-code 结果。当前没有 medium 的权威结果。
+- RT07575 minibeam rotation fix 后两 GPU seed 高度一致；与 TOPAS-Dij 的差异必须
+  连同 sparse threshold 和参考统计共同解释。获得真正的 GPU–TOPAS full-plan
+  结论仍需独立、无阈值的 TOPAS whole-plan scorer。
+- RT06541 在 TOPAS reference 重算和审计完成前不得恢复到有效病例表。
