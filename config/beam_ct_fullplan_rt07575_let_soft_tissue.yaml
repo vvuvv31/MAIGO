@@ -59,27 +59,17 @@ spots_patient_trans_y_mm: -12.7636
 spots_patient_trans_z_mm: 1.3617
 spots_patient_rot_z_deg: 90.0
 spots_ct_axis_min_mm: -104.25
-# Lateral YZ shear after tps_90 entrance placement (GPU x=patient Y, y=patient Z):
-#   origin_y += skew * (origin_x - pivot)
-# Equal-history full-plan A/B (seed 20260801, BODY∩≥10%):
-#   skew=0: formal ~43.7%, shoulder ~37%, cov_yz≈9.1 (TOPAS≈5.2)
-#   skew=-0.065 + auto_pivot: formal ~67.9%, shoulder ~70%, core ~88.5%, cov_yz≈5.8
-# Auto-pivot = history-weighted mean entrance GPU-x (patient Y). Provisional
-# geometry correction for multi-spot envelope shear vs TOPAS — not a per-voxel
-# dose fit. Code default skew=0 for other cases.
-spots_lateral_yz_skew: -0.065
-spots_lateral_yz_skew_auto_pivot: true
+# TOPAS builds the passive placement M=Ry(rot_y)Rx(rot_x), so its source
+# local-to-world map is exactly M^-1=Rx(-rot_x)Ry(-rot_y). With that order in
+# tps_90 source construction, the old RT07575 shear/rotation fit would
+# double-correct the entrance map. Equal-history BODY∩TOPAS≥10% validation with
+# neutral affine gives local/global 3%/0mm 81.4493/98.4610%, NRMSE 1.0002%,
+# and E/R 0.997578 (old fitted affine local 80.0581%).
+spots_lateral_yz_skew: 0.0
+spots_lateral_yz_skew_auto_pivot: false
+# Retained only as a harmless explicit diagnostic pivot while affine is neutral.
 spots_lateral_yz_skew_pivot_mm: 42.7
-# Rigid entrance-plane rotation about the same lateral pivot (GPU xy /
-# patient YZ), applied after skew. Equal-history full-plan A/B on top of
-# skew−0.065 (BODY∩≥10% local 3%/0mm):
-#   rot=0: formal 67.98%, shoulder 70.3%, outer 53.9%, cov_yz≈5.77 (TOPAS 5.18)
-#   rot=+3.5°: formal 80.06% (+12.1 pp), shoulder 83.3%, outer 72.5%, core 89.6%,
-#              cov_yz≈5.21 / ang≈71.4° (TOPAS 5.18 / 71.7°)
-# Rotation-only (no skew) collapses formal ~44% — both affine terms required.
-# Code default rotation=0 for other cases; RT07575-only provisional geometry
-# correction until the root cov/principal-axis mismatch is explained.
-spots_lateral_yz_rotation_deg: 3.5
+spots_lateral_yz_rotation_deg: 0.0
 spots_enable_upstream_air_energy_loss: true
 spots_upstream_air_stopping_power_file: data/stopping_power_air_geant4_11_3_2.csv
 

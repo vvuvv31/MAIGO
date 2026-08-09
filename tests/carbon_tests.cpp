@@ -8,6 +8,7 @@
 #include "carbon/particle.hpp"
 #include "carbon/reaction_package.hpp"
 #include "carbon/rng.hpp"
+#include "carbon/spot_plan_geometry.hpp"
 #include "carbon/stopping_power.hpp"
 #include "carbon/straggling.hpp"
 #include "carbon/topas_spots.hpp"
@@ -1439,6 +1440,74 @@ void test_topas_spot_weights_and_tps_90_transform() {
     require_near(world.origin_y_mm, -450.0, 1.0e-9, "TPS source TransY");
     require_near(world.uz_y, 1.0, 1.0e-9, "TPS central ray points +world-Y");
 
+    carbon::TopasSpot compound_rotation;
+    compound_rotation.trans_x_mm = 7.0;
+    compound_rotation.trans_z_mm = -11.0;
+    compound_rotation.rot_x_deg = 90.0;
+    compound_rotation.rot_y_deg = 30.0;
+    const auto compound_world =
+        pose_plan.tps_zero_beam_pose_for_spot(compound_rotation);
+    // Independently evaluated columns of Rx(-90 deg) * Ry(-30 deg).
+    constexpr double sqrt_three_over_two = 0.86602540378443864676;
+    require_near(compound_world.origin_x_mm, 7.0, 1.0e-12,
+                 "TOPAS compound rotation must not rotate TransX");
+    require_near(compound_world.origin_y_mm, -450.0, 1.0e-12,
+                 "TOPAS compound rotation must not rotate TransY");
+    require_near(compound_world.origin_z_mm, -11.0, 1.0e-12,
+                 "TOPAS compound rotation must not rotate TransZ");
+    require_near(compound_world.ux_x, sqrt_three_over_two, 1.0e-12,
+                 "TOPAS inverse compound ux.x");
+    require_near(compound_world.ux_y, 0.5, 1.0e-12,
+                 "TOPAS inverse compound ux.y");
+    require_near(compound_world.ux_z, 0.0, 1.0e-12,
+                 "TOPAS inverse compound ux.z");
+    require_near(compound_world.uy_x, 0.0, 1.0e-12,
+                 "TOPAS inverse compound uy.x");
+    require_near(compound_world.uy_y, 0.0, 1.0e-12,
+                 "TOPAS inverse compound uy.y");
+    require_near(compound_world.uy_z, -1.0, 1.0e-12,
+                 "TOPAS inverse compound uy.z");
+    require_near(compound_world.uz_x, -0.5, 1.0e-12,
+                 "TOPAS inverse compound uz.x");
+    require_near(compound_world.uz_y, sqrt_three_over_two, 1.0e-12,
+                 "TOPAS inverse compound uz.y");
+    require_near(compound_world.uz_z, 0.0, 1.0e-12,
+                 "TOPAS inverse compound uz.z");
+    const auto dot = [](const double ax, const double ay, const double az,
+                        const double bx, const double by, const double bz) {
+        return ax * bx + ay * by + az * bz;
+    };
+    require_near(dot(compound_world.ux_x, compound_world.ux_y, compound_world.ux_z,
+                     compound_world.ux_x, compound_world.ux_y, compound_world.ux_z),
+                 1.0, 1.0e-12, "TOPAS inverse compound ux norm");
+    require_near(dot(compound_world.uy_x, compound_world.uy_y, compound_world.uy_z,
+                     compound_world.uy_x, compound_world.uy_y, compound_world.uy_z),
+                 1.0, 1.0e-12, "TOPAS inverse compound uy norm");
+    require_near(dot(compound_world.uz_x, compound_world.uz_y, compound_world.uz_z,
+                     compound_world.uz_x, compound_world.uz_y, compound_world.uz_z),
+                 1.0, 1.0e-12, "TOPAS inverse compound uz norm");
+    require_near(dot(compound_world.ux_x, compound_world.ux_y, compound_world.ux_z,
+                     compound_world.uy_x, compound_world.uy_y, compound_world.uy_z),
+                 0.0, 1.0e-12, "TOPAS inverse compound ux dot uy");
+    require_near(dot(compound_world.ux_x, compound_world.ux_y, compound_world.ux_z,
+                     compound_world.uz_x, compound_world.uz_y, compound_world.uz_z),
+                 0.0, 1.0e-12, "TOPAS inverse compound ux dot uz");
+    require_near(dot(compound_world.uy_x, compound_world.uy_y, compound_world.uy_z,
+                     compound_world.uz_x, compound_world.uz_y, compound_world.uz_z),
+                 0.0, 1.0e-12, "TOPAS inverse compound uy dot uz");
+    const auto compound_triple =
+        compound_world.ux_x *
+            (compound_world.uy_y * compound_world.uz_z -
+             compound_world.uy_z * compound_world.uz_y) -
+        compound_world.ux_y *
+            (compound_world.uy_x * compound_world.uz_z -
+             compound_world.uy_z * compound_world.uz_x) +
+        compound_world.ux_z *
+            (compound_world.uy_x * compound_world.uz_y -
+             compound_world.uy_y * compound_world.uz_x);
+    require_near(compound_triple, 1.0, 1.0e-12,
+                 "TOPAS inverse compound frame determinant");
+
     const auto ct = carbon::transform_tps_90_pose_to_ct(
         world, 0.0, 0.0, 0.0, 90.0, -104.0);
     require_near(ct.origin_z_mm, -346.0, 1.0e-6,
@@ -1494,6 +1563,15 @@ void test_topas_spot_weights_and_tps_90_transform() {
                  "Lung TPS source upstream patient-Y position");
     require_near(lung_ct.uz_z, 1.0, 1.0e-9,
                  "Lung TPS central ray points +GPU-Z");
+    const auto lung_triple =
+        lung_ct.ux_x * (lung_ct.uy_y * lung_ct.uz_z -
+                        lung_ct.uy_z * lung_ct.uz_y) -
+        lung_ct.ux_y * (lung_ct.uy_x * lung_ct.uz_z -
+                        lung_ct.uy_z * lung_ct.uz_x) +
+        lung_ct.ux_z * (lung_ct.uy_x * lung_ct.uz_y -
+                        lung_ct.uy_y * lung_ct.uz_x);
+    require_near(lung_triple, 1.0, 1.0e-9,
+                 "Lung tps_y beam frame must be right-handed");
 
     const carbon::StoppingPowerTable constant_air(
         {0.01, 400.0}, {0.02, 0.02});
@@ -1526,6 +1604,26 @@ void test_topas_spot_weights_and_tps_90_transform() {
         (void)carbon::propagate_total_kinetic_energy_through_stopping_power(
             2460.0, 12, 1.0, too_narrow_air);
     }, "Upstream propagation accepted a table outside its energy domain");
+}
+
+void test_history_weighted_entrance_pivot() {
+    const std::array points{
+        carbon::WeightedEntrancePoint{10.0, -4.0, 2},
+        carbon::WeightedEntrancePoint{40.0, 8.0, 1},
+        carbon::WeightedEntrancePoint{-1000.0, 1000.0, 0},
+    };
+    const auto pivot = carbon::history_weighted_entrance_pivot(points);
+    require(pivot.has_value(), "Positive-history plan must resolve an auto-pivot");
+    require_near(pivot->first, 20.0, 1.0e-12,
+                 "History-weighted entrance pivot x");
+    require_near(pivot->second, 0.0, 1.0e-12,
+                 "History-weighted entrance pivot y");
+
+    const std::array zero_weight{
+        carbon::WeightedEntrancePoint{1.0, 2.0, 0},
+    };
+    require(!carbon::history_weighted_entrance_pivot(zero_weight).has_value(),
+            "Zero-history plan must not synthesize an auto-pivot");
 }
 
 void test_tps_source_geometry_csv_and_switch() {
@@ -2407,6 +2505,7 @@ int main() {
         test_secondary_optimization_config_validation();
         test_topas_spots_parse_angle01();
         test_topas_spot_weights_and_tps_90_transform();
+        test_history_weighted_entrance_pivot();
         test_tps_source_geometry_csv_and_switch();
         test_dose_scorer_matches_mev_conversion();
         test_dense_voxel_mhd_writer();

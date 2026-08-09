@@ -87,9 +87,10 @@ struct TopasSpotPlan {
     [[nodiscard]] SpotSourcePose pose_for_spot(const TopasSpot& spot) const noexcept;
 
     // TOPAS/Geant4 component placement used by the TPS plan: translation is in
-    // the parent frame and is not rotated. TOPAS component rotations are passive
-    // for the local source frame, hence the negative Rx/Ry angles here. This
-    // makes Rx=90 deg at TransY=-SAD point the central ray towards +world-Y.
+    // the parent frame and is not rotated. TOPAS builds the passive placement
+    // M=Ry(rot_y)Rx(rot_x); the source local-to-world map therefore uses the
+    // exact inverse M^-1=Rx(-rot_x)Ry(-rot_y). This makes Rx=90 deg at
+    // TransY=-SAD point the central ray towards +world-Y.
     [[nodiscard]] SpotSourcePose tps_zero_beam_pose_for_spot(
         const TopasSpot& spot) const noexcept;
 };

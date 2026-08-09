@@ -369,24 +369,22 @@ struct TransportConfig {
     double spots_patient_trans_z_mm{0.0};
     double spots_patient_rot_z_deg{0.0};
     double spots_ct_axis_min_mm{0.0};
-    // Diagnostic/repair: after tps_90 maps the source to the CT entrance plane
+    // Diagnostic/legacy: after tps_90 maps the source to the CT entrance plane
     // (GPU x=patient Y, GPU y=patient Z), apply
     //   origin_y += skew * (origin_x - pivot)
-    // i.e. patient_Z += skew * (patient_Y - pivot). Default 0 preserves legacy.
-    // RT07575 A/B: skew≈-0.065 lifts formal ~44→68% with core protected.
-    // Prefer auto_pivot (history-weighted mean entrance GPU-x / patient Y).
-    // Keep skew=0 for other cases until the root cov_yz mismatch is explained.
+    // i.e. patient_Z += skew * (patient_Y - pivot). The neutral default is the
+    // production setting; nonzero values remain for explicit diagnostics and
+    // backward-compatible reproduction of historical affine A/B runs.
     double spots_lateral_yz_skew{0.0};
     double spots_lateral_yz_skew_pivot_mm{0.0};
     bool spots_lateral_yz_skew_auto_pivot{false};
-    // Optional rigid rotation of the entrance-plane spot map about the same
-    // lateral pivot (GPU x=patient Y, GPU y=patient Z):
+    // Diagnostic/legacy rigid rotation of the entrance-plane spot map about
+    // the same lateral pivot (GPU x=patient Y, GPU y=patient Z):
     //   [dx']   [ cosθ  -sinθ ] [dx]
     //   [dy'] = [ sinθ   cosθ ] [dy]
     // with θ = spots_lateral_yz_rotation_deg (counter-clockwise in GPU xy).
-    // Default 0 preserves legacy. RT07575 post-hoc dose rotation ≈ −3° (sample)
-    // implies source-plane +3° closes formal ~68→~79% with core protected.
-    // Beam basis (ux,uy,uz) lateral (x,y) components are rotated consistently.
+    // The neutral default is the production setting. Nonzero values reproduce
+    // historical affine diagnostics; beam-basis lateral components rotate too.
     double spots_lateral_yz_rotation_deg{0.0};
     // Rotation pivot GPU-y (patient Z). Auto-pivot fills this with the
     // history-weighted mean entrance GPU-y when auto_pivot is true.

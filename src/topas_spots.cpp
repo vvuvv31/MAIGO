@@ -218,21 +218,26 @@ SpotSourcePose TopasSpotPlan::tps_zero_beam_pose_for_spot(
     pose.origin_y_mm = -sad_mm;
     pose.origin_z_mm = spot.trans_z_mm;
 
-    double ux = 1.0, uy = 0.0, uz = 0.0;
-    double vx = 0.0, vy = 1.0, vz = 0.0;
-    double wx = 0.0, wy = 0.0, wz = 1.0;
-    rotate_rx_ry(-spot.rot_x_deg, -spot.rot_y_deg, ux, uy, uz);
-    rotate_rx_ry(-spot.rot_x_deg, -spot.rot_y_deg, vx, vy, vz);
-    rotate_rx_ry(-spot.rot_x_deg, -spot.rot_y_deg, wx, wy, wz);
-    pose.ux_x = ux;
-    pose.ux_y = uy;
-    pose.ux_z = uz;
-    pose.uy_x = vx;
-    pose.uy_y = vy;
-    pose.uy_z = vz;
-    pose.uz_x = wx;
-    pose.uz_y = wy;
-    pose.uz_z = wz;
+    // TOPAS/CLHEP constructs the passive component placement as
+    // M = Ry(rot_y) * Rx(rot_x). Its source generator maps local vectors to
+    // World with M^-1 = Rx(-rot_x) * Ry(-rot_y); reversing the order is
+    // observable whenever both rotations are nonzero.
+    constexpr double deg2rad = 3.14159265358979323846 / 180.0;
+    const auto rx = spot.rot_x_deg * deg2rad;
+    const auto ry = spot.rot_y_deg * deg2rad;
+    const auto cx = std::cos(rx);
+    const auto sx = std::sin(rx);
+    const auto cy = std::cos(ry);
+    const auto sy = std::sin(ry);
+    pose.ux_x = cy;
+    pose.ux_y = sx * sy;
+    pose.ux_z = cx * sy;
+    pose.uy_x = 0.0;
+    pose.uy_y = cx;
+    pose.uy_z = -sx;
+    pose.uz_x = -sy;
+    pose.uz_y = sx * cy;
+    pose.uz_z = cx * cy;
     return pose;
 }
 
@@ -365,9 +370,15 @@ SpotSourcePose transform_tps_y_pose_to_ct(
     pose.uz_x = uzx;
     pose.uz_y = uzz;
     if (uzy >= 0.0) {
+        // The map patient→GPU (x, z, y) has det=-1. Negate uy so the
+        // transported beam frame stays right-handed while origins/uz retain
+        // the coordinate mapping, matching the reflection policy used by
+        // transform_tps_90_pose_to_ct.
         pose.origin_z_mm = oy - ct_axis_min_mm;
         pose.ux_z = uxy;
-        pose.uy_z = uyy;
+        pose.uy_x = -uyx;
+        pose.uy_y = -uyz;
+        pose.uy_z = -uyy;
         pose.uz_z = uzy;
     } else {
         pose.origin_z_mm = ct_axis_max_mm - oy;

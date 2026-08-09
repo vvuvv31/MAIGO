@@ -4,6 +4,7 @@
 #include "carbon/io.hpp"
 #include "carbon/neutral_package.hpp"
 #include "carbon/reaction_package.hpp"
+#include "carbon/spot_plan_geometry.hpp"
 #include "carbon/stopping_power.hpp"
 #include "carbon/topas_spots.hpp"
 #include "carbon/tps_source.hpp"
@@ -518,6 +519,45 @@ void apply_spot_to_config(carbon::TransportConfig& config,
     config.random_seed = base_seed + static_cast<std::uint64_t>(spot_index) * 1'000'003ULL;
 }
 
+void resolve_plan_lateral_auto_pivot(
+    carbon::TransportConfig& config,
+    const carbon::TopasSpotPlan& plan,
+    const std::uint64_t base_seed,
+    const carbon::StoppingPowerTable* upstream_air_stopping_power) {
+    if (!config.spots_lateral_yz_skew_auto_pivot) {
+        return;
+    }
+
+    // Resolve once even when both affine terms are disabled, so later execution
+    // paths cannot accidentally re-enter plan-level resolution.
+    config.spots_lateral_yz_skew_auto_pivot = false;
+    if (config.spots_lateral_yz_skew == 0.0 &&
+        config.spots_lateral_yz_rotation_deg == 0.0) {
+        return;
+    }
+
+    std::vector<carbon::WeightedEntrancePoint> entrance_points;
+    entrance_points.reserve(plan.spots.size());
+    for (std::size_t i = 0; i < plan.spots.size(); ++i) {
+        auto probe = config;
+        probe.spots_lateral_yz_skew = 0.0;
+        probe.spots_lateral_yz_rotation_deg = 0.0;
+        apply_spot_to_config(probe, plan, plan.spots[i], i, base_seed,
+                             upstream_air_stopping_power);
+        entrance_points.push_back(carbon::WeightedEntrancePoint{
+            probe.source_origin_x_mm, probe.source_origin_y_mm,
+            plan.spots[i].number_of_histories});
+    }
+    const auto pivot = carbon::history_weighted_entrance_pivot(entrance_points);
+    if (!pivot.has_value()) {
+        return;
+    }
+    config.spots_lateral_yz_skew_pivot_mm = pivot->first;
+    config.spots_lateral_yz_rotation_pivot_y_mm = pivot->second;
+    std::cout << "  lateral YZ auto-pivot entrance GPU (patient Y,Z) = ("
+              << pivot->first << ", " << pivot->second << ") mm\n";
+}
+
 carbon::PrimarySpotBatchEntry make_spot_batch_entry(
     const carbon::TransportConfig& spot_config,
     const std::uint64_t history_begin) {
@@ -880,6 +920,8 @@ int main(int argc, char* argv[]) {
                           << " zero-weight spots removed=" << removed_zero_weight_spots
                           << '\n';
             }
+            resolve_plan_lateral_auto_pivot(
+                config, plan, base_seed, upstream_air_stopping_power_ptr);
             if (plan_only) {
                 std::size_t min_histories = plan.spots.front().number_of_histories;
                 std::size_t max_histories = min_histories;
@@ -930,54 +972,13 @@ int main(int argc, char* argv[]) {
 
             if (config.device != "serial" && !sequential_spots) {
                 auto batch_config = config;
-                // History-weighted mean entrance GPU-x/y as lateral pivot
-                // (skew uses x=patient Y; rotation also needs y=patient Z).
-                if (batch_config.spots_lateral_yz_skew_auto_pivot &&
-                    (batch_config.spots_lateral_yz_skew != 0.0 ||
-                     batch_config.spots_lateral_yz_rotation_deg != 0.0)) {
-                    double sum_w = 0.0;
-                    double sum_x = 0.0;
-                    double sum_y = 0.0;
-                    for (std::size_t i = 0; i < plan.spots.size(); ++i) {
-                        auto probe = config;
-                        probe.spots_lateral_yz_skew = 0.0;
-                        probe.spots_lateral_yz_rotation_deg = 0.0;
-                        apply_spot_to_config(probe, plan, plan.spots[i], i, base_seed,
-                                             upstream_air_stopping_power_ptr);
-                        const auto w =
-                            static_cast<double>(plan.spots[i].number_of_histories);
-                        sum_w += w;
-                        sum_x += w * probe.source_origin_x_mm;
-                        sum_y += w * probe.source_origin_y_mm;
-                    }
-                    if (sum_w > 0.0) {
-                        batch_config.spots_lateral_yz_skew_pivot_mm = sum_x / sum_w;
-                        batch_config.spots_lateral_yz_rotation_pivot_y_mm =
-                            sum_y / sum_w;
-                        std::cout << "  lateral YZ auto-pivot entrance GPU "
-                                     "(patient Y,Z) = ("
-                                  << batch_config.spots_lateral_yz_skew_pivot_mm
-                                  << ", "
-                                  << batch_config.spots_lateral_yz_rotation_pivot_y_mm
-                                  << ") mm\n";
-                    }
-                }
                 batch_config.primary_spot_batch.clear();
                 batch_config.primary_spot_batch.reserve(plan.spots.size());
                 std::uint64_t history_begin = 0;
                 for (std::size_t i = 0; i < plan.spots.size(); ++i) {
-                    // Start from plan-level config with the resolved skew pivot;
+                    // Start from plan-level config with the resolved lateral pivot;
                     // do not copy batch_config (it accumulates primary_spot_batch).
                     auto spot_config = config;
-                    spot_config.spots_lateral_yz_skew =
-                        batch_config.spots_lateral_yz_skew;
-                    spot_config.spots_lateral_yz_skew_pivot_mm =
-                        batch_config.spots_lateral_yz_skew_pivot_mm;
-                    spot_config.spots_lateral_yz_skew_auto_pivot = false;
-                    spot_config.spots_lateral_yz_rotation_deg =
-                        batch_config.spots_lateral_yz_rotation_deg;
-                    spot_config.spots_lateral_yz_rotation_pivot_y_mm =
-                        batch_config.spots_lateral_yz_rotation_pivot_y_mm;
                     apply_spot_to_config(spot_config, plan, plan.spots[i], i, base_seed,
                                          upstream_air_stopping_power_ptr);
                     spot_config.validate();
