@@ -1,7 +1,0 @@
-{
-  "cmake.useCMakePresets": "always",
-  "cmake.configureOnOpen": false,
-  "cmake.preferredGenerators": ["Ninja", "Unix Makefiles"],
-  "python.defaultInterpreterPath": "/usr/bin/python3"
-}
-
