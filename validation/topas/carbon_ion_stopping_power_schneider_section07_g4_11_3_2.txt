@@ -1,0 +1,19 @@
+includeFile = carbon_material_tables_base.txt
+
+# Query isotope stopping powers and delta-electron energy fractions in the
+# dominant Schneider soft-tissue composition (section 7, HU 18..79) used by
+# the CT material converter.
+sv:Ma/SchneiderSection07/Components = 9 "Hydrogen" "Carbon" "Nitrogen" "Oxygen" "Phosphorus" "Sulfur" "Chlorine" "Sodium" "Potassium"
+uv:Ma/SchneiderSection07/Fractions = 9 0.103 0.134 0.030 0.723 0.002 0.002 0.002 0.002 0.002
+d:Ma/SchneiderSection07/Density = 1.0 g/cm3
+
+s:Ge/Sample/Material = "SchneiderSection07"
+d:Ge/BeamPosition/TransZ = 0. mm
+i:Ts/NumberOfThreads = 1
+i:So/CarbonBeam/NumberOfHistoriesInRun = 1
+
+s:Sc/IonStoppingPower/Quantity = "IonStoppingPowerNtuple"
+s:Sc/IonStoppingPower/Component = "Sample"
+s:Sc/IonStoppingPower/OutputFile = "output/ion_stopping_power_schneider_section07_g4_11_3_2"
+s:Sc/IonStoppingPower/OutputType = "ASCII"
+s:Sc/IonStoppingPower/IfOutputFileAlreadyExists = "Overwrite"

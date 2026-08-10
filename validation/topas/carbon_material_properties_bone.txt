@@ -1,0 +1,3 @@
+includeFile = carbon_material_properties_water.txt
+s:Ge/Sample/Material = "G4_BONE_COMPACT_ICRU"
+s:Sc/MaterialProperties/OutputFile = "output/material_properties_bone"

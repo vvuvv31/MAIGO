@@ -1,0 +1,4 @@
+includeFile = carbon_200MeVu_water_hetero_bone_offset.txt
+i:Ts/NumberOfThreads = 56
+i:So/CarbonBeam/NumberOfHistoriesInRun = 50000
+s:Sc/DepthEnergy/OutputFile = "output/hetero_bone_offset_development_energy_deposit"

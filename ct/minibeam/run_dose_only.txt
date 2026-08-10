@@ -1,0 +1,83 @@
+# Dose-only reproducible baseline derived from run1.txt.
+# LET is deliberately absent. Keep this file aligned with the supplied reference
+# geometry while preserving run1.txt as an immutable input artifact.
+i:Ts/Seed = 20260727
+i:Ts/NumberOfThreads = 40
+i:Ts/ShowHistoryCountAtInterval = 1000
+b:Gr/Enable = "False"
+b:Ge/CheckForOverlaps = "True"
+
+s:Ge/World/Material = "Air"
+d:Ge/World/HLX = 2.0 m
+d:Ge/World/HLY = 2.0 m
+d:Ge/World/HLZ = 2.0 m
+
+s:Ge/Box/Type = "TsBox"
+s:Ge/Box/Parent = "World"
+s:Ge/Box/Material = "G4_WATER"
+d:Ge/Box/HLX = 50.0 mm
+d:Ge/Box/HLY = 50.0 mm
+d:Ge/Box/HLZ = 50.0 mm
+d:Ge/Box/TransX = 0.0 mm
+d:Ge/Box/TransY = 110.0 mm
+d:Ge/Box/TransZ = 0.0 mm
+b:Ge/Box/IsVisible = "False"
+
+# Box2 is the scoring volume. It occupies the full beam-depth range but only
+# world Z=[-20,20] mm, exactly as in the supplied reference case.
+s:Ge/Box2/Type = "TsBox"
+s:Ge/Box2/Parent = "Box"
+s:Ge/Box2/Material = "G4_WATER"
+d:Ge/Box2/HLX = 50.0 mm
+d:Ge/Box2/HLY = 50.0 mm
+d:Ge/Box2/HLZ = 20.0 mm
+d:Ge/Box2/TransX = 0.0 mm
+d:Ge/Box2/TransY = 0.0 mm
+d:Ge/Box2/TransZ = 0.0 mm
+b:Ge/Box2/IsVisible = "False"
+
+s:Sc/DoseAtPhantomP/OutputFile = "output/minibeam_dose_seed20260727"
+s:Sc/DoseAtPhantomP/OutputType = "binary"
+b:Sc/DoseAtPhantomP/OutputAfterRun = "False"
+s:Sc/DoseAtPhantomP/Quantity = "DoseToMedium"
+s:Sc/DoseAtPhantomP/Component = "Box2"
+b:Sc/DoseAtPhantomP/OutputToConsole = "False"
+s:Sc/DoseAtPhantomP/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/DoseAtPhantomP/XBins = 1000
+i:Sc/DoseAtPhantomP/YBins = 1000
+i:Sc/DoseAtPhantomP/ZBins = 40
+
+includeFile = spots961.txt
+includeFile = aperture.txt
+
+sv:Ph/Default/Modules = 6 "g4em-standard_opt4" "g4h-phy_QGSP_BERT_HP" "g4decay" "g4ion-binarycascade" "g4h-elastic_HP" "g4stopping"
+d:Ph/Default/CutForAllParticles = 0.05 mm
+# 400 MeV/u C-12 has 4.8 GeV total kinetic energy.  The OpenTOPAS
+# default (600 MeV) clamps dedicated light-ion EM tables, most visibly alpha
+# fragments above 150 MeV/u.
+d:Ph/Default/EMRangeMax = 6 GeV
+d:Tf/TimelineEnd = 961 ms
+i:Tf/NumberOfSequentialTimes = 961
+
+s:Ge/BeamPosition2/Parent = "World"
+s:Ge/BeamPosition2/Type = "Group"
+d:Ge/BeamPosition2/TransX = Tf/Scatterer1/L5/Value mm
+d:Ge/BeamPosition2/TransY = -0.45 m
+d:Ge/BeamPosition2/TransZ = Tf/Scatterer1/L6/Value mm
+d:Ge/BeamPosition2/RotX = Tf/Scatterer1/L7/Value deg
+d:Ge/BeamPosition2/RotY = Tf/Scatterer1/L8/Value deg
+d:Ge/BeamPosition2/RotZ = 0.0 deg
+
+s:So/CarbonSource/Type = "emittance"
+s:So/CarbonSource/Component = "BeamPosition2"
+s:So/CarbonSource/BeamParticle = "GenericIon(6,12,6)"
+s:So/CarbonSource/Distribution = "BiGaussian"
+d:So/CarbonSource/BeamEnergy = Tf/Scatterer1/L2/Value MeV
+u:So/CarbonSource/BeamEnergySpread = Tf/Scatterer1/L3/Value
+d:So/CarbonSource/SigmaX = Tf/Scatterer1/L9/Value mm
+u:So/CarbonSource/SigmaXprime = Tf/Scatterer1/L10/Value
+u:So/CarbonSource/CorrelationX = Tf/Scatterer1/L11/Value
+d:So/CarbonSource/SigmaY = Tf/Scatterer1/L12/Value mm
+u:So/CarbonSource/SigmaYprime = Tf/Scatterer1/L13/Value
+u:So/CarbonSource/CorrelationY = Tf/Scatterer1/L14/Value
+i:So/CarbonSource/NumberOfHistoriesInRun = Tf/Scatterer1/L4/Value

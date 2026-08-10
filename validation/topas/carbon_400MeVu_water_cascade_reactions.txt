@@ -1,0 +1,13 @@
+# Charged-fragment cascade n-tuple at 400 MeV/u C-12.
+# Primary reactions span ~0--400 MeV/u as the beam slows in water.
+includeFile = carbon_400MeVu_water.txt
+
+b:Sc/DepthEnergy/Active = "False"
+b:Sc/DepthDose/Active = "False"
+b:Sc/PrimaryC12Energy/Active = "False"
+
+s:Sc/CascadeReactions/Quantity = "CarbonCascadeNtuple"
+s:Sc/CascadeReactions/Component = "Phantom"
+s:Sc/CascadeReactions/OutputFile = "output/cascade_e400_reference_reactions"
+s:Sc/CascadeReactions/OutputType = "ASCII"
+s:Sc/CascadeReactions/IfOutputFileAlreadyExists = "Overwrite"

@@ -1,0 +1,117 @@
+# Self-contained TOPAS database extraction parameter file.
+# Values with @...@ are filled by run_topas_database_extraction.sh.
+
+i:Ts/Seed = @SEED@
+i:Ts/ShowHistoryCountAtInterval = 1000
+i:Ts/NumberOfThreads = @THREADS@
+i:Ts/ParameterizationErrorMaxReports = 10
+i:Ts/UnscoredHitMaxReports = 10
+i:Ts/IndexErrorMaxReports = 10
+
+s:Ge/World/Material = "Air"
+d:Ge/World/HLX = 2.0 m
+d:Ge/World/HLY = 2.0 m
+d:Ge/World/HLZ = 2.0 m
+b:Ge/World/Invisible = "TRUE"
+
+# Beam travels from +Z towards -Z and enters the material phantom at +HLZ.
+s:Ge/BeamPosition/Parent = "World"
+s:Ge/BeamPosition/Type = "Group"
+d:Ge/BeamPosition/TransX = 0.0 mm
+d:Ge/BeamPosition/TransY = 0.0 mm
+d:Ge/BeamPosition/TransZ = Ge/World/HLZ m
+d:Ge/BeamPosition/RotX = 180.0 deg
+d:Ge/BeamPosition/RotY = 0.0 deg
+d:Ge/BeamPosition/RotZ = 0.0 deg
+
+s:Ge/Phantom/Type = "TsBox"
+s:Ge/Phantom/Parent = "World"
+s:Ge/Phantom/Material = "@MATERIAL@"
+d:Ge/Phantom/HLX = 50.0 mm
+d:Ge/Phantom/HLY = 50.0 mm
+d:Ge/Phantom/HLZ = @PHANTOM_HALF_LENGTH_MM@ mm
+d:Ge/Phantom/TransX = 0.0 mm
+d:Ge/Phantom/TransY = 0.0 mm
+d:Ge/Phantom/TransZ = 0.0 mm
+d:Ge/Phantom/RotX = 0.0 deg
+d:Ge/Phantom/RotY = 0.0 deg
+d:Ge/Phantom/RotZ = 0.0 deg
+
+s:So/CarbonBeam/Type = "Beam"
+s:So/CarbonBeam/Component = "BeamPosition"
+s:So/CarbonBeam/BeamParticle = "GenericIon(6,12,6)"
+d:So/CarbonBeam/BeamEnergy = @TOTAL_ENERGY_MEV@ MeV
+u:So/CarbonBeam/BeamEnergySpread = 0.0
+s:So/CarbonBeam/BeamPositionDistribution = "None"
+s:So/CarbonBeam/BeamAngularDistribution = "None"
+i:So/CarbonBeam/NumberOfHistoriesInRun = @HISTORIES@
+
+# Core material, stopping-power, cross-section and cascade database scorers.
+s:Sc/CarbonMaterialProperties/Quantity = "CarbonMaterialPropertiesNtuple"
+s:Sc/CarbonMaterialProperties/Component = "Phantom"
+s:Sc/CarbonMaterialProperties/OutputType = "ASCII"
+s:Sc/CarbonMaterialProperties/OutputFile = "@OUTPUT_PREFIX@_material_properties"
+s:Sc/CarbonMaterialProperties/IfOutputFileAlreadyExists = "Overwrite"
+
+s:Sc/CarbonStoppingPower/Quantity = "CarbonStoppingPowerNtuple"
+s:Sc/CarbonStoppingPower/Component = "Phantom"
+s:Sc/CarbonStoppingPower/OutputType = "ASCII"
+s:Sc/CarbonStoppingPower/OutputFile = "@OUTPUT_PREFIX@_stopping_power"
+s:Sc/CarbonStoppingPower/IfOutputFileAlreadyExists = "Overwrite"
+
+s:Sc/CarbonCrossSection/Quantity = "CarbonCrossSectionNtuple"
+s:Sc/CarbonCrossSection/Component = "Phantom"
+s:Sc/CarbonCrossSection/OutputType = "ASCII"
+s:Sc/CarbonCrossSection/OutputFile = "@OUTPUT_PREFIX@_cross_sections"
+s:Sc/CarbonCrossSection/IfOutputFileAlreadyExists = "Overwrite"
+
+s:Sc/CarbonReaction/Quantity = "CarbonReactionNtuple"
+s:Sc/CarbonReaction/Component = "Phantom"
+s:Sc/CarbonReaction/OutputType = "ASCII"
+s:Sc/CarbonReaction/OutputFile = "@OUTPUT_PREFIX@_reactions"
+s:Sc/CarbonReaction/IfOutputFileAlreadyExists = "Overwrite"
+
+s:Sc/CarbonCascade/Quantity = "CarbonCascadeNtuple"
+s:Sc/CarbonCascade/Component = "Phantom"
+s:Sc/CarbonCascade/OutputType = "ASCII"
+s:Sc/CarbonCascade/OutputFile = "@OUTPUT_PREFIX@_cascade"
+s:Sc/CarbonCascade/IfOutputFileAlreadyExists = "Overwrite"
+
+s:Sc/CarbonNeutral/Quantity = "CarbonNeutralNtuple"
+s:Sc/CarbonNeutral/Component = "Phantom"
+s:Sc/CarbonNeutral/OutputType = "ASCII"
+s:Sc/CarbonNeutral/OutputFile = "@OUTPUT_PREFIX@_neutral"
+s:Sc/CarbonNeutral/IfOutputFileAlreadyExists = "Overwrite"
+
+# The following tables are disabled by default because they add many rows and
+# are only needed for the species-conditioned GPU package. The shell runner
+# removes these lines unless --species-tables is supplied.
+#SPECIES# s:Sc/IonStoppingPower/Quantity = "IonStoppingPowerNtuple"
+#SPECIES# s:Sc/IonStoppingPower/Component = "Phantom"
+#SPECIES# s:Sc/IonStoppingPower/OutputType = "ASCII"
+#SPECIES# s:Sc/IonStoppingPower/OutputFile = "@OUTPUT_PREFIX@_ion_stopping_power"
+#SPECIES# s:Sc/IonStoppingPower/IfOutputFileAlreadyExists = "Overwrite"
+#SPECIES# s:Sc/IonCrossSection/Quantity = "IonCrossSectionNtuple"
+#SPECIES# s:Sc/IonCrossSection/Component = "Phantom"
+#SPECIES# s:Sc/IonCrossSection/OutputType = "ASCII"
+#SPECIES# s:Sc/IonCrossSection/OutputFile = "@OUTPUT_PREFIX@_ion_cross_sections"
+#SPECIES# s:Sc/IonCrossSection/IfOutputFileAlreadyExists = "Overwrite"
+#SPECIES# s:Sc/NeutralCrossSection/Quantity = "NeutralCrossSectionNtuple"
+#SPECIES# s:Sc/NeutralCrossSection/Component = "Phantom"
+#SPECIES# s:Sc/NeutralCrossSection/OutputType = "ASCII"
+#SPECIES# s:Sc/NeutralCrossSection/OutputFile = "@OUTPUT_PREFIX@_neutral_cross_sections"
+#SPECIES# s:Sc/NeutralCrossSection/IfOutputFileAlreadyExists = "Overwrite"
+#SPECIES# s:Sc/IonElastic/Quantity = "IonElasticNtuple"
+#SPECIES# s:Sc/IonElastic/Component = "Phantom"
+#SPECIES# s:Sc/IonElastic/OutputType = "ASCII"
+#SPECIES# s:Sc/IonElastic/OutputFile = "@OUTPUT_PREFIX@_ion_elastic"
+#SPECIES# s:Sc/IonElastic/IfOutputFileAlreadyExists = "Overwrite"
+#SPECIES# s:Sc/IonNuclearLET/Quantity = "IonNuclearLETNtuple"
+#SPECIES# s:Sc/IonNuclearLET/Component = "Phantom"
+#SPECIES# s:Sc/IonNuclearLET/OutputType = "ASCII"
+#SPECIES# s:Sc/IonNuclearLET/OutputFile = "@OUTPUT_PREFIX@_ion_nuclear_let"
+#SPECIES# s:Sc/IonNuclearLET/IfOutputFileAlreadyExists = "Overwrite"
+
+# Keep the physics list consistent with the CT/TOPAS validation runs.
+sv:Ph/Default/Modules = 7 "g4em-standard_opt4" "g4h-phy_QGSP_BIC_HP" "g4decay" "g4ion-inclxx" "g4h-elastic_HP" "g4stopping" "g4radioactivedecay"
+d:Ph/Default/CutForAllParticles = 0.05 mm

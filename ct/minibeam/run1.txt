@@ -1,0 +1,109 @@
+s:Ge/World/Material  = "Air" #"Vacuum"
+d:Ge/World/HLX       = 2.0 m
+d:Ge/World/HLY       = 2.0 m
+d:Ge/World/HLZ       = 2.0 m
+s:Ge/World/Color    = "white"
+
+s:Ge/Box/Type              = "TsBox"
+s:Ge/Box/Parent            = "World"
+s:Ge/Box/Material          = "G4_WATER"  
+d:Ge/Box/HLX               = 50.0 mm  
+d:Ge/Box/HLY               = 50.0 mm   
+d:Ge/Box/HLZ               = 50.0 mm  
+d:Ge/Box/TransX            = 0.0 mm
+d:Ge/Box/TransY            = 110.0 mm
+d:Ge/Box/TransZ            = 0.0 mm
+s:Ge/Box/Color             = "yellow"
+b:Ge/Box/IsVisible         = "True"
+
+s:Ge/Box2/Type              = "TsBox"
+s:Ge/Box2/Parent            = "Box"
+s:Ge/Box2/Material          = "G4_WATER"  
+d:Ge/Box2/HLX               = 50.0 mm  
+d:Ge/Box2/HLY               = 50.0 mm   
+d:Ge/Box2/HLZ               = 20 mm  
+d:Ge/Box2/TransX            = 0.0 mm
+d:Ge/Box2/TransY            = 0.0 mm
+d:Ge/Box2/TransZ            = 0.0 mm
+s:Ge/Box2/Color             = "yellow"
+b:Ge/Box2/IsVisible         = "True"
+i:Sc/Box2/XBins = 1000
+i:Sc/Box2/YBins = 1000
+i:Sc/Box2/ZBins = 40
+
+# scoring
+s:Sc/DoseAtPhantomP/OutputFile = "dose"
+s:Sc/DoseAtPhantomP/OutputType = "binary"
+b:Sc/DoseAtPhantomP/OutputAfterRun = "FALSE"
+s:Sc/DoseAtPhantomP/Quantity                  = "DoseToMedium"
+s:Sc/DoseAtPhantomP/Component                 = "Box2"
+b:Sc/DoseAtPhantomP/OutputToConsole           = "FALSE"
+s:Sc/DoseAtPhantomP/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/DoseAtPhantomP/XBins = 1000
+i:Sc/DoseAtPhantomP/YBins = 1000
+i:Sc/DoseAtPhantomP/ZBins = 40
+
+s:Sc/LET/Quantity                  = "myHadronLET"
+s:Sc/LET/Component                 = "Box2"
+s:Sc/LET/WeightBy                  = "Dose"
+s:Sc/LET/OutputType                = "binary"
+s:Sc/LET/OutputFile                = "LET_3.60.5_ag6"
+s:Sc/LET/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/LET/XBins = 1000
+i:Sc/LET/YBins = 1000
+i:Sc/LET/ZBins = 20
+
+
+includeFile = spots961.txt
+includeFile = aperture.txt
+
+sv:Ph/Default/Modules   = 6 "g4em-standard_opt4" "g4h-phy_QGSP_BERT_HP" "g4decay" "g4ion-binarycascade" "g4h-elastic_HP" "g4stopping"
+d:Ph/Default/CutForAllParticles = 0.05 mm
+d:Tf/TimelineEnd                    = 961 ms
+i:Tf/NumberOfSequentialTimes        = 961 # number of divitions of total time, at each time intertal, run the history
+
+i:Ts/NumberOfThreads = 56 # defaults to 1
+
+
+s:Ge/BeamPosition2/Parent="World"
+s:Ge/BeamPosition2/Type= "Group" # "TsBox" # "Group"
+d:Ge/BeamPosition2/TransX=  Tf/Scatterer1/L5/Value mm # 0. m
+d:Ge/BeamPosition2/TransY= -0.45 m
+d:Ge/BeamPosition2/TransZ= Tf/Scatterer1/L6/Value mm  # 0. m
+d:Ge/BeamPosition2/RotX=  Tf/Scatterer1/L7/Value deg # 180. deg 
+d:Ge/BeamPosition2/RotY= Tf/Scatterer1/L8/Value deg # 0. deg
+d:Ge/BeamPosition2/RotZ= 0. deg # Tf/Scatterer1/L7/Value deg # 0. deg 
+# rotation: all 0 z axix, rotate left hand, around Y, then X, rotate around axis in world space, Z is beam around it's self
+s:Ge/BeamPosition2/Color	= "red"
+
+s:Ge/BeamPosition20/Parent     = "BeamPosition2"
+s:Ge/BeamPosition20/Type       =  "TsBox"
+s:Ge/BeamPosition20/Material   = "Air"
+d:Ge/BeamPosition20/HLX        = 1 cm
+d:Ge/BeamPosition20/HLY        = 1 cm
+d:Ge/BeamPosition20/HLZ        = 2 cm
+d:Ge/BeamPosition20/TransX     = 0. m
+d:Ge/BeamPosition20/TransY     = 0. m
+d:Ge/BeamPosition20/TransZ     = 0. m
+d:Ge/BeamPosition20/RotX       = 0. deg
+d:Ge/BeamPosition20/RotY       = 0. deg
+d:Ge/BeamPosition20/RotZ       = 0. deg
+s:Ge/BeamPosition20/Color	  = "white"
+
+
+s:So/ProtonSource/Type = "emittance"
+s:So/ProtonSource/Component                = "BeamPosition2"
+s:So/ProtonSource/BeamParticle = "GenericIon(6,12,6)"
+s:So/ProtonSource/Distribution = "BiGaussian"
+d:So/ProtonSource/BeamEnergy               = Tf/Scatterer1/L2/Value MeV
+u:So/ProtonSource/BeamEnergySpread         = Tf/Scatterer1/L3/Value 
+d:So/ProtonSource/SigmaX = Tf/Scatterer1/L9/Value mm 
+u:So/ProtonSource/SigmaXprime = Tf/Scatterer1/L10/Value  
+u:So/ProtonSource/CorrelationX =  Tf/Scatterer1/L11/Value  
+d:So/ProtonSource/SigmaY = Tf/Scatterer1/L12/Value mm 
+u:So/ProtonSource/SigmaYprime = Tf/Scatterer1/L13/Value  
+u:So/ProtonSource/CorrelationY = Tf/Scatterer1/L14/Value  
+
+i:So/ProtonSource/NumberOfHistoriesInRun = Tf/Scatterer1/L4/Value 
+
+i:Ts/ShowHistoryCountAtInterval = 1000

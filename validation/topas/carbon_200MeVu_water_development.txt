@@ -1,0 +1,8 @@
+includeFile = carbon_200MeVu_water.txt
+
+# Development-statistics reference. Use the base file for the 1e6-history run.
+i:So/CarbonBeam/NumberOfHistoriesInRun = 10000
+s:Sc/DepthEnergy/OutputFile = "output/development_energy_deposit"
+s:Sc/DepthDose/OutputFile = "output/development_dose"
+s:Sc/PrimaryC12Energy/OutputFile = "output/development_primary_c12_energy_deposit"
+

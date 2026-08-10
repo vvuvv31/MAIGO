@@ -1,0 +1,170 @@
+includeFile = carbon_200MeVu_water.txt
+
+# Fragment-production calibration. Disable the IDD scorers inherited from the
+# base case so this run only accumulates reaction-product origin statistics.
+b:Sc/DepthEnergy/Active = "False"
+b:Sc/DepthDose/Active = "False"
+b:Sc/PrimaryC12Energy/Active = "False"
+
+# Event-level records of all secondaries created by the primary C-12 through a
+# hadronic process. OriginCount scorers below provide an independent QA path.
+s:Sc/CarbonReactionVertices/Quantity = "CarbonReactionNtuple"
+s:Sc/CarbonReactionVertices/Component = "Phantom"
+s:Sc/CarbonReactionVertices/OutputFile = "output/fragment_reference_reaction_vertices"
+s:Sc/CarbonReactionVertices/OutputType = "ASCII"
+s:Sc/CarbonReactionVertices/IfOutputFileAlreadyExists = "Overwrite"
+
+# Depth-dependent inclusive fragment yields (0.5 mm bins).
+s:Sc/OriginHydrogen/Quantity = "OriginCount"
+s:Sc/OriginHydrogen/Component = "Phantom"
+s:Sc/OriginHydrogen/OutputFile = "output/fragment_reference_origin_hydrogen"
+s:Sc/OriginHydrogen/OutputType = "csv"
+s:Sc/OriginHydrogen/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/OriginHydrogen/XBins = 1
+i:Sc/OriginHydrogen/YBins = 1
+i:Sc/OriginHydrogen/ZBins = 800
+sv:Sc/OriginHydrogen/Report = 1 "Sum"
+i:Sc/OriginHydrogen/OnlyIncludeParticlesOfAtomicNumber = 1
+s:Sc/OriginHydrogen/OnlyIncludeParticlesOfGeneration = "Secondary"
+
+s:Sc/OriginHelium/Quantity = "OriginCount"
+s:Sc/OriginHelium/Component = "Phantom"
+s:Sc/OriginHelium/OutputFile = "output/fragment_reference_origin_helium"
+s:Sc/OriginHelium/OutputType = "csv"
+s:Sc/OriginHelium/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/OriginHelium/XBins = 1
+i:Sc/OriginHelium/YBins = 1
+i:Sc/OriginHelium/ZBins = 800
+sv:Sc/OriginHelium/Report = 1 "Sum"
+i:Sc/OriginHelium/OnlyIncludeParticlesOfAtomicNumber = 2
+s:Sc/OriginHelium/OnlyIncludeParticlesOfGeneration = "Secondary"
+
+s:Sc/OriginLithium/Quantity = "OriginCount"
+s:Sc/OriginLithium/Component = "Phantom"
+s:Sc/OriginLithium/OutputFile = "output/fragment_reference_origin_lithium"
+s:Sc/OriginLithium/OutputType = "csv"
+s:Sc/OriginLithium/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/OriginLithium/XBins = 1
+i:Sc/OriginLithium/YBins = 1
+i:Sc/OriginLithium/ZBins = 800
+sv:Sc/OriginLithium/Report = 1 "Sum"
+i:Sc/OriginLithium/OnlyIncludeParticlesOfAtomicNumber = 3
+s:Sc/OriginLithium/OnlyIncludeParticlesOfGeneration = "Secondary"
+
+s:Sc/OriginBeryllium/Quantity = "OriginCount"
+s:Sc/OriginBeryllium/Component = "Phantom"
+s:Sc/OriginBeryllium/OutputFile = "output/fragment_reference_origin_beryllium"
+s:Sc/OriginBeryllium/OutputType = "csv"
+s:Sc/OriginBeryllium/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/OriginBeryllium/XBins = 1
+i:Sc/OriginBeryllium/YBins = 1
+i:Sc/OriginBeryllium/ZBins = 800
+sv:Sc/OriginBeryllium/Report = 1 "Sum"
+i:Sc/OriginBeryllium/OnlyIncludeParticlesOfAtomicNumber = 4
+s:Sc/OriginBeryllium/OnlyIncludeParticlesOfGeneration = "Secondary"
+
+s:Sc/OriginBoron/Quantity = "OriginCount"
+s:Sc/OriginBoron/Component = "Phantom"
+s:Sc/OriginBoron/OutputFile = "output/fragment_reference_origin_boron"
+s:Sc/OriginBoron/OutputType = "csv"
+s:Sc/OriginBoron/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/OriginBoron/XBins = 1
+i:Sc/OriginBoron/YBins = 1
+i:Sc/OriginBoron/ZBins = 800
+sv:Sc/OriginBoron/Report = 1 "Sum"
+i:Sc/OriginBoron/OnlyIncludeParticlesOfAtomicNumber = 5
+s:Sc/OriginBoron/OnlyIncludeParticlesOfGeneration = "Secondary"
+
+s:Sc/OriginSecondaryCarbon/Quantity = "OriginCount"
+s:Sc/OriginSecondaryCarbon/Component = "Phantom"
+s:Sc/OriginSecondaryCarbon/OutputFile = "output/fragment_reference_origin_secondary_carbon"
+s:Sc/OriginSecondaryCarbon/OutputType = "csv"
+s:Sc/OriginSecondaryCarbon/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/OriginSecondaryCarbon/XBins = 1
+i:Sc/OriginSecondaryCarbon/YBins = 1
+i:Sc/OriginSecondaryCarbon/ZBins = 800
+sv:Sc/OriginSecondaryCarbon/Report = 1 "Sum"
+i:Sc/OriginSecondaryCarbon/OnlyIncludeParticlesOfAtomicNumber = 6
+s:Sc/OriginSecondaryCarbon/OnlyIncludeParticlesOfGeneration = "Secondary"
+
+# Joint production-depth and initial-kinetic-energy spectra. Each light-ion
+# scorer spans 0--400 MeV/u in 2 MeV/u bins after dividing total KE by A.
+s:Sc/OriginProtonSpectrum/Quantity = "OriginCount"
+s:Sc/OriginProtonSpectrum/Component = "Phantom"
+s:Sc/OriginProtonSpectrum/OutputFile = "output/fragment_reference_origin_spectrum_proton"
+s:Sc/OriginProtonSpectrum/OutputType = "csv"
+s:Sc/OriginProtonSpectrum/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/OriginProtonSpectrum/XBins = 1
+i:Sc/OriginProtonSpectrum/YBins = 1
+i:Sc/OriginProtonSpectrum/ZBins = 800
+i:Sc/OriginProtonSpectrum/EBins = 200
+d:Sc/OriginProtonSpectrum/EBinMin = 0. MeV
+d:Sc/OriginProtonSpectrum/EBinMax = 400. MeV
+s:Sc/OriginProtonSpectrum/EBinEnergy = "PreStep"
+sv:Sc/OriginProtonSpectrum/Report = 1 "Sum"
+sv:Sc/OriginProtonSpectrum/OnlyIncludeParticlesNamed = 1 "proton"
+s:Sc/OriginProtonSpectrum/OnlyIncludeParticlesOfGeneration = "Secondary"
+
+s:Sc/OriginDeuteronSpectrum/Quantity = "OriginCount"
+s:Sc/OriginDeuteronSpectrum/Component = "Phantom"
+s:Sc/OriginDeuteronSpectrum/OutputFile = "output/fragment_reference_origin_spectrum_deuteron"
+s:Sc/OriginDeuteronSpectrum/OutputType = "csv"
+s:Sc/OriginDeuteronSpectrum/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/OriginDeuteronSpectrum/XBins = 1
+i:Sc/OriginDeuteronSpectrum/YBins = 1
+i:Sc/OriginDeuteronSpectrum/ZBins = 800
+i:Sc/OriginDeuteronSpectrum/EBins = 200
+d:Sc/OriginDeuteronSpectrum/EBinMin = 0. MeV
+d:Sc/OriginDeuteronSpectrum/EBinMax = 800. MeV
+s:Sc/OriginDeuteronSpectrum/EBinEnergy = "PreStep"
+sv:Sc/OriginDeuteronSpectrum/Report = 1 "Sum"
+sv:Sc/OriginDeuteronSpectrum/OnlyIncludeParticlesNamed = 1 "deuteron"
+s:Sc/OriginDeuteronSpectrum/OnlyIncludeParticlesOfGeneration = "Secondary"
+
+s:Sc/OriginTritonSpectrum/Quantity = "OriginCount"
+s:Sc/OriginTritonSpectrum/Component = "Phantom"
+s:Sc/OriginTritonSpectrum/OutputFile = "output/fragment_reference_origin_spectrum_triton"
+s:Sc/OriginTritonSpectrum/OutputType = "csv"
+s:Sc/OriginTritonSpectrum/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/OriginTritonSpectrum/XBins = 1
+i:Sc/OriginTritonSpectrum/YBins = 1
+i:Sc/OriginTritonSpectrum/ZBins = 800
+i:Sc/OriginTritonSpectrum/EBins = 200
+d:Sc/OriginTritonSpectrum/EBinMin = 0. MeV
+d:Sc/OriginTritonSpectrum/EBinMax = 1200. MeV
+s:Sc/OriginTritonSpectrum/EBinEnergy = "PreStep"
+sv:Sc/OriginTritonSpectrum/Report = 1 "Sum"
+sv:Sc/OriginTritonSpectrum/OnlyIncludeParticlesNamed = 1 "triton"
+s:Sc/OriginTritonSpectrum/OnlyIncludeParticlesOfGeneration = "Secondary"
+
+s:Sc/OriginHe3Spectrum/Quantity = "OriginCount"
+s:Sc/OriginHe3Spectrum/Component = "Phantom"
+s:Sc/OriginHe3Spectrum/OutputFile = "output/fragment_reference_origin_spectrum_he3"
+s:Sc/OriginHe3Spectrum/OutputType = "csv"
+s:Sc/OriginHe3Spectrum/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/OriginHe3Spectrum/XBins = 1
+i:Sc/OriginHe3Spectrum/YBins = 1
+i:Sc/OriginHe3Spectrum/ZBins = 800
+i:Sc/OriginHe3Spectrum/EBins = 200
+d:Sc/OriginHe3Spectrum/EBinMin = 0. MeV
+d:Sc/OriginHe3Spectrum/EBinMax = 1200. MeV
+s:Sc/OriginHe3Spectrum/EBinEnergy = "PreStep"
+sv:Sc/OriginHe3Spectrum/Report = 1 "Sum"
+sv:Sc/OriginHe3Spectrum/OnlyIncludeParticlesNamed = 1 "He3"
+s:Sc/OriginHe3Spectrum/OnlyIncludeParticlesOfGeneration = "Secondary"
+
+s:Sc/OriginAlphaSpectrum/Quantity = "OriginCount"
+s:Sc/OriginAlphaSpectrum/Component = "Phantom"
+s:Sc/OriginAlphaSpectrum/OutputFile = "output/fragment_reference_origin_spectrum_alpha"
+s:Sc/OriginAlphaSpectrum/OutputType = "csv"
+s:Sc/OriginAlphaSpectrum/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/OriginAlphaSpectrum/XBins = 1
+i:Sc/OriginAlphaSpectrum/YBins = 1
+i:Sc/OriginAlphaSpectrum/ZBins = 800
+i:Sc/OriginAlphaSpectrum/EBins = 200
+d:Sc/OriginAlphaSpectrum/EBinMin = 0. MeV
+d:Sc/OriginAlphaSpectrum/EBinMax = 1600. MeV
+s:Sc/OriginAlphaSpectrum/EBinEnergy = "PreStep"
+sv:Sc/OriginAlphaSpectrum/Report = 1 "Sum"
+sv:Sc/OriginAlphaSpectrum/OnlyIncludeParticlesNamed = 1 "alpha"
+s:Sc/OriginAlphaSpectrum/OnlyIncludeParticlesOfGeneration = "Secondary"

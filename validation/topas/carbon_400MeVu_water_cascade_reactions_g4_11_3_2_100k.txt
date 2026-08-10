@@ -1,0 +1,7 @@
+includeFile = carbon_400MeVu_water_cascade_reactions.txt
+
+# Local same-version production reference for GPU LET validation.
+i:Ts/NumberOfThreads = 40
+i:Ts/ShowHistoryCountAtInterval = 0
+i:So/CarbonBeam/NumberOfHistoriesInRun = 100000
+s:Sc/CascadeReactions/OutputFile = "output/cascade_e400_g4_11_3_2_100k_reactions"

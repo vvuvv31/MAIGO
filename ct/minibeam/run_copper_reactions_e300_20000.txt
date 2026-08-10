@@ -1,0 +1,9 @@
+# Generated Copper C-12 reaction-package energy sweep.
+includeFile = run_copper_reactions_2150MeV_20k.txt
+
+i:Ts/Seed = 20261031
+i:Ts/NumberOfThreads = 40
+i:Ts/ShowHistoryCountAtInterval = 2000
+d:So/CarbonBeam/BeamEnergy = 3600 MeV
+i:So/CarbonBeam/NumberOfHistoriesInRun = 20000
+s:Sc/CopperReactions/OutputFile = "output/copper_reactions_e300_20000"

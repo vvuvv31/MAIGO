@@ -1,0 +1,6 @@
+includeFile = carbon_400MeVu_water.txt
+
+i:So/CarbonBeam/NumberOfHistoriesInRun = 100
+s:Sc/DepthEnergy/OutputFile = "output/e400_smoke_energy_deposit"
+s:Sc/DepthDose/OutputFile = "output/e400_smoke_dose"
+s:Sc/PrimaryC12Energy/OutputFile = "output/e400_smoke_primary_c12_energy_deposit"

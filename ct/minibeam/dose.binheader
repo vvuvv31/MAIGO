@@ -1,0 +1,9 @@
+# TOPAS Version: 4.2.p3
+# Parameter File: run1.txt
+# Results for scorer: DoseAtPhantomP
+# Scored in component: Box2
+# X in 1000 bins of 0.01 cm
+# Y in 1000 bins of 0.01 cm
+# Z in 40 bins of 0.1 cm
+# DoseToMedium ( Gy ) : Sum   
+# Binary file: dose.bin

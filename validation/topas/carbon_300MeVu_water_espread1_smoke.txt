@@ -1,0 +1,6 @@
+includeFile = carbon_300MeVu_water_espread1.txt
+i:Ts/NumberOfThreads = 8
+i:So/CarbonBeam/NumberOfHistoriesInRun = 1000
+s:Sc/DepthEnergy/OutputFile = "output/e300_espread1_smoke_energy_deposit"
+s:Sc/DepthDose/OutputFile = "output/e300_espread1_smoke_dose"
+s:Sc/PrimaryC12Energy/OutputFile = "output/e300_espread1_smoke_primary_c12_energy_deposit"

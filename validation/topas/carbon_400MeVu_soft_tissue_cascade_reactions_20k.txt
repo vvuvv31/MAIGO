@@ -1,0 +1,10 @@
+# Representative soft-tissue primary/cascade final-state diagnostic.
+# Uses the same TOPAS 4.2.p3 / Geant4 11.3.2 scorer and 400 MeV/u energy
+# coverage as the production water package and the lung/bone diagnostics.
+includeFile = carbon_400MeVu_water_cascade_reactions.txt
+
+s:Ge/Phantom/Material = "G4_TISSUE_SOFT_ICRP"
+i:Ts/NumberOfThreads = 40
+i:So/CarbonBeam/NumberOfHistoriesInRun = 20000
+i:Ts/ShowHistoryCountAtInterval = 5000
+s:Sc/CascadeReactions/OutputFile = "output/cascade_e400_soft_tissue_20k_reactions"

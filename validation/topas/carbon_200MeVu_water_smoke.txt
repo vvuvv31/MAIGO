@@ -1,0 +1,8 @@
+includeFile = carbon_200MeVu_water.txt
+
+# Fast syntax/geometry/scorer check. This is not a physics reference run.
+i:So/CarbonBeam/NumberOfHistoriesInRun = 100
+s:Sc/DepthEnergy/OutputFile = "output/smoke_energy_deposit"
+s:Sc/DepthDose/OutputFile = "output/smoke_dose"
+s:Sc/PrimaryC12Energy/OutputFile = "output/smoke_primary_c12_energy_deposit"
+

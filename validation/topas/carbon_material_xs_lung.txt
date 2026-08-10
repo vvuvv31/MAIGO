@@ -1,0 +1,7 @@
+includeFile = carbon_material_tables_base.txt
+s:Ge/Sample/Material = "G4_LUNG_ICRP"
+s:Sc/CarbonCrossSections/Quantity = "CarbonCrossSectionNtuple"
+s:Sc/CarbonCrossSections/Component = "Sample"
+s:Sc/CarbonCrossSections/OutputFile = "output/carbon_c12_inelastic_cross_sections_lung"
+s:Sc/CarbonCrossSections/OutputType = "ASCII"
+s:Sc/CarbonCrossSections/IfOutputFileAlreadyExists = "Overwrite"

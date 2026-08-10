@@ -1,0 +1,9 @@
+includeFile = carbon_200MeVu_water.txt
+
+# Electromagnetic-only isolation case for CSDA/straggling validation.
+i:So/CarbonBeam/NumberOfHistoriesInRun = 100
+sv:Ph/Default/Modules = 1 "g4em-standard_opt4"
+s:Sc/DepthEnergy/OutputFile = "output/em_only_smoke_energy_deposit"
+s:Sc/DepthDose/OutputFile = "output/em_only_smoke_dose"
+s:Sc/PrimaryC12Energy/OutputFile = "output/em_only_smoke_primary_c12_energy_deposit"
+

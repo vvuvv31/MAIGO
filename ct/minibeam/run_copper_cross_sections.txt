@@ -1,0 +1,9 @@
+# Extract the C-12 macroscopic inelastic cross section in Copper from the
+# exact TOPAS 4.2.p3 / Geant4 11.3.2 physics configuration.
+includeFile = run_copper_material_tables.txt
+
+s:Sc/CarbonCrossSections/Quantity = "CarbonCrossSectionNtuple"
+s:Sc/CarbonCrossSections/Component = "Sample"
+s:Sc/CarbonCrossSections/OutputFile = "output/copper_c12_inelastic_cross_sections"
+s:Sc/CarbonCrossSections/OutputType = "ASCII"
+s:Sc/CarbonCrossSections/IfOutputFileAlreadyExists = "Overwrite"

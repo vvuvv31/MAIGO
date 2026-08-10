@@ -1,0 +1,87 @@
+# Water tank 150x150x150 mm, 5x5 cm square C-12, SOBP 50-100 mm.
+# 3 mm isotropic DoseToMedium + EnergyDeposit (50x50x50).
+i:Ts/Seed = 20260716
+i:Ts/NumberOfThreads = 56
+b:Ts/ShowHistoryCountLessFrequentlyAsSimulationProgresses = "True"
+b:Gr/Enable = "False"
+
+s:Ge/World/Type = "TsBox"
+s:Ge/World/Material = "Air"
+d:Ge/World/HLX = 20. cm
+d:Ge/World/HLY = 20. cm
+d:Ge/World/HLZ = 20. cm
+
+s:Ge/Phantom/Parent = "World"
+s:Ge/Phantom/Type = "TsBox"
+s:Ge/Phantom/Material = "Water_75eV"
+d:Ge/Phantom/HLX = 75. mm
+d:Ge/Phantom/HLY = 75. mm
+d:Ge/Phantom/HLZ = 75. mm
+d:Ge/Phantom/TransX = 0. mm
+d:Ge/Phantom/TransY = 0. mm
+d:Ge/Phantom/TransZ = 75. mm
+d:Ge/Phantom/MaxStepSize = 0.5 mm
+
+s:Ge/BeamPosition/Parent = "World"
+s:Ge/BeamPosition/Type = "Group"
+d:Ge/BeamPosition/TransX = 0. mm
+d:Ge/BeamPosition/TransY = 0. mm
+d:Ge/BeamPosition/TransZ = -0.1 mm
+d:Ge/BeamPosition/RotX = 0. deg
+d:Ge/BeamPosition/RotY = 0. deg
+d:Ge/BeamPosition/RotZ = 0. deg
+
+includeFile = spots_sobp_water_5_10cm.txt
+
+s:So/CarbonBeam/Type = "Beam"
+s:So/CarbonBeam/Component = "BeamPosition"
+s:So/CarbonBeam/BeamParticle = "GenericIon(6,12)"
+d:So/CarbonBeam/BeamEnergy = Tf/Scatterer1/L2/Value MeV
+u:So/CarbonBeam/BeamEnergySpread = Tf/Scatterer1/L3/Value
+s:So/CarbonBeam/BeamPositionDistribution = "Flat"
+s:So/CarbonBeam/BeamPositionCutoffShape = "Rectangle"
+d:So/CarbonBeam/BeamPositionCutoffX = 25. mm
+d:So/CarbonBeam/BeamPositionCutoffY = 25. mm
+s:So/CarbonBeam/BeamAngularDistribution = "None"
+i:So/CarbonBeam/NumberOfHistoriesInRun = Tf/Scatterer1/L4/Value
+i:Ts/ShowHistoryCountAtInterval = 20000
+
+s:Ph/ListName = "Default"
+s:Ph/Default/Type = "Geant4_Modular"
+sv:Ph/Default/Modules = 6 "g4em-standard_opt4" "g4h-phy_QGSP_BIC_HP" "g4decay" "g4ion-binarycascade" "g4h-elastic_HP" "g4stopping"
+d:Ph/Default/CutForAllParticles = 0.05 mm
+
+d:Tf/TimelineEnd = 21.0 ms
+i:Tf/NumberOfSequentialTimes = 21
+
+# 1D IDD (0.5 mm) over full phantom cross-section
+s:Sc/DepthEnergy/Quantity = "EnergyDeposit"
+s:Sc/DepthEnergy/Component = "Phantom"
+s:Sc/DepthEnergy/OutputFile = "output/sobp_water_5_10cm_3mm_idd_energy"
+s:Sc/DepthEnergy/OutputType = "csv"
+s:Sc/DepthEnergy/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/DepthEnergy/XBins = 1
+i:Sc/DepthEnergy/YBins = 1
+i:Sc/DepthEnergy/ZBins = 300
+sv:Sc/DepthEnergy/Report = 1 "Sum"
+
+# 3 mm x 3 mm x 3 mm 3D dose (50 x 50 x 50)
+s:Sc/Dose3mm/Quantity = "DoseToMedium"
+s:Sc/Dose3mm/Component = "Phantom"
+s:Sc/Dose3mm/OutputFile = "output/sobp_water_5_10cm_3mm_dose3d"
+s:Sc/Dose3mm/OutputType = "csv"
+s:Sc/Dose3mm/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/Dose3mm/XBins = 50
+i:Sc/Dose3mm/YBins = 50
+i:Sc/Dose3mm/ZBins = 50
+sv:Sc/Dose3mm/Report = 1 "Sum"
+
+s:Sc/Energy3mm/Quantity = "EnergyDeposit"
+s:Sc/Energy3mm/Component = "Phantom"
+s:Sc/Energy3mm/OutputFile = "output/sobp_water_5_10cm_3mm_energy3d"
+s:Sc/Energy3mm/OutputType = "csv"
+s:Sc/Energy3mm/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/Energy3mm/XBins = 50
+i:Sc/Energy3mm/YBins = 50
+i:Sc/Energy3mm/ZBins = 50
+sv:Sc/Energy3mm/Report = 1 "Sum"
