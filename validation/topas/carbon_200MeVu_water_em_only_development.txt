@@ -1,9 +1,0 @@
-includeFile = carbon_200MeVu_water.txt
-
-# 10k-history electromagnetic-only reference for CSDA/straggling validation.
-i:So/CarbonBeam/NumberOfHistoriesInRun = 10000
-sv:Ph/Default/Modules = 1 "g4em-standard_opt4"
-s:Sc/DepthEnergy/OutputFile = "output/em_only_development_energy_deposit"
-s:Sc/DepthDose/OutputFile = "output/em_only_development_dose"
-s:Sc/PrimaryC12Energy/OutputFile = "output/em_only_development_primary_c12_energy_deposit"
-

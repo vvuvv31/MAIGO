@@ -1,8 +1,0 @@
-includeFile = carbon_200MeVu_water_letd.txt
-i:So/CarbonBeam/NumberOfHistoriesInRun = 50000
-d:So/CarbonBeam/BeamEnergy = 1200. MeV
-s:Sc/PrimaryC12LETd/OutputFile = "output/e100_letd_50k_primary_c12"
-s:Sc/AllHadronLETd/OutputFile = "output/e100_letd_50k_all_hadron"
-s:Sc/DepthEnergy/OutputFile = "output/e100_letd_50k_total_energy"
-s:Sc/DepthDose/OutputFile = "output/e100_letd_50k_dose"
-s:Sc/PrimaryC12Energy/OutputFile = "output/e100_letd_50k_primary_energy"

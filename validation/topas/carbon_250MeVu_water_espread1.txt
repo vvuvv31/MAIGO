@@ -1,3 +1,0 @@
-# 1% RMS beam energy spread (TOPAS BeamEnergySpread is percent).
-includeFile = carbon_250MeVu_water.txt
-u:So/CarbonBeam/BeamEnergySpread = 1.0

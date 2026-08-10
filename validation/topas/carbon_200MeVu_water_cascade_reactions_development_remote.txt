@@ -1,5 +1,0 @@
-includeFile = carbon_200MeVu_water_cascade_reactions.txt
-
-i:Ts/NumberOfThreads = 56
-i:So/CarbonBeam/NumberOfHistoriesInRun = 100000
-s:Sc/CascadeReactions/OutputFile = "output/cascade_development_reactions"

@@ -1,6 +1,0 @@
-# Production-statistics CT-matched prompt final-state package.
-includeFile = carbon_400MeVu_soft_tissue_inclxx_cascade_reactions_20k.txt
-
-i:So/CarbonBeam/NumberOfHistoriesInRun = 100000
-i:Ts/ShowHistoryCountAtInterval = 10000
-s:Sc/CascadeReactions/OutputFile = "output/cascade_e400_soft_tissue_inclxx_100k_reactions"

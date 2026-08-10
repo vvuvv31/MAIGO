@@ -1,5 +1,0 @@
-includeFile = carbon_200MeVu_water_neutral_interactions.txt
-
-i:Ts/NumberOfThreads = 56
-i:So/CarbonBeam/NumberOfHistoriesInRun = 100000
-s:Sc/NeutralInteractions/OutputFile = "output/neutral_development_interactions"

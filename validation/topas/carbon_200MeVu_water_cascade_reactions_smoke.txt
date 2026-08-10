@@ -1,4 +1,0 @@
-includeFile = carbon_200MeVu_water_cascade_reactions.txt
-
-i:So/CarbonBeam/NumberOfHistoriesInRun = 100
-s:Sc/CascadeReactions/OutputFile = "output/cascade_smoke_reactions"

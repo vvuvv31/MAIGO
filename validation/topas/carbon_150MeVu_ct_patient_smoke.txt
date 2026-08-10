@@ -1,4 +1,0 @@
-includeFile = carbon_150MeVu_ct_patient.txt
-i:Ts/NumberOfThreads = 8
-i:So/CarbonBeam/NumberOfHistoriesInRun = 200
-s:Sc/IddEnergy/OutputFile = "output/ct_patient_smoke_energy_deposit"

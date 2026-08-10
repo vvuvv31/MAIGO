@@ -1,7 +1,0 @@
-# Same extraction grid and physics as the Copper table, for the Air world on
-# both sides of the collimator.
-includeFile = run_copper_material_tables.txt
-
-s:Ge/Sample/Material = "G4_AIR"
-s:Sc/CarbonStoppingPower/OutputFile = "output/air_c12_stopping_power"
-s:Sc/MaterialProperties/OutputFile = "output/air_material_properties"

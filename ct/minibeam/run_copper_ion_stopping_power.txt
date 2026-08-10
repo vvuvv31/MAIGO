@@ -1,9 +1,0 @@
-# Extract exact p/d/t/He/... stopping powers in Copper from the reference
-# TOPAS 4.2.p3 / Geant4 11.3.2 configuration.
-includeFile = run_copper_material_tables.txt
-
-s:Sc/IonStoppingPower/Quantity = "IonStoppingPowerNtuple"
-s:Sc/IonStoppingPower/Component = "Sample"
-s:Sc/IonStoppingPower/OutputFile = "output/ion_stopping_power_copper_g4_11_3_2"
-s:Sc/IonStoppingPower/OutputType = "ASCII"
-s:Sc/IonStoppingPower/IfOutputFileAlreadyExists = "Overwrite"

@@ -1,4 +1,0 @@
-includeFile = carbon_200MeVu_water_ancestor_attribution_development.txt
-
-# Dedicated Linux host v@192.168.31.5 has 56 logical CPUs.
-i:Ts/NumberOfThreads = 56

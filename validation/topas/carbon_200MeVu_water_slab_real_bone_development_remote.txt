@@ -1,6 +1,0 @@
-includeFile = carbon_200MeVu_water_slab_real_bone.txt
-i:Ts/NumberOfThreads = 56
-i:So/CarbonBeam/NumberOfHistoriesInRun = 50000
-s:Sc/Layer1Energy/OutputFile = "output/slab_real_bone_development_layer1_energy_deposit"
-s:Sc/DenseEnergy/OutputFile = "output/slab_real_bone_development_bone_energy_deposit"
-s:Sc/Layer2Energy/OutputFile = "output/slab_real_bone_development_layer2_energy_deposit"
