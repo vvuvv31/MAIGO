@@ -52,7 +52,7 @@ MAIGO/
 │   ├── transport_sycl_legacy.cpp        master 兼容 SYCL 内核（水/CT/LET）
 │   ├── transport_sycl.cpp               minibeam Copper 路径（可选）
 │   ├── transport_sycl_dispatch.cpp      ON 时 runtime 分发
-│   ├── detail/                          共享 SyclTransportContext Impl
+│   ├── detail/                          共享 SYCL helpers + context（.inc）
 │   ├── device.cpp / io.cpp / …          设备选择、写出、物理表
 │   └── topas_spots.cpp / tps_source.cpp 束流计划
 ├── config/                              束流与验证 YAML
@@ -104,16 +104,32 @@ MAIGO/
 | SYCL + **MINIBEAM=OFF** | `transport_sycl_legacy.cpp` | `transport_sycl` ≡ legacy |
 | SYCL + **MINIBEAM=ON** | `transport_sycl_legacy.cpp` + `transport_sycl.cpp` + `transport_sycl_dispatch.cpp` | `transport_sycl` 按 YAML 分发 |
 
-共享设备上下文：
+共享设备上下文与 device helpers（均以 `.inc` **include 进** 各 SYCL TU，不单独编译；
+保留 dual-kernel isolation，避免 ODR/设备符号问题）：
 
-- `src/detail/sycl_transport_context_impl.inc` — `SyclTransportContext::Impl`
-- `src/detail/sycl_transport_context_methods.inc` — 构造/析构（仅 legacy TU 在 ON 时定义方法，`CARBON_DEFINE_SYCL_CONTEXT`）
+| 文件 | 职责 | Include 上下文 |
+|------|------|----------------|
+| `sycl_dose_atomic.inc` | `DoseAtomicT` / `k_dose_atomic_fp32` | `namespace carbon` |
+| `sycl_profile.inc` | `profile_add` / `profile_face` | `namespace carbon` |
+| `sycl_device_math.inc` | `Direction3F`、MCS、`advance_representable`、grid/event 工具 | 匿名命名空间 |
+| `sycl_cascade_select.inc` | cascade/neutral 查找与能量/深度条件选择（不含 path-local `select_binned`） | 匿名命名空间 |
+| `sycl_cascade_host_lut.inc` | host 侧 cascade XS LUT 构建 | 匿名命名空间 |
+| `sycl_score_device.inc` | exponential / secondary / LET / birth device scorers | 匿名命名空间 |
+| `sycl_transport_context_impl.inc` | `SyclTransportContext::Impl` | `namespace carbon` |
+| `sycl_transport_context_methods.inc` | 构造/析构（仅 legacy TU 在 ON 时定义，`CARBON_DEFINE_SYCL_CONTEXT`） | `namespace carbon` |
+
+路径专用逻辑仍留在各自 TU：legacy 的 `cuda_clock_warmup` / `blend_direction_*`；
+minibeam 的 Copper beamline、`nudge_past_*`、`electronic_voxel_target` 等；
+两侧各自的 `deposit_local_heat_device` 与 `select_binned_energy_cascade_interaction`。
+
+**修改共享 helper 检查清单**：改 `.inc` 后必须编译 OFF + ON，跑 `carbon_tests` 与固定
+seed smoke；涉及 scorer / cascade 选择时再跑 minibeam isolation（若有三套二进制）。
 
 ```text
                  CARBON_ENABLE_MINIBEAM=OFF
                  ─────────────────────────
                  transport_sycl_legacy.cpp
-                          │
+                          │  #include detail/sycl_*.inc
                           ▼
                    transport_sycl()
 
@@ -122,8 +138,8 @@ MAIGO/
                  ─────────────────────────
    transport_sycl_dispatch.cpp
             │
-            ├── minibeam:false ──► transport_sycl_legacy()
-            └── minibeam:true  ──► transport_sycl_minibeam()
+            ├── minibeam:false ──► transport_sycl_legacy()  (+ shared .inc)
+            └── minibeam:true  ──► transport_sycl_minibeam() (+ shared .inc)
 ```
 
 ### 2.4 推荐 presets（节选）
@@ -173,7 +189,7 @@ main
 定义于 `include/carbon/transport_config.hpp`，集中存放：
 
 - 束流、histories、种子、步长
-- `physics_profile: accurate|best|medium|fast` 输运策略（默认 `accurate`）
+- 公开 `physics_profile: fast|best` 输运策略（未设置时走内部兼容路径）
 - slab / insert / CT 几何
 - 次级、级联、中性、LET、voxel scorer
 - GPU 批大小 / `secondary_persistent_workers` 等
@@ -232,15 +248,13 @@ Neutral kernel（可选）
   → result reduction
 ```
 
-`physics_profile` 未设置时为 `accurate`，它是兼容旧 YAML 的原行为。
-新的计划级接口为 `best / medium / fast`：
+`physics_profile` 未设置时保留原有 legacy/minibeam 行为；该内部兼容值不是公开
+生产档位。普通 CT 的计划级接口只有 `fast / best`：
 
 | profile | 用途 | LET | 次级步长 | 局域沉积 cutoff | 验收目标 |
 |---|---|---|---:|---:|---|
 | `best` | 最终 dose + LET | 必须开启、粒子特异表 | ≤0.1 mm | ≤0.1 MeV | 尽量提高 LET；dose global 2%/2 mm ≥99% |
-| `medium` | 平衡速度/剂量 | 默认配置关闭；允许诊断开启 | 0.5 mm | 1 MeV | TOPAS dose global 2%/2 mm ≥99% |
 | `fast` | 优化迭代、最终前预跑 | 强制关闭 | 1 mm | 2 MeV | TOPAS dose global 3%/3 mm ≥99% |
-| `accurate` | 旧配置兼容 | 按 YAML | 按 YAML | 按 YAML | 保持历史行为 |
 
 gamma 是每个病例相对 TOPAS 的**验收门**，不是 profile 名称自动保证的结果。
 新病例至少先用相同 histories 做一次 TOPAS 验证；任何档位都不允许通过减少
@@ -253,38 +267,35 @@ gamma 是每个病例相对 TOPAS 的**验收门**，不是 profile 名称自动
 - `maximum_step_mm<=0.1`、`maximum_relative_energy_loss<=0.001`；
 - primary 与 secondary cutoff 均不高于 0.1 MeV。
 
-`medium` 和 `fast` 保留完整的 charged dose chain、CT 材料边界和 dose voxel
-边界。二者不是 minibeam 的低精度模式，也不能用于非 CT 几何。
+`fast` 保留完整的 charged dose chain、CT 材料边界和 dose voxel 边界。它不是
+minibeam 的低精度模式，也不能用于非 CT 几何。
 
 ```text
 YAML / CLI
   → validate profile and feature compatibility
-  → medium/fast CUDA primary chunk 16k（减少 host submit / wait）
+  → fast CUDA primary chunk 16k（减少 host submit / wait）
   → primary physics 不变
-  → medium: charged-secondary 0.5 mm / ≤1 MeV 局部沉积
   → fast: charged-secondary 1 mm / ≤2 MeV 局部沉积
   → CT material face / dose voxel face / energy-loss limit 仍然 clamp
-  → result.backend 追加 +physics-best / +physics-medium / +physics-fast
+  → result.backend 追加 +physics-best / +physics-fast
 ```
 
 | 条件 | 行为 |
 |------|------|
-| 未设置 profile | `accurate`，保持原行为 |
+| 未设置 profile | 内部 legacy/minibeam 兼容，保持原行为 |
 | `best` + LET + 完整物理 | 允许 |
 | `best` 缺 LET/粒子表/完整 cascade | **拒绝配置** |
-| `medium` + 普通 CT | 允许 |
 | `fast` + 普通 CT dose | 允许 |
-| `medium/fast` + minibeam 或非 CT | **拒绝配置** |
-| `fast` + LET scorer | 允许（可选；使用 fast 次级近似，LET 精度低于 best） |
+| `fast` + minibeam、非 CT 或 LET scorer | **拒绝配置** |
+| 已移除的 `medium` | **拒绝并提示选择 fast/best** |
 | 未知 profile | **拒绝配置** |
 
-三个 profile 的正式结果仍要求
+两个公开 profile 的正式结果仍要求
 `Secondary queue overflow: 0` 和 `Cascade queue overflow: 0`。
 
 RT07575 可复现配置：
 
 - `best`：`config/beam_ct_fullplan_rt07575_let_soft_tissue.yaml`
-- `medium`：`config/beam_ct_fullplan_rt07575_medium.yaml`
 - `fast`：`config/beam_ct_fullplan_rt07575_fast.yaml`
 
 ### 5.4 SYCL minibeam（`transport_sycl.cpp`，仅 MINIBEAM=ON）
