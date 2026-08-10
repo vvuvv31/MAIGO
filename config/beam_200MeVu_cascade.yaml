@@ -1,5 +1,5 @@
-# Water phantom LET_d scoring (requires particle-specific stopping power table).
-number_of_histories: 10000
+# Water phantom with reaction packages + one generation of fragment cascade (SYCL).
+number_of_histories: 1000
 initial_energy_MeVu: 200.0
 mass_number: 12
 phantom_length_mm: 400.0
@@ -15,17 +15,14 @@ enable_primary_attenuation: true
 enable_secondary_generation: true
 enable_secondary_transport: true
 enable_fragment_cascade: true
-maximum_cascade_generations: 2
-scorerLET: true
-use_particle_specific_stopping_power: true
-particle_stopping_power_file: data/ion_stopping_power_water_geant4_11_3_2.csv
-secondary_queue_capacity: 200000
+maximum_cascade_generations: 1
+secondary_queue_capacity: 100000
 max_device_memory_fraction: 0.50
 random_seed: 20260714
 stopping_power_file: data/stopping_power_water.csv
 nuclear_cross_section_file: data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv
 reaction_package_file: data/packages/topas_200MeVu_reaction_packages_development.bin
-cascade_package_file: data/packages/topas_200MeVu_cascade_100k.bin
-output_file: out/letd_depth_dose.csv
-let_output_file: out/letd.csv
+cascade_package_file: data/packages/topas_200MeVu_cascade_smoke.bin
+output_file: out/cascade_depth_dose.csv
+fragment_species_output_file: out/cascade_species.csv
 device: gpu

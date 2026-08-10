@@ -81,9 +81,9 @@ struct PrimarySpotBatchEntry {
 };
 
 struct TransportConfig {
-    // Explicit transport accuracy policy. "accurate" preserves the validated
-    // legacy/minibeam behavior. "fast" is an opt-in CT dose profile and is
-    // rejected for minibeam and LET scoring.
+    // Explicit transport accuracy policy. Public conventional-CT profiles are
+    // "fast" and "best". "accurate" is retained only as the internal default
+    // for legacy/minibeam configurations that omit a public profile.
     std::string physics_profile{"accurate"};
     std::size_t number_of_histories{10'000};
     double initial_energy_MeVu{200.0};

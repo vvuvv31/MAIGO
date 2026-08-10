@@ -198,10 +198,16 @@ std::size_t TransportConfig::number_of_voxels() const {
 }
 
 void TransportConfig::validate() const {
-    if (physics_profile != "accurate" && physics_profile != "best" &&
-        physics_profile != "medium" && physics_profile != "fast") {
+    if (physics_profile == "medium") {
         throw std::invalid_argument(
-            "physics_profile must be accurate, best, medium, or fast");
+            "physics_profile=medium has been removed; choose physics_profile=fast "
+            "for maximum throughput or physics_profile=best for maximum accuracy");
+    }
+    if (physics_profile != "accurate" && physics_profile != "best" &&
+        physics_profile != "fast") {
+        throw std::invalid_argument(
+            "physics_profile must be fast or best for conventional CT; omit it "
+            "only for legacy/minibeam compatibility");
     }
     if (physics_profile == "best") {
         if (!enable_let_scoring) {
@@ -227,34 +233,34 @@ void TransportConfig::validate() const {
                 "maximum_relative_energy_loss<=0.001, and cutoffs<=0.1 MeV");
         }
     }
-    if (physics_profile == "medium" || physics_profile == "fast") {
+    if (physics_profile == "fast") {
         if (enable_minibeam) {
             throw std::invalid_argument(
-                "physics_profile=medium/fast is not allowed with minibeam=true");
+                "physics_profile=fast is not allowed with minibeam=true");
         }
         if (!enable_ct_grid) {
             throw std::invalid_argument(
-                "physics_profile=medium/fast currently requires enable_ct_grid=true");
+                "physics_profile=fast currently requires enable_ct_grid=true");
         }
         if (!enable_primary_attenuation || !enable_secondary_generation ||
             !enable_secondary_transport || !enable_fragment_cascade) {
             throw std::invalid_argument(
-                "physics_profile=medium/fast requires the complete charged dose chain");
+                "physics_profile=fast requires the complete charged dose chain");
+        }
+        if (enable_let_scoring) {
+            throw std::invalid_argument(
+                "physics_profile=fast disables LET scoring; choose "
+                "physics_profile=best for LET");
+        }
+        if (maximum_relative_energy_loss > 0.01) {
+            throw std::invalid_argument(
+                "physics_profile=fast requires maximum_relative_energy_loss<=0.01");
+        }
+        if (energy_cutoff_MeV > 0.1) {
+            throw std::invalid_argument(
+                "physics_profile=fast keeps the primary cutoff at <=0.1 MeV");
         }
     }
-    if (physics_profile == "medium" && maximum_relative_energy_loss > 0.005) {
-        throw std::invalid_argument(
-            "physics_profile=medium requires maximum_relative_energy_loss<=0.005");
-    }
-    if (physics_profile == "fast" && maximum_relative_energy_loss > 0.01) {
-        throw std::invalid_argument(
-            "physics_profile=fast requires maximum_relative_energy_loss<=0.01");
-    }
-    if ((physics_profile == "medium" || physics_profile == "fast") &&
-        energy_cutoff_MeV > 0.1) {
-        throw std::invalid_argument(
-            "physics_profile=medium/fast keeps the primary cutoff at <=0.1 MeV");
-        }
     if (number_of_histories == 0) {
         throw std::invalid_argument("number_of_histories must be greater than zero");
     }

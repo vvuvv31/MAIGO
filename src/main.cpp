@@ -33,7 +33,7 @@ namespace {
 void print_usage(const char* executable) {
     std::cout << "Usage: " << executable
               << " [--config FILE] [--device DEVICE] [--histories N]"
-                 " [--physics-profile accurate|best|medium|fast]"
+                 " [--physics-profile fast|best]"
                  " [--spots FILE] [--straggling-scale X] [--output FILE]"
                  " [--dose-output FILE] [--scorer-let|--no-scorer-let]"
                  " [--let-output FILE] [--plan-only] [--sequential-spots]\n"
@@ -45,7 +45,7 @@ void print_usage(const char* executable) {
                  "  --spot-weights FILE  One optimization weight per concatenated spot\n"
                  "  --histories N        With weights: total plan histories; otherwise per spot\n"
                  "  --random-seed N      Override the configured reproducible RNG seed\n"
-                 "  --physics-profile P  accurate (legacy), best, medium, or fast\n"
+                 "  --physics-profile P  fast (maximum throughput) or best (maximum accuracy)\n"
                  "  --ct-grid FILE       Override the configured CCTG patient grid\n"
                  "  --ct-stopping-power-scale X  Override the CT mass stopping-power scale\n"
                  "  --secondary-queue-capacity N  Override charged secondary queue capacity\n"

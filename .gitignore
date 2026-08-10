@@ -2,57 +2,24 @@
 build/
 build-*/
 out/
-.plot-cache/
-.plot-deps/
-.venv-plot/
+tmp/
 *.log
 *.vtk
 *.root
 __pycache__/
 *.pyc
+.venv*/
+.plot-*/
 
-# Patient DICOM contains private source images and remains local. Derived CT
-# grids and their conversion metadata are required runtime inputs and are
-# versioned (large binaries use Git LFS via .gitattributes).
-ct/dicom/
-
-tmp/
-# ---------------------------------------------------------------------------
-# Monte Carlo run outputs (TOPAS + GPU) — never commit
-# ---------------------------------------------------------------------------
-# GPU IDDs, TOPAS references, metrics, plots, reaction/cascade packages, etc.
-validation/results/**
-!validation/results/.gitkeep
-# Keep only short human docs (how to regenerate), not run data
-!validation/results/**/*.md
-# Runtime physics databases and their reproducibility metadata/source tables.
-!validation/results/topas_200MeVu_cascade_100k*
-!validation/results/topas_200MeVu_cascade_aligned_primary*
-!validation/results/topas_200MeVu_neutral_development*
-!validation/results/topas_400MeVu_cascade_g4_11_3_2_100k_conditioned_3d.bin
-!validation/results/topas_400MeVu_cascade_g4_11_3_2_100k_conditioned_3d.metadata.json
-# CT LET production packages generated with the same Geant4 11.3.2 INCL++
-# physics list as the TOPAS full-plan references. Keep compact binaries and
-# provenance metadata; raw n-tuples and intermediate CSV tables remain local.
-!validation/results/diagnostic_g4_11_3_2/
-validation/results/diagnostic_g4_11_3_2/**
-!validation/results/diagnostic_g4_11_3_2/topas_400MeVu_soft_tissue_inclxx_100k_metadata.json
-!validation/results/diagnostic_g4_11_3_2/topas_400MeVu_soft_tissue_inclxx_100k_primary.metadata.json
-!validation/results/diagnostic_g4_11_3_2/topas_400MeVu_soft_tissue_inclxx_100k_primary_3d.bin
-!validation/results/diagnostic_g4_11_3_2/topas_400MeVu_soft_tissue_inclxx_100k_primary_3d.compiled.json
-!validation/results/diagnostic_g4_11_3_2/topas_400MeVu_soft_tissue_inclxx_100k_cascade_3d.bin
-!validation/results/diagnostic_g4_11_3_2/topas_400MeVu_soft_tissue_inclxx_100k_cascade_3d.compiled.json
-
-# TOPAS raw scorer dumps
-validation/topas/output/**
-!validation/topas/output/.gitkeep
-!validation/topas/output/ct_patient_development_energy_deposit.csv
-
-# Minibeam TOPAS references are regenerated locally. Keep parameter files and
-# compact headers in Git, but never stage the supplied 320 MB scorer or run
-# outputs by accident.
-ct/minibeam/dose.bin
-ct/minibeam/output/**
-
-# Local session / agent clutter
+# Local agent / editor clutter
 mcps/
+.agents/
+.codex/
+.idea/
+.vscode/
+*.swp
+*~
+
+# Patient / large local inputs (not part of core tree)
+ct/
+validation/

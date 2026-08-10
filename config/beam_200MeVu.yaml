@@ -1,4 +1,4 @@
-# Milestone-1 development case. This parser supports simple key: value pairs.
+# Minimal water-phantom CSDA smoke case (serial or SYCL).
 number_of_histories: 10000
 initial_energy_MeVu: 200.0
 mass_number: 12
@@ -15,4 +15,5 @@ enable_primary_attenuation: false
 random_seed: 20260714
 stopping_power_file: data/stopping_power_water.csv
 nuclear_cross_section_file: data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv
-output_file: out/cpu_depth_dose.csv
+output_file: out/depth_dose.csv
+device: serial
