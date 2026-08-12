@@ -4105,6 +4105,9 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
             double pending_primary_voxel_MeV = 0.0;
             double pending_primary_voxel_delayed_MeV = 0.0;
             std::size_t pending_primary_voxel = 0;
+            auto last_primary_stopping_power_MeV_per_mm = 0.0F;
+            auto last_primary_density_g_per_cm3 = 0.0F;
+            auto last_primary_let_delta_fraction = 0.0F;
             constexpr std::uint32_t max_primary_steps = 2'000'000U;
             while (energy_MeV > energy_cutoff_MeV && steps < max_primary_steps) {
                 const auto escaped_z =
@@ -4518,6 +4521,11 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                                       (let_delta_fraction_device[index + 1] -
                                        let_delta_fraction_device[index])
                             : e_frac;
+                    last_primary_stopping_power_MeV_per_mm =
+                        stopping_power_MeV_per_mm;
+                    last_primary_density_g_per_cm3 =
+                        sycl::fmax(local_density_g_per_cm3, 1.0e-6F);
+                    last_primary_let_delta_fraction = let_delta_fraction;
                     score_letd_moments_device(
                         let_moments_device, number_of_bins,
                         static_cast<std::size_t>(bin),
@@ -5068,6 +5076,18 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                                      sycl::floor(position_z_mm / depth_bin_width_mm));
                 bin = sycl::max(
                     0, sycl::min(bin, static_cast<int>(number_of_bins) - 1));
+                if (enable_let_scoring &&
+                    last_primary_stopping_power_MeV_per_mm > 0.0F) {
+                    const auto local_cutoff_MeV =
+                        energy_MeV * (1.0F - last_primary_let_delta_fraction);
+                    score_letd_moments_device(
+                        let_moments_device, number_of_bins,
+                        static_cast<std::size_t>(bin), species_let_moments_device,
+                        charged_origin_category_count, 0, nullptr, 0, 0,
+                        local_cutoff_MeV, energy_MeV,
+                        last_primary_stopping_power_MeV_per_mm,
+                        last_primary_density_g_per_cm3, true);
+                }
                 sycl::atomic_ref<DoseAtomicT,
                                  sycl::memory_order::relaxed,
                                  sycl::memory_scope::device,
@@ -5093,6 +5113,17 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                         static_cast<std::size_t>(bin) * voxel_plane_size +
                         static_cast<std::size_t>(voxel_y) * voxel_bins_x +
                         static_cast<std::size_t>(voxel_x);
+                    if (enable_let_scoring &&
+                        last_primary_stopping_power_MeV_per_mm > 0.0F) {
+                        score_letd_moments_device(
+                            voxel_let_moments_device, number_of_voxels,
+                            voxel_index, nullptr, 0, 0, nullptr, 0, 0,
+                            energy_MeV *
+                                (1.0F - last_primary_let_delta_fraction),
+                            energy_MeV,
+                            last_primary_stopping_power_MeV_per_mm,
+                            last_primary_density_g_per_cm3, true);
+                    }
                     sycl::atomic_ref<DoseAtomicT,
                                      sycl::memory_order::relaxed,
                                      sycl::memory_scope::device,

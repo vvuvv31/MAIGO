@@ -39,6 +39,16 @@
 
 Runner 默认单次 GPU/TOPAS 不超过 100k histories，A7/A8 的 21 层权重精确合计 100k，不得用标量 histories override 变成每层 100k。若统计 gate 要求更高精度，优先聚合多个独立 ≤100k repeat；若确需放宽单次上限，必须先修订并冻结 protocol，不能运行后追认。
 
+### 0.2 2026-08-12 A1/A5 开发诊断
+
+- A1 四能量 TOPAS 五 seed mean 与 GPU absolute dose 的 Bragg peak depth 全部一致；峰值差为 `-0.19%` 到 `-1.42%`，`0--1.2 x peak` 积分差为 `-0.23%` 到 `+0.72%`。因此当前没有使用整体 dose scale 或修改 stopping-power 标定的依据。
+- 400 MeV/u `straggling_scale(400)` 的 `1.25/1.30/1.35` 50k 扫描及 `1.25/1.30` 100k 复核没有给出所有 absolute-dose 指标一致改善的替代值；不得据此在 validation 数据上追调。现有正式 runtime 使用 `...1.26,1.30`，但受控 `config/beam_*_multi_energy.yaml` 仍为 `...1.20,1.10`；正式重跑前必须把 calibration provenance 与唯一生产配置冻结并消除该差异。
+- A5 dose-Bragg-peak bin 的 GPU LETd 差约 `1.4--2.7%`。图中更大的 distal spikes 来自单次 50k GPU LET ratio 的低 denominator：200 MeV/u primary raw max `93.82%`，在 GPU denominator `>=1%` 本曲线最大值后 max 为 `2.24%`、P95 为 `0.27%`。
+- GPU primary cutoff-tail LET moments 已与 secondary 路径对齐并加回归测试；该修复在 200 MeV/u 50k A/B 中把主峰差 `2.24% -> 2.21%`，说明主要剩余不确定度仍是 single-seed ratio statistics 和 all-hadron fragment composition，不应通过 clamp LET 值修正。
+- 已用匹配旧正式 runtime 的 straggling 表完成 A5 GPU 五个 50k seed，20 个运行均为 generation 4、`secondary_queue_capacity=2.5M` 且 overflow=0；聚合时先求和 raw numerator/denominator 后相除。200/300/400 MeV/u all-hadron P95 error 从 single-seed 的 `7.68/8.67/9.72%` 降到 `5.58/5.56/6.50%`。100 MeV/u distal all-hadron 仍为系统性 fragment-tail outlier，需单独物理消融。
+- 100 MeV/u species LET 诊断显示 26.25 mm 处 GPU primary-C12 LET 本身只差约 `3--4%`，主要偏差来自 all-hadron denominator 的 primary/fragment 权重（TOPAS primary fraction `70.37%`，旧 GPU `50.91%`），不是 B/He/H stopping-power 表的整体偏差。将 100 MeV/u straggling 节点从 `1.00` 提到 `1.30` 后，五个 50k GPU seed 的 raw moments 聚合使该点 LET error 从 `-22.27%` 降到 `-6.37%`、primary fraction 升到 `66.4%`，all-hadron P95 error 从 `10.83%` 降到 `9.16%`；dose P95 error 从 `5.08%` 降到 `4.67%`，代价是 dose 峰值差从 `-1.05%` 变为 `-2.92%`，而全深度 MAE/TOPAS peak 仅从 `0.217%` 变为 `0.227%`。五个运行的 secondary/cascade overflow 均为 0。受控 100 MeV/u 配置采用 `1.30` 作为 dose--LET 折中，不得再按 validation/CT 结果追调。
+- 五 seed dose ensemble 同时缩小高能统计差异：400 MeV/u `0--1.2 x peak` 积分差 `-2.05% -> +0.25%`，MAE/TOPAS peak `0.91% -> 0.42%`，P95 point error `7.74% -> 3.70%`。这是 dirty-worktree 开发证据；冻结 commit/binary hash 后必须重新生成发文快照。
+
 ## 1. TOPAS/GPU 必做物理 Benchmark（按优先级）
 
 ### A. 最小可发表集：必须完成
@@ -49,7 +59,7 @@ Runner 默认单次 GPU/TOPAS 不超过 100k histories，A7/A8 的 21 层权重�
 | A2 | **束斑与多重散射**：同一能量在入口、mid-range、peak 前后、tail 取横向 profile | lateral σ、FWHM、80–20% penumbra、halo | σ/FWHM 差 ≤1 mm 或 ≤5%；不能只比较中心轴 | 2D dose map + 4 个深度横向 profile + σ(z) | 部分：已有 200 MeV/u 3D scorer；横向指标和 difference map 待补 |
 | A3 | **能损涨落/射程展宽**：monoenergetic 与真实 energy spread（至少 0、0.5%、1%） | peak width、distal 80–20%、R80 方差 | 各 seed 间差异在 CI 内；展宽趋势单调且与 TOPAS 一致 | distal fall-off 放大图 | 部分：已有 0/1%；0.5% 已配置未形成正式证据 |
 | A4 | **核反应与碎片尾**：水中高统计单能束，至少 200 与 400 MeV/u | primary attenuation、核反应率、C/B/Be/Li/He/p 分物种剂量或 fluence、tail dose | 反应率和主碎片积分差建议 ≤5%；tail 单独评价，不能被全局 gamma 掩盖 | 分物种深度曲线、tail ratio、能量闭合表 | 部分：200 MeV/u 有分物种；400 MeV/u 分物种和反应率待补 |
-| A5 | **LETd 水箱**：与 A1 同能量；primary-C12 和 all-hadron 分开 | LETd(z)、peak 位置/幅值、entrance/peak/tail ROI；GPU 原始 numerator/denominator，TOPAS moments 若 extension 不支持则记 `N/A` | 高剂量区 LETd median error 建议 ≤5%；峰值/尾部单列，不在低剂量噪声区用无限相对误差 | Dose+LET 联合图、LET difference/ratio、ROI 箱线图 | 部分：已有四能量两种 LETd；ROI/多 seed 待补 |
+| A5 | **LETd 水箱**：与 A1 同能量；primary-C12 和 all-hadron 分开 | LETd(z)、peak 位置/幅值、entrance/peak/tail ROI；GPU 原始 numerator/denominator，TOPAS moments 若 extension 不支持则记 `N/A` | 高剂量区 LETd median error 建议 ≤5%；峰值/尾部单列，不在低剂量噪声区用无限相对误差 | Dose+LET 联合图、LET difference/ratio、ROI 箱线图 | 部分：四能量 TOPAS/GPU 五 seed 开发比较已完成；primary cutoff-tail 已修复，100 MeV/u fragment-tail 与 clean publication snapshot 待补 |
 | A6 | **异质 phantom**：当前 AABB air cavity/bone insert/offset bone；正入射与 10° 斜入射。如论文声称层状肺/软组织/骨，需另加 layered 配对输入 | 界面剂量、range shift、lateral spread、LETd、核碎片尾 | distal range ≤1–2 mm；界面前后分别做 gamma/差值；报告材料 MCS 开/关 | 材料条带 + depth dose/LET；界面局部放大 | 部分：已有 3 个正入射 IDD；3D/LET/斜入射待完成 |
 | A7 | **SOBP / 多能量层**：临床宽度的 SOBP，先单轴再 2D 多 spot | plateau uniformity、proximal/distal edge、range、LETd 梯度 | plateau 均匀性差 ≤2%；3D gamma 2%/2 mm（10% cutoff）≥95%，并附 3%/3 mm | SOBP depth dose、LETd、gamma map/histogram | 部分：已有配对 1D dose/LET；有效 3D gamma 和多 spot 分析待补 |
 | A8 | **spot plan 解析与批处理一致性**：TOPAS spot file 的 batched vs sequential；`TPS source` 是独立任意角 batched-only 路径，需单独已知答案测试 | 总剂量、逐 spot 权重、坐标变换、能量层、MHD/CSV 一致性 | 比较前检查实际总 histories；用多 seed 或统计容差，FP32 atomic 不要求 bitwise equality | 小型已知答案 spot pattern + difference map | 失败：现有 TOPAS 3D scorer 全零；已修输入，必须重跑后才能重评 |

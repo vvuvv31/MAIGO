@@ -1978,6 +1978,45 @@ void test_sycl_primary_spot_batch() {
     }
 }
 
+void test_sycl_primary_let_includes_cutoff_tail() {
+    carbon::TransportConfig config;
+    config.number_of_histories = 8;
+    config.initial_energy_MeVu = 1.0;
+    config.phantom_length_mm = 20.0;
+    config.depth_bin_width_mm = 1.0;
+    config.maximum_step_mm = 0.5;
+    config.maximum_relative_energy_loss = 0.1;
+    config.energy_cutoff_MeV = 0.5;
+    config.enable_let_scoring = true;
+    config.validate();
+
+    const carbon::StoppingPowerTable stopping_power(
+        {0.01, 1.01, 2.01}, {2.0, 2.0, 2.0});
+    const auto result = carbon::transport_sycl(
+        config, stopping_power, zero_cross_section(), "cpu");
+    const auto primary_denominator = std::accumulate(
+        result.primary_c12_letd_denominator.begin(),
+        result.primary_c12_letd_denominator.end(), 0.0);
+    const auto all_denominator = std::accumulate(
+        result.all_hadron_letd_denominator.begin(),
+        result.all_hadron_letd_denominator.end(), 0.0);
+    const auto primary_numerator = std::accumulate(
+        result.primary_c12_letd_numerator.begin(),
+        result.primary_c12_letd_numerator.end(), 0.0);
+    const auto all_numerator = std::accumulate(
+        result.all_hadron_letd_numerator.begin(),
+        result.all_hadron_letd_numerator.end(), 0.0);
+    const auto expected_energy =
+        static_cast<double>(config.number_of_histories) *
+        config.initial_total_energy_MeV();
+    require_near(primary_denominator, expected_energy, 1.0e-4,
+                 "Primary LET denominator omitted cutoff-tail energy");
+    require_near(all_denominator, primary_denominator, 1.0e-8,
+                 "Primary-only all-hadron LET denominator mismatch");
+    require_near(all_numerator, primary_numerator, 1.0e-8,
+                 "Primary-only all-hadron LET numerator mismatch");
+}
+
 void test_sycl_flat_source_extent() {
     carbon::TransportConfig config;
     config.number_of_histories = 512;
@@ -2553,6 +2592,7 @@ int main() {
         test_sycl_tps_source_arbitrary_gantry_transport();
         test_sycl_legacy_cardinal_entrance_projection();
         test_sycl_primary_spot_batch();
+        test_sycl_primary_let_includes_cutoff_tail();
         test_sycl_flat_source_extent();
         test_serial_sycl_cpu_match();
         test_sycl_transport_context_reuse();

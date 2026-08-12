@@ -1,6 +1,7 @@
 # Multi-energy charged validation at 100 MeV/u (neutron off).
 # Phase-one calibration: current-E/A straggling table; no empirical
-# neutral/electronic redistribution. Calibrated against 50k A1 FWHM scans.
+# neutral/electronic redistribution. Calibrated against A1 dose and the A5
+# five-seed LET ensemble; see the benchmark checklist for the dose/LET trade-off.
 # Primary/cascade package covers 0--400 MeV/u (1 MeV/u bins).
 number_of_histories: 100000
 initial_energy_MeVu: 100.0
@@ -17,7 +18,7 @@ enable_charged_origin_voxel_scoring: false
 enable_energy_straggling: true
 straggling_scale: 1.0
 straggling_scale_energies_MeVu: 0, 100, 200, 300, 400
-straggling_scale_values: 1.00, 1.00, 1.08, 1.20, 1.10
+straggling_scale_values: 1.00, 1.30, 1.08, 1.20, 1.10
 enable_multiple_scattering: true
 enable_primary_attenuation: true
 enable_secondary_generation: true
