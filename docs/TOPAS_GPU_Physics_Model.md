@@ -15,7 +15,7 @@
 ### 1.1 TOPAS 参考配置
 
 CT full-plan 使用 `Geant4_Modular` physics list。生成脚本
-[`benchmark/ct/tools/fullplan/build_topas_full_plan.py`](benchmark/ct/tools/fullplan/build_topas_full_plan.py)
+[`benchmark/ct/tools/fullplan/build_topas_full_plan.py`](../benchmark/ct/tools/fullplan/build_topas_full_plan.py)
 写入如下模块集合：
 
 ```text
@@ -30,16 +30,16 @@ sv:Ph/Default/Modules = 7
 ```
 
 当前 CT 结果使用 TOPAS 4.2.p3 / Geant4 11.3.2。剂量由 `DoseToMedium` scorer 输出；LET 由 HadronLET 扩展的 `myHadronLET` scorer 输出。典型输入见
-[`benchmark/ct/RT07575/conventional/fullplan_mc/run_full_plan.txt`](benchmark/ct/RT07575/conventional/fullplan_mc/run_full_plan.txt)
+[`benchmark/ct/RT07575/conventional/fullplan_mc/run_full_plan.txt`](../benchmark/ct/RT07575/conventional/fullplan_mc/run_full_plan.txt)
 和
-[`benchmark/ct/RT06423/fullplan_mc/run_full_plan.txt`](benchmark/ct/RT06423/fullplan_mc/run_full_plan.txt)。
+[`benchmark/ct/RT06423/fullplan_mc/run_full_plan.txt`](../benchmark/ct/RT06423/fullplan_mc/run_full_plan.txt)。
 
 这里的 `7` 表示七个 physics module constructor 都加入了所选 physics list。它不表示每个 primary C-12 history 都会实际触发七类过程：过程是否执行取决于粒子种类、能量、材料和粒子是否到达相应状态。例如 `g4radioactivedecay` 只对放射性核适用，`g4stopping` 主要处理停止/静止后的强子过程，而不是普通离子的连续 `dE/dx`。
 
 ### 1.2 GPU 参考配置
 
 本文所称 GPU 模型指 CT 的 `best` profile，代表配置见
-[`config/beam_ct_fullplan_rt07575_let_soft_tissue.yaml`](config/beam_ct_fullplan_rt07575_let_soft_tissue.yaml)。其主要设置为：
+[`config/beam_ct_fullplan_rt07575_let_soft_tissue.yaml`](../config/beam_ct_fullplan_rt07575_let_soft_tissue.yaml)。其主要设置为：
 
 ```yaml
 maximum_step_mm: 0.1
@@ -59,8 +59,8 @@ scorerLET: true
 ```
 
 GPU 输运实现位于
-[`src/transport_sycl_legacy.cpp`](src/transport_sycl_legacy.cpp)，配置字段和物理开关定义于
-[`include/carbon/transport_config.hpp`](include/carbon/transport_config.hpp)。`best` 配置中的
+[`src/transport_sycl_legacy.cpp`](../src/transport_sycl_legacy.cpp)，配置字段和物理开关定义于
+[`include/carbon/transport_config.hpp`](../include/carbon/transport_config.hpp)。`best` 配置中的
 `dose_output_scale: 0.982` 是输出剂量校准因子，不属于底层物理过程；它不会改变原始沉积能量、核反应概率或输运轨迹。
 
 ## 2. TOPAS physics modules
@@ -118,7 +118,7 @@ GPU 使用自定义的 Highland 投影 RMS 散射模型。其主要依赖粒子�
 \left[1+0.038\ln\left(\frac{xz^2}{X_0\beta^2}\right)\right].
 \]
 
-实现见 [`include/carbon/multiple_scattering.hpp`](include/carbon/multiple_scattering.hpp)。
+实现见 [`include/carbon/multiple_scattering.hpp`](../include/carbon/multiple_scattering.hpp)。
 
 当前普通 CT `best` 配置设置 `enable_ct_material_mcs: false`，因此 CT 中默认使用历史 all-water radiation length；代码虽然支持 air/lung/water/bone 的材料 radiation length，但需要显式打开该开关。该差异是 GPU 与 TOPAS 电磁多重散射模型之间的重要近似边界。
 
@@ -301,7 +301,7 @@ neutral_transport_mode: first_interaction  # 仅在 neutral=true 时生效
 ```
 
 对应的独立 smoke 配置见
-[`config/beam_ct_physics_extensions_smoke.yaml`](config/beam_ct_physics_extensions_smoke.yaml)。该配置默认把三项都打开，生产 `best/fast` 配置则显式写出 secondary straggling 为 `false`，避免把默认值误认为物理过程已经启用。
+`config/beam_ct_physics_extensions_smoke.yaml`。该配置默认把三项都打开，生产 `best/fast` 配置则显式写出 secondary straggling 为 `false`，避免把默认值误认为物理过程已经启用。
 
 1,000 histories 的 smoke 主要测启动与分配开销，不能用于估计稳态吞吐。使用同一 37° TPS-source CT smoke、NVIDIA TITAN RTX、10M histories，并将队列扩大到 `secondary=48M`、`neutral=24M` 以保证 `overflow=0`，得到：
 
@@ -324,5 +324,5 @@ neutral_transport_mode: first_interaction  # 仅在 neutral=true 时生效
 1. TOPAS, *Modular Physics Lists*, https://topas.readthedocs.io/en/3.6.1/parameters/physics/modular.html
 2. Geant4 Collaboration, *Physics Reference Manual*, https://geant4.web.cern.ch/documentation/
 3. Villadslj, *Topas-Extension*（HadronLET scorer）, https://github.com/Villadslj/Topas-Extension
-4. MAIGO GPU transport configuration: [`include/carbon/transport_config.hpp`](include/carbon/transport_config.hpp)
-5. MAIGO SYCL transport implementation: [`src/transport_sycl_legacy.cpp`](src/transport_sycl_legacy.cpp)
+4. MAIGO GPU transport configuration: [`include/carbon/transport_config.hpp`](../include/carbon/transport_config.hpp)
+5. MAIGO SYCL transport implementation: [`src/transport_sycl_legacy.cpp`](../src/transport_sycl_legacy.cpp)

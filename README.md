@@ -17,7 +17,10 @@ src/                Implementation (serial + SYCL backends)
   detail/           Shared SYCL device helpers (.inc)
 config/             Example beam configs
 data/               Stopping power, cross sections, reaction packages
+docs/               Architecture, physics, CT/minibeam, and workflow notes
+mcps/               MCP integration notes (runtime state remains local)
 scripts/            Build helpers
+startup/            Offline TOPAS database extraction sources
 CMakeLists.txt
 CMakePresets.json
 ```
@@ -131,3 +134,9 @@ Shared device helpers used by both SYCL TUs live in `src/detail/sycl_*.inc`
 ## License
 
 GPL-3.0-or-later — see [LICENSE](LICENSE).
+
+## Documentation
+
+Start with [docs/structure.md](docs/structure.md) for the code and data layout.
+Physics and workflow notes are collected under `docs/`; local dose-validation
+workspaces such as `benchmark/` and `validation/` are intentionally ignored.

@@ -12,16 +12,25 @@ __pycache__/
 .plot-*/
 
 # Local agent / editor clutter
-mcps/
 .agents/
 .codex/
 .idea/
 .vscode/
 *.swp
 *~
+*:Zone.Identifier
 
 # Local validation workspaces. They are not part of project commits while the
 # benchmark protocol and patient-dose validation are still under development.
 ct/
 benchmark/
 validation/
+
+# MCP runtime state and credentials remain local; documentation may be tracked.
+mcps/*
+!mcps/README.md
+
+# Windows-only convenience wrappers under scripts/ (not required for Linux builds)
+scripts/windows_*.cmd
+scripts/build_windows_*.cmd
+scripts/run_windows_*.cmd

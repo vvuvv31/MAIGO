@@ -14,7 +14,7 @@ full-plan scorer；RT07575 minibeam 采用 TOPAS 逐 spot sparse-Dij 与 matRad
 当前常规束权威汇总只报告全部选择体素上的 3%/0 mm identical-voxel 通过率；
 `G/L` 分别表示以参考峰值和参考局部值定义剂量容差的 global/local 通过率，
 `E/R` 表示选择集内 evaluation/reference。机器可读结果见
-[rotation-fixed summary](out/ct/generic_rotation_fix_equal_history/final_summary.json)。
+[rotation-fixed summary](../out/ct/generic_rotation_fix_equal_history/final_summary.json)。
 
 Minibeam 也采用 BODY 和参考剂量 10% 阈值，但非零 DTA 只在固定 seed-0 的至多
 50,000 个选择体素上计算；0.3/0.5 mm DTA 的搜索步长为 0.1 mm，1/2/3 mm 为
@@ -45,7 +45,7 @@ RT06541 的旧 fitted-scale Dij shape 回归不能作为独立 TOPAS 验证。20
 TOPAS 剂量直接读取原始 scorer；MHD 副本只用于转换完整性检查。三个 case 均采用
 `physics_profile: best`、中性的 lateral affine（skew/rotation 均为 0），并启用相同的通用 residual-heat 和
 upstream-air 设置。详细配置、history 四向核对和输入路径见
-[rotation-fixed summary](out/ct/generic_rotation_fix_equal_history/final_summary.md)。
+[rotation-fixed summary](../out/ct/generic_rotation_fix_equal_history/final_summary.md)。
 
 ### 3.2 Runtime 与当前 LET 边界
 
@@ -96,8 +96,8 @@ scorer。1,943 个 spot 各输运 100,000 histories，原始逐 spot 预算合�
 | A/B ensemble / TOPAS-Dij | 92.502 / 58.470% | 95.622 / 83.414% | 96.838 / 89.212% |
 
 这里 0 mm 使用全部 317,867 个选择体素，其余 gamma 使用确定性 50,000 点。
-权威数值见 [comparison.md](out/benchmark/ct/RT07575/conventional/minibeam_plan/rotation_fix_56b5343/three_x_129m_two_seed/comparison.md)
-和 [comparison.json](out/benchmark/ct/RT07575/conventional/minibeam_plan/rotation_fix_56b5343/three_x_129m_two_seed/comparison.json)。
+权威数值见 [comparison.md](../out/benchmark/ct/RT07575/conventional/minibeam_plan/rotation_fix_56b5343/three_x_129m_two_seed/comparison.md)
+和 [comparison.json](../out/benchmark/ct/RT07575/conventional/minibeam_plan/rotation_fix_56b5343/three_x_129m_two_seed/comparison.json)。
 
 ### 4.3 GPU–GPU 重复性
 
@@ -124,8 +124,8 @@ GPU–GPU 明显优于 GPU–TOPAS-Dij，说明 minibeam 当前差异不能只�
 预算为 20,151 MiB，secondary/neutral queue 容量为 58M/70M。构建二进制 SHA-256
 为 `0e1f0fc08312700a2253f85add6eb1350739c558a2ad2ef8daf102fef8f3609e`；运行时
 工作树为 dirty，但 manifest 保存了输入 hash、命令和 dirty 状态。完整证据见
-[manifest.md](out/benchmark/ct/RT07575/conventional/minibeam_plan/rotation_fix_56b5343/three_x_129m_two_seed/manifest.md)
-和 [manifest.json](out/benchmark/ct/RT07575/conventional/minibeam_plan/rotation_fix_56b5343/three_x_129m_two_seed/manifest.json)。
+[manifest.md](../out/benchmark/ct/RT07575/conventional/minibeam_plan/rotation_fix_56b5343/three_x_129m_two_seed/manifest.md)
+和 [manifest.json](../out/benchmark/ct/RT07575/conventional/minibeam_plan/rotation_fix_56b5343/three_x_129m_two_seed/manifest.json)。
 
 ## 5. 结论边界
 

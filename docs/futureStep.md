@@ -2,7 +2,7 @@
 
 更新日期：2026-07-27
 
-已实现能力见 [`README.md`](README.md)。  
+已实现能力见 [`README.md`](../README.md)。
 分支约定：[`BRANCH_WORKFLOW.md`](BRANCH_WORKFLOW.md)（默认 `master`）。
 
 ---
