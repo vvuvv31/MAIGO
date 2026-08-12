@@ -20,6 +20,8 @@ mcps/
 *.swp
 *~
 
-# Patient / large local inputs (not part of core tree)
+# Local validation workspaces. They are not part of project commits while the
+# benchmark protocol and patient-dose validation are still under development.
 ct/
+benchmark/
 validation/

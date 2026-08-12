@@ -6,7 +6,7 @@
 
 - `未开始`：缺配对运行或主输出；`部分`：已有有效输出，但场景矩阵、seed、指标或 gate 不完整；`失败`：输出无效或触发硬 gate；`通过`：全部预注册条件满足。
 - runner 打印 `DONE` 只表示输运结束，不等于通过。只有由冻结的原始输出生成、带 manifest 且通过自动 gate 的结果才能标为 `通过`。
-- `benchmark/formal_*`、图片和 driver log 是当前本地证据，整个 `benchmark/` 当前未被 Git 跟踪；dirty 工作树结果只能作开发证据，不能直接作发文快照。
+- `benchmark/phantom/formal_*`、图片和 driver log 是当前本地证据；这些生成结果不由 Git 跟踪，dirty 工作树结果只能作开发证据，不能直接作发文快照。
 - 历史文档或旧结果与当前源码冲突时，以 `TransportConfig::validate()`、当次 config、binary hash 和 manifest 为准。
 
 ## 0. 论文中必须先锁定的验证协议
@@ -31,18 +31,18 @@
 
 | 层级 | 当前入口 | 用途与边界 |
 |---|---|---|
-| A1–A12 矩阵 | `benchmark/A_README.md`、`A*_gpu.sh`、`A*_topas.sh` | 通过环境变量选 binary/device/input；支持无副作用 `--dry-run` |
-| 静态预检 | `python3 benchmark/validate_A1_A12_contract.py` | 检查必需 config、A3/A9 矩阵、histories 上限和 3D scorer 体素尺寸；不替代运行验收 |
-| 开发结果审计 | `benchmark/A1_A12_CHECKLIST_AUDIT_20260811.md` | 记录当前缺项；不是冻结的发文结论 |
-| 指标摘要 | `benchmark/plot_A1_A12_checklist.py` | 目前只自动化部分 1D range/gamma、能量账本和 timing；不覆盖完整 A1–A12 gate |
+| A1–A12 矩阵 | `benchmark/phantom/A_README.md`、`A*_gpu.sh`、`A*_topas.sh` | 通过环境变量选 binary/device/input；支持无副作用 `--dry-run` |
+| 静态预检 | `python3 benchmark/phantom/validate_A1_A12_contract.py` | 检查必需 config、A3/A9 矩阵、histories 上限和 3D scorer 体素尺寸；不替代运行验收 |
+| 开发结果审计 | `benchmark/phantom/A1_A12_CHECKLIST_AUDIT_20260811.md` | 记录当前缺项；不是冻结的发文结论 |
+| 指标摘要 | `benchmark/phantom/plot_A1_A12_checklist.py` | 目前只自动化部分 1D range/gamma、能量账本和 timing；不覆盖完整 A1–A12 gate |
 | CT 工作流 | `ctplan.md`、`validation/scripts/`、`ctResult.md` | 几何/坐标、转换和当前证据边界；历史数值必须按当前 commit 重算 |
 
 Runner 默认单次 GPU/TOPAS 不超过 100k histories，A7/A8 的 21 层权重精确合计 100k，不得用标量 histories override 变成每层 100k。若统计 gate 要求更高精度，优先聚合多个独立 ≤100k repeat；若确需放宽单次上限，必须先修订并冻结 protocol，不能运行后追认。
 
 ### 0.2 2026-08-12 A1/A5 开发诊断
 
-- 新增 `benchmark/audit_bragg_peak_2pct.py` 固化 Bragg peak 2% gate：峰位置用 `abs(GPU peak depth - TOPAS peak depth) / TOPAS peak depth`，峰剂量用 TOPAS 峰中心 `+/-2 mm` 积分差。窗口积分用于避免 0.5 mm binning 与有限 histories 将相邻峰顶 bin 的统计交换误判为物理偏差；单 bin peak error 仍保留为诊断，不作为 range/peak gate。
-- 当前 TOPAS 五 seed mean 对 GPU `best/fast` 共 30 个可比 dose/energy peak 全部通过：峰深度相对误差均为 `0.000%`，峰中心 `+/-2 mm` 积分误差范围为 `0.009--1.973%`。最接近阈值的是 400 MeV/u `best` A1/A4（`1.973%`）。完整冻结输出见 `benchmark/figures_bragg_peak_2pct_20260812/bragg_peak_2pct_audit.{json,md,png}`。
+- 新增 `benchmark/phantom/audit_bragg_peak_2pct.py` 固化 Bragg peak 2% gate：峰位置用 `abs(GPU peak depth - TOPAS peak depth) / TOPAS peak depth`，峰剂量用 TOPAS 峰中心 `+/-2 mm` 积分差。窗口积分用于避免 0.5 mm binning 与有限 histories 将相邻峰顶 bin 的统计交换误判为物理偏差；单 bin peak error 仍保留为诊断，不作为 range/peak gate。
+- 当前 TOPAS 五 seed mean 对 GPU `best/fast` 共 30 个可比 dose/energy peak 全部通过：峰深度相对误差均为 `0.000%`，峰中心 `+/-2 mm` 积分误差范围为 `0.009--1.973%`。最接近阈值的是 400 MeV/u `best` A1/A4（`1.973%`）。完整冻结输出见 `benchmark/phantom/figures_bragg_peak_2pct_20260812/bragg_peak_2pct_audit.{json,md,png}`。
 - A2/A6 的单 bin peak diagnostic 可达 `4.84--9.02%`，但相同 case 的峰深度误差为 `0%`、峰中心 `+/-2 mm` 积分误差为 `1.14--1.41%`，说明残差来自峰顶有限 bin/MCS 采样而非 range 或总 peak-region dose。不得据此重新拟合 stopping power 或 straggling。
 - LET peak **位置**也已在 2% 内；部分 primary-C12 单 bin LET peak 高度不稳定，TOPAS 五 seed 95% CI half-width 在 300/400 MeV/u 与 A7 分别约为 `5.9%/24.1%/30.6%`，不能作为 2% 硬 gate。100 MeV/u all-hadron LET 高度仍有约 `18%` 的系统 fragment-mixture 残差，属于 A5 核碎片/primary-survival 问题，不是 Bragg peak range 问题，继续保留为未通过项。
 

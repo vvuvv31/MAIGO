@@ -1,6 +1,0 @@
-# Phase-3 dose target for GPU copper_em: exact central source, Copper geometry,
-# scorer and seed, with all hadronic modules removed.
-includeFile = run_dose_center_10k.txt
-
-sv:Ph/Default/Modules = 1 "g4em-standard_opt4"
-s:Sc/DoseAtPhantomP/OutputFile = "output/minibeam_center_copper_em_dose_10k"

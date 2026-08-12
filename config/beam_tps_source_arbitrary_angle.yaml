@@ -1,7 +1,7 @@
 # Arbitrary-angle TPS source using the same angular convention as the existing
 # TOPAS CT plans. The patient/voxel volume stays fixed; only the beam rotates.
 tpsSource: true
-tps_spots_file: validation/tps/spots_example.csv
+tps_spots_file: data/plans/spots_example.csv
 tps_particle_type: carbon
 tps_patient_position: HFS
 tps_angle_convention: topas_patient_rot_z

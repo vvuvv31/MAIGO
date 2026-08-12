@@ -54,11 +54,12 @@ CLI + key:value config
 | `config/` | 约百个水箱、异质体、CT、LET、SOBP、TPS、minibeam 配置 | 示例兼验证入口；并非每个都适合当前 build/profile |
 | `data/` | 入库的 CSV 物理表、metadata、`packages/` reaction/cascade/neutral/soft-tissue 与 Copper package | 运行时资产；格式需和 loader 保持一致 |
 | `tests/` | 单文件自建测试程序 | 当前未接入 CMake，不能把它等同于自动 CI |
-| `validation/` | TOPAS 参数、Python/脚本、参考数据、报告、TPS 示例 | 离线生成、对照、gamma/绘图与回归；不承载 carbon_mc 默认 package |
+| `validation/` | 本地 TOPAS 参数、Python/脚本、参考数据与报告 | 离线生成、剂量/模型对照、gamma/绘图与回归；不承载 GPU runtime/test 输入，当前不纳入 Git |
 | `startup/` | TOPAS database scorer extensions 与提取脚本 | 生成 GPU 物理数据库的上游工具，不参与 `carbon_mc` 构建 |
 | `scripts/` | Linux/Windows 构建与运行包装 | 环境便利层，不定义核心物理 |
 | `benchmark/` | A1–A12 TOPAS/GPU runner 及本地结果 | 当前工作树中的 runner/结果层；正式结论需看 manifest，目录当前未被 Git 跟踪 |
-| `ct/` | 患者 CT/DICOM/计划及派生产物 | 大型病例资产；`.gitignore` 将新文件视为本地数据，即使已有历史 tracked 文件 |
+| `benchmark/ct/` | 本地患者 CT 四病例（optimization/topas/gpu/fullplan_mc）与共享 grids | 由原 `ct/` 整理；当前作为开发期剂量验证工作区，不纳入 Git |
+| `benchmark/phantom/` | 本地水箱 A1–A12 runner/结果 | 原 `benchmark/` 根目录内容；当前不纳入 Git |
 | `build/`, `out/` | 编译目录与运行输出 | 被忽略的可再生产物，不要从中反推源码现状 |
 | `.plot-*`, `.venv-*` | 本地 Python 绘图依赖 | 本地环境，不是项目依赖声明 |
 
@@ -423,13 +424,15 @@ writer 会创建父目录。MetaImage 的维度、spacing、offset 必须与 sco
 
 ### 11.2 `validation/`
 
-- `topas/`：约两百个 TOPAS 参数/extension 辅助文件，是 reference simulation 输入。
-- `scripts/`：准备 CT/物理表/package、运行套件、转换 MHD/RTDOSE、比较 depth/3D dose/LET、gamma、绘图、消融和 isolation。
-- `results/`：部分入库的 package、metadata、CSV/report；也可能与本地产物混居。
-- `references/`：冻结的 minibeam isolation 参考。
-- `tps/`：TPS source 说明与示例 spots CSV。
+`validation/` 现在只作为本地验证工作区：TOPAS reference 输入、物理表/package
+生成中间产物、dose/LET/gamma 对照、绘图、消融和报告。它不再提供
+`carbon_mc` runtime、CMake 或测试所需的输入，因此整个目录被 `.gitignore`
+排除。可复用的小型 spot/TPS fixture 已迁到 `data/plans/`，runtime package 位于
+`data/packages/`。
 
-验证脚本没有统一 Python packaging/requirements；很多依赖本地 NumPy/SciPy/pydicom/matplotlib 环境和外部 TOPAS。运行前先读脚本 CLI、输入路径与 normalization，不能把相似脚本当成等价协议。
+验证脚本没有统一 Python packaging/requirements；很多依赖本地
+NumPy/SciPy/pydicom/matplotlib 环境和外部 TOPAS。运行前先读脚本 CLI、输入路径
+与 normalization，不能把相似脚本当成等价协议。
 
 ### 11.3 `benchmark/`
 
@@ -482,14 +485,14 @@ writer 会创建父目录。MetaImage 的维度、spacing、offset 必须与 sco
 - 物理一致性：`TOPAS_GPU_Physics_Model.md` + 对应 validation script/metadata。
 - CT/计划：`ctplan.md`、`validation/tps/README.md`、相关 CCTG preparation script。
 - minibeam：`minibeamStructure.md` 后再按需要查 `minibeam.md` 的具体阶段。
-- 发文 benchmark：`MAIGO_TOPAS_GPU_Benchmark_CT_Match_Checklist.md` + `benchmark/A_README.md`。
+- 发文 benchmark：`MAIGO_TOPAS_GPU_Benchmark_CT_Match_Checklist.md` + `benchmark/phantom/A_README.md`。
 - 历史指标：`ctResult.md` / `futureStep.md` / `local30.md`，但以当前源码和新跑结果复核。
 
 ## 15. 当前已知文档/架构差异
 
 - 旧 `structure.md` 曾把 `medium` 列为可用；当前 `TransportConfig::validate()` 已明确移除它。
 - 旧文档曾列出多项 CTest；当前 CMake 没有任何测试 target/注册。
-- `README.md` 描述的是精简 core tree，但当前 checkout 同时包含大量 tracked validation/CT 资产和未跟踪 benchmark 结果。
+- 当前 checkout 仍可能保留历史上已跟踪的 validation/CT 文件；`.gitignore` 不会自动取消跟踪，清理提交需要显式登记这些旧文件的删除。
 - minibeam 与 legacy downstream kernel 仍是双大文件，不是完全抽取后的单一 water kernel 架构。
 - 配置扩展名虽是 `.yaml`，解析器不是完整 YAML。
 

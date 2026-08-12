@@ -31,7 +31,7 @@
 physics_profile: best
 number_of_histories: 12963817
 dose_output_scale: 0.982                    # 跨病例固定，非 per-patient fit
-ct_grid_file: ct/grid/patient_ct_tps_90_xneg_edge_corrected.bin
+ct_grid_file: benchmark/ct/grids/patient_ct_tps_90_xneg_edge_corrected.bin
 spots_ct_axis_min_mm: -104.25
 spots_lateral_yz_skew: -0.065              # 已落地（RT07575）
 spots_lateral_yz_skew_auto_pivot: true     # pivot (Y,Z)≈(42.62, -1.58) mm
@@ -140,7 +140,7 @@ reaction_package: soft400 INCL++ 100k
 ### 4.4 主要诊断产物目录
 
 ```
-out/ct/RT07575/cascade_secondary_ablation/
+out/benchmark/ct/RT07575/conventional/cascade_secondary_ablation/
   fullplan_mfp0p5_rhs0p9/          # production best full-plan
   gamma_action_plan/               # 长文行动计划
   single_spot_mfp0p5_rhs0p9_1M/
@@ -192,7 +192,7 @@ out/ct/RT07575/cascade_secondary_ablation/
 
 ## 16. History 收敛 gamma（2026-08-08/09）
 
-产物：`out/ct/RT07575/cascade_secondary_ablation/history_gamma/gamma_summary.md`  
+产物：`out/benchmark/ct/RT07575/conventional/cascade_secondary_ablation/history_gamma/gamma_summary.md`
 TOPAS plan **N = 12 963 817**（L4 之和）。
 
 | arm | N | local 3%/0mm | NRMSE | E/R |
@@ -320,7 +320,7 @@ TOPAS plan **N = 12 963 817**（L4 之和）。
 
 ## 8. 最新诊断：肩部固定深度侧向剖面
 
-**目录**：`out/ct/RT07575/cascade_secondary_ablation/shoulder_lateral_profiles/`  
+**目录**：`out/benchmark/ct/RT07575/conventional/cascade_secondary_ablation/shoulder_lateral_profiles/`
 **签名**：`shoulder_mottling_not_global_falloff`
 
 ### 门控（复测）
@@ -368,7 +368,7 @@ CSV: `annular_profiles.csv`, `line_y_*.csv`
 
 ### 2026-08-07 — 肩部 primary/secondary 分解
 
-目录：`out/ct/RT07575/cascade_secondary_ablation/shoulder_secondary_decomp/`
+目录：`out/benchmark/ct/RT07575/conventional/cascade_secondary_ablation/shoulder_secondary_decomp/`
 
 | region | local full | local sec_nc | E/R | SSE% | 备注 |
 |---|---:|---:|---:|---:|---|
@@ -402,7 +402,7 @@ CSV: `annular_profiles.csv`, `line_y_*.csv`
 
 ## 9. 肩门控重评既有 A/B + 天花板（2026-08-07）
 
-目录：`out/ct/RT07575/cascade_secondary_ablation/shoulder_gate_rescore/`
+目录：`out/benchmark/ct/RT07575/conventional/cascade_secondary_ablation/shoulder_gate_rescore/`
 
 ### 9.1 既有 full-plan 臂（无新 GPU 跑）
 
@@ -474,7 +474,7 @@ CSV: `annular_profiles.csv`, `line_y_*.csv`
 
 ## 10. Hard-fail 角向/连通域聚类（2026-08-07）
 
-目录：`out/ct/RT07575/cascade_secondary_ablation/shoulder_hardfail_cluster/`
+目录：`out/benchmark/ct/RT07575/conventional/cascade_secondary_ablation/shoulder_hardfail_cluster/`
 
 ### 计数（肩 ∩ |R|/T>5%）
 
@@ -692,4 +692,3 @@ spots_lateral_yz_skew_auto_pivot: true   # 实测 pivot=42.6205 mm
 3. production 保持 **skew−0.065 + auto_pivot**，formal **67.98%**
 
 Artifacts: `outer_ring_residual/`, `outer_fill_ab/`, `fullplan_outer_*`
-

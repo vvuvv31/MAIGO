@@ -13,7 +13,7 @@ water_density_g_per_cm3: 1.0
 scorer_area_mm2: 20160.0
 
 enable_ct_grid: true
-ct_grid_file: ct/20022516/grid/patient_ct_beam_y.bin
+ct_grid_file: benchmark/ct/20022516/grid/patient_ct_beam_y.bin
 ct_skip_homogeneous_face_clamp: true
 
 # GPU (x,y,z) = patient (x,z,y): 960*0.5, 42*2, 607*0.5 mm.
@@ -41,8 +41,8 @@ enable_secondary_energy_sorting: true
 max_device_memory_fraction: 0.90
 random_seed: 20260728
 
-topas_spots_files: ct/20022516/scripts_c/spots_c_01.txt, ct/20022516/scripts_c/spots_c_02.txt
-spot_weights_file: ct/20022516/plan/full_plan_weights_exact.csv
+topas_spots_files: benchmark/ct/20022516/topas/scripts_c/spots_c_01.txt, benchmark/ct/20022516/topas/scripts_c/spots_c_02.txt
+spot_weights_file: benchmark/ct/20022516/plan/full_plan_weights_exact.csv
 spots_sad_mm: 450.0
 spots_geometry_mode: tps_gantry_y
 
@@ -67,5 +67,5 @@ fragment_species_output_file:
 fragment_species_dose_output_file:
 voxel_dose_output_file:
 voxel_dose_Gy_output_file:
-voxel_dose_mhd_output_file: out/ct/20022516/full_plan_10M/dose_10M.mhd
+voxel_dose_mhd_output_file: out/benchmark/ct/20022516/full_plan_10M/dose_10M.mhd
 device: gpu

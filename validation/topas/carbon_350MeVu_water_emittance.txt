@@ -1,5 +1,0 @@
-# 350 MeV/u C-12 BiGaussian emittance (total KE 4200 MeV).
-includeFile = carbon_emittance_base.txt
-d:So/CarbonBeam/BeamEnergy = 4200. MeV
-s:Sc/Dose3D/OutputFile = "output/emittance_350_dose_3d"
-s:Sc/ScorerIDD/OutputFile = "output/emittance_350_idd"

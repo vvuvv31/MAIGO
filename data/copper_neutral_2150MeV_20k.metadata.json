@@ -78,11 +78,11 @@
   "global_scale_applied": false,
   "files": {
     "header": {
-      "path": "ct/minibeam/output/copper_neutral_interactions_2150MeV_20k.header",
+      "path": "benchmark/ct/RT07575/minibeam/physics/output/copper_neutral_interactions_2150MeV_20k.header",
       "sha256": "d9458901770644ddb4a5124afade6352baab1b28d12f33ffac6896821955f18a"
     },
     "phsp": {
-      "path": "ct/minibeam/output/copper_neutral_interactions_2150MeV_20k.phsp",
+      "path": "benchmark/ct/RT07575/minibeam/physics/output/copper_neutral_interactions_2150MeV_20k.phsp",
       "sha256": "69f6b8a8aee5320d546dbc5af4a3fe1362d73c66738b8424fc67b209ae08ddf5"
     },
     "interactions": {

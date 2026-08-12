@@ -1,4 +1,0 @@
-includeFile = run_copper_mcs_foil_base.txt
-d:Ge/Foil/HLZ = 0.25 mm
-d:Ge/ExitFilm/TransZ = 0.252 mm
-s:Sc/FoilExit/OutputFile = "output/copper_mcs_foil_0p5mm"

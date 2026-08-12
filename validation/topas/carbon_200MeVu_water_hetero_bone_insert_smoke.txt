@@ -1,4 +1,0 @@
-includeFile = carbon_200MeVu_water_hetero_bone_insert.txt
-i:Ts/NumberOfThreads = 56
-i:So/CarbonBeam/NumberOfHistoriesInRun = 500
-s:Sc/DepthEnergy/OutputFile = "output/hetero_bone_insert_smoke_energy_deposit"

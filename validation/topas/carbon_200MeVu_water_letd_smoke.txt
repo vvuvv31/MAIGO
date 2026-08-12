@@ -1,4 +1,0 @@
-includeFile = carbon_200MeVu_water_letd.txt
-
-# Fast initial validation; use the parent file directly for the 100k reference.
-i:So/CarbonBeam/NumberOfHistoriesInRun = 10000

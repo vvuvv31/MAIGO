@@ -41,7 +41,7 @@ max_device_memory_fraction: 0.50
 random_seed: 20260716
 
 # TOPAS-format spots plan (L0–L14). Overrides energy / spread / N / emittance / pose.
-topas_spots_file: validation/topas/spots_test_c_angle01.txt
+topas_spots_file: data/plans/spots_test_c_angle01.txt
 spots_sad_mm: 450.0
 # water IDD: +z beam; for CT/angled beams use "topas"
 spots_geometry_mode: beam_plus_z

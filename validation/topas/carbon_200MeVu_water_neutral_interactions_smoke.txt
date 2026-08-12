@@ -1,4 +1,0 @@
-includeFile = carbon_200MeVu_water_neutral_interactions.txt
-
-i:So/CarbonBeam/NumberOfHistoriesInRun = 100
-s:Sc/NeutralInteractions/OutputFile = "output/neutral_smoke_interactions"

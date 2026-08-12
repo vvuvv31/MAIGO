@@ -15,7 +15,7 @@ water_density_g_per_cm3: 1.0
 scorer_area_mm2: 14960.0
 
 enable_ct_grid: true
-ct_grid_file: ct/RT06423/grid/patient_ct_tps_90_xneg.bin
+ct_grid_file: benchmark/ct/RT06423/grid/patient_ct_tps_90_xneg.bin
 ct_skip_homogeneous_face_clamp: true
 
 # GPU X=patient Y (440*0.5), GPU Y=patient Z (34*2), GPU Z=patient X (440*0.5).
@@ -47,8 +47,8 @@ max_device_memory_fraction: 0.90
 random_seed: 20260722
 
 # File order is the optimizer/Dij column order: IDs 1..459, then 460..917.
-topas_spots_files: ct/RT06423/spots_c_01.txt, ct/RT06423/spots_c_02.txt
-spot_weights_file: ct/RT06423/code/full_plan_weights_exact.csv
+topas_spots_files: benchmark/ct/RT06423/topas/spots_c_01.txt, benchmark/ct/RT06423/topas/spots_c_02.txt
+spot_weights_file: benchmark/ct/RT06423/optimization/full_plan_weights_exact.csv
 spots_sad_mm: 450.0
 spots_geometry_mode: tps_90
 
@@ -74,5 +74,5 @@ fragment_species_output_file:
 fragment_species_dose_output_file:
 voxel_dose_output_file:
 voxel_dose_Gy_output_file:
-voxel_dose_mhd_output_file: out/ct/RT06423/full_plan_10M/dose_10M.mhd
+voxel_dose_mhd_output_file: out/benchmark/ct/RT06423/full_plan_10M/dose_10M.mhd
 device: gpu

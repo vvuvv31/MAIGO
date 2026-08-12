@@ -13,7 +13,7 @@ water_density_g_per_cm3: 1.0
 scorer_area_mm2: 17675.0
 
 enable_ct_grid: true
-ct_grid_file: ct/grid/patient_ct_tps_90_xneg.bin
+ct_grid_file: benchmark/ct/grids/patient_ct_tps_90_xneg.bin
 ct_skip_homogeneous_face_clamp: true
 enable_voxel_scoring: true
 enable_charged_origin_voxel_scoring: false
@@ -41,7 +41,7 @@ enable_secondary_energy_sorting: true
 max_device_memory_fraction: 0.84
 random_seed: 20260801
 
-topas_spots_file: ct/fullplan_result/RT07575/spots_let_species_100k.txt
+topas_spots_file: benchmark/ct/RT07575/conventional/fullplan_mc/spots_let_species_100k.txt
 spots_sad_mm: 450.0
 spots_geometry_mode: tps_90
 spots_patient_trans_x_mm: -42.8515

@@ -2,7 +2,7 @@
 # baseline, with both transport CT and dose scorer at the final 2 mm grid.
 # Generate the input grid before running:
 # python3 validation/scripts/downsample_ct_grid.py \
-#   ct/grid/patient_ct_tps_90_xneg.bin \
+#   benchmark/ct/grids/patient_ct_tps_90_xneg.bin \
 #   out/ct/downsample_2mm/patient_ct_tps_90_xneg_2mm.bin \
 #   --factors 4 1 4 --trim-low 0 0 0 --trim-high 1 0 1
 number_of_histories: 1000000
@@ -48,8 +48,8 @@ enable_secondary_energy_sorting: true
 max_device_memory_fraction: 0.90
 random_seed: 20260723
 
-topas_spots_files: ct/topas/spots_c_01.txt, ct/topas/spots_c_02.txt
-spot_weights_file: ct/code/full_plan_weights_exact.csv
+topas_spots_files: benchmark/ct/RT07575/conventional/topas/spots_c_01.txt, benchmark/ct/RT07575/conventional/topas/spots_c_02.txt
+spot_weights_file: benchmark/ct/RT07575/conventional/optimization/full_plan_weights_exact.csv
 spots_sad_mm: 450.0
 spots_geometry_mode: tps_90
 spots_patient_trans_x_mm: -42.8515

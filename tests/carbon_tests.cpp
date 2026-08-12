@@ -1357,7 +1357,7 @@ void test_secondary_optimization_config_validation() {
                 best_config.spots_upstream_air_stopping_power_file ==
                     "data/stopping_power_air_geant4_11_3_2.csv" &&
                 best_config.ct_grid_file ==
-                    "ct/grid/patient_ct_tps_90_xneg_edge_corrected.bin" &&
+                    "benchmark/ct/grids/patient_ct_tps_90_xneg_edge_corrected.bin" &&
                 best_config.spots_ct_axis_min_mm == -104.25,
             "RT07575 best upstream-air/corrected-origin contract");
     // Equal-history single-spot 1M (spot 24): residual-heat MFP + share scale
@@ -1410,10 +1410,10 @@ void test_secondary_optimization_config_validation() {
 
 void test_topas_spots_parse_angle01() {
     const std::filesystem::path path =
-        std::filesystem::path(CARBON_SOURCE_DIR) / "validation" / "topas" /
+        std::filesystem::path(CARBON_SOURCE_DIR) / "data" / "plans" /
         "spots_test_c_angle01.txt";
     require(std::filesystem::exists(path),
-            "spots_test_c_angle01.txt missing under validation/topas");
+            "spots_test_c_angle01.txt missing under data/plans");
     const auto plan = carbon::TopasSpotPlan::from_file(path);
     require(plan.spots.size() == 1, "Expected single spot in angle01 plan");
     const auto& spot = plan.spots.front();
@@ -1758,7 +1758,7 @@ void test_tps_source_geometry_csv_and_switch() {
                  "TOPAS per-control-point gantry Y");
 
     const auto csv_path = std::filesystem::path(CARBON_SOURCE_DIR) /
-                          "validation/tps/spots_example.csv";
+                          "data/plans/spots_example.csv";
     const auto plan = carbon::TpsSourcePlan::from_csv(csv_path);
     require(plan.spots.size() == 3, "TPS CSV spot count");
     require(plan.active_spot_count() == 2, "TPS zero-MU spot filtering");
@@ -2174,7 +2174,7 @@ void test_sycl_transport_context_reuse() {
 
 void test_sycl_secondary_queue_generation() {
     const auto package_path = std::filesystem::path(CARBON_SOURCE_DIR) /
-                              "validation/results/"
+                              "data/packages/"
                               "topas_400MeVu_cascade_g4_11_3_2_aligned_primary_3d.bin";
     const auto reaction_packages = carbon::ReactionPackageTable::from_binary(package_path);
     carbon::TransportConfig config;
@@ -2291,7 +2291,7 @@ void test_sycl_secondary_queue_generation() {
     }
 
     const auto cascade_path = std::filesystem::path(CARBON_SOURCE_DIR) /
-                              "validation/results/"
+                              "data/packages/"
                               "topas_400MeVu_cascade_g4_11_3_2_100k_3d.bin";
     const auto cascade_packages = carbon::CascadePackageTable::from_binary(cascade_path);
     config.enable_fragment_cascade = true;
@@ -2346,7 +2346,7 @@ void test_sycl_secondary_queue_generation() {
 void test_sycl_layered_slab_range_shift() {
     // Dense insert shortens residual range vs uniform water (CSDA-level effect).
     const auto package_path = std::filesystem::path(CARBON_SOURCE_DIR) /
-                              "validation/results/"
+                              "data/packages/"
                               "topas_400MeVu_cascade_g4_11_3_2_aligned_primary_3d.bin";
     if (!std::filesystem::exists(package_path)) {
         return;
@@ -2399,7 +2399,7 @@ void test_sycl_ct_secondary_density_smoke() {
     // Secondaries must sample CT density (not water-only). Dense cube + forced
     // nuclear reaction → queued secondaries deposit with CT-scaled SP.
     const auto package_path = std::filesystem::path(CARBON_SOURCE_DIR) /
-                              "validation/results/"
+                              "data/packages/"
                               "topas_400MeVu_cascade_g4_11_3_2_aligned_primary_3d.bin";
     if (!std::filesystem::exists(package_path)) {
         return;

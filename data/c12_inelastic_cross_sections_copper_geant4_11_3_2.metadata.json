@@ -25,15 +25,15 @@
   },
   "inputs": {
     "ntuple": {
-      "path": "ct/minibeam/output/copper_c12_inelastic_cross_sections.phsp",
+      "path": "benchmark/ct/RT07575/minibeam/physics/output/copper_c12_inelastic_cross_sections.phsp",
       "sha256": "799c567a4595ab31a337991e6ce7022e83dca37c06df5b1869caff590855eacb"
     },
     "header": {
-      "path": "ct/minibeam/output/copper_c12_inelastic_cross_sections.header",
+      "path": "benchmark/ct/RT07575/minibeam/physics/output/copper_c12_inelastic_cross_sections.header",
       "sha256": "cebf01ecde61f5e56da81e65275a2a7301183ba32212ee04608eed4dbd316e44"
     },
     "log": {
-      "path": "ct/minibeam/output/run_copper_cross_sections.log",
+      "path": "benchmark/ct/RT07575/minibeam/physics/output/run_copper_cross_sections.log",
       "sha256": "e4da44866c7dd15aab7008babcb0086bb22cf5be6fdab69503d98b995a083d9d"
     }
   },

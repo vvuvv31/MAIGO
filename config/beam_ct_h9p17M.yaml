@@ -5,8 +5,8 @@
 # Preparation (once after patient_ct.bin changes):
 #   python validation/scripts/reorient_ct_grid_tps_90.py \
 #     --beam-patient-x-direction negative \
-#     --output ct/grid/patient_ct_tps_90_xneg.bin \
-#     --metadata ct/grid/patient_ct_tps_90_xneg.metadata.json
+#     --output benchmark/ct/grids/patient_ct_tps_90_xneg.bin \
+#     --metadata benchmark/ct/grids/patient_ct_tps_90_xneg.metadata.json
 # Run on a oneAPI GPU build:
 #   carbon_mc --config config/beam_ct_optimized_tps_90.yaml --device gpu
 #
@@ -29,7 +29,7 @@ water_density_g_per_cm3: 1.0
 scorer_area_mm2: 17675.0
 
 enable_ct_grid: true
-ct_grid_file: ct/grid/patient_ct_tps_90_xneg.bin
+ct_grid_file: benchmark/ct/grids/patient_ct_tps_90_xneg.bin
 ct_skip_homogeneous_face_clamp: true
 
 # Scoring grid matches the reoriented CT exactly:
@@ -56,8 +56,8 @@ secondary_queue_capacity: 25000000
 max_device_memory_fraction: 0.90
 random_seed: 20260720
 
-topas_spots_files: ct/topas/spots_c_01.txt, ct/topas/spots_c_02.txt
-spot_weights_file: ct/spotWeight.csv
+topas_spots_files: benchmark/ct/RT07575/conventional/topas/spots_c_01.txt, benchmark/ct/RT07575/conventional/topas/spots_c_02.txt
+spot_weights_file: benchmark/ct/RT07575/conventional/optimization/full_plan_weights_exact.csv
 spots_sad_mm: 450.0
 spots_geometry_mode: tps_90
 

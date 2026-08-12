@@ -1,4 +1,4 @@
-# Matched GPU case for ct/minibeam/run_hetero_bone_e200_100k.txt.
+# Matched GPU case for benchmark/ct/RT07575/minibeam/physics/run_hetero_bone_e200_100k.txt.
 # Geometry after the Copper collimator:
 # 0--50 mm water | 50--70 mm G4_BONE_COMPACT_ICRU | 70--150 mm water.
 number_of_histories: 100000

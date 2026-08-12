@@ -1,7 +1,7 @@
 # Standalone clinical TPS-source example. Existing CT/TOPAS examples do not
 # set this switch and therefore keep their validated legacy source path.
 tpsSource: true
-tps_spots_file: validation/tps/spots_example.csv
+tps_spots_file: data/plans/spots_example.csv
 tps_particle_type: carbon
 tps_patient_position: HFS
 # iec61217 keeps the original TPS-source convention. For the TOPAS CT-plan

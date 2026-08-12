@@ -96,8 +96,8 @@ scorer。1,943 个 spot 各输运 100,000 histories，原始逐 spot 预算合�
 | A/B ensemble / TOPAS-Dij | 92.502 / 58.470% | 95.622 / 83.414% | 96.838 / 89.212% |
 
 这里 0 mm 使用全部 317,867 个选择体素，其余 gamma 使用确定性 50,000 点。
-权威数值见 [comparison.md](out/ct/RT07575/minibeam_plan/rotation_fix_56b5343/three_x_129m_two_seed/comparison.md)
-和 [comparison.json](out/ct/RT07575/minibeam_plan/rotation_fix_56b5343/three_x_129m_two_seed/comparison.json)。
+权威数值见 [comparison.md](out/benchmark/ct/RT07575/conventional/minibeam_plan/rotation_fix_56b5343/three_x_129m_two_seed/comparison.md)
+和 [comparison.json](out/benchmark/ct/RT07575/conventional/minibeam_plan/rotation_fix_56b5343/three_x_129m_two_seed/comparison.json)。
 
 ### 4.3 GPU–GPU 重复性
 
@@ -124,8 +124,8 @@ GPU–GPU 明显优于 GPU–TOPAS-Dij，说明 minibeam 当前差异不能只�
 预算为 20,151 MiB，secondary/neutral queue 容量为 58M/70M。构建二进制 SHA-256
 为 `0e1f0fc08312700a2253f85add6eb1350739c558a2ad2ef8daf102fef8f3609e`；运行时
 工作树为 dirty，但 manifest 保存了输入 hash、命令和 dirty 状态。完整证据见
-[manifest.md](out/ct/RT07575/minibeam_plan/rotation_fix_56b5343/three_x_129m_two_seed/manifest.md)
-和 [manifest.json](out/ct/RT07575/minibeam_plan/rotation_fix_56b5343/three_x_129m_two_seed/manifest.json)。
+[manifest.md](out/benchmark/ct/RT07575/conventional/minibeam_plan/rotation_fix_56b5343/three_x_129m_two_seed/manifest.md)
+和 [manifest.json](out/benchmark/ct/RT07575/conventional/minibeam_plan/rotation_fix_56b5343/three_x_129m_two_seed/manifest.json)。
 
 ## 5. 结论边界
 

@@ -44,7 +44,7 @@ secondary_queue_capacity: 0
 max_device_memory_fraction: 0.50
 random_seed: 20260716
 
-topas_spots_file: validation/topas/spots_sobp_water_5_10cm.txt
+topas_spots_file: data/plans/spots_sobp_water_5_10cm.txt
 spots_geometry_mode: beam_plus_z
 spots_sad_mm: 450.0
 

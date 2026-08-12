@@ -59,8 +59,8 @@ validation/topas/run_minibeam_topas.sh run_dose_center_10k.txt
 
 # TOPAS binary 转 MHD
 python3 validation/scripts/prepare_minibeam_topas_dose.py \
-  --input ct/minibeam/output/minibeam_center_dose_10k.bin \
-  --binheader ct/minibeam/output/minibeam_center_dose_10k.binheader \
+  --input benchmark/ct/RT07575/minibeam/physics/output/minibeam_center_dose_10k.bin \
+  --binheader benchmark/ct/RT07575/minibeam/physics/output/minibeam_center_dose_10k.binheader \
   --output-mhd out/minibeam/topas_center_10k/dose.mhd \
   --metrics-json out/minibeam/topas_center_10k/metrics.json \
   --expected-slit-pitch-mm 3.6
@@ -148,11 +148,11 @@ for f in run_copper_mcs_foil_0p1mm.txt \
 done
 
 python3 validation/scripts/analyze_copper_mcs_foil.py \
-  --case 0.1:ct/minibeam/output/copper_mcs_foil_0p1mm.phsp \
-  --case 0.5:ct/minibeam/output/copper_mcs_foil_0p5mm.phsp \
-  --case 1:ct/minibeam/output/copper_mcs_foil_1mm.phsp \
-  --case 2:ct/minibeam/output/copper_mcs_foil_2mm.phsp \
-  --case 5:ct/minibeam/output/copper_mcs_foil_5mm.phsp \
+  --case 0.1:benchmark/ct/RT07575/minibeam/physics/output/copper_mcs_foil_0p1mm.phsp \
+  --case 0.5:benchmark/ct/RT07575/minibeam/physics/output/copper_mcs_foil_0p5mm.phsp \
+  --case 1:benchmark/ct/RT07575/minibeam/physics/output/copper_mcs_foil_1mm.phsp \
+  --case 2:benchmark/ct/RT07575/minibeam/physics/output/copper_mcs_foil_2mm.phsp \
+  --case 5:benchmark/ct/RT07575/minibeam/physics/output/copper_mcs_foil_5mm.phsp \
   --output-json out/minibeam/copper_mcs_foil_benchmark.json
 ```
 
@@ -166,9 +166,9 @@ TOPAS_MINIBEAM_INSTALL=build/opentopas-minibeam-install \
   validation/topas/run_minibeam_topas.sh run_copper_cross_sections.txt
 
 python3 validation/scripts/prepare_minibeam_copper_cross_sections.py \
-  --input ct/minibeam/output/copper_c12_inelastic_cross_sections.phsp \
-  --header ct/minibeam/output/copper_c12_inelastic_cross_sections.header \
-  --log ct/minibeam/output/run_copper_cross_sections.log \
+  --input benchmark/ct/RT07575/minibeam/physics/output/copper_c12_inelastic_cross_sections.phsp \
+  --header benchmark/ct/RT07575/minibeam/physics/output/copper_c12_inelastic_cross_sections.header \
+  --log benchmark/ct/RT07575/minibeam/physics/output/run_copper_cross_sections.log \
   --output-csv data/c12_inelastic_cross_sections_copper_geant4_11_3_2.csv \
   --metadata data/c12_inelastic_cross_sections_copper_geant4_11_3_2.metadata.json
 ```
@@ -210,9 +210,9 @@ TOPAS_MINIBEAM_INSTALL=build/opentopas-minibeam-install \
 
 python3 validation/scripts/prepare_topas_reactions.py \
   --case development --histories 20000 \
-  --input ct/minibeam/output/copper_reactions_2150MeV_20k.phsp \
-  --header ct/minibeam/output/copper_reactions_2150MeV_20k.header \
-  --log ct/minibeam/output/run_copper_reactions_2150MeV_20k.log \
+  --input benchmark/ct/RT07575/minibeam/physics/output/copper_reactions_2150MeV_20k.phsp \
+  --header benchmark/ct/RT07575/minibeam/physics/output/copper_reactions_2150MeV_20k.header \
+  --log benchmark/ct/RT07575/minibeam/physics/output/run_copper_reactions_2150MeV_20k.log \
   --phantom-half-length-mm 30 \
   --reactions-output data/copper_c12_reactions_2150MeV_20k.csv.gz \
   --secondaries-output data/copper_c12_secondaries_2150MeV_20k.csv.gz \
@@ -423,7 +423,7 @@ python3 validation/scripts/compare_minibeam_dose.py \
 
 ## 2. 已有 TOPAS case 审计
 
-参考文件位于 `ct/minibeam/`：
+参考文件位于 `benchmark/ct/RT07575/minibeam/physics/`：
 
 | 文件 | 内容 |
 |---|---|
@@ -648,7 +648,7 @@ minibeam_slit_half_length_mm: 25.0
 minibeam_collimator_angle_deg: 0.0
 
 # TOPAS 961-spot source
-topas_spots_file: ct/minibeam/spots961.txt
+topas_spots_file: benchmark/ct/RT07575/minibeam/physics/spots961.txt
 spots_sad_mm: 450.0
 spots_geometry_mode: minibeam_topas_y
 
@@ -1528,7 +1528,7 @@ reaction packages 前，不应通过本 case 的经验 depth scale 强行提高 
 
 可复现输入和结果：
 
-- `ct/minibeam/run_hetero_bone_e200_100k.txt`
+- `benchmark/ct/RT07575/minibeam/physics/run_hetero_bone_e200_100k.txt`
 - `config/beam_minibeam_hetero_bone_e200_100k.yaml`
 - `validation/scripts/resample_stopping_power_grid.py`
 - `validation/scripts/compare_minibeam_heterogeneous.py`
@@ -1931,9 +1931,9 @@ queue 均无 overflow。TOPAS 未计分导航能量为 `5.65e-5 MeV`，可忽略
 - `ct/fullplan_local_ct_compare/20022516/run_minibeam_plane_e200_100k.txt`
 - `config/generated/beam_ct_20022516_minibeam_plane_e200_100k.yaml`
 - `validation/scripts/analyze_ct_minibeam_plane.py`
-- `out/ct/20022516/minibeam_plane_e200_100k/match_absolute_ct/`
-- `out/ct/20022516/minibeam_plane_e200_100k/profiles_absolute_ct/`
-- `out/ct/20022516/minibeam_plane_e200_100k/multiplanar_absolute_ct/`
+- `out/benchmark/ct/20022516/minibeam_plane_e200_100k/match_absolute_ct/`
+- `out/benchmark/ct/20022516/minibeam_plane_e200_100k/profiles_absolute_ct/`
+- `out/benchmark/ct/20022516/minibeam_plane_e200_100k/multiplanar_absolute_ct/`
 
 ### 22.3 1M 统计收敛验证
 
@@ -1978,11 +1978,11 @@ parallel-world 导航漏记能量仅 `0.001916 MeV`，对结果可忽略。
 1M 复现与结果：
 
 - `ct/fullplan_local_ct_compare/20022516/run_minibeam_plane_e200_1M.txt`
-- `out/ct/20022516/minibeam_plane_e200_1M/topas/dose.mhd`
-- `out/ct/20022516/minibeam_plane_e200_1M/gpu/dose.mhd`
-- `out/ct/20022516/minibeam_plane_e200_1M/match_absolute_ct/`
-- `out/ct/20022516/minibeam_plane_e200_1M/profiles_absolute_ct/`
-- `out/ct/20022516/minibeam_plane_e200_1M/multiplanar_absolute_ct/`
+- `out/benchmark/ct/20022516/minibeam_plane_e200_1M/topas/dose.mhd`
+- `out/benchmark/ct/20022516/minibeam_plane_e200_1M/gpu/dose.mhd`
+- `out/benchmark/ct/20022516/minibeam_plane_e200_1M/match_absolute_ct/`
+- `out/benchmark/ct/20022516/minibeam_plane_e200_1M/profiles_absolute_ct/`
+- `out/benchmark/ct/20022516/minibeam_plane_e200_1M/multiplanar_absolute_ct/`
 
 另外复用同一份 1M TOPAS 做了 GPU-only high-accuracy A/B：只把
 `maximum_step_mm` 从 `0.2` 收紧到 `0.1`，把
@@ -2007,8 +2007,8 @@ Copper reaction product 的 species、角分布和 CT 低密度区输运，而�
 
 high-accuracy A/B 输出：
 
-- `out/ct/20022516/minibeam_plane_e200_1M_high_accuracy/match_absolute_ct/`
-- `out/ct/20022516/minibeam_plane_e200_1M_high_accuracy/profiles_absolute_ct/`
+- `out/benchmark/ct/20022516/minibeam_plane_e200_1M_high_accuracy/match_absolute_ct/`
+- `out/benchmark/ct/20022516/minibeam_plane_e200_1M_high_accuracy/profiles_absolute_ct/`
 
 ### 22.4 严格 3%/0.3 mm gamma
 
@@ -2040,9 +2040,9 @@ global/local 3%/0.3 mm 通过率为：
 
 输出：
 
-- `out/ct/20022516/minibeam_plane_e200_1M/gamma_3pct_0p3mm_absolute_ct/`
-- `out/ct/20022516/minibeam_plane_e200_1M_high_accuracy/gamma_3pct_0p3mm_absolute_ct/`
-- `out/ct/20022516/minibeam_plane_e200_1M_high_accuracy/multiplanar_3pct_0p3mm_absolute_ct/`
+- `out/benchmark/ct/20022516/minibeam_plane_e200_1M/gamma_3pct_0p3mm_absolute_ct/`
+- `out/benchmark/ct/20022516/minibeam_plane_e200_1M_high_accuracy/gamma_3pct_0p3mm_absolute_ct/`
+- `out/benchmark/ct/20022516/minibeam_plane_e200_1M_high_accuracy/multiplanar_3pct_0p3mm_absolute_ct/`
 
 ### 22.5 可信 95% 的可达性与 10M 收敛
 
@@ -2094,10 +2094,10 @@ GPU 积分剂量高约 `6.00%`；这是利用 TOPAS 1M 单 voxel 峰值提高 gl
 
 10M 有效输出：
 
-- `out/ct/20022516/minibeam_plane_e200_10M_high_accuracy_valid/gpu/dose.mhd`
-- `out/ct/20022516/minibeam_plane_e200_10M_high_accuracy_valid/gamma_3pct_0p3mm_absolute_ct/`
-- `out/ct/20022516/minibeam_plane_e200_10M_high_accuracy_valid/profiles_absolute_ct/`
-- `out/ct/20022516/minibeam_plane_e200_10M_high_accuracy_valid/multiplanar_3pct_0p3mm_absolute_ct/`
+- `out/benchmark/ct/20022516/minibeam_plane_e200_10M_high_accuracy_valid/gpu/dose.mhd`
+- `out/benchmark/ct/20022516/minibeam_plane_e200_10M_high_accuracy_valid/gamma_3pct_0p3mm_absolute_ct/`
+- `out/benchmark/ct/20022516/minibeam_plane_e200_10M_high_accuracy_valid/profiles_absolute_ct/`
+- `out/benchmark/ct/20022516/minibeam_plane_e200_10M_high_accuracy_valid/multiplanar_3pct_0p3mm_absolute_ct/`
 
 ### 22.6 5M TOPAS、可信 global 95% 与 local 上限
 
@@ -2159,9 +2159,9 @@ GPU继续降噪提高global但没有提高local，说明当前local主瓶颈已�
 - `validation/scripts/combine_mhd_dose.py`
 - `ct/fullplan_local_ct_compare/20022516/run_minibeam_plane_e200_5M.txt`
 - `ct/fullplan_local_ct_compare/20022516/run_minibeam_plane_e200_5M_seed20260803.txt`
-- `out/ct/20022516/minibeam_plane_e200_10M_vs_topas_5M/`
-- `out/ct/20022516/minibeam_plane_e200_10M_gpu_gpu/`
-- `out/ct/20022516/minibeam_plane_e200_20M_vs_topas_5M/`
+- `out/benchmark/ct/20022516/minibeam_plane_e200_10M_vs_topas_5M/`
+- `out/benchmark/ct/20022516/minibeam_plane_e200_10M_gpu_gpu/`
+- `out/benchmark/ct/20022516/minibeam_plane_e200_20M_vs_topas_5M/`
 
 ### 22.7 10M TOPAS 最终统计收敛验证
 
@@ -2216,10 +2216,10 @@ local 精度，应优先：
 
 最终输出：
 
-- `out/ct/20022516/minibeam_plane_e200_10M_combined/topas/dose.mhd`
-- `out/ct/20022516/minibeam_plane_e200_20M_high_accuracy_combined/gpu/dose.mhd`
-- `out/ct/20022516/minibeam_plane_e200_5M_topas_topas/`
-- `out/ct/20022516/minibeam_plane_e200_20M_vs_topas_10M/`
+- `out/benchmark/ct/20022516/minibeam_plane_e200_10M_combined/topas/dose.mhd`
+- `out/benchmark/ct/20022516/minibeam_plane_e200_20M_high_accuracy_combined/gpu/dose.mhd`
+- `out/benchmark/ct/20022516/minibeam_plane_e200_5M_topas_topas/`
+- `out/benchmark/ct/20022516/minibeam_plane_e200_20M_vs_topas_10M/`
 
 ## 23. RT07575 full-plan sparse-Dij threshold audit（2026-08-01）
 
@@ -2264,7 +2264,7 @@ low-dose、valley 和多 spot Bragg-overlap 区会累积大量单独低于 cutof
 只有消除 threshold bias 后，才能继续判断 Bragg-overlap 剩余误差是否来自
 primary C-12 range/straggling 或 copper reaction-product lateral response。
 
-补充核对：`ct/fullplan_result/RT07575/OSMK_Dtotal_full_plan.bin` 不能用于替代
+补充核对：`benchmark/ct/RT07575/conventional/fullplan_mc/OSMK_Dtotal_full_plan.bin` 不能用于替代
 上述无阈值 reference。它是普通 `c_01+c_02` 计划（917 spots、实际 Dij
 50k histories/spot），而本节 minibeam 计划是 `c_01--c_04`（1943 spots、
 100k histories/spot）。二者不是同一束流计划。
@@ -2336,7 +2336,7 @@ gamma 的主要限制。给 GPU 和 TOPAS 同时施加相同信息损失只会�
 
 可复现输出：
 
-- `out/ct/RT07575/minibeam_plan/gpu_per_spot_threshold_2e-6_100k/summary.json`
+- `out/benchmark/ct/RT07575/conventional/minibeam_plan/gpu_per_spot_threshold_2e-6_100k/summary.json`
 - `.../full_plan/dose_thresholded_like_dij.mhd`
 - `.../full_plan/compare_standard/match_metrics.json`
 - `.../full_plan/compare_submm_all/match_metrics.json`
@@ -2375,6 +2375,6 @@ elapsed 分别为 `3565.21 / 3576.36 s`，两组总计 `7141.57 s`，有效吞�
 
 结果：
 
-- `out/ct/RT07575/minibeam_plan/gpu_gpu_3x_seed_convergence/summary.json`
+- `out/benchmark/ct/RT07575/conventional/minibeam_plan/gpu_gpu_3x_seed_convergence/summary.json`
 - `.../gamma_3pct_0p5mm_all/match_metrics.json`
 - `.../gamma_3pct_0p5mm_all_reverse/match_metrics.json`

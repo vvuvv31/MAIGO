@@ -1,7 +1,0 @@
-# Clean diagnostic run: unique output stem avoids TOPAS ASCII append after an
-# Clean Geant4 11.3.2 diagnostic input; publication evidence uses the formal runner.
-includeFile = carbon_400MeVu_bone_cascade_reactions_smoke.txt
-
-i:So/CarbonBeam/NumberOfHistoriesInRun = 20000
-i:Ts/ShowHistoryCountAtInterval = 5000
-s:Sc/CascadeReactions/OutputFile = "output/cascade_e400_bone_20k_clean_reactions"

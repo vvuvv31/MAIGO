@@ -1,5 +1,5 @@
 # RT06423 full-plan GPU dose + primary-C12/all-hadron LET_d validation.
-# Histories and optimizer fluence match ct/fullplan_result/RT06423 exactly.
+# Histories and optimizer fluence match benchmark/ct/_archive/fullplan_result/RT06423 exactly.
 number_of_histories: 15108664
 initial_energy_MeVu: 200.0
 mass_number: 12
@@ -14,7 +14,7 @@ water_density_g_per_cm3: 1.0
 scorer_area_mm2: 14960.0
 
 enable_ct_grid: true
-ct_grid_file: ct/RT06423/grid/patient_ct_tps_90_xneg.bin
+ct_grid_file: benchmark/ct/RT06423/grid/patient_ct_tps_90_xneg.bin
 ct_skip_homogeneous_face_clamp: true
 
 enable_voxel_scoring: true
@@ -44,7 +44,7 @@ random_seed: 20260730
 
 # Read the integer L4 allocation used by TOPAS directly. This preserves every
 # spot history count exactly; do not add spot_weights_file or a CLI override.
-topas_spots_file: ct/fullplan_result/RT06423/spots_full_plan.txt
+topas_spots_file: benchmark/ct/RT06423/fullplan_mc/spots_full_plan.txt
 spots_sad_mm: 450.0
 spots_geometry_mode: tps_90
 spots_patient_trans_x_mm: -12.3588

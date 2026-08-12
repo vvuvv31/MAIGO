@@ -1,8 +1,0 @@
-# Material-final-state diagnostic. Geant4 11.3.2 results are used only to
-# Diagnostic material-effect input; it is not an A1--A12 publication run.
-includeFile = carbon_400MeVu_water_cascade_reactions.txt
-
-s:Ge/Phantom/Material = "G4_BONE_COMPACT_ICRU"
-i:Ts/NumberOfThreads = 40
-i:So/CarbonBeam/NumberOfHistoriesInRun = 100
-s:Sc/CascadeReactions/OutputFile = "output/cascade_e400_bone_smoke_reactions"

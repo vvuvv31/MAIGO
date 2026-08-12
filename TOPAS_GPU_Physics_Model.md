@@ -15,7 +15,7 @@
 ### 1.1 TOPAS 参考配置
 
 CT full-plan 使用 `Geant4_Modular` physics list。生成脚本
-[`ct/fullplan/build_topas_full_plan.py`](ct/fullplan/build_topas_full_plan.py)
+[`benchmark/ct/tools/fullplan/build_topas_full_plan.py`](benchmark/ct/tools/fullplan/build_topas_full_plan.py)
 写入如下模块集合：
 
 ```text
@@ -30,9 +30,9 @@ sv:Ph/Default/Modules = 7
 ```
 
 当前 CT 结果使用 TOPAS 4.2.p3 / Geant4 11.3.2。剂量由 `DoseToMedium` scorer 输出；LET 由 HadronLET 扩展的 `myHadronLET` scorer 输出。典型输入见
-[`ct/fullplan_result/RT07575/run_full_plan.txt`](ct/fullplan_result/RT07575/run_full_plan.txt)
+[`benchmark/ct/RT07575/conventional/fullplan_mc/run_full_plan.txt`](benchmark/ct/RT07575/conventional/fullplan_mc/run_full_plan.txt)
 和
-[`ct/fullplan_result/RT06423/run_full_plan.txt`](ct/fullplan_result/RT06423/run_full_plan.txt)。
+[`benchmark/ct/RT06423/fullplan_mc/run_full_plan.txt`](benchmark/ct/RT06423/fullplan_mc/run_full_plan.txt)。
 
 这里的 `7` 表示七个 physics module constructor 都加入了所选 physics list。它不表示每个 primary C-12 history 都会实际触发七类过程：过程是否执行取决于粒子种类、能量、材料和粒子是否到达相应状态。例如 `g4radioactivedecay` 只对放射性核适用，`g4stopping` 主要处理停止/静止后的强子过程，而不是普通离子的连续 `dE/dx`。
 

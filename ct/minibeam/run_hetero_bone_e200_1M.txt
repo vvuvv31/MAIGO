@@ -1,5 +1,0 @@
-includeFile = run_hetero_bone_e200_100k.txt
-
-iv:Tf/Scatterer1/L4/Values = 1 1000000
-i:Ts/ShowHistoryCountAtInterval = 100000
-s:Sc/DoseAtPhantomP/OutputFile = "output/minibeam_hetero_bone_e200_1M_total"

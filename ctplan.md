@@ -47,7 +47,7 @@ TOPAS 实现：固定「TPS 0° 束流基准」，用 Patient/RotZ = θ 转 CT
 
 ## 2. TOPAS 几何分解
 
-以 lung case `ct/20022516` 的 `scripts_c/run_c_01.txt` 为例。
+以 lung case 的 `benchmark/ct/20022516/topas/scripts_c/run_c_01.txt` 为例。
 
 ### 2.1 患者：用 RotZ 模拟 TPS 角度
 
@@ -420,8 +420,8 @@ navigation 未计入 4838 个 step，但总能量仅 `2.27e-6 MeV`，对剂量�
 - TOPAS：`ct/fullplan_local_ct_compare/20022516/run_smoke_100k_dose_only.txt`
 - spot：`ct/fullplan_local_ct_compare/20022516/spots_smoke_100k.txt`
 - TOPAS RTDOSE 转 MHD：`validation/scripts/convert_topas_rtdose_to_mhd.py`
-- 数值结果：`out/ct/20022516/topas_local_compare_100k/match_absolute/match_metrics.json`
-- 三解剖面图：`out/ct/20022516/topas_local_compare_100k/multiplanar_absolute/`
+- 数值结果：`out/benchmark/ct/20022516/topas_local_compare_100k/match_absolute/match_metrics.json`
+- 三解剖面图：`out/benchmark/ct/20022516/topas_local_compare_100k/multiplanar_absolute/`
 
 注意：本地 TOPAS 4.2.p3 使用 Geant4 11.3.2，而该 GPU CT 配置仍使用
 Geant4 11.3.2 生成的 stopping-power、截面和 cascade 表；因此残差同时包含

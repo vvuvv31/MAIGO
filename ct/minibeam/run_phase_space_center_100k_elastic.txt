@@ -1,9 +1,0 @@
-# Copper hadElastic diagnostic using the same source, aperture, physics list,
-# seed, and 100k histories as the frozen water-entrance phase-space reference.
-includeFile = run_phase_space_center_100k.txt
-
-s:Sc/CopperIonElastic/Quantity = "IonElasticNtuple"
-s:Sc/CopperIonElastic/Component = "Aperture"
-s:Sc/CopperIonElastic/OutputFile = "output/minibeam_center_100k_copper_ion_elastic"
-s:Sc/CopperIonElastic/OutputType = "ASCII"
-s:Sc/CopperIonElastic/IfOutputFileAlreadyExists = "Overwrite"

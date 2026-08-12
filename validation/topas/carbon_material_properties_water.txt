@@ -1,9 +1,0 @@
-includeFile = carbon_material_tables_base.txt
-s:Ge/Sample/Material = "G4_WATER"
-# Birth inside the sample; this scorer only queries static material properties.
-d:Ge/BeamPosition/TransZ = 0. mm
-s:Sc/MaterialProperties/Quantity = "CarbonMaterialPropertiesNtuple"
-s:Sc/MaterialProperties/Component = "Sample"
-s:Sc/MaterialProperties/OutputFile = "output/material_properties_water"
-s:Sc/MaterialProperties/OutputType = "ASCII"
-s:Sc/MaterialProperties/IfOutputFileAlreadyExists = "Overwrite"

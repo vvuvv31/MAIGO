@@ -17,15 +17,15 @@
   },
   "input_files": {
     "ntuple": {
-      "path": "ct/minibeam/output/copper_c12_stopping_power.phsp",
+      "path": "benchmark/ct/RT07575/minibeam/physics/output/copper_c12_stopping_power.phsp",
       "sha256": "49b64966eebb0a61f91f8087feea73a7456656d4deafd8416b1a09241f149c03"
     },
     "header": {
-      "path": "ct/minibeam/output/copper_c12_stopping_power.header",
+      "path": "benchmark/ct/RT07575/minibeam/physics/output/copper_c12_stopping_power.header",
       "sha256": "f0399a26497813f07a42109955b9021851ba3074b699e34dc8b76b0cbeb3467e"
     },
     "log": {
-      "path": "ct/minibeam/output/run_copper_material_tables.log",
+      "path": "benchmark/ct/RT07575/minibeam/physics/output/run_copper_material_tables.log",
       "sha256": "e0ee2b76ee3842a381fe91d959f0919ea27ba2c07c6e37c708d835b151fe5077"
     }
   },
@@ -38,11 +38,11 @@
     "radiation_length_mm": 14.3558,
     "mass_radiation_length_g_per_cm2": 12.8628,
     "source": {
-      "path": "ct/minibeam/output/copper_material_properties.phsp",
+      "path": "benchmark/ct/RT07575/minibeam/physics/output/copper_material_properties.phsp",
       "sha256": "73380ab3245c949d83656d99ccbf8ea03bae8bd21ac15966f7a70c2627982f1a"
     },
     "header": {
-      "path": "ct/minibeam/output/copper_material_properties.header",
+      "path": "benchmark/ct/RT07575/minibeam/physics/output/copper_material_properties.header",
       "sha256": "2f3ce95252028cde9260d2347e8bda580d7677dc725d5969bc6d6bfd2ace0b48"
     }
   }

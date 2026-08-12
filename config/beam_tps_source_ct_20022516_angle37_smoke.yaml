@@ -23,7 +23,7 @@ water_density_g_per_cm3: 1.0
 scorer_area_mm2: 145680
 
 enable_ct_grid: true
-ct_grid_file: ct/20022516/grid/patient_ct.bin
+ct_grid_file: benchmark/ct/20022516/grid/patient_ct.bin
 ct_skip_homogeneous_face_clamp: true
 enable_voxel_scoring: true
 voxel_bins_x: 960

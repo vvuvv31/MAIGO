@@ -1,6 +1,6 @@
 # A6 oblique 200 MeV/u beam through the same finite bone insert.
 tpsSource: true
-tps_spots_file: validation/tps/spots_A6_bone_oblique_100k.csv
+tps_spots_file: data/plans/spots_A6_bone_oblique_100k.csv
 tps_particle_type: carbon
 tps_patient_position: HFS
 tps_angle_convention: iec61217

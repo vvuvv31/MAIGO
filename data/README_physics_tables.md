@@ -17,3 +17,7 @@ example configs. Prefer `*_geant4_11_3_2.csv` for production-grade runs.
 Runtime nuclear packages live under `data/packages/` (not `validation/results/`).
 `validation/` retains generation intermediates, ablation variants, and benchmark
 outputs only.
+
+Small reusable TOPAS/TPS spot-plan fixtures live under `data/plans/`. These are
+runtime/test inputs; larger patient and dose-validation plans remain in the
+local ignored `benchmark/` and `validation/` workspaces.

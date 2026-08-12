@@ -20,7 +20,7 @@ voxel_bins_y: 40
 voxel_size_x_mm: 0.1
 voxel_size_y_mm: 1.0
 
-topas_spots_file: ct/minibeam/spots_single_center.txt
+topas_spots_file: benchmark/ct/RT07575/minibeam/physics/spots_single_center.txt
 spots_sad_mm: 450.0
 spots_geometry_mode: minibeam_topas_y
 

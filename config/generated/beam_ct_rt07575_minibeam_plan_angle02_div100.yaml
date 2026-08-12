@@ -16,7 +16,7 @@ dose_output_scale: 0.9858617637131339
 
 enable_ct_grid: true
 # World +X is patient -Y for this opposed field, hence yneg packing.
-ct_grid_file: ct/grid/patient_ct_minibeam_angle02_world_edge_corrected.bin
+ct_grid_file: benchmark/ct/grids/patient_ct_minibeam_angle02_world_edge_corrected.bin
 ct_skip_homogeneous_face_clamp: true
 enable_ct_material_mcs: true
 enable_voxel_scoring: true
@@ -26,8 +26,8 @@ voxel_bins_y: 35
 voxel_size_x_mm: 0.5
 voxel_size_y_mm: 2.0
 
-topas_spots_files: ct/RT07575/minibeam/scripts_c/spots_c_03.txt, ct/RT07575/minibeam/scripts_c/spots_c_04.txt
-spot_weights_file: out/ct/RT07575/minibeam_plan/weights_angle02.csv
+topas_spots_files: benchmark/ct/RT07575/minibeam/topas/scripts_c/spots_c_03.txt, benchmark/ct/RT07575/minibeam/topas/scripts_c/spots_c_04.txt
+spot_weights_file: out/benchmark/ct/RT07575/minibeam/plan/weights_angle02.csv
 spots_sad_mm: 450.0
 spots_geometry_mode: minibeam_topas_y
 
@@ -109,6 +109,6 @@ reaction_package_file: data/packages/topas_400MeVu_cascade_g4_11_3_2_aligned_pri
 cascade_package_file: data/packages/topas_400MeVu_cascade_g4_11_3_2_100k_3d.bin
 
 
-voxel_dose_mhd_output_file: out/ct/RT07575/minibeam_plan/gpu_angle02/dose.mhd
+voxel_dose_mhd_output_file: out/benchmark/ct/RT07575/minibeam/plan/gpu_angle02/dose.mhd
 scorerLET: false
 device: cuda
