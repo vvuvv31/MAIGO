@@ -239,10 +239,6 @@ void TransportConfig::validate() const {
             throw std::invalid_argument(
                 "physics_profile=fast is not allowed with minibeam=true");
         }
-        if (!enable_ct_grid) {
-            throw std::invalid_argument(
-                "physics_profile=fast currently requires enable_ct_grid=true");
-        }
         if (!enable_primary_attenuation || !enable_secondary_generation ||
             !enable_secondary_transport || !enable_fragment_cascade) {
             throw std::invalid_argument(

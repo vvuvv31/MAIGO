@@ -3051,6 +3051,8 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                     energy_MeVu, electronic_buildup_fraction);
                 const auto delayed_MeV = deposited_MeV * e_frac;
                 const auto local_MeV = deposited_MeV - delayed_MeV;
+                const auto electronic_mfp_mm = electronic_buildup_mfp_at_energy(
+                    energy_MeVu, electronic_buildup_mfp_mm);
                 if (enable_let_scoring) {
                     const auto let_delta_fraction =
                         use_let_delta_fraction_table
@@ -3101,7 +3103,7 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                     score_exponential_depth(
                         delayed_MeV, z_mid, depth_bin_width_mm, phantom_length_mm,
                         static_cast<std::uint32_t>(number_of_bins),
-                        electronic_buildup_mfp_mm, dose_device);
+                        electronic_mfp_mm, dose_device);
                 }
                 if (enable_voxel_scoring) {
                     // Aggregate consecutive deposits in one voxel before the

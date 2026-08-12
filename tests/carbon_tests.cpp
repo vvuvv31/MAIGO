@@ -1287,14 +1287,17 @@ void test_secondary_optimization_config_validation() {
 
     carbon::TransportConfig fast;
     fast.physics_profile = "fast";
-    fast.enable_ct_grid = true;
-    fast.ct_grid_file = "synthetic-fast-profile-grid.bin";
     fast.enable_primary_attenuation = true;
     fast.enable_secondary_generation = true;
     fast.enable_secondary_transport = true;
     fast.enable_fragment_cascade = true;
     fast.maximum_cascade_generations = 2;
     fast.validate();
+
+    auto fast_ct = fast;
+    fast_ct.enable_ct_grid = true;
+    fast_ct.ct_grid_file = "synthetic-fast-profile-grid.bin";
+    fast_ct.validate();
 
     auto medium = fast;
     medium.physics_profile = "medium";
@@ -1321,12 +1324,6 @@ void test_secondary_optimization_config_validation() {
     bad_best_step.maximum_step_mm = 0.5;
     require_throws([&bad_best_step] { bad_best_step.validate(); },
                    "Best physics profile should enforce its step limit");
-
-    auto bad_fast_geometry = fast;
-    bad_fast_geometry.enable_ct_grid = false;
-    bad_fast_geometry.ct_grid_file.clear();
-    require_throws([&bad_fast_geometry] { bad_fast_geometry.validate(); },
-                   "Fast physics profile should require a CT grid");
 
     auto fast_let = fast;
     fast_let.enable_let_scoring = true;

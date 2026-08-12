@@ -41,6 +41,11 @@ Runner 默认单次 GPU/TOPAS 不超过 100k histories，A7/A8 的 21 层权重�
 
 ### 0.2 2026-08-12 A1/A5 开发诊断
 
+- 新增 `benchmark/audit_bragg_peak_2pct.py` 固化 Bragg peak 2% gate：峰位置用 `abs(GPU peak depth - TOPAS peak depth) / TOPAS peak depth`，峰剂量用 TOPAS 峰中心 `+/-2 mm` 积分差。窗口积分用于避免 0.5 mm binning 与有限 histories 将相邻峰顶 bin 的统计交换误判为物理偏差；单 bin peak error 仍保留为诊断，不作为 range/peak gate。
+- 当前 TOPAS 五 seed mean 对 GPU `best/fast` 共 30 个可比 dose/energy peak 全部通过：峰深度相对误差均为 `0.000%`，峰中心 `+/-2 mm` 积分误差范围为 `0.009--1.973%`。最接近阈值的是 400 MeV/u `best` A1/A4（`1.973%`）。完整冻结输出见 `benchmark/figures_bragg_peak_2pct_20260812/bragg_peak_2pct_audit.{json,md,png}`。
+- A2/A6 的单 bin peak diagnostic 可达 `4.84--9.02%`，但相同 case 的峰深度误差为 `0%`、峰中心 `+/-2 mm` 积分误差为 `1.14--1.41%`，说明残差来自峰顶有限 bin/MCS 采样而非 range 或总 peak-region dose。不得据此重新拟合 stopping power 或 straggling。
+- LET peak **位置**也已在 2% 内；部分 primary-C12 单 bin LET peak 高度不稳定，TOPAS 五 seed 95% CI half-width 在 300/400 MeV/u 与 A7 分别约为 `5.9%/24.1%/30.6%`，不能作为 2% 硬 gate。100 MeV/u all-hadron LET 高度仍有约 `18%` 的系统 fragment-mixture 残差，属于 A5 核碎片/primary-survival 问题，不是 Bragg peak range 问题，继续保留为未通过项。
+
 - A1 四能量 TOPAS 五 seed mean 与 GPU absolute dose 的 Bragg peak depth 全部一致；峰值差为 `-0.19%` 到 `-1.42%`，`0--1.2 x peak` 积分差为 `-0.23%` 到 `+0.72%`。因此当前没有使用整体 dose scale 或修改 stopping-power 标定的依据。
 - 旧 Bohr 方差遗漏了重粒子碰撞的 `Tmax/beta^2` 相对论项，历史非单调 `straggling_scale(E)` 实际在经验补偿该缺项。现已改为 condensed total-loss relativistic dispersion，四个单能配置共享单位 scale。五个 50k GPU seed 聚合后，400 MeV/u dose 峰值差从 `-2.77%` 改善到 `-1.10%`、distal 80--20% width 差从 `+0.073 mm` 改善到 `+0.003 mm`；300 MeV/u dose 峰值差从 `-1.54%` 改善到 `-0.80%`。
 - A5 dose-Bragg-peak bin 的 GPU LETd 差约 `1.4--2.7%`。图中更大的 distal spikes 来自单次 50k GPU LET ratio 的低 denominator：200 MeV/u primary raw max `93.82%`，在 GPU denominator `>=1%` 本曲线最大值后 max 为 `2.24%`、P95 为 `0.27%`。
@@ -76,7 +81,7 @@ Runner 默认单次 GPU/TOPAS 不超过 100k histories，A7/A8 的 21 层权重�
 | B1 | 不同 beam size/divergence 与 off-axis spot | 验证相空间和几何变换；展示 spot centroid、σx/σy、旋转/平移误差 | ☐ |
 | B2 | CT 材料标定 phantom（air/lung/soft tissue/bone） | 分离 HU→材料/密度映射误差与输运误差；报告 WET 与 range shift | ☐ |
 | B3 | 物理消融：material-MCS、secondary straggling、neutral transport 分别开/关 | 量化每项对 dose、LET、tail、速度的影响；对应 MAIGO 已有运行时开关 | ☐ |
-| B4 | `best/fast` 两个发文 profile | 给出 accuracy–runtime–memory trade-off；`best` 强制 LET，`fast` 当前仅支持 CT dose-only | ☐ |
+| B4 | `best/fast` 两个发文 profile | 给出 accuracy–runtime–memory trade-off；`best` 强制 LET，`fast` 支持 CT 与解析 phantom dose-only，不支持 LET/minibeam | 部分：A0 与 A1–A12 fast/best 已跑，正式多 seed/显存实测待补 |
 | B5 | reaction/cascade package 泛化 | package 内插能量与边界能量分开报告；训练/生成能量与验证能量严格拆分 | ☐ |
 | B6 | GPU 可移植性 | 至少 NVIDIA 两代 GPU；若主张 SYCL 可移植，再加 Intel Arc/Level Zero，比较数值一致性 | ☐ |
 | B7 | 重复构建/可复现性 | clean build、固定 seed、容器或环境锁文件、自动生成表图 | ☐ |

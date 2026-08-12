@@ -4511,6 +4511,8 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                     energy_MeVu, electronic_buildup_fraction);
                 const auto delayed_MeV = deposited_MeV * e_frac;
                 const auto local_MeV = deposited_MeV - delayed_MeV;
+                const auto electronic_mfp_mm = electronic_buildup_mfp_at_energy(
+                    energy_MeVu, electronic_buildup_mfp_mm);
                 if (enable_let_scoring) {
                     const auto let_delta_fraction =
                         use_let_delta_fraction_table
@@ -4561,7 +4563,7 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                     score_exponential_depth(
                         delayed_MeV, z_mid, depth_bin_width_mm, phantom_length_mm,
                         static_cast<std::uint32_t>(number_of_bins),
-                        electronic_buildup_mfp_mm, dose_device);
+                        electronic_mfp_mm, dose_device);
                 }
                 if (enable_voxel_scoring) {
                     // Aggregate consecutive deposits in one voxel before the
@@ -4574,7 +4576,7 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                                 target_voxel,
                                 static_cast<float>(pending_primary_voxel_MeV),
                                 static_cast<float>(pending_primary_voxel_delayed_MeV),
-                                electronic_buildup_mfp_mm,
+                                electronic_mfp_mm,
                                 electronic_buildup_lateral_sigma_mm,
                                 depth_bin_width_mm, number_of_bins,
                                 voxel_size_x_mm, voxel_size_y_mm,
@@ -5156,7 +5158,8 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                         target_voxel,
                         static_cast<float>(pending_primary_voxel_MeV),
                         static_cast<float>(pending_primary_voxel_delayed_MeV),
-                        electronic_buildup_mfp_mm,
+                        electronic_buildup_mfp_at_energy(
+                            energy_MeVu, electronic_buildup_mfp_mm),
                         electronic_buildup_lateral_sigma_mm,
                         depth_bin_width_mm, number_of_bins,
                         voxel_size_x_mm, voxel_size_y_mm,
@@ -6008,7 +6011,8 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                                     sec_delayed, z_mid, depth_bin_width_mm,
                                     phantom_length_mm,
                                     static_cast<std::uint32_t>(number_of_bins),
-                                    electronic_buildup_mfp_mm,
+                                    electronic_buildup_mfp_at_energy(
+                                        energy_MeVu, electronic_buildup_mfp_mm),
                                     fragment_dose_device +
                                         species_index * number_of_bins);
                             }
