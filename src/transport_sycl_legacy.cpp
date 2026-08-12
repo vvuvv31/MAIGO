@@ -3013,10 +3013,7 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                     const auto effective_charge =
                         carbon_atomic_number *
                         (1.0f - sycl::exp(-125.0f * beta * carbon_charge_power));
-                    constexpr float bethe_K_MeV_cm2_per_g = 0.307075f;
-                    constexpr float electron_mass_MeV = 0.51099895f;
-                    constexpr float water_Z_over_A = 0.55509f;
-                    // Bohr straggling ∝ Z/A: Schneider za_rel from CCTG when present.
+                    // Condensed total-loss variance: Schneider Z/A when present.
                     auto za_rel = 1.0F;
                     if (enable_ct_grid && in_ct) {
                         if (use_ct_mass_sp && ct_mass_sp_za_rel_device != nullptr &&
@@ -3034,9 +3031,9 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                         }
                     }
                     const auto variance_MeV2 =
-                        bethe_K_MeV_cm2_per_g * electron_mass_MeV * effective_charge *
-                        effective_charge * water_Z_over_A * za_rel *
-                        local_density_g_per_cm3 * (step_mm / 10.0f);
+                        condensed_total_loss_variance_MeV2_device(
+                            energy_MeVu, primary_mass_number, effective_charge,
+                            step_mm, local_density_g_per_cm3, za_rel);
                     const auto local_straggling_scale =
                         interpolate_straggling_scale(
                             energy_MeVu, straggling_scale_energies,
@@ -3045,7 +3042,8 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                     const auto sigma_MeV =
                         local_straggling_scale * sycl::sqrt(sycl::fmax(0.0f, variance_MeV2));
                     deposited_MeV = sycl::clamp(
-                        mean_loss_MeV + sigma_MeV * gaussian, 0.0f, energy_MeV);
+                        mean_loss_MeV + sigma_MeV * gaussian, 0.0f,
+                        sycl::fmin(2.0F * mean_loss_MeV, energy_MeV));
                 }
                 // Electronic build-up: local (1-f)*dE + short-range delta f*dE along +z.
                 // Equilibrium dose still ≈ full unrestricted SP; surface suppressed.
@@ -4443,9 +4441,6 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                                 charge *
                                 (1.0F -
                                  sycl::exp(-125.0F * beta * charge_power));
-                            constexpr float bethe_K_MeV_cm2_per_g = 0.307075F;
-                            constexpr float electron_mass_MeV = 0.51099895F;
-                            constexpr float water_Z_over_A = 0.55509F;
                             auto za_rel = 1.0F;
                             if (enable_ct_grid && in_ct) {
                                 if (use_ct_mass_sp &&
@@ -4468,11 +4463,10 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                                 }
                             }
                             const auto variance_MeV2 =
-                                bethe_K_MeV_cm2_per_g * electron_mass_MeV *
-                                fragment_effective_charge *
-                                fragment_effective_charge * water_Z_over_A *
-                                za_rel * local_density_g_per_cm3 *
-                                (path_step_mm / 10.0F);
+                                condensed_total_loss_variance_MeV2_device(
+                                    energy_MeVu, mass_number,
+                                    fragment_effective_charge, path_step_mm,
+                                    local_density_g_per_cm3, za_rel);
                             const auto local_straggling_scale =
                                 interpolate_straggling_scale(
                                     energy_MeVu, straggling_scale_energies,
@@ -4483,7 +4477,9 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                                 sycl::sqrt(sycl::fmax(0.0F, variance_MeV2));
                             step_deposited_MeV = sycl::clamp(
                                 mean_step_loss_MeV + sigma_MeV * gaussian,
-                                0.0F, energy_MeV);
+                                0.0F,
+                                sycl::fmin(2.0F * mean_step_loss_MeV,
+                                           energy_MeV));
                         }
                         const auto sec_e_frac = electronic_buildup_fraction_at_energy(
                             energy_MeVu, electronic_buildup_fraction);
@@ -6039,19 +6035,12 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                                         (1.0F -
                                          sycl::exp(-125.0F * beta *
                                                    charge_power));
-                                    constexpr float bethe_K_MeV_cm2_per_g =
-                                        0.307075F;
-                                    constexpr float electron_mass_MeV =
-                                        0.51099895F;
-                                    constexpr float water_Z_over_A = 0.55509F;
                                     const auto variance_MeV2 =
-                                        bethe_K_MeV_cm2_per_g *
-                                        electron_mass_MeV *
-                                        fragment_effective_charge *
-                                        fragment_effective_charge *
-                                        water_Z_over_A *
-                                        local_density_g_per_cm3 *
-                                        (path_step_mm / 10.0F);
+                                        condensed_total_loss_variance_MeV2_device(
+                                            energy_MeVu, mass_number,
+                                            fragment_effective_charge,
+                                            path_step_mm,
+                                            local_density_g_per_cm3);
                                     const auto local_straggling_scale =
                                         interpolate_straggling_scale(
                                             energy_MeVu,
@@ -6066,7 +6055,9 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                                     step_deposited_MeV = sycl::clamp(
                                         mean_step_loss_MeV +
                                             sigma_MeV * gaussian,
-                                        0.0F, energy_MeV);
+                                        0.0F,
+                                        sycl::fmin(2.0F * mean_step_loss_MeV,
+                                                   energy_MeV));
                                 }
                                 if (step_deposited_MeV <= 0.0F) {
                                     energy_MeV = 0.0F;

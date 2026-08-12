@@ -543,6 +543,24 @@ void test_bohr_straggling() {
                  1.0e-12, "Negative sampled loss clamp failed");
     require_near(carbon::clamp_sampled_energy_loss(9.0, 2.0, 2.0, 10.0), 10.0,
                  1.0e-12, "Available-energy clamp failed");
+    require_near(carbon::clamp_sampled_energy_loss(1.0, 10.0, 1.0, 100.0), 2.0,
+                 1.0e-12, "Two-mean fluctuation clamp failed");
+}
+
+void test_condensed_total_loss_straggling() {
+    constexpr double carbon_mass_MeV = 12.0 * 931.49410242;
+    const auto low_energy = carbon::condensed_total_loss_variance_MeV2(
+        0.01, carbon_mass_MeV, 6.0, 0.1, 1.0);
+    const auto at_100 = carbon::condensed_total_loss_variance_MeV2(
+        100.0, carbon_mass_MeV, 6.0, 0.1, 1.0);
+    const auto at_400 = carbon::condensed_total_loss_variance_MeV2(
+        400.0, carbon_mass_MeV, 6.0, 0.1, 1.0);
+    const auto twice_step = carbon::condensed_total_loss_variance_MeV2(
+        100.0, carbon_mass_MeV, 6.0, 0.2, 1.0);
+    require(low_energy > 0.0 && at_100 > low_energy && at_400 > at_100,
+            "Relativistic total-loss variance must increase above the Bohr limit");
+    require_near(twice_step / at_100, 2.0, 1.0e-12,
+                 "Total-loss variance must scale linearly with step length");
 }
 
 void test_energy_dependent_straggling_scale() {
@@ -2568,6 +2586,7 @@ int main() {
         test_philox_rng();
         test_highland_multiple_scattering();
         test_bohr_straggling();
+        test_condensed_total_loss_straggling();
         test_energy_dependent_straggling_scale();
         test_energy_conservation();
         test_escape_energy_conservation();

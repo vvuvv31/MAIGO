@@ -125,12 +125,17 @@ TransportResult transport_serial(const TransportConfig& config,
                 const auto gaussian =
                     std::sqrt(-2.0 * std::log(uniform1)) *
                     std::cos(2.0 * std::numbers::pi * uniform2);
-                const auto sigma_MeV = bohr_straggling_sigma_MeV(
-                    energy_MeVu, step_mm, config.water_density_g_per_cm3,
-                    interpolate_straggling_scale(
-                        energy_MeVu, straggling_scale_energies,
-                        straggling_scale_values, straggling_scale_point_count,
-                        config.straggling_scale));
+                const auto local_scale = interpolate_straggling_scale(
+                    energy_MeVu, straggling_scale_energies,
+                    straggling_scale_values, straggling_scale_point_count,
+                    config.straggling_scale);
+                const auto effective_charge = carbon_effective_charge(energy_MeVu);
+                const auto variance_MeV2 = condensed_total_loss_variance_MeV2(
+                    energy_MeVu,
+                    static_cast<double>(config.mass_number) * 931.49410242,
+                    effective_charge, step_mm, config.water_density_g_per_cm3);
+                const auto sigma_MeV =
+                    local_scale * std::sqrt(std::max(0.0, variance_MeV2));
                 deposited_MeV =
                     clamp_sampled_energy_loss(mean_loss_MeV, sigma_MeV, gaussian, energy_MeV);
             }

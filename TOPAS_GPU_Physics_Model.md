@@ -98,14 +98,14 @@ GPU 对每个带电粒子采用步进输运。在一个 step 中，连续能损�
 
 ### 3.2 能损涨落
 
-`enable_energy_straggling` 打开 Bohr 型 step-wise 能损涨落，并由 `straggling_scale` 调整方差。当前配置的 `straggling_scale=1.2` 是经过跨病例验证的固定参数。
+`enable_energy_straggling` 打开重粒子 condensed total-loss step-wise 涨落。方差使用碰撞运动学的 `Tmax/beta^2` 相对论项，并在低速极限退化到 Bohr 方差；采样限制为 `0..min(2*meanLoss,E)`。四个 100/200/300/400 MeV/u 单能水箱配置共享单位 scale，不再用非单调能量表补偿公式中缺失的相对论项。
 
 需要区分 primary 和 secondary：
 
 - `enable_energy_straggling: true` 对 primary C-12 生效；
 - 碎片能损涨落还需要单独打开 `enable_secondary_energy_straggling`；当前 CT `best` 配置没有打开该项。
 
-因此，GPU 的能损涨落与 TOPAS `g4em-standard_opt4` 的完整随机过程具有相同物理目的，但不是同一套 Geant4 step process。
+因此，GPU 的能损涨落与 TOPAS `g4em-standard_opt4` 的完整随机过程具有相同物理目的，但不是同一套 Geant4 step process。当前实现把 continuous loss 与 unresolved hard electron transfer 凝聚在同一步内，没有显式 delta-electron transport，也没有完整复制 `G4IonFluctuations`/`G4UniversalFluctuation` 的 Gaussian/Gamma/Uniform/Glandz regime switch。
 
 ### 3.3 多重库仑散射
 

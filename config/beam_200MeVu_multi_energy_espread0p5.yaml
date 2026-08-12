@@ -15,7 +15,7 @@ enable_charged_origin_voxel_scoring: false
 enable_energy_straggling: true
 straggling_scale: 1.0
 straggling_scale_energies_MeVu: 0, 100, 200, 300, 400
-straggling_scale_values: 1.00, 1.00, 1.08, 1.20, 1.10
+straggling_scale_values: 1.00, 1.00, 1.00, 1.00, 1.00
 enable_multiple_scattering: true
 enable_primary_attenuation: true
 enable_secondary_generation: true

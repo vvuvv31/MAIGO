@@ -1,6 +1,6 @@
 # Multi-energy charged validation at 400 MeV/u (neutron off).
-# Phase-one calibration: current-E/A straggling table; no empirical
-# neutral/electronic redistribution. Calibrated against 50k A1 FWHM scans.
+# Relativistic condensed total-loss variance; the shared unit table avoids
+# incident-beam-specific tuning. No empirical neutral/electronic redistribution.
 # Primary/cascade packages from 400 MeV/u TOPAS cascade (0--400 MeV/u, 1 MeV/u bins).
 number_of_histories: 100000
 initial_energy_MeVu: 400.0
@@ -17,7 +17,7 @@ enable_charged_origin_voxel_scoring: false
 enable_energy_straggling: true
 straggling_scale: 1.0
 straggling_scale_energies_MeVu: 0, 100, 200, 300, 400
-straggling_scale_values: 1.00, 1.00, 1.08, 1.20, 1.10
+straggling_scale_values: 1.00, 1.00, 1.00, 1.00, 1.00
 enable_multiple_scattering: true
 enable_primary_attenuation: true
 enable_secondary_generation: true

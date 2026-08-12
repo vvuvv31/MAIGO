@@ -343,7 +343,7 @@ source
 
 - `StoppingPowerTable`：按 MeV/u 插值总离子 `dE/dx`（MeV/mm）。
 - primary/fragment 步长由最大几何步长、最大相对能损、材料/CT face、scorer face 等共同 clamp。
-- energy straggling 是 Bohr 近似；MCS 是 Highland projected RMS，可由材料 radiation length 和 scale 调整。
+- energy straggling 使用重粒子 condensed total-loss dispersion：在 Bohr 低速极限上加入 `Tmax/beta^2` 相对论因子，并将采样限制在 `0..min(2*meanLoss,E)`；它仍未显式输运 delta electron，也未完整复现 Geant4 的 Glandz/Gamma/Uniform regime。MCS 是 Highland projected RMS，可由材料 radiation length 和 scale 调整。
 - 粒子特异模式用 `IonStoppingPowerTables` 中各 Z/A 相对 C-12 的比例及 delta-electron fraction；缺表物种回退到有效电荷缩放。
 
 ### 8.2 核反应链

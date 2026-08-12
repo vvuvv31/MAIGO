@@ -61,11 +61,51 @@ inline double bohr_straggling_sigma_MeV(double energy_MeVu,
     return scale * std::sqrt(std::max(0.0, variance_MeV2));
 }
 
+template <typename Scalar>
+inline Scalar condensed_total_loss_variance_MeV2(
+    const Scalar energy_MeVu,
+    const Scalar projectile_mass_MeV,
+    const Scalar effective_charge,
+    const Scalar step_mm,
+    const Scalar density_g_per_cm3,
+    const Scalar z_over_a_rel_water = Scalar{1}) noexcept {
+    constexpr Scalar electron_mass_MeV = Scalar{0.51099895};
+    constexpr Scalar bethe_K_MeV_cm2_per_g = Scalar{0.307075};
+    constexpr Scalar water_Z_over_A = Scalar{0.55509};
+    constexpr Scalar nucleon_mass_MeV = Scalar{931.49410242};
+
+    const auto gamma = Scalar{1} + energy_MeVu / nucleon_mass_MeV;
+    const auto beta_squared = std::max(
+        Scalar{0}, Scalar{1} - Scalar{1} / (gamma * gamma));
+    if (beta_squared <= Scalar{0} || projectile_mass_MeV <= Scalar{0}) {
+        return Scalar{0};
+    }
+    const auto mass_ratio = electron_mass_MeV / projectile_mass_MeV;
+    const auto maximum_transfer_MeV =
+        Scalar{2} * electron_mass_MeV * beta_squared * gamma * gamma /
+        (Scalar{1} + Scalar{2} * gamma * mass_ratio + mass_ratio * mass_ratio);
+
+    // The transport condenses continuous loss and unresolved hard electron
+    // transfers into one local step. Integrating the heavy-particle collision
+    // spectrum through Tmax is the G4 dispersion expression with Tcut=Tmax.
+    // The multiplier tends to one in the non-relativistic Bohr limit.
+    const auto relativistic_multiplier =
+        (maximum_transfer_MeV / beta_squared - Scalar{0.5} * maximum_transfer_MeV) /
+        (Scalar{2} * electron_mass_MeV);
+    const auto z_over_a = water_Z_over_A * std::clamp(
+        z_over_a_rel_water, Scalar{0.5}, Scalar{1.5});
+    return bethe_K_MeV_cm2_per_g * electron_mass_MeV *
+           effective_charge * effective_charge * z_over_a *
+           density_g_per_cm3 * (step_mm / Scalar{10}) *
+           std::max(Scalar{0}, relativistic_multiplier);
+}
+
 inline double clamp_sampled_energy_loss(double mean_loss_MeV,
                                         double sigma_MeV,
                                         double gaussian,
                                         double available_energy_MeV) noexcept {
-    return std::clamp(mean_loss_MeV + sigma_MeV * gaussian, 0.0, available_energy_MeV);
+    return std::clamp(mean_loss_MeV + sigma_MeV * gaussian, 0.0,
+                      std::min(2.0 * mean_loss_MeV, available_energy_MeV));
 }
 
 }  // namespace carbon
