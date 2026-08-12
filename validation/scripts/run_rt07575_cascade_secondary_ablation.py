@@ -6,7 +6,7 @@ Arms (all 12,963,817 histories, seed 20260801, no fitted scale):
   electronic_buildup   — electronic_buildup_fraction=0.06, lateral sigma 0.5 mm
   material_inclxx      — lung/soft/bone INCL++ material reaction+cascade packages
                          (requires diagnostic packages under
-                          validation/results/diagnostic_g4_11_3_2/)
+                          data/packages/ soft-tissue + validation/results/diagnostic_g4_11_3_2/ lung-bone)
 
 Uses the production best-profile template. Resume-safe: completed arms keep
 dose/LET MHD outputs with zero queue overflows.
@@ -38,6 +38,7 @@ SEED = 20_260_801
 TEMPLATE = ROOT / "config/beam_ct_fullplan_rt07575_let_soft_tissue.yaml"
 OUT_ROOT = ROOT / "out/ct/RT07575/cascade_secondary_ablation"
 DIAG = ROOT / "validation/results/diagnostic_g4_11_3_2"
+PKG = ROOT / "data/packages"
 TOPAS_DOSE = ROOT / "ct/fullplan_result/RT07575/topas/dose.mhd"
 if not TOPAS_DOSE.exists():
     # Alternate seed-1 path used by equal-history scripts
@@ -51,8 +52,8 @@ FILES_GPU = {
 
 
 def material_inclxx_overrides() -> dict[str, str]:
-    soft_rx = DIAG / "topas_400MeVu_soft_tissue_inclxx_100k_primary_3d.bin"
-    soft_cas = DIAG / "topas_400MeVu_soft_tissue_inclxx_100k_cascade_3d.bin"
+    soft_rx = PKG / "topas_400MeVu_soft_tissue_inclxx_100k_primary_3d.bin"
+    soft_cas = PKG / "topas_400MeVu_soft_tissue_inclxx_100k_cascade_3d.bin"
     lung_rx = DIAG / "topas_400MeVu_lung_inclxx_20k_primary_3d.bin"
     lung_cas = DIAG / "topas_400MeVu_lung_inclxx_20k_cascade_3d.bin"
     bone_rx = DIAG / "topas_400MeVu_bone_inclxx_20k_primary_3d.bin"

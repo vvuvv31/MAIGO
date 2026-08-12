@@ -24,6 +24,7 @@ INTERACTION = struct.Struct("<ffffffiiII")
 # incident_E, continuation_E, local_deposit, cont_dx, cont_dy, cont_dz,
 # process_type, process_subtype, product_offset, product_count
 PRODUCT = struct.Struct("<ihhffff")  # pdg, Z, A, E, local_dx, local_dy, local_dz
+REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 
 
 def sha256(path: Path) -> str:
@@ -32,6 +33,15 @@ def sha256(path: Path) -> str:
         for block in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(block)
     return digest.hexdigest()
+
+
+def provenance_path(path: Path) -> str:
+    """Prefer portable repository-relative paths in generated metadata."""
+    resolved = path.resolve()
+    try:
+        return resolved.relative_to(REPOSITORY_ROOT).as_posix()
+    except ValueError:
+        return resolved.as_posix()
 
 
 def read_gzip_csv(path: Path) -> list[dict[str, str]]:
@@ -299,7 +309,7 @@ def main() -> None:
         "direction_coordinates": "incident-projectile local orthonormal frame",
         "direction_components": ["local_x", "local_y", "along_projectile"],
         "xs_energy_quantum_MeV": args.xs_energy_quantum_mev,
-        "source_metadata": args.metadata.as_posix(),
+        "source_metadata": provenance_path(args.metadata),
         "source_metadata_sha256": sha256(args.metadata),
         "source_runtime": {
             "topas_version": source.get("topas_version"),
@@ -315,7 +325,7 @@ def main() -> None:
         },
         "species": species_metadata,
         "output": {
-            "path": args.output.as_posix(),
+            "path": provenance_path(args.output),
             "bytes": expected_size,
             "sha256": sha256(args.output),
         },

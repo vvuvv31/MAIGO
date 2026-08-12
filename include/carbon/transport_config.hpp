@@ -540,11 +540,11 @@ struct TransportConfig {
     std::filesystem::path nuclear_cross_section_file{
         "data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv"};
     std::filesystem::path reaction_package_file{
-        "validation/results/topas_400MeVu_cascade_g4_11_3_2_aligned_primary_3d.bin"};
+        "data/packages/topas_400MeVu_cascade_g4_11_3_2_aligned_primary_3d.bin"};
     std::filesystem::path cascade_package_file{
-        "validation/results/topas_400MeVu_cascade_g4_11_3_2_100k_3d.bin"};
+        "data/packages/topas_400MeVu_cascade_g4_11_3_2_100k_3d.bin"};
     std::filesystem::path neutral_package_file{
-        "validation/results/topas_200MeVu_neutral_development.bin"};
+        "data/packages/topas_200MeVu_neutral_development.bin"};
     // MeV energy-deposition scorer outputs (absolute MeV → MeV/primary in writers).
     std::filesystem::path output_file{"out/cpu_depth_dose.csv"};
     std::filesystem::path fragment_species_output_file{

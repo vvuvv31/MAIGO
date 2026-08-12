@@ -142,14 +142,14 @@ def main() -> None:
         "geant4_version_remote": "geant4-11-03-patch-02",
         "reaction_packages": {
             "100_200_MeVu": (
-                "validation/results/topas_400MeVu_cascade_g4_11_3_2_aligned_primary_3d.bin "
+                "data/packages/topas_400MeVu_cascade_g4_11_3_2_aligned_primary_3d.bin "
                 "(0-200 MeV/u, 201 bins)"
             ),
             "300_400_MeVu": (
-                "validation/results/topas_400MeVu_cascade_g4_11_3_2_aligned_primary_3d.bin "
+                "data/packages/topas_400MeVu_cascade_g4_11_3_2_aligned_primary_3d.bin "
                 "(0-400 MeV/u, 401 bins)"
             ),
-            "cascade_300_400": "validation/results/topas_400MeVu_cascade_g4_11_3_2_100k_3d.bin",
+            "cascade_300_400": "data/packages/topas_400MeVu_cascade_g4_11_3_2_100k_3d.bin",
             "primary_400_stats": {
                 "reactions": 73739,
                 "secondaries": 715976,

@@ -668,7 +668,7 @@ void test_reaction_package_loading() {
     const auto source_directory = std::filesystem::path(CARBON_SOURCE_DIR);
     const auto package_path =
         source_directory /
-        "validation/results/topas_400MeVu_cascade_g4_11_3_2_aligned_primary_3d.bin";
+        "data/packages/topas_400MeVu_cascade_g4_11_3_2_aligned_primary_3d.bin";
     const auto table = carbon::ReactionPackageTable::from_binary(package_path);
     require(table.energy_bins().size() == 401, "Reaction package energy-bin count failed");
     require(table.reactions().size() == 73'729, "Reaction package reaction count failed");
@@ -722,7 +722,7 @@ void test_reaction_package_loading() {
             "Reaction package is missing a major secondary species");
 
     const auto v2_path = source_directory /
-                         "validation/results/topas_400MeVu_cascade_g4_11_3_2_aligned_primary_3d.bin";
+                         "data/packages/topas_400MeVu_cascade_g4_11_3_2_aligned_primary_3d.bin";
     const auto v2_table = carbon::ReactionPackageTable::from_binary(v2_path);
     require(v2_table.reactions().size() == 73'729,
             "Reaction package v2 reaction count failed");
@@ -752,7 +752,7 @@ void test_reaction_package_loading() {
 void test_neutral_package_loading() {
     const auto source_directory = std::filesystem::path(CARBON_SOURCE_DIR);
     const auto package_path =
-        source_directory / "validation/results/topas_200MeVu_neutral_development.bin";
+        source_directory / "data/packages/topas_200MeVu_neutral_development.bin";
     if (!std::filesystem::exists(package_path) ||
         std::filesystem::file_size(package_path) < 1024) {
         std::cout << "SKIP neutral package loading: no Geant4 11.3.2 neutral fixture\n";
@@ -834,7 +834,7 @@ void test_cascade_package_loading() {
     const auto source_directory = std::filesystem::path(CARBON_SOURCE_DIR);
     const auto package_path =
         source_directory /
-        "validation/results/topas_400MeVu_cascade_g4_11_3_2_100k_3d.bin";
+        "data/packages/topas_400MeVu_cascade_g4_11_3_2_100k_3d.bin";
     const auto table = carbon::CascadePackageTable::from_binary(package_path);
     for (const auto& product : table.products()) {
         require(std::isfinite(product.direction_x) && std::isfinite(product.direction_y),
@@ -852,7 +852,7 @@ void test_cascade_package_loading() {
 
     const auto v2_path =
         source_directory /
-        "validation/results/topas_400MeVu_cascade_g4_11_3_2_100k_3d.bin";
+        "data/packages/topas_400MeVu_cascade_g4_11_3_2_100k_3d.bin";
     const auto v2_table = carbon::CascadePackageTable::from_binary(v2_path);
     require(v2_table.products().size() == 1673741, "Cascade package v2 product count failed");
     for (const auto& product : v2_table.products()) {
@@ -1392,7 +1392,7 @@ void test_secondary_optimization_config_validation() {
                 upstream_air.cascade_package_file.string().find("g4_11_3_2") !=
                 std::string::npos &&
                 upstream_air.neutral_package_file ==
-                    "validation/results/topas_200MeVu_neutral_development.bin",
+                    "data/packages/topas_200MeVu_neutral_development.bin",
             "Default physics packages must use the Geant4 11.3.2 dataset");
     require(!upstream_air.spots_enable_upstream_air_energy_loss,
             "Upstream air energy loss must default to disabled");
@@ -2470,7 +2470,7 @@ void test_sycl_ct_secondary_density_smoke() {
 void test_sycl_neutral_transport_smoke() {
     const auto source_directory = std::filesystem::path(CARBON_SOURCE_DIR);
     const auto neutral_path =
-        source_directory / "validation/results/topas_200MeVu_neutral_development.bin";
+        source_directory / "data/packages/topas_200MeVu_neutral_development.bin";
     if (!std::filesystem::exists(neutral_path) ||
         std::filesystem::file_size(neutral_path) < 1024) {
         std::cout << "SKIP neutral SYCL smoke: no Geant4 11.3.2 neutral fixture\n";
@@ -2478,7 +2478,7 @@ void test_sycl_neutral_transport_smoke() {
     }
     const auto reaction_packages = carbon::ReactionPackageTable::from_binary(
         source_directory /
-        "validation/results/topas_400MeVu_cascade_g4_11_3_2_aligned_primary_3d.bin");
+        "data/packages/topas_400MeVu_cascade_g4_11_3_2_aligned_primary_3d.bin");
     const auto neutral_packages = carbon::NeutralPackageTable::from_binary(neutral_path);
     carbon::TransportConfig config;
     config.number_of_histories = 16;

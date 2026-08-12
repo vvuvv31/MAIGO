@@ -104,7 +104,7 @@ def main() -> None:
     summary = {
         "mode": "first_interaction",
         "kerma": 0.0,
-        "neutral_package": "validation/results/topas_200MeVu_neutral_development.bin",
+        "neutral_package": "data/packages/topas_200MeVu_neutral_development.bin",
         "neutral_stats": {"interactions": 4798230, "products": 2004174},
         "cases": rows,
         "note": (

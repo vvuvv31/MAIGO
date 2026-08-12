@@ -47,7 +47,7 @@ VARIANTS: dict[str, dict[str, str]] = {
         "neutral_transport_mode": "first_interaction",
         "maximum_neutral_generations": "1",
         "neutral_queue_capacity": str(NEUTRAL_QUEUE_CAPACITY),
-        "neutral_package_file": "validation/results/topas_200MeVu_neutral_development.bin",
+        "neutral_package_file": "data/packages/topas_200MeVu_neutral_development.bin",
     },
 }
 
@@ -383,7 +383,7 @@ def main() -> int:
         "topas_seed1": str(args.topas_dir),
         "baseline_gpu_seed1": str(args.baseline_dir),
         "neutral_settings": {
-            "package": "validation/results/topas_200MeVu_neutral_development.bin",
+            "package": "data/packages/topas_200MeVu_neutral_development.bin",
             "transport_mode": "first_interaction",
             "maximum_neutral_generations": 1,
             "neutral_queue_capacity": NEUTRAL_QUEUE_CAPACITY,

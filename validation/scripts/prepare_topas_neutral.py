@@ -35,6 +35,7 @@ INTEGER_COLUMNS = {
 FLOAT_COLUMNS = set(COLUMNS) - INTEGER_COLUMNS - {
     "record_kind", "particle_name", "process_name"
 }
+REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 
 
 def sha256(path: Path) -> str:
@@ -43,6 +44,15 @@ def sha256(path: Path) -> str:
         for block in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(block)
     return digest.hexdigest()
+
+
+def provenance_path(path: Path) -> str:
+    """Prefer portable repository-relative paths in generated metadata."""
+    resolved = path.resolve()
+    try:
+        return resolved.relative_to(REPOSITORY_ROOT).as_posix()
+    except ValueError:
+        return resolved.as_posix()
 
 
 def read_histories(path: Path) -> tuple[int, int]:
@@ -213,9 +223,6 @@ def main() -> None:
                         len(members), product_offset,
                     ])
                     product_offset += len(members)
-    def rel(path: Path) -> str:
-        return path.as_posix()
-
     runtime_text = args.runtime_log.read_text(encoding="utf-8", errors="replace")
     topas_match = re.search(r"Welcome to TOPAS.*?Version\s+([^\)]+)\)", runtime_text)
     geant4_match = re.search(r"Geant4 version Name:\s*([^\s]+)", runtime_text)
@@ -243,17 +250,23 @@ def main() -> None:
         "global_scale_applied": False,
         "files": {
             "runtime_log": {
-                "path": rel(args.runtime_log),
+                "path": provenance_path(args.runtime_log),
                 "sha256": sha256(args.runtime_log),
             },
-            "header": {"path": rel(args.header), "sha256": sha256(args.header)},
-            "phsp": {"path": rel(args.phsp), "sha256": sha256(args.phsp)},
+            "header": {
+                "path": provenance_path(args.header),
+                "sha256": sha256(args.header),
+            },
+            "phsp": {
+                "path": provenance_path(args.phsp),
+                "sha256": sha256(args.phsp),
+            },
             "interactions": {
-                "path": rel(args.interactions_output),
+                "path": provenance_path(args.interactions_output),
                 "sha256": sha256(args.interactions_output),
             },
             "products": {
-                "path": rel(args.products_output),
+                "path": provenance_path(args.products_output),
                 "sha256": sha256(args.products_output),
             },
         },

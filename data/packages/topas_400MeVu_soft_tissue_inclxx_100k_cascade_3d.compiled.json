@@ -10,7 +10,7 @@
   "condition_bins": {
     "incident_energy_MeV_per_u": 2.0,
     "reference_depth_mm": 10.0,
-    "interaction_order": "projectile \u00d7 energy_bin \u00d7 depth_bin \u00d7 exact_energy"
+    "interaction_order": "projectile × energy_bin × depth_bin × exact_energy"
   },
   "direction_coordinates": "projectile-local orthonormal frame",
   "direction_components": [
@@ -18,7 +18,7 @@
     "local_y",
     "along_projectile"
   ],
-  "source_metadata": "validation/results/diagnostic_g4_11_3_2/topas_400MeVu_soft_tissue_inclxx_100k_metadata.json",
+  "source_metadata": "data/packages/topas_400MeVu_soft_tissue_inclxx_100k_metadata.json",
   "source_metadata_sha256": "50f11f74eee2c2c8a885cf33461b0fc11b717c75eafb647ac5f19d614af9f9d2",
   "source_runtime": {
     "topas_version": "4.2.p3",
@@ -227,7 +227,7 @@
     }
   },
   "output": {
-    "path": "validation/results/diagnostic_g4_11_3_2/topas_400MeVu_soft_tissue_inclxx_100k_cascade_3d.bin",
+    "path": "data/packages/topas_400MeVu_soft_tissue_inclxx_100k_cascade_3d.bin",
     "bytes": 46571300,
     "sha256": "e970952f4728bc22b0b415a4da28c7567657e7bec77532043b24a0c03c79cc33"
   }

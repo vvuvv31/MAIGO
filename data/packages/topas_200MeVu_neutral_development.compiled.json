@@ -10,8 +10,8 @@
     "along_projectile"
   ],
   "xs_energy_quantum_MeV": 0.25,
-  "source_metadata": "/home/v/MAIGO/validation/results/topas_200MeVu_neutral_development.metadata.json",
-  "source_metadata_sha256": "79da53a4c5400f5cfd2331cc3c70509bd7148efd40a991ad85b813d4a8d5d583",
+  "source_metadata": "data/packages/topas_200MeVu_neutral_development.metadata.json",
+  "source_metadata_sha256": "e86f55053649350f45955e836ca8ee43ee028b8c9b073a544f38751b1216dbb9",
   "source_runtime": {
     "topas_version": "4.2.p3",
     "geant4_version": "geant4-11-03-patch-02",
@@ -51,7 +51,7 @@
     }
   },
   "output": {
-    "path": "/home/v/MAIGO/validation/results/topas_200MeVu_neutral_development.bin",
+    "path": "data/packages/topas_200MeVu_neutral_development.bin",
     "bytes": 265141248,
     "sha256": "4a217e4e98ebd4d80452e7da5f1086113bd4d7d0403e9f7ffde863b3a6d9e13a"
   },

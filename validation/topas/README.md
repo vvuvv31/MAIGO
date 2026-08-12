@@ -142,7 +142,7 @@ python3 validation/scripts/prepare_topas_neutral.py \
   --phsp validation/topas/output/neutral_development_interactions.phsp \
   --interactions-output validation/results/topas_200MeVu_neutral_development_interactions.csv.gz \
   --products-output validation/results/topas_200MeVu_neutral_development_products.csv.gz \
-  --metadata validation/results/topas_200MeVu_neutral_development.metadata.json \
+  --metadata data/packages/topas_200MeVu_neutral_development.metadata.json \
   --runtime-log validation/topas/output/neutral-development_topas.log \
   --case development
 ```
@@ -156,11 +156,11 @@ Compile the host/GPU binary after standardization:
 
 ```bash
 python3 validation/scripts/compile_neutral_package.py \
-  --metadata validation/results/topas_200MeVu_neutral_development.metadata.json \
+  --metadata data/packages/topas_200MeVu_neutral_development.metadata.json \
   --interactions validation/results/topas_200MeVu_neutral_development_interactions.csv.gz \
   --products validation/results/topas_200MeVu_neutral_development_products.csv.gz \
-  --output validation/results/topas_200MeVu_neutral_development.bin \
-  --output-metadata validation/results/topas_200MeVu_neutral_development.compiled.json
+  --output data/packages/topas_200MeVu_neutral_development.bin \
+  --output-metadata data/packages/topas_200MeVu_neutral_development.compiled.json
 ```
 
 The binary contains two projectiles (PDG 22 and 2112), cross-section samples,

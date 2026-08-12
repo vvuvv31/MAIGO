@@ -52,9 +52,9 @@ CLI + key:value config
 | `src/` | 配置、输运、I/O、物理表实现 | 当前行为的第一事实源 |
 | `src/detail/` | 两个 SYCL 输运 TU 共用的 include-only 实现片段 | 不能独立编译；修改会同时影响 legacy/minibeam |
 | `config/` | 约百个水箱、异质体、CT、LET、SOBP、TPS、minibeam 配置 | 示例兼验证入口；并非每个都适合当前 build/profile |
-| `data/` | 入库的 CSV 物理表、metadata、reaction/cascade/Copper package | 运行时资产；格式需和 loader 保持一致 |
+| `data/` | 入库的 CSV 物理表、metadata、`packages/` reaction/cascade/neutral/soft-tissue 与 Copper package | 运行时资产；格式需和 loader 保持一致 |
 | `tests/` | 单文件自建测试程序 | 当前未接入 CMake，不能把它等同于自动 CI |
-| `validation/` | TOPAS 参数、Python/脚本、参考数据、报告、TPS 示例 | 离线生成、对照、gamma/绘图与回归资产；规模大且混有历史实验 |
+| `validation/` | TOPAS 参数、Python/脚本、参考数据、报告、TPS 示例 | 离线生成、对照、gamma/绘图与回归；不承载 carbon_mc 默认 package |
 | `startup/` | TOPAS database scorer extensions 与提取脚本 | 生成 GPU 物理数据库的上游工具，不参与 `carbon_mc` 构建 |
 | `scripts/` | Linux/Windows 构建与运行包装 | 环境便利层，不定义核心物理 |
 | `benchmark/` | A1–A12 TOPAS/GPU runner 及本地结果 | 当前工作树中的 runner/结果层；正式结论需看 manifest，目录当前未被 Git 跟踪 |
@@ -380,11 +380,11 @@ package 保存离线抽取的相关事件样本，不是解析核模型。关键
 - `c12_inelastic_cross_sections_*.csv`
 - `ion_stopping_power_*.csv`、`ion_cross_sections_copper_*.csv`
 - `let_delta_electron_fraction_*.csv`
-- `data/packages/*.bin`：water reaction/cascade package
+- `data/packages/*.bin`：water reaction/cascade/neutral 与 soft-tissue 运行时 package
 - `data/copper_*.bin`：minibeam Copper reaction/neutral package
 - 相邻 `.metadata.json` / `.compiled.json`：生成版本和编译参数
 
-部分默认 `TransportConfig` package path 仍指向 `validation/results/`，而精简示例也有 `data/packages/` 副本；判断某个 YAML 是否自包含时必须检查其实际 path，不能只看 `data/`。
+`TransportConfig` 默认 package path 指向 `data/packages/`。`validation/results/` 只保留离线生成中间产物、消融变体与对照输出，不再承载 carbon_mc 硬依赖 package。
 
 ### 9.2 `startup/`
 

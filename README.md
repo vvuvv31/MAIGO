@@ -106,7 +106,7 @@ Config files are simple `key: value` lines (not a full YAML library).
 | `data/stopping_power_*.csv` | Material dE/dx tables |
 | `data/c12_inelastic_cross_sections_*.csv` | Macroscopic nuclear XS |
 | `data/ion_stopping_power_*.csv` | Per-isotope SP for LET / fragments |
-| `data/packages/*.bin` | Reaction & cascade final-state packages |
+| `data/packages/*.bin` | Reaction, cascade, neutral, soft-tissue packages |
 | `data/copper_*.bin` | Minibeam Copper packages |
 
 Package binaries are precompiled event samples. Regenerate them offline from

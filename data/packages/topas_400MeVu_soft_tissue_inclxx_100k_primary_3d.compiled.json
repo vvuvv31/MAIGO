@@ -8,7 +8,7 @@
     "local_y",
     "along_projectile"
   ],
-  "source_metadata": "validation/results/diagnostic_g4_11_3_2/topas_400MeVu_soft_tissue_inclxx_100k_primary.metadata.json",
+  "source_metadata": "data/packages/topas_400MeVu_soft_tissue_inclxx_100k_primary.metadata.json",
   "source_metadata_sha256": "72b97d6aa1c1a57eb30df941d6d9e55561f4ea8d94aecd52be0fccedfc895ea0",
   "source_runtime": {
     "topas_version": "4.2.p3",
@@ -35,7 +35,7 @@
     "secondary": 24
   },
   "output": {
-    "path": "validation/results/diagnostic_g4_11_3_2/topas_400MeVu_soft_tissue_inclxx_100k_primary_3d.bin",
+    "path": "data/packages/topas_400MeVu_soft_tissue_inclxx_100k_primary_3d.bin",
     "bytes": 19451960,
     "sha256": "942a2050b3ada7a58d1d254cd08ca9ab5d28e189e232096f17ebaa43219a6fbb"
   }

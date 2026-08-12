@@ -26,8 +26,8 @@ ROOT = Path(__file__).resolve().parents[2]
 PACKAGE_BY_ENERGY = {
     # Prefer G4 11.3.2 400-MeV cascade/primary packages for high-E LET work.
     100: {
-        "reaction": "validation/results/topas_400MeVu_cascade_g4_11_3_2_aligned_primary_3d.bin",
-        "cascade": "validation/results/topas_400MeVu_cascade_g4_11_3_2_100k_3d.bin",
+        "reaction": "data/packages/topas_400MeVu_cascade_g4_11_3_2_aligned_primary_3d.bin",
+        "cascade": "data/packages/topas_400MeVu_cascade_g4_11_3_2_100k_3d.bin",
         "primary_products": "validation/results/topas_400MeVu_cascade_g4_11_3_2_aligned_primary_3d_secondaries.csv.gz",
         "primary_reactions": "validation/results/topas_400MeVu_cascade_g4_11_3_2_aligned_primary_3d_reactions.csv.gz",
         "cascade_products": "validation/results/topas_400MeVu_cascade_g4_11_3_2_100k_products.csv.gz",
@@ -35,8 +35,8 @@ PACKAGE_BY_ENERGY = {
         "topas_histories": 100000,
     },
     200: {
-        "reaction": "validation/results/topas_400MeVu_cascade_g4_11_3_2_aligned_primary_3d.bin",
-        "cascade": "validation/results/topas_400MeVu_cascade_g4_11_3_2_100k_3d.bin",
+        "reaction": "data/packages/topas_400MeVu_cascade_g4_11_3_2_aligned_primary_3d.bin",
+        "cascade": "data/packages/topas_400MeVu_cascade_g4_11_3_2_100k_3d.bin",
         "primary_products": "validation/results/topas_400MeVu_cascade_g4_11_3_2_aligned_primary_3d_secondaries.csv.gz",
         "primary_reactions": "validation/results/topas_400MeVu_cascade_g4_11_3_2_aligned_primary_3d_reactions.csv.gz",
         "cascade_products": "validation/results/topas_400MeVu_cascade_g4_11_3_2_100k_products.csv.gz",
@@ -44,8 +44,8 @@ PACKAGE_BY_ENERGY = {
         "topas_histories": 100000,
     },
     300: {
-        "reaction": "validation/results/topas_400MeVu_cascade_g4_11_3_2_aligned_primary_3d.bin",
-        "cascade": "validation/results/topas_400MeVu_cascade_g4_11_3_2_100k_3d.bin",
+        "reaction": "data/packages/topas_400MeVu_cascade_g4_11_3_2_aligned_primary_3d.bin",
+        "cascade": "data/packages/topas_400MeVu_cascade_g4_11_3_2_100k_3d.bin",
         "primary_products": "validation/results/topas_400MeVu_cascade_g4_11_3_2_aligned_primary_3d_secondaries.csv.gz",
         "primary_reactions": "validation/results/topas_400MeVu_cascade_g4_11_3_2_aligned_primary_3d_reactions.csv.gz",
         "cascade_products": "validation/results/topas_400MeVu_cascade_g4_11_3_2_100k_products.csv.gz",
@@ -53,8 +53,8 @@ PACKAGE_BY_ENERGY = {
         "topas_histories": 100000,
     },
     400: {
-        "reaction": "validation/results/topas_400MeVu_cascade_g4_11_3_2_aligned_primary_3d.bin",
-        "cascade": "validation/results/topas_400MeVu_cascade_g4_11_3_2_100k_3d.bin",
+        "reaction": "data/packages/topas_400MeVu_cascade_g4_11_3_2_aligned_primary_3d.bin",
+        "cascade": "data/packages/topas_400MeVu_cascade_g4_11_3_2_100k_3d.bin",
         "primary_products": "validation/results/topas_400MeVu_cascade_g4_11_3_2_aligned_primary_3d_secondaries.csv.gz",
         "primary_reactions": "validation/results/topas_400MeVu_cascade_g4_11_3_2_aligned_primary_3d_reactions.csv.gz",
         "cascade_products": "validation/results/topas_400MeVu_cascade_g4_11_3_2_100k_products.csv.gz",

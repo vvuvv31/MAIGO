@@ -69,23 +69,23 @@
   "global_scale_applied": false,
   "files": {
     "runtime_log": {
-      "path": "/home/v/MAIGO/benchmark/local_package_extraction/neutral_topas.log",
+      "path": "benchmark/local_package_extraction/neutral_topas.log",
       "sha256": "39afbf0847213afbd6e94858f53607902483d1e45378b450df074c19d7f5bce8"
     },
     "header": {
-      "path": "/home/v/MAIGO/validation/topas/output/neutral_development_interactions.header",
+      "path": "validation/topas/output/neutral_development_interactions.header",
       "sha256": "8d5794be57ba4e9dd82b9cea10cbbda3ec031fc12034c9a694fdc41229234d5f"
     },
     "phsp": {
-      "path": "/home/v/MAIGO/validation/topas/output/neutral_development_interactions.phsp",
+      "path": "validation/topas/output/neutral_development_interactions.phsp",
       "sha256": "251efc8c7dea4e2d2900e6f1956fd4b360bf2ffa8126409207dd18d2e4428396"
     },
     "interactions": {
-      "path": "/home/v/MAIGO/validation/results/topas_200MeVu_neutral_development_interactions.csv.gz",
+      "path": "validation/results/topas_200MeVu_neutral_development_interactions.csv.gz",
       "sha256": "079e956dde71f818c416bcc00d539ebbd1eab20b9edf295e5472f86b600aa9ac"
     },
     "products": {
-      "path": "/home/v/MAIGO/validation/results/topas_200MeVu_neutral_development_products.csv.gz",
+      "path": "validation/results/topas_200MeVu_neutral_development_products.csv.gz",
       "sha256": "293ee59a4d434fc08c885f7632aa97ae169357515cdca3dca803c4e4554ca6db"
     }
   }
