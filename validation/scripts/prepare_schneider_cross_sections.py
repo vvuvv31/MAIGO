@@ -12,6 +12,7 @@ import argparse
 import csv
 import hashlib
 import json
+import re
 from pathlib import Path
 
 import numpy as np
@@ -48,13 +49,14 @@ def main() -> int:
     parser.add_argument("--water-phsp", default="/tmp/maigo_topas_xs_water75.phsp")
     parser.add_argument(
         "--reference-water",
-        default="data/c12_inelastic_cross_sections_water_geant4_11_1_3.csv",
+        default="data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv",
     )
     parser.add_argument(
         "--output",
-        default="data/c12_inelastic_cross_sections_schneider_geant4_11_1_3.csv",
+        default="data/c12_inelastic_cross_sections_schneider_geant4_11_3_2.csv",
     )
     parser.add_argument("--sections", type=int, default=25)
+    parser.add_argument("--runtime-log", default="")
     args = parser.parse_args()
 
     water_phsp = Path(args.water_phsp)
@@ -91,7 +93,7 @@ def main() -> int:
         "dataset": "C-12 inelastic mass cross sections for 25 Schneider materials",
         "method": (
             "Geant4 11.3.2 Schneider/Water_75eV material ratios multiplied by "
-            "the authoritative Geant4 11.1.3 Water_75eV table"
+            "the authoritative Geant4 11.3.2 Water_75eV table"
         ),
         "reference_water": {
             "path": str(reference_path),
@@ -103,6 +105,17 @@ def main() -> int:
         "sections": args.sections,
         "energy_samples": int(energy.size),
     }
+    if args.runtime_log:
+        runtime_log = Path(args.runtime_log)
+        text = runtime_log.read_text(encoding="utf-8", errors="replace")
+        topas = re.search(r"Welcome to TOPAS.*?Version\s+([^\)]+)\)", text)
+        geant4 = re.search(r"Geant4 version Name:\s*([^\s]+)", text)
+        metadata["runtime"] = {
+            "log": str(runtime_log),
+            "log_sha256": sha256(runtime_log),
+            "topas_version": topas.group(1).strip() if topas else None,
+            "geant4_version": geant4.group(1) if geant4 else None,
+        }
     output.with_suffix(".metadata.json").write_text(
         json.dumps(metadata, indent=2) + "\n", encoding="utf-8"
     )

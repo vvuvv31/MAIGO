@@ -21,7 +21,7 @@ enable_secondary_transport: false
 enable_fragment_cascade: false
 enable_neutral_transport: false
 random_seed: 20260715
-stopping_power_file: data/stopping_power_water_geant4_11_1_3.csv
-nuclear_cross_section_file: data/c12_inelastic_cross_sections_water_geant4_11_1_3.csv
+stopping_power_file: data/stopping_power_water_geant4_11_3_2.csv
+nuclear_cross_section_file: data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv
 output_file: out/ct/e150_patient_multimat_idd.csv
 device: gpu

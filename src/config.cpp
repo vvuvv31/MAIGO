@@ -1,4 +1,5 @@
 #include "carbon/transport_config.hpp"
+#include "carbon/straggling.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -359,8 +360,38 @@ void TransportConfig::validate() const {
                 "enable_ct_grid cannot combine with layered phantom or hetero insert");
         }
     }
-    if (straggling_scale < 0.0) {
-        throw std::invalid_argument("straggling_scale must be nonnegative");
+    if (!std::isfinite(straggling_scale) || straggling_scale < 0.0) {
+        throw std::invalid_argument("straggling_scale must be finite and nonnegative");
+    }
+    if (straggling_scale_energies_MeVu.size() != straggling_scale_values.size()) {
+        throw std::invalid_argument(
+            "straggling scale energy and value tables must have the same length");
+    }
+    if (!straggling_scale_energies_MeVu.empty()) {
+        if (straggling_scale_energies_MeVu.size() < 2) {
+            throw std::invalid_argument(
+                "straggling scale table requires at least two points");
+        }
+        if (straggling_scale_energies_MeVu.size() > max_straggling_scale_points) {
+            throw std::invalid_argument(
+                "straggling scale table has too many points (maximum is 16)");
+        }
+        for (std::size_t index = 0; index < straggling_scale_energies_MeVu.size(); ++index) {
+            const auto energy = straggling_scale_energies_MeVu[index];
+            const auto scale = straggling_scale_values[index];
+            if (!std::isfinite(energy) || energy < 0.0) {
+                throw std::invalid_argument(
+                    "straggling scale table energies must be finite and nonnegative");
+            }
+            if (!std::isfinite(scale) || scale < 0.0) {
+                throw std::invalid_argument(
+                    "straggling scale table values must be finite and nonnegative");
+            }
+            if (index > 0 && energy <= straggling_scale_energies_MeVu[index - 1]) {
+                throw std::invalid_argument(
+                    "straggling scale table energies must be strictly increasing");
+            }
+        }
     }
     if (!std::isfinite(multiple_scattering_scale) ||
         multiple_scattering_scale < 0.0 || multiple_scattering_scale > 3.0) {
@@ -1054,6 +1085,16 @@ TransportConfig load_config(const std::filesystem::path& path) {
         values, "enable_secondary_energy_straggling",
         config.enable_secondary_energy_straggling);
     config.straggling_scale = parse_number(values, "straggling_scale", config.straggling_scale);
+    if (const auto iterator = values.find("straggling_scale_energies_MeVu");
+        iterator != values.end()) {
+        config.straggling_scale_energies_MeVu = parse_double_list(
+            iterator->second, "straggling_scale_energies_MeVu");
+    }
+    if (const auto iterator = values.find("straggling_scale_values");
+        iterator != values.end()) {
+        config.straggling_scale_values = parse_double_list(
+            iterator->second, "straggling_scale_values");
+    }
     config.enable_multiple_scattering =
         parse_bool(values, "enable_multiple_scattering", config.enable_multiple_scattering);
     config.multiple_scattering_scale = parse_number(

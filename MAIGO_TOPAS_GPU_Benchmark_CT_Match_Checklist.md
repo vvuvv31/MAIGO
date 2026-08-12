@@ -1,22 +1,43 @@
 # MAIGO 发文前 TOPAS/GPU Benchmark 与 CT Match 清单
 
-> 适用范围：`vvuvv31/MAIGO` 的 `reconstruct` 分支。目标是验证 MAIGO 的 GPU condensed-history 碳离子输运在声明的能量、材料、几何和计分范围内与 TOPAS/Geant4 一致，而不是宣称其等价于完整 Geant4 physics list。
+> 适用范围：`vvuvv31/MAIGO` 的 `reconstruct` 分支；文档按 2026-08-11 工作树与当前源码校正。目标是验证 MAIGO 的 GPU condensed-history 碳离子输运在声明的能量、材料、几何和计分范围内与 TOPAS/Geant4 达到预注册精度，而不是宣称其等价于完整 Geant4 physics list。
+
+### 清单状态与证据规则
+
+- `未开始`：缺配对运行或主输出；`部分`：已有有效输出，但场景矩阵、seed、指标或 gate 不完整；`失败`：输出无效或触发硬 gate；`通过`：全部预注册条件满足。
+- runner 打印 `DONE` 只表示输运结束，不等于通过。只有由冻结的原始输出生成、带 manifest 且通过自动 gate 的结果才能标为 `通过`。
+- `benchmark/formal_*`、图片和 driver log 是当前本地证据，整个 `benchmark/` 当前未被 Git 跟踪；dirty 工作树结果只能作开发证据，不能直接作发文快照。
+- 历史文档或旧结果与当前源码冲突时，以 `TransportConfig::validate()`、当次 config、binary hash 和 manifest 为准。
 
 ## 0. 论文中必须先锁定的验证协议
 
 | 项目 | 必须记录/固定的内容 | 建议写法或输出 |
 |---|---|---|
-| 代码版本 | MAIGO commit SHA、分支、编译器、oneAPI/SYCL、CUDA plugin、编译选项 | Supplementary Table S1 |
+| 代码版本 | MAIGO commit SHA、dirty/clean、source diff/patch、binary SHA-256、分支、编译器、oneAPI/SYCL、CUDA plugin、CMake preset/选项 | Supplementary Table S1；正式结果优先 clean tag/commit |
 | 参考端版本 | TOPAS、Geant4、HadronLET extension 版本与 physics modules | TOPAS 4.2.p3 / Geant4 11.3.2（若实际如此） |
-| 物理列表 | TOPAS 的 7 个 modules；MAIGO `best/medium/fast` 的精确开关 | 配置文件随稿公开 |
-| 输入同源 | 粒子数、能谱、spot 坐标/权重、束斑、发散、几何、CT grid、材料映射完全一致 | 自动生成 input manifest |
+| 物理列表 | TOPAS physics modules/cuts；MAIGO `best/fast` 的精确开关、table/package 版本 | 发文 benchmark 只使用这两个 profile；配置与 package metadata 随稿公开 |
+| 输入同源 | 粒子数、seed、能谱、spot 坐标/权重、束斑、发散、几何、CT grid、材料映射完全一致 | 自动 manifest 记录解析后参数和每个输入 SHA-256 |
 | 剂量定义 | 两端均为 dose-to-medium；体素质量、归一化、单位转换一致 | 不允许为每个病例单独重标定 |
-| LET 定义 | dose-averaged LET、纳入粒子种类、cutoff、restricted/unrestricted stopping power 一致 | 同时报告 primary-C12 与 all-hadron LETd |
-| 随机统计 | 每个关键场景至少 3–5 个独立 seed；报告均值和 95% CI | 先做重复性，再做代码间差异 |
+| LET 定义 | dose-averaged LET、纳入粒子种类、cutoff、restricted/unrestricted stopping power、单位与 denominator mask 一致 | 同时报告 primary-C12 与 all-hadron LETd；TOPAS extension 不输出原始 moments 时明确标 `N/A` |
+| 随机统计 | 每个关键场景至少 5 个独立 seed；两端分别报告均值、SD/SE 和 95% CI | TOPAS/GPU 不要使用相同 RNG 序列作“配对”假设；先做各自重复性 |
 | 后处理 | 相同 grid；若必须重采样，固定插值方法并同时保留原始 grid 结果 | 禁止只展示平滑后曲线 |
 | 盲法阈值 | 在查看最终 CT 结果前锁定 gamma、range、dose、LET 接受标准 | protocol/README 中预注册 |
 | 校准参数 | `dose_output_scale`、`straggling_scale` 等必须用独立 calibration set 确定 | validation 病例不可再次调参 |
 | 队列完整性 | charged/cascade/neutral queue overflow 必须为 0；同时报告能量闭合 | 任一 overflow 非零则该运行不可作验证 |
+| 运行完整性 | exit code=0、backend 确为 SYCL、histories 实际完成数与预期一致、所有必需 scorer 存在且非空/非全零 | 任一不满足则 fail closed，不进入指标计算 |
+| 证据不可变性 | 原始输出只读归档；后处理脚本、参数、环境和输出 hash 入 manifest | 图表必须可由 manifest 指向的 raw data 一键重建 |
+
+### 0.1 当前仓库的可执行入口
+
+| 层级 | 当前入口 | 用途与边界 |
+|---|---|---|
+| A1–A12 矩阵 | `benchmark/A_README.md`、`A*_gpu.sh`、`A*_topas.sh` | 通过环境变量选 binary/device/input；支持无副作用 `--dry-run` |
+| 静态预检 | `python3 benchmark/validate_A1_A12_contract.py` | 检查必需 config、A3/A9 矩阵、histories 上限和 3D scorer 体素尺寸；不替代运行验收 |
+| 开发结果审计 | `benchmark/A1_A12_CHECKLIST_AUDIT_20260811.md` | 记录当前缺项；不是冻结的发文结论 |
+| 指标摘要 | `benchmark/plot_A1_A12_checklist.py` | 目前只自动化部分 1D range/gamma、能量账本和 timing；不覆盖完整 A1–A12 gate |
+| CT 工作流 | `ctplan.md`、`validation/scripts/`、`ctResult.md` | 几何/坐标、转换和当前证据边界；历史数值必须按当前 commit 重算 |
+
+Runner 默认单次 GPU/TOPAS 不超过 100k histories，A7/A8 的 21 层权重精确合计 100k，不得用标量 histories override 变成每层 100k。若统计 gate 要求更高精度，优先聚合多个独立 ≤100k repeat；若确需放宽单次上限，必须先修订并冻结 protocol，不能运行后追认。
 
 ## 1. TOPAS/GPU 必做物理 Benchmark（按优先级）
 
@@ -24,18 +45,18 @@
 
 | 编号 | 场景与扫描矩阵 | 对比量 | 建议统计/接受标准 | 推荐展示 | 状态 |
 |---|---|---|---|---|---|
-| A1 | **均匀水中单能 pencil beam**：至少 100、200、300、400 MeV/u；建议覆盖模型最低/最高有效能量 | IDD、入口平台、Bragg peak、fragment tail、R80/R50、峰宽；横向 σ/FWHM 随深度 | R80 差 ≤1 mm（或 ≤1% range）；高剂量区局部剂量差 ≤2%；1D gamma 1 mm/2% 与 2 mm/2% 均报告 | 每个能量一张 IDD ratio panel；range error vs energy 汇总图 | ☐ |
-| A2 | **束斑与多重散射**：同一能量在入口、mid-range、peak 前后、tail 取横向 profile | lateral σ、FWHM、80–20% penumbra、halo | σ/FWHM 差 ≤1 mm 或 ≤5%；不能只比较中心轴 | 2D dose map + 4 个深度横向 profile + σ(z) | ☐ |
-| A3 | **能损涨落/射程展宽**：monoenergetic 与真实 energy spread（至少 0、0.5%、1%） | peak width、distal 80–20%、R80 方差 | 各 seed CI 重叠；展宽趋势单调且与 TOPAS 一致 | distal fall-off 放大图 | ☐ |
-| A4 | **核反应与碎片尾**：水中高统计单能束，至少 200 与 400 MeV/u | primary attenuation、核反应率、C/B/Be/Li/He/p 分物种剂量或 fluence、tail dose | 反应率和主碎片积分差建议 ≤5%；tail 单独评价，不能被全局 gamma 掩盖 | 分物种深度曲线、tail ratio、能量闭合表 | ☐ |
-| A5 | **LETd 水箱**：与 A1 同能量；primary-C12 和 all-hadron 分开 | LETd(z)、peak 位置/幅值、entrance/peak/tail ROI；原始 numerator/denominator | 高剂量区 LETd median error 建议 ≤5%；峰值/尾部单列，不在低剂量噪声区用无限相对误差 | Dose+LET 联合图、LET difference/ratio、ROI 箱线图 | ☐ |
-| A6 | **异质层状 phantom**：水→肺→水、软组织→骨→软组织、含空气腔；正入射与至少一个斜入射 | 界面剂量、range shift、lateral spread、LETd、核碎片尾 | distal range ≤1–2 mm；界面前后分别做 gamma/差值；报告材料 MCS 开/关 | 材料条带 + depth dose/LET；界面局部放大 | ☐ |
-| A7 | **SOBP / 多能量层**：临床宽度的 SOBP，先单轴再 2D 多 spot | plateau uniformity、proximal/distal edge、range、LETd 梯度 | plateau 均匀性差 ≤2%；3D gamma 2%/2 mm（10% cutoff）≥95%，并附 3%/3 mm | SOBP depth dose、LETd、gamma map/histogram | ☐ |
-| A8 | **spot plan 解析与批处理一致性**：TOPAS spot file、TPS source；batched vs sequential | 总剂量、逐 spot 权重、坐标变换、能量层、MHD/CSV 一致性 | batched 与 sequential 在 MC 统计容差内；同 seed 的实现一致性需给最大/均方差 | 小型已知答案 spot pattern + difference map | ☐ |
-| A9 | **数值收敛性**：step = 1.0/0.5/0.2/0.1/0.05 mm，relative energy loss、cutoff、cascade generation、queue capacity | R80、峰值、tail、LETd、运行时间 | 选定 production 参数后，继续加严造成的关键量变化 <0.5–1%；overflow=0 | accuracy–runtime Pareto 图 | ☐ |
-| A10 | **统计收敛与重复性**：10⁵、10⁶、10⁷（必要时更高）histories，≥5 seeds | voxel uncertainty、R80/IDD/LET CI、gamma CI | 差异必须相对联合 MC 不确定度解释；最终对比不低于 10⁷ 或达到预定 uncertainty | error vs histories 的 log-log 图 | ☐ |
-| A11 | **能量守恒与审计量**：所有上述场景 | initial、deposited、escaped、beamline removed、untracked/residual、overflow energy | 闭合残差设硬阈值（建议 <0.1%，或给出合理物理解释）；所有队列 overflow=0 | 每类场景一行的 balance table | ☐ |
-| A12 | **端到端性能**：warm-up 后同一 GPU，1/10/100 M histories；单 spot、SOBP、CT | wall time、kernel time、初始化/I/O、histories/s、voxels/s、显存峰值、能耗可选 | 报中位数与波动；同时给 TOPAS CPU 核数/线程与硬件，避免只报含糊“×倍加速” | throughput scaling、breakdown、accuracy–speed 表 | ☐ |
+| A1 | **均匀水中单能 pencil beam**：至少 100、200、300、400 MeV/u；建议覆盖模型最低/最高有效能量 | IDD、入口平台、Bragg peak、fragment tail、R80/R50、峰宽；横向 σ/FWHM 随深度 | R80 差 ≤1 mm（或 ≤1% range）；高剂量区局部剂量差 ≤2%；1D gamma 1 mm/2% 与 2 mm/2% 均报告 | 每个能量一张 IDD ratio panel；range error vs energy 汇总图 | 部分：已有四能量 IDD/range；横向与正式多 seed 待补 |
+| A2 | **束斑与多重散射**：同一能量在入口、mid-range、peak 前后、tail 取横向 profile | lateral σ、FWHM、80–20% penumbra、halo | σ/FWHM 差 ≤1 mm 或 ≤5%；不能只比较中心轴 | 2D dose map + 4 个深度横向 profile + σ(z) | 部分：已有 200 MeV/u 3D scorer；横向指标和 difference map 待补 |
+| A3 | **能损涨落/射程展宽**：monoenergetic 与真实 energy spread（至少 0、0.5%、1%） | peak width、distal 80–20%、R80 方差 | 各 seed 间差异在 CI 内；展宽趋势单调且与 TOPAS 一致 | distal fall-off 放大图 | 部分：已有 0/1%；0.5% 已配置未形成正式证据 |
+| A4 | **核反应与碎片尾**：水中高统计单能束，至少 200 与 400 MeV/u | primary attenuation、核反应率、C/B/Be/Li/He/p 分物种剂量或 fluence、tail dose | 反应率和主碎片积分差建议 ≤5%；tail 单独评价，不能被全局 gamma 掩盖 | 分物种深度曲线、tail ratio、能量闭合表 | 部分：200 MeV/u 有分物种；400 MeV/u 分物种和反应率待补 |
+| A5 | **LETd 水箱**：与 A1 同能量；primary-C12 和 all-hadron 分开 | LETd(z)、peak 位置/幅值、entrance/peak/tail ROI；GPU 原始 numerator/denominator，TOPAS moments 若 extension 不支持则记 `N/A` | 高剂量区 LETd median error 建议 ≤5%；峰值/尾部单列，不在低剂量噪声区用无限相对误差 | Dose+LET 联合图、LET difference/ratio、ROI 箱线图 | 部分：已有四能量两种 LETd；ROI/多 seed 待补 |
+| A6 | **异质 phantom**：当前 AABB air cavity/bone insert/offset bone；正入射与 10° 斜入射。如论文声称层状肺/软组织/骨，需另加 layered 配对输入 | 界面剂量、range shift、lateral spread、LETd、核碎片尾 | distal range ≤1–2 mm；界面前后分别做 gamma/差值；报告材料 MCS 开/关 | 材料条带 + depth dose/LET；界面局部放大 | 部分：已有 3 个正入射 IDD；3D/LET/斜入射待完成 |
+| A7 | **SOBP / 多能量层**：临床宽度的 SOBP，先单轴再 2D 多 spot | plateau uniformity、proximal/distal edge、range、LETd 梯度 | plateau 均匀性差 ≤2%；3D gamma 2%/2 mm（10% cutoff）≥95%，并附 3%/3 mm | SOBP depth dose、LETd、gamma map/histogram | 部分：已有配对 1D dose/LET；有效 3D gamma 和多 spot 分析待补 |
+| A8 | **spot plan 解析与批处理一致性**：TOPAS spot file 的 batched vs sequential；`TPS source` 是独立任意角 batched-only 路径，需单独已知答案测试 | 总剂量、逐 spot 权重、坐标变换、能量层、MHD/CSV 一致性 | 比较前检查实际总 histories；用多 seed 或统计容差，FP32 atomic 不要求 bitwise equality | 小型已知答案 spot pattern + difference map | 失败：现有 TOPAS 3D scorer 全零；已修输入，必须重跑后才能重评 |
+| A9 | **数值收敛性**：`best` 扫 step = 0.1/0.05/建议 0.025 mm；`fast` 在 CT 上以 production step 为中心加严；另扫 relative energy loss、cutoff、cascade generation、queue capacity | R80、峰值、tail、LETd（仅 `best`）、运行时间 | 两个 profile 分开验收；选定 production 参数后继续加严变化 <0.5–1%；overflow=0 | accuracy–runtime Pareto 图 | 部分：已有的 0.2–1.0 mm 水箱扫描不属于正式 profile gate；需重建 `best/fast` 矩阵 |
+| A10 | **统计收敛与重复性**：当前 protocol 为 10k/50k/100k，每点 ≥5 seeds；对独立 repeat 做 ensemble 收敛 | voxel uncertainty、R80/IDD/LET CI、gamma CI | 差异必须相对联合 MC 不确定度解释；以预注册 uncertainty 而非固定单次 10⁷ 作停止条件 | error vs effective total histories 的 log-log 图 | 部分：已有一组粒子数扫描；5-seed 正式矩阵待完成 |
+| A11 | **能量守恒与审计量**：所有上述场景 | initial、deposited、escaped、beamline removed、untracked/residual、overflow energy | 闭合相对残差 `<1e-3`；所有队列 overflow=0。“可解释”只能作限制说明，不能把超阈值运行改判为通过 | 每类场景一行的 balance table | 部分：GPU log 可审计；A1–A10 汇总硬 gate 待完成 |
+| A12 | **端到端性能**：warm-up 后同一 GPU；当前单次 10k/50k/100k，每点 ≥5 repeats；单 spot、SOBP、CT | wall/transport/kernel time、初始化/I/O、histories/s、voxels/s、真实峰值显存、能耗可选 | 报 median [IQR]；同时给 TOPAS CPU 核数/线程与硬件；显存 estimate 不得冒充实测 peak | throughput scaling、breakdown、accuracy–speed 表 | 部分：已有单水箱时间；5 repeats、SOBP/CT、I/O 拆分和 peak memory 待完成 |
 
 ### B. 强烈建议：显著增强审稿说服力
 
@@ -44,12 +65,19 @@
 | B1 | 不同 beam size/divergence 与 off-axis spot | 验证相空间和几何变换；展示 spot centroid、σx/σy、旋转/平移误差 | ☐ |
 | B2 | CT 材料标定 phantom（air/lung/soft tissue/bone） | 分离 HU→材料/密度映射误差与输运误差；报告 WET 与 range shift | ☐ |
 | B3 | 物理消融：material-MCS、secondary straggling、neutral transport 分别开/关 | 量化每项对 dose、LET、tail、速度的影响；对应 MAIGO 已有运行时开关 | ☐ |
-| B4 | `best/medium/fast` 三 profile | 给出 accuracy–runtime–memory trade-off，明确 fast 不用于最终 LET 结论 | ☐ |
+| B4 | `best/fast` 两个发文 profile | 给出 accuracy–runtime–memory trade-off；`best` 强制 LET，`fast` 当前仅支持 CT dose-only | ☐ |
 | B5 | reaction/cascade package 泛化 | package 内插能量与边界能量分开报告；训练/生成能量与验证能量严格拆分 | ☐ |
 | B6 | GPU 可移植性 | 至少 NVIDIA 两代 GPU；若主张 SYCL 可移植，再加 Intel Arc/Level Zero，比较数值一致性 | ☐ |
 | B7 | 重复构建/可复现性 | clean build、固定 seed、容器或环境锁文件、自动生成表图 | ☐ |
 
 ## 2. CT TOPAS/GPU Match：病例与实验设计
+
+### 2.0 当前 CT 证据边界（不等于本清单已通过）
+
+- `ctResult.md` 截至 2026-08-09 仅支持 RT06423、RT07575 和 20022516 三例 rotation-fixed、equal-history 的当前常规束 dose 结论；当前统一汇总只有 3%/0 mm，不是本清单要求的 3D 2%/2 mm gate。
+- 这三例虽写出 LETd，但还没有使用统一 TOPAS-dose/denominator mask 完成当前代码的配对 LET 比较；旧 `out/fullplan_result` 和旧 fast/best 数值不得并入。
+- RT06541 旧 TOPAS full-plan 参考已确认无效，重算与审计完成前必须排除。RT07575 minibeam 当前参考是带 sparse threshold 的 per-spot TOPAS-Dij，不得写成独立 whole-plan TOPAS scorer。
+- 上述运行可用于发现问题和设计 protocol，但不能在补齐每例 manifest、多 seed、预注册 gamma/LET 指标前改标为 `通过`。
 
 ### 2.1 病例选择
 
@@ -63,12 +91,13 @@
 ### 2.2 每例必须跑的配对条件
 
 - [ ] 完全相同的 CT voxel grid、patient orientation、isocenter、gantry/couch angle、spot positions、energies、weights 和 histories。
-- [ ] TOPAS 与 GPU 使用相同 HU→density/material 映射；另保存 material-label difference map。
+- [ ] TOPAS 与 GPU 使用相同 HU→density/material 映射；记录 CCTG version、origin/spacing/dimensions/direction、density/section/`za_rel`/`I_eV` hash，另保存 material-label difference map。
+- [ ] 在 transport 前用 `--plan-only` 或等价检查输出 source bounds、beam direction、isocenter 和入射面；TOPAS “转 CT”与 GPU “转束”必须通过已知坐标点/小 spot pattern 证明等价。
 - [ ] 单野分别比较，再比较总计划；总计划不能替代 per-field 诊断。
-- [ ] dose-only 与 dose+LET 使用同一物理配置；记录 scorer 是否改变性能或内存。
-- [ ] 至少 3 个 seed；TOPAS 与 GPU 的统计不确定度分别估计。
+- [ ] 分别运行 `best` dose+LET 和 `fast` dose-only；两者物理与 scorer 不同，性能差不得解释为纯 LET scorer overhead。
+- [ ] 至少 5 个独立 seed；TOPAS 与 GPU 的统计不确定度分别估计。
 - [ ] primary-C12 LETd 与 all-hadron LETd 分开；低剂量/低 denominator voxel 设预先定义的 mask。
-- [ ] 输出 raw deposited energy、dose Gy、LET numerator/denominator、物种剂量、队列/能量审计量。
+- [ ] GPU 输出 raw deposited energy、dose Gy、LET numerator/denominator、物种剂量、队列/能量审计量；TOPAS 端只要 scorer/extension 可用就保存对应 raw moments，不可用反推值冒充原始输出。
 - [ ] 同时运行 GPU `best` 基线和关键物理扩展消融；不要只展示调到最匹配的配置。
 
 ## 3. CT 结果应该怎样展示
@@ -111,20 +140,27 @@
 | 统计 | seed 间 SD/95% CI、combined uncertainty z-score | 区分 MC noise 与系统偏差；gamma pass rate 也给 CI |
 | 物理审计 | interaction rate、species dose、energy balance、overflow | 尤其检查 distal tail 和 heterogeneity interfaces |
 
+### 3.4 指标实现必须冻结的细节
+
+- Gamma 必须记录 reference/evaluation 顺序、global/local normalization、dose cutoff 的 reference ROI、插值方法、搜索步长/范围、边界处理、是否在 BODY 内计算以及实际评价 voxel 数。抽样 gamma 必须标明抽样数和固定 seed，不得与全体素 gamma 混报。
+- Dose 转换必须在原始 grid 先用每 voxel 局部质量得到 dose-to-medium；不得先插值 deposited energy 再用统一质量除。任何质量保守 rebin 都必须实施 sum/integral 守恒检查。
+- LETd 在两端各自由 moments 相除后再比较，不对 LETd 值本身做三线性重采样代替 moments 重采样。mask 至少同时锁定 reference dose threshold 和 LET denominator threshold。
+- 所有 ratio/relative error 的分母必须是冻结的 TOPAS reference；低剂量和近零物种尾部使用绝对差或积分 ROI，不报无界相对误差。
+
 ## 4. 建议预注册的接受标准
 
 以下阈值适合做项目内部的起始 gate；最终应结合体素尺寸、TOPAS 统计不确定度和目标期刊调整，且必须在 hold-out CT 分析前锁定。
 
 | 层级 | 建议 gate | 判定 |
 |---|---|---|
-| 水箱射程 | 全能量 R80 |Δ| ≤1 mm（粗体素可改为 ≤1 voxel） | 必须通过 |
+| 水箱射程 | 全能量 R80 `abs(Δ) ≤ max(1 mm, 1 voxel)`，且无随能量的单调系统偏差 | 必须通过 |
 | 水箱剂量 | 高剂量区 ≤2%；1D/2D gamma 2%/2 mm ≥95% | 必须通过 |
 | 异质 phantom | R80 ≤2 mm；3D gamma 2%/2 mm ≥95%；界面无连续系统偏差 | 必须通过 |
 | CT 3D dose | 每例 gamma 2%/2 mm ≥95%，3%/3 mm ≥98%，10% cutoff | 任何失败例单独解释 |
 | Clinical metrics | target D95/D2 与主要 OAR Dmean/Dmax 多数 ≤2%，无 >3% 系统偏差 | 必须给 worst case |
 | LETd | 高剂量 mask 内 median error ≤5%，P95 error 预设；峰/tail 单独评价 | 不能以 dose gamma 代替 |
 | 稳定性 | production 参数进一步加严时关键量变化 <1%；seed CI 可接受 | 必须通过 |
-| 守恒/队列 | overflow=0；energy closure 建议 <0.1% 或逐项解释 | 硬性 gate |
+| 守恒/队列 | overflow=0；每个 production run 的 relative energy-closure residual `<0.1%` | 硬性 gate；超阈值运行可解释但不可改判 |
 
 ## 5. MAIGO 特有的必要消融与风险项
 
@@ -151,7 +187,22 @@
 | 输出 | histories/s、CPU core-hours、wall time | histories/s、wall time、peak memory；可加 energy/history |
 | 加速比 | GPU wall time 对固定 TOPAS 并行配置 | 同时给单核、临床可用多核两个基准，避免 cherry-picking |
 
-建议至少展示四行：单能水箱、SOBP、单野 CT、full-plan CT；每行同时给 `best/medium/fast` 的精度和速度。
+建议至少展示四行：单能水箱、SOBP、单野 CT、full-plan CT。水箱/SOBP 报 `best`；CT 报 `best` 与 `fast` accuracy–speed trade-off。
+
+### 6.1 正式 run manifest 最小字段
+
+| 分组 | 必需字段 |
+|---|---|
+| 标识 | case/run UUID、UTC 开始/结束时间、A1–A12/CT 场景标签、calibration/validation/stress 角色 |
+| MAIGO | commit/branch/dirty；diff hash 或 patch；binary SHA-256；CMake preset/cache 和 compile definitions；backend/device/driver |
+| TOPAS | executable SHA-256、TOPAS/Geant4/extension 版本、physics modules/cuts、threads、G4 data-set versions |
+| 输入 | 实际 runtime config/TOPAS overlay、include 展开后参数、CT/spot/weight/table/package 路径与 SHA-256 |
+| 运行 | seed、请求/完成 histories、spot/layer 分配、profile 与每个物理/scorer 开关、queue capacity |
+| 完整性 | exit code、backend tag、S/C/N overflow 数与能量、能量账本各项与相对残差、必需输出 hash |
+| 后处理 | script commit/hash、Python 与依赖版本、mask/gamma/rebin/归一化参数、指标 JSON 和图表 hash |
+| 性能 | warm-up 策略、计时边界、wall/transport/kernel/I/O、实测 peak memory 的工具与采样间隔、功耗设置 |
+
+Manifest 必须是机器可读文件（JSON/YAML），Markdown 摘要只是其派生视图。路径不能是唯一 provenance；每个关键输入和输出都要有内容 hash。
 
 ## 7. 推荐论文图表清单
 
@@ -176,13 +227,15 @@
 - [ ] TOPAS/GPU 的 beam、geometry、material、dose 与 LET 定义逐项核对并公开。
 - [ ] 水箱、横向散射、碎片、LET、异质界面、SOBP、CT、性能八类证据齐全。
 - [ ] 所有正式运行 queue overflow=0，能量闭合满足预设阈值。
-- [ ] 至少 3–5 seeds，误差条包含 MC 统计不确定度。
+- [ ] 每个关键场景至少 5 seeds，误差条包含两端 MC 统计不确定度。
 - [ ] CT 不只给 gamma：同时给 dose difference、range、DVH、LET、worst-case 与失败区域。
 - [ ] 代表病例不是手工挑最好结果；病例选择规则写入 Methods。
 - [ ] raw 与 calibrated 结果同时保留；统一 scale 不在 validation set 上重新拟合。
 - [ ] 速度比较使用相同物理/scorer/workload，并披露 TOPAS 并行硬件。
 - [ ] 明确声明中性粒子、电子/光子、衰变、材料 MCS、有限 cascade 等限制。
 - [ ] 所有脚本、配置、原始汇总 CSV、绘图代码和环境版本可复现。
+- [ ] A1–A12 每项都有机器可读的 pass/fail/partial 记录和缺项；没有用 transport `DONE` 或图片存在代替验收。
+- [ ] 正式证据所需 runner、config、TOPAS input、指标脚本和 protocol 都已纳入受控版本，不依赖未跟踪工作树。
 
 ## 9. 推荐执行顺序
 
@@ -199,8 +252,9 @@
 
 ```text
 validation_publication/
-├── protocol/                 # 冻结阈值、版本、定义
-├── manifests/                # 每次运行的 commit/config/hardware/seed
+├── protocol/                 # 冻结阈值、版本、定义；含变更记录
+├── manifests/                # 机器可读 manifest；一个 run 一个 UUID
+├── raw/                      # 只读 TOPAS/MAIGO 原始输出，按 hash 审计
 ├── water_mono/
 ├── lateral_mcs/
 ├── fragments_let/

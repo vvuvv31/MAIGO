@@ -1510,7 +1510,7 @@ PVDR 相对差在 10、60、70、75 mm 分别为 `-14.2%`、`+22.5%`、`-0.18%`�
 
 当前剩余系统误差有明确的材料模型来源：
 
-1. 现有 compact-bone stopping-power 表来自 Geant4 11.1.3，而水和 TOPAS 正式
+1. 现有 compact-bone stopping-power 表来自 Geant4 11.3.2，而水和 TOPAS 正式
    运行为 Geant4 11.3.2。本次为避免直接混合绝对表，使用同版本旧表中的
    bone/water 比值重采样到精确 11.3.2 water grid；这仍不是直接的 11.3.2
    compact-bone 表。

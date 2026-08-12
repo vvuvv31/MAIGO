@@ -23,7 +23,7 @@ slab_z_ends_mm: 50, 70, 150
 slab_densities_g_per_cm3: 1.0, 1.85, 1.0
 slab_radiation_lengths_g_per_cm2: 36.0830, 30.4866, 36.0830
 slab_stopping_power_files: data/stopping_power_water_geant4_11_3_2.csv, data/stopping_power_bone_geant4_11_3_2.csv, data/stopping_power_water_geant4_11_3_2.csv
-slab_cross_section_files: data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv, data/c12_inelastic_cross_sections_bone_geant4_11_1_3.csv, data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv
+slab_cross_section_files: data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv, data/c12_inelastic_cross_sections_bone_geant4_11_3_2.csv, data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv
 
 enable_voxel_scoring: true
 enable_charged_origin_voxel_scoring: false
@@ -82,7 +82,7 @@ enable_secondary_transport: true
 enable_fragment_cascade: true
 cascade_condition_on_reference_depth: false
 enable_fragment_species_scoring: true
-enable_neutral_transport: true
+enable_neutral_transport: false
 neutral_transport_mode: first_interaction
 maximum_neutral_generations: 1
 neutral_local_kerma_fraction: 0.0
@@ -102,7 +102,7 @@ particle_stopping_power_file: data/ion_stopping_power_water_geant4_11_3_2.csv
 nuclear_cross_section_file: data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv
 reaction_package_file: validation/results/topas_400MeVu_cascade_g4_11_3_2_aligned_primary_3d.bin
 cascade_package_file: validation/results/topas_400MeVu_cascade_g4_11_3_2_100k_3d.bin
-neutral_package_file: validation/results/topas_200MeVu_neutral_development.bin
+
 
 output_file:
 dose_output_file: out/minibeam/heterogeneous_bone_e200_100k/gpu_optimized/depth_dose.csv

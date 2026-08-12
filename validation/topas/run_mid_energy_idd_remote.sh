@@ -7,8 +7,8 @@ set -euo pipefail
 
 project_root="${REMOTE_PROJECT_ROOT:-${HOME}/gpu}"
 topas_dir="${project_root}/validation/topas"
-install_dir="${OPENTOPAS_EXTENSION_INSTALL_DIR:-${project_root}/build/opentopas-extension-install}"
-geant4_install="${GEANT4_INSTALL_DIR:-${HOME}/software/gate/GATE/geant4-v11.1.3-install-MT}"
+install_dir="${OPENTOPAS_EXTENSION_INSTALL_DIR:-${HOME}/software/topas/OpenTOPAS-install-v4.2.3-carbon}"
+geant4_install="${GEANT4_INSTALL_DIR:-${HOME}/software/geant4-v11.3.2-install}"
 gdcm_install="${GDCM_INSTALL_DIR:-${HOME}/software/topas/gdcm-install}"
 
 energy="${1:-}"
@@ -26,7 +26,7 @@ case "${case_name}" in
     *) usage ;;
 esac
 
-export TOPAS_G4_DATA_DIR="${TOPAS_G4_DATA_DIR:-${HOME}/software/gate/G4DATA}"
+export TOPAS_G4_DATA_DIR="${TOPAS_G4_DATA_DIR:-${geant4_install}/share/Geant4/data}"
 export LD_LIBRARY_PATH="${geant4_install}/lib:${install_dir}/lib:${gdcm_install}/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
 
 run_one() {

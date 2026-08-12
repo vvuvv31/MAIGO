@@ -1,12 +1,19 @@
 includeFile = carbon_sobp_water_3cm_5_10cm_letd_100k.txt
 
-# True 3D, 3 mm isotropic LET_d scorers matching the existing dose grid.
-i:Sc/SobpPrimaryC12LETd/XBins = 50
-i:Sc/SobpPrimaryC12LETd/YBins = 50
-i:Sc/SobpPrimaryC12LETd/ZBins = 50
+# True 3D, 1 mm isotropic LET_d scorers matching the dose grid.
+# The included 1D LET input disables the two ordinary 3D scorers; explicitly
+# re-enable them for A8 before overriding the LET scorer binning below.
+b:Sc/Dose3mm/Active = "True"
+b:Sc/Energy3mm/Active = "True"
+
+i:Sc/SobpPrimaryC12LETd/XBins = 150
+i:Sc/SobpPrimaryC12LETd/YBins = 150
+i:Sc/SobpPrimaryC12LETd/ZBins = 150
 s:Sc/SobpPrimaryC12LETd/OutputFile = "output/sobp_letd_3d_100k_primary_c12"
 
-i:Sc/SobpAllHadronLETd/XBins = 50
-i:Sc/SobpAllHadronLETd/YBins = 50
-i:Sc/SobpAllHadronLETd/ZBins = 50
+i:Sc/SobpAllHadronLETd/XBins = 150
+i:Sc/SobpAllHadronLETd/YBins = 150
+i:Sc/SobpAllHadronLETd/ZBins = 150
 s:Sc/SobpAllHadronLETd/OutputFile = "output/sobp_letd_3d_100k_all_hadron"
+s:Sc/Dose3mm/OutputFile = "output/sobp_water_3cm_5_10cm_1mm_dose3d"
+s:Sc/Energy3mm/OutputFile = "output/sobp_water_3cm_5_10cm_1mm_energy3d"

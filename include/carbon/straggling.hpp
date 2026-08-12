@@ -1,9 +1,36 @@
 #pragma once
 
+#include <array>
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 
 namespace carbon {
+
+inline constexpr std::size_t max_straggling_scale_points = 16;
+
+template <typename Scalar>
+inline Scalar interpolate_straggling_scale(
+    const Scalar energy_MeVu,
+    const std::array<Scalar, max_straggling_scale_points>& energies_MeVu,
+    const std::array<Scalar, max_straggling_scale_points>& scales,
+    const std::size_t point_count,
+    const Scalar fallback_scale) noexcept {
+    if (point_count == 0) {
+        return fallback_scale;
+    }
+    if (point_count == 1 || energy_MeVu <= energies_MeVu[0]) {
+        return scales[0];
+    }
+    for (std::size_t index = 1; index < point_count; ++index) {
+        if (energy_MeVu <= energies_MeVu[index]) {
+            const auto denominator = energies_MeVu[index] - energies_MeVu[index - 1];
+            const auto fraction = (energy_MeVu - energies_MeVu[index - 1]) / denominator;
+            return scales[index - 1] + fraction * (scales[index] - scales[index - 1]);
+        }
+    }
+    return scales[point_count - 1];
+}
 
 inline double carbon_effective_charge(double energy_MeVu) noexcept {
     constexpr double nucleon_mass_MeV = 931.49410242;
@@ -42,4 +69,3 @@ inline double clamp_sampled_energy_loss(double mean_loss_MeV,
 }
 
 }  // namespace carbon
-

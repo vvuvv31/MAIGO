@@ -424,7 +424,7 @@ navigation 未计入 4838 个 step，但总能量仅 `2.27e-6 MeV`，对剂量�
 - 三解剖面图：`out/ct/20022516/topas_local_compare_100k/multiplanar_absolute/`
 
 注意：本地 TOPAS 4.2.p3 使用 Geant4 11.3.2，而该 GPU CT 配置仍使用
-Geant4 11.1.3 生成的 stopping-power、截面和 cascade 表；因此残差同时包含
+Geant4 11.3.2 生成的 stopping-power、截面和 cascade 表；因此残差同时包含
 GPU 近似误差和 Geant4 版本差异。下一轮严格物理归因应先把 GPU 表统一到
 11.3.2，再增加 spot 数或在集群运行完整计划。
 

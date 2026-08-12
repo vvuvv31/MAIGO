@@ -15,6 +15,6 @@ enable_energy_straggling: true
 straggling_scale: 1.2
 enable_primary_attenuation: false
 random_seed: 20260714
-stopping_power_file: data/stopping_power_water.csv
+stopping_power_file: data/stopping_power_water_geant4_11_3_2.csv
 nuclear_cross_section_file: data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv
 output_file: out/cpu_straggling_depth_dose.csv

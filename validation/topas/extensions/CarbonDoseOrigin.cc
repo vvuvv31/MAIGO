@@ -98,7 +98,7 @@ OriginCategory ClassifyIndependentTrack(const G4Track* track, bool is_primary) {
             break;
     }
 
-    // In OpenTOPAS 4.1 / Geant4 11.1, a GenericIon dynamic charge can still
+    // A GenericIon dynamic charge can still
     // be zero at BeginOfTrack. Nuclear identity therefore has to be resolved
     // before consulting the dynamic charge. For non-nuclear particles the
     // charge is initialized and remains the correct discriminator.

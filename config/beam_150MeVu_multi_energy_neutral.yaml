@@ -1,5 +1,5 @@
 # Multi-energy with mode-D neutral transport (no local kerma).
-# Neutral package: topas_200MeVu_neutral_development.bin from TOPAS 100k n-tuple.
+# Neutral transport disabled until a Geant4 11.3.2 neutral fixture is generated.
 number_of_histories: 100000
 initial_energy_MeVu: 150.0
 mass_number: 12
@@ -19,7 +19,7 @@ enable_primary_attenuation: true
 enable_secondary_generation: true
 enable_secondary_transport: true
 enable_fragment_cascade: true
-enable_neutral_transport: true
+enable_neutral_transport: false
 neutral_transport_mode: first_interaction
 maximum_neutral_generations: 1
 neutral_local_kerma_fraction: 0.0
@@ -28,11 +28,11 @@ secondary_queue_capacity: 500000
 max_device_memory_fraction: 0.50
 neutral_queue_capacity: 2000000
 random_seed: 20260715
-stopping_power_file: data/stopping_power_water_geant4_11_1_3.csv
-nuclear_cross_section_file: data/c12_inelastic_cross_sections_water_geant4_11_1_3.csv
-reaction_package_file: validation/results/topas_200MeVu_cascade_aligned_primary_3d.bin
-cascade_package_file: validation/results/topas_200MeVu_cascade_100k_3d.bin
-neutral_package_file: validation/results/topas_200MeVu_neutral_development.bin
+stopping_power_file: data/stopping_power_water_geant4_11_3_2.csv
+nuclear_cross_section_file: data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv
+reaction_package_file: validation/results/topas_400MeVu_cascade_g4_11_3_2_aligned_primary_3d.bin
+cascade_package_file: validation/results/topas_400MeVu_cascade_g4_11_3_2_100k_3d.bin
+
 output_file: out/multi_energy_neutral/e150_idd.csv
 fragment_species_output_file: out/multi_energy_neutral/e150_species.csv
 device: gpu

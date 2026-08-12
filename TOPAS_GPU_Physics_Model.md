@@ -301,7 +301,7 @@ neutral_transport_mode: first_interaction  # 仅在 neutral=true 时生效
 ```
 
 对应的独立 smoke 配置见
-[`config/beam_ct_physics_extensions_smoke.yaml`](config/beam_ct_physics_extensions_smoke.yaml)。该配置默认把三项都打开，生产 `best/medium/fast` 配置则显式写出 secondary straggling 为 `false`，避免把默认值误认为物理过程已经启用。
+[`config/beam_ct_physics_extensions_smoke.yaml`](config/beam_ct_physics_extensions_smoke.yaml)。该配置默认把三项都打开，生产 `best/fast` 配置则显式写出 secondary straggling 为 `false`，避免把默认值误认为物理过程已经启用。
 
 1,000 histories 的 smoke 主要测启动与分配开销，不能用于估计稳态吞吐。使用同一 37° TPS-source CT smoke、NVIDIA TITAN RTX、10M histories，并将队列扩大到 `secondary=48M`、`neutral=24M` 以保证 `overflow=0`，得到：
 

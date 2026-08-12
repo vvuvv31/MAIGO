@@ -109,6 +109,11 @@ def main() -> None:
         raise SystemExit("--xs-energy-quantum-mev must be positive")
 
     source = json.loads(args.metadata.read_text(encoding="utf-8"))
+    if (source.get("topas_version") != "4.2.p3" or
+            source.get("geant4_version") != "geant4-11-03-patch-02"):
+        raise SystemExit(
+            "Neutral packages require TOPAS 4.2.p3 / Geant4 11.3.2 provenance"
+        )
     interactions = read_gzip_csv(args.interactions)
     products = read_gzip_csv(args.products)
     if sha256(args.interactions) != metadata_sha(source, "interactions"):
@@ -154,6 +159,10 @@ def main() -> None:
         xs_by_pdg_energy[pdg][energy_key].append(xs)
     if expected_offset != len(products):
         raise SystemExit("Interaction product ranges do not cover the product table")
+    # The grouping dictionaries now own all row references. Drop the two large
+    # CSV reader lists before constructing compact binary records.
+    del interactions
+    del products
 
     binary_projectiles: list[tuple[int, int, int, int, int]] = []
     binary_xs: list[tuple[float, float]] = []
@@ -192,7 +201,9 @@ def main() -> None:
                 continuation_global, incident_direction
             )
             product_offset = len(binary_products)
-            members = products_by_interaction[interaction_index]
+            # Release verbose CSV dictionaries as soon as their compact binary
+            # representation has been built, limiting peak memory on 100k runs.
+            members = products_by_interaction.pop(interaction_index, [])
             for product in members:
                 energy = float(product["kinetic_energy_MeV"])
                 if energy < 0.0 or not math.isfinite(energy):
@@ -248,6 +259,10 @@ def main() -> None:
                 )
             ),
         }
+        species_interactions.clear()
+
+    if products_by_interaction:
+        raise SystemExit("Unconsumed neutral product groups remain after compilation")
 
     expected_size = (
         HEADER.size
@@ -286,6 +301,12 @@ def main() -> None:
         "xs_energy_quantum_MeV": args.xs_energy_quantum_mev,
         "source_metadata": args.metadata.as_posix(),
         "source_metadata_sha256": sha256(args.metadata),
+        "source_runtime": {
+            "topas_version": source.get("topas_version"),
+            "geant4_version": source.get("geant4_version"),
+            "runtime_log_sha256": (source.get("files", {}).get("runtime_log", {})
+                                   .get("sha256")),
+        },
         "records": {
             "projectiles": len(binary_projectiles),
             "cross_section_samples": len(binary_xs),

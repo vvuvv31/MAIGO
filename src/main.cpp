@@ -693,6 +693,8 @@ int main(int argc, char* argv[]) {
                 config.spot_weights_file = argv[++index];
             } else if (argument == "--straggling-scale" && index + 1 < argc) {
                 config.straggling_scale = std::stod(argv[++index]);
+                config.straggling_scale_energies_MeVu.clear();
+                config.straggling_scale_values.clear();
             } else if (argument == "--output" && index + 1 < argc) {
                 config.output_file = argv[++index];
             } else if (argument == "--dose-output" && index + 1 < argc) {

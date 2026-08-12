@@ -1,5 +1,5 @@
 # Water tank 150x150x150 mm, 5x5 cm square C-12, SOBP 50-100 mm.
-# 3 mm isotropic DoseToMedium + EnergyDeposit (50x50x50).
+# 1 mm isotropic DoseToMedium + EnergyDeposit (150x150x150).
 i:Ts/Seed = 20260716
 i:Ts/NumberOfThreads = 56
 b:Ts/ShowHistoryCountLessFrequentlyAsSimulationProgresses = "True"
@@ -71,9 +71,9 @@ s:Sc/Dose3mm/Component = "Phantom"
 s:Sc/Dose3mm/OutputFile = "output/sobp_water_5_10cm_3mm_dose3d"
 s:Sc/Dose3mm/OutputType = "csv"
 s:Sc/Dose3mm/IfOutputFileAlreadyExists = "Overwrite"
-i:Sc/Dose3mm/XBins = 50
-i:Sc/Dose3mm/YBins = 50
-i:Sc/Dose3mm/ZBins = 50
+i:Sc/Dose3mm/XBins = 150
+i:Sc/Dose3mm/YBins = 150
+i:Sc/Dose3mm/ZBins = 150
 sv:Sc/Dose3mm/Report = 1 "Sum"
 
 s:Sc/Energy3mm/Quantity = "EnergyDeposit"
@@ -81,7 +81,7 @@ s:Sc/Energy3mm/Component = "Phantom"
 s:Sc/Energy3mm/OutputFile = "output/sobp_water_5_10cm_3mm_energy3d"
 s:Sc/Energy3mm/OutputType = "csv"
 s:Sc/Energy3mm/IfOutputFileAlreadyExists = "Overwrite"
-i:Sc/Energy3mm/XBins = 50
-i:Sc/Energy3mm/YBins = 50
-i:Sc/Energy3mm/ZBins = 50
+i:Sc/Energy3mm/XBins = 150
+i:Sc/Energy3mm/YBins = 150
+i:Sc/Energy3mm/ZBins = 150
 sv:Sc/Energy3mm/Report = 1 "Sum"

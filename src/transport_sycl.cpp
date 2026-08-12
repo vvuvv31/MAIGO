@@ -7,6 +7,7 @@
 #include "carbon/rng.hpp"
 #include "carbon/slab_phantom.hpp"
 #include "carbon/stopping_power.hpp"
+#include "carbon/straggling.hpp"
 #include "carbon/transport.hpp"
 
 #ifdef CARBON_HAS_SYCL
@@ -2851,6 +2852,16 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
         !config.enable_layered_phantom &&
         !config.enable_hetero_insert;
     const auto straggling_scale = static_cast<float>(config.straggling_scale);
+    std::array<float, max_straggling_scale_points> straggling_scale_energies{};
+    std::array<float, max_straggling_scale_points> straggling_scale_values{};
+    const auto straggling_scale_point_count =
+        config.straggling_scale_energies_MeVu.size();
+    for (std::size_t index = 0; index < straggling_scale_point_count; ++index) {
+        straggling_scale_energies[index] = static_cast<float>(
+            config.straggling_scale_energies_MeVu[index]);
+        straggling_scale_values[index] = static_cast<float>(
+            config.straggling_scale_values[index]);
+    }
     const auto water_density_g_per_cm3 = static_cast<float>(config.water_density_g_per_cm3);
     const auto enable_multiple_scattering = config.enable_multiple_scattering;
     const auto enable_ct_material_mcs = config.enable_ct_material_mcs;
@@ -4483,8 +4494,13 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                         bethe_K_MeV_cm2_per_g * electron_mass_MeV * effective_charge *
                         effective_charge * water_Z_over_A * za_rel *
                         local_density_g_per_cm3 * (step_mm / 10.0f);
+                    const auto local_straggling_scale =
+                        interpolate_straggling_scale(
+                            energy_MeVu, straggling_scale_energies,
+                            straggling_scale_values,
+                            straggling_scale_point_count, straggling_scale);
                     const auto sigma_MeV =
-                        straggling_scale * sycl::sqrt(sycl::fmax(0.0f, variance_MeV2));
+                        local_straggling_scale * sycl::sqrt(sycl::fmax(0.0f, variance_MeV2));
                     deposited_MeV = sycl::clamp(
                         mean_loss_MeV + sigma_MeV * gaussian, 0.0f, energy_MeV);
                 }
@@ -5846,8 +5862,13 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                                 fragment_effective_charge * water_Z_over_A *
                                 za_rel * local_density_g_per_cm3 *
                                 (path_step_mm / 10.0F);
+                            const auto local_straggling_scale =
+                                interpolate_straggling_scale(
+                                    energy_MeVu, straggling_scale_energies,
+                                    straggling_scale_values,
+                                    straggling_scale_point_count, straggling_scale);
                             const auto sigma_MeV =
-                                straggling_scale *
+                                local_straggling_scale *
                                 sycl::sqrt(sycl::fmax(0.0F, variance_MeV2));
                             step_deposited_MeV = sycl::clamp(
                                 mean_step_loss_MeV + sigma_MeV * gaussian,
@@ -7349,8 +7370,15 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                                         water_Z_over_A *
                                         local_density_g_per_cm3 *
                                         (path_step_mm / 10.0F);
+                                    const auto local_straggling_scale =
+                                        interpolate_straggling_scale(
+                                            energy_MeVu,
+                                            straggling_scale_energies,
+                                            straggling_scale_values,
+                                            straggling_scale_point_count,
+                                            straggling_scale);
                                     const auto sigma_MeV =
-                                        straggling_scale *
+                                        local_straggling_scale *
                                         sycl::sqrt(sycl::fmax(
                                             0.0F, variance_MeV2));
                                     step_deposited_MeV = sycl::clamp(
@@ -8210,6 +8238,11 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
             std::max(0.0, fragment_integral_MeV - result.secondary_deposited_energy_MeV);
         result.total_deposited_energy_MeV +=
             result.secondary_deposited_energy_MeV + neutral_kerma_deposit_MeV;
+        // Neutral birth energy converted to the local-kerma proxy is already
+        // present in the aggregate dose above. Remove the same amount from
+        // the unresolved nuclear reservoir so it is not counted twice by the
+        // history energy-balance diagnostic.
+        result.untracked_nuclear_energy_MeV -= neutral_kerma_deposit_MeV;
         result.escaped_energy_MeV += result.secondary_escaped_energy_MeV;
         result.untracked_nuclear_energy_MeV -= result.queued_secondary_energy_MeV;
         if (enable_fragment_cascade) {

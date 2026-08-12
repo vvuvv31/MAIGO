@@ -35,8 +35,8 @@ enable_secondary_generation: false
 enable_secondary_transport: false
 
 random_seed: 20260728
-stopping_power_file: data/stopping_power_water_geant4_11_1_3.csv
-nuclear_cross_section_file: data/c12_inelastic_cross_sections_water_geant4_11_1_3.csv
+stopping_power_file: data/stopping_power_water_geant4_11_3_2.csv
+nuclear_cross_section_file: data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv
 output_file:
 dose_output_file:
 voxel_dose_output_file:

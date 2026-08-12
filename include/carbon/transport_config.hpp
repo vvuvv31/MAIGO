@@ -217,7 +217,13 @@ struct TransportConfig {
     // Historical validation applied straggling only to primary C-12.
     // Enable this separately to apply Bohr straggling to charged fragments.
     bool enable_secondary_energy_straggling{false};
+    // Scalar fallback for Bohr straggling. If the two optional tables below
+    // are populated, the scale is linearly interpolated using the current
+    // particle E/A rather than the incident beam energy. Empty tables retain
+    // the historical scalar behavior.
     double straggling_scale{1.0};
+    std::vector<double> straggling_scale_energies_MeVu{};
+    std::vector<double> straggling_scale_values{};
     bool enable_multiple_scattering{false};
     // Multiplies Highland projected RMS angle for charged MCS (primary +
     // secondary). 1.0 is the historical default. Values >1 increase lateral
@@ -534,11 +540,11 @@ struct TransportConfig {
     std::filesystem::path nuclear_cross_section_file{
         "data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv"};
     std::filesystem::path reaction_package_file{
-        "validation/results/topas_200MeVu_reaction_packages_development.bin"};
+        "validation/results/topas_400MeVu_cascade_g4_11_3_2_aligned_primary_3d.bin"};
     std::filesystem::path cascade_package_file{
-        "validation/results/topas_200MeVu_cascade_100k.bin"};
+        "validation/results/topas_400MeVu_cascade_g4_11_3_2_100k_3d.bin"};
     std::filesystem::path neutral_package_file{
-        "validation/results/topas_200MeVu_neutral_smoke.bin"};
+        "validation/results/topas_200MeVu_neutral_development.bin"};
     // MeV energy-deposition scorer outputs (absolute MeV → MeV/primary in writers).
     std::filesystem::path output_file{"out/cpu_depth_dose.csv"};
     std::filesystem::path fragment_species_output_file{

@@ -20,6 +20,12 @@
   ],
   "source_metadata": "validation/results/topas_400MeVu_cascade_g4_11_3_2_100k.metadata.json",
   "source_metadata_sha256": "a7d4b39830fede9338370d897c02371ec80593b208cb7949903aa7f6d00c4673",
+  "source_runtime": {
+    "topas_version": "4.2.p3",
+    "geant4_version": "geant4-11-03-patch-02",
+    "runtime_reference_metadata": null,
+    "runtime_reference_metadata_sha256": null
+  },
   "records": {
     "projectiles": 31,
     "cross_section_samples": 26317,

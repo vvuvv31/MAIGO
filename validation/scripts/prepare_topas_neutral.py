@@ -5,11 +5,13 @@ from __future__ import annotations
 
 import argparse
 from collections import Counter, defaultdict
+from collections.abc import Iterator
 import csv
 import gzip
 import hashlib
 import json
 import math
+import re
 from pathlib import Path
 
 
@@ -55,8 +57,7 @@ def read_histories(path: Path) -> tuple[int, int]:
     return histories, entries
 
 
-def read_rows(path: Path) -> list[dict[str, object]]:
-    result: list[dict[str, object]] = []
+def read_rows(path: Path) -> Iterator[dict[str, object]]:
     with path.open(encoding="utf-8") as stream:
         for line_number, line in enumerate(stream, 1):
             values = line.split()
@@ -72,8 +73,7 @@ def read_rows(path: Path) -> list[dict[str, object]]:
                 row[name] = int(row[name])
             for name in FLOAT_COLUMNS:
                 row[name] = float(row[name])
-            result.append(row)
-    return result
+            yield row
 
 
 def direction(row: dict[str, object], prefix: str) -> tuple[float, float, float]:
@@ -89,18 +89,6 @@ def direction(row: dict[str, object], prefix: str) -> tuple[float, float, float]
     return values
 
 
-def write_gzip_csv(path: Path, fieldnames: tuple[str, ...], rows: list[list[object]]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("wb") as raw:
-        with gzip.GzipFile(filename="", mode="wb", fileobj=raw, mtime=0) as compressed:
-            import io
-            text = io.TextIOWrapper(compressed, encoding="utf-8", newline="")
-            writer = csv.writer(text, lineterminator="\n")
-            writer.writerow(fieldnames)
-            writer.writerows(rows)
-            text.flush()
-
-
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--header", type=Path, required=True)
@@ -109,21 +97,21 @@ def main() -> None:
     parser.add_argument("--products-output", type=Path, required=True)
     parser.add_argument("--metadata", type=Path, required=True)
     parser.add_argument("--case", required=True)
+    parser.add_argument(
+        "--runtime-log", type=Path, required=True,
+        help="TOPAS log used to prove the TOPAS and Geant4 runtime versions",
+    )
     args = parser.parse_args()
 
     histories, declared_entries = read_histories(args.header)
-    rows = read_rows(args.phsp)
-    if len(rows) != declared_entries:
-        raise SystemExit(
-            f"Header declares {declared_entries} entries, found {len(rows)}"
-        )
-
     interactions: dict[tuple[int, int, int, int], dict[str, object]] = {}
     products: dict[tuple[int, int, int, int], list[dict[str, object]]] = defaultdict(list)
     process_counts: Counter[str] = Counter()
     projectile_counts: Counter[str] = Counter()
     product_species: Counter[str] = Counter()
-    for row in rows:
+    raw_entries = 0
+    for row in read_rows(args.phsp):
+        raw_entries += 1
         key = (
             int(row["run_id"]), int(row["thread_id"]),
             int(row["event_id"]), int(row["interaction_id"]),
@@ -155,6 +143,10 @@ def main() -> None:
             ] += 1
         else:
             raise SystemExit(f"Unknown record kind: {row['record_kind']}")
+    if raw_entries != declared_entries:
+        raise SystemExit(
+            f"Header declares {declared_entries} entries, found {raw_entries}"
+        )
 
     orphaned = set(products) - set(interactions)
     if orphaned:
@@ -175,56 +167,85 @@ def main() -> None:
         "Z", "A", "charge_e", "kinetic_energy_MeV",
         "direction_x", "direction_y", "direction_z", "creator_model_id",
     )
-    interaction_rows: list[list[object]] = []
-    product_rows: list[list[object]] = []
     product_offset = 0
-    sorted_interactions = sorted(interactions.items())
-    for interaction_index, (key, row) in enumerate(sorted_interactions):
-        members = products.get(key, [])
-        vertex = tuple(float(row[f"vertex_{axis}_mm"]) for axis in "xyz")
-        for product_index, product in enumerate(members, 1):
-            product_vertex = tuple(
-                float(product[f"vertex_{axis}_mm"]) for axis in "xyz"
-            )
-            if max(abs(a - b) for a, b in zip(vertex, product_vertex)) > 1e-3:
-                raise SystemExit(f"Product vertex mismatch: {key}")
-            product_rows.append([
-                interaction_index, product_index, product["pdg_id"],
-                product["particle_name"], product["atomic_number_Z"],
-                product["mass_number_A"], product["charge_e"],
-                product["kinetic_energy_MeV"], product["direction_x"],
-                product["direction_y"], product["direction_z"],
-                product["creator_model_id"],
-            ])
-        interaction_rows.append([
-            interaction_index, *key[:3], key[3], row["interaction_track_id"],
-            row["projectile_pdg_id"], row["incident_energy_MeV"],
-            row["kinetic_energy_MeV"], row["local_deposit_MeV"],
-            row["macroscopic_total_per_mm"], row["incident_direction_x"],
-            row["incident_direction_y"], row["incident_direction_z"],
-            row["direction_x"], row["direction_y"], row["direction_z"],
-            row["process_name"], row["process_type"], row["process_subtype"],
-            len(members), product_offset,
-        ])
-        product_offset += len(members)
-
-    write_gzip_csv(args.interactions_output, interaction_fields, interaction_rows)
-    write_gzip_csv(args.products_output, product_fields, product_rows)
+    # Stream both deterministic gzip tables instead of materializing another
+    # ~6.8 million Python row lists on top of the validated raw dictionaries.
+    # This substantially reduces peak memory for the formal 100k neutral run.
+    args.interactions_output.parent.mkdir(parents=True, exist_ok=True)
+    args.products_output.parent.mkdir(parents=True, exist_ok=True)
+    import io
+    with args.interactions_output.open("wb") as interaction_raw, \
+            args.products_output.open("wb") as product_raw:
+        with gzip.GzipFile(filename="", mode="wb", fileobj=interaction_raw, mtime=0) as interaction_gz, \
+                gzip.GzipFile(filename="", mode="wb", fileobj=product_raw, mtime=0) as product_gz:
+            with io.TextIOWrapper(interaction_gz, encoding="utf-8", newline="") as interaction_text, \
+                    io.TextIOWrapper(product_gz, encoding="utf-8", newline="") as product_text:
+                interaction_writer = csv.writer(interaction_text, lineterminator="\n")
+                product_writer = csv.writer(product_text, lineterminator="\n")
+                interaction_writer.writerow(interaction_fields)
+                product_writer.writerow(product_fields)
+                for interaction_index, key in enumerate(sorted(interactions)):
+                    row = interactions[key]
+                    members = products.get(key, [])
+                    vertex = tuple(float(row[f"vertex_{axis}_mm"]) for axis in "xyz")
+                    for product_index, product in enumerate(members, 1):
+                        product_vertex = tuple(
+                            float(product[f"vertex_{axis}_mm"]) for axis in "xyz"
+                        )
+                        if max(abs(a - b) for a, b in zip(vertex, product_vertex)) > 1e-3:
+                            raise SystemExit(f"Product vertex mismatch: {key}")
+                        product_writer.writerow([
+                            interaction_index, product_index, product["pdg_id"],
+                            product["particle_name"], product["atomic_number_Z"],
+                            product["mass_number_A"], product["charge_e"],
+                            product["kinetic_energy_MeV"], product["direction_x"],
+                            product["direction_y"], product["direction_z"],
+                            product["creator_model_id"],
+                        ])
+                    interaction_writer.writerow([
+                        interaction_index, *key[:3], key[3], row["interaction_track_id"],
+                        row["projectile_pdg_id"], row["incident_energy_MeV"],
+                        row["kinetic_energy_MeV"], row["local_deposit_MeV"],
+                        row["macroscopic_total_per_mm"], row["incident_direction_x"],
+                        row["incident_direction_y"], row["incident_direction_z"],
+                        row["direction_x"], row["direction_y"], row["direction_z"],
+                        row["process_name"], row["process_type"], row["process_subtype"],
+                        len(members), product_offset,
+                    ])
+                    product_offset += len(members)
     def rel(path: Path) -> str:
         return path.as_posix()
+
+    runtime_text = args.runtime_log.read_text(encoding="utf-8", errors="replace")
+    topas_match = re.search(r"Welcome to TOPAS.*?Version\s+([^\)]+)\)", runtime_text)
+    geant4_match = re.search(r"Geant4 version Name:\s*([^\s]+)", runtime_text)
+    if topas_match is None or geant4_match is None:
+        raise SystemExit(f"Cannot identify TOPAS/Geant4 versions in {args.runtime_log}")
+    topas_version = topas_match.group(1).strip()
+    geant4_version = geant4_match.group(1)
+    if topas_version != "4.2.p3" or geant4_version != "geant4-11-03-patch-02":
+        raise SystemExit(
+            f"Unsupported runtime: TOPAS {topas_version}, Geant4 {geant4_version}"
+        )
 
     metadata = {
         "case": args.case,
         "histories": histories,
-        "raw_entries": len(rows),
-        "interactions": len(interaction_rows),
-        "products": len(product_rows),
+        "topas_version": topas_version,
+        "geant4_version": geant4_version,
+        "raw_entries": raw_entries,
+        "interactions": len(interactions),
+        "products": product_offset,
         "projectile_counts": dict(projectile_counts),
         "process_counts": dict(process_counts),
         "product_species": dict(product_species.most_common()),
         "all_interaction_cross_sections_positive": True,
         "global_scale_applied": False,
         "files": {
+            "runtime_log": {
+                "path": rel(args.runtime_log),
+                "sha256": sha256(args.runtime_log),
+            },
             "header": {"path": rel(args.header), "sha256": sha256(args.header)},
             "phsp": {"path": rel(args.phsp), "sha256": sha256(args.phsp)},
             "interactions": {
@@ -243,8 +264,8 @@ def main() -> None:
         encoding="utf-8",
     )
     print(
-        f"Validated {len(interaction_rows)} neutral interactions and "
-        f"{len(product_rows)} products from {histories} histories"
+        f"Validated {len(interactions)} neutral interactions and "
+        f"{product_offset} products from {histories} histories"
     )
 
 

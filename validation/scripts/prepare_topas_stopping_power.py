@@ -48,12 +48,12 @@ def main() -> None:
     parser.add_argument(
         "--output-csv",
         type=Path,
-        default=Path("data/stopping_power_water_geant4_11_1_3.csv"),
+        default=Path("data/stopping_power_water_geant4_11_3_2.csv"),
     )
     parser.add_argument(
         "--metadata",
         type=Path,
-        default=Path("data/stopping_power_water_geant4_11_1_3.metadata.json"),
+        default=Path("data/stopping_power_water_geant4_11_3_2.metadata.json"),
     )
     parser.add_argument(
         "--gpu-column",

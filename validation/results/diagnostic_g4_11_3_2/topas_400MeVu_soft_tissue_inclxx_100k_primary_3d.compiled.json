@@ -10,6 +10,11 @@
   ],
   "source_metadata": "validation/results/diagnostic_g4_11_3_2/topas_400MeVu_soft_tissue_inclxx_100k_primary.metadata.json",
   "source_metadata_sha256": "72b97d6aa1c1a57eb30df941d6d9e55561f4ea8d94aecd52be0fccedfc895ea0",
+  "source_runtime": {
+    "topas_version": "4.2.p3",
+    "geant4_version": "geant4-11-03-patch-02",
+    "runtime_reference_metadata": "validation/results/diagnostic_g4_11_3_2/runtime_g4_11_3_2.metadata.json"
+  },
   "source_reactions_sha256": "ccb71f9ad2d5f6c4db3362cd49f9626ec20f10a989560c351c637999e318c0f4",
   "source_secondaries_sha256": "f0a33437accd2de3ad1cbc534ec5471f8d8384498e33bb0acb887e1ae113f81f",
   "energy_bins": {

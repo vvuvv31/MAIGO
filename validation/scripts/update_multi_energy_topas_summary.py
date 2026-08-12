@@ -138,18 +138,18 @@ def main() -> None:
         "normalization": "absolute MeV/primary; no global scale",
         "histories_topas": 100000,
         "histories_gpu": 100000,
-        "topas_version_remote": "4.1.p1",
-        "geant4_version_remote": "geant4-11-01-patch-03",
+        "topas_version_remote": "4.2.p3",
+        "geant4_version_remote": "geant4-11-03-patch-02",
         "reaction_packages": {
             "100_200_MeVu": (
-                "validation/results/topas_200MeVu_cascade_aligned_primary_3d.bin "
+                "validation/results/topas_400MeVu_cascade_g4_11_3_2_aligned_primary_3d.bin "
                 "(0-200 MeV/u, 201 bins)"
             ),
             "300_400_MeVu": (
-                "validation/results/topas_400MeVu_cascade_aligned_primary_3d.bin "
+                "validation/results/topas_400MeVu_cascade_g4_11_3_2_aligned_primary_3d.bin "
                 "(0-400 MeV/u, 401 bins)"
             ),
-            "cascade_300_400": "validation/results/topas_400MeVu_cascade_100k_3d.bin",
+            "cascade_300_400": "validation/results/topas_400MeVu_cascade_g4_11_3_2_100k_3d.bin",
             "primary_400_stats": {
                 "reactions": 73739,
                 "secondaries": 715976,

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run CarbonCrossSectionNtuple on remote TOPAS (G4 11.1.3) and fetch outputs."""
+"""Run CarbonCrossSectionNtuple on remote TOPAS (G4 11.3.2) and fetch outputs."""
 
 from __future__ import annotations
 
@@ -53,9 +53,9 @@ def main() -> int:
 set -e
 cd ~/gpu/validation/topas
 mkdir -p output
-export TOPAS_G4_DATA_DIR="${HOME}/software/gate/G4DATA"
-export LD_LIBRARY_PATH="${HOME}/software/gate/GATE/geant4-v11.1.3-install-MT/lib:${HOME}/gpu/build/opentopas-extension-install/lib:${HOME}/software/topas/gdcm-install/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
-"${HOME}/gpu/build/opentopas-extension-install/bin/topas" carbon_200MeVu_water_cross_sections.txt \
+export TOPAS_G4_DATA_DIR="${HOME}/software/geant4-v11.3.2-install/share/Geant4/data"
+export LD_LIBRARY_PATH="${HOME}/software/geant4-v11.3.2-install/lib:${HOME}/software/topas/OpenTOPAS-install-v4.2.3-carbon/lib:${HOME}/software/topas/gdcm-install/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+"${HOME}/software/topas/OpenTOPAS-install-v4.2.3-carbon/bin/topas" carbon_200MeVu_water_cross_sections.txt \
   2>&1 | tee output/cross-sections_topas.log | tail -n 40
 ls -la output/carbon_c12_h_o_inelastic_cross_sections.*
 grep -E 'Welcome to TOPAS|Geant4 version|Total:' output/cross-sections_topas.log | head -10

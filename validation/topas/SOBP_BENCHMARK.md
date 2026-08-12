@@ -13,10 +13,9 @@ This case runs the same 21-layer carbon-ion plan in TOPAS and CarbonGPU:
 
 ## TOPAS reference
 
-The accepted run used TOPAS 4.1.p1, Geant4 11.1.3, and 56 threads on `vv`.
-It completed in `52348.2 s` (`14.5412 h`), or `191.03 histories/s`.
-Metadata and source hashes are recorded in
-`validation/results/sobp_water_3cm_5_10cm_3mm_topas.metadata.json`.
+The previous TOPAS 4.1.p1 / Geant4 11.1.3 result has been retired and its
+metadata removed. A result is accepted only when rerun with TOPAS 4.2.p3,
+Geant4 11.3.2, and the current fixed A7/A8 publication directory.
 
 Run again on the TOPAS host:
 
@@ -79,16 +78,12 @@ not a transport validation result.
 - energy-balance error: `2.14e-5`;
 - secondary/cascade queue overflows: zero.
 
-Relative to the accepted 56-thread TOPAS run (`191.03 histories/s`), this is a
-`153.5×` transport-throughput or `138.0×` end-to-end speedup. Linear projection
-to 10 million primaries is about `341 s` transport / `379 s` wall, but the formal
-10M run should be timed directly because queue sizes and fixed per-layer startup
-costs differ.
+No speedup claim is retained from the retired 11.1.3 reference. Throughput is
+reported only after the five-repeat TOPAS 4.2.p3 / Geant4 11.3.2 A12 run is
+complete.
 
-The 100k MHD result is under `out/sobp_benchmark_100k/`. Against the 10M TOPAS
-reference it gives `-0.683%` integral difference, `3.87%` normalized voxel L1,
-`8.31%` high-dose mean absolute difference, and Pearson `r=0.99859` above 1% of
-the TOPAS maximum.
+The old 100k-versus-10M comparison is not publication evidence because its
+TOPAS side used the retired Geant4 version.
 
 ## Dose comparison
 

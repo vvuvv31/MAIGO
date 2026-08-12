@@ -43,9 +43,9 @@ def main() -> int:
 set -e
 cd ~/gpu/validation/topas
 mkdir -p output
-export TOPAS_G4_DATA_DIR="${HOME}/software/gate/G4DATA"
-export LD_LIBRARY_PATH="${HOME}/software/gate/GATE/geant4-v11.1.3-install-MT/lib:${HOME}/gpu/build/opentopas-extension-install/lib:${HOME}/software/topas/gdcm-install/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
-"${HOME}/gpu/build/opentopas-extension-install/bin/topas" carbon_200MeVu_water_stopping_power.txt \
+export TOPAS_G4_DATA_DIR="${HOME}/software/geant4-v11.3.2-install/share/Geant4/data"
+export LD_LIBRARY_PATH="${HOME}/software/geant4-v11.3.2-install/lib:${HOME}/software/topas/OpenTOPAS-install-v4.2.3-carbon/lib:${HOME}/software/topas/gdcm-install/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+"${HOME}/software/topas/OpenTOPAS-install-v4.2.3-carbon/bin/topas" carbon_200MeVu_water_stopping_power.txt \
   2>&1 | tee output/stopping-power_topas.log | tail -n 35
 ls -la output/carbon_c12_stopping_power_water.*
 grep -E 'Welcome to TOPAS|Geant4 version|Total:|unknown value' output/stopping-power_topas.log | head -10

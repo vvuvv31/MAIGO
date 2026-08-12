@@ -20,6 +20,12 @@
   ],
   "source_metadata": "validation/results/diagnostic_g4_11_3_2/topas_400MeVu_soft_tissue_inclxx_100k_metadata.json",
   "source_metadata_sha256": "50f11f74eee2c2c8a885cf33461b0fc11b717c75eafb647ac5f19d614af9f9d2",
+  "source_runtime": {
+    "topas_version": "4.2.p3",
+    "geant4_version": "geant4-11-03-patch-02",
+    "runtime_reference_metadata": "validation/results/diagnostic_g4_11_3_2/runtime_g4_11_3_2.metadata.json",
+    "runtime_reference_metadata_sha256": "118326eb8aae685743c76201d7959110cd0d00769317be85beebe2ae7b499ef8"
+  },
   "records": {
     "projectiles": 31,
     "cross_section_samples": 24712,

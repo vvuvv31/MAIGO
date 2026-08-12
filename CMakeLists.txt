@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.22)
 
 project(carbon_oneapi_mc VERSION 0.1.0 LANGUAGES CXX)
 
+include(CTest)
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -120,3 +122,32 @@ endif()
 
 add_executable(carbon_mc src/main.cpp)
 target_link_libraries(carbon_mc PRIVATE carbon_core)
+
+if(BUILD_TESTING)
+    set(CARBON_TEST_PACKAGE_FILES
+        "${CMAKE_CURRENT_SOURCE_DIR}/validation/results/topas_400MeVu_cascade_g4_11_3_2_aligned_primary_3d.bin"
+        "${CMAKE_CURRENT_SOURCE_DIR}/validation/results/topas_400MeVu_cascade_g4_11_3_2_100k_3d.bin")
+    foreach(package_file IN LISTS CARBON_TEST_PACKAGE_FILES)
+        if(NOT EXISTS "${package_file}")
+            message(FATAL_ERROR
+                "Required Geant4 11.3.2 CTest package is missing: ${package_file}. "
+                "Restore Git LFS objects before configuring tests.")
+        endif()
+        file(READ "${package_file}" package_header LIMIT 64)
+        string(FIND "${package_header}" "version https://git-lfs.github.com/spec/v1" lfs_pointer)
+        if(NOT lfs_pointer EQUAL -1)
+            message(FATAL_ERROR
+                "Required CTest package is only a Git LFS pointer: ${package_file}. "
+                "Run git lfs pull for this path before configuring tests.")
+        endif()
+        set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${package_file}")
+    endforeach()
+    add_executable(carbon_tests tests/carbon_tests.cpp)
+    target_link_libraries(carbon_tests PRIVATE carbon_core)
+    target_compile_definitions(carbon_tests PRIVATE
+        CARBON_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+    add_test(NAME carbon_tests COMMAND carbon_tests)
+    set_tests_properties(carbon_tests PROPERTIES
+        TIMEOUT 300
+        REQUIRED_FILES "${CARBON_TEST_PACKAGE_FILES}")
+endif()

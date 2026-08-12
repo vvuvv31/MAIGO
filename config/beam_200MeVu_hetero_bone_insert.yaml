@@ -18,9 +18,9 @@ insert_y_max_mm: 10
 insert_z_min_mm: 50
 insert_z_max_mm: 70
 insert_density_g_per_cm3: 1.85
-insert_stopping_power_file: data/stopping_power_bone_geant4_11_1_3.csv
-insert_cross_section_file: data/c12_inelastic_cross_sections_bone_geant4_11_1_3.csv
-scorer_area_mm2: 90000.0
+insert_stopping_power_file: data/stopping_power_bone_geant4_11_3_2.csv
+insert_cross_section_file: data/c12_inelastic_cross_sections_bone_geant4_11_3_2.csv
+scorer_area_mm2: 3600.0
 enable_voxel_scoring: true
 enable_charged_origin_voxel_scoring: false
 voxel_bins_x: 60
@@ -39,10 +39,10 @@ maximum_cascade_generations: 2
 secondary_queue_capacity: 500000
 max_device_memory_fraction: 0.50
 random_seed: 20260715
-stopping_power_file: data/stopping_power_water_geant4_11_1_3.csv
-nuclear_cross_section_file: data/c12_inelastic_cross_sections_water_geant4_11_1_3.csv
-reaction_package_file: validation/results/topas_200MeVu_cascade_aligned_primary_3d.bin
-cascade_package_file: validation/results/topas_200MeVu_cascade_100k_3d.bin
+stopping_power_file: data/stopping_power_water_geant4_11_3_2.csv
+nuclear_cross_section_file: data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv
+reaction_package_file: validation/results/topas_400MeVu_cascade_g4_11_3_2_aligned_primary_3d.bin
+cascade_package_file: validation/results/topas_400MeVu_cascade_g4_11_3_2_100k_3d.bin
 output_file: out/hetero/e200_bone_insert_idd.csv
 fragment_species_output_file: out/hetero/e200_bone_insert_species.csv
 voxel_dose_output_file: out/hetero/e200_bone_insert_voxels.csv

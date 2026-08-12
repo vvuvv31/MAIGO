@@ -10,45 +10,50 @@
     "along_projectile"
   ],
   "xs_energy_quantum_MeV": 0.25,
-  "source_metadata": "validation/results/topas_200MeVu_neutral_development.metadata.json",
-  "source_metadata_sha256": "3320ea3cdc8a1d5f878507150ea4c8c703003eb8e26fb378bf58ac8924f238fd",
+  "source_metadata": "/home/v/MAIGO/validation/results/topas_200MeVu_neutral_development.metadata.json",
+  "source_metadata_sha256": "79da53a4c5400f5cfd2331cc3c70509bd7148efd40a991ad85b813d4a8d5d583",
+  "source_runtime": {
+    "topas_version": "4.2.p3",
+    "geant4_version": "geant4-11-03-patch-02",
+    "runtime_log_sha256": "39afbf0847213afbd6e94858f53607902483d1e45378b450df074c19d7f5bce8"
+  },
   "records": {
     "projectiles": 2,
-    "cross_section_samples": 1470,
-    "interactions": 4798230,
-    "products": 2004174
+    "cross_section_samples": 1449,
+    "interactions": 5119988,
+    "products": 2513751
   },
   "species": {
     "gamma": {
       "pdg_id": 22,
-      "cross_section_samples": 116,
-      "interactions": 1495225,
-      "minimum_energy_MeV": 2.06016e-06,
-      "maximum_energy_MeV": 42.11,
+      "cross_section_samples": 122,
+      "interactions": 1961118,
+      "minimum_energy_MeV": 6.31844e-06,
+      "maximum_energy_MeV": 210.238,
       "process_counts": {
-        "Rayl": 66976,
-        "compt": 492431,
-        "conv": 2346,
-        "phot": 933472
+        "Rayl": 86282,
+        "compt": 717492,
+        "conv": 1437,
+        "phot": 1155907
       }
     },
     "neutron": {
       "pdg_id": 2112,
-      "cross_section_samples": 1354,
-      "interactions": 3303005,
-      "minimum_energy_MeV": 2.27374e-12,
-      "maximum_energy_MeV": 598.29,
+      "cross_section_samples": 1327,
+      "interactions": 3158870,
+      "minimum_energy_MeV": 2.27374e-13,
+      "maximum_energy_MeV": 623.616,
       "process_counts": {
-        "hadElastic": 3243105,
-        "nCapture": 23874,
-        "neutronInelastic": 36026
+        "hadElastic": 3100724,
+        "nCapture": 22390,
+        "neutronInelastic": 35756
       }
     }
   },
   "output": {
-    "path": "validation/results/topas_200MeVu_neutral_development.bin",
-    "bytes": 240041248,
-    "sha256": "876d912f9cd12bb30500c50a461bc272134902ff3042c8cdd432da8e2547c26b"
+    "path": "/home/v/MAIGO/validation/results/topas_200MeVu_neutral_development.bin",
+    "bytes": 265141248,
+    "sha256": "4a217e4e98ebd4d80452e7da5f1086113bd4d7d0403e9f7ffde863b3a6d9e13a"
   },
   "global_scale_applied": false
 }

@@ -1,5 +1,5 @@
 # Clean diagnostic run: unique output stem avoids TOPAS ASCII append after an
-# interrupted run. Geant4 11.3.2 data are not production 11.1.3 calibration.
+# Clean Geant4 11.3.2 diagnostic input; publication evidence uses the formal runner.
 includeFile = carbon_400MeVu_lung_cascade_reactions_smoke.txt
 
 i:So/CarbonBeam/NumberOfHistoriesInRun = 20000

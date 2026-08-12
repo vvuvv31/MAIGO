@@ -2,10 +2,10 @@
 set -euo pipefail
 
 project_root="${REMOTE_PROJECT_ROOT:-${HOME}/gpu}"
-source_dir="${OPENTOPAS_SOURCE_DIR:-${HOME}/software/topas/OpenTOPAS}"
+source_dir="${OPENTOPAS_SOURCE_DIR:-${HOME}/software/topas/OpenTOPAS-v4.2.3}"
 build_dir="${OPENTOPAS_BUILD_DIR:-${project_root}/build/opentopas-extension-build}"
 install_dir="${OPENTOPAS_EXTENSION_INSTALL_DIR:-${project_root}/build/opentopas-extension-install}"
-geant4_dir="${Geant4_DIR:-${HOME}/software/gate/GATE/geant4-v11.1.3-install-MT/lib/cmake/Geant4}"
+geant4_dir="${Geant4_DIR:-${HOME}/software/geant4-v11.3.2-install/lib/cmake/Geant4}"
 gdcm_dir="${GDCM_DIR:-${HOME}/software/topas/gdcm-install/lib/gdcm-2.6}"
 
 cmake -S "${source_dir}" -B "${build_dir}" \

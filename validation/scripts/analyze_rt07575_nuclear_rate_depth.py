@@ -171,7 +171,7 @@ def main() -> int:
         "--schneider-xs",
         type=Path,
         default=ROOT
-        / "data/c12_inelastic_cross_sections_schneider_geant4_11_1_3.csv",
+        / "data/c12_inelastic_cross_sections_schneider_geant4_11_3_2.csv",
     )
     ap.add_argument(
         "--water-sp",

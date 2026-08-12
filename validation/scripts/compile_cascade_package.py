@@ -78,6 +78,7 @@ def read_gzip_csv(path: Path) -> list[dict[str, str]]:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--metadata", type=Path, required=True)
+    parser.add_argument("--runtime-reference-metadata", type=Path)
     parser.add_argument("--interactions", type=Path, required=True)
     parser.add_argument("--products", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
@@ -88,6 +89,19 @@ def main() -> None:
         raise SystemExit("--xs-energy-quantum-mevu must be positive")
 
     source = json.loads(args.metadata.read_text(encoding="utf-8"))
+    topas_version = source.get("topas_version")
+    geant4_version = source.get("geant4_version")
+    runtime_reference = None
+    if args.runtime_reference_metadata is not None:
+        runtime_reference = json.loads(
+            args.runtime_reference_metadata.read_text(encoding="utf-8")
+        )
+        topas_version = runtime_reference.get("topas_version")
+        geant4_version = runtime_reference.get("topas_log", {}).get("geant4_version")
+    if topas_version != "4.2.p3" or geant4_version != "geant4-11-03-patch-02":
+        raise SystemExit(
+            "Cascade packages require TOPAS 4.2.p3 / Geant4 11.3.2 provenance"
+        )
     interactions = read_gzip_csv(args.interactions)
     products = read_gzip_csv(args.products)
     if sha256(args.interactions) != source["outputs"]["interactions"]["sha256"]:
@@ -236,6 +250,18 @@ def main() -> None:
         "direction_components": ["local_x", "local_y", "along_projectile"],
         "source_metadata": args.metadata.as_posix(),
         "source_metadata_sha256": sha256(args.metadata),
+        "source_runtime": {
+            "topas_version": topas_version,
+            "geant4_version": geant4_version,
+            "runtime_reference_metadata": (
+                args.runtime_reference_metadata.as_posix()
+                if args.runtime_reference_metadata is not None else None
+            ),
+            "runtime_reference_metadata_sha256": (
+                sha256(args.runtime_reference_metadata)
+                if args.runtime_reference_metadata is not None else None
+            ),
+        },
         "records": {"projectiles": len(binary_projectiles),
                     "cross_section_samples": len(binary_xs),
                     "interactions": len(binary_interactions), "products": len(binary_products)},

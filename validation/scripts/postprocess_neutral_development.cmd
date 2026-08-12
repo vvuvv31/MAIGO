@@ -9,6 +9,7 @@ echo === prepare_topas_neutral development ===
   --interactions-output validation\results\topas_200MeVu_neutral_development_interactions.csv.gz ^
   --products-output validation\results\topas_200MeVu_neutral_development_products.csv.gz ^
   --metadata validation\results\topas_200MeVu_neutral_development.metadata.json ^
+  --runtime-log validation\topas\output\neutral-development_topas.log ^
   --case development
 if errorlevel 1 exit /b 1
 

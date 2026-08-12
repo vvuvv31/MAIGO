@@ -5,8 +5,8 @@ project_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 source_dir="${OPENTOPAS_SOURCE_DIR:-${project_root}/build/opentopas-source}"
 build_dir="${OPENTOPAS_BUILD_DIR:-${project_root}/build/opentopas-extension-build}"
 install_dir="${OPENTOPAS_EXTENSION_INSTALL_DIR:-${project_root}/build/opentopas-extension-install}"
-geant4_dir="${Geant4_DIR:-${HOME}/Applications/GEANT4/geant4-install/lib/cmake/Geant4}"
-gdcm_dir="${GDCM_DIR:-${HOME}/Applications/TOPAS/OpenTOPAS/gdcm-install/lib/gdcm-2.6}"
+geant4_dir="${Geant4_DIR:-${HOME}/software/geant4-v11.3.2-install/lib/cmake/Geant4}"
+gdcm_dir="${GDCM_DIR:-${HOME}/software/topas/gdcm-install/lib/gdcm-2.6}"
 tag="${OPENTOPAS_TAG:-v4.2.3}"
 
 if [[ ! -f "${source_dir}/CMakeLists.txt" ]]; then

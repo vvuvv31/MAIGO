@@ -107,6 +107,12 @@ def main() -> None:
         raise SystemExit("Energy-bin width and count must be positive")
 
     metadata = json.loads(args.metadata.read_text(encoding="utf-8"))
+    runtime = metadata.get("runtime_reference", {})
+    if (runtime.get("topas_version") != "4.2.p3" or
+            runtime.get("geant4_version") != "geant4-11-03-patch-02"):
+        raise SystemExit(
+            "Reaction packages require TOPAS 4.2.p3 / Geant4 11.3.2 provenance"
+        )
     reaction_rows = read_gzip_csv(args.reactions)
     secondary_rows = read_gzip_csv(args.secondaries)
     require_columns(
@@ -277,6 +283,11 @@ def main() -> None:
         "direction_components": ["local_x", "local_y", "along_projectile"],
         "source_metadata": args.metadata.as_posix(),
         "source_metadata_sha256": sha256(args.metadata),
+        "source_runtime": {
+            "topas_version": runtime.get("topas_version"),
+            "geant4_version": runtime.get("geant4_version"),
+            "runtime_reference_metadata": runtime.get("metadata"),
+        },
         "source_reactions_sha256": sha256(args.reactions),
         "source_secondaries_sha256": sha256(args.secondaries),
         "energy_bins": {

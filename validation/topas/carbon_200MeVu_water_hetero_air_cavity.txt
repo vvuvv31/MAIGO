@@ -42,6 +42,17 @@ s:So/CarbonBeam/Component = "BeamPosition"
 s:So/CarbonBeam/BeamParticle = "GenericIon(6,12)"
 d:So/CarbonBeam/BeamEnergy = 2400. MeV
 u:So/CarbonBeam/BeamEnergySpread = 0.0
+
+# A6 matched 3D scorer for interface lateral profiles and gamma.
+s:Sc/HeteroDose3D/Quantity = "DoseToMedium"
+s:Sc/HeteroDose3D/Component = "Phantom"
+s:Sc/HeteroDose3D/OutputFile = "output/hetero_air_cavity_dose_3d"
+s:Sc/HeteroDose3D/OutputType = "csv"
+s:Sc/HeteroDose3D/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/HeteroDose3D/XBins = 60
+i:Sc/HeteroDose3D/YBins = 60
+i:Sc/HeteroDose3D/ZBins = 800
+sv:Sc/HeteroDose3D/Report = 1 "Sum"
 s:So/CarbonBeam/BeamPositionDistribution = "None"
 s:So/CarbonBeam/BeamAngularDistribution = "None"
 i:So/CarbonBeam/NumberOfHistoriesInRun = 1000000

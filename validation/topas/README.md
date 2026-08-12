@@ -67,8 +67,9 @@ postprocessor packages a dense total plus sparse category arrays in NPZ, derives
 an 800-bin IDD from the 3D dose, and checks both category closure and the
 independent TOPAS `DoseToMedium` total.
 
-The accepted reference was run on host `vv` with TOPAS 4.1.p1, Geant4
-11.1.3, seed `20260714`, 56 threads, and 100,000 primaries:
+The earlier TOPAS 4.1.p1 / Geant4 11.1.3 reference is retired. Regenerate this
+case with TOPAS 4.2.p3 / Geant4 11.3.2, five seeds, 56 threads, and no more than
+100,000 primaries per run:
 
 ```bash
 cd ~/gpu
@@ -124,48 +125,47 @@ incident and continuation kinematics, local energy deposit, macroscopic total
 cross section, and correlated direct products. The stable key under MT output is
 `(run, thread, event, interaction_sequence)`.
 
-Build/run only on `v@192.168.31.5` (never WSL):
+The accepted package is the 100k development table generated with TOPAS 4.2.p3
+and Geant4 11.3.2. It may be generated locally or on the server, but the runtime
+log is mandatory and older Geant4 versions are rejected:
 
 ```bash
 bash validation/topas/build_extensions_remote.sh
-bash validation/topas/run_neutral_remote.sh smoke
-# optional formal table:
-# nohup bash validation/topas/run_neutral_remote.sh development \
-#   > validation/topas/output/neutral-development_nohup.log 2>&1 < /dev/null &
+bash validation/topas/run_neutral_remote.sh development
 ```
 
 Standardize on Windows or any host that has the raw header/phsp:
 
 ```bash
 python3 validation/scripts/prepare_topas_neutral.py \
-  --header validation/topas/output/neutral_smoke_interactions.header \
-  --phsp validation/topas/output/neutral_smoke_interactions.phsp \
-  --interactions-output validation/results/topas_200MeVu_neutral_smoke_interactions.csv.gz \
-  --products-output validation/results/topas_200MeVu_neutral_smoke_products.csv.gz \
-  --metadata validation/results/topas_200MeVu_neutral_smoke.metadata.json \
-  --case smoke
+  --header validation/topas/output/neutral_development_interactions.header \
+  --phsp validation/topas/output/neutral_development_interactions.phsp \
+  --interactions-output validation/results/topas_200MeVu_neutral_development_interactions.csv.gz \
+  --products-output validation/results/topas_200MeVu_neutral_development_products.csv.gz \
+  --metadata validation/results/topas_200MeVu_neutral_development.metadata.json \
+  --runtime-log validation/topas/output/neutral-development_topas.log \
+  --case development
 ```
 
-Accepted 100-history smoke package: 4,039 interactions, 1,961 products, all
-interaction macroscopic cross sections positive, covering neutron
-elastic/inelastic/capture and gamma photoelectric/Compton/pair/Rayleigh. This is
-the sampling reference for a future GPU neutral queue; it is not a dose map to
-copy or globally scale.
+The postprocessor requires positive interaction macroscopic cross sections and
+covers neutron elastic/inelastic/capture plus gamma photoelectric, Compton,
+pair-production and Rayleigh processes. It is a sampled transport table, not a
+dose map to copy or globally scale.
 
 Compile the host/GPU binary after standardization:
 
 ```bash
 python3 validation/scripts/compile_neutral_package.py \
-  --metadata validation/results/topas_200MeVu_neutral_smoke.metadata.json \
-  --interactions validation/results/topas_200MeVu_neutral_smoke_interactions.csv.gz \
-  --products validation/results/topas_200MeVu_neutral_smoke_products.csv.gz \
-  --output validation/results/topas_200MeVu_neutral_smoke.bin \
-  --output-metadata validation/results/topas_200MeVu_neutral_smoke.compiled.json
+  --metadata validation/results/topas_200MeVu_neutral_development.metadata.json \
+  --interactions validation/results/topas_200MeVu_neutral_development_interactions.csv.gz \
+  --products validation/results/topas_200MeVu_neutral_development_products.csv.gz \
+  --output validation/results/topas_200MeVu_neutral_development.bin \
+  --output-metadata validation/results/topas_200MeVu_neutral_development.compiled.json
 ```
 
-The binary contains two projectiles (PDG 22 and 2112), 140 total-XS energy
-samples, 4,039 interactions with continuation kinematics, and 1,961 products in
-the incident local frame. Load with `NeutralPackageTable::from_binary`.
+The binary contains two projectiles (PDG 22 and 2112), cross-section samples,
+interaction continuation kinematics, and correlated products in the incident
+local frame. Load with `NeutralPackageTable::from_binary`.
 
 ## Charged-fragment reaction cascade
 
@@ -187,10 +187,10 @@ The Windows B580 implementation transports at most two further generations in
 a breadth-first atomic queue. Every charged nuclear descendant is assigned to
 the dose category implied by its own Z/A, matching `CarbonDoseOrigin`; inheriting
 the original charged ancestor category is incorrect for nuclear products. The
-isotope/generation audit then found that the original primary package used
-TOPAS 4.2.p3/Geant4 11.3.2 while the accepted ancestor/cascade reference used
-TOPAS 4.1.p1/Geant4 11.1.3. Mixing these final-state datasets caused the
-remaining species bias.
+isotope/generation audit then found that mixed-version final-state datasets
+caused the remaining species bias. Mixed packages are now rejected; both the
+primary and ancestor/cascade sides must be generated with TOPAS 4.2.p3 /
+Geant4 11.3.2.
 
 `prepare_primary_reactions_from_cascade.py` extracts 37,661 primary track-1
 C-12 interactions and 323,901 correlated products from the cascade reference.

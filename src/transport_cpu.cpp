@@ -2,6 +2,7 @@
 #include "carbon/rng.hpp"
 #include "carbon/straggling.hpp"
 
+#include <array>
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -44,6 +45,15 @@ TransportResult transport_serial(const TransportConfig& config,
     }
     const auto start = std::chrono::steady_clock::now();
     TransportResult result;
+    std::array<double, max_straggling_scale_points> straggling_scale_energies{};
+    std::array<double, max_straggling_scale_points> straggling_scale_values{};
+    const auto straggling_scale_point_count =
+        config.straggling_scale_energies_MeVu.size();
+    for (std::size_t index = 0; index < straggling_scale_point_count; ++index) {
+        straggling_scale_energies[index] =
+            config.straggling_scale_energies_MeVu[index];
+        straggling_scale_values[index] = config.straggling_scale_values[index];
+    }
     result.backend = config.enable_energy_straggling ? "serial+straggling" : "serial";
     if (config.enable_primary_attenuation) {
         result.backend += "+attenuation";
@@ -117,7 +127,10 @@ TransportResult transport_serial(const TransportConfig& config,
                     std::cos(2.0 * std::numbers::pi * uniform2);
                 const auto sigma_MeV = bohr_straggling_sigma_MeV(
                     energy_MeVu, step_mm, config.water_density_g_per_cm3,
-                    config.straggling_scale);
+                    interpolate_straggling_scale(
+                        energy_MeVu, straggling_scale_energies,
+                        straggling_scale_values, straggling_scale_point_count,
+                        config.straggling_scale));
                 deposited_MeV =
                     clamp_sampled_energy_loss(mean_loss_MeV, sigma_MeV, gaussian, energy_MeV);
             }

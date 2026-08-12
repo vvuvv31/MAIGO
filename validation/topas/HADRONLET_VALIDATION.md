@@ -105,8 +105,7 @@ energy deposition exceeds 1% of maximum:
 - all-hadron LET_d peak depth: TOPAS 87.25 mm, GPU 87.75 mm
 
 The comparison is an initial validation, not a final convergence result:
-TOPAS has only 10k histories, TOPAS uses Geant4 11.3.2 while the current GPU
-stopping table was extracted with Geant4 11.1.3, and the GPU delta-electron
+TOPAS has only 10k histories, and the GPU delta-electron
 term is a proxy rather than explicit electron production. In addition, the
 first GPU implementation scores continuous charged-particle loss only, while
 TOPAS `GetTotalEnergyDeposit()` on a positive-length ion step can also contain
@@ -118,9 +117,8 @@ separated before tuning the underlying LET model.
 The delta-electron diagnostic was rerun with 10k histories and 40 TOPAS
 threads. The measured fraction is about 0.1102 at 200 MeV/u; the earlier
 linear electronic-build-up proxy supplied only 0.03 at the same energy. The
-Geant4 11.3.2 and 11.1.3 C-12 stopping-power extracts are identical on the
-1--400 MeV/u grid, so the stopping-table version was not the source of the
-initial entrance bias.
+retired stopping-power comparison showed no table-driven entrance bias, but
+publication inputs now use only the Geant4 11.3.2 extract.
 
 The high-accuracy water configuration additionally uses:
 

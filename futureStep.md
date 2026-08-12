@@ -722,7 +722,7 @@ cascade 相关性。完成这一部分后，再进行新的 SOBP 和 CT case 泛
 | 已有 | 方案 D / full 模式、neutral package 加载、interim `neutral_local_kerma_fraction` |
 | 待做 | 用正式 neutron/gamma package 替换 interim local kerma |
 | 待做 | 水中与 TOPAS neutral-origin 剂量闭合；再评估 CT 上是否可开 `enable_neutral_transport` |
-| 注意 | CT 上 11.1.3 water-derived neutral package 曾恶化 IDD correlation；患者材料需单独验证 |
+| 注意 | CT 上 11.3.2 water-derived neutral package 曾恶化 IDD correlation；患者材料需单独验证 |
 
 ## B.2 高能峰高残差（300/400 MeV/u）
 
@@ -735,9 +735,9 @@ cascade 相关性。完成这一部分后，再进行新的 SOBP 和 CT case 泛
 | 状态 | 说明 |
 |------|------|
 | 已有 | 水包 + 材料相关 XS / mass-SP；骨/肺 **诊断** package（G4 11.3.2）已导出 |
-| 待做 | 与 production 参考 **同 Geant4 版本**（目标 11.1.3）的骨/肺/组织 final-state 包 |
+| 待做 | 与 production 参考 **同 Geant4 版本**（目标 11.3.2）的骨/肺/组织 final-state 包 |
 | 待做 | CT 按 material_id 选择 package；Q 值 / 重残核 / 局部沉积闭合 |
-| 禁止 | 用 11.3.2 诊断库静默替换 11.1.3 production 而不做对波 |
+| 禁止 | 用 11.3.2 诊断库静默替换 11.3.2 production 而不做对波 |
 
 ## B.4 CT / TOPAS 对照补强
 
@@ -806,7 +806,7 @@ cascade 相关性。完成这一部分后，再进行新的 SOBP 和 CT case 泛
 
 三档都保持 primary cutoff 0.1 MeV、full charged-secondary/cascade、CT 材料和
 dose voxel 边界，并禁止 queue overflow。`medium/fast` 不适用于 minibeam。
-每个输出的 backend 会记录 `+physics-best/medium/fast`。在 TOPAS 跨病例门禁
+每个输出的 backend 会记录 `+physics-best/fast`。在 TOPAS 跨病例门禁
 完成前，medium/fast 仍应视为已审计的 preview 档，不能静默替代 best。
 
 ## D.4 架构债（低优先级）
