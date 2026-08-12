@@ -12,6 +12,7 @@ __pycache__/
 .plot-*/
 
 # Local agent / editor clutter
+mcps/
 .agents/
 .codex/
 .idea/
@@ -26,9 +27,6 @@ ct/
 benchmark/
 validation/
 
-# MCP runtime state and credentials remain local; documentation may be tracked.
-mcps/*
-!mcps/README.md
 
 # Windows-only convenience wrappers under scripts/ (not required for Linux builds)
 scripts/windows_*.cmd
