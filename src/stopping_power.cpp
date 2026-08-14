@@ -244,4 +244,139 @@ std::size_t IonStoppingPowerTables::energy_grid_size() const noexcept {
     return energy_grid_size_;
 }
 
+std::vector<float> load_hu_stopping_power_lut(
+    const std::filesystem::path& path,
+    const std::size_t n_sections,
+    const std::size_t table_size,
+    const float scale) {
+    std::ifstream input(path);
+    if (!input) {
+        throw std::runtime_error("Cannot open HU stopping power LUT: " + path.string());
+    }
+
+    std::vector<std::vector<float>> rows;
+    std::string line;
+    while (std::getline(input, line)) {
+        const auto first = line.find_first_not_of(" \t\r\n");
+        if (first == std::string::npos || line[first] == '#') {
+            continue;
+        }
+        if (std::isalpha(static_cast<unsigned char>(line[first]))) {
+            continue;
+        }
+        std::replace(line.begin(), line.end(), ',', ' ');
+        std::istringstream parser(line);
+        std::vector<float> row;
+        float value = 0.0F;
+        while (parser >> value) {
+            row.push_back(value);
+        }
+        if (row.size() != table_size) {
+            throw std::runtime_error(
+                "HU stopping power LUT file " + path.string() +
+                " has a row with " + std::to_string(row.size()) +
+                " columns; expected " + std::to_string(table_size));
+        }
+        rows.push_back(std::move(row));
+    }
+    std::size_t first_section_row = 0;
+    if (rows.size() == n_sections + 1U) {
+        // Generated TOPAS calibration files carry the transport energy grid
+        // in their first numeric row. It is metadata, not Schneider section 0.
+        first_section_row = 1;
+    } else if (rows.size() != n_sections) {
+        throw std::runtime_error(
+            "HU stopping power LUT file " + path.string() + " contains " +
+            std::to_string(rows.size()) + " numeric rows; expected " +
+            std::to_string(n_sections) + " section rows, optionally preceded "
+            "by one energy-grid row");
+    }
+    std::vector<float> lut(n_sections * table_size, 0.0F);
+    for (std::size_t section = 0; section < n_sections; ++section) {
+        const auto& row = rows[first_section_row + section];
+        std::transform(row.begin(), row.end(),
+                       lut.begin() + static_cast<std::ptrdiff_t>(section * table_size),
+                       [scale](const float value) { return value * scale; });
+    }
+    return lut;
+}
+
+
+DensityMassSprLut build_density_mass_spr_lut(
+    const StoppingPowerTable& water,
+    const StoppingPowerTable& air,
+    const StoppingPowerTable& lung,
+    const StoppingPowerTable& bone,
+    const float scale) {
+    constexpr std::uint32_t n_rho = 48;
+    constexpr float rho_min = 0.00120479F;
+    constexpr float rho_max = 3.0F;
+    constexpr float rho_air = 0.00120479F;
+    constexpr float rho_lung_table = 1.04F;
+    constexpr float rho_bone = 1.85F;
+    constexpr float rho_lung_knot = 0.26F;
+    constexpr float rho_soft_lo = 0.90F;
+    constexpr float rho_soft_hi = 1.20F;
+
+    DensityMassSprLut out;
+    out.n_rho = n_rho;
+    out.log_rho_min = std::log(rho_min);
+    const auto log_span = std::log(rho_max) - out.log_rho_min;
+    out.inv_dlog = static_cast<float>(n_rho - 1U) / log_span;
+
+    const auto& energies = water.energies();
+    const auto n_energy = energies.size();
+    out.factors.assign(static_cast<std::size_t>(n_rho) * n_energy, scale);
+
+    auto mass_spr = [&](const StoppingPowerTable& table, const float rho_ref,
+                        const double energy) {
+        const auto water_sp = water.interpolate(energy);
+        const auto table_sp = table.interpolate(energy);
+        if (!(water_sp > 0.0) || !(rho_ref > 0.0F)) {
+            return 1.0F;
+        }
+        return static_cast<float>(table_sp / (static_cast<double>(rho_ref) * water_sp));
+    };
+
+    auto lerp = [](const float x, const float x0, const float x1, const float y0,
+                   const float y1) {
+        if (x1 <= x0) {
+            return y1;
+        }
+        const auto t = (x - x0) / (x1 - x0);
+        return y0 + t * (y1 - y0);
+    };
+
+    for (std::uint32_t i = 0; i < n_rho; ++i) {
+        const auto rho = std::exp(out.log_rho_min + static_cast<float>(i) / out.inv_dlog);
+        for (std::size_t e = 0; e < n_energy; ++e) {
+            const auto energy = energies[e];
+            const auto fs_air = mass_spr(air, rho_air, energy);
+            const auto fs_lung = mass_spr(lung, rho_lung_table, energy);
+            const auto fs_water = 1.0F;
+            const auto fs_bone = mass_spr(bone, rho_bone, energy);
+            float fs = fs_water;
+            if (rho <= rho_lung_knot) {
+                fs = lerp(rho, rho_air, rho_lung_knot, fs_air, fs_lung);
+            } else if (rho < rho_soft_lo) {
+                fs = lerp(rho, rho_lung_knot, rho_soft_lo, fs_lung, fs_water);
+            } else if (rho <= rho_soft_hi) {
+                fs = fs_water;
+            } else if (rho < rho_bone) {
+                fs = lerp(rho, rho_soft_hi, rho_bone, fs_water, fs_bone);
+            } else {
+                fs = fs_bone;
+            }
+            if (fs < 0.5F) {
+                fs = 0.5F;
+            }
+            if (fs > 1.5F) {
+                fs = 1.5F;
+            }
+            out.factors[static_cast<std::size_t>(i) * n_energy + e] = scale * fs;
+        }
+    }
+    return out;
+}
+
 }  // namespace carbon

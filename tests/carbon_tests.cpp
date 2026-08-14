@@ -19,6 +19,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstring>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -157,6 +158,32 @@ void test_units() {
     config.voxel_bins_x = 0;
     require_throws([&config]() { config.validate(); },
                    "Enabled voxel scorer accepted a zero x-bin count");
+}
+
+void test_hu_stopping_power_lut_loading() {
+    const auto path = std::filesystem::temp_directory_path() /
+                      "carbon_hu_stopping_power_lut_test.csv";
+    {
+        std::ofstream output(path);
+        output << "0.1,0.2,0.3\n";  // optional energy-grid row
+        output << "1.0,1.1,1.2\n";
+        output << "0.8,0.9,1.0\n";
+    }
+    const auto lut = carbon::load_hu_stopping_power_lut(path, 2, 3, 2.0F);
+    require(lut.size() == 6, "HU stopping-power LUT size failed");
+    require_near(lut[0], 2.0, 1.0e-6,
+                 "HU LUT energy row was treated as section zero");
+    require_near(lut[3], 1.6, 1.0e-6, "HU LUT second section failed");
+
+    {
+        std::ofstream output(path);
+        output << "1.0,1.1\n";
+        output << "0.8,0.9,1.0\n";
+    }
+    require_throws(
+        [&]() { (void)carbon::load_hu_stopping_power_lut(path, 2, 3, 1.0F); },
+        "HU LUT accepted an incomplete row");
+    std::filesystem::remove(path);
 }
 
 void test_highland_multiple_scattering() {
@@ -383,11 +410,11 @@ void test_ct_grid_helpers() {
     require(carbon::ct_material_class(1, true) == 1,
             "Schneider section 1 must map to lung");
     require(carbon::ct_material_class(2, true) == 2 &&
-                carbon::ct_material_class(7, true) == 2,
+                carbon::ct_material_class(8, true) == 2,
             "Schneider soft-tissue sections must map to water-like");
-    require(carbon::ct_material_class(8, true) == 3 &&
+    require(carbon::ct_material_class(9, true) == 3 &&
                 carbon::ct_material_class(24, true) == 3,
-            "Schneider sections >=8 must map to bone-like");
+            "Schneider sections >=9 must map to bone-like");
     require(carbon::ct_material_class(2, false) == 2 &&
                 carbon::ct_material_class(9, false) == 3,
             "Legacy CT material class mapping failed");
@@ -668,21 +695,21 @@ void test_reaction_package_loading() {
     const auto source_directory = std::filesystem::path(CARBON_SOURCE_DIR);
     const auto package_path =
         source_directory /
-        "data/packages/topas_400MeVu_cascade_g4_11_3_2_aligned_primary_3d.bin";
+        "data/packages/topas_400MeVu_water_100k_primary_3d.bin";
     const auto table = carbon::ReactionPackageTable::from_binary(package_path);
-    require(table.energy_bins().size() == 401, "Reaction package energy-bin count failed");
-    require(table.reactions().size() == 73'729, "Reaction package reaction count failed");
-    require(table.secondaries().size() == 723'244,
+    require(table.energy_bins().size() == 101, "Reaction package energy-bin count failed");
+    require(table.reactions().size() == 73'871, "Reaction package reaction count failed");
+    require(table.secondaries().size() == 760'939,
             "Reaction package secondary count failed");
     require_near(table.minimum_energy_MeV_per_u(), 0.0, 1.0e-7,
                  "Reaction package minimum energy failed");
-    require_near(table.energy_bin_width_MeV_per_u(), 1.0, 1.0e-7,
+    require_near(table.energy_bin_width_MeV_per_u(), 4.0, 1.0e-7,
                  "Reaction package energy-bin width failed");
     require(table.energy_bin_index(-1.0F) == 0,
             "Reaction package low-energy clamp failed");
-    require(table.energy_bin_index(200.0F) == 200,
+    require(table.energy_bin_index(200.0F) == 50,
             "Reaction package exact energy-bin lookup failed");
-    require(table.energy_bin_index(500.0F) == 400,
+    require(table.energy_bin_index(500.0F) == 100,
             "Reaction package high-energy clamp failed");
     require(table.energy_bin_index(std::numeric_limits<float>::quiet_NaN()) == 0,
             "Reaction package non-finite energy handling failed");
@@ -698,6 +725,9 @@ void test_reaction_package_loading() {
     std::uint64_t secondaries_from_reactions = 0;
     std::size_t empty_reactions = 0;
     for (const auto& reaction : table.reactions()) {
+        require(std::isfinite(reaction.local_deposit_MeV) &&
+                    reaction.local_deposit_MeV >= 0.0F,
+                "Reaction package local deposit is invalid");
         secondaries_from_reactions += reaction.secondary_count;
         empty_reactions += reaction.secondary_count == 0 ? 1U : 0U;
     }
@@ -721,21 +751,21 @@ void test_reaction_package_loading() {
     require(protons > 0 && neutrons > 0 && gammas > 0 && alphas > 0,
             "Reaction package is missing a major secondary species");
 
-    const auto v2_path = source_directory /
-                         "data/packages/topas_400MeVu_cascade_g4_11_3_2_aligned_primary_3d.bin";
-    const auto v2_table = carbon::ReactionPackageTable::from_binary(v2_path);
-    require(v2_table.reactions().size() == 73'729,
-            "Reaction package v2 reaction count failed");
-    require(v2_table.secondaries().size() == 723'244,
-            "Reaction package v2 secondary count failed");
-    for (const auto& secondary : v2_table.secondaries()) {
-        require(std::isfinite(secondary.direction_x) && std::isfinite(secondary.direction_y),
-                "Reaction package v2 transverse direction is not finite");
-        const auto norm_squared = secondary.direction_x * secondary.direction_x +
-                                  secondary.direction_y * secondary.direction_y +
-                                  secondary.direction_z * secondary.direction_z;
-        require_near(norm_squared, 1.0, 2.0e-3, "Reaction package v2 direction norm failed");
+    const auto legacy_path =
+        std::filesystem::temp_directory_path() / "carbon_legacy_reaction_package.bin";
+    {
+        std::array<char, 64> header{};
+        std::ifstream source(package_path, std::ios::binary);
+        source.read(header.data(), static_cast<std::streamsize>(header.size()));
+        const std::uint32_t legacy_record_size = 16;
+        std::memcpy(header.data() + 20, &legacy_record_size, sizeof(legacy_record_size));
+        std::ofstream legacy(legacy_path, std::ios::binary | std::ios::trunc);
+        legacy.write(header.data(), static_cast<std::streamsize>(header.size()));
     }
+    require_throws(
+        [&legacy_path]() { (void)carbon::ReactionPackageTable::from_binary(legacy_path); },
+        "Legacy reaction package layout was accepted");
+    std::filesystem::remove(legacy_path);
 
     const auto invalid_path =
         std::filesystem::temp_directory_path() / "carbon_invalid_reaction_package.bin";
@@ -747,6 +777,20 @@ void test_reaction_package_loading() {
         [&invalid_path]() { (void)carbon::ReactionPackageTable::from_binary(invalid_path); },
         "Invalid reaction package was accepted");
     std::filesystem::remove(invalid_path);
+
+    const std::array<const char*, 4> material_packages{
+        "topas_400MeVu_soft_tissue_inclxx_100k_primary_3d.bin",
+        "topas_400MeVu_schneider_section07_inclxx_100k_primary_3d.bin",
+        "topas_400MeVu_lung_inclxx_100k_primary_3d.bin",
+        "topas_400MeVu_bone_inclxx_100k_primary_3d.bin",
+    };
+    for (const auto* filename : material_packages) {
+        const auto material_table = carbon::ReactionPackageTable::from_binary(
+            source_directory / "data/packages" / filename);
+        require(!material_table.reactions().empty() &&
+                    !material_table.secondaries().empty(),
+                std::string("Current reaction package failed to load: ") + filename);
+    }
 }
 
 void test_neutral_package_loading() {
@@ -834,36 +878,60 @@ void test_cascade_package_loading() {
     const auto source_directory = std::filesystem::path(CARBON_SOURCE_DIR);
     const auto package_path =
         source_directory /
-        "data/packages/topas_400MeVu_cascade_g4_11_3_2_100k_3d.bin";
+        "data/packages/topas_400MeVu_water_100k_cascade_3d.bin";
     const auto table = carbon::CascadePackageTable::from_binary(package_path);
     for (const auto& product : table.products()) {
         require(std::isfinite(product.direction_x) && std::isfinite(product.direction_y),
                 "Cascade package transverse direction is not finite");
     }
     require(table.projectiles().size() == 31, "Cascade projectile count failed");
-    require(table.cross_sections().size() == 26317, "Cascade cross-section count failed");
-    require(table.interactions().size() == 209326, "Cascade interaction count failed");
-    require(table.products().size() == 1673741, "Cascade product count failed");
+    require(table.cross_sections().size() == 24'936, "Cascade cross-section count failed");
+    require(table.interactions().size() == 289'712, "Cascade interaction count failed");
+    require(table.products().size() == 2'065'922, "Cascade product count failed");
     const auto* alpha = table.find_projectile(2, 4);
     require(alpha != nullptr && alpha->interaction_count > 0,
             "Cascade alpha lookup failed");
     require(table.find_projectile(99, 999) == nullptr,
             "Cascade missing-projectile lookup failed");
-
-    const auto v2_path =
-        source_directory /
-        "data/packages/topas_400MeVu_cascade_g4_11_3_2_100k_3d.bin";
-    const auto v2_table = carbon::CascadePackageTable::from_binary(v2_path);
-    require(v2_table.products().size() == 1673741, "Cascade package v2 product count failed");
-    for (const auto& product : v2_table.products()) {
-        require(std::isfinite(product.direction_x) && std::isfinite(product.direction_y),
-                "Cascade package v2 transverse direction is not finite");
-        const auto norm_squared = product.direction_x * product.direction_x +
-                                  product.direction_y * product.direction_y +
-                                  product.direction_z * product.direction_z;
-        require_near(norm_squared, 1.0, 2.0e-3, "Cascade package v2 direction norm failed");
+    for (const auto& interaction : table.interactions()) {
+        require(std::isfinite(interaction.local_deposit_MeV) &&
+                    interaction.local_deposit_MeV >= 0.0F,
+                "Cascade package local deposit is invalid");
     }
 
+    const auto legacy_path =
+        std::filesystem::temp_directory_path() / "carbon_legacy_cascade_package.bin";
+    {
+        std::array<char, 72> header{};
+        std::ifstream source(package_path, std::ios::binary);
+        source.read(header.data(), static_cast<std::streamsize>(header.size()));
+        const std::uint32_t legacy_interaction_size = 12;
+        const std::uint32_t legacy_product_size = 16;
+        std::memcpy(header.data() + 24, &legacy_interaction_size,
+                    sizeof(legacy_interaction_size));
+        std::memcpy(header.data() + 28, &legacy_product_size,
+                    sizeof(legacy_product_size));
+        std::ofstream legacy(legacy_path, std::ios::binary | std::ios::trunc);
+        legacy.write(header.data(), static_cast<std::streamsize>(header.size()));
+    }
+    require_throws(
+        [&legacy_path]() { (void)carbon::CascadePackageTable::from_binary(legacy_path); },
+        "Legacy cascade package layout was accepted");
+    std::filesystem::remove(legacy_path);
+
+    const std::array<const char*, 4> material_packages{
+        "topas_400MeVu_soft_tissue_inclxx_100k_cascade_3d.bin",
+        "topas_400MeVu_schneider_section07_inclxx_100k_cascade_3d.bin",
+        "topas_400MeVu_lung_inclxx_100k_cascade_3d.bin",
+        "topas_400MeVu_bone_inclxx_100k_cascade_3d.bin",
+    };
+    for (const auto* filename : material_packages) {
+        const auto material_table = carbon::CascadePackageTable::from_binary(
+            source_directory / "data/packages" / filename);
+        require(!material_table.interactions().empty() &&
+                    !material_table.products().empty(),
+                std::string("Current cascade package failed to load: ") + filename);
+    }
 }
 
 void test_dose_scorer_matches_mev_conversion() {
@@ -1002,6 +1070,53 @@ void test_layered_voxel_dose_uses_local_mass() {
     std::filesystem::remove_all(dir, ec);
 }
 
+void test_dense_charged_origin_mhd_uses_local_mass() {
+    carbon::TransportConfig config;
+    config.number_of_histories = 1;
+    config.phantom_length_mm = 2.0;
+    config.depth_bin_width_mm = 1.0;
+    config.enable_voxel_scoring = true;
+    config.enable_charged_origin_voxel_scoring = true;
+    config.enable_secondary_generation = true;
+    config.enable_secondary_transport = true;
+    config.voxel_bins_x = 1;
+    config.voxel_bins_y = 1;
+    config.voxel_size_x_mm = 1.0;
+    config.voxel_size_y_mm = 1.0;
+    config.enable_layered_phantom = true;
+    config.slab_layers = {{1.0, 1.0}, {2.0, 2.0}};
+    config.validate();
+
+    carbon::TransportResult result;
+    result.voxel_deposited_energy_MeV = {1.0, 1.0};
+    result.charged_origin_voxel_deposited_energy_MeV.assign(
+        carbon::charged_origin_category_count * config.number_of_voxels(), 0.0);
+    result.charged_origin_voxel_deposited_energy_MeV[0] = 1.0;
+    result.charged_origin_voxel_deposited_energy_MeV[1] = 1.0;
+
+    const auto dir = std::filesystem::temp_directory_path() /
+                     "carbon_origin_mhd_mass_test";
+    std::filesystem::create_directories(dir);
+    carbon::write_dense_charged_origin_voxel_dose_mhd(
+        dir / "origin", config, result);
+    const auto mhd = dir / "origin_primary_c12.mhd";
+    const auto raw = dir / "origin_primary_c12.raw";
+    require(std::filesystem::exists(mhd) && std::filesystem::exists(raw),
+            "Dense primary-origin MHD/RAW missing");
+    std::ifstream input(raw, std::ios::binary);
+    std::array<float, 2> dose{};
+    input.read(reinterpret_cast<char*>(dose.data()),
+               static_cast<std::streamsize>(dose.size() * sizeof(float)));
+    require_near(dose[1] / dose[0], 0.5, 1.0e-6,
+                 "Origin dose must use local material mass");
+    std::ifstream header(mhd);
+    const std::string text((std::istreambuf_iterator<char>(header)), {});
+    require(text.find("DoseOriginCategory = primary_c12") != std::string::npos,
+            "Origin MHD category metadata missing");
+    std::error_code ec;
+    std::filesystem::remove_all(dir, ec);
+}
+
 void test_ct_aligned_mhd_offset_and_index_pairing() {
     // CT transport samples density with edge origin; dose-to-medium mass and
     // voxel tallies must use the same edge so linear indices match.
@@ -1118,6 +1233,19 @@ void test_flat_source_config_validation() {
     config.flat_source_half_width_x_mm = 0.0;
     require_throws([&config] { config.validate(); },
                    "Flat source should require positive half widths");
+}
+
+void test_random_seed_parsing() {
+    require(carbon::parse_random_seed("987654321") == 987654321ULL,
+            "Numeric random_seed must remain reproducible");
+    const auto automatic_seed_a = carbon::parse_random_seed("auto");
+    const auto automatic_seed_b = carbon::parse_random_seed("auto");
+    require(automatic_seed_a != automatic_seed_b,
+            "Automatic random seeds must change between requests");
+    require_throws([] { static_cast<void>(carbon::parse_random_seed("automatic")); },
+                   "Invalid random_seed text must fail");
+    require_throws([] { static_cast<void>(carbon::parse_random_seed("-1")); },
+                   "Negative random_seed must fail");
 }
 
 void test_minibeam_absorbing_geometry() {
@@ -1293,6 +1421,9 @@ void test_secondary_optimization_config_validation() {
     fast.enable_fragment_cascade = true;
     fast.maximum_cascade_generations = 2;
     fast.validate();
+    require_near(fast.effective_secondary_local_deposit_cutoff_MeV(), 2.0,
+                 1.0e-12,
+                 "Fast profile must retain its 2 MeV local-deposit floor");
 
     auto fast_ct = fast;
     fast_ct.enable_ct_grid = true;
@@ -1304,6 +1435,37 @@ void test_secondary_optimization_config_validation() {
     medium.enable_let_scoring = true;
     require_throws([&medium] { medium.validate(); },
                    "Removed medium physics profile should be rejected");
+
+    auto balanced = fast;
+    balanced.physics_profile = "balanced";
+    balanced.maximum_step_mm = 0.25;
+    balanced.maximum_relative_energy_loss = 0.0025;
+    balanced.energy_cutoff_MeV = 0.1;
+    balanced.secondary_local_deposit_cutoff_MeV = 0.5;
+    balanced.secondary_condensed_step_mm = 0.5;
+    balanced.enable_let_scoring = true;
+    balanced.use_particle_specific_stopping_power = true;
+    balanced.validate();
+    require_near(balanced.effective_secondary_local_deposit_cutoff_MeV(),
+                 0.5, 1.0e-12,
+                 "Balanced profile must honor the configured 0.5 MeV cutoff");
+
+    auto balanced_default_cutoff = balanced;
+    balanced_default_cutoff.secondary_local_deposit_cutoff_MeV = 0.0;
+    require_near(
+        balanced_default_cutoff.effective_secondary_local_deposit_cutoff_MeV(),
+        balanced_default_cutoff.energy_cutoff_MeV, 1.0e-12,
+        "Balanced zero cutoff must inherit the primary energy cutoff");
+
+    auto bad_balanced_step = balanced;
+    bad_balanced_step.maximum_step_mm = 0.5;
+    require_throws([&bad_balanced_step] { bad_balanced_step.validate(); },
+                   "Balanced physics profile should enforce its step limit");
+
+    auto bad_balanced_let = balanced;
+    bad_balanced_let.enable_let_scoring = false;
+    require_throws([&bad_balanced_let] { bad_balanced_let.validate(); },
+                   "Balanced physics profile should require LET scoring");
 
     auto best = fast;
     best.physics_profile = "best";
@@ -1387,13 +1549,13 @@ void test_secondary_optimization_config_validation() {
             "RT07575 fast must retain upstream-air default off");
 
     carbon::TransportConfig upstream_air;
-    require(upstream_air.reaction_package_file.string().find("g4_11_3_2") !=
-                std::string::npos &&
-                upstream_air.cascade_package_file.string().find("g4_11_3_2") !=
-                std::string::npos &&
+    require(upstream_air.reaction_package_file ==
+                "data/packages/topas_400MeVu_water_100k_primary_3d.bin" &&
+                upstream_air.cascade_package_file ==
+                    "data/packages/topas_400MeVu_water_100k_cascade_3d.bin" &&
                 upstream_air.neutral_package_file ==
                     "data/packages/topas_200MeVu_neutral_development.bin",
-            "Default physics packages must use the Geant4 11.3.2 dataset");
+            "Default physics package paths must use the production datasets");
     require(!upstream_air.spots_enable_upstream_air_energy_loss,
             "Upstream air energy loss must default to disabled");
     upstream_air.spots_enable_upstream_air_energy_loss = true;
@@ -1446,8 +1608,8 @@ void test_topas_spots_parse_angle01() {
 }
 
 void test_topas_spot_weights_and_tps_90_transform() {
-    const auto plan_path = std::filesystem::path(CARBON_SOURCE_DIR) / "validation" /
-                           "topas" / "spots_test_c_angle01.txt";
+    const auto plan_path = std::filesystem::path(CARBON_SOURCE_DIR) / "data" /
+                           "plans" / "spots_test_c_angle01.txt";
     auto plan = carbon::TopasSpotPlan::from_files({plan_path, plan_path});
     require(plan.spots.size() == 2, "Concatenated TOPAS plan size mismatch");
 
@@ -1671,6 +1833,19 @@ void test_history_weighted_entrance_pivot() {
 void test_tps_source_geometry_csv_and_switch() {
     carbon::TransportConfig config;
     require(!config.enable_tps_source, "TPS source must default to disabled");
+    {
+        carbon::TransportConfig spot_energy;
+        spot_energy.initial_energy_MeVu = 0.0;
+        spot_energy.topas_spots_file = "spots_supply_energy.txt";
+        spot_energy.validate();
+
+        auto ct_without_spots = spot_energy;
+        ct_without_spots.topas_spots_file.clear();
+        ct_without_spots.enable_ct_grid = true;
+        ct_without_spots.ct_grid_file = "patient_ct.bin";
+        require_throws([&ct_without_spots] { ct_without_spots.validate(); },
+                       "CT without a spot file must still validate initial energy");
+    }
     config.enable_tps_source = true;
     config.enable_voxel_scoring = true;
     config.number_of_histories = 40;
@@ -1819,9 +1994,6 @@ void test_tps_source_geometry_csv_and_switch() {
     const auto fixed_ct_batch = fixed_ct_plan.make_primary_batch(fixed_ct_config);
     require_near(fixed_ct_batch.front().source_origin_z_mm(), 1.0, 1.0e-6,
                  "TPS fixed-CT transport z rebase");
-    std::error_code fixed_ct_ec;
-    std::filesystem::remove(ct_path, fixed_ct_ec);
-
     auto invalid_plan = plan;
     invalid_plan.spots.front().energy_spread_percent = 21.0;
     require_throws([&invalid_plan, &config] {
@@ -1870,6 +2042,66 @@ void test_tps_source_geometry_csv_and_switch() {
     {
         std::ofstream output(yaml_path);
         output << "number_of_histories: 10\n"
+               << "enable_tps_coordinate_system: true\n"
+               << "enable_voxel_scoring: true\n"
+               << "ct_grid_file: " << ct_path.string() << "\n"
+               << "tps_beam_angle_deg: 37.5\n";
+    }
+    const auto lps_coordinates = carbon::load_config(yaml_path);
+    require(lps_coordinates.enable_tps_coordinate_system &&
+                !lps_coordinates.enable_tps_source,
+            "TPS coordinate-system switch must not enable the TPS CSV source");
+    require(lps_coordinates.tps_angle_convention == "dicom_lps",
+            "TPS coordinate-system switch must select DICOM LPS");
+    require_near(lps_coordinates.tps_gantry_angle_deg, 37.5, 1.0e-12,
+                 "TPS public beam angle parsing");
+    {
+        std::ofstream output(yaml_path);
+        output << "physics_profile: best\n"
+               << "number_of_histories: 10\n"
+               << "use_particle_specific_stopping_power: true\n"
+               << "enable_primary_attenuation: true\n"
+               << "enable_secondary_generation: true\n"
+               << "enable_secondary_transport: true\n"
+               << "enable_fragment_cascade: true\n"
+               << "maximum_cascade_generations: 2\n"
+               << "maximum_step_mm: 0.1\n"
+               << "maximum_relative_energy_loss: 0.001\n"
+               << "energy_cutoff_MeV: 0.1\n"
+               << "secondary_local_deposit_cutoff_MeV: 0.1\n"
+               << "enable_voxel_scoring: true\n"
+               << "dose_to_medium: true\n"
+               << "dose_to_medium_type: mhd\n"
+               << "dose_to_medium_name: dose\n"
+               << "LET: true\n"
+               << "LET_type: mhd\n"
+               << "LET_name: LET\n";
+    }
+    const auto public_scorers = carbon::load_config(yaml_path);
+    require(public_scorers.enable_let_scoring,
+            "Public LET switch must enable LET scoring");
+    require(public_scorers.voxel_dose_mhd_output_file ==
+                yaml_path.parent_path() / "best" / "dose.mhd",
+            "Dose-to-medium output path resolution");
+    require(public_scorers.let_voxel_mhd_output_file ==
+                yaml_path.parent_path() / "best" / "LET",
+            "LET output prefix resolution");
+    require(public_scorers.output_file.empty() &&
+                public_scorers.voxel_dose_output_file.empty(),
+            "Public dose scorer must suppress legacy default CSV outputs");
+    {
+        std::ofstream output(yaml_path);
+        output << "number_of_histories: 10\n"
+               << "enable_voxel_scoring: true\n"
+               << "dose_to_medium: true\n"
+               << "dose_to_medium_type: dicom\n"
+               << "dose_to_medium_name: dose\n";
+    }
+    require_throws([&yaml_path] { static_cast<void>(carbon::load_config(yaml_path)); },
+                   "Unsupported public dose output type must fail");
+    {
+        std::ofstream output(yaml_path);
+        output << "number_of_histories: 10\n"
                << "tpsSource: true\n"
                << "tps_source: false\n";
     }
@@ -1877,6 +2109,7 @@ void test_tps_source_geometry_csv_and_switch() {
                    "Conflicting TPS switch aliases must fail");
     std::error_code ec;
     std::filesystem::remove(yaml_path, ec);
+    std::filesystem::remove(ct_path, ec);
 }
 
 #ifdef CARBON_HAS_SYCL
@@ -2175,7 +2408,7 @@ void test_sycl_transport_context_reuse() {
 void test_sycl_secondary_queue_generation() {
     const auto package_path = std::filesystem::path(CARBON_SOURCE_DIR) /
                               "data/packages/"
-                              "topas_400MeVu_cascade_g4_11_3_2_aligned_primary_3d.bin";
+                              "topas_400MeVu_water_100k_primary_3d.bin";
     const auto reaction_packages = carbon::ReactionPackageTable::from_binary(package_path);
     carbon::TransportConfig config;
     config.number_of_histories = 64;
@@ -2292,7 +2525,7 @@ void test_sycl_secondary_queue_generation() {
 
     const auto cascade_path = std::filesystem::path(CARBON_SOURCE_DIR) /
                               "data/packages/"
-                              "topas_400MeVu_cascade_g4_11_3_2_100k_3d.bin";
+                              "topas_400MeVu_water_100k_cascade_3d.bin";
     const auto cascade_packages = carbon::CascadePackageTable::from_binary(cascade_path);
     config.enable_fragment_cascade = true;
     config.maximum_cascade_generations = 1;
@@ -2347,7 +2580,7 @@ void test_sycl_layered_slab_range_shift() {
     // Dense insert shortens residual range vs uniform water (CSDA-level effect).
     const auto package_path = std::filesystem::path(CARBON_SOURCE_DIR) /
                               "data/packages/"
-                              "topas_400MeVu_cascade_g4_11_3_2_aligned_primary_3d.bin";
+                              "topas_400MeVu_water_100k_primary_3d.bin";
     if (!std::filesystem::exists(package_path)) {
         return;
     }
@@ -2400,7 +2633,7 @@ void test_sycl_ct_secondary_density_smoke() {
     // nuclear reaction → queued secondaries deposit with CT-scaled SP.
     const auto package_path = std::filesystem::path(CARBON_SOURCE_DIR) /
                               "data/packages/"
-                              "topas_400MeVu_cascade_g4_11_3_2_aligned_primary_3d.bin";
+                              "topas_400MeVu_water_100k_primary_3d.bin";
     if (!std::filesystem::exists(package_path)) {
         return;
     }
@@ -2478,7 +2711,7 @@ void test_sycl_neutral_transport_smoke() {
     }
     const auto reaction_packages = carbon::ReactionPackageTable::from_binary(
         source_directory /
-        "data/packages/topas_400MeVu_cascade_g4_11_3_2_aligned_primary_3d.bin");
+        "data/packages/topas_400MeVu_water_100k_primary_3d.bin");
     const auto neutral_packages = carbon::NeutralPackageTable::from_binary(neutral_path);
     carbon::TransportConfig config;
     config.number_of_histories = 16;
@@ -2572,6 +2805,7 @@ void test_sycl_neutral_transport_smoke() {
 int main() {
     try {
         test_units();
+        test_hu_stopping_power_lut_loading();
         test_serial_voxel_idd_closure();
         test_charged_dose_categories();
         test_interpolation();
@@ -2594,6 +2828,7 @@ int main() {
         test_neutral_package_loading();
         test_neutral_cross_section_loading();
         test_flat_source_config_validation();
+        test_random_seed_parsing();
         test_minibeam_absorbing_geometry();
         test_secondary_optimization_config_validation();
         test_topas_spots_parse_angle01();
@@ -2603,6 +2838,7 @@ int main() {
         test_dose_scorer_matches_mev_conversion();
         test_dense_voxel_mhd_writer();
         test_layered_voxel_dose_uses_local_mass();
+        test_dense_charged_origin_mhd_uses_local_mass();
         test_ct_aligned_mhd_offset_and_index_pairing();
 #ifdef CARBON_HAS_SYCL
         test_sycl_tps_source_arbitrary_gantry_transport();

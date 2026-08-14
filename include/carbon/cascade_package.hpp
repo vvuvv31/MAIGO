@@ -24,16 +24,17 @@ struct CascadeCrossSectionSample {
 
 struct CascadeInteraction {
     float incident_energy_MeV_per_u{0.0F};
-    // Reaction depth in the reference water phantom.  Version 1/2 packages
-    // load this as NaN and retain the legacy energy-only sampler.
+    // Reaction depth in the reference phantom.
     float depth_mm{0.0F};
+    // Geant4 step-local deposit at the sampled inelastic interaction.
+    float local_deposit_MeV{0.0F};
     std::uint32_t product_offset{0};
     std::uint32_t product_count{0};
 };
 
 static_assert(sizeof(CascadeProjectile) == 20);
 static_assert(sizeof(CascadeCrossSectionSample) == 8);
-static_assert(sizeof(CascadeInteraction) == 16);
+static_assert(sizeof(CascadeInteraction) == 20);
 
 class CascadePackageTable {
 public:

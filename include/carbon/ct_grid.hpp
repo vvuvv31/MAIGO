@@ -9,8 +9,14 @@
 
 namespace carbon {
 
-// Binary CT grid for GPU transport (7c).
-// Coordinates: transport frame with beam along +z, entrance near z=0.
+// Patient CT volume stored in conventional medical-image coordinates:
+//   x: patient left/right within an axial slice
+//   y: patient posterior/anterior within an axial slice
+//   z: patient inferior/superior, normal to the axial slices
+// Beam direction is independent of these axes. Clinical transport must rotate
+// the source, not repack the CT so that a beam happens to point along +z.
+// Legacy angle-specific CCTG files may still contain a beam-repacked volume;
+// their metadata identifies the axis mapping and they are compatibility input.
 // File magic "CCTG" little-endian.
 // v1: density float[] + material_id uint8[] (legacy 4-class 0..3)
 // v2: + n u32 + mass_sp_factor float[n]  (energy-independent Z/A factor)
@@ -47,6 +53,18 @@ struct CtGrid {
                static_cast<std::size_t>(nz);
     }
 
+    [[nodiscard]] float extent_x_mm() const noexcept {
+        return static_cast<float>(nx) * spacing_x_mm;
+    }
+
+    [[nodiscard]] float extent_y_mm() const noexcept {
+        return static_cast<float>(ny) * spacing_y_mm;
+    }
+
+    [[nodiscard]] float extent_z_mm() const noexcept {
+        return static_cast<float>(nz) * spacing_z_mm;
+    }
+
     [[nodiscard]] bool has_mass_sp_factors() const noexcept {
         return !mass_sp_za_rel.empty() || !mass_sp_factor.empty();
     }
@@ -64,7 +82,10 @@ std::uint8_t density_to_material_id(float density_g_per_cm3) noexcept;
 
 // Collapse TOPAS/Schneider sections to the legacy material tables used by the
 // current CT XS/SP implementation. Schneider bounds are:
-//   0 air, 1 lung, 2..7 soft tissue/water-like, 8+ bone-like.
+//   0 air, 1 lung, 2..8 soft tissue/water-like, 9+ bone-like.
+// Section 8 is HU 80..120 in the TOPAS Schneider table and retains a
+// soft-tissue composition. Section 9 (HU 120..200) is the first material with
+// a substantial calcium fraction and is the bone-family boundary.
 // CCTG v1 already stores these four class IDs directly.
 inline std::uint8_t ct_material_class(const std::uint8_t material_id,
                                       const bool schneider_section_id) noexcept {
@@ -77,7 +98,7 @@ inline std::uint8_t ct_material_class(const std::uint8_t material_id,
     if (material_id == 1U) {
         return 1U;
     }
-    return material_id < 8U ? 2U : 3U;
+    return material_id < 9U ? 2U : 3U;
 }
 
 // Reference densities of the Geant4 materials used to generate the optional
@@ -204,6 +225,58 @@ inline float ct_mass_scaled_stopping_power(const float water_sp_MeV_per_mm,
                                            const float mass_sp_factor) noexcept {
     return water_sp_MeV_per_mm * mass_sp_factor *
            (density_g_per_cm3 > 1.0e-6F ? density_g_per_cm3 : 1.0e-6F);
+}
+
+// Row of the mass-SP LUT is either a Schneider section or a log-density bin.
+template <typename LogFn>
+inline float ct_lookup_mass_sp_factor(const float* lut,
+                                      const std::uint32_t n_rows,
+                                      const std::size_t table_size,
+                                      const bool density_mode,
+                                      const float log_rho_min,
+                                      const float inv_dlog,
+                                      const std::uint32_t section,
+                                      const float density,
+                                      const std::size_t energy_index,
+                                      const float energy_fraction,
+                                      LogFn&& log_fn) noexcept {
+    if (lut == nullptr || n_rows == 0 || table_size < 2) {
+        return 1.0F;
+    }
+    std::uint32_t row0 = 0;
+    std::uint32_t row1 = 0;
+    float row_frac = 0.0F;
+    if (density_mode && n_rows > 1U) {
+        const auto rho = density > 1.0e-6F ? density : 1.0e-6F;
+        auto t = (log_fn(rho) - log_rho_min) * inv_dlog;
+        if (t < 0.0F) {
+            t = 0.0F;
+        }
+        const auto last = static_cast<float>(n_rows - 1U);
+        if (t > last) {
+            t = last;
+        }
+        row0 = static_cast<std::uint32_t>(t);
+        if (row0 >= n_rows - 1U) {
+            row0 = n_rows - 2U;
+            row_frac = 1.0F;
+        } else {
+            row_frac = t - static_cast<float>(row0);
+        }
+        row1 = row0 + 1U;
+    } else {
+        row0 = section < n_rows ? section : (n_rows - 1U);
+        row1 = row0;
+    }
+    const auto lerp_energy = [&](const std::uint32_t row) {
+        const auto base = static_cast<std::size_t>(row) * table_size + energy_index;
+        return lut[base] + energy_fraction * (lut[base + 1U] - lut[base]);
+    };
+    const auto a = lerp_energy(row0);
+    if (row_frac <= 0.0F || row0 == row1) {
+        return a;
+    }
+    return a + row_frac * (lerp_energy(row1) - a);
 }
 
 inline float distance_to_next_ct_face_1d(const float position_mm,

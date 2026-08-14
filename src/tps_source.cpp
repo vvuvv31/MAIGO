@@ -144,14 +144,12 @@ Matrix3 rotation_z(const double angle_deg) {
     return {{{c, -s, 0.0}, {s, c, 0.0}, {0.0, 0.0, 1.0}}};
 }
 
-Matrix3 topas_patient_rot_z_frame(const double gantry_angle_deg,
-                                  const double couch_angle_deg,
-                                  const double collimator_angle_deg) {
-    // Beam-local axes at TOPAS/TPS 0 degrees:
-    //   u=patient +X (TOPAS TransX), v=patient +Z (TOPAS TransZ),
-    //   w=patient +Y (central propagation direction).
-    // A passive Patient/RotZ=theta is equivalent, in a fixed patient CT, to
-    // actively rotating the source frame by +theta around patient +Z.
+Matrix3 dicom_lps_beam_frame(const double gantry_angle_deg,
+                             const double couch_angle_deg,
+                             const double collimator_angle_deg) {
+    // DICOM LPS patient frame: +X left, +Y posterior, +Z superior.
+    // Beam-local axes at TPS 0 degrees are u=+X, v=+Z and w=+Y. Angles rotate
+    // this source frame in the fixed patient CT; no CT permutation is involved.
     const auto collimator = collimator_angle_deg * k_pi / 180.0;
     const auto cc = std::cos(collimator);
     const auto sc = std::sin(collimator);
@@ -199,8 +197,9 @@ TpsSourcePose central_pose(const TransportConfig& config, const TpsSpot& spot) {
         std::isfinite(spot.collimator_angle_deg)
             ? spot.collimator_angle_deg
             : config.tps_collimator_angle_deg;
-    if (config.tps_angle_convention == "topas_patient_rot_z") {
-        machine = topas_patient_rot_z_frame(
+    if (config.tps_angle_convention == "dicom_lps" ||
+        config.tps_angle_convention == "topas_patient_rot_z") {
+        machine = dicom_lps_beam_frame(
             gantry_angle_deg, couch_angle_deg, collimator_angle_deg);
     } else {
         const auto collimator = rotation_z(-collimator_angle_deg);
@@ -403,10 +402,9 @@ std::vector<std::size_t> TpsSourcePlan::allocate_histories(
 std::vector<PrimarySpotBatchEntry> TpsSourcePlan::make_primary_batch(
     const TransportConfig& config) const {
     const auto allocation = allocate_histories(config.number_of_histories);
-    // The transport kernel historically uses z=[0, phantom_length] for its
-    // dense scorer. A patient-coordinate CT may have a non-zero z low edge.
-    // Rebase only the internal transport z coordinate; output MHD metadata
-    // remains in the original patient coordinates.
+    // CCTG uses conventional patient coordinates: x-y is axial and z is the
+    // slice direction. The kernel stores that same orientation but rebases the
+    // z low edge to zero internally. Output metadata restores the CT origin.
     double transport_z_shift_mm = 0.0;
     if (config.enable_ct_grid) {
         const auto grid = CtGrid::from_binary(config.ct_grid_file);
@@ -419,7 +417,7 @@ std::vector<PrimarySpotBatchEntry> TpsSourcePlan::make_primary_batch(
             grid.nz != number_of_bins ||
             !close(grid.spacing_x_mm, config.voxel_size_x_mm) ||
             !close(grid.spacing_y_mm, config.voxel_size_y_mm) ||
-            !close(grid.spacing_z_mm, config.depth_bin_width_mm) ||
+            !close(grid.spacing_z_mm, config.scorer_spacing_z_mm()) ||
             !close(static_cast<double>(grid.nz) * grid.spacing_z_mm,
                    config.phantom_length_mm)) {
             throw std::invalid_argument(

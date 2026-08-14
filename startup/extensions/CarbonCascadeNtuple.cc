@@ -54,6 +54,7 @@ CarbonCascadeNtuple::CarbonCascadeNtuple(
     fNtuple->RegisterColumnF(&charge_e_, "Charge (e)", "");
     fNtuple->RegisterColumnF(&kinetic_energy_mev_, "Particle Kinetic Energy (MeV)", "");
     fNtuple->RegisterColumnF(&incident_energy_mev_, "Incident Kinetic Energy (MeV)", "");
+    fNtuple->RegisterColumnF(&local_deposit_mev_, "Local Energy Deposit (MeV)", "");
     fNtuple->RegisterColumnD(&macroscopic_inelastic_per_mm_,
                              "Macroscopic Inelastic Cross Section (1/mm)", "");
     fNtuple->RegisterColumnI(&projectile_z_, "Projectile Atomic Number Z");
@@ -105,6 +106,8 @@ G4bool CarbonCascadeNtuple::ProcessHits(G4Step* step, G4TouchableHistory*) {
         direction = step->GetPreStepPoint()->GetMomentumDirection();
         kinetic_energy_mev_ =
             static_cast<G4float>(step->GetPreStepPoint()->GetKineticEnergy() / MeV);
+        local_deposit_mev_ =
+            static_cast<G4float>(step->GetTotalEnergyDeposit() / MeV);
         context = InteractionContext{interaction_id_, kinetic_energy_mev_,
                                      definition->GetAtomicNumber(),
                                      definition->GetAtomicMass()};
@@ -126,6 +129,7 @@ G4bool CarbonCascadeNtuple::ProcessHits(G4Step* step, G4TouchableHistory*) {
         direction = track->GetVertexMomentumDirection();
         kinetic_energy_mev_ =
             static_cast<G4float>(track->GetVertexKineticEnergy() / MeV);
+        local_deposit_mev_ = 0.0F;
         context = parent->second;
         creator_model_id_ = track->GetCreatorModelID();
     }

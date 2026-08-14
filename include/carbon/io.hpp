@@ -69,6 +69,11 @@ void write_sparse_charged_origin_voxel_dose_Gy_csv(
     const TransportConfig& config,
     const TransportResult& result);
 
+void write_dense_charged_origin_voxel_dose_mhd(
+    const std::filesystem::path& prefix,
+    const TransportConfig& config,
+    const TransportResult& result);
+
 // Dense MetaImage MHD/RAW (total Gy) written directly from the in-memory dose
 // grid. Prefer this over sparse CSV + postprocess for production CT outputs.
 // Path may end in .mhd or any name; the .raw sibling is always derived.

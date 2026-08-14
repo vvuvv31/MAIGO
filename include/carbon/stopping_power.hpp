@@ -10,6 +10,28 @@ namespace carbon {
 [[nodiscard]] double stopping_power_scale_from_carbon(int atomic_number,
                                                        double energy_MeVu);
 
+class StoppingPowerTable;
+
+[[nodiscard]] std::vector<float> load_hu_stopping_power_lut(
+    const std::filesystem::path& path,
+    std::size_t n_sections,
+    std::size_t table_size,
+    float scale = 1.0F);
+
+struct DensityMassSprLut {
+    std::uint32_t n_rho{0};
+    float log_rho_min{0.0F};
+    float inv_dlog{0.0F};
+    std::vector<float> factors{};
+};
+
+[[nodiscard]] DensityMassSprLut build_density_mass_spr_lut(
+    const StoppingPowerTable& water,
+    const StoppingPowerTable& air,
+    const StoppingPowerTable& lung,
+    const StoppingPowerTable& bone,
+    float scale = 1.0F);
+
 class StoppingPowerTable {
 public:
     StoppingPowerTable(std::vector<double> energies_MeVu,

@@ -201,13 +201,18 @@ GPU 可选的 `electronic_buildup_fraction` 和 LET delta-electron fraction tabl
 
 ### 5.1 剂量
 
-GPU 在 step、secondary 和 cascade residual heat 上累积沉积能量，并按 voxel 质量换算为 dose-to-medium：
+GPU 在 continuous step、secondary transport 和 reaction-local deposit 上累积
+沉积能量，并按 voxel 质量换算为 dose-to-medium：
 
 \[
 D_v = \frac{E_{\mathrm{dep},v}}{m_v}.
 \]
 
-输出文件可以是 MeV、Gy CSV 或 MetaImage MHD/RAW。CT best 的 `dose_output_scale=0.982` 只作用于最终输出 Gy，不改变内部 raw energy tally。
+当前 reaction/cascade v1 package 的 local deposit 直接来自 TOPAS/Geant4
+`G4Step::GetTotalEnergyDeposit()`。这避免了把“入射动能 - 产物动能”中的
+反应 Q 值和核质量差误当作局部剂量。旧 package layout 不再兼容，loader
+会直接报错。输出文件可以是 MeV、Gy CSV 或
+MetaImage MHD/RAW；当前 CT 验证保持 `dose_output_scale=1.0`。
 
 TOPAS 使用 `DoseToMedium` scorer。两者都以介质质量为分母，但由于 TOPAS 还显式输运电子、光子、中子和衰变产物，GPU 的 dose-to-medium 并不自动包含这些未覆盖贡献。
 

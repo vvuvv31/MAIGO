@@ -5,7 +5,6 @@
 #include <cmath>
 #include <cstring>
 #include <fstream>
-#include <limits>
 #include <stdexcept>
 #include <string>
 
@@ -28,25 +27,9 @@ struct CascadeFileHeader {
     std::uint64_t file_size;
 };
 
-struct ReactionSecondaryV1 {
-    std::int32_t pdg_id;
-    std::int16_t atomic_number;
-    std::int16_t mass_number;
-    float kinetic_energy_MeV;
-    float direction_z;
-};
-
-struct CascadeInteractionV2 {
-    float incident_energy_MeV_per_u;
-    std::uint32_t product_offset;
-    std::uint32_t product_count;
-};
-
-static_assert(sizeof(ReactionSecondaryV1) == 16);
-static_assert(sizeof(CascadeInteractionV2) == 12);
-
 static_assert(sizeof(CascadeFileHeader) == 72);
 constexpr std::array<char, 8> cascade_magic{'C', 'C', 'A', 'S', '0', '0', '1', '\0'};
+constexpr std::uint32_t current_version = 1;
 
 template <typename T>
 void read_records(std::ifstream& input,
@@ -78,21 +61,16 @@ CascadePackageTable CascadePackageTable::from_binary(const std::filesystem::path
     input.seekg(0);
     CascadeFileHeader header{};
     input.read(reinterpret_cast<char*>(&header), sizeof(header));
-    const auto legacy_v1 = header.version == 1;
-    const auto legacy_interactions = header.version <= 2;
-    const auto expected_product_size =
-        legacy_v1 ? sizeof(ReactionSecondaryV1) : sizeof(ReactionSecondary);
-    const auto expected_interaction_size =
-        legacy_interactions ? sizeof(CascadeInteractionV2)
-                            : sizeof(CascadeInteraction);
     if (!input || header.magic != cascade_magic ||
-        (header.version != 1 && header.version != 2 && header.version != 3) ||
+        header.version != current_version ||
         header.header_size != sizeof(header) ||
         header.projectile_size != sizeof(CascadeProjectile) ||
         header.cross_section_size != sizeof(CascadeCrossSectionSample) ||
-        header.interaction_size != expected_interaction_size ||
-        header.product_size != expected_product_size || header.projectile_count == 0) {
-        throw std::runtime_error("Unsupported cascade package layout: " + path.string());
+        header.interaction_size != sizeof(CascadeInteraction) ||
+        header.product_size != sizeof(ReactionSecondary) || header.projectile_count == 0) {
+        throw std::runtime_error(
+            "Unsupported cascade package version/layout; expected current v1 "
+            "with depth, 3D directions, and local deposit: " + path.string());
     }
     if (actual_size < 0 || header.file_size != static_cast<std::uint64_t>(actual_size)) {
         throw std::runtime_error("Cascade package file-size mismatch: " + path.string());
@@ -101,34 +79,9 @@ CascadePackageTable CascadePackageTable::from_binary(const std::filesystem::path
     CascadePackageTable table;
     read_records(input, table.projectiles_, header.projectile_count, path, "projectile");
     read_records(input, table.cross_sections_, header.cross_section_count, path, "cross-section");
-    if (legacy_interactions) {
-        std::vector<CascadeInteractionV2> legacy_records;
-        read_records(input, legacy_records, header.interaction_count, path,
-                     "interaction");
-        table.interactions_.reserve(legacy_records.size());
-        const auto missing = std::numeric_limits<float>::quiet_NaN();
-        for (const auto& interaction : legacy_records) {
-            table.interactions_.push_back(CascadeInteraction{
-                interaction.incident_energy_MeV_per_u, missing,
-                interaction.product_offset, interaction.product_count});
-        }
-    } else {
-        read_records(input, table.interactions_, header.interaction_count, path,
-                     "interaction");
-    }
-    if (legacy_v1) {
-        std::vector<ReactionSecondaryV1> legacy_products;
-        read_records(input, legacy_products, header.product_count, path, "product");
-        table.products_.reserve(legacy_products.size());
-        const auto missing = std::numeric_limits<float>::quiet_NaN();
-        for (const auto& product : legacy_products) {
-            table.products_.push_back(ReactionSecondary{
-                product.pdg_id, product.atomic_number, product.mass_number,
-                product.kinetic_energy_MeV, missing, missing, product.direction_z});
-        }
-    } else {
-        read_records(input, table.products_, header.product_count, path, "product");
-    }
+    read_records(input, table.interactions_, header.interaction_count, path,
+                 "interaction");
+    read_records(input, table.products_, header.product_count, path, "product");
 
     std::uint64_t expected_xs_offset = 0;
     std::uint64_t expected_interaction_offset = 0;
@@ -170,7 +123,6 @@ CascadePackageTable CascadePackageTable::from_binary(const std::filesystem::path
                                        ? static_cast<int>(interaction.depth_mm / 10.0F)
                                        : -1;
             const auto conditioned_ordered =
-                legacy_interactions ||
                 energy_bin > previous_energy_bin ||
                 (energy_bin == previous_energy_bin &&
                  depth_bin >= previous_depth_bin);
@@ -179,9 +131,9 @@ CascadePackageTable CascadePackageTable::from_binary(const std::filesystem::path
             // the geometric midplane. Energy-only cascade sampling still uses
             // these packages; only finite energy/depth are required.
             if (!std::isfinite(interaction.incident_energy_MeV_per_u) ||
-                (!legacy_interactions && !std::isfinite(interaction.depth_mm)) ||
-                (legacy_interactions &&
-                 interaction.incident_energy_MeV_per_u < previous_energy) ||
+                !std::isfinite(interaction.depth_mm) ||
+                !std::isfinite(interaction.local_deposit_MeV) ||
+                interaction.local_deposit_MeV < 0.0F ||
                 !conditioned_ordered ||
                 static_cast<std::uint64_t>(interaction.product_offset) +
                         interaction.product_count > table.products_.size()) {

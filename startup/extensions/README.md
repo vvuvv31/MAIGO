@@ -15,10 +15,12 @@
 | `IonStoppingPowerNtuple` | 不同碎片 Z/A 的 stopping power |
 | `IonCrossSectionNtuple` | 不同碎片 Z/A 的非弹性截面 |
 | `NeutralCrossSectionNtuple` | gamma/neutron 的总截面 |
-| `IonElasticNtuple` | 离子弹性散射 step |
-| `IonNuclearLETNtuple` | 核反应 step 的 LET 诊断字段 |
-| `CarbonDoseOrigin` | 可选的剂量来源诊断 scorer |
-| `CarbonDeltaElectronEnergy` | 可选的 delta-electron 能量诊断 scorer |
+
+`build_ct_material_packages.sh` 只需要 `CarbonCascadeNtuple`：同一份相关
+interaction/product 记录既编译 charged cascade package，也筛选 primary
+track-1 C-12 的首次非弹性反应来编译 reaction package。
+interaction 记录还保存 `G4Step::GetTotalEnergyDeposit()`；reaction 和
+cascade v1 运行时包直接使用该值，避免把反应 Q 值或核质量差
+误当成局部剂量。旧 package layout 不再读取，运行时会直接报错。
 
 其中最后两个 scorer 不在默认模板中启用，但保留在包内，便于单独做诊断。`myHadronLET` 属于独立 LET extension，没有复制到这里。
-

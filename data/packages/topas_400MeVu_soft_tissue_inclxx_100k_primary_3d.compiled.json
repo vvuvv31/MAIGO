@@ -1,6 +1,6 @@
 {
   "format": "carbon reaction package binary",
-  "format_version": 2,
+  "format_version": 1,
   "byte_order": "little-endian",
   "direction_coordinates": "projectile-local orthonormal frame",
   "direction_components": [
@@ -8,35 +8,36 @@
     "local_y",
     "along_projectile"
   ],
-  "source_metadata": "data/packages/topas_400MeVu_soft_tissue_inclxx_100k_primary.metadata.json",
-  "source_metadata_sha256": "72b97d6aa1c1a57eb30df941d6d9e55561f4ea8d94aecd52be0fccedfc895ea0",
+  "local_deposit": "Geant4 G4Step::GetTotalEnergyDeposit, scaled with package energy",
+  "source_metadata": "/home/v/maigo_package_v1_20260814/data/packages_localdep/topas_400MeVu_soft_tissue_inclxx_100k_primary.metadata.json",
+  "source_metadata_sha256": "06131227ce00d24a509e658e2faef8d8862c63dd4e35e8fdf01485144ce37a03",
   "source_runtime": {
     "topas_version": "4.2.p3",
     "geant4_version": "geant4-11-03-patch-02",
-    "runtime_reference_metadata": "validation/results/diagnostic_g4_11_3_2/runtime_g4_11_3_2.metadata.json"
+    "runtime_reference_metadata": "/home/v/maigo_package_v1_20260814/data/packages_localdep/topas_400MeVu_soft_tissue_inclxx_100k.metadata.json"
   },
-  "source_reactions_sha256": "ccb71f9ad2d5f6c4db3362cd49f9626ec20f10a989560c351c637999e318c0f4",
-  "source_secondaries_sha256": "f0a33437accd2de3ad1cbc534ec5471f8d8384498e33bb0acb887e1ae113f81f",
+  "source_reactions_sha256": "45a475cacaf6bf28e4ab8a99b6263337cce33c8f7036bf6a40f631277b6d7e25",
+  "source_secondaries_sha256": "4bfff3a0b56503be5155ed16dbb8197880e48ce75a75b6c10eb3c43410337690",
   "energy_bins": {
     "minimum_MeV_per_u": 0.0,
     "width_MeV_per_u": 4.0,
     "count": 101,
-    "minimum_packages_per_bin": 30,
-    "maximum_packages_per_bin": 2068
+    "minimum_packages_per_bin": 15,
+    "maximum_packages_per_bin": 2037
   },
   "records": {
-    "reactions": 74199,
-    "secondaries": 760996
+    "reactions": 74304,
+    "secondaries": 763166
   },
   "record_sizes_bytes": {
     "header": 64,
     "energy_bin": 8,
-    "reaction": 16,
+    "reaction": 20,
     "secondary": 24
   },
   "output": {
     "path": "data/packages/topas_400MeVu_soft_tissue_inclxx_100k_primary_3d.bin",
-    "bytes": 19451960,
-    "sha256": "942a2050b3ada7a58d1d254cd08ca9ab5d28e189e232096f17ebaa43219a6fbb"
+    "bytes": 19802936,
+    "sha256": "2af0d09a2d45adc60741d6877501e97c2936efc1e413734127e2e0befe2fceb5"
   }
 }

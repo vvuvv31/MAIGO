@@ -1,0 +1,37 @@
+{
+  "case": "cascade-aligned-primary-c12",
+  "histories": 100000,
+  "reaction_definition": "first inelastic interaction of source track-1 primary C-12",
+  "source_cascade_metadata": "/home/v/maigo_localdep_packages_20260814/data/packages/topas_400MeVu_schneider_section07_inclxx_100k.metadata.json",
+  "source_cascade_metadata_sha256": "ceff324d720a48fca739d39ec0f7422a8f5aaab60bd766994d80079e8aeaba75",
+  "runtime_reference": {
+    "metadata": "/home/v/maigo_localdep_packages_20260814/data/packages/topas_400MeVu_schneider_section07_inclxx_100k.metadata.json",
+    "topas_version": "4.2.p3",
+    "geant4_version": "geant4-11-03-patch-02"
+  },
+  "reaction_count": 73491,
+  "secondary_count": 763450,
+  "selection": {
+    "projectile_Z": 6,
+    "projectile_A": 12,
+    "interaction_track_id": 1,
+    "event_interaction_id": 0
+  },
+  "output_files": {
+    "reactions": {
+      "path": "/home/v/maigo_localdep_packages_20260814/work/topas_400MeVu_schneider_section07_inclxx_100k/topas_400MeVu_schneider_section07_inclxx_100k_primary_reactions.csv.gz",
+      "sha256": "acc58ae0ecfb8288b0c372537aa22025fc1f8f4e50d68cd1083276bf8dcc5354",
+      "bytes": 2546548,
+      "rows": 73491,
+      "compression": "gzip"
+    },
+    "secondaries": {
+      "path": "/home/v/maigo_localdep_packages_20260814/work/topas_400MeVu_schneider_section07_inclxx_100k/topas_400MeVu_schneider_section07_inclxx_100k_primary_secondaries.csv.gz",
+      "sha256": "223e7aa3d78a981f48c8e29ade6acfdea3c434801cc4b8e03a11f8434ea78019",
+      "bytes": 18036847,
+      "rows": 763450,
+      "compression": "gzip"
+    }
+  },
+  "global_scale_applied": false
+}

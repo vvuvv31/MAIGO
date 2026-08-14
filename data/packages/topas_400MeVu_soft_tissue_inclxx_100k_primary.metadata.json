@@ -2,15 +2,15 @@
   "case": "cascade-aligned-primary-c12",
   "histories": 100000,
   "reaction_definition": "first inelastic interaction of source track-1 primary C-12",
-  "source_cascade_metadata": "validation/results/diagnostic_g4_11_3_2/topas_400MeVu_soft_tissue_inclxx_100k_metadata.json",
-  "source_cascade_metadata_sha256": "50f11f74eee2c2c8a885cf33461b0fc11b717c75eafb647ac5f19d614af9f9d2",
+  "source_cascade_metadata": "/home/v/maigo_package_v1_20260814/data/packages_localdep/topas_400MeVu_soft_tissue_inclxx_100k.metadata.json",
+  "source_cascade_metadata_sha256": "64f16455b5ed765dc39a463bd8d892af9bc102177eaeb9fe4440f2d25cce78b0",
   "runtime_reference": {
-    "metadata": "validation/results/diagnostic_g4_11_3_2/runtime_g4_11_3_2.metadata.json",
+    "metadata": "/home/v/maigo_package_v1_20260814/data/packages_localdep/topas_400MeVu_soft_tissue_inclxx_100k.metadata.json",
     "topas_version": "4.2.p3",
     "geant4_version": "geant4-11-03-patch-02"
   },
-  "reaction_count": 74199,
-  "secondary_count": 760996,
+  "reaction_count": 74304,
+  "secondary_count": 763166,
   "selection": {
     "projectile_Z": 6,
     "projectile_A": 12,
@@ -19,17 +19,17 @@
   },
   "output_files": {
     "reactions": {
-      "path": "validation/results/diagnostic_g4_11_3_2/topas_400MeVu_soft_tissue_inclxx_100k_primary_reactions.csv.gz",
-      "sha256": "ccb71f9ad2d5f6c4db3362cd49f9626ec20f10a989560c351c637999e318c0f4",
-      "bytes": 2272788,
-      "rows": 74199,
+      "path": "/home/v/maigo_package_v1_20260814/startup/work/localdep/topas_400MeVu_soft_tissue_inclxx_100k/topas_400MeVu_soft_tissue_inclxx_100k_primary_reactions.csv.gz",
+      "sha256": "45a475cacaf6bf28e4ab8a99b6263337cce33c8f7036bf6a40f631277b6d7e25",
+      "bytes": 2573594,
+      "rows": 74304,
       "compression": "gzip"
     },
     "secondaries": {
-      "path": "validation/results/diagnostic_g4_11_3_2/topas_400MeVu_soft_tissue_inclxx_100k_primary_secondaries.csv.gz",
-      "sha256": "f0a33437accd2de3ad1cbc534ec5471f8d8384498e33bb0acb887e1ae113f81f",
-      "bytes": 17974005,
-      "rows": 760996,
+      "path": "/home/v/maigo_package_v1_20260814/startup/work/localdep/topas_400MeVu_soft_tissue_inclxx_100k/topas_400MeVu_soft_tissue_inclxx_100k_primary_secondaries.csv.gz",
+      "sha256": "4bfff3a0b56503be5155ed16dbb8197880e48ce75a75b6c10eb3c43410337690",
+      "bytes": 18023531,
+      "rows": 763166,
       "compression": "gzip"
     }
   },

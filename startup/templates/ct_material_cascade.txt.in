@@ -1,0 +1,57 @@
+# C-12 material-conditioned reaction/cascade package source.
+# Rendered by startup/build_ct_material_packages.sh.
+
+i:Ts/Seed = @SEED@
+i:Ts/NumberOfThreads = @THREADS@
+i:Ts/ShowHistoryCountAtInterval = @PROGRESS_INTERVAL@
+b:Ts/ShowHistoryCountLessFrequentlyAsSimulationProgresses = "True"
+b:Gr/Enable = "False"
+
+s:Ge/World/Type = "TsBox"
+s:Ge/World/Material = "Air"
+d:Ge/World/HLX = 200 mm
+d:Ge/World/HLY = 200 mm
+d:Ge/World/HLZ = @WORLD_HALF_LENGTH_MM@ mm
+
+# The renderer removes these prefixes only for the exact Schneider section-7
+# material. They remain comments for Geant4 built-in lung/bone materials.
+#SECTION07# sv:Ma/SchneiderSection07/Components = 9 "Hydrogen" "Carbon" "Nitrogen" "Oxygen" "Phosphorus" "Sulfur" "Chlorine" "Sodium" "Potassium"
+#SECTION07# uv:Ma/SchneiderSection07/Fractions = 9 0.103 0.134 0.030 0.723 0.002 0.002 0.002 0.002 0.002
+#SECTION07# d:Ma/SchneiderSection07/Density = 1.04 g/cm3
+
+s:Ge/Phantom/Parent = "World"
+s:Ge/Phantom/Type = "TsBox"
+s:Ge/Phantom/Material = "@MATERIAL@"
+d:Ge/Phantom/HLX = 150 mm
+d:Ge/Phantom/HLY = 150 mm
+d:Ge/Phantom/HLZ = @PHANTOM_HALF_LENGTH_MM@ mm
+d:Ge/Phantom/MaxStepSize = 0.1 mm
+
+s:Ge/BeamPosition/Parent = "World"
+s:Ge/BeamPosition/Type = "Group"
+d:Ge/BeamPosition/TransX = 0 mm
+d:Ge/BeamPosition/TransY = 0 mm
+d:Ge/BeamPosition/TransZ = @SOURCE_Z_MM@ mm
+d:Ge/BeamPosition/RotX = 0 deg
+d:Ge/BeamPosition/RotY = 0 deg
+d:Ge/BeamPosition/RotZ = 0 deg
+
+s:So/CarbonBeam/Type = "Beam"
+s:So/CarbonBeam/Component = "BeamPosition"
+s:So/CarbonBeam/BeamParticle = "GenericIon(6,12)"
+d:So/CarbonBeam/BeamEnergy = 4800 MeV
+u:So/CarbonBeam/BeamEnergySpread = 0.0
+s:So/CarbonBeam/BeamPositionDistribution = "None"
+s:So/CarbonBeam/BeamAngularDistribution = "None"
+i:So/CarbonBeam/NumberOfHistoriesInRun = @HISTORIES@
+
+s:Ph/ListName = "Default"
+s:Ph/Default/Type = "Geant4_Modular"
+sv:Ph/Default/Modules = 6 "g4em-standard_opt4" "g4h-phy_QGSP_BIC_HP" "g4decay" "g4ion-inclxx" "g4h-elastic_HP" "g4stopping"
+d:Ph/Default/CutForAllParticles = 0.05 mm
+
+s:Sc/CascadeReactions/Quantity = "CarbonCascadeNtuple"
+s:Sc/CascadeReactions/Component = "Phantom"
+s:Sc/CascadeReactions/OutputFile = "@OUTPUT_STEM@"
+s:Sc/CascadeReactions/OutputType = "ASCII"
+s:Sc/CascadeReactions/IfOutputFileAlreadyExists = "Overwrite"

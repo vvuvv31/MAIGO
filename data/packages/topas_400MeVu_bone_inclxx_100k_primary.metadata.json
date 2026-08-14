@@ -1,0 +1,37 @@
+{
+  "case": "cascade-aligned-primary-c12",
+  "histories": 100000,
+  "reaction_definition": "first inelastic interaction of source track-1 primary C-12",
+  "source_cascade_metadata": "/home/v/maigo_localdep_packages_20260814/data/packages/topas_400MeVu_bone_inclxx_100k.metadata.json",
+  "source_cascade_metadata_sha256": "ae0b1479ed6390418196d85ef8dd5a82ebcf48803c0a94b49afc87fafbc8e583",
+  "runtime_reference": {
+    "metadata": "/home/v/maigo_localdep_packages_20260814/data/packages/topas_400MeVu_bone_inclxx_100k.metadata.json",
+    "topas_version": "4.2.p3",
+    "geant4_version": "geant4-11-03-patch-02"
+  },
+  "reaction_count": 71361,
+  "secondary_count": 821511,
+  "selection": {
+    "projectile_Z": 6,
+    "projectile_A": 12,
+    "interaction_track_id": 1,
+    "event_interaction_id": 0
+  },
+  "output_files": {
+    "reactions": {
+      "path": "/home/v/maigo_localdep_packages_20260814/work/topas_400MeVu_bone_inclxx_100k/topas_400MeVu_bone_inclxx_100k_primary_reactions.csv.gz",
+      "sha256": "42a5626aeb3f455ac64e203ed92af32f2b0c438edacede4e4ba6fc459e1c7652",
+      "bytes": 2472313,
+      "rows": 71361,
+      "compression": "gzip"
+    },
+    "secondaries": {
+      "path": "/home/v/maigo_localdep_packages_20260814/work/topas_400MeVu_bone_inclxx_100k/topas_400MeVu_bone_inclxx_100k_primary_secondaries.csv.gz",
+      "sha256": "df091be5a78817d9ab52bc6cbda28491fcdbdb7aacba309fe1f9da633573e7c9",
+      "bytes": 19406846,
+      "rows": 821511,
+      "compression": "gzip"
+    }
+  },
+  "global_scale_applied": false
+}

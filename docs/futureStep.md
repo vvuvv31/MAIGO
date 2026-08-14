@@ -424,10 +424,11 @@ SOBP 100k 泛化检查没有退化：50–100 mm all-hadron median |rel|
 
 - 开启 secondary Bohr straggling 未稳定改善宽能量 LET（400 MeV/u
   median 4.115%→4.137%），继续保持关闭；
-- 新增 `IonNuclearLETNtuple` 后确认，TOPAS 非弹性 step 的 LET
+- 历史 TOPAS 非弹性 step 诊断确认，其 LET
   权重只使用该 step 的局域电离沉积，不是母粒子的全部剩余能量；
   这些 step 仅占 400 MeV/u 全局 LET numerator 约 0.032%，不能用
-  GPU nuclear residual 直接补 LET。
+  GPU nuclear residual 直接补 LET。该一次性诊断 extension 已从
+  `startup/` 删除，不属于 runtime 数据库生成链。
 
 **仍待做**：
 
@@ -701,6 +702,23 @@ scale。
 package。下一步应生成 Schneider lung/soft/bone family 各自的 INCL++
 primary/cascade package，并同时以 dose gamma 和 LET gamma 为门禁；不要
 用全局剂量或 LET 经验乘子掩盖材料末态不匹配。
+
+**2026-08-14 更正**：上述 dose 偏高的主因不是 soft-tissue 成分，
+而是旧 reaction/cascade 包未保存 Geant4 local deposit，GPU 将产物
+kinetic-energy deficit 全部作为局部热。5k probe 中 C-12 每次反应的
+Geant4 local deposit 平均为 `0.574 MeV`，旧近似为 `100.08 MeV`。
+引入带 local deposit 的格式（当时编号 reaction v3 / cascade v4，现统一
+重置为严格 v1）后，使用相同 histories、固定 seed、
+`dose_output_scale=1` 的 BODY 且 TOPAS dose >=10% Dmax 积分比为：
+
+| case | GPU/TOPAS absolute dose integral |
+|---|---:|
+| 20022516 | 1.00296 |
+| RT06423 | 1.00047 |
+| RT07575 | 0.99838 |
+
+20022516 的 all-hadron LET local gamma 仍低（2%/2 mm `74.60%`），属于
+独立的 lung LET 问题，不应再通过修改 dose residual heat 处理。
 
 ## A.5 当前结论
 

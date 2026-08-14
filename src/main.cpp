@@ -44,7 +44,7 @@ void print_usage(const char* executable) {
                  "  --spots FILE         TOPAS-format spots_*.txt; repeat to concatenate files\n"
                  "  --spot-weights FILE  One optimization weight per concatenated spot\n"
                  "  --histories N        With weights: total plan histories; otherwise per spot\n"
-                 "  --random-seed N      Override the configured reproducible RNG seed\n"
+                 "  --random-seed N|auto Override the configured RNG seed\n"
                  "  --physics-profile P  fast (maximum throughput) or best (maximum accuracy)\n"
                  "  --ct-grid FILE       Override the configured CCTG patient grid\n"
                  "  --ct-stopping-power-scale X  Override the CT mass stopping-power scale\n"
@@ -102,7 +102,7 @@ std::vector<double> voxel_dose_Gy_per_MeV(const carbon::TransportConfig& config)
     constexpr double MeV_to_joule = 1.602176634e-13;
     const auto count = config.number_of_voxels();
     const auto volume_mm3 = config.voxel_size_x_mm * config.voxel_size_y_mm *
-                            config.depth_bin_width_mm;
+                            config.scorer_spacing_z_mm();
     std::vector<double> density_g_per_cm3(count, config.water_density_g_per_cm3);
     if (config.enable_ct_grid) {
         const auto grid = carbon::CtGrid::from_binary(config.ct_grid_file);
@@ -318,6 +318,65 @@ struct UpstreamAirLossAudit {
     double energy_loss_MeV{0.0};
 };
 
+carbon::SpotSourcePose transform_topas_pose_to_fixed_patient_lps(
+    const carbon::SpotSourcePose& world_pose,
+    const carbon::TransportConfig& config) {
+    constexpr double kPi = 3.14159265358979323846;
+    const auto angle = config.tps_gantry_angle_deg * kPi / 180.0;
+    const auto c = std::cos(angle);
+    const auto s = std::sin(angle);
+    const auto rotate = [c, s](const double x, const double y, const double z) {
+        return std::array<double, 3>{c * x - s * y, s * x + c * y, z};
+    };
+    const auto origin = rotate(
+        world_pose.origin_x_mm - config.spots_patient_trans_x_mm,
+        world_pose.origin_y_mm - config.spots_patient_trans_y_mm,
+        world_pose.origin_z_mm - config.spots_patient_trans_z_mm);
+    const auto ux = rotate(world_pose.ux_x, world_pose.ux_y, world_pose.ux_z);
+    const auto uy = rotate(world_pose.uy_x, world_pose.uy_y, world_pose.uy_z);
+    const auto uz = rotate(world_pose.uz_x, world_pose.uz_y, world_pose.uz_z);
+    // TOPAS TsDicomPatient local coordinates are centered on the CT volume.
+    // CCTG stores slices from z=0 internally, so shift patient Z by half the
+    // native superior-inferior extent without permuting the voxel array.
+    const auto patient_z_low_edge_mm = -0.5 * config.phantom_length_mm;
+    return carbon::SpotSourcePose{
+        origin[0], origin[1], origin[2] - patient_z_low_edge_mm,
+        ux[0], ux[1], ux[2], uy[0], uy[1], uy[2], uz[0], uz[1], uz[2]};
+}
+
+double distance_to_patient_ct_entry(const carbon::SpotSourcePose& pose,
+                                    const carbon::TransportConfig& config) {
+    auto enter = 0.0;
+    auto exit = std::numeric_limits<double>::infinity();
+    const auto intersect = [&](const double position, const double direction,
+                               const double low, const double high) {
+        if (std::abs(direction) < 1.0e-12) {
+            return position >= low && position < high;
+        }
+        auto first = (low - position) / direction;
+        auto second = (high - position) / direction;
+        if (first > second) {
+            std::swap(first, second);
+        }
+        enter = std::max(enter, first);
+        exit = std::min(exit, second);
+        return exit >= enter;
+    };
+    const auto x_max = config.voxel_origin_x_mm +
+                       static_cast<double>(config.voxel_bins_x) *
+                           config.voxel_size_x_mm;
+    const auto y_max = config.voxel_origin_y_mm +
+                       static_cast<double>(config.voxel_bins_y) *
+                           config.voxel_size_y_mm;
+    if (!intersect(pose.origin_x_mm, pose.uz_x, config.voxel_origin_x_mm, x_max) ||
+        !intersect(pose.origin_y_mm, pose.uz_y, config.voxel_origin_y_mm, y_max) ||
+        !intersect(pose.origin_z_mm, pose.uz_z, 0.0, config.phantom_length_mm) ||
+        !std::isfinite(enter)) {
+        throw std::runtime_error("TPS beam does not intersect the native patient CT");
+    }
+    return enter;
+}
+
 void apply_spot_to_config(carbon::TransportConfig& config,
                           const carbon::TopasSpotPlan& plan,
                           const carbon::TopasSpot& spot,
@@ -347,7 +406,36 @@ void apply_spot_to_config(carbon::TransportConfig& config,
         config.emittance_correlation_y = spot.correlation_y;
     }
 
-    if (config.spots_geometry_mode == "beam_plus_z") {
+    if (config.enable_tps_coordinate_system) {
+        auto pose = transform_topas_pose_to_fixed_patient_lps(
+            plan.tps_zero_beam_pose_for_spot(spot), config);
+        const auto distance_to_entrance_mm =
+            distance_to_patient_ct_entry(pose, config);
+        const auto entrance_energy =
+            carbon::spot_entry_total_energy_after_optional_upstream_loss(
+                spot.energy_MeV, config.mass_number, distance_to_entrance_mm,
+                upstream_air_stopping_power);
+        config.initial_energy_MeVu =
+            entrance_energy / static_cast<double>(config.mass_number);
+        if (upstream_air_audit != nullptr) {
+            upstream_air_audit->distance_to_entrance_mm = distance_to_entrance_mm;
+            upstream_air_audit->energy_loss_MeV = spot.energy_MeV - entrance_energy;
+        }
+        // Keep the source at SAD. The SYCL AABB entry path advances each sampled
+        // ray to the fixed patient CT, including emittance divergence.
+        config.source_origin_x_mm = pose.origin_x_mm;
+        config.source_origin_y_mm = pose.origin_y_mm;
+        config.source_origin_z_mm = pose.origin_z_mm;
+        config.beam_ux_x = pose.ux_x;
+        config.beam_ux_y = pose.ux_y;
+        config.beam_ux_z = pose.ux_z;
+        config.beam_uy_x = pose.uy_x;
+        config.beam_uy_y = pose.uy_y;
+        config.beam_uy_z = pose.uy_z;
+        config.beam_uz_x = pose.uz_x;
+        config.beam_uz_y = pose.uz_y;
+        config.beam_uz_z = pose.uz_z;
+    } else if (config.spots_geometry_mode == "beam_plus_z") {
         // Water-IDD convenience: beam along +z from z=0; lateral offsets only.
         config.source_origin_x_mm = spot.trans_x_mm;
         config.source_origin_y_mm = spot.trans_z_mm;
@@ -669,7 +757,7 @@ int main(int argc, char* argv[]) {
                 config.number_of_histories = std::stoull(argv[++index]);
                 histories_cli_override = true;
             } else if (argument == "--random-seed" && index + 1 < argc) {
-                config.random_seed = std::stoull(argv[++index]);
+                config.random_seed = carbon::parse_random_seed(argv[++index]);
             } else if (argument == "--physics-profile" && index + 1 < argc) {
                 config.physics_profile = argv[++index];
             } else if (argument == "--ct-grid" && index + 1 < argc) {
@@ -750,6 +838,7 @@ int main(int argc, char* argv[]) {
                 carbon::ReactionPackageTable::from_binary(config.reaction_package_file);
             std::cout << "Reaction packages: " << reaction_packages->reactions().size()
                       << "; direct secondaries: " << reaction_packages->secondaries().size()
+                      << "; local deposit: Geant4 package"
                       << '\n';
         }
         if (config.enable_fragment_cascade) {
@@ -757,7 +846,9 @@ int main(int argc, char* argv[]) {
                 carbon::CascadePackageTable::from_binary(config.cascade_package_file);
             std::cout << "Cascade projectiles: " << cascade_packages->projectiles().size()
                       << "; interactions: " << cascade_packages->interactions().size()
-                      << "; products: " << cascade_packages->products().size() << '\n';
+                      << "; products: " << cascade_packages->products().size()
+                      << "; local deposit: Geant4 package"
+                      << '\n';
         }
         if (config.enable_neutral_transport) {
             neutral_packages =
@@ -791,6 +882,7 @@ int main(int argc, char* argv[]) {
 
         carbon::TransportResult result;
         const auto base_seed = config.random_seed;
+        std::cout << "Random seed: " << base_seed << '\n';
 
         if (config.enable_tps_source) {
             if (config.device == "serial") {
@@ -804,6 +896,19 @@ int main(int argc, char* argv[]) {
             }
             const auto plan = carbon::TpsSourcePlan::from_config(config);
             const auto batch = plan.make_primary_batch(config);
+            if (config.enable_ct_grid) {
+                const auto patient_ct =
+                    carbon::CtGrid::from_binary(config.ct_grid_file);
+                std::cout << "Patient CT (fixed DICOM LPS): DimSize="
+                          << patient_ct.nx << "x" << patient_ct.ny << "x"
+                          << patient_ct.nz << " spacing="
+                          << patient_ct.spacing_x_mm << "x"
+                          << patient_ct.spacing_y_mm << "x"
+                          << patient_ct.spacing_z_mm << " mm origin=("
+                          << patient_ct.origin_x_mm << ","
+                          << patient_ct.origin_y_mm << ","
+                          << patient_ct.origin_z_mm << ") mm\n";
+            }
             std::cout << "TPS source: "
                       << (config.tps_spots_file.empty()
                               ? std::string{"single YAML spot"}
@@ -812,13 +917,18 @@ int main(int argc, char* argv[]) {
                       << "  spots: " << batch.size() << "/" << plan.spots.size()
                       << " active; total histories: " << config.number_of_histories
                       << "; total MU: " << plan.total_mu << '\n'
-                      << "  gantry/couch/collimator: "
+                      << "  beam/couch/collimator angle: "
                       << config.tps_gantry_angle_deg << "/"
                       << config.tps_couch_angle_deg << "/"
                       << config.tps_collimator_angle_deg << " deg; SAD: "
                       << config.tps_sad_mm << " mm; patient: "
-                      << config.tps_patient_position << "; convention: "
-                      << config.tps_angle_convention << '\n';
+                      << config.tps_patient_position << "; coordinates: "
+                      << config.tps_angle_convention;
+            if (config.tps_angle_convention == "dicom_lps" ||
+                config.tps_angle_convention == "topas_patient_rot_z") {
+                std::cout << " (+X left, +Y posterior, +Z superior; CT fixed)";
+            }
+            std::cout << '\n';
             if (plan_only) {
                 double min_x = std::numeric_limits<double>::infinity();
                 double max_x = -min_x;
@@ -900,6 +1010,19 @@ int main(int argc, char* argv[]) {
                 config.voxel_dose_Gy_output_file.clear();
             }
             const auto total_histories = plan.total_histories();
+            if (config.enable_tps_coordinate_system) {
+                const auto patient_ct =
+                    carbon::CtGrid::from_binary(config.ct_grid_file);
+                std::cout << "Patient CT (fixed DICOM LPS): DimSize="
+                          << patient_ct.nx << "x" << patient_ct.ny << "x"
+                          << patient_ct.nz << " spacing="
+                          << patient_ct.spacing_x_mm << "x"
+                          << patient_ct.spacing_y_mm << "x"
+                          << patient_ct.spacing_z_mm << " mm origin=("
+                          << patient_ct.origin_x_mm << ","
+                          << patient_ct.origin_y_mm << ","
+                          << patient_ct.origin_z_mm << ") mm\n";
+            }
             std::cout << "TOPAS spots plan files:";
             for (const auto& path : spots_files) {
                 std::cout << ' ' << path.string();
@@ -907,7 +1030,10 @@ int main(int argc, char* argv[]) {
             std::cout << '\n'
                       << "  spots: " << plan.spots.size()
                       << "  total histories: " << total_histories
-                      << "  geometry: " << config.spots_geometry_mode
+                      << "  geometry: "
+                      << (config.enable_tps_coordinate_system
+                              ? "fixed DICOM LPS patient CT"
+                              : config.spots_geometry_mode)
                       << "  SAD: " << plan.sad_mm << " mm\n"
                       << "  (history ranges preserve file order; no TimeFeature timeline)\n";
             if (upstream_air_stopping_power_ptr != nullptr) {
@@ -931,7 +1057,10 @@ int main(int argc, char* argv[]) {
                 double max_entry_x = -min_entry_x;
                 double min_entry_y = min_entry_x;
                 double max_entry_y = -min_entry_x;
-                double min_direction_z = min_entry_x;
+                double min_entry_z = min_entry_x;
+                double max_entry_z = -min_entry_x;
+                std::array<double, 3> first_direction{};
+                auto has_direction = false;
                 double min_air_path = std::numeric_limits<double>::infinity();
                 double max_air_path = -min_air_path;
                 double min_air_loss = min_air_path;
@@ -950,7 +1079,14 @@ int main(int argc, char* argv[]) {
                     max_entry_x = std::max(max_entry_x, transformed.source_origin_x_mm);
                     min_entry_y = std::min(min_entry_y, transformed.source_origin_y_mm);
                     max_entry_y = std::max(max_entry_y, transformed.source_origin_y_mm);
-                    min_direction_z = std::min(min_direction_z, transformed.beam_uz_z);
+                    min_entry_z = std::min(min_entry_z, transformed.source_origin_z_mm);
+                    max_entry_z = std::max(max_entry_z, transformed.source_origin_z_mm);
+                    if (!has_direction) {
+                        first_direction = {transformed.beam_uz_x,
+                                           transformed.beam_uz_y,
+                                           transformed.beam_uz_z};
+                        has_direction = true;
+                    }
                     if (upstream_air_stopping_power_ptr != nullptr) {
                         min_air_path = std::min(min_air_path, air_audit.distance_to_entrance_mm);
                         max_air_path = std::max(max_air_path, air_audit.distance_to_entrance_mm);
@@ -960,10 +1096,14 @@ int main(int argc, char* argv[]) {
                 }
                 std::cout << "  plan-only validation passed; histories/active spot min="
                           << min_histories << " max=" << max_histories << '\n'
-                          << "  CT entrance means: x=[" << min_entry_x << ", "
+                          << "  source bounds in patient coordinates: x=["
+                          << min_entry_x << ", "
                           << max_entry_x << "] mm y=[" << min_entry_y << ", "
-                          << max_entry_y << "] mm; min beam dz=" << min_direction_z
-                          << '\n';
+                          << max_entry_y << "] mm z=[" << min_entry_z << ", "
+                          << max_entry_z << "] mm\n"
+                          << "  first propagation direction: ("
+                          << first_direction[0] << ", " << first_direction[1]
+                          << ", " << first_direction[2] << ")\n";
                 if (upstream_air_stopping_power_ptr != nullptr) {
                     std::cout << "  upstream air path=[" << min_air_path << ", "
                               << max_air_path << "] mm; total C-12 loss=["
@@ -1132,6 +1272,11 @@ int main(int argc, char* argv[]) {
             !config.charged_origin_voxel_dose_Gy_output_file.empty()) {
             carbon::write_sparse_charged_origin_voxel_dose_Gy_csv(
                 config.charged_origin_voxel_dose_Gy_output_file, config, result);
+        }
+        if (config.enable_charged_origin_voxel_scoring &&
+            !config.charged_origin_voxel_mhd_output_prefix.empty()) {
+            carbon::write_dense_charged_origin_voxel_dose_mhd(
+                config.charged_origin_voxel_mhd_output_prefix, config, result);
         }
         const auto histories_per_second =
             result.elapsed_seconds > 0.0 ? static_cast<double>(config.number_of_histories) /
@@ -1425,6 +1570,11 @@ int main(int argc, char* argv[]) {
             if (!config.charged_origin_voxel_dose_Gy_output_file.empty()) {
                 std::cout << "Charged-origin dose scorer (Gy): "
                           << config.charged_origin_voxel_dose_Gy_output_file.string()
+                          << '\n';
+            }
+            if (!config.charged_origin_voxel_mhd_output_prefix.empty()) {
+                std::cout << "Charged-origin voxel dose MHD prefix: "
+                          << config.charged_origin_voxel_mhd_output_prefix.string()
                           << '\n';
             }
         }

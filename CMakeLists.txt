@@ -13,7 +13,14 @@ option(CARBON_ENABLE_TRANSPORT_PROFILE
        "Enable low-overhead SYCL step-path profiling counters"
        OFF)
 # FP32 dose atomics: much faster on consumer NVIDIA GPUs (weak FP64).
-option(CARBON_DOSE_FP32 "Use FP32 SYCL dose scorers/atomics" OFF)
+# FP32 dose atomics default ON; enable FP64 only when CARBON_DOSE_FP64=ON is explicitly specified.
+option(CARBON_DOSE_FP32 "Use FP32 SYCL dose scorers/atomics" ON)
+option(CARBON_DOSE_FP64 "Use FP64 SYCL dose scorers/atomics" OFF)
+option(CARBON_LET_FP64 "Use FP64 SYCL LET scorers/atomics" OFF)
+
+if(CARBON_DOSE_FP64)
+    set(CARBON_DOSE_FP32 OFF CACHE BOOL "Use FP32 SYCL dose scorers/atomics" FORCE)
+endif()
 # Copper minibeam beamline. Default OFF keeps the legacy CT/water/LET kernel.
 option(CARBON_ENABLE_MINIBEAM "Build Copper minibeam transport support" OFF)
 
@@ -58,6 +65,13 @@ if(CARBON_DOSE_FP32)
     message(STATUS "CARBON_DOSE_FP32=ON")
 else()
     message(STATUS "CARBON_DOSE_FP32=OFF")
+endif()
+
+if(CARBON_LET_FP64)
+    target_compile_definitions(carbon_core PUBLIC CARBON_LET_FP64=1)
+    message(STATUS "CARBON_LET_FP64=ON")
+else()
+    message(STATUS "CARBON_LET_FP64=OFF (FP32 LET atomics)")
 endif()
 
 if(CARBON_ENABLE_MINIBEAM)
@@ -125,8 +139,8 @@ target_link_libraries(carbon_mc PRIVATE carbon_core)
 
 if(BUILD_TESTING)
     set(CARBON_TEST_PACKAGE_FILES
-        "${CMAKE_CURRENT_SOURCE_DIR}/data/packages/topas_400MeVu_cascade_g4_11_3_2_aligned_primary_3d.bin"
-        "${CMAKE_CURRENT_SOURCE_DIR}/data/packages/topas_400MeVu_cascade_g4_11_3_2_100k_3d.bin")
+        "${CMAKE_CURRENT_SOURCE_DIR}/data/packages/topas_400MeVu_water_100k_primary_3d.bin"
+        "${CMAKE_CURRENT_SOURCE_DIR}/data/packages/topas_400MeVu_water_100k_cascade_3d.bin")
     foreach(package_file IN LISTS CARBON_TEST_PACKAGE_FILES)
         if(NOT EXISTS "${package_file}")
             message(FATAL_ERROR

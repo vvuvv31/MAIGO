@@ -1,0 +1,43 @@
+{
+  "format": "carbon reaction package binary",
+  "format_version": 1,
+  "byte_order": "little-endian",
+  "direction_coordinates": "projectile-local orthonormal frame",
+  "direction_components": [
+    "local_x",
+    "local_y",
+    "along_projectile"
+  ],
+  "local_deposit": "Geant4 G4Step::GetTotalEnergyDeposit, scaled with package energy",
+  "source_metadata": "/home/v/maigo_package_v1_20260814/data/packages_localdep/topas_400MeVu_water_inclxx_100k_primary.metadata.json",
+  "source_metadata_sha256": "d5ed66e9380cab8c08bc316cd00cba6a7c6ad3e96781c931f10b4dbcd52ef85b",
+  "source_runtime": {
+    "topas_version": "4.2.p3",
+    "geant4_version": "geant4-11-03-patch-02",
+    "runtime_reference_metadata": "/home/v/maigo_package_v1_20260814/data/packages_localdep/topas_400MeVu_water_inclxx_100k.metadata.json"
+  },
+  "source_reactions_sha256": "b2856d0b8b03d580cce362d8e8bb4bbc3f84e63205fe78559ff68372f2bb9ef4",
+  "source_secondaries_sha256": "9ca7f196aaed31923d7306435ad8f8e74c18936dc022ea0144259c9a69a3fb05",
+  "energy_bins": {
+    "minimum_MeV_per_u": 0.0,
+    "width_MeV_per_u": 4.0,
+    "count": 101,
+    "minimum_packages_per_bin": 24,
+    "maximum_packages_per_bin": 1980
+  },
+  "records": {
+    "reactions": 73871,
+    "secondaries": 760939
+  },
+  "record_sizes_bytes": {
+    "header": 64,
+    "energy_bin": 8,
+    "reaction": 20,
+    "secondary": 24
+  },
+  "output": {
+    "path": "data/packages/topas_400MeVu_water_100k_primary_3d.bin",
+    "bytes": 19740828,
+    "sha256": "36dec3757e4210ad6efa656cf35cf02b3c81d5f996c787c1c8e5433fa03a5615"
+  }
+}

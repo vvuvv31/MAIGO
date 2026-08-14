@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace carbon {
@@ -86,11 +87,17 @@ struct TransportConfig {
     // for legacy/minibeam configurations that omit a public profile.
     std::string physics_profile{"accurate"};
     std::size_t number_of_histories{10'000};
+    // Fallback for single-beam runs. topas_spots_file(s) and tps_spots_file
+    // supply per-spot energy and therefore do not require this value in YAML.
     double initial_energy_MeVu{200.0};
     // Relative RMS beam energy spread (TOPAS BeamEnergySpread percent / 100).
     // 0.01 = 1% → sample E ~ N(E0, (0.01*E0)^2) at primary birth.
     double beam_energy_spread{0.0};
+    // The current transport and physics packages model carbon-12.
     int mass_number{12};
+    // Legacy water-phantom names for the transport/scorer z extent. In a CT
+    // run load_config() derives both from voxel_bins_z/voxel_size_z_mm, which
+    // in turn default to the native patient CT header.
     double phantom_length_mm{400.0};
     double depth_bin_width_mm{0.5};
     double maximum_step_mm{0.5};
@@ -111,6 +118,8 @@ struct TransportConfig {
     // over several depth bins while continuous dose is split back into the
     // original bins by track length.
     double secondary_condensed_step_mm{0.0};
+    // Uniform-water density and CT-outside fallback; CT voxels use their own
+    // material density from CCTG.
     double water_density_g_per_cm3{1.0};
     // When true, axial slabs override uniform water.
     // Density-only mode: SP/XS water tables × local density (water-equivalent).
@@ -150,6 +159,14 @@ struct TransportConfig {
     // Optional energy-dependent mass XS for every Schneider section. When set
     // on a CCTG v2/v3 grid, this supersedes the legacy four-class XS tables.
     std::filesystem::path ct_schneider_cross_section_file{};
+    // Optional TOPAS-derived, section-by-energy mass stopping-power LUT for CT
+    // mode. An explicitly configured LUT takes precedence over density-SPR.
+    std::filesystem::path ct_hu_stopping_power_lut_file{};
+    // moquimc-style continuous mass SPR(rho, E) for CT ionization and LET.
+    // When true and no HU LUT is configured, voxel density selects the
+    // water-relative electronic mass SPR instead of the analytic
+    // Schneider-section Bethe factor.
+    bool ct_use_density_mass_spr{true};
     // Optional material-conditioned primary C-12 correlated final states.
     // Empty paths preserve the production water package for every CT voxel.
     // Each package is selected only for reactions occurring in the
@@ -177,17 +194,15 @@ struct TransportConfig {
     std::filesystem::path ct_lung_cascade_package_file{};
     std::filesystem::path ct_soft_tissue_cascade_package_file{};
     std::filesystem::path ct_bone_cascade_package_file{};
-    // Optional short-range redistribution of nuclear residual heat that is
-    // otherwise deposited at the interaction point (Q-value / missing product
-    // KE). 0 preserves the historical point deposit. A positive value is the
-    // exponential MFP along the projectile direction used as a residual-nucleus
-    // transport proxy. This does not invent new particles.
+    // Optional short-range redistribution of reaction-local heat. The required
+    // reaction/cascade v1 format carries the Geant4 step-local deposit.
+    // 0 preserves a point deposit. A positive value uses an exponential MFP
+    // along the projectile direction as a residual-nucleus transport proxy.
     double nuclear_residual_heat_mfp_mm{0.0};
-    // Multiplier on nuclear residual heat scored into the dose field after a
-    // reaction (parent KE not accounted in sampled products). 1.0 is historical
-    // full local residual. Values in (0, 1) reduce entrance-local nuclear heat
-    // without changing package kinematics; 0 disables residual heat scoring.
-    // Does not apply to continuous ionization loss or queued secondaries.
+    // Multiplier on package reaction-local heat. 1.0 preserves the TOPAS value
+    // for current packages; 0 disables this local term. It does not affect
+    // continuous ionization or
+    // queued-secondary kinetic energy.
     double nuclear_residual_heat_scale{1.0};
     // Blend light-ion (Z<=2) reaction/cascade birth directions toward the
     // projectile axis: dir = normalize((1-f)*package_dir + f*projectile_dir).
@@ -209,10 +224,18 @@ struct TransportConfig {
     // Disable to keep scoring resolution from changing MCS/transport; energy
     // is then assigned to the voxel containing the step start.
     bool voxel_scorer_clamps_transport{true};
+    // Dense scorer geometry in patient coordinates. X-Y is the axial plane;
+    // Z is the inferior-superior slice direction. For CT runs these values are
+    // read from the CCTG header unless explicitly supplied for compatibility.
     std::size_t voxel_bins_x{60};
     std::size_t voxel_bins_y{60};
+    std::size_t voxel_bins_z{0};
+    double voxel_origin_x_mm{0.0};
+    double voxel_origin_y_mm{0.0};
+    double voxel_origin_z_mm{0.0};
     double voxel_size_x_mm{5.0};
     double voxel_size_y_mm{5.0};
+    double voxel_size_z_mm{0.0};
     bool enable_energy_straggling{false};
     // Historical validation applied straggling only to primary C-12.
     // Enable this separately to apply Bohr straggling to charged fragments.
@@ -363,6 +386,8 @@ struct TransportConfig {
     // "topas": legacy full BeamPosition2 pose (Rx,Ry + SAD).
     // "beam_plus_z": water-IDD convenience — force +z beam at z=0 with lateral
     //   offsets (TransX,TransZ) as (x,y); ignores gantry for depth scoring.
+    // The modes below are legacy beam-repacked-CT adapters. New clinical CT
+    // configurations should use tpsSource with a native patient-coordinate CT.
     // "tps_90": TPS 90-degree incidence. Spot rotations establish the fixed
     //   TPS 0-degree source direction, while Patient RotZ=90 supplies the plan
     //   angle. The transform maps either patient-X travel direction to GPU +Z;
@@ -406,19 +431,23 @@ struct TransportConfig {
     // modes, is disabled by default, and currently omits air MCS/straggling.
     bool spots_enable_upstream_air_energy_loss{false};
     std::filesystem::path spots_upstream_air_stopping_power_file{};
-    // Optional clinical TPS source. Disabled by default so all existing
-    // TOPAS/CT examples retain their exact source construction and RNG path.
-    // YAML accepts both `tpsSource` (public switch) and `tps_source`.
+    // Keep all clinical geometry in the fixed DICOM LPS patient frame. This is
+    // independent of the spot input format (TOPAS TimeFeature or TPS CSV).
+    bool enable_tps_coordinate_system{false};
+    // TPS CSV source switch. tpsSource/tps_source are legacy YAML aliases.
     bool enable_tps_source{false};
     // Optional CSV columns: spot_id,energy_MeVu,x_mm,y_mm,mu_weight plus
     // energy_spread_percent and emittance parameters. Empty => one central
     // spot using initial_energy_MeVu and the source defaults above.
     std::filesystem::path tps_spots_file{};
-    // "iec61217": historical MAIGO convention, local w=-Z and gantry about +Y.
-    // "topas_patient_rot_z": matches the CT-plan convention used in this repo:
-    // TPS 0 deg is patient +Y and angle theta gives
-    // w=(-sin(theta), cos(theta), 0), equivalent to passive Patient/RotZ.
+    // Source coordinates are DICOM LPS: +X patient-left, +Y posterior, +Z
+    // superior. "dicom_lps" keeps the CT fixed, defines TPS 0 deg as +Y, and
+    // rotates the beam frame about +Z: w=(-sin(theta), cos(theta), 0).
+    // "topas_patient_rot_z" is accepted as a deprecated alias. "iec61217" is
+    // retained for legacy water-phantom configurations.
     std::string tps_angle_convention{"iec61217"};
+    // Public YAML name: tps_beam_angle_deg. This is the in-plane beam angle
+    // about patient +Z for dicom_lps; tps_gantry_angle_deg is a legacy alias.
     double tps_gantry_angle_deg{0.0};
     double tps_couch_angle_deg{0.0};
     double tps_collimator_angle_deg{0.0};
@@ -540,9 +569,9 @@ struct TransportConfig {
     std::filesystem::path nuclear_cross_section_file{
         "data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv"};
     std::filesystem::path reaction_package_file{
-        "data/packages/topas_400MeVu_cascade_g4_11_3_2_aligned_primary_3d.bin"};
+        "data/packages/topas_400MeVu_water_100k_primary_3d.bin"};
     std::filesystem::path cascade_package_file{
-        "data/packages/topas_400MeVu_cascade_g4_11_3_2_100k_3d.bin"};
+        "data/packages/topas_400MeVu_water_100k_cascade_3d.bin"};
     std::filesystem::path neutral_package_file{
         "data/packages/topas_200MeVu_neutral_development.bin"};
     // MeV energy-deposition scorer outputs (absolute MeV → MeV/primary in writers).
@@ -576,6 +605,9 @@ struct TransportConfig {
     std::filesystem::path voxel_dose_Gy_output_file{"out/gpu_voxel_dose_Gy.csv"};
     std::filesystem::path charged_origin_voxel_dose_Gy_output_file{
         "out/gpu_charged_origin_voxel_dose_Gy.csv"};
+    // Optional dense CT dose-to-medium maps for primary C-12 and charged
+    // secondary origin categories. The writer appends _<category>.mhd/raw.
+    std::filesystem::path charged_origin_voxel_mhd_output_prefix{};
     // Dense MetaImage MHD/RAW (total Gy). Empty disables. Skips sparse CSV I/O
     // cost when voxel_dose_Gy_output_file is also empty.
     std::filesystem::path voxel_dose_mhd_output_file{};
@@ -587,9 +619,24 @@ struct TransportConfig {
 
     [[nodiscard]] std::size_t number_of_bins() const;
     [[nodiscard]] std::size_t number_of_voxels() const;
+    [[nodiscard]] double scorer_spacing_z_mm() const noexcept {
+        return voxel_size_z_mm > 0.0 ? voxel_size_z_mm : depth_bin_width_mm;
+    }
+    [[nodiscard]] double effective_secondary_local_deposit_cutoff_MeV()
+        const noexcept {
+        const auto configured = secondary_local_deposit_cutoff_MeV > 0.0
+                                    ? secondary_local_deposit_cutoff_MeV
+                                    : energy_cutoff_MeV;
+        return physics_profile == "fast" ? std::max(configured, 2.0)
+                                         : configured;
+    }
+    [[nodiscard]] bool uses_fixed_patient_coordinates() const noexcept {
+        return enable_tps_coordinate_system || enable_tps_source;
+    }
     void validate() const;
 };
 
 TransportConfig load_config(const std::filesystem::path& path);
+std::uint64_t parse_random_seed(std::string_view value);
 
 }  // namespace carbon

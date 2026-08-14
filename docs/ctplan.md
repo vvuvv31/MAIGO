@@ -230,6 +230,26 @@ u_k = R_gantry(θ) · u_0°(spot_k 的 Rx/Ry 扫描倾角)
 s_k = R_gantry(θ) · s_0°(spot_k 的横向扫描位置)   # 若源随机架转
 ```
 
+使用新的固定患者 CT 接口时，YAML 只需要显式开启 TPS 坐标并给出束流角：
+
+```yaml
+enable_tps_coordinate_system: true
+tps_beam_angle_deg: 37.0
+ct_grid_file: benchmark/ct/20022516/grid/patient_ct.bin
+enable_voxel_scoring: true
+```
+
+该模式固定采用 DICOM LPS 患者坐标：`+X` 指向患者左侧，`+Y` 指向患者
+后方，`+Z` 指向患者头侧。`0 deg` 的束流传播方向为患者 `+Y`；正角绕
+患者 `+Z` 旋转，因此
+`w=(-sin(theta), cos(theta), 0)`。角度只旋转束流的局部 `u/v/w` 基和
+spot 位置，CT voxel 数组、spacing、origin 与材料索引均保持不变。
+
+旧的 `tpsSource`、`tps_gantry_angle_deg` 和
+`tps_angle_convention: topas_patient_rot_z` 仍作为兼容接口。新配置应优先
+使用上面的两个公共参数和 native `patient_ct.bin`，不再生成 angle-specific
+或 beam-repacked CT。
+
 使用 `tps_angle_convention: topas_patient_rot_z` 时符号已经与本文
 TOPAS passive `Patient/RotZ` 约定钉死：
 

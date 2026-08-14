@@ -1,4 +1,5 @@
 output/*
 work/*
+package_tools/__pycache__/
 !output/.gitkeep
 !work/.gitkeep

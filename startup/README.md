@@ -7,6 +7,11 @@
 - `extensions/`：数据库提取所需的 TOPAS scorer 源码。TOPAS 的 CMake 会根据每个 `.cc` 文件第一行的 `Scorer for ...` 自动生成 `TsExtensionManager`，因此这里特意没有放生成的 `TsExtensionManager.cc`。
 - `templates/database_extraction.txt.in`：自包含的水箱/均匀材料参数文件模板。
 - `run_topas_database_extraction.sh`：顺序生成参数文件并运行 TOPAS；默认只做 dry-run，实际计算需要显式加 `--run`。
+- `build_ct_material_packages.sh`：生成 lung/bone/Schneider section-7 的 400 MeV/u INCL++
+  cascade n-tuple，并直接编译 primary reaction 与 charged cascade runtime
+  package；默认 100k histories/material、最多 56 threads，同样默认 dry-run。
+- `package_tools/`：将 TOPAS cascade ASCII n-tuple 校验、拆分并编译成
+  `CRPKG`/`CCAS` binary 的标准库 Python 工具。
 - `output/`、`work/`：运行结果和临时参数文件目录，已加入 git 忽略规则。
 
 ## 首次使用前手动配置
@@ -59,6 +64,22 @@ cmake --build /path/to/topas-build --parallel 8
 ./startup/run_topas_database_extraction.sh --run --species-tables
 ```
 
+CT lung/bone/Schneider section-7 final-state package：
+
+```bash
+./startup/build_ct_material_packages.sh --dry-run
+./startup/build_ct_material_packages.sh --run \
+  --topas-bin /path/to/extension-enabled/topas \
+  --materials schneider_section07,lung,bone \
+  --histories 100000 --threads 56
+```
+
+该 TOPAS binary 必须由 `startup/extensions/` 编译，并使用与 runtime 数据
+一致的 TOPAS 4.2.p3、Geant4 11.3.2 和 `g4ion-inclxx`。raw n-tuple 与中间
+CSV 写入 `startup/work/ct_material_packages/`；最终 reaction/cascade v1
+package 写入 `data/packages/`。当前 v1 把 Geant4 实际 local deposit 写入每个
+interaction，是 CT dose 运行时的必要输入；旧布局不再兼容。
+
 结果位于 `startup/work/e*`，每个 scorer 通常有一对 `.header`/`.phsp` 文件；`startup/output/run_manifest.tsv` 记录能量、材料、history、线程数、退出状态和输出文件。模板使用 ASCII n-tuple，因为级联/材料表包含字符串列；后续可用项目中的解析/编译脚本转换为 GPU lookup package。
 
 ## 默认 scorer
@@ -72,6 +93,6 @@ cmake --build /path/to/topas-build --parallel 8
 - `CarbonCascadeNtuple`：按 parent Z/A、incident energy、相互作用序列记录带电级联末态；
 - `CarbonNeutralNtuple`：中性粒子反应与产生物。
 
-`--species-tables` 另外开启 `IonStoppingPowerNtuple`、`IonCrossSectionNtuple`、`NeutralCrossSectionNtuple`、`IonElasticNtuple` 和 `IonNuclearLETNtuple`。这些表适合提高不同碎片和中性粒子在 GPU 中的条件化精度，但会增加 TOPAS scorer 开销和输出体积。
+`--species-tables` 另外开启 `IonStoppingPowerNtuple`、`IonCrossSectionNtuple` 和 `NeutralCrossSectionNtuple`。这些表用于提高不同碎片和中性粒子在 GPU 中的条件化精度，但会增加 TOPAS scorer 开销和输出体积。
 
 本启动包不包含 `myHadronLET`；LET scorer 是剂量/数据库提取之外的独立扩展，避免把 LET 的输出开关和数据库生成流程耦合在一起。

@@ -15,3 +15,14 @@ inline constexpr bool k_dose_atomic_fp32 = true;
 using DoseAtomicT = double;
 inline constexpr bool k_dose_atomic_fp32 = false;
 #endif
+
+// LET moment accumulation follows the same consumer-GPU-friendly default.
+// Results are promoted to double on the host. Explicit validation builds can
+// retain FP64 accumulation with -DCARBON_LET_FP64=ON.
+#if defined(CARBON_LET_FP64)
+using LetAtomicT = double;
+inline constexpr bool k_let_atomic_fp32 = false;
+#else
+using LetAtomicT = float;
+inline constexpr bool k_let_atomic_fp32 = true;
+#endif

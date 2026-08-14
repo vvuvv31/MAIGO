@@ -1,11 +1,15 @@
 #include "carbon/transport_config.hpp"
+#include "carbon/ct_grid.hpp"
 #include "carbon/straggling.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <cctype>
+#include <chrono>
 #include <cmath>
 #include <fstream>
 #include <limits>
+#include <random>
 #include <sstream>
 #include <stdexcept>
 #include <string_view>
@@ -15,6 +19,29 @@
 
 namespace carbon {
 namespace {
+
+std::uint64_t mix_seed(std::uint64_t value) noexcept {
+    value += 0x9e3779b97f4a7c15ULL;
+    value = (value ^ (value >> 30U)) * 0xbf58476d1ce4e5b9ULL;
+    value = (value ^ (value >> 27U)) * 0x94d049bb133111ebULL;
+    return value ^ (value >> 31U);
+}
+
+std::uint64_t generate_auto_seed() {
+    static std::atomic<std::uint64_t> sequence{0};
+    auto seed = static_cast<std::uint64_t>(
+        std::chrono::high_resolution_clock::now().time_since_epoch().count());
+    seed ^= mix_seed(sequence.fetch_add(1, std::memory_order_relaxed));
+    try {
+        std::random_device entropy;
+        seed ^= static_cast<std::uint64_t>(entropy()) << 32U;
+        seed ^= static_cast<std::uint64_t>(entropy());
+    } catch (const std::exception&) {
+        // The clock and process-local sequence still produce a changing seed
+        // on systems where std::random_device is unavailable.
+    }
+    return mix_seed(seed);
+}
 
 std::string trim(std::string value) {
     const auto not_space = [](unsigned char character) {
@@ -59,6 +86,54 @@ std::unordered_map<std::string, std::string> read_key_values(const std::filesyst
         values[key] = value;
     }
     return values;
+}
+
+std::filesystem::path resolve_input_path_from_config(
+    const std::filesystem::path& configured,
+    const std::filesystem::path& config_path) {
+    if (configured.empty() || configured.is_absolute() ||
+        std::filesystem::exists(configured)) {
+        return configured;
+    }
+    auto directory = std::filesystem::absolute(config_path).parent_path();
+    while (!directory.empty()) {
+        const auto candidate = directory / configured;
+        if (std::filesystem::exists(candidate)) {
+            return candidate;
+        }
+        const auto parent = directory.parent_path();
+        if (parent == directory) {
+            break;
+        }
+        directory = parent;
+    }
+    return configured;
+}
+
+std::filesystem::path scorer_output_path(const std::filesystem::path& config_path,
+                                         const std::string& profile,
+                                         const std::string& name,
+                                         const bool include_extension) {
+    if (name.empty()) {
+        throw std::invalid_argument("Scorer output name must not be empty");
+    }
+    std::filesystem::path output{name};
+    if (output.is_absolute() || output.has_parent_path()) {
+        throw std::invalid_argument(
+            "Scorer output name must be a basename without a directory");
+    }
+    if (include_extension) {
+        if (output.extension().empty()) {
+            output += ".mhd";
+        } else if (output.extension() != ".mhd") {
+            throw std::invalid_argument(
+                "MHD scorer output name must have no extension or use .mhd");
+        }
+    } else if (output.has_extension()) {
+        throw std::invalid_argument(
+            "LET MHD output name is a prefix and must not have an extension");
+    }
+    return config_path.parent_path() / profile / output;
 }
 
 template <typename Number>
@@ -146,6 +221,32 @@ std::vector<std::filesystem::path> parse_path_list(const std::string& text) {
 
 }  // namespace
 
+std::uint64_t parse_random_seed(const std::string_view value) {
+    if (value == "auto") {
+        return generate_auto_seed();
+    }
+    if (value.empty() ||
+        !std::all_of(value.begin(), value.end(), [](const unsigned char character) {
+            return std::isdigit(character) != 0;
+        })) {
+        throw std::runtime_error(
+            "Invalid random_seed: " + std::string(value) +
+            " (expected an unsigned integer or 'auto')");
+    }
+    std::size_t parsed = 0;
+    try {
+        const auto seed = std::stoull(std::string(value), &parsed);
+        if (parsed != value.size()) {
+            throw std::invalid_argument("trailing characters");
+        }
+        return seed;
+    } catch (const std::exception&) {
+        throw std::runtime_error(
+            "Invalid random_seed: " + std::string(value) +
+            " (expected an unsigned integer or 'auto')");
+    }
+}
+
 void validate_slab_layers(const std::vector<SlabLayer>& layers, double phantom_length_mm) {
     if (layers.empty()) {
         throw std::invalid_argument("enable_layered_phantom requires at least one slab layer");
@@ -184,7 +285,9 @@ void validate_hetero_insert(const HeteroInsert& insert, double phantom_length_mm
 }
 
 std::size_t TransportConfig::number_of_bins() const {
-    return static_cast<std::size_t>(std::ceil(phantom_length_mm / depth_bin_width_mm));
+    return voxel_bins_z != 0 ? voxel_bins_z
+                             : static_cast<std::size_t>(
+                                   std::ceil(phantom_length_mm / depth_bin_width_mm));
 }
 
 std::size_t TransportConfig::number_of_voxels() const {
@@ -202,13 +305,14 @@ void TransportConfig::validate() const {
     if (physics_profile == "medium") {
         throw std::invalid_argument(
             "physics_profile=medium has been removed; choose physics_profile=fast "
-            "for maximum throughput or physics_profile=best for maximum accuracy");
+            "for maximum throughput, balanced for dose+LET throughput, or best "
+            "for maximum accuracy");
     }
     if (physics_profile != "accurate" && physics_profile != "best" &&
-        physics_profile != "fast") {
+        physics_profile != "balanced" && physics_profile != "fast") {
         throw std::invalid_argument(
-            "physics_profile must be fast or best for conventional CT; omit it "
-            "only for legacy/minibeam compatibility");
+            "physics_profile must be fast, balanced, or best for conventional CT; "
+            "omit it only for legacy/minibeam compatibility");
     }
     if (physics_profile == "best") {
         if (!enable_let_scoring) {
@@ -232,6 +336,33 @@ void TransportConfig::validate() const {
             throw std::invalid_argument(
                 "physics_profile=best requires maximum_step_mm<=0.1, "
                 "maximum_relative_energy_loss<=0.001, and cutoffs<=0.1 MeV");
+        }
+    }
+    if (physics_profile == "balanced") {
+        if (!enable_let_scoring) {
+            throw std::invalid_argument(
+                "physics_profile=balanced requires LET scoring");
+        }
+        if (!use_particle_specific_stopping_power) {
+            throw std::invalid_argument(
+                "physics_profile=balanced requires particle-specific stopping power");
+        }
+        if (!enable_primary_attenuation || !enable_secondary_generation ||
+            !enable_secondary_transport || !enable_fragment_cascade) {
+            throw std::invalid_argument(
+                "physics_profile=balanced requires attenuation, secondary transport, "
+                "and fragment cascade");
+        }
+        if (maximum_step_mm > 0.25 || maximum_relative_energy_loss > 0.0025 ||
+            energy_cutoff_MeV > 0.1 ||
+            (secondary_local_deposit_cutoff_MeV > 0.0 &&
+             secondary_local_deposit_cutoff_MeV > 0.5) ||
+            secondary_condensed_step_mm > 0.5) {
+            throw std::invalid_argument(
+                "physics_profile=balanced requires maximum_step_mm<=0.25, "
+                "maximum_relative_energy_loss<=0.0025, energy_cutoff_MeV<=0.1, "
+                "secondary_local_deposit_cutoff_MeV<=0.5, and "
+                "secondary_condensed_step_mm<=0.5");
         }
     }
     if (physics_profile == "fast") {
@@ -261,8 +392,15 @@ void TransportConfig::validate() const {
     if (number_of_histories == 0) {
         throw std::invalid_argument("number_of_histories must be greater than zero");
     }
-    if (mass_number <= 0 || initial_energy_MeVu <= 0.0) {
-        throw std::invalid_argument("mass_number and initial_energy_MeVu must be positive");
+    if (mass_number <= 0) {
+        throw std::invalid_argument("mass_number must be positive");
+    }
+    const auto energy_comes_from_spot_file =
+        !topas_spots_file.empty() || !topas_spots_files.empty() ||
+        !tps_spots_file.empty();
+    if (!energy_comes_from_spot_file && initial_energy_MeVu <= 0.0) {
+        throw std::invalid_argument(
+            "initial_energy_MeVu must be positive when no spot file supplies energy");
     }
     if (beam_energy_spread < 0.0 || beam_energy_spread > 0.2) {
         throw std::invalid_argument("beam_energy_spread must be in [0, 0.2] (relative RMS)");
@@ -467,9 +605,19 @@ void TransportConfig::validate() const {
     }
     if (enable_voxel_scoring &&
         (voxel_bins_x == 0 || voxel_bins_y == 0 || voxel_size_x_mm <= 0.0 ||
-         voxel_size_y_mm <= 0.0)) {
+         voxel_size_y_mm <= 0.0 ||
+         (voxel_bins_z != 0 && voxel_size_z_mm <= 0.0))) {
         throw std::invalid_argument(
-            "Enabled voxel scoring requires positive x/y bin counts and voxel sizes");
+            "Enabled voxel scoring requires positive x/y/z bin counts and voxel sizes");
+    }
+    if (voxel_bins_z != 0) {
+        const auto scorer_z_extent_mm =
+            static_cast<double>(voxel_bins_z) * voxel_size_z_mm;
+        if (std::abs(voxel_size_z_mm - depth_bin_width_mm) > 1.0e-6 ||
+            std::abs(scorer_z_extent_mm - phantom_length_mm) > 1.0e-6) {
+            throw std::invalid_argument(
+                "voxel z geometry must match the legacy phantom z aliases");
+        }
     }
     if (enable_voxel_scoring) {
         static_cast<void>(number_of_voxels());
@@ -477,6 +625,12 @@ void TransportConfig::validate() const {
     if (enable_charged_origin_voxel_scoring && !enable_voxel_scoring) {
         throw std::invalid_argument(
             "enable_charged_origin_voxel_scoring requires enable_voxel_scoring=true");
+    }
+    if (!charged_origin_voxel_mhd_output_prefix.empty() &&
+        !enable_charged_origin_voxel_scoring) {
+        throw std::invalid_argument(
+            "charged_origin_voxel_mhd_output_prefix requires "
+            "enable_charged_origin_voxel_scoring=true");
     }
     if (!let_voxel_mhd_output_file.empty() &&
         (!enable_let_scoring || !enable_voxel_scoring)) {
@@ -839,10 +993,12 @@ void TransportConfig::validate() const {
             throw std::invalid_argument(
                 "tps_patient_position must be HFS, HFP, FFS, or FFP");
         }
-        if (tps_angle_convention != "iec61217" &&
+        if (tps_angle_convention != "dicom_lps" &&
+            tps_angle_convention != "iec61217" &&
             tps_angle_convention != "topas_patient_rot_z") {
             throw std::invalid_argument(
-                "tps_angle_convention must be iec61217 or topas_patient_rot_z");
+                "tps_angle_convention must be dicom_lps (preferred) or "
+                "iec61217; topas_patient_rot_z is a deprecated alias");
         }
         if (tps_particle_type != "carbon") {
             throw std::invalid_argument(
@@ -852,11 +1008,23 @@ void TransportConfig::validate() const {
         throw std::invalid_argument(
             "tps_spots_file is set but tpsSource=false");
     }
+    if (enable_tps_coordinate_system) {
+        if (!enable_ct_grid || !enable_voxel_scoring) {
+            throw std::invalid_argument(
+                "enable_tps_coordinate_system requires CT and voxel scoring");
+        }
+        if (tps_angle_convention != "dicom_lps") {
+            throw std::invalid_argument(
+                "enable_tps_coordinate_system requires DICOM LPS beam geometry");
+        }
+    }
     if (spots_enable_upstream_air_energy_loss) {
-        if (spots_geometry_mode != "tps_90" &&
+        if (!enable_tps_coordinate_system &&
+            spots_geometry_mode != "tps_90" &&
             spots_geometry_mode != "tps_gantry_y") {
             throw std::invalid_argument(
-                "spots_enable_upstream_air_energy_loss requires spots_geometry_mode=tps_90 or tps_gantry_y");
+                "spots_enable_upstream_air_energy_loss requires fixed TPS coordinates "
+                "or a legacy TPS geometry mode");
         }
         if (spots_upstream_air_stopping_power_file.empty()) {
             throw std::invalid_argument(
@@ -1013,6 +1181,11 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.ct_schneider_cross_section_file = parse_path(
         values, "ct_schneider_cross_section_file",
         config.ct_schneider_cross_section_file);
+    config.ct_hu_stopping_power_lut_file = parse_path(
+        values, "ct_hu_stopping_power_lut_file",
+        config.ct_hu_stopping_power_lut_file);
+    config.ct_use_density_mass_spr = parse_bool(
+        values, "ct_use_density_mass_spr", config.ct_use_density_mass_spr);
     config.ct_lung_reaction_package_file = parse_path(
         values, "ct_lung_reaction_package_file",
         config.ct_lung_reaction_package_file);
@@ -1071,10 +1244,83 @@ TransportConfig load_config(const std::filesystem::path& path) {
         config.voxel_scorer_clamps_transport);
     config.voxel_bins_x = parse_number(values, "voxel_bins_x", config.voxel_bins_x);
     config.voxel_bins_y = parse_number(values, "voxel_bins_y", config.voxel_bins_y);
+    config.voxel_bins_z = parse_number(values, "voxel_bins_z", config.voxel_bins_z);
     config.voxel_size_x_mm =
         parse_number(values, "voxel_size_x_mm", config.voxel_size_x_mm);
     config.voxel_size_y_mm =
         parse_number(values, "voxel_size_y_mm", config.voxel_size_y_mm);
+    config.voxel_size_z_mm =
+        parse_number(values, "voxel_size_z_mm", config.voxel_size_z_mm);
+    if (config.enable_ct_grid) {
+        const auto grid = CtGrid::from_binary(
+            resolve_input_path_from_config(config.ct_grid_file, path));
+        const auto close = [](const double left, const double right) {
+            return std::abs(left - right) <=
+                   1.0e-6 * std::max({1.0, std::abs(left), std::abs(right)});
+        };
+        const auto set_or_check_count = [&](const char* key,
+                                            std::size_t& configured,
+                                            const std::size_t from_ct) {
+            if (values.contains(key) && configured != from_ct) {
+                throw std::invalid_argument(
+                    std::string(key) + " does not match the native CT grid header");
+            }
+            configured = from_ct;
+        };
+        const auto set_or_check_spacing = [&](const char* key,
+                                              double& configured,
+                                              const double from_ct) {
+            if (values.contains(key) && !close(configured, from_ct)) {
+                throw std::invalid_argument(
+                    std::string(key) + " does not match the native CT grid header");
+            }
+            configured = from_ct;
+        };
+
+        // A CCTG file owns the patient image geometry. Keeping a second copy in
+        // YAML made the slice axis look like beam depth and allowed the two
+        // descriptions to drift. Explicit values remain accepted as assertions.
+        set_or_check_count("voxel_bins_x", config.voxel_bins_x, grid.nx);
+        set_or_check_count("voxel_bins_y", config.voxel_bins_y, grid.ny);
+        set_or_check_count("voxel_bins_z", config.voxel_bins_z, grid.nz);
+        set_or_check_spacing(
+            "voxel_size_x_mm", config.voxel_size_x_mm, grid.spacing_x_mm);
+        set_or_check_spacing(
+            "voxel_size_y_mm", config.voxel_size_y_mm, grid.spacing_y_mm);
+        set_or_check_spacing(
+            "voxel_size_z_mm", config.voxel_size_z_mm, grid.spacing_z_mm);
+        config.voxel_origin_x_mm = grid.origin_x_mm;
+        config.voxel_origin_y_mm = grid.origin_y_mm;
+        config.voxel_origin_z_mm = grid.origin_z_mm;
+
+        const auto ct_z_extent_mm = static_cast<double>(grid.extent_z_mm());
+        if (values.contains("depth_bin_width_mm") &&
+            !close(config.depth_bin_width_mm, grid.spacing_z_mm)) {
+            throw std::invalid_argument(
+                "depth_bin_width_mm does not match CT spacing_z; use "
+                "voxel_size_z_mm for patient CT geometry");
+        }
+        if (values.contains("phantom_length_mm") &&
+            !close(config.phantom_length_mm, ct_z_extent_mm)) {
+            throw std::invalid_argument(
+                "phantom_length_mm does not match the CT z extent; use "
+                "voxel_bins_z and voxel_size_z_mm for patient CT geometry");
+        }
+        config.depth_bin_width_mm = config.voxel_size_z_mm;
+        config.phantom_length_mm = ct_z_extent_mm;
+    } else {
+        // Homogeneous phantom configurations retain the established z aliases.
+        if (config.voxel_bins_z != 0 &&
+            !values.contains("phantom_length_mm")) {
+            config.phantom_length_mm =
+                static_cast<double>(config.voxel_bins_z) *
+                config.scorer_spacing_z_mm();
+        }
+        if (config.voxel_size_z_mm > 0.0 &&
+            !values.contains("depth_bin_width_mm")) {
+            config.depth_bin_width_mm = config.voxel_size_z_mm;
+        }
+    }
     config.enable_energy_straggling =
         parse_bool(values, "enable_energy_straggling", config.enable_energy_straggling);
     config.enable_secondary_energy_straggling = parse_bool(
@@ -1423,8 +1669,13 @@ TransportConfig load_config(const std::filesystem::path& path) {
         values, "spots_upstream_air_stopping_power_file",
         config.spots_upstream_air_stopping_power_file);
     {
+        const auto public_switch = values.find("enable_tps_coordinate_system");
         const auto camel = values.find("tpsSource");
         const auto snake = values.find("tps_source");
+        if (public_switch != values.end()) {
+            config.enable_tps_coordinate_system = parse_bool(
+                values, "enable_tps_coordinate_system", false);
+        }
         if (camel != values.end() && snake != values.end()) {
             const auto camel_value = parse_bool(values, "tpsSource", false);
             const auto snake_value = parse_bool(values, "tps_source", false);
@@ -1453,9 +1704,31 @@ TransportConfig load_config(const std::filesystem::path& path) {
                                return static_cast<char>(std::tolower(character));
                            });
         }
+        if (it == values.end() && config.enable_tps_coordinate_system) {
+            config.tps_angle_convention = "dicom_lps";
+        }
     }
-    config.tps_gantry_angle_deg = parse_number(
-        values, "tps_gantry_angle_deg", config.tps_gantry_angle_deg);
+    {
+        const auto public_angle = values.find("tps_beam_angle_deg");
+        const auto legacy_angle = values.find("tps_gantry_angle_deg");
+        if (public_angle != values.end() && legacy_angle != values.end()) {
+            const auto angle =
+                parse_number(values, "tps_beam_angle_deg", 0.0);
+            const auto legacy =
+                parse_number(values, "tps_gantry_angle_deg", 0.0);
+            if (std::abs(angle - legacy) > 1.0e-12) {
+                throw std::runtime_error(
+                    "tps_beam_angle_deg conflicts with tps_gantry_angle_deg");
+            }
+            config.tps_gantry_angle_deg = angle;
+        } else if (public_angle != values.end()) {
+            config.tps_gantry_angle_deg =
+                parse_number(values, "tps_beam_angle_deg", 0.0);
+        } else {
+            config.tps_gantry_angle_deg = parse_number(
+                values, "tps_gantry_angle_deg", config.tps_gantry_angle_deg);
+        }
+    }
     config.tps_couch_angle_deg = parse_number(
         values, "tps_couch_angle_deg", config.tps_couch_angle_deg);
     config.tps_collimator_angle_deg = parse_number(
@@ -1516,7 +1789,9 @@ TransportConfig load_config(const std::filesystem::path& path) {
                            });
         }
     }
-    config.random_seed = parse_number(values, "random_seed", config.random_seed);
+    if (const auto seed = values.find("random_seed"); seed != values.end()) {
+        config.random_seed = parse_random_seed(seed->second);
+    }
     config.stopping_power_file = parse_path(values, "stopping_power_file", config.stopping_power_file);
     config.let_delta_electron_fraction_file = parse_path(
         values, "let_delta_electron_fraction_file",
@@ -1645,11 +1920,107 @@ TransportConfig load_config(const std::filesystem::path& path) {
         }
     }
     {
+        const auto it = values.find("charged_origin_voxel_mhd_output_prefix");
+        if (it != values.end()) {
+            config.charged_origin_voxel_mhd_output_prefix =
+                it->second.empty() ? std::filesystem::path{}
+                                   : std::filesystem::path{it->second};
+        }
+    }
+    {
         const auto it = values.find("voxel_dose_mhd_output_file");
         if (it != values.end()) {
             config.voxel_dose_mhd_output_file =
                 it->second.empty() ? std::filesystem::path{}
                                    : std::filesystem::path{it->second};
+        }
+    }
+    {
+        const auto enabled_it = values.find("dose_to_medium");
+        const auto type_it = values.find("dose_to_medium_type");
+        const auto name_it = values.find("dose_to_medium_name");
+        const auto has_public_dose = enabled_it != values.end() ||
+                                     type_it != values.end() ||
+                                     name_it != values.end();
+        if (has_public_dose) {
+            if (values.contains("voxel_dose_mhd_output_file") ||
+                values.contains("voxel_dose_Gy_output_file") ||
+                values.contains("dose_output_file")) {
+                throw std::runtime_error(
+                    "dose_to_medium cannot be combined with legacy dose output paths");
+            }
+            if (enabled_it == values.end()) {
+                throw std::runtime_error(
+                    "dose_to_medium_type/name require dose_to_medium");
+            }
+            const auto enabled = parse_bool(values, "dose_to_medium", false);
+            // The high-level scorer owns the production output set. Suppress
+            // legacy default CSV files so users do not need empty YAML keys.
+            config.output_file.clear();
+            config.fragment_species_output_file.clear();
+            config.fragment_species_dose_output_file.clear();
+            config.voxel_dose_output_file.clear();
+            config.dose_output_file.clear();
+            config.voxel_dose_Gy_output_file.clear();
+            config.voxel_dose_mhd_output_file.clear();
+            if (enabled) {
+                if (!config.enable_voxel_scoring) {
+                    throw std::invalid_argument(
+                        "dose_to_medium requires enable_voxel_scoring=true");
+                }
+                const auto type = type_it != values.end() ? type_it->second : "mhd";
+                if (type != "mhd") {
+                    throw std::invalid_argument(
+                        "dose_to_medium_type currently supports only mhd");
+                }
+                if (name_it == values.end()) {
+                    throw std::runtime_error(
+                        "dose_to_medium=true requires dose_to_medium_name");
+                }
+                config.voxel_dose_mhd_output_file = scorer_output_path(
+                    path, config.physics_profile, name_it->second, true);
+            }
+        }
+    }
+    {
+        const auto enabled_it = values.find("LET");
+        const auto type_it = values.find("LET_type");
+        const auto name_it = values.find("LET_name");
+        const auto has_public_let = enabled_it != values.end() ||
+                                    type_it != values.end() ||
+                                    name_it != values.end();
+        if (has_public_let) {
+            if (values.contains("scorerLET") ||
+                values.contains("enable_let_scoring") ||
+                values.contains("let_voxel_mhd_output_file") ||
+                values.contains("let_output_file")) {
+                throw std::runtime_error(
+                    "LET cannot be combined with legacy LET scorer/output keys");
+            }
+            if (enabled_it == values.end()) {
+                throw std::runtime_error("LET_type/name require LET");
+            }
+            const auto enabled = parse_bool(values, "LET", false);
+            config.enable_let_scoring = enabled;
+            config.let_output_file.clear();
+            config.let_voxel_mhd_output_file.clear();
+            config.fragment_species_let_output_file.clear();
+            config.light_isotope_let_output_file.clear();
+            if (enabled) {
+                if (!config.enable_voxel_scoring) {
+                    throw std::invalid_argument(
+                        "LET requires enable_voxel_scoring=true");
+                }
+                const auto type = type_it != values.end() ? type_it->second : "mhd";
+                if (type != "mhd") {
+                    throw std::invalid_argument("LET_type currently supports only mhd");
+                }
+                if (name_it == values.end()) {
+                    throw std::runtime_error("LET=true requires LET_name");
+                }
+                config.let_voxel_mhd_output_file = scorer_output_path(
+                    path, config.physics_profile, name_it->second, false);
+            }
         }
     }
     const auto device = values.find("device");

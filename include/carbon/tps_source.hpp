@@ -9,6 +9,10 @@
 
 namespace carbon {
 
+// Clinical source geometry is expressed in the same DICOM LPS patient frame
+// as CtGrid: +X left, +Y posterior, +Z superior. The beam has its own local
+// orthonormal frame (u, v, w); w is the propagation direction. Gantry/couch/
+// collimator settings rotate this beam frame while the patient CT stays fixed.
 struct TpsSpot {
     int spot_id{0};
     double energy_MeVu{0.0};
@@ -32,9 +36,10 @@ struct TpsSpot {
 
 struct TpsSourcePose {
     double origin_x_mm{0.0}, origin_y_mm{0.0}, origin_z_mm{0.0};
+    // Local scanning axes u/v and propagation axis w, all in DICOM LPS.
     double ux_x{1.0}, ux_y{0.0}, ux_z{0.0};
-    double uy_x{0.0}, uy_y{1.0}, uy_z{0.0};
-    double uz_x{0.0}, uz_y{0.0}, uz_z{-1.0};
+    double uy_x{0.0}, uy_y{0.0}, uy_z{1.0};
+    double uz_x{0.0}, uz_y{1.0}, uz_z{0.0};
 };
 
 struct TpsSourcePlan {

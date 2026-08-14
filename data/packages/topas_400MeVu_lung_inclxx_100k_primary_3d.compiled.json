@@ -1,0 +1,43 @@
+{
+  "format": "carbon reaction package binary",
+  "format_version": 1,
+  "byte_order": "little-endian",
+  "direction_coordinates": "projectile-local orthonormal frame",
+  "direction_components": [
+    "local_x",
+    "local_y",
+    "along_projectile"
+  ],
+  "local_deposit": "Geant4 G4Step::GetTotalEnergyDeposit, scaled with package energy",
+  "source_metadata": "/home/v/maigo_localdep_packages_20260814/data/packages/topas_400MeVu_lung_inclxx_100k_primary.metadata.json",
+  "source_metadata_sha256": "f956e7a4cdf6df156b387280b7dfff49c0383420475f7c5f766ddecb993d9578",
+  "source_runtime": {
+    "topas_version": "4.2.p3",
+    "geant4_version": "geant4-11-03-patch-02",
+    "runtime_reference_metadata": "/home/v/maigo_localdep_packages_20260814/data/packages/topas_400MeVu_lung_inclxx_100k.metadata.json"
+  },
+  "source_reactions_sha256": "f62056deac8aae37411b54d9cdd2c065bd44a4666307de3895ad1dffbefd4992",
+  "source_secondaries_sha256": "57154126ce5912656dc94a46d02526ba62da0639a2855356afafee1c192999e8",
+  "energy_bins": {
+    "minimum_MeV_per_u": 0.0,
+    "width_MeV_per_u": 4.0,
+    "count": 101,
+    "minimum_packages_per_bin": 30,
+    "maximum_packages_per_bin": 2053
+  },
+  "records": {
+    "reactions": 74006,
+    "secondaries": 767321
+  },
+  "record_sizes_bytes": {
+    "header": 64,
+    "energy_bin": 8,
+    "reaction": 20,
+    "secondary": 24
+  },
+  "output": {
+    "path": "data/packages/topas_400MeVu_lung_inclxx_100k_primary_3d.bin",
+    "bytes": 19896696,
+    "sha256": "8ee604c5cc09545abea6664bac4d0c0607d795b8fe12f02f5844f8e136095247"
+  }
+}

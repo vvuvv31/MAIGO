@@ -264,13 +264,13 @@ void score_secondary_dose_device(
 }
 
 inline void score_letd_moments_device(
-    double* moments,
+    LetAtomicT* moments,
     const std::size_t number_of_bins,
     const std::size_t bin,
-    double* species_moments,
+    LetAtomicT* species_moments,
     const std::size_t species_count,
     const std::size_t species_category,
-    double* isotope_moments,
+    LetAtomicT* isotope_moments,
     const std::size_t isotope_count,
     const std::size_t isotope_category,
     const float local_energy_deposit_MeV,
@@ -284,14 +284,14 @@ inline void score_letd_moments_device(
         return;
     }
     const auto numerator =
-        static_cast<double>(local_energy_deposit_MeV) *
-        static_cast<double>(stopping_power_MeV_per_mm) /
-        static_cast<double>(density_g_per_cm3);
+        static_cast<LetAtomicT>(local_energy_deposit_MeV) *
+        static_cast<LetAtomicT>(stopping_power_MeV_per_mm) /
+        static_cast<LetAtomicT>(density_g_per_cm3);
     const auto denominator =
-        static_cast<double>(total_collisional_loss_MeV);
+        static_cast<LetAtomicT>(total_collisional_loss_MeV);
     const auto accumulate = [&](const std::size_t offset,
-                                const double value) {
-        sycl::atomic_ref<double, sycl::memory_order::relaxed,
+                                const LetAtomicT value) {
+        sycl::atomic_ref<LetAtomicT, sycl::memory_order::relaxed,
                          sycl::memory_scope::device,
                          sycl::access::address_space::global_space>
             atomic_value(moments[offset * number_of_bins + bin]);
@@ -305,11 +305,11 @@ inline void score_letd_moments_device(
     accumulate(3, denominator);
     if (species_moments != nullptr && species_category < species_count) {
         const auto species_accumulate = [&](const std::size_t moment,
-                                            const double value) {
+                                            const LetAtomicT value) {
             const auto offset =
                 (moment * species_count + species_category) * number_of_bins +
                 bin;
-            sycl::atomic_ref<double, sycl::memory_order::relaxed,
+            sycl::atomic_ref<LetAtomicT, sycl::memory_order::relaxed,
                              sycl::memory_scope::device,
                              sycl::access::address_space::global_space>
                 atomic_value(species_moments[offset]);
@@ -320,11 +320,11 @@ inline void score_letd_moments_device(
     }
     if (isotope_moments != nullptr && isotope_category < isotope_count) {
         const auto isotope_accumulate = [&](const std::size_t moment,
-                                            const double value) {
+                                            const LetAtomicT value) {
             const auto offset =
                 (moment * isotope_count + isotope_category) * number_of_bins +
                 bin;
-            sycl::atomic_ref<double, sycl::memory_order::relaxed,
+            sycl::atomic_ref<LetAtomicT, sycl::memory_order::relaxed,
                              sycl::memory_scope::device,
                              sycl::access::address_space::global_space>
                 atomic_value(isotope_moments[offset]);

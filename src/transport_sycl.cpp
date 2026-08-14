@@ -1156,6 +1156,16 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
         }
     }
     const auto enable_let_scoring = config.enable_let_scoring;
+    const auto enable_depth_let_scoring =
+        enable_let_scoring &&
+        (!config.let_output_file.empty() ||
+         !config.fragment_species_let_output_file.empty() ||
+         !config.light_isotope_let_output_file.empty());
+    const auto enable_voxel_let_scoring =
+        enable_let_scoring && enable_voxel_scoring &&
+        !config.let_voxel_mhd_output_file.empty();
+    const auto enable_species_let_scoring =
+        enable_let_scoring && !config.fragment_species_let_output_file.empty();
     const auto enable_light_isotope_let_scoring =
         enable_let_scoring && !config.light_isotope_let_output_file.empty();
     const auto enable_birth_spectrum =
@@ -1246,11 +1256,13 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                 "(rebuild with -DCARBON_DOSE_FP32=ON for float atomics)");
         }
     }
-    if (enable_let_scoring &&
+    if constexpr (!k_let_atomic_fp32) {
+      if (enable_let_scoring &&
         (!device.has(sycl::aspect::fp64) ||
          !device.has(sycl::aspect::atomic64))) {
         throw std::runtime_error(
             "The FP64 LET_d scorer requires fp64 and atomic64 device aspects");
+      }
     }
 
     // CUDA (especially under WSL2) cannot host multi-minute single kernels: the
@@ -1321,17 +1333,19 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
             bytes += particle_species_present_host.size() * sizeof(std::uint8_t);
         }
         bytes += number_of_bins * sizeof(DoseAtomicT);
-        if (enable_let_scoring) {
-            bytes += 4 * number_of_bins * sizeof(double);
+        if (enable_depth_let_scoring) {
+            bytes += 4 * number_of_bins * sizeof(LetAtomicT);
+        }
+        if (enable_species_let_scoring) {
             bytes += 2 * charged_origin_category_count * number_of_bins *
-                     sizeof(double);
-            if (enable_light_isotope_let_scoring) {
-                bytes += 2 * light_isotope_category_count * number_of_bins *
-                         sizeof(double);
-            }
-            if (enable_voxel_scoring) {
-                bytes += 4 * number_of_voxels * sizeof(double);
-            }
+                     sizeof(LetAtomicT);
+        }
+        if (enable_light_isotope_let_scoring) {
+            bytes += 2 * light_isotope_category_count * number_of_bins *
+                     sizeof(LetAtomicT);
+        }
+        if (enable_voxel_let_scoring) {
+            bytes += 4 * number_of_voxels * sizeof(LetAtomicT);
         }
         if (enable_birth_spectrum) {
             bytes += light_isotope_category_count * birth_generation_bin_count *
@@ -1513,21 +1527,21 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
             : nullptr;
     auto* dose_device = sycl::malloc_device<DoseAtomicT>(number_of_bins, queue);
     auto* let_moments_device =
-        enable_let_scoring
-            ? sycl::malloc_device<double>(4 * number_of_bins, queue)
+        enable_depth_let_scoring
+            ? sycl::malloc_device<LetAtomicT>(4 * number_of_bins, queue)
             : nullptr;
     auto* voxel_let_moments_device =
-        enable_let_scoring && enable_voxel_scoring
-            ? sycl::malloc_device<double>(4 * number_of_voxels, queue)
+        enable_voxel_let_scoring
+            ? sycl::malloc_device<LetAtomicT>(4 * number_of_voxels, queue)
             : nullptr;
     auto* species_let_moments_device =
-        enable_let_scoring
-            ? sycl::malloc_device<double>(
+        enable_species_let_scoring
+            ? sycl::malloc_device<LetAtomicT>(
                   2 * charged_origin_category_count * number_of_bins, queue)
             : nullptr;
     auto* isotope_let_moments_device =
         enable_light_isotope_let_scoring
-            ? sycl::malloc_device<double>(
+            ? sycl::malloc_device<LetAtomicT>(
                   2 * light_isotope_category_count * number_of_bins, queue)
             : nullptr;
     const auto birth_gen_size =
@@ -1987,6 +2001,10 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
     // Material SP and nuclear XS are independent: a v3 mass-SP grid can still
     // use composition-specific 4-class nuclear cross sections.
     auto use_ct_mass_sp = false;
+    auto use_ct_density_mass_spr = false;
+    auto ct_mass_spr_log_rho_min = 0.0F;
+    auto ct_mass_spr_inv_dlog = 0.0F;
+    auto ct_density_spr_n_rho = 0U;
     auto use_ct_material_sp = false;
     auto use_ct_material_xs = false;
     auto use_ct_schneider_xs = false;
@@ -2003,7 +2021,7 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
         ct_spacing_x = ct_grid_host.spacing_x_mm;
         ct_spacing_y = ct_grid_host.spacing_y_mm;
         ct_spacing_z = ct_grid_host.spacing_z_mm;
-        if (config.enable_tps_source) {
+        if (config.uses_fixed_patient_coordinates()) {
             // TpsSourcePlan applies the opposite shift to every source origin.
             // This lets arbitrary-angle rays traverse a fixed patient CT while
             // retaining the kernel's long-standing z=[0,L] scorer convention.
@@ -2078,19 +2096,78 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
             const auto lut_count =
                 static_cast<std::size_t>(ct_n_mass_factors) * table_size;
             std::vector<float> mass_factor_lut(lut_count);
-            for (std::uint32_t sec = 0; sec < ct_n_mass_factors; ++sec) {
-                const auto za = za_host[sec];
-                const auto I_eV = I_host[sec];
-                const auto base = static_cast<std::size_t>(sec) * table_size;
-                for (std::size_t i = 0; i < table_size; ++i) {
-                    mass_factor_lut[base + i] =
-                        sp_scale * ct_mass_sp_energy_factor(
-                                       za, I_eV,
-                                       static_cast<float>(
-                                           stopping_power.energies()[i]));
+            const auto load_configured_hu_lut = [&]() {
+                if (config.ct_hu_stopping_power_lut_file.empty()) {
+                    return false;
+                }
+                // Explicit physics input must never fail open: a missing or
+                // malformed LUT would otherwise select a different material
+                // model while leaving the run apparently successful.
+                mass_factor_lut = load_hu_stopping_power_lut(
+                    config.ct_hu_stopping_power_lut_file,
+                    ct_n_mass_factors, table_size, sp_scale);
+                return true;
+            };
+            const auto try_density_spr = [&]() {
+                if (!config.ct_use_density_mass_spr) {
+                    return false;
+                }
+                const auto resolve = [](const std::filesystem::path& configured,
+                                        const char* fallback) {
+                    if (!configured.empty() && std::filesystem::exists(configured)) {
+                        return configured;
+                    }
+                    const std::filesystem::path candidate{fallback};
+                    return std::filesystem::exists(candidate) ? candidate
+                                                              : std::filesystem::path{};
+                };
+                const auto air_path = resolve(
+                    config.ct_air_stopping_power_file,
+                    "data/stopping_power_air_geant4_11_3_2.csv");
+                const auto lung_path = resolve(
+                    config.ct_lung_stopping_power_file,
+                    "data/stopping_power_lung_geant4_11_3_2.csv");
+                const auto bone_path = resolve(
+                    config.ct_bone_stopping_power_file,
+                    "data/stopping_power_bone_geant4_11_3_2.csv");
+                if (air_path.empty() || lung_path.empty() || bone_path.empty()) {
+                    return false;
+                }
+                const auto air_table = StoppingPowerTable::from_csv(air_path);
+                const auto lung_table = StoppingPowerTable::from_csv(lung_path);
+                const auto bone_table = StoppingPowerTable::from_csv(bone_path);
+                const auto density_lut = build_density_mass_spr_lut(
+                    stopping_power, air_table, lung_table, bone_table, sp_scale);
+                if (density_lut.n_rho < 2 ||
+                    density_lut.factors.size() !=
+                        static_cast<std::size_t>(density_lut.n_rho) * table_size) {
+                    return false;
+                }
+                mass_factor_lut = density_lut.factors;
+                ct_density_spr_n_rho = density_lut.n_rho;
+                ct_mass_spr_log_rho_min = density_lut.log_rho_min;
+                ct_mass_spr_inv_dlog = density_lut.inv_dlog;
+                use_ct_density_mass_spr = true;
+                return true;
+            };
+            if (!load_configured_hu_lut()) {
+                if (!try_density_spr()) {
+                    for (std::uint32_t sec = 0; sec < ct_n_mass_factors; ++sec) {
+                        const auto za = za_host[sec];
+                        const auto I_eV = I_host[sec];
+                        const auto base = static_cast<std::size_t>(sec) * table_size;
+                        for (std::size_t i = 0; i < table_size; ++i) {
+                            mass_factor_lut[base + i] =
+                                sp_scale * ct_mass_sp_energy_factor(
+                                               za, I_eV,
+                                               static_cast<float>(
+                                                   stopping_power.energies()[i]));
+                        }
+                    }
                 }
             }
-            ct_mass_sp_factor_lut_device = sycl::malloc_device<float>(lut_count, queue);
+            const auto lut_bytes = mass_factor_lut.size();
+            ct_mass_sp_factor_lut_device = sycl::malloc_device<float>(lut_bytes, queue);
             ct_mass_sp_za_rel_device =
                 sycl::malloc_device<float>(ct_n_mass_factors, queue);
             if (ct_mass_sp_factor_lut_device == nullptr ||
@@ -2103,7 +2180,7 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
             }
             queue
                 .memcpy(ct_mass_sp_factor_lut_device, mass_factor_lut.data(),
-                        sizeof(float) * lut_count)
+                        sizeof(float) * lut_bytes)
                 .wait_and_throw();
             queue
                 .memcpy(ct_mass_sp_za_rel_device, za_host.data(),
@@ -2285,10 +2362,10 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
          (particle_sp_ratio_device == nullptr ||
           particle_delta_fraction_device == nullptr ||
           particle_species_present_device == nullptr)) ||
-        (enable_let_scoring && let_moments_device == nullptr) ||
-        (enable_let_scoring && enable_voxel_scoring &&
+        (enable_depth_let_scoring && let_moments_device == nullptr) ||
+        (enable_voxel_let_scoring &&
          voxel_let_moments_device == nullptr) ||
-        (enable_let_scoring && species_let_moments_device == nullptr) ||
+        (enable_species_let_scoring && species_let_moments_device == nullptr) ||
         (enable_light_isotope_let_scoring &&
          isotope_let_moments_device == nullptr) ||
         (enable_birth_spectrum &&
@@ -2451,23 +2528,25 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                   << std::flush;
     }
     queue.memset(dose_device, 0, number_of_bins * sizeof(DoseAtomicT));
-    if (enable_let_scoring) {
+    if (enable_depth_let_scoring) {
         queue.memset(let_moments_device, 0,
-                     4 * number_of_bins * sizeof(double));
-        if (enable_voxel_scoring) {
-            queue.memset(voxel_let_moments_device, 0,
-                         4 * number_of_voxels * sizeof(double));
-        }
+                     4 * number_of_bins * sizeof(LetAtomicT));
+    }
+    if (enable_voxel_let_scoring) {
+        queue.memset(voxel_let_moments_device, 0,
+                     4 * number_of_voxels * sizeof(LetAtomicT));
+    }
+    if (enable_species_let_scoring) {
         queue.memset(
             species_let_moments_device, 0,
             2 * charged_origin_category_count * number_of_bins *
-                sizeof(double));
-        if (enable_light_isotope_let_scoring) {
-            queue.memset(
-                isotope_let_moments_device, 0,
-                2 * light_isotope_category_count * number_of_bins *
-                    sizeof(double));
-        }
+                sizeof(LetAtomicT));
+    }
+    if (enable_light_isotope_let_scoring) {
+        queue.memset(
+            isotope_let_moments_device, 0,
+            2 * light_isotope_category_count * number_of_bins *
+                sizeof(LetAtomicT));
     }
     if (enable_birth_spectrum) {
         queue.memset(birth_counts_device, 0,
@@ -2823,6 +2902,7 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
               << (enable_secondary_energy_sorting ? "on" : "off")
               << (is_cuda_backend ? " [CUDA]" : "")
               << (k_dose_atomic_fp32 ? " dose_atomic=fp32" : " dose_atomic=fp64")
+              << (k_let_atomic_fp32 ? " let_atomic=fp32" : " let_atomic=fp64")
               << '\n'
               << std::flush;
     const auto initial_energy_MeV = static_cast<float>(config.initial_total_energy_MeV());
@@ -2834,9 +2914,7 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
         static_cast<float>(config.maximum_relative_energy_loss);
     const auto energy_cutoff_MeV = static_cast<float>(config.energy_cutoff_MeV);
     const auto secondary_local_deposit_cutoff_MeV = static_cast<float>(
-        config.secondary_local_deposit_cutoff_MeV > 0.0
-            ? config.secondary_local_deposit_cutoff_MeV
-            : config.energy_cutoff_MeV);
+        config.effective_secondary_local_deposit_cutoff_MeV());
     // 0 = transport all supported charged Z; else Z >= min deposit as local heat.
     const auto secondary_heavy_local_deposit_z_min =
         config.secondary_heavy_local_deposit_z_min;
@@ -2865,7 +2943,7 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
     const auto water_density_g_per_cm3 = static_cast<float>(config.water_density_g_per_cm3);
     const auto enable_multiple_scattering = config.enable_multiple_scattering;
     const auto enable_ct_material_mcs = config.enable_ct_material_mcs;
-    const auto enable_tps_source = config.enable_tps_source;
+    const auto enable_tps_source = config.uses_fixed_patient_coordinates();
     const auto enable_minibeam = config.enable_minibeam;
     const auto enable_minibeam_diagnostics =
         config.enable_minibeam_diagnostics;
@@ -4104,6 +4182,7 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
             int pending_primary_bin = 0;
             double pending_primary_voxel_MeV = 0.0;
             double pending_primary_voxel_delayed_MeV = 0.0;
+            float pending_primary_electronic_mfp_mm = electronic_buildup_mfp_mm;
             std::size_t pending_primary_voxel = 0;
             auto last_primary_stopping_power_MeV_per_mm = 0.0F;
             auto last_primary_density_g_per_cm3 = 0.0F;
@@ -4198,15 +4277,16 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                     if (use_ct_mass_sp && in_ct && ct_mass_sp_factor_lut_device != nullptr &&
                         ct_n_mass_factors > 0) {
                         // Precomputed Schneider mass-SP factor LUT × density (P2).
-                        const auto sec = static_cast<std::uint32_t>(ct_material);
-                        const auto fi =
-                            sec < ct_n_mass_factors ? sec : (ct_n_mass_factors - 1U);
-                        const auto base = static_cast<std::size_t>(fi) * table_size +
-                                          static_cast<std::size_t>(index);
-                        const auto mass_factor =
-                            ct_mass_sp_factor_lut_device[base] +
-                            fraction * (ct_mass_sp_factor_lut_device[base + 1U] -
-                                        ct_mass_sp_factor_lut_device[base]);
+                        const auto mass_factor = ct_lookup_mass_sp_factor(
+                            ct_mass_sp_factor_lut_device,
+                            use_ct_density_mass_spr ? ct_density_spr_n_rho
+                                                    : ct_n_mass_factors,
+                            table_size, use_ct_density_mass_spr,
+                            ct_mass_spr_log_rho_min, ct_mass_spr_inv_dlog,
+                            static_cast<std::uint32_t>(ct_material),
+                            local_density_g_per_cm3,
+                            static_cast<std::size_t>(index), fraction,
+                            [](float x) { return sycl::log(x); });
                         stopping_power_MeV_per_mm = ct_mass_scaled_stopping_power(
                             water_sp, local_density_g_per_cm3, mass_factor);
                         profile_add(profile_counters_device,
@@ -4513,6 +4593,7 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                 const auto local_MeV = deposited_MeV - delayed_MeV;
                 const auto electronic_mfp_mm = electronic_buildup_mfp_at_energy(
                     energy_MeVu, electronic_buildup_mfp_mm);
+                pending_primary_electronic_mfp_mm = electronic_mfp_mm;
                 if (enable_let_scoring) {
                     const auto let_delta_fraction =
                         use_let_delta_fraction_table
@@ -4780,9 +4861,6 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                             auto queueable_energy_MeV = 0.0F;
                             std::uint32_t neutral_queueable_count = 0;
                             auto neutral_queueable_energy_MeV = 0.0F;
-                            // Accounted KE leaves residual; unsupported charged KE is
-                            // absorbed into residual heat (not re-queued).
-                            auto package_accounted_ke_MeV = 0.0F;
                             for (std::uint32_t secondary_index = 0;
                                  secondary_index < reaction.secondary_count;
                                  ++secondary_index) {
@@ -4796,8 +4874,6 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                                     secondary.kinetic_energy_MeV *
                                     reaction_energy_scale;
                                 if (is_neutral) {
-                                    package_accounted_ke_MeV +=
-                                        scaled_secondary_energy_MeV;
                                     if (enable_neutral_transport) {
                                         ++neutral_queueable_count;
                                         neutral_queueable_energy_MeV +=
@@ -4836,8 +4912,6 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                                         }
                                     }
                                 } else if (is_supported) {
-                                    package_accounted_ke_MeV +=
-                                        scaled_secondary_energy_MeV;
                                     const auto heavy_local =
                                         secondary_heavy_local_deposit_z_min > 0 &&
                                         secondary.atomic_number >=
@@ -4883,9 +4957,6 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                                             /*parent_Z=*/6, /*parent_A=*/12, energy_MeV);
                                     }
                                 }
-                                // else: unsupported charged KE stays out of
-                                // package_accounted_ke_MeV → residual local heat (not
-                                // untransported).
                             }
 
                             if (queueable_count > 0) {
@@ -4965,7 +5036,6 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                                     secondary_summary.overflow_count = queueable_count;
                                     secondary_summary.overflow_energy_MeV =
                                         queueable_energy_MeV;
-                                    package_accounted_ke_MeV -= queueable_energy_MeV;
                                 }
                             }
                             if (neutral_queueable_count > 0) {
@@ -5041,10 +5111,8 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                                         neutral_queueable_energy_MeV;
                                 }
                             }
-                            // Residual nucleus / reaction Q / unsupported charged /
-                            // overflow not re-queued: deposit locally (G4 heat approx).
-                            const auto residual_nuclear_MeV = sycl::fmax(
-                                0.0F, energy_MeV - package_accounted_ke_MeV);
+                            const auto residual_nuclear_MeV =
+                                reaction.local_deposit_MeV * reaction_energy_scale;
                             deposit_local_heat_device(
                                 residual_nuclear_MeV, position_x_mm, position_y_mm,
                                 position_z_mm, direction_x, direction_y, direction_z,
@@ -5158,8 +5226,7 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                         target_voxel,
                         static_cast<float>(pending_primary_voxel_MeV),
                         static_cast<float>(pending_primary_voxel_delayed_MeV),
-                        electronic_buildup_mfp_at_energy(
-                            energy_MeVu, electronic_buildup_mfp_mm),
+                        pending_primary_electronic_mfp_mm,
                         electronic_buildup_lateral_sigma_mm,
                         depth_bin_width_mm, number_of_bins,
                         voxel_size_x_mm, voxel_size_y_mm,
@@ -5566,16 +5633,16 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                             if (use_ct_mass_sp && in_ct &&
                                 ct_mass_sp_factor_lut_device != nullptr &&
                                 ct_n_mass_factors > 0) {
-                                const auto sec = static_cast<std::uint32_t>(ct_material);
-                                const auto fi = sec < ct_n_mass_factors
-                                                    ? sec
-                                                    : (ct_n_mass_factors - 1U);
-                                const auto base = static_cast<std::size_t>(fi) * table_size +
-                                                  static_cast<std::size_t>(index);
-                                const auto mass_factor =
-                                    ct_mass_sp_factor_lut_device[base] +
-                                    fraction * (ct_mass_sp_factor_lut_device[base + 1U] -
-                                                ct_mass_sp_factor_lut_device[base]);
+                                const auto mass_factor = ct_lookup_mass_sp_factor(
+                                    ct_mass_sp_factor_lut_device,
+                                    use_ct_density_mass_spr ? ct_density_spr_n_rho
+                                                            : ct_n_mass_factors,
+                                    table_size, use_ct_density_mass_spr,
+                                    ct_mass_spr_log_rho_min, ct_mass_spr_inv_dlog,
+                                    static_cast<std::uint32_t>(ct_material),
+                                    local_density_g_per_cm3,
+                                    static_cast<std::size_t>(index), fraction,
+                                    [](float x) { return sycl::log(x); });
                                 carbon_sp_local = ct_mass_scaled_stopping_power(
                                     carbon_stopping_power_MeV_per_mm,
                                     local_density_g_per_cm3, mass_factor);
@@ -6228,8 +6295,6 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                                     auto queueable_energy = 0.0F;
                                     std::uint32_t neutral_queueable_count = 0;
                                     auto neutral_queueable_energy = 0.0F;
-                                    // Accounted product KE; unsupported → residual heat.
-                                    auto package_accounted_ke_MeV = 0.0F;
                                     for (std::uint32_t product_index = 0;
                                          product_index < interaction.product_count;
                                          ++product_index) {
@@ -6242,7 +6307,6 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                                         const auto supported = product.atomic_number > 0 &&
                                                                product.mass_number > 0;
                                         if (is_neutral) {
-                                            package_accounted_ke_MeV += scaled_energy;
                                             if (enable_neutral_transport) {
                                                 ++neutral_queueable_count;
                                                 neutral_queueable_energy += scaled_energy;
@@ -6283,7 +6347,6 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                                                 }
                                             }
                                         } else if (supported) {
-                                            package_accounted_ke_MeV += scaled_energy;
                                             const auto heavy_local =
                                                 secondary_heavy_local_deposit_z_min > 0 &&
                                                 product.atomic_number >=
@@ -6403,7 +6466,6 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                                             cascade_summary.overflow_count = queueable_count;
                                             cascade_summary.overflow_energy_MeV =
                                                 queueable_energy;
-                                            package_accounted_ke_MeV -= queueable_energy;
                                         }
                                     }
                                     if (neutral_queueable_count > 0) {
@@ -6480,12 +6542,8 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                                                 neutral_queueable_energy;
                                         }
                                     }
-                                    // Cascade residual heat (heavy recoils + unsupported +
-                                    // overflow): was previously zeroed without scoring.
-                                    // Score into the parent fragment species IDD + voxels so
-                                    // charged-origin and voxel↔IDD closures stay consistent.
-                                    const auto residual_cascade_MeV = sycl::fmax(
-                                        0.0F, energy_MeV - package_accounted_ke_MeV);
+                                    const auto residual_cascade_MeV =
+                                        interaction.local_deposit_MeV * energy_scale;
                                     deposit_local_heat_device(
                                         residual_cascade_MeV, position_x_mm, position_y_mm,
                                         position_z_mm, direction_x, direction_y, direction_z,
@@ -7607,10 +7665,10 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
     std::vector<NeutralTransportSummary> neutral_summaries_host;
     std::vector<DoseAtomicT> neutral_origin_dose_atomic_host;
     std::vector<DoseAtomicT> neutral_origin_voxel_dose_atomic_host;
-    std::vector<double> let_moments_host;
-    std::vector<double> voxel_let_moments_host;
-    std::vector<double> species_let_moments_host;
-    std::vector<double> isotope_let_moments_host;
+    std::vector<LetAtomicT> let_moments_host;
+    std::vector<LetAtomicT> voxel_let_moments_host;
+    std::vector<LetAtomicT> species_let_moments_host;
+    std::vector<LetAtomicT> isotope_let_moments_host;
     std::array<std::uint64_t, minibeam_diagnostic_count_size>
         minibeam_diagnostic_counts_host{};
     std::array<double, minibeam_diagnostic_moment_size>
@@ -7627,32 +7685,34 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
             .wait_and_throw();
     }
     queue.copy(dose_device, dose_atomic_host.data(), number_of_bins);
-    if (enable_let_scoring) {
+    if (enable_depth_let_scoring) {
         let_moments_host.resize(4 * number_of_bins);
         queue.copy(let_moments_device, let_moments_host.data(),
                    let_moments_host.size())
             .wait_and_throw();
-        if (enable_voxel_scoring) {
-            voxel_let_moments_host.resize(4 * number_of_voxels);
-            queue.copy(voxel_let_moments_device,
-                       voxel_let_moments_host.data(),
-                       voxel_let_moments_host.size())
-                .wait_and_throw();
-        }
+    }
+    if (enable_voxel_let_scoring) {
+        voxel_let_moments_host.resize(4 * number_of_voxels);
+        queue.copy(voxel_let_moments_device,
+                   voxel_let_moments_host.data(),
+                   voxel_let_moments_host.size())
+            .wait_and_throw();
+    }
+    if (enable_species_let_scoring) {
         species_let_moments_host.resize(
             2 * charged_origin_category_count * number_of_bins);
         queue.copy(species_let_moments_device,
                    species_let_moments_host.data(),
                    species_let_moments_host.size())
             .wait_and_throw();
-        if (enable_light_isotope_let_scoring) {
-            isotope_let_moments_host.resize(
-                2 * light_isotope_category_count * number_of_bins);
-            queue.copy(isotope_let_moments_device,
-                       isotope_let_moments_host.data(),
-                       isotope_let_moments_host.size())
-                .wait_and_throw();
-        }
+    }
+    if (enable_light_isotope_let_scoring) {
+        isotope_let_moments_host.resize(
+            2 * light_isotope_category_count * number_of_bins);
+        queue.copy(isotope_let_moments_device,
+                   isotope_let_moments_host.data(),
+                   isotope_let_moments_host.size())
+            .wait_and_throw();
     }
     std::vector<std::uint64_t> birth_counts_host;
     std::vector<double> birth_ke_sum_host;
@@ -7937,7 +7997,9 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
     }
     if (enable_ct_grid) {
         if (use_ct_mass_sp) {
-            result.backend += "+ct-grid-mass-sp-lut+ct-dda";
+            result.backend += use_ct_density_mass_spr
+                                    ? "+ct-grid-density-spr+ct-dda"
+                                    : "+ct-grid-mass-sp-lut+ct-dda";
         } else if (use_ct_material_sp) {
             result.backend += "+ct-grid-material+ct-dda";
         } else {
@@ -8106,7 +8168,7 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
     result.voxel_deposited_energy_MeV = std::move(voxel_dose_host);
     result.charged_origin_voxel_deposited_energy_MeV =
         std::move(charged_origin_voxel_dose_host);
-    if (enable_let_scoring) {
+    if (enable_depth_let_scoring) {
         const auto extract_let_moment = [&](const std::size_t moment) {
             const auto begin = let_moments_host.begin() +
                                static_cast<std::ptrdiff_t>(moment * number_of_bins);
@@ -8117,6 +8179,8 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
         result.primary_c12_letd_denominator = extract_let_moment(1);
         result.all_hadron_letd_numerator = extract_let_moment(2);
         result.all_hadron_letd_denominator = extract_let_moment(3);
+    }
+    if (enable_species_let_scoring) {
         const auto species_moment_size =
             charged_origin_category_count * number_of_bins;
         result.charged_origin_letd_numerator.assign(
@@ -8127,19 +8191,20 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
             species_let_moments_host.begin() +
                 static_cast<std::ptrdiff_t>(species_moment_size),
             species_let_moments_host.end());
-        if (enable_light_isotope_let_scoring) {
-            const auto isotope_moment_size =
-                light_isotope_category_count * number_of_bins;
-            result.light_isotope_letd_numerator.assign(
-                isotope_let_moments_host.begin(),
-                isotope_let_moments_host.begin() +
-                    static_cast<std::ptrdiff_t>(isotope_moment_size));
-            result.light_isotope_letd_denominator.assign(
-                isotope_let_moments_host.begin() +
-                    static_cast<std::ptrdiff_t>(isotope_moment_size),
-                isotope_let_moments_host.end());
-        }
-        if (enable_voxel_scoring) {
+    }
+    if (enable_light_isotope_let_scoring) {
+        const auto isotope_moment_size =
+            light_isotope_category_count * number_of_bins;
+        result.light_isotope_letd_numerator.assign(
+            isotope_let_moments_host.begin(),
+            isotope_let_moments_host.begin() +
+                static_cast<std::ptrdiff_t>(isotope_moment_size));
+        result.light_isotope_letd_denominator.assign(
+            isotope_let_moments_host.begin() +
+                static_cast<std::ptrdiff_t>(isotope_moment_size),
+            isotope_let_moments_host.end());
+    }
+    if (enable_voxel_let_scoring) {
             const auto extract_voxel_let_moment = [&](const std::size_t moment) {
                 const auto begin = voxel_let_moments_host.begin() +
                                    static_cast<std::ptrdiff_t>(
@@ -8156,7 +8221,6 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                 extract_voxel_let_moment(2);
             result.all_hadron_voxel_letd_denominator =
                 extract_voxel_let_moment(3);
-        }
     }
     if (enable_birth_spectrum) {
         result.birth_counts_by_generation = std::move(birth_counts_host);

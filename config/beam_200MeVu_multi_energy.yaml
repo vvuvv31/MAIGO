@@ -36,8 +36,8 @@ max_device_memory_fraction: 0.50
 random_seed: 20260715
 stopping_power_file: data/stopping_power_water_geant4_11_3_2.csv
 nuclear_cross_section_file: data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv
-reaction_package_file: data/packages/topas_400MeVu_cascade_g4_11_3_2_aligned_primary_3d.bin
-cascade_package_file: data/packages/topas_400MeVu_cascade_g4_11_3_2_100k_3d.bin
+reaction_package_file: data/packages/topas_400MeVu_water_100k_primary_3d.bin
+cascade_package_file: data/packages/topas_400MeVu_water_100k_cascade_3d.bin
 output_file: out/multi_energy/e200_idd.csv
 fragment_species_output_file: out/multi_energy/e200_species.csv
 device: gpu

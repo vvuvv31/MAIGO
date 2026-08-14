@@ -28,7 +28,8 @@ double idd_bin_mass_kg(const TransportConfig& config) {
 }
 
 double voxel_mass_kg(const TransportConfig& config) {
-    return config.voxel_size_x_mm * config.voxel_size_y_mm * config.depth_bin_width_mm *
+    return config.voxel_size_x_mm * config.voxel_size_y_mm *
+           config.scorer_spacing_z_mm() *
            config.water_density_g_per_cm3 * 1.0e-6;
 }
 
@@ -41,7 +42,7 @@ std::vector<double> voxel_masses_kg(const TransportConfig& config) {
     const auto plane_size = nx * ny;
     const auto dx = config.voxel_size_x_mm;
     const auto dy = config.voxel_size_y_mm;
-    const auto dz = config.depth_bin_width_mm;
+    const auto dz = config.scorer_spacing_z_mm();
     const auto volume_mm3 = dx * dy * dz;
 
     if (config.enable_layered_phantom) {
@@ -337,7 +338,7 @@ void write_dense_voxel_letd_mhd(const std::filesystem::path& mhd_path,
     const auto y_extent_mm = static_cast<double>(ny) * config.voxel_size_y_mm;
     double origin_x = 0.5 * config.voxel_size_x_mm - 0.5 * x_extent_mm;
     double origin_y = 0.5 * config.voxel_size_y_mm - 0.5 * y_extent_mm;
-    double origin_z = 0.5 * config.depth_bin_width_mm;
+    double origin_z = 0.5 * config.scorer_spacing_z_mm();
     if (config.enable_ct_grid && !config.ct_grid_file.empty()) {
         const auto grid = CtGrid::from_binary(config.ct_grid_file);
         if (grid.nx == nx && grid.ny == ny && grid.nz == nz) {
@@ -349,7 +350,7 @@ void write_dense_voxel_letd_mhd(const std::filesystem::path& mhd_path,
                 0.5 * config.voxel_size_y_mm;
             origin_z =
                 static_cast<double>(grid.origin_z_mm) +
-                0.5 * config.depth_bin_width_mm;
+                0.5 * config.scorer_spacing_z_mm();
         }
     }
 
@@ -394,7 +395,7 @@ void write_dense_voxel_letd_mhd(const std::filesystem::path& mhd_path,
                << "CenterOfRotation = 0 0 0\n"
                << "ElementSpacing = " << config.voxel_size_x_mm << ' '
                << config.voxel_size_y_mm << ' '
-               << config.depth_bin_width_mm << '\n'
+               << config.scorer_spacing_z_mm() << '\n'
                << "DimSize = " << nx << ' ' << ny << ' ' << nz << '\n'
                << "ElementType = MET_FLOAT\n"
                << "LETUnits = MeV/mm/(g/cm3)\n"
@@ -827,7 +828,8 @@ void write_sparse_voxel_dose_csv(const std::filesystem::path& path,
                     (static_cast<double>(y) + 0.5) * config.voxel_size_y_mm -
                     0.5 * y_extent_mm;
                 const auto z_mm =
-                    (static_cast<double>(z) + 0.5) * config.depth_bin_width_mm;
+                    (static_cast<double>(z) + 0.5) *
+                    config.scorer_spacing_z_mm();
                 output << x << ',' << y << ',' << z << ',' << x_mm << ',' << y_mm << ','
                        << z_mm << ',' << energy << ',' << dose_total << '\n';
             }
@@ -875,7 +877,8 @@ void write_sparse_voxel_dose_Gy_csv(const std::filesystem::path& path,
                     (static_cast<double>(y) + 0.5) * config.voxel_size_y_mm -
                     0.5 * y_extent_mm;
                 const auto z_mm =
-                    (static_cast<double>(z) + 0.5) * config.depth_bin_width_mm;
+                    (static_cast<double>(z) + 0.5) *
+                    config.scorer_spacing_z_mm();
                 output << x << ',' << y << ',' << z << ',' << x_mm << ',' << y_mm << ','
                        << z_mm << ',' << dose_total << '\n';
             }
@@ -1022,7 +1025,8 @@ void write_sparse_charged_origin_voxel_dose_csv(
                     (static_cast<double>(y) + 0.5) * config.voxel_size_y_mm -
                     0.5 * y_extent_mm;
                 const auto z_mm =
-                    (static_cast<double>(z) + 0.5) * config.depth_bin_width_mm;
+                    (static_cast<double>(z) + 0.5) *
+                    config.scorer_spacing_z_mm();
                 output << x << ',' << y << ',' << z << ',' << x_mm << ','
                        << y_mm << ',' << z_mm << ',' << total;
                 for (std::size_t category = 0;
@@ -1101,7 +1105,7 @@ void write_dense_voxel_dose_mhd(const std::filesystem::path& mhd_path,
     // CT low-edge origin + half-voxel so MHD axes match transport sampling.
     double origin_x = 0.5 * config.voxel_size_x_mm - 0.5 * x_extent_mm;
     double origin_y = 0.5 * config.voxel_size_y_mm - 0.5 * y_extent_mm;
-    double origin_z = 0.5 * config.depth_bin_width_mm;
+    double origin_z = 0.5 * config.scorer_spacing_z_mm();
     if (config.enable_ct_grid && !config.ct_grid_file.empty()) {
         const auto grid = CtGrid::from_binary(config.ct_grid_file);
         if (grid.nx == nx && grid.ny == ny && grid.nz == nz &&
@@ -1109,11 +1113,13 @@ void write_dense_voxel_dose_mhd(const std::filesystem::path& mhd_path,
                 1.0e-6 &&
             std::abs(static_cast<double>(grid.spacing_y_mm) - config.voxel_size_y_mm) <
                 1.0e-6 &&
-            std::abs(static_cast<double>(grid.spacing_z_mm) - config.depth_bin_width_mm) <
+            std::abs(static_cast<double>(grid.spacing_z_mm) -
+                     config.scorer_spacing_z_mm()) <
                 1.0e-6) {
             origin_x = static_cast<double>(grid.origin_x_mm) + 0.5 * config.voxel_size_x_mm;
             origin_y = static_cast<double>(grid.origin_y_mm) + 0.5 * config.voxel_size_y_mm;
-            origin_z = static_cast<double>(grid.origin_z_mm) + 0.5 * config.depth_bin_width_mm;
+            origin_z = static_cast<double>(grid.origin_z_mm) +
+                       0.5 * config.scorer_spacing_z_mm();
         }
     }
 
@@ -1131,7 +1137,7 @@ void write_dense_voxel_dose_mhd(const std::filesystem::path& mhd_path,
            << "Offset = " << origin_x << ' ' << origin_y << ' ' << origin_z << '\n'
            << "CenterOfRotation = 0 0 0\n"
            << "ElementSpacing = " << config.voxel_size_x_mm << ' '
-           << config.voxel_size_y_mm << ' ' << config.depth_bin_width_mm << '\n'
+           << config.voxel_size_y_mm << ' ' << config.scorer_spacing_z_mm() << '\n'
            << "DimSize = " << nx << ' ' << ny << ' ' << nz << '\n'
            << "ElementType = MET_FLOAT\n"
            << "DoseUnits = Gy\n"
@@ -1190,7 +1196,8 @@ void write_sparse_charged_origin_voxel_dose_Gy_csv(
                     (static_cast<double>(y) + 0.5) * config.voxel_size_y_mm -
                     0.5 * y_extent_mm;
                 const auto z_mm =
-                    (static_cast<double>(z) + 0.5) * config.depth_bin_width_mm;
+                    (static_cast<double>(z) + 0.5) *
+                    config.scorer_spacing_z_mm();
                 output << x << ',' << y << ',' << z << ',' << x_mm << ','
                        << y_mm << ',' << z_mm << ','
                        << scored_dose_Gy(config, total, mass_kg);
@@ -1206,6 +1213,103 @@ void write_sparse_charged_origin_voxel_dose_Gy_csv(
                 output << '\n';
             }
         }
+    }
+}
+
+void write_dense_charged_origin_voxel_dose_mhd(
+    const std::filesystem::path& prefix,
+    const TransportConfig& config,
+    const TransportResult& result) {
+    if (!config.enable_charged_origin_voxel_scoring ||
+        !config.enable_voxel_scoring) {
+        throw std::invalid_argument(
+            "Dense charged-origin MHD output requires origin and voxel scoring");
+    }
+    const auto voxel_count = config.number_of_voxels();
+    if (result.charged_origin_voxel_deposited_energy_MeV.size() !=
+        charged_origin_category_count * voxel_count) {
+        throw std::invalid_argument(
+            "Charged-origin voxel result size does not match configuration");
+    }
+    if (prefix.empty()) {
+        throw std::invalid_argument("Charged-origin MHD prefix is empty");
+    }
+
+    constexpr std::array<const char*, charged_origin_category_count> labels{
+        "primary_c12", "secondary_carbon", "boron", "beryllium",
+        "lithium", "helium", "proton", "other_charged"};
+    const auto masses_kg = voxel_masses_kg(config);
+    const auto nx = config.voxel_bins_x;
+    const auto ny = config.voxel_bins_y;
+    const auto nz = config.number_of_bins();
+
+    double origin_x = 0.5 * config.voxel_size_x_mm -
+                      0.5 * static_cast<double>(nx) * config.voxel_size_x_mm;
+    double origin_y = 0.5 * config.voxel_size_y_mm -
+                      0.5 * static_cast<double>(ny) * config.voxel_size_y_mm;
+    double origin_z = 0.5 * config.scorer_spacing_z_mm();
+    if (config.enable_ct_grid && !config.ct_grid_file.empty()) {
+        const auto grid = CtGrid::from_binary(config.ct_grid_file);
+        if (grid.nx == nx && grid.ny == ny && grid.nz == nz) {
+            origin_x = static_cast<double>(grid.origin_x_mm) +
+                       0.5 * config.voxel_size_x_mm;
+            origin_y = static_cast<double>(grid.origin_y_mm) +
+                       0.5 * config.voxel_size_y_mm;
+            origin_z = static_cast<double>(grid.origin_z_mm) +
+                       0.5 * config.scorer_spacing_z_mm();
+        }
+    }
+
+    auto base = prefix;
+    if (base.extension() == ".mhd") {
+        base.replace_extension();
+    }
+    ensure_parent_directory(base);
+    for (std::size_t category = 0; category < labels.size(); ++category) {
+        const auto header_path = base.parent_path() /
+            (base.filename().string() + "_" + labels[category] + ".mhd");
+        const auto raw_path = header_path.parent_path() /
+            (header_path.stem().string() + ".raw");
+        std::vector<float> raw(voxel_count, 0.0F);
+        const auto offset = category * voxel_count;
+        for (std::size_t voxel = 0; voxel < voxel_count; ++voxel) {
+            raw[voxel] = static_cast<float>(scored_dose_Gy(
+                config,
+                result.charged_origin_voxel_deposited_energy_MeV[offset + voxel],
+                masses_kg[voxel]));
+        }
+        {
+            std::ofstream output(raw_path, std::ios::binary);
+            if (!output) {
+                throw std::runtime_error(
+                    "Cannot create charged-origin RAW file: " + raw_path.string());
+            }
+            output.write(reinterpret_cast<const char*>(raw.data()),
+                         static_cast<std::streamsize>(raw.size() * sizeof(float)));
+        }
+        std::ofstream header(header_path, std::ios::binary);
+        if (!header) {
+            throw std::runtime_error(
+                "Cannot create charged-origin MHD file: " + header_path.string());
+        }
+        header << std::setprecision(12)
+               << "ObjectType = Image\n"
+               << "NDims = 3\n"
+               << "BinaryData = True\n"
+               << "BinaryDataByteOrderMSB = False\n"
+               << "CompressedData = False\n"
+               << "TransformMatrix = 1 0 0 0 1 0 0 0 1\n"
+               << "Offset = " << origin_x << ' ' << origin_y << ' '
+               << origin_z << '\n'
+               << "CenterOfRotation = 0 0 0\n"
+               << "ElementSpacing = " << config.voxel_size_x_mm << ' '
+               << config.voxel_size_y_mm << ' '
+               << config.scorer_spacing_z_mm() << '\n'
+               << "DimSize = " << nx << ' ' << ny << ' ' << nz << '\n'
+               << "ElementType = MET_FLOAT\n"
+               << "DoseUnits = Gy\n"
+               << "DoseOriginCategory = " << labels[category] << '\n'
+               << "ElementDataFile = " << raw_path.filename().string() << '\n';
     }
 }
 

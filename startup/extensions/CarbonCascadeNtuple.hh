@@ -38,6 +38,7 @@ private:
     G4float charge_e_ = 0.0F;
     G4float kinetic_energy_mev_ = 0.0F;
     G4float incident_energy_mev_ = 0.0F;
+    G4float local_deposit_mev_ = 0.0F;
     G4double macroscopic_inelastic_per_mm_ = 0.0;
     G4int projectile_z_ = 0;
     G4int projectile_a_ = 0;
