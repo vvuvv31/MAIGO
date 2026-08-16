@@ -8,6 +8,7 @@ maximum_relative_energy_loss: 0.0025
 energy_cutoff_MeV: 0.1
 secondary_local_deposit_cutoff_MeV: 0.5
 secondary_condensed_step_mm: 0.5
+enable_ct_grid: true
 ct_grid_file: benchmark/ct/RT06423/grid/patient_ct.bin
 ct_hu_stopping_power_lut_file: data/hu_stopping_power_lut_geant4_11_3_2.csv
 ct_skip_homogeneous_face_clamp: true
@@ -32,7 +33,7 @@ enable_secondary_energy_sorting: true
 max_device_memory_fraction: 0.84
 random_seed: 20260801
 
-enable_tps_source: true
+tpsSource: true
 enable_tps_coordinate_system: true
 tps_spots_file: benchmark/ct/result_x10/RT06423/spots.csv
 tps_beam_model_file: benchmark/ct/result_x10/RT06423/beam_model.csv
