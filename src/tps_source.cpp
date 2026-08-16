@@ -1,6 +1,7 @@
 #include "carbon/tps_source.hpp"
 
 #include "carbon/ct_grid.hpp"
+#include "carbon/topas_spots.hpp"
 
 #include <algorithm>
 #include <array>
@@ -207,13 +208,6 @@ TpsSourcePose central_pose(const TransportConfig& config, const TpsSpot& spot) {
         const auto couch = rotation_z(couch_angle_deg);
         machine = multiply(couch, multiply(gantry, collimator));
     }
-    const auto patient = orientation_matrix(config.tps_patient_position);
-    const auto rotation = multiply(patient, machine);
-    const auto u0 = multiply(rotation, Vec3{1.0, 0.0, 0.0});
-    const auto v0 = multiply(rotation, Vec3{0.0, 1.0, 0.0});
-    const auto w0 = multiply(rotation, Vec3{0.0, 0.0, -1.0});
-    const Vec3 isocenter{config.tps_isocenter_x_mm, config.tps_isocenter_y_mm,
-                         config.tps_isocenter_z_mm};
     const auto magnet_x = config.tps_virtual_scanning_magnet_x_mm;
     const auto magnet_y = config.tps_virtual_scanning_magnet_y_mm;
     const auto uses_virtual_magnets = magnet_x > 0.0 && magnet_y > 0.0;
@@ -221,6 +215,71 @@ TpsSourcePose central_pose(const TransportConfig& config, const TpsSpot& spot) {
         config.tps_virtual_source_to_isocenter_mm > 0.0
             ? config.tps_virtual_source_to_isocenter_mm
             : config.tps_sad_mm;
+    const auto apply_topas_patient =
+        config.tps_apply_topas_patient_placement ||
+        (uses_virtual_magnets && config.spots_patient_rot_z_deg != 0.0);
+
+    auto magnet_pose = [&](const Vec3& u0, const Vec3& v0, const Vec3& w0,
+                           const Vec3& isocenter) {
+        const auto x_src =
+            spot.x_mm * (magnet_x - source_distance_mm) / magnet_x;
+        const auto y_src =
+            spot.y_mm * (magnet_y - source_distance_mm) / magnet_y;
+        const auto origin =
+            isocenter + x_src * u0 + y_src * v0 - source_distance_mm * w0;
+        const auto tan_x = spot.x_mm / magnet_x;
+        const auto tan_y = spot.y_mm / magnet_y;
+        auto w = tan_x * u0 + tan_y * v0 + w0;
+        const auto w_norm = std::sqrt(w.x * w.x + w.y * w.y + w.z * w.z);
+        w = (1.0 / w_norm) * w;
+        auto u = u0 - (u0.x * w.x + u0.y * w.y + u0.z * w.z) * w;
+        const auto u_norm = std::sqrt(u.x * u.x + u.y * u.y + u.z * u.z);
+        u = (1.0 / u_norm) * u;
+        const Vec3 v{w.y * u.z - w.z * u.y, w.z * u.x - w.x * u.z,
+                     w.x * u.y - w.y * u.x};
+        return TpsSourcePose{
+            origin.x, origin.y, origin.z, u.x, u.y, u.z,
+            v.x, v.y, v.z, w.x, w.y, w.z,
+        };
+    };
+
+    if (uses_virtual_magnets && apply_topas_patient) {
+        // World TPS 0°: +X scan X, +Y beam, +Z scan Y. TOPAS applies Patient
+        // RotZ first, then Trans; the same tps_90 packing as Time Feature.
+        const Vec3 u0{1.0, 0.0, 0.0};
+        const Vec3 v0{0.0, 0.0, 1.0};
+        const Vec3 w0{0.0, 1.0, 0.0};
+        const auto world = magnet_pose(u0, v0, w0, Vec3{0.0, 0.0, 0.0});
+        SpotSourcePose world_pose{};
+        world_pose.origin_x_mm = world.origin_x_mm;
+        world_pose.origin_y_mm = world.origin_y_mm;
+        world_pose.origin_z_mm = world.origin_z_mm;
+        world_pose.ux_x = world.ux_x;
+        world_pose.ux_y = world.ux_y;
+        world_pose.ux_z = world.ux_z;
+        world_pose.uy_x = world.uy_x;
+        world_pose.uy_y = world.uy_y;
+        world_pose.uy_z = world.uy_z;
+        world_pose.uz_x = world.uz_x;
+        world_pose.uz_y = world.uz_y;
+        world_pose.uz_z = world.uz_z;
+        const auto ct = transform_tps_90_pose_to_ct(
+            world_pose, config.spots_patient_trans_x_mm,
+            config.spots_patient_trans_y_mm, config.spots_patient_trans_z_mm,
+            config.spots_patient_rot_z_deg, config.spots_ct_axis_min_mm);
+        return {ct.origin_x_mm, ct.origin_y_mm, ct.origin_z_mm,
+                ct.ux_x,        ct.ux_y,        ct.ux_z,
+                ct.uy_x,        ct.uy_y,        ct.uy_z,
+                ct.uz_x,        ct.uz_y,        ct.uz_z};
+    }
+
+    const auto patient = orientation_matrix(config.tps_patient_position);
+    const auto rotation = multiply(patient, machine);
+    const auto u0 = multiply(rotation, Vec3{1.0, 0.0, 0.0});
+    const auto v0 = multiply(rotation, Vec3{0.0, 1.0, 0.0});
+    const auto w0 = multiply(rotation, Vec3{0.0, 0.0, -1.0});
+    const Vec3 isocenter{config.tps_isocenter_x_mm, config.tps_isocenter_y_mm,
+                         config.tps_isocenter_z_mm};
     if (!uses_virtual_magnets) {
         const auto central_source = isocenter - source_distance_mm * w0;
         const auto origin = central_source + spot.x_mm * u0 + spot.y_mm * v0;
@@ -231,31 +290,7 @@ TpsSourcePose central_pose(const TransportConfig& config, const TpsSpot& spot) {
             w0.x, w0.y, w0.z,
         };
     }
-    // PencilBeamScanning: (x,y) are isocenter-plane scan coordinates.
-    // Source plane is scaled by the virtual magnets; the central ray aims
-    // at the isocenter.
-    const auto x_src = spot.x_mm * (magnet_x - source_distance_mm) / magnet_x;
-    const auto y_src = spot.y_mm * (magnet_y - source_distance_mm) / magnet_y;
-    const auto origin =
-        isocenter + x_src * u0 + y_src * v0 - source_distance_mm * w0;
-    const auto tan_x = spot.x_mm / magnet_x;
-    const auto tan_y = spot.y_mm / magnet_y;
-    auto w = tan_x * u0 + tan_y * v0 + w0;
-    const auto w_norm =
-        std::sqrt(w.x * w.x + w.y * w.y + w.z * w.z);
-    w = (1.0 / w_norm) * w;
-    auto u = u0 - (u0.x * w.x + u0.y * w.y + u0.z * w.z) * w;
-    const auto u_norm =
-        std::sqrt(u.x * u.x + u.y * u.y + u.z * u.z);
-    u = (1.0 / u_norm) * u;
-    const Vec3 v{w.y * u.z - w.z * u.y, w.z * u.x - w.x * u.z,
-                 w.x * u.y - w.y * u.x};
-    return {
-        origin.x, origin.y, origin.z,
-        u.x, u.y, u.z,
-        v.x, v.y, v.z,
-        w.x, w.y, w.z,
-    };
+    return magnet_pose(u0, v0, w0, isocenter);
 }
 
 double inherited(const double value, const double fallback) {

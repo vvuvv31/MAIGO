@@ -1,6 +1,8 @@
 # RT06423 PencilBeamScanning source: spots.csv + virtual scanning magnets.
-# The Time Feature / topas_spots_file path is unchanged. Enable this file
-# only when comparing against fullplan_tps PBS jobs (IEC gantry 0, Patient RotZ=90).
+# The Time Feature / topas_spots_file path is unchanged. Compare against
+# fullplan_tps PBS jobs: world TPS 0° beam, Patient RotZ=90 then Trans.
+# Do not use tps_beam_angle_deg=90 on the unrotated CT — TOPAS Trans is
+# applied after RotZ, so that is not equivalent.
 physics_profile: balanced
 number_of_histories: 15108664
 maximum_step_mm: 0.25
@@ -9,7 +11,7 @@ energy_cutoff_MeV: 0.1
 secondary_local_deposit_cutoff_MeV: 0.5
 secondary_condensed_step_mm: 0.5
 enable_ct_grid: true
-ct_grid_file: benchmark/ct/RT06423/grid/patient_ct.bin
+ct_grid_file: benchmark/ct/RT06423/grid/patient_ct_tps_90_xneg.bin
 ct_hu_stopping_power_lut_file: data/hu_stopping_power_lut_geant4_11_3_2.csv
 ct_skip_homogeneous_face_clamp: true
 enable_voxel_scoring: true
@@ -43,11 +45,13 @@ tps_virtual_scanning_magnet_x_mm: 6227.8
 tps_virtual_scanning_magnet_y_mm: 7008.6
 tps_virtual_source_to_isocenter_mm: 450.0
 tps_sad_mm: 450.0
-tps_beam_angle_deg: 90.0
-tps_isocenter_mm: [-5.5590, 12.3588, -0.3945]
+tps_beam_angle_deg: 0.0
+tps_apply_topas_patient_placement: true
 spots_patient_trans_x_mm: -12.3588
 spots_patient_trans_y_mm: -5.5590
 spots_patient_trans_z_mm: 0.3945
+spots_patient_rot_z_deg: 90.0
+spots_ct_axis_min_mm: -110.0
 
 stopping_power_file: data/stopping_power_water_geant4_11_3_2.csv
 let_delta_electron_fraction_file: data/let_delta_electron_fraction_water_geant4_11_3_2.csv
