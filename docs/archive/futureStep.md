@@ -1,3 +1,5 @@
+> **Archived.** Historical planning notes from 2026-07. physics_profile is no longer a transport mode. Do not treat the numbers or YAML keys here as current production.
+
 # futureStep — 当前主线与后续计划
 
 更新日期：2026-07-27

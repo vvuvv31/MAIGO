@@ -43,7 +43,7 @@ RT06541 的旧 fitted-scale Dij shape 回归不能作为独立 TOPAS 验证。20
 | 20022516 | 17,717,177 / 17,717,177 | 20260802 | 755,302 | 1.171132% | 0.992402 | 97.6631 / 68.9863% |
 
 TOPAS 剂量直接读取原始 scorer；MHD 副本只用于转换完整性检查。三个 case 均采用
-`physics_profile: best`、中性的 lateral affine（skew/rotation 均为 0），并启用相同的通用 residual-heat 和
+入口面无 shear/旋转修补，并启用相同的通用 residual-heat 和
 upstream-air 设置。详细配置、history 四向核对和输入路径见
 [rotation-fixed summary](../out/ct/generic_rotation_fix_equal_history/final_summary.md)。
 

@@ -3,7 +3,6 @@
 # fullplan_tps PBS jobs: world TPS 0° beam, Patient RotZ=90 then Trans.
 # Do not use tps_beam_angle_deg=90 on the unrotated CT — TOPAS Trans is
 # applied after RotZ, so that is not equivalent.
-physics_profile: balanced
 number_of_histories: 15108664
 maximum_step_mm: 0.25
 maximum_relative_energy_loss: 0.0025

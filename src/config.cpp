@@ -8,7 +8,6 @@
 #include <chrono>
 #include <cmath>
 #include <fstream>
-#include <iostream>
 #include <limits>
 #include <random>
 #include <sstream>
@@ -112,7 +111,6 @@ std::filesystem::path resolve_input_path_from_config(
 }
 
 std::filesystem::path scorer_output_path(const std::filesystem::path& config_path,
-                                         const std::string& profile,
                                          const std::string& name,
                                          const bool include_extension) {
     if (name.empty()) {
@@ -134,7 +132,9 @@ std::filesystem::path scorer_output_path(const std::filesystem::path& config_pat
         throw std::invalid_argument(
             "LET MHD output name is a prefix and must not have an extension");
     }
-    return config_path.parent_path() / profile / output;
+    const auto stem = config_path.stem().empty() ? std::filesystem::path{"run"}
+                                                 : config_path.stem();
+    return std::filesystem::path{"out"} / stem / output;
 }
 
 template <typename Number>
@@ -303,11 +303,6 @@ std::size_t TransportConfig::number_of_voxels() const {
 }
 
 void TransportConfig::validate() const {
-    if (enable_let_scoring && maximum_step_mm > 0.25) {
-        std::cerr << "Warning: LET scoring with maximum_step_mm="
-                  << maximum_step_mm
-                  << " mm (>0.25). Prefer <=0.25 mm for LET production.\n";
-    }
     if (number_of_histories == 0) {
         throw std::invalid_argument("number_of_histories must be greater than zero");
     }
@@ -451,21 +446,7 @@ void TransportConfig::validate() const {
         throw std::invalid_argument(
             "multiple_scattering_scale must be in [0, 3]");
     }
-    if (!std::isfinite(spots_lateral_yz_skew) ||
-        spots_lateral_yz_skew < -1.0 || spots_lateral_yz_skew > 1.0) {
-        throw std::invalid_argument(
-            "spots_lateral_yz_skew must be in [-1, 1]");
-    }
-    if (!std::isfinite(spots_lateral_yz_rotation_deg) ||
-        spots_lateral_yz_rotation_deg < -15.0 ||
-        spots_lateral_yz_rotation_deg > 15.0) {
-        throw std::invalid_argument(
-            "spots_lateral_yz_rotation_deg must be in [-15, 15]");
-    }
-    if (!std::isfinite(spots_lateral_yz_rotation_pivot_y_mm)) {
-        throw std::invalid_argument(
-            "spots_lateral_yz_rotation_pivot_y_mm must be finite");
-    }
+
     if (!std::isfinite(spots_emittance_sigma_scale) ||
         spots_emittance_sigma_scale < 0.5 || spots_emittance_sigma_scale > 1.5) {
         throw std::invalid_argument(
@@ -475,10 +456,6 @@ void TransportConfig::validate() const {
         spots_emittance_prime_scale < 0.5 || spots_emittance_prime_scale > 1.5) {
         throw std::invalid_argument(
             "spots_emittance_prime_scale must be in [0.5, 1.5]");
-    }
-    if (!std::isfinite(spots_lateral_yz_skew_pivot_mm)) {
-        throw std::invalid_argument(
-            "spots_lateral_yz_skew_pivot_mm must be finite");
     }
     if (ct_stopping_power_scale <= 0.0 || ct_stopping_power_scale > 2.0) {
         throw std::invalid_argument(
@@ -989,10 +966,18 @@ void TransportConfig::validate() const {
 TransportConfig load_config(const std::filesystem::path& path) {
     const auto values = read_key_values(path);
     TransportConfig config;
-    {
-        const auto it = values.find("physics_profile");
-        if (it != values.end()) {
-            config.physics_profile = it->second;
+    for (const char* removed : {
+             "physics_profile",
+             "spots_lateral_yz_skew",
+             "spots_lateral_yz_skew_auto_pivot",
+             "spots_lateral_yz_skew_pivot_mm",
+             "spots_lateral_yz_rotation_deg",
+             "spots_lateral_yz_rotation_pivot_y_mm",
+         }) {
+        if (values.contains(removed)) {
+            throw std::invalid_argument(
+                std::string(removed) +
+                " was removed; transport uses numeric YAML fields only");
         }
     }
     config.number_of_histories = parse_number(values, "number_of_histories", config.number_of_histories);
@@ -1580,20 +1565,6 @@ TransportConfig load_config(const std::filesystem::path& path) {
         values, "spots_patient_rot_z_deg", config.spots_patient_rot_z_deg);
     config.spots_ct_axis_min_mm = parse_number(
         values, "spots_ct_axis_min_mm", config.spots_ct_axis_min_mm);
-    config.spots_lateral_yz_skew = parse_number(
-        values, "spots_lateral_yz_skew", config.spots_lateral_yz_skew);
-    config.spots_lateral_yz_skew_pivot_mm = parse_number(
-        values, "spots_lateral_yz_skew_pivot_mm",
-        config.spots_lateral_yz_skew_pivot_mm);
-    config.spots_lateral_yz_skew_auto_pivot = parse_bool(
-        values, "spots_lateral_yz_skew_auto_pivot",
-        config.spots_lateral_yz_skew_auto_pivot);
-    config.spots_lateral_yz_rotation_deg = parse_number(
-        values, "spots_lateral_yz_rotation_deg",
-        config.spots_lateral_yz_rotation_deg);
-    config.spots_lateral_yz_rotation_pivot_y_mm = parse_number(
-        values, "spots_lateral_yz_rotation_pivot_y_mm",
-        config.spots_lateral_yz_rotation_pivot_y_mm);
     config.spots_emittance_sigma_scale = parse_number(
         values, "spots_emittance_sigma_scale",
         config.spots_emittance_sigma_scale);
@@ -1942,7 +1913,7 @@ TransportConfig load_config(const std::filesystem::path& path) {
                         "dose_to_medium=true requires dose_to_medium_name");
                 }
                 config.voxel_dose_mhd_output_file = scorer_output_path(
-                    path, config.physics_profile, name_it->second, true);
+                    path, name_it->second, true);
             }
         }
     }
@@ -1983,7 +1954,7 @@ TransportConfig load_config(const std::filesystem::path& path) {
                     throw std::runtime_error("LET=true requires LET_name");
                 }
                 config.let_voxel_mhd_output_file = scorer_output_path(
-                    path, config.physics_profile, name_it->second, false);
+                    path, name_it->second, false);
             }
         }
     }

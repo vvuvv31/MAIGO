@@ -6556,10 +6556,7 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
     TransportResult result;
     result.backend = "sycl-" + device_name +
                      (config.enable_energy_straggling ? "+straggling" : "");
-    if (!config.physics_profile.empty() &&
-        config.physics_profile != "accurate") {
-        result.backend += "+label-" + config.physics_profile;
-    }
+
     if (enable_secondary_energy_straggling) {
         result.backend += "+secondary-straggling";
     }

@@ -73,8 +73,8 @@ CLI + key:value config
 | `minibeam.md` | minibeam 物理实现与逐阶段验证日志，长且带时间线 |
 | `ctplan.md` | TOPAS Dij / matRad / GPU 计划与坐标变换工作流 |
 | `ctResult.md` | CT dose/LET 证据状态与结论边界 |
-| `futureStep.md` | LET、cascade、中性、性能的历史进展和后续计划 |
-| `local30.md` | RT07575 局部 gamma 诊断日志，不是通用架构规范 |
+| `archive/futureStep.md` | 2026-07 计划稿（历史） |
+| `archive/local30.md` | RT07575 局部 gamma 诊断日志（历史；仿射已删除） |
 | `MAIGO_TOPAS_GPU_Benchmark_CT_Match_Checklist.md` | 发文前 A1–A12 和 CT match 验收清单 |
 | `BRANCH_WORKFLOW.md` | 默认在 `master` 开发的分支约定 |
 
@@ -152,14 +152,14 @@ cmake --build --preset oneapi-nvidia-release
 
 1. 第一遍参数只寻找 `--config`，默认 `config/beam_200MeVu.yaml`。
 2. `load_config()` 读取配置并在返回前调用一次 `validate()`。
-3. 第二遍 CLI 覆盖 device、histories、seed、profile、CT、queue、spots、输出等字段。
+3. 第二遍 CLI 覆盖 device、histories、seed、CT、queue、spots、输出等字段。
 4. 再次 `validate()`，因此 CLI 也受相同组合约束。
 5. 装载主 stopping-power / cross-section 表，以及按 feature 开关装载 reaction、cascade、neutral package。
 6. 按束流来源选择单次运行、TOPAS spots 或 TPS source。
 7. 调用 serial/SYCL 后端。
 8. 根据非空输出路径写 scorer；最后打印 backend tag、吞吐、kernel timing、能量账本和队列统计。
 
-CLI 覆盖项包括：`--device`、`--histories`、`--random-seed`、`--physics-profile`、`--ct-grid`、CT SP scale、secondary/neutral queue capacity、可重复 `--spots`、spot weights、straggling scale、MeV/Gy/LET/MHD 输出、LET 开关、`--plan-only`、`--sequential-spots` 和 Dij 阈值诊断。
+CLI 覆盖项包括：`--device`、`--histories`、`--random-seed`、`--ct-grid`、CT SP scale、secondary/neutral queue capacity、可重复 `--spots`、spot weights、straggling scale、MeV/Gy/LET/MHD 输出、LET 开关、`--plan-only`、`--sequential-spots`。
 
 ### 3.2 计划运行的三条路径
 
@@ -169,7 +169,7 @@ CLI 覆盖项包括：`--device`、`--histories`、`--random-seed`、`--physics-
 
 `SyclTransportContext` 只在多 spot/TPS 路径建立，用于复用 queue 与不变的 device lookup/package allocations。普通单次运行让输运函数自行创建 queue。
 
-`--plan-only` 只校验并打印 source bounds/方向，不启动 transport。Dij threshold 模式逐 spot 运行，在乘 optimizer weight 前按每 spot voxel Gy 阈值裁剪，只保留受支持的 dense voxel dose 流程。
+`--plan-only` 只校验并打印 source bounds/方向，不启动 transport。
 
 ## 4. 配置系统
 
@@ -233,7 +233,7 @@ CLI 覆盖项包括：`--device`、`--histories`、`--random-seed`、`--physics-
 | Nuclear XS | `cross_section.*` | C-12、离子和 gamma/neutron lookup table |
 | Event packages | `reaction_package.*`, `cascade_package.*`, `neutral_package.*` | 读取预编译相关末态和 projectile XS |
 | Geometry | `slab_phantom.hpp`, `ct_grid.*`, `minibeam_collimator.hpp` | slab/insert、CCTG+DDA、slit/Copper 解析几何 |
-| Plan/source | `topas_spots.*`, `spot_plan_geometry.*`, `tps_source.*` | spot 解析、权重分配、坐标变换、batch 构造 |
+| Plan/source | `topas_spots.*`, `tps_source.*` | spot 解析、权重分配、坐标变换、batch 构造 |
 | I/O | `io.*` | MeV/Gy、LET、species、sparse CSV、dense MetaImage |
 | Device | `device.*` | SYCL selector、backend pinning、设备描述、async handler |
 | Profiling | `transport_profile.*` | CT face clamp/步数等计数与文本摘要 |
@@ -486,7 +486,7 @@ NumPy/SciPy/pydicom/matplotlib 环境和外部 TOPAS。运行前先读脚本 CLI
 - CT/计划：`ctplan.md`、`validation/tps/README.md`、相关 CCTG preparation script。
 - minibeam：`minibeamStructure.md` 后再按需要查 `minibeam.md` 的具体阶段。
 - 发文 benchmark：`MAIGO_TOPAS_GPU_Benchmark_CT_Match_Checklist.md` + `benchmark/phantom/A_README.md`。
-- 历史指标：`ctResult.md` / `futureStep.md` / `local30.md`，但以当前源码和新跑结果复核。
+- 历史指标：`ctResult.md` / `archive/futureStep.md` / `archive/local30.md`，但以当前源码和新跑结果复核。
 
 ## 15. 当前已知文档/架构差异
 

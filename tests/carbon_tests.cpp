@@ -8,7 +8,7 @@
 #include "carbon/particle.hpp"
 #include "carbon/reaction_package.hpp"
 #include "carbon/rng.hpp"
-#include "carbon/spot_plan_geometry.hpp"
+
 #include "carbon/stopping_power.hpp"
 #include "carbon/straggling.hpp"
 #include "carbon/topas_spots.hpp"
@@ -1429,10 +1429,6 @@ void test_secondary_optimization_config_validation() {
     numeric_ct.ct_grid_file = "synthetic-fast-profile-grid.bin";
     numeric_ct.validate();
 
-    auto labeled = numeric;
-    labeled.physics_profile = "turbo";
-    labeled.validate();
-
     auto dose_let = numeric;
     dose_let.maximum_step_mm = 0.25;
     dose_let.maximum_relative_energy_loss = 0.0025;
@@ -1465,27 +1461,19 @@ void test_secondary_optimization_config_validation() {
         std::filesystem::path(CARBON_SOURCE_DIR) / "config";
     const auto best_config = carbon::load_config(
         config_root / "beam_ct_fullplan_rt07575_let_soft_tissue.yaml");
-    const auto fast_config = carbon::load_config(
-        config_root / "beam_ct_fullplan_rt07575_fast.yaml");
-    require(best_config.physics_profile == "best" &&
-                best_config.enable_let_scoring,
-            "Best full-plan profile config contract");
-    require(fast_config.physics_profile == "fast" &&
-                !fast_config.enable_let_scoring,
-            "Fast full-plan profile config contract");
+    require(best_config.enable_let_scoring,
+            "RT07575 production config must score LET");
     require(best_config.spots_enable_upstream_air_energy_loss &&
                 best_config.spots_upstream_air_stopping_power_file ==
                     "data/stopping_power_air_geant4_11_3_2.csv" &&
                 best_config.ct_grid_file ==
                     "benchmark/ct/grids/patient_ct_tps_90_xneg_edge_corrected.bin" &&
                 best_config.spots_ct_axis_min_mm == -104.25,
-            "RT07575 best upstream-air/corrected-origin contract");
-    // Equal-history single-spot 1M (spot 24): residual-heat MFP + share scale
-    // raise local 3%/0mm 60.20% → 61.53%. Production defaults for RT07575 best.
+            "RT07575 production upstream-air/corrected-origin contract");
     require(best_config.nuclear_residual_heat_mfp_mm == 0.5,
-            "RT07575 best nuclear residual heat MFP production contract");
+            "RT07575 nuclear residual heat MFP production contract");
     require(best_config.nuclear_residual_heat_scale == 0.9,
-            "RT07575 best nuclear residual heat scale production contract");
+            "RT07575 nuclear residual heat scale production contract");
     auto bad_residual_scale = best_config;
     bad_residual_scale.nuclear_residual_heat_scale = -0.1;
     require_throws([&bad_residual_scale] { bad_residual_scale.validate(); },
@@ -1503,8 +1491,6 @@ void test_secondary_optimization_config_validation() {
                    "reaction_light_ion_forward_mix must reject values > 1");
     require_throws([&bad_residual_scale] { bad_residual_scale.validate(); },
                    "nuclear_residual_heat_scale must reject values > 2");
-    require(!fast_config.spots_enable_upstream_air_energy_loss,
-            "RT07575 fast must retain upstream-air default off");
 
     carbon::TransportConfig upstream_air;
     require(upstream_air.reaction_package_file ==
@@ -1766,26 +1752,6 @@ void test_topas_spot_weights_and_tps_90_transform() {
         (void)carbon::propagate_total_kinetic_energy_through_stopping_power(
             2460.0, 12, 1.0, too_narrow_air);
     }, "Upstream propagation accepted a table outside its energy domain");
-}
-
-void test_history_weighted_entrance_pivot() {
-    const std::array points{
-        carbon::WeightedEntrancePoint{10.0, -4.0, 2},
-        carbon::WeightedEntrancePoint{40.0, 8.0, 1},
-        carbon::WeightedEntrancePoint{-1000.0, 1000.0, 0},
-    };
-    const auto pivot = carbon::history_weighted_entrance_pivot(points);
-    require(pivot.has_value(), "Positive-history plan must resolve an auto-pivot");
-    require_near(pivot->first, 20.0, 1.0e-12,
-                 "History-weighted entrance pivot x");
-    require_near(pivot->second, 0.0, 1.0e-12,
-                 "History-weighted entrance pivot y");
-
-    const std::array zero_weight{
-        carbon::WeightedEntrancePoint{1.0, 2.0, 0},
-    };
-    require(!carbon::history_weighted_entrance_pivot(zero_weight).has_value(),
-            "Zero-history plan must not synthesize an auto-pivot");
 }
 
 void test_tps_source_geometry_csv_and_switch() {
@@ -2122,8 +2088,7 @@ void test_tps_source_geometry_csv_and_switch() {
                  "TPS public beam angle parsing");
     {
         std::ofstream output(yaml_path);
-        output << "physics_profile: best\n"
-               << "number_of_histories: 10\n"
+        output << "number_of_histories: 10\n"
                << "use_particle_specific_stopping_power: true\n"
                << "enable_primary_attenuation: true\n"
                << "enable_secondary_generation: true\n"
@@ -2146,10 +2111,10 @@ void test_tps_source_geometry_csv_and_switch() {
     require(public_scorers.enable_let_scoring,
             "Public LET switch must enable LET scoring");
     require(public_scorers.voxel_dose_mhd_output_file ==
-                yaml_path.parent_path() / "best" / "dose.mhd",
+                std::filesystem::path{"out"} / yaml_path.stem() / "dose.mhd",
             "Dose-to-medium output path resolution");
     require(public_scorers.let_voxel_mhd_output_file ==
-                yaml_path.parent_path() / "best" / "LET",
+                std::filesystem::path{"out"} / yaml_path.stem() / "LET",
             "LET output prefix resolution");
     require(public_scorers.output_file.empty() &&
                 public_scorers.voxel_dose_output_file.empty(),
@@ -2898,7 +2863,6 @@ int main() {
         test_secondary_optimization_config_validation();
         test_topas_spots_parse_angle01();
         test_topas_spot_weights_and_tps_90_transform();
-        test_history_weighted_entrance_pivot();
         test_tps_source_geometry_csv_and_switch();
         test_dose_scorer_matches_mev_conversion();
         test_dense_voxel_mhd_writer();

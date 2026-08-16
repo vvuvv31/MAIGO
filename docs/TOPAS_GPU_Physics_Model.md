@@ -2,7 +2,7 @@
 
 ## 摘要
 
-本文记录 MAIGO 当前 CT 碳离子蒙卡中 TOPAS 参考模型与 GPU 模型的物理过程对应关系、数值实现和适用边界。TOPAS 采用 Geant4 modular physics list，对粒子逐步注册电磁、强子、离子核反应、衰变和停止过程；GPU 则采用 SYCL/CUDA 上的表格化带电粒子输运，使用 Geant4/TOPAS 预计算的 stopping power、核反应截面和相关末态 package，在 GPU 上采样并输运 C-12 及其带电碎片。GPU 模型覆盖了当前碳离子剂量的主要带电粒子链，但不是 Geant4 physics list 的逐过程复刻。中子、光子、电子的完整输运，以及普通衰变、放射性衰变和独立的 hadronic elastic 过程，在当前 CT `best` 配置中没有与 TOPAS 一一对应的 GPU 实现。
+本文记录 MAIGO 当前 CT 碳离子蒙卡中 TOPAS 参考模型与 GPU 模型的物理过程对应关系、数值实现和适用边界。TOPAS 采用 Geant4 modular physics list，对粒子逐步注册电磁、强子、离子核反应、衰变和停止过程；GPU 则采用 SYCL/CUDA 上的表格化带电粒子输运，使用 Geant4/TOPAS 预计算的 stopping power、核反应截面和相关末态 package，在 GPU 上采样并输运 C-12 及其带电碎片。GPU 模型覆盖了当前碳离子剂量的主要带电粒子链，但不是 Geant4 physics list 的逐过程复刻。中子、光子、电子的完整输运，以及普通衰变、放射性衰变和独立的 hadronic elastic 过程，在当前 CT production 配置中没有与 TOPAS 一一对应的 GPU 实现。
 
 因此，本文中的“对应”分为三类：
 
@@ -38,7 +38,7 @@ sv:Ph/Default/Modules = 7
 
 ### 1.2 GPU 参考配置
 
-本文所称 GPU 模型指 CT 的 `best` profile，代表配置见
+本文所称 GPU 参考模型是 README 里的 tightest production 数值，代表配置见
 [`config/beam_ct_fullplan_rt07575_let_soft_tissue.yaml`](../config/beam_ct_fullplan_rt07575_let_soft_tissue.yaml)。其主要设置为：
 
 ```yaml
@@ -60,7 +60,7 @@ scorerLET: true
 
 GPU 输运实现位于
 [`src/transport_sycl_legacy.cpp`](../src/transport_sycl_legacy.cpp)，配置字段和物理开关定义于
-[`include/carbon/transport_config.hpp`](../include/carbon/transport_config.hpp)。`best` 配置中的
+[`include/carbon/transport_config.hpp`](../include/carbon/transport_config.hpp)。该配置中的
 `dose_output_scale: 0.982` 是输出剂量校准因子，不属于底层物理过程；它不会改变原始沉积能量、核反应概率或输运轨迹。
 
 ## 2. TOPAS physics modules
@@ -103,7 +103,7 @@ GPU 对每个带电粒子采用步进输运。在一个 step 中，连续能损�
 需要区分 primary 和 secondary：
 
 - `enable_energy_straggling: true` 对 primary C-12 生效；
-- 碎片能损涨落还需要单独打开 `enable_secondary_energy_straggling`；当前 CT `best` 配置没有打开该项。
+- 碎片能损涨落还需要单独打开 `enable_secondary_energy_straggling`；当前 CT production 配置没有打开该项。
 
 因此，GPU 的能损涨落与 TOPAS `g4em-standard_opt4` 的完整随机过程具有相同物理目的，但不是同一套 Geant4 step process。当前实现把 continuous loss 与 unresolved hard electron transfer 凝聚在同一步内，没有显式 delta-electron transport，也没有完整复制 `G4IonFluctuations`/`G4UniversalFluctuation` 的 Gaussian/Gamma/Uniform/Glandz regime switch。
 
@@ -120,7 +120,7 @@ GPU 使用自定义的 Highland 投影 RMS 散射模型。其主要依赖粒子�
 
 实现见 [`include/carbon/multiple_scattering.hpp`](../include/carbon/multiple_scattering.hpp)。
 
-当前普通 CT `best` 配置设置 `enable_ct_material_mcs: false`，因此 CT 中默认使用历史 all-water radiation length；代码虽然支持 air/lung/water/bone 的材料 radiation length，但需要显式打开该开关。该差异是 GPU 与 TOPAS 电磁多重散射模型之间的重要近似边界。
+当前普通 CT production 配置设置 `enable_ct_material_mcs: false`，因此 CT 中默认使用历史 all-water radiation length；代码虽然支持 air/lung/water/bone 的材料 radiation length，但需要显式打开该开关。该差异是 GPU 与 TOPAS 电磁多重散射模型之间的重要近似边界。
 
 ### 3.4 C-12 核反应和 primary attenuation
 
@@ -139,7 +139,7 @@ P_{\mathrm{int}} = 1-\exp[-\Sigma(E,m)\Delta s].
 
 因此，GPU 的 primary reaction 是 **TOPAS/Geant4/INCLXX 结果驱动的 correlated-final-state surrogate**，而不是实时 INCLXX。
 
-当前 CT `best` 默认使用：
+当前 CT production 默认使用：
 
 - `reaction_package_file`：C-12 primary 相关末态；
 - `cascade_package_file`：碎片级联相关末态；
@@ -155,11 +155,11 @@ P_{\mathrm{int}} = 1-\exp[-\Sigma(E,m)\Delta s].
 - 能量低于 `secondary_local_deposit_cutoff_MeV` 时的局部沉积；
 - 由 cascade package 和 projectile-specific cross section 决定的后续核反应。
 
-`maximum_cascade_generations: 2` 表示普通 CT `best` 最多继续两代碎片级联。级联 package 的末态保持相关性，未能继续输运的重反冲、未支持产物和队列溢出能量作为 residual local heat 计入沉积能量，以保持能量闭合。
+`maximum_cascade_generations: 2` 表示普通 CT production 最多继续两代碎片级联。级联 package 的末态保持相关性，未能继续输运的重反冲、未支持产物和队列溢出能量作为 residual local heat 计入沉积能量，以保持能量闭合。
 
 ### 3.6 中性粒子
 
-GPU 代码支持中子/光子的 `first_interaction` 和 `full` 两种可选 package-based neutral transport，但普通 CT `best` 设置：
+GPU 代码支持中子/光子的 `first_interaction` 和 `full` 两种可选 package-based neutral transport，但普通 CT production 设置：
 
 ```yaml
 enable_neutral_transport: false
@@ -171,7 +171,7 @@ enable_neutral_transport: false
 
 TOPAS 的 `g4em-standard_opt4` 可以输运电子、正电子和光子，并处理 bremsstrahlung、湮灭、成对产生、Compton、光电效应等过程。当前 CT GPU 没有通用电子/光子 secondary queue，也没有完整的原子退激发输运。
 
-GPU 可选的 `electronic_buildup_fraction` 和 LET delta-electron fraction table 是连续能损/LET 的局部近似，不等价于显式输运电子和 δ 射线。普通 CT `best` 的 `electronic_buildup_fraction` 默认关闭；LET scorer 使用的 delta-electron 表只改变 LET 定义相关的 restricted electronic stopping，不改变 dose transport。
+GPU 可选的 `electronic_buildup_fraction` 和 LET delta-electron fraction table 是连续能损/LET 的局部近似，不等价于显式输运电子和 δ 射线。普通 CT production 的 `electronic_buildup_fraction` 默认关闭；LET scorer 使用的 delta-electron 表只改变 LET 定义相关的 restricted electronic stopping，不改变 dose transport。
 
 ### 3.8 衰变和静止过程
 
@@ -179,7 +179,7 @@ GPU 可选的 `electronic_buildup_fraction` 和 LET delta-electron fraction tabl
 
 ## 4. 过程对应关系总表
 
-| TOPAS/Geant4 过程 | GPU 对应项 | 当前 CT `best` 状态 | 等效性判断 |
+| TOPAS/Geant4 过程 | GPU 对应项 | 当前 CT production 状态 | 等效性判断 |
 |---|---|---|---|
 | 电离、激发和离子连续能损 | stopping-power table + CT 材料/密度插值 | 开启 | 物理目的直接对应，数值实现为表格化 |
 | 能损涨落 | Bohr straggling | primary 开启，secondary 默认关闭 | 近似对应 |

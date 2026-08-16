@@ -1,3 +1,5 @@
+> **Archived.** Historical RT07575 local-gamma log. Entrance-plane skew/rotation has been removed from the engine. Do not treat the numbers or YAML keys here as current production.
+
 # RT07575 local 3%/0mm 工作日志
 
 **正式指标**：BODY ∩ TOPAS dose ≥ 10% BODY Dmax，**local 3%/0mm**（identical voxel，无拟合归一化）。  

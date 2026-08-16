@@ -41,7 +41,6 @@ add_library(carbon_core
     src/cascade_package.cpp
     src/neutral_package.cpp
     src/stopping_power.cpp
-    src/spot_plan_geometry.cpp
     src/topas_spots.cpp
     src/tps_source.cpp
     src/transport_cpu.cpp

@@ -1,6 +1,5 @@
-# RT06423 best-profile cross-case dose + LET with the high-statistics
+# RT06423 dose + LET with the high-statistics
 # soft-tissue primary C-12 correlated final-state package.
-physics_profile: best
 number_of_histories: 15108664
 initial_energy_MeVu: 200.0
 mass_number: 12

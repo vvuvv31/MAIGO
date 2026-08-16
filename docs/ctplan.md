@@ -293,7 +293,7 @@ tps_sad_mm: 450
 样例：
 
 - `config/beam_tps_source_arbitrary_angle.yaml`：37° 水箱；
-- `config/beam_tps_source_ct_20022516_angle37_smoke.yaml`：37° 固定 lung CT。
+- `config/beam_tps_source_example.yaml`：TPS CSV 源示例。
 
 默认 `tpsSource: false`，所以既有 `tps_90`、`tps_gantry_y` 的 RNG 和
 source 路径不变。

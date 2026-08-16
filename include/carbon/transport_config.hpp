@@ -82,9 +82,6 @@ struct PrimarySpotBatchEntry {
 };
 
 struct TransportConfig {
-    // Optional label only (output subdirectory / CLI). Transport accuracy is
-    // controlled by the numeric YAML fields, not by this name.
-    std::string physics_profile{"accurate"};
     std::size_t number_of_histories{10'000};
     // Fallback for single-beam runs. topas_spots_file(s) and tps_spots_file
     // supply per-spot energy and therefore do not require this value in YAML.
@@ -399,26 +396,6 @@ struct TransportConfig {
     double spots_patient_trans_z_mm{0.0};
     double spots_patient_rot_z_deg{0.0};
     double spots_ct_axis_min_mm{0.0};
-    // Diagnostic/legacy: after tps_90 maps the source to the CT entrance plane
-    // (GPU x=patient Y, GPU y=patient Z), apply
-    //   origin_y += skew * (origin_x - pivot)
-    // i.e. patient_Z += skew * (patient_Y - pivot). The neutral default is the
-    // production setting; nonzero values remain for explicit diagnostics and
-    // backward-compatible reproduction of historical affine A/B runs.
-    double spots_lateral_yz_skew{0.0};
-    double spots_lateral_yz_skew_pivot_mm{0.0};
-    bool spots_lateral_yz_skew_auto_pivot{false};
-    // Diagnostic/legacy rigid rotation of the entrance-plane spot map about
-    // the same lateral pivot (GPU x=patient Y, GPU y=patient Z):
-    //   [dx']   [ cosθ  -sinθ ] [dx]
-    //   [dy'] = [ sinθ   cosθ ] [dy]
-    // with θ = spots_lateral_yz_rotation_deg (counter-clockwise in GPU xy).
-    // The neutral default is the production setting. Nonzero values reproduce
-    // historical affine diagnostics; beam-basis lateral components rotate too.
-    double spots_lateral_yz_rotation_deg{0.0};
-    // Rotation pivot GPU-y (patient Z). Auto-pivot fills this with the
-    // history-weighted mean entrance GPU-y when auto_pivot is true.
-    double spots_lateral_yz_rotation_pivot_y_mm{0.0};
     // Multiplies TOPAS BiGaussian SigmaX/Y when applying spots (position width).
     // 1.0 = plan values. Modest >1 widens entrance/outer envelope.
     double spots_emittance_sigma_scale{1.0};
