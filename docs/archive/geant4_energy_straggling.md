@@ -1,3 +1,5 @@
+> **Archived.** Historical Geant4 straggling notes. Not a runtime spec.
+
 # Geant4 里的 Energy Straggling 是怎么处理的
 
 Geant4 处理 **energy straggling（能损涨落）** 的核心思路可以概括成一句话：

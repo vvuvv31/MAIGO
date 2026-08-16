@@ -1,6 +1,6 @@
 # MAIGO 仓库架构速读
 
-> 当前源码快照：2026-08-11。本文以 `CMakeLists.txt`、公共头文件和当前实现为准，目标是让新的对话或模型只读本文件即可开始定位和修改代码。历史实验结论仍应回到对应报告和原始结果核实。
+> 当前源码快照：2026-08-16。本文以 `CMakeLists.txt`、公共头文件和当前实现为准。历史实验结论仍应回到对应报告和原始结果核实。
 
 ## 0. 一页结论
 
@@ -10,10 +10,10 @@ MAIGO（CMake 项目名 `carbon_oneapi_mc`）是一个研究用途的碳离子 c
 - 输入是自定义的 `key: value` 配置、CSV 物理表、二进制末态 package、可选 CCTG CT 网格，以及 TOPAS/TPS spot 计划。
 - CPU serial 后端只覆盖一维 CSDA/straggling/初级衰减子集；水箱、CT、MCS、碎片、级联、中性粒子、LET 和完整三维计分主要在 SYCL 后端。
 - 普通水/CT/TPS 走 legacy SYCL kernel；Copper minibeam 是编译期开关控制的独立大 kernel，开启构建后再由运行时配置分发。
-- `src/main.cpp` 同时承担 CLI、资源装载、spot 计划编排、结果累加、输出和运行摘要，是应用层总入口。
+- `src/main.cpp` 是应用入口；CLI 在 `src/cli.cpp`，spot 变换/累加在 `src/plan_run.cpp`。
 - 核心状态对象是 `TransportConfig`（所有输入策略）和 `TransportResult`（所有 tally、账本、计时及诊断）。
 - 物理数据不是运行时生成的：CSV lookup table 和 `.bin` 事件 package 由 TOPAS/Geant4 离线生成，运行时只装载、插值和采样。
-- 当前 CMake 只生成 `carbon_core` 与 `carbon_mc`；`tests/carbon_tests.cpp` 存在，但没有被当前 `CMakeLists.txt` 构建，也没有 CTest 注册。
+- CMake 生成 `carbon_core` 与 `carbon_mc`；`BUILD_TESTING` 打开时构建并注册 `carbon_tests`。
 
 整体数据流：
 
@@ -51,9 +51,9 @@ CLI + key:value config
 | `include/carbon/` | 公共类型、API、几何/物理内联函数 | 接口和设备可用结构的第一事实源 |
 | `src/` | 配置、输运、I/O、物理表实现 | 当前行为的第一事实源 |
 | `src/detail/` | 两个 SYCL 输运 TU 共用的 include-only 实现片段 | 不能独立编译；修改会同时影响 legacy/minibeam |
-| `config/` | 约百个水箱、异质体、CT、LET、SOBP、TPS、minibeam 配置 | 示例兼验证入口；并非每个都适合当前 build/profile |
+| `config/` | 约 29 个水箱、CT、TPS、PBS、minibeam 示例 | 日常入口；不是扫描矩阵 |
 | `data/` | 入库的 CSV 物理表、metadata、`packages/` reaction/cascade/neutral/soft-tissue 与 Copper package | 运行时资产；格式需和 loader 保持一致 |
-| `tests/` | 单文件自建测试程序 | 当前未接入 CMake，不能把它等同于自动 CI |
+| `tests/` | `carbon_tests.cpp` | `BUILD_TESTING` 下由 CMake 构建 |
 | `validation/` | 本地 TOPAS 参数、Python/脚本、参考数据与报告 | 离线生成、剂量/模型对照、gamma/绘图与回归；不承载 GPU runtime/test 输入，当前不纳入 Git |
 | `startup/` | TOPAS database scorer extensions 与提取脚本 | 生成 GPU 物理数据库的上游工具，不参与 `carbon_mc` 构建 |
 | `scripts/` | Linux/Windows 构建与运行包装 | 环境便利层，不定义核心物理 |
@@ -69,13 +69,11 @@ CLI + key:value config
 |---|---|
 | `README.md` | 简要构建/运行介绍；其“slim core tree”叙述不覆盖当前工作树全部验证资产 |
 | `TOPAS_GPU_Physics_Model.md` | TOPAS/Geant4 与 GPU 物理过程对应和限制 |
-| `minibeamStructure.md` | minibeam 编译隔离、双 kernel、安全门和历史实现状态 |
-| `minibeam.md` | minibeam 物理实现与逐阶段验证日志，长且带时间线 |
+| `minibeamStructure.md` | minibeam 编译隔离与当前实现 |
+| `geometry_rotation.md` | 机架角数字 vs 转 CT 照射逻辑 |
 | `ctplan.md` | TOPAS Dij / matRad / GPU 计划与坐标变换工作流 |
 | `ctResult.md` | CT dose/LET 证据状态与结论边界 |
-| `archive/futureStep.md` | 2026-07 计划稿（历史） |
-| `archive/local30.md` | RT07575 局部 gamma 诊断日志（历史；仿射已删除） |
-| `MAIGO_TOPAS_GPU_Benchmark_CT_Match_Checklist.md` | 发文前 A1–A12 和 CT match 验收清单 |
+| `archive/` | 历史工作日志与清单，不是当前规范 |
 | `BRANCH_WORKFLOW.md` | 默认在 `master` 开发的分支约定 |
 
 ## 2. 构建与二进制组成
@@ -87,7 +85,7 @@ CLI + key:value config
 - `carbon_core`：静态/普通 CMake library，包含配置、数据表、几何、I/O、serial 后端，以及按开关加入的 SYCL 源。
 - `carbon_mc`：唯一可执行程序，`src/main.cpp`，链接 `carbon_core`。
 
-当前没有 `enable_testing()`、`add_executable(carbon_tests ...)` 或 `add_test(...)`。若任务涉及测试基础设施，需先明确是否要把现有测试重新接回 CMake。
+`BUILD_TESTING`（CMake 默认开）会编译 `carbon_tests` 并注册为 CTest。
 
 ### 2.2 编译开关
 
@@ -152,7 +150,7 @@ cmake --build --preset oneapi-nvidia-release
 
 1. 第一遍参数只寻找 `--config`，默认 `config/beam_200MeVu.yaml`。
 2. `load_config()` 读取配置并在返回前调用一次 `validate()`。
-3. 第二遍 CLI 覆盖 device、histories、seed、CT、queue、spots、输出等字段。
+3. `apply_cli_overrides()` 覆盖 device、histories、seed、CT、queue、spots、输出等字段。
 4. 再次 `validate()`，因此 CLI 也受相同组合约束。
 5. 装载主 stopping-power / cross-section 表，以及按 feature 开关装载 reaction、cascade、neutral package。
 6. 按束流来源选择单次运行、TOPAS spots 或 TPS source。
@@ -484,14 +482,14 @@ NumPy/SciPy/pydicom/matplotlib 环境和外部 TOPAS。运行前先读脚本 CLI
 
 - 物理一致性：`TOPAS_GPU_Physics_Model.md` + 对应 validation script/metadata。
 - CT/计划：`ctplan.md`、`validation/tps/README.md`、相关 CCTG preparation script。
-- minibeam：`minibeamStructure.md` 后再按需要查 `minibeam.md` 的具体阶段。
-- 发文 benchmark：`MAIGO_TOPAS_GPU_Benchmark_CT_Match_Checklist.md` + `benchmark/phantom/A_README.md`。
+- minibeam：`minibeamStructure.md`；时间线在 `archive/minibeam.md`。
+- 发文 checklist 历史稿：`archive/MAIGO_TOPAS_GPU_Benchmark_CT_Match_Checklist.md`。
 - 历史指标：`ctResult.md` / `archive/futureStep.md` / `archive/local30.md`，但以当前源码和新跑结果复核。
 
 ## 15. 当前已知文档/架构差异
 
 - 旧 `structure.md` 曾把 `medium` 列为可用；当前 `TransportConfig::validate()` 已明确移除它。
-- 旧文档曾列出多项 CTest；当前 CMake 没有任何测试 target/注册。
+- CTest 入口是 `carbon_tests`；没有再拆成多个独立 case。
 - 当前 checkout 仍可能保留历史上已跟踪的 validation/CT 文件；`.gitignore` 不会自动取消跟踪，清理提交需要显式登记这些旧文件的删除。
 - minibeam 与 legacy downstream kernel 仍是双大文件，不是完全抽取后的单一 water kernel 架构。
 - 配置扩展名虽是 `.yaml`，解析器不是完整 YAML。

@@ -14,6 +14,7 @@ other branches (e.g. `master`), not here.
 ```text
 include/carbon/     Public headers (config, transport, tables, geometry)
 src/                Implementation (serial + SYCL backends)
+  cli.cpp / plan_run.cpp  CLI and spot-plan helpers
   detail/           Shared SYCL device helpers (.inc)
 config/             Example beam configs
 data/               Stopping power, cross sections, reaction packages

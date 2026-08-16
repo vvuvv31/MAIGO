@@ -1,3 +1,5 @@
+> **Archived.** Historical publication checklist.
+
 # MAIGO 发文前 TOPAS/GPU Benchmark 与 CT Match 清单
 
 > 适用范围：`vvuvv31/MAIGO` 的 `reconstruct` 分支；文档按 2026-08-11 工作树与当前源码校正。目标是验证 MAIGO 的 GPU condensed-history 碳离子输运在声明的能量、材料、几何和计分范围内与 TOPAS/Geant4 达到预注册精度，而不是宣称其等价于完整 Geant4 physics list。

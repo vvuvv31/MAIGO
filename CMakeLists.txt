@@ -33,10 +33,12 @@ set(CARBON_CUDA_ARCH "" CACHE STRING
     "Optional NVIDIA GPU arch for AOT (e.g. sm_75); empty = portable PTX")
 
 add_library(carbon_core
+    src/cli.cpp
     src/config.cpp
     src/cross_section.cpp
     src/ct_grid.cpp
     src/io.cpp
+    src/plan_run.cpp
     src/reaction_package.cpp
     src/cascade_package.cpp
     src/neutral_package.cpp

@@ -1,3 +1,5 @@
+> **Archived.** Historical minibeam validation timeline. Current architecture is docs/minibeamStructure.md.
+
 # Minibeam 物理剂量实现与验证路线
 
 更新日期：2026-07-27
