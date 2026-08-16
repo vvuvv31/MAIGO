@@ -33,7 +33,7 @@ namespace {
 void print_usage(const char* executable) {
     std::cout << "Usage: " << executable
               << " [--config FILE] [--device DEVICE] [--histories N]"
-                 " [--physics-profile fast|best]"
+                 " [--physics-profile LABEL]"
                  " [--spots FILE] [--straggling-scale X] [--output FILE]"
                  " [--dose-output FILE] [--scorer-let|--no-scorer-let]"
                  " [--let-output FILE] [--plan-only] [--sequential-spots]\n"
@@ -45,7 +45,7 @@ void print_usage(const char* executable) {
                  "  --spot-weights FILE  One optimization weight per concatenated spot\n"
                  "  --histories N        With weights: total plan histories; otherwise per spot\n"
                  "  --random-seed N|auto Override the configured RNG seed\n"
-                 "  --physics-profile P  fast (maximum throughput) or best (maximum accuracy)\n"
+                 "  --physics-profile P  optional label (output path only; not a physics mode)\n"
                  "  --ct-grid FILE       Override the configured CCTG patient grid\n"
                  "  --ct-stopping-power-scale X  Override the CT mass stopping-power scale\n"
                  "  --secondary-queue-capacity N  Override charged secondary queue capacity\n"
@@ -946,6 +946,17 @@ int main(int argc, char* argv[]) {
                 if (!config.tps_beam_model_file.empty()) {
                     std::cout << "; beam model "
                               << config.tps_beam_model_file.string();
+                }
+                if (config.tps_apply_topas_patient_placement ||
+                    config.spots_patient_rot_z_deg != 0.0) {
+                    std::cout << "\n  TOPAS patient placement: RotZ="
+                              << config.spots_patient_rot_z_deg
+                              << " deg then Trans=("
+                              << config.spots_patient_trans_x_mm << ", "
+                              << config.spots_patient_trans_y_mm << ", "
+                              << config.spots_patient_trans_z_mm
+                              << ") mm; tps_90 packing ct_axis_min="
+                              << config.spots_ct_axis_min_mm << " mm";
                 }
             }
             std::cout << '\n';

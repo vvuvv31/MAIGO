@@ -97,10 +97,33 @@ With **MINIBEAM=ON**, `minibeam: false` still uses the legacy kernel;
   --device cuda
 ```
 
-Useful CLI flags: `--histories`, `--device`, `--output`, `--physics-profile`,
+Useful CLI flags: `--histories`, `--device`, `--output`,
 `--scorer-let` / `--no-scorer-let`, `--spots`, `--ct-grid`.
+`--physics-profile` is only an optional output-path label, not a physics mode.
 
 Config files are simple `key: value` lines (not a full YAML library).
+
+## Suggested transport settings
+
+There is **one** charged-particle model. Speed vs accuracy is only the
+numeric YAML fields below. `physics_profile: fast|balanced|best` is ignored
+as a mode (the string may still appear as an output subdirectory).
+
+| Use | `maximum_step_mm` | `maximum_relative_energy_loss` | `energy_cutoff_MeV` | `secondary_local_deposit_cutoff_MeV` | `secondary_condensed_step_mm` | LET | particle-specific SP |
+|-----|------------------:|-------------------------------:|--------------------:|-------------------------------------:|------------------------------:|-----|----------------------|
+| Fast dose estimate | 0.5 | 0.005 | 0.1 | 2.0 | 1.0 | off | optional |
+| Dose + LET | 0.25 | 0.0025 | 0.1 | 0.5 | 0.5 | on | on |
+| Tightest production | 0.1 | 0.001 | 0.1 | 0.1 | 0 | on | on |
+
+Particle-specific stopping power is a small kernel cost; the rows above
+differ mainly by step size, secondary cutoff, condensed secondary step, and
+whether LET is scored. Opening LET with `maximum_step_mm > 0.25` prints a
+warning and still runs.
+
+Keep the charged dose chain on for CT (`enable_primary_attenuation`,
+`enable_secondary_generation`, `enable_secondary_transport`,
+`enable_fragment_cascade`). Neutrals, secondary straggling, and CT-material
+MCS stay off unless you are studying those extensions.
 
 ## Physics data
 

@@ -8,6 +8,7 @@
 #include <chrono>
 #include <cmath>
 #include <fstream>
+#include <iostream>
 #include <limits>
 #include <random>
 #include <sstream>
@@ -302,92 +303,10 @@ std::size_t TransportConfig::number_of_voxels() const {
 }
 
 void TransportConfig::validate() const {
-    if (physics_profile == "medium") {
-        throw std::invalid_argument(
-            "physics_profile=medium has been removed; choose physics_profile=fast "
-            "for maximum throughput, balanced for dose+LET throughput, or best "
-            "for maximum accuracy");
-    }
-    if (physics_profile != "accurate" && physics_profile != "best" &&
-        physics_profile != "balanced" && physics_profile != "fast") {
-        throw std::invalid_argument(
-            "physics_profile must be fast, balanced, or best for conventional CT; "
-            "omit it only for legacy/minibeam compatibility");
-    }
-    if (physics_profile == "best") {
-        if (!enable_let_scoring) {
-            throw std::invalid_argument(
-                "physics_profile=best requires LET scoring");
-        }
-        if (!use_particle_specific_stopping_power) {
-            throw std::invalid_argument(
-                "physics_profile=best requires particle-specific stopping power");
-        }
-        if (!enable_primary_attenuation || !enable_secondary_generation ||
-            !enable_secondary_transport || !enable_fragment_cascade) {
-            throw std::invalid_argument(
-                "physics_profile=best requires attenuation, secondary transport, "
-                "and fragment cascade");
-        }
-        if (maximum_step_mm > 0.1 || maximum_relative_energy_loss > 0.001 ||
-            energy_cutoff_MeV > 0.1 ||
-            (secondary_local_deposit_cutoff_MeV > 0.0 &&
-             secondary_local_deposit_cutoff_MeV > 0.1)) {
-            throw std::invalid_argument(
-                "physics_profile=best requires maximum_step_mm<=0.1, "
-                "maximum_relative_energy_loss<=0.001, and cutoffs<=0.1 MeV");
-        }
-    }
-    if (physics_profile == "balanced") {
-        if (!enable_let_scoring) {
-            throw std::invalid_argument(
-                "physics_profile=balanced requires LET scoring");
-        }
-        if (!use_particle_specific_stopping_power) {
-            throw std::invalid_argument(
-                "physics_profile=balanced requires particle-specific stopping power");
-        }
-        if (!enable_primary_attenuation || !enable_secondary_generation ||
-            !enable_secondary_transport || !enable_fragment_cascade) {
-            throw std::invalid_argument(
-                "physics_profile=balanced requires attenuation, secondary transport, "
-                "and fragment cascade");
-        }
-        if (maximum_step_mm > 0.25 || maximum_relative_energy_loss > 0.0025 ||
-            energy_cutoff_MeV > 0.1 ||
-            (secondary_local_deposit_cutoff_MeV > 0.0 &&
-             secondary_local_deposit_cutoff_MeV > 0.5) ||
-            secondary_condensed_step_mm > 0.5) {
-            throw std::invalid_argument(
-                "physics_profile=balanced requires maximum_step_mm<=0.25, "
-                "maximum_relative_energy_loss<=0.0025, energy_cutoff_MeV<=0.1, "
-                "secondary_local_deposit_cutoff_MeV<=0.5, and "
-                "secondary_condensed_step_mm<=0.5");
-        }
-    }
-    if (physics_profile == "fast") {
-        if (enable_minibeam) {
-            throw std::invalid_argument(
-                "physics_profile=fast is not allowed with minibeam=true");
-        }
-        if (!enable_primary_attenuation || !enable_secondary_generation ||
-            !enable_secondary_transport || !enable_fragment_cascade) {
-            throw std::invalid_argument(
-                "physics_profile=fast requires the complete charged dose chain");
-        }
-        if (enable_let_scoring) {
-            throw std::invalid_argument(
-                "physics_profile=fast disables LET scoring; choose "
-                "physics_profile=best for LET");
-        }
-        if (maximum_relative_energy_loss > 0.01) {
-            throw std::invalid_argument(
-                "physics_profile=fast requires maximum_relative_energy_loss<=0.01");
-        }
-        if (energy_cutoff_MeV > 0.1) {
-            throw std::invalid_argument(
-                "physics_profile=fast keeps the primary cutoff at <=0.1 MeV");
-        }
+    if (enable_let_scoring && maximum_step_mm > 0.25) {
+        std::cerr << "Warning: LET scoring with maximum_step_mm="
+                  << maximum_step_mm
+                  << " mm (>0.25). Prefer <=0.25 mm for LET production.\n";
     }
     if (number_of_histories == 0) {
         throw std::invalid_argument("number_of_histories must be greater than zero");
@@ -1723,6 +1642,9 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.tps_virtual_source_to_isocenter_mm = parse_number(
         values, "tps_virtual_source_to_isocenter_mm",
         config.tps_virtual_source_to_isocenter_mm);
+    config.tps_apply_topas_patient_placement = parse_bool(
+        values, "tps_apply_topas_patient_placement",
+        config.tps_apply_topas_patient_placement);
     if (const auto it = values.find("tps_spot_weight_mode");
         it != values.end() && !it->second.empty()) {
         config.tps_spot_weight_mode = it->second;

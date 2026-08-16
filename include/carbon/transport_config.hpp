@@ -82,9 +82,8 @@ struct PrimarySpotBatchEntry {
 };
 
 struct TransportConfig {
-    // Explicit transport accuracy policy. Public conventional-CT profiles are
-    // "fast" and "best". "accurate" is retained only as the internal default
-    // for legacy/minibeam configurations that omit a public profile.
+    // Optional label only (output subdirectory / CLI). Transport accuracy is
+    // controlled by the numeric YAML fields, not by this name.
     std::string physics_profile{"accurate"};
     std::size_t number_of_histories{10'000};
     // Fallback for single-beam runs. topas_spots_file(s) and tps_spots_file
@@ -452,6 +451,12 @@ struct TransportConfig {
     double tps_virtual_scanning_magnet_y_mm{0.0};
     // Physical source-plane distance D. Zero falls back to tps_sad_mm.
     double tps_virtual_source_to_isocenter_mm{0.0};
+    // When true (or when spots_patient_rot_z_deg != 0 with virtual magnets),
+    // build the PBS beam in the TOPAS world TPS-0° frame and apply the same
+    // Patient Trans/RotZ + tps_90 CT packing as Time Feature plans.
+    // TOPAS applies RotZ first, then the recorded Trans — do not replace that
+    // with tps_beam_angle_deg on an unrotated CT.
+    bool tps_apply_topas_patient_placement{false};
     // "mu": treat the weight column as MU and Hamilton-allocate
     // number_of_histories (existing TPS CSV). "histories": treat weight as
     // an exact history count, optionally scaled by tps_histories_scale.
@@ -644,8 +649,7 @@ struct TransportConfig {
         const auto configured = secondary_local_deposit_cutoff_MeV > 0.0
                                     ? secondary_local_deposit_cutoff_MeV
                                     : energy_cutoff_MeV;
-        return physics_profile == "fast" ? std::max(configured, 2.0)
-                                         : configured;
+        return configured;
     }
     [[nodiscard]] bool uses_fixed_patient_coordinates() const noexcept {
         return enable_tps_coordinate_system || enable_tps_source;

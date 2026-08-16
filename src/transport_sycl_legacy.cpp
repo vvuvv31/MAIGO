@@ -2264,10 +2264,7 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
             // for fewer launches. Accurate mode preserves the validated WSL
             // launch policy byte-for-byte.
             history_chunk =
-                (config.physics_profile == "balanced" ||
-                 config.physics_profile == "fast")
-                    ? 16384
-                    : (number_of_histories > 1'000'000 ? 16384 : 4096);
+                number_of_histories > 1'000'000 ? 16384 : 4096;
         } else if (device.is_gpu()) {
             history_chunk = 8192;
         } else {
@@ -2331,43 +2328,27 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
     const auto maximum_relative_energy_loss =
         static_cast<float>(config.maximum_relative_energy_loss);
     const auto energy_cutoff_MeV = static_cast<float>(config.energy_cutoff_MeV);
-    const auto balanced_physics_profile = config.physics_profile == "balanced";
-    const auto fast_physics_profile = config.physics_profile == "fast";
     if (is_cuda_backend && !config.enable_minibeam) {
         const auto warmup_seconds = cuda_clock_warmup(queue);
         std::cout << "CUDA non-minibeam clock warm-up: " << warmup_seconds
                   << " s\n"
                   << std::flush;
     }
-    // The fast CT profile folds only very short-range charged fragments into
-    // their current voxel. It never achieves speed by overflowing a queue.
-    // Balanced and best honor the explicitly validated YAML cutoff exactly.
     const auto secondary_local_deposit_cutoff_MeV = static_cast<float>(
         config.effective_secondary_local_deposit_cutoff_MeV());
     // 0 = transport all supported charged Z; else Z >= min deposit as local heat.
     const auto secondary_heavy_local_deposit_z_min =
         config.secondary_heavy_local_deposit_z_min;
-    // In fast CT dose mode, secondary EM/MCS work is condensed to a larger
-    // macro step. Existing CT-face and dose-voxel clamps below remain active,
-    // so no step crosses a material or scoring boundary.
+    // Positive secondary_condensed_step_mm is a YAML macro-step. CT-face and
+    // dose-voxel clamps below remain active, so no step crosses a material or
+    // scoring boundary.
     const auto secondary_transport_step_mm =
-        fast_physics_profile
-            ? std::max(
-                  maximum_step_mm,
-                  static_cast<float>(
-                      config.secondary_condensed_step_mm > 0.0
-                          ? config.secondary_condensed_step_mm
-                          : 1.0))
-            : (balanced_physics_profile
-                   ? std::max(
-                         maximum_step_mm,
-                         static_cast<float>(
-                             config.secondary_condensed_step_mm > 0.0
-                                 ? config.secondary_condensed_step_mm
-                                 : 0.5))
-                   : maximum_step_mm);
-    std::cout << "Physics profile: " << config.physics_profile
-              << "; secondary step limit=" << secondary_transport_step_mm
+        config.secondary_condensed_step_mm > 0.0
+            ? std::max(maximum_step_mm,
+                       static_cast<float>(config.secondary_condensed_step_mm))
+            : maximum_step_mm;
+    std::cout << "Transport limits: step=" << maximum_step_mm
+              << " mm; secondary step=" << secondary_transport_step_mm
               << " mm; local-deposit cutoff="
               << secondary_local_deposit_cutoff_MeV << " MeV\n";
     const auto enable_energy_straggling = config.enable_energy_straggling;
@@ -6575,12 +6556,9 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
     TransportResult result;
     result.backend = "sycl-" + device_name +
                      (config.enable_energy_straggling ? "+straggling" : "");
-    if (balanced_physics_profile) {
-        result.backend += "+physics-balanced";
-    } else if (fast_physics_profile) {
-        result.backend += "+physics-fast";
-    } else if (config.physics_profile == "best") {
-        result.backend += "+physics-best";
+    if (!config.physics_profile.empty() &&
+        config.physics_profile != "accurate") {
+        result.backend += "+label-" + config.physics_profile;
     }
     if (enable_secondary_energy_straggling) {
         result.backend += "+secondary-straggling";

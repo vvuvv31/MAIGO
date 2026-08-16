@@ -1413,95 +1413,53 @@ void test_secondary_optimization_config_validation() {
     require_throws([&bad_output] { bad_output.validate(); },
                    "Disabling fragment scoring should reject total IDD output");
 
-    carbon::TransportConfig fast;
-    fast.physics_profile = "fast";
-    fast.enable_primary_attenuation = true;
-    fast.enable_secondary_generation = true;
-    fast.enable_secondary_transport = true;
-    fast.enable_fragment_cascade = true;
-    fast.maximum_cascade_generations = 2;
-    fast.validate();
-    require_near(fast.effective_secondary_local_deposit_cutoff_MeV(), 2.0,
-                 1.0e-12,
-                 "Fast profile must retain its 2 MeV local-deposit floor");
+    carbon::TransportConfig numeric;
+    numeric.enable_primary_attenuation = true;
+    numeric.enable_secondary_generation = true;
+    numeric.enable_secondary_transport = true;
+    numeric.enable_fragment_cascade = true;
+    numeric.maximum_cascade_generations = 2;
+    numeric.validate();
+    require_near(numeric.effective_secondary_local_deposit_cutoff_MeV(),
+                 numeric.energy_cutoff_MeV, 1.0e-12,
+                 "Unset secondary cutoff must inherit the primary energy cutoff");
 
-    auto fast_ct = fast;
-    fast_ct.enable_ct_grid = true;
-    fast_ct.ct_grid_file = "synthetic-fast-profile-grid.bin";
-    fast_ct.validate();
+    auto numeric_ct = numeric;
+    numeric_ct.enable_ct_grid = true;
+    numeric_ct.ct_grid_file = "synthetic-fast-profile-grid.bin";
+    numeric_ct.validate();
 
-    auto medium = fast;
-    medium.physics_profile = "medium";
-    medium.enable_let_scoring = true;
-    require_throws([&medium] { medium.validate(); },
-                   "Removed medium physics profile should be rejected");
+    auto labeled = numeric;
+    labeled.physics_profile = "turbo";
+    labeled.validate();
 
-    auto balanced = fast;
-    balanced.physics_profile = "balanced";
-    balanced.maximum_step_mm = 0.25;
-    balanced.maximum_relative_energy_loss = 0.0025;
-    balanced.energy_cutoff_MeV = 0.1;
-    balanced.secondary_local_deposit_cutoff_MeV = 0.5;
-    balanced.secondary_condensed_step_mm = 0.5;
-    balanced.enable_let_scoring = true;
-    balanced.use_particle_specific_stopping_power = true;
-    balanced.validate();
-    require_near(balanced.effective_secondary_local_deposit_cutoff_MeV(),
+    auto dose_let = numeric;
+    dose_let.maximum_step_mm = 0.25;
+    dose_let.maximum_relative_energy_loss = 0.0025;
+    dose_let.energy_cutoff_MeV = 0.1;
+    dose_let.secondary_local_deposit_cutoff_MeV = 0.5;
+    dose_let.secondary_condensed_step_mm = 0.5;
+    dose_let.enable_let_scoring = true;
+    dose_let.use_particle_specific_stopping_power = true;
+    dose_let.validate();
+    require_near(dose_let.effective_secondary_local_deposit_cutoff_MeV(),
                  0.5, 1.0e-12,
-                 "Balanced profile must honor the configured 0.5 MeV cutoff");
+                 "Configured 0.5 MeV secondary cutoff must be used as written");
 
-    auto balanced_default_cutoff = balanced;
-    balanced_default_cutoff.secondary_local_deposit_cutoff_MeV = 0.0;
+    auto inherit_cutoff = dose_let;
+    inherit_cutoff.secondary_local_deposit_cutoff_MeV = 0.0;
     require_near(
-        balanced_default_cutoff.effective_secondary_local_deposit_cutoff_MeV(),
-        balanced_default_cutoff.energy_cutoff_MeV, 1.0e-12,
-        "Balanced zero cutoff must inherit the primary energy cutoff");
+        inherit_cutoff.effective_secondary_local_deposit_cutoff_MeV(),
+        inherit_cutoff.energy_cutoff_MeV, 1.0e-12,
+        "Zero secondary cutoff must inherit the primary energy cutoff");
 
-    auto bad_balanced_step = balanced;
-    bad_balanced_step.maximum_step_mm = 0.5;
-    require_throws([&bad_balanced_step] { bad_balanced_step.validate(); },
-                   "Balanced physics profile should enforce its step limit");
+    auto coarse_let = dose_let;
+    coarse_let.maximum_step_mm = 0.5;
+    coarse_let.validate();
 
-    auto bad_balanced_let = balanced;
-    bad_balanced_let.enable_let_scoring = false;
-    require_throws([&bad_balanced_let] { bad_balanced_let.validate(); },
-                   "Balanced physics profile should require LET scoring");
-
-    auto best = fast;
-    best.physics_profile = "best";
-    best.maximum_step_mm = 0.1;
-    best.maximum_relative_energy_loss = 0.001;
-    best.energy_cutoff_MeV = 0.1;
-    best.secondary_local_deposit_cutoff_MeV = 0.1;
-    best.enable_let_scoring = true;
-    best.use_particle_specific_stopping_power = true;
-    best.validate();
-
-    auto bad_best_let = best;
-    bad_best_let.enable_let_scoring = false;
-    require_throws([&bad_best_let] { bad_best_let.validate(); },
-                   "Best physics profile should require LET scoring");
-
-    auto bad_best_step = best;
-    bad_best_step.maximum_step_mm = 0.5;
-    require_throws([&bad_best_step] { bad_best_step.validate(); },
-                   "Best physics profile should enforce its step limit");
-
-    auto fast_let = fast;
-    fast_let.enable_let_scoring = true;
-    fast_let.let_output_file = "fast_letd.csv";
-    require_throws([&fast_let] { fast_let.validate(); },
-                   "Fast physics profile should reject LET scoring");
-
-    auto bad_fast_minibeam = fast;
-    bad_fast_minibeam.enable_minibeam = true;
-    require_throws([&bad_fast_minibeam] { bad_fast_minibeam.validate(); },
-                   "Fast physics profile should reject minibeam");
-
-    auto bad_profile = fast;
-    bad_profile.physics_profile = "turbo";
-    require_throws([&bad_profile] { bad_profile.validate(); },
-                   "Unknown physics profile should be rejected");
+    auto let_off = dose_let;
+    let_off.enable_let_scoring = false;
+    let_off.validate();
 
     const auto config_root =
         std::filesystem::path(CARBON_SOURCE_DIR) / "config";
@@ -2054,6 +2012,45 @@ void test_tps_source_geometry_csv_and_switch() {
     require_near(pbs_batch.front().initial_energy_MeV(), 2040.0, 1.0e-4,
                  "PBS batch keeps total ion kinetic energy");
 
+    // TOPAS applies Patient RotZ first, then the recorded Trans. That is the
+    // same packing as Time Feature tps_90 — not "tps_beam_angle_deg=90 on an
+    // unrotated CT".
+    carbon::TransportConfig pbs_topas = pbs;
+    pbs_topas.tps_apply_topas_patient_placement = true;
+    pbs_topas.tps_gantry_angle_deg = 0.0;
+    pbs_topas.spots_patient_trans_x_mm = -12.3588;
+    pbs_topas.spots_patient_trans_y_mm = -5.5590;
+    pbs_topas.spots_patient_trans_z_mm = 0.3945;
+    pbs_topas.spots_patient_rot_z_deg = 90.0;
+    pbs_topas.spots_ct_axis_min_mm = -110.0;
+    carbon::SpotSourcePose world_pbs{};
+    world_pbs.origin_x_mm = corner.origin_x_mm;
+    world_pbs.origin_y_mm = corner.origin_y_mm;
+    world_pbs.origin_z_mm = corner.origin_z_mm;
+    world_pbs.ux_x = corner.ux_x;
+    world_pbs.ux_y = corner.ux_y;
+    world_pbs.ux_z = corner.ux_z;
+    world_pbs.uy_x = corner.uy_x;
+    world_pbs.uy_y = corner.uy_y;
+    world_pbs.uy_z = corner.uy_z;
+    world_pbs.uz_x = corner.uz_x;
+    world_pbs.uz_y = corner.uz_y;
+    world_pbs.uz_z = corner.uz_z;
+    const auto packed = carbon::transform_tps_90_pose_to_ct(
+        world_pbs, pbs_topas.spots_patient_trans_x_mm,
+        pbs_topas.spots_patient_trans_y_mm, pbs_topas.spots_patient_trans_z_mm,
+        pbs_topas.spots_patient_rot_z_deg, pbs_topas.spots_ct_axis_min_mm);
+    const auto placed = pbs_plan.pose_for_spot(pbs_topas, pbs_plan.spots.front());
+    require_near(placed.origin_x_mm, packed.origin_x_mm, 1.0e-9,
+                 "PBS TOPAS placement GPU-X matches tps_90 packing");
+    require_near(placed.origin_y_mm, packed.origin_y_mm, 1.0e-9,
+                 "PBS TOPAS placement GPU-Y matches tps_90 packing");
+    require_near(placed.origin_z_mm, packed.origin_z_mm, 1.0e-9,
+                 "PBS TOPAS placement GPU-Z matches tps_90 packing");
+    require(placed.uz_z > 0.999, "PBS TOPAS placement aims +GPU-Z");
+    require(placed.origin_z_mm < 0.0,
+            "PBS TOPAS placement source is upstream of the CT entrance");
+
     auto parallel = pbs;
     parallel.tps_virtual_scanning_magnet_x_mm = 0.0;
     parallel.tps_virtual_scanning_magnet_y_mm = 0.0;
@@ -2097,6 +2094,16 @@ void test_tps_source_geometry_csv_and_switch() {
             "voxel_scorer_clamps_transport:false parsing");
     require_near(vector_isocenter.tps_gantry_angle_deg, 37.5, 1.0e-12,
                  "TPS arbitrary angle parsing");
+    {
+        std::ofstream output(yaml_path);
+        output << "number_of_histories: 10\n"
+               << "tpsSource: true\n"
+               << "enable_voxel_scoring: true\n"
+               << "tps_apply_topas_patient_placement: true\n";
+    }
+    const auto topas_place = carbon::load_config(yaml_path);
+    require(topas_place.tps_apply_topas_patient_placement,
+            "tps_apply_topas_patient_placement parsing");
     {
         std::ofstream output(yaml_path);
         output << "number_of_histories: 10\n"
