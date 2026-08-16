@@ -2005,6 +2005,64 @@ void test_tps_source_geometry_csv_and_switch() {
     require_throws([&conflicting] { conflicting.validate(); },
                    "TPS and legacy TOPAS sources must be exclusive");
 
+    const auto pbs_csv = std::filesystem::path(CARBON_SOURCE_DIR) /
+                         "data/plans/pbs_spots_example.csv";
+    const auto pbs_model = std::filesystem::path(CARBON_SOURCE_DIR) /
+                           "data/plans/pbs_beam_model_example.csv";
+    auto pbs_plan = carbon::TpsSourcePlan::from_csv(pbs_csv);
+    require(pbs_plan.spots.size() == 3, "PBS CSV spot count");
+    require_near(pbs_plan.spots.front().energy_total_MeV, 2040.0, 1.0e-9,
+                 "PBS energy_MeV is total ion kinetic energy");
+    require_near(pbs_plan.spots.front().x_mm, -15.0, 1.0e-12, "PBS x_iso");
+    pbs_plan.apply_beam_model(pbs_model);
+    require(std::isfinite(pbs_plan.spots.front().sigma_x_mm),
+            "PBS beam model fills omitted optics");
+
+    carbon::TransportConfig pbs = config;
+    pbs.enable_tps_source = true;
+    pbs.tps_spots_file = pbs_csv;
+    pbs.tps_beam_model_file = pbs_model;
+    pbs.tps_spot_weight_mode = "histories";
+    pbs.tps_histories_scale = 1.0;
+    pbs.tps_virtual_scanning_magnet_x_mm = 6227.8;
+    pbs.tps_virtual_scanning_magnet_y_mm = 7008.6;
+    pbs.tps_virtual_source_to_isocenter_mm = 450.0;
+    pbs.tps_sad_mm = 450.0;
+    pbs.tps_angle_convention = "dicom_lps";
+    pbs.tps_gantry_angle_deg = 0.0;
+    pbs.tps_isocenter_x_mm = 0.0;
+    pbs.tps_isocenter_y_mm = 0.0;
+    pbs.tps_isocenter_z_mm = 0.0;
+    pbs.number_of_histories = 1;
+    pbs_plan = carbon::TpsSourcePlan::from_config(pbs);
+    const auto corner = pbs_plan.pose_for_spot(pbs, pbs_plan.spots.front());
+    require_near(corner.origin_x_mm, -13.9162, 5.0e-5,
+                 "PBS virtual-magnet source-plane X");
+    require_near(corner.origin_z_mm, -8.4221, 5.0e-5,
+                 "PBS virtual-magnet source-plane Y onto local v=+Z at gantry 0");
+    require_near(corner.origin_y_mm, -450.0, 1.0e-9,
+                 "PBS source plane is y=-D at gantry 0");
+    const auto aimed =
+        -corner.origin_x_mm * corner.uz_x + -corner.origin_y_mm * corner.uz_y +
+        -corner.origin_z_mm * corner.uz_z;
+    require(aimed > 449.0, "PBS central ray must aim at the isocenter");
+    const auto pbs_batch = pbs_plan.make_primary_batch(pbs);
+    require(pbs_batch.size() == 2, "PBS zero-weight spots are not transported");
+    require(pbs_batch.front().history_end == 10 &&
+                pbs_batch.back().history_end == 40,
+            "PBS weight column is exact histories");
+    require_near(pbs_batch.front().initial_energy_MeV(), 2040.0, 1.0e-4,
+                 "PBS batch keeps total ion kinetic energy");
+
+    auto parallel = pbs;
+    parallel.tps_virtual_scanning_magnet_x_mm = 0.0;
+    parallel.tps_virtual_scanning_magnet_y_mm = 0.0;
+    const auto old_pose = pbs_plan.pose_for_spot(parallel, pbs_plan.spots.front());
+    require_near(old_pose.origin_x_mm, -15.0, 1.0e-9,
+                 "Unset magnets keep the historical parallel source-plane offset");
+    require_near(old_pose.uz_y, 1.0, 1.0e-12,
+                 "Unset magnets keep the historical parallel central ray");
+
     const auto yaml_path = std::filesystem::temp_directory_path() /
                            "carbon_tps_source_switch.yaml";
     {

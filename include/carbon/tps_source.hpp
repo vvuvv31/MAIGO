@@ -16,6 +16,8 @@ namespace carbon {
 struct TpsSpot {
     int spot_id{0};
     double energy_MeVu{0.0};
+    // Finite when the CSV supplied total ion kinetic energy (energy_MeV).
+    double energy_total_MeV{std::numeric_limits<double>::quiet_NaN()};
     double x_mm{0.0};
     double y_mm{0.0};
     double mu_weight{1.0};
@@ -48,6 +50,7 @@ struct TpsSourcePlan {
 
     [[nodiscard]] static TpsSourcePlan from_config(const TransportConfig& config);
     [[nodiscard]] static TpsSourcePlan from_csv(const std::filesystem::path& path);
+    void apply_beam_model(const std::filesystem::path& path);
     [[nodiscard]] TpsSourcePose pose_for_spot(const TransportConfig& config,
                                               const TpsSpot& spot) const;
     [[nodiscard]] std::vector<std::size_t> allocate_histories(

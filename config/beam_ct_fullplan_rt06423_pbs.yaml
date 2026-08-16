@@ -1,0 +1,70 @@
+# RT06423 PencilBeamScanning source: spots.csv + virtual scanning magnets.
+# The Time Feature / topas_spots_file path is unchanged. Enable this file
+# only when comparing against fullplan_tps PBS jobs (IEC gantry 0, Patient RotZ=90).
+physics_profile: balanced
+number_of_histories: 15108664
+maximum_step_mm: 0.25
+maximum_relative_energy_loss: 0.0025
+energy_cutoff_MeV: 0.1
+secondary_local_deposit_cutoff_MeV: 0.5
+secondary_condensed_step_mm: 0.5
+ct_grid_file: benchmark/ct/RT06423/grid/patient_ct.bin
+ct_hu_stopping_power_lut_file: data/hu_stopping_power_lut_geant4_11_3_2.csv
+ct_skip_homogeneous_face_clamp: true
+enable_voxel_scoring: true
+enable_charged_origin_voxel_scoring: false
+
+enable_energy_straggling: true
+enable_secondary_energy_straggling: false
+straggling_scale: 1.2
+enable_multiple_scattering: true
+enable_ct_material_mcs: false
+enable_primary_attenuation: true
+enable_secondary_generation: true
+enable_secondary_transport: true
+enable_fragment_cascade: true
+enable_fragment_species_scoring: false
+enable_neutral_transport: false
+maximum_cascade_generations: 2
+secondary_queue_capacity: 65000000
+secondary_batch_size: 65536
+enable_secondary_energy_sorting: true
+max_device_memory_fraction: 0.84
+random_seed: 20260801
+
+enable_tps_source: true
+enable_tps_coordinate_system: true
+tps_spots_file: benchmark/ct/result_x10/RT06423/spots.csv
+tps_beam_model_file: benchmark/ct/result_x10/RT06423/beam_model.csv
+tps_spot_weight_mode: histories
+tps_histories_scale: 1.0
+tps_virtual_scanning_magnet_x_mm: 6227.8
+tps_virtual_scanning_magnet_y_mm: 7008.6
+tps_virtual_source_to_isocenter_mm: 450.0
+tps_sad_mm: 450.0
+tps_beam_angle_deg: 90.0
+tps_isocenter_mm: [-5.5590, 12.3588, -0.3945]
+spots_patient_trans_x_mm: -12.3588
+spots_patient_trans_y_mm: -5.5590
+spots_patient_trans_z_mm: 0.3945
+
+stopping_power_file: data/stopping_power_water_geant4_11_3_2.csv
+let_delta_electron_fraction_file: data/let_delta_electron_fraction_water_geant4_11_3_2.csv
+use_particle_specific_stopping_power: true
+particle_stopping_power_file: data/ion_stopping_power_water_geant4_11_3_2.csv
+nuclear_cross_section_file: data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv
+ct_schneider_cross_section_file: data/c12_inelastic_cross_sections_schneider_geant4_11_3_2.csv
+reaction_package_file: data/packages/topas_400MeVu_schneider_section07_inclxx_100k_primary_3d.bin
+cascade_package_file: data/packages/topas_400MeVu_schneider_section07_inclxx_100k_cascade_3d.bin
+ct_lung_reaction_package_file: data/packages/topas_400MeVu_lung_inclxx_100k_primary_3d.bin
+ct_bone_reaction_package_file: data/packages/topas_400MeVu_bone_inclxx_100k_primary_3d.bin
+ct_lung_cascade_package_file: data/packages/topas_400MeVu_lung_inclxx_100k_cascade_3d.bin
+ct_bone_cascade_package_file: data/packages/topas_400MeVu_bone_inclxx_100k_cascade_3d.bin
+
+dose_to_medium: true
+dose_to_medium_type: mhd
+dose_to_medium_name: dose
+LET: true
+LET_type: mhd
+LET_name: LET
+device: cuda

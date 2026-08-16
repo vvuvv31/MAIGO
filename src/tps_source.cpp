@@ -209,13 +209,47 @@ TpsSourcePose central_pose(const TransportConfig& config, const TpsSpot& spot) {
     }
     const auto patient = orientation_matrix(config.tps_patient_position);
     const auto rotation = multiply(patient, machine);
-    const auto u = multiply(rotation, Vec3{1.0, 0.0, 0.0});
-    const auto v = multiply(rotation, Vec3{0.0, 1.0, 0.0});
-    const auto w = multiply(rotation, Vec3{0.0, 0.0, -1.0});
+    const auto u0 = multiply(rotation, Vec3{1.0, 0.0, 0.0});
+    const auto v0 = multiply(rotation, Vec3{0.0, 1.0, 0.0});
+    const auto w0 = multiply(rotation, Vec3{0.0, 0.0, -1.0});
     const Vec3 isocenter{config.tps_isocenter_x_mm, config.tps_isocenter_y_mm,
                          config.tps_isocenter_z_mm};
-    const auto central_source = isocenter - config.tps_sad_mm * w;
-    const auto origin = central_source + spot.x_mm * u + spot.y_mm * v;
+    const auto magnet_x = config.tps_virtual_scanning_magnet_x_mm;
+    const auto magnet_y = config.tps_virtual_scanning_magnet_y_mm;
+    const auto uses_virtual_magnets = magnet_x > 0.0 && magnet_y > 0.0;
+    const auto source_distance_mm =
+        config.tps_virtual_source_to_isocenter_mm > 0.0
+            ? config.tps_virtual_source_to_isocenter_mm
+            : config.tps_sad_mm;
+    if (!uses_virtual_magnets) {
+        const auto central_source = isocenter - source_distance_mm * w0;
+        const auto origin = central_source + spot.x_mm * u0 + spot.y_mm * v0;
+        return {
+            origin.x, origin.y, origin.z,
+            u0.x, u0.y, u0.z,
+            v0.x, v0.y, v0.z,
+            w0.x, w0.y, w0.z,
+        };
+    }
+    // PencilBeamScanning: (x,y) are isocenter-plane scan coordinates.
+    // Source plane is scaled by the virtual magnets; the central ray aims
+    // at the isocenter.
+    const auto x_src = spot.x_mm * (magnet_x - source_distance_mm) / magnet_x;
+    const auto y_src = spot.y_mm * (magnet_y - source_distance_mm) / magnet_y;
+    const auto origin =
+        isocenter + x_src * u0 + y_src * v0 - source_distance_mm * w0;
+    const auto tan_x = spot.x_mm / magnet_x;
+    const auto tan_y = spot.y_mm / magnet_y;
+    auto w = tan_x * u0 + tan_y * v0 + w0;
+    const auto w_norm =
+        std::sqrt(w.x * w.x + w.y * w.y + w.z * w.z);
+    w = (1.0 / w_norm) * w;
+    auto u = u0 - (u0.x * w.x + u0.y * w.y + u0.z * w.z) * w;
+    const auto u_norm =
+        std::sqrt(u.x * u.x + u.y * u.y + u.z * u.z);
+    u = (1.0 / u_norm) * u;
+    const Vec3 v{w.y * u.z - w.z * u.y, w.z * u.x - w.x * u.z,
+                 w.x * u.y - w.y * u.x};
     return {
         origin.x, origin.y, origin.z,
         u.x, u.y, u.z,
@@ -278,11 +312,19 @@ TpsSourcePlan TpsSourcePlan::from_csv(const std::filesystem::path& path) {
     for (std::size_t index = 0; index < header.size(); ++index) {
         columns[normalized_header(header[index])] = index;
     }
-    for (const auto* required : {"energy_mevu", "x_mm", "y_mm", "mu_weight"}) {
-        if (!columns.contains(required)) {
-            throw std::runtime_error("TPS spots CSV missing required column '" +
-                                     std::string(required) + "': " + path.string());
-        }
+    const auto has_energy_mevu = columns.contains("energy_mevu");
+    const auto has_energy_mev =
+        columns.contains("energy_mev") || columns.contains("energy");
+    const auto has_x = columns.contains("x_mm") || columns.contains("x");
+    const auto has_y = columns.contains("y_mm") || columns.contains("y");
+    const auto has_mu = columns.contains("mu_weight");
+    const auto has_weight = columns.contains("weight");
+    if ((!has_energy_mevu && !has_energy_mev) || !has_x || !has_y ||
+        (!has_mu && !has_weight)) {
+        throw std::runtime_error(
+            "TPS spots CSV needs energy (energy_MeVu or energy_MeV), x, y, "
+            "and weight (mu_weight or weight): " +
+            path.string());
     }
 
     TpsSourcePlan plan;
@@ -300,10 +342,29 @@ TpsSourcePlan TpsSourcePlan::from_csv(const std::filesystem::path& path) {
         const auto id = parse_optional(fields, columns, "spot_id");
         spot.spot_id = std::isfinite(id) ? static_cast<int>(std::llround(id))
                                         : static_cast<int>(plan.spots.size() + 1);
-        spot.energy_MeVu = parse_required(fields, columns, "energy_mevu", path, line_number);
-        spot.x_mm = parse_required(fields, columns, "x_mm", path, line_number);
-        spot.y_mm = parse_required(fields, columns, "y_mm", path, line_number);
-        spot.mu_weight = parse_required(fields, columns, "mu_weight", path, line_number);
+        if (has_energy_mevu) {
+            spot.energy_MeVu =
+                parse_required(fields, columns, "energy_mevu", path, line_number);
+        } else if (columns.contains("energy_mev")) {
+            spot.energy_total_MeV =
+                parse_required(fields, columns, "energy_mev", path, line_number);
+        } else {
+            spot.energy_total_MeV =
+                parse_required(fields, columns, "energy", path, line_number);
+        }
+        spot.x_mm = parse_required(
+            fields, columns, columns.contains("x_mm") ? "x_mm" : "x", path,
+            line_number);
+        spot.y_mm = parse_required(
+            fields, columns, columns.contains("y_mm") ? "y_mm" : "y", path,
+            line_number);
+        if (has_mu) {
+            spot.mu_weight =
+                parse_required(fields, columns, "mu_weight", path, line_number);
+        } else {
+            spot.mu_weight =
+                parse_required(fields, columns, "weight", path, line_number);
+        }
         spot.energy_spread_percent =
             parse_optional(fields, columns, "energy_spread_percent");
         spot.sigma_x_mm = parse_optional(fields, columns, "sigma_x_mm");
@@ -318,9 +379,12 @@ TpsSourcePlan TpsSourcePlan::from_csv(const std::filesystem::path& path) {
             parse_optional(fields, columns, "couch_angle_deg");
         spot.collimator_angle_deg =
             parse_optional(fields, columns, "collimator_angle_deg");
-        if (!(spot.energy_MeVu > 0.0) || spot.mu_weight < 0.0) {
+        const auto energy_ok = std::isfinite(spot.energy_total_MeV)
+                                   ? spot.energy_total_MeV > 0.0
+                                   : spot.energy_MeVu > 0.0;
+        if (!energy_ok || spot.mu_weight < 0.0) {
             throw std::runtime_error(
-                "TPS spot energy must be positive and MU nonnegative at " +
+                "TPS spot energy must be positive and weight nonnegative at " +
                 path.string() + ":" + std::to_string(line_number));
         }
         const auto context = "TPS spot at " + path.string() + ":" +
@@ -344,7 +408,11 @@ TpsSourcePlan TpsSourcePlan::from_csv(const std::filesystem::path& path) {
 
 TpsSourcePlan TpsSourcePlan::from_config(const TransportConfig& config) {
     if (!config.tps_spots_file.empty()) {
-        return from_csv(config.tps_spots_file);
+        auto plan = from_csv(config.tps_spots_file);
+        if (!config.tps_beam_model_file.empty()) {
+            plan.apply_beam_model(config.tps_beam_model_file);
+        }
+        return plan;
     }
     TpsSourcePlan plan;
     TpsSpot spot;
@@ -354,6 +422,131 @@ TpsSourcePlan TpsSourcePlan::from_config(const TransportConfig& config) {
     plan.spots.push_back(spot);
     plan.total_mu = 1.0;
     return plan;
+}
+
+void TpsSourcePlan::apply_beam_model(const std::filesystem::path& path) {
+    std::ifstream input(path);
+    if (!input) {
+        throw std::runtime_error("Cannot open TPS beam model: " + path.string());
+    }
+    struct Optics {
+        double energy_MeV{0.0};
+        double sigma_x_mm{0.0};
+        double sigma_x_prime{0.0};
+        double correlation_x{0.0};
+        double sigma_y_mm{0.0};
+        double sigma_y_prime{0.0};
+        double correlation_y{0.0};
+        double energy_spread_percent{0.0};
+    };
+    std::string line;
+    std::size_t line_number = 0;
+    std::unordered_map<std::string, std::size_t> columns;
+    std::vector<Optics> rows;
+    while (std::getline(input, line)) {
+        ++line_number;
+        if (!trim(line).empty() && trim(line).front() != '#') {
+            const auto header = split_csv_line(line);
+            for (std::size_t index = 0; index < header.size(); ++index) {
+                columns[normalized_header(header[index])] = index;
+            }
+            break;
+        }
+    }
+    const auto energy_key = columns.contains("energy_mev") ? "energy_mev" : "energy";
+    for (const char* required :
+         {energy_key, "sigma_x_mm", "sigma_xp_rad", "corr_x", "sigma_y_mm",
+          "sigma_yp_rad", "corr_y", "energy_spread_percent"}) {
+        if (!columns.contains(required)) {
+            throw std::runtime_error("TPS beam model missing '" +
+                                     std::string(required) + "': " + path.string());
+        }
+    }
+    while (std::getline(input, line)) {
+        ++line_number;
+        if (trim(line).empty() || trim(line).front() == '#') {
+            continue;
+        }
+        const auto fields = split_csv_line(line);
+        Optics row;
+        row.energy_MeV = parse_required(fields, columns, energy_key, path, line_number);
+        row.sigma_x_mm =
+            parse_required(fields, columns, "sigma_x_mm", path, line_number);
+        row.sigma_x_prime =
+            parse_required(fields, columns, "sigma_xp_rad", path, line_number);
+        row.correlation_x =
+            parse_required(fields, columns, "corr_x", path, line_number);
+        row.sigma_y_mm =
+            parse_required(fields, columns, "sigma_y_mm", path, line_number);
+        row.sigma_y_prime =
+            parse_required(fields, columns, "sigma_yp_rad", path, line_number);
+        row.correlation_y =
+            parse_required(fields, columns, "corr_y", path, line_number);
+        row.energy_spread_percent = parse_required(
+            fields, columns, "energy_spread_percent", path, line_number);
+        rows.push_back(row);
+    }
+    if (rows.size() < 2) {
+        throw std::runtime_error("TPS beam model needs at least two energies: " +
+                                 path.string());
+    }
+    std::sort(rows.begin(), rows.end(), [](const Optics& left, const Optics& right) {
+        return left.energy_MeV < right.energy_MeV;
+    });
+    const auto interpolate = [&rows](const double energy) {
+        if (energy <= rows.front().energy_MeV) {
+            return rows.front();
+        }
+        if (energy >= rows.back().energy_MeV) {
+            return rows.back();
+        }
+        const auto upper = std::lower_bound(
+            rows.begin(), rows.end(), energy,
+            [](const Optics& row, const double value) {
+                return row.energy_MeV < value;
+            });
+        const auto& b = *upper;
+        const auto& a = *std::prev(upper);
+        const auto t = (energy - a.energy_MeV) / (b.energy_MeV - a.energy_MeV);
+        Optics out = a;
+        out.energy_MeV = energy;
+        out.sigma_x_mm += t * (b.sigma_x_mm - a.sigma_x_mm);
+        out.sigma_x_prime += t * (b.sigma_x_prime - a.sigma_x_prime);
+        out.correlation_x += t * (b.correlation_x - a.correlation_x);
+        out.sigma_y_mm += t * (b.sigma_y_mm - a.sigma_y_mm);
+        out.sigma_y_prime += t * (b.sigma_y_prime - a.sigma_y_prime);
+        out.correlation_y += t * (b.correlation_y - a.correlation_y);
+        out.energy_spread_percent +=
+            t * (b.energy_spread_percent - a.energy_spread_percent);
+        return out;
+    };
+    for (auto& spot : spots) {
+        const auto energy = std::isfinite(spot.energy_total_MeV)
+                                ? spot.energy_total_MeV
+                                : spot.energy_MeVu * 12.0;
+        const auto optics = interpolate(energy);
+        if (!std::isfinite(spot.sigma_x_mm)) {
+            spot.sigma_x_mm = optics.sigma_x_mm;
+        }
+        if (!std::isfinite(spot.sigma_y_mm)) {
+            spot.sigma_y_mm = optics.sigma_y_mm;
+        }
+        if (!std::isfinite(spot.sigma_x_prime)) {
+            spot.sigma_x_prime = optics.sigma_x_prime;
+        }
+        if (!std::isfinite(spot.sigma_y_prime)) {
+            spot.sigma_y_prime = optics.sigma_y_prime;
+        }
+        if (!std::isfinite(spot.correlation_x)) {
+            spot.correlation_x = optics.correlation_x;
+        }
+        if (!std::isfinite(spot.correlation_y)) {
+            spot.correlation_y = optics.correlation_y;
+        }
+        if (!std::isfinite(spot.energy_spread_percent)) {
+            spot.energy_spread_percent = optics.energy_spread_percent;
+        }
+    }
 }
 
 TpsSourcePose TpsSourcePlan::pose_for_spot(const TransportConfig& config,
@@ -401,7 +594,31 @@ std::vector<std::size_t> TpsSourcePlan::allocate_histories(
 
 std::vector<PrimarySpotBatchEntry> TpsSourcePlan::make_primary_batch(
     const TransportConfig& config) const {
-    const auto allocation = allocate_histories(config.number_of_histories);
+    if (config.tps_spot_weight_mode != "mu" &&
+        config.tps_spot_weight_mode != "histories") {
+        throw std::invalid_argument(
+            "tps_spot_weight_mode must be mu or histories");
+    }
+    std::vector<std::size_t> allocation;
+    if (config.tps_spot_weight_mode == "histories") {
+        if (!(config.tps_histories_scale > 0.0) ||
+            !std::isfinite(config.tps_histories_scale)) {
+            throw std::invalid_argument("tps_histories_scale must be positive");
+        }
+        allocation.assign(spots.size(), 0);
+        for (std::size_t index = 0; index < spots.size(); ++index) {
+            if (spots[index].mu_weight <= 0.0) {
+                continue;
+            }
+            const auto scaled = spots[index].mu_weight * config.tps_histories_scale;
+            allocation[index] = static_cast<std::size_t>(std::llround(scaled));
+            if (allocation[index] == 0 && scaled > 0.0) {
+                allocation[index] = 1;
+            }
+        }
+    } else {
+        allocation = allocate_histories(config.number_of_histories);
+    }
     // CCTG uses conventional patient coordinates: x-y is axial and z is the
     // slice direction. The kernel stores that same orientation but rebases the
     // z low edge to zero internally. Output metadata restores the CT origin.
@@ -455,8 +672,10 @@ std::vector<PrimarySpotBatchEntry> TpsSourcePlan::make_primary_batch(
         entry.history_begin = history_begin;
         entry.history_end = history_begin + allocation[index];
         entry.random_seed = config.random_seed + index * 1'000'003ULL;
-        entry.initial_energy_MeV() = static_cast<float>(
-            spot.energy_MeVu * static_cast<double>(config.mass_number));
+        const auto total_energy_MeV = std::isfinite(spot.energy_total_MeV)
+            ? spot.energy_total_MeV
+            : spot.energy_MeVu * static_cast<double>(config.mass_number);
+        entry.initial_energy_MeV() = static_cast<float>(total_energy_MeV);
         entry.beam_energy_spread() =
             static_cast<float>(energy_spread_percent / 100.0);
         entry.emittance_sigma_x_mm() = static_cast<float>(sigma_x_mm);

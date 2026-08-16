@@ -1004,6 +1004,25 @@ void TransportConfig::validate() const {
             throw std::invalid_argument(
                 "Only tps_particle_type=carbon is supported by the current physics tables");
         }
+        const auto magnets_x = tps_virtual_scanning_magnet_x_mm;
+        const auto magnets_y = tps_virtual_scanning_magnet_y_mm;
+        if ((magnets_x > 0.0) != (magnets_y > 0.0)) {
+            throw std::invalid_argument(
+                "tps_virtual_scanning_magnet_x_mm and "
+                "tps_virtual_scanning_magnet_y_mm must both be positive or both unused");
+        }
+        if (magnets_x < 0.0 || magnets_y < 0.0 ||
+            tps_virtual_source_to_isocenter_mm < 0.0) {
+            throw std::invalid_argument(
+                "TPS virtual magnet / source distances must be nonnegative");
+        }
+        if (tps_spot_weight_mode != "mu" && tps_spot_weight_mode != "histories") {
+            throw std::invalid_argument(
+                "tps_spot_weight_mode must be mu or histories");
+        }
+        if (!(tps_histories_scale > 0.0) || !std::isfinite(tps_histories_scale)) {
+            throw std::invalid_argument("tps_histories_scale must be positive");
+        }
     } else if (!tps_spots_file.empty()) {
         throw std::invalid_argument(
             "tps_spots_file is set but tpsSource=false");
@@ -1693,6 +1712,29 @@ TransportConfig load_config(const std::filesystem::path& path) {
         }
     }
     config.tps_spots_file = parse_path(values, "tps_spots_file", config.tps_spots_file);
+    config.tps_beam_model_file =
+        parse_path(values, "tps_beam_model_file", config.tps_beam_model_file);
+    config.tps_virtual_scanning_magnet_x_mm = parse_number(
+        values, "tps_virtual_scanning_magnet_x_mm",
+        config.tps_virtual_scanning_magnet_x_mm);
+    config.tps_virtual_scanning_magnet_y_mm = parse_number(
+        values, "tps_virtual_scanning_magnet_y_mm",
+        config.tps_virtual_scanning_magnet_y_mm);
+    config.tps_virtual_source_to_isocenter_mm = parse_number(
+        values, "tps_virtual_source_to_isocenter_mm",
+        config.tps_virtual_source_to_isocenter_mm);
+    if (const auto it = values.find("tps_spot_weight_mode");
+        it != values.end() && !it->second.empty()) {
+        config.tps_spot_weight_mode = it->second;
+        std::transform(config.tps_spot_weight_mode.begin(),
+                       config.tps_spot_weight_mode.end(),
+                       config.tps_spot_weight_mode.begin(),
+                       [](const unsigned char character) {
+                           return static_cast<char>(std::tolower(character));
+                       });
+    }
+    config.tps_histories_scale = parse_number(
+        values, "tps_histories_scale", config.tps_histories_scale);
     {
         const auto it = values.find("tps_angle_convention");
         if (it != values.end() && !it->second.empty()) {

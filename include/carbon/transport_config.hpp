@@ -439,7 +439,24 @@ struct TransportConfig {
     // Optional CSV columns: spot_id,energy_MeVu,x_mm,y_mm,mu_weight plus
     // energy_spread_percent and emittance parameters. Empty => one central
     // spot using initial_energy_MeVu and the source defaults above.
+    // PencilBeamScanning aliases energy_MeV (total ion KE) and weight are
+    // accepted when the corresponding legacy columns are absent.
     std::filesystem::path tps_spots_file{};
+    // Optional energy-dependent optics table (PBS beam_model.csv). Applied
+    // only to spots that omit per-row emittance / energy-spread columns.
+    std::filesystem::path tps_beam_model_file{};
+    // PBS virtual scanning magnets. Both must be positive to enable the
+    // isocenter-aimed scan geometry. Zero keeps the historical parallel SAD
+    // offset (x,y placed on the source plane, direction = central ray).
+    double tps_virtual_scanning_magnet_x_mm{0.0};
+    double tps_virtual_scanning_magnet_y_mm{0.0};
+    // Physical source-plane distance D. Zero falls back to tps_sad_mm.
+    double tps_virtual_source_to_isocenter_mm{0.0};
+    // "mu": treat the weight column as MU and Hamilton-allocate
+    // number_of_histories (existing TPS CSV). "histories": treat weight as
+    // an exact history count, optionally scaled by tps_histories_scale.
+    std::string tps_spot_weight_mode{"mu"};
+    double tps_histories_scale{1.0};
     // Source coordinates are DICOM LPS: +X patient-left, +Y posterior, +Z
     // superior. "dicom_lps" keeps the CT fixed, defines TPS 0 deg as +Y, and
     // rotates the beam frame about +Z: w=(-sin(theta), cos(theta), 0).

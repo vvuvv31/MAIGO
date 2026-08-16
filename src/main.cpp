@@ -896,6 +896,10 @@ int main(int argc, char* argv[]) {
             }
             const auto plan = carbon::TpsSourcePlan::from_config(config);
             const auto batch = plan.make_primary_batch(config);
+            if (!batch.empty() &&
+                batch.back().history_end != config.number_of_histories) {
+                config.number_of_histories = batch.back().history_end;
+            }
             if (config.enable_ct_grid) {
                 const auto patient_ct =
                     carbon::CtGrid::from_binary(config.ct_grid_file);
@@ -923,10 +927,26 @@ int main(int argc, char* argv[]) {
                       << config.tps_collimator_angle_deg << " deg; SAD: "
                       << config.tps_sad_mm << " mm; patient: "
                       << config.tps_patient_position << "; coordinates: "
-                      << config.tps_angle_convention;
+                      << config.tps_angle_convention
+                      << "; weight: " << config.tps_spot_weight_mode;
             if (config.tps_angle_convention == "dicom_lps" ||
                 config.tps_angle_convention == "topas_patient_rot_z") {
                 std::cout << " (+X left, +Y posterior, +Z superior; CT fixed)";
+            }
+            if (config.tps_virtual_scanning_magnet_x_mm > 0.0 &&
+                config.tps_virtual_scanning_magnet_y_mm > 0.0) {
+                const auto source_distance =
+                    config.tps_virtual_source_to_isocenter_mm > 0.0
+                        ? config.tps_virtual_source_to_isocenter_mm
+                        : config.tps_sad_mm;
+                std::cout << "\n  PBS virtual magnets: X="
+                          << config.tps_virtual_scanning_magnet_x_mm << " mm Y="
+                          << config.tps_virtual_scanning_magnet_y_mm
+                          << " mm; source plane D=" << source_distance << " mm";
+                if (!config.tps_beam_model_file.empty()) {
+                    std::cout << "; beam model "
+                              << config.tps_beam_model_file.string();
+                }
             }
             std::cout << '\n';
             if (plan_only) {
