@@ -30,7 +30,7 @@ struct MinibeamDiagnostics {
     std::uint64_t copper_generated_direct_secondaries{0};
     std::uint64_t copper_charged_survivors{0};
     std::uint64_t copper_neutral_survivors{0};
-    std::uint64_t water_entrance_primary_c12{0};
+    std::uint64_t water_entrance_primary{0};
     double beamline_removed_energy_MeV{0.0};
     double copper_charged_survivor_energy_MeV{0.0};
     double copper_neutral_survivor_energy_MeV{0.0};
@@ -40,11 +40,11 @@ struct MinibeamDiagnostics {
     std::array<std::uint64_t, 9> copper_charged_survivors_by_species{};
     std::array<double, 9> copper_charged_survivor_energy_by_species_MeV{};
     std::array<std::uint64_t, slit_count>
-        water_entrance_primary_c12_by_slit{};
+        water_entrance_primary_by_slit{};
     std::array<std::uint64_t, slit_count>
-        collimator_entrance_primary_c12_by_slit{};
+        collimator_entrance_primary_by_slit{};
     std::array<std::uint64_t, slit_count>
-        direct_air_primary_c12_by_slit{};
+        direct_air_primary_by_slit{};
     std::array<std::uint64_t, touched_energy_bin_count>
         copper_touched_primary_energy_histogram{};
     // Water-entrance kinetic-energy spectra in 50 MeV bins. The final bin
@@ -74,21 +74,32 @@ struct TransportResult {
     // Category-major layout: category * number_of_voxels + voxel index.
     std::vector<double> charged_origin_voxel_deposited_energy_MeV;
     std::vector<double> neutral_origin_voxel_deposited_energy_MeV;
-    std::vector<double> primary_c12_deposited_energy_MeV;
+    std::vector<double> primary_deposited_energy_MeV;
     std::vector<double> secondary_carbon_deposited_energy_MeV;
-    std::vector<double> boron_deposited_energy_MeV;
-    std::vector<double> beryllium_deposited_energy_MeV;
-    std::vector<double> lithium_deposited_energy_MeV;
-    std::vector<double> helium_deposited_energy_MeV;
-    std::vector<double> proton_deposited_energy_MeV;
-    std::vector<double> other_charged_deposited_energy_MeV;
+    std::vector<double> secondary_boron_deposited_energy_MeV;
+    std::vector<double> secondary_beryllium_deposited_energy_MeV;
+    std::vector<double> secondary_lithium_deposited_energy_MeV;
+    std::vector<double> secondary_helium_deposited_energy_MeV;
+    std::vector<double> secondary_proton_deposited_energy_MeV;
+    std::vector<double> secondary_other_charged_deposited_energy_MeV;
+    // Validation-only depth tallies (empty in production).
+    std::vector<double> primary_fluence_mm;
+    std::vector<double> secondary_carbon_fluence_mm;
+    std::vector<double> secondary_boron_fluence_mm;
+    std::vector<double> secondary_beryllium_fluence_mm;
+    std::vector<double> secondary_lithium_fluence_mm;
+    std::vector<double> secondary_helium_fluence_mm;
+    std::vector<double> secondary_proton_fluence_mm;
+    std::vector<double> secondary_other_charged_fluence_mm;
+    std::vector<std::uint64_t> primary_survival_counts;
+    std::vector<std::uint64_t> inelastic_reaction_counts;
     // HadronLET raw dose-weighted moments. Numerator unit:
     // MeV * MeV/mm/(g/cm3); denominator unit: MeV.
-    std::vector<double> primary_c12_letd_numerator;
-    std::vector<double> primary_c12_letd_denominator;
+    std::vector<double> primary_letd_numerator;
+    std::vector<double> primary_letd_denominator;
     std::vector<double> all_hadron_letd_numerator;
     std::vector<double> all_hadron_letd_denominator;
-    // Category-major primary-C12, secondary C, B, Be, Li, He, p, other.
+    // Category-major primary, secondary C, B, Be, Li, He, p, other.
     std::vector<double> charged_origin_letd_numerator;
     std::vector<double> charged_origin_letd_denominator;
     // Optional category-major p, d, t, He-3, He-4, N, O, F LET moments.
@@ -107,8 +118,8 @@ struct TransportResult {
     // cat*gen*(parent_mevu_bins * product_mevu_bins)
     std::vector<std::uint64_t> birth_parent_product_mevu_hist;
     // Same four moments on the optional voxel grid (z-major, x fastest).
-    std::vector<double> primary_c12_voxel_letd_numerator;
-    std::vector<double> primary_c12_voxel_letd_denominator;
+    std::vector<double> primary_voxel_letd_numerator;
+    std::vector<double> primary_voxel_letd_denominator;
     std::vector<double> all_hadron_voxel_letd_numerator;
     std::vector<double> all_hadron_voxel_letd_denominator;
     std::vector<double> neutron_origin_deposited_energy_MeV;

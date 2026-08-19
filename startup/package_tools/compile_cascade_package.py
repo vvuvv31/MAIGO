@@ -98,10 +98,6 @@ def main() -> None:
         )
         topas_version = runtime_reference.get("topas_version")
         geant4_version = runtime_reference.get("topas_log", {}).get("geant4_version")
-    if topas_version != "4.2.p3" or geant4_version != "geant4-11-03-patch-02":
-        raise SystemExit(
-            "Cascade packages require TOPAS 4.2.p3 / Geant4 11.3.2 provenance"
-        )
     interactions = read_gzip_csv(args.interactions)
     products = read_gzip_csv(args.products)
     if sha256(args.interactions) != source["outputs"]["interactions"]["sha256"]:
@@ -257,12 +253,13 @@ def main() -> None:
         },
         "direction_coordinates": "projectile-local orthonormal frame",
         "direction_components": ["local_x", "local_y", "along_projectile"],
-        "local_deposit": "Geant4 G4Step::GetTotalEnergyDeposit, scaled with package energy",
+        "local_deposit": "generator-provided interaction-local energy deposit",
         "source_metadata": args.metadata.as_posix(),
         "source_metadata_sha256": sha256(args.metadata),
         "source_runtime": {
             "topas_version": topas_version,
             "geant4_version": geant4_version,
+            "physics_model": source.get("physics_model"),
             "runtime_reference_metadata": (
                 args.runtime_reference_metadata.as_posix()
                 if args.runtime_reference_metadata is not None else None

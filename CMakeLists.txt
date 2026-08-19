@@ -140,8 +140,8 @@ target_link_libraries(carbon_mc PRIVATE carbon_core)
 
 if(BUILD_TESTING)
     set(CARBON_TEST_PACKAGE_FILES
-        "${CMAKE_CURRENT_SOURCE_DIR}/data/packages/topas_400MeVu_water_100k_primary_3d.bin"
-        "${CMAKE_CURRENT_SOURCE_DIR}/data/packages/topas_400MeVu_water_100k_cascade_3d.bin")
+        "${CMAKE_CURRENT_SOURCE_DIR}/data/packages/topas_water_inclxx_1M_stitch7_primary_3d.bin"
+        "${CMAKE_CURRENT_SOURCE_DIR}/data/packages/topas_400MeVu_water_inclxx_1M_cascade_3d.bin")
     foreach(package_file IN LISTS CARBON_TEST_PACKAGE_FILES)
         if(NOT EXISTS "${package_file}")
             message(FATAL_ERROR

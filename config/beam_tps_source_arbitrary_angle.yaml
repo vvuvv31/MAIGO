@@ -2,7 +2,6 @@
 # TOPAS CT plans. The patient/voxel volume stays fixed; only the beam rotates.
 tpsSource: true
 tps_spots_file: data/plans/spots_example.csv
-tps_particle_type: carbon
 tps_patient_position: HFS
 tps_angle_convention: topas_patient_rot_z
 tps_gantry_angle_deg: 37.0
@@ -13,7 +12,8 @@ tps_sad_mm: 450
 
 number_of_histories: 100000
 initial_energy_MeVu: 200
-mass_number: 12
+primary_atomic_number: 6
+primary_mass_number: 12
 phantom_length_mm: 200
 depth_bin_width_mm: 2
 maximum_step_mm: 0.5
@@ -35,8 +35,8 @@ enable_secondary_generation: false
 enable_secondary_transport: false
 
 random_seed: 20260728
-stopping_power_file: data/stopping_power_water_geant4_11_3_2.csv
-nuclear_cross_section_file: data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv
+primary_stopping_power_file: data/stopping_power_water_geant4_11_3_2.csv
+primary_inelastic_cross_section_file: data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv
 output_file:
 dose_output_file:
 voxel_dose_output_file:

@@ -216,14 +216,14 @@ void write_fragment_species_csv(const std::filesystem::path& path,
     const auto bins = config.number_of_bins();
     const std::vector<const std::vector<double>*> columns{
         &result.deposited_energy_MeV,
-        &result.primary_c12_deposited_energy_MeV,
+        &result.primary_deposited_energy_MeV,
         &result.secondary_carbon_deposited_energy_MeV,
-        &result.boron_deposited_energy_MeV,
-        &result.beryllium_deposited_energy_MeV,
-        &result.lithium_deposited_energy_MeV,
-        &result.helium_deposited_energy_MeV,
-        &result.proton_deposited_energy_MeV,
-        &result.other_charged_deposited_energy_MeV,
+        &result.secondary_boron_deposited_energy_MeV,
+        &result.secondary_beryllium_deposited_energy_MeV,
+        &result.secondary_lithium_deposited_energy_MeV,
+        &result.secondary_helium_deposited_energy_MeV,
+        &result.secondary_proton_deposited_energy_MeV,
+        &result.secondary_other_charged_deposited_energy_MeV,
     };
     if (std::any_of(columns.begin(), columns.end(),
                     [bins](const auto* column) { return column->size() != bins; })) {
@@ -236,11 +236,11 @@ void write_fragment_species_csv(const std::filesystem::path& path,
     }
     const auto maximum = *std::max_element(result.deposited_energy_MeV.begin(),
                                            result.deposited_energy_MeV.end());
-    output << "depth_mm,total_MeV,primary_c12_MeV,"
-              "secondary_carbon_MeV,boron_MeV,"
-              "beryllium_MeV,lithium_MeV,"
-              "helium_MeV,proton_MeV,"
-              "other_MeV,relative_total\n";
+    output << "depth_mm,total_MeV,primary_MeV,"
+              "secondary_carbon_MeV,secondary_boron_MeV,"
+              "secondary_beryllium_MeV,secondary_lithium_MeV,"
+              "secondary_helium_MeV,secondary_proton_MeV,"
+              "secondary_other_MeV,relative_total\n";
     output << std::setprecision(12);
     for (std::size_t bin = 0; bin < bins; ++bin) {
         const auto depth_center_mm =
@@ -260,8 +260,8 @@ void write_letd_csv(const std::filesystem::path& path,
                     const TransportResult& result) {
     const auto bins = config.number_of_bins();
     const std::array<const std::vector<double>*, 4> moments{
-        &result.primary_c12_letd_numerator,
-        &result.primary_c12_letd_denominator,
+        &result.primary_letd_numerator,
+        &result.primary_letd_denominator,
         &result.all_hadron_letd_numerator,
         &result.all_hadron_letd_denominator,
     };
@@ -274,17 +274,17 @@ void write_letd_csv(const std::filesystem::path& path,
     if (!output) {
         throw std::runtime_error("Cannot create LET output file: " + path.string());
     }
-    output << "depth_mm,primary_c12_letd_MeV_per_mm_per_g_cm3,"
+    output << "depth_mm,primary_letd_MeV_per_mm_per_g_cm3,"
               "all_hadron_letd_MeV_per_mm_per_g_cm3,"
-              "primary_c12_numerator,primary_c12_denominator_MeV,"
+              "primary_numerator,primary_denominator_MeV,"
               "all_hadron_numerator,all_hadron_denominator_MeV\n";
     output << std::setprecision(12);
     for (std::size_t bin = 0; bin < bins; ++bin) {
-        const auto primary_denominator = result.primary_c12_letd_denominator[bin];
+        const auto primary_denominator = result.primary_letd_denominator[bin];
         const auto all_denominator = result.all_hadron_letd_denominator[bin];
         const auto primary_letd =
             primary_denominator > 0.0
-                ? result.primary_c12_letd_numerator[bin] / primary_denominator
+                ? result.primary_letd_numerator[bin] / primary_denominator
                 : 0.0;
         const auto all_letd =
             all_denominator > 0.0
@@ -293,7 +293,7 @@ void write_letd_csv(const std::filesystem::path& path,
         const auto depth_center_mm =
             (static_cast<double>(bin) + 0.5) * config.depth_bin_width_mm;
         output << depth_center_mm << ',' << primary_letd << ',' << all_letd << ','
-               << result.primary_c12_letd_numerator[bin] << ','
+               << result.primary_letd_numerator[bin] << ','
                << primary_denominator << ','
                << result.all_hadron_letd_numerator[bin] << ','
                << all_denominator << '\n';
@@ -309,8 +309,8 @@ void write_dense_voxel_letd_mhd(const std::filesystem::path& mhd_path,
     }
     const auto count = config.number_of_voxels();
     const std::array<const std::vector<double>*, 4> moments{
-        &result.primary_c12_voxel_letd_numerator,
-        &result.primary_c12_voxel_letd_denominator,
+        &result.primary_voxel_letd_numerator,
+        &result.primary_voxel_letd_denominator,
         &result.all_hadron_voxel_letd_numerator,
         &result.all_hadron_voxel_letd_denominator,
     };
@@ -402,9 +402,9 @@ void write_dense_voxel_letd_mhd(const std::filesystem::path& mhd_path,
                << "ElementDataFile = " << raw_path.filename().string() << '\n';
     };
 
-    write_map("_primary_c12",
-              result.primary_c12_voxel_letd_numerator,
-              result.primary_c12_voxel_letd_denominator);
+    write_map("_primary",
+              result.primary_voxel_letd_numerator,
+              result.primary_voxel_letd_denominator);
     write_map("_all_hadron",
               result.all_hadron_voxel_letd_numerator,
               result.all_hadron_voxel_letd_denominator);
@@ -428,8 +428,9 @@ void write_fragment_species_letd_csv(const std::filesystem::path& path,
             "Cannot create fragment-species LET output file: " + path.string());
     }
     constexpr std::array<const char*, categories> names{
-        "primary_c12", "secondary_carbon", "boron", "beryllium",
-        "lithium", "helium", "hydrogen", "other_charged"};
+        "primary", "secondary_carbon", "secondary_boron",
+        "secondary_beryllium", "secondary_lithium", "secondary_helium",
+        "secondary_hydrogen", "secondary_other_charged"};
     output << "depth_mm";
     for (const auto* name : names) {
         output << ',' << name << "_letd_MeV_per_mm_per_g_cm3";
@@ -713,14 +714,14 @@ void write_fragment_species_dose_Gy_csv(const std::filesystem::path& path,
     const auto bins = config.number_of_bins();
     const std::vector<const std::vector<double>*> columns{
         &result.deposited_energy_MeV,
-        &result.primary_c12_deposited_energy_MeV,
+        &result.primary_deposited_energy_MeV,
         &result.secondary_carbon_deposited_energy_MeV,
-        &result.boron_deposited_energy_MeV,
-        &result.beryllium_deposited_energy_MeV,
-        &result.lithium_deposited_energy_MeV,
-        &result.helium_deposited_energy_MeV,
-        &result.proton_deposited_energy_MeV,
-        &result.other_charged_deposited_energy_MeV,
+        &result.secondary_boron_deposited_energy_MeV,
+        &result.secondary_beryllium_deposited_energy_MeV,
+        &result.secondary_lithium_deposited_energy_MeV,
+        &result.secondary_helium_deposited_energy_MeV,
+        &result.secondary_proton_deposited_energy_MeV,
+        &result.secondary_other_charged_deposited_energy_MeV,
     };
     if (std::any_of(columns.begin(), columns.end(),
                     [bins](const auto* column) { return column->size() != bins; })) {
@@ -739,11 +740,11 @@ void write_fragment_species_dose_Gy_csv(const std::filesystem::path& path,
         maximum_dose = std::max(maximum_dose, scored_dose_Gy(config, energy_MeV, bin_mass_kg));
     }
 
-    output << "depth_mm,total_Gy,primary_c12_Gy,"
-              "secondary_carbon_Gy,boron_Gy,"
-              "beryllium_Gy,lithium_Gy,"
-              "helium_Gy,proton_Gy,"
-              "other_Gy,relative_total\n";
+    output << "depth_mm,total_Gy,primary_Gy,"
+              "secondary_carbon_Gy,secondary_boron_Gy,"
+              "secondary_beryllium_Gy,secondary_lithium_Gy,"
+              "secondary_helium_Gy,secondary_proton_Gy,"
+              "secondary_other_Gy,relative_total\n";
     output << std::setprecision(12);
     for (std::size_t bin = 0; bin < bins; ++bin) {
         const auto depth_center_mm =
@@ -903,14 +904,14 @@ void write_sparse_charged_origin_voxel_dose_csv(
 
     const std::array<const std::vector<double>*, charged_origin_category_count>
         depth_categories{
-            &result.primary_c12_deposited_energy_MeV,
+            &result.primary_deposited_energy_MeV,
             &result.secondary_carbon_deposited_energy_MeV,
-            &result.boron_deposited_energy_MeV,
-            &result.beryllium_deposited_energy_MeV,
-            &result.lithium_deposited_energy_MeV,
-            &result.helium_deposited_energy_MeV,
-            &result.proton_deposited_energy_MeV,
-            &result.other_charged_deposited_energy_MeV,
+            &result.secondary_boron_deposited_energy_MeV,
+            &result.secondary_beryllium_deposited_energy_MeV,
+            &result.secondary_lithium_deposited_energy_MeV,
+            &result.secondary_helium_deposited_energy_MeV,
+            &result.secondary_proton_deposited_energy_MeV,
+            &result.secondary_other_charged_deposited_energy_MeV,
         };
     const auto bins = config.number_of_bins();
     if (std::any_of(depth_categories.begin(), depth_categories.end(),
@@ -1005,10 +1006,10 @@ void write_sparse_charged_origin_voxel_dose_csv(
     const auto y_extent_mm =
         static_cast<double>(config.voxel_bins_y) * config.voxel_size_y_mm;
     output << "ix,iy,iz,x_mm,y_mm,z_mm,total_MeV,"
-              "primary_c12_MeV,secondary_carbon_MeV,"
-              "boron_MeV,beryllium_MeV,"
-              "lithium_MeV,helium_MeV,"
-              "proton_MeV,other_charged_MeV\n";
+              "primary_MeV,secondary_carbon_MeV,"
+              "secondary_boron_MeV,secondary_beryllium_MeV,"
+              "secondary_lithium_MeV,secondary_helium_MeV,"
+              "secondary_proton_MeV,secondary_other_charged_MeV\n";
     output << std::setprecision(12);
     for (std::size_t z = 0; z < bins; ++z) {
         for (std::size_t y = 0; y < config.voxel_bins_y; ++y) {
@@ -1176,10 +1177,10 @@ void write_sparse_charged_origin_voxel_dose_Gy_csv(
         static_cast<double>(config.voxel_bins_y) * config.voxel_size_y_mm;
 
     output << "ix,iy,iz,x_mm,y_mm,z_mm,total_Gy,"
-              "primary_c12_Gy,secondary_carbon_Gy,"
-              "boron_Gy,beryllium_Gy,"
-              "lithium_Gy,helium_Gy,"
-              "proton_Gy,other_charged_Gy\n";
+              "primary_Gy,secondary_carbon_Gy,"
+              "secondary_boron_Gy,secondary_beryllium_Gy,"
+              "secondary_lithium_Gy,secondary_helium_Gy,"
+              "secondary_proton_Gy,secondary_other_charged_Gy\n";
     output << std::setprecision(12);
     for (std::size_t z = 0; z < bins; ++z) {
         for (std::size_t y = 0; y < config.voxel_bins_y; ++y) {
@@ -1236,8 +1237,9 @@ void write_dense_charged_origin_voxel_dose_mhd(
     }
 
     constexpr std::array<const char*, charged_origin_category_count> labels{
-        "primary_c12", "secondary_carbon", "boron", "beryllium",
-        "lithium", "helium", "proton", "other_charged"};
+        "primary", "secondary_carbon", "secondary_boron",
+        "secondary_beryllium", "secondary_lithium", "secondary_helium",
+        "secondary_proton", "secondary_other_charged"};
     const auto masses_kg = voxel_masses_kg(config);
     const auto nx = config.voxel_bins_x;
     const auto ny = config.voxel_bins_y;

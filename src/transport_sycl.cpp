@@ -846,6 +846,7 @@ inline void score_secondary_uniform_z_segment_device(
     const std::size_t voxel_plane_size,
     const std::size_t charged_origin_voxel_offset,
     const std::size_t neutral_origin_voxel_offset,
+    DoseAtomicT* aggregate_secondary_dose_device,
     DoseAtomicT* fragment_dose_device,
     DoseAtomicT* voxel_dose_device,
     DoseAtomicT* charged_origin_voxel_dose_device,
@@ -869,7 +870,7 @@ inline void score_secondary_uniform_z_segment_device(
             bin, number_of_bins, enable_voxel_scoring,
             enable_charged_origin_voxel_scoring, voxel_index,
             charged_origin_voxel_offset, neutral_origin_voxel_offset,
-            fragment_dose_device, voxel_dose_device,
+            aggregate_secondary_dose_device, fragment_dose_device, voxel_dose_device,
             charged_origin_voxel_dose_device, neutral_origin_dose_device,
             neutral_origin_voxel_dose_device);
         return;
@@ -911,7 +912,7 @@ inline void score_secondary_uniform_z_segment_device(
             bin, number_of_bins, enable_voxel_scoring,
             enable_charged_origin_voxel_scoring, voxel_index,
             charged_origin_voxel_offset, neutral_origin_voxel_offset,
-            fragment_dose_device, voxel_dose_device,
+            aggregate_secondary_dose_device, fragment_dose_device, voxel_dose_device,
             charged_origin_voxel_dose_device, neutral_origin_dose_device,
             neutral_origin_voxel_dose_device);
     }
@@ -1375,6 +1376,7 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
             bytes += 2 * sizeof(std::uint64_t);
             bytes += number_of_histories * sizeof(SecondaryGenerationSummary);
             if (enable_secondary_transport) {
+                bytes += number_of_bins * sizeof(DoseAtomicT);
                 if (enable_fragment_species_scoring) {
                     bytes += fragment_species_count * number_of_bins * sizeof(DoseAtomicT);
                 }
@@ -1624,6 +1626,7 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
     std::uint64_t* secondary_queue_filled_device = nullptr;
     std::uint64_t* secondary_work_counter_device = nullptr;
     SecondaryGenerationSummary* secondary_summaries_device = nullptr;
+    DoseAtomicT* aggregate_secondary_dose_device = nullptr;
     DoseAtomicT* fragment_dose_device = nullptr;
     float* secondary_deposited_device = nullptr;
     float* secondary_escaped_device = nullptr;
@@ -1669,6 +1672,8 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
             sycl::malloc_device<SecondaryGenerationSummary>(number_of_histories, queue);
         if (enable_secondary_transport) {
             secondary_work_counter_device = sycl::malloc_device<std::uint64_t>(1, queue);
+            aggregate_secondary_dose_device =
+                sycl::malloc_device<DoseAtomicT>(number_of_bins, queue);
             if (enable_secondary_energy_sorting) {
                 const auto scratch_capacity =
                     std::min(secondary_queue_capacity, std::size_t{65536});
@@ -2011,7 +2016,7 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
     std::uint32_t ct_xs_material_count = 4;
     auto ct_material_ids_are_schneider_sections = false;
     if (enable_ct_grid) {
-        ct_grid_host = CtGrid::from_binary(config.ct_grid_file);
+        ct_grid_host = CtGrid::from_config(config);
         ct_nx = ct_grid_host.nx;
         ct_ny = ct_grid_host.ny;
         ct_nz = ct_grid_host.nz;
@@ -2240,29 +2245,29 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
         if (use_ct_material_sp ||
             (use_ct_material_xs && !use_ct_schneider_xs)) {
             const std::array<std::filesystem::path, 4> sp_paths = {
-                config.ct_air_stopping_power_file.empty() ? config.stopping_power_file
+                config.ct_air_stopping_power_file.empty() ? config.primary_stopping_power_file
                                                           : config.ct_air_stopping_power_file,
                 config.ct_lung_stopping_power_file.empty()
-                    ? config.stopping_power_file
+                    ? config.primary_stopping_power_file
                     : config.ct_lung_stopping_power_file,
                 config.ct_water_stopping_power_file.empty()
-                    ? config.stopping_power_file
+                    ? config.primary_stopping_power_file
                     : config.ct_water_stopping_power_file,
                 config.ct_bone_stopping_power_file.empty()
-                    ? config.stopping_power_file
+                    ? config.primary_stopping_power_file
                     : config.ct_bone_stopping_power_file,
             };
             const std::array<std::filesystem::path, 4> xs_paths = {
-                config.ct_air_cross_section_file.empty() ? config.nuclear_cross_section_file
+                config.ct_air_cross_section_file.empty() ? config.primary_inelastic_cross_section_file
                                                          : config.ct_air_cross_section_file,
                 config.ct_lung_cross_section_file.empty()
-                    ? config.nuclear_cross_section_file
+                    ? config.primary_inelastic_cross_section_file
                     : config.ct_lung_cross_section_file,
                 config.ct_water_cross_section_file.empty()
-                    ? config.nuclear_cross_section_file
+                    ? config.primary_inelastic_cross_section_file
                     : config.ct_water_cross_section_file,
                 config.ct_bone_cross_section_file.empty()
-                    ? config.nuclear_cross_section_file
+                    ? config.primary_inelastic_cross_section_file
                     : config.ct_bone_cross_section_file,
             };
             const std::array<bool, 4> has_native_table = {
@@ -2337,6 +2342,7 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
          secondary_summaries_device == nullptr ||
          (enable_secondary_transport &&
            (secondary_work_counter_device == nullptr ||
+           aggregate_secondary_dose_device == nullptr ||
            (enable_fragment_species_scoring && fragment_dose_device == nullptr) ||
            secondary_deposited_device == nullptr ||
            secondary_escaped_device == nullptr || secondary_steps_device == nullptr ||
@@ -2437,6 +2443,7 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
         free_device(secondary_queue_filled_device);
         free_device(secondary_work_counter_device);
         free_device(secondary_summaries_device);
+        free_device(aggregate_secondary_dose_device);
         free_device(fragment_dose_device);
         free_device(secondary_deposited_device);
         free_device(secondary_escaped_device);
@@ -2589,6 +2596,10 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
         }
         queue.memset(secondary_queue_counter_device, 0, sizeof(std::uint64_t));
         queue.memset(secondary_queue_filled_device, 0, sizeof(std::uint64_t));
+        if (enable_secondary_transport) {
+            queue.memset(aggregate_secondary_dose_device, 0,
+                         number_of_bins * sizeof(DoseAtomicT));
+        }
         if (enable_fragment_species_scoring) {
             queue.memset(fragment_dose_device, 0,
                          fragment_species_count * number_of_bins * sizeof(DoseAtomicT));
@@ -2932,6 +2943,8 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
     const auto straggling_scale = static_cast<float>(config.straggling_scale);
     std::array<float, max_straggling_scale_points> straggling_scale_energies{};
     std::array<float, max_straggling_scale_points> straggling_scale_values{};
+    std::array<float, max_straggling_scale_points> primary_xs_correction_energies{};
+    std::array<float, max_straggling_scale_points> primary_xs_correction_scales{};
     const auto straggling_scale_point_count =
         config.straggling_scale_energies_MeVu.size();
     for (std::size_t index = 0; index < straggling_scale_point_count; ++index) {
@@ -2939,6 +2952,14 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
             config.straggling_scale_energies_MeVu[index]);
         straggling_scale_values[index] = static_cast<float>(
             config.straggling_scale_values[index]);
+    }
+    const auto primary_xs_correction_point_count =
+        config.primary_inelastic_xs_correction_energies_MeVu.size();
+    for (std::size_t index = 0; index < primary_xs_correction_point_count; ++index) {
+        primary_xs_correction_energies[index] = static_cast<float>(
+            config.primary_inelastic_xs_correction_energies_MeVu[index]);
+        primary_xs_correction_scales[index] = static_cast<float>(
+            config.primary_inelastic_xs_correction_scales[index]);
     }
     const auto water_density_g_per_cm3 = static_cast<float>(config.water_density_g_per_cm3);
     const auto enable_multiple_scattering = config.enable_multiple_scattering;
@@ -3048,6 +3069,8 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                 .minibeam_water_touched_primary_deficit_sigma_mm);
     const auto random_seed = config.random_seed;
     const auto enable_primary_attenuation = config.enable_primary_attenuation;
+    const auto primary_inelastic_xs_scale =
+        static_cast<float>(config.primary_inelastic_xs_scale);
     const auto enable_flat_source = config.enable_flat_source;
     const auto flat_source_half_width_x_mm =
         static_cast<float>(config.flat_source_half_width_x_mm);
@@ -3090,8 +3113,16 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
         config.minibeam_electronic_buildup_primary_only;
     const auto electronic_buildup_lateral_sigma_mm =
         static_cast<float>(config.electronic_buildup_lateral_sigma_mm);
-    const auto inverse_mass_number = 1.0f / static_cast<float>(config.mass_number);
-    const auto primary_mass_number = config.mass_number;
+    const auto inverse_mass_number = 1.0f / static_cast<float>(config.primary_mass_number);
+    const auto primary_mass_number = config.primary_mass_number;
+    const auto primary_atomic_number = config.primary_atomic_number;
+    const auto primary_charge = static_cast<float>(primary_atomic_number);
+    const auto primary_charge_power = static_cast<float>(
+        config.primary_ion().charge_power);
+    const auto use_explicit_primary_rest_mass =
+        config.primary_rest_mass_MeV > 0.0;
+    const auto primary_rest_mass_MeV =
+        static_cast<float>(config.resolved_primary_rest_mass_MeV());
     const auto minimum_table_energy = static_cast<float>(stopping_power.energies().front());
     const auto inverse_table_step =
         1.0f / static_cast<float>(stopping_power.energies()[1] - stopping_power.energies()[0]);
@@ -3196,6 +3227,13 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                 }
             }
             const auto sampled_initial_energy_MeV = energy_MeV;
+            const auto history_primary_inelastic_xs_scale =
+                interpolate_straggling_scale(
+                    energy_MeV * inverse_mass_number,
+                    primary_xs_correction_energies,
+                    primary_xs_correction_scales,
+                    primary_xs_correction_point_count,
+                    primary_inelastic_xs_scale);
             // Local beam frame (defaults: origin 0, +z beam). Emittance is local x/y.
             auto local_x_mm = 0.0F;
             auto local_y_mm = 0.0F;
@@ -3489,8 +3527,6 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                             sycl::sqrt(-2.0F * sycl::log(uniform1)) *
                             sycl::cos(two_pi * uniform2);
                         constexpr float nucleon_mass_MeV = 931.49410242F;
-                        constexpr float carbon_atomic_number = 6.0F;
-                        constexpr float carbon_charge_power = 0.30285343214F;
                         const auto energy_MeV_per_u =
                             energy_MeV * inverse_mass_number;
                         const auto gamma =
@@ -3499,10 +3535,10 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                             0.0F, 1.0F - 1.0F / (gamma * gamma));
                         const auto beta = sycl::sqrt(beta_squared);
                         const auto effective_charge =
-                            carbon_atomic_number *
+                            primary_charge *
                             (1.0F -
                              sycl::exp(
-                                 -125.0F * beta * carbon_charge_power));
+                                 -125.0F * beta * primary_charge_power));
                         constexpr float bethe_K_MeV_cm2_per_g = 0.307075F;
                         constexpr float electron_mass_MeV = 0.51099895F;
                         constexpr float water_Z_over_A = 0.55509F;
@@ -3769,7 +3805,7 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                                             secondary.mass_number == 12;
                                         const auto origin_category =
                                             is_primary_continuation
-                                                ? primary_c12_charged_origin_category
+                                                ? primary_charged_origin_category
                                                 : charged_dose_category(
                                                       secondary.atomic_number,
                                                       secondary.mass_number);
@@ -3955,20 +3991,36 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                         const auto previous_segment_path =
                             copper_segment_path_mm;
                         copper_segment_path_mm += path_step_mm;
-                        const auto total_rms =
-                            highland_projected_rms_angle_device(
-                                scattering_energy_MeV, 6,
-                                primary_mass_number,
-                                copper_segment_path_mm,
-                                minibeam_copper_density_g_per_cm3,
-                                minibeam_copper_radiation_length_g_per_cm2);
-                        const auto previous_rms =
-                            highland_projected_rms_angle_device(
-                                scattering_energy_MeV, 6,
-                                primary_mass_number,
-                                previous_segment_path,
-                                minibeam_copper_density_g_per_cm3,
-                                minibeam_copper_radiation_length_g_per_cm2);
+                        const auto total_rms = use_explicit_primary_rest_mass
+                            ? highland_projected_rms_angle_with_mass_device(
+                                  scattering_energy_MeV,
+                                  primary_atomic_number,
+                                  primary_rest_mass_MeV,
+                                  copper_segment_path_mm,
+                                  minibeam_copper_density_g_per_cm3,
+                                  minibeam_copper_radiation_length_g_per_cm2)
+                            : highland_projected_rms_angle_device(
+                                  scattering_energy_MeV,
+                                  primary_atomic_number,
+                                  primary_mass_number,
+                                  copper_segment_path_mm,
+                                  minibeam_copper_density_g_per_cm3,
+                                  minibeam_copper_radiation_length_g_per_cm2);
+                        const auto previous_rms = use_explicit_primary_rest_mass
+                            ? highland_projected_rms_angle_with_mass_device(
+                                  scattering_energy_MeV,
+                                  primary_atomic_number,
+                                  primary_rest_mass_MeV,
+                                  previous_segment_path,
+                                  minibeam_copper_density_g_per_cm3,
+                                  minibeam_copper_radiation_length_g_per_cm2)
+                            : highland_projected_rms_angle_device(
+                                  scattering_energy_MeV,
+                                  primary_atomic_number,
+                                  primary_mass_number,
+                                  previous_segment_path,
+                                  minibeam_copper_density_g_per_cm3,
+                                  minibeam_copper_radiation_length_g_per_cm2);
                         const auto incremental_variance = sycl::fmax(
                             0.0F, total_rms * total_rms -
                                       previous_rms * previous_rms);
@@ -4187,6 +4239,9 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
             auto last_primary_stopping_power_MeV_per_mm = 0.0F;
             auto last_primary_density_g_per_cm3 = 0.0F;
             auto last_primary_let_delta_fraction = 0.0F;
+            const auto attenuation_uniform = sycl::fmax(
+                rng::uniform01(spot_seed, rng_history, 0, 9), 1.0e-12F);
+            auto remaining_interaction_lengths = -sycl::log(attenuation_uniform);
             constexpr std::uint32_t max_primary_steps = 2'000'000U;
             while (energy_MeV > energy_cutoff_MeV && steps < max_primary_steps) {
                 const auto escaped_z =
@@ -4544,15 +4599,13 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                                           sycl::cos(two_pi * uniform2);
 
                     constexpr float nucleon_mass_MeV = 931.49410242f;
-                    constexpr float carbon_atomic_number = 6.0f;
-                    constexpr float carbon_charge_power = 0.30285343214f;
                     const auto gamma = 1.0f + energy_MeVu / nucleon_mass_MeV;
                     const auto beta_squared =
                         sycl::fmax(0.0f, 1.0f - 1.0f / (gamma * gamma));
                     const auto beta = sycl::sqrt(beta_squared);
                     const auto effective_charge =
-                        carbon_atomic_number *
-                        (1.0f - sycl::exp(-125.0f * beta * carbon_charge_power));
+                        primary_charge *
+                        (1.0f - sycl::exp(-125.0f * beta * primary_charge_power));
                     // Condensed total-loss variance: Schneider Z/A when present.
                     auto za_rel = 1.0F;
                     if (enable_ct_grid && in_ct) {
@@ -4570,10 +4623,15 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                             za_rel = mat == 3U ? 0.93F : 1.0F;
                         }
                     }
-                    const auto variance_MeV2 =
-                        condensed_total_loss_variance_MeV2_device(
-                            energy_MeVu, primary_mass_number, effective_charge,
-                            step_mm, local_density_g_per_cm3, za_rel);
+                    const auto variance_MeV2 = use_explicit_primary_rest_mass
+                        ? condensed_total_loss_variance_with_mass_MeV2_device(
+                              energy_MeV, primary_rest_mass_MeV,
+                              effective_charge, step_mm,
+                              local_density_g_per_cm3, za_rel)
+                        : condensed_total_loss_variance_MeV2_device(
+                              energy_MeVu, primary_mass_number,
+                              effective_charge, step_mm,
+                              local_density_g_per_cm3, za_rel);
                     const auto local_straggling_scale =
                         interpolate_straggling_scale(
                             energy_MeVu, straggling_scale_energies,
@@ -4721,10 +4779,19 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                         mcs_radiation_length =
                             slab_radiation_lengths_device[layer_for_material];
                     }
-                    auto projected_rms_angle_rad =
-                        highland_projected_rms_angle_device(
-                            scattering_energy_MeV, 6, primary_mass_number, step_mm,
-                            local_density_g_per_cm3, mcs_radiation_length);
+                    auto projected_rms_angle_rad = use_explicit_primary_rest_mass
+                        ? highland_projected_rms_angle_with_mass_device(
+                              scattering_energy_MeV,
+                              primary_atomic_number,
+                              primary_rest_mass_MeV, step_mm,
+                              local_density_g_per_cm3,
+                              mcs_radiation_length)
+                        : highland_projected_rms_angle_device(
+                              scattering_energy_MeV,
+                              primary_atomic_number,
+                              primary_mass_number, step_mm,
+                              local_density_g_per_cm3,
+                              mcs_radiation_length);
                     // The low-energy correction compensates the step-wise
                     // Highland approximation and is a projectile correction,
                     // not a water-only material correction.  Keep the local
@@ -4748,8 +4815,10 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                 }
                 if (enable_primary_attenuation && energy_MeV > energy_cutoff_MeV) {
                     const auto post_step_energy_MeVu = energy_MeV * inverse_mass_number;
+                    const auto attenuation_energy_MeVu =
+                        (energy_MeV + 0.5F * deposited_MeV) * inverse_mass_number;
                     auto cross_section_floating_index =
-                        (post_step_energy_MeVu - minimum_cross_section_energy) *
+                        (attenuation_energy_MeVu - minimum_cross_section_energy) *
                         inverse_cross_section_step;
                     auto cross_section_index =
                         static_cast<int>(sycl::floor(cross_section_floating_index));
@@ -4823,10 +4892,10 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                             macroscopic_cross_section_per_mm *= local_density_g_per_cm3;
                         }
                     }
-                    const auto probability = 1.0f - sycl::exp(
-                        -macroscopic_cross_section_per_mm * step_mm);
-                    const auto uniform = rng::uniform01(spot_seed, rng_history, steps, 2);
-                    if (uniform < probability) {
+                    remaining_interaction_lengths -=
+                        history_primary_inelastic_xs_scale *
+                        macroscopic_cross_section_per_mm * step_mm;
+                    if (remaining_interaction_lengths <= 0.0F) {
                         history_nuclear_MeV = energy_MeV;
                         profile_add(profile_counters_device,
                                     TransportProfileSlot::primary_nuclear);
@@ -4887,8 +4956,7 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                                         const auto residual_MeV =
                                             scaled_secondary_energy_MeV - kerma_MeV;
                                         secondary_summary.neutral_energy_MeV += residual_MeV;
-                                        if (kerma_MeV > 0.0F &&
-                                            fragment_dose_device != nullptr) {
+                                        if (kerma_MeV > 0.0F) {
                                             // Interim n/γ kerma into "other" fragment channel,
                                             // distributed along +z; renormalize into phantom.
                                             constexpr std::size_t other_species = 6;
@@ -4897,9 +4965,17 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                                                 phantom_length_mm,
                                                 static_cast<std::uint32_t>(number_of_bins),
                                                 neutral_kerma_mean_free_path_mm,
-                                                fragment_dose_device +
-                                                    other_species * number_of_bins,
-                                                true);
+                                                aggregate_secondary_dose_device, true);
+                                            if (fragment_dose_device != nullptr) {
+                                                score_exponential_depth(
+                                                    kerma_MeV, position_z_mm,
+                                                    depth_bin_width_mm, phantom_length_mm,
+                                                    static_cast<std::uint32_t>(number_of_bins),
+                                                    neutral_kerma_mean_free_path_mm,
+                                                    fragment_dose_device +
+                                                        other_species * number_of_bins,
+                                                    true);
+                                            }
                                             if (enable_voxel_scoring) {
                                                 score_exponential_voxel_depth(
                                                     kerma_MeV, position_z_mm,
@@ -5461,9 +5537,6 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                     }
                     const auto charge = static_cast<float>(atomic_number);
                     const auto charge_power = sycl::pow(charge, -2.0F / 3.0F);
-                    constexpr float carbon_charge = 6.0F;
-                    const auto carbon_charge_power =
-                        sycl::pow(carbon_charge, -2.0F / 3.0F);
                     const auto is_neutral_lineage =
                         particle.reserved == neutron_lineage ||
                         particle.reserved == gamma_lineage;
@@ -5544,7 +5617,7 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                                 enable_voxel_scoring,
                                 enable_charged_origin_voxel_scoring,
                                 pending_voxel_index, charged_origin_voxel_offset,
-                                neutral_origin_voxel_offset, fragment_dose_device,
+                                neutral_origin_voxel_offset, aggregate_secondary_dose_device, fragment_dose_device,
                                 voxel_dose_device, charged_origin_voxel_dose_device,
                                 neutral_origin_dose_device,
                                 neutral_origin_voxel_dose_device);
@@ -5554,7 +5627,7 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                                 bin, number_of_bins, enable_voxel_scoring,
                                 enable_charged_origin_voxel_scoring, voxel_index,
                                 charged_origin_voxel_offset, neutral_origin_voxel_offset,
-                                fragment_dose_device, voxel_dose_device,
+                                aggregate_secondary_dose_device, fragment_dose_device, voxel_dose_device,
                                 charged_origin_voxel_dose_device, neutral_origin_dose_device,
                                 neutral_origin_voxel_dose_device);
                             deposited_MeV += energy_MeV;
@@ -5587,13 +5660,13 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                                 charge *
                                 (1.0F -
                                  sycl::exp(-125.0F * beta * charge_power));
-                            const auto carbon_effective_charge =
-                                carbon_charge *
+                            const auto reference_effective_charge =
+                                primary_charge *
                                 (1.0F -
                                  sycl::exp(-125.0F * beta *
-                                           carbon_charge_power));
+                                           primary_charge_power));
                             charge_ratio =
-                                effective_charge / carbon_effective_charge;
+                                effective_charge / reference_effective_charge;
                         }
                         const auto in_insert =
                             enable_hetero_insert &&
@@ -5710,7 +5783,7 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                             !enable_layered_phantom &&
                             !enable_hetero_insert &&
                             species_index ==
-                                primary_c12_charged_origin_category &&
+                                primary_charged_origin_category &&
                             atomic_number == 6 && mass_number == 12) {
                             stopping_power_MeV_per_mm *=
                                 minibeam_water_primary_stopping_power_scale;
@@ -6038,7 +6111,7 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                                 enable_voxel_scoring,
                                 enable_charged_origin_voxel_scoring,
                                 pending_voxel_index, charged_origin_voxel_offset,
-                                neutral_origin_voxel_offset, fragment_dose_device,
+                                neutral_origin_voxel_offset, aggregate_secondary_dose_device, fragment_dose_device,
                                 voxel_dose_device, charged_origin_voxel_dose_device,
                                 neutral_origin_dose_device,
                                 neutral_origin_voxel_dose_device);
@@ -6058,7 +6131,7 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                                 voxel_plane_size,
                                 charged_origin_voxel_offset,
                                 neutral_origin_voxel_offset,
-                                fragment_dose_device, voxel_dose_device,
+                                aggregate_secondary_dose_device, fragment_dose_device, voxel_dose_device,
                                 charged_origin_voxel_dose_device,
                                 neutral_origin_dose_device,
                                 neutral_origin_voxel_dose_device);
@@ -6073,13 +6146,19 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                         if (sec_delayed > 0.0F && !is_neutral_lineage) {
                             const auto z_mid =
                                 position_z_mm + 0.5F * direction_z * path_step_mm;
+                            const auto buildup_mfp_mm = electronic_buildup_mfp_at_energy(
+                                energy_MeVu, electronic_buildup_mfp_mm);
+                            score_exponential_depth(
+                                sec_delayed, z_mid, depth_bin_width_mm,
+                                phantom_length_mm,
+                                static_cast<std::uint32_t>(number_of_bins),
+                                buildup_mfp_mm, aggregate_secondary_dose_device);
                             if (fragment_dose_device != nullptr) {
                                 score_exponential_depth(
                                     sec_delayed, z_mid, depth_bin_width_mm,
                                     phantom_length_mm,
                                     static_cast<std::uint32_t>(number_of_bins),
-                                    electronic_buildup_mfp_at_energy(
-                                        energy_MeVu, electronic_buildup_mfp_mm),
+                                    buildup_mfp_mm,
                                     fragment_dose_device +
                                         species_index * number_of_bins);
                             }
@@ -6159,7 +6238,7 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                             if (enable_minibeam) {
                                 const auto is_primary_continuation =
                                     species_index ==
-                                    primary_c12_charged_origin_category;
+                                    primary_charged_origin_category;
                                 projected_rms_angle_rad *=
                                     minibeam_water_low_energy_mcs_scale(
                                         scattering_energy_MeV, mass_number,
@@ -6322,17 +6401,26 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                                                     scaled_energy - kerma_MeV;
                                                 cascade_summary.neutral_energy_MeV +=
                                                     residual_MeV;
-                                                if (kerma_MeV > 0.0F &&
-                                                    fragment_dose_device != nullptr) {
+                                                if (kerma_MeV > 0.0F) {
                                                     constexpr std::size_t other_species = 6;
                                                     score_exponential_depth(
                                                         kerma_MeV, position_z_mm,
                                                         depth_bin_width_mm, phantom_length_mm,
                                                         static_cast<std::uint32_t>(number_of_bins),
                                                         neutral_kerma_mean_free_path_mm,
-                                                        fragment_dose_device +
-                                                            other_species * number_of_bins,
-                                                        true);
+                                                        aggregate_secondary_dose_device, true);
+                                                    if (fragment_dose_device != nullptr) {
+                                                        score_exponential_depth(
+                                                            kerma_MeV, position_z_mm,
+                                                            depth_bin_width_mm,
+                                                            phantom_length_mm,
+                                                            static_cast<std::uint32_t>(
+                                                                number_of_bins),
+                                                            neutral_kerma_mean_free_path_mm,
+                                                            fragment_dose_device +
+                                                                other_species * number_of_bins,
+                                                            true);
+                                                    }
                                                     if (enable_voxel_scoring) {
                                                         score_exponential_voxel_depth(
                                                             kerma_MeV, position_z_mm,
@@ -6550,7 +6638,8 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                                         depth_bin_width_mm, number_of_bins,
                                         enable_voxel_scoring, voxel_min_x_mm, voxel_min_y_mm,
                                         voxel_size_x_mm, voxel_size_y_mm, voxel_bins_x,
-                                        voxel_bins_y, voxel_plane_size, nullptr,
+                                        voxel_bins_y, voxel_plane_size,
+                                        aggregate_secondary_dose_device,
                                         fragment_dose_device, species_index,
                                         voxel_dose_device,
                                         enable_charged_origin_voxel_scoring,
@@ -6579,7 +6668,7 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                         enable_voxel_scoring,
                         enable_charged_origin_voxel_scoring,
                         pending_voxel_index, charged_origin_voxel_offset,
-                        neutral_origin_voxel_offset, fragment_dose_device,
+                        neutral_origin_voxel_offset, aggregate_secondary_dose_device, fragment_dose_device,
                         voxel_dose_device, charged_origin_voxel_dose_device,
                         neutral_origin_dose_device,
                         neutral_origin_voxel_dose_device);
@@ -6675,7 +6764,7 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                             bin, number_of_bins, enable_voxel_scoring,
                             enable_charged_origin_voxel_scoring, voxel_index,
                             charged_origin_voxel_offset, neutral_origin_voxel_offset,
-                            fragment_dose_device, voxel_dose_device,
+                            aggregate_secondary_dose_device, fragment_dose_device, voxel_dose_device,
                             charged_origin_voxel_dose_device, neutral_origin_dose_device,
                             neutral_origin_voxel_dose_device);
                         deposited_MeV += energy_MeV;
@@ -6960,7 +7049,7 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                                 score_secondary_dose_device(
                                     local_deposit, true, 0, origin_category, bin,
                                     number_of_bins, enable_voxel_scoring, false, voxel_index,
-                                    0, origin_category * number_of_voxels, fragment_dose_device,
+                                    0, origin_category * number_of_voxels, aggregate_secondary_dose_device, fragment_dose_device,
                                     voxel_dose_device, charged_origin_voxel_dose_device,
                                     neutral_origin_dose_device,
                                     neutral_origin_voxel_dose_device);
@@ -7194,9 +7283,6 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                             const auto charge = static_cast<float>(atomic_number);
                             const auto charge_power =
                                 sycl::pow(charge, -2.0F / 3.0F);
-                            constexpr float carbon_charge = 6.0F;
-                            const auto carbon_charge_power =
-                                sycl::pow(carbon_charge, -2.0F / 3.0F);
 
                             constexpr std::uint32_t max_secondary_steps = 500'000U;
                             auto last_stopping_power_MeV_per_mm = 0.0F;
@@ -7278,14 +7364,14 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                                         (1.0F -
                                          sycl::exp(-125.0F * beta *
                                                    charge_power));
-                                    const auto carbon_effective_charge =
-                                        carbon_charge *
+                                    const auto reference_effective_charge =
+                                        primary_charge *
                                         (1.0F -
                                          sycl::exp(-125.0F * beta *
-                                                   carbon_charge_power));
+                                                   primary_charge_power));
                                     charge_ratio =
                                         effective_charge /
-                                        carbon_effective_charge;
+                                        reference_effective_charge;
                                 }
                                 const auto in_insert =
                                     enable_hetero_insert &&
@@ -7537,7 +7623,7 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                                     enable_charged_origin_voxel_scoring, voxel_index,
                                     charged_origin_voxel_offset,
                                     neutral_origin_voxel_offset,
-                                    fragment_dose_device, voxel_dose_device,
+                                    aggregate_secondary_dose_device, fragment_dose_device, voxel_dose_device,
                                     charged_origin_voxel_dose_device,
                                     neutral_origin_dose_device,
                                     neutral_origin_voxel_dose_device);
@@ -7623,7 +7709,7 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                                     neutral_origin, bin, number_of_bins, enable_voxel_scoring,
                                     enable_charged_origin_voxel_scoring, voxel_index,
                                     charged_origin_voxel_offset, neutral_origin_voxel_offset,
-                                    fragment_dose_device, voxel_dose_device,
+                                    aggregate_secondary_dose_device, fragment_dose_device, voxel_dose_device,
                                     charged_origin_voxel_dose_device,
                                     neutral_origin_dose_device,
                                     neutral_origin_voxel_dose_device);
@@ -7657,6 +7743,7 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
     std::vector<float> nuclear_host(number_of_histories);
     std::vector<std::uint32_t> steps_host(number_of_histories);
     std::vector<SecondaryGenerationSummary> secondary_summaries_host;
+    std::vector<DoseAtomicT> aggregate_secondary_dose_atomic_host;
     std::vector<DoseAtomicT> fragment_dose_atomic_host;
     std::vector<float> secondary_deposited_host;
     std::vector<float> secondary_escaped_host;
@@ -7765,6 +7852,7 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
     std::vector<double> charged_origin_voxel_dose_host =
         to_double_vec(charged_origin_voxel_dose_atomic_host);
     std::vector<double> fragment_dose_host;
+    std::vector<double> aggregate_secondary_dose_host;
     std::vector<double> neutral_origin_dose_host;
     std::vector<double> neutral_origin_voxel_dose_host;
     queue.copy(deposited_device, deposited_host.data(), number_of_histories);
@@ -7786,6 +7874,10 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
         secondary_deposited_host.resize(transported_secondary_count);
         secondary_escaped_host.resize(transported_secondary_count);
         secondary_steps_host.resize(transported_secondary_count);
+        aggregate_secondary_dose_atomic_host.resize(number_of_bins);
+        queue.copy(aggregate_secondary_dose_device,
+                   aggregate_secondary_dose_atomic_host.data(), number_of_bins);
+        aggregate_secondary_dose_host = to_double_vec(aggregate_secondary_dose_atomic_host);
         if (enable_fragment_species_scoring) {
             queue.copy(fragment_dose_device, fragment_dose_atomic_host.data(),
                        fragment_dose_atomic_host.size());
@@ -8028,6 +8120,11 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
     }
     if (config.enable_primary_attenuation) {
         result.backend += "+attenuation";
+        if (config.enable_primary_inelastic_xs_correction) {
+            result.backend += "+primary-xs-table";
+        } else if (config.primary_inelastic_xs_scale != 1.0) {
+            result.backend += "+primary-xs-scale";
+        }
     }
     if (enable_secondary_generation) {
         result.backend += "+secondary-generation";
@@ -8062,7 +8159,7 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
             minibeam_diagnostic_counts_host[1];
         result.minibeam.copper_touched_histories =
             minibeam_diagnostic_counts_host[2];
-        result.minibeam.water_entrance_primary_c12 =
+        result.minibeam.water_entrance_primary =
             minibeam_diagnostic_counts_host[3];
         result.minibeam.copper_nuclear_interactions =
             minibeam_diagnostic_counts_host[4];
@@ -8114,14 +8211,14 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                 14 + minibeam_charged_species_count];
         for (std::size_t slit = 0;
              slit < MinibeamDiagnostics::slit_count; ++slit) {
-            result.minibeam.water_entrance_primary_c12_by_slit[slit] =
+            result.minibeam.water_entrance_primary_by_slit[slit] =
                 minibeam_diagnostic_counts_host[
                     8 + minibeam_charged_species_count + slit];
-            result.minibeam.collimator_entrance_primary_c12_by_slit[slit] =
+            result.minibeam.collimator_entrance_primary_by_slit[slit] =
                 minibeam_diagnostic_counts_host[
                     8 + minibeam_charged_species_count +
                     MinibeamDiagnostics::slit_count + slit];
-            result.minibeam.direct_air_primary_c12_by_slit[slit] =
+            result.minibeam.direct_air_primary_by_slit[slit] =
                 minibeam_diagnostic_counts_host[
                     8 + minibeam_charged_species_count +
                     2 * MinibeamDiagnostics::slit_count + slit];
@@ -8163,7 +8260,7 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
         result.beamline_removed_energy_MeV =
             minibeam_diagnostic_moments_host[10];
     }
-    result.primary_c12_deposited_energy_MeV = dose_host;
+    result.primary_deposited_energy_MeV = dose_host;
     result.deposited_energy_MeV = std::move(dose_host);
     result.voxel_deposited_energy_MeV = std::move(voxel_dose_host);
     result.charged_origin_voxel_deposited_energy_MeV =
@@ -8175,8 +8272,8 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
             return std::vector<double>(
                 begin, begin + static_cast<std::ptrdiff_t>(number_of_bins));
         };
-        result.primary_c12_letd_numerator = extract_let_moment(0);
-        result.primary_c12_letd_denominator = extract_let_moment(1);
+        result.primary_letd_numerator = extract_let_moment(0);
+        result.primary_letd_denominator = extract_let_moment(1);
         result.all_hadron_letd_numerator = extract_let_moment(2);
         result.all_hadron_letd_denominator = extract_let_moment(3);
     }
@@ -8213,9 +8310,9 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                     begin,
                     begin + static_cast<std::ptrdiff_t>(number_of_voxels));
             };
-            result.primary_c12_voxel_letd_numerator =
+            result.primary_voxel_letd_numerator =
                 extract_voxel_let_moment(0);
-            result.primary_c12_voxel_letd_denominator =
+            result.primary_voxel_letd_denominator =
                 extract_voxel_let_moment(1);
             result.all_hadron_voxel_letd_numerator =
                 extract_voxel_let_moment(2);
@@ -8281,7 +8378,12 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
     }
     result.total_steps = std::accumulate(steps_host.begin(), steps_host.end(), std::uint64_t{0});
     if (enable_secondary_transport) {
-        double fragment_integral_MeV = 0.0;
+        const auto aggregate_secondary_integral_MeV =
+            std::accumulate(aggregate_secondary_dose_host.begin(),
+                            aggregate_secondary_dose_host.end(), 0.0);
+        for (std::size_t bin = 0; bin < number_of_bins; ++bin) {
+            result.deposited_energy_MeV[bin] += aggregate_secondary_dose_host[bin];
+        }
         if (enable_fragment_species_scoring) {
             const auto extract_species = [&](std::size_t species_index) {
                 const auto begin = fragment_dose_host.begin() +
@@ -8290,27 +8392,12 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                     begin, begin + static_cast<std::ptrdiff_t>(number_of_bins));
             };
             result.secondary_carbon_deposited_energy_MeV = extract_species(0);
-            result.boron_deposited_energy_MeV = extract_species(1);
-            result.beryllium_deposited_energy_MeV = extract_species(2);
-            result.lithium_deposited_energy_MeV = extract_species(3);
-            result.helium_deposited_energy_MeV = extract_species(4);
-            result.proton_deposited_energy_MeV = extract_species(5);
-            result.other_charged_deposited_energy_MeV = extract_species(6);
-            const std::vector<const std::vector<double>*> fragment_species{
-                &result.secondary_carbon_deposited_energy_MeV,
-                &result.boron_deposited_energy_MeV,
-                &result.beryllium_deposited_energy_MeV,
-                &result.lithium_deposited_energy_MeV,
-                &result.helium_deposited_energy_MeV,
-                &result.proton_deposited_energy_MeV,
-                &result.other_charged_deposited_energy_MeV,
-            };
-            for (const auto* species : fragment_species) {
-                for (std::size_t bin = 0; bin < number_of_bins; ++bin) {
-                    result.deposited_energy_MeV[bin] += (*species)[bin];
-                    fragment_integral_MeV += (*species)[bin];
-                }
-            }
+            result.secondary_boron_deposited_energy_MeV = extract_species(1);
+            result.secondary_beryllium_deposited_energy_MeV = extract_species(2);
+            result.secondary_lithium_deposited_energy_MeV = extract_species(3);
+            result.secondary_helium_deposited_energy_MeV = extract_species(4);
+            result.secondary_proton_deposited_energy_MeV = extract_species(5);
+            result.secondary_other_charged_deposited_energy_MeV = extract_species(6);
         }
         result.transported_secondaries = transported_queue_count;
         result.secondary_deposited_energy_MeV =
@@ -8322,17 +8409,17 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
         result.secondary_transport_steps =
             std::accumulate(secondary_steps_host.begin(), secondary_steps_host.end(),
                             std::uint64_t{0});
-        // Secondary-transport deposits are tracked in secondary_deposited_host.
-        // Local neutral kerma is scored only into fragment_dose; include the extra.
-        const auto neutral_kerma_deposit_MeV =
-            std::max(0.0, fragment_integral_MeV - result.secondary_deposited_energy_MeV);
+        // The aggregate depth scorer includes charged transport and local secondary
+        // heat that is not represented in per-track deposited-energy ledgers.
+        const auto secondary_local_scored_MeV = std::max(
+            0.0, aggregate_secondary_integral_MeV - result.secondary_deposited_energy_MeV);
         result.total_deposited_energy_MeV +=
-            result.secondary_deposited_energy_MeV + neutral_kerma_deposit_MeV;
-        // Neutral birth energy converted to the local-kerma proxy is already
+            result.secondary_deposited_energy_MeV + secondary_local_scored_MeV;
+        // Secondary local heat is already
         // present in the aggregate dose above. Remove the same amount from
         // the unresolved nuclear reservoir so it is not counted twice by the
         // history energy-balance diagnostic.
-        result.untracked_nuclear_energy_MeV -= neutral_kerma_deposit_MeV;
+        result.untracked_nuclear_energy_MeV -= secondary_local_scored_MeV;
         result.escaped_energy_MeV += result.secondary_escaped_energy_MeV;
         result.untracked_nuclear_energy_MeV -= result.queued_secondary_energy_MeV;
         if (enable_fragment_cascade) {

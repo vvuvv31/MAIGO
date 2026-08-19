@@ -110,6 +110,72 @@ std::filesystem::path resolve_input_path_from_config(
     return configured;
 }
 
+void load_primary_inelastic_xs_correction_csv(
+    const std::filesystem::path& path,
+    std::vector<double>& energies_MeVu,
+    std::vector<double>& scales) {
+    std::ifstream input(path);
+    if (!input) {
+        throw std::runtime_error(
+            "Cannot open primary inelastic XS correction table: " + path.string());
+    }
+    constexpr std::string_view expected_header =
+        "initial_energy_MeV_per_u,primary_inelastic_xs_scale";
+    auto found_header = false;
+    std::string line;
+    std::size_t line_number = 0;
+    while (std::getline(input, line)) {
+        ++line_number;
+        const auto comment = line.find('#');
+        if (comment != std::string::npos) {
+            line.erase(comment);
+        }
+        line = trim(line);
+        if (line.empty()) {
+            continue;
+        }
+        if (!found_header) {
+            if (line != expected_header) {
+                throw std::runtime_error(
+                    "Primary inelastic XS correction CSV has an unexpected header: " +
+                    path.string());
+            }
+            found_header = true;
+            continue;
+        }
+        const auto separator = line.find(',');
+        if (separator == std::string::npos || line.find(',', separator + 1) != std::string::npos) {
+            throw std::runtime_error(
+                "Expected two correction columns at " + path.string() + ":" +
+                std::to_string(line_number));
+        }
+        const auto parse_csv_number = [&](const std::string& field, const char* label) {
+            const auto cleaned = trim(field);
+            std::size_t parsed = 0;
+            double value = 0.0;
+            try {
+                value = std::stod(cleaned, &parsed);
+            } catch (const std::exception&) {
+                throw std::runtime_error(
+                    std::string("Invalid ") + label + " at " + path.string() + ":" +
+                    std::to_string(line_number));
+            }
+            if (parsed != cleaned.size()) {
+                throw std::runtime_error(
+                    std::string("Invalid ") + label + " at " + path.string() + ":" +
+                    std::to_string(line_number));
+            }
+            return value;
+        };
+        energies_MeVu.push_back(parse_csv_number(line.substr(0, separator), "energy"));
+        scales.push_back(parse_csv_number(line.substr(separator + 1), "scale"));
+    }
+    if (!found_header) {
+        throw std::runtime_error(
+            "Primary inelastic XS correction CSV is missing its header: " + path.string());
+    }
+}
+
 std::filesystem::path scorer_output_path(const std::filesystem::path& config_path,
                                          const std::string& name,
                                          const bool include_extension) {
@@ -302,12 +368,35 @@ std::size_t TransportConfig::number_of_voxels() const {
     return voxel_bins_x * voxel_bins_y * depth_bins;
 }
 
+bool TransportConfig::validation_scorers() const noexcept {
+#ifdef CARBON_VALIDATION_SCORERS
+    return scorer_mode == "validation";
+#else
+    return false;
+#endif
+}
+
 void TransportConfig::validate() const {
     if (number_of_histories == 0) {
         throw std::invalid_argument("number_of_histories must be greater than zero");
     }
-    if (mass_number <= 0) {
-        throw std::invalid_argument("mass_number must be positive");
+    if (scorer_mode != "production" && scorer_mode != "validation") {
+        throw std::invalid_argument(
+            "scorer_mode must be production or validation");
+    }
+    if (scorer_mode == "validation" && !validation_scorers()) {
+        throw std::invalid_argument(
+            "scorer_mode=validation requires a binary built with "
+            "-DCARBON_VALIDATION_SCORERS=ON");
+    }
+    if (primary_atomic_number <= 0 || primary_mass_number < primary_atomic_number) {
+        throw std::invalid_argument(
+            "primary ion must satisfy primary_atomic_number > 0 and "
+            "primary_mass_number >= primary_atomic_number");
+    }
+    if (!std::isfinite(primary_rest_mass_MeV) || primary_rest_mass_MeV < 0.0) {
+        throw std::invalid_argument(
+            "primary_rest_mass_MeV must be zero or finite and positive");
     }
     const auto energy_comes_from_spot_file =
         !topas_spots_file.empty() || !topas_spots_files.empty() ||
@@ -482,6 +571,63 @@ void TransportConfig::validate() const {
         throw std::invalid_argument(
             "nuclear_residual_heat_scale must be in [0, 2]");
     }
+    if (!std::isfinite(primary_inelastic_xs_scale) ||
+        primary_inelastic_xs_scale <= 0.0 ||
+        primary_inelastic_xs_scale > 2.0) {
+        throw std::invalid_argument(
+            "primary_inelastic_xs_scale must be in (0, 2]");
+    }
+    if (enable_primary_inelastic_xs_correction) {
+        if (!enable_primary_attenuation) {
+            throw std::invalid_argument(
+                "primary inelastic XS correction requires enable_primary_attenuation");
+        }
+        if (primary_inelastic_xs_correction_file.empty()) {
+            throw std::invalid_argument(
+                "primary inelastic XS correction requires a correction file");
+        }
+        if (primary_inelastic_xs_scale != 1.0) {
+            throw std::invalid_argument(
+                "primary_inelastic_xs_scale must remain 1.0 when the correction table is enabled");
+        }
+        if (primary_inelastic_xs_correction_energies_MeVu.size() !=
+            primary_inelastic_xs_correction_scales.size()) {
+            throw std::invalid_argument(
+                "primary inelastic XS correction energies and scales must have the same length");
+        }
+        const auto count = primary_inelastic_xs_correction_energies_MeVu.size();
+        if (count < 2 || count > max_straggling_scale_points) {
+            throw std::invalid_argument(
+                "primary inelastic XS correction table requires 2 to 16 points");
+        }
+        for (std::size_t index = 0; index < count; ++index) {
+            const auto energy = primary_inelastic_xs_correction_energies_MeVu[index];
+            const auto scale = primary_inelastic_xs_correction_scales[index];
+            if (!std::isfinite(energy) || energy <= 0.0) {
+                throw std::invalid_argument(
+                    "primary inelastic XS correction energies must be finite and positive");
+            }
+            if (!std::isfinite(scale) || scale <= 0.0 || scale > 2.0) {
+                throw std::invalid_argument(
+                    "primary inelastic XS correction scales must be in (0, 2]");
+            }
+            if (index > 0 &&
+                energy <= primary_inelastic_xs_correction_energies_MeVu[index - 1]) {
+                throw std::invalid_argument(
+                    "primary inelastic XS correction energies must be strictly increasing");
+            }
+        }
+    }
+    if (restrict_fragment_species_energy_deposit) {
+        if (restrict_fragment_species_z_min < 1 ||
+            restrict_fragment_species_z_max < restrict_fragment_species_z_min ||
+            restrict_fragment_species_z_max > 8) {
+            throw std::invalid_argument(
+                "restrict_fragment_species_z_min/max must satisfy "
+                "1 <= min <= max <= 8 when restrict_fragment_species_energy_deposit "
+                "is true");
+        }
+    }
     if (!std::isfinite(reaction_light_ion_forward_mix) ||
         reaction_light_ion_forward_mix < 0.0 ||
         reaction_light_ion_forward_mix > 1.0) {
@@ -493,11 +639,11 @@ void TransportConfig::validate() const {
         throw std::invalid_argument(
             "cascade_light_ion_xs_scale must be in [0, 2]");
     }
-    if (!std::isfinite(cascade_secondary_carbon_xs_scale) ||
-        cascade_secondary_carbon_xs_scale < 0.0 ||
-        cascade_secondary_carbon_xs_scale > 2.0) {
+    if (!std::isfinite(cascade_secondary_z6_xs_scale) ||
+        cascade_secondary_z6_xs_scale < 0.0 ||
+        cascade_secondary_z6_xs_scale > 2.0) {
         throw std::invalid_argument(
-            "cascade_secondary_carbon_xs_scale must be in [0, 2]");
+            "cascade_secondary_z6_xs_scale must be in [0, 2]");
     }
     if (enable_voxel_scoring &&
         (voxel_bins_x == 0 || voxel_bins_y == 0 || voxel_size_x_mm <= 0.0 ||
@@ -579,13 +725,16 @@ void TransportConfig::validate() const {
         throw std::invalid_argument(
             "cascade_condition_on_reference_depth requires fragment cascade");
     }
-    if (!enable_fragment_species_scoring && enable_secondary_transport &&
-        (!output_file.empty() || !dose_output_file.empty() ||
-         !fragment_species_output_file.empty() ||
-         !fragment_species_dose_output_file.empty())) {
+    if (!enable_fragment_species_scoring &&
+        !fragment_species_output_file.empty()) {
         throw std::invalid_argument(
-            "fragment species scoring disabled: depth-dose and fragment output "
-            "paths must be empty (voxel dose remains available)");
+            "fragment_species_output_file is set but enable_fragment_species_scoring=false");
+    }
+    if (!enable_fragment_species_scoring &&
+        !fragment_species_dose_output_file.empty()) {
+        throw std::invalid_argument(
+            "fragment_species_dose_output_file is set but "
+            "enable_fragment_species_scoring=false");
     }
     if (!enable_fragment_species_scoring && neutral_local_kerma_fraction > 0.0) {
         throw std::invalid_argument(
@@ -692,6 +841,11 @@ void TransportConfig::validate() const {
         if (device == "serial") {
             throw std::invalid_argument(
                 "minibeam=true currently requires a SYCL device");
+        }
+        if (primary_atomic_number != 6 || primary_mass_number != 12) {
+            throw std::invalid_argument(
+                "minibeam=true is currently calibrated only for a C-12 primary; "
+                "disable minibeam for other configured ions");
         }
         if (minibeam_transport_mode != "absorbing_geometry" &&
             minibeam_transport_mode != "copper_em") {
@@ -896,10 +1050,6 @@ void TransportConfig::validate() const {
                 "tps_angle_convention must be dicom_lps (preferred) or "
                 "iec61217; topas_patient_rot_z is a deprecated alias");
         }
-        if (tps_particle_type != "carbon") {
-            throw std::invalid_argument(
-                "Only tps_particle_type=carbon is supported by the current physics tables");
-        }
         const auto magnets_x = tps_virtual_scanning_magnet_x_mm;
         const auto magnets_y = tps_virtual_scanning_magnet_y_mm;
         if ((magnets_x > 0.0) != (magnets_y > 0.0)) {
@@ -973,6 +1123,11 @@ TransportConfig load_config(const std::filesystem::path& path) {
              "spots_lateral_yz_skew_pivot_mm",
              "spots_lateral_yz_rotation_deg",
              "spots_lateral_yz_rotation_pivot_y_mm",
+             "mass_number",
+             "stopping_power_file",
+             "nuclear_cross_section_file",
+             "reaction_package_file",
+             "tps_particle_type",
          }) {
         if (values.contains(removed)) {
             throw std::invalid_argument(
@@ -984,7 +1139,12 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.initial_energy_MeVu = parse_number(values, "initial_energy_MeVu", config.initial_energy_MeVu);
     config.beam_energy_spread =
         parse_number(values, "beam_energy_spread", config.beam_energy_spread);
-    config.mass_number = parse_number(values, "mass_number", config.mass_number);
+    config.primary_atomic_number = static_cast<int>(parse_number(
+        values, "primary_atomic_number", config.primary_atomic_number));
+    config.primary_mass_number = static_cast<int>(parse_number(
+        values, "primary_mass_number", config.primary_mass_number));
+    config.primary_rest_mass_MeV = parse_number(
+        values, "primary_rest_mass_MeV", config.primary_rest_mass_MeV);
     config.phantom_length_mm = parse_number(values, "phantom_length_mm", config.phantom_length_mm);
     config.depth_bin_width_mm = parse_number(values, "depth_bin_width_mm", config.depth_bin_width_mm);
     config.maximum_step_mm = parse_number(values, "maximum_step_mm", config.maximum_step_mm);
@@ -1083,6 +1243,20 @@ TransportConfig load_config(const std::filesystem::path& path) {
     }
     config.enable_ct_grid = parse_bool(values, "enable_ct_grid", config.enable_ct_grid);
     config.ct_grid_file = parse_path(values, "ct_grid_file", config.ct_grid_file);
+    config.ct_schneider_file =
+        parse_path(values, "ct_schneider_file", config.ct_schneider_file);
+    {
+        const auto it = values.find("ct_dicom_origin_mode");
+        if (it != values.end() && !it->second.empty()) {
+            config.ct_dicom_origin_mode = it->second;
+            std::transform(config.ct_dicom_origin_mode.begin(),
+                           config.ct_dicom_origin_mode.end(),
+                           config.ct_dicom_origin_mode.begin(),
+                           [](const unsigned char character) {
+                               return static_cast<char>(std::tolower(character));
+                           });
+        }
+    }
     config.ct_skip_homogeneous_face_clamp = parse_bool(
         values, "ct_skip_homogeneous_face_clamp", config.ct_skip_homogeneous_face_clamp);
     config.ct_air_stopping_power_file = parse_path(
@@ -1145,6 +1319,15 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.nuclear_residual_heat_scale = parse_number(
         values, "nuclear_residual_heat_scale",
         config.nuclear_residual_heat_scale);
+    config.restrict_fragment_species_energy_deposit = parse_bool(
+        values, "restrict_fragment_species_energy_deposit",
+        config.restrict_fragment_species_energy_deposit);
+    config.restrict_fragment_species_z_min = static_cast<int>(parse_number(
+        values, "restrict_fragment_species_z_min",
+        config.restrict_fragment_species_z_min));
+    config.restrict_fragment_species_z_max = static_cast<int>(parse_number(
+        values, "restrict_fragment_species_z_max",
+        config.restrict_fragment_species_z_max));
     config.reaction_light_ion_forward_mix = parse_number(
         values, "reaction_light_ion_forward_mix",
         config.reaction_light_ion_forward_mix);
@@ -1175,8 +1358,12 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.voxel_size_z_mm =
         parse_number(values, "voxel_size_z_mm", config.voxel_size_z_mm);
     if (config.enable_ct_grid) {
-        const auto grid = CtGrid::from_binary(
-            resolve_input_path_from_config(config.ct_grid_file, path));
+        const auto grid = CtGrid::load(
+            resolve_input_path_from_config(config.ct_grid_file, path),
+            config.ct_schneider_file.empty()
+                ? std::filesystem::path{}
+                : resolve_input_path_from_config(config.ct_schneider_file, path),
+            config.ct_dicom_origin_mode);
         const auto close = [](const double left, const double right) {
             return std::abs(left - right) <=
                    1.0e-6 * std::max({1.0, std::abs(left), std::abs(right)});
@@ -1288,6 +1475,15 @@ TransportConfig load_config(const std::filesystem::path& path) {
         parse_number(values, "emittance_correlation_y", config.emittance_correlation_y);
     config.enable_primary_attenuation =
         parse_bool(values, "enable_primary_attenuation", config.enable_primary_attenuation);
+    config.primary_inelastic_xs_scale = parse_number(
+        values, "primary_inelastic_xs_scale",
+        config.primary_inelastic_xs_scale);
+    config.enable_primary_inelastic_xs_correction = parse_bool(
+        values, "enable_primary_inelastic_xs_correction",
+        config.enable_primary_inelastic_xs_correction);
+    config.primary_inelastic_xs_correction_file = parse_path(
+        values, "primary_inelastic_xs_correction_file",
+        config.primary_inelastic_xs_correction_file);
     config.enable_secondary_generation =
         parse_bool(values, "enable_secondary_generation", config.enable_secondary_generation);
     config.enable_secondary_transport =
@@ -1300,12 +1496,49 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.cascade_light_ion_xs_scale = parse_number(
         values, "cascade_light_ion_xs_scale",
         config.cascade_light_ion_xs_scale);
-    config.cascade_secondary_carbon_xs_scale = parse_number(
-        values, "cascade_secondary_carbon_xs_scale",
-        config.cascade_secondary_carbon_xs_scale);
+    config.cascade_secondary_z6_xs_scale = parse_number(
+        values, "cascade_secondary_z6_xs_scale",
+        config.cascade_secondary_z6_xs_scale);
     config.enable_fragment_species_scoring = parse_bool(
         values, "enable_fragment_species_scoring",
         config.enable_fragment_species_scoring);
+    {
+        const auto it = values.find("scorer_mode");
+        if (it != values.end() && !it->second.empty()) {
+            config.scorer_mode = it->second;
+            std::transform(config.scorer_mode.begin(), config.scorer_mode.end(),
+                           config.scorer_mode.begin(),
+                           [](const unsigned char character) {
+                               return static_cast<char>(std::tolower(character));
+                           });
+        }
+    }
+    config.validation_output_directory = parse_path(
+        values, "validation_output_directory",
+        config.validation_output_directory);
+    if (config.scorer_mode == "validation") {
+        config.enable_fragment_species_scoring = true;
+        if (!config.validation_output_directory.empty()) {
+            const auto dir = config.validation_output_directory;
+            if (config.output_file.empty() ||
+                config.output_file == "out/cpu_depth_dose.csv") {
+                config.output_file = dir / "dose_MeV.csv";
+            }
+            if (config.dose_output_file.empty() ||
+                config.dose_output_file == "out/cpu_depth_dose_Gy.csv") {
+                config.dose_output_file = dir / "dose.csv";
+            }
+            if (config.fragment_species_output_file.empty()) {
+                config.fragment_species_output_file = dir / "species_dose_MeV.csv";
+            }
+            if (config.fragment_species_dose_output_file.empty()) {
+                config.fragment_species_dose_output_file = dir / "species_dose.csv";
+            }
+            if (config.enable_let_scoring && config.let_output_file.empty()) {
+                config.let_output_file = dir / "letd.csv";
+            }
+        }
+    }
     {
         const auto camel = values.find("scorerLET");
         const auto snake = values.find("enable_let_scoring");
@@ -1712,22 +1945,10 @@ TransportConfig load_config(const std::filesystem::path& path) {
                            });
         }
     }
-    {
-        const auto it = values.find("tps_particle_type");
-        if (it != values.end() && !it->second.empty()) {
-            config.tps_particle_type = it->second;
-            std::transform(config.tps_particle_type.begin(),
-                           config.tps_particle_type.end(),
-                           config.tps_particle_type.begin(),
-                           [](const unsigned char character) {
-                               return static_cast<char>(std::tolower(character));
-                           });
-        }
-    }
     if (const auto seed = values.find("random_seed"); seed != values.end()) {
         config.random_seed = parse_random_seed(seed->second);
     }
-    config.stopping_power_file = parse_path(values, "stopping_power_file", config.stopping_power_file);
+    config.primary_stopping_power_file = parse_path(values, "primary_stopping_power_file", config.primary_stopping_power_file);
     config.let_delta_electron_fraction_file = parse_path(
         values, "let_delta_electron_fraction_file",
         config.let_delta_electron_fraction_file);
@@ -1746,10 +1967,10 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.ct_bone_particle_stopping_power_file = parse_path(
         values, "ct_bone_particle_stopping_power_file",
         config.ct_bone_particle_stopping_power_file);
-    config.nuclear_cross_section_file =
-        parse_path(values, "nuclear_cross_section_file", config.nuclear_cross_section_file);
-    config.reaction_package_file =
-        parse_path(values, "reaction_package_file", config.reaction_package_file);
+    config.primary_inelastic_cross_section_file =
+        parse_path(values, "primary_inelastic_cross_section_file", config.primary_inelastic_cross_section_file);
+    config.primary_reaction_package_file =
+        parse_path(values, "primary_reaction_package_file", config.primary_reaction_package_file);
     config.cascade_package_file =
         parse_path(values, "cascade_package_file", config.cascade_package_file);
     config.neutral_package_file =
@@ -1961,6 +2182,15 @@ TransportConfig load_config(const std::filesystem::path& path) {
     const auto device = values.find("device");
     if (device != values.end()) {
         config.device = device->second;
+    }
+    if (config.enable_primary_inelastic_xs_correction) {
+        config.primary_inelastic_xs_correction_file =
+            resolve_input_path_from_config(
+                config.primary_inelastic_xs_correction_file, path);
+        load_primary_inelastic_xs_correction_csv(
+            config.primary_inelastic_xs_correction_file,
+            config.primary_inelastic_xs_correction_energies_MeVu,
+            config.primary_inelastic_xs_correction_scales);
     }
     config.validate();
     return config;

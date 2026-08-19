@@ -92,14 +92,14 @@ void require_charged_origin_voxel_closure(
     const std::array<const std::vector<double>*,
                      carbon::charged_origin_category_count>
         depth_categories{
-            &result.primary_c12_deposited_energy_MeV,
+            &result.primary_deposited_energy_MeV,
             &result.secondary_carbon_deposited_energy_MeV,
-            &result.boron_deposited_energy_MeV,
-            &result.beryllium_deposited_energy_MeV,
-            &result.lithium_deposited_energy_MeV,
-            &result.helium_deposited_energy_MeV,
-            &result.proton_deposited_energy_MeV,
-            &result.other_charged_deposited_energy_MeV,
+            &result.secondary_boron_deposited_energy_MeV,
+            &result.secondary_beryllium_deposited_energy_MeV,
+            &result.secondary_lithium_deposited_energy_MeV,
+            &result.secondary_helium_deposited_energy_MeV,
+            &result.secondary_proton_deposited_energy_MeV,
+            &result.secondary_other_charged_deposited_energy_MeV,
         };
     const auto histories = static_cast<double>(config.number_of_histories);
     const auto plane_size = config.voxel_bins_x * config.voxel_bins_y;
@@ -142,10 +142,86 @@ const carbon::CrossSectionTable& zero_cross_section() {
     return table;
 }
 
+// These fixtures deliberately write the published v1 layouts, so the proton
+// smoke exercises the public package readers as well as device transport.
+struct ReactionPackageHeaderV1 {
+    char magic[8];
+    std::uint32_t version;
+    std::uint32_t header_size;
+    std::uint32_t energy_bin_record_size;
+    std::uint32_t reaction_record_size;
+    std::uint32_t secondary_record_size;
+    std::uint32_t energy_bin_count;
+    float minimum_energy_MeV_per_u;
+    float energy_bin_width_MeV_per_u;
+    std::uint64_t reaction_count;
+    std::uint64_t secondary_count;
+    std::uint64_t expected_file_size;
+};
+struct CascadePackageHeaderV1 {
+    char magic[8];
+    std::uint32_t version;
+    std::uint32_t header_size;
+    std::uint32_t projectile_size;
+    std::uint32_t cross_section_size;
+    std::uint32_t interaction_size;
+    std::uint32_t product_size;
+    std::uint32_t projectile_count;
+    std::uint32_t reserved;
+    std::uint64_t cross_section_count;
+    std::uint64_t interaction_count;
+    std::uint64_t product_count;
+    std::uint64_t file_size;
+};
+static_assert(sizeof(ReactionPackageHeaderV1) == 64);
+static_assert(sizeof(CascadePackageHeaderV1) == 72);
+
+void write_synthetic_proton_packages(const std::filesystem::path& reaction_path,
+                                     const std::filesystem::path& cascade_path) {
+    const carbon::ReactionEnergyBin reaction_bin{0, 1};
+    const carbon::ReactionPackage reaction{50.0F, 0.0F, 5.0F, 0, 1};
+    const carbon::ReactionSecondary primary_product{2212, 1, 1, 30.0F, 0.0F, 0.0F, 1.0F};
+    const auto reaction_size = static_cast<std::uint64_t>(
+        sizeof(ReactionPackageHeaderV1) + sizeof(reaction_bin) + sizeof(reaction) +
+        sizeof(primary_product));
+    const ReactionPackageHeaderV1 reaction_header{
+        {'C', 'R', 'P', 'K', 'G', '0', '1', '\0'}, 1, sizeof(ReactionPackageHeaderV1),
+        sizeof(reaction_bin), sizeof(reaction), sizeof(primary_product), 1, 0.0F, 100.0F,
+        1, 1, reaction_size};
+    {
+        std::ofstream output(reaction_path, std::ios::binary | std::ios::trunc);
+        output.write(reinterpret_cast<const char*>(&reaction_header), sizeof(reaction_header));
+        output.write(reinterpret_cast<const char*>(&reaction_bin), sizeof(reaction_bin));
+        output.write(reinterpret_cast<const char*>(&reaction), sizeof(reaction));
+        output.write(reinterpret_cast<const char*>(&primary_product), sizeof(primary_product));
+    }
+
+    const carbon::CascadeProjectile projectile{1, 1, 0, 1, 0, 1};
+    const carbon::CascadeCrossSectionSample cascade_xs{0.0F, 100.0F};
+    const carbon::CascadeInteraction cascade_interaction{30.0F, 0.0F, 3.0F, 0, 1};
+    const carbon::ReactionSecondary cascade_product{2212, 1, 1, 5.0F, 0.0F, 0.0F, 1.0F};
+    const auto cascade_size = static_cast<std::uint64_t>(
+        sizeof(CascadePackageHeaderV1) + sizeof(projectile) + sizeof(cascade_xs) +
+        sizeof(cascade_interaction) + sizeof(cascade_product));
+    const CascadePackageHeaderV1 cascade_header{
+        {'C', 'C', 'A', 'S', '0', '0', '1', '\0'}, 1, sizeof(CascadePackageHeaderV1),
+        sizeof(projectile), sizeof(cascade_xs), sizeof(cascade_interaction),
+        sizeof(cascade_product), 1, 0, 1, 1, 1, cascade_size};
+    {
+        std::ofstream output(cascade_path, std::ios::binary | std::ios::trunc);
+        output.write(reinterpret_cast<const char*>(&cascade_header), sizeof(cascade_header));
+        output.write(reinterpret_cast<const char*>(&projectile), sizeof(projectile));
+        output.write(reinterpret_cast<const char*>(&cascade_xs), sizeof(cascade_xs));
+        output.write(reinterpret_cast<const char*>(&cascade_interaction),
+                     sizeof(cascade_interaction));
+        output.write(reinterpret_cast<const char*>(&cascade_product), sizeof(cascade_product));
+    }
+}
+
 void test_units() {
     carbon::TransportConfig config;
     config.initial_energy_MeVu = 200.0;
-    config.mass_number = 12;
+    config.primary_mass_number = 12;
     require_near(config.initial_total_energy_MeV(), 2400.0, 1.0e-12,
                  "MeV/u to total kinetic energy conversion failed");
     require(config.number_of_bins() == 800, "Depth-bin count failed");
@@ -265,18 +341,39 @@ void test_interpolation() {
 }
 
 void test_fragment_stopping_power_scale() {
-    require_near(carbon::stopping_power_scale_from_carbon(6, 200.0), 1.0, 1.0e-12,
+    require_near(carbon::stopping_power_scale_from_reference_ion(6, 6, 200.0), 1.0, 1.0e-12,
                  "C-12 stopping-power scale failed");
-    const auto proton_scale = carbon::stopping_power_scale_from_carbon(1, 200.0);
-    const auto helium_scale = carbon::stopping_power_scale_from_carbon(2, 200.0);
-    const auto boron_scale = carbon::stopping_power_scale_from_carbon(5, 200.0);
+    const auto proton_scale = carbon::stopping_power_scale_from_reference_ion(1, 6, 200.0);
+    const auto helium_scale = carbon::stopping_power_scale_from_reference_ion(2, 6, 200.0);
+    const auto boron_scale = carbon::stopping_power_scale_from_reference_ion(5, 6, 200.0);
     require(proton_scale > 0.0 && proton_scale < helium_scale && helium_scale < boron_scale &&
                 boron_scale < 1.0,
             "Fragment stopping-power charge ordering failed");
-    require(carbon::stopping_power_scale_from_carbon(1, 1.0) > proton_scale,
+    require(carbon::stopping_power_scale_from_reference_ion(1, 6, 1.0) > proton_scale,
             "Low-energy effective-charge scaling failed");
-    require_throws([]() { (void)carbon::stopping_power_scale_from_carbon(0, 10.0); },
+    require_throws([]() {
+        (void)carbon::stopping_power_scale_from_reference_ion(0, 6, 10.0);
+    },
                    "Invalid fragment atomic number was accepted");
+}
+
+void test_primary_ion_definition() {
+    const auto carbon_ion = carbon::make_primary_ion_definition(6, 12);
+    require(carbon_ion.atomic_number == 6 && carbon_ion.mass_number == 12,
+            "C-12 primary identity failed");
+    require_near(carbon_ion.rest_mass_MeV, 12.0 * 931.49410242, 1.0e-9,
+                 "Default primary rest mass changed");
+    const auto proton = carbon::make_primary_ion_definition(1, 1, 938.27208816);
+    require_near(proton.rest_mass_MeV, 938.27208816, 1.0e-9,
+                 "Configured proton rest mass failed");
+    require_throws([] { (void)carbon::make_primary_ion_definition(0, 1); },
+                   "Primary ion accepted Z=0");
+    require_throws([] { (void)carbon::make_primary_ion_definition(8, 4); },
+                   "Primary ion accepted A < Z");
+    require(carbon::ion_effective_charge(1, 200.0) > 0.0 &&
+                carbon::ion_effective_charge(10, 200.0) >
+                    carbon::ion_effective_charge(6, 200.0),
+            "Generic effective charge does not cover proton through neon");
 }
 
 void test_particle_specific_stopping_power_tables() {
@@ -521,6 +618,102 @@ void test_ct_grid_helpers() {
     require_near(loaded.mass_sp_za_rel[3], 0.93F, 1.0e-6, "ct v3 bone za");
     require_near(loaded.mass_sp_I_eV[3], 106.0F, 1.0e-4, "ct v3 bone I");
     std::filesystem::remove(path);
+
+    const auto schneider = carbon::SchneiderHuTable::builtin();
+    require(schneider.section_id(-1000.0F) == 0, "HU -1000 is Schneider air");
+    require(schneider.section_id(-200.0F) == 1, "HU -200 is Schneider lung");
+    require(schneider.section_id(0.0F) == 5, "HU 0 is Schneider section 5");
+    require(schneider.section_id(150.0F) == 9, "HU 150 is first bone-like section");
+    require(schneider.density_g_per_cm3(-1000.0F) > 0.0F &&
+                schneider.density_g_per_cm3(-1000.0F) < 0.01F,
+            "Schneider air density");
+    require_near(schneider.density_g_per_cm3(0.0F), 1.018F, 1.0e-3,
+                 "Schneider HU0 density without correction");
+
+    const auto write_explicit_ct = [](const std::filesystem::path& dest,
+                                      const std::int16_t hu,
+                                      const double z_mm) {
+        std::ofstream out(dest, std::ios::binary);
+        std::vector<char> preamble(128, 0);
+        out.write(preamble.data(), 128);
+        out.write("DICM", 4);
+        auto put_u16 = [&](const std::uint16_t value) {
+            out.write(reinterpret_cast<const char*>(&value), 2);
+        };
+        auto put_u32 = [&](const std::uint32_t value) {
+            out.write(reinterpret_cast<const char*>(&value), 4);
+        };
+        auto put_explicit = [&](const std::uint16_t group, const std::uint16_t element,
+                                const char* vr, const std::string& value) {
+            put_u16(group);
+            put_u16(element);
+            out.write(vr, 2);
+            const auto padded = value.size() % 2 == 0 ? value : value + " ";
+            if (std::string(vr) == "OW" || std::string(vr) == "OB" ||
+                std::string(vr) == "UN") {
+                put_u16(0);
+                put_u32(static_cast<std::uint32_t>(padded.size()));
+            } else {
+                put_u16(static_cast<std::uint16_t>(padded.size()));
+            }
+            out.write(padded.data(), static_cast<std::streamsize>(padded.size()));
+        };
+        auto put_us = [&](const std::uint16_t group, const std::uint16_t element,
+                          const std::uint16_t value) {
+            put_u16(group);
+            put_u16(element);
+            out.write("US", 2);
+            put_u16(2);
+            put_u16(value);
+        };
+        put_explicit(0x0002, 0x0010, "UI", "1.2.840.10008.1.2.1");
+        put_explicit(0x0008, 0x0060, "CS", "CT");
+        put_explicit(0x0020, 0x000E, "UI", "1.2.3.4.5");
+        put_explicit(0x0020, 0x0032, "DS",
+                     "0\\0\\" + std::to_string(z_mm));
+        put_explicit(0x0020, 0x0037, "DS", "1\\0\\0\\0\\1\\0");
+        put_us(0x0028, 0x0010, 2);
+        put_us(0x0028, 0x0011, 2);
+        put_explicit(0x0028, 0x0030, "DS", "1\\1");
+        put_us(0x0028, 0x0100, 16);
+        put_us(0x0028, 0x0103, 1);
+        put_explicit(0x0028, 0x1052, "DS", "0");
+        put_explicit(0x0028, 0x1053, "DS", "1");
+        put_u16(0x7FE0);
+        put_u16(0x0010);
+        out.write("OW", 2);
+        put_u16(0);
+        put_u32(8);
+        for (int i = 0; i < 4; ++i) {
+            out.write(reinterpret_cast<const char*>(&hu), 2);
+        }
+    };
+    const auto dicom_dir =
+        std::filesystem::temp_directory_path() / "carbon_ct_dicom_series";
+    std::filesystem::create_directories(dicom_dir);
+    write_explicit_ct(dicom_dir / "s0.dcm", 0, 0.0);
+    write_explicit_ct(dicom_dir / "s1.dcm", 0, 2.0);
+    const auto schneider_file = std::filesystem::path("data/HUtoMaterialSchneider.txt");
+    const auto table = std::filesystem::is_regular_file(schneider_file)
+                           ? carbon::SchneiderHuTable::from_topas_file(schneider_file)
+                           : carbon::SchneiderHuTable::builtin();
+    const auto from_dicom = carbon::CtGrid::from_dicom_directory(
+        dicom_dir,
+        std::filesystem::is_regular_file(schneider_file) ? schneider_file
+                                                        : std::filesystem::path{},
+        "centered");
+    require(from_dicom.nx == 2 && from_dicom.ny == 2 && from_dicom.nz == 2,
+            "DICOM series dimensions");
+    require_near(from_dicom.spacing_z_mm, 2.0F, 1.0e-5, "DICOM slice spacing");
+    require_near(from_dicom.origin_x_mm, -1.0F, 1.0e-5, "centered DICOM origin X");
+    require_near(from_dicom.origin_z_mm, -1.0F, 1.0e-5, "centered DICOM origin Z");
+    require(from_dicom.material_id.front() == 5, "DICOM HU 0 maps to Schneider 5");
+    require_near(from_dicom.density_g_per_cm3.front(), table.density_g_per_cm3(0.0F),
+                 1.0e-5, "DICOM HU 0 Schneider density");
+    const auto via_load = carbon::CtGrid::load(dicom_dir, {}, "dicom");
+    require_near(via_load.origin_x_mm, -0.5F, 1.0e-4, "native DICOM low-edge X");
+    require_near(via_load.origin_z_mm, -1.0F, 1.0e-4, "native DICOM low-edge Z");
+    std::filesystem::remove_all(dicom_dir);
 }
 
 void test_philox_rng() {
@@ -561,8 +754,8 @@ void test_philox_rng() {
 }
 
 void test_bohr_straggling() {
-    const auto sigma_half_mm = carbon::bohr_straggling_sigma_MeV(200.0, 0.5, 1.0);
-    const auto sigma_two_mm = carbon::bohr_straggling_sigma_MeV(200.0, 2.0, 1.0);
+    const auto sigma_half_mm = carbon::bohr_straggling_sigma_MeV(200.0, 6, 0.5, 1.0);
+    const auto sigma_two_mm = carbon::bohr_straggling_sigma_MeV(200.0, 6, 2.0, 1.0);
     require(sigma_half_mm > 0.0, "Bohr straggling sigma must be positive");
     require_near(sigma_two_mm / sigma_half_mm, 2.0, 1.0e-12,
                  "Bohr sigma must scale with sqrt(step length)");
@@ -615,6 +808,79 @@ void test_energy_dependent_straggling_scale() {
         carbon::interpolate_straggling_scale(
             300.0, energies, scales, 0, 1.07),
         1.07, 1.0e-12, "Scalar straggling fallback failed");
+}
+
+void test_primary_inelastic_xs_correction() {
+    std::array<double, carbon::max_straggling_scale_points> energies{};
+    std::array<double, carbon::max_straggling_scale_points> scales{};
+    energies[0] = 100.0;
+    energies[1] = 200.0;
+    energies[2] = 400.0;
+    scales[0] = 0.97;
+    scales[1] = 0.98;
+    scales[2] = 1.0;
+    require_near(
+        carbon::interpolate_straggling_scale(50.0, energies, scales, 3, 9.0),
+        0.97, 1.0e-12, "Primary XS correction lower clamp failed");
+    require_near(
+        carbon::interpolate_straggling_scale(150.0, energies, scales, 3, 9.0),
+        0.975, 1.0e-12, "Primary XS correction interpolation failed");
+    require_near(
+        carbon::interpolate_straggling_scale(500.0, energies, scales, 3, 9.0),
+        1.0, 1.0e-12, "Primary XS correction upper clamp failed");
+
+    carbon::TransportConfig correction;
+    require(!correction.enable_primary_inelastic_xs_correction,
+            "Primary XS correction must default off");
+    correction.enable_primary_inelastic_xs_correction = true;
+    correction.primary_inelastic_xs_correction_file = "calibration.csv";
+    correction.primary_inelastic_xs_correction_energies_MeVu = {100.0, 400.0};
+    correction.primary_inelastic_xs_correction_scales = {0.75, 0.75};
+    require_throws([&correction] { correction.validate(); },
+                   "Primary XS correction must require attenuation");
+    correction.enable_primary_attenuation = true;
+    correction.validate();
+
+    auto scalar_conflict = correction;
+    scalar_conflict.primary_inelastic_xs_scale = 0.75;
+    require_throws([&scalar_conflict] { scalar_conflict.validate(); },
+                   "Primary XS table and legacy scalar must be mutually exclusive");
+    auto nonascending = correction;
+    nonascending.primary_inelastic_xs_correction_energies_MeVu = {100.0, 100.0};
+    require_throws([&nonascending] { nonascending.validate(); },
+                   "Primary XS correction energies must be strictly increasing");
+    auto invalid_scale = correction;
+    invalid_scale.primary_inelastic_xs_correction_scales = {
+        0.75, std::numeric_limits<double>::quiet_NaN()};
+    require_throws([&invalid_scale] { invalid_scale.validate(); },
+                   "Primary XS correction must reject non-finite scales");
+
+    correction.number_of_histories = 1024;
+    correction.initial_energy_MeVu = 200.0;
+    correction.phantom_length_mm = 20.0;
+    correction.depth_bin_width_mm = 1.0;
+    correction.maximum_step_mm = 0.5;
+    correction.maximum_relative_energy_loss = 0.01;
+    correction.random_seed = 0x91abU;
+    auto legacy = correction;
+    legacy.enable_primary_inelastic_xs_correction = false;
+    legacy.primary_inelastic_xs_correction_file.clear();
+    legacy.primary_inelastic_xs_correction_energies_MeVu.clear();
+    legacy.primary_inelastic_xs_correction_scales.clear();
+    legacy.primary_inelastic_xs_scale = 0.75;
+    const carbon::StoppingPowerTable stopping_power(
+        {0.01, 400.01}, {2.0, 2.0});
+    const carbon::CrossSectionTable cross_section(
+        {0.01, 400.01}, {0.02, 0.02});
+    const auto table_result =
+        carbon::transport_serial(correction, stopping_power, cross_section);
+    const auto scalar_result =
+        carbon::transport_serial(legacy, stopping_power, cross_section);
+    require(table_result.nuclear_interactions == scalar_result.nuclear_interactions &&
+                table_result.deposited_energy_MeV == scalar_result.deposited_energy_MeV,
+            "Constant primary XS table must reproduce the legacy scalar exactly");
+    require(table_result.backend.find("+primary-xs-table") != std::string::npos,
+            "Primary XS table backend tag missing");
 }
 
 void test_energy_conservation() {
@@ -691,15 +957,40 @@ void test_primary_attenuation_energy_accounting() {
             "Zero-cross-section energy balance failed");
 }
 
+void test_primary_attenuation_step_partition_invariance() {
+    carbon::TransportConfig coarse;
+    coarse.number_of_histories = 4096;
+    coarse.initial_energy_MeVu = 10.0;
+    coarse.phantom_length_mm = 80.0;
+    coarse.depth_bin_width_mm = 20.0;
+    coarse.maximum_step_mm = 1.0;
+    coarse.maximum_relative_energy_loss = 0.1;
+    coarse.enable_primary_attenuation = true;
+    coarse.random_seed = 0x12345678U;
+    const carbon::StoppingPowerTable stopping_power(
+        {0.01, 10.01, 20.01}, {2.0, 2.0, 2.0});
+    const carbon::CrossSectionTable constant_xs(
+        {0.01, 20.01}, {0.01, 0.01});
+
+    auto fine = coarse;
+    fine.maximum_step_mm = 0.1;
+    const auto coarse_result =
+        carbon::transport_serial(coarse, stopping_power, constant_xs);
+    const auto fine_result =
+        carbon::transport_serial(fine, stopping_power, constant_xs);
+    require(coarse_result.nuclear_interactions == fine_result.nuclear_interactions,
+            "Accumulated attenuation changed when the path was split into finer steps");
+}
+
 void test_reaction_package_loading() {
     const auto source_directory = std::filesystem::path(CARBON_SOURCE_DIR);
     const auto package_path =
         source_directory /
-        "data/packages/topas_400MeVu_water_100k_primary_3d.bin";
+        "data/packages/topas_water_inclxx_1M_stitch7_primary_3d.bin";
     const auto table = carbon::ReactionPackageTable::from_binary(package_path);
     require(table.energy_bins().size() == 101, "Reaction package energy-bin count failed");
-    require(table.reactions().size() == 73'871, "Reaction package reaction count failed");
-    require(table.secondaries().size() == 760'939,
+    require(table.reactions().size() == 1'165'652, "Reaction package reaction count failed");
+    require(table.secondaries().size() == 11'711'199,
             "Reaction package secondary count failed");
     require_near(table.minimum_energy_MeV_per_u(), 0.0, 1.0e-7,
                  "Reaction package minimum energy failed");
@@ -778,19 +1069,6 @@ void test_reaction_package_loading() {
         "Invalid reaction package was accepted");
     std::filesystem::remove(invalid_path);
 
-    const std::array<const char*, 4> material_packages{
-        "topas_400MeVu_soft_tissue_inclxx_100k_primary_3d.bin",
-        "topas_400MeVu_schneider_section07_inclxx_100k_primary_3d.bin",
-        "topas_400MeVu_lung_inclxx_100k_primary_3d.bin",
-        "topas_400MeVu_bone_inclxx_100k_primary_3d.bin",
-    };
-    for (const auto* filename : material_packages) {
-        const auto material_table = carbon::ReactionPackageTable::from_binary(
-            source_directory / "data/packages" / filename);
-        require(!material_table.reactions().empty() &&
-                    !material_table.secondaries().empty(),
-                std::string("Current reaction package failed to load: ") + filename);
-    }
 }
 
 void test_neutral_package_loading() {
@@ -878,16 +1156,16 @@ void test_cascade_package_loading() {
     const auto source_directory = std::filesystem::path(CARBON_SOURCE_DIR);
     const auto package_path =
         source_directory /
-        "data/packages/topas_400MeVu_water_100k_cascade_3d.bin";
+        "data/packages/topas_400MeVu_water_inclxx_1M_cascade_3d.bin";
     const auto table = carbon::CascadePackageTable::from_binary(package_path);
     for (const auto& product : table.products()) {
         require(std::isfinite(product.direction_x) && std::isfinite(product.direction_y),
                 "Cascade package transverse direction is not finite");
     }
-    require(table.projectiles().size() == 31, "Cascade projectile count failed");
-    require(table.cross_sections().size() == 24'936, "Cascade cross-section count failed");
-    require(table.interactions().size() == 289'712, "Cascade interaction count failed");
-    require(table.products().size() == 2'065'922, "Cascade product count failed");
+    require(table.projectiles().size() == 41, "Cascade projectile count failed");
+    require(table.cross_sections().size() == 38'430, "Cascade cross-section count failed");
+    require(table.interactions().size() == 2'903'823, "Cascade interaction count failed");
+    require(table.products().size() == 20'747'195, "Cascade product count failed");
     const auto* alpha = table.find_projectile(2, 4);
     require(alpha != nullptr && alpha->interaction_count > 0,
             "Cascade alpha lookup failed");
@@ -919,19 +1197,6 @@ void test_cascade_package_loading() {
         "Legacy cascade package layout was accepted");
     std::filesystem::remove(legacy_path);
 
-    const std::array<const char*, 4> material_packages{
-        "topas_400MeVu_soft_tissue_inclxx_100k_cascade_3d.bin",
-        "topas_400MeVu_schneider_section07_inclxx_100k_cascade_3d.bin",
-        "topas_400MeVu_lung_inclxx_100k_cascade_3d.bin",
-        "topas_400MeVu_bone_inclxx_100k_cascade_3d.bin",
-    };
-    for (const auto* filename : material_packages) {
-        const auto material_table = carbon::CascadePackageTable::from_binary(
-            source_directory / "data/packages" / filename);
-        require(!material_table.interactions().empty() &&
-                    !material_table.products().empty(),
-                std::string("Current cascade package failed to load: ") + filename);
-    }
 }
 
 void test_dose_scorer_matches_mev_conversion() {
@@ -1099,8 +1364,8 @@ void test_dense_charged_origin_mhd_uses_local_mass() {
     std::filesystem::create_directories(dir);
     carbon::write_dense_charged_origin_voxel_dose_mhd(
         dir / "origin", config, result);
-    const auto mhd = dir / "origin_primary_c12.mhd";
-    const auto raw = dir / "origin_primary_c12.raw";
+    const auto mhd = dir / "origin_primary.mhd";
+    const auto raw = dir / "origin_primary.raw";
     require(std::filesystem::exists(mhd) && std::filesystem::exists(raw),
             "Dense primary-origin MHD/RAW missing");
     std::ifstream input(raw, std::ios::binary);
@@ -1111,7 +1376,7 @@ void test_dense_charged_origin_mhd_uses_local_mass() {
                  "Origin dose must use local material mass");
     std::ifstream header(mhd);
     const std::string text((std::istreambuf_iterator<char>(header)), {});
-    require(text.find("DoseOriginCategory = primary_c12") != std::string::npos,
+    require(text.find("DoseOriginCategory = primary") != std::string::npos,
             "Origin MHD category metadata missing");
     std::error_code ec;
     std::filesystem::remove_all(dir, ec);
@@ -1338,7 +1603,7 @@ void test_minibeam_absorbing_geometry() {
     config.enable_secondary_generation = true;
     config.enable_secondary_transport = true;
     config.enable_primary_attenuation = true;
-    config.reaction_package_file = "water_reactions.bin";
+    config.primary_reaction_package_file = "water_reactions.bin";
     config.validate();
     config.enable_neutral_transport = true;
     require_throws([&config] { config.validate(); },
@@ -1408,10 +1673,13 @@ void test_secondary_optimization_config_validation() {
     require_throws([&bad_cutoff] { bad_cutoff.validate(); },
                    "Secondary local-deposit cutoff should be non-negative");
 
+    auto ok_idd = config;
+    ok_idd.output_file = "total_idd.csv";
+    ok_idd.validate();
     auto bad_output = config;
-    bad_output.output_file = "total_idd_would_be_incomplete.csv";
+    bad_output.fragment_species_output_file = "species.csv";
     require_throws([&bad_output] { bad_output.validate(); },
-                   "Disabling fragment scoring should reject total IDD output");
+                   "Fragment species file requires enable_fragment_species_scoring");
 
     carbon::TransportConfig numeric;
     numeric.enable_primary_attenuation = true;
@@ -1474,6 +1742,17 @@ void test_secondary_optimization_config_validation() {
             "RT07575 nuclear residual heat MFP production contract");
     require(best_config.nuclear_residual_heat_scale == 0.9,
             "RT07575 nuclear residual heat scale production contract");
+    require(best_config.primary_inelastic_xs_scale == 1.0,
+            "primary inelastic XS scale defaults to raw table");
+    require(!best_config.enable_primary_inelastic_xs_correction,
+            "primary inelastic XS correction defaults off");
+    auto bad_primary_xs_scale = best_config;
+    bad_primary_xs_scale.primary_inelastic_xs_scale = 0.0;
+    require_throws([&bad_primary_xs_scale] { bad_primary_xs_scale.validate(); },
+                   "primary inelastic XS scale must reject zero");
+    bad_primary_xs_scale.primary_inelastic_xs_scale = 2.1;
+    require_throws([&bad_primary_xs_scale] { bad_primary_xs_scale.validate(); },
+                   "primary inelastic XS scale must reject values above two");
     auto bad_residual_scale = best_config;
     bad_residual_scale.nuclear_residual_heat_scale = -0.1;
     require_throws([&bad_residual_scale] { bad_residual_scale.validate(); },
@@ -1491,12 +1770,22 @@ void test_secondary_optimization_config_validation() {
                    "reaction_light_ion_forward_mix must reject values > 1");
     require_throws([&bad_residual_scale] { bad_residual_scale.validate(); },
                    "nuclear_residual_heat_scale must reject values > 2");
+    require(!best_config.restrict_fragment_species_energy_deposit,
+            "restricted fragment EnergyDeposit defaults off");
+    auto restricted_species = best_config;
+    restricted_species.restrict_fragment_species_energy_deposit = true;
+    restricted_species.restrict_fragment_species_z_min = 2;
+    restricted_species.restrict_fragment_species_z_max = 2;
+    restricted_species.validate();
+    restricted_species.restrict_fragment_species_z_min = 0;
+    require_throws([&restricted_species] { restricted_species.validate(); },
+                   "restrict_fragment_species_z_min must be >= 1 when enabled");
 
     carbon::TransportConfig upstream_air;
-    require(upstream_air.reaction_package_file ==
-                "data/packages/topas_400MeVu_water_100k_primary_3d.bin" &&
+    require(upstream_air.primary_reaction_package_file ==
+                "data/packages/topas_water_inclxx_1M_stitch7_primary_3d.bin" &&
                 upstream_air.cascade_package_file ==
-                    "data/packages/topas_400MeVu_water_100k_cascade_3d.bin" &&
+                    "data/packages/topas_400MeVu_water_inclxx_1M_cascade_3d.bin" &&
                 upstream_air.neutral_package_file ==
                     "data/packages/topas_200MeVu_neutral_development.bin",
             "Default physics package paths must use the production datasets");
@@ -1778,7 +2067,6 @@ void test_tps_source_geometry_csv_and_switch() {
     config.tps_isocenter_y_mm = 20.0;
     config.tps_isocenter_z_mm = 30.0;
     config.tps_patient_position = "HFS";
-    config.tps_particle_type = "carbon";
     config.validate();
 
     carbon::TpsSourcePlan one;
@@ -2119,6 +2407,19 @@ void test_tps_source_geometry_csv_and_switch() {
     require(public_scorers.output_file.empty() &&
                 public_scorers.voxel_dose_output_file.empty(),
             "Public dose scorer must suppress legacy default CSV outputs");
+    require(!public_scorers.enable_fragment_species_scoring,
+            "production default must not enable fragment species scoring");
+    require(public_scorers.scorer_mode == "production",
+            "default scorer_mode is production");
+    {
+        std::ofstream output(yaml_path);
+        output << "number_of_histories: 10\n"
+               << "scorer_mode: validation\n";
+    }
+#ifndef CARBON_VALIDATION_SCORERS
+    require_throws([&yaml_path] { carbon::load_config(yaml_path); },
+                   "validation scorer_mode must fail without the CMake option");
+#endif
     {
         std::ofstream output(yaml_path);
         output << "number_of_histories: 10\n"
@@ -2201,7 +2502,7 @@ void test_sycl_legacy_cardinal_entrance_projection() {
         config, table, zero_cross_section(), "cpu");
     const auto initial_total =
         static_cast<double>(config.number_of_histories) *
-        config.initial_energy_MeVu * static_cast<double>(config.mass_number);
+        config.initial_energy_MeVu * static_cast<double>(config.primary_mass_number);
     require(result.total_deposited_energy_MeV > 0.95 * initial_total,
             "Legacy cardinal source lost histories infinitesimally below z=0");
 }
@@ -2273,14 +2574,14 @@ void test_sycl_primary_let_includes_cutoff_tail() {
     const auto result = carbon::transport_sycl(
         config, stopping_power, zero_cross_section(), "cpu");
     const auto primary_denominator = std::accumulate(
-        result.primary_c12_letd_denominator.begin(),
-        result.primary_c12_letd_denominator.end(), 0.0);
+        result.primary_letd_denominator.begin(),
+        result.primary_letd_denominator.end(), 0.0);
     const auto all_denominator = std::accumulate(
         result.all_hadron_letd_denominator.begin(),
         result.all_hadron_letd_denominator.end(), 0.0);
     const auto primary_numerator = std::accumulate(
-        result.primary_c12_letd_numerator.begin(),
-        result.primary_c12_letd_numerator.end(), 0.0);
+        result.primary_letd_numerator.begin(),
+        result.primary_letd_numerator.end(), 0.0);
     const auto all_numerator = std::accumulate(
         result.all_hadron_letd_numerator.begin(),
         result.all_hadron_letd_numerator.end(), 0.0);
@@ -2438,7 +2739,7 @@ void test_sycl_transport_context_reuse() {
 void test_sycl_secondary_queue_generation() {
     const auto package_path = std::filesystem::path(CARBON_SOURCE_DIR) /
                               "data/packages/"
-                              "topas_400MeVu_water_100k_primary_3d.bin";
+                              "topas_water_inclxx_1M_stitch7_primary_3d.bin";
     const auto reaction_packages = carbon::ReactionPackageTable::from_binary(package_path);
     carbon::TransportConfig config;
     config.number_of_histories = 64;
@@ -2504,7 +2805,15 @@ void test_sycl_secondary_queue_generation() {
     config.enable_charged_origin_voxel_scoring = true;
     config.voxel_bins_x = 5;
     config.voxel_bins_y = 7;
+    config.enable_fragment_species_scoring = false;
     config.validate();
+    const auto transported_without_species = carbon::transport_sycl(
+        config, stopping_power, forced_reaction, "cpu", &reaction_packages);
+    require_voxel_idd_closure(config, transported_without_species, 1.0e-9);
+    require(transported_without_species.secondary_deposited_energy_MeV > 0.0,
+            "Aggregate secondary depth scorer did not record charged transport");
+
+    config.enable_fragment_species_scoring = true;
     const auto transported = carbon::transport_sycl(
         config, stopping_power, forced_reaction, "cpu", &reaction_packages);
     require(transported.transported_secondaries == transported.queued_secondaries &&
@@ -2525,14 +2834,14 @@ void test_sycl_secondary_queue_generation() {
             "Secondary transport total energy balance failed");
     const std::vector<const std::vector<double>*> species{
         &transported.secondary_carbon_deposited_energy_MeV,
-        &transported.boron_deposited_energy_MeV,
-        &transported.beryllium_deposited_energy_MeV,
-        &transported.lithium_deposited_energy_MeV,
-        &transported.helium_deposited_energy_MeV,
-        &transported.proton_deposited_energy_MeV,
-        &transported.other_charged_deposited_energy_MeV,
+        &transported.secondary_boron_deposited_energy_MeV,
+        &transported.secondary_beryllium_deposited_energy_MeV,
+        &transported.secondary_lithium_deposited_energy_MeV,
+        &transported.secondary_helium_deposited_energy_MeV,
+        &transported.secondary_proton_deposited_energy_MeV,
+        &transported.secondary_other_charged_deposited_energy_MeV,
     };
-    require(transported.primary_c12_deposited_energy_MeV.size() ==
+    require(transported.primary_deposited_energy_MeV.size() ==
                 config.number_of_bins(),
             "Primary species tally has the wrong size");
     double species_deposited_energy = 0.0;
@@ -2545,17 +2854,23 @@ void test_sycl_secondary_queue_generation() {
     require_near(species_deposited_energy, transported.secondary_deposited_energy_MeV,
                  1.0e-2, "Fragment species tally energy closure failed");
     for (std::size_t bin = 0; bin < config.number_of_bins(); ++bin) {
-        auto reconstructed = transported.primary_c12_deposited_energy_MeV[bin];
+        auto reconstructed = transported.primary_deposited_energy_MeV[bin];
         for (const auto* tally : species) {
             reconstructed += (*tally)[bin];
         }
-        require_near(reconstructed, transported.deposited_energy_MeV[bin], 1.0e-9,
+        require_near(reconstructed / config.number_of_histories,
+                     transported.deposited_energy_MeV[bin] / config.number_of_histories,
+#if defined(CARBON_DOSE_FP32)
+                     5.0e-5,
+#else
+                     1.0e-9,
+#endif
                      "Total dose bin does not close over species");
     }
 
     const auto cascade_path = std::filesystem::path(CARBON_SOURCE_DIR) /
                               "data/packages/"
-                              "topas_400MeVu_water_100k_cascade_3d.bin";
+                              "topas_400MeVu_water_inclxx_1M_cascade_3d.bin";
     const auto cascade_packages = carbon::CascadePackageTable::from_binary(cascade_path);
     config.enable_fragment_cascade = true;
     config.maximum_cascade_generations = 1;
@@ -2606,11 +2921,90 @@ void test_sycl_secondary_queue_generation() {
             "Cascade summary counters not bit-identical across same-seed runs");
 }
 
+void test_sycl_proton_full_chain_smoke() {
+    const auto directory = std::filesystem::temp_directory_path() /
+                           "carbon_proton_full_chain_smoke";
+    std::filesystem::create_directories(directory);
+    const auto reaction_path = directory / "proton_primary.crpkg";
+    const auto cascade_path = directory / "proton_cascade.ccas";
+    write_synthetic_proton_packages(reaction_path, cascade_path);
+    const auto reaction_packages = carbon::ReactionPackageTable::from_binary(reaction_path);
+    const auto cascade_packages = carbon::CascadePackageTable::from_binary(cascade_path);
+    require(reaction_packages.reactions().size() == 1 &&
+                reaction_packages.secondaries()[0].pdg_id == 2212,
+            "Synthetic proton primary package did not round-trip");
+    require(cascade_packages.find_projectile(1, 1) != nullptr,
+            "Synthetic proton cascade package did not round-trip");
+
+    carbon::TransportConfig config;
+    config.number_of_histories = 8;
+    config.initial_energy_MeVu = 50.0;
+    config.primary_atomic_number = 1;
+    config.primary_mass_number = 1;
+    config.primary_rest_mass_MeV = 938.27208816;
+    config.phantom_length_mm = 100.0;
+    config.depth_bin_width_mm = 1.0;
+    config.maximum_step_mm = 0.25;
+    config.maximum_relative_energy_loss = 0.01;
+    config.enable_primary_attenuation = true;
+    config.enable_secondary_generation = true;
+    config.enable_secondary_transport = true;
+    config.enable_fragment_cascade = true;
+    config.maximum_cascade_generations = 1;
+    config.enable_let_scoring = true;
+    config.enable_voxel_scoring = true;
+    config.voxel_bins_x = 3;
+    config.voxel_bins_y = 3;
+    config.secondary_queue_capacity = 256;
+    config.random_seed = 0xBADC0FFEU;
+    config.validate();
+    const carbon::StoppingPowerTable stopping_power(
+        {0.01, 50.01, 100.01}, {1.0, 1.0, 1.0});
+    const carbon::CrossSectionTable forced_reaction(
+        {0.01, 100.01}, {100.0, 100.0});
+    const auto result = carbon::transport_sycl(
+        config, stopping_power, forced_reaction, "cpu", &reaction_packages,
+        &cascade_packages);
+
+    require(result.nuclear_interactions == config.number_of_histories &&
+                result.sampled_reaction_packages == config.number_of_histories,
+            "Proton primary inelastic sampling did not run for every history");
+    require(result.queued_secondaries == config.number_of_histories &&
+                result.transported_secondaries >= result.queued_secondaries,
+            "Proton direct final states did not enter secondary transport");
+    require(result.cascade_interactions > 0 &&
+                result.generated_cascade_products > 0 &&
+                result.queued_cascade_secondaries > 0,
+            "Proton cascade final states were not transported");
+    require(result.secondary_queue_overflow == 0 && result.cascade_queue_overflow == 0,
+            "Synthetic proton chain overflowed its queues");
+    require(result.total_deposited_energy_MeV > 0.0 &&
+                std::accumulate(result.primary_letd_denominator.begin(),
+                                result.primary_letd_denominator.end(), 0.0) > 0.0 &&
+                std::accumulate(result.all_hadron_letd_denominator.begin(),
+                                result.all_hadron_letd_denominator.end(), 0.0) > 0.0,
+            "Proton full chain did not score finite dose and LET");
+    std::cerr << "proton closure idd="
+              << std::accumulate(result.deposited_energy_MeV.begin(),
+                                 result.deposited_energy_MeV.end(), 0.0)
+              << " voxel="
+              << std::accumulate(result.voxel_deposited_energy_MeV.begin(),
+                                 result.voxel_deposited_energy_MeV.end(), 0.0)
+              << " primary="
+              << std::accumulate(result.primary_deposited_energy_MeV.begin(),
+                                 result.primary_deposited_energy_MeV.end(), 0.0)
+              << " secondary=" << result.secondary_deposited_energy_MeV << '\n';
+    require_voxel_idd_closure(config, result, 1.0e-9);
+    require(result.relative_energy_balance_error() < 1.0e-4,
+            "Proton full-chain energy accounting failed");
+    std::filesystem::remove_all(directory);
+}
+
 void test_sycl_layered_slab_range_shift() {
     // Dense insert shortens residual range vs uniform water (CSDA-level effect).
     const auto package_path = std::filesystem::path(CARBON_SOURCE_DIR) /
                               "data/packages/"
-                              "topas_400MeVu_water_100k_primary_3d.bin";
+                              "topas_water_inclxx_1M_stitch7_primary_3d.bin";
     if (!std::filesystem::exists(package_path)) {
         return;
     }
@@ -2663,7 +3057,7 @@ void test_sycl_ct_secondary_density_smoke() {
     // nuclear reaction → queued secondaries deposit with CT-scaled SP.
     const auto package_path = std::filesystem::path(CARBON_SOURCE_DIR) /
                               "data/packages/"
-                              "topas_400MeVu_water_100k_primary_3d.bin";
+                              "topas_water_inclxx_1M_stitch7_primary_3d.bin";
     if (!std::filesystem::exists(package_path)) {
         return;
     }
@@ -2741,7 +3135,7 @@ void test_sycl_neutral_transport_smoke() {
     }
     const auto reaction_packages = carbon::ReactionPackageTable::from_binary(
         source_directory /
-        "data/packages/topas_400MeVu_water_100k_primary_3d.bin");
+        "data/packages/topas_water_inclxx_1M_stitch7_primary_3d.bin");
     const auto neutral_packages = carbon::NeutralPackageTable::from_binary(neutral_path);
     carbon::TransportConfig config;
     config.number_of_histories = 16;
@@ -2840,6 +3234,7 @@ int main() {
         test_charged_dose_categories();
         test_interpolation();
         test_fragment_stopping_power_scale();
+        test_primary_ion_definition();
         test_particle_specific_stopping_power_tables();
         test_step_selection();
         test_slab_phantom_helpers();
@@ -2849,10 +3244,12 @@ int main() {
         test_bohr_straggling();
         test_condensed_total_loss_straggling();
         test_energy_dependent_straggling_scale();
+        test_primary_inelastic_xs_correction();
         test_energy_conservation();
         test_escape_energy_conservation();
         test_straggling_reproducibility();
         test_primary_attenuation_energy_accounting();
+        test_primary_attenuation_step_partition_invariance();
         test_reaction_package_loading();
         test_cascade_package_loading();
         test_neutral_package_loading();
@@ -2877,6 +3274,7 @@ int main() {
         test_sycl_flat_source_extent();
         test_serial_sycl_cpu_match();
         test_sycl_transport_context_reuse();
+        test_sycl_proton_full_chain_smoke();
         test_sycl_secondary_queue_generation();
         test_sycl_layered_slab_range_shift();
         test_sycl_ct_secondary_density_smoke();

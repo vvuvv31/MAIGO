@@ -44,9 +44,12 @@ TransportResult transport_serial(const TransportConfig& config,
             "Multiple scattering requires the three-dimensional SYCL backend");
     }
     const auto start = std::chrono::steady_clock::now();
+    const auto primary_ion = config.primary_ion();
     TransportResult result;
     std::array<double, max_straggling_scale_points> straggling_scale_energies{};
     std::array<double, max_straggling_scale_points> straggling_scale_values{};
+    std::array<double, max_straggling_scale_points> primary_xs_correction_energies{};
+    std::array<double, max_straggling_scale_points> primary_xs_correction_scales{};
     const auto straggling_scale_point_count =
         config.straggling_scale_energies_MeVu.size();
     for (std::size_t index = 0; index < straggling_scale_point_count; ++index) {
@@ -54,9 +57,22 @@ TransportResult transport_serial(const TransportConfig& config,
             config.straggling_scale_energies_MeVu[index];
         straggling_scale_values[index] = config.straggling_scale_values[index];
     }
+    const auto primary_xs_correction_point_count =
+        config.primary_inelastic_xs_correction_energies_MeVu.size();
+    for (std::size_t index = 0; index < primary_xs_correction_point_count; ++index) {
+        primary_xs_correction_energies[index] =
+            config.primary_inelastic_xs_correction_energies_MeVu[index];
+        primary_xs_correction_scales[index] =
+            config.primary_inelastic_xs_correction_scales[index];
+    }
     result.backend = config.enable_energy_straggling ? "serial+straggling" : "serial";
     if (config.enable_primary_attenuation) {
         result.backend += "+attenuation";
+        if (config.enable_primary_inelastic_xs_correction) {
+            result.backend += "+primary-xs-table";
+        } else if (config.primary_inelastic_xs_scale != 1.0) {
+            result.backend += "+primary-xs-scale";
+        }
     }
     result.deposited_energy_MeV.assign(config.number_of_bins(), 0.0);
     if (config.enable_voxel_scoring) {
@@ -89,14 +105,25 @@ TransportResult transport_serial(const TransportConfig& config,
                 energy_MeV = config.energy_cutoff_MeV;
             }
         }
+        const auto history_primary_inelastic_xs_scale =
+            interpolate_straggling_scale(
+                energy_MeV / static_cast<double>(config.primary_mass_number),
+                primary_xs_correction_energies,
+                primary_xs_correction_scales,
+                primary_xs_correction_point_count,
+                config.primary_inelastic_xs_scale);
         auto position_mm = 0.0;
         std::uint64_t steps = 0;
         auto untracked_nuclear_MeV = 0.0;
         auto nuclear_interaction = false;
+        const auto attenuation_uniform = std::max(
+            static_cast<double>(rng::uniform01(config.random_seed, history_id, 0, 9)),
+            1.0e-12);
+        auto remaining_interaction_lengths = -std::log(attenuation_uniform);
 
         while (energy_MeV > config.energy_cutoff_MeV &&
                position_mm < config.phantom_length_mm) {
-            const auto energy_MeVu = energy_MeV / static_cast<double>(config.mass_number);
+            const auto energy_MeVu = energy_MeV / static_cast<double>(config.primary_mass_number);
             const auto stopping_power_MeV_per_mm = stopping_power.interpolate(energy_MeVu);
             auto step_mm = choose_step_mm(energy_MeV,
                                           stopping_power_MeV_per_mm,
@@ -129,10 +156,11 @@ TransportResult transport_serial(const TransportConfig& config,
                     energy_MeVu, straggling_scale_energies,
                     straggling_scale_values, straggling_scale_point_count,
                     config.straggling_scale);
-                const auto effective_charge = carbon_effective_charge(energy_MeVu);
+                const auto effective_charge = ion_effective_charge(
+                    primary_ion.atomic_number, energy_MeVu);
                 const auto variance_MeV2 = condensed_total_loss_variance_MeV2(
                     energy_MeVu,
-                    static_cast<double>(config.mass_number) * 931.49410242,
+                    primary_ion.rest_mass_MeV,
                     effective_charge, step_mm, config.water_density_g_per_cm3);
                 const auto sigma_MeV =
                     local_scale * std::sqrt(std::max(0.0, variance_MeV2));
@@ -143,18 +171,18 @@ TransportResult transport_serial(const TransportConfig& config,
             if (config.enable_voxel_scoring) {
                 voxel_tally[bin * voxel_plane_size + center_voxel_offset] += deposited_MeV;
             }
+            const auto mid_step_energy_MeVu =
+                (energy_MeV - 0.5 * deposited_MeV) /
+                static_cast<double>(config.primary_mass_number);
             energy_MeV -= deposited_MeV;
             position_mm += step_mm;
             if (config.enable_primary_attenuation && energy_MeV > config.energy_cutoff_MeV) {
-                const auto post_step_energy_MeVu =
-                    energy_MeV / static_cast<double>(config.mass_number);
                 const auto macroscopic_cross_section_per_mm =
-                    cross_section.interpolate(post_step_energy_MeVu);
-                const auto probability = 1.0 - std::exp(
-                    -macroscopic_cross_section_per_mm * step_mm);
-                const auto uniform = static_cast<double>(
-                    rng::uniform01(config.random_seed, history_id, steps, 2));
-                if (uniform < probability) {
+                    cross_section.interpolate(mid_step_energy_MeVu) *
+                    history_primary_inelastic_xs_scale;
+                remaining_interaction_lengths -=
+                    macroscopic_cross_section_per_mm * step_mm;
+                if (remaining_interaction_lengths <= 0.0) {
                     untracked_nuclear_MeV = energy_MeV;
                     energy_MeV = 0.0;
                     nuclear_interaction = true;

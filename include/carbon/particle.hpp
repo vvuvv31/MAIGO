@@ -2,11 +2,42 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cmath>
+#include <stdexcept>
 
 namespace carbon {
 
+inline constexpr double ion_nucleon_rest_mass_MeV = 931.49410242;
+
+struct PrimaryIonDefinition {
+    int atomic_number{6};
+    int mass_number{12};
+    double rest_mass_MeV{12.0 * ion_nucleon_rest_mass_MeV};
+    double inverse_mass_number{1.0 / 12.0};
+    double charge_power{0.3028534321386899};
+};
+
+inline PrimaryIonDefinition make_primary_ion_definition(
+    const int atomic_number,
+    const int mass_number,
+    const double configured_rest_mass_MeV = 0.0) {
+    if (atomic_number <= 0 || mass_number < atomic_number ||
+        configured_rest_mass_MeV < 0.0) {
+        throw std::invalid_argument("Invalid primary ion definition");
+    }
+    return PrimaryIonDefinition{
+        atomic_number,
+        mass_number,
+        configured_rest_mass_MeV > 0.0
+            ? configured_rest_mass_MeV
+            : static_cast<double>(mass_number) * ion_nucleon_rest_mass_MeV,
+        1.0 / static_cast<double>(mass_number),
+        std::pow(static_cast<double>(atomic_number), -2.0 / 3.0),
+    };
+}
+
 inline constexpr std::size_t charged_origin_category_count = 8;
-inline constexpr std::size_t primary_c12_charged_origin_category = 0;
+inline constexpr std::size_t primary_charged_origin_category = 0;
 inline constexpr std::size_t light_isotope_category_count = 8;
 
 // Optional LET diagnostics: p, d, t, He-3, He-4, N, O, F.  The three target
@@ -27,7 +58,7 @@ constexpr std::size_t light_isotope_category(const int atomic_number,
 }
 
 // Fragment birth-spectrum diagnostics for the same optional categories.
-// Generation bins: 0 = primary C-12 direct product, 1 = first cascade
+// Generation bins: 0 = primary ion direct product, 1 = first cascade
 // generation, 2 = generation >= 2.
 inline constexpr std::size_t birth_generation_bin_count = 3;
 inline constexpr std::size_t birth_mevu_bin_count = 200;  // 0–400 MeV/u @ 2 MeV/u

@@ -3,7 +3,8 @@
 # 0--50 mm water | 50--70 mm G4_BONE_COMPACT_ICRU | 70--150 mm water.
 number_of_histories: 100000
 initial_energy_MeVu: 200
-mass_number: 12
+primary_atomic_number: 6
+primary_mass_number: 12
 
 phantom_length_mm: 150
 depth_bin_width_mm: 0.5
@@ -96,12 +97,12 @@ secondary_persistent_workers: 32768
 max_device_memory_fraction: 0.70
 random_seed: 20260728
 
-stopping_power_file: data/stopping_power_water_geant4_11_3_2.csv
+primary_stopping_power_file: data/stopping_power_water_geant4_11_3_2.csv
 use_particle_specific_stopping_power: true
 particle_stopping_power_file: data/ion_stopping_power_water_geant4_11_3_2.csv
-nuclear_cross_section_file: data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv
-reaction_package_file: data/packages/topas_400MeVu_water_100k_primary_3d.bin
-cascade_package_file: data/packages/topas_400MeVu_water_100k_cascade_3d.bin
+primary_inelastic_cross_section_file: data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv
+primary_reaction_package_file: data/packages/topas_water_inclxx_1M_stitch7_primary_3d.bin
+cascade_package_file: data/packages/topas_400MeVu_water_inclxx_1M_cascade_3d.bin
 
 
 output_file:

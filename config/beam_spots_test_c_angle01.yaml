@@ -12,7 +12,8 @@
 
 number_of_histories: 100000
 initial_energy_MeVu: 170.0
-mass_number: 12
+primary_atomic_number: 6
+primary_mass_number: 12
 phantom_length_mm: 400.0
 depth_bin_width_mm: 0.5
 maximum_step_mm: 0.5
@@ -46,10 +47,10 @@ spots_sad_mm: 450.0
 # water IDD: +z beam; for CT/angled beams use "topas"
 spots_geometry_mode: beam_plus_z
 
-stopping_power_file: data/stopping_power_water_geant4_11_3_2.csv
-nuclear_cross_section_file: data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv
-reaction_package_file: data/packages/topas_400MeVu_water_100k_primary_3d.bin
-cascade_package_file: data/packages/topas_400MeVu_water_100k_cascade_3d.bin
+primary_stopping_power_file: data/stopping_power_water_geant4_11_3_2.csv
+primary_inelastic_cross_section_file: data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv
+primary_reaction_package_file: data/packages/topas_water_inclxx_1M_stitch7_primary_3d.bin
+cascade_package_file: data/packages/topas_400MeVu_water_inclxx_1M_cascade_3d.bin
 output_file: out/spots_test_c_angle01_idd.csv
 dose_output_file: out/spots_test_c_angle01_dose_Gy.csv
 fragment_species_output_file: out/spots_test_c_angle01_species.csv

@@ -3,7 +3,8 @@
 number_of_histories: 10000000
 initial_energy_MeVu: 148.370808
 beam_energy_spread: 0.01
-mass_number: 12
+primary_atomic_number: 6
+primary_mass_number: 12
 phantom_length_mm: 150.0
 depth_bin_width_mm: 3.0
 maximum_step_mm: 0.5
@@ -48,10 +49,10 @@ topas_spots_file: data/plans/spots_sobp_water_5_10cm.txt
 spots_geometry_mode: beam_plus_z
 spots_sad_mm: 450.0
 
-stopping_power_file: data/stopping_power_water_geant4_11_3_2.csv
-nuclear_cross_section_file: data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv
-reaction_package_file: data/packages/topas_400MeVu_water_100k_primary_3d.bin
-cascade_package_file: data/packages/topas_400MeVu_water_100k_cascade_3d.bin
+primary_stopping_power_file: data/stopping_power_water_geant4_11_3_2.csv
+primary_inelastic_cross_section_file: data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv
+primary_reaction_package_file: data/packages/topas_water_inclxx_1M_stitch7_primary_3d.bin
+cascade_package_file: data/packages/topas_400MeVu_water_inclxx_1M_cascade_3d.bin
 
 output_file: out/sobp_benchmark/gpu_sobp_idd.csv
 dose_output_file: out/sobp_benchmark/gpu_sobp_idd_Gy.csv

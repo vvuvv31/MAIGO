@@ -193,6 +193,10 @@ inline float neutral_kerma_fraction_at_energy(const float energy_MeVu,
     return f0 * (1.0F + (high_scale - 1.0F) * t);
 }
 
+void add_unrestricted_depth_dose_device(
+    DoseAtomicT amount_MeV, int bin,
+    DoseAtomicT* unrestricted_secondary_dose_device) noexcept;
+
 void score_secondary_dose_device(
     const DoseAtomicT amount_MeV,
     const bool is_neutral_lineage,
@@ -205,6 +209,7 @@ void score_secondary_dose_device(
     const std::size_t voxel_index,
     const std::size_t charged_origin_voxel_offset,
     const std::size_t neutral_origin_voxel_offset,
+    DoseAtomicT* aggregate_secondary_dose_device,
     DoseAtomicT* fragment_dose_device,
     DoseAtomicT* voxel_dose_device,
     DoseAtomicT* charged_origin_voxel_dose_device,
@@ -212,6 +217,17 @@ void score_secondary_dose_device(
     DoseAtomicT* neutral_origin_voxel_dose_device) noexcept {
     if (amount_MeV <= DoseAtomicT{0}) {
         return;
+    }
+    // Neutral-transport lineage is accumulated by its dedicated origin scorer
+    // and merged on the host. All other secondary deposits must reach the
+    // total depth-dose scorer independently of optional species rows.
+    if (!is_neutral_lineage && aggregate_secondary_dose_device != nullptr) {
+        sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
+                         sycl::memory_scope::device,
+                         sycl::access::address_space::global_space>
+            atomic_aggregate(
+                aggregate_secondary_dose_device[static_cast<std::size_t>(bin)]);
+        atomic_aggregate.fetch_add(amount_MeV);
     }
     if (is_neutral_lineage) {
         sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed, sycl::memory_scope::device,
@@ -235,6 +251,16 @@ void score_secondary_dose_device(
                              sycl::access::address_space::global_space>
                 atomic_total_voxel(voxel_dose_device[voxel_index]);
             atomic_total_voxel.fetch_add(amount_MeV);
+        }
+        // Also attribute to the Z/A species row so n/γ-born p/He match TOPAS.
+        if (fragment_dose_device != nullptr) {
+            sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
+                             sycl::memory_scope::device,
+                             sycl::access::address_space::global_space>
+                atomic_fragment(
+                    fragment_dose_device[species_index * number_of_bins +
+                                         static_cast<std::size_t>(bin)]);
+            atomic_fragment.fetch_add(amount_MeV);
         }
         return;
     }

@@ -55,22 +55,22 @@ void accumulate_transport_result(carbon::TransportResult& total,
                         part.charged_origin_voxel_deposited_energy_MeV);
     add_vector_in_place(total.neutral_origin_voxel_deposited_energy_MeV,
                         part.neutral_origin_voxel_deposited_energy_MeV);
-    add_vector_in_place(total.primary_c12_deposited_energy_MeV,
-                        part.primary_c12_deposited_energy_MeV);
+    add_vector_in_place(total.primary_deposited_energy_MeV,
+                        part.primary_deposited_energy_MeV);
     add_vector_in_place(total.secondary_carbon_deposited_energy_MeV,
                         part.secondary_carbon_deposited_energy_MeV);
-    add_vector_in_place(total.boron_deposited_energy_MeV, part.boron_deposited_energy_MeV);
-    add_vector_in_place(total.beryllium_deposited_energy_MeV,
-                        part.beryllium_deposited_energy_MeV);
-    add_vector_in_place(total.lithium_deposited_energy_MeV, part.lithium_deposited_energy_MeV);
-    add_vector_in_place(total.helium_deposited_energy_MeV, part.helium_deposited_energy_MeV);
-    add_vector_in_place(total.proton_deposited_energy_MeV, part.proton_deposited_energy_MeV);
-    add_vector_in_place(total.other_charged_deposited_energy_MeV,
-                        part.other_charged_deposited_energy_MeV);
-    add_vector_in_place(total.primary_c12_letd_numerator,
-                        part.primary_c12_letd_numerator);
-    add_vector_in_place(total.primary_c12_letd_denominator,
-                        part.primary_c12_letd_denominator);
+    add_vector_in_place(total.secondary_boron_deposited_energy_MeV, part.secondary_boron_deposited_energy_MeV);
+    add_vector_in_place(total.secondary_beryllium_deposited_energy_MeV,
+                        part.secondary_beryllium_deposited_energy_MeV);
+    add_vector_in_place(total.secondary_lithium_deposited_energy_MeV, part.secondary_lithium_deposited_energy_MeV);
+    add_vector_in_place(total.secondary_helium_deposited_energy_MeV, part.secondary_helium_deposited_energy_MeV);
+    add_vector_in_place(total.secondary_proton_deposited_energy_MeV, part.secondary_proton_deposited_energy_MeV);
+    add_vector_in_place(total.secondary_other_charged_deposited_energy_MeV,
+                        part.secondary_other_charged_deposited_energy_MeV);
+    add_vector_in_place(total.primary_letd_numerator,
+                        part.primary_letd_numerator);
+    add_vector_in_place(total.primary_letd_denominator,
+                        part.primary_letd_denominator);
     add_vector_in_place(total.all_hadron_letd_numerator,
                         part.all_hadron_letd_numerator);
     add_vector_in_place(total.all_hadron_letd_denominator,
@@ -94,10 +94,10 @@ void accumulate_transport_result(carbon::TransportResult& total,
     add_vector_in_place(total.birth_parent_z_hist, part.birth_parent_z_hist);
     add_vector_in_place(total.birth_parent_product_mevu_hist,
                         part.birth_parent_product_mevu_hist);
-    add_vector_in_place(total.primary_c12_voxel_letd_numerator,
-                        part.primary_c12_voxel_letd_numerator);
-    add_vector_in_place(total.primary_c12_voxel_letd_denominator,
-                        part.primary_c12_voxel_letd_denominator);
+    add_vector_in_place(total.primary_voxel_letd_numerator,
+                        part.primary_voxel_letd_numerator);
+    add_vector_in_place(total.primary_voxel_letd_denominator,
+                        part.primary_voxel_letd_denominator);
     add_vector_in_place(total.all_hadron_voxel_letd_numerator,
                         part.all_hadron_voxel_letd_numerator);
     add_vector_in_place(total.all_hadron_voxel_letd_denominator,
@@ -178,8 +178,8 @@ void accumulate_transport_result(carbon::TransportResult& total,
             part.minibeam
                 .copper_charged_survivor_energy_by_species_MeV[category];
     }
-    total.minibeam.water_entrance_primary_c12 +=
-        part.minibeam.water_entrance_primary_c12;
+    total.minibeam.water_entrance_primary +=
+        part.minibeam.water_entrance_primary;
     total.minibeam.energy_sum_MeV += part.minibeam.energy_sum_MeV;
     total.minibeam.energy_squared_sum_MeV2 +=
         part.minibeam.energy_squared_sum_MeV2;
@@ -271,11 +271,12 @@ void apply_spot_to_config(carbon::TransportConfig& config,
                           std::uint64_t base_seed,
                           const carbon::StoppingPowerTable* upstream_air_stopping_power,
                           UpstreamAirLossAudit* upstream_air_audit) {
-    if (config.mass_number <= 0) {
-        throw std::invalid_argument("mass_number must be positive for spots plans");
+    if (config.primary_mass_number <= 0) {
+        throw std::invalid_argument(
+            "primary_mass_number must be positive for spots plans");
     }
     config.number_of_histories = spot.number_of_histories;
-    config.initial_energy_MeVu = spot.energy_MeV / static_cast<double>(config.mass_number);
+    config.initial_energy_MeVu = spot.energy_MeV / static_cast<double>(config.primary_mass_number);
     // TOPAS BeamEnergySpread is percent (1.0 => 1%); GPU uses relative RMS.
     config.beam_energy_spread = spot.energy_spread_percent / 100.0;
 
@@ -300,10 +301,10 @@ void apply_spot_to_config(carbon::TransportConfig& config,
             distance_to_patient_ct_entry(pose, config);
         const auto entrance_energy =
             carbon::spot_entry_total_energy_after_optional_upstream_loss(
-                spot.energy_MeV, config.mass_number, distance_to_entrance_mm,
+                spot.energy_MeV, config.primary_mass_number, distance_to_entrance_mm,
                 upstream_air_stopping_power);
         config.initial_energy_MeVu =
-            entrance_energy / static_cast<double>(config.mass_number);
+            entrance_energy / static_cast<double>(config.primary_mass_number);
         if (upstream_air_audit != nullptr) {
             upstream_air_audit->distance_to_entrance_mm = distance_to_entrance_mm;
             upstream_air_audit->energy_loss_MeV = spot.energy_MeV - entrance_energy;
@@ -368,11 +369,11 @@ void apply_spot_to_config(carbon::TransportConfig& config,
         }
         const auto entrance_energy =
             carbon::spot_entry_total_energy_after_optional_upstream_loss(
-                spot.energy_MeV, config.mass_number, distance_to_entrance_mm,
+                spot.energy_MeV, config.primary_mass_number, distance_to_entrance_mm,
                 upstream_air_stopping_power);
         // With no table this is exactly the legacy spot.energy_MeV assignment.
         config.initial_energy_MeVu =
-            entrance_energy / static_cast<double>(config.mass_number);
+            entrance_energy / static_cast<double>(config.primary_mass_number);
         if (upstream_air_audit != nullptr) {
             upstream_air_audit->distance_to_entrance_mm = distance_to_entrance_mm;
             upstream_air_audit->energy_loss_MeV = spot.energy_MeV - entrance_energy;

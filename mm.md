@@ -1,7 +1,7 @@
 # Materials and Methods
 
 This note describes the physical models and their numerical implementation in
-MAIGO, a condensed-history Monte Carlo for carbon-ion dose and dose-averaged
+MAIGO, a condensed-history Monte Carlo for configured charged-ion dose and dose-averaged
 linear energy transfer (LET\(_d\)). The code is research software. It is not a
 Geant4 physics-list clone and is not intended for clinical treatment planning.
 Reference comparisons use OpenTOPAS 4.2 with Geant4 11.3.2.
@@ -102,8 +102,11 @@ The mean electromagnetic loss on a step is the condensed CSDA increment
 \]
 
 with \(S_{p,m}\) interpolated from Geant4 11.3.2 tables for projectile
-species \(p\) and local material \(m\). Primary \(^{12}\mathrm{C}\) uses
-`stopping_power_file`. Fragments use isotope-specific water ratios
+species \(p\) and local material \(m\). The primary uses
+`primary_stopping_power_file`; its identity is explicit in
+`primary_atomic_number`, `primary_mass_number`, and optionally
+`primary_rest_mass_MeV` (zero retains the historical
+\(A\times931.49410242\) MeV approximation). Fragments use isotope-specific water ratios
 (`ion_stopping_power_*`) applied to the continuous carbon table when
 `use_particle_specific_stopping_power` is on; missing isotopes fall back to
 water or to an effective-charge scaling of the carbon table.
@@ -181,8 +184,8 @@ enters only through the precomputed inelastic final states.
 ### 8.1 Interaction probability
 
 The macroscopic inelastic cross section \(\Sigma(E,m)\) is interpolated from
-Geant4 tables (`c12_inelastic_cross_sections_*`, and per-projectile cascade
-tables). On a step the analog interaction probability is
+the configured primary inelastic table and per-projectile cascade tables. On
+a step the analog interaction probability is
 
 \[
 P_\mathrm{int}=1-\exp\bigl[-\Sigma(E,m)\,\Delta s\bigr].
@@ -195,8 +198,8 @@ four-class air/lung/water/bone tables when present.
 
 ### 8.2 Correlated final states
 
-MAIGO does not run INCL++ on the device. Offline, TOPAS with
-`G4IonINCLXXPhysics` records inelastic events into binary packages
+MAIGO does not run a nuclear generator on the device. Offline, a user-selected
+inelastic model records correlated events into binary packages
 (`CRPKG` reaction, `CCAS` cascade). Each sampled interaction stores:
 
 - incident energy per nucleon and a reaction depth;
@@ -216,7 +219,10 @@ the kinematic imbalance \(E_\mathrm{in}-\sum E_\mathrm{out}\) (reaction
 Unsupported products, recoils below the transport cutoff and any energy
 that cannot be queued are added to a residual nuclear-heat tally so that
 the energy ledger remains closed. Package layout v1 is required;
-older files without 3-D directions or local deposit are rejected.
+older files without 3-D directions or local deposit are rejected. The package
+compiler records the source model as provenance but does not require INCL++ or
+TOPAS/Geant4 branding; users are responsible for making the configured primary
+Z/A, stopping table, cross section, and package physically consistent.
 
 ### 8.3 Charged secondaries and cascade
 
@@ -232,7 +238,19 @@ stops.
 Queue capacity is a numerical, not physical, parameter. An overflow
 truncates charged secondaries and must be zero for a validation run.
 
-### 8.4 Neutrals, decay and electrons
+### 8.4 Scope of ion generalization
+
+The shared algorithm is voxel traversal, step control, continuous loss,
+straggling, MCS, reaction sampling, queues, RNG, dose, and LET scoring.
+Primary mass/charge and all primary physics data are configurable, so proton,
+helium, carbon, oxygen, and neon runs can use their own prepared datasets.
+This is a transport interface generalization, not a claim of cross-ion physics
+validation: package v1 does not embed primary identity, scorer species columns
+remain fixed (Z>6 products are `secondary_other_charged`), and hadronic
+elastic, decay, and arbitrary-species scoring are not implemented. The Copper
+minibeam calibration is explicitly restricted to C-12.
+
+### 8.5 Neutrals, decay and electrons
 
 Neutrons and photons can be pushed to an optional package-driven neutral
 queue (`enable_neutral_transport`). Production CT configurations leave this

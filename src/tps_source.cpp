@@ -709,7 +709,7 @@ std::vector<PrimarySpotBatchEntry> TpsSourcePlan::make_primary_batch(
         entry.random_seed = config.random_seed + index * 1'000'003ULL;
         const auto total_energy_MeV = std::isfinite(spot.energy_total_MeV)
             ? spot.energy_total_MeV
-            : spot.energy_MeVu * static_cast<double>(config.mass_number);
+            : spot.energy_MeVu * static_cast<double>(config.primary_mass_number);
         entry.initial_energy_MeV() = static_cast<float>(total_energy_MeV);
         entry.beam_energy_spread() =
             static_cast<float>(energy_spread_percent / 100.0);

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compile validated TOPAS reaction CSV gzip files into a GPU-ready binary table."""
+"""Compile validated inelastic-event CSV files into a GPU-ready binary table."""
 
 from __future__ import annotations
 
@@ -67,6 +67,14 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("--energy-bin-min-mevu", type=float, default=0.0)
     parser.add_argument("--energy-bin-width-mevu", type=float, default=1.0)
     parser.add_argument("--energy-bin-count", type=int, default=201)
+    parser.add_argument(
+        "--fill-empty",
+        choices=("none", "nearest"),
+        default="none",
+        help="How to handle empty energy bins. nearest copies the closest "
+        "occupied bin (preferring higher energy) so a dedicated low-energy "
+        "beam can still emit a complete 0–E table.",
+    )
     return parser.parse_args()
 
 
@@ -108,18 +116,23 @@ def main() -> None:
 
     metadata = json.loads(args.metadata.read_text(encoding="utf-8"))
     runtime = metadata.get("runtime_reference", {})
-    if (runtime.get("topas_version") != "4.2.p3" or
-            runtime.get("geant4_version") != "geant4-11-03-patch-02"):
-        raise SystemExit(
-            "Reaction packages require TOPAS 4.2.p3 / Geant4 11.3.2 provenance"
-        )
+    selection = metadata.get("selection", {})
+    projectile_z = int(metadata.get("projectile_Z", selection.get("projectile_Z", 6)))
+    projectile_a = int(metadata.get("projectile_A", selection.get("projectile_A", 12)))
+    if projectile_z <= 0 or projectile_a < projectile_z:
+        raise SystemExit("Reaction metadata must define a valid projectile Z/A")
     reaction_rows = read_gzip_csv(args.reactions)
     secondary_rows = read_gzip_csv(args.secondaries)
+    incident_energy_column = (
+        "incident_energy_MeV_per_u"
+        if "incident_energy_MeV_per_u" in reaction_rows[0]
+        else "incident_c12_energy_MeV_per_u"
+    )
     require_columns(
         reaction_rows,
         (
             "reaction_id",
-            "incident_c12_energy_MeV_per_u",
+            incident_energy_column,
             "reaction_depth_mm",
             "local_deposit_MeV",
             "secondary_count",
@@ -167,7 +180,7 @@ def main() -> None:
                 raise SystemExit(f"Secondary indices are not contiguous for reaction {reaction_id}")
         expected_secondary_offset += count
 
-        energy = float(row["incident_c12_energy_MeV_per_u"])
+        energy = float(row[incident_energy_column])
         bin_index = math.floor((energy - args.energy_bin_min_mevu) / args.energy_bin_width_mevu)
         if bin_index < 0 or bin_index >= args.energy_bin_count:
             raise SystemExit(f"Reaction {reaction_id} energy {energy} MeV/u is outside the bin grid")
@@ -176,11 +189,28 @@ def main() -> None:
     if expected_secondary_offset != len(secondary_rows):
         raise SystemExit("Reaction ranges do not consume the complete secondary table")
     empty_bins = [index for index, members in enumerate(bins) if not members]
+    fill_log: list[dict[str, int]] = []
     if empty_bins:
-        raise SystemExit(
-            "Every runtime energy bin needs at least one reaction package; empty bins: "
-            + ", ".join(map(str, empty_bins[:20]))
-        )
+        if args.fill_empty != "nearest":
+            raise SystemExit(
+                "Every runtime energy bin needs at least one reaction package; empty bins: "
+                + ", ".join(map(str, empty_bins[:20]))
+            )
+        n_bins = len(bins)
+        occupied = [index for index, members in enumerate(bins) if members]
+        if not occupied:
+            raise SystemExit("No reactions fell inside the energy-bin grid")
+        for index in empty_bins:
+            best = min(
+                occupied,
+                key=lambda cand: (
+                    abs(cand - index),
+                    0 if cand > index else 1,
+                    -cand,
+                ),
+            )
+            bins[index] = list(bins[best])
+            fill_log.append({"empty_bin": index, "copied_from_bin": best})
 
     ordered_reactions: list[tuple[float, float, float, int, int]] = []
     ordered_secondaries: list[tuple[int, int, int, float, float, float, float]] = []
@@ -204,7 +234,7 @@ def main() -> None:
                 )
             ordered_reactions.append(
                 (
-                    float(row["incident_c12_energy_MeV_per_u"]),
+                    float(row[incident_energy_column]),
                     float(row["reaction_depth_mm"]),
                     local_deposit,
                     output_offset,
@@ -226,17 +256,20 @@ def main() -> None:
                 local_direction = direction_in_parent_frame(
                     global_direction, incident_direction)
                 pdg_id = int(secondary["pdg_id"])
-                if secondary.get("particle_name") == "primary_continuation":
-                    if not (
-                        int(secondary["track_id"]) == 1
-                        and pdg_id == 1_000_060_120
-                        and atomic_number == 6
-                        and mass_number == 12
-                    ):
+                if secondary.get("particle_name") in (
+                    "primary_continuation",
+                    "projectile_continuation",
+                ) and atomic_number == projectile_z and mass_number == projectile_a:
+                    track_id = secondary.get("track_id", secondary.get("source_track_id", "1"))
+                    expected_pdg = (
+                        2212 if (projectile_z, projectile_a) == (1, 1)
+                        else 1_000_000_000 + projectile_z * 10_000 + projectile_a * 10
+                    )
+                    if int(track_id) != 1 or abs(pdg_id) != expected_pdg:
                         raise SystemExit(
                             "Invalid primary_continuation package member"
                         )
-                    pdg_id = -pdg_id
+                    pdg_id = -abs(pdg_id)
                 ordered_secondaries.append(
                     (
                         pdg_id,
@@ -283,17 +316,19 @@ def main() -> None:
     if args.output.stat().st_size != expected_file_size:
         raise SystemExit("Compiled binary size does not match its header")
     compiled_metadata = {
-        "format": "carbon reaction package binary",
+        "format": "charged-ion reaction package binary",
         "format_version": VERSION,
         "byte_order": "little-endian",
         "direction_coordinates": "projectile-local orthonormal frame",
         "direction_components": ["local_x", "local_y", "along_projectile"],
-        "local_deposit": "Geant4 G4Step::GetTotalEnergyDeposit, scaled with package energy",
+        "projectile": {"atomic_number_Z": projectile_z, "mass_number_A": projectile_a},
+        "local_deposit": "generator-provided interaction-local energy deposit",
         "source_metadata": args.metadata.as_posix(),
         "source_metadata_sha256": sha256(args.metadata),
         "source_runtime": {
             "topas_version": runtime.get("topas_version"),
             "geant4_version": runtime.get("geant4_version"),
+            "physics_model": runtime.get("physics_model", metadata.get("physics_model")),
             "runtime_reference_metadata": runtime.get("metadata"),
         },
         "source_reactions_sha256": sha256(args.reactions),
@@ -304,6 +339,8 @@ def main() -> None:
             "count": len(binary_bins),
             "minimum_packages_per_bin": min(map(len, bins)),
             "maximum_packages_per_bin": max(map(len, bins)),
+            "fill_empty": args.fill_empty,
+            "filled_empty_bins": fill_log,
         },
         "records": {
             "reactions": len(ordered_reactions),

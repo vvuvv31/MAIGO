@@ -1,7 +1,8 @@
 # RT07575 full-plan GPU dose + primary-C12/all-hadron LET_d validation.
 number_of_histories: 12963817
 initial_energy_MeVu: 200.0
-mass_number: 12
+primary_atomic_number: 6
+primary_mass_number: 12
 
 phantom_length_mm: 208.5
 depth_bin_width_mm: 0.5
@@ -52,14 +53,14 @@ spots_patient_trans_z_mm: 1.3617
 spots_patient_rot_z_deg: 90.0
 spots_ct_axis_min_mm: -104.0
 
-stopping_power_file: data/stopping_power_water_geant4_11_3_2.csv
+primary_stopping_power_file: data/stopping_power_water_geant4_11_3_2.csv
 let_delta_electron_fraction_file: data/let_delta_electron_fraction_water_geant4_11_3_2.csv
 use_particle_specific_stopping_power: true
 particle_stopping_power_file: data/ion_stopping_power_water_geant4_11_3_2.csv
-nuclear_cross_section_file: data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv
+primary_inelastic_cross_section_file: data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv
 ct_schneider_cross_section_file: data/c12_inelastic_cross_sections_schneider_geant4_11_3_2.csv
-reaction_package_file: data/packages/topas_400MeVu_water_100k_primary_3d.bin
-cascade_package_file: data/packages/topas_400MeVu_water_100k_cascade_3d.bin
+primary_reaction_package_file: data/packages/topas_water_inclxx_1M_stitch7_primary_3d.bin
+cascade_package_file: data/packages/topas_400MeVu_water_inclxx_1M_cascade_3d.bin
 
 output_file:
 dose_output_file:

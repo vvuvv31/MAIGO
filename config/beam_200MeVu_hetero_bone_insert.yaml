@@ -3,7 +3,8 @@
 # Pencil beam at origin goes through the insert → distal R80 pull vs pure water.
 number_of_histories: 50000
 initial_energy_MeVu: 200.0
-mass_number: 12
+primary_atomic_number: 6
+primary_mass_number: 12
 phantom_length_mm: 400.0
 depth_bin_width_mm: 0.5
 maximum_step_mm: 0.5
@@ -39,10 +40,10 @@ maximum_cascade_generations: 2
 secondary_queue_capacity: 500000
 max_device_memory_fraction: 0.50
 random_seed: 20260715
-stopping_power_file: data/stopping_power_water_geant4_11_3_2.csv
-nuclear_cross_section_file: data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv
-reaction_package_file: data/packages/topas_400MeVu_water_100k_primary_3d.bin
-cascade_package_file: data/packages/topas_400MeVu_water_100k_cascade_3d.bin
+primary_stopping_power_file: data/stopping_power_water_geant4_11_3_2.csv
+primary_inelastic_cross_section_file: data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv
+primary_reaction_package_file: data/packages/topas_water_inclxx_1M_stitch7_primary_3d.bin
+cascade_package_file: data/packages/topas_400MeVu_water_inclxx_1M_cascade_3d.bin
 output_file: out/hetero/e200_bone_insert_idd.csv
 fragment_species_output_file: out/hetero/e200_bone_insert_species.csv
 voxel_dose_output_file: out/hetero/e200_bone_insert_voxels.csv

@@ -2,7 +2,8 @@
 # interactions are disabled to match run_dose_center_copper_em_10k.txt.
 number_of_histories: 10000
 initial_energy_MeVu: 179.1666666667
-mass_number: 12
+primary_atomic_number: 6
+primary_mass_number: 12
 
 phantom_length_mm: 100.0
 depth_bin_width_mm: 0.1
@@ -55,8 +56,8 @@ enable_fragment_cascade: false
 enable_neutral_transport: false
 random_seed: 20260728
 
-stopping_power_file: data/stopping_power_water_geant4_11_3_2.csv
-nuclear_cross_section_file: data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv
+primary_stopping_power_file: data/stopping_power_water_geant4_11_3_2.csv
+primary_inelastic_cross_section_file: data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv
 
 output_file:
 dose_output_file:

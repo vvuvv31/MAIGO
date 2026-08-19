@@ -123,6 +123,40 @@ float highland_projected_rms_angle_device(const float kinetic_energy_MeV,
            (beta * momentum_MeV_per_c) * sycl::sqrt(radiation_lengths) * correction;
 }
 
+float highland_projected_rms_angle_with_mass_device(
+    const float kinetic_energy_MeV,
+    const int atomic_number,
+    const float rest_mass_MeV,
+    const float path_length_mm,
+    const float density_g_per_cm3,
+    const float radiation_length_g_per_cm2 =
+        static_cast<float>(water_radiation_length_g_per_cm2)) noexcept {
+    if (kinetic_energy_MeV <= 0.0F || atomic_number <= 0 ||
+        rest_mass_MeV <= 0.0F || path_length_mm <= 0.0F ||
+        density_g_per_cm3 <= 0.0F || radiation_length_g_per_cm2 <= 0.0F) {
+        return 0.0F;
+    }
+    const auto total_energy_MeV = kinetic_energy_MeV + rest_mass_MeV;
+    const auto momentum_MeV_per_c = sycl::sqrt(
+        kinetic_energy_MeV * (kinetic_energy_MeV + 2.0F * rest_mass_MeV));
+    const auto beta = momentum_MeV_per_c / total_energy_MeV;
+    const auto radiation_lengths =
+        density_g_per_cm3 * (path_length_mm / 10.0F) /
+        radiation_length_g_per_cm2;
+    if (beta <= 0.0F || momentum_MeV_per_c <= 0.0F ||
+        radiation_lengths <= 0.0F) {
+        return 0.0F;
+    }
+    const auto charge = static_cast<float>(atomic_number);
+    const auto correction = sycl::fmax(
+        0.0F,
+        1.0F + 0.038F * sycl::log(
+            radiation_lengths * charge * charge / (beta * beta)));
+    return static_cast<float>(highland_energy_constant_MeV) * charge /
+           (beta * momentum_MeV_per_c) * sycl::sqrt(radiation_lengths) *
+           correction;
+}
+
 inline float condensed_total_loss_variance_MeV2_device(
     const float energy_MeVu,
     const int mass_number,
@@ -158,6 +192,42 @@ inline float condensed_total_loss_variance_MeV2_device(
     return bethe_K_MeV_cm2_per_g * electron_mass_MeV * effective_charge *
            effective_charge * z_over_a * density_g_per_cm3 *
            (path_length_mm / 10.0F) * sycl::fmax(0.0F, relativistic_multiplier);
+}
+
+inline float condensed_total_loss_variance_with_mass_MeV2_device(
+    const float kinetic_energy_MeV,
+    const float rest_mass_MeV,
+    const float effective_charge,
+    const float path_length_mm,
+    const float density_g_per_cm3,
+    const float z_over_a_rel_water = 1.0F) noexcept {
+    if (kinetic_energy_MeV <= 0.0F || rest_mass_MeV <= 0.0F ||
+        effective_charge <= 0.0F || path_length_mm <= 0.0F ||
+        density_g_per_cm3 <= 0.0F) {
+        return 0.0F;
+    }
+    constexpr float electron_mass_MeV = 0.51099895F;
+    constexpr float bethe_K_MeV_cm2_per_g = 0.307075F;
+    constexpr float water_Z_over_A = 0.55509F;
+    const auto gamma = 1.0F + kinetic_energy_MeV / rest_mass_MeV;
+    const auto beta_squared =
+        sycl::fmax(0.0F, 1.0F - 1.0F / (gamma * gamma));
+    if (beta_squared <= 0.0F) {
+        return 0.0F;
+    }
+    const auto mass_ratio = electron_mass_MeV / rest_mass_MeV;
+    const auto maximum_transfer_MeV =
+        2.0F * electron_mass_MeV * beta_squared * gamma * gamma /
+        (1.0F + 2.0F * gamma * mass_ratio + mass_ratio * mass_ratio);
+    const auto relativistic_multiplier =
+        (maximum_transfer_MeV / beta_squared - 0.5F * maximum_transfer_MeV) /
+        (2.0F * electron_mass_MeV);
+    const auto z_over_a = water_Z_over_A *
+                          sycl::clamp(z_over_a_rel_water, 0.5F, 1.5F);
+    return bethe_K_MeV_cm2_per_g * electron_mass_MeV * effective_charge *
+           effective_charge * z_over_a * density_g_per_cm3 *
+           (path_length_mm / 10.0F) *
+           sycl::fmax(0.0F, relativistic_multiplier);
 }
 
 Direction3F scatter_direction(const Direction3F direction,

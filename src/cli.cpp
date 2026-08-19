@@ -28,7 +28,7 @@ void print_usage(const char* executable) {
                  "  --sequential-spots   Disable batched SYCL plan launch\n"
                  "  --output FILE        MeV energy-deposition scorer CSV\n"
                  "  --dose-output FILE   Dose scorer CSV (total Gy); empty disables\n"
-                 "  --scorer-let         Enable primary-C12 and all-hadron LET_d scoring\n"
+                 "  --scorer-let         Enable primary and all-hadron LET_d scoring\n"
                  "  --no-scorer-let      Disable LET_d scoring (overrides YAML scorerLET)\n"
                  "  --let-output FILE    LET_d CSV including raw numerator/denominator\n"
                  "  --voxel-dose-mhd FILE  Override dense voxel dose MHD output\n";

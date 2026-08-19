@@ -2,7 +2,8 @@
 # free path + one interaction; continuation residual; no TOPAS dose-map scaling.
 number_of_histories: 16
 initial_energy_MeVu: 200.0
-mass_number: 12
+primary_atomic_number: 6
+primary_mass_number: 12
 phantom_length_mm: 400.0
 depth_bin_width_mm: 2.0
 maximum_step_mm: 1.0
@@ -25,9 +26,9 @@ secondary_queue_capacity: 20000
 max_device_memory_fraction: 0.50
 neutral_queue_capacity: 20000
 random_seed: 20260715
-stopping_power_file: data/stopping_power_water_geant4_11_3_2.csv
-nuclear_cross_section_file: data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv
-reaction_package_file: data/packages/topas_400MeVu_water_100k_primary_3d.bin
+primary_stopping_power_file: data/stopping_power_water_geant4_11_3_2.csv
+primary_inelastic_cross_section_file: data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv
+primary_reaction_package_file: data/packages/topas_water_inclxx_1M_stitch7_primary_3d.bin
 
 output_file: out/windows_neutral_smoke_idd.csv
 fragment_species_output_file: out/windows_neutral_smoke_species.csv

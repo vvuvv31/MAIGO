@@ -1,7 +1,8 @@
 # Level-3 case: calibrated straggling plus direct Geant4 energy-dependent attenuation.
 number_of_histories: 10000
 initial_energy_MeVu: 200.0
-mass_number: 12
+primary_atomic_number: 6
+primary_mass_number: 12
 phantom_length_mm: 400.0
 depth_bin_width_mm: 0.5
 maximum_step_mm: 0.5
@@ -13,6 +14,6 @@ enable_energy_straggling: true
 straggling_scale: 1.2
 enable_primary_attenuation: true
 random_seed: 20260714
-stopping_power_file: data/stopping_power_water_geant4_11_3_2.csv
-nuclear_cross_section_file: data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv
+primary_stopping_power_file: data/stopping_power_water_geant4_11_3_2.csv
+primary_inelastic_cross_section_file: data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv
 output_file: out/cpu_attenuation_depth_dose.csv

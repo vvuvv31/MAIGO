@@ -25,10 +25,12 @@ double ion_effective_charge(int atomic_number, double energy_MeVu) {
            (1.0 - std::exp(-125.0 * beta * std::pow(charge, -2.0 / 3.0)));
 }
 
-double stopping_power_scale_from_carbon(int atomic_number, double energy_MeVu) {
+double stopping_power_scale_from_reference_ion(
+    int atomic_number, int reference_atomic_number, double energy_MeVu) {
     const auto ion_charge = ion_effective_charge(atomic_number, energy_MeVu);
-    const auto carbon_charge = ion_effective_charge(6, energy_MeVu);
-    const auto ratio = ion_charge / carbon_charge;
+    const auto reference_charge =
+        ion_effective_charge(reference_atomic_number, energy_MeVu);
+    const auto ratio = ion_charge / reference_charge;
     return ratio * ratio;
 }
 

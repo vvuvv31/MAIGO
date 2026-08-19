@@ -1,6 +1,7 @@
 #pragma once
 
 #include "carbon/slab_phantom.hpp"
+#include "carbon/particle.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -89,8 +90,11 @@ struct TransportConfig {
     // Relative RMS beam energy spread (TOPAS BeamEnergySpread percent / 100).
     // 0.01 = 1% → sample E ~ N(E0, (0.01*E0)^2) at primary birth.
     double beam_energy_spread{0.0};
-    // The current transport and physics packages model carbon-12.
-    int mass_number{12};
+    // Primary ion identity. Kinetic energies remain expressed per nucleon.
+    int primary_atomic_number{6};
+    int primary_mass_number{12};
+    // Zero preserves the historical A * nucleon-mass approximation.
+    double primary_rest_mass_MeV{0.0};
     // Legacy water-phantom names for the transport/scorer z extent. In a CT
     // run load_config() derives both from voxel_bins_z/voxel_size_z_mm, which
     // in turn default to the native patient CT header.
@@ -139,6 +143,13 @@ struct TransportConfig {
     // 7c: CT voxel grid (exclusive with layered/hetero insert).
     bool enable_ct_grid{false};
     std::filesystem::path ct_grid_file{};
+    // Optional TOPAS Schneider HU table. Used when ct_grid_file is a DICOM
+    // folder. Empty searches data/HUtoMaterialSchneider.txt.
+    std::filesystem::path ct_schneider_file{};
+    // DICOM origin: "centered" matches the historical CCTG converter
+    // (volume centred, first-slice centre at z=0). "dicom" keeps native
+    // LPS voxel low edges from ImagePositionPatient.
+    std::string ct_dicom_origin_mode{"centered"};
     // When true (default), skip CT voxel-face step clamps in homogeneous regions.
     // Set false for isolated performance A/B against full face clamping.
     bool ct_skip_homogeneous_face_clamp{true};
@@ -163,11 +174,11 @@ struct TransportConfig {
     // water-relative electronic mass SPR instead of the analytic
     // Schneider-section Bethe factor.
     bool ct_use_density_mass_spr{true};
-    // Optional material-conditioned primary C-12 correlated final states.
+    // Optional material-conditioned primary ion correlated final states.
     // Empty paths preserve the production water package for every CT voxel.
     // Each package is selected only for reactions occurring in the
     // corresponding CT material class. An empty class path falls back to
-    // reaction_package_file.
+    // primary_reaction_package_file.
     std::filesystem::path ct_lung_reaction_package_file{};
     std::filesystem::path ct_soft_tissue_reaction_package_file{};
     std::filesystem::path ct_bone_reaction_package_file{};
@@ -200,6 +211,15 @@ struct TransportConfig {
     // continuous ionization or
     // queued-secondary kinetic energy.
     double nuclear_residual_heat_scale{1.0};
+    // When true, fragment-species EnergyDeposit for Z in
+    // [restrict_fragment_species_z_min, restrict_fragment_species_z_max]
+    // uses (1 − δ) × unrestricted dE so the ion column matches TOPAS
+    // G4Step::GetTotalEnergyDeposit (δ rays leave the ion scorer).
+    // Transport and the aggregate energy ledger stay unrestricted.
+    // 0,0 leaves every fragment species unrestricted (production default).
+    bool restrict_fragment_species_energy_deposit{false};
+    int restrict_fragment_species_z_min{0};
+    int restrict_fragment_species_z_max{0};
     // Blend light-ion (Z<=2) reaction/cascade birth directions toward the
     // projectile axis: dir = normalize((1-f)*package_dir + f*projectile_dir).
     // 0 keeps the correlated INCL++ angular package; values in (0,1] narrow
@@ -233,7 +253,7 @@ struct TransportConfig {
     double voxel_size_y_mm{5.0};
     double voxel_size_z_mm{0.0};
     bool enable_energy_straggling{false};
-    // Historical validation applied straggling only to primary C-12.
+    // Historical validation applied straggling only to primary ion.
     // Enable this separately to apply Bohr straggling to charged fragments.
     bool enable_secondary_energy_straggling{false};
     // Scalar fallback for Bohr straggling. If the two optional tables below
@@ -312,20 +332,20 @@ struct TransportConfig {
     // Frozen against an independent 2150 MeV C-12 Copper-foil benchmark using
     // the same TOPAS/Geant4 release. This scales the projected Highland core.
     double minibeam_copper_mcs_scale{0.785};
-    // Residual accumulated Copper-loss correction for primary C-12 ions that
+    // Residual accumulated Copper-loss correction for primary ion ions that
     // survive to the collimator exit. It is frozen from an independent
     // water-entrance phase-space comparison and deliberately does not alter
     // nuclear interaction probability, survival, or angular transport.
     double minibeam_copper_survivor_energy_loss_scale{1.0};
     // Optional piecewise-linear incident-energy calibration of the same
     // accumulated-loss scale. Empty vectors preserve the scalar behavior.
-    // The values are constrained by Copper-touched primary C-12 phase space,
+    // The values are constrained by Copper-touched primary ion phase space,
     // independently of the downstream dose comparison.
     std::vector<double>
         minibeam_copper_survivor_energy_loss_energies_MeVu{};
     std::vector<double>
         minibeam_copper_survivor_energy_loss_scales{};
-    // Residual primary-C12 range correction in the downstream water phantom.
+    // Residual primary range correction in the downstream water phantom.
     // Default 1.0; the minibeam value is frozen from a TOPAS/GPU primary-origin
     // R80 comparison after the water-entrance phase space has been matched.
     double minibeam_water_primary_stopping_power_scale{1.0};
@@ -337,7 +357,7 @@ struct TransportConfig {
     double minibeam_water_low_energy_mcs_transition_MeVu{0.0};
     double minibeam_water_primary_low_energy_mcs_scale{1.0};
     double minibeam_water_fragment_low_energy_mcs_scale{1.0};
-    // Optional entrance response for primary C-12 histories that touched the
+    // Optional entrance response for primary ion histories that touched the
     // Copper collimator. The two smooth terms modify stopping (not scored dose),
     // so retained kinetic energy continues downstream. Zero amplitudes are
     // neutral and preserve all non-minibeam/default behaviour.
@@ -457,10 +477,19 @@ struct TransportConfig {
     // HFS, HFP, FFS, or FFP. Axes are converted to the simulation's patient
     // coordinate system; isocenter coordinates are already in that system.
     std::string tps_patient_position{"HFS"};
-    // The current physics tables model carbon ions. Keep this explicit so a
-    // proton TPS plan cannot silently run with carbon physics.
-    std::string tps_particle_type{"carbon"};
     bool enable_primary_attenuation{false};
+    // Scale the tabulated primary-ion inelastic macroscopic cross section.
+    // Keep 1.0 for the raw G4HadronicProcessStore table. Validation may use a
+    // process-effective scale measured from equal-history TOPAS first-reaction
+    // counts, which are slightly lower than the direct table integral.
+    double primary_inelastic_xs_scale{1.0};
+    bool enable_primary_inelastic_xs_correction{false};
+    std::filesystem::path primary_inelastic_xs_correction_file{};
+    // Loaded once from primary_inelastic_xs_correction_file. The cumulative
+    // TOPAS/table optical-depth ratio is selected from the sampled incident
+    // primary energy and remains fixed while that primary slows down.
+    std::vector<double> primary_inelastic_xs_correction_energies_MeVu{};
+    std::vector<double> primary_inelastic_xs_correction_scales{};
     bool enable_secondary_generation{false};
     bool enable_secondary_transport{false};
     bool enable_fragment_cascade{false};
@@ -473,10 +502,18 @@ struct TransportConfig {
     // Secondary carbons are Z==6 fragments continuing a cascade (not primary).
     // These are not patient-specific fits; use only with equal-history A/B.
     double cascade_light_ion_xs_scale{1.0};
-    double cascade_secondary_carbon_xs_scale{1.0};
-    // Per-species secondary depth-dose scoring. Disable for voxel-only full-plan
-    // production to remove an otherwise redundant global atomic per deposit.
-    bool enable_fragment_species_scoring{true};
+    double cascade_secondary_z6_xs_scale{1.0};
+    // Per-species secondary depth-dose scoring. Off in production; validation
+    // mode turns it on. Voxel-only full-plan runs should leave this false.
+    bool enable_fragment_species_scoring{false};
+    // "production": DoseToMedium + optional LET_d.
+    // "validation": extra fluence / survival / reaction / ledger outputs.
+    // Requires a binary built with -DCARBON_VALIDATION_SCORERS=ON.
+    std::string scorer_mode{"production"};
+    // If set in validation mode, default extra CSV/JSON paths are placed here.
+    std::filesystem::path validation_output_directory{};
+
+    [[nodiscard]] bool validation_scorers() const noexcept;
     // Dose-averaged electronic LET scorer compatible with the
     // Villadslj/Topas-Extension myHadronLET definition. YAML also accepts the
     // requested camel-case alias `scorerLET`.
@@ -506,7 +543,7 @@ struct TransportConfig {
     double electronic_buildup_fraction{0.0};
     double electronic_buildup_mfp_mm{0.5};
     // Minibeam validation can restrict the unresolved delta-electron proxy to
-    // primary C-12. This avoids applying a carbon-derived energy fraction to
+    // primary ion. This avoids applying a carbon-derived energy fraction to
     // fragment species whose restricted/unrestricted stopping split differs.
     bool minibeam_electronic_buildup_primary_only{false};
     // Optional transverse Gaussian sigma [mm] for the electronic fraction in
@@ -548,7 +585,8 @@ struct TransportConfig {
     // benchmarked on the target GPU.
     bool enable_secondary_energy_sorting{false};
     std::uint64_t random_seed{20'260'714};
-    std::filesystem::path stopping_power_file{"data/stopping_power_water.csv"};
+    std::filesystem::path primary_stopping_power_file{
+        "data/stopping_power_water_geant4_11_3_2.csv"};
     // Optional E_delta/(Edep+E_delta) lookup on the stopping-power energy grid.
     // Used only by the HadronLET-compatible scorer; dose transport is unchanged.
     std::filesystem::path let_delta_electron_fraction_file{};
@@ -565,18 +603,17 @@ struct TransportConfig {
     std::filesystem::path ct_lung_particle_stopping_power_file{};
     std::filesystem::path ct_soft_tissue_particle_stopping_power_file{};
     std::filesystem::path ct_bone_particle_stopping_power_file{};
-    std::filesystem::path nuclear_cross_section_file{
+    std::filesystem::path primary_inelastic_cross_section_file{
         "data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv"};
-    std::filesystem::path reaction_package_file{
-        "data/packages/topas_400MeVu_water_100k_primary_3d.bin"};
+    std::filesystem::path primary_reaction_package_file{
+        "data/packages/topas_water_inclxx_1M_stitch7_primary_3d.bin"};
     std::filesystem::path cascade_package_file{
-        "data/packages/topas_400MeVu_water_100k_cascade_3d.bin"};
+        "data/packages/topas_400MeVu_water_inclxx_1M_cascade_3d.bin"};
     std::filesystem::path neutral_package_file{
         "data/packages/topas_200MeVu_neutral_development.bin"};
     // MeV energy-deposition scorer outputs (absolute MeV → MeV/primary in writers).
     std::filesystem::path output_file{"out/cpu_depth_dose.csv"};
-    std::filesystem::path fragment_species_output_file{
-        "out/gpu_fragment_species_depth_dose.csv"};
+    std::filesystem::path fragment_species_output_file{};
     std::filesystem::path let_output_file{"out/gpu_letd_depth.csv"};
     std::filesystem::path fragment_species_let_output_file{};
     // Optional p/d/t/He-3/He-4/N/O/F depth LET diagnostics. Empty avoids the
@@ -587,7 +624,7 @@ struct TransportConfig {
     // Writes: <path>_summary.csv, <path>_mevu.csv, <path>_depth.csv,
     // <path>_costheta.csv, <path>_parent_mevu.csv, <path>_parent_z.csv
     std::filesystem::path fragment_birth_spectrum_output_file{};
-    // Prefix/header path for dense primary-C12 and all-hadron 3D LET_d MHD maps.
+    // Prefix/header path for dense primary and all-hadron 3D LET_d MHD maps.
     // Requires both scorerLET and enable_voxel_scoring.
     std::filesystem::path let_voxel_mhd_output_file{};
     std::filesystem::path voxel_dose_output_file{"out/gpu_voxel_dose.csv"};
@@ -599,12 +636,11 @@ struct TransportConfig {
     // file; MeV scorers always write when their paths are set. Defaults write Gy
     // alongside MeV.
     std::filesystem::path dose_output_file{"out/cpu_depth_dose_Gy.csv"};
-    std::filesystem::path fragment_species_dose_output_file{
-        "out/gpu_fragment_species_depth_dose_Gy.csv"};
+    std::filesystem::path fragment_species_dose_output_file{};
     std::filesystem::path voxel_dose_Gy_output_file{"out/gpu_voxel_dose_Gy.csv"};
     std::filesystem::path charged_origin_voxel_dose_Gy_output_file{
         "out/gpu_charged_origin_voxel_dose_Gy.csv"};
-    // Optional dense CT dose-to-medium maps for primary C-12 and charged
+    // Optional dense CT dose-to-medium maps for primary ion and charged
     // secondary origin categories. The writer appends _<category>.mhd/raw.
     std::filesystem::path charged_origin_voxel_mhd_output_prefix{};
     // Dense MetaImage MHD/RAW (total Gy). Empty disables. Skips sparse CSV I/O
@@ -613,7 +649,16 @@ struct TransportConfig {
     std::string device{"serial"};
 
     [[nodiscard]] double initial_total_energy_MeV() const noexcept {
-        return initial_energy_MeVu * static_cast<double>(mass_number);
+        return initial_energy_MeVu * static_cast<double>(primary_mass_number);
+    }
+    [[nodiscard]] double resolved_primary_rest_mass_MeV() const noexcept {
+        return primary_rest_mass_MeV > 0.0
+                   ? primary_rest_mass_MeV
+                   : static_cast<double>(primary_mass_number) * 931.49410242;
+    }
+    [[nodiscard]] PrimaryIonDefinition primary_ion() const {
+        return make_primary_ion_definition(
+            primary_atomic_number, primary_mass_number, primary_rest_mass_MeV);
     }
 
     [[nodiscard]] std::size_t number_of_bins() const;
