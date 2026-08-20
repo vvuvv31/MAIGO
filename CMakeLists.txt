@@ -37,6 +37,9 @@ add_library(carbon_core
     src/config.cpp
     src/cross_section.cpp
     src/ct_grid.cpp
+    src/package_identity.cpp
+    src/elastic_package.cpp
+    src/elastic_device_storage.cpp
     src/io.cpp
     src/plan_run.cpp
     src/reaction_package.cpp
@@ -139,6 +142,7 @@ add_executable(carbon_mc src/main.cpp)
 target_link_libraries(carbon_mc PRIVATE carbon_core)
 
 if(BUILD_TESTING)
+    find_package(Python3 COMPONENTS Interpreter REQUIRED)
     set(CARBON_TEST_PACKAGE_FILES
         "${CMAKE_CURRENT_SOURCE_DIR}/data/packages/topas_water_inclxx_1M_stitch7_primary_3d.bin"
         "${CMAKE_CURRENT_SOURCE_DIR}/data/packages/topas_400MeVu_water_inclxx_1M_cascade_3d.bin")
@@ -165,4 +169,56 @@ if(BUILD_TESTING)
     set_tests_properties(carbon_tests PROPERTIES
         TIMEOUT 300
         REQUIRED_FILES "${CARBON_TEST_PACKAGE_FILES}")
+    add_executable(elastic_package_tests tests/elastic_package_tests.cpp)
+    target_link_libraries(elastic_package_tests PRIVATE carbon_core)
+    add_executable(elastic_sampling_tests tests/elastic_sampling_tests.cpp)
+    target_link_libraries(elastic_sampling_tests PRIVATE carbon_core)
+    add_executable(elastic_device_storage_tests tests/elastic_device_storage_tests.cpp)
+    target_link_libraries(elastic_device_storage_tests PRIVATE carbon_core)
+    add_executable(elastic_application_tests tests/elastic_application_tests.cpp)
+    target_link_libraries(elastic_application_tests PRIVATE carbon_core)
+    add_executable(elastic_queue_adapter_tests tests/elastic_queue_adapter_tests.cpp)
+    target_link_libraries(elastic_queue_adapter_tests PRIVATE carbon_core)
+    if(CARBON_ENABLE_SYCL)
+        target_compile_options(elastic_sampling_tests PRIVATE -fsycl)
+        target_compile_options(elastic_device_storage_tests PRIVATE -fsycl)
+        target_compile_options(elastic_application_tests PRIVATE -fsycl)
+        target_compile_options(elastic_queue_adapter_tests PRIVATE -fsycl)
+        if(CARBON_SYCL_TARGETS)
+            target_compile_options(elastic_sampling_tests PRIVATE
+                -fsycl-targets=${CARBON_SYCL_TARGETS})
+            target_compile_options(elastic_device_storage_tests PRIVATE
+                -fsycl-targets=${CARBON_SYCL_TARGETS})
+            target_compile_options(elastic_application_tests PRIVATE
+                -fsycl-targets=${CARBON_SYCL_TARGETS})
+            target_compile_options(elastic_queue_adapter_tests PRIVATE
+                -fsycl-targets=${CARBON_SYCL_TARGETS})
+        endif()
+        if(CARBON_CUDA_ARCH)
+            target_compile_options(elastic_sampling_tests PRIVATE
+                "SHELL:-Xsycl-target-backend=nvptx64-nvidia-cuda --cuda-gpu-arch=${CARBON_CUDA_ARCH}")
+            target_compile_options(elastic_device_storage_tests PRIVATE
+                "SHELL:-Xsycl-target-backend=nvptx64-nvidia-cuda --cuda-gpu-arch=${CARBON_CUDA_ARCH}")
+            target_compile_options(elastic_application_tests PRIVATE
+                "SHELL:-Xsycl-target-backend=nvptx64-nvidia-cuda --cuda-gpu-arch=${CARBON_CUDA_ARCH}")
+            target_compile_options(elastic_queue_adapter_tests PRIVATE
+                "SHELL:-Xsycl-target-backend=nvptx64-nvidia-cuda --cuda-gpu-arch=${CARBON_CUDA_ARCH}")
+        endif()
+    endif()
+    add_test(NAME elastic_sampling COMMAND elastic_sampling_tests)
+    add_test(NAME elastic_device_storage COMMAND elastic_device_storage_tests)
+    add_test(NAME elastic_application COMMAND elastic_application_tests)
+    add_test(NAME elastic_queue_adapter COMMAND elastic_queue_adapter_tests)
+    add_test(NAME elastic_package_cross_language
+        COMMAND ${Python3_EXECUTABLE}
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/run_elastic_package_tests.py"
+                "$<TARGET_FILE:elastic_package_tests>")
+    add_test(NAME elastic_config_preload
+        COMMAND ${Python3_EXECUTABLE}
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_elastic_config_preload.py"
+                "$<TARGET_FILE:carbon_mc>")
+    add_test(NAME elastic_campaign_python
+        COMMAND ${Python3_EXECUTABLE}
+                "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_elastic_campaign.py")
+    set_tests_properties(elastic_config_preload PROPERTIES TIMEOUT 60)
 endif()

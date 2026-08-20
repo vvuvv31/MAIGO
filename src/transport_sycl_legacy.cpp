@@ -1,6 +1,10 @@
 #include "carbon/cross_section.hpp"
 #include "carbon/ct_grid.hpp"
 #include "carbon/device.hpp"
+#include "carbon/elastic_application.hpp"
+#include "carbon/elastic_device_storage.hpp"
+#include "carbon/elastic_queue_adapter.hpp"
+#include "carbon/elastic_sampling.hpp"
 #include "carbon/multiple_scattering.hpp"
 #include "carbon/particle.hpp"
 #include "carbon/rng.hpp"
@@ -357,7 +361,9 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                                const ReactionPackageTable* reaction_packages,
                                const CascadePackageTable* cascade_packages,
                                const NeutralPackageTable* neutral_packages,
-                               SyclTransportContext* context) {
+                               SyclTransportContext* context,
+                               const CrossSectionTable* elastic_cross_section,
+                               const ElasticPackageTable* elastic_packages) {
     config.validate();
     if (!is_uniform_grid(stopping_power.energies())) {
         throw std::invalid_argument("The current SYCL backend requires a uniform stopping-power grid");
@@ -365,6 +371,24 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
     if (!is_uniform_grid(cross_section.energies())) {
         throw std::invalid_argument("The current SYCL backend requires a uniform cross-section grid");
     }
+    if (config.enable_primary_elastic_interactions) {
+        if (elastic_cross_section == nullptr || elastic_packages == nullptr ||
+            elastic_cross_section->energies().size() < 2 ||
+            !is_uniform_grid(elastic_cross_section->energies())) {
+            throw std::invalid_argument(
+                "Primary elastic transport requires a uniform elastic XS grid with two bins");
+        }
+        if (elastic_packages->projectile_atomic_number() != config.primary_atomic_number ||
+            elastic_packages->projectile_mass_number() != config.primary_mass_number) {
+            throw std::invalid_argument(
+                "Primary elastic package projectile does not match YAML primary Z/A");
+        }
+    }
+    const auto primary_elastic_transport_enabled =
+        config.enable_primary_elastic_interactions &&
+        std::any_of(elastic_cross_section->values().begin(),
+                    elastic_cross_section->values().end(),
+                    [](const double value) { return value > 0.0; });
     if (config.enable_secondary_generation && !config.enable_primary_attenuation) {
         throw std::invalid_argument(
             "Secondary generation requires enable_primary_attenuation=true");
@@ -383,6 +407,11 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
     }
     if (config.enable_neutral_transport && neutral_packages == nullptr) {
         throw std::invalid_argument("Neutral transport requires a neutral package table");
+    }
+    if (primary_elastic_transport_enabled &&
+        (elastic_cross_section == nullptr || elastic_packages == nullptr)) {
+        throw std::invalid_argument(
+            "Primary elastic interactions require elastic cross-section and package tables");
     }
 
     if (context != nullptr && context->impl_->device_name != device_name) {
@@ -736,6 +765,13 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
         std::size_t bytes = 0;
         bytes += table_size * sizeof(float);
         bytes += cross_section_table_size * sizeof(float);
+        if (primary_elastic_transport_enabled && elastic_cross_section != nullptr &&
+            elastic_packages != nullptr) {
+            bytes += elastic_cross_section->values().size() * sizeof(float);
+            bytes += elastic_packages->energy_bins().size() * sizeof(ElasticEnergyBin);
+            bytes += elastic_packages->events().size() * sizeof(ElasticEvent);
+            bytes += elastic_packages->products().size() * sizeof(ElasticProduct);
+        }
         if (use_let_delta_fraction_table) {
             bytes += table_size * sizeof(float);
         }
@@ -927,6 +963,16 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
         reuse_immutable_buffers
             ? context->impl_->cross_section_device
             : sycl::malloc_device<float>(cross_section_table_size, queue);
+    float* elastic_cross_section_device = nullptr;
+    std::optional<ElasticPackageDeviceStorage> elastic_package_storage;
+    if (primary_elastic_transport_enabled) {
+        elastic_cross_section_device = sycl::malloc_device<float>(
+            elastic_cross_section->values().size(), queue);
+        if (elastic_cross_section_device == nullptr) {
+            throw std::bad_alloc();
+        }
+        elastic_package_storage.emplace(*elastic_packages, queue);
+    }
     auto* let_delta_fraction_device =
         use_let_delta_fraction_table
             ? sycl::malloc_device<float>(table_size, queue)
@@ -1031,6 +1077,34 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
     auto* deposited_device = sycl::malloc_device<float>(number_of_histories, queue);
     auto* escaped_device = sycl::malloc_device<float>(number_of_histories, queue);
     auto* nuclear_device = sycl::malloc_device<float>(number_of_histories, queue);
+    auto* elastic_interactions_device = primary_elastic_transport_enabled
+                                            ? sycl::malloc_device<std::uint32_t>(
+                                                  number_of_histories, queue)
+                                            : nullptr;
+    auto* elastic_local_deposit_device = primary_elastic_transport_enabled
+                                             ? sycl::malloc_device<float>(
+                                                   number_of_histories, queue)
+                                             : nullptr;
+    auto* elastic_queued_energy_device = primary_elastic_transport_enabled
+                                             ? sycl::malloc_device<float>(
+                                                   number_of_histories, queue)
+                                             : nullptr;
+    auto* elastic_queued_charged_energy_device =
+        primary_elastic_transport_enabled
+            ? sycl::malloc_device<float>(number_of_histories, queue)
+            : nullptr;
+    auto* elastic_queued_neutral_energy_device =
+        primary_elastic_transport_enabled
+            ? sycl::malloc_device<float>(number_of_histories, queue)
+            : nullptr;
+    auto* elastic_overflow_device = primary_elastic_transport_enabled
+                                        ? sycl::malloc_device<std::uint32_t>(
+                                              number_of_histories, queue)
+                                        : nullptr;
+    auto* elastic_overflow_energy_device = primary_elastic_transport_enabled
+                                               ? sycl::malloc_device<float>(
+                                                     number_of_histories, queue)
+                                               : nullptr;
     auto* steps_device = sycl::malloc_device<std::uint32_t>(number_of_histories, queue);
 #ifdef CARBON_TRANSPORT_PROFILE
     auto* profile_counters_device =
@@ -1101,6 +1175,34 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
     NeutralTransportSummary* neutral_summaries_device = nullptr;
     DoseAtomicT* neutral_origin_dose_device = nullptr;
     DoseAtomicT* neutral_origin_voxel_dose_device = nullptr;
+    if (primary_elastic_transport_enabled && !enable_secondary_generation) {
+        // Elastic products use the same queue ABI even when the inelastic
+        // reaction package channel is disabled.
+        reaction_bins_device = sycl::malloc_device<ReactionEnergyBin>(1, queue);
+        reactions_device = sycl::malloc_device<ReactionPackage>(1, queue);
+        reaction_secondaries_device = sycl::malloc_device<ReactionSecondary>(1, queue);
+        secondary_queue_device =
+            sycl::malloc_device<SecondaryParticle3D>(secondary_queue_capacity, queue);
+        secondary_queue_counter_device = sycl::malloc_device<std::uint64_t>(1, queue);
+        secondary_queue_filled_device = sycl::malloc_device<std::uint64_t>(1, queue);
+        secondary_summaries_device =
+            sycl::malloc_device<SecondaryGenerationSummary>(number_of_histories, queue);
+        if (enable_secondary_transport) {
+            secondary_work_counter_device = sycl::malloc_device<std::uint64_t>(1, queue);
+            unrestricted_secondary_dose_device =
+                sycl::malloc_device<DoseAtomicT>(number_of_bins, queue);
+            secondary_deposited_device =
+                sycl::malloc_device<float>(secondary_queue_capacity, queue);
+            secondary_escaped_device =
+                sycl::malloc_device<float>(secondary_queue_capacity, queue);
+            secondary_steps_device =
+                sycl::malloc_device<std::uint32_t>(secondary_queue_capacity, queue);
+            if (enable_fragment_species_scoring) {
+                fragment_dose_device = sycl::malloc_device<DoseAtomicT>(
+                    fragment_species_count * number_of_bins, queue);
+            }
+        }
+    }
     if (enable_secondary_generation) {
         reaction_bins_device =
             reuse_immutable_buffers
@@ -1115,7 +1217,8 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
             reuse_immutable_buffers
                 ? context->impl_->reaction_secondaries_device
                 : sycl::malloc_device<ReactionSecondary>(
-                      reaction_packages->secondaries().size(), queue);
+                      std::max<std::size_t>(reaction_packages->secondaries().size(), 1U),
+                      queue);
         if (use_ct_lung_reaction_packages) {
             ct_lung_reaction_bins_device =
                 sycl::malloc_device<ReactionEnergyBin>(
@@ -1255,6 +1358,40 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                     sycl::malloc_device<ReactionSecondary>(
                         ct_bone_cascade_packages->products().size(), queue);
             }
+        }
+    }
+    // Elastic-only runs do not enter the reaction-package initialization block,
+    // but they still use the same secondary queue and aggregate scorer storage.
+    if (primary_elastic_transport_enabled && !enable_secondary_generation) {
+        queue.memset(secondary_queue_counter_device, 0, sizeof(std::uint64_t));
+        queue.memset(secondary_queue_filled_device, 0, sizeof(std::uint64_t));
+        if (enable_secondary_transport) {
+            if (enable_fragment_species_scoring) {
+                queue.memset(fragment_dose_device, 0,
+                             fragment_species_count * number_of_bins *
+                                 sizeof(DoseAtomicT));
+            }
+            if (restricted_primary_dose_device != nullptr) {
+                queue.memset(restricted_primary_dose_device, 0,
+                             number_of_bins * sizeof(DoseAtomicT));
+            }
+            if (unrestricted_secondary_dose_device != nullptr) {
+                queue.memset(unrestricted_secondary_dose_device, 0,
+                             number_of_bins * sizeof(DoseAtomicT));
+            }
+#ifdef CARBON_VALIDATION_SCORERS
+            if (enable_validation_scorers) {
+                queue.memset(validation_primary_fluence_device, 0,
+                             number_of_bins * sizeof(float));
+                queue.memset(validation_fragment_fluence_device, 0,
+                             fragment_species_count * number_of_bins *
+                                 sizeof(float));
+                queue.memset(validation_survival_device, 0,
+                             number_of_bins * sizeof(std::uint32_t));
+                queue.memset(validation_inelastic_device, 0,
+                             number_of_bins * sizeof(std::uint32_t));
+            }
+#endif
         }
     }
     if (enable_neutral_transport) {
@@ -1878,7 +2015,7 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
           ct_bone_cascade_interactions_device == nullptr ||
           ct_bone_cascade_products_device == nullptr));
     const auto secondary_allocation_failed =
-        enable_secondary_generation &&
+        (enable_secondary_generation || primary_elastic_transport_enabled) &&
         (reaction_bins_device == nullptr || reactions_device == nullptr ||
          reaction_secondaries_device == nullptr || secondary_queue_device == nullptr ||
          (use_ct_lung_reaction_packages &&
@@ -1926,6 +2063,13 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
          (particle_sp_ratio_device == nullptr ||
           particle_delta_fraction_device == nullptr ||
           particle_species_present_device == nullptr)) ||
+        (primary_elastic_transport_enabled &&
+         (elastic_cross_section_device == nullptr ||
+          elastic_package_storage->empty() || elastic_interactions_device == nullptr ||
+          elastic_local_deposit_device == nullptr || elastic_queued_energy_device == nullptr ||
+          elastic_queued_charged_energy_device == nullptr ||
+          elastic_queued_neutral_energy_device == nullptr ||
+          elastic_overflow_device == nullptr || elastic_overflow_energy_device == nullptr)) ||
         (enable_depth_let_scoring && let_moments_device == nullptr) ||
         (enable_voxel_let_scoring &&
          voxel_let_moments_device == nullptr) ||
@@ -1951,6 +2095,7 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
         secondary_allocation_failed || neutral_allocation_failed) {
         free_immutable_device(table_device);
         free_immutable_device(cross_section_device);
+        free_device(elastic_cross_section_device);
         free_device(let_delta_fraction_device);
         free_device(particle_sp_ratio_device);
         free_device(particle_delta_fraction_device);
@@ -1973,6 +2118,13 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
         free_device(deposited_device);
         free_device(escaped_device);
         free_device(nuclear_device);
+        free_device(elastic_interactions_device);
+        free_device(elastic_local_deposit_device);
+        free_device(elastic_queued_energy_device);
+        free_device(elastic_queued_charged_energy_device);
+        free_device(elastic_queued_neutral_energy_device);
+        free_device(elastic_overflow_device);
+        free_device(elastic_overflow_energy_device);
         free_device(steps_device);
         free_device(profile_counters_device);
         free_device(primary_spots_device);
@@ -2057,6 +2209,15 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
         queue.copy(cross_section_host.data(), cross_section_device, cross_section_table_size);
         queue.wait_and_throw();
     }
+    if (primary_elastic_transport_enabled) {
+        std::vector<float> elastic_cross_section_host(elastic_cross_section->values().size());
+        std::transform(elastic_cross_section->values().begin(),
+                       elastic_cross_section->values().end(),
+                       elastic_cross_section_host.begin(),
+                       [](double value) { return static_cast<float>(value); });
+        queue.copy(elastic_cross_section_host.data(), elastic_cross_section_device,
+                   elastic_cross_section_host.size()).wait_and_throw();
+    }
     if (use_let_delta_fraction_table) {
         queue.copy(let_delta_fraction_host.data(), let_delta_fraction_device,
                    table_size)
@@ -2112,6 +2273,22 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                   << std::flush;
     }
     queue.memset(dose_device, 0, number_of_bins * sizeof(DoseAtomicT));
+    if (primary_elastic_transport_enabled) {
+        queue.memset(elastic_interactions_device, 0,
+                     number_of_histories * sizeof(std::uint32_t));
+        queue.memset(elastic_local_deposit_device, 0,
+                     number_of_histories * sizeof(float));
+        queue.memset(elastic_queued_energy_device, 0,
+                     number_of_histories * sizeof(float));
+        queue.memset(elastic_queued_charged_energy_device, 0,
+                     number_of_histories * sizeof(float));
+        queue.memset(elastic_queued_neutral_energy_device, 0,
+                     number_of_histories * sizeof(float));
+        queue.memset(elastic_overflow_device, 0,
+                     number_of_histories * sizeof(std::uint32_t));
+        queue.memset(elastic_overflow_energy_device, 0,
+                     number_of_histories * sizeof(float));
+    }
     if (enable_depth_let_scoring) {
         queue.memset(let_moments_device, 0,
                      4 * number_of_bins * sizeof(LetAtomicT));
@@ -2459,6 +2636,8 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
     const auto enable_tps_source = config.uses_fixed_patient_coordinates();
     const auto random_seed = config.random_seed;
     const auto enable_primary_attenuation = config.enable_primary_attenuation;
+    const auto enable_primary_elastic_interactions =
+        primary_elastic_transport_enabled;
     const auto primary_inelastic_xs_scale =
         static_cast<float>(config.primary_inelastic_xs_scale);
     const auto enable_flat_source = config.enable_flat_source;
@@ -2516,6 +2695,23 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
         static_cast<float>(cross_section.energies().front());
     const auto inverse_cross_section_step =
         1.0f / static_cast<float>(cross_section.energies()[1] - cross_section.energies()[0]);
+    const auto elastic_cross_section_table_size =
+        primary_elastic_transport_enabled
+            ? elastic_cross_section->values().size()
+            : std::size_t{0};
+    const auto minimum_elastic_cross_section_energy =
+        primary_elastic_transport_enabled
+            ? static_cast<float>(elastic_cross_section->energies().front())
+            : 0.0F;
+    const auto inverse_elastic_cross_section_step =
+        primary_elastic_transport_enabled
+            ? 1.0F / static_cast<float>(elastic_cross_section->energies()[1] -
+                                        elastic_cross_section->energies()[0])
+            : 0.0F;
+    const auto elastic_package_view =
+        primary_elastic_transport_enabled
+            ? elastic_package_storage->device_view()
+            : ElasticPackageDeviceView{};
     const auto reaction_energy_bin_count =
         enable_secondary_generation
             ? static_cast<std::uint32_t>(reaction_packages->energy_bins().size())
@@ -2853,6 +3049,14 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
             const auto attenuation_uniform = sycl::fmax(
                 rng::uniform01(spot_seed, rng_history, 0, 9), 1.0e-12F);
             auto remaining_interaction_lengths = -sycl::log(attenuation_uniform);
+            // Keep the established single-channel sampler byte-for-byte intact
+            // when elastic interactions are disabled.  The enabled path owns
+            // independent optical-depth clocks for the two discrete processes.
+            IndependentInteractionClocks independent_interaction_clocks{};
+            constexpr std::uint32_t primary_elastic_tau_dimension = 64U;
+            constexpr std::uint32_t primary_inelastic_tau_dimension = 96U;
+            constexpr std::uint32_t primary_elastic_package_dimension = 128U;
+            constexpr std::uint32_t primary_inelastic_package_dimension = 160U;
             constexpr std::uint32_t max_primary_steps = 2'000'000U;
             while (energy_MeV > energy_cutoff_MeV && steps < max_primary_steps) {
                 const auto escaped_z =
@@ -3069,11 +3273,141 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                     step_mm = sycl::fmin(
                         step_mm, (boundary_y_mm - position_y_mm) / direction_y);
                 }
+                float primary_elastic_cross_section_per_mm = 0.0F;
+                float primary_inelastic_hazard_per_mm = 0.0F;
+                IndependentInteractionProposal primary_interaction_proposal{};
+                auto primary_interaction_event_selected = false;
+                if (enable_primary_elastic_interactions &&
+                    enable_primary_attenuation && energy_MeV > energy_cutoff_MeV) {
+                    // Discrete hazards are evaluated at the beginning of the
+                    // condensed step.  This lets the shortest interaction
+                    // distance clamp the EM/MCS step before any energy is lost.
+                    const auto attenuation_energy_MeVu = energy_MeVu;
+                    auto cross_section_floating_index =
+                        (attenuation_energy_MeVu - minimum_cross_section_energy) *
+                        inverse_cross_section_step;
+                    auto cross_section_index = static_cast<int>(sycl::floor(
+                        cross_section_floating_index));
+                    cross_section_index = sycl::max(
+                        0, sycl::min(cross_section_index,
+                                     static_cast<int>(cross_section_table_size) - 2));
+                    const auto cross_section_fraction = sycl::clamp(
+                        cross_section_floating_index -
+                            static_cast<float>(cross_section_index),
+                        0.0F, 1.0F);
+                    float macroscopic_cross_section_per_mm = 0.0F;
+                    if (enable_ct_grid) {
+                        if (use_ct_material_xs && in_ct && ct_xs_device != nullptr &&
+                            ct_ref_density_device != nullptr) {
+                            const auto mat = static_cast<std::uint32_t>(
+                                ct_cross_section_material_index(
+                                    ct_material,
+                                    ct_material_ids_are_schneider_sections,
+                                    use_ct_schneider_xs));
+                            const auto base = mat * cross_section_table_size;
+                            const auto xs_abs =
+                                ct_xs_device[base +
+                                             static_cast<std::size_t>(cross_section_index)] +
+                                cross_section_fraction *
+                                    (ct_xs_device[
+                                         base + static_cast<std::size_t>(cross_section_index) +
+                                         1] -
+                                     ct_xs_device[
+                                         base + static_cast<std::size_t>(cross_section_index)]);
+                            const auto ref_rho =
+                                sycl::fmax(ct_ref_density_device[mat], 1.0e-6F);
+                            macroscopic_cross_section_per_mm =
+                                xs_abs *
+                                (sycl::fmax(local_density_g_per_cm3, 1.0e-6F) /
+                                 ref_rho);
+                        } else {
+                            const auto water_xs =
+                                cross_section_device[cross_section_index] +
+                                cross_section_fraction *
+                                    (cross_section_device[cross_section_index + 1] -
+                                     cross_section_device[cross_section_index]);
+                            macroscopic_cross_section_per_mm =
+                                water_xs * sycl::fmax(local_density_g_per_cm3, 1.0e-6F);
+                        }
+                    } else if (in_insert && use_insert_material_tables) {
+                        macroscopic_cross_section_per_mm =
+                            insert_xs_device[static_cast<std::size_t>(cross_section_index)] +
+                            cross_section_fraction *
+                                (insert_xs_device[static_cast<std::size_t>(
+                                                      cross_section_index) +
+                                                  1] -
+                                 insert_xs_device[static_cast<std::size_t>(
+                                     cross_section_index)]);
+                    } else if (material_table_count > 0) {
+                        const auto base = static_cast<std::size_t>(layer_for_material) *
+                                          cross_section_table_size;
+                        macroscopic_cross_section_per_mm =
+                            material_xs_device[base +
+                                               static_cast<std::size_t>(cross_section_index)] +
+                            cross_section_fraction *
+                                (material_xs_device[
+                                     base + static_cast<std::size_t>(cross_section_index) + 1] -
+                                 material_xs_device[
+                                     base + static_cast<std::size_t>(cross_section_index)]);
+                    } else {
+                        macroscopic_cross_section_per_mm =
+                            cross_section_device[cross_section_index] +
+                            cross_section_fraction *
+                                (cross_section_device[cross_section_index + 1] -
+                                 cross_section_device[cross_section_index]);
+                        if (slab_layer_count > 0 || in_insert) {
+                            macroscopic_cross_section_per_mm *= local_density_g_per_cm3;
+                        }
+                    }
+                    auto elastic_index_floating =
+                        (attenuation_energy_MeVu - minimum_elastic_cross_section_energy) *
+                        inverse_elastic_cross_section_step;
+                    auto elastic_index = static_cast<int>(sycl::floor(
+                        elastic_index_floating));
+                    elastic_index = sycl::max(
+                        0, sycl::min(elastic_index,
+                                     static_cast<int>(elastic_cross_section_table_size) - 2));
+                    const auto elastic_fraction = sycl::clamp(
+                        elastic_index_floating - static_cast<float>(elastic_index),
+                        0.0F, 1.0F);
+                    primary_elastic_cross_section_per_mm =
+                        elastic_cross_section_device[elastic_index] +
+                        elastic_fraction *
+                            (elastic_cross_section_device[elastic_index + 1] -
+                             elastic_cross_section_device[elastic_index]);
+                    if (slab_layer_count > 0 || in_insert || enable_ct_grid) {
+                        primary_elastic_cross_section_per_mm *= local_density_g_per_cm3;
+                    }
+                    primary_inelastic_hazard_per_mm =
+                        history_primary_inelastic_xs_scale *
+                        macroscopic_cross_section_per_mm;
+
+                    const IndependentInteractionRng interaction_rng{
+                        spot_seed, rng_history, steps,
+                        primary_elastic_tau_dimension,
+                        primary_inelastic_tau_dimension};
+                    const auto ensure_status = ensure_independent_interaction_clocks(
+                        independent_interaction_clocks,
+                        primary_elastic_cross_section_per_mm,
+                        primary_inelastic_hazard_per_mm, interaction_rng);
+                    if (ensure_status == IndependentInteractionStatus::no_event) {
+                        primary_interaction_proposal =
+                            propose_independent_interaction_step(
+                                independent_interaction_clocks,
+                                primary_elastic_cross_section_per_mm,
+                                primary_inelastic_hazard_per_mm);
+                        if (primary_interaction_proposal.event() &&
+                            primary_interaction_proposal.distance_mm <= step_mm) {
+                            step_mm = primary_interaction_proposal.distance_mm;
+                            primary_interaction_event_selected = true;
+                        }
+                    }
+                }
                 // Accept CT micro-steps (DDA already avoids zero-length face clamps).
                 // Only snap/nudge when the step is non-positive or non-CT thrash.
                 const auto min_step_accept =
                     (enable_ct_grid && in_ct) ? 1.0e-8F : 1.0e-6F;
-                if (step_mm <= min_step_accept) {
+                if (step_mm <= min_step_accept && !primary_interaction_event_selected) {
                     constexpr auto infinity =
                         std::numeric_limits<float>::infinity();
                     auto snapped_to_boundary = false;
@@ -3463,87 +3797,251 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                 }
                 if (enable_primary_attenuation && energy_MeV > energy_cutoff_MeV) {
                     const auto post_step_energy_MeVu = energy_MeV * inverse_mass_number;
-                    const auto attenuation_energy_MeVu =
-                        (energy_MeV + 0.5F * deposited_MeV) * inverse_mass_number;
-                    auto cross_section_floating_index =
-                        (attenuation_energy_MeVu - minimum_cross_section_energy) *
-                        inverse_cross_section_step;
-                    auto cross_section_index =
-                        static_cast<int>(sycl::floor(cross_section_floating_index));
-                    cross_section_index = sycl::max(
-                        0, sycl::min(cross_section_index,
-                                     static_cast<int>(cross_section_table_size) - 2));
-                    const auto cross_section_fraction = sycl::clamp(
-                        cross_section_floating_index - static_cast<float>(cross_section_index),
-                        0.0f, 1.0f);
-                    float macroscopic_cross_section_per_mm = 0.0F;
-                    if (enable_ct_grid) {
-                        if (use_ct_material_xs && in_ct && ct_xs_device != nullptr &&
-                            ct_ref_density_device != nullptr) {
-                            const auto mat = static_cast<std::uint32_t>(
-                                ct_cross_section_material_index(
-                                    ct_material,
-                                    ct_material_ids_are_schneider_sections,
-                                    use_ct_schneider_xs));
-                            const auto base = mat * cross_section_table_size;
-                            const auto xs_abs =
-                                ct_xs_device[base +
-                                             static_cast<std::size_t>(cross_section_index)] +
-                                cross_section_fraction *
-                                    (ct_xs_device[base + static_cast<std::size_t>(
-                                                              cross_section_index) +
-                                                  1] -
-                                     ct_xs_device[base + static_cast<std::size_t>(
-                                                              cross_section_index)]);
-                            const auto ref_rho =
-                                sycl::fmax(ct_ref_density_device[mat], 1.0e-6F);
+                    auto interaction_event = false;
+                    auto elastic_event_selected = false;
+                    if (enable_primary_elastic_interactions) {
+                        const auto interaction_advance_status =
+                            advance_independent_interaction_clocks(
+                                independent_interaction_clocks,
+                                primary_elastic_cross_section_per_mm,
+                                primary_inelastic_hazard_per_mm, step_mm);
+                        interaction_event =
+                            primary_interaction_event_selected &&
+                            interaction_advance_status ==
+                                IndependentInteractionStatus::no_event;
+                        elastic_event_selected =
+                            interaction_event &&
+                            primary_interaction_proposal.channel ==
+                                IndependentInteractionChannel::elastic;
+                        if (interaction_event) {
+                            const auto commit_status =
+                                commit_independent_interaction_winner(
+                                    independent_interaction_clocks,
+                                    primary_interaction_proposal.channel);
+                            if (commit_status != IndependentInteractionStatus::no_event) {
+                                interaction_event = false;
+                                elastic_event_selected = false;
+                            }
+                        }
+                    } else {
+                        const auto attenuation_energy_MeVu =
+                            (energy_MeV + 0.5F * deposited_MeV) * inverse_mass_number;
+                        auto cross_section_floating_index =
+                            (attenuation_energy_MeVu - minimum_cross_section_energy) *
+                            inverse_cross_section_step;
+                        auto cross_section_index = static_cast<int>(sycl::floor(
+                            cross_section_floating_index));
+                        cross_section_index = sycl::max(
+                            0, sycl::min(cross_section_index,
+                                         static_cast<int>(cross_section_table_size) - 2));
+                        const auto cross_section_fraction = sycl::clamp(
+                            cross_section_floating_index -
+                                static_cast<float>(cross_section_index),
+                            0.0F, 1.0F);
+                        float macroscopic_cross_section_per_mm = 0.0F;
+                        if (enable_ct_grid) {
+                            if (use_ct_material_xs && in_ct && ct_xs_device != nullptr &&
+                                ct_ref_density_device != nullptr) {
+                                const auto mat = static_cast<std::uint32_t>(
+                                    ct_cross_section_material_index(
+                                        ct_material,
+                                        ct_material_ids_are_schneider_sections,
+                                        use_ct_schneider_xs));
+                                const auto base = mat * cross_section_table_size;
+                                const auto xs_abs =
+                                    ct_xs_device[base + static_cast<std::size_t>(
+                                                            cross_section_index)] +
+                                    cross_section_fraction *
+                                        (ct_xs_device[base + static_cast<std::size_t>(
+                                                            cross_section_index) + 1] -
+                                         ct_xs_device[base + static_cast<std::size_t>(
+                                                            cross_section_index)]);
+                                const auto ref_rho =
+                                    sycl::fmax(ct_ref_density_device[mat], 1.0e-6F);
+                                macroscopic_cross_section_per_mm =
+                                    xs_abs *
+                                    (sycl::fmax(local_density_g_per_cm3, 1.0e-6F) /
+                                     ref_rho);
+                            } else {
+                                const auto water_xs =
+                                    cross_section_device[cross_section_index] +
+                                    cross_section_fraction *
+                                        (cross_section_device[cross_section_index + 1] -
+                                         cross_section_device[cross_section_index]);
+                                macroscopic_cross_section_per_mm =
+                                    water_xs * sycl::fmax(local_density_g_per_cm3, 1.0e-6F);
+                            }
+                        } else if (in_insert && use_insert_material_tables) {
                             macroscopic_cross_section_per_mm =
-                                xs_abs *
-                                (sycl::fmax(local_density_g_per_cm3, 1.0e-6F) / ref_rho);
+                                insert_xs_device[static_cast<std::size_t>(cross_section_index)] +
+                                cross_section_fraction *
+                                    (insert_xs_device[static_cast<std::size_t>(
+                                                          cross_section_index) + 1] -
+                                     insert_xs_device[static_cast<std::size_t>(
+                                         cross_section_index)]);
+                        } else if (material_table_count > 0) {
+                            const auto base = static_cast<std::size_t>(layer_for_material) *
+                                              cross_section_table_size;
+                            macroscopic_cross_section_per_mm =
+                                material_xs_device[base + static_cast<std::size_t>(
+                                                              cross_section_index)] +
+                                cross_section_fraction *
+                                    (material_xs_device[base + static_cast<std::size_t>(
+                                                                    cross_section_index) + 1] -
+                                     material_xs_device[base + static_cast<std::size_t>(
+                                                                    cross_section_index)]);
                         } else {
-                            const auto water_xs =
+                            macroscopic_cross_section_per_mm =
                                 cross_section_device[cross_section_index] +
                                 cross_section_fraction *
                                     (cross_section_device[cross_section_index + 1] -
                                      cross_section_device[cross_section_index]);
-                            macroscopic_cross_section_per_mm =
-                                water_xs * sycl::fmax(local_density_g_per_cm3, 1.0e-6F);
+                            if (slab_layer_count > 0 || in_insert) {
+                                macroscopic_cross_section_per_mm *= local_density_g_per_cm3;
+                            }
                         }
-                    } else if (in_insert && use_insert_material_tables) {
-                        macroscopic_cross_section_per_mm =
-                            insert_xs_device[static_cast<std::size_t>(cross_section_index)] +
-                            cross_section_fraction *
-                                (insert_xs_device[static_cast<std::size_t>(
-                                                      cross_section_index) +
-                                                  1] -
-                                 insert_xs_device[static_cast<std::size_t>(
-                                     cross_section_index)]);
-                    } else if (material_table_count > 0) {
-                        const auto base = static_cast<std::size_t>(layer_for_material) *
-                                          cross_section_table_size;
-                        macroscopic_cross_section_per_mm =
-                            material_xs_device[base + static_cast<std::size_t>(
-                                                          cross_section_index)] +
-                            cross_section_fraction *
-                                (material_xs_device[base + static_cast<std::size_t>(
-                                                                cross_section_index) +
-                                                    1] -
-                                 material_xs_device[base + static_cast<std::size_t>(
-                                                                cross_section_index)]);
-                    } else {
-                        macroscopic_cross_section_per_mm =
-                            cross_section_device[cross_section_index] +
-                            cross_section_fraction *
-                                (cross_section_device[cross_section_index + 1] -
-                                 cross_section_device[cross_section_index]);
-                        if (slab_layer_count > 0 || in_insert) {
-                            macroscopic_cross_section_per_mm *= local_density_g_per_cm3;
-                        }
+                        const auto inelastic_hazard_per_mm =
+                            history_primary_inelastic_xs_scale *
+                            macroscopic_cross_section_per_mm;
+                        const auto total_hazard_per_mm = inelastic_hazard_per_mm;
+                        remaining_interaction_lengths -=
+                            total_hazard_per_mm * step_mm;
+                        interaction_event = remaining_interaction_lengths <= 0.0F;
                     }
-                    remaining_interaction_lengths -=
-                        history_primary_inelastic_xs_scale *
-                        macroscopic_cross_section_per_mm * step_mm;
-                    if (remaining_interaction_lengths <= 0.0F) {
+                    if (interaction_event) {
+                        if (elastic_event_selected) {
+                            const auto sampled = sample_elastic_event_for_energy(
+                                elastic_package_view, post_step_energy_MeVu,
+                                rng::uniform01(spot_seed, rng_history, steps,
+                                               primary_elastic_package_dimension));
+                            ElasticQueuedProduct elastic_products[32]{};
+                            ElasticPrimaryState elastic_current{};
+                            elastic_current.incoming_energy_MeV = energy_MeV;
+                            elastic_current.incoming_direction =
+                                ElasticDirection3F{direction_x, direction_y, direction_z};
+                            elastic_current.outgoing_energy_MeV = energy_MeV;
+                            elastic_current.outgoing_direction =
+                                elastic_current.incoming_direction;
+                            elastic_current.active = true;
+                            ElasticPrimaryState elastic_next{};
+                            const auto elastic_application = apply_elastic_event(
+                                elastic_package_view, sampled, elastic_current,
+                                ElasticProductOutputSpan{elastic_products, 32}, elastic_next);
+                            if (!elastic_application.success()) {
+                                // A malformed event must make progress and preserve
+                                // the total-energy ledger rather than spin at one step.
+                                deposit_local_heat_device(
+                                    energy_MeV, position_x_mm, position_y_mm,
+                                    position_z_mm, direction_x, direction_y, direction_z,
+                                    depth_bin_width_mm, phantom_length_mm, number_of_bins,
+                                    enable_voxel_scoring, voxel_min_x_mm, voxel_min_y_mm,
+                                    voxel_size_x_mm, voxel_size_y_mm, voxel_bins_x,
+                                    voxel_bins_y, voxel_plane_size, dose_device, nullptr, 0,
+                                    voxel_dose_device, enable_charged_origin_voxel_scoring,
+                                    charged_origin_voxel_dose_device, 0,
+                                    nuclear_residual_heat_mfp_mm);
+                                history_deposited_MeV += energy_MeV;
+                                energy_MeV = 0.0F;
+                            } else {
+                                ++elastic_interactions_device[global_history];
+                                const auto local_elastic_MeV =
+                                    elastic_application.local_deposit_MeV;
+                                if (local_elastic_MeV > 0.0F) {
+                                    deposit_local_heat_device(
+                                        local_elastic_MeV, position_x_mm, position_y_mm,
+                                        position_z_mm, direction_x, direction_y, direction_z,
+                                        depth_bin_width_mm, phantom_length_mm, number_of_bins,
+                                        enable_voxel_scoring, voxel_min_x_mm, voxel_min_y_mm,
+                                        voxel_size_x_mm, voxel_size_y_mm, voxel_bins_x,
+                                        voxel_bins_y, voxel_plane_size, dose_device, nullptr, 0,
+                                        voxel_dose_device,
+                                        enable_charged_origin_voxel_scoring,
+                                        charged_origin_voxel_dose_device, 0,
+                                        nuclear_residual_heat_mfp_mm);
+                                    history_deposited_MeV += local_elastic_MeV;
+                                    elastic_local_deposit_device[global_history] +=
+                                        local_elastic_MeV;
+                                }
+                                if (enable_secondary_transport &&
+                                    secondary_queue_counter_device != nullptr &&
+                                    (enable_neutral_transport ||
+                                     elastic_application.queued_neutral_count == 0)) {
+                                    ElasticDeviceQueueStorage elastic_queue_storage{
+                                        secondary_queue_device,
+                                        secondary_queue_capacity,
+                                        secondary_queue_counter_device,
+                                        secondary_queue_filled_device,
+                                        neutral_queue_device,
+                                        neutral_queue_capacity,
+                                        neutral_queue_counter_device,
+                                        neutral_queue_filled_device,
+                                        enable_neutral_transport};
+                                    const ElasticQueueParentMetadata parent{
+                                        position_x_mm, position_y_mm, position_z_mm, 0.0F,
+                                        0, static_cast<std::int16_t>(primary_atomic_number),
+                                        static_cast<std::int16_t>(primary_mass_number), 0, 0,
+                                        rng::child_stream(global_history,
+                                                          rng::branch_role_primary_charged),
+                                        steps, ElasticQueueOrigin::elastic};
+                                    const auto commit = commit_elastic_queues(
+                                        elastic_application,
+                                        ElasticProductOutputSpan{elastic_products, 32}, parent,
+                                        elastic_queue_storage);
+                                    elastic_queued_energy_device[global_history] +=
+                                        commit.written_energy_MeV;
+                                    elastic_queued_charged_energy_device[global_history] +=
+                                        commit.written_charged_energy_MeV;
+                                    elastic_queued_neutral_energy_device[global_history] +=
+                                        commit.written_neutral_energy_MeV;
+                                    elastic_overflow_device[global_history] +=
+                                        commit.dropped_count;
+                                    elastic_overflow_energy_device[global_history] +=
+                                        commit.dropped_energy_MeV;
+                                    if (commit.dropped_energy_MeV > 0.0F) {
+                                        deposit_local_heat_device(
+                                            commit.dropped_energy_MeV, position_x_mm,
+                                            position_y_mm, position_z_mm, direction_x,
+                                            direction_y, direction_z, depth_bin_width_mm,
+                                            phantom_length_mm, number_of_bins,
+                                            enable_voxel_scoring, voxel_min_x_mm,
+                                            voxel_min_y_mm, voxel_size_x_mm, voxel_size_y_mm,
+                                            voxel_bins_x, voxel_bins_y, voxel_plane_size,
+                                            dose_device, nullptr, 0, voxel_dose_device,
+                                            enable_charged_origin_voxel_scoring,
+                                            charged_origin_voxel_dose_device, 0,
+                                            nuclear_residual_heat_mfp_mm);
+                                        history_deposited_MeV +=
+                                            commit.dropped_energy_MeV;
+                                        elastic_local_deposit_device[global_history] +=
+                                            commit.dropped_energy_MeV;
+                                    }
+                                } else {
+                                    const auto fallback_energy =
+                                        elastic_application.queued_charged_energy_MeV +
+                                        elastic_application.queued_neutral_energy_MeV;
+                                    if (fallback_energy > 0.0F) {
+                                        deposit_local_heat_device(
+                                            fallback_energy, position_x_mm, position_y_mm,
+                                            position_z_mm, direction_x, direction_y, direction_z,
+                                            depth_bin_width_mm, phantom_length_mm, number_of_bins,
+                                            enable_voxel_scoring, voxel_min_x_mm, voxel_min_y_mm,
+                                            voxel_size_x_mm, voxel_size_y_mm, voxel_bins_x,
+                                            voxel_bins_y, voxel_plane_size, dose_device, nullptr, 0,
+                                            voxel_dose_device,
+                                            enable_charged_origin_voxel_scoring,
+                                            charged_origin_voxel_dose_device, 0,
+                                            nuclear_residual_heat_mfp_mm);
+                                        history_deposited_MeV += fallback_energy;
+                                        elastic_local_deposit_device[global_history] +=
+                                            fallback_energy;
+                                    }
+                                }
+                                energy_MeV = elastic_next.outgoing_energy_MeV;
+                                direction_x = elastic_next.outgoing_direction.x;
+                                direction_y = elastic_next.outgoing_direction.y;
+                                direction_z = elastic_next.outgoing_direction.z;
+                            }
+                        } else {
                         history_nuclear_MeV = energy_MeV;
 #ifdef CARBON_VALIDATION_SCORERS
                         if (enable_validation_scorers) {
@@ -3641,7 +4139,10 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                             const auto reaction_bin =
                                 active_reaction_bins[reaction_bin_index];
                             const auto package_uniform =
-                                rng::uniform01(spot_seed, rng_history, steps, 3);
+                                enable_primary_elastic_interactions
+                                    ? rng::uniform01(spot_seed, rng_history, steps,
+                                                     primary_inelastic_package_dimension)
+                                    : rng::uniform01(spot_seed, rng_history, steps, 3);
                             const auto package_in_bin = sycl::min(
                                 static_cast<std::uint32_t>(
                                     package_uniform * reaction_bin.reaction_count),
@@ -3955,6 +4456,7 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                                 nuclear_residual_heat_mfp_mm);
                         }
                         energy_MeV = 0.0f;
+                        }
                     }
                 }
                 ++steps;
@@ -6821,6 +7323,13 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
     std::vector<float> deposited_host(number_of_histories);
     std::vector<float> escaped_host(number_of_histories);
     std::vector<float> nuclear_host(number_of_histories);
+    std::vector<std::uint32_t> elastic_interactions_host;
+    std::vector<float> elastic_local_deposit_host;
+    std::vector<float> elastic_queued_energy_host;
+    std::vector<float> elastic_queued_charged_energy_host;
+    std::vector<float> elastic_queued_neutral_energy_host;
+    std::vector<std::uint32_t> elastic_overflow_host;
+    std::vector<float> elastic_overflow_energy_host;
     std::vector<std::uint32_t> steps_host(number_of_histories);
     std::vector<SecondaryGenerationSummary> secondary_summaries_host;
     std::vector<DoseAtomicT> fragment_dose_atomic_host;
@@ -6929,6 +7438,29 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
     queue.copy(deposited_device, deposited_host.data(), number_of_histories);
     queue.copy(escaped_device, escaped_host.data(), number_of_histories);
     queue.copy(nuclear_device, nuclear_host.data(), number_of_histories);
+    if (primary_elastic_transport_enabled) {
+        elastic_interactions_host.resize(number_of_histories);
+        elastic_local_deposit_host.resize(number_of_histories);
+        elastic_queued_energy_host.resize(number_of_histories);
+        elastic_queued_charged_energy_host.resize(number_of_histories);
+        elastic_queued_neutral_energy_host.resize(number_of_histories);
+        elastic_overflow_host.resize(number_of_histories);
+        elastic_overflow_energy_host.resize(number_of_histories);
+        queue.copy(elastic_interactions_device, elastic_interactions_host.data(),
+                   number_of_histories);
+        queue.copy(elastic_local_deposit_device, elastic_local_deposit_host.data(),
+                   number_of_histories);
+        queue.copy(elastic_queued_energy_device, elastic_queued_energy_host.data(),
+                   number_of_histories);
+        queue.copy(elastic_queued_charged_energy_device,
+                   elastic_queued_charged_energy_host.data(), number_of_histories);
+        queue.copy(elastic_queued_neutral_energy_device,
+                   elastic_queued_neutral_energy_host.data(), number_of_histories);
+        queue.copy(elastic_overflow_device, elastic_overflow_host.data(),
+                   number_of_histories);
+        queue.copy(elastic_overflow_energy_device, elastic_overflow_energy_host.data(),
+                   number_of_histories);
+    }
     queue.copy(steps_device, steps_host.data(), number_of_histories).wait_and_throw();
     if (enable_secondary_generation) {
         secondary_summaries_host.resize(number_of_histories);
@@ -7041,6 +7573,7 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
 
     free_immutable_device(table_device);
     free_immutable_device(cross_section_device);
+    free_device(elastic_cross_section_device);
     free_device(let_delta_fraction_device);
     free_device(particle_sp_ratio_device);
     free_device(particle_delta_fraction_device);
@@ -7063,6 +7596,13 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
     free_device(deposited_device);
     free_device(escaped_device);
     free_device(nuclear_device);
+    free_device(elastic_interactions_device);
+    free_device(elastic_local_deposit_device);
+    free_device(elastic_queued_energy_device);
+    free_device(elastic_queued_charged_energy_device);
+    free_device(elastic_queued_neutral_energy_device);
+    free_device(elastic_overflow_device);
+    free_device(elastic_overflow_energy_device);
     free_device(steps_device);
     free_device(profile_counters_device);
     free_device(primary_spots_device);
@@ -7367,6 +7907,24 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
         std::accumulate(nuclear_host.begin(), nuclear_host.end(), 0.0);
     result.nuclear_interactions = static_cast<std::uint64_t>(std::count_if(
         nuclear_host.begin(), nuclear_host.end(), [](float energy) { return energy > 0.0f; }));
+    if (primary_elastic_transport_enabled) {
+        result.primary_elastic_interactions = std::accumulate(
+            elastic_interactions_host.begin(), elastic_interactions_host.end(),
+            std::uint64_t{0});
+        result.elastic_local_deposited_energy_MeV = std::accumulate(
+            elastic_local_deposit_host.begin(), elastic_local_deposit_host.end(), 0.0);
+        result.elastic_queued_charged_energy_MeV = std::accumulate(
+            elastic_queued_charged_energy_host.begin(),
+            elastic_queued_charged_energy_host.end(), 0.0);
+        result.elastic_queued_neutral_energy_MeV = std::accumulate(
+            elastic_queued_neutral_energy_host.begin(),
+            elastic_queued_neutral_energy_host.end(), 0.0);
+        result.elastic_queue_overflow = std::accumulate(
+            elastic_overflow_host.begin(), elastic_overflow_host.end(), std::uint64_t{0});
+        result.elastic_queue_overflow_energy_MeV = std::accumulate(
+            elastic_overflow_energy_host.begin(), elastic_overflow_energy_host.end(), 0.0);
+        result.backend += "+primary-elastic";
+    }
     if (enable_secondary_generation) {
         result.sampled_reaction_packages = result.nuclear_interactions;
         for (const auto& summary : secondary_summaries_host) {

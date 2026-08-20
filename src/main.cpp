@@ -1,10 +1,12 @@
 #include "carbon/cascade_package.hpp"
 #include "carbon/cli.hpp"
 #include "carbon/cross_section.hpp"
+#include "carbon/elastic_package.hpp"
 #include "carbon/ct_grid.hpp"
 #include "carbon/io.hpp"
 #include "carbon/neutral_package.hpp"
 #include "carbon/plan_run.hpp"
+#include "carbon/package_identity.hpp"
 #include "carbon/reaction_package.hpp"
 #include "carbon/stopping_power.hpp"
 #include "carbon/topas_spots.hpp"
@@ -56,19 +58,69 @@ int main(int argc, char* argv[]) {
         const auto* upstream_air_stopping_power_ptr =
             upstream_air_stopping_power ? &*upstream_air_stopping_power : nullptr;
         const auto cross_section =
-            carbon::CrossSectionTable::from_csv(config.nuclear_cross_section_file);
+            carbon::CrossSectionTable::from_csv(config.primary_inelastic_cross_section_file);
+        std::optional<carbon::CrossSectionTable> elastic_cross_section;
+        std::optional<carbon::ElasticPackageTable> elastic_packages;
+        if (config.enable_primary_elastic_interactions) {
+            elastic_cross_section = carbon::CrossSectionTable::from_csv(
+                config.primary_elastic_cross_section_file);
+            const auto& elastic_energies = elastic_cross_section->energies();
+            if (elastic_energies.empty() ||
+                elastic_energies.front() > config.initial_energy_MeVu ||
+                elastic_energies.back() < config.initial_energy_MeVu) {
+                throw std::invalid_argument(
+                    "primary elastic cross-section table must cover the "
+                    "configured initial energy (and its zero-energy clamp)");
+            }
+            carbon::validate_package_identity(
+                config.primary_elastic_package_file,
+                {"elastic", config.primary_atomic_number,
+                 config.primary_mass_number, "G4_WATER",
+                 config.primary_elastic_package_physics_model, 0.0,
+                 config.initial_energy_MeVu},
+                config.package_identity_validation,
+                config.package_identity_override_manifest_file);
+            elastic_packages = carbon::ElasticPackageTable::from_binary(
+                config.primary_elastic_package_file);
+            std::cout << "Elastic cross section: "
+                      << elastic_cross_section->energies().size()
+                      << " bins, energy range="
+                      << elastic_cross_section->energies().front() << ".."
+                      << elastic_cross_section->energies().back()
+                      << " MeV/u\n"
+                      << "Elastic packages: bins="
+                      << elastic_packages->energy_bins().size()
+                      << "; events=" << elastic_packages->events().size()
+                      << "; products=" << elastic_packages->products().size()
+                      << "; model="
+                      << config.primary_elastic_package_physics_model << '\n';
+        }
         std::optional<carbon::ReactionPackageTable> reaction_packages;
         std::optional<carbon::CascadePackageTable> cascade_packages;
         std::optional<carbon::NeutralPackageTable> neutral_packages;
         if (config.enable_secondary_generation) {
+            carbon::validate_package_identity(
+                config.primary_reaction_package_file,
+                {"reaction", config.primary_atomic_number, config.primary_mass_number,
+                 "G4_WATER", config.primary_package_physics_model, 0.0,
+                 config.initial_energy_MeVu},
+                config.package_identity_validation,
+                config.package_identity_override_manifest_file);
             reaction_packages =
-                carbon::ReactionPackageTable::from_binary(config.reaction_package_file);
+                carbon::ReactionPackageTable::from_binary(config.primary_reaction_package_file);
             std::cout << "Reaction packages: " << reaction_packages->reactions().size()
                       << "; direct secondaries: " << reaction_packages->secondaries().size()
                       << "; local deposit: Geant4 package"
                       << '\n';
         }
         if (config.enable_fragment_cascade) {
+            carbon::validate_package_identity(
+                config.cascade_package_file,
+                {"cascade", config.primary_atomic_number, config.primary_mass_number,
+                 "G4_WATER", config.cascade_package_physics_model, 0.0,
+                 config.initial_energy_MeVu},
+                config.package_identity_validation,
+                config.package_identity_override_manifest_file);
             cascade_packages =
                 carbon::CascadePackageTable::from_binary(config.cascade_package_file);
             std::cout << "Cascade projectiles: " << cascade_packages->projectiles().size()
@@ -229,6 +281,7 @@ int main(int argc, char* argv[]) {
                       << config.number_of_histories << " histories\n";
             result = carbon::run_transport(batch_config, stopping_power, cross_section,
                                    reaction_packages, cascade_packages, neutral_packages,
+                                   elastic_cross_section, elastic_packages,
                                    sycl_context);
             if (!plan.spots.empty()) {
                 config.initial_energy_MeVu = plan.spots.front().energy_MeVu;
@@ -370,6 +423,7 @@ int main(int argc, char* argv[]) {
                           << total_histories << " histories\n";
                 result = carbon::run_transport(batch_config, stopping_power, cross_section,
                                        reaction_packages, cascade_packages, neutral_packages,
+                                       elastic_cross_section, elastic_packages,
                                        sycl_context);
             } else {
                 for (std::size_t i = 0; i < plan.spots.size(); ++i) {
@@ -380,7 +434,8 @@ int main(int argc, char* argv[]) {
                     spot_config.validate();
                     auto spot_result = carbon::run_transport(
                         spot_config, stopping_power, cross_section, reaction_packages,
-                        cascade_packages, neutral_packages, sycl_context);
+                        cascade_packages, neutral_packages, elastic_cross_section,
+                        elastic_packages, sycl_context);
                     if (i == 0) {
                         result = std::move(spot_result);
                     } else {
@@ -401,7 +456,8 @@ int main(int argc, char* argv[]) {
             }
         } else {
             result = carbon::run_transport(config, stopping_power, cross_section, reaction_packages,
-                                   cascade_packages, neutral_packages);
+                                   cascade_packages, neutral_packages,
+                                   elastic_cross_section, elastic_packages, nullptr);
         }
 
         // MeV energy-deposition scorers (empty path disables that file).
@@ -490,7 +546,17 @@ int main(int argc, char* argv[]) {
                   << " s charged-after-neutral="
                   << result.charged_after_neutral_kernel_seconds << " s\n"
                   << "Energy balance error: " << result.relative_energy_balance_error() << '\n'
-                  << "Nuclear interactions: " << result.nuclear_interactions << '\n';
+                  << "Nuclear interactions: " << result.nuclear_interactions << '\n'
+                  << "Primary elastic interactions: "
+                  << result.primary_elastic_interactions
+                  << " (local=" << result.elastic_local_deposited_energy_MeV
+                  << " MeV, queued charged="
+                  << result.elastic_queued_charged_energy_MeV
+                  << " MeV, queued neutral="
+                  << result.elastic_queued_neutral_energy_MeV
+                  << " MeV, overflow=" << result.elastic_queue_overflow
+                  << ", overflow energy="
+                  << result.elastic_queue_overflow_energy_MeV << " MeV)\n";
         if (result.minibeam.enabled) {
             const auto count = static_cast<double>(
                 result.minibeam.water_entrance_primary_c12);

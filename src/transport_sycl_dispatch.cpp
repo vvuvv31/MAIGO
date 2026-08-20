@@ -13,19 +13,26 @@ TransportResult transport_sycl(const TransportConfig& config,
                                const ReactionPackageTable* reaction_packages,
                                const CascadePackageTable* cascade_packages,
                                const NeutralPackageTable* neutral_packages,
-                               SyclTransportContext* context) {
+                               SyclTransportContext* context,
+                               const CrossSectionTable* elastic_cross_section,
+                               const ElasticPackageTable* elastic_packages) {
 #if defined(CARBON_ENABLE_MINIBEAM)
     if (config.enable_minibeam) {
+        if (config.enable_primary_elastic_interactions) {
+            throw std::invalid_argument(
+                "primary elastic interactions are supported only by the legacy SYCL path");
+        }
         return transport_sycl_minibeam(config, stopping_power, cross_section,
                                        device_name, reaction_packages,
                                        cascade_packages, neutral_packages,
-                                       context);
+                                       context, elastic_cross_section, elastic_packages);
     }
     // ON build + minibeam:false must use the master-compatible legacy kernel so
     // ordinary CT/water cases do not pay Copper register/code-size cost.
     return transport_sycl_legacy(config, stopping_power, cross_section,
                                  device_name, reaction_packages,
-                                 cascade_packages, neutral_packages, context);
+                                 cascade_packages, neutral_packages,
+                                 context, elastic_cross_section, elastic_packages);
 #else
     // OFF builds only compile the legacy TU, which exports transport_sycl.
     // This TU is not linked when CARBON_ENABLE_MINIBEAM is off.
@@ -36,6 +43,8 @@ TransportResult transport_sycl(const TransportConfig& config,
     (void)reaction_packages;
     (void)cascade_packages;
     (void)neutral_packages;
+    (void)elastic_cross_section;
+    (void)elastic_packages;
     (void)context;
     throw std::logic_error(
         "transport_sycl_dispatch.cpp should not be linked without "

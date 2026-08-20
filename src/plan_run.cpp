@@ -114,6 +114,16 @@ void accumulate_transport_result(carbon::TransportResult& total,
         part.beamline_removed_energy_MeV;
     total.untracked_nuclear_energy_MeV += part.untracked_nuclear_energy_MeV;
     total.nuclear_interactions += part.nuclear_interactions;
+    total.primary_elastic_interactions += part.primary_elastic_interactions;
+    total.elastic_local_deposited_energy_MeV +=
+        part.elastic_local_deposited_energy_MeV;
+    total.elastic_queued_charged_energy_MeV +=
+        part.elastic_queued_charged_energy_MeV;
+    total.elastic_queued_neutral_energy_MeV +=
+        part.elastic_queued_neutral_energy_MeV;
+    total.elastic_queue_overflow += part.elastic_queue_overflow;
+    total.elastic_queue_overflow_energy_MeV +=
+        part.elastic_queue_overflow_energy_MeV;
     total.sampled_reaction_packages += part.sampled_reaction_packages;
     total.generated_direct_secondaries += part.generated_direct_secondaries;
     total.queued_secondaries += part.queued_secondaries;
@@ -502,7 +512,13 @@ carbon::TransportResult run_transport(
     const std::optional<carbon::ReactionPackageTable>& reaction_packages,
     const std::optional<carbon::CascadePackageTable>& cascade_packages,
     const std::optional<carbon::NeutralPackageTable>& neutral_packages,
+    const std::optional<carbon::CrossSectionTable>& elastic_cross_section,
+    const std::optional<carbon::ElasticPackageTable>& elastic_packages,
     carbon::SyclTransportContext* sycl_context) {
+    if (config.enable_primary_elastic_interactions && config.device == "serial") {
+        throw std::invalid_argument(
+            "primary elastic interactions require the legacy SYCL backend");
+    }
     if (config.device == "serial") {
         if (config.enable_let_scoring) {
             throw std::invalid_argument(
@@ -528,7 +544,9 @@ carbon::TransportResult run_transport(
                                   reaction_packages ? &*reaction_packages : nullptr,
                                   cascade_packages ? &*cascade_packages : nullptr,
                                   neutral_packages ? &*neutral_packages : nullptr,
-                                  sycl_context);
+                                  sycl_context,
+                                  elastic_cross_section ? &*elastic_cross_section : nullptr,
+                                  elastic_packages ? &*elastic_packages : nullptr);
 #else
     (void)sycl_context;
     throw std::runtime_error(

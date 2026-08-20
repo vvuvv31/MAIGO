@@ -1,5 +1,7 @@
 #pragma once
 
+#include "carbon/package_identity.hpp"
+
 #include "carbon/slab_phantom.hpp"
 #include "carbon/particle.hpp"
 
@@ -490,6 +492,10 @@ struct TransportConfig {
     // primary energy and remains fixed while that primary slows down.
     std::vector<double> primary_inelastic_xs_correction_energies_MeVu{};
     std::vector<double> primary_inelastic_xs_correction_scales{};
+    // Primary elastic interactions are data-preload only until the elastic
+    // transport channel is implemented. Keep the default disabled so all
+    // existing carbon runs retain their historical behavior.
+    bool enable_primary_elastic_interactions{false};
     bool enable_secondary_generation{false};
     bool enable_secondary_transport{false};
     bool enable_fragment_cascade{false};
@@ -605,10 +611,20 @@ struct TransportConfig {
     std::filesystem::path ct_bone_particle_stopping_power_file{};
     std::filesystem::path primary_inelastic_cross_section_file{
         "data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv"};
+    std::filesystem::path primary_elastic_cross_section_file{};
     std::filesystem::path primary_reaction_package_file{
         "data/packages/topas_water_inclxx_1M_stitch7_primary_3d.bin"};
     std::filesystem::path cascade_package_file{
         "data/packages/topas_400MeVu_water_inclxx_1M_cascade_3d.bin"};
+    PackageIdentityValidation package_identity_validation{
+        PackageIdentityValidation::strict};
+    // Older package sidecars are described by this repository-controlled manifest.
+    std::filesystem::path package_identity_override_manifest_file{
+        "data/packages/package_identity_overrides.json"};
+    std::string primary_package_physics_model{"INCLXX"};
+    std::filesystem::path primary_elastic_package_file{};
+    std::string primary_elastic_package_physics_model{};
+    std::string cascade_package_physics_model{"INCLXX"};
     std::filesystem::path neutral_package_file{
         "data/packages/topas_200MeVu_neutral_development.bin"};
     // MeV energy-deposition scorer outputs (absolute MeV → MeV/primary in writers).

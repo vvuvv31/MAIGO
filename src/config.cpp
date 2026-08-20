@@ -398,6 +398,29 @@ void TransportConfig::validate() const {
         throw std::invalid_argument(
             "primary_rest_mass_MeV must be zero or finite and positive");
     }
+    if (primary_package_physics_model.empty() || cascade_package_physics_model.empty()) {
+        throw std::invalid_argument("package physics model names must not be empty");
+    }
+    const auto has_primary_elastic_data =
+        !primary_elastic_cross_section_file.empty() ||
+        !primary_elastic_package_file.empty() ||
+        !primary_elastic_package_physics_model.empty();
+    if (!enable_primary_elastic_interactions && has_primary_elastic_data) {
+        throw std::invalid_argument(
+            "primary elastic package/table fields require "
+            "enable_primary_elastic_interactions=true");
+    }
+    if (enable_primary_elastic_interactions) {
+        if (primary_elastic_cross_section_file.empty() ||
+            primary_elastic_package_file.empty() ||
+            primary_elastic_package_physics_model.empty()) {
+            throw std::invalid_argument(
+                "primary elastic interactions require non-empty "
+                "primary_elastic_cross_section_file, "
+                "primary_elastic_package_file, and "
+                "primary_elastic_package_physics_model");
+        }
+    }
     const auto energy_comes_from_spot_file =
         !topas_spots_file.empty() || !topas_spots_files.empty() ||
         !tps_spots_file.empty();
@@ -704,9 +727,11 @@ void TransportConfig::validate() const {
         throw std::invalid_argument(
             "enable_flat_source and enable_emittance_source cannot both be true");
     }
-    if (enable_secondary_transport && !enable_secondary_generation) {
+    if (enable_secondary_transport && !enable_secondary_generation &&
+        !enable_primary_elastic_interactions) {
         throw std::invalid_argument(
-            "enable_secondary_transport requires enable_secondary_generation=true");
+            "enable_secondary_transport requires enable_secondary_generation=true, "
+            "unless primary elastic interactions are enabled");
     }
     if (enable_secondary_energy_sorting && !enable_secondary_transport) {
         throw std::invalid_argument(
@@ -1481,6 +1506,9 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.enable_primary_inelastic_xs_correction = parse_bool(
         values, "enable_primary_inelastic_xs_correction",
         config.enable_primary_inelastic_xs_correction);
+    config.enable_primary_elastic_interactions = parse_bool(
+        values, "enable_primary_elastic_interactions",
+        config.enable_primary_elastic_interactions);
     config.primary_inelastic_xs_correction_file = parse_path(
         values, "primary_inelastic_xs_correction_file",
         config.primary_inelastic_xs_correction_file);
@@ -1969,10 +1997,31 @@ TransportConfig load_config(const std::filesystem::path& path) {
         config.ct_bone_particle_stopping_power_file);
     config.primary_inelastic_cross_section_file =
         parse_path(values, "primary_inelastic_cross_section_file", config.primary_inelastic_cross_section_file);
+    config.primary_elastic_cross_section_file = parse_path(
+        values, "primary_elastic_cross_section_file",
+        config.primary_elastic_cross_section_file);
     config.primary_reaction_package_file =
         parse_path(values, "primary_reaction_package_file", config.primary_reaction_package_file);
     config.cascade_package_file =
         parse_path(values, "cascade_package_file", config.cascade_package_file);
+    if (const auto it = values.find("package_identity_validation"); it != values.end()) {
+        config.package_identity_validation = parse_package_identity_validation(it->second);
+    }
+    config.package_identity_override_manifest_file = parse_path(
+        values, "package_identity_override_manifest_file",
+        config.package_identity_override_manifest_file);
+    if (const auto it = values.find("primary_package_physics_model"); it != values.end()) {
+        config.primary_package_physics_model = it->second;
+    }
+    config.primary_elastic_package_file = parse_path(
+        values, "primary_elastic_package_file", config.primary_elastic_package_file);
+    if (const auto it = values.find("primary_elastic_package_physics_model");
+        it != values.end()) {
+        config.primary_elastic_package_physics_model = it->second;
+    }
+    if (const auto it = values.find("cascade_package_physics_model"); it != values.end()) {
+        config.cascade_package_physics_model = it->second;
+    }
     config.neutral_package_file =
         parse_path(values, "neutral_package_file", config.neutral_package_file);
     {
@@ -2191,6 +2240,13 @@ TransportConfig load_config(const std::filesystem::path& path) {
             config.primary_inelastic_xs_correction_file,
             config.primary_inelastic_xs_correction_energies_MeVu,
             config.primary_inelastic_xs_correction_scales);
+    }
+    if (config.enable_primary_elastic_interactions) {
+        config.primary_elastic_cross_section_file =
+            resolve_input_path_from_config(
+                config.primary_elastic_cross_section_file, path);
+        config.primary_elastic_package_file =
+            resolve_input_path_from_config(config.primary_elastic_package_file, path);
     }
     config.validate();
     return config;

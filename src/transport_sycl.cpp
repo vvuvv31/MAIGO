@@ -927,7 +927,15 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                                const ReactionPackageTable* reaction_packages,
                                const CascadePackageTable* cascade_packages,
                                const NeutralPackageTable* neutral_packages,
-                               SyclTransportContext* context) {
+                               SyclTransportContext* context,
+                               const CrossSectionTable* elastic_cross_section,
+                               const ElasticPackageTable* elastic_packages) {
+    (void)elastic_cross_section;
+    (void)elastic_packages;
+    if (config.enable_primary_elastic_interactions) {
+        throw std::invalid_argument(
+            "primary elastic interactions are supported only by the legacy SYCL path");
+    }
     config.validate();
     if (!is_uniform_grid(stopping_power.energies())) {
         throw std::invalid_argument("The current SYCL backend requires a uniform stopping-power grid");

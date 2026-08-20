@@ -4,7 +4,9 @@
 #include "carbon/minibeam_collimator.hpp"
 #include "carbon/neutral_package.hpp"
 #include "carbon/cross_section.hpp"
+#include "carbon/elastic_package.hpp"
 #include "carbon/multiple_scattering.hpp"
+#include "carbon/package_identity.hpp"
 #include "carbon/particle.hpp"
 #include "carbon/reaction_package.hpp"
 #include "carbon/rng.hpp"
@@ -881,6 +883,31 @@ void test_primary_inelastic_xs_correction() {
             "Constant primary XS table must reproduce the legacy scalar exactly");
     require(table_result.backend.find("+primary-xs-table") != std::string::npos,
             "Primary XS table backend tag missing");
+}
+
+void test_primary_elastic_config_contract() {
+    carbon::TransportConfig disabled;
+    disabled.validate();
+    require(!disabled.enable_primary_elastic_interactions,
+            "Primary elastic interactions must default off");
+    require(disabled.primary_elastic_cross_section_file.empty() &&
+                disabled.primary_elastic_package_file.empty() &&
+                disabled.primary_elastic_package_physics_model.empty(),
+            "Primary elastic package fields must default empty");
+
+    auto partially_configured = disabled;
+    partially_configured.primary_elastic_cross_section_file = "elastic.csv";
+    require_throws([&] { partially_configured.validate(); },
+                   "Disabled primary elastic fields must be rejected");
+
+    auto enabled = disabled;
+    enabled.enable_primary_elastic_interactions = true;
+    require_throws([&] { enabled.validate(); },
+                   "Enabled primary elastic interactions must require all fields");
+    enabled.primary_elastic_cross_section_file = "elastic.csv";
+    enabled.primary_elastic_package_file = "elastic.bin";
+    enabled.primary_elastic_package_physics_model = "G4HadronElasticPhysicsHP";
+    enabled.validate();
 }
 
 void test_energy_conservation() {
@@ -2444,6 +2471,212 @@ void test_tps_source_geometry_csv_and_switch() {
 }
 
 #ifdef CARBON_HAS_SYCL
+
+#pragma pack(push, 1)
+struct ElasticFixtureHeader {
+    char magic[8];
+    std::uint32_t version;
+    std::uint32_t header_size;
+    std::uint32_t bin_size;
+    std::uint32_t event_size;
+    std::uint32_t product_size;
+    std::uint32_t bin_count;
+    std::uint32_t flags;
+    std::uint64_t event_count;
+    std::uint64_t product_count;
+    std::uint64_t file_size;
+};
+struct ElasticFixtureBin {
+    float minimum;
+    float maximum;
+    std::uint32_t event_offset;
+    std::uint32_t event_count;
+};
+struct ElasticFixtureEvent {
+    std::int16_t z;
+    std::int16_t a;
+    float incident;
+    float outgoing;
+    float dx;
+    float dy;
+    float dz;
+    float local;
+    std::uint32_t product_offset;
+    std::uint32_t product_count;
+    std::int32_t continuation;
+    std::int32_t generation;
+};
+struct ElasticFixtureProduct {
+    std::int32_t pdg;
+    std::int16_t z;
+    std::int16_t a;
+    float energy;
+    float dx;
+    float dy;
+    float dz;
+    float charge;
+    std::int32_t generation;
+    std::int32_t disposition;
+};
+#pragma pack(pop)
+
+void write_elastic_transport_fixture(const std::filesystem::path& path) {
+    const ElasticFixtureHeader header{{'E', 'L', 'P', 'K', 'G', '0', '1', '\0'}, 1, 60,
+                                      16, 44, 36, 1, 0, 1, 2,
+                                      60 + 16 + 44 + 2 * 36};
+    const ElasticFixtureBin bin{0.0F, 100.0F, 0, 1};
+    const ElasticFixtureEvent event{1, 1, 70.0F, 68.0F, 0.1F, 0.0F, 0.995F, 1.0F,
+                                    0, 2, 1, 0};
+    // A charged recoil is queued; the neutral product uses the explicit local
+    // disposition because this fixture deliberately leaves neutral transport off.
+    const ElasticFixtureProduct charged{2212, 1, 1, 0.5F, 0.0F, 0.0F, 1.0F, 1.0F, 0, 2};
+    const ElasticFixtureProduct neutral{22, 0, 0, 0.5F, 0.0F, 0.0F, 1.0F, 0.0F, 0, 3};
+    std::ofstream output(path, std::ios::binary | std::ios::trunc);
+    require(static_cast<bool>(output), "Cannot create elastic transport fixture");
+    output.write(reinterpret_cast<const char*>(&header), sizeof(header));
+    output.write(reinterpret_cast<const char*>(&bin), sizeof(bin));
+    output.write(reinterpret_cast<const char*>(&event), sizeof(event));
+    output.write(reinterpret_cast<const char*>(&charged), sizeof(charged));
+    output.write(reinterpret_cast<const char*>(&neutral), sizeof(neutral));
+    require(static_cast<bool>(output), "Cannot write elastic transport fixture");
+}
+
+void write_competing_reaction_fixture(const std::filesystem::path& path) {
+    const carbon::ReactionEnergyBin bin{0, 1};
+    // The primary is terminated at the inelastic event.  Its remaining kinetic
+    // energy is intentionally accounted by the transport nuclear ledger; the
+    // package has no continuation and no secondary products.
+    const carbon::ReactionPackage reaction{70.0F, 0.0F, 0.0F, 0, 0};
+    const auto file_size = static_cast<std::uint64_t>(
+        sizeof(ReactionPackageHeaderV1) + sizeof(bin) + sizeof(reaction));
+    const ReactionPackageHeaderV1 header{
+        {'C', 'R', 'P', 'K', 'G', '0', '1', '\0'},
+        1,
+        sizeof(ReactionPackageHeaderV1),
+        sizeof(bin),
+        sizeof(reaction),
+        sizeof(carbon::ReactionSecondary),
+        1,
+        0.0F,
+        100.0F,
+        1,
+        0,
+        file_size};
+    std::ofstream output(path, std::ios::binary | std::ios::trunc);
+    require(static_cast<bool>(output), "Cannot create competing reaction fixture");
+    output.write(reinterpret_cast<const char*>(&header), sizeof(header));
+    output.write(reinterpret_cast<const char*>(&bin), sizeof(bin));
+    output.write(reinterpret_cast<const char*>(&reaction), sizeof(reaction));
+    require(static_cast<bool>(output), "Cannot write competing reaction fixture");
+}
+
+void write_competing_elastic_fixture(const std::filesystem::path& path) {
+    const ElasticFixtureHeader header{{'E', 'L', 'P', 'K', 'G', '0', '1', '\0'}, 1, 60,
+                                      16, 44, 36, 1, 0, 1, 0,
+                                      60 + 16 + 44};
+    const ElasticFixtureBin bin{0.0F, 100.0F, 0, 1};
+    // The package event preserves both primary energy and direction and has no
+    // products, so every elastic event must only continue the primary.
+    const ElasticFixtureEvent event{1, 1, 70.0F, 70.0F, 0.0F, 0.0F, 1.0F, 0.0F,
+                                    0, 0, 1, 0};
+    std::ofstream output(path, std::ios::binary | std::ios::trunc);
+    require(static_cast<bool>(output), "Cannot create competing elastic fixture");
+    output.write(reinterpret_cast<const char*>(&header), sizeof(header));
+    output.write(reinterpret_cast<const char*>(&bin), sizeof(bin));
+    output.write(reinterpret_cast<const char*>(&event), sizeof(event));
+    require(static_cast<bool>(output), "Cannot write competing elastic fixture");
+}
+
+void test_sycl_primary_elastic_transport_fixture() {
+    const auto fixture_path = std::filesystem::temp_directory_path() /
+                              "maigo_primary_elastic_transport_fixture.bin";
+    write_elastic_transport_fixture(fixture_path);
+    const auto package = carbon::ElasticPackageTable::from_binary(fixture_path);
+    std::error_code ignored;
+    std::filesystem::remove(fixture_path, ignored);
+
+    carbon::TransportConfig config;
+    config.number_of_histories = 1;
+    config.initial_energy_MeVu = 70.0;
+    config.primary_atomic_number = 1;
+    config.primary_mass_number = 1;
+    config.primary_rest_mass_MeV = 938.27208816;
+    config.phantom_length_mm = 100.0;
+    config.depth_bin_width_mm = 1.0;
+    config.maximum_step_mm = 0.5;
+    config.maximum_relative_energy_loss = 0.01;
+    config.energy_cutoff_MeV = 0.1;
+    config.enable_primary_attenuation = true;
+    config.enable_primary_elastic_interactions = true;
+    config.primary_elastic_cross_section_file = "fixture_elastic.csv";
+    config.primary_elastic_package_file = "fixture_elastic.bin";
+    config.primary_elastic_package_physics_model = "fixture-elastic";
+    config.enable_secondary_transport = true;
+    config.secondary_queue_capacity = 256;
+    config.enable_secondary_generation = false;
+    config.enable_neutral_transport = false;
+    config.enable_fragment_cascade = false;
+    config.enable_multiple_scattering = false;
+    config.enable_energy_straggling = false;
+    config.enable_let_scoring = true;
+    config.device = "cpu";
+    config.validate();
+    const carbon::StoppingPowerTable stopping({0.01, 100.01}, {0.01, 0.01});
+    const carbon::CrossSectionTable inelastic({0.01, 100.01}, {0.0, 0.0});
+    const carbon::CrossSectionTable elastic_xs({0.01, 100.01}, {100.0, 100.0});
+    const auto result = carbon::transport_sycl(
+        config, stopping, inelastic, "cpu", nullptr, nullptr, nullptr, nullptr, &elastic_xs,
+        &package);
+    require(result.primary_elastic_interactions > 0,
+            "Elastic fixture did not produce a primary elastic interaction");
+    require(result.nuclear_interactions == 0,
+            "Elastic fixture was counted as an inelastic interaction");
+    require(result.elastic_queued_charged_energy_MeV > 0.0,
+            "Elastic charged recoil was not queued");
+    require(result.transported_secondaries == result.primary_elastic_interactions &&
+                result.transported_secondaries <= config.secondary_queue_capacity,
+            "Elastic fixture queue count did not match generated charged recoils");
+    require(result.elastic_queue_overflow == 0,
+            "Elastic fixture unexpectedly overflowed the queue");
+    require(result.elastic_queue_overflow_energy_MeV == 0.0,
+            "Elastic fixture unexpectedly dropped recoil energy");
+    require(result.elastic_local_deposited_energy_MeV > 0.0,
+            "Elastic local deposit was not scored");
+    require(result.relative_energy_balance_error() < 1.0e-3,
+            "Elastic fixture energy balance failed");
+    require(!result.deposited_energy_MeV.empty() &&
+                std::all_of(result.deposited_energy_MeV.begin(),
+                            result.deposited_energy_MeV.end(),
+                            [](double value) { return std::isfinite(value) && value >= 0.0; }),
+            "Elastic fixture dose contains invalid values");
+
+    auto disabled = config;
+    disabled.enable_primary_elastic_interactions = false;
+    disabled.primary_elastic_cross_section_file.clear();
+    disabled.primary_elastic_package_file.clear();
+    disabled.primary_elastic_package_physics_model.clear();
+    disabled.enable_secondary_transport = false;
+    disabled.enable_secondary_generation = false;
+    disabled.primary_reaction_package_file.clear();
+    const auto parity_a = carbon::transport_sycl(
+        disabled, stopping, inelastic, "cpu");
+    const auto parity_b = carbon::transport_sycl(
+        disabled, stopping, inelastic, "cpu");
+    require(parity_a.deposited_energy_MeV == parity_b.deposited_energy_MeV &&
+                parity_a.nuclear_interactions == parity_b.nuclear_interactions,
+            "Elastic-disabled legacy path is not deterministic/parity-stable");
+#if defined(CARBON_ENABLE_MINIBEAM)
+    auto unsupported = config;
+    unsupported.enable_minibeam = true;
+    require_throws(
+        [&] {
+            (void)carbon::transport_sycl(unsupported, stopping, inelastic, "cpu", nullptr,
+                                          nullptr, nullptr, nullptr, &elastic_xs, &package);
+        },
+        "Minibeam path accepted primary elastic interactions");
+#endif
+}
+
 void test_sycl_tps_source_arbitrary_gantry_transport() {
     carbon::TransportConfig config;
     config.enable_tps_source = true;
@@ -2555,6 +2788,130 @@ void test_sycl_primary_spot_batch() {
                      a.deposited_energy_MeV[i] + b.deposited_energy_MeV[i],
                      batch_tol, "batched primary dose");
     }
+}
+
+void test_sycl_primary_elastic_inelastic_competition() {
+    const auto directory = std::filesystem::temp_directory_path() /
+                           "maigo_primary_elastic_inelastic_competition";
+    std::filesystem::create_directories(directory);
+    const auto reaction_path = directory / "inelastic.crpkg";
+    const auto elastic_path = directory / "elastic.elpkg";
+    write_competing_reaction_fixture(reaction_path);
+    write_competing_elastic_fixture(elastic_path);
+    const auto reaction = carbon::ReactionPackageTable::from_binary(reaction_path);
+    const auto elastic = carbon::ElasticPackageTable::from_binary(elastic_path);
+
+    carbon::TransportConfig config;
+    config.number_of_histories = 512;
+    config.initial_energy_MeVu = 70.0;
+    config.primary_atomic_number = 1;
+    config.primary_mass_number = 1;
+    config.primary_rest_mass_MeV = 938.27208816;
+    config.primary_package_physics_model = "fixture-inelastic";
+    config.cascade_package_physics_model = "fixture-cascade";
+    config.phantom_length_mm = 20.0;
+    config.depth_bin_width_mm = 1.0;
+    config.maximum_step_mm = 0.5;
+    config.maximum_relative_energy_loss = 0.001;
+    config.energy_cutoff_MeV = 0.1;
+    config.enable_primary_attenuation = true;
+    config.enable_primary_elastic_interactions = true;
+    config.primary_elastic_cross_section_file = "fixture-elastic-xs.csv";
+    config.primary_elastic_package_file = "fixture-elastic.elpkg";
+    config.primary_elastic_package_physics_model = "fixture-elastic";
+    config.enable_secondary_generation = true;
+    config.enable_secondary_transport = false;
+    config.secondary_queue_capacity = 16;
+    config.neutral_queue_capacity = 16;
+    config.enable_fragment_cascade = false;
+    config.enable_multiple_scattering = false;
+    config.enable_energy_straggling = false;
+    config.enable_let_scoring = true;
+    config.enable_voxel_scoring = true;
+    config.voxel_bins_x = 1;
+    config.voxel_bins_y = 1;
+    config.voxel_size_x_mm = 10.0;
+    config.voxel_size_y_mm = 10.0;
+    config.random_seed = 0xC0DE3717U;
+    config.device = "cpu";
+    config.validate();
+
+    const carbon::StoppingPowerTable stopping({0.01, 50.01, 100.01},
+                                               {0.001, 0.001, 0.001});
+    const carbon::CrossSectionTable inelastic_xs({0.01, 100.01}, {0.1, 0.1});
+    const carbon::CrossSectionTable elastic_xs({0.01, 100.01}, {0.4, 0.4});
+    const auto result = carbon::transport_sycl(
+        config, stopping, inelastic_xs, "cpu", &reaction, nullptr, nullptr, nullptr,
+        &elastic_xs, &elastic);
+    require(result.primary_elastic_interactions > 0 && result.nuclear_interactions > 0,
+            "Competing elastic/inelastic fixture did not sample both channels");
+    require(result.nuclear_interactions <= config.number_of_histories,
+            "Inelastic channel did not terminate each primary at most once");
+    const auto expected_ratio = 0.4 / 0.1;
+    const auto observed_ratio = static_cast<double>(result.primary_elastic_interactions) /
+                                static_cast<double>(result.nuclear_interactions);
+    require(std::abs(observed_ratio - expected_ratio) < 0.18 * expected_ratio,
+            "Elastic/inelastic channel ratio is inconsistent with competing XS");
+    require(result.elastic_queue_overflow == 0 && result.secondary_queue_overflow == 0,
+            "Competing fixture reported queue overflow");
+    require(result.total_steps > 0 && result.total_steps < config.number_of_histories * 1000,
+            "Competing fixture made unreasonable transport progress");
+    require(std::isfinite(result.total_deposited_energy_MeV) &&
+                result.total_deposited_energy_MeV > 0.0 &&
+                std::all_of(result.deposited_energy_MeV.begin(),
+                            result.deposited_energy_MeV.end(),
+                            [](const double value) { return std::isfinite(value) && value >= 0.0; }),
+            "Competing fixture produced invalid dose");
+    require(std::isfinite(std::accumulate(result.primary_letd_denominator.begin(),
+                                          result.primary_letd_denominator.end(), 0.0)),
+            "Competing fixture produced invalid LET");
+    require_voxel_idd_closure(config, result, 1.0e-7);
+    require(result.relative_energy_balance_error() < 1.0e-4,
+            "Competing fixture energy balance failed");
+
+    const carbon::CrossSectionTable zero_elastic({0.01, 100.01}, {0.0, 0.0});
+    auto zero_config = config;
+    zero_config.primary_elastic_cross_section_file = "fixture-zero-elastic-xs.csv";
+    const auto enabled_zero = carbon::transport_sycl(
+        zero_config, stopping, inelastic_xs, "cpu", &reaction, nullptr, nullptr, nullptr,
+        &zero_elastic, &elastic);
+    auto disabled = config;
+    disabled.enable_primary_elastic_interactions = false;
+    disabled.primary_elastic_cross_section_file.clear();
+    disabled.primary_elastic_package_file.clear();
+    disabled.primary_elastic_package_physics_model.clear();
+    const auto disabled_result = carbon::transport_sycl(
+        disabled, stopping, inelastic_xs, "cpu", &reaction);
+    require(enabled_zero.primary_elastic_interactions == 0 &&
+                enabled_zero.nuclear_interactions == disabled_result.nuclear_interactions &&
+                enabled_zero.total_steps == disabled_result.total_steps,
+            "Zero elastic channel changed disabled-path RNG or dose parity");
+#if defined(CARBON_DOSE_FP32)
+    constexpr double zero_elastic_scorer_tol = 1.0e-3;
+#else
+    constexpr double zero_elastic_scorer_tol = 0.0;
+#endif
+    require(enabled_zero.deposited_energy_MeV.size() ==
+                disabled_result.deposited_energy_MeV.size() &&
+                enabled_zero.voxel_deposited_energy_MeV.size() ==
+                    disabled_result.voxel_deposited_energy_MeV.size(),
+            "Zero elastic channel changed disabled-path scorer dimensions");
+    for (std::size_t bin = 0; bin < enabled_zero.deposited_energy_MeV.size(); ++bin) {
+        require_near(enabled_zero.deposited_energy_MeV[bin],
+                     disabled_result.deposited_energy_MeV[bin],
+                     zero_elastic_scorer_tol,
+                     "Zero elastic channel changed disabled-path IDD at bin " +
+                         std::to_string(bin));
+    }
+    for (std::size_t voxel = 0;
+         voxel < enabled_zero.voxel_deposited_energy_MeV.size(); ++voxel) {
+        require_near(enabled_zero.voxel_deposited_energy_MeV[voxel],
+                     disabled_result.voxel_deposited_energy_MeV[voxel],
+                     zero_elastic_scorer_tol,
+                     "Zero elastic channel changed disabled-path voxel dose at voxel " +
+                         std::to_string(voxel));
+    }
+    std::filesystem::remove_all(directory);
 }
 
 void test_sycl_primary_let_includes_cutoff_tail() {
@@ -3245,6 +3602,7 @@ int main() {
         test_condensed_total_loss_straggling();
         test_energy_dependent_straggling_scale();
         test_primary_inelastic_xs_correction();
+        test_primary_elastic_config_contract();
         test_energy_conservation();
         test_escape_energy_conservation();
         test_straggling_reproducibility();
@@ -3267,6 +3625,8 @@ int main() {
         test_dense_charged_origin_mhd_uses_local_mass();
         test_ct_aligned_mhd_offset_and_index_pairing();
 #ifdef CARBON_HAS_SYCL
+        test_sycl_primary_elastic_transport_fixture();
+        test_sycl_primary_elastic_inelastic_competition();
         test_sycl_tps_source_arbitrary_gantry_transport();
         test_sycl_legacy_cardinal_entrance_projection();
         test_sycl_primary_spot_batch();
