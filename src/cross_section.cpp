@@ -55,9 +55,14 @@ CrossSectionTable::CrossSectionTable(
         throw std::invalid_argument("Cross-section table must contain at least two paired samples");
     }
     for (std::size_t index = 0; index < energies_MeVu_.size(); ++index) {
-        if (energies_MeVu_[index] <= 0.0 || macroscopic_cross_sections_per_mm_[index] < 0.0) {
+        if (!std::isfinite(energies_MeVu_[index]) || energies_MeVu_[index] < 0.0) {
             throw std::invalid_argument(
-                "Cross-section energies must be positive and values must be nonnegative");
+                "Cross-section energies must be finite and nonnegative");
+        }
+        if (!std::isfinite(macroscopic_cross_sections_per_mm_[index]) ||
+            macroscopic_cross_sections_per_mm_[index] < 0.0) {
+            throw std::invalid_argument(
+                "Cross-section values must be finite and nonnegative");
         }
         if (index > 0 && energies_MeVu_[index] <= energies_MeVu_[index - 1]) {
             throw std::invalid_argument("Cross-section energies must be strictly increasing");
@@ -184,7 +189,7 @@ std::vector<CrossSectionTable> CrossSectionTable::from_schneider_csv(
 }
 
 double CrossSectionTable::interpolate(double energy_MeVu) const noexcept {
-    if (energy_MeVu <= energies_MeVu_.front()) {
+    if (!std::isfinite(energy_MeVu) || energy_MeVu <= energies_MeVu_.front()) {
         return macroscopic_cross_sections_per_mm_.front();
     }
     if (energy_MeVu >= energies_MeVu_.back()) {

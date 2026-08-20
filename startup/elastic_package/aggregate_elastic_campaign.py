@@ -9,10 +9,19 @@ import gzip
 import hashlib
 import json
 import math
+import shutil
 import statistics
 import subprocess
 import sys
 from pathlib import Path
+
+
+DIRECT_QUERY_SOURCE = "direct G4HadronicProcessStore query"
+DIRECT_QUERY_FIELDS = [
+    "energy_MeV_per_u",
+    "water_macroscopic_cross_section_per_mm",
+]
+DIRECT_QUERY_MAX_POINTS = 1_000_000
 
 
 def sha256(path: Path) -> str:
@@ -39,18 +48,6 @@ def write_csv(path: Path, fields: list[str], rows: list[dict[str, str]]) -> None
         writer.writerows(rows)
 
 
-def write_runtime_xs(path: Path, rows: list[dict[str, object]]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8", newline="") as stream:
-        writer = csv.DictWriter(
-            stream,
-            fieldnames=["energy_MeV_per_u", "water_macroscopic_cross_section_per_mm"],
-            lineterminator="\n",
-        )
-        writer.writeheader()
-        writer.writerows(rows)
-
-
 def source_path(metadata_path: Path, entry: object, label: str) -> Path:
     if not isinstance(entry, dict) or not isinstance(entry.get("path"), str):
         raise SystemExit(f"{metadata_path}: missing files.{label}.path")
@@ -65,6 +62,160 @@ def source_path(metadata_path: Path, entry: object, label: str) -> Path:
     raise SystemExit(f"{metadata_path}: cannot locate {label} CSV ({recorded})")
 
 
+def resolve_metadata_path(metadata_path: Path, recorded_path: str) -> Path:
+    recorded = Path(recorded_path)
+    candidates = (
+        recorded,
+        metadata_path.parent / recorded,
+        metadata_path.parent / recorded.name,
+    )
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate.resolve()
+    raise SystemExit(
+        f"{metadata_path}: cannot locate direct-query CSV recorded as {recorded_path}"
+    )
+
+
+def read_direct_query_csv(path: Path, minimum: float, maximum: float,
+                          step: float, points: int) -> list[dict[str, str]]:
+    opener = gzip.open if path.suffix == ".gz" else open
+    with opener(path, "rt", encoding="utf-8", newline="") as stream:
+        reader = csv.DictReader(stream)
+        if reader.fieldnames != DIRECT_QUERY_FIELDS:
+            raise SystemExit(
+                f"{path}: direct-query CSV header must be {DIRECT_QUERY_FIELDS!r}; "
+                f"found {reader.fieldnames!r}"
+            )
+        rows = list(reader)
+    if len(rows) != points:
+        raise SystemExit(
+            f"{path}: direct-query CSV must contain exactly {points} points; "
+            f"found {len(rows)}"
+        )
+    previous_energy: float | None = None
+    for index, row in enumerate(rows):
+        try:
+            energy = float(row[DIRECT_QUERY_FIELDS[0]])
+            value = float(row[DIRECT_QUERY_FIELDS[1]])
+        except (KeyError, TypeError, ValueError) as error:
+            raise SystemExit(f"{path}: invalid direct-query row {index + 2}") from error
+        if not math.isfinite(energy) or energy < 0.0:
+            raise SystemExit(f"{path}: direct-query row {index + 2} has invalid energy")
+        if not math.isfinite(value) or value < 0.0:
+            raise SystemExit(f"{path}: direct-query row {index + 2} has invalid XS")
+        expected_energy = minimum + index * step
+        if abs(energy - expected_energy) > 1.0e-9:
+            raise SystemExit(
+                f"{path}: direct-query energy grid is not uniform at row {index + 2}; "
+                f"expected {expected_energy:g}, found {energy:g}"
+            )
+        if previous_energy is not None and energy <= previous_energy:
+            raise SystemExit(f"{path}: direct-query energies are not strictly increasing")
+        previous_energy = energy
+    if previous_energy is None or abs(previous_energy - maximum) > 1.0e-9:
+        raise SystemExit(
+            f"{path}: direct-query grid does not end at {maximum:g} MeV/u"
+        )
+    return rows
+
+
+def load_direct_runtime_xs(
+    csv_path: Path,
+    direct_metadata_path: Path,
+    identity: tuple[int, int, str, str],
+    required_min: float,
+    required_max_exclusive: float,
+) -> tuple[Path, Path, dict[str, object], list[dict[str, str]]]:
+    csv_path = csv_path.resolve()
+    metadata_path = direct_metadata_path.resolve()
+    if not csv_path.is_file():
+        raise SystemExit(f"Missing direct-query CSV: {csv_path}")
+    if not metadata_path.is_file():
+        raise SystemExit(f"Missing direct-query metadata: {metadata_path}")
+    try:
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise SystemExit(f"Invalid direct-query metadata: {metadata_path}") from error
+    if not isinstance(metadata, dict) or metadata.get("schema_version") != 1:
+        raise SystemExit(f"{metadata_path}: unsupported direct-query metadata schema")
+    if metadata.get("kind") != "direct_elastic_cross_section_query":
+        raise SystemExit(f"{metadata_path}: metadata kind is not direct elastic query")
+    if metadata.get("source") != DIRECT_QUERY_SOURCE:
+        raise SystemExit(f"{metadata_path}: metadata source is not {DIRECT_QUERY_SOURCE!r}")
+
+    projectile = metadata.get("projectile")
+    material = metadata.get("material")
+    process = metadata.get("process")
+    physics_model = metadata.get("physics_model")
+    if not isinstance(projectile, dict) or not isinstance(projectile.get("Z"), int) or \
+            isinstance(projectile.get("Z"), bool) or not isinstance(projectile.get("A"), int) or \
+            isinstance(projectile.get("A"), bool):
+        raise SystemExit(f"{metadata_path}: invalid direct-query projectile identity")
+    if process != "hadElastic" or not all(
+            isinstance(value, str) and value for value in (material, physics_model)):
+        raise SystemExit(f"{metadata_path}: invalid direct-query process/material/model identity")
+    direct_identity = (projectile["Z"], projectile["A"], material, physics_model)
+    if direct_identity != identity:
+        raise SystemExit(
+            f"{metadata_path}: direct-query identity {direct_identity!r} differs from campaign "
+            f"identity {identity!r}"
+        )
+
+    grid = metadata.get("grid")
+    if not isinstance(grid, dict):
+        raise SystemExit(f"{metadata_path}: missing direct-query grid metadata")
+    try:
+        grid_minimum = float(grid["minimum_MeV_per_u"])
+        grid_maximum = float(grid["maximum_MeV_per_u"])
+        grid_step = float(grid["step_MeV_per_u"])
+        grid_points = grid["points"]
+    except (KeyError, TypeError, ValueError) as error:
+        raise SystemExit(f"{metadata_path}: incomplete direct-query grid metadata") from error
+    expected_points = (
+        int(round((grid_maximum - grid_minimum) / grid_step)) + 1
+        if math.isfinite(grid_maximum - grid_minimum) and grid_step > 0.0
+        else 0
+    )
+    if (
+        not all(math.isfinite(value) for value in (grid_minimum, grid_maximum, grid_step))
+        or abs(grid_minimum - required_min) > 1.0e-12
+        or grid_maximum + 1.0e-9 < required_max_exclusive
+        or grid_maximum <= grid_minimum
+        or grid_step <= 0.0
+        or not isinstance(grid_points, int)
+        or isinstance(grid_points, bool)
+        or grid_points < 2
+        or grid_points > DIRECT_QUERY_MAX_POINTS
+        or grid_points != expected_points
+        or grid.get("endpoint_inclusive") is not True
+    ):
+        raise SystemExit(
+            f"{metadata_path}: direct-query grid does not start at {required_min:g} or "
+            f"cover required maximum {required_max_exclusive:g} MeV/u"
+        )
+    units = metadata.get("units")
+    if not isinstance(units, dict) or units.get("energy") != "MeV/u" or \
+            units.get("water_macroscopic_cross_section") != "1/mm":
+        raise SystemExit(f"{metadata_path}: invalid direct-query units")
+
+    output = metadata.get("output")
+    if not isinstance(output, dict) or not isinstance(output.get("path"), str) or \
+            not isinstance(output.get("sha256"), str):
+        raise SystemExit(f"{metadata_path}: missing direct-query output provenance")
+    recorded_csv_path = resolve_metadata_path(metadata_path, output["path"])
+    if recorded_csv_path != csv_path:
+        raise SystemExit(
+            f"{metadata_path}: metadata output path {recorded_csv_path} does not match {csv_path}"
+        )
+    if output["sha256"] != sha256(csv_path):
+        raise SystemExit(f"{metadata_path}: SHA-256 mismatch for direct-query CSV")
+    rows = read_direct_query_csv(
+        csv_path, grid_minimum, grid_maximum, grid_step, grid_points
+    )
+    return csv_path, metadata_path, metadata, rows
+
+
 def percentile(values: list[int], fraction: float) -> int:
     ordered = sorted(values)
     index = max(0, math.ceil(fraction * len(ordered)) - 1)
@@ -77,6 +228,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--input-metadata", type=Path, action="append", required=True,
                         help="prepared metadata JSON; repeat for each independent run")
     parser.add_argument("--output-prefix", type=Path, required=True)
+    parser.add_argument("--direct-xs-csv", type=Path, required=True,
+                        help="independent direct G4HadronicProcessStore XS CSV")
+    parser.add_argument("--direct-xs-metadata", type=Path, required=True,
+                        help="metadata for --direct-xs-csv")
     parser.add_argument("--energy-min-mevu", type=float, default=0.0)
     parser.add_argument("--energy-max-mevu", type=float, default=250.0,
                         help="lower edge of the final included 1 MeV/u bin")
@@ -227,6 +382,11 @@ def main() -> None:
 
     if identity is None or interaction_fields is None or product_fields is None:
         raise SystemExit("No campaign inputs")
+    direct_csv, direct_metadata_path, direct_metadata, direct_rows = load_direct_runtime_xs(
+        args.direct_xs_csv, args.direct_xs_metadata, identity,
+        required_min=0.0, required_max_exclusive=upper_exclusive,
+    )
+    direct_grid = direct_metadata["grid"]
     counts = [0] * bin_count
     xs_values: list[list[float]] = [[] for _ in range(bin_count)]
     for row in merged_interactions:
@@ -234,7 +394,6 @@ def main() -> None:
         counts[index] += 1
         xs_values[index].append(float(row["macroscopic_elastic_per_mm"]))
     bins = []
-    runtime_xs_rows: list[dict[str, object]] = []
     for index, count in enumerate(counts):
         values = xs_values[index]
         entry: dict[str, object] = {
@@ -255,10 +414,6 @@ def main() -> None:
                     else (0.0 if maximum == 0.0 else None)
                 ),
             }
-            runtime_xs_rows.append({
-                "energy_MeV_per_u": f"{args.energy_min_mevu + index + 0.5:.9g}",
-                "water_macroscopic_cross_section_per_mm": f"{median:.17g}",
-            })
         bins.append(entry)
     empty_bins = [entry["index"] for entry in bins if entry["event_count"] == 0]
     low_bins = [entry["index"] for entry in bins if entry["event_count"] < args.min_events_per_bin]
@@ -275,7 +430,9 @@ def main() -> None:
         "event_count_summary": count_summary, "empty_bins": empty_bins,
         "bins_below_minimum": low_bins,
         "xs_empty_bins": [index for index, values in enumerate(xs_values) if not values],
-        "xs_aggregation": "median of finite non-negative event samples in each bin",
+        "xs_aggregation": "event-sample median diagnostics only; not used for runtime XS",
+        "runtime_xs_source": "direct query",
+        "runtime_xs_points": len(direct_rows),
         "xs_nearest_fill": False,
         "bins": bins, "eligible_for_compile": not low_bins,
     }
@@ -284,20 +441,36 @@ def main() -> None:
 
     write_csv(interactions_output, interaction_fields, merged_interactions)
     write_csv(products_output, product_fields, merged_products)
-    write_runtime_xs(xs_output, runtime_xs_rows)
+    xs_output.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(direct_csv, xs_output)
     xs_sidecar = {
         "schema_version": 1,
         "kind": "runtime_elastic_cross_section_table",
+        "source": "direct query",
+        "query_source": DIRECT_QUERY_SOURCE,
         "energy_unit": "MeV/u", "cross_section_unit": "1/mm",
-        "bin_width_MeV_per_u": 1.0, "representative_energy": "bin center",
-        "aggregation": "median", "nearest_fill": False,
-        "source_interactions": {
-            "path": str(interactions_output), "sha256": sha256(interactions_output),
+        "grid": {
+            "minimum_MeV_per_u": direct_grid["minimum_MeV_per_u"],
+            "maximum_MeV_per_u": direct_grid["maximum_MeV_per_u"],
+            "step_MeV_per_u": direct_grid["step_MeV_per_u"],
+            "points": len(direct_rows),
+            "endpoint_inclusive": True,
         },
-        "source_metadata": sources,
+        "aggregation": "none; direct query values copied verbatim",
+        "event_xs_diagnostics": "reported in coverage JSON; not used for runtime XS",
+        "required_energy_range_MeV_per_u": {
+            "minimum": args.energy_min_mevu,
+            "maximum_inclusive": upper_exclusive,
+        },
+        "input": {
+            "path": str(direct_csv), "sha256": sha256(direct_csv),
+            "metadata_path": str(direct_metadata_path),
+            "metadata_sha256": sha256(direct_metadata_path),
+            "metadata_source": direct_metadata["source"],
+        },
         "output": {"path": str(xs_output), "sha256": sha256(xs_output)},
-        "covered_bins": len(runtime_xs_rows), "required_bins": bin_count,
-        "complete": len(runtime_xs_rows) == bin_count,
+        "covered_points": len(direct_rows),
+        "complete": True,
     }
     xs_sidecar_output.write_text(json.dumps(xs_sidecar, indent=2) + "\n", encoding="utf-8")
     z, a, material, physics_model = identity
@@ -313,6 +486,12 @@ def main() -> None:
                        "contains_non_dose_reference_sampling": any(
                            not bool(source["continuous_em_loss_enabled"]) for source in sources
                        ),
+                       "runtime_xs_source": "direct query",
+                       "runtime_xs_query_metadata": {
+                           "path": str(direct_metadata_path),
+                           "sha256": sha256(direct_metadata_path),
+                           "source": direct_metadata["source"],
+                       },
                        "sources": sources},
         "interactions": len(merged_interactions), "products": len(merged_products),
         "files": {"interactions": {"path": str(interactions_output), "sha256": sha256(interactions_output)},

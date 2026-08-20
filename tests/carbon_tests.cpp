@@ -342,6 +342,67 @@ void test_interpolation() {
                  "Cross-section low-energy clamp failed");
 }
 
+void test_cross_section_zero_endpoint_contract() {
+    const carbon::CrossSectionTable table({0.0, 2.0, 4.0}, {2.0, 6.0, 14.0});
+    require(table.energies().front() == 0.0,
+            "Cross-section table did not retain a zero-energy endpoint");
+    require_near(table.interpolate(-1.0), 2.0, 1.0e-12,
+                 "Cross-section negative-energy clamp failed");
+    require_near(table.interpolate(0.0), 2.0, 1.0e-12,
+                 "Cross-section zero-energy clamp failed");
+    require_near(table.interpolate(1.0), 4.0, 1.0e-12,
+                 "Cross-section interpolation from a zero endpoint failed");
+    require_near(table.interpolate(3.0), 10.0, 1.0e-12,
+                 "Cross-section interior interpolation failed");
+    require_near(table.interpolate(8.0), 14.0, 1.0e-12,
+                 "Cross-section high-energy clamp failed");
+    require_near(table.interpolate(std::numeric_limits<double>::quiet_NaN()), 2.0,
+                 1.0e-12, "Cross-section non-finite query clamp failed");
+
+    require_throws(
+        [] { (void)carbon::CrossSectionTable({-1.0, 0.0}, {0.0, 1.0}); },
+        "Cross-section table accepted a negative energy");
+    require_throws(
+        [] { (void)carbon::CrossSectionTable({0.0, 0.0}, {0.0, 1.0}); },
+        "Cross-section table accepted a duplicate zero energy");
+    require_throws(
+        [] { (void)carbon::CrossSectionTable({0.0, -1.0}, {0.0, 1.0}); },
+        "Cross-section table accepted a non-increasing energy grid");
+    require_throws(
+        [] {
+            (void)carbon::CrossSectionTable(
+                {0.0, std::numeric_limits<double>::infinity()}, {0.0, 1.0});
+        },
+        "Cross-section table accepted a non-finite energy");
+    require_throws(
+        [] {
+            (void)carbon::CrossSectionTable(
+                {0.0, 1.0}, {0.0, std::numeric_limits<double>::quiet_NaN()});
+        },
+        "Cross-section table accepted a non-finite value");
+    require_throws(
+        [] { (void)carbon::CrossSectionTable({0.0, 1.0}, {0.0, -1.0}); },
+        "Cross-section table accepted a negative value");
+
+    const auto path = std::filesystem::temp_directory_path() /
+                      "carbon_cross_section_zero_endpoint.csv";
+    {
+        std::ofstream output(path, std::ios::trunc);
+        output << "energy_MeV_per_u,water_macroscopic_cross_section_per_mm\n"
+               << "0.0,0.0\n"
+               << "1.0,0.5\n"
+               << "2.0,0.25\n";
+    }
+    const auto loaded = carbon::CrossSectionTable::from_csv(path);
+    require(loaded.energies().size() == 3,
+            "Cross-section CSV zero endpoint row was not loaded");
+    require(loaded.energies().front() == 0.0 && loaded.values().front() == 0.0,
+            "Cross-section CSV zero endpoint values changed");
+    require_near(loaded.interpolate(0.5), 0.25, 1.0e-12,
+                 "Cross-section CSV zero endpoint interpolation failed");
+    std::filesystem::remove(path);
+}
+
 void test_fragment_stopping_power_scale() {
     require_near(carbon::stopping_power_scale_from_reference_ion(6, 6, 200.0), 1.0, 1.0e-12,
                  "C-12 stopping-power scale failed");
@@ -3617,6 +3678,7 @@ int main() {
         test_serial_voxel_idd_closure();
         test_charged_dose_categories();
         test_interpolation();
+        test_cross_section_zero_endpoint_contract();
         test_fragment_stopping_power_scale();
         test_primary_ion_definition();
         test_particle_specific_stopping_power_tables();

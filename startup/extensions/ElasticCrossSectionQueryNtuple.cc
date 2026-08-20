@@ -2,6 +2,7 @@
 
 #include "ElasticCrossSectionQueryNtuple.hh"
 
+#include "G4Exception.hh"
 #include "G4HadronicProcessStore.hh"
 #include "G4Material.hh"
 #include "G4ParticleDefinition.hh"
@@ -9,7 +10,26 @@
 #include "G4SystemOfUnits.hh"
 #include "G4Track.hh"
 
-#include <array>
+#include <cmath>
+#include <cstdint>
+
+namespace {
+
+G4double ReadRequiredEnergyParameter(TsParameterManager* parameter_manager,
+                                     const G4String& parameter_name,
+                                     const char* label) {
+    if (!parameter_manager->ParameterExists(parameter_name)) {
+        G4ExceptionDescription description;
+        description << "ElasticCrossSectionQueryNtuple requires " << label
+                    << " parameter " << parameter_name;
+        G4Exception("ElasticCrossSectionQueryNtuple", "MissingGridParameter",
+                    FatalException, description);
+        return 0.0;
+    }
+    return parameter_manager->GetDoubleParameter(parameter_name, "Energy") / MeV;
+}
+
+}  // namespace
 
 ElasticCrossSectionQueryNtuple::ElasticCrossSectionQueryNtuple(
     TsParameterManager* parameter_manager,
@@ -24,6 +44,29 @@ ElasticCrossSectionQueryNtuple::ElasticCrossSectionQueryNtuple(
     : TsVNtupleScorer(parameter_manager, material_manager, geometry_manager,
                       scoring_manager, extension_manager, scorer_name,
                       quantity, output_file, is_sub_scorer) {
+    energy_min_mev_ = ReadRequiredEnergyParameter(
+        parameter_manager, GetFullParmName("EnergyMin"), "EnergyMin");
+    energy_max_mev_ = ReadRequiredEnergyParameter(
+        parameter_manager, GetFullParmName("EnergyMax"), "EnergyMax");
+    energy_step_mev_ = ReadRequiredEnergyParameter(
+        parameter_manager, GetFullParmName("EnergyStep"), "EnergyStep");
+    const auto span = energy_max_mev_ - energy_min_mev_;
+    const auto count = span / energy_step_mev_;
+    if (!std::isfinite(energy_min_mev_) || !std::isfinite(energy_max_mev_) ||
+        !std::isfinite(energy_step_mev_) || energy_min_mev_ < 0.0 ||
+        energy_max_mev_ < energy_min_mev_ || energy_step_mev_ <= 0.0 ||
+        !std::isfinite(count) || count < 0.0 ||
+        std::abs(count - std::round(count)) > 1.0e-8 || count > 1000000.0) {
+        G4ExceptionDescription description;
+        description << "ElasticCrossSectionQueryNtuple requires a finite, non-negative "
+                    << "uniform EnergyMin/EnergyMax grid with positive EnergyStep; got "
+                    << energy_min_mev_ << ", " << energy_max_mev_ << ", "
+                    << energy_step_mev_;
+        G4Exception("ElasticCrossSectionQueryNtuple", "InvalidGridParameter",
+                    FatalException, description);
+        return;
+    }
+    energy_count_ = static_cast<G4int>(std::llround(count)) + 1;
     fNtuple->RegisterColumnF(&energy_mev_per_u_, "Energy (MeV/u)", "");
     fNtuple->RegisterColumnD(&macroscopic_elastic_per_mm_,
                              "Macroscopic Elastic Cross Section (1/mm)", "");
@@ -47,10 +90,11 @@ G4bool ElasticCrossSectionQueryNtuple::ProcessHits(
     if (projectile->GetAtomicNumber() <= 0 || mass_number <= 0 || material == nullptr) {
         return false;
     }
-    constexpr std::array<G4double, 10> energies_mev_per_u{
-        0.0, 0.25, 0.5, 0.75, 0.9, 0.99, 1.0, 1.1, 1.25, 1.5};
     auto* store = G4HadronicProcessStore::Instance();
-    for (const auto energy : energies_mev_per_u) {
+    for (G4int index = 0; index < energy_count_; ++index) {
+        const auto energy = index + 1 == energy_count_
+                                ? energy_max_mev_
+                                : energy_min_mev_ + index * energy_step_mev_;
         const auto macro = store->GetElasticCrossSectionPerVolume(
             projectile, energy * mass_number * MeV, material);
         energy_mev_per_u_ = static_cast<G4float>(energy);

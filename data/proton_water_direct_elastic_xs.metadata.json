@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "kind": "direct_elastic_cross_section_query",
+  "source": "direct G4HadronicProcessStore query",
+  "projectile": {
+    "Z": 1,
+    "A": 1
+  },
+  "material": "G4_WATER",
+  "process": "hadElastic",
+  "physics_model": "G4HadronElasticPhysicsHP",
+  "versions": {
+    "TOPAS": "4.2.p3",
+    "Geant4": "11.3.2"
+  },
+  "physics_modules": [
+    "g4em-standard_opt4",
+    "g4h-phy_QGSP_BIC_HP",
+    "g4decay",
+    "g4h-elastic_HP",
+    "g4stopping"
+  ],
+  "grid": {
+    "minimum_MeV_per_u": 0.0,
+    "maximum_MeV_per_u": 251.0,
+    "step_MeV_per_u": 0.01,
+    "points": 25101,
+    "endpoint_inclusive": true
+  },
+  "units": {
+    "energy": "MeV/u",
+    "water_macroscopic_cross_section": "1/mm"
+  },
+  "query": {
+    "store_method": "GetElasticCrossSectionPerVolume",
+    "energy_argument": "A * energy_MeV_per_u",
+    "material_argument": "G4_WATER",
+    "histories": 1,
+    "input": "proton_water_elastic_xs_query.txt",
+    "command": "/home/v/maigo_proton_water_qgsp_bic_hp/topas-install/bin/topas run.txt"
+  },
+  "output": {
+    "path": "proton_water_direct_elastic_xs.csv",
+    "sha256": "f9b50723fe307eb7150746ee01a5cbb0e7ccb9d15fa410d94cabef22827da0ba"
+  }
+}

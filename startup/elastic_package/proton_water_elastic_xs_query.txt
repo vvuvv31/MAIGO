@@ -1,4 +1,7 @@
 # Diagnostic only: direct G4HadronicProcessStore elastic XS query, no dose.
+# The scorer emits the authoritative uniform runtime grid, including zero.
+# EnergyMin/Max/Step are in total kinetic-energy units and are converted to
+# MeV/u by the proton A=1 scorer input below.
 i:Ts/Seed = 2026082099
 i:Ts/NumberOfThreads = 1
 b:Gr/Enable = "False"
@@ -32,3 +35,6 @@ s:Sc/ElasticXS/Component = "Phantom"
 s:Sc/ElasticXS/OutputFile = "proton_water_elastic_xs_query"
 s:Sc/ElasticXS/OutputType = "ASCII"
 s:Sc/ElasticXS/IfOutputFileAlreadyExists = "Overwrite"
+d:Sc/ElasticXS/EnergyMin = 0 MeV
+d:Sc/ElasticXS/EnergyMax = 251 MeV
+d:Sc/ElasticXS/EnergyStep = 0.01 MeV
