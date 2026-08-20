@@ -659,7 +659,7 @@ std::vector<PrimarySpotBatchEntry> TpsSourcePlan::make_primary_batch(
     // z low edge to zero internally. Output metadata restores the CT origin.
     double transport_z_shift_mm = 0.0;
     if (config.enable_ct_grid) {
-        const auto grid = CtGrid::from_binary(config.ct_grid_file);
+        const auto grid = CtGrid::from_config(config);
         const auto number_of_bins = config.number_of_bins();
         const auto close = [](const double left, const double right) {
             return std::abs(left - right) <=

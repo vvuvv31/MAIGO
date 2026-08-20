@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Extract primary track-1 C-12 reaction packages from a cascade baseline."""
+"""Extract source-primary first-inelastic reaction packages from a cascade baseline."""
 
 from __future__ import annotations
 
@@ -43,6 +43,8 @@ def main() -> None:
     parser.add_argument("--reactions-output", type=Path, required=True)
     parser.add_argument("--secondaries-output", type=Path, required=True)
     parser.add_argument("--metadata-output", type=Path, required=True)
+    parser.add_argument("--projectile-z", type=int, required=True)
+    parser.add_argument("--projectile-a", type=int, required=True)
     args = parser.parse_args()
 
     source_metadata = json.loads(args.cascade_metadata.read_text(encoding="utf-8"))
@@ -64,13 +66,13 @@ def main() -> None:
     selected: list[dict[str, str]] = []
     with gzip.open(args.interactions, "rt", encoding="utf-8", newline="") as source:
         for row in csv.DictReader(source):
-            if (int(row["projectile_Z"]), int(row["projectile_A"])) != (6, 12):
+            if (int(row["projectile_Z"]), int(row["projectile_A"])) != (args.projectile_z, args.projectile_a):
                 continue
             if int(row["interaction_track_id"]) != 1 or int(row["event_interaction_id"]) != 0:
                 continue
             selected.append(row)
     if not selected:
-        raise SystemExit("No primary track-1 C-12 interactions were found")
+        raise SystemExit("No source-primary track-1 first-inelastic interactions were found")
 
     reaction_rows: list[dict[str, object]] = []
     secondary_rows: list[dict[str, object]] = []
@@ -81,7 +83,7 @@ def main() -> None:
             raise SystemExit(f"Product-count mismatch for source interaction {interaction_id}")
         reaction_rows.append({
             "reaction_id": reaction_id,
-            "incident_c12_energy_MeV_per_u": interaction["incident_energy_MeV_per_u"],
+            "incident_energy_MeV_per_u": interaction["incident_energy_MeV_per_u"],
             "reaction_depth_mm": interaction["depth_mm"],
             "local_deposit_MeV": interaction["local_deposit_MeV"],
             "secondary_count": len(products),
@@ -112,9 +114,9 @@ def main() -> None:
     write_gzip_csv(args.reactions_output, reaction_fields, reaction_rows)
     write_gzip_csv(args.secondaries_output, secondary_fields, secondary_rows)
     metadata = {
-        "case": "cascade-aligned-primary-c12",
+        "case": "cascade-aligned-primary",
         "histories": int(source_metadata["histories"]),
-        "reaction_definition": "first inelastic interaction of source track-1 primary C-12",
+        "reaction_definition": "first inelastic interaction of source track-1 primary ion",
         "source_cascade_metadata": args.cascade_metadata.as_posix(),
         "source_cascade_metadata_sha256": sha256(args.cascade_metadata),
         "runtime_reference": (
@@ -133,8 +135,8 @@ def main() -> None:
         "reaction_count": len(reaction_rows),
         "secondary_count": len(secondary_rows),
         "selection": {
-            "projectile_Z": 6,
-            "projectile_A": 12,
+            "projectile_Z": args.projectile_z,
+            "projectile_A": args.projectile_a,
             "interaction_track_id": 1,
             "event_interaction_id": 0,
         },
@@ -159,7 +161,7 @@ def main() -> None:
     args.metadata_output.parent.mkdir(parents=True, exist_ok=True)
     with args.metadata_output.open("w", encoding="utf-8", newline="\n") as target:
         target.write(json.dumps(metadata, indent=2) + "\n")
-    print(f"Extracted {len(reaction_rows)} primary C-12 reactions and "
+    print(f"Extracted {len(reaction_rows)} source-primary reactions and "
           f"{len(secondary_rows)} correlated products")
 
 

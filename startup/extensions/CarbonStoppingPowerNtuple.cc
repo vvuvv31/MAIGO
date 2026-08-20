@@ -48,8 +48,9 @@ G4bool CarbonStoppingPowerNtuple::ProcessHits(G4Step* step, G4TouchableHistory*)
         return false;
     }
 
-    const G4ParticleDefinition* carbon = step->GetTrack()->GetDefinition();
-    if (carbon->GetAtomicNumber() != 6 || carbon->GetAtomicMass() != 12) {
+    const G4ParticleDefinition* projectile = step->GetTrack()->GetDefinition();
+    const G4int mass_number = projectile->GetAtomicMass();
+    if (projectile->GetAtomicNumber() <= 0 || mass_number <= 0) {
         return false;
     }
 
@@ -62,11 +63,11 @@ G4bool CarbonStoppingPowerNtuple::ProcessHits(G4Step* step, G4TouchableHistory*)
     for (G4int energy_index = 0; energy_index <= 4000; ++energy_index) {
         const G4double energy_per_u =
             (0.01 + 0.1 * static_cast<G4double>(energy_index)) * MeV;
-        const G4double total_energy = 12.0 * energy_per_u;
+        const G4double total_energy = static_cast<G4double>(mass_number) * energy_per_u;
         const G4double electronic = em_calculator.ComputeElectronicDEDX(
-            total_energy, carbon, material);
+            total_energy, projectile, material);
         const G4double total = em_calculator.ComputeTotalDEDX(
-            total_energy, carbon, material);
+            total_energy, projectile, material);
         // CSDA tables are disabled by the reference physics list. Querying
         // them emits one warning per grid point and does not affect the GPU
         // transport, which integrates dE/dx directly.

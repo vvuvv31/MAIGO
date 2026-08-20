@@ -1,0 +1,74 @@
+# EM-only proton water validation. The OFF variant adds the
+# EMOnlyNoLossFluctuation module, which calls the official Geant4
+# G4EmParameters::SetLossFluctuations(false) API before process construction.
+i:Ts/Seed = @SEED@
+i:Ts/NumberOfThreads = @THREADS@
+i:Ts/ShowHistoryCountAtInterval = 10000
+b:Gr/Enable = "False"
+s:Ge/World/Type = "TsBox"
+s:Ge/World/Material = "Air"
+d:Ge/World/HLX = 200 mm
+d:Ge/World/HLY = 200 mm
+d:Ge/World/HLZ = 400 mm
+s:Ge/Phantom/Parent = "World"
+s:Ge/Phantom/Type = "TsBox"
+s:Ge/Phantom/Material = "G4_WATER"
+d:Ge/Phantom/HLX = 150 mm
+d:Ge/Phantom/HLY = 150 mm
+d:Ge/Phantom/HLZ = 350 mm
+d:Ge/Phantom/MaxStepSize = 0.1 mm
+s:Ge/BeamPosition/Parent = "World"
+s:Ge/BeamPosition/Type = "Group"
+d:Ge/BeamPosition/TransZ = 349.999 mm
+s:So/ProtonBeam/Type = "Beam"
+s:So/ProtonBeam/Component = "BeamPosition"
+s:So/ProtonBeam/BeamParticle = "proton"
+d:So/ProtonBeam/BeamEnergy = 70 MeV
+u:So/ProtonBeam/BeamEnergySpread = 0.0
+s:So/ProtonBeam/BeamPositionDistribution = "None"
+s:So/ProtonBeam/BeamAngularDistribution = "None"
+i:So/ProtonBeam/NumberOfHistoriesInRun = @HISTORIES@
+
+s:Ph/ListName = "Default"
+s:Ph/Default/Type = "Geant4_Modular"
+sv:Ph/Default/Modules = @MODULE_COUNT@ @MODULES@
+i:Ph/Verbosity = 1
+b:Ph/SetEmParametersInTsModularPhysicsList = "True"
+d:Ph/Default/CutForAllParticles = 0.05 mm
+
+# Formal primary crossing-count survival on a 0.5 mm grid.
+s:Sc/PrimaryCrossing/Quantity = "PrimaryCrossingCount"
+s:Sc/PrimaryCrossing/Component = "Phantom"
+s:Sc/PrimaryCrossing/OutputFile = "@OUTPUT_STEM@_primary_crossing_count"
+s:Sc/PrimaryCrossing/OutputType = "csv"
+s:Sc/PrimaryCrossing/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/PrimaryCrossing/ProjectileZ = 1
+i:Sc/PrimaryCrossing/ProjectileA = 1
+i:Sc/PrimaryCrossing/XBins = 1
+i:Sc/PrimaryCrossing/YBins = 1
+i:Sc/PrimaryCrossing/ZBins = 1400
+sv:Sc/PrimaryCrossing/Report = 1 "Sum"
+
+s:Sc/PrimaryEnergy/Quantity = "EnergyDeposit"
+s:Sc/PrimaryEnergy/Component = "Phantom"
+s:Sc/PrimaryEnergy/OutputFile = "@OUTPUT_STEM@_primary_energy_deposit"
+s:Sc/PrimaryEnergy/OutputType = "csv"
+s:Sc/PrimaryEnergy/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/PrimaryEnergy/XBins = 1
+i:Sc/PrimaryEnergy/YBins = 1
+i:Sc/PrimaryEnergy/ZBins = 1400
+sv:Sc/PrimaryEnergy/Report = 1 "Sum"
+sv:Sc/PrimaryEnergy/OnlyIncludeParticlesNamed = 1 "proton"
+s:Sc/PrimaryEnergy/OnlyIncludeParticlesOfGeneration = "Primary"
+
+s:Sc/PrimaryDose/Quantity = "DoseToMedium"
+s:Sc/PrimaryDose/Component = "Phantom"
+s:Sc/PrimaryDose/OutputFile = "@OUTPUT_STEM@_primary_dose"
+s:Sc/PrimaryDose/OutputType = "csv"
+s:Sc/PrimaryDose/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/PrimaryDose/XBins = 1
+i:Sc/PrimaryDose/YBins = 1
+i:Sc/PrimaryDose/ZBins = 1400
+sv:Sc/PrimaryDose/Report = 1 "Sum"
+sv:Sc/PrimaryDose/OnlyIncludeParticlesNamed = 1 "proton"
+s:Sc/PrimaryDose/OnlyIncludeParticlesOfGeneration = "Primary"

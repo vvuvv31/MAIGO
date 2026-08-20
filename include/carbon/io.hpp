@@ -81,4 +81,12 @@ void write_dense_voxel_dose_mhd(const std::filesystem::path& mhd_path,
                                 const TransportConfig& config,
                                 const TransportResult& result);
 
+void write_energy_ledger_json(const std::filesystem::path& path,
+                              const TransportConfig& config,
+                              const TransportResult& result);
+
+void write_validation_scorer_csvs(const std::filesystem::path& directory,
+                                  const TransportConfig& config,
+                                  const TransportResult& result);
+
 }  // namespace carbon

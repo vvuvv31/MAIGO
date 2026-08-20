@@ -9,6 +9,8 @@ Runtime inputs used by MAIGO. Tables are Geant4 11.3.2-derived CSVs unless noted
 | `hu_stopping_power_lut_geant4_11_3_2.csv` | TOPAS-sampled Schneider section mass stopping-power ratios on the GPU water energy grid; first row is the energy grid |
 | `ion_stopping_power_water_*.csv` | Per-isotope water ratios applied to the continuous CT C-12 stopping power |
 | `let_delta_electron_fraction_*.csv` | Optional delta-electron fraction for LET_d |
+| `c12_primary_inelastic_effective_scale_topas_1M.csv` | Incident-energy-dependent TOPAS effective/table primary optical-depth ratio |
+| `HUtoMaterialSchneider.txt` | TOPAS Schneider HU→density/material table for DICOM folders |
 | `packages/*.bin` | Reaction, cascade, neutral, and soft-tissue final-state packages |
 | `copper_*.bin` | Minibeam Copper reaction / neutral packages |
 
@@ -22,6 +24,14 @@ outputs only.
 Small reusable TOPAS/TPS spot-plan fixtures live under `data/plans/`. These are
 runtime/test inputs; larger patient and dose-validation plans remain in the
 local ignored `benchmark/` and `validation/` workspaces.
+
+The primary inelastic correction table is an optional runtime calibration.
+Enable it explicitly with `enable_primary_inelastic_xs_correction: true` and
+`primary_inelastic_xs_correction_file`. The scale is linearly interpolated from
+the incident MeV/u after beam-energy-spread sampling, clamped to the endpoint
+values outside the table, and held fixed for the full primary history. It is
+off by default and cannot be combined with a non-unit legacy
+`primary_inelastic_xs_scale`.
 
 CT patient ionization has two explicit material backends. A configured
 `ct_hu_stopping_power_lut_file` has first priority and selects a TOPAS-sampled

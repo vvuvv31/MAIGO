@@ -5038,7 +5038,8 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                                             secondary.atomic_number, secondary.mass_number,
                                             scaled_secondary_energy_MeV, position_z_mm,
                                             child_direction.z, /*generation=*/0,
-                                            /*parent_Z=*/6, /*parent_A=*/12, energy_MeV);
+                                            /*parent_Z=*/primary_atomic_number,
+                                            /*parent_A=*/primary_mass_number, energy_MeV);
                                     }
                                 }
                             }

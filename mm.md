@@ -33,10 +33,14 @@ drives the TOPAS reference and loaded as CSV or binary packages
 
 ## 2. Geometry and patient model
 
-A patient volume is a CCTG voxel grid: per-voxel mass density
-\(\rho\) (g cm\(^{-3}\)) and a Schneider section index. Version-3 grids also
-store the section \(\langle Z/A\rangle\) relative to water and the Bragg
-mean excitation energy \(I\). Voxel faces are the geometric boundaries for
+A patient volume is a voxel grid of mass density \(\rho\) (g cm\(^{-3}\))
+and a Schneider section index. The on-disk cache format is **CCTG**
+(Carbon CT Grid: little-endian magic `CCTG`, currently v3). Version-3
+grids also store the section \(\langle Z/A\rangle\) relative to water and
+the Bragg mean excitation energy \(I\). `ct_grid_file` may instead be a
+DICOM folder: the engine reads the CT Image series, converts HU with the
+TOPAS Schneider table (`data/HUtoMaterialSchneider.txt`), and builds the
+same v3 grid in memory. Voxel faces are the geometric boundaries for
 step clamping. Homogeneous-region face clamps can be skipped
 (`ct_skip_homogeneous_face_clamp`) without changing the material model.
 
@@ -259,6 +263,35 @@ transport nor deposit. There is no general electron / positron / photon
 cascade, no `G4DecayPhysics` lifetime module, no radioactive-decay chain
 and no at-rest hadronic capture process. Those TOPAS modules therefore
 have no one-to-one GPU counterpart.
+
+### 8.6 Proton water validation protocol
+
+The reproducible proton campaign is water-only and covers 70, 100, 150, 200,
+and 250 MeV protons. `config/proton_water_qgsp_bic_hp.yaml.template` is
+rendered by `scripts/prepare_proton_water_configs.py` into the ignored
+`out/proton_water_qgsp_bic_hp/` workspace. It fixes `Z=1`, `A=1`, and
+938.27208816 MeV rest mass, uses `QGSP_BIC_HP/BinaryCascade` as the package
+provenance expectation, and requires strict package identity validation. The
+generator records separate GPU, TOPAS-package, and TOPAS-reference seeds plus
+resolved-config checksums; package binaries and raw TOPAS files are never
+source assets.
+
+TOPAS package/reference Monte Carlo runs on `v@192.168.31.5`; MAIGO CUDA
+transport runs locally. Neutral transport is off and untracked neutral energy
+has the existing local-kerma semantics. CT and Copper minibeam are explicitly
+outside this protocol. An energy-dependent inelastic-XS correction is optional
+and must be an externally generated CSV with header
+`initial_energy_MeV_per_u,primary_inelastic_xs_scale`; the renderer leaves it
+disabled by default.
+
+`scripts/compare_water_ion_validation.py` normalizes TOPAS and GPU results by
+their own history counts and writes a machine-readable pass/fail report. The
+acceptance limits are absolute R80 and peak displacement <= 1 mm; total dose
+integral <= 2%; dose mean/p95 absolute relative error <= 2%/5% in the TOPAS
+>1% peak mask; primary/all-hadron LET mean absolute relative error <= 3%/5%;
+total reaction-rate relative error <= 2%; and maximum primary-survival
+difference <= 2 percentage points. The comparator is not evidence that CT,
+minibeam, neutral transport, or clinical commissioning has been validated.
 
 ## 9. Scoring
 

@@ -167,5 +167,43 @@ G4bool CarbonCascadeNtuple::ProcessHits(G4Step* step, G4TouchableHistory*) {
     process_type_ = process->GetProcessType();
     process_subtype_ = process->GetProcessSubType();
     fNtuple->Fill();
+
+    // Geant4 may keep the projectile track after ionInelastic (or change its
+    // identity in place). The first-step product loop never sees that track,
+    // so record the post-step ion as a correlated package member. A source
+    // primary that keeps its Z/A is tagged primary_continuation; a remnant
+    // is recorded with its actual Z/A so GPU species columns can see it.
+    if (record_kind_ == "interaction") {
+        const auto* post = step->GetPostStepPoint();
+        if (post != nullptr && post->GetKineticEnergy() > 0.0 &&
+            track->GetTrackStatus() != fStopAndKill &&
+            definition->GetAtomicNumber() > 0 &&
+            definition->GetAtomicMass() > 0) {
+            record_kind_ = "product";
+            kinetic_energy_mev_ =
+                static_cast<G4float>(post->GetKineticEnergy() / MeV);
+            local_deposit_mev_ = 0.0F;
+            const G4ThreeVector post_direction = post->GetMomentumDirection();
+            direction_x_ = static_cast<G4float>(post_direction.x());
+            direction_y_ = static_cast<G4float>(post_direction.y());
+            direction_z_ = static_cast<G4float>(post_direction.z());
+            const G4ThreeVector post_vertex = post->GetPosition();
+            vertex_x_mm_ = static_cast<G4float>(post_vertex.x() / mm);
+            vertex_y_mm_ = static_cast<G4float>(post_vertex.y() / mm);
+            vertex_z_mm_ = static_cast<G4float>(post_vertex.z() / mm);
+            pdg_id_ = definition->GetPDGEncoding();
+            atomic_number_ = definition->GetAtomicNumber();
+            atomic_mass_ = definition->GetAtomicMass();
+            particle_name_ =
+                (atomic_number_ == context.projectile_z &&
+                 atomic_mass_ == context.projectile_a)
+                    ? "primary_continuation"
+                    : "projectile_continuation";
+            // Same track as the projectile; prepare_topas_cascade requires
+            // product parent == interaction_track.
+            parent_id_ = interaction_track_id_;
+            fNtuple->Fill();
+        }
+    }
     return true;
 }

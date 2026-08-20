@@ -220,6 +220,54 @@ void write_synthetic_proton_packages(const std::filesystem::path& reaction_path,
     }
 }
 
+enum class ReactionAliasFixture {
+    valid,
+    isolated_misbin,
+    different_payload,
+};
+
+void write_reaction_alias_fixture(const std::filesystem::path& path,
+                                  ReactionAliasFixture fixture) {
+    const std::array<carbon::ReactionEnergyBin, 3> bins{{{0, 1}, {1, 1}, {2, 1}}};
+    const auto alias_energy = fixture == ReactionAliasFixture::isolated_misbin
+                                  ? 16.0F
+                                  : 15.0F;
+    const std::array<carbon::ReactionPackage, 3> reactions{{
+        {alias_energy, 2.0F, 1.0F, 0, 1},
+        {15.0F, 2.0F, 1.0F, 1, 1},
+        {25.0F, 3.0F, 1.5F, 2, 1},
+    }};
+    const auto alias_kinetic_energy =
+        fixture == ReactionAliasFixture::different_payload ? 4.0F : 5.0F;
+    const std::array<carbon::ReactionSecondary, 3> secondaries{{
+        {2212, 1, 1, alias_kinetic_energy, 0.0F, 0.0F, 1.0F},
+        {2212, 1, 1, 5.0F, 0.0F, 0.0F, 1.0F},
+        {2212, 1, 1, 6.0F, 0.0F, 0.0F, 1.0F},
+    }};
+    const auto file_size = static_cast<std::uint64_t>(
+        sizeof(ReactionPackageHeaderV1) + sizeof(bins) + sizeof(reactions) +
+        sizeof(secondaries));
+    const ReactionPackageHeaderV1 header{
+        {'C', 'R', 'P', 'K', 'G', '0', '1', '\0'},
+        1,
+        sizeof(ReactionPackageHeaderV1),
+        sizeof(carbon::ReactionEnergyBin),
+        sizeof(carbon::ReactionPackage),
+        sizeof(carbon::ReactionSecondary),
+        static_cast<std::uint32_t>(bins.size()),
+        0.0F,
+        10.0F,
+        reactions.size(),
+        secondaries.size(),
+        file_size,
+    };
+    std::ofstream output(path, std::ios::binary | std::ios::trunc);
+    output.write(reinterpret_cast<const char*>(&header), sizeof(header));
+    output.write(reinterpret_cast<const char*>(bins.data()), sizeof(bins));
+    output.write(reinterpret_cast<const char*>(reactions.data()), sizeof(reactions));
+    output.write(reinterpret_cast<const char*>(secondaries.data()), sizeof(secondaries));
+}
+
 void test_units() {
     carbon::TransportConfig config;
     config.initial_energy_MeVu = 200.0;
@@ -1157,6 +1205,80 @@ void test_reaction_package_loading() {
         "Invalid reaction package was accepted");
     std::filesystem::remove(invalid_path);
 
+}
+
+void test_reaction_package_nearest_fill_alias_validation() {
+    const auto directory = std::filesystem::temp_directory_path();
+    const auto valid_path = directory / "carbon_reaction_alias_valid.bin";
+    const auto isolated_path = directory / "carbon_reaction_alias_isolated.bin";
+    const auto payload_path = directory / "carbon_reaction_alias_payload.bin";
+
+    write_reaction_alias_fixture(valid_path, ReactionAliasFixture::valid);
+    const auto valid = carbon::ReactionPackageTable::from_binary(valid_path);
+    require(valid.energy_bins().size() == 3 && valid.reactions().size() == 3,
+            "Valid nearest-fill alias package did not load");
+
+    write_reaction_alias_fixture(isolated_path,
+                                 ReactionAliasFixture::isolated_misbin);
+    require_throws(
+        [&] { (void)carbon::ReactionPackageTable::from_binary(isolated_path); },
+        "Isolated mis-binned reaction was accepted as a nearest-fill alias");
+
+    write_reaction_alias_fixture(payload_path,
+                                 ReactionAliasFixture::different_payload);
+    require_throws(
+        [&] { (void)carbon::ReactionPackageTable::from_binary(payload_path); },
+        "Nearest-fill alias with different secondary payload was accepted");
+
+    std::filesystem::remove(valid_path);
+    std::filesystem::remove(isolated_path);
+    std::filesystem::remove(payload_path);
+}
+
+void test_package_identity_validation() {
+    const auto source_directory = std::filesystem::path(CARBON_SOURCE_DIR);
+    const auto carbon_package = source_directory /
+        "data/packages/topas_water_inclxx_1M_stitch7_primary_3d.bin";
+    const auto overrides = source_directory / "data/packages/package_identity_overrides.json";
+    const carbon::PackageIdentityExpectation carbon_expectation{
+        "reaction", 6, 12, "G4_WATER", "INCLXX", 0.0, 400.0};
+    carbon::validate_package_identity(carbon_package, carbon_expectation,
+                                      carbon::PackageIdentityValidation::strict, overrides);
+    auto wrong_projectile = carbon_expectation;
+    wrong_projectile.projectile_atomic_number = 1;
+    require_throws([&] { carbon::validate_package_identity(
+                       carbon_package, wrong_projectile,
+                       carbon::PackageIdentityValidation::strict, overrides); },
+                   "Carbon override accepted the wrong projectile");
+    auto wrong_kind = carbon_expectation;
+    wrong_kind.kind = "cascade";
+    require_throws([&] { carbon::validate_package_identity(
+                       carbon_package, wrong_kind,
+                       carbon::PackageIdentityValidation::strict, overrides); },
+                   "Package identity accepted the wrong kind");
+    auto wrong_range = carbon_expectation;
+    wrong_range.maximum_energy_MeV_per_u = 405.0;
+    require_throws([&] { carbon::validate_package_identity(
+                       carbon_package, wrong_range,
+                       carbon::PackageIdentityValidation::strict, overrides); },
+                   "Package identity accepted an uncovered energy range");
+
+    const auto temp = std::filesystem::temp_directory_path() / "carbon_identity_test.bin";
+    const auto sidecar = temp.parent_path() / "carbon_identity_test.compiled.json";
+    {
+        std::ofstream output(temp, std::ios::binary | std::ios::trunc);
+        output << "package";
+    }
+    {
+        std::ofstream output(sidecar, std::ios::trunc);
+        output << R"({"kind":"reaction","projectile":{"Z":6,"A":12},"material":"G4_WATER","physics_model":"INCLXX","energy_range_MeV_per_u":{"minimum":0,"maximum":400},"output":{"bytes":7,"sha256":"0000000000000000000000000000000000000000000000000000000000000000"}})";
+    }
+    require_throws([&] { carbon::validate_package_identity(
+                       temp, carbon_expectation,
+                       carbon::PackageIdentityValidation::strict, overrides); },
+                   "Package identity accepted a wrong SHA-256");
+    std::filesystem::remove(sidecar);
+    std::filesystem::remove(temp);
 }
 
 void test_neutral_package_loading() {
@@ -3366,6 +3488,78 @@ void test_sycl_secondary_queue_generation() {
             "Cascade summary counters not bit-identical across same-seed runs");
 }
 
+#if defined(CARBON_VALIDATION_SCORERS)
+void test_sycl_validation_primary_survival_without_secondary_transport() {
+    carbon::TransportConfig config;
+    config.number_of_histories = 32;
+    config.initial_energy_MeVu = 10.0;
+    config.phantom_length_mm = 20.0;
+    config.depth_bin_width_mm = 1.0;
+    config.maximum_step_mm = 0.5;
+    config.maximum_relative_energy_loss = 0.01;
+    config.enable_primary_attenuation = false;
+    config.enable_secondary_generation = false;
+    config.enable_secondary_transport = false;
+    config.enable_fragment_cascade = false;
+    config.enable_voxel_scoring = false;
+    config.scorer_mode = "validation";
+    config.random_seed = 2026082001;
+    config.validate();
+
+    const carbon::StoppingPowerTable stopping_power(
+        {0.01, 20.01}, {2.0, 2.0});
+    const auto result = carbon::transport_sycl(
+        config, stopping_power, zero_cross_section(), "cpu");
+    require(result.primary_survival_counts.size() == config.number_of_bins(),
+            "Validation primary survival was not assembled without secondary transport");
+    for (std::size_t bin = 0; bin < result.primary_survival_counts.size(); ++bin) {
+        require(result.primary_survival_counts[bin] <= config.number_of_histories,
+                "Validation primary survival exceeded history count");
+        if (bin > 0) {
+            require(result.primary_survival_counts[bin] <=
+                        result.primary_survival_counts[bin - 1],
+                    "Validation primary survival was not non-increasing");
+        }
+    }
+    require(result.primary_survival_counts.front() > 0,
+            "Validation primary survival was empty at the phantom entrance");
+
+    const auto output_directory = std::filesystem::temp_directory_path() /
+                                  "carbon_validation_primary_survival";
+    std::filesystem::remove_all(output_directory);
+    carbon::write_validation_scorer_csvs(output_directory, config, result);
+    const auto survival_path = output_directory / "primary_survival.csv";
+    std::ifstream survival(survival_path);
+    require(static_cast<bool>(survival),
+            "Validation primary survival CSV was not written");
+    std::string line;
+    require(static_cast<bool>(std::getline(survival, line)) &&
+                line == "depth_mm,count",
+            "Validation primary survival CSV header is incorrect");
+    std::size_t rows = 0;
+    while (std::getline(survival, line)) {
+        if (line.empty()) {
+            continue;
+        }
+        const auto comma = line.find(',');
+        require(comma != std::string::npos,
+                "Validation primary survival CSV row is malformed");
+        const auto depth = std::stod(line.substr(0, comma));
+        const auto count = std::stoull(line.substr(comma + 1));
+        require_near(depth,
+                     (static_cast<double>(rows) + 0.5) * config.depth_bin_width_mm,
+                     1.0e-12,
+                     "Validation primary survival CSV grid mismatch");
+        require(count <= config.number_of_histories,
+                "Validation primary survival CSV count exceeded histories");
+        ++rows;
+    }
+    require(rows == config.number_of_bins(),
+            "Validation primary survival CSV row count mismatch");
+    std::filesystem::remove_all(output_directory);
+}
+#endif
+
 void test_sycl_proton_full_chain_smoke() {
     const auto directory = std::filesystem::temp_directory_path() /
                            "carbon_proton_full_chain_smoke";
@@ -3698,6 +3892,8 @@ int main() {
         test_primary_attenuation_energy_accounting();
         test_primary_attenuation_step_partition_invariance();
         test_reaction_package_loading();
+        test_reaction_package_nearest_fill_alias_validation();
+        test_package_identity_validation();
         test_cascade_package_loading();
         test_neutral_package_loading();
         test_neutral_cross_section_loading();
@@ -3725,6 +3921,9 @@ int main() {
         test_sycl_transport_context_reuse();
         test_sycl_proton_full_chain_smoke();
         test_sycl_secondary_queue_generation();
+#if defined(CARBON_VALIDATION_SCORERS)
+        test_sycl_validation_primary_survival_without_secondary_transport();
+#endif
         test_sycl_layered_slab_range_shift();
         test_sycl_ct_secondary_density_smoke();
         test_sycl_neutral_transport_smoke();

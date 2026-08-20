@@ -7,6 +7,7 @@
 #include <cstring>
 #include <fstream>
 #include <limits>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <type_traits>
@@ -122,17 +123,6 @@ ReactionPackageTable ReactionPackageTable::from_binary(const std::filesystem::pa
                 table.reactions_.size()) {
             throw std::runtime_error("Invalid reaction energy-bin range: " + path.string());
         }
-        const auto lower_energy = table.minimum_energy_MeV_per_u_ +
-                                  static_cast<float>(bin_index) *
-                                      table.energy_bin_width_MeV_per_u_;
-        const auto upper_energy = lower_energy + table.energy_bin_width_MeV_per_u_;
-        for (std::uint32_t offset = 0; offset < bin.reaction_count; ++offset) {
-            const auto energy = table.reactions_[bin.reaction_offset + offset]
-                                    .incident_energy_MeV_per_u;
-            if (!std::isfinite(energy) || energy < lower_energy || energy >= upper_energy) {
-                throw std::runtime_error("Reaction is outside its energy bin: " + path.string());
-            }
-        }
         expected_reaction_offset += bin.reaction_count;
     }
     if (expected_reaction_offset != table.reactions_.size()) {
@@ -173,6 +163,84 @@ ReactionPackageTable ReactionPackageTable::from_binary(const std::filesystem::pa
             (has_x && (!std::isfinite(direction_norm_squared) ||
                        std::abs(direction_norm_squared - 1.0F) > 2.0e-3F))) {
             throw std::runtime_error("Invalid reaction secondary value: " + path.string());
+        }
+    }
+
+    const auto natural_bin_index = [&](const float energy) -> std::optional<std::size_t> {
+        if (!std::isfinite(energy) || energy < table.minimum_energy_MeV_per_u_) {
+            return std::nullopt;
+        }
+        const auto scaled = static_cast<double>(energy - table.minimum_energy_MeV_per_u_) /
+                            table.energy_bin_width_MeV_per_u_;
+        if (scaled < 0.0 || scaled >= static_cast<double>(table.energy_bins_.size())) {
+            return std::nullopt;
+        }
+        return static_cast<std::size_t>(scaled);
+    };
+    const auto same_payload = [&](const ReactionPackage& lhs,
+                                  const ReactionPackage& rhs) {
+        if (std::memcmp(&lhs.incident_energy_MeV_per_u,
+                        &rhs.incident_energy_MeV_per_u, sizeof(float)) != 0 ||
+            std::memcmp(&lhs.reaction_depth_mm, &rhs.reaction_depth_mm,
+                        sizeof(float)) != 0 ||
+            std::memcmp(&lhs.local_deposit_MeV, &rhs.local_deposit_MeV,
+                        sizeof(float)) != 0 ||
+            lhs.secondary_count != rhs.secondary_count) {
+            return false;
+        }
+        const auto bytes = static_cast<std::size_t>(lhs.secondary_count) *
+                           sizeof(ReactionSecondary);
+        return bytes == 0 ||
+               std::memcmp(table.secondaries_.data() + lhs.secondary_offset,
+                           table.secondaries_.data() + rhs.secondary_offset,
+                           bytes) == 0;
+    };
+
+    // Nearest-fill aliases are the sole exception to normal bin membership.
+    // The whole aliased bin must be an exact payload clone of one naturally
+    // populated source bin; accepting individual look-alikes would weaken the
+    // package integrity check for arbitrary mis-binned records.
+    for (std::size_t bin_index = 0; bin_index < table.energy_bins_.size(); ++bin_index) {
+        const auto& bin = table.energy_bins_[bin_index];
+        std::optional<std::size_t> alias_source;
+        bool has_natural_record = false;
+        for (std::uint32_t offset = 0; offset < bin.reaction_count; ++offset) {
+            const auto& reaction = table.reactions_[bin.reaction_offset + offset];
+            const auto natural = natural_bin_index(reaction.incident_energy_MeV_per_u);
+            if (!natural) {
+                throw std::runtime_error("Reaction is outside the package energy range: " +
+                                         path.string());
+            }
+            if (*natural == bin_index) {
+                has_natural_record = true;
+            } else if (!alias_source) {
+                alias_source = *natural;
+            } else if (*alias_source != *natural) {
+                throw std::runtime_error("Reaction bin mixes multiple alias sources: " +
+                                         path.string());
+            }
+        }
+        if (!alias_source) {
+            continue;
+        }
+        const auto& source = table.energy_bins_[*alias_source];
+        if (has_natural_record || source.reaction_count != bin.reaction_count) {
+            throw std::runtime_error("Reaction bin is not a complete nearest-fill alias: " +
+                                     path.string());
+        }
+        for (std::uint32_t offset = 0; offset < bin.reaction_count; ++offset) {
+            const auto& alias_reaction =
+                table.reactions_[bin.reaction_offset + offset];
+            const auto& source_reaction =
+                table.reactions_[source.reaction_offset + offset];
+            const auto source_natural =
+                natural_bin_index(source_reaction.incident_energy_MeV_per_u);
+            if (!source_natural || *source_natural != *alias_source ||
+                !same_payload(alias_reaction, source_reaction)) {
+                throw std::runtime_error(
+                    "Reaction nearest-fill alias payload differs from its source bin: " +
+                    path.string());
+            }
         }
     }
     return table;

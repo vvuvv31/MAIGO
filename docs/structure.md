@@ -4,7 +4,7 @@
 
 ## 0. 一页结论
 
-MAIGO（CMake 项目名 `carbon_oneapi_mc`）是一个研究用途的碳离子 condensed-history Monte Carlo：
+MAIGO（CMake 项目名 `carbon_oneapi_mc`）是一个研究用途的、以可配置带电离子 primary 为入口的 condensed-history Monte Carlo：
 
 - C++20 核心，无外部运行时库；完整加速后端使用 Intel oneAPI SYCL。
 - 输入是自定义的 `key: value` 配置、CSV 物理表、二进制末态 package、可选 CCTG CT 网格，以及 TOPAS/TPS spot 计划。
@@ -182,11 +182,31 @@ CLI 覆盖项包括：`--device`、`--histories`、`--random-seed`、`--ct-grid`
 
 字段的完整默认值和注释在 `include/carbon/transport_config.hpp`；解析映射与组合校验在 `src/config.cpp`。添加配置项通常必须同时修改这两个文件，并视情况修改 CLI、kernel capture 和示例配置。
 
-### 4.2 `TransportConfig` 的功能分区
+### 4.2 Primary-ion 数据契约
+
+每个配置显式给出 `primary_atomic_number` 和 `primary_mass_number`；
+`primary_rest_mass_MeV` 可选，零表示历史的 \(A\times931.49410242\) MeV
+近似。与该 Z/A 配套的 `primary_stopping_power_file`、
+`primary_inelastic_cross_section_file`、`primary_reaction_package_file` 和
+`cascade_package_file` 必须由用户一起准备。CRPKG v1 不嵌入 primary 身份，
+因此 loader 无法替用户发现 Z/A 与 package 不匹配。当前 carbon 示例统一使用
+`topas_water_inclxx_1M_stitch7_primary_3d.bin` 与
+`topas_400MeVu_water_inclxx_1M_cascade_3d.bin`。
+
+Primary elastic 数据使用独立的 ELPKG v1 契约：设置
+`enable_primary_elastic_interactions: true` 时必须同时提供
+`primary_elastic_cross_section_file`、`primary_elastic_package_file` 和
+`primary_elastic_package_physics_model`。`carbon_mc --plan-only` 会读取 XS/ELPKG
+并在 strict 模式下校验相邻 `.compiled.json` 的 kind、SHA-256、字节数、Z/A、
+`G4_WATER`、model 和能区；当前普通 transport 尚未实现 elastic sampling，
+因此非 plan-only 运行会明确失败。开关关闭时提供 elastic 字段也会被拒绝，
+避免配置看似生效但实际未使用。
+
+### 4.3 `TransportConfig` 的功能分区
 
 | 分区 | 代表内容 |
 |---|---|
-| 基础输运 | histories、MeV/u、A、步长、相对能损、cutoff、seed |
+| 基础输运 | histories、MeV/u、primary Z/A、可选静质量、步长、相对能损、cutoff、seed |
 | 几何 | 均匀水、轴向 slab、AABB insert、CCTG CT（互斥） |
 | 束源 | flat、BiGaussian emittance、世界坐标 beam basis、能散 |
 | 计划 | TOPAS files/weights/geometry transforms、TPS angles/isocenter/SAD/patient position |
@@ -198,7 +218,7 @@ CLI 覆盖项包括：`--device`、`--histories`、`--random-seed`、`--ct-grid`
 | minibeam | slit/Copper 几何、EM/MCS/straggling、核反应、Copper product tables、诊断 |
 | 输出 | MeV/Gy CSV、MHD、LET、species、origin、birth-spectrum 路径及 dose scale |
 
-### 4.3 当前 profile 事实
+### 4.4 当前 profile 事实
 
 | 值 | 当前校验行为 |
 |---|---|
@@ -209,15 +229,16 @@ CLI 覆盖项包括：`--device`、`--histories`、`--random-seed`、`--ct-grid`
 
 不要照搬旧文档中“medium 可用”或“fast 可开 LET”的结论。当前源码明确拒绝二者。
 
-### 4.4 关键组合约束
+### 4.5 关键组合约束
 
 - layered phantom、hetero insert、CT grid 三选一。
 - secondary transport 依赖 secondary generation；cascade 还依赖 transport 和 `maximum_cascade_generations > 0`。
 - neutral transport 依赖 generation + charged transport；`full` 要至少两代。
 - minibeam YAML 需要以 `CARBON_ENABLE_MINIBEAM=ON` 编译。
+- `minibeam:true` 的 Copper 校准目前只接受 primary `Z=6,A=12`；普通 water/CT primary 不受此限制。
 - charged-origin voxel 依赖 voxel scorer 和 secondary transport。
 - voxel LET MHD 依赖 LET + voxel scorer。
-- TPS source 当前只允许 carbon、要求 voxel scorer，并依赖 SYCL 主路径。
+- TPS source 要求 voxel scorer，并依赖 SYCL 主路径；其 primary Z/A 与物理 package 由同一份配置显式指定。
 - queue overflow 不会自动变成“有效物理近似”；正式结果必须审计 stdout 中 secondary/cascade/neutral overflow。
 
 ## 5. 公共模块地图
@@ -228,8 +249,8 @@ CLI 覆盖项包括：`--device`、`--histories`、`--random-seed`、`--ct-grid`
 | Config | `transport_config.hpp`, `config.cpp` | 所有策略、默认值、解析、组合校验 |
 | Particle/RNG | `particle.hpp`, `rng.hpp` | device-safe track structs、species/category、Philox counter RNG |
 | Continuous physics | `stopping_power.*`, `straggling.hpp`, `multiple_scattering.hpp` | SP 插值、有效电荷/同位素比例、Bohr、Highland |
-| Nuclear XS | `cross_section.*` | C-12、离子和 gamma/neutron lookup table |
-| Event packages | `reaction_package.*`, `cascade_package.*`, `neutral_package.*` | 读取预编译相关末态和 projectile XS |
+| Nuclear XS | `cross_section.*` | configured primary、secondary ion 和 gamma/neutron lookup table |
+| Event packages | `reaction_package.*`, `cascade_package.*`, `elastic_package.*`, `neutral_package.*` | 读取预编译相关末态和 projectile XS |
 | Geometry | `slab_phantom.hpp`, `ct_grid.*`, `minibeam_collimator.hpp` | slab/insert、CCTG+DDA、slit/Copper 解析几何 |
 | Plan/source | `topas_spots.*`, `tps_source.*` | spot 解析、权重分配、坐标变换、batch 构造 |
 | I/O | `io.*` | MeV/Gy、LET、species、sparse CSV、dense MetaImage |
@@ -263,7 +284,7 @@ CLI 覆盖项包括：`--device`、`--histories`、`--random-seed`、`--ct-grid`
 - v2：附加每 section 的常数 mass stopping-power factor。
 - v3：附加 `(Z/A)_section/(Z/A)_water` 与 mean excitation energy `I_eV`，运行时形成能量相关 mass-SP factor。
 
-新写出的网格固定为 v3。`validation/scripts/prepare_ct_grid.py`、reorient/downsample 工具负责从 DICOM/中间网格准备 CCTG；transport 不读取 DICOM。
+新写出的网格固定为 v3。`ct_grid_file` 也可以是 DICOM 文件夹：`CtGrid::load` 读取 CT Image 序列，用 `data/HUtoMaterialSchneider.txt` 做 HU→密度/材料，在内存里建成同样的 v3 网格。`ct_dicom_origin_mode: centered` 与历史 CCTG 转换一致（体中心、第一层中心 z=0）；`dicom` 保留 ImagePositionPatient 的 LPS 低边。reorient/downsample 工具仍可用于预先打包的 `tps_90` 网格。
 
 ### 6.3 TOPAS 与 TPS 计划
 
@@ -365,7 +386,7 @@ package 保存离线抽取的相关事件样本，不是解析核模型。关键
 
 - raw transport tally 是 deposited energy（MeV）。writer 依据几何质量换算 Gy，并应用仅输出层的 `dose_output_scale`。
 - depth IDD 质量来自面积 × depth bin × 局部/配置密度；voxel Gy 使用每 voxel 局部 CT 密度。
-- LET 保存 numerator/denominator 原始 moments，分别有 primary C-12、all hadron、charged species 和可选轻同位素；最终 LETd 由 writer 相除。
+- LET 保存 numerator/denominator 原始 moments，分别有 primary ion、all hadron、charged species 和可选轻同位素；最终 LETd 由 writer 相除。
 - `TransportResult::relative_energy_balance_error()` 用 initial、deposited、escaped、beamline removed、untracked/overflow 等账本项审计闭合。
 - `backend` 字符串逐项追加实际 feature tag，是确认运行路径、dose 精度、材料模型与 scorer 的快速证据。
 
@@ -384,6 +405,24 @@ package 保存离线抽取的相关事件样本，不是解析核模型。关键
 - 相邻 `.metadata.json` / `.compiled.json`：生成版本和编译参数
 
 `TransportConfig` 默认 package path 指向 `data/packages/`。`validation/results/` 只保留离线生成中间产物、消融变体与对照输出，不再承载 carbon_mc 硬依赖 package。
+
+Proton water 的可提交入口是 `config/proton_water_qgsp_bic_hp.yaml.template`
+和 `scripts/prepare_proton_water_configs.py`。后者只生成被忽略的
+`out/proton_water_qgsp_bic_hp/` resolved configs/manifest；不会下载、复制或提交
+package。它为 70/100/150/200/250 MeV 固定 proton Z/A/rest mass、独立
+GPU/package-reference seeds、`package_identity_validation: strict` 和
+`QGSP_BIC_HP/BinaryCascade` package model。carbon 配置仍必须使用
+`data/packages/topas_water_inclxx_1M_stitch7_primary_3d.bin` 与
+`data/packages/topas_400MeVu_water_inclxx_1M_cascade_3d.bin`，不得由 proton
+模板替换。
+
+`scripts/compare_water_ion_validation.py` 是不依赖旧 carbon A1/A4 文件名的
+通用 1-D primary-ion comparator。输入为各自 history-normalized 所需的 dose、
+primary/all-hadron LET、primary survival 和 inelastic reaction CSV；输出 JSON
+包含 R80、peak、integral、>1% TOPAS dose mask 的 mean/p95、LET、reaction 和
+survival checks。正式 proton 只覆盖 homogeneous `G4_WATER`、neutral-off；CT
+和 minibeam 不属于该验收。TOPAS Monte Carlo 在 `v@192.168.31.5`，本机负责
+MAIGO CUDA run 与该比较器。
 
 ### 9.2 `startup/`
 

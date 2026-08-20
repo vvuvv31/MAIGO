@@ -23,6 +23,11 @@ if(CARBON_DOSE_FP64)
 endif()
 # Copper minibeam beamline. Default OFF keeps the legacy CT/water/LET kernel.
 option(CARBON_ENABLE_MINIBEAM "Build Copper minibeam transport support" OFF)
+# Extra physics-validation scorers (fluence, survival, reaction-z, ledger files).
+# Default OFF keeps production DoseToMedium + LET_d atomics only.
+option(CARBON_VALIDATION_SCORERS
+       "Compile validation/debug scorers (species fluence, survival, ledger)"
+       OFF)
 
 # Comma-separated SYCL targets for -fsycl-targets.
 # Empty → compiler default (SPIR-V JIT for Intel).
@@ -38,11 +43,11 @@ add_library(carbon_core
     src/cross_section.cpp
     src/ct_grid.cpp
     src/ct_dicom.cpp
+    src/io.cpp
+    src/plan_run.cpp
     src/package_identity.cpp
     src/elastic_package.cpp
     src/elastic_device_storage.cpp
-    src/io.cpp
-    src/plan_run.cpp
     src/reaction_package.cpp
     src/cascade_package.cpp
     src/neutral_package.cpp
@@ -84,6 +89,13 @@ if(CARBON_ENABLE_MINIBEAM)
     message(STATUS "CARBON_ENABLE_MINIBEAM=ON")
 else()
     message(STATUS "CARBON_ENABLE_MINIBEAM=OFF")
+endif()
+
+if(CARBON_VALIDATION_SCORERS)
+    target_compile_definitions(carbon_core PUBLIC CARBON_VALIDATION_SCORERS=1)
+    message(STATUS "CARBON_VALIDATION_SCORERS=ON")
+else()
+    message(STATUS "CARBON_VALIDATION_SCORERS=OFF")
 endif()
 
 if(CARBON_ENABLE_SYCL)

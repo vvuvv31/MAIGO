@@ -159,7 +159,9 @@ for material in "${MATERIALS[@]}"; do
         --metadata "$cascade_metadata" --interactions "$interactions" \
         --products "$products" \
         --output "$PACKAGE_ROOT/${tag}_cascade_3d.bin" \
-        --output-metadata "$PACKAGE_ROOT/${tag}_cascade_3d.compiled.json"
+        --output-metadata "$PACKAGE_ROOT/${tag}_cascade_3d.compiled.json" \
+        --material "$g4_material" --physics-model "INCLXX" \
+        --source-projectile-z 6 --source-projectile-a 12
 
     reactions="$run_dir/${tag}_primary_reactions.csv.gz"
     secondaries="$run_dir/${tag}_primary_secondaries.csv.gz"
@@ -167,12 +169,14 @@ for material in "${MATERIALS[@]}"; do
     python3 "$TOOLS/prepare_primary_reactions_from_cascade.py" \
         --cascade-metadata "$cascade_metadata" --interactions "$interactions" \
         --products "$products" --reactions-output "$reactions" \
-        --secondaries-output "$secondaries" --metadata-output "$primary_metadata"
+        --secondaries-output "$secondaries" --metadata-output "$primary_metadata" \
+        --projectile-z 6 --projectile-a 12
     python3 "$TOOLS/compile_reaction_package.py" \
         --metadata "$primary_metadata" --reactions "$reactions" \
         --secondaries "$secondaries" \
         --output "$PACKAGE_ROOT/${tag}_primary_3d.bin" \
         --output-metadata "$PACKAGE_ROOT/${tag}_primary_3d.compiled.json" \
+        --material "$g4_material" --physics-model "INCLXX" \
         --energy-bin-min-mevu 0 --energy-bin-width-mevu 4 --energy-bin-count 101
     echo "[$material] packages complete: $PACKAGE_ROOT/${tag}_{primary,cascade}_3d.bin"
 done

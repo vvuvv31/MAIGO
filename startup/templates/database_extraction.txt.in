@@ -37,14 +37,14 @@ d:Ge/Phantom/RotX = 0.0 deg
 d:Ge/Phantom/RotY = 0.0 deg
 d:Ge/Phantom/RotZ = 0.0 deg
 
-s:So/CarbonBeam/Type = "Beam"
-s:So/CarbonBeam/Component = "BeamPosition"
-s:So/CarbonBeam/BeamParticle = "GenericIon(6,12,6)"
-d:So/CarbonBeam/BeamEnergy = @TOTAL_ENERGY_MEV@ MeV
-u:So/CarbonBeam/BeamEnergySpread = 0.0
-s:So/CarbonBeam/BeamPositionDistribution = "None"
-s:So/CarbonBeam/BeamAngularDistribution = "None"
-i:So/CarbonBeam/NumberOfHistoriesInRun = @HISTORIES@
+s:So/PrimaryBeam/Type = "Beam"
+s:So/PrimaryBeam/Component = "BeamPosition"
+s:So/PrimaryBeam/BeamParticle = "@PROJECTILE_PARTICLE@"
+d:So/PrimaryBeam/BeamEnergy = @TOTAL_ENERGY_MEV@ MeV
+u:So/PrimaryBeam/BeamEnergySpread = 0.0
+s:So/PrimaryBeam/BeamPositionDistribution = "None"
+s:So/PrimaryBeam/BeamAngularDistribution = "None"
+i:So/PrimaryBeam/NumberOfHistoriesInRun = @HISTORIES@
 
 # Core material, stopping-power, cross-section and cascade database scorers.
 s:Sc/CarbonMaterialProperties/Quantity = "CarbonMaterialPropertiesNtuple"
@@ -76,6 +76,16 @@ s:Sc/CarbonCascade/Component = "Phantom"
 s:Sc/CarbonCascade/OutputType = "ASCII"
 s:Sc/CarbonCascade/OutputFile = "@OUTPUT_PREFIX@_cascade"
 s:Sc/CarbonCascade/IfOutputFileAlreadyExists = "Overwrite"
+
+# Elastic event package.  The legacy scorer name is retained for TOPAS
+# extension discovery, while ProjectileZ/A make the extraction generic.
+s:Sc/CarbonElastic/Quantity = "CarbonElasticNtuple"
+s:Sc/CarbonElastic/Component = "Phantom"
+s:Sc/CarbonElastic/OutputType = "ASCII"
+s:Sc/CarbonElastic/OutputFile = "@OUTPUT_PREFIX@_elastic"
+s:Sc/CarbonElastic/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/CarbonElastic/ProjectileZ = @PROJECTILE_Z@
+i:Sc/CarbonElastic/ProjectileA = @PROJECTILE_A@
 
 s:Sc/CarbonNeutral/Quantity = "CarbonNeutralNtuple"
 s:Sc/CarbonNeutral/Component = "Phantom"

@@ -1,0 +1,54 @@
+{
+  "format": "neutron-gamma neutral package",
+  "version": 1,
+  "energy_units": "MeV absolute (not MeV/u)",
+  "cross_section": "macroscopic total per mm in water",
+  "direction_coordinates": "incident-projectile local orthonormal frame",
+  "direction_components": [
+    "local_x",
+    "local_y",
+    "along_projectile"
+  ],
+  "xs_energy_quantum_MeV": 0.25,
+  "source_metadata": "package/topas_400MeVu_neutral_100k.metadata.json",
+  "source_metadata_sha256": "8176fefc8f9dfbbfb67c92fd685893859ccadd59ba94514fa1e04207e6b80bd2",
+  "records": {
+    "projectiles": 2,
+    "cross_section_samples": 3042,
+    "interactions": 13119080,
+    "products": 6790609
+  },
+  "species": {
+    "gamma": {
+      "pdg_id": 22,
+      "cross_section_samples": 487,
+      "interactions": 5456501,
+      "minimum_energy_MeV": 2.06016e-06,
+      "maximum_energy_MeV": 430.828,
+      "process_counts": {
+        "Rayl": 257387,
+        "compt": 2256608,
+        "conv": 4171,
+        "phot": 2938335
+      }
+    },
+    "neutron": {
+      "pdg_id": 2112,
+      "cross_section_samples": 2555,
+      "interactions": 7662579,
+      "minimum_energy_MeV": 7.95808e-13,
+      "maximum_energy_MeV": 1111.12,
+      "process_counts": {
+        "hadElastic": 7512683,
+        "nCapture": 55120,
+        "neutronInelastic": 94776
+      }
+    }
+  },
+  "output": {
+    "path": "package/topas_400MeVu_neutral_100k.bin",
+    "bytes": 687762264,
+    "sha256": "31c5093c143a35ac4f5b586362680f13d7265a871bbd379dda494ad8ae086771"
+  },
+  "global_scale_applied": false
+}

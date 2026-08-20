@@ -34,8 +34,8 @@ CarbonCrossSectionNtuple::CarbonCrossSectionNtuple(
           is_sub_scorer) {
     fNtuple->RegisterColumnF(&energy_mev_per_u_, "Energy (MeV/u)", "");
     fNtuple->RegisterColumnF(&total_energy_mev_, "Total Kinetic Energy (MeV)", "");
-    fNtuple->RegisterColumnD(&sigma_h_barn_, "C12-H Inelastic Cross Section (barn)", "");
-    fNtuple->RegisterColumnD(&sigma_o_barn_, "C12-O Inelastic Cross Section (barn)", "");
+    fNtuple->RegisterColumnD(&sigma_h_barn_, "Projectile-H Inelastic Cross Section (barn)", "");
+    fNtuple->RegisterColumnD(&sigma_o_barn_, "Projectile-O Inelastic Cross Section (barn)", "");
     fNtuple->RegisterColumnD(&macro_h_per_mm_, "Hydrogen Macroscopic Cross Section (1/mm)", "");
     fNtuple->RegisterColumnD(&macro_o_per_mm_, "Oxygen Macroscopic Cross Section (1/mm)", "");
     fNtuple->RegisterColumnD(&macro_water_per_mm_, "Water Macroscopic Cross Section (1/mm)", "");
@@ -53,8 +53,9 @@ G4bool CarbonCrossSectionNtuple::ProcessHits(G4Step* step, G4TouchableHistory*) 
         return false;
     }
 
-    const G4ParticleDefinition* carbon = step->GetTrack()->GetDefinition();
-    if (carbon->GetAtomicNumber() != 6 || carbon->GetAtomicMass() != 12) {
+    const G4ParticleDefinition* projectile = step->GetTrack()->GetDefinition();
+    const G4int mass_number = projectile->GetAtomicMass();
+    if (projectile->GetAtomicNumber() <= 0 || mass_number <= 0) {
         return false;
     }
 
@@ -65,7 +66,7 @@ G4bool CarbonCrossSectionNtuple::ProcessHits(G4Step* step, G4TouchableHistory*) 
 
     for (G4int energy_index = 1; energy_index <= 400; ++energy_index) {
         const G4double energy_per_u = static_cast<G4double>(energy_index) * MeV;
-        const G4double total_energy = 12.0 * energy_per_u;
+        const G4double total_energy = static_cast<G4double>(mass_number) * energy_per_u;
         G4double sigma_h = 0.0;
         G4double sigma_o = 0.0;
         G4double macro_h = 0.0;
@@ -74,7 +75,7 @@ G4bool CarbonCrossSectionNtuple::ProcessHits(G4Step* step, G4TouchableHistory*) 
         for (std::size_t element_index = 0; element_index < material->GetNumberOfElements(); ++element_index) {
             const G4Element* element = (*elements)[element_index];
             const G4double microscopic = store->GetInelasticCrossSectionPerAtom(
-                carbon, total_energy, element, material);
+                projectile, total_energy, element, material);
             const G4int atomic_number = static_cast<G4int>(std::lround(element->GetZ()));
             if (atomic_number == 1) {
                 sigma_h = microscopic;
@@ -86,7 +87,7 @@ G4bool CarbonCrossSectionNtuple::ProcessHits(G4Step* step, G4TouchableHistory*) 
         }
 
         const G4double macro_water = store->GetInelasticCrossSectionPerVolume(
-            carbon, total_energy, material);
+            projectile, total_energy, material);
         energy_mev_per_u_ = static_cast<G4float>(energy_per_u / MeV);
         total_energy_mev_ = static_cast<G4float>(total_energy / MeV);
         sigma_h_barn_ = sigma_h / barn;

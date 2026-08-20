@@ -84,6 +84,160 @@ inline void score_exponential_depth(
     }
 }
 
+#ifdef CARBON_VALIDATION_SCORERS
+inline void score_track_length_mm(const float z_mm,
+                                  const float uz,
+                                  const float step_mm,
+                                  const float bin_width_mm,
+                                  const std::size_t number_of_bins,
+                                  float* fluence_row) noexcept {
+    if (fluence_row == nullptr || step_mm <= 0.0F || number_of_bins == 0 ||
+        bin_width_mm <= 0.0F) {
+        return;
+    }
+    const auto z0 = z_mm;
+    const auto z1 = z_mm + uz * step_mm;
+    const auto z_lo = sycl::fmin(z0, z1);
+    const auto z_hi = sycl::fmax(z0, z1);
+    auto bin0 = static_cast<int>(sycl::floor(z_lo / bin_width_mm));
+    auto bin1 = static_cast<int>(sycl::floor((z_hi - 1.0e-6F) / bin_width_mm));
+    bin0 = sycl::max(0, sycl::min(bin0, static_cast<int>(number_of_bins) - 1));
+    bin1 = sycl::max(0, sycl::min(bin1, static_cast<int>(number_of_bins) - 1));
+    if (bin0 == bin1) {
+        sycl::atomic_ref<float, sycl::memory_order::relaxed, sycl::memory_scope::device,
+                         sycl::access::address_space::global_space>
+            atomic_phi(fluence_row[static_cast<std::size_t>(bin0)]);
+        atomic_phi.fetch_add(step_mm);
+        return;
+    }
+    const auto uz_abs = sycl::fabs(uz);
+    for (int bin = bin0; bin <= bin1; ++bin) {
+        const auto lo = sycl::fmax(z_lo, static_cast<float>(bin) * bin_width_mm);
+        const auto hi =
+            sycl::fmin(z_hi, static_cast<float>(bin + 1) * bin_width_mm);
+        const auto overlap = hi - lo;
+        if (overlap <= 0.0F) {
+            continue;
+        }
+        // Track-length fluence is ΣΔs. A multi-bin step's z-overlap is Δz;
+        // convert with 1/|u_z| so angled fragments are not under-counted.
+        const auto path_mm = uz_abs > 1.0e-6F ? overlap / uz_abs : step_mm;
+        sycl::atomic_ref<float, sycl::memory_order::relaxed, sycl::memory_scope::device,
+                         sycl::access::address_space::global_space>
+            atomic_phi(fluence_row[static_cast<std::size_t>(bin)]);
+        atomic_phi.fetch_add(path_mm);
+    }
+}
+
+inline void score_count_bin(const float z_mm,
+                            const float bin_width_mm,
+                            const std::size_t number_of_bins,
+                            std::uint32_t* counts) noexcept {
+    if (counts == nullptr || number_of_bins == 0 || bin_width_mm <= 0.0F) {
+        return;
+    }
+    auto bin = static_cast<int>(sycl::floor(z_mm / bin_width_mm));
+    bin = sycl::max(0, sycl::min(bin, static_cast<int>(number_of_bins) - 1));
+    sycl::atomic_ref<std::uint32_t, sycl::memory_order::relaxed,
+                     sycl::memory_scope::device,
+                     sycl::access::address_space::global_space>
+        atomic_n(counts[static_cast<std::size_t>(bin)]);
+    atomic_n.fetch_add(1U);
+}
+
+inline void score_survival_to_bin(const int previous_bin,
+                                  const int current_bin,
+                                  const std::size_t number_of_bins,
+                                  std::uint32_t* survival) noexcept {
+    if (survival == nullptr || current_bin < 0 ||
+        current_bin >= static_cast<int>(number_of_bins)) {
+        return;
+    }
+    const auto start = previous_bin + 1;
+    if (start > current_bin) {
+        return;
+    }
+    for (int bin = start; bin <= current_bin; ++bin) {
+        sycl::atomic_ref<std::uint32_t, sycl::memory_order::relaxed,
+                         sycl::memory_scope::device,
+                         sycl::access::address_space::global_space>
+            atomic_n(survival[static_cast<std::size_t>(bin)]);
+        atomic_n.fetch_add(1U);
+    }
+}
+#endif
+
+// Ion-column EnergyDeposit matching TOPAS GetTotalEnergyDeposit: drop the
+// δ-electron fraction from selected Z while leaving transport unrestricted.
+inline float fragment_species_step_deposit_MeV(
+    const float step_deposited_MeV,
+    const float let_delta_fraction,
+    const int atomic_number,
+    const int restrict_z_min,
+    const int restrict_z_max) noexcept {
+    if (restrict_z_min <= 0 || atomic_number < restrict_z_min ||
+        atomic_number > restrict_z_max) {
+        return step_deposited_MeV;
+    }
+    auto fraction = let_delta_fraction;
+    if (fraction < 0.0F) {
+        fraction = 0.0F;
+    }
+    if (fraction > 1.0F) {
+        fraction = 1.0F;
+    }
+    return step_deposited_MeV * (1.0F - fraction);
+}
+
+// Linear interpolation on the C-12 (or any) energy grid used by the SP tables.
+inline void interpolate_energy_grid(const float energy_MeVu,
+                                    const float minimum_table_energy,
+                                    const float inverse_table_step,
+                                    const int table_size,
+                                    int& index,
+                                    float& fraction) noexcept {
+    auto floating =
+        (energy_MeVu - minimum_table_energy) * inverse_table_step;
+    index = static_cast<int>(sycl::floor(floating));
+    index = sycl::max(0, sycl::min(index, table_size - 2));
+    fraction = sycl::clamp(floating - static_cast<float>(index), 0.0F, 1.0F);
+}
+
+inline float interpolate_table_value(const float* table,
+                                     const int index,
+                                     const float fraction) noexcept {
+    return table[static_cast<std::size_t>(index)] +
+           fraction * (table[static_cast<std::size_t>(index) + 1] -
+                       table[static_cast<std::size_t>(index)]);
+}
+
+// Scale start-of-step SP to mid-step energy using the C-12 water table shape.
+inline float mid_step_stopping_power_MeV_per_mm(
+    const float start_stopping_power,
+    const float* table,
+    const int start_index,
+    const float start_fraction,
+    const float mid_energy_MeVu,
+    const float minimum_table_energy,
+    const float inverse_table_step,
+    const int table_size) noexcept {
+    if (table == nullptr || start_stopping_power <= 0.0F) {
+        return start_stopping_power;
+    }
+    const auto start_water =
+        interpolate_table_value(table, start_index, start_fraction);
+    if (start_water <= 1.0e-12F) {
+        return start_stopping_power;
+    }
+    int mid_index = start_index;
+    float mid_fraction = start_fraction;
+    interpolate_energy_grid(mid_energy_MeVu, minimum_table_energy,
+                            inverse_table_step, table_size, mid_index,
+                            mid_fraction);
+    const auto mid_water = interpolate_table_value(table, mid_index, mid_fraction);
+    return start_stopping_power * (mid_water / start_water);
+}
+
 // Voxel analogue of score_exponential_depth. The proxy keeps the production
 // voxel's transverse (x,y) index and distributes energy only along +z.
 inline void score_exponential_voxel_depth(
@@ -289,6 +443,50 @@ void score_secondary_dose_device(
     }
 }
 
+void add_unrestricted_depth_dose_device(
+    const DoseAtomicT amount_MeV,
+    const int bin,
+    DoseAtomicT* unrestricted_secondary_dose_device) noexcept {
+    if (unrestricted_secondary_dose_device == nullptr ||
+        amount_MeV <= DoseAtomicT{0}) {
+        return;
+    }
+    sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
+                     sycl::memory_scope::device,
+                     sycl::access::address_space::global_space>
+        atomic_unrestricted(
+            unrestricted_secondary_dose_device[static_cast<std::size_t>(bin)]);
+    atomic_unrestricted.fetch_add(amount_MeV);
+}
+
+// Compatibility path for the legacy SYCL transport. It deliberately has no
+// aggregate depth scorer; the modern transport supplies the extra argument.
+void score_secondary_dose_device(
+    const DoseAtomicT amount_MeV,
+    const bool is_neutral_lineage,
+    const std::size_t species_index,
+    const std::size_t neutral_origin,
+    const int bin,
+    const std::size_t number_of_bins,
+    const bool enable_voxel_scoring,
+    const bool enable_charged_origin_voxel_scoring,
+    const std::size_t voxel_index,
+    const std::size_t charged_origin_voxel_offset,
+    const std::size_t neutral_origin_voxel_offset,
+    DoseAtomicT* fragment_dose_device,
+    DoseAtomicT* voxel_dose_device,
+    DoseAtomicT* charged_origin_voxel_dose_device,
+    DoseAtomicT* neutral_origin_dose_device,
+    DoseAtomicT* neutral_origin_voxel_dose_device) noexcept {
+    score_secondary_dose_device(
+        amount_MeV, is_neutral_lineage, species_index, neutral_origin, bin,
+        number_of_bins, enable_voxel_scoring, enable_charged_origin_voxel_scoring,
+        voxel_index, charged_origin_voxel_offset, neutral_origin_voxel_offset,
+        nullptr, fragment_dose_device, voxel_dose_device,
+        charged_origin_voxel_dose_device, neutral_origin_dose_device,
+        neutral_origin_voxel_dose_device);
+}
+
 inline void score_letd_moments_device(
     LetAtomicT* moments,
     const std::size_t number_of_bins,
@@ -358,6 +556,73 @@ inline void score_letd_moments_device(
         };
         isotope_accumulate(0, numerator);
         isotope_accumulate(1, denominator);
+    }
+}
+
+// One atomic pair per particle-bin. Tiny per-step FP32 atomics vanish once a
+// Bragg-peak bin already holds ~1e6 MeV (mantissa ~0.25 MeV).
+inline void flush_letd_moments_device(
+    LetAtomicT* moments,
+    const std::size_t number_of_bins,
+    const std::size_t bin,
+    LetAtomicT* species_moments,
+    const std::size_t species_count,
+    const std::size_t species_category,
+    const double numerator,
+    const double denominator,
+    const bool is_c12,
+    LetAtomicT* isotope_moments = nullptr,
+    const std::size_t isotope_count = 0,
+    const std::size_t isotope_category = 0) noexcept {
+    if (moments == nullptr || bin >= number_of_bins ||
+        numerator <= 0.0 || denominator <= 0.0) {
+        return;
+    }
+    const auto num = static_cast<LetAtomicT>(numerator);
+    const auto den = static_cast<LetAtomicT>(denominator);
+    const auto accumulate = [&](const std::size_t offset,
+                                const LetAtomicT value) {
+        sycl::atomic_ref<LetAtomicT, sycl::memory_order::relaxed,
+                         sycl::memory_scope::device,
+                         sycl::access::address_space::global_space>
+            atomic_value(moments[offset * number_of_bins + bin]);
+        atomic_value.fetch_add(value);
+    };
+    if (is_c12) {
+        accumulate(0, num);
+        accumulate(1, den);
+    }
+    accumulate(2, num);
+    accumulate(3, den);
+    if (species_moments != nullptr && species_category < species_count) {
+        const auto species_accumulate = [&](const std::size_t moment,
+                                            const LetAtomicT value) {
+            const auto offset =
+                (moment * species_count + species_category) * number_of_bins +
+                bin;
+            sycl::atomic_ref<LetAtomicT, sycl::memory_order::relaxed,
+                             sycl::memory_scope::device,
+                             sycl::access::address_space::global_space>
+                atomic_value(species_moments[offset]);
+            atomic_value.fetch_add(value);
+        };
+        species_accumulate(0, num);
+        species_accumulate(1, den);
+    }
+    if (isotope_moments != nullptr && isotope_category < isotope_count) {
+        const auto isotope_accumulate = [&](const std::size_t moment,
+                                            const LetAtomicT value) {
+            const auto offset =
+                (moment * isotope_count + isotope_category) * number_of_bins +
+                bin;
+            sycl::atomic_ref<LetAtomicT, sycl::memory_order::relaxed,
+                             sycl::memory_scope::device,
+                             sycl::access::address_space::global_space>
+                atomic_value(isotope_moments[offset]);
+            atomic_value.fetch_add(value);
+        };
+        isotope_accumulate(0, num);
+        isotope_accumulate(1, den);
     }
 }
 

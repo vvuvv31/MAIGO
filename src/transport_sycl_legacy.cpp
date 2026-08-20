@@ -4274,7 +4274,8 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                                             secondary.atomic_number, secondary.mass_number,
                                             scaled_secondary_energy_MeV, position_z_mm,
                                             child_direction.z, /*generation=*/0,
-                                            /*parent_Z=*/6, /*parent_A=*/12, energy_MeV);
+                                            /*parent_Z=*/primary_atomic_number,
+                                            /*parent_A=*/primary_mass_number, energy_MeV);
                                     }
                                 }
                             }
@@ -7494,21 +7495,11 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
         unrestricted_secondary_host = to_double_vec(unrestricted_secondary_atomic);
 #ifdef CARBON_VALIDATION_SCORERS
         if (enable_validation_scorers) {
-            validation_primary_fluence_host.resize(number_of_bins);
             validation_fragment_fluence_host.resize(fragment_species_count *
                                                     number_of_bins);
-            validation_survival_host.resize(number_of_bins);
-            validation_inelastic_host.resize(number_of_bins);
-            queue.copy(validation_primary_fluence_device,
-                       validation_primary_fluence_host.data(), number_of_bins);
             queue.copy(validation_fragment_fluence_device,
                        validation_fragment_fluence_host.data(),
                        validation_fragment_fluence_host.size());
-            queue.copy(validation_survival_device, validation_survival_host.data(),
-                       number_of_bins);
-            queue.copy(validation_inelastic_device, validation_inelastic_host.data(),
-                       number_of_bins)
-                .wait_and_throw();
         }
 #endif
         if (transported_secondary_count > 0) {
@@ -7531,6 +7522,23 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
             }
         }
     }
+#ifdef CARBON_VALIDATION_SCORERS
+    // Primary validation tallies are independent of secondary transport.  Keep
+    // their copy/assembly outside the secondary branch so EM-only validation
+    // still produces primary crossing and reaction profiles.
+    if (enable_validation_scorers) {
+        validation_primary_fluence_host.resize(number_of_bins);
+        validation_survival_host.resize(number_of_bins);
+        validation_inelastic_host.resize(number_of_bins);
+        queue.copy(validation_primary_fluence_device,
+                   validation_primary_fluence_host.data(), number_of_bins);
+        queue.copy(validation_survival_device, validation_survival_host.data(),
+                   number_of_bins);
+        queue.copy(validation_inelastic_device, validation_inelastic_host.data(),
+                   number_of_bins)
+            .wait_and_throw();
+    }
+#endif
     if (enable_neutral_transport) {
         const auto transported_neutral_summary_count = static_cast<std::size_t>(
             std::min<std::uint64_t>(transported_neutral_count, neutral_queue_capacity));
@@ -7689,13 +7697,15 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
             return std::vector<double>(
                 begin, begin + static_cast<std::ptrdiff_t>(number_of_bins));
         };
-        result.secondary_carbon_fluence_mm = extract_fluence(0);
-        result.secondary_boron_fluence_mm = extract_fluence(1);
-        result.secondary_beryllium_fluence_mm = extract_fluence(2);
-        result.secondary_lithium_fluence_mm = extract_fluence(3);
-        result.secondary_helium_fluence_mm = extract_fluence(4);
-        result.secondary_proton_fluence_mm = extract_fluence(5);
-        result.secondary_other_charged_fluence_mm = extract_fluence(6);
+        if (!validation_fragment_fluence_host.empty()) {
+            result.secondary_carbon_fluence_mm = extract_fluence(0);
+            result.secondary_boron_fluence_mm = extract_fluence(1);
+            result.secondary_beryllium_fluence_mm = extract_fluence(2);
+            result.secondary_lithium_fluence_mm = extract_fluence(3);
+            result.secondary_helium_fluence_mm = extract_fluence(4);
+            result.secondary_proton_fluence_mm = extract_fluence(5);
+            result.secondary_other_charged_fluence_mm = extract_fluence(6);
+        }
         result.primary_survival_counts.assign(validation_survival_host.begin(),
                                               validation_survival_host.end());
         result.inelastic_reaction_counts.assign(

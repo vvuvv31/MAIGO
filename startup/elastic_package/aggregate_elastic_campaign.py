@@ -293,6 +293,25 @@ def main() -> None:
         continuous_em_loss = provenance.get("continuous_em_loss_enabled") if isinstance(provenance, dict) else None
         sampling_purpose = provenance.get("sampling_purpose") if isinstance(provenance, dict) else None
         provenance_source = "prepared_metadata"
+        aggregate_modes = provenance.get("extraction_modes") if isinstance(provenance, dict) else None
+        if (
+            (not isinstance(extraction_mode, str) or not isinstance(continuous_em_loss, bool))
+            and isinstance(aggregate_modes, list)
+            and aggregate_modes
+            and all(isinstance(mode, str) and mode for mode in aggregate_modes)
+        ):
+            if len(aggregate_modes) == 1:
+                extraction_mode = aggregate_modes[0]
+                continuous_em_loss = extraction_mode == "transport-degrading"
+                sampling_purpose = (
+                    "elastic-package-transport-degrading-extraction"
+                    if continuous_em_loss else "elastic-package-fixed-energy-sampling-not-dose-reference"
+                )
+            else:
+                extraction_mode = "mixed"
+                continuous_em_loss = bool(provenance.get("contains_non_dose_reference_sampling"))
+                sampling_purpose = "mixed extraction modes inherited from aggregate metadata"
+            provenance_source = "aggregate_metadata"
         if not isinstance(extraction_mode, str) or not isinstance(continuous_em_loss, bool):
             manifest_path = metadata_path.parent / "campaign_run.json"
             if not manifest_path.is_file():
@@ -310,7 +329,10 @@ def main() -> None:
             provenance_source = "campaign_manifest_inference"
         if not isinstance(sampling_purpose, str) or not sampling_purpose:
             raise SystemExit(f"{metadata_path}: missing sampling_purpose")
-        extraction_modes.add(extraction_mode)
+        if extraction_mode == "mixed" and isinstance(aggregate_modes, list):
+            extraction_modes.update(aggregate_modes)
+        else:
+            extraction_modes.add(extraction_mode)
 
         files = metadata.get("files")
         if not isinstance(files, dict):

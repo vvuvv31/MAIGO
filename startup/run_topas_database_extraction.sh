@@ -19,6 +19,8 @@ TOPAS_EXTENSIONS_DIR=""              # build-time path; normally startup/extensi
 TOPAS_THREADS=40
 HISTORIES_PER_ENERGY=20000
 ENERGIES_MEV_U=(100 200 300 400)
+PROJECTILE_Z=6
+PROJECTILE_A=12
 PHANTOM_MATERIAL="G4_WATER"
 PHANTOM_HALF_LENGTH_MM=350
 SEED_BASE=20260810
@@ -45,7 +47,9 @@ Options:
   --histories N             Histories per energy.
   --threads N               TOPAS worker threads.
   --material NAME           TOPAS material name, e.g. G4_WATER.
-  --species-tables          Enable fragment/neutral/elastic lookup tables.
+  --projectile-z N          Primary atomic number (default: 6).
+  --projectile-a N          Primary mass number (default: 12).
+  --species-tables          Enable fragment/neutral lookup tables.
   --topas-bin PATH          Override TOPAS_BIN for this invocation.
   --env-script PATH         Override TOPAS_ENV_SCRIPT for this invocation.
   --g4-data PATH            Override TOPAS_G4_DATA_DIR for this invocation.
@@ -87,6 +91,14 @@ while (($# > 0)); do
         --material)
             [[ $# -ge 2 ]] || { echo "ERROR: --material needs a value" >&2; exit 2; }
             PHANTOM_MATERIAL="$2"
+            shift 2
+            ;;
+        --projectile-z)
+            PROJECTILE_Z="$2"
+            shift 2
+            ;;
+        --projectile-a)
+            PROJECTILE_A="$2"
             shift 2
             ;;
         --species-tables)
@@ -147,6 +159,13 @@ die() {
 [[ "$HISTORIES_PER_ENERGY" =~ ^[1-9][0-9]*$ ]] || die "histories must be a positive integer"
 [[ "$PHANTOM_HALF_LENGTH_MM" =~ ^[1-9][0-9]*$ ]] || die "phantom half length must be a positive integer"
 [[ "$SEED_BASE" =~ ^[0-9]+$ ]] || die "SEED_BASE must be a non-negative integer"
+[[ "$PROJECTILE_Z" =~ ^[1-9][0-9]*$ && "$PROJECTILE_A" =~ ^[1-9][0-9]*$ ]] || die "projectile Z/A must be positive integers"
+(( PROJECTILE_A >= PROJECTILE_Z )) || die "projectile A must be >= Z"
+if (( PROJECTILE_Z == 1 && PROJECTILE_A == 1 )); then
+    PROJECTILE_PARTICLE="proton"
+else
+    PROJECTILE_PARTICLE="GenericIon(${PROJECTILE_Z},${PROJECTILE_A})"
+fi
 
 for energy in "${ENERGIES_MEV_U[@]}"; do
     [[ "$energy" =~ ^[1-9][0-9]*$ ]] || die "invalid energy: $energy"
@@ -198,14 +217,19 @@ render_config() {
     local destination="$5"
     local material_escaped
     local prefix_escaped
+    local projectile_escaped
     material_escaped="$(sed_escape "$PHANTOM_MATERIAL")"
     prefix_escaped="$(sed_escape "$prefix")"
+    projectile_escaped="$(sed_escape "$PROJECTILE_PARTICLE")"
 
     if [[ "$ENABLE_SPECIES_TABLES" == true ]]; then
         sed \
             -e 's/^#SPECIES# //' \
             -e "s|@ENERGY_MEV_U@|$(sed_escape "$energy")|g" \
             -e "s|@TOTAL_ENERGY_MEV@|$(sed_escape "$total_energy")|g" \
+            -e "s|@PROJECTILE_PARTICLE@|${projectile_escaped}|g" \
+            -e "s|@PROJECTILE_Z@|$(sed_escape "$PROJECTILE_Z")|g" \
+            -e "s|@PROJECTILE_A@|$(sed_escape "$PROJECTILE_A")|g" \
             -e "s|@SEED@|$(sed_escape "$seed")|g" \
             -e "s|@THREADS@|$(sed_escape "$TOPAS_THREADS")|g" \
             -e "s|@HISTORIES@|$(sed_escape "$HISTORIES_PER_ENERGY")|g" \
@@ -218,6 +242,9 @@ render_config() {
             -e '/^#SPECIES#/d' \
             -e "s|@ENERGY_MEV_U@|$(sed_escape "$energy")|g" \
             -e "s|@TOTAL_ENERGY_MEV@|$(sed_escape "$total_energy")|g" \
+            -e "s|@PROJECTILE_PARTICLE@|${projectile_escaped}|g" \
+            -e "s|@PROJECTILE_Z@|$(sed_escape "$PROJECTILE_Z")|g" \
+            -e "s|@PROJECTILE_A@|$(sed_escape "$PROJECTILE_A")|g" \
             -e "s|@SEED@|$(sed_escape "$seed")|g" \
             -e "s|@THREADS@|$(sed_escape "$TOPAS_THREADS")|g" \
             -e "s|@HISTORIES@|$(sed_escape "$HISTORIES_PER_ENERGY")|g" \
@@ -229,8 +256,8 @@ render_config() {
 }
 
 material_slug="${PHANTOM_MATERIAL//[^A-Za-z0-9_.-]/_}"
-printf 'TOPAS database extraction: mode=%s material=%s histories/energy=%s threads=%s species_tables=%s\n' \
-    "$MODE" "$PHANTOM_MATERIAL" "$HISTORIES_PER_ENERGY" "$TOPAS_THREADS" "$ENABLE_SPECIES_TABLES"
+printf 'TOPAS database extraction: mode=%s projectile=Z%sA%s material=%s histories/energy=%s threads=%s species_tables=%s\n' \
+    "$MODE" "$PROJECTILE_Z" "$PROJECTILE_A" "$PHANTOM_MATERIAL" "$HISTORIES_PER_ENERGY" "$TOPAS_THREADS" "$ENABLE_SPECIES_TABLES"
 if [[ -n "$TOPAS_EXTENSIONS_DIR" ]]; then
     printf 'Configured build-time extension directory: %s\n' "$TOPAS_EXTENSIONS_DIR"
 else
@@ -239,7 +266,7 @@ fi
 
 energy_index=0
 for energy in "${ENERGIES_MEV_U[@]}"; do
-    total_energy=$((12 * energy))
+    total_energy=$((PROJECTILE_A * energy))
     seed=$((SEED_BASE + energy_index))
     run_dir="${WORK_ROOT}/e${energy}MeVu_${material_slug}"
     config_file="${run_dir}/database_extraction.txt"

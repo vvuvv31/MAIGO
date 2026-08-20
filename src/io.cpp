@@ -112,7 +112,7 @@ std::vector<double> voxel_masses_kg(const TransportConfig& config) {
     if (!config.enable_ct_grid) {
         return masses;
     }
-    const auto grid = CtGrid::from_binary(config.ct_grid_file);
+    const auto grid = CtGrid::from_config(config);
     if (grid.nx != config.voxel_bins_x || grid.ny != config.voxel_bins_y ||
         grid.nz != config.number_of_bins() ||
         std::abs(static_cast<double>(grid.spacing_x_mm) - config.voxel_size_x_mm) > 1.0e-6 ||
@@ -340,7 +340,7 @@ void write_dense_voxel_letd_mhd(const std::filesystem::path& mhd_path,
     double origin_y = 0.5 * config.voxel_size_y_mm - 0.5 * y_extent_mm;
     double origin_z = 0.5 * config.scorer_spacing_z_mm();
     if (config.enable_ct_grid && !config.ct_grid_file.empty()) {
-        const auto grid = CtGrid::from_binary(config.ct_grid_file);
+        const auto grid = CtGrid::from_config(config);
         if (grid.nx == nx && grid.ny == ny && grid.nz == nz) {
             origin_x =
                 static_cast<double>(grid.origin_x_mm) +
@@ -1108,7 +1108,7 @@ void write_dense_voxel_dose_mhd(const std::filesystem::path& mhd_path,
     double origin_y = 0.5 * config.voxel_size_y_mm - 0.5 * y_extent_mm;
     double origin_z = 0.5 * config.scorer_spacing_z_mm();
     if (config.enable_ct_grid && !config.ct_grid_file.empty()) {
-        const auto grid = CtGrid::from_binary(config.ct_grid_file);
+        const auto grid = CtGrid::from_config(config);
         if (grid.nx == nx && grid.ny == ny && grid.nz == nz &&
             std::abs(static_cast<double>(grid.spacing_x_mm) - config.voxel_size_x_mm) <
                 1.0e-6 &&
@@ -1251,7 +1251,7 @@ void write_dense_charged_origin_voxel_dose_mhd(
                       0.5 * static_cast<double>(ny) * config.voxel_size_y_mm;
     double origin_z = 0.5 * config.scorer_spacing_z_mm();
     if (config.enable_ct_grid && !config.ct_grid_file.empty()) {
-        const auto grid = CtGrid::from_binary(config.ct_grid_file);
+        const auto grid = CtGrid::from_config(config);
         if (grid.nx == nx && grid.ny == ny && grid.nz == nz) {
             origin_x = static_cast<double>(grid.origin_x_mm) +
                        0.5 * config.voxel_size_x_mm;
@@ -1313,6 +1313,158 @@ void write_dense_charged_origin_voxel_dose_mhd(
                << "DoseOriginCategory = " << labels[category] << '\n'
                << "ElementDataFile = " << raw_path.filename().string() << '\n';
     }
+}
+
+void write_energy_ledger_json(const std::filesystem::path& path,
+                              const TransportConfig& config,
+                              const TransportResult& result) {
+    ensure_parent_directory(path);
+    std::ofstream output(path, std::ios::binary);
+    if (!output) {
+        throw std::runtime_error("Cannot create energy ledger: " + path.string());
+    }
+    const auto sum_depth = [](const std::vector<double>& values) {
+        return std::accumulate(values.begin(), values.end(), 0.0);
+    };
+    output << std::setprecision(12);
+    output << "{\n"
+           << "  \"histories\": " << config.number_of_histories << ",\n"
+           << "  \"E_in_MeV\": " << result.initial_energy_MeV << ",\n"
+           << "  \"E_dep_MeV\": " << result.total_deposited_energy_MeV << ",\n"
+           << "  \"E_dep_depth_MeV\": " << sum_depth(result.deposited_energy_MeV)
+           << ",\n"
+           << "  \"E_primary_depth_MeV\": "
+           << sum_depth(result.primary_deposited_energy_MeV) << ",\n"
+           << "  \"E_secondary_transport_MeV\": "
+           << result.secondary_deposited_energy_MeV << ",\n"
+           << "  \"E_esc_MeV\": " << result.escaped_energy_MeV << ",\n"
+           << "  \"E_secondary_esc_MeV\": " << result.secondary_escaped_energy_MeV
+           << ",\n"
+           << "  \"E_beamline_MeV\": " << result.beamline_removed_energy_MeV
+           << ",\n"
+           << "  \"E_untracked_MeV\": " << result.untracked_nuclear_energy_MeV
+           << ",\n"
+           << "  \"E_queue_lost_MeV\": "
+           << result.secondary_queue_overflow_energy_MeV +
+                  result.neutral_queue_overflow_energy_MeV
+           << ",\n"
+           << "  \"E_secondary_overflow_MeV\": "
+           << result.secondary_queue_overflow_energy_MeV << ",\n"
+           << "  \"E_neutral_overflow_MeV\": "
+           << result.neutral_queue_overflow_energy_MeV << ",\n"
+           << "  \"nuclear_interactions\": " << result.nuclear_interactions << ",\n"
+           << "  \"primary_elastic_interactions\": "
+           << result.primary_elastic_interactions << ",\n"
+           << "  \"elastic_local_deposited_MeV\": "
+           << result.elastic_local_deposited_energy_MeV << ",\n"
+           << "  \"elastic_queued_charged_MeV\": "
+           << result.elastic_queued_charged_energy_MeV << ",\n"
+           << "  \"elastic_queued_neutral_MeV\": "
+           << result.elastic_queued_neutral_energy_MeV << ",\n"
+           << "  \"elastic_queue_overflow\": "
+           << result.elastic_queue_overflow << ",\n"
+           << "  \"elastic_queue_overflow_MeV\": "
+           << result.elastic_queue_overflow_energy_MeV << ",\n"
+           << "  \"cascade_interactions\": " << result.cascade_interactions << ",\n"
+           << "  \"secondary_queue_overflow\": " << result.secondary_queue_overflow
+           << ",\n"
+           << "  \"cascade_queue_overflow\": " << result.cascade_queue_overflow
+           << ",\n"
+           << "  \"neutral_queue_overflow\": " << result.neutral_queue_overflow
+           << ",\n"
+           << "  \"energy_balance_error\": "
+           << result.relative_energy_balance_error() << "\n"
+           << "}\n";
+}
+
+void write_validation_scorer_csvs(const std::filesystem::path& directory,
+                                  const TransportConfig& config,
+                                  const TransportResult& result) {
+    const auto bins = config.number_of_bins();
+    const auto write_double = [&](const std::filesystem::path& name,
+                                  const char* header,
+                                  const std::vector<double>& values) {
+        if (values.size() != bins) {
+            return;
+        }
+        const auto path = directory / name;
+        ensure_parent_directory(path);
+        std::ofstream output(path, std::ios::binary);
+        if (!output) {
+            throw std::runtime_error("Cannot create " + path.string());
+        }
+        output << "depth_mm," << header << '\n';
+        output << std::setprecision(12);
+        for (std::size_t bin = 0; bin < bins; ++bin) {
+            const auto depth =
+                (static_cast<double>(bin) + 0.5) * config.depth_bin_width_mm;
+            output << depth << ',' << values[bin] << '\n';
+        }
+    };
+    const auto write_count = [&](const std::filesystem::path& name,
+                                 const char* header,
+                                 const std::vector<std::uint64_t>& values) {
+        if (values.size() != bins) {
+            return;
+        }
+        const auto path = directory / name;
+        ensure_parent_directory(path);
+        std::ofstream output(path, std::ios::binary);
+        if (!output) {
+            throw std::runtime_error("Cannot create " + path.string());
+        }
+        output << "depth_mm," << header << '\n';
+        for (std::size_t bin = 0; bin < bins; ++bin) {
+            const auto depth =
+                (static_cast<double>(bin) + 0.5) * config.depth_bin_width_mm;
+            output << depth << ',' << values[bin] << '\n';
+        }
+    };
+    const auto bin_mass = idd_bin_mass_kg(config);
+    if (result.primary_deposited_energy_MeV.size() == bins) {
+        std::vector<double> primary_gy(bins);
+        std::vector<double> secondary_gy(bins);
+        for (std::size_t bin = 0; bin < bins; ++bin) {
+            primary_gy[bin] = scored_dose_Gy(
+                config, result.primary_deposited_energy_MeV[bin], bin_mass);
+            const auto secondary_MeV =
+                result.deposited_energy_MeV.size() == bins
+                    ? result.deposited_energy_MeV[bin] -
+                          result.primary_deposited_energy_MeV[bin]
+                    : 0.0;
+            secondary_gy[bin] = scored_dose_Gy(config, secondary_MeV, bin_mass);
+        }
+        write_double("dose_primary.csv", "dose_Gy", primary_gy);
+        write_double("dose_secondary.csv", "dose_Gy", secondary_gy);
+    }
+    const auto area = config.scorer_area_mm2;
+    const auto to_fluence = [area](const std::vector<double>& track_mm) {
+        std::vector<double> phi(track_mm.size(), 0.0);
+        if (!(area > 0.0)) {
+            return phi;
+        }
+        for (std::size_t i = 0; i < track_mm.size(); ++i) {
+            phi[i] = track_mm[i] / area;
+        }
+        return phi;
+    };
+    write_double("fluence_primary.csv", "fluence_per_mm2",
+                 to_fluence(result.primary_fluence_mm));
+    write_double("fluence_C.csv", "fluence_per_mm2",
+                 to_fluence(result.secondary_carbon_fluence_mm));
+    write_double("fluence_B.csv", "fluence_per_mm2",
+                 to_fluence(result.secondary_boron_fluence_mm));
+    write_double("fluence_Be.csv", "fluence_per_mm2",
+                 to_fluence(result.secondary_beryllium_fluence_mm));
+    write_double("fluence_Li.csv", "fluence_per_mm2",
+                 to_fluence(result.secondary_lithium_fluence_mm));
+    write_double("fluence_He.csv", "fluence_per_mm2",
+                 to_fluence(result.secondary_helium_fluence_mm));
+    write_double("fluence_p.csv", "fluence_per_mm2",
+                 to_fluence(result.secondary_proton_fluence_mm));
+    write_count("primary_survival.csv", "count", result.primary_survival_counts);
+    write_count("inelastic_reactions.csv", "count",
+                result.inelastic_reaction_counts);
 }
 
 }  // namespace carbon

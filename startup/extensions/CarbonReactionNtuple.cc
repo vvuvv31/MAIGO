@@ -39,7 +39,7 @@ CarbonReactionNtuple::CarbonReactionNtuple(
     fNtuple->RegisterColumnI(&atomic_mass_, "Atomic Mass A");
     fNtuple->RegisterColumnF(&charge_e_, "Charge (e)", "");
     fNtuple->RegisterColumnF(&kinetic_energy_mev_, "Particle Kinetic Energy (MeV)", "");
-    fNtuple->RegisterColumnF(&incident_energy_mev_, "Incident C12 Kinetic Energy (MeV)", "");
+    fNtuple->RegisterColumnF(&incident_energy_mev_, "Incident Primary Kinetic Energy (MeV)", "");
     fNtuple->RegisterColumnF(&vertex_x_mm_, "Vertex X (mm)", "");
     fNtuple->RegisterColumnF(&vertex_y_mm_, "Vertex Y (mm)", "");
     fNtuple->RegisterColumnF(&vertex_z_mm_, "Vertex Z (mm)", "");
@@ -105,7 +105,7 @@ G4bool CarbonReactionNtuple::ProcessHits(G4Step* step, G4TouchableHistory*) {
 
         // Geant4 may retain the incident track after ionInelastic.  Record its
         // post-step state as a correlated package member; omitting it makes a
-        // sampled GPU reaction kill a C-12 that should continue and can react
+        // sampled GPU reaction kill a source primary that should continue and can react
         // again.  track_id=1 plus this explicit name is the portable marker
         // consumed by the package compiler.
         const auto* post = step->GetPostStepPoint();

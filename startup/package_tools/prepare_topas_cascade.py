@@ -34,22 +34,39 @@ def parse_header(path: Path) -> dict[str, int]:
 
 def parse_row(line: str, path: Path, line_number: int) -> dict[str, object]:
     values = line.split()
-    if len(values) != 30:
+    # 30-col records include Geant4 step-local deposit; the 200 MeV/u
+    # validation ntuple is the older 29-col layout without that field.
+    if len(values) == 30:
+        local_deposit = float(values[15])
+        macro_xs = float(values[16])
+        projectile_z = int(values[17])
+        projectile_a = int(values[18])
+        x, y, z_mm = float(values[19]), float(values[20]), float(values[21])
+        dx, dy, dz = float(values[22]), float(values[23]), float(values[24])
+        weight = float(values[25])
+        process = values[26]
+        process_type = int(values[27])
+        process_subtype = int(values[28])
+        model = int(values[29])
+    elif len(values) == 29:
+        local_deposit = 0.0
+        macro_xs = float(values[15])
+        projectile_z = int(values[16])
+        projectile_a = int(values[17])
+        x, y, z_mm = float(values[18]), float(values[19]), float(values[20])
+        dx, dy, dz = float(values[21]), float(values[22]), float(values[23])
+        weight = float(values[24])
+        process = values[25]
+        process_type = int(values[26])
+        process_subtype = int(values[27])
+        model = int(values[28])
+    else:
         raise ValueError(
-            f"Expected 30 columns including local deposit at "
-            f"{path}:{line_number}, got {len(values)}"
+            f"Expected 29 or 30 columns at {path}:{line_number}, got {len(values)}"
         )
-    integer_indices = (
-        1, 2, 3, 4, 5, 6, 7, 8, 10, 11,
-        17, 18, 27, 28, 29,
-    )
-    float_indices = (
-        12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25,
-    )
-    for index in integer_indices:
-        int(values[index])
-    for index in float_indices:
-        if not math.isfinite(float(values[index])):
+    for value in (local_deposit, macro_xs, x, y, z_mm, dx, dy, dz, weight,
+                  float(values[12]), float(values[13]), float(values[14])):
+        if not math.isfinite(value):
             raise ValueError(f"Non-finite value at {path}:{line_number}")
     return {
         "kind": values[0], "run": int(values[1]), "thread": int(values[2]),
@@ -58,14 +75,14 @@ def parse_row(line: str, path: Path, line_number: int) -> dict[str, object]:
         "parent": int(values[7]), "pdg": int(values[8]), "name": values[9],
         "z": int(values[10]), "a": int(values[11]), "charge": float(values[12]),
         "energy": float(values[13]), "incident_energy": float(values[14]),
-        "local_deposit": float(values[15]), "macro_xs": float(values[16]),
-        "projectile_z": int(values[17]),
-        "projectile_a": int(values[18]), "x": float(values[19]),
-        "y": float(values[20]), "z_mm": float(values[21]),
-        "dx": float(values[22]), "dy": float(values[23]),
-        "dz": float(values[24]), "weight": float(values[25]),
-        "process": values[26], "process_type": int(values[27]),
-        "process_subtype": int(values[28]), "model": int(values[29]),
+        "local_deposit": local_deposit, "macro_xs": macro_xs,
+        "projectile_z": projectile_z,
+        "projectile_a": projectile_a, "x": x,
+        "y": y, "z_mm": z_mm,
+        "dx": dx, "dy": dy,
+        "dz": dz, "weight": weight,
+        "process": process, "process_type": process_type,
+        "process_subtype": process_subtype, "model": model,
     }
 
 

@@ -83,6 +83,10 @@ def main() -> None:
     parser.add_argument("--products", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--output-metadata", type=Path, required=True)
+    parser.add_argument("--material", default=None)
+    parser.add_argument("--physics-model", default=None)
+    parser.add_argument("--source-projectile-z", type=int, required=True)
+    parser.add_argument("--source-projectile-a", type=int, required=True)
     parser.add_argument("--xs-energy-quantum-mevu", type=float, default=0.25)
     args = parser.parse_args()
     if args.xs_energy_quantum_mevu <= 0.0:
@@ -238,7 +242,20 @@ def main() -> None:
     if args.output.stat().st_size != expected_size:
         raise SystemExit("Compiled cascade binary size mismatch")
 
+    if args.source_projectile_z <= 0 or args.source_projectile_a < args.source_projectile_z:
+        raise SystemExit("source projectile Z/A must be valid")
+    source_projectile = {"Z": args.source_projectile_z,
+                         "A": args.source_projectile_a}
+    material = args.material or source.get("material") or source.get("phantom_material")
+    physics_model = args.physics_model or source.get("physics_model")
+    if not isinstance(material, str) or not material:
+        raise SystemExit("Cascade sidecar requires a non-empty material")
+    if not isinstance(physics_model, str) or not physics_model:
+        raise SystemExit("Cascade sidecar requires a non-empty physics model")
+    energy_values = [float(row["incident_energy_MeV_per_u"]) for row in interactions]
     compiled = {
+        "sidecar_schema_version": 2,
+        "kind": "cascade",
         "format": "charged-fragment cascade package", "version": VERSION,
         "final_state_conditioning": [
             "projectile_Z",
@@ -254,12 +271,21 @@ def main() -> None:
         "direction_coordinates": "projectile-local orthonormal frame",
         "direction_components": ["local_x", "local_y", "along_projectile"],
         "local_deposit": "generator-provided interaction-local energy deposit",
+        "projectile": source_projectile,
+        "material": material,
+        "physics_model": physics_model,
+        "physics": {"model": physics_model, "topas_version": topas_version,
+                    "geant4_version": geant4_version},
+        "energy_range_MeV_per_u": {
+            "minimum": 0.0,
+            "maximum": math.ceil(max(energy_values)) if energy_values else None,
+        },
         "source_metadata": args.metadata.as_posix(),
         "source_metadata_sha256": sha256(args.metadata),
         "source_runtime": {
             "topas_version": topas_version,
             "geant4_version": geant4_version,
-            "physics_model": source.get("physics_model"),
+            "physics_model": physics_model,
             "runtime_reference_metadata": (
                 args.runtime_reference_metadata.as_posix()
                 if args.runtime_reference_metadata is not None else None

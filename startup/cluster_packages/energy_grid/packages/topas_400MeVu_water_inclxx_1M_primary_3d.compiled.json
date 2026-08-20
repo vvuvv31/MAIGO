@@ -1,0 +1,45 @@
+{
+  "format": "carbon reaction package binary",
+  "format_version": 1,
+  "byte_order": "little-endian",
+  "direction_coordinates": "projectile-local orthonormal frame",
+  "direction_components": [
+    "local_x",
+    "local_y",
+    "along_projectile"
+  ],
+  "local_deposit": "Geant4 G4Step::GetTotalEnergyDeposit, scaled with package energy",
+  "source_metadata": "/LustreData6/home/wuwei/carbonGPU/maigo_packages_1M/energy_grid/packages/topas_400MeVu_water_inclxx_1M_primary.metadata.json",
+  "source_metadata_sha256": "433412f620029dc86c810cbf79d9cab2afecfe296f750d70757f1bc174007f81",
+  "source_runtime": {
+    "topas_version": "4.2.p3",
+    "geant4_version": "geant4-11-03-patch-02",
+    "runtime_reference_metadata": "/LustreData6/home/wuwei/carbonGPU/maigo_packages_1M/energy_grid/packages/topas_400MeVu_water_inclxx_1M.metadata.json"
+  },
+  "source_reactions_sha256": "c04bf92edee77f68ecfaf08203e6e1617d04e293dfd92647cd5822f3dd6e75f7",
+  "source_secondaries_sha256": "d20adec2a0c43bbb458fdb14e7f7dcf5fd3d0896a0a2f1ce8eca3ce5c9df6e77",
+  "energy_bins": {
+    "minimum_MeV_per_u": 0.0,
+    "width_MeV_per_u": 4.0,
+    "count": 101,
+    "minimum_packages_per_bin": 233,
+    "maximum_packages_per_bin": 19918,
+    "fill_empty": "nearest",
+    "filled_empty_bins": []
+  },
+  "records": {
+    "reactions": 739926,
+    "secondaries": 7646543
+  },
+  "record_sizes_bytes": {
+    "header": 64,
+    "energy_bin": 8,
+    "reaction": 20,
+    "secondary": 24
+  },
+  "output": {
+    "path": "/LustreData6/home/wuwei/carbonGPU/maigo_packages_1M/energy_grid/packages/topas_400MeVu_water_inclxx_1M_primary_3d.bin",
+    "bytes": 198316424,
+    "sha256": "1796877a2d95cdc8f09f86452d65a78106b3f5bf6e2de842330c004c2cd42737"
+  }
+}

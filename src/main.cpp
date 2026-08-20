@@ -49,6 +49,26 @@ int main(int argc, char* argv[]) {
         const auto sequential_spots = cli.sequential_spots;
         config.validate();
 
+        const auto primary_ion = config.primary_ion();
+        std::cout << "Primary ion: Z=" << primary_ion.atomic_number
+                  << " A=" << primary_ion.mass_number
+                  << "; rest mass=" << primary_ion.rest_mass_MeV << " MeV"
+                  << (config.primary_rest_mass_MeV > 0.0
+                          ? " (configured)\n"
+                          : " (A * nucleon mass)\n");
+
+        if (config.enable_primary_inelastic_xs_correction) {
+            std::cout << "Primary inelastic XS correction: "
+                      << config.primary_inelastic_xs_correction_file
+                      << "; points="
+                      << config.primary_inelastic_xs_correction_energies_MeVu.size()
+                      << "; incident-energy range="
+                      << config.primary_inelastic_xs_correction_energies_MeVu.front()
+                      << ".."
+                      << config.primary_inelastic_xs_correction_energies_MeVu.back()
+                      << " MeV/u; linear interpolation with endpoint clamping\n";
+        }
+
         const auto stopping_power = carbon::StoppingPowerTable::from_csv(config.primary_stopping_power_file);
         std::optional<carbon::StoppingPowerTable> upstream_air_stopping_power;
         if (config.spots_enable_upstream_air_energy_loss) {
@@ -185,7 +205,7 @@ int main(int argc, char* argv[]) {
             }
             if (config.enable_ct_grid) {
                 const auto patient_ct =
-                    carbon::CtGrid::from_binary(config.ct_grid_file);
+                    carbon::CtGrid::from_config(config);
                 std::cout << "Patient CT (fixed DICOM LPS): DimSize="
                           << patient_ct.nx << "x" << patient_ct.ny << "x"
                           << patient_ct.nz << " spacing="
@@ -305,7 +325,7 @@ int main(int argc, char* argv[]) {
             const auto total_histories = plan.total_histories();
             if (config.enable_tps_coordinate_system) {
                 const auto patient_ct =
-                    carbon::CtGrid::from_binary(config.ct_grid_file);
+                    carbon::CtGrid::from_config(config);
                 std::cout << "Patient CT (fixed DICOM LPS): DimSize="
                           << patient_ct.nx << "x" << patient_ct.ny << "x"
                           << patient_ct.nz << " spacing="
@@ -397,7 +417,7 @@ int main(int argc, char* argv[]) {
                           << ", " << first_direction[2] << ")\n";
                 if (upstream_air_stopping_power_ptr != nullptr) {
                     std::cout << "  upstream air path=[" << min_air_path << ", "
-                              << max_air_path << "] mm; total C-12 loss=["
+                              << max_air_path << "] mm; total primary-ion loss=["
                               << min_air_loss << ", " << max_air_loss << "] MeV\n";
                 }
                 return EXIT_SUCCESS;
@@ -477,6 +497,19 @@ int main(int argc, char* argv[]) {
         if (config.enable_let_scoring && !config.let_output_file.empty()) {
             carbon::write_letd_csv(config.let_output_file, config, result);
         }
+        if (config.validation_scorers()) {
+            const auto dir = config.validation_output_directory.empty()
+                                 ? std::filesystem::path{"benchmark/scorer/results"}
+                                 : config.validation_output_directory;
+            carbon::write_energy_ledger_json(dir / "energy_ledger.json", config,
+                                             result);
+            carbon::write_validation_scorer_csvs(dir, config, result);
+            if (result.secondary_queue_overflow != 0 ||
+                result.cascade_queue_overflow != 0) {
+                throw std::runtime_error(
+                    "validation scorer run had a non-zero secondary/cascade queue overflow");
+            }
+        }
         if (config.enable_let_scoring &&
             !config.fragment_species_let_output_file.empty()) {
             carbon::write_fragment_species_letd_csv(
@@ -540,7 +573,7 @@ int main(int argc, char* argv[]) {
                   << "Backend: " << result.backend << '\n'
                   << "Histories: " << config.number_of_histories << '\n'
                   << "Initial energy: " << config.initial_energy_MeVu << " MeV/u = "
-                  << config.initial_total_energy_MeV() << " MeV per C-12\n"
+                  << config.initial_total_energy_MeV() << " MeV per primary ion\n"
                   << "Steps: " << result.total_steps << '\n'
                   << "Elapsed: " << result.elapsed_seconds << " s\n"
                   << "Throughput: " << histories_per_second << " histories/s\n"
@@ -778,6 +811,12 @@ int main(int argc, char* argv[]) {
         std::cout << "Untracked nuclear energy: " << result.untracked_nuclear_energy_MeV
                   << " MeV\n"
                   << "MeV scorer output: " << config.output_file.string() << '\n';
+        if (config.validation_scorers()) {
+            const auto dir = config.validation_output_directory.empty()
+                                 ? std::filesystem::path{"benchmark/scorer/results"}
+                                 : config.validation_output_directory;
+            std::cout << "Validation scorer directory: " << dir.string() << '\n';
+        }
         if (!config.dose_output_file.empty()) {
             std::cout << "Dose scorer output (Gy): " << config.dose_output_file.string()
                       << '\n';

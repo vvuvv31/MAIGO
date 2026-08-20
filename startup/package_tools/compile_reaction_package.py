@@ -64,6 +64,8 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("--secondaries", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--output-metadata", type=Path, required=True)
+    parser.add_argument("--material", default=None)
+    parser.add_argument("--physics-model", default=None)
     parser.add_argument("--energy-bin-min-mevu", type=float, default=0.0)
     parser.add_argument("--energy-bin-width-mevu", type=float, default=1.0)
     parser.add_argument("--energy-bin-count", type=int, default=201)
@@ -315,20 +317,39 @@ def main() -> None:
 
     if args.output.stat().st_size != expected_file_size:
         raise SystemExit("Compiled binary size does not match its header")
+    material = args.material or metadata.get("material") or metadata.get("phantom_material")
+    physics_model = args.physics_model or runtime.get("physics_model") or metadata.get("physics_model")
+    if not isinstance(material, str) or not material:
+        raise SystemExit("Reaction sidecar requires a non-empty material")
+    if not isinstance(physics_model, str) or not physics_model:
+        raise SystemExit("Reaction sidecar requires a non-empty physics model")
     compiled_metadata = {
+        "sidecar_schema_version": 2,
+        "kind": "reaction",
         "format": "charged-ion reaction package binary",
         "format_version": VERSION,
         "byte_order": "little-endian",
         "direction_coordinates": "projectile-local orthonormal frame",
         "direction_components": ["local_x", "local_y", "along_projectile"],
-        "projectile": {"atomic_number_Z": projectile_z, "mass_number_A": projectile_a},
+        "projectile": {"Z": projectile_z, "A": projectile_a},
+        "material": material,
+        "physics_model": physics_model,
+        "physics": {
+            "model": physics_model,
+            "topas_version": runtime.get("topas_version"),
+            "geant4_version": runtime.get("geant4_version"),
+        },
+        "energy_range_MeV_per_u": {
+            "minimum": args.energy_bin_min_mevu,
+            "maximum": args.energy_bin_min_mevu + args.energy_bin_width_mevu * len(binary_bins),
+        },
         "local_deposit": "generator-provided interaction-local energy deposit",
         "source_metadata": args.metadata.as_posix(),
         "source_metadata_sha256": sha256(args.metadata),
         "source_runtime": {
             "topas_version": runtime.get("topas_version"),
             "geant4_version": runtime.get("geant4_version"),
-            "physics_model": runtime.get("physics_model", metadata.get("physics_model")),
+            "physics_model": physics_model,
             "runtime_reference_metadata": runtime.get("metadata"),
         },
         "source_reactions_sha256": sha256(args.reactions),

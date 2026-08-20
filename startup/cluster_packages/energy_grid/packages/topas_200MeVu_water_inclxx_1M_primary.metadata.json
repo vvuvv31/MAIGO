@@ -1,0 +1,37 @@
+{
+  "case": "cascade-aligned-primary-c12",
+  "histories": 1000000,
+  "reaction_definition": "first inelastic interaction of source track-1 primary C-12",
+  "source_cascade_metadata": "/LustreData6/home/wuwei/carbonGPU/maigo_packages_1M/energy_grid/packages/topas_200MeVu_water_inclxx_1M.metadata.json",
+  "source_cascade_metadata_sha256": "cf1c740fa604e172c0759fb62185e2528dc36f93bddddb9c31d9218e8c57ab1f",
+  "runtime_reference": {
+    "metadata": "/LustreData6/home/wuwei/carbonGPU/maigo_packages_1M/energy_grid/packages/topas_200MeVu_water_inclxx_1M.metadata.json",
+    "topas_version": "4.2.p3",
+    "geant4_version": "geant4-11-03-patch-02"
+  },
+  "reaction_count": 379798,
+  "secondary_count": 3486108,
+  "selection": {
+    "projectile_Z": 6,
+    "projectile_A": 12,
+    "interaction_track_id": 1,
+    "event_interaction_id": 0
+  },
+  "output_files": {
+    "reactions": {
+      "path": "/LustreData6/home/wuwei/carbonGPU/maigo_packages_1M/energy_grid/run_200MeVu_1M/topas_200MeVu_water_inclxx_1M_primary_reactions.csv.gz",
+      "sha256": "5a53142f58aec777cf0c449c2ff60015698024b8af698941a4b360771d010b49",
+      "bytes": 13084327,
+      "rows": 379798,
+      "compression": "gzip"
+    },
+    "secondaries": {
+      "path": "/LustreData6/home/wuwei/carbonGPU/maigo_packages_1M/energy_grid/run_200MeVu_1M/topas_200MeVu_water_inclxx_1M_primary_secondaries.csv.gz",
+      "sha256": "62925ebb00c5aac0467e61ae64153e0e8bfa5ff9fae261edb7655a198c983eff",
+      "bytes": 82200147,
+      "rows": 3486108,
+      "compression": "gzip"
+    }
+  },
+  "global_scale_applied": false
+}

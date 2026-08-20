@@ -1,0 +1,170 @@
+# Proton water package/reference source. QGSP_BIC_HP supplies protonInelastic
+# through Binary Cascade; no INCL++ provenance is asserted for this source.
+# The output converter expects the scorer stems below and writes strict
+# depth_mm/value CSVs for scripts/compare_water_ion_validation.py.
+i:Ts/Seed = @SEED@
+i:Ts/NumberOfThreads = @THREADS@
+i:Ts/ShowHistoryCountAtInterval = 10000
+b:Gr/Enable = "False"
+s:Ge/World/Type = "TsBox"
+s:Ge/World/Material = "Air"
+d:Ge/World/HLX = 200 mm
+d:Ge/World/HLY = 200 mm
+d:Ge/World/HLZ = 400 mm
+s:Ge/Phantom/Parent = "World"
+s:Ge/Phantom/Type = "TsBox"
+s:Ge/Phantom/Material = "G4_WATER"
+d:Ge/Phantom/HLX = 150 mm
+d:Ge/Phantom/HLY = 150 mm
+d:Ge/Phantom/HLZ = 350 mm
+d:Ge/Phantom/MaxStepSize = 0.1 mm
+s:Ge/BeamPosition/Parent = "World"
+s:Ge/BeamPosition/Type = "Group"
+d:Ge/BeamPosition/TransZ = 349.999 mm
+s:So/ProtonBeam/Type = "Beam"
+s:So/ProtonBeam/Component = "BeamPosition"
+s:So/ProtonBeam/BeamParticle = "proton"
+d:So/ProtonBeam/BeamEnergy = @ENERGY_MEV@ MeV
+u:So/ProtonBeam/BeamEnergySpread = 0.0
+s:So/ProtonBeam/BeamPositionDistribution = "None"
+s:So/ProtonBeam/BeamAngularDistribution = "None"
+i:So/ProtonBeam/NumberOfHistoriesInRun = @HISTORIES@
+s:Ph/ListName = "Default"
+s:Ph/Default/Type = "Geant4_Modular"
+sv:Ph/Default/Modules = 5 "g4em-standard_opt4" "g4h-phy_QGSP_BIC_HP" "g4decay" "g4h-elastic_HP" "g4stopping"
+d:Ph/Default/CutForAllParticles = 0.05 mm
+
+# One 0.5 mm depth bin over the 700 mm phantom.  The converter validates the
+# X/Y/Z grid instead of relying on these values implicitly.
+s:Sc/TotalEnergy/Quantity = "EnergyDeposit"
+s:Sc/TotalEnergy/Component = "Phantom"
+s:Sc/TotalEnergy/OutputFile = "@OUTPUT_STEM@_total_energy_deposit"
+s:Sc/TotalEnergy/OutputType = "csv"
+s:Sc/TotalEnergy/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/TotalEnergy/XBins = 1
+i:Sc/TotalEnergy/YBins = 1
+i:Sc/TotalEnergy/ZBins = 1400
+sv:Sc/TotalEnergy/Report = 1 "Sum"
+
+s:Sc/PrimaryProtonEnergy/Quantity = "EnergyDeposit"
+s:Sc/PrimaryProtonEnergy/Component = "Phantom"
+s:Sc/PrimaryProtonEnergy/OutputFile = "@OUTPUT_STEM@_primary_proton_energy_deposit"
+s:Sc/PrimaryProtonEnergy/OutputType = "csv"
+s:Sc/PrimaryProtonEnergy/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/PrimaryProtonEnergy/XBins = 1
+i:Sc/PrimaryProtonEnergy/YBins = 1
+i:Sc/PrimaryProtonEnergy/ZBins = 1400
+sv:Sc/PrimaryProtonEnergy/Report = 1 "Sum"
+sv:Sc/PrimaryProtonEnergy/OnlyIncludeParticlesNamed = 1 "proton"
+s:Sc/PrimaryProtonEnergy/OnlyIncludeParticlesOfGeneration = "Primary"
+
+s:Sc/TotalDose/Quantity = "DoseToMedium"
+s:Sc/TotalDose/Component = "Phantom"
+s:Sc/TotalDose/OutputFile = "@OUTPUT_STEM@_total_dose"
+s:Sc/TotalDose/OutputType = "csv"
+s:Sc/TotalDose/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/TotalDose/XBins = 1
+i:Sc/TotalDose/YBins = 1
+i:Sc/TotalDose/ZBins = 1400
+sv:Sc/TotalDose/Report = 1 "Sum"
+
+s:Sc/PrimaryProtonDose/Quantity = "DoseToMedium"
+s:Sc/PrimaryProtonDose/Component = "Phantom"
+s:Sc/PrimaryProtonDose/OutputFile = "@OUTPUT_STEM@_primary_proton_dose"
+s:Sc/PrimaryProtonDose/OutputType = "csv"
+s:Sc/PrimaryProtonDose/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/PrimaryProtonDose/XBins = 1
+i:Sc/PrimaryProtonDose/YBins = 1
+i:Sc/PrimaryProtonDose/ZBins = 1400
+sv:Sc/PrimaryProtonDose/Report = 1 "Sum"
+sv:Sc/PrimaryProtonDose/OnlyIncludeParticlesNamed = 1 "proton"
+s:Sc/PrimaryProtonDose/OnlyIncludeParticlesOfGeneration = "Primary"
+
+# myHadronLET is the remote reference scorer.  It uses a matching
+# myHadronLET_Denominator scorer; explicit denominator outputs below make the
+# LET definition auditable.  It accepts charged ions/nuclei with Z>=1, so
+# charged mesons and muons are excluded.
+s:Sc/PrimaryProtonLET/Quantity = "myHadronLET"
+s:Sc/PrimaryProtonLET/Component = "Phantom"
+s:Sc/PrimaryProtonLET/OutputFile = "@OUTPUT_STEM@_primary_let"
+s:Sc/PrimaryProtonLET/OutputType = "csv"
+s:Sc/PrimaryProtonLET/IfOutputFileAlreadyExists = "Overwrite"
+s:Sc/PrimaryProtonLET/WeightBy = "dose"
+u:Sc/PrimaryProtonLET/Order = 1
+i:Sc/PrimaryProtonLET/XBins = 1
+i:Sc/PrimaryProtonLET/YBins = 1
+i:Sc/PrimaryProtonLET/ZBins = 1400
+sv:Sc/PrimaryProtonLET/OnlyIncludeParticlesNamed = 1 "proton"
+s:Sc/PrimaryProtonLET/OnlyIncludeParticlesOfGeneration = "Primary"
+
+s:Sc/PrimaryProtonLETDenominator/Quantity = "myHadronLET_Denominator"
+s:Sc/PrimaryProtonLETDenominator/Component = "Phantom"
+s:Sc/PrimaryProtonLETDenominator/OutputFile = "@OUTPUT_STEM@_primary_let_denominator"
+s:Sc/PrimaryProtonLETDenominator/OutputType = "csv"
+s:Sc/PrimaryProtonLETDenominator/IfOutputFileAlreadyExists = "Overwrite"
+s:Sc/PrimaryProtonLETDenominator/WeightBy = "dose"
+i:Sc/PrimaryProtonLETDenominator/XBins = 1
+i:Sc/PrimaryProtonLETDenominator/YBins = 1
+i:Sc/PrimaryProtonLETDenominator/ZBins = 1400
+sv:Sc/PrimaryProtonLETDenominator/OnlyIncludeParticlesNamed = 1 "proton"
+s:Sc/PrimaryProtonLETDenominator/OnlyIncludeParticlesOfGeneration = "Primary"
+
+s:Sc/AllHadronLET/Quantity = "myHadronLET"
+s:Sc/AllHadronLET/Component = "Phantom"
+s:Sc/AllHadronLET/OutputFile = "@OUTPUT_STEM@_all_hadron_let"
+s:Sc/AllHadronLET/OutputType = "csv"
+s:Sc/AllHadronLET/IfOutputFileAlreadyExists = "Overwrite"
+s:Sc/AllHadronLET/WeightBy = "dose"
+u:Sc/AllHadronLET/Order = 1
+i:Sc/AllHadronLET/XBins = 1
+i:Sc/AllHadronLET/YBins = 1
+i:Sc/AllHadronLET/ZBins = 1400
+
+s:Sc/AllHadronLETDenominator/Quantity = "myHadronLET_Denominator"
+s:Sc/AllHadronLETDenominator/Component = "Phantom"
+s:Sc/AllHadronLETDenominator/OutputFile = "@OUTPUT_STEM@_all_hadron_let_denominator"
+s:Sc/AllHadronLETDenominator/OutputType = "csv"
+s:Sc/AllHadronLETDenominator/IfOutputFileAlreadyExists = "Overwrite"
+s:Sc/AllHadronLETDenominator/WeightBy = "dose"
+i:Sc/AllHadronLETDenominator/XBins = 1
+i:Sc/AllHadronLETDenominator/YBins = 1
+i:Sc/AllHadronLETDenominator/ZBins = 1400
+
+# PrimaryCrossingCount is the formal primary survival scorer.  It counts each
+# primary history at most once per depth bin and therefore has the same
+# history-count semantics as the MAIGO primary survival scorer.  The proton
+# values are explicit here; a different projectile requires matching Z/A in
+# this template and in the converter arguments.
+s:Sc/PrimaryCrossing/Quantity = "PrimaryCrossingCount"
+s:Sc/PrimaryCrossing/Component = "Phantom"
+s:Sc/PrimaryCrossing/OutputFile = "@OUTPUT_STEM@_primary_crossing_count"
+s:Sc/PrimaryCrossing/OutputType = "csv"
+s:Sc/PrimaryCrossing/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/PrimaryCrossing/ProjectileZ = 1
+i:Sc/PrimaryCrossing/ProjectileA = 1
+i:Sc/PrimaryCrossing/XBins = 1
+i:Sc/PrimaryCrossing/YBins = 1
+i:Sc/PrimaryCrossing/ZBins = 1400
+sv:Sc/PrimaryCrossing/Report = 1 "Sum"
+
+# Retain fluence only as a diagnostic track-length estimator.  It must not be
+# used as the formal primary survival profile.
+s:Sc/PrimaryProtonFluence/Quantity = "Fluence"
+s:Sc/PrimaryProtonFluence/Component = "Phantom"
+s:Sc/PrimaryProtonFluence/OutputFile = "@OUTPUT_STEM@_primary_fluence"
+s:Sc/PrimaryProtonFluence/OutputType = "csv"
+s:Sc/PrimaryProtonFluence/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/PrimaryProtonFluence/XBins = 1
+i:Sc/PrimaryProtonFluence/YBins = 1
+i:Sc/PrimaryProtonFluence/ZBins = 1400
+sv:Sc/PrimaryProtonFluence/Report = 1 "Sum"
+sv:Sc/PrimaryProtonFluence/OnlyIncludeParticlesNamed = 1 "proton"
+s:Sc/PrimaryProtonFluence/OnlyIncludeParticlesOfGeneration = "Primary"
+
+# CarbonCascadeNtuple is a legacy extension name, but records any charged-ion
+# inelastic interaction and its projectile Z/A.  The converter filters Z=1,A=1.
+s:Sc/CascadeReactions/Quantity = "CarbonCascadeNtuple"
+s:Sc/CascadeReactions/Component = "Phantom"
+s:Sc/CascadeReactions/OutputFile = "@OUTPUT_STEM@_cascade"
+s:Sc/CascadeReactions/OutputType = "ASCII"
+s:Sc/CascadeReactions/IfOutputFileAlreadyExists = "Overwrite"
