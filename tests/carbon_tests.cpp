@@ -1754,8 +1754,31 @@ void test_secondary_optimization_config_validation() {
 
     const auto config_root =
         std::filesystem::path(CARBON_SOURCE_DIR) / "config";
-    const auto best_config = carbon::load_config(
-        config_root / "beam_ct_fullplan_rt07575_let_soft_tissue.yaml");
+    const auto production_config_path =
+        config_root / "beam_ct_fullplan_rt07575_let_soft_tissue.yaml";
+    auto best_config_path = production_config_path;
+    std::filesystem::path fallback_config_path;
+    const auto production_ct_path =
+        std::filesystem::path(CARBON_SOURCE_DIR) /
+        "benchmark/ct/grids/patient_ct_tps_90_xneg_edge_corrected.bin";
+    if (!std::filesystem::is_regular_file(production_ct_path)) {
+        // The large benchmark CT volume is intentionally ignored. Keep this
+        // parser-contract test runnable from source archives without it.
+        fallback_config_path = std::filesystem::temp_directory_path() /
+                               "carbon_rt07575_config_without_ct.yaml";
+        std::ifstream input(production_config_path);
+        std::ofstream output(fallback_config_path);
+        require(input && output, "Could not create CT config parser fallback");
+        std::string line;
+        while (std::getline(input, line)) {
+            if (line == "enable_ct_grid: true") {
+                line = "enable_ct_grid: false";
+            }
+            output << line << '\n';
+        }
+        best_config_path = fallback_config_path;
+    }
+    const auto best_config = carbon::load_config(best_config_path);
     require(best_config.enable_let_scoring,
             "RT07575 production config must score LET");
     require(best_config.spots_enable_upstream_air_energy_loss &&
@@ -1828,6 +1851,10 @@ void test_secondary_optimization_config_validation() {
                    "Upstream air loss accepted a non-TPS spot geometry");
     upstream_air.spots_geometry_mode = "tps_gantry_y";
     upstream_air.validate();
+    if (!fallback_config_path.empty()) {
+        std::error_code ec;
+        std::filesystem::remove(fallback_config_path, ec);
+    }
 }
 
 void test_topas_spots_parse_angle01() {

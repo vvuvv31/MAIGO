@@ -49,7 +49,7 @@ int main(int argc, char* argv[]) {
         const auto sequential_spots = cli.sequential_spots;
         config.validate();
 
-        const auto stopping_power = carbon::StoppingPowerTable::from_csv(config.stopping_power_file);
+        const auto stopping_power = carbon::StoppingPowerTable::from_csv(config.primary_stopping_power_file);
         std::optional<carbon::StoppingPowerTable> upstream_air_stopping_power;
         if (config.spots_enable_upstream_air_energy_loss) {
             upstream_air_stopping_power = carbon::StoppingPowerTable::from_csv(
@@ -146,6 +146,10 @@ int main(int argc, char* argv[]) {
         std::vector<std::filesystem::path> spots_files = config.topas_spots_files;
         if (spots_files.empty() && !config.topas_spots_file.empty()) {
             spots_files.push_back(config.topas_spots_file);
+        }
+        if (plan_only && spots_files.empty() && !config.enable_tps_source) {
+            std::cout << "Plan-only validation passed; transport not started\n";
+            return EXIT_SUCCESS;
         }
 
         carbon::SyclTransportContext* sycl_context = nullptr;
@@ -559,7 +563,7 @@ int main(int argc, char* argv[]) {
                   << result.elastic_queue_overflow_energy_MeV << " MeV)\n";
         if (result.minibeam.enabled) {
             const auto count = static_cast<double>(
-                result.minibeam.water_entrance_primary_c12);
+                result.minibeam.water_entrance_primary);
             const auto mean_and_std = [count](const double sum,
                                               const double squared_sum) {
                 if (count <= 0.0) {
@@ -593,7 +597,7 @@ int main(int argc, char* argv[]) {
                 << result.minibeam.direct_air_slit_histories << '/'
                 << result.minibeam.copper_touched_histories << '/'
                 << result.minibeam.copper_nuclear_interactions << '/'
-                << result.minibeam.water_entrance_primary_c12 << '\n'
+                << result.minibeam.water_entrance_primary << '\n'
                 << "Minibeam beamline removed energy: "
                 << result.minibeam.beamline_removed_energy_MeV << " MeV\n"
                 << "Minibeam Copper products generated/charged-survivor/"
@@ -615,38 +619,38 @@ int main(int argc, char* argv[]) {
                 << dx_mean << '/' << dx_std << '\n'
                 << "Minibeam water entrance dir-y mean/std: "
                 << dy_mean << '/' << dy_std << '\n';
-            std::cout << "Minibeam water entrance primary C-12 by slit:";
+            std::cout << "Minibeam water entrance primary ion by slit:";
             for (std::size_t slit = 0;
                  slit < carbon::MinibeamDiagnostics::slit_count; ++slit) {
                 std::cout
                     << (slit == 0 ? ' ' : '/')
                     << result.minibeam
-                           .water_entrance_primary_c12_by_slit[slit];
+                           .water_entrance_primary_by_slit[slit];
             }
             std::cout << '\n';
             std::cout
-                << "Minibeam collimator entrance primary C-12 by slit:";
+                << "Minibeam collimator entrance primary ion by slit:";
             for (std::size_t slit = 0;
                  slit < carbon::MinibeamDiagnostics::slit_count; ++slit) {
                 std::cout
                     << (slit == 0 ? ' ' : '/')
                     << result.minibeam
-                           .collimator_entrance_primary_c12_by_slit[slit];
+                           .collimator_entrance_primary_by_slit[slit];
             }
             std::cout << '\n';
-            std::cout << "Minibeam direct-air primary C-12 by slit:";
+            std::cout << "Minibeam direct-air primary ion by slit:";
             for (std::size_t slit = 0;
                  slit < carbon::MinibeamDiagnostics::slit_count; ++slit) {
                 std::cout
                     << (slit == 0 ? ' ' : '/')
                     << result.minibeam
-                           .direct_air_primary_c12_by_slit[slit];
+                           .direct_air_primary_by_slit[slit];
             }
             std::cout << '\n';
             const auto direct_primary_count =
                 result.minibeam.direct_air_slit_histories;
             const auto copper_touched_primary_count =
-                result.minibeam.water_entrance_primary_c12 -
+                result.minibeam.water_entrance_primary -
                 direct_primary_count;
             std::cout
                 << "Minibeam water entrance direct/touched primary "

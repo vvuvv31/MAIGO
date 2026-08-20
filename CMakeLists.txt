@@ -37,6 +37,7 @@ add_library(carbon_core
     src/config.cpp
     src/cross_section.cpp
     src/ct_grid.cpp
+    src/ct_dicom.cpp
     src/package_identity.cpp
     src/elastic_package.cpp
     src/elastic_device_storage.cpp

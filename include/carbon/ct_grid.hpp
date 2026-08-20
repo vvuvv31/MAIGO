@@ -5,9 +5,13 @@
 #include <cmath>
 #include <cstdint>
 #include <filesystem>
+#include <string>
+#include <string_view>
 #include <vector>
 
 namespace carbon {
+
+struct TransportConfig;
 
 // Patient CT volume stored in conventional medical-image coordinates:
 //   x: patient left/right within an axial slice
@@ -74,7 +78,32 @@ struct CtGrid {
     }
 
     static CtGrid from_binary(const std::filesystem::path& path);
+    static CtGrid from_config(const TransportConfig& config);
+    // File: CCTG binary. Directory or .dcm: CT Image series + Schneider HU map.
+    static CtGrid load(const std::filesystem::path& path,
+                       const std::filesystem::path& schneider_file = {},
+                       std::string_view origin_mode = "centered");
+    static CtGrid from_dicom_directory(const std::filesystem::path& directory,
+                                       const std::filesystem::path& schneider_file = {},
+                                       std::string_view origin_mode = "centered");
     void write_binary(const std::filesystem::path& path) const;
+};
+
+struct SchneiderHuTable {
+    std::vector<int> density_hu_edges;
+    std::vector<double> density_offset;
+    std::vector<double> density_factor;
+    std::vector<double> density_factor_offset;
+    std::vector<double> density_correction;
+    int density_correction_hu0{-1000};
+    std::vector<int> material_hu_edges;
+    std::vector<float> za_rel;
+    std::vector<float> I_eV;
+
+    static SchneiderHuTable builtin();
+    static SchneiderHuTable from_topas_file(const std::filesystem::path& path);
+    [[nodiscard]] float density_g_per_cm3(float hu) const noexcept;
+    [[nodiscard]] std::uint8_t section_id(float hu) const noexcept;
 };
 
 float hu_to_density_g_per_cm3(float hu) noexcept;

@@ -40,6 +40,8 @@ TransportResult run_transport(
     const std::optional<ReactionPackageTable>& reaction_packages,
     const std::optional<CascadePackageTable>& cascade_packages,
     const std::optional<NeutralPackageTable>& neutral_packages,
+    const std::optional<CrossSectionTable>& elastic_cross_section,
+    const std::optional<ElasticPackageTable>& elastic_packages,
     SyclTransportContext* sycl_context = nullptr);
 
 }  // namespace carbon
