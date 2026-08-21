@@ -764,6 +764,9 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                                           std::size_t neu_cap) -> std::size_t {
         std::size_t bytes = 0;
         bytes += table_size * sizeof(float);
+        if (reuse_immutable_buffers || config.enable_csda_range_energy_loss) {
+            bytes += 2 * table_size * sizeof(float);
+        }
         bytes += cross_section_table_size * sizeof(float);
         if (primary_elastic_transport_enabled && elastic_cross_section != nullptr &&
             elastic_packages != nullptr) {
@@ -959,6 +962,16 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
     auto* table_device = reuse_immutable_buffers
                              ? context->impl_->table_device
                              : sycl::malloc_device<float>(table_size, queue);
+    auto* energy_grid_device = reuse_immutable_buffers
+                                   ? context->impl_->energy_grid_device
+                                   : (config.enable_csda_range_energy_loss
+                                          ? sycl::malloc_device<float>(table_size, queue)
+                                          : nullptr);
+    auto* cumulative_range_device = reuse_immutable_buffers
+                                        ? context->impl_->cumulative_range_device
+                                        : (config.enable_csda_range_energy_loss
+                                               ? sycl::malloc_device<float>(table_size, queue)
+                                               : nullptr);
     auto* cross_section_device =
         reuse_immutable_buffers
             ? context->impl_->cross_section_device
@@ -1461,6 +1474,8 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
             free_device(slab_densities_device);
             free_device(slab_radiation_lengths_device);
             free_immutable_device(table_device);
+            free_immutable_device(energy_grid_device);
+            free_immutable_device(cumulative_range_device);
             free_immutable_device(cross_section_device);
             free_device(let_delta_fraction_device);
             free_device(particle_sp_ratio_device);
@@ -2057,7 +2072,10 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
          neutral_queue_filled_device == nullptr || neutral_summaries_device == nullptr ||
          neutral_origin_dose_device == nullptr ||
          (enable_voxel_scoring && neutral_origin_voxel_dose_device == nullptr));
-    if (table_device == nullptr || cross_section_device == nullptr || dose_device == nullptr ||
+    if (table_device == nullptr ||
+        (config.enable_csda_range_energy_loss &&
+         (energy_grid_device == nullptr || cumulative_range_device == nullptr)) ||
+        cross_section_device == nullptr || dose_device == nullptr ||
         (use_let_delta_fraction_table && let_delta_fraction_device == nullptr) ||
         (use_particle_specific_stopping_power &&
          (particle_sp_ratio_device == nullptr ||
@@ -2094,6 +2112,8 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
         (primary_spot_count > 0 && primary_spots_device == nullptr) ||
         secondary_allocation_failed || neutral_allocation_failed) {
         free_immutable_device(table_device);
+        free_immutable_device(energy_grid_device);
+        free_immutable_device(cumulative_range_device);
         free_immutable_device(cross_section_device);
         free_device(elastic_cross_section_device);
         free_device(let_delta_fraction_device);
@@ -2202,6 +2222,19 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                        table_host.begin(),
                        [](double value) { return static_cast<float>(value); });
         queue.copy(table_host.data(), table_device, table_size);
+        if (config.enable_csda_range_energy_loss) {
+            std::vector<float> energy_grid_host(table_size);
+            std::transform(stopping_power.energies().begin(), stopping_power.energies().end(),
+                           energy_grid_host.begin(),
+                           [](double value) { return static_cast<float>(value); });
+            queue.copy(energy_grid_host.data(), energy_grid_device, table_size);
+            std::vector<float> cumulative_range_host(table_size);
+            std::transform(stopping_power.cumulative_ranges_mm().begin(),
+                           stopping_power.cumulative_ranges_mm().end(),
+                           cumulative_range_host.begin(),
+                           [](double value) { return static_cast<float>(value); });
+            queue.copy(cumulative_range_host.data(), cumulative_range_device, table_size);
+        }
         std::vector<float> cross_section_host(cross_section_table_size);
         std::transform(cross_section.values().begin(), cross_section.values().end(),
                        cross_section_host.begin(),
@@ -2604,6 +2637,10 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                   << "; total IDD stays unrestricted\n";
     }
     const auto enable_energy_straggling = config.enable_energy_straggling;
+    const auto enable_step_stable_straggling =
+        enable_energy_straggling && config.enable_step_stable_straggling;
+    const auto straggling_sampling_length_mm =
+        static_cast<float>(config.straggling_sampling_length_mm);
     const auto enable_secondary_energy_straggling =
         enable_energy_straggling &&
         config.enable_secondary_energy_straggling;
@@ -2680,6 +2717,7 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
         static_cast<float>(config.electronic_buildup_mfp_mm);
     const auto inverse_mass_number = 1.0f / static_cast<float>(config.primary_mass_number);
     const auto primary_mass_number = config.primary_mass_number;
+    const auto enable_csda_range_energy_loss = config.enable_csda_range_energy_loss;
     const auto primary_atomic_number = config.primary_atomic_number;
     const auto primary_charge = static_cast<float>(primary_atomic_number);
     const auto primary_charge_power = static_cast<float>(
@@ -3030,6 +3068,8 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
 #endif
             SecondaryGenerationSummary secondary_summary{};
             std::uint32_t steps = 0;
+            StepStableStragglingState<float> stable_straggling;
+            stable_straggling.initialize(straggling_sampling_length_mm);
             double pending_primary_depth_MeV = 0.0;
             double pending_restricted_primary_MeV = 0.0;
             double pending_let_numerator = 0.0;
@@ -3223,10 +3263,12 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                         step_mm = sycl::fmin(step_mm, dz_step);
                     }
                 }
+                auto stable_straggling_interface_limited = false;
                 if (slab_layer_count > 0) {
                     const auto slab_step = distance_to_slab_interface_mm(
                         position_z_mm, direction_z, slab_z_ends_device, slab_layer_count,
                         phantom_length_mm);
+                    stable_straggling_interface_limited = slab_step < step_mm;
                     step_mm = sycl::fmin(step_mm, slab_step);
                 }
                 if (enable_hetero_insert) {
@@ -3234,9 +3276,12 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                         position_x_mm, position_y_mm, position_z_mm, direction_x,
                         direction_y, direction_z, insert_x_min, insert_x_max, insert_y_min,
                         insert_y_max, insert_z_min, insert_z_max, phantom_length_mm);
+                    stable_straggling_interface_limited =
+                        stable_straggling_interface_limited || insert_step < step_mm;
                     step_mm = sycl::fmin(step_mm, insert_step);
                 }
                 if (enable_ct_grid && in_ct) {
+                    const auto step_before_ct_clamp = step_mm;
                     // Face clamp only when density/material changes along the step
                     // (unless ct_skip_homogeneous_face_clamp is false).
                     CtClampPath clamp_path = CtClampPath::three_axis;
@@ -3254,6 +3299,8 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
 #endif
                     );
                     profile_face(profile_counters_device, true, clamp_path);
+                    stable_straggling_interface_limited =
+                        stable_straggling_interface_limited || step_mm < step_before_ct_clamp;
                 }
                 if (enable_voxel_scoring && voxel_scorer_clamps_transport &&
                     absolute_direction_x >= 1.0e-6F) {
@@ -3497,14 +3544,34 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                     break;
                 }
 
-                const auto mean_loss_MeV = stopping_power_MeV_per_mm * step_mm;
+                if (enable_energy_straggling && enable_step_stable_straggling) {
+                    stable_straggling.prepare_step(
+                        step_mm, (phantom_length_mm - position_z_mm) /
+                                      sycl::fmax(direction_z, 1.0e-6F));
+                }
+                const auto mean_loss_MeV = enable_csda_range_energy_loss
+                    ? sycl::fmax(
+                          0.0F,
+                          sycl::fmin(
+                              energy_MeV,
+                              energy_MeV -
+                                  static_cast<float>(primary_mass_number) *
+                                      csda_energy_after_distance_device(
+                                          energy_grid_device, table_device,
+                                          cumulative_range_device, table_size,
+                                          energy_MeV * inverse_mass_number,
+                                          step_mm, primary_mass_number)))
+                    : stopping_power_MeV_per_mm * step_mm;
                 auto deposited_MeV = sycl::fmin(mean_loss_MeV, energy_MeV);
                 if (enable_energy_straggling) {
                     profile_add(profile_counters_device,
                                 TransportProfileSlot::primary_straggling);
+                    const auto random_index = enable_step_stable_straggling
+                        ? stable_straggling.block_index
+                        : static_cast<std::uint64_t>(steps);
                     const auto uniform1 = sycl::fmax(
-                        rng::uniform01(spot_seed, rng_history, steps, 0), 1.0e-12f);
-                    const auto uniform2 = rng::uniform01(spot_seed, rng_history, steps, 1);
+                        rng::uniform01(spot_seed, rng_history, random_index, 0), 1.0e-12f);
+                    const auto uniform2 = rng::uniform01(spot_seed, rng_history, random_index, 1);
                     constexpr float two_pi = 6.2831853071795864769f;
                     const auto gaussian = sycl::sqrt(-2.0f * sycl::log(uniform1)) *
                                           sycl::cos(two_pi * uniform2);
@@ -3550,9 +3617,47 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                             straggling_scale_point_count, straggling_scale);
                     const auto sigma_MeV =
                         local_straggling_scale * sycl::sqrt(sycl::fmax(0.0f, variance_MeV2));
-                    deposited_MeV = sycl::clamp(
-                        mean_loss_MeV + sigma_MeV * gaussian, 0.0f,
-                        sycl::fmin(2.0F * mean_loss_MeV, energy_MeV));
+                    if (enable_step_stable_straggling) {
+                        if (!stable_straggling.block_active) {
+                            if (enable_csda_range_energy_loss) {
+                                const auto block_length_mm = stable_straggling.block_length_mm;
+                                const auto block_energy_MeVu =
+                                    csda_energy_after_distance_device(
+                                        energy_grid_device, table_device,
+                                        cumulative_range_device, table_size,
+                                        energy_MeVu, block_length_mm,
+                                        primary_mass_number);
+                                const auto block_mean_loss_MeV = csda_block_mean_loss_MeV(
+                                    energy_MeV, block_energy_MeVu,
+                                    static_cast<float>(primary_mass_number));
+                                const auto block_variance_MeV2 = use_explicit_primary_rest_mass
+                                    ? condensed_total_loss_variance_with_mass_MeV2_device(
+                                          energy_MeV, primary_rest_mass_MeV,
+                                          effective_charge, block_length_mm,
+                                          local_density_g_per_cm3, za_rel)
+                                    : condensed_total_loss_variance_MeV2_device(
+                                          energy_MeVu, primary_mass_number,
+                                          effective_charge, block_length_mm,
+                                          local_density_g_per_cm3, za_rel);
+                                stable_straggling.begin_block(
+                                    block_mean_loss_MeV, block_variance_MeV2,
+                                    block_length_mm, local_straggling_scale,
+                                    gaussian, energy_MeV);
+                            } else {
+                                stable_straggling.begin_block(
+                                    mean_loss_MeV, variance_MeV2, step_mm,
+                                    local_straggling_scale, gaussian, energy_MeV);
+                            }
+                        }
+                        deposited_MeV = stable_straggling.consume_loss(step_mm, energy_MeV);
+                        if (stable_straggling_interface_limited) {
+                            stable_straggling.reset_block();
+                        }
+                    } else {
+                        deposited_MeV = sycl::clamp(
+                            mean_loss_MeV + sigma_MeV * gaussian, 0.0F,
+                            sycl::fmin(2.0F * mean_loss_MeV, energy_MeV));
+                    }
                 }
                 // Electronic build-up: local (1-f)*dE + short-range delta f*dE along +z.
                 // Equilibrium dose still ≈ full unrestricted SP; surface suppressed.
@@ -6589,18 +6694,25 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
 
                             std::uint32_t charged_count = 0;
                             auto charged_energy = 0.0F;
+                            auto product_energy = 0.0F;
+                            auto unsupported_product_energy = 0.0F;
                             for (std::uint32_t product_index = 0;
                                  product_index < interaction.product_count; ++product_index) {
                                 const auto product = neutral_products_device
                                     [interaction.product_offset + product_index];
                                 const auto scaled =
                                     product.kinetic_energy_MeV * energy_scale;
+                                product_energy += scaled;
                                 if (product.atomic_number > 0 && product.mass_number > 0 &&
                                     scaled > 0.0F) {
                                     ++charged_count;
                                     charged_energy += scaled;
+                                } else if (product.pdg_id != 22 && product.pdg_id != 2112) {
+                                    unsupported_product_energy += scaled;
                                 }
                             }
+                            summary.unsupported_product_energy_MeV +=
+                                unsupported_product_energy;
                             if (charged_count > 0) {
                                 sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
                                                  sycl::memory_scope::device,
@@ -6679,6 +6791,8 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
 
                             const auto continuation =
                                 interaction.continuation_energy_MeV * energy_scale;
+                            summary.package_closure_residual_MeV +=
+                                energy_MeV - local_deposit - continuation - product_energy;
                             // Mode D (first_interaction): free path + one package only.
                             // Continuation kinetic energy becomes residual, not re-queued.
                             if (continuation > 0.0F && neutral_allow_continuation &&
@@ -7580,6 +7694,8 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
 #endif
 
     free_immutable_device(table_device);
+    free_immutable_device(energy_grid_device);
+    free_immutable_device(cumulative_range_device);
     free_immutable_device(cross_section_device);
     free_device(elastic_cross_section_device);
     free_device(let_delta_fraction_device);
@@ -7714,6 +7830,9 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
 #endif
     result.backend = "sycl-" + device_name +
                      (config.enable_energy_straggling ? "+straggling" : "");
+    if (config.enable_step_stable_straggling) {
+        result.backend += "+step-stable-primary-straggling";
+    }
 
     if (enable_secondary_energy_straggling) {
         result.backend += "+secondary-straggling";
@@ -8064,6 +8183,10 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
             result.neutral_escaped_energy_MeV += summary.escaped_energy_MeV;
             result.residual_neutral_energy_MeV += summary.residual_energy_MeV;
             result.charged_from_neutral_energy_MeV += summary.queued_charged_energy_MeV;
+            result.neutral_unsupported_product_energy_MeV +=
+                summary.unsupported_product_energy_MeV;
+            result.neutral_package_closure_residual_MeV +=
+                summary.package_closure_residual_MeV;
             result.neutral_queue_overflow += summary.neutral_overflow_count;
             result.neutral_queue_overflow_energy_MeV += summary.neutral_overflow_energy_MeV;
             result.secondary_queue_overflow += summary.charged_overflow_count;
@@ -8077,6 +8200,9 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
         // neutrals (mode D) return to the untracked nuclear residual, not phantom escape.
         result.untracked_nuclear_energy_MeV -= result.queued_neutral_energy_MeV;
         result.untracked_nuclear_energy_MeV += result.residual_neutral_energy_MeV;
+        result.untracked_nuclear_energy_MeV +=
+            result.neutral_unsupported_product_energy_MeV +
+            result.neutral_package_closure_residual_MeV;
         result.untransported_neutral_energy_MeV += result.residual_neutral_energy_MeV;
         result.total_deposited_energy_MeV += result.neutral_deposited_energy_MeV;
         result.escaped_energy_MeV += result.neutral_escaped_energy_MeV;

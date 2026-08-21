@@ -286,6 +286,28 @@ void test_units() {
                    "Enabled voxel scorer accepted a zero x-bin count");
 }
 
+void test_csda_range_loss_validation() {
+    const auto rejected = [](auto configure, const char* message) {
+        carbon::TransportConfig config;
+        config.enable_csda_range_energy_loss = true;
+        configure(config);
+        require_throws([&config] { config.validate(); }, message);
+    };
+    rejected([](auto& config) { config.enable_ct_grid = true; },
+             "CSDA range loss accepted CT transport");
+    rejected([](auto& config) { config.enable_layered_phantom = true; },
+             "CSDA range loss accepted layered transport");
+    rejected([](auto& config) { config.enable_hetero_insert = true; },
+             "CSDA range loss accepted heterogeneous insert");
+    rejected([](auto& config) { config.enable_minibeam = true; },
+             "CSDA range loss accepted minibeam transport");
+    rejected([](auto& config) { config.use_particle_specific_stopping_power = true; },
+             "CSDA range loss accepted particle-specific stopping power");
+    carbon::TransportConfig enabled;
+    enabled.enable_csda_range_energy_loss = true;
+    enabled.validate();
+}
+
 void test_hu_stopping_power_lut_loading() {
     const auto path = std::filesystem::temp_directory_path() /
                       "carbon_hu_stopping_power_lut_test.csv";
@@ -388,6 +410,119 @@ void test_interpolation() {
                  "Cross-section interpolation failed");
     require_near(cross_section.interpolate(0.1), 0.01, 1.0e-12,
                  "Cross-section low-energy clamp failed");
+}
+
+void test_stopping_power_csda_range_helpers() {
+    // Constant total-ion dE/dx makes the A*dE_u/S contract exact.
+    const carbon::StoppingPowerTable constant({1.0, 3.0}, {2.0, 2.0});
+    require_near(constant.csda_range_mm(0.5, 12), 3.0, 1.0e-12,
+                 "CSDA low-energy range contract failed");
+    require_near(constant.csda_range_mm(2.0, 12), 12.0, 1.0e-12,
+                 "CSDA mass-number range contract failed");
+    require_near(constant.csda_range_mm(8.0, 12), 48.0, 1.0e-12,
+                 "CSDA high-energy endpoint clamp failed");
+    require_near(constant.csda_energy_after_distance_MeVu(2.0, 3.0, 12), 1.5,
+                 1.0e-12, "CSDA constant-table round trip failed");
+    require_near(constant.csda_energy_after_distance_MeVu(2.0, 12.0, 12), 0.0,
+                 1.0e-12, "CSDA exhausted range did not clamp to zero");
+    require_near(constant.csda_energy_after_distance_MeVu(2.0, 0.0, 12), 2.0,
+                 1.0e-12, "CSDA zero-distance boundary failed");
+
+    const carbon::StoppingPowerTable varying({0.5, 1.0, 2.0, 4.0},
+                                              {4.0, 2.0, 1.0, 0.5});
+    double previous_range = 0.0;
+    for (const auto energy : {0.0, 0.25, 0.5, 1.0, 2.0, 4.0, 8.0}) {
+        const auto range = varying.csda_range_mm(energy, 1);
+        require(range >= previous_range, "CSDA range must be monotonic");
+        previous_range = range;
+    }
+    for (const auto energy : {0.1, 0.5, 1.3, 3.7, 8.0}) {
+        const auto range = varying.csda_range_mm(energy, 6);
+        const auto recovered = varying.csda_energy_after_distance_MeVu(
+            energy, 0.37 * range, 6);
+        require_near(varying.csda_range_mm(recovered, 6), 0.63 * range,
+                     1.0e-10 * std::max(1.0, range),
+                     "CSDA range/energy inverse round trip failed");
+    }
+    std::vector<float> energies_device(varying.energies().begin(), varying.energies().end());
+    std::vector<float> stopping_device(varying.values().begin(), varying.values().end());
+    std::vector<float> ranges_device(varying.cumulative_ranges_mm().begin(),
+                                      varying.cumulative_ranges_mm().end());
+    for (const auto energy : {0.1F, 0.5F, 1.3F, 3.7F, 8.0F}) {
+        require_near(
+            carbon::csda_range_mm_device(energies_device.data(), stopping_device.data(),
+                                          ranges_device.data(), energies_device.size(), energy, 6),
+            varying.csda_range_mm(energy, 6), 2.0e-5,
+            "Flat CSDA range helper disagrees with host helper");
+        const auto distance = 0.37F * static_cast<float>(
+            varying.csda_range_mm(energy, 6));
+        require_near(
+            carbon::csda_energy_after_distance_device(
+                energies_device.data(), stopping_device.data(), ranges_device.data(),
+                energies_device.size(), energy, distance, 6),
+            varying.csda_energy_after_distance_MeVu(energy, distance, 6), 2.0e-5,
+            "Flat CSDA inverse helper disagrees with host helper");
+    }
+    require_throws([&] { (void)varying.csda_range_mm(-0.1, 1); },
+                   "CSDA accepted negative energy");
+    require_throws([&] {
+        (void)varying.csda_range_mm(std::numeric_limits<double>::quiet_NaN(), 1);
+    }, "CSDA accepted NaN energy");
+    require_throws([&] {
+        (void)varying.csda_range_mm(std::numeric_limits<double>::infinity(), 1);
+    }, "CSDA accepted infinite energy");
+    require_throws([&] { (void)varying.csda_range_mm(1.0, 0); },
+                   "CSDA accepted nonpositive mass number");
+    require_throws([&] { (void)varying.csda_energy_after_distance_MeVu(1.0, -1.0, 1); },
+                   "CSDA accepted negative distance");
+    require_throws([&] {
+        (void)varying.csda_energy_after_distance_MeVu(
+            1.0, std::numeric_limits<double>::infinity(), 1);
+    }, "CSDA accepted infinite distance");
+}
+
+void test_cpu_csda_range_loss_switch() {
+    carbon::TransportConfig defaults;
+    require(!defaults.enable_csda_range_energy_loss,
+            "CPU CSDA range-loss mode must default to disabled");
+
+    carbon::TransportConfig local;
+    local.number_of_histories = 4;
+    local.initial_energy_MeVu = 2.0;
+    local.primary_atomic_number = 1;
+    local.primary_mass_number = 2;
+    local.phantom_length_mm = 0.5;
+    local.depth_bin_width_mm = 1.0;
+    local.maximum_relative_energy_loss = 0.5;
+    local.maximum_step_mm = 0.1;
+    const carbon::StoppingPowerTable constant({0.01, 4.0}, {2.0, 2.0});
+    const auto historical = carbon::transport_serial(local, constant, zero_cross_section());
+    local.enable_csda_range_energy_loss = true;
+    const auto csda_constant = carbon::transport_serial(local, constant, zero_cross_section());
+    const auto historical_total = std::accumulate(historical.deposited_energy_MeV.begin(),
+                                                  historical.deposited_energy_MeV.end(), 0.0);
+    const auto csda_constant_total = std::accumulate(
+        csda_constant.deposited_energy_MeV.begin(), csda_constant.deposited_energy_MeV.end(), 0.0);
+    require_near(historical_total, csda_constant_total, 1.0e-10,
+                 "CPU CSDA constant-table path changed the legacy total loss");
+
+    const carbon::StoppingPowerTable varying({0.01, 1.0, 2.0, 4.0},
+                                              {4.0, 2.0, 1.0, 0.5});
+    local.primary_mass_number = 1;
+    local.initial_energy_MeVu = 3.0;
+    local.maximum_step_mm = 0.1;
+    const auto coarse = carbon::transport_serial(local, varying, zero_cross_section());
+    local.maximum_step_mm = 0.037;
+    const auto fine = carbon::transport_serial(local, varying, zero_cross_section());
+    const auto coarse_total = std::accumulate(coarse.deposited_energy_MeV.begin(),
+                                              coarse.deposited_energy_MeV.end(), 0.0);
+    const auto fine_total = std::accumulate(fine.deposited_energy_MeV.begin(),
+                                            fine.deposited_energy_MeV.end(), 0.0);
+    require_near(coarse_total, fine_total, 1.0e-10,
+                 "CPU CSDA nonlinear-table loss changed with step subdivision");
+    require(coarse.relative_energy_balance_error() < 1.0e-12 &&
+                fine.relative_energy_balance_error() < 1.0e-12,
+            "CPU CSDA subdivision energy balance failed");
 }
 
 void test_cross_section_zero_endpoint_contract() {
@@ -878,6 +1013,88 @@ void test_bohr_straggling() {
                  1.0e-12, "Two-mean fluctuation clamp failed");
 }
 
+void test_clamped_gaussian_straggling_sampler_audit() {
+    // Diagnose why scale=1 still needs energy-wise correction: the production
+    // sampler is Gaussian + clamp to [0, min(2μ, E)]. High-energy 0.1 mm
+    // proton blocks have μ/σ ~ 1.1, so the 2μ cap discards variance that the
+    // condensed-loss formula requested. This audit does not change transport.
+    const auto erf = [](const double x) {
+        return std::erf(x);
+    };
+    const auto normal_cdf = [&erf](const double x) {
+        return 0.5 * (1.0 + erf(x / std::sqrt(2.0)));
+    };
+    const auto normal_pdf = [](const double x) {
+        return std::exp(-0.5 * x * x) / std::sqrt(2.0 * std::numbers::pi);
+    };
+    const auto censored_gaussian_variance = [&](const double mean,
+                                                const double sigma) {
+        const auto a = -mean / sigma;
+        const auto b = mean / sigma;
+        const auto pdf_a = normal_pdf(a);
+        const auto pdf_b = normal_pdf(b);
+        const auto cdf_a = normal_cdf(a);
+        const auto cdf_b = normal_cdf(b);
+        const auto ez = cdf_a * a + (pdf_a - pdf_b) + (1.0 - cdf_b) * b;
+        const auto ez2 = cdf_a * a * a + (a * pdf_a - b * pdf_b) + (cdf_b - cdf_a) +
+                         (1.0 - cdf_b) * b * b;
+        return (ez2 - ez * ez) * sigma * sigma;
+    };
+
+    const auto water = carbon::StoppingPowerTable::from_csv(
+        std::filesystem::path(CARBON_SOURCE_DIR) /
+        "data/stopping_power_water_geant4_11_3_2.csv");
+    constexpr double proton_mass_MeV = 938.27208816;
+    constexpr double block_mm = 0.1;
+    constexpr int sample_count = 200000;
+    const std::array<double, 5> energies_MeVu{70.0, 100.0, 150.0, 200.0, 250.0};
+    double previous_retained = 2.0;
+    double retained_250 = 1.0;
+    for (std::size_t point_index = 0; point_index < energies_MeVu.size(); ++point_index) {
+        const auto energy_MeVu = energies_MeVu[point_index];
+        const auto stopping = water.interpolate(energy_MeVu) *
+            carbon::stopping_power_scale_from_reference_ion(1, 6, energy_MeVu);
+        const auto mean = stopping * block_mm;
+        const auto charge = carbon::ion_effective_charge(1, energy_MeVu);
+        const auto formula_variance = carbon::condensed_total_loss_variance_MeV2(
+            energy_MeVu, proton_mass_MeV, charge, block_mm, 1.0);
+        const auto formula_sigma = std::sqrt(formula_variance);
+        const auto analytic_variance = censored_gaussian_variance(mean, formula_sigma);
+        double sampled_sum = 0.0;
+        double sampled_sum_sq = 0.0;
+        for (int sample = 0; sample < sample_count; ++sample) {
+            const auto u1 = std::max<double>(
+                carbon::rng::uniform01(20260821, static_cast<std::uint64_t>(sample),
+                                       point_index, 0),
+                1.0e-12);
+            const auto u2 = static_cast<double>(
+                carbon::rng::uniform01(20260821, static_cast<std::uint64_t>(sample),
+                                       point_index, 1));
+            const auto gaussian = std::sqrt(-2.0 * std::log(u1)) *
+                                  std::cos(2.0 * std::numbers::pi * u2);
+            const auto loss = carbon::clamp_sampled_energy_loss(
+                mean, formula_sigma, gaussian, energy_MeVu);
+            sampled_sum += loss;
+            sampled_sum_sq += loss * loss;
+        }
+        const auto sampled_mean = sampled_sum / sample_count;
+        const auto sampled_variance =
+            sampled_sum_sq / sample_count - sampled_mean * sampled_mean;
+        const auto retained = analytic_variance / formula_variance;
+        require_near(sampled_variance, analytic_variance,
+                     0.02 * formula_variance,
+                     "Clamped Gaussian MC variance missed the analytic censoring model at " +
+                         std::to_string(energy_MeVu) + " MeV");
+        require(retained < previous_retained,
+                "Clamped Gaussian retained variance must fall as proton energy rises");
+        if (energy_MeVu == 250.0) retained_250 = retained;
+        previous_retained = retained;
+        (void)sampled_mean;
+    }
+    require(retained_250 < 0.70,
+            "250 MeV 0.1 mm proton blocks should lose more than 30% of formula variance to the 2-mean clamp");
+}
+
 void test_condensed_total_loss_straggling() {
     constexpr double carbon_mass_MeV = 12.0 * 931.49410242;
     const auto low_energy = carbon::condensed_total_loss_variance_MeV2(
@@ -892,6 +1109,141 @@ void test_condensed_total_loss_straggling() {
             "Relativistic total-loss variance must increase above the Bohr limit");
     require_near(twice_step / at_100, 2.0, 1.0e-12,
                  "Total-loss variance must scale linearly with step length");
+    const auto block_loss_a = carbon::step_stable_sampled_energy_loss(
+        1.0, 0.04, 0.025, 0.1, 0.5, 10.0);
+    const auto block_loss_b = carbon::step_stable_sampled_energy_loss(
+        1.0, 0.04, 0.025, 0.1, 0.5, 10.0);
+    require_near(block_loss_a, block_loss_b, 1.0e-14,
+                 "Step-stable block sampler must be subdivision deterministic");
+    require(block_loss_a >= 0.0 && block_loss_a <= 2.0,
+            "Step-stable block sampler violated nonnegative/2x-mean bounds");
+}
+
+void test_step_stable_straggling_validation() {
+    carbon::TransportConfig disabled;
+    disabled.enable_step_stable_straggling = false;
+    disabled.straggling_sampling_length_mm = 0.0;
+    disabled.validate();
+    carbon::TransportConfig missing_length;
+    missing_length.enable_step_stable_straggling = true;
+    require_throws([&missing_length] { missing_length.validate(); },
+                   "Enabled step-stable straggling must require a positive block length");
+    carbon::TransportConfig negative_length;
+    negative_length.straggling_sampling_length_mm = -0.1;
+    require_throws([&negative_length] { negative_length.validate(); },
+                   "Negative straggling block length must be rejected");
+    carbon::TransportConfig enabled;
+    enabled.enable_step_stable_straggling = true;
+    enabled.straggling_sampling_length_mm = 0.1;
+    enabled.validate();
+
+    const auto path_loss = [](const double subdivision_mm, const std::uint64_t history) {
+        double total = 0.0;
+        double path = 0.0;
+        double bin_remaining = 0.13;
+        carbon::StepStableStragglingState<double> state;
+        state.initialize(0.1);
+        constexpr double path_length = 1.037;
+        while (path < path_length - 1.0e-12) {
+            auto step = std::min(subdivision_mm, path_length - path);
+            step = std::min(step, bin_remaining);
+            state.prepare_step(step);
+            const auto block = state.block_index;
+            const auto u1 = std::max<double>(
+                carbon::rng::uniform01(1234, history, block, 0), 1.0e-12);
+            const auto u2 = static_cast<double>(
+                carbon::rng::uniform01(1234, history, block, 1));
+            const auto gaussian = std::sqrt(-2.0 * std::log(u1)) *
+                                  std::cos(2.0 * std::numbers::pi * u2);
+            total += carbon::step_stable_sampled_energy_loss(
+                step, 0.0004 * step, step, 0.1, gaussian, 100.0);
+            path += step;
+            state.consume(step);
+            bin_remaining -= step;
+            if (bin_remaining <= 1.0e-12) bin_remaining = 0.13;
+        }
+        return total;
+    };
+    std::array<double, 3> means{};
+    std::array<double, 3> variances{};
+    std::array<std::array<double, 256>, 3> samples{};
+    for (std::uint64_t history = 0; history < 256; ++history) {
+        samples[0][history] = path_loss(0.1, history);
+        samples[1][history] = path_loss(0.05, history);
+        samples[2][history] = path_loss(0.025, history);
+    }
+    for (std::size_t subdivision = 0; subdivision < 3; ++subdivision) {
+        for (const auto sample : samples[subdivision]) means[subdivision] += sample;
+        means[subdivision] /= 256.0;
+        for (const auto sample : samples[subdivision]) {
+            const auto delta = sample - means[subdivision];
+            variances[subdivision] += delta * delta;
+        }
+        variances[subdivision] /= 255.0;
+    }
+    require_near(means[0], means[1], 1.0e-8,
+                 "Step-stable 0.1/0.05 subdivision means diverged");
+    require_near(means[0], means[2], 1.0e-8,
+                 "Step-stable 0.1/0.025 subdivision means diverged");
+    require_near(variances[0], variances[1], 1.0e-8,
+                 "Step-stable 0.1/0.05 subdivision variances diverged");
+    require_near(variances[0], variances[2], 1.0e-8,
+                 "Step-stable 0.1/0.025 subdivision variances diverged");
+
+    const auto budget_path = [](const double subdivision_mm) {
+        carbon::StepStableStragglingState<double> state;
+        state.initialize(0.1);
+        double energy = 4.0;
+        double path = 0.0;
+        while (path < 0.37 - 1.0e-12 && energy > 0.0) {
+            auto step = std::min(subdivision_mm, 0.37 - path);
+            state.prepare_step(step);
+            if (!state.block_active) {
+                const auto stopping = 1.0 + 0.02 * energy;
+                state.begin_block(stopping * step, 0.0001 * step, step, 1.0, 0.25, energy);
+            }
+            const auto loss = state.consume_loss(step, energy);
+            energy -= loss;
+            path += step;
+        }
+        return std::pair<double, double>{path, energy};
+    };
+    const auto budget_a = budget_path(0.1);
+    const auto budget_b = budget_path(0.05);
+    const auto budget_c = budget_path(0.025);
+    require_near(budget_a.first, 0.37, 1.0e-12,
+                 "Fixed-budget nonintegral tail path did not terminate at endpoint");
+    require_near(budget_a.second, budget_b.second, 1.0e-12,
+                 "Energy-dependent fixed block budget changed with subdivision");
+    require_near(budget_a.second, budget_c.second, 1.0e-12,
+                 "Energy-dependent fixed block budget changed with fine subdivision");
+    carbon::StepStableStragglingState<double> exhausted;
+    exhausted.initialize(0.1);
+    exhausted.begin_block(1.0, 0.0, 0.1, 1.0, 0.0, 0.03);
+    require_near(exhausted.consume_loss(0.1, 0.03), 0.03, 1.0e-12,
+                 "Fixed block budget failed available-energy cap");
+
+    const carbon::StoppingPowerTable csda_table({1.0, 3.0}, {2.0, 2.0});
+    carbon::StepStableStragglingState<double> csda_state;
+    csda_state.initialize(0.1);
+    auto first_step_mm = 0.001;
+    csda_state.prepare_step(first_step_mm);
+    const auto initial_energy_MeV = 12.0;
+    constexpr int mass_number = 1;
+    const auto block_length_mm = csda_state.block_length_mm;
+    const auto block_energy_MeVu = csda_table.csda_energy_after_distance_MeVu(
+        initial_energy_MeV, block_length_mm, mass_number);
+    const auto block_mean_loss_MeV = carbon::csda_block_mean_loss_MeV(
+        initial_energy_MeV, block_energy_MeVu, static_cast<double>(mass_number));
+    require_near(block_length_mm, 0.1, 1.0e-12,
+                 "CSDA stable block did not preserve its full length after a tiny first step");
+    csda_state.begin_block(block_mean_loss_MeV, 0.0, block_length_mm,
+                           1.0, 0.0, initial_energy_MeV);
+    auto accumulated_loss_MeV = csda_state.consume_loss(first_step_mm, initial_energy_MeV);
+    accumulated_loss_MeV += csda_state.consume_loss(0.037, initial_energy_MeV);
+    accumulated_loss_MeV += csda_state.consume_loss(0.062, initial_energy_MeV);
+    require_near(accumulated_loss_MeV, block_mean_loss_MeV, 1.0e-12,
+                 "CSDA stable block loss changed with tiny/irregular subdivision");
 }
 
 void test_energy_dependent_straggling_scale() {
@@ -2565,6 +2917,14 @@ void test_tps_source_geometry_csv_and_switch() {
     {
         std::ofstream output(yaml_path);
         output << "number_of_histories: 10\n"
+               << "enable_csda_range_energy_loss: true\n";
+    }
+    const auto csda_enabled = carbon::load_config(yaml_path);
+    require(csda_enabled.enable_csda_range_energy_loss,
+            "enable_csda_range_energy_loss:true parsing");
+    {
+        std::ofstream output(yaml_path);
+        output << "number_of_histories: 10\n"
                << "tpsSource: true\n"
                << "enable_voxel_scoring: true\n"
                << "voxel_scorer_clamps_transport: false\n"
@@ -3868,10 +4228,13 @@ void test_sycl_neutral_transport_smoke() {
 int main() {
     try {
         test_units();
+        test_csda_range_loss_validation();
         test_hu_stopping_power_lut_loading();
         test_serial_voxel_idd_closure();
         test_charged_dose_categories();
         test_interpolation();
+        test_stopping_power_csda_range_helpers();
+        test_cpu_csda_range_loss_switch();
         test_cross_section_zero_endpoint_contract();
         test_fragment_stopping_power_scale();
         test_primary_ion_definition();
@@ -3882,7 +4245,9 @@ int main() {
         test_philox_rng();
         test_highland_multiple_scattering();
         test_bohr_straggling();
+        test_clamped_gaussian_straggling_sampler_audit();
         test_condensed_total_loss_straggling();
+        test_step_stable_straggling_validation();
         test_energy_dependent_straggling_scale();
         test_primary_inelastic_xs_correction();
         test_primary_elastic_config_contract();

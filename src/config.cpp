@@ -377,6 +377,13 @@ bool TransportConfig::validation_scorers() const noexcept {
 }
 
 void TransportConfig::validate() const {
+    if (enable_csda_range_energy_loss &&
+        (enable_ct_grid || enable_layered_phantom || enable_hetero_insert ||
+         enable_minibeam || use_particle_specific_stopping_power)) {
+        throw std::invalid_argument(
+            "enable_csda_range_energy_loss requires homogeneous water primary "
+            "transport without CT, layered, insert, minibeam, or particle-specific materials");
+    }
     if (number_of_histories == 0) {
         throw std::invalid_argument("number_of_histories must be greater than zero");
     }
@@ -522,6 +529,15 @@ void TransportConfig::validate() const {
     }
     if (!std::isfinite(straggling_scale) || straggling_scale < 0.0) {
         throw std::invalid_argument("straggling_scale must be finite and nonnegative");
+    }
+    if (!std::isfinite(straggling_sampling_length_mm) ||
+        straggling_sampling_length_mm < 0.0) {
+        throw std::invalid_argument(
+            "straggling_sampling_length_mm must be finite and nonnegative");
+    }
+    if (enable_step_stable_straggling && straggling_sampling_length_mm <= 0.0) {
+        throw std::invalid_argument(
+            "enable_step_stable_straggling requires straggling_sampling_length_mm > 0");
     }
     if (straggling_scale_energies_MeVu.size() != straggling_scale_values.size()) {
         throw std::invalid_argument(
@@ -1458,6 +1474,12 @@ TransportConfig load_config(const std::filesystem::path& path) {
     }
     config.enable_energy_straggling =
         parse_bool(values, "enable_energy_straggling", config.enable_energy_straggling);
+    config.enable_csda_range_energy_loss = parse_bool(
+        values, "enable_csda_range_energy_loss", config.enable_csda_range_energy_loss);
+    config.enable_step_stable_straggling = parse_bool(
+        values, "enable_step_stable_straggling", config.enable_step_stable_straggling);
+    config.straggling_sampling_length_mm = parse_number(
+        values, "straggling_sampling_length_mm", config.straggling_sampling_length_mm);
     config.enable_secondary_energy_straggling = parse_bool(
         values, "enable_secondary_energy_straggling",
         config.enable_secondary_energy_straggling);

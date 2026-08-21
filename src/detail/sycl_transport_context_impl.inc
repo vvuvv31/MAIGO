@@ -16,6 +16,8 @@ struct SyclTransportContext::Impl {
             }
         };
         release(table_device);
+        release(energy_grid_device);
+        release(cumulative_range_device);
         release(cross_section_device);
         release(reaction_bins_device);
         release(reactions_device);
@@ -55,6 +57,10 @@ struct SyclTransportContext::Impl {
 
         try {
             table_device = sycl::malloc_device<float>(stopping_power.values().size(), queue);
+            energy_grid_device = sycl::malloc_device<float>(
+                stopping_power.energies().size(), queue);
+            cumulative_range_device = sycl::malloc_device<float>(
+                stopping_power.cumulative_ranges_mm().size(), queue);
             cross_section_device =
                 sycl::malloc_device<float>(cross_section.values().size(), queue);
             if (reaction_packages != nullptr) {
@@ -87,7 +93,9 @@ struct SyclTransportContext::Impl {
             }
 
             const auto allocation_failed =
-                table_device == nullptr || cross_section_device == nullptr ||
+                table_device == nullptr || energy_grid_device == nullptr ||
+                cumulative_range_device == nullptr ||
+                cross_section_device == nullptr ||
                 (reaction_packages != nullptr &&
                  (reaction_bins_device == nullptr || reactions_device == nullptr ||
                   reaction_secondaries_device == nullptr)) ||
@@ -111,7 +119,19 @@ struct SyclTransportContext::Impl {
             std::transform(cross_section.values().begin(), cross_section.values().end(),
                            xs_host.begin(),
                            [](double value) { return static_cast<float>(value); });
+            std::vector<float> energy_grid_host(stopping_power.energies().size());
+            std::transform(stopping_power.energies().begin(), stopping_power.energies().end(),
+                           energy_grid_host.begin(),
+                           [](double value) { return static_cast<float>(value); });
+            std::vector<float> cumulative_range_host(stopping_power.cumulative_ranges_mm().size());
+            std::transform(stopping_power.cumulative_ranges_mm().begin(),
+                           stopping_power.cumulative_ranges_mm().end(),
+                           cumulative_range_host.begin(),
+                           [](double value) { return static_cast<float>(value); });
             queue.copy(table_host.data(), table_device, table_host.size());
+            queue.copy(energy_grid_host.data(), energy_grid_device, energy_grid_host.size());
+            queue.copy(cumulative_range_host.data(), cumulative_range_device,
+                       cumulative_range_host.size());
             queue.copy(xs_host.data(), cross_section_device, xs_host.size());
             if (reaction_packages != nullptr) {
                 queue.copy(reaction_packages->energy_bins().data(), reaction_bins_device,
@@ -160,6 +180,8 @@ struct SyclTransportContext::Impl {
     const CascadePackageTable* cascade_packages_host{nullptr};
     const NeutralPackageTable* neutral_packages_host{nullptr};
     float* table_device{nullptr};
+    float* energy_grid_device{nullptr};
+    float* cumulative_range_device{nullptr};
     float* cross_section_device{nullptr};
     ReactionEnergyBin* reaction_bins_device{nullptr};
     ReactionPackage* reactions_device{nullptr};

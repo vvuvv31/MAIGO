@@ -100,6 +100,8 @@ GPU 对每个带电粒子采用步进输运。在一个 step 中，连续能损�
 
 `enable_energy_straggling` 打开重粒子 condensed total-loss step-wise 涨落。方差使用碰撞运动学的 `Tmax/beta^2` 相对论项，并在低速极限退化到 Bohr 方差；采样限制为 `0..min(2*meanLoss,E)`。四个 100/200/300/400 MeV/u 单能水箱配置共享单位 scale，不再用非单调能量表补偿公式中缺失的相对论项。
 
+可选的 `enable_step_stable_straggling`（默认 `false`）将 primary 涨落按固定物理块采样；`straggling_sampling_length_mm` 指定块长（例如 `0.1`）。启用后每个物理块复用一个由 `history_id + block_index` 确定的 Gaussian，并将块涨落按路径长度分配，因此完整均匀材料块的累计 mean/variance 不随 transport step subdivision 改变。材料/CT interface 仍由既有几何 clamp 保证不跨界；block 状态按物理路径连续，故 interface 会结束当前 transport step 但不会隐式重抽 block Gaussian。该模式当前只覆盖 primary；secondary 仍使用 legacy step-wise 语义。`false` 或块长 `0` 保留历史路径。
+
 需要区分 primary 和 secondary：
 
 - `enable_energy_straggling: true` 对 primary C-12 生效；

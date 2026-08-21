@@ -255,6 +255,15 @@ struct TransportConfig {
     double voxel_size_y_mm{5.0};
     double voxel_size_z_mm{0.0};
     bool enable_energy_straggling{false};
+    // Optional CPU-only CSDA residual-range energy loss. Disabled preserves
+    // the historical local stopping_power * step path; SYCL is unaffected.
+    bool enable_csda_range_energy_loss{false};
+    // When enabled, primary straggling is sampled on fixed physical blocks so
+    // subdividing a transport step does not create new independent Gaussians.
+    bool enable_step_stable_straggling{false};
+    // Physical sampling length for step-stable primary straggling. 0 disables
+    // the mode and preserves the historical per-step sampler.
+    double straggling_sampling_length_mm{0.0};
     // Historical validation applied straggling only to primary ion.
     // Enable this separately to apply Bohr straggling to charged fragments.
     bool enable_secondary_energy_straggling{false};

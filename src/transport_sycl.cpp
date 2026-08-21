@@ -2940,6 +2940,10 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
     const auto secondary_condensed_step_mm =
         static_cast<float>(config.secondary_condensed_step_mm);
     const auto enable_energy_straggling = config.enable_energy_straggling;
+    const auto enable_step_stable_straggling =
+        enable_energy_straggling && config.enable_step_stable_straggling;
+    const auto straggling_sampling_length_mm =
+        static_cast<float>(config.straggling_sampling_length_mm);
     const auto enable_secondary_energy_straggling =
         enable_energy_straggling &&
         config.enable_secondary_energy_straggling;
@@ -4238,6 +4242,8 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
             auto history_nuclear_MeV = 0.0f;
             SecondaryGenerationSummary secondary_summary{};
             std::uint32_t steps = 0;
+            StepStableStragglingState<float> stable_straggling;
+            stable_straggling.initialize(straggling_sampling_length_mm);
             double pending_primary_depth_MeV = 0.0;
             int pending_primary_bin = 0;
             double pending_primary_voxel_MeV = 0.0;
@@ -4450,10 +4456,12 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                         step_mm = sycl::fmin(step_mm, dz_step);
                     }
                 }
+                auto stable_straggling_interface_limited = false;
                 if (slab_layer_count > 0) {
                     const auto slab_step = distance_to_slab_interface_mm(
                         position_z_mm, direction_z, slab_z_ends_device, slab_layer_count,
                         phantom_length_mm);
+                    stable_straggling_interface_limited = slab_step < step_mm;
                     step_mm = sycl::fmin(step_mm, slab_step);
                 }
                 if (enable_hetero_insert) {
@@ -4461,9 +4469,12 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                         position_x_mm, position_y_mm, position_z_mm, direction_x,
                         direction_y, direction_z, insert_x_min, insert_x_max, insert_y_min,
                         insert_y_max, insert_z_min, insert_z_max, phantom_length_mm);
+                    stable_straggling_interface_limited =
+                        stable_straggling_interface_limited || insert_step < step_mm;
                     step_mm = sycl::fmin(step_mm, insert_step);
                 }
                 if (enable_ct_grid && in_ct) {
+                    const auto step_before_ct_clamp = step_mm;
                     // Face clamp only when density/material changes along the step
                     // (unless ct_skip_homogeneous_face_clamp is false).
                     CtClampPath clamp_path = CtClampPath::three_axis;
@@ -4481,6 +4492,8 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
 #endif
                     );
                     profile_face(profile_counters_device, true, clamp_path);
+                    stable_straggling_interface_limited =
+                        stable_straggling_interface_limited || step_mm < step_before_ct_clamp;
                 }
                 if (enable_voxel_scoring && voxel_scorer_clamps_transport &&
                     absolute_direction_x >= 1.0e-6F) {
@@ -4594,14 +4607,22 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                     break;
                 }
 
+                if (enable_energy_straggling && enable_step_stable_straggling) {
+                    stable_straggling.prepare_step(
+                        step_mm, (phantom_length_mm - position_z_mm) /
+                                      sycl::fmax(direction_z, 1.0e-6F));
+                }
                 const auto mean_loss_MeV = stopping_power_MeV_per_mm * step_mm;
                 auto deposited_MeV = sycl::fmin(mean_loss_MeV, energy_MeV);
                 if (enable_energy_straggling) {
                     profile_add(profile_counters_device,
                                 TransportProfileSlot::primary_straggling);
+                    const auto random_index = enable_step_stable_straggling
+                        ? stable_straggling.block_index
+                        : static_cast<std::uint64_t>(steps);
                     const auto uniform1 = sycl::fmax(
-                        rng::uniform01(spot_seed, rng_history, steps, 0), 1.0e-12f);
-                    const auto uniform2 = rng::uniform01(spot_seed, rng_history, steps, 1);
+                        rng::uniform01(spot_seed, rng_history, random_index, 0), 1.0e-12f);
+                    const auto uniform2 = rng::uniform01(spot_seed, rng_history, random_index, 1);
                     constexpr float two_pi = 6.2831853071795864769f;
                     const auto gaussian = sycl::sqrt(-2.0f * sycl::log(uniform1)) *
                                           sycl::cos(two_pi * uniform2);
@@ -4647,9 +4668,21 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                             straggling_scale_point_count, straggling_scale);
                     const auto sigma_MeV =
                         local_straggling_scale * sycl::sqrt(sycl::fmax(0.0f, variance_MeV2));
-                    deposited_MeV = sycl::clamp(
-                        mean_loss_MeV + sigma_MeV * gaussian, 0.0f,
-                        sycl::fmin(2.0F * mean_loss_MeV, energy_MeV));
+                    if (enable_step_stable_straggling) {
+                        if (!stable_straggling.block_active) {
+                            stable_straggling.begin_block(
+                                mean_loss_MeV, variance_MeV2, step_mm,
+                                local_straggling_scale, gaussian, energy_MeV);
+                        }
+                        deposited_MeV = stable_straggling.consume_loss(step_mm, energy_MeV);
+                        if (stable_straggling_interface_limited) {
+                            stable_straggling.reset_block();
+                        }
+                    } else {
+                        deposited_MeV = sycl::clamp(
+                            mean_loss_MeV + sigma_MeV * gaussian, 0.0f,
+                            sycl::fmin(2.0F * mean_loss_MeV, energy_MeV));
+                    }
                 }
                 // Electronic build-up: local (1-f)*dE + short-range delta f*dE along +z.
                 // Equilibrium dose still ≈ full unrestricted SP; surface suppressed.
@@ -7067,18 +7100,25 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
 
                             std::uint32_t charged_count = 0;
                             auto charged_energy = 0.0F;
+                            auto product_energy = 0.0F;
+                            auto unsupported_product_energy = 0.0F;
                             for (std::uint32_t product_index = 0;
                                  product_index < interaction.product_count; ++product_index) {
                                 const auto product = neutral_products_device
                                     [interaction.product_offset + product_index];
                                 const auto scaled =
                                     product.kinetic_energy_MeV * energy_scale;
+                                product_energy += scaled;
                                 if (product.atomic_number > 0 && product.mass_number > 0 &&
                                     scaled > 0.0F) {
                                     ++charged_count;
                                     charged_energy += scaled;
+                                } else if (product.pdg_id != 22 && product.pdg_id != 2112) {
+                                    unsupported_product_energy += scaled;
                                 }
                             }
+                            summary.unsupported_product_energy_MeV +=
+                                unsupported_product_energy;
                             if (charged_count > 0) {
                                 sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
                                                  sycl::memory_scope::device,
@@ -7157,6 +7197,8 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
 
                             const auto continuation =
                                 interaction.continuation_energy_MeV * energy_scale;
+                            summary.package_closure_residual_MeV +=
+                                energy_MeV - local_deposit - continuation - product_energy;
                             // Mode D (first_interaction): free path + one package only.
                             // Continuation kinetic energy becomes residual, not re-queued.
                             if (continuation > 0.0F && neutral_allow_continuation &&
@@ -8043,6 +8085,9 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
     TransportResult result;
     result.backend = "sycl-" + device_name +
                      (config.enable_energy_straggling ? "+straggling" : "");
+    if (config.enable_step_stable_straggling) {
+        result.backend += "+step-stable-primary-straggling";
+    }
     if (enable_secondary_energy_straggling) {
         result.backend += "+secondary-straggling";
     }
@@ -8489,6 +8534,10 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
             result.neutral_escaped_energy_MeV += summary.escaped_energy_MeV;
             result.residual_neutral_energy_MeV += summary.residual_energy_MeV;
             result.charged_from_neutral_energy_MeV += summary.queued_charged_energy_MeV;
+            result.neutral_unsupported_product_energy_MeV +=
+                summary.unsupported_product_energy_MeV;
+            result.neutral_package_closure_residual_MeV +=
+                summary.package_closure_residual_MeV;
             result.neutral_queue_overflow += summary.neutral_overflow_count;
             result.neutral_queue_overflow_energy_MeV += summary.neutral_overflow_energy_MeV;
             result.secondary_queue_overflow += summary.charged_overflow_count;
@@ -8502,6 +8551,9 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
         // neutrals (mode D) return to the untracked nuclear residual, not phantom escape.
         result.untracked_nuclear_energy_MeV -= result.queued_neutral_energy_MeV;
         result.untracked_nuclear_energy_MeV += result.residual_neutral_energy_MeV;
+        result.untracked_nuclear_energy_MeV +=
+            result.neutral_unsupported_product_energy_MeV +
+            result.neutral_package_closure_residual_MeV;
         result.untransported_neutral_energy_MeV += result.residual_neutral_energy_MeV;
         result.total_deposited_energy_MeV += result.neutral_deposited_energy_MeV;
         result.escaped_energy_MeV += result.neutral_escaped_energy_MeV;

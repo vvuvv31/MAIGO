@@ -805,7 +805,11 @@ int main(int argc, char* argv[]) {
                           << "Residual neutral energy: "
                           << result.residual_neutral_energy_MeV << " MeV\n"
                           << "Charged-from-neutral energy: "
-                          << result.charged_from_neutral_energy_MeV << " MeV\n";
+                          << result.charged_from_neutral_energy_MeV << " MeV\n"
+                          << "Neutral unsupported-product energy: "
+                          << result.neutral_unsupported_product_energy_MeV << " MeV\n"
+                          << "Neutral package closure residual: "
+                          << result.neutral_package_closure_residual_MeV << " MeV\n";
             }
         }
         std::cout << "Untracked nuclear energy: " << result.untracked_nuclear_energy_MeV

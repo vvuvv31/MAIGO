@@ -157,6 +157,10 @@ void accumulate_transport_result(carbon::TransportResult& total,
     total.neutral_escaped_energy_MeV += part.neutral_escaped_energy_MeV;
     total.residual_neutral_energy_MeV += part.residual_neutral_energy_MeV;
     total.charged_from_neutral_energy_MeV += part.charged_from_neutral_energy_MeV;
+    total.neutral_unsupported_product_energy_MeV +=
+        part.neutral_unsupported_product_energy_MeV;
+    total.neutral_package_closure_residual_MeV +=
+        part.neutral_package_closure_residual_MeV;
     total.minibeam.enabled = total.minibeam.enabled || part.minibeam.enabled;
     total.minibeam.incident_histories += part.minibeam.incident_histories;
     total.minibeam.direct_air_slit_histories +=

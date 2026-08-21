@@ -113,6 +113,8 @@ TransportResult transport_serial(const TransportConfig& config,
                 primary_xs_correction_point_count,
                 config.primary_inelastic_xs_scale);
         auto position_mm = 0.0;
+        StepStableStragglingState<double> stable_straggling;
+        stable_straggling.initialize(config.straggling_sampling_length_mm);
         std::uint64_t steps = 0;
         auto untracked_nuclear_MeV = 0.0;
         auto nuclear_interaction = false;
@@ -137,21 +139,25 @@ TransportResult transport_serial(const TransportConfig& config,
                 static_cast<double>(bin + 1) * config.depth_bin_width_mm;
             step_mm = std::min(step_mm, next_bin_boundary_mm - position_mm);
             step_mm = std::min(step_mm, config.phantom_length_mm - position_mm);
+            if (config.enable_energy_straggling &&
+                config.enable_step_stable_straggling) {
+                stable_straggling.prepare_step(
+                    step_mm, config.phantom_length_mm - position_mm);
+            }
             if (step_mm <= 0.0) {
                 throw std::runtime_error("Transport stalled at a depth-bin boundary");
             }
 
-            const auto mean_loss_MeV = stopping_power_MeV_per_mm * step_mm;
+            const auto mean_loss_MeV = config.enable_csda_range_energy_loss
+                ? std::clamp(
+                      energy_MeV -
+                          static_cast<double>(config.primary_mass_number) *
+                              stopping_power.csda_energy_after_distance_MeVu(
+                                  energy_MeVu, step_mm, config.primary_mass_number),
+                      0.0, energy_MeV)
+                : stopping_power_MeV_per_mm * step_mm;
             auto deposited_MeV = std::min(mean_loss_MeV, energy_MeV);
             if (config.enable_energy_straggling) {
-                const auto uniform1 = std::max(
-                    static_cast<double>(rng::uniform01(config.random_seed, history_id, steps, 0)),
-                    1.0e-12);
-                const auto uniform2 =
-                    static_cast<double>(rng::uniform01(config.random_seed, history_id, steps, 1));
-                const auto gaussian =
-                    std::sqrt(-2.0 * std::log(uniform1)) *
-                    std::cos(2.0 * std::numbers::pi * uniform2);
                 const auto local_scale = interpolate_straggling_scale(
                     energy_MeVu, straggling_scale_energies,
                     straggling_scale_values, straggling_scale_point_count,
@@ -162,10 +168,47 @@ TransportResult transport_serial(const TransportConfig& config,
                     energy_MeVu,
                     primary_ion.rest_mass_MeV,
                     effective_charge, step_mm, config.water_density_g_per_cm3);
-                const auto sigma_MeV =
-                    local_scale * std::sqrt(std::max(0.0, variance_MeV2));
-                deposited_MeV =
-                    clamp_sampled_energy_loss(mean_loss_MeV, sigma_MeV, gaussian, energy_MeV);
+                if (config.enable_step_stable_straggling) {
+                    if (!stable_straggling.block_active) {
+                        const auto uniform1 = std::max(static_cast<double>(rng::uniform01(
+                            config.random_seed, history_id, stable_straggling.block_index, 0)), 1.0e-12);
+                        const auto uniform2 = static_cast<double>(rng::uniform01(
+                            config.random_seed, history_id, stable_straggling.block_index, 1));
+                        const auto gaussian = std::sqrt(-2.0 * std::log(uniform1)) *
+                                              std::cos(2.0 * std::numbers::pi * uniform2);
+                        if (config.enable_csda_range_energy_loss) {
+                            const auto block_length_mm = stable_straggling.block_length_mm;
+                            const auto block_energy_MeVu =
+                                stopping_power.csda_energy_after_distance_MeVu(
+                                    energy_MeVu, block_length_mm,
+                                    config.primary_mass_number);
+                            const auto block_mean_loss_MeV = csda_block_mean_loss_MeV(
+                                energy_MeV, block_energy_MeVu,
+                                static_cast<double>(config.primary_mass_number));
+                            const auto block_variance_MeV2 = condensed_total_loss_variance_MeV2(
+                                energy_MeVu,
+                                primary_ion.rest_mass_MeV,
+                                effective_charge, block_length_mm,
+                                config.water_density_g_per_cm3);
+                            stable_straggling.begin_block(
+                                block_mean_loss_MeV, block_variance_MeV2,
+                                block_length_mm, local_scale, gaussian, energy_MeV);
+                        } else {
+                            stable_straggling.begin_block(mean_loss_MeV, variance_MeV2, step_mm,
+                                                          local_scale, gaussian, energy_MeV);
+                        }
+                    }
+                    deposited_MeV = stable_straggling.consume_loss(step_mm, energy_MeV);
+                } else {
+                    const auto uniform1 = std::max(static_cast<double>(rng::uniform01(
+                        config.random_seed, history_id, steps, 0)), 1.0e-12);
+                    const auto uniform2 = static_cast<double>(rng::uniform01(
+                        config.random_seed, history_id, steps, 1));
+                    const auto gaussian = std::sqrt(-2.0 * std::log(uniform1)) *
+                                          std::cos(2.0 * std::numbers::pi * uniform2);
+                    const auto sigma_MeV = local_scale * std::sqrt(std::max(0.0, variance_MeV2));
+                    deposited_MeV = clamp_sampled_energy_loss(mean_loss_MeV, sigma_MeV, gaussian, energy_MeV);
+                }
             }
             tally[bin] += deposited_MeV;
             if (config.enable_voxel_scoring) {
