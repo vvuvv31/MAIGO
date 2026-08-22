@@ -489,6 +489,15 @@ std::vector<std::filesystem::path> parse_path_list(const std::string& text) {
 
 }  // namespace
 
+const char* run_mode_name(const RunMode mode) noexcept {
+    switch (mode) {
+    case RunMode::smoke: return "smoke";
+    case RunMode::research: return "research";
+    case RunMode::production: return "production";
+    }
+    return "unknown";
+}
+
 std::uint64_t parse_random_seed(const std::string_view value) {
     if (value == "auto") {
         return generate_auto_seed();
@@ -581,6 +590,18 @@ void TransportConfig::validate() const {
     if (config_schema_version != 1U) {
         throw std::invalid_argument(
             "config_schema_version must be 1 for the current flat configuration schema");
+    }
+    if (!std::isfinite(quality_maximum_relative_energy_residual) ||
+        quality_maximum_relative_energy_residual < 0.0 ||
+        !std::isfinite(quality_maximum_absolute_energy_residual_MeV) ||
+        quality_maximum_absolute_energy_residual_MeV < 0.0) {
+        throw std::invalid_argument(
+            "run quality energy-residual tolerances must be finite and non-negative");
+    }
+    if (run_mode == RunMode::production &&
+        (!quality_reject_any_queue_overflow || !quality_reject_nan_or_inf)) {
+        throw std::invalid_argument(
+            "production run_mode requires queue-overflow and NaN/Inf rejection");
     }
     if (enable_csda_range_energy_loss &&
         (enable_ct_grid || enable_layered_phantom || enable_hetero_insert ||
@@ -1461,6 +1482,34 @@ TransportConfig load_config(const std::filesystem::path& path) {
     TransportConfig config;
     config.config_schema_version = parse_number(
         values, "config_schema_version", config.config_schema_version);
+    if (const auto mode = values.find("run_mode"); mode != values.end()) {
+        auto name = mode->second;
+        std::transform(name.begin(), name.end(), name.begin(),
+                       [](const unsigned char character) {
+                           return static_cast<char>(std::tolower(character));
+                       });
+        if (name == "smoke") {
+            config.run_mode = RunMode::smoke;
+        } else if (name == "research") {
+            config.run_mode = RunMode::research;
+        } else if (name == "production") {
+            config.run_mode = RunMode::production;
+        } else {
+            throw std::invalid_argument(
+                "run_mode must be smoke, research, or production");
+        }
+    }
+    config.quality_maximum_relative_energy_residual = parse_number(
+        values, "quality_maximum_relative_energy_residual",
+        config.quality_maximum_relative_energy_residual);
+    config.quality_maximum_absolute_energy_residual_MeV = parse_number(
+        values, "quality_maximum_absolute_energy_residual_MeV",
+        config.quality_maximum_absolute_energy_residual_MeV);
+    config.quality_reject_any_queue_overflow = parse_bool(
+        values, "quality_reject_any_queue_overflow",
+        config.quality_reject_any_queue_overflow);
+    config.quality_reject_nan_or_inf = parse_bool(
+        values, "quality_reject_nan_or_inf", config.quality_reject_nan_or_inf);
     config.ion_physics_file = ion_physics_file;
     if (!ion_physics_file.empty()) {
         // A manifest is an ownership boundary. Missing optional data must stay

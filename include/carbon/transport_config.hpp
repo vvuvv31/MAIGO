@@ -14,6 +14,14 @@
 
 namespace carbon {
 
+enum class RunMode : std::uint8_t {
+    smoke,
+    research,
+    production,
+};
+
+[[nodiscard]] const char* run_mode_name(RunMode mode) noexcept;
+
 // Compact per-spot source parameters consumed by one batched SYCL launch.
 // history_begin/history_end describe the half-open range in the flattened plan.
 //
@@ -92,6 +100,14 @@ struct TransportConfig {
     // imported ion-physics manifest. This is intended for run provenance and
     // hashing; CLI overrides are not represented here.
     std::string canonical_config_text{};
+    // Legacy configurations default to research so existing approximation
+    // behavior remains visible but non-production. Production enables strict
+    // post-transport quality gates.
+    RunMode run_mode{RunMode::research};
+    double quality_maximum_relative_energy_residual{1.0e-4};
+    double quality_maximum_absolute_energy_residual_MeV{1.0e-6};
+    bool quality_reject_any_queue_overflow{true};
+    bool quality_reject_nan_or_inf{true};
     // Optional single-file manifest owning the primary-ion identity and all
     // ion-dependent water physics data. Run controls remain in the main YAML.
     std::filesystem::path ion_physics_file{};

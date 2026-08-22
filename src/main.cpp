@@ -8,6 +8,7 @@
 #include "carbon/plan_run.hpp"
 #include "carbon/package_identity.hpp"
 #include "carbon/reaction_package.hpp"
+#include "carbon/run_quality.hpp"
 #include "carbon/stopping_power.hpp"
 #include "carbon/topas_spots.hpp"
 #include "carbon/tps_source.hpp"
@@ -510,6 +511,25 @@ int main(int argc, char* argv[]) {
                                    elastic_cross_section, elastic_packages, nullptr);
         }
 
+        const auto quality_directory = config.validation_scorers()
+                                           ? (config.validation_output_directory.empty()
+                                                  ? std::filesystem::path{
+                                                        "benchmark/scorer/results"}
+                                                  : config.validation_output_directory)
+                                           : std::filesystem::path{"out"} /
+                                                 (cli.config_path.stem().empty()
+                                                      ? std::filesystem::path{"run"}
+                                                      : cli.config_path.stem());
+        const auto quality_report_path = quality_directory / "quality_report.json";
+        const auto quality = carbon::evaluate_run_quality(config, result);
+        carbon::write_run_quality_report_json(quality_report_path, quality);
+        std::cout << "Run mode: " << carbon::run_mode_name(config.run_mode) << '\n'
+                  << "Quality status: " << quality.status() << '\n'
+                  << "Quality report: " << quality_report_path << '\n';
+        if (!quality.accepted) {
+            throw std::runtime_error(quality.summary());
+        }
+
         // MeV energy-deposition scorers (empty path disables that file).
         if (!config.output_file.empty()) {
             carbon::write_depth_dose_csv(config.output_file, config, result);
@@ -530,11 +550,6 @@ int main(int argc, char* argv[]) {
             carbon::write_energy_ledger_json(dir / "energy_ledger.json", config,
                                              result);
             carbon::write_validation_scorer_csvs(dir, config, result);
-            if (result.secondary_queue_overflow != 0 ||
-                result.cascade_queue_overflow != 0) {
-                throw std::runtime_error(
-                    "validation scorer run had a non-zero secondary/cascade queue overflow");
-            }
         }
         if (config.enable_let_scoring &&
             !config.fragment_species_let_output_file.empty()) {

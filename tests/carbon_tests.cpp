@@ -12,6 +12,7 @@
 #include "carbon/particle.hpp"
 #include "carbon/reaction_package.hpp"
 #include "carbon/rng.hpp"
+#include "carbon/run_quality.hpp"
 
 #include "carbon/stopping_power.hpp"
 #include "carbon/straggling.hpp"
@@ -862,7 +863,101 @@ void test_strict_config_parsing_and_canonicalization() {
     require(reordered.canonical_config_text == first.canonical_config_text,
             "Canonical configuration changed with input key order");
 
+    {
+        std::ofstream output(config_path);
+        output << "run_mode: production\n"
+               << "quality_maximum_relative_energy_residual: 0.0002\n"
+               << "quality_maximum_absolute_energy_residual_MeV: 0.01\n";
+    }
+    const auto production = carbon::load_config(config_path);
+    require(production.run_mode == carbon::RunMode::production &&
+                production.quality_maximum_relative_energy_residual == 0.0002 &&
+                production.quality_maximum_absolute_energy_residual_MeV == 0.01,
+            "Run quality configuration fields were not parsed");
+    auto weakened_production = production;
+    weakened_production.quality_reject_any_queue_overflow = false;
+    require_throws([&] { weakened_production.validate(); },
+                   "Production mode allowed queue-overflow rejection to be disabled");
+
+    {
+        std::ofstream output(config_path);
+        output << "run_mode: clinical\n";
+    }
+    require_throws([&] { (void)carbon::load_config(config_path); },
+                   "Configuration accepted an unknown run mode");
+
     std::filesystem::remove_all(directory);
+}
+
+void test_run_quality_gate() {
+    carbon::TransportConfig production;
+    production.run_mode = carbon::RunMode::production;
+    production.quality_maximum_relative_energy_residual = 1.0e-4;
+    production.quality_maximum_absolute_energy_residual_MeV = 1.0e-9;
+
+    carbon::TransportResult clean;
+    clean.initial_energy_MeV = 100.0;
+    clean.total_deposited_energy_MeV = 100.0;
+    auto report = carbon::evaluate_run_quality(production, clean);
+    require(report.accepted && report.status() == "pass" &&
+                report.failures.empty() && report.approximations.empty(),
+            "Production quality gate rejected a clean result");
+
+    const auto require_overflow_rejected = [&](auto set_overflow,
+                                                const std::string& label) {
+        auto result = clean;
+        set_overflow(result);
+        const auto rejected = carbon::evaluate_run_quality(production, result);
+        require(!rejected.accepted && rejected.queue_overflow_count == 1 &&
+                    !rejected.failures.empty(),
+                "Production quality gate accepted " + label + " overflow");
+    };
+    require_overflow_rejected(
+        [](auto& result) { result.elastic_queue_overflow = 1; }, "elastic");
+    require_overflow_rejected(
+        [](auto& result) { result.secondary_queue_overflow = 1; }, "secondary");
+    require_overflow_rejected(
+        [](auto& result) { result.cascade_queue_overflow = 1; }, "cascade");
+    require_overflow_rejected(
+        [](auto& result) { result.neutral_queue_overflow = 1; }, "neutral");
+    require_overflow_rejected(
+        [](auto& result) { result.electron_queue_overflow = 1; }, "electron");
+    require_overflow_rejected(
+        [](auto& result) { result.electron_gamma_queue_overflow = 1; },
+        "electron-gamma");
+
+    auto research = production;
+    research.run_mode = carbon::RunMode::research;
+    auto overflow = clean;
+    overflow.neutral_queue_overflow = 1;
+    report = carbon::evaluate_run_quality(research, overflow);
+    require(report.accepted && report.status() == "non_production" &&
+                report.failures.empty() && report.approximations.size() == 1,
+            "Research quality gate did not expose overflow as an approximation");
+
+    auto residual = clean;
+    residual.total_deposited_energy_MeV = 99.0;
+    report = carbon::evaluate_run_quality(production, residual);
+    require(!report.accepted && !report.failures.empty(),
+            "Production quality gate accepted a large energy residual");
+
+    auto non_finite = clean;
+    non_finite.deposited_energy_MeV = {
+        std::numeric_limits<double>::quiet_NaN()};
+    report = carbon::evaluate_run_quality(production, non_finite);
+    require(!report.accepted && !report.failures.empty(),
+            "Production quality gate accepted a non-finite scorer");
+
+    const auto path = std::filesystem::temp_directory_path() /
+                      "maigo_quality_report.json";
+    carbon::write_run_quality_report_json(path, report);
+    std::ifstream input(path);
+    const std::string json((std::istreambuf_iterator<char>(input)),
+                           std::istreambuf_iterator<char>());
+    require(json.find("\"status\": \"fail\"") != std::string::npos &&
+                json.find("\"non_finite_result\"") != std::string::npos,
+            "Run quality JSON omitted failure status or issue code");
+    std::filesystem::remove(path);
 }
 
 void test_particle_specific_stopping_power_tables() {
@@ -4836,6 +4931,7 @@ int main() {
         test_primary_ion_definition();
         test_ion_physics_manifest_loading();
         test_strict_config_parsing_and_canonicalization();
+        test_run_quality_gate();
         test_particle_specific_stopping_power_tables();
         test_step_selection();
         test_slab_phantom_helpers();

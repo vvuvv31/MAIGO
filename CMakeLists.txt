@@ -51,6 +51,7 @@ add_library(carbon_core
     src/electron_transport.cpp
     src/energy_loss_fluctuation.cpp
     src/reaction_package.cpp
+    src/run_quality.cpp
     src/cascade_package.cpp
     src/neutral_package.cpp
     src/stopping_power.cpp
