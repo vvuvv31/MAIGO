@@ -1,0 +1,47 @@
+# EM-only proton-water absolute dose with Geant4 loss fluctuations disabled.
+i:Ts/Seed = @SEED@
+i:Ts/NumberOfThreads = 56
+i:Ts/ShowHistoryCountAtInterval = 10000
+b:Gr/Enable = "False"
+
+s:Ge/World/Type = "TsBox"
+s:Ge/World/Material = "Air"
+d:Ge/World/HLX = 200 mm
+d:Ge/World/HLY = 200 mm
+d:Ge/World/HLZ = 400 mm
+
+s:Ge/Phantom/Parent = "World"
+s:Ge/Phantom/Type = "TsBox"
+s:Ge/Phantom/Material = "G4_WATER"
+d:Ge/Phantom/HLX = 150 mm
+d:Ge/Phantom/HLY = 150 mm
+d:Ge/Phantom/HLZ = 350 mm
+d:Ge/Phantom/MaxStepSize = 0.1 mm
+
+s:Ge/BeamPosition/Parent = "World"
+s:Ge/BeamPosition/Type = "Group"
+d:Ge/BeamPosition/TransZ = 349.999 mm
+
+s:So/ProtonBeam/Type = "Beam"
+s:So/ProtonBeam/Component = "BeamPosition"
+s:So/ProtonBeam/BeamParticle = "proton"
+d:So/ProtonBeam/BeamEnergy = @ENERGY@ MeV
+u:So/ProtonBeam/BeamEnergySpread = 0.0
+s:So/ProtonBeam/BeamPositionDistribution = "None"
+s:So/ProtonBeam/BeamAngularDistribution = "None"
+i:So/ProtonBeam/NumberOfHistoriesInRun = 1000000
+
+s:Ph/ListName = "EMOnly"
+s:Ph/EMOnly/Type = "Geant4_Modular"
+sv:Ph/EMOnly/Modules = 2 "g4em-standard_opt4" "EMOnlyNoLossFluctuation"
+d:Ph/EMOnly/CutForAllParticles = 0.05 mm
+
+s:Sc/TotalDose/Quantity = "DoseToMedium"
+s:Sc/TotalDose/Component = "Phantom"
+s:Sc/TotalDose/OutputFile = "proton_@ENERGY@MeV_water_em_only_1M_total_dose"
+s:Sc/TotalDose/OutputType = "csv"
+s:Sc/TotalDose/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/TotalDose/XBins = 1
+i:Sc/TotalDose/YBins = 1
+i:Sc/TotalDose/ZBins = 1400
+sv:Sc/TotalDose/Report = 1 "Sum"

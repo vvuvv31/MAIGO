@@ -1,0 +1,42 @@
+i:Ts/Seed = 20260822
+i:Ts/NumberOfThreads = 1
+i:Ts/ShowHistoryCountAtInterval = 1
+b:Gr/Enable = "False"
+
+s:Ge/World/Type = "TsBox"
+s:Ge/World/Material = "G4_Galactic"
+d:Ge/World/HLX = 20 mm
+d:Ge/World/HLY = 20 mm
+d:Ge/World/HLZ = 20 mm
+
+s:Ge/Water/Parent = "World"
+s:Ge/Water/Type = "TsBox"
+s:Ge/Water/Material = "G4_WATER"
+d:Ge/Water/HLX = 10 mm
+d:Ge/Water/HLY = 10 mm
+d:Ge/Water/HLZ = 10 mm
+
+s:Ge/BeamPosition/Parent = "World"
+s:Ge/BeamPosition/Type = "Group"
+d:Ge/BeamPosition/TransZ = 15 mm
+
+s:So/Beam/Type = "Beam"
+s:So/Beam/Component = "BeamPosition"
+s:So/Beam/BeamParticle = "e-"
+d:So/Beam/BeamEnergy = 1 MeV
+u:So/Beam/BeamEnergySpread = 0.0
+s:So/Beam/BeamPositionDistribution = "None"
+s:So/Beam/BeamAngularDistribution = "None"
+i:So/Beam/NumberOfHistoriesInRun = 1
+
+s:Ph/ListName = "Default"
+s:Ph/Default/Type = "Geant4_Modular"
+sv:Ph/Default/Modules = 1 "g4em-standard_opt4"
+b:Ph/SetEmParametersInTsModularPhysicsList = "True"
+d:Ph/Default/CutForAllParticles = 0.05 mm
+
+s:Sc/ElectronTransport/Quantity = "ElectronTransportNtuple"
+s:Sc/ElectronTransport/Component = "Water"
+s:Sc/ElectronTransport/OutputFile = "electron_transport_water_geant4_11_3_2"
+s:Sc/ElectronTransport/OutputType = "ASCII"
+s:Sc/ElectronTransport/IfOutputFileAlreadyExists = "Overwrite"

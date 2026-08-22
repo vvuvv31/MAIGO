@@ -2953,6 +2953,7 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
         !config.enable_layered_phantom &&
         !config.enable_hetero_insert;
     const auto straggling_scale = static_cast<float>(config.straggling_scale);
+    const auto straggling_sampler = config.straggling_sampler_id();
     std::array<float, max_straggling_scale_points> straggling_scale_energies{};
     std::array<float, max_straggling_scale_points> straggling_scale_values{};
     std::array<float, max_straggling_scale_points> primary_xs_correction_energies{};
@@ -3534,6 +3535,8 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                             1.0e-12F);
                         const auto uniform2 = rng::uniform01(
                             spot_seed, rng_history, beamline_step, 41);
+                        const auto extra_uniform = rng::uniform01(
+                            spot_seed, rng_history, beamline_step, 42);
                         constexpr float two_pi = 6.2831853071795864769F;
                         const auto gaussian =
                             sycl::sqrt(-2.0F * sycl::log(uniform1)) *
@@ -3569,9 +3572,9 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                             minibeam_copper_straggling_scale *
                             sycl::sqrt(
                                 sycl::fmax(0.0F, variance_MeV2));
-                        sampled_loss_MeV = sycl::clamp(
-                            mean_loss_MeV + sigma_MeV * gaussian,
-                            0.0F, energy_MeV - energy_cutoff_MeV);
+                        sampled_loss_MeV = sample_condensed_energy_loss(
+                            mean_loss_MeV, sigma_MeV, gaussian, extra_uniform,
+                            energy_MeV - energy_cutoff_MeV, straggling_sampler);
                         if (sampled_loss_MeV >=
                             energy_MeV - energy_cutoff_MeV) {
                             record_beamline_removed(0.0F);
@@ -4624,6 +4627,8 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                         rng::uniform01(spot_seed, rng_history, random_index, 0), 1.0e-12f);
                     const auto uniform2 = rng::uniform01(spot_seed, rng_history, random_index, 1);
                     constexpr float two_pi = 6.2831853071795864769f;
+                    const auto extra_uniform =
+                        rng::uniform01(spot_seed, rng_history, random_index, 2);
                     const auto gaussian = sycl::sqrt(-2.0f * sycl::log(uniform1)) *
                                           sycl::cos(two_pi * uniform2);
 
@@ -4672,16 +4677,17 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                         if (!stable_straggling.block_active) {
                             stable_straggling.begin_block(
                                 mean_loss_MeV, variance_MeV2, step_mm,
-                                local_straggling_scale, gaussian, energy_MeV);
+                                local_straggling_scale, gaussian, energy_MeV,
+                                extra_uniform, straggling_sampler);
                         }
                         deposited_MeV = stable_straggling.consume_loss(step_mm, energy_MeV);
                         if (stable_straggling_interface_limited) {
                             stable_straggling.reset_block();
                         }
                     } else {
-                        deposited_MeV = sycl::clamp(
-                            mean_loss_MeV + sigma_MeV * gaussian, 0.0f,
-                            sycl::fmin(2.0F * mean_loss_MeV, energy_MeV));
+                        deposited_MeV = sample_condensed_energy_loss(
+                            mean_loss_MeV, sigma_MeV, gaussian, extra_uniform,
+                            energy_MeV, straggling_sampler);
                     }
                 }
                 // Electronic build-up: local (1-f)*dE + short-range delta f*dE along +z.
@@ -6032,6 +6038,8 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                                 1.0e-12F);
                             const auto uniform2 =
                                 rng::uniform01(random_seed, rng_stream, steps, 5);
+                            const auto extra_uniform =
+                                rng::uniform01(random_seed, rng_stream, steps, 6);
                             constexpr float two_pi = 6.2831853071795864769F;
                             const auto gaussian =
                                 sycl::sqrt(-2.0F * sycl::log(uniform1)) *
@@ -6080,11 +6088,9 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                             const auto sigma_MeV =
                                 local_straggling_scale *
                                 sycl::sqrt(sycl::fmax(0.0F, variance_MeV2));
-                            step_deposited_MeV = sycl::clamp(
-                                mean_step_loss_MeV + sigma_MeV * gaussian,
-                                0.0F,
-                                sycl::fmin(2.0F * mean_step_loss_MeV,
-                                           energy_MeV));
+                            step_deposited_MeV = sample_condensed_energy_loss(
+                                mean_step_loss_MeV, sigma_MeV, gaussian,
+                                extra_uniform, energy_MeV, straggling_sampler);
                         }
                         const auto sec_e_frac =
                             enable_minibeam &&
@@ -7564,6 +7570,9 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                                     const auto uniform2 = rng::uniform01(
                                         random_seed, particle.rng_stream,
                                         steps, 23);
+                                    const auto extra_uniform = rng::uniform01(
+                                        random_seed, particle.rng_stream,
+                                        steps, 24);
                                     constexpr float two_pi =
                                         6.2831853071795864769F;
                                     const auto gaussian =
@@ -7600,17 +7609,13 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                                         local_straggling_scale *
                                         sycl::sqrt(sycl::fmax(
                                             0.0F, variance_MeV2));
-                                    step_deposited_MeV = sycl::clamp(
-                                        mean_step_loss_MeV +
-                                            sigma_MeV * gaussian,
-                                        0.0F,
-                                        sycl::fmin(2.0F * mean_step_loss_MeV,
-                                                   energy_MeV));
+                                    step_deposited_MeV = sample_condensed_energy_loss(
+                                        mean_step_loss_MeV, sigma_MeV, gaussian,
+                                        extra_uniform, energy_MeV,
+                                        straggling_sampler);
                                 }
-                                if (step_deposited_MeV <= 0.0F) {
-                                    energy_MeV = 0.0F;
-                                    break;
-                                }
+                                // A thin-segment sampler may return zero loss;
+                                // spatial transport still advances below.
                                 if (enable_let_scoring) {
                                     const auto sec_e_frac =
                                         electronic_buildup_fraction_at_energy(
@@ -8085,6 +8090,9 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
     TransportResult result;
     result.backend = "sycl-" + device_name +
                      (config.enable_energy_straggling ? "+straggling" : "");
+    if (config.uses_moment_matched_straggling()) {
+        result.backend += "+moment-matched-straggling";
+    }
     if (config.enable_step_stable_straggling) {
         result.backend += "+step-stable-primary-straggling";
     }

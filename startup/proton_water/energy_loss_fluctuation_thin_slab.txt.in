@@ -1,0 +1,55 @@
+# EM-only thin-water-slab export for an energy-loss fluctuation package.
+#
+# @TOTAL_ENERGY_MEV@ is the projectile total kinetic energy. The campaign
+# generator is responsible for converting its MeV/u grid using ProjectileA.
+# @SLAB_HALF_THICKNESS_MM@ defines the complete sampled water thickness;
+# @SOURCE_Z_MM@ must be greater than that value so the source starts in vacuum.
+# Only g4em-standard_opt4 is loaded: elastic and inelastic nuclear processes
+# are deliberately absent from this reference calculation.
+i:Ts/Seed = @SEED@
+i:Ts/NumberOfThreads = @THREADS@
+i:Ts/ShowHistoryCountAtInterval = 10000
+b:Gr/Enable = "False"
+
+s:Ge/World/Type = "TsBox"
+s:Ge/World/Material = "G4_Galactic"
+d:Ge/World/HLX = 100 mm
+d:Ge/World/HLY = 100 mm
+d:Ge/World/HLZ = 100 mm
+
+s:Ge/Slab/Parent = "World"
+s:Ge/Slab/Type = "TsBox"
+s:Ge/Slab/Material = "G4_WATER"
+d:Ge/Slab/HLX = 50 mm
+d:Ge/Slab/HLY = 50 mm
+d:Ge/Slab/HLZ = @SLAB_HALF_THICKNESS_MM@ mm
+
+# A TOPAS Beam travels along its local -Z axis. Starting in vacuum avoids an
+# unscored upstream energy loss while allowing Geant4 to enter the slab at its
+# exact +Z boundary.
+s:Ge/BeamPosition/Parent = "World"
+s:Ge/BeamPosition/Type = "Group"
+d:Ge/BeamPosition/TransZ = @SOURCE_Z_MM@ mm
+
+s:So/IonBeam/Type = "Beam"
+s:So/IonBeam/Component = "BeamPosition"
+s:So/IonBeam/BeamParticle = "@PROJECTILE_NAME@"
+d:So/IonBeam/BeamEnergy = @TOTAL_ENERGY_MEV@ MeV
+u:So/IonBeam/BeamEnergySpread = 0.0
+s:So/IonBeam/BeamPositionDistribution = "None"
+s:So/IonBeam/BeamAngularDistribution = "None"
+i:So/IonBeam/NumberOfHistoriesInRun = @HISTORIES@
+
+s:Ph/ListName = "Default"
+s:Ph/Default/Type = "Geant4_Modular"
+sv:Ph/Default/Modules = 1 "g4em-standard_opt4"
+b:Ph/SetEmParametersInTsModularPhysicsList = "True"
+d:Ph/Default/CutForAllParticles = @PRODUCTION_CUT_MM@ mm
+
+s:Sc/EnergyLossFluctuation/Quantity = "EnergyLossFluctuationNtuple"
+s:Sc/EnergyLossFluctuation/Component = "Slab"
+s:Sc/EnergyLossFluctuation/OutputFile = "@OUTPUT_STEM@"
+s:Sc/EnergyLossFluctuation/OutputType = "ASCII"
+s:Sc/EnergyLossFluctuation/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/EnergyLossFluctuation/ProjectileZ = @PROJECTILE_Z@
+i:Sc/EnergyLossFluctuation/ProjectileA = @PROJECTILE_A@

@@ -1,0 +1,44 @@
+# Diagnose primary C-12 hadronic-elastic events under the authoritative
+# full-physics TOPAS setup. This scorer does not alter transport.
+i:Ts/Seed = 2026082202
+i:Ts/NumberOfThreads = 56
+i:Ts/ShowHistoryCountAtInterval = 10000
+b:Gr/Enable = "False"
+
+s:Ge/World/Type = "TsBox"
+s:Ge/World/Material = "Air"
+d:Ge/World/HLX = 200 mm
+d:Ge/World/HLY = 200 mm
+d:Ge/World/HLZ = 400 mm
+s:Ge/Phantom/Parent = "World"
+s:Ge/Phantom/Type = "TsBox"
+s:Ge/Phantom/Material = "G4_WATER"
+d:Ge/Phantom/HLX = 150 mm
+d:Ge/Phantom/HLY = 150 mm
+d:Ge/Phantom/HLZ = 350 mm
+d:Ge/Phantom/MaxStepSize = 0.1 mm
+
+s:Ge/BeamPosition/Parent = "World"
+s:Ge/BeamPosition/Type = "Group"
+d:Ge/BeamPosition/TransZ = 349.999 mm
+s:So/CarbonBeam/Type = "Beam"
+s:So/CarbonBeam/Component = "BeamPosition"
+s:So/CarbonBeam/BeamParticle = "GenericIon(6,12)"
+d:So/CarbonBeam/BeamEnergy = 4800 MeV
+u:So/CarbonBeam/BeamEnergySpread = 0.0
+s:So/CarbonBeam/BeamPositionDistribution = "None"
+s:So/CarbonBeam/BeamAngularDistribution = "None"
+i:So/CarbonBeam/NumberOfHistoriesInRun = 100000
+
+s:Ph/ListName = "Default"
+s:Ph/Default/Type = "Geant4_Modular"
+sv:Ph/Default/Modules = 7 "g4em-standard_opt4" "g4h-phy_QGSP_BIC_HP" "g4decay" "g4ion-inclxx" "g4h-elastic_HP" "g4stopping" "g4radioactivedecay"
+d:Ph/Default/CutForAllParticles = 0.05 mm
+
+s:Sc/ElasticEvents/Quantity = "CarbonElasticNtuple"
+s:Sc/ElasticEvents/Component = "Phantom"
+s:Sc/ElasticEvents/OutputFile = "carbon12_water_fullphysics_elastic_400MeVu_100k"
+s:Sc/ElasticEvents/OutputType = "ASCII"
+s:Sc/ElasticEvents/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/ElasticEvents/ProjectileZ = 6
+i:Sc/ElasticEvents/ProjectileA = 12

@@ -18,6 +18,14 @@
 | `IonCrossSectionNtuple` | 不同碎片 Z/A 的非弹性截面 |
 | `NeutralCrossSectionNtuple` | gamma/neutron 的总截面 |
 | `PrimaryCrossingCount` | 配置 projectile Z/A 的 primary history 逐 bin crossing count |
+| `EnergyLossFluctuationNtuple` | EM-only 薄层中逐 history 的 primary 动能损失样本 |
+| `ElectronTransportNtuple` | G4_WATER 中 e-/e+ 的 eIoni/eBrem stopping-power 表 |
+
+`EnergyLossFluctuationNtuple` 的参数模板位于
+`startup/proton_water/energy_loss_fluctuation_thin_slab.txt.in`。模板仅加载
+`g4em-standard_opt4`，并使用真空上游和 `G4_WATER` 薄层；因此每行的
+`Primary Kinetic Energy Loss` 是一个不含弹性、非弹性核过程的完整 primary
+能损样本，而 `Primary Local Deposit` 仅用于检查 delta-electron 能量转移。
 
 `PrimaryCrossingCount` 是一个 binned scorer，不使用 `Fluence x area`。
 在 scorer 参数下设置 `i:.../ProjectileZ` 和 `i:.../ProjectileA`；每个

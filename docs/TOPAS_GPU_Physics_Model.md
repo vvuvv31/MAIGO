@@ -98,7 +98,26 @@ GPU 对每个带电粒子采用步进输运。在一个 step 中，连续能损�
 
 ### 3.2 能损涨落
 
-`enable_energy_straggling` 打开重粒子 condensed total-loss step-wise 涨落。方差使用碰撞运动学的 `Tmax/beta^2` 相对论项，并在低速极限退化到 Bohr 方差；采样限制为 `0..min(2*meanLoss,E)`。四个 100/200/300/400 MeV/u 单能水箱配置共享单位 scale，不再用非单调能量表补偿公式中缺失的相对论项。
+`enable_energy_straggling` 打开重粒子 condensed total-loss step-wise 涨落。方差使用碰撞运动学的 `Tmax/beta^2` 相对论项，并在低速极限退化到 Bohr 方差。`gaussian_clamped`（别名 `legacy_calibrated`）保留历史采样 `0..min(2*meanLoss,E)`，可配合标量或按当前能量插值的 `straggling_scale` 表。实验性的 `moment_matched` 改为正值 Gaussian/Gamma 采样，只在粒子剩余动能处截断，并强制 `straggling_scale: 1.0`、禁止 scale 表和 fixed-block 模式；在 additive Gamma/Brownian partial-block bridge 实现前，每个实际 transport segment 独立采样。四个 100/200/300/400 MeV/u 单能碳离子水箱配置在默认 clamped 模型下共享单位 scale。
+
+`packaged_fluctuation` 提供数据驱动的 inverse-CDF sampler。stopping-power table 仍决定每一步的平均能损；package 只给出 `sampled loss / mean loss` 的分布形状，因此不是能量或入射能量相关的经验 scale。配置示例：
+
+```yaml
+enable_energy_straggling: true
+energy_straggling_model: packaged_fluctuation
+energy_straggling_package_file: data/packages/proton_G4_WATER_fluctuation_100k.csv
+straggling_scale: 1.0
+```
+
+CSV 的固定前五列为：
+
+```text
+projectile_Z,projectile_A,material,energy_MeV_per_u,areal_density_g_per_cm2
+```
+
+后续列为严格递增的 `q_<probability>`，必须包含 `q_0`、`q_1` 和至少一个内部概率。每一行是在一个 energy/areal-density 网格点上的非递减 `loss/mean` 分位数；折线 inverse CDF 的积分必须在单位均值的 0.1% 内。文件必须包含至少两个 energy，每个 energy 至少两个严格不同的 areal-density 点，并且只包含一个 projectile/material identity。不同 energy 可以使用不同的 density 节点，以覆盖低能相对能损 step limiter 和高能固定最大 step。loader 先在每个 energy 的局部 density grid 上插值或端点延拓，再展开到所有 density 节点的 union，保持 CUDA/SYCL 的矩形内存布局。运行时随后在 probability、energy 和 areal density 上插值，最终能损只按剩余动能截断。
+
+当前 loader、serial sampler 和 CUDA/SYCL sampler 已实现。质子生产模板使用 TOPAS 导出的 `data/packages/proton_G4_WATER_fluctuation_100k.csv`；70/100/150/200/250 MeV 的独立 1M EM-only 绝对剂量验证中，peak-height 误差为 -0.574%/+0.377%/+0.162%/+0.259%/+0.621%，ROI p95 绝对误差均小于 1%，没有归一化或能量相关 scale。运行日志的 backend 必须包含 `+packaged-fluctuation`，多能量审计会强制检查该标志。当前配置契约仅允许 homogeneous `G4_WATER` primary，并核对 package 的 `Z/A` 与 YAML；还会拒绝超出 package 初始能量或最大 step areal-density 覆盖的配置。CT、layered/insert/minibeam 和 secondary straggling 会被拒绝；其他离子需要用户提供匹配其 Z/A 的 fluctuation package。
 
 可选的 `enable_step_stable_straggling`（默认 `false`）将 primary 涨落按固定物理块采样；`straggling_sampling_length_mm` 指定块长（例如 `0.1`）。启用后每个物理块复用一个由 `history_id + block_index` 确定的 Gaussian，并将块涨落按路径长度分配，因此完整均匀材料块的累计 mean/variance 不随 transport step subdivision 改变。材料/CT interface 仍由既有几何 clamp 保证不跨界；block 状态按物理路径连续，故 interface 会结束当前 transport step 但不会隐式重抽 block Gaussian。该模式当前只覆盖 primary；secondary 仍使用 legacy step-wise 语义。`false` 或块长 `0` 保留历史路径。
 

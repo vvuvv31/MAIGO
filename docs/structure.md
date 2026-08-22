@@ -184,23 +184,36 @@ CLI 覆盖项包括：`--device`、`--histories`、`--random-seed`、`--ct-grid`
 
 ### 4.2 Primary-ion 数据契约
 
-每个配置显式给出 `primary_atomic_number` 和 `primary_mass_number`；
-`primary_rest_mass_MeV` 可选，零表示历史的 \(A\times931.49410242\) MeV
-近似。与该 Z/A 配套的 `primary_stopping_power_file`、
-`primary_inelastic_cross_section_file`、`primary_reaction_package_file` 和
-`cascade_package_file` 必须由用户一起准备。CRPKG v1 不嵌入 primary 身份，
-因此 loader 无法替用户发现 Z/A 与 package 不匹配。当前 carbon 示例统一使用
+离子相关输入可以继续逐字段写在运行配置中，也可以由单个
+`ion_physics_file` 清单统一拥有。后一种方式把 `primary_atomic_number`、
+`primary_mass_number`、可选静质量、stopping-power 表、核截面、reaction/cascade
+package、straggling 数据模型、elastic capability 和模型 provenance 从几何、history、
+通用运输开关及 scorer 配置中抽离；同一运行
+配置切换离子时只改清单路径。示例见
+`data/ion_physics/carbon12_water_inclxx.yaml` 和
+`config/beam_200MeVu_ion_physics.yaml`。
+
+清单是严格的所有权边界：主配置不能重复定义清单字段，清单不能包含 histories、
+geometry、transport switch 或 scorer 字段。启用清单后，未声明的 optional 数据保持
+为空，不继承历史 C-12 默认值；因此启用 elastic、neutral 或 packaged straggling 时若
+清单未提供对应数据会明确失败。清单内相对路径相对于清单文件查找。现有逐字段配置
+保持兼容。
+
+每个清单必须给出与其 Z/A 配套的 `primary_stopping_power_file`、
+`particle_stopping_power_file`、`primary_inelastic_cross_section_file`、
+`primary_reaction_package_file` 和 `cascade_package_file`。CRPKG/CCAS v1 的 payload
+不嵌入 primary 身份；strict loader 使用相邻 `.compiled.json` 或显式 override
+manifest 校验二进制 hash、Z/A、material、model 和能区。当前 carbon 示例统一使用
 `topas_water_inclxx_1M_stitch7_primary_3d.bin` 与
 `topas_400MeVu_water_inclxx_1M_cascade_3d.bin`。
 
 Primary elastic 数据使用独立的 ELPKG v1 契约：设置
 `enable_primary_elastic_interactions: true` 时必须同时提供
 `primary_elastic_cross_section_file`、`primary_elastic_package_file` 和
-`primary_elastic_package_physics_model`。`carbon_mc --plan-only` 会读取 XS/ELPKG
-并在 strict 模式下校验相邻 `.compiled.json` 的 kind、SHA-256、字节数、Z/A、
-`G4_WATER`、model 和能区；当前普通 transport 尚未实现 elastic sampling，
-因此非 plan-only 运行会明确失败。开关关闭时提供 elastic 字段也会被拒绝，
-避免配置看似生效但实际未使用。
+`primary_elastic_package_physics_model`。启动时会读取 XS/ELPKG，并在 strict 模式下
+校验相邻 `.compiled.json` 的 kind、SHA-256、字节数、Z/A、`G4_WATER`、model 和
+能区；legacy SYCL transport 将 elastic 作为与 inelastic 竞争的离散过程抽样。开关
+关闭时提供 elastic 字段会被拒绝，避免配置看似生效但实际未使用。
 
 ### 4.3 `TransportConfig` 的功能分区
 
@@ -401,6 +414,8 @@ package 保存离线抽取的相关事件样本，不是解析核模型。关键
 - `ion_stopping_power_*.csv`、`ion_cross_sections_copper_*.csv`
 - `let_delta_electron_fraction_*.csv`
 - `data/packages/*.bin`：water reaction/cascade/neutral 与 soft-tissue 运行时 package
+- `data/packages/*_fluctuation_*.csv`：按 projectile Z/A、材料、能量和 areal density
+  索引的能损 inverse-CDF package；相邻 metadata 记录 TOPAS 源数据摘要
 - `data/copper_*.bin`：minibeam Copper reaction/neutral package
 - 相邻 `.metadata.json` / `.compiled.json`：生成版本和编译参数
 
@@ -410,7 +425,8 @@ Proton water 的可提交入口是 `config/proton_water_qgsp_bic_hp.yaml.templat
 和 `scripts/prepare_proton_water_configs.py`。后者只生成被忽略的
 `out/proton_water_qgsp_bic_hp/` resolved configs/manifest；不会下载、复制或提交
 package。它为 70/100/150/200/250 MeV 固定 proton Z/A/rest mass、独立
-GPU/package-reference seeds、`package_identity_validation: strict` 和
+GPU/package-reference seeds、scale-free `packaged_fluctuation`、
+`package_identity_validation: strict` 和
 `QGSP_BIC_HP/BinaryCascade` package model。carbon 配置仍必须使用
 `data/packages/topas_water_inclxx_1M_stitch7_primary_3d.bin` 与
 `data/packages/topas_400MeVu_water_inclxx_1M_cascade_3d.bin`，不得由 proton
@@ -421,8 +437,8 @@ GPU/package-reference seeds、`package_identity_validation: strict` 和
 primary/all-hadron LET、primary survival 和 inelastic reaction CSV；输出 JSON
 包含 R80、peak、integral、>1% TOPAS dose mask 的 mean/p95、LET、reaction 和
 survival checks。正式 proton 只覆盖 homogeneous `G4_WATER`、neutral-off；CT
-和 minibeam 不属于该验收。TOPAS Monte Carlo 在 `v@192.168.31.5`，本机负责
-MAIGO CUDA run 与该比较器。
+和 minibeam 不属于该验收。TOPAS Monte Carlo 在 `wuwei@10.10.10.4` 的
+`cpup6` 运行，本机 WSL 负责 MAIGO CUDA run 与该比较器。
 
 ### 9.2 `startup/`
 

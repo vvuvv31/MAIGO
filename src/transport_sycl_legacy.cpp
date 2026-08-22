@@ -5,6 +5,8 @@
 #include "carbon/elastic_device_storage.hpp"
 #include "carbon/elastic_queue_adapter.hpp"
 #include "carbon/elastic_sampling.hpp"
+#include "carbon/electron_transport.hpp"
+#include "carbon/energy_loss_fluctuation.hpp"
 #include "carbon/multiple_scattering.hpp"
 #include "carbon/particle.hpp"
 #include "carbon/rng.hpp"
@@ -24,6 +26,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <iostream>
+#include <iterator>
 #include <limits>
 #include <numeric>
 #include <optional>
@@ -126,6 +129,31 @@ inline Direction3F blend_direction_toward_parent(
     }
     const auto inv = 1.0F / mixed_norm;
     return Direction3F{mixed.x * inv, mixed.y * inv, mixed.z * inv};
+}
+
+inline float interpolate_electron_plane_device(
+    const float* table,
+    const std::uint32_t count,
+    const std::uint32_t plane,
+    const float kinetic_energy_MeV) noexcept {
+    if (count == 0U) return 0.0F;
+    const auto* energies = table;
+    const auto* values = table + static_cast<std::size_t>(plane) * count;
+    if (kinetic_energy_MeV <= energies[0]) return values[0];
+    if (kinetic_energy_MeV >= energies[count - 1U]) return values[count - 1U];
+    std::uint32_t low = 0U;
+    std::uint32_t high = count - 1U;
+    while (high - low > 1U) {
+        const auto middle = low + (high - low) / 2U;
+        if (energies[middle] <= kinetic_energy_MeV) {
+            low = middle;
+        } else {
+            high = middle;
+        }
+    }
+    const auto fraction = (kinetic_energy_MeV - energies[low]) /
+                          (energies[high] - energies[low]);
+    return values[low] + fraction * (values[high] - values[low]);
 }
 
 #include "detail/sycl_cascade_select.inc"
@@ -365,6 +393,77 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                                const CrossSectionTable* elastic_cross_section,
                                const ElasticPackageTable* elastic_packages) {
     config.validate();
+    std::optional<ElectronTransportTable> electron_transport_table;
+    std::vector<float> electron_transport_table_host;
+    std::size_t electron_transport_table_size = 0;
+    if (config.enable_electron_transport) {
+        electron_transport_table = ElectronTransportTable::from_csv(
+            config.electron_transport_data_file);
+        electron_transport_table_size =
+            electron_transport_table->kinetic_energies_MeV().size();
+        electron_transport_table_host.reserve(7 * electron_transport_table_size);
+        const auto append_float = [&](const std::vector<double>& values) {
+            std::transform(values.begin(), values.end(),
+                           std::back_inserter(electron_transport_table_host),
+                           [](const double value) { return static_cast<float>(value); });
+        };
+        append_float(electron_transport_table->kinetic_energies_MeV());
+        append_float(electron_transport_table->collisional_stopping_powers(
+            LeptonSpecies::electron));
+        append_float(electron_transport_table->radiative_stopping_powers(
+            LeptonSpecies::electron));
+        append_float(electron_transport_table->total_stopping_powers(
+            LeptonSpecies::electron));
+        append_float(electron_transport_table->collisional_stopping_powers(
+            LeptonSpecies::positron));
+        append_float(electron_transport_table->radiative_stopping_powers(
+            LeptonSpecies::positron));
+        append_float(electron_transport_table->total_stopping_powers(
+            LeptonSpecies::positron));
+    }
+    std::optional<EnergyLossFluctuationTable> fluctuation_table;
+    std::vector<float> fluctuation_energies_host;
+    std::vector<float> fluctuation_densities_host;
+    std::vector<float> fluctuation_probabilities_host;
+    std::vector<float> fluctuation_quantiles_host;
+    if (config.uses_packaged_straggling()) {
+        fluctuation_table = EnergyLossFluctuationTable::from_csv(
+            config.energy_straggling_package_file);
+        if (fluctuation_table->projectile_atomic_number() !=
+                config.primary_atomic_number ||
+            fluctuation_table->projectile_mass_number() !=
+                config.primary_mass_number ||
+            fluctuation_table->material_name() != "G4_WATER") {
+            throw std::invalid_argument(
+                "Energy-loss fluctuation package must match YAML primary Z/A and G4_WATER");
+        }
+        const auto maximum_areal_density =
+            config.water_density_g_per_cm3 * config.maximum_step_mm / 10.0;
+        if (config.initial_energy_MeVu >
+                fluctuation_table->energies_MeVu().back() ||
+            maximum_areal_density >
+                fluctuation_table->areal_densities_g_per_cm2().back()) {
+            throw std::invalid_argument(
+                "Energy-loss fluctuation package does not cover the configured "
+                "initial energy or maximum step areal density");
+        }
+        const auto to_float = [](const std::vector<double>& source) {
+            std::vector<float> result(source.size());
+            std::transform(source.begin(), source.end(), result.begin(),
+                           [](const double value) {
+                               return static_cast<float>(value);
+                           });
+            return result;
+        };
+        fluctuation_energies_host = to_float(
+            fluctuation_table->energies_MeVu());
+        fluctuation_densities_host = to_float(
+            fluctuation_table->areal_densities_g_per_cm2());
+        fluctuation_probabilities_host = to_float(
+            fluctuation_table->probabilities());
+        fluctuation_quantiles_host = to_float(
+            fluctuation_table->loss_ratio_quantiles());
+    }
     if (!is_uniform_grid(stopping_power.energies())) {
         throw std::invalid_argument("The current SYCL backend requires a uniform stopping-power grid");
     }
@@ -424,6 +523,7 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
     auto primary_kernel_seconds = 0.0;
     auto secondary_kernel_seconds = 0.0;
     auto neutral_kernel_seconds = 0.0;
+    auto electron_kernel_seconds = 0.0;
     auto charged_after_neutral_kernel_seconds = 0.0;
     const auto table_size = stopping_power.values().size();
     const auto cross_section_table_size = cross_section.values().size();
@@ -658,6 +758,7 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                      "to water)\n";
     }
     const auto enable_neutral_transport = config.enable_neutral_transport;
+    const auto enable_electron_transport = config.enable_electron_transport;
     const auto neutral_allow_continuation =
         enable_neutral_transport && config.neutral_transport_mode == "full";
     const auto automatic_queue_capacity =
@@ -680,6 +781,13 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
     auto neutral_queue_capacity =
         config.neutral_queue_capacity == 0 ? automatic_neutral_queue_capacity
                                            : config.neutral_queue_capacity;
+    const auto automatic_electron_queue_capacity =
+        number_of_histories > std::numeric_limits<std::size_t>::max() / 16U
+            ? std::numeric_limits<std::size_t>::max()
+            : number_of_histories * 16U;
+    auto electron_queue_capacity =
+        config.electron_queue_capacity == 0 ? automatic_electron_queue_capacity
+                                            : config.electron_queue_capacity;
     if (enable_secondary_generation &&
         secondary_queue_capacity > std::numeric_limits<std::uint32_t>::max()) {
         throw std::invalid_argument("Secondary queue capacity exceeds the uint32 runtime limit");
@@ -687,6 +795,11 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
     if (enable_neutral_transport &&
         neutral_queue_capacity > std::numeric_limits<std::uint32_t>::max()) {
         throw std::invalid_argument("Neutral queue capacity exceeds the uint32 runtime limit");
+    }
+    if (enable_electron_transport &&
+        electron_queue_capacity > std::numeric_limits<std::uint32_t>::max()) {
+        throw std::invalid_argument(
+            "Electron queue capacity exceeds the uint32 runtime limit");
     }
 
     const auto& device = queue.get_device();
@@ -720,6 +833,7 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
         // Explicit high-statistics runs may request a larger neutral queue;
         // the device-memory budget below remains the final allocation guard.
         constexpr std::size_t kCudaMaxNeutralSlots = 96ULL * 1024ULL * 1024ULL;
+        constexpr std::size_t kCudaMaxElectronSlots = 64ULL * 1024ULL * 1024ULL;
         const auto cuda_auto_secondary =
             std::max(number_of_histories * 4U, std::size_t{8192});
         if (config.secondary_queue_capacity == 0) {
@@ -735,9 +849,17 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
         }
         neutral_queue_capacity =
             std::min(neutral_queue_capacity, kCudaMaxNeutralSlots);
+        if (config.electron_queue_capacity == 0) {
+            electron_queue_capacity = std::min(
+                electron_queue_capacity,
+                std::max(number_of_histories * 8U, std::size_t{4096}));
+        }
+        electron_queue_capacity =
+            std::min(electron_queue_capacity, kCudaMaxElectronSlots);
         std::cout << "CUDA backend detected: WSL-safe queue caps "
                   << "secondary_queue_capacity=" << secondary_queue_capacity
                   << " neutral_queue_capacity=" << neutral_queue_capacity << '\n'
+                  << " electron_queue_capacity=" << electron_queue_capacity << '\n'
                   << std::flush;
     }
 
@@ -761,7 +883,8 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
         std::min(1.0, std::max(0.05, memory_fraction)));
 
     const auto estimate_device_bytes = [&](std::size_t sec_cap,
-                                          std::size_t neu_cap) -> std::size_t {
+                                          std::size_t neu_cap,
+                                          std::size_t ele_cap) -> std::size_t {
         std::size_t bytes = 0;
         bytes += table_size * sizeof(float);
         if (reuse_immutable_buffers || config.enable_csda_range_energy_loss) {
@@ -868,6 +991,12 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                 bytes += neutral_origin_category_count * number_of_voxels * sizeof(DoseAtomicT);
             }
         }
+        if (enable_electron_transport) {
+            bytes += 7 * electron_transport_table_size * sizeof(float);
+            bytes += ele_cap *
+                     (sizeof(ElectronParticle3D) + sizeof(ElectronTransportSummary));
+            bytes += 2 * sizeof(std::uint64_t);
+        }
         if (config.enable_ct_grid) {
             // Conservative upper bound until grid is loaded below.
             bytes += 64ULL * 1024ULL * 1024ULL;
@@ -878,9 +1007,10 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
     };
 
     {
-        auto estimated = estimate_device_bytes(secondary_queue_capacity, neutral_queue_capacity);
+        auto estimated = estimate_device_bytes(
+            secondary_queue_capacity, neutral_queue_capacity, electron_queue_capacity);
         if (estimated > memory_budget_bytes) {
-            const auto fixed = estimate_device_bytes(0, 0);
+            const auto fixed = estimate_device_bytes(0, 0, 0);
             if (fixed >= memory_budget_bytes) {
                 throw std::runtime_error(
                     "Device memory budget exceeded by fixed buffers alone (tables/packages/"
@@ -905,10 +1035,15 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                 bytes_per_neu =
                     sizeof(NeutralParticle3D) + sizeof(NeutralTransportSummary);
             }
+            const auto bytes_per_ele = enable_electron_transport
+                                           ? sizeof(ElectronParticle3D) +
+                                                 sizeof(ElectronTransportSummary)
+                                           : 0U;
             // Prefer keeping secondary capacity; scale both proportionally.
             const auto total_var =
                 secondary_queue_capacity * bytes_per_sec +
-                neutral_queue_capacity * bytes_per_neu;
+                neutral_queue_capacity * bytes_per_neu +
+                electron_queue_capacity * bytes_per_ele;
             if (total_var > 0) {
                 const auto scale = static_cast<double>(variable_budget) /
                                    static_cast<double>(total_var);
@@ -917,6 +1052,8 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                         std::floor(static_cast<double>(secondary_queue_capacity) * scale));
                     neutral_queue_capacity = static_cast<std::size_t>(
                         std::floor(static_cast<double>(neutral_queue_capacity) * scale));
+                    electron_queue_capacity = static_cast<std::size_t>(
+                        std::floor(static_cast<double>(electron_queue_capacity) * scale));
                 }
             }
             // Enforce minimum usable queues.
@@ -928,7 +1065,13 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                 neutral_queue_capacity =
                     std::max<std::size_t>(neutral_queue_capacity, number_of_histories);
             }
-            estimated = estimate_device_bytes(secondary_queue_capacity, neutral_queue_capacity);
+            if (enable_electron_transport) {
+                electron_queue_capacity =
+                    std::max<std::size_t>(electron_queue_capacity, number_of_histories);
+            }
+            estimated = estimate_device_bytes(
+                secondary_queue_capacity, neutral_queue_capacity,
+                electron_queue_capacity);
             if (estimated > memory_budget_bytes) {
                 throw std::runtime_error(
                     "Unable to fit device buffers under max_device_memory_fraction=" +
@@ -943,6 +1086,9 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                       << " (estimate " << (estimated / (1024ULL * 1024ULL)) << " MiB;"
                       << " secondary_queue_capacity=" << secondary_queue_capacity
                       << "; neutral_queue_capacity=" << neutral_queue_capacity << ")\n";
+            if (enable_electron_transport) {
+                std::cout << "Electron queue capacity=" << electron_queue_capacity << '\n';
+            }
         } else {
             std::cout << "Device memory estimate: "
                       << (estimated / (1024ULL * 1024ULL)) << " MiB / budget "
@@ -976,6 +1122,18 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
         reuse_immutable_buffers
             ? context->impl_->cross_section_device
             : sycl::malloc_device<float>(cross_section_table_size, queue);
+    auto* fluctuation_energies_device = config.uses_packaged_straggling()
+        ? sycl::malloc_device<float>(fluctuation_energies_host.size(), queue)
+        : nullptr;
+    auto* fluctuation_densities_device = config.uses_packaged_straggling()
+        ? sycl::malloc_device<float>(fluctuation_densities_host.size(), queue)
+        : nullptr;
+    auto* fluctuation_probabilities_device = config.uses_packaged_straggling()
+        ? sycl::malloc_device<float>(fluctuation_probabilities_host.size(), queue)
+        : nullptr;
+    auto* fluctuation_quantiles_device = config.uses_packaged_straggling()
+        ? sycl::malloc_device<float>(fluctuation_quantiles_host.size(), queue)
+        : nullptr;
     float* elastic_cross_section_device = nullptr;
     std::optional<ElasticPackageDeviceStorage> elastic_package_storage;
     if (primary_elastic_transport_enabled) {
@@ -1188,6 +1346,11 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
     NeutralTransportSummary* neutral_summaries_device = nullptr;
     DoseAtomicT* neutral_origin_dose_device = nullptr;
     DoseAtomicT* neutral_origin_voxel_dose_device = nullptr;
+    float* electron_transport_table_device = nullptr;
+    ElectronParticle3D* electron_queue_device = nullptr;
+    std::uint64_t* electron_queue_counter_device = nullptr;
+    std::uint64_t* electron_queue_filled_device = nullptr;
+    ElectronTransportSummary* electron_summaries_device = nullptr;
     if (primary_elastic_transport_enabled && !enable_secondary_generation) {
         // Elastic products use the same queue ABI even when the inelastic
         // reaction package channel is disabled.
@@ -1440,6 +1603,16 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
             neutral_origin_voxel_dose_device = sycl::malloc_device<DoseAtomicT>(
                 neutral_origin_category_count * number_of_voxels, queue);
         }
+    }
+    if (enable_electron_transport) {
+        electron_transport_table_device = sycl::malloc_device<float>(
+            electron_transport_table_host.size(), queue);
+        electron_queue_device = sycl::malloc_device<ElectronParticle3D>(
+            electron_queue_capacity, queue);
+        electron_queue_counter_device = sycl::malloc_device<std::uint64_t>(1, queue);
+        electron_queue_filled_device = sycl::malloc_device<std::uint64_t>(1, queue);
+        electron_summaries_device = sycl::malloc_device<ElectronTransportSummary>(
+            electron_queue_capacity, queue);
     }
     const auto free_device = [&queue](auto* pointer) {
         if (pointer != nullptr) {
@@ -2072,10 +2245,20 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
          neutral_queue_filled_device == nullptr || neutral_summaries_device == nullptr ||
          neutral_origin_dose_device == nullptr ||
          (enable_voxel_scoring && neutral_origin_voxel_dose_device == nullptr));
+    const auto electron_allocation_failed =
+        enable_electron_transport &&
+        (electron_transport_table_device == nullptr ||
+         electron_queue_device == nullptr || electron_queue_counter_device == nullptr ||
+         electron_queue_filled_device == nullptr || electron_summaries_device == nullptr);
     if (table_device == nullptr ||
         (config.enable_csda_range_energy_loss &&
          (energy_grid_device == nullptr || cumulative_range_device == nullptr)) ||
         cross_section_device == nullptr || dose_device == nullptr ||
+        (config.uses_packaged_straggling() &&
+         (fluctuation_energies_device == nullptr ||
+          fluctuation_densities_device == nullptr ||
+          fluctuation_probabilities_device == nullptr ||
+          fluctuation_quantiles_device == nullptr)) ||
         (use_let_delta_fraction_table && let_delta_fraction_device == nullptr) ||
         (use_particle_specific_stopping_power &&
          (particle_sp_ratio_device == nullptr ||
@@ -2110,11 +2293,16 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
         profile_counters_device == nullptr ||
 #endif
         (primary_spot_count > 0 && primary_spots_device == nullptr) ||
-        secondary_allocation_failed || neutral_allocation_failed) {
+        secondary_allocation_failed || neutral_allocation_failed ||
+        electron_allocation_failed) {
         free_immutable_device(table_device);
         free_immutable_device(energy_grid_device);
         free_immutable_device(cumulative_range_device);
         free_immutable_device(cross_section_device);
+        free_device(fluctuation_energies_device);
+        free_device(fluctuation_densities_device);
+        free_device(fluctuation_probabilities_device);
+        free_device(fluctuation_quantiles_device);
         free_device(elastic_cross_section_device);
         free_device(let_delta_fraction_device);
         free_device(particle_sp_ratio_device);
@@ -2213,6 +2401,11 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
         free_device(neutral_summaries_device);
         free_device(neutral_origin_dose_device);
         free_device(neutral_origin_voxel_dose_device);
+        free_device(electron_transport_table_device);
+        free_device(electron_queue_device);
+        free_device(electron_queue_counter_device);
+        free_device(electron_queue_filled_device);
+        free_device(electron_summaries_device);
         throw std::runtime_error("SYCL USM device allocation failed");
     }
 
@@ -2250,6 +2443,20 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                        [](double value) { return static_cast<float>(value); });
         queue.copy(elastic_cross_section_host.data(), elastic_cross_section_device,
                    elastic_cross_section_host.size()).wait_and_throw();
+    }
+    if (config.uses_packaged_straggling()) {
+        queue.copy(fluctuation_energies_host.data(),
+                   fluctuation_energies_device,
+                   fluctuation_energies_host.size());
+        queue.copy(fluctuation_densities_host.data(),
+                   fluctuation_densities_device,
+                   fluctuation_densities_host.size());
+        queue.copy(fluctuation_probabilities_host.data(),
+                   fluctuation_probabilities_device,
+                   fluctuation_probabilities_host.size());
+        queue.copy(fluctuation_quantiles_host.data(),
+                   fluctuation_quantiles_device,
+                   fluctuation_quantiles_host.size()).wait_and_throw();
     }
     if (use_let_delta_fraction_table) {
         queue.copy(let_delta_fraction_host.data(), let_delta_fraction_device,
@@ -2515,6 +2722,15 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                          neutral_origin_category_count * number_of_voxels * sizeof(DoseAtomicT));
         }
     }
+    if (enable_electron_transport) {
+        queue.copy(electron_transport_table_host.data(),
+                   electron_transport_table_device,
+                   electron_transport_table_host.size());
+        queue.memset(electron_queue_counter_device, 0, sizeof(std::uint64_t));
+        queue.memset(electron_queue_filled_device, 0, sizeof(std::uint64_t));
+        queue.memset(electron_summaries_device, 0,
+                     electron_queue_capacity * sizeof(ElectronTransportSummary));
+    }
 
     // GPU backends (CUDA / Level Zero / OpenCL GPU / --device gpu|cuda|...) use larger
     // work-groups; SYCL CPU and other selectors stay at 128. CUDA stays at 128:
@@ -2645,6 +2861,12 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
         enable_energy_straggling &&
         config.enable_secondary_energy_straggling;
     const auto straggling_scale = static_cast<float>(config.straggling_scale);
+    const auto straggling_sampler = config.straggling_sampler_id();
+    const auto use_packaged_straggling = config.uses_packaged_straggling();
+    const auto fluctuation_energy_count = fluctuation_energies_host.size();
+    const auto fluctuation_density_count = fluctuation_densities_host.size();
+    const auto fluctuation_probability_count =
+        fluctuation_probabilities_host.size();
     std::array<float, max_straggling_scale_points> straggling_scale_energies{};
     std::array<float, max_straggling_scale_points> straggling_scale_values{};
     std::array<float, max_straggling_scale_points> primary_xs_correction_energies{};
@@ -2808,6 +3030,16 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
         static_cast<std::uint32_t>(secondary_queue_capacity);
     const auto neutral_queue_capacity_u32 =
         static_cast<std::uint32_t>(neutral_queue_capacity);
+    const auto electron_queue_capacity_u32 =
+        static_cast<std::uint32_t>(electron_queue_capacity);
+    const auto electron_transport_table_size_u32 =
+        static_cast<std::uint32_t>(electron_transport_table_size);
+    const auto electron_kinetic_cutoff_MeV =
+        static_cast<float>(config.electron_kinetic_cutoff_MeV);
+    const auto maximum_electron_step_mm =
+        static_cast<float>(config.maximum_electron_step_mm);
+    const auto maximum_electron_relative_energy_loss =
+        static_cast<float>(config.maximum_electron_relative_energy_loss);
     const auto cascade_projectile_count = enable_fragment_cascade
                                               ? cascade_packages->projectiles().size()
                                               : std::size_t{0};
@@ -2851,6 +3083,8 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                                               : std::size_t{0};
     const auto maximum_cascade_generations = config.maximum_cascade_generations;
     const auto maximum_neutral_generations = config.maximum_neutral_generations;
+    const auto maximum_electromagnetic_generations =
+        config.maximum_electromagnetic_generations;
 
     for (std::size_t hist_offset = 0; hist_offset < number_of_histories;
          hist_offset += history_chunk) {
@@ -3572,6 +3806,8 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                     const auto uniform1 = sycl::fmax(
                         rng::uniform01(spot_seed, rng_history, random_index, 0), 1.0e-12f);
                     const auto uniform2 = rng::uniform01(spot_seed, rng_history, random_index, 1);
+                    const auto extra_uniform =
+                        rng::uniform01(spot_seed, rng_history, random_index, 2);
                     constexpr float two_pi = 6.2831853071795864769f;
                     const auto gaussian = sycl::sqrt(-2.0f * sycl::log(uniform1)) *
                                           sycl::cos(two_pi * uniform2);
@@ -3617,7 +3853,21 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                             straggling_scale_point_count, straggling_scale);
                     const auto sigma_MeV =
                         local_straggling_scale * sycl::sqrt(sycl::fmax(0.0f, variance_MeV2));
-                    if (enable_step_stable_straggling) {
+                    if (use_packaged_straggling) {
+                        const auto loss_ratio = sample_energy_loss_ratio_from_grid(
+                            fluctuation_energies_device,
+                            fluctuation_energy_count,
+                            fluctuation_densities_device,
+                            fluctuation_density_count,
+                            fluctuation_probabilities_device,
+                            fluctuation_probability_count,
+                            fluctuation_quantiles_device,
+                            energy_MeVu,
+                            local_density_g_per_cm3 * step_mm / 10.0F,
+                            extra_uniform);
+                        deposited_MeV = sycl::clamp(
+                            mean_loss_MeV * loss_ratio, 0.0F, energy_MeV);
+                    } else if (enable_step_stable_straggling) {
                         if (!stable_straggling.block_active) {
                             if (enable_csda_range_energy_loss) {
                                 const auto block_length_mm = stable_straggling.block_length_mm;
@@ -3630,7 +3880,16 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                                 const auto block_mean_loss_MeV = csda_block_mean_loss_MeV(
                                     energy_MeV, block_energy_MeVu,
                                     static_cast<float>(primary_mass_number));
-                                const auto block_variance_MeV2 = use_explicit_primary_rest_mass
+                                const auto end_gamma =
+                                    1.0f + block_energy_MeVu / nucleon_mass_MeV;
+                                const auto end_beta_squared = sycl::fmax(
+                                    0.0f, 1.0f - 1.0f / (end_gamma * end_gamma));
+                                const auto end_beta = sycl::sqrt(end_beta_squared);
+                                const auto end_charge =
+                                    primary_charge *
+                                    (1.0f - sycl::exp(-125.0f * end_beta *
+                                                      primary_charge_power));
+                                const auto start_variance_MeV2 = use_explicit_primary_rest_mass
                                     ? condensed_total_loss_variance_with_mass_MeV2_device(
                                           energy_MeV, primary_rest_mass_MeV,
                                           effective_charge, block_length_mm,
@@ -3639,14 +3898,30 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                                           energy_MeVu, primary_mass_number,
                                           effective_charge, block_length_mm,
                                           local_density_g_per_cm3, za_rel);
+                                const auto end_energy_MeV =
+                                    block_energy_MeVu *
+                                    static_cast<float>(primary_mass_number);
+                                const auto end_variance_MeV2 = use_explicit_primary_rest_mass
+                                    ? condensed_total_loss_variance_with_mass_MeV2_device(
+                                          end_energy_MeV, primary_rest_mass_MeV,
+                                          end_charge, block_length_mm,
+                                          local_density_g_per_cm3, za_rel)
+                                    : condensed_total_loss_variance_MeV2_device(
+                                          block_energy_MeVu, primary_mass_number,
+                                          end_charge, block_length_mm,
+                                          local_density_g_per_cm3, za_rel);
+                                const auto block_variance_MeV2 = integrate_path_variance_MeV2(
+                                    start_variance_MeV2, end_variance_MeV2);
                                 stable_straggling.begin_block(
                                     block_mean_loss_MeV, block_variance_MeV2,
                                     block_length_mm, local_straggling_scale,
-                                    gaussian, energy_MeV);
+                                    gaussian, energy_MeV, extra_uniform,
+                                    straggling_sampler);
                             } else {
                                 stable_straggling.begin_block(
                                     mean_loss_MeV, variance_MeV2, step_mm,
-                                    local_straggling_scale, gaussian, energy_MeV);
+                                    local_straggling_scale, gaussian, energy_MeV,
+                                    extra_uniform, straggling_sampler);
                             }
                         }
                         deposited_MeV = stable_straggling.consume_loss(step_mm, energy_MeV);
@@ -3654,9 +3929,9 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                             stable_straggling.reset_block();
                         }
                     } else {
-                        deposited_MeV = sycl::clamp(
-                            mean_loss_MeV + sigma_MeV * gaussian, 0.0F,
-                            sycl::fmin(2.0F * mean_loss_MeV, energy_MeV));
+                        deposited_MeV = sample_condensed_energy_loss(
+                            mean_loss_MeV, sigma_MeV, gaussian, extra_uniform,
+                            energy_MeV, straggling_sampler);
                     }
                 }
                 // Electronic build-up: local (1-f)*dE + short-range delta f*dE along +z.
@@ -5444,6 +5719,8 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                                 1.0e-12F);
                             const auto uniform2 =
                                 rng::uniform01(random_seed, rng_stream, steps, 5);
+                            const auto extra_uniform =
+                                rng::uniform01(random_seed, rng_stream, steps, 6);
                             constexpr float two_pi = 6.2831853071795864769F;
                             const auto gaussian =
                                 sycl::sqrt(-2.0F * sycl::log(uniform1)) *
@@ -5492,11 +5769,9 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                             const auto sigma_MeV =
                                 local_straggling_scale *
                                 sycl::sqrt(sycl::fmax(0.0F, variance_MeV2));
-                            step_deposited_MeV = sycl::clamp(
-                                mean_step_loss_MeV + sigma_MeV * gaussian,
-                                0.0F,
-                                sycl::fmin(2.0F * mean_step_loss_MeV,
-                                           energy_MeV));
+                            step_deposited_MeV = sample_condensed_energy_loss(
+                                mean_step_loss_MeV, sigma_MeV, gaussian,
+                                extra_uniform, energy_MeV, straggling_sampler);
                         }
                         const auto sec_e_frac = electronic_buildup_fraction_at_energy(
                             energy_MeVu, electronic_buildup_fraction);
@@ -6455,8 +6730,13 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
         std::uint64_t neutral_generation_end = 0;
         queue.copy(neutral_queue_filled_device, &neutral_generation_end, 1).wait_and_throw();
         std::uint32_t neutral_generation = 0;
+        std::uint64_t electron_generation_begin = 0;
+        const auto coupled_generation_limit = enable_electron_transport
+                                                  ? maximum_electromagnetic_generations
+                                                  : maximum_neutral_generations;
         while (neutral_generation_begin < neutral_generation_end &&
-               neutral_generation < maximum_neutral_generations) {
+               neutral_generation < coupled_generation_limit) {
+          {
             const auto generation_size = neutral_generation_end - neutral_generation_begin;
             const auto neutral_global_size =
                 ((generation_size + local_size - 1) / local_size) * local_size;
@@ -6488,6 +6768,58 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                         const auto lineage = particle.pdg_id == 22 ? gamma_lineage
                                                                    : neutron_lineage;
                         constexpr std::uint32_t max_neutral_steps = 500'000U;
+                        if (energy_MeV > 0.0F && energy_MeV <= energy_cutoff_MeV) {
+                            const auto inside_z = position_z_mm >= 0.0F &&
+                                                  position_z_mm < phantom_length_mm;
+                            const auto inside_xy =
+                                !enable_voxel_scoring ||
+                                (position_x_mm >= voxel_min_x_mm &&
+                                 position_x_mm < voxel_max_x_mm &&
+                                 position_y_mm >= voxel_min_y_mm &&
+                                 position_y_mm < voxel_max_y_mm);
+                            if (particle.pdg_id == 22 && inside_z && inside_xy) {
+                                auto bin = static_cast<int>(sycl::floor(
+                                    position_z_mm / depth_bin_width_mm));
+                                bin = sycl::max(
+                                    0, sycl::min(bin,
+                                                 static_cast<int>(number_of_bins) - 1));
+                                auto voxel_x = static_cast<int>(voxel_bins_x / 2);
+                                auto voxel_y = static_cast<int>(voxel_bins_y / 2);
+                                if (enable_voxel_scoring) {
+                                    voxel_x = sycl::max(
+                                        0, sycl::min(
+                                               static_cast<int>(sycl::floor(
+                                                   (position_x_mm - voxel_min_x_mm) /
+                                                   voxel_size_x_mm)),
+                                               static_cast<int>(voxel_bins_x) - 1));
+                                    voxel_y = sycl::max(
+                                        0, sycl::min(
+                                               static_cast<int>(sycl::floor(
+                                                   (position_y_mm - voxel_min_y_mm) /
+                                                   voxel_size_y_mm)),
+                                               static_cast<int>(voxel_bins_y) - 1));
+                                }
+                                const auto voxel_index =
+                                    static_cast<std::size_t>(bin) * voxel_plane_size +
+                                    static_cast<std::size_t>(voxel_y) * voxel_bins_x +
+                                    static_cast<std::size_t>(voxel_x);
+                                score_secondary_dose_device(
+                                    static_cast<DoseAtomicT>(energy_MeV), true, 0,
+                                    origin_category, bin, number_of_bins,
+                                    enable_voxel_scoring, false, voxel_index, 0,
+                                    origin_category * number_of_voxels,
+                                    fragment_dose_device, voxel_dose_device,
+                                    charged_origin_voxel_dose_device,
+                                    neutral_origin_dose_device,
+                                    neutral_origin_voxel_dose_device);
+                                summary.local_deposit_MeV += energy_MeV;
+                            } else if (inside_z && inside_xy) {
+                                summary.residual_energy_MeV += energy_MeV;
+                            } else {
+                                summary.escaped_energy_MeV += energy_MeV;
+                            }
+                            energy_MeV = 0.0F;
+                        }
 
                         while (energy_MeV > energy_cutoff_MeV && steps < max_neutral_steps) {
                             const auto escaped_z = position_z_mm < 0.0F ||
@@ -6693,7 +7025,10 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                             }
 
                             std::uint32_t charged_count = 0;
+                            std::uint32_t electron_count = 0;
                             auto charged_energy = 0.0F;
+                            auto electron_energy = 0.0F;
+                            auto positron_reserve = 0.0F;
                             auto product_energy = 0.0F;
                             auto unsupported_product_energy = 0.0F;
                             for (std::uint32_t product_index = 0;
@@ -6703,7 +7038,17 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                                 const auto scaled =
                                     product.kinetic_energy_MeV * energy_scale;
                                 product_energy += scaled;
-                                if (product.atomic_number > 0 && product.mass_number > 0 &&
+                                if (enable_electron_transport &&
+                                    (product.pdg_id == 11 || product.pdg_id == -11) &&
+                                    scaled > 0.0F) {
+                                    ++electron_count;
+                                    electron_energy += scaled;
+                                    if (product.pdg_id == -11) {
+                                        positron_reserve +=
+                                            positron_annihilation_reserve_MeV;
+                                    }
+                                } else if (product.atomic_number > 0 &&
+                                    product.mass_number > 0 &&
                                     scaled > 0.0F) {
                                     ++charged_count;
                                     charged_energy += scaled;
@@ -6777,27 +7122,178 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                                     summary.charged_overflow_energy_MeV += charged_energy;
                                 }
                             }
+                            if (electron_count > 0) {
+                                sycl::atomic_ref<std::uint64_t,
+                                                 sycl::memory_order::relaxed,
+                                                 sycl::memory_scope::device,
+                                                 sycl::access::address_space::global_space>
+                                    electron_counter(*electron_queue_counter_device);
+                                const auto electron_offset =
+                                    electron_counter.fetch_add(electron_count);
+                                const auto package_fits =
+                                    electron_offset <= electron_queue_capacity_u32 &&
+                                    electron_count <=
+                                        electron_queue_capacity_u32 - electron_offset;
+                                if (package_fits) {
+                                    auto output_index = electron_offset;
+                                    for (std::uint32_t product_index = 0;
+                                         product_index < interaction.product_count;
+                                         ++product_index) {
+                                        const auto product = neutral_products_device
+                                            [interaction.product_offset + product_index];
+                                        const auto scaled =
+                                            product.kinetic_energy_MeV * energy_scale;
+                                        if ((product.pdg_id == 11 ||
+                                             product.pdg_id == -11) &&
+                                            scaled > 0.0F) {
+                                            const auto child_direction =
+                                                rotate_local_direction(
+                                                    product.direction_x,
+                                                    product.direction_y,
+                                                    product.direction_z,
+                                                    Direction3F{direction_x, direction_y,
+                                                                direction_z});
+                                            electron_queue_device[output_index++] =
+                                                ElectronParticle3D{
+                                                    position_x_mm,
+                                                    position_y_mm,
+                                                    position_z_mm,
+                                                    scaled,
+                                                    child_direction.x,
+                                                    child_direction.y,
+                                                    child_direction.z,
+                                                    product.pdg_id,
+                                                    particle.origin_category,
+                                                    particle.generation,
+                                                    0,
+                                                    rng::child_stream(
+                                                        rng_stream,
+                                                        rng::branch_tag(
+                                                            rng::branch_role_neutral_electron,
+                                                            product_index)),
+                                                };
+                                        }
+                                    }
+                                    sycl::atomic_ref<std::uint64_t,
+                                                     sycl::memory_order::relaxed,
+                                                     sycl::memory_scope::device,
+                                                     sycl::access::address_space::global_space>
+                                        filled_counter(*electron_queue_filled_device);
+                                    filled_counter.fetch_add(electron_count);
+                                    summary.queued_electron_count += electron_count;
+                                    summary.queued_electron_energy_MeV +=
+                                        electron_energy + positron_reserve;
+                                } else {
+                                    summary.electron_overflow_count += electron_count;
+                                    summary.electron_overflow_energy_MeV +=
+                                        electron_energy + positron_reserve;
+                                }
+                            }
 
-                            // Nested neutral products stay residual (not re-queued in mode D).
+                            std::uint32_t nested_neutral_count = 0;
+                            auto nested_neutral_energy = 0.0F;
                             for (std::uint32_t product_index = 0;
-                                 product_index < interaction.product_count; ++product_index) {
+                                 product_index < interaction.product_count;
+                                 ++product_index) {
                                 const auto product = neutral_products_device
                                     [interaction.product_offset + product_index];
-                                if (product.pdg_id == 22 || product.pdg_id == 2112) {
-                                    summary.residual_energy_MeV +=
+                                if ((product.pdg_id == 22 ||
+                                     product.pdg_id == 2112) &&
+                                    product.kinetic_energy_MeV > 0.0F) {
+                                    ++nested_neutral_count;
+                                    nested_neutral_energy +=
                                         product.kinetic_energy_MeV * energy_scale;
                                 }
+                            }
+                            const auto can_requeue_nested =
+                                neutral_allow_continuation &&
+                                neutral_generation + 1U < coupled_generation_limit &&
+                                particle.generation + 1U < coupled_generation_limit;
+                            if (nested_neutral_count > 0U && can_requeue_nested) {
+                                sycl::atomic_ref<std::uint64_t,
+                                                 sycl::memory_order::relaxed,
+                                                 sycl::memory_scope::device,
+                                                 sycl::access::address_space::global_space>
+                                    nested_counter(*neutral_queue_counter_device);
+                                const auto nested_offset =
+                                    nested_counter.fetch_add(nested_neutral_count);
+                                const auto package_fits =
+                                    nested_offset <= neutral_queue_capacity_u32 &&
+                                    nested_neutral_count <=
+                                        neutral_queue_capacity_u32 - nested_offset;
+                                if (package_fits) {
+                                    auto output_index = nested_offset;
+                                    for (std::uint32_t product_index = 0;
+                                         product_index < interaction.product_count;
+                                         ++product_index) {
+                                        const auto product = neutral_products_device
+                                            [interaction.product_offset + product_index];
+                                        const auto scaled =
+                                            product.kinetic_energy_MeV * energy_scale;
+                                        if ((product.pdg_id == 22 ||
+                                             product.pdg_id == 2112) &&
+                                            scaled > 0.0F) {
+                                            const auto child_direction =
+                                                rotate_local_direction(
+                                                    product.direction_x,
+                                                    product.direction_y,
+                                                    product.direction_z,
+                                                    Direction3F{direction_x, direction_y,
+                                                                direction_z});
+                                            neutral_queue_device[output_index++] =
+                                                NeutralParticle3D{
+                                                    position_x_mm,
+                                                    position_y_mm,
+                                                    position_z_mm,
+                                                    scaled,
+                                                    child_direction.x,
+                                                    child_direction.y,
+                                                    child_direction.z,
+                                                    product.pdg_id,
+                                                    particle.origin_category,
+                                                    static_cast<std::uint8_t>(
+                                                        particle.generation + 1U),
+                                                    0,
+                                                    rng::child_stream(
+                                                        rng_stream,
+                                                        rng::branch_tag(
+                                                            rng::branch_role_neutral_continuation,
+                                                            16U + product_index)),
+                                                };
+                                        }
+                                    }
+                                    sycl::atomic_ref<
+                                        std::uint64_t,
+                                        sycl::memory_order::relaxed,
+                                        sycl::memory_scope::device,
+                                        sycl::access::address_space::global_space>
+                                        filled_counter(*neutral_queue_filled_device);
+                                    filled_counter.fetch_add(nested_neutral_count);
+                                    summary.continuation_count += nested_neutral_count;
+                                    summary.continuation_energy_MeV +=
+                                        nested_neutral_energy;
+                                } else {
+                                    summary.neutral_overflow_count +=
+                                        nested_neutral_count;
+                                    summary.neutral_overflow_energy_MeV +=
+                                        nested_neutral_energy;
+                                }
+                            } else if (nested_neutral_count > 0U) {
+                                summary.residual_energy_MeV +=
+                                    nested_neutral_energy;
                             }
 
                             const auto continuation =
                                 interaction.continuation_energy_MeV * energy_scale;
                             summary.package_closure_residual_MeV +=
-                                energy_MeV - local_deposit - continuation - product_energy;
+                                energy_MeV - local_deposit - continuation - product_energy -
+                                positron_reserve;
                             // Mode D (first_interaction): free path + one package only.
                             // Continuation kinetic energy becomes residual, not re-queued.
                             if (continuation > 0.0F && neutral_allow_continuation &&
                                 continuation > energy_cutoff_MeV &&
-                                particle.generation + 1 < maximum_neutral_generations) {
+                                neutral_generation + 1U < coupled_generation_limit &&
+                                particle.generation + 1 < coupled_generation_limit) {
                                 const auto child_direction = rotate_local_direction(
                                     interaction.continuation_direction_x,
                                     interaction.continuation_direction_y,
@@ -6855,6 +7351,408 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
             neutral_generation_end =
                 std::min<std::uint64_t>(neutral_generation_end, neutral_queue_capacity);
             ++neutral_generation;
+        }
+
+        if (enable_electron_transport) {
+            std::uint64_t electron_generation_end = 0;
+            queue.copy(electron_queue_filled_device, &electron_generation_end, 1)
+                .wait_and_throw();
+            electron_generation_end = std::min<std::uint64_t>(
+                electron_generation_end, electron_queue_capacity);
+            const auto electron_count =
+                electron_generation_end - electron_generation_begin;
+            if (electron_count > 0) {
+                const auto electron_global_size =
+                    ((electron_count + local_size - 1) / local_size) * local_size;
+                auto electron_kernel_event = queue.parallel_for(
+                    sycl::nd_range<1>{sycl::range<1>{electron_global_size},
+                                      sycl::range<1>{local_size}},
+                    [=](sycl::nd_item<1> item) {
+                        const auto generation_index = item.get_global_linear_id();
+                        if (generation_index >= electron_count) return;
+                        const auto particle_index =
+                            electron_generation_begin + generation_index;
+                        const auto particle = electron_queue_device[particle_index];
+                        ElectronTransportSummary summary{};
+                        summary.is_positron = particle.pdg_id == -11 ? 1U : 0U;
+                        auto annihilation_reserve =
+                            particle.pdg_id == -11
+                                ? positron_annihilation_reserve_MeV
+                                : 0.0F;
+                        auto energy_MeV = particle.kinetic_energy_MeV;
+                        auto position_x_mm = particle.position_x_mm;
+                        auto position_y_mm = particle.position_y_mm;
+                        auto position_z_mm = particle.position_z_mm;
+                        auto direction_x = particle.direction_x;
+                        auto direction_y = particle.direction_y;
+                        auto direction_z =
+                            sycl::clamp(particle.direction_z, -1.0F, 1.0F);
+                        auto brems_position_x_mm = position_x_mm;
+                        auto brems_position_y_mm = position_y_mm;
+                        auto brems_position_z_mm = position_z_mm;
+                        auto brems_direction_x = direction_x;
+                        auto brems_direction_y = direction_y;
+                        auto brems_direction_z = direction_z;
+                        const auto origin_category = static_cast<std::size_t>(
+                            sycl::min(
+                                static_cast<std::uint32_t>(particle.origin_category),
+                                static_cast<std::uint32_t>(
+                                    neutral_origin_category_count - 1)));
+                        constexpr std::uint32_t max_electron_steps = 2'000'000U;
+                        constexpr float electron_rest_mass_MeV = 0.51099895F;
+                        constexpr float max_projected_mcs_rms_rad = 0.2F;
+                        while (energy_MeV > electron_kinetic_cutoff_MeV &&
+                               summary.step_count < max_electron_steps) {
+                            const auto escaped_z = position_z_mm < 0.0F ||
+                                                   position_z_mm >= phantom_length_mm;
+                            const auto escaped_xy =
+                                enable_voxel_scoring &&
+                                (position_x_mm < voxel_min_x_mm ||
+                                 position_x_mm >= voxel_max_x_mm ||
+                                 position_y_mm < voxel_min_y_mm ||
+                                 position_y_mm >= voxel_max_y_mm);
+                            if (escaped_z || escaped_xy) {
+                                summary.escaped_energy_MeV +=
+                                    energy_MeV + annihilation_reserve;
+                                energy_MeV = 0.0F;
+                                annihilation_reserve = 0.0F;
+                                break;
+                            }
+                            const auto positron = particle.pdg_id == -11;
+                            const auto collisional_plane = positron ? 4U : 1U;
+                            const auto radiative_plane = positron ? 5U : 2U;
+                            const auto total_plane = positron ? 6U : 3U;
+                            const auto collisional_stopping =
+                                interpolate_electron_plane_device(
+                                    electron_transport_table_device,
+                                    electron_transport_table_size_u32,
+                                    collisional_plane, energy_MeV);
+                            const auto radiative_stopping =
+                                interpolate_electron_plane_device(
+                                    electron_transport_table_device,
+                                    electron_transport_table_size_u32,
+                                    radiative_plane, energy_MeV);
+                            const auto total_stopping =
+                                interpolate_electron_plane_device(
+                                    electron_transport_table_device,
+                                    electron_transport_table_size_u32,
+                                    total_plane, energy_MeV);
+                            if (!(total_stopping > 0.0F)) {
+                                summary.escaped_energy_MeV +=
+                                    energy_MeV + annihilation_reserve;
+                                energy_MeV = 0.0F;
+                                annihilation_reserve = 0.0F;
+                                break;
+                            }
+                            auto step_mm = sycl::fmin(
+                                maximum_electron_step_mm,
+                                maximum_electron_relative_energy_loss * energy_MeV /
+                                    total_stopping);
+                            auto distance_to_boundary =
+                                std::numeric_limits<float>::infinity();
+                            if (direction_z > 1.0e-7F) {
+                                distance_to_boundary = sycl::fmin(
+                                    distance_to_boundary,
+                                    (phantom_length_mm - position_z_mm) / direction_z);
+                            } else if (direction_z < -1.0e-7F) {
+                                distance_to_boundary = sycl::fmin(
+                                    distance_to_boundary,
+                                    -position_z_mm / direction_z);
+                            }
+                            if (enable_voxel_scoring) {
+                                if (direction_x > 1.0e-7F) {
+                                    distance_to_boundary = sycl::fmin(
+                                        distance_to_boundary,
+                                        (voxel_max_x_mm - position_x_mm) / direction_x);
+                                } else if (direction_x < -1.0e-7F) {
+                                    distance_to_boundary = sycl::fmin(
+                                        distance_to_boundary,
+                                        (voxel_min_x_mm - position_x_mm) / direction_x);
+                                }
+                                if (direction_y > 1.0e-7F) {
+                                    distance_to_boundary = sycl::fmin(
+                                        distance_to_boundary,
+                                        (voxel_max_y_mm - position_y_mm) / direction_y);
+                                } else if (direction_y < -1.0e-7F) {
+                                    distance_to_boundary = sycl::fmin(
+                                        distance_to_boundary,
+                                        (voxel_min_y_mm - position_y_mm) / direction_y);
+                                }
+                            }
+                            step_mm = sycl::fmin(step_mm, distance_to_boundary);
+                            const auto trial_mcs =
+                                highland_projected_rms_angle_with_mass_device(
+                                    energy_MeV, 1, electron_rest_mass_MeV, step_mm,
+                                    water_density_g_per_cm3,
+                                    static_cast<float>(
+                                        water_radiation_length_g_per_cm2));
+                            if (trial_mcs > max_projected_mcs_rms_rad) {
+                                const auto ratio =
+                                    max_projected_mcs_rms_rad / trial_mcs;
+                                step_mm *= ratio * ratio;
+                            }
+                            if (!(step_mm > 1.0e-7F)) {
+                                summary.escaped_energy_MeV +=
+                                    energy_MeV + annihilation_reserve;
+                                energy_MeV = 0.0F;
+                                annihilation_reserve = 0.0F;
+                                break;
+                            }
+
+                            const auto half_step = 0.5F * step_mm;
+                            position_x_mm += direction_x * half_step;
+                            position_y_mm += direction_y * half_step;
+                            position_z_mm += direction_z * half_step;
+                            const auto total_loss = sycl::fmin(
+                                energy_MeV, total_stopping * step_mm);
+                            const auto collisional_loss =
+                                total_loss * collisional_stopping / total_stopping;
+                            const auto radiative_loss = sycl::fmin(
+                                total_loss - collisional_loss,
+                                total_loss * radiative_stopping / total_stopping);
+                            auto bin = static_cast<int>(sycl::floor(
+                                position_z_mm / depth_bin_width_mm));
+                            bin = sycl::max(
+                                0, sycl::min(bin, static_cast<int>(number_of_bins) - 1));
+                            auto voxel_x = static_cast<int>(voxel_bins_x / 2);
+                            auto voxel_y = static_cast<int>(voxel_bins_y / 2);
+                            if (enable_voxel_scoring) {
+                                voxel_x = static_cast<int>(sycl::floor(
+                                    (position_x_mm - voxel_min_x_mm) /
+                                    voxel_size_x_mm));
+                                voxel_y = static_cast<int>(sycl::floor(
+                                    (position_y_mm - voxel_min_y_mm) /
+                                    voxel_size_y_mm));
+                                voxel_x = sycl::max(
+                                    0, sycl::min(voxel_x,
+                                                 static_cast<int>(voxel_bins_x) - 1));
+                                voxel_y = sycl::max(
+                                    0, sycl::min(voxel_y,
+                                                 static_cast<int>(voxel_bins_y) - 1));
+                            }
+                            const auto voxel_index =
+                                static_cast<std::size_t>(bin) * voxel_plane_size +
+                                static_cast<std::size_t>(voxel_y) * voxel_bins_x +
+                                static_cast<std::size_t>(voxel_x);
+                            score_secondary_dose_device(
+                                static_cast<DoseAtomicT>(collisional_loss), true, 0,
+                                origin_category, bin, number_of_bins,
+                                enable_voxel_scoring, false, voxel_index, 0,
+                                origin_category * number_of_voxels, nullptr,
+                                voxel_dose_device, nullptr, neutral_origin_dose_device,
+                                neutral_origin_voxel_dose_device);
+                            summary.deposited_energy_MeV += collisional_loss;
+                            const auto accumulated_radiative =
+                                summary.radiative_energy_MeV + radiative_loss;
+                            if (radiative_loss > 0.0F &&
+                                rng::uniform01(random_seed, particle.rng_stream,
+                                               summary.step_count, 32) <
+                                    radiative_loss / accumulated_radiative) {
+                                brems_position_x_mm = position_x_mm;
+                                brems_position_y_mm = position_y_mm;
+                                brems_position_z_mm = position_z_mm;
+                                brems_direction_x = direction_x;
+                                brems_direction_y = direction_y;
+                                brems_direction_z = direction_z;
+                            }
+                            summary.radiative_energy_MeV = accumulated_radiative;
+                            energy_MeV -= total_loss;
+
+                            if (energy_MeV > electron_kinetic_cutoff_MeV) {
+                                const auto scattering_energy =
+                                    energy_MeV + 0.5F * total_loss;
+                                const auto projected_rms =
+                                    highland_projected_rms_angle_with_mass_device(
+                                        scattering_energy, 1,
+                                        electron_rest_mass_MeV, step_mm,
+                                        water_density_g_per_cm3,
+                                        static_cast<float>(
+                                            water_radiation_length_g_per_cm2));
+                                const auto scattered = scatter_direction(
+                                    Direction3F{direction_x, direction_y, direction_z},
+                                    projected_rms, random_seed, particle.rng_stream,
+                                    summary.step_count, 31);
+                                direction_x = scattered.x;
+                                direction_y = scattered.y;
+                                direction_z = scattered.z;
+                            }
+                            position_x_mm += direction_x * half_step;
+                            position_y_mm += direction_y * half_step;
+                            position_z_mm += direction_z * half_step;
+                            ++summary.step_count;
+                        }
+
+                        if (energy_MeV > 0.0F &&
+                            energy_MeV <= electron_kinetic_cutoff_MeV) {
+                            auto bin = static_cast<int>(sycl::floor(
+                                position_z_mm / depth_bin_width_mm));
+                            bin = sycl::max(
+                                0, sycl::min(bin, static_cast<int>(number_of_bins) - 1));
+                            auto voxel_x = static_cast<int>(voxel_bins_x / 2);
+                            auto voxel_y = static_cast<int>(voxel_bins_y / 2);
+                            if (enable_voxel_scoring) {
+                                voxel_x = sycl::max(
+                                    0, sycl::min(
+                                           static_cast<int>(sycl::floor(
+                                               (position_x_mm - voxel_min_x_mm) /
+                                               voxel_size_x_mm)),
+                                           static_cast<int>(voxel_bins_x) - 1));
+                                voxel_y = sycl::max(
+                                    0, sycl::min(
+                                           static_cast<int>(sycl::floor(
+                                               (position_y_mm - voxel_min_y_mm) /
+                                               voxel_size_y_mm)),
+                                           static_cast<int>(voxel_bins_y) - 1));
+                            }
+                            const auto voxel_index =
+                                static_cast<std::size_t>(bin) * voxel_plane_size +
+                                static_cast<std::size_t>(voxel_y) * voxel_bins_x +
+                                static_cast<std::size_t>(voxel_x);
+                            score_secondary_dose_device(
+                                static_cast<DoseAtomicT>(energy_MeV), true, 0,
+                                origin_category, bin, number_of_bins,
+                                enable_voxel_scoring, false, voxel_index, 0,
+                                origin_category * number_of_voxels, nullptr,
+                                voxel_dose_device, nullptr, neutral_origin_dose_device,
+                                neutral_origin_voxel_dose_device);
+                            summary.deposited_energy_MeV += energy_MeV;
+                            energy_MeV = 0.0F;
+                        }
+                        if (energy_MeV > 0.0F) {
+                            summary.escaped_energy_MeV +=
+                                energy_MeV + annihilation_reserve;
+                            annihilation_reserve = 0.0F;
+                        }
+                        const auto can_emit_gamma =
+                            neutral_generation < coupled_generation_limit;
+                        const auto brems_count =
+                            can_emit_gamma && summary.radiative_energy_MeV > 0.0F
+                                ? 1U
+                                : 0U;
+                        const auto annihilation_count =
+                            can_emit_gamma && annihilation_reserve > 0.0F ? 2U : 0U;
+                        const auto gamma_count = brems_count + annihilation_count;
+                        if (gamma_count > 0U) {
+                            sycl::atomic_ref<std::uint64_t,
+                                             sycl::memory_order::relaxed,
+                                             sycl::memory_scope::device,
+                                             sycl::access::address_space::global_space>
+                                neutral_counter(*neutral_queue_counter_device);
+                            const auto gamma_offset =
+                                neutral_counter.fetch_add(gamma_count);
+                            const auto package_fits =
+                                gamma_offset <= neutral_queue_capacity_u32 &&
+                                gamma_count <=
+                                    neutral_queue_capacity_u32 - gamma_offset;
+                            if (package_fits) {
+                                auto output_index = gamma_offset;
+                                if (brems_count != 0U) {
+                                    neutral_queue_device[output_index++] =
+                                        NeutralParticle3D{
+                                            brems_position_x_mm,
+                                            brems_position_y_mm,
+                                            brems_position_z_mm,
+                                            summary.radiative_energy_MeV,
+                                            brems_direction_x,
+                                            brems_direction_y,
+                                            brems_direction_z,
+                                            22,
+                                            particle.origin_category,
+                                            static_cast<std::uint8_t>(
+                                                particle.generation + 1U),
+                                            0,
+                                            rng::child_stream(
+                                                particle.rng_stream,
+                                                rng::branch_tag(
+                                                    rng::branch_role_neutral_continuation,
+                                                    1U)),
+                                        };
+                                    summary.queued_brems_gamma_energy_MeV =
+                                        summary.radiative_energy_MeV;
+                                }
+                                if (annihilation_count != 0U) {
+                                    constexpr float two_pi =
+                                        6.2831853071795864769F;
+                                    const auto cos_theta =
+                                        2.0F * rng::uniform01(
+                                                   random_seed, particle.rng_stream,
+                                                   summary.step_count, 40) -
+                                        1.0F;
+                                    const auto sin_theta = sycl::sqrt(
+                                        sycl::fmax(0.0F,
+                                                   1.0F - cos_theta * cos_theta));
+                                    const auto phi =
+                                        two_pi * rng::uniform01(
+                                                     random_seed,
+                                                     particle.rng_stream,
+                                                     summary.step_count, 41);
+                                    const auto gamma_x = sin_theta * sycl::cos(phi);
+                                    const auto gamma_y = sin_theta * sycl::sin(phi);
+                                    const auto gamma_z = cos_theta;
+                                    constexpr float annihilation_gamma_MeV =
+                                        0.51099895F;
+                                    for (std::uint32_t photon = 0; photon < 2U;
+                                         ++photon) {
+                                        const auto sign = photon == 0U ? 1.0F : -1.0F;
+                                        neutral_queue_device[output_index++] =
+                                            NeutralParticle3D{
+                                                position_x_mm,
+                                                position_y_mm,
+                                                position_z_mm,
+                                                annihilation_gamma_MeV,
+                                                sign * gamma_x,
+                                                sign * gamma_y,
+                                                sign * gamma_z,
+                                                22,
+                                                particle.origin_category,
+                                                static_cast<std::uint8_t>(
+                                                    particle.generation + 1U),
+                                                0,
+                                                rng::child_stream(
+                                                    particle.rng_stream,
+                                                    rng::branch_tag(
+                                                        rng::branch_role_neutral_continuation,
+                                                        2U + photon)),
+                                            };
+                                    }
+                                    summary.queued_annihilation_gamma_energy_MeV =
+                                        annihilation_reserve;
+                                    annihilation_reserve = 0.0F;
+                                }
+                                sycl::atomic_ref<
+                                    std::uint64_t, sycl::memory_order::relaxed,
+                                    sycl::memory_scope::device,
+                                    sycl::access::address_space::global_space>
+                                    filled_counter(*neutral_queue_filled_device);
+                                filled_counter.fetch_add(gamma_count);
+                                summary.queued_gamma_count = gamma_count;
+                            } else {
+                                summary.gamma_overflow_count = gamma_count;
+                                summary.gamma_overflow_energy_MeV =
+                                    (brems_count != 0U
+                                         ? summary.radiative_energy_MeV
+                                         : 0.0F) +
+                                    (annihilation_count != 0U
+                                         ? annihilation_reserve
+                                         : 0.0F);
+                                if (annihilation_count != 0U) {
+                                    annihilation_reserve = 0.0F;
+                                }
+                            }
+                        }
+                        summary.annihilation_reserve_MeV = annihilation_reserve;
+                        electron_summaries_device[particle_index] = summary;
+                    });
+                electron_kernel_event.wait_and_throw();
+                electron_kernel_seconds +=
+                    event_duration_seconds(electron_kernel_event);
+            }
+            electron_generation_begin = electron_generation_end;
+        }
+        queue.copy(neutral_queue_filled_device, &neutral_generation_end, 1)
+            .wait_and_throw();
+        neutral_generation_end = std::min<std::uint64_t>(
+            neutral_generation_end, neutral_queue_capacity);
         }
 
         // Transport charged products created by neutral interactions.
@@ -7162,6 +8060,9 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                                     const auto uniform2 = rng::uniform01(
                                         random_seed, particle.rng_stream,
                                         steps, 23);
+                                    const auto extra_uniform = rng::uniform01(
+                                        random_seed, particle.rng_stream,
+                                        steps, 24);
                                     constexpr float two_pi =
                                         6.2831853071795864769F;
                                     const auto gaussian =
@@ -7198,17 +8099,13 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                                         local_straggling_scale *
                                         sycl::sqrt(sycl::fmax(
                                             0.0F, variance_MeV2));
-                                    step_deposited_MeV = sycl::clamp(
-                                        mean_step_loss_MeV +
-                                            sigma_MeV * gaussian,
-                                        0.0F,
-                                        sycl::fmin(2.0F * mean_step_loss_MeV,
-                                                   energy_MeV));
+                                    step_deposited_MeV = sample_condensed_energy_loss(
+                                        mean_step_loss_MeV, sigma_MeV, gaussian,
+                                        extra_uniform, energy_MeV,
+                                        straggling_sampler);
                                 }
-                                if (step_deposited_MeV <= 0.0F) {
-                                    energy_MeV = 0.0F;
-                                    break;
-                                }
+                                // A thin-segment sampler may return zero loss;
+                                // spatial transport still advances below.
                                 const auto sec_e_frac =
                                     electronic_buildup_fraction_at_energy(
                                         energy_MeVu,
@@ -7453,6 +8350,8 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
     std::vector<std::uint32_t> secondary_steps_host;
     std::vector<CascadeTransportSummary> cascade_summaries_host;
     std::vector<NeutralTransportSummary> neutral_summaries_host;
+    std::vector<ElectronTransportSummary> electron_summaries_host;
+    std::uint64_t transported_electron_count = 0;
     std::vector<DoseAtomicT> neutral_origin_dose_atomic_host;
     std::vector<DoseAtomicT> neutral_origin_voxel_dose_atomic_host;
     std::vector<LetAtomicT> let_moments_host;
@@ -7677,6 +8576,19 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                 to_double_vec(neutral_origin_voxel_dose_atomic_host);
         }
     }
+    if (enable_electron_transport) {
+        queue.copy(electron_queue_filled_device, &transported_electron_count, 1)
+            .wait_and_throw();
+        transported_electron_count = std::min<std::uint64_t>(
+            transported_electron_count, electron_queue_capacity);
+        electron_summaries_host.resize(
+            static_cast<std::size_t>(transported_electron_count));
+        if (transported_electron_count > 0) {
+            queue.copy(electron_summaries_device, electron_summaries_host.data(),
+                       static_cast<std::size_t>(transported_electron_count))
+                .wait_and_throw();
+        }
+    }
 
 #ifdef CARBON_TRANSPORT_PROFILE
     std::array<std::uint64_t, static_cast<std::size_t>(TransportProfileSlot::count)>
@@ -7697,6 +8609,10 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
     free_immutable_device(energy_grid_device);
     free_immutable_device(cumulative_range_device);
     free_immutable_device(cross_section_device);
+    free_device(fluctuation_energies_device);
+    free_device(fluctuation_densities_device);
+    free_device(fluctuation_probabilities_device);
+    free_device(fluctuation_quantiles_device);
     free_device(elastic_cross_section_device);
     free_device(let_delta_fraction_device);
     free_device(particle_sp_ratio_device);
@@ -7799,6 +8715,11 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
     free_device(neutral_summaries_device);
     free_device(neutral_origin_dose_device);
     free_device(neutral_origin_voxel_dose_device);
+    free_device(electron_transport_table_device);
+    free_device(electron_queue_device);
+    free_device(electron_queue_counter_device);
+    free_device(electron_queue_filled_device);
+    free_device(electron_summaries_device);
 
     TransportResult result;
 #ifdef CARBON_VALIDATION_SCORERS
@@ -7830,6 +8751,15 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
 #endif
     result.backend = "sycl-" + device_name +
                      (config.enable_energy_straggling ? "+straggling" : "");
+    if (config.uses_moment_matched_straggling()) {
+        result.backend += "+moment-matched-straggling";
+    }
+    if (config.uses_packaged_straggling()) {
+        result.backend += "+packaged-fluctuation";
+    }
+    if (enable_electron_transport) {
+        result.backend += "+electron-condensed";
+    }
     if (config.enable_step_stable_straggling) {
         result.backend += "+step-stable-primary-straggling";
     }
@@ -8187,6 +9117,12 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
                 summary.unsupported_product_energy_MeV;
             result.neutral_package_closure_residual_MeV +=
                 summary.package_closure_residual_MeV;
+            result.queued_electrons += summary.queued_electron_count;
+            result.queued_electron_energy_MeV +=
+                summary.queued_electron_energy_MeV;
+            result.electron_queue_overflow += summary.electron_overflow_count;
+            result.electron_queue_overflow_energy_MeV +=
+                summary.electron_overflow_energy_MeV;
             result.neutral_queue_overflow += summary.neutral_overflow_count;
             result.neutral_queue_overflow_energy_MeV += summary.neutral_overflow_energy_MeV;
             result.secondary_queue_overflow += summary.charged_overflow_count;
@@ -8207,11 +9143,54 @@ TransportResult CARBON_TRANSPORT_SYCL_ENTRY(const TransportConfig& config,
         result.total_deposited_energy_MeV += result.neutral_deposited_energy_MeV;
         result.escaped_energy_MeV += result.neutral_escaped_energy_MeV;
     }
+    if (enable_electron_transport) {
+        result.transported_electrons = transported_electron_count;
+        for (const auto& summary : electron_summaries_host) {
+            result.transported_positrons += summary.is_positron;
+            result.electron_transport_steps += summary.step_count;
+            result.electron_deposited_energy_MeV += summary.deposited_energy_MeV;
+            result.electron_escaped_energy_MeV += summary.escaped_energy_MeV;
+            result.electron_radiative_energy_MeV += summary.radiative_energy_MeV;
+            result.positron_annihilation_reserve_MeV +=
+                summary.annihilation_reserve_MeV;
+            result.electron_generated_gammas += summary.queued_gamma_count;
+            result.electron_gamma_queue_overflow +=
+                summary.gamma_overflow_count;
+            result.electron_brems_gamma_energy_MeV +=
+                summary.queued_brems_gamma_energy_MeV;
+            result.positron_annihilation_gamma_energy_MeV +=
+                summary.queued_annihilation_gamma_energy_MeV;
+            result.electron_gamma_queue_overflow_energy_MeV +=
+                summary.gamma_overflow_energy_MeV;
+            const auto overflow_includes_brems =
+                summary.gamma_overflow_count == 1U ||
+                summary.gamma_overflow_count == 3U;
+            const auto overflow_brems = overflow_includes_brems
+                                             ? summary.radiative_energy_MeV
+                                             : 0.0F;
+            result.electromagnetic_generation_residual_MeV +=
+                std::max(0.0F,
+                         summary.radiative_energy_MeV -
+                             summary.queued_brems_gamma_energy_MeV -
+                             overflow_brems) +
+                summary.annihilation_reserve_MeV;
+        }
+        result.queued_neutrals += result.electron_generated_gammas;
+        result.total_deposited_energy_MeV += result.electron_deposited_energy_MeV;
+        result.neutral_deposited_energy_MeV += result.electron_deposited_energy_MeV;
+        result.escaped_energy_MeV += result.electron_escaped_energy_MeV;
+        result.untracked_nuclear_energy_MeV +=
+            result.electromagnetic_generation_residual_MeV +
+            result.electron_gamma_queue_overflow_energy_MeV +
+            result.electron_queue_overflow_energy_MeV;
+        result.total_steps += result.electron_transport_steps;
+    }
     result.elapsed_seconds =
         std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
     result.primary_kernel_seconds = primary_kernel_seconds;
     result.secondary_kernel_seconds = secondary_kernel_seconds;
     result.neutral_kernel_seconds = neutral_kernel_seconds;
+    result.electron_kernel_seconds = electron_kernel_seconds;
     result.charged_after_neutral_kernel_seconds =
         charged_after_neutral_kernel_seconds;
     return result;

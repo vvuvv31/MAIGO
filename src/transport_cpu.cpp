@@ -1,4 +1,5 @@
 #include "carbon/transport.hpp"
+#include "carbon/energy_loss_fluctuation.hpp"
 #include "carbon/rng.hpp"
 #include "carbon/straggling.hpp"
 
@@ -8,6 +9,7 @@
 #include <cmath>
 #include <numeric>
 #include <numbers>
+#include <optional>
 #include <stdexcept>
 
 namespace carbon {
@@ -45,6 +47,29 @@ TransportResult transport_serial(const TransportConfig& config,
     }
     const auto start = std::chrono::steady_clock::now();
     const auto primary_ion = config.primary_ion();
+    std::optional<EnergyLossFluctuationTable> fluctuation_table;
+    if (config.uses_packaged_straggling()) {
+        fluctuation_table = EnergyLossFluctuationTable::from_csv(
+            config.energy_straggling_package_file);
+        if (fluctuation_table->projectile_atomic_number() !=
+                config.primary_atomic_number ||
+            fluctuation_table->projectile_mass_number() !=
+                config.primary_mass_number ||
+            fluctuation_table->material_name() != "G4_WATER") {
+            throw std::invalid_argument(
+                "Energy-loss fluctuation package must match YAML primary Z/A and G4_WATER");
+        }
+        const auto maximum_areal_density =
+            config.water_density_g_per_cm3 * config.maximum_step_mm / 10.0;
+        if (config.initial_energy_MeVu >
+                fluctuation_table->energies_MeVu().back() ||
+            maximum_areal_density >
+                fluctuation_table->areal_densities_g_per_cm2().back()) {
+            throw std::invalid_argument(
+                "Energy-loss fluctuation package does not cover the configured "
+                "initial energy or maximum step areal density");
+        }
+    }
     TransportResult result;
     std::array<double, max_straggling_scale_points> straggling_scale_energies{};
     std::array<double, max_straggling_scale_points> straggling_scale_values{};
@@ -66,6 +91,9 @@ TransportResult transport_serial(const TransportConfig& config,
             config.primary_inelastic_xs_correction_scales[index];
     }
     result.backend = config.enable_energy_straggling ? "serial+straggling" : "serial";
+    if (config.uses_packaged_straggling()) {
+        result.backend += "+packaged-fluctuation";
+    }
     if (config.enable_primary_attenuation) {
         result.backend += "+attenuation";
         if (config.enable_primary_inelastic_xs_correction) {
@@ -162,6 +190,7 @@ TransportResult transport_serial(const TransportConfig& config,
                     energy_MeVu, straggling_scale_energies,
                     straggling_scale_values, straggling_scale_point_count,
                     config.straggling_scale);
+                const auto sampler = config.straggling_sampler_id();
                 const auto effective_charge = ion_effective_charge(
                     primary_ion.atomic_number, energy_MeVu);
                 const auto variance_MeV2 = condensed_total_loss_variance_MeV2(
@@ -174,6 +203,8 @@ TransportResult transport_serial(const TransportConfig& config,
                             config.random_seed, history_id, stable_straggling.block_index, 0)), 1.0e-12);
                         const auto uniform2 = static_cast<double>(rng::uniform01(
                             config.random_seed, history_id, stable_straggling.block_index, 1));
+                        const auto extra_uniform = static_cast<double>(rng::uniform01(
+                            config.random_seed, history_id, stable_straggling.block_index, 2));
                         const auto gaussian = std::sqrt(-2.0 * std::log(uniform1)) *
                                               std::cos(2.0 * std::numbers::pi * uniform2);
                         if (config.enable_csda_range_energy_loss) {
@@ -185,17 +216,29 @@ TransportResult transport_serial(const TransportConfig& config,
                             const auto block_mean_loss_MeV = csda_block_mean_loss_MeV(
                                 energy_MeV, block_energy_MeVu,
                                 static_cast<double>(config.primary_mass_number));
-                            const auto block_variance_MeV2 = condensed_total_loss_variance_MeV2(
+                            const auto end_charge = ion_effective_charge(
+                                primary_ion.atomic_number, block_energy_MeVu);
+                            const auto start_variance_MeV2 = condensed_total_loss_variance_MeV2(
                                 energy_MeVu,
                                 primary_ion.rest_mass_MeV,
                                 effective_charge, block_length_mm,
                                 config.water_density_g_per_cm3);
+                            const auto end_variance_MeV2 = condensed_total_loss_variance_MeV2(
+                                block_energy_MeVu,
+                                primary_ion.rest_mass_MeV,
+                                end_charge, block_length_mm,
+                                config.water_density_g_per_cm3);
+                            const auto block_variance_MeV2 = integrate_path_variance_MeV2(
+                                start_variance_MeV2, end_variance_MeV2);
                             stable_straggling.begin_block(
                                 block_mean_loss_MeV, block_variance_MeV2,
-                                block_length_mm, local_scale, gaussian, energy_MeV);
+                                block_length_mm, local_scale, gaussian, energy_MeV,
+                                extra_uniform, sampler);
                         } else {
-                            stable_straggling.begin_block(mean_loss_MeV, variance_MeV2, step_mm,
-                                                          local_scale, gaussian, energy_MeV);
+                            stable_straggling.begin_block(
+                                mean_loss_MeV, variance_MeV2, step_mm,
+                                local_scale, gaussian, energy_MeV,
+                                extra_uniform, sampler);
                         }
                     }
                     deposited_MeV = stable_straggling.consume_loss(step_mm, energy_MeV);
@@ -204,10 +247,24 @@ TransportResult transport_serial(const TransportConfig& config,
                         config.random_seed, history_id, steps, 0)), 1.0e-12);
                     const auto uniform2 = static_cast<double>(rng::uniform01(
                         config.random_seed, history_id, steps, 1));
-                    const auto gaussian = std::sqrt(-2.0 * std::log(uniform1)) *
-                                          std::cos(2.0 * std::numbers::pi * uniform2);
-                    const auto sigma_MeV = local_scale * std::sqrt(std::max(0.0, variance_MeV2));
-                    deposited_MeV = clamp_sampled_energy_loss(mean_loss_MeV, sigma_MeV, gaussian, energy_MeV);
+                    const auto extra_uniform = static_cast<double>(rng::uniform01(
+                        config.random_seed, history_id, steps, 2));
+                    if (fluctuation_table) {
+                        const auto areal_density_g_per_cm2 =
+                            config.water_density_g_per_cm3 * step_mm / 10.0;
+                        const auto loss_ratio = fluctuation_table->sample_loss_ratio(
+                            energy_MeVu, areal_density_g_per_cm2, extra_uniform);
+                        deposited_MeV = std::clamp(
+                            mean_loss_MeV * loss_ratio, 0.0, energy_MeV);
+                    } else {
+                        const auto gaussian = std::sqrt(-2.0 * std::log(uniform1)) *
+                                              std::cos(2.0 * std::numbers::pi * uniform2);
+                        const auto sigma_MeV =
+                            local_scale * std::sqrt(std::max(0.0, variance_MeV2));
+                        deposited_MeV = sample_condensed_energy_loss(
+                            mean_loss_MeV, sigma_MeV, gaussian, extra_uniform,
+                            energy_MeV, sampler);
+                    }
                 }
             }
             tally[bin] += deposited_MeV;

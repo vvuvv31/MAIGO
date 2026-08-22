@@ -85,6 +85,9 @@ struct PrimarySpotBatchEntry {
 };
 
 struct TransportConfig {
+    // Optional single-file manifest owning the primary-ion identity and all
+    // ion-dependent water physics data. Run controls remain in the main YAML.
+    std::filesystem::path ion_physics_file{};
     std::size_t number_of_histories{10'000};
     // Fallback for single-beam runs. topas_spots_file(s) and tps_spots_file
     // supply per-spot energy and therefore do not require this value in YAML.
@@ -255,6 +258,13 @@ struct TransportConfig {
     double voxel_size_y_mm{5.0};
     double voxel_size_z_mm{0.0};
     bool enable_energy_straggling{false};
+    // gaussian_clamped / legacy_calibrated: historical Gaussian + [0, 2μ] cap.
+    // moment_matched: positive Gamma/Gaussian sampler that keeps mean/variance
+    // without a 2μ clamp; scale tables are rejected.
+    // packaged_fluctuation: empirical loss/mean inverse-CDF package selected
+    // explicitly by energy_straggling_package_file.
+    std::string energy_straggling_model{"gaussian_clamped"};
+    std::filesystem::path energy_straggling_package_file{};
     // Optional CPU-only CSDA residual-range energy loss. Disabled preserves
     // the historical local stopping_power * step path; SYCL is unaffected.
     bool enable_csda_range_energy_loss{false};
@@ -537,6 +547,15 @@ struct TransportConfig {
     // "first_interaction": free path + one package (mode D); continuation residual.
     // "full": re-queue neutral continuations up to maximum_neutral_generations.
     std::string neutral_transport_mode{"first_interaction"};
+    // V1 transports only neutral-package e-/e+ in homogeneous G4_WATER.
+    // Ion delta electrons remain condensed in unrestricted ion stopping power.
+    bool enable_electron_transport{false};
+    std::filesystem::path electron_transport_data_file{};
+    std::size_t electron_queue_capacity{0};
+    double electron_kinetic_cutoff_MeV{0.01};
+    std::uint32_t maximum_electromagnetic_generations{4};
+    double maximum_electron_step_mm{0.1};
+    double maximum_electron_relative_energy_loss{0.05};
     // When neutral transport is off, deposit this fraction of born neutron/gamma
     // kinetic energy as an interim kerma (calibrated ~0.298 at ≤200 MeV/u).
     // Not a global dose scale of the charged IDD.
@@ -700,6 +719,19 @@ struct TransportConfig {
     }
     [[nodiscard]] bool uses_fixed_patient_coordinates() const noexcept {
         return enable_tps_coordinate_system || enable_tps_source;
+    }
+    [[nodiscard]] bool uses_legacy_clamped_straggling() const noexcept {
+        return energy_straggling_model == "gaussian_clamped" ||
+               energy_straggling_model == "legacy_calibrated";
+    }
+    [[nodiscard]] bool uses_moment_matched_straggling() const noexcept {
+        return energy_straggling_model == "moment_matched";
+    }
+    [[nodiscard]] bool uses_packaged_straggling() const noexcept {
+        return energy_straggling_model == "packaged_fluctuation";
+    }
+    [[nodiscard]] int straggling_sampler_id() const noexcept {
+        return uses_moment_matched_straggling() ? 1 : 0;
     }
     void validate() const;
 };

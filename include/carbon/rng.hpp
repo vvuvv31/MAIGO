@@ -15,6 +15,7 @@ inline constexpr std::uint32_t branch_role_cascade_charged = 0x30000000U;
 inline constexpr std::uint32_t branch_role_cascade_neutral = 0x40000000U;
 inline constexpr std::uint32_t branch_role_neutral_charged = 0x50000000U;
 inline constexpr std::uint32_t branch_role_neutral_continuation = 0x60000000U;
+inline constexpr std::uint32_t branch_role_neutral_electron = 0x70000000U;
 
 inline constexpr std::uint32_t branch_tag(const std::uint32_t role,
                                           const std::uint32_t product_index) noexcept {

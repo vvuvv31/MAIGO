@@ -239,6 +239,24 @@ struct NeutralParticle3D {
 
 static_assert(sizeof(NeutralParticle3D) == 48);
 
+struct ElectronParticle3D {
+    float position_x_mm{0.0F};
+    float position_y_mm{0.0F};
+    float position_z_mm{0.0F};
+    float kinetic_energy_MeV{0.0F};
+    float direction_x{0.0F};
+    float direction_y{0.0F};
+    float direction_z{0.0F};
+    std::int32_t pdg_id{11};  // 11 = e-, -11 = e+
+    std::uint8_t origin_category{0};
+    std::uint8_t generation{0};
+    std::uint16_t reserved{0};
+    std::uint64_t rng_stream{0};
+};
+
+static_assert(sizeof(ElectronParticle3D) == 48);
+inline constexpr float positron_annihilation_reserve_MeV = 1.0219979F;
+
 struct SecondaryGenerationSummary {
     std::uint32_t direct_count{0};
     std::uint32_t queued_count{0};
@@ -290,8 +308,28 @@ struct NeutralTransportSummary {
     float residual_energy_MeV{0.0F};  // continuation/nested neutrals not re-queued
     float unsupported_product_energy_MeV{0.0F};
     float package_closure_residual_MeV{0.0F};
+    std::uint32_t queued_electron_count{0};
+    std::uint32_t electron_overflow_count{0};
+    float queued_electron_energy_MeV{0.0F};
+    float electron_overflow_energy_MeV{0.0F};
 };
 
-static_assert(sizeof(NeutralTransportSummary) == 56);
+static_assert(sizeof(NeutralTransportSummary) == 72);
+
+struct ElectronTransportSummary {
+    std::uint32_t step_count{0};
+    std::uint32_t is_positron{0};
+    std::uint32_t queued_gamma_count{0};
+    std::uint32_t gamma_overflow_count{0};
+    float deposited_energy_MeV{0.0F};
+    float escaped_energy_MeV{0.0F};
+    float radiative_energy_MeV{0.0F};
+    float annihilation_reserve_MeV{0.0F};
+    float queued_brems_gamma_energy_MeV{0.0F};
+    float queued_annihilation_gamma_energy_MeV{0.0F};
+    float gamma_overflow_energy_MeV{0.0F};
+};
+
+static_assert(sizeof(ElectronTransportSummary) == 44);
 
 }  // namespace carbon

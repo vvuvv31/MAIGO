@@ -50,6 +50,10 @@ int main(int argc, char* argv[]) {
         config.validate();
 
         const auto primary_ion = config.primary_ion();
+        if (!config.ion_physics_file.empty()) {
+            std::cout << "Ion physics manifest: " << config.ion_physics_file
+                      << '\n';
+        }
         std::cout << "Primary ion: Z=" << primary_ion.atomic_number
                   << " A=" << primary_ion.mass_number
                   << "; rest mass=" << primary_ion.rest_mass_MeV << " MeV"

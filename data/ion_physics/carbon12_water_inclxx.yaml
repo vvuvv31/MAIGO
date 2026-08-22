@@ -1,0 +1,17 @@
+# C-12 water physics data. Runtime geometry, algorithms, and scorers belong in
+# the main configuration that references this file with ion_physics_file.
+primary_atomic_number: 6
+primary_mass_number: 12
+primary_rest_mass_MeV: 0.0
+energy_straggling_model: gaussian_clamped
+use_particle_specific_stopping_power: true
+enable_primary_elastic_interactions: false
+primary_stopping_power_file: data/stopping_power_water_geant4_11_3_2.csv
+particle_stopping_power_file: data/ion_stopping_power_water_geant4_11_3_2.csv
+primary_inelastic_cross_section_file: data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv
+primary_reaction_package_file: data/packages/topas_water_inclxx_1M_stitch7_primary_3d.bin
+cascade_package_file: data/packages/topas_400MeVu_water_inclxx_1M_cascade_3d.bin
+package_identity_validation: strict
+package_identity_override_manifest_file: data/packages/package_identity_overrides.json
+primary_package_physics_model: INCLXX
+cascade_package_physics_model: INCLXX

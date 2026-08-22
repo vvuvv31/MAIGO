@@ -161,6 +161,29 @@ void accumulate_transport_result(carbon::TransportResult& total,
         part.neutral_unsupported_product_energy_MeV;
     total.neutral_package_closure_residual_MeV +=
         part.neutral_package_closure_residual_MeV;
+    total.queued_electrons += part.queued_electrons;
+    total.electron_queue_overflow += part.electron_queue_overflow;
+    total.transported_electrons += part.transported_electrons;
+    total.transported_positrons += part.transported_positrons;
+    total.electron_transport_steps += part.electron_transport_steps;
+    total.queued_electron_energy_MeV += part.queued_electron_energy_MeV;
+    total.electron_queue_overflow_energy_MeV +=
+        part.electron_queue_overflow_energy_MeV;
+    total.electron_deposited_energy_MeV += part.electron_deposited_energy_MeV;
+    total.electron_escaped_energy_MeV += part.electron_escaped_energy_MeV;
+    total.electron_radiative_energy_MeV += part.electron_radiative_energy_MeV;
+    total.positron_annihilation_reserve_MeV +=
+        part.positron_annihilation_reserve_MeV;
+    total.electron_generated_gammas += part.electron_generated_gammas;
+    total.electron_gamma_queue_overflow += part.electron_gamma_queue_overflow;
+    total.electron_brems_gamma_energy_MeV +=
+        part.electron_brems_gamma_energy_MeV;
+    total.positron_annihilation_gamma_energy_MeV +=
+        part.positron_annihilation_gamma_energy_MeV;
+    total.electron_gamma_queue_overflow_energy_MeV +=
+        part.electron_gamma_queue_overflow_energy_MeV;
+    total.electromagnetic_generation_residual_MeV +=
+        part.electromagnetic_generation_residual_MeV;
     total.minibeam.enabled = total.minibeam.enabled || part.minibeam.enabled;
     total.minibeam.incident_histories += part.minibeam.incident_histories;
     total.minibeam.direct_air_slit_histories +=
@@ -212,6 +235,7 @@ void accumulate_transport_result(carbon::TransportResult& total,
     total.primary_kernel_seconds += part.primary_kernel_seconds;
     total.secondary_kernel_seconds += part.secondary_kernel_seconds;
     total.neutral_kernel_seconds += part.neutral_kernel_seconds;
+    total.electron_kernel_seconds += part.electron_kernel_seconds;
     total.charged_after_neutral_kernel_seconds +=
         part.charged_after_neutral_kernel_seconds;
     if (total.backend.empty()) {

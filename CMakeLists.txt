@@ -48,6 +48,8 @@ add_library(carbon_core
     src/package_identity.cpp
     src/elastic_package.cpp
     src/elastic_device_storage.cpp
+    src/electron_transport.cpp
+    src/energy_loss_fluctuation.cpp
     src/reaction_package.cpp
     src/cascade_package.cpp
     src/neutral_package.cpp

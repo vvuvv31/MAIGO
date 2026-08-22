@@ -95,12 +95,89 @@ inline Scalar condensed_total_loss_variance_MeV2(
            std::max(Scalar{0}, relativistic_multiplier);
 }
 
+inline constexpr int straggling_sampler_gaussian_clamped = 0;
+inline constexpr int straggling_sampler_moment_matched = 1;
+// Thick-layer Gaussian is used when μ/σ is large enough that P(ΔE<0) is
+// negligible. Below this, a moment-matched Gamma (thin: compound-Poisson
+// Gamma with k<1) keeps the support positive without a 2μ cap.
+inline constexpr double straggling_gaussian_kappa_min = 4.0;
+
 inline double clamp_sampled_energy_loss(double mean_loss_MeV,
                                         double sigma_MeV,
                                         double gaussian,
                                         double available_energy_MeV) noexcept {
     return std::clamp(mean_loss_MeV + sigma_MeV * gaussian, 0.0,
                       std::min(2.0 * mean_loss_MeV, available_energy_MeV));
+}
+
+template <typename Scalar>
+inline Scalar integrate_path_variance_MeV2(
+    const Scalar variance_at_start_MeV2,
+    const Scalar variance_at_end_MeV2) noexcept {
+    return Scalar{0.5} * (std::max(Scalar{0}, variance_at_start_MeV2) +
+                          std::max(Scalar{0}, variance_at_end_MeV2));
+}
+
+template <typename Scalar>
+inline Scalar wilson_hilferty_unit_gamma(const Scalar shape,
+                                         const Scalar gaussian) noexcept {
+    const auto shifted = Scalar{1} - Scalar{1} / (Scalar{9} * shape) +
+                         gaussian / std::sqrt(Scalar{9} * shape);
+    const auto cube = shifted * shifted * shifted;
+    return shape * std::max(Scalar{1.0e-18}, cube);
+}
+
+template <typename Scalar>
+inline Scalar sample_unit_gamma(const Scalar shape,
+                                const Scalar gaussian,
+                                const Scalar extra_uniform) noexcept {
+    if (shape >= Scalar{1}) {
+        return wilson_hilferty_unit_gamma(shape, gaussian);
+    }
+    const auto parent = wilson_hilferty_unit_gamma(shape + Scalar{1}, gaussian);
+    const auto uniform = std::min(std::max(extra_uniform, Scalar{1.0e-12}),
+                                  Scalar{1} - Scalar{1.0e-12});
+    return parent * std::pow(uniform, Scalar{1} / shape);
+}
+
+template <typename Scalar>
+inline Scalar sample_moment_matched_energy_loss(
+    const Scalar mean_loss_MeV,
+    const Scalar sigma_MeV,
+    const Scalar gaussian,
+    const Scalar extra_uniform,
+    const Scalar available_energy_MeV) noexcept {
+    if (!(mean_loss_MeV > Scalar{0}) || !(sigma_MeV > Scalar{0})) {
+        return std::clamp(mean_loss_MeV, Scalar{0}, available_energy_MeV);
+    }
+    const auto kappa = mean_loss_MeV / sigma_MeV;
+    Scalar sampled = mean_loss_MeV + sigma_MeV * gaussian;
+    const auto use_gaussian =
+        kappa >= static_cast<Scalar>(straggling_gaussian_kappa_min) &&
+        sampled > Scalar{0};
+    if (!use_gaussian) {
+        const auto shape = kappa * kappa;
+        const auto scale = mean_loss_MeV / shape;
+        sampled = scale * sample_unit_gamma(shape, gaussian, extra_uniform);
+    }
+    return std::clamp(sampled, Scalar{0}, available_energy_MeV);
+}
+
+template <typename Scalar>
+inline Scalar sample_condensed_energy_loss(
+    const Scalar mean_loss_MeV,
+    const Scalar sigma_MeV,
+    const Scalar gaussian,
+    const Scalar extra_uniform,
+    const Scalar available_energy_MeV,
+    const int sampler) noexcept {
+    if (sampler == straggling_sampler_moment_matched) {
+        return sample_moment_matched_energy_loss(
+            mean_loss_MeV, sigma_MeV, gaussian, extra_uniform,
+            available_energy_MeV);
+    }
+    return std::clamp(mean_loss_MeV + sigma_MeV * gaussian, Scalar{0},
+                      std::min(Scalar{2} * mean_loss_MeV, available_energy_MeV));
 }
 
 template <typename Scalar>
@@ -135,7 +212,9 @@ struct StepStableStragglingState {
                             const Scalar step_mm,
                             const Scalar scale,
                             const Scalar gaussian,
-                            const Scalar available_energy_MeV) noexcept {
+                            const Scalar available_energy_MeV,
+                            const Scalar extra_uniform = Scalar{0.5},
+                            const int sampler = straggling_sampler_gaussian_clamped) noexcept {
         const auto effective_length = block_length_mm > Scalar{0}
             ? block_length_mm : sampling_length_mm;
         const auto rate = step_mm > Scalar{0} ? mean_loss_MeV / step_mm : Scalar{0};
@@ -143,9 +222,9 @@ struct StepStableStragglingState {
             ? std::max(Scalar{0}, variance_MeV2 / step_mm) : Scalar{0};
         const auto block_mean = rate * effective_length;
         const auto block_sigma = scale * std::sqrt(variance_rate * effective_length);
-        block_remaining_loss_MeV = std::clamp(
-            block_mean + block_sigma * gaussian, Scalar{0},
-            std::min(Scalar{2} * block_mean, available_energy_MeV));
+        block_remaining_loss_MeV = sample_condensed_energy_loss(
+            block_mean, block_sigma, gaussian, extra_uniform,
+            available_energy_MeV, sampler);
         block_remaining_mm = effective_length;
         block_active = true;
     }

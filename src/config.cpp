@@ -1,5 +1,6 @@
 #include "carbon/transport_config.hpp"
 #include "carbon/ct_grid.hpp"
+#include "carbon/electron_transport.hpp"
 #include "carbon/straggling.hpp"
 
 #include <algorithm>
@@ -15,6 +16,7 @@
 #include <string_view>
 #include <type_traits>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace carbon {
@@ -108,6 +110,109 @@ std::filesystem::path resolve_input_path_from_config(
         directory = parent;
     }
     return configured;
+}
+
+using ConfigValues = std::unordered_map<std::string, std::string>;
+
+const std::unordered_set<std::string>& ion_physics_manifest_keys() {
+    static const std::unordered_set<std::string> keys{
+        "primary_atomic_number",
+        "primary_mass_number",
+        "primary_rest_mass_MeV",
+        "energy_straggling_model",
+        "use_particle_specific_stopping_power",
+        "enable_primary_elastic_interactions",
+        "primary_stopping_power_file",
+        "let_delta_electron_fraction_file",
+        "particle_stopping_power_file",
+        "primary_inelastic_cross_section_file",
+        "primary_elastic_cross_section_file",
+        "primary_reaction_package_file",
+        "primary_elastic_package_file",
+        "cascade_package_file",
+        "neutral_package_file",
+        "energy_straggling_package_file",
+        "package_identity_validation",
+        "package_identity_override_manifest_file",
+        "primary_package_physics_model",
+        "primary_elastic_package_physics_model",
+        "cascade_package_physics_model",
+    };
+    return keys;
+}
+
+const std::unordered_set<std::string>& ion_physics_manifest_path_keys() {
+    static const std::unordered_set<std::string> keys{
+        "primary_stopping_power_file",
+        "let_delta_electron_fraction_file",
+        "particle_stopping_power_file",
+        "primary_inelastic_cross_section_file",
+        "primary_elastic_cross_section_file",
+        "primary_reaction_package_file",
+        "primary_elastic_package_file",
+        "cascade_package_file",
+        "neutral_package_file",
+        "energy_straggling_package_file",
+        "package_identity_override_manifest_file",
+    };
+    return keys;
+}
+
+std::filesystem::path merge_ion_physics_manifest(
+    const std::filesystem::path& config_path,
+    ConfigValues& values) {
+    const auto manifest_entry = values.find("ion_physics_file");
+    if (manifest_entry == values.end()) {
+        return {};
+    }
+    if (manifest_entry->second.empty()) {
+        throw std::invalid_argument("ion_physics_file must not be empty");
+    }
+    const auto manifest_path = resolve_input_path_from_config(
+        std::filesystem::path{manifest_entry->second}, config_path);
+    const auto manifest = read_key_values(manifest_path);
+    const auto& allowed = ion_physics_manifest_keys();
+    for (const auto& [key, value] : manifest) {
+        if (!allowed.contains(key)) {
+            throw std::invalid_argument(
+                "Ion physics manifest contains non-physics key '" + key +
+                "': " + manifest_path.string());
+        }
+        if (values.contains(key)) {
+            throw std::invalid_argument(
+                "Ion-dependent key '" + key + "' is defined in both " +
+                config_path.string() + " and " + manifest_path.string());
+        }
+        auto imported = value;
+        if (ion_physics_manifest_path_keys().contains(key) && !value.empty()) {
+            imported = resolve_input_path_from_config(
+                           std::filesystem::path{value}, manifest_path)
+                           .string();
+        }
+        values.emplace(key, std::move(imported));
+    }
+    for (const char* required : {
+             "primary_atomic_number",
+             "primary_mass_number",
+             "energy_straggling_model",
+             "use_particle_specific_stopping_power",
+             "enable_primary_elastic_interactions",
+             "primary_stopping_power_file",
+             "particle_stopping_power_file",
+             "primary_inelastic_cross_section_file",
+             "primary_reaction_package_file",
+             "cascade_package_file",
+             "primary_package_physics_model",
+             "cascade_package_physics_model",
+         }) {
+        const auto entry = manifest.find(required);
+        if (entry == manifest.end() || entry->second.empty()) {
+            throw std::invalid_argument(
+                "Ion physics manifest is missing required key '" +
+                std::string(required) + "': " + manifest_path.string());
+        }
+    }
+    return manifest_path;
 }
 
 void load_primary_inelastic_xs_correction_csv(
@@ -539,6 +644,52 @@ void TransportConfig::validate() const {
         throw std::invalid_argument(
             "enable_step_stable_straggling requires straggling_sampling_length_mm > 0");
     }
+    if (energy_straggling_model != "gaussian_clamped" &&
+        energy_straggling_model != "legacy_calibrated" &&
+        energy_straggling_model != "moment_matched" &&
+        energy_straggling_model != "packaged_fluctuation") {
+        throw std::invalid_argument(
+            "energy_straggling_model must be gaussian_clamped, "
+            "legacy_calibrated, moment_matched, or packaged_fluctuation");
+    }
+    if (uses_packaged_straggling() && energy_straggling_package_file.empty()) {
+        throw std::invalid_argument(
+            "packaged_fluctuation requires energy_straggling_package_file");
+    }
+    if (uses_packaged_straggling() && !enable_energy_straggling) {
+        throw std::invalid_argument(
+            "packaged_fluctuation requires enable_energy_straggling: true");
+    }
+    if (!uses_packaged_straggling() && !energy_straggling_package_file.empty()) {
+        throw std::invalid_argument(
+            "energy_straggling_package_file requires packaged_fluctuation");
+    }
+    if (uses_packaged_straggling() &&
+        (enable_ct_grid || enable_layered_phantom || enable_hetero_insert ||
+         enable_minibeam)) {
+        throw std::invalid_argument(
+            "packaged_fluctuation currently supports homogeneous water only");
+    }
+    if (uses_packaged_straggling() && enable_secondary_energy_straggling) {
+        throw std::invalid_argument(
+            "packaged_fluctuation currently supports primary-ion straggling only");
+    }
+    if ((uses_moment_matched_straggling() || uses_packaged_straggling()) &&
+        std::abs(straggling_scale - 1.0) > 1.0e-12) {
+        throw std::invalid_argument(
+            "uncalibrated straggling models require straggling_scale: 1.0");
+    }
+    if ((uses_moment_matched_straggling() || uses_packaged_straggling()) &&
+        enable_step_stable_straggling) {
+        throw std::invalid_argument(
+            "uncalibrated straggling models cannot use the legacy fixed-block sampler");
+    }
+    if ((uses_moment_matched_straggling() || uses_packaged_straggling()) &&
+        !straggling_scale_energies_MeVu.empty()) {
+        throw std::invalid_argument(
+            "uncalibrated straggling models reject energy-dependent "
+            "straggling_scale tables; use a scalar straggling_scale of 1");
+    }
     if (straggling_scale_energies_MeVu.size() != straggling_scale_values.size()) {
         throw std::invalid_argument(
             "straggling scale energy and value tables must have the same length");
@@ -797,6 +948,56 @@ void TransportConfig::validate() const {
         maximum_neutral_generations < 2) {
         throw std::invalid_argument(
             "neutral_transport_mode=full requires maximum_neutral_generations >= 2");
+    }
+    if (enable_electron_transport) {
+        if (!enable_neutral_transport || neutral_transport_mode != "full") {
+            throw std::invalid_argument(
+                "enable_electron_transport requires enable_neutral_transport=true and "
+                "neutral_transport_mode=full");
+        }
+        if (enable_ct_grid || enable_layered_phantom || enable_hetero_insert ||
+            enable_minibeam) {
+            throw std::invalid_argument(
+                "electron transport v1 supports homogeneous G4_WATER only; "
+                "CT, layered, insert, and minibeam geometries are unsupported");
+        }
+        if (electron_transport_data_file.empty()) {
+            throw std::invalid_argument(
+                "enable_electron_transport requires electron_transport_data_file");
+        }
+        const auto table = ElectronTransportTable::from_csv(
+            electron_transport_data_file);
+        if (table.kinetic_energies_MeV().front() > 0.001 ||
+            table.kinetic_energies_MeV().back() < 500.0) {
+            throw std::invalid_argument(
+                "electron transport table must cover at least 0.001 to 500 MeV");
+        }
+        if (device == "serial") {
+            throw std::invalid_argument(
+                "electron transport is not implemented by the serial CPU backend");
+        }
+    } else if (!electron_transport_data_file.empty() || electron_queue_capacity != 0) {
+        throw std::invalid_argument(
+            "electron transport data/queue fields require enable_electron_transport=true");
+    }
+    if (!std::isfinite(electron_kinetic_cutoff_MeV) ||
+        electron_kinetic_cutoff_MeV <= 0.0) {
+        throw std::invalid_argument(
+            "electron_kinetic_cutoff_MeV must be finite and positive");
+    }
+    if (maximum_electromagnetic_generations == 0) {
+        throw std::invalid_argument(
+            "maximum_electromagnetic_generations must be greater than zero");
+    }
+    if (!std::isfinite(maximum_electron_step_mm) || maximum_electron_step_mm <= 0.0) {
+        throw std::invalid_argument(
+            "maximum_electron_step_mm must be finite and positive");
+    }
+    if (!std::isfinite(maximum_electron_relative_energy_loss) ||
+        maximum_electron_relative_energy_loss <= 0.0 ||
+        maximum_electron_relative_energy_loss > 1.0) {
+        throw std::invalid_argument(
+            "maximum_electron_relative_energy_loss must be in (0, 1]");
     }
     if (neutral_local_kerma_fraction < 0.0 || neutral_local_kerma_fraction > 1.0) {
         throw std::invalid_argument(
@@ -1155,8 +1356,28 @@ void TransportConfig::validate() const {
 }
 
 TransportConfig load_config(const std::filesystem::path& path) {
-    const auto values = read_key_values(path);
+    auto values = read_key_values(path);
+    const auto ion_physics_file = merge_ion_physics_manifest(path, values);
     TransportConfig config;
+    config.ion_physics_file = ion_physics_file;
+    if (!ion_physics_file.empty()) {
+        // A manifest is an ownership boundary. Missing optional data must stay
+        // unavailable instead of silently inheriting the historical C-12 defaults.
+        config.primary_stopping_power_file.clear();
+        config.let_delta_electron_fraction_file.clear();
+        config.particle_stopping_power_file.clear();
+        config.primary_inelastic_cross_section_file.clear();
+        config.primary_elastic_cross_section_file.clear();
+        config.primary_reaction_package_file.clear();
+        config.primary_elastic_package_file.clear();
+        config.cascade_package_file.clear();
+        config.neutral_package_file.clear();
+        config.energy_straggling_package_file.clear();
+        config.package_identity_override_manifest_file.clear();
+        config.primary_package_physics_model.clear();
+        config.primary_elastic_package_physics_model.clear();
+        config.cascade_package_physics_model.clear();
+    }
     for (const char* removed : {
              "physics_profile",
              "spots_lateral_yz_skew",
@@ -1483,6 +1704,21 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.enable_secondary_energy_straggling = parse_bool(
         values, "enable_secondary_energy_straggling",
         config.enable_secondary_energy_straggling);
+    {
+        const auto it = values.find("energy_straggling_model");
+        if (it != values.end() && !it->second.empty()) {
+            config.energy_straggling_model = it->second;
+            std::transform(config.energy_straggling_model.begin(),
+                           config.energy_straggling_model.end(),
+                           config.energy_straggling_model.begin(),
+                           [](const unsigned char character) {
+                               return static_cast<char>(std::tolower(character));
+                           });
+        }
+    }
+    config.energy_straggling_package_file = parse_path(
+        values, "energy_straggling_package_file",
+        config.energy_straggling_package_file);
     config.straggling_scale = parse_number(values, "straggling_scale", config.straggling_scale);
     if (const auto iterator = values.find("straggling_scale_energies_MeVu");
         iterator != values.end()) {
@@ -1614,6 +1850,20 @@ TransportConfig load_config(const std::filesystem::path& path) {
     if (neutral_mode != values.end()) {
         config.neutral_transport_mode = neutral_mode->second;
     }
+    config.enable_electron_transport = parse_bool(
+        values, "enable_electron_transport", config.enable_electron_transport);
+    config.electron_queue_capacity = parse_number(
+        values, "electron_queue_capacity", config.electron_queue_capacity);
+    config.electron_kinetic_cutoff_MeV = parse_number(
+        values, "electron_kinetic_cutoff_MeV", config.electron_kinetic_cutoff_MeV);
+    config.maximum_electromagnetic_generations = parse_number(
+        values, "maximum_electromagnetic_generations",
+        config.maximum_electromagnetic_generations);
+    config.maximum_electron_step_mm = parse_number(
+        values, "maximum_electron_step_mm", config.maximum_electron_step_mm);
+    config.maximum_electron_relative_energy_loss = parse_number(
+        values, "maximum_electron_relative_energy_loss",
+        config.maximum_electron_relative_energy_loss);
     config.neutral_local_kerma_fraction = parse_number(
         values, "neutral_local_kerma_fraction", config.neutral_local_kerma_fraction);
     config.neutral_kerma_high_energy_scale = parse_number(
@@ -2046,6 +2296,8 @@ TransportConfig load_config(const std::filesystem::path& path) {
     }
     config.neutral_package_file =
         parse_path(values, "neutral_package_file", config.neutral_package_file);
+    config.electron_transport_data_file = parse_path(
+        values, "electron_transport_data_file", config.electron_transport_data_file);
     {
         const auto it = values.find("output_file");
         if (it != values.end()) {
@@ -2269,6 +2521,14 @@ TransportConfig load_config(const std::filesystem::path& path) {
                 config.primary_elastic_cross_section_file, path);
         config.primary_elastic_package_file =
             resolve_input_path_from_config(config.primary_elastic_package_file, path);
+    }
+    if (!config.energy_straggling_package_file.empty()) {
+        config.energy_straggling_package_file = resolve_input_path_from_config(
+            config.energy_straggling_package_file, path);
+    }
+    if (!config.electron_transport_data_file.empty()) {
+        config.electron_transport_data_file = resolve_input_path_from_config(
+            config.electron_transport_data_file, path);
     }
     config.validate();
     return config;

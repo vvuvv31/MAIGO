@@ -56,12 +56,19 @@ def main() -> None:
     parser.add_argument("--gpu-seed-base", type=int, default=2026084900)
     parser.add_argument("--topas-package-seed-base", type=int, default=2026082900)
     parser.add_argument("--topas-reference-seed-base", type=int, default=2026083900)
+    parser.add_argument(
+        "--energy-loss-fluctuation-package",
+        type=Path,
+        default=Path("data/packages/proton_G4_WATER_fluctuation_100k.csv"),
+        help="TOPAS-derived primary proton/G4_WATER fluctuation package",
+    )
     parser.add_argument("--enable-xs-correction", action="store_true")
     args = parser.parse_args()
     if args.histories <= 0:
         raise SystemExit("--histories must be positive")
 
     template = args.template.read_text(encoding="utf-8")
+    fluctuation_package = args.energy_loss_fluctuation_package
     root = args.output_root
     configs_dir = root / "resolved_configs"
     packages_dir = root / "packages"
@@ -80,6 +87,7 @@ def main() -> None:
             "GPU_SEED": str(args.gpu_seed_base + energy),
             "STOPPING_POWER": str(tables_dir / f"{case_id}_stopping_power.csv"),
             "INELASTIC_XS": str(tables_dir / f"{case_id}_inelastic_xs.csv"),
+            "ENERGY_LOSS_FLUCTUATION_PACKAGE": str(fluctuation_package),
             "PRIMARY_PACKAGE": str(package_prefix) + "_primary_3d.bin",
             "CASCADE_PACKAGE": str(package_prefix) + "_cascade_3d.bin",
             "ENABLE_XS_CORRECTION": "true" if args.enable_xs_correction else "false",
@@ -108,6 +116,7 @@ def main() -> None:
                     "path": values["XS_CORRECTION"] or None,
                 },
                 "artifacts": {
+                    "energy_loss_fluctuation": artifact_record(fluctuation_package),
                     "stopping_power": artifact_record(Path(values["STOPPING_POWER"])),
                     "inelastic_cross_section": artifact_record(Path(values["INELASTIC_XS"])),
                     "primary_package": artifact_record(Path(values["PRIMARY_PACKAGE"])),

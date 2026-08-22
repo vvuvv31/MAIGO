@@ -5,6 +5,8 @@
 #include "carbon/neutral_package.hpp"
 #include "carbon/cross_section.hpp"
 #include "carbon/elastic_package.hpp"
+#include "carbon/electron_transport.hpp"
+#include "carbon/energy_loss_fluctuation.hpp"
 #include "carbon/multiple_scattering.hpp"
 #include "carbon/package_identity.hpp"
 #include "carbon/particle.hpp"
@@ -412,6 +414,87 @@ void test_interpolation() {
                  "Cross-section low-energy clamp failed");
 }
 
+void test_electron_transport_table_and_config() {
+    const auto directory = std::filesystem::temp_directory_path() /
+                           "maigo_electron_transport_test";
+    std::filesystem::create_directories(directory);
+    const auto table_path = directory / "electron_water.csv";
+    const auto config_path = directory / "run.yaml";
+    const auto write_table = [&](const bool valid_total = true) {
+        std::ofstream output(table_path, std::ios::trunc);
+        output
+            << "kinetic_energy_MeV,"
+               "electron_collisional_stopping_power_MeV_per_mm,"
+               "electron_radiative_stopping_power_MeV_per_mm,"
+               "electron_total_stopping_power_MeV_per_mm,"
+               "positron_collisional_stopping_power_MeV_per_mm,"
+               "positron_radiative_stopping_power_MeV_per_mm,"
+               "positron_total_stopping_power_MeV_per_mm\n"
+            << "0.001,2,0," << (valid_total ? 2 : 3) << ",3,0,3\n"
+            << "1,4,1,5,5,1,6\n"
+            << "500,6,2,8,7,2,9\n";
+    };
+    write_table();
+
+    const auto table = carbon::ElectronTransportTable::from_csv(table_path);
+    require(table.kinetic_energies_MeV().size() == 3,
+            "Electron transport table row count failed");
+    require_near(table.collisional_stopping_power(
+                     carbon::LeptonSpecies::electron, 0.5005),
+                 3.0, 1.0e-12,
+                 "Electron collision stopping-power interpolation failed");
+    require_near(table.total_stopping_power(
+                     carbon::LeptonSpecies::positron, 1.0),
+                 6.0, 1.0e-12,
+                 "Positron total stopping-power lookup failed");
+    require_near(table.csda_range_mm(carbon::LeptonSpecies::electron, 0.001),
+                 0.0005, 1.0e-12, "Electron low-energy CSDA range failed");
+    require(table.csda_range_mm(carbon::LeptonSpecies::electron, 500.0) >
+                table.csda_range_mm(carbon::LeptonSpecies::electron, 1.0),
+            "Electron CSDA range is not monotonic");
+
+    {
+        std::ofstream output(config_path, std::ios::trunc);
+        output << "device: gpu\n"
+               << "enable_secondary_generation: true\n"
+               << "enable_secondary_transport: true\n"
+               << "enable_neutral_transport: true\n"
+               << "neutral_transport_mode: full\n"
+               << "maximum_neutral_generations: 2\n"
+               << "enable_electron_transport: true\n"
+               << "electron_transport_data_file: electron_water.csv\n"
+               << "electron_queue_capacity: 1234\n"
+               << "electron_kinetic_cutoff_MeV: 0.01\n"
+               << "maximum_electromagnetic_generations: 4\n"
+               << "maximum_electron_step_mm: 0.1\n"
+               << "maximum_electron_relative_energy_loss: 0.05\n";
+    }
+    const auto config = carbon::load_config(config_path);
+    require(config.enable_electron_transport &&
+                config.electron_transport_data_file == table_path &&
+                config.electron_queue_capacity == 1234,
+            "Electron transport YAML fields or relative table path failed");
+
+    auto invalid = config;
+    invalid.neutral_transport_mode = "first_interaction";
+    require_throws([&] { invalid.validate(); },
+                   "Electron transport accepted first-interaction neutral mode");
+    invalid = config;
+    invalid.enable_ct_grid = true;
+    invalid.ct_grid_file = "fixture.cctg";
+    require_throws([&] { invalid.validate(); },
+                   "Electron transport accepted CT geometry");
+    invalid = config;
+    invalid.device = "serial";
+    require_throws([&] { invalid.validate(); },
+                   "Serial backend claimed electron transport support");
+
+    write_table(false);
+    require_throws([&] { (void)carbon::ElectronTransportTable::from_csv(table_path); },
+                   "Electron table accepted inconsistent total stopping power");
+    std::filesystem::remove_all(directory);
+}
+
 void test_stopping_power_csda_range_helpers() {
     // Constant total-ion dE/dx makes the A*dE_u/S contract exact.
     const carbon::StoppingPowerTable constant({1.0, 3.0}, {2.0, 2.0});
@@ -620,6 +703,109 @@ void test_primary_ion_definition() {
                 carbon::ion_effective_charge(10, 200.0) >
                     carbon::ion_effective_charge(6, 200.0),
             "Generic effective charge does not cover proton through neon");
+}
+
+void test_ion_physics_manifest_loading() {
+    const auto directory = std::filesystem::temp_directory_path() /
+                           "maigo_ion_physics_manifest_test";
+    std::filesystem::create_directories(directory);
+    const auto manifest_path = directory / "proton_water.yaml";
+    const auto config_path = directory / "run.yaml";
+    for (const char* name : {
+             "stopping.csv", "ions.csv", "inelastic.csv", "reaction.bin",
+             "cascade.bin", "overrides.json",
+         }) {
+        std::ofstream(directory / name) << "fixture\n";
+    }
+    const auto write_valid_manifest = [&] {
+        std::ofstream output(manifest_path);
+        output << "primary_atomic_number: 1\n"
+               << "primary_mass_number: 1\n"
+               << "primary_rest_mass_MeV: 938.27208816\n"
+               << "energy_straggling_model: gaussian_clamped\n"
+               << "use_particle_specific_stopping_power: true\n"
+               << "enable_primary_elastic_interactions: false\n"
+               << "primary_stopping_power_file: stopping.csv\n"
+               << "particle_stopping_power_file: ions.csv\n"
+               << "primary_inelastic_cross_section_file: inelastic.csv\n"
+               << "primary_reaction_package_file: reaction.bin\n"
+               << "cascade_package_file: cascade.bin\n"
+               << "package_identity_override_manifest_file: overrides.json\n"
+               << "primary_package_physics_model: BinaryCascade\n"
+               << "cascade_package_physics_model: BinaryCascade\n";
+    };
+    write_valid_manifest();
+    {
+        std::ofstream output(config_path);
+        output << "ion_physics_file: proton_water.yaml\n"
+               << "number_of_histories: 17\n"
+               << "initial_energy_MeVu: 150\n";
+    }
+    const auto config = carbon::load_config(config_path);
+    require(config.ion_physics_file == manifest_path,
+            "Ion physics manifest path was not resolved");
+    require(config.primary_atomic_number == 1 && config.primary_mass_number == 1,
+            "Ion physics manifest did not import projectile identity");
+    require(config.energy_straggling_model == "gaussian_clamped" &&
+                config.use_particle_specific_stopping_power &&
+                !config.enable_primary_elastic_interactions,
+            "Ion physics manifest did not import ion-dependent model choices");
+    require_near(config.primary_rest_mass_MeV, 938.27208816, 1.0e-12,
+                 "Ion physics manifest did not import rest mass");
+    require(config.primary_stopping_power_file == directory / "stopping.csv" &&
+                config.primary_reaction_package_file == directory / "reaction.bin" &&
+                config.cascade_package_file == directory / "cascade.bin",
+            "Ion physics manifest data paths were not resolved relative to the manifest");
+    require(config.neutral_package_file.empty() &&
+                config.primary_elastic_package_file.empty(),
+            "Ion physics manifest inherited optional C-12 package defaults");
+    require(config.number_of_histories == 17 && config.initial_energy_MeVu == 150.0,
+            "Ion physics manifest changed run controls");
+
+    {
+        std::ofstream output(config_path);
+        output << "ion_physics_file: proton_water.yaml\n"
+               << "primary_atomic_number: 6\n";
+    }
+    require_throws([&] { (void)carbon::load_config(config_path); },
+                   "Main YAML overrode manifest-owned ion identity");
+
+    {
+        std::ofstream output(manifest_path);
+        output << "primary_atomic_number: 1\n"
+               << "number_of_histories: 99\n";
+    }
+    {
+        std::ofstream output(config_path);
+        output << "ion_physics_file: proton_water.yaml\n";
+    }
+    require_throws([&] { (void)carbon::load_config(config_path); },
+                   "Ion physics manifest accepted a runtime control");
+
+    {
+        std::ofstream output(manifest_path);
+        output << "primary_atomic_number: 1\n"
+               << "primary_mass_number: 1\n";
+    }
+    require_throws([&] { (void)carbon::load_config(config_path); },
+                   "Incomplete ion physics manifest was accepted");
+    std::filesystem::remove_all(directory);
+
+    const auto source_directory = std::filesystem::path(CARBON_SOURCE_DIR);
+    const auto repository_config = carbon::load_config(
+        source_directory / "config/beam_200MeVu_ion_physics.yaml");
+    require(repository_config.primary_atomic_number == 6 &&
+                repository_config.primary_mass_number == 12,
+            "Repository carbon manifest has the wrong primary identity");
+    require(std::filesystem::equivalent(
+                repository_config.primary_reaction_package_file,
+                source_directory /
+                    "data/packages/topas_water_inclxx_1M_stitch7_primary_3d.bin") &&
+                std::filesystem::equivalent(
+                    repository_config.cascade_package_file,
+                    source_directory /
+                        "data/packages/topas_400MeVu_water_inclxx_1M_cascade_3d.bin"),
+            "Repository carbon manifest does not use the required packages");
 }
 
 void test_particle_specific_stopping_power_tables() {
@@ -1093,6 +1279,284 @@ void test_clamped_gaussian_straggling_sampler_audit() {
     }
     require(retained_250 < 0.70,
             "250 MeV 0.1 mm proton blocks should lose more than 30% of formula variance to the 2-mean clamp");
+}
+
+void test_moment_matched_straggling_sampler() {
+    const auto audit = [](const double mean, const double sigma, const int samples) {
+        double sum = 0.0;
+        double sum_sq = 0.0;
+        int nonpositive = 0;
+        for (int sample = 0; sample < samples; ++sample) {
+            const auto u1 = std::max<double>(
+                carbon::rng::uniform01(7, static_cast<std::uint64_t>(sample), 0, 0),
+                1.0e-12);
+            const auto u2 = static_cast<double>(
+                carbon::rng::uniform01(7, static_cast<std::uint64_t>(sample), 0, 1));
+            const auto extra = static_cast<double>(
+                carbon::rng::uniform01(7, static_cast<std::uint64_t>(sample), 0, 2));
+            const auto gaussian = std::sqrt(-2.0 * std::log(u1)) *
+                                  std::cos(2.0 * std::numbers::pi * u2);
+            const auto loss = carbon::sample_moment_matched_energy_loss(
+                mean, sigma, gaussian, extra, 1.0e6);
+            if (!(loss > 0.0)) ++nonpositive;
+            sum += loss;
+            sum_sq += loss * loss;
+        }
+        const auto sampled_mean = sum / samples;
+        const auto sampled_variance = sum_sq / samples - sampled_mean * sampled_mean;
+        return std::array<double, 3>{sampled_mean, sampled_variance,
+                                     static_cast<double>(nonpositive)};
+    };
+
+    const auto thick = audit(1.0, 0.20, 80000);
+    require(thick[2] == 0.0, "Thick-layer moment-matched sampler produced nonpositive loss");
+    require_near(thick[0], 1.0, 0.02, "Thick-layer moment-matched mean drifted");
+    require_near(thick[1], 0.04, 0.004, "Thick-layer moment-matched variance drifted");
+
+    const auto mid = audit(1.0, 0.50, 80000);
+    require(mid[2] == 0.0, "Gamma-regime moment-matched sampler produced nonpositive loss");
+    require_near(mid[0], 1.0, 0.05, "Gamma-regime moment-matched mean drifted");
+    require_near(mid[1], 0.25, 0.04, "Gamma-regime moment-matched variance drifted");
+
+    const auto thin = audit(1.0, 1.20, 80000);
+    require(thin[2] == 0.0, "Thin-layer moment-matched sampler produced nonpositive loss");
+    require_near(thin[0], 1.0, 0.12, "Thin-layer moment-matched mean drifted");
+    require_near(thin[1], 1.44, 0.30, "Thin-layer moment-matched variance drifted");
+
+    // Extremely small Gamma shapes can underflow to an exact zero. Zero is a
+    // valid no-collision loss for a transport segment and must remain finite;
+    // the transport kernel advances the particle instead of treating it as
+    // exhausted.
+    const auto ultra_thin = carbon::sample_moment_matched_energy_loss(
+        1.0e-5, 1.0e-2, -8.0, 1.0e-12, 10.0);
+    require(std::isfinite(ultra_thin) && ultra_thin >= 0.0,
+            "Ultra-thin moment-matched sample is invalid");
+
+    const auto first = carbon::sample_condensed_energy_loss(
+        0.04, 0.033, 0.3, 0.7, 250.0, carbon::straggling_sampler_moment_matched);
+    const auto second = carbon::sample_condensed_energy_loss(
+        0.04, 0.033, 0.3, 0.7, 250.0, carbon::straggling_sampler_moment_matched);
+    require_near(first, second, 0.0, "Moment-matched sampler is not deterministic");
+    require(first > 0.0 && first < 250.0,
+            "Moment-matched sampler violated the physical energy cap");
+    require_near(carbon::sample_condensed_energy_loss(
+                     1.0, 10.0, 1.0, 0.5, 100.0,
+                     carbon::straggling_sampler_gaussian_clamped),
+                 2.0, 1.0e-12,
+                 "Legacy clamped sampler must keep the historical 2-mean cap");
+
+    const auto water = carbon::StoppingPowerTable::from_csv(
+        std::filesystem::path(CARBON_SOURCE_DIR) /
+        "data/stopping_power_water_geant4_11_3_2.csv");
+    constexpr double proton_mass_MeV = 938.27208816;
+    constexpr double block_mm = 0.1;
+    constexpr double energy_MeVu = 250.0;
+    const auto mean = water.interpolate(energy_MeVu) *
+        carbon::stopping_power_scale_from_reference_ion(1, 6, energy_MeVu) * block_mm;
+    const auto charge = carbon::ion_effective_charge(1, energy_MeVu);
+    const auto formula_variance = carbon::condensed_total_loss_variance_MeV2(
+        energy_MeVu, proton_mass_MeV, charge, block_mm, 1.0);
+    const auto formula_sigma = std::sqrt(formula_variance);
+    double sum = 0.0;
+    double sum_sq = 0.0;
+    constexpr int samples = 120000;
+    for (int sample = 0; sample < samples; ++sample) {
+        const auto u1 = std::max<double>(
+            carbon::rng::uniform01(11, static_cast<std::uint64_t>(sample), 0, 0),
+            1.0e-12);
+        const auto u2 = static_cast<double>(
+            carbon::rng::uniform01(11, static_cast<std::uint64_t>(sample), 0, 1));
+        const auto extra = static_cast<double>(
+            carbon::rng::uniform01(11, static_cast<std::uint64_t>(sample), 0, 2));
+        const auto gaussian = std::sqrt(-2.0 * std::log(u1)) *
+                              std::cos(2.0 * std::numbers::pi * u2);
+        const auto loss = carbon::sample_moment_matched_energy_loss(
+            mean, formula_sigma, gaussian, extra, energy_MeVu);
+        sum += loss;
+        sum_sq += loss * loss;
+    }
+    const auto sampled_mean = sum / samples;
+    const auto sampled_variance = sum_sq / samples - sampled_mean * sampled_mean;
+    require(sampled_variance / formula_variance > 0.90,
+            "Moment-matched 250 MeV proton blocks still lose formula variance");
+
+    carbon::TransportConfig matched;
+    matched.energy_straggling_model = "moment_matched";
+    matched.validate();
+    require(matched.straggling_sampler_id() ==
+                carbon::straggling_sampler_moment_matched,
+            "moment_matched sampler id");
+    matched.straggling_scale_energies_MeVu = {70.0, 250.0};
+    matched.straggling_scale_values = {1.0, 1.7};
+    require_throws([&matched] { matched.validate(); },
+                   "moment_matched must reject incident-energy scale tables");
+    matched.straggling_scale_energies_MeVu.clear();
+    matched.straggling_scale_values.clear();
+    matched.straggling_scale = 1.01;
+    require_throws([&matched] { matched.validate(); },
+                   "moment_matched must reject scalar calibration");
+    matched.straggling_scale = 1.0;
+    matched.enable_step_stable_straggling = true;
+    matched.straggling_sampling_length_mm = 0.1;
+    require_throws([&matched] { matched.validate(); },
+                   "moment_matched must reject non-additive fixed blocks");
+    carbon::TransportConfig packaged;
+    packaged.energy_straggling_model = "packaged_fluctuation";
+    require_throws([&packaged] { packaged.validate(); },
+                   "packaged_fluctuation must require its data package");
+    packaged.energy_straggling_package_file = "fluctuation.csv";
+    require_throws([&packaged] { packaged.validate(); },
+                   "packaged_fluctuation accepted disabled straggling");
+    packaged.enable_energy_straggling = true;
+    packaged.validate();
+    require(packaged.uses_packaged_straggling(),
+            "packaged_fluctuation model predicate");
+    packaged.straggling_scale = 1.01;
+    require_throws([&packaged] { packaged.validate(); },
+                   "packaged_fluctuation accepted scalar calibration");
+    packaged.straggling_scale = 1.0;
+    packaged.straggling_scale_energies_MeVu = {70.0, 250.0};
+    packaged.straggling_scale_values = {1.0, 1.1};
+    require_throws([&packaged] { packaged.validate(); },
+                   "packaged_fluctuation accepted energy-wise calibration");
+    packaged.straggling_scale_energies_MeVu.clear();
+    packaged.straggling_scale_values.clear();
+    packaged.enable_secondary_energy_straggling = true;
+    require_throws([&packaged] { packaged.validate(); },
+                   "packaged_fluctuation accepted secondary straggling");
+    packaged.enable_secondary_energy_straggling = false;
+    packaged.enable_ct_grid = true;
+    packaged.ct_grid_file = "ct.mhd";
+    require_throws([&packaged] { packaged.validate(); },
+                   "packaged_fluctuation accepted CT material transport");
+    carbon::TransportConfig unknown;
+    unknown.energy_straggling_model = "urban";
+    require_throws([&unknown] { unknown.validate(); },
+                   "Unknown straggling model was accepted");
+}
+
+void test_energy_loss_fluctuation_package() {
+    const auto path = std::filesystem::temp_directory_path() /
+                      "carbon_energy_loss_fluctuation.csv";
+    {
+        std::ofstream output(path);
+        output << "projectile_Z,projectile_A,material,energy_MeV_per_u,"
+                  "areal_density_g_per_cm2,q_0,q_0.5,q_1\n"
+               << "1,1,G4_WATER,100,0.001,0,0.6,2.8\n"
+               << "1,1,G4_WATER,100,0.002,0,0.7,2.6\n"
+               << "1,1,G4_WATER,200,0.001,0,0.8,2.4\n"
+               << "1,1,G4_WATER,200,0.002,0,0.9,2.2\n";
+    }
+    const auto table = carbon::EnergyLossFluctuationTable::from_csv(path);
+    require(table.projectile_atomic_number() == 1 &&
+                table.projectile_mass_number() == 1,
+            "Fluctuation package projectile identity");
+    require(table.material_name() == "G4_WATER",
+            "Fluctuation package material identity");
+    require(table.energies_MeVu().size() == 2 &&
+                table.areal_densities_g_per_cm2().size() == 2 &&
+                table.probabilities().size() == 3,
+            "Fluctuation package grid dimensions");
+    require_near(table.sample_loss_ratio(150.0, 0.0015, 0.5), 0.75,
+                 1.0e-12, "Fluctuation package trilinear interpolation");
+    require_near(table.sample_loss_ratio(1.0, 1.0e-9, -1.0), 0.0,
+                 1.0e-12, "Fluctuation package lower endpoint clamping");
+    require_near(table.sample_loss_ratio(1.0e6, 1.0, 2.0), 2.2,
+                 1.0e-12, "Fluctuation package upper endpoint clamping");
+
+    {
+        std::ofstream output(path);
+        output << "projectile_Z,projectile_A,material,energy_MeV_per_u,"
+                  "areal_density_g_per_cm2,q_0,q_0.5,q_1\n"
+               << "1,1,G4_WATER,100,0.001,0,1,2\n"
+               << "1,1,G4_WATER,100,0.0025,0,0.5,3\n"
+               << "1,1,G4_WATER,200,0.002,0,0.8,2.4\n"
+               << "1,1,G4_WATER,200,0.0025,0,1.2,1.6\n";
+    }
+    const auto ragged = carbon::EnergyLossFluctuationTable::from_csv(path);
+    require(ragged.energies_MeVu().size() == 2 &&
+                ragged.areal_densities_g_per_cm2().size() == 3 &&
+                ragged.loss_ratio_quantiles().size() == 18,
+            "Ragged fluctuation package was not expanded to its union grid");
+    require_near(ragged.sample_loss_ratio(100.0, 0.002, 0.5), 2.0 / 3.0,
+                 1.0e-12, "Ragged density interpolation at lower energy");
+    require_near(ragged.sample_loss_ratio(200.0, 0.001, 0.5), 0.8,
+                 1.0e-12, "Ragged density lower endpoint extension");
+    require_near(ragged.sample_loss_ratio(150.0, 0.002, 0.5), 11.0 / 15.0,
+                 1.0e-12, "Ragged density then energy interpolation");
+
+    carbon::TransportConfig config;
+    config.number_of_histories = 100;
+    config.primary_atomic_number = 1;
+    config.primary_mass_number = 1;
+    config.initial_energy_MeVu = 150.0;
+    config.phantom_length_mm = 0.03;
+    config.depth_bin_width_mm = 0.015;
+    config.maximum_step_mm = 0.015;
+    config.maximum_relative_energy_loss = 0.5;
+    config.enable_energy_straggling = true;
+    config.energy_straggling_model = "packaged_fluctuation";
+    config.energy_straggling_package_file = path;
+    const carbon::StoppingPowerTable stopping_power(
+        {1.0, 300.0}, {1.0, 1.0});
+    const carbon::CrossSectionTable cross_section(
+        {0.0, 300.0}, {0.0, 0.0});
+    const auto first = carbon::transport_serial(
+        config, stopping_power, cross_section);
+    const auto second = carbon::transport_serial(
+        config, stopping_power, cross_section);
+    require(first.backend.find("packaged-fluctuation") != std::string::npos,
+            "Serial backend omitted packaged fluctuation identity");
+    require(first.deposited_energy_MeV == second.deposited_energy_MeV,
+            "Packaged fluctuation transport is not deterministic");
+    require(first.relative_energy_balance_error() < 1.0e-12,
+            "Packaged fluctuation transport broke energy conservation");
+
+    auto uncovered = config;
+    uncovered.initial_energy_MeVu = 201.0;
+    require_throws(
+        [&uncovered, &stopping_power, &cross_section] {
+            (void)carbon::transport_serial(
+                uncovered, stopping_power, cross_section);
+        },
+        "Fluctuation transport accepted energy above package coverage");
+    uncovered = config;
+    uncovered.maximum_step_mm = 0.026;
+    require_throws(
+        [&uncovered, &stopping_power, &cross_section] {
+            (void)carbon::transport_serial(
+                uncovered, stopping_power, cross_section);
+        },
+        "Fluctuation transport accepted areal density above package coverage");
+
+    const auto yaml_path = std::filesystem::temp_directory_path() /
+                           "carbon_energy_loss_fluctuation.yaml";
+    {
+        std::ofstream output(yaml_path);
+        output << "number_of_histories: 10\n"
+               << "enable_energy_straggling: true\n"
+               << "energy_straggling_model: packaged_fluctuation\n"
+               << "energy_straggling_package_file: " << path.filename().string()
+               << "\n";
+    }
+    const auto parsed = carbon::load_config(yaml_path);
+    require(parsed.energy_straggling_package_file == path,
+            "Relative fluctuation package path was not resolved from YAML");
+
+    {
+        std::ofstream output(path);
+        output << "projectile_Z,projectile_A,material,energy_MeV_per_u,"
+                  "areal_density_g_per_cm2,q_0,q_0.5,q_1\n"
+               << "1,1,G4_WATER,100,0.001,0,0.1,0.2\n"
+               << "1,1,G4_WATER,100,0.002,0,0.1,0.2\n"
+               << "1,1,G4_WATER,200,0.001,0,0.1,0.2\n"
+               << "1,1,G4_WATER,200,0.002,0,0.1,0.2\n";
+    }
+    require_throws(
+        [&path] { (void)carbon::EnergyLossFluctuationTable::from_csv(path); },
+        "Fluctuation package accepted a non-unit loss-ratio mean");
+    std::filesystem::remove(path);
+    std::filesystem::remove(yaml_path);
 }
 
 void test_condensed_total_loss_straggling() {
@@ -2925,6 +3389,18 @@ void test_tps_source_geometry_csv_and_switch() {
     {
         std::ofstream output(yaml_path);
         output << "number_of_histories: 10\n"
+               << "energy_straggling_model: moment_matched\n"
+               << "straggling_scale: 1.0\n";
+    }
+    const auto matched = carbon::load_config(yaml_path);
+    require(matched.uses_moment_matched_straggling(),
+            "energy_straggling_model:moment_matched parsing");
+    require(matched.straggling_sampler_id() ==
+                carbon::straggling_sampler_moment_matched,
+            "parsed moment_matched sampler id");
+    {
+        std::ofstream output(yaml_path);
+        output << "number_of_histories: 10\n"
                << "tpsSource: true\n"
                << "enable_voxel_scoring: true\n"
                << "voxel_scorer_clamps_transport: false\n"
@@ -4125,8 +4601,13 @@ void test_sycl_ct_secondary_density_smoke() {
 
 void test_sycl_neutral_transport_smoke() {
     const auto source_directory = std::filesystem::path(CARBON_SOURCE_DIR);
-    const auto neutral_path =
+    auto neutral_path =
         source_directory / "data/packages/topas_200MeVu_neutral_development.bin";
+    if (!std::filesystem::exists(neutral_path) ||
+        std::filesystem::file_size(neutral_path) < 1024) {
+        neutral_path =
+            source_directory / "data/packages/topas_400MeVu_neutral_100k.bin";
+    }
     if (!std::filesystem::exists(neutral_path) ||
         std::filesystem::file_size(neutral_path) < 1024) {
         std::cout << "SKIP neutral SYCL smoke: no Geant4 11.3.2 neutral fixture\n";
@@ -4203,6 +4684,7 @@ void test_sycl_neutral_transport_smoke() {
     // historically it was written only to the 1D "other" fragment channel.
     auto kerma_config = config;
     kerma_config.enable_neutral_transport = false;
+    kerma_config.enable_fragment_species_scoring = true;
     kerma_config.neutral_local_kerma_fraction = 0.298;
     kerma_config.neutral_kerma_mean_free_path_mm = 110.0;
     kerma_config.validate();
@@ -4220,6 +4702,62 @@ void test_sycl_neutral_transport_smoke() {
     require(kerma_result.relative_energy_balance_error() < 1.0e-3,
             "Neutral local kerma counted twice in the energy balance: " +
                 std::to_string(kerma_result.relative_energy_balance_error()));
+
+    const auto electron_table_path = std::filesystem::temp_directory_path() /
+                                     "maigo_neutral_electron_water.csv";
+    {
+        std::ofstream output(electron_table_path, std::ios::trunc);
+        output
+            << "kinetic_energy_MeV,"
+               "electron_collisional_stopping_power_MeV_per_mm,"
+               "electron_radiative_stopping_power_MeV_per_mm,"
+               "electron_total_stopping_power_MeV_per_mm,"
+               "positron_collisional_stopping_power_MeV_per_mm,"
+               "positron_radiative_stopping_power_MeV_per_mm,"
+               "positron_total_stopping_power_MeV_per_mm\n"
+            << "0.001,2,0,2,2,0,2\n"
+            << "1,2,0.01,2.01,2,0.01,2.01\n"
+            << "500,2,0.1,2.1,2,0.1,2.1\n";
+    }
+    auto electron_config = config;
+    electron_config.device = "cpu";
+    electron_config.neutral_transport_mode = "full";
+    electron_config.maximum_neutral_generations = 2;
+    electron_config.enable_electron_transport = true;
+    electron_config.electron_transport_data_file = electron_table_path;
+    electron_config.electron_queue_capacity = 20'000;
+    electron_config.validate();
+    const auto electron_result = carbon::transport_sycl(
+        electron_config, stopping_power, forced_reaction, "cpu", &reaction_packages,
+        nullptr, &neutral_packages);
+    std::filesystem::remove(electron_table_path);
+    require(electron_result.queued_electrons > 0 &&
+                electron_result.transported_electrons > 0,
+            "Neutral-package electrons were not routed into electron transport");
+    require(electron_result.electron_queue_overflow == 0,
+            "Unexpected electron queue overflow");
+    require(electron_result.electron_deposited_energy_MeV > 0.0,
+            "Electron collision loss did not reach the dose scorer");
+    require(electron_result.electron_generated_gammas > 0 &&
+                electron_result.electron_brems_gamma_energy_MeV > 0.0,
+            "Electron radiative loss did not feed brems gamma into neutral transport");
+    require(electron_result.electron_gamma_queue_overflow == 0,
+            "Unexpected electron-generated gamma queue overflow");
+    const auto electron_output_energy =
+        electron_result.electron_deposited_energy_MeV +
+        electron_result.electron_escaped_energy_MeV +
+        electron_result.electron_radiative_energy_MeV +
+        electron_result.positron_annihilation_gamma_energy_MeV +
+        electron_result.positron_annihilation_reserve_MeV;
+    require(std::abs(electron_output_energy -
+                     electron_result.queued_electron_energy_MeV) <=
+                1.0e-4 * std::max(1.0, electron_result.queued_electron_energy_MeV),
+            "Electron queue kinetic/rest-energy ledger failed");
+    require(electron_result.backend.find("+electron-condensed") != std::string::npos,
+            "Electron transport backend suffix is missing");
+    require(electron_result.relative_energy_balance_error() < 5.0e-2,
+            "Electron transport energy balance failed: " +
+                std::to_string(electron_result.relative_energy_balance_error()));
 }
 #endif
 
@@ -4233,11 +4771,13 @@ int main() {
         test_serial_voxel_idd_closure();
         test_charged_dose_categories();
         test_interpolation();
+        test_electron_transport_table_and_config();
         test_stopping_power_csda_range_helpers();
         test_cpu_csda_range_loss_switch();
         test_cross_section_zero_endpoint_contract();
         test_fragment_stopping_power_scale();
         test_primary_ion_definition();
+        test_ion_physics_manifest_loading();
         test_particle_specific_stopping_power_tables();
         test_step_selection();
         test_slab_phantom_helpers();
@@ -4246,6 +4786,8 @@ int main() {
         test_highland_multiple_scattering();
         test_bohr_straggling();
         test_clamped_gaussian_straggling_sampler_audit();
+        test_moment_matched_straggling_sampler();
+        test_energy_loss_fluctuation_package();
         test_condensed_total_loss_straggling();
         test_step_stable_straggling_validation();
         test_energy_dependent_straggling_scale();
