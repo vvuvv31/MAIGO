@@ -584,12 +584,17 @@ inline MinibeamChargedSurvivor transport_minibeam_charged_product(
 #include "detail/sycl_cascade_host_lut.inc"
 
 
-inline std::uint32_t select_binned_energy_cascade_interaction(
+inline CascadeSelectionResult select_binned_energy_cascade_interaction(
     const CascadeInteraction* interactions,
     const std::uint32_t offset,
     const std::uint32_t count,
     const float energy_MeV_per_u,
-    const float u01) noexcept {
+    const float u01,
+    const bool allow_nearest_fallback) noexcept {
+    if (count == 0U) {
+        return no_cascade_energy_coverage(
+            interactions, offset, count, energy_MeV_per_u);
+    }
     const auto target_energy_bin =
         cascade_condition_energy_bin(energy_MeV_per_u);
     // Keep parent-energy conditioning tight: ±5 × 2 MeV/u = ±10 MeV/u.
@@ -629,17 +634,28 @@ inline std::uint32_t select_binned_energy_cascade_interaction(
             total_candidates - 1U);
         for (std::uint32_t range = 0; range < range_total; ++range) {
             if (pick < range_count[range]) {
-                return range_begin[range] + pick;
+                return make_cascade_selection_result(
+                    interactions, offset, range_begin[range] + pick,
+                    energy_MeV_per_u,
+                    radius == 0U ? CascadeSelectionStatus::exact_cell
+                                 : CascadeSelectionStatus::expanded_window);
             }
             pick -= range_count[range];
         }
     }
     // Never fall back to energy-unconditioned random full-table sampling.
-    return nearest_cascade_interaction(interactions, offset, count,
-                                       energy_MeV_per_u);
+    if (!allow_nearest_fallback) {
+        return no_cascade_energy_coverage(
+            interactions, offset, count, energy_MeV_per_u);
+    }
+    return make_cascade_selection_result(
+        interactions, offset,
+        nearest_cascade_interaction(interactions, offset, count,
+                                    energy_MeV_per_u),
+        energy_MeV_per_u, CascadeSelectionStatus::nearest_fallback);
 }
 
-inline std::uint32_t select_cascade_interaction_conditioned(
+inline CascadeSelectionResult select_cascade_interaction_conditioned(
     const CascadeInteraction* interactions,
     const std::uint32_t offset,
     const std::uint32_t count,
@@ -647,17 +663,21 @@ inline std::uint32_t select_cascade_interaction_conditioned(
     const float depth_mm,
     const float u01,
     const bool binned_depth_layout,
-    const bool condition_on_reference_depth) noexcept {
+    const bool condition_on_reference_depth,
+    const bool allow_nearest_fallback) noexcept {
     if (!binned_depth_layout) {
         return select_legacy_cascade_interaction_energy_conditioned(
-            interactions, offset, count, energy_MeV_per_u, u01);
+            interactions, offset, count, energy_MeV_per_u, u01,
+            allow_nearest_fallback);
     }
     if (condition_on_reference_depth) {
         return select_depth_conditioned_cascade_interaction(
-            interactions, offset, count, energy_MeV_per_u, depth_mm, u01);
+            interactions, offset, count, energy_MeV_per_u, depth_mm, u01,
+            allow_nearest_fallback);
     }
     return select_binned_energy_cascade_interaction(
-        interactions, offset, count, energy_MeV_per_u, u01);
+        interactions, offset, count, energy_MeV_per_u, u01,
+        allow_nearest_fallback);
 }
 
 #include "detail/sycl_score_device.inc"
@@ -3181,6 +3201,9 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
         std::isfinite(cascade_packages->interactions().front().depth_mm);
     const auto cascade_condition_on_reference_depth =
         config.cascade_condition_on_reference_depth;
+    const auto cascade_allow_nearest_fallback =
+        config.cascade_selection_policy ==
+        CascadeSelectionPolicy::legacy_nearest;
     const auto neutral_projectile_count = enable_neutral_transport
                                               ? neutral_packages->projectiles().size()
                                               : std::size_t{0};
@@ -6396,9 +6419,56 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                                             current_energy_MeVu, position_z_mm,
                                             package_uniform,
                                             cascade_depth_conditioned_layout,
-                                            cascade_condition_on_reference_depth);
+                                            cascade_condition_on_reference_depth,
+                                            cascade_allow_nearest_fallback);
+                                    if (selected.status ==
+                                        CascadeSelectionStatus::exact_cell) {
+                                        ++cascade_summary.selection_exact_count;
+                                    } else if (selected.status ==
+                                               CascadeSelectionStatus::expanded_window) {
+                                        ++cascade_summary.selection_expanded_count;
+                                    } else if (selected.status ==
+                                               CascadeSelectionStatus::nearest_fallback) {
+                                        ++cascade_summary.selection_nearest_count;
+                                    } else {
+                                        ++cascade_summary.selection_no_coverage_count;
+                                    }
+                                    cascade_summary.selection_energy_distance_sum_MeVu +=
+                                        selected.energy_distance_MeVu;
+                                    cascade_summary.selection_energy_distance_max_MeVu =
+                                        sycl::fmax(
+                                            cascade_summary
+                                                .selection_energy_distance_max_MeVu,
+                                            selected.energy_distance_MeVu);
+                                    if (selected.status ==
+                                        CascadeSelectionStatus::no_energy_coverage) {
+                                        cascade_summary.interaction_count = 1;
+                                        cascade_summary.incident_energy_MeV = energy_MeV;
+                                        profile_add(profile_counters_device,
+                                                    TransportProfileSlot::secondary_cascade);
+                                        deposit_local_heat_device(
+                                            energy_MeV, position_x_mm, position_y_mm,
+                                            position_z_mm, direction_x, direction_y,
+                                            direction_z, depth_bin_width_mm,
+                                            number_of_bins,
+                                            enable_voxel_scoring, voxel_min_x_mm,
+                                            voxel_min_y_mm, voxel_size_x_mm,
+                                            voxel_size_y_mm, voxel_bins_x, voxel_bins_y,
+                                            voxel_plane_size,
+                                            aggregate_secondary_dose_device,
+                                            fragment_dose_device, species_index,
+                                            voxel_dose_device,
+                                            enable_charged_origin_voxel_scoring,
+                                            charged_origin_voxel_dose_device,
+                                            charged_origin_voxel_offset);
+                                        cascade_summary.residual_local_MeV += energy_MeV;
+                                        deposited_MeV += energy_MeV;
+                                        energy_MeV = 0.0F;
+                                        break;
+                                    }
                                     const auto interaction = cascade_interactions_device[
-                                        projectile.interaction_offset + selected];
+                                        projectile.interaction_offset +
+                                        selected.interaction_index];
                                     auto package_product_ke_MeV = 0.0F;
                                     for (std::uint32_t product_index = 0;
                                          product_index < interaction.product_count;
@@ -8492,6 +8562,19 @@ TransportResult transport_sycl_minibeam(const TransportConfig& config,
                  ++index) {
                 const auto& summary = cascade_summaries_host[index];
                 result.cascade_interactions += summary.interaction_count;
+                result.cascade_selection_exact += summary.selection_exact_count;
+                result.cascade_selection_expanded +=
+                    summary.selection_expanded_count;
+                result.cascade_selection_nearest +=
+                    summary.selection_nearest_count;
+                result.cascade_selection_no_coverage +=
+                    summary.selection_no_coverage_count;
+                result.cascade_selection_energy_distance_sum_MeVu +=
+                    summary.selection_energy_distance_sum_MeVu;
+                result.cascade_selection_energy_distance_max_MeVu = std::max(
+                    result.cascade_selection_energy_distance_max_MeVu,
+                    static_cast<double>(
+                        summary.selection_energy_distance_max_MeVu));
                 result.generated_cascade_products += summary.direct_count;
                 result.queued_cascade_secondaries += summary.queued_count;
                 result.cascade_queue_overflow += summary.overflow_count;

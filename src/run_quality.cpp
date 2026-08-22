@@ -85,6 +85,14 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
         result.untracked_nuclear_energy_MeV;
     report.absolute_energy_residual_MeV = std::abs(raw_residual);
     report.relative_energy_residual = result.relative_energy_balance_error();
+    report.cascade_selection_exact = result.cascade_selection_exact;
+    report.cascade_selection_expanded = result.cascade_selection_expanded;
+    report.cascade_selection_nearest = result.cascade_selection_nearest;
+    report.cascade_selection_no_coverage = result.cascade_selection_no_coverage;
+    report.cascade_selection_energy_distance_sum_MeVu =
+        result.cascade_selection_energy_distance_sum_MeVu;
+    report.cascade_selection_energy_distance_max_MeVu =
+        result.cascade_selection_energy_distance_max_MeVu;
 
     const auto add_issue = [&](const QualityIssue& issue,
                                const bool production_failure) {
@@ -132,6 +140,19 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
                  result.electron_gamma_queue_overflow,
                  result.electron_gamma_queue_overflow_energy_MeV);
 
+    if (report.cascade_selection_nearest != 0) {
+        add_issue({"cascade_nearest_fallback",
+                   "cascade selection used a nearest-event fallback",
+                   static_cast<double>(report.cascade_selection_nearest), 0.0},
+                  true);
+    }
+    if (report.cascade_selection_no_coverage != 0) {
+        add_issue({"cascade_no_energy_coverage",
+                   "cascade selection had no event inside the allowed energy coverage",
+                   static_cast<double>(report.cascade_selection_no_coverage), 0.0},
+                  true);
+    }
+
     const auto finite_issue = [&](const std::string& label) {
         report.failures.push_back(
             {"non_finite_result", label + " contains NaN or infinity", 1.0, 0.0});
@@ -175,6 +196,8 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
             result.positron_annihilation_gamma_energy_MeV,
             result.electron_gamma_queue_overflow_energy_MeV,
             result.electromagnetic_generation_residual_MeV,
+            result.cascade_selection_energy_distance_sum_MeVu,
+            result.cascade_selection_energy_distance_max_MeVu,
             result.elapsed_seconds,
             result.primary_kernel_seconds,
             result.secondary_kernel_seconds,
@@ -277,6 +300,21 @@ void write_run_quality_report_json(const std::filesystem::path& path,
            << ",\n  \"queue_overflow_count\": " << report.queue_overflow_count
            << ",\n  \"queue_overflow_energy_MeV\": ";
     write_json_number(output, report.queue_overflow_energy_MeV);
+    output << ",\n  \"cascade_selection\": {"
+           << "\n    \"exact_count\": " << report.cascade_selection_exact
+           << ",\n    \"expanded_window_count\": "
+           << report.cascade_selection_expanded
+           << ",\n    \"nearest_fallback_count\": "
+           << report.cascade_selection_nearest
+           << ",\n    \"no_energy_coverage_count\": "
+           << report.cascade_selection_no_coverage
+           << ",\n    \"energy_distance_sum_MeVu\": ";
+    write_json_number(output,
+                      report.cascade_selection_energy_distance_sum_MeVu);
+    output << ",\n    \"energy_distance_max_MeVu\": ";
+    write_json_number(output,
+                      report.cascade_selection_energy_distance_max_MeVu);
+    output << "\n  }";
     output << ",\n  \"failures\": ";
     write_issues(output, report.failures);
     output << ",\n  \"approximations\": ";

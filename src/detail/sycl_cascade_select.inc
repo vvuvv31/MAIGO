@@ -91,22 +91,58 @@ inline std::uint32_t nearest_cascade_interaction(
     return upper_delta < lower_delta ? lower : lower - 1U;
 }
 
+inline CascadeSelectionResult make_cascade_selection_result(
+    const CascadeInteraction* interactions,
+    const std::uint32_t offset,
+    const std::uint32_t interaction_index,
+    const float energy_MeV_per_u,
+    const CascadeSelectionStatus status) noexcept {
+    const auto source_energy =
+        interactions[offset + interaction_index].incident_energy_MeV_per_u;
+    return CascadeSelectionResult{
+        interaction_index,
+        source_energy,
+        sycl::fabs(source_energy - energy_MeV_per_u),
+        status,
+    };
+}
+
+inline CascadeSelectionResult no_cascade_energy_coverage(
+    const CascadeInteraction* interactions,
+    const std::uint32_t offset,
+    const std::uint32_t count,
+    const float energy_MeV_per_u) noexcept {
+    if (count != 0U) {
+        const auto nearest = nearest_cascade_interaction(
+            interactions, offset, count, energy_MeV_per_u);
+        const auto source_energy =
+            interactions[offset + nearest].incident_energy_MeV_per_u;
+        return CascadeSelectionResult{
+            count, source_energy, sycl::fabs(source_energy - energy_MeV_per_u),
+            CascadeSelectionStatus::no_energy_coverage,
+        };
+    }
+    return CascadeSelectionResult{
+        count, 0.0F, 0.0F,
+        CascadeSelectionStatus::no_energy_coverage,
+    };
+}
+
 // Energy-conditioned cascade final-state selection.
 // Keep a tight incident-energy band so residual-soft and fragmentation-hard
 // topologies are not mixed, then over-scaled. Returns `count` when no event
 // lies inside the maximum allowed band (caller should deposit residual heat
 // instead of inventing a distant final state).
-inline std::uint32_t select_legacy_cascade_interaction_energy_conditioned(
+inline CascadeSelectionResult select_legacy_cascade_interaction_energy_conditioned(
     const CascadeInteraction* interactions,
     const std::uint32_t offset,
     const std::uint32_t count,
     const float energy_MeV_per_u,
-    const float u01) noexcept {
+    const float u01,
+    const bool allow_nearest_fallback) noexcept {
     if (count == 0U) {
-        return 0U;
-    }
-    if (count == 1U) {
-        return 0U;
+        return no_cascade_energy_coverage(
+            interactions, offset, count, energy_MeV_per_u);
     }
     // Prefer a tight band (≤15%). Absolute floor helps sparse low-E species;
     // absolute cap avoids huge high-E windows that re-mix residual/fragmentation
@@ -146,10 +182,24 @@ inline std::uint32_t select_legacy_cascade_interaction_energy_conditioned(
         const auto pick = sycl::min(
             static_cast<std::uint32_t>(u01 * static_cast<float>(window)),
             window - 1U);
-        return begin + pick;
+        const auto selected = begin + pick;
+        const auto distance = sycl::fabs(
+            interactions[offset + selected].incident_energy_MeV_per_u -
+            energy_MeV_per_u);
+        return make_cascade_selection_result(
+            interactions, offset, selected, energy_MeV_per_u,
+            distance <= 1.0e-6F ? CascadeSelectionStatus::exact_cell
+                               : CascadeSelectionStatus::expanded_window);
     }
-    return nearest_cascade_interaction(interactions, offset, count,
-                                       energy_MeV_per_u);
+    if (!allow_nearest_fallback) {
+        return no_cascade_energy_coverage(
+            interactions, offset, count, energy_MeV_per_u);
+    }
+    return make_cascade_selection_result(
+        interactions, offset,
+        nearest_cascade_interaction(interactions, offset, count,
+                                    energy_MeV_per_u),
+        energy_MeV_per_u, CascadeSelectionStatus::nearest_fallback);
 }
 
 constexpr float cascade_condition_energy_bin_width_MeVu = 2.0F;
@@ -196,13 +246,18 @@ inline std::uint32_t cascade_condition_cell_lower_bound(
     return lower;
 }
 
-inline std::uint32_t select_depth_conditioned_cascade_interaction(
+inline CascadeSelectionResult select_depth_conditioned_cascade_interaction(
     const CascadeInteraction* interactions,
     const std::uint32_t offset,
     const std::uint32_t count,
     const float energy_MeV_per_u,
     const float depth_mm,
-    const float u01) noexcept {
+    const float u01,
+    const bool allow_nearest_fallback) noexcept {
+    if (count == 0U) {
+        return no_cascade_energy_coverage(
+            interactions, offset, count, energy_MeV_per_u);
+    }
     const auto target_energy_bin =
         cascade_condition_energy_bin(energy_MeV_per_u);
     const auto target_depth_bin = cascade_condition_depth_bin(depth_mm);
@@ -270,15 +325,26 @@ inline std::uint32_t select_depth_conditioned_cascade_interaction(
                 total_candidates - 1U);
             for (std::uint32_t range = 0; range < range_total; ++range) {
                 if (pick < range_count[range]) {
-                    return range_begin[range] + pick;
+                    return make_cascade_selection_result(
+                        interactions, offset, range_begin[range] + pick,
+                        energy_MeV_per_u,
+                        energy_radius == 0U && depth_radius == 0U
+                            ? CascadeSelectionStatus::exact_cell
+                            : CascadeSelectionStatus::expanded_window);
                 }
                 pick -= range_count[range];
             }
         }
     }
-    // Prefer nearest energy over a full-table random draw (parent-energy mix).
-    return nearest_cascade_interaction(interactions, offset, count,
-                                       energy_MeV_per_u);
+    if (!allow_nearest_fallback) {
+        return no_cascade_energy_coverage(
+            interactions, offset, count, energy_MeV_per_u);
+    }
+    return make_cascade_selection_result(
+        interactions, offset,
+        nearest_cascade_interaction(interactions, offset, count,
+                                    energy_MeV_per_u),
+        energy_MeV_per_u, CascadeSelectionStatus::nearest_fallback);
 }
 
 // Scale correlated final-state KE to the true projectile energy.

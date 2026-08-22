@@ -141,6 +141,16 @@ void accumulate_transport_result(carbon::TransportResult& total,
     total.secondary_deposited_energy_MeV += part.secondary_deposited_energy_MeV;
     total.secondary_escaped_energy_MeV += part.secondary_escaped_energy_MeV;
     total.cascade_interactions += part.cascade_interactions;
+    total.cascade_selection_exact += part.cascade_selection_exact;
+    total.cascade_selection_expanded += part.cascade_selection_expanded;
+    total.cascade_selection_nearest += part.cascade_selection_nearest;
+    total.cascade_selection_no_coverage +=
+        part.cascade_selection_no_coverage;
+    total.cascade_selection_energy_distance_sum_MeVu +=
+        part.cascade_selection_energy_distance_sum_MeVu;
+    total.cascade_selection_energy_distance_max_MeVu = std::max(
+        total.cascade_selection_energy_distance_max_MeVu,
+        part.cascade_selection_energy_distance_max_MeVu);
     total.generated_cascade_products += part.generated_cascade_products;
     total.queued_cascade_secondaries += part.queued_cascade_secondaries;
     total.cascade_queue_overflow += part.cascade_queue_overflow;

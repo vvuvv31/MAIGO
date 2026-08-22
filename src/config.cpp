@@ -603,6 +603,12 @@ void TransportConfig::validate() const {
         throw std::invalid_argument(
             "production run_mode requires queue-overflow and NaN/Inf rejection");
     }
+    if (run_mode == RunMode::production && enable_fragment_cascade &&
+        cascade_selection_policy != CascadeSelectionPolicy::strict_coverage) {
+        throw std::invalid_argument(
+            "production fragment cascade requires "
+            "cascade_selection_policy=strict_coverage");
+    }
     if (enable_csda_range_energy_loss &&
         (enable_ct_grid || enable_layered_phantom || enable_hetero_insert ||
          enable_minibeam || use_particle_specific_stopping_power)) {
@@ -1510,6 +1516,24 @@ TransportConfig load_config(const std::filesystem::path& path) {
         config.quality_reject_any_queue_overflow);
     config.quality_reject_nan_or_inf = parse_bool(
         values, "quality_reject_nan_or_inf", config.quality_reject_nan_or_inf);
+    if (const auto policy = values.find("cascade_selection_policy");
+        policy != values.end()) {
+        auto name = policy->second;
+        std::transform(name.begin(), name.end(), name.begin(),
+                       [](const unsigned char character) {
+                           return static_cast<char>(std::tolower(character));
+                       });
+        if (name == "legacy_nearest") {
+            config.cascade_selection_policy =
+                CascadeSelectionPolicy::legacy_nearest;
+        } else if (name == "strict_coverage") {
+            config.cascade_selection_policy =
+                CascadeSelectionPolicy::strict_coverage;
+        } else {
+            throw std::invalid_argument(
+                "cascade_selection_policy must be legacy_nearest or strict_coverage");
+        }
+    }
     config.ion_physics_file = ion_physics_file;
     if (!ion_physics_file.empty()) {
         // A manifest is an ownership boundary. Missing optional data must stay

@@ -289,9 +289,15 @@ struct CascadeTransportSummary {
     float neutral_queue_overflow_energy_MeV{0.0F};
     // Local residual heat deposited at cascade sites (dose map, not untracked).
     float residual_local_MeV{0.0F};
+    std::uint32_t selection_exact_count{0};
+    std::uint32_t selection_expanded_count{0};
+    std::uint32_t selection_nearest_count{0};
+    std::uint32_t selection_no_coverage_count{0};
+    float selection_energy_distance_sum_MeVu{0.0F};
+    float selection_energy_distance_max_MeVu{0.0F};
 };
 
-static_assert(sizeof(CascadeTransportSummary) == 56);
+static_assert(sizeof(CascadeTransportSummary) == 80);
 
 struct NeutralTransportSummary {
     std::uint32_t interaction_count{0};

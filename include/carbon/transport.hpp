@@ -154,6 +154,12 @@ struct TransportResult {
     double secondary_deposited_energy_MeV{0.0};
     double secondary_escaped_energy_MeV{0.0};
     std::uint64_t cascade_interactions{0};
+    std::uint64_t cascade_selection_exact{0};
+    std::uint64_t cascade_selection_expanded{0};
+    std::uint64_t cascade_selection_nearest{0};
+    std::uint64_t cascade_selection_no_coverage{0};
+    double cascade_selection_energy_distance_sum_MeVu{0.0};
+    double cascade_selection_energy_distance_max_MeVu{0.0};
     std::uint64_t generated_cascade_products{0};
     std::uint64_t queued_cascade_secondaries{0};
     std::uint64_t cascade_queue_overflow{0};

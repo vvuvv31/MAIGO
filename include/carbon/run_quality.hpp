@@ -24,6 +24,12 @@ struct RunQualityReport {
     double relative_energy_residual{};
     std::uint64_t queue_overflow_count{};
     double queue_overflow_energy_MeV{};
+    std::uint64_t cascade_selection_exact{};
+    std::uint64_t cascade_selection_expanded{};
+    std::uint64_t cascade_selection_nearest{};
+    std::uint64_t cascade_selection_no_coverage{};
+    double cascade_selection_energy_distance_sum_MeVu{};
+    double cascade_selection_energy_distance_max_MeVu{};
     std::vector<QualityIssue> failures;
     std::vector<QualityIssue> approximations;
 

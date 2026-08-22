@@ -820,6 +820,15 @@ int main(int argc, char* argv[]) {
                           << "Secondary escaped energy: "
                           << result.secondary_escaped_energy_MeV << " MeV\n"
                           << "Cascade interactions: " << result.cascade_interactions << '\n'
+                          << "Cascade selection exact/expanded/nearest/no-coverage: "
+                          << result.cascade_selection_exact << '/'
+                          << result.cascade_selection_expanded << '/'
+                          << result.cascade_selection_nearest << '/'
+                          << result.cascade_selection_no_coverage << '\n'
+                          << "Cascade selection energy-distance sum/max: "
+                          << result.cascade_selection_energy_distance_sum_MeVu << '/'
+                          << result.cascade_selection_energy_distance_max_MeVu
+                          << " MeV/u\n"
                           << "Generated cascade products: "
                           << result.generated_cascade_products << '\n'
                           << "Queued cascade secondaries: "

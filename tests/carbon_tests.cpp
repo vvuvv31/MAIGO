@@ -881,6 +881,33 @@ void test_strict_config_parsing_and_canonicalization() {
 
     {
         std::ofstream output(config_path);
+        output << "cascade_selection_policy: strict_coverage\n";
+    }
+    const auto strict_cascade = carbon::load_config(config_path);
+    require(strict_cascade.cascade_selection_policy ==
+                carbon::CascadeSelectionPolicy::strict_coverage,
+            "Strict cascade selection policy was not parsed");
+
+    {
+        std::ofstream output(config_path);
+        output << "cascade_selection_policy: approximate\n";
+    }
+    require_throws([&] { (void)carbon::load_config(config_path); },
+                   "Configuration accepted an unknown cascade selection policy");
+
+    auto production_cascade = production;
+    production_cascade.enable_fragment_cascade = true;
+    production_cascade.enable_secondary_generation = true;
+    production_cascade.enable_secondary_transport = true;
+    production_cascade.maximum_cascade_generations = 1;
+    require_throws([&] { production_cascade.validate(); },
+                   "Production fragment cascade accepted nearest fallback");
+    production_cascade.cascade_selection_policy =
+        carbon::CascadeSelectionPolicy::strict_coverage;
+    production_cascade.validate();
+
+    {
+        std::ofstream output(config_path);
         output << "run_mode: clinical\n";
     }
     require_throws([&] { (void)carbon::load_config(config_path); },
@@ -935,6 +962,28 @@ void test_run_quality_gate() {
                 report.failures.empty() && report.approximations.size() == 1,
             "Research quality gate did not expose overflow as an approximation");
 
+    auto nearest = clean;
+    nearest.cascade_selection_exact = 2;
+    nearest.cascade_selection_expanded = 3;
+    nearest.cascade_selection_nearest = 1;
+    nearest.cascade_selection_energy_distance_sum_MeVu = 7.5;
+    nearest.cascade_selection_energy_distance_max_MeVu = 7.5;
+    report = carbon::evaluate_run_quality(production, nearest);
+    require(!report.accepted && report.cascade_selection_nearest == 1 &&
+                report.failures.front().code == "cascade_nearest_fallback",
+            "Production quality gate accepted a nearest cascade fallback");
+    report = carbon::evaluate_run_quality(research, nearest);
+    require(report.accepted && report.approximations.size() == 1 &&
+                report.cascade_selection_expanded == 3,
+            "Research quality report did not expose nearest fallback");
+
+    auto no_coverage = clean;
+    no_coverage.cascade_selection_no_coverage = 1;
+    report = carbon::evaluate_run_quality(production, no_coverage);
+    require(!report.accepted &&
+                report.failures.front().code == "cascade_no_energy_coverage",
+            "Production quality gate accepted missing cascade energy coverage");
+
     auto residual = clean;
     residual.total_deposited_energy_MeV = 99.0;
     report = carbon::evaluate_run_quality(production, residual);
@@ -950,13 +999,18 @@ void test_run_quality_gate() {
 
     const auto path = std::filesystem::temp_directory_path() /
                       "maigo_quality_report.json";
+    report = carbon::evaluate_run_quality(production, nearest);
     carbon::write_run_quality_report_json(path, report);
     std::ifstream input(path);
     const std::string json((std::istreambuf_iterator<char>(input)),
                            std::istreambuf_iterator<char>());
     require(json.find("\"status\": \"fail\"") != std::string::npos &&
-                json.find("\"non_finite_result\"") != std::string::npos,
-            "Run quality JSON omitted failure status or issue code");
+                json.find("\"cascade_nearest_fallback\"") != std::string::npos &&
+                json.find("\"cascade_selection\"") != std::string::npos &&
+                json.find("\"expanded_window_count\": 3") != std::string::npos &&
+                json.find("\"energy_distance_max_MeVu\": 7.5") !=
+                    std::string::npos,
+            "Run quality JSON omitted cascade selection audit fields");
     std::filesystem::remove(path);
 }
 
