@@ -808,6 +808,63 @@ void test_ion_physics_manifest_loading() {
             "Repository carbon manifest does not use the required packages");
 }
 
+void test_strict_config_parsing_and_canonicalization() {
+    const auto directory = std::filesystem::temp_directory_path() /
+                           "maigo_strict_config_test";
+    std::filesystem::create_directories(directory);
+    const auto config_path = directory / "run.yaml";
+
+    {
+        std::ofstream output(config_path);
+        output << "number_of_histories: 7\n"
+               << "number_of_histories: 8\n";
+    }
+    require_throws([&] { (void)carbon::load_config(config_path); },
+                   "Configuration parser accepted a duplicate key");
+
+    {
+        std::ofstream output(config_path);
+        output << "number_of_histories: 7\n"
+               << "number_of_historiez: 8\n";
+    }
+    require_throws([&] { (void)carbon::load_config(config_path); },
+                   "Configuration parser accepted an unknown key");
+
+    {
+        std::ofstream output(config_path);
+        output << "config_schema_version: 2\n"
+               << "number_of_histories: 7\n";
+    }
+    require_throws([&] { (void)carbon::load_config(config_path); },
+                   "Configuration parser accepted an unsupported schema version");
+
+    {
+        std::ofstream output(config_path);
+        output << "number_of_histories: 7 # stripped from canonical text\n"
+               << "initial_energy_MeVu: 123\n";
+    }
+    const auto first = carbon::load_config(config_path);
+    require(first.config_schema_version == 1U,
+            "Implicit configuration schema is not v1");
+    require(first.canonical_config_text ==
+                "config_schema_version: 1\n"
+                "initial_energy_MeVu: 123\n"
+                "number_of_histories: 7\n",
+            "Canonical configuration text is not normalized and key-sorted");
+
+    {
+        std::ofstream output(config_path);
+        output << "config_schema_version: 1\n"
+               << "initial_energy_MeVu: 123\n"
+               << "number_of_histories: 7\n";
+    }
+    const auto reordered = carbon::load_config(config_path);
+    require(reordered.canonical_config_text == first.canonical_config_text,
+            "Canonical configuration changed with input key order");
+
+    std::filesystem::remove_all(directory);
+}
+
 void test_particle_specific_stopping_power_tables() {
     const auto source_directory = std::filesystem::path(CARBON_SOURCE_DIR);
     const auto carbon = carbon::StoppingPowerTable::from_csv(
@@ -4778,6 +4835,7 @@ int main() {
         test_fragment_stopping_power_scale();
         test_primary_ion_definition();
         test_ion_physics_manifest_loading();
+        test_strict_config_parsing_and_canonicalization();
         test_particle_specific_stopping_power_tables();
         test_step_selection();
         test_slab_phantom_helpers();

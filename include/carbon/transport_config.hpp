@@ -85,6 +85,13 @@ struct PrimarySpotBatchEntry {
 };
 
 struct TransportConfig {
+    // Flat configuration schema used by the current strict key/value parser.
+    // Files that predate this field are interpreted as schema v1.
+    std::uint32_t config_schema_version{1};
+    // Stable, comment-free, key-sorted representation of the parsed input and
+    // imported ion-physics manifest. This is intended for run provenance and
+    // hashing; CLI overrides are not represented here.
+    std::string canonical_config_text{};
     // Optional single-file manifest owning the primary-ion identity and all
     // ion-dependent water physics data. Run controls remain in the main YAML.
     std::filesystem::path ion_physics_file{};

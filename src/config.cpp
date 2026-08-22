@@ -54,13 +54,63 @@ std::string trim(std::string value) {
     return value;
 }
 
-std::unordered_map<std::string, std::string> read_key_values(const std::filesystem::path& path) {
+class ConfigValues
+    : public std::unordered_map<std::string, std::string> {
+public:
+    using Base = std::unordered_map<std::string, std::string>;
+    using Base::Base;
+    using Base::end;
+
+    std::pair<iterator, bool> add(std::string key, std::string value,
+                                  const std::size_t line_number) {
+        auto result = Base::emplace(std::move(key), std::move(value));
+        if (result.second) {
+            line_numbers_.emplace(result.first->first, line_number);
+        }
+        return result;
+    }
+
+    iterator find(const key_type& key) {
+        auto iterator = Base::find(key);
+        if (iterator != Base::end()) {
+            consumed_.insert(iterator->first);
+        }
+        return iterator;
+    }
+
+    const_iterator find(const key_type& key) const {
+        auto iterator = Base::find(key);
+        if (iterator != Base::end()) {
+            consumed_.insert(iterator->first);
+        }
+        return iterator;
+    }
+
+    bool contains(const key_type& key) const {
+        return find(key) != Base::end();
+    }
+
+    [[nodiscard]] bool consumed(const key_type& key) const {
+        return consumed_.contains(key);
+    }
+
+    [[nodiscard]] std::size_t line_number(const key_type& key) const {
+        const auto iterator = line_numbers_.find(key);
+        return iterator == line_numbers_.end() ? 0U : iterator->second;
+    }
+
+private:
+    std::unordered_map<std::string, std::size_t> line_numbers_;
+    mutable std::unordered_set<std::string> consumed_;
+};
+
+ConfigValues read_key_values(const std::filesystem::path& path) {
     std::ifstream input(path);
     if (!input) {
         throw std::runtime_error("Cannot open configuration file: " + path.string());
     }
 
-    std::unordered_map<std::string, std::string> values;
+    ConfigValues values;
     std::string line;
     std::size_t line_number = 0;
     while (std::getline(input, line)) {
@@ -85,7 +135,15 @@ std::unordered_map<std::string, std::string> read_key_values(const std::filesyst
             throw std::runtime_error("Empty configuration key at " + path.string() + ":" +
                                      std::to_string(line_number));
         }
-        values[key] = value;
+        const auto [existing, inserted] = values.add(
+            key, std::move(value), line_number);
+        if (!inserted) {
+            throw std::runtime_error(
+                "Duplicate configuration key '" + key + "' at " +
+                path.string() + ":" + std::to_string(line_number) +
+                " (first defined at line " +
+                std::to_string(values.line_number(key)) + ")");
+        }
     }
     return values;
 }
@@ -111,8 +169,6 @@ std::filesystem::path resolve_input_path_from_config(
     }
     return configured;
 }
-
-using ConfigValues = std::unordered_map<std::string, std::string>;
 
 const std::unordered_set<std::string>& ion_physics_manifest_keys() {
     static const std::unordered_set<std::string> keys{
@@ -189,7 +245,7 @@ std::filesystem::path merge_ion_physics_manifest(
                            std::filesystem::path{value}, manifest_path)
                            .string();
         }
-        values.emplace(key, std::move(imported));
+        values.add(key, std::move(imported), manifest.line_number(key));
     }
     for (const char* required : {
              "primary_atomic_number",
@@ -309,7 +365,7 @@ std::filesystem::path scorer_output_path(const std::filesystem::path& config_pat
 }
 
 template <typename Number>
-Number parse_number(const std::unordered_map<std::string, std::string>& values,
+Number parse_number(const ConfigValues& values,
                     const std::string& key,
                     Number fallback) {
     const auto iterator = values.find(key);
@@ -332,14 +388,14 @@ Number parse_number(const std::unordered_map<std::string, std::string>& values,
     }
 }
 
-std::filesystem::path parse_path(const std::unordered_map<std::string, std::string>& values,
+std::filesystem::path parse_path(const ConfigValues& values,
                                  const std::string& key,
                                  const std::filesystem::path& fallback) {
     const auto iterator = values.find(key);
     return iterator == values.end() ? fallback : std::filesystem::path(iterator->second);
 }
 
-bool parse_bool(const std::unordered_map<std::string, std::string>& values,
+bool parse_bool(const ConfigValues& values,
                 const std::string& key,
                 bool fallback) {
     const auto iterator = values.find(key);
@@ -356,6 +412,46 @@ bool parse_bool(const std::unordered_map<std::string, std::string>& values,
         return false;
     }
     throw std::runtime_error("Invalid boolean for '" + key + "': " + iterator->second);
+}
+
+void reject_unknown_config_keys(const ConfigValues& values,
+                                const std::filesystem::path& path) {
+    const auto unknown = std::min_element(
+        values.begin(), values.end(), [&values](const auto& left, const auto& right) {
+            const auto left_line = values.consumed(left.first)
+                                       ? std::numeric_limits<std::size_t>::max()
+                                       : values.line_number(left.first);
+            const auto right_line = values.consumed(right.first)
+                                        ? std::numeric_limits<std::size_t>::max()
+                                        : values.line_number(right.first);
+            return left_line < right_line;
+        });
+    if (unknown != values.end() && !values.consumed(unknown->first)) {
+        throw std::runtime_error(
+            "Unknown configuration key '" + unknown->first + "' at " +
+            path.string() + ":" +
+            std::to_string(values.line_number(unknown->first)));
+    }
+}
+
+std::string canonicalize_config(const ConfigValues& values,
+                                const std::uint32_t schema_version) {
+    std::vector<std::string> keys;
+    keys.reserve(values.size());
+    for (const auto& [key, value] : values) {
+        (void)value;
+        if (key != "config_schema_version") {
+            keys.push_back(key);
+        }
+    }
+    std::sort(keys.begin(), keys.end());
+
+    std::ostringstream output;
+    output << "config_schema_version: " << schema_version << '\n';
+    for (const auto& key : keys) {
+        output << key << ": " << values.at(key) << '\n';
+    }
+    return output.str();
 }
 
 std::vector<double> parse_double_list(const std::string& text, const std::string& key) {
@@ -482,6 +578,10 @@ bool TransportConfig::validation_scorers() const noexcept {
 }
 
 void TransportConfig::validate() const {
+    if (config_schema_version != 1U) {
+        throw std::invalid_argument(
+            "config_schema_version must be 1 for the current flat configuration schema");
+    }
     if (enable_csda_range_energy_loss &&
         (enable_ct_grid || enable_layered_phantom || enable_hetero_insert ||
          enable_minibeam || use_particle_specific_stopping_power)) {
@@ -1359,6 +1459,8 @@ TransportConfig load_config(const std::filesystem::path& path) {
     auto values = read_key_values(path);
     const auto ion_physics_file = merge_ion_physics_manifest(path, values);
     TransportConfig config;
+    config.config_schema_version = parse_number(
+        values, "config_schema_version", config.config_schema_version);
     config.ion_physics_file = ion_physics_file;
     if (!ion_physics_file.empty()) {
         // A manifest is an ownership boundary. Missing optional data must stay
@@ -2530,6 +2632,9 @@ TransportConfig load_config(const std::filesystem::path& path) {
         config.electron_transport_data_file = resolve_input_path_from_config(
             config.electron_transport_data_file, path);
     }
+    reject_unknown_config_keys(values, path);
+    config.canonical_config_text = canonicalize_config(
+        values, config.config_schema_version);
     config.validate();
     return config;
 }

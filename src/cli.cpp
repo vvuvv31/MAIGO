@@ -11,7 +11,8 @@ void print_usage(const char* executable) {
               << " [--config FILE] [--device DEVICE] [--histories N]"
                  " [--spots FILE] [--straggling-scale X] [--output FILE]"
                  " [--dose-output FILE] [--scorer-let|--no-scorer-let]"
-                 " [--let-output FILE] [--plan-only] [--sequential-spots]\n"
+                 " [--let-output FILE] [--write-canonical-config FILE]"
+                 " [--plan-only] [--sequential-spots]\n"
                  "  --device DEVICE      serial | cpu | gpu | default |\n"
                  "                       cuda|nvidia | level_zero|intel|arc | opencl\n"
                  "                       (gpu respects ONEAPI_DEVICE_SELECTOR;\n"
@@ -24,6 +25,7 @@ void print_usage(const char* executable) {
                  "  --ct-stopping-power-scale X  Override the CT mass stopping-power scale\n"
                  "  --secondary-queue-capacity N  Override charged secondary queue capacity\n"
                  "  --neutral-queue-capacity N  Override neutral queue capacity\n"
+                 "  --write-canonical-config FILE  Write strict normalized YAML input\n"
                  "  --plan-only          Parse/allocate/transform plan without transport\n"
                  "  --sequential-spots   Disable batched SYCL plan launch\n"
                  "  --output FILE        MeV energy-deposition scorer CSV\n"
@@ -39,6 +41,8 @@ void parse_config_and_help(int argc, char** argv, CliState& state) {
         const std::string argument = argv[index];
         if (argument == "--config" && index + 1 < argc) {
             state.config_path = argv[++index];
+        } else if (argument == "--write-canonical-config" && index + 1 < argc) {
+            state.canonical_config_output_path = argv[++index];
         } else if (argument == "--help" || argument == "-h") {
             state.help = true;
         }
@@ -50,6 +54,8 @@ void apply_cli_overrides(int argc, char** argv, TransportConfig& config, CliStat
     for (int index = 1; index < argc; ++index) {
         const std::string argument = argv[index];
         if (argument == "--config") {
+            ++index;
+        } else if (argument == "--write-canonical-config" && index + 1 < argc) {
             ++index;
         } else if (argument == "--device" && index + 1 < argc) {
             config.device = argv[++index];

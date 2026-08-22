@@ -20,6 +20,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <limits>
@@ -48,6 +49,27 @@ int main(int argc, char* argv[]) {
         const auto plan_only = cli.plan_only;
         const auto sequential_spots = cli.sequential_spots;
         config.validate();
+        if (!cli.canonical_config_output_path.empty()) {
+            const auto parent = cli.canonical_config_output_path.parent_path();
+            if (!parent.empty()) {
+                std::filesystem::create_directories(parent);
+            }
+            std::ofstream canonical_output(
+                cli.canonical_config_output_path, std::ios::trunc);
+            if (!canonical_output) {
+                throw std::runtime_error(
+                    "Cannot write canonical configuration: " +
+                    cli.canonical_config_output_path.string());
+            }
+            canonical_output << config.canonical_config_text;
+            if (!canonical_output) {
+                throw std::runtime_error(
+                    "Failed while writing canonical configuration: " +
+                    cli.canonical_config_output_path.string());
+            }
+            std::cout << "Canonical configuration: "
+                      << cli.canonical_config_output_path << '\n';
+        }
 
         const auto primary_ion = config.primary_ion();
         if (!config.ion_physics_file.empty()) {
