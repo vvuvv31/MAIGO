@@ -192,3 +192,12 @@ for E, tpath, gpath, max_z in [
     art_png = f"/home/wuwei/.gemini/antigravity-cli/brain/b6e8050e-cd93-476b-bd8a-039915838a5f/plots/benchmark_{E}MeVu_idd_sigma.png"
     import shutil
     shutil.copyfile(png_file, art_png)
+
+# 400 MeV/u benchmark plot
+E = 400
+tpath = "/mnt/sda/wuwei/carbon_emittance_inelastic_100k/e400/topas_emittance_inelastic_e400.bin"
+gpath = "out/gpu_inelastic_e400/voxel_dose.raw"
+z_all, t_idd, g_idd, z_samples, t_sc, t_sh, g_sc, g_sh = load_and_analyze(tpath, gpath, 320.0)
+png_file = f"plots/benchmark_{E}MeVu_idd_sigma.png"
+plot_benchmark_png(E, z_all, t_idd, g_idd, z_samples, t_sc, t_sh, g_sc, g_sh, png_file)
+shutil.copyfile(png_file, f"/home/wuwei/.gemini/antigravity-cli/brain/b6e8050e-cd93-476b-bd8a-039915838a5f/plots/benchmark_{E}MeVu_idd_sigma.png")
