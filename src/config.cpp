@@ -1472,6 +1472,14 @@ TransportConfig load_config(const std::filesystem::path& path) {
         config.straggling_scale_energies_MeVu = {100.0, 200.0, 300.0, 400.0};
         config.straggling_scale_values = {0.93, 0.95, 1.00, 1.00};
     }
+    config.enable_inelastic =
+        parse_bool(values, "enable_inelastic", config.enable_inelastic);
+    config.primary_inelastic_cross_section_file =
+        parse_path(values, "primary_inelastic_cross_section_file",
+                   config.primary_inelastic_cross_section_file);
+    config.enable_secondary_transport =
+        parse_bool(values, "enable_secondary_transport",
+                   config.enable_secondary_transport);
     config.enable_multiple_scattering =
         parse_bool(values, "enable_multiple_scattering", config.enable_multiple_scattering);
     config.multiple_scattering_scale = parse_number(

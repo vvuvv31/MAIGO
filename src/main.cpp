@@ -88,6 +88,11 @@ int main(int argc, char* argv[]) {
         const auto* upstream_air_stopping_power_ptr =
             upstream_air_stopping_power ? &*upstream_air_stopping_power : nullptr;
         carbon::CrossSectionTable cross_section;
+        if (config.enable_inelastic &&
+            !config.primary_inelastic_cross_section_file.empty()) {
+            cross_section = carbon::CrossSectionTable::from_csv(
+                config.primary_inelastic_cross_section_file);
+        }
 
 #ifdef CARBON_HAS_SYCL
         if (config.device != "serial") {

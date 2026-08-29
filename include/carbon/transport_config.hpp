@@ -265,6 +265,10 @@ struct TransportConfig {
     double straggling_scale{1.0};
     std::vector<double> straggling_scale_energies_MeVu{};
     std::vector<double> straggling_scale_values{};
+    bool enable_inelastic{false};
+    std::filesystem::path primary_inelastic_cross_section_file{
+        "data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv"};
+    bool enable_secondary_transport{true};
     bool enable_multiple_scattering{false};
     // Multiplies Highland projected RMS angle for charged MCS (primary +
     // secondary). 1.0 is the historical default. Values >1 increase lateral

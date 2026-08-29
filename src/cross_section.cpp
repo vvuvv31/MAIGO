@@ -96,12 +96,26 @@ CrossSectionTable CrossSectionTable::from_csv(const std::filesystem::path& path)
         }
         const auto fields = split_csv(line);
         if (!found_header) {
-            const auto energy = std::find(fields.begin(), fields.end(), energy_name);
+            auto energy = std::find(fields.begin(), fields.end(), energy_name);
+            if (energy == fields.end()) {
+                energy = std::find(fields.begin(), fields.end(), "energy_MeVu");
+            }
+            if (energy == fields.end()) {
+                energy = std::find(fields.begin(), fields.end(), "energy_MeV");
+            }
             auto cross_section =
                 std::find(fields.begin(), fields.end(), water_cross_section_name);
             if (cross_section == fields.end()) {
                 cross_section =
                     std::find(fields.begin(), fields.end(), copper_cross_section_name);
+            }
+            if (cross_section == fields.end()) {
+                cross_section =
+                    std::find(fields.begin(), fields.end(), "macroscopic_cross_section_per_mm");
+            }
+            if (cross_section == fields.end()) {
+                cross_section =
+                    std::find(fields.begin(), fields.end(), "macro_total_per_mm");
             }
             if (energy == fields.end() || cross_section == fields.end()) {
                 throw std::runtime_error("Cross-section CSV is missing required columns: " +
