@@ -70,7 +70,13 @@ def nelder_mead(f, x0, step=0.1, no_improve_thr=1e-9, no_improv_break=300, max_i
             nres.append([redx, score])
         res = nres
 
-def fit_double_gaussian(xs, ys):
+def fit_regularized_profile(xs, ys):
+    """
+    Physically regularized lateral dose profile fitter:
+    1. Fits pure single Gaussian baseline.
+    2. Fits constrained Double Gaussian (sigma_halo >= 1.8 * sigma_core).
+    3. If w_halo < 1.0% or relative variance improvement < 0.5%, rejects spurious halo.
+    """
     peak_y = max(ys)
     total = sum(ys)
     if total <= 0:
@@ -79,11 +85,22 @@ def fit_double_gaussian(xs, ys):
     var_x = sum(((x - mean_x)**2) * y for x, y in zip(xs, ys)) / total
     sig0 = math.sqrt(max(0.1, var_x))
     
-    def loss(p):
+    # 1. Single Gaussian Fit
+    def single_loss(p):
+        A, s = p
+        if s < 0.5 or A < 0: return 1e18
+        res = 0.0
+        for x, y in zip(xs, ys):
+            diff = y - A * math.exp(-0.5 * ((x - mean_x)/s)**2)
+            res += diff * diff
+        return res
+        
+    (best_A_s, best_s_s), s_loss = nelder_mead(single_loss, [peak_y, sig0], step=0.1)
+    
+    # 2. Constrained Double Gaussian Fit (sigma_halo >= 1.8 * sigma_core)
+    def double_loss(p):
         Ac, sc, Ah, sh = p
-        if sc < 0.5 or sh < sc * 1.20 or Ac < 0 or Ah < 0:
-            return 1e18
-        if Ah > Ac * 1.2:
+        if sc < 0.5 or sh < sc * 1.80 or Ac < 0 or Ah < 0:
             return 1e18
         res = 0.0
         for x, y in zip(xs, ys):
@@ -93,27 +110,29 @@ def fit_double_gaussian(xs, ys):
             res += diff * diff
         return res
 
-    best_loss = 1e20
+    best_d_loss = 1e20
     best_p = None
     starts = [
-        [peak_y * 0.95, sig0 * 0.98, peak_y * 0.05, sig0 * 2.0],
-        [peak_y * 0.90, sig0 * 0.90, peak_y * 0.10, sig0 * 3.0],
-        [peak_y * 0.80, sig0 * 0.85, peak_y * 0.20, sig0 * 1.8],
+        [peak_y * 0.95, sig0 * 0.98, peak_y * 0.05, sig0 * 2.2],
+        [peak_y * 0.90, sig0 * 0.92, peak_y * 0.10, sig0 * 2.8],
+        [peak_y * 0.80, sig0 * 0.88, peak_y * 0.20, sig0 * 2.0],
     ]
     for x0 in starts:
-        p, score = nelder_mead(loss, x0, step=0.1, max_iter=2000)
-        if score < best_loss:
-            best_loss = score
+        p, score = nelder_mead(double_loss, x0, step=0.1, max_iter=2500)
+        if score < best_d_loss:
+            best_d_loss = score
             best_p = p
 
     Ac, sc, Ah, sh = best_p
-    if sc > sh:
-        sc, sh = sh, sc
-        Ac, Ah = Ah, Ac
-
     area_c = Ac * math.sqrt(2.0 * math.pi) * sc
     area_h = Ah * math.sqrt(2.0 * math.pi) * sh
     w_halo = area_h / (area_c + area_h) if (area_c + area_h) > 0 else 0.0
+    
+    # 3. Model selection gate:
+    # If halo dose weight < 1.0% or double gaussian does not improve single gaussian significantly
+    if w_halo < 0.010 or (s_loss - best_d_loss) / (s_loss + 1e-12) < 0.005:
+        return best_s_s, 0.0, 0.0, best_A_s, 0.0
+        
     return sc, sh, w_halo, Ac, Ah
 
 def load_voxel_grid(path, is_double=True):
@@ -155,17 +174,17 @@ def load_voxel_grid(path, is_double=True):
 
 def benchmark_energy(E, tpath, gpath):
     print("=" * 115)
-    print(">>> BENCHMARKING %d MeV/u (TOPAS INCL++ vs GPU MAIGO)" % E)
+    print(">>> REGULARIZED BENCHMARK %d MeV/u (TOPAS INCL++ vs GPU MAIGO)" % E)
     print("=" * 115)
     
     x_coords, t_idd, t_sig, t_xprojs = load_voxel_grid(tpath, is_double=True)
     _, g_idd, g_sig, g_xprojs = load_voxel_grid(gpath, is_double=False)
     
     if t_idd is None:
-        print("[!] TOPAS dataset not yet available or incomplete: %s" % tpath)
+        print("[!] TOPAS dataset not yet available: %s" % tpath)
         return
     if g_idd is None:
-        print("[!] GPU dataset not yet available or incomplete: %s" % gpath)
+        print("[!] GPU dataset not yet available: %s" % gpath)
         return
         
     dz = 0.5
@@ -199,12 +218,17 @@ def benchmark_energy(E, tpath, gpath):
         t_sc, t_sh, t_wh = 0, 0, 0
         g_sc, g_sh, g_wh = 0, 0, 0
         if iz in t_xprojs and sum(t_xprojs[iz]) > 1e-3:
-            t_sc, t_sh, t_wh, _, _ = fit_double_gaussian(x_coords, t_xprojs[iz])
+            t_sc, t_sh, t_wh, _, _ = fit_regularized_profile(x_coords, t_xprojs[iz])
         if iz in g_xprojs and sum(g_xprojs[iz]) > 1e-3:
-            g_sc, g_sh, g_wh, _, _ = fit_double_gaussian(x_coords, g_xprojs[iz])
+            g_sc, g_sh, g_wh, _, _ = fit_regularized_profile(x_coords, g_xprojs[iz])
             
-        print("%7.1f | %10.4f | %10.4f | %+7.2f%% | %11.4f | %11.4f | %7.2f%% | %11.4f | %11.4f | %7.2f%%" % (
-            z_mm, t_val, g_val, idd_d, t_sc, t_sh, t_wh*100, g_sc, g_sh, g_wh*100))
+        t_sh_str = ("%11.4f" % t_sh) if t_sh > 0 else "          -"
+        g_sh_str = ("%11.4f" % g_sh) if g_sh > 0 else "          -"
+        t_wh_str = ("%7.2f%%" % (t_wh*100)) if t_wh > 0 else "      -"
+        g_wh_str = ("%7.2f%%" % (g_wh*100)) if g_wh > 0 else "      -"
+        
+        print("%7.1f | %10.4f | %10.4f | %+7.2f%% | %11.4f | %11s | %8s | %11.4f | %11s | %8s" % (
+            z_mm, t_val, g_val, idd_d, t_sc, t_sh_str, t_wh_str, g_sc, g_sh_str, g_wh_str))
     print()
 
 for E, tfile, gfile in [
