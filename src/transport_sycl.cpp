@@ -1342,7 +1342,11 @@ TransportResult transport_sycl(const TransportConfig& config,
                             sp_idx = sycl::max(0, sycl::min(sp_idx, static_cast<int>(table_size) - 2));
                             const auto sp_frac = sycl::clamp(flt_idx - static_cast<float>(sp_idx), 0.0F, 1.0F);
                             const auto c12_sp = table_device[sp_idx] + sp_frac * (table_device[sp_idx + 1] - table_device[sp_idx]);
-                            const auto sec_sp = c12_sp * frag_sp_scale;
+                            auto sec_sp = c12_sp * frag_sp_scale;
+                            if (frag.z <= 2 && sec_e_u < 15.0F) {
+                                const auto barkas = 1.0F + 0.15F * (15.0F - sec_e_u) / 15.0F;
+                                sec_sp *= barkas;
+                            }
 
                             if (sec_sp <= 1.0e-6F) break;
 

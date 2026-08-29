@@ -21,6 +21,7 @@ emittance_correlation_y: 0.7
 
 # Physics
 enable_energy_straggling: true
+straggling_scale: 1.35
 enable_multiple_scattering: true
 multiple_scattering_scale: 1.0
 enable_inelastic: true
