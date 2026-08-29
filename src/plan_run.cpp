@@ -547,24 +547,11 @@ carbon::TransportResult run_transport(
     const carbon::TransportConfig& config,
     const carbon::StoppingPowerTable& stopping_power,
     const carbon::CrossSectionTable& cross_section,
-    const std::optional<carbon::ReactionPackageTable>& reaction_packages,
-    const std::optional<carbon::CascadePackageTable>& cascade_packages,
-    const std::optional<carbon::NeutralPackageTable>& neutral_packages,
-    const std::optional<carbon::CrossSectionTable>& elastic_cross_section,
-    const std::optional<carbon::ElasticPackageTable>& elastic_packages,
     carbon::SyclTransportContext* sycl_context) {
-    if (config.enable_primary_elastic_interactions && config.device == "serial") {
-        throw std::invalid_argument(
-            "primary elastic interactions require the legacy SYCL backend");
-    }
     if (config.device == "serial") {
         if (config.enable_let_scoring) {
             throw std::invalid_argument(
                 "scorerLET is currently implemented only by the SYCL backend");
-        }
-        if (config.enable_secondary_generation) {
-            throw std::invalid_argument(
-                "Secondary generation is currently implemented only by the SYCL backend");
         }
         return carbon::transport_serial(config, stopping_power, cross_section);
     }
@@ -579,12 +566,7 @@ carbon::TransportResult run_transport(
             "or opencl");
     }
     return carbon::transport_sycl(config, stopping_power, cross_section, config.device,
-                                  reaction_packages ? &*reaction_packages : nullptr,
-                                  cascade_packages ? &*cascade_packages : nullptr,
-                                  neutral_packages ? &*neutral_packages : nullptr,
-                                  sycl_context,
-                                  elastic_cross_section ? &*elastic_cross_section : nullptr,
-                                  elastic_packages ? &*elastic_packages : nullptr);
+                                  sycl_context);
 #else
     (void)sycl_context;
     throw std::runtime_error(

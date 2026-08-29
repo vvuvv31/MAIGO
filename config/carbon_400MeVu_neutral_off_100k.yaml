@@ -14,15 +14,7 @@ enable_charged_origin_voxel_scoring: false
 enable_energy_straggling: true
 straggling_scale: 1.0
 enable_step_stable_straggling: false
-enable_secondary_energy_straggling: false
 enable_multiple_scattering: true
-enable_primary_attenuation: true
-enable_secondary_generation: true
-enable_secondary_transport: true
-enable_fragment_cascade: true
-enable_neutral_transport: false
-maximum_cascade_generations: 2
-secondary_queue_capacity: 2500000
 max_device_memory_fraction: 0.50
 random_seed: 2026085400
 scorerLET: false

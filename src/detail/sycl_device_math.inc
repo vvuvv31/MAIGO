@@ -157,6 +157,20 @@ float highland_projected_rms_angle_with_mass_device(
            correction;
 }
 
+inline float ion_effective_charge_device(const int atomic_number,
+                                          const float energy_MeVu) noexcept {
+    if (atomic_number <= 0 || energy_MeVu <= 0.0F) {
+        return 0.0F;
+    }
+    constexpr float nucleon_mass_MeV = 931.49410242F;
+    const auto gamma = 1.0F + energy_MeVu / nucleon_mass_MeV;
+    const auto beta_squared = sycl::fmax(0.0F, 1.0F - 1.0F / (gamma * gamma));
+    const auto beta = sycl::sqrt(beta_squared);
+    const auto charge = static_cast<float>(atomic_number);
+    return charge *
+           (1.0F - sycl::exp(-125.0F * beta * sycl::pow(charge, -2.0F / 3.0F)));
+}
+
 inline float condensed_total_loss_variance_MeV2_device(
     const float energy_MeVu,
     const int mass_number,

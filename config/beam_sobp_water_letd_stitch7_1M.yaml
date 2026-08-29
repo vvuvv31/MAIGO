@@ -20,20 +20,10 @@ flat_source_half_width_y_mm: 15.0
 enable_emittance_source: false
 
 enable_energy_straggling: true
-enable_secondary_energy_straggling: false
 straggling_scale: 1.0
 enable_multiple_scattering: true
-enable_primary_attenuation: true
-enable_primary_inelastic_xs_correction: true
 primary_inelastic_xs_correction_file: data/c12_primary_inelastic_effective_scale_topas_1M.csv
-enable_secondary_generation: true
-enable_secondary_transport: true
-enable_fragment_cascade: true
-cascade_condition_on_reference_depth: false
-enable_neutral_transport: false
 electronic_buildup_fraction: 0.0
-maximum_cascade_generations: 4
-secondary_queue_capacity: 8000000
 max_device_memory_fraction: 0.50
 random_seed: 20260716
 
@@ -45,9 +35,6 @@ primary_stopping_power_file: data/stopping_power_water_geant4_11_3_2.csv
 let_delta_electron_fraction_file: data/let_delta_electron_fraction_water_geant4_11_3_2.csv
 use_particle_specific_stopping_power: true
 particle_stopping_power_file: data/ion_stopping_power_water_geant4_11_3_2.csv
-primary_inelastic_cross_section_file: data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv
-primary_reaction_package_file: data/packages/topas_water_inclxx_1M_stitch7_primary_3d.bin
-cascade_package_file: data/packages/topas_400MeVu_water_inclxx_1M_cascade_3d.bin
 
 output_file: out/sobp_stitch7_1M/gpu_sobp_idd.csv
 fragment_species_output_file: out/sobp_stitch7_1M/gpu_sobp_species.csv
@@ -58,6 +45,3 @@ fragment_species_let_output_file: out/sobp_stitch7_1M/gpu_sobp_species_letd.csv
 scorerLET: true
 device: cuda
 enable_fragment_species_scoring: true
-restrict_fragment_species_energy_deposit: true
-restrict_fragment_species_z_min: 1
-restrict_fragment_species_z_max: 6

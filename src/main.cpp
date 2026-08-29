@@ -1,13 +1,8 @@
-#include "carbon/cascade_package.hpp"
 #include "carbon/cli.hpp"
 #include "carbon/cross_section.hpp"
-#include "carbon/elastic_package.hpp"
 #include "carbon/ct_grid.hpp"
 #include "carbon/io.hpp"
-#include "carbon/neutral_package.hpp"
 #include "carbon/plan_run.hpp"
-#include "carbon/package_identity.hpp"
-#include "carbon/reaction_package.hpp"
 #include "carbon/run_quality.hpp"
 #include "carbon/stopping_power.hpp"
 #include "carbon/topas_spots.hpp"
@@ -84,18 +79,6 @@ int main(int argc, char* argv[]) {
                           ? " (configured)\n"
                           : " (A * nucleon mass)\n");
 
-        if (config.enable_primary_inelastic_xs_correction) {
-            std::cout << "Primary inelastic XS correction: "
-                      << config.primary_inelastic_xs_correction_file
-                      << "; points="
-                      << config.primary_inelastic_xs_correction_energies_MeVu.size()
-                      << "; incident-energy range="
-                      << config.primary_inelastic_xs_correction_energies_MeVu.front()
-                      << ".."
-                      << config.primary_inelastic_xs_correction_energies_MeVu.back()
-                      << " MeV/u; linear interpolation with endpoint clamping\n";
-        }
-
         const auto stopping_power = carbon::StoppingPowerTable::from_csv(config.primary_stopping_power_file);
         std::optional<carbon::StoppingPowerTable> upstream_air_stopping_power;
         if (config.spots_enable_upstream_air_energy_loss) {
@@ -104,85 +87,7 @@ int main(int argc, char* argv[]) {
         }
         const auto* upstream_air_stopping_power_ptr =
             upstream_air_stopping_power ? &*upstream_air_stopping_power : nullptr;
-        const auto cross_section =
-            carbon::CrossSectionTable::from_csv(config.primary_inelastic_cross_section_file);
-        std::optional<carbon::CrossSectionTable> elastic_cross_section;
-        std::optional<carbon::ElasticPackageTable> elastic_packages;
-        if (config.enable_primary_elastic_interactions) {
-            elastic_cross_section = carbon::CrossSectionTable::from_csv(
-                config.primary_elastic_cross_section_file);
-            const auto& elastic_energies = elastic_cross_section->energies();
-            if (elastic_energies.empty() ||
-                elastic_energies.front() > config.initial_energy_MeVu ||
-                elastic_energies.back() < config.initial_energy_MeVu) {
-                throw std::invalid_argument(
-                    "primary elastic cross-section table must cover the "
-                    "configured initial energy (and its zero-energy clamp)");
-            }
-            carbon::validate_package_identity(
-                config.primary_elastic_package_file,
-                {"elastic", config.primary_atomic_number,
-                 config.primary_mass_number, "G4_WATER",
-                 config.primary_elastic_package_physics_model, 0.0,
-                 config.initial_energy_MeVu},
-                config.package_identity_validation,
-                config.package_identity_override_manifest_file);
-            elastic_packages = carbon::ElasticPackageTable::from_binary(
-                config.primary_elastic_package_file);
-            std::cout << "Elastic cross section: "
-                      << elastic_cross_section->energies().size()
-                      << " bins, energy range="
-                      << elastic_cross_section->energies().front() << ".."
-                      << elastic_cross_section->energies().back()
-                      << " MeV/u\n"
-                      << "Elastic packages: bins="
-                      << elastic_packages->energy_bins().size()
-                      << "; events=" << elastic_packages->events().size()
-                      << "; products=" << elastic_packages->products().size()
-                      << "; model="
-                      << config.primary_elastic_package_physics_model << '\n';
-        }
-        std::optional<carbon::ReactionPackageTable> reaction_packages;
-        std::optional<carbon::CascadePackageTable> cascade_packages;
-        std::optional<carbon::NeutralPackageTable> neutral_packages;
-        if (config.enable_secondary_generation) {
-            carbon::validate_package_identity(
-                config.primary_reaction_package_file,
-                {"reaction", config.primary_atomic_number, config.primary_mass_number,
-                 "G4_WATER", config.primary_package_physics_model, 0.0,
-                 config.initial_energy_MeVu},
-                config.package_identity_validation,
-                config.package_identity_override_manifest_file);
-            reaction_packages =
-                carbon::ReactionPackageTable::from_binary(config.primary_reaction_package_file);
-            std::cout << "Reaction packages: " << reaction_packages->reactions().size()
-                      << "; direct secondaries: " << reaction_packages->secondaries().size()
-                      << "; local deposit: Geant4 package"
-                      << '\n';
-        }
-        if (config.enable_fragment_cascade) {
-            carbon::validate_package_identity(
-                config.cascade_package_file,
-                {"cascade", config.primary_atomic_number, config.primary_mass_number,
-                 "G4_WATER", config.cascade_package_physics_model, 0.0,
-                 config.initial_energy_MeVu},
-                config.package_identity_validation,
-                config.package_identity_override_manifest_file);
-            cascade_packages =
-                carbon::CascadePackageTable::from_binary(config.cascade_package_file);
-            std::cout << "Cascade projectiles: " << cascade_packages->projectiles().size()
-                      << "; interactions: " << cascade_packages->interactions().size()
-                      << "; products: " << cascade_packages->products().size()
-                      << "; local deposit: Geant4 package"
-                      << '\n';
-        }
-        if (config.enable_neutral_transport) {
-            neutral_packages =
-                carbon::NeutralPackageTable::from_binary(config.neutral_package_file);
-            std::cout << "Neutral projectiles: " << neutral_packages->projectiles().size()
-                      << "; interactions: " << neutral_packages->interactions().size()
-                      << "; products: " << neutral_packages->products().size() << '\n';
-        }
+        carbon::CrossSectionTable cross_section;
 
 #ifdef CARBON_HAS_SYCL
         if (config.device != "serial") {
@@ -331,9 +236,7 @@ int main(int argc, char* argv[]) {
             std::cout << "  batched SYCL launch: " << batch.size() << " TPS spots, "
                       << config.number_of_histories << " histories\n";
             result = carbon::run_transport(batch_config, stopping_power, cross_section,
-                                   reaction_packages, cascade_packages, neutral_packages,
-                                   elastic_cross_section, elastic_packages,
-                                   sycl_context);
+                                           sycl_context);
             if (!plan.spots.empty()) {
                 config.initial_energy_MeVu = plan.spots.front().energy_MeVu;
             }
@@ -473,9 +376,7 @@ int main(int argc, char* argv[]) {
                           << batch_config.primary_spot_batch.size() << " spots, "
                           << total_histories << " histories\n";
                 result = carbon::run_transport(batch_config, stopping_power, cross_section,
-                                       reaction_packages, cascade_packages, neutral_packages,
-                                       elastic_cross_section, elastic_packages,
-                                       sycl_context);
+                                               sycl_context);
             } else {
                 for (std::size_t i = 0; i < plan.spots.size(); ++i) {
                     const auto& spot = plan.spots[i];
@@ -484,9 +385,7 @@ int main(int argc, char* argv[]) {
                                          upstream_air_stopping_power_ptr);
                     spot_config.validate();
                     auto spot_result = carbon::run_transport(
-                        spot_config, stopping_power, cross_section, reaction_packages,
-                        cascade_packages, neutral_packages, elastic_cross_section,
-                        elastic_packages, sycl_context);
+                        spot_config, stopping_power, cross_section, sycl_context);
                     if (i == 0) {
                         result = std::move(spot_result);
                     } else {
@@ -506,9 +405,7 @@ int main(int argc, char* argv[]) {
                 config.beam_energy_spread = first_spot_config.beam_energy_spread;
             }
         } else {
-            result = carbon::run_transport(config, stopping_power, cross_section, reaction_packages,
-                                   cascade_packages, neutral_packages,
-                                   elastic_cross_section, elastic_packages, nullptr);
+            result = carbon::run_transport(config, stopping_power, cross_section, nullptr);
         }
 
         const auto quality_directory = config.validation_scorers()
@@ -534,9 +431,7 @@ int main(int argc, char* argv[]) {
         if (!config.output_file.empty()) {
             carbon::write_depth_dose_csv(config.output_file, config, result);
         }
-        if (config.enable_secondary_transport &&
-            config.enable_fragment_species_scoring &&
-            !config.fragment_species_output_file.empty()) {
+        if (!config.fragment_species_output_file.empty()) {
             carbon::write_fragment_species_csv(
                 config.fragment_species_output_file, config, result);
         }
@@ -582,9 +477,7 @@ int main(int argc, char* argv[]) {
         if (!config.dose_output_file.empty()) {
             carbon::write_depth_dose_Gy_csv(config.dose_output_file, config, result);
         }
-        if (config.enable_secondary_transport &&
-            config.enable_fragment_species_scoring &&
-            !config.fragment_species_dose_output_file.empty()) {
+        if (!config.fragment_species_dose_output_file.empty()) {
             carbon::write_fragment_species_dose_Gy_csv(
                 config.fragment_species_dose_output_file, config, result);
         }
@@ -792,76 +685,6 @@ int main(int argc, char* argv[]) {
         if (result.profile.enabled) {
             std::cout << result.profile.summary();
         }
-        if (config.enable_secondary_generation) {
-            std::cout << "Sampled reaction packages: " << result.sampled_reaction_packages << '\n'
-                      << "Generated direct secondaries: "
-                      << result.generated_direct_secondaries << '\n'
-                      << "Generated direct-secondary energy: "
-                      << result.generated_direct_secondary_energy_MeV << " MeV\n"
-                      << "Queued charged secondaries: " << result.queued_secondaries << '\n'
-                      << "Secondary queue overflow: " << result.secondary_queue_overflow << '\n'
-                      << "Queued secondary energy: " << result.queued_secondary_energy_MeV
-                      << " MeV\n"
-                      << "Secondary queue overflow energy: "
-                      << result.secondary_queue_overflow_energy_MeV << " MeV\n"
-                      << "Untransported neutral energy: "
-                      << result.untransported_neutral_energy_MeV << " MeV\n"
-                      << "Untransported unsupported charged energy: "
-                      << result.untransported_unsupported_charged_energy_MeV << " MeV\n"
-                      << "Nuclear energy not in sampled direct secondaries: "
-                      << result.nuclear_energy_not_in_direct_secondaries_MeV << " MeV\n";
-            if (config.enable_secondary_transport) {
-                std::cout << "Transported charged secondaries: "
-                          << result.transported_secondaries << '\n'
-                          << "Secondary transport steps: "
-                          << result.secondary_transport_steps << '\n'
-                          << "Secondary deposited energy: "
-                          << result.secondary_deposited_energy_MeV << " MeV\n"
-                          << "Secondary escaped energy: "
-                          << result.secondary_escaped_energy_MeV << " MeV\n"
-                          << "Cascade interactions: " << result.cascade_interactions << '\n'
-                          << "Cascade selection exact/expanded/nearest/no-coverage: "
-                          << result.cascade_selection_exact << '/'
-                          << result.cascade_selection_expanded << '/'
-                          << result.cascade_selection_nearest << '/'
-                          << result.cascade_selection_no_coverage << '\n'
-                          << "Cascade selection energy-distance sum/max: "
-                          << result.cascade_selection_energy_distance_sum_MeVu << '/'
-                          << result.cascade_selection_energy_distance_max_MeVu
-                          << " MeV/u\n"
-                          << "Generated cascade products: "
-                          << result.generated_cascade_products << '\n'
-                          << "Queued cascade secondaries: "
-                          << result.queued_cascade_secondaries << '\n'
-                          << "Cascade queue overflow: " << result.cascade_queue_overflow
-                          << '\n';
-                if (config.enable_fragment_species_scoring &&
-                    !config.fragment_species_output_file.empty()) {
-                    std::cout << "Fragment species output: "
-                              << config.fragment_species_output_file.string() << '\n';
-                }
-            }
-            if (config.enable_neutral_transport) {
-                std::cout << "Neutral mode: " << config.neutral_transport_mode << '\n'
-                          << "Queued neutrals: " << result.queued_neutrals << '\n'
-                          << "Neutral queue overflow: " << result.neutral_queue_overflow
-                          << '\n'
-                          << "Transported neutrals: " << result.transported_neutrals << '\n'
-                          << "Neutral interactions: " << result.neutral_interactions << '\n'
-                          << "Neutral deposited energy: "
-                          << result.neutral_deposited_energy_MeV << " MeV\n"
-                          << "Neutral escaped energy: " << result.neutral_escaped_energy_MeV
-                          << " MeV\n"
-                          << "Residual neutral energy: "
-                          << result.residual_neutral_energy_MeV << " MeV\n"
-                          << "Charged-from-neutral energy: "
-                          << result.charged_from_neutral_energy_MeV << " MeV\n"
-                          << "Neutral unsupported-product energy: "
-                          << result.neutral_unsupported_product_energy_MeV << " MeV\n"
-                          << "Neutral package closure residual: "
-                          << result.neutral_package_closure_residual_MeV << " MeV\n";
-            }
-        }
         std::cout << "Untracked nuclear energy: " << result.untracked_nuclear_energy_MeV
                   << " MeV\n"
                   << "MeV scorer output: " << config.output_file.string() << '\n';
@@ -879,9 +702,7 @@ int main(int argc, char* argv[]) {
             std::cout << "Dose output scale (independent calibration): "
                       << config.dose_output_scale << '\n';
         }
-        if (config.enable_secondary_transport &&
-            config.enable_fragment_species_scoring &&
-            !config.fragment_species_dose_output_file.empty()) {
+        if (!config.fragment_species_dose_output_file.empty()) {
             std::cout << "Fragment-species dose (Gy): "
                       << config.fragment_species_dose_output_file.string() << '\n';
         }

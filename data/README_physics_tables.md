@@ -5,16 +5,16 @@ Runtime inputs used by MAIGO. Tables are Geant4 11.3.2-derived CSVs unless noted
 | Pattern | Use |
 |---------|-----|
 | `stopping_power_*.csv` | Continuous energy loss (MeV/mm vs MeV/u). Air/lung/bone also build the CT density mass-SPR curve |
-| `c12_inelastic_cross_sections_*.csv` | Water fallback, Schneider CT, and dedicated insert-material C-12 nuclear XS |
-| `hu_stopping_power_lut_geant4_11_3_2.csv` | TOPAS-sampled Schneider section mass stopping-power ratios on the GPU water energy grid; first row is the energy grid |
+| `carbon_c12_inelastic_cross_sections_*.csv` | Water fallback, Schneider CT, and dedicated insert-material C-12 nuclear XS |
+| `carbon_hu_stopping_power_lut_geant4_11_3_2.csv` | TOPAS-sampled Schneider section mass stopping-power ratios on the GPU water energy grid; first row is the energy grid |
 | `ion_stopping_power_water_*.csv` | Per-isotope water ratios applied to the continuous CT C-12 stopping power |
 | `let_delta_electron_fraction_*.csv` | Optional delta-electron fraction for LET_d |
-| `c12_primary_inelastic_effective_scale_topas_1M.csv` | Incident-energy-dependent TOPAS effective/table primary optical-depth ratio |
+| `carbon_c12_primary_inelastic_effective_scale_topas_1M.csv` | Incident-energy-dependent TOPAS effective/table primary optical-depth ratio |
 | `HUtoMaterialSchneider.txt` | TOPAS Schneider HU→density/material table for DICOM folders |
 | `packages/*.bin` | Reaction, cascade, neutral, and soft-tissue final-state packages |
 | `copper_*.bin` | Minibeam Copper reaction / neutral packages |
 
-`stopping_power_water.csv` is the default light-weight water table for the
+`carbon_stopping_power_water.csv` is the default light-weight water table for the
 example configs. Prefer `*_geant4_11_3_2.csv` for production-grade runs.
 
 Runtime nuclear packages live under `data/packages/` (not `validation/results/`).

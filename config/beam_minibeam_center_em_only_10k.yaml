@@ -44,20 +44,13 @@ minibeam_copper_radiation_length_g_per_cm2: 12.8628
 minibeam_copper_max_step_mm: 0.05
 minibeam_copper_enable_mcs: true
 minibeam_copper_mcs_scale: 0.785
-minibeam_copper_enable_nuclear_attenuation: false
 
 enable_energy_straggling: true
 straggling_scale: 1.0
 enable_multiple_scattering: true
-enable_primary_attenuation: false
-enable_secondary_generation: false
-enable_secondary_transport: false
-enable_fragment_cascade: false
-enable_neutral_transport: false
 random_seed: 20260728
 
 primary_stopping_power_file: data/stopping_power_water_geant4_11_3_2.csv
-primary_inelastic_cross_section_file: data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv
 
 output_file:
 dose_output_file:

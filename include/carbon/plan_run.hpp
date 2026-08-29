@@ -1,9 +1,6 @@
 #pragma once
 
-#include "carbon/cascade_package.hpp"
 #include "carbon/cross_section.hpp"
-#include "carbon/neutral_package.hpp"
-#include "carbon/reaction_package.hpp"
 #include "carbon/stopping_power.hpp"
 #include "carbon/topas_spots.hpp"
 #include "carbon/transport.hpp"
@@ -37,11 +34,6 @@ TransportResult run_transport(
     const TransportConfig& config,
     const StoppingPowerTable& stopping_power,
     const CrossSectionTable& cross_section,
-    const std::optional<ReactionPackageTable>& reaction_packages,
-    const std::optional<CascadePackageTable>& cascade_packages,
-    const std::optional<NeutralPackageTable>& neutral_packages,
-    const std::optional<CrossSectionTable>& elastic_cross_section,
-    const std::optional<ElasticPackageTable>& elastic_packages,
     SyclTransportContext* sycl_context = nullptr);
 
 }  // namespace carbon

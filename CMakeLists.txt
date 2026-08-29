@@ -45,15 +45,9 @@ add_library(carbon_core
     src/ct_dicom.cpp
     src/io.cpp
     src/plan_run.cpp
-    src/package_identity.cpp
-    src/elastic_package.cpp
-    src/elastic_device_storage.cpp
     src/electron_transport.cpp
     src/energy_loss_fluctuation.cpp
-    src/reaction_package.cpp
     src/run_quality.cpp
-    src/cascade_package.cpp
-    src/neutral_package.cpp
     src/stopping_power.cpp
     src/topas_spots.cpp
     src/tps_source.cpp
@@ -102,29 +96,17 @@ else()
 endif()
 
 if(CARBON_ENABLE_SYCL)
-    if(NOT CMAKE_CXX_COMPILER_ID MATCHES "IntelLLVM")
-        message(FATAL_ERROR "CARBON_ENABLE_SYCL requires Intel oneAPI icpx (IntelLLVM).")
+    if(NOT CMAKE_CXX_COMPILER_ID MATCHES "IntelLLVM|Clang")
+        message(FATAL_ERROR "CARBON_ENABLE_SYCL requires Intel oneAPI DPC++ / Clang (IntelLLVM or Clang).")
     endif()
 
-    # Dual SYCL transport:
-    # - OFF: transport_sycl_legacy.cpp only (exports transport_sycl)
-    # - ON:  legacy + minibeam + dispatch (minibeam:false → legacy)
     target_include_directories(carbon_core PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
-    if(CARBON_ENABLE_MINIBEAM)
-        target_sources(carbon_core PRIVATE
-            src/device.cpp
-            src/transport_sycl_legacy.cpp
-            src/transport_sycl.cpp
-            src/transport_sycl_dispatch.cpp
-            src/transport_profile.cpp)
-        set_property(SOURCE src/transport_sycl_legacy.cpp APPEND PROPERTY
-            COMPILE_DEFINITIONS CARBON_DEFINE_SYCL_CONTEXT=1)
-    else()
-        target_sources(carbon_core PRIVATE
-            src/device.cpp
-            src/transport_sycl_legacy.cpp
-            src/transport_profile.cpp)
-    endif()
+    target_sources(carbon_core PRIVATE
+        src/device.cpp
+        src/transport_sycl.cpp
+        src/transport_profile.cpp)
+    set_property(SOURCE src/transport_sycl.cpp APPEND PROPERTY
+        COMPILE_DEFINITIONS CARBON_DEFINE_SYCL_CONTEXT=1)
     target_compile_definitions(carbon_core PUBLIC CARBON_HAS_SYCL=1)
     target_compile_options(carbon_core PRIVATE -fsycl)
     target_link_options(carbon_core PUBLIC -fsycl)
@@ -158,83 +140,11 @@ add_executable(carbon_mc src/main.cpp)
 target_link_libraries(carbon_mc PRIVATE carbon_core)
 
 if(BUILD_TESTING)
-    find_package(Python3 COMPONENTS Interpreter REQUIRED)
-    set(CARBON_TEST_PACKAGE_FILES
-        "${CMAKE_CURRENT_SOURCE_DIR}/data/packages/topas_water_inclxx_1M_stitch7_primary_3d.bin"
-        "${CMAKE_CURRENT_SOURCE_DIR}/data/packages/topas_400MeVu_water_inclxx_1M_cascade_3d.bin")
-    foreach(package_file IN LISTS CARBON_TEST_PACKAGE_FILES)
-        if(NOT EXISTS "${package_file}")
-            message(FATAL_ERROR
-                "Required Geant4 11.3.2 CTest package is missing: ${package_file}. "
-                "Restore Git LFS objects before configuring tests.")
-        endif()
-        file(READ "${package_file}" package_header LIMIT 64)
-        string(FIND "${package_header}" "version https://git-lfs.github.com/spec/v1" lfs_pointer)
-        if(NOT lfs_pointer EQUAL -1)
-            message(FATAL_ERROR
-                "Required CTest package is only a Git LFS pointer: ${package_file}. "
-                "Run git lfs pull for this path before configuring tests.")
-        endif()
-        set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${package_file}")
-    endforeach()
     add_executable(carbon_tests tests/carbon_tests.cpp)
     target_link_libraries(carbon_tests PRIVATE carbon_core)
     target_compile_definitions(carbon_tests PRIVATE
         CARBON_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
     add_test(NAME carbon_tests COMMAND carbon_tests)
     set_tests_properties(carbon_tests PROPERTIES
-        TIMEOUT 300
-        REQUIRED_FILES "${CARBON_TEST_PACKAGE_FILES}")
-    add_executable(elastic_package_tests tests/elastic_package_tests.cpp)
-    target_link_libraries(elastic_package_tests PRIVATE carbon_core)
-    add_executable(elastic_sampling_tests tests/elastic_sampling_tests.cpp)
-    target_link_libraries(elastic_sampling_tests PRIVATE carbon_core)
-    add_executable(elastic_device_storage_tests tests/elastic_device_storage_tests.cpp)
-    target_link_libraries(elastic_device_storage_tests PRIVATE carbon_core)
-    add_executable(elastic_application_tests tests/elastic_application_tests.cpp)
-    target_link_libraries(elastic_application_tests PRIVATE carbon_core)
-    add_executable(elastic_queue_adapter_tests tests/elastic_queue_adapter_tests.cpp)
-    target_link_libraries(elastic_queue_adapter_tests PRIVATE carbon_core)
-    if(CARBON_ENABLE_SYCL)
-        target_compile_options(elastic_sampling_tests PRIVATE -fsycl)
-        target_compile_options(elastic_device_storage_tests PRIVATE -fsycl)
-        target_compile_options(elastic_application_tests PRIVATE -fsycl)
-        target_compile_options(elastic_queue_adapter_tests PRIVATE -fsycl)
-        if(CARBON_SYCL_TARGETS)
-            target_compile_options(elastic_sampling_tests PRIVATE
-                -fsycl-targets=${CARBON_SYCL_TARGETS})
-            target_compile_options(elastic_device_storage_tests PRIVATE
-                -fsycl-targets=${CARBON_SYCL_TARGETS})
-            target_compile_options(elastic_application_tests PRIVATE
-                -fsycl-targets=${CARBON_SYCL_TARGETS})
-            target_compile_options(elastic_queue_adapter_tests PRIVATE
-                -fsycl-targets=${CARBON_SYCL_TARGETS})
-        endif()
-        if(CARBON_CUDA_ARCH)
-            target_compile_options(elastic_sampling_tests PRIVATE
-                "SHELL:-Xsycl-target-backend=nvptx64-nvidia-cuda --cuda-gpu-arch=${CARBON_CUDA_ARCH}")
-            target_compile_options(elastic_device_storage_tests PRIVATE
-                "SHELL:-Xsycl-target-backend=nvptx64-nvidia-cuda --cuda-gpu-arch=${CARBON_CUDA_ARCH}")
-            target_compile_options(elastic_application_tests PRIVATE
-                "SHELL:-Xsycl-target-backend=nvptx64-nvidia-cuda --cuda-gpu-arch=${CARBON_CUDA_ARCH}")
-            target_compile_options(elastic_queue_adapter_tests PRIVATE
-                "SHELL:-Xsycl-target-backend=nvptx64-nvidia-cuda --cuda-gpu-arch=${CARBON_CUDA_ARCH}")
-        endif()
-    endif()
-    add_test(NAME elastic_sampling COMMAND elastic_sampling_tests)
-    add_test(NAME elastic_device_storage COMMAND elastic_device_storage_tests)
-    add_test(NAME elastic_application COMMAND elastic_application_tests)
-    add_test(NAME elastic_queue_adapter COMMAND elastic_queue_adapter_tests)
-    add_test(NAME elastic_package_cross_language
-        COMMAND ${Python3_EXECUTABLE}
-                "${CMAKE_CURRENT_SOURCE_DIR}/tests/run_elastic_package_tests.py"
-                "$<TARGET_FILE:elastic_package_tests>")
-    add_test(NAME elastic_config_preload
-        COMMAND ${Python3_EXECUTABLE}
-                "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_elastic_config_preload.py"
-                "$<TARGET_FILE:carbon_mc>")
-    add_test(NAME elastic_campaign_python
-        COMMAND ${Python3_EXECUTABLE}
-                "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_elastic_campaign.py")
-    set_tests_properties(elastic_config_preload PROPERTIES TIMEOUT 60)
+        TIMEOUT 300)
 endif()

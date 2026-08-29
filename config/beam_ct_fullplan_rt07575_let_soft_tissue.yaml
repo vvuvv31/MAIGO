@@ -10,7 +10,6 @@ depth_bin_width_mm: 0.5
 maximum_step_mm: 0.1
 maximum_relative_energy_loss: 0.001
 energy_cutoff_MeV: 0.1
-secondary_local_deposit_cutoff_MeV: 0.1
 water_density_g_per_cm3: 1.0
 # Shared absolute response correction validated across two head cases and one
 # lung case. Not fitted per patient.
@@ -28,26 +27,15 @@ voxel_size_x_mm: 0.5
 voxel_size_y_mm: 2.0
 
 enable_energy_straggling: true
-enable_secondary_energy_straggling: false
 straggling_scale: 1.2
 enable_multiple_scattering: true
 enable_ct_material_mcs: false
-enable_primary_attenuation: true
-enable_secondary_generation: true
-enable_secondary_transport: true
-enable_fragment_cascade: true
 enable_fragment_species_scoring: false
-enable_neutral_transport: false
 # Equal-history single-spot 1M (spot 24), mask TOPAS≥10% dmax:
 #   mfp=0 → 60.20%; mfp=0.5 → 61.15%; mfp=0.5+scale=0.9 → 61.53% (+1.33 pp total).
 # MFP spreads residual nuclear heat; scale reduces residual heat share (entrance mass).
 # Not a per-patient fit; fixed RT07575 production defaults.
-nuclear_residual_heat_mfp_mm: 0.5
-nuclear_residual_heat_scale: 0.9
-maximum_cascade_generations: 2
-secondary_queue_capacity: 65000000
 secondary_batch_size: 65536
-enable_secondary_energy_sorting: true
 max_device_memory_fraction: 0.84
 random_seed: 20260801
 
@@ -68,10 +56,6 @@ primary_stopping_power_file: data/stopping_power_water_geant4_11_3_2.csv
 let_delta_electron_fraction_file: data/let_delta_electron_fraction_water_geant4_11_3_2.csv
 use_particle_specific_stopping_power: true
 particle_stopping_power_file: data/ion_stopping_power_water_geant4_11_3_2.csv
-primary_inelastic_cross_section_file: data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv
-ct_schneider_cross_section_file: data/c12_inelastic_cross_sections_schneider_geant4_11_3_2.csv
-primary_reaction_package_file: data/packages/topas_water_inclxx_1M_stitch7_primary_3d.bin
-cascade_package_file: data/packages/topas_400MeVu_water_inclxx_1M_cascade_3d.bin
 
 output_file:
 dose_output_file:

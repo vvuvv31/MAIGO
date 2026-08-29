@@ -47,34 +47,9 @@ TransportResult transport_serial(const TransportConfig& config,
     }
     const auto start = std::chrono::steady_clock::now();
     const auto primary_ion = config.primary_ion();
-    std::optional<EnergyLossFluctuationTable> fluctuation_table;
-    if (config.uses_packaged_straggling()) {
-        fluctuation_table = EnergyLossFluctuationTable::from_csv(
-            config.energy_straggling_package_file);
-        if (fluctuation_table->projectile_atomic_number() !=
-                config.primary_atomic_number ||
-            fluctuation_table->projectile_mass_number() !=
-                config.primary_mass_number ||
-            fluctuation_table->material_name() != "G4_WATER") {
-            throw std::invalid_argument(
-                "Energy-loss fluctuation package must match YAML primary Z/A and G4_WATER");
-        }
-        const auto maximum_areal_density =
-            config.water_density_g_per_cm3 * config.maximum_step_mm / 10.0;
-        if (config.initial_energy_MeVu >
-                fluctuation_table->energies_MeVu().back() ||
-            maximum_areal_density >
-                fluctuation_table->areal_densities_g_per_cm2().back()) {
-            throw std::invalid_argument(
-                "Energy-loss fluctuation package does not cover the configured "
-                "initial energy or maximum step areal density");
-        }
-    }
     TransportResult result;
     std::array<double, max_straggling_scale_points> straggling_scale_energies{};
     std::array<double, max_straggling_scale_points> straggling_scale_values{};
-    std::array<double, max_straggling_scale_points> primary_xs_correction_energies{};
-    std::array<double, max_straggling_scale_points> primary_xs_correction_scales{};
     const auto straggling_scale_point_count =
         config.straggling_scale_energies_MeVu.size();
     for (std::size_t index = 0; index < straggling_scale_point_count; ++index) {
@@ -82,26 +57,7 @@ TransportResult transport_serial(const TransportConfig& config,
             config.straggling_scale_energies_MeVu[index];
         straggling_scale_values[index] = config.straggling_scale_values[index];
     }
-    const auto primary_xs_correction_point_count =
-        config.primary_inelastic_xs_correction_energies_MeVu.size();
-    for (std::size_t index = 0; index < primary_xs_correction_point_count; ++index) {
-        primary_xs_correction_energies[index] =
-            config.primary_inelastic_xs_correction_energies_MeVu[index];
-        primary_xs_correction_scales[index] =
-            config.primary_inelastic_xs_correction_scales[index];
-    }
     result.backend = config.enable_energy_straggling ? "serial+straggling" : "serial";
-    if (config.uses_packaged_straggling()) {
-        result.backend += "+packaged-fluctuation";
-    }
-    if (config.enable_primary_attenuation) {
-        result.backend += "+attenuation";
-        if (config.enable_primary_inelastic_xs_correction) {
-            result.backend += "+primary-xs-table";
-        } else if (config.primary_inelastic_xs_scale != 1.0) {
-            result.backend += "+primary-xs-scale";
-        }
-    }
     result.deposited_energy_MeV.assign(config.number_of_bins(), 0.0);
     if (config.enable_voxel_scoring) {
         result.voxel_deposited_energy_MeV.assign(config.number_of_voxels(), 0.0);
@@ -133,23 +89,12 @@ TransportResult transport_serial(const TransportConfig& config,
                 energy_MeV = config.energy_cutoff_MeV;
             }
         }
-        const auto history_primary_inelastic_xs_scale =
-            interpolate_straggling_scale(
-                energy_MeV / static_cast<double>(config.primary_mass_number),
-                primary_xs_correction_energies,
-                primary_xs_correction_scales,
-                primary_xs_correction_point_count,
-                config.primary_inelastic_xs_scale);
         auto position_mm = 0.0;
         StepStableStragglingState<double> stable_straggling;
         stable_straggling.initialize(config.straggling_sampling_length_mm);
         std::uint64_t steps = 0;
         auto untracked_nuclear_MeV = 0.0;
         auto nuclear_interaction = false;
-        const auto attenuation_uniform = std::max(
-            static_cast<double>(rng::uniform01(config.random_seed, history_id, 0, 9)),
-            1.0e-12);
-        auto remaining_interaction_lengths = -std::log(attenuation_uniform);
 
         while (energy_MeV > config.energy_cutoff_MeV &&
                position_mm < config.phantom_length_mm) {
@@ -249,45 +194,21 @@ TransportResult transport_serial(const TransportConfig& config,
                         config.random_seed, history_id, steps, 1));
                     const auto extra_uniform = static_cast<double>(rng::uniform01(
                         config.random_seed, history_id, steps, 2));
-                    if (fluctuation_table) {
-                        const auto areal_density_g_per_cm2 =
-                            config.water_density_g_per_cm3 * step_mm / 10.0;
-                        const auto loss_ratio = fluctuation_table->sample_loss_ratio(
-                            energy_MeVu, areal_density_g_per_cm2, extra_uniform);
-                        deposited_MeV = std::clamp(
-                            mean_loss_MeV * loss_ratio, 0.0, energy_MeV);
-                    } else {
-                        const auto gaussian = std::sqrt(-2.0 * std::log(uniform1)) *
-                                              std::cos(2.0 * std::numbers::pi * uniform2);
-                        const auto sigma_MeV =
-                            local_scale * std::sqrt(std::max(0.0, variance_MeV2));
-                        deposited_MeV = sample_condensed_energy_loss(
-                            mean_loss_MeV, sigma_MeV, gaussian, extra_uniform,
-                            energy_MeV, sampler);
-                    }
+                    const auto gaussian = std::sqrt(-2.0 * std::log(uniform1)) *
+                                          std::cos(2.0 * std::numbers::pi * uniform2);
+                    const auto sigma_MeV =
+                        local_scale * std::sqrt(std::max(0.0, variance_MeV2));
+                    deposited_MeV = sample_condensed_energy_loss(
+                        mean_loss_MeV, sigma_MeV, gaussian, extra_uniform,
+                        energy_MeV, sampler);
                 }
             }
             tally[bin] += deposited_MeV;
             if (config.enable_voxel_scoring) {
                 voxel_tally[bin * voxel_plane_size + center_voxel_offset] += deposited_MeV;
             }
-            const auto mid_step_energy_MeVu =
-                (energy_MeV - 0.5 * deposited_MeV) /
-                static_cast<double>(config.primary_mass_number);
             energy_MeV -= deposited_MeV;
             position_mm += step_mm;
-            if (config.enable_primary_attenuation && energy_MeV > config.energy_cutoff_MeV) {
-                const auto macroscopic_cross_section_per_mm =
-                    cross_section.interpolate(mid_step_energy_MeVu) *
-                    history_primary_inelastic_xs_scale;
-                remaining_interaction_lengths -=
-                    macroscopic_cross_section_per_mm * step_mm;
-                if (remaining_interaction_lengths <= 0.0) {
-                    untracked_nuclear_MeV = energy_MeV;
-                    energy_MeV = 0.0;
-                    nuclear_interaction = true;
-                }
-            }
             ++steps;
         }
 
@@ -304,7 +225,7 @@ TransportResult transport_serial(const TransportConfig& config,
         return HistorySummary{energy_MeV, untracked_nuclear_MeV, steps, nuclear_interaction};
     };
 
-    if (config.enable_energy_straggling || config.enable_primary_attenuation) {
+    if (config.enable_energy_straggling) {
         for (std::uint64_t history = 0; history < config.number_of_histories; ++history) {
             const auto summary = simulate_history(
                 history, result.deposited_energy_MeV, result.voxel_deposited_energy_MeV);

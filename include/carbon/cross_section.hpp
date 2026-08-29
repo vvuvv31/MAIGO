@@ -7,6 +7,7 @@ namespace carbon {
 
 class CrossSectionTable {
 public:
+    CrossSectionTable() = default;
     CrossSectionTable(std::vector<double> energies_MeVu,
                       std::vector<double> macroscopic_cross_sections_per_mm);
 

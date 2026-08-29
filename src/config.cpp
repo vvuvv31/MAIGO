@@ -177,22 +177,9 @@ const std::unordered_set<std::string>& ion_physics_manifest_keys() {
         "primary_rest_mass_MeV",
         "energy_straggling_model",
         "use_particle_specific_stopping_power",
-        "enable_primary_elastic_interactions",
         "primary_stopping_power_file",
         "let_delta_electron_fraction_file",
         "particle_stopping_power_file",
-        "primary_inelastic_cross_section_file",
-        "primary_elastic_cross_section_file",
-        "primary_reaction_package_file",
-        "primary_elastic_package_file",
-        "cascade_package_file",
-        "neutral_package_file",
-        "energy_straggling_package_file",
-        "package_identity_validation",
-        "package_identity_override_manifest_file",
-        "primary_package_physics_model",
-        "primary_elastic_package_physics_model",
-        "cascade_package_physics_model",
     };
     return keys;
 }
@@ -202,14 +189,6 @@ const std::unordered_set<std::string>& ion_physics_manifest_path_keys() {
         "primary_stopping_power_file",
         "let_delta_electron_fraction_file",
         "particle_stopping_power_file",
-        "primary_inelastic_cross_section_file",
-        "primary_elastic_cross_section_file",
-        "primary_reaction_package_file",
-        "primary_elastic_package_file",
-        "cascade_package_file",
-        "neutral_package_file",
-        "energy_straggling_package_file",
-        "package_identity_override_manifest_file",
     };
     return keys;
 }
@@ -252,14 +231,8 @@ std::filesystem::path merge_ion_physics_manifest(
              "primary_mass_number",
              "energy_straggling_model",
              "use_particle_specific_stopping_power",
-             "enable_primary_elastic_interactions",
              "primary_stopping_power_file",
              "particle_stopping_power_file",
-             "primary_inelastic_cross_section_file",
-             "primary_reaction_package_file",
-             "cascade_package_file",
-             "primary_package_physics_model",
-             "cascade_package_physics_model",
          }) {
         const auto entry = manifest.find(required);
         if (entry == manifest.end() || entry->second.empty()) {
@@ -269,72 +242,6 @@ std::filesystem::path merge_ion_physics_manifest(
         }
     }
     return manifest_path;
-}
-
-void load_primary_inelastic_xs_correction_csv(
-    const std::filesystem::path& path,
-    std::vector<double>& energies_MeVu,
-    std::vector<double>& scales) {
-    std::ifstream input(path);
-    if (!input) {
-        throw std::runtime_error(
-            "Cannot open primary inelastic XS correction table: " + path.string());
-    }
-    constexpr std::string_view expected_header =
-        "initial_energy_MeV_per_u,primary_inelastic_xs_scale";
-    auto found_header = false;
-    std::string line;
-    std::size_t line_number = 0;
-    while (std::getline(input, line)) {
-        ++line_number;
-        const auto comment = line.find('#');
-        if (comment != std::string::npos) {
-            line.erase(comment);
-        }
-        line = trim(line);
-        if (line.empty()) {
-            continue;
-        }
-        if (!found_header) {
-            if (line != expected_header) {
-                throw std::runtime_error(
-                    "Primary inelastic XS correction CSV has an unexpected header: " +
-                    path.string());
-            }
-            found_header = true;
-            continue;
-        }
-        const auto separator = line.find(',');
-        if (separator == std::string::npos || line.find(',', separator + 1) != std::string::npos) {
-            throw std::runtime_error(
-                "Expected two correction columns at " + path.string() + ":" +
-                std::to_string(line_number));
-        }
-        const auto parse_csv_number = [&](const std::string& field, const char* label) {
-            const auto cleaned = trim(field);
-            std::size_t parsed = 0;
-            double value = 0.0;
-            try {
-                value = std::stod(cleaned, &parsed);
-            } catch (const std::exception&) {
-                throw std::runtime_error(
-                    std::string("Invalid ") + label + " at " + path.string() + ":" +
-                    std::to_string(line_number));
-            }
-            if (parsed != cleaned.size()) {
-                throw std::runtime_error(
-                    std::string("Invalid ") + label + " at " + path.string() + ":" +
-                    std::to_string(line_number));
-            }
-            return value;
-        };
-        energies_MeVu.push_back(parse_csv_number(line.substr(0, separator), "energy"));
-        scales.push_back(parse_csv_number(line.substr(separator + 1), "scale"));
-    }
-    if (!found_header) {
-        throw std::runtime_error(
-            "Primary inelastic XS correction CSV is missing its header: " + path.string());
-    }
 }
 
 std::filesystem::path scorer_output_path(const std::filesystem::path& config_path,
@@ -603,12 +510,6 @@ void TransportConfig::validate() const {
         throw std::invalid_argument(
             "production run_mode requires queue-overflow and NaN/Inf rejection");
     }
-    if (run_mode == RunMode::production && enable_fragment_cascade &&
-        cascade_selection_policy != CascadeSelectionPolicy::strict_coverage) {
-        throw std::invalid_argument(
-            "production fragment cascade requires "
-            "cascade_selection_policy=strict_coverage");
-    }
     if (enable_csda_range_energy_loss &&
         (enable_ct_grid || enable_layered_phantom || enable_hetero_insert ||
          enable_minibeam || use_particle_specific_stopping_power)) {
@@ -636,29 +537,6 @@ void TransportConfig::validate() const {
     if (!std::isfinite(primary_rest_mass_MeV) || primary_rest_mass_MeV < 0.0) {
         throw std::invalid_argument(
             "primary_rest_mass_MeV must be zero or finite and positive");
-    }
-    if (primary_package_physics_model.empty() || cascade_package_physics_model.empty()) {
-        throw std::invalid_argument("package physics model names must not be empty");
-    }
-    const auto has_primary_elastic_data =
-        !primary_elastic_cross_section_file.empty() ||
-        !primary_elastic_package_file.empty() ||
-        !primary_elastic_package_physics_model.empty();
-    if (!enable_primary_elastic_interactions && has_primary_elastic_data) {
-        throw std::invalid_argument(
-            "primary elastic package/table fields require "
-            "enable_primary_elastic_interactions=true");
-    }
-    if (enable_primary_elastic_interactions) {
-        if (primary_elastic_cross_section_file.empty() ||
-            primary_elastic_package_file.empty() ||
-            primary_elastic_package_physics_model.empty()) {
-            throw std::invalid_argument(
-                "primary elastic interactions require non-empty "
-                "primary_elastic_cross_section_file, "
-                "primary_elastic_package_file, and "
-                "primary_elastic_package_physics_model");
-        }
     }
     const auto energy_comes_from_spot_file =
         !topas_spots_file.empty() || !topas_spots_files.empty() ||
@@ -773,45 +651,22 @@ void TransportConfig::validate() const {
     }
     if (energy_straggling_model != "gaussian_clamped" &&
         energy_straggling_model != "legacy_calibrated" &&
-        energy_straggling_model != "moment_matched" &&
-        energy_straggling_model != "packaged_fluctuation") {
+        energy_straggling_model != "moment_matched") {
         throw std::invalid_argument(
             "energy_straggling_model must be gaussian_clamped, "
-            "legacy_calibrated, moment_matched, or packaged_fluctuation");
+            "legacy_calibrated, or moment_matched");
     }
-    if (uses_packaged_straggling() && energy_straggling_package_file.empty()) {
-        throw std::invalid_argument(
-            "packaged_fluctuation requires energy_straggling_package_file");
-    }
-    if (uses_packaged_straggling() && !enable_energy_straggling) {
-        throw std::invalid_argument(
-            "packaged_fluctuation requires enable_energy_straggling: true");
-    }
-    if (!uses_packaged_straggling() && !energy_straggling_package_file.empty()) {
-        throw std::invalid_argument(
-            "energy_straggling_package_file requires packaged_fluctuation");
-    }
-    if (uses_packaged_straggling() &&
-        (enable_ct_grid || enable_layered_phantom || enable_hetero_insert ||
-         enable_minibeam)) {
-        throw std::invalid_argument(
-            "packaged_fluctuation currently supports homogeneous water only");
-    }
-    if (uses_packaged_straggling() && enable_secondary_energy_straggling) {
-        throw std::invalid_argument(
-            "packaged_fluctuation currently supports primary-ion straggling only");
-    }
-    if ((uses_moment_matched_straggling() || uses_packaged_straggling()) &&
+    if (uses_moment_matched_straggling() &&
         std::abs(straggling_scale - 1.0) > 1.0e-12) {
         throw std::invalid_argument(
             "uncalibrated straggling models require straggling_scale: 1.0");
     }
-    if ((uses_moment_matched_straggling() || uses_packaged_straggling()) &&
+    if (uses_moment_matched_straggling() &&
         enable_step_stable_straggling) {
         throw std::invalid_argument(
             "uncalibrated straggling models cannot use the legacy fixed-block sampler");
     }
-    if ((uses_moment_matched_straggling() || uses_packaged_straggling()) &&
+    if (uses_moment_matched_straggling() &&
         !straggling_scale_energies_MeVu.empty()) {
         throw std::invalid_argument(
             "uncalibrated straggling models reject energy-dependent "
@@ -867,74 +722,6 @@ void TransportConfig::validate() const {
         throw std::invalid_argument(
             "ct_stopping_power_scale must be in (0, 2]");
     }
-    if ((!ct_lung_cascade_cross_section_package_file.empty() &&
-         (!std::isfinite(ct_lung_cascade_reference_density_g_per_cm3) ||
-          ct_lung_cascade_reference_density_g_per_cm3 <= 0.0)) ||
-        (!ct_bone_cascade_cross_section_package_file.empty() &&
-         (!std::isfinite(ct_bone_cascade_reference_density_g_per_cm3) ||
-          ct_bone_cascade_reference_density_g_per_cm3 <= 0.0))) {
-        throw std::invalid_argument(
-            "CT material cascade reference densities must be finite and positive");
-    }
-    if (!std::isfinite(nuclear_residual_heat_mfp_mm) ||
-        nuclear_residual_heat_mfp_mm < 0.0 ||
-        nuclear_residual_heat_mfp_mm > 50.0) {
-        throw std::invalid_argument(
-            "nuclear_residual_heat_mfp_mm must be in [0, 50] mm");
-    }
-    if (!std::isfinite(nuclear_residual_heat_scale) ||
-        nuclear_residual_heat_scale < 0.0 ||
-        nuclear_residual_heat_scale > 2.0) {
-        throw std::invalid_argument(
-            "nuclear_residual_heat_scale must be in [0, 2]");
-    }
-    if (!std::isfinite(primary_inelastic_xs_scale) ||
-        primary_inelastic_xs_scale <= 0.0 ||
-        primary_inelastic_xs_scale > 2.0) {
-        throw std::invalid_argument(
-            "primary_inelastic_xs_scale must be in (0, 2]");
-    }
-    if (enable_primary_inelastic_xs_correction) {
-        if (!enable_primary_attenuation) {
-            throw std::invalid_argument(
-                "primary inelastic XS correction requires enable_primary_attenuation");
-        }
-        if (primary_inelastic_xs_correction_file.empty()) {
-            throw std::invalid_argument(
-                "primary inelastic XS correction requires a correction file");
-        }
-        if (primary_inelastic_xs_scale != 1.0) {
-            throw std::invalid_argument(
-                "primary_inelastic_xs_scale must remain 1.0 when the correction table is enabled");
-        }
-        if (primary_inelastic_xs_correction_energies_MeVu.size() !=
-            primary_inelastic_xs_correction_scales.size()) {
-            throw std::invalid_argument(
-                "primary inelastic XS correction energies and scales must have the same length");
-        }
-        const auto count = primary_inelastic_xs_correction_energies_MeVu.size();
-        if (count < 2 || count > max_straggling_scale_points) {
-            throw std::invalid_argument(
-                "primary inelastic XS correction table requires 2 to 16 points");
-        }
-        for (std::size_t index = 0; index < count; ++index) {
-            const auto energy = primary_inelastic_xs_correction_energies_MeVu[index];
-            const auto scale = primary_inelastic_xs_correction_scales[index];
-            if (!std::isfinite(energy) || energy <= 0.0) {
-                throw std::invalid_argument(
-                    "primary inelastic XS correction energies must be finite and positive");
-            }
-            if (!std::isfinite(scale) || scale <= 0.0 || scale > 2.0) {
-                throw std::invalid_argument(
-                    "primary inelastic XS correction scales must be in (0, 2]");
-            }
-            if (index > 0 &&
-                energy <= primary_inelastic_xs_correction_energies_MeVu[index - 1]) {
-                throw std::invalid_argument(
-                    "primary inelastic XS correction energies must be strictly increasing");
-            }
-        }
-    }
     if (restrict_fragment_species_energy_deposit) {
         if (restrict_fragment_species_z_min < 1 ||
             restrict_fragment_species_z_max < restrict_fragment_species_z_min ||
@@ -944,23 +731,6 @@ void TransportConfig::validate() const {
                 "1 <= min <= max <= 8 when restrict_fragment_species_energy_deposit "
                 "is true");
         }
-    }
-    if (!std::isfinite(reaction_light_ion_forward_mix) ||
-        reaction_light_ion_forward_mix < 0.0 ||
-        reaction_light_ion_forward_mix > 1.0) {
-        throw std::invalid_argument(
-            "reaction_light_ion_forward_mix must be in [0, 1]");
-    }
-    if (!std::isfinite(cascade_light_ion_xs_scale) ||
-        cascade_light_ion_xs_scale < 0.0 || cascade_light_ion_xs_scale > 2.0) {
-        throw std::invalid_argument(
-            "cascade_light_ion_xs_scale must be in [0, 2]");
-    }
-    if (!std::isfinite(cascade_secondary_z6_xs_scale) ||
-        cascade_secondary_z6_xs_scale < 0.0 ||
-        cascade_secondary_z6_xs_scale > 2.0) {
-        throw std::invalid_argument(
-            "cascade_secondary_z6_xs_scale must be in [0, 2]");
     }
     if (enable_voxel_scoring &&
         (voxel_bins_x == 0 || voxel_bins_y == 0 || voxel_size_x_mm <= 0.0 ||
@@ -1005,12 +775,6 @@ void TransportConfig::validate() const {
         throw std::invalid_argument(
             "light_isotope_let_output_file requires scorerLET=true");
     }
-    if (!fragment_birth_spectrum_output_file.empty() &&
-        !enable_secondary_generation) {
-        throw std::invalid_argument(
-            "fragment_birth_spectrum_output_file requires "
-            "enable_secondary_generation=true");
-    }
     if (enable_flat_source &&
         (flat_source_half_width_x_mm <= 0.0 || flat_source_half_width_y_mm <= 0.0)) {
         throw std::invalid_argument(
@@ -1021,67 +785,7 @@ void TransportConfig::validate() const {
         throw std::invalid_argument(
             "enable_flat_source and enable_emittance_source cannot both be true");
     }
-    if (enable_secondary_transport && !enable_secondary_generation &&
-        !enable_primary_elastic_interactions) {
-        throw std::invalid_argument(
-            "enable_secondary_transport requires enable_secondary_generation=true, "
-            "unless primary elastic interactions are enabled");
-    }
-    if (enable_secondary_energy_sorting && !enable_secondary_transport) {
-        throw std::invalid_argument(
-            "enable_secondary_energy_sorting requires enable_secondary_transport=true");
-    }
-    if (enable_charged_origin_voxel_scoring && !enable_secondary_transport) {
-        throw std::invalid_argument(
-            "charged-origin voxel scoring requires secondary transport");
-    }
-    if (enable_fragment_cascade &&
-        (!enable_secondary_transport || maximum_cascade_generations == 0)) {
-        throw std::invalid_argument(
-            "enable_fragment_cascade requires secondary transport and at least one generation");
-    }
-    if (cascade_condition_on_reference_depth && !enable_fragment_cascade) {
-        throw std::invalid_argument(
-            "cascade_condition_on_reference_depth requires fragment cascade");
-    }
-    if (!enable_fragment_species_scoring &&
-        !fragment_species_output_file.empty()) {
-        throw std::invalid_argument(
-            "fragment_species_output_file is set but enable_fragment_species_scoring=false");
-    }
-    if (!enable_fragment_species_scoring &&
-        !fragment_species_dose_output_file.empty()) {
-        throw std::invalid_argument(
-            "fragment_species_dose_output_file is set but "
-            "enable_fragment_species_scoring=false");
-    }
-    if (!enable_fragment_species_scoring && neutral_local_kerma_fraction > 0.0) {
-        throw std::invalid_argument(
-            "neutral_local_kerma_fraction requires fragment species scoring");
-    }
-    if (enable_neutral_transport &&
-        (!enable_secondary_generation || !enable_secondary_transport ||
-         maximum_neutral_generations == 0)) {
-        throw std::invalid_argument(
-            "enable_neutral_transport requires secondary generation/transport and at "
-            "least one neutral generation");
-    }
-    if (enable_neutral_transport && neutral_transport_mode != "first_interaction" &&
-        neutral_transport_mode != "full") {
-        throw std::invalid_argument(
-            "neutral_transport_mode must be first_interaction or full");
-    }
-    if (enable_neutral_transport && neutral_transport_mode == "full" &&
-        maximum_neutral_generations < 2) {
-        throw std::invalid_argument(
-            "neutral_transport_mode=full requires maximum_neutral_generations >= 2");
-    }
     if (enable_electron_transport) {
-        if (!enable_neutral_transport || neutral_transport_mode != "full") {
-            throw std::invalid_argument(
-                "enable_electron_transport requires enable_neutral_transport=true and "
-                "neutral_transport_mode=full");
-        }
         if (enable_ct_grid || enable_layered_phantom || enable_hetero_insert ||
             enable_minibeam) {
             throw std::invalid_argument(
@@ -1126,22 +830,6 @@ void TransportConfig::validate() const {
         throw std::invalid_argument(
             "maximum_electron_relative_energy_loss must be in (0, 1]");
     }
-    if (neutral_local_kerma_fraction < 0.0 || neutral_local_kerma_fraction > 1.0) {
-        throw std::invalid_argument(
-            "neutral_local_kerma_fraction must be in [0, 1]");
-    }
-    if (neutral_kerma_high_energy_scale < 1.0 || neutral_kerma_high_energy_scale > 2.0) {
-        throw std::invalid_argument(
-            "neutral_kerma_high_energy_scale must be in [1, 2]");
-    }
-    if (neutral_local_kerma_fraction * neutral_kerma_high_energy_scale > 1.0) {
-        throw std::invalid_argument(
-            "neutral_local_kerma_fraction * neutral_kerma_high_energy_scale must be <= 1");
-    }
-    if (neutral_kerma_mean_free_path_mm < 0.0) {
-        throw std::invalid_argument(
-            "neutral_kerma_mean_free_path_mm must be nonnegative (0 = local dump)");
-    }
     if (max_device_memory_fraction <= 0.05 || max_device_memory_fraction > 1.0) {
         throw std::invalid_argument(
             "max_device_memory_fraction must be in (0.05, 1.0]");
@@ -1167,16 +855,6 @@ void TransportConfig::validate() const {
     if (electronic_buildup_fraction > 0.0 && electronic_buildup_mfp_mm <= 0.0) {
         throw std::invalid_argument(
             "electronic_buildup_fraction > 0 requires electronic_buildup_mfp_mm > 0");
-    }
-    if (neutral_local_kerma_fraction > 0.0 && enable_neutral_transport) {
-        throw std::invalid_argument(
-            "neutral_local_kerma_fraction is only for neutral transport off "
-            "(interim local kerma); disable enable_neutral_transport");
-    }
-    if (neutral_local_kerma_fraction > 0.0 && !enable_secondary_transport) {
-        throw std::invalid_argument(
-            "neutral_local_kerma_fraction requires enable_secondary_transport "
-            "so deposits can be scored into the fragment IDD");
     }
     if (enable_emittance_source) {
         if (emittance_sigma_x_mm < 0.0 || emittance_sigma_y_mm < 0.0 ||
@@ -1263,42 +941,6 @@ void TransportConfig::validate() const {
                 throw std::invalid_argument(
                     "minibeam Copper nuclear attenuation requires "
                     "minibeam_copper_cross_section_file");
-            }
-            if (minibeam_copper_enable_reaction_products) {
-                if (!minibeam_copper_enable_nuclear_attenuation) {
-                    throw std::invalid_argument(
-                        "minibeam Copper reaction products require Copper "
-                        "nuclear attenuation");
-                }
-                if (minibeam_copper_reaction_package_file.empty()) {
-                    throw std::invalid_argument(
-                        "minibeam Copper reaction products require "
-                        "minibeam_copper_reaction_package_file");
-                }
-                if (minibeam_copper_ion_stopping_power_file.empty() ||
-                    minibeam_copper_ion_cross_section_file.empty()) {
-                    throw std::invalid_argument(
-                        "minibeam Copper reaction products require isotope "
-                        "stopping-power and cross-section tables");
-                }
-                if (!enable_secondary_generation ||
-                    !enable_secondary_transport) {
-                    throw std::invalid_argument(
-                        "minibeam Copper reaction products currently require "
-                        "secondary generation and transport");
-                }
-                if (enable_neutral_transport &&
-                    minibeam_copper_neutral_cross_section_file.empty()) {
-                    throw std::invalid_argument(
-                        "minibeam Copper neutral transport requires "
-                        "minibeam_copper_neutral_cross_section_file");
-                }
-                if (enable_neutral_transport &&
-                    minibeam_copper_neutral_package_file.empty()) {
-                    throw std::invalid_argument(
-                        "minibeam Copper neutral transport requires "
-                        "minibeam_copper_neutral_package_file");
-                }
             }
             if (!(minibeam_copper_density_g_per_cm3 > 0.0 &&
                   minibeam_copper_radiation_length_g_per_cm2 > 0.0 &&
@@ -1516,42 +1158,11 @@ TransportConfig load_config(const std::filesystem::path& path) {
         config.quality_reject_any_queue_overflow);
     config.quality_reject_nan_or_inf = parse_bool(
         values, "quality_reject_nan_or_inf", config.quality_reject_nan_or_inf);
-    if (const auto policy = values.find("cascade_selection_policy");
-        policy != values.end()) {
-        auto name = policy->second;
-        std::transform(name.begin(), name.end(), name.begin(),
-                       [](const unsigned char character) {
-                           return static_cast<char>(std::tolower(character));
-                       });
-        if (name == "legacy_nearest") {
-            config.cascade_selection_policy =
-                CascadeSelectionPolicy::legacy_nearest;
-        } else if (name == "strict_coverage") {
-            config.cascade_selection_policy =
-                CascadeSelectionPolicy::strict_coverage;
-        } else {
-            throw std::invalid_argument(
-                "cascade_selection_policy must be legacy_nearest or strict_coverage");
-        }
-    }
     config.ion_physics_file = ion_physics_file;
     if (!ion_physics_file.empty()) {
-        // A manifest is an ownership boundary. Missing optional data must stay
-        // unavailable instead of silently inheriting the historical C-12 defaults.
         config.primary_stopping_power_file.clear();
         config.let_delta_electron_fraction_file.clear();
         config.particle_stopping_power_file.clear();
-        config.primary_inelastic_cross_section_file.clear();
-        config.primary_elastic_cross_section_file.clear();
-        config.primary_reaction_package_file.clear();
-        config.primary_elastic_package_file.clear();
-        config.cascade_package_file.clear();
-        config.neutral_package_file.clear();
-        config.energy_straggling_package_file.clear();
-        config.package_identity_override_manifest_file.clear();
-        config.primary_package_physics_model.clear();
-        config.primary_elastic_package_physics_model.clear();
-        config.cascade_package_physics_model.clear();
     }
     for (const char* removed : {
              "physics_profile",
@@ -1720,54 +1331,6 @@ TransportConfig load_config(const std::filesystem::path& path) {
         config.ct_hu_stopping_power_lut_file);
     config.ct_use_density_mass_spr = parse_bool(
         values, "ct_use_density_mass_spr", config.ct_use_density_mass_spr);
-    config.ct_lung_reaction_package_file = parse_path(
-        values, "ct_lung_reaction_package_file",
-        config.ct_lung_reaction_package_file);
-    config.ct_soft_tissue_reaction_package_file = parse_path(
-        values, "ct_soft_tissue_reaction_package_file",
-        config.ct_soft_tissue_reaction_package_file);
-    config.ct_bone_reaction_package_file = parse_path(
-        values, "ct_bone_reaction_package_file",
-        config.ct_bone_reaction_package_file);
-    config.ct_lung_cascade_cross_section_package_file = parse_path(
-        values, "ct_lung_cascade_cross_section_package_file",
-        config.ct_lung_cascade_cross_section_package_file);
-    config.ct_bone_cascade_cross_section_package_file = parse_path(
-        values, "ct_bone_cascade_cross_section_package_file",
-        config.ct_bone_cascade_cross_section_package_file);
-    config.ct_lung_cascade_reference_density_g_per_cm3 = parse_number(
-        values, "ct_lung_cascade_reference_density_g_per_cm3",
-        config.ct_lung_cascade_reference_density_g_per_cm3);
-    config.ct_bone_cascade_reference_density_g_per_cm3 = parse_number(
-        values, "ct_bone_cascade_reference_density_g_per_cm3",
-        config.ct_bone_cascade_reference_density_g_per_cm3);
-    config.ct_lung_cascade_package_file = parse_path(
-        values, "ct_lung_cascade_package_file",
-        config.ct_lung_cascade_package_file);
-    config.ct_soft_tissue_cascade_package_file = parse_path(
-        values, "ct_soft_tissue_cascade_package_file",
-        config.ct_soft_tissue_cascade_package_file);
-    config.ct_bone_cascade_package_file = parse_path(
-        values, "ct_bone_cascade_package_file",
-        config.ct_bone_cascade_package_file);
-    config.nuclear_residual_heat_mfp_mm = parse_number(
-        values, "nuclear_residual_heat_mfp_mm",
-        config.nuclear_residual_heat_mfp_mm);
-    config.nuclear_residual_heat_scale = parse_number(
-        values, "nuclear_residual_heat_scale",
-        config.nuclear_residual_heat_scale);
-    config.restrict_fragment_species_energy_deposit = parse_bool(
-        values, "restrict_fragment_species_energy_deposit",
-        config.restrict_fragment_species_energy_deposit);
-    config.restrict_fragment_species_z_min = static_cast<int>(parse_number(
-        values, "restrict_fragment_species_z_min",
-        config.restrict_fragment_species_z_min));
-    config.restrict_fragment_species_z_max = static_cast<int>(parse_number(
-        values, "restrict_fragment_species_z_max",
-        config.restrict_fragment_species_z_max));
-    config.reaction_light_ion_forward_mix = parse_number(
-        values, "reaction_light_ion_forward_mix",
-        config.reaction_light_ion_forward_mix);
     config.ct_stopping_power_scale = parse_number(
         values, "ct_stopping_power_scale", config.ct_stopping_power_scale);
     if (values.find("ct_grid_file") != values.end() &&
@@ -1891,9 +1454,6 @@ TransportConfig load_config(const std::filesystem::path& path) {
                            });
         }
     }
-    config.energy_straggling_package_file = parse_path(
-        values, "energy_straggling_package_file",
-        config.energy_straggling_package_file);
     config.straggling_scale = parse_number(values, "straggling_scale", config.straggling_scale);
     if (const auto iterator = values.find("straggling_scale_energies_MeVu");
         iterator != values.end()) {
@@ -1904,6 +1464,13 @@ TransportConfig load_config(const std::filesystem::path& path) {
         iterator != values.end()) {
         config.straggling_scale_values = parse_double_list(
             iterator->second, "straggling_scale_values");
+    }
+    if (config.primary_atomic_number == 6 &&
+        config.straggling_scale_energies_MeVu.empty() &&
+        config.energy_straggling_model == "gaussian_clamped" &&
+        values.find("straggling_scale") == values.end()) {
+        config.straggling_scale_energies_MeVu = {100.0, 200.0, 300.0, 400.0};
+        config.straggling_scale_values = {0.93, 0.95, 1.00, 1.00};
     }
     config.enable_multiple_scattering =
         parse_bool(values, "enable_multiple_scattering", config.enable_multiple_scattering);
@@ -1931,35 +1498,6 @@ TransportConfig load_config(const std::filesystem::path& path) {
         parse_number(values, "emittance_correlation_x", config.emittance_correlation_x);
     config.emittance_correlation_y =
         parse_number(values, "emittance_correlation_y", config.emittance_correlation_y);
-    config.enable_primary_attenuation =
-        parse_bool(values, "enable_primary_attenuation", config.enable_primary_attenuation);
-    config.primary_inelastic_xs_scale = parse_number(
-        values, "primary_inelastic_xs_scale",
-        config.primary_inelastic_xs_scale);
-    config.enable_primary_inelastic_xs_correction = parse_bool(
-        values, "enable_primary_inelastic_xs_correction",
-        config.enable_primary_inelastic_xs_correction);
-    config.enable_primary_elastic_interactions = parse_bool(
-        values, "enable_primary_elastic_interactions",
-        config.enable_primary_elastic_interactions);
-    config.primary_inelastic_xs_correction_file = parse_path(
-        values, "primary_inelastic_xs_correction_file",
-        config.primary_inelastic_xs_correction_file);
-    config.enable_secondary_generation =
-        parse_bool(values, "enable_secondary_generation", config.enable_secondary_generation);
-    config.enable_secondary_transport =
-        parse_bool(values, "enable_secondary_transport", config.enable_secondary_transport);
-    config.enable_fragment_cascade =
-        parse_bool(values, "enable_fragment_cascade", config.enable_fragment_cascade);
-    config.cascade_condition_on_reference_depth = parse_bool(
-        values, "cascade_condition_on_reference_depth",
-        config.cascade_condition_on_reference_depth);
-    config.cascade_light_ion_xs_scale = parse_number(
-        values, "cascade_light_ion_xs_scale",
-        config.cascade_light_ion_xs_scale);
-    config.cascade_secondary_z6_xs_scale = parse_number(
-        values, "cascade_secondary_z6_xs_scale",
-        config.cascade_secondary_z6_xs_scale);
     config.enable_fragment_species_scoring = parse_bool(
         values, "enable_fragment_species_scoring",
         config.enable_fragment_species_scoring);
@@ -2019,12 +1557,6 @@ TransportConfig load_config(const std::filesystem::path& path) {
                 parse_bool(values, "enable_let_scoring", config.enable_let_scoring);
         }
     }
-    config.enable_neutral_transport =
-        parse_bool(values, "enable_neutral_transport", config.enable_neutral_transport);
-    const auto neutral_mode = values.find("neutral_transport_mode");
-    if (neutral_mode != values.end()) {
-        config.neutral_transport_mode = neutral_mode->second;
-    }
     config.enable_electron_transport = parse_bool(
         values, "enable_electron_transport", config.enable_electron_transport);
     config.electron_queue_capacity = parse_number(
@@ -2039,14 +1571,6 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.maximum_electron_relative_energy_loss = parse_number(
         values, "maximum_electron_relative_energy_loss",
         config.maximum_electron_relative_energy_loss);
-    config.neutral_local_kerma_fraction = parse_number(
-        values, "neutral_local_kerma_fraction", config.neutral_local_kerma_fraction);
-    config.neutral_kerma_high_energy_scale = parse_number(
-        values, "neutral_kerma_high_energy_scale",
-        config.neutral_kerma_high_energy_scale);
-    config.neutral_kerma_mean_free_path_mm = parse_number(
-        values, "neutral_kerma_mean_free_path_mm",
-        config.neutral_kerma_mean_free_path_mm);
     config.electronic_buildup_fraction = parse_number(
         values, "electronic_buildup_fraction", config.electronic_buildup_fraction);
     config.electronic_buildup_mfp_mm = parse_number(
@@ -2057,31 +1581,12 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.electronic_buildup_lateral_sigma_mm = parse_number(
         values, "electronic_buildup_lateral_sigma_mm",
         config.electronic_buildup_lateral_sigma_mm);
-    config.maximum_cascade_generations = parse_number(
-        values, "maximum_cascade_generations", config.maximum_cascade_generations);
-    config.maximum_neutral_generations = parse_number(
-        values, "maximum_neutral_generations", config.maximum_neutral_generations);
-    config.secondary_queue_capacity =
-        parse_number(values, "secondary_queue_capacity", config.secondary_queue_capacity);
-    config.neutral_queue_capacity =
-        parse_number(values, "neutral_queue_capacity", config.neutral_queue_capacity);
     config.max_device_memory_fraction = parse_number(
         values, "max_device_memory_fraction", config.max_device_memory_fraction);
     config.history_chunk_size =
         parse_number(values, "history_chunk_size", config.history_chunk_size);
-    config.secondary_batch_size =
-        parse_number(values, "secondary_batch_size", config.secondary_batch_size);
-    config.secondary_persistent_workers = parse_number(
-        values, "secondary_persistent_workers",
-        config.secondary_persistent_workers);
-    config.secondary_fp32_energy_residual = parse_bool(
-        values, "secondary_fp32_energy_residual",
-        config.secondary_fp32_energy_residual);
     config.robust_boundary_nudge = parse_bool(
         values, "robust_boundary_nudge", config.robust_boundary_nudge);
-    config.enable_secondary_energy_sorting = parse_bool(
-        values, "enable_secondary_energy_sorting",
-        config.enable_secondary_energy_sorting);
     config.source_origin_x_mm =
         parse_number(values, "source_origin_x_mm", config.source_origin_x_mm);
     config.source_origin_y_mm =
@@ -2221,12 +1726,6 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.minibeam_copper_cross_section_file = parse_path(
         values, "minibeam_copper_cross_section_file",
         config.minibeam_copper_cross_section_file);
-    config.minibeam_copper_enable_reaction_products = parse_bool(
-        values, "minibeam_copper_enable_reaction_products",
-        config.minibeam_copper_enable_reaction_products);
-    config.minibeam_copper_reaction_package_file = parse_path(
-        values, "minibeam_copper_reaction_package_file",
-        config.minibeam_copper_reaction_package_file);
     config.minibeam_copper_ion_stopping_power_file = parse_path(
         values, "minibeam_copper_ion_stopping_power_file",
         config.minibeam_copper_ion_stopping_power_file);
@@ -2236,9 +1735,6 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.minibeam_copper_neutral_cross_section_file = parse_path(
         values, "minibeam_copper_neutral_cross_section_file",
         config.minibeam_copper_neutral_cross_section_file);
-    config.minibeam_copper_neutral_package_file = parse_path(
-        values, "minibeam_copper_neutral_package_file",
-        config.minibeam_copper_neutral_package_file);
     config.minibeam_water_entrance_world_y_mm = parse_number(
         values, "minibeam_water_entrance_world_y_mm",
         config.minibeam_water_entrance_world_y_mm);
@@ -2442,35 +1938,6 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.ct_bone_particle_stopping_power_file = parse_path(
         values, "ct_bone_particle_stopping_power_file",
         config.ct_bone_particle_stopping_power_file);
-    config.primary_inelastic_cross_section_file =
-        parse_path(values, "primary_inelastic_cross_section_file", config.primary_inelastic_cross_section_file);
-    config.primary_elastic_cross_section_file = parse_path(
-        values, "primary_elastic_cross_section_file",
-        config.primary_elastic_cross_section_file);
-    config.primary_reaction_package_file =
-        parse_path(values, "primary_reaction_package_file", config.primary_reaction_package_file);
-    config.cascade_package_file =
-        parse_path(values, "cascade_package_file", config.cascade_package_file);
-    if (const auto it = values.find("package_identity_validation"); it != values.end()) {
-        config.package_identity_validation = parse_package_identity_validation(it->second);
-    }
-    config.package_identity_override_manifest_file = parse_path(
-        values, "package_identity_override_manifest_file",
-        config.package_identity_override_manifest_file);
-    if (const auto it = values.find("primary_package_physics_model"); it != values.end()) {
-        config.primary_package_physics_model = it->second;
-    }
-    config.primary_elastic_package_file = parse_path(
-        values, "primary_elastic_package_file", config.primary_elastic_package_file);
-    if (const auto it = values.find("primary_elastic_package_physics_model");
-        it != values.end()) {
-        config.primary_elastic_package_physics_model = it->second;
-    }
-    if (const auto it = values.find("cascade_package_physics_model"); it != values.end()) {
-        config.cascade_package_physics_model = it->second;
-    }
-    config.neutral_package_file =
-        parse_path(values, "neutral_package_file", config.neutral_package_file);
     config.electron_transport_data_file = parse_path(
         values, "electron_transport_data_file", config.electron_transport_data_file);
     {
@@ -2680,26 +2147,6 @@ TransportConfig load_config(const std::filesystem::path& path) {
     const auto device = values.find("device");
     if (device != values.end()) {
         config.device = device->second;
-    }
-    if (config.enable_primary_inelastic_xs_correction) {
-        config.primary_inelastic_xs_correction_file =
-            resolve_input_path_from_config(
-                config.primary_inelastic_xs_correction_file, path);
-        load_primary_inelastic_xs_correction_csv(
-            config.primary_inelastic_xs_correction_file,
-            config.primary_inelastic_xs_correction_energies_MeVu,
-            config.primary_inelastic_xs_correction_scales);
-    }
-    if (config.enable_primary_elastic_interactions) {
-        config.primary_elastic_cross_section_file =
-            resolve_input_path_from_config(
-                config.primary_elastic_cross_section_file, path);
-        config.primary_elastic_package_file =
-            resolve_input_path_from_config(config.primary_elastic_package_file, path);
-    }
-    if (!config.energy_straggling_package_file.empty()) {
-        config.energy_straggling_package_file = resolve_input_path_from_config(
-            config.energy_straggling_package_file, path);
     }
     if (!config.electron_transport_data_file.empty()) {
         config.electron_transport_data_file = resolve_input_path_from_config(

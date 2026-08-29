@@ -17,7 +17,6 @@ enable_voxel_scoring: true
 enable_charged_origin_voxel_scoring: false
 enable_energy_straggling: true
 energy_straggling_model: packaged_fluctuation
-energy_straggling_package_file: @ENERGY_LOSS_FLUCTUATION_PACKAGE@
 straggling_scale: 1.0
 # Use the same residual-range CSDA mean loss as the validated CPU/CUDA model.
 enable_csda_range_energy_loss: true
@@ -25,29 +24,15 @@ enable_csda_range_energy_loss: true
 enable_step_stable_straggling: false
 straggling_sampling_length_mm: 0.0
 enable_multiple_scattering: true
-enable_primary_attenuation: true
-enable_primary_elastic_interactions: true
-enable_secondary_generation: true
-enable_secondary_transport: true
-enable_fragment_cascade: true
-enable_neutral_transport: false
-maximum_cascade_generations: 2
-secondary_queue_capacity: 500000
 max_device_memory_fraction: 0.50
 random_seed: @GPU_SEED@
 primary_stopping_power_file: @STOPPING_POWER@
-primary_inelastic_cross_section_file: @INELASTIC_XS@
 primary_elastic_cross_section_file: data/proton_water_direct_elastic_xs.csv
-primary_reaction_package_file: @PRIMARY_PACKAGE@
-cascade_package_file: @CASCADE_PACKAGE@
-primary_elastic_package_file: data/packages/proton_water_hadelastic_10k_x5_plus_low_final.bin
 primary_elastic_package_physics_model: G4HadronElasticPhysicsHP
 package_identity_validation: strict
 primary_package_physics_model: QGSP_BIC_HP/BinaryCascade
-cascade_package_physics_model: QGSP_BIC_HP/BinaryCascade
 # This remains off unless an independently measured correction table is
 # present. The table has header initial_energy_MeV_per_u,primary_inelastic_xs_scale.
-enable_primary_inelastic_xs_correction: @ENABLE_XS_CORRECTION@
 primary_inelastic_xs_correction_file: @XS_CORRECTION@
 output_file: @OUTPUT_DIR@/dose_MeV.csv
 fragment_species_output_file: @OUTPUT_DIR@/species_dose_MeV.csv

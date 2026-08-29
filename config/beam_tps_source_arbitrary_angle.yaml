@@ -30,13 +30,9 @@ voxel_size_y_mm: 4
 enable_emittance_source: true
 enable_energy_straggling: true
 enable_multiple_scattering: true
-enable_primary_attenuation: false
-enable_secondary_generation: false
-enable_secondary_transport: false
 
 random_seed: 20260728
 primary_stopping_power_file: data/stopping_power_water_geant4_11_3_2.csv
-primary_inelastic_cross_section_file: data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv
 output_file:
 dose_output_file:
 voxel_dose_output_file:

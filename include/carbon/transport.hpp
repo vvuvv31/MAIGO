@@ -1,10 +1,6 @@
 #pragma once
 
-#include "carbon/cascade_package.hpp"
 #include "carbon/cross_section.hpp"
-#include "carbon/elastic_package.hpp"
-#include "carbon/neutral_package.hpp"
-#include "carbon/reaction_package.hpp"
 #include "carbon/stopping_power.hpp"
 #include "carbon/transport_config.hpp"
 #include "carbon/transport_profile.hpp"
@@ -236,20 +232,14 @@ private:
 
     friend TransportResult transport_sycl(
         const TransportConfig&, const StoppingPowerTable&, const CrossSectionTable&,
-        const std::string&, const ReactionPackageTable*, const CascadePackageTable*,
-        const NeutralPackageTable*, SyclTransportContext*,
-        const CrossSectionTable*, const ElasticPackageTable*);
+        const std::string&, SyclTransportContext*);
 #if defined(CARBON_ENABLE_MINIBEAM)
     friend TransportResult transport_sycl_legacy(
         const TransportConfig&, const StoppingPowerTable&, const CrossSectionTable&,
-        const std::string&, const ReactionPackageTable*, const CascadePackageTable*,
-        const NeutralPackageTable*, SyclTransportContext*,
-        const CrossSectionTable*, const ElasticPackageTable*);
+        const std::string&, SyclTransportContext*);
     friend TransportResult transport_sycl_minibeam(
         const TransportConfig&, const StoppingPowerTable&, const CrossSectionTable&,
-        const std::string&, const ReactionPackageTable*, const CascadePackageTable*,
-        const NeutralPackageTable*, SyclTransportContext*,
-        const CrossSectionTable*, const ElasticPackageTable*);
+        const std::string&, SyclTransportContext*);
 #endif
 };
 
@@ -257,33 +247,18 @@ TransportResult transport_sycl(const TransportConfig& config,
                                const StoppingPowerTable& stopping_power,
                                const CrossSectionTable& cross_section,
                                const std::string& device_name,
-                               const ReactionPackageTable* reaction_packages = nullptr,
-                               const CascadePackageTable* cascade_packages = nullptr,
-                               const NeutralPackageTable* neutral_packages = nullptr,
-                               SyclTransportContext* context = nullptr,
-                               const CrossSectionTable* elastic_cross_section = nullptr,
-                               const ElasticPackageTable* elastic_packages = nullptr);
+                               SyclTransportContext* context = nullptr);
 #if defined(CARBON_ENABLE_MINIBEAM)
 // Dual kernels: legacy is the master-compatible water/CT path; minibeam is the
 // Copper beamline path. transport_sycl() dispatches at runtime.
 TransportResult transport_sycl_legacy(
     const TransportConfig& config, const StoppingPowerTable& stopping_power,
     const CrossSectionTable& cross_section, const std::string& device_name,
-    const ReactionPackageTable* reaction_packages = nullptr,
-    const CascadePackageTable* cascade_packages = nullptr,
-    const NeutralPackageTable* neutral_packages = nullptr,
-    SyclTransportContext* context = nullptr,
-    const CrossSectionTable* elastic_cross_section = nullptr,
-    const ElasticPackageTable* elastic_packages = nullptr);
+    SyclTransportContext* context = nullptr);
 TransportResult transport_sycl_minibeam(
     const TransportConfig& config, const StoppingPowerTable& stopping_power,
     const CrossSectionTable& cross_section, const std::string& device_name,
-    const ReactionPackageTable* reaction_packages = nullptr,
-    const CascadePackageTable* cascade_packages = nullptr,
-    const NeutralPackageTable* neutral_packages = nullptr,
-    SyclTransportContext* context = nullptr,
-    const CrossSectionTable* elastic_cross_section = nullptr,
-    const ElasticPackageTable* elastic_packages = nullptr);
+    SyclTransportContext* context = nullptr);
 #endif
 std::string describe_sycl_device(const std::string& device_name);
 #endif

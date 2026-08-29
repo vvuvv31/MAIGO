@@ -26,18 +26,8 @@ enable_charged_origin_voxel_scoring: false
 enable_energy_straggling: true
 straggling_scale: 1.2
 enable_multiple_scattering: true
-enable_primary_attenuation: true
-enable_secondary_generation: true
-enable_secondary_transport: true
-enable_fragment_cascade: true
-enable_neutral_transport: false
-neutral_local_kerma_fraction: 0.298
-neutral_kerma_high_energy_scale: 1.55
-neutral_kerma_mean_free_path_mm: 110.0
 electronic_buildup_fraction: 0.06
 electronic_buildup_mfp_mm: 0.5
-maximum_cascade_generations: 2
-secondary_queue_capacity: 700000
 max_device_memory_fraction: 0.50
 random_seed: 20260716
 
@@ -48,9 +38,6 @@ spots_sad_mm: 450.0
 spots_geometry_mode: beam_plus_z
 
 primary_stopping_power_file: data/stopping_power_water_geant4_11_3_2.csv
-primary_inelastic_cross_section_file: data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv
-primary_reaction_package_file: data/packages/topas_water_inclxx_1M_stitch7_primary_3d.bin
-cascade_package_file: data/packages/topas_400MeVu_water_inclxx_1M_cascade_3d.bin
 output_file: out/spots_test_c_angle01_idd.csv
 dose_output_file: out/spots_test_c_angle01_dose_Gy.csv
 fragment_species_output_file: out/spots_test_c_angle01_species.csv

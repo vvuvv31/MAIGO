@@ -12,30 +12,18 @@ water_density_g_per_cm3: 1.0
 scorer_area_mm2: 90000.0
 enable_voxel_scoring: false
 enable_energy_straggling: true
-enable_secondary_energy_straggling: false
 straggling_scale: 1.0
 enable_multiple_scattering: true
-enable_primary_attenuation: true
-enable_secondary_generation: true
-enable_secondary_transport: true
-enable_fragment_cascade: true
-cascade_condition_on_reference_depth: false
-enable_neutral_transport: false
 electronic_buildup_fraction: 0.06
 electronic_buildup_mfp_mm: 0.5
-maximum_cascade_generations: 4
 # CUDA auto (4/history) overflows cascade at 100k–400 MeV and truncates
 # fragment transport → all-hadron LET tail error. Keep ≥20 slots/history.
-secondary_queue_capacity: 2500000
 max_device_memory_fraction: 0.50
 random_seed: 20260715
 primary_stopping_power_file: data/stopping_power_water_geant4_11_3_2.csv
 # Exact isotope SP tables: required for best all-hadron LET agreement.
 use_particle_specific_stopping_power: true
 particle_stopping_power_file: data/ion_stopping_power_water_geant4_11_3_2.csv
-primary_inelastic_cross_section_file: data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv
-primary_reaction_package_file: data/packages/topas_water_inclxx_1M_stitch7_primary_3d.bin
-cascade_package_file: data/packages/topas_400MeVu_water_inclxx_1M_cascade_3d.bin
 output_file: out/letd_water/gpu_idd.csv
 fragment_species_output_file:
 dose_output_file:

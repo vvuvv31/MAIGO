@@ -1,8 +1,5 @@
 #pragma once
 
-#include "carbon/package_identity.hpp"
-#include "carbon/cascade_selection.hpp"
-
 #include "carbon/slab_phantom.hpp"
 #include "carbon/particle.hpp"
 
@@ -109,8 +106,6 @@ struct TransportConfig {
     double quality_maximum_absolute_energy_residual_MeV{1.0e-6};
     bool quality_reject_any_queue_overflow{true};
     bool quality_reject_nan_or_inf{true};
-    CascadeSelectionPolicy cascade_selection_policy{
-        CascadeSelectionPolicy::legacy_nearest};
     // Optional single-file manifest owning the primary-ion identity and all
     // ion-dependent water physics data. Run controls remain in the main YAML.
     std::filesystem::path ion_physics_file{};
@@ -205,43 +200,6 @@ struct TransportConfig {
     // water-relative electronic mass SPR instead of the analytic
     // Schneider-section Bethe factor.
     bool ct_use_density_mass_spr{true};
-    // Optional material-conditioned primary ion correlated final states.
-    // Empty paths preserve the production water package for every CT voxel.
-    // Each package is selected only for reactions occurring in the
-    // corresponding CT material class. An empty class path falls back to
-    // primary_reaction_package_file.
-    std::filesystem::path ct_lung_reaction_package_file{};
-    std::filesystem::path ct_soft_tissue_reaction_package_file{};
-    std::filesystem::path ct_bone_reaction_package_file{};
-    // Optional fragment-specific inelastic cross sections extracted from
-    // material cascade packages. Only their projectile XS tables are used
-    // unless the matching ct_*_cascade_package_file is also set (full
-    // material-conditioned final states). Values in the package are
-    // macroscopic at the reference density below and are converted to mass
-    // cross sections before CT-density scaling.
-    std::filesystem::path ct_lung_cascade_cross_section_package_file{};
-    std::filesystem::path ct_bone_cascade_cross_section_package_file{};
-    double ct_lung_cascade_reference_density_g_per_cm3{1.04};
-    double ct_bone_cascade_reference_density_g_per_cm3{1.85};
-    // Optional material-conditioned cascade correlated final states.
-    // Empty preserves cascade_package_file for every CT voxel. When set,
-    // cascade interactions that occur in that CT material class sample
-    // final states from the material package (with fallback to the default
-    // cascade package if the projectile is missing there). Soft-tissue is
-    // the dominant residual class in head CT cases.
-    std::filesystem::path ct_lung_cascade_package_file{};
-    std::filesystem::path ct_soft_tissue_cascade_package_file{};
-    std::filesystem::path ct_bone_cascade_package_file{};
-    // Optional short-range redistribution of reaction-local heat. The required
-    // reaction/cascade v1 format carries the Geant4 step-local deposit.
-    // 0 preserves a point deposit. A positive value uses an exponential MFP
-    // along the projectile direction as a residual-nucleus transport proxy.
-    double nuclear_residual_heat_mfp_mm{0.0};
-    // Multiplier on package reaction-local heat. 1.0 preserves the TOPAS value
-    // for current packages; 0 disables this local term. It does not affect
-    // continuous ionization or
-    // queued-secondary kinetic energy.
-    double nuclear_residual_heat_scale{1.0};
     // When true, fragment-species EnergyDeposit for Z in
     // [restrict_fragment_species_z_min, restrict_fragment_species_z_max]
     // uses (1 − δ) × unrestricted dE so the ion column matches TOPAS
@@ -287,10 +245,7 @@ struct TransportConfig {
     // gaussian_clamped / legacy_calibrated: historical Gaussian + [0, 2μ] cap.
     // moment_matched: positive Gamma/Gaussian sampler that keeps mean/variance
     // without a 2μ clamp; scale tables are rejected.
-    // packaged_fluctuation: empirical loss/mean inverse-CDF package selected
-    // explicitly by energy_straggling_package_file.
     std::string energy_straggling_model{"gaussian_clamped"};
-    std::filesystem::path energy_straggling_package_file{};
     // Optional CPU-only CSDA residual-range energy loss. Disabled preserves
     // the historical local stopping_power * step path; SYCL is unaffected.
     bool enable_csda_range_energy_loss{false};
@@ -415,17 +370,9 @@ struct TransportConfig {
     double minibeam_water_touched_primary_deficit_sigma_mm{1.0};
     bool minibeam_copper_enable_nuclear_attenuation{false};
     std::filesystem::path minibeam_copper_cross_section_file{};
-    bool minibeam_copper_enable_reaction_products{false};
-    std::filesystem::path minibeam_copper_reaction_package_file{};
     std::filesystem::path minibeam_copper_ion_stopping_power_file{};
     std::filesystem::path minibeam_copper_ion_cross_section_file{};
-    // Total gamma/neutron macroscopic cross sections used to reject Copper
-    // products that interact before reaching a slit or the collimator exit.
     std::filesystem::path minibeam_copper_neutral_cross_section_file{};
-    // Conditional gamma/neutron final states in Copper. These preserve the
-    // leading neutral after elastic, Compton, and Rayleigh interactions instead
-    // of treating every total-cross-section collision as absorption.
-    std::filesystem::path minibeam_copper_neutral_package_file{};
     // Used by spots_geometry_mode=minibeam_topas_y to map TOPAS world Y to
     // canonical GPU depth: gpu_z = world_y - this value.
     double minibeam_water_entrance_world_y_mm{60.0};
@@ -524,36 +471,6 @@ struct TransportConfig {
     // HFS, HFP, FFS, or FFP. Axes are converted to the simulation's patient
     // coordinate system; isocenter coordinates are already in that system.
     std::string tps_patient_position{"HFS"};
-    bool enable_primary_attenuation{false};
-    // Scale the tabulated primary-ion inelastic macroscopic cross section.
-    // Keep 1.0 for the raw G4HadronicProcessStore table. Validation may use a
-    // process-effective scale measured from equal-history TOPAS first-reaction
-    // counts, which are slightly lower than the direct table integral.
-    double primary_inelastic_xs_scale{1.0};
-    bool enable_primary_inelastic_xs_correction{false};
-    std::filesystem::path primary_inelastic_xs_correction_file{};
-    // Loaded once from primary_inelastic_xs_correction_file. The cumulative
-    // TOPAS/table optical-depth ratio is selected from the sampled incident
-    // primary energy and remains fixed while that primary slows down.
-    std::vector<double> primary_inelastic_xs_correction_energies_MeVu{};
-    std::vector<double> primary_inelastic_xs_correction_scales{};
-    // Primary elastic interactions are data-preload only until the elastic
-    // transport channel is implemented. Keep the default disabled so all
-    // existing carbon runs retain their historical behavior.
-    bool enable_primary_elastic_interactions{false};
-    bool enable_secondary_generation{false};
-    bool enable_secondary_transport{false};
-    bool enable_fragment_cascade{false};
-    // Optional v3 package mode. Absolute reference depth is diagnostic and can
-    // overfit a source energy; keep disabled unless cross-case validation wins.
-    bool cascade_condition_on_reference_depth{false};
-    // Diagnostic / residual-closure scales for cascade macroscopic XS sampled
-    // from cascade_package_file. Applied after density / material mass-XS
-    // factors. 1.0 preserves package rates. Light ions are Z<=2 (p/d/t/He).
-    // Secondary carbons are Z==6 fragments continuing a cascade (not primary).
-    // These are not patient-specific fits; use only with equal-history A/B.
-    double cascade_light_ion_xs_scale{1.0};
-    double cascade_secondary_z6_xs_scale{1.0};
     // Per-species secondary depth-dose scoring. Off in production; validation
     // mode turns it on. Voxel-only full-plan runs should leave this false.
     bool enable_fragment_species_scoring{false};
@@ -569,10 +486,6 @@ struct TransportConfig {
     // Villadslj/Topas-Extension myHadronLET definition. YAML also accepts the
     // requested camel-case alias `scorerLET`.
     bool enable_let_scoring{false};
-    bool enable_neutral_transport{false};
-    // "first_interaction": free path + one package (mode D); continuation residual.
-    // "full": re-queue neutral continuations up to maximum_neutral_generations.
-    std::string neutral_transport_mode{"first_interaction"};
     // V1 transports only neutral-package e-/e+ in homogeneous G4_WATER.
     // Ion delta electrons remain condensed in unrestricted ion stopping power.
     bool enable_electron_transport{false};
@@ -582,19 +495,6 @@ struct TransportConfig {
     std::uint32_t maximum_electromagnetic_generations{4};
     double maximum_electron_step_mm{0.1};
     double maximum_electron_relative_energy_loss{0.05};
-    // When neutral transport is off, deposit this fraction of born neutron/gamma
-    // kinetic energy as an interim kerma (calibrated ~0.298 at ≤200 MeV/u).
-    // Not a global dose scale of the charged IDD.
-    double neutral_local_kerma_fraction{0.0};
-    // Multiplier of kerma fraction at E>=400 MeV/u (linear ramp from 200→400).
-    // f(E) = f0 for E<=200; f0 * scale at E>=400. High-E needs more kerma to
-    // close the plateau/integral deficit vs TOPAS.
-    double neutral_kerma_high_energy_scale{1.0};
-    // Exponential mean free path [mm] for distributing that kerma along +z from
-    // the birth depth. 0 = legacy local dump in the production bin (overpredicts
-    // entrance). Multi-energy charged suite uses ~80 mm to match TOPAS build-up.
-    // Kerma is renormalized into the remaining phantom so high-E tails are not lost.
-    double neutral_kerma_mean_free_path_mm{0.0};
     // Short-range electronic build-up vs unrestricted CSDA local deposit.
     // Of each continuous energy loss, fraction f is re-deposited along +z with
     // MFP electronic_buildup_mfp_mm (delta-ray proxy). f scales with energy:
@@ -611,10 +511,6 @@ struct TransportConfig {
     // preserving expectation and using one voxel atomic per aggregated deposit.
     // 0 keeps the legacy track-local voxel scoring.
     double electronic_buildup_lateral_sigma_mm{0.0};
-    std::uint32_t maximum_cascade_generations{0};
-    std::uint32_t maximum_neutral_generations{1};
-    std::size_t secondary_queue_capacity{0};
-    std::size_t neutral_queue_capacity{0};
     // Hard soft-cap on estimated SYCL device USM vs device global memory.
     // Default 0.50: queues are scaled down to fit; allocation still aborts if over.
     // Pair with a host watchdog (run scripts) that kills the process if live VRAM
@@ -624,26 +520,10 @@ struct TransportConfig {
     // CUDA defaults to a small chunk so WSL/Windows can reclaim the GPU between
     // launches (long single kernels freeze WSL). Intel GPU uses a larger default.
     std::size_t history_chunk_size{0};
-    // Secondary/cascade particles processed per GPU submit. 0 = auto (CUDA small).
-    std::size_t secondary_batch_size{0};
-    // Persistent secondary workers per GPU submit. 0 preserves the legacy
-    // one-work-item-per-track launch. A smaller nonzero worker pool repeatedly
-    // fetches tracks from the batch, reducing whole-track warp tail divergence
-    // without changing per-particle Philox streams.
-    std::size_t secondary_persistent_workers{0};
-    // FP32 continuous-loss residual for charged secondaries. When false, energy
-    // is subtracted exactly as on master (legacy bitwise path). When true,
-    // unrepresented FP32 ULPs are carried so scored energy is not double-counted
-    // in the escaped-energy balance. Minibeam production configs enable this.
-    bool secondary_fp32_energy_residual{false};
     // When false, boundary snaps use sycl::nextafter (master). When true, a
     // fixed 1e-5 mm physical nudge is used to escape CT/voxel face thrash.
     // Minibeam 0.1 mm scorer cases should enable this explicitly.
     bool robust_boundary_nudge{false};
-    // Reorder each secondary batch into contiguous initial-energy-per-nucleon
-    // buckets before transport to reduce warp divergence. Off by default until
-    // benchmarked on the target GPU.
-    bool enable_secondary_energy_sorting{false};
     std::uint64_t random_seed{20'260'714};
     std::filesystem::path primary_stopping_power_file{
         "data/stopping_power_water_geant4_11_3_2.csv"};
@@ -663,24 +543,6 @@ struct TransportConfig {
     std::filesystem::path ct_lung_particle_stopping_power_file{};
     std::filesystem::path ct_soft_tissue_particle_stopping_power_file{};
     std::filesystem::path ct_bone_particle_stopping_power_file{};
-    std::filesystem::path primary_inelastic_cross_section_file{
-        "data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv"};
-    std::filesystem::path primary_elastic_cross_section_file{};
-    std::filesystem::path primary_reaction_package_file{
-        "data/packages/topas_water_inclxx_1M_stitch7_primary_3d.bin"};
-    std::filesystem::path cascade_package_file{
-        "data/packages/topas_400MeVu_water_inclxx_1M_cascade_3d.bin"};
-    PackageIdentityValidation package_identity_validation{
-        PackageIdentityValidation::strict};
-    // Older package sidecars are described by this repository-controlled manifest.
-    std::filesystem::path package_identity_override_manifest_file{
-        "data/packages/package_identity_overrides.json"};
-    std::string primary_package_physics_model{"INCLXX"};
-    std::filesystem::path primary_elastic_package_file{};
-    std::string primary_elastic_package_physics_model{};
-    std::string cascade_package_physics_model{"INCLXX"};
-    std::filesystem::path neutral_package_file{
-        "data/packages/topas_200MeVu_neutral_development.bin"};
     // MeV energy-deposition scorer outputs (absolute MeV → MeV/primary in writers).
     std::filesystem::path output_file{"out/cpu_depth_dose.csv"};
     std::filesystem::path fragment_species_output_file{};
@@ -752,9 +614,6 @@ struct TransportConfig {
     }
     [[nodiscard]] bool uses_moment_matched_straggling() const noexcept {
         return energy_straggling_model == "moment_matched";
-    }
-    [[nodiscard]] bool uses_packaged_straggling() const noexcept {
-        return energy_straggling_model == "packaged_fluctuation";
     }
     [[nodiscard]] int straggling_sampler_id() const noexcept {
         return uses_moment_matched_straggling() ? 1 : 0;
