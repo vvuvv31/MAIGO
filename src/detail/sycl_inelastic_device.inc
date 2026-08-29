@@ -20,7 +20,10 @@ inline InelasticProductSet sample_carbon_inelastic_products_device(
     const int ion_sp_table_size,
     const float ion_sp_min_energy,
     const float ion_sp_inv_step,
-    const float energy_cutoff_MeV) noexcept {
+    const float* ion_energy_grid,
+    const float* ion_csda_a1,
+    const float energy_cutoff_MeV,
+    const float p_target_h) noexcept {
 
     InelasticProductSet set{};
     const auto e_per_u = incident_energy_MeV / 12.0F;
@@ -33,39 +36,21 @@ inline InelasticProductSet sample_carbon_inelastic_products_device(
     constexpr float deg_to_rad = 0.017453292519943295F;
     constexpr uint32_t kInelasticBaseDim = 10000;
 
-    // 1. Target Selection in water (Eq. 10-11)
-    const float sigma_H = (e_per_u >= 250.0F)
-                              ? 250.0F
-                              : (250.0F * (1.0F + 0.80F * sycl::exp(-e_per_u / 60.0F)));
-
-    // sigma_O(E) from Kox reaction cross-section formula for 12C + 16O (Kox et al., Phys. Rev. C 35, 1678)
-    constexpr float a_kox = 1.85F;
-    constexpr float ap_c12 = 12.0F;
-    constexpr float at_o16 = 16.0F;
-    constexpr float zp_c12 = 6.0F;
-    constexpr float zt_o16 = 8.0F;
-    constexpr float ap13 = 2.289428F; // 12^(1/3)
-    constexpr float at13 = 2.519842F; // 16^(1/3)
-    const float c_e = 0.80F * (1.0F - sycl::exp(-e_per_u / 40.0F));
-    const float r_vol = ap13 + at13 + a_kox * (ap13 * at13) / (ap13 + at13) - c_e;
-    const float b_c = (1.44F * zp_c12 * zt_o16) / (1.3F * (ap13 + at13));
-    const float e_cm = (at_o16 / (ap_c12 + at_o16)) * incident_energy_MeV;
-    const float coulomb_barrier_factor = (e_cm > b_c) ? (1.0F - b_c / e_cm) : 0.0F;
-    const float sigma_O = 38.013F * r_vol * r_vol * coulomb_barrier_factor;
-
-    const float p_target_H = (2.0F * sigma_H) / (2.0F * sigma_H + sycl::fmax(sigma_O, 1.0F));
     const float u_target = rng::uniform01(spot_seed, rng_history, steps, kInelasticBaseDim + 0);
-    const uint8_t target_idx = (u_target < p_target_H) ? 0 : 2; // 0 for H, 2 for O
+    const uint8_t target_idx = (u_target < p_target_h) ? 0 : 2; // 0 for H, 2 for O
     const float* proj_prob = (target_idx == 0) ? prob_proj_h : prob_proj_o;
-    const float* tgt_prob = (target_idx == 0) ? prob_tgt_h : prob_tgt_o;
+    const float* tgt_prob = carbon::kFredProbO.data();
+    (void)prob_tgt_h;
+    (void)prob_tgt_o;
 
-    // 2. Binding energy is unavailable kinetic energy (untracked nuclear), not local dose.
-    const auto base_q_MeV = 12.0F + 0.04F * e_per_u;
-    const auto max_available_MeV = sycl::fmax(0.0F, incident_energy_MeV - base_q_MeV);
+    const auto base_q_MeV = 0.0F;
+    const auto max_available_MeV = incident_energy_MeV;
 
     // 3. Sample projectile and target fragment sets with resampling (Section 2.1.3)
     constexpr int max_retries = 32;
     bool accepted = false;
+    InelasticProductSet last_closed{};
+    bool have_closed = false;
 
     for (int retry = 0; retry < max_retries; ++retry) {
         InelasticProductSet candidate{};
@@ -77,41 +62,34 @@ inline InelasticProductSet sample_carbon_inelastic_products_device(
         bool is_target_frag[12]{};
         uint8_t num_frags = 0;
 
-        // Projectile fragments: sequential Table 1 sampling over remaining (A,Z), including 12C.
-        int step_cnt = 0;
-        while ((a_rem > 0 || z_rem > 0) &&
-               num_frags < carbon::kMaxProjectileFragments && step_cnt < 16) {
-            ++step_cnt;
-            const float u_frag = rng::uniform01(
-                spot_seed, rng_history, steps,
-                kInelasticBaseDim + static_cast<uint32_t>(retry * 200 + step_cnt));
-
-            const int iso_idx = carbon::sample_table1_isotope(proj_prob, a_rem, z_rem, u_frag);
-            const auto iso = carbon::kFredIsotopes[iso_idx];
-            if (iso.a <= a_rem && iso.z <= z_rem && iso.a > 0) {
-                frag_species[num_frags] = static_cast<uint8_t>(iso_idx);
-                is_target_frag[num_frags] = false;
-                ++num_frags;
-                a_rem -= iso.a;
-                z_rem -= iso.z;
-            } else if (z_rem > 0 && a_rem > 0) {
-                frag_species[num_frags] = 1;
-                is_target_frag[num_frags] = false;
-                ++num_frags;
-                a_rem -= 1;
-                z_rem -= 1;
-            } else if (a_rem > 0) {
-                frag_species[num_frags] = 0;
-                is_target_frag[num_frags] = false;
-                ++num_frags;
-                a_rem -= 1;
-            } else {
-                break;
-            }
+        float wproj[18];
+        carbon::fill_energy_dependent_inclusive_weights(e_per_u, proj_prob, wproj);
+        const float u_lead = rng::uniform01(
+            spot_seed, rng_history, steps,
+            kInelasticBaseDim + static_cast<uint32_t>(retry * 200 + 1));
+        uint8_t joint_idx[8]{};
+        int leftover_n = 0;
+        const int njoint = carbon::fill_projectile_joint_channel(
+            wproj, u_lead, joint_idx, carbon::kMaxProjectileFragments, &leftover_n);
+        for (int j = 0; j < njoint && num_frags < carbon::kMaxProjectileFragments; ++j) {
+            frag_species[num_frags] = joint_idx[j];
+            is_target_frag[num_frags] = false;
+            ++num_frags;
         }
-
-        if (a_rem != 0 || z_rem != 0) {
-            continue;
+        a_rem = leftover_n;
+        z_rem = 0;
+        // Heaviest projectile fragment first so Eq. 13–16 gives E/A≈P to
+        // the projectile-like remnant, not to a light leading He/p.
+        for (uint8_t i = 0; i < num_frags; ++i) {
+            for (uint8_t j = static_cast<uint8_t>(i + 1); j < num_frags; ++j) {
+                const int ai = carbon::kFredIsotopes[frag_species[i]].a;
+                const int aj = carbon::kFredIsotopes[frag_species[j]].a;
+                if (aj > ai) {
+                    const auto tmp = frag_species[i];
+                    frag_species[i] = frag_species[j];
+                    frag_species[j] = tmp;
+                }
+            }
         }
 
         // Target fragments from Table 1 remaining (A,Z). Light charged (p,d,t,He) are transported;
@@ -122,7 +100,16 @@ inline InelasticProductSet sample_carbon_inelastic_products_device(
         int heavy_tgt_z = 0;
         int heavy_tgt_idx = -1;
         int tgt_step = 0;
-        while ((target_a_rem > 0 || target_z_rem > 0) &&
+        if (target_idx == 0) {
+            if (num_frags < carbon::kMaxInelasticProducts) {
+                frag_species[num_frags] = 1;
+                is_target_frag[num_frags] = true;
+                ++num_frags;
+                target_a_rem = 0;
+                target_z_rem = 0;
+            }
+        }
+        while (target_idx != 0 && (target_a_rem > 0 || target_z_rem > 0) &&
                num_frags < carbon::kMaxInelasticProducts && tgt_step < 12) {
             ++tgt_step;
             const float u_tgt = rng::uniform01(
@@ -131,21 +118,7 @@ inline InelasticProductSet sample_carbon_inelastic_products_device(
             const int iso_idx = carbon::sample_table1_isotope(tgt_prob, target_a_rem, target_z_rem, u_tgt);
             const auto iso = carbon::kFredIsotopes[iso_idx];
             if (iso.a <= 0 || iso.a > target_a_rem || iso.z > target_z_rem) {
-                if (target_z_rem > 0 && target_a_rem > 0) {
-                    frag_species[num_frags] = 1;
-                    is_target_frag[num_frags] = true;
-                    ++num_frags;
-                    target_a_rem -= 1;
-                    target_z_rem -= 1;
-                } else if (target_a_rem > 0) {
-                    frag_species[num_frags] = 0;
-                    is_target_frag[num_frags] = true;
-                    ++num_frags;
-                    target_a_rem -= 1;
-                } else {
-                    break;
-                }
-                continue;
+                break;
             }
             if (iso.z >= 3 || iso.a >= 6) {
                 target_a_rem -= iso.a;
@@ -172,7 +145,7 @@ inline InelasticProductSet sample_carbon_inelastic_products_device(
         float running_e_sum = 0.0F;
         float running_a_sum = 0.0F;
         uint8_t charged_count = 0;
-
+        bool kinematics_ok = true;
 
         for (uint8_t i = 0; i < num_frags; ++i) {
             const auto sp_idx = frag_species[i];
@@ -197,8 +170,8 @@ inline InelasticProductSet sample_carbon_inelastic_products_device(
             const float i_exp = params.a1 / (a_e * a_th);
             const float p_gauss = i_gauss / sycl::fmax(1.0e-6F, i_gauss + i_exp);
 
-            // Eq. (12) mixture for projectile fragments; target fragments are exponential.
-            const bool sample_gauss = !is_tgt && (u_mix < p_gauss);
+            const bool sample_gauss =
+                carbon::eq12_sample_gaussian(iso.z, iso.a, is_tgt, u_mix, p_gauss);
 
             float frag_e_u = 0.0F;
             float theta_rad = 0.0F;
@@ -207,15 +180,18 @@ inline InelasticProductSet sample_carbon_inelastic_products_device(
                 // Box-Muller Gaussian for E95
                 const auto u_log = sycl::fmax(u_e0, 1.0e-10F);
                 const auto gauss_e = sycl::sqrt(-2.0F * sycl::log(u_log)) * sycl::cos(two_pi * u_e1);
-                const auto e95 = sycl::clamp(params.mean_e + params.sigma_e * gauss_e, 1.0F, 180.0F);
+                const auto e95 = sycl::fmax(params.mean_e + params.sigma_e * gauss_e, 0.0F);
 
-                // Energy scaling Eq. (13)-(16)
-                const auto r_ratio = (running_a_sum > 0.0F && e_per_u > 0.0F)
-                                         ? (running_e_sum / running_a_sum) / e_per_u
-                                         : 0.0F;
-                constexpr float c_corr = 0.40F;
-                const auto k_corr = c_corr * (1.0F - sycl::clamp(r_ratio, 0.0F, 1.0F));
-                frag_e_u = e95 * (e_per_u / 95.0F) * (1.0F - k_corr);
+                if (!is_tgt && iso.a >= 10) {
+                    frag_e_u = carbon::sample_projectile_fragment_Eu(
+                        e95, e_per_u, iso.a, running_e_sum, running_a_sum);
+                    if (!(frag_e_u > 0.0F)) {
+                        kinematics_ok = false;
+                        break;
+                    }
+                } else {
+                    frag_e_u = e95 * (e_per_u / 95.0F);
+                }
 
                 // Half-Normal Gaussian for theta95
                 const auto u_th_log = sycl::fmax(u_th0, 1.0e-10F);
@@ -232,22 +208,32 @@ inline InelasticProductSet sample_carbon_inelastic_products_device(
             } else {
                 // Exponential (target-like) energy: Eq. (13) scale, no event-level k.
                 const auto u_e_log = sycl::fmax(u_e0, 1.0e-8F);
-                const auto e95 = sycl::fmin(35.0F, -sycl::log(u_e_log) / a_e);
+                const float emax_u = sycl::fmax(e_per_u * 2.0F, 1.0F);
+                const float norm = 1.0F - sycl::exp(-a_e * emax_u);
+                const float e95 = -sycl::log(1.0F - u_e_log * sycl::fmax(norm, 1.0e-8F)) / a_e;
                 frag_e_u = e95 * (e_per_u / 95.0F);
 
                 const auto u_th_log = sycl::fmax(u_th0, 1.0e-8F);
-                const auto theta_deg = -sycl::log(u_th_log) / a_th;
+                const float th_max = 180.0F;
+                const float th_norm = 1.0F - sycl::exp(-a_th * th_max);
+                const auto theta_deg =
+                    -sycl::log(1.0F - u_th_log * sycl::fmax(th_norm, 1.0e-8F)) / a_th;
                 const bool skip_angle_scale = (iso.z == 0) || (iso.z == 1 && iso.a == 1);
                 if (skip_angle_scale) {
-                    theta_rad = sycl::fmin(1.57F, theta_deg * deg_to_rad);
+                    theta_rad = theta_deg * deg_to_rad;
                 } else {
-                    theta_rad = sycl::fmin(1.57F, theta_deg * deg_to_rad * sycl::sqrt(95.0F / e_per_u));
+                    theta_rad = theta_deg * deg_to_rad * sycl::sqrt(95.0F / e_per_u);
                 }
             }
 
             frag_e_u = sycl::fmax(0.0F, frag_e_u);
-            const float frag_e_tot = af * frag_e_u;
+            float frag_e_tot = af * frag_e_u;
             if (!is_tgt) {
+                const float room = sycl::fmax(0.0F, max_available_MeV - running_e_sum);
+                if (frag_e_tot > room) {
+                    frag_e_tot = room;
+                    frag_e_u = (af > 0.0F) ? frag_e_tot / af : 0.0F;
+                }
                 running_e_sum += frag_e_tot;
                 running_a_sum += af;
             }
@@ -267,23 +253,24 @@ inline InelasticProductSet sample_carbon_inelastic_products_device(
             } else {
                 const bool heavy_tgt = is_tgt && (iso.z >= 3 || iso.a >= 6);
                 float range_mm = 1.0e3F;
-                if (heavy_tgt) {
-                    float sp_est = sycl::fmax(0.80F * static_cast<float>(iso.z * iso.z), 0.20F);
-                    if (ion_sp_lut != nullptr && ion_sp_table_size > 1 && af > 0.0F) {
-                        const int sp_species = carbon::get_charged_species_idx(iso.z, iso.a);
-                        const float e_u = frag_e_tot / af;
-                        const float flt_idx = (e_u - ion_sp_min_energy) * ion_sp_inv_step;
-                        auto sp_idx = static_cast<int>(sycl::floor(flt_idx));
-                        sp_idx = sycl::max(0, sycl::min(sp_idx, ion_sp_table_size - 2));
-                        const float sp_fr =
-                            sycl::clamp(flt_idx - static_cast<float>(sp_idx), 0.0F, 1.0F);
-                        const float* row = ion_sp_lut + static_cast<int>(sp_species) * ion_sp_table_size;
-                        sp_est = sycl::fmax(row[sp_idx] + sp_fr * (row[sp_idx + 1] - row[sp_idx]), 0.01F);
+                if (heavy_tgt && af > 0.0F) {
+                    const int sp_species = carbon::get_charged_species_idx(iso.z, iso.a);
+                    const float e_u = frag_e_tot / af;
+                    if (ion_sp_lut != nullptr && ion_csda_a1 != nullptr && ion_energy_grid != nullptr &&
+                        ion_sp_table_size > 1) {
+                        const std::size_t off =
+                            static_cast<std::size_t>(sp_species) * static_cast<std::size_t>(ion_sp_table_size);
+                        range_mm = carbon::csda_range_mm_device(
+                            ion_energy_grid, ion_sp_lut + off, ion_csda_a1 + off,
+                            static_cast<std::size_t>(ion_sp_table_size), e_u, iso.a);
+                    } else {
+                        float sp_est = sycl::fmax(0.80F * static_cast<float>(iso.z * iso.z), 0.20F);
+                        range_mm = frag_e_tot / sp_est;
                     }
-                    range_mm = frag_e_tot / sp_est;
                 }
                 const bool local_stop =
-                    heavy_tgt && (range_mm < 0.05F || frag_e_tot < energy_cutoff_MeV);
+                    heavy_tgt && carbon::remnant_local_stop_from_csda(range_mm, frag_e_tot,
+                                                                     energy_cutoff_MeV);
                 if (local_stop) {
                     candidate.local_deposit_MeV += frag_e_tot;
                     candidate.remnant_local_MeV += frag_e_tot;
@@ -306,6 +293,26 @@ inline InelasticProductSet sample_carbon_inelastic_products_device(
                 }
             }
         }
+        if (!kinematics_ok) {
+            continue;
+        }
+
+        // Leftover projectile neutrons: one lumped KE packet (no n/p particle dump).
+        if (leftover_n > 0) {
+            const auto nparams = (target_idx == 0) ? carbon::kFredParamsH[0] : carbon::kFredParamsO[0];
+            const uint32_t n_rng = kInelasticBaseDim + static_cast<uint32_t>(retry * 200 + 35);
+            const float u_n = sycl::fmax(
+                rng::uniform01(spot_seed, rng_history, steps, n_rng), 1.0e-8F);
+            const float a_e_n = sycl::fmax(nparams.a_e, 0.005F);
+            const float emax_u = sycl::fmax(e_per_u * 2.0F, 1.0F);
+            const float nnorm = 1.0F - sycl::exp(-a_e_n * emax_u);
+            const float e95_n = -sycl::log(1.0F - u_n * sycl::fmax(nnorm, 1.0e-8F)) / a_e_n;
+            const float room = sycl::fmax(0.0F, max_available_MeV - running_e_sum);
+            float n_ke = static_cast<float>(leftover_n) * e95_n * (e_per_u / 95.0F);
+            n_ke = sycl::fmin(sycl::fmax(0.0F, n_ke), room);
+            candidate.untracked_energy_MeV += n_ke;
+            running_e_sum += n_ke;
+        }
 
         // Leftover target nucleons not identified as a Table-1 isotope: low-energy local only.
         const int leftover_a = sycl::max(target_a_rem, 0);
@@ -321,14 +328,7 @@ inline InelasticProductSet sample_carbon_inelastic_products_device(
 
         candidate.count = charged_count;
 
-        float total_charged_MeV = 0.0F;
-        for (uint8_t i = 0; i < candidate.count; ++i) {
-            total_charged_MeV += candidate.products[i].energy_MeV;
-        }
         const float neutron_ke_MeV = sycl::fmax(0.0F, candidate.untracked_energy_MeV - base_q_MeV);
-        const float kinetic_used_MeV =
-            total_charged_MeV + candidate.local_deposit_MeV + neutron_ke_MeV +
-            candidate.product_capacity_overflow_MeV;
         candidate.untracked_energy_MeV += candidate.product_capacity_overflow_MeV;
 
         candidate.q_MeV = base_q_MeV;
@@ -343,21 +343,61 @@ inline InelasticProductSet sample_carbon_inelastic_products_device(
             candidate.emitted_idx[s] = frag_species[s];
         }
 
-        if (kinetic_used_MeV <= max_available_MeV) {
+        // Projectile joint channel is nucleon-conserving and energy-clipped.
+        // Target KE is extra and is not a reason to energy-scale the projectile.
+        if (running_e_sum <= max_available_MeV + 1.0e-3F) {
             set = candidate;
             accepted = true;
             break;
         }
+        last_closed = candidate;
+        have_closed = true;
+    }
+
+    if (!accepted && have_closed) {
+        float used = 0.0F;
+        for (uint8_t i = 0; i < last_closed.count; ++i) {
+            used += last_closed.products[i].energy_MeV;
+        }
+        used += last_closed.local_deposit_MeV + last_closed.neutron_ke_MeV;
+        if (used > 0.0F) {
+            const float scale = max_available_MeV / used;
+            for (uint8_t i = 0; i < last_closed.count; ++i) {
+                last_closed.products[i].energy_MeV *= scale;
+            }
+            last_closed.local_deposit_MeV *= scale;
+            last_closed.neutron_ke_MeV *= scale;
+            last_closed.untracked_energy_MeV = last_closed.neutron_ke_MeV;
+            last_closed.remnant_local_MeV *= scale;
+        }
+        last_closed.energy_scaled = 1;
+        last_closed.resample_failed = 0;
+        last_closed.model_unassigned_MeV = 0.0F;
+        set = last_closed;
+        accepted = true;
     }
 
     if (!accepted) {
-        set.count = 0;
+        set.count = 1;
         set.local_deposit_MeV = 0.0F;
-        set.untracked_energy_MeV = incident_energy_MeV;
+        set.untracked_energy_MeV = 0.0F;
+        set.model_unassigned_MeV = 0.0F;
         set.resample_failed = 1;
         set.retries_used = static_cast<uint8_t>(max_retries);
         set.q_MeV = 0.0F;
         set.neutron_ke_MeV = 0.0F;
+        auto& p = set.products[0];
+        p.z = 6;
+        p.a = 12;
+        p.energy_MeV = incident_energy_MeV;
+        p.pos_x_mm = pos_x_mm;
+        p.pos_y_mm = pos_y_mm;
+        p.pos_z_mm = pos_z_mm;
+        p.dir_x = parent_dir.x;
+        p.dir_y = parent_dir.y;
+        p.dir_z = parent_dir.z;
+        p.weight = 1.0F;
+        p.parent_history = rng_history;
     }
 
     return set;

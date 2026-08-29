@@ -28,6 +28,7 @@ struct InelasticProductSet {
     float local_deposit_MeV{0.0F};
     float untracked_energy_MeV{0.0F};
     float model_residual_MeV{0.0F};
+    float model_unassigned_MeV{0.0F};
     SecondaryParticle products[kMaxInelasticProducts]{};
     uint8_t retries_used{0};
     uint8_t energy_scaled{0};
@@ -44,6 +45,19 @@ struct InelasticProductSet {
     uint8_t product_capacity_overflow{0};
     float product_capacity_overflow_MeV{0.0F};
 };
+
+// Leftover after charged + local + sampled untracked + explicit unassigned.
+// Scaled/fallback events keep unassigned=0 and put KE on charged products.
+inline float inelastic_numerical_residual_MeV(float incident_MeV, float charged_MeV,
+                                              float local_MeV, float untracked_MeV,
+                                              float unassigned_MeV) noexcept {
+    return incident_MeV - charged_MeV - local_MeV - untracked_MeV - unassigned_MeV;
+}
+
+inline float inelastic_fail_unassigned_if_no_products(uint8_t product_count,
+                                                      float incident_MeV) noexcept {
+    return (product_count == 0) ? incident_MeV : 0.0F;
+}
 
 
 }  // namespace carbon

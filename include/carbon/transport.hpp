@@ -129,6 +129,7 @@ struct TransportResult {
     // optional minibeam beamline.
     double beamline_removed_energy_MeV{0.0};
     double untracked_nuclear_energy_MeV{0.0};
+    double fred_model_unassigned_MeV{0.0};
     std::uint64_t nuclear_interactions{0};
     std::array<std::uint64_t, 18> fred_isotope_counts{};
     std::uint64_t fred_inelastic_events{0};

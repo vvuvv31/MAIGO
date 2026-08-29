@@ -17,6 +17,7 @@
 #include "carbon/transport_config.hpp"
 #include "carbon/detail/fred_fragmentation_data.hpp"
 #include "carbon/fred_table1.hpp"
+#include "carbon/inelastic.hpp"
 
 #include <algorithm>
 #include <array>
@@ -3115,6 +3116,203 @@ void test_kox_icru_cross_sections() {
     require(prob_H_400 > 0.20f && prob_H_400 < 0.35f, "P(H) at 400 MeV/u in [0.20, 0.35]");
 }
 
+void test_table1_no_np_evaporation_dump() {
+    float uniforms[16];
+    uint8_t idx[8];
+    int leftover_n = 0;
+    int saw_c12 = 0;
+    int n_events = 4000;
+    double counts[18]{};
+    int nfrag_sum = 0;
+    for (int e = 0; e < n_events; ++e) {
+        for (int k = 0; k < 16; ++k) {
+            uniforms[k] = static_cast<float>((e * 16 + k) % 997) / 997.0F;
+        }
+        leftover_n = 0;
+        const int n = carbon::fill_projectile_table1_fragments(
+            carbon::kFredProbH.data(), uniforms, 16, idx, 8, &leftover_n);
+        require(n >= 1 && n <= 8, "projectile fragment count");
+        nfrag_sum += n;
+        int a = 0, z = 0;
+        for (int i = 0; i < n; ++i) {
+            require(idx[i] < 18, "isotope index");
+            counts[idx[i]] += 1.0;
+            a += carbon::kFredIsotopes[idx[i]].a;
+            z += carbon::kFredIsotopes[idx[i]].z;
+            if (idx[i] == 17) {
+                ++saw_c12;
+            }
+        }
+        require(z <= 6 && a + leftover_n <= 12, "A/Z bound without n/p dump");
+    }
+    require(saw_c12 > 0, "12C reachable");
+    require(counts[1] > 0.0 && counts[5] > 0.0, "1H and 4He appear in Table 1 sampling");
+    const double mean_frags = static_cast<double>(nfrag_sum) / static_cast<double>(n_events);
+    require(mean_frags < 6.0, "no nucleon-by-nucleon evaporation dump");
+}
+
+void test_energy_dependent_inclusive_yields() {
+    float w95[18]{};
+    float w200[18]{};
+    float w250[18]{};
+    float w300[18]{};
+    float w400[18]{};
+    float wO300[18]{};
+    carbon::fill_energy_dependent_inclusive_weights(95.0F, carbon::kFredProbH.data(), w95);
+    carbon::fill_energy_dependent_inclusive_weights(200.0F, carbon::kFredProbH.data(), w200);
+    carbon::fill_energy_dependent_inclusive_weights(250.0F, carbon::kFredProbH.data(), w250);
+    carbon::fill_energy_dependent_inclusive_weights(300.0F, carbon::kFredProbH.data(), w300);
+    carbon::fill_energy_dependent_inclusive_weights(400.0F, carbon::kFredProbH.data(), w400);
+    carbon::fill_energy_dependent_inclusive_weights(300.0F, carbon::kFredProbO.data(), wO300);
+    for (int i = 0; i < 18; ++i) {
+        require(std::isfinite(w95[i]) && w95[i] >= 0.0F, "95 MeV/u weight finite non-negative");
+        require(std::isfinite(w300[i]) && w300[i] >= 0.0F, "300 MeV/u weight finite non-negative");
+        require(std::isfinite(w400[i]) && w400[i] >= 0.0F, "400 MeV/u weight finite non-negative");
+        require_near(w95[i], carbon::kFredProbH[static_cast<std::size_t>(i)], 1.0e-5F,
+                     "weights at 95 MeV/u match Table 1");
+        require_near(w200[i], carbon::kFredProbHByE[1][static_cast<std::size_t>(i)], 1.0e-4F,
+                     "200 MeV/u knot is the H 200 table");
+        require_near(w400[i], carbon::kFredProbHByE[3][static_cast<std::size_t>(i)], 1.0e-4F,
+                     "400 MeV/u knot is the H 400 table");
+    }
+    const float he95 = carbon::inclusive_element_weight(w95, 2);
+    const float he200 = carbon::inclusive_element_weight(w200, 2);
+    const float he250 = carbon::inclusive_element_weight(w250, 2);
+    const float he300 = carbon::inclusive_element_weight(w300, 2);
+    const float li95 = carbon::inclusive_element_weight(w95, 3);
+    const float li300 = carbon::inclusive_element_weight(w300, 3);
+    const float be95 = carbon::inclusive_element_weight(w95, 4);
+    const float be300 = carbon::inclusive_element_weight(w300, 4);
+    const float b95 = carbon::inclusive_element_weight(w95, 5);
+    const float b300 = carbon::inclusive_element_weight(w300, 5);
+    require(std::fabs(he300 - he95) > 1.0e-4F, "He inclusive weight depends on E/A");
+    require(std::fabs(li300 - li95) > 1.0e-4F, "Li inclusive weight depends on E/A");
+    require(std::fabs(be300 - be95) > 1.0e-6F, "Be inclusive weight depends on E/A");
+    require(std::fabs(b300 - b95) > 1.0e-6F, "B inclusive weight depends on E/A");
+    require(he300 > he95, "He yield rises with E/A");
+    require(b300 < b95, "B yield falls with E/A on H target");
+    require(he250 > he200 && he250 < he300, "He at 250 MeV/u interpolates 200 and 300 knots");
+    require(carbon::inclusive_element_weight(wO300, 0) >
+                carbon::inclusive_element_weight(w300, 0),
+            "O-target neutron yield table is distinct from H");
+}
+
+void test_projectile_joint_channel() {
+    uint8_t idx[8];
+    int leftover_n = 0;
+    int saw_c12 = 0;
+    int n_events = 4000;
+    int nfrag_sum = 0;
+    double counts[18]{};
+    for (int e = 0; e < n_events; ++e) {
+        const float u = static_cast<float>((e * 17 + 3) % 997) / 997.0F;
+        leftover_n = 0;
+        float w[18]{};
+        carbon::fill_energy_dependent_inclusive_weights(200.0F, carbon::kFredProbH.data(), w);
+        const int n = carbon::fill_projectile_joint_channel(w, u, idx, 8, &leftover_n);
+        require(n >= 1 && n <= 3, "joint channel has 1-2 charged fragments plus remnant");
+        nfrag_sum += n;
+        int a = 0;
+        int z = 0;
+        for (int i = 0; i < n; ++i) {
+            require(idx[i] < 18, "joint isotope index");
+            counts[idx[i]] += 1.0;
+            a += carbon::kFredIsotopes[idx[i]].a;
+            z += carbon::kFredIsotopes[idx[i]].z;
+            if (idx[i] == 17) {
+                ++saw_c12;
+            }
+        }
+        require(z <= 6 && a + leftover_n <= 12, "joint A/Z bound without n/p dump");
+        require(leftover_n >= 0, "leftover neutrons non-negative");
+    }
+    require(saw_c12 > 0, "12C reachable in joint channel");
+    require(counts[5] > 0.0 || counts[1] > 0.0, "He or p appears in joint channel");
+    const double mean_frags = static_cast<double>(nfrag_sum) / static_cast<double>(n_events);
+    require(mean_frags < 3.0, "joint channel is not nucleon-by-nucleon evaporation");
+}
+
+void test_inelastic_neutron_kerma_fraction() {
+    require(carbon::inelastic_neutron_kerma_MeV(0.0F) == 0.0F, "zero neutron KE scores no kerma");
+    const float k = carbon::inelastic_neutron_kerma_MeV(100.0F);
+    require(k > 0.0F && k < 100.0F, "kerma is a proper fraction of neutron KE");
+    require_near(k, 8.0F, 1.0e-4F, "default kerma fraction is 0.08");
+}
+
+void test_inelastic_optical_depth_in_step() {
+    float s = 0.0F;
+    require(carbon::inelastic_collision_in_step(0.02F, 1.0F, 0.0F, &s), "u=0 collides");
+    require(s > 0.0F && s <= 1.0F, "collision distance inside step");
+    require(!carbon::inelastic_collision_in_step(0.02F, 1.0F, 0.999F, &s),
+            "large u may miss a short step");
+    require_near(s, 1.0F, 1.0e-6F, "miss keeps full step");
+}
+
+void test_inelastic_fail_residual_not_double_counted() {
+    const float incident = 1200.0F;
+    carbon::InelasticProductSet failed{};
+    failed.resample_failed = 1;
+    failed.model_unassigned_MeV = incident;
+    failed.untracked_energy_MeV = 0.0F;
+    const float residual = carbon::inelastic_numerical_residual_MeV(
+        incident, 0.0F, 0.0F, failed.untracked_energy_MeV, failed.model_unassigned_MeV);
+    require_near(residual, 0.0, 1.0e-4, "resample-fail leftover must not appear again as residual");
+    require(failed.untracked_energy_MeV == 0.0F, "resample fail must not dump KE into untracked");
+    require_near(carbon::inelastic_fail_unassigned_if_no_products(1, 1200.0F), 0.0, 1.0e-6,
+                 "fallback charged product carries KE, unassigned is 0");
+    require_near(carbon::inelastic_fail_unassigned_if_no_products(0, 1200.0F), 1200.0, 1.0e-6,
+                 "empty product list would leave incident unassigned");
+}
+
+void test_eq13_first_fragment_not_scaled_down() {
+    for (const float p : {100.0F, 200.0F, 300.0F, 400.0F}) {
+        const float e = carbon::sample_projectile_fragment_Eu(95.0F, p, 11, 0.0F, 0.0F);
+        require(e > 0.0F, "first-fragment E/A must be finite");
+        require_near(e, p, 1.0e-3F * p, "first fragment E/A must match incident E/A, not 0.6 P");
+        require(e > 0.9F * p, "first fragment must not be 0.6x incident E/A");
+    }
+}
+
+void test_eq12_component_choice() {
+    require(carbon::eq12_sample_gaussian(1, 1, false, 0.1F, 0.5F), "projectile 1H mix can be Gaussian");
+    require(!carbon::eq12_sample_gaussian(1, 1, false, 0.9F, 0.5F), "projectile 1H mix can be exponential");
+    require(carbon::eq12_sample_gaussian(1, 2, true, 0.1F, 0.5F), "target 2H mix can be Gaussian");
+    require(!carbon::eq12_sample_gaussian(1, 3, true, 0.9F, 0.5F), "target 3H mix can be exponential");
+    require(carbon::eq12_sample_gaussian(6, 12, false, 0.99F, 0.01F), "projectile 12C is Gaussian");
+    require(!carbon::eq12_sample_gaussian(6, 12, true, 0.0F, 0.99F), "target 12C is exponential");
+}
+
+void test_csv_target_h_fraction() {
+    const auto xs = carbon::CrossSectionTable::from_csv(
+        "data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv");
+    require_near(static_cast<float>(xs.interpolate_target_h_fraction(100.0)), 0.374118F, 1.0e-5F,
+                 "P_H(100)");
+    require_near(static_cast<float>(xs.interpolate_target_h_fraction(200.0)), 0.342821F, 1.0e-5F,
+                 "P_H(200)");
+    require_near(static_cast<float>(xs.interpolate_target_h_fraction(300.0)), 0.335628F, 1.0e-5F,
+                 "P_H(300)");
+    require_near(static_cast<float>(xs.interpolate_target_h_fraction(400.0)), 0.337719F, 1.0e-5F,
+                 "P_H(400)");
+    require(xs.macro_h_per_mm().size() == xs.energies().size(), "macro_h loaded");
+    require(xs.macro_o_per_mm().size() == xs.energies().size(), "macro_o loaded");
+    for (std::size_t i = 0; i < xs.energies().size(); i += 50) {
+        require_near(xs.macro_h_per_mm()[i] + xs.macro_o_per_mm()[i], xs.values()[i], 1.0e-8,
+                     "macro_h + macro_o == total");
+    }
+}
+
+void test_csda_remnant_local_stop() {
+    require(carbon::remnant_local_stop_from_csda(0.01F, 10.0F, 0.05F), "short CSDA stops locally");
+    require(!carbon::remnant_local_stop_from_csda(10.0F, 10.0F, 0.05F), "long CSDA is transported");
+    const float e[3] = {1.0F, 2.0F, 3.0F};
+    const float s[3] = {10.0F, 10.0F, 10.0F};
+    float c[3] = {};
+    carbon::fill_a1_csda_range_mm(e, s, 3, c);
+    const float r = carbon::csda_range_mm_device(e, s, c, 3, 2.0F, 12);
+    require(r > 0.0F, "CSDA range from SP grid is positive");
+    require(r > 12.0F * 2.0F / 10.0F * 0.5F, "CSDA uses integrated 1/S not a single E/S dump");
+}
+
 void test_table1_newton_invert() {
     double raw_counts[18]{};
     unsigned raw_closed = 0;
@@ -3189,6 +3387,16 @@ int main() {
         test_ion_species_stopping_power_grid_validation();
         test_stopping_power_csv_corruption_rejection();
         test_kox_icru_cross_sections();
+        test_table1_no_np_evaporation_dump();
+        test_energy_dependent_inclusive_yields();
+        test_projectile_joint_channel();
+        test_inelastic_neutron_kerma_fraction();
+        test_inelastic_optical_depth_in_step();
+        test_inelastic_fail_residual_not_double_counted();
+        test_eq13_first_fragment_not_scaled_down();
+        test_eq12_component_choice();
+        test_csv_target_h_fraction();
+        test_csda_remnant_local_stop();
         test_table1_inclusive_sampling();
         test_table1_newton_invert();
 

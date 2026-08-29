@@ -121,6 +121,8 @@ TransportResult transport_sycl(const TransportConfig& config,
     float* cross_section_device =
         context != nullptr ? context->impl_->cross_section_device
                            : sycl::malloc_device<float>(cross_section_table_size, queue);
+    float* target_h_fraction_device =
+        sycl::malloc_device<float>(cross_section_table_size, queue);
 
     const auto free_immutable_device = [&](auto* pointer) {
         if (!reuse_immutable_buffers && pointer != nullptr) {
@@ -491,22 +493,14 @@ TransportResult transport_sycl(const TransportConfig& config,
         static float cached_err_tgt_o = 0.0F;
         static bool cached_sample_ready = false;
         if (!cached_sample_ready) {
-            const auto inv_ph =
-                invert_table1_independent_probs(kFredProbH.data(), 12, 6, 4000U, 5U, 20260829U);
-            const auto inv_po =
-                invert_table1_independent_probs(kFredProbO.data(), 12, 6, 4000U, 5U, 20260830U);
-            const auto inv_th =
-                invert_table1_independent_probs(kFredProbH.data(), 1, 1, 4000U, 5U, 20260831U);
-            const auto inv_to =
-                invert_table1_independent_probs(kFredProbO.data(), 16, 8, 4000U, 5U, 20260832U);
-            cached_proj_h = inv_ph.sample_prob;
-            cached_proj_o = inv_po.sample_prob;
-            cached_tgt_h = inv_th.sample_prob;
-            cached_tgt_o = inv_to.sample_prob;
-            cached_err_proj_h = inv_ph.max_abs_fraction_error;
-            cached_err_proj_o = inv_po.max_abs_fraction_error;
-            cached_err_tgt_h = inv_th.max_abs_fraction_error;
-            cached_err_tgt_o = inv_to.max_abs_fraction_error;
+            cached_proj_h = kFredProbH;
+            cached_proj_o = kFredProbO;
+            cached_tgt_h = kFredProbH;
+            cached_tgt_o = kFredProbO;
+            cached_err_proj_h = 0.0F;
+            cached_err_proj_o = 0.0F;
+            cached_err_tgt_h = 0.0F;
+            cached_err_tgt_o = 0.0F;
             cached_sample_ready = true;
         }
         invert_err_proj_h = cached_err_proj_h;
@@ -537,6 +531,8 @@ TransportResult transport_sycl(const TransportConfig& config,
     }
 
     float* ion_species_sp_device = nullptr;
+    float* ion_energy_grid_device = nullptr;
+    float* ion_csda_a1_device = nullptr;
     if (enable_inelastic && enable_secondary_transport) {
         std::filesystem::path ion_sp_path = "data/ion_stopping_power_water_geant4_11_3_2.csv";
         if (!std::filesystem::exists(ion_sp_path)) {
@@ -551,6 +547,24 @@ TransportResult transport_sycl(const TransportConfig& config,
         const auto ion_sp_lut = load_ion_species_stopping_power_lut(ion_sp_path, table_size, 1.0F);
         ion_species_sp_device = sycl::malloc_device<float>(17 * table_size, queue);
         queue.copy(ion_sp_lut.data(), ion_species_sp_device, 17 * table_size).wait_and_throw();
+        std::vector<float> energy_grid_host(table_size);
+        std::transform(stopping_power.energies().begin(), stopping_power.energies().end(),
+                       energy_grid_host.begin(),
+                       [](double value) { return static_cast<float>(value); });
+        ion_energy_grid_device = sycl::malloc_device<float>(table_size, queue);
+        ion_csda_a1_device = sycl::malloc_device<float>(17 * table_size, queue);
+        if (ion_energy_grid_device == nullptr || ion_csda_a1_device == nullptr) {
+            throw std::bad_alloc();
+        }
+        std::vector<float> csda_host(17 * table_size, 0.0F);
+        for (int species = 0; species < 17; ++species) {
+            fill_a1_csda_range_mm(energy_grid_host.data(),
+                                  ion_sp_lut.data() + static_cast<std::size_t>(species) * table_size,
+                                  table_size,
+                                  csda_host.data() + static_cast<std::size_t>(species) * table_size);
+        }
+        queue.copy(energy_grid_host.data(), ion_energy_grid_device, table_size);
+        queue.copy(csda_host.data(), ion_csda_a1_device, 17 * table_size).wait_and_throw();
     }
 
     auto* in_fov_dose_device =
@@ -590,7 +604,25 @@ TransportResult transport_sycl(const TransportConfig& config,
                        cross_section_host.begin(),
                        [](double value) { return static_cast<float>(value); });
         queue.copy(cross_section_host.data(), cross_section_device, cross_section_table_size);
+        std::vector<float> target_h_host(cross_section_table_size, 0.5F);
+        if (cross_section.target_h_fractions().size() == cross_section_table_size) {
+            std::transform(cross_section.target_h_fractions().begin(),
+                           cross_section.target_h_fractions().end(), target_h_host.begin(),
+                           [](double value) { return static_cast<float>(value); });
+        }
+        if (target_h_fraction_device != nullptr) {
+            queue.copy(target_h_host.data(), target_h_fraction_device, cross_section_table_size);
+        }
         queue.wait_and_throw();
+    } else if (target_h_fraction_device != nullptr) {
+        std::vector<float> target_h_host(cross_section_table_size, 0.5F);
+        if (cross_section.target_h_fractions().size() == cross_section_table_size) {
+            std::transform(cross_section.target_h_fractions().begin(),
+                           cross_section.target_h_fractions().end(), target_h_host.begin(),
+                           [](double value) { return static_cast<float>(value); });
+        }
+        queue.copy(target_h_host.data(), target_h_fraction_device, cross_section_table_size)
+            .wait_and_throw();
     }
 
     queue.memset(dose_device, 0, number_of_bins * sizeof(DoseAtomicT));
@@ -1073,6 +1105,39 @@ TransportResult transport_sycl(const TransportConfig& config,
                     }
                     step_mm = sycl::fmax(step_mm, 1.0e-5F);
 
+                    bool inelastic_this_step = false;
+                    float p_target_h_step = 0.5F;
+                    if (enable_inelastic && energy_MeV > energy_cutoff_MeV &&
+                        cross_section_device != nullptr) {
+                        const auto cur_e_u = energy_MeV * inverse_mass_number;
+                        const auto xs_flt =
+                            (cur_e_u - minimum_table_energy) * inverse_table_step;
+                        auto xs_idx = static_cast<int>(sycl::floor(xs_flt));
+                        xs_idx = sycl::max(
+                            0, sycl::min(xs_idx,
+                                         static_cast<int>(cross_section_table_size) - 2));
+                        const auto xs_fr =
+                            sycl::clamp(xs_flt - static_cast<float>(xs_idx), 0.0F, 1.0F);
+                        const auto macro_xs =
+                            cross_section_device[xs_idx] +
+                            xs_fr * (cross_section_device[xs_idx + 1] -
+                                     cross_section_device[xs_idx]);
+                        if (target_h_fraction_device != nullptr) {
+                            p_target_h_step =
+                                target_h_fraction_device[xs_idx] +
+                                xs_fr * (target_h_fraction_device[xs_idx + 1] -
+                                         target_h_fraction_device[xs_idx]);
+                        }
+                        const auto u_inel = rng::uniform01(
+                            spot_seed, rng_history, steps, 8);
+                        float collision_s = step_mm;
+                        inelastic_this_step = carbon::inelastic_collision_in_step(
+                            macro_xs, step_mm, u_inel, &collision_s);
+                        if (inelastic_this_step) {
+                            step_mm = collision_s;
+                        }
+                    }
+
                     float mean_loss_MeV = 0.0F;
                     if (enable_csda_range_energy_loss && energy_grid_device != nullptr &&
                         cumulative_range_device != nullptr) {
@@ -1310,26 +1375,11 @@ TransportResult transport_sycl(const TransportConfig& config,
 
                     energy_MeV -= deposited_MeV;
 
-                    if (enable_inelastic && energy_MeV > energy_cutoff_MeV &&
+                    if (enable_inelastic && inelastic_this_step &&
+                        energy_MeV > energy_cutoff_MeV &&
                         cross_section_device != nullptr) {
-                        const auto cur_e_u = energy_MeV * inverse_mass_number;
-                        const auto xs_flt =
-                            (cur_e_u - minimum_table_energy) * inverse_table_step;
-                        auto xs_idx = static_cast<int>(sycl::floor(xs_flt));
-                        xs_idx = sycl::max(
-                            0, sycl::min(xs_idx,
-                                         static_cast<int>(cross_section_table_size) - 2));
-                        const auto xs_fr =
-                            sycl::clamp(xs_flt - static_cast<float>(xs_idx), 0.0F, 1.0F);
-                        const auto macro_xs =
-                            cross_section_device[xs_idx] +
-                            xs_fr * (cross_section_device[xs_idx + 1] -
-                                     cross_section_device[xs_idx]);
-                        const auto p_inel =
-                            1.0F - sycl::exp(-macro_xs * step_mm);
-                        const auto u_inel = rng::uniform01(
-                            spot_seed, rng_history, steps, 8);
-                        if (u_inel < p_inel) {
+                        const float p_target_h = p_target_h_step;
+                        {
                             const Direction3F cur_dir{direction_x, direction_y,
                                                       direction_z};
                             const auto products =
@@ -1341,7 +1391,8 @@ TransportResult transport_sycl(const TransportConfig& config,
                                     ion_species_sp_device,
                                     static_cast<int>(table_size),
                                     minimum_table_energy, inverse_table_step,
-                                    energy_cutoff_MeV);
+                                    ion_energy_grid_device, ion_csda_a1_device,
+                                    energy_cutoff_MeV, p_target_h);
 
                             if (products.local_deposit_MeV > 0.0F) {
                                 pending_primary_depth_MeV +=
@@ -1361,23 +1412,51 @@ TransportResult transport_sycl(const TransportConfig& config,
                                 history_deposited_MeV +=
                                     products.local_deposit_MeV;
                             }
+                            // Neutron kerma: score absorbed dose at the vertex.
+                            // Ledger still keeps neutron KE in untracked, not unassigned.
+                            if (products.neutron_ke_MeV > 0.0F) {
+                                // High-energy neutrons mostly leave the phantom; score a
+                                // local kerma fraction, keep full KE in untracked.
+                                const float kerma =
+                                    carbon::inelastic_neutron_kerma_MeV(products.neutron_ke_MeV);
+                                pending_primary_depth_MeV += kerma;
+                                if (enable_voxel_scoring && voxel_index >= 0) {
+                                    pending_primary_voxel_MeV += kerma;
+                                    if (in_fov_dose_device != nullptr && pending_primary_bin >= 0 &&
+                                        pending_primary_bin < static_cast<int>(number_of_bins)) {
+                                        sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
+                                                         sycl::memory_scope::device,
+                                                         sycl::access::address_space::global_space>
+                                            atomic_in_fov(in_fov_dose_device[pending_primary_bin]);
+                                        atomic_in_fov.fetch_add(static_cast<DoseAtomicT>(kerma));
+                                    }
+                                }
+                            }
 
                             float total_charged_MeV = 0.0F;
                             for (uint8_t ip = 0; ip < products.count; ++ip) {
                                 total_charged_MeV += products.products[ip].energy_MeV;
                             }
                             float untracked_MeV = products.untracked_energy_MeV;
-                            const float residual_MeV = energy_MeV - total_charged_MeV -
-                                                       products.local_deposit_MeV - untracked_MeV;
-                            if (residual_MeV > 0.0F) {
-                                if (fred_model_residual_device != nullptr) {
-                                    sycl::atomic_ref<float, sycl::memory_order::relaxed,
-                                                     sycl::memory_scope::device,
-                                                     sycl::access::address_space::global_space>
-                                        atomic_res(*fred_model_residual_device);
-                                    atomic_res.fetch_add(residual_MeV);
-                                }
-                                untracked_MeV += residual_MeV;
+                            const float residual_MeV = inelastic_numerical_residual_MeV(
+                                energy_MeV, total_charged_MeV, products.local_deposit_MeV,
+                                untracked_MeV, products.model_unassigned_MeV);
+                            if (products.model_unassigned_MeV > 0.0F &&
+                                fred_model_residual_device != nullptr) {
+                                sycl::atomic_ref<float, sycl::memory_order::relaxed,
+                                                 sycl::memory_scope::device,
+                                                 sycl::access::address_space::global_space>
+                                    atomic_un(*fred_model_residual_device);
+                                atomic_un.fetch_add(products.model_unassigned_MeV);
+                            }
+                            if (residual_MeV > 0.0F && products.resample_failed == 0 &&
+                                products.model_unassigned_MeV <= 0.0F &&
+                                fred_model_residual_device != nullptr) {
+                                sycl::atomic_ref<float, sycl::memory_order::relaxed,
+                                                 sycl::memory_scope::device,
+                                                 sycl::access::address_space::global_space>
+                                    atomic_res(*fred_model_residual_device);
+                                atomic_res.fetch_add(residual_MeV);
                             }
 
                             if (fred_q_device != nullptr) {
@@ -1680,7 +1759,9 @@ TransportResult transport_sycl(const TransportConfig& config,
                         float pending_sec_voxel_MeV = 0.0F;
 
                         uint32_t sec_steps = 0;
-                        while (sec_e > energy_cutoff_MeV && sec_z >= 0.0F && sec_z < phantom_length_mm && sec_steps < 3000) {
+                        constexpr uint32_t kSecondaryMaxSteps = 30000U;
+                        while (sec_e > energy_cutoff_MeV && sec_z >= 0.0F && sec_z < phantom_length_mm &&
+                               sec_steps < kSecondaryMaxSteps) {
                             const auto bin_x = static_cast<int>((sec_x - voxel_min_x_mm) * inverse_voxel_size_x_mm);
                             const auto bin_y = static_cast<int>((sec_y - voxel_min_y_mm) * inverse_voxel_size_y_mm);
                             const auto bin_z = static_cast<int>(sec_z * inverse_depth_bin_width_mm);
@@ -1799,9 +1880,18 @@ TransportResult transport_sycl(const TransportConfig& config,
                             ++sec_steps;
                         }
 
-                        // Secondary termination handling: cutoff local deposit or escaped deposit
+                        const bool step_limited =
+                            sec_e > energy_cutoff_MeV && sec_steps >= kSecondaryMaxSteps;
                         if (sec_e > 0.0F) {
-                            if (sec_z >= 0.0F && sec_z < phantom_length_mm) {
+                            if (step_limited) {
+                                if (escaped_device != nullptr) {
+                                    sycl::atomic_ref<float, sycl::memory_order::relaxed,
+                                                     sycl::memory_scope::device,
+                                                     sycl::access::address_space::global_space>
+                                        atomic_esc(escaped_device[frag.parent_history]);
+                                    atomic_esc.fetch_add(sec_e);
+                                }
+                            } else if (sec_z >= 0.0F && sec_z < phantom_length_mm) {
                                 const auto bin_x = static_cast<int>((sec_x - voxel_min_x_mm) * inverse_voxel_size_x_mm);
                                 const auto bin_y = static_cast<int>((sec_y - voxel_min_y_mm) * inverse_voxel_size_y_mm);
                                 const auto bin_z = static_cast<int>(sec_z * inverse_depth_bin_width_mm);
@@ -1973,6 +2063,9 @@ TransportResult transport_sycl(const TransportConfig& config,
     free_immutable_device(energy_grid_device);
     free_immutable_device(cumulative_range_device);
     free_immutable_device(cross_section_device);
+    if (target_h_fraction_device != nullptr) {
+        sycl::free(target_h_fraction_device, queue);
+    }
     free_device(dose_device);
     free_device(in_fov_dose_device);
     free_device(voxel_dose_device);
@@ -1982,6 +2075,8 @@ TransportResult transport_sycl(const TransportConfig& config,
     free_device(secondary_queue_device);
     free_device(secondary_count_device);
     free_device(ion_species_sp_device);
+    free_device(ion_energy_grid_device);
+    free_device(ion_csda_a1_device);
     free_device(untracked_nuclear_device);
     free_device(fred_prob_proj_h_device);
     free_device(fred_prob_proj_o_device);
@@ -2131,6 +2226,7 @@ TransportResult transport_sycl(const TransportConfig& config,
     result.fred_leftover_projectile_a_sum = fred_diag_host[24];
     result.fred_leftover_projectile_z_sum = fred_diag_host[25];
     result.fred_model_residual_MeV = static_cast<double>(model_residual_host);
+    result.fred_model_unassigned_MeV = static_cast<double>(model_residual_host);
     result.fred_q_MeV = static_cast<double>(fred_q_host);
     result.fred_neutron_ke_MeV = static_cast<double>(fred_neutron_host);
     result.fred_remnant_local_MeV = static_cast<double>(fred_remnant_host);

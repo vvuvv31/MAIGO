@@ -108,6 +108,31 @@ inline float csda_range_mm_device(const float* energies_MeVu,
     return static_cast<float>(mass_number) * range;
 }
 
+inline void fill_a1_csda_range_mm(const float* energies_MeVu, const float* stopping_MeV_per_mm,
+                                  std::size_t count, float* cumulative_a1_mm) noexcept {
+    if (count == 0) {
+        return;
+    }
+    cumulative_a1_mm[0] = energies_MeVu[0] / stopping_MeV_per_mm[0];
+    for (std::size_t i = 1; i < count; ++i) {
+        const float e0 = energies_MeVu[i - 1];
+        const float e1 = energies_MeVu[i];
+        const float s0 = stopping_MeV_per_mm[i - 1];
+        const float s1 = stopping_MeV_per_mm[i];
+        const float de = e1 - e0;
+        const float slope = (s1 - s0) / de;
+        const float nearly =
+            (slope < 0.0F ? -slope : slope) < 1.0e-7F * (s0 > 1.0F ? s0 : 1.0F);
+        const float integral = nearly ? (de / s0) : (std::log(s1 / s0) / slope);
+        cumulative_a1_mm[i] = cumulative_a1_mm[i - 1] + integral;
+    }
+}
+
+inline bool remnant_local_stop_from_csda(float range_mm, float energy_MeV,
+                                         float cutoff_MeV) noexcept {
+    return range_mm < 0.05F || energy_MeV < cutoff_MeV;
+}
+
 inline float csda_energy_after_distance_device(
     const float* energies_MeVu,
     const float* stopping_powers_MeV_per_mm,

@@ -240,6 +240,261 @@ inline int sample_table1_isotope(const float* prob_table, int a_rem, int z_rem, 
     return 0;
 }
 
+// Paper Eq. 13–16 with current fragment in R (implicit E_i). First fragment (T=M=0) gives E/A = P, not 0.6 P.
+inline float sample_projectile_fragment_Eu(float e95, float projectile_Eu, int fragment_A,
+                                           float previous_total_energy,
+                                           float previous_total_A) noexcept {
+    constexpr float c = 0.40F;
+    if (!(projectile_Eu > 0.0F) || fragment_A <= 0 || !(e95 > 0.0F)) {
+        return -1.0F;
+    }
+    const float x = e95 * (projectile_Eu / 95.0F);
+    const float total_A = previous_total_A + static_cast<float>(fragment_A);
+    const float denom =
+        1.0F - c * x * static_cast<float>(fragment_A) / (total_A * projectile_Eu);
+    if (!(denom > 1.0e-6F)) {
+        return -1.0F;
+    }
+    return x *
+           ((1.0F - c) + c * previous_total_energy / (total_A * projectile_Eu)) / denom;
+}
+
+// Paper Eq. 12: H isotopes mix; other projectile Gaussian; other target exponential.
+inline int nearest_fred_isotope(int z, int a) noexcept {
+    int best = (z > 0) ? 1 : 0;
+    int best_d = 1000;
+    for (int i = 0; i < 18; ++i) {
+        const int dz = kFredIsotopes[i].z - z;
+        const int da = kFredIsotopes[i].a - a;
+        const int d = (dz < 0 ? -dz : dz) + (da < 0 ? -da : da);
+        if (d < best_d) {
+            best_d = d;
+            best = i;
+        }
+    }
+    return best;
+}
+
+// Nearest Table-1 charged isotope that does not overshoot leftover (A,Z).
+inline int nearest_fred_isotope_fitting(int z, int a) noexcept {
+    int best = -1;
+    int best_d = 1000;
+    for (int i = 0; i < 18; ++i) {
+        const int iz = kFredIsotopes[i].z;
+        const int ia = kFredIsotopes[i].a;
+        if (iz < 1 || ia < 1 || iz > z || ia > a) {
+            continue;
+        }
+        const int dz = iz - z;
+        const int da = ia - a;
+        const int d = (dz < 0 ? -dz : dz) + (da < 0 ? -da : da);
+        if (d < best_d) {
+            best_d = d;
+            best = i;
+        }
+    }
+    return best;
+}
+
+// Sequential Table 1 without n/p evaporation dump. Leftover (A,Z) with Z>=1 is one remnant.
+// Returns fragment count; leftover neutrons encoded as out_neutron_a (mass only).
+inline int fill_projectile_table1_fragments(const float* prob, const float* uniforms, int n_u,
+                                            uint8_t* idx_out, int max_out,
+                                            int* leftover_n) noexcept {
+    int a_rem = 12;
+    int z_rem = 6;
+    int nfrag = 0;
+    const int cap = (max_out > 1) ? max_out - 1 : max_out;
+    for (int k = 0; k < n_u && (a_rem > 0 || z_rem > 0) && nfrag < cap; ++k) {
+        const int iso_idx = sample_table1_isotope(prob, a_rem, z_rem, uniforms[k]);
+        const auto iso = kFredIsotopes[static_cast<std::size_t>(iso_idx)];
+        if (iso.a <= a_rem && iso.z <= z_rem && iso.a > 0) {
+            idx_out[nfrag++] = static_cast<uint8_t>(iso_idx);
+            a_rem -= iso.a;
+            z_rem -= iso.z;
+        } else {
+            break;
+        }
+    }
+    if (z_rem > 0 && a_rem > 0 && nfrag < max_out) {
+        const int ridx = nearest_fred_isotope_fitting(z_rem, a_rem);
+        if (ridx >= 0) {
+            const auto r = kFredIsotopes[static_cast<std::size_t>(ridx)];
+            idx_out[nfrag++] = static_cast<uint8_t>(ridx);
+            a_rem -= r.a;
+            z_rem -= r.z;
+        }
+    }
+    if (leftover_n != nullptr) {
+        *leftover_n = (z_rem == 0 && a_rem > 0) ? a_rem : 0;
+    }
+    return nfrag;
+}
+
+// Inclusive production knots. 95 MeV/u is GANIL/FRED Table 1. 200/300/400 MeV/u
+// keep intra-Z isotope ratios from Table 1 and rescale Z-groups toward Toshito
+// et al. PRC 75, 054606 (2007) water partial charge-changing (ΔZ=1,2,3 nearly
+// flat 200–400 MeV/u): more n/p/He/Li, fewer projectile-like C/B on H.
+inline constexpr int kFredYieldNKnots = 4;
+inline constexpr std::array<float, 4> kFredYieldKnotMeVu = {95.0F, 200.0F, 300.0F, 400.0F};
+
+inline constexpr std::array<std::array<float, 18>, 4> kFredProbHByE = {{
+    {14.0F, 38.0F, 5.0F, 1.3F, 3.0F, 26.0F, 0.036F, 2.3F, 0.93F, 1.6F, 0.25F, 0.0001F, 0.15F, 1.3F, 2.1F, 0.19F, 3.9F, 0.59F},
+    {14.7F, 39.52F, 5.2F, 1.352F, 3.24F, 28.08F, 0.03888F, 2.438F, 0.9858F, 1.68F, 0.2625F, 0.000105F, 0.1425F, 1.235F, 1.995F, 0.1748F, 3.588F, 0.5428F},
+    {15.12F, 40.66F, 5.35F, 1.391F, 3.36F, 29.12F, 0.04032F, 2.53F, 1.023F, 1.728F, 0.27F, 0.000108F, 0.135F, 1.17F, 1.89F, 0.1615F, 3.315F, 0.5015F},
+    {15.4F, 41.42F, 5.45F, 1.417F, 3.45F, 29.9F, 0.0414F, 2.576F, 1.0416F, 1.76F, 0.275F, 0.00011F, 0.129F, 1.118F, 1.806F, 0.152F, 3.12F, 0.472F},
+}};
+
+inline constexpr std::array<std::array<float, 18>, 4> kFredProbCByE = {{
+    {65.0F, 10.0F, 7.5F, 6.1F, 1.2F, 6.4F, 1.7F, 0.25F, 0.41F, 0.083F, 0.11F, 0.24F, 0.013F, 0.089F, 0.20F, 0.017F, 0.055F, 0.043F},
+    {69.55F, 10.8F, 8.1F, 6.588F, 1.344F, 7.168F, 1.904F, 0.285F, 0.4674F, 0.08964F, 0.1188F, 0.2592F, 0.013F, 0.089F, 0.20F, 0.01547F, 0.05005F, 0.03913F},
+    {71.5F, 11.1F, 8.325F, 6.771F, 1.416F, 7.552F, 2.006F, 0.3F, 0.492F, 0.09296F, 0.1232F, 0.2688F, 0.01248F, 0.08544F, 0.192F, 0.01428F, 0.0462F, 0.03612F},
+    {73.45F, 11.3F, 8.475F, 6.893F, 1.464F, 7.808F, 2.074F, 0.31F, 0.5084F, 0.09462F, 0.1254F, 0.2736F, 0.01209F, 0.08277F, 0.186F, 0.01326F, 0.0429F, 0.03354F},
+}};
+
+inline constexpr std::array<std::array<float, 18>, 4> kFredProbOByE = {{
+    {60.0F, 16.0F, 8.8F, 5.1F, 1.7F, 6.3F, 1.0F, 0.28F, 0.39F, 0.12F, 0.079F, 0.10F, 0.014F, 0.086F, 0.18F, 0.016F, 0.071F, 0.079F},
+    {64.8F, 17.6F, 9.68F, 5.61F, 1.955F, 7.245F, 1.15F, 0.336F, 0.468F, 0.132F, 0.0869F, 0.11F, 0.0147F, 0.0903F, 0.189F, 0.0144F, 0.0639F, 0.0711F},
+    {67.2F, 18.24F, 10.032F, 5.814F, 2.074F, 7.686F, 1.22F, 0.3584F, 0.4992F, 0.138F, 0.09085F, 0.115F, 0.01428F, 0.08772F, 0.1836F, 0.01312F, 0.05822F, 0.06478F},
+    {69.0F, 18.56F, 10.208F, 5.916F, 2.176F, 8.064F, 1.28F, 0.3696F, 0.5148F, 0.1416F, 0.09322F, 0.118F, 0.014F, 0.086F, 0.18F, 0.012F, 0.05325F, 0.05925F},
+}};
+
+// Identify H/C/O by Table-1 neutron % so GPU copies of the 95 MeV/u table match.
+inline const std::array<std::array<float, 18>, 4>* fred_yield_family(const float* table95) noexcept {
+    const float n0 = table95[0];
+    if (n0 > 62.0F) {
+        return &kFredProbCByE;
+    }
+    if (n0 > 50.0F) {
+        return &kFredProbOByE;
+    }
+    return &kFredProbHByE;
+}
+
+inline void interpolate_fred_yield_table(float e_per_u,
+                                         const std::array<std::array<float, 18>, 4>& family,
+                                         float* out18) noexcept {
+    const float e = (e_per_u > 0.0F) ? e_per_u : kFredYieldKnotMeVu[0];
+    int ihi = 1;
+    while (ihi < kFredYieldNKnots - 1 && e > kFredYieldKnotMeVu[static_cast<std::size_t>(ihi)]) {
+        ++ihi;
+    }
+    const int ilo = ihi - 1;
+    const float e0 = kFredYieldKnotMeVu[static_cast<std::size_t>(ilo)];
+    const float e1 = kFredYieldKnotMeVu[static_cast<std::size_t>(ihi)];
+    float t = (e - e0) / (e1 - e0);
+    if (t < 0.0F) {
+        t = 0.0F;
+    }
+    if (t > 1.0F) {
+        t = 1.0F;
+    }
+    const auto& a = family[static_cast<std::size_t>(ilo)];
+    const auto& b = family[static_cast<std::size_t>(ihi)];
+    for (int i = 0; i < 18; ++i) {
+        const float w = a[static_cast<std::size_t>(i)] * (1.0F - t) +
+                        b[static_cast<std::size_t>(i)] * t;
+        out18[i] = (w > 0.0F && w < 1.0e30F) ? w : 0.0F;
+    }
+}
+
+inline void fill_energy_dependent_inclusive_weights(float e_per_u, const float* table95,
+                                                    float* out18) noexcept {
+    interpolate_fred_yield_table(e_per_u, *fred_yield_family(table95), out18);
+}
+
+inline float inclusive_element_weight(const float* w, int z) noexcept {
+    float s = 0.0F;
+    for (int i = 0; i < 18; ++i) {
+        if (kFredIsotopes[static_cast<std::size_t>(i)].z == z) {
+            s += w[i];
+        }
+    }
+    return s;
+}
+
+// One leading Table-1 fragment plus at most one A/Z-fitting remnant. No n/p dump.
+inline int fill_projectile_joint_channel(const float* prob, float u_lead, uint8_t* idx_out,
+                                         int max_out, int* leftover_n) noexcept {
+    int a_rem = 12;
+    int z_rem = 6;
+    int nfrag = 0;
+    int leftover = 0;
+    const int lead = sample_table1_isotope(prob, a_rem, z_rem, u_lead);
+    const auto iso = kFredIsotopes[static_cast<std::size_t>(lead)];
+    if (iso.z == 0 && iso.a > 0 && iso.a <= a_rem) {
+        leftover += iso.a;
+        a_rem -= iso.a;
+    } else if (iso.a > 0 && iso.a <= a_rem && iso.z <= z_rem && nfrag < max_out) {
+        idx_out[nfrag++] = static_cast<uint8_t>(lead);
+        a_rem -= iso.a;
+        z_rem -= iso.z;
+    }
+    if (z_rem > 0 && a_rem > 0 && nfrag < max_out) {
+        const int ridx = nearest_fred_isotope_fitting(z_rem, a_rem);
+        if (ridx >= 0) {
+            const auto r = kFredIsotopes[static_cast<std::size_t>(ridx)];
+            idx_out[nfrag++] = static_cast<uint8_t>(ridx);
+            a_rem -= r.a;
+            z_rem -= r.z;
+        }
+    }
+    if (z_rem == 0 && a_rem > 0) {
+        leftover += a_rem;
+        a_rem = 0;
+    }
+    if (nfrag == 0 && max_out > 0) {
+        idx_out[nfrag++] = 17;
+        leftover = 0;
+    }
+    if (leftover_n != nullptr) {
+        *leftover_n = leftover;
+    }
+    return nfrag;
+}
+
+// Exponential free path. If u < 1-exp(-Sigma L) the collision sits inside the step.
+// Local absorbed fraction of inelastic neutron KE (kerma). Remainder stays untracked.
+inline constexpr float kInelasticNeutronKermaFraction = 0.08F;
+
+inline float inelastic_neutron_kerma_MeV(float neutron_ke_MeV) noexcept {
+    if (!(neutron_ke_MeV > 0.0F)) {
+        return 0.0F;
+    }
+    return kInelasticNeutronKermaFraction * neutron_ke_MeV;
+}
+
+inline bool inelastic_collision_in_step(float macro_xs_per_mm, float step_mm, float u,
+                                        float* collision_s_mm) noexcept {
+    if (collision_s_mm == nullptr) {
+        return false;
+    }
+    if (!(macro_xs_per_mm > 0.0F) || !(step_mm > 0.0F)) {
+        *collision_s_mm = step_mm;
+        return false;
+    }
+    const float p = 1.0F - std::exp(-macro_xs_per_mm * step_mm);
+    if (!(u < p)) {
+        *collision_s_mm = step_mm;
+        return false;
+    }
+    const float s = -std::log(std::fmax(1.0F - u, 1.0e-12F)) / macro_xs_per_mm;
+    *collision_s_mm = std::fmin(std::fmax(s, 1.0e-5F), step_mm);
+    return true;
+}
+
+inline bool eq12_sample_gaussian(int z, int a, bool is_target, float u_mix,
+                                 float p_gauss) noexcept {
+    const bool hydrogen = (z == 1 && a >= 1 && a <= 3);
+    if (hydrogen) {
+        return u_mix < p_gauss;
+    }
+    if (!is_target && z >= 1) {
+        return true;
+    }
+    return false;
+}
+
 } // namespace carbon
 
 

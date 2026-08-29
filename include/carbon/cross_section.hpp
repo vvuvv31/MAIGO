@@ -16,12 +16,21 @@ public:
         const std::filesystem::path& path);
 
     [[nodiscard]] double interpolate(double energy_MeVu) const noexcept;
+    [[nodiscard]] double interpolate_target_h_fraction(double energy_MeVu) const noexcept;
     [[nodiscard]] const std::vector<double>& energies() const noexcept;
     [[nodiscard]] const std::vector<double>& values() const noexcept;
+    [[nodiscard]] const std::vector<double>& target_h_fractions() const noexcept;
+    [[nodiscard]] const std::vector<double>& macro_h_per_mm() const noexcept;
+    [[nodiscard]] const std::vector<double>& macro_o_per_mm() const noexcept;
+    void set_target_h_fractions(std::vector<double> fractions);
+    void set_partial_macros(std::vector<double> macro_h, std::vector<double> macro_o);
 
 private:
     std::vector<double> energies_MeVu_;
     std::vector<double> macroscopic_cross_sections_per_mm_;
+    std::vector<double> target_h_fractions_;
+    std::vector<double> macro_h_per_mm_;
+    std::vector<double> macro_o_per_mm_;
 };
 
 class IonCrossSectionTables {

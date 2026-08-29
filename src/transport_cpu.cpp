@@ -20,7 +20,7 @@ double TransportResult::relative_energy_balance_error() const noexcept {
     }
     return std::abs(initial_energy_MeV - total_deposited_energy_MeV -
                     escaped_energy_MeV - beamline_removed_energy_MeV -
-                    untracked_nuclear_energy_MeV) /
+                    untracked_nuclear_energy_MeV - fred_model_unassigned_MeV) /
            initial_energy_MeV;
 }
 

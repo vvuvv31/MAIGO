@@ -83,9 +83,15 @@ CrossSectionTable CrossSectionTable::from_csv(const std::filesystem::path& path)
         "c12_copper_macroscopic_inelastic_cross_section_per_mm";
     std::size_t energy_column = 0;
     std::size_t cross_section_column = 0;
+    std::size_t target_h_column = static_cast<std::size_t>(-1);
+    std::size_t macro_h_column = static_cast<std::size_t>(-1);
+    std::size_t macro_o_column = static_cast<std::size_t>(-1);
     bool found_header = false;
     std::vector<double> energies;
     std::vector<double> cross_sections;
+    std::vector<double> target_h;
+    std::vector<double> macro_h;
+    std::vector<double> macro_o;
     std::string line;
     std::size_t line_number = 0;
     while (std::getline(input, line)) {
@@ -123,6 +129,18 @@ CrossSectionTable CrossSectionTable::from_csv(const std::filesystem::path& path)
             }
             energy_column = static_cast<std::size_t>(energy - fields.begin());
             cross_section_column = static_cast<std::size_t>(cross_section - fields.begin());
+            const auto hfrac = std::find(fields.begin(), fields.end(), "target_h_fraction");
+            if (hfrac != fields.end()) {
+                target_h_column = static_cast<std::size_t>(hfrac - fields.begin());
+            }
+            const auto mh = std::find(fields.begin(), fields.end(), "macro_h_per_mm");
+            const auto mo = std::find(fields.begin(), fields.end(), "macro_o_per_mm");
+            if (mh != fields.end()) {
+                macro_h_column = static_cast<std::size_t>(mh - fields.begin());
+            }
+            if (mo != fields.end()) {
+                macro_o_column = static_cast<std::size_t>(mo - fields.begin());
+            }
             found_header = true;
             continue;
         }
@@ -133,11 +151,27 @@ CrossSectionTable CrossSectionTable::from_csv(const std::filesystem::path& path)
         energies.push_back(parse_number(fields[energy_column], path, line_number));
         cross_sections.push_back(
             parse_number(fields[cross_section_column], path, line_number));
+        if (target_h_column != static_cast<std::size_t>(-1) && fields.size() > target_h_column) {
+            target_h.push_back(parse_number(fields[target_h_column], path, line_number));
+        }
+        if (macro_h_column != static_cast<std::size_t>(-1) && fields.size() > macro_h_column) {
+            macro_h.push_back(parse_number(fields[macro_h_column], path, line_number));
+        }
+        if (macro_o_column != static_cast<std::size_t>(-1) && fields.size() > macro_o_column) {
+            macro_o.push_back(parse_number(fields[macro_o_column], path, line_number));
+        }
     }
     if (!found_header) {
         throw std::runtime_error("Cross-section CSV header not found: " + path.string());
     }
-    return CrossSectionTable(std::move(energies), std::move(cross_sections));
+    auto table = CrossSectionTable(std::move(energies), std::move(cross_sections));
+    if (target_h.size() == table.energies().size()) {
+        table.set_target_h_fractions(std::move(target_h));
+    }
+    if (macro_h.size() == table.energies().size() && macro_o.size() == table.energies().size()) {
+        table.set_partial_macros(std::move(macro_h), std::move(macro_o));
+    }
+    return table;
 }
 
 std::vector<CrossSectionTable> CrossSectionTable::from_schneider_csv(
@@ -219,9 +253,47 @@ double CrossSectionTable::interpolate(double energy_MeVu) const noexcept {
                        macroscopic_cross_sections_per_mm_[lower_index]);
 }
 
+double CrossSectionTable::interpolate_target_h_fraction(double energy_MeVu) const noexcept {
+    if (target_h_fractions_.size() != energies_MeVu_.size() || target_h_fractions_.empty()) {
+        return 0.5;
+    }
+    if (!std::isfinite(energy_MeVu) || energy_MeVu <= energies_MeVu_.front()) {
+        return target_h_fractions_.front();
+    }
+    if (energy_MeVu >= energies_MeVu_.back()) {
+        return target_h_fractions_.back();
+    }
+    const auto upper = std::upper_bound(energies_MeVu_.begin(), energies_MeVu_.end(), energy_MeVu);
+    const auto upper_index = static_cast<std::size_t>(upper - energies_MeVu_.begin());
+    const auto lower_index = upper_index - 1;
+    const auto fraction = (energy_MeVu - energies_MeVu_[lower_index]) /
+                          (energies_MeVu_[upper_index] - energies_MeVu_[lower_index]);
+    return target_h_fractions_[lower_index] +
+           fraction * (target_h_fractions_[upper_index] - target_h_fractions_[lower_index]);
+}
+
+void CrossSectionTable::set_target_h_fractions(std::vector<double> fractions) {
+    target_h_fractions_ = std::move(fractions);
+}
+
+void CrossSectionTable::set_partial_macros(std::vector<double> macro_h,
+                                           std::vector<double> macro_o) {
+    macro_h_per_mm_ = std::move(macro_h);
+    macro_o_per_mm_ = std::move(macro_o);
+}
+
 const std::vector<double>& CrossSectionTable::energies() const noexcept { return energies_MeVu_; }
 const std::vector<double>& CrossSectionTable::values() const noexcept {
     return macroscopic_cross_sections_per_mm_;
+}
+const std::vector<double>& CrossSectionTable::target_h_fractions() const noexcept {
+    return target_h_fractions_;
+}
+const std::vector<double>& CrossSectionTable::macro_h_per_mm() const noexcept {
+    return macro_h_per_mm_;
+}
+const std::vector<double>& CrossSectionTable::macro_o_per_mm() const noexcept {
+    return macro_o_per_mm_;
 }
 
 IonCrossSectionTables IonCrossSectionTables::from_csv(
