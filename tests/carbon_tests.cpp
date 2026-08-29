@@ -15,6 +15,8 @@
 #include "carbon/tps_source.hpp"
 #include "carbon/transport.hpp"
 #include "carbon/transport_config.hpp"
+#include "carbon/detail/fred_fragmentation_data.hpp"
+#include "carbon/fred_table1.hpp"
 
 #include <algorithm>
 #include <array>
@@ -45,15 +47,18 @@ void require_near(double actual, double expected, double tolerance, const std::s
     }
 }
 
-template <typename Operation>
+template <typename ExceptionType = std::exception, typename Operation>
 void require_throws(Operation operation, const std::string& message) {
     try {
         operation();
-    } catch (const std::exception&) {
+    } catch (const ExceptionType&) {
         return;
+    } catch (...) {
+        throw std::runtime_error(message + " (threw unexpected exception type)");
     }
-    throw std::runtime_error(message);
+    throw std::runtime_error(message + " (did not throw)");
 }
+
 
 void require_voxel_idd_closure(const carbon::TransportConfig& config,
                                const carbon::TransportResult& result,
@@ -3033,10 +3038,160 @@ void test_sycl_layered_slab_range_shift() {
 }
 #endif
 
+void test_fred_18_isotopes_data() {
+    require(carbon::kFredIsotopes.size() == 18, "kFredIsotopes must contain 18 isotopes");
+    require(carbon::kFredCdfH.size() == 18, "kFredCdfH must contain 18 entries");
+    require(carbon::kFredCdfO.size() == 18, "kFredCdfO must contain 18 entries");
+    require(std::abs(carbon::kFredCdfH.back() - 1.0f) < 1e-4f, "kFredCdfH must terminate at 1.0");
+    require(std::abs(carbon::kFredCdfO.back() - 1.0f) < 1e-4f, "kFredCdfO must terminate at 1.0");
+
+    for (std::size_t i = 1; i < 18; ++i) {
+        require(carbon::kFredCdfH[i] >= carbon::kFredCdfH[i - 1], "kFredCdfH must be non-decreasing");
+        require(carbon::kFredCdfO[i] >= carbon::kFredCdfO[i - 1], "kFredCdfO must be non-decreasing");
+    }
+
+    // Verify all 17 charged species mapping
+    require(carbon::get_charged_species_idx(1, 1) == 0, "1H (p) index");
+    require(carbon::get_charged_species_idx(1, 2) == 1, "2H (d) index");
+    require(carbon::get_charged_species_idx(1, 3) == 2, "3H (t) index");
+    require(carbon::get_charged_species_idx(2, 3) == 3, "3He index");
+    require(carbon::get_charged_species_idx(2, 4) == 4, "4He index");
+    require(carbon::get_charged_species_idx(2, 6) == 5, "6He index");
+    require(carbon::get_charged_species_idx(3, 6) == 6, "6Li index");
+    require(carbon::get_charged_species_idx(3, 7) == 7, "7Li index");
+    require(carbon::get_charged_species_idx(4, 7) == 8, "7Be index");
+    require(carbon::get_charged_species_idx(4, 9) == 9, "9Be index");
+    require(carbon::get_charged_species_idx(4, 10) == 10, "10Be index");
+    require(carbon::get_charged_species_idx(5, 8) == 11, "8B index");
+    require(carbon::get_charged_species_idx(5, 10) == 12, "10B index");
+    require(carbon::get_charged_species_idx(5, 11) == 13, "11B index");
+    require(carbon::get_charged_species_idx(6, 10) == 14, "10C index");
+    require(carbon::get_charged_species_idx(6, 11) == 15, "11C index");
+    require(carbon::get_charged_species_idx(6, 12) == 16, "12C index");
+}
+
+void test_ion_species_stopping_power_grid_validation() {
+    const std::filesystem::path csv_path = "data/ion_stopping_power_water_geant4_11_3_2.csv";
+    if (std::filesystem::exists(csv_path)) {
+        const auto lut = carbon::load_ion_species_stopping_power_lut(csv_path, 4001, 1.0f);
+        require(lut.size() == 17 * 4001, "Stopping power LUT size must be 17 * 4001");
+        for (std::size_t i = 0; i < lut.size(); ++i) {
+            require(lut[i] > 0.0f, "Stopping power values must be strictly positive");
+        }
+    }
+}
+
+void test_stopping_power_csv_corruption_rejection() {
+    const auto bad_csv_path = std::filesystem::temp_directory_path() / "bad_ion_sp.csv";
+    {
+        std::ofstream out(bad_csv_path);
+        out << "atomic_number,mass_number,energy_MeVu,electronic_stopping_power_MeV_per_mm,nuclear_stopping_power_MeV_per_mm\n";
+        out << "1,1,0.01,20.0,0.0\n";
+        out << "1,1,0.15,19.0,0.0\n"; // grid step mismatch: expected 0.11, found 0.15
+    }
+    require_throws<std::runtime_error>(
+        [&]() {
+            (void)carbon::load_ion_species_stopping_power_lut(bad_csv_path, 4001, 1.0f);
+        },
+        "Corrupted ion stopping power grid must throw std::runtime_error");
+    std::filesystem::remove(bad_csv_path);
+}
+
+void test_kox_icru_cross_sections() {
+    // 100 MeV/u
+    const float sig_H_100 = carbon::calculate_icru_sigma_H(100.0f);
+    const float sig_O_100 = carbon::calculate_kox_sigma_O(100.0f, 1200.0f);
+    const float prob_H_100 = carbon::calculate_target_prob_H(sig_H_100, sig_O_100);
+    require(sig_H_100 > 250.0f && sig_H_100 < 300.0f, "sigma_H at 100 MeV/u in [250, 300] mb");
+    require(sig_O_100 > 900.0f && sig_O_100 < 1500.0f, "sigma_O at 100 MeV/u in [900, 1500] mb");
+    require(prob_H_100 > 0.25f && prob_H_100 < 0.45f, "P(H) at 100 MeV/u in [0.25, 0.45]");
+
+    // 400 MeV/u
+    const float sig_H_400 = carbon::calculate_icru_sigma_H(400.0f);
+    const float sig_O_400 = carbon::calculate_kox_sigma_O(400.0f, 4800.0f);
+    const float prob_H_400 = carbon::calculate_target_prob_H(sig_H_400, sig_O_400);
+    require_near(sig_H_400, 250.0f, 0.1f, "sigma_H at 400 MeV/u is 250 mb plateau");
+    require(sig_O_400 > 1100.0f && sig_O_400 < 1600.0f, "sigma_O at 400 MeV/u in [1100, 1600] mb");
+    require(prob_H_400 > 0.20f && prob_H_400 < 0.35f, "P(H) at 400 MeV/u in [0.20, 0.35]");
+}
+
+void test_table1_newton_invert() {
+    double raw_counts[18]{};
+    unsigned raw_closed = 0;
+    carbon::simulate_projectile_inclusive(carbon::kFredProbH.data(), 4000U, 7U, raw_counts,
+                                          &raw_closed);
+    double raw_sum = 0.0;
+    for (int i = 0; i < 18; ++i) {
+        raw_sum += raw_counts[i];
+    }
+    require(raw_sum > 0.0, "raw sequential sampling must emit fragments");
+    require(raw_counts[17] > 0.0, "raw Table 1 sequential sampling must emit 12C");
+
+    double table_sum = 0.0;
+    for (int i = 0; i < 18; ++i) {
+        table_sum += static_cast<double>(carbon::kFredProbH[static_cast<std::size_t>(i)]);
+    }
+    float raw_max = 0.0F;
+    for (int i = 0; i < 18; ++i) {
+        const auto fe = static_cast<double>(carbon::kFredProbH[static_cast<std::size_t>(i)]) /
+                        table_sum;
+        const auto fn = raw_counts[i] / raw_sum;
+        raw_max = std::max(raw_max, static_cast<float>(std::fabs(fn - fe)));
+    }
+
+    const auto inverted = carbon::invert_table1_independent_probs(
+        carbon::kFredProbH.data(), 12, 6, 2500U, 5U, 11U);
+    require(inverted.events == 2500U, "invert must run requested events");
+    require(inverted.inclusive_fraction[17] > 0.0, "inverted sampling must keep 12C");
+    require(inverted.max_abs_fraction_error <= raw_max + 0.05F,
+            "CRN Newton invert should not degrade Table 1 fraction match");
+
+    const auto inverted_o16 = carbon::invert_table1_independent_probs(
+        carbon::kFredProbO.data(), 16, 8, 2500U, 5U, 13U);
+    require(inverted_o16.events == 2500U, "O-16 invert must run requested events");
+    double o16_counts[18]{};
+    carbon::simulate_nucleon_conserving_inclusive(
+        inverted_o16.sample_prob.data(), 16, 8, 2000U, 13U, o16_counts, nullptr);
+    double o16_sum = 0.0;
+    for (int i = 0; i < 18; ++i) {
+        o16_sum += o16_counts[i];
+    }
+    require(o16_sum > 0.0, "O-16 nucleon-conserving sampling must emit fragments");
+}
+
+void test_table1_inclusive_sampling() {
+    bool saw_c12_h = false;
+    bool saw_c12_o = false;
+    bool saw_n_h = false;
+    for (int trial = 0; trial < 10000; ++trial) {
+        float u = (static_cast<float>(trial) + 0.5f) / 10000.0f;
+        int iso_h = carbon::sample_table1_isotope(carbon::kFredProbH.data(), 12, 6, u);
+        require(iso_h >= 0 && iso_h < 18, "Valid isotope index on H");
+        require(carbon::kFredIsotopes[iso_h].a <= 12 && carbon::kFredIsotopes[iso_h].z <= 6, "Nucleon bound on H");
+        if (iso_h == 17) saw_c12_h = true;
+        if (iso_h == 0) saw_n_h = true;
+
+        int iso_o = carbon::sample_table1_isotope(carbon::kFredProbO.data(), 12, 6, u);
+        require(iso_o >= 0 && iso_o < 18, "Valid isotope index on O");
+        require(carbon::kFredIsotopes[iso_o].a <= 12 && carbon::kFredIsotopes[iso_o].z <= 6, "Nucleon bound on O");
+        if (iso_o == 17) saw_c12_o = true;
+    }
+    require(saw_c12_h, "Table 1 H sampling must be able to return 12C");
+    require(saw_c12_o, "Table 1 O sampling must be able to return 12C");
+    require(saw_n_h, "Table 1 H sampling must be able to return neutrons");
+}
+
 }  // namespace
 
 int main() {
     try {
+        test_fred_18_isotopes_data();
+        test_ion_species_stopping_power_grid_validation();
+        test_stopping_power_csv_corruption_rejection();
+        test_kox_icru_cross_sections();
+        test_table1_inclusive_sampling();
+        test_table1_newton_invert();
+
         test_units();
         test_csda_range_loss_validation();
         test_hu_stopping_power_lut_loading();

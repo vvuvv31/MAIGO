@@ -19,6 +19,11 @@ class StoppingPowerTable;
     std::size_t table_size,
     float scale = 1.0F);
 
+[[nodiscard]] std::vector<float> load_ion_species_stopping_power_lut(
+    const std::filesystem::path& path,
+    std::size_t table_size,
+    float scale = 1.0F);
+
 struct DensityMassSprLut {
     std::uint32_t n_rho{0};
     float log_rho_min{0.0F};

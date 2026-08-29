@@ -68,6 +68,7 @@ struct MinibeamDiagnostics {
 struct TransportResult {
     std::vector<double> deposited_energy_MeV;
     std::vector<double> voxel_deposited_energy_MeV;
+    std::vector<double> in_fov_deposited_energy_MeV;
     // Category-major layout: category * number_of_voxels + voxel index.
     std::vector<double> charged_origin_voxel_deposited_energy_MeV;
     std::vector<double> neutral_origin_voxel_deposited_energy_MeV;
@@ -129,6 +130,27 @@ struct TransportResult {
     double beamline_removed_energy_MeV{0.0};
     double untracked_nuclear_energy_MeV{0.0};
     std::uint64_t nuclear_interactions{0};
+    std::array<std::uint64_t, 18> fred_isotope_counts{};
+    std::uint64_t fred_inelastic_events{0};
+    std::uint64_t fred_retry_sum{0};
+    std::uint64_t fred_energy_scaled_events{0};
+    std::uint64_t fred_projectile_az_open_events{0};
+    std::uint64_t fred_leftover_target_a_sum{0};
+    std::uint64_t fred_leftover_target_z_sum{0};
+    std::uint64_t fred_leftover_projectile_a_sum{0};
+    std::uint64_t fred_leftover_projectile_z_sum{0};
+    double fred_model_residual_MeV{0.0};
+    double fred_q_MeV{0.0};
+    double fred_neutron_ke_MeV{0.0};
+    double fred_remnant_local_MeV{0.0};
+    std::uint64_t fred_resample_failed_events{0};
+    double fred_resample_failed_energy_MeV{0.0};
+    std::uint64_t fred_product_capacity_overflow_events{0};
+    double fred_product_capacity_overflow_energy_MeV{0.0};
+    float fred_invert_error_proj_h{0.0F};
+    float fred_invert_error_proj_o{0.0F};
+    float fred_invert_error_tgt_h{0.0F};
+    float fred_invert_error_tgt_o{0.0F};
     std::uint64_t sampled_reaction_packages{0};
     std::uint64_t generated_direct_secondaries{0};
     std::uint64_t queued_secondaries{0};

@@ -472,4 +472,106 @@ DensityMassSprLut build_density_mass_spr_lut(
     return out;
 }
 
+std::vector<float> load_ion_species_stopping_power_lut(
+    const std::filesystem::path& path,
+    const std::size_t table_size,
+    const float scale) {
+    if (!std::filesystem::exists(path)) {
+        throw std::runtime_error("Ion stopping-power file does not exist: " + path.string());
+    }
+    std::ifstream file(path);
+    if (!file.is_open()) {
+        throw std::runtime_error("Failed to open ion stopping-power file: " + path.string());
+    }
+
+    // 17 charged species (indices 0..16 from get_charged_species_idx)
+    std::vector<float> lut(17 * table_size, 0.0F);
+    std::vector<std::size_t> samples_count(17, 0);
+
+    const auto get_species_idx = [](int z, int a) -> int {
+        if (z == 1) {
+            if (a == 1) return 0;  // 1H (p)
+            if (a == 2) return 1;  // 2H (d)
+            if (a == 3) return 2;  // 3H (t)
+            return -1;
+        }
+        if (z == 2) {
+            if (a == 3) return 3;  // 3He
+            if (a == 4) return 4;  // 4He (alpha)
+            if (a == 6) return 5;  // 6He
+            return -1;
+        }
+        if (z == 3) {
+            if (a == 6) return 6;  // 6Li
+            if (a == 7) return 7;  // 7Li
+            return -1;
+        }
+        if (z == 4) {
+            if (a == 7) return 8;  // 7Be
+            if (a == 9) return 9;  // 9Be
+            if (a == 10) return 10; // 10Be
+            return -1;
+        }
+        if (z == 5) {
+            if (a == 8) return 11;  // 8B
+            if (a == 10) return 12; // 10B
+            if (a == 11) return 13; // 11B
+            return -1;
+        }
+        if (z == 6) {
+            if (a == 10) return 14; // 10C
+            if (a == 11) return 15; // 11C
+            if (a == 12) return 16; // 12C
+            return -1;
+        }
+        return -1;
+    };
+
+    std::string line;
+    while (std::getline(file, line)) {
+        if (line.empty() || line.front() == '#') continue;
+        if (line.rfind("atomic_number", 0) == 0) continue;
+        std::stringstream ss(line);
+        std::string token;
+        int atomic_number = 0, mass_number = 0;
+        double energy_MeVu = 0.0, stopping_power = 0.0;
+        if (std::getline(ss, token, ',')) atomic_number = std::stoi(token);
+        if (std::getline(ss, token, ',')) mass_number = std::stoi(token);
+        if (std::getline(ss, token, ',')) energy_MeVu = std::stod(token);
+        if (std::getline(ss, token, ',')) stopping_power = std::stod(token);
+
+        const auto sp_idx = get_species_idx(atomic_number, mass_number);
+        if (sp_idx >= 0 && sp_idx < 17) {
+            const auto e_idx = samples_count[sp_idx];
+            if (e_idx < table_size) {
+                const double expected_e = 0.01 + static_cast<double>(e_idx) * 0.1;
+                if (std::abs(energy_MeVu - expected_e) > 0.005) {
+                    throw std::runtime_error(
+                        "Ion species (Z=" + std::to_string(atomic_number) +
+                        ", A=" + std::to_string(mass_number) + ") grid mismatch at index " +
+                        std::to_string(e_idx) + ": found " + std::to_string(energy_MeVu) +
+                        ", expected " + std::to_string(expected_e));
+                }
+                lut[static_cast<std::size_t>(sp_idx) * table_size + e_idx] =
+                    static_cast<float>(stopping_power * scale);
+                samples_count[sp_idx]++;
+            } else {
+                throw std::runtime_error("Ion species (Z=" + std::to_string(atomic_number) +
+                                         ", A=" + std::to_string(mass_number) +
+                                         ") has excess samples in " + path.string());
+            }
+        }
+    }
+
+    for (std::size_t sp = 0; sp < 17; ++sp) {
+        if (samples_count[sp] != table_size) {
+            throw std::runtime_error("Ion species index " + std::to_string(sp) +
+                                     " in " + path.string() + " has " +
+                                     std::to_string(samples_count[sp]) +
+                                     " samples, expected " + std::to_string(table_size));
+        }
+    }
+    return lut;
+}
+
 }  // namespace carbon

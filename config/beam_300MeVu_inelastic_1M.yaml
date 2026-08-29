@@ -1,8 +1,8 @@
-# Carbon-12 beam 200 MeV/u with emittance source and full INELASTIC fragmentation
+# Carbon-12 beam 300 MeV/u with emittance source and full INELASTIC fragmentation
 primary_atomic_number: 6
 primary_mass_number: 12
-initial_energy_MeVu: 200.0
-number_of_histories: 100000
+initial_energy_MeVu: 300.0
+number_of_histories: 1000000
 phantom_length_mm: 400.0
 depth_bin_width_mm: 0.5
 maximum_step_mm: 0.1
@@ -37,10 +37,10 @@ voxel_size_x_mm: 0.2
 voxel_size_y_mm: 0.2
 
 # Scorers
-output_file: out/gpu_inelastic_e200/depth_dose.csv
-dose_output_file: out/gpu_inelastic_e200/depth_dose_Gy.csv
-voxel_dose_output_file: out/gpu_inelastic_e200/voxel_dose.csv
-voxel_dose_Gy_output_file: out/gpu_inelastic_e200/voxel_dose_Gy.csv
-voxel_dose_mhd_output_file: out/gpu_inelastic_e200/voxel_dose.mhd
-random_seed: 2026084200
+output_file: out/gpu_inelastic_1M_e300/depth_dose.csv
+dose_output_file: out/gpu_inelastic_1M_e300/depth_dose_Gy.csv
+voxel_dose_output_file: out/gpu_inelastic_1M_e300/voxel_dose.csv
+voxel_dose_Gy_output_file: out/gpu_inelastic_1M_e300/voxel_dose_Gy.csv
+voxel_dose_mhd_output_file: out/gpu_inelastic_1M_e300/voxel_dose.mhd
+random_seed: 2026084300
 device: gpu

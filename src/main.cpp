@@ -425,9 +425,27 @@ int main(int argc, char* argv[]) {
         const auto quality_report_path = quality_directory / "quality_report.json";
         const auto quality = carbon::evaluate_run_quality(config, result);
         carbon::write_run_quality_report_json(quality_report_path, quality);
+        carbon::write_energy_ledger_json(quality_directory / "energy_ledger.json", config,
+                                         result);
         std::cout << "Run mode: " << carbon::run_mode_name(config.run_mode) << '\n'
                   << "Quality status: " << quality.status() << '\n'
                   << "Quality report: " << quality_report_path << '\n';
+        if (result.fred_inelastic_events > 0) {
+            const auto n = static_cast<double>(result.fred_inelastic_events);
+            std::cout << "FRED inelastic events: " << result.fred_inelastic_events
+                      << "  mean retries: " << (static_cast<double>(result.fred_retry_sum) / n)
+                      << "  energy-scaled fraction: "
+                      << (static_cast<double>(result.fred_energy_scaled_events) / n)
+                      << "  proj A/Z open: " << result.fred_projectile_az_open_events
+                      << "  mean leftover target A/Z: "
+                      << (static_cast<double>(result.fred_leftover_target_a_sum) / n) << '/'
+                      << (static_cast<double>(result.fred_leftover_target_z_sum) / n)
+                      << "  12C count: " << result.fred_isotope_counts[17]
+                      << "  resample_failed: " << result.fred_resample_failed_events
+                      << "  Q/neutron/remnant/residual MeV: " << result.fred_q_MeV << '/'
+                      << result.fred_neutron_ke_MeV << '/' << result.fred_remnant_local_MeV
+                      << '/' << result.fred_model_residual_MeV << '\n';
+        }
         if (!quality.accepted) {
             throw std::runtime_error(quality.summary());
         }

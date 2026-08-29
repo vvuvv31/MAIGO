@@ -1465,13 +1465,6 @@ TransportConfig load_config(const std::filesystem::path& path) {
         config.straggling_scale_values = parse_double_list(
             iterator->second, "straggling_scale_values");
     }
-    if (config.primary_atomic_number == 6 &&
-        config.straggling_scale_energies_MeVu.empty() &&
-        config.energy_straggling_model == "gaussian_clamped" &&
-        values.find("straggling_scale") == values.end()) {
-        config.straggling_scale_energies_MeVu = {100.0, 200.0, 300.0, 400.0};
-        config.straggling_scale_values = {1.00, 1.12, 1.28, 1.38};
-    }
     config.enable_inelastic =
         parse_bool(values, "enable_inelastic", config.enable_inelastic);
     config.primary_inelastic_cross_section_file =

@@ -777,17 +777,17 @@ void write_sparse_voxel_dose_csv(const std::filesystem::path& path,
                            static_cast<std::ptrdiff_t>(z * plane_size);
         const auto reconstructed =
             std::accumulate(begin, begin + static_cast<std::ptrdiff_t>(plane_size), 0.0);
-        // Depth vs plane-sum of voxels: exact for FP64 ordered adds; FP32 device
-        // atomics are non-associative and lose precision when totals are huge (10M
-        // histories). Use relative tolerance; on FP32 builds only warn so outputs
-        // still write for benchmark comparison.
-        const auto depth = result.deposited_energy_MeV[z];
+        // Compare plane-sum of voxels against in-FOV depth tally (same spatial domain).
+        // Full plane depth dose contains lateral leakage outside the finite voxel grid.
+        const auto depth = (!result.in_fov_deposited_energy_MeV.empty())
+                               ? result.in_fov_deposited_energy_MeV[z]
+                               : result.deposited_energy_MeV[z];
         const auto abs_diff = std::abs(reconstructed - depth);
         const auto scale = std::max({std::abs(reconstructed), std::abs(depth), 1.0});
 #if defined(CARBON_DOSE_FP32)
-        const auto tol = std::max(1.0e-6 * histories, 5.0e-2 * scale);  // 5% rel
+        const auto tol = std::max(1.0e-5 * histories, 1.0e-3 * scale);
         if (abs_diff > tol) {
-            std::cerr << "warning: voxel vs depth-dose closure weak at z bin " << z
+            std::cerr << "warning: voxel vs in-FOV depth-dose closure weak at z bin " << z
                       << " (diff=" << abs_diff << " MeV, tol=" << tol
                       << " MeV, rel=" << (abs_diff / scale) << ")\n";
         }
@@ -795,7 +795,7 @@ void write_sparse_voxel_dose_csv(const std::filesystem::path& path,
         const auto tol = std::max(1.0e-9 * histories, 5.0e-5 * scale);
         if (abs_diff > tol) {
             throw std::runtime_error(
-                "Voxel dose does not close to the depth-dose tally at z bin " +
+                "Voxel dose does not close to the in-FOV depth-dose tally at z bin " +
                 std::to_string(z) + " (diff=" + std::to_string(abs_diff) +
                 " MeV, tol=" + std::to_string(tol) + " MeV)");
         }
@@ -1348,6 +1348,9 @@ void write_energy_ledger_json(const std::filesystem::path& path,
            << result.secondary_queue_overflow_energy_MeV +
                   result.neutral_queue_overflow_energy_MeV
            << ",\n"
+           << "  \"E_queue_lost_MeV_included_in_untracked\": "
+           << result.secondary_queue_overflow_energy_MeV
+           << ",\n"
            << "  \"E_secondary_overflow_MeV\": "
            << result.secondary_queue_overflow_energy_MeV << ",\n"
            << "  \"E_neutral_overflow_MeV\": "
@@ -1357,6 +1360,68 @@ void write_energy_ledger_json(const std::filesystem::path& path,
            << "  \"E_neutral_package_closure_residual_MeV\": "
            << result.neutral_package_closure_residual_MeV << ",\n"
            << "  \"nuclear_interactions\": " << result.nuclear_interactions << ",\n"
+           << "  \"fred_inelastic_events\": " << result.fred_inelastic_events << ",\n"
+           << "  \"fred_mean_retries\": "
+           << (result.fred_inelastic_events == 0
+                   ? 0.0
+                   : static_cast<double>(result.fred_retry_sum) /
+                         static_cast<double>(result.fred_inelastic_events))
+           << ",\n"
+           << "  \"fred_energy_scaled_events\": " << result.fred_energy_scaled_events
+           << ",\n"
+           << "  \"fred_energy_scaled_fraction\": "
+           << (result.fred_inelastic_events == 0
+                   ? 0.0
+                   : static_cast<double>(result.fred_energy_scaled_events) /
+                         static_cast<double>(result.fred_inelastic_events))
+           << ",\n"
+           << "  \"fred_projectile_az_open_events\": "
+           << result.fred_projectile_az_open_events << ",\n"
+           << "  \"fred_mean_leftover_target_a\": "
+           << (result.fred_inelastic_events == 0
+                   ? 0.0
+                   : static_cast<double>(result.fred_leftover_target_a_sum) /
+                         static_cast<double>(result.fred_inelastic_events))
+           << ",\n"
+           << "  \"fred_mean_leftover_target_z\": "
+           << (result.fred_inelastic_events == 0
+                   ? 0.0
+                   : static_cast<double>(result.fred_leftover_target_z_sum) /
+                         static_cast<double>(result.fred_inelastic_events))
+           << ",\n"
+           << "  \"fred_mean_leftover_projectile_a\": "
+           << (result.fred_inelastic_events == 0
+                   ? 0.0
+                   : static_cast<double>(result.fred_leftover_projectile_a_sum) /
+                         static_cast<double>(result.fred_inelastic_events))
+           << ",\n"
+           << "  \"fred_mean_leftover_projectile_z\": "
+           << (result.fred_inelastic_events == 0
+                   ? 0.0
+                   : static_cast<double>(result.fred_leftover_projectile_z_sum) /
+                         static_cast<double>(result.fred_inelastic_events))
+           << ",\n"
+           << "  \"fred_model_residual_MeV\": " << result.fred_model_residual_MeV << ",\n"
+           << "  \"fred_q_MeV\": " << result.fred_q_MeV << ",\n"
+           << "  \"fred_neutron_ke_MeV\": " << result.fred_neutron_ke_MeV << ",\n"
+           << "  \"fred_remnant_local_MeV\": " << result.fred_remnant_local_MeV << ",\n"
+           << "  \"fred_resample_failed_events\": " << result.fred_resample_failed_events
+           << ",\n"
+           << "  \"fred_resample_failed_energy_MeV\": "
+           << result.fred_resample_failed_energy_MeV << ",\n"
+           << "  \"fred_product_capacity_overflow_events\": "
+           << result.fred_product_capacity_overflow_events << ",\n"
+           << "  \"fred_product_capacity_overflow_energy_MeV\": "
+           << result.fred_product_capacity_overflow_energy_MeV << ",\n"
+           << "  \"fred_invert_error_proj_h\": " << result.fred_invert_error_proj_h << ",\n"
+           << "  \"fred_invert_error_proj_o\": " << result.fred_invert_error_proj_o << ",\n"
+           << "  \"fred_invert_error_tgt_h\": " << result.fred_invert_error_tgt_h << ",\n"
+           << "  \"fred_invert_error_tgt_o\": " << result.fred_invert_error_tgt_o << ",\n"
+           << "  \"fred_isotope_counts\": [";
+    for (std::size_t i = 0; i < result.fred_isotope_counts.size(); ++i) {
+        output << (i == 0 ? "" : ", ") << result.fred_isotope_counts[i];
+    }
+    output << "],\n"
            << "  \"primary_elastic_interactions\": "
            << result.primary_elastic_interactions << ",\n"
            << "  \"elastic_local_deposited_MeV\": "

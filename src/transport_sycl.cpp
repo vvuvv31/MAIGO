@@ -2,6 +2,7 @@
 #include "carbon/ct_grid.hpp"
 #include "carbon/device.hpp"
 #include "carbon/electron_transport.hpp"
+#include "carbon/fred_table1.hpp"
 #include "carbon/inelastic.hpp"
 #include "carbon/multiple_scattering.hpp"
 #include "carbon/particle.hpp"
@@ -400,23 +401,167 @@ TransportResult transport_sycl(const TransportConfig& config,
     auto* deposited_device = sycl::malloc_device<float>(number_of_histories, queue);
     auto* escaped_device = sycl::malloc_device<float>(number_of_histories, queue);
     auto* steps_device = sycl::malloc_device<std::uint32_t>(number_of_histories, queue);
+    auto* untracked_nuclear_device = sycl::malloc_device<float>(number_of_histories, queue);
+    if (untracked_nuclear_device != nullptr) {
+        queue.fill(untracked_nuclear_device, 0.0F, number_of_histories).wait_and_throw();
+    }
 
     const auto enable_inelastic = config.enable_inelastic;
     const auto enable_secondary_transport = config.enable_secondary_transport;
-    constexpr std::size_t max_secondaries = 2000000;
+    constexpr std::size_t max_secondaries = 32000000;
     auto* secondary_queue_device =
         enable_inelastic
             ? sycl::malloc_device<SecondaryParticle>(max_secondaries, queue)
             : nullptr;
     auto* secondary_count_device =
         enable_inelastic ? sycl::malloc_device<uint32_t>(1, queue) : nullptr;
-    if (secondary_count_device != nullptr) {
-        queue.fill(secondary_count_device, 0U, 1).wait_and_throw();
+    uint32_t* secondary_overflow_count_device =
+        enable_inelastic ? sycl::malloc_device<uint32_t>(1, queue) : nullptr;
+    float* secondary_overflow_energy_device =
+        enable_inelastic ? sycl::malloc_device<float>(1, queue) : nullptr;
+    float* fred_model_residual_device =
+        enable_inelastic ? sycl::malloc_device<float>(1, queue) : nullptr;
+    float* fred_q_device = enable_inelastic ? sycl::malloc_device<float>(1, queue) : nullptr;
+    float* fred_neutron_device = enable_inelastic ? sycl::malloc_device<float>(1, queue) : nullptr;
+    float* fred_remnant_device = enable_inelastic ? sycl::malloc_device<float>(1, queue) : nullptr;
+    uint32_t* fred_fail_count_device =
+        enable_inelastic ? sycl::malloc_device<uint32_t>(1, queue) : nullptr;
+    float* fred_fail_energy_device =
+        enable_inelastic ? sycl::malloc_device<float>(1, queue) : nullptr;
+    uint32_t* fred_cap_overflow_count_device = nullptr;
+    float* fred_cap_overflow_energy_device = nullptr;
+    if (enable_inelastic) {
+        fred_cap_overflow_count_device = sycl::malloc_device<uint32_t>(1, queue);
+        fred_cap_overflow_energy_device = sycl::malloc_device<float>(1, queue);
+        const bool inelastic_ok =
+            secondary_queue_device != nullptr && secondary_count_device != nullptr &&
+            secondary_overflow_count_device != nullptr &&
+            secondary_overflow_energy_device != nullptr &&
+            fred_model_residual_device != nullptr && fred_q_device != nullptr &&
+            fred_neutron_device != nullptr && fred_remnant_device != nullptr &&
+            fred_fail_count_device != nullptr && fred_fail_energy_device != nullptr &&
+            fred_cap_overflow_count_device != nullptr &&
+            fred_cap_overflow_energy_device != nullptr;
+        if (!inelastic_ok) {
+            free_device(secondary_queue_device);
+            free_device(secondary_count_device);
+            free_device(secondary_overflow_count_device);
+            free_device(secondary_overflow_energy_device);
+            free_device(fred_model_residual_device);
+            free_device(fred_q_device);
+            free_device(fred_neutron_device);
+            free_device(fred_remnant_device);
+            free_device(fred_fail_count_device);
+            free_device(fred_fail_energy_device);
+            free_device(fred_cap_overflow_count_device);
+            free_device(fred_cap_overflow_energy_device);
+            throw std::bad_alloc();
+        }
+        queue.fill(secondary_count_device, 0U, 1);
+        queue.fill(secondary_overflow_count_device, 0U, 1);
+        queue.fill(secondary_overflow_energy_device, 0.0F, 1);
+        queue.fill(fred_model_residual_device, 0.0F, 1);
+        queue.fill(fred_q_device, 0.0F, 1);
+        queue.fill(fred_neutron_device, 0.0F, 1);
+        queue.fill(fred_remnant_device, 0.0F, 1);
+        queue.fill(fred_fail_count_device, 0U, 1);
+        queue.fill(fred_fail_energy_device, 0.0F, 1);
+        queue.fill(fred_cap_overflow_count_device, 0U, 1);
+        queue.fill(fred_cap_overflow_energy_device, 0.0F, 1).wait_and_throw();
+    }
+
+    constexpr std::size_t kFredDiagSlots = 26;
+    float* fred_prob_proj_h_device = nullptr;
+    float* fred_prob_proj_o_device = nullptr;
+    float* fred_prob_tgt_h_device = nullptr;
+    float* fred_prob_tgt_o_device = nullptr;
+    std::uint64_t* fred_diag_device = nullptr;
+    float invert_err_proj_h = 0.0F;
+    float invert_err_proj_o = 0.0F;
+    float invert_err_tgt_h = 0.0F;
+    float invert_err_tgt_o = 0.0F;
+    if (enable_inelastic) {
+        static std::array<float, 18> cached_proj_h{};
+        static std::array<float, 18> cached_proj_o{};
+        static std::array<float, 18> cached_tgt_h{};
+        static std::array<float, 18> cached_tgt_o{};
+        static float cached_err_proj_h = 0.0F;
+        static float cached_err_proj_o = 0.0F;
+        static float cached_err_tgt_h = 0.0F;
+        static float cached_err_tgt_o = 0.0F;
+        static bool cached_sample_ready = false;
+        if (!cached_sample_ready) {
+            const auto inv_ph =
+                invert_table1_independent_probs(kFredProbH.data(), 12, 6, 4000U, 5U, 20260829U);
+            const auto inv_po =
+                invert_table1_independent_probs(kFredProbO.data(), 12, 6, 4000U, 5U, 20260830U);
+            const auto inv_th =
+                invert_table1_independent_probs(kFredProbH.data(), 1, 1, 4000U, 5U, 20260831U);
+            const auto inv_to =
+                invert_table1_independent_probs(kFredProbO.data(), 16, 8, 4000U, 5U, 20260832U);
+            cached_proj_h = inv_ph.sample_prob;
+            cached_proj_o = inv_po.sample_prob;
+            cached_tgt_h = inv_th.sample_prob;
+            cached_tgt_o = inv_to.sample_prob;
+            cached_err_proj_h = inv_ph.max_abs_fraction_error;
+            cached_err_proj_o = inv_po.max_abs_fraction_error;
+            cached_err_tgt_h = inv_th.max_abs_fraction_error;
+            cached_err_tgt_o = inv_to.max_abs_fraction_error;
+            cached_sample_ready = true;
+        }
+        invert_err_proj_h = cached_err_proj_h;
+        invert_err_proj_o = cached_err_proj_o;
+        invert_err_tgt_h = cached_err_tgt_h;
+        invert_err_tgt_o = cached_err_tgt_o;
+        fred_prob_proj_h_device = sycl::malloc_device<float>(18, queue);
+        fred_prob_proj_o_device = sycl::malloc_device<float>(18, queue);
+        fred_prob_tgt_h_device = sycl::malloc_device<float>(18, queue);
+        fred_prob_tgt_o_device = sycl::malloc_device<float>(18, queue);
+        fred_diag_device = sycl::malloc_device<std::uint64_t>(kFredDiagSlots, queue);
+        if (fred_prob_proj_h_device == nullptr || fred_prob_proj_o_device == nullptr ||
+            fred_prob_tgt_h_device == nullptr || fred_prob_tgt_o_device == nullptr ||
+            fred_diag_device == nullptr) {
+            free_device(fred_prob_proj_h_device);
+            free_device(fred_prob_proj_o_device);
+            free_device(fred_prob_tgt_h_device);
+            free_device(fred_prob_tgt_o_device);
+            free_device(fred_diag_device);
+            throw std::bad_alloc();
+        }
+        queue.copy(cached_proj_h.data(), fred_prob_proj_h_device, 18);
+        queue.copy(cached_proj_o.data(), fred_prob_proj_o_device, 18);
+        queue.copy(cached_tgt_h.data(), fred_prob_tgt_h_device, 18);
+        queue.copy(cached_tgt_o.data(), fred_prob_tgt_o_device, 18);
+        queue.fill(fred_diag_device, static_cast<std::uint64_t>(0), kFredDiagSlots)
+            .wait_and_throw();
+    }
+
+    float* ion_species_sp_device = nullptr;
+    if (enable_inelastic && enable_secondary_transport) {
+        std::filesystem::path ion_sp_path = "data/ion_stopping_power_water_geant4_11_3_2.csv";
+        if (!std::filesystem::exists(ion_sp_path)) {
+            const auto cur_p = std::filesystem::current_path();
+            if (std::filesystem::exists(cur_p / "data" / "ion_stopping_power_water_geant4_11_3_2.csv")) {
+                ion_sp_path = cur_p / "data" / "ion_stopping_power_water_geant4_11_3_2.csv";
+            }
+        }
+        if (!std::filesystem::exists(ion_sp_path)) {
+            throw std::runtime_error("Required ion stopping-power CSV not found: " + ion_sp_path.string());
+        }
+        const auto ion_sp_lut = load_ion_species_stopping_power_lut(ion_sp_path, table_size, 1.0F);
+        ion_species_sp_device = sycl::malloc_device<float>(17 * table_size, queue);
+        queue.copy(ion_sp_lut.data(), ion_species_sp_device, 17 * table_size).wait_and_throw();
+    }
+
+    auto* in_fov_dose_device =
+        enable_voxel_scoring ? sycl::malloc_device<DoseAtomicT>(number_of_bins, queue) : nullptr;
+    if (in_fov_dose_device != nullptr) {
+        queue.fill(in_fov_dose_device, DoseAtomicT{0}, number_of_bins).wait_and_throw();
     }
 
     if (dose_device == nullptr || deposited_device == nullptr ||
         escaped_device == nullptr || steps_device == nullptr ||
-        (enable_voxel_scoring && voxel_dose_device == nullptr) ||
+        (enable_voxel_scoring && (voxel_dose_device == nullptr || in_fov_dose_device == nullptr)) ||
         (enable_let_scoring && let_moments_device == nullptr)) {
         throw std::bad_alloc();
     }
@@ -1027,15 +1172,16 @@ TransportResult transport_sycl(const TransportConfig& config,
                         pending_primary_bin = bin;
                     }
                     if (enable_voxel_scoring && voxel_index != pending_primary_voxel) {
-                        if (pending_primary_voxel_MeV > 0.0) {
+                        if (pending_primary_voxel_MeV > 0.0 && pending_primary_voxel >= 0 &&
+                            pending_primary_voxel < static_cast<std::size_t>(number_of_voxels)) {
                             sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
                                              sycl::memory_scope::device,
                                              sycl::access::address_space::global_space>
                                 atomic_voxel_dose(voxel_dose_device[pending_primary_voxel]);
                             atomic_voxel_dose.fetch_add(static_cast<DoseAtomicT>(pending_primary_voxel_MeV));
-                            pending_primary_voxel_MeV = 0.0;
                         }
-                        if (enable_let_scoring && voxel_let_moments_device != nullptr) {
+                        pending_primary_voxel_MeV = 0.0;
+                        if (enable_let_scoring && voxel_let_moments_device != nullptr && pending_primary_voxel >= 0) {
                             flush_letd_moments_device(
                                 voxel_let_moments_device, number_of_voxels,
                                 pending_primary_voxel, nullptr, 0, 0,
@@ -1047,8 +1193,16 @@ TransportResult transport_sycl(const TransportConfig& config,
                     }
 
                     pending_primary_depth_MeV += deposited_MeV;
-                    if (enable_voxel_scoring) {
+                    if (enable_voxel_scoring && voxel_index >= 0) {
                         pending_primary_voxel_MeV += deposited_MeV;
+                        if (in_fov_dose_device != nullptr && pending_primary_bin >= 0 &&
+                            pending_primary_bin < static_cast<int>(number_of_bins)) {
+                            sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
+                                             sycl::memory_scope::device,
+                                             sycl::access::address_space::global_space>
+                                atomic_in_fov(in_fov_dose_device[pending_primary_bin]);
+                            atomic_in_fov.fetch_add(static_cast<DoseAtomicT>(deposited_MeV));
+                        }
                     }
                     history_deposited_MeV += deposited_MeV;
                     last_primary_stopping_power_MeV_per_mm = stopping_power_MeV_per_mm;
@@ -1176,31 +1330,33 @@ TransportResult transport_sycl(const TransportConfig& config,
                         const auto u_inel = rng::uniform01(
                             spot_seed, rng_history, steps, 8);
                         if (u_inel < p_inel) {
-                            const auto u_chan = rng::uniform01(
-                                spot_seed, rng_history, steps, 9);
-                            const auto u_eng = rng::uniform01(
-                                spot_seed, rng_history, steps, 10);
-                            const auto u_th = rng::uniform01(
-                                spot_seed, rng_history, steps, 11);
-                            const auto u_ph = rng::uniform01(
-                                spot_seed, rng_history, steps, 12);
-                            const auto u_sub = rng::uniform01(
-                                spot_seed, rng_history, steps, 13);
-
                             const Direction3F cur_dir{direction_x, direction_y,
                                                       direction_z};
                             const auto products =
                                 sample_carbon_inelastic_products_device(
                                     energy_MeV, position_x_mm, position_y_mm,
-                                    position_z_mm, cur_dir, u_chan, u_eng, u_th,
-                                    u_ph, u_sub);
+                                    position_z_mm, cur_dir, spot_seed, rng_history, steps,
+                                    fred_prob_proj_h_device, fred_prob_proj_o_device,
+                                    fred_prob_tgt_h_device, fred_prob_tgt_o_device,
+                                    ion_species_sp_device,
+                                    static_cast<int>(table_size),
+                                    minimum_table_energy, inverse_table_step,
+                                    energy_cutoff_MeV);
 
                             if (products.local_deposit_MeV > 0.0F) {
                                 pending_primary_depth_MeV +=
                                     products.local_deposit_MeV;
-                                if (enable_voxel_scoring) {
+                                if (enable_voxel_scoring && voxel_index >= 0) {
                                     pending_primary_voxel_MeV +=
                                         products.local_deposit_MeV;
+                                    if (in_fov_dose_device != nullptr && pending_primary_bin >= 0 &&
+                                        pending_primary_bin < static_cast<int>(number_of_bins)) {
+                                        sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
+                                                         sycl::memory_scope::device,
+                                                         sycl::access::address_space::global_space>
+                                            atomic_in_fov(in_fov_dose_device[pending_primary_bin]);
+                                        atomic_in_fov.fetch_add(static_cast<DoseAtomicT>(products.local_deposit_MeV));
+                                    }
                                 }
                                 history_deposited_MeV +=
                                     products.local_deposit_MeV;
@@ -1210,34 +1366,122 @@ TransportResult transport_sycl(const TransportConfig& config,
                             for (uint8_t ip = 0; ip < products.count; ++ip) {
                                 total_charged_MeV += products.products[ip].energy_MeV;
                             }
-                            const float neutron_energy_MeV = sycl::fmax(
-                                0.0F, energy_MeV - total_charged_MeV - products.local_deposit_MeV);
-                            if (neutron_energy_MeV > 0.0F && dose_device != nullptr) {
-                                constexpr float neutron_lambda_mm = 85.0F;
-                                score_exponential_depth(
-                                    neutron_energy_MeV,
-                                    position_z_mm,
-                                    depth_bin_width_mm,
-                                    phantom_length_mm,
-                                    number_of_bins,
-                                    neutron_lambda_mm,
-                                    dose_device);
-                                if (enable_voxel_scoring && voxel_dose_device != nullptr) {
-                                    const auto voxel_in_p =
-                                        static_cast<std::size_t>(sycl::max(0, sycl::min(voxel_y, static_cast<int>(voxel_bins_y) - 1))) * voxel_bins_x +
-                                        static_cast<std::size_t>(sycl::max(0, sycl::min(voxel_x, static_cast<int>(voxel_bins_x) - 1)));
-                                    score_exponential_voxel_depth(
-                                        neutron_energy_MeV,
-                                        position_z_mm,
-                                        depth_bin_width_mm,
-                                        phantom_length_mm,
-                                        number_of_bins,
-                                        neutron_lambda_mm,
-                                        static_cast<std::size_t>(voxel_bins_x * voxel_bins_y),
-                                        voxel_in_p,
-                                        voxel_dose_device);
+                            float untracked_MeV = products.untracked_energy_MeV;
+                            const float residual_MeV = energy_MeV - total_charged_MeV -
+                                                       products.local_deposit_MeV - untracked_MeV;
+                            if (residual_MeV > 0.0F) {
+                                if (fred_model_residual_device != nullptr) {
+                                    sycl::atomic_ref<float, sycl::memory_order::relaxed,
+                                                     sycl::memory_scope::device,
+                                                     sycl::access::address_space::global_space>
+                                        atomic_res(*fred_model_residual_device);
+                                    atomic_res.fetch_add(residual_MeV);
                                 }
-                                history_deposited_MeV += neutron_energy_MeV;
+                                untracked_MeV += residual_MeV;
+                            }
+
+                            if (fred_q_device != nullptr) {
+                                sycl::atomic_ref<float, sycl::memory_order::relaxed,
+                                                 sycl::memory_scope::device,
+                                                 sycl::access::address_space::global_space>
+                                    atomic_q(*fred_q_device);
+                                atomic_q.fetch_add(products.q_MeV);
+                                sycl::atomic_ref<float, sycl::memory_order::relaxed,
+                                                 sycl::memory_scope::device,
+                                                 sycl::access::address_space::global_space>
+                                    atomic_nke(*fred_neutron_device);
+                                atomic_nke.fetch_add(products.neutron_ke_MeV);
+                                sycl::atomic_ref<float, sycl::memory_order::relaxed,
+                                                 sycl::memory_scope::device,
+                                                 sycl::access::address_space::global_space>
+                                    atomic_rem(*fred_remnant_device);
+                                atomic_rem.fetch_add(products.remnant_local_MeV);
+                            }
+                            if (products.product_capacity_overflow != 0 &&
+                                fred_cap_overflow_count_device != nullptr) {
+                                sycl::atomic_ref<uint32_t, sycl::memory_order::relaxed,
+                                                 sycl::memory_scope::device,
+                                                 sycl::access::address_space::global_space>
+                                    atomic_cap(*fred_cap_overflow_count_device);
+                                atomic_cap.fetch_add(1U);
+                                sycl::atomic_ref<float, sycl::memory_order::relaxed,
+                                                 sycl::memory_scope::device,
+                                                 sycl::access::address_space::global_space>
+                                    atomic_cape(*fred_cap_overflow_energy_device);
+                                atomic_cape.fetch_add(products.product_capacity_overflow_MeV);
+                            }
+                            if (products.resample_failed != 0 && fred_fail_count_device != nullptr) {
+                                sycl::atomic_ref<uint32_t, sycl::memory_order::relaxed,
+                                                 sycl::memory_scope::device,
+                                                 sycl::access::address_space::global_space>
+                                    atomic_fail(*fred_fail_count_device);
+                                atomic_fail.fetch_add(1U);
+                                sycl::atomic_ref<float, sycl::memory_order::relaxed,
+                                                 sycl::memory_scope::device,
+                                                 sycl::access::address_space::global_space>
+                                    atomic_fe(*fred_fail_energy_device);
+                                atomic_fe.fetch_add(products.untracked_energy_MeV);
+                            }
+
+                            if (fred_diag_device != nullptr) {
+                                sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
+                                                 sycl::memory_scope::device,
+                                                 sycl::access::address_space::global_space>
+                                    atomic_n(fred_diag_device[18]);
+                                atomic_n.fetch_add(1U);
+                                sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
+                                                 sycl::memory_scope::device,
+                                                 sycl::access::address_space::global_space>
+                                    atomic_retry(fred_diag_device[19]);
+                                atomic_retry.fetch_add(static_cast<std::uint64_t>(products.retries_used));
+                                if (products.energy_scaled != 0) {
+                                    sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
+                                                     sycl::memory_scope::device,
+                                                     sycl::access::address_space::global_space>
+                                        atomic_sc(fred_diag_device[20]);
+                                    atomic_sc.fetch_add(1U);
+                                }
+                                if (products.leftover_proj_a != 0 || products.leftover_proj_z != 0) {
+                                    sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
+                                                     sycl::memory_scope::device,
+                                                     sycl::access::address_space::global_space>
+                                        atomic_open(fred_diag_device[21]);
+                                    atomic_open.fetch_add(1U);
+                                }
+                                sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
+                                                 sycl::memory_scope::device,
+                                                 sycl::access::address_space::global_space>
+                                    atomic_ta(fred_diag_device[22]);
+                                atomic_ta.fetch_add(static_cast<std::uint64_t>(
+                                    sycl::max(static_cast<int>(products.leftover_tgt_a), 0)));
+                                sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
+                                                 sycl::memory_scope::device,
+                                                 sycl::access::address_space::global_space>
+                                    atomic_tz(fred_diag_device[23]);
+                                atomic_tz.fetch_add(static_cast<std::uint64_t>(
+                                    sycl::max(static_cast<int>(products.leftover_tgt_z), 0)));
+                                sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
+                                                 sycl::memory_scope::device,
+                                                 sycl::access::address_space::global_space>
+                                    atomic_pa(fred_diag_device[24]);
+                                atomic_pa.fetch_add(static_cast<std::uint64_t>(
+                                    sycl::max(static_cast<int>(products.leftover_proj_a), 0)));
+                                sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
+                                                 sycl::memory_scope::device,
+                                                 sycl::access::address_space::global_space>
+                                    atomic_pz(fred_diag_device[25]);
+                                atomic_pz.fetch_add(static_cast<std::uint64_t>(
+                                    sycl::max(static_cast<int>(products.leftover_proj_z), 0)));
+                                for (uint8_t s = 0; s < products.n_emitted && s < 12; ++s) {
+                                    const auto idx = products.emitted_idx[s];
+                                    if (idx < 18) {
+                                        sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
+                                                         sycl::memory_scope::device,
+                                                         sycl::access::address_space::global_space>
+                                            atomic_iso(fred_diag_device[idx]);
+                                        atomic_iso.fetch_add(1U);
+                                    }
+                                }
                             }
 
                             if (products.count > 0 &&
@@ -1253,8 +1497,28 @@ TransportResult transport_sycl(const TransportConfig& config,
                                     if (base_idx + ip < max_secondaries) {
                                         secondary_queue_device[base_idx + ip] =
                                             products.products[ip];
+                                    } else if (secondary_overflow_count_device != nullptr) {
+                                        sycl::atomic_ref<uint32_t, sycl::memory_order::relaxed,
+                                                         sycl::memory_scope::device,
+                                                         sycl::access::address_space::global_space>
+                                            atomic_ov(*secondary_overflow_count_device);
+                                        atomic_ov.fetch_add(1U);
+                                        sycl::atomic_ref<float, sycl::memory_order::relaxed,
+                                                         sycl::memory_scope::device,
+                                                         sycl::access::address_space::global_space>
+                                            atomic_ove(*secondary_overflow_energy_device);
+                                        atomic_ove.fetch_add(products.products[ip].energy_MeV);
+                                        untracked_MeV += products.products[ip].energy_MeV;
                                     }
                                 }
+                            }
+
+                            if (untracked_MeV > 0.0F && untracked_nuclear_device != nullptr) {
+                                sycl::atomic_ref<float, sycl::memory_order::relaxed,
+                                                 sycl::memory_scope::device,
+                                                 sycl::access::address_space::global_space>
+                                    atomic_untracked(untracked_nuclear_device[global_history]);
+                                atomic_untracked.fetch_add(untracked_MeV);
                             }
 
                             energy_MeV = 0.0F;
@@ -1270,8 +1534,17 @@ TransportResult transport_sycl(const TransportConfig& config,
                     position_z_mm >= 0.0F && position_z_mm < phantom_length_mm) {
                     const auto cutoff_energy_MeV = energy_MeV;
                     pending_primary_depth_MeV += cutoff_energy_MeV;
-                    if (enable_voxel_scoring) {
+                    if (enable_voxel_scoring && pending_primary_voxel >= 0 &&
+                        pending_primary_voxel < static_cast<std::size_t>(number_of_voxels)) {
                         pending_primary_voxel_MeV += cutoff_energy_MeV;
+                        if (in_fov_dose_device != nullptr && pending_primary_bin >= 0 &&
+                            pending_primary_bin < static_cast<int>(number_of_bins)) {
+                            sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
+                                             sycl::memory_scope::device,
+                                             sycl::access::address_space::global_space>
+                                atomic_in_fov(in_fov_dose_device[pending_primary_bin]);
+                            atomic_in_fov.fetch_add(static_cast<DoseAtomicT>(cutoff_energy_MeV));
+                        }
                     }
                     history_deposited_MeV += cutoff_energy_MeV;
                     if (enable_let_scoring) {
@@ -1303,7 +1576,8 @@ TransportResult transport_sycl(const TransportConfig& config,
                         static_cast<std::size_t>(pending_primary_bin), nullptr, 0, 0,
                         pending_let_numerator, pending_let_denominator, true);
                 }
-                if (enable_voxel_scoring) {
+                if (enable_voxel_scoring && pending_primary_voxel >= 0 &&
+                    pending_primary_voxel < static_cast<std::size_t>(number_of_voxels)) {
                     if (pending_primary_voxel_MeV > 0.0) {
                         sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
                                          sycl::memory_scope::device,
@@ -1342,12 +1616,55 @@ TransportResult transport_sycl(const TransportConfig& config,
                     [=](sycl::id<1> item_id) {
                         const auto sec_idx = item_id[0];
                         const auto frag = secondary_queue_device[sec_idx];
-                        if (frag.z <= 0 || frag.a <= 0 || frag.energy_MeV <= energy_cutoff_MeV) return;
+                        if (frag.z <= 0 || frag.a <= 0) return;
+                        if (frag.energy_MeV <= energy_cutoff_MeV) {
+                            const auto bin_z = static_cast<int>(frag.pos_z_mm * inverse_depth_bin_width_mm);
+                            if (bin_z >= 0 && bin_z < static_cast<int>(number_of_bins)) {
+                                sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
+                                                 sycl::memory_scope::device,
+                                                 sycl::access::address_space::global_space>
+                                    atomic_dose(dose_device[bin_z]);
+                                atomic_dose.fetch_add(static_cast<DoseAtomicT>(frag.energy_MeV));
+                            }
+                            if (enable_voxel_scoring) {
+                                const auto bin_x = static_cast<int>((frag.pos_x_mm - voxel_min_x_mm) * inverse_voxel_size_x_mm);
+                                const auto bin_y = static_cast<int>((frag.pos_y_mm - voxel_min_y_mm) * inverse_voxel_size_y_mm);
+                                if (bin_x >= 0 && bin_x < static_cast<int>(voxel_bins_x) &&
+                                    bin_y >= 0 && bin_y < static_cast<int>(voxel_bins_y) &&
+                                    bin_z >= 0 && bin_z < static_cast<int>(number_of_bins)) {
+                                    const auto cur_voxel = (bin_z * static_cast<int>(voxel_bins_y) + bin_y) * static_cast<int>(voxel_bins_x) + bin_x;
+                                    sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
+                                                     sycl::memory_scope::device,
+                                                     sycl::access::address_space::global_space>
+                                        atomic_vox(voxel_dose_device[cur_voxel]);
+                                    atomic_vox.fetch_add(static_cast<DoseAtomicT>(frag.energy_MeV));
+                                    if (in_fov_dose_device != nullptr) {
+                                        sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
+                                                         sycl::memory_scope::device,
+                                                         sycl::access::address_space::global_space>
+                                            atomic_in_fov(in_fov_dose_device[bin_z]);
+                                        atomic_in_fov.fetch_add(static_cast<DoseAtomicT>(frag.energy_MeV));
+                                    }
+                                }
+                            }
+                            if (deposited_device != nullptr) {
+                                sycl::atomic_ref<float, sycl::memory_order::relaxed,
+                                                 sycl::memory_scope::device,
+                                                 sycl::access::address_space::global_space>
+                                    atomic_dep(deposited_device[frag.parent_history]);
+                                atomic_dep.fetch_add(frag.energy_MeV);
+                            }
+                            return;
+                        }
 
                         const auto frag_a = static_cast<float>(frag.a);
                         const auto frag_z = static_cast<float>(frag.z);
                         const auto frag_inv_a = 1.0F / frag_a;
-                        const auto frag_sp_scale = (frag_z * frag_z) / 36.0F;
+                        const auto charged_sp_idx = carbon::get_charged_species_idx(static_cast<int>(frag.z), static_cast<int>(frag.a));
+                        const float* ion_sp_table = (ion_species_sp_device != nullptr)
+                                                        ? &ion_species_sp_device[static_cast<std::size_t>(charged_sp_idx) * table_size]
+                                                        : table_device;
+                        const auto frag_sp_scale = (ion_species_sp_device != nullptr) ? 1.0F : ((frag_z * frag_z) / 36.0F);
 
                         float sec_e = frag.energy_MeV;
                         float sec_x = frag.pos_x_mm;
@@ -1375,12 +1692,7 @@ TransportResult transport_sycl(const TransportConfig& config,
                             auto sp_idx = static_cast<int>(sycl::floor(flt_idx));
                             sp_idx = sycl::max(0, sycl::min(sp_idx, static_cast<int>(table_size) - 2));
                             const auto sp_frac = sycl::clamp(flt_idx - static_cast<float>(sp_idx), 0.0F, 1.0F);
-                            const auto c12_sp = table_device[sp_idx] + sp_frac * (table_device[sp_idx + 1] - table_device[sp_idx]);
-                            auto sec_sp = c12_sp * frag_sp_scale;
-                            if (frag.z <= 2 && sec_e_u < 15.0F) {
-                                const auto barkas = 1.0F + 0.15F * (15.0F - sec_e_u) / 15.0F;
-                                sec_sp *= barkas;
-                            }
+                            const auto sec_sp = (ion_sp_table[sp_idx] + sp_frac * (ion_sp_table[sp_idx + 1] - ion_sp_table[sp_idx])) * frag_sp_scale;
 
                             if (sec_sp <= 1.0e-6F) break;
 
@@ -1402,7 +1714,7 @@ TransportResult transport_sycl(const TransportConfig& config,
                             auto mid_idx = static_cast<int>(sycl::floor(mid_flt));
                             mid_idx = sycl::max(0, sycl::min(mid_idx, static_cast<int>(table_size) - 2));
                             const auto mid_fr = sycl::clamp(mid_flt - static_cast<float>(mid_idx), 0.0F, 1.0F);
-                            const auto mid_sp = (table_device[mid_idx] + mid_fr * (table_device[mid_idx + 1] - table_device[mid_idx])) * frag_sp_scale;
+                            const auto mid_sp = (ion_sp_table[mid_idx] + mid_fr * (ion_sp_table[mid_idx + 1] - ion_sp_table[mid_idx])) * frag_sp_scale;
 
                             const auto dE = sycl::fmin(mid_sp * sec_step_mm, sec_e);
 
@@ -1431,14 +1743,30 @@ TransportResult transport_sycl(const TransportConfig& config,
                                                          sycl::access::address_space::global_space>
                                             atomic_vox(voxel_dose_device[pending_sec_voxel]);
                                         atomic_vox.fetch_add(static_cast<DoseAtomicT>(pending_sec_voxel_MeV));
-                                        pending_sec_voxel_MeV = 0.0F;
                                     }
+                                    pending_sec_voxel_MeV = 0.0F;
                                     pending_sec_voxel = cur_voxel;
                                 }
-                                pending_sec_voxel_MeV += dE;
+                                if (cur_voxel >= 0) {
+                                    pending_sec_voxel_MeV += dE;
+                                    if (in_fov_dose_device != nullptr && pending_sec_bin >= 0 && pending_sec_bin < static_cast<int>(number_of_bins)) {
+                                        sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
+                                                         sycl::memory_scope::device,
+                                                         sycl::access::address_space::global_space>
+                                            atomic_in_fov(in_fov_dose_device[pending_sec_bin]);
+                                        atomic_in_fov.fetch_add(static_cast<DoseAtomicT>(dE));
+                                    }
+                                }
                             }
 
                             sec_e -= dE;
+                            if (deposited_device != nullptr) {
+                                sycl::atomic_ref<float, sycl::memory_order::relaxed,
+                                                 sycl::memory_scope::device,
+                                                 sycl::access::address_space::global_space>
+                                    atomic_dep(deposited_device[frag.parent_history]);
+                                atomic_dep.fetch_add(dE);
+                            }
                             sec_x += sec_dx * sec_step_mm;
                             sec_y += sec_dy * sec_step_mm;
                             sec_z += sec_dz * sec_step_mm;
@@ -1469,6 +1797,75 @@ TransportResult transport_sycl(const TransportConfig& config,
                             }
 
                             ++sec_steps;
+                        }
+
+                        // Secondary termination handling: cutoff local deposit or escaped deposit
+                        if (sec_e > 0.0F) {
+                            if (sec_z >= 0.0F && sec_z < phantom_length_mm) {
+                                const auto bin_x = static_cast<int>((sec_x - voxel_min_x_mm) * inverse_voxel_size_x_mm);
+                                const auto bin_y = static_cast<int>((sec_y - voxel_min_y_mm) * inverse_voxel_size_y_mm);
+                                const auto bin_z = static_cast<int>(sec_z * inverse_depth_bin_width_mm);
+                                if (bin_z >= 0 && bin_z < static_cast<int>(number_of_bins)) {
+                                    if (bin_z != pending_sec_bin) {
+                                        if (pending_sec_depth_MeV > 0.0F && pending_sec_bin >= 0 &&
+                                            pending_sec_bin < static_cast<int>(number_of_bins)) {
+                                            sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
+                                                             sycl::memory_scope::device,
+                                                             sycl::access::address_space::global_space>
+                                                atomic_dose(dose_device[pending_sec_bin]);
+                                            atomic_dose.fetch_add(static_cast<DoseAtomicT>(pending_sec_depth_MeV));
+                                            pending_sec_depth_MeV = 0.0F;
+                                        }
+                                        pending_sec_bin = bin_z;
+                                    }
+                                    pending_sec_depth_MeV += sec_e;
+                                    if (enable_voxel_scoring) {
+                                        int cur_voxel = -1;
+                                        if (bin_x >= 0 && bin_x < static_cast<int>(voxel_bins_x) &&
+                                            bin_y >= 0 && bin_y < static_cast<int>(voxel_bins_y)) {
+                                            cur_voxel = (bin_z * static_cast<int>(voxel_bins_y) + bin_y) *
+                                                            static_cast<int>(voxel_bins_x) +
+                                                        bin_x;
+                                        }
+                                        if (cur_voxel != pending_sec_voxel) {
+                                            if (pending_sec_voxel_MeV > 0.0F && pending_sec_voxel >= 0 &&
+                                                pending_sec_voxel < static_cast<int>(number_of_voxels)) {
+                                                sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
+                                                                 sycl::memory_scope::device,
+                                                                 sycl::access::address_space::global_space>
+                                                    atomic_vox(voxel_dose_device[pending_sec_voxel]);
+                                                atomic_vox.fetch_add(static_cast<DoseAtomicT>(pending_sec_voxel_MeV));
+                                            }
+                                            pending_sec_voxel_MeV = 0.0F;
+                                            pending_sec_voxel = cur_voxel;
+                                        }
+                                        if (cur_voxel >= 0) {
+                                            pending_sec_voxel_MeV += sec_e;
+                                            if (in_fov_dose_device != nullptr) {
+                                                sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
+                                                                 sycl::memory_scope::device,
+                                                                 sycl::access::address_space::global_space>
+                                                    atomic_in_fov(in_fov_dose_device[bin_z]);
+                                                atomic_in_fov.fetch_add(static_cast<DoseAtomicT>(sec_e));
+                                            }
+                                        }
+                                    }
+                                }
+                                if (deposited_device != nullptr) {
+                                    sycl::atomic_ref<float, sycl::memory_order::relaxed,
+                                                     sycl::memory_scope::device,
+                                                     sycl::access::address_space::global_space>
+                                        atomic_dep(deposited_device[frag.parent_history]);
+                                    atomic_dep.fetch_add(sec_e);
+                                }
+                            } else if (escaped_device != nullptr) {
+                                // Escaped phantom boundaries
+                                sycl::atomic_ref<float, sycl::memory_order::relaxed,
+                                                 sycl::memory_scope::device,
+                                                 sycl::access::address_space::global_space>
+                                    atomic_esc(escaped_device[frag.parent_history]);
+                                atomic_esc.fetch_add(sec_e);
+                            }
                         }
 
                         if (pending_sec_depth_MeV > 0.0F && pending_sec_bin >= 0 && pending_sec_bin < static_cast<int>(number_of_bins)) {
@@ -1509,6 +1906,16 @@ TransportResult transport_sycl(const TransportConfig& config,
                        [](DoseAtomicT val) { return static_cast<double>(val); });
     }
 
+    std::vector<double> in_fov_dose_host;
+    if (enable_voxel_scoring && in_fov_dose_device != nullptr) {
+        std::vector<DoseAtomicT> in_fov_device_host(number_of_bins);
+        queue.copy(in_fov_dose_device, in_fov_device_host.data(), number_of_bins).wait_and_throw();
+        in_fov_dose_host.resize(number_of_bins);
+        std::transform(in_fov_device_host.begin(), in_fov_device_host.end(),
+                       in_fov_dose_host.begin(),
+                       [](DoseAtomicT val) { return static_cast<double>(val); });
+    }
+
     std::vector<LetAtomicT> let_moments_host;
     if (enable_let_scoring) {
         let_moments_host.resize(4 * number_of_bins);
@@ -1526,9 +1933,40 @@ TransportResult transport_sycl(const TransportConfig& config,
     std::vector<float> deposited_host(number_of_histories);
     std::vector<float> escaped_host(number_of_histories);
     std::vector<std::uint32_t> steps_host(number_of_histories);
+    std::vector<float> untracked_host(number_of_histories, 0.0F);
     queue.copy(deposited_device, deposited_host.data(), number_of_histories);
     queue.copy(escaped_device, escaped_host.data(), number_of_histories);
-    queue.copy(steps_device, steps_host.data(), number_of_histories).wait_and_throw();
+    queue.copy(steps_device, steps_host.data(), number_of_histories);
+    if (untracked_nuclear_device != nullptr) {
+        queue.copy(untracked_nuclear_device, untracked_host.data(), number_of_histories);
+    }
+    std::array<std::uint64_t, 26> fred_diag_host{};
+    if (fred_diag_device != nullptr) {
+        queue.copy(fred_diag_device, fred_diag_host.data(), 26);
+    }
+    uint32_t overflow_count_host = 0;
+    float overflow_energy_host = 0.0F;
+    float model_residual_host = 0.0F;
+    float fred_q_host = 0.0F;
+    float fred_neutron_host = 0.0F;
+    float fred_remnant_host = 0.0F;
+    uint32_t fred_fail_count_host = 0;
+    float fred_fail_energy_host = 0.0F;
+    uint32_t fred_cap_count_host = 0;
+    float fred_cap_energy_host = 0.0F;
+    if (secondary_overflow_count_device != nullptr) {
+        queue.copy(secondary_overflow_count_device, &overflow_count_host, 1);
+        queue.copy(secondary_overflow_energy_device, &overflow_energy_host, 1);
+        queue.copy(fred_model_residual_device, &model_residual_host, 1);
+        queue.copy(fred_q_device, &fred_q_host, 1);
+        queue.copy(fred_neutron_device, &fred_neutron_host, 1);
+        queue.copy(fred_remnant_device, &fred_remnant_host, 1);
+        queue.copy(fred_fail_count_device, &fred_fail_count_host, 1);
+        queue.copy(fred_fail_energy_device, &fred_fail_energy_host, 1);
+        queue.copy(fred_cap_overflow_count_device, &fred_cap_count_host, 1);
+        queue.copy(fred_cap_overflow_energy_device, &fred_cap_energy_host, 1);
+    }
+    queue.wait_and_throw();
 
     // Free buffers
     free_immutable_device(table_device);
@@ -1536,12 +1974,30 @@ TransportResult transport_sycl(const TransportConfig& config,
     free_immutable_device(cumulative_range_device);
     free_immutable_device(cross_section_device);
     free_device(dose_device);
+    free_device(in_fov_dose_device);
     free_device(voxel_dose_device);
     free_device(let_moments_device);
     free_device(voxel_let_moments_device);
     free_device(deposited_device);
     free_device(secondary_queue_device);
     free_device(secondary_count_device);
+    free_device(ion_species_sp_device);
+    free_device(untracked_nuclear_device);
+    free_device(fred_prob_proj_h_device);
+    free_device(fred_prob_proj_o_device);
+    free_device(fred_prob_tgt_h_device);
+    free_device(fred_prob_tgt_o_device);
+    free_device(fred_diag_device);
+    free_device(secondary_overflow_count_device);
+    free_device(secondary_overflow_energy_device);
+    free_device(fred_model_residual_device);
+    free_device(fred_q_device);
+    free_device(fred_neutron_device);
+    free_device(fred_remnant_device);
+    free_device(fred_fail_count_device);
+    free_device(fred_fail_energy_device);
+    free_device(fred_cap_overflow_count_device);
+    free_device(fred_cap_overflow_energy_device);
     free_device(escaped_device);
     free_device(steps_device);
     free_device(primary_spots_device);
@@ -1621,6 +2077,7 @@ TransportResult transport_sycl(const TransportConfig& config,
     result.primary_deposited_energy_MeV = dose_host;
     result.deposited_energy_MeV = std::move(dose_host);
     result.voxel_deposited_energy_MeV = std::move(voxel_dose_host);
+    result.in_fov_deposited_energy_MeV = std::move(in_fov_dose_host);
 
     if (enable_let_scoring) {
         const auto extract_let_moment = [&](const std::size_t moment) {
@@ -1660,6 +2117,34 @@ TransportResult transport_sycl(const TransportConfig& config,
         std::accumulate(deposited_host.begin(), deposited_host.end(), 0.0);
     result.escaped_energy_MeV =
         std::accumulate(escaped_host.begin(), escaped_host.end(), 0.0);
+    result.untracked_nuclear_energy_MeV =
+        std::accumulate(untracked_host.begin(), untracked_host.end(), 0.0);
+    for (std::size_t i = 0; i < 18; ++i) {
+        result.fred_isotope_counts[i] = fred_diag_host[i];
+    }
+    result.fred_inelastic_events = fred_diag_host[18];
+    result.fred_retry_sum = fred_diag_host[19];
+    result.fred_energy_scaled_events = fred_diag_host[20];
+    result.fred_projectile_az_open_events = fred_diag_host[21];
+    result.fred_leftover_target_a_sum = fred_diag_host[22];
+    result.fred_leftover_target_z_sum = fred_diag_host[23];
+    result.fred_leftover_projectile_a_sum = fred_diag_host[24];
+    result.fred_leftover_projectile_z_sum = fred_diag_host[25];
+    result.fred_model_residual_MeV = static_cast<double>(model_residual_host);
+    result.fred_q_MeV = static_cast<double>(fred_q_host);
+    result.fred_neutron_ke_MeV = static_cast<double>(fred_neutron_host);
+    result.fred_remnant_local_MeV = static_cast<double>(fred_remnant_host);
+    result.fred_resample_failed_events = fred_fail_count_host;
+    result.fred_resample_failed_energy_MeV = static_cast<double>(fred_fail_energy_host);
+    result.fred_product_capacity_overflow_events = fred_cap_count_host;
+    result.fred_product_capacity_overflow_energy_MeV = static_cast<double>(fred_cap_energy_host);
+    result.fred_invert_error_proj_h = invert_err_proj_h;
+    result.fred_invert_error_proj_o = invert_err_proj_o;
+    result.fred_invert_error_tgt_h = invert_err_tgt_h;
+    result.fred_invert_error_tgt_o = invert_err_tgt_o;
+    result.secondary_queue_overflow = overflow_count_host;
+    result.secondary_queue_overflow_energy_MeV = static_cast<double>(overflow_energy_host);
+    result.nuclear_interactions = result.fred_inelastic_events;
     result.total_steps = std::accumulate(steps_host.begin(), steps_host.end(), std::uint64_t{0});
 
     result.elapsed_seconds =

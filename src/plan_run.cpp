@@ -114,6 +114,34 @@ void accumulate_transport_result(carbon::TransportResult& total,
         part.beamline_removed_energy_MeV;
     total.untracked_nuclear_energy_MeV += part.untracked_nuclear_energy_MeV;
     total.nuclear_interactions += part.nuclear_interactions;
+    for (std::size_t i = 0; i < total.fred_isotope_counts.size(); ++i) {
+        total.fred_isotope_counts[i] += part.fred_isotope_counts[i];
+    }
+    total.fred_inelastic_events += part.fred_inelastic_events;
+    total.fred_retry_sum += part.fred_retry_sum;
+    total.fred_energy_scaled_events += part.fred_energy_scaled_events;
+    total.fred_projectile_az_open_events += part.fred_projectile_az_open_events;
+    total.fred_leftover_target_a_sum += part.fred_leftover_target_a_sum;
+    total.fred_leftover_target_z_sum += part.fred_leftover_target_z_sum;
+    total.fred_leftover_projectile_a_sum += part.fred_leftover_projectile_a_sum;
+    total.fred_leftover_projectile_z_sum += part.fred_leftover_projectile_z_sum;
+    total.fred_model_residual_MeV += part.fred_model_residual_MeV;
+    total.fred_q_MeV += part.fred_q_MeV;
+    total.fred_neutron_ke_MeV += part.fred_neutron_ke_MeV;
+    total.fred_remnant_local_MeV += part.fred_remnant_local_MeV;
+    total.fred_resample_failed_events += part.fred_resample_failed_events;
+    total.fred_resample_failed_energy_MeV += part.fred_resample_failed_energy_MeV;
+    total.fred_product_capacity_overflow_events += part.fred_product_capacity_overflow_events;
+    total.fred_product_capacity_overflow_energy_MeV +=
+        part.fred_product_capacity_overflow_energy_MeV;
+    total.fred_invert_error_proj_h =
+        std::max(total.fred_invert_error_proj_h, part.fred_invert_error_proj_h);
+    total.fred_invert_error_proj_o =
+        std::max(total.fred_invert_error_proj_o, part.fred_invert_error_proj_o);
+    total.fred_invert_error_tgt_h =
+        std::max(total.fred_invert_error_tgt_h, part.fred_invert_error_tgt_h);
+    total.fred_invert_error_tgt_o =
+        std::max(total.fred_invert_error_tgt_o, part.fred_invert_error_tgt_o);
     total.primary_elastic_interactions += part.primary_elastic_interactions;
     total.elastic_local_deposited_energy_MeV +=
         part.elastic_local_deposited_energy_MeV;

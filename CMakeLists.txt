@@ -47,6 +47,7 @@ add_library(carbon_core
     src/plan_run.cpp
     src/electron_transport.cpp
     src/energy_loss_fluctuation.cpp
+    src/fred_table1.cpp
     src/run_quality.cpp
     src/stopping_power.cpp
     src/topas_spots.cpp

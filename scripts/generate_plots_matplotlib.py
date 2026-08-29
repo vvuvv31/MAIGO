@@ -7,8 +7,9 @@ import matplotlib.pyplot as plt
 
 def fit_profile_scipy(x, y):
     """
-    Fits double Gaussian or single Gaussian:
-    f(x) = Ac * exp(-0.5 * (x/sc)^2) + Ah * exp(-0.5 * (x/sh)^2)
+    Fits double Gaussian with exact constraint:
+    sh = 1.8 * sc + exp(delta)
+    and Poisson / relative weighting: w_i = 1 / sqrt(y_i + 1e-4 * max(y))
     """
     total = np.sum(y)
     if total <= 1e-4:
@@ -18,37 +19,36 @@ def fit_profile_scipy(x, y):
     var_x = np.sum(((x - mean_x)**2) * y) / total
     sig0 = math.sqrt(max(0.1, var_x))
     peak_y = np.max(y)
+    weights = 1.0 / np.sqrt(y + 1e-4 * peak_y)
     
     # 1. Single Gaussian
     def single_gauss(p):
         A, s = p
-        diff = y - A * np.exp(-0.5 * ((x - mean_x)/s)**2)
+        diff = (y - A * np.exp(-0.5 * ((x - mean_x)/s)**2)) * weights
         return diff
-    res_s = opt.least_squares(single_gauss, [peak_y, sig0], bounds=([0, 0.5], [np.inf, np.inf]))
+    res_s = opt.least_squares(single_gauss, [peak_y, sig0], bounds=([0, 0.2], [np.inf, np.inf]))
     loss_s = np.sum(res_s.fun**2)
     
-    # 2. Double Gaussian (constrained sh >= 1.8 * sc)
+    # 2. Constrained Double Gaussian: sh = 1.8 * sc + exp(delta)
     def double_gauss(p):
-        Ac, sc, Ah, sh = p
-        diff = y - (Ac * np.exp(-0.5 * ((x - mean_x)/sc)**2) + Ah * np.exp(-0.5 * ((x - mean_x)/sh)**2))
+        Ac, sc, Ah, delta = p
+        sh = 1.8 * sc + math.exp(delta)
+        diff = (y - (Ac * np.exp(-0.5 * ((x - mean_x)/sc)**2) + Ah * np.exp(-0.5 * ((x - mean_x)/sh)**2))) * weights
         return diff
         
-    p0 = [peak_y * 0.90, sig0 * 0.95, peak_y * 0.10, sig0 * 2.5]
-    bounds = ([0, 0.5, 0, 1.0], [np.inf, np.inf, np.inf, np.inf])
+    p0 = [peak_y * 0.90, sig0 * 0.90, peak_y * 0.05, math.log(max(0.1, sig0 * 1.5))]
+    bounds = ([0, 0.2, 0, -5.0], [np.inf, np.inf, np.inf, 5.0])
     res_d = opt.least_squares(double_gauss, p0, bounds=bounds)
     loss_d = np.sum(res_d.fun**2)
     
-    Ac, sc, Ah, sh = res_d.x
-    if sc > sh:
-        sc, sh = sh, sc
-        Ac, Ah = Ah, Ac
+    Ac, sc, Ah, delta = res_d.x
+    sh = 1.8 * sc + math.exp(delta)
         
     area_c = Ac * math.sqrt(2 * math.pi) * sc
     area_h = Ah * math.sqrt(2 * math.pi) * sh
     w_h = area_h / (area_c + area_h) if (area_c + area_h) > 0 else 0.0
     
-    # If halo weight < 1% or not significant improvement over single gaussian, return single core
-    if w_h < 0.010 or sh < sc * 1.6 or (loss_s - loss_d) / loss_s < 0.008:
+    if w_h < 0.010 or (loss_s - loss_d) / loss_s < 0.008:
         return res_s.x[1], np.nan, 0.0
         
     return sc, sh, w_h
@@ -81,7 +81,6 @@ def load_and_analyze(topas_path, gpu_path, max_z_mm=None):
     g_sc, g_sh, g_wh = [], [], []
     
     for iz in sample_indices:
-        # Lateral 1D projections (sum over y)
         t_x = np.sum(t_vol[iz], axis=0)
         g_x = np.sum(g_vol[iz], axis=0)
         
@@ -107,7 +106,7 @@ def plot_benchmark_png(E_mevu, z_all, t_idd, g_idd, z_samples, t_sc, t_sh, g_sc,
     # 1. IDD Absolute
     ax1 = axes[0, 0]
     ax1.plot(z_all, t_idd, "b-", linewidth=2.2, label="TOPAS (INCL++ Full Physics)")
-    ax1.plot(z_all, g_idd, "r--", linewidth=2.0, label="GPU MAIGO (Data-Driven Inelastic)")
+    ax1.plot(z_all, g_idd, "r--", linewidth=2.0, label="GPU MAIGO (Literature Data-Driven)")
     ax1.axvline(z_peak, color="gray", linestyle=":", label=f"Bragg Peak ({z_peak:.2f} mm)")
     ax1.set_title("Integrated Depth Dose (IDD)", fontsize=13, fontweight="bold")
     ax1.set_xlabel("Depth z (mm)", fontsize=11, fontweight="bold")
@@ -115,18 +114,16 @@ def plot_benchmark_png(E_mevu, z_all, t_idd, g_idd, z_samples, t_sc, t_sh, g_sc,
     ax1.grid(True, linestyle="--", alpha=0.6)
     ax1.legend(fontsize=10, loc="upper right")
     
-    # 2. IDD Relative Error
+    # 2. IDD Relative Error (Unclipped)
     ax2 = axes[0, 1]
-    # Only calculate diff where dose > 0.5% of peak to avoid noisy ratio in deep zero region
     valid_mask = t_idd > (0.005 * np.max(t_idd))
     idd_diff = (g_idd - t_idd) / t_idd * 100.0
     ax2.plot(z_all[valid_mask], idd_diff[valid_mask], color="purple", linewidth=2.0, label="IDD Diff: (GPU - TOPAS)/TOPAS (%)")
     ax2.axhline(0, color="black", linestyle="--", linewidth=1.2)
     ax2.axvline(z_peak, color="gray", linestyle=":")
-    ax2.set_title("IDD Relative Error (%)", fontsize=13, fontweight="bold")
+    ax2.set_title("IDD Relative Error (%) [Unclipped]", fontsize=13, fontweight="bold")
     ax2.set_xlabel("Depth z (mm)", fontsize=11, fontweight="bold")
     ax2.set_ylabel("Relative Error (%)", fontsize=11, fontweight="bold")
-    ax2.set_ylim(-12, 12)
     ax2.grid(True, linestyle="--", alpha=0.6)
     ax2.legend(fontsize=10, loc="upper right")
     
@@ -135,7 +132,6 @@ def plot_benchmark_png(E_mevu, z_all, t_idd, g_idd, z_samples, t_sc, t_sh, g_sc,
     ax3.plot(z_samples, t_sc, "g-", linewidth=2.2, label=r"TOPAS Core $\sigma_{core}$")
     ax3.plot(z_samples, g_sc, "g--", linewidth=2.0, label=r"GPU Core $\sigma_{core}$")
     
-    # Plot Halo where not nan
     mask_th = ~np.isnan(t_sh)
     mask_gh = ~np.isnan(g_sh)
     if np.any(mask_th):
@@ -150,7 +146,7 @@ def plot_benchmark_png(E_mevu, z_all, t_idd, g_idd, z_samples, t_sc, t_sh, g_sc,
     ax3.grid(True, linestyle="--", alpha=0.6)
     ax3.legend(fontsize=10, loc="upper left")
     
-    # 4. Lateral Sigma Relative Error
+    # 4. Lateral Sigma Relative Error (Unclipped)
     ax4 = axes[1, 1]
     sig_c_diff = (g_sc - t_sc) / t_sc * 100.0
     ax4.plot(z_samples, sig_c_diff, "g-", linewidth=2.0, label=r"Core $\sigma_{core}$ Diff (%)")
@@ -162,10 +158,9 @@ def plot_benchmark_png(E_mevu, z_all, t_idd, g_idd, z_samples, t_sc, t_sh, g_sc,
         
     ax4.axhline(0, color="black", linestyle="--", linewidth=1.2)
     ax4.axvline(z_peak, color="gray", linestyle=":")
-    ax4.set_title(r"Lateral $\sigma$ Relative Error (%)", fontsize=13, fontweight="bold")
+    ax4.set_title(r"Lateral $\sigma$ Relative Error (%) [Unclipped]", fontsize=13, fontweight="bold")
     ax4.set_xlabel("Depth z (mm)", fontsize=11, fontweight="bold")
     ax4.set_ylabel("Relative Error (%)", fontsize=11, fontweight="bold")
-    ax4.set_ylim(-15, 15)
     ax4.grid(True, linestyle="--", alpha=0.6)
     ax4.legend(fontsize=10, loc="upper right")
     
@@ -178,26 +173,13 @@ os.makedirs("plots", exist_ok=True)
 os.makedirs("/home/wuwei/.gemini/antigravity-cli/brain/b6e8050e-cd93-476b-bd8a-039915838a5f/plots", exist_ok=True)
 
 for E, tpath, gpath, max_z in [
-    (100, "/mnt/sda/wuwei/carbon_emittance_inelastic_100k/e100/topas_emittance_inelastic_e100.bin", "out/gpu_inelastic_e100/voxel_dose.raw", 45.0),
+    (100, "/mnt/sda/wuwei/carbon_emittance_inelastic_100k/e100/topas_emittance_inelastic_e100.bin", "out/gpu_inelastic_e100/voxel_dose.raw", 40.0),
     (200, "/mnt/sda/wuwei/carbon_emittance_inelastic_100k/e200/topas_emittance_inelastic_e200.bin", "out/gpu_inelastic_e200/voxel_dose.raw", 120.0),
-    (300, "/mnt/sda/wuwei/carbon_emittance_inelastic_100k/e300/topas_emittance_inelastic_e300.bin", "out/gpu_inelastic_e300/voxel_dose.raw", 210.0),
+    (300, "/mnt/sda/wuwei/carbon_emittance_inelastic_100k/e300/topas_emittance_inelastic_e300.bin", "out/gpu_inelastic_e300/voxel_dose.raw", 220.0),
+    (400, "/mnt/sda/wuwei/carbon_emittance_inelastic_100k/e400/topas_emittance_inelastic_e400.bin", "out/gpu_inelastic_e400/voxel_dose.raw", 340.0)
 ]:
-    print(f"Processing {E} MeV/u...")
-    z_all, t_idd, g_idd, z_samples, t_sc, t_sh, g_sc, g_sh = load_and_analyze(tpath, gpath, max_z)
-    
-    png_file = f"plots/benchmark_{E}MeVu_idd_sigma.png"
-    plot_benchmark_png(E, z_all, t_idd, g_idd, z_samples, t_sc, t_sh, g_sc, g_sh, png_file)
-    
-    # Copy to artifact directory
-    art_png = f"/home/wuwei/.gemini/antigravity-cli/brain/b6e8050e-cd93-476b-bd8a-039915838a5f/plots/benchmark_{E}MeVu_idd_sigma.png"
-    import shutil
-    shutil.copyfile(png_file, art_png)
-
-# 400 MeV/u benchmark plot
-E = 400
-tpath = "/mnt/sda/wuwei/carbon_emittance_inelastic_100k/e400/topas_emittance_inelastic_e400.bin"
-gpath = "out/gpu_inelastic_e400/voxel_dose.raw"
-z_all, t_idd, g_idd, z_samples, t_sc, t_sh, g_sc, g_sh = load_and_analyze(tpath, gpath, 320.0)
-png_file = f"plots/benchmark_{E}MeVu_idd_sigma.png"
-plot_benchmark_png(E, z_all, t_idd, g_idd, z_samples, t_sc, t_sh, g_sc, g_sh, png_file)
-shutil.copyfile(png_file, f"/home/wuwei/.gemini/antigravity-cli/brain/b6e8050e-cd93-476b-bd8a-039915838a5f/plots/benchmark_{E}MeVu_idd_sigma.png")
+    if os.path.exists(tpath) and os.path.exists(gpath):
+        print(f"Processing {E} MeV/u...")
+        z_all, t_idd, g_idd, z_samples, t_sc, t_sh, g_sc, g_sh = load_and_analyze(tpath, gpath, max_z)
+        out_png = f"plots/benchmark_{E}MeVu_idd_sigma.png"
+        plot_benchmark_png(E, z_all, t_idd, g_idd, z_samples, t_sc, t_sh, g_sc, g_sh, out_png)

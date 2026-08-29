@@ -239,6 +239,43 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
         }
     }
 
+    if (result.fred_inelastic_events > 0) {
+        const auto scaled_frac =
+            static_cast<double>(result.fred_energy_scaled_events) /
+            static_cast<double>(result.fred_inelastic_events);
+        if (scaled_frac > 0.05) {
+            add_issue({"fred_energy_scale_fraction",
+                       "inelastic energy-rescale fraction exceeds 5%",
+                       scaled_frac, 0.05},
+                      false);
+        }
+        const auto residual_frac =
+            (result.initial_energy_MeV > 0.0)
+                ? result.fred_model_residual_MeV / result.initial_energy_MeV
+                : 0.0;
+        if (residual_frac > 1.0e-3) {
+            add_issue({"fred_model_residual",
+                       "labeled inelastic model residual exceeds 0.1% of incident energy",
+                       residual_frac, 1.0e-3},
+                      false);
+        }
+        if (result.fred_resample_failed_events > 0) {
+            const auto fail_frac =
+                static_cast<double>(result.fred_resample_failed_events) /
+                static_cast<double>(result.fred_inelastic_events);
+            add_issue({"fred_resample_failed",
+                       "inelastic resampling exhausted without an accepted set",
+                       fail_frac, 0.01},
+                      fail_frac > 0.01);
+        }
+        if (result.fred_projectile_az_open_events > 0) {
+            add_issue({"fred_projectile_az_open",
+                       "projectile A/Z leftover after accepted inelastic event",
+                       static_cast<double>(result.fred_projectile_az_open_events), 0.0},
+                      false);
+        }
+    }
+
     if (std::isfinite(report.absolute_energy_residual_MeV) &&
         std::isfinite(report.relative_energy_residual)) {
         const auto allowed_residual = std::max(
