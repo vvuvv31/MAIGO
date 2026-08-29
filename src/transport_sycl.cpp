@@ -1174,18 +1174,18 @@ TransportResult transport_sycl(const TransportConfig& config,
                         const auto p_inel =
                             1.0F - sycl::exp(-macro_xs * step_mm);
                         const auto u_inel = rng::uniform01(
-                            spot_seed, rng_history, steps, 3);
+                            spot_seed, rng_history, steps, 8);
                         if (u_inel < p_inel) {
                             const auto u_chan = rng::uniform01(
-                                spot_seed, rng_history, steps, 4);
+                                spot_seed, rng_history, steps, 9);
                             const auto u_eng = rng::uniform01(
-                                spot_seed, rng_history, steps, 5);
+                                spot_seed, rng_history, steps, 10);
                             const auto u_th = rng::uniform01(
-                                spot_seed, rng_history, steps, 6);
+                                spot_seed, rng_history, steps, 11);
                             const auto u_ph = rng::uniform01(
-                                spot_seed, rng_history, steps, 7);
+                                spot_seed, rng_history, steps, 12);
                             const auto u_sub = rng::uniform01(
-                                spot_seed, rng_history, steps, 8);
+                                spot_seed, rng_history, steps, 13);
 
                             const Direction3F cur_dir{direction_x, direction_y,
                                                       direction_z};
@@ -1204,6 +1204,40 @@ TransportResult transport_sycl(const TransportConfig& config,
                                 }
                                 history_deposited_MeV +=
                                     products.local_deposit_MeV;
+                            }
+
+                            float total_charged_MeV = 0.0F;
+                            for (uint8_t ip = 0; ip < products.count; ++ip) {
+                                total_charged_MeV += products.products[ip].energy_MeV;
+                            }
+                            const float neutron_energy_MeV = sycl::fmax(
+                                0.0F, energy_MeV - total_charged_MeV - products.local_deposit_MeV);
+                            if (neutron_energy_MeV > 0.0F && dose_device != nullptr) {
+                                constexpr float neutron_lambda_mm = 85.0F;
+                                score_exponential_depth(
+                                    neutron_energy_MeV,
+                                    position_z_mm,
+                                    depth_bin_width_mm,
+                                    phantom_length_mm,
+                                    number_of_bins,
+                                    neutron_lambda_mm,
+                                    dose_device);
+                                if (enable_voxel_scoring && voxel_dose_device != nullptr) {
+                                    const auto voxel_in_p =
+                                        static_cast<std::size_t>(sycl::max(0, sycl::min(voxel_y, static_cast<int>(voxel_bins_y) - 1))) * voxel_bins_x +
+                                        static_cast<std::size_t>(sycl::max(0, sycl::min(voxel_x, static_cast<int>(voxel_bins_x) - 1)));
+                                    score_exponential_voxel_depth(
+                                        neutron_energy_MeV,
+                                        position_z_mm,
+                                        depth_bin_width_mm,
+                                        phantom_length_mm,
+                                        number_of_bins,
+                                        neutron_lambda_mm,
+                                        static_cast<std::size_t>(voxel_bins_x * voxel_bins_y),
+                                        voxel_in_p,
+                                        voxel_dose_device);
+                                }
+                                history_deposited_MeV += neutron_energy_MeV;
                             }
 
                             if (products.count > 0 &&
