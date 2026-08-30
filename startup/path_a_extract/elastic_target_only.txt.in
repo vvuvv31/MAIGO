@@ -1,0 +1,88 @@
+# Target-resolved C-12 nuclear elastic: EM + CarbonIonElasticPhysics only.
+i:Ts/Seed = @SEED@
+i:Ts/NumberOfThreads = @THREADS@
+i:Ts/ShowHistoryCountAtInterval = 100000
+b:Gr/Enable = "False"
+
+i:Is/H1/Z = 1
+i:Is/H1/N = 1
+d:Is/H1/A = 1.00782503223 g/mole
+i:Is/C12/Z = 6
+i:Is/C12/N = 12
+d:Is/C12/A = 12.0 g/mole
+i:Is/O16/Z = 8
+i:Is/O16/N = 16
+d:Is/O16/A = 15.99491461957 g/mole
+
+s:El/HydrogenH1/Symbol = "H"
+sv:El/HydrogenH1/IsotopeNames = 1 "H1"
+uv:El/HydrogenH1/IsotopeAbundances = 1 1.0
+s:El/CarbonC12/Symbol = "C"
+sv:El/CarbonC12/IsotopeNames = 1 "C12"
+uv:El/CarbonC12/IsotopeAbundances = 1 1.0
+s:El/OxygenO16/Symbol = "O"
+sv:El/OxygenO16/IsotopeNames = 1 "O16"
+uv:El/OxygenO16/IsotopeAbundances = 1 1.0
+
+d:Ma/ElasticH1/Density = 1.0 g/cm3
+s:Ma/ElasticH1/State = "Liquid"
+sv:Ma/ElasticH1/Components = 1 "HydrogenH1"
+uv:Ma/ElasticH1/Fractions = 1 1.0
+d:Ma/ElasticC12/Density = 1.0 g/cm3
+s:Ma/ElasticC12/State = "Solid"
+sv:Ma/ElasticC12/Components = 1 "CarbonC12"
+uv:Ma/ElasticC12/Fractions = 1 1.0
+d:Ma/ElasticO16/Density = 1.0 g/cm3
+s:Ma/ElasticO16/State = "Liquid"
+sv:Ma/ElasticO16/Components = 1 "OxygenO16"
+uv:Ma/ElasticO16/Fractions = 1 1.0
+
+s:Ge/World/Type = "TsBox"
+s:Ge/World/Material = "G4_Galactic"
+d:Ge/World/HLX = 250 mm
+d:Ge/World/HLY = 250 mm
+d:Ge/World/HLZ = 400 mm
+b:Ge/World/Invisible = "TRUE"
+
+s:Ge/Phantom/Parent = "World"
+s:Ge/Phantom/Type = "TsBox"
+s:Ge/Phantom/Material = "@TARGET_MATERIAL@"
+d:Ge/Phantom/HLX = 150 mm
+d:Ge/Phantom/HLY = 150 mm
+d:Ge/Phantom/HLZ = 350 mm
+d:Ge/Phantom/MaxStepSize = 0.1 mm
+
+s:Ge/BeamPosition/Parent = "World"
+s:Ge/BeamPosition/Type = "Group"
+d:Ge/BeamPosition/TransZ = 349.999 mm
+
+s:So/IonBeam/Type = "Beam"
+s:So/IonBeam/Component = "BeamPosition"
+s:So/IonBeam/BeamParticle = "GenericIon(6,12)"
+d:So/IonBeam/BeamEnergy = @TOTAL_ENERGY_MEV@ MeV
+u:So/IonBeam/BeamEnergySpread = 0.0
+s:So/IonBeam/BeamPositionDistribution = "None"
+s:So/IonBeam/BeamAngularDistribution = "None"
+i:So/IonBeam/NumberOfHistoriesInRun = @HISTORIES@
+
+s:Ph/ListName = "Default"
+s:Ph/Default/Type = "Geant4_Modular"
+sv:Ph/Default/Modules = 2 "g4em-standard_opt4" "CarbonIonElasticPhysics"
+d:Ph/Default/CutForAllParticles = 0.05 mm
+
+s:Sc/ElasticEvents/Quantity = "CarbonElasticNtuple"
+s:Sc/ElasticEvents/Component = "Phantom"
+s:Sc/ElasticEvents/OutputFile = "@OUTPUT_STEM@_elastic"
+s:Sc/ElasticEvents/OutputType = "ASCII"
+s:Sc/ElasticEvents/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/ElasticEvents/ProjectileZ = 6
+i:Sc/ElasticEvents/ProjectileA = 12
+
+s:Sc/ElasticXS/Quantity = "ElasticCrossSectionQueryNtuple"
+s:Sc/ElasticXS/Component = "Phantom"
+s:Sc/ElasticXS/OutputFile = "@XS_OUTPUT_STEM@"
+s:Sc/ElasticXS/OutputType = "ASCII"
+s:Sc/ElasticXS/IfOutputFileAlreadyExists = "Overwrite"
+d:Sc/ElasticXS/EnergyMin = 0 MeV
+d:Sc/ElasticXS/EnergyMax = 400 MeV
+d:Sc/ElasticXS/EnergyStep = 1 MeV

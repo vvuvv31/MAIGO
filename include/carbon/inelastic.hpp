@@ -23,6 +23,25 @@ struct SecondaryParticle {
     uint32_t parent_history{0};
 };
 
+struct FredEventLibDevice {
+    std::uint32_t event_count{0};
+    std::uint32_t max_fragments{8};
+    float reference_energy_MeVu{95.0F};
+    const std::uint8_t* fragment_count{nullptr};
+    const float* neutron_ke_MeV{nullptr};
+    const std::int8_t* z{nullptr};
+    const std::int8_t* a{nullptr};
+    const float* ke_MeV{nullptr};
+    const float* ux{nullptr};
+    const float* uy{nullptr};
+    const float* uz{nullptr};
+};
+
+struct FredEventLibSetDevice {
+    std::uint32_t count{0};
+    FredEventLibDevice libraries[4]{};
+};
+
 struct InelasticProductSet {
     uint8_t count{0};
     float local_deposit_MeV{0.0F};

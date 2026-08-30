@@ -1,0 +1,9 @@
+{
+  "target": "H1",
+  "Z": 1,
+  "A": 1,
+  "energy_MeVu": 300.0,
+  "events": 8192,
+  "source_events": 13392,
+  "bytes": 1220632
+}

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "carbon/detail/c12_elastic_h_xs.hpp"
+
 #include <cstdint>
 #include <array>
 #include <cmath>
@@ -188,27 +190,180 @@ inline float calculate_icru_sigma_H(float e_per_u) noexcept {
 }
 
 // 2. Kox Reaction Cross Section for 12C + 16O (Kox et al., Phys. Rev. C 35, 1678)
-inline float calculate_kox_sigma_O(float e_per_u, float incident_energy_MeV) noexcept {
-    if (e_per_u <= 0.0F || incident_energy_MeV <= 0.0F) return 0.0F;
+inline float calculate_kox_sigma_mb(float ap, float zp, float at, float zt,
+                                    float e_per_u, float incident_energy_MeV) noexcept {
+    if (e_per_u <= 0.0F || incident_energy_MeV <= 0.0F || ap <= 0.0F || at <= 0.0F) {
+        return 0.0F;
+    }
     constexpr float a_kox = 1.85F;
-    constexpr float ap_c12 = 12.0F;
-    constexpr float at_o16 = 16.0F;
-    constexpr float zp_c12 = 6.0F;
-    constexpr float zt_o16 = 8.0F;
-    constexpr float ap13 = 2.289428F; // 12^(1/3)
-    constexpr float at13 = 2.519842F; // 16^(1/3)
+    const float ap13 = std::pow(ap, 1.0F / 3.0F);
+    const float at13 = std::pow(at, 1.0F / 3.0F);
     const float c_e = 0.80F * (1.0F - std::exp(-e_per_u / 40.0F));
     const float r_vol = ap13 + at13 + a_kox * (ap13 * at13) / (ap13 + at13) - c_e;
-    const float b_c = (1.44F * zp_c12 * zt_o16) / (1.3F * (ap13 + at13));
-    const float e_cm = (at_o16 / (ap_c12 + at_o16)) * incident_energy_MeV;
+    const float b_c = (1.44F * zp * zt) / (1.3F * (ap13 + at13));
+    const float e_cm = (at / (ap + at)) * incident_energy_MeV;
     const float coulomb_barrier_factor = (e_cm > b_c) ? (1.0F - b_c / e_cm) : 0.0F;
-    // Conversion fm^2 to mb: 1 fm^2 = 10 mb, pi * r0^2 * 10 = 38.013 mb (r0 = 1.1 fm)
     return 38.013F * r_vol * r_vol * coulomb_barrier_factor;
+}
+
+inline float calculate_kox_sigma_O(float e_per_u, float incident_energy_MeV) noexcept {
+    return calculate_kox_sigma_mb(12.0F, 6.0F, 16.0F, 8.0F, e_per_u, incident_energy_MeV);
+}
+
+// Paper Eq. 5: C-C inelastic fit (Takechi/Zhang/Kox), millibarns.
+inline float calculate_sigma_cc_mb(float e_per_u) noexcept {
+    if (e_per_u <= 0.0F) {
+        return 0.0F;
+    }
+    constexpr float e_c = 30.0F;
+    constexpr float p0 = 762.0F;
+    constexpr float p1 = 14.0e-4F;
+    constexpr float p2 = 6.7F;
+    constexpr float p3 = 13.4e-3F;
+    return (1.0F - std::exp(-e_per_u / e_c)) *
+           (p0 + p1 * e_per_u + std::exp(p2 - p3 * e_per_u));
+}
+
+// Paper Eq. 6–7: Kox ratio times the C-C fit. Hydrogen uses ICRU, not Kox.
+inline float calculate_sigma_nonel_mb(float ap, float zp, float at, float zt,
+                                      float e_per_u, float incident_energy_MeV) noexcept {
+    if (at <= 1.5F && zt <= 1.5F) {
+        return calculate_icru_sigma_H(e_per_u);
+    }
+    const float sigma_cc = calculate_sigma_cc_mb(e_per_u);
+    const float kox_cc =
+        calculate_kox_sigma_mb(12.0F, 6.0F, 12.0F, 6.0F, e_per_u, incident_energy_MeV);
+    const float kox_pt =
+        calculate_kox_sigma_mb(ap, zp, at, zt, e_per_u, incident_energy_MeV);
+    if (!(kox_cc > 0.0F)) {
+        return 0.0F;
+    }
+    return sigma_cc * (kox_pt / kox_cc);
+}
+
+// C-12 + ^{1}H elastic (mb) from TOPAS 4.2.p3 / Geant4 11.3.2 ionElastic
+// on a pure-H1 target, converted with the H number density.
+inline float calculate_sigma_el_H_mb(float e_per_u) noexcept {
+    if (!(e_per_u > 0.0F)) {
+        return 0.0F;
+    }
+    if (e_per_u <= kC12ElasticHEnergyMeVu[0]) {
+        return kC12ElasticHSigmaMb[0];
+    }
+    if (e_per_u >= kC12ElasticHEnergyMeVu[kC12ElasticHGridSize - 1]) {
+        return kC12ElasticHSigmaMb[kC12ElasticHGridSize - 1];
+    }
+    int lo = 0;
+    int hi = kC12ElasticHGridSize - 1;
+    while (hi - lo > 1) {
+        const int mid = (lo + hi) / 2;
+        if (kC12ElasticHEnergyMeVu[mid] <= e_per_u) {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+    }
+    const float e0 = kC12ElasticHEnergyMeVu[lo];
+    const float e1 = kC12ElasticHEnergyMeVu[hi];
+    const float t = (e_per_u - e0) / (e1 - e0);
+    return kC12ElasticHSigmaMb[lo] * (1.0F - t) + kC12ElasticHSigmaMb[hi] * t;
 }
 
 inline float calculate_target_prob_H(float sigma_H, float sigma_O) noexcept {
     const float denom = 2.0F * sigma_H + ((sigma_O > 1.0F) ? sigma_O : 1.0F);
     return (2.0F * sigma_H) / denom;
+}
+
+// Water H2O, ρ in g/cm3. Σ [1/mm] = n_mol * (2 σ_H + σ_O) with σ in mb.
+inline float water_macroscopic_xs_per_mm(float sigma_H_mb, float sigma_O_mb,
+                                         float density_g_per_cm3) noexcept {
+    constexpr float n_a = 6.02214076e23F;
+    constexpr float m_water = 18.01528F;
+    constexpr float mb_to_cm2 = 1.0e-27F;
+    const float n_mol_per_cm3 = density_g_per_cm3 * n_a / m_water;
+    const float sigma_cm2 = (2.0F * sigma_H_mb + sigma_O_mb) * mb_to_cm2;
+    return n_mol_per_cm3 * sigma_cm2 * 0.1F;
+}
+
+inline float water_elastic_h_macro_per_mm(float e_per_u, float density_g_per_cm3) noexcept {
+    const float unit = interpolate_c12_elastic_h_water_macro_per_mm(e_per_u);
+    if (!(density_g_per_cm3 > 0.0F)) {
+        return 0.0F;
+    }
+    return unit * density_g_per_cm3;
+}
+
+struct FredElasticOutcome {
+    float projectile_ke_MeV{0.0F};
+    float proton_ke_MeV{0.0F};
+    float proj_dir_x{0.0F};
+    float proj_dir_y{0.0F};
+    float proj_dir_z{1.0F};
+    float proton_dir_x{0.0F};
+    float proton_dir_y{0.0F};
+    float proton_dir_z{1.0F};
+};
+
+// Paper Sec. 4: C-12 on free proton, isotropic CoM, lab transform.
+inline FredElasticOutcome sample_c12_hydrogen_elastic(float kinetic_MeV, float dir_x,
+                                                      float dir_y, float dir_z, float u_cos,
+                                                      float u_phi) noexcept {
+    FredElasticOutcome out{};
+    constexpr float a_mass = 12.0F;
+    const float cos_c = 2.0F * u_cos - 1.0F;
+    const float sin_c_sq = std::max(0.0F, 1.0F - cos_c * cos_c);
+    const float denom = std::sqrt(a_mass * a_mass + 2.0F * a_mass * cos_c + 1.0F);
+    const float cos_l = (a_mass + cos_c) / denom;
+    const float sin_l = std::sqrt(std::max(0.0F, 1.0F - cos_l * cos_l));
+    const float cos_p = std::sqrt(std::max(0.0F, 0.5F * (1.0F + cos_c)));
+    const float sin_p = std::sqrt(std::max(0.0F, 1.0F - cos_p * cos_p));
+    const float alpha = ((a_mass - 1.0F) / (a_mass + 1.0F));
+    const float alpha_sq = alpha * alpha;
+    out.projectile_ke_MeV =
+        0.5F * ((1.0F + alpha_sq) + (1.0F - alpha_sq) * cos_c) * kinetic_MeV;
+    out.proton_ke_MeV = (2.0F * a_mass / ((a_mass + 1.0F) * (a_mass + 1.0F))) *
+                        (1.0F - cos_c) * kinetic_MeV;
+
+    float n = std::sqrt(dir_x * dir_x + dir_y * dir_y + dir_z * dir_z);
+    if (!(n > 0.0F)) {
+        n = 1.0F;
+        dir_z = 1.0F;
+    }
+    dir_x /= n;
+    dir_y /= n;
+    dir_z /= n;
+    float ax = 0.0F;
+    float ay = 1.0F;
+    float az = 0.0F;
+    if (std::fabs(dir_y) > 0.9F) {
+        ay = 0.0F;
+        ax = 1.0F;
+    }
+    float t1x = ay * dir_z - az * dir_y;
+    float t1y = az * dir_x - ax * dir_z;
+    float t1z = ax * dir_y - ay * dir_x;
+    const float t1n = std::sqrt(t1x * t1x + t1y * t1y + t1z * t1z);
+    t1x /= t1n;
+    t1y /= t1n;
+    t1z /= t1n;
+    const float t2x = dir_y * t1z - dir_z * t1y;
+    const float t2y = dir_z * t1x - dir_x * t1z;
+    const float t2z = dir_x * t1y - dir_y * t1x;
+    constexpr float two_pi = 6.283185307179586F;
+    const float phi = two_pi * u_phi;
+    const float cphi = std::cos(phi);
+    const float sphi = std::sin(phi);
+    const float rx = t1x * cphi + t2x * sphi;
+    const float ry = t1y * cphi + t2y * sphi;
+    const float rz = t1z * cphi + t2z * sphi;
+    out.proj_dir_x = dir_x * cos_l + rx * sin_l;
+    out.proj_dir_y = dir_y * cos_l + ry * sin_l;
+    out.proj_dir_z = dir_z * cos_l + rz * sin_l;
+    out.proton_dir_x = dir_x * cos_p - rx * sin_p;
+    out.proton_dir_y = dir_y * cos_p - ry * sin_p;
+    out.proton_dir_z = dir_z * cos_p - rz * sin_p;
+    (void)sin_c_sq;
+    return out;
 }
 
 // Sample isotope from Table 1 conditional on remaining protons (z_rem) and neutrons (n_rem = a_rem - z_rem)

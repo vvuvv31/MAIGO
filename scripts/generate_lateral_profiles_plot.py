@@ -104,32 +104,24 @@ def plot_lateral_profiles(E_mevu, topas_path, gpu_path, out_png, depths_mm):
     print(f"Generated Log: {out_log_png}")
 
 os.makedirs("plots", exist_ok=True)
-os.makedirs("/home/wuwei/.gemini/antigravity-cli/brain/b6e8050e-cd93-476b-bd8a-039915838a5f/plots", exist_ok=True)
 
+# Six physical depth locations: entrance, approximately 1/4, 1/2 and 3/4
+# of the TOPAS peak depth, the Bragg peak, and 5 mm beyond the peak.
 configs = [
-    (100, "/mnt/sda/wuwei/carbon_emittance_inelastic_100k/e100/topas_emittance_inelastic_e100.bin", "out/gpu_inelastic_e100/voxel_dose.raw",
-     [1.0, 10.0, 20.0, 25.75, 29.0, 34.0]),
-    (200, "/mnt/sda/wuwei/carbon_emittance_inelastic_100k/e200/topas_emittance_inelastic_e200.bin", "out/gpu_inelastic_e200/voxel_dose.raw",
-     [5.0, 40.0, 70.0, 86.75, 92.0, 100.0]),
-    (300, "/mnt/sda/wuwei/carbon_emittance_inelastic_100k/e300/topas_emittance_inelastic_e300.bin", "out/gpu_inelastic_e300/voxel_dose.raw",
-     [10.0, 80.0, 140.0, 171.75, 178.0, 190.0]),
+    (100, "/mnt/sda/wuwei/carbon_emittance_inelastic_1M/e100/topas_emittance_inelastic_e100.bin",
+     "out/fred_topas_1M_idd_corrected_independent/e100/voxel_dose.raw",
+     [1.25, 6.25, 12.75, 19.25, 25.75, 30.75]),
+    (200, "/mnt/sda/wuwei/carbon_emittance_inelastic_1M/e200/topas_emittance_inelastic_e200.bin",
+     "out/fred_topas_1M_idd_corrected_independent/e200/voxel_dose.raw",
+     [5.25, 21.75, 43.25, 65.25, 86.75, 91.75]),
+    (300, "/mnt/sda/wuwei/carbon_emittance_inelastic_1M/e300/topas_emittance_inelastic_e300.bin",
+     "out/fred_topas_1M_idd_corrected_independent/e300/voxel_dose.raw",
+     [5.25, 42.75, 85.75, 128.75, 171.75, 176.75]),
+    (400, "/mnt/sda/wuwei/carbon_emittance_inelastic_1M/e400/topas_emittance_inelastic_e400.bin",
+     "out/fred_topas_1M_idd_corrected_independent/e400/voxel_dose.raw",
+     [5.25, 68.75, 137.25, 205.75, 274.25, 279.25]),
 ]
 
-for E, tpath, gpath, depths in configs:
-    png_file = f"plots/lateral_profiles_{E}MeVu.png"
-    plot_lateral_profiles(E, tpath, gpath, png_file, depths)
-    
-    art_png = f"/home/wuwei/.gemini/antigravity-cli/brain/b6e8050e-cd93-476b-bd8a-039915838a5f/plots/lateral_profiles_{E}MeVu.png"
-    art_log_png = f"/home/wuwei/.gemini/antigravity-cli/brain/b6e8050e-cd93-476b-bd8a-039915838a5f/plots/lateral_profiles_{E}MeVu_log.png"
-    shutil.copyfile(png_file, art_png)
-    shutil.copyfile(png_file.replace(".png", "_log.png"), art_log_png)
-
-# 400 MeV/u profiles
-E = 400
-tpath = "/mnt/sda/wuwei/carbon_emittance_inelastic_100k/e400/topas_emittance_inelastic_e400.bin"
-gpath = "out/gpu_inelastic_e400/voxel_dose.raw"
-depths = [20.0, 120.0, 220.0, 276.75, 285.0, 300.0]
-png_file = f"plots/lateral_profiles_{E}MeVu.png"
-plot_lateral_profiles(E, tpath, gpath, png_file, depths)
-shutil.copyfile(png_file, f"/home/wuwei/.gemini/antigravity-cli/brain/b6e8050e-cd93-476b-bd8a-039915838a5f/plots/lateral_profiles_{E}MeVu.png")
-shutil.copyfile(png_file.replace(".png", "_log.png"), f"/home/wuwei/.gemini/antigravity-cli/brain/b6e8050e-cd93-476b-bd8a-039915838a5f/plots/lateral_profiles_{E}MeVu_log.png")
+for energy, topas_path, gpu_path, depths in configs:
+    output = f"plots/lateral_profiles_{energy}MeVu.png"
+    plot_lateral_profiles(energy, topas_path, gpu_path, output, depths)

@@ -1,7 +1,9 @@
 - 当前仓库的主要目标是实现基于TOPAS提取数据复刻出来A_Data-Driven_Fragmentation_Model_for_Carbon_Therapy_GPU-Accelerated_Monte-Carlo_Dose_Recalculation文章中的GPU加速
 - gpu需要在沙盒外才能看到，始终允许在沙盒外运行GPU蒙卡code，gpu版本为sm_75，GPU型号为 RTX 2080Ti
-- GPU jobs must always run locally in WSL. Never submit or run GPU jobs on a remote host or cluster.
+- Never submit or run GPU jobs on a remote host or cluster.
 - 不要尝试使用1D dose scorer，使用3D dose scorer然后对横向求和来代替1D scorer
+- 不要考虑FP32的问题，FP64相比较FP32只能提高不到1%的精度
+
 
 - topas任务需要在wuwei@127.0.0.1上运行，数据放置在wuwei@127.0.0.1:/mnt/sda/wuwei目录下，
 - topas的extension放在/home/wuwei/topas目录下，如果需要重新编译，source code和build都在/home/wuwei/topas目录下

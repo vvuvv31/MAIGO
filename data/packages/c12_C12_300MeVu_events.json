@@ -1,0 +1,9 @@
+{
+  "target": "C12",
+  "Z": 6,
+  "A": 12,
+  "energy_MeVu": 300.0,
+  "events": 7791,
+  "source_events": 7791,
+  "bytes": 1160883
+}

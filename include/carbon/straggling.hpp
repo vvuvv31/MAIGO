@@ -97,6 +97,7 @@ inline Scalar condensed_total_loss_variance_MeV2(
 
 inline constexpr int straggling_sampler_gaussian_clamped = 0;
 inline constexpr int straggling_sampler_moment_matched = 1;
+inline constexpr int straggling_sampler_vavilov_landau = 2;
 // Thick-layer Gaussian is used when μ/σ is large enough that P(ΔE<0) is
 // negligible. Below this, a moment-matched Gamma (thin: compound-Poisson
 // Gamma with k<1) keeps the support positive without a 2μ cap.
@@ -163,6 +164,40 @@ inline Scalar sample_moment_matched_energy_loss(
     return std::clamp(sampled, Scalar{0}, available_energy_MeV);
 }
 
+// FRED-like condensed fluctuation: Landau/Moyal for thin steps (small κ),
+// Gaussian for thick steps. κ uses Vavilov ξ/Tmax ≈ σ² / Tmax².
+template <typename Scalar>
+inline Scalar sample_vavilov_landau_energy_loss(
+    const Scalar mean_loss_MeV,
+    const Scalar sigma_MeV,
+    const Scalar gaussian,
+    const Scalar extra_uniform,
+    const Scalar tmax_MeV,
+    const Scalar available_energy_MeV) noexcept {
+    if (!(mean_loss_MeV > Scalar{0}) || !(sigma_MeV > Scalar{0})) {
+        return std::clamp(mean_loss_MeV, Scalar{0}, available_energy_MeV);
+    }
+    const auto tmax = std::max(tmax_MeV, Scalar{1.0e-6});
+    const auto kappa = (sigma_MeV * sigma_MeV) / (tmax * tmax);
+    Scalar sampled = mean_loss_MeV + sigma_MeV * gaussian;
+    if (kappa < Scalar{0.01}) {
+        const auto u = std::min(std::max(extra_uniform, Scalar{1.0e-12}),
+                                Scalar{1} - Scalar{1.0e-12});
+        const auto lambda = -std::log(-std::log(u)) - Scalar{0.22278};
+        const auto xi = sigma_MeV * sigma_MeV / tmax;
+        sampled = mean_loss_MeV + xi * lambda;
+    } else if (kappa < Scalar{10}) {
+        const auto u = std::min(std::max(extra_uniform, Scalar{1.0e-12}),
+                                Scalar{1} - Scalar{1.0e-12});
+        const auto lambda = -std::log(-std::log(u)) - Scalar{0.22278};
+        const auto xi = sigma_MeV * sigma_MeV / tmax;
+        const auto landau = mean_loss_MeV + xi * lambda;
+        const auto t = (kappa - Scalar{0.01}) / Scalar{9.99};
+        sampled = landau * (Scalar{1} - t) + sampled * t;
+    }
+    return std::clamp(sampled, Scalar{0}, available_energy_MeV);
+}
+
 template <typename Scalar>
 inline Scalar sample_condensed_energy_loss(
     const Scalar mean_loss_MeV,
@@ -174,6 +209,12 @@ inline Scalar sample_condensed_energy_loss(
     if (sampler == straggling_sampler_moment_matched) {
         return sample_moment_matched_energy_loss(
             mean_loss_MeV, sigma_MeV, gaussian, extra_uniform,
+            available_energy_MeV);
+    }
+    if (sampler == straggling_sampler_vavilov_landau) {
+        const Scalar tmax = std::max(mean_loss_MeV, Scalar{1.0e-3});
+        return sample_vavilov_landau_energy_loss(
+            mean_loss_MeV, sigma_MeV, gaussian, extra_uniform, tmax,
             available_energy_MeV);
     }
     return std::clamp(mean_loss_MeV + sigma_MeV * gaussian, Scalar{0},

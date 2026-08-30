@@ -651,10 +651,24 @@ void TransportConfig::validate() const {
     }
     if (energy_straggling_model != "gaussian_clamped" &&
         energy_straggling_model != "legacy_calibrated" &&
-        energy_straggling_model != "moment_matched") {
+        energy_straggling_model != "moment_matched" &&
+        energy_straggling_model != "vavilov_landau" &&
+        energy_straggling_model != "packaged_fluctuation") {
         throw std::invalid_argument(
             "energy_straggling_model must be gaussian_clamped, "
-            "legacy_calibrated, or moment_matched");
+            "legacy_calibrated, moment_matched, vavilov_landau, or packaged_fluctuation");
+    }
+    if (uses_packaged_fluctuation() && energy_straggling_package_file.empty()) {
+        throw std::invalid_argument(
+            "packaged_fluctuation requires energy_straggling_package_file");
+    }
+    if (nuclear_model != "geant4" && nuclear_model != "fred_paper") {
+        throw std::invalid_argument(
+            "nuclear_model must be geant4 or fred_paper");
+    }
+    if (enable_nuclear_elastic && nuclear_model != "fred_paper") {
+        throw std::invalid_argument(
+            "enable_nuclear_elastic requires nuclear_model: fred_paper");
     }
     if (uses_moment_matched_straggling() &&
         std::abs(straggling_scale - 1.0) > 1.0e-12) {
@@ -702,6 +716,24 @@ void TransportConfig::validate() const {
             }
         }
     }
+    if (multiple_scattering_model != "highland" &&
+        multiple_scattering_model != "fred_2gr") {
+        throw std::invalid_argument(
+            "multiple_scattering_model must be highland or fred_2gr");
+    }
+    if (uses_fred_2gr_mcs() && fred_2gr_mcs_file.empty()) {
+        throw std::invalid_argument("fred_2gr requires fred_2gr_mcs_file");
+    }
+    if (fred_2gr_high_energy_mode != "zero" &&
+        fred_2gr_high_energy_mode != "kinematic_extrapolation") {
+        throw std::invalid_argument(
+            "fred_2gr_high_energy_mode must be zero or kinematic_extrapolation");
+    }
+    if (!uses_fred_2gr_mcs() && fred_2gr_high_energy_mode != "zero") {
+        throw std::invalid_argument(
+            "fred_2gr_high_energy_mode requires multiple_scattering_model: fred_2gr");
+    }
+
     if (!std::isfinite(multiple_scattering_scale) ||
         multiple_scattering_scale < 0.0 || multiple_scattering_scale > 3.0) {
         throw std::invalid_argument(
@@ -1454,6 +1486,8 @@ TransportConfig load_config(const std::filesystem::path& path) {
                            });
         }
     }
+    config.energy_straggling_package_file = parse_path(
+        values, "energy_straggling_package_file", config.energy_straggling_package_file);
     config.straggling_scale = parse_number(values, "straggling_scale", config.straggling_scale);
     if (const auto iterator = values.find("straggling_scale_energies_MeVu");
         iterator != values.end()) {
@@ -1467,6 +1501,41 @@ TransportConfig load_config(const std::filesystem::path& path) {
     }
     config.enable_inelastic =
         parse_bool(values, "enable_inelastic", config.enable_inelastic);
+    if (const auto it = values.find("nuclear_model"); it != values.end()) {
+        config.nuclear_model = it->second;
+        std::transform(config.nuclear_model.begin(), config.nuclear_model.end(),
+                       config.nuclear_model.begin(), [](unsigned char c) {
+                           return static_cast<char>(std::tolower(c));
+                       });
+    }
+    config.enable_nuclear_elastic =
+        parse_bool(values, "enable_nuclear_elastic", config.enable_nuclear_elastic);
+    config.fred_event_library_h_file = parse_path(
+        values, "fred_event_library_h_file", config.fred_event_library_h_file);
+    config.fred_event_library_o_file = parse_path(
+        values, "fred_event_library_o_file", config.fred_event_library_o_file);
+    if (const auto it = values.find("fred_event_library_h_files"); it != values.end())
+        config.fred_event_library_h_files = parse_path_list(it->second);
+    if (const auto it = values.find("fred_event_library_c_files"); it != values.end())
+        config.fred_event_library_c_files = parse_path_list(it->second);
+    if (const auto it = values.find("fred_event_library_o_files"); it != values.end())
+        config.fred_event_library_o_files = parse_path_list(it->second);
+    if (!config.fred_event_library_h_file.empty() &&
+        !config.fred_event_library_h_files.empty())
+        throw std::invalid_argument("use singular or plural H event-library key, not both");
+    if (!config.fred_event_library_o_file.empty() &&
+        !config.fred_event_library_o_files.empty())
+        throw std::invalid_argument("use singular or plural O event-library key, not both");
+    if (config.nuclear_model == "fred_paper") {
+        if (config.fred_event_library_h_file.empty()) {
+            config.fred_event_library_h_file =
+                "data/packages/c12_H1_95MeVu_events.bin";
+        }
+        if (config.fred_event_library_o_file.empty()) {
+            config.fred_event_library_o_file =
+                "data/packages/c12_O16_95MeVu_events.bin";
+        }
+    }
     config.primary_inelastic_cross_section_file =
         parse_path(values, "primary_inelastic_cross_section_file",
                    config.primary_inelastic_cross_section_file);
@@ -1475,6 +1544,24 @@ TransportConfig load_config(const std::filesystem::path& path) {
                    config.enable_secondary_transport);
     config.enable_multiple_scattering =
         parse_bool(values, "enable_multiple_scattering", config.enable_multiple_scattering);
+    if (const auto it = values.find("multiple_scattering_model"); it != values.end()) {
+        config.multiple_scattering_model = it->second;
+        std::transform(config.multiple_scattering_model.begin(),
+                       config.multiple_scattering_model.end(),
+                       config.multiple_scattering_model.begin(), [](unsigned char c) {
+                           return static_cast<char>(std::tolower(c));
+                       });
+    }
+    config.fred_2gr_mcs_file = parse_path(
+        values, "fred_2gr_mcs_file", config.fred_2gr_mcs_file);
+    if (const auto it = values.find("fred_2gr_high_energy_mode"); it != values.end()) {
+        config.fred_2gr_high_energy_mode = it->second;
+        std::transform(config.fred_2gr_high_energy_mode.begin(),
+                       config.fred_2gr_high_energy_mode.end(),
+                       config.fred_2gr_high_energy_mode.begin(), [](unsigned char c) {
+                           return static_cast<char>(std::tolower(c));
+                       });
+    }
     config.multiple_scattering_scale = parse_number(
         values, "multiple_scattering_scale", config.multiple_scattering_scale);
     config.enable_ct_material_mcs =

@@ -88,10 +88,17 @@ int main(int argc, char* argv[]) {
         const auto* upstream_air_stopping_power_ptr =
             upstream_air_stopping_power ? &*upstream_air_stopping_power : nullptr;
         carbon::CrossSectionTable cross_section;
-        if (config.enable_inelastic &&
-            !config.primary_inelastic_cross_section_file.empty()) {
-            cross_section = carbon::CrossSectionTable::from_csv(
-                config.primary_inelastic_cross_section_file);
+        if (config.enable_inelastic) {
+            if (config.uses_fred_paper_nuclear()) {
+                cross_section = carbon::CrossSectionTable::from_fred_paper_water(
+                    config.water_density_g_per_cm3);
+                std::cout << "Nuclear model: fred_paper (C-C + Kox + ICRU-H"
+                          << (config.enable_nuclear_elastic ? ", H elastic)\n"
+                                                            : ")\n");
+            } else if (!config.primary_inelastic_cross_section_file.empty()) {
+                cross_section = carbon::CrossSectionTable::from_csv(
+                    config.primary_inelastic_cross_section_file);
+            }
         }
 
 #ifdef CARBON_HAS_SYCL

@@ -2,6 +2,8 @@
 #include "carbon/ct_grid.hpp"
 #include "carbon/device.hpp"
 #include "carbon/electron_transport.hpp"
+#include "carbon/energy_loss_fluctuation.hpp"
+#include "carbon/fred_event_library.hpp"
 #include "carbon/fred_table1.hpp"
 #include "carbon/inelastic.hpp"
 #include "carbon/multiple_scattering.hpp"
@@ -22,6 +24,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <iostream>
 #include <limits>
 #include <numeric>
@@ -410,18 +413,25 @@ TransportResult transport_sycl(const TransportConfig& config,
     }
 
     const auto enable_inelastic = config.enable_inelastic;
+    const auto enable_nuclear_elastic = config.enable_nuclear_elastic;
     const auto enable_secondary_transport = config.enable_secondary_transport;
     constexpr std::size_t max_secondaries = 32000000;
     auto* secondary_queue_device =
-        enable_inelastic
+        (enable_inelastic || enable_nuclear_elastic)
             ? sycl::malloc_device<SecondaryParticle>(max_secondaries, queue)
             : nullptr;
     auto* secondary_count_device =
-        enable_inelastic ? sycl::malloc_device<uint32_t>(1, queue) : nullptr;
+        (enable_inelastic || enable_nuclear_elastic)
+            ? sycl::malloc_device<uint32_t>(1, queue)
+            : nullptr;
     uint32_t* secondary_overflow_count_device =
-        enable_inelastic ? sycl::malloc_device<uint32_t>(1, queue) : nullptr;
+        (enable_inelastic || enable_nuclear_elastic)
+            ? sycl::malloc_device<uint32_t>(1, queue)
+            : nullptr;
     float* secondary_overflow_energy_device =
-        enable_inelastic ? sycl::malloc_device<float>(1, queue) : nullptr;
+        (enable_inelastic || enable_nuclear_elastic)
+            ? sycl::malloc_device<float>(1, queue)
+            : nullptr;
     float* fred_model_residual_device =
         enable_inelastic ? sycl::malloc_device<float>(1, queue) : nullptr;
     float* fred_q_device = enable_inelastic ? sycl::malloc_device<float>(1, queue) : nullptr;
@@ -471,6 +481,15 @@ TransportResult transport_sycl(const TransportConfig& config,
         queue.fill(fred_fail_energy_device, 0.0F, 1);
         queue.fill(fred_cap_overflow_count_device, 0U, 1);
         queue.fill(fred_cap_overflow_energy_device, 0.0F, 1).wait_and_throw();
+    } else if (enable_nuclear_elastic) {
+        if (secondary_queue_device == nullptr || secondary_count_device == nullptr ||
+            secondary_overflow_count_device == nullptr ||
+            secondary_overflow_energy_device == nullptr) {
+            throw std::bad_alloc();
+        }
+        queue.fill(secondary_count_device, 0U, 1);
+        queue.fill(secondary_overflow_count_device, 0U, 1);
+        queue.fill(secondary_overflow_energy_device, 0.0F, 1).wait_and_throw();
     }
 
     constexpr std::size_t kFredDiagSlots = 26;
@@ -529,6 +548,127 @@ TransportResult transport_sycl(const TransportConfig& config,
         queue.copy(cached_tgt_o.data(), fred_prob_tgt_o_device, 18);
         queue.fill(fred_diag_device, static_cast<std::uint64_t>(0), kFredDiagSlots)
             .wait_and_throw();
+    }
+
+    carbon::FredEventLibSetDevice lib_h_view{};
+    carbon::FredEventLibSetDevice lib_o_view{};
+    std::vector<void*> event_lib_device_allocations;
+    const auto upload_event_set = [&](std::vector<std::filesystem::path> paths,
+                                      const std::filesystem::path& legacy_path,
+                                      const std::uint16_t expected_z,
+                                      const std::uint16_t expected_a,
+                                      carbon::FredEventLibSetDevice& set) {
+        if (paths.empty() && !legacy_path.empty()) paths.push_back(legacy_path);
+        std::vector<carbon::FredEventLibrary> hosts;
+        for (const auto& path : paths) {
+            if (path.empty() || !std::filesystem::exists(path))
+                throw std::runtime_error("Missing FRED event library: " + path.string());
+            auto host = carbon::load_fred_event_library(path);
+            if (host.target_z != expected_z || host.target_a != expected_a)
+                throw std::runtime_error("FRED event-library target identity mismatch: " +
+                                         path.string());
+            hosts.push_back(std::move(host));
+        }
+        std::sort(hosts.begin(), hosts.end(), [](const auto& a, const auto& b) {
+            return a.reference_energy_MeVu < b.reference_energy_MeVu;
+        });
+        if (hosts.size() > 4) throw std::runtime_error("At most four event-library energies are supported");
+        for (std::size_t k = 1; k < hosts.size(); ++k)
+            if (hosts[k].reference_energy_MeVu <= hosts[k - 1].reference_energy_MeVu)
+                throw std::runtime_error("Event-library energies must be unique");
+        set.count = static_cast<std::uint32_t>(hosts.size());
+        for (std::size_t k = 0; k < hosts.size(); ++k) {
+            const auto& host = hosts[k];
+            const auto n = host.event_count;
+            const auto slots = static_cast<std::size_t>(n) * host.max_fragments;
+            auto alloc = [&](auto*& pointer, std::size_t count) {
+                using T = std::remove_pointer_t<std::remove_reference_t<decltype(pointer)>>;
+                pointer = sycl::malloc_device<T>(count, queue);
+                if (pointer == nullptr) throw std::bad_alloc();
+                event_lib_device_allocations.push_back(static_cast<void*>(pointer));
+            };
+            std::uint8_t* nfrag{}; float* nke{}; std::int8_t* z{}; std::int8_t* a{};
+            float* ke{}; float* ux{}; float* uy{}; float* uz{};
+            alloc(nfrag, n); alloc(nke, n); alloc(z, slots); alloc(a, slots);
+            alloc(ke, slots); alloc(ux, slots); alloc(uy, slots); alloc(uz, slots);
+            queue.copy(host.fragment_count.data(), nfrag, n);
+            queue.copy(host.neutron_ke_MeV.data(), nke, n);
+            queue.copy(host.z.data(), z, slots); queue.copy(host.a.data(), a, slots);
+            queue.copy(host.ke_MeV.data(), ke, slots); queue.copy(host.ux.data(), ux, slots);
+            queue.copy(host.uy.data(), uy, slots); queue.copy(host.uz.data(), uz, slots)
+                .wait_and_throw();
+            set.libraries[k] = carbon::FredEventLibDevice{
+                n, host.max_fragments, host.reference_energy_MeVu,
+                nfrag, nke, z, a, ke, ux, uy, uz};
+            std::cout << "Loaded FRED event library at " << host.reference_energy_MeVu
+                      << " MeV/u (" << n << " events)\n";
+        }
+    };
+    if (enable_inelastic) {
+        upload_event_set(config.fred_event_library_h_files,
+                         config.fred_event_library_h_file, 1, 1, lib_h_view);
+        upload_event_set(config.fred_event_library_o_files,
+                         config.fred_event_library_o_file, 8, 16, lib_o_view);
+        for (const auto& path : config.fred_event_library_c_files) {
+            const auto host = carbon::load_fred_event_library(path);
+            if (host.target_z != 6 || host.target_a != 12)
+                throw std::runtime_error("FRED carbon event-library target mismatch: " +
+                                         path.string());
+        }
+    }
+
+    float* fluct_energy_device = nullptr;
+    float* fluct_density_device = nullptr;
+    float* fluct_probability_device = nullptr;
+    float* fluct_quantile_device = nullptr;
+    std::size_t fluct_energy_count = 0;
+    std::size_t fluct_density_count = 0;
+    std::size_t fluct_probability_count = 0;
+    if (config.uses_packaged_fluctuation()) {
+        const auto host = carbon::EnergyLossFluctuationTable::from_csv(
+            config.energy_straggling_package_file);
+        if (host.projectile_atomic_number() != 6 ||
+            host.projectile_mass_number() != 12 ||
+            host.material_name() != "G4_WATER")
+            throw std::runtime_error(
+                "Packaged fluctuation must describe C-12 in G4_WATER");
+        const auto to_float = [](const std::vector<double>& input) {
+            std::vector<float> output(input.size());
+            std::transform(input.begin(), input.end(), output.begin(),
+                           [](double value) { return static_cast<float>(value); });
+            return output;
+        };
+        const auto energies = to_float(host.energies_MeVu());
+        const auto densities = to_float(host.areal_densities_g_per_cm2());
+        const auto probabilities = to_float(host.probabilities());
+        const auto quantiles = to_float(host.loss_ratio_quantiles());
+        fluct_energy_count = energies.size();
+        fluct_density_count = densities.size();
+        fluct_probability_count = probabilities.size();
+        fluct_energy_device = sycl::malloc_device<float>(energies.size(), queue);
+        fluct_density_device = sycl::malloc_device<float>(densities.size(), queue);
+        fluct_probability_device = sycl::malloc_device<float>(probabilities.size(), queue);
+        fluct_quantile_device = sycl::malloc_device<float>(quantiles.size(), queue);
+        if (!fluct_energy_device || !fluct_density_device ||
+            !fluct_probability_device || !fluct_quantile_device)
+            throw std::bad_alloc();
+        queue.copy(energies.data(), fluct_energy_device, energies.size());
+        queue.copy(densities.data(), fluct_density_device, densities.size());
+        queue.copy(probabilities.data(), fluct_probability_device, probabilities.size());
+        queue.copy(quantiles.data(), fluct_quantile_device, quantiles.size()).wait_and_throw();
+        std::cout << "Loaded packaged C-12 fluctuation grid (" << fluct_energy_count
+                  << " energies, " << fluct_density_count << " thicknesses, "
+                  << fluct_probability_count << " quantiles)\n";
+    }
+
+    float* fred_2gr_mcs_device = nullptr;
+    if (config.uses_fred_2gr_mcs()) {
+        const auto host = carbon::Fred2GrMcsTable::from_binary(config.fred_2gr_mcs_file);
+        fred_2gr_mcs_device = sycl::malloc_device<float>(host.values.size(), queue);
+        if (fred_2gr_mcs_device == nullptr) throw std::bad_alloc();
+        queue.copy(host.values.data(), fred_2gr_mcs_device, host.values.size())
+            .wait_and_throw();
+        std::cout << "Loaded FRED 3.76 2GR MCS table (51x48x6)\n";
     }
 
     float* ion_species_sp_device = nullptr;
@@ -658,6 +798,9 @@ TransportResult transport_sycl(const TransportConfig& config,
         static_cast<float>(config.straggling_sampling_length_mm);
     const auto straggling_scale = static_cast<float>(config.straggling_scale);
     const auto straggling_sampler = config.straggling_sampler_id();
+    const auto use_packaged_fluctuation = config.uses_packaged_fluctuation();
+    const auto enable_secondary_energy_straggling =
+        config.enable_secondary_energy_straggling;
 
     std::array<float, max_straggling_scale_points> straggling_scale_energies{};
     std::array<float, max_straggling_scale_points> straggling_scale_values{};
@@ -674,6 +817,9 @@ TransportResult transport_sycl(const TransportConfig& config,
         static_cast<float>(config.multiple_scattering_scale);
     const auto water_density_g_per_cm3 = static_cast<float>(config.water_density_g_per_cm3);
     const auto enable_multiple_scattering = config.enable_multiple_scattering;
+    const auto use_fred_2gr_mcs = config.uses_fred_2gr_mcs();
+    const auto extrapolate_fred_2gr_high_energy =
+        config.uses_fred_2gr_high_energy_extrapolation();
     const auto enable_ct_material_mcs = config.enable_ct_material_mcs;
     const auto enable_tps_source = config.uses_fixed_patient_coordinates();
     const auto random_seed = config.random_seed;
@@ -1097,35 +1243,53 @@ TransportResult transport_sycl(const TransportConfig& config,
                     step_mm = sycl::fmax(step_mm, 1.0e-5F);
 
                     bool inelastic_this_step = false;
+                    bool elastic_this_step = false;
                     float p_target_h_step = 0.5F;
-                    if (enable_inelastic && energy_MeV > energy_cutoff_MeV &&
-                        cross_section_device != nullptr) {
+                    if ((enable_inelastic || enable_nuclear_elastic) &&
+                        energy_MeV > energy_cutoff_MeV) {
                         const auto cur_e_u = energy_MeV * inverse_mass_number;
-                        const auto xs_flt =
-                            (cur_e_u - minimum_table_energy) * inverse_table_step;
-                        auto xs_idx = static_cast<int>(sycl::floor(xs_flt));
-                        xs_idx = sycl::max(
-                            0, sycl::min(xs_idx,
-                                         static_cast<int>(cross_section_table_size) - 2));
-                        const auto xs_fr =
-                            sycl::clamp(xs_flt - static_cast<float>(xs_idx), 0.0F, 1.0F);
-                        const auto macro_xs =
-                            cross_section_device[xs_idx] +
-                            xs_fr * (cross_section_device[xs_idx + 1] -
-                                     cross_section_device[xs_idx]);
-                        if (target_h_fraction_device != nullptr) {
-                            p_target_h_step =
-                                target_h_fraction_device[xs_idx] +
-                                xs_fr * (target_h_fraction_device[xs_idx + 1] -
-                                         target_h_fraction_device[xs_idx]);
+                        float macro_xs = 0.0F;
+                        if (enable_inelastic && cross_section_device != nullptr) {
+                            const auto xs_flt =
+                                (cur_e_u - minimum_table_energy) * inverse_table_step;
+                            auto xs_idx = static_cast<int>(sycl::floor(xs_flt));
+                            xs_idx = sycl::max(
+                                0, sycl::min(xs_idx,
+                                             static_cast<int>(cross_section_table_size) - 2));
+                            const auto xs_fr =
+                                sycl::clamp(xs_flt - static_cast<float>(xs_idx), 0.0F, 1.0F);
+                            macro_xs =
+                                cross_section_device[xs_idx] +
+                                xs_fr * (cross_section_device[xs_idx + 1] -
+                                         cross_section_device[xs_idx]);
+                            if (target_h_fraction_device != nullptr) {
+                                p_target_h_step =
+                                    target_h_fraction_device[xs_idx] +
+                                    xs_fr * (target_h_fraction_device[xs_idx + 1] -
+                                             target_h_fraction_device[xs_idx]);
+                            }
                         }
-                        const auto u_inel = rng::uniform01(
+                        const float macro_el =
+                            enable_nuclear_elastic
+                                ? carbon::water_elastic_h_macro_per_mm(
+                                      cur_e_u, water_density_g_per_cm3)
+                                : 0.0F;
+                        const float macro_tot = macro_xs + macro_el;
+                        const auto u_nuc = rng::uniform01(
                             spot_seed, rng_history, steps, 8);
                         float collision_s = step_mm;
-                        inelastic_this_step = carbon::inelastic_collision_in_step(
-                            macro_xs, step_mm, u_inel, &collision_s);
-                        if (inelastic_this_step) {
+                        const bool collision = carbon::inelastic_collision_in_step(
+                            macro_tot, step_mm, u_nuc, &collision_s);
+                        if (collision) {
                             step_mm = collision_s;
+                            const float u_br = rng::uniform01(
+                                spot_seed, rng_history, steps, 9);
+                            if (enable_nuclear_elastic && macro_tot > 0.0F &&
+                                u_br * macro_tot < macro_el) {
+                                elastic_this_step = true;
+                            } else if (enable_inelastic) {
+                                inelastic_this_step = true;
+                            }
                         }
                     }
 
@@ -1166,6 +1330,24 @@ TransportResult transport_sycl(const TransportConfig& config,
                     auto deposited_MeV = sycl::fmin(mean_loss_MeV, energy_MeV);
 
                     if (enable_energy_straggling) {
+                        if (use_packaged_fluctuation) {
+                            const auto u_loss = rng::uniform01(
+                                spot_seed, rng_history, steps, 2);
+                            const auto ratio = sample_energy_loss_ratio_from_grid(
+                                fluct_energy_device, fluct_energy_count,
+                                fluct_density_device, fluct_density_count,
+                                fluct_probability_device, fluct_probability_count,
+                                fluct_quantile_device, energy_MeVu,
+                                local_density_g_per_cm3 * step_mm / 10.0F, u_loss);
+                            const auto local_scale = interpolate_straggling_scale(
+                                energy_MeVu, straggling_scale_energies,
+                                straggling_scale_values,
+                                straggling_scale_point_count, straggling_scale);
+                            const auto scaled_ratio =
+                                scale_energy_loss_ratio_preserving_mean(ratio, local_scale);
+                            deposited_MeV = sycl::clamp(
+                                mean_loss_MeV * scaled_ratio, 0.0F, energy_MeV);
+                        } else {
                         const auto local_scale = interpolate_straggling_scale(
                             energy_MeVu, straggling_scale_energies, straggling_scale_values,
                             straggling_scale_point_count, straggling_scale);
@@ -1205,6 +1387,7 @@ TransportResult transport_sycl(const TransportConfig& config,
                                 local_scale * sycl::sqrt(sycl::fmax(0.0F, variance_MeV2));
                             deposited_MeV = sample_condensed_energy_loss(
                                 mean_loss_MeV, sigma_MeV, gauss, u2, energy_MeV, straggling_sampler);
+                        }
                         }
                     }
 
@@ -1291,21 +1474,44 @@ TransportResult transport_sycl(const TransportConfig& config,
                             radiation_length_g_per_cm2 =
                                 slab_radiation_lengths_device[layer_for_material];
                         }
-                        const auto theta0 = highland_projected_rms_angle_device(
-                            energy_MeV, primary_atomic_number, primary_mass_number, step_mm,
-                            local_density_g_per_cm3, radiation_length_g_per_cm2) *
-                            multiple_scattering_scale;
-                        const auto u0 = sycl::fmax(
-                            rng::uniform01(spot_seed, rng_history, steps, 3), 1.0e-12F);
-                        const auto u1 = rng::uniform01(spot_seed, rng_history, steps, 4);
-                        const auto u2 = sycl::fmax(
-                            rng::uniform01(spot_seed, rng_history, steps, 5), 1.0e-12F);
-                        const auto u3 = rng::uniform01(spot_seed, rng_history, steps, 6);
+                        float theta_x = 0.0F;
+                        float theta_y = 0.0F;
                         constexpr float two_pi = 6.2831853071795864769F;
-                        const auto theta_x =
-                            theta0 * sycl::sqrt(-2.0F * sycl::log(u0)) * sycl::cos(two_pi * u1);
-                        const auto theta_y =
-                            theta0 * sycl::sqrt(-2.0F * sycl::log(u2)) * sycl::cos(two_pi * u3);
+                        if (use_fred_2gr_mcs) {
+                            const auto mixture = rng::uniform01(
+                                spot_seed, rng_history, steps, 3);
+                            const auto radial = rng::uniform01(
+                                spot_seed, rng_history, steps, 4);
+                            const auto azimuth = two_pi * rng::uniform01(
+                                spot_seed, rng_history, steps, 5);
+                            const auto angle = fred_2gr_angle_device(
+                                fred_2gr_mcs_device, energy_MeVu,
+                                primary_atomic_number, primary_mass_number,
+                                local_density_g_per_cm3 * step_mm / 10.0F,
+                                radiation_length_g_per_cm2,
+                                extrapolate_fred_2gr_high_energy,
+                                multiple_scattering_scale, mixture, radial);
+                            theta_x = angle * sycl::cos(azimuth);
+                            theta_y = angle * sycl::sin(azimuth);
+                        } else {
+                            const auto theta0 = highland_projected_rms_angle_device(
+                                energy_MeV, primary_atomic_number, primary_mass_number,
+                                step_mm, local_density_g_per_cm3,
+                                radiation_length_g_per_cm2) * multiple_scattering_scale;
+                            const auto u0 = sycl::fmax(rng::uniform01(
+                                spot_seed, rng_history, steps, 3), 1.0e-12F);
+                            const auto u1 = rng::uniform01(
+                                spot_seed, rng_history, steps, 4);
+                            const auto u2 = sycl::fmax(rng::uniform01(
+                                spot_seed, rng_history, steps, 5), 1.0e-12F);
+                            const auto u3 = rng::uniform01(
+                                spot_seed, rng_history, steps, 6);
+                            theta_x = theta0 * sycl::sqrt(-2.0F * sycl::log(u0)) *
+                                      sycl::cos(two_pi * u1);
+                            theta_y = theta0 * sycl::sqrt(-2.0F * sycl::log(u2)) *
+                                      sycl::cos(two_pi * u3);
+                        }
+
                         const auto transverse_magnitude =
                             sycl::sqrt(theta_x * theta_x + theta_y * theta_y);
                         const auto local_direction_z =
@@ -1366,6 +1572,52 @@ TransportResult transport_sycl(const TransportConfig& config,
 
                     energy_MeV -= deposited_MeV;
 
+                    if (enable_nuclear_elastic && elastic_this_step &&
+                        energy_MeV > energy_cutoff_MeV) {
+                        const float u_cos = rng::uniform01(
+                            spot_seed, rng_history, steps, 10);
+                        const float u_phi = rng::uniform01(
+                            spot_seed, rng_history, steps, 11);
+                        const auto scat = carbon::sample_c12_hydrogen_elastic(
+                            energy_MeV, direction_x, direction_y, direction_z,
+                            u_cos, u_phi);
+                        energy_MeV = scat.projectile_ke_MeV;
+                        direction_x = scat.proj_dir_x;
+                        direction_y = scat.proj_dir_y;
+                        direction_z = scat.proj_dir_z;
+                        if (enable_secondary_transport &&
+                            scat.proton_ke_MeV > energy_cutoff_MeV &&
+                            secondary_queue_device != nullptr) {
+                            auto count_ref = sycl::atomic_ref<
+                                uint32_t, sycl::memory_order::relaxed,
+                                sycl::memory_scope::device,
+                                sycl::access::address_space::global_space>(
+                                *secondary_count_device);
+                            const auto base_idx = count_ref.fetch_add(1U);
+                            if (base_idx < max_secondaries) {
+                                SecondaryParticle proton{};
+                                proton.z = 1;
+                                proton.a = 1;
+                                proton.energy_MeV = scat.proton_ke_MeV;
+                                proton.pos_x_mm = position_x_mm;
+                                proton.pos_y_mm = position_y_mm;
+                                proton.pos_z_mm = position_z_mm;
+                                proton.dir_x = scat.proton_dir_x;
+                                proton.dir_y = scat.proton_dir_y;
+                                proton.dir_z = scat.proton_dir_z;
+                                proton.weight = 1.0F;
+                                proton.parent_history = rng_history;
+                                secondary_queue_device[base_idx] = proton;
+                            } else if (secondary_overflow_count_device != nullptr) {
+                                sycl::atomic_ref<uint32_t, sycl::memory_order::relaxed,
+                                                 sycl::memory_scope::device,
+                                                 sycl::access::address_space::global_space>
+                                    atomic_ov(*secondary_overflow_count_device);
+                                atomic_ov.fetch_add(1U);
+                            }
+                        }
+                    }
+
                     if (enable_inelastic && inelastic_this_step &&
                         energy_MeV > energy_cutoff_MeV &&
                         cross_section_device != nullptr) {
@@ -1383,7 +1635,8 @@ TransportResult transport_sycl(const TransportConfig& config,
                                     static_cast<int>(table_size),
                                     minimum_table_energy, inverse_table_step,
                                     ion_energy_grid_device, ion_csda_a1_device,
-                                    energy_cutoff_MeV, p_target_h);
+                                    energy_cutoff_MeV, p_target_h,
+                                    lib_h_view, lib_o_view);
 
                             if (products.local_deposit_MeV > 0.0F) {
                                 pending_primary_depth_MeV +=
@@ -1775,7 +2028,25 @@ TransportResult transport_sycl(const TransportConfig& config,
                             const auto mid_fr = sycl::clamp(mid_flt - static_cast<float>(mid_idx), 0.0F, 1.0F);
                             const auto mid_sp = (ion_sp_table[mid_idx] + mid_fr * (ion_sp_table[mid_idx + 1] - ion_sp_table[mid_idx])) * frag_sp_scale;
 
-                            const auto dE = sycl::fmin(mid_sp * sec_step_mm, sec_e);
+                            auto dE = sycl::fmin(mid_sp * sec_step_mm, sec_e);
+                            if (enable_secondary_energy_straggling &&
+                                use_packaged_fluctuation && frag.z == 6 && frag.a == 12) {
+                                const auto u_loss = rng::uniform01(
+                                    2026, static_cast<uint32_t>(sec_idx), sec_steps, 2);
+                                const auto ratio = sample_energy_loss_ratio_from_grid(
+                                    fluct_energy_device, fluct_energy_count,
+                                    fluct_density_device, fluct_density_count,
+                                    fluct_probability_device, fluct_probability_count,
+                                    fluct_quantile_device, sec_e_u,
+                                    water_density_g_per_cm3 * sec_step_mm / 10.0F, u_loss);
+                                const auto local_scale = interpolate_straggling_scale(
+                                    sec_e_u, straggling_scale_energies,
+                                    straggling_scale_values,
+                                    straggling_scale_point_count, straggling_scale);
+                                const auto scaled_ratio =
+                                    scale_energy_loss_ratio_preserving_mean(ratio, local_scale);
+                                dE = sycl::clamp(dE * scaled_ratio, 0.0F, sec_e);
+                            }
 
                             if (bin_z != pending_sec_bin) {
                                 if (pending_sec_depth_MeV > 0.0F && pending_sec_bin >= 0 && pending_sec_bin < static_cast<int>(number_of_bins)) {
@@ -1831,18 +2102,37 @@ TransportResult transport_sycl(const TransportConfig& config,
                             sec_z += sec_dz * sec_step_mm;
 
                             if (enable_multiple_scattering && sec_e > energy_cutoff_MeV) {
-                                const auto theta_rms = highland_projected_rms_angle_device(
-                                    sec_e, static_cast<int>(frag.z),
-                                    static_cast<int>(frag.a), sec_step_mm, multiple_scattering_scale);
-                                const auto u_msc0 = sycl::fmax(
-                                    rng::uniform01(2026, static_cast<uint32_t>(sec_idx), sec_steps, 0),
-                                    1.0e-10F);
-                                const auto u_msc1 =
-                                    rng::uniform01(2026, static_cast<uint32_t>(sec_idx), sec_steps, 1);
-                                const auto theta_scat =
-                                    theta_rms * sycl::sqrt(-2.0F * sycl::log(u_msc0));
                                 constexpr float two_pi = 6.2831853071795864769F;
-                                const auto phi_scat = two_pi * u_msc1;
+                                float theta_scat = 0.0F;
+                                float phi_scat = 0.0F;
+                                if (use_fred_2gr_mcs) {
+                                    const auto mixture = rng::uniform01(
+                                        2026, static_cast<uint32_t>(sec_idx), sec_steps, 0);
+                                    const auto radial = rng::uniform01(
+                                        2026, static_cast<uint32_t>(sec_idx), sec_steps, 1);
+                                    phi_scat = two_pi * rng::uniform01(
+                                        2026, static_cast<uint32_t>(sec_idx), sec_steps, 3);
+                                    theta_scat = fred_2gr_angle_device(
+                                        fred_2gr_mcs_device, sec_e / frag_a,
+                                        static_cast<int>(frag.z), static_cast<int>(frag.a),
+                                        water_density_g_per_cm3 * sec_step_mm / 10.0F,
+                                        static_cast<float>(water_radiation_length_g_per_cm2),
+                                        extrapolate_fred_2gr_high_energy,
+                                        multiple_scattering_scale, mixture, radial);
+                                } else {
+                                    const auto theta_rms = highland_projected_rms_angle_device(
+                                        sec_e, static_cast<int>(frag.z),
+                                        static_cast<int>(frag.a), sec_step_mm,
+                                        water_density_g_per_cm3) * multiple_scattering_scale;
+                                    const auto u_msc0 = sycl::fmax(rng::uniform01(
+                                        2026, static_cast<uint32_t>(sec_idx), sec_steps, 0),
+                                        1.0e-10F);
+                                    theta_scat = theta_rms *
+                                        sycl::sqrt(-2.0F * sycl::log(u_msc0));
+                                    phi_scat = two_pi * rng::uniform01(
+                                        2026, static_cast<uint32_t>(sec_idx), sec_steps, 1);
+                                }
+
                                 const auto sin_scat = sycl::sin(theta_scat);
                                 const auto cos_scat = sycl::cos(theta_scat);
                                 const auto rotated = rotate_local_direction(
@@ -2060,6 +2350,14 @@ TransportResult transport_sycl(const TransportConfig& config,
     free_device(fred_prob_proj_o_device);
     free_device(fred_prob_tgt_h_device);
     free_device(fred_prob_tgt_o_device);
+    for (auto* allocation : event_lib_device_allocations) {
+        if (allocation != nullptr) sycl::free(allocation, queue);
+    }
+    free_device(fluct_energy_device);
+    free_device(fluct_density_device);
+    free_device(fluct_probability_device);
+    free_device(fluct_quantile_device);
+    free_device(fred_2gr_mcs_device);
     free_device(fred_diag_device);
     free_device(secondary_overflow_count_device);
     free_device(secondary_overflow_energy_device);

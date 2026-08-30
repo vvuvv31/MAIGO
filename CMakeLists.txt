@@ -48,6 +48,8 @@ add_library(carbon_core
     src/electron_transport.cpp
     src/energy_loss_fluctuation.cpp
     src/fred_table1.cpp
+    src/fred_event_library.cpp
+    src/multiple_scattering.cpp
     src/run_quality.cpp
     src/stopping_power.cpp
     src/topas_spots.cpp
@@ -147,5 +149,6 @@ if(BUILD_TESTING)
         CARBON_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
     add_test(NAME carbon_tests COMMAND carbon_tests)
     set_tests_properties(carbon_tests PROPERTIES
-        TIMEOUT 300)
+        TIMEOUT 300
+        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
 endif()

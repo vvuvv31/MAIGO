@@ -23,7 +23,9 @@ inline InelasticProductSet sample_carbon_inelastic_products_device(
     const float* ion_energy_grid,
     const float* ion_csda_a1,
     const float energy_cutoff_MeV,
-    const float p_target_h) noexcept {
+    const float p_target_h,
+    const carbon::FredEventLibSetDevice lib_h = {},
+    const carbon::FredEventLibSetDevice lib_o = {}) noexcept {
 
     InelasticProductSet set{};
     const auto e_per_u = incident_energy_MeV / 12.0F;
@@ -42,6 +44,88 @@ inline InelasticProductSet sample_carbon_inelastic_products_device(
     const float* tgt_prob = carbon::kFredProbO.data();
     (void)prob_tgt_h;
     (void)prob_tgt_o;
+
+    const auto& event_set = (target_idx == 0) ? lib_h : lib_o;
+    carbon::FredEventLibDevice event_lib{};
+    if (event_set.count > 0) {
+        std::uint32_t upper = 0;
+        while (upper + 1 < event_set.count &&
+               e_per_u > event_set.libraries[upper].reference_energy_MeVu) ++upper;
+        std::uint32_t chosen = upper;
+        if (upper > 0 && e_per_u < event_set.libraries[upper].reference_energy_MeVu) {
+            const auto lower = upper - 1;
+            const auto e0 = event_set.libraries[lower].reference_energy_MeVu;
+            const auto e1 = event_set.libraries[upper].reference_energy_MeVu;
+            const auto mix = sycl::clamp((e_per_u - e0) / (e1 - e0), 0.0F, 1.0F);
+            const auto u_energy_mix = rng::uniform01(spot_seed, rng_history, steps,
+                                                      kInelasticBaseDim + 2);
+            chosen = u_energy_mix < mix ? upper : lower;
+        }
+        event_lib = event_set.libraries[chosen];
+    }
+    if (event_lib.event_count > 0 && event_lib.fragment_count != nullptr) {
+        const float u_ev = rng::uniform01(spot_seed, rng_history, steps, kInelasticBaseDim + 3);
+        auto ie = static_cast<uint32_t>(u_ev * static_cast<float>(event_lib.event_count));
+        if (ie >= event_lib.event_count) {
+            ie = event_lib.event_count - 1;
+        }
+        const float scale = e_per_u / sycl::fmax(event_lib.reference_energy_MeVu, 1.0F);
+        const uint8_t nfrag = event_lib.fragment_count[ie];
+        InelasticProductSet from_lib{};
+        float charged = 0.0F;
+        uint8_t charged_count = 0;
+        const uint32_t maxf = event_lib.max_fragments;
+        for (uint8_t f = 0; f < nfrag && f < maxf; ++f) {
+            const std::size_t slot = static_cast<std::size_t>(ie) * maxf + f;
+            const int z = static_cast<int>(event_lib.z[slot]);
+            const int a = static_cast<int>(event_lib.a[slot]);
+            if (z < 1 || a < 1) {
+                continue;
+            }
+            float ke = event_lib.ke_MeV[slot] * scale;
+            charged += ke;
+            if (charged > incident_energy_MeV + 1.0e-3F) {
+                from_lib = {};
+                charged_count = 0;
+                break;
+            }
+            if (charged_count >= carbon::kMaxInelasticProducts) {
+                from_lib.untracked_energy_MeV += ke;
+                continue;
+            }
+            // TOPAS beam is local -Z; MAIGO parent +Z uses flipped z cosine.
+            const float lx = event_lib.ux[slot];
+            const float ly = event_lib.uy[slot];
+            const float lz = -event_lib.uz[slot];
+            const auto rot = rotate_local_direction(lx, ly, lz, parent_dir);
+            auto& p = from_lib.products[charged_count++];
+            p.z = static_cast<int16_t>(z);
+            p.a = static_cast<int16_t>(a);
+            p.energy_MeV = ke;
+            p.pos_x_mm = pos_x_mm;
+            p.pos_y_mm = pos_y_mm;
+            p.pos_z_mm = pos_z_mm;
+            p.dir_x = rot.x;
+            p.dir_y = rot.y;
+            p.dir_z = rot.z;
+            p.weight = 1.0F;
+            p.parent_history = rng_history;
+        }
+        if (charged_count > 0) {
+            from_lib.count = charged_count;
+            float nke = event_lib.neutron_ke_MeV[ie] * scale;
+            if (charged + nke > incident_energy_MeV) {
+                nke = sycl::fmax(0.0F, incident_energy_MeV - charged);
+            }
+            from_lib.untracked_energy_MeV += nke;
+            from_lib.neutron_ke_MeV = nke;
+            const float leftover = sycl::fmax(0.0F, incident_energy_MeV - charged - nke);
+            from_lib.untracked_energy_MeV += leftover;
+            from_lib.remnant_excitation_MeV = leftover;
+            from_lib.retries_used = 1;
+            return from_lib;
+        }
+    }
 
     const auto base_q_MeV = 0.0F;
     const auto max_available_MeV = incident_energy_MeV;

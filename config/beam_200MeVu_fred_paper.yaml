@@ -1,0 +1,40 @@
+# Path A: FRED/paper nuclear + FRED-like EM. Homogeneous water, C-12 200 MeV/u.
+# libEvents_C12_*.dat are not in the 3.76 libFred.data pack; fragmentation
+# uses the paper Table-1 + Eq.12 sampler already in sycl_inelastic_device.inc.
+primary_atomic_number: 6
+primary_mass_number: 12
+initial_energy_MeVu: 200.0
+number_of_histories: 100000
+phantom_length_mm: 400.0
+depth_bin_width_mm: 0.5
+maximum_step_mm: 0.1
+maximum_relative_energy_loss: 0.01
+energy_cutoff_MeV: 0.05
+water_density_g_per_cm3: 1.0
+
+enable_energy_straggling: true
+energy_straggling_model: vavilov_landau
+# Packaged C-12 inverse CDF is at data/packages/c12_G4_WATER_fluctuation_50k.csv
+# (not yet sampled on the GPU kernel; vavilov_landau is the live EM model).
+straggling_scale: 1.0
+enable_multiple_scattering: true
+# Highland 13.6 MeV in code × ~1.03 (14.1/13.6) × f_mcs ~1.35
+multiple_scattering_scale: 1.40
+enable_inelastic: true
+nuclear_model: fred_paper
+enable_nuclear_elastic: true
+fred_event_library_h_file: data/packages/c12_H1_95MeVu_events.bin
+fred_event_library_o_file: data/packages/c12_O16_95MeVu_events.bin
+enable_secondary_transport: true
+primary_stopping_power_file: data/stopping_power_water_geant4_11_3_2.csv
+
+enable_voxel_scoring: true
+voxel_bins_x: 400
+voxel_bins_y: 400
+voxel_size_x_mm: 0.2
+voxel_size_y_mm: 0.2
+
+output_file: out/gpu_fred_paper_e200/depth_dose.csv
+dose_output_file: out/gpu_fred_paper_e200/depth_dose_Gy.csv
+random_seed: 20260830
+device: cuda

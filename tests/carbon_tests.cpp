@@ -16,6 +16,7 @@
 #include "carbon/transport.hpp"
 #include "carbon/transport_config.hpp"
 #include "carbon/detail/fred_fragmentation_data.hpp"
+#include "carbon/fred_event_library.hpp"
 #include "carbon/fred_table1.hpp"
 #include "carbon/inelastic.hpp"
 
@@ -1571,6 +1572,12 @@ void test_energy_dependent_straggling_scale() {
         carbon::interpolate_straggling_scale(
             300.0, energies, scales, 0, 1.07),
         1.07, 1.0e-12, "Scalar straggling fallback failed");
+    require_near(
+        carbon::scale_energy_loss_ratio_preserving_mean(1.4, 0.5),
+        1.2, 1.0e-12, "Packaged fluctuation width scale failed");
+    require_near(
+        carbon::scale_energy_loss_ratio_preserving_mean(0.2, 2.0),
+        0.0, 1.0e-12, "Packaged fluctuation scale must keep loss nonnegative");
 }
 
 void test_primary_inelastic_xs_correction() {
@@ -3127,6 +3134,140 @@ void test_kox_icru_cross_sections() {
     require(prob_H_400 > 0.20f && prob_H_400 < 0.35f, "P(H) at 400 MeV/u in [0.20, 0.35]");
 }
 
+
+void test_fred_2gr_package() {
+    const auto table = carbon::Fred2GrMcsTable::from_binary(
+        std::filesystem::path(CARBON_SOURCE_DIR) /
+        "data/packages/fred_3_76_mcs_2gr.bin");
+    require(table.values.size() == 6U * 51U * 48U, "2GR table dimensions");
+    const auto w1 = carbon::fred_2gr_parameter(
+        table.values.data(), 0, 100.0F, 0.01F);
+    const auto sigma_c = carbon::fred_2gr_parameter(
+        table.values.data(), 1, 100.0F, 0.01F);
+    const auto m = carbon::fred_2gr_parameter(
+        table.values.data(), 5, 100.0F, 0.01F);
+    require(w1 >= 0.0F && w1 <= 1.0F, "2GR core weight in [0,1]");
+    require(sigma_c > 0.0F, "2GR core width positive");
+    require(m > 0.5F, "2GR Rutherford exponent valid");
+    require(carbon::fred_2gr_parameter(
+                table.values.data(), 0, 300.0F, 0.01F) < 0.0F,
+            "2GR rejects energy outside FRED table domain");
+
+    require_near(carbon::fred_2gr_high_energy_angle_scale(236.0), 1.0,
+                 1.0e-12, "2GR extrapolation is continuous at 236 MeV/u");
+    const auto scale_300 = carbon::fred_2gr_high_energy_angle_scale(300.0);
+    const auto scale_400 = carbon::fred_2gr_high_energy_angle_scale(400.0);
+    require(scale_300 > 0.0 && scale_300 < 1.0,
+            "2GR 300 MeV/u extrapolation scale is physical");
+    require(scale_400 > 0.0 && scale_400 < scale_300,
+            "2GR extrapolation scale decreases with energy");
+
+    carbon::TransportConfig legacy;
+    require(legacy.fred_2gr_high_energy_mode == "zero" &&
+                !legacy.uses_fred_2gr_high_energy_extrapolation(),
+            "2GR legacy high-energy behavior is the default");
+    carbon::TransportConfig extrapolated;
+    extrapolated.multiple_scattering_model = "fred_2gr";
+    extrapolated.fred_2gr_mcs_file = "fred_2gr.bin";
+    extrapolated.fred_2gr_high_energy_mode = "kinematic_extrapolation";
+    extrapolated.validate();
+    require(extrapolated.uses_fred_2gr_high_energy_extrapolation(),
+            "2GR kinematic extrapolation mode was not enabled");
+    auto invalid_mode = extrapolated;
+    invalid_mode.fred_2gr_high_energy_mode = "kinematic";
+    require_throws([&invalid_mode] { invalid_mode.validate(); },
+                   "Unknown 2GR high-energy mode was accepted");
+    auto invalid_model = extrapolated;
+    invalid_model.multiple_scattering_model = "highland";
+    require_throws([&invalid_model] { invalid_model.validate(); },
+                   "2GR extrapolation was accepted with Highland MCS");
+}
+
+void test_multi_energy_fred_event_libraries() {
+    for (const auto energy : {95, 200, 300, 400}) {
+        for (const auto& target : {std::string("H1"), std::string("C12"),
+                                   std::string("O16")}) {
+            const auto path = std::filesystem::path(CARBON_SOURCE_DIR) /
+                "data/packages" /
+                ("c12_" + target + "_" + std::to_string(energy) +
+                 "MeVu_events.bin");
+            const auto lib = carbon::load_fred_event_library(path);
+            require_near(lib.reference_energy_MeVu, static_cast<float>(energy),
+                         1.0e-4F, "event-library reference energy");
+            require(lib.event_count > 3000, "multi-energy library event count");
+            const int expected_z = target == "H1" ? 1 : (target == "C12" ? 6 : 8);
+            const int expected_a = target == "H1" ? 1 : (target == "C12" ? 12 : 16);
+            require(lib.target_z == expected_z && lib.target_a == expected_a,
+                    "event-library target identity");
+        }
+    }
+}
+void test_fred_event_library_load() {
+    const auto lib = carbon::load_fred_event_library(
+        std::filesystem::path(CARBON_SOURCE_DIR) /
+        "data/packages/c12_H1_95MeVu_events.bin");
+    require(lib.event_count > 1000, "H1 event library has events");
+    require(lib.max_fragments == 8, "max fragments");
+    require_near(lib.reference_energy_MeVu, 95.0F, 1.0e-3F, "95 MeV/u reference");
+    require(lib.fragment_count[0] >= 1, "first event has a charged fragment");
+}
+
+void test_topas_c12_h_elastic_table() {
+    const float s100 = carbon::calculate_sigma_el_H_mb(100.0F);
+    const float s400 = carbon::calculate_sigma_el_H_mb(400.0F);
+    require(s100 > 50.0F && s100 < 200.0F, "TOPAS C+p elastic at 100 MeV/u");
+    require(s400 > 20.0F && s400 < s100, "elastic XS falls with energy");
+    const float m100 = carbon::water_elastic_h_macro_per_mm(100.0F, 1.0F);
+    require(m100 > 1.0e-4F && m100 < 5.0e-3F, "water H elastic macro/mm");
+}
+
+void test_fred_paper_sigma_cc_and_water_macro() {
+    const float sig_cc_95 = carbon::calculate_sigma_cc_mb(95.0F);
+    require(sig_cc_95 > 700.0F && sig_cc_95 < 1100.0F, "C-C fit at 95 MeV/u near paper 760–1000 mb");
+    const float sig_o_scaled = carbon::calculate_sigma_nonel_mb(
+        12.0F, 6.0F, 16.0F, 8.0F, 95.0F, 1140.0F);
+    const float sig_o_raw = carbon::calculate_kox_sigma_O(95.0F, 1140.0F);
+    require(sig_o_scaled > 800.0F && sig_o_scaled < 1600.0F, "scaled C-O inelastic");
+    require(std::fabs(sig_o_scaled - sig_o_raw) > 1.0F,
+            "Kox ratio times C-C is not raw Kox C-O");
+    const auto table = carbon::CrossSectionTable::from_fred_paper_water(1.0);
+    require(table.energies().size() == 401, "1 MeV/u paper grid");
+    const double tot = table.interpolate(200.0);
+    require(tot > 0.003 && tot < 0.03, "water macroscopic XS /mm at 200 MeV/u");
+    require(table.interpolate_target_h_fraction(200.0) > 0.2 &&
+                table.interpolate_target_h_fraction(200.0) < 0.5,
+            "paper P(H) in water");
+}
+
+void test_c12_hydrogen_elastic_kinematics() {
+    const float e0 = 2400.0F;
+    const auto scat = carbon::sample_c12_hydrogen_elastic(e0, 0.0F, 0.0F, 1.0F, 0.25F, 0.1F);
+    require_near(scat.projectile_ke_MeV + scat.proton_ke_MeV, e0, 1.0e-3F,
+                 "elastic KE conserved");
+    require(scat.projectile_ke_MeV < e0, "projectile loses energy");
+    require(scat.proton_ke_MeV > 0.0F, "recoil proton");
+    const float pn = std::sqrt(scat.proj_dir_x * scat.proj_dir_x +
+                               scat.proj_dir_y * scat.proj_dir_y +
+                               scat.proj_dir_z * scat.proj_dir_z);
+    require_near(pn, 1.0F, 1.0e-5F, "projectile direction unit");
+}
+
+void test_vavilov_landau_straggling_sampler() {
+    carbon::TransportConfig cfg;
+    cfg.energy_straggling_model = "vavilov_landau";
+    cfg.validate();
+    require(cfg.straggling_sampler_id() == carbon::straggling_sampler_vavilov_landau,
+            "vavilov sampler id");
+    double sum = 0.0;
+    for (int i = 1; i <= 2000; ++i) {
+        const double g = 0.0;
+        const double u = static_cast<double>(i) / 2001.0;
+        sum += carbon::sample_vavilov_landau_energy_loss(1.0, 0.4, g, u, 2.0, 50.0);
+    }
+    const double mean = sum / 2000.0;
+    require(mean > 0.4 && mean < 2.0, "vavilov-like mean stays O(mean loss)");
+}
+
 void test_table1_no_np_evaporation_dump() {
     float uniforms[16];
     uint8_t idx[8];
@@ -3382,6 +3523,13 @@ int main() {
         test_ion_species_stopping_power_grid_validation();
         test_stopping_power_csv_corruption_rejection();
         test_kox_icru_cross_sections();
+        test_topas_c12_h_elastic_table();
+        test_fred_event_library_load();
+        test_fred_2gr_package();
+        test_multi_energy_fred_event_libraries();
+        test_fred_paper_sigma_cc_and_water_macro();
+        test_c12_hydrogen_elastic_kinematics();
+        test_vavilov_landau_straggling_sampler();
         test_table1_no_np_evaporation_dump();
         test_energy_dependent_inclusive_yields();
         test_projectile_joint_channel();

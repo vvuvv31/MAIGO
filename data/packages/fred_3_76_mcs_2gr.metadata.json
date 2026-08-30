@@ -1,0 +1,75 @@
+{
+  "format": "M2GR",
+  "version": 1,
+  "source": "FRED 3.76.0 libFred.data",
+  "source_sha256": "b7e4439e12f0c76aec79649e4fe8fd36ffdff58bcdef56c153fc2903e79af5d9",
+  "energy_bins": 48,
+  "log_areal_density_bins": 51,
+  "parameter_order": [
+    "w1",
+    "sigma_c",
+    "w2",
+    "sigma_t",
+    "b",
+    "m"
+  ],
+  "energy_coordinate": "iT=(T_MeV_per_u-1)/5",
+  "areal_density_coordinate": "ilogs=(log10(rhodz_g_per_cm2)+4)/0.1",
+  "payload_sha256": "85a5bad77f7bb7c66dc3c49d47a9f23444c45dfa343510074a225b2088ac34b1",
+  "resources": [
+    {
+      "resource": "data/mcs/w1_2GR.txt",
+      "size": 31875,
+      "offset": 15118687,
+      "archive_index": 87,
+      "index_checksum_u32": 3949084113,
+      "toc_digest": "0440e586e3b55f6e369699e6bba1eb18",
+      "resource_sha256": "15d9922180f4e9b4f024f58467e589058332c78dbc67e4391e26bfe7f3608caf"
+    },
+    {
+      "resource": "data/mcs/sigma_c_2GR.txt",
+      "size": 31875,
+      "offset": 15501187,
+      "archive_index": 99,
+      "index_checksum_u32": 2717737894,
+      "toc_digest": "d297d27b15cfddf76ff4ef5d78cb338e",
+      "resource_sha256": "0730d01e803dbf70f82175bf99ec856a889ef1045992b7517f5157d435cf7e28"
+    },
+    {
+      "resource": "data/mcs/w2_2GR.txt",
+      "size": 31875,
+      "offset": 14704429,
+      "archive_index": 78,
+      "index_checksum_u32": 1522004513,
+      "toc_digest": "a4b9a80ba85d14f8b4b09520c9ea8561",
+      "resource_sha256": "2bc579a1aab4f47dc93fb695bb2aa570377f447eff58901aa32d247794b369e3"
+    },
+    {
+      "resource": "data/mcs/sigma_t_2GR.txt",
+      "size": 31875,
+      "offset": 15437437,
+      "archive_index": 97,
+      "index_checksum_u32": 33448053,
+      "toc_digest": "a174badea53f3caf5a5b31a615408c66",
+      "resource_sha256": "676273a9406e06c5d974d5153b6035de0d7d38e235c4ffac97c0db39c4d7049d"
+    },
+    {
+      "resource": "data/mcs/b_2GR.txt",
+      "size": 31875,
+      "offset": 14895562,
+      "archive_index": 80,
+      "index_checksum_u32": 1137067894,
+      "toc_digest": "fe3dc064cd0cc922faec136be915ebb3",
+      "resource_sha256": "db8df6faf79ea53cb4d4305464b6b5d6e2431536220923c53af00d47a140537f"
+    },
+    {
+      "resource": "data/mcs/m_2GR.txt",
+      "size": 31875,
+      "offset": 15373687,
+      "archive_index": 95,
+      "index_checksum_u32": 2235778461,
+      "toc_digest": "725b1b7fd5b6a0a15bd7c8752fa68914",
+      "resource_sha256": "6d98d055da017efa1b711836b48a3c5322c93576eda9e380b88842c5a18ff65c"
+    }
+  ]
+}

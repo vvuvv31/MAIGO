@@ -61,16 +61,18 @@ def load_and_analyze(topas_path, gpu_path, max_z_mm=None):
     t_vol = np.fromfile(topas_path, dtype=np.float64).reshape((nz, ny, nx))
     g_vol = np.fromfile(gpu_path, dtype=np.float32).reshape((nz, ny, nx))
     
-    z_all = (np.arange(nz) + 0.5) * dz
-    if max_z_mm:
-        valid = z_all <= max_z_mm
-        t_vol = t_vol[valid]
-        g_vol = g_vol[valid]
-        z_all = z_all[valid]
-        
-    # Compute IDD (sum over xy)
-    t_idd = np.sum(t_vol, axis=(1, 2))
-    g_idd = np.sum(g_vol, axis=(1, 2))
+    # Compute IDD from the complete 3D scorers, then limit plots and fits
+    # to 1.2 times the TOPAS Bragg-peak depth.
+    t_idd_full = np.sum(t_vol, axis=(1, 2))
+    g_idd_full = np.sum(g_vol, axis=(1, 2))
+    z_full = (np.arange(nz) + 0.5) * dz
+    peak_depth_mm = z_full[np.argmax(t_idd_full)]
+    valid = z_full <= 1.2 * peak_depth_mm
+    t_vol = t_vol[valid]
+    g_vol = g_vol[valid]
+    z_all = z_full[valid]
+    t_idd = t_idd_full[valid]
+    g_idd = g_idd_full[valid]
     
     # Step sampling for lateral profiles
     step = 2 # every 1.0 mm
@@ -110,7 +112,7 @@ def plot_benchmark_png(E_mevu, z_all, t_idd, g_idd, z_samples, t_sc, t_sh, g_sc,
     ax1.axvline(z_peak, color="gray", linestyle=":", label=f"Bragg Peak ({z_peak:.2f} mm)")
     ax1.set_title("Integrated Depth Dose (IDD)", fontsize=13, fontweight="bold")
     ax1.set_xlabel("Depth z (mm)", fontsize=11, fontweight="bold")
-    ax1.set_ylabel("Absorbed Dose (Gy / 100k)", fontsize=11, fontweight="bold")
+    ax1.set_ylabel("Absorbed Dose (Gy / 1M)", fontsize=11, fontweight="bold")
     ax1.grid(True, linestyle="--", alpha=0.6)
     ax1.legend(fontsize=10, loc="upper right")
     
@@ -121,9 +123,10 @@ def plot_benchmark_png(E_mevu, z_all, t_idd, g_idd, z_samples, t_sc, t_sh, g_sc,
     ax2.plot(z_all[valid_mask], idd_diff[valid_mask], color="purple", linewidth=2.0, label="IDD Diff: (GPU - TOPAS)/TOPAS (%)")
     ax2.axhline(0, color="black", linestyle="--", linewidth=1.2)
     ax2.axvline(z_peak, color="gray", linestyle=":")
-    ax2.set_title("IDD Relative Error (%) [Unclipped]", fontsize=13, fontweight="bold")
+    ax2.set_title("IDD Relative Error (%) [±5%]", fontsize=13, fontweight="bold")
     ax2.set_xlabel("Depth z (mm)", fontsize=11, fontweight="bold")
     ax2.set_ylabel("Relative Error (%)", fontsize=11, fontweight="bold")
+    ax2.set_ylim(-5.0, 5.0)
     ax2.grid(True, linestyle="--", alpha=0.6)
     ax2.legend(fontsize=10, loc="upper right")
     
@@ -158,9 +161,10 @@ def plot_benchmark_png(E_mevu, z_all, t_idd, g_idd, z_samples, t_sc, t_sh, g_sc,
         
     ax4.axhline(0, color="black", linestyle="--", linewidth=1.2)
     ax4.axvline(z_peak, color="gray", linestyle=":")
-    ax4.set_title(r"Lateral $\sigma$ Relative Error (%) [Unclipped]", fontsize=13, fontweight="bold")
+    ax4.set_title(r"Lateral $\sigma$ Relative Error (%) [$\pm$5\%]", fontsize=13, fontweight="bold")
     ax4.set_xlabel("Depth z (mm)", fontsize=11, fontweight="bold")
     ax4.set_ylabel("Relative Error (%)", fontsize=11, fontweight="bold")
+    ax4.set_ylim(-5.0, 5.0)
     ax4.grid(True, linestyle="--", alpha=0.6)
     ax4.legend(fontsize=10, loc="upper right")
     
@@ -169,17 +173,23 @@ def plot_benchmark_png(E_mevu, z_all, t_idd, g_idd, z_samples, t_sc, t_sh, g_sc,
     plt.close()
     print(f"Successfully generated {out_png}")
 
-os.makedirs("plots", exist_ok=True)
-os.makedirs("/home/wuwei/.gemini/antigravity-cli/brain/b6e8050e-cd93-476b-bd8a-039915838a5f/plots", exist_ok=True)
+if __name__ == "__main__":
+    os.makedirs("plots", exist_ok=True)
 
-for E, tpath, gpath, max_z in [
-    (100, "/mnt/sda/wuwei/carbon_emittance_inelastic_100k/e100/topas_emittance_inelastic_e100.bin", "out/gpu_inelastic_e100/voxel_dose.raw", 40.0),
-    (200, "/mnt/sda/wuwei/carbon_emittance_inelastic_100k/e200/topas_emittance_inelastic_e200.bin", "out/gpu_inelastic_e200/voxel_dose.raw", 120.0),
-    (300, "/mnt/sda/wuwei/carbon_emittance_inelastic_100k/e300/topas_emittance_inelastic_e300.bin", "out/gpu_inelastic_e300/voxel_dose.raw", 220.0),
-    (400, "/mnt/sda/wuwei/carbon_emittance_inelastic_100k/e400/topas_emittance_inelastic_e400.bin", "out/gpu_inelastic_e400/voxel_dose.raw", 340.0)
-]:
-    if os.path.exists(tpath) and os.path.exists(gpath):
-        print(f"Processing {E} MeV/u...")
-        z_all, t_idd, g_idd, z_samples, t_sc, t_sh, g_sc, g_sh = load_and_analyze(tpath, gpath, max_z)
-        out_png = f"plots/benchmark_{E}MeVu_idd_sigma.png"
-        plot_benchmark_png(E, z_all, t_idd, g_idd, z_samples, t_sc, t_sh, g_sc, g_sh, out_png)
+    for E, tpath, gpath, max_z in [
+        (100, "/mnt/sda/wuwei/carbon_emittance_inelastic_1M/e100/topas_emittance_inelastic_e100.bin",
+         "out/fred_topas_1M_idd_corrected_independent/e100/voxel_dose.raw", 40.0),
+        (200, "/mnt/sda/wuwei/carbon_emittance_inelastic_1M/e200/topas_emittance_inelastic_e200.bin",
+         "out/fred_topas_1M_idd_corrected_independent/e200/voxel_dose.raw", 120.0),
+        (300, "/mnt/sda/wuwei/carbon_emittance_inelastic_1M/e300/topas_emittance_inelastic_e300.bin",
+         "out/fred_topas_1M_idd_corrected_independent/e300/voxel_dose.raw", 220.0),
+        (400, "/mnt/sda/wuwei/carbon_emittance_inelastic_1M/e400/topas_emittance_inelastic_e400.bin",
+         "out/fred_topas_1M_idd_corrected_independent/e400/voxel_dose.raw", 340.0),
+    ]:
+        if os.path.exists(tpath) and os.path.exists(gpath):
+            print(f"Processing {E} MeV/u...")
+            z_all, t_idd, g_idd, z_samples, t_sc, t_sh, g_sc, g_sh = load_and_analyze(
+                tpath, gpath, max_z)
+            out_png = f"plots/benchmark_{E}MeVu_idd_sigma.png"
+            plot_benchmark_png(E, z_all, t_idd, g_idd, z_samples, t_sc, t_sh, g_sc, g_sh,
+                               out_png)

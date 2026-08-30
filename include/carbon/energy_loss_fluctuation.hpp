@@ -1,11 +1,18 @@
 #pragma once
 
+#include <algorithm>
 #include <cstddef>
 #include <filesystem>
 #include <string>
 #include <vector>
 
 namespace carbon {
+
+template <typename Scalar>
+inline Scalar scale_energy_loss_ratio_preserving_mean(
+    const Scalar ratio, const Scalar scale) noexcept {
+    return std::max(Scalar{0}, Scalar{1} + scale * (ratio - Scalar{1}));
+}
 
 template <typename Scalar>
 inline Scalar sample_energy_loss_ratio_from_grid(

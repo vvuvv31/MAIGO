@@ -1,0 +1,2157 @@
+ORIGINAL RESEARCH
+published: 25 March 2022
+doi: 10.3389/fonc.2022.780784
+
+A Data-Driven Fragmentation Model
+for Carbon Therapy GPU-Accelerated
+Monte-Carlo Dose Recalculation
+Micol De Simoni 1,2, Giuseppe Battistoni 3, Angelica De Gregorio 1,2, Patrizia De Maria 4,
+Marta Fischetti 2,5, Gaia Franciosini 1,2, Michela Maraﬁni 2,6, Vincenzo Patera 2,5,
+Alessio Sarti 2,5, Marco Toppi 5,7*, Giacomo Traini 2, Antonio Trigilio 1,2
+and Angelo Schiavi 2,5
+1 Department of Physics, University of Rome “Sapienza”, Rome, Italy, 2 INFN (Istituto Nazionale di Fisica Nucleare) section of
+Roma 1, Rome, Italy, 3 INFN (Istituto Nazionale Fisica Nucleare) Section of Milano, Milano, Italy, 4 Department of MedicoSurgical Sciences and Biotechnologies, Post-Graduate School in Medical Physics, Rome, Italy, 5 Department of Scienze di
+Base e Applicate per l’Ingegneria (SBAI), University of Rome “Sapienza”, Rome, Italy, 6 Museo Storico della Fisica e Centro
+Studi e Ricerche Enrico Fermi, Rome, Italy, 7 INFN Laboratori Nazionali di Frascati, Frascati, Italy
+
+Edited by:
+Thomas Tessonnier,
+Heidelberg Ion Beam Therapy Center,
+Heidelberg University
+Hospital, Germany
+Reviewed by:
+Chris Beltran,
+Mayo Clinic Florida, United States
+Benedikt Kopp,
+Heidelberg University Hospital,
+Germany
+*Correspondence:
+Marco Toppi
+marco.toppi@uniroma1.it
+Specialty section:
+This article was submitted to
+Radiation Oncology,
+a section of the journal
+Frontiers in Oncology
+Received: 21 September 2021
+Accepted: 04 February 2022
+Published: 25 March 2022
+Citation:
+De Simoni M, Battistoni G,
+De Gregorio A, De Maria P, Fischetti M,
+Franciosini G, Maraﬁni M, Patera V,
+Sarti A, Toppi M, Traini G, Trigilio A and
+Schiavi A (2022) A Data-Driven
+Fragmentation Model for Carbon
+Therapy GPU-Accelerated MonteCarlo Dose Recalculation.
+Front. Oncol. 12:780784.
+doi: 10.3389/fonc.2022.780784
+
+Frontiers in Oncology | www.frontiersin.org
+
+The advent of Graphics Processing Units (GPU) has prompted the development of Monte
+Carlo (MC) algorithms that can signiﬁcantly reduce the simulation time with respect to
+standard MC algorithms based on Central Processing Unit (CPU) hardware. The
+possibility to evaluate a complete treatment plan within minutes, instead of hours,
+paves the way for many clinical applications where the time-factor is important. FRED
+(Fast paRticle thErapy Dose evaluator) is a software that exploits the GPU power to
+recalculate and optimise ion beam treatment plans. The main goal when developing the
+FRED physics model was to balance accuracy, calculation time and GPU execution
+guidelines. Nowadays, FRED is already used as a quality assurance tool in Maastricht and
+Krakow proton clinical centers and as a research tool in several clinical and research
+centers across Europe. Lately the core software has been updated including a model of
+carbon ions interactions with matter. The implementation is phenomenological and based
+on carbon fragmentation data currently available. The model has been tested against the
+MC FLUKA software, commonly used in particle therapy, and a good agreement was
+found. In this paper, the new FRED data-driven model for carbon ion fragmentation will be
+presented together with the validation tests against the FLUKA MC software. The results
+will be discussed in the context of FRED clinical applications to 12 C ions
+treatment planning.
+Keywords: hadrontherapy, carbon ion (C12), fragmentation, fast MC, quality assurance (QA), graphics processing
+unit (GPU)
+
+1 INTRODUCTION
+In Particle therapy (PT) solid tumors are irradiated by means of accelerated charged particle beams
+(mainly protons and, more recently, carbon ions). The main advantage this technique with respect
+to the standard radiotherapy using X-rays/electron beams, is related to the different longitudinal
+energy release proﬁles. While photons longitudinal dose release is characterized by a slow
+
+1
+
+March 2022 | Volume 12 | Article 780784
+
+De Simoni et al.
+
+FRED MC for Carbon Therapy
+
+needed to yield the desired level of precision. For that reason, the
+use of full MC simulations, especially in carbon therapy where
+also the secondary particles emitted need to be accounted for, is
+limited to the re-calculation of existing treatment plans for
+research studies, while it is not suitable for a routinely application
+in the TPS implementation and as QA tool for all patients (5).
+Despite the great efforts devoted to reducing the MC dose
+calculation time (6–9), the currently available algorithms and
+implementations still cannot match the clinical requirements.
+The advent of general programming Graphics Processing
+Units (GPU) has prompted the development of MC algorithms
+that can signiﬁcantly reduce the plan recalculation time (10–19)
+achieving an impressive speed gain compared to CPU‐based
+calculations, proﬁting from algorithmic simpliﬁcations and
+hardware acceleration. Exploiting the GPU hardware, many
+vended TPS used for proton therapy now include MC tools
+(20–25). For carbon therapy, recently a tool called goCMC (GPU
+OpenCL Carbon Monte Carlo) (26) was developed.
+In this framework, the FRED (Fast paRticle thErapy Dose
+evaluator) (27) software toolkit has been developed. It is a MCbased software optimized for GPU architecture that has been
+developed to recalculate and optimize external beams radio
+therapy treatment plans delivered using either protons, carbon
+ions, electrons or photons. FRED purpose is to rapidly
+recalculate a complete treatment plan within minutes, opening
+the way for many clinical applications where the time-factor is of
+paramount importance.
+
+exponential decrease, for charged particles a sharp peak at the
+end of the path is observed, providing a more selective energy
+deposition. By conveniently controlling the Bragg Peak (BP)
+position by means of the beam energy tuning, it is possible to
+concentrate the dose to tumors and, at the same time, preserve
+the surrounding healthy tissues. In carbon ion therapy an
+important effect that has to be properly accounted for at the
+treatment planning stage is the contribution to the dose
+absorption distribution from nuclear fragments produced by
+the interaction of carbon ions with target nuclei. This process
+attenuates and mitigates the primary beam contribution while
+producing secondary fragments with an energy per nucleon
+comparable to that of the projectile. As a consequence, the
+total absorbed dose will have a non-negligible contribution due
+to secondary particles which have different biological
+effectiveness and range with respect to the primary beam,
+releasing the dose also in a tail beyond the BP. When
+comparing carbon ions and protons, it is also important to
+note that the BP of the former is more resolved and the
+absorbed dose distribution shows a better ratio between the
+peak and the plateau region. Another important difference is that
+photons have a sparse ionization density (low-LET radiation)
+and protons are considered to the photon-like beside their endof-range path where they can reach high LET values, while
+carbon ions are high-LET particles all along their path. The
+achieved steep, when compared to conventional radiotherapy,
+dose gradients in PT demand accurate patient positioning and
+treatment planning to maximize the treatment efﬁcacy. Patient
+treatment plans are obtained using a Treatment Planning
+System (TPS) software that provides, accordingly to medical
+prescriptions, the irradiation details for each particle beam in
+each ﬁeld. The commercial TPS used in the clinical routine are
+mainly based on analytical algorithms that achieve a reduced
+computation time at the cost of a reduced accuracy in the dose
+maps calculations. Analytical TPSs have to be routinely tested
+through quality assurance (QA) tools to verify that the
+accelerators parameters have been calculated correctly for each
+patient. In several treatment centers the QA check is performed
+having the accelerator delivering the beam in a tank full of water
+following the TPS instructions and then measuring the dose in
+different target points with several ionization chambers. To
+improve the analytic TPS usually Monte-Carlo based TPS are
+employed (e.g. both RayStation and Varian AcurosPT provide
+full MC support). It has been demonstrated that the use of MC in
+PT could lead to a signiﬁcant reduction in treatment planning
+safety margins (1), thanks to its accurate modelling and
+calculation of the dose absorbed by the tissues. MC simulations
+of proton treatment plans have previously been performed
+using well‐established software packages such as FLUKA (2),
+GEANT4 and MCNP X (3). Despite the improvements that can
+be obtained by means of MC dose calculation, pencil-beambased algorithms are widely used in clinical practice (4), mainly
+because of their high computational efﬁciency. On the other
+hand, the accuracy of a MC dose calculation is determined by the
+total number of particles used for the simulation, implying that a
+large number of particles, and long computational times, are
+
+Frontiers in Oncology | www.frontiersin.org
+
+2 MATERIAL AND METHODS
+The FRED core engine has been developed balancing accuracy,
+calculation time and GPU execution guidelines to achieve the
+best accuracy in the absorbed dose calculation while exploiting
+the GPU power to reduce the calculation time. To do so, the most
+effective physical models from the literature have been chosen,
+and a careful optimization has been carried out to achieve the
+needed precision in the dose calculation while avoiding the
+explicit computation and handling of processes that would
+result in negligible contributions while affecting the software
+tracking performance (e.g. atom excitation, the production and
+tracking of photons, etc.). To reduce the computational time of
+many physical processes, FRED relies on a library of precomputed look-up tables. This approach performs extremely
+well on GPU cards where hardware interpolation can be
+exploited using the so-called Texture Units. The algorithms
+core structure is detailed elsewhere (27).
+The handling of proton beams interaction with matter
+implemented within FRED is already at a mature stage,
+achieving a precision that matches the clinical requirements
+and allowed its use as a quality assurance tool in the centers of
+Maastricht and Krakow and as a research tool at several clinical
+and research centers in Europe (Krakow, Trento, Maastricht,
+Lyon and PSI). Carbon ion, electron and photon beams have
+been recently introduced as well for applications in carbon ion
+therapy, photon radiotherapy and IORT (IntraOperative
+
+2
+
+March 2022 | Volume 12 | Article 780784
+
+De Simoni et al.
+
+FRED MC for Carbon Therapy
+
+Radiation Therapy). In this contribution the newly developed
+data-driven tracking model of carbon ions will be described
+in detail.
+The dose engine for carbon ions relies on three main building
+blocks that are used to simulate the particles interaction with
+matter: the ionization energy loss, the multiple scattering and the
+fragmentation model. The ionization energy loss and multiple
+scattering implemented in the carbon ions model are analogous
+to the ones used in FRED for protons (27). For what concerns the
+multiple coulomb scattering of carbon ion beams, the single
+Gaussian term included in Highland’s formula (28) to account
+for such interactions is multiplied by a scaling factor fmcs,
+following the approach documented in Fippel and Soukup (7).
+This factor was obtained by comparing FRED and FLUKA
+simulations of a single pencil beam in water with an energy in
+the center of the therapeutic range and with nuclear interactions
+switched off. The values obtained have been computed at
+different depths, energies and using different ion beams,
+resulting in values ranging from fmcs = 1.29 (for 200 MeV/u
+alpha particles, computed at 15% of range) to fmcs = 1.43 (for 300
+MeV/u oxygen ions, computed at 90% of the range). For each
+transported charged particle, the best scaling factor was
+implemented as the one that gave the best lateral distribution
+of a single pencil beam at the BP placed at a reference depth of
+15 cm in water.
+The nuclear model, developed completely from scratch, has been
+parameterized using data already published and this is, as for now, a
+unique characteristic of FRED. The other available MC software
+implemented on a GPU hardware that is currently capable of
+handling carbon ions interactions [goCMC (26)] makes instead
+use of the information obtained from Geant4 simulations. In
+particular, for FRED, data used for the calculation of the
+fragmentation cross sections were extracted from the papers of
+Tacheki (29), Zhang (30) and Kox (31, 32). Data used for the
+sampling of the combination offragments emitted, energy and angle
+distributions, were taken from the experiments at Ganil (laboratory
+of CAEN, France), where the fragmentation of carbon ions on thin
+targets (H, C, O, Al and Ti) has been studied (33, 34). The
+experiment provided data about the angular and energy crosssection of a carbon beam of 95 and 50 MeV/u and with detection
+angles in the range (-43°; 43°). To simulate all the energies of interest
+for carbon ion therapy [namely up to 400 MeV/u as in the case of
+CNAO center (35)], an algorithm to scale the energy and angle
+distribution as a function of the incident particle energy has been
+implemented. Whenever the data were missing, the predictions of
+the FRED model have been bench-marked instead, against the
+FLUKA MC.
+
+where the sum is performed against all the elements of the target
+compound, m is the attenuation coefﬁcient, r is the material
+density, NA is the number of Avogadro, wi, Ai and sti are
+respectively the mass weight, the atomic mass and the total
+cross-section of nucleus-nucleus interactions of each i-th
+element of the target. The total cross-section is deﬁned as the
+sum of the elastic and non-elastic cross-sections.
+Elastic collisions are handled requiring kinetic energy and
+momentum conservation, and sampling the deﬂection angle in
+the center of mass frame. In the case of non-elastic collisions, no
+energy conservation is implied, the incident carbon ion track is
+removed from the simulation, and charged fragments are
+generated by means of a sampling procedure and queued
+for tracking.
+
+2.1.1 Elastic Cross-Section
+The elastic cross-section is explicitly accounted only if the carbon
+ion projectile interacts with a hydrogen nucleus, as the
+fragmentation process dominates for all heavier target nuclei.
+To handle the elastic interactions, we have exploited the center of
+mass reference system in which the carbon ion interactions with
+the proton target can be modeled using the data collected
+studying the reversed process (proton interactions with a
+carbon ion target).
+The sampling of elastic cross-sections was done according to
+data available from the ENDF database [ENDF/B-VII IncidentProton Data (36)], based on nuclear model calculations
+benchmarked against experimental data (37, 38).
+The relationship between the carbon ion scattering angles,
+when it interacts with the hydrogen nucleus, in the center of
+mass and in the laboratory reference frames can be written as:
+A + cos (qc )
+cos (ql ) = pﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃ
+2
+A + 2A cos (qc ) + 1
+
+where ql and qc are respectively the scattering angles in the
+laboratory and center of mass (CoM) reference frames, A is the
+atomic mass of the projectile and the atomic mass of the hydrogen
+has already been considered equal to 1 (39, 40). The carbon ion
+diffusion angle is hence extracted using, as input, an isotropic
+distribution computed in the CoM frame.
+With the same procedure it is possible to calculate also the
+proton target deﬂection (fl):
+1 + cos (qc )
+ﬃ
+cos (fl ) = pﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃ
+2(1 + cos (qc ))
+
+The nuclear interactions of a given particle are handled in two
+separate steps. First, the probability that a nuclear interaction
+occurs is computed, taking into account each particle mass
+attenuation coefﬁcient using the following equation:
+
+Frontiers in Oncology | www.frontiersin.org
+
+(3);
+
+The other parameter necessary for the description of the
+elastic interaction is the new energy of the projectile and of the
+target element(s). The kinetic energy in the laboratory system
+after the collision, El 0 , is:
+
+2.1 Nuclear Model
+
+m
+N w si
+=o A i t
+Ai
+r
+i
+
+(2);
+
+El 0 =
+=
+
+(1);
+
+3
+
+A2 + 1 + 2A cos (qc )
+El
+(A + 1)2
+1
+½(1 + a) + (1 − a) cos (qc )El
+2
+
+(4)
+
+March 2022 | Volume 12 | Article 780784
+
+De Simoni et al.
+
+FRED MC for Carbon Therapy
+
+2
+
+where a equals to (A−1)
+and El is the kinetic energy of the ion in
+(A+1)2
+the laboratory system before the collision. Similarly, in the
+p
+laboratory system the energy of the proton El is:
+p
+
+El =
+
+2AEl
+(1 − cos (qc ))
+(A + 1)2
+
+sections are collected in pre-computed look-up tables that
+FRED reads and interpolates.
+The fragmentation of secondary particles has been
+computed directly using the Kox formula (42–44). The
+simulation studies we performed clearly showed that the
+secondaries fragmentation gives a negligible contribution to
+the deposited dose. For that reason, by default, the algorithm
+only takes into account the primary particles fragmentation.
+We have although left the possibility, for the user interested in
+evaluating directly the impact of such contribution, to choose
+whether to enable the accounting for the secondary
+fragmentation contribution as well.
+
+(5)
+
+2.1.2 Non-Elastic Cross-Section
+The non-elastic cross-section depends on the crossed material
+and on the type and energy of incident particle.
+The cross-section of a nucleus projectile Np (Figure 1 left)
+interacting with a nucleus target Nt is obtained from a ﬁt to
+existent carbon-carbon interactions data [Takechi (29), Zhang
+(30) and Kox (31, 32), Figure 1 right]:
+s (Np , Nt , E) = K(Np , Nt , E)(1 − e Ec )(p0 + p1 E + ep2 −p3 E )
+−E
+
+2.1.3 Fragmentation Model
+The nuclear fragmentation process is still lacking a theoretical
+model capable of providing accurate and precise cross sections
+predictions. Interactions between the projectile and target
+nuclei are ultimately described by quantum electrodynamics
+(QED) but nuclear fragmentation interactions are many-body
+problems that defy present-day calculation methods at the most
+fundamental level. The lack of a fundamental theory has been
+addressed developing a semi-empirical model to describe
+nucleus-nucleus interactions. The details can be found in the
+next paragraph.
+
+(6)
+
+where Ec = 30 MeV, p0 = (762 ± 7)mb, p1 = (14.0 ± 0.7) × 10–4 mb
+MeV–1, p2 = 6.7 ± 0.8 and p3 = (13.4 ± 0.7) × 10–3 MeV–1 have
+been obtained from the ﬁt. K(Ap, At, E) is a scaling factor that is
+needed whenever the projectile and target nuclei are different
+from carbon. In particular, the scaling has been obtained using
+the energy-dependent Kox formula (41–43) for the total crosssection sK in nucleus-nucleus reactions
+K(Np , Nt , Ecm ) =
+
+sK (Np , Nt , Ecm )
+sK (12 C,12C, Ecm )
+
+(7)
+
+Sampling of the Target
+
+The ﬁrst step to simulate the fragmentation process in a given
+medium made of many materials is the choice of the actual
+nucleus of the target on which the fragmentation occurs. FRED
+computes such information from tables where a cumulative
+distribution (explained in detail here-after) is associated with
+each target used in the 95 MeV/u Ganil experiment and to each
+possible fragment emitted. To choose which combination of
+fragments will be emitted, it is necessary to know the nucleus hit
+by the carbon ion. This information is retrieved using the Kox’s
+cross-section s K (42–44) and computing a cumulative
+distribution based on the probability for each nucleus to be hit:
+
+where sK(12C,12C, Ecm) is Kox’s cross-section for carbon on
+carbon interactions, while sK(Np, Nt, Ecm) is the Kox’s crosssection for a nucleus projectile Np impinging on a nucleus
+target Nt.
+This scaling law is used for every nucleus of the target
+except for hydrogen, for which the cross-section has been
+computed using the available data from ICRU (International
+Commission on Radiation Units & Measurements) (41). The
+comparison between the available data and the simulation
+performed using FRED is shown in Figure 2. The cross-
+
+FIGURE 1 | On the left, cross-sections of a carbon ion beam as a function of the energy per nucleon of the projectile interacting with different targets: calcium
+(purple cross), carbon (green x), oxygen (blue asterisk), hydrogen (orange square). Each cross-section has been obtained as described by Eq. 6 with the exception
+of the hydrogen target for which the available ICRU data has been used (Figure 2). Cross section dependence on the energy per nucleon of the projectile is shown.
+On the right, fragmentation cross-section in carbon-carbon interactions in the energy range of interest for hadron therapy as a function of the total energy of the
+projectile. In red the ﬁt to data from papers of Takechi (29), Zhang (30) and Kox (31, 32).
+
+Frontiers in Oncology | www.frontiersin.org
+
+4
+
+March 2022 | Volume 12 | Article 780784
+
+De Simoni et al.
+
+FRED MC for Carbon Therapy
+
+FIGURE 2 | Carbon-hydrogen fragmentation cross-section. For energies higher than 250 MeV/u the cross-section can be considered as nearly constant. Red
+triangles show the ICRU data ﬁt result that is used in the FRED implementation. ICRU data (41) are represented as green squares.
+
+Pi =
+
+ni sKi
+s tot
+
+(45)] that allowed to reach a good agreement with the data
+published from the 95 MeV/u Ganil experiment. This iterative
+procedure was implemented to account for the experimental
+correlation between the different fragments production
+probabilities measured by Ganil. Table 1 reports the results of
+the procedure, used for all the targets with the exception of
+hydrogen, for each isotope and elemental target in comparison
+with Ganil experiment measurements.
+Since the Ganil experiment, as shown in Table 1, did not had
+any experimental access to the production of fragments heavier
+than 7Be in the case of a hydrogen target, in that case the
+algorithm uses as input the cumulative distributions obtained
+from a FLUKA simulation1 of the interactions of a 95 MeV/n
+carbon beam impinging on a thin target. The same holds also for
+the neutron production, absent in the Ganil data.
+Outgoing particles from a heavy-ion fragmentation reaction
+are typically described as either “projectile” or “target”
+fragments. In the Ganil experiment, both types of fragments
+were detected and it was impossible to distinguish them. For that
+reason, both phenomena were considered to be present when
+using the cumulative distributions. The fragmentation
+production probabilities were also scaled to account for the
+non-negligible contribution from elastic scattering of 12C
+isotopes. The simulation of each event proceeds using random
+numbers to sample, by means of the cumulative distributions
+previously described, the projectile fragments. The same
+procedure is used for the target fragmentation.
+Once the complete set of fragments is deﬁned, the energy and
+angle computation are obtained as described in the following
+section. If the sum of the energy of all projectile’s and target’s
+fragments is greater than the energy of the projectile, the software
+extracts a new set of fragments until mass, charge and energy are
+conserved. The most frequent fragments are neutrons, protons,
+deuterium and Helium-4 followed by lighter fragments.
+
+(8)
+
+where
+j=N
+
+s tot = o nj sK
+j
+
+(9)
+
+j=1
+
+and sKtot is the sum of the cross-sections of all the N nuclei of the
+target weighted by the occurrence n of each element. For
+hydrogen and carbon targets, the available cross-section from
+data is used. As an example, we list the deﬁnition of the
+probability of interaction on hydrogen and oxygen nuclei, P
+(H) and P(O) respectively, for a carbon ion impinging on a water
+target:
+P(H) =
+
+H
+2sdata
+sKO
+,
+P(O)
+=
+s tot
+s tot
+
+H
++ sKO
+s tot = 2sdata
+
+(10)
+(11)
+
+H
+and sKO
+sdata
+
+are respectively the cross-sections for a
+where
+hydrogen target, which is calculated by means of a data ﬁt
+(Figure 2), and the Kox cross-section for an oxygen target.
+The Kox cross-section is used to compute the probability that
+an incident particle has an interaction with a given nucleus of
+crossed material. The algorithm extracts a uniform random
+number (0,1) to compare with the cumulative distributions
+in order to choose the element to be used for the
+fragmentation simulation.
+
+Sampling of the Fragments
+Once the target nucleus has been determined, the software
+computes the emission probabilities for each fragment using a
+look-up table. The isotopes with a non-negligible production
+cross section are: neutrons, 1H, 2H, 3H, 3He, 4He, 6He, 6Li, 7Li,
+7
+Be, 9Be, 10Be, 8B, 10B, 11B, 10C, 11C and 12C. The probability table
+has been computed using an iterative algorithm [Newton Method
+
+Frontiers in Oncology | www.frontiersin.org
+
+1
+Version: 2020.0.10, using the default values provided by the HADROTHERAPY
+setting.
+
+5
+
+March 2022 | Volume 12 | Article 780784
+
+De Simoni et al.
+
+FRED MC for Carbon Therapy
+
+TABLE 1 | Production probabilities per isotope and for each elemental target reported in the Ganil experiment (33) and built for the code FRED.
+Probabilities [%]
+Frag
+
+(Ganil) H
+
+(Fred) H
+
+(Ganil) C
+
+(Fred) C
+
+(Ganil) O
+
+(Fred) O
+
+n
+H
+2
+H
+3
+H
+3
+He
+4
+He
+6
+He
+6
+Li
+7
+Li
+7
+Be
+9
+Be
+10
+Be
+8
+B
+10
+B
+11
+B
+10
+C
+11
+C
+12
+C
+
+–
+52(8)
+9(2)
+2.0(0.4)
+5.2(0.5)
+25(10)
+1.3(0.1)
+1.5(0.8)
+1.0(0.2)
+2.0(0.4)
+–
+–
+–
+–
+–
+–
+–
+–
+
+1.4x10
+3.8x10
+5.0
+1.3
+3.0
+26
+3.6×10-2
+2.3
+9.3×10-1
+1.6
+2.5×10-1
+1.0×10-4
+1.5×10-1
+1.3
+2.1
+1.9×10-1
+3.9
+5.9×10-1
+
+–
+35(2)
+16.3(0.8)
+6.6(0.4)
+7(1)
+25(6)
+1.0(0.2)
+1.4(0.2)
+1.2(0.2)
+1.0(0.2)
+4(1)×10-1
+1.8(0.4)×10-1
+1.3(0.4)×10-1
+10(3)×10-1
+1.2(0.5)
+1.7(0.6)×10-1
+1.1(0.4)
+1.6(0.9)
+
+6.5x10
+1.0×10
+7.5
+6.1
+1.2
+6.4
+1.7
+2.5×10-1
+4.1×10-1
+8.3×10-2
+1.1×10-1
+2.4×10-1
+1.3×10-2
+8.9×10-2
+2.0×10-1
+1.7×10-2
+5.5×10-2
+4.3×10-2
+
+–
+38(4)
+17(1)
+6.5(0.7)
+7.2(0.9)
+22(7)
+1.0(0.4)
+1.3(0.3)
+1.2(0.3)
+1.0(0.2)
+3.4(0.7)×10-1
+1.9(0.5)×10-1
+1.2(0.5)×10-1
+9(6)×10-1
+1(1)
+1.5(0.9)×10-1
+1.0(0.7)
+1.5(0.9)
+
+6.0x10
+1.6×10
+8.8
+5.1
+1.7
+6.3
+1.0
+2.8×10-1
+3.9×10-1
+1.2×10-1
+7.9×10-2
+1.0×10-1
+1.4×10-2
+8.6×10-2
+1.8×10-1
+1.6×10-2
+7.1×10-2
+7.9×10-2
+
+1
+
+peaked at zero degrees along the incoming beam direction. The target
+fragments angular distribution is instead almost isotropic and the
+energy is smaller than the energy of the projectile fragments. The
+contribution of the projectile fragments term becomes more important
+when the fragments are heavier. For the hydrogen fragments (1H, 2H
+and 3H) the energy and angle of emission are extracted directly by Eq.
+12 both for projectile and target fragmentation.
+The reason of this choice is that, as it can be observed in
+Figures 3–5, the Gaussian and exponential distributions for these
+fragments are largely overlapping and they are not easily
+distinguishable. All other fragments are extracted from the
+Gaussian and the exponential distribution in case of projectile and
+target fragmentation respectively. For a hydrogen target (Figure 3
+and Table 2), with the exception of 1H fragments, all the distributions
+have a predominant Gaussian component. This is because the target
+fragmentation can only produce a proton. The small exponential
+contribution can be explained as the cross-sections for the hydrogen
+target have been obtained by subtraction using the cross-sections
+of CH2 and C targets. The distribution ﬁtted in the experimental
+angular range [4°; 43°] is used to perform an extrapolation to cover
+the full [0°;180°] range in the angular sampling.
+
+Sampling of Energy and Angular Distributions
+When a projectile particle with a velocity v interacts with a ﬁxed
+target, the produced projectile and target fragments have different
+angular and energy distributions. While projectile fragments are
+emitted mostly forward (small angles of emission) and have, on
+average, the same energy per nucleon of the projectile, target
+fragments have lower energies and their space distribution is
+more isotropic. Golovkov and Matsufuji (46, 47) observed that, to
+describe the energy and angular distributions of secondary
+fragments, Gaussian and exponential distributions are needed.
+The ﬁrst one accounts for fragments produced by the projectile,
+while the latter one for the target fragmentation. In Ganil data the
+two contributions were mixed and could not be disentangled. In
+Figures 3–5, it is possible to observe an example of energy and angle
+distributions, in linear and logarithmic scales, for the six different
+fragments (1H, 4He, 6Li, 7Be, 11B and 11C) detected by the 95 MeV/u
+Ganil experiment after the interaction of a 12C ion beam with
+hydrogen, carbon and oxygen targets respectively.
+The measured fragment angles were in the range between 4°
+and 43°, while the applied energy threshold was fragmentdependent (ranging from 4 MeV for 1H to 86.9 MeV for 12C).
+The bi-dimensional phenomenological distribution, f(E, q), built
+using a combination of Gaussian and exponential functions,
+which better describes the data is the following:
+f (E, q) = A1 eaE E+aq q + A2 e−ð 2sE + 2sq Þ
+(E−<E>)2
+
+(q−<q>)2
+
+Extrapolation to Different Beam Energies
+The angle and energy distributions collected by the Ganil
+experiment correspond to fragments produced by a carbon
+beam of 95 MeV/u. To consider every possible energy of the
+projectile, a scaling model has been implemented.
+When sampling the projectile fragmentation, the emission
+energy per nucleon of the i-th fragment is scaled according to the
+following equation:
+
+(12);
+
+where A1, A2, aE, aq, sE, sq, < E > and < q > are respectively the
+different normalization factors of the projectile and target
+contributions, the empirical coefﬁcients that take into account the
+target fragments energy and angle dependency and the mean and
+spread, in energy and angle, values describing the projectile
+fragments distributions. The parameters used in FRED are shown
+in Tables 2–4 for hydrogen, carbon and oxygen target respectively.
+The projectile fragments have an average energy per nucleon that is
+close to the projectile one (in this case 95 MeV/u) and their direction is
+
+Frontiers in Oncology | www.frontiersin.org
+
+i
+Ei ½MeV=u = E95MeV=u
+
+Eproj ½MeV=u
+(1 − k)
+95½MeV=u
+
+(13)
+
+i
+where E95MeV=u
+is the energy per nucleon extracted from the
+Gaussian distribution of the Ganil experiment and Eproj is the
+
+6
+
+March 2022 | Volume 12 | Article 780784
+
+De Simoni et al.
+
+FRED MC for Carbon Therapy
+
+FIGURE 3 | Contour lines (red) of bidimensional ﬁts of energy and angle distribution of different fragments produced by a 95 MeV/u carbon ion beam interacting with
+a hydrogen target. The color maps represent data taken from the 95 MeV/u Ganil experiment in linear (left) and logarithmic (right) scale.
+
+energy per nucleon of the projectile. k is used to take into account
+that the fragments energy from the same event is correlated and
+that the total energy must not exceed the energy of the projectile:
+k = c(1 − R)
+
+R=
+
+(14)
+
+(15)
+
+j=i
+
+i
+Enucl
+=
+
+where c is the correlation factor and R, for each i-th fragment,
+depends on the energy of the previous i-1 fragments:
+
+Frontiers in Oncology | www.frontiersin.org
+
+i
+Enucl
+Ep
+
+7
+
+Sj=0 Ej Aj
+j=i
+
+Sj=0 Aj
+
+:
+
+(16)
+
+March 2022 | Volume 12 | Article 780784
+
+De Simoni et al.
+
+FRED MC for Carbon Therapy
+
+FIGURE 4 | Contour lines (red) of bidimensional ﬁts of energy and angle distribution of different fragments produced by a 95 MeV/u carbon ion beam interacting with
+a carbon target. The color maps represent data taken from the 95 MeV/u Ganil experiment in linear (left) and logarithmic (right) scale.
+
+released to the target fragments is analogous to the one of the
+i
+projectile but E95Mev=u
+is extracted from the exponential
+distribution without any correlation factors.
+The scaling factor for the angle of emission (q) of the
+projectile fragment, can be computed according to:
+
+Ej and Aj are the energy and the atomic number of the
+previous fragments in the current event.
+For the results shown in this paper, the value implemented
+(c=0.4) was chosen in order to achieve the best agreement
+between FRED and FLUKA results.
+With this linear dependence, the assumption that the average
+energy per nucleon of a projectile fragment is the same as that of
+the projectile itself is guaranteed. The sampling of the energy
+
+Frontiers in Oncology | www.frontiersin.org
+
+pj sin (q) = p⊥
+j~
+
+8
+
+(17)
+
+March 2022 | Volume 12 | Article 780784
+
+De Simoni et al.
+
+FRED MC for Carbon Therapy
+
+FIGURE 5 | Contour lines (red) of bidimensional ﬁts of energy and angle distribution of different fragments produced by a 95 MeV/u carbon ion beam interacting with
+an oxygen target. The color maps represent data taken from the 95 MeV/u Ganil experiment in linear (left) and logarithmic (right) scale.
+
+where j~
+pj and p⊥ are the fragment momentum magnitude and
+transverse momentum respectively and q is the angle of ~
+p with
+respect to projectile direction. As the angles of emission of
+projectile fragments are small, it is possible to write:
+q ∼ sin (q) =
+
+Frontiers in Oncology | www.frontiersin.org
+
+p⊥
+:
+pj
+j~
+
+The fragment transverse momentum does not depend on the
+projectile energy. As a consequence, the dependence of the angle
+on the beam energy is only due to the denominator of Eq. 18:
+
+
+~
+p95MeV=u 
+q
+=
+(19)
+q95MeV=u
+pj
+j~
+
+(18)
+
+9
+
+March 2022 | Volume 12 | Article 780784
+
+De Simoni et al.
+
+FRED MC for Carbon Therapy
+
+where q95MeV/u is the angle extracted from the Gaussian
+distribution of the Ganil experiment and j~
+p95MeV=u j is the
+corresponding momentum.
+pﬃﬃﬃ
+At therapeutic energies, p ∝ E and hence the equation
+becomes:
+pﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃ
+E95MeV=u
+pﬃﬃﬃ
+=
+q95MeV=u
+E
+q
+
+q
+
+i
+
+i
+= q95MeV=u
+
+sﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃ
+95
+Eproj ½MeV=u
+
+(21)
+
+This scaling is not used for protons and neutrons since,
+checking the angular dependence with FLUKA, it has been
+observed that for those particles at the energies of interest for
+particle therapy applications the angle of emission is nearly
+energy-independent. The same scaling factor is also used for
+the angle of the target fragments.
+
+(20)
+
+where E95MeV/u and E are the fragments kinetic energies of the
+Ganil experiment and of the fragments emitted for a generic
+beam energy. Using the fragments energy scaling factor (Eq. 13),
+the relation between an angle of emission q produced by a
+i
+projectile of energy Eproj and the angle of Ganil data, q95MeV=u
+,
+becomes
+
+3 RESULTS
+The nuclear models implemented in FRED were tested against
+the results obtained with a full-MC simulation performed using
+
+TABLE 2 | Parameters of Eq. 12 considering a 95 MeV/u carbon ion beams on a 1H target.
+Frag.
+n
+H
+2
+H
+3
+H
+3
+He
+4
+He
+6
+He
+6
+Li
+7
+Li
+7
+Be
+9
+Be
+10
+Be
+8
+B
+10
+B
+11
+B
+10
+C
+11
+C
+12
+C
+1
+
+A1
+
+A2
+-1
+
+5.4×10
+5.4×10-1
+2.0×10-1
+7.8×10-2
+2.2×10-2
+9.8×10-3
+3.0×10-2
+8.0×10-3
+1.9×10-2
+3.6×10-3
+2.0×10-2
+7.1×10-2
+6.3×10-1
+3.5×10-3
+1.1×10-2
+1.2×10-3
+5.0×10-4
+5.0×10-4
+
+<E>
+
+4.9×10
+4.9×10
+7.5
+2.7
+7.6
+5.6×10
+3.1
+4.5
+3.3
+6.6
+1.3
+3.8×10-1
+8.3×10-3
+1.3×10
+1.4
+3.7
+3.9×10
+9.3×10
+
+9.3×10
+9.3×10
+8.1×10
+7.6×10
+9.6×10
+8.4×10
+7.8×10
+8.4×10
+7.9×10
+8.5×10
+8.2×10
+7.9×10
+8.9×10
+8.3×10
+8.3×10
+8.8×10
+8.4×10
+8.3×10
+
+sE
+3.3×10
+3.3×10
+2.3×10
+2.2×10
+2.7×10
+1.2×10
+1.4×10
+1.1×10
+8.6
+1.1×10
+7.3
+5.3
+1.3×10
+6.5
+4.6
+7.2
+4.8
+3.6
+
+<q>
+
+sq
+
+aE
+
+aq
+-2
+
+0.0
+0.0
+0.0
+0.0
+0.0
+0.0
+0.0
+0.0
+0.0
+0.0
+0.0
+0.0
+0.0
+0.0
+0.0
+0.0
+0.0
+0.0
+
+9.7
+9.7
+8.2
+6.8
+6.2
+4.3
+4.0
+3.4
+3.2
+3.1
+3.0
+3.1
+3.2
+2.5
+2.2
+2.3
+2.1
+9.2×10-1
+
+1.0×10
+1.2×10-2
+2.2×10-2
+1.9×10-2
+1.8×10-2
+1.5×10-2
+2.6×10-2
+1.9×10-2
+2.0×10-2
+1.7×10-2
+2.3×10-2
+2.4×10-2
+2.2×10-2
+1.9×10-2
+1.8×10-2
+1.8×10-2
+1.7×10-2
+1.0×10-2
+
+2.5×10-2
+2.5×10-2
+6.5×10-2
+1.8×10-1
+1.0×10-1
+1.8×10-1
+2.7×10-1
+2.0×10-1
+2.7×10-1
+2.1×10-1
+2.7×10-1
+3.2×10-1
+1.6×10-1
+3.7×10-1
+5.8×10-1
+2.1×10-1
+3.0×10-1
+2.0×10-1
+
+<q>
+
+aq
+
+aE
+
+aq
+
+Parameters relative to the energy, E, are expressed in MeV/u while the one of the angle, q, in degrees.
+
+TABLE 3 | Parameters of Eq. 12 considering a 95 MeV/u carbon ion beams on a 12C target.
+Frag.
+n
+H
+2
+H
+3
+H
+3
+He
+4
+He
+6
+He
+6
+Li
+7
+Li
+7
+Be
+9
+Be
+10
+Be
+8
+B
+10
+B
+11
+B
+10
+C
+11
+C
+12
+C
+1
+
+A1
+
+A2
+-1
+
+2.8×10
+2.8×10-1
+2.7×10-1
+2.6×10-1
+1.5×10-1
+7.4×10-2
+8.1×10-2
+7.0×10-2
+6.1×10-2
+3.7×10-2
+3.6×10-2
+4.8×10-2
+1.8×10-2
+7.7×10-3
+8.4×10-3
+5.9×10-3
+3.4×10-3
+3.5×10-3
+
+<E>
+2
+
+1.0×10
+1.0×102
+5.4×10
+2.5×10
+3.6×10
+1.9×102
+1.0×10
+1.3×10
+1.3×10
+1.2×10
+5.7
+3.0
+1.9
+1.9×10
+3.9×10
+3.5
+3.0
+6.5×10
+
+9.3×10
+9.3×10
+8.1×10
+7.3×10
+9.2×10
+8.3×10
+7.8×10
+8.4×10
+7.9×10
+8.3×10
+8.3×10
+8.2×10
+8.8×10
+8.6×10
+8.4×10
+8.8×10
+8.6×10
+8.8×10
+
+sE
+3.7×10
+3.7×10
+2.6×10
+1.8×10
+2.9×10
+1.5×10
+1.7×10
+1.4×10
+1.3×10
+1.6×10
+1.1×10
+9.3
+1.7×10
+9.3
+7.3
+9.5
+7.2
+4.9
+
+0.0
+0.0
+0.0
+0.0
+0.0
+0.0
+0.0
+0.0
+0.0
+0.0
+0.0
+0.0
+0.0
+0.0
+0.0
+0.0
+0.0
+0.0
+
+1.0×10
+1.0×10
+8.9
+7.6
+7.0
+5.2
+5.4
+4.4
+4.2
+4.2
+3.7
+3.6
+4.0
+3.2
+2.9
+3.1
+2.7
+2.3
+
+-2
+
+1.2×10
+1.3×10-3
+2.6×10-2
+3.2×10-2
+3.1×10-2
+2.9×10-2
+3.0×10-2
+2.7×10-2
+3.1×10-2
+2.6×10-2
+2.5×10-2
+2.4×10-2
+2.8×10-2
+2.3×10-2
+2.0×10-1
+1.9×10-2
+1.9×10-2
+1.6×10-2
+
+2.5×10-2
+2.6×10-2
+3.1×10-2
+5.7×10-2
+4.7×10-2
+8.0×10-2
+1.5×10-1
+1.1×10-1
+1.2×10-1
+1.2×10-1
+2.2×10-1
+2.7×10-1
+1.5×10-1
+2.1×10-1
+3.0×10-1
+2.1×10-1
+2.6×10-1
+2.8×10-1
+
+Parameters relative to the energy, E, are expressed in MeV/u while the one of the angle, q, in degrees.
+
+Frontiers in Oncology | www.frontiersin.org
+
+10
+
+March 2022 | Volume 12 | Article 780784
+
+De Simoni et al.
+
+FRED MC for Carbon Therapy
+
+TABLE 4 | Parameters of Eq. 12 considering a 95 MeV/u carbon ion beams on a 16O target.
+Frag.
+n
+H
+2
+H
+3
+H
+3
+He
+4
+He
+6
+He
+6
+Li
+7
+Li
+7
+Be
+9
+Be
+10
+Be
+8
+B
+10
+B
+11
+B
+10
+C
+11
+C
+12
+C
+1
+
+A1
+
+A2
+-1
+
+3.0×10
+3.0×10-1
+3.0×10-1
+2.6×10-1
+1.5×10-1
+8.3×10-2
+8.1×10-2
+7.9×10-2
+6.3×10-2
+3.9×10-2
+3.1×10-2
+5.5×10-2
+2.2×10-2
+7.7×10-3
+8.0×10-3
+8.8×10-3
+3.4×10-3
+3.4×10-3
+
+sE
+
+<E>
+2
+
+1.3×10
+1.3×102
+6.3×10
+2.8×10
+4.2×10
+2.1×102
+1.1×10
+1.5×10
+1.4×10
+1.3×10
+6.0
+3.2
+2.1
+1.9×10
+3.1×10
+3.5
+3.0×10
+6.2×10
+
+9.3×10
+9.3×10
+8.2×10
+7.3×10
+9.1×10
+8.3×10
+7.9×10
+8.4×10
+7.9×10
+8.3×10
+8.3×10
+8.2×10
+8.9×10
+8.4×10
+8.5×10
+8.8×10
+8.6×10
+8.7×10
+
+<q>
+
+3.7×10
+3.7×10
+2.6×10
+1.8×10
+2.9×10
+1.5×10
+1.7×10
+1.4×10
+1.3×10
+1.6×10
+1.2×10
+8.8
+1.7×10
+9.3
+7.1
+9.2
+7.1
+4.7
+
+0.0
+0.0
+0.0
+0.0
+0.0
+0.0
+0.0
+0.0
+0.0
+0.0
+0.0
+0.0
+0.0
+0.0
+0.0
+0.0
+0.0
+0.0
+
+aq
+
+aE
+
+1.0×10
+1.0×10
+9.2
+7.9
+7.3
+5.3
+5.5
+4.5
+4.4
+4.3
+3.9
+3.7
+4.1
+3.3
+2.9
+3.2
+2.8
+2.4
+
+aq
+-2
+
+1.3×10
+1.3×10-2
+2.6×10-2
+3.2×10-2
+2.9×10-2
+2.9×10-2
+2.9×10-2
+2.8×10-2
+3.1×10-2
+2.7×10-2
+2.7×10-2
+2.4×10-2
+2.9×10-2
+2.6×10-2
+2.1×10-2
+2.3×10-2
+2.0×10-2
+1.7×10-2
+
+2.4×10-2
+2.4×10-2
+3.0×10-2
+5.6×10-2
+4.3×10-2
+7.8×10-2
+1.4×10-1
+1.0×10-1
+1.1×10-1
+1.1×10-1
+1.8×10-1
+2.4×10-1
+1.4×10-1
+1.7×10-1
+2.5×10-1
+2.0×10-1
+2.3×10-1
+3.0×10-1
+
+Parameters relative to the energy, E, are expressed in MeV/u while the one of the angle, q, in degrees.
+
+The same distributions have been obtained using a FLUKA
+simulation and the results have been compared. In particular, the
+curves shown in Figure 6 correspond to single pencil-beams of
+mono-energetic carbon ions.
+The absorbed dose per primary is shown, from a simulation
+performed using 108 primary ions to minimize the statistical
+ﬂuctuations. The proﬁles closely overlap and, in particular, the
+agreement of the absorbed dose at the peak between FRED and
+FLUKA simulations is very good. The relative difference between
+FRED and FLUKA predictions is always within 2.5% when
+computing the integral absorbed dose over the whole depth in
+the 100-300 MeV/u energy range, with the best agreement
+achieved at 100 MeV/u (relative difference = 0.05%).
+The agreement between FRED and FLUKA, studied using the
+same scoring grid and the same number of primaries, is shown in
+
+FLUKA. In particular, the longitudinal and lateral dose
+distribution obtained simulating the interactions of different
+beams with different targets have been compared in several
+conﬁgurations and projectiles. In this contribution, we report
+in detail the results obtained studying the carbon ions beam
+interactions with a water target and with a patient CT.
+
+3.1 Single Pencil-Beam in Water
+Figure 6 shows the depth-dose proﬁles obtained from a
+simulation performed using FRED, in which carbon ions with
+energies in the range of interest for PT applications (100-300
+MeV/u) are interacting with a water target. The target
+dimensions are 10 cm × 10 cm × 40 cm (x × y × z) with a
+voxel size of 0.5 mm in all the directions. The incident beam in all
+the cases was directed along z.
+
+FIGURE 6 | The absorbed dose integrated over the longitudinal axis for carbon ion beams in water at different energies. The absorbed dose per primary particle
+was obtained simulationg 108 primaries. Comparison between FRED (red continuous line) and FLUKA (blue dotted line) simulations, with the same scoring grid, and
+the same number of primaries is presented.
+
+Frontiers in Oncology | www.frontiersin.org
+
+11
+
+March 2022 | Volume 12 | Article 780784
+
+De Simoni et al.
+
+FRED MC for Carbon Therapy
+
+Figure 7. A single pencil beam of 200 MeV/u has been simulated
+along the beam axis (longitudinal) and at the BP position (lateral).
+The position chosen for the BP corresponds to the maximum
+of the dose observed in FLUKA and FRED simulations. With the
+same scoring grid, the two simulations predict the BP in the same
+voxel. The lateral transverse proﬁles show, in linear and
+logarithmic scale, the tails of the distribution, mainly due to
+nuclear interactions. Observing the lateral and longitudinal
+proﬁles, we can conclude that the present implementation of
+multiple Coulomb scattering, of nuclear elastic scattering and the
+angular distribution of secondary fragments are capable of
+reproducing the main features of the dose distribution.
+
+The gamma-index test has also been performed to quantify the
+dose distributions agreement. In Figure 8, the g-index test obtained
+comparing FLUKA and FRED is shown. The gamma-index is
+strongly dependent on the statistical uncertainty, inherent to MC,
+which may (artiﬁcially) improve the g pass-rate. However, it has
+been observed that 107 primaries are enough to reduce the statistical
+uncertainty contribution to a negligible level.
+As already observed in Figure 8, the dose deposited in FRED
+is slightly lower than the one predicted by FLUKA. However, the
+g-index 2mm/3% pass-rate is 99.89% with a global cutoff of 5% of
+the maximum dose. This result is very good and demonstrates
+that FRED can be successfully used in the clinical practice.
+
+3.2 SOBP in Water
+
+3.3 Heterogeneous Materials
+
+After having studied the dose released by a single pencil beam,
+the next step was to assess agreement also for a Spread-out Bragg
+Peak (SOBP) composed by pencil-beams of different energies.
+This is a more interesting benchmark considering the purpose
+of the software. In particular, we have simulated a SOBP
+corresponding to a 5 cm cuboid starting at a depth of 10 cm
+with ~2 Gy of physical dose in the center. It has been simulated
+in a water phantom of dimensions 5 cm × 5 cm × 20 cm (x × y × z)
+and with a voxel size of 0.5 × 0.5 × 0.2 mm3 both with FLUKA and
+FRED. The incident beams were along z direction.
+To obtain the cuboid, 31 energy layers from 219.0 to 277.5
+MeV/u, with ~108 primaries per layer, have been simulated with
+a total of ~1.5 × 109 primary particles. In Figure 8, the
+longitudinal and lateral distribution of the SOBP are shown.
+The relative difference between the absorbed dose simulated by
+FRED and FLUKA is below 1.5%. The relative difference with
+respect to FLUKA predictions is within 0.2% of the total
+absorbed dose.
+
+To validate the FRED simulation results in heterogeneous
+materials, we used an anthropomorphic phantom (Figure 9).
+We delivered the same SOBP used in the previous paragraph on
+a head-and-neck CT, using the same calibration curve to convert
+HU into the material density both in FRED and in FLUKA. The
+CT has a voxel size of 2 mm in each direction. The 2mm/3%
+gamma-index between FRED and FLUKA dose distributions is
+99.89% with threshold of 5%.
+
+4 PERFORMANCE ON GPU
+Once the good quality of the FRED simulation has been assessed
+performing a comparison with another state-of-the-art
+simulation software (FLUKA) the other important aspect that
+has to be quantiﬁed is the computation time. In Table 5, the time
+performances for different architectures are reported for the
+FLUKA and FRED simulations. Mono-energetic carbon beams
+
+FIGURE 7 | Absorbed dose in water for a 200 MeV/u carbon ion beam simulated with FRED (red continuous line) and FLUKA (blue dotted line) with the same
+scoring grid and the same number of primaries. On the left, it is possible to observe the absorbed dose integrated over the longitudinal axis (top) and central axis
+proﬁle along beam axis (bottom). On the right, the lateral axis proﬁle at 8.6 cm of depth in linear scale (top right) and logarithmic (bottom right) scale. This position is
+the one corresponding to the maximum value of the dose (BP) both in the FLUKA and the FRED simulations.
+
+Frontiers in Oncology | www.frontiersin.org
+
+12
+
+March 2022 | Volume 12 | Article 780784
+
+De Simoni et al.
+
+FRED MC for Carbon Therapy
+
+FIGURE 8 | Top: longitudinal (left) and lateral (right) integrated dose distributions for a SOBP in water. FRED (red continuous line) and FLUKA (blue dotted line)
+simulations are shown using the same scoring grid (voxel size: 0.5 × 0.5 × 0.2 mm3), and the same number of primary particles (108). Bottom: the corresponding gindex distribution is shown. The g-index 2mm/3% pass rate is 99.89%. The maximum value of the g-index is 4.3, while the mean value is 0.21. The g-index xy slice
+(left) shows the g-index distribution at z = 13 cm, which is in the peak region of the SOBP, while the other slices (center and right) are centered in x (0 cm) and y (-1.5 cm).
+
+FIGURE 9 | On the left the dose distribution on the XY slice at z = 12.80 cm is shown. On the center pictures, there is the dose distribution on the YZ slice centered in x. On the
+right, the longitudinal dose distribution on the ZX slice at z=-1.7cm is shown. The projection of the 2D ﬁgures is shown on the bottom ﬁgures. Comparison between FRED (ﬁgures
+on the top and blue line) and FLUKA (ﬁgures on the bottom and red line) simulations, with the same scoring grid (2 mm), and the same number of primary particles (106) is shown.
+
+physics models. The tracking rate decreases with increasing energy, as
+expected, since a carbon ion with more energy is subject to more
+interactions and its average path through the medium is longer.
+As shown, running on GPU (NVIDIA Geforce RTX 3090) the
+gain in terms of time is about three orders of magnitude with
+
+interactions in water (target 20 cm × 20 cm × 20 cm with a 2 mm
+cubic voxels) were the subjects for the simulations.
+As it can be observed, FRED is nearly 10 times faster than FLUKA
+when running on the same hardware (single CPU, Intel Xeon E52687W at 3,1 GHz) exploiting the simpliﬁcation of the implemented
+
+Frontiers in Oncology | www.frontiersin.org
+
+13
+
+March 2022 | Volume 12 | Article 780784
+
+De Simoni et al.
+
+FRED MC for Carbon Therapy
+
+TABLE 5 | Computing times for different hardware architectures simulating a monoenergetic carbon ion beam at 100 (top) and 300 (bottom) MeV/u in a water target
+(20 cm × 20 cm× 20 cm) with 2 mm cubic voxels.
+100 MeV/u
+MC
+
+Hardware
+
+Primary/s
+
+ms/primary
+
+FLUKA
+
+single CPU core
+
+0.7 k
+
+1400
+
+FRED
+
+single CPU core
+
+4.2 k
+
+240
+
+FRED
+
+single GPU card
+
+2000 k
+
+0.5
+
+300 MeV/u
+MC
+
+Hardware
+
+Primary/s
+
+ms/primary
+
+FLUKA
+
+single CPU core
+
+0.3 k
+
+3000
+
+FRED
+
+single CPU core
+
+3k
+
+300
+
+FRED
+
+single GPU card
+
+2500 k
+
+0.4
+
+We used a motherboard with Intel Xeon E5-2687W CPU at 3,1 GHz to test the CPU performances, while we used a NVIDIA Geforce RTX 3090 for the GPU.
+
+SOBP in water and in heterogeneous material we obtained an
+almost 100% pass rate for 2mm/3% gamma-index.
+Beside the successful implementation of the nuclear model,
+capable of clinical precision when computing the absorbed dose
+in particle therapy conditions, FRED also achieved an impressive
+improvement in computing time, with respect to conventional
+full MC software solutions. Exploiting the parallel programming
+power of GPU architectures, FRED is capable of tracking
+millions of primary particles per second on a single GPU card.
+The observed gain in processing time, when comparing to the
+FLUKA full MC, was nearly a factor ~2000, depending on the
+energy of the primary beam. Using FRED in combination with
+GPU hardware, it is possible to process a complete treatment
+plan within minutes instead of days, opening the way for the use
+of FRED, not only for protons, but also as quality assurance tool
+in carbon therapy especially for the head-and-neck tumors that
+require lower beam energy. Comparing the time performance of
+FRED with the GPU MC goCMC we observed consistent results.
+The next step will be to compare the accuracy of FRED dose
+recalculation against commissioning data and commercial TPS
+at CNAO in order to achieve a clinical validation for carbon
+therapy applications.
+
+respect to single CPU execution. No signiﬁcant changes to the
+structure of the original GPU algorithm (27) were necessary,
+besides the implementation of the nuclear fragmentation model
+for carbon described in Section 2.1. Carbon fragmentation is a
+relatively rare event with respect to tracing step-by-step all charged
+particles in a simulation. As such, the impact on the tracking rate is
+mostly due to the number of complete particle histories that have to
+be simulated per primary carbon ion. On the same GPU card and
+with similar geometry and scoring conditions, the typical tracking
+rate for a proton beam is about 5 million primary/s. The
+performance observed in the case of carbon ions is affected by
+the increased number of particles that have to be simulated. In the
+therapeutic energy range, such number has already been evaluated,
+and hence our fragmentation model generates on average 2 to 4
+charged fragments per primary carbon.
+
+5 CONCLUSION
+In this contribution, we have presented a fast-MC software
+capable of simulating, with clinical precision, particle therapy
+carbon ion treatments. The nuclear fragmentation model has
+been developed parametrizing existent data and applying energy
+and angle re-scaling to estimate fragments energies in the range
+where data are missing. The model was based directly on
+experimental data, in order to ease its update whenever new or
+updated results will be available from experiments. For example,
+data from the FOOT experiment (48, 49) focusing on the study
+of nuclear fragmentation, will be available soon. This is the main
+difference between FRED and the GPU MC goCMC that has
+been developed starting from Geant4. In addition, by comparing
+the results of FRED, obtained from data, with the full-MC
+FLUKA, already clinically validated, there is a double check on
+the accuracy of the implemented model.
+Results obtained when comparing FRED with FLUKA are
+satisfactory, especially for low energies which are the most used
+in PT and, in particular, for head-and-neck tumors. The relative
+difference between the total dose in single pencil beams in FRED
+and FLUKA predictions is always within 2.5% in the 100-300
+MeV/u energy range. Simulating a SOBP in water the relative
+difference of the dose distribution is within 1.4%. For both the
+
+Frontiers in Oncology | www.frontiersin.org
+
+DATA AVAILABILITY STATEMENT
+The original contributions presented in the study are included in
+the article/supplementary material. Further inquiries can be
+directed to the corresponding author.
+
+AUTHOR CONTRIBUTIONS
+MDS: wrote the main manuscript text. MDS, VP, AnS, and GB:
+developed the nuclear model described in the paper. GB, MF,
+GT, and GF: provided FLUKA simulations used to compare the
+FRED model. AlS, MM, MT, and AT: provided the information
+about cross-sections found in literature and contributed to the
+interpretation of the work. PDM: provided the raster ﬁle for the
+SOBP and information about the clinical practice. All authors
+contributed to the article and approved the submitted version.
+
+14
+
+March 2022 | Volume 12 | Article 780784
+
+De Simoni et al.
+
+FRED MC for Carbon Therapy
+
+21. Men C, Jia X, Jiang SB. GPU-Based Ultra-Fast Direct Aperture Optimization
+for Online Adaptive Radiation Therapy. Phys Med Biol (2010) 55:4309–19.
+doi: 10.1088/0031-9155/55/15/008
+22. Men C, Romeijn HE, Jia X, Jiang SB. Ultrafast Treatment Plan Optimization
+for Volumetric Modulated Arc Therapy (VMAT). Med Phys (2010) 37:5787–
+91. doi: 10.1118/1.3491675
+23. WanChanTseung H, et al. A Fast GPU-based Monte Carlo Simulation of
+Proton Transport with Detailed Modeling of Nonelastic Interactions. Med
+Phys (2015) 42:2967–78. doi: 10.1118/1.4921046
+24. WanChanTseung H, et al. Clinically Applicable Monte Carlo–based Biological
+Dose Optimization for the Treatment of Head and Neck Cancers With SpotScanning Proton Therapy. Int J Radiat Oncol Biol Physics (2016) 95:1535–43.
+doi: 10.1016/j.ijrobp.2016.03.041
+25. Beltran C, Jia Y, Slopsema R, Yeung D, Li Z. A Simpliﬁed Methodology to
+Produce Monte Carlo Dose Distributions in Proton Therapy. J Appl Clin Med
+Phys (2014) 15:2–10. doi: 10.1120/jacmp.v15i4.4413
+26. Qin N, Pinto M, Tian Z, Dedes G, Pompos A, Jiang SB, et al. Initial
+Development of goCMC: A GPU-Oriented Fast Cross-Platform Monte
+Carlo Engine for Carbon Ion Therapy. Phys Med Bio (2017) 62:3682–99.
+doi: 10.1088/1361-6560/aa5d43
+27. Schiavi A, Senzacqua M, Pioli S, Mairani A, Magro G, Molinelli S, et al. Fred:
+A GPU-Accelerated fast-Monte Carlo Code for Rapid Treatment Plan
+Recalculation in Ion Beam Therapy. Phys Med Biol (2017) 62:7482–504.
+doi: 10.1088/1361-6560/aa8134
+28. Highland L. Some Practical Remarks on Multiple Scattering. Nucl Instruments
+Methods (1975) 129:497–9. doi: 10.1016/0029-554X(75)90743-0
+29. Takechi M, Fukuda M, Mihara M, Tanaka K, Chinda T, Matsumasa T, et al.
+Reaction Cross Sections at Intermediate Energies and Fermi-Motion Effect.
+Nucl Phys (2009) 79:061601. doi: 10.1103/PhysRevC.79.061601
+30. Zhang HY, Shenac W, Ren Z, Ma Y, Jiang W, Zhu Z, et al. Measurement of
+Reaction Cross Section for Proton-Rich Nuclei (A<30) at Intermediate
+Energies. Nucl Phys (2002) 707:303. doi: 10.1016/S0375-9474(02)01007-2
+31. Kox S, Gamp A, Cherkaoui R, Cole AJ, Longequeue N, Menet J, et al. Direct
+Measurements of Heavy-Ion Total Reaction Cross Sections at 30- And 83MeV/Nuclon. Nucl Phys (1984) 420:162. doi: 10.1016/0375-9474(84)
+90663-8
+32. Kox S, Gamp A, Perrin C, Arvieux J, Bertholet R, Bruandet J, et al.
+Transparency Effects in Heavy-Ion Collisions Over the Energy Range
+100300 MeV/Nuclon. Phys Lett (1985) 159:15. doi: 10.1016/0370-2693(85)
+90110-8
+33. Dudouet J, Juliani D, Labalme M, Cussol D, Angelique JC, Braunn B, et al.
+Double-Differential Fragmentation Cross-Section Measurements of 95 MeV/
+Nucleon C Beams on Thin Targets for Hadron Therapy. Phys Med Biol (2013)
+159:24606. doi: 10.1103/PhysRevC.88.024606
+34. Divay C, Colin J, Cussol D, Finck C, Karakaya Y, Labalme M, et al. Differential
+Cross Section Measurements for Hadron Therapy: 50 MeV/Nucleon C
+Reactions on H, C, O, A1, and Ti Targets. Phys Rev C (2017) 95:044602.
+doi: 10.1103/PhysRevC.95.044602
+35. Franzini G. Final Design and Features of the B-Train System of CNAO. Proc
+IPAC (2010) 9:1–3. doi: 10.18429/JACoW-IPAC2018-TUPAF011
+36. Chadwick MB, Herman M, Obložinský P. Nuclear Data for Science and
+Technology: Cross Sections, Covariances, Fission Product Yields and Decay
+Data. ENDF/B-VII.1 Nucl Data Sheets (2011) 112:2887–996. doi: 10.1016/
+j.nds.2011.11.002. Special Issue on ENDF/B-VII.1 Library.
+37. Chadwick MB, Young PG. Proton Nuclear Interactions Up to 250 MeV for
+Radiation Transport Simulations of Particle Therapy. Proc Int Particle Ther
+Meeting PTCOG XXIV (1996) 13:89–93.
+38. Chadwick MB, Herman M, Obložinský P. High-Energy Nuclear Data Libraries for
+Accelerator-Driven Technologies: Calculational Method for Heavy Recoils. Proc. of
+2nd Int. Conf on Accelerator Driven Transmutation Technology and Applications,
+Kalmar, Sweden (1996). pp. 483–9.
+39. Bernard JA. Kinematics of Elastic Neutron Scattering. Neutron Sci Reactor
+Phys (2006) 14:22.05. (MIT Course).
+40. Henry AF. Nuclear-Reactor Analysis. Cambridge, MA: MIT Press (1975).
+41. Malmer C. Nuclear Data for Neutron and Proton Radiotherapy and For
+Radiation Protection. ICRU Rep 63 Med Phys (2001) 28:861–861. doi: 10.1118/
+1.1369116
+
+REFERENCES
+1. Paganetti H. Range Uncertainties in Proton Therapy and the Role of Monte
+Carlo Simulations. Phys Med Bio (2012) 57:r99–117. doi: 10.1088/0031-9155/
+57/11/R99
+2. Parodi K. Clinical CT-Based Calculations of Dose and Positron Emitter
+Distributions in Proton Therapy Using the Fluka Monte Carlo Code. Phys
+Med Biol (2007) 52:3369–87. doi: 10.1088/0031-9155/52/12/004
+3. Titt U, Bednarz B, Paganetti H. Comparison of Mcnp X And Geant 4 Proton
+Energy Deposition Predictions for Clinical Use. Phys Med Biol (2012)
+57:6381–93. doi: 10.1088/0031-9155/57/20/6381
+4. Scaffner B, Pedroni E, Lomax A. Dose Calculation Models for Proton
+Treatment Planning Using a Dynamic Beam Delivery System: An Attempt
+to Include Density Heterogeneity Effects in the Analytical Dose Calculation.
+Phys Med Bio (1999) 44:27–41. doi: 10.1088/0031-9155/44/1/004
+5. Paganetti H, Jiang H, Parodi K, Slopsema R, Engelsman M. Clinical
+Implementation of Full Monte Carlo Dose Calculation in Proton Beam
+Therapy. Phys Med Bio (2008) 53:4825–53. doi: 10.1088/0031-9155/53/17/
+023
+6. Kohno R, Takada Y, Sakae T, Terunuma T, Matsumoto K, Nohtomi A, et al.
+Experimental Evaluation of Validity of Simpliﬁed Monte Carlo Method in
+Proton Dose Calculations. Phys Med Biol (2003) 48:1277–88. doi: 10.1088/
+0031-9155/48/10/303
+7. Fippel M, Soukup M. A Monte Carlo Dose Calculation Algorithm for Proton
+Therapy. Med Phys (2004) 31:2263–73. doi: 10.1118/1.1769631
+8. Li JS, Shahine B, Fourkal E, Ma CM. A Particle Track-Repeating Algorithm
+for Proton Beam Dose Calculation. Phys Med Biol (2005) 50:1001–10. doi:
+10.1088/0031-9155/50/5/022
+9. Yepes P, Randeniya S, Taddei PJ, Newhauser WD. Monte Carlo Fast Dose
+Calculator for Proton Radiotherapy: Application to a Voxelized Geometry
+Representing a Patient with Prostate Cancer. Phys Med Biol (2009) 54:N21–8.
+doi: 10.1088/0031-9155/54/1/N03
+10. Jia X, Ziegenhein P, Jiang SB. GPU-Based High-Performance Computing for
+Radiation Therapy. Phys Med Biol (2014) 59:151–82. doi: 10.1088/0031-9155/
+59/4/R151
+11. Jia X, Lou Y, Li R, Song WY, Jiang SB. GPU-Based Fast Cone Beam CT
+Reconstruction from Undersampled and Noisy Projection Data via Total
+Variation. Phys Med Biol (2010) 37:1757–60. doi: 10.1118/1.3371691
+12. Giantsoudi D, Schuemann J, Jia X, Dowdell S, Jiang S, Paganetti H. Validation
+of a GPU-based Monte Carlo Code (gPMC) for Proton Radiation Therapy:
+Clinical Cases Study. Phys Med Biol (2015) 60:2257–69. doi: 10.1088/00319155/60/6/2257
+13. Xu F, Mueller K. Accelerating Popular Tomographic Reconstruction
+Algorithms on Commodity PC graphics Hardware. IEEE Trans Nucl Sci
+(2005) 52:654–63. doi: 10.1109/TNS.2005.851398
+14. Sharp GC, Kandasamy N, Singh H, Folkert M. GPU-Based Streaming
+Architectures for Fast Cone-Beam CT Image Reconstruction and Demons
+Deformable Registration. Phys Med Biol (2007) 16:5771–83. doi: 10.1088/
+0031-9155/52/19/003
+15. Yan GR, Tian J, Zhu S, Dai Y, Qin C. Fast Cone-Beam CT image
+Reconstruction using GPU Hardware. J X-Ray Sci Technol (2008) 16:225–34.
+16. Gu X, Choi D, Men C, Pan H, Majumdar A, Jiang SB. GPU-Based Ultra Fast
+Dose Calculation Using a Finite Size Pencil Beam Model. Phys Med Biol
+(2009) 54:6287–97. doi: 10.1088/0031-9155/54/20/017
+17. Gu X, Pan H, Yun Liang RC, Yang D, et al. Implementation and Evaluation of
+Various Demons Deformable Image Registration Algorithms on a GPU. Phys
+Med Biol (2010) 55:207–19. doi: 10.1088/0031-9155/55/1/012
+18. Hissoiny S, Ozell B, Despré s P. Fast Convolution-Superposition Dose
+Calculation on Graphics Hardware. Med Phys (2009) 36:1998–2005. doi:
+10.1118/1.3120286
+19. Samant SS, Xia J, Muyan-Ozcelik P, Owens JD. High Performance Computing
+for Deformable Image Registration: Towards A New Paradigm in Adaptive
+Radiotherapy. Med Phys (2008) 35:3546–53. doi: 10.1118/1.2948318
+20. Men C, Gu X, Choi D, Majumdar A, Zheng Z, Mueller K, et al. GPU-Based
+Ultra Fast IMRT Plan Optimization. Phys Med Biol (2009) 54:6565–73. doi:
+10.1088/0031-9155/54/21/008
+
+Frontiers in Oncology | www.frontiersin.org
+
+15
+
+March 2022 | Volume 12 | Article 780784
+
+De Simoni et al.
+
+FRED MC for Carbon Therapy
+
+Spectrometers Detectors Associated Equip (2021) 1001:165206. doi: 10.1016/
+j.nima.2021.16520
+49. Battistoni G, Toppi M, Patera V, Collaboration TF. Measuring the Impact of
+Nuclear Interaction in Particle Therapy and in Radio Protection in Space: the
+FOOT Experiment. Front Phys (2021) 8:1–20. doi: 10.3389/fphy.2020.568242
+
+42. Kox S, Gamp A, Perrin C, Arvieux J, Bertholet R, Bruandet JF, et al. Trends of
+Total Reaction Cross Sections for Heavy Ion Collisions in the Intermediate
+Energy Range. Phys Rev C (1987) 33:1678–91. doi: 10.1103/PhysRevC.35.1678
+43. Ivanchenko V, Bagulya A, Bakr S, Bandieramonte M, Bernard D, Bordage MC, et al. Progress of Geant4 Electromagnetic Physics Developments and
+Applications. EPJ Web Conf (2019) 214:2046. doi: 10.1051/epjconf/
+201921402046
+44. Allison J, Amako K, Apostolakis J, Arce P, Asai M, Aso T, et al. Recent
+Developments in Geant4. Nucl Instruments Methods Phys Res Section A:
+Accelerators Spectrometers Detectors Associated Equip (2016) 835:186–225.
+doi: 10.1016/j.nima.2016.06.125
+45. Griva I, Nash S, Sofer A. Linear and Non Linear Optimization. Cambridge
+Press (2009).
+46. Golovkov M, Aleksandrov D, Chulkov l, Kraus G, Schardt D. Fragmentation
+of 270 A MeV Carbon Ions in Water. st International Week on
+Hadrontherapy: Advances in Hadrontherapy GSI-97-08.U Amaldi, B
+Larsson and Y Lemoigne. ed. Excerpta Medica, Int. Congr. Series Elsevier
+Science (1997) 1144:316–24.
+47. Matsufuji N, Komori M, Sasaki H, Akiu K, Ogawa M, Fukumura A, et al. Spatial
+Fragment Distribution from a Therapeutic Pencil-Like Carbon Beam in Water.
+Phys Med Biol (2004) 50:3393–403. doi: 10.1088/0031-9155/50/14/014
+48. Kraan AC, Zarrella R, Alexandrov A, Alpat B, Ambrosi G, Argirò S, et al.
+Charge Identiﬁcation of Nuclear Fragments With the FOOT Time-Of-Flight
+System. Nucl Instruments Methods Phys Research Section A: Accelerators
+
+Frontiers in Oncology | www.frontiersin.org
+
+Conﬂict of Interest: The authors declare that the research was conducted in the
+absence of any commercial or ﬁnancial relationships that could be construed as a
+potential conﬂict of interest.
+Publisher’s Note: All claims expressed in this article are solely those of the authors
+and do not necessarily represent those of their afﬁliated organizations, or those of
+the publisher, the editors and the reviewers. Any product that may be evaluated in
+this article, or claim that may be made by its manufacturer, is not guaranteed or
+endorsed by the publisher.
+Copyright © 2022 De Simoni, Battistoni, De Gregorio, De Maria, Fischetti,
+Franciosini, Maraﬁni, Patera, Sarti, Toppi, Traini, Trigilio and Schiavi. This is an
+open-access article distributed under the terms of the Creative Commons Attribution
+License (CC BY). The use, distribution or reproduction in other forums is permitted,
+provided the original author(s) and the copyright owner(s) are credited and that the
+original publication in this journal is cited, in accordance with accepted academic
+practice. No use, distribution or reproduction is permitted which does not comply with
+these terms.
+
+16
+
+March 2022 | Volume 12 | Article 780784
+
+

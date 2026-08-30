@@ -2,12 +2,65 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
+#include <filesystem>
+#include <vector>
 
 namespace carbon {
 
 constexpr double nucleon_rest_mass_MeV = 931.49410242;
 constexpr double water_radiation_length_g_per_cm2 = 36.08;
 constexpr double highland_energy_constant_MeV = 13.6;
+constexpr double fred_2gr_max_energy_MeVu = 236.0;
+
+template <typename Scalar>
+inline Scalar beta_momentum_per_u_MeV(const Scalar energy_MeVu) noexcept {
+    const auto mass = static_cast<Scalar>(nucleon_rest_mass_MeV);
+    if (!(energy_MeVu > Scalar{0})) return Scalar{0};
+    return energy_MeVu * (energy_MeVu + Scalar{2} * mass) /
+           (energy_MeVu + mass);
+}
+
+template <typename Scalar>
+inline Scalar fred_2gr_high_energy_angle_scale(const Scalar energy_MeVu) noexcept {
+    if (energy_MeVu <= static_cast<Scalar>(fred_2gr_max_energy_MeVu)) return Scalar{1};
+    const auto reference = beta_momentum_per_u_MeV(
+        static_cast<Scalar>(fred_2gr_max_energy_MeVu));
+    const auto current = beta_momentum_per_u_MeV(energy_MeVu);
+    return current > Scalar{0} ? reference / current : Scalar{0};
+}
+
+struct Fred2GrMcsTable {
+    static constexpr std::size_t energy_bins = 48;
+    static constexpr std::size_t thickness_bins = 51;
+    static constexpr std::size_t parameter_count = 6;
+    std::vector<float> values;
+    static Fred2GrMcsTable from_binary(const std::filesystem::path& path);
+};
+
+template <typename Scalar>
+inline Scalar fred_2gr_parameter(const Scalar* table, int parameter,
+                                 Scalar energy_MeVu,
+                                 Scalar areal_density_g_per_cm2) noexcept {
+    if (table == nullptr || parameter < 0 || parameter >= 6 ||
+        energy_MeVu < Scalar{1} || energy_MeVu > Scalar{236} ||
+        areal_density_g_per_cm2 < Scalar{1.0e-4} ||
+        areal_density_g_per_cm2 > Scalar{10}) return Scalar{-1};
+    Scalar x = (energy_MeVu - Scalar{1}) / Scalar{5};
+    Scalar y = (static_cast<Scalar>(std::log10(
+                    static_cast<double>(areal_density_g_per_cm2))) + Scalar{4}) /
+               Scalar{0.1};
+    int ix = std::max(0, std::min(46, static_cast<int>(std::floor(x))));
+    int iy = std::max(0, std::min(49, static_cast<int>(std::floor(y))));
+    const Scalar fx = x - static_cast<Scalar>(ix);
+    const Scalar fy = y - static_cast<Scalar>(iy);
+    const auto at = [&](int yy, int xx) {
+        return static_cast<Scalar>(table[(parameter * 51 + yy) * 48 + xx]);
+    };
+    const auto a = at(iy, ix) + fx * (at(iy, ix + 1) - at(iy, ix));
+    const auto b = at(iy + 1, ix) + fx * (at(iy + 1, ix + 1) - at(iy + 1, ix));
+    return a + fy * (b - a);
+}
 
 // Geant4 material mass radiation lengths (g/cm2), measured with the
 // CarbonMaterialPropertiesNtuple TOPAS extension.  Keep these in mass units:
