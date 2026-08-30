@@ -36,6 +36,8 @@ struct InelasticProductSet {
     float q_MeV{0.0F};
     float neutron_ke_MeV{0.0F};
     float remnant_local_MeV{0.0F};
+    float remnant_kinetic_MeV{0.0F};
+    float remnant_excitation_MeV{0.0F};
     int8_t leftover_proj_a{0};
     int8_t leftover_proj_z{0};
     int8_t leftover_tgt_a{0};

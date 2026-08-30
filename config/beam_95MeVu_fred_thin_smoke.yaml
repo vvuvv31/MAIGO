@@ -1,0 +1,25 @@
+# Minimal FRED birth-spectrum diagnostic; not a dose benchmark.
+primary_atomic_number: 6
+primary_mass_number: 12
+initial_energy_MeVu: 95.0
+number_of_histories: 10000
+phantom_length_mm: 1.0
+depth_bin_width_mm: 0.1
+maximum_step_mm: 0.1
+maximum_relative_energy_loss: 0.01
+energy_cutoff_MeV: 0.05
+water_density_g_per_cm3: 1.0
+
+enable_energy_straggling: false
+enable_multiple_scattering: false
+enable_inelastic: true
+enable_secondary_transport: true
+primary_inelastic_cross_section_file: data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv
+primary_stopping_power_file: data/stopping_power_water_geant4_11_3_2.csv
+
+enable_voxel_scoring: false
+output_file: out/fred_thin_95/depth_dose.csv
+dose_output_file: ""
+fragment_birth_spectrum_output_file: out/fred_thin_95/birth
+random_seed: 2026083095
+device: cuda

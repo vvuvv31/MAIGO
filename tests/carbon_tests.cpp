@@ -281,11 +281,22 @@ void test_interpolation() {
     require_near(table.interpolate(0.1), 12.0, 1.0e-12, "Low-energy clamp failed");
     require_near(table.interpolate(9.0), 6.0, 1.0e-12, "High-energy clamp failed");
 
-    const carbon::CrossSectionTable cross_section({1.0, 2.0, 3.0}, {0.01, 0.02, 0.04});
+    carbon::CrossSectionTable cross_section({1.0, 2.0, 3.0}, {0.01, 0.02, 0.04});
     require_near(cross_section.interpolate(2.5), 0.03, 1.0e-12,
                  "Cross-section interpolation failed");
     require_near(cross_section.interpolate(0.1), 0.01, 1.0e-12,
                  "Cross-section low-energy clamp failed");
+
+    cross_section.set_target_h_fractions({0.2, 0.4, 0.8});
+    const std::vector<double> transport_grid{1.0, 1.5, 2.0, 2.5, 3.0};
+    const auto resampled =
+        carbon::resample_cross_section_grid(cross_section, transport_grid);
+    require(resampled.macroscopic_per_mm.size() == transport_grid.size(),
+            "Resampled cross-section grid has wrong size");
+    require_near(resampled.macroscopic_per_mm[1], 0.015, 1.0e-7,
+                 "Cross-section transport-grid resampling failed");
+    require_near(resampled.target_h_fraction[3], 0.6, 1.0e-7,
+                 "Target-H transport-grid resampling failed");
 }
 
 void test_electron_transport_table_and_config() {
@@ -3166,35 +3177,15 @@ void test_energy_dependent_inclusive_yields() {
     carbon::fill_energy_dependent_inclusive_weights(300.0F, carbon::kFredProbO.data(), wO300);
     for (int i = 0; i < 18; ++i) {
         require(std::isfinite(w95[i]) && w95[i] >= 0.0F, "95 MeV/u weight finite non-negative");
-        require(std::isfinite(w300[i]) && w300[i] >= 0.0F, "300 MeV/u weight finite non-negative");
-        require(std::isfinite(w400[i]) && w400[i] >= 0.0F, "400 MeV/u weight finite non-negative");
         require_near(w95[i], carbon::kFredProbH[static_cast<std::size_t>(i)], 1.0e-5F,
                      "weights at 95 MeV/u match Table 1");
-        require_near(w200[i], carbon::kFredProbHByE[1][static_cast<std::size_t>(i)], 1.0e-4F,
-                     "200 MeV/u knot is the H 200 table");
-        require_near(w400[i], carbon::kFredProbHByE[3][static_cast<std::size_t>(i)], 1.0e-4F,
-                     "400 MeV/u knot is the H 400 table");
+        require_near(w200[i], w95[i], 1.0e-5F, "paper yields fixed at 200 MeV/u");
+        require_near(w250[i], w95[i], 1.0e-5F, "paper yields fixed at 250 MeV/u");
+        require_near(w300[i], w95[i], 1.0e-5F, "paper yields fixed at 300 MeV/u");
+        require_near(w400[i], w95[i], 1.0e-5F, "paper yields fixed at 400 MeV/u");
     }
-    const float he95 = carbon::inclusive_element_weight(w95, 2);
-    const float he200 = carbon::inclusive_element_weight(w200, 2);
-    const float he250 = carbon::inclusive_element_weight(w250, 2);
-    const float he300 = carbon::inclusive_element_weight(w300, 2);
-    const float li95 = carbon::inclusive_element_weight(w95, 3);
-    const float li300 = carbon::inclusive_element_weight(w300, 3);
-    const float be95 = carbon::inclusive_element_weight(w95, 4);
-    const float be300 = carbon::inclusive_element_weight(w300, 4);
-    const float b95 = carbon::inclusive_element_weight(w95, 5);
-    const float b300 = carbon::inclusive_element_weight(w300, 5);
-    require(std::fabs(he300 - he95) > 1.0e-4F, "He inclusive weight depends on E/A");
-    require(std::fabs(li300 - li95) > 1.0e-4F, "Li inclusive weight depends on E/A");
-    require(std::fabs(be300 - be95) > 1.0e-6F, "Be inclusive weight depends on E/A");
-    require(std::fabs(b300 - b95) > 1.0e-6F, "B inclusive weight depends on E/A");
-    require(he300 > he95, "He yield rises with E/A");
-    require(b300 < b95, "B yield falls with E/A on H target");
-    require(he250 > he200 && he250 < he300, "He at 250 MeV/u interpolates 200 and 300 knots");
-    require(carbon::inclusive_element_weight(wO300, 0) >
-                carbon::inclusive_element_weight(w300, 0),
-            "O-target neutron yield table is distinct from H");
+    require_near(wO300[0], carbon::kFredProbO[0], 1.0e-5F,
+                 "O-target paper yields use O Table 1");
 }
 
 void test_projectile_joint_channel() {
@@ -3205,12 +3196,17 @@ void test_projectile_joint_channel() {
     int nfrag_sum = 0;
     double counts[18]{};
     for (int e = 0; e < n_events; ++e) {
-        const float u = static_cast<float>((e * 17 + 3) % 997) / 997.0F;
+        float uniforms[8]{};
+        for (int j = 0; j < 8; ++j) {
+            uniforms[j] =
+                static_cast<float>((e * 17 + j * 31 + 3) % 997) / 997.0F;
+        }
         leftover_n = 0;
         float w[18]{};
         carbon::fill_energy_dependent_inclusive_weights(200.0F, carbon::kFredProbH.data(), w);
-        const int n = carbon::fill_projectile_joint_channel(w, u, idx, 8, &leftover_n);
-        require(n >= 1 && n <= 3, "joint channel has 1-2 charged fragments plus remnant");
+        const int n = carbon::fill_projectile_constrained_channel(
+            w, uniforms, 8, idx, 8, &leftover_n);
+        require(n >= 1 && n <= 8, "constrained channel has charged fragments");
         nfrag_sum += n;
         int a = 0;
         int z = 0;
@@ -3223,20 +3219,19 @@ void test_projectile_joint_channel() {
                 ++saw_c12;
             }
         }
-        require(z <= 6 && a + leftover_n <= 12, "joint A/Z bound without n/p dump");
+        require(z == 6 && a + leftover_n == 12, "projectile channel closes A/Z exactly");
         require(leftover_n >= 0, "leftover neutrons non-negative");
     }
     require(saw_c12 > 0, "12C reachable in joint channel");
     require(counts[5] > 0.0 || counts[1] > 0.0, "He or p appears in joint channel");
     const double mean_frags = static_cast<double>(nfrag_sum) / static_cast<double>(n_events);
-    require(mean_frags < 3.0, "joint channel is not nucleon-by-nucleon evaporation");
+    require(mean_frags < 7.0, "constrained channel remains below proton-only completion");
 }
 
 void test_inelastic_neutron_kerma_fraction() {
     require(carbon::inelastic_neutron_kerma_MeV(0.0F) == 0.0F, "zero neutron KE scores no kerma");
-    const float k = carbon::inelastic_neutron_kerma_MeV(100.0F);
-    require(k > 0.0F && k < 100.0F, "kerma is a proper fraction of neutron KE");
-    require_near(k, 8.0F, 1.0e-4F, "default kerma fraction is 0.08");
+    require(carbon::inelastic_neutron_kerma_MeV(100.0F) == 0.0F,
+            "paper mode scores no fixed neutron vertex kerma");
 }
 
 void test_inelastic_optical_depth_in_step() {

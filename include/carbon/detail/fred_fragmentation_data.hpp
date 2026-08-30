@@ -6,6 +6,10 @@
 
 namespace carbon {
 
+// Fixed 95 MeV/u reference support; residual tail is below 0.7% at the
+// smallest fitted exponential slope.
+inline constexpr float kFredReferenceEnergyMaxMeVu = 1000.0F;
+
 struct FredIsotope {
     int16_t z;
     int16_t a;
@@ -400,7 +404,10 @@ inline void interpolate_fred_yield_table(float e_per_u,
 
 inline void fill_energy_dependent_inclusive_weights(float e_per_u, const float* table95,
                                                     float* out18) noexcept {
-    interpolate_fred_yield_table(e_per_u, *fred_yield_family(table95), out18);
+    (void)e_per_u;
+    for (int i = 0; i < 18; ++i) {
+        out18[i] = table95[i];
+    }
 }
 
 inline float inclusive_element_weight(const float* w, int z) noexcept {
@@ -411,6 +418,71 @@ inline float inclusive_element_weight(const float* w, int z) noexcept {
         }
     }
     return s;
+}
+
+// Sequential Table-1 approximation with exact projectile A/Z closure.
+// Returns -1 when the sampled partial channel cannot be completed.
+inline int fill_projectile_constrained_channel(
+    const float* prob, const float* uniforms, int n_uniforms,
+    uint8_t* idx_out, int max_out, int* leftover_n) noexcept {
+    int a_rem = 12;
+    int z_rem = 6;
+    int neutrons = 0;
+    int nfrag = 0;
+    for (int k = 0; k < n_uniforms && a_rem > 0 && z_rem > 0; ++k) {
+        const int idx = sample_table1_isotope(prob, a_rem, z_rem, uniforms[k]);
+        const auto iso = kFredIsotopes[static_cast<std::size_t>(idx)];
+        const int next_a = a_rem - iso.a;
+        const int next_z = z_rem - iso.z;
+        if (iso.a <= 0 || next_a < 0 || next_z < 0 || next_a < next_z) {
+            continue;
+        }
+        if (iso.z == 0) {
+            neutrons += iso.a;
+        } else {
+            if (nfrag >= max_out) {
+                return -1;
+            }
+            idx_out[nfrag++] = static_cast<uint8_t>(idx);
+        }
+        a_rem = next_a;
+        z_rem = next_z;
+    }
+    if (z_rem > 0) {
+        int exact_idx = -1;
+        for (int i = 1; i < 18; ++i) {
+            if (kFredIsotopes[static_cast<std::size_t>(i)].a == a_rem &&
+                kFredIsotopes[static_cast<std::size_t>(i)].z == z_rem) {
+                exact_idx = i;
+                break;
+            }
+        }
+        if (exact_idx >= 0) {
+            if (nfrag >= max_out) {
+                return -1;
+            }
+            idx_out[nfrag++] = static_cast<uint8_t>(exact_idx);
+            a_rem = 0;
+            z_rem = 0;
+        } else {
+            if (a_rem < z_rem || nfrag + z_rem > max_out) {
+                return -1;
+            }
+            for (int i = 0; i < z_rem; ++i) {
+                idx_out[nfrag++] = 1;
+            }
+            a_rem -= z_rem;
+            z_rem = 0;
+        }
+    }
+    neutrons += a_rem;
+    if (z_rem != 0) {
+        return -1;
+    }
+    if (leftover_n != nullptr) {
+        *leftover_n = neutrons;
+    }
+    return nfrag;
 }
 
 // One leading Table-1 fragment plus at most one A/Z-fitting remnant. No n/p dump.
@@ -454,14 +526,12 @@ inline int fill_projectile_joint_channel(const float* prob, float u_lead, uint8_
 }
 
 // Exponential free path. If u < 1-exp(-Sigma L) the collision sits inside the step.
-// Local absorbed fraction of inelastic neutron KE (kerma). Remainder stays untracked.
-inline constexpr float kInelasticNeutronKermaFraction = 0.08F;
+// Paper mode has no fixed local neutron kerma at the production vertex.
+inline constexpr float kInelasticNeutronKermaFraction = 0.0F;
 
 inline float inelastic_neutron_kerma_MeV(float neutron_ke_MeV) noexcept {
-    if (!(neutron_ke_MeV > 0.0F)) {
-        return 0.0F;
-    }
-    return kInelasticNeutronKermaFraction * neutron_ke_MeV;
+    (void)neutron_ke_MeV;
+    return 0.0F;
 }
 
 inline bool inelastic_collision_in_step(float macro_xs_per_mm, float step_mm, float u,

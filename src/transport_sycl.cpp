@@ -99,7 +99,8 @@ TransportResult transport_sycl(const TransportConfig& config,
     const auto number_of_bins = config.number_of_bins();
     const auto number_of_voxels = config.number_of_voxels();
     const auto table_size = stopping_power.values().size();
-    const auto cross_section_table_size = cross_section.values().size();
+    // Device-side inelastic tables share the stopping-power transport grid.
+    const auto cross_section_table_size = table_size;
 
     const bool reuse_immutable_buffers = context != nullptr;
     if (context != nullptr) {
@@ -177,7 +178,7 @@ TransportResult transport_sycl(const TransportConfig& config,
             }
             for (std::size_t i = 0; i < cross_section_table_size; ++i) {
                 material_xs_host[layer * cross_section_table_size + i] =
-                    static_cast<float>(xs.values()[i]);
+                    static_cast<float>(xs.interpolate(table_energies[i]));
             }
         }
     }
@@ -217,7 +218,7 @@ TransportResult transport_sycl(const TransportConfig& config,
             insert_sp_host[i] = static_cast<float>(sp.values()[i]);
         }
         for (std::size_t i = 0; i < cross_section_table_size; ++i) {
-            insert_xs_host[i] = static_cast<float>(xs.values()[i]);
+            insert_xs_host[i] = static_cast<float>(xs.interpolate(table_energies[i]));
         }
     }
     float* insert_sp_device = use_insert_material_tables
@@ -599,30 +600,20 @@ TransportResult transport_sycl(const TransportConfig& config,
                            [](double value) { return static_cast<float>(value); });
             queue.copy(cumulative_range_host.data(), cumulative_range_device, table_size);
         }
-        std::vector<float> cross_section_host(cross_section_table_size);
-        std::transform(cross_section.values().begin(), cross_section.values().end(),
-                       cross_section_host.begin(),
-                       [](double value) { return static_cast<float>(value); });
-        queue.copy(cross_section_host.data(), cross_section_device, cross_section_table_size);
-        std::vector<float> target_h_host(cross_section_table_size, 0.5F);
-        if (cross_section.target_h_fractions().size() == cross_section_table_size) {
-            std::transform(cross_section.target_h_fractions().begin(),
-                           cross_section.target_h_fractions().end(), target_h_host.begin(),
-                           [](double value) { return static_cast<float>(value); });
-        }
+        const auto resampled_xs =
+            resample_cross_section_grid(cross_section, table_energies);
+        queue.copy(resampled_xs.macroscopic_per_mm.data(), cross_section_device,
+                   cross_section_table_size);
         if (target_h_fraction_device != nullptr) {
-            queue.copy(target_h_host.data(), target_h_fraction_device, cross_section_table_size);
+            queue.copy(resampled_xs.target_h_fraction.data(), target_h_fraction_device,
+                       cross_section_table_size);
         }
         queue.wait_and_throw();
     } else if (target_h_fraction_device != nullptr) {
-        std::vector<float> target_h_host(cross_section_table_size, 0.5F);
-        if (cross_section.target_h_fractions().size() == cross_section_table_size) {
-            std::transform(cross_section.target_h_fractions().begin(),
-                           cross_section.target_h_fractions().end(), target_h_host.begin(),
-                           [](double value) { return static_cast<float>(value); });
-        }
-        queue.copy(target_h_host.data(), target_h_fraction_device, cross_section_table_size)
-            .wait_and_throw();
+        const auto resampled_xs =
+            resample_cross_section_grid(cross_section, table_energies);
+        queue.copy(resampled_xs.target_h_fraction.data(), target_h_fraction_device,
+                   cross_section_table_size).wait_and_throw();
     }
 
     queue.memset(dose_device, 0, number_of_bins * sizeof(DoseAtomicT));
@@ -1412,26 +1403,6 @@ TransportResult transport_sycl(const TransportConfig& config,
                                 history_deposited_MeV +=
                                     products.local_deposit_MeV;
                             }
-                            // Neutron kerma: score absorbed dose at the vertex.
-                            // Ledger still keeps neutron KE in untracked, not unassigned.
-                            if (products.neutron_ke_MeV > 0.0F) {
-                                // High-energy neutrons mostly leave the phantom; score a
-                                // local kerma fraction, keep full KE in untracked.
-                                const float kerma =
-                                    carbon::inelastic_neutron_kerma_MeV(products.neutron_ke_MeV);
-                                pending_primary_depth_MeV += kerma;
-                                if (enable_voxel_scoring && voxel_index >= 0) {
-                                    pending_primary_voxel_MeV += kerma;
-                                    if (in_fov_dose_device != nullptr && pending_primary_bin >= 0 &&
-                                        pending_primary_bin < static_cast<int>(number_of_bins)) {
-                                        sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
-                                                         sycl::memory_scope::device,
-                                                         sycl::access::address_space::global_space>
-                                            atomic_in_fov(in_fov_dose_device[pending_primary_bin]);
-                                        atomic_in_fov.fetch_add(static_cast<DoseAtomicT>(kerma));
-                                    }
-                                }
-                            }
 
                             float total_charged_MeV = 0.0F;
                             for (uint8_t ip = 0; ip < products.count; ++ip) {
@@ -1681,6 +1652,7 @@ TransportResult transport_sycl(const TransportConfig& config,
     }
 
     double secondary_kernel_seconds = 0.0;
+    std::vector<SecondaryParticle> birth_secondaries_host;
     if (enable_inelastic && enable_secondary_transport &&
         secondary_count_device != nullptr && secondary_queue_device != nullptr) {
         uint32_t secondary_count_host = 0;
@@ -1689,6 +1661,12 @@ TransportResult transport_sycl(const TransportConfig& config,
             secondary_count_host = static_cast<uint32_t>(max_secondaries);
         }
         if (secondary_count_host > 0) {
+        if (!config.fragment_birth_spectrum_output_file.empty() &&
+            secondary_count_host > 0) {
+            birth_secondaries_host.resize(secondary_count_host);
+            queue.copy(secondary_queue_device, birth_secondaries_host.data(),
+                       secondary_count_host).wait_and_throw();
+        }
             auto sec_event = queue.submit([&](sycl::handler& cgh) {
                 cgh.parallel_for<class CarbonSecondaryTransportKernel>(
                     sycl::range<1>(secondary_count_host),
@@ -1855,7 +1833,7 @@ TransportResult transport_sycl(const TransportConfig& config,
                             if (enable_multiple_scattering && sec_e > energy_cutoff_MeV) {
                                 const auto theta_rms = highland_projected_rms_angle_device(
                                     sec_e, static_cast<int>(frag.z),
-                                    static_cast<int>(frag.a), sec_step_mm, 1.0F);
+                                    static_cast<int>(frag.a), sec_step_mm, multiple_scattering_scale);
                                 const auto u_msc0 = sycl::fmax(
                                     rng::uniform01(2026, static_cast<uint32_t>(sec_idx), sec_steps, 0),
                                     1.0e-10F);
@@ -2173,7 +2151,56 @@ TransportResult transport_sycl(const TransportConfig& config,
     result.deposited_energy_MeV = std::move(dose_host);
     result.voxel_deposited_energy_MeV = std::move(voxel_dose_host);
     result.in_fov_deposited_energy_MeV = std::move(in_fov_dose_host);
+    if (!config.fragment_birth_spectrum_output_file.empty()) {
+        constexpr std::size_t categories = light_isotope_category_count;
+        constexpr std::size_t generations = birth_generation_bin_count;
+        result.birth_counts_by_generation.assign(categories * generations, 0);
+        result.birth_ke_sum_MeV_by_generation.assign(categories * generations, 0.0);
+        result.birth_mevu_hist.assign(birth_hist_plane_size(birth_mevu_bin_count), 0);
+        result.birth_depth_hist.assign(birth_hist_plane_size(number_of_bins), 0);
+        result.birth_cos_hist.assign(birth_hist_plane_size(birth_cos_bin_count), 0);
+        result.birth_parent_mevu_hist.assign(
+            birth_hist_plane_size(birth_parent_mevu_bin_count), 0);
+        result.birth_parent_z_hist.assign(
+            birth_hist_plane_size(birth_parent_z_bin_count), 0);
+        result.birth_parent_product_mevu_hist.assign(birth_joint_plane_size(), 0);
 
+        constexpr std::size_t generation = 0;
+        const auto parent_mevu_bin = birth_parent_mevu_bin(
+            config.initial_total_energy_MeV(), config.primary_mass_number);
+        const auto parent_z_bin = birth_parent_z_bin(config.primary_atomic_number);
+        for (const auto& fragment : birth_secondaries_host) {
+            const auto category =
+                light_isotope_category(fragment.z, fragment.a);
+            if (category >= categories || fragment.a <= 0) {
+                continue;
+            }
+            const auto summary_index = category * generations + generation;
+            const auto mevu_bin =
+                birth_mevu_bin(fragment.energy_MeV, fragment.a);
+            const auto depth_bin = std::min(
+                number_of_bins - 1,
+                static_cast<std::size_t>(std::max(
+                    0.0F, fragment.pos_z_mm / depth_bin_width_mm)));
+            const auto cos_bin = birth_cos_bin(fragment.dir_z);
+            ++result.birth_counts_by_generation[summary_index];
+            result.birth_ke_sum_MeV_by_generation[summary_index] +=
+                fragment.energy_MeV;
+            ++result.birth_mevu_hist[birth_hist_index(
+                category, generation, mevu_bin, birth_mevu_bin_count)];
+            ++result.birth_depth_hist[birth_hist_index(
+                category, generation, depth_bin, number_of_bins)];
+            ++result.birth_cos_hist[birth_hist_index(
+                category, generation, cos_bin, birth_cos_bin_count)];
+            ++result.birth_parent_mevu_hist[birth_hist_index(
+                category, generation, parent_mevu_bin, birth_parent_mevu_bin_count)];
+            ++result.birth_parent_z_hist[birth_hist_index(
+                category, generation, parent_z_bin, birth_parent_z_bin_count)];
+
+            ++result.birth_parent_product_mevu_hist[birth_joint_index(
+                category, generation, parent_mevu_bin, mevu_bin)];
+        }
+    }
     if (enable_let_scoring) {
         const auto extract_let_moment = [&](const std::size_t moment) {
             const auto begin = let_moments_host.begin() +

@@ -42,8 +42,8 @@ struct SyclTransportContext::Impl {
                 stopping_power.energies().size(), queue);
             cumulative_range_device = sycl::malloc_device<float>(
                 stopping_power.cumulative_ranges_mm().size(), queue);
-            cross_section_device =
-                sycl::malloc_device<float>(cross_section.values().size(), queue);
+            cross_section_device = sycl::malloc_device<float>(
+                stopping_power.energies().size(), queue);
 
             const auto allocation_failed =
                 table_device == nullptr || energy_grid_device == nullptr ||
@@ -57,10 +57,8 @@ struct SyclTransportContext::Impl {
             std::transform(stopping_power.values().begin(), stopping_power.values().end(),
                            table_host.begin(),
                            [](double value) { return static_cast<float>(value); });
-            std::vector<float> xs_host(cross_section.values().size());
-            std::transform(cross_section.values().begin(), cross_section.values().end(),
-                           xs_host.begin(),
-                           [](double value) { return static_cast<float>(value); });
+            const auto resampled_xs =
+                resample_cross_section_grid(cross_section, stopping_power.energies());
             std::vector<float> energy_grid_host(stopping_power.energies().size());
             std::transform(stopping_power.energies().begin(), stopping_power.energies().end(),
                            energy_grid_host.begin(),
@@ -74,7 +72,8 @@ struct SyclTransportContext::Impl {
             queue.copy(energy_grid_host.data(), energy_grid_device, energy_grid_host.size());
             queue.copy(cumulative_range_host.data(), cumulative_range_device,
                        cumulative_range_host.size());
-            queue.copy(xs_host.data(), cross_section_device, xs_host.size());
+            queue.copy(resampled_xs.macroscopic_per_mm.data(), cross_section_device,
+                       resampled_xs.macroscopic_per_mm.size());
             queue.wait_and_throw();
             initialized = true;
         } catch (...) {

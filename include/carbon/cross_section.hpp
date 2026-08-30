@@ -33,6 +33,16 @@ private:
     std::vector<double> macro_o_per_mm_;
 };
 
+struct ResampledCrossSectionGrid {
+    std::vector<float> macroscopic_per_mm;
+    std::vector<float> target_h_fraction;
+};
+
+// Resample inelastic data onto the transport grid used by device kernels.
+[[nodiscard]] ResampledCrossSectionGrid resample_cross_section_grid(
+    const CrossSectionTable& cross_section,
+    const std::vector<double>& transport_energies_MeVu);
+
 class IonCrossSectionTables {
 public:
     static constexpr std::size_t mass_stride = 32;

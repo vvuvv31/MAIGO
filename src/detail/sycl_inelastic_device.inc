@@ -47,10 +47,8 @@ inline InelasticProductSet sample_carbon_inelastic_products_device(
     const auto max_available_MeV = incident_energy_MeV;
 
     // 3. Sample projectile and target fragment sets with resampling (Section 2.1.3)
-    constexpr int max_retries = 32;
+    constexpr int max_retries = 128;
     bool accepted = false;
-    InelasticProductSet last_closed{};
-    bool have_closed = false;
 
     for (int retry = 0; retry < max_retries; ++retry) {
         InelasticProductSet candidate{};
@@ -64,40 +62,33 @@ inline InelasticProductSet sample_carbon_inelastic_products_device(
 
         float wproj[18];
         carbon::fill_energy_dependent_inclusive_weights(e_per_u, proj_prob, wproj);
-        const float u_lead = rng::uniform01(
-            spot_seed, rng_history, steps,
-            kInelasticBaseDim + static_cast<uint32_t>(retry * 200 + 1));
+        float projectile_uniforms[8]{};
+        for (int j = 0; j < 8; ++j) {
+            projectile_uniforms[j] = rng::uniform01(
+                spot_seed, rng_history, steps,
+                kInelasticBaseDim +
+                    static_cast<uint32_t>(retry * 200 + 1 + j));
+        }
         uint8_t joint_idx[8]{};
         int leftover_n = 0;
-        const int njoint = carbon::fill_projectile_joint_channel(
-            wproj, u_lead, joint_idx, carbon::kMaxProjectileFragments, &leftover_n);
+        const int njoint = carbon::fill_projectile_constrained_channel(
+            wproj, projectile_uniforms, 8, joint_idx,
+            carbon::kMaxProjectileFragments, &leftover_n);
+        if (njoint < 0) {
+            continue;
+        }
         for (int j = 0; j < njoint && num_frags < carbon::kMaxProjectileFragments; ++j) {
             frag_species[num_frags] = joint_idx[j];
             is_target_frag[num_frags] = false;
             ++num_frags;
         }
-        a_rem = leftover_n;
+        a_rem = 0;  // leftover_n is an emitted neutron packet, not an A residual
         z_rem = 0;
-        // Heaviest projectile fragment first so Eq. 13–16 gives E/A≈P to
-        // the projectile-like remnant, not to a light leading He/p.
-        for (uint8_t i = 0; i < num_frags; ++i) {
-            for (uint8_t j = static_cast<uint8_t>(i + 1); j < num_frags; ++j) {
-                const int ai = carbon::kFredIsotopes[frag_species[i]].a;
-                const int aj = carbon::kFredIsotopes[frag_species[j]].a;
-                if (aj > ai) {
-                    const auto tmp = frag_species[i];
-                    frag_species[i] = frag_species[j];
-                    frag_species[j] = tmp;
-                }
-            }
-        }
 
-        // Target fragments from Table 1 remaining (A,Z). Light charged (p,d,t,He) are transported;
-        // neutrons are untracked; leftover heavy residue is locally deposited.
+        // Transport sampled target fragments and retain remaining A/Z as an
+        // explicit zero-kinetic-energy remnant in paper-minimal mode.
         int target_a_rem = (target_idx == 0) ? 1 : 16;
         int target_z_rem = (target_idx == 0) ? 1 : 8;
-        int heavy_tgt_a = 0;
-        int heavy_tgt_z = 0;
         int heavy_tgt_idx = -1;
         int tgt_step = 0;
         if (target_idx == 0) {
@@ -123,8 +114,6 @@ inline InelasticProductSet sample_carbon_inelastic_products_device(
             if (iso.z >= 3 || iso.a >= 6) {
                 target_a_rem -= iso.a;
                 target_z_rem -= iso.z;
-                heavy_tgt_a = iso.a;
-                heavy_tgt_z = iso.z;
                 heavy_tgt_idx = iso_idx;
                 break;
             }
@@ -142,7 +131,8 @@ inline InelasticProductSet sample_carbon_inelastic_products_device(
         }
 
         // Sample Kinematics for all fragments from Eq. (12) 2D PDF
-        float running_e_sum = 0.0F;
+        float projectile_e_sum = 0.0F;
+        float total_product_ke_MeV = 0.0F;
         float running_a_sum = 0.0F;
         uint8_t charged_count = 0;
         bool kinematics_ok = true;
@@ -163,11 +153,24 @@ inline InelasticProductSet sample_carbon_inelastic_products_device(
             const float u_th1 = rng::uniform01(spot_seed, rng_history, steps, base_frag_rng + 4);
             const float u_ph  = rng::uniform01(spot_seed, rng_history, steps, base_frag_rng + 5);
 
-            // Analytical mixture integration weights for Eq. (12)
-            const float i_gauss = 3.14159F * params.a2 * params.sigma_e * params.sigma_th;
+            // Eq. (12) component weights integrated on the same fixed domain
+            // used below: E95 in [0,Emax], theta95 in [0,180 deg].
             const float a_e = sycl::fmax(params.a_e, 0.005F);
             const float a_th = sycl::fmax(params.a_th, 0.01F);
-            const float i_exp = params.a1 / (a_e * a_th);
+            constexpr float sqrt_half_pi = 1.2533141373155F;
+            constexpr float inv_sqrt_two = 0.7071067811865F;
+            const float sigma_e = sycl::fmax(params.sigma_e, 1.0e-6F);
+            const float sigma_th = sycl::fmax(params.sigma_th, 1.0e-6F);
+            const float gauss_e_int = sigma_e * sqrt_half_pi *
+                (sycl::erf((carbon::kFredReferenceEnergyMaxMeVu - params.mean_e) *
+                            inv_sqrt_two / sigma_e) +
+                 sycl::erf(params.mean_e * inv_sqrt_two / sigma_e));
+            const float gauss_th_int = sigma_th * sqrt_half_pi *
+                sycl::erf(180.0F * inv_sqrt_two / sigma_th);
+            const float i_gauss = params.a2 * gauss_e_int * gauss_th_int;
+            const float i_exp = params.a1 *
+                (1.0F - sycl::exp(-a_e * carbon::kFredReferenceEnergyMaxMeVu)) / a_e *
+                (1.0F - sycl::exp(-a_th * 180.0F)) / a_th;
             const float p_gauss = i_gauss / sycl::fmax(1.0e-6F, i_gauss + i_exp);
 
             const bool sample_gauss =
@@ -182,9 +185,9 @@ inline InelasticProductSet sample_carbon_inelastic_products_device(
                 const auto gauss_e = sycl::sqrt(-2.0F * sycl::log(u_log)) * sycl::cos(two_pi * u_e1);
                 const auto e95 = sycl::fmax(params.mean_e + params.sigma_e * gauss_e, 0.0F);
 
-                if (!is_tgt && iso.a >= 10) {
+                if (!is_tgt) {
                     frag_e_u = carbon::sample_projectile_fragment_Eu(
-                        e95, e_per_u, iso.a, running_e_sum, running_a_sum);
+                        e95, e_per_u, iso.a, projectile_e_sum, running_a_sum);
                     if (!(frag_e_u > 0.0F)) {
                         kinematics_ok = false;
                         break;
@@ -206,12 +209,21 @@ inline InelasticProductSet sample_carbon_inelastic_products_device(
                     theta_rad = theta95_rad * sycl::sqrt(95.0F / e_per_u);
                 }
             } else {
-                // Exponential (target-like) energy: Eq. (13) scale, no event-level k.
+                // Sample once from the fixed 95 MeV/u reference domain.
                 const auto u_e_log = sycl::fmax(u_e0, 1.0e-8F);
-                const float emax_u = sycl::fmax(e_per_u * 2.0F, 1.0F);
+                const float emax_u = carbon::kFredReferenceEnergyMaxMeVu;
                 const float norm = 1.0F - sycl::exp(-a_e * emax_u);
                 const float e95 = -sycl::log(1.0F - u_e_log * sycl::fmax(norm, 1.0e-8F)) / a_e;
-                frag_e_u = e95 * (e_per_u / 95.0F);
+                if (!is_tgt) {
+                    frag_e_u = carbon::sample_projectile_fragment_Eu(
+                        e95, e_per_u, iso.a, projectile_e_sum, running_a_sum);
+                    if (!(frag_e_u > 0.0F)) {
+                        kinematics_ok = false;
+                        break;
+                    }
+                } else {
+                    frag_e_u = e95 * (e_per_u / 95.0F);
+                }
 
                 const auto u_th_log = sycl::fmax(u_th0, 1.0e-8F);
                 const float th_max = 180.0F;
@@ -227,14 +239,14 @@ inline InelasticProductSet sample_carbon_inelastic_products_device(
             }
 
             frag_e_u = sycl::fmax(0.0F, frag_e_u);
-            float frag_e_tot = af * frag_e_u;
+            const float frag_e_tot = af * frag_e_u;
+            total_product_ke_MeV += frag_e_tot;
+            if (!(total_product_ke_MeV <= max_available_MeV + 1.0e-3F)) {
+                kinematics_ok = false;
+                break;
+            }
             if (!is_tgt) {
-                const float room = sycl::fmax(0.0F, max_available_MeV - running_e_sum);
-                if (frag_e_tot > room) {
-                    frag_e_tot = room;
-                    frag_e_u = (af > 0.0F) ? frag_e_tot / af : 0.0F;
-                }
-                running_e_sum += frag_e_tot;
+                projectile_e_sum += frag_e_tot;
                 running_a_sum += af;
             }
 
@@ -304,78 +316,52 @@ inline InelasticProductSet sample_carbon_inelastic_products_device(
             const float u_n = sycl::fmax(
                 rng::uniform01(spot_seed, rng_history, steps, n_rng), 1.0e-8F);
             const float a_e_n = sycl::fmax(nparams.a_e, 0.005F);
-            const float emax_u = sycl::fmax(e_per_u * 2.0F, 1.0F);
+            const float emax_u = carbon::kFredReferenceEnergyMaxMeVu;
             const float nnorm = 1.0F - sycl::exp(-a_e_n * emax_u);
             const float e95_n = -sycl::log(1.0F - u_n * sycl::fmax(nnorm, 1.0e-8F)) / a_e_n;
-            const float room = sycl::fmax(0.0F, max_available_MeV - running_e_sum);
-            float n_ke = static_cast<float>(leftover_n) * e95_n * (e_per_u / 95.0F);
-            n_ke = sycl::fmin(sycl::fmax(0.0F, n_ke), room);
+            const float n_ke = sycl::fmax(
+                0.0F, static_cast<float>(leftover_n) * e95_n * (e_per_u / 95.0F));
+            total_product_ke_MeV += n_ke;
+            if (!(total_product_ke_MeV <= max_available_MeV + 1.0e-3F)) {
+                continue;
+            }
             candidate.untracked_energy_MeV += n_ke;
-            running_e_sum += n_ke;
         }
 
-        // Leftover target nucleons not identified as a Table-1 isotope: low-energy local only.
-        const int leftover_a = sycl::max(target_a_rem, 0);
-        if (leftover_a > 0) {
-            const uint32_t recoil_rng = kInelasticBaseDim + static_cast<uint32_t>(retry * 200 + 180);
-            const float u_rec = sycl::fmax(
-                rng::uniform01(spot_seed, rng_history, steps, recoil_rng), 1.0e-8F);
-            const float leftover_e = sycl::fmin(8.0F, -sycl::log(u_rec) / 0.40F);
-            candidate.local_deposit_MeV += leftover_e;
-            candidate.remnant_local_MeV += leftover_e;
-        }
-        const int recoil_a = heavy_tgt_a + leftover_a;
 
         candidate.count = charged_count;
 
         const float neutron_ke_MeV = sycl::fmax(0.0F, candidate.untracked_energy_MeV - base_q_MeV);
         candidate.untracked_energy_MeV += candidate.product_capacity_overflow_MeV;
+        // Paper-minimal Q=0 mode keeps unused available energy explicit as
+        // escaped/excitation energy; it is not deposited locally.
+        const float excitation_MeV =
+            sycl::fmax(0.0F, max_available_MeV - total_product_ke_MeV);
+        candidate.untracked_energy_MeV += excitation_MeV;
+        candidate.remnant_kinetic_MeV = 0.0F;
+        candidate.remnant_excitation_MeV = excitation_MeV;
 
         candidate.q_MeV = base_q_MeV;
         candidate.neutron_ke_MeV = neutron_ke_MeV;
         candidate.retries_used = static_cast<uint8_t>(retry + 1);
         candidate.leftover_proj_a = static_cast<int8_t>(a_rem);
         candidate.leftover_proj_z = static_cast<int8_t>(z_rem);
-        candidate.leftover_tgt_a = static_cast<int8_t>(recoil_a);
-        candidate.leftover_tgt_z = static_cast<int8_t>(heavy_tgt_z + sycl::max(target_z_rem, 0));
+        candidate.leftover_tgt_a = static_cast<int8_t>(sycl::max(target_a_rem, 0));
+        candidate.leftover_tgt_z = static_cast<int8_t>(sycl::max(target_z_rem, 0));
         candidate.n_emitted = num_frags;
         for (uint8_t s = 0; s < num_frags && s < carbon::kMaxInelasticProducts; ++s) {
             candidate.emitted_idx[s] = frag_species[s];
         }
 
-        // Projectile joint channel is nucleon-conserving and energy-clipped.
-        // Target KE is extra and is not a reason to energy-scale the projectile.
-        if (running_e_sum <= max_available_MeV + 1.0e-3F) {
+        // Accept only complete events whose projectile, target, neutron and
+        // local-remnant kinetic energies all fit the same signed budget.
+        if (total_product_ke_MeV <= max_available_MeV + 1.0e-3F) {
             set = candidate;
             accepted = true;
             break;
         }
-        last_closed = candidate;
-        have_closed = true;
     }
 
-    if (!accepted && have_closed) {
-        float used = 0.0F;
-        for (uint8_t i = 0; i < last_closed.count; ++i) {
-            used += last_closed.products[i].energy_MeV;
-        }
-        used += last_closed.local_deposit_MeV + last_closed.neutron_ke_MeV;
-        if (used > 0.0F) {
-            const float scale = max_available_MeV / used;
-            for (uint8_t i = 0; i < last_closed.count; ++i) {
-                last_closed.products[i].energy_MeV *= scale;
-            }
-            last_closed.local_deposit_MeV *= scale;
-            last_closed.neutron_ke_MeV *= scale;
-            last_closed.untracked_energy_MeV = last_closed.neutron_ke_MeV;
-            last_closed.remnant_local_MeV *= scale;
-        }
-        last_closed.energy_scaled = 1;
-        last_closed.resample_failed = 0;
-        last_closed.model_unassigned_MeV = 0.0F;
-        set = last_closed;
-        accepted = true;
-    }
 
     if (!accepted) {
         set.count = 1;

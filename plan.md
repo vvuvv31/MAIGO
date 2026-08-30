@@ -1,1206 +1,1670 @@
-# MAIGO `fred` 分支 inelastic 修复执行方案
+# `38b5150` 非弹性过程第二轮代码审查与修复方案
 
-## 一、结论
+我按你这轮结果对应的新提交 **`38b5150`** 做了静态复核。该提交主要引入了：
 
-我检查时，`fred` 分支最新提交是 `a4bee63`，该提交正是把论文中的 Table 1、能量角度采样、重残核输运和能量 ledger 接入 GPU 的版本。([GitHub][1])
+* 95/200/300/400 MeV/u 的能量相关碎片产额；
+* projectile “joint channel”；
+* 固定比例 neutron kerma；
+* step 内非弹性碰撞位置抽样；
+* 新的能量与剩余核诊断。
 
-**当前问题的主要来源不是 EM、主碳离子的 stopping power 或 primary MCS，而是 inelastic event generator 本身。** 论文将碳离子输运拆成电离能损、MCS 和碎裂三个部分，而且 MCS 标定是在关闭核反应时完成的；既然你的 EM+elastic 已经吻合，就应先冻结这部分。
+提交本身是 `feat(fred): energy-dependent yields, joint channels, kerma, in-step collisions`。
 
-从你给出的图看：
+本文对照的是 De Simoni 等人的 *A Data-Driven Fragmentation Model for Carbon Therapy GPU-Accelerated Monte-Carlo Dose Recalculation*。
 
-* 100–300 MeV/u：Bragg peak 后的 IDD 明显偏低，halo σ 也大多偏低，说明**次级带电碎片的能量、射程或产额不足**，或者大量能量被放进了 `untracked`。
-* 400 MeV/u：远端尾部反而大幅偏高且波动异常，说明还存在**次级输运终止时的人工局域能量倾倒**或高能碎片方向/射程处理错误。
-* 误差随能量发生符号反转，因此不能通过一个全局 normalization、一个 MCS scale 或一个 halo scale 修好。
+先给结论：
 
-仓库自己的 `plan.md` 已经记录了几个红色信号：四套 Table 1 反演误差为 `0.122 / 0.137 / 0.622 / 0.182`，400 MeV/u 的模型 residual 占入射能量约 `9.71%`，71774 次 inelastic 中有 700 次重采样失败，而且重残核射程仍是 `E/SP` 而不是 CSDA 积分射程。([GitHub][2])
+> **现在 100 MeV/u 的 IDD 吻合，很可能是多个方向相反的错误相互抵消，而不是非弹性过程已经正确。**
+>
+> 200–400 MeV/u 的平台剂量随深度越来越高、远端尾部仍偏低、halo 始终偏窄，说明当前同时存在：
+>
+> 1. 非弹性截面查表错误；
+> 2. 事件中人为产生额外能量；
+> 3. 碎片组合与论文算法不一致；
+> 4. 轻碎片和 target-like fragments 的产生不足或能谱错误；
+> 5. 次级碎片 MCS 明显偏小。
 
----
-
-# 二、最高优先级的代码问题
-
-## P0-1：Eq. 13–16 实现使第一个 projectile fragment 的能量被固定乘以 0.6
-
-当前实现中：
-
-```cpp
-R = running_e_sum / running_a_sum / e_per_u;
-k = 0.4 * (1 - R);
-E_fragment = E95 * E_projectile / 95 * (1 - k);
-```
-
-但第一个碎片出现时 `running_a_sum == 0`，于是：
-
-```text
-R = 0
-k = 0.4
-E_fragment = 0.6 × E95 × Eprojectile / 95
-```
-
-也就是说，第一个 projectile fragment 无条件丢掉约 40% 的应有动能。当前代码正是这样实现的。([GitHub][3])
-
-论文则说明，`c = 0.4` 的相关修正应当保证 projectile fragment 的平均能量/核子接近入射 projectile 的能量/核子；target fragment 才是不带相关因子的 exponential 抽样。 
-
-这是最可能造成 100–300 MeV/u distal IDD 严重不足的单个代码错误。
+这五项必须按顺序处理，不能再用一个 normalization 或 halo scale 一次性拟合。
 
 ---
 
-## P0-2：Eq. 12 的 Gaussian/Exponential 分支选择与论文不一致
+# 一、从新结果判断目前的错误结构
 
-论文规定：
+## 1. 100 MeV/u 只是表面吻合
 
-* `1H、2H、3H`：不论 projectile fragment 还是 target fragment，都从完整的 Gaussian + exponential 混合分布抽样。
-* 其他 projectile fragments：Gaussian。
-* 其他 target fragments：exponential。
-* projectile fragments 主要向前、能量/核子接近入射离子；target fragments 能量低、角分布更接近各向同性。
+100 MeV/u：
 
-当前代码却是：
+* Bragg peak 前的 IDD 基本吻合；
+* Bragg peak 后仍低约 20%–50%；
+* halo σ 仍低约 20%–30%；
+* z=26.2 mm 的 GPU lateral profile 峰值大约只有 TOPAS 的一半。
 
-```cpp
-sample_gauss = !is_target && (u_mix < p_gauss);
-```
+这说明主碳离子的电磁部分仍然正常，但：
 
-这意味着：
+* 产生的远程带电碎片不足；
+* 碎片能量或射程不足；
+* 或大量次级能量被放到了局域沉积、neutron/untracked，而不是远距离输运。
 
-* 所有 projectile fragment 都可能错误地落入低能 exponential 分量；
-* 所有 target fragment 都被强制为 exponential；
-* target 的 p/d/t 缺少论文要求的 Gaussian 高能前向分量。([GitHub][3])
+因此不能把“100 MeV/u IDD match”当作验收通过。
 
-同时当前代码还把：
+## 2. 200–400 MeV/u 的平台过量随射程增长
 
-```cpp
-E95_exponential <= 35 MeV/u
-theta <= 90 degree
-```
+目测新图：
 
-作为硬截断，而论文明确说角分布应外推到完整的 `[0°, 180°]`。([GitHub][3]) 
+|        能量 | Bragg peak 前最大 IDD 偏差 |  Bragg peak 后 |
+| --------: | --------------------: | ------------: |
+| 100 MeV/u |           约 −2% 到 +5% |   −20% 到 −50% |
+| 200 MeV/u |              最高约 +18% | 约 −25% 到 −32% |
+| 300 MeV/u |              最高约 +40% |        约 −20% |
+| 400 MeV/u |          最高约 +60%–65% | 约 −10% 到 −17% |
 
-`35 MeV/u` 的截断会显著缩短 target proton、deuteron、triton 的射程，直接压低 halo 和 distal tail。
+这种随飞行距离和初始能量增长的正偏差，最符合：
 
----
+* primary inelastic attenuation 偏小，使过多主碳离子继续沉积剂量；
+* 每次 inelastic event 又额外产生 target-fragment kinetic energy；
+* neutron kerma 在碰撞点被额外加到剂量中；
+* target remnant 被经验性地局域沉积。
 
-## P0-3：inelastic 总截面与 H/O 靶核选择来自两套不一致的模型
+## 3. halo σ 系统性偏小是另一个独立问题
 
-当前配置使用 Geant4 11.3.2 的水中总宏观 inelastic 截面。对应 CSV 实际已经包含：
+在 300/400 MeV/u 上游区域，GPU halo σ 比 TOPAS 低约 40%–50%，接近峰区后误差才逐渐减小。
 
-```text
-macroscopic_cross_section_per_mm
-macro_h_per_mm
-macro_o_per_mm
-target_h_fraction
-```
+这通常不能由 IDD normalization 解释，更可能来自：
 
-([GitHub][4])
+* light fragment multiplicity 太低；
+* target fragment 被局域沉积，没有继续输运；
+* target-like angular component 被错误抽样；
+* secondary fragment MCS 仍使用未标定的 Highland scale；
+* neutron/secondary interaction 产生的宽翼没有被建模。
 
-但 `CrossSectionTable` 只保存能量和总截面，CSV 解析器也只读取一个总截面列，H/O partial cross section 和 `target_h_fraction` 都被丢弃。([GitHub][5])
-
-随后 GPU event generator 又用另一套硬编码 H 拟合和近似 Kox 公式重新计算靶核种类。([GitHub][3])
-
-按当前 GPU 公式计算，与 CSV 给出的靶氢概率约为：
-
-|        能量 | 当前 GPU 公式 \(P_H\) | CSV 中 \(P_H\) |
-| --------: | ----------------: | ------------: |
-| 100 MeV/u |             0.280 |         0.374 |
-| 200 MeV/u |             0.260 |         0.343 |
-| 300 MeV/u |             0.254 |         0.336 |
-| 400 MeV/u |             0.254 |         0.338 |
-
-CSV 对应值可直接在表中看到。([GitHub][4])
-
-因此代码目前系统性地：
-
-* 少采样 H 相互作用；
-* 多采样 O 相互作用；
-* O 表中中子占比更高，进而让更多能量进入 `untracked`；
-* 改变 projectile/target fragment 的种类和角能分布。
-
-论文的水中靶核选择本来就是根据 H/O 的 partial cross section 构造累计概率。
+因此纵向 IDD 和横向 halo 必须分开诊断。
 
 ---
 
-## P0-4：在论文已经给出的 Table 1 上又进行了一次未收敛的 runtime inversion
+# 二、当前最新代码中最严重的问题
 
-代码中的 `kFredProbH/C/O` 就是论文 Table 1 的 FRED 概率，并且已经建立了对应 CDF。([GitHub][6])
+# P0-1：GPU 非弹性截面使用了错误的能量网格
 
-但程序启动时又分别对：
+这是当前必须第一个修复的问题。
 
-* projectile on H；
-* projectile on O；
-* target H，`A=1,Z=1`；
-* target O，`A=16,Z=8`；
+`transport_sycl.cpp` 使用以下变量计算 stopping-power 插值位置：
 
-执行 `invert_table1_independent_probs()`。([GitHub][7])
+```cpp
+minimum_table_energy
+inverse_table_step
+```
 
-论文描述的是：Table 1 本身就是经过 iterative/Newton procedure 构造出来、用于处理碎片产生相关性的最终概率表；随后事件通过累计分布抽样，并在质量、电荷、能量条件不满足时重新抽样。
+这两个变量来自 stopping-power table。当前 stopping-power table 的网格是：
 
-尤其是对 `A=1,Z=1` 的 target-H 去反演完整 Table 1，在物理上不可能收敛——氢靶的 target fragment 只能是一个 proton。当前 `tgt_h` 反演误差高达 0.622 正是这个问题的表现。([GitHub][2])
+```text
+0.01, 0.11, 0.21, ...
+```
 
-论文没有公开完整的原始 joint-fragment channel 构造过程，因此稳妥做法不是继续增加 runtime Newton 迭代，而是：
+也就是：
 
-1. 先把 Table 1 当作最终模型输入；
-2. 在 CPU 离线生成满足 A/Z 约束的 joint event channels；
-3. 检验生成后的 inclusive yield 是否重现 Table 1；
-4. 把验证后的 channel CDF 打包给 GPU。
+```text
+Emin = 0.01 MeV/u
+ΔE   = 0.1 MeV/u
+inverse step = 10
+```
+
+但非弹性截面表的网格是：
+
+```text
+1, 2, 3, ..., 400 MeV/u
+```
+
+也就是：
+
+```text
+Emin = 1 MeV/u
+ΔE   = 1 MeV/u
+```
+
+GPU kernel 却用 stopping-power 的 `Emin=0.01` 和 `inverse_step=10` 去索引只有 400 行的 cross-section array。
+
+这会产生近似映射：
+
+|    实际粒子能量 |       GPU 实际访问的截面能量 |
+| --------: | ------------------: |
+|   5 MeV/u |          约 51 MeV/u |
+|  10 MeV/u |         约 101 MeV/u |
+|  20 MeV/u |         约 201 MeV/u |
+|  30 MeV/u |         约 301 MeV/u |
+| ≥40 MeV/u | 被 clamp 到 400 MeV/u |
+
+也就是说：
+
+```text
+100 MeV/u → 使用 400 MeV/u 截面
+200 MeV/u → 使用 400 MeV/u 截面
+300 MeV/u → 使用 400 MeV/u 截面
+400 MeV/u → 使用 400 MeV/u 截面
+```
+
+同时 `target_h_fraction` 也使用了同样的错误索引。
+
+影响包括：
+
+1. 100 MeV/u 初始非弹性截面被低估；
+2. 低于约 40 MeV/u 后，接近射程末端的截面被严重低估；
+3. 过多 primary carbon 存活到更深处；
+4. 产生的碎片数量不足；
+5. H/O target 比例错误，尤其是低能区 O 被过量选择；
+6. IDD 平台偏高、fragment tail 和 halo 偏低。
+
+这一个问题已经能够同时解释：
+
+```text
+高能平台逐渐过量
++
+halo/fragment tail 不足
+```
+
+## 正确修改
+
+最简单且 GPU 友好的方案是，在 host 侧把截面和 H 比例重采样到 stopping-power 网格：
+
+```cpp
+const auto& transport_energy = stopping_power.energies();
+
+std::vector<float> macro_xs_on_transport_grid(
+    transport_energy.size());
+
+std::vector<float> target_h_on_transport_grid(
+    transport_energy.size());
+
+for (std::size_t i = 0; i < transport_energy.size(); ++i) {
+    const double energy = transport_energy[i];
+
+    macro_xs_on_transport_grid[i] =
+        static_cast<float>(
+            cross_section.interpolate(energy));
+
+    target_h_on_transport_grid[i] =
+        static_cast<float>(
+            cross_section.interpolate_target_h_fraction(energy));
+}
+```
+
+然后 GPU kernel 可以继续使用：
+
+```cpp
+minimum_table_energy
+inverse_table_step
+```
+
+但必须访问新重采样后的数组，而不是原始 1 MeV/u 网格数组。
+
+另一种方案是给 cross-section 独立保存：
+
+```cpp
+xs_min_energy
+xs_inverse_step
+xs_table_size
+```
+
+但从 GPU 性能和代码简单性考虑，host 端重采样更合适。
+
+## 必须新增的测试
+
+```cpp
+for (float e : {
+    1.0F, 5.0F, 10.0F, 20.0F, 40.0F,
+    95.0F, 100.0F, 200.0F, 300.0F, 400.0F})
+{
+    CHECK_NEAR(
+        gpu_interpolate_xs(e),
+        cpu_cross_section.interpolate(e),
+        1.0e-5F);
+
+    CHECK_NEAR(
+        gpu_interpolate_target_h(e),
+        cpu_cross_section.interpolate_target_h_fraction(e),
+        1.0e-5F);
+}
+```
+
+当前测试只验证 CPU parser/interpolation，没有测试 GPU kernel 实际使用的索引，因此没有发现这个错误。
 
 ---
 
-## P0-5：能量 ledger 把模型缺失能量伪装成了 `untracked`
+# P0-2：target fragment kinetic energy 被当作“免费额外能量”
 
-当前代码自行定义了：
+当前 event generator 中，`running_e_sum` 只累计 projectile fragment energy。
 
-```cpp
-base_q_MeV = 12.0 + 0.04 * E_per_u;
+代码逻辑相当于：
+
+```text
+projectile fragment kinetic energy
+    必须小于 incident energy
+
+target fragment kinetic energy
+    不计入 energy budget
+    被当作额外产生的能量
 ```
 
-论文没有给出这一 Q-value 或 excitation 公式。([GitHub][3])
+代码注释也明确表示 target KE 是 extra。
 
-事件生成后，代码又计算：
+随后总能量 residual 虽然会计算：
 
-```cpp
-residual = Eincident
-         - Echarged
-         - Elocal
-         - Euntracked;
+```text
+incident
+- projectile fragments
+- target fragments
+- neutron energy
+- local deposit
 ```
 
-只要 residual 为正，就直接：
+但如果 residual 是负数，即生成的总能量已经超过入射能量，事件仍然继续输运和沉积，没有被拒绝。
 
-```cpp
-untracked += residual;
+论文在前面确实说明 FRED 不做完整的非弹性多体动力学求解，但在具体 fragment-set 抽样部分又明确规定：
+
+> 若 projectile 和 target fragments 的总能量超过 projectile energy，就重新抽取 fragment set，直到质量、电荷和能量满足约束。
+
+所以当前实现与论文的具体 event-sampling 规则不一致。
+
+## 为什么它正好造成你的高能 IDD 结果
+
+target fragment 的能量又按以下方式随 beam energy 增长：
+
+```text
+Etarget ∝ E95 × Eprojectile / 95
 ```
 
-([GitHub][7])
+因此每次 inelastic event 中凭空增加的 target KE 会随能量增大。
 
-因此外层的“会计能量守恒”可以看起来很好，但物理模型中实际上仍有近 10% 的入射能量没有解释。仓库自己的诊断正好报告 400 MeV/u 的 `model residual / E_in ≈ 9.71%`。([GitHub][2])
+同时高能粒子的路径更长、发生非弹性反应的机会更多，所以累计额外剂量会呈现：
 
-更严重的是，32 次重采样失败后，代码将整个 incident energy 设为 `untracked`，相当于让这一条 primary 无声消失。([GitHub][3])
+```text
+100 MeV/u 小
+200 MeV/u 中等
+300 MeV/u 大
+400 MeV/u 最大
+```
+
+这与你现在的平台偏差随能量增长高度一致。
+
+## 正确修改
+
+事件接受条件必须包含所有动能：
+
+```cpp
+double total_product_kinetic_MeV = 0.0;
+
+for (const auto& fragment : products) {
+    total_product_kinetic_MeV += fragment.kinetic_energy_MeV;
+}
+
+total_product_kinetic_MeV += neutron_kinetic_MeV;
+total_product_kinetic_MeV += remnant_kinetic_MeV;
+
+const double available_MeV =
+    incident_kinetic_MeV + q_value_MeV;
+
+if (total_product_kinetic_MeV > available_MeV + tolerance) {
+    reject_entire_event();
+    continue;
+}
+```
+
+论文严格复现模式下，可以先使用：
+
+```text
+q_value = 0
+available = incident kinetic energy
+```
+
+然后把剩余量定义为：
+
+```text
+remnant/excitation/untracked neutral energy
+```
+
+但不能：
+
+```text
+负 residual → 仍然接受事件
+```
 
 ---
 
-## P0-6：secondary 达到 3000 步上限后，会把全部剩余能量沉积在当前位置
+# P0-3：固定 8% neutron kerma 在当前实现中是双重计数
 
-次级带电粒子的循环条件是：
+最新提交增加了固定：
 
-```cpp
-while (... && sec_steps < 3000)
+```text
+neutron kerma fraction = 0.08
 ```
 
-([GitHub][7])
+当前过程相当于：
 
-循环无论因为 cutoff、异常 stopping power，还是 `sec_steps == 3000` 结束，只要碎片还在 phantom 内，代码就把剩余 `sec_e` 全部加入当前位置的剂量。([GitHub][7])
+1. neutron 的完整 kinetic energy 加入 `untracked_energy`;
+2. 再把其中 8% 作为局域剂量沉积；
+3. 但没有从 neutron/untracked energy 中扣除该 8%；
+4. 该 kerma 也没有完整进入同一 energy ledger。
 
-若使用 `maximum_step_mm = 0.1 mm`，3000 步只对应 300 mm 路径。在 400 MeV/u 下，部分前向轻碎片或高能重碎片完全可能触发此上限。**这很可能是 400 MeV/u 远端尾部突然变成巨大正误差的直接原因之一。**
+因此：
+
+```text
+deposited dose
++
+untracked neutron energy
+>
+neutron initial kinetic energy
+```
+
+这是明确的能量双重计数。
+
+论文的 neutron production 数据来自 FLUKA 补充，因为 Ganil 没有 neutron production measurement；论文没有给出“所有 neutron kinetic energy 的 8% 在生成点局域沉积”这一模型。
+
+## 正确修改
+
+第一阶段直接关闭：
+
+```yaml
+inelastic_neutron_kerma_fraction: 0.0
+```
+
+若后续仍要保留经验 kerma，则至少必须满足：
+
+```cpp
+const float local_neutron_deposit =
+    kerma_fraction * neutron_energy;
+
+const float escaped_neutron_energy =
+    neutron_energy - local_neutron_deposit;
+```
+
+并且：
+
+```text
+local_neutron_deposit
++
+escaped_neutron_energy
+=
+original neutron energy
+```
+
+但固定 8% 在碰撞点沉积仍然没有论文依据。更合理的实现是：
+
+* 显式 neutron transport；
+* 预计算 neutron dose-spread kernel；
+* 或从相同 TOPAS physics list 提取与能量、深度和材料相关的 neutral-dose response。
 
 ---
 
-# 三、按顺序执行的修复步骤
+# P0-4：新加入的 200/300/400 MeV/u isotope-yield knots 不是论文模型
 
-## Step 0：固定可复现基线
-
-在任何修改前固定当前状态：
-
-```bash
-git fetch origin
-git checkout -b fix/fred-inelastic-v2 a4bee63
-
-source /opt/intel/oneapi/setvars.sh
-
-cmake --preset oneapi-nvidia-release
-cmake --build --preset oneapi-nvidia-release -j
-
-ctest --test-dir build/oneapi-nvidia-release \
-      --output-on-failure
-```
-
-仓库的 NVIDIA SYCL preset 和运行方式记录在 README 中。([GitHub][8])
-
-固定以下条件：
+最新提交加入了：
 
 ```text
-random seed
-phantom dimensions
-voxel size
-beam emittance
-stopping-power table
-elastic configuration
-MCS configuration
-TOPAS scoring grid
+kFredProbHByE
+kFredProbCByE
+kFredProbOByE
 ```
 
-保存四组基线：
+然后在 95、200、300、400 MeV/u 之间插值，并人为增加：
 
 ```text
-EM only
-EM + elastic
-EM + elastic + inelastic attenuation only
-current full inelastic
+neutron
+proton
+helium
+lithium
 ```
 
-每次开发使用 100k histories 做 smoke test；每个重要提交至少用 1M histories 验证。
+同时减少部分 B/C-like fragments。
 
----
+但提供的论文中：
 
-## Step 1：先增加诊断，不先调物理参数
+* Table 1 是由 95 MeV/u Ganil 数据和 Newton procedure 得到的 fragment production probability；
+* 对其他治疗能量进行的是 **energy distribution 和 angular distribution 的 scaling**；
+* 文中没有给出 200/300/400 MeV/u 的 isotope probability knots。 
 
-修改：
+所以当前版本已经不是论文中描述的 FRED 模型，而是：
 
 ```text
-include/carbon/inelastic.hpp
-src/detail/sycl_inelastic_device.inc
-src/transport_sycl.cpp
-src/io.cpp
+95 MeV/u FRED Table 1
++
+手工 energy-dependent yield adjustment
++
+Geant4 cross section
++
+固定 neutron kerma
 ```
 
-增加以下 event-level 或 reduction-level 指标：
+这种 hybrid model 最容易出现：
 
 ```text
-reaction depth
-target nucleus: H / O
-projectile A/Z before and after
-target A/Z before and after
-fragment multiplicity
-fragment isotope and projectile/target source flag
-E/A and theta by isotope
-charged kinetic energy
-neutron kinetic energy
-recoil/remnant kinetic energy
-local excitation/deposit
-mass-defect Q
-model-unassigned energy
-signed numerical residual
-resampling count
-resampling failure
-secondary queue overflow
-secondary termination reason
+95/100 MeV/u 看起来正常
+高能量逐渐失控
 ```
 
-必须把现有的单个 `untracked_energy_MeV` 拆开，至少分为：
+这与你的新结果完全一致。
 
-```cpp
-struct InelasticEnergyLedger {
-    float incident_kinetic_MeV;
-    float charged_kinetic_MeV;
-    float neutron_kinetic_MeV;
-    float recoil_kinetic_MeV;
-    float local_excitation_MeV;
-    float q_mass_MeV;
-    float escaped_neutral_MeV;
-    float model_unassigned_MeV;
-    float numerical_residual_MeV;
-};
-```
+## 建议
 
-### 本步骤通过条件
+立即增加两个明确模式：
 
-```text
-A/Z closure failure               = 0
-product-capacity overflow         = 0
-secondary queue overflow          = 0
-secondary step-cap termination    = 0
-numerical residual / E_in         < 1e-4
-model_unassigned / E_in           单独输出，不能隐藏
-resample failure                  = 0 in smoke test
-```
-
-在这些条件没有达到前，不允许调 MCS、halo scale 或 stopping-power scale。
-
----
-
-## Step 2：统一总截面和 H/O 靶核选择
-
-### 2.1 扩展数据结构
-
-把：
-
-```cpp
-class CrossSectionTable
-```
-
-扩展为类似：
-
-```cpp
-struct WaterInelasticTable {
-    std::vector<double> energy_MeVu;
-    std::vector<double> macro_total_per_mm;
-    std::vector<double> macro_h_per_mm;
-    std::vector<double> macro_o_per_mm;
-    std::vector<double> target_h_fraction;
-};
-```
-
-修改：
-
-```text
-include/carbon/cross_section.hpp
-src/cross_section.cpp
-src/transport_sycl.cpp
-```
-
-为 GPU 增加：
-
-```text
-macro_total_device
-macro_h_device
-macro_o_device
-target_h_fraction_device
-```
-
-### 2.2 event generator 不再自行重算 H/O
-
-将：
-
-```cpp
-sample_carbon_inelastic_products_device(...)
-```
-
-增加参数：
-
-```cpp
-float target_h_fraction
-```
-
-并删除 `sycl_inelastic_device.inc` 中硬编码的 `sigma_H` 和 `sigma_O` 公式。
-
-在与总截面完全相同的 incident energy 上插值：
-
-```cpp
-const float pH = interpolate(target_h_fraction_table, E_per_u);
-target = uniform() < pH ? H : O;
-```
-
-### 2.3 明确两种模式，不要混用
-
-建议增加：
-
-```text
+```yaml
 inelastic_model: fred_paper
-inelastic_model: reference_matched
 ```
 
-* `fred_paper`：总截面和 H/O partial 都来自论文的 H 数据拟合、Eq. 6 和 Kox scaling。
-* `reference_matched`：总截面和 H/O partial 都来自同一套 TOPAS/Geant4 数据。
-
-目前为分析你的 TOPAS 差异，应先使用 `reference_matched`。当前“一套总截面 + 另一套 H/O selector”的混合模式应删除。
-
-### 本步骤单元测试
+使用：
 
 ```text
-macro_total == macro_H + macro_O
-P_H(100) == 0.374118
-P_H(200) == 0.342821
-P_H(300) == 0.335628
-P_H(400) == 0.337719
+固定的 95 MeV/u Table 1 probability
+Eq. 12 energy-angle distribution
+Eq. 13–16 energy scaling
+Eq. 21 angular scaling
+Kox/ICRU 或明确选择的 cross-section
+无固定 neutron kerma
 ```
+
+以及：
+
+```yaml
+inelastic_model: topas_inclxx_matched
+```
+
+使用：
+
+```text
+与 TOPAS 相同 physics list 提取的
+energy-dependent reaction package / species yield / kinematics
+```
+
+不要在一个模式中混用 paper probabilities 和手调 TOPAS corrections。
+
+需要注意：论文验证对象是 FLUKA，不是 TOPAS INCL++，因此完全复现论文模型并不保证逐 bin 等于 TOPAS；但论文在 100–300 MeV/u 的整体剂量差异只有约 2.5%，当前 20%–65% 的偏差显然远大于参考模型差异。
 
 ---
 
-## Step 3：删除 runtime Table 1 inversion，改为离线验证的 event-channel sampler
+# P0-5：当前 “joint projectile channel” 不是真正守恒的 joint channel
 
-修改：
+最新代码的 projectile fragmentation 基本过程是：
+
+1. 从 Table 1 权重抽取一个 leading isotope；
+2. 计算剩余 A/Z；
+3. 找一个距离剩余 A/Z 最近的 isotope；
+4. 剩余量只有在 `Zrem == 0` 时才转换为 neutron；
+5. 返回最多两个 charged projectile fragments。
+
+这不是论文描述的 fragment-set sampling，也没有重现 Newton procedure 中的 fragment correlation。
+
+更严重的是，它并不总是满足精确电荷守恒。
+
+例如抽到：
 
 ```text
-src/transport_sycl.cpp
-src/fred_table1.cpp
-scripts/invert_fred_table1.py
-src/detail/sycl_inelastic_device.inc
+leading fragment = 6He  (A=6, Z=2)
+remaining        =      (A=6, Z=4)
 ```
 
-### 3.1 删除或禁用以下运行时反演
+`nearest_fred_isotope_fitting()` 很可能选：
+
+```text
+6Li  (A=6, Z=3)
+```
+
+最终：
+
+```text
+total A = 12
+total Z = 5
+```
+
+缺少一个单位正电荷。
+
+但当前 caller 会把剩余变量重新写成：
+
+```text
+leftover neutrons
+Zrem = 0
+```
+
+因此电荷缺失被隐藏。
+
+另一个例子：
+
+```text
+7Li + nearest 4He
+```
+
+只得到：
+
+```text
+A=11, Z=5
+```
+
+实际还缺一个 proton，但代码不能再添加第三个 charged remnant。
+
+当前单元测试只检查：
+
+```text
+sumA <= 12
+sumZ <= 6
+```
+
+而不是：
+
+```text
+sumA + remnantA == 12
+sumZ + remnantZ == 6
+```
+
+所以这些不守恒事件仍能通过测试。
+
+## 对 halo 的影响
+
+这个 sampler 通常会生成：
+
+```text
+一个轻 leading fragment
++
+一个较重 residue
+```
+
+而不是论文中平均每 primary 产生约 2–4 个 charged fragments 的多碎片集合。论文明确报告治疗能区平均每个 primary 产生约 2–4 个带电碎片。
+
+结果会是：
+
+* p/d/t/He 等轻碎片 multiplicity 偏低；
+* 宽角 target-like fragments 偏低；
+* 剂量更多集中在窄的重残核分量；
+* halo σ 系统性偏小；
+* distal tail 偏低。
+
+## 正确实现
+
+### 方案 A：最接近论文描述
+
+使用 Table 1 CDF 依次抽取 fragment，直到不能再加入：
 
 ```cpp
-invert_table1_independent_probs(kFredProbH, 12, 6, ...)
-invert_table1_independent_probs(kFredProbO, 12, 6, ...)
-invert_table1_independent_probs(kFredProbH, 1, 1, ...)
-invert_table1_independent_probs(kFredProbO, 16, 8, ...)
+while (remaining_A > 0) {
+    isotope = sample_from_table1_cdf();
+
+    if (isotope.A > remaining_A ||
+        isotope.Z > remaining_Z) {
+        reject_isotope_and_resample();
+        continue;
+    }
+
+    add(isotope);
+    remaining_A -= isotope.A;
+    remaining_Z -= isotope.Z;
+}
 ```
 
-`src/fred_table1.cpp` 和 `scripts/invert_fred_table1.py` 暂时只作为离线诊断工具，不参与生产运行。
+若最终：
 
-### 3.2 第一阶段实现
+```text
+remaining_Z != 0
+```
 
-* projectile on H：使用 `kFredProbH`。
-* projectile on O：使用 `kFredProbO`。
-* target H：直接生成一个 target proton，不进行 Table 1 反演。
-* target O：使用受 A/Z 限制的抽样；剩余未发射 A/Z 显式保存为 `NuclearRemnant`，不能隐式消失。
+则拒绝整个 event。
 
-### 3.3 推荐的最终 GPU 实现
+这仍然不能完全恢复论文内部的 Newton correlation，因为论文没有公开完整的 Newton 方程组和最终 joint-channel table；这一点必须明确记录，不能靠猜测补全。
 
-在 CPU 离线生成 joint event channels：
+### 方案 B：推荐的 GPU 最终方案
+
+在 CPU 离线枚举所有满足以下条件的 fragment multisets：
+
+```text
+Σ Ai = 12
+Σ Zi = 6
+```
+
+target O：
+
+```text
+Σ Ai + Arem = 16
+Σ Zi + Zrem = 8
+```
+
+然后通过非负优化或最大熵方法寻找 channel weights，使其满足：
+
+```text
+Table 1 isotope marginals
+charged multiplicity
+neutron multiplicity
+physical channel constraints
+```
+
+生成：
 
 ```cpp
 struct FragmentChannel {
     uint8_t count;
     uint8_t isotope[kMaxFragments];
-    uint8_t source[kMaxFragments]; // projectile or target
-    int8_t remnant_A;
-    int8_t remnant_Z;
+    uint8_t origin[kMaxFragments];
+    uint8_t remnant_A;
+    uint8_t remnant_Z;
     float cumulative_probability;
 };
 ```
 
-离线优化目标：
-
-```text
-重现 Table 1 inclusive isotope fractions
-精确满足 projectile/target A/Z
-重现 multiplicity distribution
-不生成非法组合
-```
-
-GPU 只做：
-
-```text
-uniform RNG
-CDF lookup
-copy fixed-size channel
-kinematics sampling
-```
-
-这也更符合论文采用预计算 lookup table、把复杂工作移出 GPU tracking kernel 的设计原则。
-
-### 本步骤通过条件
-
-对每个靶核生成至少 \(10^6\) 个 95 MeV/u 事件：
-
-```text
-A/Z closure                        100%
-major isotope inclusive error      < 2%
-all reported isotope error         < 5%
-target-H target fragment           100% proton
-resampling failure                 < 1e-5
-```
-
-不要继续使用“反演误差 0.12–0.62 但仍允许进入 GPU”的逻辑。
+GPU 只做一次 CDF lookup。
 
 ---
 
-## Step 4：严格按论文修复 Eq. 12 分量选择和截断
+# P0-6：target remnant 被经验性局域沉积，导致平台偏高和 halo 偏低
 
-在 `sycl_inelastic_device.inc` 中替换当前：
+当前 target loop 中：
 
-```cpp
-const bool sample_gauss =
-    !is_tgt && (u_mix < p_gauss);
-```
+* 抽到 heavy target fragment 后就提前结束；
+* 剩余 target A/Z 不再作为真实 remnant 输运；
+* 而是用经验公式给出一个最多约 8 MeV 的局域能量沉积；
+* 未形成真实 secondary track。
 
-为：
+这不是论文中的 fragment-set completion 和 conservation 过程。
 
-```cpp
-const bool is_hydrogen_fragment =
-    iso.z == 1 && iso.a >= 1 && iso.a <= 3;
-
-Component component;
-
-if (is_hydrogen_fragment) {
-    component = sample_normalized_eq12_mixture(params, Emax, rng);
-} else if (!is_target_fragment) {
-    component = Component::Gaussian;
-} else {
-    component = Component::Exponential;
-}
-```
-
-中子应建立独立规则，因为论文指出中子产额不来自 Ganil 测量，而是由 FLUKA 补充；不要默认把中子完全等同于 proton 参数。
-
-### 4.1 正确计算 mixture 权重
-
-不要直接使用无限积分近似。应在实际定义域内计算：
+它会同时导致：
 
 ```text
-E ∈ [0, Emax]
-theta ∈ [0°, 180°]
+局域平台剂量升高
++
+可输运 target fragments 减少
++
+halo 变窄
 ```
+
+正好与当前图形一致。
+
+## 修改方式
+
+定义显式 remnant：
 
 ```cpp
-W_gaussian =
-    A2 * integral_truncated_gaussian_E
-       * integral_truncated_gaussian_theta;
-
-W_exponential =
-    A1 * integral_truncated_exponential_E
-       * integral_truncated_exponential_theta;
-
-P_gaussian = W_gaussian / (W_gaussian + W_exponential);
+struct NuclearRemnant {
+    int A;
+    int Z;
+    float kinetic_energy_MeV;
+    float excitation_energy_MeV;
+};
 ```
 
-### 4.2 删除非论文硬截断
+然后：
 
-删除：
-
-```cpp
-e95 = min(e95, 35.0F);
-theta = min(theta, 1.57F);
-```
-
-改为：
-
-```text
-Gaussian E: truncated at E >= 0
-Exponential E: truncated by current event physical Emax
-theta: sampled over 0°–180°
-```
-
-指数分布可以使用截断逆 CDF：
-
-```cpp
-float sample_truncated_exp(float u, float alpha, float xmax) {
-    const float norm = 1.0F - exp(-alpha * xmax);
-    return -log(1.0F - u * norm) / alpha;
-}
-```
-
-注意论文表格中的能量参数是 MeV/u，角度参数是 degree；完成抽样后再统一转换到 rad。
-
-### 本步骤验证
-
-在固定 95 MeV/u、固定 target 和 isotope 条件下，输出：
-
-```text
-E/A histogram
-theta histogram
-E-theta 2D histogram
-Gaussian/exponential component fraction
-```
-
-先重现论文第 7–9 页的定性分布，再进入水模体测试。
+* 若 remnant 带电且 CSDA range 大于 cutoff：加入 secondary queue；
+* 若 range 小于物理 cutoff：局域沉积其 kinetic energy；
+* excitation 单独记录；
+* 不能直接按 `Arem` 乘一个经验常数后沉积。
 
 ---
 
-## Step 5：修复 Eq. 13–16 的 projectile energy correlation
+# P1-1：Eq. 13–16 只应用于 A ≥ 10 的 projectile fragments
 
-令：
+当前代码只有：
 
 ```text
-P   = incident projectile energy per nucleon
-x_i = E95_i × P / 95
-T   = Σ(j<i) A_j E_j
-M   = Σ(j<i) A_j
-A_i = current fragment mass number
-c   = 0.4
+projectile fragment
+且 A >= 10
 ```
 
-按论文公式中 \(j=0\ldots i\) 的定义，当前碎片能量出现在 \(R\) 中，因此需要解一个简单的隐式一次方程：
+才调用 projectile energy correlation。
 
-$$
-E_i =
-\frac{
-x_i\left[(1-c)+
-c\frac{T}{(M+A_i)P}\right]
-}{
-1-
-c\frac{x_iA_i}{(M+A_i)P}
-}.
-$$
+p、d、t、He、Li、Be、B 大部分都只做简单：
 
-实现：
+```text
+E = E95 × Eprojectile / 95
+```
+
+没有 Eq. 14–16 的 eventwise correlation。
+
+论文没有给出 `A >= 10` 这个例外。它说明 projectile fragment energy 使用 Eq. 13，并通过相关因子 `k=c(1-R)` 保证同一事件总能量受到约束；target fragment 则从 exponential component 抽样且不使用相关因子。 
+
+这意味着所有 projectile-origin fragments 都应进入同一个 correlation/energy-budget 过程，而不是只有重残核。
+
+## 另一个问题：逐碎片 clip
+
+当前 projectile fragment 超过剩余预算时，会把该 fragment energy 截断到剩余 room。
+
+论文描述的是：
+
+```text
+整个 fragment set 不满足 → 重新抽取 fragment set
+```
+
+不是：
+
+```text
+只把当前 fragment 削短
+```
+
+逐碎片 clip 会：
+
+* 改变 Eq. 12 能谱；
+* 使后抽样 fragment 系统性低能；
+* 压低 distal fragment tail；
+* 让结果依赖 fragment 排序。
+
+当前又把 fragments 按 heaviest-first 排序，因此相关结果进一步依赖人为顺序。
+
+## 修复
 
 ```cpp
-float sample_projectile_fragment_Eu(
-    float E95,
-    float projectile_Eu,
-    int fragment_A,
-    float previous_total_energy,
-    float previous_total_A)
-{
-    constexpr float c = 0.4F;
+for (const auto& fragment : sampled_order) {
+    fragment_energy =
+        sample_correlated_projectile_energy(...);
 
-    const float x = E95 * projectile_Eu / 95.0F;
-    const float total_A =
-        previous_total_A + static_cast<float>(fragment_A);
-
-    const float denominator =
-        1.0F
-        - c * x * static_cast<float>(fragment_A)
-          / (total_A * projectile_Eu);
-
-    if (!(denominator > 1.0e-6F)) {
-        return -1.0F; // reject and resample
+    if (!valid(fragment_energy)) {
+        reject_entire_event();
     }
+}
 
-    return x *
-           ((1.0F - c)
-            + c * previous_total_energy
-              / (total_A * projectile_Eu))
-           / denominator;
+if (sum_all_fragment_energy > available_energy) {
+    reject_entire_event();
 }
 ```
 
-只有成功得到当前 \(E_i\) 后，才更新：
+不要：
 
 ```cpp
-T += A_i * E_i;
-M += A_i;
+fragment_energy = min(fragment_energy, remaining_room);
 ```
-
-不要再：
-
-```cpp
-clamp(R, 0, 1)
-```
-
-因为超出物理范围的事件应重采样，而不是通过 clamp 改写分布。
-
-### 关键单元测试
-
-```text
-E95 = 95 MeV/u
-first fragment
-P = 100, 200, 300, 400 MeV/u
-
-expected E_fragment/A ≈ P
-not 0.6 × P
-```
-
-target fragments 继续使用论文规定的无相关修正 scaling：
-
-```cpp
-E_target_i = E95_target_i * P / 95;
-```
-
-### 预期图像变化
-
-完成 Step 4 和 Step 5 后，应首先看到：
-
-* 100–300 MeV/u 的 Bragg peak 后 IDD 明显抬高；
-* projectile-like heavy fragments 射程增加；
-* z=26.2、95.2、185.2 mm 等远端 lateral profile 的峰值不再严重偏低；
-* halo component 的有效统计量增加。
 
 ---
 
-## Step 6：重构 Q、remnant 和能量守恒
+# P1-2：exponential sampling 的上限产生了二次能量依赖
 
-### 6.1 删除任意的 Q 公式
-
-删除：
-
-```cpp
-base_q_MeV = 12.0F + 0.04F * e_per_u;
-```
-
-论文只给出了“若所有碎片能量之和超过 projectile energy，则重新抽样”的现象学约束，没有给出当前这条线性 Q 公式。
-
-### 6.2 分两阶段完成
-
-#### Phase A：结构调试模式
-
-暂时设置：
+当前代码先设置：
 
 ```text
-q_mass = 0
-excitation = 0
+E95,max = 2 × Eprojectile
 ```
 
-只允许：
+然后再执行：
 
 ```text
-charged fragment kinetic
-neutral kinetic
-explicit remnant/recoil kinetic
+Efragment =
+E95 × Eprojectile / 95
 ```
 
-目标是先证明：
-
-```text
-fragment sampler + kinematics + transport
-```
-
-能够工作。
-
-#### Phase B：最终物理模式
-
-加入 isotope mass table，计算：
+因此最终 support 上限为：
 
 $$
-Q =
-\left(
-M_{^{12}C}+M_\text{target}
--\sum M_\text{products}
--M_\text{remnant}
-\right)c^2.
+E_{\max}^\text{fragment}
+=
+\frac{2E_\text{projectile}^{2}}{95}.
 $$
 
-把 excitation/local nuclear deposit 作为独立模型量。由于论文没有公开 excitation 分布，该部分需要：
-
-* 额外实验数据；
-* FLUKA/TOPAS event package；
-* 或明确标记为经验参数化。
-
-不要把它伪装成数值 residual。
-
-### 6.3 禁止 post-hoc residual hiding
-
-删除：
-
-```cpp
-if (residual_MeV > 0) {
-    untracked_MeV += residual_MeV;
-}
-```
-
-改为：
-
-```cpp
-if (abs(numerical_residual) > tolerance) {
-    reject_event();
-}
-```
-
-若某部分能量确实由未追踪中子、gamma 或 excitation 携带，必须在 event generator 中显式赋值到对应字段。
-
-### 6.4 重采样失败处理
-
-删除当前：
+例如：
 
 ```text
-32 retries failed
-→ primary energy entirely untracked
-→ continue simulation
+100 MeV/u → 约 211 MeV/u
+200 MeV/u → 约 842 MeV/u
+300 MeV/u → 约 1895 MeV/u
+400 MeV/u → 约 3368 MeV/u
 ```
 
-验证构建中应直接：
+对 projectile fragments，部分会被 remaining-room clip；对 target fragments，当前没有完整能量 gate，因此高能 tail 可以直接进入输运。
+
+论文只说明从 95 MeV/u reference distribution 抽样，然后进行一次线性 scaling；没有给出 `E95,max = 2 × current beam energy` 这样的动态截断。论文给出的实验能量阈值是 fragment-dependent，角度从测量的 4°–43° 外推到 0°–180°。
+
+## 正确做法
+
+定义固定的 reference distribution domain：
 
 ```text
-increment fatal counter
-mark run invalid
+E95 ∈ [0, E95_reference_max(fragment, target)]
+theta95 ∈ [0°, 180°]
 ```
 
-生产构建只能回退到一个已经离线验证过的物理 channel，不能让 primary 无声消失。
+`E95_reference_max` 必须：
+
+* 来自 Ganil 数据范围；
+* 或取一个足够大的固定数值，使截断概率可忽略；
+* 不能随当前 beam energy 改变。
+
+之后只做一次：
+
+```cpp
+E = E95 * Eprojectile / 95.0F;
+```
+
+并在完整事件层面检查 energy budget。
 
 ---
 
-## Step 7：在 step 内抽样真实的核反应位置
+# P1-3：mixture 权重与实际抽样域不一致
 
-当前代码先：
-
-1. 移动完整 `step_mm`；
-2. 扣除完整 step 的 EM deposit；
-3. 再用 `1-exp(-Σ step)` 判断是否发生 inelastic；
-4. 在 step 终点生成碎片。([GitHub][7])
-
-改为 residual optical depth：
-
-```cpp
-if (!has_tau) {
-    tau_remaining = -log(uniform());
-}
-
-const float optical_depth_step =
-    macro_xs(E_mid) * step_mm;
-
-if (tau_remaining > optical_depth_step) {
-    transport_em(step_mm);
-    tau_remaining -= optical_depth_step;
-} else {
-    const float collision_distance =
-        tau_remaining / macro_xs(E_mid);
-
-    transport_em(collision_distance);
-
-    generate_inelastic_event(
-        energy_at_collision,
-        position_at_collision,
-        direction_at_collision);
-
-    terminate_primary();
-}
-```
-
-这样可避免：
-
-* 反应点系统性向下游移动；
-* 使用 step 末端而不是碰撞点能量；
-* inelastic 概率对 `maximum_step_mm` 的非物理依赖。
-
-### Step convergence 测试
-
-分别运行：
+当前 Gaussian/exponential mixture 权重使用近似无限积分：
 
 ```text
-maximum_step_mm = 0.50
-maximum_step_mm = 0.20
-maximum_step_mm = 0.10
-maximum_step_mm = 0.05
+Gaussian integral ≈ π A2 σE σθ
+Exponential integral ≈ A1 / (αE αθ)
+```
+
+但实际 sampling 却有：
+
+```text
+E 截断
+theta 截断到 180°
+E >= 0
+Gaussian 反复拒绝负能量
+```
+
+因此 mixture probability 与实际使用的 truncated distribution 并不完全一致。
+
+这对 p/d/t 尤其重要，因为论文规定这三种 hydrogen fragments 在 projectile 和 target fragmentation 中都使用完整 Eq. 12 mixture。
+
+## 修复
+
+对每个：
+
+```text
+target × isotope × Ereference-domain
+```
+
+离线计算：
+
+```text
+WGaussian
+WExponential
+```
+
+并保存：
+
+```cpp
+P_gaussian =
+    W_gaussian / (W_gaussian + W_exponential);
+```
+
+然后 GPU 使用预计算 LUT。
+
+---
+
+# P1-4：secondary fragment MCS 没有使用论文的 `fmcs`
+
+当前 primary carbon MCS 有可配置 scale，但 secondary charged fragment 在调用 Highland 时使用固定 scale，等效于：
+
+```text
+fmcs = 1
+```
+
+没有按 fragment species、能量和 range fraction 使用标定值。
+
+论文明确说明 Highland 单 Gaussian 项需要乘 `fmcs`，并且该因子随：
+
+* 粒子种类；
+* 能量；
+* 深度；
+
+变化。论文示例范围约为 1.29–1.43，并且标定时关闭了 nuclear interactions。
+
+这会直接使 secondary fragment lateral spreading 偏小，是当前 halo σ 低 20%–50% 的重要原因之一。
+
+但这一项必须在：
+
+```text
+species yield
+birth angle
+energy spectrum
+range
+```
+
+都正确之后再标定，否则 MCS 会被迫补偿错误的 event generator。
+
+---
+
+# 三、这次提交中应该保留的改进
+
+并不是 `38b5150` 的所有改动都需要回退。
+
+## 应保留
+
+### 1. step 内核反应位置抽样
+
+现在先计算本 step 是否发生 interaction，并将 step 缩短到 collision distance，再进行碰撞。这比以前总在 step 末端生成碎片合理。
+
+### 2. p/d/t 使用完整 Eq. 12 mixture
+
+当前已经不再简单地把所有 target p/d/t 强制为 exponential，这一方向与论文一致。
+
+### 3. 角度范围扩展到 0°–180°
+
+这符合论文对 Ganil 4°–43° 拟合结果进行全角度外推的说明。
+
+### 4. secondary step-limit 不再把所有剩余能量局域倾倒
+
+新代码增大了 step cap，并在 step-limit 条件下将剩余能量标记为逃逸/未追踪，而不是全部沉积在当前位置。这基本解决了上一版 400 MeV/u distal spike 的主要人工来源。
+
+### 5. 重 target fragment 使用 CSDA range 判断 local stop
+
+这一修改比简单的 `E/SP` range 估算更合理。
+
+---
+
+# 四、按顺序执行的修复方案
+
+# Step 0：冻结基线并增加可切换的 ablation 模式
+
+以 `38b5150` 建立修复分支：
+
+```bash
+git checkout fred
+git checkout -b fix/fred-inelastic-v3 38b5150
+```
+
+增加以下运行开关：
+
+```yaml
+inelastic:
+  enable_attenuation: true
+  enable_projectile_fragments: true
+  enable_target_fragments: true
+  enable_neutron_kerma: false
+  enable_energy_dependent_yields: false
+  strict_energy_conservation: true
+  strict_az_conservation: true
+  secondary_mcs_mode: unscaled
+```
+
+每次运行必须输出：
+
+```text
+primary carbon fluence vs depth
+reaction count vs depth
+reaction count by H/O target
+projectile fragment KE
+target fragment KE
+neutron KE
+local remnant deposit
+neutron kerma deposit
+signed energy residual
+A residual
+Z residual
+charged multiplicity
+species yield
+secondary termination reason
+```
+
+## 本步骤硬门槛
+
+```text
+negative energy residual count = 0
+A/Z closure failures           = 0
+product queue overflow         = 0
+secondary step limit           = 0
+NaN/invalid stopping power     = 0
+```
+
+---
+
+# Step 1：修复 GPU cross-section 与 target-H 查表网格
+
+这是第一条代码提交，不应和其他物理修改混合。
+
+推荐提交：
+
+```text
+fix(sycl): interpolate inelastic XS on its own energy grid
+```
+
+实现 host-side resampling，或使用单独的 cross-section metadata。
+
+## 单元测试
+
+CPU 和 GPU 分别检查：
+
+```text
+1, 5, 10, 20, 40, 95, 100, 200, 300, 400 MeV/u
 ```
 
 要求：
 
 ```text
-reaction-depth mean shift < 0.1 mm
-IDD integral change       < 0.5%
-distal-tail integral      稳定收敛
+relative XS difference      < 1e-5
+target-H fraction difference < 1e-5
 ```
+
+## 回归测试
+
+先只开启 attenuation：
+
+```yaml
+enable_attenuation: true
+enable_projectile_fragments: false
+enable_target_fragments: false
+```
+
+当发生 inelastic 时，直接杀死 primary，但不产生任何 secondary。
+
+输出：
+
+```text
+primary C12 survival vs depth
+reaction-depth histogram
+H/O reaction ratio
+```
+
+这样可以把：
+
+```text
+cross-section/attenuation
+```
+
+与：
+
+```text
+fragment energy deposition
+```
+
+完全分离。
+
+### 预期变化
+
+修复后：
+
+* 低能末端 reaction count 应显著增加；
+* primary survival 应下降；
+* 300/400 MeV/u 随深度增长的正 IDD 偏差应缩小；
+* H reaction fraction 在低能区应上升；
+* 后续 fragment count 和 halo 应有所增加。
 
 ---
 
-## Step 8：修复 secondary range 和终止逻辑
+# Step 2：关闭所有人为额外能量
 
-### 8.1 用积分 CSDA 射程代替 `E/SP`
-
-当前重 target fragment 使用：
-
-```cpp
-range_mm = fragment_energy / stopping_power_at_current_energy;
-```
-
-这不是 CSDA range。([GitHub][3])
-
-仓库已经实现了：
-
-```cpp
-csda_range_mm()
-csda_range_mm_device()
-csda_energy_after_distance_MeVu()
-```
-
-可以直接复用。([GitHub][9])
-
-为每个带电 isotope 预计算：
+推荐提交：
 
 ```text
-cumulative_range[species][energy]
-inverse_range_to_energy[species][range]
+fix(fred): enforce full-event signed energy closure
 ```
 
-local-stop 判据改为：
+修改内容：
+
+1. target fragment energy 加入同一总预算；
+2. neutron energy 加入同一总预算；
+3. remnant/recoil energy 加入同一总预算；
+4. 禁止 negative residual；
+5. 禁止逐 fragment clipping；
+6. 不满足则拒绝整个 event。
+
+定义统一 ledger：
 
 ```cpp
-const float range =
-    csda_range_mm_device(species_table, E_per_u, A);
-
-local_stop =
-    range < physical_local_cutoff_mm;
-```
-
-### 8.2 验证模式禁止 Z² fallback
-
-当前缺少 species-specific stopping-power table 时，会回退到：
-
-```cpp
-Z² / 36
-```
-
-([GitHub][7])
-
-增加：
-
-```text
-strict_fragment_transport: true
-```
-
-在严格模式下，只要某一 isotope 缺少 SP/range 表就终止验证，不允许静默 fallback。
-
-### 8.3 明确 secondary termination reason
-
-定义：
-
-```cpp
-enum class SecondaryTermination {
-    EnergyCutoff,
-    RangeExhausted,
-    EscapedPhantom,
-    GeometryBoundary,
-    InvalidStoppingPower,
-    StepLimit,
-    QueueOverflow
+struct InelasticEnergyLedger {
+    double incident_MeV;
+    double projectile_charged_MeV;
+    double target_charged_MeV;
+    double neutron_MeV;
+    double remnant_kinetic_MeV;
+    double excitation_MeV;
+    double local_deposit_MeV;
+    double escaped_neutral_MeV;
+    double numerical_residual_MeV;
 };
+```
+
+约束：
+
+```cpp
+incident
+=
+projectile_charged
++ target_charged
++ neutron
++ remnant_kinetic
++ excitation
++ local_deposit
++ escaped_neutral
++ numerical_residual;
+```
+
+要求：
+
+```text
+|numerical_residual| / incident < 1e-5
+```
+
+### 预期变化
+
+* 200–400 MeV/u plateau 应明显下降；
+* GPU/TOPAS 正误差不应再随能量近似单调扩大；
+* 高能结果不应再依赖 rare target-energy outliers。
+
+---
+
+# Step 3：完全关闭固定 neutron kerma
+
+推荐提交：
+
+```text
+fix(fred): remove fixed vertex neutron kerma
+```
+
+先设置：
+
+```text
+kerma fraction = 0
+```
+
+并运行以下对照：
+
+| Run | neutron bookkeeping   | neutron dose |
+| --- | --------------------- | ------------ |
+| A   | neutron KE 全部 escaped | 0            |
+| B   | neutron 显式输运或 kernel  | 正确空间分布       |
+| C   | 原固定 8% vertex kerma   | 仅用于定位错误      |
+
+如果 A 比 C 明显降低 200–400 MeV/u plateau，则可直接确认固定 kerma 是正偏差来源之一。
+
+不要长期保留 C。
+
+---
+
+# Step 4：回退手工 energy-dependent isotope yields
+
+推荐提交：
+
+```text
+revert(fred): restore paper Table-1 yields at all energies
+```
+
+在 `fred_paper` 模式中：
+
+```cpp
+probabilities =
+    target_is_H ? kFredProbH
+                : kFredProbO;
+```
+
+不要调用：
+
+```text
+kFredProbHByE
+kFredProbCByE
+kFredProbOByE
 ```
 
 只有：
 
 ```text
-EnergyCutoff
-RangeExhausted
+fragment energy
+fragment angle
 ```
 
-可以把剩余能量局域沉积。
+按 Eqs. 13–21 随 beam energy scaling。
 
-以下情况不得局域沉积：
+## 必须做的 A/B test
+
+四种能量分别运行：
 
 ```text
-StepLimit
-InvalidStoppingPower
-QueueOverflow
+A: fixed Table 1, kerma off
+B: energy-dependent knots, kerma off
+C: fixed Table 1, kerma on
+D: energy-dependent knots, kerma on
 ```
 
-`StepLimit` 在验证中必须为零。
-
-### 8.4 暂时关闭 secondary fragmentation
-
-论文指出 secondary fragmentation 对总剂量贡献很小，默认只模拟 primary fragmentation。
-
-因此在 primary fragmentation 通过前，保持：
+通过该矩阵可以直接分离：
 
 ```text
-secondary_fragmentation = false
+yield-knot bias
+与
+kerma bias
 ```
 
-避免把 cascade 的额外问题混入当前调试。
+### 预期变化
+
+如果当前高能偏差主要由 knots 造成：
+
+* 100 MeV/u 几乎不变；
+* 200/300/400 MeV/u plateau 明显降低；
+* 高能 species composition 更接近 95-MeV reference scaling；
+* 结果的能量趋势变得平滑。
 
 ---
 
-## Step 9：按层次验证，不能直接只看最终 IDD
+# Step 5：删除 nearest-remnant joint sampler
 
-### 9.1 验证顺序
-
-| 阶段 | 开启内容                   | 主要检查                              |
-| -- | ---------------------- | --------------------------------- |
-| A  | EM + elastic           | 保持当前已吻合基线                         |
-| B  | + attenuation only     | primary survival 和 reaction depth |
-| C  | + projectile fragments | distal IDD、前向 fragment range      |
-| D  | + target fragments     | 近反应点 halo、宽角低能 dose               |
-| E  | + explicit remnant/Q   | 总能量、局域核能沉积                        |
-| F  | + secondary MCS        | lateral core/halo                 |
-| G  | full 100 MeV/u         | 首个完整验收                            |
-| H  | full 200 MeV/u         | 中能量验收                             |
-| I  | full 300 MeV/u         | 高能量验收                             |
-| J  | full 400 MeV/u         | 外推与稳定性测试                          |
-
-100 MeV/u 应先通过，因为论文在该能量取得最好的整体剂量一致性。论文的详细单 pencil-beam 验证范围是 100–300 MeV/u，而不是 400 MeV/u。
-
-### 9.2 每阶段必须输出
+推荐提交：
 
 ```text
-primary survival vs depth
-inelastic reaction depth
-dose by fragment Z/A
-dose by projectile/target origin
-charged multiplicity
-E/A by isotope
-theta by isotope
-local excitation/recoil dose
-neutral escaped energy
-secondary termination counts
+fix(fred): replace nearest-remnant projectile sampler
 ```
 
-仅看总 IDD 无法区分：
+禁止：
 
 ```text
-截面错误
-species yield 错误
-fragment energy 错误
-fragment range 错误
-scoring 错误
+one leading isotope
++
+one nearest fitting residue
 ```
 
-### 9.3 统计量
-
-论文的最终对比使用了 \(10^8\) 个 primaries 来减小 MC 波动，并报告 100–300 MeV/u 全深度积分剂量差在 2.5% 以内。
-
-建议：
+第一阶段可以实现论文文字最接近的 constrained sequential sampler：
 
 ```text
-100k   快速回归
-1M     每次物理提交
-10M+   distal halo 与最终图
+抽取 isotope
+检查是否适合剩余 A/Z
+适合则加入
+不适合则重抽
+完成后要求 A/Z 精确闭合
+否则拒绝整个 event
 ```
 
-最终统计量应由不确定度决定，而不是固定只看 100k。
+测试必须从：
+
+```cpp
+CHECK(sumA <= 12);
+CHECK(sumZ <= 6);
+```
+
+改为：
+
+```cpp
+CHECK(sumA + remnantA == 12);
+CHECK(sumZ + remnantZ == 6);
+```
+
+target H：
+
+```text
+A=1, Z=1
+```
+
+target O：
+
+```text
+sumA + remnantA == 16
+sumZ + remnantZ == 8
+```
+
+## 最终推荐
+
+离线生成精确 channel LUT，使 GPU 不需要进行复杂 resampling。
+
+## 验收指标
+
+生成至少 \(10^7\) 个薄靶 events：
+
+```text
+A closure                         100%
+Z closure                         100%
+invalid channel                   0
+major isotope marginal error      < 2%
+all relevant isotope error        < 5%
+mean charged multiplicity         合理且稳定
+```
+
+论文没有公开完整 Newton joint-channel system，因此无法只靠文章唯一恢复原始 channel weights。需要明确记录你采用的是：
+
+```text
+constrained approximation of published marginals
+```
+
+而不是声称完全复现未公开的内部 FRED channel table。
 
 ---
 
-## Step 10：物理事件生成正确后再校准 fragment MCS
+# Step 6：按论文重新实现 Eq. 12–21
 
-不要修改已经匹配的 primary MCS。
-
-论文中的 MCS scale 是在关闭核反应的单粒子模拟中标定的，并且因 ion species、能量和深度而异；论文列出的示例范围约为 1.29–1.43，而不是所有 secondary 一律使用 1.0。
-
-当前 secondary transport 调用 Highland 时没有使用主输运的 `multiple_scattering_scale`，相当于固定为自身默认处理。([GitHub][7])
-
-推荐分组：
+推荐提交：
 
 ```text
-H group:  p, d, t
+fix(fred): implement paper Eq12-21 without dynamic truncation
+```
+
+## 6.1 Fragment source 与 component
+
+```text
+p/d/t:
+    projectile 与 target 都抽完整 Eq. 12 mixture
+
+其他 projectile fragments:
+    Gaussian component
+
+其他 target fragments:
+    Exponential component
+```
+
+这与论文描述一致。
+
+## 6.2 固定 reference domain
+
+禁止：
+
+```text
+E95,max = 2 × current beam energy
+```
+
+改为固定 reference domain，并在该 domain 上正确归一化 mixture。
+
+## 6.3 对所有 projectile fragments 应用 correlation
+
+删除：
+
+```cpp
+if (fragment.A >= 10) {
+    apply_correlation();
+}
+```
+
+改为：
+
+```cpp
+if (fragment.origin == Projectile) {
+    apply_projectile_energy_scaling_and_correlation();
+}
+```
+
+对于 p/d/t 的 mixed component，先从 Eq. 12 抽出 `E95`，然后只要其 origin 是 projectile，就纳入 eventwise correlation。
+
+## 6.4 不逐 fragment clip
+
+任何 fragment 导致总预算超出：
+
+```text
+拒绝整个 event
+```
+
+不要修改该 fragment 的能量。
+
+## 6.5 角度
+
+```text
+theta95 sampled over 0°–180°
+theta = theta95 sqrt(95 / Eprojectile)
+```
+
+但 proton 和 neutron 不做 Eq. 21 scaling；target fragments 使用同样规则。
+
+## 薄靶验证
+
+固定 95 MeV/u，分别使用 H/O target，输出每个 isotope 的：
+
+```text
+E/A histogram
+theta histogram
+E–theta 2D histogram
+Gaussian/exponential component fraction
+projectile/target source
+```
+
+先定性重现论文第 7–11 页的分布图，再进入水模体。
+
+---
+
+# Step 7：显式处理 target remnant、Q 和 excitation
+
+推荐提交：
+
+```text
+fix(fred): introduce explicit target remnant and excitation ledger
+```
+
+删除：
+
+```text
+按剩余 A 经验计算、最多 8 MeV 的局域 deposit
+```
+
+替换为：
+
+```text
+explicit A/Z remnant
+remnant kinetic energy
+excitation energy
+mass-defect Q
+```
+
+在没有足够数据前，可以采用两个模式：
+
+## Paper-minimal 模式
+
+```text
+Q = 0
+excitation = available energy remainder
+excitation 不作为剂量沉积，除非有明确局域释放模型
+```
+
+## Extended physics 模式
+
+通过 nuclear mass table 计算：
+
+$$
+Q =
+\left(
+M_{\mathrm{initial}}
+-
+\sum M_{\mathrm{products}}
+-
+M_{\mathrm{remnant}}
+\right)c^2.
+$$
+
+若 excitation 需要转化为局域剂量，必须给出明确模型或通过 TOPAS/FLUKA event package 标定。
+
+---
+
+# Step 8：先修 species production，再处理 halo MCS
+
+推荐提交：
+
+```text
+fix(fred): apply species-dependent secondary MCS scaling
+```
+
+验证顺序：
+
+## 8.1 Birth-angle-only
+
+关闭 secondary MCS：
+
+```text
+fmcs = 0
+```
+
+查看刚生成后很短距离处的 angular profile，验证 Eq. 12/21。
+
+## 8.2 MCS-only ion beams
+
+分别模拟：
+
+```text
+proton
+deuteron
+triton
+helium
+Li/Be
+B/C
+```
+
+关闭 nuclear interactions，只比较单粒子 lateral broadening。
+
+## 8.3 建立 scale LUT
+
+```cpp
+fmcs[species_group][energy_bin][range_fraction_bin]
+```
+
+初始可按：
+
+```text
+H group
 He group
 Li/Be group
 B/C group
 ```
 
-对每组做“单 isotope、无核反应、固定 E/A”的水中 lateral benchmark，得到：
+论文给出的 `fmcs` 示例在 1.29–1.43 范围，但不能简单给所有 fragment 固定 1.35；应按 species、energy 和 depth 标定。
 
-```text
-fragment_mcs_scale[species]
-```
+### 预期变化
 
-但只有在下列条件已经通过后才能开始：
+完成本步骤后：
 
-```text
-species yield correct
-E/A distribution correct
-angle-at-birth distribution correct
-CSDA range correct
-energy ledger correct
-```
+* core σ 小幅变化；
+* halo σ 明显增加；
+* 300/400 MeV/u 上游 halo 的 −40% 到 −50% 误差应显著缩小；
+* IDD 积分不应出现明显变化。
 
-否则 MCS 会被迫补偿出生角度和射程错误。
+如果调整 MCS 会显著改变 IDD，说明 secondary stopping/range 或 scoring 仍有错误。
 
 ---
 
-## Step 11：修复 sigma 拟合脚本，避免把统计噪声当成物理误差
+# Step 9：按物理层级重新验证
 
-当前 `generate_plots_matplotlib.py` 强制：
+建议严格按以下顺序执行。
 
-```text
-sigma_halo = 1.8 × sigma_core + exp(delta)
-```
+| 阶段 | 开启内容                         | 检查目标                              |
+| -- | ---------------------------- | --------------------------------- |
+| A  | EM + elastic                 | 保持现有基线                            |
+| B  | + inelastic attenuation only | primary survival 与 reaction depth |
+| C  | + projectile fragments       | distal tail 与前向 fragments         |
+| D  | + target fragments           | 低能宽角 halo                         |
+| E  | + explicit remnant           | A/Z 与能量闭合                         |
+| F  | + neutron model              | neutron dose 的空间分布                |
+| G  | + secondary MCS              | core/halo σ                       |
+| H  | 100 MeV/u full               | 接近 95-MeV reference               |
+| I  | 200 MeV/u full               | 论文主要 benchmark                    |
+| J  | 300 MeV/u full               | 高治疗能区                             |
+| K  | 400 MeV/u full               | 外推稳定性                             |
 
-并在 halo weight 小于 1% 或双 Gaussian 改善小于 0.8% 时退化为单 Gaussian。([GitHub][10])
-
-同时 sigma relative error 没有基于 dose、halo weight 或拟合不确定度做有效性 mask。([GitHub][10])
-
-修改为同时输出：
-
-```text
-double-Gaussian sigma_core
-double-Gaussian sigma_halo
-halo fraction
-fit covariance / bootstrap uncertainty
-direct RMS radius
-r68
-r95
-linear profile residual
-log-profile residual
-```
-
-建议判据：
+每一级都保存：
 
 ```text
-dose(z) > 0.5% of maximum
-halo weight > 2%
-effective halo counts > threshold
-relative sigma uncertainty < 20%
+dose by primary C12
+dose by projectile fragments
+dose by target fragments
+dose by species Z/A
+local remnant dose
+neutron-associated dose
+escaped energy
 ```
 
-否则该深度的 halo σ 标为无效，而不是画出几十个百分点的随机振荡。
-
-此外，当前验证脚本允许 peak 6%、ROI 8%、full integral 10% 的误差，这对于判断 FRED 复现是否成功过于宽松。([GitHub][11])
+只看总 IDD 无法判断偏差是由哪一个 component 引起的。
 
 ---
 
-## Step 12：最后再做 GPU 优化
+# 五、建议的验收标准
 
-物理通过后再优化性能：
+## 1. 代码和守恒
 
-1. Table 1 joint channels 离线生成；
-2. Eq. 12 的 truncated mixture normalization 离线预计算；
-3. 按 target × isotope × energy 建立小型 CDF LUT；
-4. 固定长度 fragment channel，避免动态分配；
-5. 使用 SoA secondary queue；
-6. 分离 projectile-like 和 target-like fragment kernel，减少 warp/sub-group divergence；
-7. 把 event diagnostics 编译为可关闭选项；
-8. CPU 与 GPU 使用同一套 counter-based RNG 索引约定；
-9. 对 100、300 MeV/u 分别报告：
+```text
+GPU/CPU XS interpolation error       < 1e-5
+GPU/CPU target-H probability error   < 1e-5
+A closure failure                    0
+Z closure failure                    0
+negative energy residual             0
+numerical energy residual / Ein      < 1e-5
+product queue overflow               0
+secondary step-limit count           0
+NaN stopping/range                   0
+```
 
-   * primary/s；
-   * complete histories/s；
-   * average charged secondaries；
-   * queue occupancy；
-   * overflow；
-   * kernel time breakdown。
+## 2. 薄靶 event generator
 
-论文指出 fragmentation 相对主 tracking 是稀有事件，但每个 primary 平均会产生约 2–4 个带电碎片，因此性能关键在 secondary histories 和队列，而不是在 GPU 内进行复杂迭代求解。
+```text
+major isotope yield difference       < 2%
+all retained isotope difference      < 5%
+energy-spectrum moments              < 5%
+angle-spectrum moments               < 5%
+```
+
+## 3. 水模体 100–300 MeV/u
+
+论文报告 100–300 MeV/u 总积分剂量差异在 2.5% 内，并使用 \(10^8\) primaries 降低统计涨落。
+
+建议工程验收：
+
+```text
+whole-depth integrated dose error    <= 2.5%
+Bragg peak position difference       <= 0.5 mm
+plateau IDD difference               <= 3%
+distal-tail integral difference      <= 5%
+core sigma difference                <= 3%
+halo sigma difference                <= 10%
+```
+
+开发阶段：
+
+```text
+100k histories  smoke test
+1M histories    每个物理提交
+10M histories   halo 与 distal tail
+100M histories  论文级最终验证
+```
+
+## 4. 400 MeV/u
+
+400 MeV/u 是论文 scaling 的外推范围，但详细水中 pencil-beam validation 主要报告 100–300 MeV/u。 
+
+建议目标：
+
+```text
+integrated dose difference           <= 5%
+无随深度单调放大的平台偏差
+无人工 distal spike
+无能量相关手工 normalization
+```
 
 ---
 
-# 四、最终验收标准
-
-## Event generator
+# 六、建议的提交顺序
 
 ```text
-A/Z closure                         100%
-invalid channel                     0
-resample failure                    < 1e-5
-product/queue overflow              0
-model-unassigned energy             有明确物理解释
-numerical residual / E_in           < 1e-4
-step-cap local-deposit              0
+1. fix(sycl): use correct energy grid for inelastic XS and target-H lookup
+
+2. test(sycl): compare CPU/GPU XS interpolation at 1–400 MeV/u
+
+3. fix(fred): enforce complete signed event energy closure
+
+4. fix(fred): remove fixed neutron vertex kerma
+
+5. revert(fred): disable unsupported energy-dependent yield knots
+                 in paper mode
+
+6. fix(fred): replace nearest-remnant projectile joint sampler
+
+7. test(fred): require exact A/Z closure, not inequality
+
+8. fix(fred): apply Eq13-16 to all projectile fragments
+              and reject whole invalid events
+
+9. fix(fred): use a fixed reference domain for Eq12 sampling
+
+10. fix(fred): represent target remnant and excitation explicitly
+
+11. test(fred): add 95-MeV/u H/O thin-target spectrum benchmarks
+
+12. fix(fred): add species/energy/depth secondary fmcs tables
+
+13. test(fred): staged 100/200/300/400-MeV/u water regressions
 ```
 
-## 100–300 MeV/u
+# 七、最优先修改的四项
 
-论文级目标：
+当前最可能快速改善新结果的顺序是：
 
 ```text
-total integrated dose error         <= 2.5%
-Bragg peak position shift           <= 0.5 mm
-entrance/plateau IDD error          <= 3%
-distal integrated-tail error        <= 5%
-core sigma error                    <= 3%
-halo sigma error                    <= 10%
+第一：修复 cross-section 网格错配
+第二：把 target fragment KE 纳入完整 energy budget
+第三：关闭固定 8% neutron kerma
+第四：关闭手工 200/300/400-MeV/u isotope yield knots
 ```
 
-其中最后四项是推荐的工程验收条件，不是论文原文给出的逐项指标。
-
-## 400 MeV/u
-
-400 MeV/u 应作为外推验证，不能参与最初参数拟合。论文说明能量 scaling 用于覆盖最高约 400 MeV/u，但详细 pencil-beam 剂量验收报告的是 100–300 MeV/u。 
-
-建议临时目标：
+预期图形变化：
 
 ```text
-integrated dose error               <= 5%
-no artificial distal spike
-no secondary step-cap termination
-no energy-dependent fudge factor
+cross-section 修复
+→ primary survival 降低
+→ 200–400 平台正偏差下降
+→ fragment count 增加
+
+完整能量预算 + 关闭 kerma
+→ 高能平台进一步下降
+→ 不再随能量产生额外剂量
+
+精确 fragment channels
+→ distal charged-fragment tail 增加
+→ halo population 增加
+
+secondary fmcs
+→ halo σ 增大
+→ 解决剩余的 lateral width 偏差
 ```
 
-还要注意：论文使用 FLUKA 作为参考，而你现在使用 TOPAS INCL++。即使完全正确复现 FRED，局部 fragment spectrum 和远端 halo 也不一定逐 bin 等于 TOPAS；不要为了强行吻合 TOPAS 而破坏论文模型的一致性。
-
----
-
-# 五、建议的提交顺序
-
-```text
-1. chore(fred): add inelastic event diagnostics and hard validation gates
-
-2. fix(fred): use consistent H/O partial cross sections for target sampling
-
-3. fix(fred): remove unconverged runtime Table-1 inversion
-              and add validated channel sampler
-
-4. fix(fred): implement Eq12 source-dependent component sampling
-              and remove 35-MeV/u / 90-degree caps
-
-5. fix(fred): solve Eq13-16 projectile energy correlation correctly
-
-6. fix(fred): separate Q, remnant, neutral, model residual,
-              and numerical residual ledgers
-
-7. fix(fred): sample nuclear collision inside transport step
-
-8. fix(fred): use per-isotope CSDA range and explicit
-              secondary termination reasons
-
-9. test(fred): add 95-MeV/u thin-target and staged water benchmarks
-
-10. fix(plots): add statistically valid halo fitting and uncertainties
-
-11. perf(fred): precompute event/CDF LUTs and optimize secondary queue
-```
-
-**最先应看到明显效果的三个修改是：**
-
-```text
-Eq. 13–16 第一个碎片 0.6 能量问题
-Eq. 12 错误分支和 35 MeV/u 截断
-secondary 3000-step 后剩余能量局域倾倒
-```
-
-这三项分别最可能对应你图中的：
-
-```text
-100–300 MeV/u distal underdose
-halo sigma 偏小
-400 MeV/u distal overdose
-```
-
-[1]: https://github.com/vvuvv31/MAIGO/commits/fred/ "https://github.com/vvuvv31/MAIGO/commits/fred/"
-[2]: https://raw.githubusercontent.com/vvuvv31/MAIGO/fred/plan.md "https://raw.githubusercontent.com/vvuvv31/MAIGO/fred/plan.md"
-[3]: https://raw.githubusercontent.com/vvuvv31/MAIGO/fred/src/detail/sycl_inelastic_device.inc "https://raw.githubusercontent.com/vvuvv31/MAIGO/fred/src/detail/sycl_inelastic_device.inc"
-[4]: https://github.com/vvuvv31/MAIGO/raw/refs/heads/fred/data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv "https://github.com/vvuvv31/MAIGO/raw/refs/heads/fred/data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv"
-[5]: https://raw.githubusercontent.com/vvuvv31/MAIGO/fred/include/carbon/cross_section.hpp "https://raw.githubusercontent.com/vvuvv31/MAIGO/fred/include/carbon/cross_section.hpp"
-[6]: https://raw.githubusercontent.com/vvuvv31/MAIGO/fred/include/carbon/detail/fred_fragmentation_data.hpp "https://raw.githubusercontent.com/vvuvv31/MAIGO/fred/include/carbon/detail/fred_fragmentation_data.hpp"
-[7]: https://raw.githubusercontent.com/vvuvv31/MAIGO/fred/src/transport_sycl.cpp "https://raw.githubusercontent.com/vvuvv31/MAIGO/fred/src/transport_sycl.cpp"
-[8]: https://raw.githubusercontent.com/vvuvv31/MAIGO/fred/README.md "https://raw.githubusercontent.com/vvuvv31/MAIGO/fred/README.md"
-[9]: https://raw.githubusercontent.com/vvuvv31/MAIGO/fred/include/carbon/stopping_power.hpp "https://raw.githubusercontent.com/vvuvv31/MAIGO/fred/include/carbon/stopping_power.hpp"
-[10]: https://raw.githubusercontent.com/vvuvv31/MAIGO/fred/scripts/generate_plots_matplotlib.py "https://raw.githubusercontent.com/vvuvv31/MAIGO/fred/scripts/generate_plots_matplotlib.py"
-[11]: https://raw.githubusercontent.com/vvuvv31/MAIGO/fred/scripts/validate_metrics.py "https://raw.githubusercontent.com/vvuvv31/MAIGO/fred/scripts/validate_metrics.py"
+所以，当前不能先调 halo scale，也不能根据 100 MeV/u 的表面吻合继续拟合高能 yield。**先修 cross-section 查表和 event energy closure，这两项是代码正确性问题，而不是模型调参问题。**

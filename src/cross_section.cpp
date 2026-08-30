@@ -289,6 +289,28 @@ const std::vector<double>& CrossSectionTable::values() const noexcept {
 const std::vector<double>& CrossSectionTable::target_h_fractions() const noexcept {
     return target_h_fractions_;
 }
+
+ResampledCrossSectionGrid resample_cross_section_grid(
+    const CrossSectionTable& cross_section,
+    const std::vector<double>& transport_energies_MeVu) {
+    ResampledCrossSectionGrid result;
+    result.macroscopic_per_mm.reserve(transport_energies_MeVu.size());
+    result.target_h_fraction.reserve(transport_energies_MeVu.size());
+    const bool has_target_fraction =
+        cross_section.target_h_fractions().size() == cross_section.energies().size() &&
+        !cross_section.target_h_fractions().empty();
+    for (const double energy_MeVu : transport_energies_MeVu) {
+        result.macroscopic_per_mm.push_back(
+            static_cast<float>(cross_section.interpolate(energy_MeVu)));
+        result.target_h_fraction.push_back(
+            has_target_fraction
+                ? static_cast<float>(
+                      cross_section.interpolate_target_h_fraction(energy_MeVu))
+                : 0.5F);
+    }
+    return result;
+}
+
 const std::vector<double>& CrossSectionTable::macro_h_per_mm() const noexcept {
     return macro_h_per_mm_;
 }

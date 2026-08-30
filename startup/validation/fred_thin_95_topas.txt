@@ -1,0 +1,50 @@
+# TOPAS reference for the FRED Eq. 12--21 thin-target birth distributions.
+# The source is 0.1 mm upstream of the 1 mm water slab to avoid air-MCS
+# contamination of the incident direction. This is an ntuple benchmark, not a
+# dose scorer; dose validation elsewhere always uses a 3-D dose scorer.
+i:Ts/Seed = 2026083097
+i:Ts/NumberOfThreads = 50
+i:Ts/ShowHistoryCountAtInterval = 10000
+b:Gr/Enable = "False"
+
+s:Ge/World/Type = "TsBox"
+s:Ge/World/Material = "Air"
+d:Ge/World/HLX = 100 mm
+d:Ge/World/HLY = 100 mm
+d:Ge/World/HLZ = 100 mm
+
+s:Ge/Phantom/Parent = "World"
+s:Ge/Phantom/Type = "TsBox"
+s:Ge/Phantom/Material = "G4_WATER"
+d:Ge/Phantom/HLX = 50 mm
+d:Ge/Phantom/HLY = 50 mm
+d:Ge/Phantom/HLZ = 0.5 mm
+d:Ge/Phantom/TransX = 0 mm
+d:Ge/Phantom/TransY = 0 mm
+d:Ge/Phantom/TransZ = 0 mm
+d:Ge/Phantom/MaxStepSize = 0.1 mm
+
+# TOPAS Beam points along local -Z. Put it immediately before the +Z face.
+s:Ge/BeamPosition/Parent = "World"
+s:Ge/BeamPosition/Type = "Group"
+d:Ge/BeamPosition/TransX = 0 mm
+d:Ge/BeamPosition/TransY = 0 mm
+d:Ge/BeamPosition/TransZ = 0.6 mm
+
+s:So/CarbonBeam/Type = "Beam"
+s:So/CarbonBeam/Component = "BeamPosition"
+s:So/CarbonBeam/BeamParticle = "GenericIon(6,12)"
+d:So/CarbonBeam/BeamEnergy = 1140 MeV
+u:So/CarbonBeam/BeamEnergySpread = 0.0
+s:So/CarbonBeam/BeamPositionDistribution = "None"
+s:So/CarbonBeam/BeamAngularDistribution = "None"
+i:So/CarbonBeam/NumberOfHistoriesInRun = 1000000
+
+s:Sc/CarbonReaction/Quantity = "CarbonReactionNtuple"
+s:Sc/CarbonReaction/Component = "Phantom"
+s:Sc/CarbonReaction/OutputType = "ASCII"
+s:Sc/CarbonReaction/OutputFile = "fred_thin_95_reactions"
+s:Sc/CarbonReaction/IfOutputFileAlreadyExists = "Overwrite"
+
+sv:Ph/Default/Modules = 7 "g4em-standard_opt4" "g4h-phy_QGSP_BIC_HP" "g4decay" "g4ion-inclxx" "g4h-elastic_HP" "g4stopping" "g4radioactivedecay"
+d:Ph/Default/CutForAllParticles = 0.05 mm
