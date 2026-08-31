@@ -662,9 +662,17 @@ void TransportConfig::validate() const {
         throw std::invalid_argument(
             "packaged_fluctuation requires energy_straggling_package_file");
     }
-    if (nuclear_model != "geant4" && nuclear_model != "fred_paper") {
+    if (nuclear_model != "geant4" && nuclear_model != "fred_paper" &&
+        nuclear_model != "cinel02") {
         throw std::invalid_argument(
-            "nuclear_model must be geant4 or fred_paper");
+            "nuclear_model must be geant4, fred_paper, or cinel02");
+    }
+    if (nuclear_model == "cinel02" &&
+        (primary_inelastic_package_v2_file.empty() ||
+         primary_inelastic_rate_v2_file.empty())) {
+        throw std::invalid_argument(
+            "nuclear_model: cinel02 requires both primary_inelastic_package_v2_file "
+            "and primary_inelastic_rate_v2_file");
     }
     if (enable_nuclear_elastic && nuclear_model != "fred_paper") {
         throw std::invalid_argument(
@@ -1501,6 +1509,12 @@ TransportConfig load_config(const std::filesystem::path& path) {
     }
     config.enable_inelastic =
         parse_bool(values, "enable_inelastic", config.enable_inelastic);
+    config.primary_inelastic_package_v2_file = parse_path(
+        values, "primary_inelastic_package_v2_file",
+        config.primary_inelastic_package_v2_file);
+    config.primary_inelastic_rate_v2_file = parse_path(
+        values, "primary_inelastic_rate_v2_file",
+        config.primary_inelastic_rate_v2_file);
     if (const auto it = values.find("nuclear_model"); it != values.end()) {
         config.nuclear_model = it->second;
         std::transform(config.nuclear_model.begin(), config.nuclear_model.end(),

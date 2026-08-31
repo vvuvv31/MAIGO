@@ -270,6 +270,10 @@ struct TransportConfig {
     // geant4: load the configured macroscopic table as-is.
     // fred_paper: C-C fit + Kox scaling + ICRU-H; optional H-target elastic.
     std::string nuclear_model{"geant4"};
+    // TOPAS-derived correlated multi-generation final states and independent
+    // target-conditioned interaction rates (CINPKG03 / CINEL02_RATE_V1).
+    std::filesystem::path primary_inelastic_package_v2_file{};
+    std::filesystem::path primary_inelastic_rate_v2_file{};
     bool enable_nuclear_elastic{false};
     std::filesystem::path fred_event_library_h_file{};
     std::filesystem::path fred_event_library_o_file{};

@@ -41,6 +41,10 @@ TransportResult transport_serial(const TransportConfig& config,
                                  const StoppingPowerTable& stopping_power,
                                  const CrossSectionTable& cross_section) {
     config.validate();
+    if (config.nuclear_model == "cinel02") {
+        throw std::logic_error(
+            "CINEL02 is supported only by the SYCL backend after runtime integration");
+    }
     if (config.enable_multiple_scattering) {
         throw std::invalid_argument(
             "Multiple scattering requires the three-dimensional SYCL backend");

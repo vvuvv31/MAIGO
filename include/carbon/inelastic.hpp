@@ -21,6 +21,7 @@ struct SecondaryParticle {
     float dir_z{1.0F};
     float weight{1.0F};
     uint32_t parent_history{0};
+    uint16_t generation{0};
 };
 
 struct FredEventLibDevice {

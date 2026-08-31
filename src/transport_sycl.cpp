@@ -6,6 +6,7 @@
 #include "carbon/fred_event_library.hpp"
 #include "carbon/fred_table1.hpp"
 #include "carbon/inelastic.hpp"
+#include "carbon/inelastic_package_v2.hpp"
 #include "carbon/multiple_scattering.hpp"
 #include "carbon/particle.hpp"
 #include "carbon/rng.hpp"
@@ -39,6 +40,7 @@ namespace carbon {
 #include "detail/sycl_profile.inc"
 #include "detail/sycl_transport_context_impl.inc"
 #include "detail/sycl_transport_context_methods.inc"
+#include "detail/sycl_cinel02_device.inc"
 
 namespace {
 
@@ -75,6 +77,17 @@ TransportResult transport_sycl(const TransportConfig& config,
                                const std::string& device_name,
                                SyclTransportContext* context) {
     config.validate();
+    const bool use_cinel02 = config.nuclear_model == "cinel02";
+    std::optional<InelasticPackageV2Table> cinel02_package;
+    std::optional<InelasticRateV2Table> cinel02_rates;
+    std::optional<Cinel02DeviceTables> cinel02_host_tables;
+    if (use_cinel02) {
+        cinel02_package.emplace(InelasticPackageV2Table::from_binary(
+            config.primary_inelastic_package_v2_file));
+        cinel02_rates.emplace(InelasticRateV2Table::from_csv(
+            config.primary_inelastic_rate_v2_file));
+        cinel02_host_tables.emplace(cinel02_package->make_device_tables());
+    }
     const auto start = std::chrono::steady_clock::now();
     const auto& table_energies = stopping_power.energies();
     if (table_energies.size() < 2 || !is_uniform_grid(table_energies)) {
@@ -133,6 +146,93 @@ TransportResult transport_sycl(const TransportConfig& config,
             sycl::free(pointer, queue);
         }
     };
+
+    Cinel02DeviceInteraction* cinel02_interactions_device = nullptr;
+    Cinel02DeviceProduct* cinel02_products_device = nullptr;
+    Cinel02EnergyNode* cinel02_energy_nodes_device = nullptr;
+    std::uint32_t* cinel02_event_offsets_device = nullptr;
+    std::uint32_t* cinel02_event_indices_device = nullptr;
+    Cinel02RateGroup* cinel02_rate_groups_device = nullptr;
+    Cinel02RateSample* cinel02_rate_samples_device = nullptr;
+    std::uint32_t cinel02_interaction_count = 0U;
+    std::uint32_t cinel02_product_count = 0U;
+    std::uint32_t cinel02_energy_node_count = 0U;
+    std::uint32_t cinel02_rate_group_count = 0U;
+    std::uint32_t cinel02_rate_sample_count = 0U;
+    if (use_cinel02) {
+        const auto checked_u32 = [](const std::size_t value, const char* label) {
+            if (value > std::numeric_limits<std::uint32_t>::max()) {
+                throw std::overflow_error(std::string("CINEL02 ") + label +
+                                          " exceeds uint32 range");
+            }
+            return static_cast<std::uint32_t>(value);
+        };
+        cinel02_interaction_count = checked_u32(
+            cinel02_host_tables->interactions.size(), "interaction count");
+        cinel02_product_count = checked_u32(
+            cinel02_host_tables->products.size(), "product count");
+        cinel02_energy_node_count = checked_u32(
+            cinel02_host_tables->energy_nodes.size(), "energy-node count");
+        cinel02_rate_group_count = checked_u32(
+            cinel02_rates->groups().size(), "rate-group count");
+        cinel02_rate_sample_count = checked_u32(
+            cinel02_rates->samples().size(), "rate-sample count");
+        const auto immutable_bytes = cinel02_host_tables->bytes() +
+            cinel02_rates->groups().size() * sizeof(Cinel02RateGroup) +
+            cinel02_rates->samples().size() * sizeof(Cinel02RateSample);
+        const auto global_bytes =
+            device.get_info<sycl::info::device::global_mem_size>();
+        const auto configured_limit = static_cast<std::uint64_t>(
+            static_cast<double>(global_bytes) * config.max_device_memory_fraction);
+        if (immutable_bytes > configured_limit) {
+            throw std::runtime_error(
+                "CINEL02 compact tables exceed max_device_memory_fraction: need " +
+                std::to_string(immutable_bytes) + " bytes, limit " +
+                std::to_string(configured_limit));
+        }
+        std::cout << "CINEL02 compact device tables: " << immutable_bytes
+                  << " bytes (" << cinel02_interaction_count << " interactions, "
+                  << cinel02_product_count << " products)\n";
+        cinel02_interactions_device = sycl::malloc_device<Cinel02DeviceInteraction>(
+            cinel02_interaction_count, queue);
+        cinel02_products_device = sycl::malloc_device<Cinel02DeviceProduct>(
+            cinel02_product_count, queue);
+        cinel02_energy_nodes_device = sycl::malloc_device<Cinel02EnergyNode>(
+            cinel02_energy_node_count, queue);
+        cinel02_event_offsets_device = sycl::malloc_device<std::uint32_t>(
+            cinel02_host_tables->event_offsets.size(), queue);
+        cinel02_event_indices_device = sycl::malloc_device<std::uint32_t>(
+            cinel02_host_tables->event_indices.size(), queue);
+        cinel02_rate_groups_device = sycl::malloc_device<Cinel02RateGroup>(
+            cinel02_rate_group_count, queue);
+        cinel02_rate_samples_device = sycl::malloc_device<Cinel02RateSample>(
+            cinel02_rate_sample_count, queue);
+        if (cinel02_interactions_device == nullptr || cinel02_products_device == nullptr ||
+            cinel02_energy_nodes_device == nullptr || cinel02_event_offsets_device == nullptr ||
+            cinel02_event_indices_device == nullptr || cinel02_rate_groups_device == nullptr ||
+            cinel02_rate_samples_device == nullptr) {
+            throw std::bad_alloc();
+        }
+        queue.copy(cinel02_host_tables->interactions.data(),
+                   cinel02_interactions_device, cinel02_interaction_count);
+        queue.copy(cinel02_host_tables->products.data(),
+                   cinel02_products_device, cinel02_product_count);
+        queue.copy(cinel02_host_tables->energy_nodes.data(),
+                   cinel02_energy_nodes_device, cinel02_energy_node_count);
+        queue.copy(cinel02_host_tables->event_offsets.data(),
+                   cinel02_event_offsets_device,
+                   cinel02_host_tables->event_offsets.size());
+        queue.copy(cinel02_host_tables->event_indices.data(),
+                   cinel02_event_indices_device,
+                   cinel02_host_tables->event_indices.size());
+        queue.copy(cinel02_rates->groups().data(), cinel02_rate_groups_device,
+                   cinel02_rate_group_count);
+        queue.copy(cinel02_rates->samples().data(), cinel02_rate_samples_device,
+                   cinel02_rate_sample_count).wait_and_throw();
+        cinel02_host_tables.reset();
+        cinel02_package.reset();
+        cinel02_rates.reset();
+    }
 
     // Slab layers
     const auto enable_layered_phantom = config.enable_layered_phantom;
@@ -396,6 +496,13 @@ TransportResult transport_sycl(const TransportConfig& config,
     auto* voxel_dose_device = enable_voxel_scoring
                                   ? sycl::malloc_device<DoseAtomicT>(number_of_voxels, queue)
                                   : nullptr;
+    const auto enable_charged_origin_voxel_scoring =
+        config.enable_charged_origin_voxel_scoring;
+    auto* charged_origin_voxel_dose_device =
+        enable_charged_origin_voxel_scoring
+            ? sycl::malloc_device<DoseAtomicT>(
+                  charged_origin_category_count * number_of_voxels, queue)
+            : nullptr;
     auto* let_moments_device = enable_let_scoring
                                    ? sycl::malloc_device<LetAtomicT>(4 * number_of_bins, queue)
                                    : nullptr;
@@ -717,6 +824,8 @@ TransportResult transport_sycl(const TransportConfig& config,
     if (dose_device == nullptr || deposited_device == nullptr ||
         escaped_device == nullptr || steps_device == nullptr ||
         (enable_voxel_scoring && (voxel_dose_device == nullptr || in_fov_dose_device == nullptr)) ||
+        (enable_charged_origin_voxel_scoring &&
+         charged_origin_voxel_dose_device == nullptr) ||
         (enable_let_scoring && let_moments_device == nullptr)) {
         throw std::bad_alloc();
     }
@@ -759,6 +868,11 @@ TransportResult transport_sycl(const TransportConfig& config,
     queue.memset(dose_device, 0, number_of_bins * sizeof(DoseAtomicT));
     if (enable_voxel_scoring) {
         queue.memset(voxel_dose_device, 0, number_of_voxels * sizeof(DoseAtomicT));
+    }
+    if (enable_charged_origin_voxel_scoring) {
+        queue.memset(charged_origin_voxel_dose_device, 0,
+                     charged_origin_category_count * number_of_voxels *
+                         sizeof(DoseAtomicT));
     }
     if (enable_let_scoring) {
         queue.memset(let_moments_device, 0, 4 * number_of_bins * sizeof(LetAtomicT));
@@ -1245,11 +1359,25 @@ TransportResult transport_sycl(const TransportConfig& config,
                     bool inelastic_this_step = false;
                     bool elastic_this_step = false;
                     float p_target_h_step = 0.5F;
+                    std::int16_t cinel02_target_z_step = 0;
+                    std::int16_t cinel02_target_a_step = 0;
                     if ((enable_inelastic || enable_nuclear_elastic) &&
                         energy_MeV > energy_cutoff_MeV) {
                         const auto cur_e_u = energy_MeV * inverse_mass_number;
                         float macro_xs = 0.0F;
-                        if (enable_inelastic && cross_section_device != nullptr) {
+                        if (use_cinel02) {
+                            const auto target = cinel02_select_water_target_device(
+                                cinel02_rate_groups_device, cinel02_rate_group_count,
+                                cinel02_rate_samples_device, cinel02_rate_sample_count,
+                                primary_atomic_number, primary_mass_number, cur_e_u,
+                                local_density_g_per_cm3, water_density_g_per_cm3,
+                                rng::uniform01(spot_seed, rng_history, steps, 12));
+                            if (target.covered) {
+                                macro_xs = target.total_rate_per_mm;
+                                cinel02_target_z_step = target.target_z;
+                                cinel02_target_a_step = target.target_a;
+                            }
+                        } else if (enable_inelastic && cross_section_device != nullptr) {
                             const auto xs_flt =
                                 (cur_e_u - minimum_table_energy) * inverse_table_step;
                             auto xs_idx = static_cast<int>(sycl::floor(xs_flt));
@@ -1418,6 +1546,15 @@ TransportResult transport_sycl(const TransportConfig& config,
                                              sycl::access::address_space::global_space>
                                 atomic_voxel_dose(voxel_dose_device[pending_primary_voxel]);
                             atomic_voxel_dose.fetch_add(static_cast<DoseAtomicT>(pending_primary_voxel_MeV));
+                            if (enable_charged_origin_voxel_scoring) {
+                                sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
+                                                 sycl::memory_scope::device,
+                                                 sycl::access::address_space::global_space>
+                                    atomic_primary_origin(
+                                        charged_origin_voxel_dose_device[pending_primary_voxel]);
+                                atomic_primary_origin.fetch_add(
+                                    static_cast<DoseAtomicT>(pending_primary_voxel_MeV));
+                            }
                         }
                         pending_primary_voxel_MeV = 0.0;
                         if (enable_let_scoring && voxel_let_moments_device != nullptr && pending_primary_voxel >= 0) {
@@ -1620,7 +1757,110 @@ TransportResult transport_sycl(const TransportConfig& config,
 
                     if (enable_inelastic && inelastic_this_step &&
                         energy_MeV > energy_cutoff_MeV &&
-                        cross_section_device != nullptr) {
+                        (use_cinel02 || cross_section_device != nullptr)) {
+                        if (use_cinel02) {
+                            constexpr float cinel02_energy_tolerance_MeV_per_u = 0.51F;
+                            const auto event_index = cinel02_find_event_device(
+                                cinel02_energy_nodes_device, cinel02_energy_node_count,
+                                cinel02_event_offsets_device, cinel02_event_indices_device,
+                                cinel02_interactions_device, cinel02_interaction_count,
+                                primary_atomic_number, primary_mass_number,
+                                cinel02_target_z_step, cinel02_target_a_step,
+                                energy_MeV * inverse_mass_number,
+                                cinel02_energy_tolerance_MeV_per_u,
+                                rng::uniform01(spot_seed, rng_history, steps, 13));
+                            if (event_index != std::numeric_limits<std::uint32_t>::max()) {
+                                const auto event = cinel02_interactions_device[event_index];
+                                const auto product_end =
+                                    static_cast<std::uint64_t>(event.product_offset) +
+                                    event.product_count;
+                                if (product_end <= cinel02_product_count &&
+                                    (event.parent_status == 0 || event.parent_status == 2)) {
+                                    const auto local_deposit = sycl::fmax(
+                                        0.0F, event.process_local_deposit_MeV +
+                                                  event.nonionizing_deposit_MeV);
+                                    pending_primary_depth_MeV += local_deposit;
+                                    if (enable_voxel_scoring && voxel_index >= 0) {
+                                        pending_primary_voxel_MeV += local_deposit;
+                                    }
+                                    history_deposited_MeV += local_deposit;
+                                    float untracked_MeV = 0.0F;
+                                    for (std::uint32_t ip = 0; ip < event.product_count; ++ip) {
+                                        const auto product =
+                                            cinel02_products_device[event.product_offset + ip];
+                                        if (product.role == 1) continue;
+                                        if (product.role != 0 || product.z <= 0 || product.a <= 0) {
+                                            untracked_MeV += sycl::fmax(
+                                                0.0F, product.kinetic_energy_MeV);
+                                            continue;
+                                        }
+                                        const auto child_direction = rotate_local_direction(
+                                            product.local_direction_x,
+                                            product.local_direction_y,
+                                            product.local_direction_z,
+                                            Direction3F{direction_x, direction_y, direction_z});
+                                        if (secondary_queue_device != nullptr) {
+                                            auto count_ref = sycl::atomic_ref<
+                                                uint32_t, sycl::memory_order::relaxed,
+                                                sycl::memory_scope::device,
+                                                sycl::access::address_space::global_space>(
+                                                *secondary_count_device);
+                                            const auto output = count_ref.fetch_add(1U);
+                                            if (output < max_secondaries) {
+                                                SecondaryParticle child{};
+                                                child.z = product.z;
+                                                child.a = product.a;
+                                                child.energy_MeV = product.kinetic_energy_MeV;
+                                                child.pos_x_mm = position_x_mm;
+                                                child.pos_y_mm = position_y_mm;
+                                                child.pos_z_mm = position_z_mm;
+                                                child.dir_x = child_direction.x;
+                                                child.dir_y = child_direction.y;
+                                                child.dir_z = child_direction.z;
+                                                child.weight = product.weight;
+                                                child.parent_history = rng_history;
+                                                secondary_queue_device[output] = child;
+                                            } else {
+                                                untracked_MeV += sycl::fmax(
+                                                    0.0F, product.kinetic_energy_MeV);
+                                                if (secondary_overflow_count_device != nullptr) {
+                                                    sycl::atomic_ref<
+                                                        uint32_t, sycl::memory_order::relaxed,
+                                                        sycl::memory_scope::device,
+                                                        sycl::access::address_space::global_space>
+                                                        atomic_overflow(
+                                                            *secondary_overflow_count_device);
+                                                    atomic_overflow.fetch_add(1U);
+                                                }
+                                            }
+                                        }
+                                    }
+                                    if (untracked_MeV > 0.0F &&
+                                        untracked_nuclear_device != nullptr) {
+                                        sycl::atomic_ref<
+                                            float, sycl::memory_order::relaxed,
+                                            sycl::memory_scope::device,
+                                            sycl::access::address_space::global_space>
+                                            atomic_untracked(
+                                                untracked_nuclear_device[global_history]);
+                                        atomic_untracked.fetch_add(untracked_MeV);
+                                    }
+                                    if (event.parent_status == 0) {
+                                        energy_MeV = sycl::fmax(0.0F, event.parent_energy_MeV);
+                                        const auto parent_direction = rotate_local_direction(
+                                            event.parent_local_direction_x,
+                                            event.parent_local_direction_y,
+                                            event.parent_local_direction_z,
+                                            Direction3F{direction_x, direction_y, direction_z});
+                                        direction_x = parent_direction.x;
+                                        direction_y = parent_direction.y;
+                                        direction_z = parent_direction.z;
+                                    } else {
+                                        energy_MeV = 0.0F;
+                                    }
+                                }
+                            }
+                        } else {
                         const float p_target_h = p_target_h_step;
                         {
                             const Direction3F cur_dir{direction_x, direction_y,
@@ -1828,6 +2068,7 @@ TransportResult transport_sycl(const TransportConfig& config,
                             ++steps;
                             break;
                         }
+                        }
                     }
 
                     ++steps;
@@ -1887,6 +2128,15 @@ TransportResult transport_sycl(const TransportConfig& config,
                                          sycl::access::address_space::global_space>
                             atomic_voxel_dose(voxel_dose_device[pending_primary_voxel]);
                         atomic_voxel_dose.fetch_add(static_cast<DoseAtomicT>(pending_primary_voxel_MeV));
+                        if (enable_charged_origin_voxel_scoring) {
+                            sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
+                                             sycl::memory_scope::device,
+                                             sycl::access::address_space::global_space>
+                                atomic_primary_origin(
+                                    charged_origin_voxel_dose_device[pending_primary_voxel]);
+                            atomic_primary_origin.fetch_add(
+                                static_cast<DoseAtomicT>(pending_primary_voxel_MeV));
+                        }
                     }
                     if (enable_let_scoring && voxel_let_moments_device != nullptr) {
                         flush_letd_moments_device(
@@ -1914,19 +2164,21 @@ TransportResult transport_sycl(const TransportConfig& config,
             secondary_count_host = static_cast<uint32_t>(max_secondaries);
         }
         if (secondary_count_host > 0) {
-        if (!config.fragment_birth_spectrum_output_file.empty() &&
-            secondary_count_host > 0) {
-            birth_secondaries_host.resize(secondary_count_host);
-            queue.copy(secondary_queue_device, birth_secondaries_host.data(),
-                       secondary_count_host).wait_and_throw();
-        }
+            std::uint32_t generation_begin = 0U;
+            std::uint32_t generation_end = secondary_count_host;
+            while (generation_begin < generation_end) {
             auto sec_event = queue.submit([&](sycl::handler& cgh) {
                 cgh.parallel_for<class CarbonSecondaryTransportKernel>(
-                    sycl::range<1>(secondary_count_host),
+                    sycl::range<1>(generation_end - generation_begin),
                     [=](sycl::id<1> item_id) {
-                        const auto sec_idx = item_id[0];
+                        const auto sec_idx = generation_begin + item_id[0];
                         const auto frag = secondary_queue_device[sec_idx];
                         if (frag.z <= 0 || frag.a <= 0) return;
+                        const auto charged_origin_category =
+                            charged_origin_category_from_fragment(
+                                charged_dose_category(frag.z, frag.a));
+                        const auto charged_origin_voxel_offset =
+                            charged_origin_category * number_of_voxels;
                         if (frag.energy_MeV <= energy_cutoff_MeV) {
                             const auto bin_z = static_cast<int>(frag.pos_z_mm * inverse_depth_bin_width_mm);
                             if (bin_z >= 0 && bin_z < static_cast<int>(number_of_bins)) {
@@ -1948,6 +2200,14 @@ TransportResult transport_sycl(const TransportConfig& config,
                                                      sycl::access::address_space::global_space>
                                         atomic_vox(voxel_dose_device[cur_voxel]);
                                     atomic_vox.fetch_add(static_cast<DoseAtomicT>(frag.energy_MeV));
+                                    if (enable_charged_origin_voxel_scoring) {
+                                        sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
+                                                         sycl::memory_scope::device,
+                                                         sycl::access::address_space::global_space>
+                                            atomic_origin(charged_origin_voxel_dose_device[
+                                                charged_origin_voxel_offset + cur_voxel]);
+                                        atomic_origin.fetch_add(static_cast<DoseAtomicT>(frag.energy_MeV));
+                                    }
                                     if (in_fov_dose_device != nullptr) {
                                         sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
                                                          sycl::memory_scope::device,
@@ -2019,6 +2279,31 @@ TransportResult transport_sycl(const TransportConfig& config,
                                 if (dz_step > 1.0e-5F) sec_step_mm = sycl::fmin(sec_step_mm, dz_step);
                             }
                             sec_step_mm = sycl::fmax(sec_step_mm, 1.0e-5F);
+                            bool secondary_inelastic = false;
+                            std::int16_t secondary_target_z = 0;
+                            std::int16_t secondary_target_a = 0;
+                            if (use_cinel02 && frag.generation < 15U) {
+                                const auto target = cinel02_select_water_target_device(
+                                    cinel02_rate_groups_device, cinel02_rate_group_count,
+                                    cinel02_rate_samples_device, cinel02_rate_sample_count,
+                                    frag.z, frag.a, sec_e_u,
+                                    water_density_g_per_cm3, water_density_g_per_cm3,
+                                    rng::uniform01(2026, static_cast<uint32_t>(sec_idx),
+                                                   sec_steps, 12));
+                                if (target.covered) {
+                                    float collision_distance = sec_step_mm;
+                                    secondary_inelastic = inelastic_collision_in_step(
+                                        target.total_rate_per_mm, sec_step_mm,
+                                        rng::uniform01(2026, static_cast<uint32_t>(sec_idx),
+                                                       sec_steps, 13),
+                                        &collision_distance);
+                                    if (secondary_inelastic) {
+                                        sec_step_mm = collision_distance;
+                                        secondary_target_z = target.target_z;
+                                        secondary_target_a = target.target_a;
+                                    }
+                                }
+                            }
 
                             // Midpoint loss
                             const auto mid_e_u = sycl::fmax(0.01F, (sec_e - 0.5F * sec_sp * sec_step_mm) * frag_inv_a);
@@ -2073,8 +2358,117 @@ TransportResult transport_sycl(const TransportConfig& config,
                                                          sycl::access::address_space::global_space>
                                             atomic_vox(voxel_dose_device[pending_sec_voxel]);
                                         atomic_vox.fetch_add(static_cast<DoseAtomicT>(pending_sec_voxel_MeV));
+                                    if (enable_charged_origin_voxel_scoring) {
+                                        sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
+                                                         sycl::memory_scope::device,
+                                                         sycl::access::address_space::global_space>
+                                            atomic_origin(charged_origin_voxel_dose_device[
+                                                charged_origin_voxel_offset + pending_sec_voxel]);
+                                        atomic_origin.fetch_add(static_cast<DoseAtomicT>(pending_sec_voxel_MeV));
+                                    }
                                     }
                                     pending_sec_voxel_MeV = 0.0F;
+                            if (secondary_inelastic && sec_e > energy_cutoff_MeV) {
+                                const auto event_index = cinel02_find_event_device(
+                                    cinel02_energy_nodes_device, cinel02_energy_node_count,
+                                    cinel02_event_offsets_device, cinel02_event_indices_device,
+                                    cinel02_interactions_device, cinel02_interaction_count,
+                                    frag.z, frag.a, secondary_target_z, secondary_target_a,
+                                    sec_e * frag_inv_a, 0.51F,
+                                    rng::uniform01(2026, static_cast<uint32_t>(sec_idx),
+                                                   sec_steps, 14));
+                                if (event_index !=
+                                    std::numeric_limits<std::uint32_t>::max()) {
+                                    const auto event =
+                                        cinel02_interactions_device[event_index];
+                                    const auto product_end =
+                                        static_cast<std::uint64_t>(event.product_offset) +
+                                        event.product_count;
+                                    if (product_end <= cinel02_product_count &&
+                                        (event.parent_status == 0 ||
+                                         event.parent_status == 2)) {
+                                        const auto local_deposit = sycl::fmax(
+                                            0.0F, event.process_local_deposit_MeV +
+                                                      event.nonionizing_deposit_MeV);
+                                        pending_sec_depth_MeV += local_deposit;
+                                        if (enable_voxel_scoring && pending_sec_voxel >= 0) {
+                                            pending_sec_voxel_MeV += local_deposit;
+                                        }
+                                        if (deposited_device != nullptr) {
+                                            sycl::atomic_ref<
+                                                float, sycl::memory_order::relaxed,
+                                                sycl::memory_scope::device,
+                                                sycl::access::address_space::global_space>
+                                                atomic_dep(
+                                                    deposited_device[frag.parent_history]);
+                                            atomic_dep.fetch_add(local_deposit);
+                                        }
+                                        for (std::uint32_t ip = 0;
+                                             ip < event.product_count; ++ip) {
+                                            const auto product = cinel02_products_device[
+                                                event.product_offset + ip];
+                                            if (product.role != 0 || product.z <= 0 ||
+                                                product.a <= 0 ||
+                                                secondary_queue_device == nullptr) continue;
+                                            const auto child_direction =
+                                                rotate_local_direction(
+                                                    product.local_direction_x,
+                                                    product.local_direction_y,
+                                                    product.local_direction_z,
+                                                    Direction3F{sec_dx, sec_dy, sec_dz});
+                                            auto count_ref = sycl::atomic_ref<
+                                                uint32_t, sycl::memory_order::relaxed,
+                                                sycl::memory_scope::device,
+                                                sycl::access::address_space::global_space>(
+                                                *secondary_count_device);
+                                            const auto output = count_ref.fetch_add(1U);
+                                            if (output < max_secondaries) {
+                                                SecondaryParticle child{};
+                                                child.z = product.z;
+                                                child.a = product.a;
+                                                child.energy_MeV =
+                                                    product.kinetic_energy_MeV;
+                                                child.pos_x_mm = sec_x;
+                                                child.pos_y_mm = sec_y;
+                                                child.pos_z_mm = sec_z;
+                                                child.dir_x = child_direction.x;
+                                                child.dir_y = child_direction.y;
+                                                child.dir_z = child_direction.z;
+                                                child.weight = product.weight;
+                                                child.parent_history = frag.parent_history;
+                                                child.generation =
+                                                    static_cast<std::uint16_t>(
+                                                        frag.generation + 1U);
+                                                secondary_queue_device[output] = child;
+                                            } else if (secondary_overflow_count_device !=
+                                                       nullptr) {
+                                                sycl::atomic_ref<
+                                                    uint32_t, sycl::memory_order::relaxed,
+                                                    sycl::memory_scope::device,
+                                                    sycl::access::address_space::global_space>
+                                                    atomic_overflow(
+                                                        *secondary_overflow_count_device);
+                                                atomic_overflow.fetch_add(1U);
+                                            }
+                                        }
+                                        if (event.parent_status == 0) {
+                                            sec_e = sycl::fmax(
+                                                0.0F, event.parent_energy_MeV);
+                                            const auto parent_direction =
+                                                rotate_local_direction(
+                                                    event.parent_local_direction_x,
+                                                    event.parent_local_direction_y,
+                                                    event.parent_local_direction_z,
+                                                    Direction3F{sec_dx, sec_dy, sec_dz});
+                                            sec_dx = parent_direction.x;
+                                            sec_dy = parent_direction.y;
+                                            sec_dz = parent_direction.z;
+                                        } else {
+                                            sec_e = 0.0F;
+                                        }
+                                    }
+                                }
+                            }
                                     pending_sec_voxel = cur_voxel;
                                 }
                                 if (cur_voxel >= 0) {
@@ -2193,6 +2587,14 @@ TransportResult transport_sycl(const TransportConfig& config,
                                                                  sycl::access::address_space::global_space>
                                                     atomic_vox(voxel_dose_device[pending_sec_voxel]);
                                                 atomic_vox.fetch_add(static_cast<DoseAtomicT>(pending_sec_voxel_MeV));
+                                    if (enable_charged_origin_voxel_scoring) {
+                                        sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
+                                                         sycl::memory_scope::device,
+                                                         sycl::access::address_space::global_space>
+                                            atomic_origin(charged_origin_voxel_dose_device[
+                                                charged_origin_voxel_offset + pending_sec_voxel]);
+                                        atomic_origin.fetch_add(static_cast<DoseAtomicT>(pending_sec_voxel_MeV));
+                                    }
                                             }
                                             pending_sec_voxel_MeV = 0.0F;
                                             pending_sec_voxel = cur_voxel;
@@ -2239,11 +2641,31 @@ TransportResult transport_sycl(const TransportConfig& config,
                                              sycl::access::address_space::global_space>
                                 atomic_vox(voxel_dose_device[pending_sec_voxel]);
                             atomic_vox.fetch_add(static_cast<DoseAtomicT>(pending_sec_voxel_MeV));
+                            if (enable_charged_origin_voxel_scoring) {
+                                sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
+                                                 sycl::memory_scope::device,
+                                                 sycl::access::address_space::global_space>
+                                    atomic_origin(charged_origin_voxel_dose_device[
+                                        charged_origin_voxel_offset + pending_sec_voxel]);
+                                atomic_origin.fetch_add(
+                                    static_cast<DoseAtomicT>(pending_sec_voxel_MeV));
+                            }
                         }
                     });
             });
             sec_event.wait_and_throw();
-            secondary_kernel_seconds = event_duration_seconds(sec_event);
+                secondary_kernel_seconds += event_duration_seconds(sec_event);
+                generation_begin = generation_end;
+                queue.copy(secondary_count_device, &secondary_count_host, 1)
+                    .wait_and_throw();
+                generation_end = sycl::min(
+                    secondary_count_host, static_cast<std::uint32_t>(max_secondaries));
+            }
+            if (!config.fragment_birth_spectrum_output_file.empty()) {
+                birth_secondaries_host.resize(generation_end);
+                queue.copy(secondary_queue_device, birth_secondaries_host.data(),
+                           generation_end).wait_and_throw();
+            }
         }
     }
 
@@ -2261,6 +2683,19 @@ TransportResult transport_sycl(const TransportConfig& config,
         voxel_dose_host.resize(number_of_voxels);
         std::transform(voxel_dose_device_host.begin(), voxel_dose_device_host.end(),
                        voxel_dose_host.begin(),
+                       [](DoseAtomicT val) { return static_cast<double>(val); });
+    }
+
+    std::vector<double> charged_origin_voxel_dose_host;
+    if (enable_charged_origin_voxel_scoring) {
+        const auto value_count =
+            charged_origin_category_count * number_of_voxels;
+        std::vector<DoseAtomicT> device_host(value_count);
+        queue.copy(charged_origin_voxel_dose_device, device_host.data(),
+                   value_count).wait_and_throw();
+        charged_origin_voxel_dose_host.resize(value_count);
+        std::transform(device_host.begin(), device_host.end(),
+                       charged_origin_voxel_dose_host.begin(),
                        [](DoseAtomicT val) { return static_cast<double>(val); });
     }
 
@@ -2337,6 +2772,7 @@ TransportResult transport_sycl(const TransportConfig& config,
     free_device(dose_device);
     free_device(in_fov_dose_device);
     free_device(voxel_dose_device);
+    free_device(charged_origin_voxel_dose_device);
     free_device(let_moments_device);
     free_device(voxel_let_moments_device);
     free_device(deposited_device);
@@ -2345,6 +2781,13 @@ TransportResult transport_sycl(const TransportConfig& config,
     free_device(ion_species_sp_device);
     free_device(ion_energy_grid_device);
     free_device(ion_csda_a1_device);
+    free_device(cinel02_interactions_device);
+    free_device(cinel02_products_device);
+    free_device(cinel02_energy_nodes_device);
+    free_device(cinel02_event_offsets_device);
+    free_device(cinel02_event_indices_device);
+    free_device(cinel02_rate_groups_device);
+    free_device(cinel02_rate_samples_device);
     free_device(untracked_nuclear_device);
     free_device(fred_prob_proj_h_device);
     free_device(fred_prob_proj_o_device);
@@ -2448,6 +2891,8 @@ TransportResult transport_sycl(const TransportConfig& config,
     result.primary_deposited_energy_MeV = dose_host;
     result.deposited_energy_MeV = std::move(dose_host);
     result.voxel_deposited_energy_MeV = std::move(voxel_dose_host);
+    result.charged_origin_voxel_deposited_energy_MeV =
+        std::move(charged_origin_voxel_dose_host);
     result.in_fov_deposited_energy_MeV = std::move(in_fov_dose_host);
     if (!config.fragment_birth_spectrum_output_file.empty()) {
         constexpr std::size_t categories = light_isotope_category_count;
@@ -2463,11 +2908,12 @@ TransportResult transport_sycl(const TransportConfig& config,
             birth_hist_plane_size(birth_parent_z_bin_count), 0);
         result.birth_parent_product_mevu_hist.assign(birth_joint_plane_size(), 0);
 
-        constexpr std::size_t generation = 0;
         const auto parent_mevu_bin = birth_parent_mevu_bin(
             config.initial_total_energy_MeV(), config.primary_mass_number);
         const auto parent_z_bin = birth_parent_z_bin(config.primary_atomic_number);
         for (const auto& fragment : birth_secondaries_host) {
+            const auto generation = birth_generation_bin(
+                static_cast<std::uint8_t>(fragment.generation));
             const auto category =
                 light_isotope_category(fragment.z, fragment.a);
             if (category >= categories || fragment.a <= 0) {

@@ -49,6 +49,7 @@ add_library(carbon_core
     src/energy_loss_fluctuation.cpp
     src/fred_table1.cpp
     src/fred_event_library.cpp
+    src/inelastic_package_v2.cpp
     src/multiple_scattering.cpp
     src/run_quality.cpp
     src/stopping_power.cpp
@@ -144,6 +145,8 @@ target_link_libraries(carbon_mc PRIVATE carbon_core)
 
 if(BUILD_TESTING)
     add_executable(carbon_tests tests/carbon_tests.cpp)
+    add_executable(inelastic_package_v2_tests tests/inelastic_package_v2_tests.cpp)
+    target_link_libraries(inelastic_package_v2_tests PRIVATE carbon_core)
     target_link_libraries(carbon_tests PRIVATE carbon_core)
     target_compile_definitions(carbon_tests PRIVATE
         CARBON_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")

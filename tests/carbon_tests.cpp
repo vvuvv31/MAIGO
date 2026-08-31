@@ -2943,6 +2943,7 @@ void test_serial_sycl_cpu_match() {
     config.maximum_step_mm = 0.5;
     config.maximum_relative_energy_loss = 0.01;
     config.enable_voxel_scoring = true;
+    config.enable_charged_origin_voxel_scoring = true;
     config.voxel_bins_x = 5;
     config.voxel_bins_y = 7;
     const carbon::StoppingPowerTable table({0.01, 10.01, 20.01}, {2.0, 2.0, 2.0});
@@ -2951,6 +2952,15 @@ void test_serial_sycl_cpu_match() {
         carbon::transport_sycl(config, table, zero_cross_section(), "cpu");
     require_voxel_idd_closure(config, serial, 1.0e-12);
     require_voxel_idd_closure(config, sycl_cpu, 1.0e-9);
+    require(sycl_cpu.charged_origin_voxel_deposited_energy_MeV.size() ==
+                carbon::charged_origin_category_count * config.number_of_voxels(),
+            "SYCL charged-origin voxel tally has the wrong size");
+    for (std::size_t voxel = 0; voxel < config.number_of_voxels(); ++voxel) {
+        require_near(
+            sycl_cpu.charged_origin_voxel_deposited_energy_MeV[voxel],
+            sycl_cpu.voxel_deposited_energy_MeV[voxel], 1.0e-9,
+            "SYCL primary origin voxel does not close to total");
+    }
     require(sycl_cpu.relative_energy_balance_error() < 1.0e-4,
             "SYCL CPU energy balance failed");
 
