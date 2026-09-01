@@ -62,6 +62,26 @@ inline void cinel02_record_queued_secondary_birth_device(
         kinetic_energy_MeV);
 }
 
+inline void cinel02_record_topas_compat_discard_device(
+    std::uint64_t* counts, float* kinetic_energy,
+    const int z, const int a, const float value_MeV) noexcept {
+    const auto species = carbon::get_charged_species_idx(z, a);
+    constexpr auto species_count = static_cast<int>(
+        Cinel02SpeciesLedgerSchema::species_count);
+    if (species < 0 || species >= species_count ||
+        !sycl::isfinite(value_MeV)) {
+        return;
+    }
+    // Count every generated unsupported product, including a zero-KE
+    // record; the kinetic sink only accepts a positive finite value.
+    cinel02_diag_increment_device(
+        counts, static_cast<std::uint32_t>(species));
+    if (value_MeV > 0.0F) {
+        cinel02_energy_add_device(
+            kinetic_energy, static_cast<std::uint32_t>(species), value_MeV);
+    }
+}
+
 inline void cinel02_record_replay_delta_device(
     float* delta_sum_MeV_per_u, float* abs_delta_sum_MeV_per_u,
     std::uint64_t* positive_counts, std::uint64_t* negative_counts,

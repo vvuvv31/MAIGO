@@ -678,6 +678,10 @@ void TransportConfig::validate() const {
         throw std::invalid_argument(
             "cinel02_max_secondary_inelastic_generations must be between 0 and 2");
     }
+    if (cinel02_topas_compatibility_mode && nuclear_model != "cinel02") {
+        throw std::invalid_argument(
+            "cinel02_topas_compatibility_mode requires nuclear_model: cinel02");
+    }
     if (enable_nuclear_elastic && nuclear_model != "fred_paper") {
         throw std::invalid_argument(
             "enable_nuclear_elastic requires nuclear_model: fred_paper");
@@ -1522,6 +1526,9 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.cinel02_max_secondary_inelastic_generations = parse_number(
         values, "cinel02_max_secondary_inelastic_generations",
         config.cinel02_max_secondary_inelastic_generations);
+    config.cinel02_topas_compatibility_mode = parse_bool(
+        values, "cinel02_topas_compatibility_mode",
+        config.cinel02_topas_compatibility_mode);
     config.cinel02_strict_match = parse_bool(
         values, "cinel02_strict_match", config.cinel02_strict_match);
     if (const auto it = values.find("nuclear_model"); it != values.end()) {

@@ -1,6 +1,7 @@
 #include "carbon/io.hpp"
 #include "carbon/ct_grid.hpp"
 #include "carbon/particle.hpp"
+#include "carbon/detail/fred_fragmentation_data.hpp"
 
 
 #include <algorithm>
@@ -1351,6 +1352,25 @@ void write_energy_ledger_json(const std::filesystem::path& path,
     const auto sum_depth = [](const std::vector<double>& values) {
         return std::accumulate(values.begin(), values.end(), 0.0);
     };
+    const auto be6_species = get_charged_species_idx(4, 6);
+    std::uint64_t generated_be6_count = 0;
+    std::uint64_t queued_be6_count = 0;
+    double generated_be6_kinetic_MeV = 0.0;
+    double queued_be6_kinetic_MeV = 0.0;
+    if (be6_species >= 0 &&
+        be6_species < static_cast<int>(Cinel02ReplayLedgerSchema::species_count)) {
+        for (std::size_t parent = 0;
+             parent < Cinel02ReplayLedgerSchema::species_count; ++parent) {
+            const auto slot = parent * Cinel02ReplayLedgerSchema::species_count +
+                              static_cast<std::size_t>(be6_species);
+            generated_be6_count += result.cinel02_generated_transition_counts[slot];
+            queued_be6_count += result.cinel02_queued_transition_counts[slot];
+            generated_be6_kinetic_MeV +=
+                result.cinel02_generated_transition_kinetic_MeV[slot];
+            queued_be6_kinetic_MeV +=
+                result.cinel02_queued_transition_kinetic_MeV[slot];
+        }
+    }
     output << std::setprecision(12);
     output << "{\n"
            << "  \"histories\": " << config.number_of_histories << ",\n"
@@ -1367,8 +1387,8 @@ void write_energy_ledger_json(const std::filesystem::path& path,
            << ",\n"
            << "  \"E_beamline_MeV\": " << result.beamline_removed_energy_MeV
            << ",\n"
-           << "  \"E_untracked_MeV\": " << result.untracked_nuclear_energy_MeV
-           << ",\n"
+           << "  \"E_untracked_MeV\": " << result.untracked_nuclear_energy_MeV << ",\n"
+           << "  \"E_topas_compat_discarded_kinetic_MeV\": " << result.topas_compat_discarded_kinetic_total_MeV() << ",\n"
            << "  \"E_queue_lost_MeV\": "
            << result.secondary_queue_overflow_energy_MeV +
                   result.neutral_queue_overflow_energy_MeV
@@ -1480,6 +1500,47 @@ void write_energy_ledger_json(const std::filesystem::path& path,
                << result.cinel02_species_transport_ledger_MeV[i];
     }
     output << "],\n"
+           << "  \"cinel02_reference_compatibility\": {\n"
+           << "    \"mode\": \""
+           << (config.cinel02_topas_compatibility_mode
+                   ? "geant4_11_3_2_topas_4_2_p3"
+                   : "native_transport")
+           << "\",\n"
+           << "    \"unsupported_prompt_ion_policy\": \""
+           << (config.cinel02_topas_compatibility_mode
+                   ? "topas_compat_kill"
+                   : "stable_for_transport")
+           << "\",\n"
+           << "    \"policy_species\": [\"6Be\"],\n"
+           << "    \"produced_be6_count\": " << generated_be6_count << ",\n"
+           << "    \"produced_be6_kinetic_MeV\": " << generated_be6_kinetic_MeV << ",\n"
+           << "    \"queued_be6_count\": " << queued_be6_count << ",\n"
+           << "    \"queued_be6_kinetic_MeV\": " << queued_be6_kinetic_MeV << ",\n"
+           << "    \"topas_compat_discarded_counts\": [";
+    for (std::size_t i = 0;
+         i < result.cinel02_topas_compat_discarded_counts.size(); ++i) {
+        output << (i == 0 ? "" : ", ")
+               << result.cinel02_topas_compat_discarded_counts[i];
+    }
+    const auto discarded_kinetic_total = std::accumulate(
+        result.cinel02_topas_compat_discarded_kinetic_MeV.begin(),
+        result.cinel02_topas_compat_discarded_kinetic_MeV.end(), 0.0);
+    const auto discarded_count_total = std::accumulate(
+        result.cinel02_topas_compat_discarded_counts.begin(),
+        result.cinel02_topas_compat_discarded_counts.end(), std::uint64_t{0});
+    output << "],\n"
+           << "    \"topas_compat_discarded_kinetic_MeV\": [";
+    for (std::size_t i = 0;
+         i < result.cinel02_topas_compat_discarded_kinetic_MeV.size(); ++i) {
+        output << (i == 0 ? "" : ", ")
+               << result.cinel02_topas_compat_discarded_kinetic_MeV[i];
+    }
+    output << "],\n"
+           << "    \"topas_compat_discarded_count_total\": "
+           << discarded_count_total << ",\n"
+           << "    \"topas_compat_discarded_kinetic_total_MeV\": "
+           << discarded_kinetic_total << "\n"
+           << "  },\n"
            << "  \"cinel02_replay_handoff_layout\": "
               "{\"species\": [\"1H\",\"2H\",\"3H\",\"3He\",\"4He\",\"6He\","
               "\"6Li\",\"7Li\",\"7Be\",\"9Be\",\"10Be\",\"8B\","
@@ -1704,6 +1765,8 @@ void write_energy_ledger_json(const std::filesystem::path& path,
            << ",\n"
            << "  \"neutral_queue_overflow\": " << result.neutral_queue_overflow
            << ",\n"
+           << "  \"physical_energy_balance_error\": "
+           << result.physical_relative_energy_balance_error() << ",\n"
            << "  \"energy_balance_error\": "
            << result.relative_energy_balance_error() << "\n"
            << "}\n";

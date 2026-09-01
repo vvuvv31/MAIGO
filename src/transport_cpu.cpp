@@ -14,13 +14,29 @@
 
 namespace carbon {
 
-double TransportResult::relative_energy_balance_error() const noexcept {
+double TransportResult::topas_compat_discarded_kinetic_total_MeV() const noexcept {
+    return std::accumulate(cinel02_topas_compat_discarded_kinetic_MeV.begin(),
+                           cinel02_topas_compat_discarded_kinetic_MeV.end(), 0.0);
+}
+
+double TransportResult::physical_relative_energy_balance_error() const noexcept {
     if (initial_energy_MeV == 0.0) {
         return 0.0;
     }
     return std::abs(initial_energy_MeV - total_deposited_energy_MeV -
                     escaped_energy_MeV - beamline_removed_energy_MeV -
                     untracked_nuclear_energy_MeV - fred_model_unassigned_MeV) /
+           initial_energy_MeV;
+}
+
+double TransportResult::relative_energy_balance_error() const noexcept {
+    if (initial_energy_MeV == 0.0) {
+        return 0.0;
+    }
+    return std::abs(initial_energy_MeV - total_deposited_energy_MeV -
+                    escaped_energy_MeV - beamline_removed_energy_MeV -
+                    untracked_nuclear_energy_MeV - fred_model_unassigned_MeV -
+                    topas_compat_discarded_kinetic_total_MeV()) /
            initial_energy_MeV;
 }
 

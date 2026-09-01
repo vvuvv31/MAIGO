@@ -82,7 +82,8 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
     const auto raw_residual =
         result.initial_energy_MeV - result.total_deposited_energy_MeV -
         result.escaped_energy_MeV - result.beamline_removed_energy_MeV -
-        result.untracked_nuclear_energy_MeV;
+        result.untracked_nuclear_energy_MeV -
+        result.topas_compat_discarded_kinetic_total_MeV();
     report.absolute_energy_residual_MeV = std::abs(raw_residual);
     report.relative_energy_residual = result.relative_energy_balance_error();
 
@@ -143,6 +144,7 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
             result.escaped_energy_MeV,
             result.beamline_removed_energy_MeV,
             result.untracked_nuclear_energy_MeV,
+            result.topas_compat_discarded_kinetic_total_MeV(),
             result.generated_direct_secondary_energy_MeV,
             result.queued_secondary_energy_MeV,
             result.secondary_queue_overflow_energy_MeV,

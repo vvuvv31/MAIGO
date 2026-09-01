@@ -278,6 +278,10 @@ struct TransportConfig {
     // replay. Zero restricts inelastic reactions to the primary projectile.
     // Validated production configurations are limited to at most two.
     std::uint32_t cinel02_max_secondary_inelastic_generations{0};
+    // Reproduce TOPAS/Geant4 behavior for unsupported prompt-unstable
+    // products. Currently this is only Be-6: count its generated kinetic
+    // energy as an explicit compatibility sink and do not queue it.
+    bool cinel02_topas_compatibility_mode{false};
     // Reject a run when a sampled collision has no valid replay event or the
     // hazard/outcome counters do not close.
     bool cinel02_strict_match{false};

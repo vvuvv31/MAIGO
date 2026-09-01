@@ -65,6 +65,32 @@ struct MinibeamDiagnostics {
     double direction_y_squared_sum{0.0};
 };
 
+enum class Cinel02UnstableIonPolicy : std::uint8_t {
+    StableForTransport = 0,
+    RejectUnsupported = 1,
+    TopasCompatKill = 2,
+    PromptDecayKernel = 3,
+};
+
+// Table-driven policy for product identities whose lifetime/data semantics are
+// not represented by the normal condensed-history transport tables.  Keep the
+// default transport behavior stable for every identity except the explicitly
+// classified Be-6 reference case.
+constexpr Cinel02UnstableIonPolicy cinel02_unstable_ion_policy(
+    const int atomic_number, const int mass_number) noexcept {
+    return atomic_number == 4 && mass_number == 6
+        ? Cinel02UnstableIonPolicy::TopasCompatKill
+        : Cinel02UnstableIonPolicy::StableForTransport;
+}
+
+constexpr bool cinel02_should_topas_compat_kill(
+    const bool compatibility_mode, const int atomic_number,
+    const int mass_number) noexcept {
+    return compatibility_mode &&
+           cinel02_unstable_ion_policy(atomic_number, mass_number) ==
+               Cinel02UnstableIonPolicy::TopasCompatKill;
+}
+
 struct Cinel02SpeciesLedgerSchema {
     static constexpr std::size_t species_count = 18;
     static constexpr std::size_t metric_count = 11;
@@ -205,6 +231,13 @@ struct TransportResult {
                species_ledger_species_count *
                    Cinel02SpeciesLedgerSchema::terminal_reason_count>
         cinel02_species_terminal_reason_counts{};
+    // Explicit sink used only by TOPAS/Geant4 compatibility mode for
+    // unsupported prompt-unstable products (currently Be-6).  This is not
+    // dose, local nuclear deposit, reaction export, or physical escape.
+    std::array<std::uint64_t, species_ledger_species_count>
+        cinel02_topas_compat_discarded_counts{};
+    std::array<double, species_ledger_species_count>
+        cinel02_topas_compat_discarded_kinetic_MeV{};
     // Signed package/runtime incident-energy handoff diagnostics. The sums
     // are in MeV/u and are keyed by the projectile isotope of each valid
     // CINEL02 replay. Positive/negative counts classify the signed delta.
@@ -352,6 +385,11 @@ struct TransportResult {
     // Populated only when built with CARBON_TRANSPORT_PROFILE=1.
     TransportProfile profile;
 
+    // Accounting closure includes explicit TOPAS compatibility sinks.  The
+    // physical closure intentionally excludes those sinks so a reference
+    // model defect cannot be mistaken for deposited or escaped energy.
+    [[nodiscard]] double physical_relative_energy_balance_error() const noexcept;
+    [[nodiscard]] double topas_compat_discarded_kinetic_total_MeV() const noexcept;
     [[nodiscard]] double relative_energy_balance_error() const noexcept;
 };
 

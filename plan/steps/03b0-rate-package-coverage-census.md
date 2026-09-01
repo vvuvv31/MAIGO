@@ -56,12 +56,9 @@ python3 startup/package_tools/census_cinel02_rate_package_coverage.py \
 
 [x] 03B-0 已完成：Be-6 coverage 缺口已被确定性确认。
 
-下一步为 **03B-1 Be-6 rate/package coverage root-cause gate**：
+下一步为 **03B-2 support-aware rate consistency（仅 transportable isotopes）**；Be-6 已按 TOPAS reference policy 标记为 non-transportable：
+- 6Be 的 rate/replay coverage 视为 N/A，不计入 miss 门槛；coverage auditor 必须输出 non_transportable_prompt_decay。
+- 7Be/9Be/10Be、6Li/7Li 等 transportable isotopes 继续执行 support interval 与 reaction survival 审计。
 
-1. 从 package raw/contract/summary 追溯是否存在 `6Be` projectile exposure campaign；
-2. 区分“源数据从未生成 6Be 二次 projectile”与“compiler 过滤/unsupported mapping 丢失”；
-3. 不允许把 Be-7 rate 或任何其他 isotope alias 给 Be-6；
-4. 在获得独立 `6Be+H1`、`6Be+O16` exposure/rate 和 event package 之前，不修改 runtime 物理参数；
-5. 若 6Be 仅作为 primary CINEL02 product 出现而没有可复用的 secondary event 数据，应明确将其标为 unsupported secondary cascade，而不是静默使用零 rate。
 
-阶段 B 尚未完成：support-aware rate segmentation、runtime support mask 和 miss 下降门槛仍待实现。
+03B-2 尚未完成：support-aware rate segmentation、runtime support mask 和 miss 下降门槛仍待实现。

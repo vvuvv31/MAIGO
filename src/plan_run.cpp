@@ -133,6 +133,13 @@ void accumulate_transport_result(carbon::TransportResult& total,
         total.cinel02_species_terminal_reason_counts[i] +=
             part.cinel02_species_terminal_reason_counts[i];
     }
+    for (std::size_t i = 0;
+         i < total.cinel02_topas_compat_discarded_counts.size(); ++i) {
+        total.cinel02_topas_compat_discarded_counts[i] +=
+            part.cinel02_topas_compat_discarded_counts[i];
+        total.cinel02_topas_compat_discarded_kinetic_MeV[i] +=
+            part.cinel02_topas_compat_discarded_kinetic_MeV[i];
+    }
     for (std::size_t i = 0; i < total.cinel02_replay_delta_MeV_per_u.size(); ++i) {
         total.cinel02_replay_delta_MeV_per_u[i] +=
             part.cinel02_replay_delta_MeV_per_u[i];

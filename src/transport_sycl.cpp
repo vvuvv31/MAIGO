@@ -172,6 +172,8 @@ TransportResult transport_sycl(const TransportConfig& config,
         Cinel02SpeciesLedgerSchema::species_count *
         Cinel02SpeciesLedgerSchema::terminal_reason_count;
     std::uint64_t* cinel02_species_terminal_device = nullptr;
+    std::uint64_t* cinel02_topas_compat_discarded_counts_device = nullptr;
+    float* cinel02_topas_compat_discarded_kinetic_device = nullptr;
     float* cinel02_replay_delta_device = nullptr;
     float* cinel02_replay_abs_delta_device = nullptr;
     std::uint64_t* cinel02_replay_delta_positive_device = nullptr;
@@ -255,6 +257,10 @@ TransportResult transport_sycl(const TransportConfig& config,
             sycl::malloc_device<float>(kCinel02SpeciesEnergySlots, queue);
         cinel02_species_terminal_device = sycl::malloc_device<std::uint64_t>(
             kCinel02SpeciesTerminalSlots, queue);
+        cinel02_topas_compat_discarded_counts_device = sycl::malloc_device<std::uint64_t>(
+            Cinel02SpeciesLedgerSchema::species_count, queue);
+        cinel02_topas_compat_discarded_kinetic_device = sycl::malloc_device<float>(
+            Cinel02SpeciesLedgerSchema::species_count, queue);
         cinel02_replay_delta_device = sycl::malloc_device<float>(
             TransportResult::species_ledger_species_count, queue);
         cinel02_replay_abs_delta_device = sycl::malloc_device<float>(
@@ -302,7 +308,10 @@ TransportResult transport_sycl(const TransportConfig& config,
             cinel02_event_indices_device == nullptr || cinel02_rate_groups_device == nullptr ||
             cinel02_rate_samples_device == nullptr || cinel02_diag_device == nullptr ||
             cinel02_energy_device == nullptr || cinel02_species_energy_device == nullptr ||
-            cinel02_species_terminal_device == nullptr || cinel02_replay_delta_device == nullptr ||
+            cinel02_species_terminal_device == nullptr ||
+            cinel02_topas_compat_discarded_counts_device == nullptr ||
+            cinel02_topas_compat_discarded_kinetic_device == nullptr ||
+            cinel02_replay_delta_device == nullptr ||
             cinel02_replay_abs_delta_device == nullptr ||
             cinel02_replay_delta_positive_device == nullptr ||
             cinel02_replay_delta_negative_device == nullptr ||
@@ -349,6 +358,10 @@ TransportResult transport_sycl(const TransportConfig& config,
                    kCinel02SpeciesEnergySlots).wait_and_throw();
         queue.fill(cinel02_species_terminal_device, std::uint64_t{0},
                    kCinel02SpeciesTerminalSlots).wait_and_throw();
+        queue.fill(cinel02_topas_compat_discarded_counts_device, std::uint64_t{0},
+                   Cinel02SpeciesLedgerSchema::species_count).wait_and_throw();
+        queue.fill(cinel02_topas_compat_discarded_kinetic_device, 0.0F,
+                   Cinel02SpeciesLedgerSchema::species_count).wait_and_throw();
         queue.fill(cinel02_replay_delta_device, 0.0F,
                    TransportResult::species_ledger_species_count).wait_and_throw();
         queue.fill(cinel02_replay_abs_delta_device, 0.0F,
@@ -627,6 +640,8 @@ TransportResult transport_sycl(const TransportConfig& config,
     // Scorers & Result buffers
     const auto cinel02_max_secondary_inelastic_generations =
         config.cinel02_max_secondary_inelastic_generations;
+    const auto cinel02_topas_compatibility_mode =
+        use_cinel02 && config.cinel02_topas_compatibility_mode;
     const auto enable_voxel_scoring = config.enable_voxel_scoring;
     const auto enable_let_scoring = config.enable_let_scoring;
     const auto voxel_scorer_clamps_transport = config.voxel_scorer_clamps_transport;
@@ -2211,6 +2226,20 @@ TransportResult transport_sycl(const TransportConfig& config,
                                             }
                                         }
                                         if (product.role == 1) continue;
+                                        if (product.role == 0 && product.z > 0 && product.a > 0 &&
+                                            cinel02_should_topas_compat_kill(
+                                                cinel02_topas_compatibility_mode,
+                                                product.z, product.a)) {
+                                            // Match TOPAS/Geant4's unsupported prompt-ion
+                                            // fallback: generated, then killed before queue,
+                                            // with no daughter and no local deposit.
+                                            cinel02_record_topas_compat_discard_device(
+                                                cinel02_topas_compat_discarded_counts_device,
+                                                cinel02_topas_compat_discarded_kinetic_device,
+                                                product.z, product.a,
+                                                sycl::fmax(0.0F, product.kinetic_energy_MeV));
+                                            continue;
+                                        }
                                         if (product.role != 0 || product.z <= 0 || product.a <= 0) {
                                             untracked_MeV += sycl::fmax(
                                                 0.0F, product.kinetic_energy_MeV);
@@ -3178,6 +3207,21 @@ TransportResult transport_sycl(const TransportConfig& config,
                                                         transition_slot + 108U, kinetic_keV);
                                                 }
                                             }
+                                            if (product.role == 0 && product.z > 0 &&
+                                                product.a > 0 &&
+                                                cinel02_should_topas_compat_kill(
+                                                    cinel02_topas_compatibility_mode,
+                                                    product.z, product.a)) {
+                                                // Match TOPAS/Geant4's unsupported prompt-ion
+                                                // fallback: generated, then killed before queue,
+                                                // with no daughter and no local deposit.
+                                                cinel02_record_topas_compat_discard_device(
+                                                    cinel02_topas_compat_discarded_counts_device,
+                                                    cinel02_topas_compat_discarded_kinetic_device,
+                                                    product.z, product.a,
+                                                    sycl::fmax(0.0F, product.kinetic_energy_MeV));
+                                                continue;
+                                            }
                                             if (product.role != 0 || product.z <= 0 ||
                                                 product.a <= 0 ||
                                                 secondary_queue_device == nullptr) {
@@ -3693,6 +3737,10 @@ TransportResult transport_sycl(const TransportConfig& config,
     std::array<float, kCinel02SpeciesEnergySlots> cinel02_species_energy_host{};
     std::array<std::uint64_t, kCinel02SpeciesTerminalSlots>
         cinel02_species_terminal_host{};
+    std::array<std::uint64_t, TransportResult::species_ledger_species_count>
+        cinel02_topas_compat_discarded_counts_host{};
+    std::array<float, TransportResult::species_ledger_species_count>
+        cinel02_topas_compat_discarded_kinetic_host{};
     std::array<float, TransportResult::species_ledger_species_count>
         cinel02_replay_delta_host{};
     std::array<float, TransportResult::species_ledger_species_count>
@@ -3748,6 +3796,14 @@ TransportResult transport_sycl(const TransportConfig& config,
         queue.copy(cinel02_species_terminal_device,
                    cinel02_species_terminal_host.data(),
                    kCinel02SpeciesTerminalSlots);
+    }
+    if (cinel02_topas_compat_discarded_counts_device != nullptr) {
+        queue.copy(cinel02_topas_compat_discarded_counts_device,
+                   cinel02_topas_compat_discarded_counts_host.data(),
+                   TransportResult::species_ledger_species_count);
+        queue.copy(cinel02_topas_compat_discarded_kinetic_device,
+                   cinel02_topas_compat_discarded_kinetic_host.data(),
+                   TransportResult::species_ledger_species_count);
     }
     if (cinel02_replay_delta_device != nullptr) {
         queue.copy(cinel02_replay_delta_device, cinel02_replay_delta_host.data(),
@@ -3863,6 +3919,8 @@ TransportResult transport_sycl(const TransportConfig& config,
     free_device(cinel02_energy_device);
     free_device(cinel02_species_energy_device);
     free_device(cinel02_species_terminal_device);
+    free_device(cinel02_topas_compat_discarded_counts_device);
+    free_device(cinel02_topas_compat_discarded_kinetic_device);
     free_device(cinel02_replay_delta_device);
     free_device(cinel02_replay_abs_delta_device);
     free_device(cinel02_replay_delta_positive_device);
@@ -4131,6 +4189,12 @@ TransportResult transport_sycl(const TransportConfig& config,
     }
     result.cinel02_species_terminal_reason_counts =
         cinel02_species_terminal_host;
+    result.cinel02_topas_compat_discarded_counts =
+        cinel02_topas_compat_discarded_counts_host;
+    for (std::size_t i = 0; i < TransportResult::species_ledger_species_count; ++i) {
+        result.cinel02_topas_compat_discarded_kinetic_MeV[i] =
+            static_cast<double>(cinel02_topas_compat_discarded_kinetic_host[i]);
+    }
     for (std::size_t i = 0; i < TransportResult::species_ledger_species_count; ++i) {
         result.cinel02_replay_delta_MeV_per_u[i] =
             static_cast<double>(cinel02_replay_delta_host[i]);

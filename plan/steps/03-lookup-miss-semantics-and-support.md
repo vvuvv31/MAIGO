@@ -58,9 +58,9 @@ rate group 可在连续能区插值为非零，但 event replay 要求当前 `±
 1. [x] 追溯 raw exposure/contract/summary，确认缺少 6Be projectile campaign，而非 compiler 过滤丢失。
 2. [x] 确认 Be-6 仅作为 C-12 direct child 生成（raw 计数 27,186），没有 Be-6 projectile interaction。
 3. [x] 保持 isotope alias 禁止；独立 6Be 数据补充前不静默填 rate/event。
-4. [ ] 03B-1R：补充独立 6Be+H1/O16 TOPAS exposure 与 CINPKG03 event package。
+4. [x] 03B-1R：按 Job 495 reference semantics 实现 TopasCompatKill；不补充独立 6Be+H1/O16 exposure/package。
 
-### 03B-2：support-aware rate consistency（待执行）
+### 03B-2：support-aware rate consistency（待执行，仅 transportable isotopes）
 
 1. compiler/manifest 为每个 rate group 输出真正 event-support intervals/mask。
 2. runtime 仅在 tolerance window 内存在 event 时标记 replay-covered。
@@ -74,7 +74,7 @@ rate group 可在连续能区插值为非零，但 event replay 要求当前 `±
 - [x] miss 步保留 post-EM state，并通过 GPU 回归确认 status partition 与有效 replay
   统计不变。
 - [x] 03B-0 census 的区间 union/zero-rate 过滤 synthetic tests。
-- [x] 03B-1 raw campaign/compiler root-cause 判定完成；Be-6 数据补充转入 03B-1R。
+- [x] 03B-1 raw campaign/compiler root-cause 与 03B-1R compatibility policy 判定完成；不补充 Be-6 data。
 - [ ] 03B-2 仍需补充 rate-covered/event-uncovered、boundary hit、H/O 切换、G1/G2
   的 support-aware synthetic tests，以及逐 collision 的 support mask 验证。
 

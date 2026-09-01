@@ -3561,6 +3561,31 @@ void test_cinel02_replay_miss_mcs_semantics() {
 }
 
 void test_cinel02_ledger_schema_and_accumulator() {
+    require(carbon::cinel02_unstable_ion_policy(4, 6) ==
+                carbon::Cinel02UnstableIonPolicy::TopasCompatKill,
+            "Be-6 must use the TOPAS compatibility policy");
+    for (const auto& isotope : carbon::kFredIsotopes) {
+        const auto policy = carbon::cinel02_unstable_ion_policy(isotope.z, isotope.a);
+        require(policy == ((isotope.z == 4 && isotope.a == 6)
+                               ? carbon::Cinel02UnstableIonPolicy::TopasCompatKill
+                               : carbon::Cinel02UnstableIonPolicy::StableForTransport),
+                "unexpected unstable-ion policy table entry");
+    }
+    require(carbon::cinel02_should_topas_compat_kill(true, 4, 6),
+            "compatibility mode did not enable Be-6 kill");
+    require(!carbon::cinel02_should_topas_compat_kill(false, 4, 6),
+            "disabled compatibility mode still killed Be-6");
+    require(!carbon::cinel02_should_topas_compat_kill(true, 4, 7),
+            "compatibility mode killed transportable Be-7");
+    carbon::TransportConfig compat_config;
+    compat_config.nuclear_model = "cinel02";
+    compat_config.primary_inelastic_package_v2_file = "package.cinpkg";
+    compat_config.primary_inelastic_rate_v2_file = "rates.csv";
+    compat_config.cinel02_topas_compatibility_mode = true;
+    compat_config.validate();
+    compat_config.nuclear_model = "fred_paper";
+    require_throws([&compat_config] { compat_config.validate(); },
+                   "compatibility mode accepted a non-CINEL02 model");
     using Schema = carbon::Cinel02SpeciesLedgerSchema;
     using Replay = carbon::Cinel02ReplayLedgerSchema;
     static_assert(Schema::species_count == 18);
@@ -3575,6 +3600,11 @@ void test_cinel02_ledger_schema_and_accumulator() {
 
     carbon::TransportResult total{};
     carbon::TransportResult part{};
+    constexpr std::size_t be6_species = 17;
+    total.cinel02_topas_compat_discarded_counts[be6_species] = 2;
+    part.cinel02_topas_compat_discarded_counts[be6_species] = 3;
+    total.cinel02_topas_compat_discarded_kinetic_MeV[be6_species] = 4.5;
+    part.cinel02_topas_compat_discarded_kinetic_MeV[be6_species] = 5.5;
     constexpr std::array<std::size_t, 4> diagnostic_slots{0, 64, 928, 1388};
     for (std::size_t i = 0; i < diagnostic_slots.size(); ++i) {
         total.cinel02_diagnostics[diagnostic_slots[i]] = 10 + i;
@@ -3646,6 +3676,16 @@ void test_cinel02_ledger_schema_and_accumulator() {
     }
 
     carbon::accumulate_transport_result(total, part);
+    require(total.cinel02_topas_compat_discarded_counts[be6_species] == 5,
+            "compatibility sink count did not accumulate");
+    require_near(total.cinel02_topas_compat_discarded_kinetic_MeV[be6_species],
+                 10.0, 0.0, "compatibility sink kinetic energy did not accumulate");
+    total.initial_energy_MeV = 100.0;
+    total.total_deposited_energy_MeV = 90.0;
+    require_near(total.physical_relative_energy_balance_error(), 0.1, 0.0,
+                 "physical closure must expose compatibility sink");
+    require_near(total.relative_energy_balance_error(), 0.0, 0.0,
+                 "accounting closure must include compatibility sink");
     for (std::size_t i = 0; i < diagnostic_slots.size(); ++i) {
         require(total.cinel02_diagnostics[diagnostic_slots[i]] == 110 + 3 * i,
                 "CINEL02 diagnostic accumulator mismatch");
