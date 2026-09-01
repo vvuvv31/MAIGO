@@ -152,7 +152,7 @@ struct Cinel02ExposureLedgerSchema {
         Cinel02ReplayLedgerSchema::energy_bin_width_MeV_per_u;
     static constexpr std::size_t cell_count =
         species_count * generation_count * energy_bin_count;
-    static constexpr std::size_t sum_metric_count = 10;
+    static constexpr std::size_t sum_metric_count = 13;
     static constexpr std::size_t count_metric_count = 4;
     static constexpr std::size_t sum_slot_count = cell_count * sum_metric_count;
     static constexpr std::size_t count_slot_count = cell_count * count_metric_count;
@@ -167,7 +167,11 @@ struct Cinel02ExposureLedgerSchema {
         path_mm_o_uncovered = 6,
         hazard_h = 7,
         hazard_o = 8,
-        hazard_total = 9
+        hazard_total = 9,
+        // Counterfactual optical depth for generation-blocked steps; diagnostic only.
+        hazard_blocked_h = 10,
+        hazard_blocked_o = 11,
+        hazard_blocked_total = 12
     };
     enum CountMetric : std::size_t {
         collision_candidates = 0,

@@ -3,13 +3,14 @@
 
 This tool is intentionally descriptive: it never modifies rates, package data,
 or a runtime ledger.  It aggregates the 04A isotope x transport-generation x
-10-MeV/u-bin arrays into one row per isotope, preserving generation eligibility
+10-MeV/u-bin arrays into isotope and isotope×generation rows, preserving generation eligibility
 and H/O coverage as separate path categories.
 """
 from __future__ import annotations
 
 import argparse
 import json
+import math
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +22,7 @@ SUM_METRICS = [
     "path_mm_total", "path_mm_generation_eligible", "path_mm_generation_blocked",
     "path_mm_rate_covered", "path_mm_rate_uncovered", "path_mm_h_uncovered",
     "path_mm_o_uncovered", "hazard_h", "hazard_o", "hazard_total",
+    "hazard_blocked_h", "hazard_blocked_o", "hazard_blocked_total",
 ]
 COUNT_METRICS = [
     "collision_candidates", "replay_valid", "parent_killed", "parent_continued",
@@ -63,11 +65,69 @@ def summarize(ledger: dict[str, Any]) -> dict[str, Any]:
         row["rate_coverage_fraction_of_eligible"] = (
             row["path_mm_rate_covered"] / eligible if eligible > 0.0 else 0.0
         )
+        tau_runtime = row["hazard_total"]
+        tau_blocked = row["hazard_blocked_total"]
+        row["tau_runtime"] = tau_runtime
+        row["tau_blocked_counterfactual"] = tau_blocked
+        row["blocked_hazard_fraction"] = (
+            tau_blocked / (tau_runtime + tau_blocked)
+            if tau_runtime + tau_blocked > 0.0 else 0.0
+        )
+        row["candidate_minus_tau_runtime"] = row["collision_candidates"] - tau_runtime
+        row["candidate_to_tau_runtime"] = (
+            row["collision_candidates"] / tau_runtime if tau_runtime > 0.0 else None
+        )
+        row["candidate_z_score"] = (
+            row["candidate_minus_tau_runtime"] / math.sqrt(tau_runtime)
+            if tau_runtime > 0.0 else None
+        )
         rows.append(row)
+    generation_rows: list[dict[str, Any]] = []
+    for species_index, species in enumerate(SPECIES):
+        for generation in range(3):
+            row: dict[str, Any] = {"species": species, "transport_generation": generation}
+            for metric_index, metric in enumerate(SUM_METRICS):
+                value = 0.0
+                for energy_bin in range(40):
+                    cell = (species_index * 3 + generation) * 40 + energy_bin
+                    value += float(sums[cell * len(SUM_METRICS) + metric_index])
+                row[metric] = value
+            for metric_index, metric in enumerate(COUNT_METRICS):
+                value = 0
+                for energy_bin in range(40):
+                    cell = (species_index * 3 + generation) * 40 + energy_bin
+                    value += int(counts[cell * len(COUNT_METRICS) + metric_index])
+                row[metric] = value
+            total = row["path_mm_total"]
+            eligible = row["path_mm_generation_eligible"]
+            tau_runtime = row["hazard_total"]
+            tau_blocked = row["hazard_blocked_total"]
+            row["generation_blocked_fraction"] = (
+                row["path_mm_generation_blocked"] / total if total > 0.0 else 0.0
+            )
+            row["rate_coverage_fraction_of_eligible"] = (
+                row["path_mm_rate_covered"] / eligible if eligible > 0.0 else 0.0
+            )
+            row["tau_runtime"] = tau_runtime
+            row["tau_blocked_counterfactual"] = tau_blocked
+            row["blocked_hazard_fraction"] = (
+                tau_blocked / (tau_runtime + tau_blocked)
+                if tau_runtime + tau_blocked > 0.0 else 0.0
+            )
+            row["candidate_minus_tau_runtime"] = row["collision_candidates"] - tau_runtime
+            row["candidate_to_tau_runtime"] = (
+                row["collision_candidates"] / tau_runtime if tau_runtime > 0.0 else None
+            )
+            row["candidate_z_score"] = (
+                row["candidate_minus_tau_runtime"] / math.sqrt(tau_runtime)
+                if tau_runtime > 0.0 else None
+            )
+            generation_rows.append(row)
     return {
-        "schema": "cinel02_secondary_exposure_v1",
+        "schema": "cinel02_secondary_exposure_v2",
         "layout": layout,
         "species": rows,
+        "species_by_generation": generation_rows,
     }
 
 

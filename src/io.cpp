@@ -1606,7 +1606,7 @@ void write_energy_ledger_json(const std::filesystem::path& path,
     output << "],\n"
            << "  \"cinel02_secondary_exposure_layout\": "
               "{\"shape\":[18,3,40],\"order\":[\"projectile_species\",\"transport_generation\",\"energy_bin\"],"
-              "\"sum_metrics\":[\"path_mm_total\",\"path_mm_generation_eligible\",\"path_mm_generation_blocked\",\"path_mm_rate_covered\",\"path_mm_rate_uncovered\",\"path_mm_h_uncovered\",\"path_mm_o_uncovered\",\"hazard_h\",\"hazard_o\",\"hazard_total\"],"
+              "\"sum_metrics\":[\"path_mm_total\",\"path_mm_generation_eligible\",\"path_mm_generation_blocked\",\"path_mm_rate_covered\",\"path_mm_rate_uncovered\",\"path_mm_h_uncovered\",\"path_mm_o_uncovered\",\"hazard_h\",\"hazard_o\",\"hazard_total\",\"hazard_blocked_h\",\"hazard_blocked_o\",\"hazard_blocked_total\"],"
               "\"count_metrics\":[\"collision_candidates\",\"replay_valid\",\"parent_killed\",\"parent_continued\"],"
               "\"energy_bin_width_MeV_per_u\":10,\"transport_generations\":[0,1,2],"
               "\"projectile_species\":[\"1H\",\"2H\",\"3H\",\"3He\",\"4He\",\"6He\",\"6Li\",\"7Li\",\"7Be\",\"9Be\",\"10Be\",\"8B\",\"10B\",\"11B\",\"10C\",\"11C\",\"12C\",\"6Be\"]},\n"

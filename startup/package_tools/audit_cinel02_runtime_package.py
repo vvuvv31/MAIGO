@@ -308,6 +308,8 @@ def _summarise(rows: list[dict[str, Any]], ledger: dict[str, Any]) -> dict[str, 
     expected_ke = [0.0] * (18 * 18)
     expected_parent_continue = [0.0] * 18
     expected_parent_kill = [0.0] * 18
+    expected_parent_continue_cell = [0.0] * (18 * 2 * 3)
+    expected_parent_kill_cell = [0.0] * (18 * 2 * 3)
     support_missing = []
     for row in rows:
         parent = int(row["species"])
@@ -319,6 +321,9 @@ def _summarise(rows: list[dict[str, Any]], ledger: dict[str, Any]) -> dict[str, 
             expected_variance[parent * 18 + child] += float(value) * float(value)
         expected_parent_continue[parent] += float(row["expected_valid_parent_continue_count"])
         expected_parent_kill[parent] += float(row["expected_valid_parent_kill_count"])
+        outcome_cell = ((parent * 2 + int(row["target"])) * 3 + int(row["reaction_generation"]))
+        expected_parent_continue_cell[outcome_cell] += float(row["expected_valid_parent_continue_count"])
+        expected_parent_kill_cell[outcome_cell] += float(row["expected_valid_parent_kill_count"])
         if not row["support_qualified"]:
             support_missing.append({"species": SPECIES[parent], "target": row["target"], "reaction_generation": row["reaction_generation"], "energy_bin": row["energy_bin"], "valid_count": row["valid_count"]})
     actual_generated = _actual_transition(ledger, "cinel02_generated_transition_counts")
@@ -355,6 +360,35 @@ def _summarise(rows: list[dict[str, Any]], ledger: dict[str, Any]) -> dict[str, 
             "count_difference_z_score": (actual - expected_child) / stddev if stddev > 0.0 else None,
             "relative_difference_percent": (actual - expected_child) / expected_child * 100.0 if expected_child > 0.0 else None,
         })
+    actual_parent_outcome = ledger.get("cinel02_parent_outcome_counts")
+    if not isinstance(actual_parent_outcome, list) or len(actual_parent_outcome) != 18 * 2 * 3 * 2:
+        raise ValueError("ledger missing isotope×target×generation parent outcome counts")
+    parent_outcome_rows = []
+    for parent in range(18):
+        for target in range(2):
+            for generation in range(3):
+                cell = (parent * 2 + target) * 3 + generation
+                actual_continue = int(actual_parent_outcome[cell * 2])
+                actual_kill = int(actual_parent_outcome[cell * 2 + 1])
+                expected_continue = expected_parent_continue_cell[cell]
+                expected_kill = expected_parent_kill_cell[cell]
+                expected_total = expected_continue + expected_kill
+                actual_total = actual_continue + actual_kill
+                parent_outcome_rows.append({
+                    "projectile": SPECIES[parent],
+                    "target": ("H", "O")[target],
+                    "reaction_generation": generation,
+                    "actual_valid_count": actual_total,
+                    "actual_continue_count": actual_continue,
+                    "actual_kill_count": actual_kill,
+                    "actual_continue_fraction": (actual_continue / actual_total if actual_total else None),
+                    "expected_valid_count": expected_total,
+                    "expected_continue_count": expected_continue,
+                    "expected_kill_count": expected_kill,
+                    "expected_continue_fraction": (expected_continue / expected_total if expected_total else None),
+                    "continue_count_difference": actual_continue - expected_continue,
+                    "kill_count_difference": actual_kill - expected_kill,
+                })
     total_expected = sum(expected)
     total_stddev = math.sqrt(sum(expected_variance))
     total_actual = sum(actual_generated)
@@ -370,6 +404,7 @@ def _summarise(rows: list[dict[str, Any]], ledger: dict[str, Any]) -> dict[str, 
         "total_count_difference_z_score": (total_actual - total_expected) / total_stddev if total_stddev > 0.0 else None,
         "child_species_summary": child_summary,
         "transition_rows": transition_rows,
+        "parent_outcome_rows": parent_outcome_rows,
         "note": "Expectation uses each occupied replay cell's mean post-EM energy; standard deviations are approximate package-event sampling errors. Ledger does not retain per-collision energies, so support and energy-occupancy conclusions remain provisional for cells with sparse nodes.",
     }
 

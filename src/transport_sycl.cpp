@@ -2977,6 +2977,35 @@ TransportResult transport_sycl(const TransportConfig& config,
                                         static_cast<std::uint32_t>(
                                             Cinel02ExposureLedgerSchema::path_mm_generation_blocked),
                                         sec_step_mm);
+                                    // Counterfactual hazard for this blocked segment.
+                                    // Keep H/O separate when only one target is covered;
+                                    // total is defined only for a complete H/O pair, exactly
+                                    // as in the runtime target selector.
+                                    if (exposure_h_covered) {
+                                        cinel02_exposure_sum_add_device(
+                                            cinel02_secondary_exposure_sums_device,
+                                            exposure_cell,
+                                            static_cast<std::uint32_t>(
+                                                Cinel02ExposureLedgerSchema::hazard_blocked_h),
+                                            exposure_h_lookup.value_per_mm * sec_step_mm);
+                                    }
+                                    if (exposure_o_covered) {
+                                        cinel02_exposure_sum_add_device(
+                                            cinel02_secondary_exposure_sums_device,
+                                            exposure_cell,
+                                            static_cast<std::uint32_t>(
+                                                Cinel02ExposureLedgerSchema::hazard_blocked_o),
+                                            exposure_o_lookup.value_per_mm * sec_step_mm);
+                                    }
+                                    if (exposure_rate_covered) {
+                                        cinel02_exposure_sum_add_device(
+                                            cinel02_secondary_exposure_sums_device,
+                                            exposure_cell,
+                                            static_cast<std::uint32_t>(
+                                                Cinel02ExposureLedgerSchema::hazard_blocked_total),
+                                            (exposure_h_lookup.value_per_mm +
+                                             exposure_o_lookup.value_per_mm) * sec_step_mm);
+                                    }
                                 }
                             }
 

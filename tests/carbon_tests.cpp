@@ -3630,8 +3630,9 @@ void test_cinel02_ledger_schema_and_accumulator() {
     static_assert(Replay::parent_outcome_cell_count == 18 * 2 * 3 * 2);
     static_assert(Replay::transition_cell_count == 18 * 18);
     static_assert(Exposure::cell_count == 18 * 3 * 40);
-    static_assert(Exposure::sum_slot_count == Exposure::cell_count * 10);
+    static_assert(Exposure::sum_slot_count == Exposure::cell_count * 13);
     static_assert(Exposure::count_slot_count == Exposure::cell_count * 4);
+    static_assert(Exposure::hazard_blocked_total + 1 == Exposure::sum_metric_count);
 
     carbon::TransportResult total{};
     carbon::TransportResult part{};
