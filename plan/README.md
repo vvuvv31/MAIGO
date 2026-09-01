@@ -39,9 +39,9 @@
 
 ## 进度控制
 
-当前完成度：**5/13（约 38%）**；Step 03 阶段 A 已完成，阶段 B 仍进行中。
+当前完成度：**5/13（约 38%）**；Step 03 阶段 A 与 03B-0 已完成，阶段 B 的 03B-1/03B-2 仍进行中。
 
-Step 01A ledger correctness、Step 01A.5 signed handoff、Step 01B compact isotope 诊断仪器和 Step 02 deterministic package auditor 已完成；Step 03 阶段 A 已修复 replay miss 的 null-collision MCS semantics，当前继续执行 **Step 03 阶段 B：support-aware rate consistency**。Step 01B.1 已完成；p/d/He4 的物理 residual 仍未修复，不能把诊断步骤误记为物理收敛。
+Step 01A ledger correctness、Step 01A.5 signed handoff、Step 01B compact isotope 诊断仪器和 Step 02 deterministic package auditor 已完成；Step 03 阶段 A 已修复 replay miss 的 null-collision MCS semantics，03B-0 已确定 Be-6 rate/package coverage 缺口，当前继续执行 **Step 03 阶段 B：03B-1 Be-6 root-cause 与 03B-2 support-aware rate consistency**。Step 01B.1 已完成；p/d/He4 的物理 residual 仍未修复，不能把诊断步骤误记为物理收敛。
 
 | 状态 | 步骤 | 主要产出 |
 |---|---|---|
@@ -51,7 +51,7 @@ Step 01A ledger correctness、Step 01A.5 signed handoff、Step 01B compact isoto
 | [x] | [01B Compact isotope replay ledger](steps/01b-compact-isotope-replay-ledger.md) | isotope×target×generation status、parent outcome、transition |
 | [x] | [01B.1 Replay semantics cleanup](steps/01b1-replay-semantics-cleanup.md) | lookup miss/cutoff 拆分；rate/replay/dE energy handoff |
 | [x] | [02 Deterministic package auditor](steps/02-deterministic-package-yield-auditor.md) | GPU actual vs package exact vs TOPAS source；10-MeV occupancy audit |
-| [ ] | [03 Lookup miss semantics/support](steps/03-lookup-miss-semantics-and-support.md) | 阶段 A null-collision MCS 已完成；阶段 B support-aware rate 待完成 |
+| [ ] | [03 Lookup miss semantics/support](steps/03-lookup-miss-semantics-and-support.md) | 阶段 A 与 03B-0 census 已完成；03B-1 Be-6 coverage、03B-2 support-aware rate 待完成 |
 | [ ] | [04 MCS-only species/FOV](steps/04-mcs-only-species-fov.md) | step convergence、species-aware full-2GR、FOV acceptance |
 | [ ] | [05 Stopping/range regression](steps/05-stopping-range-regression.md) | Be/Li explicit-table range 与 unrestricted deposition |
 | [ ] | [06 Non-C12 straggling](steps/06-nonc12-straggling.md) | mean-preserving species-aware fluctuation |
@@ -59,7 +59,22 @@ Step 01A ledger correctness、Step 01A.5 signed handoff、Step 01B compact isoto
 | [ ] | [08 Package 修改门禁](steps/08-package-change-gate.md) | 仅在 job 485 + auditor 同向时修 construction cause |
 | [ ] | [09 100/200/300 最终验收](steps/09-multienergy-final-validation.md) | 同一 physics 参数的多 seed 报告 |
 
-### Step 01B 运行证据
+### Step 03B-0 运行证据
+
+2026-09-01 在沙盒外完成 rate/package census，输入为当前 200 MeV/u G1 基线使用的
+`cascade_e400_rates.csv` 与 `research_hybrid_e200light107.cinpkg`，replay tolerance 为
+`±0.51 MeV/u`。输出：
+`plan/artifacts/cinel02-rate-package-census-e200-g1/census.json`、`census.csv` 和 `RESULTS.md`。
+
+36 个显式 isotope×target rate group 全部存在，但只有 34 个有正 rate；package 也只有
+34/36 个请求 group 有 global event nodes。`6Be+H1` 与 `6Be+O16` 的 rate sample 均为
+445 个且全为零，package node 数均为 0；`7Be/9Be/10Be` 与 `6Li/7Li` 均有正 rate 和
+package nodes。由此确定 Be-6 的 GPU secondary replay candidate=0 是输入 coverage 缺口，
+不是 100k 抽样偶然。全局 3249 个正 rate sample 落在 package support 外，需结合实际
+occupancy 在 03B-2 处理；本步骤不改变 runtime physics。详见
+[03B-0 step record](steps/03b0-rate-package-coverage-census.md)。
+
+## Step 01B 运行证据
 
 2026-09-01 在本机 RTX 2080Ti、200 MeV/u、G1、100k、seed `2026095100` 完成。
 Replay status（10 MeV/u bins）为 candidate/valid/lookup-miss/invalid/cutoff = `71524/71318/192/0/14`，

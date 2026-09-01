@@ -45,6 +45,22 @@ rate group 可在连续能区插值为非零，但 event replay 要求当前 `±
 
 ## 阶段 B：Support-aware rate
 
+### 03B-0：18 isotope coverage census
+
+- [x] 只读扫描 rate CSV 与 CINPKG03 global energy nodes。
+- [x] 确认 6Be rate group 存在但 H/O 全为零，且 package 无 6Be event-support nodes。
+- [x] 确认 6Li/7Li、7Be/9Be/10Be 等其他关键 isotope 具有正 rate 与 package nodes。
+- [x] 输出 `plan/artifacts/cinel02-rate-package-census-e200-g1/`；详见
+  [03B-0 record](03b0-rate-package-coverage-census.md)。
+
+### 03B-1：Be-6 coverage root-cause gate（进行中）
+
+1. 追溯 raw exposure/contract/summary，区分缺少 6Be projectile campaign 与 compiler 过滤丢失。
+2. 禁止 isotope alias；没有独立 6Be 数据时不得静默补 rate 或 event。
+3. 如需补数据，先生成独立 6Be+H1/O16 exposure 与 CINPKG03 event package，再通过统计门禁。
+
+### 03B-2：support-aware rate consistency（待执行）
+
 1. compiler/manifest 为每个 rate group 输出真正 event-support intervals/mask。
 2. runtime 仅在 tolerance window 内存在 event 时标记 replay-covered。
 3. 不跨大能差寻找 nearest event，不扩大 tolerance 来隐藏 gap。
@@ -56,7 +72,9 @@ rate group 可在连续能区插值为非零，但 event replay 要求当前 `±
   invalid replay、valid replay、cutoff 和禁用 MCS。
 - [x] miss 步保留 post-EM state，并通过 GPU 回归确认 status partition 与有效 replay
   统计不变。
-- [ ] 阶段 B 仍需补充 rate-covered/event-uncovered、boundary hit、H/O 切换、G1/G2
+- [x] 03B-0 census 的区间 union/zero-rate 过滤 synthetic tests。
+- [ ] 03B-1 仍需完成 raw campaign/compiler root-cause 判定。
+- [ ] 03B-2 仍需补充 rate-covered/event-uncovered、boundary hit、H/O 切换、G1/G2
   的 support-aware synthetic tests，以及逐 collision 的 support mask 验证。
 
 ## 退出条件
