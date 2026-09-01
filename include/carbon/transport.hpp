@@ -110,6 +110,18 @@ struct Cinel02ReplayLedgerSchema {
     };
 };
 
+// A secondary inelastic hazard suppresses the normal per-step MCS only when a
+// valid CINEL02 final state was actually replayed. Lookup misses and invalid
+// package records are null collisions: the post-EM state is retained and the
+// same MCS that a non-nuclear step would receive must still be applied.
+constexpr bool cinel02_should_apply_secondary_mcs(
+    const bool secondary_inelastic, const bool replay_succeeded,
+    const bool enable_multiple_scattering, const float kinetic_energy_MeV,
+    const float energy_cutoff_MeV) noexcept {
+    return enable_multiple_scattering && kinetic_energy_MeV > energy_cutoff_MeV &&
+           (!secondary_inelastic || !replay_succeeded);
+}
+
 struct TransportResult {
     static constexpr std::size_t species_ledger_species_count =
         Cinel02SpeciesLedgerSchema::species_count;

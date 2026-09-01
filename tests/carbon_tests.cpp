@@ -3538,6 +3538,28 @@ void test_table1_inclusive_sampling() {
     require(saw_n_h, "Table 1 H sampling must be able to return neutrons");
 }
 
+void test_cinel02_replay_miss_mcs_semantics() {
+    constexpr float cutoff = 1.0F;
+    require(carbon::cinel02_should_apply_secondary_mcs(
+                false, false, true, 10.0F, cutoff),
+            "ordinary secondary step must apply MCS");
+    require(carbon::cinel02_should_apply_secondary_mcs(
+                true, false, true, 10.0F, cutoff),
+            "replay lookup miss must apply null-collision MCS");
+    require(carbon::cinel02_should_apply_secondary_mcs(
+                true, false, true, 10.0F, cutoff),
+            "invalid replay must apply null-collision MCS");
+    require(!carbon::cinel02_should_apply_secondary_mcs(
+                true, true, true, 10.0F, cutoff),
+            "valid replay must not apply the ordinary step MCS twice");
+    require(!carbon::cinel02_should_apply_secondary_mcs(
+                true, false, true, cutoff, cutoff),
+            "below-cutoff null collision must not apply MCS");
+    require(!carbon::cinel02_should_apply_secondary_mcs(
+                true, false, false, 10.0F, cutoff),
+            "disabled MCS must remain disabled for a replay miss");
+}
+
 void test_cinel02_ledger_schema_and_accumulator() {
     using Schema = carbon::Cinel02SpeciesLedgerSchema;
     using Replay = carbon::Cinel02ReplayLedgerSchema;
@@ -3718,6 +3740,7 @@ void test_cinel02_ledger_schema_and_accumulator() {
 int main() {
     try {
         test_fred_18_isotopes_data();
+        test_cinel02_replay_miss_mcs_semantics();
         test_cinel02_ledger_schema_and_accumulator();
         test_ion_species_stopping_power_grid_validation();
         test_stopping_power_csv_corruption_rejection();

@@ -2784,6 +2784,11 @@ TransportResult transport_sycl(const TransportConfig& config,
                             }
                             sec_step_mm = sycl::fmax(sec_step_mm, 1.0e-5F);
                             bool secondary_inelastic = false;
+                            // A nuclear hazard is not necessarily a replayed
+                            // event. Keep this separate so lookup misses and
+                            // invalid records follow null-collision transport
+                            // semantics and still receive normal MCS.
+                            bool secondary_replay_succeeded = false;
                             std::int16_t secondary_target_z = 0;
                             std::int16_t secondary_target_a = 0;
                             if (use_cinel02 && frag.generation <
@@ -2975,6 +2980,7 @@ TransportResult transport_sycl(const TransportConfig& config,
                                     if (product_end <= cinel02_product_count &&
                                         (event.parent_status == 0 ||
                                          event.parent_status == 2)) {
+                                        secondary_replay_succeeded = true;
                                         cinel02_diag_increment_device(
                                             cinel02_diag_device,
                                             event.parent_status == 0 ? 8U : 9U);
@@ -3367,8 +3373,10 @@ TransportResult transport_sycl(const TransportConfig& config,
                                 sec_z = post_em_z;
                             }
 
-                            if (!secondary_inelastic && enable_multiple_scattering &&
-                                sec_e > energy_cutoff_MeV) {
+                            if (cinel02_should_apply_secondary_mcs(
+                                    secondary_inelastic, secondary_replay_succeeded,
+                                    enable_multiple_scattering, sec_e,
+                                    energy_cutoff_MeV)) {
                                 constexpr float two_pi = 6.2831853071795864769F;
                                 float theta_scat = 0.0F;
                                 float phi_scat = 0.0F;
