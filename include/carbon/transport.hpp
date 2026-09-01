@@ -66,6 +66,8 @@ struct MinibeamDiagnostics {
 };
 
 struct TransportResult {
+    static constexpr std::size_t species_ledger_species_count = 18;
+    static constexpr std::size_t species_ledger_metric_count = 10;
     std::vector<double> deposited_energy_MeV;
     std::vector<double> voxel_deposited_energy_MeV;
     std::vector<double> in_fov_deposited_energy_MeV;
@@ -138,6 +140,8 @@ struct TransportResult {
     // Aggregate kinetic-energy classification for valid CINEL02 replays.
     // Layout is emitted with the energy ledger JSON.
     std::array<double, 8> cinel02_energy_ledger_MeV{};
+    std::array<double, species_ledger_species_count * species_ledger_metric_count>
+        cinel02_species_transport_ledger_MeV{};
     std::array<std::uint64_t, 18> fred_isotope_counts{};
     std::uint64_t fred_inelastic_events{0};
     std::uint64_t fred_retry_sum{0};

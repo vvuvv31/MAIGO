@@ -120,6 +120,11 @@ void accumulate_transport_result(carbon::TransportResult& total,
     for (std::size_t i = 0; i < total.cinel02_energy_ledger_MeV.size(); ++i) {
         total.cinel02_energy_ledger_MeV[i] += part.cinel02_energy_ledger_MeV[i];
     }
+    for (std::size_t i = 0;
+         i < total.cinel02_species_transport_ledger_MeV.size(); ++i) {
+        total.cinel02_species_transport_ledger_MeV[i] +=
+            part.cinel02_species_transport_ledger_MeV[i];
+    }
     for (std::size_t i = 0; i < total.fred_isotope_counts.size(); ++i) {
         total.fred_isotope_counts[i] += part.fred_isotope_counts[i];
     }

@@ -1464,6 +1464,22 @@ void write_energy_ledger_json(const std::filesystem::path& path,
         result.cinel02_energy_ledger_MeV[6] -
         result.cinel02_energy_ledger_MeV[7];
     output << "],\n"
+           << "  \"cinel02_species_transport_ledger_layout\": "
+              "{\"shape\":[18,10],\"order\":[\"species\",\"metric\"],"
+              "\"species\":[\"1H\",\"2H\",\"3H\",\"3He\",\"4He\",\"6He\","
+              "\"6Li\",\"7Li\",\"7Be\",\"9Be\",\"10Be\",\"8B\",\"10B\","
+              "\"11B\",\"10C\",\"11C\",\"12C\",\"6Be\"],"
+              "\"metric\":[\"birth_kinetic\",\"continuous_deposit_all\","
+              "\"continuous_deposit_fov\",\"nuclear_local_deposit_all\","
+              "\"nuclear_local_deposit_fov\",\"cutoff_end_deposit_all\","
+              "\"cutoff_end_deposit_fov\",\"escaped_kinetic\",\"reaction_removed_kinetic\",\"step_limit_escape_kinetic\"]},\n"
+           << "  \"cinel02_species_transport_ledger_MeV\": [";
+    for (std::size_t i = 0;
+         i < result.cinel02_species_transport_ledger_MeV.size(); ++i) {
+        output << (i == 0 ? "" : ", ")
+               << result.cinel02_species_transport_ledger_MeV[i];
+    }
+    output << "],\n"
            << "  \"cinel02_kinetic_q_excitation_bucket_MeV\": "
            << cinel02_kinetic_q_bucket << ",\n"
            << "  \"cinel02_diagnostic_layout\": "
