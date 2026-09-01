@@ -45,6 +45,16 @@ rate group 可在连续能区插值为非零，但 event replay 要求当前 `±
 
 ## 阶段 B：Support-aware rate
 
+### 03B-2A：occupancy-aware support audit（2026-09-01）
+
+- [x] 只读使用 rate/package census 与 10-MeV/u replay ledger，按 isotope×target×reaction_generation×energy cell 汇总 candidate、valid、miss、cutoff 及 rate/replay energy。
+- [x] 将 miss 按 occupied-cell mean provisional 分类为 `raw_or_compiler_support_gap`、`post_em_support_boundary`、`index_or_lookup_anomaly` 或 `rate_occupancy_or_interpolation_gap`；不修改 runtime rate、CDF、tolerance 或 target mix。
+- [x] 6Be 从 audit 中排除并标记 `non_transportable_prompt_decay`，不再作为 missing rate coverage。
+- [x] 输出：`startup/package_tools/audit_cinel02_replay_support_occupancy.py`、`plan/artifacts/cinel02-replay-support-occupancy-e200-g1-topascompat/audit.{json,csv}`。
+- [x] canonical compatibility 100k 结果：transportable isotope candidate=71524、lookup miss=192（0.268441%）；Li6/Li7、Be7/Be9/Be10 miss 均为 0。174/192 miss 落入 raw/compiler support-gap provisional bucket，18/192 为 index/lookup anomaly provisional bucket。
+- [ ] 由于 ledger 没有 per-collision path length，本步只报告 `-log(1-miss fraction)` optical-depth proxy，不能宣称物理 integrated optical depth 已闭合。
+
+
 ### 03B-0：18 isotope coverage census
 
 - [x] 只读扫描 rate CSV 与 CINPKG03 global energy nodes。
@@ -62,10 +72,10 @@ rate group 可在连续能区插值为非零，但 event replay 要求当前 `±
 
 ### 03B-2：support-aware rate consistency（待执行，仅 transportable isotopes）
 
-1. compiler/manifest 为每个 rate group 输出真正 event-support intervals/mask。
-2. runtime 仅在 tolerance window 内存在 event 时标记 replay-covered。
-3. 不跨大能差寻找 nearest event，不扩大 tolerance 来隐藏 gap。
-4. 检查 support mask 对 rate/reaction CDF 的影响，不允许无声重归一化 isotope yield。
+1. [ ] compiler/manifest 为每个 rate group 输出真正 event-support intervals/mask（先修 source/compiler consistency）。
+2. [ ] runtime 仅在 tolerance window 内存在 event 时标记 replay-covered；不得简单在 E_rate 上乘 mask。
+3. [x] 不跨大能差寻找 nearest event，不扩大 tolerance 来隐藏 gap；03B-2A 已证明 Be/Li miss 为 0，暂不改 runtime rate。
+4. [ ] 若 raw source 有 support 而 compiler 丢失，优先修 package/compiler；只有 raw 真 gap 才考虑 suppress hazard，并记录 suppressed_hazard / suppressed_optical_depth。
 
 ## 测试
 
@@ -75,8 +85,9 @@ rate group 可在连续能区插值为非零，但 event replay 要求当前 `±
   统计不变。
 - [x] 03B-0 census 的区间 union/zero-rate 过滤 synthetic tests。
 - [x] 03B-1 raw campaign/compiler root-cause 与 03B-1R compatibility policy 判定完成；不补充 Be-6 data。
-- [ ] 03B-2 仍需补充 rate-covered/event-uncovered、boundary hit、H/O 切换、G1/G2
-  的 support-aware synthetic tests，以及逐 collision 的 support mask 验证。
+- [x] 03B-2A occupancy 分类与 Be6 non-transportable policy test 已补充。
+- [ ] 03B-2B 仍需补充 rate-covered/event-uncovered、boundary hit、H/O 切换、G1/G2
+  的 source/compiler consistency tests，以及逐 collision 的 support mask 验证。
 
 ## 退出条件
 
@@ -88,7 +99,8 @@ rate group 可在连续能区插值为非零，但 event replay 要求当前 `±
 
 ### 阶段 B（Step 03 尚未完成）
 
-- [ ] 中间目标 miss `<0.05%`；最终认证 package miss `=0`。
+- [x] 03B-2A 已按实际 occupancy 分类 miss；不把 0.268% global miss 误报为 Be/Li dose 根因。
+- [ ] 中间目标 miss `<0.05%`；最终认证 package miss `=0`（仅在 source/compiler 修复有证据时推进）。
 - [ ] 修复前后 isotope birth expectation 无可测重归一化。
 - [ ] compiler/manifest 输出 event-support intervals/mask，runtime 与 replay support
   严格一致；不得扩大 tolerance 或使用 nearest-event fallback。

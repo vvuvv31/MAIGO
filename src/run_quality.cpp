@@ -79,13 +79,29 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
     RunQualityReport report;
     report.mode = config.run_mode;
 
-    const auto raw_residual =
+    // Keep the two closure equations explicit.  The physical residual omits
+    // the intentional TOPAS compatibility sink; the accounting residual
+    // includes it.  Both use the same fred_model_unassigned term as the
+    // corresponding TransportResult helper.
+    const auto physical_raw_residual =
         result.initial_energy_MeV - result.total_deposited_energy_MeV -
         result.escaped_energy_MeV - result.beamline_removed_energy_MeV -
-        result.untracked_nuclear_energy_MeV -
-        result.topas_compat_discarded_kinetic_total_MeV();
-    report.absolute_energy_residual_MeV = std::abs(raw_residual);
-    report.relative_energy_residual = result.relative_energy_balance_error();
+        result.untracked_nuclear_energy_MeV - result.fred_model_unassigned_MeV;
+    const auto accounting_raw_residual =
+        physical_raw_residual - result.topas_compat_discarded_kinetic_total_MeV();
+    report.absolute_physical_energy_residual_MeV = std::abs(physical_raw_residual);
+    report.physical_relative_energy_residual =
+        result.physical_relative_energy_balance_error();
+    report.absolute_accounting_energy_residual_MeV = std::abs(accounting_raw_residual);
+    report.accounting_relative_energy_residual =
+        result.relative_energy_balance_error();
+    // Preserve the v1 field meanings for existing scripts: they represented
+    // accounting closure.
+    report.absolute_energy_residual_MeV = report.absolute_accounting_energy_residual_MeV;
+    report.relative_energy_residual = report.accounting_relative_energy_residual;
+    report.topas_reference_energy_sink_active =
+        config.cinel02_topas_compatibility_mode &&
+        result.topas_compat_discarded_kinetic_total_MeV() > 0.0;
 
     const auto add_issue = [&](const QualityIssue& issue,
                                const bool production_failure) {
@@ -185,6 +201,10 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
             result.neutral_kernel_seconds,
             result.electron_kernel_seconds,
             result.charged_after_neutral_kernel_seconds,
+            report.absolute_physical_energy_residual_MeV,
+            report.physical_relative_energy_residual,
+            report.absolute_accounting_energy_residual_MeV,
+            report.accounting_relative_energy_residual,
             report.absolute_energy_residual_MeV,
             report.relative_energy_residual,
         };
@@ -241,6 +261,13 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
         }
     }
 
+    if (report.topas_reference_energy_sink_active) {
+        add_issue({"topas_reference_energy_sink_active",
+                   "TOPAS compatibility mode discarded unsupported prompt-ion kinetic energy",
+                   result.topas_compat_discarded_kinetic_total_MeV(), 0.0},
+                  false);
+    }
+
     if (result.fred_inelastic_events > 0) {
         const auto scaled_frac =
             static_cast<double>(result.fred_energy_scaled_events) /
@@ -278,16 +305,16 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
         }
     }
 
-    if (std::isfinite(report.absolute_energy_residual_MeV) &&
-        std::isfinite(report.relative_energy_residual)) {
+    if (std::isfinite(report.absolute_accounting_energy_residual_MeV) &&
+        std::isfinite(report.accounting_relative_energy_residual)) {
         const auto allowed_residual = std::max(
             config.quality_maximum_absolute_energy_residual_MeV,
             config.quality_maximum_relative_energy_residual *
                 std::abs(result.initial_energy_MeV));
-        if (report.absolute_energy_residual_MeV > allowed_residual) {
+        if (report.absolute_accounting_energy_residual_MeV > allowed_residual) {
             add_issue({"energy_residual_exceeded",
-                       "energy ledger residual exceeds the configured tolerance",
-                       report.absolute_energy_residual_MeV, allowed_residual}, true);
+                       "accounting energy ledger residual exceeds the configured tolerance",
+                       report.absolute_accounting_energy_residual_MeV, allowed_residual}, true);
         }
     }
 
@@ -305,15 +332,25 @@ void write_run_quality_report_json(const std::filesystem::path& path,
         throw std::runtime_error("Cannot create run quality report: " + path.string());
     }
     output << std::setprecision(12)
-           << "{\n  \"schema_version\": 1,\n  \"status\": ";
+           << "{\n  \"schema_version\": 2,\n  \"status\": ";
     append_json_string(output, report.status());
     output << ",\n  \"run_mode\": ";
     append_json_string(output, run_mode_name(report.mode));
     output << ",\n  \"accepted\": " << (report.accepted ? "true" : "false")
-           << ",\n  \"absolute_energy_residual_MeV\": ";
+           << ",\n  \"absolute_physical_energy_residual_MeV\": ";
+    write_json_number(output, report.absolute_physical_energy_residual_MeV);
+    output << ",\n  \"physical_relative_energy_residual\": ";
+    write_json_number(output, report.physical_relative_energy_residual);
+    output << ",\n  \"absolute_accounting_energy_residual_MeV\": ";
+    write_json_number(output, report.absolute_accounting_energy_residual_MeV);
+    output << ",\n  \"accounting_relative_energy_residual\": ";
+    write_json_number(output, report.accounting_relative_energy_residual);
+    output << ",\n  \"absolute_energy_residual_MeV\": ";
     write_json_number(output, report.absolute_energy_residual_MeV);
     output << ",\n  \"relative_energy_residual\": ";
     write_json_number(output, report.relative_energy_residual);
+    output << ",\n  \"topas_reference_energy_sink_active\": "
+           << (report.topas_reference_energy_sink_active ? "true" : "false");
     output
            << ",\n  \"queue_overflow_count\": " << report.queue_overflow_count
            << ",\n  \"queue_overflow_energy_MeV\": ";

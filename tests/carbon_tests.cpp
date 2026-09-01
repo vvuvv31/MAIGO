@@ -782,6 +782,32 @@ void test_run_quality_gate() {
                 report.failures.empty() && report.approximations.size() == 1,
             "Research quality gate did not expose overflow as an approximation");
 
+    {
+        auto compatibility = production;
+        compatibility.cinel02_topas_compatibility_mode = true;
+        auto sink = clean;
+        sink.total_deposited_energy_MeV = 90.0;
+        sink.fred_model_unassigned_MeV = 5.0;
+        sink.cinel02_topas_compat_discarded_kinetic_MeV.back() = 5.0;
+        const auto sink_report = carbon::evaluate_run_quality(compatibility, sink);
+        require(sink_report.accepted && sink_report.topas_reference_energy_sink_active,
+                "Compatibility sink should be an explicit accepted approximation");
+        require_near(sink_report.absolute_physical_energy_residual_MeV, 5.0, 0.0,
+                     "Physical closure must exclude the compatibility sink");
+        require_near(sink_report.absolute_accounting_energy_residual_MeV, 0.0, 0.0,
+                     "Accounting closure must include the compatibility sink");
+        require_near(sink_report.physical_relative_energy_residual, 0.05, 0.0,
+                     "Physical relative residual mismatch");
+        require_near(sink_report.accounting_relative_energy_residual, 0.0, 0.0,
+                     "Accounting relative residual mismatch");
+        require_near(sink_report.absolute_energy_residual_MeV,
+                     sink_report.absolute_accounting_energy_residual_MeV, 0.0,
+                     "Legacy absolute residual alias mismatch");
+        require_near(sink_report.relative_energy_residual,
+                     sink_report.accounting_relative_energy_residual, 0.0,
+                     "Legacy relative residual alias mismatch");
+    }
+
     auto residual = clean;
     residual.total_deposited_energy_MeV = 99.0;
     report = carbon::evaluate_run_quality(production, residual);
@@ -802,6 +828,11 @@ void test_run_quality_gate() {
     std::ifstream input(path);
     const std::string json((std::istreambuf_iterator<char>(input)),
                            std::istreambuf_iterator<char>());
+    require(json.find("\"schema_version\": 2") != std::string::npos,
+            "Run quality JSON schema version did not advance");
+    require(json.find("\"accounting_relative_energy_residual\"") != std::string::npos &&
+                json.find("\"physical_relative_energy_residual\"") != std::string::npos,
+            "Run quality JSON missing physical/accounting residual fields");
     require(json.find("\"status\": \"fail\"") != std::string::npos,
             "Run quality JSON failed status");
     std::filesystem::remove(path);

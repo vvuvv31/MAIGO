@@ -51,9 +51,13 @@ for E, tpath, gpath, qpath, max_z in configs:
                     errors.append(err)
                     all_passed = False
                 
-                rel_res = rep.get("relative_energy_residual", None)
+                # Quality schema v2 names the gated equation explicitly;
+                # retain a fallback for older reports generated before the
+                # physical/accounting split.
+                rel_res = rep.get("accounting_relative_energy_residual",
+                                  rep.get("relative_energy_residual", None))
                 if rel_res is None or not math.isfinite(rel_res):
-                    err = f"FAIL: Invalid relative_energy_residual for E={E}: {rel_res}"
+                    err = f"FAIL: Invalid accounting_relative_energy_residual for E={E}: {rel_res}"
                     print(err)
                     errors.append(err)
                     all_passed = False
@@ -61,7 +65,7 @@ for E, tpath, gpath, qpath, max_z in configs:
                 else:
                     rel_residual_str = f"{rel_res:.2e}"
                     if rel_res > 1.0e-4:
-                        err = f"FAIL: relative_energy_residual {rel_res:.2e} > 1.0e-4 for E={E}"
+                        err = f"FAIL: accounting_relative_energy_residual {rel_res:.2e} > 1.0e-4 for E={E}"
                         print(err)
                         errors.append(err)
                         all_passed = False

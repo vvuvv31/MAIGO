@@ -23,38 +23,38 @@
 
 ## 当前冻结基线
 
-- Commit：`becf880`。
-- Energy：200 MeV/u，100k histories，seed `2026095100`，G1。
+- Development profile：`c2e25b832fbc015c611eb4d233da4a164abefd23`，显式 `cinel02_topas_compatibility_mode: true`；完整 manifest 为 [`baseline-e200-c2e25b8-topascompat.json`](baseline-e200-c2e25b8-topascompat.json)。
+- Energy：200 MeV/u，100k histories，seed `2026095100`，G1；本机 RTX 2080Ti/sm_75。
 - Package：`research_hybrid_e200light107.cinpkg`，window-event sampling `±0.51 MeV/u`。
-- Grid/FOV：200×200×800，0.4×0.4×0.5 mm，80×80 mm。
-- Species：Primary C -0.492%，Secondary C -1.452%，B +0.963%，Be +4.844%，Li -3.668%，He +0.767%，Z1 +1.751%，Total -0.511%。
-- Be isotope：Be6 +10.388%，Be7 +2.730%，Be9 +13.496%，Be10 +6.881%。
-- Be6 birth KE +3.82% 但 dose +10.39%，`dose/birth-KE` +6.33%；GPU G0 mean cosine 0.791，TOPAS 0.735。
-- Secondary lookup miss：`192/33512 = 0.573%`。
-- TOPAS 1M full-cascade job 485 用于 Be9 统计门禁。
+- Grid/FOV：200×200×800，0.4×0.4×0.5 mm，80×80 mm；IDD 仅由 3D scorer 横向求和。
+- Compatibility baseline species integral（独立 TOPAS/GPU seed，描述性非 CI）：Primary C +7.278%，Secondary C +3.327%，B +6.539%，Be -2.365%，Li +0.976%，He +5.183%，Z1 +4.207%，charged Total -0.569%。
+- Be6 在 compatibility profile 中是 `non_transportable_prompt_decay`：produced=281、queued=0、discarded KE=130184.242188 MeV；relative Be6 dose gate 暂停，等待 matched depositing-track scorer。
+- Secondary replay miss：`192/71524 = 0.268441%`；Li6/Li7、Be7/Be9/Be10 均为 0。
+- TOPAS 1M full-cascade job 485 仍用于 Be9 统计门禁；sampler/yield/package 继续冻结。
 
 ## 优先级
 
-当前路线：P0 Be-6 TOPAS compatibility policy/A-B 已完成；当前进入 P1 replay-support（仅 transportable isotopes）、reaction-survival + stopping optical depth、causal fix；最后是 straggling、MCS shape 和 100/300 frozen-physics regression。
+当前路线：c2e25b8 compatibility rebaseline 已完成；03B-2A occupancy audit 已完成。当前进入 03B-2B source/compiler consistency（仅 transportable isotopes），随后 reaction-survival × stopping optical depth；最后是 light-ion residual、straggling、MCS shape 和 100/300 frozen-physics regression。
 
-`P0 Step 01A ledger correctness → P0 Step 01A.5 signed reaction handoff → P0 Step 01B isotope replay/outcome/transition → P0 Step 01B.1 replay semantics cleanup → P1 deterministic auditor → P0 Be-6 TOPAS compatibility policy/A-B → P1 replay-support consistency (transportable isotopes only) → P1 reaction-survival + stopping optical depth → P1 causal waterfall/physics fix → P2 non-C12 straggling → P3 MCS shape → P4 100/300 regression`。
+`P0 ledger correctness → P0 signed handoff → P0 compact isotope ledger → P0 replay semantics → P1 deterministic auditor → P0 Be6 compatibility policy/A-B → P0 compatibility rebaseline → P1 03B-2A occupancy audit → P1 03B-2B source/compiler consistency → P1 reaction survival + stopping optical depth → P1 causal Be/Li fix → P2 light-ion accounting cleanup → P2 non-C12 straggling → P3 MCS shape → P4 100/300 regression`。
 
 ## 进度控制
 
-当前完成度：**6/15（约 40%）**；Step 03 阶段 A、03B-0、03B-1 campaign provenance gate 和 Step 01B.1 已完成。由于新发现 Be-6 的基态寿命为 prompt scale，原先“补充稳定 Be-6 projectile campaign”的 03B-1R 已收缩为 TOPAS reference compatibility policy gate；reference 明确为无 daughter/无 deposit 的 StopAndKill，no-decay 数据只作诊断，不得编译进生产 package。
+当前完成度：**7/15（约 47%）**；Step 03 阶段 A、03B-0、03B-1 campaign provenance gate、03B-1R、compatibility rebaseline、03B-2A 和 Step 01B.1 已完成。由于新发现 Be-6 的基态寿命为 prompt scale，原先“补充稳定 Be-6 projectile campaign”的 03B-1R 已收缩为 TOPAS reference compatibility policy gate；reference 明确为无 daughter/无 deposit 的 StopAndKill，no-decay 数据只作诊断，不得编译进生产 package。
 
-Step 01A ledger correctness、Step 01A.5 signed handoff、Step 01B compact isotope 诊断仪器和 Step 02 deterministic package auditor 已完成；Step 03 阶段 A 已修复 replay miss 的 null-collision MCS semantics，03B-0 已确定 Be-6 rate/package coverage 缺口；03B-1 已确认 source campaign 缺失但随后发现普通 TOPAS Be-6 为 prompt-unstable，当前先执行 Be6 TOPAS compatibility policy/A-B，再进入 03B-2 support-aware rate consistency（仅 transportable isotopes）。Step 01B.1 已完成；p/d/He4 的物理 residual 仍未修复，不能把诊断步骤误记为物理收敛。
+Step 01A ledger correctness、Step 01A.5 signed handoff、Step 01B compact isotope 诊断仪器和 Step 02 deterministic package auditor 已完成；Step 03 阶段 A 已修复 replay miss 的 null-collision MCS semantics，03B-0/03B-1 已确定 Be6 coverage 缺口及 TOPAS prompt-unstable compatibility 语义，compatibility rebaseline 已切换为开发基线。03B-2A 已证明 transportable Be/Li 的 miss 为零，下一步只做 source/compiler consistency，不直接改 runtime rate。p/d/He4 及当前 aggregate species residual 仍未修复，不能把 compatibility rebaseline 误记为物理收敛。
 
 | 状态 | 步骤 | 主要产出 |
 |---|---|---|
-| [x] | [00 冻结 200 MeV/u 基线](steps/00-freeze-e200-baseline.md) | `baseline-e200-becf880.json`；job 485 已解析 |
+| [x] | [00 冻结 200 MeV/u 基线](steps/00-freeze-e200-baseline.md) | `baseline-e200-c2e25b8-topascompat.json`；旧 `becf880` 仅作历史对照 |
 | [ ] | [01 Species 分层 ledger](steps/01-hierarchical-species-ledger.md) | `K_birth × f_dep × f_FOV` 逐层 closure |
 | [x] | [01A.5 Signed reaction handoff](steps/01a5-signed-reaction-handoff.md) | reaction import/export 与 replay δE 诊断完成；import=0，残差留给后续 |
 | [x] | [01B Compact isotope replay ledger](steps/01b-compact-isotope-replay-ledger.md) | isotope×target×generation status、parent outcome、transition |
 | [x] | [01B.1 Replay semantics cleanup](steps/01b1-replay-semantics-cleanup.md) | lookup miss/cutoff 拆分；rate/replay/dE energy handoff |
 | [x] | [02 Deterministic package auditor](steps/02-deterministic-package-yield-auditor.md) | GPU actual vs package exact vs TOPAS source；10-MeV occupancy audit |
 | [x] | [03B-1R Be6 TOPAS compatibility policy/A-B](steps/03b1r-be6-prompt-decay-semantics.md) | TopasCompatKill、显式 discarded-kinetic sink、200 MeV/u 100k fixed-seed A/B 已完成；全局 inherited CINEL02 residual 仍待后续处理 |
-| [ ] | [03 Lookup miss semantics/support](steps/03-lookup-miss-semantics-and-support.md) | 阶段 A/03B-0/03B-1 root-cause 与 Be6 compatibility policy/A-B 已完成；03B-2 仅针对 transportable isotopes |
+| [x] | [03B-2A Occupancy-aware replay-support audit](steps/03b2-replay-support-occupancy-audit.md) | transportable isotope miss 分类完成；Be/Li miss=0；不改 runtime rate |
+| [ ] | [03 Lookup miss semantics/support](steps/03-lookup-miss-semantics-and-support.md) | 阶段 A/03B-0/03B-1/03B-2A 已完成；03B-2B 仅针对 transportable isotopes |
 | [ ] | [04 MCS-only species/FOV](steps/04-mcs-only-species-fov.md) | step convergence、species-aware full-2GR、FOV acceptance |
 | [ ] | [05 Stopping/range regression](steps/05-stopping-range-regression.md) | Be/Li explicit-table range 与 unrestricted deposition |
 | [ ] | [06 Non-C12 straggling](steps/06-nonc12-straggling.md) | mean-preserving species-aware fluctuation |
