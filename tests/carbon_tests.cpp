@@ -3540,11 +3540,15 @@ void test_table1_inclusive_sampling() {
 
 void test_cinel02_ledger_schema_and_accumulator() {
     using Schema = carbon::Cinel02SpeciesLedgerSchema;
+    using Replay = carbon::Cinel02ReplayLedgerSchema;
     static_assert(Schema::species_count == 18);
     static_assert(Schema::metric_count == 11);
     static_assert(Schema::terminal_reason_count == 6);
     static_assert(Schema::reaction_import_kinetic + 1 == Schema::metric_count);
     static_assert(Schema::continuous_stop + 1 == Schema::terminal_reason_count);
+    static_assert(Replay::status_slot_count == 18 * 2 * 3 * 8 * 4);
+    static_assert(Replay::parent_outcome_cell_count == 18 * 2 * 3 * 2);
+    static_assert(Replay::transition_cell_count == 18 * 18);
 
     carbon::TransportResult total{};
     carbon::TransportResult part{};
@@ -3579,6 +3583,41 @@ void test_cinel02_ledger_schema_and_accumulator() {
         total.cinel02_replay_valid_counts[i] = 5 * i;
         part.cinel02_replay_valid_counts[i] = 6 * i;
     }
+    for (std::size_t i = 0; i < total.cinel02_replay_status_counts.size(); ++i) {
+        total.cinel02_replay_status_counts[i] = i;
+        part.cinel02_replay_status_counts[i] = 2 * i;
+        total.cinel02_replay_status_incident_energy_MeV[i] = static_cast<double>(i);
+        part.cinel02_replay_status_incident_energy_MeV[i] = static_cast<double>(3 * i);
+        total.cinel02_replay_status_delta_MeV_per_u[i] = static_cast<double>(4 * i);
+        part.cinel02_replay_status_delta_MeV_per_u[i] = static_cast<double>(5 * i);
+        total.cinel02_replay_status_abs_delta_MeV_per_u[i] = static_cast<double>(6 * i);
+        part.cinel02_replay_status_abs_delta_MeV_per_u[i] = static_cast<double>(7 * i);
+    }
+    for (std::size_t i = 0; i < total.cinel02_parent_outcome_counts.size(); ++i) {
+        total.cinel02_parent_outcome_counts[i] = i;
+        part.cinel02_parent_outcome_counts[i] = 2 * i;
+        total.cinel02_parent_outcome_incident_energy_MeV[i] = static_cast<double>(i);
+        part.cinel02_parent_outcome_incident_energy_MeV[i] = static_cast<double>(3 * i);
+        total.cinel02_parent_outcome_after_energy_MeV[i] = static_cast<double>(4 * i);
+        part.cinel02_parent_outcome_after_energy_MeV[i] = static_cast<double>(5 * i);
+        total.cinel02_parent_outcome_local_deposit_MeV[i] = static_cast<double>(6 * i);
+        part.cinel02_parent_outcome_local_deposit_MeV[i] = static_cast<double>(7 * i);
+        total.cinel02_parent_outcome_export_MeV[i] = static_cast<double>(8 * i);
+        part.cinel02_parent_outcome_export_MeV[i] = static_cast<double>(9 * i);
+        total.cinel02_parent_outcome_import_MeV[i] = static_cast<double>(10 * i);
+        part.cinel02_parent_outcome_import_MeV[i] = static_cast<double>(11 * i);
+    }
+    for (std::size_t i = 0; i < total.cinel02_generated_transition_counts.size(); ++i) {
+        total.cinel02_generated_transition_counts[i] = i;
+        part.cinel02_generated_transition_counts[i] = 2 * i;
+        total.cinel02_generated_transition_kinetic_MeV[i] = static_cast<double>(3 * i);
+        part.cinel02_generated_transition_kinetic_MeV[i] = static_cast<double>(4 * i);
+        total.cinel02_queued_transition_counts[i] = 5 * i;
+        part.cinel02_queued_transition_counts[i] = 6 * i;
+        total.cinel02_queued_transition_kinetic_MeV[i] = static_cast<double>(7 * i);
+        part.cinel02_queued_transition_kinetic_MeV[i] = static_cast<double>(8 * i);
+    }
+
     carbon::accumulate_transport_result(total, part);
     for (std::size_t i = 0; i < diagnostic_slots.size(); ++i) {
         require(total.cinel02_diagnostics[diagnostic_slots[i]] == 110 + 3 * i,
@@ -3609,6 +3648,41 @@ void test_cinel02_ledger_schema_and_accumulator() {
                 "CINEL02 replay negative-count accumulator mismatch");
         require(total.cinel02_replay_valid_counts[i] == 11 * i,
                 "CINEL02 replay valid-count accumulator mismatch");
+    }
+
+    for (std::size_t i = 0; i < total.cinel02_replay_status_counts.size(); ++i) {
+        require(total.cinel02_replay_status_counts[i] == 3 * i,
+                "CINEL02 replay-status count accumulator mismatch");
+        require_near(total.cinel02_replay_status_incident_energy_MeV[i], 4.0 * i, 0.0,
+                     "CINEL02 replay-status incident accumulator mismatch");
+        require_near(total.cinel02_replay_status_delta_MeV_per_u[i], 9.0 * i, 0.0,
+                     "CINEL02 replay-status delta accumulator mismatch");
+        require_near(total.cinel02_replay_status_abs_delta_MeV_per_u[i], 13.0 * i, 0.0,
+                     "CINEL02 replay-status absolute-delta accumulator mismatch");
+    }
+    for (std::size_t i = 0; i < total.cinel02_parent_outcome_counts.size(); ++i) {
+        require(total.cinel02_parent_outcome_counts[i] == 3 * i,
+                "CINEL02 parent-outcome count accumulator mismatch");
+        require_near(total.cinel02_parent_outcome_incident_energy_MeV[i], 4.0 * i, 0.0,
+                     "CINEL02 parent-outcome incident accumulator mismatch");
+        require_near(total.cinel02_parent_outcome_after_energy_MeV[i], 9.0 * i, 0.0,
+                     "CINEL02 parent-outcome after accumulator mismatch");
+        require_near(total.cinel02_parent_outcome_local_deposit_MeV[i], 13.0 * i, 0.0,
+                     "CINEL02 parent-outcome local accumulator mismatch");
+        require_near(total.cinel02_parent_outcome_export_MeV[i], 17.0 * i, 0.0,
+                     "CINEL02 parent-outcome export accumulator mismatch");
+        require_near(total.cinel02_parent_outcome_import_MeV[i], 21.0 * i, 0.0,
+                     "CINEL02 parent-outcome import accumulator mismatch");
+    }
+    for (std::size_t i = 0; i < total.cinel02_generated_transition_counts.size(); ++i) {
+        require(total.cinel02_generated_transition_counts[i] == 3 * i,
+                "CINEL02 generated-transition count accumulator mismatch");
+        require_near(total.cinel02_generated_transition_kinetic_MeV[i], 7.0 * i, 0.0,
+                     "CINEL02 generated-transition energy accumulator mismatch");
+        require(total.cinel02_queued_transition_counts[i] == 11 * i,
+                "CINEL02 queued-transition count accumulator mismatch");
+        require_near(total.cinel02_queued_transition_kinetic_MeV[i], 15.0 * i, 0.0,
+                     "CINEL02 queued-transition energy accumulator mismatch");
     }
 
     const double queued_birth = 100.0;

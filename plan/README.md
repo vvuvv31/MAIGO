@@ -39,15 +39,16 @@
 
 ## 进度控制
 
-当前完成度：**1/11（约 9%）**。
+当前完成度：**3/12（约 25%）**。
 
-当前下一步：**Step 01A.5：完成 signed reaction handoff closure；先验证 import/export 与 replay δE，再进入 Step 01B。**
+Step 01A ledger correctness、Step 01A.5 signed handoff 和 Step 01B compact isotope 诊断仪器已完成；当前下一步：**Step 02 deterministic package auditor**。p/d/He4 的物理 residual 仍未修复，不能把诊断步骤误记为物理收敛。
 
 | 状态 | 步骤 | 主要产出 |
 |---|---|---|
 | [x] | [00 冻结 200 MeV/u 基线](steps/00-freeze-e200-baseline.md) | `baseline-e200-becf880.json`；job 485 已解析 |
 | [ ] | [01 Species 分层 ledger](steps/01-hierarchical-species-ledger.md) | `K_birth × f_dep × f_FOV` 逐层 closure |
-| [ ] | [01A.5 Signed reaction handoff](steps/01a5-signed-reaction-handoff.md) | reaction import/export 与 replay δE 闭合 |
+| [x] | [01A.5 Signed reaction handoff](steps/01a5-signed-reaction-handoff.md) | reaction import/export 与 replay δE 诊断完成；import=0，残差留给后续 |
+| [x] | [01B Compact isotope replay ledger](steps/01b-compact-isotope-replay-ledger.md) | isotope×target×generation status、parent outcome、transition |
 | [ ] | [02 Deterministic package auditor](steps/02-deterministic-package-yield-auditor.md) | GPU actual vs package exact vs TOPAS source |
 | [ ] | [03 Lookup miss semantics/support](steps/03-lookup-miss-semantics-and-support.md) | null-collision MCS 和 support-aware rate |
 | [ ] | [04 MCS-only species/FOV](steps/04-mcs-only-species-fov.md) | step convergence、species-aware full-2GR、FOV acceptance |
@@ -56,6 +57,14 @@
 | [ ] | [07 Full-cascade species closure](steps/07-full-cascade-species-closure.md) | Li/Be G0/G1/G2 birth→survival→transport→FOV |
 | [ ] | [08 Package 修改门禁](steps/08-package-change-gate.md) | 仅在 job 485 + auditor 同向时修 construction cause |
 | [ ] | [09 100/200/300 最终验收](steps/09-multienergy-final-validation.md) | 同一 physics 参数的多 seed 报告 |
+
+### Step 01B 运行证据
+
+2026-09-01 在本机 RTX 2080Ti、200 MeV/u、G1、100k、seed `2026095100` 完成。
+Replay status 为 candidate/valid/no-event/invalid = `71524/71318/206/0`，
+secondary generation-1 no-event `206/33512 = 0.615%`；按 isotope 最高为 2H `1.779%`、
+3H `0.798%`、7Be `0.490%`、6Li `0.358%`。结果详见
+[01B step record](steps/01b-compact-isotope-replay-ledger.md)。
 
 ## 提交切分
 

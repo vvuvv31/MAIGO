@@ -92,6 +92,129 @@ inline void cinel02_record_replay_delta_device(
     }
 }
 
+inline std::uint32_t cinel02_replay_status_cell_index_device(
+    const int projectile_z, const int projectile_a, const int target_z,
+    const std::uint32_t generation, const float energy_MeV_per_u) noexcept {
+    constexpr auto invalid = std::numeric_limits<std::uint32_t>::max();
+    constexpr auto target_count =
+        static_cast<std::uint32_t>(Cinel02ReplayLedgerSchema::target_count);
+    constexpr auto generation_count =
+        static_cast<std::uint32_t>(Cinel02ReplayLedgerSchema::generation_count);
+    constexpr auto energy_bin_count =
+        static_cast<std::uint32_t>(Cinel02ReplayLedgerSchema::energy_bin_count);
+    const auto mapped_species =
+        carbon::get_charged_species_idx(projectile_z, projectile_a);
+    if (mapped_species < 0 ||
+        mapped_species >= static_cast<int>(Cinel02ReplayLedgerSchema::species_count)) {
+        return invalid;
+    }
+    const auto target = target_z == 1 ? 0U : (target_z == 8 ? 1U : target_count);
+    if (target >= target_count) return invalid;
+    const auto generation_bin = sycl::min(generation, generation_count - 1U);
+    const auto finite_energy = sycl::isfinite(energy_MeV_per_u)
+                                   ? sycl::fmax(energy_MeV_per_u, 0.0F)
+                                   : 0.0F;
+    const auto energy_bin = sycl::min(
+        static_cast<std::uint32_t>(finite_energy / 50.0F), energy_bin_count - 1U);
+    return ((static_cast<std::uint32_t>(mapped_species) * target_count + target) *
+                generation_count + generation_bin) *
+               energy_bin_count +
+           energy_bin;
+}
+
+inline void cinel02_record_replay_status_device(
+    std::uint64_t* counts, float* incident_energy_MeV,
+    float* delta_MeV_per_u, float* abs_delta_MeV_per_u,
+    const int projectile_z, const int projectile_a, const int target_z,
+    const std::uint32_t generation, const float runtime_energy_MeV,
+    const float delta_energy_MeV_per_u,
+    const std::uint32_t status) noexcept {
+    constexpr auto invalid = std::numeric_limits<std::uint32_t>::max();
+    constexpr auto status_count =
+        static_cast<std::uint32_t>(Cinel02ReplayLedgerSchema::status_count);
+    if (status >= status_count) return;
+    const auto cell = cinel02_replay_status_cell_index_device(
+        projectile_z, projectile_a, target_z, generation,
+        runtime_energy_MeV / sycl::fmax(1.0F,
+            static_cast<float>(sycl::max(1, projectile_a))));
+    if (cell == invalid) return;
+    const auto slot = cell * status_count + status;
+    cinel02_diag_increment_device(counts, slot);
+    cinel02_energy_add_device(incident_energy_MeV, slot, runtime_energy_MeV);
+    cinel02_energy_add_device(delta_MeV_per_u, slot, delta_energy_MeV_per_u);
+    cinel02_energy_add_device(abs_delta_MeV_per_u, slot,
+                              sycl::fabs(delta_energy_MeV_per_u));
+}
+
+inline std::uint32_t cinel02_parent_outcome_cell_index_device(
+    const int projectile_z, const int projectile_a, const int target_z,
+    const std::uint32_t generation, const int parent_status) noexcept {
+    constexpr auto invalid = std::numeric_limits<std::uint32_t>::max();
+    constexpr auto target_count =
+        static_cast<std::uint32_t>(Cinel02ReplayLedgerSchema::target_count);
+    constexpr auto generation_count =
+        static_cast<std::uint32_t>(Cinel02ReplayLedgerSchema::generation_count);
+    const auto mapped_species =
+        carbon::get_charged_species_idx(projectile_z, projectile_a);
+    if (mapped_species < 0 ||
+        mapped_species >= static_cast<int>(Cinel02ReplayLedgerSchema::species_count)) {
+        return invalid;
+    }
+    const auto target = target_z == 1 ? 0U : (target_z == 8 ? 1U : target_count);
+    if (target >= target_count) return invalid;
+    const auto generation_bin = sycl::min(generation, generation_count - 1U);
+    const auto outcome = parent_status == 0 ? 0U : 1U;
+    return ((static_cast<std::uint32_t>(mapped_species) * target_count + target) *
+                generation_count + generation_bin) * 2U + outcome;
+}
+
+inline void cinel02_record_parent_outcome_device(
+    std::uint64_t* counts, float* incident_energy_MeV,
+    float* parent_after_energy_MeV, float* local_deposit_MeV,
+    float* export_MeV, float* import_MeV,
+    const int projectile_z, const int projectile_a, const int target_z,
+    const std::uint32_t generation, const int parent_status,
+    const float incident_energy, const float parent_after_energy,
+    const float local_deposit, const float export_energy,
+    const float import_energy) noexcept {
+    const auto slot = cinel02_parent_outcome_cell_index_device(
+        projectile_z, projectile_a, target_z, generation, parent_status);
+    if (slot == std::numeric_limits<std::uint32_t>::max()) return;
+    cinel02_diag_increment_device(counts, slot);
+    cinel02_energy_add_device(incident_energy_MeV, slot, incident_energy);
+    cinel02_energy_add_device(parent_after_energy_MeV, slot, parent_after_energy);
+    cinel02_energy_add_device(local_deposit_MeV, slot, local_deposit);
+    cinel02_energy_add_device(export_MeV, slot, export_energy);
+    cinel02_energy_add_device(import_MeV, slot, import_energy);
+}
+
+inline std::uint32_t cinel02_transition_cell_index_device(
+    const int parent_z, const int parent_a, const int child_z,
+    const int child_a) noexcept {
+    constexpr auto invalid = std::numeric_limits<std::uint32_t>::max();
+    const auto parent = carbon::get_charged_species_idx(parent_z, parent_a);
+    const auto child = carbon::get_charged_species_idx(child_z, child_a);
+    if (parent < 0 || child < 0 ||
+        parent >= static_cast<int>(Cinel02ReplayLedgerSchema::species_count) ||
+        child >= static_cast<int>(Cinel02ReplayLedgerSchema::species_count)) {
+        return invalid;
+    }
+    return static_cast<std::uint32_t>(parent) *
+               static_cast<std::uint32_t>(Cinel02ReplayLedgerSchema::species_count) +
+           static_cast<std::uint32_t>(child);
+}
+
+inline void cinel02_record_transition_device(
+    std::uint64_t* counts, float* kinetic_energy_MeV,
+    const int parent_z, const int parent_a, const int child_z,
+    const int child_a, const float child_energy_MeV) noexcept {
+    const auto slot = cinel02_transition_cell_index_device(
+        parent_z, parent_a, child_z, child_a);
+    if (slot == std::numeric_limits<std::uint32_t>::max()) return;
+    cinel02_diag_increment_device(counts, slot);
+    cinel02_energy_add_device(kinetic_energy_MeV, slot, child_energy_MeV);
+}
+
 inline void cinel02_species_terminal_increment_device(
     std::uint64_t* counters, const int species, const std::uint32_t reason) noexcept {
     constexpr auto species_count =

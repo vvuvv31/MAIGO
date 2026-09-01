@@ -45,7 +45,7 @@
 - [x] 新增 18×6 terminal reason counters 与 accumulator/partition synthetic regression。
 - [ ] p/d/He4 closure 仍为 31.57%/17.30%/17.11%；elastic 在基线中关闭，漏记 elastic birth 不是本次 residual 来源。
 - [x] Step 01A.5 已加入 `reaction_import_kinetic` 与 signed replay δE 诊断；本轮 import 为 0，未解释 light-ion residual。
-- [ ] 下一步增加紧凑 isotope replay status、parent outcome 和 18×18 transition ledger，不增加 depth 维。
+- [x] Step 01B 已增加紧凑 isotope replay status、parent outcome 和 18×18 transition ledger，不增加 depth 维；证据见 `01b-compact-isotope-replay-ledger.md`。
 
 
 - 已实现 18 isotope × 10 metric 聚合 ledger，JSON 输出固定 schema。

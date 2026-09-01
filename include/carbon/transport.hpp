@@ -83,6 +83,27 @@ struct Cinel02SpeciesLedgerSchema {
     };
 };
 
+struct Cinel02ReplayLedgerSchema {
+    static constexpr std::size_t species_count = Cinel02SpeciesLedgerSchema::species_count;
+    static constexpr std::size_t target_count = 2;
+    static constexpr std::size_t generation_count = 3;
+    static constexpr std::size_t energy_bin_count = 8;
+    static constexpr std::size_t status_count = 4;
+    static constexpr std::size_t outcome_count = 2;
+    static constexpr std::size_t status_cell_count =
+        species_count * target_count * generation_count * energy_bin_count;
+    static constexpr std::size_t status_slot_count =
+        status_cell_count * status_count;
+    static constexpr std::size_t parent_outcome_cell_count =
+        species_count * target_count * generation_count * outcome_count;
+    static constexpr std::size_t transition_cell_count =
+        species_count * species_count;
+    enum Status : std::size_t {
+        collision_candidate = 0, replay_valid = 1,
+        replay_no_event = 2, replay_invalid_event = 3
+    };
+};
+
 struct TransportResult {
     static constexpr std::size_t species_ledger_species_count =
         Cinel02SpeciesLedgerSchema::species_count;
@@ -179,6 +200,37 @@ struct TransportResult {
         cinel02_replay_delta_negative_counts{};
     std::array<std::uint64_t, species_ledger_species_count>
         cinel02_replay_valid_counts{};
+    // Compact isotope × target × generation × 50-MeV/u-bin replay ledger.
+    std::array<std::uint64_t, Cinel02ReplayLedgerSchema::status_slot_count>
+        cinel02_replay_status_counts{};
+    std::array<double, Cinel02ReplayLedgerSchema::status_slot_count>
+        cinel02_replay_status_incident_energy_MeV{};
+    std::array<double, Cinel02ReplayLedgerSchema::status_slot_count>
+        cinel02_replay_status_delta_MeV_per_u{};
+    std::array<double, Cinel02ReplayLedgerSchema::status_slot_count>
+        cinel02_replay_status_abs_delta_MeV_per_u{};
+    // Isotope-resolved parent outcome energy ledger.
+    std::array<std::uint64_t, Cinel02ReplayLedgerSchema::parent_outcome_cell_count>
+        cinel02_parent_outcome_counts{};
+    std::array<double, Cinel02ReplayLedgerSchema::parent_outcome_cell_count>
+        cinel02_parent_outcome_incident_energy_MeV{};
+    std::array<double, Cinel02ReplayLedgerSchema::parent_outcome_cell_count>
+        cinel02_parent_outcome_after_energy_MeV{};
+    std::array<double, Cinel02ReplayLedgerSchema::parent_outcome_cell_count>
+        cinel02_parent_outcome_local_deposit_MeV{};
+    std::array<double, Cinel02ReplayLedgerSchema::parent_outcome_cell_count>
+        cinel02_parent_outcome_export_MeV{};
+    std::array<double, Cinel02ReplayLedgerSchema::parent_outcome_cell_count>
+        cinel02_parent_outcome_import_MeV{};
+    // Generated and successfully queued isotope-to-isotope transitions.
+    std::array<std::uint64_t, Cinel02ReplayLedgerSchema::transition_cell_count>
+        cinel02_generated_transition_counts{};
+    std::array<double, Cinel02ReplayLedgerSchema::transition_cell_count>
+        cinel02_generated_transition_kinetic_MeV{};
+    std::array<std::uint64_t, Cinel02ReplayLedgerSchema::transition_cell_count>
+        cinel02_queued_transition_counts{};
+    std::array<double, Cinel02ReplayLedgerSchema::transition_cell_count>
+        cinel02_queued_transition_kinetic_MeV{};
     std::array<std::uint64_t, 18> fred_isotope_counts{};
     std::uint64_t fred_inelastic_events{0};
     std::uint64_t fred_retry_sum{0};

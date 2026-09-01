@@ -177,6 +177,26 @@ TransportResult transport_sycl(const TransportConfig& config,
     std::uint64_t* cinel02_replay_delta_positive_device = nullptr;
     std::uint64_t* cinel02_replay_delta_negative_device = nullptr;
     std::uint64_t* cinel02_replay_valid_device = nullptr;
+    constexpr std::size_t kCinel02ReplayStatusSlots =
+        Cinel02ReplayLedgerSchema::status_slot_count;
+    constexpr std::size_t kCinel02ParentOutcomeSlots =
+        Cinel02ReplayLedgerSchema::parent_outcome_cell_count;
+    constexpr std::size_t kCinel02TransitionSlots =
+        Cinel02ReplayLedgerSchema::transition_cell_count;
+    std::uint64_t* cinel02_replay_status_counts_device = nullptr;
+    float* cinel02_replay_status_incident_device = nullptr;
+    float* cinel02_replay_status_delta_device = nullptr;
+    float* cinel02_replay_status_abs_delta_device = nullptr;
+    std::uint64_t* cinel02_parent_outcome_counts_device = nullptr;
+    float* cinel02_parent_outcome_incident_device = nullptr;
+    float* cinel02_parent_outcome_after_device = nullptr;
+    float* cinel02_parent_outcome_local_device = nullptr;
+    float* cinel02_parent_outcome_export_device = nullptr;
+    float* cinel02_parent_outcome_import_device = nullptr;
+    std::uint64_t* cinel02_generated_transition_counts_device = nullptr;
+    float* cinel02_generated_transition_energy_device = nullptr;
+    std::uint64_t* cinel02_queued_transition_counts_device = nullptr;
+    float* cinel02_queued_transition_energy_device = nullptr;
     if (use_cinel02) {
         const auto checked_u32 = [](const std::size_t value, const char* label) {
             if (value > std::numeric_limits<std::uint32_t>::max()) {
@@ -243,6 +263,34 @@ TransportResult transport_sycl(const TransportConfig& config,
             TransportResult::species_ledger_species_count, queue);
         cinel02_replay_valid_device = sycl::malloc_device<std::uint64_t>(
             TransportResult::species_ledger_species_count, queue);
+        cinel02_replay_status_counts_device = sycl::malloc_device<std::uint64_t>(
+            kCinel02ReplayStatusSlots, queue);
+        cinel02_replay_status_incident_device = sycl::malloc_device<float>(
+            kCinel02ReplayStatusSlots, queue);
+        cinel02_replay_status_delta_device = sycl::malloc_device<float>(
+            kCinel02ReplayStatusSlots, queue);
+        cinel02_replay_status_abs_delta_device = sycl::malloc_device<float>(
+            kCinel02ReplayStatusSlots, queue);
+        cinel02_parent_outcome_counts_device = sycl::malloc_device<std::uint64_t>(
+            kCinel02ParentOutcomeSlots, queue);
+        cinel02_parent_outcome_incident_device = sycl::malloc_device<float>(
+            kCinel02ParentOutcomeSlots, queue);
+        cinel02_parent_outcome_after_device = sycl::malloc_device<float>(
+            kCinel02ParentOutcomeSlots, queue);
+        cinel02_parent_outcome_local_device = sycl::malloc_device<float>(
+            kCinel02ParentOutcomeSlots, queue);
+        cinel02_parent_outcome_export_device = sycl::malloc_device<float>(
+            kCinel02ParentOutcomeSlots, queue);
+        cinel02_parent_outcome_import_device = sycl::malloc_device<float>(
+            kCinel02ParentOutcomeSlots, queue);
+        cinel02_generated_transition_counts_device = sycl::malloc_device<std::uint64_t>(
+            kCinel02TransitionSlots, queue);
+        cinel02_generated_transition_energy_device = sycl::malloc_device<float>(
+            kCinel02TransitionSlots, queue);
+        cinel02_queued_transition_counts_device = sycl::malloc_device<std::uint64_t>(
+            kCinel02TransitionSlots, queue);
+        cinel02_queued_transition_energy_device = sycl::malloc_device<float>(
+            kCinel02TransitionSlots, queue);
         if (cinel02_interactions_device == nullptr || cinel02_products_device == nullptr ||
             cinel02_energy_nodes_device == nullptr || cinel02_event_offsets_device == nullptr ||
             cinel02_event_indices_device == nullptr || cinel02_rate_groups_device == nullptr ||
@@ -252,7 +300,21 @@ TransportResult transport_sycl(const TransportConfig& config,
             cinel02_replay_abs_delta_device == nullptr ||
             cinel02_replay_delta_positive_device == nullptr ||
             cinel02_replay_delta_negative_device == nullptr ||
-            cinel02_replay_valid_device == nullptr) {
+            cinel02_replay_valid_device == nullptr ||
+            cinel02_replay_status_counts_device == nullptr ||
+            cinel02_replay_status_incident_device == nullptr ||
+            cinel02_replay_status_delta_device == nullptr ||
+            cinel02_replay_status_abs_delta_device == nullptr ||
+            cinel02_parent_outcome_counts_device == nullptr ||
+            cinel02_parent_outcome_incident_device == nullptr ||
+            cinel02_parent_outcome_after_device == nullptr ||
+            cinel02_parent_outcome_local_device == nullptr ||
+            cinel02_parent_outcome_export_device == nullptr ||
+            cinel02_parent_outcome_import_device == nullptr ||
+            cinel02_generated_transition_counts_device == nullptr ||
+            cinel02_generated_transition_energy_device == nullptr ||
+            cinel02_queued_transition_counts_device == nullptr ||
+            cinel02_queued_transition_energy_device == nullptr) {
             throw std::bad_alloc();
         }
         queue.copy(cinel02_host_tables->interactions.data(),
@@ -289,6 +351,34 @@ TransportResult transport_sycl(const TransportConfig& config,
                    TransportResult::species_ledger_species_count).wait_and_throw();
         queue.fill(cinel02_replay_valid_device, std::uint64_t{0},
                    TransportResult::species_ledger_species_count).wait_and_throw();
+        queue.fill(cinel02_replay_status_counts_device, std::uint64_t{0},
+                   kCinel02ReplayStatusSlots).wait_and_throw();
+        queue.fill(cinel02_replay_status_incident_device, 0.0F,
+                   kCinel02ReplayStatusSlots).wait_and_throw();
+        queue.fill(cinel02_replay_status_delta_device, 0.0F,
+                   kCinel02ReplayStatusSlots).wait_and_throw();
+        queue.fill(cinel02_replay_status_abs_delta_device, 0.0F,
+                   kCinel02ReplayStatusSlots).wait_and_throw();
+        queue.fill(cinel02_parent_outcome_counts_device, std::uint64_t{0},
+                   kCinel02ParentOutcomeSlots).wait_and_throw();
+        queue.fill(cinel02_parent_outcome_incident_device, 0.0F,
+                   kCinel02ParentOutcomeSlots).wait_and_throw();
+        queue.fill(cinel02_parent_outcome_after_device, 0.0F,
+                   kCinel02ParentOutcomeSlots).wait_and_throw();
+        queue.fill(cinel02_parent_outcome_local_device, 0.0F,
+                   kCinel02ParentOutcomeSlots).wait_and_throw();
+        queue.fill(cinel02_parent_outcome_export_device, 0.0F,
+                   kCinel02ParentOutcomeSlots).wait_and_throw();
+        queue.fill(cinel02_parent_outcome_import_device, 0.0F,
+                   kCinel02ParentOutcomeSlots).wait_and_throw();
+        queue.fill(cinel02_generated_transition_counts_device, std::uint64_t{0},
+                   kCinel02TransitionSlots).wait_and_throw();
+        queue.fill(cinel02_generated_transition_energy_device, 0.0F,
+                   kCinel02TransitionSlots).wait_and_throw();
+        queue.fill(cinel02_queued_transition_counts_device, std::uint64_t{0},
+                   kCinel02TransitionSlots).wait_and_throw();
+        queue.fill(cinel02_queued_transition_energy_device, 0.0F,
+                   kCinel02TransitionSlots).wait_and_throw();
         cinel02_host_tables.reset();
         cinel02_package.reset();
         cinel02_rates.reset();
@@ -1903,12 +1993,39 @@ TransportResult transport_sycl(const TransportConfig& config,
                                 energy_MeV * inverse_mass_number,
                                 cinel02_energy_tolerance_MeV_per_u,
                                 rng::uniform01(spot_seed, rng_history, steps, 13));
+                            const auto replay_runtime_energy_MeV = sycl::fmax(0.0F, energy_MeV);
+                            cinel02_record_replay_status_device(
+                                cinel02_replay_status_counts_device,
+                                cinel02_replay_status_incident_device,
+                                cinel02_replay_status_delta_device,
+                                cinel02_replay_status_abs_delta_device,
+                                primary_atomic_number, primary_mass_number,
+                                cinel02_target_z_step, 0U,
+                                replay_runtime_energy_MeV, 0.0F,
+                                static_cast<std::uint32_t>(
+                                    Cinel02ReplayLedgerSchema::collision_candidate));
                             if (event_index != std::numeric_limits<std::uint32_t>::max()) {
                                 cinel02_diag_increment_device(cinel02_diag_device, 3U);
                                 const auto event = cinel02_interactions_device[event_index];
                                 const auto product_end =
                                     static_cast<std::uint64_t>(event.product_offset) +
                                     event.product_count;
+                                const auto replay_status =
+                                    product_end <= cinel02_product_count &&
+                                    (event.parent_status == 0 || event.parent_status == 2)
+                                        ? Cinel02ReplayLedgerSchema::replay_valid
+                                        : Cinel02ReplayLedgerSchema::replay_invalid_event;
+                                cinel02_record_replay_status_device(
+                                    cinel02_replay_status_counts_device,
+                                    cinel02_replay_status_incident_device,
+                                    cinel02_replay_status_delta_device,
+                                    cinel02_replay_status_abs_delta_device,
+                                    primary_atomic_number, primary_mass_number,
+                                    cinel02_target_z_step, 0U,
+                                    replay_runtime_energy_MeV,
+                                    event.incident_energy_MeV_per_u -
+                                        replay_runtime_energy_MeV * inverse_mass_number,
+                                    static_cast<std::uint32_t>(replay_status));
                                 if (product_end <= cinel02_product_count &&
                                     (event.parent_status == 0 || event.parent_status == 2)) {
                                     cinel02_diag_increment_device(
@@ -1927,6 +2044,23 @@ TransportResult transport_sycl(const TransportConfig& config,
                                                 energy_MeV * inverse_mass_number));
                                     const auto local_deposit = sycl::fmax(
                                         0.0F, event.process_local_deposit_MeV);
+                                    const auto parent_after = event.parent_status == 0
+                                        ? sycl::fmax(0.0F, event.parent_energy_MeV)
+                                        : 0.0F;
+                                    const auto reaction_handoff_delta = energy_MeV -
+                                        parent_after - local_deposit;
+                                    cinel02_record_parent_outcome_device(
+                                        cinel02_parent_outcome_counts_device,
+                                        cinel02_parent_outcome_incident_device,
+                                        cinel02_parent_outcome_after_device,
+                                        cinel02_parent_outcome_local_device,
+                                        cinel02_parent_outcome_export_device,
+                                        cinel02_parent_outcome_import_device,
+                                        primary_atomic_number, primary_mass_number,
+                                        cinel02_target_z_step, 0U, event.parent_status,
+                                        energy_MeV, parent_after, local_deposit,
+                                        sycl::fmax(0.0F, reaction_handoff_delta),
+                                        sycl::fmax(0.0F, -reaction_handoff_delta));
                                     cinel02_energy_add_device(cinel02_energy_device, 0U, energy_MeV);
                                     cinel02_energy_add_device(cinel02_energy_device, 1U, deposited_MeV);
                                     cinel02_energy_add_device(cinel02_energy_device, 2U, local_deposit);
@@ -1975,6 +2109,14 @@ TransportResult transport_sycl(const TransportConfig& config,
                                             cinel02_diag_increment_device(
                                                 cinel02_diag_device,
                                                 22U + static_cast<std::uint32_t>(product.z - 1));
+                                        }
+                                        if (product.role == 0) {
+                                            cinel02_record_transition_device(
+                                                cinel02_generated_transition_counts_device,
+                                                cinel02_generated_transition_energy_device,
+                                                primary_atomic_number, primary_mass_number,
+                                                product.z, product.a,
+                                                sycl::fmax(0.0F, product.kinetic_energy_MeV));
                                         }
                                         if (product.role == 0 && product.z == 4) {
                                             const auto birth_slot =
@@ -2080,6 +2222,12 @@ TransportResult transport_sycl(const TransportConfig& config,
                                                 cinel02_record_queued_secondary_birth_device(
                                                     cinel02_species_energy_device, product.z, product.a,
                                                     sycl::fmax(0.0F, product.kinetic_energy_MeV));
+                                                cinel02_record_transition_device(
+                                                    cinel02_queued_transition_counts_device,
+                                                    cinel02_queued_transition_energy_device,
+                                                    primary_atomic_number, primary_mass_number,
+                                                    product.z, product.a,
+                                                    sycl::fmax(0.0F, product.kinetic_energy_MeV));
                                             } else {
                                                 untracked_MeV += sycl::fmax(
                                                     0.0F, product.kinetic_energy_MeV);
@@ -2130,6 +2278,16 @@ TransportResult transport_sycl(const TransportConfig& config,
                                 }
                                 else {
                                     cinel02_diag_increment_device(cinel02_diag_device, 5U);
+                                    cinel02_record_replay_status_device(
+                                        cinel02_replay_status_counts_device,
+                                        cinel02_replay_status_incident_device,
+                                        cinel02_replay_status_delta_device,
+                                        cinel02_replay_status_abs_delta_device,
+                                        primary_atomic_number, primary_mass_number,
+                                        cinel02_target_z_step, 0U,
+                                        replay_runtime_energy_MeV, 0.0F,
+                                        static_cast<std::uint32_t>(
+                                            Cinel02ReplayLedgerSchema::replay_no_event));
                                 }
                             }
                             else {
@@ -2672,6 +2830,19 @@ TransportResult transport_sycl(const TransportConfig& config,
                                 sec_x = post_em_x;
                                 sec_y = post_em_y;
                                 sec_z = post_em_z;
+                                // Record the hazard before attempting package
+                                // replay so isotope/target/generation misses
+                                // remain distinguishable from valid events.
+                                cinel02_record_replay_status_device(
+                                    cinel02_replay_status_counts_device,
+                                    cinel02_replay_status_incident_device,
+                                    cinel02_replay_status_delta_device,
+                                    cinel02_replay_status_abs_delta_device,
+                                    frag.z, frag.a, secondary_target_z,
+                                    static_cast<std::uint32_t>(frag.generation) + 1U,
+                                    sycl::fmax(0.0F, sec_e), 0.0F,
+                                    static_cast<std::uint32_t>(
+                                        Cinel02ReplayLedgerSchema::collision_candidate));
                             }
 
                             if (bin_z != pending_sec_bin) {
@@ -2738,6 +2909,23 @@ TransportResult transport_sycl(const TransportConfig& config,
                                     const auto product_end =
                                         static_cast<std::uint64_t>(event.product_offset) +
                                         event.product_count;
+                                    const auto replay_status =
+                                        product_end <= cinel02_product_count &&
+                                        (event.parent_status == 0 ||
+                                         event.parent_status == 2)
+                                            ? Cinel02ReplayLedgerSchema::replay_valid
+                                            : Cinel02ReplayLedgerSchema::replay_invalid_event;
+                                    cinel02_record_replay_status_device(
+                                        cinel02_replay_status_counts_device,
+                                        cinel02_replay_status_incident_device,
+                                        cinel02_replay_status_delta_device,
+                                        cinel02_replay_status_abs_delta_device,
+                                        frag.z, frag.a, secondary_target_z,
+                                        static_cast<std::uint32_t>(frag.generation) + 1U,
+                                        sycl::fmax(0.0F, sec_e),
+                                        event.incident_energy_MeV_per_u -
+                                            sycl::fmax(0.0F, sec_e * frag_inv_a),
+                                        static_cast<std::uint32_t>(replay_status));
                                     if (product_end <= cinel02_product_count &&
                                         (event.parent_status == 0 ||
                                          event.parent_status == 2)) {
@@ -2783,6 +2971,19 @@ TransportResult transport_sycl(const TransportConfig& config,
                                             : 0.0F;
                                         const auto reaction_handoff_delta = sec_e -
                                             parent_after - local_deposit;
+                                        cinel02_record_parent_outcome_device(
+                                            cinel02_parent_outcome_counts_device,
+                                            cinel02_parent_outcome_incident_device,
+                                            cinel02_parent_outcome_after_device,
+                                            cinel02_parent_outcome_local_device,
+                                            cinel02_parent_outcome_export_device,
+                                            cinel02_parent_outcome_import_device,
+                                            frag.z, frag.a, secondary_target_z,
+                                            static_cast<std::uint32_t>(frag.generation) + 1U,
+                                            event.parent_status, sec_e, parent_after,
+                                            local_deposit,
+                                            sycl::fmax(0.0F, reaction_handoff_delta),
+                                            sycl::fmax(0.0F, -reaction_handoff_delta));
                                         cinel02_species_energy_add_device(
                                             cinel02_species_energy_device, ledger_species_idx,
                                             static_cast<std::uint32_t>(
@@ -2902,6 +3103,12 @@ TransportResult transport_sycl(const TransportConfig& config,
                                                 }
                                             }
                                             if (product.role == 0) {
+                                                cinel02_record_transition_device(
+                                                    cinel02_generated_transition_counts_device,
+                                                    cinel02_generated_transition_energy_device,
+                                                    frag.z, frag.a, product.z, product.a,
+                                                    sycl::fmax(0.0F,
+                                                        product.kinetic_energy_MeV));
                                                 const auto transition_slot =
                                                     cinel02_transition_diag_slot_device(
                                                         frag.z, product.z,
@@ -2972,6 +3179,12 @@ TransportResult transport_sycl(const TransportConfig& config,
                                                 cinel02_record_queued_secondary_birth_device(
                                                     cinel02_species_energy_device, product.z, product.a,
                                                     sycl::fmax(0.0F, product.kinetic_energy_MeV));
+                                                cinel02_record_transition_device(
+                                                    cinel02_queued_transition_counts_device,
+                                                    cinel02_queued_transition_energy_device,
+                                                    frag.z, frag.a, product.z, product.a,
+                                                    sycl::fmax(0.0F,
+                                                        product.kinetic_energy_MeV));
                                             } else if (secondary_overflow_count_device !=
                                                        nullptr) {
                                                 sycl::atomic_ref<
@@ -3027,11 +3240,46 @@ TransportResult transport_sycl(const TransportConfig& config,
                                     }
                                     else {
                                         cinel02_diag_increment_device(cinel02_diag_device, 19U);
+                                        cinel02_record_replay_status_device(
+                                            cinel02_replay_status_counts_device,
+                                            cinel02_replay_status_incident_device,
+                                            cinel02_replay_status_delta_device,
+                                            cinel02_replay_status_abs_delta_device,
+                                            frag.z, frag.a, secondary_target_z,
+                                            static_cast<std::uint32_t>(frag.generation) + 1U,
+                                            sycl::fmax(0.0F, sec_e), 0.0F,
+                                            static_cast<std::uint32_t>(
+                                                Cinel02ReplayLedgerSchema::replay_invalid_event));
                                     }
                                 }
                                 else {
                                     cinel02_diag_increment_device(cinel02_diag_device, 18U);
+                                    cinel02_record_replay_status_device(
+                                        cinel02_replay_status_counts_device,
+                                        cinel02_replay_status_incident_device,
+                                        cinel02_replay_status_delta_device,
+                                        cinel02_replay_status_abs_delta_device,
+                                        frag.z, frag.a, secondary_target_z,
+                                        static_cast<std::uint32_t>(frag.generation) + 1U,
+                                        sycl::fmax(0.0F, sec_e), 0.0F,
+                                        static_cast<std::uint32_t>(
+                                            Cinel02ReplayLedgerSchema::replay_no_event));
                                 }
+                            } else if (secondary_inelastic) {
+                                // The post-EM collision energy is already at
+                                // or below the transport cutoff, so no package
+                                // event is eligible.  Keep the candidate in
+                                // the status partition as no_event.
+                                cinel02_record_replay_status_device(
+                                    cinel02_replay_status_counts_device,
+                                    cinel02_replay_status_incident_device,
+                                    cinel02_replay_status_delta_device,
+                                    cinel02_replay_status_abs_delta_device,
+                                    frag.z, frag.a, secondary_target_z,
+                                    static_cast<std::uint32_t>(frag.generation) + 1U,
+                                    sycl::fmax(0.0F, sec_e), 0.0F,
+                                    static_cast<std::uint32_t>(
+                                        Cinel02ReplayLedgerSchema::replay_no_event));
                             }
                                     pending_sec_voxel = cur_voxel;
                                 }
@@ -3392,6 +3640,34 @@ TransportResult transport_sycl(const TransportConfig& config,
         cinel02_replay_delta_negative_host{};
     std::array<std::uint64_t, TransportResult::species_ledger_species_count>
         cinel02_replay_valid_host{};
+    std::array<std::uint64_t, kCinel02ReplayStatusSlots>
+        cinel02_replay_status_counts_host{};
+    std::array<float, kCinel02ReplayStatusSlots>
+        cinel02_replay_status_incident_host{};
+    std::array<float, kCinel02ReplayStatusSlots>
+        cinel02_replay_status_delta_host{};
+    std::array<float, kCinel02ReplayStatusSlots>
+        cinel02_replay_status_abs_delta_host{};
+    std::array<std::uint64_t, kCinel02ParentOutcomeSlots>
+        cinel02_parent_outcome_counts_host{};
+    std::array<float, kCinel02ParentOutcomeSlots>
+        cinel02_parent_outcome_incident_host{};
+    std::array<float, kCinel02ParentOutcomeSlots>
+        cinel02_parent_outcome_after_host{};
+    std::array<float, kCinel02ParentOutcomeSlots>
+        cinel02_parent_outcome_local_host{};
+    std::array<float, kCinel02ParentOutcomeSlots>
+        cinel02_parent_outcome_export_host{};
+    std::array<float, kCinel02ParentOutcomeSlots>
+        cinel02_parent_outcome_import_host{};
+    std::array<std::uint64_t, kCinel02TransitionSlots>
+        cinel02_generated_transition_counts_host{};
+    std::array<float, kCinel02TransitionSlots>
+        cinel02_generated_transition_energy_host{};
+    std::array<std::uint64_t, kCinel02TransitionSlots>
+        cinel02_queued_transition_counts_host{};
+    std::array<float, kCinel02TransitionSlots>
+        cinel02_queued_transition_energy_host{};
     if (cinel02_energy_device != nullptr) {
         queue.copy(cinel02_energy_device, cinel02_energy_host.data(),
                    kCinel02EnergySlots);
@@ -3419,6 +3695,36 @@ TransportResult transport_sycl(const TransportConfig& config,
                    TransportResult::species_ledger_species_count);
         queue.copy(cinel02_replay_valid_device, cinel02_replay_valid_host.data(),
                    TransportResult::species_ledger_species_count);
+    }
+    if (cinel02_replay_status_counts_device != nullptr) {
+        queue.copy(cinel02_replay_status_counts_device,
+                   cinel02_replay_status_counts_host.data(), kCinel02ReplayStatusSlots);
+        queue.copy(cinel02_replay_status_incident_device,
+                   cinel02_replay_status_incident_host.data(), kCinel02ReplayStatusSlots);
+        queue.copy(cinel02_replay_status_delta_device,
+                   cinel02_replay_status_delta_host.data(), kCinel02ReplayStatusSlots);
+        queue.copy(cinel02_replay_status_abs_delta_device,
+                   cinel02_replay_status_abs_delta_host.data(), kCinel02ReplayStatusSlots);
+        queue.copy(cinel02_parent_outcome_counts_device,
+                   cinel02_parent_outcome_counts_host.data(), kCinel02ParentOutcomeSlots);
+        queue.copy(cinel02_parent_outcome_incident_device,
+                   cinel02_parent_outcome_incident_host.data(), kCinel02ParentOutcomeSlots);
+        queue.copy(cinel02_parent_outcome_after_device,
+                   cinel02_parent_outcome_after_host.data(), kCinel02ParentOutcomeSlots);
+        queue.copy(cinel02_parent_outcome_local_device,
+                   cinel02_parent_outcome_local_host.data(), kCinel02ParentOutcomeSlots);
+        queue.copy(cinel02_parent_outcome_export_device,
+                   cinel02_parent_outcome_export_host.data(), kCinel02ParentOutcomeSlots);
+        queue.copy(cinel02_parent_outcome_import_device,
+                   cinel02_parent_outcome_import_host.data(), kCinel02ParentOutcomeSlots);
+        queue.copy(cinel02_generated_transition_counts_device,
+                   cinel02_generated_transition_counts_host.data(), kCinel02TransitionSlots);
+        queue.copy(cinel02_generated_transition_energy_device,
+                   cinel02_generated_transition_energy_host.data(), kCinel02TransitionSlots);
+        queue.copy(cinel02_queued_transition_counts_device,
+                   cinel02_queued_transition_counts_host.data(), kCinel02TransitionSlots);
+        queue.copy(cinel02_queued_transition_energy_device,
+                   cinel02_queued_transition_energy_host.data(), kCinel02TransitionSlots);
     }
     std::array<std::uint64_t, kCinel02DiagSlots> cinel02_diag_host{};
     if (cinel02_diag_device != nullptr) {
@@ -3491,6 +3797,20 @@ TransportResult transport_sycl(const TransportConfig& config,
     free_device(cinel02_replay_delta_positive_device);
     free_device(cinel02_replay_delta_negative_device);
     free_device(cinel02_replay_valid_device);
+    free_device(cinel02_replay_status_counts_device);
+    free_device(cinel02_replay_status_incident_device);
+    free_device(cinel02_replay_status_delta_device);
+    free_device(cinel02_replay_status_abs_delta_device);
+    free_device(cinel02_parent_outcome_counts_device);
+    free_device(cinel02_parent_outcome_incident_device);
+    free_device(cinel02_parent_outcome_after_device);
+    free_device(cinel02_parent_outcome_local_device);
+    free_device(cinel02_parent_outcome_export_device);
+    free_device(cinel02_parent_outcome_import_device);
+    free_device(cinel02_generated_transition_counts_device);
+    free_device(cinel02_generated_transition_energy_device);
+    free_device(cinel02_queued_transition_counts_device);
+    free_device(cinel02_queued_transition_energy_device);
     free_device(untracked_nuclear_device);
     free_device(fred_prob_proj_h_device);
     free_device(fred_prob_proj_o_device);
@@ -3748,6 +4068,38 @@ TransportResult transport_sycl(const TransportConfig& config,
         result.cinel02_replay_delta_negative_counts[i] =
             cinel02_replay_delta_negative_host[i];
         result.cinel02_replay_valid_counts[i] = cinel02_replay_valid_host[i];
+    }
+    for (std::size_t i = 0; i < kCinel02ReplayStatusSlots; ++i) {
+        result.cinel02_replay_status_counts[i] = cinel02_replay_status_counts_host[i];
+        result.cinel02_replay_status_incident_energy_MeV[i] =
+            static_cast<double>(cinel02_replay_status_incident_host[i]);
+        result.cinel02_replay_status_delta_MeV_per_u[i] =
+            static_cast<double>(cinel02_replay_status_delta_host[i]);
+        result.cinel02_replay_status_abs_delta_MeV_per_u[i] =
+            static_cast<double>(cinel02_replay_status_abs_delta_host[i]);
+    }
+    for (std::size_t i = 0; i < kCinel02ParentOutcomeSlots; ++i) {
+        result.cinel02_parent_outcome_counts[i] = cinel02_parent_outcome_counts_host[i];
+        result.cinel02_parent_outcome_incident_energy_MeV[i] =
+            static_cast<double>(cinel02_parent_outcome_incident_host[i]);
+        result.cinel02_parent_outcome_after_energy_MeV[i] =
+            static_cast<double>(cinel02_parent_outcome_after_host[i]);
+        result.cinel02_parent_outcome_local_deposit_MeV[i] =
+            static_cast<double>(cinel02_parent_outcome_local_host[i]);
+        result.cinel02_parent_outcome_export_MeV[i] =
+            static_cast<double>(cinel02_parent_outcome_export_host[i]);
+        result.cinel02_parent_outcome_import_MeV[i] =
+            static_cast<double>(cinel02_parent_outcome_import_host[i]);
+    }
+    for (std::size_t i = 0; i < kCinel02TransitionSlots; ++i) {
+        result.cinel02_generated_transition_counts[i] =
+            cinel02_generated_transition_counts_host[i];
+        result.cinel02_generated_transition_kinetic_MeV[i] =
+            static_cast<double>(cinel02_generated_transition_energy_host[i]);
+        result.cinel02_queued_transition_counts[i] =
+            cinel02_queued_transition_counts_host[i];
+        result.cinel02_queued_transition_kinetic_MeV[i] =
+            static_cast<double>(cinel02_queued_transition_energy_host[i]);
     }
     if (use_cinel02 && config.cinel02_strict_match &&
         (result.cinel02_diagnostics[4] != 0U || result.cinel02_diagnostics[5] != 0U ||

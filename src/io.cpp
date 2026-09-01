@@ -1507,6 +1507,87 @@ void write_energy_ledger_json(const std::filesystem::path& path,
         output << (i == 0 ? "" : ", ") << result.cinel02_replay_valid_counts[i];
     }
     output << "],\n"
+           << "  \"cinel02_replay_status_layout\": "
+              "{\"shape\":[18,2,3,8,4],\"order\":[\"projectile_species\",\"target\",\"generation\",\"energy_bin\",\"status\"],"
+              "\"status\":[\"collision_candidate\",\"replay_valid\",\"replay_no_event\",\"replay_invalid_event\"],"
+              "\"projectile_species\":[\"1H\",\"2H\",\"3H\",\"3He\",\"4He\",\"6He\",\"6Li\",\"7Li\",\"7Be\",\"9Be\",\"10Be\",\"8B\",\"10B\",\"11B\",\"10C\",\"11C\",\"12C\",\"6Be\"],"
+              "\"targets\":[\"H\",\"O\"],\"generations\":[0,1,2],"
+              "\"energy_bin_edges_MeV_per_u\":[0,50,100,150,200,250,300,350,\"infinity\"]},\n"
+           << "  \"cinel02_replay_status_counts\": [";
+    for (std::size_t i = 0; i < result.cinel02_replay_status_counts.size(); ++i) {
+        output << (i == 0 ? "" : ", ") << result.cinel02_replay_status_counts[i];
+    }
+    output << "],\n  \"cinel02_replay_status_incident_energy_MeV\": [";
+    for (std::size_t i = 0; i < result.cinel02_replay_status_incident_energy_MeV.size(); ++i) {
+        output << (i == 0 ? "" : ", ")
+               << result.cinel02_replay_status_incident_energy_MeV[i];
+    }
+    output << "],\n  \"cinel02_replay_status_delta_MeV_per_u\": [";
+    for (std::size_t i = 0; i < result.cinel02_replay_status_delta_MeV_per_u.size(); ++i) {
+        output << (i == 0 ? "" : ", ")
+               << result.cinel02_replay_status_delta_MeV_per_u[i];
+    }
+    output << "],\n  \"cinel02_replay_status_abs_delta_MeV_per_u\": [";
+    for (std::size_t i = 0; i < result.cinel02_replay_status_abs_delta_MeV_per_u.size(); ++i) {
+        output << (i == 0 ? "" : ", ")
+               << result.cinel02_replay_status_abs_delta_MeV_per_u[i];
+    }
+    output << "],\n"
+           << "  \"cinel02_parent_outcome_layout\": "
+              "{\"shape\":[18,2,3,2],\"order\":[\"projectile_species\",\"target\",\"generation\",\"outcome\"],"
+              "\"outcome\":[\"continued\",\"killed\"],\"targets\":[\"H\",\"O\"],\"generations\":[0,1,2]},\n"
+           << "  \"cinel02_parent_outcome_counts\": [";
+    for (std::size_t i = 0; i < result.cinel02_parent_outcome_counts.size(); ++i) {
+        output << (i == 0 ? "" : ", ") << result.cinel02_parent_outcome_counts[i];
+    }
+    output << "],\n  \"cinel02_parent_outcome_incident_energy_MeV\": [";
+    for (std::size_t i = 0; i < result.cinel02_parent_outcome_incident_energy_MeV.size(); ++i) {
+        output << (i == 0 ? "" : ", ")
+               << result.cinel02_parent_outcome_incident_energy_MeV[i];
+    }
+    output << "],\n  \"cinel02_parent_outcome_after_energy_MeV\": [";
+    for (std::size_t i = 0; i < result.cinel02_parent_outcome_after_energy_MeV.size(); ++i) {
+        output << (i == 0 ? "" : ", ")
+               << result.cinel02_parent_outcome_after_energy_MeV[i];
+    }
+    output << "],\n  \"cinel02_parent_outcome_local_deposit_MeV\": [";
+    for (std::size_t i = 0; i < result.cinel02_parent_outcome_local_deposit_MeV.size(); ++i) {
+        output << (i == 0 ? "" : ", ")
+               << result.cinel02_parent_outcome_local_deposit_MeV[i];
+    }
+    output << "],\n  \"cinel02_parent_outcome_export_MeV\": [";
+    for (std::size_t i = 0; i < result.cinel02_parent_outcome_export_MeV.size(); ++i) {
+        output << (i == 0 ? "" : ", ")
+               << result.cinel02_parent_outcome_export_MeV[i];
+    }
+    output << "],\n  \"cinel02_parent_outcome_import_MeV\": [";
+    for (std::size_t i = 0; i < result.cinel02_parent_outcome_import_MeV.size(); ++i) {
+        output << (i == 0 ? "" : ", ")
+               << result.cinel02_parent_outcome_import_MeV[i];
+    }
+    output << "],\n"
+           << "  \"cinel02_transition_layout\": "
+              "{\"shape\":[18,18],\"order\":[\"parent_species\",\"child_species\"],"
+              "\"species\":[\"1H\",\"2H\",\"3H\",\"3He\",\"4He\",\"6He\",\"6Li\",\"7Li\",\"7Be\",\"9Be\",\"10Be\",\"8B\",\"10B\",\"11B\",\"10C\",\"11C\",\"12C\",\"6Be\"]},\n"
+           << "  \"cinel02_generated_transition_counts\": [";
+    for (std::size_t i = 0; i < result.cinel02_generated_transition_counts.size(); ++i) {
+        output << (i == 0 ? "" : ", ") << result.cinel02_generated_transition_counts[i];
+    }
+    output << "],\n  \"cinel02_generated_transition_kinetic_MeV\": [";
+    for (std::size_t i = 0; i < result.cinel02_generated_transition_kinetic_MeV.size(); ++i) {
+        output << (i == 0 ? "" : ", ")
+               << result.cinel02_generated_transition_kinetic_MeV[i];
+    }
+    output << "],\n  \"cinel02_queued_transition_counts\": [";
+    for (std::size_t i = 0; i < result.cinel02_queued_transition_counts.size(); ++i) {
+        output << (i == 0 ? "" : ", ") << result.cinel02_queued_transition_counts[i];
+    }
+    output << "],\n  \"cinel02_queued_transition_kinetic_MeV\": [";
+    for (std::size_t i = 0; i < result.cinel02_queued_transition_kinetic_MeV.size(); ++i) {
+        output << (i == 0 ? "" : ", ")
+               << result.cinel02_queued_transition_kinetic_MeV[i];
+    }
+    output << "],\n"
            << "  \"cinel02_species_terminal_reason_layout\": "
               "{\"shape\":[18,6],\"order\":[\"species\",\"reason\"],"
               "\"reason\":[\"initial_below_cutoff\",\"reaction_killed\","

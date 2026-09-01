@@ -145,6 +145,38 @@ void accumulate_transport_result(carbon::TransportResult& total,
         total.cinel02_replay_valid_counts[i] +=
             part.cinel02_replay_valid_counts[i];
     }
+    for (std::size_t i = 0; i < total.cinel02_replay_status_counts.size(); ++i) {
+        total.cinel02_replay_status_counts[i] += part.cinel02_replay_status_counts[i];
+        total.cinel02_replay_status_incident_energy_MeV[i] +=
+            part.cinel02_replay_status_incident_energy_MeV[i];
+        total.cinel02_replay_status_delta_MeV_per_u[i] +=
+            part.cinel02_replay_status_delta_MeV_per_u[i];
+        total.cinel02_replay_status_abs_delta_MeV_per_u[i] +=
+            part.cinel02_replay_status_abs_delta_MeV_per_u[i];
+    }
+    for (std::size_t i = 0; i < total.cinel02_parent_outcome_counts.size(); ++i) {
+        total.cinel02_parent_outcome_counts[i] += part.cinel02_parent_outcome_counts[i];
+        total.cinel02_parent_outcome_incident_energy_MeV[i] +=
+            part.cinel02_parent_outcome_incident_energy_MeV[i];
+        total.cinel02_parent_outcome_after_energy_MeV[i] +=
+            part.cinel02_parent_outcome_after_energy_MeV[i];
+        total.cinel02_parent_outcome_local_deposit_MeV[i] +=
+            part.cinel02_parent_outcome_local_deposit_MeV[i];
+        total.cinel02_parent_outcome_export_MeV[i] +=
+            part.cinel02_parent_outcome_export_MeV[i];
+        total.cinel02_parent_outcome_import_MeV[i] +=
+            part.cinel02_parent_outcome_import_MeV[i];
+    }
+    for (std::size_t i = 0; i < total.cinel02_generated_transition_counts.size(); ++i) {
+        total.cinel02_generated_transition_counts[i] +=
+            part.cinel02_generated_transition_counts[i];
+        total.cinel02_generated_transition_kinetic_MeV[i] +=
+            part.cinel02_generated_transition_kinetic_MeV[i];
+        total.cinel02_queued_transition_counts[i] +=
+            part.cinel02_queued_transition_counts[i];
+        total.cinel02_queued_transition_kinetic_MeV[i] +=
+            part.cinel02_queued_transition_kinetic_MeV[i];
+    }
     for (std::size_t i = 0; i < total.fred_isotope_counts.size(); ++i) {
         total.fred_isotope_counts[i] += part.fred_isotope_counts[i];
     }

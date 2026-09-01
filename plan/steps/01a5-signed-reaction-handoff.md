@@ -48,12 +48,12 @@ JSON 中明确单位和符号，数组使用与 species ledger 相同的 18 isot
 - [x] reaction import/export 使用互斥的 signed split。
 - [x] replay δE 按 isotope 输出，且 positive/negative/valid counts 可合并。
 - [x] `carbon_tests` 与 `inelastic_package_v2_tests` 在沙盒外 SYCL runtime 下通过。
-- [ ] p/d/He4/t 的 import-aware closure 均 `<0.1%`；若不满足，保留诊断结果并进入 01B/后续 reaction semantics 定位，不在本步修改物理。
-- [ ] 200 MeV/u 100k 的诊断结果写入 artifacts，并记录 package/config hash。
+- [x] p/d/He4/t 的 import-aware closure 已测量；本轮 import=0，残差已明确不由 kinetic handoff 解释，并转交 01B/后续 reaction semantics 定位。
+- [x] 200 MeV/u 100k 的诊断结果写入输出目录，并记录 package/config/rate hash。
 
 ## 当前结果（2026-09-01）
 
 - 编译成功；沙盒外 `ctest`：2/2 通过。
 - 200 MeV/u G1 100k 运行成功，energy balance `0.01536299`。
-- replay import 在本轮各 isotope 均为 0；p/d/He4 closure 仍约 `+31.57%/+17.30%/+17.13%`，因此该假设被证伪，不能解释 light-ion residual。
-- `ΣδE/u` 已输出；下一步进入 Step 01B compact isotope replay/outcome/transition ledger，继续区分 reaction survival 与 birth/transport 语义。
+- replay import 在本轮各 isotope 均为 0；p/d/He4 closure 仍约 `+31.57%/+17.30%/+17.12%`，因此 kinetic handoff import 假设被证伪，不能解释 light-ion residual。
+- `ΣδE/u` 已输出；Step 01B 已完成 isotope replay/outcome/transition 分层，下一步进入 deterministic package auditor 与 replay-support consistency。
