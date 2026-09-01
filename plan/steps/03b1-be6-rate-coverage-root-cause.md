@@ -52,16 +52,25 @@
 
 ## 结论
 
-[x] 03B-1 root-cause gate 完成。Be-6 的 secondary rate/package coverage 缺失来自 **source campaign 未运行 Be-6 projectile exposure**；Be-6 只在 C-12 event 中作为 direct child 出现。
+[x] 03B-1 campaign-provenance gate 完成。Be-6 的 secondary rate/package coverage 缺失来自
+**source campaign 未运行 Be-6 projectile exposure**；Be-6 只在 C-12 event 中作为 direct child 出现。
 
-这足以解释 `6Be` secondary hazard/candidate 为零，但不能仅凭 coverage 直接估算 +10.39% dose residual 的全部幅度。要验证 reaction-survival 影响，必须补充独立 `6Be+H1/O16` TOPAS exposure/event campaign。
+[x] 该结论随后被 TOPAS prompt-decay smoke 修正为不完整：普通 `GenericIon(4,6)` 的基态寿命为
+`4.95333e-21 s`，200 MeV/u 下衰变长度约 `1e-9 mm`。开启 `g4decay/g4radioactivedecay` 时 50k
+histories 得到 `Scored Entries: 0`，所以“没有 Be-6 projectile interaction”不仅是 campaign scope，
+也是因为可输运的 Be-6 track 在产生后立即衰变。关闭 decay 的 50k 诊断得到 H/O interactions，
+证明 INCL++/scorer 可以处理 Be-6，但该配置产生 energy-conservation/resampling warnings，
+不能作为物理 package 输入。
 
-## 下一项（03B-1R，数据补充）
+因此 `6Be` candidate=0 目前只能说明冻结 package 没有稳定 Be-6 projectile replay coverage，不能直接
+推出“应补一张 Be-6 secondary rate 表”。GPU 当前却把 C-12 event 中的 Be-6 child 当作稳定离子输运，
+这使 Be-6 prompt-decay semantics 成为比 generic rate supplementation 更优先的物理 gate。
 
-1. 添加只针对 `GenericIon(4,6)`、200 MeV/u 的本地 TOPAS extraction smoke（先 50k histories）；
-2. 检查 contract/raw CRC、H/O target coverage 和 Be-6 projectile interaction count；
-3. 通过 smoke 后再提交 5M production campaign，并以 package/rate compiler 原有统计门禁编译；
-4. 只把新 package/rate 放到独立输出目录，冻结当前 `research107` 基线不覆盖；
-5. 新数据通过 deterministic auditor 和 200 MeV/u 100k GPU A/B 后，才决定是否将其纳入 physics baseline。
+## 03B-1R 状态
 
-在 03B-1R 完成前，不修改 Be-6 rate 数值、不做 isotope alias、不做 dose scale。
+详见 [03B-1R prompt-decay semantics gate](03b1r-be6-prompt-decay-semantics.md)。在该 gate 完成前：
+
+- 不将 no-decay Be-6 raw 数据编译为生产 rate/package；
+- 不把 Be-7/Be-9/Be-10 alias 给 Be-6；
+- 不修改 Be-6 dose/rate scale 或 sampler；
+- 冻结 `research_hybrid_e200light107` package 作为可复现基线。

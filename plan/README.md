@@ -35,13 +35,13 @@
 
 ## 优先级
 
-`P0 Step 01A ledger correctness → P0 Step 01A.5 signed reaction handoff → P0 Step 01B isotope replay/outcome/transition → P0 Step 01B.1 replay semantics cleanup → P1 deterministic auditor → P1 replay-support consistency → P1 reaction-survival + stopping optical depth → P1 causal waterfall/physics fix → P2 non-C12 straggling → P3 MCS shape → P4 100/300 regression`。
+`P0 Step 01A ledger correctness → P0 Step 01A.5 signed reaction handoff → P0 Step 01B isotope replay/outcome/transition → P0 Step 01B.1 replay semantics cleanup → P1 deterministic auditor → P1 03B-1R Be-6 prompt-decay semantics gate → P1 replay-support consistency → P1 reaction-survival + stopping optical depth → P1 causal waterfall/physics fix → P2 non-C12 straggling → P3 MCS shape → P4 100/300 regression`。
 
 ## 进度控制
 
-当前完成度：**5/13（约 38%）**；Step 03 阶段 A、03B-0 和 03B-1 root-cause gate 已完成，03B-1R 数据补充与 03B-2 仍进行中。
+当前完成度：**5/14（约 36%）**；Step 03 阶段 A、03B-0、03B-1 campaign provenance gate 和 Step 01B.1 已完成。由于新发现 Be-6 的基态寿命为 prompt scale，原先“补充稳定 Be-6 projectile campaign”的 03B-1R 已收缩为 **prompt-decay semantics gate**；no-decay 数据只作诊断，不得编译进生产 package。
 
-Step 01A ledger correctness、Step 01A.5 signed handoff、Step 01B compact isotope 诊断仪器和 Step 02 deterministic package auditor 已完成；Step 03 阶段 A 已修复 replay miss 的 null-collision MCS semantics，03B-0 已确定 Be-6 rate/package coverage 缺口，03B-1 已确认根因为 source campaign 未运行 Be-6 projectile，当前继续执行 **Step 03 阶段 B：03B-1R 数据补充与 03B-2 support-aware rate consistency**。Step 01B.1 已完成；p/d/He4 的物理 residual 仍未修复，不能把诊断步骤误记为物理收敛。
+Step 01A ledger correctness、Step 01A.5 signed handoff、Step 01B compact isotope 诊断仪器和 Step 02 deterministic package auditor 已完成；Step 03 阶段 A 已修复 replay miss 的 null-collision MCS semantics，03B-0 已确定 Be-6 rate/package coverage 缺口；03B-1 已确认 source campaign 缺失但随后发现普通 TOPAS Be-6 为 prompt-unstable，当前先执行 **03B-1R prompt-decay semantics gate**，再进入 03B-2 support-aware rate consistency。Step 01B.1 已完成；p/d/He4 的物理 residual 仍未修复，不能把诊断步骤误记为物理收敛。
 
 | 状态 | 步骤 | 主要产出 |
 |---|---|---|
@@ -51,7 +51,7 @@ Step 01A ledger correctness、Step 01A.5 signed handoff、Step 01B compact isoto
 | [x] | [01B Compact isotope replay ledger](steps/01b-compact-isotope-replay-ledger.md) | isotope×target×generation status、parent outcome、transition |
 | [x] | [01B.1 Replay semantics cleanup](steps/01b1-replay-semantics-cleanup.md) | lookup miss/cutoff 拆分；rate/replay/dE energy handoff |
 | [x] | [02 Deterministic package auditor](steps/02-deterministic-package-yield-auditor.md) | GPU actual vs package exact vs TOPAS source；10-MeV occupancy audit |
-| [ ] | [03 Lookup miss semantics/support](steps/03-lookup-miss-semantics-and-support.md) | 阶段 A/03B-0/03B-1 root-cause 已完成；03B-1R Be-6 数据补充、03B-2 support-aware rate 待完成 |
+| [ ] | [03 Lookup miss semantics/support](steps/03-lookup-miss-semantics-and-support.md) | 阶段 A/03B-0/03B-1 root-cause 已完成；03B-1R prompt-decay gate、03B-2 support-aware rate 待完成 |
 | [ ] | [04 MCS-only species/FOV](steps/04-mcs-only-species-fov.md) | step convergence、species-aware full-2GR、FOV acceptance |
 | [ ] | [05 Stopping/range regression](steps/05-stopping-range-regression.md) | Be/Li explicit-table range 与 unrestricted deposition |
 | [ ] | [06 Non-C12 straggling](steps/06-nonc12-straggling.md) | mean-preserving species-aware fluctuation |
@@ -70,8 +70,23 @@ Step 01A ledger correctness、Step 01A.5 signed handoff、Step 01B compact isoto
 确定缺口来自 source campaign 未运行 Be-6 projectile exposure，而不是 compiler 丢弃已有
 Be-6 projectile event。详见 [03B-1 step record](steps/03b1-be6-rate-coverage-root-cause.md)。
 
-下一项是 03B-1R：先执行本地 200 MeV/u `GenericIon(4,6)` 50k smoke，再决定 5M
-production；当前冻结 package 不覆盖。
+当前执行 [03B-1R prompt-decay semantics gate](steps/03b1r-be6-prompt-decay-semantics.md)。Job 495 增强 scorer 已确认
+TOPAS 对 `GenericIon(4,6)` 立即调用 `RadioactiveDecay` 并终止 parent，但 50k histories 没有任何
+可观测 daughter；RDM 数据目录也没有 `z4.a6` 衰变方案。该结果足以禁止稳定 Be-6 rate/package
+补充，但尚不足以证明 `alpha+p+p` conversion。下一步先明确“无 daughter、parent KE 未沉积”的
+reference 能量语义；在此之前不实现 GPU conversion、不编译 no-decay package，也不静默丢能量。
+
+## Step 03B-1R 运行证据
+
+2026-09-01 本机 TOPAS Job 495（200 MeV/u、50k、seed `2026099609`）完成增强 scorer 诊断。
+50,000/50,000 条记录均为 `(Z,A)=(4,6)` 的 `decay_parent`，post-step process 为
+`RadioactiveDecay`，step length 约 `10^-9 mm`，pre/post KE 均为 1200 MeV；`decay_daughter`
+为 0，step deposit 为数值零。`RadioactiveDecay6.1.2` 中缺少 `z4.a6`，只有
+`PhotonEvaporation6.1/z4.a6`。因此当前 TOPAS reference 的可观测行为是立即终止且无 daughter，
+但三体衰变尚无证据。详见 [03B-1R step record](steps/03b1r-be6-prompt-decay-semantics.md)。
+
+03B-1R **仍未完成**：不能将 Be-6 当稳定 secondary 输运，也不能在没有 reference daughter/能量
+归属证据时硬编码 `alpha+p+p` conversion。
 
 ## Step 03B-0 运行证据
 
