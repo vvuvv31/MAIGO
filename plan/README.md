@@ -34,15 +34,15 @@
 
 ## 优先级
 
-当前路线：c2e25b8 compatibility rebaseline 已完成；下一步先做 03A baseline attribution sanity check，确认 compatibility 开关没有造成 scorer/analysis side effect。通过后执行 03B-2B bounded source/compiler consistency（仅 transportable isotopes），随后 reaction-survival × stopping optical depth；最后是 light-ion residual、straggling、MCS shape 和 100/300 frozen-physics regression。
+当前路线：c2e25b8 compatibility rebaseline 与 03A baseline attribution sanity check 已完成；03B-2B bounded source/compiler consistency 也已完成且未发现 source/compiler/index 缺陷。下一步直接进入 transportable Be/Li 的 reaction-survival × stopping optical depth；03B-2B 的 192 个 runtime sparse-support miss 作为 correctness residual 携带，不调 rate/target mix。随后处理 causal physics fix、light-ion residual、straggling、MCS shape 和 100/300 frozen-physics regression。
 
 `P0 ledger correctness → P0 signed handoff → P0 compact isotope ledger → P0 replay semantics → P1 deterministic auditor → P0 Be6 compatibility policy/A-B → P0 compatibility rebaseline → P1 03A baseline attribution sanity check → P1 03B-2B bounded source/compiler consistency → P1 reaction survival + stopping optical depth → P1 causal Be/Li fix → P2 light-ion accounting cleanup → P2 non-C12 straggling → P3 MCS shape → P4 100/300 regression`。
 
 ## 进度控制
 
-当前完成度：**8/16（约 50%）**；Step 03 阶段 A、03B-0、03B-1 campaign provenance gate、03B-1R、compatibility rebaseline、03B-2A、03A attribution sanity check 和 Step 01B.1 已完成。由于新发现 Be-6 的基态寿命为 prompt scale，原先“补充稳定 Be-6 projectile campaign”的 03B-1R 已收缩为 TOPAS reference compatibility policy gate；reference 明确为无 daughter/无 deposit 的 StopAndKill，no-decay 数据只作诊断，不得编译进生产 package。
+当前完成度：**9/16（约 56%）**；Step 03 阶段 A、03B-0、03B-1 campaign provenance gate、03B-1R、compatibility rebaseline、03B-2A、03A attribution sanity check、Step 01B.1 和 03B-2B bounded source/compiler audit 已完成。由于新发现 Be-6 的基态寿命为 prompt scale，原先“补充稳定 Be-6 projectile campaign”的 03B-1R 已收缩为 TOPAS reference compatibility policy gate；reference 明确为无 daughter/无 deposit 的 StopAndKill，no-decay 数据只作诊断，不得编译进生产 package。
 
-Step 01A ledger correctness、Step 01A.5 signed handoff、Step 01B compact isotope 诊断仪器和 Step 02 deterministic package auditor 已完成；Step 03 阶段 A 已修复 replay miss 的 null-collision MCS semantics，03B-0/03B-1 已确定 Be6 coverage 缺口及 TOPAS prompt-unstable compatibility 语义，compatibility rebaseline 已切换为开发基线。03B-2A 已证明 transportable Be/Li 的 miss 为零，下一步只做 source/compiler consistency，不直接改 runtime rate。p/d/He4 及当前 aggregate species residual 仍未修复，不能把 compatibility rebaseline 误记为物理收敛。
+Step 01A ledger correctness、Step 01A.5 signed handoff、Step 01B compact isotope 诊断仪器和 Step 02 deterministic package auditor 已完成；Step 03 阶段 A 已修复 replay miss 的 null-collision MCS semantics，03B-0/03B-1 已确定 Be6 coverage 缺口及 TOPAS prompt-unstable compatibility 语义，compatibility rebaseline 已切换为开发基线。03B-2A 与 03B-2B 已证明 transportable Be/Li 的 miss 为零，且当前 source/compiler/package/global-index 一致；192 个 runtime sparse-support miss 仅作为 correctness residual 携带，不直接改 runtime rate。p/d/He4 及当前 aggregate species residual 仍未修复，不能把 compatibility rebaseline 误记为物理收敛。
 
 | 状态 | 步骤 | 主要产出 |
 |---|---|---|
@@ -55,7 +55,7 @@ Step 01A ledger correctness、Step 01A.5 signed handoff、Step 01B compact isoto
 | [x] | [03B-1R Be6 TOPAS compatibility policy/A-B](steps/03b1r-be6-prompt-decay-semantics.md) | TopasCompatKill、显式 discarded-kinetic sink、200 MeV/u 100k fixed-seed A/B 已完成；全局 inherited CINEL02 residual 仍待后续处理 |
 | [x] | [03B-2A Occupancy-aware replay-support audit](steps/03b2-replay-support-occupancy-audit.md) | transportable isotope miss 分类完成；Be/Li miss=0；不改 runtime rate |
 | [x] | [03A Baseline attribution sanity check](steps/03a-baseline-attribution-sanity-check.md) | 当前 HEAD 同 seed A/B 通过；稳定 species 仅约 1e-8% 变化，Be/Total 单独允许变化 |
-| [ ] | [03B-2B Bounded source/compiler consistency](steps/03b2b-source-compiler-consistency.md) | 仅回溯 174 gap 与 18 anomaly；不调 rate/target mix，不以 dose 改善验收 |
+| [x] | [03B-2B Bounded source/compiler consistency](steps/03b2b-source-compiler-consistency.md) | 174/18 provisional miss 分类已完成；source/compiler/index 无确认缺陷，不调 rate/target mix |
 | [ ] | [04 MCS-only species/FOV](steps/04-mcs-only-species-fov.md) | step convergence、species-aware full-2GR、FOV acceptance |
 | [ ] | [05 Stopping/range regression](steps/05-stopping-range-regression.md) | Be/Li explicit-table range 与 unrestricted deposition |
 | [ ] | [06 Non-C12 straggling](steps/06-nonc12-straggling.md) | mean-preserving species-aware fluctuation |
@@ -74,7 +74,7 @@ Step 01A ledger correctness、Step 01A.5 signed handoff、Step 01B compact isoto
 确定缺口来自 source campaign 未运行 Be-6 projectile exposure，而不是 compiler 丢弃已有
 Be-6 projectile event。详见 [03B-1 step record](steps/03b1-be6-rate-coverage-root-cause.md)。
 
-已完成 Be6 TOPAS compatibility policy/A-B；baseline attribution sanity check 通过后执行 03B-2B bounded support-aware consistency（仅 transportable isotopes）。Job 495 增强 scorer 已确认 TOPAS 对 GenericIon(4,6) 立即调用 RadioactiveDecay 并终止 parent；50k histories 没有任何可观测 daughter，RDM 数据目录也没有 z4.a6 衰变方案。该结果禁止稳定 Be-6 rate/package 补充，也禁止在 GPU 中猜测 alpha+p+p conversion。
+已完成 Be6 TOPAS compatibility policy/A-B；03A attribution sanity check 与 03B-2B bounded source/compiler audit 也已完成（仅 transportable isotopes）。Job 495 增强 scorer 已确认 TOPAS 对 GenericIon(4,6) 立即调用 RadioactiveDecay 并终止 parent；50k histories 没有任何可观测 daughter，RDM 数据目录也没有 z4.a6 衰变方案。该结果禁止稳定 Be-6 rate/package 补充，也禁止在 GPU 中猜测 alpha+p+p conversion。
 
 ## Step 03A 运行证据
 
@@ -94,7 +94,35 @@ A/B。false 配置显式写入 `cinel02_topas_compatibility_mode: false`，true 
   用绑定的 `total_species` TOPAS reference 作为开发基线。
 
 该步骤只排除了 compatibility 开关导致的 scorer/analysis side effect，不构成物理收敛结论；
-下一步为 03B-2B bounded source/compiler consistency。
+下一步为 transportable Be/Li 的 reaction-survival × stopping optical-depth audit；03B-2B 不再阻塞该主线。
+
+## Step 03B-2B 运行证据
+
+2026-09-01 在 compatibility baseline（200 MeV/u、G1、100k、seed `2026095100`）上完成
+bounded source/compiler/package consistency audit。审计脚本为
+`startup/package_tools/audit_cinel02_source_package_consistency.py`，输出
+`plan/artifacts/cinel02-source-package-replay-consistency-e200-g1/report.json`；输入为
+`research_hybrid_e200light107.cinel02`、`research_hybrid_e200light107.cinpkg` 和同一 campaign
+`summary.csv`。
+
+- raw 全量扫描 `3,663,101` records；package 为 `3,663,101` interactions、`30,051,236`
+  products、`3,573,494` global energy nodes。34 个 source-backed isotope×target groups 全部
+  `source_present_compiled`；仅 6Be 的 H/O 两组为预期 `source_missing`，因为 compatibility
+  policy 将其标记为 non-transportable。`compiler_dropped_support=0`、
+  `package_has_unbacked_support=0`、raw/package 不匹配均为 0。
+- 03B-2A 的 192 个 occupied miss 中，174 个（20 cells）仍是 provisional
+  raw/compiler-support-gap bucket，18 个（9 cells）是 provisional index/lookup-anomaly
+  bucket；这些 cells 全部属于 `source_present_compiled` key，不能解释为 compiler 丢包。
+- 对 package 全部 `3,573,494` 个 node 执行 `14,293,976` 个 exact node/window replay probes，
+  `exact_replay_failures=0`。因此没有确认的 global-index、window-selection 或 `(Z,A)` lookup
+  bug；不修改 package、rate、target CDF、tolerance 或 runtime support mask。
+- 生产 package C++ inspection 与 Python census 一致：34 个 source-backed groups、
+  `parent_survival_fraction=0`；6Be 不进入 transportable projectile/rate/replay coverage。
+
+结论：03B-2B 是 bounded correctness cleanup，未找到可提交的 source/compiler/index 修复。
+transportable Be/Li 的 replay miss 为 0；其余 192 个 miss 作为 runtime sparse-support
+correctness residual 携带，不以 dose 改善作为验收。下一步进入 Be7/9/10、Li6/7 的
+`track-length × hazard optical depth → empirical reaction survival → stopping residence`。
 
 ## Step 03B-1R 运行证据
 
@@ -152,7 +180,7 @@ secondary generation-1 no-event `206/33512 = 0.615%`；按 isotope 最高为 2H 
 `continuous_loss_to_collision_MeV`；generation 语义改为 `reaction_generation`。
 
 该步骤只修正诊断语义，不修改 sampler/yield、rate、stopping、MCS 或 cascade physics。
-Step 02 deterministic package auditor 已完成；下一步进入 Step 03 replay-support consistency。
+Step 02 deterministic package auditor、03B-2A 和 03B-2B bounded source/compiler audit 已完成；下一步进入 transportable Be/Li 的 reaction-survival × stopping optical-depth audit。
 
 ## 提交切分
 
@@ -168,7 +196,7 @@ sampler/package commit 不在预定队列中；必须先通过 Step 08 门禁。
 
 ## 更新规则
 
-- README 是唯一进度入口；只执行第一个未完成步骤。
+- README 是唯一进度入口；按当前路线执行第一个未完成且不被前置诊断阻塞的步骤，已分类但未收口的 light-ion residual 可携带到后续支线。
 - 只有步骤文件的所有退出条件通过并记录证据时才标记 `[x]`。
 - 每次记录 commit、canonical config、seed、histories、TOPAS job ID、package/rate SHA256、FOV/scorer header、输出路径和失败项。
 - artifacts 保留在本地/15 TB 数据盘，不将 raw/3D dose 提交到 Git。

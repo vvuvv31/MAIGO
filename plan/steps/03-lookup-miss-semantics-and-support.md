@@ -6,14 +6,14 @@
 
 ## 问题
 
-rate group 可在连续能区插值为非零，但 event replay 要求当前 `±0.51 MeV/u` 真正有 event。200 MeV/u G1 已观测 `192/33512 = 0.573%` secondary misses。
+rate group 可在连续能区插值为非零，但 event replay 要求当前 `±0.51 MeV/u` 真正有 event。200 MeV/u G1 compatibility baseline 实测 `192/71524 = 0.268441%` lookup misses；另有 14 个 post-EM cutoff，不能混作 lookup miss。
 
 ## 阶段 A：Null-collision transport
 
 1. [x] miss 保留已走路径的 continuous EM loss 和 post-EM state。
 2. [x] miss 也必须执行与普通步一致的 MCS/lateral displacement，不得人工直线飞行。
 3. [x] 不产生 products、local nuclear deposit 或 parent final-state 变化。
-4. [x] 记录 `(Z,A,target,E,generation,depth)` miss histogram 和 associated path/KE。
+4. [x] 记录 `(Z,A,target,E,reaction_generation)` miss histogram 和 associated KE；当前 compact ledger 不含 depth，spatial discrepancy 留到后续 optical-depth 阶段再加。
 
 ### 阶段 A 实施与验证总结
 
@@ -70,21 +70,23 @@ rate group 可在连续能区插值为非零，但 event replay 要求当前 `±
 3. [x] 保持 isotope alias 禁止；独立 6Be 数据补充前不静默填 rate/event。
 4. [x] 03B-1R：按 Job 495 reference semantics 实现 TopasCompatKill；不补充独立 6Be+H1/O16 exposure/package。
 
-### 03B-2B：bounded source/compiler consistency（待执行，仅 transportable isotopes）
+### 03B-2B：bounded source/compiler consistency（已完成，仅 transportable isotopes）
 
 本阶段是 correctness cleanup，不是 Be/Li 剂量收敛步骤。只处理 03B-2A 实际占用的
 174 个 provisional source/compiler gap 与 18 个 lookup/index anomaly；不改变 rate、target
 CDF、tolerance 或 isotope yield。
 
-1. [ ] 对 174 个 gap 逐项回溯 raw source → compiler → package，确认 raw 真缺还是 compiler 丢 support。
-2. [ ] 对 18 个 anomaly 做 exact-energy replay，确认 index/lookup 实现问题并补回归测试。
-3. [ ] 若 raw 有 support 而 compiler 丢失，修 source/compiler/package manifest；若 raw 真缺，
-   只记录缺口并评估显式 suppressed hazard，不静默改 H/O target mix。
+1. [x] raw/package provenance census 完成：34 个 source-backed groups 全部匹配，2 个 6Be
+   groups 按 non-transportable policy 缺失；compiler/package 丢 support 为 0。
+2. [x] 14,293,976 个 exact node/window replay probes 全部通过；18 个 anomaly 没有确认的
+   index/lookup bug，保留为 provisional runtime sparse-support 分类。
+3. [x] 没有 raw-present/compiler-dropped 项，因此不修改 source/compiler/package manifest，
+   不静默改变 H/O target mix，也不新增 suppressed-hazard physics。
 4. [x] 不跨大能差寻找 nearest event，不扩大 tolerance 来隐藏 gap；03B-2A 已证明 Be/Li miss=0。
-5. [ ] 不在 E_rate 上直接乘 runtime support mask；只有 03B-2A 证明边界漂移占主导时，才设计
-   support-boundary segmentation，并记录 suppressed hazard / optical depth。
+5. [x] 不在 E_rate 上直接乘 runtime support mask；没有 occupancy 证据要求 support-boundary
+   segmentation。192 个 miss 作为 correctness residual 携带。
 
-完成上述 bounded 检查后立即进入 reaction-survival × stopping-residence 主线；不得以 dose
+bounded 检查已完成，立即进入 reaction-survival × stopping-residence 主线；不得以 dose
 改善作为本阶段验收。
 
 ## 测试
@@ -96,8 +98,9 @@ CDF、tolerance 或 isotope yield。
 - [x] 03B-0 census 的区间 union/zero-rate 过滤 synthetic tests。
 - [x] 03B-1 raw campaign/compiler root-cause 与 03B-1R compatibility policy 判定完成；不补充 Be-6 data。
 - [x] 03B-2A occupancy 分类与 Be6 non-transportable policy test 已补充。
-- [ ] 03B-2B 需补充 raw/compiler/package provenance、exact-energy index/lookup、H/O 切换与
-  G1/G2 source/compiler consistency tests；不预先实现 runtime support mask。
+- [x] 03B-2B Python regression 覆盖 raw/compiler/package provenance key 表、exact-energy
+  node/window lookup 和 `(Z,A)` mismatch；生产 census 覆盖 H/O 与 0/1/2 `reaction_generation`，
+  不预先实现 runtime support mask。
 
 ## 退出条件
 
@@ -107,10 +110,13 @@ CDF、tolerance 或 isotope yield。
 - [x] valid replay 不重复施加普通步 MCS；post-EM cutoff 不施加超出 cutoff 的 MCS。
 - [x] 沙盒外编译、CTest 和 200 MeV/u 100k GPU 回归完成。
 
-### 阶段 B（03B-2B 尚未完成）
+### 阶段 B（03B-2B 已完成）
 
 - [x] 03B-2A 已按实际 occupancy 分类 miss；不把 0.268% global miss 误报为 Be/Li dose 根因。
-- [ ] 174 个 provisional gap 已完成 raw source → compiler → package 回溯；18 个 anomaly 已 exact replay。
-- [ ] transportable isotope replay miss 接近 0，且修复前后 isotope birth expectation 无可测重归一化。
-- [ ] 仅在 source/compiler 证据支持时修复 support；不扩大 tolerance、使用 nearest-event fallback
-  或在 E_rate 上静默乘 runtime mask。
+- [x] 174 个 provisional gap（20 cells）与 18 个 provisional anomaly（9 cells）已有
+  source/package provenance；34 个 source-backed groups 无 raw/package mismatch，6Be 两组按
+  policy 排除。
+- [x] 14,293,976 个 exact-energy node/window probes 全部通过；未确认 index/lookup bug，
+  transportable Be/Li miss 仍为 0，其余 192 个 miss 显式携带为 runtime sparse-support residual。
+- [x] 没有 source/compiler 修复项；未扩大 tolerance、使用 nearest-event fallback，未在
+  E_rate 上静默乘 runtime mask，也未改变 isotope birth expectation。
