@@ -39,9 +39,9 @@
 
 ## 进度控制
 
-当前完成度：**4/13（约 31%）**。
+当前完成度：**5/13（约 38%）**。
 
-Step 01A ledger correctness、Step 01A.5 signed handoff 和 Step 01B compact isotope 诊断仪器已完成；当前下一步：**Step 02 deterministic package auditor**。Step 01B.1 已完成；p/d/He4 的物理 residual 仍未修复，不能把诊断步骤误记为物理收敛。
+Step 01A ledger correctness、Step 01A.5 signed handoff、Step 01B compact isotope 诊断仪器和 Step 02 deterministic package auditor 已完成；当前下一步：**Step 03 replay-support consistency**。Step 01B.1 已完成；p/d/He4 的物理 residual 仍未修复，不能把诊断步骤误记为物理收敛。
 
 | 状态 | 步骤 | 主要产出 |
 |---|---|---|
@@ -50,7 +50,7 @@ Step 01A ledger correctness、Step 01A.5 signed handoff 和 Step 01B compact iso
 | [x] | [01A.5 Signed reaction handoff](steps/01a5-signed-reaction-handoff.md) | reaction import/export 与 replay δE 诊断完成；import=0，残差留给后续 |
 | [x] | [01B Compact isotope replay ledger](steps/01b-compact-isotope-replay-ledger.md) | isotope×target×generation status、parent outcome、transition |
 | [x] | [01B.1 Replay semantics cleanup](steps/01b1-replay-semantics-cleanup.md) | lookup miss/cutoff 拆分；rate/replay/dE energy handoff |
-| [ ] | [02 Deterministic package auditor](steps/02-deterministic-package-yield-auditor.md) | GPU actual vs package exact vs TOPAS source |
+| [x] | [02 Deterministic package auditor](steps/02-deterministic-package-yield-auditor.md) | GPU actual vs package exact vs TOPAS source；10-MeV occupancy audit |
 | [ ] | [03 Lookup miss semantics/support](steps/03-lookup-miss-semantics-and-support.md) | null-collision MCS 和 support-aware rate |
 | [ ] | [04 MCS-only species/FOV](steps/04-mcs-only-species-fov.md) | step convergence、species-aware full-2GR、FOV acceptance |
 | [ ] | [05 Stopping/range regression](steps/05-stopping-range-regression.md) | Be/Li explicit-table range 与 unrestricted deposition |
@@ -62,7 +62,7 @@ Step 01A ledger correctness、Step 01A.5 signed handoff 和 Step 01B compact iso
 ### Step 01B 运行证据
 
 2026-09-01 在本机 RTX 2080Ti、200 MeV/u、G1、100k、seed `2026095100` 完成。
-Replay status 为 candidate/valid/no-event/invalid = `71524/71318/206/0`，
+Replay status（10 MeV/u bins）为 candidate/valid/lookup-miss/invalid/cutoff = `71524/71318/192/0/14`，
 secondary generation-1 no-event `206/33512 = 0.615%`；按 isotope 最高为 2H `1.779%`、
 3H `0.798%`、7Be `0.490%`、6Li `0.358%`。结果详见
 [01B step record](steps/01b-compact-isotope-replay-ledger.md)。
@@ -86,11 +86,11 @@ secondary generation-1 no-event `206/33512 = 0.615%`；按 isotope 最高为 2H 
 
 `E_rate - E_replay - dE` 的全局相对残差为 `1.98e-7`；最大 cell 相对残差
 `1.20e-6`，来源是 device float atomic 累加，未改变物理结果。JSON layout 已更新为
-`[18,2,3,8,5]`，并输出 `rate_query_energy_MeV`、`replay_query_energy_MeV`、
+`[18,2,3,40,5]`（10 MeV/u diagnostic bins），并输出 `rate_query_energy_MeV`、`replay_query_energy_MeV`、
 `continuous_loss_to_collision_MeV`；generation 语义改为 `reaction_generation`。
 
 该步骤只修正诊断语义，不修改 sampler/yield、rate、stopping、MCS 或 cascade physics。
-下一步按计划进入 Step 02 deterministic package auditor。
+Step 02 deterministic package auditor 已完成；下一步进入 Step 03 replay-support consistency。
 
 ## 提交切分
 

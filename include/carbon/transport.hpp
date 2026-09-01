@@ -87,7 +87,10 @@ struct Cinel02ReplayLedgerSchema {
     static constexpr std::size_t species_count = Cinel02SpeciesLedgerSchema::species_count;
     static constexpr std::size_t target_count = 2;
     static constexpr std::size_t generation_count = 3;
-    static constexpr std::size_t energy_bin_count = 8;
+    // Fine replay occupancy bins (10 MeV/u) keep package support and misses
+    // separable inside the broad 50 MeV/u physics ranges.
+    static constexpr std::size_t energy_bin_count = 40;
+    static constexpr float energy_bin_width_MeV_per_u = 10.0F;
     static constexpr std::size_t status_count = 5;
     static constexpr std::size_t outcome_count = 2;
     static constexpr std::size_t status_cell_count =
@@ -203,7 +206,7 @@ struct TransportResult {
         cinel02_replay_delta_negative_counts{};
     std::array<std::uint64_t, species_ledger_species_count>
         cinel02_replay_valid_counts{};
-    // Compact isotope × target × generation × 50-MeV/u-bin replay ledger.
+    // Compact isotope × target × generation × 10-MeV/u-bin replay ledger.
     std::array<std::uint64_t, Cinel02ReplayLedgerSchema::status_slot_count>
         cinel02_replay_status_counts{};
     // Per replay-status cell energies.  The replay query energy is the

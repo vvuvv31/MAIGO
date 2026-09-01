@@ -102,6 +102,8 @@ inline std::uint32_t cinel02_replay_status_cell_index_device(
         static_cast<std::uint32_t>(Cinel02ReplayLedgerSchema::generation_count);
     constexpr auto energy_bin_count =
         static_cast<std::uint32_t>(Cinel02ReplayLedgerSchema::energy_bin_count);
+    constexpr float energy_bin_width_MeV_per_u =
+        Cinel02ReplayLedgerSchema::energy_bin_width_MeV_per_u;
     const auto mapped_species =
         carbon::get_charged_species_idx(projectile_z, projectile_a);
     if (mapped_species < 0 ||
@@ -115,7 +117,8 @@ inline std::uint32_t cinel02_replay_status_cell_index_device(
                                    ? sycl::fmax(energy_MeV_per_u, 0.0F)
                                    : 0.0F;
     const auto energy_bin = sycl::min(
-        static_cast<std::uint32_t>(finite_energy / 50.0F), energy_bin_count - 1U);
+        static_cast<std::uint32_t>(finite_energy / energy_bin_width_MeV_per_u),
+        energy_bin_count - 1U);
     return ((static_cast<std::uint32_t>(mapped_species) * target_count + target) *
                 generation_count + generation_bin) *
                energy_bin_count +

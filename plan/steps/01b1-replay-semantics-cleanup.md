@@ -29,11 +29,12 @@
 - [x] 200 MeV/u、G1、100k、seed `2026095100` GPU 重跑完成。
 - [x] status partition 满足 candidate = valid + lookup_miss + invalid + cutoff。
 - [x] 新 JSON 包含五状态 layout 与三类 collision energy array。
+- [x] 10 MeV/u replay occupancy refinement 已编译、测试并完成同配置 GPU 重跑，为 Step 02 提供可分辨的 support 诊断。
 - [x] 记录 lookup miss 与 post-EM cutoff 的分项结果；不以 p/d/He4 residual 阻塞后续 auditor。
 
 ## 运行记录
 
-- Commit（代码基线）：工作树基于 `82f7f4a`，Step 01B.1 尚未提交。
+- Commit（代码基线）：`c4ceee4`（replay semantics cleanup）；后续 10-MeV diagnostic refinement 工作树中。
 - Config：`config/beam_200MeVu_cinel02_e200light107_g1_transitiondiag4_100k_xy04.yaml`。
 - Seed/histories：`2026095100` / `100000`；设备：RTX 2080Ti/sm_75，CUDA SYCL。
 - Package SHA256：`8a54b8544aea484fa3ff649fc372c22d4b48deff4c2fe37dbd31b2f7f6adb25d`。
@@ -42,6 +43,6 @@
 - Output：`out/beam_200MeVu_cinel02_e200light107_g1_transitiondiag4_100k_xy04/energy_ledger.json`。
 - Build：沙盒外 `cmake --build build -j2` 成功。
 - Tests：沙盒外 CTest `2/2` 通过。
-- Status：`71524/71318/192/0/14`（candidate/valid/lookup_miss/invalid/cutoff），逐 cell 守恒。
+- Status：`71524/71318/192/0/14`（candidate/valid/lookup_miss/invalid/cutoff），逐 cell 守恒；当前 replay status 使用 40 个 10-MeV/u bins（旧 50-MeV/u coarse layout 已由本次 auditor 前的诊断细化取代）。
 - Energy invariant：全局相对残差 `1.98e-7`，最大 cell 相对残差 `1.20e-6`。
 - 物理 residual：本步骤不改变；p/d/He4 仍留给后续 reaction-survival / stopping optical-depth 分析。

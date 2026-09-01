@@ -4,7 +4,7 @@
 
 在不改变 CINEL02 sampler、rate、stopping、MCS 或 straggling 的前提下，
 把 secondary replay 的候选、命中、缺失和非法事件按 isotope、target、cascade
-reaction_generation 与 50 MeV/u energy bin 分开记录；同时记录 parent handoff 和
+reaction_generation 与细粒度 10 MeV/u diagnostic energy bin 分开记录（hazard/Be legacy tables 仍保留 50-MeV/u coarse view）；同时记录 parent handoff 和
 generated/queued isotope transition，作为后续 reaction-survival 与 package
 auditor 的输入。
 

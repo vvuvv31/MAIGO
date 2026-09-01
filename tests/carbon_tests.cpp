@@ -3547,7 +3547,7 @@ void test_cinel02_ledger_schema_and_accumulator() {
     static_assert(Schema::reaction_import_kinetic + 1 == Schema::metric_count);
     static_assert(Schema::continuous_stop + 1 == Schema::terminal_reason_count);
     static_assert(Replay::status_count == 5);
-    static_assert(Replay::status_slot_count == 18 * 2 * 3 * 8 * 5);
+    static_assert(Replay::status_slot_count == 18 * 2 * 3 * 40 * 5);
     static_assert(Replay::parent_outcome_cell_count == 18 * 2 * 3 * 2);
     static_assert(Replay::transition_cell_count == 18 * 18);
 

@@ -1508,11 +1508,11 @@ void write_energy_ledger_json(const std::filesystem::path& path,
     }
     output << "],\n"
            << "  \"cinel02_replay_status_layout\": "
-              "{\"shape\":[18,2,3,8,5],\"order\":[\"projectile_species\",\"target\",\"reaction_generation\",\"energy_bin\",\"status\"],"
+              "{\"shape\":[18,2,3,40,5],\"order\":[\"projectile_species\",\"target\",\"reaction_generation\",\"energy_bin\",\"status\"],"
               "\"status\":[\"collision_candidate\",\"replay_valid\",\"replay_lookup_miss\",\"replay_invalid_event\",\"post_em_below_cutoff\"],"
               "\"projectile_species\":[\"1H\",\"2H\",\"3H\",\"3He\",\"4He\",\"6He\",\"6Li\",\"7Li\",\"7Be\",\"9Be\",\"10Be\",\"8B\",\"10B\",\"11B\",\"10C\",\"11C\",\"12C\",\"6Be\"],"
               "\"targets\":[\"H\",\"O\"],\"reaction_generations\":[0,1,2],"
-              "\"energy_bin_edges_MeV_per_u\":[0,50,100,150,200,250,300,350,\"infinity\"]},\n"
+              "\"energy_bin_edges_MeV_per_u\":[0,10,20,30,40,50,60,70,80,90,100,110,120,130,140,150,160,170,180,190,200,210,220,230,240,250,260,270,280,290,300,310,320,330,340,350,360,370,380,390,\"infinity\"]},\n"
            << "  \"cinel02_replay_status_counts\": [";
     for (std::size_t i = 0; i < result.cinel02_replay_status_counts.size(); ++i) {
         output << (i == 0 ? "" : ", ") << result.cinel02_replay_status_counts[i];
