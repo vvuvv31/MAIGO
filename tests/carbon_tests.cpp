@@ -3546,7 +3546,8 @@ void test_cinel02_ledger_schema_and_accumulator() {
     static_assert(Schema::terminal_reason_count == 6);
     static_assert(Schema::reaction_import_kinetic + 1 == Schema::metric_count);
     static_assert(Schema::continuous_stop + 1 == Schema::terminal_reason_count);
-    static_assert(Replay::status_slot_count == 18 * 2 * 3 * 8 * 4);
+    static_assert(Replay::status_count == 5);
+    static_assert(Replay::status_slot_count == 18 * 2 * 3 * 8 * 5);
     static_assert(Replay::parent_outcome_cell_count == 18 * 2 * 3 * 2);
     static_assert(Replay::transition_cell_count == 18 * 18);
 
@@ -3586,8 +3587,12 @@ void test_cinel02_ledger_schema_and_accumulator() {
     for (std::size_t i = 0; i < total.cinel02_replay_status_counts.size(); ++i) {
         total.cinel02_replay_status_counts[i] = i;
         part.cinel02_replay_status_counts[i] = 2 * i;
-        total.cinel02_replay_status_incident_energy_MeV[i] = static_cast<double>(i);
-        part.cinel02_replay_status_incident_energy_MeV[i] = static_cast<double>(3 * i);
+        total.cinel02_replay_status_rate_query_energy_MeV[i] = 10.0 + i;
+        part.cinel02_replay_status_rate_query_energy_MeV[i] = 20.0 + 3.0 * i;
+        total.cinel02_replay_status_replay_query_energy_MeV[i] = 9.0 + i;
+        part.cinel02_replay_status_replay_query_energy_MeV[i] = 18.0 + 2.0 * i;
+        total.cinel02_replay_status_continuous_loss_to_collision_MeV[i] = 1.0;
+        part.cinel02_replay_status_continuous_loss_to_collision_MeV[i] = 2.0 + i;
         total.cinel02_replay_status_delta_MeV_per_u[i] = static_cast<double>(4 * i);
         part.cinel02_replay_status_delta_MeV_per_u[i] = static_cast<double>(5 * i);
         total.cinel02_replay_status_abs_delta_MeV_per_u[i] = static_cast<double>(6 * i);
@@ -3653,8 +3658,19 @@ void test_cinel02_ledger_schema_and_accumulator() {
     for (std::size_t i = 0; i < total.cinel02_replay_status_counts.size(); ++i) {
         require(total.cinel02_replay_status_counts[i] == 3 * i,
                 "CINEL02 replay-status count accumulator mismatch");
-        require_near(total.cinel02_replay_status_incident_energy_MeV[i], 4.0 * i, 0.0,
-                     "CINEL02 replay-status incident accumulator mismatch");
+        require_near(total.cinel02_replay_status_rate_query_energy_MeV[i],
+                     30.0 + 4.0 * i, 0.0,
+                     "CINEL02 replay-status rate-energy accumulator mismatch");
+        require_near(total.cinel02_replay_status_replay_query_energy_MeV[i],
+                     27.0 + 3.0 * i, 0.0,
+                     "CINEL02 replay-status replay-energy accumulator mismatch");
+        require_near(total.cinel02_replay_status_continuous_loss_to_collision_MeV[i],
+                     3.0 + i, 0.0,
+                     "CINEL02 replay-status continuous-loss accumulator mismatch");
+        require_near(total.cinel02_replay_status_rate_query_energy_MeV[i] -
+                         total.cinel02_replay_status_replay_query_energy_MeV[i],
+                     total.cinel02_replay_status_continuous_loss_to_collision_MeV[i],
+                     0.0, "CINEL02 replay energy handoff invariant mismatch");
         require_near(total.cinel02_replay_status_delta_MeV_per_u[i], 9.0 * i, 0.0,
                      "CINEL02 replay-status delta accumulator mismatch");
         require_near(total.cinel02_replay_status_abs_delta_MeV_per_u[i], 13.0 * i, 0.0,

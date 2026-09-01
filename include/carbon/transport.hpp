@@ -88,7 +88,7 @@ struct Cinel02ReplayLedgerSchema {
     static constexpr std::size_t target_count = 2;
     static constexpr std::size_t generation_count = 3;
     static constexpr std::size_t energy_bin_count = 8;
-    static constexpr std::size_t status_count = 4;
+    static constexpr std::size_t status_count = 5;
     static constexpr std::size_t outcome_count = 2;
     static constexpr std::size_t status_cell_count =
         species_count * target_count * generation_count * energy_bin_count;
@@ -99,8 +99,11 @@ struct Cinel02ReplayLedgerSchema {
     static constexpr std::size_t transition_cell_count =
         species_count * species_count;
     enum Status : std::size_t {
-        collision_candidate = 0, replay_valid = 1,
-        replay_no_event = 2, replay_invalid_event = 3
+        collision_candidate = 0,
+        replay_valid = 1,
+        replay_lookup_miss = 2,
+        replay_invalid_event = 3,
+        post_em_below_cutoff = 4
     };
 };
 
@@ -203,8 +206,16 @@ struct TransportResult {
     // Compact isotope × target × generation × 50-MeV/u-bin replay ledger.
     std::array<std::uint64_t, Cinel02ReplayLedgerSchema::status_slot_count>
         cinel02_replay_status_counts{};
+    // Per replay-status cell energies.  The replay query energy is the
+    // post-EM collision-point energy; rate query is the pre-EM energy used
+    // for hazard/target selection.  Their difference is the continuous loss
+    // accrued to the collision point (within atomic accumulation precision).
     std::array<double, Cinel02ReplayLedgerSchema::status_slot_count>
-        cinel02_replay_status_incident_energy_MeV{};
+        cinel02_replay_status_rate_query_energy_MeV{};
+    std::array<double, Cinel02ReplayLedgerSchema::status_slot_count>
+        cinel02_replay_status_replay_query_energy_MeV{};
+    std::array<double, Cinel02ReplayLedgerSchema::status_slot_count>
+        cinel02_replay_status_continuous_loss_to_collision_MeV{};
     std::array<double, Cinel02ReplayLedgerSchema::status_slot_count>
         cinel02_replay_status_delta_MeV_per_u{};
     std::array<double, Cinel02ReplayLedgerSchema::status_slot_count>

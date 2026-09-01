@@ -123,10 +123,13 @@ inline std::uint32_t cinel02_replay_status_cell_index_device(
 }
 
 inline void cinel02_record_replay_status_device(
-    std::uint64_t* counts, float* incident_energy_MeV,
+    std::uint64_t* counts, float* rate_query_energy_MeV,
+    float* replay_query_energy_MeV,
+    float* continuous_loss_to_collision_MeV,
     float* delta_MeV_per_u, float* abs_delta_MeV_per_u,
     const int projectile_z, const int projectile_a, const int target_z,
-    const std::uint32_t generation, const float runtime_energy_MeV,
+    const std::uint32_t generation, const float rate_energy_MeV,
+    const float replay_energy_MeV, const float continuous_loss_MeV,
     const float delta_energy_MeV_per_u,
     const std::uint32_t status) noexcept {
     constexpr auto invalid = std::numeric_limits<std::uint32_t>::max();
@@ -135,12 +138,15 @@ inline void cinel02_record_replay_status_device(
     if (status >= status_count) return;
     const auto cell = cinel02_replay_status_cell_index_device(
         projectile_z, projectile_a, target_z, generation,
-        runtime_energy_MeV / sycl::fmax(1.0F,
+        replay_energy_MeV / sycl::fmax(1.0F,
             static_cast<float>(sycl::max(1, projectile_a))));
     if (cell == invalid) return;
     const auto slot = cell * status_count + status;
     cinel02_diag_increment_device(counts, slot);
-    cinel02_energy_add_device(incident_energy_MeV, slot, runtime_energy_MeV);
+    cinel02_energy_add_device(rate_query_energy_MeV, slot, rate_energy_MeV);
+    cinel02_energy_add_device(replay_query_energy_MeV, slot, replay_energy_MeV);
+    cinel02_energy_add_device(continuous_loss_to_collision_MeV, slot,
+                              continuous_loss_MeV);
     cinel02_energy_add_device(delta_MeV_per_u, slot, delta_energy_MeV_per_u);
     cinel02_energy_add_device(abs_delta_MeV_per_u, slot,
                               sycl::fabs(delta_energy_MeV_per_u));

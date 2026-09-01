@@ -147,8 +147,12 @@ void accumulate_transport_result(carbon::TransportResult& total,
     }
     for (std::size_t i = 0; i < total.cinel02_replay_status_counts.size(); ++i) {
         total.cinel02_replay_status_counts[i] += part.cinel02_replay_status_counts[i];
-        total.cinel02_replay_status_incident_energy_MeV[i] +=
-            part.cinel02_replay_status_incident_energy_MeV[i];
+        total.cinel02_replay_status_rate_query_energy_MeV[i] +=
+            part.cinel02_replay_status_rate_query_energy_MeV[i];
+        total.cinel02_replay_status_replay_query_energy_MeV[i] +=
+            part.cinel02_replay_status_replay_query_energy_MeV[i];
+        total.cinel02_replay_status_continuous_loss_to_collision_MeV[i] +=
+            part.cinel02_replay_status_continuous_loss_to_collision_MeV[i];
         total.cinel02_replay_status_delta_MeV_per_u[i] +=
             part.cinel02_replay_status_delta_MeV_per_u[i];
         total.cinel02_replay_status_abs_delta_MeV_per_u[i] +=

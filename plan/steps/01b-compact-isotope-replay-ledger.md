@@ -4,7 +4,7 @@
 
 在不改变 CINEL02 sampler、rate、stopping、MCS 或 straggling 的前提下，
 把 secondary replay 的候选、命中、缺失和非法事件按 isotope、target、cascade
-generation 与 50 MeV/u energy bin 分开记录；同时记录 parent handoff 和
+reaction_generation 与 50 MeV/u energy bin 分开记录；同时记录 parent handoff 和
 generated/queued isotope transition，作为后续 reaction-survival 与 package
 auditor 的输入。
 
@@ -12,8 +12,8 @@ auditor 的输入。
 
 `Cinel02ReplayLedgerSchema` 定义固定布局：
 
-- replay status：`18 × 2 × 3 × 8 × 4`，顺序为
-  `projectile isotope × target(H/O) × generation(0..2) × energy bin × status`；
+- replay status：`18 × 2 × 3 × 8 × 5`，顺序为
+  `projectile isotope × target(H/O) × reaction_generation(0..2) × energy bin × status`；
 - parent outcome：`18 × 2 × 3 × 2`，outcome 为 `continued/killed`，并累加
   incident、parent-after、local、export、import kinetic energy；
 - transition：`18 × 18`，分别保存 generated 与 successfully queued 的 count 和
@@ -25,7 +25,7 @@ auditor 的输入。
 ## 执行内容
 
 1. primary 和 secondary CINEL02 replay 在 hazard/collision point 记录
-   `collision_candidate`；event lookup miss 记录 `replay_no_event`；越界 product
+   `collision_candidate`；event lookup miss 记录 `replay_lookup_miss`；post-EM energy 低于 cutoff 记录 `post_em_below_cutoff`；越界 product
    或非法 parent status 记录 `replay_invalid_event`；合法 event 记录
    `replay_valid`。
 2. secondary parent valid replay 记录 isotope-resolved outcome 与 signed
@@ -47,8 +47,8 @@ auditor 的输入。
 - Output：`out/beam_200MeVu_cinel02_e200light107_g1_transitiondiag4_100k_xy04/energy_ledger.json`
 - energy balance：`0.0153629914825`；沙盒外 2/2 CTest 通过。
 
-Replay status 总计：candidate `71524`、valid `71318`、no-event `206`、invalid
-`0`；因此 candidate = valid + no-event + invalid。secondary generation-1
+Replay status 总计（旧四状态基线）：candidate `71524`、valid `71318`、no-event `206`、invalid
+`0`。01B.1 将 no-event 拆为 lookup miss 与 post-EM cutoff，并保留 candidate = valid + lookup_miss + invalid + cutoff。secondary generation-1
 no-event 为 `206/33512 = 0.615%`。按 isotope 的 no-event 比例最高的是
 `2H 1.779%`、`3H 0.798%`、`7Be 0.490%`、`6Li 0.358%`；`9Be` 和 `10Be` 本轮
 均为 0/31 与 0/49。所有 reaction-import energy 仍为 0。

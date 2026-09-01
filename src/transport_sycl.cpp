@@ -184,7 +184,9 @@ TransportResult transport_sycl(const TransportConfig& config,
     constexpr std::size_t kCinel02TransitionSlots =
         Cinel02ReplayLedgerSchema::transition_cell_count;
     std::uint64_t* cinel02_replay_status_counts_device = nullptr;
-    float* cinel02_replay_status_incident_device = nullptr;
+    float* cinel02_replay_status_rate_query_energy_device = nullptr;
+    float* cinel02_replay_status_replay_query_energy_device = nullptr;
+    float* cinel02_replay_status_continuous_loss_device = nullptr;
     float* cinel02_replay_status_delta_device = nullptr;
     float* cinel02_replay_status_abs_delta_device = nullptr;
     std::uint64_t* cinel02_parent_outcome_counts_device = nullptr;
@@ -265,7 +267,11 @@ TransportResult transport_sycl(const TransportConfig& config,
             TransportResult::species_ledger_species_count, queue);
         cinel02_replay_status_counts_device = sycl::malloc_device<std::uint64_t>(
             kCinel02ReplayStatusSlots, queue);
-        cinel02_replay_status_incident_device = sycl::malloc_device<float>(
+        cinel02_replay_status_rate_query_energy_device = sycl::malloc_device<float>(
+            kCinel02ReplayStatusSlots, queue);
+        cinel02_replay_status_replay_query_energy_device = sycl::malloc_device<float>(
+            kCinel02ReplayStatusSlots, queue);
+        cinel02_replay_status_continuous_loss_device = sycl::malloc_device<float>(
             kCinel02ReplayStatusSlots, queue);
         cinel02_replay_status_delta_device = sycl::malloc_device<float>(
             kCinel02ReplayStatusSlots, queue);
@@ -302,7 +308,9 @@ TransportResult transport_sycl(const TransportConfig& config,
             cinel02_replay_delta_negative_device == nullptr ||
             cinel02_replay_valid_device == nullptr ||
             cinel02_replay_status_counts_device == nullptr ||
-            cinel02_replay_status_incident_device == nullptr ||
+            cinel02_replay_status_rate_query_energy_device == nullptr ||
+            cinel02_replay_status_replay_query_energy_device == nullptr ||
+            cinel02_replay_status_continuous_loss_device == nullptr ||
             cinel02_replay_status_delta_device == nullptr ||
             cinel02_replay_status_abs_delta_device == nullptr ||
             cinel02_parent_outcome_counts_device == nullptr ||
@@ -353,7 +361,11 @@ TransportResult transport_sycl(const TransportConfig& config,
                    TransportResult::species_ledger_species_count).wait_and_throw();
         queue.fill(cinel02_replay_status_counts_device, std::uint64_t{0},
                    kCinel02ReplayStatusSlots).wait_and_throw();
-        queue.fill(cinel02_replay_status_incident_device, 0.0F,
+        queue.fill(cinel02_replay_status_rate_query_energy_device, 0.0F,
+                   kCinel02ReplayStatusSlots).wait_and_throw();
+        queue.fill(cinel02_replay_status_replay_query_energy_device, 0.0F,
+                   kCinel02ReplayStatusSlots).wait_and_throw();
+        queue.fill(cinel02_replay_status_continuous_loss_device, 0.0F,
                    kCinel02ReplayStatusSlots).wait_and_throw();
         queue.fill(cinel02_replay_status_delta_device, 0.0F,
                    kCinel02ReplayStatusSlots).wait_and_throw();
@@ -1356,6 +1368,12 @@ TransportResult transport_sycl(const TransportConfig& config,
                 constexpr std::uint32_t max_primary_steps = 2000000U;
                 int last_survival_bin = -1;
                 while (energy_MeV > energy_cutoff_MeV && steps < max_primary_steps) {
+                    // The rate/target hazard is evaluated from the energy at
+                    // the beginning of this step.  The replay event is
+                    // queried after the continuous EM loss below, so retain
+                    // both values for the compact replay ledger.
+                    const auto primary_rate_query_energy_MeV =
+                        sycl::fmax(0.0F, energy_MeV);
                     const auto escaped_z =
                         position_z_mm < 0.0F || position_z_mm >= phantom_length_mm;
                     if (escaped_z) break;
@@ -1996,12 +2014,19 @@ TransportResult transport_sycl(const TransportConfig& config,
                             const auto replay_runtime_energy_MeV = sycl::fmax(0.0F, energy_MeV);
                             cinel02_record_replay_status_device(
                                 cinel02_replay_status_counts_device,
-                                cinel02_replay_status_incident_device,
+                                cinel02_replay_status_rate_query_energy_device,
+                                cinel02_replay_status_replay_query_energy_device,
+                                cinel02_replay_status_continuous_loss_device,
                                 cinel02_replay_status_delta_device,
                                 cinel02_replay_status_abs_delta_device,
                                 primary_atomic_number, primary_mass_number,
                                 cinel02_target_z_step, 0U,
-                                replay_runtime_energy_MeV, 0.0F,
+                                primary_rate_query_energy_MeV,
+                                replay_runtime_energy_MeV,
+                                sycl::fmax(0.0F,
+                                    primary_rate_query_energy_MeV -
+                                        replay_runtime_energy_MeV),
+                                0.0F,
                                 static_cast<std::uint32_t>(
                                     Cinel02ReplayLedgerSchema::collision_candidate));
                             if (event_index != std::numeric_limits<std::uint32_t>::max()) {
@@ -2017,12 +2042,18 @@ TransportResult transport_sycl(const TransportConfig& config,
                                         : Cinel02ReplayLedgerSchema::replay_invalid_event;
                                 cinel02_record_replay_status_device(
                                     cinel02_replay_status_counts_device,
-                                    cinel02_replay_status_incident_device,
+                                    cinel02_replay_status_rate_query_energy_device,
+                                    cinel02_replay_status_replay_query_energy_device,
+                                    cinel02_replay_status_continuous_loss_device,
                                     cinel02_replay_status_delta_device,
                                     cinel02_replay_status_abs_delta_device,
                                     primary_atomic_number, primary_mass_number,
                                     cinel02_target_z_step, 0U,
+                                    primary_rate_query_energy_MeV,
                                     replay_runtime_energy_MeV,
+                                    sycl::fmax(0.0F,
+                                        primary_rate_query_energy_MeV -
+                                            replay_runtime_energy_MeV),
                                     event.incident_energy_MeV_per_u -
                                         replay_runtime_energy_MeV * inverse_mass_number,
                                     static_cast<std::uint32_t>(replay_status));
@@ -2280,14 +2311,21 @@ TransportResult transport_sycl(const TransportConfig& config,
                                     cinel02_diag_increment_device(cinel02_diag_device, 5U);
                                     cinel02_record_replay_status_device(
                                         cinel02_replay_status_counts_device,
-                                        cinel02_replay_status_incident_device,
+                                        cinel02_replay_status_rate_query_energy_device,
+                                        cinel02_replay_status_replay_query_energy_device,
+                                        cinel02_replay_status_continuous_loss_device,
                                         cinel02_replay_status_delta_device,
                                         cinel02_replay_status_abs_delta_device,
                                         primary_atomic_number, primary_mass_number,
                                         cinel02_target_z_step, 0U,
-                                        replay_runtime_energy_MeV, 0.0F,
+                                        primary_rate_query_energy_MeV,
+                                        replay_runtime_energy_MeV,
+                                        sycl::fmax(0.0F,
+                                            primary_rate_query_energy_MeV -
+                                                replay_runtime_energy_MeV),
+                                        0.0F,
                                         static_cast<std::uint32_t>(
-                                            Cinel02ReplayLedgerSchema::replay_no_event));
+                                            Cinel02ReplayLedgerSchema::replay_lookup_miss));
                                 }
                             }
                             else {
@@ -2723,6 +2761,8 @@ TransportResult transport_sycl(const TransportConfig& config,
 
                             if (bin_z < 0 || bin_z >= static_cast<int>(number_of_bins)) break;
 
+                            const auto secondary_rate_query_energy_MeV =
+                                sycl::fmax(0.0F, sec_e);
                             const auto sec_e_u = sec_e * frag_inv_a;
                             const auto flt_idx = (sec_e_u - minimum_table_energy) * inverse_table_step;
                             auto sp_idx = static_cast<int>(sycl::floor(flt_idx));
@@ -2835,12 +2875,15 @@ TransportResult transport_sycl(const TransportConfig& config,
                                 // remain distinguishable from valid events.
                                 cinel02_record_replay_status_device(
                                     cinel02_replay_status_counts_device,
-                                    cinel02_replay_status_incident_device,
+                                    cinel02_replay_status_rate_query_energy_device,
+                                    cinel02_replay_status_replay_query_energy_device,
+                                    cinel02_replay_status_continuous_loss_device,
                                     cinel02_replay_status_delta_device,
                                     cinel02_replay_status_abs_delta_device,
                                     frag.z, frag.a, secondary_target_z,
                                     static_cast<std::uint32_t>(frag.generation) + 1U,
-                                    sycl::fmax(0.0F, sec_e), 0.0F,
+                                    secondary_rate_query_energy_MeV,
+                                    sycl::fmax(0.0F, sec_e), dE, 0.0F,
                                     static_cast<std::uint32_t>(
                                         Cinel02ReplayLedgerSchema::collision_candidate));
                             }
@@ -2917,12 +2960,15 @@ TransportResult transport_sycl(const TransportConfig& config,
                                             : Cinel02ReplayLedgerSchema::replay_invalid_event;
                                     cinel02_record_replay_status_device(
                                         cinel02_replay_status_counts_device,
-                                        cinel02_replay_status_incident_device,
+                                        cinel02_replay_status_rate_query_energy_device,
+                                        cinel02_replay_status_replay_query_energy_device,
+                                        cinel02_replay_status_continuous_loss_device,
                                         cinel02_replay_status_delta_device,
                                         cinel02_replay_status_abs_delta_device,
                                         frag.z, frag.a, secondary_target_z,
                                         static_cast<std::uint32_t>(frag.generation) + 1U,
-                                        sycl::fmax(0.0F, sec_e),
+                                        secondary_rate_query_energy_MeV,
+                                        sycl::fmax(0.0F, sec_e), dE,
                                         event.incident_energy_MeV_per_u -
                                             sycl::fmax(0.0F, sec_e * frag_inv_a),
                                         static_cast<std::uint32_t>(replay_status));
@@ -3242,12 +3288,15 @@ TransportResult transport_sycl(const TransportConfig& config,
                                         cinel02_diag_increment_device(cinel02_diag_device, 19U);
                                         cinel02_record_replay_status_device(
                                             cinel02_replay_status_counts_device,
-                                            cinel02_replay_status_incident_device,
+                                            cinel02_replay_status_rate_query_energy_device,
+                                            cinel02_replay_status_replay_query_energy_device,
+                                            cinel02_replay_status_continuous_loss_device,
                                             cinel02_replay_status_delta_device,
                                             cinel02_replay_status_abs_delta_device,
                                             frag.z, frag.a, secondary_target_z,
                                             static_cast<std::uint32_t>(frag.generation) + 1U,
-                                            sycl::fmax(0.0F, sec_e), 0.0F,
+                                            secondary_rate_query_energy_MeV,
+                                            sycl::fmax(0.0F, sec_e), dE, 0.0F,
                                             static_cast<std::uint32_t>(
                                                 Cinel02ReplayLedgerSchema::replay_invalid_event));
                                     }
@@ -3256,30 +3305,36 @@ TransportResult transport_sycl(const TransportConfig& config,
                                     cinel02_diag_increment_device(cinel02_diag_device, 18U);
                                     cinel02_record_replay_status_device(
                                         cinel02_replay_status_counts_device,
-                                        cinel02_replay_status_incident_device,
+                                        cinel02_replay_status_rate_query_energy_device,
+                                        cinel02_replay_status_replay_query_energy_device,
+                                        cinel02_replay_status_continuous_loss_device,
                                         cinel02_replay_status_delta_device,
                                         cinel02_replay_status_abs_delta_device,
                                         frag.z, frag.a, secondary_target_z,
                                         static_cast<std::uint32_t>(frag.generation) + 1U,
-                                        sycl::fmax(0.0F, sec_e), 0.0F,
+                                        secondary_rate_query_energy_MeV,
+                                        sycl::fmax(0.0F, sec_e), dE, 0.0F,
                                         static_cast<std::uint32_t>(
-                                            Cinel02ReplayLedgerSchema::replay_no_event));
+                                            Cinel02ReplayLedgerSchema::replay_lookup_miss));
                                 }
                             } else if (secondary_inelastic) {
                                 // The post-EM collision energy is already at
                                 // or below the transport cutoff, so no package
                                 // event is eligible.  Keep the candidate in
-                                // the status partition as no_event.
+                                // the status partition as post_em_below_cutoff.
                                 cinel02_record_replay_status_device(
                                     cinel02_replay_status_counts_device,
-                                    cinel02_replay_status_incident_device,
+                                    cinel02_replay_status_rate_query_energy_device,
+                                    cinel02_replay_status_replay_query_energy_device,
+                                    cinel02_replay_status_continuous_loss_device,
                                     cinel02_replay_status_delta_device,
                                     cinel02_replay_status_abs_delta_device,
                                     frag.z, frag.a, secondary_target_z,
                                     static_cast<std::uint32_t>(frag.generation) + 1U,
-                                    sycl::fmax(0.0F, sec_e), 0.0F,
+                                    secondary_rate_query_energy_MeV,
+                                    sycl::fmax(0.0F, sec_e), dE, 0.0F,
                                     static_cast<std::uint32_t>(
-                                        Cinel02ReplayLedgerSchema::replay_no_event));
+                                        Cinel02ReplayLedgerSchema::post_em_below_cutoff));
                             }
                                     pending_sec_voxel = cur_voxel;
                                 }
@@ -3643,7 +3698,11 @@ TransportResult transport_sycl(const TransportConfig& config,
     std::array<std::uint64_t, kCinel02ReplayStatusSlots>
         cinel02_replay_status_counts_host{};
     std::array<float, kCinel02ReplayStatusSlots>
-        cinel02_replay_status_incident_host{};
+        cinel02_replay_status_rate_query_energy_host{};
+    std::array<float, kCinel02ReplayStatusSlots>
+        cinel02_replay_status_replay_query_energy_host{};
+    std::array<float, kCinel02ReplayStatusSlots>
+        cinel02_replay_status_continuous_loss_host{};
     std::array<float, kCinel02ReplayStatusSlots>
         cinel02_replay_status_delta_host{};
     std::array<float, kCinel02ReplayStatusSlots>
@@ -3699,8 +3758,12 @@ TransportResult transport_sycl(const TransportConfig& config,
     if (cinel02_replay_status_counts_device != nullptr) {
         queue.copy(cinel02_replay_status_counts_device,
                    cinel02_replay_status_counts_host.data(), kCinel02ReplayStatusSlots);
-        queue.copy(cinel02_replay_status_incident_device,
-                   cinel02_replay_status_incident_host.data(), kCinel02ReplayStatusSlots);
+        queue.copy(cinel02_replay_status_rate_query_energy_device,
+                   cinel02_replay_status_rate_query_energy_host.data(), kCinel02ReplayStatusSlots);
+        queue.copy(cinel02_replay_status_replay_query_energy_device,
+                   cinel02_replay_status_replay_query_energy_host.data(), kCinel02ReplayStatusSlots);
+        queue.copy(cinel02_replay_status_continuous_loss_device,
+                   cinel02_replay_status_continuous_loss_host.data(), kCinel02ReplayStatusSlots);
         queue.copy(cinel02_replay_status_delta_device,
                    cinel02_replay_status_delta_host.data(), kCinel02ReplayStatusSlots);
         queue.copy(cinel02_replay_status_abs_delta_device,
@@ -3798,7 +3861,9 @@ TransportResult transport_sycl(const TransportConfig& config,
     free_device(cinel02_replay_delta_negative_device);
     free_device(cinel02_replay_valid_device);
     free_device(cinel02_replay_status_counts_device);
-    free_device(cinel02_replay_status_incident_device);
+    free_device(cinel02_replay_status_rate_query_energy_device);
+    free_device(cinel02_replay_status_replay_query_energy_device);
+    free_device(cinel02_replay_status_continuous_loss_device);
     free_device(cinel02_replay_status_delta_device);
     free_device(cinel02_replay_status_abs_delta_device);
     free_device(cinel02_parent_outcome_counts_device);
@@ -4071,8 +4136,12 @@ TransportResult transport_sycl(const TransportConfig& config,
     }
     for (std::size_t i = 0; i < kCinel02ReplayStatusSlots; ++i) {
         result.cinel02_replay_status_counts[i] = cinel02_replay_status_counts_host[i];
-        result.cinel02_replay_status_incident_energy_MeV[i] =
-            static_cast<double>(cinel02_replay_status_incident_host[i]);
+        result.cinel02_replay_status_rate_query_energy_MeV[i] =
+            static_cast<double>(cinel02_replay_status_rate_query_energy_host[i]);
+        result.cinel02_replay_status_replay_query_energy_MeV[i] =
+            static_cast<double>(cinel02_replay_status_replay_query_energy_host[i]);
+        result.cinel02_replay_status_continuous_loss_to_collision_MeV[i] =
+            static_cast<double>(cinel02_replay_status_continuous_loss_host[i]);
         result.cinel02_replay_status_delta_MeV_per_u[i] =
             static_cast<double>(cinel02_replay_status_delta_host[i]);
         result.cinel02_replay_status_abs_delta_MeV_per_u[i] =

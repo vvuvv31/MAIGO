@@ -1508,19 +1508,29 @@ void write_energy_ledger_json(const std::filesystem::path& path,
     }
     output << "],\n"
            << "  \"cinel02_replay_status_layout\": "
-              "{\"shape\":[18,2,3,8,4],\"order\":[\"projectile_species\",\"target\",\"generation\",\"energy_bin\",\"status\"],"
-              "\"status\":[\"collision_candidate\",\"replay_valid\",\"replay_no_event\",\"replay_invalid_event\"],"
+              "{\"shape\":[18,2,3,8,5],\"order\":[\"projectile_species\",\"target\",\"reaction_generation\",\"energy_bin\",\"status\"],"
+              "\"status\":[\"collision_candidate\",\"replay_valid\",\"replay_lookup_miss\",\"replay_invalid_event\",\"post_em_below_cutoff\"],"
               "\"projectile_species\":[\"1H\",\"2H\",\"3H\",\"3He\",\"4He\",\"6He\",\"6Li\",\"7Li\",\"7Be\",\"9Be\",\"10Be\",\"8B\",\"10B\",\"11B\",\"10C\",\"11C\",\"12C\",\"6Be\"],"
-              "\"targets\":[\"H\",\"O\"],\"generations\":[0,1,2],"
+              "\"targets\":[\"H\",\"O\"],\"reaction_generations\":[0,1,2],"
               "\"energy_bin_edges_MeV_per_u\":[0,50,100,150,200,250,300,350,\"infinity\"]},\n"
            << "  \"cinel02_replay_status_counts\": [";
     for (std::size_t i = 0; i < result.cinel02_replay_status_counts.size(); ++i) {
         output << (i == 0 ? "" : ", ") << result.cinel02_replay_status_counts[i];
     }
-    output << "],\n  \"cinel02_replay_status_incident_energy_MeV\": [";
-    for (std::size_t i = 0; i < result.cinel02_replay_status_incident_energy_MeV.size(); ++i) {
+    output << "],\n  \"cinel02_replay_status_rate_query_energy_MeV\": [";
+    for (std::size_t i = 0; i < result.cinel02_replay_status_rate_query_energy_MeV.size(); ++i) {
         output << (i == 0 ? "" : ", ")
-               << result.cinel02_replay_status_incident_energy_MeV[i];
+               << result.cinel02_replay_status_rate_query_energy_MeV[i];
+    }
+    output << "],\n  \"cinel02_replay_status_replay_query_energy_MeV\": [";
+    for (std::size_t i = 0; i < result.cinel02_replay_status_replay_query_energy_MeV.size(); ++i) {
+        output << (i == 0 ? "" : ", ")
+               << result.cinel02_replay_status_replay_query_energy_MeV[i];
+    }
+    output << "],\n  \"cinel02_replay_status_continuous_loss_to_collision_MeV\": [";
+    for (std::size_t i = 0; i < result.cinel02_replay_status_continuous_loss_to_collision_MeV.size(); ++i) {
+        output << (i == 0 ? "" : ", ")
+               << result.cinel02_replay_status_continuous_loss_to_collision_MeV[i];
     }
     output << "],\n  \"cinel02_replay_status_delta_MeV_per_u\": [";
     for (std::size_t i = 0; i < result.cinel02_replay_status_delta_MeV_per_u.size(); ++i) {
@@ -1534,8 +1544,8 @@ void write_energy_ledger_json(const std::filesystem::path& path,
     }
     output << "],\n"
            << "  \"cinel02_parent_outcome_layout\": "
-              "{\"shape\":[18,2,3,2],\"order\":[\"projectile_species\",\"target\",\"generation\",\"outcome\"],"
-              "\"outcome\":[\"continued\",\"killed\"],\"targets\":[\"H\",\"O\"],\"generations\":[0,1,2]},\n"
+              "{\"shape\":[18,2,3,2],\"order\":[\"projectile_species\",\"target\",\"reaction_generation\",\"outcome\"],"
+              "\"outcome\":[\"continued\",\"killed\"],\"targets\":[\"H\",\"O\"],\"reaction_generations\":[0,1,2]},\n"
            << "  \"cinel02_parent_outcome_counts\": [";
     for (std::size_t i = 0; i < result.cinel02_parent_outcome_counts.size(); ++i) {
         output << (i == 0 ? "" : ", ") << result.cinel02_parent_outcome_counts[i];

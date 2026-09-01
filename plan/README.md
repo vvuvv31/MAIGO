@@ -35,13 +35,13 @@
 
 ## 优先级
 
-`P0 Step 01A ledger correctness → P0 Step 01A.5 signed reaction handoff → P0 Step 01B isotope replay/outcome/transition → P1 deterministic auditor → P1 replay-support consistency → P1 reaction-survival + stopping optical depth → P1 causal waterfall/physics fix → P2 non-C12 straggling → P3 MCS shape → P4 100/300 regression`。
+`P0 Step 01A ledger correctness → P0 Step 01A.5 signed reaction handoff → P0 Step 01B isotope replay/outcome/transition → P0 Step 01B.1 replay semantics cleanup → P1 deterministic auditor → P1 replay-support consistency → P1 reaction-survival + stopping optical depth → P1 causal waterfall/physics fix → P2 non-C12 straggling → P3 MCS shape → P4 100/300 regression`。
 
 ## 进度控制
 
-当前完成度：**3/12（约 25%）**。
+当前完成度：**4/13（约 31%）**。
 
-Step 01A ledger correctness、Step 01A.5 signed handoff 和 Step 01B compact isotope 诊断仪器已完成；当前下一步：**Step 02 deterministic package auditor**。p/d/He4 的物理 residual 仍未修复，不能把诊断步骤误记为物理收敛。
+Step 01A ledger correctness、Step 01A.5 signed handoff 和 Step 01B compact isotope 诊断仪器已完成；当前下一步：**Step 02 deterministic package auditor**。Step 01B.1 已完成；p/d/He4 的物理 residual 仍未修复，不能把诊断步骤误记为物理收敛。
 
 | 状态 | 步骤 | 主要产出 |
 |---|---|---|
@@ -49,6 +49,7 @@ Step 01A ledger correctness、Step 01A.5 signed handoff 和 Step 01B compact iso
 | [ ] | [01 Species 分层 ledger](steps/01-hierarchical-species-ledger.md) | `K_birth × f_dep × f_FOV` 逐层 closure |
 | [x] | [01A.5 Signed reaction handoff](steps/01a5-signed-reaction-handoff.md) | reaction import/export 与 replay δE 诊断完成；import=0，残差留给后续 |
 | [x] | [01B Compact isotope replay ledger](steps/01b-compact-isotope-replay-ledger.md) | isotope×target×generation status、parent outcome、transition |
+| [x] | [01B.1 Replay semantics cleanup](steps/01b1-replay-semantics-cleanup.md) | lookup miss/cutoff 拆分；rate/replay/dE energy handoff |
 | [ ] | [02 Deterministic package auditor](steps/02-deterministic-package-yield-auditor.md) | GPU actual vs package exact vs TOPAS source |
 | [ ] | [03 Lookup miss semantics/support](steps/03-lookup-miss-semantics-and-support.md) | null-collision MCS 和 support-aware rate |
 | [ ] | [04 MCS-only species/FOV](steps/04-mcs-only-species-fov.md) | step convergence、species-aware full-2GR、FOV acceptance |
@@ -65,6 +66,31 @@ Replay status 为 candidate/valid/no-event/invalid = `71524/71318/206/0`，
 secondary generation-1 no-event `206/33512 = 0.615%`；按 isotope 最高为 2H `1.779%`、
 3H `0.798%`、7Be `0.490%`、6Li `0.358%`。结果详见
 [01B step record](steps/01b-compact-isotope-replay-ledger.md)。
+
+### Step 01B.1 运行证据
+
+2026-09-01 在本机 RTX 2080Ti/sm_75、200 MeV/u、G1、100k、seed `2026095100`
+完成沙盒外 GPU 重跑。构建成功，CTest `2/2` 通过。输出：
+`out/beam_200MeVu_cinel02_e200light107_g1_transitiondiag4_100k_xy04/energy_ledger.json`。
+
+五状态总计：`candidate=71524`、`valid=71318`、`lookup_miss=192`、
+`invalid=0`、`post_em_below_cutoff=14`；满足
+`71524 = 71318 + 192 + 0 + 14`，且逐 cell partition 无异常。
+分 isotope 的非零计数为：1H `5296/5290/6/0/0`、2H `8770/8614/153/0/3`、
+3H `3133/3108/24/0/1`、3He `1445/1444/1/0/0`、4He `12487/12475/6/0/6`、
+6He `61/61/0/0/0`、6Li `279/278/0/0/1`、7Li `263/263/0/0/0`、
+7Be `204/203/0/0/1`、9Be `31/31/0/0/0`、10Be `49/49/0/0/0`、
+8B `3/3/0/0/0`、10B `241/240/1/0/0`、11B `484/483/0/0/1`、
+10C `30/30/0/0/0`、11C `499/498/0/0/1`、12C `38249/38248/1/0/0`
+（字段顺序 candidate/valid/lookup_miss/invalid/cutoff）。
+
+`E_rate - E_replay - dE` 的全局相对残差为 `1.98e-7`；最大 cell 相对残差
+`1.20e-6`，来源是 device float atomic 累加，未改变物理结果。JSON layout 已更新为
+`[18,2,3,8,5]`，并输出 `rate_query_energy_MeV`、`replay_query_energy_MeV`、
+`continuous_loss_to_collision_MeV`；generation 语义改为 `reaction_generation`。
+
+该步骤只修正诊断语义，不修改 sampler/yield、rate、stopping、MCS 或 cascade physics。
+下一步按计划进入 Step 02 deterministic package auditor。
 
 ## 提交切分
 
