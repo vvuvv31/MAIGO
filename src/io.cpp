@@ -1465,19 +1465,46 @@ void write_energy_ledger_json(const std::filesystem::path& path,
         result.cinel02_energy_ledger_MeV[7];
     output << "],\n"
            << "  \"cinel02_species_transport_ledger_layout\": "
-              "{\"shape\":[18,10],\"order\":[\"species\",\"metric\"],"
+              "{\"shape\":[18,11],\"order\":[\"species\",\"metric\"],"
               "\"species\":[\"1H\",\"2H\",\"3H\",\"3He\",\"4He\",\"6He\","
               "\"6Li\",\"7Li\",\"7Be\",\"9Be\",\"10Be\",\"8B\",\"10B\","
               "\"11B\",\"10C\",\"11C\",\"12C\",\"6Be\"],"
               "\"metric\":[\"queued_birth_kinetic\",\"continuous_deposit_all\","
               "\"continuous_deposit_fov\",\"nuclear_local_deposit_all\","
               "\"nuclear_local_deposit_fov\",\"terminal_deposit_all\","
-              "\"terminal_deposit_fov\",\"boundary_escape_kinetic\",\"reaction_export_kinetic\",\"step_limit_escape_kinetic\"]},\n"
+              "\"terminal_deposit_fov\",\"boundary_escape_kinetic\",\"reaction_export_kinetic\",\"step_limit_escape_kinetic\",\"reaction_import_kinetic\"]},\n"
            << "  \"cinel02_species_transport_ledger_MeV\": [";
     for (std::size_t i = 0;
          i < result.cinel02_species_transport_ledger_MeV.size(); ++i) {
         output << (i == 0 ? "" : ", ")
                << result.cinel02_species_transport_ledger_MeV[i];
+    }
+    output << "],\n"
+           << "  \"cinel02_replay_handoff_layout\": "
+              "{\"species\": [\"1H\",\"2H\",\"3H\",\"3He\",\"4He\",\"6He\","
+              "\"6Li\",\"7Li\",\"7Be\",\"9Be\",\"10Be\",\"8B\","
+              "\"10B\",\"11B\",\"10C\",\"11C\",\"12C\",\"6Be\"],"
+              "\"delta_unit\": \"MeV_per_u\","
+              "\"delta_sign\": \"package_incident_minus_runtime_incident\"},\n"
+           << "  \"cinel02_replay_delta_MeV_per_u\": [";
+    for (std::size_t i = 0; i < result.cinel02_replay_delta_MeV_per_u.size(); ++i) {
+        output << (i == 0 ? "" : ", ") << result.cinel02_replay_delta_MeV_per_u[i];
+    }
+    output << "],\n  \"cinel02_replay_abs_delta_MeV_per_u\": [";
+    for (std::size_t i = 0; i < result.cinel02_replay_abs_delta_MeV_per_u.size(); ++i) {
+        output << (i == 0 ? "" : ", ") << result.cinel02_replay_abs_delta_MeV_per_u[i];
+    }
+    output << "],\n  \"cinel02_replay_delta_positive_counts\": [";
+    for (std::size_t i = 0; i < result.cinel02_replay_delta_positive_counts.size(); ++i) {
+        output << (i == 0 ? "" : ", ") << result.cinel02_replay_delta_positive_counts[i];
+    }
+    output << "],\n  \"cinel02_replay_delta_negative_counts\": [";
+    for (std::size_t i = 0; i < result.cinel02_replay_delta_negative_counts.size(); ++i) {
+        output << (i == 0 ? "" : ", ") << result.cinel02_replay_delta_negative_counts[i];
+    }
+    output << "],\n  \"cinel02_replay_valid_counts\": [";
+    for (std::size_t i = 0; i < result.cinel02_replay_valid_counts.size(); ++i) {
+        output << (i == 0 ? "" : ", ") << result.cinel02_replay_valid_counts[i];
     }
     output << "],\n"
            << "  \"cinel02_species_terminal_reason_layout\": "

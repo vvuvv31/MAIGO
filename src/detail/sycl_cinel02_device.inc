@@ -62,6 +62,36 @@ inline void cinel02_record_queued_secondary_birth_device(
         kinetic_energy_MeV);
 }
 
+inline void cinel02_record_replay_delta_device(
+    float* delta_sum_MeV_per_u, float* abs_delta_sum_MeV_per_u,
+    std::uint64_t* positive_counts, std::uint64_t* negative_counts,
+    std::uint64_t* valid_counts, const int species,
+    const float delta_MeV_per_u) noexcept {
+    constexpr auto species_count =
+        static_cast<std::uint32_t>(Cinel02SpeciesLedgerSchema::species_count);
+    if (species < 0 || species >= static_cast<int>(species_count) ||
+        !sycl::isfinite(delta_MeV_per_u)) {
+        return;
+    }
+    if (valid_counts != nullptr) {
+        cinel02_diag_increment_device(
+            valid_counts, static_cast<std::uint32_t>(species));
+    }
+    cinel02_energy_add_device(
+        delta_sum_MeV_per_u, static_cast<std::uint32_t>(species),
+        delta_MeV_per_u);
+    cinel02_energy_add_device(
+        abs_delta_sum_MeV_per_u, static_cast<std::uint32_t>(species),
+        sycl::fabs(delta_MeV_per_u));
+    if (delta_MeV_per_u > 0.0F && positive_counts != nullptr) {
+        cinel02_diag_increment_device(
+            positive_counts, static_cast<std::uint32_t>(species));
+    } else if (delta_MeV_per_u < 0.0F && negative_counts != nullptr) {
+        cinel02_diag_increment_device(
+            negative_counts, static_cast<std::uint32_t>(species));
+    }
+}
+
 inline void cinel02_species_terminal_increment_device(
     std::uint64_t* counters, const int species, const std::uint32_t reason) noexcept {
     constexpr auto species_count =

@@ -133,6 +133,18 @@ void accumulate_transport_result(carbon::TransportResult& total,
         total.cinel02_species_terminal_reason_counts[i] +=
             part.cinel02_species_terminal_reason_counts[i];
     }
+    for (std::size_t i = 0; i < total.cinel02_replay_delta_MeV_per_u.size(); ++i) {
+        total.cinel02_replay_delta_MeV_per_u[i] +=
+            part.cinel02_replay_delta_MeV_per_u[i];
+        total.cinel02_replay_abs_delta_MeV_per_u[i] +=
+            part.cinel02_replay_abs_delta_MeV_per_u[i];
+        total.cinel02_replay_delta_positive_counts[i] +=
+            part.cinel02_replay_delta_positive_counts[i];
+        total.cinel02_replay_delta_negative_counts[i] +=
+            part.cinel02_replay_delta_negative_counts[i];
+        total.cinel02_replay_valid_counts[i] +=
+            part.cinel02_replay_valid_counts[i];
+    }
     for (std::size_t i = 0; i < total.fred_isotope_counts.size(); ++i) {
         total.fred_isotope_counts[i] += part.fred_isotope_counts[i];
     }

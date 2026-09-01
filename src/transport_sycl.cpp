@@ -172,6 +172,11 @@ TransportResult transport_sycl(const TransportConfig& config,
         Cinel02SpeciesLedgerSchema::species_count *
         Cinel02SpeciesLedgerSchema::terminal_reason_count;
     std::uint64_t* cinel02_species_terminal_device = nullptr;
+    float* cinel02_replay_delta_device = nullptr;
+    float* cinel02_replay_abs_delta_device = nullptr;
+    std::uint64_t* cinel02_replay_delta_positive_device = nullptr;
+    std::uint64_t* cinel02_replay_delta_negative_device = nullptr;
+    std::uint64_t* cinel02_replay_valid_device = nullptr;
     if (use_cinel02) {
         const auto checked_u32 = [](const std::size_t value, const char* label) {
             if (value > std::numeric_limits<std::uint32_t>::max()) {
@@ -228,12 +233,26 @@ TransportResult transport_sycl(const TransportConfig& config,
             sycl::malloc_device<float>(kCinel02SpeciesEnergySlots, queue);
         cinel02_species_terminal_device = sycl::malloc_device<std::uint64_t>(
             kCinel02SpeciesTerminalSlots, queue);
+        cinel02_replay_delta_device = sycl::malloc_device<float>(
+            TransportResult::species_ledger_species_count, queue);
+        cinel02_replay_abs_delta_device = sycl::malloc_device<float>(
+            TransportResult::species_ledger_species_count, queue);
+        cinel02_replay_delta_positive_device = sycl::malloc_device<std::uint64_t>(
+            TransportResult::species_ledger_species_count, queue);
+        cinel02_replay_delta_negative_device = sycl::malloc_device<std::uint64_t>(
+            TransportResult::species_ledger_species_count, queue);
+        cinel02_replay_valid_device = sycl::malloc_device<std::uint64_t>(
+            TransportResult::species_ledger_species_count, queue);
         if (cinel02_interactions_device == nullptr || cinel02_products_device == nullptr ||
             cinel02_energy_nodes_device == nullptr || cinel02_event_offsets_device == nullptr ||
             cinel02_event_indices_device == nullptr || cinel02_rate_groups_device == nullptr ||
             cinel02_rate_samples_device == nullptr || cinel02_diag_device == nullptr ||
             cinel02_energy_device == nullptr || cinel02_species_energy_device == nullptr ||
-            cinel02_species_terminal_device == nullptr) {
+            cinel02_species_terminal_device == nullptr || cinel02_replay_delta_device == nullptr ||
+            cinel02_replay_abs_delta_device == nullptr ||
+            cinel02_replay_delta_positive_device == nullptr ||
+            cinel02_replay_delta_negative_device == nullptr ||
+            cinel02_replay_valid_device == nullptr) {
             throw std::bad_alloc();
         }
         queue.copy(cinel02_host_tables->interactions.data(),
@@ -260,6 +279,16 @@ TransportResult transport_sycl(const TransportConfig& config,
                    kCinel02SpeciesEnergySlots).wait_and_throw();
         queue.fill(cinel02_species_terminal_device, std::uint64_t{0},
                    kCinel02SpeciesTerminalSlots).wait_and_throw();
+        queue.fill(cinel02_replay_delta_device, 0.0F,
+                   TransportResult::species_ledger_species_count).wait_and_throw();
+        queue.fill(cinel02_replay_abs_delta_device, 0.0F,
+                   TransportResult::species_ledger_species_count).wait_and_throw();
+        queue.fill(cinel02_replay_delta_positive_device, std::uint64_t{0},
+                   TransportResult::species_ledger_species_count).wait_and_throw();
+        queue.fill(cinel02_replay_delta_negative_device, std::uint64_t{0},
+                   TransportResult::species_ledger_species_count).wait_and_throw();
+        queue.fill(cinel02_replay_valid_device, std::uint64_t{0},
+                   TransportResult::species_ledger_species_count).wait_and_throw();
         cinel02_host_tables.reset();
         cinel02_package.reset();
         cinel02_rates.reset();
@@ -1885,6 +1914,17 @@ TransportResult transport_sycl(const TransportConfig& config,
                                     cinel02_diag_increment_device(
                                         cinel02_diag_device,
                                         event.parent_status == 0 ? 8U : 9U);
+                                    cinel02_record_replay_delta_device(
+                                        cinel02_replay_delta_device,
+                                        cinel02_replay_abs_delta_device,
+                                        cinel02_replay_delta_positive_device,
+                                        cinel02_replay_delta_negative_device,
+                                        cinel02_replay_valid_device,
+                                        carbon::get_charged_species_idx(
+                                            primary_atomic_number, primary_mass_number),
+                                        event.incident_energy_MeV_per_u -
+                                            sycl::fmax(0.0F,
+                                                energy_MeV * inverse_mass_number));
                                     const auto local_deposit = sycl::fmax(
                                         0.0F, event.process_local_deposit_MeV);
                                     cinel02_energy_add_device(cinel02_energy_device, 0U, energy_MeV);
@@ -2738,17 +2778,35 @@ TransportResult transport_sycl(const TransportConfig& config,
                                         }
                                         const auto local_deposit = sycl::fmax(
                                             0.0F, event.process_local_deposit_MeV);
+                                        const auto parent_after = event.parent_status == 0
+                                            ? sycl::fmax(0.0F, event.parent_energy_MeV)
+                                            : 0.0F;
+                                        const auto reaction_handoff_delta = sec_e -
+                                            parent_after - local_deposit;
                                         cinel02_species_energy_add_device(
                                             cinel02_species_energy_device, ledger_species_idx,
-                                            3U, local_deposit);
+                                            static_cast<std::uint32_t>(
+                                                Cinel02SpeciesLedgerSchema::nuclear_local_deposit_all),
+                                            local_deposit);
                                         cinel02_species_energy_add_device(
                                             cinel02_species_energy_device, ledger_species_idx,
                                             static_cast<std::uint32_t>(
                                                 Cinel02SpeciesLedgerSchema::reaction_export_kinetic),
-                                            sycl::fmax(0.0F, sec_e -
-                                                (event.parent_status == 0
-                                                     ? sycl::fmax(0.0F, event.parent_energy_MeV)
-                                                     : 0.0F) - local_deposit));
+                                            sycl::fmax(0.0F, reaction_handoff_delta));
+                                        cinel02_species_energy_add_device(
+                                            cinel02_species_energy_device, ledger_species_idx,
+                                            static_cast<std::uint32_t>(
+                                                Cinel02SpeciesLedgerSchema::reaction_import_kinetic),
+                                            sycl::fmax(0.0F, -reaction_handoff_delta));
+                                        cinel02_record_replay_delta_device(
+                                            cinel02_replay_delta_device,
+                                            cinel02_replay_abs_delta_device,
+                                            cinel02_replay_delta_positive_device,
+                                            cinel02_replay_delta_negative_device,
+                                            cinel02_replay_valid_device,
+                                            ledger_species_idx,
+                                            event.incident_energy_MeV_per_u -
+                                                sycl::fmax(0.0F, sec_e * frag_inv_a));
                                         cinel02_energy_add_device(cinel02_energy_device, 0U, sec_e);
                                         cinel02_energy_add_device(cinel02_energy_device, 1U, dE);
                                         cinel02_energy_add_device(cinel02_energy_device, 2U, local_deposit);
@@ -3324,6 +3382,16 @@ TransportResult transport_sycl(const TransportConfig& config,
     std::array<float, kCinel02SpeciesEnergySlots> cinel02_species_energy_host{};
     std::array<std::uint64_t, kCinel02SpeciesTerminalSlots>
         cinel02_species_terminal_host{};
+    std::array<float, TransportResult::species_ledger_species_count>
+        cinel02_replay_delta_host{};
+    std::array<float, TransportResult::species_ledger_species_count>
+        cinel02_replay_abs_delta_host{};
+    std::array<std::uint64_t, TransportResult::species_ledger_species_count>
+        cinel02_replay_delta_positive_host{};
+    std::array<std::uint64_t, TransportResult::species_ledger_species_count>
+        cinel02_replay_delta_negative_host{};
+    std::array<std::uint64_t, TransportResult::species_ledger_species_count>
+        cinel02_replay_valid_host{};
     if (cinel02_energy_device != nullptr) {
         queue.copy(cinel02_energy_device, cinel02_energy_host.data(),
                    kCinel02EnergySlots);
@@ -3337,6 +3405,20 @@ TransportResult transport_sycl(const TransportConfig& config,
         queue.copy(cinel02_species_terminal_device,
                    cinel02_species_terminal_host.data(),
                    kCinel02SpeciesTerminalSlots);
+    }
+    if (cinel02_replay_delta_device != nullptr) {
+        queue.copy(cinel02_replay_delta_device, cinel02_replay_delta_host.data(),
+                   TransportResult::species_ledger_species_count);
+        queue.copy(cinel02_replay_abs_delta_device, cinel02_replay_abs_delta_host.data(),
+                   TransportResult::species_ledger_species_count);
+        queue.copy(cinel02_replay_delta_positive_device,
+                   cinel02_replay_delta_positive_host.data(),
+                   TransportResult::species_ledger_species_count);
+        queue.copy(cinel02_replay_delta_negative_device,
+                   cinel02_replay_delta_negative_host.data(),
+                   TransportResult::species_ledger_species_count);
+        queue.copy(cinel02_replay_valid_device, cinel02_replay_valid_host.data(),
+                   TransportResult::species_ledger_species_count);
     }
     std::array<std::uint64_t, kCinel02DiagSlots> cinel02_diag_host{};
     if (cinel02_diag_device != nullptr) {
@@ -3404,6 +3486,11 @@ TransportResult transport_sycl(const TransportConfig& config,
     free_device(cinel02_energy_device);
     free_device(cinel02_species_energy_device);
     free_device(cinel02_species_terminal_device);
+    free_device(cinel02_replay_delta_device);
+    free_device(cinel02_replay_abs_delta_device);
+    free_device(cinel02_replay_delta_positive_device);
+    free_device(cinel02_replay_delta_negative_device);
+    free_device(cinel02_replay_valid_device);
     free_device(untracked_nuclear_device);
     free_device(fred_prob_proj_h_device);
     free_device(fred_prob_proj_o_device);
@@ -3651,6 +3738,17 @@ TransportResult transport_sycl(const TransportConfig& config,
     }
     result.cinel02_species_terminal_reason_counts =
         cinel02_species_terminal_host;
+    for (std::size_t i = 0; i < TransportResult::species_ledger_species_count; ++i) {
+        result.cinel02_replay_delta_MeV_per_u[i] =
+            static_cast<double>(cinel02_replay_delta_host[i]);
+        result.cinel02_replay_abs_delta_MeV_per_u[i] =
+            static_cast<double>(cinel02_replay_abs_delta_host[i]);
+        result.cinel02_replay_delta_positive_counts[i] =
+            cinel02_replay_delta_positive_host[i];
+        result.cinel02_replay_delta_negative_counts[i] =
+            cinel02_replay_delta_negative_host[i];
+        result.cinel02_replay_valid_counts[i] = cinel02_replay_valid_host[i];
+    }
     if (use_cinel02 && config.cinel02_strict_match &&
         (result.cinel02_diagnostics[4] != 0U || result.cinel02_diagnostics[5] != 0U ||
          result.cinel02_diagnostics[18] != 0U || result.cinel02_diagnostics[19] != 0U ||

@@ -35,18 +35,19 @@
 
 ## 优先级
 
-`P0 Step 01A ledger correctness → P0 Step 01B isotope replay/outcome/transition → P1 deterministic auditor → P1 replay-support consistency → P1 reaction-survival + stopping optical depth → P1 causal waterfall/physics fix → P2 non-C12 straggling → P3 MCS shape → P4 100/300 regression`。
+`P0 Step 01A ledger correctness → P0 Step 01A.5 signed reaction handoff → P0 Step 01B isotope replay/outcome/transition → P1 deterministic auditor → P1 replay-support consistency → P1 reaction-survival + stopping optical depth → P1 causal waterfall/physics fix → P2 non-C12 straggling → P3 MCS shape → P4 100/300 regression`。
 
 ## 进度控制
 
-当前完成度：**1/10（10%）**。
+当前完成度：**1/11（约 9%）**。
 
-当前下一步：**Step 01B：增加紧凑 isotope replay status、parent outcome 和 18×18 transition ledger；暂不增加 depth 维，也不改 physics。**
+当前下一步：**Step 01A.5：完成 signed reaction handoff closure；先验证 import/export 与 replay δE，再进入 Step 01B。**
 
 | 状态 | 步骤 | 主要产出 |
 |---|---|---|
 | [x] | [00 冻结 200 MeV/u 基线](steps/00-freeze-e200-baseline.md) | `baseline-e200-becf880.json`；job 485 已解析 |
 | [ ] | [01 Species 分层 ledger](steps/01-hierarchical-species-ledger.md) | `K_birth × f_dep × f_FOV` 逐层 closure |
+| [ ] | [01A.5 Signed reaction handoff](steps/01a5-signed-reaction-handoff.md) | reaction import/export 与 replay δE 闭合 |
 | [ ] | [02 Deterministic package auditor](steps/02-deterministic-package-yield-auditor.md) | GPU actual vs package exact vs TOPAS source |
 | [ ] | [03 Lookup miss semantics/support](steps/03-lookup-miss-semantics-and-support.md) | null-collision MCS 和 support-aware rate |
 | [ ] | [04 MCS-only species/FOV](steps/04-mcs-only-species-fov.md) | step convergence、species-aware full-2GR、FOV acceptance |
@@ -59,11 +60,12 @@
 ## 提交切分
 
 1. `feat(diag): add stratified secondary energy closure ledger`
-2. `fix(cinel02): preserve secondary transport semantics on replay miss`
-3. `fix(mcs): apply species-aware scaling to full 2gr distribution`
-4. `test(mcs): add mono-ion isotope lateral and range regressions`
-5. `feat(straggling): add non-c12 secondary loss fluctuations`
-6. `test(cascade): add 200mevu species closure regression`
+2. `feat(diag): close signed secondary reaction handoff`
+3. `fix(cinel02): preserve secondary transport semantics on replay miss`
+4. `fix(mcs): apply species-aware scaling to full 2gr distribution`
+5. `test(mcs): add mono-ion isotope lateral and range regressions`
+6. `feat(straggling): add non-c12 secondary loss fluctuations`
+7. `test(cascade): add 200mevu species closure regression`
 
 sampler/package commit 不在预定队列中；必须先通过 Step 08 门禁。
 

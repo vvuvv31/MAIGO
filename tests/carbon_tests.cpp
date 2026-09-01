@@ -3541,9 +3541,9 @@ void test_table1_inclusive_sampling() {
 void test_cinel02_ledger_schema_and_accumulator() {
     using Schema = carbon::Cinel02SpeciesLedgerSchema;
     static_assert(Schema::species_count == 18);
-    static_assert(Schema::metric_count == 10);
+    static_assert(Schema::metric_count == 11);
     static_assert(Schema::terminal_reason_count == 6);
-    static_assert(Schema::step_limit_escape_kinetic + 1 == Schema::metric_count);
+    static_assert(Schema::reaction_import_kinetic + 1 == Schema::metric_count);
     static_assert(Schema::continuous_stop + 1 == Schema::terminal_reason_count);
 
     carbon::TransportResult total{};
@@ -3567,6 +3567,18 @@ void test_cinel02_ledger_schema_and_accumulator() {
         total.cinel02_species_terminal_reason_counts[i] = i;
         part.cinel02_species_terminal_reason_counts[i] = 4 * i;
     }
+    for (std::size_t i = 0; i < total.cinel02_replay_delta_MeV_per_u.size(); ++i) {
+        total.cinel02_replay_delta_MeV_per_u[i] = static_cast<double>(i);
+        part.cinel02_replay_delta_MeV_per_u[i] = static_cast<double>(2 * i);
+        total.cinel02_replay_abs_delta_MeV_per_u[i] = static_cast<double>(3 * i);
+        part.cinel02_replay_abs_delta_MeV_per_u[i] = static_cast<double>(4 * i);
+        total.cinel02_replay_delta_positive_counts[i] = i;
+        part.cinel02_replay_delta_positive_counts[i] = 2 * i;
+        total.cinel02_replay_delta_negative_counts[i] = 3 * i;
+        part.cinel02_replay_delta_negative_counts[i] = 4 * i;
+        total.cinel02_replay_valid_counts[i] = 5 * i;
+        part.cinel02_replay_valid_counts[i] = 6 * i;
+    }
     carbon::accumulate_transport_result(total, part);
     for (std::size_t i = 0; i < diagnostic_slots.size(); ++i) {
         require(total.cinel02_diagnostics[diagnostic_slots[i]] == 110 + 3 * i,
@@ -3586,16 +3598,29 @@ void test_cinel02_ledger_schema_and_accumulator() {
         require(total.cinel02_species_terminal_reason_counts[i] == 5 * i,
                 "CINEL02 terminal accumulator mismatch");
     }
+    for (std::size_t i = 0; i < total.cinel02_replay_delta_MeV_per_u.size(); ++i) {
+        require_near(total.cinel02_replay_delta_MeV_per_u[i], 3.0 * i, 0.0,
+                     "CINEL02 replay delta accumulator mismatch");
+        require_near(total.cinel02_replay_abs_delta_MeV_per_u[i], 7.0 * i, 0.0,
+                     "CINEL02 replay absolute delta accumulator mismatch");
+        require(total.cinel02_replay_delta_positive_counts[i] == 3 * i,
+                "CINEL02 replay positive-count accumulator mismatch");
+        require(total.cinel02_replay_delta_negative_counts[i] == 7 * i,
+                "CINEL02 replay negative-count accumulator mismatch");
+        require(total.cinel02_replay_valid_counts[i] == 11 * i,
+                "CINEL02 replay valid-count accumulator mismatch");
+    }
 
     const double queued_birth = 100.0;
     const double continuous = 35.0;
     const double nuclear_local = 5.0;
     const double reaction_export = 40.0;
+    const double reaction_import = 7.0;
     const double terminal = 15.0;
-    const double escape = 5.0;
-    require_near(queued_birth - continuous - nuclear_local - reaction_export -
-                     terminal - escape,
-                 0.0, 0.0, "CINEL02 mutually-exclusive partition mismatch");
+    const double escape = 12.0;
+    require_near(queued_birth + reaction_import - continuous - nuclear_local -
+                     reaction_export - terminal - escape,
+                 0.0, 0.0, "CINEL02 signed handoff partition mismatch");
 }
 
 }  // namespace
