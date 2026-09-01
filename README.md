@@ -1,171 +1,182 @@
 # MAIGO
 
-Carbon-ion **condensed-history Monte Carlo** for dose and dose-averaged LET  
-on **Intel oneAPI / SYCL** (Intel Level Zero or NVIDIA CUDA plugin).
+Carbon-ion condensed-history Monte Carlo for dose and dose-averaged LET
+on Intel oneAPI / SYCL (Intel Level Zero or NVIDIA CUDA plugin).
 
-Research software only — **not for clinical treatment planning**.
-
-## What this repository is
-
-A slim core tree: engine sources, build system, physics tables, and a few example
-configs. Validation suites, patient CT cases, and development notes live on
-other branches (e.g. `master`), not here.
-
-```text
-include/carbon/     Public headers (config, transport, tables, geometry)
-src/                Implementation (serial + SYCL backends)
-  cli.cpp / plan_run.cpp  CLI and spot-plan helpers
-  detail/           Shared SYCL device helpers (.inc)
-config/             Example beam configs
-data/               Stopping power, cross sections, reaction packages
-docs/               Architecture, physics, CT/minibeam, and workflow notes
-mcps/               MCP integration notes (runtime state remains local)
-scripts/            Build helpers
-startup/            Offline TOPAS database extraction sources
-CMakeLists.txt
-CMakePresets.json
-```
+> **Research software only** -- not for clinical treatment planning.
 
 ## Features
 
-| Area | Capability |
-|------|------------|
-| Transport | CSDA + straggling + Highland MCS; primary attenuation |
-| Secondaries | Reaction packages, charged fragment queue, cascade (≤2 gen) |
-| Neutrals | Optional neutron/gamma queue (package-driven) |
-| Geometry | Uniform water, axial slabs, hetero inserts, CT voxel grid |
-| Beam | Mono/multi energy, emittance, TOPAS spots, TPS source |
-| Scoring | Depth dose, dense MHD, LET_d moments, fragment species |
-| Backends | Serial CPU subset; SYCL full path |
-| Optional | Copper minibeam beamline (`CARBON_ENABLE_MINIBEAM`) |
+- **Condensed-history transport** -- CSDA + Vavilov energy straggling + Highland multiple Coulomb scattering; primary nuclear attenuation.
+- **Nuclear interactions** -- data-driven reaction packages extracted from TOPAS / Geant4, charged-fragment queue with cascade (up to 2 generations), optional neutral (neutron / gamma) queue.
+- **Geometry** -- uniform water phantom, axial slab stacks, heterogeneous bone / tissue inserts, full CT voxel grids (HU-to-material conversion).
+- **Beam models** -- mono- / multi-energy pencil beams with Gaussian emittance, TOPAS spot files, TPS plan source with arbitrary gantry angles.
+- **Scoring** -- 3-D dose-to-medium, dose-averaged LET (LET_d) with numerator / denominator moments, dense MHD voxel output, fragment-species fluence, per-spot PBS scoring.
+- **Backends** -- serial C++ (subset) and full SYCL GPU transport; supports Intel Arc (Level Zero / SPIR-V) and NVIDIA GPUs (CUDA plugin / PTX).
+- **Optional Copper minibeam** -- dedicated beamline kernel (`CARBON_ENABLE_MINIBEAM`).
+- **FP32 / FP64 dose atomics** -- FP32 default for fast consumer-GPU atomics; FP64 available via CMake option.
 
 ## Requirements
 
-- CMake ≥ 3.22, C++20 compiler  
-- **Serial only**: any modern C++20 toolchain  
-- **SYCL**: Intel oneAPI `icpx` (IntelLLVM)  
-- GPU: Intel Arc (Level Zero) and/or NVIDIA (CUDA plugin + `nvptx64-nvidia-cuda`)
+| Component | Minimum | Notes |
+|-----------|---------|-------|
+| CMake | 3.22 | |
+| C++ standard | C++20 | |
+| Ninja | any (recommended) | Falls back to Unix Makefiles |
+| **Serial-only build** | GCC 12+, Clang 16+, or MSVC 2022 | No GPU required |
+| **SYCL build** | Intel oneAPI DPC++ (`icpx` / IntelLLVM) | See compiler setup below |
+| NVIDIA GPU | Compute capability 7.5+ (e.g. RTX 2080 Ti) | Requires the oneAPI CUDA plugin |
+| Intel GPU | Arc / Data Center GPU (Level Zero) | SPIR-V JIT |
+
+### Building Intel LLVM (DPC++) from Source
+
+If a packaged oneAPI toolkit is unavailable or you need the latest CUDA plugin
+support, build the Intel LLVM SYCL compiler from source:
+
+```bash
+# 1. Clone the Intel LLVM fork
+git clone https://github.com/intel/llvm.git intel-llvm
+cd intel-llvm
+
+# 2. Configure with CUDA support
+#    Adjust --cuda-sdk-root to your local CUDA toolkit path.
+python buildbot/configure.py \
+  --cuda \
+  --cuda-sdk-root /usr/local/cuda \
+  -o build
+
+# 3. Build (takes a while)
+cd build
+ninja sycl-toolchain
+
+# 4. (Optional) Install to a prefix
+ninja install
+
+# 5. Put the compiler on PATH
+export PATH=$(pwd)/bin:$PATH
+export LD_LIBRARY_PATH=$(pwd)/lib:$LD_LIBRARY_PATH
+
+# Verify
+icpx --version   # should report IntelLLVM / oneAPI DPC++
+```
+
+If you already have a packaged Intel oneAPI toolkit, source the environment
+instead:
+
+```bash
+source /opt/intel/oneapi/setvars.sh
+```
 
 ## Build
 
-```bash
-# Optional: oneAPI environment
-source /opt/intel/oneapi/setvars.sh
+The project ships CMake presets for common configurations. Ninja is the default
+generator.
 
-# Serial debug
+```bash
+# Serial CPU debug
 cmake --preset cpu-debug && cmake --build --preset cpu-debug
 
-# NVIDIA SYCL (legacy CT/water/LET kernel, FP32 dose)
+# NVIDIA SYCL (FP32 dose, legacy CT / water / LET kernel)
 cmake --preset oneapi-nvidia-release && cmake --build --preset oneapi-nvidia-release
 
-# NVIDIA + Copper minibeam dual kernel
+# NVIDIA SYCL + Copper minibeam kernel
 cmake --preset oneapi-nvidia-minibeam && cmake --build --preset oneapi-nvidia-minibeam
 
-# Or helper script (Linux dual targets)
-scripts/build_linux_oneapi.sh
+# Intel SPIR-V only
+cmake --preset oneapi-intel-release && cmake --build --preset oneapi-intel-release
+
+# Dual targets (Intel + NVIDIA)
+cmake --preset oneapi-release && cmake --build --preset oneapi-release
 ```
 
-Binaries land under `build/<preset>/carbon_mc`.
-
-### CMake options
-
-| Option | Default | Meaning |
-|--------|---------|---------|
-| `CARBON_ENABLE_SYCL` | OFF | SYCL transport |
-| `CARBON_ENABLE_MINIBEAM` | OFF | Compile Copper minibeam path + dispatch |
-| `CARBON_DOSE_FP32` | OFF* | FP32 dose atomics (*NVIDIA presets ON) |
-| `CARBON_SYCL_TARGETS` | empty | e.g. `nvptx64-nvidia-cuda` or `spir64,nvptx64-nvidia-cuda` |
-| `CARBON_CUDA_ARCH` | empty | Optional AOT, e.g. `sm_75` |
-
-With **MINIBEAM=OFF**, only the legacy SYCL kernel is built.  
-With **MINIBEAM=ON**, `minibeam: false` still uses the legacy kernel;  
-`minibeam: true` selects the Copper beamline path.
-
-## Run
+Or use the helper script:
 
 ```bash
-# Serial CSDA water phantom
+scripts/build_linux_oneapi.sh                       # default: oneapi-release
+scripts/build_linux_oneapi.sh oneapi-nvidia-release  # NVIDIA only
+```
+
+Binaries are placed under `build/<preset>/carbon_mc`.
+
+### Manual CMake Invocation
+
+```bash
+source /opt/intel/oneapi/setvars.sh   # or use the from-source compiler
+
+cmake -B build -G Ninja \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_CXX_COMPILER=icpx \
+  -DCARBON_ENABLE_SYCL=ON \
+  -DCARBON_SYCL_TARGETS=nvptx64-nvidia-cuda \
+  -DCARBON_CUDA_ARCH=sm_75 \
+  -DCARBON_DOSE_FP32=ON
+
+cmake --build build
+```
+
+### CMake Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `CARBON_ENABLE_SYCL` | `OFF` | Enable the SYCL transport backend |
+| `CARBON_DOSE_FP32` | `ON` | Use FP32 dose scorer atomics (fast on consumer NVIDIA GPUs) |
+| `CARBON_DOSE_FP64` | `OFF` | Use FP64 dose scorer atomics (overrides FP32 when ON) |
+| `CARBON_LET_FP64` | `OFF` | Use FP64 LET scorer atomics |
+| `CARBON_ENABLE_MINIBEAM` | `OFF` | Build the Copper minibeam beamline kernel |
+| `CARBON_VALIDATION_SCORERS` | `OFF` | Compile extra validation scorers (species fluence, survival, ledger) |
+| `CARBON_ENABLE_TRANSPORT_PROFILE` | `OFF` | Enable low-overhead SYCL step-path profiling counters |
+| `CARBON_SYCL_TARGETS` | *(empty)* | SYCL compilation targets, e.g. `nvptx64-nvidia-cuda`, `spir64`, or both |
+| `CARBON_CUDA_ARCH` | *(empty)* | NVIDIA GPU architecture for AOT compilation, e.g. `sm_75` |
+
+With `CARBON_ENABLE_MINIBEAM=OFF` only the legacy SYCL kernel is built. With
+`CARBON_ENABLE_MINIBEAM=ON`, setting `minibeam: false` in the config still
+uses the legacy kernel while `minibeam: true` selects the Copper beamline path.
+
+## How to Run
+
+```bash
+# Basic water phantom (serial)
 ./build/cpu-debug/carbon_mc --config config/beam_200MeVu.yaml
 
-# SYCL + cascade (needs GPU / correct --device)
+# SYCL on NVIDIA GPU with fragment cascade
 ./build/oneapi-nvidia-release/carbon_mc \
   --config config/beam_200MeVu_fragment_cascade_100k.yaml \
   --device cuda
 
-# LET_d example
+# Dose-averaged LET
 ./build/oneapi-nvidia-release/carbon_mc \
   --config config/beam_200MeVu_letd.yaml \
   --device cuda
 
-# CT full-plan (dose + LET, TOPAS-matched numerics)
+# CT full-plan (PBS dose + LET)
 ./build/oneapi-nvidia-release/carbon_mc \
   --config config/beam_ct_fullplan_rt07575_let.yaml \
   --device cuda
 ```
 
-Useful CLI flags: `--histories`, `--device`, `--output`,
-`--scorer-let` / `--no-scorer-let`, `--spots`, `--ct-grid`, `--plan-only`.
+### CLI Flags
 
-Config files are simple `key: value` lines (not a full YAML library).
+| Flag | Description |
+|------|-------------|
+| `--config FILE` | Configuration file (simple `key: value` format) |
+| `--device DEVICE` | `serial`, `cpu`, `gpu`, `cuda` / `nvidia`, `level_zero` / `intel` / `arc`, `opencl`, `default` |
+| `--histories N` | Number of histories (per spot, or total plan with spot weights) |
+| `--spots FILE` | TOPAS-format spot file; repeat to concatenate |
+| `--spot-weights FILE` | One optimization weight per concatenated spot |
+| `--random-seed N\|auto` | Override configured RNG seed |
+| `--ct-grid FILE` | Override configured CT patient grid |
+| `--output FILE` | Energy-deposition scorer CSV |
+| `--dose-output FILE` | Dose scorer CSV (Gy) |
+| `--scorer-let` / `--no-scorer-let` | Enable / disable LET_d scoring |
+| `--let-output FILE` | LET_d CSV with raw numerator / denominator |
+| `--voxel-dose-mhd FILE` | Dense voxel dose MHD output path |
+| `--plan-only` | Parse and allocate the plan without running transport |
+| `--sequential-spots` | Disable batched SYCL plan launch |
+| `--write-canonical-config FILE` | Write normalized YAML input |
 
-Kept examples: water / 200 MeV/u IDD and LET, one cascade, one SOBP, TPS
-source, CT full-plan (`rt06423` / `rt07575` / `20022516`), PBS, minibeam.
-
-## Suggested transport settings
-
-There is **one** charged-particle model. Speed vs accuracy is only the
-numeric YAML fields below.
-
-| Use | `maximum_step_mm` | `maximum_relative_energy_loss` | `energy_cutoff_MeV` | `secondary_local_deposit_cutoff_MeV` | `secondary_condensed_step_mm` | LET | particle-specific SP |
-|-----|------------------:|-------------------------------:|--------------------:|-------------------------------------:|------------------------------:|-----|----------------------|
-| Fast dose estimate | 0.5 | 0.005 | 0.1 | 2.0 | 1.0 | off | optional |
-| Dose + LET | 0.25 | 0.0025 | 0.1 | 0.5 | 0.5 | on | on |
-| Tightest production | 0.1 | 0.001 | 0.1 | 0.1 | 0 | on | on |
-
-Particle-specific stopping power is a small kernel cost; the rows above
-differ mainly by step size, secondary cutoff, condensed secondary step, and
-whether LET is scored.
-
-Keep the charged dose chain on for CT (`enable_primary_attenuation`,
-`enable_secondary_generation`, `enable_secondary_transport`,
-`enable_fragment_cascade`). Neutrals, secondary straggling, and CT-material
-MCS stay off unless you are studying those extensions.
-
-## Physics data
-
-| Path | Role |
-|------|------|
-| `data/stopping_power_*.csv` | Material dE/dx tables |
-| `data/c12_inelastic_cross_sections_*.csv` | Macroscopic nuclear XS |
-| `data/ion_stopping_power_*.csv` | Per-isotope SP for LET / fragments |
-| `data/packages/*.bin` | Reaction, cascade, neutral, soft-tissue packages |
-| `data/copper_*.bin` | Minibeam Copper packages |
-
-Package binaries are precompiled event samples. Regenerate them offline from
-TOPAS/Geant4 if you need different energies or materials; this branch does not
-ship the generation pipeline.
-
-## Layout (engine)
-
-```text
-CLI / config
-    → TransportConfig
-    → load SP / XS / packages / CT / spots
-    → transport_serial  or  transport_sycl
-         ├─ legacy (water / CT / LET / TPS)
-         └─ minibeam (optional Copper beamline)
-    → TransportResult → CSV / MHD writers
-```
-
-Shared device helpers used by both SYCL TUs live in `src/detail/sycl_*.inc`
-(include-only; dual-kernel isolation preserved).
+Config files use simple `key: value` lines (a lightweight parser, not a full
+YAML library).
 
 ## License
 
-GPL-3.0-or-later — see [LICENSE](LICENSE).
-
-## Documentation
-
-Start with [docs/structure.md](docs/structure.md) for the code and data layout.
-Physics and workflow notes are collected under `docs/`; local dose-validation
-workspaces such as `benchmark/` and `validation/` are intentionally ignored.
+GPL-3.0-or-later -- see [LICENSE](LICENSE).
