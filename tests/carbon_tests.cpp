@@ -6,6 +6,7 @@
 #include "carbon/energy_loss_fluctuation.hpp"
 #include "carbon/multiple_scattering.hpp"
 #include "carbon/particle.hpp"
+#include "carbon/plan_run.hpp"
 #include "carbon/rng.hpp"
 #include "carbon/run_quality.hpp"
 
@@ -3537,11 +3538,72 @@ void test_table1_inclusive_sampling() {
     require(saw_n_h, "Table 1 H sampling must be able to return neutrons");
 }
 
+void test_cinel02_ledger_schema_and_accumulator() {
+    using Schema = carbon::Cinel02SpeciesLedgerSchema;
+    static_assert(Schema::species_count == 18);
+    static_assert(Schema::metric_count == 10);
+    static_assert(Schema::terminal_reason_count == 6);
+    static_assert(Schema::step_limit_escape_kinetic + 1 == Schema::metric_count);
+    static_assert(Schema::continuous_stop + 1 == Schema::terminal_reason_count);
+
+    carbon::TransportResult total{};
+    carbon::TransportResult part{};
+    constexpr std::array<std::size_t, 4> diagnostic_slots{0, 64, 928, 1388};
+    for (std::size_t i = 0; i < diagnostic_slots.size(); ++i) {
+        total.cinel02_diagnostics[diagnostic_slots[i]] = 10 + i;
+        part.cinel02_diagnostics[diagnostic_slots[i]] = 100 + 2 * i;
+    }
+    for (std::size_t i = 0; i < total.cinel02_energy_ledger_MeV.size(); ++i) {
+        total.cinel02_energy_ledger_MeV[i] = static_cast<double>(i);
+        part.cinel02_energy_ledger_MeV[i] = static_cast<double>(2 * i);
+    }
+    for (std::size_t i = 0;
+         i < total.cinel02_species_transport_ledger_MeV.size(); ++i) {
+        total.cinel02_species_transport_ledger_MeV[i] = static_cast<double>(i);
+        part.cinel02_species_transport_ledger_MeV[i] = static_cast<double>(3 * i);
+    }
+    for (std::size_t i = 0;
+         i < total.cinel02_species_terminal_reason_counts.size(); ++i) {
+        total.cinel02_species_terminal_reason_counts[i] = i;
+        part.cinel02_species_terminal_reason_counts[i] = 4 * i;
+    }
+    carbon::accumulate_transport_result(total, part);
+    for (std::size_t i = 0; i < diagnostic_slots.size(); ++i) {
+        require(total.cinel02_diagnostics[diagnostic_slots[i]] == 110 + 3 * i,
+                "CINEL02 diagnostic accumulator mismatch");
+    }
+    for (std::size_t i = 0; i < total.cinel02_energy_ledger_MeV.size(); ++i) {
+        require_near(total.cinel02_energy_ledger_MeV[i], 3.0 * i, 0.0,
+                     "CINEL02 energy accumulator mismatch");
+    }
+    for (std::size_t i = 0;
+         i < total.cinel02_species_transport_ledger_MeV.size(); ++i) {
+        require_near(total.cinel02_species_transport_ledger_MeV[i], 4.0 * i, 0.0,
+                     "CINEL02 species energy accumulator mismatch");
+    }
+    for (std::size_t i = 0;
+         i < total.cinel02_species_terminal_reason_counts.size(); ++i) {
+        require(total.cinel02_species_terminal_reason_counts[i] == 5 * i,
+                "CINEL02 terminal accumulator mismatch");
+    }
+
+    const double queued_birth = 100.0;
+    const double continuous = 35.0;
+    const double nuclear_local = 5.0;
+    const double reaction_export = 40.0;
+    const double terminal = 15.0;
+    const double escape = 5.0;
+    require_near(queued_birth - continuous - nuclear_local - reaction_export -
+                     terminal - escape,
+                 0.0, 0.0, "CINEL02 mutually-exclusive partition mismatch");
+}
+
 }  // namespace
 
 int main() {
     try {
         test_fred_18_isotopes_data();
+        test_cinel02_ledger_schema_and_accumulator();
         test_ion_species_stopping_power_grid_validation();
         test_stopping_power_csv_corruption_rejection();
         test_kox_icru_cross_sections();

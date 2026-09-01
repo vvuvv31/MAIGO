@@ -37,6 +37,16 @@
 
 ## 当前证据（2026-09-01）
 
+### Step 01A correctness review
+
+- [x] multi-batch 累加 `cinel02_diagnostics`、aggregate energy ledger、species ledger 与 terminal counters。
+- [x] primary/secondary CINEL02 和 C12-H elastic proton 共用 queued-birth helper。
+- [x] metric 0 明确为 `queued_birth_kinetic`；metric 8 改为不与 local deposit 重叠的 `reaction_export_kinetic`。
+- [x] 新增 18×6 terminal reason counters 与 accumulator/partition synthetic regression。
+- [ ] p/d/He4 closure 仍为 31.57%/17.30%/17.11%；elastic 在基线中关闭，漏记 elastic birth 不是本次 residual 来源。
+- [ ] 下一步只增加紧凑 isotope replay status、parent outcome 和 18×18 transition ledger，不增加 depth 维。
+
+
 - 已实现 18 isotope × 10 metric 聚合 ledger，JSON 输出固定 schema。
 - 200 MeV/u 100k G1 本地 RTX 2080Ti 验证：编译与 2/2 tests 通过；全局 energy balance 与冻结基线一致。
 - Be/Li/B/C isotope closure 多数已到 `<0.05%`；p/d/He4 仍有 17–32% 未解释残差，Step 01 尚未完成。

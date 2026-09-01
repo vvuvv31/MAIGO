@@ -44,12 +44,34 @@ inline void cinel02_energy_add_device(
 inline void cinel02_species_energy_add_device(
     float* ledger, const int species, const std::uint32_t metric,
     const float value) noexcept {
-    constexpr std::uint32_t species_count = 18U;
-    constexpr std::uint32_t metric_count = 10U;
+    constexpr auto species_count =
+        static_cast<std::uint32_t>(Cinel02SpeciesLedgerSchema::species_count);
+    constexpr auto metric_count =
+        static_cast<std::uint32_t>(Cinel02SpeciesLedgerSchema::metric_count);
     if (ledger == nullptr || species < 0 || species >= static_cast<int>(species_count) ||
         metric >= metric_count || !sycl::isfinite(value) || value <= 0.0F) return;
     cinel02_energy_add_device(
         ledger, static_cast<std::uint32_t>(species) * metric_count + metric, value);
+}
+
+inline void cinel02_record_queued_secondary_birth_device(
+    float* ledger, const int z, const int a, const float kinetic_energy_MeV) noexcept {
+    cinel02_species_energy_add_device(
+        ledger, carbon::get_charged_species_idx(z, a),
+        static_cast<std::uint32_t>(Cinel02SpeciesLedgerSchema::queued_birth_kinetic),
+        kinetic_energy_MeV);
+}
+
+inline void cinel02_species_terminal_increment_device(
+    std::uint64_t* counters, const int species, const std::uint32_t reason) noexcept {
+    constexpr auto species_count =
+        static_cast<std::uint32_t>(Cinel02SpeciesLedgerSchema::species_count);
+    constexpr auto reason_count =
+        static_cast<std::uint32_t>(Cinel02SpeciesLedgerSchema::terminal_reason_count);
+    if (counters == nullptr || species < 0 || species >= static_cast<int>(species_count) ||
+        reason >= reason_count) return;
+    cinel02_diag_increment_device(
+        counters, static_cast<std::uint32_t>(species) * reason_count + reason);
 }
 
 inline std::uint32_t cinel02_hazard_diag_slot_device(

@@ -168,6 +168,10 @@ TransportResult transport_sycl(const TransportConfig& config,
         TransportResult::species_ledger_metric_count;
     float* cinel02_energy_device = nullptr;
     float* cinel02_species_energy_device = nullptr;
+    constexpr std::size_t kCinel02SpeciesTerminalSlots =
+        Cinel02SpeciesLedgerSchema::species_count *
+        Cinel02SpeciesLedgerSchema::terminal_reason_count;
+    std::uint64_t* cinel02_species_terminal_device = nullptr;
     if (use_cinel02) {
         const auto checked_u32 = [](const std::size_t value, const char* label) {
             if (value > std::numeric_limits<std::uint32_t>::max()) {
@@ -222,11 +226,14 @@ TransportResult transport_sycl(const TransportConfig& config,
             sycl::malloc_device<float>(kCinel02EnergySlots, queue);
         cinel02_species_energy_device =
             sycl::malloc_device<float>(kCinel02SpeciesEnergySlots, queue);
+        cinel02_species_terminal_device = sycl::malloc_device<std::uint64_t>(
+            kCinel02SpeciesTerminalSlots, queue);
         if (cinel02_interactions_device == nullptr || cinel02_products_device == nullptr ||
             cinel02_energy_nodes_device == nullptr || cinel02_event_offsets_device == nullptr ||
             cinel02_event_indices_device == nullptr || cinel02_rate_groups_device == nullptr ||
             cinel02_rate_samples_device == nullptr || cinel02_diag_device == nullptr ||
-            cinel02_energy_device == nullptr || cinel02_species_energy_device == nullptr) {
+            cinel02_energy_device == nullptr || cinel02_species_energy_device == nullptr ||
+            cinel02_species_terminal_device == nullptr) {
             throw std::bad_alloc();
         }
         queue.copy(cinel02_host_tables->interactions.data(),
@@ -251,6 +258,8 @@ TransportResult transport_sycl(const TransportConfig& config,
             .wait_and_throw();
         queue.fill(cinel02_species_energy_device, 0.0F,
                    kCinel02SpeciesEnergySlots).wait_and_throw();
+        queue.fill(cinel02_species_terminal_device, std::uint64_t{0},
+                   kCinel02SpeciesTerminalSlots).wait_and_throw();
         cinel02_host_tables.reset();
         cinel02_package.reset();
         cinel02_rates.reset();
@@ -1838,6 +1847,9 @@ TransportResult transport_sycl(const TransportConfig& config,
                                     rng_history, rng::branch_tag(
                                         rng::branch_role_primary_charged, steps));
                                 secondary_queue_device[base_idx] = proton;
+                                cinel02_record_queued_secondary_birth_device(
+                                    cinel02_species_energy_device, proton.z, proton.a,
+                                    proton.energy_MeV);
                             } else if (secondary_overflow_count_device != nullptr) {
                                 sycl::atomic_ref<uint32_t, sycl::memory_order::relaxed,
                                                  sycl::memory_scope::device,
@@ -2025,10 +2037,9 @@ TransportResult transport_sycl(const TransportConfig& config,
                                                         28U + static_cast<std::uint32_t>(product.z - 1));
                                                 }
                                                 secondary_queue_device[output] = child;
-                                                cinel02_species_energy_add_device(
-                                                    cinel02_species_energy_device,
-                                                    carbon::get_charged_species_idx(product.z, product.a),
-                                                    0U, sycl::fmax(0.0F, product.kinetic_energy_MeV));
+                                                cinel02_record_queued_secondary_birth_device(
+                                                    cinel02_species_energy_device, product.z, product.a,
+                                                    sycl::fmax(0.0F, product.kinetic_energy_MeV));
                                             } else {
                                                 untracked_MeV += sycl::fmax(
                                                     0.0F, product.kinetic_energy_MeV);
@@ -2414,6 +2425,10 @@ TransportResult transport_sycl(const TransportConfig& config,
                             cinel02_species_energy_add_device(
                                 cinel02_species_energy_device, ledger_species_idx, 5U,
                                 frag.energy_MeV);
+                            cinel02_species_terminal_increment_device(
+                                cinel02_species_terminal_device, ledger_species_idx,
+                                static_cast<std::uint32_t>(
+                                    Cinel02SpeciesLedgerSchema::initial_below_cutoff));
                             const auto bin_z = static_cast<int>(frag.pos_z_mm * inverse_depth_bin_width_mm);
                             if (bin_z >= 0 && bin_z < static_cast<int>(number_of_bins)) {
                                 sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
@@ -2488,6 +2503,7 @@ TransportResult transport_sycl(const TransportConfig& config,
                             &ion_species_sp_device[
                                 static_cast<std::size_t>(charged_sp_idx) * table_size];
 
+                        bool sec_terminal_recorded = false;
                         float sec_e = frag.energy_MeV;
                         float sec_x = frag.pos_x_mm;
                         float sec_y = frag.pos_y_mm;
@@ -2619,7 +2635,7 @@ TransportResult transport_sycl(const TransportConfig& config,
                             }
 
                             if (bin_z != pending_sec_bin) {
-                                if (pending_sec_depth_MeV > 0.0F && pending_sec_bin >= 0 && pending_sec_bin < static_cast<int>(number_of_bins)) {
+                        if (pending_sec_depth_MeV > 0.0F && pending_sec_bin >= 0 && pending_sec_bin < static_cast<int>(number_of_bins)) {
                                     sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
                                                      sycl::memory_scope::device,
                                                      sycl::access::address_space::global_space>
@@ -2727,10 +2743,12 @@ TransportResult transport_sycl(const TransportConfig& config,
                                             3U, local_deposit);
                                         cinel02_species_energy_add_device(
                                             cinel02_species_energy_device, ledger_species_idx,
-                                            8U, sycl::fmax(0.0F, sec_e -
+                                            static_cast<std::uint32_t>(
+                                                Cinel02SpeciesLedgerSchema::reaction_export_kinetic),
+                                            sycl::fmax(0.0F, sec_e -
                                                 (event.parent_status == 0
                                                      ? sycl::fmax(0.0F, event.parent_energy_MeV)
-                                                     : 0.0F)));
+                                                     : 0.0F) - local_deposit));
                                         cinel02_energy_add_device(cinel02_energy_device, 0U, sec_e);
                                         cinel02_energy_add_device(cinel02_energy_device, 1U, dE);
                                         cinel02_energy_add_device(cinel02_energy_device, 2U, local_deposit);
@@ -2893,10 +2911,9 @@ TransportResult transport_sycl(const TransportConfig& config,
                                                         28U + static_cast<std::uint32_t>(product.z - 1));
                                                 }
                                                 secondary_queue_device[output] = child;
-                                                cinel02_species_energy_add_device(
-                                                    cinel02_species_energy_device,
-                                                    carbon::get_charged_species_idx(product.z, product.a),
-                                                    0U, sycl::fmax(0.0F, product.kinetic_energy_MeV));
+                                                cinel02_record_queued_secondary_birth_device(
+                                                    cinel02_species_energy_device, product.z, product.a,
+                                                    sycl::fmax(0.0F, product.kinetic_energy_MeV));
                                             } else if (secondary_overflow_count_device !=
                                                        nullptr) {
                                                 sycl::atomic_ref<
@@ -2942,6 +2959,11 @@ TransportResult transport_sycl(const TransportConfig& config,
                                             sec_dy = parent_direction.y;
                                             sec_dz = parent_direction.z;
                                         } else {
+                                            cinel02_species_terminal_increment_device(
+                                                cinel02_species_terminal_device, ledger_species_idx,
+                                                static_cast<std::uint32_t>(
+                                                    Cinel02SpeciesLedgerSchema::reaction_killed));
+                                            sec_terminal_recorded = true;
                                             sec_e = 0.0F;
                                         }
                                     }
@@ -3039,6 +3061,10 @@ TransportResult transport_sycl(const TransportConfig& config,
                             if (step_limited) {
                                 cinel02_species_energy_add_device(
                                     cinel02_species_energy_device, ledger_species_idx,  9U, sec_e);
+                                cinel02_species_terminal_increment_device(
+                                    cinel02_species_terminal_device, ledger_species_idx,
+                                    static_cast<std::uint32_t>(Cinel02SpeciesLedgerSchema::step_limit));
+                                sec_terminal_recorded = true;
                                 if (escaped_device != nullptr) {
                                     sycl::atomic_ref<float, sycl::memory_order::relaxed,
                                                      sycl::memory_scope::device,
@@ -3049,6 +3075,10 @@ TransportResult transport_sycl(const TransportConfig& config,
                             } else if (sec_z >= 0.0F && sec_z < phantom_length_mm) {
                                 cinel02_species_energy_add_device(
                                     cinel02_species_energy_device, ledger_species_idx, 5U, sec_e);
+                                cinel02_species_terminal_increment_device(
+                                    cinel02_species_terminal_device, ledger_species_idx,
+                                    static_cast<std::uint32_t>(Cinel02SpeciesLedgerSchema::terminal_deposit));
+                                sec_terminal_recorded = true;
                                 const auto bin_x = static_cast<int>((sec_x - voxel_min_x_mm) * inverse_voxel_size_x_mm);
                                 const auto bin_y = static_cast<int>((sec_y - voxel_min_y_mm) * inverse_voxel_size_y_mm);
                                 const auto bin_z = static_cast<int>(sec_z * inverse_depth_bin_width_mm);
@@ -3124,6 +3154,10 @@ TransportResult transport_sycl(const TransportConfig& config,
                             } else {
                                 cinel02_species_energy_add_device(
                                     cinel02_species_energy_device, ledger_species_idx, 7U, sec_e);
+                                cinel02_species_terminal_increment_device(
+                                    cinel02_species_terminal_device, ledger_species_idx,
+                                    static_cast<std::uint32_t>(Cinel02SpeciesLedgerSchema::boundary_escape));
+                                sec_terminal_recorded = true;
                                 if (escaped_device != nullptr) {
                                 // Escaped phantom boundaries
                                 sycl::atomic_ref<float, sycl::memory_order::relaxed,
@@ -3133,6 +3167,13 @@ TransportResult transport_sycl(const TransportConfig& config,
                                 atomic_esc.fetch_add(sec_e);
                                 }
                             }
+                        }
+
+                        if (!sec_terminal_recorded) {
+                            cinel02_species_terminal_increment_device(
+                                cinel02_species_terminal_device, ledger_species_idx,
+                                static_cast<std::uint32_t>(
+                                    Cinel02SpeciesLedgerSchema::continuous_stop));
                         }
 
                         if (pending_sec_depth_MeV > 0.0F && pending_sec_bin >= 0 && pending_sec_bin < static_cast<int>(number_of_bins)) {
@@ -3281,6 +3322,8 @@ TransportResult transport_sycl(const TransportConfig& config,
     }
     std::array<float, kCinel02EnergySlots> cinel02_energy_host{};
     std::array<float, kCinel02SpeciesEnergySlots> cinel02_species_energy_host{};
+    std::array<std::uint64_t, kCinel02SpeciesTerminalSlots>
+        cinel02_species_terminal_host{};
     if (cinel02_energy_device != nullptr) {
         queue.copy(cinel02_energy_device, cinel02_energy_host.data(),
                    kCinel02EnergySlots);
@@ -3289,6 +3332,11 @@ TransportResult transport_sycl(const TransportConfig& config,
         queue.copy(cinel02_species_energy_device,
                    cinel02_species_energy_host.data(),
                    kCinel02SpeciesEnergySlots);
+    }
+    if (cinel02_species_terminal_device != nullptr) {
+        queue.copy(cinel02_species_terminal_device,
+                   cinel02_species_terminal_host.data(),
+                   kCinel02SpeciesTerminalSlots);
     }
     std::array<std::uint64_t, kCinel02DiagSlots> cinel02_diag_host{};
     if (cinel02_diag_device != nullptr) {
@@ -3355,6 +3403,7 @@ TransportResult transport_sycl(const TransportConfig& config,
     free_device(cinel02_diag_device);
     free_device(cinel02_energy_device);
     free_device(cinel02_species_energy_device);
+    free_device(cinel02_species_terminal_device);
     free_device(untracked_nuclear_device);
     free_device(fred_prob_proj_h_device);
     free_device(fred_prob_proj_o_device);
@@ -3600,6 +3649,8 @@ TransportResult transport_sycl(const TransportConfig& config,
         result.cinel02_species_transport_ledger_MeV[i] =
             static_cast<double>(cinel02_species_energy_host[i]);
     }
+    result.cinel02_species_terminal_reason_counts =
+        cinel02_species_terminal_host;
     if (use_cinel02 && config.cinel02_strict_match &&
         (result.cinel02_diagnostics[4] != 0U || result.cinel02_diagnostics[5] != 0U ||
          result.cinel02_diagnostics[18] != 0U || result.cinel02_diagnostics[19] != 0U ||

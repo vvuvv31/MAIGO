@@ -1469,15 +1469,27 @@ void write_energy_ledger_json(const std::filesystem::path& path,
               "\"species\":[\"1H\",\"2H\",\"3H\",\"3He\",\"4He\",\"6He\","
               "\"6Li\",\"7Li\",\"7Be\",\"9Be\",\"10Be\",\"8B\",\"10B\","
               "\"11B\",\"10C\",\"11C\",\"12C\",\"6Be\"],"
-              "\"metric\":[\"birth_kinetic\",\"continuous_deposit_all\","
+              "\"metric\":[\"queued_birth_kinetic\",\"continuous_deposit_all\","
               "\"continuous_deposit_fov\",\"nuclear_local_deposit_all\","
-              "\"nuclear_local_deposit_fov\",\"cutoff_end_deposit_all\","
-              "\"cutoff_end_deposit_fov\",\"escaped_kinetic\",\"reaction_removed_kinetic\",\"step_limit_escape_kinetic\"]},\n"
+              "\"nuclear_local_deposit_fov\",\"terminal_deposit_all\","
+              "\"terminal_deposit_fov\",\"boundary_escape_kinetic\",\"reaction_export_kinetic\",\"step_limit_escape_kinetic\"]},\n"
            << "  \"cinel02_species_transport_ledger_MeV\": [";
     for (std::size_t i = 0;
          i < result.cinel02_species_transport_ledger_MeV.size(); ++i) {
         output << (i == 0 ? "" : ", ")
                << result.cinel02_species_transport_ledger_MeV[i];
+    }
+    output << "],\n"
+           << "  \"cinel02_species_terminal_reason_layout\": "
+              "{\"shape\":[18,6],\"order\":[\"species\",\"reason\"],"
+              "\"reason\":[\"initial_below_cutoff\",\"reaction_killed\","
+              "\"terminal_deposit\",\"boundary_escape\",\"step_limit\","
+              "\"continuous_stop\"]},\n"
+           << "  \"cinel02_species_terminal_reason_counts\": [";
+    for (std::size_t i = 0;
+         i < result.cinel02_species_terminal_reason_counts.size(); ++i) {
+        output << (i == 0 ? "" : ", ")
+               << result.cinel02_species_terminal_reason_counts[i];
     }
     output << "],\n"
            << "  \"cinel02_kinetic_q_excitation_bucket_MeV\": "

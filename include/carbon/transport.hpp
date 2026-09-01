@@ -65,9 +65,28 @@ struct MinibeamDiagnostics {
     double direction_y_squared_sum{0.0};
 };
 
+struct Cinel02SpeciesLedgerSchema {
+    static constexpr std::size_t species_count = 18;
+    static constexpr std::size_t metric_count = 10;
+    static constexpr std::size_t terminal_reason_count = 6;
+    enum Metric : std::size_t {
+        queued_birth_kinetic = 0, continuous_deposit_all = 1,
+        continuous_deposit_fov = 2, nuclear_local_deposit_all = 3,
+        nuclear_local_deposit_fov = 4, terminal_deposit_all = 5,
+        terminal_deposit_fov = 6, boundary_escape_kinetic = 7,
+        reaction_export_kinetic = 8, step_limit_escape_kinetic = 9
+    };
+    enum TerminalReason : std::size_t {
+        initial_below_cutoff = 0, reaction_killed = 1, terminal_deposit = 2,
+        boundary_escape = 3, step_limit = 4, continuous_stop = 5
+    };
+};
+
 struct TransportResult {
-    static constexpr std::size_t species_ledger_species_count = 18;
-    static constexpr std::size_t species_ledger_metric_count = 10;
+    static constexpr std::size_t species_ledger_species_count =
+        Cinel02SpeciesLedgerSchema::species_count;
+    static constexpr std::size_t species_ledger_metric_count =
+        Cinel02SpeciesLedgerSchema::metric_count;
     std::vector<double> deposited_energy_MeV;
     std::vector<double> voxel_deposited_energy_MeV;
     std::vector<double> in_fov_deposited_energy_MeV;
@@ -142,6 +161,10 @@ struct TransportResult {
     std::array<double, 8> cinel02_energy_ledger_MeV{};
     std::array<double, species_ledger_species_count * species_ledger_metric_count>
         cinel02_species_transport_ledger_MeV{};
+    std::array<std::uint64_t,
+               species_ledger_species_count *
+                   Cinel02SpeciesLedgerSchema::terminal_reason_count>
+        cinel02_species_terminal_reason_counts{};
     std::array<std::uint64_t, 18> fred_isotope_counts{};
     std::uint64_t fred_inelastic_events{0};
     std::uint64_t fred_retry_sum{0};

@@ -35,13 +35,13 @@
 
 ## 优先级
 
-`P0 分层 energy closure → P1 deterministic auditor → P1 lookup semantics/support → P1 MCS/FOV → P2 stopping/range → P2 non-C12 straggling → P3 cascade → package gate → 100/200/300 validation`。
+`P0 Step 01A ledger correctness → P0 Step 01B isotope replay/outcome/transition → P1 deterministic auditor → P1 replay-support consistency → P1 reaction-survival + stopping optical depth → P1 causal waterfall/physics fix → P2 non-C12 straggling → P3 MCS shape → P4 100/300 regression`。
 
 ## 进度控制
 
 当前完成度：**1/10（10%）**。
 
-当前下一步：**继续 Step 01：定位 p/d/He4 closure 残差，并增加 generation/target/energy/depth sparse 分层；Be/Li 的正式 FOV acceptance 已证实接近 1。**
+当前下一步：**Step 01B：增加紧凑 isotope replay status、parent outcome 和 18×18 transition ledger；暂不增加 depth 维，也不改 physics。**
 
 | 状态 | 步骤 | 主要产出 |
 |---|---|---|
