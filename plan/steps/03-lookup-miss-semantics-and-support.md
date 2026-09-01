@@ -70,12 +70,22 @@ rate group 可在连续能区插值为非零，但 event replay 要求当前 `±
 3. [x] 保持 isotope alias 禁止；独立 6Be 数据补充前不静默填 rate/event。
 4. [x] 03B-1R：按 Job 495 reference semantics 实现 TopasCompatKill；不补充独立 6Be+H1/O16 exposure/package。
 
-### 03B-2：support-aware rate consistency（待执行，仅 transportable isotopes）
+### 03B-2B：bounded source/compiler consistency（待执行，仅 transportable isotopes）
 
-1. [ ] compiler/manifest 为每个 rate group 输出真正 event-support intervals/mask（先修 source/compiler consistency）。
-2. [ ] runtime 仅在 tolerance window 内存在 event 时标记 replay-covered；不得简单在 E_rate 上乘 mask。
-3. [x] 不跨大能差寻找 nearest event，不扩大 tolerance 来隐藏 gap；03B-2A 已证明 Be/Li miss 为 0，暂不改 runtime rate。
-4. [ ] 若 raw source 有 support 而 compiler 丢失，优先修 package/compiler；只有 raw 真 gap 才考虑 suppress hazard，并记录 suppressed_hazard / suppressed_optical_depth。
+本阶段是 correctness cleanup，不是 Be/Li 剂量收敛步骤。只处理 03B-2A 实际占用的
+174 个 provisional source/compiler gap 与 18 个 lookup/index anomaly；不改变 rate、target
+CDF、tolerance 或 isotope yield。
+
+1. [ ] 对 174 个 gap 逐项回溯 raw source → compiler → package，确认 raw 真缺还是 compiler 丢 support。
+2. [ ] 对 18 个 anomaly 做 exact-energy replay，确认 index/lookup 实现问题并补回归测试。
+3. [ ] 若 raw 有 support 而 compiler 丢失，修 source/compiler/package manifest；若 raw 真缺，
+   只记录缺口并评估显式 suppressed hazard，不静默改 H/O target mix。
+4. [x] 不跨大能差寻找 nearest event，不扩大 tolerance 来隐藏 gap；03B-2A 已证明 Be/Li miss=0。
+5. [ ] 不在 E_rate 上直接乘 runtime support mask；只有 03B-2A 证明边界漂移占主导时，才设计
+   support-boundary segmentation，并记录 suppressed hazard / optical depth。
+
+完成上述 bounded 检查后立即进入 reaction-survival × stopping-residence 主线；不得以 dose
+改善作为本阶段验收。
 
 ## 测试
 
@@ -86,8 +96,8 @@ rate group 可在连续能区插值为非零，但 event replay 要求当前 `±
 - [x] 03B-0 census 的区间 union/zero-rate 过滤 synthetic tests。
 - [x] 03B-1 raw campaign/compiler root-cause 与 03B-1R compatibility policy 判定完成；不补充 Be-6 data。
 - [x] 03B-2A occupancy 分类与 Be6 non-transportable policy test 已补充。
-- [ ] 03B-2B 仍需补充 rate-covered/event-uncovered、boundary hit、H/O 切换、G1/G2
-  的 source/compiler consistency tests，以及逐 collision 的 support mask 验证。
+- [ ] 03B-2B 需补充 raw/compiler/package provenance、exact-energy index/lookup、H/O 切换与
+  G1/G2 source/compiler consistency tests；不预先实现 runtime support mask。
 
 ## 退出条件
 
@@ -97,10 +107,10 @@ rate group 可在连续能区插值为非零，但 event replay 要求当前 `±
 - [x] valid replay 不重复施加普通步 MCS；post-EM cutoff 不施加超出 cutoff 的 MCS。
 - [x] 沙盒外编译、CTest 和 200 MeV/u 100k GPU 回归完成。
 
-### 阶段 B（Step 03 尚未完成）
+### 阶段 B（03B-2B 尚未完成）
 
 - [x] 03B-2A 已按实际 occupancy 分类 miss；不把 0.268% global miss 误报为 Be/Li dose 根因。
-- [ ] 中间目标 miss `<0.05%`；最终认证 package miss `=0`（仅在 source/compiler 修复有证据时推进）。
-- [ ] 修复前后 isotope birth expectation 无可测重归一化。
-- [ ] compiler/manifest 输出 event-support intervals/mask，runtime 与 replay support
-  严格一致；不得扩大 tolerance 或使用 nearest-event fallback。
+- [ ] 174 个 provisional gap 已完成 raw source → compiler → package 回溯；18 个 anomaly 已 exact replay。
+- [ ] transportable isotope replay miss 接近 0，且修复前后 isotope birth expectation 无可测重归一化。
+- [ ] 仅在 source/compiler 证据支持时修复 support；不扩大 tolerance、使用 nearest-event fallback
+  或在 E_rate 上静默乘 runtime mask。

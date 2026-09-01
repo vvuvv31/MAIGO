@@ -31,6 +31,7 @@ fred_2gr_mcs_file: data/packages/fred_3_76_mcs_2gr.bin
 multiple_scattering_scale: 1.40
 enable_inelastic: true
 cinel02_max_secondary_inelastic_generations: 1
+cinel02_topas_compatibility_mode: false
 nuclear_model: cinel02
 primary_inelastic_package_v2_file: /mnt/sda/wuwei/cinel02-lightion-production-5m-v2/research107/research_hybrid_e200light107.cinpkg
 primary_inelastic_rate_v2_file: /mnt/sda/wuwei/cinel02-cascade-h1o16/e400MeVu_5000000h_bin1_cascade_5001_h1o16_cascade/compiled/cascade_e400_rates.csv

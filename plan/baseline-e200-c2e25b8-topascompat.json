@@ -59,5 +59,25 @@
     "This replaces becf880 as the development baseline only for the explicit TOPAS-compatibility profile.",
     "The TOPAS and GPU campaigns have independent fixed seeds; single-seed differences are descriptive, not confidence intervals.",
     "No raw or 3D dose data are committed."
-  ]
+  ],
+  "attribution_sanity_check": {
+    "status": "pass",
+    "code_commit": "2791baea26b878cbb3ca62c3af92e58a8a957017",
+    "false_config": "config/beam_200MeVu_cinel02_e200light107_g1_transitiondiag4_100k_xy04.yaml",
+    "false_config_sha256": "2734bb35d6d8443d560e4d4b521f03296b11cc31ae0a3655f9929b93112a3eb4",
+    "true_config_sha256": "42b97e07ff5e4c8ee9951e2bc7a8a8b40b85acb5dcc46ffec48ee269dd7fb0cb",
+    "false_analysis": "plan/artifacts/cinel02-baseline-attribution-e200-g1/off/analysis.json",
+    "true_analysis": "plan/artifacts/cinel02-baseline-attribution-e200-g1/on/analysis.json",
+    "report": "plan/artifacts/cinel02-baseline-attribution-e200-g1/sanity.json",
+    "seed": 2026095100,
+    "histories": 100000,
+    "stable_tolerance_percentage_points": 0.01,
+    "max_stable_gpu_change_percent": 2.743894000900582e-08,
+    "allowed_changes_percent": {
+      "Z4_Be": -11.526263449932284,
+      "charged_total": -0.05773590414898111
+    },
+    "topas_reference_hashes_match": true,
+    "interpretation": "compatibility switch has no measurable scorer/analysis side effect outside Be aggregate and charged total; integral species mismatches remain non-convergence diagnostics."
+  }
 }

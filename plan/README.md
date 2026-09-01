@@ -34,13 +34,13 @@
 
 ## 优先级
 
-当前路线：c2e25b8 compatibility rebaseline 已完成；03B-2A occupancy audit 已完成。当前进入 03B-2B source/compiler consistency（仅 transportable isotopes），随后 reaction-survival × stopping optical depth；最后是 light-ion residual、straggling、MCS shape 和 100/300 frozen-physics regression。
+当前路线：c2e25b8 compatibility rebaseline 已完成；下一步先做 03A baseline attribution sanity check，确认 compatibility 开关没有造成 scorer/analysis side effect。通过后执行 03B-2B bounded source/compiler consistency（仅 transportable isotopes），随后 reaction-survival × stopping optical depth；最后是 light-ion residual、straggling、MCS shape 和 100/300 frozen-physics regression。
 
-`P0 ledger correctness → P0 signed handoff → P0 compact isotope ledger → P0 replay semantics → P1 deterministic auditor → P0 Be6 compatibility policy/A-B → P0 compatibility rebaseline → P1 03B-2A occupancy audit → P1 03B-2B source/compiler consistency → P1 reaction survival + stopping optical depth → P1 causal Be/Li fix → P2 light-ion accounting cleanup → P2 non-C12 straggling → P3 MCS shape → P4 100/300 regression`。
+`P0 ledger correctness → P0 signed handoff → P0 compact isotope ledger → P0 replay semantics → P1 deterministic auditor → P0 Be6 compatibility policy/A-B → P0 compatibility rebaseline → P1 03A baseline attribution sanity check → P1 03B-2B bounded source/compiler consistency → P1 reaction survival + stopping optical depth → P1 causal Be/Li fix → P2 light-ion accounting cleanup → P2 non-C12 straggling → P3 MCS shape → P4 100/300 regression`。
 
 ## 进度控制
 
-当前完成度：**7/15（约 47%）**；Step 03 阶段 A、03B-0、03B-1 campaign provenance gate、03B-1R、compatibility rebaseline、03B-2A 和 Step 01B.1 已完成。由于新发现 Be-6 的基态寿命为 prompt scale，原先“补充稳定 Be-6 projectile campaign”的 03B-1R 已收缩为 TOPAS reference compatibility policy gate；reference 明确为无 daughter/无 deposit 的 StopAndKill，no-decay 数据只作诊断，不得编译进生产 package。
+当前完成度：**8/16（约 50%）**；Step 03 阶段 A、03B-0、03B-1 campaign provenance gate、03B-1R、compatibility rebaseline、03B-2A、03A attribution sanity check 和 Step 01B.1 已完成。由于新发现 Be-6 的基态寿命为 prompt scale，原先“补充稳定 Be-6 projectile campaign”的 03B-1R 已收缩为 TOPAS reference compatibility policy gate；reference 明确为无 daughter/无 deposit 的 StopAndKill，no-decay 数据只作诊断，不得编译进生产 package。
 
 Step 01A ledger correctness、Step 01A.5 signed handoff、Step 01B compact isotope 诊断仪器和 Step 02 deterministic package auditor 已完成；Step 03 阶段 A 已修复 replay miss 的 null-collision MCS semantics，03B-0/03B-1 已确定 Be6 coverage 缺口及 TOPAS prompt-unstable compatibility 语义，compatibility rebaseline 已切换为开发基线。03B-2A 已证明 transportable Be/Li 的 miss 为零，下一步只做 source/compiler consistency，不直接改 runtime rate。p/d/He4 及当前 aggregate species residual 仍未修复，不能把 compatibility rebaseline 误记为物理收敛。
 
@@ -54,7 +54,8 @@ Step 01A ledger correctness、Step 01A.5 signed handoff、Step 01B compact isoto
 | [x] | [02 Deterministic package auditor](steps/02-deterministic-package-yield-auditor.md) | GPU actual vs package exact vs TOPAS source；10-MeV occupancy audit |
 | [x] | [03B-1R Be6 TOPAS compatibility policy/A-B](steps/03b1r-be6-prompt-decay-semantics.md) | TopasCompatKill、显式 discarded-kinetic sink、200 MeV/u 100k fixed-seed A/B 已完成；全局 inherited CINEL02 residual 仍待后续处理 |
 | [x] | [03B-2A Occupancy-aware replay-support audit](steps/03b2-replay-support-occupancy-audit.md) | transportable isotope miss 分类完成；Be/Li miss=0；不改 runtime rate |
-| [ ] | [03 Lookup miss semantics/support](steps/03-lookup-miss-semantics-and-support.md) | 阶段 A/03B-0/03B-1/03B-2A 已完成；03B-2B 仅针对 transportable isotopes |
+| [x] | [03A Baseline attribution sanity check](steps/03a-baseline-attribution-sanity-check.md) | 当前 HEAD 同 seed A/B 通过；稳定 species 仅约 1e-8% 变化，Be/Total 单独允许变化 |
+| [ ] | [03B-2B Bounded source/compiler consistency](steps/03b2b-source-compiler-consistency.md) | 仅回溯 174 gap 与 18 anomaly；不调 rate/target mix，不以 dose 改善验收 |
 | [ ] | [04 MCS-only species/FOV](steps/04-mcs-only-species-fov.md) | step convergence、species-aware full-2GR、FOV acceptance |
 | [ ] | [05 Stopping/range regression](steps/05-stopping-range-regression.md) | Be/Li explicit-table range 与 unrestricted deposition |
 | [ ] | [06 Non-C12 straggling](steps/06-nonc12-straggling.md) | mean-preserving species-aware fluctuation |
@@ -73,7 +74,27 @@ Step 01A ledger correctness、Step 01A.5 signed handoff、Step 01B compact isoto
 确定缺口来自 source campaign 未运行 Be-6 projectile exposure，而不是 compiler 丢弃已有
 Be-6 projectile event。详见 [03B-1 step record](steps/03b1-be6-rate-coverage-root-cause.md)。
 
-已完成 Be6 TOPAS compatibility policy/A-B，下一步执行 03B-2 support-aware rate consistency（仅 transportable isotopes）。Job 495 增强 scorer 已确认 TOPAS 对 GenericIon(4,6) 立即调用 RadioactiveDecay 并终止 parent；50k histories 没有任何可观测 daughter，RDM 数据目录也没有 z4.a6 衰变方案。该结果禁止稳定 Be-6 rate/package 补充，也禁止在 GPU 中猜测 alpha+p+p conversion。
+已完成 Be6 TOPAS compatibility policy/A-B；baseline attribution sanity check 通过后执行 03B-2B bounded support-aware consistency（仅 transportable isotopes）。Job 495 增强 scorer 已确认 TOPAS 对 GenericIon(4,6) 立即调用 RadioactiveDecay 并终止 parent；50k histories 没有任何可观测 daughter，RDM 数据目录也没有 z4.a6 衰变方案。该结果禁止稳定 Be-6 rate/package 补充，也禁止在 GPU 中猜测 alpha+p+p conversion。
+
+## Step 03A 运行证据
+
+2026-09-01 在当前 HEAD `2791bae` 重建 SYCL CUDA binary 后，以同一 200 MeV/u、G1、
+100k、seed `2026095100`、package/rate、geometry 和 3D scorer 完成 compatibility=false/true
+A/B。false 配置显式写入 `cinel02_topas_compatibility_mode: false`，true 配置为 `true`；
+两份报告的 TOPAS 八个 3D scorer SHA256、histories、grid 和 scorer contract 完全一致。
+
+- false analysis：`plan/artifacts/cinel02-baseline-attribution-e200-g1/off/analysis.json`
+- true analysis：`plan/artifacts/cinel02-baseline-attribution-e200-g1/on/analysis.json`
+- checker：`plan/artifacts/cinel02-baseline-attribution-e200-g1/sanity.json`，status=`pass`
+- 稳定类别 GPU integral 最大绝对变化为 `2.74e-8%`（Primary C）；Secondary C、B、Li、
+  He、Z1 均在 `0.01` percentage-point 门槛内。Be aggregate `-11.5263%`、charged total
+  `-0.0577%` 是允许的 compatibility sink 变化。
+- 旧 `baseline-e200-becf880.json` 没有绑定 TOPAS reference config/hash，且使用不同的
+  `explicitsp` GPU config；因此旧 `becf880` 百分比仅作历史对照，新 compatibility baseline 才
+  用绑定的 `total_species` TOPAS reference 作为开发基线。
+
+该步骤只排除了 compatibility 开关导致的 scorer/analysis side effect，不构成物理收敛结论；
+下一步为 03B-2B bounded source/compiler consistency。
 
 ## Step 03B-1R 运行证据
 
