@@ -136,6 +136,47 @@ struct Cinel02ReplayLedgerSchema {
     };
 };
 
+// Secondary-transport exposure ledger used by the reaction-survival audit.
+// The path sums are keyed by the isotope and transport generation of each
+// secondary track, then by its step-start kinetic energy. Coverage is kept
+// separate from generation eligibility so an absent hazard is not silently
+// interpreted as a physical zero-rate segment.
+struct Cinel02ExposureLedgerSchema {
+    static constexpr std::size_t species_count =
+        Cinel02SpeciesLedgerSchema::species_count;
+    static constexpr std::size_t generation_count =
+        Cinel02ReplayLedgerSchema::generation_count;
+    static constexpr std::size_t energy_bin_count =
+        Cinel02ReplayLedgerSchema::energy_bin_count;
+    static constexpr float energy_bin_width_MeV_per_u =
+        Cinel02ReplayLedgerSchema::energy_bin_width_MeV_per_u;
+    static constexpr std::size_t cell_count =
+        species_count * generation_count * energy_bin_count;
+    static constexpr std::size_t sum_metric_count = 10;
+    static constexpr std::size_t count_metric_count = 4;
+    static constexpr std::size_t sum_slot_count = cell_count * sum_metric_count;
+    static constexpr std::size_t count_slot_count = cell_count * count_metric_count;
+
+    enum SumMetric : std::size_t {
+        path_mm_total = 0,
+        path_mm_generation_eligible = 1,
+        path_mm_generation_blocked = 2,
+        path_mm_rate_covered = 3,
+        path_mm_rate_uncovered = 4,
+        path_mm_h_uncovered = 5,
+        path_mm_o_uncovered = 6,
+        hazard_h = 7,
+        hazard_o = 8,
+        hazard_total = 9
+    };
+    enum CountMetric : std::size_t {
+        collision_candidates = 0,
+        replay_valid = 1,
+        parent_killed = 2,
+        parent_continued = 3
+    };
+};
+
 // A secondary inelastic hazard suppresses the normal per-step MCS only when a
 // valid CINEL02 final state was actually replayed. Lookup misses and invalid
 // package records are null collisions: the post-EM state is retained and the
@@ -268,6 +309,14 @@ struct TransportResult {
         cinel02_replay_status_delta_MeV_per_u{};
     std::array<double, Cinel02ReplayLedgerSchema::status_slot_count>
         cinel02_replay_status_abs_delta_MeV_per_u{};
+    // Secondary transport exposure: sums are in mm (path) or dimensionless
+    // integrated hazard; count metrics are event tallies. The generation
+    // index is the SecondaryParticle transport generation (0 = direct
+    // product, 1 = first cascade child, 2 = generation 2+).
+    std::array<double, Cinel02ExposureLedgerSchema::sum_slot_count>
+        cinel02_secondary_exposure_sums{};
+    std::array<std::uint64_t, Cinel02ExposureLedgerSchema::count_slot_count>
+        cinel02_secondary_exposure_counts{};
     // Isotope-resolved parent outcome energy ledger.
     std::array<std::uint64_t, Cinel02ReplayLedgerSchema::parent_outcome_cell_count>
         cinel02_parent_outcome_counts{};

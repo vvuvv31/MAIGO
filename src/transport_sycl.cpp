@@ -191,6 +191,12 @@ TransportResult transport_sycl(const TransportConfig& config,
     float* cinel02_replay_status_continuous_loss_device = nullptr;
     float* cinel02_replay_status_delta_device = nullptr;
     float* cinel02_replay_status_abs_delta_device = nullptr;
+    constexpr std::size_t kCinel02ExposureSumSlots =
+        Cinel02ExposureLedgerSchema::sum_slot_count;
+    constexpr std::size_t kCinel02ExposureCountSlots =
+        Cinel02ExposureLedgerSchema::count_slot_count;
+    float* cinel02_secondary_exposure_sums_device = nullptr;
+    std::uint64_t* cinel02_secondary_exposure_counts_device = nullptr;
     std::uint64_t* cinel02_parent_outcome_counts_device = nullptr;
     float* cinel02_parent_outcome_incident_device = nullptr;
     float* cinel02_parent_outcome_after_device = nullptr;
@@ -283,6 +289,10 @@ TransportResult transport_sycl(const TransportConfig& config,
             kCinel02ReplayStatusSlots, queue);
         cinel02_replay_status_abs_delta_device = sycl::malloc_device<float>(
             kCinel02ReplayStatusSlots, queue);
+        cinel02_secondary_exposure_sums_device = sycl::malloc_device<float>(
+            kCinel02ExposureSumSlots, queue);
+        cinel02_secondary_exposure_counts_device = sycl::malloc_device<std::uint64_t>(
+            kCinel02ExposureCountSlots, queue);
         cinel02_parent_outcome_counts_device = sycl::malloc_device<std::uint64_t>(
             kCinel02ParentOutcomeSlots, queue);
         cinel02_parent_outcome_incident_device = sycl::malloc_device<float>(
@@ -322,6 +332,8 @@ TransportResult transport_sycl(const TransportConfig& config,
             cinel02_replay_status_continuous_loss_device == nullptr ||
             cinel02_replay_status_delta_device == nullptr ||
             cinel02_replay_status_abs_delta_device == nullptr ||
+            cinel02_secondary_exposure_sums_device == nullptr ||
+            cinel02_secondary_exposure_counts_device == nullptr ||
             cinel02_parent_outcome_counts_device == nullptr ||
             cinel02_parent_outcome_incident_device == nullptr ||
             cinel02_parent_outcome_after_device == nullptr ||
@@ -384,6 +396,10 @@ TransportResult transport_sycl(const TransportConfig& config,
                    kCinel02ReplayStatusSlots).wait_and_throw();
         queue.fill(cinel02_replay_status_abs_delta_device, 0.0F,
                    kCinel02ReplayStatusSlots).wait_and_throw();
+        queue.fill(cinel02_secondary_exposure_sums_device, 0.0F,
+                   kCinel02ExposureSumSlots).wait_and_throw();
+        queue.fill(cinel02_secondary_exposure_counts_device, std::uint64_t{0},
+                   kCinel02ExposureCountSlots).wait_and_throw();
         queue.fill(cinel02_parent_outcome_counts_device, std::uint64_t{0},
                    kCinel02ParentOutcomeSlots).wait_and_throw();
         queue.fill(cinel02_parent_outcome_incident_device, 0.0F,
@@ -2793,6 +2809,29 @@ TransportResult transport_sycl(const TransportConfig& config,
                             const auto secondary_rate_query_energy_MeV =
                                 sycl::fmax(0.0F, sec_e);
                             const auto sec_e_u = sec_e * frag_inv_a;
+                            const auto exposure_cell = use_cinel02
+                                ? cinel02_exposure_cell_index_device(
+                                      frag.z, frag.a, frag.generation, sec_e_u)
+                                : std::numeric_limits<std::uint32_t>::max();
+                            const bool secondary_generation_eligible =
+                                use_cinel02 && frag.generation <
+                                    cinel02_max_secondary_inelastic_generations;
+                            Cinel02DeviceRateLookup exposure_h_lookup{};
+                            Cinel02DeviceRateLookup exposure_o_lookup{};
+                            if (use_cinel02) {
+                                exposure_h_lookup = cinel02_rate_lookup_device(
+                                    cinel02_rate_groups_device, cinel02_rate_group_count,
+                                    cinel02_rate_samples_device, cinel02_rate_sample_count,
+                                    frag.z, frag.a, 1, 1, sec_e_u);
+                                exposure_o_lookup = cinel02_rate_lookup_device(
+                                    cinel02_rate_groups_device, cinel02_rate_group_count,
+                                    cinel02_rate_samples_device, cinel02_rate_sample_count,
+                                    frag.z, frag.a, 8, 16, sec_e_u);
+                            }
+                            const bool exposure_h_covered = exposure_h_lookup.covered;
+                            const bool exposure_o_covered = exposure_o_lookup.covered;
+                            const bool exposure_rate_covered =
+                                exposure_h_covered && exposure_o_covered;
                             const auto flt_idx = (sec_e_u - minimum_table_energy) * inverse_table_step;
                             auto sp_idx = static_cast<int>(sycl::floor(flt_idx));
                             sp_idx = sycl::max(0, sycl::min(sp_idx, static_cast<int>(table_size) - 2));
@@ -2853,6 +2892,91 @@ TransportResult transport_sycl(const TransportConfig& config,
                                         secondary_target_z = target.target_z;
                                         secondary_target_a = target.target_a;
                                     }
+                                }
+                            }
+
+                            // Record the actual charged-track exposure after any
+                            // collision truncation.  Coverage is evaluated at the
+                            // same step-start energy used by the runtime hazard;
+                            // generation-blocked path is kept separate and never
+                            // folded into an apparent uncovered rate segment.
+                            if (exposure_cell != std::numeric_limits<std::uint32_t>::max()) {
+                                cinel02_exposure_sum_add_device(
+                                    cinel02_secondary_exposure_sums_device,
+                                    exposure_cell,
+                                    static_cast<std::uint32_t>(
+                                        Cinel02ExposureLedgerSchema::path_mm_total),
+                                    sec_step_mm);
+                                if (secondary_generation_eligible) {
+                                    cinel02_exposure_sum_add_device(
+                                        cinel02_secondary_exposure_sums_device,
+                                        exposure_cell,
+                                        static_cast<std::uint32_t>(
+                                            Cinel02ExposureLedgerSchema::path_mm_generation_eligible),
+                                        sec_step_mm);
+                                    if (exposure_rate_covered) {
+                                        cinel02_exposure_sum_add_device(
+                                            cinel02_secondary_exposure_sums_device,
+                                            exposure_cell,
+                                            static_cast<std::uint32_t>(
+                                                Cinel02ExposureLedgerSchema::path_mm_rate_covered),
+                                            sec_step_mm);
+                                    } else {
+                                        cinel02_exposure_sum_add_device(
+                                            cinel02_secondary_exposure_sums_device,
+                                            exposure_cell,
+                                            static_cast<std::uint32_t>(
+                                                Cinel02ExposureLedgerSchema::path_mm_rate_uncovered),
+                                            sec_step_mm);
+                                    }
+                                    if (!exposure_h_covered) {
+                                        cinel02_exposure_sum_add_device(
+                                            cinel02_secondary_exposure_sums_device,
+                                            exposure_cell,
+                                            static_cast<std::uint32_t>(
+                                                Cinel02ExposureLedgerSchema::path_mm_h_uncovered),
+                                            sec_step_mm);
+                                    }
+                                    if (!exposure_o_covered) {
+                                        cinel02_exposure_sum_add_device(
+                                            cinel02_secondary_exposure_sums_device,
+                                            exposure_cell,
+                                            static_cast<std::uint32_t>(
+                                                Cinel02ExposureLedgerSchema::path_mm_o_uncovered),
+                                            sec_step_mm);
+                                    }
+                                    if (exposure_h_covered) {
+                                        cinel02_exposure_sum_add_device(
+                                            cinel02_secondary_exposure_sums_device,
+                                            exposure_cell,
+                                            static_cast<std::uint32_t>(
+                                                Cinel02ExposureLedgerSchema::hazard_h),
+                                            exposure_h_lookup.value_per_mm * sec_step_mm);
+                                    }
+                                    if (exposure_o_covered) {
+                                        cinel02_exposure_sum_add_device(
+                                            cinel02_secondary_exposure_sums_device,
+                                            exposure_cell,
+                                            static_cast<std::uint32_t>(
+                                                Cinel02ExposureLedgerSchema::hazard_o),
+                                            exposure_o_lookup.value_per_mm * sec_step_mm);
+                                    }
+                                    if (exposure_rate_covered) {
+                                        cinel02_exposure_sum_add_device(
+                                            cinel02_secondary_exposure_sums_device,
+                                            exposure_cell,
+                                            static_cast<std::uint32_t>(
+                                                Cinel02ExposureLedgerSchema::hazard_total),
+                                            (exposure_h_lookup.value_per_mm +
+                                             exposure_o_lookup.value_per_mm) * sec_step_mm);
+                                    }
+                                } else {
+                                    cinel02_exposure_sum_add_device(
+                                        cinel02_secondary_exposure_sums_device,
+                                        exposure_cell,
+                                        static_cast<std::uint32_t>(
+                                            Cinel02ExposureLedgerSchema::path_mm_generation_blocked),
+                                        sec_step_mm);
                                 }
                             }
 
@@ -2920,6 +3044,11 @@ TransportResult transport_sycl(const TransportConfig& config,
                                     sycl::fmax(0.0F, sec_e), dE, 0.0F,
                                     static_cast<std::uint32_t>(
                                         Cinel02ReplayLedgerSchema::collision_candidate));
+                                cinel02_exposure_count_increment_device(
+                                    cinel02_secondary_exposure_counts_device,
+                                    exposure_cell,
+                                    static_cast<std::uint32_t>(
+                                        Cinel02ExposureLedgerSchema::collision_candidates));
                             }
 
                             if (bin_z != pending_sec_bin) {
@@ -3010,6 +3139,18 @@ TransportResult transport_sycl(const TransportConfig& config,
                                         (event.parent_status == 0 ||
                                          event.parent_status == 2)) {
                                         secondary_replay_succeeded = true;
+                                        cinel02_exposure_count_increment_device(
+                                            cinel02_secondary_exposure_counts_device,
+                                            exposure_cell,
+                                            static_cast<std::uint32_t>(
+                                                Cinel02ExposureLedgerSchema::replay_valid));
+                                        cinel02_exposure_count_increment_device(
+                                            cinel02_secondary_exposure_counts_device,
+                                            exposure_cell,
+                                            static_cast<std::uint32_t>(
+                                                event.parent_status == 0
+                                                    ? Cinel02ExposureLedgerSchema::parent_continued
+                                                    : Cinel02ExposureLedgerSchema::parent_killed));
                                         cinel02_diag_increment_device(
                                             cinel02_diag_device,
                                             event.parent_status == 0 ? 8U : 9U);
@@ -3763,6 +3904,10 @@ TransportResult transport_sycl(const TransportConfig& config,
         cinel02_replay_status_delta_host{};
     std::array<float, kCinel02ReplayStatusSlots>
         cinel02_replay_status_abs_delta_host{};
+    std::array<float, kCinel02ExposureSumSlots>
+        cinel02_secondary_exposure_sums_host{};
+    std::array<std::uint64_t, kCinel02ExposureCountSlots>
+        cinel02_secondary_exposure_counts_host{};
     std::array<std::uint64_t, kCinel02ParentOutcomeSlots>
         cinel02_parent_outcome_counts_host{};
     std::array<float, kCinel02ParentOutcomeSlots>
@@ -3832,6 +3977,10 @@ TransportResult transport_sycl(const TransportConfig& config,
                    cinel02_replay_status_delta_host.data(), kCinel02ReplayStatusSlots);
         queue.copy(cinel02_replay_status_abs_delta_device,
                    cinel02_replay_status_abs_delta_host.data(), kCinel02ReplayStatusSlots);
+        queue.copy(cinel02_secondary_exposure_sums_device,
+                   cinel02_secondary_exposure_sums_host.data(), kCinel02ExposureSumSlots);
+        queue.copy(cinel02_secondary_exposure_counts_device,
+                   cinel02_secondary_exposure_counts_host.data(), kCinel02ExposureCountSlots);
         queue.copy(cinel02_parent_outcome_counts_device,
                    cinel02_parent_outcome_counts_host.data(), kCinel02ParentOutcomeSlots);
         queue.copy(cinel02_parent_outcome_incident_device,
@@ -3932,6 +4081,8 @@ TransportResult transport_sycl(const TransportConfig& config,
     free_device(cinel02_replay_status_continuous_loss_device);
     free_device(cinel02_replay_status_delta_device);
     free_device(cinel02_replay_status_abs_delta_device);
+    free_device(cinel02_secondary_exposure_sums_device);
+    free_device(cinel02_secondary_exposure_counts_device);
     free_device(cinel02_parent_outcome_counts_device);
     free_device(cinel02_parent_outcome_incident_device);
     free_device(cinel02_parent_outcome_after_device);
@@ -4218,6 +4369,14 @@ TransportResult transport_sycl(const TransportConfig& config,
             static_cast<double>(cinel02_replay_status_delta_host[i]);
         result.cinel02_replay_status_abs_delta_MeV_per_u[i] =
             static_cast<double>(cinel02_replay_status_abs_delta_host[i]);
+    }
+    for (std::size_t i = 0; i < kCinel02ExposureSumSlots; ++i) {
+        result.cinel02_secondary_exposure_sums[i] =
+            static_cast<double>(cinel02_secondary_exposure_sums_host[i]);
+    }
+    for (std::size_t i = 0; i < kCinel02ExposureCountSlots; ++i) {
+        result.cinel02_secondary_exposure_counts[i] =
+            cinel02_secondary_exposure_counts_host[i];
     }
     for (std::size_t i = 0; i < kCinel02ParentOutcomeSlots; ++i) {
         result.cinel02_parent_outcome_counts[i] = cinel02_parent_outcome_counts_host[i];

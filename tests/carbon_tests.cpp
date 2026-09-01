@@ -3619,6 +3619,7 @@ void test_cinel02_ledger_schema_and_accumulator() {
                    "compatibility mode accepted a non-CINEL02 model");
     using Schema = carbon::Cinel02SpeciesLedgerSchema;
     using Replay = carbon::Cinel02ReplayLedgerSchema;
+    using Exposure = carbon::Cinel02ExposureLedgerSchema;
     static_assert(Schema::species_count == 18);
     static_assert(Schema::metric_count == 11);
     static_assert(Schema::terminal_reason_count == 6);
@@ -3628,6 +3629,9 @@ void test_cinel02_ledger_schema_and_accumulator() {
     static_assert(Replay::status_slot_count == 18 * 2 * 3 * 40 * 5);
     static_assert(Replay::parent_outcome_cell_count == 18 * 2 * 3 * 2);
     static_assert(Replay::transition_cell_count == 18 * 18);
+    static_assert(Exposure::cell_count == 18 * 3 * 40);
+    static_assert(Exposure::sum_slot_count == Exposure::cell_count * 10);
+    static_assert(Exposure::count_slot_count == Exposure::cell_count * 4);
 
     carbon::TransportResult total{};
     carbon::TransportResult part{};
@@ -3680,6 +3684,14 @@ void test_cinel02_ledger_schema_and_accumulator() {
         part.cinel02_replay_status_delta_MeV_per_u[i] = static_cast<double>(5 * i);
         total.cinel02_replay_status_abs_delta_MeV_per_u[i] = static_cast<double>(6 * i);
         part.cinel02_replay_status_abs_delta_MeV_per_u[i] = static_cast<double>(7 * i);
+    }
+    for (std::size_t i = 0; i < total.cinel02_secondary_exposure_sums.size(); ++i) {
+        total.cinel02_secondary_exposure_sums[i] = 0.5 * static_cast<double>(i);
+        part.cinel02_secondary_exposure_sums[i] = 1.5 * static_cast<double>(i);
+    }
+    for (std::size_t i = 0; i < total.cinel02_secondary_exposure_counts.size(); ++i) {
+        total.cinel02_secondary_exposure_counts[i] = i;
+        part.cinel02_secondary_exposure_counts[i] = 2 * i;
     }
     for (std::size_t i = 0; i < total.cinel02_parent_outcome_counts.size(); ++i) {
         total.cinel02_parent_outcome_counts[i] = i;
@@ -3768,6 +3780,14 @@ void test_cinel02_ledger_schema_and_accumulator() {
                      "CINEL02 replay-status delta accumulator mismatch");
         require_near(total.cinel02_replay_status_abs_delta_MeV_per_u[i], 13.0 * i, 0.0,
                      "CINEL02 replay-status absolute-delta accumulator mismatch");
+    }
+    for (std::size_t i = 0; i < total.cinel02_secondary_exposure_sums.size(); ++i) {
+        require_near(total.cinel02_secondary_exposure_sums[i], 2.0 * i, 0.0,
+                     "CINEL02 secondary-exposure sum accumulator mismatch");
+    }
+    for (std::size_t i = 0; i < total.cinel02_secondary_exposure_counts.size(); ++i) {
+        require(total.cinel02_secondary_exposure_counts[i] == 3 * i,
+                "CINEL02 secondary-exposure count accumulator mismatch");
     }
     for (std::size_t i = 0; i < total.cinel02_parent_outcome_counts.size(); ++i) {
         require(total.cinel02_parent_outcome_counts[i] == 3 * i,

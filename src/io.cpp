@@ -1604,6 +1604,25 @@ void write_energy_ledger_json(const std::filesystem::path& path,
                << result.cinel02_replay_status_abs_delta_MeV_per_u[i];
     }
     output << "],\n"
+           << "  \"cinel02_secondary_exposure_layout\": "
+              "{\"shape\":[18,3,40],\"order\":[\"projectile_species\",\"transport_generation\",\"energy_bin\"],"
+              "\"sum_metrics\":[\"path_mm_total\",\"path_mm_generation_eligible\",\"path_mm_generation_blocked\",\"path_mm_rate_covered\",\"path_mm_rate_uncovered\",\"path_mm_h_uncovered\",\"path_mm_o_uncovered\",\"hazard_h\",\"hazard_o\",\"hazard_total\"],"
+              "\"count_metrics\":[\"collision_candidates\",\"replay_valid\",\"parent_killed\",\"parent_continued\"],"
+              "\"energy_bin_width_MeV_per_u\":10,\"transport_generations\":[0,1,2],"
+              "\"projectile_species\":[\"1H\",\"2H\",\"3H\",\"3He\",\"4He\",\"6He\",\"6Li\",\"7Li\",\"7Be\",\"9Be\",\"10Be\",\"8B\",\"10B\",\"11B\",\"10C\",\"11C\",\"12C\",\"6Be\"]},\n"
+           << "  \"cinel02_secondary_exposure_sums\": [";
+    for (std::size_t i = 0;
+         i < result.cinel02_secondary_exposure_sums.size(); ++i) {
+        output << (i == 0 ? "" : ", ")
+               << result.cinel02_secondary_exposure_sums[i];
+    }
+    output << "],\n  \"cinel02_secondary_exposure_counts\": [";
+    for (std::size_t i = 0;
+         i < result.cinel02_secondary_exposure_counts.size(); ++i) {
+        output << (i == 0 ? "" : ", ")
+               << result.cinel02_secondary_exposure_counts[i];
+    }
+    output << "],\n"
            << "  \"cinel02_parent_outcome_layout\": "
               "{\"shape\":[18,2,3,2],\"order\":[\"projectile_species\",\"target\",\"reaction_generation\",\"outcome\"],"
               "\"outcome\":[\"continued\",\"killed\"],\"targets\":[\"H\",\"O\"],\"reaction_generations\":[0,1,2]},\n"

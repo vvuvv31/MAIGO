@@ -175,6 +175,57 @@ inline void cinel02_record_replay_status_device(
                               sycl::fabs(delta_energy_MeV_per_u));
 }
 
+inline std::uint32_t cinel02_exposure_cell_index_device(
+    const int projectile_z, const int projectile_a,
+    const std::uint32_t generation, const float energy_MeV_per_u) noexcept {
+    constexpr auto invalid = std::numeric_limits<std::uint32_t>::max();
+    constexpr auto species_count =
+        static_cast<std::uint32_t>(Cinel02ExposureLedgerSchema::species_count);
+    constexpr auto generation_count =
+        static_cast<std::uint32_t>(Cinel02ExposureLedgerSchema::generation_count);
+    constexpr auto energy_bin_count =
+        static_cast<std::uint32_t>(Cinel02ExposureLedgerSchema::energy_bin_count);
+    constexpr float energy_bin_width_MeV_per_u =
+        Cinel02ExposureLedgerSchema::energy_bin_width_MeV_per_u;
+    const auto mapped_species =
+        carbon::get_charged_species_idx(projectile_z, projectile_a);
+    if (mapped_species < 0 || mapped_species >= static_cast<int>(species_count) ||
+        !sycl::isfinite(energy_MeV_per_u)) {
+        return invalid;
+    }
+    const auto generation_bin = sycl::min(generation, generation_count - 1U);
+    const auto finite_energy = sycl::fmax(energy_MeV_per_u, 0.0F);
+    const auto energy_bin = sycl::min(
+        static_cast<std::uint32_t>(finite_energy / energy_bin_width_MeV_per_u),
+        energy_bin_count - 1U);
+    return (static_cast<std::uint32_t>(mapped_species) * generation_count +
+            generation_bin) * energy_bin_count + energy_bin;
+}
+
+inline void cinel02_exposure_sum_add_device(
+    float* sums, const std::uint32_t cell, const std::uint32_t metric,
+    const float value) noexcept {
+    constexpr auto metric_count =
+        static_cast<std::uint32_t>(Cinel02ExposureLedgerSchema::sum_metric_count);
+    constexpr auto cell_count =
+        static_cast<std::uint32_t>(Cinel02ExposureLedgerSchema::cell_count);
+    if (sums == nullptr || cell >= cell_count || metric >= metric_count ||
+        !sycl::isfinite(value) || value == 0.0F) {
+        return;
+    }
+    cinel02_energy_add_device(sums, cell * metric_count + metric, value);
+}
+
+inline void cinel02_exposure_count_increment_device(
+    std::uint64_t* counts, const std::uint32_t cell, const std::uint32_t metric) noexcept {
+    constexpr auto metric_count =
+        static_cast<std::uint32_t>(Cinel02ExposureLedgerSchema::count_metric_count);
+    constexpr auto cell_count =
+        static_cast<std::uint32_t>(Cinel02ExposureLedgerSchema::cell_count);
+    if (counts == nullptr || cell >= cell_count || metric >= metric_count) return;
+    cinel02_diag_increment_device(counts, cell * metric_count + metric);
+}
+
 inline std::uint32_t cinel02_parent_outcome_cell_index_device(
     const int projectile_z, const int projectile_a, const int target_z,
     const std::uint32_t generation, const int parent_status) noexcept {

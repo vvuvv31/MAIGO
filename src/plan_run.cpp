@@ -165,6 +165,14 @@ void accumulate_transport_result(carbon::TransportResult& total,
         total.cinel02_replay_status_abs_delta_MeV_per_u[i] +=
             part.cinel02_replay_status_abs_delta_MeV_per_u[i];
     }
+    for (std::size_t i = 0; i < total.cinel02_secondary_exposure_sums.size(); ++i) {
+        total.cinel02_secondary_exposure_sums[i] +=
+            part.cinel02_secondary_exposure_sums[i];
+    }
+    for (std::size_t i = 0; i < total.cinel02_secondary_exposure_counts.size(); ++i) {
+        total.cinel02_secondary_exposure_counts[i] +=
+            part.cinel02_secondary_exposure_counts[i];
+    }
     for (std::size_t i = 0; i < total.cinel02_parent_outcome_counts.size(); ++i) {
         total.cinel02_parent_outcome_counts[i] += part.cinel02_parent_outcome_counts[i];
         total.cinel02_parent_outcome_incident_energy_MeV[i] +=
