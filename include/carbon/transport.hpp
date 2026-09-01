@@ -71,6 +71,7 @@ struct TransportResult {
     std::vector<double> in_fov_deposited_energy_MeV;
     // Category-major layout: category * number_of_voxels + voxel index.
     std::vector<double> charged_origin_voxel_deposited_energy_MeV;
+    std::vector<double> be_isotope_origin_voxel_deposited_energy_MeV;
     std::vector<double> neutral_origin_voxel_deposited_energy_MeV;
     std::vector<double> primary_deposited_energy_MeV;
     std::vector<double> secondary_carbon_deposited_energy_MeV;
@@ -131,6 +132,12 @@ struct TransportResult {
     double untracked_nuclear_energy_MeV{0.0};
     double fred_model_unassigned_MeV{0.0};
     std::uint64_t nuclear_interactions{0};
+    // Fixed-layout CINEL02 runtime ledger; zero for other nuclear models.
+    static constexpr std::size_t cinel02_diagnostic_slot_count = 1668;
+    std::array<std::uint64_t, cinel02_diagnostic_slot_count> cinel02_diagnostics{};
+    // Aggregate kinetic-energy classification for valid CINEL02 replays.
+    // Layout is emitted with the energy ledger JSON.
+    std::array<double, 8> cinel02_energy_ledger_MeV{};
     std::array<std::uint64_t, 18> fred_isotope_counts{};
     std::uint64_t fred_inelastic_events{0};
     std::uint64_t fred_retry_sum{0};

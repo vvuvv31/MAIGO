@@ -147,10 +147,18 @@ if(BUILD_TESTING)
     add_executable(carbon_tests tests/carbon_tests.cpp)
     add_executable(inelastic_package_v2_tests tests/inelastic_package_v2_tests.cpp)
     target_link_libraries(inelastic_package_v2_tests PRIVATE carbon_core)
+    if(CARBON_ENABLE_SYCL)
+        target_compile_options(inelastic_package_v2_tests PRIVATE -fsycl)
+        if(CARBON_SYCL_TARGETS)
+            target_compile_options(inelastic_package_v2_tests PRIVATE
+                -fsycl-targets=${CARBON_SYCL_TARGETS})
+        endif()
+    endif()
     target_link_libraries(carbon_tests PRIVATE carbon_core)
     target_compile_definitions(carbon_tests PRIVATE
         CARBON_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
     add_test(NAME carbon_tests COMMAND carbon_tests)
+    add_test(NAME inelastic_package_v2_tests COMMAND inelastic_package_v2_tests)
     set_tests_properties(carbon_tests PROPERTIES
         TIMEOUT 300
         WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")

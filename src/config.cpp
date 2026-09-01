@@ -674,6 +674,10 @@ void TransportConfig::validate() const {
             "nuclear_model: cinel02 requires both primary_inelastic_package_v2_file "
             "and primary_inelastic_rate_v2_file");
     }
+    if (cinel02_max_secondary_inelastic_generations > 2U) {
+        throw std::invalid_argument(
+            "cinel02_max_secondary_inelastic_generations must be between 0 and 2");
+    }
     if (enable_nuclear_elastic && nuclear_model != "fred_paper") {
         throw std::invalid_argument(
             "enable_nuclear_elastic requires nuclear_model: fred_paper");
@@ -1515,6 +1519,11 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.primary_inelastic_rate_v2_file = parse_path(
         values, "primary_inelastic_rate_v2_file",
         config.primary_inelastic_rate_v2_file);
+    config.cinel02_max_secondary_inelastic_generations = parse_number(
+        values, "cinel02_max_secondary_inelastic_generations",
+        config.cinel02_max_secondary_inelastic_generations);
+    config.cinel02_strict_match = parse_bool(
+        values, "cinel02_strict_match", config.cinel02_strict_match);
     if (const auto it = values.find("nuclear_model"); it != values.end()) {
         config.nuclear_model = it->second;
         std::transform(config.nuclear_model.begin(), config.nuclear_model.end(),

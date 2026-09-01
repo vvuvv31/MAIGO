@@ -740,6 +740,32 @@ Cinel02DeviceTables InelasticPackageV2Table::make_device_tables() const {
     return tables;
 }
 
+Cinel02FixedReplayView InelasticPackageV2Table::fixed_replay(
+    const std::uint64_t event_index,
+    const Cinel02DeviceTables& compact) const noexcept {
+    if (event_index >= interactions_.size() ||
+        event_index >= compact.interactions.size()) {
+        return {};
+    }
+    const auto index = static_cast<std::size_t>(event_index);
+    const auto& serialized = interactions_[index];
+    const auto& device = compact.interactions[index];
+    const auto raw_offset = static_cast<std::uint64_t>(product_offsets_[index]);
+    const auto compact_offset = static_cast<std::uint64_t>(device.product_offset);
+    const auto raw_end = raw_offset + serialized.direct_product_count;
+    const auto compact_end = compact_offset + device.product_count;
+    if (serialized.direct_product_count != device.product_count ||
+        raw_offset != compact_offset || raw_end > products_.size() ||
+        compact_end > compact.products.size()) {
+        return {};
+    }
+    return Cinel02FixedReplayView{
+        &serialized, &device,
+        serialized.direct_product_count == 0U ? nullptr : &products_[raw_offset],
+        device.product_count == 0U ? nullptr : &compact.products[compact_offset],
+        device.product_count};
+}
+
 std::uint64_t InelasticPackageV2Table::find_event(
     const int projectile_z, const int projectile_a, const int target_z, const int target_a,
     const float energy, const float tolerance, const float u01) const noexcept {

@@ -159,6 +159,11 @@ TransportResult transport_sycl(const TransportConfig& config,
     std::uint32_t cinel02_energy_node_count = 0U;
     std::uint32_t cinel02_rate_group_count = 0U;
     std::uint32_t cinel02_rate_sample_count = 0U;
+    constexpr std::size_t kCinel02DiagSlots =
+        TransportResult::cinel02_diagnostic_slot_count;
+    std::uint64_t* cinel02_diag_device = nullptr;
+    constexpr std::size_t kCinel02EnergySlots = 8;
+    float* cinel02_energy_device = nullptr;
     if (use_cinel02) {
         const auto checked_u32 = [](const std::size_t value, const char* label) {
             if (value > std::numeric_limits<std::uint32_t>::max()) {
@@ -207,10 +212,15 @@ TransportResult transport_sycl(const TransportConfig& config,
             cinel02_rate_group_count, queue);
         cinel02_rate_samples_device = sycl::malloc_device<Cinel02RateSample>(
             cinel02_rate_sample_count, queue);
+        cinel02_diag_device =
+            sycl::malloc_device<std::uint64_t>(kCinel02DiagSlots, queue);
+        cinel02_energy_device =
+            sycl::malloc_device<float>(kCinel02EnergySlots, queue);
         if (cinel02_interactions_device == nullptr || cinel02_products_device == nullptr ||
             cinel02_energy_nodes_device == nullptr || cinel02_event_offsets_device == nullptr ||
             cinel02_event_indices_device == nullptr || cinel02_rate_groups_device == nullptr ||
-            cinel02_rate_samples_device == nullptr) {
+            cinel02_rate_samples_device == nullptr || cinel02_diag_device == nullptr ||
+            cinel02_energy_device == nullptr) {
             throw std::bad_alloc();
         }
         queue.copy(cinel02_host_tables->interactions.data(),
@@ -228,7 +238,11 @@ TransportResult transport_sycl(const TransportConfig& config,
         queue.copy(cinel02_rates->groups().data(), cinel02_rate_groups_device,
                    cinel02_rate_group_count);
         queue.copy(cinel02_rates->samples().data(), cinel02_rate_samples_device,
-                   cinel02_rate_sample_count).wait_and_throw();
+                   cinel02_rate_sample_count);
+        queue.fill(cinel02_diag_device, std::uint64_t{0}, kCinel02DiagSlots)
+            .wait_and_throw();
+        queue.fill(cinel02_energy_device, 0.0F, kCinel02EnergySlots)
+            .wait_and_throw();
         cinel02_host_tables.reset();
         cinel02_package.reset();
         cinel02_rates.reset();
@@ -463,6 +477,8 @@ TransportResult transport_sycl(const TransportConfig& config,
     }
 
     // Scorers & Result buffers
+    const auto cinel02_max_secondary_inelastic_generations =
+        config.cinel02_max_secondary_inelastic_generations;
     const auto enable_voxel_scoring = config.enable_voxel_scoring;
     const auto enable_let_scoring = config.enable_let_scoring;
     const auto voxel_scorer_clamps_transport = config.voxel_scorer_clamps_transport;
@@ -493,6 +509,21 @@ TransportResult transport_sycl(const TransportConfig& config,
     }
 
     auto* dose_device = sycl::malloc_device<DoseAtomicT>(number_of_bins, queue);
+    std::uint64_t* primary_survival_device = nullptr;
+    std::uint64_t* inelastic_reaction_device = nullptr;
+#ifdef CARBON_VALIDATION_SCORERS
+    if (config.validation_scorers()) {
+        primary_survival_device =
+            sycl::malloc_device<std::uint64_t>(number_of_bins, queue);
+        inelastic_reaction_device =
+            sycl::malloc_device<std::uint64_t>(number_of_bins, queue);
+        if (primary_survival_device == nullptr || inelastic_reaction_device == nullptr) {
+            throw std::bad_alloc();
+        }
+        queue.fill(primary_survival_device, std::uint64_t{0}, number_of_bins);
+        queue.fill(inelastic_reaction_device, std::uint64_t{0}, number_of_bins);
+    }
+#endif
     auto* voxel_dose_device = enable_voxel_scoring
                                   ? sycl::malloc_device<DoseAtomicT>(number_of_voxels, queue)
                                   : nullptr;
@@ -502,6 +533,11 @@ TransportResult transport_sycl(const TransportConfig& config,
         enable_charged_origin_voxel_scoring
             ? sycl::malloc_device<DoseAtomicT>(
                   charged_origin_category_count * number_of_voxels, queue)
+            : nullptr;
+    auto* be_isotope_origin_voxel_dose_device =
+        enable_charged_origin_voxel_scoring
+            ? sycl::malloc_device<DoseAtomicT>(
+                  be_isotope_origin_category_count * number_of_voxels, queue)
             : nullptr;
     auto* let_moments_device = enable_let_scoring
                                    ? sycl::malloc_device<LetAtomicT>(4 * number_of_bins, queue)
@@ -781,7 +817,7 @@ TransportResult transport_sycl(const TransportConfig& config,
     float* ion_species_sp_device = nullptr;
     float* ion_energy_grid_device = nullptr;
     float* ion_csda_a1_device = nullptr;
-    if (enable_inelastic && enable_secondary_transport) {
+    if (enable_inelastic) {
         std::filesystem::path ion_sp_path = "data/ion_stopping_power_water_geant4_11_3_2.csv";
         if (!std::filesystem::exists(ion_sp_path)) {
             const auto cur_p = std::filesystem::current_path();
@@ -793,27 +829,43 @@ TransportResult transport_sycl(const TransportConfig& config,
             throw std::runtime_error("Required ion stopping-power CSV not found: " + ion_sp_path.string());
         }
         const auto ion_sp_lut = load_ion_species_stopping_power_lut(ion_sp_path, table_size, 1.0F);
-        ion_species_sp_device = sycl::malloc_device<float>(17 * table_size, queue);
-        queue.copy(ion_sp_lut.data(), ion_species_sp_device, 17 * table_size).wait_and_throw();
+        ion_species_sp_device = sycl::malloc_device<float>(18 * table_size, queue);
+        queue.copy(ion_sp_lut.data(), ion_species_sp_device, 18 * table_size).wait_and_throw();
         std::vector<float> energy_grid_host(table_size);
         std::transform(stopping_power.energies().begin(), stopping_power.energies().end(),
                        energy_grid_host.begin(),
                        [](double value) { return static_cast<float>(value); });
         ion_energy_grid_device = sycl::malloc_device<float>(table_size, queue);
-        ion_csda_a1_device = sycl::malloc_device<float>(17 * table_size, queue);
+        ion_csda_a1_device = sycl::malloc_device<float>(18 * table_size, queue);
         if (ion_energy_grid_device == nullptr || ion_csda_a1_device == nullptr) {
             throw std::bad_alloc();
         }
-        std::vector<float> csda_host(17 * table_size, 0.0F);
-        for (int species = 0; species < 17; ++species) {
+        std::vector<float> csda_host(18 * table_size, 0.0F);
+        for (int species = 0; species < 18; ++species) {
             fill_a1_csda_range_mm(energy_grid_host.data(),
                                   ion_sp_lut.data() + static_cast<std::size_t>(species) * table_size,
                                   table_size,
                                   csda_host.data() + static_cast<std::size_t>(species) * table_size);
         }
         queue.copy(energy_grid_host.data(), ion_energy_grid_device, table_size);
-        queue.copy(csda_host.data(), ion_csda_a1_device, 17 * table_size).wait_and_throw();
+        queue.copy(csda_host.data(), ion_csda_a1_device, 18 * table_size).wait_and_throw();
     }
+
+    const auto primary_species_sp_idx = carbon::get_charged_species_idx(
+        config.primary_atomic_number, config.primary_mass_number);
+    if (enable_inelastic && primary_species_sp_idx < 0) {
+        throw std::runtime_error(
+            "Primary ion is absent from the explicit ion stopping-power table");
+    }
+    const auto primary_species_offset = primary_species_sp_idx >= 0
+        ? static_cast<std::size_t>(primary_species_sp_idx) * table_size
+        : 0U;
+    const float* primary_water_sp_device = enable_inelastic
+        ? ion_species_sp_device + primary_species_offset
+        : table_device;
+    const float* primary_csda_a1_device = enable_inelastic
+        ? ion_csda_a1_device + primary_species_offset
+        : cumulative_range_device;
 
     auto* in_fov_dose_device =
         enable_voxel_scoring ? sycl::malloc_device<DoseAtomicT>(number_of_bins, queue) : nullptr;
@@ -825,7 +877,8 @@ TransportResult transport_sycl(const TransportConfig& config,
         escaped_device == nullptr || steps_device == nullptr ||
         (enable_voxel_scoring && (voxel_dose_device == nullptr || in_fov_dose_device == nullptr)) ||
         (enable_charged_origin_voxel_scoring &&
-         charged_origin_voxel_dose_device == nullptr) ||
+         (charged_origin_voxel_dose_device == nullptr ||
+          be_isotope_origin_voxel_dose_device == nullptr)) ||
         (enable_let_scoring && let_moments_device == nullptr)) {
         throw std::bad_alloc();
     }
@@ -872,6 +925,9 @@ TransportResult transport_sycl(const TransportConfig& config,
     if (enable_charged_origin_voxel_scoring) {
         queue.memset(charged_origin_voxel_dose_device, 0,
                      charged_origin_category_count * number_of_voxels *
+                         sizeof(DoseAtomicT));
+        queue.memset(be_isotope_origin_voxel_dose_device, 0,
+                     be_isotope_origin_category_count * number_of_voxels *
                          sizeof(DoseAtomicT));
     }
     if (enable_let_scoring) {
@@ -1162,16 +1218,11 @@ TransportResult transport_sycl(const TransportConfig& config,
                 auto last_primary_density_g_per_cm3 = 0.0F;
 
                 constexpr std::uint32_t max_primary_steps = 2000000U;
+                int last_survival_bin = -1;
                 while (energy_MeV > energy_cutoff_MeV && steps < max_primary_steps) {
                     const auto escaped_z =
                         position_z_mm < 0.0F || position_z_mm >= phantom_length_mm;
-                    const auto escaped_xy =
-                        enable_voxel_scoring &&
-                        (position_x_mm < voxel_min_x_mm || position_x_mm >= voxel_max_x_mm ||
-                         position_y_mm < voxel_min_y_mm || position_y_mm >= voxel_max_y_mm);
-                    if (escaped_z || escaped_xy) {
-                        break;
-                    }
+                    if (escaped_z) break;
 
                     const auto absolute_direction_x = sycl::fabs(direction_x);
                     const auto absolute_direction_y = sycl::fabs(direction_y);
@@ -1182,6 +1233,14 @@ TransportResult transport_sycl(const TransportConfig& config,
                                    : static_cast<int>(
                                          sycl::floor(position_z_mm / depth_bin_width_mm));
                     bin = sycl::max(0, sycl::min(bin, static_cast<int>(number_of_bins) - 1));
+                    if (primary_survival_device != nullptr && bin != last_survival_bin) {
+                        sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
+                                         sycl::memory_scope::device,
+                                         sycl::access::address_space::global_space>
+                            survival(primary_survival_device[bin]);
+                        survival.fetch_add(1U);
+                        last_survival_bin = bin;
+                    }
 
                     auto voxel_x = static_cast<int>(voxel_bins_x / 2);
                     auto voxel_y = static_cast<int>(voxel_bins_y / 2);
@@ -1277,8 +1336,9 @@ TransportResult transport_sycl(const TransportConfig& config,
                                  material_sp_device[base + static_cast<std::size_t>(index)]);
                     } else {
                         const auto table_stopping_power_MeV_per_mm =
-                            table_device[index] +
-                            fraction * (table_device[index + 1] - table_device[index]);
+                            primary_water_sp_device[index] +
+                            fraction * (primary_water_sp_device[index + 1] -
+                                        primary_water_sp_device[index]);
                         const auto scale_density =
                             (slab_layer_count > 0 || in_insert) ? local_density_g_per_cm3 : 1.0F;
                         stopping_power_MeV_per_mm =
@@ -1366,6 +1426,7 @@ TransportResult transport_sycl(const TransportConfig& config,
                         const auto cur_e_u = energy_MeV * inverse_mass_number;
                         float macro_xs = 0.0F;
                         if (use_cinel02) {
+                            cinel02_diag_increment_device(cinel02_diag_device, 0U);
                             const auto target = cinel02_select_water_target_device(
                                 cinel02_rate_groups_device, cinel02_rate_group_count,
                                 cinel02_rate_samples_device, cinel02_rate_sample_count,
@@ -1373,6 +1434,7 @@ TransportResult transport_sycl(const TransportConfig& config,
                                 local_density_g_per_cm3, water_density_g_per_cm3,
                                 rng::uniform01(spot_seed, rng_history, steps, 12));
                             if (target.covered) {
+                                cinel02_diag_increment_device(cinel02_diag_device, 1U);
                                 macro_xs = target.total_rate_per_mm;
                                 cinel02_target_z_step = target.target_z;
                                 cinel02_target_a_step = target.target_a;
@@ -1416,6 +1478,25 @@ TransportResult transport_sycl(const TransportConfig& config,
                                 u_br * macro_tot < macro_el) {
                                 elastic_this_step = true;
                             } else if (enable_inelastic) {
+                                if (use_cinel02) {
+                                    cinel02_diag_increment_device(cinel02_diag_device, 2U);
+                                    cinel02_diag_increment_device(
+                                        cinel02_diag_device,
+                                        cinel02_target_z_step == 1 ? 6U : 7U);
+                                    cinel02_diag_increment_device(
+                                        cinel02_diag_device,
+                                        cinel02_hazard_diag_slot_device(
+                                            primary_atomic_number, primary_mass_number,
+                                            cinel02_target_z_step, 0U,
+                                            energy_MeV * inverse_mass_number));
+                                }
+                                if (inelastic_reaction_device != nullptr) {
+                                    sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
+                                                     sycl::memory_scope::device,
+                                                     sycl::access::address_space::global_space>
+                                        reaction(inelastic_reaction_device[bin]);
+                                    reaction.fetch_add(1U);
+                                }
                                 inelastic_this_step = true;
                             }
                         }
@@ -1425,7 +1506,8 @@ TransportResult transport_sycl(const TransportConfig& config,
                     if (enable_csda_range_energy_loss && energy_grid_device != nullptr &&
                         cumulative_range_device != nullptr) {
                         const auto end_energy_MeVu = csda_energy_after_distance_device(
-                            energy_grid_device, table_device, cumulative_range_device,
+                            ion_energy_grid_device, primary_water_sp_device,
+                            primary_csda_a1_device,
                             table_size, energy_MeVu, step_mm, primary_mass_number);
                         mean_loss_MeV = sycl::clamp(
                             energy_MeV -
@@ -1447,9 +1529,9 @@ TransportResult transport_sycl(const TransportConfig& config,
                             mid_floating_index - static_cast<float>(mid_index),
                             0.0F, 1.0F);
                         const auto mid_sp =
-                            (table_device[mid_index] +
-                             mid_fraction * (table_device[mid_index + 1] -
-                                             table_device[mid_index])) *
+                            (primary_water_sp_device[mid_index] +
+                             mid_fraction * (primary_water_sp_device[mid_index + 1] -
+                                             primary_water_sp_device[mid_index])) *
                             sycl::fmax(local_density_g_per_cm3, 1.0e-6F);
                         mean_loss_MeV = mid_sp * step_mm;
                     } else {
@@ -1744,6 +1826,9 @@ TransportResult transport_sycl(const TransportConfig& config,
                                 proton.dir_z = scat.proton_dir_z;
                                 proton.weight = 1.0F;
                                 proton.parent_history = rng_history;
+                                proton.rng_stream = rng::child_stream(
+                                    rng_history, rng::branch_tag(
+                                        rng::branch_role_primary_charged, steps));
                                 secondary_queue_device[base_idx] = proton;
                             } else if (secondary_overflow_count_device != nullptr) {
                                 sycl::atomic_ref<uint32_t, sycl::memory_order::relaxed,
@@ -1770,24 +1855,128 @@ TransportResult transport_sycl(const TransportConfig& config,
                                 cinel02_energy_tolerance_MeV_per_u,
                                 rng::uniform01(spot_seed, rng_history, steps, 13));
                             if (event_index != std::numeric_limits<std::uint32_t>::max()) {
+                                cinel02_diag_increment_device(cinel02_diag_device, 3U);
                                 const auto event = cinel02_interactions_device[event_index];
                                 const auto product_end =
                                     static_cast<std::uint64_t>(event.product_offset) +
                                     event.product_count;
                                 if (product_end <= cinel02_product_count &&
                                     (event.parent_status == 0 || event.parent_status == 2)) {
+                                    cinel02_diag_increment_device(
+                                        cinel02_diag_device,
+                                        event.parent_status == 0 ? 8U : 9U);
                                     const auto local_deposit = sycl::fmax(
-                                        0.0F, event.process_local_deposit_MeV +
-                                                  event.nonionizing_deposit_MeV);
+                                        0.0F, event.process_local_deposit_MeV);
+                                    cinel02_energy_add_device(cinel02_energy_device, 0U, energy_MeV);
+                                    cinel02_energy_add_device(cinel02_energy_device, 1U, deposited_MeV);
+                                    cinel02_energy_add_device(cinel02_energy_device, 2U, local_deposit);
+                                    cinel02_energy_add_device(cinel02_energy_device, 3U,
+                                                              event.nonionizing_deposit_MeV);
+                                    cinel02_energy_add_device(cinel02_energy_device, 4U,
+                                                              event.parent_energy_MeV);
                                     pending_primary_depth_MeV += local_deposit;
                                     if (enable_voxel_scoring && voxel_index >= 0) {
                                         pending_primary_voxel_MeV += local_deposit;
                                     }
                                     history_deposited_MeV += local_deposit;
                                     float untracked_MeV = 0.0F;
+                                    if (primary_atomic_number == 6 &&
+                                        primary_mass_number == 12 &&
+                                        cinel02_target_z_step == 8 &&
+                                        cinel02_target_a_step == 16) {
+                                        const auto parent_energy_MeV_per_u = sycl::fmax(
+                                            0.0F, energy_MeV * inverse_mass_number);
+                                        const auto parent_energy_bin = sycl::min(
+                                            static_cast<std::uint32_t>(
+                                                parent_energy_MeV_per_u / 50.0F),
+                                            7U);
+                                        cinel02_diag_add_device(
+                                            cinel02_diag_device, 1596U + parent_energy_bin,
+                                            static_cast<std::uint64_t>(
+                                                parent_energy_MeV_per_u * 1000.0F + 0.5F));
+                                    }
                                     for (std::uint32_t ip = 0; ip < event.product_count; ++ip) {
                                         const auto product =
                                             cinel02_products_device[event.product_offset + ip];
+                                        cinel02_energy_add_device(
+                                            cinel02_energy_device,
+                                            product.role == 2
+                                                ? 7U
+                                                : ((product.role == 0 && product.z > 0 &&
+                                                    carbon::get_charged_species_idx(
+                                                        product.z, product.a) >= 0)
+                                                       ? 5U
+                                                       : 6U),
+                                            product.kinetic_energy_MeV);
+                                        cinel02_diag_increment_device(
+                                            cinel02_diag_device,
+                                            product.role <= 2 ? 10U + product.role : 13U);
+                                        if (product.role == 0 && product.z >= 1 && product.z <= 6) {
+                                            cinel02_diag_increment_device(
+                                                cinel02_diag_device,
+                                                22U + static_cast<std::uint32_t>(product.z - 1));
+                                        }
+                                        if (product.role == 0 && product.z == 4) {
+                                            const auto birth_slot =
+                                                cinel02_be_isotope_birth_diag_slot_device(
+                                                    primary_atomic_number, cinel02_target_z_step,
+                                                    0U, product.a);
+                                            if (birth_slot !=
+                                                std::numeric_limits<std::uint32_t>::max()) {
+                                                cinel02_diag_increment_device(
+                                                    cinel02_diag_device, birth_slot);
+                                                cinel02_diag_add_device(
+                                                    cinel02_diag_device, birth_slot + 48U,
+                                                    static_cast<std::uint64_t>(sycl::fmax(
+                                                        0.0F, product.kinetic_energy_MeV) *
+                                                        1000.0F + 0.5F));
+                                                cinel02_diag_add_device(
+                                                    cinel02_diag_device, birth_slot + 96U,
+                                                    static_cast<std::uint64_t>(sycl::fmax(
+                                                        0.0F, position_z_mm) * 1000.0F + 0.5F));
+                                                cinel02_diag_add_device(
+                                                    cinel02_diag_device, birth_slot + 144U,
+                                                    static_cast<std::uint64_t>((sycl::clamp(
+                                                        product.local_direction_z, -1.0F, 1.0F) +
+                                                        1.0F) * 1000000.0F + 0.5F));
+                                            }
+                                            if (product.a == 10 && cinel02_target_z_step == 8) {
+                                                const auto parent_energy_bin = sycl::min(
+                                                    static_cast<std::uint32_t>(sycl::fmax(
+                                                        0.0F, energy_MeV * inverse_mass_number) /
+                                                        50.0F), 7U);
+                                                cinel02_diag_increment_device(
+                                                    cinel02_diag_device, 1580U + parent_energy_bin);
+                                                cinel02_diag_add_device(
+                                                    cinel02_diag_device, 1588U + parent_energy_bin,
+                                                    static_cast<std::uint64_t>(sycl::fmax(
+                                                        0.0F, product.kinetic_energy_MeV) *
+                                                        1000.0F + 0.5F));
+                                            }
+                                            if (cinel02_target_z_step == 8 &&
+                                                (product.a == 6 || product.a == 7 ||
+                                                 product.a == 9 || product.a == 10)) {
+                                                const auto isotope_bin =
+                                                    product.a == 6 ? 0U :
+                                                    (product.a == 7 ? 1U :
+                                                     (product.a == 9 ? 2U : 3U));
+                                                const auto parent_energy_bin = sycl::min(
+                                                    static_cast<std::uint32_t>(sycl::fmax(
+                                                        0.0F, energy_MeV * inverse_mass_number) /
+                                                        50.0F), 7U);
+                                                const auto isotope_energy_slot =
+                                                    isotope_bin * 8U + parent_energy_bin;
+                                                cinel02_diag_increment_device(
+                                                    cinel02_diag_device,
+                                                    1604U + isotope_energy_slot);
+                                                cinel02_diag_add_device(
+                                                    cinel02_diag_device,
+                                                    1636U + isotope_energy_slot,
+                                                    static_cast<std::uint64_t>(sycl::fmax(
+                                                        0.0F, product.kinetic_energy_MeV) *
+                                                        1000.0F + 0.5F));
+                                            }
+                                        }
                                         if (product.role == 1) continue;
                                         if (product.role != 0 || product.z <= 0 || product.a <= 0) {
                                             untracked_MeV += sycl::fmax(
@@ -1819,6 +2008,14 @@ TransportResult transport_sycl(const TransportConfig& config,
                                                 child.dir_z = child_direction.z;
                                                 child.weight = product.weight;
                                                 child.parent_history = rng_history;
+                                                child.rng_stream = rng::child_stream(
+                                                    rng_history, rng::branch_tag(
+                                                        rng::branch_role_primary_charged, ip));
+                                                if (product.z >= 1 && product.z <= 6) {
+                                                    cinel02_diag_increment_device(
+                                                        cinel02_diag_device,
+                                                        28U + static_cast<std::uint32_t>(product.z - 1));
+                                                }
                                                 secondary_queue_device[output] = child;
                                             } else {
                                                 untracked_MeV += sycl::fmax(
@@ -1831,6 +2028,15 @@ TransportResult transport_sycl(const TransportConfig& config,
                                                         atomic_overflow(
                                                             *secondary_overflow_count_device);
                                                     atomic_overflow.fetch_add(1U);
+                                                }
+                                                if (secondary_overflow_energy_device != nullptr) {
+                                                    sycl::atomic_ref<float, sycl::memory_order::relaxed,
+                                                                     sycl::memory_scope::device,
+                                                                     sycl::access::address_space::global_space>
+                                                        atomic_overflow_energy(
+                                                            *secondary_overflow_energy_device);
+                                                    atomic_overflow_energy.fetch_add(sycl::fmax(
+                                                        0.0F, product.kinetic_energy_MeV));
                                                 }
                                             }
                                         }
@@ -1859,6 +2065,12 @@ TransportResult transport_sycl(const TransportConfig& config,
                                         energy_MeV = 0.0F;
                                     }
                                 }
+                                else {
+                                    cinel02_diag_increment_device(cinel02_diag_device, 5U);
+                                }
+                            }
+                            else {
+                                cinel02_diag_increment_device(cinel02_diag_device, 4U);
                             }
                         } else {
                         const float p_target_h = p_target_h_step;
@@ -2038,8 +2250,11 @@ TransportResult transport_sycl(const TransportConfig& config,
                                     count_ref.fetch_add(products.count);
                                 for (uint8_t ip = 0; ip < products.count; ++ip) {
                                     if (base_idx + ip < max_secondaries) {
-                                        secondary_queue_device[base_idx + ip] =
-                                            products.products[ip];
+                                        auto queued_product = products.products[ip];
+                                        queued_product.rng_stream = rng::child_stream(
+                                            rng_history, rng::branch_tag(
+                                                rng::branch_role_primary_charged, ip));
+                                        secondary_queue_device[base_idx + ip] = queued_product;
                                     } else if (secondary_overflow_count_device != nullptr) {
                                         sycl::atomic_ref<uint32_t, sycl::memory_order::relaxed,
                                                          sycl::memory_scope::device,
@@ -2179,6 +2394,8 @@ TransportResult transport_sycl(const TransportConfig& config,
                                 charged_dose_category(frag.z, frag.a));
                         const auto charged_origin_voxel_offset =
                             charged_origin_category * number_of_voxels;
+                        const auto be_isotope_category =
+                            be_isotope_origin_category(frag.z, frag.a);
                         if (frag.energy_MeV <= energy_cutoff_MeV) {
                             const auto bin_z = static_cast<int>(frag.pos_z_mm * inverse_depth_bin_width_mm);
                             if (bin_z >= 0 && bin_z < static_cast<int>(number_of_bins)) {
@@ -2207,6 +2424,10 @@ TransportResult transport_sycl(const TransportConfig& config,
                                             atomic_origin(charged_origin_voxel_dose_device[
                                                 charged_origin_voxel_offset + cur_voxel]);
                                         atomic_origin.fetch_add(static_cast<DoseAtomicT>(frag.energy_MeV));
+                                        score_be_isotope_origin_voxel_device(
+                                            be_isotope_origin_voxel_dose_device,
+                                            be_isotope_category, number_of_voxels, cur_voxel,
+                                            static_cast<DoseAtomicT>(frag.energy_MeV));
                                     }
                                     if (in_fov_dose_device != nullptr) {
                                         sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
@@ -2228,13 +2449,23 @@ TransportResult transport_sycl(const TransportConfig& config,
                         }
 
                         const auto frag_a = static_cast<float>(frag.a);
-                        const auto frag_z = static_cast<float>(frag.z);
                         const auto frag_inv_a = 1.0F / frag_a;
                         const auto charged_sp_idx = carbon::get_charged_species_idx(static_cast<int>(frag.z), static_cast<int>(frag.a));
-                        const float* ion_sp_table = (ion_species_sp_device != nullptr)
-                                                        ? &ion_species_sp_device[static_cast<std::size_t>(charged_sp_idx) * table_size]
-                                                        : table_device;
-                        const auto frag_sp_scale = (ion_species_sp_device != nullptr) ? 1.0F : ((frag_z * frag_z) / 36.0F);
+                        if (charged_sp_idx < 0) {
+                            cinel02_diag_increment_device(cinel02_diag_device, 34U);
+                            if (untracked_nuclear_device != nullptr) {
+                                sycl::atomic_ref<float, sycl::memory_order::relaxed,
+                                                 sycl::memory_scope::device,
+                                                 sycl::access::address_space::global_space>
+                                    atomic_untracked(
+                                        untracked_nuclear_device[frag.parent_history]);
+                                atomic_untracked.fetch_add(sycl::fmax(0.0F, frag.energy_MeV));
+                            }
+                            return;
+                        }
+                        const float* ion_sp_table =
+                            &ion_species_sp_device[
+                                static_cast<std::size_t>(charged_sp_idx) * table_size];
 
                         float sec_e = frag.energy_MeV;
                         float sec_x = frag.pos_x_mm;
@@ -2253,8 +2484,6 @@ TransportResult transport_sycl(const TransportConfig& config,
                         constexpr uint32_t kSecondaryMaxSteps = 30000U;
                         while (sec_e > energy_cutoff_MeV && sec_z >= 0.0F && sec_z < phantom_length_mm &&
                                sec_steps < kSecondaryMaxSteps) {
-                            const auto bin_x = static_cast<int>((sec_x - voxel_min_x_mm) * inverse_voxel_size_x_mm);
-                            const auto bin_y = static_cast<int>((sec_y - voxel_min_y_mm) * inverse_voxel_size_y_mm);
                             const auto bin_z = static_cast<int>(sec_z * inverse_depth_bin_width_mm);
 
                             if (bin_z < 0 || bin_z >= static_cast<int>(number_of_bins)) break;
@@ -2264,7 +2493,7 @@ TransportResult transport_sycl(const TransportConfig& config,
                             auto sp_idx = static_cast<int>(sycl::floor(flt_idx));
                             sp_idx = sycl::max(0, sycl::min(sp_idx, static_cast<int>(table_size) - 2));
                             const auto sp_frac = sycl::clamp(flt_idx - static_cast<float>(sp_idx), 0.0F, 1.0F);
-                            const auto sec_sp = (ion_sp_table[sp_idx] + sp_frac * (ion_sp_table[sp_idx + 1] - ion_sp_table[sp_idx])) * frag_sp_scale;
+                            const auto sec_sp = (ion_sp_table[sp_idx] + sp_frac * (ion_sp_table[sp_idx + 1] - ion_sp_table[sp_idx]));
 
                             if (sec_sp <= 1.0e-6F) break;
 
@@ -2282,22 +2511,35 @@ TransportResult transport_sycl(const TransportConfig& config,
                             bool secondary_inelastic = false;
                             std::int16_t secondary_target_z = 0;
                             std::int16_t secondary_target_a = 0;
-                            if (use_cinel02 && frag.generation < 15U) {
+                            if (use_cinel02 && frag.generation <
+                                cinel02_max_secondary_inelastic_generations) {
+                                cinel02_diag_increment_device(cinel02_diag_device, 14U);
                                 const auto target = cinel02_select_water_target_device(
                                     cinel02_rate_groups_device, cinel02_rate_group_count,
                                     cinel02_rate_samples_device, cinel02_rate_sample_count,
                                     frag.z, frag.a, sec_e_u,
                                     water_density_g_per_cm3, water_density_g_per_cm3,
-                                    rng::uniform01(2026, static_cast<uint32_t>(sec_idx),
+                                    rng::uniform01(2026, frag.rng_stream,
                                                    sec_steps, 12));
                                 if (target.covered) {
+                                    cinel02_diag_increment_device(cinel02_diag_device, 15U);
                                     float collision_distance = sec_step_mm;
                                     secondary_inelastic = inelastic_collision_in_step(
                                         target.total_rate_per_mm, sec_step_mm,
-                                        rng::uniform01(2026, static_cast<uint32_t>(sec_idx),
+                                        rng::uniform01(2026, frag.rng_stream,
                                                        sec_steps, 13),
                                         &collision_distance);
                                     if (secondary_inelastic) {
+                                        cinel02_diag_increment_device(cinel02_diag_device, 16U);
+                                        cinel02_diag_increment_device(
+                                            cinel02_diag_device,
+                                            target.target_z == 1 ? 20U : 21U);
+                                        cinel02_diag_increment_device(
+                                            cinel02_diag_device,
+                                            cinel02_hazard_diag_slot_device(
+                                                frag.z, frag.a, target.target_z,
+                                                static_cast<std::uint32_t>(frag.generation) + 1U,
+                                                sec_e_u));
                                         sec_step_mm = collision_distance;
                                         secondary_target_z = target.target_z;
                                         secondary_target_a = target.target_a;
@@ -2311,13 +2553,13 @@ TransportResult transport_sycl(const TransportConfig& config,
                             auto mid_idx = static_cast<int>(sycl::floor(mid_flt));
                             mid_idx = sycl::max(0, sycl::min(mid_idx, static_cast<int>(table_size) - 2));
                             const auto mid_fr = sycl::clamp(mid_flt - static_cast<float>(mid_idx), 0.0F, 1.0F);
-                            const auto mid_sp = (ion_sp_table[mid_idx] + mid_fr * (ion_sp_table[mid_idx + 1] - ion_sp_table[mid_idx])) * frag_sp_scale;
+                            const auto mid_sp = (ion_sp_table[mid_idx] + mid_fr * (ion_sp_table[mid_idx + 1] - ion_sp_table[mid_idx]));
 
                             auto dE = sycl::fmin(mid_sp * sec_step_mm, sec_e);
                             if (enable_secondary_energy_straggling &&
                                 use_packaged_fluctuation && frag.z == 6 && frag.a == 12) {
                                 const auto u_loss = rng::uniform01(
-                                    2026, static_cast<uint32_t>(sec_idx), sec_steps, 2);
+                                    2026, frag.rng_stream, sec_steps, 2);
                                 const auto ratio = sample_energy_loss_ratio_from_grid(
                                     fluct_energy_device, fluct_energy_count,
                                     fluct_density_device, fluct_density_count,
@@ -2333,6 +2575,28 @@ TransportResult transport_sycl(const TransportConfig& config,
                                 dE = sycl::clamp(dE * scaled_ratio, 0.0F, sec_e);
                             }
 
+                            // CINEL02 packages are captured at hadronic PostStepDoIt:
+                            // advance the continuous EM state to the collision point
+                            // before selecting and replaying the final state.
+                            const auto collision_input_dx = sec_dx;
+                            const auto collision_input_dy = sec_dy;
+                            const auto collision_input_dz = sec_dz;
+                            const auto post_em_e = sycl::fmax(0.0F, sec_e - dE);
+                            const auto post_em_x = sec_x + collision_input_dx * sec_step_mm;
+                            const auto post_em_y = sec_y + collision_input_dy * sec_step_mm;
+                            const auto post_em_z = sec_z + collision_input_dz * sec_step_mm;
+                            const auto collision_bin = sycl::max(
+                                0, sycl::min(
+                                       static_cast<int>(post_em_z *
+                                           inverse_depth_bin_width_mm),
+                                       static_cast<int>(number_of_bins) - 1));
+                            if (secondary_inelastic) {
+                                sec_e = post_em_e;
+                                sec_x = post_em_x;
+                                sec_y = post_em_y;
+                                sec_z = post_em_z;
+                            }
+
                             if (bin_z != pending_sec_bin) {
                                 if (pending_sec_depth_MeV > 0.0F && pending_sec_bin >= 0 && pending_sec_bin < static_cast<int>(number_of_bins)) {
                                     sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
@@ -2346,12 +2610,16 @@ TransportResult transport_sycl(const TransportConfig& config,
                             }
                             pending_sec_depth_MeV += dE;
 
-                            if (enable_voxel_scoring) {
+                            if (enable_voxel_scoring || secondary_inelastic) {
                                 int cur_voxel = -1;
-                                if (bin_x >= 0 && bin_x < static_cast<int>(voxel_bins_x) && bin_y >= 0 && bin_y < static_cast<int>(voxel_bins_y)) {
-                                    cur_voxel = (bin_z * static_cast<int>(voxel_bins_y) + bin_y) * static_cast<int>(voxel_bins_x) + bin_x;
+                                const auto score_bin_x = static_cast<int>(
+                                    (sec_x - voxel_min_x_mm) * inverse_voxel_size_x_mm);
+                                const auto score_bin_y = static_cast<int>(
+                                    (sec_y - voxel_min_y_mm) * inverse_voxel_size_y_mm);
+                                if (score_bin_x >= 0 && score_bin_x < static_cast<int>(voxel_bins_x) && score_bin_y >= 0 && score_bin_y < static_cast<int>(voxel_bins_y)) {
+                                    cur_voxel = (collision_bin * static_cast<int>(voxel_bins_y) + score_bin_y) * static_cast<int>(voxel_bins_x) + score_bin_x;
                                 }
-                                if (cur_voxel != pending_sec_voxel) {
+                                if (cur_voxel != pending_sec_voxel || secondary_inelastic) {
                                     if (pending_sec_voxel_MeV > 0.0F && pending_sec_voxel >= 0 && pending_sec_voxel < static_cast<int>(number_of_voxels)) {
                                         sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
                                                          sycl::memory_scope::device,
@@ -2365,9 +2633,15 @@ TransportResult transport_sycl(const TransportConfig& config,
                                             atomic_origin(charged_origin_voxel_dose_device[
                                                 charged_origin_voxel_offset + pending_sec_voxel]);
                                         atomic_origin.fetch_add(static_cast<DoseAtomicT>(pending_sec_voxel_MeV));
+                                        score_be_isotope_origin_voxel_device(
+                                            be_isotope_origin_voxel_dose_device,
+                                            be_isotope_category, number_of_voxels,
+                                            pending_sec_voxel,
+                                            static_cast<DoseAtomicT>(pending_sec_voxel_MeV));
                                     }
                                     }
                                     pending_sec_voxel_MeV = 0.0F;
+                                    pending_sec_voxel = cur_voxel;
                             if (secondary_inelastic && sec_e > energy_cutoff_MeV) {
                                 const auto event_index = cinel02_find_event_device(
                                     cinel02_energy_nodes_device, cinel02_energy_node_count,
@@ -2375,10 +2649,11 @@ TransportResult transport_sycl(const TransportConfig& config,
                                     cinel02_interactions_device, cinel02_interaction_count,
                                     frag.z, frag.a, secondary_target_z, secondary_target_a,
                                     sec_e * frag_inv_a, 0.51F,
-                                    rng::uniform01(2026, static_cast<uint32_t>(sec_idx),
+                                    rng::uniform01(2026, frag.rng_stream,
                                                    sec_steps, 14));
                                 if (event_index !=
                                     std::numeric_limits<std::uint32_t>::max()) {
+                                    cinel02_diag_increment_device(cinel02_diag_device, 17U);
                                     const auto event =
                                         cinel02_interactions_device[event_index];
                                     const auto product_end =
@@ -2387,10 +2662,59 @@ TransportResult transport_sycl(const TransportConfig& config,
                                     if (product_end <= cinel02_product_count &&
                                         (event.parent_status == 0 ||
                                          event.parent_status == 2)) {
+                                        cinel02_diag_increment_device(
+                                            cinel02_diag_device,
+                                            event.parent_status == 0 ? 8U : 9U);
+                                        if (frag.z >= 1 && frag.z <= 6) {
+                                            const auto incident_keV =
+                                                static_cast<std::uint64_t>(sycl::fmax(
+                                                    0.0F, sec_e) * 1000.0F + 0.5F);
+                                            cinel02_diag_add_device(
+                                                cinel02_diag_device,
+                                                1120U + sycl::min<std::uint32_t>(
+                                                    frag.generation, 1U) * 6U +
+                                                    static_cast<std::uint32_t>(frag.z - 1),
+                                                incident_keV);
+                                        }
+                                        if (frag.z == 4) {
+                                            const auto be_incident_slot =
+                                                cinel02_be_incident_diag_slot_device(
+                                                    secondary_target_z, frag.generation,
+                                                    sec_e * frag_inv_a);
+                                            cinel02_diag_increment_device(
+                                                cinel02_diag_device, be_incident_slot);
+                                            cinel02_diag_add_device(
+                                                cinel02_diag_device, be_incident_slot + 32U,
+                                                static_cast<std::uint64_t>(sycl::fmax(
+                                                    0.0F, sec_e) * 1000.0F + 0.5F));
+                                        }
+                                        const auto parent_outcome_slot =
+                                            cinel02_parent_outcome_diag_slot_device(
+                                                frag.z, event.parent_status,
+                                                static_cast<std::uint32_t>(frag.generation));
+                                        if (parent_outcome_slot !=
+                                            std::numeric_limits<std::uint32_t>::max()) {
+                                            cinel02_diag_increment_device(
+                                                cinel02_diag_device, parent_outcome_slot);
+                                        }
                                         const auto local_deposit = sycl::fmax(
-                                            0.0F, event.process_local_deposit_MeV +
-                                                      event.nonionizing_deposit_MeV);
-                                        pending_sec_depth_MeV += local_deposit;
+                                            0.0F, event.process_local_deposit_MeV);
+                                        cinel02_energy_add_device(cinel02_energy_device, 0U, sec_e);
+                                        cinel02_energy_add_device(cinel02_energy_device, 1U, dE);
+                                        cinel02_energy_add_device(cinel02_energy_device, 2U, local_deposit);
+                                        cinel02_energy_add_device(cinel02_energy_device, 3U,
+                                                                  event.nonionizing_deposit_MeV);
+                                        cinel02_energy_add_device(cinel02_energy_device, 4U,
+                                                                  event.parent_energy_MeV);
+                                        if (local_deposit > 0.0F) {
+                                            sycl::atomic_ref<
+                                                DoseAtomicT, sycl::memory_order::relaxed,
+                                                sycl::memory_scope::device,
+                                                sycl::access::address_space::global_space>
+                                                atomic_local_depth(dose_device[collision_bin]);
+                                            atomic_local_depth.fetch_add(
+                                                static_cast<DoseAtomicT>(local_deposit));
+                                        }
                                         if (enable_voxel_scoring && pending_sec_voxel >= 0) {
                                             pending_sec_voxel_MeV += local_deposit;
                                         }
@@ -2403,19 +2727,101 @@ TransportResult transport_sycl(const TransportConfig& config,
                                                     deposited_device[frag.parent_history]);
                                             atomic_dep.fetch_add(local_deposit);
                                         }
+                                        float untracked_MeV = 0.0F;
                                         for (std::uint32_t ip = 0;
                                              ip < event.product_count; ++ip) {
                                             const auto product = cinel02_products_device[
                                                 event.product_offset + ip];
+                                            cinel02_energy_add_device(
+                                                cinel02_energy_device,
+                                                product.role == 2
+                                                ? 7U
+                                                : ((product.role == 0 && product.z > 0 &&
+                                                    carbon::get_charged_species_idx(
+                                                        product.z, product.a) >= 0)
+                                                       ? 5U
+                                                       : 6U),
+                                                product.kinetic_energy_MeV);
+                                            cinel02_diag_increment_device(
+                                                cinel02_diag_device,
+                                                product.role <= 2 ? 10U + product.role : 13U);
+                                            if (product.role == 0 && product.z >= 1 && product.z <= 6) {
+                                                cinel02_diag_increment_device(
+                                                    cinel02_diag_device,
+                                                    22U + static_cast<std::uint32_t>(product.z - 1));
+                                            }
+                                            if (product.role == 0 && product.z == 4) {
+                                                const auto birth_slot =
+                                                    cinel02_be_isotope_birth_diag_slot_device(
+                                                        frag.z, secondary_target_z,
+                                                        frag.generation + 1U, product.a);
+                                                if (birth_slot !=
+                                                    std::numeric_limits<std::uint32_t>::max()) {
+                                                    cinel02_diag_increment_device(
+                                                        cinel02_diag_device, birth_slot);
+                                                    cinel02_diag_add_device(
+                                                        cinel02_diag_device, birth_slot + 48U,
+                                                        static_cast<std::uint64_t>(sycl::fmax(
+                                                            0.0F, product.kinetic_energy_MeV) *
+                                                            1000.0F + 0.5F));
+                                                    cinel02_diag_add_device(
+                                                        cinel02_diag_device, birth_slot + 96U,
+                                                        static_cast<std::uint64_t>(sycl::fmax(
+                                                            0.0F, sec_z) * 1000.0F + 0.5F));
+                                                    cinel02_diag_add_device(
+                                                        cinel02_diag_device, birth_slot + 144U,
+                                                        static_cast<std::uint64_t>((sycl::clamp(
+                                                            product.local_direction_z, -1.0F, 1.0F) +
+                                                            1.0F) * 1000000.0F + 0.5F));
+                                                }
+                                                const auto be_channel_slot =
+                                                    cinel02_be_channel_diag_slot_device(
+                                                        frag.z, secondary_target_z,
+                                                        frag.generation, sec_e * frag_inv_a);
+                                                if (be_channel_slot !=
+                                                    std::numeric_limits<std::uint32_t>::max()) {
+                                                    cinel02_diag_increment_device(
+                                                        cinel02_diag_device, be_channel_slot);
+                                                    cinel02_diag_add_device(
+                                                        cinel02_diag_device,
+                                                        be_channel_slot + 96U,
+                                                        static_cast<std::uint64_t>(sycl::fmax(
+                                                            0.0F, product.kinetic_energy_MeV) *
+                                                            1000.0F + 0.5F));
+                                                }
+                                            }
+                                            if (product.role == 0) {
+                                                const auto transition_slot =
+                                                    cinel02_transition_diag_slot_device(
+                                                        frag.z, product.z,
+                                                        static_cast<std::uint32_t>(frag.generation));
+                                                if (transition_slot !=
+                                                    std::numeric_limits<std::uint32_t>::max()) {
+                                                    cinel02_diag_increment_device(
+                                                        cinel02_diag_device, transition_slot);
+                                                    const auto kinetic_keV =
+                                                        static_cast<std::uint64_t>(sycl::fmax(
+                                                            0.0F, product.kinetic_energy_MeV) *
+                                                            1000.0F + 0.5F);
+                                                    cinel02_diag_add_device(
+                                                        cinel02_diag_device,
+                                                        transition_slot + 108U, kinetic_keV);
+                                                }
+                                            }
                                             if (product.role != 0 || product.z <= 0 ||
                                                 product.a <= 0 ||
-                                                secondary_queue_device == nullptr) continue;
+                                                secondary_queue_device == nullptr) {
+                                                untracked_MeV += sycl::fmax(
+                                                    0.0F, product.kinetic_energy_MeV);
+                                                continue;
+                                            }
                                             const auto child_direction =
                                                 rotate_local_direction(
                                                     product.local_direction_x,
                                                     product.local_direction_y,
                                                     product.local_direction_z,
-                                                    Direction3F{sec_dx, sec_dy, sec_dz});
+                                                    Direction3F{collision_input_dx, collision_input_dy,
+                                                                collision_input_dz});
                                             auto count_ref = sycl::atomic_ref<
                                                 uint32_t, sycl::memory_order::relaxed,
                                                 sycl::memory_scope::device,
@@ -2436,9 +2842,21 @@ TransportResult transport_sycl(const TransportConfig& config,
                                                 child.dir_z = child_direction.z;
                                                 child.weight = product.weight;
                                                 child.parent_history = frag.parent_history;
+                                                const auto event_stream = rng::child_stream(
+                                                    frag.rng_stream,
+                                                    event_index ^
+                                                        (sec_steps * 0x9E3779B9U));
+                                                child.rng_stream = rng::child_stream(
+                                                    event_stream, rng::branch_tag(
+                                                        rng::branch_role_cascade_charged, ip));
                                                 child.generation =
                                                     static_cast<std::uint16_t>(
                                                         frag.generation + 1U);
+                                                if (product.z >= 1 && product.z <= 6) {
+                                                    cinel02_diag_increment_device(
+                                                        cinel02_diag_device,
+                                                        28U + static_cast<std::uint32_t>(product.z - 1));
+                                                }
                                                 secondary_queue_device[output] = child;
                                             } else if (secondary_overflow_count_device !=
                                                        nullptr) {
@@ -2449,7 +2867,27 @@ TransportResult transport_sycl(const TransportConfig& config,
                                                     atomic_overflow(
                                                         *secondary_overflow_count_device);
                                                 atomic_overflow.fetch_add(1U);
+                                                const auto overflow_energy = sycl::fmax(
+                                                    0.0F, product.kinetic_energy_MeV);
+                                                untracked_MeV += overflow_energy;
+                                                if (secondary_overflow_energy_device != nullptr) {
+                                                    sycl::atomic_ref<float, sycl::memory_order::relaxed,
+                                                                     sycl::memory_scope::device,
+                                                                     sycl::access::address_space::global_space>
+                                                        atomic_overflow_energy(
+                                                            *secondary_overflow_energy_device);
+                                                    atomic_overflow_energy.fetch_add(overflow_energy);
+                                                }
                                             }
+                                        }
+                                        if (untracked_MeV > 0.0F &&
+                                            untracked_nuclear_device != nullptr) {
+                                            sycl::atomic_ref<float, sycl::memory_order::relaxed,
+                                                             sycl::memory_scope::device,
+                                                             sycl::access::address_space::global_space>
+                                                atomic_untracked(
+                                                    untracked_nuclear_device[frag.parent_history]);
+                                            atomic_untracked.fetch_add(untracked_MeV);
                                         }
                                         if (event.parent_status == 0) {
                                             sec_e = sycl::fmax(
@@ -2459,7 +2897,8 @@ TransportResult transport_sycl(const TransportConfig& config,
                                                     event.parent_local_direction_x,
                                                     event.parent_local_direction_y,
                                                     event.parent_local_direction_z,
-                                                    Direction3F{sec_dx, sec_dy, sec_dz});
+                                                    Direction3F{collision_input_dx, collision_input_dy,
+                                                                collision_input_dz});
                                             sec_dx = parent_direction.x;
                                             sec_dy = parent_direction.y;
                                             sec_dz = parent_direction.z;
@@ -2467,6 +2906,12 @@ TransportResult transport_sycl(const TransportConfig& config,
                                             sec_e = 0.0F;
                                         }
                                     }
+                                    else {
+                                        cinel02_diag_increment_device(cinel02_diag_device, 19U);
+                                    }
+                                }
+                                else {
+                                    cinel02_diag_increment_device(cinel02_diag_device, 18U);
                                 }
                             }
                                     pending_sec_voxel = cur_voxel;
@@ -2483,7 +2928,7 @@ TransportResult transport_sycl(const TransportConfig& config,
                                 }
                             }
 
-                            sec_e -= dE;
+                            if (!secondary_inelastic) sec_e = post_em_e;
                             if (deposited_device != nullptr) {
                                 sycl::atomic_ref<float, sycl::memory_order::relaxed,
                                                  sycl::memory_scope::device,
@@ -2491,21 +2936,24 @@ TransportResult transport_sycl(const TransportConfig& config,
                                     atomic_dep(deposited_device[frag.parent_history]);
                                 atomic_dep.fetch_add(dE);
                             }
-                            sec_x += sec_dx * sec_step_mm;
-                            sec_y += sec_dy * sec_step_mm;
-                            sec_z += sec_dz * sec_step_mm;
+                            if (!secondary_inelastic) {
+                                sec_x = post_em_x;
+                                sec_y = post_em_y;
+                                sec_z = post_em_z;
+                            }
 
-                            if (enable_multiple_scattering && sec_e > energy_cutoff_MeV) {
+                            if (!secondary_inelastic && enable_multiple_scattering &&
+                                sec_e > energy_cutoff_MeV) {
                                 constexpr float two_pi = 6.2831853071795864769F;
                                 float theta_scat = 0.0F;
                                 float phi_scat = 0.0F;
                                 if (use_fred_2gr_mcs) {
                                     const auto mixture = rng::uniform01(
-                                        2026, static_cast<uint32_t>(sec_idx), sec_steps, 0);
+                                        2026, frag.rng_stream, sec_steps, 0);
                                     const auto radial = rng::uniform01(
-                                        2026, static_cast<uint32_t>(sec_idx), sec_steps, 1);
+                                        2026, frag.rng_stream, sec_steps, 1);
                                     phi_scat = two_pi * rng::uniform01(
-                                        2026, static_cast<uint32_t>(sec_idx), sec_steps, 3);
+                                        2026, frag.rng_stream, sec_steps, 3);
                                     theta_scat = fred_2gr_angle_device(
                                         fred_2gr_mcs_device, sec_e / frag_a,
                                         static_cast<int>(frag.z), static_cast<int>(frag.a),
@@ -2519,12 +2967,12 @@ TransportResult transport_sycl(const TransportConfig& config,
                                         static_cast<int>(frag.a), sec_step_mm,
                                         water_density_g_per_cm3) * multiple_scattering_scale;
                                     const auto u_msc0 = sycl::fmax(rng::uniform01(
-                                        2026, static_cast<uint32_t>(sec_idx), sec_steps, 0),
+                                        2026, frag.rng_stream, sec_steps, 0),
                                         1.0e-10F);
                                     theta_scat = theta_rms *
                                         sycl::sqrt(-2.0F * sycl::log(u_msc0));
                                     phi_scat = two_pi * rng::uniform01(
-                                        2026, static_cast<uint32_t>(sec_idx), sec_steps, 1);
+                                        2026, frag.rng_stream, sec_steps, 1);
                                 }
 
                                 const auto sin_scat = sycl::sin(theta_scat);
@@ -2533,7 +2981,8 @@ TransportResult transport_sycl(const TransportConfig& config,
                                     sin_scat * sycl::cos(phi_scat),
                                     sin_scat * sycl::sin(phi_scat),
                                     cos_scat,
-                                    Direction3F{sec_dx, sec_dy, sec_dz});
+                                    Direction3F{collision_input_dx, collision_input_dy,
+                                                                collision_input_dz});
                                 sec_dx = rotated.x;
                                 sec_dy = rotated.y;
                                 sec_dz = rotated.z;
@@ -2594,6 +3043,11 @@ TransportResult transport_sycl(const TransportConfig& config,
                                             atomic_origin(charged_origin_voxel_dose_device[
                                                 charged_origin_voxel_offset + pending_sec_voxel]);
                                         atomic_origin.fetch_add(static_cast<DoseAtomicT>(pending_sec_voxel_MeV));
+                                        score_be_isotope_origin_voxel_device(
+                                            be_isotope_origin_voxel_dose_device,
+                                            be_isotope_category, number_of_voxels,
+                                            pending_sec_voxel,
+                                            static_cast<DoseAtomicT>(pending_sec_voxel_MeV));
                                     }
                                             }
                                             pending_sec_voxel_MeV = 0.0F;
@@ -2649,6 +3103,11 @@ TransportResult transport_sycl(const TransportConfig& config,
                                         charged_origin_voxel_offset + pending_sec_voxel]);
                                 atomic_origin.fetch_add(
                                     static_cast<DoseAtomicT>(pending_sec_voxel_MeV));
+                                score_be_isotope_origin_voxel_device(
+                                    be_isotope_origin_voxel_dose_device,
+                                    be_isotope_category, number_of_voxels,
+                                    pending_sec_voxel,
+                                    static_cast<DoseAtomicT>(pending_sec_voxel_MeV));
                             }
                         }
                     });
@@ -2666,6 +3125,19 @@ TransportResult transport_sycl(const TransportConfig& config,
                 queue.copy(secondary_queue_device, birth_secondaries_host.data(),
                            generation_end).wait_and_throw();
             }
+        }
+    }
+    if (birth_secondaries_host.empty() &&
+        !config.fragment_birth_spectrum_output_file.empty() &&
+        secondary_count_device != nullptr && secondary_queue_device != nullptr) {
+        std::uint32_t birth_count = 0U;
+        queue.copy(secondary_count_device, &birth_count, 1).wait_and_throw();
+        birth_count = sycl::min(
+            birth_count, static_cast<std::uint32_t>(max_secondaries));
+        if (birth_count > 0U) {
+            birth_secondaries_host.resize(birth_count);
+            queue.copy(secondary_queue_device, birth_secondaries_host.data(),
+                       birth_count).wait_and_throw();
         }
     }
 
@@ -2699,6 +3171,19 @@ TransportResult transport_sycl(const TransportConfig& config,
                        [](DoseAtomicT val) { return static_cast<double>(val); });
     }
 
+    std::vector<double> be_isotope_origin_voxel_dose_host;
+    if (enable_charged_origin_voxel_scoring) {
+        const auto value_count =
+            be_isotope_origin_category_count * number_of_voxels;
+        std::vector<DoseAtomicT> device_host(value_count);
+        queue.copy(be_isotope_origin_voxel_dose_device, device_host.data(),
+                   value_count).wait_and_throw();
+        be_isotope_origin_voxel_dose_host.resize(value_count);
+        std::transform(device_host.begin(), device_host.end(),
+                       be_isotope_origin_voxel_dose_host.begin(),
+                       [](DoseAtomicT val) { return static_cast<double>(val); });
+    }
+
     std::vector<double> in_fov_dose_host;
     if (enable_voxel_scoring && in_fov_dose_device != nullptr) {
         std::vector<DoseAtomicT> in_fov_device_host(number_of_bins);
@@ -2723,6 +3208,14 @@ TransportResult transport_sycl(const TransportConfig& config,
             .wait_and_throw();
     }
 
+    std::vector<std::uint64_t> primary_survival_host;
+    std::vector<std::uint64_t> inelastic_reaction_host;
+    if (primary_survival_device != nullptr) {
+        primary_survival_host.resize(number_of_bins);
+        inelastic_reaction_host.resize(number_of_bins);
+        queue.copy(primary_survival_device, primary_survival_host.data(), number_of_bins);
+        queue.copy(inelastic_reaction_device, inelastic_reaction_host.data(), number_of_bins);
+    }
     std::vector<float> deposited_host(number_of_histories);
     std::vector<float> escaped_host(number_of_histories);
     std::vector<std::uint32_t> steps_host(number_of_histories);
@@ -2732,6 +3225,15 @@ TransportResult transport_sycl(const TransportConfig& config,
     queue.copy(steps_device, steps_host.data(), number_of_histories);
     if (untracked_nuclear_device != nullptr) {
         queue.copy(untracked_nuclear_device, untracked_host.data(), number_of_histories);
+    }
+    std::array<float, kCinel02EnergySlots> cinel02_energy_host{};
+    if (cinel02_energy_device != nullptr) {
+        queue.copy(cinel02_energy_device, cinel02_energy_host.data(),
+                   kCinel02EnergySlots);
+    }
+    std::array<std::uint64_t, kCinel02DiagSlots> cinel02_diag_host{};
+    if (cinel02_diag_device != nullptr) {
+        queue.copy(cinel02_diag_device, cinel02_diag_host.data(), kCinel02DiagSlots);
     }
     std::array<std::uint64_t, 26> fred_diag_host{};
     if (fred_diag_device != nullptr) {
@@ -2770,9 +3272,12 @@ TransportResult transport_sycl(const TransportConfig& config,
         sycl::free(target_h_fraction_device, queue);
     }
     free_device(dose_device);
+    free_device(primary_survival_device);
+    free_device(inelastic_reaction_device);
     free_device(in_fov_dose_device);
     free_device(voxel_dose_device);
     free_device(charged_origin_voxel_dose_device);
+    free_device(be_isotope_origin_voxel_dose_device);
     free_device(let_moments_device);
     free_device(voxel_let_moments_device);
     free_device(deposited_device);
@@ -2788,6 +3293,8 @@ TransportResult transport_sycl(const TransportConfig& config,
     free_device(cinel02_event_indices_device);
     free_device(cinel02_rate_groups_device);
     free_device(cinel02_rate_samples_device);
+    free_device(cinel02_diag_device);
+    free_device(cinel02_energy_device);
     free_device(untracked_nuclear_device);
     free_device(fred_prob_proj_h_device);
     free_device(fred_prob_proj_o_device);
@@ -2888,11 +3395,24 @@ TransportResult transport_sycl(const TransportConfig& config,
         result.backend += "+letd-scoring";
     }
 
+    if (config.enable_fragment_species_scoring && !enable_secondary_transport) {
+        result.secondary_carbon_deposited_energy_MeV.assign(number_of_bins, 0.0);
+        result.secondary_boron_deposited_energy_MeV.assign(number_of_bins, 0.0);
+        result.secondary_beryllium_deposited_energy_MeV.assign(number_of_bins, 0.0);
+        result.secondary_lithium_deposited_energy_MeV.assign(number_of_bins, 0.0);
+        result.secondary_helium_deposited_energy_MeV.assign(number_of_bins, 0.0);
+        result.secondary_proton_deposited_energy_MeV.assign(number_of_bins, 0.0);
+        result.secondary_other_charged_deposited_energy_MeV.assign(number_of_bins, 0.0);
+    }
+    result.primary_survival_counts = std::move(primary_survival_host);
+    result.inelastic_reaction_counts = std::move(inelastic_reaction_host);
     result.primary_deposited_energy_MeV = dose_host;
     result.deposited_energy_MeV = std::move(dose_host);
     result.voxel_deposited_energy_MeV = std::move(voxel_dose_host);
     result.charged_origin_voxel_deposited_energy_MeV =
         std::move(charged_origin_voxel_dose_host);
+    result.be_isotope_origin_voxel_deposited_energy_MeV =
+        std::move(be_isotope_origin_voxel_dose_host);
     result.in_fov_deposited_energy_MeV = std::move(in_fov_dose_host);
     if (!config.fragment_birth_spectrum_output_file.empty()) {
         constexpr std::size_t categories = light_isotope_category_count;
@@ -3011,12 +3531,28 @@ TransportResult transport_sycl(const TransportConfig& config,
     result.fred_invert_error_tgt_o = invert_err_tgt_o;
     result.secondary_queue_overflow = overflow_count_host;
     result.secondary_queue_overflow_energy_MeV = static_cast<double>(overflow_energy_host);
-    result.nuclear_interactions = result.fred_inelastic_events;
+    result.cinel02_diagnostics = cinel02_diag_host;
+    for (std::size_t i = 0; i < kCinel02EnergySlots; ++i) {
+        result.cinel02_energy_ledger_MeV[i] =
+            static_cast<double>(cinel02_energy_host[i]);
+    }
+    if (use_cinel02 && config.cinel02_strict_match &&
+        (result.cinel02_diagnostics[4] != 0U || result.cinel02_diagnostics[5] != 0U ||
+         result.cinel02_diagnostics[18] != 0U || result.cinel02_diagnostics[19] != 0U ||
+         result.cinel02_diagnostics[34] != 0U ||
+         result.cinel02_diagnostics[2] != result.cinel02_diagnostics[3] + result.cinel02_diagnostics[4] + result.cinel02_diagnostics[5] ||
+         result.cinel02_diagnostics[16] != result.cinel02_diagnostics[17] + result.cinel02_diagnostics[18] + result.cinel02_diagnostics[19])) {
+        throw std::runtime_error("CINEL02 strict match failed");
+    }
+    result.nuclear_interactions = use_cinel02
+        ? result.cinel02_diagnostics[2] + result.cinel02_diagnostics[16]
+        : result.fred_inelastic_events;
     result.total_steps = std::accumulate(steps_host.begin(), steps_host.end(), std::uint64_t{0});
 
     result.elapsed_seconds =
         std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
     result.primary_kernel_seconds = primary_kernel_seconds;
+    result.secondary_kernel_seconds = secondary_kernel_seconds;
     return result;
 }
 

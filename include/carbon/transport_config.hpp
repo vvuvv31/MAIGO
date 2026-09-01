@@ -228,7 +228,7 @@ struct TransportConfig {
     // Historical mode stops every physics step at lateral scorer faces.
     // Disable to keep scoring resolution from changing MCS/transport; energy
     // is then assigned to the voxel containing the step start.
-    bool voxel_scorer_clamps_transport{true};
+    bool voxel_scorer_clamps_transport{false};
     // Dense scorer geometry in patient coordinates. X-Y is the axial plane;
     // Z is the inferior-superior slice direction. For CT runs these values are
     // read from the CCTG header unless explicitly supplied for compatibility.
@@ -274,6 +274,13 @@ struct TransportConfig {
     // target-conditioned interaction rates (CINPKG03 / CINEL02_RATE_V1).
     std::filesystem::path primary_inelastic_package_v2_file{};
     std::filesystem::path primary_inelastic_rate_v2_file{};
+    // Number of secondary generations allowed to undergo CINEL02 inelastic
+    // replay. Zero restricts inelastic reactions to the primary projectile.
+    // Validated production configurations are limited to at most two.
+    std::uint32_t cinel02_max_secondary_inelastic_generations{0};
+    // Reject a run when a sampled collision has no valid replay event or the
+    // hazard/outcome counters do not close.
+    bool cinel02_strict_match{false};
     bool enable_nuclear_elastic{false};
     std::filesystem::path fred_event_library_h_file{};
     std::filesystem::path fred_event_library_o_file{};

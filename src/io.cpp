@@ -1313,6 +1313,31 @@ void write_dense_charged_origin_voxel_dose_mhd(
                << "DoseOriginCategory = " << labels[category] << '\n'
                << "ElementDataFile = " << raw_path.filename().string() << '\n';
     }
+    if (result.be_isotope_origin_voxel_deposited_energy_MeV.empty()) return;
+    if (result.be_isotope_origin_voxel_deposited_energy_MeV.size() !=
+        be_isotope_origin_category_count * voxel_count) {
+        throw std::invalid_argument("Be-isotope origin voxel result size mismatch");
+    }
+    constexpr std::array<const char*, be_isotope_origin_category_count>
+        be_labels{"be6", "be7", "be9", "be10"};
+    for (std::size_t category = 0; category < be_labels.size(); ++category) {
+        const auto raw_path = base.parent_path() /
+            (base.filename().string() + "_" + be_labels[category] + ".raw");
+        std::vector<float> raw(voxel_count, 0.0F);
+        const auto offset = category * voxel_count;
+        for (std::size_t voxel = 0; voxel < voxel_count; ++voxel) {
+            raw[voxel] = static_cast<float>(scored_dose_Gy(
+                config, result.be_isotope_origin_voxel_deposited_energy_MeV[
+                            offset + voxel], masses_kg[voxel]));
+        }
+        std::ofstream output(raw_path, std::ios::binary);
+        if (!output) {
+            throw std::runtime_error("Cannot create Be-isotope RAW file: " +
+                                     raw_path.string());
+        }
+        output.write(reinterpret_cast<const char*>(raw.data()),
+                     static_cast<std::streamsize>(raw.size() * sizeof(float)));
+    }
 }
 
 void write_energy_ledger_json(const std::filesystem::path& path,
@@ -1420,6 +1445,98 @@ void write_energy_ledger_json(const std::filesystem::path& path,
            << "  \"fred_isotope_counts\": [";
     for (std::size_t i = 0; i < result.fred_isotope_counts.size(); ++i) {
         output << (i == 0 ? "" : ", ") << result.fred_isotope_counts[i];
+    }
+    output << "],\n"
+           << "  \"cinel02_energy_ledger_layout\": "
+              "[\"collision_input_kinetic\", \"pre_collision_em_loss\", "
+              "\"process_local_deposit\", \"niel_diagnostic_only\", "
+              "\"surviving_parent_kinetic\", \"charged_product_kinetic\", "
+              "\"neutral_product_kinetic\", \"unsupported_product_kinetic\"],\n"
+           << "  \"cinel02_energy_ledger_MeV\": [";
+    for (std::size_t i = 0; i < result.cinel02_energy_ledger_MeV.size(); ++i) {
+        output << (i == 0 ? "" : ", ") << result.cinel02_energy_ledger_MeV[i];
+    }
+    const auto cinel02_kinetic_q_bucket =
+        result.cinel02_energy_ledger_MeV[0] -
+        result.cinel02_energy_ledger_MeV[2] -
+        result.cinel02_energy_ledger_MeV[4] -
+        result.cinel02_energy_ledger_MeV[5] -
+        result.cinel02_energy_ledger_MeV[6] -
+        result.cinel02_energy_ledger_MeV[7];
+    output << "],\n"
+           << "  \"cinel02_kinetic_q_excitation_bucket_MeV\": "
+           << cinel02_kinetic_q_bucket << ",\n"
+           << "  \"cinel02_diagnostic_layout\": "
+              "[\"primary_rate_queries\", \"primary_rate_covered\", \"primary_hazards\", "
+              "\"primary_event_hits\", \"primary_event_misses\", \"primary_invalid_events\", "
+              "\"primary_h_hazards\", \"primary_o_hazards\", \"primary_parent_continue\", "
+              "\"primary_parent_killed\", \"primary_role0\", \"primary_role1\", "
+              "\"primary_role2\", \"primary_role_other\", \"secondary_rate_queries\", "
+              "\"secondary_rate_covered\", \"secondary_hazards\", \"secondary_event_hits\", "
+              "\"secondary_event_misses\", \"secondary_invalid_events\", "
+              "\"secondary_h_hazards\", \"secondary_o_hazards\", \"born_z1\", \"born_z2\", "
+              "\"born_z3\", \"born_z4\", \"born_z5\", \"born_z6\", \"queued_z1\", "
+              "\"queued_z2\", \"queued_z3\", \"queued_z4\", \"queued_z5\", \"queued_z6\", \"unsupported_charged_isotope\"],\n"
+              "  \"cinel02_hazard_histogram_layout\": {\"offset\": 64, "
+              "\"shape\": [18, 2, 3, 8], \"order\": "
+              "[\"projectile_species\", \"target\", \"generation\", \"energy_bin\"], "
+              "\"projectile_species\": [\"1H\", \"2H\", \"3H\", \"3He\", \"4He\", "
+              "\"6He\", \"6Li\", \"7Li\", \"7Be\", \"9Be\", \"10Be\", \"8B\", "
+              "\"10B\", \"11B\", \"10C\", \"11C\", \"12C\", \"reserved\"], "
+              "\"targets\": [\"H\", \"O\"], \"generations\": [0, 1, 2], "
+              "\"energy_bin_edges_MeV_per_u\": [0, 50, 100, 150, 200, 250, 300, 350, "
+              "\"infinity\"]},\n"
+              "  \"cinel02_secondary_transition_layout\": {\"offset\": 928, "
+              "\"shape\": [2, 6, 7], \"order\": [\"generation\", \"parent_z\", \"child_z_bucket\"], "
+              "\"generations\": [1, 2], \"parent_z\": [1, 2, 3, 4, 5, 6], "
+              "\"child_z_bucket\": [0, 1, 2, 3, 4, 5, 6], "
+              "\"child_bucket_0\": \"role0 product outside Z=1..6\"},\n"
+              "  \"cinel02_secondary_parent_outcome_layout\": {\"offset\": 1012, "
+              "\"shape\": [2, 6, 2], \"order\": [\"generation\", \"parent_z\", \"outcome\"], "
+              "\"generations\": [1, 2], \"parent_z\": [1, 2, 3, 4, 5, 6], "
+              "\"outcome\": [\"continue\", \"killed\"]},\n"
+              "  \"cinel02_secondary_transition_energy_layout\": {\"offset\": 1036, "
+              "\"shape\": [2, 6, 7], \"unit\": \"keV\", "
+              "\"order\": [\"generation\", \"parent_z\", \"child_z_bucket\"]},\n"
+              "  \"cinel02_secondary_parent_incident_energy_layout\": {\"offset\": 1120, "
+              "\"shape\": [2, 6], \"unit\": \"keV\", "
+              "\"generations\": [1, 2], \"parent_z\": [1, 2, 3, 4, 5, 6]},\n"
+              "  \"cinel02_be_channel_count_layout\": {\"offset\": 1132, "
+              "\"shape\": [2, 2, 8, 3], \"order\": [\"generation\", \"target\", \"energy_bin\", \"parent_channel\"], "
+              "\"generations\": [1, 2], \"targets\": [\"H\", \"O\"], "
+              "\"parent_channels\": [\"Be_to_Be\", \"B_to_Be\", \"C_to_Be\"]},\n"
+              "  \"cinel02_be_channel_energy_layout\": {\"offset\": 1228, "
+              "\"shape\": [2, 2, 8, 3], \"unit\": \"keV\"},\n"
+              "  \"cinel02_be_incident_count_layout\": {\"offset\": 1324, "
+              "\"shape\": [2, 2, 8]},\n"
+              "  \"cinel02_be_incident_energy_layout\": {\"offset\": 1356, "
+              "\"shape\": [2, 2, 8], \"unit\": \"keV\", "
+              "\"energy_bin_edges_MeV_per_u\": [0, 50, 100, 150, 200, 250, 300, 350, \"infinity\"]},\n"
+              "  \"cinel02_be_isotope_birth_count_layout\": {\"offset\": 1388, "
+              "\"shape\": [2, 2, 3, 4], \"order\": [\"generation\", \"target\", \"parent_channel\", \"be_isotope\"], "
+              "\"generations\": [0, 1], \"targets\": [\"H\", \"O\"], "
+              "\"parent_channels\": [\"Be\", \"B\", \"C\"], "
+              "\"be_isotopes\": [6, 7, 9, 10]},\n"
+              "  \"cinel02_be_isotope_birth_energy_layout\": {\"offset\": 1436, "
+              "\"shape\": [2, 2, 3, 4], \"unit\": \"keV\"},\n"
+              "  \"cinel02_be_isotope_birth_depth_layout\": {\"offset\": 1484, "
+              "\"shape\": [2, 2, 3, 4], \"unit\": \"um\"},\n"
+              "  \"cinel02_be_isotope_birth_cosine_layout\": {\"offset\": 1532, "
+              "\"shape\": [2, 2, 3, 4], \"encoding\": \"sum((cosine+1)*1e6)\", "
+              "\"frame\": \"projectile-local incident direction\"},\n"
+              "  \"cinel02_c12_o16_be10_count_by_parent_energy_layout\": {\"offset\": 1580, "
+              "\"shape\": [8], \"energy_bin_edges_MeV_per_u\": [0, 50, 100, 150, 200, 250, 300, 350, \"infinity\"]},\n"
+              "  \"cinel02_c12_o16_be10_energy_by_parent_energy_layout\": {\"offset\": 1588, "
+              "\"shape\": [8], \"unit\": \"keV\"},\n"
+              "  \"cinel02_c12_o16_reaction_parent_energy_layout\": {\"offset\": 1596, "
+              "\"shape\": [8], \"unit\": \"keV_per_u\"},\n"              "  \"cinel02_c12_o16_be_isotope_count_by_parent_energy_layout\": {\"offset\": 1604, "
+              "\"shape\": [4, 8], \"order\": [\"be_isotope\", \"parent_energy_bin\"], "
+              "\"be_isotopes\": [6, 7, 9, 10]},\n"
+              "  \"cinel02_c12_o16_be_isotope_energy_by_parent_energy_layout\": {\"offset\": 1636, "
+              "\"shape\": [4, 8], \"unit\": \"keV\"},\n"
+              "  \"cinel02_diagnostics\": [";
+    for (std::size_t i = 0; i < result.cinel02_diagnostics.size(); ++i) {
+        output << (i == 0 ? "" : ", ") << result.cinel02_diagnostics[i];
     }
     output << "],\n"
            << "  \"primary_elastic_interactions\": "

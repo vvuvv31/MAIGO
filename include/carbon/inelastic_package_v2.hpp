@@ -225,6 +225,18 @@ struct Cinel02DeviceTables {
     }
 };
 
+struct Cinel02FixedReplayView {
+    const Cinel02InteractionRecord* serialized_interaction{nullptr};
+    const Cinel02DeviceInteraction* compact_interaction{nullptr};
+    const Cinel02ProductRecord* serialized_products{nullptr};
+    const Cinel02DeviceProduct* compact_products{nullptr};
+    std::uint32_t product_count{0};
+
+    [[nodiscard]] explicit operator bool() const noexcept {
+        return serialized_interaction != nullptr && compact_interaction != nullptr;
+    }
+};
+
 // Final-state packages do not carry rate information. Rates are loaded from
 // an independent exposure campaign. Each group owns a contiguous, strictly
 // increasing energy sample range for one projectile/target pair.
@@ -314,6 +326,8 @@ public:
     [[nodiscard]] const Cinel02InteractionRecord* interaction(
         const Cinel02CellIndex& cell, std::uint64_t offset) const noexcept;
     [[nodiscard]] Cinel02DeviceTables make_device_tables() const;
+    [[nodiscard]] Cinel02FixedReplayView fixed_replay(
+        std::uint64_t event_index, const Cinel02DeviceTables& compact) const noexcept;
     [[nodiscard]] const Cinel02ProductRecord* products_for(
         const Cinel02InteractionRecord& interaction) const noexcept;
     [[nodiscard]] std::uint32_t product_offset(

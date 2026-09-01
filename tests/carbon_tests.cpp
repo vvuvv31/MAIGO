@@ -272,8 +272,16 @@ void test_charged_dose_categories() {
     require(carbon::charged_dose_category(3, 7) == 3, "Lithium category failed");
     require(carbon::charged_dose_category(2, 4) == 4, "Helium category failed");
     require(carbon::charged_dose_category(1, 1) == 5, "Proton category failed");
-    require(carbon::charged_dose_category(1, 2) == 6, "Deuteron category failed");
+    require(carbon::charged_dose_category(1, 2) == 5, "Deuteron Z1 category failed");
+    require(carbon::charged_dose_category(1, 3) == 5, "Triton Z1 category failed");
     require(carbon::charged_dose_category(7, 14) == 6, "Other charged category failed");
+    require(carbon::be_isotope_origin_category(4, 6) == 0, "Be-6 origin category");
+    require(carbon::be_isotope_origin_category(4, 7) == 1, "Be-7 origin category");
+    require(carbon::be_isotope_origin_category(4, 9) == 2, "Be-9 origin category");
+    require(carbon::be_isotope_origin_category(4, 10) == 3, "Be-10 origin category");
+    require(carbon::be_isotope_origin_category(4, 8) ==
+                carbon::be_isotope_origin_category_count,
+            "unsupported Be isotope origin sentinel");
 }
 
 void test_interpolation() {
@@ -2596,8 +2604,8 @@ void test_tps_source_geometry_csv_and_switch() {
     }
     const auto disabled = carbon::load_config(yaml_path);
     require(!disabled.enable_tps_source, "tpsSource:false parsing");
-    require(disabled.voxel_scorer_clamps_transport,
-            "voxel scorer transport clamp must remain compatibility default");
+    require(!disabled.voxel_scorer_clamps_transport,
+            "voxel scorer transport clamp must default to scorer-decoupled");
     {
         std::ofstream output(yaml_path);
         output << "number_of_histories: 10\n"
@@ -3079,7 +3087,7 @@ void test_fred_18_isotopes_data() {
         require(carbon::kFredCdfO[i] >= carbon::kFredCdfO[i - 1], "kFredCdfO must be non-decreasing");
     }
 
-    // Verify all 17 charged species mapping
+    // Verify all 18 charged species mapping
     require(carbon::get_charged_species_idx(1, 1) == 0, "1H (p) index");
     require(carbon::get_charged_species_idx(1, 2) == 1, "2H (d) index");
     require(carbon::get_charged_species_idx(1, 3) == 2, "3H (t) index");
@@ -3097,13 +3105,17 @@ void test_fred_18_isotopes_data() {
     require(carbon::get_charged_species_idx(6, 10) == 14, "10C index");
     require(carbon::get_charged_species_idx(6, 11) == 15, "11C index");
     require(carbon::get_charged_species_idx(6, 12) == 16, "12C index");
+    require(carbon::get_charged_species_idx(4, 6) == 17, "6Be index");
+    require(carbon::get_charged_species_idx(1, 4) == -1, "unknown hydrogen isotope aliased");
+    require(carbon::get_charged_species_idx(2, 5) == -1, "unknown helium isotope aliased");
+    require(carbon::get_charged_species_idx(7, 14) == -1, "Z>6 isotope aliased to proton");
 }
 
 void test_ion_species_stopping_power_grid_validation() {
     const std::filesystem::path csv_path = "data/ion_stopping_power_water_geant4_11_3_2.csv";
     if (std::filesystem::exists(csv_path)) {
         const auto lut = carbon::load_ion_species_stopping_power_lut(csv_path, 4001, 1.0f);
-        require(lut.size() == 17 * 4001, "Stopping power LUT size must be 17 * 4001");
+        require(lut.size() == 18 * 4001, "Stopping power LUT size must be 18 * 4001");
         for (std::size_t i = 0; i < lut.size(); ++i) {
             require(lut[i] > 0.0f, "Stopping power values must be strictly positive");
         }

@@ -484,9 +484,9 @@ std::vector<float> load_ion_species_stopping_power_lut(
         throw std::runtime_error("Failed to open ion stopping-power file: " + path.string());
     }
 
-    // 17 charged species (indices 0..16 from get_charged_species_idx)
-    std::vector<float> lut(17 * table_size, 0.0F);
-    std::vector<std::size_t> samples_count(17, 0);
+    // 18 charged species (indices 0..17 from get_charged_species_idx).
+    std::vector<float> lut(18 * table_size, 0.0F);
+    std::vector<std::size_t> samples_count(18, 0);
 
     const auto get_species_idx = [](int z, int a) -> int {
         if (z == 1) {
@@ -510,6 +510,7 @@ std::vector<float> load_ion_species_stopping_power_lut(
             if (a == 7) return 8;  // 7Be
             if (a == 9) return 9;  // 9Be
             if (a == 10) return 10; // 10Be
+            if (a == 6) return 17; // 6Be
             return -1;
         }
         if (z == 5) {
@@ -541,7 +542,7 @@ std::vector<float> load_ion_species_stopping_power_lut(
         if (std::getline(ss, token, ',')) stopping_power = std::stod(token);
 
         const auto sp_idx = get_species_idx(atomic_number, mass_number);
-        if (sp_idx >= 0 && sp_idx < 17) {
+        if (sp_idx >= 0 && sp_idx < 18) {
             const auto e_idx = samples_count[sp_idx];
             if (e_idx < table_size) {
                 const double expected_e = 0.01 + static_cast<double>(e_idx) * 0.1;
@@ -563,7 +564,7 @@ std::vector<float> load_ion_species_stopping_power_lut(
         }
     }
 
-    for (std::size_t sp = 0; sp < 17; ++sp) {
+    for (std::size_t sp = 0; sp < 18; ++sp) {
         if (samples_count[sp] != table_size) {
             throw std::runtime_error("Ion species index " + std::to_string(sp) +
                                      " in " + path.string() + " has " +

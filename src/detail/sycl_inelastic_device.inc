@@ -352,7 +352,7 @@ inline InelasticProductSet sample_carbon_inelastic_products_device(
                 if (heavy_tgt && af > 0.0F) {
                     const int sp_species = carbon::get_charged_species_idx(iso.z, iso.a);
                     const float e_u = frag_e_tot / af;
-                    if (ion_sp_lut != nullptr && ion_csda_a1 != nullptr && ion_energy_grid != nullptr &&
+                    if (sp_species >= 0 && ion_sp_lut != nullptr && ion_csda_a1 != nullptr && ion_energy_grid != nullptr &&
                         ion_sp_table_size > 1) {
                         const std::size_t off =
                             static_cast<std::size_t>(sp_species) * static_cast<std::size_t>(ion_sp_table_size);

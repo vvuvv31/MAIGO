@@ -142,44 +142,46 @@ inline constexpr std::array<Fred2DParams, 18> kFredParamsO = {{
     {0.0034F, 62.0F, 87.0F, 4.7F, 0.0F, 2.4F, 0.017F, 0.30F}
 }};
 
-// Map (Z, A) to charged species index 0..16 for stopping power table lookup
+// Map (Z, A) to charged species index 0..17 for stopping power table lookup.
+// Be-6 has its own explicit Geant4 table; never alias it to another isotope.
 inline int get_charged_species_idx(int z, int a) noexcept {
     if (z == 1) {
         if (a == 1) return 0;  // 1H (p)
         if (a == 2) return 1;  // 2H (d)
         if (a == 3) return 2;  // 3H (t)
-        return 0;
+        return -1;
     }
     if (z == 2) {
         if (a == 3) return 3;  // 3He
         if (a == 4) return 4;  // 4He (alpha)
         if (a == 6) return 5;  // 6He
-        return 4;
+        return -1;
     }
     if (z == 3) {
         if (a == 6) return 6;  // 6Li
         if (a == 7) return 7;  // 7Li
-        return 7;
+        return -1;
     }
     if (z == 4) {
         if (a == 7) return 8;  // 7Be
         if (a == 9) return 9;  // 9Be
         if (a == 10) return 10; // 10Be
-        return 9;
+        if (a == 6) return 17;  // 6Be
+        return -1;
     }
     if (z == 5) {
         if (a == 8) return 11;  // 8B
         if (a == 10) return 12; // 10B
         if (a == 11) return 13; // 11B
-        return 13;
+        return -1;
     }
     if (z == 6) {
         if (a == 10) return 14; // 10C
         if (a == 11) return 15; // 11C
         if (a == 12) return 16; // 12C
-        return 16;
+        return -1;
     }
-    return 0;
+    return -1;
 }
 
 // 1. ICRU Data Fit for sigma_H(E) (Figure 2 in PMC8990885)

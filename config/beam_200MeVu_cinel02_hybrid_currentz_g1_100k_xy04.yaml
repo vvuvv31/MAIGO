@@ -1,0 +1,58 @@
+# Path A GPU vs TOPAS 1M emittance inelastic, 200 MeV/u
+primary_atomic_number: 6
+primary_mass_number: 12
+initial_energy_MeVu: 200.0
+number_of_histories: 100000
+phantom_length_mm: 400.0
+depth_bin_width_mm: 0.5
+maximum_step_mm: 0.1
+maximum_relative_energy_loss: 0.01
+energy_cutoff_MeV: 0.05
+water_density_g_per_cm3: 1.0
+
+enable_emittance_source: true
+emittance_sigma_x_mm: 3.0
+emittance_sigma_y_mm: 3.0
+emittance_sigma_x_prime: 0.006
+emittance_sigma_y_prime: 0.006
+emittance_correlation_x: 0.7
+emittance_correlation_y: 0.7
+
+enable_energy_straggling: true
+energy_straggling_model: packaged_fluctuation
+energy_straggling_package_file: data/packages/c12_G4_WATER_fluctuation_topas_4_2_p3_g4_11_3_2_50k.csv
+enable_secondary_energy_straggling: true
+straggling_scale: 1.0
+straggling_scale_energies_MeVu: 0, 100, 200, 300, 400
+straggling_scale_values: 0.74, 0.74, 0.90, 0.98, 0.87
+enable_multiple_scattering: true
+multiple_scattering_model: fred_2gr
+fred_2gr_mcs_file: data/packages/fred_3_76_mcs_2gr.bin
+multiple_scattering_scale: 1.40
+enable_inelastic: true
+cinel02_max_secondary_inelastic_generations: 1
+nuclear_model: cinel02
+primary_inelastic_package_v2_file: /mnt/sda/wuwei/cinel02-hybrid-pilot/merged/research_hybrid_102.cinpkg
+primary_inelastic_rate_v2_file: /mnt/sda/wuwei/cinel02-cascade-h1o16/e400MeVu_5000000h_bin1_cascade_5001_h1o16_cascade/compiled/cascade_e400_rates.csv
+max_device_memory_fraction: 0.70
+enable_nuclear_elastic: false
+enable_secondary_transport: true
+primary_stopping_power_file: data/stopping_power_water_geant4_11_3_2.csv
+
+enable_voxel_scoring: true
+enable_charged_origin_voxel_scoring: true
+charged_origin_voxel_mhd_output_prefix: out/gpu_cinel02_hybrid_currentz_g1_100k_e200_xy04/species
+charged_origin_voxel_output_file:
+charged_origin_voxel_dose_Gy_output_file:
+voxel_bins_x: 200
+voxel_bins_y: 200
+voxel_size_x_mm: 0.4
+voxel_size_y_mm: 0.4
+
+output_file: out/gpu_cinel02_hybrid_currentz_g1_100k_e200_xy04/depth_dose.csv
+dose_output_file: out/gpu_cinel02_hybrid_currentz_g1_100k_e200_xy04/depth_dose_Gy.csv
+voxel_dose_output_file:
+voxel_dose_Gy_output_file:
+voxel_dose_mhd_output_file: out/gpu_cinel02_hybrid_currentz_g1_100k_e200_xy04/voxel_dose.mhd
+random_seed: 2026095100
+device: cuda

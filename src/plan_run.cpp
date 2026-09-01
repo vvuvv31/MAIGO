@@ -53,6 +53,8 @@ void accumulate_transport_result(carbon::TransportResult& total,
     add_vector_in_place(total.voxel_deposited_energy_MeV, part.voxel_deposited_energy_MeV);
     add_vector_in_place(total.charged_origin_voxel_deposited_energy_MeV,
                         part.charged_origin_voxel_deposited_energy_MeV);
+    add_vector_in_place(total.be_isotope_origin_voxel_deposited_energy_MeV,
+                        part.be_isotope_origin_voxel_deposited_energy_MeV);
     add_vector_in_place(total.neutral_origin_voxel_deposited_energy_MeV,
                         part.neutral_origin_voxel_deposited_energy_MeV);
     add_vector_in_place(total.primary_deposited_energy_MeV,
@@ -115,6 +117,9 @@ void accumulate_transport_result(carbon::TransportResult& total,
     total.untracked_nuclear_energy_MeV += part.untracked_nuclear_energy_MeV;
     total.fred_model_unassigned_MeV += part.fred_model_unassigned_MeV;
     total.nuclear_interactions += part.nuclear_interactions;
+    for (std::size_t i = 0; i < total.cinel02_energy_ledger_MeV.size(); ++i) {
+        total.cinel02_energy_ledger_MeV[i] += part.cinel02_energy_ledger_MeV[i];
+    }
     for (std::size_t i = 0; i < total.fred_isotope_counts.size(); ++i) {
         total.fred_isotope_counts[i] += part.fred_isotope_counts[i];
     }

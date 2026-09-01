@@ -1,3 +1,151 @@
+inline void score_be_isotope_origin_voxel_device(
+    DoseAtomicT* dose, const std::size_t category, const std::size_t voxel_count,
+    const std::size_t voxel, const DoseAtomicT amount) noexcept {
+    if (dose == nullptr || category >= be_isotope_origin_category_count ||
+        voxel >= voxel_count || amount <= DoseAtomicT{0}) return;
+    sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
+                     sycl::memory_scope::device,
+                     sycl::access::address_space::global_space>
+        atomic(dose[category * voxel_count + voxel]);
+    atomic.fetch_add(amount);
+}
+
+inline void cinel02_diag_add_device(
+    std::uint64_t* diagnostics, const std::uint32_t slot,
+    const std::uint64_t value) noexcept {
+    if (diagnostics == nullptr) return;
+    sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
+                     sycl::memory_scope::device,
+                     sycl::access::address_space::global_space>
+        counter(diagnostics[slot]);
+    counter.fetch_add(value);
+}
+
+inline void cinel02_diag_increment_device(
+    std::uint64_t* diagnostics, const std::uint32_t slot) noexcept {
+    if (diagnostics == nullptr) return;
+    sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
+                     sycl::memory_scope::device,
+                     sycl::access::address_space::global_space>
+        counter(diagnostics[slot]);
+    counter.fetch_add(1U);
+}
+
+inline void cinel02_energy_add_device(
+    float* ledger, const std::uint32_t slot, const float value) noexcept {
+    if (ledger == nullptr || !sycl::isfinite(value)) return;
+    sycl::atomic_ref<float, sycl::memory_order::relaxed,
+                     sycl::memory_scope::device,
+                     sycl::access::address_space::global_space>
+        counter(ledger[slot]);
+    counter.fetch_add(value);
+}
+
+inline std::uint32_t cinel02_hazard_diag_slot_device(
+    const int projectile_z, const int projectile_a, const int target_z,
+    const std::uint32_t generation, const float energy_MeV_per_u) noexcept {
+    constexpr std::uint32_t offset = 64U;
+    constexpr std::uint32_t target_count = 2U;
+    constexpr std::uint32_t generation_count = 3U;
+    constexpr std::uint32_t energy_bin_count = 8U;
+    const auto mapped_species =
+        carbon::get_charged_species_idx(projectile_z, projectile_a);
+    const auto species = static_cast<std::uint32_t>(
+        mapped_species >= 0 ? mapped_species : 17);
+    const auto target = target_z == 1 ? 0U : 1U;
+    const auto generation_bin = sycl::min(generation, generation_count - 1U);
+    const auto finite_energy = sycl::isfinite(energy_MeV_per_u)
+                                   ? sycl::fmax(energy_MeV_per_u, 0.0F)
+                                   : 0.0F;
+    const auto energy_bin = sycl::min(
+        static_cast<std::uint32_t>(finite_energy / 50.0F), energy_bin_count - 1U);
+    return offset +
+           (((species * target_count + target) * generation_count + generation_bin) *
+                energy_bin_count +
+            energy_bin);
+}
+
+inline std::uint32_t cinel02_transition_diag_slot_device(
+    const int parent_z, const int child_z, const std::uint32_t generation) noexcept {
+    constexpr std::uint32_t offset = 928U;
+    constexpr std::uint32_t generation_count = 2U;
+    constexpr std::uint32_t parent_count = 6U;
+    constexpr std::uint32_t child_bucket_count = 7U;
+    if (parent_z < 1 || parent_z > 6) {
+        return std::numeric_limits<std::uint32_t>::max();
+    }
+    const auto child_bucket = static_cast<std::uint32_t>(
+        child_z >= 1 && child_z <= 6 ? child_z : 0);
+    const auto generation_bin = sycl::min(
+        generation, generation_count - 1U);
+    return offset + generation_bin * parent_count * child_bucket_count +
+           static_cast<std::uint32_t>(parent_z - 1) *
+               child_bucket_count + child_bucket;
+}
+
+inline std::uint32_t cinel02_parent_outcome_diag_slot_device(
+    const int parent_z, const int parent_status,
+    const std::uint32_t generation) noexcept {
+    constexpr std::uint32_t offset = 1012U;
+    constexpr std::uint32_t generation_count = 2U;
+    constexpr std::uint32_t parent_count = 6U;
+    if (parent_z < 1 || parent_z > 6) {
+        return std::numeric_limits<std::uint32_t>::max();
+    }
+    const auto killed = static_cast<std::uint32_t>(parent_status != 0);
+    const auto generation_bin = sycl::min(
+        generation, generation_count - 1U);
+    return offset + generation_bin * parent_count * 2U +
+           static_cast<std::uint32_t>(parent_z - 1) * 2U + killed;
+}
+
+inline std::uint32_t cinel02_be_channel_diag_slot_device(
+    const int parent_z, const int target_z, const std::uint32_t generation,
+    const float energy_MeV_per_u) noexcept {
+    constexpr std::uint32_t offset = 1132U;
+    if (parent_z < 4 || parent_z > 6) {
+        return std::numeric_limits<std::uint32_t>::max();
+    }
+    const auto generation_bin = sycl::min(generation, 1U);
+    const auto target_bin = target_z == 1 ? 0U : 1U;
+    const auto energy_bin = sycl::min(
+        static_cast<std::uint32_t>(sycl::fmax(energy_MeV_per_u, 0.0F) / 50.0F),
+        7U);
+    const auto parent_channel = static_cast<std::uint32_t>(parent_z - 4);
+    return offset + (((generation_bin * 2U + target_bin) * 8U + energy_bin) * 3U +
+                     parent_channel);
+}
+
+inline std::uint32_t cinel02_be_incident_diag_slot_device(
+    const int target_z, const std::uint32_t generation,
+    const float energy_MeV_per_u) noexcept {
+    constexpr std::uint32_t offset = 1324U;
+    const auto generation_bin = sycl::min(generation, 1U);
+    const auto target_bin = target_z == 1 ? 0U : 1U;
+    const auto energy_bin = sycl::min(
+        static_cast<std::uint32_t>(sycl::fmax(energy_MeV_per_u, 0.0F) / 50.0F),
+        7U);
+    return offset + ((generation_bin * 2U + target_bin) * 8U + energy_bin);
+}
+
+inline std::uint32_t cinel02_be_isotope_birth_diag_slot_device(
+    const int parent_z, const int target_z, const std::uint32_t generation,
+    const int be_mass_number) noexcept {
+    constexpr std::uint32_t offset = 1388U;
+    if (parent_z < 4 || parent_z > 6) {
+        return std::numeric_limits<std::uint32_t>::max();
+    }
+    const auto isotope = be_isotope_origin_category(4, be_mass_number);
+    if (isotope >= be_isotope_origin_category_count) {
+        return std::numeric_limits<std::uint32_t>::max();
+    }
+    const auto generation_bin = generation == 0U ? 0U : 1U;
+    const auto target_bin = target_z == 1 ? 0U : 1U;
+    const auto parent_channel = static_cast<std::uint32_t>(parent_z - 4);
+    return offset + (((generation_bin * 2U + target_bin) * 3U + parent_channel) * 4U +
+                     static_cast<std::uint32_t>(isotope));
+}
+
 inline std::uint32_t cinel02_find_event_device(
     const Cinel02EnergyNode* nodes, const std::uint32_t node_count,
     const std::uint32_t* offsets, const std::uint32_t* indices,
