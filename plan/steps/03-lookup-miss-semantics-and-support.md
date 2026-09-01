@@ -53,11 +53,12 @@ rate group 可在连续能区插值为非零，但 event replay 要求当前 `±
 - [x] 输出 `plan/artifacts/cinel02-rate-package-census-e200-g1/`；详见
   [03B-0 record](03b0-rate-package-coverage-census.md)。
 
-### 03B-1：Be-6 coverage root-cause gate（进行中）
+### 03B-1：Be-6 coverage root-cause gate（已完成）
 
-1. 追溯 raw exposure/contract/summary，区分缺少 6Be projectile campaign 与 compiler 过滤丢失。
-2. 禁止 isotope alias；没有独立 6Be 数据时不得静默补 rate 或 event。
-3. 如需补数据，先生成独立 6Be+H1/O16 exposure 与 CINPKG03 event package，再通过统计门禁。
+1. [x] 追溯 raw exposure/contract/summary，确认缺少 6Be projectile campaign，而非 compiler 过滤丢失。
+2. [x] 确认 Be-6 仅作为 C-12 direct child 生成（raw 计数 27,186），没有 Be-6 projectile interaction。
+3. [x] 保持 isotope alias 禁止；独立 6Be 数据补充前不静默填 rate/event。
+4. [ ] 03B-1R：补充独立 6Be+H1/O16 TOPAS exposure 与 CINPKG03 event package。
 
 ### 03B-2：support-aware rate consistency（待执行）
 
@@ -73,7 +74,7 @@ rate group 可在连续能区插值为非零，但 event replay 要求当前 `±
 - [x] miss 步保留 post-EM state，并通过 GPU 回归确认 status partition 与有效 replay
   统计不变。
 - [x] 03B-0 census 的区间 union/zero-rate 过滤 synthetic tests。
-- [ ] 03B-1 仍需完成 raw campaign/compiler root-cause 判定。
+- [x] 03B-1 raw campaign/compiler root-cause 判定完成；Be-6 数据补充转入 03B-1R。
 - [ ] 03B-2 仍需补充 rate-covered/event-uncovered、boundary hit、H/O 切换、G1/G2
   的 support-aware synthetic tests，以及逐 collision 的 support mask 验证。
 
