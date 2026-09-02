@@ -860,8 +860,7 @@ TransportResult transport_sycl(const TransportConfig& config,
     auto* dose_device = mem_tracker.allocate<DoseAtomicT>(number_of_bins);
     std::uint64_t* primary_survival_device = nullptr;
     std::uint64_t* inelastic_reaction_device = nullptr;
-#ifdef CARBON_VALIDATION_SCORERS
-    if (config.validation_scorers()) {
+    if (config.validation_scorers() || config.is_primary_attenuation_only_mode()) {
         primary_survival_device =
             mem_tracker.allocate<std::uint64_t>(number_of_bins);
         inelastic_reaction_device =
@@ -872,7 +871,6 @@ TransportResult transport_sycl(const TransportConfig& config,
         queue.fill(primary_survival_device, std::uint64_t{0}, number_of_bins);
         queue.fill(inelastic_reaction_device, std::uint64_t{0}, number_of_bins);
     }
-#endif
     auto* voxel_dose_device = enable_voxel_scoring
                                   ? mem_tracker.allocate<DoseAtomicT>(number_of_voxels)
                                   : nullptr;
