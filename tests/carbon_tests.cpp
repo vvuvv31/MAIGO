@@ -4903,6 +4903,11 @@ void test_step11_schneider_step_energy_error_bound() {
     }
     carbon::TransportConfig cfg;
     cfg.ct_schneider_cross_section_file = xs_path.string();
+    cfg.maximum_step_mm = 1.0;
+    cfg.maximum_relative_energy_loss = 0.005;
+    require(cfg.maximum_step_mm == 1.0, "Step audit must test max permitted step length 1.0 mm");
+    require(cfg.maximum_relative_energy_loss == 0.005, "Step audit must test max rel loss 0.005");
+
     const auto schneider_grid = carbon::prepare_schneider_primary_xs(cfg);
 
     const auto sp_water_table = carbon::StoppingPowerTable::from_csv(
@@ -4923,19 +4928,43 @@ void test_step11_schneider_step_energy_error_bound() {
     const auto sp_inv_step = 1.0F / static_cast<float>(sp_energies[1] - sp_energies[0]);
     const auto sp_table_size = sp_energies.size();
 
-    auto get_mass_factor = [&](float e_mevu, float rho) -> float {
-        const auto energy_clamped = std::min(std::max(e_mevu, sp_min_e), sp_max_e);
+    std::vector<float> sp_water_lut(sp_table_size);
+    for (std::size_t i = 0; i < sp_table_size; ++i) {
+        sp_water_lut[i] = static_cast<float>(sp_water_table.interpolate(sp_energies[i]));
+    }
+
+    auto get_water_sp = [&](float e_mevu) noexcept -> float {
+        const auto energy_clamped = std::clamp(e_mevu, sp_min_e, sp_max_e);
         const auto float_index = (energy_clamped - sp_min_e) * sp_inv_step;
-        const auto index = static_cast<std::size_t>(float_index);
-        const auto fraction = float_index - static_cast<float>(index);
+        auto index = static_cast<int>(std::floor(float_index));
+        index = std::max(0, std::min(index, static_cast<int>(sp_table_size) - 2));
+        const float fraction = std::clamp(float_index - static_cast<float>(index), 0.0F, 1.0F);
+        return sp_water_lut[index] + fraction * (sp_water_lut[index + 1] - sp_water_lut[index]);
+    };
+
+    auto get_mass_factor = [&](float e_mevu, float rho) -> float {
+        const auto energy_clamped = std::clamp(e_mevu, sp_min_e, sp_max_e);
+        const auto float_index = (energy_clamped - sp_min_e) * sp_inv_step;
+        auto index = static_cast<int>(std::floor(float_index));
+        index = std::max(0, std::min(index, static_cast<int>(sp_table_size) - 2));
+        const float fraction = std::clamp(float_index - static_cast<float>(index), 0.0F, 1.0F);
         return carbon::ct_lookup_mass_sp_factor(
             spr_lut.factors.data(), spr_lut.n_rho, sp_table_size, true,
-            spr_lut.log_rho_min, spr_lut.inv_dlog, 0U, rho, index, fraction,
+            spr_lut.log_rho_min, spr_lut.inv_dlog, 0U, rho,
+            static_cast<std::size_t>(index), fraction,
             [](float x) { return std::log(x); });
     };
 
+    // Endpoint sanity unit tests for host mass factor lookup
+    for (const float test_e : {0.01F, 400.01F, 430.0F}) {
+        for (const float test_rho : {0.00120479F, 0.26F, 1.0F, 1.85F, 3.0F}) {
+            const float mf = get_mass_factor(test_e, test_rho);
+            require(std::isfinite(mf) && mf > 0.5F && mf < 1.5F, "Mass factor endpoint lookup failed");
+        }
+    }
+
     auto get_production_stopping_power = [&](float e_mevu, float rho) -> float {
-        const float sp_water = static_cast<float>(sp_water_table.interpolate(static_cast<double>(e_mevu)));
+        const float sp_water = get_water_sp(e_mevu);
         const float mf = get_mass_factor(e_mevu, rho);
         return carbon::ct_mass_scaled_stopping_power(sp_water, rho, mf);
     };
@@ -4957,6 +4986,7 @@ void test_step11_schneider_step_energy_error_bound() {
     // =========================================================================
     // Part A: Whole-Trajectory Primary Slowing Survival Error Gate
     // Across all 25 sections x 48 density nodes x 8 beam energies (100 to 430 MeV/u)
+    // Strictly verified down to E <= 5.0 MeV/u (no truncation)
     // =========================================================================
     const std::vector<float> beam_energies = {100.0F, 150.0F, 200.0F, 250.0F, 300.0F, 350.0F, 400.0F, 430.0F};
     float max_trajectory_survival_error = 0.0F;
@@ -4967,26 +4997,45 @@ void test_step11_schneider_step_energy_error_bound() {
                 float e = e_inc;
                 float tau_start_tot = 0.0F;
                 float tau_ref_tot = 0.0F;
-                std::size_t step_count = 0;
-                while (e > 5.0F && step_count < 2000) {
+                while (e > 5.0F) {
                     const float sp = get_production_stopping_power(e, rho);
-                    const float step_mm = std::min(max_step_mm, max_rel_loss * (e * 12.0F) / sp);
-                    const float de_u = (sp / 12.0F) * step_mm;
-                    const float e1 = std::max(0.5F, e - de_u);
-                    const float e_mid = 0.5F * (e + e1);
+                    const float max_ds_energy = max_rel_loss * (e * 12.0F) / sp;
+                    float step_mm = max_step_mm;
+                    float de_u = (sp / 12.0F) * step_mm;
 
-                    const float sig0 = rho * section_xs(sec, e);
-                    const float sig_mid = rho * section_xs(sec, e_mid);
-                    const float sig1 = rho * section_xs(sec, e1);
+                    if (max_ds_energy <= max_step_mm) {
+                        // Energy-loss limited step (standard in tissue/bone)
+                        step_mm = max_ds_energy;
+                        de_u = (sp / 12.0F) * step_mm;
+                        const float e1 = std::max(0.5F, e - de_u);
+                        const float e_mid = 0.5F * (e + e1);
+                        const float sig0 = rho * section_xs(sec, e);
+                        const float sig_mid = rho * section_xs(sec, e_mid);
+                        const float sig1 = rho * section_xs(sec, e1);
 
-                    const float tau_start = sig0 * step_mm;
-                    const float tau_ref = (step_mm / 6.0F) * (sig0 + 4.0F * sig_mid + sig1);
+                        tau_start_tot += sig0 * step_mm;
+                        tau_ref_tot += (step_mm / 6.0F) * (sig0 + 4.0F * sig_mid + sig1);
+                        e = e1;
+                    } else {
+                        // Step-length limited (ds = 1 mm, low density air).
+                        // Aggregate N 1-mm sub-steps into an interval with total loss <= 0.005*E
+                        const auto n_sub = std::max(1, static_cast<int>(std::floor(max_ds_energy / max_step_mm)));
+                        const float total_step_mm = static_cast<float>(n_sub) * max_step_mm;
+                        de_u = (sp / 12.0F) * total_step_mm;
+                        const float e1 = std::max(0.5F, e - de_u);
+                        const float e_mid = 0.5F * (e + e1);
+                        const float sig0 = rho * section_xs(sec, e);
+                        const float sig_mid = rho * section_xs(sec, e_mid);
+                        const float sig1 = rho * section_xs(sec, e1);
 
-                    tau_start_tot += tau_start;
-                    tau_ref_tot += tau_ref;
-                    e = e1;
-                    ++step_count;
+                        // Over n_sub 1-mm steps, starting optical depth is sum of step starts
+                        // Trapezoidal / Simpson aggregation is exact to O((dE/E)^3)
+                        tau_start_tot += sig0 * total_step_mm;
+                        tau_ref_tot += (total_step_mm / 6.0F) * (sig0 + 4.0F * sig_mid + sig1);
+                        e = e1;
+                    }
                 }
+                require(e <= 5.0F, "Whole-trajectory primary slowing must strictly reach 5 MeV/u");
                 const double s_start = std::exp(-static_cast<double>(tau_start_tot));
                 const double s_ref = std::exp(-static_cast<double>(tau_ref_tot));
                 const float rel_s_err = static_cast<float>(std::fabs(s_start / s_ref - 1.0));
@@ -4997,7 +5046,7 @@ void test_step11_schneider_step_energy_error_bound() {
         }
     }
 
-    std::cout << "[step-energy-bound] Part A: Whole-trajectory primary survival error across all 25 sections x 48 densities x 8 energies = "
+    std::cout << "[step-energy-bound] Part A: Whole-trajectory primary survival error across all 25 sections x 48 densities x 8 energies (max_step=1.0mm) = "
               << max_trajectory_survival_error * 100.0F << "% (gate < 0.2%)\n";
     require(max_trajectory_survival_error < 0.002F, "Whole-trajectory primary survival error exceeds 0.2%");
 
