@@ -4369,6 +4369,199 @@ void test_step09_schneider_primary_xs_host_path() {
                  "prepare_schneider_primary_xs values must match resampled table");
 }
 
+void test_step10_schneider_primary_xs_device_path() {
+    // 1. Single layout index helper verification:
+    // Contiguous [section][energy]: index = section * energy_nodes + energy_index
+    require(carbon::schneider_cross_section_index(0, 0, 100) == 0, "Index (0, 0) must be 0");
+    require(carbon::schneider_cross_section_index(1, 0, 100) == 100, "Index (1, 0) must be 100");
+    require(carbon::schneider_cross_section_index(24, 99, 100) == 2499, "Index (24, 99) must be 2499");
+
+    // 2. Sentinel table test on GPU and CPU:
+    // value(section, e_idx) = 100000.0f * section + e_idx
+    constexpr std::uint32_t kSentinelSections = 25;
+    constexpr std::uint32_t kSentinelEnergies = 101; // 0 to 500 MeV/u, dE = 5.0
+    constexpr float kSentinelEmin = 0.0F;
+    constexpr float kSentinelInvDE = 1.0F / 5.0F; // 0.2
+    std::vector<float> sentinel_table(kSentinelSections * kSentinelEnergies);
+    for (std::uint32_t s = 0; s < kSentinelSections; ++s) {
+        for (std::uint32_t e = 0; e < kSentinelEnergies; ++e) {
+            sentinel_table[carbon::schneider_cross_section_index(s, e, kSentinelEnergies)] =
+                100000.0F * static_cast<float>(s) + static_cast<float>(e);
+        }
+    }
+
+    // Build comprehensive queries across all 25 sections:
+    // - exact nodes (e_idx = 0, 1, 25, 50, 75, 100)
+    // - midpoints (e_idx = 0.5, 10.5, 49.5, 99.5)
+    // - endpoints (0.0 and 500.0)
+    std::vector<std::uint32_t> query_sections;
+    std::vector<float> query_energies;
+    std::vector<float> query_densities;
+    std::vector<float> expected_host_vals;
+
+    for (std::uint32_t s = 0; s < kSentinelSections; ++s) {
+        // Exact node queries (rho = 1.0)
+        for (std::uint32_t node : {0U, 1U, 25U, 50U, 75U, 100U}) {
+            const float energy = static_cast<float>(node) * 5.0F;
+            query_sections.push_back(s);
+            query_energies.push_back(energy);
+            query_densities.push_back(1.0F);
+            expected_host_vals.push_back(100000.0F * static_cast<float>(s) + static_cast<float>(node));
+        }
+        // Midpoint queries (rho = 1.0)
+        for (float frac_node : {0.5F, 10.5F, 49.5F, 99.5F}) {
+            const float energy = frac_node * 5.0F;
+            query_sections.push_back(s);
+            query_energies.push_back(energy);
+            query_densities.push_back(1.0F);
+            expected_host_vals.push_back(100000.0F * static_cast<float>(s) + frac_node);
+        }
+    }
+
+    // Density test queries:
+    // rho in {0.001, 0.3, 1.0, 2.0}
+    for (std::uint32_t s : {1U, 8U, 20U}) {
+        const float test_energy = 200.0F; // node 40
+        const float expected_mass_rate = 100000.0F * static_cast<float>(s) + 40.0F;
+        for (float rho : {0.001F, 0.3F, 1.0F, 2.0F}) {
+            query_sections.push_back(s);
+            query_energies.push_back(test_energy);
+            query_densities.push_back(rho);
+            expected_host_vals.push_back(rho * expected_mass_rate);
+        }
+    }
+
+    // First, verify host helper matches expectations exactly
+    for (std::size_t i = 0; i < query_sections.size(); ++i) {
+        const float host_eval = carbon::schneider_primary_macroscopic_xs(
+            sentinel_table.data(), kSentinelSections, kSentinelEnergies,
+            kSentinelEmin, kSentinelInvDE, query_sections[i],
+            query_energies[i], query_densities[i]);
+        require_near(host_eval, expected_host_vals[i], 1e-4,
+                     "Host sentinel evaluation mismatch at query " + std::to_string(i));
+    }
+
+#ifdef CARBON_HAS_SYCL
+    if (is_sycl_available()) {
+        // GPU sentinel lookup batch
+        const auto device_results = carbon::test_schneider_device_lookup_batch(
+            sentinel_table, kSentinelSections, kSentinelEnergies,
+            kSentinelEmin, kSentinelInvDE, query_sections,
+            query_energies, query_densities, "default");
+        require(device_results.size() == expected_host_vals.size(),
+                "Device results size must match query count");
+        for (std::size_t i = 0; i < device_results.size(); ++i) {
+            require_near(device_results[i], expected_host_vals[i], 1e-4,
+                         "GPU sentinel lookup mismatch vs expected at query " + std::to_string(i));
+        }
+
+        // 3. Real Schneider table GPU lookup equivalence test
+        carbon::TransportConfig real_cfg;
+        real_cfg.ct_schneider_cross_section_file = "data/schneider/c12_schneider_inelastic_mass_xs.csv";
+        std::vector<double> real_transport_energies(400);
+        for (std::size_t i = 0; i < 400; ++i) {
+            real_transport_energies[i] = 1.0 + i * 1.0; // 1.0 to 400.0 MeV/u (within [0.5, 430.0])
+        }
+        const auto real_grid = carbon::prepare_schneider_primary_xs(real_cfg, real_transport_energies);
+        const float real_emin = static_cast<float>(real_transport_energies.front());
+        const float real_inv_de = 1.0F / static_cast<float>(real_transport_energies[1] - real_transport_energies[0]);
+
+        std::vector<std::uint32_t> real_q_sec;
+        std::vector<float> real_q_e;
+        std::vector<float> real_q_rho;
+        std::vector<float> real_expected;
+
+        for (std::uint32_t s = 0; s < 25; ++s) {
+            for (float e : {1.0F, 50.0F, 100.0F, 200.0F, 300.0F, 350.0F, 400.0F}) {
+                for (float rho : {0.001F, 0.3F, 1.0F, 2.0F}) {
+                    real_q_sec.push_back(s);
+                    real_q_e.push_back(e);
+                    real_q_rho.push_back(rho);
+                    const float host_macro = carbon::schneider_primary_macroscopic_xs(
+                        real_grid.mass_xs_per_mm_at_1g_cm3.data(), 25,
+                        static_cast<std::uint32_t>(real_grid.energy_nodes()),
+                        real_emin, real_inv_de, s, e, rho);
+                    real_expected.push_back(host_macro);
+                }
+            }
+        }
+
+        const auto real_device_results = carbon::test_schneider_device_lookup_batch(
+            real_grid.mass_xs_per_mm_at_1g_cm3, 25,
+            static_cast<std::uint32_t>(real_grid.energy_nodes()),
+            real_emin, real_inv_de, real_q_sec, real_q_e, real_q_rho, "default");
+        require(real_device_results.size() == real_expected.size(),
+                "Real table device results size mismatch");
+        for (std::size_t i = 0; i < real_device_results.size(); ++i) {
+            require_near(real_device_results[i], real_expected[i], 1e-6,
+                         "GPU real Schneider table lookup mismatch at query " + std::to_string(i));
+        }
+
+        // 4. Invalid dimensions / bounds checks fail-fast before launch
+        require_throws<std::invalid_argument>(
+            [&]() {
+                (void)carbon::test_schneider_device_lookup_batch(
+                    sentinel_table, 24, kSentinelEnergies, kSentinelEmin, kSentinelInvDE,
+                    query_sections, query_energies, query_densities, "default");
+            },
+            "Non-25 section_count must throw invalid_argument");
+    }
+#endif
+
+    // 5. CCTG integration test:
+    // Create a tiny synthetic CCTG file (1x1x1) with Schneider material_id
+    {
+        const auto temp_cctg_dir = std::filesystem::temp_directory_path() / "test_cctg_schneider";
+        std::filesystem::create_directories(temp_cctg_dir);
+        const auto cctg_file = temp_cctg_dir / "tiny_schneider.cctg";
+        carbon::CtGrid test_grid;
+        test_grid.file_version = carbon::CtGrid::version_v2;
+        test_grid.nx = 1;
+        test_grid.ny = 1;
+        test_grid.nz = 1;
+        test_grid.spacing_x_mm = 1.0;
+        test_grid.spacing_y_mm = 1.0;
+        test_grid.spacing_z_mm = 1.0;
+        test_grid.origin_x_mm = 0.0;
+        test_grid.origin_y_mm = 0.0;
+        test_grid.origin_z_mm = 0.0;
+        test_grid.density_g_per_cm3 = {1.0F};
+        test_grid.material_id = {8}; // section 8 (soft tissue)
+        test_grid.mass_sp_za_rel.resize(25, 1.0);
+        test_grid.write_binary(cctg_file);
+
+        // tiny Schneider CCTG + nuclear_model=none + no XS -> PASS
+        const auto cfg_em_file = temp_cctg_dir / "em_cctg.txt";
+        {
+            std::ofstream out(cfg_em_file);
+            out << "enable_ct_grid: true\n"
+                << "ct_grid_file: " << cctg_file.string() << "\n"
+                << "nuclear_model: none\n"
+                << "number_of_histories: 1\n"
+                << "initial_energy_MeVu: 100.0\n";
+        }
+        const auto loaded_em = carbon::load_config(cfg_em_file);
+        require(loaded_em.nuclear_model == "none", "Loaded CCTG EM config must have nuclear_model: none");
+
+        // tiny Schneider CCTG + nuclear_model=geant4 + no XS -> FAIL
+        const auto cfg_nuc_file = temp_cctg_dir / "nuc_cctg.txt";
+        {
+            std::ofstream out(cfg_nuc_file);
+            out << "enable_ct_grid: true\n"
+                << "ct_grid_file: " << cctg_file.string() << "\n"
+                << "nuclear_model: geant4\n"
+                << "number_of_histories: 1\n"
+                << "initial_energy_MeVu: 100.0\n";
+        }
+        require_throws<std::runtime_error>(
+            [&]() { (void)carbon::load_config(cfg_nuc_file); },
+            "Schneider CCTG with nuclear_model=geant4 and no XS must fail load_config");
+
+        std::filesystem::remove_all(temp_cctg_dir);
+    }
+}
+
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -4475,6 +4668,7 @@ int main(int argc, char** argv) {
 #ifdef CARBON_HAS_SYCL
         run("test_sycl_layered_slab_range_shift", test_sycl_layered_slab_range_shift);
 #endif
+        run("test_step10_schneider_primary_xs_device_path", test_step10_schneider_primary_xs_device_path);
         std::cout << "All carbon_tests passed\n";
         return EXIT_SUCCESS;
     } catch (const std::exception& error) {

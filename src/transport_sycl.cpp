@@ -152,6 +152,13 @@ TransportResult transport_sycl(const TransportConfig& config,
         }
     };
 
+    float* schneider_primary_xs_device = nullptr;
+    std::uint32_t schneider_xs_sections = 0;
+    std::uint32_t schneider_xs_energies = 0;
+    float schneider_xs_e_min = 0.0F;
+    float schneider_xs_inv_dE = 0.0F;
+    bool use_schneider_primary_xs = false;
+
     Cinel02DeviceInteraction* cinel02_interactions_device = nullptr;
     Cinel02DeviceProduct* cinel02_products_device = nullptr;
     Cinel02EnergyNode* cinel02_energy_nodes_device = nullptr;
@@ -614,16 +621,60 @@ TransportResult transport_sycl(const TransportConfig& config,
         use_ct_material_xs = !config.ct_bone_cross_section_file.empty() ||
                              !config.ct_schneider_cross_section_file.empty();
 
-        const bool use_schneider_primary_xs =
+        use_schneider_primary_xs =
             ((ct_material_ids_are_schneider_sections && grid.mass_sp_za_rel.size() == 25) ||
              !config.ct_schneider_file.empty() ||
              !config.ct_schneider_cross_section_file.empty()) &&
             config.nuclear_model != "none";
 
-        std::optional<SchneiderResampledCrossSectionGrid> schneider_primary_xs_host;
         if (use_schneider_primary_xs) {
-            schneider_primary_xs_host.emplace(
-                prepare_schneider_primary_xs(config, table_energies));
+            // Validate all voxel material_id < 25 before kernel launch
+            for (std::size_t i = 0; i < grid.material_id.size(); ++i) {
+                if (grid.material_id[i] >= SchneiderResampledCrossSectionGrid::kExpectedSections) {
+                    throw std::runtime_error(
+                        "Invalid Schneider material_id " +
+                        std::to_string(static_cast<unsigned>(grid.material_id[i])) +
+                        " at voxel " + std::to_string(i) + " (must be < 25)");
+                }
+            }
+
+            const auto schneider_host_grid =
+                prepare_schneider_primary_xs(config, table_energies);
+            schneider_xs_sections =
+                static_cast<std::uint32_t>(SchneiderResampledCrossSectionGrid::kExpectedSections);
+            schneider_xs_energies =
+                static_cast<std::uint32_t>(schneider_host_grid.energy_nodes());
+            schneider_xs_e_min = static_cast<float>(table_energies.front());
+            const float dE = static_cast<float>(table_energies[1] - table_energies[0]);
+            schneider_xs_inv_dE = 1.0F / dE;
+
+            const std::size_t total_elements =
+                static_cast<std::size_t>(schneider_xs_sections) * schneider_xs_energies;
+            if (schneider_host_grid.mass_xs_per_mm_at_1g_cm3.size() != total_elements) {
+                throw std::runtime_error("Schneider cross section host payload size mismatch");
+            }
+            if (schneider_xs_sections != 25) {
+                throw std::runtime_error("schneider_xs_sections must be exactly 25");
+            }
+            if (schneider_xs_energies != table_energies.size()) {
+                throw std::runtime_error("schneider_xs_energies must match transport grid size");
+            }
+
+            schneider_primary_xs_device = sycl::malloc_device<float>(total_elements, queue);
+            if (schneider_primary_xs_device == nullptr) {
+                throw std::runtime_error(
+                    "Failed to allocate device memory for Schneider cross section table");
+            }
+            queue.copy(schneider_host_grid.mass_xs_per_mm_at_1g_cm3.data(),
+                       schneider_primary_xs_device, total_elements).wait_and_throw();
+
+            // Log table dimensions, byte count, source file once
+            std::cout << "[schneider-primary-xs] device upload: "
+                      << schneider_xs_sections << " sections x "
+                      << schneider_xs_energies << " energies ("
+                      << total_elements * sizeof(float) << " bytes), E_min="
+                      << schneider_xs_e_min << " MeV/u, inv_dE=" << schneider_xs_inv_dE
+                      << " (source: " << config.ct_schneider_cross_section_file << ")\n";
         }
 
         if (use_ct_mass_sp) {
@@ -4389,6 +4440,7 @@ TransportResult transport_sycl(const TransportConfig& config,
     free_device(ct_sp_device);
     free_device(ct_xs_device);
     free_device(ct_ref_density_device);
+    free_device(schneider_primary_xs_device);
 
     TransportResult result;
     result.backend = "sycl-" + resolved_device_name +

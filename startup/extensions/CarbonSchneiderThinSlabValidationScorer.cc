@@ -289,6 +289,7 @@ void CarbonSchneiderThinSlabValidationScorer::WriteResultsToJson() {
         out << "      \"unreacted_count\": " << n_surv << ",\n";
         out << "      \"survival_fraction\": " << s_mc << ",\n";
         out << "      \"survival_std_err\": " << s_err << ",\n";
+        out << "      \"energy_sample_count\": " << n_samples << ",\n";
         out << "      \"mean_energy_mevu\": " << mean_e << ",\n";
         out << "      \"std_energy_mevu\": " << std_e << "\n";
         out << "    }" << (k + 1 < num_depth_bins_ ? ",\n" : "\n");

@@ -1,4 +1,5 @@
 #include "carbon/device.hpp"
+#include "carbon/cross_section.hpp"
 #include "carbon/transport.hpp"
 
 #ifdef CARBON_HAS_SYCL
@@ -125,6 +126,78 @@ std::string describe_sycl_device(const std::string& device_name) {
     description += " atomic64=";
     description += device.has(sycl::aspect::atomic64) ? "yes" : "no";
     return description;
+}
+
+std::vector<float> test_schneider_device_lookup_batch(
+    const std::vector<float>& host_table,
+    std::uint32_t section_count,
+    std::uint32_t energy_nodes,
+    float e_min,
+    float inv_dE,
+    const std::vector<std::uint32_t>& query_sections,
+    const std::vector<float>& query_energies,
+    const std::vector<float>& query_densities,
+    const std::string& device_preference) {
+    if (query_sections.size() != query_energies.size() ||
+        query_sections.size() != query_densities.size()) {
+        throw std::invalid_argument("Query buffer dimension mismatch");
+    }
+    const std::size_t n_queries = query_sections.size();
+    if (n_queries == 0) {
+        return {};
+    }
+    const std::size_t table_elements = static_cast<std::size_t>(section_count) * energy_nodes;
+    if (host_table.size() != table_elements) {
+        throw std::invalid_argument("Host table size mismatch");
+    }
+    if (section_count != 25) {
+        throw std::invalid_argument("section_count must be 25");
+    }
+    if (energy_nodes < 2) {
+        throw std::invalid_argument("energy_nodes must be >= 2");
+    }
+
+    auto queue = make_sycl_queue(device_preference);
+
+    float* table_device = sycl::malloc_device<float>(table_elements, queue);
+    std::uint32_t* sections_device = sycl::malloc_device<std::uint32_t>(n_queries, queue);
+    float* energies_device = sycl::malloc_device<float>(n_queries, queue);
+    float* densities_device = sycl::malloc_device<float>(n_queries, queue);
+    float* results_device = sycl::malloc_device<float>(n_queries, queue);
+
+    if (!table_device || !sections_device || !energies_device || !densities_device || !results_device) {
+        if (table_device) sycl::free(table_device, queue);
+        if (sections_device) sycl::free(sections_device, queue);
+        if (energies_device) sycl::free(energies_device, queue);
+        if (densities_device) sycl::free(densities_device, queue);
+        if (results_device) sycl::free(results_device, queue);
+        throw std::runtime_error("Failed to allocate device memory for Schneider lookup batch");
+    }
+
+    queue.copy(host_table.data(), table_device, table_elements);
+    queue.copy(query_sections.data(), sections_device, n_queries);
+    queue.copy(query_energies.data(), energies_device, n_queries);
+    queue.copy(query_densities.data(), densities_device, n_queries).wait_and_throw();
+
+    queue.submit([&](sycl::handler& cgh) {
+        cgh.parallel_for(sycl::range<1>{n_queries}, [=](sycl::id<1> idx) {
+            const auto i = idx[0];
+            results_device[i] = schneider_primary_macroscopic_xs(
+                table_device, section_count, energy_nodes, e_min, inv_dE,
+                sections_device[i], energies_device[i], densities_device[i]);
+        });
+    }).wait_and_throw();
+
+    std::vector<float> results(n_queries);
+    queue.copy(results_device, results.data(), n_queries).wait_and_throw();
+
+    sycl::free(table_device, queue);
+    sycl::free(sections_device, queue);
+    sycl::free(energies_device, queue);
+    sycl::free(densities_device, queue);
+    sycl::free(results_device, queue);
+
+    return results;
 }
 
 }  // namespace carbon

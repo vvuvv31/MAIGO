@@ -86,6 +86,73 @@ struct TransportConfig;
     const TransportConfig& config,
     const std::vector<double>& transport_energies_MeVu);
 
+// Single canonical layout indexing helper shared by host and GPU device code.
+// Contiguous layout: [section][energy]
+// index = section_id * energy_nodes + energy_index
+inline constexpr std::size_t schneider_cross_section_index(
+    std::size_t section_id,
+    std::size_t energy_index,
+    std::size_t energy_nodes) noexcept {
+    return section_id * energy_nodes + energy_index;
+}
+
+// Evaluates mass cross section rate (mm^-1 / (g/cm^3)) via linear interpolation on host or device.
+inline float schneider_primary_mass_xs(
+    const float* __restrict table,
+    std::uint32_t section_count,
+    std::uint32_t energy_nodes,
+    float e_min,
+    float inv_dE,
+    std::uint32_t section_id,
+    float energy_mevu) noexcept {
+    if (table == nullptr || section_id >= section_count || energy_nodes < 2) {
+        return 0.0F;
+    }
+    const float f_node = (energy_mevu - e_min) * inv_dE;
+    const auto max_node = static_cast<std::uint32_t>(energy_nodes - 1);
+    if (f_node <= 0.0F) {
+        return table[schneider_cross_section_index(section_id, 0, energy_nodes)];
+    }
+    if (f_node >= static_cast<float>(max_node)) {
+        return table[schneider_cross_section_index(section_id, max_node, energy_nodes)];
+    }
+    const auto idx0 = static_cast<std::uint32_t>(f_node);
+    const auto idx1 = idx0 + 1U;
+    const float frac = f_node - static_cast<float>(idx0);
+    const float v0 = table[schneider_cross_section_index(section_id, idx0, energy_nodes)];
+    const float v1 = table[schneider_cross_section_index(section_id, idx1, energy_nodes)];
+    return v0 + frac * (v1 - v0);
+}
+
+// Evaluates macroscopic cross section Sigma (mm^-1) = density_g_cm3 * mass_rate on host or device.
+// Density multiplication occurs exactly once at runtime; no reference-density division is performed.
+inline float schneider_primary_macroscopic_xs(
+    const float* __restrict table,
+    std::uint32_t section_count,
+    std::uint32_t energy_nodes,
+    float e_min,
+    float inv_dE,
+    std::uint32_t section_id,
+    float energy_mevu,
+    float density_g_cm3) noexcept {
+    return density_g_cm3 * schneider_primary_mass_xs(
+        table, section_count, energy_nodes, e_min, inv_dE, section_id, energy_mevu);
+}
+
+#ifdef CARBON_HAS_SYCL
+// GPU batch evaluation helper for testing Schneider primary cross-section table lookup & density scaling.
+[[nodiscard]] std::vector<float> test_schneider_device_lookup_batch(
+    const std::vector<float>& host_table,
+    std::uint32_t section_count,
+    std::uint32_t energy_nodes,
+    float e_min,
+    float inv_dE,
+    const std::vector<std::uint32_t>& query_sections,
+    const std::vector<float>& query_energies,
+    const std::vector<float>& query_densities,
+    const std::string& device_preference = "default");
+#endif
+
 class IonCrossSectionTables {
 public:
     static constexpr std::size_t mass_stride = 32;
