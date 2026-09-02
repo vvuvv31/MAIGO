@@ -62,7 +62,7 @@ The executor updates only the `Status` column and the execution log. Never rewri
 | [05](steps/05-material-truth-gate.md) | DONE | Automated MAIGO-parser versus TOPAS material audit | 04 |
 | [06](steps/06-topas-inelastic-xs-dump.md) | DONE | Deterministic C12 section/element inelastic XS dump | 05 |
 | [07](steps/07-xs-compiler-and-metadata.md) | DONE | Audited Schneider mass-rate data product | 06 |
-| [08](steps/08-thin-slab-xs-validation.md) | TODO | Independent TOPAS attenuation validation of XS | 07 |
+| [08](steps/08-thin-slab-xs-validation.md) | DONE | Independent TOPAS attenuation validation of XS | 07 |
 | [09](steps/09-primary-xs-host-path.md) | TODO | Strict config/load/resample path for 25-section C12 XS | 08 |
 | [10](steps/10-primary-xs-device-path.md) | TODO | Correct device upload/index/density scaling | 09 |
 | [11](steps/11-voxel-boundary-hazard.md) | TODO | Piecewise-material optical-depth stepping | 10 |
@@ -162,4 +162,6 @@ YYYY-MM-DD HH:MM TZ | step NN | OLD -> NEW | commit/hash or blocker | evidence p
 2026-09-02 15:56 CST | step 06 | TODO -> DONE | fix(topas): harden Schneider C12 XS provenance and process locking | /mnt/sda/wuwei/maigo-ct-schneider/evidence/step-04/
 2026-09-02 16:19 CST | step 07 | TODO -> DONE | feat(ct): compile Schneider primary-carbon nuclear rates | /mnt/sda/wuwei/maigo-ct-schneider/evidence/step-07/
 2026-09-02 16:26 CST | step 07 | IN_PROGRESS -> DONE | data(ct): regenerate audited Schneider C12 rate products | /mnt/sda/wuwei/maigo-ct-schneider/evidence/step-07/
+2026-09-02 16:43 CST | step 08 | TODO -> IN_PROGRESS | start independent TOPAS thin-slab MC attenuation validation | /mnt/sda/wuwei/maigo-ct-schneider/evidence/step-08/
+2026-09-02 17:10 CST | step 08 | IN_PROGRESS -> DONE | test(ct): validate Schneider C12 attenuation with TOPAS thin slabs | /mnt/sda/wuwei/maigo-ct-schneider/evidence/step-08/
 ```
