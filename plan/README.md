@@ -57,10 +57,10 @@ The executor updates only the `Status` column and the execution log. Never rewri
 | [00](steps/00-freeze-and-provenance.md) | FROZEN | Freeze water/secondary baseline and provenance | none |
 | [01](steps/01-current-state-audit.md) | DONE | Audited local implementation map and conflict decision | 00 |
 | [02](steps/02-schneider-material-model.md) | DONE | Host-side 13-element/25-section data model and parser | 01 |
-| [03](steps/03-schneider-parser-tests.md) | TODO | Boundary, malformed-input, and golden parser tests | 02 |
-| [04](steps/04-topas-material-truth-dump.md) | TODO | TOPAS/Geant4 material truth extension and synthetic inputs | 03 |
-| [05](steps/05-material-truth-gate.md) | TODO | Automated MAIGO-parser versus TOPAS material audit | 04 |
-| [06](steps/06-topas-inelastic-xs-dump.md) | TODO | Deterministic C12 section/element inelastic XS dump | 05 |
+| [03](steps/03-schneider-parser-tests.md) | DONE | Boundary, malformed-input, and golden parser tests | 02 |
+| [04](steps/04-topas-material-truth-dump.md) | DONE | TOPAS/Geant4 material truth extension and synthetic inputs | 03 |
+| [05](steps/05-material-truth-gate.md) | DONE | Automated MAIGO-parser versus TOPAS material audit | 04 |
+| [06](steps/06-topas-inelastic-xs-dump.md) | DONE | Deterministic C12 section/element inelastic XS dump | 05 |
 | [07](steps/07-xs-compiler-and-metadata.md) | TODO | Audited Schneider mass-rate data product | 06 |
 | [08](steps/08-thin-slab-xs-validation.md) | TODO | Independent TOPAS attenuation validation of XS | 07 |
 | [09](steps/09-primary-xs-host-path.md) | TODO | Strict config/load/resample path for 25-section C12 XS | 08 |
@@ -156,4 +156,8 @@ YYYY-MM-DD HH:MM TZ | step NN | OLD -> NEW | commit/hash or blocker | evidence p
 2026-09-02 14:42 CST | step 00 | TODO -> FROZEN | chore(ct): freeze Schneider workstream provenance | /mnt/sda/wuwei/maigo-ct-schneider/evidence/step-00/
 2026-09-02 15:01 CST | step 01 | TODO -> DONE | audit completed; evidence in /mnt/sda/wuwei/maigo-ct-schneider/evidence/step-01/
 2026-09-02 15:15 CST | step 02 | TODO -> DONE | feat(ct): parse Schneider elemental material composition | tests/carbon_tests.cpp
+2026-09-02 15:30 CST | step 03 | TODO -> DONE | test(ct): add Schneider parser hardening and domain sweep tests | tests/carbon_tests.cpp
+2026-09-02 15:40 CST | step 04 | TODO -> DONE | feat(topas): dump Schneider material truth | /mnt/sda/wuwei/maigo-ct-schneider/evidence/step-03/
+2026-09-02 15:42 CST | step 05 | TODO -> DONE | audit(ct): 25/25 section MAIGO ↔ TOPAS material truth gate passed | plan/evidence-step03.sha256
+2026-09-02 15:56 CST | step 06 | TODO -> DONE | fix(topas): harden Schneider C12 XS provenance and process locking | /mnt/sda/wuwei/maigo-ct-schneider/evidence/step-04/
 ```

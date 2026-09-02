@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """
-Step 04 Verification Tool:
+Step 06 (labeled step-04 in legacy artifact path) Verification Tool:
 Verifies C12 inelastic cross sections across all 25 Schneider sections.
 Checks:
-  1. Header format and table parseability via CrossSectionTable::from_schneider_csv specification.
-  2. Element partial macroscopic sum closure: sum_j Sigma_j(E) == Sigma_total(E) for all sections & energies.
-  3. Non-negativity, physical monotonicity, and asymptotic plateau.
-  4. Deterministic thin-slab primary survival attenuation benchmark.
+  1. Process attachment provenance: exactly 1 inelastic process attached to C12 (ionInelastic).
+  2. Header format and table parseability via CrossSectionTable::from_schneider_csv specification.
+  3. Element partial macroscopic sum closure: sum_j Sigma_j(E) == Sigma_total(E) for all sections & energies.
+  4. Non-negativity, physical monotonicity, and asymptotic plateau.
+  5. Deterministic attenuation prediction sanity table (not independent MC transport).
 Generates:
   - evidence/step-04/inelastic-xs-comparison.json
   - evidence/step-04/run-manifest.json
@@ -59,13 +60,20 @@ def main():
     energy_points = len(rows)
     print(f"CSV validated: {energy_points} energy rows (0.5 to 430.0 MeV/u), 25 section columns.")
 
-    # 2. Validate JSON & Partial Sum Conservation
+    # 2. Validate JSON, Process Provenance & Partial Sum Conservation
     with open(json_path) as f:
         data = json.load(f)
 
     assert data["schema_version"] == 1
     assert data["projectile"] == "C12"
     assert len(data["sections"]) == 25
+
+    # Check Process Provenance
+    prov = data.get("process_provenance", {})
+    assert prov.get("process_name") == "ionInelastic", f"Unexpected process name: {prov.get('process_name')}"
+    assert prov.get("process_type_name") == "fHadronic"
+    assert prov.get("process_sub_type_name") == "fHadronInelastic"
+    print(f"Process provenance verified: {prov.get('process_name')} ({prov.get('process_sub_type_name')})")
 
     max_partial_discrepancy = 0.0
     total_checks = 0
@@ -82,11 +90,11 @@ def main():
         grid = sec["grid"]
         for pt in grid:
             e_mevu = pt["energy_mevu"]
-            tot_macro = pt["total_macro_per_mm"]
-            part_sum = pt["partial_sum_macro_per_mm"]
+            tot_macro = pt["direct_material_macro_per_mm"]
+            part_sum = pt["summed_macro_per_mm"]
             disc = pt["partial_sum_discrepancy"]
 
-            if tot_macro < 0.0 or any(p < 0.0 for p in pt["partial_macro_per_mm"]):
+            if tot_macro < 0.0 or any(el["partial_macro_per_mm"] < 0.0 for el in pt["elements"]):
                 non_negative_checks = False
 
             if disc > sec_max_disc:
@@ -101,20 +109,20 @@ def main():
 
             total_checks += 1
 
-        # Check thin slab attenuation at 100, 200, 300, 400 MeV/u for thickness dz = 10 mm
-        atten_tests = []
+        # Deterministic attenuation prediction sanity table (not independent MC)
+        sanity_table = []
         for test_e in [10.0, 50.0, 100.0, 200.0, 300.0, 400.0]:
             matching_pt = next((p for p in grid if abs(p["energy_mevu"] - test_e) < 1e-4), None)
             if matching_pt:
-                macro_sigma = matching_pt["total_macro_per_mm"]
+                macro_sigma = matching_pt["direct_material_macro_per_mm"]
                 dz_mm = 10.0
                 survival_prob = math.exp(-macro_sigma * dz_mm)
-                atten_tests.append({
+                sanity_table.append({
                     "energy_mevu": test_e,
                     "macro_xs_per_mm": macro_sigma,
-                    "mass_xs_per_mm_at_1g_cm3": matching_pt["mass_xs_per_mm_at_1g_cm3"],
+                    "mass_total_per_mm_at_1g_cm3": matching_pt["mass_total_per_mm_at_1g_cm3"],
                     "slab_thickness_mm": dz_mm,
-                    "survival_probability": survival_prob
+                    "predicted_survival_probability": survival_prob
                 })
 
         section_summaries.append({
@@ -124,7 +132,7 @@ def main():
             "density_g_cm3": density,
             "max_partial_sum_discrepancy_per_mm": sec_max_disc,
             "max_total_macro_per_mm": sec_max_total_macro,
-            "thin_slab_attenuation_benchmarks": atten_tests
+            "deterministic_attenuation_prediction_sanity_table": sanity_table
         })
 
     # Evaluation Gates
@@ -134,8 +142,10 @@ def main():
 
     comparison_report = {
         "schema_version": 1,
-        "step": "step-04",
+        "step": "step-06",
+        "legacy_artifact_path": "step-04",
         "description": "C12 × 25 Schneider Section Inelastic Cross Section Audit",
+        "process_provenance": prov,
         "sections_checked": 25,
         "energy_points_per_section": energy_points,
         "total_evaluated_grid_points": total_checks,
@@ -156,12 +166,14 @@ def main():
     git_branch = subprocess.check_output(['git', 'rev-parse', '--abbrev-ref', 'HEAD'], cwd=repo_dir).decode().strip()
 
     manifest = {
-        "step": "step-04",
+        "step": "step-06",
+        "legacy_artifact_path": "step-04",
         "description": "TOPAS/Geant4 C12 Schneider Inelastic Cross Section Extraction",
         "git_commit": git_head,
         "git_branch": git_branch,
         "topas_version": "4.2.p3",
         "geant4_version": "11.03.p02",
+        "process_name": prov.get("process_name"),
         "files": {
             "topas-c12-schneider-inelastic-xs.json": {
                 "sha256": sha256_file(json_path),
@@ -186,13 +198,14 @@ def main():
 
     # 4. Generate plan/evidence-step04.sha256
     with open(sha256_anchor_path, 'w') as f:
-        f.write("# Cryptographic anchor for external Step 04 evidence stored under /mnt/sda/wuwei/maigo-ct-schneider/evidence/step-04/\n")
+        f.write("# Cryptographic anchor for external Step 06 evidence stored under /mnt/sda/wuwei/maigo-ct-schneider/evidence/step-04/\n")
         for fname in sorted(["topas-c12-schneider-inelastic-xs.json", "inelastic-xs-comparison.json", "run-manifest.json"]):
             fpath = os.path.join(evidence_dir, fname)
             f.write(f"{sha256_file(fpath)}  {fname}\n")
     print(f"Generated {sha256_anchor_path}")
 
-    print("\n================ STEP 04 SUMMARY ================")
+    print("\n================ STEP 06 / XS DUMP SUMMARY ================")
+    print(f"Process Name: {prov.get('process_name')} ({prov.get('process_sub_type_name')})")
     print(f"Sections Evaluated: 25/25")
     print(f"Energy Grid Points: {energy_points} (0.5 - 430.0 MeV/u)")
     print(f"Total Evaluations: {total_checks}")
@@ -200,10 +213,10 @@ def main():
     print(f"Non-Negativity / Positivity: {non_negative_checks}")
     print(f"Partial Sum Conservation: {sum_conservation_passed}")
     print(f"Quality Gate Passed: {quality_gate_passed}")
-    print("==================================================")
+    print("============================================================")
 
     if not quality_gate_passed:
-        raise SystemExit("Step 04 Quality Gate FAILED!")
+        raise SystemExit("Step 06 Quality Gate FAILED!")
 
 if __name__ == '__main__':
     main()
