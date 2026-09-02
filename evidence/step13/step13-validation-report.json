@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "task": "Step 13 C12 Primary CT Milestone Gate Verification (Fail-Closed)",
+  "task": "Step 13 C12 Primary CT Milestone Gate Verification (Strict Fail-Closed)",
   "overall_pass": true,
   "total_cases": 18,
   "passed_cases": 18,
@@ -160,9 +160,9 @@
       },
       "gate2_first_interaction_nrmse": {
         "required": true,
-        "nrmse": 0.006727989985742993,
+        "nrmse": 0.006762593988107648,
         "gate_passed": true,
-        "reason": "PASS (NRMSE=0.673% < 2.0%)"
+        "reason": "PASS (NRMSE=0.676% < 2.0%)"
       },
       "gate3_bragg_range": {
         "required": false,
@@ -293,9 +293,9 @@
       },
       "gate2_first_interaction_nrmse": {
         "required": true,
-        "nrmse": 0.0032561000394617473,
+        "nrmse": 0.003248199875116553,
         "gate_passed": true,
-        "reason": "PASS (NRMSE=0.326% < 2.0%)"
+        "reason": "PASS (NRMSE=0.325% < 2.0%)"
       },
       "gate3_bragg_range": {
         "required": false,
@@ -692,9 +692,9 @@
       },
       "gate2_first_interaction_nrmse": {
         "required": true,
-        "nrmse": 0.007711419894259574,
+        "nrmse": 0.007721404111185529,
         "gate_passed": true,
-        "reason": "PASS (NRMSE=0.771% < 2.0%)"
+        "reason": "PASS (NRMSE=0.772% < 2.0%)"
       },
       "gate3_bragg_range": {
         "required": false,
@@ -1091,9 +1091,9 @@
       },
       "gate2_first_interaction_nrmse": {
         "required": true,
-        "nrmse": 0.004453119023852337,
+        "nrmse": 0.004551162596812186,
         "gate_passed": true,
-        "reason": "PASS (NRMSE=0.445% < 2.0%)"
+        "reason": "PASS (NRMSE=0.455% < 2.0%)"
       },
       "gate3_bragg_range": {
         "required": false,
@@ -2020,9 +2020,9 @@
       },
       "gate2_first_interaction_nrmse": {
         "required": true,
-        "nrmse": 0.007679677693848816,
+        "nrmse": 0.007649927673312913,
         "gate_passed": true,
-        "reason": "PASS (NRMSE=0.768% < 2.0%)"
+        "reason": "PASS (NRMSE=0.765% < 2.0%)"
       },
       "gate3_bragg_range": {
         "required": false,
@@ -2145,15 +2145,15 @@
       "passed_all_gates": true,
       "gate1_survival_integral": {
         "required": true,
-        "topas_integral": 9.45593,
+        "topas_integral": 9.45594,
         "gpu_integral": 9.44295,
-        "rel_diff": 0.0013726835964310922,
+        "rel_diff": 0.0013737396810893764,
         "gate_passed": true,
         "reason": "PASS (rel_diff=0.137% < 1.0%)"
       },
       "gate2_first_interaction_nrmse": {
         "required": true,
-        "nrmse": 0.005639633311963531,
+        "nrmse": 0.005644832900134621,
         "gate_passed": true,
         "reason": "PASS (NRMSE=0.564% < 2.0%)"
       },
@@ -2286,9 +2286,9 @@
       },
       "gate2_first_interaction_nrmse": {
         "required": true,
-        "nrmse": 0.019320652007027612,
+        "nrmse": 0.019298274760324394,
         "gate_passed": true,
-        "reason": "PASS (NRMSE=1.932% < 2.0%)"
+        "reason": "PASS (NRMSE=1.930% < 2.0%)"
       },
       "gate3_bragg_range": {
         "required": false,
