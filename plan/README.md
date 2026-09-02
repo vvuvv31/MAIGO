@@ -34,13 +34,13 @@
 
 ## 优先级
 
-当前路线：c2e25b8 compatibility rebaseline、03A attribution sanity check、03B-2B bounded source/compiler consistency、04A eligibility/coverage exposure、04B runtime optical depth 与 04C stopping residence/continuous optical depth 均已完成；下一步进入 TOPAS lineage/survival 对照与 Be/Li 因果分析。04A--04C 均未修改 rate、target selection、generation gate 或其他 physics。192 个 runtime sparse-support miss 作为 correctness residual 携带，不调 rate/target mix；G1 gate 仍待 reference survival 证据。
+当前路线：c2e25b8 compatibility rebaseline、03A attribution sanity check、03B-2B bounded source/compiler consistency、04A eligibility/coverage exposure、04B runtime optical depth、04C stopping residence/continuous optical depth 和 04D TOPAS lineage/survival 对照均已完成；下一步进入 Be/Li 因果分析。04A--04D 均未修改 rate、target selection、generation gate 或其他 physics。192 个 runtime sparse-support miss 作为 correctness residual 携带，不调 rate/target mix；G1 gate 仍待 TOPAS/GPU survival 对照决定。
 
-`P0 ledger correctness → P0 signed handoff → P0 compact isotope ledger → P0 replay semantics → P1 deterministic auditor → P0 Be6 compatibility policy/A-B → P0 compatibility rebaseline → P1 03A baseline attribution sanity check → P1 03B-2B bounded source/compiler consistency → P1 04A generation eligibility + H/O coverage exposure → P1 04B runtime optical depth × empirical survival → P1 04C stopping residence/continuous optical depth → P1 causal Be/Li fix → P2 light-ion accounting cleanup → P2 non-C12 straggling → P3 MCS shape → P4 100/300 regression`。
+`P0 ledger correctness → P0 signed handoff → P0 compact isotope ledger → P0 replay semantics → P1 deterministic auditor → P0 Be6 compatibility policy/A-B → P0 compatibility rebaseline → P1 03A baseline attribution sanity check → P1 03B-2B bounded source/compiler consistency → P1 04A generation eligibility + H/O coverage exposure → P1 04B runtime optical depth × empirical survival → P1 04C stopping residence/continuous optical depth → P1 04D TOPAS lineage/survival reference → P1 causal Be/Li fix → P2 light-ion accounting cleanup → P2 non-C12 straggling → P3 MCS shape → P4 100/300 regression`。
 
 ## 进度控制
 
-当前完成度：**12/17（约 71%）**；Step 03 阶段 A、03B-0、03B-1 campaign provenance gate、03B-1R、compatibility rebaseline、03B-2A、03A attribution sanity check、Step 01B.1 和 03B-2B bounded source/compiler audit 已完成。由于新发现 Be-6 的基态寿命为 prompt scale，原先“补充稳定 Be-6 projectile campaign”的 03B-1R 已收缩为 TOPAS reference compatibility policy gate；reference 明确为无 daughter/无 deposit 的 StopAndKill，no-decay 数据只作诊断，不得编译进生产 package。
+当前完成度：**13/18（约 72%）**；Step 03 阶段 A、03B-0、03B-1 campaign provenance gate、03B-1R、compatibility rebaseline、03B-2A、03A attribution sanity check、Step 01B.1 和 03B-2B bounded source/compiler audit 已完成。由于新发现 Be-6 的基态寿命为 prompt scale，原先“补充稳定 Be-6 projectile campaign”的 03B-1R 已收缩为 TOPAS reference compatibility policy gate；reference 明确为无 daughter/无 deposit 的 StopAndKill，no-decay 数据只作诊断，不得编译进生产 package。
 
 Step 01A ledger correctness、Step 01A.5 signed handoff、Step 01B compact isotope 诊断仪器和 Step 02 deterministic package auditor 已完成；04A 已完成 eligibility/coverage exposure 诊断，04B-1 candidate-vs-tau、04B-2 blocked counterfactual hazard、04B-3 package-vs-runtime parent outcome 和 04C continuous optical depth/stopping residence 已完成；Step 03 阶段 A 已修复 replay miss 的 null-collision MCS semantics，03B-0/03B-1 已确定 Be6 coverage 缺口及 TOPAS prompt-unstable compatibility 语义，compatibility rebaseline 已切换为开发基线。03B-2A 与 03B-2B 已证明 transportable Be/Li 的 miss 为零，且当前 source/compiler/package/global-index 一致；192 个 runtime sparse-support miss 仅作为 correctness residual 携带，不直接改 runtime rate。p/d/He4 及当前 aggregate species residual 仍未修复，不能把 compatibility rebaseline 误记为物理收敛。
 
@@ -59,6 +59,7 @@ Step 01A ledger correctness、Step 01A.5 signed handoff、Step 01B compact isoto
 | [x] | [04A Generation eligibility + H/O rate-coverage exposure](steps/04a-generation-eligibility-rate-coverage.md) | secondary path、generation gate、H/O coverage、rate·ds 与 reaction outcome ledger |
 | [x] | [04B Runtime optical depth + survival self-audit](steps/04b-runtime-optical-depth-survival.md) | candidate-vs-τ、generation-blocked counterfactual hazard、package/runtime parent outcome |
 | [x] | [04C Stopping residence + continuous optical depth](steps/04c-stopping-residence-continuous-optical-depth.md) | Simpson continuous τ、连续 coverage、stopping loss/residence |
+| [x] | [04D TOPAS lineage/survival reference](steps/04d-topas-lineage-survival-reference.md) | Li/Be generation、path、首次核反应与终止原因 |
 | [ ] | [04 MCS-only species/FOV](steps/04-mcs-only-species-fov.md) | step convergence、species-aware full-2GR、FOV acceptance |
 | [ ] | [05 Stopping/range regression](steps/05-stopping-range-regression.md) | Be/Li explicit-table range 与 unrestricted deposition |
 | [ ] | [06 Non-C12 straggling](steps/06-nonc12-straggling.md) | mean-preserving species-aware fluctuation |
@@ -146,8 +147,27 @@ sampler。
 GPU canonical run 成功。
 
 该步骤只能证明 GPU runtime 与自身 rate/stopping exposure 的一致性；TOPAS lineage/survival
-reference 尚未建立，p/d/He4 residual 及 aggregate dose mismatch 仍未解决。下一步进入
-TOPAS survival 对照与 Be/Li causal analysis。
+reference 已由 04D 建立，p/d/He4 residual 及 aggregate dose mismatch 仍未解决。下一步进入
+TOPAS/GPU survival 对照与 Be/Li causal analysis。
+
+## Step 04D 运行证据
+
+2026-09-02 在本机 TOPAS 4.2.3 / Geant4 11.3.2 通过 sbatch job 497 完成 200 MeV/u、100k
+full-cascade lineage smoke。新增 CarbonLineageSurvivalNtuple，每条 Li6/Li7/Be7/Be9/Be10
+transport episode 记录 generation、path、birth/interaction energy、首次 hadronic interaction
+和 terminal reason；event-end 未结束轨迹单独标为 censored。
+
+输出：`/mnt/sda/wuwei/cinel02-lineage-survival/e200MeVu_100000h_lineage_survival_v2/`；
+汇总：`plan/artifacts/topas-lineage-survival-e200-g1/summary.json`，对照：
+`plan/artifacts/topas-lineage-survival-e200-g1/comparison.json`。共 7,717 条 episode、0 条
+censored；TOPAS G0/G1/G2 反应率分别为 Li6 12.07%/1.14%/0、Li7 20.83%/1.58%/0、
+Be7 18.60%/1.20%/0、Be9 15.88%/1.35%/0、Be10 23.84%/2.83%/0。
+
+该结果是 reference occupancy/终止语义，不是 matched physics acceptance gate；TOPAS 与 GPU
+仍使用不同 event generator 与 generation policy。下一步将用这些 reference outcome 对照 GPU
+04B/04C 的 optical depth、generation eligibility 和 stopping residence，再决定 G1 gate 或
+rate/stopping 方向是否存在物理缺口。job 496 初次因旧模板 501 MeV/u 网格越界中止，已通过 5001
+bin 脚本修正；该失败不涉及 scorer。
 
 ## Step 03B-2B 运行证据
 
@@ -233,7 +253,7 @@ secondary generation-1 no-event `206/33512 = 0.615%`；按 isotope 最高为 2H 
 `continuous_loss_to_collision_MeV`；generation 语义改为 `reaction_generation`。
 
 该步骤只修正诊断语义，不修改 sampler/yield、rate、stopping、MCS 或 cascade physics。
-Step 02 deterministic package auditor、03B-2A、03B-2B bounded source/compiler audit、04A exposure audit、04B runtime optical-depth self-audit 与 04C continuous optical-depth/stopping-residence audit 已完成；下一步进入 TOPAS lineage/survival 对照与 Be/Li 因果分析。
+Step 02 deterministic package auditor、03B-2A、03B-2B bounded source/compiler audit、04A exposure audit、04B runtime optical-depth self-audit、04C continuous optical-depth/stopping-residence audit 与 04D TOPAS lineage/survival reference 已完成；下一步进入 Be/Li 因果分析。
 
 ## 提交切分
 

@@ -113,6 +113,7 @@ python3 startup/package_tools/compile_neutral_package.py \
 - `CarbonCrossSectionNtuple`：C-12 的 H/O 以及材料宏观非弹性截面；
 - `CarbonReactionNtuple`：primary C-12 反应和一级碎片；
 - `CarbonCascadeNtuple`：按 parent Z/A、incident energy、相互作用序列记录带电级联末态；
+- `CarbonLineageSurvivalNtuple`：Li/Be 次级按 generation 的 episode 路径、首次后续核反应和终止原因（仅诊断，不用于 package 编译）；
 - `CarbonNeutralNtuple`：中性粒子反应与产生物。
 - `CarbonElasticNtuple`：参数化 projectile Z/A 的弹性 interaction、primary
   continuation 和全部可见 product（包括 neutral）。输出先由

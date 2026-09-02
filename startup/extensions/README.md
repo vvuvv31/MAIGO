@@ -11,6 +11,7 @@
 | `CarbonCrossSectionNtuple` | source-primary 非弹性截面/平均自由程 (legacy extension name) |
 | `CarbonReactionNtuple` | primary C-12 反应和一级带电产物 |
 | `CarbonCascadeNtuple` | 带电级联 interaction/product 记录 |
+| CarbonLineageSurvivalNtuple | Li/Be secondary episode generation, path, first nuclear interaction, and terminal reason |
 | `CarbonNeutralNtuple` | 中性相互作用和产物 |
 | `CarbonElasticNtuple` | 参数化 Z/A 的弹性 interaction、primary continuation 和全部可见产物 |
 | `ElasticCrossSectionQueryNtuple` | 直接查询指定低能点的 Geant4 弹性宏观截面，仅用于诊断 |
