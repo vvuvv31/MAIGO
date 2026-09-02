@@ -105,7 +105,7 @@ s:Ge/BeamPosition/Parent = "World"
 s:Ge/BeamPosition/Type = "Group"
 d:Ge/BeamPosition/TransX = {beam_pos_x_mm:.4f} mm
 d:Ge/BeamPosition/TransY = {beam_pos_y_mm:.4f} mm
-d:Ge/BeamPosition/TransZ = -1.0 m
+d:Ge/BeamPosition/TransZ = {beam_pos_z_mm:.4f} mm
 d:Ge/BeamPosition/RotX = {beam_rot_x_deg:.4f} deg
 d:Ge/BeamPosition/RotY = {beam_rot_y_deg:.4f} deg
 d:Ge/BeamPosition/RotZ = 0.0 deg
@@ -310,9 +310,11 @@ def generate_suite():
         trans_z = half_thick
         tot_energy = e_mevu * 12.0
 
+        beam_z = -1.0
         param_content = TOPAS_PARAM_TEMPLATE.format(
             beam_pos_x_mm=0.0,
             beam_pos_y_mm=0.0,
+            beam_pos_z_mm=beam_z,
             beam_rot_x_deg=rot_x,
             beam_rot_y_deg=rot_y,
             material_name=tc["material_name"],
@@ -345,8 +347,10 @@ def generate_suite():
         slurm_path.write_text(slurm_content)
         slurm_path.chmod(0o755)
 
+        req_gates = [3, 4, 5, 6, 7] if tc.get("is_bragg_check", False) else [1, 2, 4, 5, 6, 7]
         entry = {
             **tc,
+            "required_gates": req_gates,
             "cctg_file": str(cctg_path),
             "param_file": str(param_path),
             "slurm_script": str(slurm_path),
@@ -393,6 +397,106 @@ def generate_suite():
                   staircase_spacing_x, staircase_spacing_y, staircase_spacing_z,
                   staircase_densities, staircase_mat_ids)
 
+    staircase_param_path = TOPAS_DIR / f"param_{case3_id}.txt"
+    staircase_slurm_path = TOPAS_DIR / f"submit_{case3_id}.sh"
+    staircase_json_out = SHARDS_DIR / f"validation_{case3_id}.json"
+    staircase_dose_out = SHARDS_DIR / f"dose3d_{case3_id}"
+    staircase_scorer_base = SHARDS_DIR / f"scorer_out_{case3_id}"
+
+    slices_def = ""
+    for s_idx, s_info in enumerate(topas_mats):
+        local_z = -24.0 + s_idx * 2.0
+        slices_def += f"""
+s:Ge/Slice_{s_idx}/Parent = "StaircaseBox"
+s:Ge/Slice_{s_idx}/Type = "TsBox"
+s:Ge/Slice_{s_idx}/Material = "{s_info['material_name']}"
+d:Ge/Slice_{s_idx}/HLX = 20.0000 mm
+d:Ge/Slice_{s_idx}/HLY = 20.0000 mm
+d:Ge/Slice_{s_idx}/HLZ = 1.0000 mm
+d:Ge/Slice_{s_idx}/TransZ = {local_z:.4f} mm
+"""
+
+    staircase_param_content = f"""includeFile = /mnt/sdb/wuwei/MAIGO/data/HUtoMaterialSchneider.txt
+
+s:Ge/World/Material = "Vacuum"
+d:Ge/World/HLX = 100.0 m
+d:Ge/World/HLY = 100.0 m
+d:Ge/World/HLZ = 100.0 m
+b:Ge/World/Invisible = "TRUE"
+
+s:Ge/Patient/Parent = "World"
+s:Ge/Patient/Material = "G4_WATER"
+s:Ge/Patient/Type = "TsDicomPatient"
+s:Ge/Patient/DicomDirectory = "/mnt/sda/wuwei/maigo-ct-schneider/step-03/DICOM_Box/DICOM_Box"
+b:Ge/Patient/PreLoadAllMaterials = "True"
+d:Ge/Patient/TransX = -45.0 m
+b:Ge/Patient/Invisible = "TRUE"
+
+s:Ge/BeamPosition/Parent = "World"
+s:Ge/BeamPosition/Type = "Group"
+d:Ge/BeamPosition/TransX = 0.0000 mm
+d:Ge/BeamPosition/TransY = 0.0000 mm
+d:Ge/BeamPosition/TransZ = -1.0 mm
+d:Ge/BeamPosition/RotX = 0.0000 deg
+d:Ge/BeamPosition/RotY = 0.0000 deg
+d:Ge/BeamPosition/RotZ = 0.0 deg
+
+s:Ge/StaircaseBox/Parent = "World"
+s:Ge/StaircaseBox/Type = "TsBox"
+s:Ge/StaircaseBox/Material = "Vacuum"
+d:Ge/StaircaseBox/HLX = 20.0000 mm
+d:Ge/StaircaseBox/HLY = 20.0000 mm
+d:Ge/StaircaseBox/HLZ = 25.0000 mm
+d:Ge/StaircaseBox/TransZ = 25.0000 mm
+{slices_def}
+
+sv:Ph/Default/Modules = 6 "g4em-standard_opt4" "g4h-phy_QGSP_BIC_HP" "g4decay" "g4ion-binarycascade" "g4h-elastic_HP" "g4stopping"
+
+s:So/Beam/Type = "Beam"
+s:So/Beam/Component = "BeamPosition"
+s:So/Beam/BeamParticle = "GenericIon(6,12)"
+d:So/Beam/BeamEnergy = 2400.0 MeV
+u:So/Beam/BeamEnergySpread = 0.0
+s:So/Beam/BeamPositionDistribution = "None"
+s:So/Beam/BeamAngularDistribution = "None"
+i:So/Beam/NumberOfHistoriesInRun = 100000
+
+s:Sc/Validation/Quantity = "CarbonSchneiderThinSlabValidationScorer"
+s:Sc/Validation/Component = "StaircaseBox"
+b:Sc/Validation/PropagateToChildren = "True"
+s:Sc/Validation/OutputFile = "{staircase_scorer_base}"
+s:Sc/Validation/OutputJsonPath = "{staircase_json_out}"
+i:Sc/Validation/SectionId = 99
+s:Sc/Validation/MaterialName = "SchneiderStaircase25"
+u:Sc/Validation/NominalEnergyMeVPerU = 200.0
+d:Sc/Validation/SlabThickness = 50.0000 mm
+d:Sc/Validation/SlabTransZ = 25.0000 mm
+i:Sc/Validation/NumberOfDepthBins = 25
+s:Sc/Validation/IfOutputFileAlreadyExists = "Overwrite"
+
+s:Sc/Dose3D/Quantity = "DoseToMedium"
+s:Sc/Dose3D/Component = "StaircaseBox"
+b:Sc/Dose3D/PropagateToChildren = "True"
+i:Sc/Dose3D/XBins = 20
+i:Sc/Dose3D/YBins = 20
+i:Sc/Dose3D/ZBins = 25
+s:Sc/Dose3D/OutputFile = "{staircase_dose_out}"
+s:Sc/Dose3D/OutputType = "csv"
+s:Sc/Dose3D/IfOutputFileAlreadyExists = "Overwrite"
+
+Ts/NumberOfThreads = 50
+"""
+    staircase_param_path.write_text(staircase_param_content)
+
+    staircase_slurm_content = SLURM_TEMPLATE.format(
+        id=case3_id,
+        threads=50,
+        mem_gb=40,
+        param_file=str(staircase_param_path)
+    )
+    staircase_slurm_path.write_text(staircase_slurm_content)
+    staircase_slurm_path.chmod(0o755)
+
     entry_case3 = {
         "id": case3_id,
         "category": "case3_staircase_25sec",
@@ -404,16 +508,17 @@ def generate_suite():
         "thickness_mm": 50.0,
         "depth_bins": 25,
         "histories": 100000,
-        "threads": 20,
-        "mem_gb": 16,
+        "threads": 50,
+        "mem_gb": 40,
         "is_bragg_check": False,
         "precomputed_in_step08": False,
         "beam_angle_deg": 0.0,
+        "required_gates": [1, 2, 4, 5, 6, 7],
         "cctg_file": str(staircase_cctg),
-        "param_file": "",
-        "slurm_script": "",
-        "topas_json_output": "",
-        "topas_dose_csv": "",
+        "param_file": str(staircase_param_path),
+        "slurm_script": str(staircase_slurm_path),
+        "topas_json_output": str(staircase_json_out),
+        "topas_dose_csv": str(staircase_dose_out) + ".csv",
         "gpu_json_output": str(GPU_DIR / f"result_{case3_id}.json"),
         "nx": staircase_nx, "ny": staircase_ny, "nz": staircase_nz,
         "spacing_x_mm": staircase_spacing_x,

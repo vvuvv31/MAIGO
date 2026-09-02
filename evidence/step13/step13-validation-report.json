@@ -1,0 +1,2401 @@
+{
+  "schema_version": 2,
+  "task": "Step 13 C12 Primary CT Milestone Gate Verification (Fail-Closed)",
+  "overall_pass": true,
+  "total_cases": 18,
+  "passed_cases": 18,
+  "cases": [
+    {
+      "id": "lung_100mevu",
+      "category": "case1_homogeneous_slabs",
+      "required_gates": [
+        1,
+        2,
+        4,
+        5,
+        6,
+        7
+      ],
+      "passed_all_gates": true,
+      "gate1_survival_integral": {
+        "required": true,
+        "topas_integral": 4.92266,
+        "gpu_integral": 4.9203600000000005,
+        "rel_diff": 0.00046722706829215927,
+        "gate_passed": true,
+        "reason": "PASS (rel_diff=0.047% < 1.0%)"
+      },
+      "gate2_first_interaction_nrmse": {
+        "required": true,
+        "nrmse": 0.009460597827932071,
+        "gate_passed": true,
+        "reason": "PASS (NRMSE=0.946% < 2.0%)"
+      },
+      "gate3_bragg_range": {
+        "required": false,
+        "peak_diff_mm": null,
+        "gate_passed": true,
+        "reason": "N/A (Not required for this case)"
+      },
+      "gate4_terminal_conservation": {
+        "required": true,
+        "exact_conservation": true,
+        "histories": 100000,
+        "sum_terminal_counts": 100000,
+        "counts": {
+          "stopped": 0,
+          "inelastic": 2608,
+          "other": 0,
+          "escaped": 97392
+        },
+        "gate_passed": true,
+        "reason": "PASS (exact sum=100000 == 100000)"
+      },
+      "gate5_section_mapping": {
+        "required": true,
+        "mismatches": 0,
+        "first_interactions_by_expected_section": [
+          0,
+          2608,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "first_interactions_by_recorded_section": [
+          0,
+          2608,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "gate_passed": true,
+        "reason": "PASS (0 mismatches)"
+      },
+      "gate6_secondary_count": {
+        "required": true,
+        "gate_passed": true,
+        "reason": "PASS (all secondary/replay counts == 0)",
+        "diagnostics": {
+          "generated_direct_secondaries": 0,
+          "queued_secondaries": 0,
+          "transported_secondaries": 0,
+          "cinel02_replay_valid_sum": 0
+        }
+      },
+      "gate7_overflow_count": {
+        "required": true,
+        "gate_passed": true,
+        "reason": "PASS (all overflow/retry diagnostics == 0)",
+        "diagnostics": {
+          "secondary_queue_overflow": 0,
+          "elastic_queue_overflow": 0,
+          "neutral_queue_overflow": 0,
+          "electron_queue_overflow": 0,
+          "fred_resample_failed_events": 0,
+          "fred_product_capacity_overflow_events": 0,
+          "primary_other_terminal_count": 0
+        }
+      },
+      "energy_balance_rel_error": 6.828687129e-08
+    },
+    {
+      "id": "lung_200mevu",
+      "category": "case1_homogeneous_slabs",
+      "required_gates": [
+        1,
+        2,
+        4,
+        5,
+        6,
+        7
+      ],
+      "passed_all_gates": true,
+      "gate1_survival_integral": {
+        "required": true,
+        "topas_integral": 4.84013,
+        "gpu_integral": 4.83748,
+        "rel_diff": 0.0005475059554185613,
+        "gate_passed": true,
+        "reason": "PASS (rel_diff=0.055% < 1.0%)"
+      },
+      "gate2_first_interaction_nrmse": {
+        "required": true,
+        "nrmse": 0.006727989985742993,
+        "gate_passed": true,
+        "reason": "PASS (NRMSE=0.673% < 2.0%)"
+      },
+      "gate3_bragg_range": {
+        "required": false,
+        "peak_diff_mm": null,
+        "gate_passed": true,
+        "reason": "N/A (Not required for this case)"
+      },
+      "gate4_terminal_conservation": {
+        "required": true,
+        "exact_conservation": true,
+        "histories": 100000,
+        "sum_terminal_counts": 100000,
+        "counts": {
+          "stopped": 0,
+          "inelastic": 5402,
+          "other": 0,
+          "escaped": 94598
+        },
+        "gate_passed": true,
+        "reason": "PASS (exact sum=100000 == 100000)"
+      },
+      "gate5_section_mapping": {
+        "required": true,
+        "mismatches": 0,
+        "first_interactions_by_expected_section": [
+          0,
+          5402,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "first_interactions_by_recorded_section": [
+          0,
+          5402,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "gate_passed": true,
+        "reason": "PASS (0 mismatches)"
+      },
+      "gate6_secondary_count": {
+        "required": true,
+        "gate_passed": true,
+        "reason": "PASS (all secondary/replay counts == 0)",
+        "diagnostics": {
+          "generated_direct_secondaries": 0,
+          "queued_secondaries": 0,
+          "transported_secondaries": 0,
+          "cinel02_replay_valid_sum": 0
+        }
+      },
+      "gate7_overflow_count": {
+        "required": true,
+        "gate_passed": true,
+        "reason": "PASS (all overflow/retry diagnostics == 0)",
+        "diagnostics": {
+          "secondary_queue_overflow": 0,
+          "elastic_queue_overflow": 0,
+          "neutral_queue_overflow": 0,
+          "electron_queue_overflow": 0,
+          "fred_resample_failed_events": 0,
+          "fred_product_capacity_overflow_events": 0,
+          "primary_other_terminal_count": 0
+        }
+      },
+      "energy_balance_rel_error": 4.989283755e-08
+    },
+    {
+      "id": "lung_300mevu",
+      "category": "case1_homogeneous_slabs",
+      "required_gates": [
+        1,
+        2,
+        4,
+        5,
+        6,
+        7
+      ],
+      "passed_all_gates": true,
+      "gate1_survival_integral": {
+        "required": true,
+        "topas_integral": 4.75729,
+        "gpu_integral": 4.75243,
+        "rel_diff": 0.0010215900228911553,
+        "gate_passed": true,
+        "reason": "PASS (rel_diff=0.102% < 1.0%)"
+      },
+      "gate2_first_interaction_nrmse": {
+        "required": true,
+        "nrmse": 0.0032561000394617473,
+        "gate_passed": true,
+        "reason": "PASS (NRMSE=0.326% < 2.0%)"
+      },
+      "gate3_bragg_range": {
+        "required": false,
+        "peak_diff_mm": null,
+        "gate_passed": true,
+        "reason": "N/A (Not required for this case)"
+      },
+      "gate4_terminal_conservation": {
+        "required": true,
+        "exact_conservation": true,
+        "histories": 100000,
+        "sum_terminal_counts": 100000,
+        "counts": {
+          "stopped": 0,
+          "inelastic": 8178,
+          "other": 0,
+          "escaped": 91822
+        },
+        "gate_passed": true,
+        "reason": "PASS (exact sum=100000 == 100000)"
+      },
+      "gate5_section_mapping": {
+        "required": true,
+        "mismatches": 0,
+        "first_interactions_by_expected_section": [
+          0,
+          8178,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "first_interactions_by_recorded_section": [
+          0,
+          8178,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "gate_passed": true,
+        "reason": "PASS (0 mismatches)"
+      },
+      "gate6_secondary_count": {
+        "required": true,
+        "gate_passed": true,
+        "reason": "PASS (all secondary/replay counts == 0)",
+        "diagnostics": {
+          "generated_direct_secondaries": 0,
+          "queued_secondaries": 0,
+          "transported_secondaries": 0,
+          "cinel02_replay_valid_sum": 0
+        }
+      },
+      "gate7_overflow_count": {
+        "required": true,
+        "gate_passed": true,
+        "reason": "PASS (all overflow/retry diagnostics == 0)",
+        "diagnostics": {
+          "secondary_queue_overflow": 0,
+          "elastic_queue_overflow": 0,
+          "neutral_queue_overflow": 0,
+          "electron_queue_overflow": 0,
+          "fred_resample_failed_events": 0,
+          "fred_product_capacity_overflow_events": 0,
+          "primary_other_terminal_count": 0
+        }
+      },
+      "energy_balance_rel_error": 9.412574437e-09
+    },
+    {
+      "id": "soft_tissue_100mevu",
+      "category": "case1_homogeneous_slabs",
+      "required_gates": [
+        1,
+        2,
+        4,
+        5,
+        6,
+        7
+      ],
+      "passed_all_gates": true,
+      "gate1_survival_integral": {
+        "required": true,
+        "topas_integral": 4.92919,
+        "gpu_integral": 4.9275,
+        "rel_diff": 0.00034285551987242715,
+        "gate_passed": true,
+        "reason": "PASS (rel_diff=0.034% < 1.0%)"
+      },
+      "gate2_first_interaction_nrmse": {
+        "required": true,
+        "nrmse": 0.00856623690247481,
+        "gate_passed": true,
+        "reason": "PASS (NRMSE=0.857% < 2.0%)"
+      },
+      "gate3_bragg_range": {
+        "required": false,
+        "peak_diff_mm": null,
+        "gate_passed": true,
+        "reason": "N/A (Not required for this case)"
+      },
+      "gate4_terminal_conservation": {
+        "required": true,
+        "exact_conservation": true,
+        "histories": 100000,
+        "sum_terminal_counts": 100000,
+        "counts": {
+          "stopped": 0,
+          "inelastic": 2397,
+          "other": 0,
+          "escaped": 97603
+        },
+        "gate_passed": true,
+        "reason": "PASS (exact sum=100000 == 100000)"
+      },
+      "gate5_section_mapping": {
+        "required": true,
+        "mismatches": 0,
+        "first_interactions_by_expected_section": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          2397,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "first_interactions_by_recorded_section": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          2397,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "gate_passed": true,
+        "reason": "PASS (0 mismatches)"
+      },
+      "gate6_secondary_count": {
+        "required": true,
+        "gate_passed": true,
+        "reason": "PASS (all secondary/replay counts == 0)",
+        "diagnostics": {
+          "generated_direct_secondaries": 0,
+          "queued_secondaries": 0,
+          "transported_secondaries": 0,
+          "cinel02_replay_valid_sum": 0
+        }
+      },
+      "gate7_overflow_count": {
+        "required": true,
+        "gate_passed": true,
+        "reason": "PASS (all overflow/retry diagnostics == 0)",
+        "diagnostics": {
+          "secondary_queue_overflow": 0,
+          "elastic_queue_overflow": 0,
+          "neutral_queue_overflow": 0,
+          "electron_queue_overflow": 0,
+          "fred_resample_failed_events": 0,
+          "fred_product_capacity_overflow_events": 0,
+          "primary_other_terminal_count": 0
+        }
+      },
+      "energy_balance_rel_error": 6.255887647e-08
+    },
+    {
+      "id": "soft_tissue_200mevu",
+      "category": "case1_homogeneous_slabs",
+      "required_gates": [
+        1,
+        2,
+        4,
+        5,
+        6,
+        7
+      ],
+      "passed_all_gates": true,
+      "gate1_survival_integral": {
+        "required": true,
+        "topas_integral": 4.85455,
+        "gpu_integral": 4.85201,
+        "rel_diff": 0.000523220483875903,
+        "gate_passed": true,
+        "reason": "PASS (rel_diff=0.052% < 1.0%)"
+      },
+      "gate2_first_interaction_nrmse": {
+        "required": true,
+        "nrmse": 0.007209201775925258,
+        "gate_passed": true,
+        "reason": "PASS (NRMSE=0.721% < 2.0%)"
+      },
+      "gate3_bragg_range": {
+        "required": false,
+        "peak_diff_mm": null,
+        "gate_passed": true,
+        "reason": "N/A (Not required for this case)"
+      },
+      "gate4_terminal_conservation": {
+        "required": true,
+        "exact_conservation": true,
+        "histories": 100000,
+        "sum_terminal_counts": 100000,
+        "counts": {
+          "stopped": 0,
+          "inelastic": 4915,
+          "other": 0,
+          "escaped": 95085
+        },
+        "gate_passed": true,
+        "reason": "PASS (exact sum=100000 == 100000)"
+      },
+      "gate5_section_mapping": {
+        "required": true,
+        "mismatches": 0,
+        "first_interactions_by_expected_section": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          4915,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "first_interactions_by_recorded_section": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          4915,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "gate_passed": true,
+        "reason": "PASS (0 mismatches)"
+      },
+      "gate6_secondary_count": {
+        "required": true,
+        "gate_passed": true,
+        "reason": "PASS (all secondary/replay counts == 0)",
+        "diagnostics": {
+          "generated_direct_secondaries": 0,
+          "queued_secondaries": 0,
+          "transported_secondaries": 0,
+          "cinel02_replay_valid_sum": 0
+        }
+      },
+      "gate7_overflow_count": {
+        "required": true,
+        "gate_passed": true,
+        "reason": "PASS (all overflow/retry diagnostics == 0)",
+        "diagnostics": {
+          "secondary_queue_overflow": 0,
+          "elastic_queue_overflow": 0,
+          "neutral_queue_overflow": 0,
+          "electron_queue_overflow": 0,
+          "fred_resample_failed_events": 0,
+          "fred_product_capacity_overflow_events": 0,
+          "primary_other_terminal_count": 0
+        }
+      },
+      "energy_balance_rel_error": 6.092789421e-08
+    },
+    {
+      "id": "soft_tissue_300mevu",
+      "category": "case1_homogeneous_slabs",
+      "required_gates": [
+        1,
+        2,
+        4,
+        5,
+        6,
+        7
+      ],
+      "passed_all_gates": true,
+      "gate1_survival_integral": {
+        "required": true,
+        "topas_integral": 4.7245,
+        "gpu_integral": 4.71901,
+        "rel_diff": 0.0011620277278018827,
+        "gate_passed": true,
+        "reason": "PASS (rel_diff=0.116% < 1.0%)"
+      },
+      "gate2_first_interaction_nrmse": {
+        "required": true,
+        "nrmse": 0.007711419894259574,
+        "gate_passed": true,
+        "reason": "PASS (NRMSE=0.771% < 2.0%)"
+      },
+      "gate3_bragg_range": {
+        "required": false,
+        "peak_diff_mm": null,
+        "gate_passed": true,
+        "reason": "N/A (Not required for this case)"
+      },
+      "gate4_terminal_conservation": {
+        "required": true,
+        "exact_conservation": true,
+        "histories": 100000,
+        "sum_terminal_counts": 100000,
+        "counts": {
+          "stopped": 0,
+          "inelastic": 9232,
+          "other": 0,
+          "escaped": 90768
+        },
+        "gate_passed": true,
+        "reason": "PASS (exact sum=100000 == 100000)"
+      },
+      "gate5_section_mapping": {
+        "required": true,
+        "mismatches": 0,
+        "first_interactions_by_expected_section": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          9232,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "first_interactions_by_recorded_section": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          9232,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "gate_passed": true,
+        "reason": "PASS (0 mismatches)"
+      },
+      "gate6_secondary_count": {
+        "required": true,
+        "gate_passed": true,
+        "reason": "PASS (all secondary/replay counts == 0)",
+        "diagnostics": {
+          "generated_direct_secondaries": 0,
+          "queued_secondaries": 0,
+          "transported_secondaries": 0,
+          "cinel02_replay_valid_sum": 0
+        }
+      },
+      "gate7_overflow_count": {
+        "required": true,
+        "gate_passed": true,
+        "reason": "PASS (all overflow/retry diagnostics == 0)",
+        "diagnostics": {
+          "secondary_queue_overflow": 0,
+          "elastic_queue_overflow": 0,
+          "neutral_queue_overflow": 0,
+          "electron_queue_overflow": 0,
+          "fred_resample_failed_events": 0,
+          "fred_product_capacity_overflow_events": 0,
+          "primary_other_terminal_count": 0
+        }
+      },
+      "energy_balance_rel_error": 9.653840363e-08
+    },
+    {
+      "id": "dense_bone_100mevu",
+      "category": "case1_homogeneous_slabs",
+      "required_gates": [
+        1,
+        2,
+        4,
+        5,
+        6,
+        7
+      ],
+      "passed_all_gates": true,
+      "gate1_survival_integral": {
+        "required": true,
+        "topas_integral": 4.94098,
+        "gpu_integral": 4.9388,
+        "rel_diff": 0.00044120801946174055,
+        "gate_passed": true,
+        "reason": "PASS (rel_diff=0.044% < 1.0%)"
+      },
+      "gate2_first_interaction_nrmse": {
+        "required": true,
+        "nrmse": 0.008645578572617154,
+        "gate_passed": true,
+        "reason": "PASS (NRMSE=0.865% < 2.0%)"
+      },
+      "gate3_bragg_range": {
+        "required": false,
+        "peak_diff_mm": null,
+        "gate_passed": true,
+        "reason": "N/A (Not required for this case)"
+      },
+      "gate4_terminal_conservation": {
+        "required": true,
+        "exact_conservation": true,
+        "histories": 100000,
+        "sum_terminal_counts": 100000,
+        "counts": {
+          "stopped": 0,
+          "inelastic": 2017,
+          "other": 0,
+          "escaped": 97983
+        },
+        "gate_passed": true,
+        "reason": "PASS (exact sum=100000 == 100000)"
+      },
+      "gate5_section_mapping": {
+        "required": true,
+        "mismatches": 0,
+        "first_interactions_by_expected_section": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          2017,
+          0,
+          0,
+          0,
+          0
+        ],
+        "first_interactions_by_recorded_section": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          2017,
+          0,
+          0,
+          0,
+          0
+        ],
+        "gate_passed": true,
+        "reason": "PASS (0 mismatches)"
+      },
+      "gate6_secondary_count": {
+        "required": true,
+        "gate_passed": true,
+        "reason": "PASS (all secondary/replay counts == 0)",
+        "diagnostics": {
+          "generated_direct_secondaries": 0,
+          "queued_secondaries": 0,
+          "transported_secondaries": 0,
+          "cinel02_replay_valid_sum": 0
+        }
+      },
+      "gate7_overflow_count": {
+        "required": true,
+        "gate_passed": true,
+        "reason": "PASS (all overflow/retry diagnostics == 0)",
+        "diagnostics": {
+          "secondary_queue_overflow": 0,
+          "elastic_queue_overflow": 0,
+          "neutral_queue_overflow": 0,
+          "electron_queue_overflow": 0,
+          "fred_resample_failed_events": 0,
+          "fred_product_capacity_overflow_events": 0,
+          "primary_other_terminal_count": 0
+        }
+      },
+      "energy_balance_rel_error": 6.161776471e-08
+    },
+    {
+      "id": "dense_bone_200mevu",
+      "category": "case1_homogeneous_slabs",
+      "required_gates": [
+        1,
+        2,
+        4,
+        5,
+        6,
+        7
+      ],
+      "passed_all_gates": true,
+      "gate1_survival_integral": {
+        "required": true,
+        "topas_integral": 4.8801,
+        "gpu_integral": 4.87822,
+        "rel_diff": 0.00038523800741785657,
+        "gate_passed": true,
+        "reason": "PASS (rel_diff=0.039% < 1.0%)"
+      },
+      "gate2_first_interaction_nrmse": {
+        "required": true,
+        "nrmse": 0.004776912918429268,
+        "gate_passed": true,
+        "reason": "PASS (NRMSE=0.478% < 2.0%)"
+      },
+      "gate3_bragg_range": {
+        "required": false,
+        "peak_diff_mm": null,
+        "gate_passed": true,
+        "reason": "N/A (Not required for this case)"
+      },
+      "gate4_terminal_conservation": {
+        "required": true,
+        "exact_conservation": true,
+        "histories": 100000,
+        "sum_terminal_counts": 100000,
+        "counts": {
+          "stopped": 0,
+          "inelastic": 4014,
+          "other": 0,
+          "escaped": 95986
+        },
+        "gate_passed": true,
+        "reason": "PASS (exact sum=100000 == 100000)"
+      },
+      "gate5_section_mapping": {
+        "required": true,
+        "mismatches": 0,
+        "first_interactions_by_expected_section": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          4014,
+          0,
+          0,
+          0,
+          0
+        ],
+        "first_interactions_by_recorded_section": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          4014,
+          0,
+          0,
+          0,
+          0
+        ],
+        "gate_passed": true,
+        "reason": "PASS (0 mismatches)"
+      },
+      "gate6_secondary_count": {
+        "required": true,
+        "gate_passed": true,
+        "reason": "PASS (all secondary/replay counts == 0)",
+        "diagnostics": {
+          "generated_direct_secondaries": 0,
+          "queued_secondaries": 0,
+          "transported_secondaries": 0,
+          "cinel02_replay_valid_sum": 0
+        }
+      },
+      "gate7_overflow_count": {
+        "required": true,
+        "gate_passed": true,
+        "reason": "PASS (all overflow/retry diagnostics == 0)",
+        "diagnostics": {
+          "secondary_queue_overflow": 0,
+          "elastic_queue_overflow": 0,
+          "neutral_queue_overflow": 0,
+          "electron_queue_overflow": 0,
+          "fred_resample_failed_events": 0,
+          "fred_product_capacity_overflow_events": 0,
+          "primary_other_terminal_count": 0
+        }
+      },
+      "energy_balance_rel_error": 5.74474362e-08
+    },
+    {
+      "id": "dense_bone_300mevu",
+      "category": "case1_homogeneous_slabs",
+      "required_gates": [
+        1,
+        2,
+        4,
+        5,
+        6,
+        7
+      ],
+      "passed_all_gates": true,
+      "gate1_survival_integral": {
+        "required": true,
+        "topas_integral": 4.77134,
+        "gpu_integral": 4.76692,
+        "rel_diff": 0.0009263645013770837,
+        "gate_passed": true,
+        "reason": "PASS (rel_diff=0.093% < 1.0%)"
+      },
+      "gate2_first_interaction_nrmse": {
+        "required": true,
+        "nrmse": 0.004453119023852337,
+        "gate_passed": true,
+        "reason": "PASS (NRMSE=0.445% < 2.0%)"
+      },
+      "gate3_bragg_range": {
+        "required": false,
+        "peak_diff_mm": null,
+        "gate_passed": true,
+        "reason": "N/A (Not required for this case)"
+      },
+      "gate4_terminal_conservation": {
+        "required": true,
+        "exact_conservation": true,
+        "histories": 100000,
+        "sum_terminal_counts": 100000,
+        "counts": {
+          "stopped": 0,
+          "inelastic": 7728,
+          "other": 0,
+          "escaped": 92272
+        },
+        "gate_passed": true,
+        "reason": "PASS (exact sum=100000 == 100000)"
+      },
+      "gate5_section_mapping": {
+        "required": true,
+        "mismatches": 0,
+        "first_interactions_by_expected_section": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          7728,
+          0,
+          0,
+          0,
+          0
+        ],
+        "first_interactions_by_recorded_section": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          7728,
+          0,
+          0,
+          0,
+          0
+        ],
+        "gate_passed": true,
+        "reason": "PASS (0 mismatches)"
+      },
+      "gate6_secondary_count": {
+        "required": true,
+        "gate_passed": true,
+        "reason": "PASS (all secondary/replay counts == 0)",
+        "diagnostics": {
+          "generated_direct_secondaries": 0,
+          "queued_secondaries": 0,
+          "transported_secondaries": 0,
+          "cinel02_replay_valid_sum": 0
+        }
+      },
+      "gate7_overflow_count": {
+        "required": true,
+        "gate_passed": true,
+        "reason": "PASS (all overflow/retry diagnostics == 0)",
+        "diagnostics": {
+          "secondary_queue_overflow": 0,
+          "elastic_queue_overflow": 0,
+          "neutral_queue_overflow": 0,
+          "electron_queue_overflow": 0,
+          "fred_resample_failed_events": 0,
+          "fred_product_capacity_overflow_events": 0,
+          "primary_other_terminal_count": 0
+        }
+      },
+      "energy_balance_rel_error": 8.394063844e-09
+    },
+    {
+      "id": "soft_tissue_100mevu_bragg",
+      "category": "case1_homogeneous_slabs",
+      "required_gates": [
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "passed_all_gates": true,
+      "gate1_survival_integral": {
+        "required": false,
+        "topas_integral": null,
+        "gpu_integral": null,
+        "rel_diff": null,
+        "gate_passed": true,
+        "reason": "N/A (Not required for this case)"
+      },
+      "gate2_first_interaction_nrmse": {
+        "required": false,
+        "nrmse": null,
+        "gate_passed": true,
+        "reason": "N/A (Not required for this case)"
+      },
+      "gate3_bragg_range": {
+        "required": true,
+        "peak_diff_mm": 0.0,
+        "gate_passed": true,
+        "reason": "PASS (|diff|=0.00mm <= 1.00mm)"
+      },
+      "gate4_terminal_conservation": {
+        "required": true,
+        "exact_conservation": true,
+        "histories": 100000,
+        "sum_terminal_counts": 100000,
+        "counts": {
+          "stopped": 83961,
+          "inelastic": 16039,
+          "other": 0,
+          "escaped": 0
+        },
+        "gate_passed": true,
+        "reason": "PASS (exact sum=100000 == 100000)"
+      },
+      "gate5_section_mapping": {
+        "required": true,
+        "mismatches": 0,
+        "first_interactions_by_expected_section": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          16039,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "first_interactions_by_recorded_section": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          16039,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "gate_passed": true,
+        "reason": "PASS (0 mismatches)"
+      },
+      "gate6_secondary_count": {
+        "required": true,
+        "gate_passed": true,
+        "reason": "PASS (all secondary/replay counts == 0)",
+        "diagnostics": {
+          "generated_direct_secondaries": 0,
+          "queued_secondaries": 0,
+          "transported_secondaries": 0,
+          "cinel02_replay_valid_sum": 0
+        }
+      },
+      "gate7_overflow_count": {
+        "required": true,
+        "gate_passed": true,
+        "reason": "PASS (all overflow/retry diagnostics == 0)",
+        "diagnostics": {
+          "secondary_queue_overflow": 0,
+          "elastic_queue_overflow": 0,
+          "neutral_queue_overflow": 0,
+          "electron_queue_overflow": 0,
+          "fred_resample_failed_events": 0,
+          "fred_product_capacity_overflow_events": 0,
+          "primary_other_terminal_count": 0
+        }
+      },
+      "energy_balance_rel_error": 2.443715602e-07
+    },
+    {
+      "id": "dense_bone_100mevu_bragg",
+      "category": "case1_homogeneous_slabs",
+      "required_gates": [
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "passed_all_gates": true,
+      "gate1_survival_integral": {
+        "required": false,
+        "topas_integral": null,
+        "gpu_integral": null,
+        "rel_diff": null,
+        "gate_passed": true,
+        "reason": "N/A (Not required for this case)"
+      },
+      "gate2_first_interaction_nrmse": {
+        "required": false,
+        "nrmse": null,
+        "gate_passed": true,
+        "reason": "N/A (Not required for this case)"
+      },
+      "gate3_bragg_range": {
+        "required": true,
+        "peak_diff_mm": 0.5,
+        "gate_passed": true,
+        "reason": "PASS (|diff|=0.50mm <= 0.50mm)"
+      },
+      "gate4_terminal_conservation": {
+        "required": true,
+        "exact_conservation": true,
+        "histories": 100000,
+        "sum_terminal_counts": 100000,
+        "counts": {
+          "stopped": 86619,
+          "inelastic": 13381,
+          "other": 0,
+          "escaped": 0
+        },
+        "gate_passed": true,
+        "reason": "PASS (exact sum=100000 == 100000)"
+      },
+      "gate5_section_mapping": {
+        "required": true,
+        "mismatches": 0,
+        "first_interactions_by_expected_section": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          13381,
+          0,
+          0,
+          0,
+          0
+        ],
+        "first_interactions_by_recorded_section": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          13381,
+          0,
+          0,
+          0,
+          0
+        ],
+        "gate_passed": true,
+        "reason": "PASS (0 mismatches)"
+      },
+      "gate6_secondary_count": {
+        "required": true,
+        "gate_passed": true,
+        "reason": "PASS (all secondary/replay counts == 0)",
+        "diagnostics": {
+          "generated_direct_secondaries": 0,
+          "queued_secondaries": 0,
+          "transported_secondaries": 0,
+          "cinel02_replay_valid_sum": 0
+        }
+      },
+      "gate7_overflow_count": {
+        "required": true,
+        "gate_passed": true,
+        "reason": "PASS (all overflow/retry diagnostics == 0)",
+        "diagnostics": {
+          "secondary_queue_overflow": 0,
+          "elastic_queue_overflow": 0,
+          "neutral_queue_overflow": 0,
+          "electron_queue_overflow": 0,
+          "fred_resample_failed_events": 0,
+          "fred_product_capacity_overflow_events": 0,
+          "primary_other_terminal_count": 0
+        }
+      },
+      "energy_balance_rel_error": 1.503101755e-06
+    },
+    {
+      "id": "air_100mevu",
+      "category": "case2_five_material_set",
+      "required_gates": [
+        1,
+        2,
+        4,
+        5,
+        6,
+        7
+      ],
+      "passed_all_gates": true,
+      "gate1_survival_integral": {
+        "required": true,
+        "topas_integral": 9.95417,
+        "gpu_integral": 9.952960000000001,
+        "rel_diff": 0.00012155709617161462,
+        "gate_passed": true,
+        "reason": "PASS (rel_diff=0.012% < 1.0%)"
+      },
+      "gate2_first_interaction_nrmse": {
+        "required": true,
+        "nrmse": 0.01904441742427535,
+        "gate_passed": true,
+        "reason": "PASS (NRMSE=1.904% < 2.0%)"
+      },
+      "gate3_bragg_range": {
+        "required": false,
+        "peak_diff_mm": null,
+        "gate_passed": true,
+        "reason": "N/A (Not required for this case)"
+      },
+      "gate4_terminal_conservation": {
+        "required": true,
+        "exact_conservation": true,
+        "histories": 100000,
+        "sum_terminal_counts": 100000,
+        "counts": {
+          "stopped": 0,
+          "inelastic": 837,
+          "other": 0,
+          "escaped": 99163
+        },
+        "gate_passed": true,
+        "reason": "PASS (exact sum=100000 == 100000)"
+      },
+      "gate5_section_mapping": {
+        "required": true,
+        "mismatches": 0,
+        "first_interactions_by_expected_section": [
+          837,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "first_interactions_by_recorded_section": [
+          837,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "gate_passed": true,
+        "reason": "PASS (0 mismatches)"
+      },
+      "gate6_secondary_count": {
+        "required": true,
+        "gate_passed": true,
+        "reason": "PASS (all secondary/replay counts == 0)",
+        "diagnostics": {
+          "generated_direct_secondaries": 0,
+          "queued_secondaries": 0,
+          "transported_secondaries": 0,
+          "cinel02_replay_valid_sum": 0
+        }
+      },
+      "gate7_overflow_count": {
+        "required": true,
+        "gate_passed": true,
+        "reason": "PASS (all overflow/retry diagnostics == 0)",
+        "diagnostics": {
+          "secondary_queue_overflow": 0,
+          "elastic_queue_overflow": 0,
+          "neutral_queue_overflow": 0,
+          "electron_queue_overflow": 0,
+          "fred_resample_failed_events": 0,
+          "fred_product_capacity_overflow_events": 0,
+          "primary_other_terminal_count": 0
+        }
+      },
+      "energy_balance_rel_error": 6.711764783e-08
+    },
+    {
+      "id": "air_200mevu",
+      "category": "case2_five_material_set",
+      "required_gates": [
+        1,
+        2,
+        4,
+        5,
+        6,
+        7
+      ],
+      "passed_all_gates": true,
+      "gate1_survival_integral": {
+        "required": true,
+        "topas_integral": 9.91982,
+        "gpu_integral": 9.91841,
+        "rel_diff": 0.00014213967592152996,
+        "gate_passed": true,
+        "reason": "PASS (rel_diff=0.014% < 1.0%)"
+      },
+      "gate2_first_interaction_nrmse": {
+        "required": true,
+        "nrmse": 0.011486590956429153,
+        "gate_passed": true,
+        "reason": "PASS (NRMSE=1.149% < 2.0%)"
+      },
+      "gate3_bragg_range": {
+        "required": false,
+        "peak_diff_mm": null,
+        "gate_passed": true,
+        "reason": "N/A (Not required for this case)"
+      },
+      "gate4_terminal_conservation": {
+        "required": true,
+        "exact_conservation": true,
+        "histories": 100000,
+        "sum_terminal_counts": 100000,
+        "counts": {
+          "stopped": 0,
+          "inelastic": 1485,
+          "other": 0,
+          "escaped": 98515
+        },
+        "gate_passed": true,
+        "reason": "PASS (exact sum=100000 == 100000)"
+      },
+      "gate5_section_mapping": {
+        "required": true,
+        "mismatches": 0,
+        "first_interactions_by_expected_section": [
+          1485,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "first_interactions_by_recorded_section": [
+          1485,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "gate_passed": true,
+        "reason": "PASS (0 mismatches)"
+      },
+      "gate6_secondary_count": {
+        "required": true,
+        "gate_passed": true,
+        "reason": "PASS (all secondary/replay counts == 0)",
+        "diagnostics": {
+          "generated_direct_secondaries": 0,
+          "queued_secondaries": 0,
+          "transported_secondaries": 0,
+          "cinel02_replay_valid_sum": 0
+        }
+      },
+      "gate7_overflow_count": {
+        "required": true,
+        "gate_passed": true,
+        "reason": "PASS (all overflow/retry diagnostics == 0)",
+        "diagnostics": {
+          "secondary_queue_overflow": 0,
+          "elastic_queue_overflow": 0,
+          "neutral_queue_overflow": 0,
+          "electron_queue_overflow": 0,
+          "fred_resample_failed_events": 0,
+          "fred_product_capacity_overflow_events": 0,
+          "primary_other_terminal_count": 0
+        }
+      },
+      "energy_balance_rel_error": 3.853920636e-08
+    },
+    {
+      "id": "trabecular_bone_100mevu",
+      "category": "case2_five_material_set",
+      "required_gates": [
+        1,
+        2,
+        4,
+        5,
+        6,
+        7
+      ],
+      "passed_all_gates": true,
+      "gate1_survival_integral": {
+        "required": true,
+        "topas_integral": 4.94057,
+        "gpu_integral": 4.9381900000000005,
+        "rel_diff": 0.00048172579277281865,
+        "gate_passed": true,
+        "reason": "PASS (rel_diff=0.048% < 1.0%)"
+      },
+      "gate2_first_interaction_nrmse": {
+        "required": true,
+        "nrmse": 0.009247740369283197,
+        "gate_passed": true,
+        "reason": "PASS (NRMSE=0.925% < 2.0%)"
+      },
+      "gate3_bragg_range": {
+        "required": false,
+        "peak_diff_mm": null,
+        "gate_passed": true,
+        "reason": "N/A (Not required for this case)"
+      },
+      "gate4_terminal_conservation": {
+        "required": true,
+        "exact_conservation": true,
+        "histories": 100000,
+        "sum_terminal_counts": 100000,
+        "counts": {
+          "stopped": 0,
+          "inelastic": 2042,
+          "other": 0,
+          "escaped": 97958
+        },
+        "gate_passed": true,
+        "reason": "PASS (exact sum=100000 == 100000)"
+      },
+      "gate5_section_mapping": {
+        "required": true,
+        "mismatches": 0,
+        "first_interactions_by_expected_section": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          2042,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "first_interactions_by_recorded_section": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          2042,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "gate_passed": true,
+        "reason": "PASS (0 mismatches)"
+      },
+      "gate6_secondary_count": {
+        "required": true,
+        "gate_passed": true,
+        "reason": "PASS (all secondary/replay counts == 0)",
+        "diagnostics": {
+          "generated_direct_secondaries": 0,
+          "queued_secondaries": 0,
+          "transported_secondaries": 0,
+          "cinel02_replay_valid_sum": 0
+        }
+      },
+      "gate7_overflow_count": {
+        "required": true,
+        "gate_passed": true,
+        "reason": "PASS (all overflow/retry diagnostics == 0)",
+        "diagnostics": {
+          "secondary_queue_overflow": 0,
+          "elastic_queue_overflow": 0,
+          "neutral_queue_overflow": 0,
+          "electron_queue_overflow": 0,
+          "fred_resample_failed_events": 0,
+          "fred_product_capacity_overflow_events": 0,
+          "primary_other_terminal_count": 0
+        }
+      },
+      "energy_balance_rel_error": 3.634252896e-10
+    },
+    {
+      "id": "trabecular_bone_200mevu",
+      "category": "case2_five_material_set",
+      "required_gates": [
+        1,
+        2,
+        4,
+        5,
+        6,
+        7
+      ],
+      "passed_all_gates": true,
+      "gate1_survival_integral": {
+        "required": true,
+        "topas_integral": 4.86733,
+        "gpu_integral": 4.86662,
+        "rel_diff": 0.00014587052860598446,
+        "gate_passed": true,
+        "reason": "PASS (rel_diff=0.015% < 1.0%)"
+      },
+      "gate2_first_interaction_nrmse": {
+        "required": true,
+        "nrmse": 0.0048288631840754095,
+        "gate_passed": true,
+        "reason": "PASS (NRMSE=0.483% < 2.0%)"
+      },
+      "gate3_bragg_range": {
+        "required": false,
+        "peak_diff_mm": null,
+        "gate_passed": true,
+        "reason": "N/A (Not required for this case)"
+      },
+      "gate4_terminal_conservation": {
+        "required": true,
+        "exact_conservation": true,
+        "histories": 100000,
+        "sum_terminal_counts": 100000,
+        "counts": {
+          "stopped": 0,
+          "inelastic": 4421,
+          "other": 0,
+          "escaped": 95579
+        },
+        "gate_passed": true,
+        "reason": "PASS (exact sum=100000 == 100000)"
+      },
+      "gate5_section_mapping": {
+        "required": true,
+        "mismatches": 0,
+        "first_interactions_by_expected_section": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          4421,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "first_interactions_by_recorded_section": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          4421,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "gate_passed": true,
+        "reason": "PASS (0 mismatches)"
+      },
+      "gate6_secondary_count": {
+        "required": true,
+        "gate_passed": true,
+        "reason": "PASS (all secondary/replay counts == 0)",
+        "diagnostics": {
+          "generated_direct_secondaries": 0,
+          "queued_secondaries": 0,
+          "transported_secondaries": 0,
+          "cinel02_replay_valid_sum": 0
+        }
+      },
+      "gate7_overflow_count": {
+        "required": true,
+        "gate_passed": true,
+        "reason": "PASS (all overflow/retry diagnostics == 0)",
+        "diagnostics": {
+          "secondary_queue_overflow": 0,
+          "elastic_queue_overflow": 0,
+          "neutral_queue_overflow": 0,
+          "electron_queue_overflow": 0,
+          "fred_resample_failed_events": 0,
+          "fred_product_capacity_overflow_events": 0,
+          "primary_other_terminal_count": 0
+        }
+      },
+      "energy_balance_rel_error": 1.532712992e-07
+    },
+    {
+      "id": "trabecular_bone_300mevu",
+      "category": "case2_five_material_set",
+      "required_gates": [
+        1,
+        2,
+        4,
+        5,
+        6,
+        7
+      ],
+      "passed_all_gates": true,
+      "gate1_survival_integral": {
+        "required": true,
+        "topas_integral": 4.76475,
+        "gpu_integral": 4.7600999999999996,
+        "rel_diff": 0.0009759168896585779,
+        "gate_passed": true,
+        "reason": "PASS (rel_diff=0.098% < 1.0%)"
+      },
+      "gate2_first_interaction_nrmse": {
+        "required": true,
+        "nrmse": 0.007679677693848816,
+        "gate_passed": true,
+        "reason": "PASS (NRMSE=0.768% < 2.0%)"
+      },
+      "gate3_bragg_range": {
+        "required": false,
+        "peak_diff_mm": null,
+        "gate_passed": true,
+        "reason": "N/A (Not required for this case)"
+      },
+      "gate4_terminal_conservation": {
+        "required": true,
+        "exact_conservation": true,
+        "histories": 100000,
+        "sum_terminal_counts": 100000,
+        "counts": {
+          "stopped": 0,
+          "inelastic": 7943,
+          "other": 0,
+          "escaped": 92057
+        },
+        "gate_passed": true,
+        "reason": "PASS (exact sum=100000 == 100000)"
+      },
+      "gate5_section_mapping": {
+        "required": true,
+        "mismatches": 0,
+        "first_interactions_by_expected_section": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          7943,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "first_interactions_by_recorded_section": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          7943,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "gate_passed": true,
+        "reason": "PASS (0 mismatches)"
+      },
+      "gate6_secondary_count": {
+        "required": true,
+        "gate_passed": true,
+        "reason": "PASS (all secondary/replay counts == 0)",
+        "diagnostics": {
+          "generated_direct_secondaries": 0,
+          "queued_secondaries": 0,
+          "transported_secondaries": 0,
+          "cinel02_replay_valid_sum": 0
+        }
+      },
+      "gate7_overflow_count": {
+        "required": true,
+        "gate_passed": true,
+        "reason": "PASS (all overflow/retry diagnostics == 0)",
+        "diagnostics": {
+          "secondary_queue_overflow": 0,
+          "elastic_queue_overflow": 0,
+          "neutral_queue_overflow": 0,
+          "electron_queue_overflow": 0,
+          "fred_resample_failed_events": 0,
+          "fred_product_capacity_overflow_events": 0,
+          "primary_other_terminal_count": 0
+        }
+      },
+      "energy_balance_rel_error": 3.223625885e-08
+    },
+    {
+      "id": "oblique_grid_200mevu",
+      "category": "case4_boundary_stress",
+      "required_gates": [
+        1,
+        2,
+        4,
+        5,
+        6,
+        7
+      ],
+      "passed_all_gates": true,
+      "gate1_survival_integral": {
+        "required": true,
+        "topas_integral": 9.45593,
+        "gpu_integral": 9.44295,
+        "rel_diff": 0.0013726835964310922,
+        "gate_passed": true,
+        "reason": "PASS (rel_diff=0.137% < 1.0%)"
+      },
+      "gate2_first_interaction_nrmse": {
+        "required": true,
+        "nrmse": 0.005639633311963531,
+        "gate_passed": true,
+        "reason": "PASS (NRMSE=0.564% < 2.0%)"
+      },
+      "gate3_bragg_range": {
+        "required": false,
+        "peak_diff_mm": null,
+        "gate_passed": true,
+        "reason": "N/A (Not required for this case)"
+      },
+      "gate4_terminal_conservation": {
+        "required": true,
+        "exact_conservation": true,
+        "histories": 100000,
+        "sum_terminal_counts": 100000,
+        "counts": {
+          "stopped": 0,
+          "inelastic": 10002,
+          "other": 0,
+          "escaped": 89998
+        },
+        "gate_passed": true,
+        "reason": "PASS (exact sum=100000 == 100000)"
+      },
+      "gate5_section_mapping": {
+        "required": true,
+        "mismatches": 0,
+        "first_interactions_by_expected_section": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          10002,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "first_interactions_by_recorded_section": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          10002,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "gate_passed": true,
+        "reason": "PASS (0 mismatches)"
+      },
+      "gate6_secondary_count": {
+        "required": true,
+        "gate_passed": true,
+        "reason": "PASS (all secondary/replay counts == 0)",
+        "diagnostics": {
+          "generated_direct_secondaries": 0,
+          "queued_secondaries": 0,
+          "transported_secondaries": 0,
+          "cinel02_replay_valid_sum": 0
+        }
+      },
+      "gate7_overflow_count": {
+        "required": true,
+        "gate_passed": true,
+        "reason": "PASS (all overflow/retry diagnostics == 0)",
+        "diagnostics": {
+          "secondary_queue_overflow": 0,
+          "elastic_queue_overflow": 0,
+          "neutral_queue_overflow": 0,
+          "electron_queue_overflow": 0,
+          "fred_resample_failed_events": 0,
+          "fred_product_capacity_overflow_events": 0,
+          "primary_other_terminal_count": 0
+        }
+      },
+      "energy_balance_rel_error": 8.464648823e-09
+    },
+    {
+      "id": "staircase_25sec_200mevu",
+      "category": "case3_staircase_25sec",
+      "required_gates": [
+        1,
+        2,
+        4,
+        5,
+        6,
+        7
+      ],
+      "passed_all_gates": true,
+      "gate1_survival_integral": {
+        "required": true,
+        "topas_integral": 22.13927,
+        "gpu_integral": 22.11136,
+        "rel_diff": 0.0012606558391491023,
+        "gate_passed": true,
+        "reason": "PASS (rel_diff=0.126% < 1.0%)"
+      },
+      "gate2_first_interaction_nrmse": {
+        "required": true,
+        "nrmse": 0.019320652007027612,
+        "gate_passed": true,
+        "reason": "PASS (NRMSE=1.932% < 2.0%)"
+      },
+      "gate3_bragg_range": {
+        "required": false,
+        "peak_diff_mm": null,
+        "gate_passed": true,
+        "reason": "N/A (Not required for this case)"
+      },
+      "gate4_terminal_conservation": {
+        "required": true,
+        "exact_conservation": true,
+        "histories": 100000,
+        "sum_terminal_counts": 100000,
+        "counts": {
+          "stopped": 0,
+          "inelastic": 25812,
+          "other": 0,
+          "escaped": 74188
+        },
+        "gate_passed": true,
+        "reason": "PASS (exact sum=100000 == 100000)"
+      },
+      "gate5_section_mapping": {
+        "required": true,
+        "mismatches": 0,
+        "first_interactions_by_expected_section": [
+          34,
+          463,
+          893,
+          892,
+          872,
+          926,
+          971,
+          956,
+          969,
+          994,
+          968,
+          1018,
+          1050,
+          1056,
+          1042,
+          1096,
+          1197,
+          1133,
+          1184,
+          1193,
+          1161,
+          1172,
+          1238,
+          1533,
+          1801
+        ],
+        "first_interactions_by_recorded_section": [
+          34,
+          463,
+          893,
+          892,
+          872,
+          926,
+          971,
+          956,
+          969,
+          994,
+          968,
+          1018,
+          1050,
+          1056,
+          1042,
+          1096,
+          1197,
+          1133,
+          1184,
+          1193,
+          1161,
+          1172,
+          1238,
+          1533,
+          1801
+        ],
+        "gate_passed": true,
+        "reason": "PASS (0 mismatches)"
+      },
+      "gate6_secondary_count": {
+        "required": true,
+        "gate_passed": true,
+        "reason": "PASS (all secondary/replay counts == 0)",
+        "diagnostics": {
+          "generated_direct_secondaries": 0,
+          "queued_secondaries": 0,
+          "transported_secondaries": 0,
+          "cinel02_replay_valid_sum": 0
+        }
+      },
+      "gate7_overflow_count": {
+        "required": true,
+        "gate_passed": true,
+        "reason": "PASS (all overflow/retry diagnostics == 0)",
+        "diagnostics": {
+          "secondary_queue_overflow": 0,
+          "elastic_queue_overflow": 0,
+          "neutral_queue_overflow": 0,
+          "electron_queue_overflow": 0,
+          "fred_resample_failed_events": 0,
+          "fred_product_capacity_overflow_events": 0,
+          "primary_other_terminal_count": 0
+        }
+      },
+      "energy_balance_rel_error": 1.562518347e-07
+    }
+  ]
+}

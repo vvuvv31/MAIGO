@@ -179,14 +179,20 @@ YAML library).
 
 ## Validation Milestones
 
-- **P2 Milestone (C12 Primary CT Attenuation)**: **Achieved**. Validated against TOPAS across homogeneous Schneider slabs (lung, soft tissue, dense bone), 5-material set (adding air and trabecular bone), 25-section staircase phantom, and boundary-stress oblique beam geometries (15 deg) for 100, 200, and 300 MeV/u. All 7 acceptance gates passed:
-  - Primary survival integral relative difference < 1% (observed max 0.116%)
-  - First-interaction-depth NRMSE < 2% (observed max 0.946%)
+- **P2 Milestone (C12 Primary CT Attenuation)**: **Achieved**. Validated against dedicated TOPAS / Geant4 baselines across the full 18-case offline validation suite under strict fail-closed contract (`tools/verify_step13_p2_gates.py`):
+  - Case 1: Homogeneous Schneider slabs (lung, soft tissue, dense bone at 100, 200, 300 MeV/u) and Bragg stopping range slabs (soft tissue, dense bone at 100 MeV/u).
+  - Case 2: 5-material set adding air (100, 200 MeV/u) and trabecular bone (100, 200, 300 MeV/u).
+  - Case 3: 25-section continuous staircase phantom (Sections 0..24 at 200 MeV/u) with per-section depth mapping audit.
+  - Case 4: Voxel-boundary stress oblique beam geometry (15 deg entrance angle at 200 MeV/u).
+  All 7 acceptance gates strictly passed across all 18 cases:
+  - Primary survival integral relative difference < 1% (observed max 0.137%)
+  - First-interaction-depth NRMSE < 2% (observed max 1.932% on full 25-section staircase)
   - Range / Bragg position difference <= max(0.5 mm, one voxel size) (observed 0.00 mm in soft tissue, 0.50 mm in dense bone)
   - Exact terminal particle conservation across 100% of cases
-  - Zero section mapping mismatches
-  - Zero secondaries / replays in primary validation mode
-  - Zero queue/step overflows
+  - Zero section mapping mismatches across all 25 sections
+  - Zero secondaries / replays in primary validation mode (verified via runtime diagnostics)
+  - Zero queue / step / resample overflows (verified via runtime diagnostics)
+  Full cryptographic manifest and report preserved in `evidence/step13/`.
 
 ## License
 

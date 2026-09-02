@@ -206,14 +206,45 @@ int main(int argc, char* argv[]) {
             const uint64_t sum_terminal = stopped + inelastic_term + other_term + escaped;
             const bool exact_conservation = (sum_terminal == tc.histories);
 
-            // Check section mapping mismatch
+            // Check section mapping audit on every first interaction
             uint64_t section_mapping_mismatch = 0;
-            if (tc.category != "case3_staircase_25sec") {
-                for (const auto& rec : result.primary_first_interactions) {
-                    if (rec.section_id != static_cast<uint32_t>(tc.section_id)) {
-                        section_mapping_mismatch++;
-                    }
+            std::vector<uint64_t> first_interactions_by_expected_section(25, 0);
+            std::vector<uint64_t> first_interactions_by_recorded_section(25, 0);
+
+            for (const auto& rec : result.primary_first_interactions) {
+                uint32_t expected_sec = 0;
+                if (tc.category == "case3_staircase_25sec") {
+                    expected_sec = static_cast<uint32_t>(std::clamp(
+                        static_cast<int>(std::floor((rec.depth_mm - tc.origin_z_mm) / tc.spacing_z_mm)),
+                        0, 24));
+                } else {
+                    expected_sec = static_cast<uint32_t>(tc.section_id);
                 }
+
+                if (expected_sec < 25) {
+                    first_interactions_by_expected_section[expected_sec]++;
+                }
+                if (rec.section_id < 25) {
+                    first_interactions_by_recorded_section[rec.section_id]++;
+                }
+                if (rec.section_id != expected_sec) {
+                    section_mapping_mismatch++;
+                }
+            }
+
+            // Real transport diagnostics from result
+            const uint64_t gen_secondaries = result.generated_direct_secondaries;
+            const uint64_t queued_sec = result.queued_secondaries;
+            const uint64_t trans_sec = result.transported_secondaries;
+            const uint64_t sec_overflow = result.secondary_queue_overflow;
+            const uint64_t elastic_overflow = result.elastic_queue_overflow;
+            const uint64_t neutral_overflow = result.neutral_queue_overflow;
+            const uint64_t electron_overflow = result.electron_queue_overflow;
+            const uint64_t fred_resample_failed = result.fred_resample_failed_events;
+            const uint64_t fred_cap_overflow = result.fred_product_capacity_overflow_events;
+            uint64_t replay_valid_sum = 0;
+            for (const auto v : result.cinel02_replay_valid_counts) {
+                replay_valid_sum += v;
             }
 
             std::cout << "  Simulated " << tc.histories << " histories.\n"
@@ -258,8 +289,29 @@ int main(int argc, char* argv[]) {
             out << "  \"exact_terminal_conservation\": " << (exact_conservation ? "true" : "false") << ",\n";
             out << "  \"section_mapping_mismatch\": " << section_mapping_mismatch << ",\n";
             out << "  \"relative_energy_balance_error\": " << result.relative_energy_balance_error() << ",\n";
-            out << "  \"secondary_count\": 0,\n";
-            out << "  \"overflow_count\": 0,\n";
+            out << "  \"diagnostics\": {\n";
+            out << "    \"generated_direct_secondaries\": " << gen_secondaries << ",\n";
+            out << "    \"queued_secondaries\": " << queued_sec << ",\n";
+            out << "    \"transported_secondaries\": " << trans_sec << ",\n";
+            out << "    \"secondary_queue_overflow\": " << sec_overflow << ",\n";
+            out << "    \"elastic_queue_overflow\": " << elastic_overflow << ",\n";
+            out << "    \"neutral_queue_overflow\": " << neutral_overflow << ",\n";
+            out << "    \"electron_queue_overflow\": " << electron_overflow << ",\n";
+            out << "    \"primary_other_terminal_count\": " << other_term << ",\n";
+            out << "    \"fred_resample_failed_events\": " << fred_resample_failed << ",\n";
+            out << "    \"fred_product_capacity_overflow_events\": " << fred_cap_overflow << ",\n";
+            out << "    \"cinel02_replay_valid_sum\": " << replay_valid_sum << "\n";
+            out << "  },\n";
+            out << "  \"first_interactions_by_expected_section\": [";
+            for (size_t s = 0; s < 25; ++s) {
+                out << first_interactions_by_expected_section[s] << (s + 1 < 25 ? ", " : "");
+            }
+            out << "],\n";
+            out << "  \"first_interactions_by_recorded_section\": [";
+            for (size_t s = 0; s < 25; ++s) {
+                out << first_interactions_by_recorded_section[s] << (s + 1 < 25 ? ", " : "");
+            }
+            out << "],\n";
 
             out << "  \"bragg_peak_metrics\": {\n";
             out << "    \"found_r80\": " << (bp_metrics.found_r80 ? "true" : "false") << ",\n";
