@@ -338,19 +338,16 @@ Step11TestResult run_step11_piecewise_hazard_gpu_test(
                     }
                 }
 
-                if (!tau_active) {
-                    const float u = rng::uniform01(1234567ULL, history_id, rng_step++, 8);
-                    tau_remaining = -sycl::log(sycl::fmax(u, 1.0e-12F));
-                    tau_active = true;
-                }
+                const float u = rng::uniform01(1234567ULL, history_id, rng_step++, 8);
+                float step_used = t_face;
+                const bool collision = consume_schneider_optical_depth_segment(
+                    tau_remaining, tau_active, step_used, macro_xs, u);
 
-                const float delta_tau = macro_xs * t_face;
-                if (macro_xs > 0.0F && delta_tau >= tau_remaining) {
-                    const float s_int = tau_remaining / macro_xs;
-                    pos_x += s_int * dx;
-                    pos_y += s_int * dy;
-                    pos_z += s_int * dz;
-                    path_traversed += s_int;
+                if (collision) {
+                    pos_x += step_used * dx;
+                    pos_y += step_used * dy;
+                    pos_z += step_used * dz;
+                    path_traversed += step_used;
                     survived = false;
 
                     if (num_bins > 0 && bin_width_mm > 0.0F) {
@@ -365,7 +362,6 @@ Step11TestResult run_step11_piecewise_hazard_gpu_test(
                     }
                     break;
                 } else {
-                    tau_remaining -= delta_tau;
                     pos_x += t_face * dx;
                     pos_y += t_face * dy;
                     pos_z += t_face * dz;
@@ -378,13 +374,28 @@ Step11TestResult run_step11_piecewise_hazard_gpu_test(
                     fc.fetch_add(1U);
 
                     if (sycl::fabs(dx) > 1.0e-6F) {
-                        pos_x = sycl::nextafter(pos_x, dx > 0.0F ? 1.0e30F : -1.0e30F);
+                        const float fx = (pos_x - org_x) / sp_x;
+                        const int face_x = static_cast<int>(sycl::round(fx));
+                        const float b_x = org_x + static_cast<float>(face_x) * sp_x;
+                        if (sycl::fabs(pos_x - b_x) <= 1.0e-5F) {
+                            pos_x = sycl::nextafter(b_x, dx > 0.0F ? 1.0e30F : -1.0e30F);
+                        }
                     }
                     if (sycl::fabs(dy) > 1.0e-6F) {
-                        pos_y = sycl::nextafter(pos_y, dy > 0.0F ? 1.0e30F : -1.0e30F);
+                        const float fy = (pos_y - org_y) / sp_y;
+                        const int face_y = static_cast<int>(sycl::round(fy));
+                        const float b_y = org_y + static_cast<float>(face_y) * sp_y;
+                        if (sycl::fabs(pos_y - b_y) <= 1.0e-5F) {
+                            pos_y = sycl::nextafter(b_y, dy > 0.0F ? 1.0e30F : -1.0e30F);
+                        }
                     }
                     if (sycl::fabs(dz) > 1.0e-6F) {
-                        pos_z = sycl::nextafter(pos_z, dz > 0.0F ? 1.0e30F : -1.0e30F);
+                        const float fz = (pos_z - org_z) / sp_z;
+                        const int face_z = static_cast<int>(sycl::round(fz));
+                        const float b_z = org_z + static_cast<float>(face_z) * sp_z;
+                        if (sycl::fabs(pos_z - b_z) <= 1.0e-5F) {
+                            pos_z = sycl::nextafter(b_z, dz > 0.0F ? 1.0e30F : -1.0e30F);
+                        }
                     }
                 }
             }

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <algorithm>
+#include <cmath>
 #include <filesystem>
 #include <vector>
 
@@ -137,6 +139,31 @@ inline float schneider_primary_macroscopic_xs(
     float density_g_cm3) noexcept {
     return density_g_cm3 * schneider_primary_mass_xs(
         table, section_count, energy_nodes, e_min, inv_dE, section_id, energy_mevu);
+}
+
+// Consumes optical depth over a segment of length step_mm in a medium with macro_xs (mm^-1).
+// If collision occurs within step_mm: returns true, clamps step_mm to collision distance, resets tau_active.
+// Otherwise: returns false, subtracts macro_xs * step_mm from tau_remaining, keeps tau_active true.
+inline bool consume_schneider_optical_depth_segment(
+    float& tau_remaining,
+    bool& tau_active,
+    float& step_mm,
+    float macro_xs,
+    float rng_u) noexcept {
+    if (!tau_active) {
+        tau_remaining = -std::log(std::max(rng_u, 1.0e-12F));
+        tau_active = true;
+    }
+    const float delta_tau = macro_xs * step_mm;
+    if (macro_xs > 0.0F && delta_tau >= tau_remaining) {
+        const float collision_s = tau_remaining / macro_xs;
+        step_mm = std::min(step_mm, collision_s);
+        tau_remaining = 0.0F;
+        tau_active = false;
+        return true;
+    }
+    tau_remaining -= delta_tau;
+    return false;
 }
 
 #ifdef CARBON_HAS_SYCL

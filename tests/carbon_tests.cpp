@@ -4829,6 +4829,212 @@ void test_step11_piecewise_nuclear_optical_depth() {
 #endif
 }
 
+void test_step11_schneider_step_energy_error_bound() {
+    const auto source_dir = std::filesystem::path(CARBON_SOURCE_DIR);
+    const auto xs_path = source_dir / "data/schneider/c12_schneider_inelastic_mass_xs.csv";
+    if (!std::filesystem::exists(xs_path)) {
+        return;
+    }
+    carbon::TransportConfig cfg;
+    cfg.ct_schneider_cross_section_file = xs_path.string();
+    std::vector<double> transport_energies(400);
+    for (std::size_t i = 0; i < 400; ++i) {
+        transport_energies[i] = 1.0 + i * 1.0;
+    }
+    const auto schneider_grid = carbon::prepare_schneider_primary_xs(cfg, transport_energies);
+
+    const auto sp_table = carbon::StoppingPowerTable::from_csv(
+        source_dir / "data/stopping_power_water_geant4_11_3_2.csv");
+
+    const auto section_xs = [&](std::uint32_t sec, float e_mevu) -> float {
+        return carbon::schneider_primary_mass_xs(
+            schneider_grid.mass_xs_per_mm_at_1g_cm3.data(), 25, 400, 1.0F, 1.0F, sec, e_mevu);
+    };
+
+    const std::vector<float> test_energies = {100.0F, 200.0F, 300.0F};
+    const std::vector<std::pair<std::uint32_t, float>> materials = {
+        {1, 0.26F},   // lung
+        {8, 1.0F},    // soft tissue
+        {20, 1.5F}    // dense bone
+    };
+
+    const float ds = 1.0F; // 1 mm typical condensed history step
+    float max_error = 0.0F;
+
+    for (const auto e0 : test_energies) {
+        const float sp_water_mev_per_mm = static_cast<float>(sp_table.interpolate(static_cast<double>(e0 * 12.0F)));
+        const float sp_mevu_per_mm = sp_water_mev_per_mm / 12.0F;
+        for (const auto& [sec, rho] : materials) {
+            const float de_step = sp_mevu_per_mm * rho * ds;
+            const float e1 = e0 - de_step;
+            const float e_mid = 0.5F * (e0 + e1);
+
+            const float sig0 = rho * section_xs(sec, e0);
+            const float sig_mid = rho * section_xs(sec, e_mid);
+            const float sig1 = rho * section_xs(sec, e1);
+
+            const float tau_start = sig0 * ds;
+            const float tau_simpson = (ds / 6.0F) * (sig0 + 4.0F * sig_mid + sig1);
+
+            const float rel_err = std::fabs(tau_start - tau_simpson) / tau_simpson;
+            if (rel_err > max_error) {
+                max_error = rel_err;
+            }
+        }
+    }
+
+    std::cout << "[step-energy-bound] Maximum |tau_start - tau_simpson| / tau_simpson = "
+              << max_error * 100.0F << "% (threshold < 0.2%)\n";
+    require(max_error < 0.002F, "Step-energy error bound exceeds 0.2%");
+}
+
+void test_step11_schneider_primary_mode_safety() {
+    const auto source_dir = std::filesystem::path(CARBON_SOURCE_DIR);
+    const auto xs_path = source_dir / "data/schneider/c12_schneider_inelastic_mass_xs.csv";
+    if (!std::filesystem::exists(xs_path)) {
+        return;
+    }
+
+    // Test A: non-C12 projectile with Schneider XS must fail validate()
+    {
+        carbon::TransportConfig cfg;
+        cfg.primary_atomic_number = 1; // Proton
+        cfg.primary_mass_number = 1;
+        cfg.enable_ct_grid = true;
+        cfg.ct_grid_file = "dummy.cctg";
+        cfg.ct_schneider_cross_section_file = xs_path.string();
+        cfg.nuclear_model = "geant4";
+        require_throws<std::invalid_argument>(
+            [&]() { cfg.validate(); },
+            "Non-C12 projectile with Schneider XS must throw in validate()");
+    }
+
+    // Test B: enable_nuclear_elastic with Schneider XS must fail validate()
+    {
+        carbon::TransportConfig cfg;
+        cfg.primary_atomic_number = 6;
+        cfg.primary_mass_number = 12;
+        cfg.enable_ct_grid = true;
+        cfg.ct_grid_file = "dummy.cctg";
+        cfg.ct_schneider_cross_section_file = xs_path.string();
+        cfg.nuclear_model = "geant4";
+        cfg.enable_nuclear_elastic = true;
+        require_throws<std::invalid_argument>(
+            [&]() { cfg.validate(); },
+            "enable_nuclear_elastic=true with Schneider XS must throw in validate()");
+    }
+}
+
+void test_step11_schneider_production_tiny_cctg_transport() {
+#ifdef CARBON_HAS_SYCL
+    if (!is_sycl_available()) {
+        return;
+    }
+    const auto source_dir = std::filesystem::path(CARBON_SOURCE_DIR);
+    const auto xs_path = source_dir / "data/schneider/c12_schneider_inelastic_mass_xs.csv";
+    if (!std::filesystem::exists(xs_path)) {
+        return;
+    }
+
+    const auto temp_dir = std::filesystem::temp_directory_path() / "test_step11_tiny_cctg";
+    std::filesystem::create_directories(temp_dir);
+    const auto cctg_file = temp_dir / "tiny_two_voxel.cctg";
+
+    // 2-voxel CT grid along Z:
+    // Voxel 0: z in [0, 10) mm, section 8 (soft tissue), rho = 1.0 g/cm3
+    // Voxel 1: z in [10, 20) mm, section 20 (dense bone), rho = 1.5 g/cm3
+    carbon::CtGrid grid;
+    grid.file_version = carbon::CtGrid::version_v2;
+    grid.nx = 1;
+    grid.ny = 1;
+    grid.nz = 2;
+    grid.spacing_x_mm = 10.0;
+    grid.spacing_y_mm = 10.0;
+    grid.spacing_z_mm = 10.0;
+    grid.origin_x_mm = -5.0;
+    grid.origin_y_mm = -5.0;
+    grid.origin_z_mm = 0.0;
+    grid.density_g_per_cm3 = {1.0F, 1.5F};
+    grid.material_id = {8, 20};
+    grid.mass_sp_za_rel.resize(25, 1.0);
+    grid.write_binary(cctg_file);
+
+    carbon::TransportConfig config;
+    config.phantom_length_mm = 20.0;
+    config.depth_bin_width_mm = 1.0;
+    config.primary_atomic_number = 6;
+    config.primary_mass_number = 12;
+    config.initial_energy_MeVu = 200.0;
+    config.enable_ct_grid = true;
+    config.ct_grid_file = cctg_file.string();
+    config.ct_schneider_cross_section_file = xs_path.string();
+    config.nuclear_model = "geant4";
+    config.enable_inelastic = true;
+    config.enable_nuclear_elastic = false;
+    config.enable_multiple_scattering = false;
+    config.number_of_histories = 50000;
+    config.validate();
+
+    const auto water_sp = carbon::StoppingPowerTable::from_csv(
+        source_dir / "data/stopping_power_water_geant4_11_3_2.csv");
+    const auto zero_xs = zero_cross_section();
+
+    const auto result = carbon::transport_sycl(config, water_sp, zero_xs, "default");
+
+    std::vector<double> transport_energies(400);
+    for (std::size_t i = 0; i < 400; ++i) {
+        transport_energies[i] = 1.0 + i * 1.0;
+    }
+    const auto schneider_grid = carbon::prepare_schneider_primary_xs(config, transport_energies);
+    const float sig0 = 1.0F * carbon::schneider_primary_mass_xs(
+        schneider_grid.mass_xs_per_mm_at_1g_cm3.data(), 25, 400, 1.0F, 1.0F, 8, 200.0F);
+    const float sig1 = 1.5F * carbon::schneider_primary_mass_xs(
+        schneider_grid.mass_xs_per_mm_at_1g_cm3.data(), 25, 400, 1.0F, 1.0F, 20, 200.0F);
+    const double s_exact = std::exp(-(sig0 * 10.0 + sig1 * 10.0));
+
+    const double s_meas = 1.0 - static_cast<double>(result.nuclear_interactions) / static_cast<double>(config.number_of_histories);
+    const double sigma = std::sqrt(s_exact * (1.0 - s_exact) / static_cast<double>(config.number_of_histories));
+
+    std::cout << "[production-tiny-cctg] Measured survival = " << s_meas
+              << ", exact = " << s_exact << ", diff = " << std::fabs(s_meas - s_exact)
+              << " (" << std::fabs(s_meas - s_exact) / sigma << " sigma)\n";
+    require_near(s_meas, s_exact, 3.5 * sigma, "Production tiny CCTG survival does not match theory");
+
+    // Subtest 2: Forward ray starting 5 um before the interface (z = 9.995 mm, dz = +1.0)
+    // Path: 0.005 mm in Voxel 0 + 10.0 mm in Voxel 1
+    {
+        carbon::TransportConfig cfg_near_face = config;
+        cfg_near_face.source_origin_z_mm = 9.995;
+        cfg_near_face.validate();
+        const auto res_fwd = carbon::transport_sycl(cfg_near_face, water_sp, zero_xs, "default");
+        const double s_fwd_exact = std::exp(-(sig0 * 0.005 + sig1 * 10.0));
+        const double s_fwd_meas = 1.0 - static_cast<double>(res_fwd.nuclear_interactions) / static_cast<double>(cfg_near_face.number_of_histories);
+        const double sigma_fwd = std::sqrt(s_fwd_exact * (1.0 - s_fwd_exact) / static_cast<double>(cfg_near_face.number_of_histories));
+        std::cout << "[production-tiny-cctg] Forward 5um-before-face survival = " << s_fwd_meas
+                  << ", exact = " << s_fwd_exact << " (" << std::fabs(s_fwd_meas - s_fwd_exact) / sigma_fwd << " sigma)\n";
+        require_near(s_fwd_meas, s_fwd_exact, 3.5 * sigma_fwd, "Forward 5um-before-face survival failed");
+    }
+
+    // Subtest 3: Negative-direction ray starting 5 um after the interface (z = 10.005 mm, dz = -1.0)
+    // Path: 0.005 mm in Voxel 1 + 10.0 mm in Voxel 0
+    {
+        carbon::TransportConfig cfg_rev = config;
+        cfg_rev.source_origin_z_mm = 10.005;
+        cfg_rev.beam_uz_z = -1.0;
+        cfg_rev.validate();
+        const auto res_rev = carbon::transport_sycl(cfg_rev, water_sp, zero_xs, "default");
+        const double s_rev_exact = std::exp(-(sig1 * 0.005 + sig0 * 10.0));
+        const double s_rev_meas = 1.0 - static_cast<double>(res_rev.nuclear_interactions) / static_cast<double>(cfg_rev.number_of_histories);
+        const double sigma_rev = std::sqrt(s_rev_exact * (1.0 - s_rev_exact) / static_cast<double>(cfg_rev.number_of_histories));
+        std::cout << "[production-tiny-cctg] Reverse 5um-after-face survival = " << s_rev_meas
+                  << ", exact = " << s_rev_exact << " (" << std::fabs(s_rev_meas - s_rev_exact) / sigma_rev << " sigma)\n";
+        require_near(s_rev_meas, s_rev_exact, 3.5 * sigma_rev, "Reverse 5um-after-face survival failed");
+    }
+
+    std::filesystem::remove_all(temp_dir);
+#endif
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -4937,6 +5143,9 @@ int main(int argc, char** argv) {
 #endif
         run("test_step10_schneider_primary_xs_device_path", test_step10_schneider_primary_xs_device_path);
         run("test_step11_piecewise_nuclear_optical_depth", test_step11_piecewise_nuclear_optical_depth);
+        run("test_step11_schneider_step_energy_error_bound", test_step11_schneider_step_energy_error_bound);
+        run("test_step11_schneider_primary_mode_safety", test_step11_schneider_primary_mode_safety);
+        run("test_step11_schneider_production_tiny_cctg_transport", test_step11_schneider_production_tiny_cctg_transport);
         std::cout << "All carbon_tests passed\n";
         return EXIT_SUCCESS;
     } catch (const std::exception& error) {

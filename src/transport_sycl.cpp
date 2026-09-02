@@ -628,6 +628,15 @@ TransportResult transport_sycl(const TransportConfig& config,
             config.nuclear_model != "none";
 
         if (use_schneider_primary_xs) {
+            if (config.primary_atomic_number != 6 || config.primary_mass_number != 12) {
+                throw std::runtime_error(
+                    "Schneider primary cross section is validated for C12 (Z=6, A=12) primaries only, got Z=" +
+                    std::to_string(config.primary_atomic_number) + ", A=" + std::to_string(config.primary_mass_number));
+            }
+            if (config.enable_nuclear_elastic) {
+                throw std::runtime_error(
+                    "Nuclear elastic scattering is not supported under Schneider primary cross section mode");
+            }
             // Validate all voxel material_id < 25 before kernel launch
             for (std::size_t i = 0; i < grid.material_id.size(); ++i) {
                 if (grid.material_id[i] >= SchneiderResampledCrossSectionGrid::kExpectedSections) {
@@ -638,14 +647,27 @@ TransportResult transport_sycl(const TransportConfig& config,
                 }
             }
 
+            std::vector<double> schneider_grid_energies;
+            if (table_energies.front() >= 0.5 - 1e-4 && table_energies.back() <= 430.0 + 1e-4) {
+                schneider_grid_energies = table_energies;
+            } else {
+                const double e_start = 1.0;
+                const double e_end = std::min(430.0, std::max(e_start + 1.0, table_energies.back()));
+                const auto n_nodes = static_cast<std::size_t>(std::floor(e_end - e_start)) + 1;
+                schneider_grid_energies.resize(n_nodes);
+                for (std::size_t i = 0; i < n_nodes; ++i) {
+                    schneider_grid_energies[i] = e_start + static_cast<double>(i) * 1.0;
+                }
+            }
+
             const auto schneider_host_grid =
-                prepare_schneider_primary_xs(config, table_energies);
+                prepare_schneider_primary_xs(config, schneider_grid_energies);
             schneider_xs_sections =
                 static_cast<std::uint32_t>(SchneiderResampledCrossSectionGrid::kExpectedSections);
             schneider_xs_energies =
                 static_cast<std::uint32_t>(schneider_host_grid.energy_nodes());
-            schneider_xs_e_min = static_cast<float>(table_energies.front());
-            const float dE = static_cast<float>(table_energies[1] - table_energies[0]);
+            schneider_xs_e_min = static_cast<float>(schneider_grid_energies.front());
+            const float dE = static_cast<float>(schneider_grid_energies[1] - schneider_grid_energies[0]);
             schneider_xs_inv_dE = 1.0F / dE;
 
             const std::size_t total_elements =
@@ -656,8 +678,8 @@ TransportResult transport_sycl(const TransportConfig& config,
             if (schneider_xs_sections != 25) {
                 throw std::runtime_error("schneider_xs_sections must be exactly 25");
             }
-            if (schneider_xs_energies != table_energies.size()) {
-                throw std::runtime_error("schneider_xs_energies must match transport grid size");
+            if (schneider_xs_energies != schneider_grid_energies.size()) {
+                throw std::runtime_error("schneider_xs_energies must match grid size");
             }
 
             schneider_primary_xs_device = sycl::malloc_device<float>(total_elements, queue);
@@ -853,6 +875,11 @@ TransportResult transport_sycl(const TransportConfig& config,
     auto* untracked_nuclear_device = sycl::malloc_device<float>(number_of_histories, queue);
     if (untracked_nuclear_device != nullptr) {
         queue.fill(untracked_nuclear_device, 0.0F, number_of_histories).wait_and_throw();
+    }
+    auto* schneider_inelastic_device =
+        use_schneider_primary_xs ? sycl::malloc_device<std::uint64_t>(1, queue) : nullptr;
+    if (schneider_inelastic_device != nullptr) {
+        queue.fill(schneider_inelastic_device, std::uint64_t{0}, 1).wait_and_throw();
     }
 
     const auto enable_inelastic = config.enable_inelastic;
@@ -1493,7 +1520,7 @@ TransportResult transport_sycl(const TransportConfig& config,
                         position_z_mm += entry * direction_z;
                     }
                 } else {
-                    if (sycl::fabs(direction_z) > 1.0e-8F) {
+                    if (position_z_mm < 0.0F && sycl::fabs(direction_z) > 1.0e-8F) {
                         const auto t_plane = -position_z_mm / direction_z;
                         position_x_mm += t_plane * direction_x;
                         position_y_mm += t_plane * direction_y;
@@ -1661,13 +1688,15 @@ TransportResult transport_sycl(const TransportConfig& config,
                         maximum_step_mm,
                         maximum_relative_energy_loss * energy_MeV /
                             sycl::fmax(stopping_power_MeV_per_mm, 1.0e-6F));
+                    step_mm = sycl::fmax(step_mm, 1.0e-5F);
+
                     if (absolute_direction_z >= 1.0e-6F) {
                         const auto boundary_z_mm =
                             direction_z < 0.0F
                                 ? static_cast<float>(bin) * depth_bin_width_mm
                                 : static_cast<float>(bin + 1) * depth_bin_width_mm;
                         const auto dz_step = (boundary_z_mm - position_z_mm) / direction_z;
-                        if (dz_step > 1.0e-5F) {
+                        if (dz_step > 0.0F) {
                             step_mm = sycl::fmin(step_mm, dz_step);
                         }
                     }
@@ -1675,7 +1704,7 @@ TransportResult transport_sycl(const TransportConfig& config,
                         const auto slab_step = distance_to_slab_interface_mm(
                             position_z_mm, direction_z, slab_z_ends_device, slab_layer_count,
                             phantom_length_mm);
-                        if (slab_step > 1.0e-5F) {
+                        if (slab_step > 0.0F) {
                             step_mm = sycl::fmin(step_mm, slab_step);
                         }
                     }
@@ -1684,11 +1713,13 @@ TransportResult transport_sycl(const TransportConfig& config,
                             position_x_mm, position_y_mm, position_z_mm, direction_x,
                             direction_y, direction_z, insert_x_min, insert_x_max, insert_y_min,
                             insert_y_max, insert_z_min, insert_z_max, phantom_length_mm);
-                        if (insert_step > 1.0e-5F) {
+                        if (insert_step > 0.0F) {
                             step_mm = sycl::fmin(step_mm, insert_step);
                         }
                     }
+                    bool ct_face_clamped = false;
                     if (enable_ct_grid && in_ct) {
+                        const float pre_ct_step = step_mm;
                         const bool skip_homo =
                             use_schneider_primary_xs ? false : ct_skip_homogeneous_face_clamp;
                         step_mm = clamp_step_to_ct_faces_near_z_if_needed(
@@ -1698,6 +1729,9 @@ TransportResult transport_sycl(const TransportConfig& config,
                             ct_spacing_z, ct_nx, ct_ny, ct_nz, ct_density_device,
                             ct_material_device, local_density_g_per_cm3, ct_material,
                             skip_homo, nullptr);
+                        if (step_mm < pre_ct_step - 1.0e-7F) {
+                            ct_face_clamped = true;
+                        }
                     }
                     if (enable_voxel_scoring && voxel_scorer_clamps_transport &&
                         absolute_direction_x >= 1.0e-6F) {
@@ -1706,7 +1740,7 @@ TransportResult transport_sycl(const TransportConfig& config,
                             static_cast<float>(voxel_x + (direction_x > 0.0F ? 1 : 0)) *
                                 voxel_size_x_mm;
                         const auto dx_step = (boundary_x_mm - position_x_mm) / direction_x;
-                        if (dx_step > 1.0e-5F) {
+                        if (dx_step > 0.0F) {
                             step_mm = sycl::fmin(step_mm, dx_step);
                         }
                     }
@@ -1717,7 +1751,7 @@ TransportResult transport_sycl(const TransportConfig& config,
                             static_cast<float>(voxel_y + (direction_y > 0.0F ? 1 : 0)) *
                                 voxel_size_y_mm;
                         const auto dy_step = (boundary_y_mm - position_y_mm) / direction_y;
-                        if (dy_step > 1.0e-5F) {
+                        if (dy_step > 0.0F) {
                             step_mm = sycl::fmin(step_mm, dy_step);
                         }
                     }
@@ -1726,7 +1760,6 @@ TransportResult transport_sycl(const TransportConfig& config,
                         stable_straggling.prepare_step(
                             step_mm, phantom_length_mm - position_z_mm);
                     }
-                    step_mm = sycl::fmax(step_mm, 1.0e-5F);
 
                     bool inelastic_this_step = false;
                     bool elastic_this_step = false;
@@ -1736,29 +1769,27 @@ TransportResult transport_sycl(const TransportConfig& config,
                     if ((enable_inelastic || enable_nuclear_elastic) &&
                         energy_MeV > energy_cutoff_MeV) {
                         const auto cur_e_u = energy_MeV * inverse_mass_number;
-                        if (use_schneider_primary_xs && in_ct) {
-                            const std::uint32_t section_id = static_cast<std::uint32_t>(ct_material);
-                            const float mass_rate = schneider_primary_mass_xs(
-                                schneider_primary_xs_device, schneider_xs_sections,
-                                schneider_xs_energies, schneider_xs_e_min, schneider_xs_inv_dE,
-                                section_id, cur_e_u);
-                            const float macro_tot = local_density_g_per_cm3 * mass_rate;
+                        if (use_schneider_primary_xs) {
+                            if (in_ct) {
+                                const std::uint32_t section_id = static_cast<std::uint32_t>(ct_material);
+                                const float mass_rate = schneider_primary_mass_xs(
+                                    schneider_primary_xs_device, schneider_xs_sections,
+                                    schneider_xs_energies, schneider_xs_e_min, schneider_xs_inv_dE,
+                                    section_id, cur_e_u);
+                                const float macro_tot = local_density_g_per_cm3 * mass_rate;
 
-                            if (!nuclear_tau_active) {
                                 const auto u_nuc = rng::uniform01(
                                     spot_seed, rng_history, nuclear_tau_rng_step++, 8);
-                                nuclear_tau_remaining = -sycl::log(sycl::fmax(u_nuc, 1.0e-12F));
-                                nuclear_tau_active = true;
-                            }
-
-                            const float delta_tau = macro_tot * step_mm;
-                            if (macro_tot > 0.0F && delta_tau >= nuclear_tau_remaining) {
-                                const float collision_s = nuclear_tau_remaining / macro_tot;
-                                step_mm = sycl::fmin(step_mm, collision_s);
-                                nuclear_tau_remaining = 0.0F;
-                                nuclear_tau_active = false;
-
-                                if (enable_inelastic) {
+                                const bool collision = consume_schneider_optical_depth_segment(
+                                    nuclear_tau_remaining, nuclear_tau_active, step_mm, macro_tot, u_nuc);
+                                if (collision && enable_inelastic) {
+                                    if (schneider_inelastic_device != nullptr) {
+                                        sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
+                                                         sycl::memory_scope::device,
+                                                         sycl::access::address_space::global_space>
+                                            nuc_ref(*schneider_inelastic_device);
+                                        nuc_ref.fetch_add(1U);
+                                    }
                                     if (inelastic_reaction_device != nullptr) {
                                         sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
                                                          sycl::memory_scope::device,
@@ -1768,8 +1799,6 @@ TransportResult transport_sycl(const TransportConfig& config,
                                     }
                                     inelastic_this_step = true;
                                 }
-                            } else {
-                                nuclear_tau_remaining -= delta_tau;
                             }
                         } else {
                             float macro_xs = 0.0F;
@@ -2041,6 +2070,10 @@ TransportResult transport_sycl(const TransportConfig& config,
                         }
                     }
 
+                    const float seg_dir_x = direction_x;
+                    const float seg_dir_y = direction_y;
+                    const float seg_dir_z = direction_z;
+
                     if (enable_multiple_scattering) {
                         auto radiation_length_g_per_cm2 =
                             static_cast<float>(water_radiation_length_g_per_cm2);
@@ -2110,9 +2143,36 @@ TransportResult transport_sycl(const TransportConfig& config,
                         direction_z = rotated.z;
                     }
 
-                    position_x_mm += direction_x * step_mm;
-                    position_y_mm += direction_y * step_mm;
-                    position_z_mm += direction_z * step_mm;
+                    position_x_mm += seg_dir_x * step_mm;
+                    position_y_mm += seg_dir_y * step_mm;
+                    position_z_mm += seg_dir_z * step_mm;
+
+                    if (enable_ct_grid && in_ct && ct_face_clamped && !inelastic_this_step) {
+                        if (sycl::fabs(seg_dir_x) > 1.0e-6F) {
+                            const float fx = (position_x_mm - ct_origin_x) / ct_spacing_x;
+                            const int face_x = static_cast<int>(sycl::round(fx));
+                            const float b_x = ct_origin_x + static_cast<float>(face_x) * ct_spacing_x;
+                            if (sycl::fabs(position_x_mm - b_x) <= 1.0e-5F) {
+                                position_x_mm = sycl::nextafter(b_x, seg_dir_x > 0.0F ? 1.0e30F : -1.0e30F);
+                            }
+                        }
+                        if (sycl::fabs(seg_dir_y) > 1.0e-6F) {
+                            const float fy = (position_y_mm - ct_origin_y) / ct_spacing_y;
+                            const int face_y = static_cast<int>(sycl::round(fy));
+                            const float b_y = ct_origin_y + static_cast<float>(face_y) * ct_spacing_y;
+                            if (sycl::fabs(position_y_mm - b_y) <= 1.0e-5F) {
+                                position_y_mm = sycl::nextafter(b_y, seg_dir_y > 0.0F ? 1.0e30F : -1.0e30F);
+                            }
+                        }
+                        if (sycl::fabs(seg_dir_z) > 1.0e-6F) {
+                            const float fz = (position_z_mm - ct_origin_z) / ct_spacing_z;
+                            const int face_z = static_cast<int>(sycl::round(fz));
+                            const float b_z = ct_origin_z + static_cast<float>(face_z) * ct_spacing_z;
+                            if (sycl::fabs(position_z_mm - b_z) <= 1.0e-5F) {
+                                position_z_mm = sycl::nextafter(b_z, seg_dir_z > 0.0F ? 1.0e30F : -1.0e30F);
+                            }
+                        }
+                    }
 
                     if (absolute_direction_z >= 1.0e-6F) {
                         const auto boundary_z_mm =
@@ -4246,6 +4306,10 @@ TransportResult transport_sycl(const TransportConfig& config,
     if (untracked_nuclear_device != nullptr) {
         queue.copy(untracked_nuclear_device, untracked_host.data(), number_of_histories);
     }
+    std::uint64_t schneider_inelastic_host = 0;
+    if (schneider_inelastic_device != nullptr) {
+        queue.copy(schneider_inelastic_device, &schneider_inelastic_host, 1);
+    }
     std::array<float, kCinel02EnergySlots> cinel02_energy_host{};
     std::array<float, kCinel02SpeciesEnergySlots> cinel02_species_energy_host{};
     std::array<std::uint64_t, kCinel02SpeciesTerminalSlots>
@@ -4509,6 +4573,7 @@ TransportResult transport_sycl(const TransportConfig& config,
     free_device(ct_xs_device);
     free_device(ct_ref_density_device);
     free_device(schneider_primary_xs_device);
+    free_device(schneider_inelastic_device);
 
     TransportResult result;
     result.backend = "sycl-" + resolved_device_name +
@@ -4786,7 +4851,7 @@ TransportResult transport_sycl(const TransportConfig& config,
     }
     result.nuclear_interactions = use_cinel02
         ? result.cinel02_diagnostics[2] + result.cinel02_diagnostics[16]
-        : result.fred_inelastic_events;
+        : (use_schneider_primary_xs ? schneider_inelastic_host : result.fred_inelastic_events);
     result.total_steps = std::accumulate(steps_host.begin(), steps_host.end(), std::uint64_t{0});
 
     result.elapsed_seconds =

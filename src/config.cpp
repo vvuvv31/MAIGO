@@ -643,6 +643,17 @@ void TransportConfig::validate() const {
                 "CT Schneider-25 mode with active nuclear model requires ct_schneider_cross_section_file; "
                 "fallback to water or four-class XS is forbidden.");
         }
+        if (!ct_schneider_cross_section_file.empty() && nuclear_model != "none") {
+            if (primary_atomic_number != 6 || primary_mass_number != 12) {
+                throw std::invalid_argument(
+                    "Schneider primary cross section is validated for C12 (Z=6, A=12) primaries only, got Z=" +
+                    std::to_string(primary_atomic_number) + ", A=" + std::to_string(primary_mass_number));
+            }
+            if (enable_nuclear_elastic) {
+                throw std::invalid_argument(
+                    "Nuclear elastic scattering is not supported under Schneider primary cross section mode");
+            }
+        }
     }
     if (!std::isfinite(straggling_scale) || straggling_scale < 0.0) {
         throw std::invalid_argument("straggling_scale must be finite and nonnegative");
