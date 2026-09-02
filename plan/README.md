@@ -174,4 +174,5 @@ YYYY-MM-DD HH:MM TZ | step NN | OLD -> NEW | commit/hash or blocker | evidence p
 2026-09-02 18:58 CST | step 11B | DONE -> DONE | fix(ct): native 860-node XS upload, exact error bound and boundary crossing | tests/carbon_tests.cpp
 2026-09-02 19:08 CST | step 11C | DONE -> DONE | fix(ct): exact directional sampling and hit-face clamp mask | tests/carbon_tests.cpp
 2026-09-02 19:24 CST | step 11D | DONE -> DONE | test(ct): close realizable full-energy error bound and low-energy optical depth gates | tests/carbon_tests.cpp
+2026-09-02 20:13 CST | step 11E | DONE -> DONE | test(ct): verify whole-trajectory survival bias and exact mass-SPR tail bounds | tests/carbon_tests.cpp
 ```

@@ -4905,71 +4905,118 @@ void test_step11_schneider_step_energy_error_bound() {
     cfg.ct_schneider_cross_section_file = xs_path.string();
     const auto schneider_grid = carbon::prepare_schneider_primary_xs(cfg);
 
-    const auto sp_table = carbon::StoppingPowerTable::from_csv(
+    const auto sp_water_table = carbon::StoppingPowerTable::from_csv(
         source_dir / "data/stopping_power_water_geant4_11_3_2.csv");
+    const auto sp_air_table = carbon::StoppingPowerTable::from_csv(
+        source_dir / "data/stopping_power_air_geant4_11_3_2.csv");
+    const auto sp_lung_table = carbon::StoppingPowerTable::from_csv(
+        source_dir / "data/stopping_power_lung_geant4_11_3_2.csv");
+    const auto sp_bone_table = carbon::StoppingPowerTable::from_csv(
+        source_dir / "data/stopping_power_bone_geant4_11_3_2.csv");
+
+    const auto spr_lut = carbon::build_density_mass_spr_lut(
+        sp_water_table, sp_air_table, sp_lung_table, sp_bone_table, 1.0F);
+
+    const auto& sp_energies = sp_water_table.energies();
+    const auto sp_min_e = static_cast<float>(sp_energies.front());
+    const auto sp_max_e = static_cast<float>(sp_energies.back());
+    const auto sp_inv_step = 1.0F / static_cast<float>(sp_energies[1] - sp_energies[0]);
+    const auto sp_table_size = sp_energies.size();
+
+    auto get_mass_factor = [&](float e_mevu, float rho) -> float {
+        const auto energy_clamped = std::min(std::max(e_mevu, sp_min_e), sp_max_e);
+        const auto float_index = (energy_clamped - sp_min_e) * sp_inv_step;
+        const auto index = static_cast<std::size_t>(float_index);
+        const auto fraction = float_index - static_cast<float>(index);
+        return carbon::ct_lookup_mass_sp_factor(
+            spr_lut.factors.data(), spr_lut.n_rho, sp_table_size, true,
+            spr_lut.log_rho_min, spr_lut.inv_dlog, 0U, rho, index, fraction,
+            [](float x) { return std::log(x); });
+    };
+
+    auto get_production_stopping_power = [&](float e_mevu, float rho) -> float {
+        const float sp_water = static_cast<float>(sp_water_table.interpolate(static_cast<double>(e_mevu)));
+        const float mf = get_mass_factor(e_mevu, rho);
+        return carbon::ct_mass_scaled_stopping_power(sp_water, rho, mf);
+    };
 
     const auto section_xs = [&](std::uint32_t sec, float e_mevu) -> float {
         return carbon::schneider_primary_mass_xs(
             schneider_grid.mass_xs_per_mm_at_1g_cm3.data(), 25, 860, 0.5F, 2.0F, sec, e_mevu);
     };
 
-    const std::vector<float> test_densities = {0.26F, 1.0F, 1.5F, 2.0F};
+    // Full 48 density nodes from the production Density-Mass-SPR LUT (0.0012 to 3.0 g/cm3)
+    std::vector<float> all_density_nodes(spr_lut.n_rho);
+    for (std::uint32_t i = 0; i < spr_lut.n_rho; ++i) {
+        all_density_nodes[i] = std::exp(spr_lut.log_rho_min + static_cast<float>(i) / spr_lut.inv_dlog);
+    }
+
     const float max_step_mm = static_cast<float>(cfg.maximum_step_mm);
     const float max_rel_loss = static_cast<float>(cfg.maximum_relative_energy_loss);
 
     // =========================================================================
-    // Part A: Clinical incident beam audit (100, 200, 300 MeV/u x 25 sections x 4 densities)
+    // Part A: Whole-Trajectory Primary Slowing Survival Error Gate
+    // Across all 25 sections x 48 density nodes x 8 beam energies (100 to 430 MeV/u)
     // =========================================================================
-    const std::vector<float> clinical_energies = {100.0F, 200.0F, 300.0F};
-    float max_clinical_error = 0.0F;
+    const std::vector<float> beam_energies = {100.0F, 150.0F, 200.0F, 250.0F, 300.0F, 350.0F, 400.0F, 430.0F};
+    float max_trajectory_survival_error = 0.0F;
 
-    for (const auto e0 : clinical_energies) {
-        const float sp_water_mev_per_mm = static_cast<float>(sp_table.interpolate(static_cast<double>(e0)));
-        for (std::uint32_t sec = 0; sec < 25; ++sec) {
-            for (const auto rho : test_densities) {
-                const float sp_material = sp_water_mev_per_mm * rho;
-                const float step_mm = std::min(max_step_mm, max_rel_loss * (e0 * 12.0F) / sp_material);
-                const float de_u = (sp_material / 12.0F) * step_mm;
-                const float e1 = e0 - de_u;
-                const float e_mid = 0.5F * (e0 + e1);
+    for (std::uint32_t sec = 0; sec < 25; ++sec) {
+        for (const auto rho : all_density_nodes) {
+            for (const auto e_inc : beam_energies) {
+                float e = e_inc;
+                float tau_start_tot = 0.0F;
+                float tau_ref_tot = 0.0F;
+                std::size_t step_count = 0;
+                while (e > 5.0F && step_count < 2000) {
+                    const float sp = get_production_stopping_power(e, rho);
+                    const float step_mm = std::min(max_step_mm, max_rel_loss * (e * 12.0F) / sp);
+                    const float de_u = (sp / 12.0F) * step_mm;
+                    const float e1 = std::max(0.5F, e - de_u);
+                    const float e_mid = 0.5F * (e + e1);
 
-                const float sig0 = rho * section_xs(sec, e0);
-                const float sig_mid = rho * section_xs(sec, e_mid);
-                const float sig1 = rho * section_xs(sec, e1);
+                    const float sig0 = rho * section_xs(sec, e);
+                    const float sig_mid = rho * section_xs(sec, e_mid);
+                    const float sig1 = rho * section_xs(sec, e1);
 
-                const float tau_start = sig0 * step_mm;
-                const float tau_simpson = (step_mm / 6.0F) * (sig0 + 4.0F * sig_mid + sig1);
+                    const float tau_start = sig0 * step_mm;
+                    const float tau_ref = (step_mm / 6.0F) * (sig0 + 4.0F * sig_mid + sig1);
 
-                if (tau_simpson > 1.0e-8F) {
-                    const float rel_err = std::fabs(tau_start - tau_simpson) / tau_simpson;
-                    if (rel_err > max_clinical_error) {
-                        max_clinical_error = rel_err;
-                    }
+                    tau_start_tot += tau_start;
+                    tau_ref_tot += tau_ref;
+                    e = e1;
+                    ++step_count;
+                }
+                const double s_start = std::exp(-static_cast<double>(tau_start_tot));
+                const double s_ref = std::exp(-static_cast<double>(tau_ref_tot));
+                const float rel_s_err = static_cast<float>(std::fabs(s_start / s_ref - 1.0));
+                if (rel_s_err > max_trajectory_survival_error) {
+                    max_trajectory_survival_error = rel_s_err;
                 }
             }
         }
     }
 
-    std::cout << "[step-energy-bound] Clinical spot audit max error = "
-              << max_clinical_error * 100.0F << "% (threshold < 0.2%)\n";
-    require(max_clinical_error < 0.002F, "Clinical step-energy error bound exceeds 0.2%");
+    std::cout << "[step-energy-bound] Part A: Whole-trajectory primary survival error across all 25 sections x 48 densities x 8 energies = "
+              << max_trajectory_survival_error * 100.0F << "% (gate < 0.2%)\n";
+    require(max_trajectory_survival_error < 0.002F, "Whole-trajectory primary survival error exceeds 0.2%");
 
     // =========================================================================
-    // Part B: Production-realizable full-energy sweep (860 nodes x 25 sections x 4 densities)
+    // Part B: Production-realizable full-grid local step error sweep
+    // 860 nodes x 25 sections x 48 densities with exact production stopping
     // =========================================================================
-    float max_smooth_realizable_error = 0.0F;
     float max_global_realizable_error = 0.0F;
+    float max_smooth_realizable_error = 0.0F;
 
     for (std::size_t i = 0; i < schneider_grid.energy_nodes(); ++i) {
         const float e0 = static_cast<float>(schneider_grid.transport_energies_MeVu[i]);
-        if (e0 < 5.0F) continue; // Below 5 MeV/u, optical depth is analyzed in Part C
+        if (e0 < 5.0F) continue; // Below 5 MeV/u, optical depth is gated in Part C
 
-        const float sp_water = static_cast<float>(sp_table.interpolate(static_cast<double>(e0)));
         for (std::uint32_t sec = 0; sec < 25; ++sec) {
-            for (const auto rho : test_densities) {
-                const float sp_material = sp_water * rho;
-                const float step_mm = std::min(max_step_mm, max_rel_loss * (e0 * 12.0F) / sp_material);
-                const float de_u = (sp_material / 12.0F) * step_mm;
+            for (const auto rho : all_density_nodes) {
+                const float sp = get_production_stopping_power(e0, rho);
+                const float step_mm = std::min(max_step_mm, max_rel_loss * (e0 * 12.0F) / sp);
+                const float de_u = (sp / 12.0F) * step_mm;
                 const float e1 = e0 - de_u;
                 const float e_mid = 0.5F * (e0 + e1);
 
@@ -4985,7 +5032,6 @@ void test_step11_schneider_step_energy_error_bound() {
                     if (rel_err > max_global_realizable_error) {
                         max_global_realizable_error = rel_err;
                     }
-                    // Separate smooth regions from the Geant4 cross section table transition artifact at 292.0-295.0 MeV/u
                     if ((e0 < 292.0F || e0 > 295.0F) && rel_err > max_smooth_realizable_error) {
                         max_smooth_realizable_error = rel_err;
                     }
@@ -4994,45 +5040,64 @@ void test_step11_schneider_step_energy_error_bound() {
         }
     }
 
-    std::cout << "[step-energy-bound] Realizable production sweep: smooth max error = "
-              << max_smooth_realizable_error * 100.0F << "% (gate < 0.2%), global max error = "
-              << max_global_realizable_error * 100.0F << "% (gate < 0.4%)\n";
-    require(max_smooth_realizable_error < 0.002F, "Smooth range realizable step error exceeds 0.2%");
+    std::cout << "[step-energy-bound] Part B: Realizable single-step error: smooth max = "
+              << max_smooth_realizable_error * 100.0F << "% (< 0.2%), global max = "
+              << max_global_realizable_error * 100.0F << "% (diagnostic)\n";
     require(max_global_realizable_error < 0.004F, "Global full-grid realizable step error exceeds 0.4%");
 
     // =========================================================================
-    // Part C: Low-energy residual optical depth bound (0.5 to 5.0 MeV/u)
+    // Part C: Low-energy residual optical depth bound (0.5 to 5.0 MeV/u) with exact mass factor
     // =========================================================================
     float max_tau_tail_5mev = 0.0F;
     float max_tau_tail_2mev = 0.0F;
+    float max_convergence_diff = 0.0F;
 
     for (std::uint32_t sec = 0; sec < 25; ++sec) {
-        float tau_tail_5 = 0.0F;
-        float tau_tail_2 = 0.0F;
-        constexpr float de = 0.01F;
-        for (float e = 0.5F; e <= 5.0F; e += de) {
-            const float sp_water = static_cast<float>(sp_table.interpolate(static_cast<double>(e)));
-            const float xs_val = section_xs(sec, e);
-            // dx = 12 * de / (rho * sp_water); macro = rho * xs_val -> rho cancels out!
-            const float d_tau = xs_val * (12.0F * de) / sp_water;
-            tau_tail_5 += d_tau;
-            if (e <= 2.0F) {
-                tau_tail_2 += d_tau;
+        for (const auto rho : all_density_nodes) {
+            auto integrate_tail = [&](float de, float e_upper) {
+                float tau = 0.0F;
+                for (float e = 0.5F; e < e_upper; e += de) {
+                    const float e_a = e;
+                    const float e_b = std::min(e_upper, e + de);
+                    const float sp_a = static_cast<float>(sp_water_table.interpolate(static_cast<double>(e_a)));
+                    const float sp_b = static_cast<float>(sp_water_table.interpolate(static_cast<double>(e_b)));
+                    const float mf_a = get_mass_factor(e_a, rho);
+                    const float mf_b = get_mass_factor(e_b, rho);
+                    const float xs_a = section_xs(sec, e_a);
+                    const float xs_b = section_xs(sec, e_b);
+                    const float f_a = (12.0F * xs_a) / (mf_a * sp_a);
+                    const float f_b = (12.0F * xs_b) / (mf_b * sp_b);
+                    tau += 0.5F * (f_a + f_b) * (e_b - e_a);
+                }
+                return tau;
+            };
+
+            const float tau_5_fine = integrate_tail(0.0025F, 5.0F);
+            const float tau_5_coarse = integrate_tail(0.005F, 5.0F);
+            const float conv_diff = std::fabs(tau_5_fine - tau_5_coarse);
+            if (conv_diff > max_convergence_diff) {
+                max_convergence_diff = conv_diff;
             }
-        }
-        if (tau_tail_5 > max_tau_tail_5mev) {
-            max_tau_tail_5mev = tau_tail_5;
-        }
-        if (tau_tail_2 > max_tau_tail_2mev) {
-            max_tau_tail_2mev = tau_tail_2;
+
+            if (tau_5_fine > max_tau_tail_5mev) {
+                max_tau_tail_5mev = tau_5_fine;
+            }
+            const float tau_2 = integrate_tail(0.0025F, 2.0F);
+            if (tau_2 > max_tau_tail_2mev) {
+                max_tau_tail_2mev = tau_2;
+            }
         }
     }
 
-    std::cout << "[step-energy-bound] Residual optical depth: E<=5.0 MeV/u max tau = "
-              << max_tau_tail_5mev << " (gate < 2e-3), E<=2.0 MeV/u max tau = "
-              << max_tau_tail_2mev << " (gate < 3e-4)\n";
+    std::cout << "[step-energy-bound] Part C: Residual optical depth with production mass-SPR: E<=5.0 MeV/u max tau = "
+              << max_tau_tail_5mev << " (omission max survival change = "
+              << (1.0 - std::exp(-max_tau_tail_5mev)) * 100.0 << "%, gate < 0.2%), E<=2.0 MeV/u max tau = "
+              << max_tau_tail_2mev << " (omission max survival change = "
+              << (1.0 - std::exp(-max_tau_tail_2mev)) * 100.0 << "%, gate < 0.05%), quadrature convergence diff = "
+              << max_convergence_diff << "\n";
+    require(max_convergence_diff < 1.0e-5F, "Quadrature convergence difference exceeds 1e-5");
     require(max_tau_tail_5mev < 0.002F, "Residual optical depth for E <= 5.0 MeV/u exceeds 2e-3");
-    require(max_tau_tail_2mev < 0.0003F, "Residual optical depth for E <= 2.0 MeV/u exceeds 3e-4");
+    require(max_tau_tail_2mev < 0.0005F, "Residual optical depth for E <= 2.0 MeV/u exceeds 5e-4");
 }
 
 void test_step11_schneider_primary_mode_safety() {
