@@ -110,6 +110,17 @@ struct RateRow {
     double cross_section{0.0};
 };
 
+struct MaterialRateRow {
+    int material_section{0};
+    double reference_density{1.0};
+    int projectile_z{0};
+    int projectile_a{0};
+    int target_z{0};
+    int target_a{0};
+    double energy{0.0};
+    double cross_section{0.0};
+};
+
 auto energy_node_key(const Cinel02EnergyNode& node) {
     return std::tuple{static_cast<int>(node.projectile_z),
                       static_cast<int>(node.projectile_a),
@@ -421,6 +432,165 @@ double InelasticRateV2Table::interpolate(const int projectile_z,
                                          const int target_z, const int target_a,
                                          const double energy) const noexcept {
     return lookup(projectile_z, projectile_a, target_z, target_a, energy).value_per_mm;
+}
+
+InelasticMaterialRateTable InelasticMaterialRateTable::from_csv(
+    const std::filesystem::path& path) {
+    std::ifstream input(path);
+    if (!input) {
+        throw std::runtime_error("Cannot open CT CINEL02 rate table: " + path.string());
+    }
+    constexpr std::array<const char*, 12> expected_header{
+        "material_section", "material_name", "material_density_g_per_cm3",
+        "projectile_z", "projectile_a", "target_z", "target_a",
+        "target_mass_fraction", "target_number_density_per_mm3",
+        "energy_MeV_per_u", "microscopic_cross_section_barn",
+        "macroscopic_cross_section_per_mm"};
+    bool header_seen = false;
+    std::vector<MaterialRateRow> rows;
+    std::string line;
+    std::size_t line_number = 0;
+    while (std::getline(input, line)) {
+        ++line_number;
+        const auto first = line.find_first_not_of(" \t\r\n");
+        if (first == std::string::npos || line[first] == '#') continue;
+        const auto fields = split_csv(line);
+        if (!header_seen) {
+            if (fields.size() != expected_header.size()) {
+                throw std::runtime_error("CT CINEL02 rate CSV has an invalid header: " +
+                                         path.string());
+            }
+            for (std::size_t index = 0; index < expected_header.size(); ++index) {
+                if (fields[index] != expected_header[index]) {
+                    throw std::runtime_error("CT CINEL02 rate CSV header mismatch: " +
+                                             path.string());
+                }
+            }
+            header_seen = true;
+            continue;
+        }
+        if (fields.size() != expected_header.size()) {
+            throw std::runtime_error("Incomplete CT CINEL02 rate row at " + path.string() + ":" +
+                                     std::to_string(line_number));
+        }
+        const auto integer = [&](const std::size_t index) {
+            const auto value = parse_rate_number(fields[index], path, line_number);
+            if (value < 0.0 || value > 32767.0 || std::floor(value) != value) {
+                throw std::runtime_error("Invalid CT CINEL02 rate identity at " + path.string() + ":" +
+                                         std::to_string(line_number));
+            }
+            return static_cast<int>(value);
+        };
+        const auto section = integer(0);
+        const auto density = parse_rate_number(fields[2], path, line_number);
+        const auto energy = parse_rate_number(fields[9], path, line_number);
+        const auto macro = parse_rate_number(fields[11], path, line_number);
+        const auto projectile_z = integer(3);
+        const auto projectile_a = integer(4);
+        const auto target_z = integer(5);
+        const auto target_a = integer(6);
+        if (section < 0 || section > 255 || !(density > 0.0) ||
+            projectile_z <= 0 || projectile_a < projectile_z || target_z <= 0 ||
+            target_a < target_z || energy < 0.0 || macro < 0.0) {
+            throw std::runtime_error("CT CINEL02 rate row is outside its physical domain at " +
+                                     path.string() + ":" + std::to_string(line_number));
+        }
+        const auto energy_float = static_cast<float>(energy);
+        const auto macro_float = static_cast<float>(macro);
+        const auto density_float = static_cast<float>(density);
+        if (!std::isfinite(energy_float) || !std::isfinite(macro_float) ||
+            !std::isfinite(density_float)) {
+            throw std::runtime_error("CT CINEL02 rate value exceeds device float range at " +
+                                     path.string() + ":" + std::to_string(line_number));
+        }
+        rows.push_back(MaterialRateRow{section, density, projectile_z, projectile_a,
+                                       target_z, target_a, energy, macro});
+    }
+    if (!header_seen || rows.empty()) {
+        throw std::runtime_error("CT CINEL02 rate CSV has no samples: " + path.string());
+    }
+    std::sort(rows.begin(), rows.end(), [](const MaterialRateRow& lhs,
+                                           const MaterialRateRow& rhs) {
+        return std::tie(lhs.material_section, lhs.projectile_z, lhs.projectile_a,
+                        lhs.target_z, lhs.target_a, lhs.energy) <
+               std::tie(rhs.material_section, rhs.projectile_z, rhs.projectile_a,
+                        rhs.target_z, rhs.target_a, rhs.energy);
+    });
+    for (std::size_t index = 1; index < rows.size(); ++index) {
+        const auto& previous = rows[index - 1];
+        const auto& current = rows[index];
+        if (std::tie(previous.material_section, previous.projectile_z,
+                     previous.projectile_a, previous.target_z, previous.target_a,
+                     previous.energy) ==
+            std::tie(current.material_section, current.projectile_z,
+                     current.projectile_a, current.target_z, current.target_a,
+                     current.energy)) {
+            throw std::runtime_error("Duplicate CT CINEL02 rate sample in " + path.string());
+        }
+    }
+    const auto reference_density = rows.front().reference_density;
+    for (const auto& row : rows) {
+        if (std::abs(row.reference_density - reference_density) >
+            std::max(1.0e-8, std::abs(reference_density) * 1.0e-6)) {
+            throw std::runtime_error(
+                "CT CINEL02 rate table has inconsistent reference densities: " +
+                path.string());
+        }
+    }
+    InelasticMaterialRateTable table;
+    table.reference_material_density_g_per_cm3_ =
+        static_cast<float>(reference_density);
+    std::size_t offset = 0;
+    while (offset < rows.size()) {
+        const auto key = std::tie(rows[offset].material_section,
+                                  rows[offset].projectile_z, rows[offset].projectile_a,
+                                  rows[offset].target_z, rows[offset].target_a);
+        const auto begin = offset;
+        const auto density = rows[offset].reference_density;
+        while (offset < rows.size() &&
+               std::tie(rows[offset].material_section, rows[offset].projectile_z,
+                        rows[offset].projectile_a, rows[offset].target_z,
+                        rows[offset].target_a) == key) {
+            if (std::abs(rows[offset].reference_density - density) >
+                std::max(1.0e-8, std::abs(density) * 1.0e-6)) {
+                throw std::runtime_error("CT CINEL02 rate group has inconsistent reference density: " +
+                                         path.string());
+            }
+            if (offset - begin >= std::numeric_limits<std::uint32_t>::max()) {
+                throw std::runtime_error("CT CINEL02 rate group exceeds uint32 range: " +
+                                         path.string());
+            }
+            table.samples_.push_back(Cinel02RateSample{
+                static_cast<float>(rows[offset].energy),
+                static_cast<float>(rows[offset].cross_section)});
+            ++offset;
+        }
+        table.groups_.push_back(Cinel02MaterialRateGroup{
+            static_cast<std::int16_t>(rows[begin].projectile_z),
+            static_cast<std::int16_t>(rows[begin].projectile_a),
+            static_cast<std::int16_t>(rows[begin].target_z),
+            static_cast<std::int16_t>(rows[begin].target_a),
+            static_cast<std::int16_t>(rows[begin].material_section),
+            0,
+            static_cast<std::uint32_t>(begin),
+            static_cast<std::uint32_t>(offset - begin),
+            static_cast<float>(density)});
+    }
+    return table;
+}
+
+const std::vector<Cinel02MaterialRateGroup>&
+InelasticMaterialRateTable::groups() const noexcept {
+    return groups_;
+}
+
+const std::vector<Cinel02RateSample>&
+InelasticMaterialRateTable::samples() const noexcept {
+    return samples_;
+}
+
+float InelasticMaterialRateTable::reference_material_density_g_per_cm3() const noexcept {
+    return reference_material_density_g_per_cm3_;
 }
 
 InelasticPackageV2Table InelasticPackageV2Table::from_binary(

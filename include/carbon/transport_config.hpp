@@ -192,6 +192,11 @@ struct TransportConfig {
     // Optional energy-dependent mass XS for every Schneider section. When set
     // on a CCTG v2/v3 grid, this supersedes the legacy four-class XS tables.
     std::filesystem::path ct_schneider_cross_section_file{};
+    // Optional TOPAS-derived CINEL02 rate table with an additional
+    // material_section column. Rows with a non-negative section are selected
+    // from the CT voxel's Schneider section; legacy six-column water rate
+    // tables remain the fallback for sections without a material-specific row.
+    std::filesystem::path ct_cinel02_rate_file{};
     // Optional TOPAS-derived, section-by-energy mass stopping-power LUT for CT
     // mode. An explicitly configured LUT takes precedence over density-SPR.
     std::filesystem::path ct_hu_stopping_power_lut_file{};

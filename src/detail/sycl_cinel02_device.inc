@@ -551,6 +551,93 @@ inline Cinel02DeviceRateLookup cinel02_rate_lookup_device(
                : Cinel02DeviceRateLookup{};
 }
 
+inline Cinel02DeviceRateLookup cinel02_material_rate_lookup_device(
+    const Cinel02MaterialRateGroup* groups, const std::uint32_t group_count,
+    const Cinel02RateSample* samples, const std::uint32_t sample_count,
+    const int material_section, const int projectile_z, const int projectile_a,
+    const int target_z, const int target_a,
+    const float energy_MeV_per_u) noexcept {
+    if (groups == nullptr || samples == nullptr || group_count == 0U ||
+        sample_count == 0U || material_section < 0 ||
+        !sycl::isfinite(energy_MeV_per_u)) return {};
+    const auto before = [&](const Cinel02MaterialRateGroup& group) {
+        return group.material_section < material_section ||
+               (group.material_section == material_section &&
+                (group.projectile_z < projectile_z ||
+                 (group.projectile_z == projectile_z && group.projectile_a < projectile_a) ||
+                 (group.projectile_z == projectile_z && group.projectile_a == projectile_a &&
+                  group.target_z < target_z) ||
+                 (group.projectile_z == projectile_z && group.projectile_a == projectile_a &&
+                  group.target_z == target_z && group.target_a < target_a)));
+    };
+    auto first = 0U;
+    auto last = group_count;
+    while (first < last) {
+        const auto middle = first + (last - first) / 2U;
+        if (before(groups[middle])) first = middle + 1U;
+        else last = middle;
+    }
+    if (first >= group_count) return {};
+    const auto& group = groups[first];
+    if (group.material_section != material_section ||
+        group.projectile_z != projectile_z || group.projectile_a != projectile_a ||
+        group.target_z != target_z || group.target_a != target_a ||
+        group.sample_count < 1U || group.sample_offset > sample_count ||
+        group.sample_count > sample_count - group.sample_offset) return {};
+    const auto* begin = samples + group.sample_offset;
+    const auto* end = begin + group.sample_count;
+    if (energy_MeV_per_u < begin->energy_MeV_per_u ||
+        energy_MeV_per_u > (end - 1)->energy_MeV_per_u) return {};
+    if (energy_MeV_per_u == begin->energy_MeV_per_u)
+        return {true, begin->macroscopic_cross_section_per_mm};
+    if (energy_MeV_per_u == (end - 1)->energy_MeV_per_u)
+        return {true, (end - 1)->macroscopic_cross_section_per_mm};
+    auto low = 0U;
+    auto high = group.sample_count;
+    while (low < high) {
+        const auto middle = low + (high - low) / 2U;
+        if (begin[middle].energy_MeV_per_u <= energy_MeV_per_u) low = middle + 1U;
+        else high = middle;
+    }
+    if (low == 0U || low >= group.sample_count) return {};
+    const auto& lower = begin[low - 1U];
+    const auto& upper = begin[low];
+    const auto span = upper.energy_MeV_per_u - lower.energy_MeV_per_u;
+    if (!(span > 0.0F)) return {};
+    const auto fraction = (energy_MeV_per_u - lower.energy_MeV_per_u) / span;
+    const auto value = lower.macroscopic_cross_section_per_mm +
+                       fraction * (upper.macroscopic_cross_section_per_mm -
+                                   lower.macroscopic_cross_section_per_mm);
+    return sycl::isfinite(value) && value >= 0.0F
+               ? Cinel02DeviceRateLookup{true, value}
+               : Cinel02DeviceRateLookup{};
+}
+
+inline Cinel02DeviceTargetSelection cinel02_select_material_target_device(
+    const Cinel02MaterialRateGroup* groups, const std::uint32_t group_count,
+    const Cinel02RateSample* samples, const std::uint32_t sample_count,
+    const int material_section, const int projectile_z, const int projectile_a,
+    const float energy_MeV_per_u, const float local_density_g_per_cm3,
+    const float reference_density_g_per_cm3, const float u01) noexcept {
+    if (!(local_density_g_per_cm3 > 0.0F) ||
+        !(reference_density_g_per_cm3 > 0.0F) ||
+        !sycl::isfinite(u01) || u01 < 0.0F || u01 > 1.0F) return {};
+    const auto hydrogen = cinel02_material_rate_lookup_device(
+        groups, group_count, samples, sample_count, material_section,
+        projectile_z, projectile_a, 1, 1, energy_MeV_per_u);
+    const auto oxygen = cinel02_material_rate_lookup_device(
+        groups, group_count, samples, sample_count, material_section,
+        projectile_z, projectile_a, 8, 16, energy_MeV_per_u);
+    if (!hydrogen.covered || !oxygen.covered) return {};
+    const auto density_scale = local_density_g_per_cm3 / reference_density_g_per_cm3;
+    const auto h_rate = hydrogen.value_per_mm * density_scale;
+    const auto o_rate = oxygen.value_per_mm * density_scale;
+    const auto total = h_rate + o_rate;
+    if (!(total > 0.0F) || !sycl::isfinite(total)) return {};
+    if (u01 < h_rate / total) return {true, 1, 1, total};
+    return {true, 8, 16, total};
+}
+
 inline Cinel02DeviceTargetSelection cinel02_select_water_target_device(
     const Cinel02RateGroup* groups, const std::uint32_t group_count,
     const Cinel02RateSample* samples, const std::uint32_t sample_count,

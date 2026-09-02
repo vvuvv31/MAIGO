@@ -1374,6 +1374,8 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.ct_schneider_cross_section_file = parse_path(
         values, "ct_schneider_cross_section_file",
         config.ct_schneider_cross_section_file);
+    config.ct_cinel02_rate_file = parse_path(
+        values, "ct_cinel02_rate_file", config.ct_cinel02_rate_file);
     config.ct_hu_stopping_power_lut_file = parse_path(
         values, "ct_hu_stopping_power_lut_file",
         config.ct_hu_stopping_power_lut_file);

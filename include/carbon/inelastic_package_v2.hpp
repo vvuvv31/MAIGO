@@ -260,6 +260,21 @@ struct Cinel02RateSample {
 };
 static_assert(sizeof(Cinel02RateSample) == 8);
 
+// Section-aware CT rate groups. These remain separate from the legacy
+// homogeneous groups so the existing CINPKG03/water contract is unchanged.
+struct Cinel02MaterialRateGroup {
+    std::int16_t projectile_z{0};
+    std::int16_t projectile_a{0};
+    std::int16_t target_z{0};
+    std::int16_t target_a{0};
+    std::int16_t material_section{-1};
+    std::int16_t reserved{0};
+    std::uint32_t sample_offset{0};
+    std::uint32_t sample_count{0};
+    float reference_material_density_g_per_cm3{1.0F};
+};
+static_assert(sizeof(Cinel02MaterialRateGroup) == 24);
+
 // One active target isotope for the CINEL02 material resolver. A negative
 // material_section denotes the homogeneous manifest material. Non-negative
 // sections are Schneider material-section ids; their number density is
@@ -304,6 +319,23 @@ private:
     std::vector<Cinel02RateGroup> groups_;
     std::vector<Cinel02RateSample> samples_;
     bool reference_number_densities_bound_{false};
+};
+
+// TOPAS Schneider-section CINEL02 rates produced by
+// extract_ct_cinel02_rates.py. Samples are macroscopic rates at the reference
+// material density and are scaled by local CT density in the device selector.
+class InelasticMaterialRateTable {
+public:
+    static InelasticMaterialRateTable from_csv(const std::filesystem::path& path);
+
+    [[nodiscard]] const std::vector<Cinel02MaterialRateGroup>& groups() const noexcept;
+    [[nodiscard]] const std::vector<Cinel02RateSample>& samples() const noexcept;
+    [[nodiscard]] float reference_material_density_g_per_cm3() const noexcept;
+
+private:
+    std::vector<Cinel02MaterialRateGroup> groups_;
+    std::vector<Cinel02RateSample> samples_;
+    float reference_material_density_g_per_cm3_{1.0F};
 };
 
 class InelasticPackageV2Table {

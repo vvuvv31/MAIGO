@@ -80,12 +80,17 @@ TransportResult transport_sycl(const TransportConfig& config,
     const bool use_cinel02 = config.nuclear_model == "cinel02";
     std::optional<InelasticPackageV2Table> cinel02_package;
     std::optional<InelasticRateV2Table> cinel02_rates;
+    std::optional<InelasticMaterialRateTable> cinel02_ct_rates;
     std::optional<Cinel02DeviceTables> cinel02_host_tables;
     if (use_cinel02) {
         cinel02_package.emplace(InelasticPackageV2Table::from_binary(
             config.primary_inelastic_package_v2_file));
         cinel02_rates.emplace(InelasticRateV2Table::from_csv(
             config.primary_inelastic_rate_v2_file));
+        if (config.enable_ct_grid && !config.ct_cinel02_rate_file.empty()) {
+            cinel02_ct_rates.emplace(InelasticMaterialRateTable::from_csv(
+                config.ct_cinel02_rate_file));
+        }
         cinel02_host_tables.emplace(cinel02_package->make_device_tables());
     }
     const auto start = std::chrono::steady_clock::now();
@@ -154,11 +159,16 @@ TransportResult transport_sycl(const TransportConfig& config,
     std::uint32_t* cinel02_event_indices_device = nullptr;
     Cinel02RateGroup* cinel02_rate_groups_device = nullptr;
     Cinel02RateSample* cinel02_rate_samples_device = nullptr;
+    Cinel02MaterialRateGroup* cinel02_ct_rate_groups_device = nullptr;
+    Cinel02RateSample* cinel02_ct_rate_samples_device = nullptr;
     std::uint32_t cinel02_interaction_count = 0U;
     std::uint32_t cinel02_product_count = 0U;
     std::uint32_t cinel02_energy_node_count = 0U;
     std::uint32_t cinel02_rate_group_count = 0U;
     std::uint32_t cinel02_rate_sample_count = 0U;
+    std::uint32_t cinel02_ct_rate_group_count = 0U;
+    std::uint32_t cinel02_ct_rate_sample_count = 0U;
+    float cinel02_ct_rate_reference_density_g_per_cm3 = 1.0F;
     constexpr std::size_t kCinel02DiagSlots =
         TransportResult::cinel02_diagnostic_slot_count;
     std::uint64_t* cinel02_diag_device = nullptr;
@@ -225,9 +235,20 @@ TransportResult transport_sycl(const TransportConfig& config,
             cinel02_rates->groups().size(), "rate-group count");
         cinel02_rate_sample_count = checked_u32(
             cinel02_rates->samples().size(), "rate-sample count");
+        if (cinel02_ct_rates) {
+            cinel02_ct_rate_group_count = checked_u32(
+                cinel02_ct_rates->groups().size(), "CT rate-group count");
+            cinel02_ct_rate_sample_count = checked_u32(
+                cinel02_ct_rates->samples().size(), "CT rate-sample count");
+            cinel02_ct_rate_reference_density_g_per_cm3 =
+                cinel02_ct_rates->reference_material_density_g_per_cm3();
+        }
         const auto immutable_bytes = cinel02_host_tables->bytes() +
             cinel02_rates->groups().size() * sizeof(Cinel02RateGroup) +
-            cinel02_rates->samples().size() * sizeof(Cinel02RateSample);
+            cinel02_rates->samples().size() * sizeof(Cinel02RateSample) +
+            (cinel02_ct_rates ? cinel02_ct_rates->groups().size() * sizeof(Cinel02MaterialRateGroup) +
+                                     cinel02_ct_rates->samples().size() * sizeof(Cinel02RateSample)
+                               : 0U);
         const auto global_bytes =
             device.get_info<sycl::info::device::global_mem_size>();
         const auto configured_limit = static_cast<std::uint64_t>(
@@ -255,6 +276,12 @@ TransportResult transport_sycl(const TransportConfig& config,
             cinel02_rate_group_count, queue);
         cinel02_rate_samples_device = sycl::malloc_device<Cinel02RateSample>(
             cinel02_rate_sample_count, queue);
+        if (cinel02_ct_rate_group_count > 0U) {
+            cinel02_ct_rate_groups_device = sycl::malloc_device<Cinel02MaterialRateGroup>(
+                cinel02_ct_rate_group_count, queue);
+            cinel02_ct_rate_samples_device = sycl::malloc_device<Cinel02RateSample>(
+                cinel02_ct_rate_sample_count, queue);
+        }
         cinel02_diag_device =
             sycl::malloc_device<std::uint64_t>(kCinel02DiagSlots, queue);
         cinel02_energy_device =
@@ -316,7 +343,10 @@ TransportResult transport_sycl(const TransportConfig& config,
         if (cinel02_interactions_device == nullptr || cinel02_products_device == nullptr ||
             cinel02_energy_nodes_device == nullptr || cinel02_event_offsets_device == nullptr ||
             cinel02_event_indices_device == nullptr || cinel02_rate_groups_device == nullptr ||
-            cinel02_rate_samples_device == nullptr || cinel02_diag_device == nullptr ||
+            cinel02_rate_samples_device == nullptr ||
+            (cinel02_ct_rate_group_count > 0U &&
+             (cinel02_ct_rate_groups_device == nullptr || cinel02_ct_rate_samples_device == nullptr)) ||
+            cinel02_diag_device == nullptr ||
             cinel02_energy_device == nullptr || cinel02_species_energy_device == nullptr ||
             cinel02_species_terminal_device == nullptr ||
             cinel02_topas_compat_discarded_counts_device == nullptr ||
@@ -362,6 +392,12 @@ TransportResult transport_sycl(const TransportConfig& config,
                    cinel02_rate_group_count);
         queue.copy(cinel02_rates->samples().data(), cinel02_rate_samples_device,
                    cinel02_rate_sample_count);
+        if (cinel02_ct_rates) {
+            queue.copy(cinel02_ct_rates->groups().data(), cinel02_ct_rate_groups_device,
+                       cinel02_ct_rate_group_count);
+            queue.copy(cinel02_ct_rates->samples().data(), cinel02_ct_rate_samples_device,
+                       cinel02_ct_rate_sample_count);
+        }
         queue.fill(cinel02_diag_device, std::uint64_t{0}, kCinel02DiagSlots)
             .wait_and_throw();
         queue.fill(cinel02_energy_device, 0.0F, kCinel02EnergySlots)
@@ -423,6 +459,7 @@ TransportResult transport_sycl(const TransportConfig& config,
         cinel02_host_tables.reset();
         cinel02_package.reset();
         cinel02_rates.reset();
+        cinel02_ct_rates.reset();
     }
 
     // Slab layers
@@ -1612,12 +1649,24 @@ TransportResult transport_sycl(const TransportConfig& config,
                         float macro_xs = 0.0F;
                         if (use_cinel02) {
                             cinel02_diag_increment_device(cinel02_diag_device, 0U);
-                            const auto target = cinel02_select_water_target_device(
-                                cinel02_rate_groups_device, cinel02_rate_group_count,
-                                cinel02_rate_samples_device, cinel02_rate_sample_count,
-                                primary_atomic_number, primary_mass_number, cur_e_u,
-                                local_density_g_per_cm3, water_density_g_per_cm3,
-                                rng::uniform01(spot_seed, rng_history, steps, 12));
+                            const auto target =
+                                (in_ct && cinel02_ct_rate_groups_device != nullptr)
+                                    ? cinel02_select_material_target_device(
+                                          cinel02_ct_rate_groups_device,
+                                          cinel02_ct_rate_group_count,
+                                          cinel02_ct_rate_samples_device,
+                                          cinel02_ct_rate_sample_count,
+                                          static_cast<int>(ct_material),
+                                          primary_atomic_number, primary_mass_number, cur_e_u,
+                                          local_density_g_per_cm3,
+                                          cinel02_ct_rate_reference_density_g_per_cm3,
+                                          rng::uniform01(spot_seed, rng_history, steps, 12))
+                                    : cinel02_select_water_target_device(
+                                          cinel02_rate_groups_device, cinel02_rate_group_count,
+                                          cinel02_rate_samples_device, cinel02_rate_sample_count,
+                                          primary_atomic_number, primary_mass_number, cur_e_u,
+                                          local_density_g_per_cm3, water_density_g_per_cm3,
+                                          rng::uniform01(spot_seed, rng_history, steps, 12));
                             if (target.covered) {
                                 cinel02_diag_increment_device(cinel02_diag_device, 1U);
                                 macro_xs = target.total_rate_per_mm;
@@ -2671,6 +2720,9 @@ TransportResult transport_sycl(const TransportConfig& config,
             });
         kernel_event.wait_and_throw();
         primary_kernel_seconds += event_duration_seconds(kernel_event);
+        std::cout << "[progress] primary batch completed: "
+                  << (hist_offset + chunk_count) << "/" << number_of_histories
+                  << " histories" << std::endl;
     }
 
     double secondary_kernel_seconds = 0.0;
@@ -2686,7 +2738,8 @@ TransportResult transport_sycl(const TransportConfig& config,
             std::uint32_t generation_begin = 0U;
             std::uint32_t generation_end = secondary_count_host;
             while (generation_begin < generation_end) {
-            auto sec_event = queue.submit([&](sycl::handler& cgh) {
+                const auto batch_begin = generation_begin;
+                auto sec_event = queue.submit([&](sycl::handler& cgh) {
                 cgh.parallel_for<class CarbonSecondaryTransportKernel>(
                     sycl::range<1>(generation_end - generation_begin),
                     [=](sycl::id<1> item_id) {
@@ -2809,6 +2862,17 @@ TransportResult transport_sycl(const TransportConfig& config,
                             const auto secondary_rate_query_energy_MeV =
                                 sycl::fmax(0.0F, sec_e);
                             const auto sec_e_u = sec_e * frag_inv_a;
+                            float sec_local_density_g_per_cm3 = water_density_g_per_cm3;
+                            std::uint8_t sec_ct_material = 2U;
+                            bool sec_in_ct = false;
+                            if (enable_ct_grid) {
+                                sec_in_ct = ct_sample(
+                                    sec_x, sec_y, sec_z, ct_origin_x, ct_origin_y,
+                                    ct_origin_z, ct_spacing_x, ct_spacing_y, ct_spacing_z,
+                                    ct_nx, ct_ny, ct_nz, ct_density_device,
+                                    ct_material_device, sec_local_density_g_per_cm3,
+                                    sec_ct_material);
+                            }
                             const auto exposure_cell = use_cinel02
                                 ? cinel02_exposure_cell_index_device(
                                       frag.z, frag.a, frag.generation, sec_e_u)
@@ -2819,14 +2883,31 @@ TransportResult transport_sycl(const TransportConfig& config,
                             Cinel02DeviceRateLookup exposure_h_lookup{};
                             Cinel02DeviceRateLookup exposure_o_lookup{};
                             if (use_cinel02) {
-                                exposure_h_lookup = cinel02_rate_lookup_device(
-                                    cinel02_rate_groups_device, cinel02_rate_group_count,
-                                    cinel02_rate_samples_device, cinel02_rate_sample_count,
-                                    frag.z, frag.a, 1, 1, sec_e_u);
-                                exposure_o_lookup = cinel02_rate_lookup_device(
-                                    cinel02_rate_groups_device, cinel02_rate_group_count,
-                                    cinel02_rate_samples_device, cinel02_rate_sample_count,
-                                    frag.z, frag.a, 8, 16, sec_e_u);
+                                if (sec_in_ct && cinel02_ct_rate_groups_device != nullptr) {
+                                    exposure_h_lookup = cinel02_material_rate_lookup_device(
+                                        cinel02_ct_rate_groups_device,
+                                        cinel02_ct_rate_group_count,
+                                        cinel02_ct_rate_samples_device,
+                                        cinel02_ct_rate_sample_count,
+                                        static_cast<int>(sec_ct_material), frag.z, frag.a,
+                                        1, 1, sec_e_u);
+                                    exposure_o_lookup = cinel02_material_rate_lookup_device(
+                                        cinel02_ct_rate_groups_device,
+                                        cinel02_ct_rate_group_count,
+                                        cinel02_ct_rate_samples_device,
+                                        cinel02_ct_rate_sample_count,
+                                        static_cast<int>(sec_ct_material), frag.z, frag.a,
+                                        8, 16, sec_e_u);
+                                } else {
+                                    exposure_h_lookup = cinel02_rate_lookup_device(
+                                        cinel02_rate_groups_device, cinel02_rate_group_count,
+                                        cinel02_rate_samples_device, cinel02_rate_sample_count,
+                                        frag.z, frag.a, 1, 1, sec_e_u);
+                                    exposure_o_lookup = cinel02_rate_lookup_device(
+                                        cinel02_rate_groups_device, cinel02_rate_group_count,
+                                        cinel02_rate_samples_device, cinel02_rate_sample_count,
+                                        frag.z, frag.a, 8, 16, sec_e_u);
+                                }
                             }
                             const bool exposure_h_covered = exposure_h_lookup.covered;
                             const bool exposure_o_covered = exposure_o_lookup.covered;
@@ -2836,7 +2917,28 @@ TransportResult transport_sycl(const TransportConfig& config,
                             auto sp_idx = static_cast<int>(sycl::floor(flt_idx));
                             sp_idx = sycl::max(0, sycl::min(sp_idx, static_cast<int>(table_size) - 2));
                             const auto sp_frac = sycl::clamp(flt_idx - static_cast<float>(sp_idx), 0.0F, 1.0F);
-                            const auto sec_sp = (ion_sp_table[sp_idx] + sp_frac * (ion_sp_table[sp_idx + 1] - ion_sp_table[sp_idx]));
+                            auto sec_sp = (ion_sp_table[sp_idx] +
+                                           sp_frac * (ion_sp_table[sp_idx + 1] -
+                                                      ion_sp_table[sp_idx]));
+                            if (enable_ct_grid && sec_in_ct) {
+                                if (use_ct_mass_sp && ct_mass_sp_factor_lut_device != nullptr &&
+                                    ct_n_mass_factors > 0U) {
+                                    const auto material_factor = ct_lookup_mass_sp_factor(
+                                        ct_mass_sp_factor_lut_device,
+                                        use_ct_density_mass_spr ? ct_density_spr_n_rho
+                                                                : ct_n_mass_factors,
+                                        table_size, use_ct_density_mass_spr,
+                                        ct_mass_spr_log_rho_min, ct_mass_spr_inv_dlog,
+                                        static_cast<std::uint32_t>(sec_ct_material),
+                                        sec_local_density_g_per_cm3,
+                                        static_cast<std::size_t>(sp_idx), sp_frac,
+                                        [](float x) { return sycl::log(x); });
+                                    sec_sp = ct_mass_scaled_stopping_power(
+                                        sec_sp, sec_local_density_g_per_cm3, material_factor);
+                                } else {
+                                    sec_sp *= sycl::fmax(sec_local_density_g_per_cm3, 1.0e-6F);
+                                }
+                            }
 
                             if (sec_sp <= 1.0e-6F) break;
 
@@ -2850,6 +2952,15 @@ TransportResult transport_sycl(const TransportConfig& config,
                                 const auto dz_step = (bz - sec_z) / sec_dz;
                                 if (dz_step > 1.0e-5F) sec_step_mm = sycl::fmin(sec_step_mm, dz_step);
                             }
+                            if (enable_ct_grid && sec_in_ct) {
+                                sec_step_mm = clamp_step_to_ct_faces_near_z_if_needed(
+                                    sec_step_mm, sec_x, sec_y, sec_z, sec_dx, sec_dy,
+                                    sec_dz, ct_origin_x, ct_origin_y, ct_origin_z,
+                                    ct_spacing_x, ct_spacing_y, ct_spacing_z, ct_nx, ct_ny,
+                                    ct_nz, ct_density_device, ct_material_device,
+                                    sec_local_density_g_per_cm3, sec_ct_material,
+                                    ct_skip_homogeneous_face_clamp, nullptr);
+                            }
                             sec_step_mm = sycl::fmax(sec_step_mm, 1.0e-5F);
                             bool secondary_inelastic = false;
                             // A nuclear hazard is not necessarily a replayed
@@ -2862,13 +2973,27 @@ TransportResult transport_sycl(const TransportConfig& config,
                             if (use_cinel02 && frag.generation <
                                 cinel02_max_secondary_inelastic_generations) {
                                 cinel02_diag_increment_device(cinel02_diag_device, 14U);
-                                const auto target = cinel02_select_water_target_device(
-                                    cinel02_rate_groups_device, cinel02_rate_group_count,
-                                    cinel02_rate_samples_device, cinel02_rate_sample_count,
-                                    frag.z, frag.a, sec_e_u,
-                                    water_density_g_per_cm3, water_density_g_per_cm3,
-                                    rng::uniform01(2026, frag.rng_stream,
-                                                   sec_steps, 12));
+                                const auto target =
+                                    (sec_in_ct && cinel02_ct_rate_groups_device != nullptr)
+                                        ? cinel02_select_material_target_device(
+                                              cinel02_ct_rate_groups_device,
+                                              cinel02_ct_rate_group_count,
+                                              cinel02_ct_rate_samples_device,
+                                              cinel02_ct_rate_sample_count,
+                                              static_cast<int>(sec_ct_material), frag.z,
+                                              frag.a, sec_e_u, sec_local_density_g_per_cm3,
+                                              cinel02_ct_rate_reference_density_g_per_cm3,
+                                              rng::uniform01(2026, frag.rng_stream,
+                                                             sec_steps, 12))
+                                        : cinel02_select_water_target_device(
+                                              cinel02_rate_groups_device,
+                                              cinel02_rate_group_count,
+                                              cinel02_rate_samples_device,
+                                              cinel02_rate_sample_count, frag.z, frag.a,
+                                              sec_e_u, sec_local_density_g_per_cm3,
+                                              water_density_g_per_cm3,
+                                              rng::uniform01(2026, frag.rng_stream,
+                                                             sec_steps, 12));
                                 if (target.covered) {
                                     cinel02_diag_increment_device(cinel02_diag_device, 15U);
                                     float collision_distance = sec_step_mm;
@@ -3874,11 +3999,15 @@ TransportResult transport_sycl(const TransportConfig& config,
             });
             sec_event.wait_and_throw();
                 secondary_kernel_seconds += event_duration_seconds(sec_event);
-                generation_begin = generation_end;
+                const auto batch_end = generation_end;
+                generation_begin = batch_end;
                 queue.copy(secondary_count_device, &secondary_count_host, 1)
                     .wait_and_throw();
                 generation_end = sycl::min(
                     secondary_count_host, static_cast<std::uint32_t>(max_secondaries));
+                std::cout << "[progress] secondary batch completed: ["
+                          << batch_begin << ", " << batch_end << ") particles; queued="
+                          << generation_end << std::endl;
             }
             if (!config.fragment_birth_spectrum_output_file.empty()) {
                 birth_secondaries_host.resize(generation_end);
@@ -4176,6 +4305,8 @@ TransportResult transport_sycl(const TransportConfig& config,
     free_device(cinel02_event_indices_device);
     free_device(cinel02_rate_groups_device);
     free_device(cinel02_rate_samples_device);
+    free_device(cinel02_ct_rate_groups_device);
+    free_device(cinel02_ct_rate_samples_device);
     free_device(cinel02_diag_device);
     free_device(cinel02_energy_device);
     free_device(cinel02_species_energy_device);

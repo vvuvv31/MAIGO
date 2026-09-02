@@ -1,276 +1,156 @@
-# CINEL02 Species IDD 分层修复计划
+# Schneider CT material-dependent transport plan
 
-## 唯一执行原则
+## Purpose and authority
 
-每个 species/isotope 的误差必须先拆成：
+This directory is the single progress controller for the Schneider CT workstream. The water/CINEL secondary-species line is frozen at the repository state recorded by Step 00. CT work must not tune water physics or silently reuse water H/O physics for other elements.
 
-`D_FOV = K_birth × f_dep × f_FOV`
+The required architecture is four separately gated layers:
 
-- `K_birth`：birth/yield/kinematics 层。
-- `f_dep = D_all/K_birth`：stopping、range、straggling、cutoff 和 cascade survival 层。
-- `f_FOV = D_FOV/D_all`：MCS、lateral displacement 和 finite-FOV acceptance 层。
+```text
+HU -> Schneider section + density
+   -> section-dependent stopping and MCS
+   -> material-dependent inelastic total rate + target selection
+   -> projectile/target-dependent correlated CINEL final state
+```
 
-未完成分层定位前，禁止修 sampler/yield，禁止 isotope/global dose scale，禁止用 MCS/halo 补偿 event generator。
+Passing a later layer never excuses a failed earlier layer. Patient CT is forbidden until the synthetic validation gates pass.
 
-## 运行约束
+## Repository facts verified when this plan was written
 
-- GPU 仅在本机 RTX 2080Ti/sm_75 运行，不提交远程 GPU job。
-- TOPAS 仅在 `wuwei@127.0.0.1` 上通过 `sbatch` 运行，数据位于 `/mnt/sda/wuwei`。
-- TOPAS 总资源不超过 192 CPU / 128 GB；短暂 `InvalidAccount` 等待 1–3 分钟再检查。
-- 仅用 3D dose scorer 横向求和，禁止 1D scorer。
-- 不考虑 FP32/FP64 作为修复。
-- 仅允许显式 ion stopping tables；禁止 Z² scaling、C12 fallback、isotope alias 和 stopping/dose normalization。
+- `data/HUtoMaterialSchneider.txt` declares 13 elements and 25 material sections.
+- `SchneiderHuTable::from_topas_file()` currently skips `SchneiderElements` and `SchneiderMaterialsWeight*`.
+- `CtGrid` stores per-voxel density and an 8-bit material/section ID; composition must remain a global 25 x 13 table, not per voxel.
+- `CrossSectionTable::from_schneider_csv()` already accepts section mass-rate columns.
+- The worktree already contains uncommitted CT material-rate work (`Cinel02MaterialRateNtuple`, an extractor, runtime/config changes), including changes in secondary transport. Step 00 must inventory and freeze it; do not assume it is accepted merely because it exists.
+- The legacy `ct_material_class()` four-class collapse remains in the repository. It is not permitted for the Schneider production CT path.
 
-## 当前冻结基线
+## Non-negotiable rules
 
-- Development profile：`c2e25b832fbc015c611eb4d233da4a164abefd23`，显式 `cinel02_topas_compatibility_mode: true`；完整 manifest 为 [`baseline-e200-c2e25b8-topascompat.json`](baseline-e200-c2e25b8-topascompat.json)。
-- Energy：200 MeV/u，100k histories，seed `2026095100`，G1；本机 RTX 2080Ti/sm_75。
-- Package：`research_hybrid_e200light107.cinpkg`，window-event sampling `±0.51 MeV/u`。
-- Grid/FOV：200×200×800，0.4×0.4×0.5 mm，80×80 mm；IDD 仅由 3D scorer 横向求和。
-- Compatibility baseline species integral（独立 TOPAS/GPU seed，描述性非 CI）：Primary C +7.278%，Secondary C +3.327%，B +6.539%，Be -2.365%，Li +0.976%，He +5.183%，Z1 +4.207%，charged Total -0.569%。
-- Be6 在 compatibility profile 中是 `non_transportable_prompt_decay`：produced=281、queued=0、discarded KE=130184.242188 MeV；relative Be6 dose gate 暂停，等待 matched depositing-track scorer。
-- Secondary replay miss：`192/71524 = 0.268441%`；Li6/Li7、Be7/Be9/Be10 均为 0。
-- TOPAS 1M full-cascade job 485 仍用于 Be9 统计门禁；sampler/yield/package 继续冻结。
+1. Never change frozen water/CINEL parameters, event semantics, random-number mapping, or water validation tolerances as part of this workstream.
+2. Phase P2 uses C12 primaries only and no secondary cascade. A nuclear interaction may terminate the primary in an explicit attenuation-validation mode, but it must not replay a fragmentation event.
+3. CT material selection uses all 25 Schneider sections. No air/lung/soft/bone collapse is allowed in the new CT path.
+4. Never alias an unsupported target element to oxygen or hydrogen. Missing rate/final-state coverage is a hard error for production and an explicit counter only in a named audit mode.
+5. Nuclear optical depth may not be integrated across a voxel face at which density or section changes. Step length is capped at the face, then material and rate are re-evaluated.
+6. Use a 3D dose scorer and sum transverse bins for IDD. Do not add or use a 1D dose scorer.
+7. Do not spend work on FP32 versus FP64. Keep the established precision policy.
+8. GPU and SYCL commands run locally, outside the sandbox, on RTX 2080 Ti / `sm_75`. Never submit GPU work to a remote host or cluster.
+9. TOPAS jobs run locally through `sbatch`; input/output and raw data live under `/mnt/sda/wuwei`, while TOPAS extensions/source/build live under `/home/wuwei/topas`.
+10. All concurrent TOPAS jobs together must stay at or below 192 CPU threads and 160 GiB RAM. Allocate roughly in proportion to energy/computation so jobs finish at similar times. A brief `InvalidAccount` state is rechecked after 1--3 minutes and is not treated as failure.
+11. Split large particle campaigns into shards. If any secondary buffer overflow is reported, discard the affected aggregate, reduce histories per shard, rerun, and merge only overflow-free shards.
+12. Raw TOPAS ntuples are artifacts outside Git. Only audited compiled products and metadata enter `data/schneider/`.
+13. Do not modify source in a step marked `BLOCKED`, and do not advance the README status without all gate evidence.
 
-## 优先级
+## Status vocabulary
 
-当前路线：c2e25b8 compatibility rebaseline、03A attribution sanity check、03B-2B bounded source/compiler consistency、04A eligibility/coverage exposure、04B runtime optical depth、04C stopping residence/continuous optical depth 和 04D TOPAS lineage/survival 对照均已完成；下一步进入 Be/Li 因果分析。04A--04D 均未修改 rate、target selection、generation gate 或其他 physics。192 个 runtime sparse-support miss 作为 correctness residual 携带，不调 rate/target mix；G1 gate 仍待 TOPAS/GPU survival 对照决定。
+- `TODO`: no implementation accepted.
+- `IN_PROGRESS`: exactly one step may have this status.
+- `BLOCKED`: an external dependency or failed gate is documented; later dependent steps remain `TODO`.
+- `DONE`: implementation, tests, evidence, diff review, and the step gate all passed.
+- `FROZEN`: intentionally unchanged and protected by regression evidence.
 
-`P0 ledger correctness → P0 signed handoff → P0 compact isotope ledger → P0 replay semantics → P1 deterministic auditor → P0 Be6 compatibility policy/A-B → P0 compatibility rebaseline → P1 03A baseline attribution sanity check → P1 03B-2B bounded source/compiler consistency → P1 04A generation eligibility + H/O coverage exposure → P1 04B runtime optical depth × empirical survival → P1 04C stopping residence/continuous optical depth → P1 04D TOPAS lineage/survival reference → P1 causal Be/Li fix → P2 light-ion accounting cleanup → P2 non-C12 straggling → P3 MCS shape → P4 100/300 regression`。
+The executor updates only the `Status` column and the execution log. Never rewrite acceptance thresholds after seeing results. If a threshold is scientifically wrong, open a separate documented plan change before rerunning.
 
-## 进度控制
+## Progress table
 
-当前完成度：**13/18（约 72%）**；Step 03 阶段 A、03B-0、03B-1 campaign provenance gate、03B-1R、compatibility rebaseline、03B-2A、03A attribution sanity check、Step 01B.1 和 03B-2B bounded source/compiler audit 已完成。由于新发现 Be-6 的基态寿命为 prompt scale，原先“补充稳定 Be-6 projectile campaign”的 03B-1R 已收缩为 TOPAS reference compatibility policy gate；reference 明确为无 daughter/无 deposit 的 StopAndKill，no-decay 数据只作诊断，不得编译进生产 package。
+| Step | Status | Deliverable | Depends on |
+|---|---|---|---|
+| [00](steps/00-freeze-and-provenance.md) | TODO | Freeze water/secondary baseline and provenance | none |
+| [01](steps/01-current-state-audit.md) | TODO | Audited local implementation map and conflict decision | 00 |
+| [02](steps/02-schneider-material-model.md) | TODO | Host-side 13-element/25-section data model and parser | 01 |
+| [03](steps/03-schneider-parser-tests.md) | TODO | Boundary, malformed-input, and golden parser tests | 02 |
+| [04](steps/04-topas-material-truth-dump.md) | TODO | TOPAS/Geant4 material truth extension and synthetic inputs | 03 |
+| [05](steps/05-material-truth-gate.md) | TODO | Automated MAIGO-parser versus TOPAS material audit | 04 |
+| [06](steps/06-topas-inelastic-xs-dump.md) | TODO | Deterministic C12 section/element inelastic XS dump | 05 |
+| [07](steps/07-xs-compiler-and-metadata.md) | TODO | Audited Schneider mass-rate data product | 06 |
+| [08](steps/08-thin-slab-xs-validation.md) | TODO | Independent TOPAS attenuation validation of XS | 07 |
+| [09](steps/09-primary-xs-host-path.md) | TODO | Strict config/load/resample path for 25-section C12 XS | 08 |
+| [10](steps/10-primary-xs-device-path.md) | TODO | Correct device upload/index/density scaling | 09 |
+| [11](steps/11-voxel-boundary-hazard.md) | TODO | Piecewise-material optical-depth stepping | 10 |
+| [12](steps/12-primary-only-observables.md) | TODO | Explicit primary-only mode and validation scorers | 11 |
+| [13](steps/13-primary-ct-validation.md) | TODO | Slab + staircase primary CT milestone | 12 |
+| [14](steps/14-schneider-stopping.md) | TODO | TOPAS-derived 25-section stopping tables | 13 |
+| [15](steps/15-schneider-mcs.md) | TODO | Exact 25-section radiation-length MCS path | 14 |
+| [16](steps/16-cinel03-schema.md) | TODO | Element-target correlated-event package schema | 15 |
+| [17](steps/17-c12-element-campaigns.md) | TODO | C12 x 13-target TOPAS final-state campaigns | 16 |
+| [18](steps/18-material-target-runtime.md) | TODO | Partial-rate target selection and CINEL03 replay | 17 |
+| [19](steps/19-c12-fragment-validation.md) | TODO | C12 fragmentation validation in Schneider media | 18 |
+| [20](steps/20-secondary-projectiles.md) | TODO | Prioritized secondary projectile coverage | 19 |
+| [21](steps/21-heterogeneous-and-dicom-gates.md) | TODO | Heterogeneous and real-DICOM research gates | 20 |
 
-Step 01A ledger correctness、Step 01A.5 signed handoff、Step 01B compact isotope 诊断仪器和 Step 02 deterministic package auditor 已完成；04A 已完成 eligibility/coverage exposure 诊断，04B-1 candidate-vs-tau、04B-2 blocked counterfactual hazard、04B-3 package-vs-runtime parent outcome 和 04C continuous optical depth/stopping residence 已完成；Step 03 阶段 A 已修复 replay miss 的 null-collision MCS semantics，03B-0/03B-1 已确定 Be6 coverage 缺口及 TOPAS prompt-unstable compatibility 语义，compatibility rebaseline 已切换为开发基线。03B-2A 与 03B-2B 已证明 transportable Be/Li 的 miss 为零，且当前 source/compiler/package/global-index 一致；192 个 runtime sparse-support miss 仅作为 correctness residual 携带，不直接改 runtime rate。p/d/He4 及当前 aggregate species residual 仍未修复，不能把 compatibility rebaseline 误记为物理收敛。
+## Phase gates
 
-| 状态 | 步骤 | 主要产出 |
-|---|---|---|
-| [x] | [00 冻结 200 MeV/u 基线](steps/00-freeze-e200-baseline.md) | `baseline-e200-c2e25b8-topascompat.json`；旧 `becf880` 仅作历史对照 |
-| [ ] | [01 Species 分层 ledger](steps/01-hierarchical-species-ledger.md) | `K_birth × f_dep × f_FOV` 逐层 closure |
-| [x] | [01A.5 Signed reaction handoff](steps/01a5-signed-reaction-handoff.md) | reaction import/export 与 replay δE 诊断完成；import=0，残差留给后续 |
-| [x] | [01B Compact isotope replay ledger](steps/01b-compact-isotope-replay-ledger.md) | isotope×target×generation status、parent outcome、transition |
-| [x] | [01B.1 Replay semantics cleanup](steps/01b1-replay-semantics-cleanup.md) | lookup miss/cutoff 拆分；rate/replay/dE energy handoff |
-| [x] | [02 Deterministic package auditor](steps/02-deterministic-package-yield-auditor.md) | GPU actual vs package exact vs TOPAS source；10-MeV occupancy audit |
-| [x] | [03B-1R Be6 TOPAS compatibility policy/A-B](steps/03b1r-be6-prompt-decay-semantics.md) | TopasCompatKill、显式 discarded-kinetic sink、200 MeV/u 100k fixed-seed A/B 已完成；全局 inherited CINEL02 residual 仍待后续处理 |
-| [x] | [03B-2A Occupancy-aware replay-support audit](steps/03b2-replay-support-occupancy-audit.md) | transportable isotope miss 分类完成；Be/Li miss=0；不改 runtime rate |
-| [x] | [03A Baseline attribution sanity check](steps/03a-baseline-attribution-sanity-check.md) | 当前 HEAD 同 seed A/B 通过；稳定 species 仅约 1e-8% 变化，Be/Total 单独允许变化 |
-| [x] | [03B-2B Bounded source/compiler consistency](steps/03b2b-source-compiler-consistency.md) | 174/18 provisional miss 分类已完成；source/compiler/index 无确认缺陷，不调 rate/target mix |
-| [x] | [04A Generation eligibility + H/O rate-coverage exposure](steps/04a-generation-eligibility-rate-coverage.md) | secondary path、generation gate、H/O coverage、rate·ds 与 reaction outcome ledger |
-| [x] | [04B Runtime optical depth + survival self-audit](steps/04b-runtime-optical-depth-survival.md) | candidate-vs-τ、generation-blocked counterfactual hazard、package/runtime parent outcome |
-| [x] | [04C Stopping residence + continuous optical depth](steps/04c-stopping-residence-continuous-optical-depth.md) | Simpson continuous τ、连续 coverage、stopping loss/residence |
-| [x] | [04D TOPAS lineage/survival reference](steps/04d-topas-lineage-survival-reference.md) | Li/Be generation、path、首次核反应与终止原因 |
-| [ ] | [04 MCS-only species/FOV](steps/04-mcs-only-species-fov.md) | step convergence、species-aware full-2GR、FOV acceptance |
-| [ ] | [05 Stopping/range regression](steps/05-stopping-range-regression.md) | Be/Li explicit-table range 与 unrestricted deposition |
-| [ ] | [06 Non-C12 straggling](steps/06-nonc12-straggling.md) | mean-preserving species-aware fluctuation |
-| [ ] | [07 Full-cascade species closure](steps/07-full-cascade-species-closure.md) | Li/Be G0/G1/G2 birth→survival→transport→FOV |
-| [ ] | [08 Package 修改门禁](steps/08-package-change-gate.md) | 仅在 job 485 + auditor 同向时修 construction cause |
-| [ ] | [09 100/200/300 最终验收](steps/09-multienergy-final-validation.md) | 同一 physics 参数的多 seed 报告 |
+- P0, frozen baseline: Steps 00--01.
+- P1, material truth: Steps 02--05.
+- P2, C12 primary nuclear attenuation: Steps 06--13. This is the first usable milestone.
+- P3, exact electromagnetic material transport: Steps 14--15.
+- P4, C12 material-dependent fragmentation: Steps 16--19.
+- P5, secondary nuclear transport and clinical validation: Steps 20--21.
 
-### Step 03B-1 运行证据
+Do not start a phase until every step in the previous phase is `DONE`, except Step 00 which becomes `FROZEN` after completion.
 
-2026-09-01 完成 `summary.csv` 作用域检查和 3.8 GB raw 全量流式审计。输出：
-`plan/artifacts/cinel02-rate-package-census-e200-g1/projectile-campaign-audit.json`。
+## Per-step execution protocol
 
-当前 package 的 102 个 source campaign 只有 17 个 projectile identity，不含 `Z4A6`；raw 中
-`Z4A6` projectile interactions 为 `0`，但作为 C-12 direct child 的 `Z4A6` products 为
-`27,186`，全部 role 0。结合 03B-0 的 `6Be+H/O` rate 全零、package nodes 为 0，
-确定缺口来自 source campaign 未运行 Be-6 projectile exposure，而不是 compiler 丢弃已有
-Be-6 projectile event。详见 [03B-1 step record](steps/03b1-be6-rate-coverage-root-cause.md)。
+For every step, the executor must:
 
-已完成 Be6 TOPAS compatibility policy/A-B；03A attribution sanity check 与 03B-2B bounded source/compiler audit 也已完成（仅 transportable isotopes）。Job 495 增强 scorer 已确认 TOPAS 对 GenericIon(4,6) 立即调用 RadioactiveDecay 并终止 parent；50k histories 没有任何可观测 daughter，RDM 数据目录也没有 z4.a6 衰变方案。该结果禁止稳定 Be-6 rate/package 补充，也禁止在 GPU 中猜测 alpha+p+p conversion。
+1. Read this README, the current step, `AGENTS.md`, and the exact current source sections named by the step.
+2. Run `git status --short`; record pre-existing changes and avoid overwriting them.
+3. Create outputs under the path required by the step. Do not improvise a second configuration key or file schema.
+4. Add positive, boundary, malformed-input, and fail-fast tests where applicable.
+5. Run the smallest tests first, then the full relevant CPU suite, then local out-of-sandbox SYCL/GPU validation when requested.
+6. For source edits, re-read before patching; use small edits; run `git diff --check` and inspect `git diff`.
+7. Write an evidence file under `/mnt/sda/wuwei/maigo-ct-schneider/evidence/step-NN/` containing commands, exit codes, hashes, machine/software versions, numerical results, and overflow counters. Large outputs stay there, not in `plan/`.
+8. Mark `DONE` only if every acceptance item is demonstrated. “Build succeeds”, plots that only look reasonable, or partial data are not acceptance evidence.
+9. Commit only the scope of the current step, using the commit intent stated in that step. Never include unrelated dirty-worktree changes.
 
-## Step 03A 运行证据
+## Required provenance fields
 
-2026-09-01 在当前 HEAD `2791bae` 重建 SYCL CUDA binary 后，以同一 200 MeV/u、G1、
-100k、seed `2026095100`、package/rate、geometry 和 3D scorer 完成 compatibility=false/true
-A/B。false 配置显式写入 `cinel02_topas_compatibility_mode: false`，true 配置为 `true`；
-两份报告的 TOPAS 八个 3D scorer SHA256、histories、grid 和 scorer contract 完全一致。
+Every generated formal data product has a sibling metadata JSON containing at least:
 
-- false analysis：`plan/artifacts/cinel02-baseline-attribution-e200-g1/off/analysis.json`
-- true analysis：`plan/artifacts/cinel02-baseline-attribution-e200-g1/on/analysis.json`
-- checker：`plan/artifacts/cinel02-baseline-attribution-e200-g1/sanity.json`，status=`pass`
-- 稳定类别 GPU integral 最大绝对变化为 `2.74e-8%`（Primary C）；Secondary C、B、Li、
-  He、Z1 均在 `0.01` percentage-point 门槛内。Be aggregate `-11.5263%`、charged total
-  `-0.0577%` 是允许的 compatibility sink 变化。
-- 旧 `baseline-e200-becf880.json` 没有绑定 TOPAS reference config/hash，且使用不同的
-  `explicitsp` GPU config；因此旧 `becf880` 百分比仅作历史对照，新 compatibility baseline 才
-  用绑定的 `total_species` TOPAS reference 作为开发基线。
+```text
+schema_version
+data_sha256
+topas_version
+geant4_version
+physics_list
+schneider_source_path
+schneider_sha256
+extractor_git_commit
+compiler_git_commit
+raw_campaign_manifest_sha256
+energy_min_MeVu
+energy_max_MeVu
+energy_grid
+projectiles
+target_elements
+units
+generation_timestamp_utc
+validation_report_sha256
+```
 
-该步骤只排除了 compatibility 开关导致的 scorer/analysis side effect，不构成物理收敛结论；
-04B 已完成 runtime optical-depth self-audit；04A 显示的 G1 generation-blocked path 已用反事实
-hazard 单独量化，下一步进入 04C stopping residence/continuous optical depth。
+Missing or placeholder fields fail the gate.
 
-## Step 04A 运行证据
+## Final data layout
 
-2026-09-02 在本机 RTX 2080 Ti/sm_75、200 MeV/u、G1、100k、seed `2026095100`
-完成 secondary exposure smoke。实现只增加 diagnostics，不改变 rate、target selection、step size、
-package、stopping、MCS 或 sampler。
+```text
+data/schneider/
+  schneider_materials_geant4_11_3_2.json
+  schneider_materials_geant4_11_3_2.metadata.json
+  c12_schneider_inelastic_mass_xs.csv
+  c12_schneider_inelastic_mass_xs.metadata.json
+  schneider_inelastic_rates_v1.bin
+  schneider_inelastic_rates_v1.metadata.json
+  cinel03_c12_targets.bin
+  cinel03_c12_targets.metadata.json
+  cinel03_secondary_targets.bin
+  cinel03_secondary_targets.metadata.json
+  schneider_stopping_v1.bin
+  schneider_stopping_v1.metadata.json
+```
 
-- Ledger：`out/beam_200MeVu_cinel02_e200light107_g1_topascompat_100k_xy04/energy_ledger.json`。
-- 汇总：`plan/artifacts/cinel02-exposure-e200-g1-topascompat/summary.json`。
-- 16,994,005.1 mm total secondary path 中，13,921,212.1 mm 为 generation-eligible，
-  3,072,793.0 mm（18.08%）被 G1 generation gate 阻断。
-- eligible path 中 13,916,848.8 mm rate-pair covered，4,316.7 mm uncovered（约 0.031%）；
-  6Li/7Li、7Be/9Be/10Be 的 coverage 分别为 99.942%、99.962%、99.954%、99.796%、99.939%。
-- secondary candidate/valid/killed/continued = `33512/33306/33306/0`；与既有 replay status
-  partition 一致。
+## Execution log
 
-结论：H/O rate coverage 对 Be/Li 基本完整，不能解释大剂量偏差；G1 generation-blocked path
-则不可忽略，04B 已把 eligibility、counterfactual hazard 与 empirical candidate 分开校验，
-不直接调大 `cinel02_max_secondary_inelastic_generations`。
+Append one line after each status change. Do not erase old entries.
 
-
-## Step 04B 运行证据
-
-2026-09-02：完成 04B-1 candidate-vs-tau、04B-2 blocked counterfactual hazard、04B-3 package-vs-runtime parent outcome。主要 Li/Be 的 blocked-hazard fraction 为 6Li 4.49%、7Li 2.05%、7Be 1.76%、9Be 4.90%、10Be 11.06%；candidate-vs-tau z-score 均在约 ±2σ 内。当前 occupied package cells 的 parent outcome expectation 均为 100% kill，GPU 为 33306 kill / 0 continue。04B 未修改 rate、target selection 或 generation gate，下一步进入 04C stopping residence 与 continuous optical depth。
-
-## Step 04C 运行证据
-
-2026-09-02 在本机 RTX 2080 Ti/sm_75、200 MeV/u、G1、100k、seed `2026095100`
-完成 continuous optical-depth 与 stopping-residence audit。新增 18-metric exposure schema，
-对每个实际 secondary step 在 start/mid/end energy 计算 H/O rate 的 Simpson 积分，并保留
-continuous-rate covered/uncovered path 及实际 `stopping_loss_MeV`；没有改变 runtime hazard
-sampler。
-
-| isotope | τ runtime | τ continuous | continuous/runtime | blocked τ runtime | blocked τ continuous | candidates |
-|---|---:|---:|---:|---:|---:|---:|
-| 6Li | 267.176 | 266.481 | 0.997402 | 12.555 | 12.181 | 279 |
-| 7Li | 279.265 | 278.843 | 0.998488 | 5.835 | 5.657 | 263 |
-| 7Be | 229.547 | 229.098 | 0.998046 | 4.101 | 4.013 | 204 |
-| 9Be | 36.270 | 36.154 | 0.996792 | 1.868 | 1.795 | 31 |
-| 10Be | 40.106 | 40.044 | 0.998442 | 4.988 | 4.954 | 49 |
-
-`τ_continuous` 比 `τ_runtime` 低约 0.15--0.32%，说明当前 step-start rate 近似在该
-配置下不是百分之几级别的主因。generation-blocked continuous hazard 与 04B 量级一致，
-不据此直接修改 G1。NVIDIA SYCL release CTest `2/2`、Python synthetic tests `3/3`，
-GPU canonical run 成功。
-
-该步骤只能证明 GPU runtime 与自身 rate/stopping exposure 的一致性；TOPAS lineage/survival
-reference 已由 04D 建立，p/d/He4 residual 及 aggregate dose mismatch 仍未解决。下一步进入
-TOPAS/GPU survival 对照与 Be/Li causal analysis。
-
-## Step 04D 运行证据
-
-2026-09-02 在本机 TOPAS 4.2.3 / Geant4 11.3.2 通过 sbatch job 497 完成 200 MeV/u、100k
-full-cascade lineage smoke。新增 CarbonLineageSurvivalNtuple，每条 Li6/Li7/Be7/Be9/Be10
-transport episode 记录 generation、path、birth/interaction energy、首次 hadronic interaction
-和 terminal reason；event-end 未结束轨迹单独标为 censored。
-
-输出：`/mnt/sda/wuwei/cinel02-lineage-survival/e200MeVu_100000h_lineage_survival_v2/`；
-汇总：`plan/artifacts/topas-lineage-survival-e200-g1/summary.json`，对照：
-`plan/artifacts/topas-lineage-survival-e200-g1/comparison.json`。共 7,717 条 episode、0 条
-censored；TOPAS G0/G1/G2 反应率分别为 Li6 12.07%/1.14%/0、Li7 20.83%/1.58%/0、
-Be7 18.60%/1.20%/0、Be9 15.88%/1.35%/0、Be10 23.84%/2.83%/0。
-
-该结果是 reference occupancy/终止语义，不是 matched physics acceptance gate；TOPAS 与 GPU
-仍使用不同 event generator 与 generation policy。下一步将用这些 reference outcome 对照 GPU
-04B/04C 的 optical depth、generation eligibility 和 stopping residence，再决定 G1 gate 或
-rate/stopping 方向是否存在物理缺口。job 496 初次因旧模板 501 MeV/u 网格越界中止，已通过 5001
-bin 脚本修正；该失败不涉及 scorer。
-
-## Step 03B-2B 运行证据
-
-2026-09-01 在 compatibility baseline（200 MeV/u、G1、100k、seed `2026095100`）上完成
-bounded source/compiler/package consistency audit。审计脚本为
-`startup/package_tools/audit_cinel02_source_package_consistency.py`，输出
-`plan/artifacts/cinel02-source-package-replay-consistency-e200-g1/report.json`；输入为
-`research_hybrid_e200light107.cinel02`、`research_hybrid_e200light107.cinpkg` 和同一 campaign
-`summary.csv`。
-
-- raw 全量扫描 `3,663,101` records；package 为 `3,663,101` interactions、`30,051,236`
-  products、`3,573,494` global energy nodes。34 个 source-backed isotope×target groups 全部
-  `source_present_compiled`；仅 6Be 的 H/O 两组为预期 `source_missing`，因为 compatibility
-  policy 将其标记为 non-transportable。`compiler_dropped_support=0`、
-  `package_has_unbacked_support=0`、raw/package 不匹配均为 0。
-- 03B-2A 的 192 个 occupied miss 中，174 个（20 cells）仍是 provisional
-  raw/compiler-support-gap bucket，18 个（9 cells）是 provisional index/lookup-anomaly
-  bucket；这些 cells 全部属于 `source_present_compiled` key，不能解释为 compiler 丢包。
-- 对 package 全部 `3,573,494` 个 node 执行 `14,293,976` 个 exact node/window replay probes，
-  `exact_replay_failures=0`。因此没有确认的 global-index、window-selection 或 `(Z,A)` lookup
-  bug；不修改 package、rate、target CDF、tolerance 或 runtime support mask。
-- 生产 package C++ inspection 与 Python census 一致：34 个 source-backed groups、
-  `parent_survival_fraction=0`；6Be 不进入 transportable projectile/rate/replay coverage。
-
-结论：03B-2B 是 bounded correctness cleanup，未找到可提交的 source/compiler/index 修复。
-transportable Be/Li 的 replay miss 为 0；其余 192 个 miss 作为 runtime sparse-support
-correctness residual 携带，不以 dose 改善作为验收。下一步进入 Be7/9/10、Li6/7 的
-`track-length × hazard optical depth → empirical reaction survival → stopping residence`。
-
-## Step 03B-1R 运行证据
-
-2026-09-01 本机 TOPAS Job 495（200 MeV/u、50k、seed `2026099609`）完成增强 scorer 诊断。
-50,000/50,000 条记录均为 `(Z,A)=(4,6)` 的 `decay_parent`，post-step process 为
-`RadioactiveDecay`，step length 约 `10^-9 mm`，pre/post KE 均为 1200 MeV；`decay_daughter`
-为 0，step deposit 为数值零。`RadioactiveDecay6.1.2` 中缺少 `z4.a6`，只有
-`PhotonEvaporation6.1/z4.a6`。因此当前 TOPAS reference 的可观测行为是立即终止且无 daughter，
-但三体衰变尚无证据。详见 [03B-1R step record](steps/03b1r-be6-prompt-decay-semantics.md)。
-
-03B-1R 已确认 reference compatibility 语义，完成 TopasCompatKill policy、显式 sink 和固定 seed A/B；Be6 produced=281、queued=0、discarded=281，sink KE 与 generated KE 相对残差约 1.1e-7。全局 accounting residual 约 1.536% 为既有 CINEL02 residual，不是 compatibility mode 新增。
-## Step 03B-0 运行证据
-
-2026-09-01 在沙盒外完成 rate/package census，输入为当前 200 MeV/u G1 基线使用的
-`cascade_e400_rates.csv` 与 `research_hybrid_e200light107.cinpkg`，replay tolerance 为
-`±0.51 MeV/u`。输出：
-`plan/artifacts/cinel02-rate-package-census-e200-g1/census.json`、`census.csv` 和 `RESULTS.md`。
-
-36 个显式 isotope×target rate group 全部存在，但只有 34 个有正 rate；package 也只有
-34/36 个请求 group 有 global event nodes。`6Be+H1` 与 `6Be+O16` 的 rate sample 均为
-445 个且全为零，package node 数均为 0；`7Be/9Be/10Be` 与 `6Li/7Li` 均有正 rate 和
-package nodes。由此确定 Be-6 的 GPU secondary replay candidate=0 是输入 coverage 缺口，
-不是 100k 抽样偶然。全局 3249 个正 rate sample 落在 package support 外，需结合实际
-occupancy 在 03B-2 处理；本步骤不改变 runtime physics。详见
-[03B-0 step record](steps/03b0-rate-package-coverage-census.md)。
-
-## Step 01B 运行证据
-
-2026-09-01 在本机 RTX 2080Ti、200 MeV/u、G1、100k、seed `2026095100` 完成。
-Replay status（10 MeV/u bins）为 candidate/valid/lookup-miss/invalid/cutoff = `71524/71318/192/0/14`，
-secondary generation-1 no-event `206/33512 = 0.615%`；按 isotope 最高为 2H `1.779%`、
-3H `0.798%`、7Be `0.490%`、6Li `0.358%`。结果详见
-[01B step record](steps/01b-compact-isotope-replay-ledger.md)。
-
-### Step 01B.1 运行证据
-
-2026-09-01 在本机 RTX 2080Ti/sm_75、200 MeV/u、G1、100k、seed `2026095100`
-完成沙盒外 GPU 重跑。构建成功，CTest `2/2` 通过。输出：
-`out/beam_200MeVu_cinel02_e200light107_g1_transitiondiag4_100k_xy04/energy_ledger.json`。
-
-五状态总计：`candidate=71524`、`valid=71318`、`lookup_miss=192`、
-`invalid=0`、`post_em_below_cutoff=14`；满足
-`71524 = 71318 + 192 + 0 + 14`，且逐 cell partition 无异常。
-分 isotope 的非零计数为：1H `5296/5290/6/0/0`、2H `8770/8614/153/0/3`、
-3H `3133/3108/24/0/1`、3He `1445/1444/1/0/0`、4He `12487/12475/6/0/6`、
-6He `61/61/0/0/0`、6Li `279/278/0/0/1`、7Li `263/263/0/0/0`、
-7Be `204/203/0/0/1`、9Be `31/31/0/0/0`、10Be `49/49/0/0/0`、
-8B `3/3/0/0/0`、10B `241/240/1/0/0`、11B `484/483/0/0/1`、
-10C `30/30/0/0/0`、11C `499/498/0/0/1`、12C `38249/38248/1/0/0`
-（字段顺序 candidate/valid/lookup_miss/invalid/cutoff）。
-
-`E_rate - E_replay - dE` 的全局相对残差为 `1.98e-7`；最大 cell 相对残差
-`1.20e-6`，来源是 device float atomic 累加，未改变物理结果。JSON layout 已更新为
-`[18,2,3,40,5]`（10 MeV/u diagnostic bins），并输出 `rate_query_energy_MeV`、`replay_query_energy_MeV`、
-`continuous_loss_to_collision_MeV`；generation 语义改为 `reaction_generation`。
-
-该步骤只修正诊断语义，不修改 sampler/yield、rate、stopping、MCS 或 cascade physics。
-Step 02 deterministic package auditor、03B-2A、03B-2B bounded source/compiler audit、04A exposure audit、04B runtime optical-depth self-audit、04C continuous optical-depth/stopping-residence audit 与 04D TOPAS lineage/survival reference 已完成；下一步进入 Be/Li 因果分析。
-
-## 提交切分
-
-1. `feat(diag): add stratified secondary energy closure ledger`
-2. `feat(diag): close signed secondary reaction handoff`
-3. `fix(cinel02): preserve secondary transport semantics on replay miss`
-4. `fix(mcs): apply species-aware scaling to full 2gr distribution`
-5. `test(mcs): add mono-ion isotope lateral and range regressions`
-6. `feat(straggling): add non-c12 secondary loss fluctuations`
-7. `test(cascade): add 200mevu species closure regression`
-
-sampler/package commit 不在预定队列中；必须先通过 Step 08 门禁。
-
-## 更新规则
-
-- README 是唯一进度入口；按当前路线执行第一个未完成且不被前置诊断阻塞的步骤，已分类但未收口的 light-ion residual 可携带到后续支线。
-- 只有步骤文件的所有退出条件通过并记录证据时才标记 `[x]`。
-- 每次记录 commit、canonical config、seed、histories、TOPAS job ID、package/rate SHA256、FOV/scorer header、输出路径和失败项。
-- artifacts 保留在本地/15 TB 数据盘，不将 raw/3D dose 提交到 Git。
-- 400 MeV/u 不阻塞当前验收；不用它促使 100–300 MeV/u 添加经验 scale。
+```text
+YYYY-MM-DD HH:MM TZ | step NN | OLD -> NEW | commit/hash or blocker | evidence path
+```
