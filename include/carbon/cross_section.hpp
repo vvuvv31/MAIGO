@@ -151,7 +151,40 @@ inline float schneider_primary_macroscopic_xs(
     const std::vector<float>& query_energies,
     const std::vector<float>& query_densities,
     const std::string& device_preference = "default");
+
+struct CtGrid;
+
+struct Step11TestResult {
+    double survival_fraction{0.0};
+    double survival_fraction_std_err{0.0};
+    std::vector<std::uint64_t> interaction_binned_counts{};
+    std::uint64_t zero_progress_count{0};
+    std::uint64_t changed_material_step_span_count{0};
+    std::uint64_t face_cross_count{0};
+};
+
+// Standalone GPU test runner for Step 11 piecewise nuclear optical-depth stepping.
+[[nodiscard]] Step11TestResult run_step11_piecewise_hazard_gpu_test(
+    const CtGrid& grid,
+    const std::vector<float>& host_schneider_table,
+    std::uint32_t section_count,
+    std::uint32_t energy_nodes,
+    float e_min,
+    float inv_dE,
+    float energy_mevu,
+    std::uint32_t num_histories,
+    float ray_origin_x,
+    float ray_origin_y,
+    float ray_origin_z,
+    float ray_dir_x,
+    float ray_dir_y,
+    float ray_dir_z,
+    float max_track_length_mm,
+    float bin_width_mm,
+    std::uint32_t num_bins,
+    const std::string& device_preference = "default");
 #endif
+
 
 class IonCrossSectionTables {
 public:

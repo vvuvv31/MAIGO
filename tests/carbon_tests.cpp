@@ -4561,6 +4561,273 @@ void test_step10_schneider_primary_xs_device_path() {
     }
 }
 
+void test_step11_piecewise_nuclear_optical_depth() {
+#ifdef CARBON_HAS_SYCL
+    if (!is_sycl_available()) {
+        std::cout << "Skipping test_step11_piecewise_nuclear_optical_depth: SYCL device not available\n";
+        return;
+    }
+
+    carbon::TransportConfig cfg;
+    cfg.ct_schneider_cross_section_file = "data/schneider/c12_schneider_inelastic_mass_xs.csv";
+    std::vector<double> transport_energies(400);
+    for (std::size_t i = 0; i < 400; ++i) {
+        transport_energies[i] = 1.0 + i * 1.0; // 1.0 to 400.0 MeV/u
+    }
+    const auto schneider_grid = carbon::prepare_schneider_primary_xs(cfg, transport_energies);
+    const float e_min = static_cast<float>(transport_energies.front());
+    const float inv_dE = 1.0F / static_cast<float>(transport_energies[1] - transport_energies[0]);
+    const auto n_energies = static_cast<std::uint32_t>(schneider_grid.energy_nodes());
+    const float test_energy = 200.0F; // 200 MeV/u
+
+    // =========================================================================
+    // Test 1: Two-layer analytical survival S = exp(-(Sigma1 * L1 + Sigma2 * L2))
+    // Layer 1: section 8 (soft tissue), density 1.0 g/cm3, length 10.0 mm
+    // Layer 2: section 20 (dense bone), density 1.5 g/cm3, length 15.0 mm
+    // Total thickness = 25.0 mm
+    // =========================================================================
+    {
+        const float mass_rate_1 = carbon::schneider_primary_mass_xs(
+            schneider_grid.mass_xs_per_mm_at_1g_cm3.data(), 25, n_energies, e_min, inv_dE, 8, test_energy);
+        const float mass_rate_2 = carbon::schneider_primary_mass_xs(
+            schneider_grid.mass_xs_per_mm_at_1g_cm3.data(), 25, n_energies, e_min, inv_dE, 20, test_energy);
+        const float rho_1 = 1.0F;
+        const float rho_2 = 1.5F;
+        const float sigma_1 = rho_1 * mass_rate_1;
+        const float sigma_2 = rho_2 * mass_rate_2;
+        const float L_1 = 10.0F;
+        const float L_2 = 15.0F;
+        const double S_exact = std::exp(-(static_cast<double>(sigma_1) * L_1 + static_cast<double>(sigma_2) * L_2));
+
+        // Create a 2-layer CT grid along z:
+        // voxel spacing: 10 mm in x, 10 mm in y, 1.0 mm in z
+        // 1 x 1 x 25 voxels: voxels 0..9 are layer 1 (z: 0..10 mm), voxels 10..24 are layer 2 (z: 10..25 mm)
+        carbon::CtGrid grid;
+        grid.file_version = carbon::CtGrid::version_v2;
+        grid.nx = 1;
+        grid.ny = 1;
+        grid.nz = 25;
+        grid.spacing_x_mm = 10.0;
+        grid.spacing_y_mm = 10.0;
+        grid.spacing_z_mm = 1.0;
+        grid.origin_x_mm = -5.0;
+        grid.origin_y_mm = -5.0;
+        grid.origin_z_mm = 0.0;
+        grid.density_g_per_cm3.resize(25);
+        grid.material_id.resize(25);
+        for (std::uint32_t z = 0; z < 25; ++z) {
+            if (z < 10) {
+                grid.material_id[z] = 8;
+                grid.density_g_per_cm3[z] = rho_1;
+            } else {
+                grid.material_id[z] = 20;
+                grid.density_g_per_cm3[z] = rho_2;
+            }
+        }
+
+        constexpr std::uint32_t kHistories = 1000000;
+        const auto res = carbon::run_step11_piecewise_hazard_gpu_test(
+            grid, schneider_grid.mass_xs_per_mm_at_1g_cm3, 25, n_energies,
+            e_min, inv_dE, test_energy, kHistories,
+            0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 1.0F, 25.0F, 1.0F, 25, "default");
+
+        const double rel_err = std::abs(res.survival_fraction - S_exact) / S_exact;
+        require(rel_err < 0.002,
+                "Two-layer analytical survival relative error must be < 0.2%, got " +
+                std::to_string(rel_err * 100.0) + "% (S_GPU=" + std::to_string(res.survival_fraction) +
+                ", S_exact=" + std::to_string(S_exact) + ")");
+        require(std::abs(res.survival_fraction - S_exact) <= 3.0 * res.survival_fraction_std_err,
+                "Two-layer survival must agree with exact within 3 sigma");
+        require(res.zero_progress_count == 0, "zero_progress_count must be 0");
+        require(res.changed_material_step_span_count == 0, "changed_material_step_span_count must be 0");
+        require(res.face_cross_count > 0, "face_cross_count must be positive");
+
+        // =========================================================================
+        // Test 2: First-interaction CDF histogram matching piecewise theoretical CDF
+        // Layer 1 (z in [0, 10]): F(z) = 1 - exp(-sigma1 * z)
+        // Layer 2 (z in [10, 25]): F(z) = 1 - exp(-sigma1 * L1 - sigma2 * (z - L1))
+        // Bins are 1.0 mm wide (25 bins total)
+        // =========================================================================
+        require(res.interaction_binned_counts.size() == 25, "Must have 25 bins");
+        for (std::uint32_t b = 0; b < 25; ++b) {
+            const double z_lo = static_cast<double>(b) * 1.0;
+            const double z_hi = static_cast<double>(b + 1) * 1.0;
+            double F_lo = 0.0;
+            double F_hi = 0.0;
+            if (z_hi <= 10.0) {
+                F_lo = 1.0 - std::exp(-static_cast<double>(sigma_1) * z_lo);
+                F_hi = 1.0 - std::exp(-static_cast<double>(sigma_1) * z_hi);
+            } else if (z_lo >= 10.0) {
+                F_lo = 1.0 - std::exp(-static_cast<double>(sigma_1) * 10.0 - static_cast<double>(sigma_2) * (z_lo - 10.0));
+                F_hi = 1.0 - std::exp(-static_cast<double>(sigma_1) * 10.0 - static_cast<double>(sigma_2) * (z_hi - 10.0));
+            } else {
+                F_lo = 1.0 - std::exp(-static_cast<double>(sigma_1) * z_lo);
+                F_hi = 1.0 - std::exp(-static_cast<double>(sigma_1) * 10.0 - static_cast<double>(sigma_2) * (z_hi - 10.0));
+            }
+            const double p_bin = F_hi - F_lo;
+            const double expected_count = static_cast<double>(kHistories) * p_bin;
+            const double actual_count = static_cast<double>(res.interaction_binned_counts[b]);
+            const double bin_std_err = std::sqrt(expected_count * (1.0 - p_bin));
+            const double bin_diff = std::abs(actual_count - expected_count);
+            require(bin_diff <= 3.5 * bin_std_err,
+                    "Bin " + std::to_string(b) + " interaction count outside 3.5 sigma: actual=" +
+                    std::to_string(actual_count) + " expected=" + std::to_string(expected_count) +
+                    " sigma=" + std::to_string(bin_std_err));
+        }
+    }
+
+    // =========================================================================
+    // Test 3: Same density / different section and same section / different density
+    // =========================================================================
+    {
+        // Case A: rho1 == rho2 = 1.0, section 1 (lung) vs section 20 (dense bone)
+        const float mr_lung = carbon::schneider_primary_mass_xs(
+            schneider_grid.mass_xs_per_mm_at_1g_cm3.data(), 25, n_energies, e_min, inv_dE, 1, test_energy);
+        const float mr_bone = carbon::schneider_primary_mass_xs(
+            schneider_grid.mass_xs_per_mm_at_1g_cm3.data(), 25, n_energies, e_min, inv_dE, 20, test_energy);
+        require(std::abs(mr_lung - mr_bone) > 1e-4F, "Lung and bone mass rates must differ");
+
+        carbon::CtGrid grid_sec;
+        grid_sec.file_version = carbon::CtGrid::version_v2;
+        grid_sec.nx = 1;
+        grid_sec.ny = 1;
+        grid_sec.nz = 2;
+        grid_sec.spacing_x_mm = 10.0;
+        grid_sec.spacing_y_mm = 10.0;
+        grid_sec.spacing_z_mm = 10.0;
+        grid_sec.origin_x_mm = -5.0;
+        grid_sec.origin_y_mm = -5.0;
+        grid_sec.origin_z_mm = 0.0;
+        grid_sec.density_g_per_cm3 = {1.0F, 1.0F};
+        grid_sec.material_id = {1, 20}; // lung then bone
+
+        const auto res_sec = carbon::run_step11_piecewise_hazard_gpu_test(
+            grid_sec, schneider_grid.mass_xs_per_mm_at_1g_cm3, 25, n_energies,
+            e_min, inv_dE, test_energy, 500000,
+            0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 1.0F, 20.0F, 10.0F, 2, "default");
+        const double S_sec_exact = std::exp(-(static_cast<double>(mr_lung) * 10.0 + static_cast<double>(mr_bone) * 10.0));
+        require(std::abs(res_sec.survival_fraction - S_sec_exact) / S_sec_exact < 0.002,
+                "Case A: Same density different section survival must match exact within 0.2%");
+
+        // Case B: same section (8), different density: 0.5 vs 1.5 g/cm3
+        carbon::CtGrid grid_rho;
+        grid_rho.file_version = carbon::CtGrid::version_v2;
+        grid_rho.nx = 1;
+        grid_rho.ny = 1;
+        grid_rho.nz = 2;
+        grid_rho.spacing_x_mm = 10.0;
+        grid_rho.spacing_y_mm = 10.0;
+        grid_rho.spacing_z_mm = 10.0;
+        grid_rho.origin_x_mm = -5.0;
+        grid_rho.origin_y_mm = -5.0;
+        grid_rho.origin_z_mm = 0.0;
+        grid_rho.density_g_per_cm3 = {0.5F, 1.5F};
+        grid_rho.material_id = {8, 8}; // same section 8
+
+        const float mr_soft = carbon::schneider_primary_mass_xs(
+            schneider_grid.mass_xs_per_mm_at_1g_cm3.data(), 25, n_energies, e_min, inv_dE, 8, test_energy);
+        const double S_rho_exact = std::exp(-(0.5 * static_cast<double>(mr_soft) * 10.0 + 1.5 * static_cast<double>(mr_soft) * 10.0));
+        const auto res_rho = carbon::run_step11_piecewise_hazard_gpu_test(
+            grid_rho, schneider_grid.mass_xs_per_mm_at_1g_cm3, 25, n_energies,
+            e_min, inv_dE, test_energy, 500000,
+            0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 1.0F, 20.0F, 10.0F, 2, "default");
+        require(std::abs(res_rho.survival_fraction - S_rho_exact) / S_rho_exact < 0.002,
+                "Case B: Same section different density survival must match exact within 0.2%");
+    }
+
+    // =========================================================================
+    // Test 4: Geometry edge cases & robustness
+    // =========================================================================
+    {
+        // 3D grid with anisotropic spacing and distinct voxel materials:
+        // nx=3, ny=3, nz=3
+        // spacing: dx=2.0, dy=3.0, dz=4.0
+        carbon::CtGrid grid3d;
+        grid3d.file_version = carbon::CtGrid::version_v2;
+        grid3d.nx = 3;
+        grid3d.ny = 3;
+        grid3d.nz = 3;
+        grid3d.spacing_x_mm = 2.0;
+        grid3d.spacing_y_mm = 3.0;
+        grid3d.spacing_z_mm = 4.0;
+        grid3d.origin_x_mm = 0.0;
+        grid3d.origin_y_mm = 0.0;
+        grid3d.origin_z_mm = 0.0;
+        grid3d.density_g_per_cm3.resize(27);
+        grid3d.material_id.resize(27);
+        for (std::uint32_t i = 0; i < 27; ++i) {
+            grid3d.material_id[i] = static_cast<std::uint8_t>(i % 25);
+            grid3d.density_g_per_cm3[i] = 0.5F + 0.05F * static_cast<float>(i);
+        }
+
+        struct TestCase {
+            float ox, oy, oz;
+            float dx, dy, dz;
+            float max_len;
+            const char* desc;
+        };
+
+        const std::vector<TestCase> test_cases = {
+            // Axial rays
+            {1.0F, 1.5F, 0.1F, 0.0F, 0.0F, 1.0F, 10.0F, "+z axial"},
+            {1.0F, 1.5F, 11.9F, 0.0F, 0.0F, -1.0F, 10.0F, "-z axial"},
+            {0.1F, 1.5F, 2.0F, 1.0F, 0.0F, 0.0F, 5.0F, "+x axial"},
+            {5.9F, 1.5F, 2.0F, -1.0F, 0.0F, 0.0F, 5.0F, "-x axial"},
+            {1.0F, 0.1F, 2.0F, 0.0F, 1.0F, 0.0F, 8.0F, "+y axial"},
+            {1.0F, 8.9F, 2.0F, 0.0F, -1.0F, 0.0F, 8.0F, "-y axial"},
+            // Oblique rays
+            {0.1F, 0.1F, 0.1F, 1.0F, 1.0F, 1.0F, 10.0F, "oblique +++"},
+            {5.9F, 8.9F, 11.9F, -1.0F, -1.0F, -1.0F, 10.0F, "oblique ---"},
+            // Zero direction component (dy = 0)
+            {0.1F, 1.5F, 0.1F, 1.0F, 0.0F, 1.0F, 8.0F, "planar dx,dz (dy=0)"},
+            // Start exactly on face
+            {2.0F, 1.5F, 4.0F, 1.0F, 0.0F, 1.0F, 6.0F, "start exactly on face"},
+            // Start face +/- epsilon
+            {2.0F - 1e-5F, 1.5F, 4.0F - 1e-5F, 1.0F, 0.0F, 1.0F, 6.0F, "start face - eps"},
+            {2.0F + 1e-5F, 1.5F, 4.0F + 1e-5F, 1.0F, 0.0F, 1.0F, 6.0F, "start face + eps"},
+            // Corner crossing
+            {0.0F, 0.0F, 0.0F, 2.0F, 3.0F, 4.0F, 15.0F, "corner crossing ray"}
+        };
+
+        for (const auto& tc : test_cases) {
+            const auto tc_res = carbon::run_step11_piecewise_hazard_gpu_test(
+                grid3d, schneider_grid.mass_xs_per_mm_at_1g_cm3, 25, n_energies,
+                e_min, inv_dE, test_energy, 10000,
+                tc.ox, tc.oy, tc.oz, tc.dx, tc.dy, tc.dz, tc.max_len, 0.0F, 0, "default");
+            require(tc_res.zero_progress_count == 0,
+                    std::string("Edge case [") + tc.desc + "]: zero_progress_count must be 0");
+            require(tc_res.changed_material_step_span_count == 0,
+                    std::string("Edge case [") + tc.desc + "]: changed_material_step_span_count must be 0");
+        }
+
+        // Thin voxels (0.05 mm thick)
+        carbon::CtGrid thin_grid;
+        thin_grid.file_version = carbon::CtGrid::version_v2;
+        thin_grid.nx = 1;
+        thin_grid.ny = 1;
+        thin_grid.nz = 20;
+        thin_grid.spacing_x_mm = 10.0;
+        thin_grid.spacing_y_mm = 10.0;
+        thin_grid.spacing_z_mm = 0.05; // 50 microns
+        thin_grid.origin_x_mm = -5.0;
+        thin_grid.origin_y_mm = -5.0;
+        thin_grid.origin_z_mm = 0.0;
+        thin_grid.density_g_per_cm3.resize(20, 1.0F);
+        thin_grid.material_id.resize(20);
+        for (std::uint32_t i = 0; i < 20; ++i) {
+            thin_grid.material_id[i] = static_cast<std::uint8_t>(i % 25);
+        }
+
+        const auto thin_res = carbon::run_step11_piecewise_hazard_gpu_test(
+            thin_grid, schneider_grid.mass_xs_per_mm_at_1g_cm3, 25, n_energies,
+            e_min, inv_dE, test_energy, 50000,
+            0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 1.0F, 1.0F, 0.05F, 20, "default");
+        require(thin_res.zero_progress_count == 0, "Thin voxel zero_progress_count must be 0");
+        require(thin_res.changed_material_step_span_count == 0, "Thin voxel changed_material_step_span_count must be 0");
+        require(thin_res.face_cross_count > 0, "Thin voxel face_cross_count must be positive");
+    }
+#endif
+}
 
 }  // namespace
 
@@ -4669,6 +4936,7 @@ int main(int argc, char** argv) {
         run("test_sycl_layered_slab_range_shift", test_sycl_layered_slab_range_shift);
 #endif
         run("test_step10_schneider_primary_xs_device_path", test_step10_schneider_primary_xs_device_path);
+        run("test_step11_piecewise_nuclear_optical_depth", test_step11_piecewise_nuclear_optical_depth);
         std::cout << "All carbon_tests passed\n";
         return EXIT_SUCCESS;
     } catch (const std::exception& error) {

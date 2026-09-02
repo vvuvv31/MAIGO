@@ -343,7 +343,6 @@ inline float distance_to_next_ct_face_1d(const float position_mm,
                                         const float origin_mm,
                                         const float spacing_mm,
                                         const float direction) noexcept {
-    constexpr float eps = 1.0e-4F;
     if (direction > -1.0e-6F && direction < 1.0e-6F) {
         return 1.0e30F;
     }
@@ -354,7 +353,7 @@ inline float distance_to_next_ct_face_1d(const float position_mm,
     if (direction > 0.0F) {
         auto boundary = origin_mm + static_cast<float>(cell + 1) * spacing_mm;
         auto t = (boundary - position_mm) / direction;
-        if (t <= eps) {
+        if (t <= 0.0F) {
             boundary += spacing_mm;
             t = (boundary - position_mm) / direction;
         }
@@ -362,7 +361,7 @@ inline float distance_to_next_ct_face_1d(const float position_mm,
     }
     auto boundary = origin_mm + static_cast<float>(cell) * spacing_mm;
     auto t = (boundary - position_mm) / direction;
-    if (t <= eps) {
+    if (t <= 0.0F) {
         boundary -= spacing_mm;
         t = (boundary - position_mm) / direction;
     }
@@ -414,7 +413,6 @@ inline bool ct_dda_init(const float x_mm,
                         const std::uint32_t nz,
                         CtDdaState& state) noexcept {
     constexpr float huge = 1.0e30F;
-    constexpr float eps = 1.0e-4F;
     constexpr float dir_eps = 1.0e-6F;
     if (nx == 0 || ny == 0 || nz == 0 || spacing_x <= 0.0F || spacing_y <= 0.0F ||
         spacing_z <= 0.0F) {
@@ -474,16 +472,16 @@ inline bool ct_dda_init(const float x_mm,
         state.t_max_z = huge;
     }
 
-    // Snap off an already-crossed face so the first distance is positive.
-    if (state.t_max_x <= eps && state.step_x != 0) {
+    // Snap off an already-crossed face so the first distance is strictly positive.
+    if (state.t_max_x <= 0.0F && state.step_x != 0) {
         state.ix += state.step_x;
         state.t_max_x += state.t_delta_x;
     }
-    if (state.t_max_y <= eps && state.step_y != 0) {
+    if (state.t_max_y <= 0.0F && state.step_y != 0) {
         state.iy += state.step_y;
         state.t_max_y += state.t_delta_y;
     }
-    if (state.t_max_z <= eps && state.step_z != 0) {
+    if (state.t_max_z <= 0.0F && state.step_z != 0) {
         state.iz += state.step_z;
         state.t_max_z += state.t_delta_z;
     }
@@ -664,6 +662,11 @@ inline float clamp_step_to_ct_faces_if_needed(const float step_mm,
                                               const std::uint8_t material_here,
                                               const bool skip_homogeneous = true,
                                               CtClampPath* path_out = nullptr) noexcept {
+    if (!skip_homogeneous || densities == nullptr) {
+        return clamp_step_to_ct_faces(step_mm, x_mm, y_mm, z_mm, dx, dy, dz, origin_x,
+                                      origin_y, origin_z, spacing_x, spacing_y, spacing_z,
+                                      path_out, nx, ny, nz);
+    }
     if (step_mm <= 1.0e-6F) {
         // Keep energy-limited micro-steps unchanged; DDA only prevents zero face
         // clamps (handled below when step is finite).
@@ -682,11 +685,6 @@ inline float clamp_step_to_ct_faces_if_needed(const float step_mm,
             *path_out = CtClampPath::short_step_skip;
         }
         return step_mm;
-    }
-    if (!skip_homogeneous || densities == nullptr) {
-        return clamp_step_to_ct_faces(step_mm, x_mm, y_mm, z_mm, dx, dy, dz, origin_x,
-                                      origin_y, origin_z, spacing_x, spacing_y, spacing_z,
-                                      path_out, nx, ny, nz);
     }
 
     CtDdaState state{};
@@ -753,7 +751,7 @@ inline float clamp_step_to_ct_faces_near_z_if_needed(
     const std::uint8_t material_here,
     const bool skip_homogeneous = true,
     CtClampPath* path_out = nullptr) noexcept {
-    if (std::fabs(dz) < 0.999F || densities == nullptr) {
+    if (!skip_homogeneous || std::fabs(dz) < 0.999F || densities == nullptr) {
         return clamp_step_to_ct_faces_if_needed(
             step_mm, x_mm, y_mm, z_mm, dx, dy, dz, origin_x, origin_y, origin_z,
             spacing_x, spacing_y, spacing_z, nx, ny, nz, densities, materials,

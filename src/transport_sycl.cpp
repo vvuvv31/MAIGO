@@ -668,13 +668,34 @@ TransportResult transport_sycl(const TransportConfig& config,
             queue.copy(schneider_host_grid.mass_xs_per_mm_at_1g_cm3.data(),
                        schneider_primary_xs_device, total_elements).wait_and_throw();
 
-            // Log table dimensions, byte count, source file once
-            std::cout << "[schneider-primary-xs] device upload: "
-                      << schneider_xs_sections << " sections x "
-                      << schneider_xs_energies << " energies ("
-                      << total_elements * sizeof(float) << " bytes), E_min="
-                      << schneider_xs_e_min << " MeV/u, inv_dE=" << schneider_xs_inv_dE
-                      << " (source: " << config.ct_schneider_cross_section_file << ")\n";
+            std::string source_sha256 = "unknown";
+            const auto meta_path = config.ct_schneider_cross_section_file.parent_path() /
+                (config.ct_schneider_cross_section_file.stem().string() + ".metadata.json");
+            if (std::filesystem::exists(meta_path)) {
+                std::ifstream meta_in(meta_path);
+                std::string line;
+                while (std::getline(meta_in, line)) {
+                    if (line.find("\"data_sha256\"") != std::string::npos) {
+                        const auto colon = line.find(':');
+                        const auto quote1 = line.find('"', colon);
+                        const auto quote2 = line.find('"', quote1 + 1);
+                        if (quote1 != std::string::npos && quote2 != std::string::npos) {
+                            source_sha256 = line.substr(quote1 + 1, quote2 - quote1 - 1);
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // Log table dimensions, byte count, source file, mode, and source SHA256 once
+            std::cout << "[schneider-primary-xs] mode=primary-c12-section-resolved\n"
+                      << "  sections=" << schneider_xs_sections << "\n"
+                      << "  energies=" << schneider_xs_energies << "\n"
+                      << "  bytes=" << total_elements * sizeof(float) << "\n"
+                      << "  E_min=" << schneider_xs_e_min << " MeV/u\n"
+                      << "  inv_dE=" << schneider_xs_inv_dE << "\n"
+                      << "  source=" << config.ct_schneider_cross_section_file << "\n"
+                      << "  source_sha256=" << source_sha256 << "\n";
         }
 
         if (use_ct_mass_sp) {
@@ -1496,6 +1517,10 @@ TransportResult transport_sycl(const TransportConfig& config,
                 auto last_primary_stopping_power_MeV_per_mm = 0.0F;
                 auto last_primary_density_g_per_cm3 = 0.0F;
 
+                float nuclear_tau_remaining = 0.0F;
+                bool nuclear_tau_active = false;
+                std::uint32_t nuclear_tau_rng_step = 0;
+
                 constexpr std::uint32_t max_primary_steps = 2000000U;
                 int last_survival_bin = -1;
                 while (energy_MeV > energy_cutoff_MeV && steps < max_primary_steps) {
@@ -1664,13 +1689,15 @@ TransportResult transport_sycl(const TransportConfig& config,
                         }
                     }
                     if (enable_ct_grid && in_ct) {
+                        const bool skip_homo =
+                            use_schneider_primary_xs ? false : ct_skip_homogeneous_face_clamp;
                         step_mm = clamp_step_to_ct_faces_near_z_if_needed(
                             step_mm, position_x_mm, position_y_mm, position_z_mm,
                             direction_x, direction_y, direction_z, ct_origin_x,
                             ct_origin_y, ct_origin_z, ct_spacing_x, ct_spacing_y,
                             ct_spacing_z, ct_nx, ct_ny, ct_nz, ct_density_device,
                             ct_material_device, local_density_g_per_cm3, ct_material,
-                            ct_skip_homogeneous_face_clamp, nullptr);
+                            skip_homo, nullptr);
                     }
                     if (enable_voxel_scoring && voxel_scorer_clamps_transport &&
                         absolute_direction_x >= 1.0e-6F) {
@@ -1709,92 +1736,129 @@ TransportResult transport_sycl(const TransportConfig& config,
                     if ((enable_inelastic || enable_nuclear_elastic) &&
                         energy_MeV > energy_cutoff_MeV) {
                         const auto cur_e_u = energy_MeV * inverse_mass_number;
-                        float macro_xs = 0.0F;
-                        if (use_cinel02) {
-                            cinel02_diag_increment_device(cinel02_diag_device, 0U);
-                            const auto target =
-                                (in_ct && cinel02_ct_rate_groups_device != nullptr)
-                                    ? cinel02_select_material_target_device(
-                                          cinel02_ct_rate_groups_device,
-                                          cinel02_ct_rate_group_count,
-                                          cinel02_ct_rate_samples_device,
-                                          cinel02_ct_rate_sample_count,
-                                          static_cast<int>(ct_material),
-                                          primary_atomic_number, primary_mass_number, cur_e_u,
-                                          local_density_g_per_cm3,
-                                          cinel02_ct_rate_reference_density_g_per_cm3,
-                                          rng::uniform01(spot_seed, rng_history, steps, 12))
-                                    : cinel02_select_water_target_device(
-                                          cinel02_rate_groups_device, cinel02_rate_group_count,
-                                          cinel02_rate_samples_device, cinel02_rate_sample_count,
-                                          primary_atomic_number, primary_mass_number, cur_e_u,
-                                          local_density_g_per_cm3, water_density_g_per_cm3,
-                                          rng::uniform01(spot_seed, rng_history, steps, 12));
-                            if (target.covered) {
-                                cinel02_diag_increment_device(cinel02_diag_device, 1U);
-                                macro_xs = target.total_rate_per_mm;
-                                cinel02_target_z_step = target.target_z;
-                                cinel02_target_a_step = target.target_a;
+                        if (use_schneider_primary_xs && in_ct) {
+                            const std::uint32_t section_id = static_cast<std::uint32_t>(ct_material);
+                            const float mass_rate = schneider_primary_mass_xs(
+                                schneider_primary_xs_device, schneider_xs_sections,
+                                schneider_xs_energies, schneider_xs_e_min, schneider_xs_inv_dE,
+                                section_id, cur_e_u);
+                            const float macro_tot = local_density_g_per_cm3 * mass_rate;
+
+                            if (!nuclear_tau_active) {
+                                const auto u_nuc = rng::uniform01(
+                                    spot_seed, rng_history, nuclear_tau_rng_step++, 8);
+                                nuclear_tau_remaining = -sycl::log(sycl::fmax(u_nuc, 1.0e-12F));
+                                nuclear_tau_active = true;
                             }
-                        } else if (enable_inelastic && cross_section_device != nullptr) {
-                            const auto xs_flt =
-                                (cur_e_u - minimum_table_energy) * inverse_table_step;
-                            auto xs_idx = static_cast<int>(sycl::floor(xs_flt));
-                            xs_idx = sycl::max(
-                                0, sycl::min(xs_idx,
-                                             static_cast<int>(cross_section_table_size) - 2));
-                            const auto xs_fr =
-                                sycl::clamp(xs_flt - static_cast<float>(xs_idx), 0.0F, 1.0F);
-                            macro_xs =
-                                cross_section_device[xs_idx] +
-                                xs_fr * (cross_section_device[xs_idx + 1] -
-                                         cross_section_device[xs_idx]);
-                            if (target_h_fraction_device != nullptr) {
-                                p_target_h_step =
-                                    target_h_fraction_device[xs_idx] +
-                                    xs_fr * (target_h_fraction_device[xs_idx + 1] -
-                                             target_h_fraction_device[xs_idx]);
+
+                            const float delta_tau = macro_tot * step_mm;
+                            if (macro_tot > 0.0F && delta_tau >= nuclear_tau_remaining) {
+                                const float collision_s = nuclear_tau_remaining / macro_tot;
+                                step_mm = sycl::fmin(step_mm, collision_s);
+                                nuclear_tau_remaining = 0.0F;
+                                nuclear_tau_active = false;
+
+                                if (enable_inelastic) {
+                                    if (inelastic_reaction_device != nullptr) {
+                                        sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
+                                                         sycl::memory_scope::device,
+                                                         sycl::access::address_space::global_space>
+                                            reaction(inelastic_reaction_device[bin]);
+                                        reaction.fetch_add(1U);
+                                    }
+                                    inelastic_this_step = true;
+                                }
+                            } else {
+                                nuclear_tau_remaining -= delta_tau;
                             }
-                        }
-                        const float macro_el =
-                            enable_nuclear_elastic
-                                ? carbon::water_elastic_h_macro_per_mm(
-                                      cur_e_u, water_density_g_per_cm3)
-                                : 0.0F;
-                        const float macro_tot = macro_xs + macro_el;
-                        const auto u_nuc = rng::uniform01(
-                            spot_seed, rng_history, steps, 8);
-                        float collision_s = step_mm;
-                        const bool collision = carbon::inelastic_collision_in_step(
-                            macro_tot, step_mm, u_nuc, &collision_s);
-                        if (collision) {
-                            step_mm = collision_s;
-                            const float u_br = rng::uniform01(
-                                spot_seed, rng_history, steps, 9);
-                            if (enable_nuclear_elastic && macro_tot > 0.0F &&
-                                u_br * macro_tot < macro_el) {
-                                elastic_this_step = true;
-                            } else if (enable_inelastic) {
-                                if (use_cinel02) {
-                                    cinel02_diag_increment_device(cinel02_diag_device, 2U);
-                                    cinel02_diag_increment_device(
-                                        cinel02_diag_device,
-                                        cinel02_target_z_step == 1 ? 6U : 7U);
-                                    cinel02_diag_increment_device(
-                                        cinel02_diag_device,
-                                        cinel02_hazard_diag_slot_device(
-                                            primary_atomic_number, primary_mass_number,
-                                            cinel02_target_z_step, 0U,
-                                            energy_MeV * inverse_mass_number));
+                        } else {
+                            float macro_xs = 0.0F;
+                            if (use_cinel02) {
+                                cinel02_diag_increment_device(cinel02_diag_device, 0U);
+                                const auto target =
+                                    (in_ct && cinel02_ct_rate_groups_device != nullptr)
+                                        ? cinel02_select_material_target_device(
+                                              cinel02_ct_rate_groups_device,
+                                              cinel02_ct_rate_group_count,
+                                              cinel02_ct_rate_samples_device,
+                                              cinel02_ct_rate_sample_count,
+                                              static_cast<int>(ct_material),
+                                              primary_atomic_number, primary_mass_number, cur_e_u,
+                                              local_density_g_per_cm3,
+                                              cinel02_ct_rate_reference_density_g_per_cm3,
+                                              rng::uniform01(spot_seed, rng_history, steps, 12))
+                                        : cinel02_select_water_target_device(
+                                              cinel02_rate_groups_device, cinel02_rate_group_count,
+                                              cinel02_rate_samples_device, cinel02_rate_sample_count,
+                                              primary_atomic_number, primary_mass_number, cur_e_u,
+                                              local_density_g_per_cm3, water_density_g_per_cm3,
+                                              rng::uniform01(spot_seed, rng_history, steps, 12));
+                                if (target.covered) {
+                                    cinel02_diag_increment_device(cinel02_diag_device, 1U);
+                                    macro_xs = target.total_rate_per_mm;
+                                    cinel02_target_z_step = target.target_z;
+                                    cinel02_target_a_step = target.target_a;
                                 }
-                                if (inelastic_reaction_device != nullptr) {
-                                    sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
-                                                     sycl::memory_scope::device,
-                                                     sycl::access::address_space::global_space>
-                                        reaction(inelastic_reaction_device[bin]);
-                                    reaction.fetch_add(1U);
+                            } else if (enable_inelastic && cross_section_device != nullptr) {
+                                const auto xs_flt =
+                                    (cur_e_u - minimum_table_energy) * inverse_table_step;
+                                auto xs_idx = static_cast<int>(sycl::floor(xs_flt));
+                                xs_idx = sycl::max(
+                                    0, sycl::min(xs_idx,
+                                                 static_cast<int>(cross_section_table_size) - 2));
+                                const auto xs_fr =
+                                    sycl::clamp(xs_flt - static_cast<float>(xs_idx), 0.0F, 1.0F);
+                                macro_xs =
+                                    cross_section_device[xs_idx] +
+                                    xs_fr * (cross_section_device[xs_idx + 1] -
+                                             cross_section_device[xs_idx]);
+                                if (target_h_fraction_device != nullptr) {
+                                    p_target_h_step =
+                                        target_h_fraction_device[xs_idx] +
+                                        xs_fr * (target_h_fraction_device[xs_idx + 1] -
+                                                 target_h_fraction_device[xs_idx]);
                                 }
-                                inelastic_this_step = true;
+                            }
+                            const float macro_el =
+                                enable_nuclear_elastic
+                                    ? carbon::water_elastic_h_macro_per_mm(
+                                          cur_e_u, water_density_g_per_cm3)
+                                    : 0.0F;
+                            const float macro_tot = macro_xs + macro_el;
+                            const auto u_nuc = rng::uniform01(
+                                spot_seed, rng_history, steps, 8);
+                            float collision_s = step_mm;
+                            const bool collision = carbon::inelastic_collision_in_step(
+                                macro_tot, step_mm, u_nuc, &collision_s);
+                            if (collision) {
+                                step_mm = collision_s;
+                                const float u_br = rng::uniform01(
+                                    spot_seed, rng_history, steps, 9);
+                                if (enable_nuclear_elastic && macro_tot > 0.0F &&
+                                    u_br * macro_tot < macro_el) {
+                                    elastic_this_step = true;
+                                } else if (enable_inelastic) {
+                                    if (use_cinel02) {
+                                        cinel02_diag_increment_device(cinel02_diag_device, 2U);
+                                        cinel02_diag_increment_device(
+                                            cinel02_diag_device,
+                                            cinel02_target_z_step == 1 ? 6U : 7U);
+                                        cinel02_diag_increment_device(
+                                            cinel02_diag_device,
+                                            cinel02_hazard_diag_slot_device(
+                                                primary_atomic_number, primary_mass_number,
+                                                cinel02_target_z_step, 0U,
+                                                energy_MeV * inverse_mass_number));
+                                    }
+                                    if (inelastic_reaction_device != nullptr) {
+                                        sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
+                                                         sycl::memory_scope::device,
+                                                         sycl::access::address_space::global_space>
+                                            reaction(inelastic_reaction_device[bin]);
+                                        reaction.fetch_add(1U);
+                                    }
+                                    inelastic_this_step = true;
+                                }
                             }
                         }
                     }
@@ -2138,6 +2202,10 @@ TransportResult transport_sycl(const TransportConfig& config,
                                 atomic_ov.fetch_add(1U);
                             }
                         }
+                    }
+
+                    if (use_schneider_primary_xs && in_ct && inelastic_this_step) {
+                        break;
                     }
 
                     if (enable_inelastic && inelastic_this_step &&

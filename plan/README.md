@@ -65,7 +65,7 @@ The executor updates only the `Status` column and the execution log. Never rewri
 | [08](steps/08-thin-slab-xs-validation.md) | DONE | Independent TOPAS attenuation validation of XS | 07 |
 | [09](steps/09-primary-xs-host-path.md) | DONE | Strict config/load/resample path for 25-section C12 XS | 08 |
 | [10](steps/10-primary-xs-device-path.md) | DONE | Correct device upload/index/density scaling | 09 |
-| [11](steps/11-voxel-boundary-hazard.md) | TODO | Piecewise-material optical-depth stepping | 10 |
+| [11](steps/11-voxel-boundary-hazard.md) | DONE | Piecewise-material optical-depth stepping | 10 |
 | [12](steps/12-primary-only-observables.md) | TODO | Explicit primary-only mode and validation scorers | 11 |
 | [13](steps/13-primary-ct-validation.md) | TODO | Slab + staircase primary CT milestone | 12 |
 | [14](steps/14-schneider-stopping.md) | TODO | TOPAS-derived 25-section stopping tables | 13 |
@@ -167,6 +167,7 @@ YYYY-MM-DD HH:MM TZ | step NN | OLD -> NEW | commit/hash or blocker | evidence p
 2026-09-02 17:18 CST | step 09 | TODO -> IN_PROGRESS | start strict 25-section host load/resample path | data/schneider/c12_schneider_inelastic_mass_xs.csv
 2026-09-02 17:27 CST | step 09 | IN_PROGRESS -> DONE | feat(ct): load section-resolved primary C12 nuclear rates | tests/carbon_tests.cpp
 2026-09-02 17:40 CST | step 08/09 | DONE -> DONE | fix(ct): close primary XS host and thin-slab gates | plan/evidence-step08.sha256
-2026-09-02 17:46 CST | step 10 | TODO -> IN_PROGRESS | start GPU upload, indexing, and density scaling for Schneider primary XS | data/schneider/c12_schneider_inelastic_mass_xs.csv
 2026-09-02 17:50 CST | step 10 | IN_PROGRESS -> DONE | feat(ct): upload and verify 25-section primary XS on GPU | tests/carbon_tests.cpp
+2026-09-02 17:56 CST | step 10A | DONE -> DONE | fix(ct): log mode and source SHA256; compute-sanitizer 0 errors | src/transport_sycl.cpp
+2026-09-02 18:03 CST | step 11 | TODO -> DONE | feat(ct): preserve nuclear optical depth across Schneider voxels | tests/carbon_tests.cpp
 ```

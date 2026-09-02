@@ -1,8 +1,12 @@
 #include "carbon/device.hpp"
 #include "carbon/cross_section.hpp"
+#include "carbon/ct_grid.hpp"
+#include "carbon/rng.hpp"
 #include "carbon/transport.hpp"
 
 #ifdef CARBON_HAS_SYCL
+
+#include <cmath>
 
 #include <exception>
 #include <stdexcept>
@@ -198,6 +202,229 @@ std::vector<float> test_schneider_device_lookup_batch(
     sycl::free(results_device, queue);
 
     return results;
+}
+
+Step11TestResult run_step11_piecewise_hazard_gpu_test(
+    const CtGrid& grid,
+    const std::vector<float>& host_schneider_table,
+    std::uint32_t section_count,
+    std::uint32_t energy_nodes,
+    float e_min,
+    float inv_dE,
+    float energy_mevu,
+    std::uint32_t num_histories,
+    float ray_origin_x,
+    float ray_origin_y,
+    float ray_origin_z,
+    float ray_dir_x,
+    float ray_dir_y,
+    float ray_dir_z,
+    float max_track_length_mm,
+    float bin_width_mm,
+    std::uint32_t num_bins,
+    const std::string& device_preference) {
+    if (num_histories == 0) {
+        return {};
+    }
+    const std::size_t table_elements = static_cast<std::size_t>(section_count) * energy_nodes;
+    if (host_schneider_table.size() != table_elements) {
+        throw std::invalid_argument("Host table size mismatch");
+    }
+    const std::size_t voxel_count = static_cast<std::size_t>(grid.nx) * grid.ny * grid.nz;
+    if (grid.density_g_per_cm3.size() != voxel_count || grid.material_id.size() != voxel_count) {
+        throw std::invalid_argument("Grid dimensions mismatch voxel count");
+    }
+
+    auto queue = make_sycl_queue(device_preference);
+
+    float* table_dev = sycl::malloc_device<float>(table_elements, queue);
+    float* density_dev = sycl::malloc_device<float>(voxel_count, queue);
+    std::uint8_t* material_dev = sycl::malloc_device<std::uint8_t>(voxel_count, queue);
+
+    std::uint64_t* surv_count_dev = sycl::malloc_device<std::uint64_t>(1, queue);
+    std::uint64_t* zero_prog_dev = sycl::malloc_device<std::uint64_t>(1, queue);
+    std::uint64_t* changed_mat_dev = sycl::malloc_device<std::uint64_t>(1, queue);
+    std::uint64_t* face_cross_dev = sycl::malloc_device<std::uint64_t>(1, queue);
+    std::uint64_t* bins_dev = sycl::malloc_device<std::uint64_t>(num_bins > 0 ? num_bins : 1, queue);
+
+    queue.copy(host_schneider_table.data(), table_dev, table_elements);
+    queue.copy(grid.density_g_per_cm3.data(), density_dev, voxel_count);
+    queue.copy(grid.material_id.data(), material_dev, voxel_count);
+
+    queue.memset(surv_count_dev, 0, sizeof(std::uint64_t));
+    queue.memset(zero_prog_dev, 0, sizeof(std::uint64_t));
+    queue.memset(changed_mat_dev, 0, sizeof(std::uint64_t));
+    queue.memset(face_cross_dev, 0, sizeof(std::uint64_t));
+    if (num_bins > 0) {
+        queue.memset(bins_dev, 0, num_bins * sizeof(std::uint64_t));
+    }
+    queue.wait_and_throw();
+
+    const float org_x = grid.origin_x_mm;
+    const float org_y = grid.origin_y_mm;
+    const float org_z = grid.origin_z_mm;
+    const float sp_x = grid.spacing_x_mm;
+    const float sp_y = grid.spacing_y_mm;
+    const float sp_z = grid.spacing_z_mm;
+    const std::uint32_t nx = grid.nx;
+    const std::uint32_t ny = grid.ny;
+    const std::uint32_t nz = grid.nz;
+
+    const float dir_len = sycl::sqrt(ray_dir_x * ray_dir_x + ray_dir_y * ray_dir_y + ray_dir_z * ray_dir_z);
+    const float dx = dir_len > 1.0e-6F ? ray_dir_x / dir_len : 0.0F;
+    const float dy = dir_len > 1.0e-6F ? ray_dir_y / dir_len : 0.0F;
+    const float dz = dir_len > 1.0e-6F ? ray_dir_z / dir_len : 1.0F;
+
+    queue.submit([&](sycl::handler& cgh) {
+        cgh.parallel_for(sycl::range<1>{num_histories}, [=](sycl::id<1> idx) {
+            const auto history_id = idx[0];
+            float pos_x = ray_origin_x;
+            float pos_y = ray_origin_y;
+            float pos_z = ray_origin_z;
+            float path_traversed = 0.0F;
+
+            float tau_remaining = 0.0F;
+            bool tau_active = false;
+            std::uint32_t rng_step = 0;
+            bool survived = true;
+            constexpr std::uint32_t max_steps = 10000;
+            std::uint32_t step_count = 0;
+
+            while (path_traversed < max_track_length_mm && step_count < max_steps) {
+                step_count++;
+                float dens = 0.0F;
+                std::uint8_t mat = 0;
+                if (!ct_sample(pos_x, pos_y, pos_z, org_x, org_y, org_z, sp_x, sp_y, sp_z,
+                               nx, ny, nz, density_dev, material_dev, dens, mat)) {
+                    break;
+                }
+
+                const float mass_rate = schneider_primary_mass_xs(
+                    table_dev, section_count, energy_nodes, e_min, inv_dE,
+                    static_cast<std::uint32_t>(mat), energy_mevu);
+                const float macro_xs = dens * mass_rate;
+
+                const float max_substep = max_track_length_mm - path_traversed;
+                const float t_face = clamp_step_to_ct_faces_near_z_if_needed(
+                    max_substep, pos_x, pos_y, pos_z, dx, dy, dz,
+                    org_x, org_y, org_z, sp_x, sp_y, sp_z, nx, ny, nz,
+                    density_dev, material_dev, dens, mat, false, nullptr);
+
+                if (!(t_face > 0.0F)) {
+                    sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
+                                     sycl::memory_scope::device,
+                                     sycl::access::address_space::global_space>
+                        zp(*zero_prog_dev);
+                    zp.fetch_add(1U);
+                    pos_x += 1.0e-4F * dx;
+                    pos_y += 1.0e-4F * dy;
+                    pos_z += 1.0e-4F * dz;
+                    path_traversed += 1.0e-4F;
+                    continue;
+                }
+
+                const float test_mid = 0.5F * t_face;
+                float dens_mid = 0.0F;
+                std::uint8_t mat_mid = 0;
+                if (ct_sample(pos_x + test_mid * dx, pos_y + test_mid * dy, pos_z + test_mid * dz,
+                              org_x, org_y, org_z, sp_x, sp_y, sp_z, nx, ny, nz,
+                              density_dev, material_dev, dens_mid, mat_mid)) {
+                    if (mat_mid != mat || sycl::fabs(dens_mid - dens) > 1.0e-4F) {
+                        sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
+                                         sycl::memory_scope::device,
+                                         sycl::access::address_space::global_space>
+                            cm(*changed_mat_dev);
+                        cm.fetch_add(1U);
+                    }
+                }
+
+                if (!tau_active) {
+                    const float u = rng::uniform01(1234567ULL, history_id, rng_step++, 8);
+                    tau_remaining = -sycl::log(sycl::fmax(u, 1.0e-12F));
+                    tau_active = true;
+                }
+
+                const float delta_tau = macro_xs * t_face;
+                if (macro_xs > 0.0F && delta_tau >= tau_remaining) {
+                    const float s_int = tau_remaining / macro_xs;
+                    pos_x += s_int * dx;
+                    pos_y += s_int * dy;
+                    pos_z += s_int * dz;
+                    path_traversed += s_int;
+                    survived = false;
+
+                    if (num_bins > 0 && bin_width_mm > 0.0F) {
+                        const auto bin_idx = static_cast<std::size_t>(path_traversed / bin_width_mm);
+                        if (bin_idx < num_bins) {
+                            sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
+                                             sycl::memory_scope::device,
+                                             sycl::access::address_space::global_space>
+                                b_ref(bins_dev[bin_idx]);
+                            b_ref.fetch_add(1U);
+                        }
+                    }
+                    break;
+                } else {
+                    tau_remaining -= delta_tau;
+                    pos_x += t_face * dx;
+                    pos_y += t_face * dy;
+                    pos_z += t_face * dz;
+                    path_traversed += t_face;
+
+                    sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
+                                     sycl::memory_scope::device,
+                                     sycl::access::address_space::global_space>
+                        fc(*face_cross_dev);
+                    fc.fetch_add(1U);
+
+                    if (sycl::fabs(dx) > 1.0e-6F) {
+                        pos_x = sycl::nextafter(pos_x, dx > 0.0F ? 1.0e30F : -1.0e30F);
+                    }
+                    if (sycl::fabs(dy) > 1.0e-6F) {
+                        pos_y = sycl::nextafter(pos_y, dy > 0.0F ? 1.0e30F : -1.0e30F);
+                    }
+                    if (sycl::fabs(dz) > 1.0e-6F) {
+                        pos_z = sycl::nextafter(pos_z, dz > 0.0F ? 1.0e30F : -1.0e30F);
+                    }
+                }
+            }
+
+            if (survived) {
+                sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
+                                 sycl::memory_scope::device,
+                                 sycl::access::address_space::global_space>
+                    s_ref(*surv_count_dev);
+                s_ref.fetch_add(1U);
+            }
+        });
+    }).wait_and_throw();
+
+    Step11TestResult result{};
+    std::uint64_t h_surv = 0;
+    queue.copy(surv_count_dev, &h_surv, 1);
+    queue.copy(zero_prog_dev, &result.zero_progress_count, 1);
+    queue.copy(changed_mat_dev, &result.changed_material_step_span_count, 1);
+    queue.copy(face_cross_dev, &result.face_cross_count, 1);
+    if (num_bins > 0) {
+        result.interaction_binned_counts.resize(num_bins);
+        queue.copy(bins_dev, result.interaction_binned_counts.data(), num_bins);
+    }
+    queue.wait_and_throw();
+
+    result.survival_fraction = static_cast<double>(h_surv) / static_cast<double>(num_histories);
+    result.survival_fraction_std_err = std::sqrt(
+        (result.survival_fraction * (1.0 - result.survival_fraction)) / static_cast<double>(num_histories));
+
+    sycl::free(table_dev, queue);
+    sycl::free(density_dev, queue);
+    sycl::free(material_dev, queue);
+    sycl::free(surv_count_dev, queue);
+    sycl::free(zero_prog_dev, queue);
+    sycl::free(changed_mat_dev, queue);
+    sycl::free(face_cross_dev, queue);
+    sycl::free(bins_dev, queue);
+
+    return result;
 }
 
 }  // namespace carbon
