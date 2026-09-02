@@ -12,6 +12,7 @@
 #include "carbon/rng.hpp"
 #include "carbon/slab_phantom.hpp"
 #include "carbon/stopping_power.hpp"
+#include "carbon/detail/device_memory_tracker.hpp"
 #include "carbon/straggling.hpp"
 #include "carbon/transport.hpp"
 #include "carbon/sha256.hpp"
@@ -49,6 +50,8 @@ namespace {
 #include "detail/sycl_inelastic_device.inc"
 #include "detail/sycl_score_device.inc"
 
+using carbon::detail::DeviceMemoryTracker;
+
 float cuda_clock_warmup(sycl::queue& queue) {
     auto* dummy = sycl::malloc_device<float>(1024, queue);
     if (dummy == nullptr) {
@@ -69,51 +72,6 @@ float cuda_clock_warmup(sycl::queue& queue) {
     return static_cast<float>(
         std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count());
 }
-
-struct DeviceMemoryTracker {
-    sycl::queue& queue;
-    std::vector<void*> allocations{};
-    bool active{true};
-
-    DeviceMemoryTracker(sycl::queue& q) : queue(q) {}
-
-    template <typename T>
-    T* allocate(std::size_t count) {
-        auto* ptr = sycl::malloc_device<T>(count, queue);
-        if (ptr != nullptr) {
-            allocations.push_back(ptr);
-        }
-        return ptr;
-    }
-
-    void track(void* ptr) {
-        if (ptr != nullptr) {
-            allocations.push_back(ptr);
-        }
-    }
-
-    void free(void* ptr) {
-        if (ptr != nullptr) {
-            auto it = std::find(allocations.begin(), allocations.end(), ptr);
-            if (it != allocations.end()) {
-                allocations.erase(it);
-            }
-            sycl::free(ptr, queue);
-        }
-    }
-
-    ~DeviceMemoryTracker() {
-        if (active) {
-            for (auto* ptr : allocations) {
-                if (ptr != nullptr) {
-                    try {
-                        sycl::free(ptr, queue);
-                    } catch (...) {}
-                }
-            }
-        }
-    }
-};
 
 }  // namespace
 
@@ -398,84 +356,49 @@ TransportResult transport_sycl(const TransportConfig& config,
         std::cout << "CINEL02 compact device tables: " << immutable_bytes
                   << " bytes (" << cinel02_interaction_count << " interactions, "
                   << cinel02_product_count << " products)\n";
-        cinel02_interactions_device = sycl::malloc_device<Cinel02DeviceInteraction>(
-            cinel02_interaction_count, queue);
-        cinel02_products_device = sycl::malloc_device<Cinel02DeviceProduct>(
-            cinel02_product_count, queue);
-        cinel02_energy_nodes_device = sycl::malloc_device<Cinel02EnergyNode>(
-            cinel02_energy_node_count, queue);
-        cinel02_event_offsets_device = sycl::malloc_device<std::uint32_t>(
-            cinel02_host_tables->event_offsets.size(), queue);
-        cinel02_event_indices_device = sycl::malloc_device<std::uint32_t>(
-            cinel02_host_tables->event_indices.size(), queue);
-        cinel02_rate_groups_device = sycl::malloc_device<Cinel02RateGroup>(
-            cinel02_rate_group_count, queue);
-        cinel02_rate_samples_device = sycl::malloc_device<Cinel02RateSample>(
-            cinel02_rate_sample_count, queue);
+        cinel02_interactions_device = mem_tracker.allocate<Cinel02DeviceInteraction>(cinel02_interaction_count);
+        cinel02_products_device = mem_tracker.allocate<Cinel02DeviceProduct>(cinel02_product_count);
+        cinel02_energy_nodes_device = mem_tracker.allocate<Cinel02EnergyNode>(cinel02_energy_node_count);
+        cinel02_event_offsets_device = mem_tracker.allocate<std::uint32_t>(cinel02_host_tables->event_offsets.size());
+        cinel02_event_indices_device = mem_tracker.allocate<std::uint32_t>(cinel02_host_tables->event_indices.size());
+        cinel02_rate_groups_device = mem_tracker.allocate<Cinel02RateGroup>(cinel02_rate_group_count);
+        cinel02_rate_samples_device = mem_tracker.allocate<Cinel02RateSample>(cinel02_rate_sample_count);
         if (cinel02_ct_rate_group_count > 0U) {
-            cinel02_ct_rate_groups_device = sycl::malloc_device<Cinel02MaterialRateGroup>(
-                cinel02_ct_rate_group_count, queue);
-            cinel02_ct_rate_samples_device = sycl::malloc_device<Cinel02RateSample>(
-                cinel02_ct_rate_sample_count, queue);
+            cinel02_ct_rate_groups_device = mem_tracker.allocate<Cinel02MaterialRateGroup>(cinel02_ct_rate_group_count);
+            cinel02_ct_rate_samples_device = mem_tracker.allocate<Cinel02RateSample>(cinel02_ct_rate_sample_count);
         }
         cinel02_diag_device =
-            sycl::malloc_device<std::uint64_t>(kCinel02DiagSlots, queue);
+            mem_tracker.allocate<std::uint64_t>(kCinel02DiagSlots);
         cinel02_energy_device =
-            sycl::malloc_device<float>(kCinel02EnergySlots, queue);
+            mem_tracker.allocate<float>(kCinel02EnergySlots);
         cinel02_species_energy_device =
-            sycl::malloc_device<float>(kCinel02SpeciesEnergySlots, queue);
-        cinel02_species_terminal_device = sycl::malloc_device<std::uint64_t>(
-            kCinel02SpeciesTerminalSlots, queue);
-        cinel02_topas_compat_discarded_counts_device = sycl::malloc_device<std::uint64_t>(
-            Cinel02SpeciesLedgerSchema::species_count, queue);
-        cinel02_topas_compat_discarded_kinetic_device = sycl::malloc_device<float>(
-            Cinel02SpeciesLedgerSchema::species_count, queue);
-        cinel02_replay_delta_device = sycl::malloc_device<float>(
-            TransportResult::species_ledger_species_count, queue);
-        cinel02_replay_abs_delta_device = sycl::malloc_device<float>(
-            TransportResult::species_ledger_species_count, queue);
-        cinel02_replay_delta_positive_device = sycl::malloc_device<std::uint64_t>(
-            TransportResult::species_ledger_species_count, queue);
-        cinel02_replay_delta_negative_device = sycl::malloc_device<std::uint64_t>(
-            TransportResult::species_ledger_species_count, queue);
-        cinel02_replay_valid_device = sycl::malloc_device<std::uint64_t>(
-            TransportResult::species_ledger_species_count, queue);
-        cinel02_replay_status_counts_device = sycl::malloc_device<std::uint64_t>(
-            kCinel02ReplayStatusSlots, queue);
-        cinel02_replay_status_rate_query_energy_device = sycl::malloc_device<float>(
-            kCinel02ReplayStatusSlots, queue);
-        cinel02_replay_status_replay_query_energy_device = sycl::malloc_device<float>(
-            kCinel02ReplayStatusSlots, queue);
-        cinel02_replay_status_continuous_loss_device = sycl::malloc_device<float>(
-            kCinel02ReplayStatusSlots, queue);
-        cinel02_replay_status_delta_device = sycl::malloc_device<float>(
-            kCinel02ReplayStatusSlots, queue);
-        cinel02_replay_status_abs_delta_device = sycl::malloc_device<float>(
-            kCinel02ReplayStatusSlots, queue);
-        cinel02_secondary_exposure_sums_device = sycl::malloc_device<float>(
-            kCinel02ExposureSumSlots, queue);
-        cinel02_secondary_exposure_counts_device = sycl::malloc_device<std::uint64_t>(
-            kCinel02ExposureCountSlots, queue);
-        cinel02_parent_outcome_counts_device = sycl::malloc_device<std::uint64_t>(
-            kCinel02ParentOutcomeSlots, queue);
-        cinel02_parent_outcome_incident_device = sycl::malloc_device<float>(
-            kCinel02ParentOutcomeSlots, queue);
-        cinel02_parent_outcome_after_device = sycl::malloc_device<float>(
-            kCinel02ParentOutcomeSlots, queue);
-        cinel02_parent_outcome_local_device = sycl::malloc_device<float>(
-            kCinel02ParentOutcomeSlots, queue);
-        cinel02_parent_outcome_export_device = sycl::malloc_device<float>(
-            kCinel02ParentOutcomeSlots, queue);
-        cinel02_parent_outcome_import_device = sycl::malloc_device<float>(
-            kCinel02ParentOutcomeSlots, queue);
-        cinel02_generated_transition_counts_device = sycl::malloc_device<std::uint64_t>(
-            kCinel02TransitionSlots, queue);
-        cinel02_generated_transition_energy_device = sycl::malloc_device<float>(
-            kCinel02TransitionSlots, queue);
-        cinel02_queued_transition_counts_device = sycl::malloc_device<std::uint64_t>(
-            kCinel02TransitionSlots, queue);
-        cinel02_queued_transition_energy_device = sycl::malloc_device<float>(
-            kCinel02TransitionSlots, queue);
+            mem_tracker.allocate<float>(kCinel02SpeciesEnergySlots);
+        cinel02_species_terminal_device = mem_tracker.allocate<std::uint64_t>(kCinel02SpeciesTerminalSlots);
+        cinel02_topas_compat_discarded_counts_device = mem_tracker.allocate<std::uint64_t>(Cinel02SpeciesLedgerSchema::species_count);
+        cinel02_topas_compat_discarded_kinetic_device = mem_tracker.allocate<float>(Cinel02SpeciesLedgerSchema::species_count);
+        cinel02_replay_delta_device = mem_tracker.allocate<float>(TransportResult::species_ledger_species_count);
+        cinel02_replay_abs_delta_device = mem_tracker.allocate<float>(TransportResult::species_ledger_species_count);
+        cinel02_replay_delta_positive_device = mem_tracker.allocate<std::uint64_t>(TransportResult::species_ledger_species_count);
+        cinel02_replay_delta_negative_device = mem_tracker.allocate<std::uint64_t>(TransportResult::species_ledger_species_count);
+        cinel02_replay_valid_device = mem_tracker.allocate<std::uint64_t>(TransportResult::species_ledger_species_count);
+        cinel02_replay_status_counts_device = mem_tracker.allocate<std::uint64_t>(kCinel02ReplayStatusSlots);
+        cinel02_replay_status_rate_query_energy_device = mem_tracker.allocate<float>(kCinel02ReplayStatusSlots);
+        cinel02_replay_status_replay_query_energy_device = mem_tracker.allocate<float>(kCinel02ReplayStatusSlots);
+        cinel02_replay_status_continuous_loss_device = mem_tracker.allocate<float>(kCinel02ReplayStatusSlots);
+        cinel02_replay_status_delta_device = mem_tracker.allocate<float>(kCinel02ReplayStatusSlots);
+        cinel02_replay_status_abs_delta_device = mem_tracker.allocate<float>(kCinel02ReplayStatusSlots);
+        cinel02_secondary_exposure_sums_device = mem_tracker.allocate<float>(kCinel02ExposureSumSlots);
+        cinel02_secondary_exposure_counts_device = mem_tracker.allocate<std::uint64_t>(kCinel02ExposureCountSlots);
+        cinel02_parent_outcome_counts_device = mem_tracker.allocate<std::uint64_t>(kCinel02ParentOutcomeSlots);
+        cinel02_parent_outcome_incident_device = mem_tracker.allocate<float>(kCinel02ParentOutcomeSlots);
+        cinel02_parent_outcome_after_device = mem_tracker.allocate<float>(kCinel02ParentOutcomeSlots);
+        cinel02_parent_outcome_local_device = mem_tracker.allocate<float>(kCinel02ParentOutcomeSlots);
+        cinel02_parent_outcome_export_device = mem_tracker.allocate<float>(kCinel02ParentOutcomeSlots);
+        cinel02_parent_outcome_import_device = mem_tracker.allocate<float>(kCinel02ParentOutcomeSlots);
+        cinel02_generated_transition_counts_device = mem_tracker.allocate<std::uint64_t>(kCinel02TransitionSlots);
+        cinel02_generated_transition_energy_device = mem_tracker.allocate<float>(kCinel02TransitionSlots);
+        cinel02_queued_transition_counts_device = mem_tracker.allocate<std::uint64_t>(kCinel02TransitionSlots);
+        cinel02_queued_transition_energy_device = mem_tracker.allocate<float>(kCinel02TransitionSlots);
         if (cinel02_interactions_device == nullptr || cinel02_products_device == nullptr ||
             cinel02_energy_nodes_device == nullptr || cinel02_event_offsets_device == nullptr ||
             cinel02_event_indices_device == nullptr || cinel02_rate_groups_device == nullptr ||
@@ -618,14 +541,14 @@ TransportResult transport_sycl(const TransportConfig& config,
                 : static_cast<float>(water_radiation_length_g_per_cm2);
     }
     float* slab_z_ends_device = slab_layer_count > 0
-                                   ? sycl::malloc_device<float>(slab_layer_count, queue)
+                                   ? mem_tracker.allocate<float>(slab_layer_count)
                                    : nullptr;
     float* slab_densities_device = slab_layer_count > 0
-                                       ? sycl::malloc_device<float>(slab_layer_count, queue)
+                                       ? mem_tracker.allocate<float>(slab_layer_count)
                                        : nullptr;
     float* slab_radiation_lengths_device =
         slab_layer_count > 0
-            ? sycl::malloc_device<float>(slab_layer_count, queue)
+            ? mem_tracker.allocate<float>(slab_layer_count)
             : nullptr;
     if (slab_layer_count > 0) {
         queue.copy(slab_z_ends_host.data(), slab_z_ends_device, slab_layer_count);
@@ -650,10 +573,10 @@ TransportResult transport_sycl(const TransportConfig& config,
         }
     }
     float* material_sp_device = material_table_count > 0
-                                   ? sycl::malloc_device<float>(material_sp_host.size(), queue)
+                                   ? mem_tracker.allocate<float>(material_sp_host.size())
                                    : nullptr;
     float* material_xs_device = material_table_count > 0
-                                   ? sycl::malloc_device<float>(material_xs_host.size(), queue)
+                                   ? mem_tracker.allocate<float>(material_xs_host.size())
                                    : nullptr;
     if (material_table_count > 0) {
         queue.copy(material_sp_host.data(), material_sp_device, material_sp_host.size());
@@ -689,10 +612,10 @@ TransportResult transport_sycl(const TransportConfig& config,
         }
     }
     float* insert_sp_device = use_insert_material_tables
-                                  ? sycl::malloc_device<float>(table_size, queue)
+                                  ? mem_tracker.allocate<float>(table_size)
                                   : nullptr;
     float* insert_xs_device = use_insert_material_tables
-                                  ? sycl::malloc_device<float>(cross_section_table_size, queue)
+                                  ? mem_tracker.allocate<float>(cross_section_table_size)
                                   : nullptr;
     if (use_insert_material_tables) {
         queue.copy(insert_sp_host.data(), insert_sp_device, table_size);
@@ -739,8 +662,8 @@ TransportResult transport_sycl(const TransportConfig& config,
             grid.file_version >= CtGrid::version_v2;
 
         const auto voxel_count = static_cast<std::size_t>(ct_nx) * ct_ny * ct_nz;
-        ct_density_device = sycl::malloc_device<float>(voxel_count, queue);
-        ct_material_device = sycl::malloc_device<std::uint8_t>(voxel_count, queue);
+        ct_density_device = mem_tracker.allocate<float>(voxel_count);
+        ct_material_device = mem_tracker.allocate<std::uint8_t>(voxel_count);
         queue.copy(grid.density_g_per_cm3.data(), ct_density_device, voxel_count);
         queue.copy(grid.material_id.data(), ct_material_device, voxel_count).wait_and_throw();
 
@@ -798,7 +721,7 @@ TransportResult transport_sycl(const TransportConfig& config,
                 throw std::runtime_error("schneider_xs_energies must match grid size");
             }
 
-            schneider_primary_xs_device = sycl::malloc_device<float>(total_elements, queue);
+            schneider_primary_xs_device = mem_tracker.allocate<float>(total_elements);
             if (schneider_primary_xs_device == nullptr) {
                 throw std::bad_alloc();
             }
@@ -882,8 +805,8 @@ TransportResult transport_sycl(const TransportConfig& config,
                 }
             }
             const auto lut_bytes = mass_factor_lut.size();
-            ct_mass_sp_factor_lut_device = sycl::malloc_device<float>(lut_bytes, queue);
-            ct_mass_sp_za_rel_device = sycl::malloc_device<float>(ct_n_mass_factors, queue);
+            ct_mass_sp_factor_lut_device = mem_tracker.allocate<float>(lut_bytes);
+            ct_mass_sp_za_rel_device = mem_tracker.allocate<float>(ct_n_mass_factors);
             queue.copy(mass_factor_lut.data(), ct_mass_sp_factor_lut_device, lut_bytes);
             queue.copy(grid.mass_sp_za_rel.data(), ct_mass_sp_za_rel_device, ct_n_mass_factors)
                 .wait_and_throw();
@@ -895,7 +818,7 @@ TransportResult transport_sycl(const TransportConfig& config,
     PrimarySpotBatchEntry* primary_spots_device = nullptr;
     if (primary_spot_count > 0) {
         primary_spots_device =
-            sycl::malloc_device<PrimarySpotBatchEntry>(primary_spot_count, queue);
+            mem_tracker.allocate<PrimarySpotBatchEntry>(primary_spot_count);
         queue.copy(config.primary_spot_batch.data(), primary_spots_device, primary_spot_count)
             .wait_and_throw();
     }
@@ -934,15 +857,15 @@ TransportResult transport_sycl(const TransportConfig& config,
             ct_origin_y + static_cast<float>(voxel_bins_y) * voxel_size_y_mm;
     }
 
-    auto* dose_device = sycl::malloc_device<DoseAtomicT>(number_of_bins, queue);
+    auto* dose_device = mem_tracker.allocate<DoseAtomicT>(number_of_bins);
     std::uint64_t* primary_survival_device = nullptr;
     std::uint64_t* inelastic_reaction_device = nullptr;
 #ifdef CARBON_VALIDATION_SCORERS
     if (config.validation_scorers()) {
         primary_survival_device =
-            sycl::malloc_device<std::uint64_t>(number_of_bins, queue);
+            mem_tracker.allocate<std::uint64_t>(number_of_bins);
         inelastic_reaction_device =
-            sycl::malloc_device<std::uint64_t>(number_of_bins, queue);
+            mem_tracker.allocate<std::uint64_t>(number_of_bins);
         if (primary_survival_device == nullptr || inelastic_reaction_device == nullptr) {
             throw std::bad_alloc();
         }
@@ -951,26 +874,24 @@ TransportResult transport_sycl(const TransportConfig& config,
     }
 #endif
     auto* voxel_dose_device = enable_voxel_scoring
-                                  ? sycl::malloc_device<DoseAtomicT>(number_of_voxels, queue)
+                                  ? mem_tracker.allocate<DoseAtomicT>(number_of_voxels)
                                   : nullptr;
     const auto enable_charged_origin_voxel_scoring =
         config.enable_charged_origin_voxel_scoring;
     auto* charged_origin_voxel_dose_device =
         enable_charged_origin_voxel_scoring
-            ? sycl::malloc_device<DoseAtomicT>(
-                  charged_origin_category_count * number_of_voxels, queue)
+            ? mem_tracker.allocate<DoseAtomicT>(charged_origin_category_count * number_of_voxels)
             : nullptr;
     auto* be_isotope_origin_voxel_dose_device =
         enable_charged_origin_voxel_scoring
-            ? sycl::malloc_device<DoseAtomicT>(
-                  be_isotope_origin_category_count * number_of_voxels, queue)
+            ? mem_tracker.allocate<DoseAtomicT>(be_isotope_origin_category_count * number_of_voxels)
             : nullptr;
     auto* let_moments_device = enable_let_scoring
-                                   ? sycl::malloc_device<LetAtomicT>(4 * number_of_bins, queue)
+                                   ? mem_tracker.allocate<LetAtomicT>(4 * number_of_bins)
                                    : nullptr;
     auto* voxel_let_moments_device =
         enable_let_scoring && enable_voxel_scoring
-            ? sycl::malloc_device<LetAtomicT>(4 * number_of_voxels, queue)
+            ? mem_tracker.allocate<LetAtomicT>(4 * number_of_voxels)
             : nullptr;
 
     const bool is_primary_attenuation_only = config.is_primary_attenuation_only_mode();
@@ -978,15 +899,15 @@ TransportResult transport_sycl(const TransportConfig& config,
     const auto enable_nuclear_elastic = config.enable_nuclear_elastic;
     const auto enable_secondary_transport = config.enable_secondary_transport;
 
-    auto* deposited_device = sycl::malloc_device<float>(number_of_histories, queue);
-    auto* escaped_device = sycl::malloc_device<float>(number_of_histories, queue);
-    auto* steps_device = sycl::malloc_device<std::uint32_t>(number_of_histories, queue);
-    auto* untracked_nuclear_device = sycl::malloc_device<float>(number_of_histories, queue);
-    auto* other_terminal_energy_device = sycl::malloc_device<float>(number_of_histories, queue);
-    auto* cutoff_stopped_energy_device = sycl::malloc_device<float>(number_of_histories, queue);
+    auto* deposited_device = mem_tracker.allocate<float>(number_of_histories);
+    auto* escaped_device = mem_tracker.allocate<float>(number_of_histories);
+    auto* steps_device = mem_tracker.allocate<std::uint32_t>(number_of_histories);
+    auto* untracked_nuclear_device = mem_tracker.allocate<float>(number_of_histories);
+    auto* other_terminal_energy_device = mem_tracker.allocate<float>(number_of_histories);
+    auto* cutoff_stopped_energy_device = mem_tracker.allocate<float>(number_of_histories);
     auto* schneider_inelastic_device =
-        use_schneider_primary_xs ? sycl::malloc_device<std::uint64_t>(1, queue) : nullptr;
-    auto* primary_terminal_counts_device = sycl::malloc_device<std::uint64_t>(4, queue);
+        use_schneider_primary_xs ? mem_tracker.allocate<std::uint64_t>(1) : nullptr;
+    auto* primary_terminal_counts_device = mem_tracker.allocate<std::uint64_t>(4);
 
     if (deposited_device == nullptr || escaped_device == nullptr || steps_device == nullptr ||
         untracked_nuclear_device == nullptr || other_terminal_energy_device == nullptr ||
@@ -1016,9 +937,8 @@ TransportResult transport_sycl(const TransportConfig& config,
     PrimaryFirstInteractionRecord* first_interactions_device = nullptr;
     std::uint32_t* first_interactions_count_device = nullptr;
     if (record_first_interactions) {
-        first_interactions_device = sycl::malloc_device<PrimaryFirstInteractionRecord>(
-            number_of_histories, queue);
-        first_interactions_count_device = sycl::malloc_device<std::uint32_t>(1, queue);
+        first_interactions_device = mem_tracker.allocate<PrimaryFirstInteractionRecord>(number_of_histories);
+        first_interactions_count_device = mem_tracker.allocate<std::uint32_t>(1);
         if (first_interactions_device == nullptr || first_interactions_count_device == nullptr) {
             free_device(primary_terminal_counts_device);
             free_device(deposited_device);
@@ -1041,49 +961,49 @@ TransportResult transport_sycl(const TransportConfig& config,
     constexpr std::size_t max_secondaries = 32000000;
     auto* secondary_queue_device =
         need_secondary_buffers
-            ? sycl::malloc_device<SecondaryParticle>(max_secondaries, queue)
+            ? mem_tracker.allocate<SecondaryParticle>(max_secondaries)
             : nullptr;
     auto* secondary_count_device =
         need_secondary_buffers
-            ? sycl::malloc_device<uint32_t>(1, queue)
+            ? mem_tracker.allocate<uint32_t>(1)
             : nullptr;
     uint32_t* secondary_overflow_count_device =
         need_secondary_buffers
-            ? sycl::malloc_device<uint32_t>(1, queue)
+            ? mem_tracker.allocate<uint32_t>(1)
             : nullptr;
     float* secondary_overflow_energy_device =
         need_secondary_buffers
-            ? sycl::malloc_device<float>(1, queue)
+            ? mem_tracker.allocate<float>(1)
             : nullptr;
     float* fred_model_residual_device =
         (need_secondary_buffers && enable_inelastic)
-            ? sycl::malloc_device<float>(1, queue)
+            ? mem_tracker.allocate<float>(1)
             : nullptr;
     float* fred_q_device =
         (need_secondary_buffers && enable_inelastic)
-            ? sycl::malloc_device<float>(1, queue)
+            ? mem_tracker.allocate<float>(1)
             : nullptr;
     float* fred_neutron_device =
         (need_secondary_buffers && enable_inelastic)
-            ? sycl::malloc_device<float>(1, queue)
+            ? mem_tracker.allocate<float>(1)
             : nullptr;
     float* fred_remnant_device =
         (need_secondary_buffers && enable_inelastic)
-            ? sycl::malloc_device<float>(1, queue)
+            ? mem_tracker.allocate<float>(1)
             : nullptr;
     uint32_t* fred_fail_count_device =
         (need_secondary_buffers && enable_inelastic)
-            ? sycl::malloc_device<uint32_t>(1, queue)
+            ? mem_tracker.allocate<uint32_t>(1)
             : nullptr;
     float* fred_fail_energy_device =
         (need_secondary_buffers && enable_inelastic)
-            ? sycl::malloc_device<float>(1, queue)
+            ? mem_tracker.allocate<float>(1)
             : nullptr;
     uint32_t* fred_cap_overflow_count_device = nullptr;
     float* fred_cap_overflow_energy_device = nullptr;
     if (need_secondary_buffers && enable_inelastic) {
-        fred_cap_overflow_count_device = sycl::malloc_device<uint32_t>(1, queue);
-        fred_cap_overflow_energy_device = sycl::malloc_device<float>(1, queue);
+        fred_cap_overflow_count_device = mem_tracker.allocate<uint32_t>(1);
+        fred_cap_overflow_energy_device = mem_tracker.allocate<float>(1);
         const bool inelastic_ok =
             secondary_queue_device != nullptr && secondary_count_device != nullptr &&
             secondary_overflow_count_device != nullptr &&
@@ -1165,11 +1085,11 @@ TransportResult transport_sycl(const TransportConfig& config,
         invert_err_proj_o = cached_err_proj_o;
         invert_err_tgt_h = cached_err_tgt_h;
         invert_err_tgt_o = cached_err_tgt_o;
-        fred_prob_proj_h_device = sycl::malloc_device<float>(18, queue);
-        fred_prob_proj_o_device = sycl::malloc_device<float>(18, queue);
-        fred_prob_tgt_h_device = sycl::malloc_device<float>(18, queue);
-        fred_prob_tgt_o_device = sycl::malloc_device<float>(18, queue);
-        fred_diag_device = sycl::malloc_device<std::uint64_t>(kFredDiagSlots, queue);
+        fred_prob_proj_h_device = mem_tracker.allocate<float>(18);
+        fred_prob_proj_o_device = mem_tracker.allocate<float>(18);
+        fred_prob_tgt_h_device = mem_tracker.allocate<float>(18);
+        fred_prob_tgt_o_device = mem_tracker.allocate<float>(18);
+        fred_diag_device = mem_tracker.allocate<std::uint64_t>(kFredDiagSlots);
         if (fred_prob_proj_h_device == nullptr || fred_prob_proj_o_device == nullptr ||
             fred_prob_tgt_h_device == nullptr || fred_prob_tgt_o_device == nullptr ||
             fred_diag_device == nullptr) {
@@ -1221,7 +1141,7 @@ TransportResult transport_sycl(const TransportConfig& config,
             const auto slots = static_cast<std::size_t>(n) * host.max_fragments;
             auto alloc = [&](auto*& pointer, std::size_t count) {
                 using T = std::remove_pointer_t<std::remove_reference_t<decltype(pointer)>>;
-                pointer = sycl::malloc_device<T>(count, queue);
+                pointer = mem_tracker.allocate<T>(count);
                 if (pointer == nullptr) throw std::bad_alloc();
                 event_lib_device_allocations.push_back(static_cast<void*>(pointer));
             };
@@ -1283,10 +1203,10 @@ TransportResult transport_sycl(const TransportConfig& config,
         fluct_energy_count = energies.size();
         fluct_density_count = densities.size();
         fluct_probability_count = probabilities.size();
-        fluct_energy_device = sycl::malloc_device<float>(energies.size(), queue);
-        fluct_density_device = sycl::malloc_device<float>(densities.size(), queue);
-        fluct_probability_device = sycl::malloc_device<float>(probabilities.size(), queue);
-        fluct_quantile_device = sycl::malloc_device<float>(quantiles.size(), queue);
+        fluct_energy_device = mem_tracker.allocate<float>(energies.size());
+        fluct_density_device = mem_tracker.allocate<float>(densities.size());
+        fluct_probability_device = mem_tracker.allocate<float>(probabilities.size());
+        fluct_quantile_device = mem_tracker.allocate<float>(quantiles.size());
         if (!fluct_energy_device || !fluct_density_device ||
             !fluct_probability_device || !fluct_quantile_device)
             throw std::bad_alloc();
@@ -1302,7 +1222,7 @@ TransportResult transport_sycl(const TransportConfig& config,
     float* fred_2gr_mcs_device = nullptr;
     if (config.uses_fred_2gr_mcs()) {
         const auto host = carbon::Fred2GrMcsTable::from_binary(config.fred_2gr_mcs_file);
-        fred_2gr_mcs_device = sycl::malloc_device<float>(host.values.size(), queue);
+        fred_2gr_mcs_device = mem_tracker.allocate<float>(host.values.size());
         if (fred_2gr_mcs_device == nullptr) throw std::bad_alloc();
         queue.copy(host.values.data(), fred_2gr_mcs_device, host.values.size())
             .wait_and_throw();
@@ -1324,14 +1244,14 @@ TransportResult transport_sycl(const TransportConfig& config,
             throw std::runtime_error("Required ion stopping-power CSV not found: " + ion_sp_path.string());
         }
         const auto ion_sp_lut = load_ion_species_stopping_power_lut(ion_sp_path, table_size, 1.0F);
-        ion_species_sp_device = sycl::malloc_device<float>(18 * table_size, queue);
+        ion_species_sp_device = mem_tracker.allocate<float>(18 * table_size);
         queue.copy(ion_sp_lut.data(), ion_species_sp_device, 18 * table_size).wait_and_throw();
         std::vector<float> energy_grid_host(table_size);
         std::transform(stopping_power.energies().begin(), stopping_power.energies().end(),
                        energy_grid_host.begin(),
                        [](double value) { return static_cast<float>(value); });
-        ion_energy_grid_device = sycl::malloc_device<float>(table_size, queue);
-        ion_csda_a1_device = sycl::malloc_device<float>(18 * table_size, queue);
+        ion_energy_grid_device = mem_tracker.allocate<float>(table_size);
+        ion_csda_a1_device = mem_tracker.allocate<float>(18 * table_size);
         if (ion_energy_grid_device == nullptr || ion_csda_a1_device == nullptr) {
             throw std::bad_alloc();
         }
@@ -1363,7 +1283,7 @@ TransportResult transport_sycl(const TransportConfig& config,
         : cumulative_range_device;
 
     auto* in_fov_dose_device =
-        enable_voxel_scoring ? sycl::malloc_device<DoseAtomicT>(number_of_bins, queue) : nullptr;
+        enable_voxel_scoring ? mem_tracker.allocate<DoseAtomicT>(number_of_bins) : nullptr;
     if (in_fov_dose_device != nullptr) {
         queue.fill(in_fov_dose_device, DoseAtomicT{0}, number_of_bins).wait_and_throw();
     }
@@ -4723,9 +4643,7 @@ TransportResult transport_sycl(const TransportConfig& config,
     free_immutable_device(energy_grid_device);
     free_immutable_device(cumulative_range_device);
     free_immutable_device(cross_section_device);
-    if (target_h_fraction_device != nullptr) {
-        sycl::free(target_h_fraction_device, queue);
-    }
+    free_device(target_h_fraction_device);
     free_device(dose_device);
     free_device(primary_survival_device);
     free_device(inelastic_reaction_device);
@@ -4790,7 +4708,7 @@ TransportResult transport_sycl(const TransportConfig& config,
     free_device(fred_prob_tgt_h_device);
     free_device(fred_prob_tgt_o_device);
     for (auto* allocation : event_lib_device_allocations) {
-        if (allocation != nullptr) sycl::free(allocation, queue);
+        free_device(allocation);
     }
     free_device(fluct_energy_device);
     free_device(fluct_density_device);

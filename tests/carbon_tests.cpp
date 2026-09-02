@@ -22,6 +22,8 @@
 #include "carbon/fred_event_library.hpp"
 #include "carbon/fred_table1.hpp"
 #include "carbon/inelastic.hpp"
+#include "carbon/device.hpp"
+#include "carbon/detail/device_memory_tracker.hpp"
 
 #include <algorithm>
 #include <array>
@@ -6345,6 +6347,73 @@ void test_step12_gpu_transport() {
 
     std::filesystem::remove_all(temp_dir);
 }
+
+void test_step12_device_memory_tracker_exception_safety() {
+    if (!is_sycl_available()) {
+        return;
+    }
+    auto queue = carbon::make_sycl_queue("default");
+
+    // 1. Basic allocate, tracking, and manual free
+    {
+        carbon::detail::DeviceMemoryTracker tracker{queue};
+        require(tracker.active_allocation_count() == 0, "Tracker initial count must be 0");
+        auto* p1 = tracker.allocate<float>(100);
+        auto* p2 = tracker.allocate<int>(200);
+        auto* p3 = tracker.allocate<double>(50);
+        require(p1 != nullptr && p2 != nullptr && p3 != nullptr, "Allocations must succeed");
+        require(tracker.active_allocation_count() == 3, "Tracker must record 3 allocations");
+
+        // Free p2 manually
+        tracker.free(p2);
+        require(tracker.active_allocation_count() == 2, "Tracker count must decrement after free");
+
+        // External track
+        auto* raw = sycl::malloc_device<uint32_t>(10, queue);
+        tracker.track(raw);
+        require(tracker.active_allocation_count() == 3, "Tracker count must increment after track");
+
+        // Free p1 and raw
+        tracker.free(p1);
+        tracker.free(raw);
+        require(tracker.active_allocation_count() == 1, "Tracker count must be 1 (p3 remaining)");
+        // p3 will be automatically and safely freed when tracker goes out of scope
+    }
+
+    // 2. Double-free safety test
+    {
+        carbon::detail::DeviceMemoryTracker tracker{queue};
+        auto* p = tracker.allocate<float>(128);
+        require(p != nullptr, "p allocation must succeed");
+        require(tracker.active_allocation_count() == 1, "Tracker must track p");
+        tracker.free(p);
+        require(tracker.active_allocation_count() == 0, "Tracker count must be 0 after free");
+        // Second free call on already freed pointer is a safe no-op on tracker
+        tracker.free(p);
+        require(tracker.active_allocation_count() == 0, "Tracker count remains 0");
+    }
+
+    // 3. Fault injection / exception unwinding safety test
+    {
+        bool caught_exception = false;
+        try {
+            carbon::detail::DeviceMemoryTracker tracker{queue};
+            for (int i = 0; i < 10; ++i) {
+                auto* ptr = tracker.allocate<float>(1024);
+                require(ptr != nullptr, "Allocation in loop must succeed");
+                if (i == 5) {
+                    // Simulate runtime fault injection mid-pipeline
+                    throw std::runtime_error("Simulated fault injection at allocation step 5");
+                }
+            }
+        } catch (const std::runtime_error& err) {
+            require(std::string(err.what()).find("Simulated fault injection") != std::string::npos,
+                    "Expected fault injection error caught");
+            caught_exception = true;
+        }
+        require(caught_exception, "Fault injection exception must be caught");
+    }
+}
 #endif
 }  // namespace
 
@@ -6462,6 +6531,7 @@ int main(int argc, char** argv) {
         run("test_step12_primary_only_mode_contract", test_step12_primary_only_mode_contract);
 #ifdef CARBON_HAS_SYCL
         run("test_step12_gpu_transport", test_step12_gpu_transport);
+        run("test_step12_device_memory_tracker_exception_safety", test_step12_device_memory_tracker_exception_safety);
 #endif
         std::cout << "All carbon_tests passed\n";
         return EXIT_SUCCESS;
