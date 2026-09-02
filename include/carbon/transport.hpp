@@ -307,6 +307,7 @@ struct TransportResult {
     std::uint64_t primary_stopped_count{0};
     std::uint64_t primary_other_terminal_count{0};
     double primary_inelastic_removed_kinetic_MeV{0.0};
+    double primary_other_terminal_kinetic_MeV{0.0};
     double primary_cutoff_stopped_energy_MeV{0.0};
     std::vector<PrimaryFirstInteractionRecord> primary_first_interactions{};
     // Fixed-layout CINEL02 runtime ledger; zero for other nuclear models.

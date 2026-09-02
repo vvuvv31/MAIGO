@@ -648,36 +648,7 @@ TransportResult transport_sycl(const TransportConfig& config,
                 }
             }
 
-            const auto schneider_host_grid = prepare_schneider_primary_xs(config);
-            schneider_xs_sections =
-                static_cast<std::uint32_t>(SchneiderResampledCrossSectionGrid::kExpectedSections);
-            schneider_xs_energies =
-                static_cast<std::uint32_t>(schneider_host_grid.energy_nodes());
-            schneider_xs_e_min = static_cast<float>(schneider_host_grid.transport_energies_MeVu.front());
-            const float dE = static_cast<float>(
-                schneider_host_grid.transport_energies_MeVu[1] - schneider_host_grid.transport_energies_MeVu[0]);
-            schneider_xs_inv_dE = 1.0F / dE;
-
-            const std::size_t total_elements =
-                static_cast<std::size_t>(schneider_xs_sections) * schneider_xs_energies;
-            if (schneider_host_grid.mass_xs_per_mm_at_1g_cm3.size() != total_elements) {
-                throw std::runtime_error("Schneider cross section host payload size mismatch");
-            }
-            if (schneider_xs_sections != 25) {
-                throw std::runtime_error("schneider_xs_sections must be exactly 25");
-            }
-            if (schneider_xs_energies != schneider_host_grid.energy_nodes()) {
-                throw std::runtime_error("schneider_xs_energies must match grid size");
-            }
-
-            schneider_primary_xs_device = sycl::malloc_device<float>(total_elements, queue);
-            if (schneider_primary_xs_device == nullptr) {
-                throw std::runtime_error(
-                    "Failed to allocate device memory for Schneider cross section table");
-            }
-            queue.copy(schneider_host_grid.mass_xs_per_mm_at_1g_cm3.data(),
-                       schneider_primary_xs_device, total_elements).wait_and_throw();
-
+            // Verify provenance and metadata before device allocation
             const auto actual_sha256 = compute_file_sha256_hex(config.ct_schneider_cross_section_file);
             std::string source_sha256 = "";
             const auto meta_path = config.ct_schneider_cross_section_file.parent_path() /
@@ -733,6 +704,36 @@ TransportResult transport_sycl(const TransportConfig& config,
                     "Schneider cross section runtime SHA256 mismatch: file=" + actual_sha256 +
                     ", metadata=" + source_sha256);
             }
+
+            const auto schneider_host_grid = prepare_schneider_primary_xs(config);
+            schneider_xs_sections =
+                static_cast<std::uint32_t>(SchneiderResampledCrossSectionGrid::kExpectedSections);
+            schneider_xs_energies =
+                static_cast<std::uint32_t>(schneider_host_grid.energy_nodes());
+            schneider_xs_e_min = static_cast<float>(schneider_host_grid.transport_energies_MeVu.front());
+            const float dE = static_cast<float>(
+                schneider_host_grid.transport_energies_MeVu[1] - schneider_host_grid.transport_energies_MeVu[0]);
+            schneider_xs_inv_dE = 1.0F / dE;
+
+            const std::size_t total_elements =
+                static_cast<std::size_t>(schneider_xs_sections) * schneider_xs_energies;
+            if (schneider_host_grid.mass_xs_per_mm_at_1g_cm3.size() != total_elements) {
+                throw std::runtime_error("Schneider cross section host payload size mismatch");
+            }
+            if (schneider_xs_sections != 25) {
+                throw std::runtime_error("schneider_xs_sections must be exactly 25");
+            }
+            if (schneider_xs_energies != schneider_host_grid.energy_nodes()) {
+                throw std::runtime_error("schneider_xs_energies must match grid size");
+            }
+
+            schneider_primary_xs_device = sycl::malloc_device<float>(total_elements, queue);
+            if (schneider_primary_xs_device == nullptr) {
+                throw std::runtime_error(
+                    "Failed to allocate device memory for Schneider cross section table");
+            }
+            queue.copy(schneider_host_grid.mass_xs_per_mm_at_1g_cm3.data(),
+                       schneider_primary_xs_device, total_elements).wait_and_throw();
 
             // Log table dimensions, byte count, source file, mode, and source SHA256 once
             std::cout << "[schneider-primary-xs] mode=primary-c12-section-resolved\n"
@@ -908,6 +909,14 @@ TransportResult transport_sycl(const TransportConfig& config,
     auto* untracked_nuclear_device = sycl::malloc_device<float>(number_of_histories, queue);
     if (untracked_nuclear_device != nullptr) {
         queue.fill(untracked_nuclear_device, 0.0F, number_of_histories).wait_and_throw();
+    }
+    auto* other_terminal_energy_device = sycl::malloc_device<float>(number_of_histories, queue);
+    if (other_terminal_energy_device != nullptr) {
+        queue.fill(other_terminal_energy_device, 0.0F, number_of_histories).wait_and_throw();
+    }
+    auto* cutoff_stopped_energy_device = sycl::malloc_device<float>(number_of_histories, queue);
+    if (cutoff_stopped_energy_device != nullptr) {
+        queue.fill(cutoff_stopped_energy_device, 0.0F, number_of_histories).wait_and_throw();
     }
     auto* schneider_inelastic_device =
         use_schneider_primary_xs ? sycl::malloc_device<std::uint64_t>(1, queue) : nullptr;
@@ -1358,6 +1367,7 @@ TransportResult transport_sycl(const TransportConfig& config,
     const auto maximum_step_mm = static_cast<float>(config.maximum_step_mm);
     const auto maximum_relative_energy_loss =
         static_cast<float>(config.maximum_relative_energy_loss);
+    const auto maximum_primary_steps = config.maximum_primary_steps;
     const auto energy_cutoff_MeV = static_cast<float>(config.energy_cutoff_MeV);
 
     if (is_cuda_backend && !config.enable_minibeam) {
@@ -1627,7 +1637,7 @@ TransportResult transport_sycl(const TransportConfig& config,
                 std::uint32_t interaction_section = 0;
                 float interaction_density = 0.0F;
 
-                constexpr std::uint32_t max_primary_steps = 2000000U;
+                const std::uint32_t max_primary_steps = maximum_primary_steps;
                 int last_survival_bin = -1;
                 while (energy_MeV > energy_cutoff_MeV && steps < max_primary_steps) {
                     // The rate/target hazard is evaluated from the energy at
@@ -2953,6 +2963,9 @@ TransportResult transport_sycl(const TransportConfig& config,
                         }
                     }
                     history_deposited_MeV += cutoff_energy_MeV;
+                    if (cutoff_stopped_energy_device != nullptr) {
+                        cutoff_stopped_energy_device[global_history] = cutoff_energy_MeV;
+                    }
                     if (enable_let_scoring) {
                         const auto cutoff_numerator =
                             static_cast<double>(cutoff_energy_MeV) *
@@ -2991,8 +3004,8 @@ TransportResult transport_sycl(const TransportConfig& config,
                         term_ref.fetch_add(1U);
                     }
                     if (energy_MeV > 0.0F) {
-                        if (untracked_nuclear_device != nullptr) {
-                            untracked_nuclear_device[global_history] = energy_MeV;
+                        if (other_terminal_energy_device != nullptr) {
+                            other_terminal_energy_device[global_history] = energy_MeV;
                         }
                         energy_MeV = 0.0F;
                     }
@@ -4438,6 +4451,14 @@ TransportResult transport_sycl(const TransportConfig& config,
     if (untracked_nuclear_device != nullptr) {
         queue.copy(untracked_nuclear_device, untracked_host.data(), number_of_histories);
     }
+    std::vector<float> other_terminal_host(number_of_histories, 0.0F);
+    if (other_terminal_energy_device != nullptr) {
+        queue.copy(other_terminal_energy_device, other_terminal_host.data(), number_of_histories);
+    }
+    std::vector<float> cutoff_stopped_host(number_of_histories, 0.0F);
+    if (cutoff_stopped_energy_device != nullptr) {
+        queue.copy(cutoff_stopped_energy_device, cutoff_stopped_host.data(), number_of_histories);
+    }
     std::uint64_t schneider_inelastic_host = 0;
     if (schneider_inelastic_device != nullptr) {
         queue.copy(schneider_inelastic_device, &schneider_inelastic_host, 1);
@@ -4681,6 +4702,8 @@ TransportResult transport_sycl(const TransportConfig& config,
     free_device(cinel02_queued_transition_counts_device);
     free_device(cinel02_queued_transition_energy_device);
     free_device(untracked_nuclear_device);
+    free_device(other_terminal_energy_device);
+    free_device(cutoff_stopped_energy_device);
     free_device(fred_prob_proj_h_device);
     free_device(fred_prob_proj_o_device);
     free_device(fred_prob_tgt_h_device);
@@ -4897,6 +4920,10 @@ TransportResult transport_sycl(const TransportConfig& config,
     result.primary_stopped_count = terminal_counts_host[2];
     result.primary_other_terminal_count = terminal_counts_host[3];
     result.primary_inelastic_removed_kinetic_MeV = result.untracked_nuclear_energy_MeV;
+    result.primary_other_terminal_kinetic_MeV =
+        std::accumulate(other_terminal_host.begin(), other_terminal_host.end(), 0.0);
+    result.primary_cutoff_stopped_energy_MeV =
+        std::accumulate(cutoff_stopped_host.begin(), cutoff_stopped_host.end(), 0.0);
     result.primary_first_interactions = std::move(first_interactions_host);
     for (std::size_t i = 0; i < 18; ++i) {
         result.fred_isotope_counts[i] = fred_diag_host[i];

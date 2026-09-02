@@ -209,7 +209,7 @@ inline std::string compute_file_sha256_hex(const std::filesystem::path& path) {
         throw std::runtime_error("compute_file_sha256_hex: cannot open file " + path.string());
     }
     Sha256 ctx;
-    std::array<char, 65536> buffer{};
+    std::array<char, 4096> buffer{};
     while (stream.read(buffer.data(), buffer.size()) || stream.gcount() > 0) {
         ctx.update(buffer.data(), static_cast<std::size_t>(stream.gcount()));
     }

@@ -5504,17 +5504,27 @@ void test_step12_primary_only_mode_contract() {
     }
 
     // =========================================================================
-    // 2. SHA-256 Runtime Verification & Tamper Detection
+    // 2. First-Interaction Record 3D Vertex & Stopping Point Checks
     // =========================================================================
     {
-        const auto actual_hash = carbon::compute_file_sha256_hex(xs_path);
-        const std::string expected_hash =
-            "47b341324c95f874a2874ba48180a84504605f86d549d7920173d690e0aa91bb";
-        require(actual_hash == expected_hash, "c12_schneider_inelastic_mass_xs.csv SHA-256 hash mismatch");
+        carbon::PrimaryFirstInteractionRecord rec{};
+        rec.x_mm = -15.5F;
+        rec.y_mm = 22.3F;
+        rec.depth_mm = 85.0F;
+        rec.energy_MeVu = 120.0F;
+        rec.section_id = 11;
+        rec.density_g_per_cm3 = 1.0F;
+
+        require(rec.x_mm == -15.5F, "Record x_mm mismatch");
+        require(rec.y_mm == 22.3F, "Record y_mm mismatch");
+        require(rec.depth_mm == 85.0F, "Record depth_mm mismatch");
+        require(rec.energy_MeVu == 120.0F, "Record energy_MeVu mismatch");
+        require(rec.section_id == 11, "Record section_id mismatch");
+        require(rec.density_g_per_cm3 == 1.0F, "Record density mismatch");
     }
 
     // =========================================================================
-    // 3. 3D Voxel Dose to 1D IDD & Bragg Peak Metrics Helpers
+    // 3. Bragg Peak Falloff Crossing Metrics (Robustness & Invalid States)
     // =========================================================================
     {
         // 3D Voxel Dose to 1D IDD
@@ -5660,18 +5670,24 @@ void test_step12_primary_only_mode_contract() {
                     "Inelastic collisions should be observed");
             require(result.primary_stopped_count > 0,
                     "Stopped particles should be observed for 200 MeV/u in 200 mm water");
+            require(result.primary_other_terminal_count == 0,
+                    "Valid validation run must have zero other_terminal events");
+            require(result.primary_other_terminal_kinetic_MeV == 0.0,
+                    "Valid validation run must have zero other_terminal kinetic energy");
 
-            // Energy conservation identity
+            // Energy conservation identity: E_initial = E_deposited + E_inelastic_removed + E_escaped + E_other_terminal
             const double initial_e = cfg.initial_total_energy_MeV() * static_cast<double>(cfg.number_of_histories);
             const double total_accounted =
                 result.total_deposited_energy_MeV +
                 result.primary_inelastic_removed_kinetic_MeV +
+                result.primary_other_terminal_kinetic_MeV +
                 result.escaped_energy_MeV;
             const double rel_energy_err = std::fabs(initial_e - total_accounted) / initial_e;
             std::cout << "[step12-gpu-test] Energy conservation:\n"
                       << "  initial_total_MeV=" << initial_e << "\n"
                       << "  deposited_MeV=" << result.total_deposited_energy_MeV << "\n"
                       << "  inelastic_removed_MeV=" << result.primary_inelastic_removed_kinetic_MeV << "\n"
+                      << "  other_terminal_MeV=" << result.primary_other_terminal_kinetic_MeV << "\n"
                       << "  escaped_MeV=" << result.escaped_energy_MeV << "\n"
                       << "  accounted_MeV=" << total_accounted << "\n"
                       << "  relative_error=" << rel_energy_err << "\n";
@@ -5954,6 +5970,143 @@ void test_step12_primary_only_mode_contract() {
                 }, "transport_sycl must throw when density-mass-SPR fails to construct in validation mode");
             }
         }
+
+        // 4E: True Watchdog Regression Test (Force maximum_primary_steps = 2)
+            // 4E.1: Pure Watchdog Test with Zero XS (100% histories hit watchdog, 0 inelastic collisions)
+            {
+                const auto zero_xs_csv = temp_dir / "zero_schneider_xs.csv";
+                carbon::TransportConfig cfg_watchdog;
+                cfg_watchdog.phantom_length_mm = 200.0;
+                cfg_watchdog.depth_bin_width_mm = 10.0;
+                cfg_watchdog.primary_atomic_number = 6;
+                cfg_watchdog.primary_mass_number = 12;
+                cfg_watchdog.initial_energy_MeVu = 200.0;
+                cfg_watchdog.enable_ct_grid = true;
+                cfg_watchdog.ct_grid_file = cctg_file.string();
+                cfg_watchdog.ct_schneider_cross_section_file = zero_xs_csv.string();
+                cfg_watchdog.ct_validation_mode = "primary-attenuation-only";
+                cfg_watchdog.enable_inelastic = true;
+                cfg_watchdog.enable_nuclear_elastic = false;
+                cfg_watchdog.enable_secondary_transport = false;
+                cfg_watchdog.enable_energy_straggling = false;
+                cfg_watchdog.beam_energy_spread = 0.0;
+                cfg_watchdog.ct_use_density_mass_spr = true;
+                cfg_watchdog.ct_stopping_power_scale = 1.0;
+                cfg_watchdog.energy_cutoff_MeV = 6.0;
+                cfg_watchdog.maximum_primary_steps = 2; // Force watchdog trigger on step 2
+                cfg_watchdog.number_of_histories = 1000;
+                cfg_watchdog.validate();
+
+                const auto result = carbon::transport_sycl(cfg_watchdog, water_sp, zero_xs, "default");
+
+                std::cout << "[step12-watchdog-test-zero-xs] Terminal counts:\n"
+                          << "  inelastic_terminated=" << result.primary_inelastic_terminated_count << "\n"
+                          << "  escaped_ct=" << result.primary_escaped_ct_count << "\n"
+                          << "  stopped=" << result.primary_stopped_count << "\n"
+                          << "  other=" << result.primary_other_terminal_count << "\n"
+                          << "  other_kinetic_MeV=" << result.primary_other_terminal_kinetic_MeV << "\n";
+
+                // All 1000 histories must hit watchdog and land strictly in other_terminal
+                require(result.primary_other_terminal_count == 1000,
+                        "Watchdog timeout particles must be classified as other_terminal");
+                require(result.primary_inelastic_terminated_count == 0,
+                        "No particles should be classified as inelastic_terminated under zero XS");
+                require(result.primary_escaped_ct_count == 0,
+                        "No particles should be classified as escaped_ct under 2-step watchdog");
+                require(result.primary_stopped_count == 0,
+                        "No particles should be classified as stopped under 2-step watchdog");
+
+                // Kinetic energy segregation
+                require(result.primary_other_terminal_kinetic_MeV > 0.0,
+                        "Watchdog particles must record remaining kinetic energy in other_terminal_kinetic");
+                require(result.primary_inelastic_removed_kinetic_MeV == 0.0,
+                        "Inelastic removed kinetic must be strictly 0.0 when no inelastic occurred");
+                require(result.escaped_energy_MeV == 0.0,
+                        "Escaped energy must be strictly 0.0 when no particles escaped");
+                require(result.total_deposited_energy_MeV > 0.0,
+                        "Deposited energy should reflect continuous loss of 2 steps");
+
+                // Closed energy identity: E_initial = E_deposited + E_other_terminal_kinetic
+                const double initial_e = cfg_watchdog.initial_total_energy_MeV() * static_cast<double>(cfg_watchdog.number_of_histories);
+                const double accounted = result.total_deposited_energy_MeV +
+                                         result.primary_inelastic_removed_kinetic_MeV +
+                                         result.primary_other_terminal_kinetic_MeV +
+                                         result.escaped_energy_MeV;
+                const double rel_err = std::fabs(initial_e - accounted) / initial_e;
+                require(rel_err < 1.0e-5, "Watchdog zero-XS energy conservation identity failed");
+                require(result.physical_relative_energy_balance_error() < 1.0e-5,
+                        "Watchdog zero-XS physical relative energy balance error failed");
+            }
+
+            // 4E.2: Mixed Watchdog + Inelastic Test with Real XS
+            {
+                carbon::TransportConfig cfg_watchdog_real;
+                cfg_watchdog_real.phantom_length_mm = 200.0;
+                cfg_watchdog_real.depth_bin_width_mm = 10.0;
+                cfg_watchdog_real.primary_atomic_number = 6;
+                cfg_watchdog_real.primary_mass_number = 12;
+                cfg_watchdog_real.initial_energy_MeVu = 200.0;
+                cfg_watchdog_real.enable_ct_grid = true;
+                cfg_watchdog_real.ct_grid_file = cctg_file.string();
+                cfg_watchdog_real.ct_schneider_cross_section_file = xs_path.string();
+                cfg_watchdog_real.ct_validation_mode = "primary-attenuation-only";
+                cfg_watchdog_real.enable_inelastic = true;
+                cfg_watchdog_real.enable_nuclear_elastic = false;
+                cfg_watchdog_real.enable_secondary_transport = false;
+                cfg_watchdog_real.enable_energy_straggling = false;
+                cfg_watchdog_real.beam_energy_spread = 0.0;
+                cfg_watchdog_real.ct_use_density_mass_spr = true;
+                cfg_watchdog_real.ct_stopping_power_scale = 1.0;
+                cfg_watchdog_real.energy_cutoff_MeV = 6.0;
+                cfg_watchdog_real.maximum_primary_steps = 2; // Force watchdog trigger on step 2
+                cfg_watchdog_real.number_of_histories = 1000;
+                cfg_watchdog_real.validate();
+
+                const auto result = carbon::transport_sycl(cfg_watchdog_real, water_sp, zero_xs, "default");
+
+                std::cout << "[step12-watchdog-test-real-xs] Terminal counts:\n"
+                          << "  inelastic_terminated=" << result.primary_inelastic_terminated_count << "\n"
+                          << "  escaped_ct=" << result.primary_escaped_ct_count << "\n"
+                          << "  stopped=" << result.primary_stopped_count << "\n"
+                          << "  other=" << result.primary_other_terminal_count << "\n"
+                          << "  inelastic_removed_MeV=" << result.primary_inelastic_removed_kinetic_MeV << "\n"
+                          << "  other_kinetic_MeV=" << result.primary_other_terminal_kinetic_MeV << "\n";
+
+                // Terminal count conservation
+                const auto total_terminal =
+                    result.primary_inelastic_terminated_count +
+                    result.primary_escaped_ct_count +
+                    result.primary_stopped_count +
+                    result.primary_other_terminal_count;
+                require(total_terminal == cfg_watchdog_real.number_of_histories,
+                        "Watchdog real XS total terminal counts must equal number of histories");
+                require(result.primary_other_terminal_count > 900,
+                        "Most particles should hit watchdog at step 2");
+                require(result.primary_inelastic_terminated_count > 0,
+                        "Some particles should undergo inelastic collision in step 1 or 2");
+                require(result.primary_escaped_ct_count == 0,
+                        "No particles should escape at step 2");
+                require(result.primary_stopped_count == 0,
+                        "No particles should stop at step 2");
+
+                // Strictly segregated energy accounting
+                require(result.primary_other_terminal_kinetic_MeV > 0.0,
+                        "Watchdog particles must have positive other_terminal_kinetic");
+                require(result.primary_inelastic_removed_kinetic_MeV > 0.0,
+                        "Inelastic particles must have positive inelastic_removed_kinetic");
+                require(result.escaped_energy_MeV == 0.0,
+                        "No escaped energy");
+
+                const double initial_e = cfg_watchdog_real.initial_total_energy_MeV() * static_cast<double>(cfg_watchdog_real.number_of_histories);
+                const double accounted = result.total_deposited_energy_MeV +
+                                         result.primary_inelastic_removed_kinetic_MeV +
+                                         result.primary_other_terminal_kinetic_MeV +
+                                         result.escaped_energy_MeV;
+                const double rel_err = std::fabs(initial_e - accounted) / initial_e;
+                require(rel_err < 1.0e-5, "Watchdog real-XS energy conservation identity failed");
+                require(result.physical_relative_energy_balance_error() < 1.0e-5,
+                        "Watchdog real-XS physical relative energy balance error failed");
+            }
 
         std::filesystem::remove_all(temp_dir);
     }

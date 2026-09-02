@@ -553,6 +553,9 @@ void TransportConfig::validate() const {
     if (phantom_length_mm <= 0.0 || depth_bin_width_mm <= 0.0 || maximum_step_mm <= 0.0) {
         throw std::invalid_argument("phantom and step lengths must be positive");
     }
+    if (maximum_primary_steps == 0) {
+        throw std::invalid_argument("maximum_primary_steps must be greater than zero");
+    }
     if (maximum_relative_energy_loss <= 0.0 || maximum_relative_energy_loss > 1.0) {
         throw std::invalid_argument("maximum_relative_energy_loss must be in (0, 1]");
     }
@@ -1346,6 +1349,8 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.maximum_step_mm = parse_number(values, "maximum_step_mm", config.maximum_step_mm);
     config.maximum_relative_energy_loss =
         parse_number(values, "maximum_relative_energy_loss", config.maximum_relative_energy_loss);
+    config.maximum_primary_steps = static_cast<std::uint32_t>(
+        parse_number(values, "maximum_primary_steps", static_cast<double>(config.maximum_primary_steps)));
     config.energy_cutoff_MeV = parse_number(values, "energy_cutoff_MeV", config.energy_cutoff_MeV);
     config.secondary_local_deposit_cutoff_MeV = parse_number(
         values, "secondary_local_deposit_cutoff_MeV",

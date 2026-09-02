@@ -128,6 +128,7 @@ struct TransportConfig {
     double depth_bin_width_mm{0.5};
     double maximum_step_mm{0.5};
     double maximum_relative_energy_loss{0.005};
+    std::uint32_t maximum_primary_steps{2000000U};
     double energy_cutoff_MeV{0.1};
     // Charged secondaries below this total kinetic energy are stopped and their
     // remaining energy is deposited locally. 0 uses energy_cutoff_MeV.
