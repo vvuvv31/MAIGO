@@ -192,14 +192,12 @@ struct TransportConfig {
     // Optional energy-dependent mass XS for every Schneider section. When set
     // on a CCTG v2/v3 grid, this supersedes the legacy four-class XS tables.
     std::filesystem::path ct_schneider_cross_section_file{};
-    // Optional TOPAS-derived CINEL02 rate table with an additional
-    // material_section column. Rows with a non-negative section are selected
-    // from the CT voxel's Schneider section; legacy six-column water rate
-    // tables remain the fallback for sections without a material-specific row.
     std::filesystem::path ct_cinel02_rate_file{};
-    // Optional TOPAS-derived, section-by-energy mass stopping-power LUT for CT
-    // mode. An explicitly configured LUT takes precedence over density-SPR.
     std::filesystem::path ct_hu_stopping_power_lut_file{};
+    // Optional CT validation mode. Supported: "none", "primary-attenuation-only".
+    // "primary-attenuation-only" enforces C12 primary nuclear attenuation validation,
+    // terminating primaries on first inelastic collision and disabling all secondary creation/transport.
+    std::string ct_validation_mode{};
     // moquimc-style continuous mass SPR(rho, E) for CT ionization and LET.
     // When true and no HU LUT is configured, voxel density selects the
     // water-relative electronic mass SPR instead of the analytic
@@ -680,6 +678,9 @@ struct TransportConfig {
             return 2;
         }
         return 0;
+    }
+    [[nodiscard]] bool is_primary_attenuation_only_mode() const noexcept {
+        return ct_validation_mode == "primary-attenuation-only";
     }
     void validate() const;
 };

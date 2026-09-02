@@ -66,7 +66,7 @@ The executor updates only the `Status` column and the execution log. Never rewri
 | [09](steps/09-primary-xs-host-path.md) | DONE | Strict config/load/resample path for 25-section C12 XS | 08 |
 | [10](steps/10-primary-xs-device-path.md) | DONE | Correct device upload/index/density scaling | 09 |
 | [11](steps/11-voxel-boundary-hazard.md) | DONE | Piecewise-material optical-depth stepping | 10 |
-| [12](steps/12-primary-only-observables.md) | TODO | Explicit primary-only mode and validation scorers | 11 |
+| [12](steps/12-primary-only-observables.md) | DONE | Explicit primary-only mode and validation scorers | 11 |
 | [13](steps/13-primary-ct-validation.md) | TODO | Slab + staircase primary CT milestone | 12 |
 | [14](steps/14-schneider-stopping.md) | TODO | TOPAS-derived 25-section stopping tables | 13 |
 | [15](steps/15-schneider-mcs.md) | TODO | Exact 25-section radiation-length MCS path | 14 |
@@ -177,4 +177,5 @@ YYYY-MM-DD HH:MM TZ | step NN | OLD -> NEW | commit/hash or blocker | evidence p
 2026-09-02 20:13 CST | step 11E | DONE -> DONE | test(ct): verify whole-trajectory survival bias and exact mass-SPR tail bounds | tests/carbon_tests.cpp
 2026-09-02 20:24 CST | step 11F | DONE -> DONE | test(ct): close Step 11F exact 1mm max step, endpoint index clamp, and strict slowing gates | tests/carbon_tests.cpp
 2026-09-02 20:34 CST | step 11G | DONE -> DONE | test(ct): close Step 11G exact step-by-step 25-section trajectory loop and clamp contract | tests/carbon_tests.cpp
+2026-09-02 20:55 CST | step 12 | TODO -> DONE | feat(ct): implement primary-only validation mode, dynamic SHA256 provenance check, terminal state conservation, decoupled energy accounting, and IDD/Bragg peak metrics | tests/carbon_tests.cpp
 ```

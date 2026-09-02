@@ -14,6 +14,7 @@
 #include "carbon/stopping_power.hpp"
 #include "carbon/straggling.hpp"
 #include "carbon/transport.hpp"
+#include "carbon/sha256.hpp"
 
 #ifdef CARBON_HAS_SYCL
 
@@ -677,6 +678,7 @@ TransportResult transport_sycl(const TransportConfig& config,
             queue.copy(schneider_host_grid.mass_xs_per_mm_at_1g_cm3.data(),
                        schneider_primary_xs_device, total_elements).wait_and_throw();
 
+            const auto actual_sha256 = compute_file_sha256_hex(config.ct_schneider_cross_section_file);
             std::string source_sha256 = "unknown";
             const auto meta_path = config.ct_schneider_cross_section_file.parent_path() /
                 (config.ct_schneider_cross_section_file.stem().string() + ".metadata.json");
@@ -695,6 +697,11 @@ TransportResult transport_sycl(const TransportConfig& config,
                     }
                 }
             }
+            if (source_sha256 != "unknown" && source_sha256 != actual_sha256) {
+                throw std::runtime_error(
+                    "Schneider cross section runtime SHA256 mismatch: file=" + actual_sha256 +
+                    ", metadata=" + source_sha256);
+            }
 
             // Log table dimensions, byte count, source file, mode, and source SHA256 once
             std::cout << "[schneider-primary-xs] mode=primary-c12-section-resolved\n"
@@ -705,6 +712,10 @@ TransportResult transport_sycl(const TransportConfig& config,
                       << "  inv_dE=" << schneider_xs_inv_dE << "\n"
                       << "  source=" << config.ct_schneider_cross_section_file << "\n"
                       << "  source_sha256=" << source_sha256 << "\n";
+            if (config.is_primary_attenuation_only_mode()) {
+                std::cout << "[ct-validation-mode] primary-attenuation-only\n"
+                          << "  verified_source_sha256=" << actual_sha256 << "\n";
+            }
         }
 
         if (use_ct_mass_sp) {
@@ -869,38 +880,81 @@ TransportResult transport_sycl(const TransportConfig& config,
         queue.fill(schneider_inelastic_device, std::uint64_t{0}, 1).wait_and_throw();
     }
 
+    const bool is_primary_attenuation_only = config.is_primary_attenuation_only_mode();
     const auto enable_inelastic = config.enable_inelastic;
     const auto enable_nuclear_elastic = config.enable_nuclear_elastic;
     const auto enable_secondary_transport = config.enable_secondary_transport;
+
+    auto* primary_terminal_counts_device = sycl::malloc_device<std::uint64_t>(4, queue);
+    if (primary_terminal_counts_device == nullptr) {
+        throw std::bad_alloc();
+    }
+    queue.fill(primary_terminal_counts_device, std::uint64_t{0}, 4).wait_and_throw();
+
+    const bool record_first_interactions =
+        is_primary_attenuation_only || config.validation_scorers();
+    PrimaryFirstInteractionRecord* first_interactions_device = nullptr;
+    std::uint32_t* first_interactions_count_device = nullptr;
+    if (record_first_interactions) {
+        first_interactions_device = sycl::malloc_device<PrimaryFirstInteractionRecord>(
+            number_of_histories, queue);
+        first_interactions_count_device = sycl::malloc_device<std::uint32_t>(1, queue);
+        if (first_interactions_device == nullptr || first_interactions_count_device == nullptr) {
+            free_device(primary_terminal_counts_device);
+            free_device(first_interactions_device);
+            free_device(first_interactions_count_device);
+            throw std::bad_alloc();
+        }
+        queue.fill(first_interactions_count_device, 0U, 1).wait_and_throw();
+    }
+
+    const bool need_secondary_buffers =
+        !is_primary_attenuation_only && (enable_inelastic || enable_nuclear_elastic);
+
     constexpr std::size_t max_secondaries = 32000000;
     auto* secondary_queue_device =
-        (enable_inelastic || enable_nuclear_elastic)
+        need_secondary_buffers
             ? sycl::malloc_device<SecondaryParticle>(max_secondaries, queue)
             : nullptr;
     auto* secondary_count_device =
-        (enable_inelastic || enable_nuclear_elastic)
+        need_secondary_buffers
             ? sycl::malloc_device<uint32_t>(1, queue)
             : nullptr;
     uint32_t* secondary_overflow_count_device =
-        (enable_inelastic || enable_nuclear_elastic)
+        need_secondary_buffers
             ? sycl::malloc_device<uint32_t>(1, queue)
             : nullptr;
     float* secondary_overflow_energy_device =
-        (enable_inelastic || enable_nuclear_elastic)
+        need_secondary_buffers
             ? sycl::malloc_device<float>(1, queue)
             : nullptr;
     float* fred_model_residual_device =
-        enable_inelastic ? sycl::malloc_device<float>(1, queue) : nullptr;
-    float* fred_q_device = enable_inelastic ? sycl::malloc_device<float>(1, queue) : nullptr;
-    float* fred_neutron_device = enable_inelastic ? sycl::malloc_device<float>(1, queue) : nullptr;
-    float* fred_remnant_device = enable_inelastic ? sycl::malloc_device<float>(1, queue) : nullptr;
+        (need_secondary_buffers && enable_inelastic)
+            ? sycl::malloc_device<float>(1, queue)
+            : nullptr;
+    float* fred_q_device =
+        (need_secondary_buffers && enable_inelastic)
+            ? sycl::malloc_device<float>(1, queue)
+            : nullptr;
+    float* fred_neutron_device =
+        (need_secondary_buffers && enable_inelastic)
+            ? sycl::malloc_device<float>(1, queue)
+            : nullptr;
+    float* fred_remnant_device =
+        (need_secondary_buffers && enable_inelastic)
+            ? sycl::malloc_device<float>(1, queue)
+            : nullptr;
     uint32_t* fred_fail_count_device =
-        enable_inelastic ? sycl::malloc_device<uint32_t>(1, queue) : nullptr;
+        (need_secondary_buffers && enable_inelastic)
+            ? sycl::malloc_device<uint32_t>(1, queue)
+            : nullptr;
     float* fred_fail_energy_device =
-        enable_inelastic ? sycl::malloc_device<float>(1, queue) : nullptr;
+        (need_secondary_buffers && enable_inelastic)
+            ? sycl::malloc_device<float>(1, queue)
+            : nullptr;
     uint32_t* fred_cap_overflow_count_device = nullptr;
     float* fred_cap_overflow_energy_device = nullptr;
-    if (enable_inelastic) {
+    if (need_secondary_buffers && enable_inelastic) {
         fred_cap_overflow_count_device = sycl::malloc_device<uint32_t>(1, queue);
         fred_cap_overflow_energy_device = sycl::malloc_device<float>(1, queue);
         const bool inelastic_ok =
@@ -938,7 +992,7 @@ TransportResult transport_sycl(const TransportConfig& config,
         queue.fill(fred_fail_energy_device, 0.0F, 1);
         queue.fill(fred_cap_overflow_count_device, 0U, 1);
         queue.fill(fred_cap_overflow_energy_device, 0.0F, 1).wait_and_throw();
-    } else if (enable_nuclear_elastic) {
+    } else if (need_secondary_buffers && enable_nuclear_elastic) {
         if (secondary_queue_device == nullptr || secondary_count_device == nullptr ||
             secondary_overflow_count_device == nullptr ||
             secondary_overflow_energy_device == nullptr) {
@@ -1534,6 +1588,9 @@ TransportResult transport_sycl(const TransportConfig& config,
                 float nuclear_tau_remaining = 0.0F;
                 bool nuclear_tau_active = false;
                 std::uint32_t nuclear_tau_rng_step = 0;
+                bool primary_inelastic_occurred = false;
+                std::uint32_t interaction_section = 0;
+                float interaction_density = 0.0F;
 
                 constexpr std::uint32_t max_primary_steps = 2000000U;
                 int last_survival_bin = -1;
@@ -1781,6 +1838,8 @@ TransportResult transport_sycl(const TransportConfig& config,
                                         reaction.fetch_add(1U);
                                     }
                                     inelastic_this_step = true;
+                                    interaction_section = section_id;
+                                    interaction_density = local_density_g_per_cm3;
                                 }
                             }
                         } else {
@@ -2242,6 +2301,33 @@ TransportResult transport_sycl(const TransportConfig& config,
                     }
 
                     if (use_schneider_primary_xs && in_ct && inelastic_this_step) {
+                        primary_inelastic_occurred = true;
+                        if (first_interactions_device != nullptr && first_interactions_count_device != nullptr) {
+                            sycl::atomic_ref<std::uint32_t, sycl::memory_order::relaxed,
+                                             sycl::memory_scope::device,
+                                             sycl::access::address_space::global_space>
+                                count_ref(*first_interactions_count_device);
+                            const auto slot = count_ref.fetch_add(1U);
+                            if (slot < number_of_histories) {
+                                first_interactions_device[slot] = PrimaryFirstInteractionRecord{
+                                    position_z_mm,
+                                    energy_MeV * inverse_mass_number,
+                                    interaction_section,
+                                    interaction_density
+                                };
+                            }
+                        }
+                        if (primary_terminal_counts_device != nullptr) {
+                            sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
+                                             sycl::memory_scope::device,
+                                             sycl::access::address_space::global_space>
+                                term_ref(primary_terminal_counts_device[0]);
+                            term_ref.fetch_add(1U);
+                        }
+                        if (untracked_nuclear_device != nullptr) {
+                            untracked_nuclear_device[global_history] = energy_MeV;
+                        }
+                        energy_MeV = 0.0F;
                         break;
                     }
 
@@ -2840,7 +2926,30 @@ TransportResult transport_sycl(const TransportConfig& config,
                             pending_voxel_let_denominator += cutoff_denominator;
                         }
                     }
+                    if (primary_terminal_counts_device != nullptr) {
+                        sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
+                                         sycl::memory_scope::device,
+                                         sycl::access::address_space::global_space>
+                            term_ref(primary_terminal_counts_device[2]); // [2] = stopped_without_inelastic
+                        term_ref.fetch_add(1U);
+                    }
                     energy_MeV = 0.0F;
+                } else if (energy_MeV > 0.0F) {
+                    if (primary_terminal_counts_device != nullptr) {
+                        sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
+                                         sycl::memory_scope::device,
+                                         sycl::access::address_space::global_space>
+                            term_ref(primary_terminal_counts_device[1]); // [1] = escaped_ct_without_inelastic
+                        term_ref.fetch_add(1U);
+                    }
+                } else if (!primary_inelastic_occurred) {
+                    if (primary_terminal_counts_device != nullptr) {
+                        sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
+                                         sycl::memory_scope::device,
+                                         sycl::access::address_space::global_space>
+                            term_ref(primary_terminal_counts_device[3]); // [3] = other_terminal
+                        term_ref.fetch_add(1U);
+                    }
                 }
 
                 if (pending_primary_depth_MeV > 0.0) {
@@ -4287,6 +4396,20 @@ TransportResult transport_sycl(const TransportConfig& config,
     if (schneider_inelastic_device != nullptr) {
         queue.copy(schneider_inelastic_device, &schneider_inelastic_host, 1);
     }
+    std::array<std::uint64_t, 4> terminal_counts_host{};
+    if (primary_terminal_counts_device != nullptr) {
+        queue.copy(primary_terminal_counts_device, terminal_counts_host.data(), 4).wait_and_throw();
+    }
+    std::vector<PrimaryFirstInteractionRecord> first_interactions_host;
+    if (first_interactions_device != nullptr && first_interactions_count_device != nullptr) {
+        std::uint32_t first_int_count = 0;
+        queue.copy(first_interactions_count_device, &first_int_count, 1).wait_and_throw();
+        const auto actual_count = std::min(first_int_count, static_cast<std::uint32_t>(number_of_histories));
+        first_interactions_host.resize(actual_count);
+        if (actual_count > 0) {
+            queue.copy(first_interactions_device, first_interactions_host.data(), actual_count).wait_and_throw();
+        }
+    }
     std::array<float, kCinel02EnergySlots> cinel02_energy_host{};
     std::array<float, kCinel02SpeciesEnergySlots> cinel02_species_energy_host{};
     std::array<std::uint64_t, kCinel02SpeciesTerminalSlots>
@@ -4458,6 +4581,9 @@ TransportResult transport_sycl(const TransportConfig& config,
     free_device(dose_device);
     free_device(primary_survival_device);
     free_device(inelastic_reaction_device);
+    free_device(primary_terminal_counts_device);
+    free_device(first_interactions_device);
+    free_device(first_interactions_count_device);
     free_device(in_fov_dose_device);
     free_device(voxel_dose_device);
     free_device(charged_origin_voxel_dose_device);
@@ -4720,6 +4846,12 @@ TransportResult transport_sycl(const TransportConfig& config,
         std::accumulate(escaped_host.begin(), escaped_host.end(), 0.0);
     result.untracked_nuclear_energy_MeV =
         std::accumulate(untracked_host.begin(), untracked_host.end(), 0.0);
+    result.primary_inelastic_terminated_count = terminal_counts_host[0];
+    result.primary_escaped_ct_count = terminal_counts_host[1];
+    result.primary_stopped_count = terminal_counts_host[2];
+    result.primary_other_terminal_count = terminal_counts_host[3];
+    result.primary_inelastic_removed_kinetic_MeV = result.untracked_nuclear_energy_MeV;
+    result.primary_first_interactions = std::move(first_interactions_host);
     for (std::size_t i = 0; i < 18; ++i) {
         result.fred_isotope_counts[i] = fred_diag_host[i];
     }

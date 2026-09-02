@@ -212,6 +212,20 @@ inline constexpr float cinel02_simpson_hazard(
                       lambda_end_per_mm) / 6.0F;
 }
 
+struct PrimaryFirstInteractionRecord {
+    float depth_mm{0.0F};
+    float energy_MeVu{0.0F};
+    std::uint32_t section_id{0};
+    float density_g_per_cm3{0.0F};
+};
+
+struct BraggPeakMetrics {
+    double peak_depth_mm{0.0};
+    double peak_dose_MeV{0.0};
+    double r80_distal_mm{0.0};
+    double r50_distal_mm{0.0};
+};
+
 struct TransportResult {
     static constexpr std::size_t species_ledger_species_count =
         Cinel02SpeciesLedgerSchema::species_count;
@@ -283,6 +297,14 @@ struct TransportResult {
     double untracked_nuclear_energy_MeV{0.0};
     double fred_model_unassigned_MeV{0.0};
     std::uint64_t nuclear_interactions{0};
+    // Step 12 primary-only & validation counters
+    std::uint64_t primary_inelastic_terminated_count{0};
+    std::uint64_t primary_escaped_ct_count{0};
+    std::uint64_t primary_stopped_count{0};
+    std::uint64_t primary_other_terminal_count{0};
+    double primary_inelastic_removed_kinetic_MeV{0.0};
+    double primary_cutoff_stopped_energy_MeV{0.0};
+    std::vector<PrimaryFirstInteractionRecord> primary_first_interactions{};
     // Fixed-layout CINEL02 runtime ledger; zero for other nuclear models.
     static constexpr std::size_t cinel02_diagnostic_slot_count = 1668;
     std::array<std::uint64_t, cinel02_diagnostic_slot_count> cinel02_diagnostics{};
@@ -469,6 +491,15 @@ struct TransportResult {
                                     double stopping_power_MeV_per_mm,
                                     double maximum_step_mm,
                                     double maximum_relative_energy_loss);
+
+[[nodiscard]] std::vector<double> compute_idd_from_3d_voxel_dose(
+    const std::vector<double>& voxel_dose_MeV,
+    std::size_t nx, std::size_t ny, std::size_t nz);
+
+[[nodiscard]] BraggPeakMetrics compute_bragg_peak_metrics(
+    const std::vector<double>& idd_energy_MeV,
+    double bin_width_z_mm,
+    double z_min_mm = 0.0);
 
 TransportResult transport_serial(const TransportConfig& config,
                                  const StoppingPowerTable& stopping_power,

@@ -10,6 +10,7 @@
 #include "carbon/plan_run.hpp"
 #include "carbon/rng.hpp"
 #include "carbon/run_quality.hpp"
+#include "carbon/sha256.hpp"
 
 #include "carbon/stopping_power.hpp"
 #include "carbon/straggling.hpp"
@@ -5364,7 +5365,421 @@ void test_step11_schneider_production_tiny_cctg_transport() {
         require_near(s_meas, s_exact, 3.5 * sigma, "Reverse 5nm-after-face survival failed");
     }
 
-    std::filesystem::remove_all(temp_dir);
+        std::filesystem::remove_all(temp_dir);
+#endif
+}
+
+void test_step12_primary_only_mode_contract() {
+    const auto source_dir = std::filesystem::path(CARBON_SOURCE_DIR);
+    const auto xs_path = source_dir / "data/schneider/c12_schneider_inelastic_mass_xs.csv";
+
+    // =========================================================================
+    // 1. Config Validation & Mode Contract Gating
+    // =========================================================================
+    {
+        carbon::TransportConfig base_cfg;
+        base_cfg.primary_atomic_number = 6;
+        base_cfg.primary_mass_number = 12;
+        base_cfg.enable_ct_grid = true;
+        base_cfg.ct_grid_file = "dummy_grid.cctg";
+        base_cfg.ct_schneider_cross_section_file = xs_path.string();
+        base_cfg.ct_validation_mode = "primary-attenuation-only";
+        base_cfg.enable_inelastic = true;
+        base_cfg.enable_nuclear_elastic = false;
+        base_cfg.enable_secondary_transport = false;
+        base_cfg.enable_energy_straggling = false;
+        base_cfg.beam_energy_spread = 0.0;
+        base_cfg.ct_use_density_mass_spr = true;
+        base_cfg.ct_stopping_power_scale = 1.0;
+        base_cfg.initial_energy_MeVu = 200.0;
+        base_cfg.energy_cutoff_MeV = 6.0;
+        base_cfg.maximum_step_mm = 1.0;
+        base_cfg.maximum_relative_energy_loss = 0.005;
+
+        // Valid configuration passes
+        base_cfg.validate();
+        require(base_cfg.is_primary_attenuation_only_mode(), "is_primary_attenuation_only_mode should be true");
+
+        // Non-C12 rejected
+        {
+            auto bad = base_cfg;
+            bad.primary_atomic_number = 1;
+            bad.primary_mass_number = 1;
+            require_throws([&]() { bad.validate(); }, "Non-C12 projectile must be rejected");
+        }
+        // CT grid disabled rejected
+        {
+            auto bad = base_cfg;
+            bad.enable_ct_grid = false;
+            require_throws([&]() { bad.validate(); }, "enable_ct_grid = false must be rejected");
+        }
+        // Nuclear elastic enabled rejected
+        {
+            auto bad = base_cfg;
+            bad.enable_nuclear_elastic = true;
+            require_throws([&]() { bad.validate(); }, "enable_nuclear_elastic = true must be rejected");
+        }
+        // Secondary transport enabled rejected
+        {
+            auto bad = base_cfg;
+            bad.enable_secondary_transport = true;
+            require_throws([&]() { bad.validate(); }, "enable_secondary_transport = true must be rejected");
+        }
+        // Energy straggling enabled rejected
+        {
+            auto bad = base_cfg;
+            bad.enable_energy_straggling = true;
+            require_throws([&]() { bad.validate(); }, "enable_energy_straggling = true must be rejected");
+        }
+        // Energy spread > 0 rejected
+        {
+            auto bad = base_cfg;
+            bad.beam_energy_spread = 0.01;
+            require_throws([&]() { bad.validate(); }, "beam_energy_spread > 0 must be rejected");
+        }
+        // Density mass SPR disabled rejected
+        {
+            auto bad = base_cfg;
+            bad.ct_use_density_mass_spr = false;
+            require_throws([&]() { bad.validate(); }, "ct_use_density_mass_spr = false must be rejected");
+        }
+        // Stopping scale != 1.0 rejected
+        {
+            auto bad = base_cfg;
+            bad.ct_stopping_power_scale = 1.02;
+            require_throws([&]() { bad.validate(); }, "ct_stopping_power_scale != 1.0 must be rejected");
+        }
+        // Initial energy > 430 MeV/u rejected
+        {
+            auto bad = base_cfg;
+            bad.initial_energy_MeVu = 450.0;
+            require_throws([&]() { bad.validate(); }, "initial_energy_MeVu > 430.0 must be rejected");
+        }
+        // Energy cutoff < 6.0 MeV (0.5 MeV/u) rejected
+        {
+            auto bad = base_cfg;
+            bad.energy_cutoff_MeV = 3.0;
+            require_throws([&]() { bad.validate(); }, "energy_cutoff_MeV < 6.0 must be rejected");
+        }
+        // Inelastic package V2 set rejected
+        {
+            auto bad = base_cfg;
+            bad.primary_inelastic_package_v2_file = "dummy_package.csv";
+            require_throws([&]() { bad.validate(); }, "primary_inelastic_package_v2_file must be rejected");
+        }
+        // Unknown mode rejected
+        {
+            auto bad = base_cfg;
+            bad.ct_validation_mode = "invalid-validation-mode";
+            require_throws([&]() { bad.validate(); }, "invalid ct_validation_mode must be rejected");
+        }
+    }
+
+    // =========================================================================
+    // 2. SHA-256 Runtime Verification & Tamper Detection
+    // =========================================================================
+    {
+        const auto actual_hash = carbon::compute_file_sha256_hex(xs_path);
+        const std::string expected_hash =
+            "47b341324c95f874a2874ba48180a84504605f86d549d7920173d690e0aa91bb";
+        require(actual_hash == expected_hash, "c12_schneider_inelastic_mass_xs.csv SHA-256 hash mismatch");
+
+        // Tamper detection test
+        const auto temp_dir = std::filesystem::temp_directory_path() / "carbon_step12_tamper_test";
+        std::filesystem::create_directories(temp_dir);
+        const auto tampered_csv = temp_dir / "c12_schneider_inelastic_mass_xs.csv";
+        const auto tampered_meta = temp_dir / "c12_schneider_inelastic_mass_xs.metadata.json";
+
+        std::filesystem::copy_file(xs_path, tampered_csv, std::filesystem::copy_options::overwrite_existing);
+        {
+            std::ofstream meta_out(tampered_meta);
+            meta_out << "{\n  \"data_sha256\": \"" << expected_hash << "\"\n}\n";
+        }
+        {
+            std::fstream f(tampered_csv, std::ios::in | std::ios::out | std::ios::binary);
+            f.seekp(50);
+            f.put('9');
+        }
+
+        const auto tampered_hash = carbon::compute_file_sha256_hex(tampered_csv);
+        require(tampered_hash != expected_hash, "Tampered file hash should not equal original hash");
+
+        std::filesystem::remove_all(temp_dir);
+    }
+
+    // =========================================================================
+    // 3. 3D Voxel Dose to 1D IDD & Bragg Peak Metrics Helpers
+    // =========================================================================
+    {
+        // 3D Voxel Dose to 1D IDD
+        constexpr std::size_t nx = 3;
+        constexpr std::size_t ny = 3;
+        constexpr std::size_t nz = 5;
+        std::vector<double> voxel_dose(nx * ny * nz, 0.0);
+        for (std::size_t z = 0; z < nz; ++z) {
+            for (std::size_t y = 0; y < ny; ++y) {
+                for (std::size_t x = 0; x < nx; ++x) {
+                    voxel_dose[z * (nx * ny) + y * nx + x] = static_cast<double>((z + 1) * 10);
+                }
+            }
+        }
+        const auto idd = carbon::compute_idd_from_3d_voxel_dose(voxel_dose, nx, ny, nz);
+        require(idd.size() == nz, "IDD size mismatch");
+        for (std::size_t z = 0; z < nz; ++z) {
+            const double expected = (z + 1) * 10 * 9.0;
+            require_near(idd[z], expected, 1e-9, "IDD slice sum mismatch");
+        }
+
+        // Bragg Peak Metrics with known shape
+        std::vector<double> test_idd(20, 0.0);
+        for (std::size_t i = 0; i <= 10; ++i) {
+            test_idd[i] = 10.0 * static_cast<double>(i);
+        }
+        test_idd[11] = 80.0;
+        test_idd[12] = 65.0;
+        test_idd[13] = 50.0;
+        test_idd[14] = 20.0;
+        test_idd[15] = 0.0;
+
+        const auto bp = carbon::compute_bragg_peak_metrics(test_idd, 1.0, 0.0);
+        require_near(bp.peak_depth_mm, 10.5, 1e-6, "Bragg peak depth mismatch");
+        require_near(bp.peak_dose_MeV, 100.0, 1e-6, "Bragg peak dose mismatch");
+        require_near(bp.r80_distal_mm, 11.5, 1e-6, "R80 distal mismatch");
+        require_near(bp.r50_distal_mm, 13.5, 1e-6, "R50 distal mismatch");
+    }
+
+#ifdef CARBON_HAS_SYCL
+    // =========================================================================
+    // 4. GPU Primary Transport Execution under primary-attenuation-only Mode
+    // =========================================================================
+    {
+        const auto temp_dir = std::filesystem::temp_directory_path() / "carbon_step12_gpu_test";
+        std::filesystem::create_directories(temp_dir);
+        const auto cctg_file = temp_dir / "step12_ct_grid.cctg";
+
+        // Create a 10x10x20 CCTG grid, 10mm voxels, water-equivalent section 11, rho = 1.0 g/cm3
+        constexpr int nx = 10;
+        constexpr int ny = 10;
+        constexpr int nz = 20;
+        constexpr std::size_t n_voxels = nx * ny * nz;
+        carbon::CtGrid grid;
+        grid.file_version = carbon::CtGrid::version_v2;
+        grid.nx = nx;
+        grid.ny = ny;
+        grid.nz = nz;
+        grid.spacing_x_mm = 10.0;
+        grid.spacing_y_mm = 10.0;
+        grid.spacing_z_mm = 10.0;
+        grid.origin_x_mm = -50.0;
+        grid.origin_y_mm = -50.0;
+        grid.origin_z_mm = 0.0;
+        grid.density_g_per_cm3.assign(n_voxels, 1.0F);
+        grid.material_id.assign(n_voxels, 11);
+        grid.mass_sp_za_rel.resize(25, 1.0);
+        grid.write_binary(cctg_file);
+
+        const auto water_sp = carbon::StoppingPowerTable::from_csv(
+            source_dir / "data/stopping_power_water_geant4_11_3_2.csv");
+        const auto zero_xs = zero_cross_section();
+
+        // 4A: Production Schneider XS with 20000 histories
+        {
+            carbon::TransportConfig cfg;
+            cfg.phantom_length_mm = 200.0;
+            cfg.depth_bin_width_mm = 10.0;
+            cfg.enable_voxel_scoring = true;
+            cfg.voxel_bins_x = nx;
+            cfg.voxel_bins_y = ny;
+            cfg.voxel_bins_z = nz;
+            cfg.voxel_size_x_mm = 10.0;
+            cfg.voxel_size_y_mm = 10.0;
+            cfg.voxel_size_z_mm = 10.0;
+            cfg.voxel_origin_x_mm = -50.0;
+            cfg.voxel_origin_y_mm = -50.0;
+            cfg.voxel_origin_z_mm = 0.0;
+            cfg.primary_atomic_number = 6;
+            cfg.primary_mass_number = 12;
+            cfg.initial_energy_MeVu = 200.0;
+            cfg.enable_ct_grid = true;
+            cfg.ct_grid_file = cctg_file.string();
+            cfg.ct_schneider_cross_section_file = xs_path.string();
+            cfg.ct_validation_mode = "primary-attenuation-only";
+            cfg.nuclear_model = "geant4";
+            cfg.enable_inelastic = true;
+            cfg.enable_nuclear_elastic = false;
+            cfg.enable_secondary_transport = false;
+            cfg.enable_energy_straggling = false;
+            cfg.beam_energy_spread = 0.0;
+            cfg.ct_use_density_mass_spr = true;
+            cfg.ct_stopping_power_scale = 1.0;
+            cfg.energy_cutoff_MeV = 6.0;
+            cfg.number_of_histories = 20000;
+            cfg.validate();
+
+            const auto result = carbon::transport_sycl(cfg, water_sp, zero_xs, "default");
+
+            // Terminal conservation identity
+            const std::uint64_t total_terminal =
+                result.primary_inelastic_terminated_count +
+                result.primary_escaped_ct_count +
+                result.primary_stopped_count +
+                result.primary_other_terminal_count;
+            std::cout << "[step12-gpu-test] Terminal counts:\n"
+                      << "  inelastic_terminated=" << result.primary_inelastic_terminated_count << "\n"
+                      << "  escaped_ct=" << result.primary_escaped_ct_count << "\n"
+                      << "  stopped=" << result.primary_stopped_count << "\n"
+                      << "  other=" << result.primary_other_terminal_count << "\n"
+                      << "  sum=" << total_terminal << " / " << cfg.number_of_histories << "\n";
+            require(total_terminal == cfg.number_of_histories,
+                    "Terminal conservation identity violated: sum != number_of_histories");
+            require(result.primary_inelastic_terminated_count > 0,
+                    "Inelastic collisions should be observed");
+            require(result.primary_stopped_count > 0,
+                    "Stopped particles should be observed for 200 MeV/u in 200 mm water");
+
+            // Energy conservation identity
+            const double initial_e = cfg.initial_total_energy_MeV() * static_cast<double>(cfg.number_of_histories);
+            const double total_accounted =
+                result.total_deposited_energy_MeV +
+                result.primary_inelastic_removed_kinetic_MeV +
+                result.escaped_energy_MeV;
+            const double rel_energy_err = std::fabs(initial_e - total_accounted) / initial_e;
+            std::cout << "[step12-gpu-test] Energy conservation:\n"
+                      << "  initial_total_MeV=" << initial_e << "\n"
+                      << "  deposited_MeV=" << result.total_deposited_energy_MeV << "\n"
+                      << "  inelastic_removed_MeV=" << result.primary_inelastic_removed_kinetic_MeV << "\n"
+                      << "  escaped_MeV=" << result.escaped_energy_MeV << "\n"
+                      << "  accounted_MeV=" << total_accounted << "\n"
+                      << "  relative_error=" << rel_energy_err << "\n";
+            require(rel_energy_err < 1.0e-5, "Decoupled kinetic energy conservation failed");
+            require(result.physical_relative_energy_balance_error() < 1.0e-5,
+                    "Physical relative energy balance error failed");
+
+            // First interaction records
+            require(result.primary_first_interactions.size() == result.primary_inelastic_terminated_count,
+                    "primary_first_interactions size mismatch");
+            for (const auto& rec : result.primary_first_interactions) {
+                require(rec.depth_mm >= 0.0F && rec.depth_mm <= 200.0F, "Interaction depth out of bounds");
+                require(rec.energy_MeVu >= 0.5F && rec.energy_MeVu <= 200.0F + 1e-4F, "Interaction energy out of bounds");
+                require(rec.section_id == 11, "Interaction section_id mismatch");
+                require_near(rec.density_g_per_cm3, 1.0F, 1e-5F, "Interaction density mismatch");
+            }
+
+            // IDD & Bragg Peak Metrics
+            const auto voxel_idd = carbon::compute_idd_from_3d_voxel_dose(
+                result.voxel_deposited_energy_MeV, nx, ny, nz);
+            require(voxel_idd.size() == nz, "Voxel IDD size mismatch");
+            const auto bp = carbon::compute_bragg_peak_metrics(voxel_idd, 10.0, 0.0);
+            std::cout << "[step12-gpu-test] Bragg Peak Metrics:\n"
+                      << "  peak_depth_mm=" << bp.peak_depth_mm << "\n"
+                      << "  peak_dose_MeV=" << bp.peak_dose_MeV << "\n"
+                      << "  R80_distal_mm=" << bp.r80_distal_mm << "\n"
+                      << "  R50_distal_mm=" << bp.r50_distal_mm << "\n";
+            require(bp.peak_depth_mm >= 80.0 && bp.peak_depth_mm <= 100.0,
+                    "Bragg peak depth for 200 MeV/u C12 in water should be near 85-90 mm");
+        }
+
+        // 4B: Zero XS Case (100% nuclear survival)
+        {
+            std::string header_line;
+            {
+                std::ifstream in(xs_path);
+                std::getline(in, header_line);
+            }
+            const auto zero_xs_csv = temp_dir / "zero_schneider_xs.csv";
+            {
+                std::ofstream out(zero_xs_csv);
+                out << header_line << "\n";
+                for (float e = 0.5F; e <= 430.0F; e += 0.5F) {
+                    out << e;
+                    for (int s = 0; s < 25; ++s) out << ",0.0";
+                    out << "\n";
+                }
+            }
+            carbon::TransportConfig cfg_zero;
+            cfg_zero.phantom_length_mm = 200.0;
+            cfg_zero.depth_bin_width_mm = 10.0;
+            cfg_zero.primary_atomic_number = 6;
+            cfg_zero.primary_mass_number = 12;
+            cfg_zero.initial_energy_MeVu = 200.0;
+            cfg_zero.enable_ct_grid = true;
+            cfg_zero.ct_grid_file = cctg_file.string();
+            cfg_zero.ct_schneider_cross_section_file = zero_xs_csv.string();
+            cfg_zero.ct_validation_mode = "primary-attenuation-only";
+            cfg_zero.nuclear_model = "geant4";
+            cfg_zero.enable_inelastic = true;
+            cfg_zero.enable_nuclear_elastic = false;
+            cfg_zero.enable_secondary_transport = false;
+            cfg_zero.enable_energy_straggling = false;
+            cfg_zero.beam_energy_spread = 0.0;
+            cfg_zero.ct_use_density_mass_spr = true;
+            cfg_zero.ct_stopping_power_scale = 1.0;
+            cfg_zero.energy_cutoff_MeV = 6.0;
+            cfg_zero.number_of_histories = 5000;
+            cfg_zero.validate();
+
+            const auto res_zero = carbon::transport_sycl(cfg_zero, water_sp, zero_xs, "default");
+            require(res_zero.primary_inelastic_terminated_count == 0,
+                    "Zero XS should have 0 inelastic terminations");
+            require(res_zero.primary_first_interactions.empty(),
+                    "Zero XS should have empty first interaction list");
+            require(res_zero.primary_stopped_count + res_zero.primary_escaped_ct_count == cfg_zero.number_of_histories,
+                    "Zero XS all particles should stop or escape");
+        }
+
+        // 4C: Huge XS Case (100% collision near entrance)
+        {
+            std::string header_line;
+            {
+                std::ifstream in(xs_path);
+                std::getline(in, header_line);
+            }
+            const auto huge_xs_csv = temp_dir / "huge_schneider_xs.csv";
+            {
+                std::ofstream out(huge_xs_csv);
+                out << header_line << "\n";
+                for (float e = 0.5F; e <= 430.0F; e += 0.5F) {
+                    out << e;
+                    for (int s = 0; s < 25; ++s) out << ",1000.0";
+                    out << "\n";
+                }
+            }
+            carbon::TransportConfig cfg_huge;
+            cfg_huge.phantom_length_mm = 200.0;
+            cfg_huge.depth_bin_width_mm = 10.0;
+            cfg_huge.primary_atomic_number = 6;
+            cfg_huge.primary_mass_number = 12;
+            cfg_huge.initial_energy_MeVu = 200.0;
+            cfg_huge.enable_ct_grid = true;
+            cfg_huge.ct_grid_file = cctg_file.string();
+            cfg_huge.ct_schneider_cross_section_file = huge_xs_csv.string();
+            cfg_huge.ct_validation_mode = "primary-attenuation-only";
+            cfg_huge.nuclear_model = "geant4";
+            cfg_huge.enable_inelastic = true;
+            cfg_huge.enable_nuclear_elastic = false;
+            cfg_huge.enable_secondary_transport = false;
+            cfg_huge.enable_energy_straggling = false;
+            cfg_huge.beam_energy_spread = 0.0;
+            cfg_huge.ct_use_density_mass_spr = true;
+            cfg_huge.ct_stopping_power_scale = 1.0;
+            cfg_huge.energy_cutoff_MeV = 6.0;
+            cfg_huge.number_of_histories = 5000;
+            cfg_huge.validate();
+
+            const auto res_huge = carbon::transport_sycl(cfg_huge, water_sp, zero_xs, "default");
+            require(res_huge.primary_inelastic_terminated_count == cfg_huge.number_of_histories,
+                    "Huge XS should have 100% inelastic terminations");
+            require(res_huge.primary_stopped_count == 0,
+                    "Huge XS should have 0 stopped particles");
+            require(res_huge.primary_escaped_ct_count == 0,
+                    "Huge XS should have 0 escaped particles");
+            for (const auto& rec : res_huge.primary_first_interactions) {
+                require(rec.depth_mm < 1.0F, "Huge XS collision depth must be < 1 mm");
+            }
+        }
+
+        std::filesystem::remove_all(temp_dir);
+    }
 #endif
 }
 
@@ -5481,6 +5896,7 @@ int main(int argc, char** argv) {
         run("test_step11_schneider_step_energy_error_bound", test_step11_schneider_step_energy_error_bound);
         run("test_step11_schneider_primary_mode_safety", test_step11_schneider_primary_mode_safety);
         run("test_step11_schneider_production_tiny_cctg_transport", test_step11_schneider_production_tiny_cctg_transport);
+        run("test_step12_primary_only_mode_contract", test_step12_primary_only_mode_contract);
         std::cout << "All carbon_tests passed\n";
         return EXIT_SUCCESS;
     } catch (const std::exception& error) {

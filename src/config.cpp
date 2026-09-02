@@ -665,6 +665,50 @@ void TransportConfig::validate() const {
             }
         }
     }
+    if (!ct_validation_mode.empty() && ct_validation_mode != "none") {
+        if (ct_validation_mode != "primary-attenuation-only") {
+            throw std::invalid_argument("Unknown ct_validation_mode: '" + ct_validation_mode +
+                                        "'; supported modes: 'none', 'primary-attenuation-only'");
+        }
+        if (primary_atomic_number != 6 || primary_mass_number != 12) {
+            throw std::invalid_argument("ct_validation_mode 'primary-attenuation-only' requires C12 projectile (Z=6, A=12)");
+        }
+        if (!enable_ct_grid) {
+            throw std::invalid_argument("ct_validation_mode 'primary-attenuation-only' requires enable_ct_grid = true");
+        }
+        if (ct_schneider_cross_section_file.empty()) {
+            throw std::invalid_argument("ct_validation_mode 'primary-attenuation-only' requires ct_schneider_cross_section_file");
+        }
+        if (enable_nuclear_elastic) {
+            throw std::invalid_argument("ct_validation_mode 'primary-attenuation-only' requires enable_nuclear_elastic = false");
+        }
+        if (enable_secondary_transport) {
+            throw std::invalid_argument("ct_validation_mode 'primary-attenuation-only' requires enable_secondary_transport = false");
+        }
+        if (enable_energy_straggling) {
+            throw std::invalid_argument("ct_validation_mode 'primary-attenuation-only' requires enable_energy_straggling = false");
+        }
+        if (beam_energy_spread != 0.0) {
+            throw std::invalid_argument("ct_validation_mode 'primary-attenuation-only' requires beam_energy_spread = 0.0");
+        }
+        if (!ct_use_density_mass_spr) {
+            throw std::invalid_argument("ct_validation_mode 'primary-attenuation-only' requires ct_use_density_mass_spr = true");
+        }
+        if (std::abs(ct_stopping_power_scale - 1.0) > 1e-6) {
+            throw std::invalid_argument("ct_validation_mode 'primary-attenuation-only' requires ct_stopping_power_scale = 1.0");
+        }
+        if (initial_energy_MeVu > 430.0 + 1e-5) {
+            throw std::invalid_argument("ct_validation_mode 'primary-attenuation-only' requires initial_energy_MeVu <= 430.0 MeV/u, got " +
+                                        std::to_string(initial_energy_MeVu));
+        }
+        if (energy_cutoff_MeV < 6.0 - 1e-5) {
+            throw std::invalid_argument("ct_validation_mode 'primary-attenuation-only' requires energy_cutoff_MeV >= 6.0 MeV (>= 0.5 MeV/u for C12), got " +
+                                        std::to_string(energy_cutoff_MeV));
+        }
+        if (!primary_inelastic_package_v2_file.empty()) {
+            throw std::invalid_argument("ct_validation_mode 'primary-attenuation-only' forbids CINEL package / final-state replay");
+        }
+    }
     if (!std::isfinite(straggling_scale) || straggling_scale < 0.0) {
         throw std::invalid_argument("straggling_scale must be finite and nonnegative");
     }
@@ -1415,6 +1459,9 @@ TransportConfig load_config(const std::filesystem::path& path) {
         values, "ct_use_density_mass_spr", config.ct_use_density_mass_spr);
     config.ct_stopping_power_scale = parse_number(
         values, "ct_stopping_power_scale", config.ct_stopping_power_scale);
+    if (const auto it = values.find("ct_validation_mode"); it != values.end()) {
+        config.ct_validation_mode = it->second;
+    }
     if (values.find("ct_grid_file") != values.end() &&
         values.find("enable_ct_grid") == values.end()) {
         config.enable_ct_grid = true;
