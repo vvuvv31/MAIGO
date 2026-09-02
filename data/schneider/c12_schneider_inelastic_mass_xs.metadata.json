@@ -9,8 +9,8 @@
   "schneider_source_path": "data/HUtoMaterialSchneider.txt",
   "schneider_sha256": "5022cd89617b28dbd8ee8bf8b095ea20cfd99f6405218693c0df238b3617a139",
   "extractor_git_commit": "38a5dd27e39b7cd79a4d1f72710810417ca03934",
-  "compiler_git_commit": "0113e0f3285b7b8af0eacb9710ddaddc24c9e642",
-  "raw_campaign_manifest_sha256": "ff09ce826f488cead789de981ee988fe0563ab8925f5f978f1fa585eff34a008",
+  "compiler_git_commit": "f1e3d03b7f0975dd283f54c5c81d173cf310036f",
+  "raw_campaign_manifest_sha256": "584c6962383c1ac5bbdf0a31e5c78cc61c6215428c656ce48294afb36342ed9c",
   "energy_min_MeVu": 0.5,
   "energy_max_MeVu": 430.0,
   "energy_grid": {
