@@ -1,0 +1,3 @@
+# Cryptographic anchor for external Step 07 evidence stored under /mnt/sda/wuwei/maigo-ct-schneider/evidence/step-07/
+9882a45ab99518de1c9bd4a4ab5233411080e751546205d9fc0d0dbbe9a143ec  compiler-audit.json
+b30871f8b774fd33a867d263a22d595334041b48041a3c29143748cbe911bd35  run-manifest.json

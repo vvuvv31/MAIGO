@@ -53,6 +53,7 @@ add_library(carbon_core
     src/multiple_scattering.cpp
     src/run_quality.cpp
     src/stopping_power.cpp
+    src/schneider_rate_table.cpp
     src/topas_spots.cpp
     src/tps_source.cpp
     src/transport_cpu.cpp

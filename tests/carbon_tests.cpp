@@ -2,6 +2,7 @@
 #include "carbon/io.hpp"
 #include "carbon/minibeam_collimator.hpp"
 #include "carbon/cross_section.hpp"
+#include "carbon/schneider_rate_table.hpp"
 #include "carbon/electron_transport.hpp"
 #include "carbon/energy_loss_fluctuation.hpp"
 #include "carbon/multiple_scattering.hpp"
@@ -4107,6 +4108,79 @@ void test_c12_inelastic_unit_conversions_and_sample_rows() {
                  "Atom density cm3 -> mm3 conversion mismatch for Ca");
 }
 
+void test_compiled_schneider_c12_rate_products() {
+    // 1. Verify CSV parsing via CrossSectionTable::from_schneider_csv
+    const auto csv_tables = carbon::CrossSectionTable::from_schneider_csv(
+        "data/schneider/c12_schneider_inelastic_mass_xs.csv");
+    require(csv_tables.size() == 25, "Compiled CSV must have exactly 25 section tables");
+    for (std::size_t s = 0; s < csv_tables.size(); ++s) {
+        require(csv_tables[s].energies().size() == 860, "Compiled CSV section must have 860 energy nodes");
+        require_near(csv_tables[s].energies().front(), 0.5, 1e-9, "CSV energy start mismatch");
+        require_near(csv_tables[s].energies().back(), 430.0, 1e-9, "CSV energy end mismatch");
+    }
+
+    // 2. Verify Binary parsing via SchneiderRateTable::from_binary
+    const auto rate_table = carbon::SchneiderRateTable::from_binary(
+        "data/schneider/schneider_inelastic_rates_v1.bin",
+        "data/schneider/schneider_inelastic_rates_v1.metadata.json");
+
+    require_near(rate_table.energy_min_mevu(), 0.5, 1e-9, "Rate table min energy mismatch");
+    require_near(rate_table.energy_max_mevu(), 430.0, 1e-9, "Rate table max energy mismatch");
+    require_near(rate_table.energy_step_mevu(), 0.5, 1e-9, "Rate table step energy mismatch");
+
+    // Canonical target index lookup checks
+    require(carbon::SchneiderRateTable::target_index_from_z(1) == 0, "Target H Z=1 index must be 0");
+    require(carbon::SchneiderRateTable::target_index_from_z(6) == 1, "Target C Z=6 index must be 1");
+    require(carbon::SchneiderRateTable::target_index_from_z(8) == 3, "Target O Z=8 index must be 3");
+    require(carbon::SchneiderRateTable::target_index_from_z(20) == 9, "Target Ca Z=20 index must be 9");
+    require(carbon::SchneiderRateTable::target_index_from_z(22) == 12, "Target Ti Z=22 index must be 12");
+    require_throws<std::invalid_argument>(
+        []() { (void)carbon::SchneiderRateTable::target_index_from_z(99); },
+        "Unsupported target Z must throw invalid_argument");
+
+    // 3. Cross-validate binary against CSV for all 25 sections and all 860 energies
+    for (std::size_t s = 0; s < 25; ++s) {
+        for (std::size_t e_idx = 0; e_idx < 860; ++e_idx) {
+            const double bin_total = rate_table.mass_total_rate(s, e_idx);
+            const double csv_total = csv_tables[s].values()[e_idx];
+            require_near(bin_total, csv_total, 1e-10, "Binary total vs CSV total mismatch");
+
+            double partial_sum = 0.0;
+            for (std::size_t t = 0; t < 13; ++t) {
+                const double part = rate_table.mass_partial_rate(s, t, e_idx);
+                require(part >= 0.0 && std::isfinite(part), "Partial rate must be finite and non-negative");
+                partial_sum += part;
+            }
+            require_near(partial_sum, bin_total, 1e-12, "Partial sum != total in binary rate table");
+        }
+
+        // Test continuous interpolation consistency
+        const double interp_bin_123 = rate_table.interpolate_mass_total(s, 123.45);
+        const double interp_csv_123 = csv_tables[s].interpolate(123.45);
+        require_near(interp_bin_123, interp_csv_123, 1e-5, "Interpolation consistency at 123.45 MeV/u");
+    }
+
+    // 4. Negative tests for binary loader
+    const auto test_malformed_bin = [](const std::string& name, const std::string& content) {
+        const auto path = std::filesystem::temp_directory_path() / name;
+        std::ofstream out(path, std::ios::binary);
+        out.write(content.data(), content.size());
+        out.close();
+
+        bool threw = false;
+        try {
+            carbon::SchneiderRateTable::from_binary(path);
+        } catch (const std::exception&) {
+            threw = true;
+        }
+        std::filesystem::remove(path);
+        require(threw, "SchneiderRateTable::from_binary accepted malformed binary data");
+    };
+
+    test_malformed_bin("bad_magic.bin", "BADMAGIC_12345678901234567890");
+    test_malformed_bin("truncated.bin", "SCHNRATE");
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -4187,6 +4261,7 @@ int main(int argc, char** argv) {
         run("test_schneider_material_table_parser", test_schneider_material_table_parser);
         run("test_schneider_c12_inelastic_cross_section_table", test_schneider_c12_inelastic_cross_section_table);
         run("test_c12_inelastic_unit_conversions_and_sample_rows", test_c12_inelastic_unit_conversions_and_sample_rows);
+        run("test_compiled_schneider_c12_rate_products", test_compiled_schneider_c12_rate_products);
 #ifdef CARBON_HAS_SYCL
         run("test_sycl_tps_source_arbitrary_gantry_transport", test_sycl_tps_source_arbitrary_gantry_transport);
 #endif

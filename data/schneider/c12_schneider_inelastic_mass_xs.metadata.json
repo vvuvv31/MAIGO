@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "data_filename": "c12_schneider_inelastic_mass_xs.csv",
+  "data_sha256": "47b341324c95f874a2874ba48180a84504605f86d549d7920173d690e0aa91bb",
+  "topas_version": "4.2.p3",
+  "geant4_version": "11.03.p02",
+  "physics_list": "g4em-standard_opt4 + g4ion-binarycascade",
+  "process_name": "ionInelastic",
+  "schneider_source_path": "data/HUtoMaterialSchneider.txt",
+  "schneider_sha256": "5022cd89617b28dbd8ee8bf8b095ea20cfd99f6405218693c0df238b3617a139",
+  "extractor_git_commit": "38a5dd27e39b7cd79a4d1f72710810417ca03934",
+  "compiler_git_commit": "044f743a2242ddc8f40cd61eb817d0524ca50174",
+  "raw_campaign_manifest_sha256": "ff09ce826f488cead789de981ee988fe0563ab8925f5f978f1fa585eff34a008",
+  "energy_min_MeVu": 0.5,
+  "energy_max_MeVu": 430.0,
+  "energy_step_MeVu": 0.5,
+  "energy_grid_nodes": 860,
+  "projectiles": [
+    "C12"
+  ],
+  "sections_count": 25,
+  "dimension_order": [
+    "energy_MeV_per_u",
+    "section_00_to_24_mass_xs"
+  ],
+  "units": {
+    "energy": "MeV/u",
+    "mass_cross_section": "mm^-1 / (g/cm^3)"
+  },
+  "generation_timestamp_utc": "2026-09-02T08:00:00Z",
+  "validation_report_sha256": "ab5ca8dac1f114f3b0ffa0bd0998bb2eb074dfd8ff4ce44fcf43898de5fa0237"
+}
