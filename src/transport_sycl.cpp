@@ -70,6 +70,51 @@ float cuda_clock_warmup(sycl::queue& queue) {
         std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count());
 }
 
+struct DeviceMemoryTracker {
+    sycl::queue& queue;
+    std::vector<void*> allocations{};
+    bool active{true};
+
+    DeviceMemoryTracker(sycl::queue& q) : queue(q) {}
+
+    template <typename T>
+    T* allocate(std::size_t count) {
+        auto* ptr = sycl::malloc_device<T>(count, queue);
+        if (ptr != nullptr) {
+            allocations.push_back(ptr);
+        }
+        return ptr;
+    }
+
+    void track(void* ptr) {
+        if (ptr != nullptr) {
+            allocations.push_back(ptr);
+        }
+    }
+
+    void free(void* ptr) {
+        if (ptr != nullptr) {
+            auto it = std::find(allocations.begin(), allocations.end(), ptr);
+            if (it != allocations.end()) {
+                allocations.erase(it);
+            }
+            sycl::free(ptr, queue);
+        }
+    }
+
+    ~DeviceMemoryTracker() {
+        if (active) {
+            for (auto* ptr : allocations) {
+                if (ptr != nullptr) {
+                    try {
+                        sycl::free(ptr, queue);
+                    } catch (...) {}
+                }
+            }
+        }
+    }
+};
+
 }  // namespace
 
 TransportResult transport_sycl(const TransportConfig& config,
@@ -194,10 +239,10 @@ TransportResult transport_sycl(const TransportConfig& config,
     const auto backend = queue.get_backend();
     const bool is_cuda_backend = backend == sycl::backend::ext_oneapi_cuda;
 
+    DeviceMemoryTracker mem_tracker{queue};
+
     const auto free_device = [&](auto* pointer) {
-        if (pointer != nullptr) {
-            sycl::free(pointer, queue);
-        }
+        mem_tracker.free(pointer);
     };
 
     const auto number_of_histories = config.number_of_histories;
@@ -213,26 +258,26 @@ TransportResult transport_sycl(const TransportConfig& config,
     }
 
     float* table_device = context != nullptr ? context->impl_->table_device
-                                            : sycl::malloc_device<float>(table_size, queue);
+                                            : mem_tracker.allocate<float>(table_size);
     float* energy_grid_device =
         context != nullptr ? context->impl_->energy_grid_device
                            : (config.enable_csda_range_energy_loss
-                                  ? sycl::malloc_device<float>(table_size, queue)
+                                  ? mem_tracker.allocate<float>(table_size)
                                   : nullptr);
     float* cumulative_range_device =
         context != nullptr ? context->impl_->cumulative_range_device
                            : (config.enable_csda_range_energy_loss
-                                  ? sycl::malloc_device<float>(table_size, queue)
+                                  ? mem_tracker.allocate<float>(table_size)
                                   : nullptr);
     float* cross_section_device =
         context != nullptr ? context->impl_->cross_section_device
-                           : sycl::malloc_device<float>(cross_section_table_size, queue);
+                           : mem_tracker.allocate<float>(cross_section_table_size);
     float* target_h_fraction_device =
-        sycl::malloc_device<float>(cross_section_table_size, queue);
+        mem_tracker.allocate<float>(cross_section_table_size);
 
     const auto free_immutable_device = [&](auto* pointer) {
         if (!reuse_immutable_buffers && pointer != nullptr) {
-            sycl::free(pointer, queue);
+            mem_tracker.free(pointer);
         }
     };
 

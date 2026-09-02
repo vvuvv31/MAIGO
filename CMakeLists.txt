@@ -156,6 +156,13 @@ if(BUILD_TESTING)
         endif()
     endif()
     target_link_libraries(carbon_tests PRIVATE carbon_core)
+    if(CARBON_ENABLE_SYCL)
+        target_compile_options(carbon_tests PRIVATE -fsycl)
+        if(CARBON_SYCL_TARGETS)
+            target_compile_options(carbon_tests PRIVATE
+                -fsycl-targets=${CARBON_SYCL_TARGETS})
+        endif()
+    endif()
     target_compile_definitions(carbon_tests PRIVATE
         CARBON_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
     add_test(NAME carbon_tests COMMAND carbon_tests)
