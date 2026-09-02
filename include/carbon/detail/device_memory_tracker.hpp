@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <functional>
 #include <vector>
 #include <sycl/sycl.hpp>
 
@@ -12,6 +13,7 @@ namespace carbon::detail {
 struct DeviceMemoryTracker {
     sycl::queue& queue;
     std::vector<void*> allocations{};
+    std::function<void(void*)> on_free_hook{};
 
     explicit DeviceMemoryTracker(sycl::queue& q) : queue(q) {}
 
@@ -26,8 +28,16 @@ struct DeviceMemoryTracker {
             return nullptr;
         }
         auto* ptr = sycl::malloc_device<T>(count, queue);
-        if (ptr != nullptr) {
+        if (ptr == nullptr) {
+            return nullptr;
+        }
+        try {
             allocations.push_back(ptr);
+        } catch (...) {
+            try {
+                sycl::free(ptr, queue);
+            } catch (...) {}
+            throw;
         }
         return ptr;
     }
@@ -35,7 +45,10 @@ struct DeviceMemoryTracker {
     template <typename T>
     T* track(T* ptr) {
         if (ptr != nullptr) {
-            allocations.push_back(static_cast<void*>(ptr));
+            auto it = std::find(allocations.begin(), allocations.end(), static_cast<void*>(ptr));
+            if (it == allocations.end()) {
+                allocations.push_back(static_cast<void*>(ptr));
+            }
         }
         return ptr;
     }
@@ -44,8 +57,11 @@ struct DeviceMemoryTracker {
         if (ptr != nullptr) {
             auto it = std::find(allocations.begin(), allocations.end(), ptr);
             if (it != allocations.end()) {
-                allocations.erase(it);
                 sycl::free(ptr, queue);
+                allocations.erase(it);
+                if (on_free_hook) {
+                    on_free_hook(ptr);
+                }
             }
         }
     }
@@ -63,6 +79,9 @@ struct DeviceMemoryTracker {
             if (ptr != nullptr) {
                 try {
                     sycl::free(ptr, queue);
+                    if (on_free_hook) {
+                        on_free_hook(ptr);
+                    }
                 } catch (...) {}
             }
         }

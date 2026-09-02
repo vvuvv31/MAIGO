@@ -6354,7 +6354,7 @@ void test_step12_device_memory_tracker_exception_safety() {
     }
     auto queue = carbon::make_sycl_queue("default");
 
-    // 1. Basic allocate, tracking, and manual free
+    // 1. Basic allocate, tracking, idempotent track, and manual free
     {
         carbon::detail::DeviceMemoryTracker tracker{queue};
         require(tracker.active_allocation_count() == 0, "Tracker initial count must be 0");
@@ -6372,6 +6372,11 @@ void test_step12_device_memory_tracker_exception_safety() {
         auto* raw = sycl::malloc_device<uint32_t>(10, queue);
         tracker.track(raw);
         require(tracker.active_allocation_count() == 3, "Tracker count must increment after track");
+
+        // Idempotent duplicate track: must not add duplicate entry
+        tracker.track(raw);
+        tracker.track(p1);
+        require(tracker.active_allocation_count() == 3, "Idempotent track must not add duplicate entry");
 
         // Free p1 and raw
         tracker.free(p1);
@@ -6393,16 +6398,18 @@ void test_step12_device_memory_tracker_exception_safety() {
         require(tracker.active_allocation_count() == 0, "Tracker count remains 0");
     }
 
-    // 3. Fault injection / exception unwinding safety test
+    // 3. Fault injection / exception unwinding safety test with exact free count verification
     {
         bool caught_exception = false;
+        std::size_t freed_count = 0;
         try {
             carbon::detail::DeviceMemoryTracker tracker{queue};
+            tracker.on_free_hook = [&](void*) { ++freed_count; };
             for (int i = 0; i < 10; ++i) {
                 auto* ptr = tracker.allocate<float>(1024);
                 require(ptr != nullptr, "Allocation in loop must succeed");
                 if (i == 5) {
-                    // Simulate runtime fault injection mid-pipeline
+                    // Simulate runtime fault injection mid-pipeline after 6 allocations (i = 0..5)
                     throw std::runtime_error("Simulated fault injection at allocation step 5");
                 }
             }
@@ -6412,6 +6419,8 @@ void test_step12_device_memory_tracker_exception_safety() {
             caught_exception = true;
         }
         require(caught_exception, "Fault injection exception must be caught");
+        require(freed_count == 6, "Destructor must have invoked free on exactly 6 active allocations, got " +
+                                  std::to_string(freed_count));
     }
 }
 #endif

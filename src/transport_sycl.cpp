@@ -52,8 +52,8 @@ namespace {
 
 using carbon::detail::DeviceMemoryTracker;
 
-float cuda_clock_warmup(sycl::queue& queue) {
-    auto* dummy = sycl::malloc_device<float>(1024, queue);
+float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
+    auto* dummy = tracker.allocate<float>(1024);
     if (dummy == nullptr) {
         return 0.0F;
     }
@@ -68,7 +68,7 @@ float cuda_clock_warmup(sycl::queue& queue) {
             }
         });
     event.wait_and_throw();
-    sycl::free(dummy, queue);
+    tracker.free(dummy);
     return static_cast<float>(
         std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count());
 }
@@ -1374,7 +1374,7 @@ TransportResult transport_sycl(const TransportConfig& config,
     const auto energy_cutoff_MeV = static_cast<float>(config.energy_cutoff_MeV);
 
     if (is_cuda_backend && !config.enable_minibeam) {
-        cuda_clock_warmup(queue);
+        cuda_clock_warmup(queue, mem_tracker);
     }
 
     const auto enable_energy_straggling = config.enable_energy_straggling;
