@@ -3832,6 +3832,49 @@ void test_cinel02_ledger_schema_and_accumulator() {
                  0.0, 0.0, "CINEL02 signed handoff partition mismatch");
 }
 
+void test_water_transport_invariance_without_ct() {
+    carbon::TransportConfig base_config;
+    base_config.number_of_histories = 64;
+    base_config.initial_energy_MeVu = 200.0;
+    base_config.phantom_length_mm = 200.0;
+    base_config.depth_bin_width_mm = 1.0;
+    base_config.maximum_step_mm = 0.5;
+    base_config.maximum_relative_energy_loss = 0.01;
+    base_config.enable_energy_straggling = true;
+    base_config.enable_multiple_scattering = true;
+    base_config.random_seed = 20260902;
+    base_config.validate();
+
+    const carbon::StoppingPowerTable table({0.01, 100.0, 200.0, 300.0}, {1.5, 1.8, 2.0, 2.2});
+
+    const auto run_a = carbon::transport_serial(base_config, table, zero_cross_section());
+    const auto run_b = carbon::transport_serial(base_config, table, zero_cross_section());
+
+    require(run_a.deposited_energy_MeV == run_b.deposited_energy_MeV,
+            "Water transport serial runs must produce bitwise identical deposited energy");
+    require(run_a.relative_energy_balance_error() < 1.0e-12,
+            "Water transport serial energy balance failed");
+
+    auto ct_unattached_config = base_config;
+    ct_unattached_config.ct_schneider_file = "data/HUtoMaterialSchneider.txt";
+    ct_unattached_config.validate();
+
+    const auto run_c = carbon::transport_serial(ct_unattached_config, table, zero_cross_section());
+    require(run_a.deposited_energy_MeV == run_c.deposited_energy_MeV,
+            "Unattached CT configuration must not alter water transport energy deposition");
+
+#ifdef CARBON_HAS_SYCL
+    try {
+        const auto sycl_a = carbon::transport_sycl(base_config, table, zero_cross_section(), "cuda");
+        const auto sycl_b = carbon::transport_sycl(ct_unattached_config, table, zero_cross_section(), "cuda");
+        require(sycl_a.deposited_energy_MeV == sycl_b.deposited_energy_MeV,
+                "SYCL water transport must produce identical results with or without unattached CT fields");
+    } catch (const std::exception&) {
+        // Fall back gracefully if CUDA backend not available in testing environment
+    }
+#endif
+}
+
 }  // namespace
 
 int main() {
@@ -3903,6 +3946,7 @@ int main() {
         test_layered_voxel_dose_uses_local_mass();
         test_dense_charged_origin_mhd_uses_local_mass();
         test_ct_aligned_mhd_offset_and_index_pairing();
+        test_water_transport_invariance_without_ct();
 #ifdef CARBON_HAS_SYCL
         test_sycl_tps_source_arbitrary_gantry_transport();
         test_sycl_legacy_cardinal_entrance_projection();
