@@ -9,7 +9,8 @@ Enforces:
   - Byte-for-byte determinism
   - Strict canonical ordering: [energy, section] for CSV, [section, target, energy] for binary
   - Strict partial sum closure: sum_target mass_partial == mass_total
-  - Exact 25 sections, 13 canonical target Zs, 860 energy nodes
+  - Exact 25 sections, 13 canonical target Zs, 860 uniform energy nodes (0.5 to 430.0 MeV/u, step 0.5)
+  - Introspected provenance from raw manifest & JSON (fails fast on mixed provenance)
   - Rejection of duplicates, missing keys, smoothing, oxygen aliasing, or corrupted provenance
 """
 
@@ -39,6 +40,7 @@ CANONICAL_TARGETS = [
     {"name": "Titanium",   "z": 22},
 ]
 
+CANONICAL_TARGET_NAMES = [t["name"] for t in CANONICAL_TARGETS]
 CANONICAL_Z_ORDER = [t["z"] for t in CANONICAL_TARGETS]
 EXPECTED_SECTIONS = 25
 EXPECTED_TARGETS = 13
@@ -65,7 +67,7 @@ def compile_rates(raw_manifest_path, raw_json_path, output_dir, evidence_dir, gi
     schneider_txt = os.path.join(repo_dir, "data/HUtoMaterialSchneider.txt")
     schneider_sha256 = sha256_file(schneider_txt)
 
-    # 1. Read & Validate Raw Manifest
+    # 1. Read & Validate Raw Manifest (Provenance Introspection)
     with open(raw_manifest_path) as f:
         manifest = json.load(f)
 
@@ -76,13 +78,27 @@ def compile_rates(raw_manifest_path, raw_json_path, output_dir, evidence_dir, gi
     if not manifest.get("quality_gate_passed", False):
         raise ValueError("Raw manifest indicates quality gate failed!")
 
+    topas_ver = manifest.get("topas_version")
+    if not topas_ver or not isinstance(topas_ver, str):
+        raise ValueError("Raw manifest missing or invalid topas_version")
+
+    geant4_ver = manifest.get("geant4_version")
+    if not geant4_ver or not isinstance(geant4_ver, str):
+        raise ValueError("Raw manifest missing or invalid geant4_version")
+
+    manifest_proc = manifest.get("process_name")
+    if not manifest_proc or manifest_proc != "ionInelastic":
+        raise ValueError(f"Raw manifest invalid or missing inelastic process_name: {manifest_proc}")
+
     raw_json_name = os.path.basename(raw_json_path)
+    if raw_json_name not in manifest.get("files", {}):
+        raise ValueError(f"Raw manifest does not register file: {raw_json_name}")
     expected_json_sha = manifest["files"][raw_json_name]["sha256"]
     actual_json_sha = sha256_file(raw_json_path)
     if expected_json_sha != actual_json_sha:
         raise ValueError(f"Raw JSON SHA mismatch: {actual_json_sha} != {expected_json_sha}")
 
-    # Use fixed timestamp from raw manifest to ensure byte-for-byte reproducibility
+    # Fixed timestamp from raw manifest to ensure byte-for-byte reproducibility
     fixed_timestamp = manifest.get("generation_timestamp_utc", "2026-09-02T08:00:00Z")
     extractor_commit = manifest.get("git_commit", "unknown")
 
@@ -105,8 +121,10 @@ def compile_rates(raw_manifest_path, raw_json_path, output_dir, evidence_dir, gi
         raise ValueError(f"Unsupported projectile: {raw_data.get('projectile')}")
 
     prov = raw_data.get("process_provenance", {})
-    if prov.get("process_name") != "ionInelastic":
-        raise ValueError(f"Invalid process provenance name: {prov.get('process_name')}")
+    if prov.get("process_name") != manifest_proc:
+        raise ValueError(f"Process provenance mismatch between manifest ({manifest_proc}) and raw JSON ({prov.get('process_name')})")
+    if prov.get("process_type_name") != "fHadronic" or prov.get("process_sub_type_name") != "fHadronInelastic":
+        raise ValueError(f"Process type/subtype mismatch: {prov.get('process_type_name')}/{prov.get('process_sub_type_name')}")
 
     sections = raw_data.get("sections", [])
     if len(sections) != EXPECTED_SECTIONS:
@@ -131,6 +149,14 @@ def compile_rates(raw_manifest_path, raw_json_path, output_dir, evidence_dir, gi
 
         for e_idx, pt in enumerate(grid):
             e_mevu = round(pt["energy_mevu"], 6)
+            expected_e = round(ENERGY_MIN + e_idx * ENERGY_STEP, 6)
+
+            # Strict uniform grid validation: E[i] == 0.5 + 0.5*i
+            if abs(e_mevu - expected_e) > 1e-4:
+                raise ValueError(
+                    f"Energy grid deviation at section {s_idx}, node {e_idx}: got {e_mevu}, expected {expected_e}"
+                )
+
             if s_idx == 0:
                 energy_grid.append(e_mevu)
             else:
@@ -171,6 +197,8 @@ def compile_rates(raw_manifest_path, raw_json_path, output_dir, evidence_dir, gi
                 raise ValueError(f"Partial sum discrepancy exceeded at s={s_idx}, e={e_mevu}: {diff:.3e}")
 
     assert len(seen_keys) == EXPECTED_SECTIONS * EXPECTED_TARGETS * EXPECTED_ENERGIES
+    if len(energy_grid) != EXPECTED_ENERGIES or abs(energy_grid[0] - ENERGY_MIN) > 1e-6 or abs(energy_grid[-1] - ENERGY_MAX) > 1e-6:
+        raise ValueError(f"Energy grid bounds mismatch: expected [{ENERGY_MIN}, {ENERGY_MAX}] ({EXPECTED_ENERGIES} nodes), got [{energy_grid[0]}, {energy_grid[-1]}] ({len(energy_grid)} nodes)")
 
     # 3. Generate c12_schneider_inelastic_mass_xs.csv (Deterministic Atomic Write)
     csv_filename = "c12_schneider_inelastic_mass_xs.csv"
@@ -186,7 +214,6 @@ def compile_rates(raw_manifest_path, raw_json_path, output_dir, evidence_dir, gi
 
         for e_idx in range(EXPECTED_ENERGIES):
             e_val = energy_grid[e_idx]
-            # Format integer energies as X or X.0, step energies cleanly
             f.write(f"{e_val:g}")
             for s in range(EXPECTED_SECTIONS):
                 f.write(f",{mass_total_tensor[s][e_idx]:.10e}")
@@ -195,15 +222,15 @@ def compile_rates(raw_manifest_path, raw_json_path, output_dir, evidence_dir, gi
     os.replace(csv_tmp, csv_path)
     csv_sha256 = sha256_file(csv_path)
 
-    # Write CSV Metadata
+    # Write CSV Metadata (Conforms strictly to README schema)
     csv_meta = {
         "schema_version": 1,
         "data_filename": csv_filename,
         "data_sha256": csv_sha256,
-        "topas_version": "4.2.p3",
-        "geant4_version": "11.03.p02",
+        "topas_version": topas_ver,
+        "geant4_version": geant4_ver,
         "physics_list": "g4em-standard_opt4 + g4ion-binarycascade",
-        "process_name": prov.get("process_name", "ionInelastic"),
+        "process_name": manifest_proc,
         "schneider_source_path": "data/HUtoMaterialSchneider.txt",
         "schneider_sha256": schneider_sha256,
         "extractor_git_commit": extractor_commit,
@@ -211,10 +238,16 @@ def compile_rates(raw_manifest_path, raw_json_path, output_dir, evidence_dir, gi
         "raw_campaign_manifest_sha256": sha256_file(raw_manifest_path),
         "energy_min_MeVu": ENERGY_MIN,
         "energy_max_MeVu": ENERGY_MAX,
-        "energy_step_MeVu": ENERGY_STEP,
-        "energy_grid_nodes": EXPECTED_ENERGIES,
+        "energy_grid": {
+            "type": "uniform",
+            "min_MeVu": ENERGY_MIN,
+            "max_MeVu": ENERGY_MAX,
+            "step_MeVu": ENERGY_STEP,
+            "nodes": EXPECTED_ENERGIES
+        },
         "projectiles": ["C12"],
         "sections_count": EXPECTED_SECTIONS,
+        "target_elements": CANONICAL_TARGET_NAMES,
         "dimension_order": ["energy_MeV_per_u", "section_00_to_24_mass_xs"],
         "units": {
             "energy": "MeV/u",
@@ -267,17 +300,17 @@ def compile_rates(raw_manifest_path, raw_json_path, output_dir, evidence_dir, gi
     os.replace(bin_tmp, bin_path)
     bin_sha256 = sha256_file(bin_path)
 
-    # Write Binary Metadata
+    # Write Binary Metadata (Conforms strictly to README schema)
     bin_meta = {
         "schema_version": 1,
         "data_filename": bin_filename,
         "data_sha256": bin_sha256,
         "binary_magic": "SCHNRATE",
         "binary_version": 1,
-        "topas_version": "4.2.p3",
-        "geant4_version": "11.03.p02",
+        "topas_version": topas_ver,
+        "geant4_version": geant4_ver,
         "physics_list": "g4em-standard_opt4 + g4ion-binarycascade",
-        "process_name": prov.get("process_name", "ionInelastic"),
+        "process_name": manifest_proc,
         "schneider_source_path": "data/HUtoMaterialSchneider.txt",
         "schneider_sha256": schneider_sha256,
         "extractor_git_commit": extractor_commit,
@@ -285,12 +318,17 @@ def compile_rates(raw_manifest_path, raw_json_path, output_dir, evidence_dir, gi
         "raw_campaign_manifest_sha256": sha256_file(raw_manifest_path),
         "energy_min_MeVu": ENERGY_MIN,
         "energy_max_MeVu": ENERGY_MAX,
-        "energy_step_MeVu": ENERGY_STEP,
-        "energy_grid_nodes": EXPECTED_ENERGIES,
+        "energy_grid": {
+            "type": "uniform",
+            "min_MeVu": ENERGY_MIN,
+            "max_MeVu": ENERGY_MAX,
+            "step_MeVu": ENERGY_STEP,
+            "nodes": EXPECTED_ENERGIES
+        },
         "projectiles": ["C12"],
         "sections_count": EXPECTED_SECTIONS,
         "targets_count": EXPECTED_TARGETS,
-        "target_elements": [t["name"] for t in CANONICAL_TARGETS],
+        "target_elements": CANONICAL_TARGET_NAMES,
         "target_z_order": CANONICAL_Z_ORDER,
         "dimension_order": {
             "partial_rates": ["section", "target", "energy"],
@@ -315,6 +353,9 @@ def compile_rates(raw_manifest_path, raw_json_path, output_dir, evidence_dir, gi
         "step": "step-07",
         "description": "Schneider C12 Inelastic Rate Product Compilation Audit",
         "status": "PASSED",
+        "topas_version": topas_ver,
+        "geant4_version": geant4_ver,
+        "process_name": manifest_proc,
         "sections_verified": EXPECTED_SECTIONS,
         "targets_verified": EXPECTED_TARGETS,
         "energy_nodes_verified": EXPECTED_ENERGIES,
@@ -347,7 +388,7 @@ def compile_rates(raw_manifest_path, raw_json_path, output_dir, evidence_dir, gi
 
     evidence_manifest = {
         "step": "step-07",
-        "git_commit": compiler_commit,
+        "compiler_git_commit": compiler_commit,
         "files": {
             "compiler-audit.json": {
                 "sha256": sha256_file(audit_path),
@@ -370,9 +411,10 @@ def compile_rates(raw_manifest_path, raw_json_path, output_dir, evidence_dir, gi
     print("\n================ STEP 07 COMPILER SUMMARY ================")
     print(f"Sections Compiled: {EXPECTED_SECTIONS}")
     print(f"Targets in Canonical Z Order: {EXPECTED_TARGETS}")
-    print(f"Energy Nodes: {EXPECTED_ENERGIES} (0.5 to 430.0 MeV/u)")
+    print(f"Energy Nodes: {EXPECTED_ENERGIES} (0.5 to 430.0 MeV/u, uniform step 0.5)")
     print(f"Total [s, t, E] keys: {len(seen_keys)}")
     print(f"Max Partial Sum Discrepancy: {max_partial_sum_diff:.3e}")
+    print(f"Compiler Commit Provenance: {compiler_commit}")
     print(f"Emitted CSV: {csv_path} (SHA256: {csv_sha256})")
     print(f"Emitted BIN: {bin_path} (SHA256: {bin_sha256})")
     print(f"Compiler Gate Passed: True")
@@ -391,15 +433,16 @@ def main():
     parser.add_argument("--raw-json", default="/mnt/sda/wuwei/maigo-ct-schneider/evidence/step-04/topas-c12-schneider-inelastic-xs.json")
     parser.add_argument("--output-dir", default="/mnt/sdb/wuwei/MAIGO/data/schneider")
     parser.add_argument("--evidence-dir", default="/mnt/sda/wuwei/maigo-ct-schneider/evidence/step-07")
+    parser.add_argument("--compiler-commit", default=None, help="Explicit compiler git commit hash for metadata provenance")
     parser.add_argument("--verify-determinism", action="store_true", help="Compile twice and verify byte-for-byte identity")
 
     args = parser.parse_args()
 
-    result1 = compile_rates(args.raw_manifest, args.raw_json, args.output_dir, args.evidence_dir)
+    result1 = compile_rates(args.raw_manifest, args.raw_json, args.output_dir, args.evidence_dir, args.compiler_commit)
 
     if args.verify_determinism:
         print("\nVerifying compiler byte-for-byte determinism (Run 2)...")
-        result2 = compile_rates(args.raw_manifest, args.raw_json, args.output_dir, args.evidence_dir)
+        result2 = compile_rates(args.raw_manifest, args.raw_json, args.output_dir, args.evidence_dir, args.compiler_commit)
         assert result1["csv_sha256"] == result2["csv_sha256"], "CSV SHA256 mismatch across compiles!"
         assert result1["bin_sha256"] == result2["bin_sha256"], "BIN SHA256 mismatch across compiles!"
         assert result1["csv_meta_sha256"] == result2["csv_meta_sha256"], "CSV Metadata SHA256 mismatch across compiles!"
