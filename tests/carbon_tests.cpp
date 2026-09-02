@@ -4018,6 +4018,62 @@ void test_schneider_material_table_parser() {
                    "unknown element name Krypton");
 }
 
+void test_schneider_c12_inelastic_cross_section_table() {
+    const auto tables = carbon::CrossSectionTable::from_schneider_csv(
+        "data/c12_schneider_inelastic_cross_sections_geant4_11_3_2.csv");
+    require(tables.size() == 25, "Schneider cross section table must have exactly 25 sections");
+
+    for (std::size_t s = 0; s < tables.size(); ++s) {
+        const auto& table = tables[s];
+        require(table.energies().size() == 860,
+                "Section " + std::to_string(s) + " must have 860 energy bins");
+        require_near(table.energies().front(), 0.5, 1e-9, "Energy grid start must be 0.5 MeV/u");
+        require_near(table.energies().back(), 430.0, 1e-9, "Energy grid end must be 430.0 MeV/u");
+
+        for (std::size_t i = 0; i < table.values().size(); ++i) {
+            require(table.values()[i] >= 0.0,
+                    "Section " + std::to_string(s) + " mass cross section must be non-negative");
+            require(std::isfinite(table.values()[i]),
+                    "Section " + std::to_string(s) + " mass cross section must be finite");
+        }
+
+        // Test interpolation at clinical energies
+        const double xs_100 = table.interpolate(100.0);
+        const double xs_200 = table.interpolate(200.0);
+        const double xs_290 = table.interpolate(290.0);
+        const double xs_400 = table.interpolate(400.0);
+
+        require(xs_100 > 0.0 && xs_200 > 0.0 && xs_290 > 0.0 && xs_400 > 0.0,
+                "Interpolated mass cross sections must be strictly positive at clinical energies");
+    }
+
+    // Negative tests: malformed CSV rejection
+    const auto test_malformed_csv = [](const std::string& name, const std::string& content,
+                                       const std::string& expected_error) {
+        const auto path = std::filesystem::temp_directory_path() / name;
+        std::ofstream out(path);
+        out << content;
+        out.close();
+
+        bool threw = false;
+        try {
+            carbon::CrossSectionTable::from_schneider_csv(path);
+        } catch (const std::exception& error) {
+            threw = true;
+            require(std::string(error.what()).find(expected_error) != std::string::npos,
+                    "Error message missing expected substring '" + expected_error +
+                    "': " + error.what());
+        }
+        std::filesystem::remove(path);
+        require(threw, "Parser accepted invalid Schneider cross-section CSV");
+    };
+
+    test_malformed_csv("bad_header.csv", "bad_col,section_00_mass_xs_per_mm_at_1g_cm3\n1.0,0.01\n",
+                       "Schneider cross-section CSV must start with energy_MeV_per_u");
+    test_malformed_csv("bad_sec_col.csv", "energy_MeV_per_u,section_01_mass_xs_per_mm_at_1g_cm3\n1.0,0.01\n",
+                       "Unexpected Schneider cross-section column");
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -4096,6 +4152,7 @@ int main(int argc, char** argv) {
         run("test_ct_aligned_mhd_offset_and_index_pairing", test_ct_aligned_mhd_offset_and_index_pairing);
         run("test_water_transport_invariance_without_ct", test_water_transport_invariance_without_ct);
         run("test_schneider_material_table_parser", test_schneider_material_table_parser);
+        run("test_schneider_c12_inelastic_cross_section_table", test_schneider_c12_inelastic_cross_section_table);
 #ifdef CARBON_HAS_SYCL
         run("test_sycl_tps_source_arbitrary_gantry_transport", test_sycl_tps_source_arbitrary_gantry_transport);
 #endif

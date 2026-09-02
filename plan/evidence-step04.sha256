@@ -1,0 +1,4 @@
+# Cryptographic anchor for external Step 04 evidence stored under /mnt/sda/wuwei/maigo-ct-schneider/evidence/step-04/
+792c728e858ede1c4cede920a7f0563ea0008106fefdc0a0f2e28d9467b1ba43  inelastic-xs-comparison.json
+b46b56ca99a05ac5862549078cc47d0738de11945651c45f539b8995495ab901  run-manifest.json
+a09b394a80774ad2390294e5b80e5e94ece4fb27bb9c6b0ad9fcd6b4001ec4f1  topas-c12-schneider-inelastic-xs.json
