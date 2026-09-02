@@ -8,22 +8,27 @@ import summarize_cinel02_exposure as summarize
 
 
 def _ledger():
-    sums = [0.0] * (18 * 3 * 40 * 13)
+    sums = [0.0] * (18 * 3 * 40 * 18)
     counts = [0] * (18 * 3 * 40 * 4)
     cell = (8 * 3 + 1) * 40 + 12  # 7Be, generation 1, 120--130 MeV/u
-    sums[cell * 13 + 0] = 10.0
-    sums[cell * 13 + 1] = 7.0
-    sums[cell * 13 + 2] = 3.0
-    sums[cell * 13 + 3] = 6.0
-    sums[cell * 13 + 4] = 1.0
-    sums[cell * 13 + 5] = 1.0
-    sums[cell * 13 + 6] = 1.0
-    sums[cell * 13 + 7] = 2.0
-    sums[cell * 13 + 8] = 3.0
-    sums[cell * 13 + 9] = 5.0
-    sums[cell * 13 + 10] = 0.5
-    sums[cell * 13 + 11] = 1.0
-    sums[cell * 13 + 12] = 1.5
+    sums[cell * 18 + 0] = 10.0
+    sums[cell * 18 + 1] = 7.0
+    sums[cell * 18 + 2] = 3.0
+    sums[cell * 18 + 3] = 6.0
+    sums[cell * 18 + 4] = 1.0
+    sums[cell * 18 + 5] = 1.0
+    sums[cell * 18 + 6] = 1.0
+    sums[cell * 18 + 7] = 2.0
+    sums[cell * 18 + 8] = 3.0
+    sums[cell * 18 + 9] = 5.0
+    sums[cell * 18 + 10] = 0.5
+    sums[cell * 18 + 11] = 1.0
+    sums[cell * 18 + 12] = 1.5
+    sums[cell * 18 + 13] = 8.0
+    sums[cell * 18 + 14] = 2.0
+    sums[cell * 18 + 15] = 4.0
+    sums[cell * 18 + 16] = 0.75
+    sums[cell * 18 + 17] = 5.0
     counts[cell * 4 + 0] = 4
     counts[cell * 4 + 1] = 3
     counts[cell * 4 + 2] = 1
@@ -51,6 +56,12 @@ def test_summarize_preserves_eligibility_and_coverage_categories():
     assert row["hazard_blocked_o"] == 1.0
     assert row["hazard_blocked_total"] == 1.5
     assert row["blocked_hazard_fraction"] == 1.5 / 6.5
+    assert row["tau_continuous"] == 4.0
+    assert row["tau_blocked_continuous"] == 0.75
+    assert row["tau_runtime_minus_continuous"] == 1.0
+    assert row["tau_continuous_to_runtime"] == 0.8
+    assert row["continuous_rate_coverage_fraction_of_total"] == 0.8
+    assert row["stopping_residence_mm_per_MeV"] == 2.0
     assert row["candidate_minus_tau_runtime"] == -1.0
     assert row["candidate_to_tau_runtime"] == 0.8
     assert row["rate_coverage_fraction_of_eligible"] == 6.0 / 7.0
@@ -66,6 +77,6 @@ def test_summarize_rejects_wrong_shape():
     try:
         summarize.summarize(ledger)
     except ValueError as exc:
-        assert "04A exposure shape" in str(exc)
+        assert "04C exposure shape" in str(exc)
     else:
         raise AssertionError("wrong exposure shape was accepted")

@@ -152,7 +152,7 @@ struct Cinel02ExposureLedgerSchema {
         Cinel02ReplayLedgerSchema::energy_bin_width_MeV_per_u;
     static constexpr std::size_t cell_count =
         species_count * generation_count * energy_bin_count;
-    static constexpr std::size_t sum_metric_count = 13;
+    static constexpr std::size_t sum_metric_count = 18;
     static constexpr std::size_t count_metric_count = 4;
     static constexpr std::size_t sum_slot_count = cell_count * sum_metric_count;
     static constexpr std::size_t count_slot_count = cell_count * count_metric_count;
@@ -171,7 +171,15 @@ struct Cinel02ExposureLedgerSchema {
         // Counterfactual optical depth for generation-blocked steps; diagnostic only.
         hazard_blocked_h = 10,
         hazard_blocked_o = 11,
-        hazard_blocked_total = 12
+        hazard_blocked_total = 12,
+        // Continuous-rate quadrature over the actual start/end energy of a
+        // transport step. These are diagnostic-only and never feed the
+        // runtime hazard sampler.
+        path_mm_continuous_rate_covered = 13,
+        path_mm_continuous_rate_uncovered = 14,
+        hazard_continuous = 15,
+        hazard_blocked_continuous = 16,
+        stopping_loss_MeV = 17
     };
     enum CountMetric : std::size_t {
         collision_candidates = 0,
@@ -191,6 +199,17 @@ constexpr bool cinel02_should_apply_secondary_mcs(
     const float energy_cutoff_MeV) noexcept {
     return enable_multiple_scattering && kinetic_energy_MeV > energy_cutoff_MeV &&
            (!secondary_inelastic || !replay_succeeded);
+}
+
+// Simpson quadrature for the continuous optical-depth audit. The caller
+// supplies rates evaluated at the beginning, midpoint and end energies of the
+// same linearized stopping segment. This helper is deliberately independent
+// of the runtime step-start hazard sampler.
+inline constexpr float cinel02_simpson_hazard(
+    const float lambda_start_per_mm, const float lambda_mid_per_mm,
+    const float lambda_end_per_mm, const float step_mm) noexcept {
+    return step_mm * (lambda_start_per_mm + 4.0F * lambda_mid_per_mm +
+                      lambda_end_per_mm) / 6.0F;
 }
 
 struct TransportResult {

@@ -3630,9 +3630,14 @@ void test_cinel02_ledger_schema_and_accumulator() {
     static_assert(Replay::parent_outcome_cell_count == 18 * 2 * 3 * 2);
     static_assert(Replay::transition_cell_count == 18 * 18);
     static_assert(Exposure::cell_count == 18 * 3 * 40);
-    static_assert(Exposure::sum_slot_count == Exposure::cell_count * 13);
+    static_assert(Exposure::sum_slot_count == Exposure::cell_count * 18);
     static_assert(Exposure::count_slot_count == Exposure::cell_count * 4);
-    static_assert(Exposure::hazard_blocked_total + 1 == Exposure::sum_metric_count);
+    static_assert(Exposure::hazard_blocked_total + 1 == Exposure::path_mm_continuous_rate_covered);
+    static_assert(Exposure::stopping_loss_MeV + 1 == Exposure::sum_metric_count);
+    require_near(carbon::cinel02_simpson_hazard(1.0F, 2.0F, 3.0F, 6.0F),
+                 12.0, 1.0e-6, "CINEL02 Simpson hazard quadrature failed");
+    require_near(carbon::cinel02_simpson_hazard(2.0F, 2.0F, 2.0F, 5.0F),
+                 10.0, 1.0e-6, "CINEL02 constant hazard quadrature failed");
 
     carbon::TransportResult total{};
     carbon::TransportResult part{};

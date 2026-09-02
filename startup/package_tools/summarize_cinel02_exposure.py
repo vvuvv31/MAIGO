@@ -2,7 +2,7 @@
 """Summarize the secondary CINEL02 exposure ledger emitted by carbon_mc.
 
 This tool is intentionally descriptive: it never modifies rates, package data,
-or a runtime ledger.  It aggregates the 04A isotope x transport-generation x
+or a runtime ledger.  It aggregates the 04C isotope x transport-generation x
 10-MeV/u-bin arrays into isotope and isotope×generation rows, preserving generation eligibility
 and H/O coverage as separate path categories.
 """
@@ -23,6 +23,8 @@ SUM_METRICS = [
     "path_mm_rate_covered", "path_mm_rate_uncovered", "path_mm_h_uncovered",
     "path_mm_o_uncovered", "hazard_h", "hazard_o", "hazard_total",
     "hazard_blocked_h", "hazard_blocked_o", "hazard_blocked_total",
+    "path_mm_continuous_rate_covered", "path_mm_continuous_rate_uncovered",
+    "hazard_continuous", "hazard_blocked_continuous", "stopping_loss_MeV",
 ]
 COUNT_METRICS = [
     "collision_candidates", "replay_valid", "parent_killed", "parent_continued",
@@ -32,11 +34,11 @@ COUNT_METRICS = [
 def summarize(ledger: dict[str, Any]) -> dict[str, Any]:
     layout = ledger.get("cinel02_secondary_exposure_layout")
     if not isinstance(layout, dict) or layout.get("shape") != [18, 3, 40]:
-        raise ValueError("ledger is missing 04A exposure shape [18,3,40]")
+        raise ValueError("ledger is missing 04C exposure shape [18,3,40]")
     sums = ledger.get("cinel02_secondary_exposure_sums")
     counts = ledger.get("cinel02_secondary_exposure_counts")
     if not isinstance(sums, list) or len(sums) != 18 * 3 * 40 * len(SUM_METRICS):
-        raise ValueError("unexpected 04A exposure sum array length")
+        raise ValueError("unexpected 04C exposure sum array length")
     if not isinstance(counts, list) or len(counts) != 18 * 3 * 40 * len(COUNT_METRICS):
         raise ValueError("unexpected 04A exposure count array length")
 
@@ -81,6 +83,20 @@ def summarize(ledger: dict[str, Any]) -> dict[str, Any]:
             row["candidate_minus_tau_runtime"] / math.sqrt(tau_runtime)
             if tau_runtime > 0.0 else None
         )
+        tau_continuous = row["hazard_continuous"]
+        row["tau_continuous"] = tau_continuous
+        row["tau_blocked_continuous"] = row["hazard_blocked_continuous"]
+        row["tau_runtime_minus_continuous"] = tau_runtime - tau_continuous
+        row["tau_continuous_to_runtime"] = (
+            tau_continuous / tau_runtime if tau_runtime > 0.0 else None
+        )
+        row["continuous_rate_coverage_fraction_of_total"] = (
+            row["path_mm_continuous_rate_covered"] / total if total > 0.0 else 0.0
+        )
+        row["stopping_residence_mm_per_MeV"] = (
+            total / row["stopping_loss_MeV"]
+            if row["stopping_loss_MeV"] > 0.0 else None
+        )
         rows.append(row)
     generation_rows: list[dict[str, Any]] = []
     for species_index, species in enumerate(SPECIES):
@@ -122,9 +138,23 @@ def summarize(ledger: dict[str, Any]) -> dict[str, Any]:
                 row["candidate_minus_tau_runtime"] / math.sqrt(tau_runtime)
                 if tau_runtime > 0.0 else None
             )
+            tau_continuous = row["hazard_continuous"]
+            row["tau_continuous"] = tau_continuous
+            row["tau_blocked_continuous"] = row["hazard_blocked_continuous"]
+            row["tau_runtime_minus_continuous"] = tau_runtime - tau_continuous
+            row["tau_continuous_to_runtime"] = (
+                tau_continuous / tau_runtime if tau_runtime > 0.0 else None
+            )
+            row["continuous_rate_coverage_fraction_of_total"] = (
+                row["path_mm_continuous_rate_covered"] / total if total > 0.0 else 0.0
+            )
+            row["stopping_residence_mm_per_MeV"] = (
+                total / row["stopping_loss_MeV"]
+                if row["stopping_loss_MeV"] > 0.0 else None
+            )
             generation_rows.append(row)
     return {
-        "schema": "cinel02_secondary_exposure_v2",
+        "schema": "cinel02_secondary_exposure_v3",
         "layout": layout,
         "species": rows,
         "species_by_generation": generation_rows,

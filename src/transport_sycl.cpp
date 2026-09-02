@@ -3047,6 +3047,89 @@ TransportResult transport_sycl(const TransportConfig& config,
                             const auto post_em_x = sec_x + collision_input_dx * sec_step_mm;
                             const auto post_em_y = sec_y + collision_input_dy * sec_step_mm;
                             const auto post_em_z = sec_z + collision_input_dz * sec_step_mm;
+
+                            // Independent continuous optical-depth audit.  The
+                            // runtime sampler uses the step-start rates above;
+                            // this diagnostic evaluates the same H/O rates at
+                            // the start, midpoint and post-EM endpoint and
+                            // integrates them with Simpson's rule over the
+                            // actual (possibly collision-truncated) segment.
+                            // It never feeds back into target selection or
+                            // collision sampling.
+                            const auto continuous_mid_e_u = sycl::fmax(
+                                0.0F, (sec_e - 0.5F * dE) * frag_inv_a);
+                            const auto continuous_end_e_u = sycl::fmax(
+                                0.0F, post_em_e * frag_inv_a);
+                            Cinel02DeviceRateLookup continuous_h_mid{};
+                            Cinel02DeviceRateLookup continuous_o_mid{};
+                            Cinel02DeviceRateLookup continuous_h_end{};
+                            Cinel02DeviceRateLookup continuous_o_end{};
+                            if (use_cinel02) {
+                                continuous_h_mid = cinel02_rate_lookup_device(
+                                    cinel02_rate_groups_device, cinel02_rate_group_count,
+                                    cinel02_rate_samples_device, cinel02_rate_sample_count,
+                                    frag.z, frag.a, 1, 1, continuous_mid_e_u);
+                                continuous_o_mid = cinel02_rate_lookup_device(
+                                    cinel02_rate_groups_device, cinel02_rate_group_count,
+                                    cinel02_rate_samples_device, cinel02_rate_sample_count,
+                                    frag.z, frag.a, 8, 16, continuous_mid_e_u);
+                                continuous_h_end = cinel02_rate_lookup_device(
+                                    cinel02_rate_groups_device, cinel02_rate_group_count,
+                                    cinel02_rate_samples_device, cinel02_rate_sample_count,
+                                    frag.z, frag.a, 1, 1, continuous_end_e_u);
+                                continuous_o_end = cinel02_rate_lookup_device(
+                                    cinel02_rate_groups_device, cinel02_rate_group_count,
+                                    cinel02_rate_samples_device, cinel02_rate_sample_count,
+                                    frag.z, frag.a, 8, 16, continuous_end_e_u);
+                            }
+                            const bool continuous_rate_covered =
+                                exposure_h_lookup.covered && exposure_o_lookup.covered &&
+                                continuous_h_mid.covered && continuous_o_mid.covered &&
+                                continuous_h_end.covered && continuous_o_end.covered;
+                            if (exposure_cell != std::numeric_limits<std::uint32_t>::max()) {
+                                cinel02_exposure_sum_add_device(
+                                    cinel02_secondary_exposure_sums_device,
+                                    exposure_cell,
+                                    static_cast<std::uint32_t>(
+                                        Cinel02ExposureLedgerSchema::stopping_loss_MeV),
+                                    dE);
+                                if (continuous_rate_covered) {
+                                    cinel02_exposure_sum_add_device(
+                                        cinel02_secondary_exposure_sums_device,
+                                        exposure_cell,
+                                        static_cast<std::uint32_t>(
+                                            Cinel02ExposureLedgerSchema::path_mm_continuous_rate_covered),
+                                        sec_step_mm);
+                                    const auto lambda_start =
+                                        exposure_h_lookup.value_per_mm +
+                                        exposure_o_lookup.value_per_mm;
+                                    const auto lambda_mid =
+                                        continuous_h_mid.value_per_mm +
+                                        continuous_o_mid.value_per_mm;
+                                    const auto lambda_end =
+                                        continuous_h_end.value_per_mm +
+                                        continuous_o_end.value_per_mm;
+                                    const auto tau_continuous =
+                                        cinel02_simpson_hazard(
+                                            lambda_start, lambda_mid, lambda_end,
+                                            sec_step_mm);
+                                    cinel02_exposure_sum_add_device(
+                                        cinel02_secondary_exposure_sums_device,
+                                        exposure_cell,
+                                        static_cast<std::uint32_t>(
+                                            secondary_generation_eligible
+                                                ? Cinel02ExposureLedgerSchema::hazard_continuous
+                                                : Cinel02ExposureLedgerSchema::hazard_blocked_continuous),
+                                        tau_continuous);
+                                } else {
+                                    cinel02_exposure_sum_add_device(
+                                        cinel02_secondary_exposure_sums_device,
+                                        exposure_cell,
+                                        static_cast<std::uint32_t>(
+                                            Cinel02ExposureLedgerSchema::path_mm_continuous_rate_uncovered),
+                                        sec_step_mm);
+                                }
+                            }
                             const auto collision_bin = sycl::max(
                                 0, sycl::min(
                                        static_cast<int>(post_em_z *
