@@ -5501,6 +5501,39 @@ void test_step12_primary_only_mode_contract() {
             bad.ct_validation_mode = "invalid-validation-mode";
             require_throws([&]() { bad.validate(); }, "invalid ct_validation_mode must be rejected");
         }
+        // maximum_primary_steps = 0 rejected
+        {
+            auto bad = base_cfg;
+            bad.maximum_primary_steps = 0;
+            require_throws([&]() { bad.validate(); }, "maximum_primary_steps = 0 must be rejected");
+        }
+        // Config file parsing negative tests for maximum_primary_steps
+        {
+            const auto temp_cfg_dir = std::filesystem::temp_directory_path() / "cfg_parsing_test";
+            std::filesystem::create_directories(temp_cfg_dir);
+            const auto temp_cfg = temp_cfg_dir / "bad_steps_cfg.txt";
+            {
+                std::ofstream out(temp_cfg);
+                out << "maximum_primary_steps = 0\n";
+                require_throws([&]() { carbon::load_config(temp_cfg); }, "maximum_primary_steps = 0 must be rejected in load_config");
+            }
+            {
+                std::ofstream out(temp_cfg);
+                out << "maximum_primary_steps = 2.9\n";
+                require_throws([&]() { carbon::load_config(temp_cfg); }, "maximum_primary_steps = 2.9 must be rejected in load_config");
+            }
+            {
+                std::ofstream out(temp_cfg);
+                out << "maximum_primary_steps = -5\n";
+                require_throws([&]() { carbon::load_config(temp_cfg); }, "maximum_primary_steps = -5 must be rejected in load_config");
+            }
+            {
+                std::ofstream out(temp_cfg);
+                out << "maximum_primary_steps = 5000000000\n";
+                require_throws([&]() { carbon::load_config(temp_cfg); }, "maximum_primary_steps > UINT32_MAX must be rejected in load_config");
+            }
+            std::filesystem::remove_all(temp_cfg_dir);
+        }
     }
 
     // =========================================================================
@@ -5674,6 +5707,10 @@ void test_step12_primary_only_mode_contract() {
                     "Valid validation run must have zero other_terminal events");
             require(result.primary_other_terminal_kinetic_MeV == 0.0,
                     "Valid validation run must have zero other_terminal kinetic energy");
+            require(result.primary_cutoff_stopped_energy_MeV > 0.0,
+                    "Cutoff stopped energy tally must be > 0 when stopped_count > 0");
+            require(result.primary_cutoff_stopped_energy_MeV < result.total_deposited_energy_MeV,
+                    "Cutoff stopped energy tally must be a positive fraction of total deposited energy");
 
             // Energy conservation identity: E_initial = E_deposited + E_inelastic_removed + E_escaped + E_other_terminal
             const double initial_e = cfg.initial_total_energy_MeV() * static_cast<double>(cfg.number_of_histories);
@@ -6023,6 +6060,8 @@ void test_step12_primary_only_mode_contract() {
                         "Inelastic removed kinetic must be strictly 0.0 when no inelastic occurred");
                 require(result.escaped_energy_MeV == 0.0,
                         "Escaped energy must be strictly 0.0 when no particles escaped");
+                require(result.primary_cutoff_stopped_energy_MeV == 0.0,
+                        "Cutoff stopped energy tally must be strictly 0.0 when stopped_count == 0");
                 require(result.total_deposited_energy_MeV > 0.0,
                         "Deposited energy should reflect continuous loss of 2 steps");
 
@@ -6096,6 +6135,8 @@ void test_step12_primary_only_mode_contract() {
                         "Inelastic particles must have positive inelastic_removed_kinetic");
                 require(result.escaped_energy_MeV == 0.0,
                         "No escaped energy");
+                require(result.primary_cutoff_stopped_energy_MeV == 0.0,
+                        "Cutoff stopped energy tally must be strictly 0.0 when stopped_count == 0");
 
                 const double initial_e = cfg_watchdog_real.initial_total_energy_MeV() * static_cast<double>(cfg_watchdog_real.number_of_histories);
                 const double accounted = result.total_deposited_energy_MeV +
@@ -6107,6 +6148,133 @@ void test_step12_primary_only_mode_contract() {
                 require(result.physical_relative_energy_balance_error() < 1.0e-5,
                         "Watchdog real-XS physical relative energy balance error failed");
             }
+
+        // 4F: Simultaneous Terminal State Priority Tests
+        // 4F.1: max_steps = 1 where 1st step exits boundary (Escape priority over watchdog)
+        {
+            const auto thin_cctg_file = temp_dir / "thin_step12_ct_grid.cctg";
+            carbon::CtGrid thin_grid;
+            thin_grid.file_version = carbon::CtGrid::version_v2;
+            thin_grid.nx = 10;
+            thin_grid.ny = 10;
+            thin_grid.nz = 1;
+            thin_grid.spacing_x_mm = 10.0;
+            thin_grid.spacing_y_mm = 10.0;
+            thin_grid.spacing_z_mm = 0.5;
+            thin_grid.origin_x_mm = -50.0;
+            thin_grid.origin_y_mm = -50.0;
+            thin_grid.origin_z_mm = 0.0;
+            thin_grid.density_g_per_cm3.assign(100, 1.0F);
+            thin_grid.material_id.assign(100, 11);
+            thin_grid.mass_sp_za_rel.resize(25, 1.0);
+            thin_grid.write_binary(thin_cctg_file);
+
+            const auto zero_xs_csv = temp_dir / "zero_schneider_xs.csv";
+            carbon::TransportConfig cfg_escape;
+            cfg_escape.phantom_length_mm = 0.5;
+            cfg_escape.depth_bin_width_mm = 0.5;
+            cfg_escape.primary_atomic_number = 6;
+            cfg_escape.primary_mass_number = 12;
+            cfg_escape.initial_energy_MeVu = 200.0;
+            cfg_escape.enable_ct_grid = true;
+            cfg_escape.ct_grid_file = thin_cctg_file.string();
+            cfg_escape.ct_schneider_cross_section_file = zero_xs_csv.string();
+            cfg_escape.ct_validation_mode = "primary-attenuation-only";
+            cfg_escape.enable_inelastic = true;
+            cfg_escape.enable_nuclear_elastic = false;
+            cfg_escape.enable_secondary_transport = false;
+            cfg_escape.enable_energy_straggling = false;
+            cfg_escape.beam_energy_spread = 0.0;
+            cfg_escape.ct_use_density_mass_spr = true;
+            cfg_escape.ct_stopping_power_scale = 1.0;
+            cfg_escape.energy_cutoff_MeV = 6.0;
+            cfg_escape.maximum_primary_steps = 1; // Particle escapes on step 1
+            cfg_escape.number_of_histories = 1000;
+            cfg_escape.validate();
+
+            const auto result = carbon::transport_sycl(cfg_escape, water_sp, zero_xs, "default");
+
+            // Particle exiting on step 1 must be classified as escaped_ct, not other_terminal
+            require(result.primary_escaped_ct_count == 1000,
+                    "Particle exiting phantom on step 1 must be classified as escaped_ct");
+            require(result.primary_other_terminal_count == 0,
+                    "No particles should land in other_terminal when step 1 escapes");
+            require(result.primary_stopped_count == 0,
+                    "No particles should stop");
+            require(result.primary_inelastic_terminated_count == 0,
+                    "No inelastic under zero XS");
+            require(result.primary_other_terminal_kinetic_MeV == 0.0,
+                    "other_terminal_kinetic must be 0.0");
+            require(result.escaped_energy_MeV > 0.0,
+                    "escaped_energy_MeV must be > 0.0");
+            require(result.primary_cutoff_stopped_energy_MeV == 0.0,
+                    "cutoff_stopped_energy must be 0.0");
+
+            const double initial_e = cfg_escape.initial_total_energy_MeV() * static_cast<double>(cfg_escape.number_of_histories);
+            const double accounted = result.total_deposited_energy_MeV +
+                                     result.primary_inelastic_removed_kinetic_MeV +
+                                     result.primary_other_terminal_kinetic_MeV +
+                                     result.escaped_energy_MeV;
+            const double rel_err = std::fabs(initial_e - accounted) / initial_e;
+            require(rel_err < 1.0e-5, "Simultaneous escape test energy conservation failed");
+            require(result.physical_relative_energy_balance_error() < 1.0e-5,
+                    "Simultaneous escape physical relative energy balance error failed");
+        }
+
+        // 4F.2: max_steps = 2 where step 2 enters cutoff (Cutoff stop priority over watchdog)
+        {
+            const auto zero_xs_csv = temp_dir / "zero_schneider_xs.csv";
+            carbon::TransportConfig cfg_cutoff;
+            cfg_cutoff.phantom_length_mm = 200.0;
+            cfg_cutoff.depth_bin_width_mm = 10.0;
+            cfg_cutoff.primary_atomic_number = 6;
+            cfg_cutoff.primary_mass_number = 12;
+            cfg_cutoff.initial_energy_MeVu = 1.0; // 12.0 MeV total kinetic energy
+            cfg_cutoff.enable_ct_grid = true;
+            cfg_cutoff.ct_grid_file = cctg_file.string();
+            cfg_cutoff.ct_schneider_cross_section_file = zero_xs_csv.string();
+            cfg_cutoff.ct_validation_mode = "primary-attenuation-only";
+            cfg_cutoff.enable_inelastic = true;
+            cfg_cutoff.enable_nuclear_elastic = false;
+            cfg_cutoff.enable_secondary_transport = false;
+            cfg_cutoff.enable_energy_straggling = false;
+            cfg_cutoff.beam_energy_spread = 0.0;
+            cfg_cutoff.ct_use_density_mass_spr = true;
+            cfg_cutoff.ct_stopping_power_scale = 1.0;
+            cfg_cutoff.energy_cutoff_MeV = 11.5; // Stops at step 2 when E drops below 11.5 MeV
+            cfg_cutoff.maximum_step_mm = 0.01;
+            cfg_cutoff.maximum_primary_steps = 2;
+            cfg_cutoff.number_of_histories = 1000;
+            cfg_cutoff.validate();
+
+            const auto result = carbon::transport_sycl(cfg_cutoff, water_sp, zero_xs, "default");
+
+            // Particle reaching cutoff on step 2 must be classified as stopped, not other_terminal
+            require(result.primary_stopped_count == 1000,
+                    "Particle reaching cutoff on step 2 must be classified as stopped");
+            require(result.primary_other_terminal_count == 0,
+                    "No particles should land in other_terminal when step 2 hits cutoff");
+            require(result.primary_escaped_ct_count == 0,
+                    "No particles should escape");
+            require(result.primary_inelastic_terminated_count == 0,
+                    "No inelastic under zero XS");
+            require(result.primary_other_terminal_kinetic_MeV == 0.0,
+                    "other_terminal_kinetic must be 0.0");
+            require(result.primary_cutoff_stopped_energy_MeV > 0.0,
+                    "cutoff_stopped_energy must be > 0.0");
+            require(result.total_deposited_energy_MeV > 0.0,
+                    "deposited energy must be > 0.0");
+
+            const double initial_e = cfg_cutoff.initial_total_energy_MeV() * static_cast<double>(cfg_cutoff.number_of_histories);
+            const double accounted = result.total_deposited_energy_MeV +
+                                     result.primary_inelastic_removed_kinetic_MeV +
+                                     result.primary_other_terminal_kinetic_MeV +
+                                     result.escaped_energy_MeV;
+            const double rel_err = std::fabs(initial_e - accounted) / initial_e;
+            require(rel_err < 1.0e-5, "Simultaneous cutoff stop test energy conservation failed");
+            require(result.physical_relative_energy_balance_error() < 1.0e-5,
+                    "Simultaneous cutoff stop physical relative energy balance error failed");
+        }
 
         std::filesystem::remove_all(temp_dir);
     }

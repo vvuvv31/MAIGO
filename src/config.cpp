@@ -281,17 +281,39 @@ Number parse_number(const ConfigValues& values,
     if (iterator == values.end()) {
         return fallback;
     }
+    const auto& str = iterator->second;
     std::size_t parsed = 0;
     if constexpr (std::is_integral_v<Number>) {
-        const auto number = std::stoull(iterator->second, &parsed);
-        if (parsed != iterator->second.size()) {
-            throw std::runtime_error("Invalid integer for '" + key + "': " + iterator->second);
+        if (str.find('.') != std::string::npos || str.find('e') != std::string::npos || str.find('E') != std::string::npos) {
+            throw std::runtime_error("Invalid integer for '" + key + "': " + str);
         }
-        return static_cast<Number>(number);
+        if constexpr (std::is_unsigned_v<Number>) {
+            if (!str.empty() && str.front() == '-') {
+                throw std::runtime_error("Negative value not allowed for unsigned integer '" + key + "': " + str);
+            }
+            const auto number = std::stoull(str, &parsed);
+            if (parsed != str.size()) {
+                throw std::runtime_error("Invalid integer for '" + key + "': " + str);
+            }
+            if (number > static_cast<unsigned long long>(std::numeric_limits<Number>::max())) {
+                throw std::runtime_error("Integer out of range for '" + key + "': " + str);
+            }
+            return static_cast<Number>(number);
+        } else {
+            const auto number = std::stoll(str, &parsed);
+            if (parsed != str.size()) {
+                throw std::runtime_error("Invalid integer for '" + key + "': " + str);
+            }
+            if (number < static_cast<long long>(std::numeric_limits<Number>::min()) ||
+                number > static_cast<long long>(std::numeric_limits<Number>::max())) {
+                throw std::runtime_error("Integer out of range for '" + key + "': " + str);
+            }
+            return static_cast<Number>(number);
+        }
     } else {
-        const auto number = std::stod(iterator->second, &parsed);
-        if (parsed != iterator->second.size()) {
-            throw std::runtime_error("Invalid number for '" + key + "': " + iterator->second);
+        const auto number = std::stod(str, &parsed);
+        if (parsed != str.size()) {
+            throw std::runtime_error("Invalid number for '" + key + "': " + str);
         }
         return static_cast<Number>(number);
     }
@@ -1349,15 +1371,15 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.maximum_step_mm = parse_number(values, "maximum_step_mm", config.maximum_step_mm);
     config.maximum_relative_energy_loss =
         parse_number(values, "maximum_relative_energy_loss", config.maximum_relative_energy_loss);
-    config.maximum_primary_steps = static_cast<std::uint32_t>(
-        parse_number(values, "maximum_primary_steps", static_cast<double>(config.maximum_primary_steps)));
+    config.maximum_primary_steps =
+        parse_number(values, "maximum_primary_steps", config.maximum_primary_steps);
     config.energy_cutoff_MeV = parse_number(values, "energy_cutoff_MeV", config.energy_cutoff_MeV);
     config.secondary_local_deposit_cutoff_MeV = parse_number(
         values, "secondary_local_deposit_cutoff_MeV",
         config.secondary_local_deposit_cutoff_MeV);
-    config.secondary_heavy_local_deposit_z_min = static_cast<int>(parse_number(
+    config.secondary_heavy_local_deposit_z_min = parse_number(
         values, "secondary_heavy_local_deposit_z_min",
-        static_cast<double>(config.secondary_heavy_local_deposit_z_min)));
+        config.secondary_heavy_local_deposit_z_min);
     config.secondary_condensed_step_mm = parse_number(
         values, "secondary_condensed_step_mm",
         config.secondary_condensed_step_mm);
