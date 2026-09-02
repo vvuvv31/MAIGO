@@ -45,6 +45,39 @@ struct ResampledCrossSectionGrid {
     const CrossSectionTable& cross_section,
     const std::vector<double>& transport_energies_MeVu);
 
+struct SchneiderResampledCrossSectionGrid {
+    static constexpr std::size_t kExpectedSections = 25;
+    std::vector<double> transport_energies_MeVu;
+    // Flattened table: [section_id * energy_nodes + node_idx]
+    // Unit: mm^-1 at 1 g/cm3 (mass cross section; density is NOT multiplied here)
+    std::vector<float> mass_xs_per_mm_at_1g_cm3;
+
+    [[nodiscard]] std::size_t energy_nodes() const noexcept {
+        return transport_energies_MeVu.size();
+    }
+
+    [[nodiscard]] float at(std::size_t section_id, std::size_t energy_node) const {
+        if (section_id >= kExpectedSections) {
+            throw std::out_of_range(
+                "Schneider section ID " + std::to_string(section_id) +
+                " out of range (expected 0.." + std::to_string(kExpectedSections - 1) + ")");
+        }
+        if (energy_node >= energy_nodes()) {
+            throw std::out_of_range(
+                "Energy node index " + std::to_string(energy_node) +
+                " out of range (max " + std::to_string(energy_nodes()) + ")");
+        }
+        return mass_xs_per_mm_at_1g_cm3[section_id * energy_nodes() + energy_node];
+    }
+};
+
+// Resample 25-section Schneider cross-section tables onto the transport energy grid.
+// Validates identical nodes across sections, strict energy coverage (fail-fast without clamping),
+// and stores mass rates in units of mm^-1 at 1 g/cm3 (without density multiplication).
+[[nodiscard]] SchneiderResampledCrossSectionGrid resample_schneider_cross_section_grid(
+    const std::vector<CrossSectionTable>& tables,
+    const std::vector<double>& transport_energies_MeVu);
+
 class IonCrossSectionTables {
 public:
     static constexpr std::size_t mass_stride = 32;

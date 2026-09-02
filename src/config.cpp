@@ -1,4 +1,5 @@
 #include "carbon/transport_config.hpp"
+#include "carbon/cross_section.hpp"
 #include "carbon/ct_grid.hpp"
 #include "carbon/electron_transport.hpp"
 #include "carbon/straggling.hpp"
@@ -9,6 +10,7 @@
 #include <chrono>
 #include <cmath>
 #include <fstream>
+#include <iostream>
 #include <limits>
 #include <random>
 #include <sstream>
@@ -635,6 +637,11 @@ void TransportConfig::validate() const {
         if (enable_layered_phantom || enable_hetero_insert) {
             throw std::invalid_argument(
                 "enable_ct_grid cannot combine with layered phantom or hetero insert");
+        }
+        if (!ct_schneider_file.empty() && nuclear_model != "none" && ct_schneider_cross_section_file.empty()) {
+            throw std::invalid_argument(
+                "CT Schneider-25 mode with active nuclear model requires ct_schneider_cross_section_file; "
+                "fallback to water or four-class XS is forbidden.");
         }
     }
     if (!std::isfinite(straggling_scale) || straggling_scale < 0.0) {
@@ -1374,6 +1381,10 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.ct_schneider_cross_section_file = parse_path(
         values, "ct_schneider_cross_section_file",
         config.ct_schneider_cross_section_file);
+    if (!config.ct_schneider_cross_section_file.empty()) {
+        config.ct_schneider_cross_section_file = resolve_input_path_from_config(
+            config.ct_schneider_cross_section_file, path);
+    }
     config.ct_cinel02_rate_file = parse_path(
         values, "ct_cinel02_rate_file", config.ct_cinel02_rate_file);
     config.ct_hu_stopping_power_lut_file = parse_path(
@@ -1468,6 +1479,40 @@ TransportConfig load_config(const std::filesystem::path& path) {
         }
         config.depth_bin_width_mm = config.voxel_size_z_mm;
         config.phantom_length_mm = ct_z_extent_mm;
+
+        if (!config.ct_schneider_cross_section_file.empty()) {
+            config.ct_schneider_cross_section_file = resolve_input_path_from_config(
+                config.ct_schneider_cross_section_file, path);
+        }
+
+        const bool is_schneider_mode = (grid.file_version >= CtGrid::version_v2 && grid.mass_sp_za_rel.size() == 25) ||
+                                       !config.ct_schneider_file.empty() ||
+                                       !config.ct_schneider_cross_section_file.empty();
+
+        if (is_schneider_mode) {
+            std::cout << "[material-indexing] mode: schneider-25\n";
+            if (config.nuclear_model != "none") {
+                if (config.ct_schneider_cross_section_file.empty()) {
+                    throw std::runtime_error(
+                        "CT Schneider-25 mode with active nuclear model '" + config.nuclear_model +
+                        "' requires ct_schneider_cross_section_file; fallback to water or four-class XS is forbidden.");
+                }
+                if (!std::filesystem::exists(config.ct_schneider_cross_section_file)) {
+                    throw std::runtime_error(
+                        "ct_schneider_cross_section_file does not exist: " +
+                        config.ct_schneider_cross_section_file.string());
+                }
+                const auto xs_tables = CrossSectionTable::from_schneider_csv(
+                    config.ct_schneider_cross_section_file);
+                if (xs_tables.size() != SchneiderResampledCrossSectionGrid::kExpectedSections) {
+                    throw std::runtime_error(
+                        "ct_schneider_cross_section_file must contain exactly 25 sections (got " +
+                        std::to_string(xs_tables.size()) + ")");
+                }
+            }
+        } else {
+            std::cout << "[material-indexing] mode: legacy-four-class\n";
+        }
     } else {
         // Homogeneous phantom configurations retain the established z aliases.
         if (config.voxel_bins_z != 0 &&

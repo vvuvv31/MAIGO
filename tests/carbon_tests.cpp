@@ -4181,6 +4181,159 @@ void test_compiled_schneider_c12_rate_products() {
     test_malformed_bin("truncated.bin", "SCHNRATE");
 }
 
+void test_step09_schneider_primary_xs_host_path() {
+    // 1. Valid 25-section loading
+    const auto tables = carbon::CrossSectionTable::from_schneider_csv(
+        "data/schneider/c12_schneider_inelastic_mass_xs.csv");
+    require(tables.size() == 25, "Schneider cross-section table must have exactly 25 sections");
+    for (std::size_t s = 0; s < tables.size(); ++s) {
+        require(tables[s].energies().size() == 860, "Section " + std::to_string(s) + " must have 860 nodes");
+        require(tables[s].values().size() == 860, "Section " + std::to_string(s) + " values mismatch");
+        require_near(tables[s].energies().front(), 0.5, 1e-9, "Energy start must be 0.5");
+        require_near(tables[s].energies().back(), 430.0, 1e-9, "Energy end must be 430.0");
+    }
+
+    // Helper for negative CSV tests
+    const auto test_malformed_csv = [](const std::string& name, const std::string& content,
+                                       const std::string& expected_substr) {
+        const auto path = std::filesystem::temp_directory_path() / name;
+        std::ofstream out(path);
+        out << content;
+        out.close();
+
+        bool threw = false;
+        try {
+            carbon::CrossSectionTable::from_schneider_csv(path);
+        } catch (const std::exception& error) {
+            threw = true;
+            require(std::string(error.what()).find(expected_substr) != std::string::npos,
+                    "Error missing substring '" + expected_substr + "': " + error.what());
+        }
+        std::filesystem::remove(path);
+        require(threw, "Parser accepted invalid Schneider cross-section CSV");
+    };
+
+    // 2. Reject 24 columns (missing section 24)
+    std::string csv_24 = "energy_MeV_per_u";
+    for (int s = 0; s < 24; ++s) {
+        csv_24 += ",section_" + (s < 10 ? std::string{"0"} : std::string{}) + std::to_string(s) + "_mass_xs_per_mm_at_1g_cm3";
+    }
+    csv_24 += "\n1.0";
+    for (int s = 0; s < 24; ++s) csv_24 += ",0.005";
+    csv_24 += "\n";
+    test_malformed_csv("bad_24_cols.csv", csv_24, "Schneider cross-section CSV must have exactly 25 section columns");
+
+    // 3. Reject 26 columns (extra section 25)
+    std::string csv_26 = "energy_MeV_per_u";
+    for (int s = 0; s < 26; ++s) {
+        csv_26 += ",section_" + (s < 10 ? std::string{"0"} : std::string{}) + std::to_string(s) + "_mass_xs_per_mm_at_1g_cm3";
+    }
+    csv_26 += "\n1.0";
+    for (int s = 0; s < 26; ++s) csv_26 += ",0.005";
+    csv_26 += "\n";
+    test_malformed_csv("bad_26_cols.csv", csv_26, "Schneider cross-section CSV must have exactly 25 section columns");
+
+    // 4. Reject swapped headers (section 01 before section 00)
+    std::string csv_swapped = "energy_MeV_per_u,section_01_mass_xs_per_mm_at_1g_cm3,section_00_mass_xs_per_mm_at_1g_cm3";
+    for (int s = 2; s < 25; ++s) {
+        csv_swapped += ",section_" + (s < 10 ? std::string{"0"} : std::string{}) + std::to_string(s) + "_mass_xs_per_mm_at_1g_cm3";
+    }
+    csv_swapped += "\n1.0";
+    for (int s = 0; s < 25; ++s) csv_swapped += ",0.005";
+    csv_swapped += "\n";
+    test_malformed_csv("bad_swapped.csv", csv_swapped, "Unexpected Schneider cross-section column");
+
+    // 5. Reject non-monotonic energies
+    std::string csv_non_monotonic = "energy_MeV_per_u";
+    for (int s = 0; s < 25; ++s) {
+        csv_non_monotonic += ",section_" + (s < 10 ? std::string{"0"} : std::string{}) + std::to_string(s) + "_mass_xs_per_mm_at_1g_cm3";
+    }
+    csv_non_monotonic += "\n10.0";
+    for (int s = 0; s < 25; ++s) csv_non_monotonic += ",0.005";
+    csv_non_monotonic += "\n9.5";
+    for (int s = 0; s < 25; ++s) csv_non_monotonic += ",0.005";
+    csv_non_monotonic += "\n";
+    test_malformed_csv("bad_non_monotonic.csv", csv_non_monotonic, "Non-monotonic energy sequence");
+
+    // 6. Resampling and Energy Coverage:
+    std::vector<double> valid_transport_energies;
+    for (double e = 10.0; e <= 400.0; e += 1.0) {
+        valid_transport_energies.push_back(e);
+    }
+    const auto resampled_grid = carbon::resample_schneider_cross_section_grid(tables, valid_transport_energies);
+    require(resampled_grid.energy_nodes() == valid_transport_energies.size(), "Resampled grid node count mismatch");
+
+    // Test coverage underflow (< 0.5 MeV/u)
+    std::vector<double> underflow_energies = {0.1, 10.0, 100.0};
+    require_throws<std::runtime_error>(
+        [&]() { (void)carbon::resample_schneider_cross_section_grid(tables, underflow_energies); },
+        "Transport energy range underflow must fail-fast without clamping");
+
+    // Test coverage overflow (> 430.0 MeV/u)
+    std::vector<double> overflow_energies = {100.0, 200.0, 450.0};
+    require_throws<std::runtime_error>(
+        [&]() { (void)carbon::resample_schneider_cross_section_grid(tables, overflow_energies); },
+        "Transport energy range overflow must fail-fast without clamping");
+
+    // 7. Section boundary (Section 24 vs Section 25)
+    const float sec24_val = resampled_grid.at(24, 0);
+    require(sec24_val > 0.0f && std::isfinite(sec24_val), "Section 24 (Titanium) rate must be valid");
+    require_throws<std::out_of_range>(
+        [&]() { (void)resampled_grid.at(25, 0); },
+        "Section 25 must throw out_of_range (0..24 valid)");
+
+    // 8. Density unit sanity check:
+    // Verify that host values are in units of mm^-1 at 1 g/cm3 (mass cross section).
+    // For rho = 1.0 g/cm3, macroscopic cross section == mass cross section.
+    // For rho != 1.0 g/cm3, the host table remains completely invariant.
+    const std::size_t e_idx_100 = 90; // index of 100.0 MeV/u in valid_transport_energies (10 + 90 = 100)
+    const float host_val_sec8 = resampled_grid.at(8, e_idx_100);
+    const double raw_val_sec8 = tables[8].interpolate(100.0);
+    require_near(host_val_sec8, raw_val_sec8, 1e-6, "Host table value must equal source mass rate");
+
+    const double rho_water = 1.0;
+    const double macro_water = rho_water * host_val_sec8;
+    require_near(macro_water, host_val_sec8, 1e-6, "At rho=1.0, macro == mass rate");
+
+    const double rho_bone = 1.8216;
+    const double macro_bone = rho_bone * resampled_grid.at(20, e_idx_100);
+    require(macro_bone != resampled_grid.at(20, e_idx_100), "At rho!=1.0, macro != mass rate");
+    require_near(resampled_grid.at(20, e_idx_100), tables[20].interpolate(100.0), 1e-6,
+                 "Host table is strictly invariant to density");
+
+    // 9. Relative-path resolution in configuration:
+    const auto temp_dir = std::filesystem::temp_directory_path() / "step09_rel_test";
+    std::filesystem::create_directories(temp_dir);
+    const auto abs_xs_path = std::filesystem::absolute(
+        "data/schneider/c12_schneider_inelastic_mass_xs.csv");
+    const auto rel_xs_path = std::filesystem::relative(abs_xs_path, temp_dir);
+
+    const auto config_path = temp_dir / "test_config.txt";
+    std::ofstream cfg_out(config_path);
+    cfg_out << "ct_schneider_cross_section_file: " << rel_xs_path.string() << "\n";
+    cfg_out << "initial_energy_MeVu: 100.0\n";
+    cfg_out << "number_of_histories: 10\n";
+    cfg_out.close();
+
+    const auto loaded_cfg = carbon::load_config(config_path);
+    require(std::filesystem::exists(loaded_cfg.ct_schneider_cross_section_file),
+            "Relative ct_schneider_cross_section_file must resolve to existing file");
+
+    std::filesystem::remove_all(temp_dir);
+
+    // 10. No-table fail-fast check:
+    // When CT Schneider mode is requested with active nuclear model, missing table must throw.
+    carbon::TransportConfig ct_missing_xs;
+    ct_missing_xs.enable_ct_grid = true;
+    ct_missing_xs.ct_grid_file = "dummy_grid.cctg";
+    ct_missing_xs.ct_schneider_file = "dummy_schneider.txt";
+    ct_missing_xs.nuclear_model = "geant4";
+    ct_missing_xs.ct_schneider_cross_section_file = ""; // explicitly empty
+    require_throws<std::invalid_argument>(
+        [&]() { ct_missing_xs.validate(); },
+        "CT Schneider mode without ct_schneider_cross_section_file must fail-fast in validate()");
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -4262,6 +4415,7 @@ int main(int argc, char** argv) {
         run("test_schneider_c12_inelastic_cross_section_table", test_schneider_c12_inelastic_cross_section_table);
         run("test_c12_inelastic_unit_conversions_and_sample_rows", test_c12_inelastic_unit_conversions_and_sample_rows);
         run("test_compiled_schneider_c12_rate_products", test_compiled_schneider_c12_rate_products);
+        run("test_step09_schneider_primary_xs_host_path", test_step09_schneider_primary_xs_host_path);
 #ifdef CARBON_HAS_SYCL
         run("test_sycl_tps_source_arbitrary_gantry_transport", test_sycl_tps_source_arbitrary_gantry_transport);
 #endif

@@ -193,24 +193,31 @@ std::vector<CrossSectionTable> CrossSectionTable::from_schneider_csv(
             break;
         }
     }
-    if (header.size() < 2 || header.front() != "energy_MeV_per_u") {
+    if (header.empty() || header.front() != "energy_MeV_per_u") {
         throw std::runtime_error(
-            "Schneider cross-section CSV must start with energy_MeV_per_u and "
-            "at least one section column: " +
+            "Schneider cross-section CSV must start with energy_MeV_per_u and have exactly 25 section columns: " +
             path.string());
     }
-    for (std::size_t section = 0; section + 1 < header.size(); ++section) {
+    constexpr std::size_t kExpectedSections = 25;
+    constexpr std::size_t kExpectedColumns = 1 + kExpectedSections;
+    for (std::size_t section = 0; section < kExpectedSections && section + 1 < header.size(); ++section) {
         const auto expected = "section_" + (section < 10 ? std::string{"0"} : std::string{}) +
                               std::to_string(section) +
                               "_mass_xs_per_mm_at_1g_cm3";
         if (header[section + 1] != expected) {
             throw std::runtime_error("Unexpected Schneider cross-section column '" +
-                                     header[section + 1] + "' in " + path.string());
+                                     header[section + 1] + "' (expected '" + expected + "') in " + path.string());
         }
+    }
+    if (header.size() != kExpectedColumns) {
+        throw std::runtime_error(
+            "Schneider cross-section CSV must have exactly 25 section columns (got " +
+            std::to_string(header.size() > 0 ? header.size() - 1 : 0) + "): " +
+            path.string());
     }
 
     std::vector<double> energies;
-    std::vector<std::vector<double>> section_values(header.size() - 1);
+    std::vector<std::vector<double>> section_values(kExpectedSections);
     while (std::getline(input, line)) {
         ++line_number;
         const auto first = line.find_first_not_of(" \t\r\n");
@@ -222,11 +229,29 @@ std::vector<CrossSectionTable> CrossSectionTable::from_schneider_csv(
             throw std::runtime_error("Incomplete Schneider cross-section row at " +
                                      path.string() + ":" + std::to_string(line_number));
         }
-        energies.push_back(parse_number(fields[0], path, line_number));
-        for (std::size_t section = 0; section < section_values.size(); ++section) {
-            section_values[section].push_back(
-                parse_number(fields[section + 1], path, line_number));
+        const double energy = parse_number(fields[0], path, line_number);
+        if (!std::isfinite(energy) || energy <= 0.0) {
+            throw std::runtime_error("Non-positive or non-finite energy " + fields[0] +
+                                     " at " + path.string() + ":" + std::to_string(line_number));
         }
+        if (!energies.empty() && energy <= energies.back()) {
+            throw std::runtime_error("Non-monotonic energy sequence (" +
+                                     std::to_string(energy) + " <= " + std::to_string(energies.back()) +
+                                     ") at " + path.string() + ":" + std::to_string(line_number));
+        }
+        energies.push_back(energy);
+        for (std::size_t section = 0; section < kExpectedSections; ++section) {
+            const double val = parse_number(fields[section + 1], path, line_number);
+            if (!std::isfinite(val) || val < 0.0) {
+                throw std::runtime_error("Negative or non-finite Schneider mass cross section (" +
+                                         fields[section + 1] + ") at " + path.string() + ":" +
+                                         std::to_string(line_number));
+            }
+            section_values[section].push_back(val);
+        }
+    }
+    if (energies.empty()) {
+        throw std::runtime_error("Empty Schneider cross-section table in " + path.string());
     }
 
     std::vector<CrossSectionTable> tables;
@@ -347,6 +372,90 @@ ResampledCrossSectionGrid resample_cross_section_grid(
     }
     return result;
 }
+
+SchneiderResampledCrossSectionGrid resample_schneider_cross_section_grid(
+    const std::vector<CrossSectionTable>& tables,
+    const std::vector<double>& transport_energies_MeVu) {
+    if (tables.size() != SchneiderResampledCrossSectionGrid::kExpectedSections) {
+        throw std::invalid_argument(
+            "resample_schneider_cross_section_grid requires exactly 25 section tables, got " +
+            std::to_string(tables.size()));
+    }
+    if (transport_energies_MeVu.empty()) {
+        throw std::invalid_argument("transport_energies_MeVu cannot be empty");
+    }
+
+    const auto& ref_energies = tables.front().energies();
+    if (ref_energies.empty()) {
+        throw std::invalid_argument("Schneider cross-section tables contain empty energy grid");
+    }
+
+    // Verify all 25 tables share identical energy nodes
+    for (std::size_t s = 1; s < tables.size(); ++s) {
+        const auto& e_s = tables[s].energies();
+        if (e_s.size() != ref_energies.size()) {
+            throw std::invalid_argument(
+                "Schneider cross-section section " + std::to_string(s) +
+                " has differing energy node count (" + std::to_string(e_s.size()) +
+                " vs reference " + std::to_string(ref_energies.size()) + ")");
+        }
+        for (std::size_t i = 0; i < ref_energies.size(); ++i) {
+            if (std::abs(e_s[i] - ref_energies[i]) > 1e-6) {
+                throw std::invalid_argument(
+                    "Schneider cross-section section " + std::to_string(s) +
+                    " has differing energy grid node at index " + std::to_string(i));
+            }
+        }
+    }
+
+    // Energy coverage check: transport energy range must be fully covered by validated table
+    constexpr double kCoverageTolerance = 1e-4;
+    const double t_min = transport_energies_MeVu.front();
+    const double t_max = transport_energies_MeVu.back();
+    const double table_min = ref_energies.front();
+    const double table_max = ref_energies.back();
+
+    if (t_min < table_min - kCoverageTolerance || t_max > table_max + kCoverageTolerance) {
+        throw std::runtime_error(
+            "Transport energy range [" + std::to_string(t_min) + ", " + std::to_string(t_max) +
+            "] exceeds validated Schneider cross-section coverage [" + std::to_string(table_min) +
+            ", " + std::to_string(table_max) + "] without clamping policy.");
+    }
+
+    SchneiderResampledCrossSectionGrid result;
+    result.transport_energies_MeVu = transport_energies_MeVu;
+    const std::size_t n_nodes = transport_energies_MeVu.size();
+    result.mass_xs_per_mm_at_1g_cm3.resize(
+        SchneiderResampledCrossSectionGrid::kExpectedSections * n_nodes);
+
+    for (std::size_t s = 0; s < SchneiderResampledCrossSectionGrid::kExpectedSections; ++s) {
+        const auto& table = tables[s];
+        const auto& xs_vals = table.values();
+        const std::size_t offset = s * n_nodes;
+
+        for (std::size_t i = 0; i < n_nodes; ++i) {
+            const double e = transport_energies_MeVu[i];
+            // Linear interpolation within [table_min, table_max]
+            if (e <= table_min) {
+                result.mass_xs_per_mm_at_1g_cm3[offset + i] = static_cast<float>(xs_vals.front());
+            } else if (e >= table_max) {
+                result.mass_xs_per_mm_at_1g_cm3[offset + i] = static_cast<float>(xs_vals.back());
+            } else {
+                auto it = std::lower_bound(ref_energies.begin(), ref_energies.end(), e);
+                const auto idx = static_cast<std::size_t>(std::distance(ref_energies.begin(), it));
+                const double x0 = ref_energies[idx - 1];
+                const double x1 = ref_energies[idx];
+                const double y0 = xs_vals[idx - 1];
+                const double y1 = xs_vals[idx];
+                const double frac = (e - x0) / (x1 - x0);
+                result.mass_xs_per_mm_at_1g_cm3[offset + i] = static_cast<float>(y0 + frac * (y1 - y0));
+            }
+        }
+    }
+
+    return result;
+}
+
 
 const std::vector<double>& CrossSectionTable::macro_h_per_mm() const noexcept {
     return macro_h_per_mm_;
