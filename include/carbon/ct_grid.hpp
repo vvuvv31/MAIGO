@@ -14,6 +14,12 @@ namespace carbon {
 
 struct TransportConfig;
 
+inline constexpr std::array<std::string_view, 13> schneider_canonical_element_names = {
+    "Hydrogen", "Carbon", "Nitrogen", "Oxygen",
+    "Magnesium", "Phosphorus", "Sulfur", "Chlorine",
+    "Argon", "Calcium", "Sodium", "Potassium", "Titanium"
+};
+
 struct SchneiderElement {
     std::uint8_t z{0};
     double atomic_mass_g_mol{0.0};

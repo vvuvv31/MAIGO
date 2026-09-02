@@ -84,6 +84,16 @@ std::vector<double> parse_number_list(const std::string& text) {
     return values;
 }
 
+int exact_integer(double x, const std::string& field_name) {
+    if (!std::isfinite(x) || std::floor(x) != x ||
+        x < static_cast<double>(std::numeric_limits<int>::min()) ||
+        x > static_cast<double>(std::numeric_limits<int>::max())) {
+        throw std::invalid_argument("Expected exact integer value for " + field_name +
+                                    ", got: " + std::to_string(x));
+    }
+    return static_cast<int>(x);
+}
+
 int find_section(const std::vector<int>& edges, const float hu) noexcept {
     if (edges.size() < 2) {
         return 0;
@@ -153,6 +163,12 @@ SchneiderMaterialTable SchneiderMaterialTable::from_topas_file(
                                             std::to_string(elem_names.size()) + "): " + path.string());
             }
             for (std::size_t i = 0; i < element_count; ++i) {
+                if (elem_names[i] != schneider_canonical_element_names[i]) {
+                    throw std::invalid_argument(
+                        "Schneider element order mismatch at column " + std::to_string(i) +
+                        " (expected " + std::string(schneider_canonical_element_names[i]) +
+                        ", got " + elem_names[i] + "): " + path.string());
+                }
                 table.elements[i] = element_from_name(elem_names[i]);
             }
             has_elements = true;
@@ -164,13 +180,15 @@ SchneiderMaterialTable SchneiderMaterialTable::from_topas_file(
             if (numbers.size() < section_count + 2) {
                 throw std::invalid_argument("SchneiderHUToMaterialSections incomplete in " + path.string());
             }
-            const auto count = static_cast<std::size_t>(numbers[0]);
+            const auto count = static_cast<std::size_t>(
+                exact_integer(numbers[0], "SchneiderHUToMaterialSections count"));
             if (count != section_count + 1 || numbers.size() != count + 1) {
                 throw std::invalid_argument("SchneiderHUToMaterialSections count mismatch in " + path.string());
             }
             std::vector<int> edges(count);
             for (std::size_t i = 0; i < count; ++i) {
-                edges[i] = static_cast<int>(numbers[i + 1]);
+                edges[i] = exact_integer(numbers[i + 1],
+                                         "SchneiderHUToMaterialSections edge[" + std::to_string(i) + "]");
                 if (i > 0 && edges[i] <= edges[i - 1]) {
                     throw std::invalid_argument("SchneiderHUToMaterialSections not strictly increasing at index " +
                                                 std::to_string(i) + " in " + path.string());
@@ -203,7 +221,9 @@ SchneiderMaterialTable SchneiderMaterialTable::from_topas_file(
                                             " count mismatch (expected " + std::to_string(element_count + 1) +
                                             ", got " + std::to_string(numbers.size()) + ") in " + path.string());
             }
-            if (static_cast<std::size_t>(numbers[0]) != element_count) {
+            const auto declared_count = static_cast<std::size_t>(
+                exact_integer(numbers[0], "SchneiderMaterialsWeight" + std::to_string(row_idx) + " declared count"));
+            if (declared_count != element_count) {
                 throw std::invalid_argument("SchneiderMaterialsWeight" + std::to_string(row_idx) +
                                             " declared count mismatch in " + path.string());
             }
