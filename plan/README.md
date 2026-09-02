@@ -166,4 +166,6 @@ YYYY-MM-DD HH:MM TZ | step NN | OLD -> NEW | commit/hash or blocker | evidence p
 2026-09-02 17:10 CST | step 08 | IN_PROGRESS -> DONE | test(ct): validate Schneider C12 attenuation with TOPAS thin slabs | /mnt/sda/wuwei/maigo-ct-schneider/evidence/step-08/
 2026-09-02 17:18 CST | step 09 | TODO -> IN_PROGRESS | start strict 25-section host load/resample path | data/schneider/c12_schneider_inelastic_mass_xs.csv
 2026-09-02 17:27 CST | step 09 | IN_PROGRESS -> DONE | feat(ct): load section-resolved primary C12 nuclear rates | tests/carbon_tests.cpp
+2026-09-02 17:40 CST | step 08/09 | DONE -> DONE | fix(ct): close primary XS host and thin-slab gates | plan/evidence-step08.sha256
 ```
+

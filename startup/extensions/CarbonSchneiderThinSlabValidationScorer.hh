@@ -35,7 +35,7 @@ public:
     struct FirstInteractionRecord {
         G4int event_id;
         G4double depth_mm;
-        G4double energy_before_mevu;
+        G4double step_pre_energy_mevu;
         G4String process_name;
         G4int track_id;
         G4int parent_id;
@@ -71,13 +71,15 @@ private:
     std::vector<G4long> bin_surviving_counts_{};
     std::vector<G4double> bin_energy_sums_mevu_{};
     std::vector<G4double> bin_energy_sq_sums_mevu_{};
+    std::vector<G4long> bin_energy_sample_counts_{};
 
     // Process breakdown
     std::map<G4String, G4long> process_counts_{};
 
     // Sample of detailed first interactions (capped to prevent huge JSON)
     std::vector<FirstInteractionRecord> first_interactions_{};
-    size_t max_detailed_interactions_{2000};
+    size_t max_detailed_interactions_{20000};
+    G4long first_interaction_sample_overflow_count_{0};
 };
 
 #endif

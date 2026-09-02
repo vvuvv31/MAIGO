@@ -78,6 +78,14 @@ struct SchneiderResampledCrossSectionGrid {
     const std::vector<CrossSectionTable>& tables,
     const std::vector<double>& transport_energies_MeVu);
 
+struct TransportConfig;
+
+// Prepares and resamples the 25-section Schneider cross-section table for primary transport on the host.
+// Reads config.ct_schneider_cross_section_file, validates exactly 25 sections, and resamples onto transport_energies_MeVu.
+[[nodiscard]] SchneiderResampledCrossSectionGrid prepare_schneider_primary_xs(
+    const TransportConfig& config,
+    const std::vector<double>& transport_energies_MeVu);
+
 class IonCrossSectionTables {
 public:
     static constexpr std::size_t mass_stride = 32;

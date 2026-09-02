@@ -614,6 +614,18 @@ TransportResult transport_sycl(const TransportConfig& config,
         use_ct_material_xs = !config.ct_bone_cross_section_file.empty() ||
                              !config.ct_schneider_cross_section_file.empty();
 
+        const bool use_schneider_primary_xs =
+            ((ct_material_ids_are_schneider_sections && grid.mass_sp_za_rel.size() == 25) ||
+             !config.ct_schneider_file.empty() ||
+             !config.ct_schneider_cross_section_file.empty()) &&
+            config.nuclear_model != "none";
+
+        std::optional<SchneiderResampledCrossSectionGrid> schneider_primary_xs_host;
+        if (use_schneider_primary_xs) {
+            schneider_primary_xs_host.emplace(
+                prepare_schneider_primary_xs(config, table_energies));
+        }
+
         if (use_ct_mass_sp) {
             ct_n_mass_factors = static_cast<std::uint32_t>(grid.mass_sp_za_rel.size());
             std::vector<float> mass_factor_lut(

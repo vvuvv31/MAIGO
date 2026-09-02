@@ -205,13 +205,19 @@ def evaluate_validation():
         if not gate_contamination:
             pt_passed = False
 
+        # Overflow gate
+        overflow_count = sim_data.get("first_interaction_sample_overflow_count", -1)
+        gate_overflow = (overflow_count == 0)
+        if not gate_overflow:
+            pt_passed = False
+
         if not pt_passed:
             all_passed = False
 
         # Status output
         status_str = "PASSED" if pt_passed else "FAILED"
         print(f"[{status_str}] Point: {pt_id:<22} | Section: {sec_id:2d} ({pt['material_name']}) | E0: {nominal_e:5.1f} MeV/u")
-        print(f"         Primaries: {entering_n:,} | Contamination: {contamination_count}")
+        print(f"         Primaries: {entering_n:,} | Contamination: {contamination_count} | Overflow: {overflow_count}")
         for r in pt_gate_records:
             g1 = "PASS" if r["gate_2sigma_passed"] else "FAIL"
             g2 = "PASS" if r["gate_rel1pct_passed"] else "FAIL"
@@ -224,6 +230,8 @@ def evaluate_validation():
             "energy_mevu": nominal_e,
             "entering_primaries": entering_n,
             "contamination_count": contamination_count,
+            "overflow_count": overflow_count,
+            "gate_overflow_passed": gate_overflow,
             "passed": pt_passed,
             "checkpoints": pt_gate_records,
             "process_breakdown": sim_data.get("process_breakdown", {})

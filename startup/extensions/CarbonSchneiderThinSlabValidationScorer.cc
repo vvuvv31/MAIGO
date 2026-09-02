@@ -69,6 +69,7 @@ CarbonSchneiderThinSlabValidationScorer::CarbonSchneiderThinSlabValidationScorer
     bin_surviving_counts_.assign(num_depth_bins_, 0);
     bin_energy_sums_mevu_.assign(num_depth_bins_, 0.0);
     bin_energy_sq_sums_mevu_.assign(num_depth_bins_, 0.0);
+    bin_energy_sample_counts_.assign(num_depth_bins_, 0);
 
     const G4double step_mm = slab_thickness_mm_ / static_cast<G4double>(num_depth_bins_);
     for (G4int k = 0; k < num_depth_bins_; ++k) {
@@ -138,14 +139,19 @@ G4bool CarbonSchneiderThinSlabValidationScorer::ProcessHits(G4Step* step, G4Touc
                     crossed_checkpoints_.insert(k);
                     bin_surviving_counts_[k]++;
 
-                    const G4double frac = (z_post > z_pre) ? (target_depth - z_pre) / (z_post - z_pre) : 0.0;
-                    const G4double pre_e = step->GetPreStepPoint()->GetKineticEnergy() / MeV;
-                    const G4double post_e = step->GetPostStepPoint()->GetKineticEnergy() / MeV;
-                    const G4double e_cross = pre_e - frac * (pre_e - post_e);
-                    const G4double e_mevu = e_cross / 12.0;
+                    // Only sample continuous energy from steps without hadronic reactions
+                    // to prevent post-reaction fragments / destroyed projectile states from contaminating mean_e
+                    if (!is_hadronic_inelastic) {
+                        const G4double frac = (z_post > z_pre) ? (target_depth - z_pre) / (z_post - z_pre) : 0.0;
+                        const G4double pre_e = step->GetPreStepPoint()->GetKineticEnergy() / MeV;
+                        const G4double post_e = step->GetPostStepPoint()->GetKineticEnergy() / MeV;
+                        const G4double e_cross = pre_e - frac * (pre_e - post_e);
+                        const G4double e_mevu = e_cross / 12.0;
 
-                    bin_energy_sums_mevu_[k] += e_mevu;
-                    bin_energy_sq_sums_mevu_[k] += (e_mevu * e_mevu);
+                        bin_energy_sums_mevu_[k] += e_mevu;
+                        bin_energy_sq_sums_mevu_[k] += (e_mevu * e_mevu);
+                        bin_energy_sample_counts_[k]++;
+                    }
                 }
             }
         }
@@ -165,13 +171,15 @@ G4bool CarbonSchneiderThinSlabValidationScorer::ProcessHits(G4Step* step, G4Touc
             if (first_interactions_.size() < max_detailed_interactions_) {
                 FirstInteractionRecord rec;
                 rec.event_id = event_id;
-                rec.depth_mm = (z_pre + z_post) * 0.5;
-                rec.energy_before_mevu = (step->GetPreStepPoint()->GetKineticEnergy() / MeV) / 12.0;
+                rec.depth_mm = z_post; // Hadronic reaction occurs at post-step point
+                rec.step_pre_energy_mevu = (step->GetPreStepPoint()->GetKineticEnergy() / MeV) / 12.0;
                 rec.process_name = proc_name;
                 rec.track_id = 1;
                 rec.parent_id = 0;
                 rec.is_hadronic_inelastic = true;
                 first_interactions_.push_back(rec);
+            } else {
+                first_interaction_sample_overflow_count_++;
             }
         }
     }
@@ -198,15 +206,19 @@ void CarbonSchneiderThinSlabValidationScorer::AbsorbResultsFromWorkerScorer(TsVS
         bin_surviving_counts_[k] += worker->bin_surviving_counts_[k];
         bin_energy_sums_mevu_[k] += worker->bin_energy_sums_mevu_[k];
         bin_energy_sq_sums_mevu_[k] += worker->bin_energy_sq_sums_mevu_[k];
+        bin_energy_sample_counts_[k] += worker->bin_energy_sample_counts_[k];
     }
 
     for (const auto& kv : worker->process_counts_) {
         process_counts_[kv.first] += kv.second;
     }
 
+    first_interaction_sample_overflow_count_ += worker->first_interaction_sample_overflow_count_;
     for (const auto& rec : worker->first_interactions_) {
         if (first_interactions_.size() < max_detailed_interactions_) {
             first_interactions_.push_back(rec);
+        } else {
+            first_interaction_sample_overflow_count_++;
         }
     }
 }
@@ -246,6 +258,7 @@ void CarbonSchneiderThinSlabValidationScorer::WriteResultsToJson() {
     out << "  \"entering_primaries\": " << total_entering_primaries_ << ",\n";
     out << "  \"total_first_inelastic_count\": " << total_first_inelastic_count_ << ",\n";
     out << "  \"contamination_count\": " << total_contamination_count_ << ",\n";
+    out << "  \"first_interaction_sample_overflow_count\": " << first_interaction_sample_overflow_count_ << ",\n";
 
     out << "  \"process_breakdown\": {\n";
     bool first_proc = true;
@@ -262,10 +275,11 @@ void CarbonSchneiderThinSlabValidationScorer::WriteResultsToJson() {
         const G4double s_mc = static_cast<G4double>(n_surv) / static_cast<G4double>(total_entering_primaries_);
         const G4double s_err = std::sqrt((s_mc * (1.0 - s_mc)) / static_cast<G4double>(total_entering_primaries_));
 
-        const G4double mean_e = (n_surv > 0) ? (bin_energy_sums_mevu_[k] / n_surv) : 0.0;
+        const G4long n_samples = bin_energy_sample_counts_[k];
+        const G4double mean_e = (n_samples > 0) ? (bin_energy_sums_mevu_[k] / n_samples) : 0.0;
         G4double std_e = 0.0;
-        if (n_surv > 1) {
-            const G4double var = (bin_energy_sq_sums_mevu_[k] - (bin_energy_sums_mevu_[k] * bin_energy_sums_mevu_[k] / n_surv)) / (n_surv - 1);
+        if (n_samples > 1) {
+            const G4double var = (bin_energy_sq_sums_mevu_[k] - (bin_energy_sums_mevu_[k] * bin_energy_sums_mevu_[k] / n_samples)) / (n_samples - 1);
             if (var > 0.0) std_e = std::sqrt(var);
         }
 
@@ -287,7 +301,7 @@ void CarbonSchneiderThinSlabValidationScorer::WriteResultsToJson() {
         out << "    {\n";
         out << "      \"event_id\": " << rec.event_id << ",\n";
         out << "      \"depth_mm\": " << rec.depth_mm << ",\n";
-        out << "      \"energy_before_interaction_mevu\": " << rec.energy_before_mevu << ",\n";
+        out << "      \"step_pre_energy_mevu\": " << rec.step_pre_energy_mevu << ",\n";
         out << "      \"process_name\": \"" << rec.process_name << "\",\n";
         out << "      \"track_id\": " << rec.track_id << ",\n";
         out << "      \"parent_id\": " << rec.parent_id << ",\n";

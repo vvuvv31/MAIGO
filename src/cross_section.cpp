@@ -1,4 +1,5 @@
 #include "carbon/cross_section.hpp"
+#include "carbon/transport_config.hpp"
 #include "carbon/detail/fred_fragmentation_data.hpp"
 
 #include <algorithm>
@@ -456,6 +457,27 @@ SchneiderResampledCrossSectionGrid resample_schneider_cross_section_grid(
     return result;
 }
 
+SchneiderResampledCrossSectionGrid prepare_schneider_primary_xs(
+    const TransportConfig& config,
+    const std::vector<double>& transport_energies_MeVu) {
+    if (config.ct_schneider_cross_section_file.empty()) {
+        throw std::runtime_error(
+            "prepare_schneider_primary_xs: ct_schneider_cross_section_file is empty");
+    }
+    if (!std::filesystem::exists(config.ct_schneider_cross_section_file)) {
+        throw std::runtime_error(
+            "prepare_schneider_primary_xs: file does not exist: " +
+            config.ct_schneider_cross_section_file.string());
+    }
+    const auto tables = CrossSectionTable::from_schneider_csv(
+        config.ct_schneider_cross_section_file);
+    if (tables.size() != SchneiderResampledCrossSectionGrid::kExpectedSections) {
+        throw std::runtime_error(
+            "prepare_schneider_primary_xs: expected exactly 25 section tables, got " +
+            std::to_string(tables.size()));
+    }
+    return resample_schneider_cross_section_grid(tables, transport_energies_MeVu);
+}
 
 const std::vector<double>& CrossSectionTable::macro_h_per_mm() const noexcept {
     return macro_h_per_mm_;

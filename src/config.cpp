@@ -670,9 +670,9 @@ void TransportConfig::validate() const {
             "packaged_fluctuation requires energy_straggling_package_file");
     }
     if (nuclear_model != "geant4" && nuclear_model != "fred_paper" &&
-        nuclear_model != "cinel02") {
+        nuclear_model != "cinel02" && nuclear_model != "none") {
         throw std::invalid_argument(
-            "nuclear_model must be geant4, fred_paper, or cinel02");
+            "nuclear_model must be geant4, fred_paper, cinel02, or none");
     }
     if (nuclear_model == "cinel02" &&
         (primary_inelastic_package_v2_file.empty() ||
@@ -1418,6 +1418,13 @@ TransportConfig load_config(const std::filesystem::path& path) {
         parse_number(values, "voxel_size_y_mm", config.voxel_size_y_mm);
     config.voxel_size_z_mm =
         parse_number(values, "voxel_size_z_mm", config.voxel_size_z_mm);
+    if (const auto it = values.find("nuclear_model"); it != values.end()) {
+        config.nuclear_model = it->second;
+        std::transform(config.nuclear_model.begin(), config.nuclear_model.end(),
+                       config.nuclear_model.begin(), [](unsigned char c) {
+                           return static_cast<char>(std::tolower(c));
+                       });
+    }
     if (config.enable_ct_grid) {
         const auto grid = CtGrid::load(
             resolve_input_path_from_config(config.ct_grid_file, path),
@@ -1578,13 +1585,6 @@ TransportConfig load_config(const std::filesystem::path& path) {
         config.cinel02_topas_compatibility_mode);
     config.cinel02_strict_match = parse_bool(
         values, "cinel02_strict_match", config.cinel02_strict_match);
-    if (const auto it = values.find("nuclear_model"); it != values.end()) {
-        config.nuclear_model = it->second;
-        std::transform(config.nuclear_model.begin(), config.nuclear_model.end(),
-                       config.nuclear_model.begin(), [](unsigned char c) {
-                           return static_cast<char>(std::tolower(c));
-                       });
-    }
     config.enable_nuclear_elastic =
         parse_bool(values, "enable_nuclear_elastic", config.enable_nuclear_elastic);
     config.fred_event_library_h_file = parse_path(

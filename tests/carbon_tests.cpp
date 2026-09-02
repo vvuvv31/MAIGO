@@ -4321,17 +4321,52 @@ void test_step09_schneider_primary_xs_host_path() {
 
     std::filesystem::remove_all(temp_dir);
 
-    // 10. No-table fail-fast check:
-    // When CT Schneider mode is requested with active nuclear model, missing table must throw.
-    carbon::TransportConfig ct_missing_xs;
-    ct_missing_xs.enable_ct_grid = true;
-    ct_missing_xs.ct_grid_file = "dummy_grid.cctg";
-    ct_missing_xs.ct_schneider_file = "dummy_schneider.txt";
-    ct_missing_xs.nuclear_model = "geant4";
-    ct_missing_xs.ct_schneider_cross_section_file = ""; // explicitly empty
+    // 10. Config nuclear_model test:
+    // Schneider CT + nuclear_model=none + no XS -> PASS
+    // Schneider CT + nuclear_model=geant4 + no XS -> FAIL
+    carbon::TransportConfig ct_em_only;
+    ct_em_only.enable_ct_grid = true;
+    ct_em_only.ct_grid_file = "dummy_grid.cctg";
+    ct_em_only.ct_schneider_file = "dummy_schneider.txt";
+    ct_em_only.nuclear_model = "none";
+    ct_em_only.ct_schneider_cross_section_file = ""; // No XS
+    ct_em_only.validate(); // Must pass without throwing!
+
+    carbon::TransportConfig ct_nuclear_active;
+    ct_nuclear_active.enable_ct_grid = true;
+    ct_nuclear_active.ct_grid_file = "dummy_grid.cctg";
+    ct_nuclear_active.ct_schneider_file = "dummy_schneider.txt";
+    ct_nuclear_active.nuclear_model = "geant4";
+    ct_nuclear_active.ct_schneider_cross_section_file = ""; // No XS
     require_throws<std::invalid_argument>(
-        [&]() { ct_missing_xs.validate(); },
-        "CT Schneider mode without ct_schneider_cross_section_file must fail-fast in validate()");
+        [&]() { ct_nuclear_active.validate(); },
+        "Schneider CT + nuclear_model=geant4 + no XS must FAIL");
+
+    // Also test via load_config from file to verify parse-order fix
+    {
+        const auto cfg_test_dir = std::filesystem::temp_directory_path() / "schneider_em_only_test";
+        std::filesystem::create_directories(cfg_test_dir);
+        const auto em_cfg_file = cfg_test_dir / "em_only.txt";
+        std::ofstream em_out(em_cfg_file);
+        em_out << "initial_energy_MeVu: 100.0\n"
+               << "number_of_histories: 10\n"
+               << "nuclear_model: none\n";
+        em_out.close();
+        const auto parsed_em = carbon::load_config(em_cfg_file);
+        require(parsed_em.nuclear_model == "none", "Parsed nuclear_model must be none");
+        std::filesystem::remove_all(cfg_test_dir);
+    }
+
+    // 11. Test prepare_schneider_primary_xs helper:
+    carbon::TransportConfig valid_schneider_cfg;
+    valid_schneider_cfg.ct_schneider_cross_section_file =
+        "data/schneider/c12_schneider_inelastic_mass_xs.csv";
+    const auto prepared_grid = carbon::prepare_schneider_primary_xs(
+        valid_schneider_cfg, valid_transport_energies);
+    require(prepared_grid.energy_nodes() == valid_transport_energies.size(),
+            "prepare_schneider_primary_xs must return properly resampled grid");
+    require_near(prepared_grid.at(8, e_idx_100), host_val_sec8, 1e-6,
+                 "prepare_schneider_primary_xs values must match resampled table");
 }
 
 }  // namespace
