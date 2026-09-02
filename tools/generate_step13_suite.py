@@ -310,7 +310,7 @@ def generate_suite():
         trans_z = half_thick
         tot_energy = e_mevu * 12.0
 
-        beam_z = -1.0
+        beam_z = 0.0
         param_content = TOPAS_PARAM_TEMPLATE.format(
             beam_pos_x_mm=0.0,
             beam_pos_y_mm=0.0,
