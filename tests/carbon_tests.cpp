@@ -4955,12 +4955,18 @@ void test_step11_schneider_step_energy_error_bound() {
             [](float x) { return std::log(x); });
     };
 
-    // Endpoint sanity unit tests for host mass factor lookup
-    for (const float test_e : {0.01F, 400.01F, 430.0F}) {
-        for (const float test_rho : {0.00120479F, 0.26F, 1.0F, 1.85F, 3.0F}) {
-            const float mf = get_mass_factor(test_e, test_rho);
-            require(std::isfinite(mf) && mf > 0.5F && mf < 1.5F, "Mass factor endpoint lookup failed");
-        }
+    // Endpoint clamp contract tests for host mass factor lookup
+    for (const float test_rho : {0.00120479F, 0.26F, 1.0F, 1.85F, 3.0F}) {
+        const float mf_min = get_mass_factor(sp_min_e, test_rho);
+        const float mf_below = get_mass_factor(std::nextafter(sp_min_e, -1.0e30F), test_rho);
+        const float mf_zero = get_mass_factor(0.0F, test_rho);
+        require(mf_min == mf_below && mf_min == mf_zero, "Mass factor lower clamp contract failed");
+
+        const float mf_max = get_mass_factor(sp_max_e, test_rho);
+        const float mf_above = get_mass_factor(std::nextafter(sp_max_e, 1.0e30F), test_rho);
+        const float mf_430 = get_mass_factor(430.0F, test_rho);
+        const float mf_high = get_mass_factor(1000.0F, test_rho);
+        require(mf_max == mf_above && mf_max == mf_430 && mf_max == mf_high, "Mass factor upper clamp contract failed");
     }
 
     auto get_production_stopping_power = [&](float e_mevu, float rho) -> float {
@@ -4984,60 +4990,49 @@ void test_step11_schneider_step_energy_error_bound() {
     const float max_rel_loss = static_cast<float>(cfg.maximum_relative_energy_loss);
 
     // =========================================================================
-    // Part A: Whole-Trajectory Primary Slowing Survival Error Gate
+    // Part A: Exact Step-by-Step Whole-Trajectory Primary Slowing Survival Error Gate
     // Across all 25 sections x 48 density nodes x 8 beam energies (100 to 430 MeV/u)
-    // Strictly verified down to E <= 5.0 MeV/u (no truncation)
+    // The slowing energy sequence is strictly determined step-by-step by (rho, E_inc),
+    // advancing exact 1 mm / energy-limited steps down to E <= 5.0 MeV/u without any macro-aggregation.
     // =========================================================================
     const std::vector<float> beam_energies = {100.0F, 150.0F, 200.0F, 250.0F, 300.0F, 350.0F, 400.0F, 430.0F};
     float max_trajectory_survival_error = 0.0F;
 
-    for (std::uint32_t sec = 0; sec < 25; ++sec) {
-        for (const auto rho : all_density_nodes) {
-            for (const auto e_inc : beam_energies) {
-                float e = e_inc;
-                float tau_start_tot = 0.0F;
-                float tau_ref_tot = 0.0F;
-                while (e > 5.0F) {
-                    const float sp = get_production_stopping_power(e, rho);
-                    const float max_ds_energy = max_rel_loss * (e * 12.0F) / sp;
-                    float step_mm = max_step_mm;
-                    float de_u = (sp / 12.0F) * step_mm;
+    for (const auto rho : all_density_nodes) {
+        for (const auto e_inc : beam_energies) {
+            float e = e_inc;
+            std::array<double, 25> tau_start_tot{};
+            std::array<double, 25> tau_ref_tot{};
+            std::size_t step_watchdog = 0;
+            constexpr std::size_t kMaxWatchdog = 10'000'000;
 
-                    if (max_ds_energy <= max_step_mm) {
-                        // Energy-loss limited step (standard in tissue/bone)
-                        step_mm = max_ds_energy;
-                        de_u = (sp / 12.0F) * step_mm;
-                        const float e1 = std::max(0.5F, e - de_u);
-                        const float e_mid = 0.5F * (e + e1);
-                        const float sig0 = rho * section_xs(sec, e);
-                        const float sig_mid = rho * section_xs(sec, e_mid);
-                        const float sig1 = rho * section_xs(sec, e1);
-
-                        tau_start_tot += sig0 * step_mm;
-                        tau_ref_tot += (step_mm / 6.0F) * (sig0 + 4.0F * sig_mid + sig1);
-                        e = e1;
-                    } else {
-                        // Step-length limited (ds = 1 mm, low density air).
-                        // Aggregate N 1-mm sub-steps into an interval with total loss <= 0.005*E
-                        const auto n_sub = std::max(1, static_cast<int>(std::floor(max_ds_energy / max_step_mm)));
-                        const float total_step_mm = static_cast<float>(n_sub) * max_step_mm;
-                        de_u = (sp / 12.0F) * total_step_mm;
-                        const float e1 = std::max(0.5F, e - de_u);
-                        const float e_mid = 0.5F * (e + e1);
-                        const float sig0 = rho * section_xs(sec, e);
-                        const float sig_mid = rho * section_xs(sec, e_mid);
-                        const float sig1 = rho * section_xs(sec, e1);
-
-                        // Over n_sub 1-mm steps, starting optical depth is sum of step starts
-                        // Trapezoidal / Simpson aggregation is exact to O((dE/E)^3)
-                        tau_start_tot += sig0 * total_step_mm;
-                        tau_ref_tot += (total_step_mm / 6.0F) * (sig0 + 4.0F * sig_mid + sig1);
-                        e = e1;
-                    }
+            while (e > 5.0F) {
+                if (++step_watchdog > kMaxWatchdog) {
+                    require(false, "Trajectory slowing loop exceeded watchdog limit 10M steps");
                 }
-                require(e <= 5.0F, "Whole-trajectory primary slowing must strictly reach 5 MeV/u");
-                const double s_start = std::exp(-static_cast<double>(tau_start_tot));
-                const double s_ref = std::exp(-static_cast<double>(tau_ref_tot));
+                const float sp = get_production_stopping_power(e, rho);
+                require(std::isfinite(sp) && sp > 0.0F, "Stopping power must be finite and positive");
+
+                const float step_mm = std::min(max_step_mm, max_rel_loss * (e * 12.0F) / sp);
+                const float de_u = (sp / 12.0F) * step_mm;
+                const float e1 = std::max(0.5F, e - de_u);
+                require(std::isfinite(e1) && e1 < e, "Energy must decrease monotonically");
+                const float e_mid = 0.5F * (e + e1);
+
+                for (std::uint32_t s = 0; s < 25; ++s) {
+                    const float s0 = rho * section_xs(s, e);
+                    const float s_mid = rho * section_xs(s, e_mid);
+                    const float s1 = rho * section_xs(s, e1);
+                    tau_start_tot[s] += static_cast<double>(s0 * step_mm);
+                    tau_ref_tot[s] += static_cast<double>((step_mm / 6.0F) * (s0 + 4.0F * s_mid + s1));
+                }
+                e = e1;
+            }
+            require(e <= 5.0F, "Whole-trajectory primary slowing must strictly reach 5 MeV/u");
+
+            for (std::uint32_t s = 0; s < 25; ++s) {
+                const double s_start = std::exp(-tau_start_tot[s]);
+                const double s_ref = std::exp(-tau_ref_tot[s]);
                 const float rel_s_err = static_cast<float>(std::fabs(s_start / s_ref - 1.0));
                 if (rel_s_err > max_trajectory_survival_error) {
                     max_trajectory_survival_error = rel_s_err;
@@ -5046,7 +5041,7 @@ void test_step11_schneider_step_energy_error_bound() {
         }
     }
 
-    std::cout << "[step-energy-bound] Part A: Whole-trajectory primary survival error across all 25 sections x 48 densities x 8 energies (max_step=1.0mm) = "
+    std::cout << "[step-energy-bound] Part A: Exact step-by-step whole-trajectory primary survival error across all 25 sections x 48 densities x 8 energies (max_step=1.0mm) = "
               << max_trajectory_survival_error * 100.0F << "% (gate < 0.2%)\n";
     require(max_trajectory_survival_error < 0.002F, "Whole-trajectory primary survival error exceeds 0.2%");
 
@@ -5090,8 +5085,9 @@ void test_step11_schneider_step_energy_error_bound() {
     }
 
     std::cout << "[step-energy-bound] Part B: Realizable single-step error: smooth max = "
-              << max_smooth_realizable_error * 100.0F << "% (< 0.2%), global max = "
-              << max_global_realizable_error * 100.0F << "% (diagnostic)\n";
+              << max_smooth_realizable_error * 100.0F << "% (gate < 0.2%), global max = "
+              << max_global_realizable_error * 100.0F << "% (gate < 0.4%)\n";
+    require(max_smooth_realizable_error < 0.002F, "Smooth range realizable step error exceeds 0.2%");
     require(max_global_realizable_error < 0.004F, "Global full-grid realizable step error exceeds 0.4%");
 
     // =========================================================================

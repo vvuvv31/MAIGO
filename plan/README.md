@@ -176,4 +176,5 @@ YYYY-MM-DD HH:MM TZ | step NN | OLD -> NEW | commit/hash or blocker | evidence p
 2026-09-02 19:24 CST | step 11D | DONE -> DONE | test(ct): close realizable full-energy error bound and low-energy optical depth gates | tests/carbon_tests.cpp
 2026-09-02 20:13 CST | step 11E | DONE -> DONE | test(ct): verify whole-trajectory survival bias and exact mass-SPR tail bounds | tests/carbon_tests.cpp
 2026-09-02 20:24 CST | step 11F | DONE -> DONE | test(ct): close Step 11F exact 1mm max step, endpoint index clamp, and strict slowing gates | tests/carbon_tests.cpp
+2026-09-02 20:34 CST | step 11G | DONE -> DONE | test(ct): close Step 11G exact step-by-step 25-section trajectory loop and clamp contract | tests/carbon_tests.cpp
 ```
