@@ -1,0 +1,4 @@
+# Revalidation cryptographic anchor for external Step 06 evidence stored under /mnt/sda/wuwei/maigo-ct-schneider/evidence/step-04/
+ab5ca8dac1f114f3b0ffa0bd0998bb2eb074dfd8ff4ce44fcf43898de5fa0237  inelastic-xs-comparison.json
+584c6962383c1ac5bbdf0a31e5c78cc61c6215428c656ce48294afb36342ed9c  run-manifest.json
+d55c7855e5b89f4c8a065fd9120f8fe871c9d53557cbfc747803f838e33a93cf  topas-c12-schneider-inelastic-xs.json

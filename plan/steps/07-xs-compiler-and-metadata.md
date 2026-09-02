@@ -23,10 +23,10 @@ section_24_mass_xs_per_mm_at_1g_cm3
 
 - Input is the Step 06 raw manifest, never ad hoc concatenated CSVs.
 - Enforce one and only one row per key.
-- Sort by numeric energy, section, and declared target order.
+- Require strict canonical input ordering (numeric energy, section, and declared canonical target Z order); reject shuffled, misaligned, or out-of-order input.
 - Verify section total equals sum of partials and compiled CSV equals raw mass total.
 - Preserve zeros. Do not replace small elements with oxygen, drop sparse targets, smooth curves, or interpolate missing nodes.
-- Refuse mixed TOPAS/Geant4/physics-list/Schneider hashes.
+- Refuse mixed TOPAS/Geant4/physics-list/Schneider hashes without fallback.
 - Write atomically and calculate data SHA256 after final serialization.
 
 ## Tests

@@ -10,7 +10,8 @@ Enforces:
   - Strict canonical ordering: [energy, section] for CSV, [section, target, energy] for binary
   - Strict partial sum closure: sum_target mass_partial == mass_total
   - Exact 25 sections, 13 canonical target Zs, 860 uniform energy nodes (0.5 to 430.0 MeV/u, step 0.5)
-  - Introspected provenance from raw manifest & JSON (fails fast on mixed provenance)
+  - Introspected provenance from raw manifest without fallback (fails fast on missing or mixed provenance)
+  - Raw manifest Schneider SHA256 == Current repo Schneider SHA256 cross-check
   - Rejection of duplicates, missing keys, smoothing, oxygen aliasing, or corrupted provenance
 """
 
@@ -65,9 +66,9 @@ def compile_rates(raw_manifest_path, raw_json_path, output_dir, evidence_dir, gi
 
     repo_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     schneider_txt = os.path.join(repo_dir, "data/HUtoMaterialSchneider.txt")
-    schneider_sha256 = sha256_file(schneider_txt)
+    current_schneider_sha = sha256_file(schneider_txt)
 
-    # 1. Read & Validate Raw Manifest (Provenance Introspection)
+    # 1. Read & Validate Raw Manifest (Strict Provenance Introspection, No Fallback)
     with open(raw_manifest_path) as f:
         manifest = json.load(f)
 
@@ -77,6 +78,14 @@ def compile_rates(raw_manifest_path, raw_json_path, output_dir, evidence_dir, gi
         raise ValueError("Raw manifest indicates sum_conservation failed!")
     if not manifest.get("quality_gate_passed", False):
         raise ValueError("Raw manifest indicates quality gate failed!")
+
+    extractor_commit = manifest.get("git_commit")
+    if not extractor_commit or not isinstance(extractor_commit, str) or len(extractor_commit) < 7:
+        raise ValueError("Raw manifest missing or invalid git_commit")
+
+    fixed_timestamp = manifest.get("generation_timestamp_utc")
+    if not fixed_timestamp or not isinstance(fixed_timestamp, str):
+        raise ValueError("Raw manifest missing or invalid generation_timestamp_utc")
 
     topas_ver = manifest.get("topas_version")
     if not topas_ver or not isinstance(topas_ver, str):
@@ -90,6 +99,18 @@ def compile_rates(raw_manifest_path, raw_json_path, output_dir, evidence_dir, gi
     if not manifest_proc or manifest_proc != "ionInelastic":
         raise ValueError(f"Raw manifest invalid or missing inelastic process_name: {manifest_proc}")
 
+    manifest_physics = manifest.get("physics_list") or manifest.get("physics_modules")
+    if not manifest_physics:
+        raise ValueError("Raw manifest missing physics_list or physics_modules")
+
+    manifest_schneider_sha = manifest.get("schneider_sha256")
+    if not manifest_schneider_sha or not isinstance(manifest_schneider_sha, str):
+        raise ValueError("Raw manifest missing schneider_sha256")
+    if manifest_schneider_sha != current_schneider_sha:
+        raise ValueError(
+            f"Schneider provenance mismatch: raw manifest SHA ({manifest_schneider_sha}) != current repo SHA ({current_schneider_sha})"
+        )
+
     raw_json_name = os.path.basename(raw_json_path)
     if raw_json_name not in manifest.get("files", {}):
         raise ValueError(f"Raw manifest does not register file: {raw_json_name}")
@@ -97,10 +118,6 @@ def compile_rates(raw_manifest_path, raw_json_path, output_dir, evidence_dir, gi
     actual_json_sha = sha256_file(raw_json_path)
     if expected_json_sha != actual_json_sha:
         raise ValueError(f"Raw JSON SHA mismatch: {actual_json_sha} != {expected_json_sha}")
-
-    # Fixed timestamp from raw manifest to ensure byte-for-byte reproducibility
-    fixed_timestamp = manifest.get("generation_timestamp_utc", "2026-09-02T08:00:00Z")
-    extractor_commit = manifest.get("git_commit", "unknown")
 
     # Current compiler commit
     if git_commit_override:
@@ -141,7 +158,7 @@ def compile_rates(raw_manifest_path, raw_json_path, output_dir, evidence_dir, gi
 
     for s_idx, sec in enumerate(sections):
         if sec.get("section_id") != s_idx:
-            raise ValueError(f"Section ID mismatch: {sec.get('section_id')} != {s_idx}")
+            raise ValueError(f"Section ordering mismatch: got {sec.get('section_id')}, expected {s_idx}")
 
         grid = sec.get("grid", [])
         if len(grid) != EXPECTED_ENERGIES:
@@ -151,10 +168,10 @@ def compile_rates(raw_manifest_path, raw_json_path, output_dir, evidence_dir, gi
             e_mevu = round(pt["energy_mevu"], 6)
             expected_e = round(ENERGY_MIN + e_idx * ENERGY_STEP, 6)
 
-            # Strict uniform grid validation: E[i] == 0.5 + 0.5*i
+            # Strict uniform grid validation & canonical ordering check
             if abs(e_mevu - expected_e) > 1e-4:
                 raise ValueError(
-                    f"Energy grid deviation at section {s_idx}, node {e_idx}: got {e_mevu}, expected {expected_e}"
+                    f"Energy grid deviation or out-of-order node at section {s_idx}, index {e_idx}: got {e_mevu}, expected {expected_e}"
                 )
 
             if s_idx == 0:
@@ -229,10 +246,10 @@ def compile_rates(raw_manifest_path, raw_json_path, output_dir, evidence_dir, gi
         "data_sha256": csv_sha256,
         "topas_version": topas_ver,
         "geant4_version": geant4_ver,
-        "physics_list": "g4em-standard_opt4 + g4ion-binarycascade",
+        "physics_list": manifest_physics,
         "process_name": manifest_proc,
         "schneider_source_path": "data/HUtoMaterialSchneider.txt",
-        "schneider_sha256": schneider_sha256,
+        "schneider_sha256": manifest_schneider_sha,
         "extractor_git_commit": extractor_commit,
         "compiler_git_commit": compiler_commit,
         "raw_campaign_manifest_sha256": sha256_file(raw_manifest_path),
@@ -309,10 +326,10 @@ def compile_rates(raw_manifest_path, raw_json_path, output_dir, evidence_dir, gi
         "binary_version": 1,
         "topas_version": topas_ver,
         "geant4_version": geant4_ver,
-        "physics_list": "g4em-standard_opt4 + g4ion-binarycascade",
+        "physics_list": manifest_physics,
         "process_name": manifest_proc,
         "schneider_source_path": "data/HUtoMaterialSchneider.txt",
-        "schneider_sha256": schneider_sha256,
+        "schneider_sha256": manifest_schneider_sha,
         "extractor_git_commit": extractor_commit,
         "compiler_git_commit": compiler_commit,
         "raw_campaign_manifest_sha256": sha256_file(raw_manifest_path),
@@ -355,6 +372,7 @@ def compile_rates(raw_manifest_path, raw_json_path, output_dir, evidence_dir, gi
         "status": "PASSED",
         "topas_version": topas_ver,
         "geant4_version": geant4_ver,
+        "physics_list": manifest_physics,
         "process_name": manifest_proc,
         "sections_verified": EXPECTED_SECTIONS,
         "targets_verified": EXPECTED_TARGETS,
