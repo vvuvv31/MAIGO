@@ -161,4 +161,5 @@ YYYY-MM-DD HH:MM TZ | step NN | OLD -> NEW | commit/hash or blocker | evidence p
 2026-09-02 15:42 CST | step 05 | TODO -> DONE | audit(ct): 25/25 section MAIGO ↔ TOPAS material truth gate passed | plan/evidence-step03.sha256
 2026-09-02 15:56 CST | step 06 | TODO -> DONE | fix(topas): harden Schneider C12 XS provenance and process locking | /mnt/sda/wuwei/maigo-ct-schneider/evidence/step-04/
 2026-09-02 16:19 CST | step 07 | TODO -> DONE | feat(ct): compile Schneider primary-carbon nuclear rates | /mnt/sda/wuwei/maigo-ct-schneider/evidence/step-07/
+2026-09-02 16:26 CST | step 07 | IN_PROGRESS -> DONE | data(ct): regenerate audited Schneider C12 rate products | /mnt/sda/wuwei/maigo-ct-schneider/evidence/step-07/
 ```

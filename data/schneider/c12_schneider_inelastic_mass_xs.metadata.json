@@ -9,16 +9,36 @@
   "schneider_source_path": "data/HUtoMaterialSchneider.txt",
   "schneider_sha256": "5022cd89617b28dbd8ee8bf8b095ea20cfd99f6405218693c0df238b3617a139",
   "extractor_git_commit": "38a5dd27e39b7cd79a4d1f72710810417ca03934",
-  "compiler_git_commit": "044f743a2242ddc8f40cd61eb817d0524ca50174",
+  "compiler_git_commit": "0113e0f3285b7b8af0eacb9710ddaddc24c9e642",
   "raw_campaign_manifest_sha256": "ff09ce826f488cead789de981ee988fe0563ab8925f5f978f1fa585eff34a008",
   "energy_min_MeVu": 0.5,
   "energy_max_MeVu": 430.0,
-  "energy_step_MeVu": 0.5,
-  "energy_grid_nodes": 860,
+  "energy_grid": {
+    "type": "uniform",
+    "min_MeVu": 0.5,
+    "max_MeVu": 430.0,
+    "step_MeVu": 0.5,
+    "nodes": 860
+  },
   "projectiles": [
     "C12"
   ],
   "sections_count": 25,
+  "target_elements": [
+    "Hydrogen",
+    "Carbon",
+    "Nitrogen",
+    "Oxygen",
+    "Magnesium",
+    "Phosphorus",
+    "Sulfur",
+    "Chlorine",
+    "Argon",
+    "Calcium",
+    "Sodium",
+    "Potassium",
+    "Titanium"
+  ],
   "dimension_order": [
     "energy_MeV_per_u",
     "section_00_to_24_mass_xs"
