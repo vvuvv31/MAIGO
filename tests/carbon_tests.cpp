@@ -4074,6 +4074,39 @@ void test_schneider_c12_inelastic_cross_section_table() {
                        "Unexpected Schneider cross-section column");
 }
 
+void test_c12_inelastic_unit_conversions_and_sample_rows() {
+    // 1. Unit conversion mathematical proof:
+    // 1 barn = 10^-24 cm^2 = 10^-28 m^2 = 10^-22 mm^2
+    constexpr double kBarnToMm2 = 1.0e-22;
+    constexpr double kCm3ToMm3 = 1.0e-3;
+
+    // 2. Hand calculation check Sample 1:
+    // Section 8 (Soft Tissue, HU=100), Target Oxygen (Z=8), E=200.0 MeV/u
+    const double n_o_mm3 = 2.5256826962e+19;
+    const double sigma_o_barn = 0.93229581701;
+    const double expected_partial_macro_o = n_o_mm3 * (sigma_o_barn * kBarnToMm2);
+    const double recorded_partial_macro_o = 0.00235468341276;
+    require_near(expected_partial_macro_o, recorded_partial_macro_o, 1.0e-12,
+                 "Sample 1 (Soft tissue/O/200 MeV/u) hand-calculated partial macro mismatch");
+
+    const double n_o_cm3 = 2.5256826962e+22;
+    require_near((n_o_cm3 * kCm3ToMm3) / n_o_mm3, 1.0, 1.0e-12,
+                 "Atom density cm3 -> mm3 conversion mismatch");
+
+    // 3. Hand calculation check Sample 2:
+    // Section 20 (Dense Bone, HU=1250), Target Calcium (Z=20), E=300.0 MeV/u
+    const double n_ca_mm3 = 5.50165804809e+18;
+    const double sigma_ca_barn = 1.5501092386;
+    const double expected_partial_macro_ca = n_ca_mm3 * (sigma_ca_barn * kBarnToMm2);
+    const double recorded_partial_macro_ca = 0.000852817096793;
+    require_near(expected_partial_macro_ca, recorded_partial_macro_ca, 1.0e-12,
+                 "Sample 2 (Dense bone/Ca/300 MeV/u) hand-calculated partial macro mismatch");
+
+    const double n_ca_cm3 = 5.50165804809e+21;
+    require_near((n_ca_cm3 * kCm3ToMm3) / n_ca_mm3, 1.0, 1.0e-12,
+                 "Atom density cm3 -> mm3 conversion mismatch for Ca");
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -4153,6 +4186,7 @@ int main(int argc, char** argv) {
         run("test_water_transport_invariance_without_ct", test_water_transport_invariance_without_ct);
         run("test_schneider_material_table_parser", test_schneider_material_table_parser);
         run("test_schneider_c12_inelastic_cross_section_table", test_schneider_c12_inelastic_cross_section_table);
+        run("test_c12_inelastic_unit_conversions_and_sample_rows", test_c12_inelastic_unit_conversions_and_sample_rows);
 #ifdef CARBON_HAS_SYCL
         run("test_sycl_tps_source_arbitrary_gantry_transport", test_sycl_tps_source_arbitrary_gantry_transport);
 #endif

@@ -360,7 +360,7 @@ void CarbonSchneiderInelasticXsDump::DumpCrossSections() {
         jout << "    \"process_sub_type\": " << process_sub_type << ",\n";
         jout << "    \"process_type_name\": \"fHadronic\",\n";
         jout << "    \"process_sub_type_name\": \"fHadronInelastic\",\n";
-        jout << "    \"dataset_model_family\": \"Glauber-Gribov / G4HadronInelasticDataSet\"\n";
+        jout << "    \"dataset_model_identity\": \"not_introspected\"\n";
         jout << "  },\n";
         jout << "  \"projectile\": \"C12\",\n";
         jout << "  \"projectile_z\": 6,\n";
