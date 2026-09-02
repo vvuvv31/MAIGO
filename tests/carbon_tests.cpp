@@ -3832,6 +3832,36 @@ void test_cinel02_ledger_schema_and_accumulator() {
                  0.0, 0.0, "CINEL02 signed handoff partition mismatch");
 }
 
+bool is_sycl_cuda_available() {
+#ifdef CARBON_HAS_SYCL
+    try {
+        (void)carbon::describe_sycl_device("cuda");
+        return true;
+    } catch (const std::exception&) {
+        return false;
+    }
+#else
+    return false;
+#endif
+}
+
+void require_water_transport_equivalent(const carbon::TransportResult& actual,
+                                        const carbon::TransportResult& expected,
+                                        const std::string& context) {
+    require_near(actual.total_deposited_energy_MeV, expected.total_deposited_energy_MeV,
+                 1.0e-12, context + ": total deposited energy mismatch");
+    require_near(actual.escaped_energy_MeV, expected.escaped_energy_MeV,
+                 1.0e-12, context + ": escaped energy mismatch");
+    require(actual.deposited_energy_MeV == expected.deposited_energy_MeV,
+            context + ": 1D depth dose bins mismatch");
+    require(actual.nuclear_interactions == expected.nuclear_interactions,
+            context + ": nuclear interactions count mismatch");
+    require(actual.primary_elastic_interactions == expected.primary_elastic_interactions,
+            context + ": primary elastic count mismatch");
+    require(actual.relative_energy_balance_error() < 1.0e-12,
+            context + ": energy balance error exceeds tolerance");
+}
+
 void test_water_transport_invariance_without_ct() {
     carbon::TransportConfig base_config;
     base_config.number_of_histories = 64;
@@ -3849,28 +3879,30 @@ void test_water_transport_invariance_without_ct() {
 
     const auto run_a = carbon::transport_serial(base_config, table, zero_cross_section());
     const auto run_b = carbon::transport_serial(base_config, table, zero_cross_section());
+    require_water_transport_equivalent(run_a, run_b, "Serial water exact repeatability");
 
-    require(run_a.deposited_energy_MeV == run_b.deposited_energy_MeV,
-            "Water transport serial runs must produce bitwise identical deposited energy");
-    require(run_a.relative_energy_balance_error() < 1.0e-12,
-            "Water transport serial energy balance failed");
-
+    // Configure unattached CT knobs with distinct sentinel values; when enable_ct_grid=false,
+    // none of these knobs may leak into pure water transport.
     auto ct_unattached_config = base_config;
     ct_unattached_config.ct_schneider_file = "data/HUtoMaterialSchneider.txt";
+    ct_unattached_config.ct_stopping_power_scale = 1.2345;
+    ct_unattached_config.ct_use_density_mass_spr = false;
+    ct_unattached_config.ct_skip_homogeneous_face_clamp = false;
+    ct_unattached_config.ct_schneider_cross_section_file = "unused.csv";
+    ct_unattached_config.ct_cinel02_rate_file = "unused-rates.csv";
+    ct_unattached_config.ct_hu_stopping_power_lut_file = "unused-sp.csv";
     ct_unattached_config.validate();
 
     const auto run_c = carbon::transport_serial(ct_unattached_config, table, zero_cross_section());
-    require(run_a.deposited_energy_MeV == run_c.deposited_energy_MeV,
-            "Unattached CT configuration must not alter water transport energy deposition");
+    require_water_transport_equivalent(run_c, run_a, "Serial unattached CT knob isolation");
 
 #ifdef CARBON_HAS_SYCL
-    try {
-        const auto sycl_a = carbon::transport_sycl(base_config, table, zero_cross_section(), "cuda");
-        const auto sycl_b = carbon::transport_sycl(ct_unattached_config, table, zero_cross_section(), "cuda");
-        require(sycl_a.deposited_energy_MeV == sycl_b.deposited_energy_MeV,
-                "SYCL water transport must produce identical results with or without unattached CT fields");
-    } catch (const std::exception&) {
-        // Fall back gracefully if CUDA backend not available in testing environment
+    if (is_sycl_cuda_available()) {
+        const auto sycl_a =
+            carbon::transport_sycl(base_config, table, zero_cross_section(), "cuda");
+        const auto sycl_b =
+            carbon::transport_sycl(ct_unattached_config, table, zero_cross_section(), "cuda");
+        require_water_transport_equivalent(sycl_b, sycl_a, "SYCL unattached CT knob isolation");
     }
 #endif
 }

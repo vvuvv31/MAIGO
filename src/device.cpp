@@ -89,9 +89,7 @@ sycl::queue make_sycl_queue(const std::string& device_name) {
         // is unavailable (common on GPU workstations without CPU OpenCL RT).
         try {
             return sycl::queue{sycl::cpu_selector_v, async_handler, properties};
-        } catch (const std::exception&) {
-            return sycl::queue{sycl::gpu_selector_v, async_handler, properties};
-        } catch (...) {
+        } catch (const sycl::exception&) {
             return sycl::queue{sycl::gpu_selector_v, async_handler, properties};
         }
     }
