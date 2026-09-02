@@ -679,11 +679,20 @@ TransportResult transport_sycl(const TransportConfig& config,
                        schneider_primary_xs_device, total_elements).wait_and_throw();
 
             const auto actual_sha256 = compute_file_sha256_hex(config.ct_schneider_cross_section_file);
-            std::string source_sha256 = "unknown";
+            std::string source_sha256 = "";
             const auto meta_path = config.ct_schneider_cross_section_file.parent_path() /
                 (config.ct_schneider_cross_section_file.stem().string() + ".metadata.json");
-            if (std::filesystem::exists(meta_path)) {
+            if (!std::filesystem::exists(meta_path)) {
+                if (config.is_primary_attenuation_only_mode()) {
+                    throw std::runtime_error(
+                        "Schneider cross section metadata file missing: " + meta_path.string());
+                }
+            } else {
                 std::ifstream meta_in(meta_path);
+                if (!meta_in.is_open()) {
+                    throw std::runtime_error(
+                        "Failed to open Schneider cross section metadata file: " + meta_path.string());
+                }
                 std::string line;
                 while (std::getline(meta_in, line)) {
                     if (line.find("\"data_sha256\"") != std::string::npos) {
@@ -697,7 +706,29 @@ TransportResult transport_sycl(const TransportConfig& config,
                     }
                 }
             }
-            if (source_sha256 != "unknown" && source_sha256 != actual_sha256) {
+
+            auto is_valid_64hex = [](const std::string& s) -> bool {
+                if (s.size() != 64) return false;
+                for (char c : s) {
+                    if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'))) {
+                        return false;
+                    }
+                }
+                return true;
+            };
+
+            if (config.is_primary_attenuation_only_mode()) {
+                if (source_sha256.empty() || !is_valid_64hex(source_sha256)) {
+                    throw std::runtime_error(
+                        "Schneider cross section metadata missing or malformed data_sha256 in: " +
+                        meta_path.string());
+                }
+                if (source_sha256 != actual_sha256) {
+                    throw std::runtime_error(
+                        "Schneider cross section runtime SHA256 mismatch: file=" + actual_sha256 +
+                        ", metadata=" + source_sha256);
+                }
+            } else if (!source_sha256.empty() && source_sha256 != actual_sha256) {
                 throw std::runtime_error(
                     "Schneider cross section runtime SHA256 mismatch: file=" + actual_sha256 +
                     ", metadata=" + source_sha256);
@@ -711,7 +742,7 @@ TransportResult transport_sycl(const TransportConfig& config,
                       << "  E_min=" << schneider_xs_e_min << " MeV/u\n"
                       << "  inv_dE=" << schneider_xs_inv_dE << "\n"
                       << "  source=" << config.ct_schneider_cross_section_file << "\n"
-                      << "  source_sha256=" << source_sha256 << "\n";
+                      << "  source_sha256=" << (source_sha256.empty() ? "unknown" : source_sha256) << "\n";
             if (config.is_primary_attenuation_only_mode()) {
                 std::cout << "[ct-validation-mode] primary-attenuation-only\n"
                           << "  verified_source_sha256=" << actual_sha256 << "\n";
@@ -730,10 +761,10 @@ TransportResult transport_sycl(const TransportConfig& config,
                 }
                 const auto resolve = [](const std::filesystem::path& user_path,
                                         const std::filesystem::path& fallback) {
-                    return !user_path.empty() && std::filesystem::exists(user_path)
-                               ? user_path
-                               : (std::filesystem::exists(fallback) ? fallback
-                                                                    : std::filesystem::path{});
+                    if (!user_path.empty()) {
+                        return std::filesystem::exists(user_path) ? user_path : std::filesystem::path{};
+                    }
+                    return std::filesystem::exists(fallback) ? fallback : std::filesystem::path{};
                 };
                 const auto air_path = resolve(config.ct_air_stopping_power_file,
                                              "data/stopping_power_air_geant4_11_3_2.csv");
@@ -763,6 +794,10 @@ TransportResult transport_sycl(const TransportConfig& config,
             };
 
             if (!try_density_spr()) {
+                if (config.is_primary_attenuation_only_mode()) {
+                    throw std::runtime_error(
+                        "primary-attenuation-only mode requires density-mass-SPR LUT to be successfully constructed without fallback");
+                }
                 for (std::uint32_t sec = 0; sec < ct_n_mass_factors; ++sec) {
                     const auto za = grid.mass_sp_za_rel[sec];
                     const auto I_eV = grid.mass_sp_I_eV[sec];
@@ -2310,6 +2345,8 @@ TransportResult transport_sycl(const TransportConfig& config,
                             const auto slot = count_ref.fetch_add(1U);
                             if (slot < number_of_histories) {
                                 first_interactions_device[slot] = PrimaryFirstInteractionRecord{
+                                    position_x_mm,
+                                    position_y_mm,
                                     position_z_mm,
                                     energy_MeV * inverse_mass_number,
                                     interaction_section,
@@ -2896,8 +2933,11 @@ TransportResult transport_sycl(const TransportConfig& config,
                     ++steps;
                 }
 
+                const bool inside_phantom = (position_z_mm >= 0.0F && position_z_mm < phantom_length_mm);
+                const bool watchdog_exceeded = (steps >= max_primary_steps);
+
                 if (energy_MeV > 0.0F && energy_MeV <= energy_cutoff_MeV &&
-                    position_z_mm >= 0.0F && position_z_mm < phantom_length_mm) {
+                    inside_phantom && !watchdog_exceeded) {
                     const auto cutoff_energy_MeV = energy_MeV;
                     pending_primary_depth_MeV += cutoff_energy_MeV;
                     if (enable_voxel_scoring && pending_primary_voxel >= 0 &&
@@ -2934,7 +2974,7 @@ TransportResult transport_sycl(const TransportConfig& config,
                         term_ref.fetch_add(1U);
                     }
                     energy_MeV = 0.0F;
-                } else if (energy_MeV > 0.0F) {
+                } else if (energy_MeV > 0.0F && !inside_phantom && !watchdog_exceeded) {
                     if (primary_terminal_counts_device != nullptr) {
                         sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
                                          sycl::memory_scope::device,
@@ -2949,6 +2989,12 @@ TransportResult transport_sycl(const TransportConfig& config,
                                          sycl::access::address_space::global_space>
                             term_ref(primary_terminal_counts_device[3]); // [3] = other_terminal
                         term_ref.fetch_add(1U);
+                    }
+                    if (energy_MeV > 0.0F) {
+                        if (untracked_nuclear_device != nullptr) {
+                            untracked_nuclear_device[global_history] = energy_MeV;
+                        }
+                        energy_MeV = 0.0F;
                     }
                 }
 

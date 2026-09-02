@@ -97,24 +97,23 @@ BraggPeakMetrics compute_bragg_peak_metrics(
 
     const double target_80 = 0.8 * max_val;
     const double target_50 = 0.5 * max_val;
-    metrics.r80_distal_mm = metrics.peak_depth_mm;
-    metrics.r50_distal_mm = metrics.peak_depth_mm;
 
-    // Distal falloff search (after peak)
+    // Distal falloff search (first downward crossing after peak)
     for (std::size_t i = max_bin; i + 1 < idd_energy_MeV.size(); ++i) {
         const double v0 = idd_energy_MeV[i];
         const double v1 = idd_energy_MeV[i + 1];
         const double z0 = z_min_mm + (static_cast<double>(i) + 0.5) * bin_width_z_mm;
         const double z1 = z_min_mm + (static_cast<double>(i + 1) + 0.5) * bin_width_z_mm;
 
-        if (v0 >= target_80 && v1 <= target_80 && v0 != v1) {
+        if (!metrics.found_r80 && v0 >= target_80 && v1 <= target_80 && v0 != v1) {
             const double frac = (v0 - target_80) / (v0 - v1);
             metrics.r80_distal_mm = z0 + frac * (z1 - z0);
+            metrics.found_r80 = true;
         }
-        if (v0 >= target_50 && v1 <= target_50 && v0 != v1) {
+        if (!metrics.found_r50 && v0 >= target_50 && v1 <= target_50 && v0 != v1) {
             const double frac = (v0 - target_50) / (v0 - v1);
             metrics.r50_distal_mm = z0 + frac * (z1 - z0);
-            break;
+            metrics.found_r50 = true;
         }
     }
     return metrics;

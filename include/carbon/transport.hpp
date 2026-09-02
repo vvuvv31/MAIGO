@@ -213,6 +213,8 @@ inline constexpr float cinel02_simpson_hazard(
 }
 
 struct PrimaryFirstInteractionRecord {
+    float x_mm{0.0F};
+    float y_mm{0.0F};
     float depth_mm{0.0F};
     float energy_MeVu{0.0F};
     std::uint32_t section_id{0};
@@ -222,8 +224,10 @@ struct PrimaryFirstInteractionRecord {
 struct BraggPeakMetrics {
     double peak_depth_mm{0.0};
     double peak_dose_MeV{0.0};
-    double r80_distal_mm{0.0};
-    double r50_distal_mm{0.0};
+    double r80_distal_mm{std::numeric_limits<double>::quiet_NaN()};
+    double r50_distal_mm{std::numeric_limits<double>::quiet_NaN()};
+    bool found_r80{false};
+    bool found_r50{false};
 };
 
 struct TransportResult {

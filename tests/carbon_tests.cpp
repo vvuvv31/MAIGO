@@ -5400,6 +5400,34 @@ void test_step12_primary_only_mode_contract() {
         base_cfg.validate();
         require(base_cfg.is_primary_attenuation_only_mode(), "is_primary_attenuation_only_mode should be true");
 
+        // enable_inelastic = false rejected
+        {
+            auto bad = base_cfg;
+            bad.enable_inelastic = false;
+            require_throws([&]() { bad.validate(); }, "enable_inelastic = false must be rejected");
+        }
+        // Spot energy > 430 MeV/u rejected
+        {
+            auto bad = base_cfg;
+            carbon::PrimarySpotBatchEntry spot{};
+            spot.history_begin = 0;
+            spot.history_end = bad.number_of_histories;
+            spot.floats[0] = 6000.0F; // 500 MeV/u > 430
+            spot.floats[1] = 0.0F;
+            bad.primary_spot_batch = {spot};
+            require_throws([&]() { bad.validate(); }, "Spot energy > 430 MeV/u must be rejected");
+        }
+        // Spot spread > 0 rejected
+        {
+            auto bad = base_cfg;
+            carbon::PrimarySpotBatchEntry spot{};
+            spot.history_begin = 0;
+            spot.history_end = bad.number_of_histories;
+            spot.floats[0] = 2400.0F; // 200 MeV/u
+            spot.floats[1] = 0.02F;
+            bad.primary_spot_batch = {spot};
+            require_throws([&]() { bad.validate(); }, "Spot spread > 0 must be rejected");
+        }
         // Non-C12 rejected
         {
             auto bad = base_cfg;
@@ -5483,28 +5511,6 @@ void test_step12_primary_only_mode_contract() {
         const std::string expected_hash =
             "47b341324c95f874a2874ba48180a84504605f86d549d7920173d690e0aa91bb";
         require(actual_hash == expected_hash, "c12_schneider_inelastic_mass_xs.csv SHA-256 hash mismatch");
-
-        // Tamper detection test
-        const auto temp_dir = std::filesystem::temp_directory_path() / "carbon_step12_tamper_test";
-        std::filesystem::create_directories(temp_dir);
-        const auto tampered_csv = temp_dir / "c12_schneider_inelastic_mass_xs.csv";
-        const auto tampered_meta = temp_dir / "c12_schneider_inelastic_mass_xs.metadata.json";
-
-        std::filesystem::copy_file(xs_path, tampered_csv, std::filesystem::copy_options::overwrite_existing);
-        {
-            std::ofstream meta_out(tampered_meta);
-            meta_out << "{\n  \"data_sha256\": \"" << expected_hash << "\"\n}\n";
-        }
-        {
-            std::fstream f(tampered_csv, std::ios::in | std::ios::out | std::ios::binary);
-            f.seekp(50);
-            f.put('9');
-        }
-
-        const auto tampered_hash = carbon::compute_file_sha256_hex(tampered_csv);
-        require(tampered_hash != expected_hash, "Tampered file hash should not equal original hash");
-
-        std::filesystem::remove_all(temp_dir);
     }
 
     // =========================================================================
@@ -5530,7 +5536,7 @@ void test_step12_primary_only_mode_contract() {
             require_near(idd[z], expected, 1e-9, "IDD slice sum mismatch");
         }
 
-        // Bragg Peak Metrics with known shape
+        // Bragg Peak Metrics with known downward crossings
         std::vector<double> test_idd(20, 0.0);
         for (std::size_t i = 0; i <= 10; ++i) {
             test_idd[i] = 10.0 * static_cast<double>(i);
@@ -5542,10 +5548,28 @@ void test_step12_primary_only_mode_contract() {
         test_idd[15] = 0.0;
 
         const auto bp = carbon::compute_bragg_peak_metrics(test_idd, 1.0, 0.0);
+        require(bp.found_r80, "found_r80 should be true");
+        require(bp.found_r50, "found_r50 should be true");
         require_near(bp.peak_depth_mm, 10.5, 1e-6, "Bragg peak depth mismatch");
         require_near(bp.peak_dose_MeV, 100.0, 1e-6, "Bragg peak dose mismatch");
         require_near(bp.r80_distal_mm, 11.5, 1e-6, "R80 distal mismatch");
         require_near(bp.r50_distal_mm, 13.5, 1e-6, "R50 distal mismatch");
+
+        // Monotonically increasing curve (no distal crossings)
+        std::vector<double> rising_idd = {10.0, 20.0, 30.0, 40.0, 50.0};
+        const auto bp_rising = carbon::compute_bragg_peak_metrics(rising_idd, 1.0, 0.0);
+        require(!bp_rising.found_r80, "rising curve should not find R80");
+        require(!bp_rising.found_r50, "rising curve should not find R50");
+        require(std::isnan(bp_rising.r80_distal_mm), "rising curve R80 should be NaN");
+        require(std::isnan(bp_rising.r50_distal_mm), "rising curve R50 should be NaN");
+
+        // Truncated distal curve: crosses 80% but stops before reaching 50%
+        std::vector<double> truncated_idd = {0.0, 50.0, 100.0, 75.0, 60.0};
+        const auto bp_trunc = carbon::compute_bragg_peak_metrics(truncated_idd, 1.0, 0.0);
+        require(bp_trunc.found_r80, "truncated curve should find R80");
+        require(!bp_trunc.found_r50, "truncated curve should not find R50");
+        require(!std::isnan(bp_trunc.r80_distal_mm), "truncated curve R80 should not be NaN");
+        require(std::isnan(bp_trunc.r50_distal_mm), "truncated curve R50 should be NaN");
     }
 
 #ifdef CARBON_HAS_SYCL
@@ -5659,6 +5683,8 @@ void test_step12_primary_only_mode_contract() {
             require(result.primary_first_interactions.size() == result.primary_inelastic_terminated_count,
                     "primary_first_interactions size mismatch");
             for (const auto& rec : result.primary_first_interactions) {
+                require(rec.x_mm >= -50.0F && rec.x_mm <= 50.0F, "Interaction x out of bounds");
+                require(rec.y_mm >= -50.0F && rec.y_mm <= 50.0F, "Interaction y out of bounds");
                 require(rec.depth_mm >= 0.0F && rec.depth_mm <= 200.0F, "Interaction depth out of bounds");
                 require(rec.energy_MeVu >= 0.5F && rec.energy_MeVu <= 200.0F + 1e-4F, "Interaction energy out of bounds");
                 require(rec.section_id == 11, "Interaction section_id mismatch");
@@ -5675,6 +5701,8 @@ void test_step12_primary_only_mode_contract() {
                       << "  peak_dose_MeV=" << bp.peak_dose_MeV << "\n"
                       << "  R80_distal_mm=" << bp.r80_distal_mm << "\n"
                       << "  R50_distal_mm=" << bp.r50_distal_mm << "\n";
+            require(bp.found_r80, "Bragg peak R80 should be found");
+            require(bp.found_r50, "Bragg peak R50 should be found");
             require(bp.peak_depth_mm >= 80.0 && bp.peak_depth_mm <= 100.0,
                     "Bragg peak depth for 200 MeV/u C12 in water should be near 85-90 mm");
         }
@@ -5687,6 +5715,7 @@ void test_step12_primary_only_mode_contract() {
                 std::getline(in, header_line);
             }
             const auto zero_xs_csv = temp_dir / "zero_schneider_xs.csv";
+            const auto zero_xs_meta = temp_dir / "zero_schneider_xs.metadata.json";
             {
                 std::ofstream out(zero_xs_csv);
                 out << header_line << "\n";
@@ -5695,6 +5724,11 @@ void test_step12_primary_only_mode_contract() {
                     for (int s = 0; s < 25; ++s) out << ",0.0";
                     out << "\n";
                 }
+            }
+            const auto zero_hash = carbon::compute_file_sha256_hex(zero_xs_csv);
+            {
+                std::ofstream out(zero_xs_meta);
+                out << "{\n  \"data_sha256\": \"" << zero_hash << "\"\n}\n";
             }
             carbon::TransportConfig cfg_zero;
             cfg_zero.phantom_length_mm = 200.0;
@@ -5735,6 +5769,7 @@ void test_step12_primary_only_mode_contract() {
                 std::getline(in, header_line);
             }
             const auto huge_xs_csv = temp_dir / "huge_schneider_xs.csv";
+            const auto huge_xs_meta = temp_dir / "huge_schneider_xs.metadata.json";
             {
                 std::ofstream out(huge_xs_csv);
                 out << header_line << "\n";
@@ -5743,6 +5778,11 @@ void test_step12_primary_only_mode_contract() {
                     for (int s = 0; s < 25; ++s) out << ",1000.0";
                     out << "\n";
                 }
+            }
+            const auto huge_hash = carbon::compute_file_sha256_hex(huge_xs_csv);
+            {
+                std::ofstream out(huge_xs_meta);
+                out << "{\n  \"data_sha256\": \"" << huge_hash << "\"\n}\n";
             }
             carbon::TransportConfig cfg_huge;
             cfg_huge.phantom_length_mm = 200.0;
@@ -5775,6 +5815,143 @@ void test_step12_primary_only_mode_contract() {
                     "Huge XS should have 0 escaped particles");
             for (const auto& rec : res_huge.primary_first_interactions) {
                 require(rec.depth_mm < 1.0F, "Huge XS collision depth must be < 1 mm");
+            }
+        }
+
+        // 4D: True Runtime Negative / Fail-Closed Tests for transport_sycl
+        {
+            // 4D.1: SHA256 mismatch (tampered CSV with original metadata)
+            {
+                const auto tampered_csv = temp_dir / "tampered_xs.csv";
+                const auto tampered_meta = temp_dir / "tampered_xs.metadata.json";
+                std::filesystem::copy_file(xs_path, tampered_csv, std::filesystem::copy_options::overwrite_existing);
+                {
+                    std::ofstream meta_out(tampered_meta);
+                    meta_out << "{\n  \"data_sha256\": \"47b341324c95f874a2874ba48180a84504605f86d549d7920173d690e0aa91bb\"\n}\n";
+                }
+                {
+                    std::fstream f(tampered_csv, std::ios::in | std::ios::out | std::ios::binary);
+                    f.seekp(50);
+                    f.put('9');
+                }
+                carbon::TransportConfig cfg_tampered;
+                cfg_tampered.phantom_length_mm = 200.0;
+                cfg_tampered.depth_bin_width_mm = 10.0;
+                cfg_tampered.primary_atomic_number = 6;
+                cfg_tampered.primary_mass_number = 12;
+                cfg_tampered.initial_energy_MeVu = 200.0;
+                cfg_tampered.enable_ct_grid = true;
+                cfg_tampered.ct_grid_file = cctg_file.string();
+                cfg_tampered.ct_schneider_cross_section_file = tampered_csv.string();
+                cfg_tampered.ct_validation_mode = "primary-attenuation-only";
+                cfg_tampered.enable_inelastic = true;
+                cfg_tampered.enable_nuclear_elastic = false;
+                cfg_tampered.enable_secondary_transport = false;
+                cfg_tampered.enable_energy_straggling = false;
+                cfg_tampered.beam_energy_spread = 0.0;
+                cfg_tampered.ct_use_density_mass_spr = true;
+                cfg_tampered.ct_stopping_power_scale = 1.0;
+                cfg_tampered.energy_cutoff_MeV = 6.0;
+                cfg_tampered.number_of_histories = 100;
+                cfg_tampered.validate();
+
+                require_throws([&]() {
+                    carbon::transport_sycl(cfg_tampered, water_sp, zero_xs, "default");
+                }, "transport_sycl must reject tampered cross section file");
+            }
+
+            // 4D.2: Missing metadata file
+            {
+                const auto nometa_csv = temp_dir / "nometa_xs.csv";
+                std::filesystem::copy_file(xs_path, nometa_csv, std::filesystem::copy_options::overwrite_existing);
+                carbon::TransportConfig cfg_nometa;
+                cfg_nometa.phantom_length_mm = 200.0;
+                cfg_nometa.depth_bin_width_mm = 10.0;
+                cfg_nometa.primary_atomic_number = 6;
+                cfg_nometa.primary_mass_number = 12;
+                cfg_nometa.initial_energy_MeVu = 200.0;
+                cfg_nometa.enable_ct_grid = true;
+                cfg_nometa.ct_grid_file = cctg_file.string();
+                cfg_nometa.ct_schneider_cross_section_file = nometa_csv.string();
+                cfg_nometa.ct_validation_mode = "primary-attenuation-only";
+                cfg_nometa.enable_inelastic = true;
+                cfg_nometa.enable_nuclear_elastic = false;
+                cfg_nometa.enable_secondary_transport = false;
+                cfg_nometa.enable_energy_straggling = false;
+                cfg_nometa.beam_energy_spread = 0.0;
+                cfg_nometa.ct_use_density_mass_spr = true;
+                cfg_nometa.ct_stopping_power_scale = 1.0;
+                cfg_nometa.energy_cutoff_MeV = 6.0;
+                cfg_nometa.number_of_histories = 100;
+                cfg_nometa.validate();
+
+                require_throws([&]() {
+                    carbon::transport_sycl(cfg_nometa, water_sp, zero_xs, "default");
+                }, "transport_sycl must reject missing metadata file in validation mode");
+            }
+
+            // 4D.3: Malformed data_sha256 in metadata
+            {
+                const auto malformed_csv = temp_dir / "malformed_xs.csv";
+                const auto malformed_meta = temp_dir / "malformed_xs.metadata.json";
+                std::filesystem::copy_file(xs_path, malformed_csv, std::filesystem::copy_options::overwrite_existing);
+                {
+                    std::ofstream meta_out(malformed_meta);
+                    meta_out << "{\n  \"data_sha256\": \"short_invalid_hex\"\n}\n";
+                }
+                carbon::TransportConfig cfg_malformed;
+                cfg_malformed.phantom_length_mm = 200.0;
+                cfg_malformed.depth_bin_width_mm = 10.0;
+                cfg_malformed.primary_atomic_number = 6;
+                cfg_malformed.primary_mass_number = 12;
+                cfg_malformed.initial_energy_MeVu = 200.0;
+                cfg_malformed.enable_ct_grid = true;
+                cfg_malformed.ct_grid_file = cctg_file.string();
+                cfg_malformed.ct_schneider_cross_section_file = malformed_csv.string();
+                cfg_malformed.ct_validation_mode = "primary-attenuation-only";
+                cfg_malformed.enable_inelastic = true;
+                cfg_malformed.enable_nuclear_elastic = false;
+                cfg_malformed.enable_secondary_transport = false;
+                cfg_malformed.enable_energy_straggling = false;
+                cfg_malformed.beam_energy_spread = 0.0;
+                cfg_malformed.ct_use_density_mass_spr = true;
+                cfg_malformed.ct_stopping_power_scale = 1.0;
+                cfg_malformed.energy_cutoff_MeV = 6.0;
+                cfg_malformed.number_of_histories = 100;
+                cfg_malformed.validate();
+
+                require_throws([&]() {
+                    carbon::transport_sycl(cfg_malformed, water_sp, zero_xs, "default");
+                }, "transport_sycl must reject malformed data_sha256 in validation mode");
+            }
+
+            // 4D.4: Fail-closed Density-Mass-SPR (missing required stopping power table file)
+            {
+                carbon::TransportConfig cfg_nodensity;
+                cfg_nodensity.phantom_length_mm = 200.0;
+                cfg_nodensity.depth_bin_width_mm = 10.0;
+                cfg_nodensity.primary_atomic_number = 6;
+                cfg_nodensity.primary_mass_number = 12;
+                cfg_nodensity.initial_energy_MeVu = 200.0;
+                cfg_nodensity.enable_ct_grid = true;
+                cfg_nodensity.ct_grid_file = cctg_file.string();
+                cfg_nodensity.ct_schneider_cross_section_file = xs_path.string();
+                cfg_nodensity.ct_validation_mode = "primary-attenuation-only";
+                cfg_nodensity.enable_inelastic = true;
+                cfg_nodensity.enable_nuclear_elastic = false;
+                cfg_nodensity.enable_secondary_transport = false;
+                cfg_nodensity.enable_energy_straggling = false;
+                cfg_nodensity.beam_energy_spread = 0.0;
+                cfg_nodensity.ct_use_density_mass_spr = true;
+                cfg_nodensity.ct_air_stopping_power_file = "nonexistent_air_table.csv";
+                cfg_nodensity.ct_stopping_power_scale = 1.0;
+                cfg_nodensity.energy_cutoff_MeV = 6.0;
+                cfg_nodensity.number_of_histories = 100;
+                cfg_nodensity.validate();
+
+                require_throws([&]() {
+                    carbon::transport_sycl(cfg_nodensity, water_sp, zero_xs, "default");
+                }, "transport_sycl must throw when density-mass-SPR fails to construct in validation mode");
             }
         }
 

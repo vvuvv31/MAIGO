@@ -679,6 +679,9 @@ void TransportConfig::validate() const {
         if (ct_schneider_cross_section_file.empty()) {
             throw std::invalid_argument("ct_validation_mode 'primary-attenuation-only' requires ct_schneider_cross_section_file");
         }
+        if (!enable_inelastic) {
+            throw std::invalid_argument("ct_validation_mode 'primary-attenuation-only' requires enable_inelastic = true");
+        }
         if (enable_nuclear_elastic) {
             throw std::invalid_argument("ct_validation_mode 'primary-attenuation-only' requires enable_nuclear_elastic = false");
         }
@@ -1229,13 +1232,38 @@ void TransportConfig::validate() const {
     }
     if (!primary_spot_batch.empty()) {
         std::uint64_t expected_begin = 0;
-        for (const auto& entry : primary_spot_batch) {
+        for (std::size_t s = 0; s < primary_spot_batch.size(); ++s) {
+            const auto& entry = primary_spot_batch[s];
             if (entry.history_begin != expected_begin ||
                 entry.history_end <= entry.history_begin) {
                 throw std::invalid_argument(
                     "primary_spot_batch history ranges must be contiguous and non-empty");
             }
             expected_begin = entry.history_end;
+            const float spot_energy_MeV = entry.floats[0];
+            const float spot_spread = entry.floats[1];
+            if (!std::isfinite(spot_energy_MeV) || spot_energy_MeV <= 0.0F) {
+                throw std::invalid_argument(
+                    "primary_spot_batch[" + std::to_string(s) + "] energy must be finite and positive");
+            }
+            if (!std::isfinite(spot_spread) || spot_spread < 0.0F) {
+                throw std::invalid_argument(
+                    "primary_spot_batch[" + std::to_string(s) + "] energy spread must be finite and nonnegative");
+            }
+            if (is_primary_attenuation_only_mode()) {
+                const double spot_energy_MeVu =
+                    static_cast<double>(spot_energy_MeV) / static_cast<double>(primary_mass_number);
+                if (spot_energy_MeVu > 430.0 + 1e-5) {
+                    throw std::invalid_argument(
+                        "primary-attenuation-only mode requires all spot energies <= 430 MeV/u, spot " +
+                        std::to_string(s) + " has " + std::to_string(spot_energy_MeVu) + " MeV/u");
+                }
+                if (spot_spread != 0.0F) {
+                    throw std::invalid_argument(
+                        "primary-attenuation-only mode requires all spot energy spreads == 0.0, spot " +
+                        std::to_string(s) + " has " + std::to_string(spot_spread));
+                }
+            }
         }
         if (expected_begin != number_of_histories) {
             throw std::invalid_argument(
