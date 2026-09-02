@@ -33,6 +33,39 @@ float hu_to_density_g_per_cm3(float hu) noexcept {
 
 namespace {
 
+SchneiderElement element_from_name(const std::string& name) {
+    if (name == "Hydrogen") return {1, 1.008, "Hydrogen"};
+    if (name == "Carbon") return {6, 12.011, "Carbon"};
+    if (name == "Nitrogen") return {7, 14.007, "Nitrogen"};
+    if (name == "Oxygen") return {8, 15.999, "Oxygen"};
+    if (name == "Magnesium") return {12, 24.305, "Magnesium"};
+    if (name == "Phosphorus") return {15, 30.973762, "Phosphorus"};
+    if (name == "Sulfur") return {16, 32.06, "Sulfur"};
+    if (name == "Chlorine") return {17, 35.45, "Chlorine"};
+    if (name == "Argon") return {18, 39.948, "Argon"};
+    if (name == "Calcium") return {20, 40.078, "Calcium"};
+    if (name == "Sodium") return {11, 22.989769, "Sodium"};
+    if (name == "Potassium") return {19, 39.0983, "Potassium"};
+    if (name == "Titanium") return {22, 47.867, "Titanium"};
+    throw std::invalid_argument("Unsupported or unknown Schneider element name: " + name);
+}
+
+std::vector<std::string> parse_string_list(const std::string& text) {
+    std::vector<std::string> tokens;
+    std::size_t pos = 0;
+    while (pos < text.size()) {
+        const auto quote_start = text.find('"', pos);
+        if (quote_start == std::string::npos) break;
+        const auto quote_end = text.find('"', quote_start + 1);
+        if (quote_end == std::string::npos) {
+            throw std::invalid_argument("Unterminated quoted string in element list");
+        }
+        tokens.push_back(text.substr(quote_start + 1, quote_end - quote_start - 1));
+        pos = quote_end + 1;
+    }
+    return tokens;
+}
+
 std::vector<double> parse_number_list(const std::string& text) {
     std::vector<double> values;
     std::stringstream input(text);
@@ -64,6 +97,176 @@ int find_section(const std::vector<int>& edges, const float hu) noexcept {
 }
 
 }  // namespace
+
+SchneiderMaterialTable SchneiderMaterialTable::from_topas_file(
+    const std::filesystem::path& path) {
+    std::ifstream input(path);
+    if (!input) {
+        throw std::runtime_error("Cannot open Schneider file: " + path.string());
+    }
+
+    SchneiderMaterialTable table;
+    bool has_elements = false;
+    bool has_sections = false;
+    std::array<bool, section_count> has_weight_row{};
+    has_weight_row.fill(false);
+
+    std::string line;
+    while (std::getline(input, line)) {
+        const auto comment_pos = line.find('#');
+        if (comment_pos != std::string::npos) {
+            line.erase(comment_pos);
+        }
+        const auto eq = line.find('=');
+        if (eq == std::string::npos) {
+            continue;
+        }
+        std::string key = line.substr(0, eq);
+        const std::string payload = line.substr(eq + 1);
+        const auto first_key_char = key.find_first_not_of(" \t\r\n");
+        if (first_key_char == std::string::npos) {
+            continue;
+        }
+        key.erase(0, first_key_char);
+        if (const auto last = key.find_last_not_of(" \t\r\n"); last != std::string::npos) {
+            key.erase(last + 1);
+        }
+
+        if (key.find("SchneiderElements") != std::string::npos) {
+            if (has_elements) {
+                throw std::invalid_argument("Duplicate SchneiderElements entry in " + path.string());
+            }
+            std::stringstream ss(payload);
+            std::size_t count = 0;
+            if (!(ss >> count)) {
+                throw std::invalid_argument("Missing count in SchneiderElements: " + path.string());
+            }
+            if (count != element_count) {
+                throw std::invalid_argument("SchneiderElements count mismatch (expected " +
+                                            std::to_string(element_count) + ", got " +
+                                            std::to_string(count) + "): " + path.string());
+            }
+            const auto elem_names = parse_string_list(payload);
+            if (elem_names.size() != element_count) {
+                throw std::invalid_argument("SchneiderElements parsed count mismatch (expected " +
+                                            std::to_string(element_count) + ", got " +
+                                            std::to_string(elem_names.size()) + "): " + path.string());
+            }
+            for (std::size_t i = 0; i < element_count; ++i) {
+                table.elements[i] = element_from_name(elem_names[i]);
+            }
+            has_elements = true;
+        } else if (key.find("SchneiderHUToMaterialSections") != std::string::npos) {
+            if (has_sections) {
+                throw std::invalid_argument("Duplicate SchneiderHUToMaterialSections entry in " + path.string());
+            }
+            const auto numbers = parse_number_list(payload);
+            if (numbers.size() < section_count + 2) {
+                throw std::invalid_argument("SchneiderHUToMaterialSections incomplete in " + path.string());
+            }
+            const auto count = static_cast<std::size_t>(numbers[0]);
+            if (count != section_count + 1 || numbers.size() != count + 1) {
+                throw std::invalid_argument("SchneiderHUToMaterialSections count mismatch in " + path.string());
+            }
+            std::vector<int> edges(count);
+            for (std::size_t i = 0; i < count; ++i) {
+                edges[i] = static_cast<int>(numbers[i + 1]);
+                if (i > 0 && edges[i] <= edges[i - 1]) {
+                    throw std::invalid_argument("SchneiderHUToMaterialSections not strictly increasing at index " +
+                                                std::to_string(i) + " in " + path.string());
+                }
+            }
+            for (std::size_t i = 0; i < section_count; ++i) {
+                table.sections[i].hu_min_inclusive = edges[i];
+                table.sections[i].hu_max_exclusive = edges[i + 1];
+            }
+            has_sections = true;
+        } else if (const auto w_pos = key.find("SchneiderMaterialsWeight"); w_pos != std::string::npos) {
+            const auto num_str = key.substr(w_pos + std::string("SchneiderMaterialsWeight").length());
+            int row_idx = 0;
+            try {
+                row_idx = std::stoi(num_str);
+            } catch (const std::exception&) {
+                throw std::invalid_argument("Malformed SchneiderMaterialsWeight row key: " + key);
+            }
+            if (row_idx < 1 || row_idx > static_cast<int>(section_count)) {
+                throw std::invalid_argument("SchneiderMaterialsWeight row index out of range [1..25]: " +
+                                            std::to_string(row_idx));
+            }
+            if (has_weight_row[static_cast<std::size_t>(row_idx - 1)]) {
+                throw std::invalid_argument("Duplicate SchneiderMaterialsWeight" + std::to_string(row_idx) +
+                                            " in " + path.string());
+            }
+            const auto numbers = parse_number_list(payload);
+            if (numbers.size() != element_count + 1) {
+                throw std::invalid_argument("SchneiderMaterialsWeight" + std::to_string(row_idx) +
+                                            " count mismatch (expected " + std::to_string(element_count + 1) +
+                                            ", got " + std::to_string(numbers.size()) + ") in " + path.string());
+            }
+            if (static_cast<std::size_t>(numbers[0]) != element_count) {
+                throw std::invalid_argument("SchneiderMaterialsWeight" + std::to_string(row_idx) +
+                                            " declared count mismatch in " + path.string());
+            }
+            double row_sum = 0.0;
+            for (std::size_t el = 0; el < element_count; ++el) {
+                const double w = numbers[el + 1];
+                if (!std::isfinite(w) || w < 0.0) {
+                    throw std::invalid_argument("SchneiderMaterialsWeight" + std::to_string(row_idx) +
+                                                " contains negative or non-finite weight: " + std::to_string(w));
+                }
+                table.sections[static_cast<std::size_t>(row_idx - 1)].mass_fraction[el] = w;
+                row_sum += w;
+            }
+            if (std::abs(row_sum - 1.0) > 1.0e-6) {
+                throw std::invalid_argument("SchneiderMaterialsWeight" + std::to_string(row_idx) +
+                                            " sum diverges from 1.0 (sum=" + std::to_string(row_sum) +
+                                            ") in " + path.string());
+            }
+            has_weight_row[static_cast<std::size_t>(row_idx - 1)] = true;
+        }
+    }
+
+    if (!has_elements) {
+        throw std::runtime_error("SchneiderElements missing in " + path.string());
+    }
+    if (!has_sections) {
+        throw std::runtime_error("SchneiderHUToMaterialSections missing in " + path.string());
+    }
+    for (std::size_t i = 0; i < section_count; ++i) {
+        if (!has_weight_row[i]) {
+            throw std::runtime_error("SchneiderMaterialsWeight" + std::to_string(i + 1) +
+                                     " missing in " + path.string());
+        }
+    }
+
+    return table;
+}
+
+SchneiderMaterialTable SchneiderMaterialTable::builtin() {
+    const std::array<std::filesystem::path, 3> candidates = {
+        std::filesystem::path("data/HUtoMaterialSchneider.txt"),
+        std::filesystem::path("../data/HUtoMaterialSchneider.txt"),
+        std::filesystem::path("../../data/HUtoMaterialSchneider.txt")
+    };
+    for (const auto& candidate : candidates) {
+        if (std::filesystem::exists(candidate)) {
+            return from_topas_file(candidate);
+        }
+    }
+    throw std::runtime_error("Cannot locate built-in data/HUtoMaterialSchneider.txt");
+}
+
+std::uint8_t SchneiderMaterialTable::section_id(const int hu) const noexcept {
+    if (hu < sections[0].hu_min_inclusive) {
+        return 0;
+    }
+    for (std::size_t i = 0; i < section_count; ++i) {
+        if (hu >= sections[i].hu_min_inclusive && hu < sections[i].hu_max_exclusive) {
+            return static_cast<std::uint8_t>(i);
+        }
+    }
+    return static_cast<std::uint8_t>(section_count - 1);
+}
 
 SchneiderHuTable SchneiderHuTable::builtin() {
     SchneiderHuTable table;

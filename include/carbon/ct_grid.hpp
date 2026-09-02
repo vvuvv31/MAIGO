@@ -2,6 +2,7 @@
 
 #include "carbon/transport_profile.hpp"
 
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <filesystem>
@@ -12,6 +13,30 @@
 namespace carbon {
 
 struct TransportConfig;
+
+struct SchneiderElement {
+    std::uint8_t z{0};
+    double atomic_mass_g_mol{0.0};
+    std::string name{};
+};
+
+struct SchneiderMaterialSection {
+    int hu_min_inclusive{0};
+    int hu_max_exclusive{0};
+    std::array<double, 13> mass_fraction{};
+};
+
+struct SchneiderMaterialTable {
+    static constexpr std::size_t element_count = 13;
+    static constexpr std::size_t section_count = 25;
+
+    std::array<SchneiderElement, element_count> elements{};
+    std::array<SchneiderMaterialSection, section_count> sections{};
+
+    static SchneiderMaterialTable builtin();
+    static SchneiderMaterialTable from_topas_file(const std::filesystem::path& path);
+    [[nodiscard]] std::uint8_t section_id(int hu) const noexcept;
+};
 
 // Patient CT volume stored in conventional medical-image coordinates:
 //   x: patient left/right within an axial slice

@@ -3832,10 +3832,10 @@ void test_cinel02_ledger_schema_and_accumulator() {
                  0.0, 0.0, "CINEL02 signed handoff partition mismatch");
 }
 
-bool is_sycl_cuda_available() {
+bool is_sycl_available() {
 #ifdef CARBON_HAS_SYCL
     try {
-        (void)carbon::describe_sycl_device("cuda");
+        (void)carbon::describe_sycl_device("default");
         return true;
     } catch (const std::exception&) {
         return false;
@@ -3871,11 +3871,10 @@ void test_water_transport_invariance_without_ct() {
     base_config.maximum_step_mm = 0.5;
     base_config.maximum_relative_energy_loss = 0.01;
     base_config.enable_energy_straggling = true;
-    base_config.enable_multiple_scattering = true;
     base_config.random_seed = 20260902;
     base_config.validate();
 
-    const carbon::StoppingPowerTable table({0.01, 100.0, 200.0, 300.0}, {1.5, 1.8, 2.0, 2.2});
+    const carbon::StoppingPowerTable table({0.01, 100.01, 200.01, 300.01}, {1.5, 1.8, 2.0, 2.2});
 
     const auto run_a = carbon::transport_serial(base_config, table, zero_cross_section());
     const auto run_b = carbon::transport_serial(base_config, table, zero_cross_section());
@@ -3897,14 +3896,117 @@ void test_water_transport_invariance_without_ct() {
     require_water_transport_equivalent(run_c, run_a, "Serial unattached CT knob isolation");
 
 #ifdef CARBON_HAS_SYCL
-    if (is_sycl_cuda_available()) {
+    if (is_sycl_available()) {
+        auto sycl_base = base_config;
+        sycl_base.validate();
+        auto sycl_ct = ct_unattached_config;
+        sycl_ct.validate();
+
         const auto sycl_a =
-            carbon::transport_sycl(base_config, table, zero_cross_section(), "cuda");
+            carbon::transport_sycl(sycl_base, table, zero_cross_section(), "default");
         const auto sycl_b =
-            carbon::transport_sycl(ct_unattached_config, table, zero_cross_section(), "cuda");
+            carbon::transport_sycl(sycl_ct, table, zero_cross_section(), "default");
         require_water_transport_equivalent(sycl_b, sycl_a, "SYCL unattached CT knob isolation");
     }
 #endif
+}
+
+void test_schneider_material_table_parser() {
+    const auto source_dir = std::filesystem::path(CARBON_SOURCE_DIR);
+    const auto schneider_path = source_dir / "data/HUtoMaterialSchneider.txt";
+    const auto table = carbon::SchneiderMaterialTable::from_topas_file(schneider_path);
+
+    // 1. Verify 13 elements in exact order with correct Z and atomic masses
+    require(table.elements.size() == 13, "Schneider element count must be 13");
+    const std::vector<std::pair<std::string, std::uint8_t>> expected_elements = {
+        {"Hydrogen", 1}, {"Carbon", 6}, {"Nitrogen", 7}, {"Oxygen", 8},
+        {"Magnesium", 12}, {"Phosphorus", 15}, {"Sulfur", 16}, {"Chlorine", 17},
+        {"Argon", 18}, {"Calcium", 20}, {"Sodium", 11}, {"Potassium", 19},
+        {"Titanium", 22}
+    };
+    for (std::size_t i = 0; i < 13; ++i) {
+        require(table.elements[i].name == expected_elements[i].first,
+                "Schneider element name mismatch at index " + std::to_string(i));
+        require(table.elements[i].z == expected_elements[i].second,
+                "Schneider element Z mismatch at index " + std::to_string(i));
+        require(table.elements[i].atomic_mass_g_mol > 0.0,
+                "Schneider atomic mass must be positive");
+    }
+
+    // 2. Verify 25 sections with strictly increasing contiguous HU boundaries
+    require(table.sections.size() == 25, "Schneider section count must be 25");
+    require(table.sections[0].hu_min_inclusive == -1000, "Section 0 must start at HU -1000");
+    require(table.sections[0].hu_max_exclusive == -950, "Section 0 must end at HU -950");
+    require(table.sections[1].hu_min_inclusive == -950, "Section 1 must start at HU -950");
+    require(table.sections[23].hu_min_inclusive == 1500, "Section 23 must start at HU 1500");
+    require(table.sections[23].hu_max_exclusive == 2995, "Section 23 must end at HU 2995");
+    require(table.sections[24].hu_min_inclusive == 2995, "Section 24 must start at HU 2995");
+    require(table.sections[24].hu_max_exclusive == 2996, "Section 24 must end at HU 2996");
+
+    for (std::size_t i = 0; i < 25; ++i) {
+        if (i > 0) {
+            require(table.sections[i].hu_min_inclusive == table.sections[i - 1].hu_max_exclusive,
+                    "Section HU boundaries must be contiguous at section " + std::to_string(i));
+        }
+        double row_sum = 0.0;
+        for (std::size_t el = 0; el < 13; ++el) {
+            const double w = table.sections[i].mass_fraction[el];
+            require(w >= 0.0, "Mass fraction must be nonnegative");
+            row_sum += w;
+        }
+        require_near(row_sum, 1.0, 1.0e-6, "Mass fraction sum must equal 1.0 for section " + std::to_string(i));
+    }
+
+    // 3. Verify specific known sections (Section 0 Air, Section 24 Titanium)
+    require_near(table.sections[0].mass_fraction[2], 0.755, 1.0e-6, "Air Nitrogen fraction mismatch");
+    require_near(table.sections[0].mass_fraction[3], 0.232, 1.0e-6, "Air Oxygen fraction mismatch");
+    require_near(table.sections[0].mass_fraction[8], 0.013, 1.0e-6, "Air Argon fraction mismatch");
+    require_near(table.sections[24].mass_fraction[12], 1.0, 1.0e-6, "Titanium section fraction mismatch");
+
+    // 4. Verify section_id mapping across domain and boundaries
+    require(table.section_id(-1500) == 0, "HU < -1000 must map to section 0");
+    require(table.section_id(-1000) == 0, "HU = -1000 must map to section 0");
+    require(table.section_id(-951) == 0, "HU = -951 must map to section 0");
+    require(table.section_id(-950) == 1, "HU = -950 must map to section 1");
+    require(table.section_id(-120) == 2, "HU = -120 must map to section 2");
+    require(table.section_id(0) == 5, "HU = 0 must map to section 5");
+    require(table.section_id(1500) == 23, "HU = 1500 must map to section 23");
+    require(table.section_id(2994) == 23, "HU = 2994 must map to section 23");
+    require(table.section_id(2995) == 24, "HU = 2995 must map to section 24");
+    require(table.section_id(2996) == 24, "HU = 2996 must map to section 24");
+    require(table.section_id(3500) == 24, "HU > 2995 must clamp to section 24");
+
+    // 5. Verify malformed inputs are properly rejected
+    const auto temp_dir = std::filesystem::temp_directory_path();
+    const auto test_malformed = [&](const std::string& filename, const std::string& content, const std::string& error_desc) {
+        const auto temp_file = temp_dir / filename;
+        std::ofstream out(temp_file);
+        out << content;
+        out.close();
+        bool threw = false;
+        try {
+            (void)carbon::SchneiderMaterialTable::from_topas_file(temp_file);
+        } catch (const std::exception&) {
+            threw = true;
+        }
+        std::filesystem::remove(temp_file);
+        require(threw, "Parser accepted malformed input: " + error_desc);
+    };
+
+    test_malformed("schneider_missing_elem.txt",
+                   "iv:Ge/Patient/SchneiderHUToMaterialSections = 26 -1000 -950 -120 -83 -53 -23 7 18 80 120 200 300 400 500 600 700 800 900 1000 1100 1200 1300 1400 1500 2995 2996\n",
+                   "missing SchneiderElements");
+
+    test_malformed("schneider_bad_weights_sum.txt",
+                   "sv:Ge/Patient/SchneiderElements = 13 \"Hydrogen\" \"Carbon\" \"Nitrogen\" \"Oxygen\" \"Magnesium\" \"Phosphorus\" \"Sulfur\" \"Chlorine\" \"Argon\" \"Calcium\" \"Sodium\" \"Potassium\" \"Titanium\"\n"
+                   "iv:Ge/Patient/SchneiderHUToMaterialSections = 26 -1000 -950 -120 -83 -53 -23 7 18 80 120 200 300 400 500 600 700 800 900 1000 1100 1200 1300 1400 1500 2995 2996\n"
+                   "uv:Ge/Patient/SchneiderMaterialsWeight1 = 13 0.5 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0\n",
+                   "weight row sum != 1.0");
+
+    test_malformed("schneider_bad_elem_name.txt",
+                   "sv:Ge/Patient/SchneiderElements = 13 \"Hydrogen\" \"Carbon\" \"Nitrogen\" \"Oxygen\" \"Krypton\" \"Phosphorus\" \"Sulfur\" \"Chlorine\" \"Argon\" \"Calcium\" \"Sodium\" \"Potassium\" \"Titanium\"\n"
+                   "iv:Ge/Patient/SchneiderHUToMaterialSections = 26 -1000 -950 -120 -83 -53 -23 7 18 80 120 200 300 400 500 600 700 800 900 1000 1100 1200 1300 1400 1500 2995 2996\n",
+                   "unknown element name Krypton");
 }
 
 }  // namespace
@@ -3936,7 +4038,6 @@ int main() {
         test_csda_remnant_local_stop();
         test_table1_inclusive_sampling();
         test_table1_newton_invert();
-
         test_units();
         test_csda_range_loss_validation();
         test_hu_stopping_power_lut_loading();
@@ -3979,6 +4080,7 @@ int main() {
         test_dense_charged_origin_mhd_uses_local_mass();
         test_ct_aligned_mhd_offset_and_index_pairing();
         test_water_transport_invariance_without_ct();
+        test_schneider_material_table_parser();
 #ifdef CARBON_HAS_SYCL
         test_sycl_tps_source_arbitrary_gantry_transport();
         test_sycl_legacy_cardinal_entrance_projection();

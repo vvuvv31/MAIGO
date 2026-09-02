@@ -55,8 +55,8 @@ The executor updates only the `Status` column and the execution log. Never rewri
 | Step | Status | Deliverable | Depends on |
 |---|---|---|---|
 | [00](steps/00-freeze-and-provenance.md) | FROZEN | Freeze water/secondary baseline and provenance | none |
-| [01](steps/01-current-state-audit.md) | TODO | Audited local implementation map and conflict decision | 00 |
-| [02](steps/02-schneider-material-model.md) | TODO | Host-side 13-element/25-section data model and parser | 01 |
+| [01](steps/01-current-state-audit.md) | DONE | Audited local implementation map and conflict decision | 00 |
+| [02](steps/02-schneider-material-model.md) | DONE | Host-side 13-element/25-section data model and parser | 01 |
 | [03](steps/03-schneider-parser-tests.md) | TODO | Boundary, malformed-input, and golden parser tests | 02 |
 | [04](steps/04-topas-material-truth-dump.md) | TODO | TOPAS/Geant4 material truth extension and synthetic inputs | 03 |
 | [05](steps/05-material-truth-gate.md) | TODO | Automated MAIGO-parser versus TOPAS material audit | 04 |
@@ -154,4 +154,6 @@ Append one line after each status change. Do not erase old entries.
 ```text
 YYYY-MM-DD HH:MM TZ | step NN | OLD -> NEW | commit/hash or blocker | evidence path
 2026-09-02 14:42 CST | step 00 | TODO -> FROZEN | chore(ct): freeze Schneider workstream provenance | /mnt/sda/wuwei/maigo-ct-schneider/evidence/step-00/
+2026-09-02 15:01 CST | step 01 | TODO -> DONE | audit completed; evidence in /mnt/sda/wuwei/maigo-ct-schneider/evidence/step-01/
+2026-09-02 15:15 CST | step 02 | TODO -> DONE | feat(ct): parse Schneider elemental material composition | tests/carbon_tests.cpp
 ```
