@@ -338,7 +338,10 @@ Step11TestResult run_step11_piecewise_hazard_gpu_test(
                     }
                 }
 
-                const float u = rng::uniform01(1234567ULL, history_id, rng_step++, 8);
+                float u = 1.0F;
+                if (!tau_active) {
+                    u = rng::uniform01(1234567ULL, history_id, rng_step++, 8);
+                }
                 float step_used = t_face;
                 const bool collision = consume_schneider_optical_depth_segment(
                     tau_remaining, tau_active, step_used, macro_xs, u);

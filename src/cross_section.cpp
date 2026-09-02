@@ -479,6 +479,18 @@ SchneiderResampledCrossSectionGrid prepare_schneider_primary_xs(
     return resample_schneider_cross_section_grid(tables, transport_energies_MeVu);
 }
 
+SchneiderResampledCrossSectionGrid prepare_schneider_primary_xs(
+    const TransportConfig& config) {
+    constexpr std::size_t kNativeSchneiderNodes = 860;
+    constexpr double kNativeSchneiderEmin = 0.5;
+    constexpr double kNativeSchneiderStep = 0.5;
+    std::vector<double> native_energies(kNativeSchneiderNodes);
+    for (std::size_t i = 0; i < kNativeSchneiderNodes; ++i) {
+        native_energies[i] = kNativeSchneiderEmin + static_cast<double>(i) * kNativeSchneiderStep;
+    }
+    return prepare_schneider_primary_xs(config, native_energies);
+}
+
 const std::vector<double>& CrossSectionTable::macro_h_per_mm() const noexcept {
     return macro_h_per_mm_;
 }

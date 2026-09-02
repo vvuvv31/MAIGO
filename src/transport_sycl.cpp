@@ -647,27 +647,14 @@ TransportResult transport_sycl(const TransportConfig& config,
                 }
             }
 
-            std::vector<double> schneider_grid_energies;
-            if (table_energies.front() >= 0.5 - 1e-4 && table_energies.back() <= 430.0 + 1e-4) {
-                schneider_grid_energies = table_energies;
-            } else {
-                const double e_start = 1.0;
-                const double e_end = std::min(430.0, std::max(e_start + 1.0, table_energies.back()));
-                const auto n_nodes = static_cast<std::size_t>(std::floor(e_end - e_start)) + 1;
-                schneider_grid_energies.resize(n_nodes);
-                for (std::size_t i = 0; i < n_nodes; ++i) {
-                    schneider_grid_energies[i] = e_start + static_cast<double>(i) * 1.0;
-                }
-            }
-
-            const auto schneider_host_grid =
-                prepare_schneider_primary_xs(config, schneider_grid_energies);
+            const auto schneider_host_grid = prepare_schneider_primary_xs(config);
             schneider_xs_sections =
                 static_cast<std::uint32_t>(SchneiderResampledCrossSectionGrid::kExpectedSections);
             schneider_xs_energies =
                 static_cast<std::uint32_t>(schneider_host_grid.energy_nodes());
-            schneider_xs_e_min = static_cast<float>(schneider_grid_energies.front());
-            const float dE = static_cast<float>(schneider_grid_energies[1] - schneider_grid_energies[0]);
+            schneider_xs_e_min = static_cast<float>(schneider_host_grid.transport_energies_MeVu.front());
+            const float dE = static_cast<float>(
+                schneider_host_grid.transport_energies_MeVu[1] - schneider_host_grid.transport_energies_MeVu[0]);
             schneider_xs_inv_dE = 1.0F / dE;
 
             const std::size_t total_elements =
@@ -678,7 +665,7 @@ TransportResult transport_sycl(const TransportConfig& config,
             if (schneider_xs_sections != 25) {
                 throw std::runtime_error("schneider_xs_sections must be exactly 25");
             }
-            if (schneider_xs_energies != schneider_grid_energies.size()) {
+            if (schneider_xs_energies != schneider_host_grid.energy_nodes()) {
                 throw std::runtime_error("schneider_xs_energies must match grid size");
             }
 
@@ -1627,7 +1614,7 @@ TransportResult transport_sycl(const TransportConfig& config,
                                           ct_origin_x, ct_origin_y, ct_origin_z, ct_spacing_x,
                                           ct_spacing_y, ct_spacing_z, ct_nx, ct_ny, ct_nz,
                                           ct_density_device, ct_material_device, ct_rho,
-                                          ct_material);
+                                          ct_material, direction_x, direction_y, direction_z);
                         if (in_ct) {
                             local_density_g_per_cm3 = ct_rho;
                         }
@@ -1778,8 +1765,11 @@ TransportResult transport_sycl(const TransportConfig& config,
                                     section_id, cur_e_u);
                                 const float macro_tot = local_density_g_per_cm3 * mass_rate;
 
-                                const auto u_nuc = rng::uniform01(
-                                    spot_seed, rng_history, nuclear_tau_rng_step++, 8);
+                                float u_nuc = 1.0F;
+                                if (!nuclear_tau_active) {
+                                    u_nuc = rng::uniform01(
+                                        spot_seed, rng_history, nuclear_tau_rng_step++, 8);
+                                }
                                 const bool collision = consume_schneider_optical_depth_segment(
                                     nuclear_tau_remaining, nuclear_tau_active, step_mm, macro_tot, u_nuc);
                                 if (collision && enable_inelastic) {
@@ -2147,7 +2137,7 @@ TransportResult transport_sycl(const TransportConfig& config,
                     position_y_mm += seg_dir_y * step_mm;
                     position_z_mm += seg_dir_z * step_mm;
 
-                    if (enable_ct_grid && in_ct && ct_face_clamped && !inelastic_this_step) {
+                    if (enable_ct_grid && in_ct && !inelastic_this_step) {
                         if (sycl::fabs(seg_dir_x) > 1.0e-6F) {
                             const float fx = (position_x_mm - ct_origin_x) / ct_spacing_x;
                             const int face_x = static_cast<int>(sycl::round(fx));
@@ -3062,7 +3052,7 @@ TransportResult transport_sycl(const TransportConfig& config,
                                     ct_origin_z, ct_spacing_x, ct_spacing_y, ct_spacing_z,
                                     ct_nx, ct_ny, ct_nz, ct_density_device,
                                     ct_material_device, sec_local_density_g_per_cm3,
-                                    sec_ct_material);
+                                    sec_ct_material, frag.dir_x, frag.dir_y, frag.dir_z);
                             }
                             const auto exposure_cell = use_cinel02
                                 ? cinel02_exposure_cell_index_device(

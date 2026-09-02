@@ -88,6 +88,10 @@ struct TransportConfig;
     const TransportConfig& config,
     const std::vector<double>& transport_energies_MeVu);
 
+// Prepares the 25-section Schneider cross-section table using its native validated energy grid (0.5 to 430.0 MeV/u, 0.5 MeV/u step, 860 nodes).
+[[nodiscard]] SchneiderResampledCrossSectionGrid prepare_schneider_primary_xs(
+    const TransportConfig& config);
+
 // Single canonical layout indexing helper shared by host and GPU device code.
 // Contiguous layout: [section][energy]
 // index = section_id * energy_nodes + energy_index

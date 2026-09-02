@@ -213,19 +213,37 @@ inline bool ct_sample(const float x_mm,
                       const float* densities,
                       const std::uint8_t* materials,
                       float& density_out,
-                      std::uint8_t& material_out) noexcept {
+                      std::uint8_t& material_out,
+                      const float dir_x = 0.0F,
+                      const float dir_y = 0.0F,
+                      const float dir_z = 0.0F) noexcept {
     if (densities == nullptr || nx == 0 || ny == 0 || nz == 0) {
         return false;
     }
     const auto fx = (x_mm - origin_x) / spacing_x;
     const auto fy = (y_mm - origin_y) / spacing_y;
     const auto fz = (z_mm - origin_z) / spacing_z;
-    if (fx < 0.0F || fy < 0.0F || fz < 0.0F) {
+
+    auto resolve_cell = [](float f, float dir) noexcept -> int {
+        int cell = static_cast<int>(std::floor(f));
+        if (dir < -1.0e-6F) {
+            const float round_f = std::round(f);
+            if (std::fabs(f - round_f) <= 1.0e-5F) {
+                cell = static_cast<int>(round_f) - 1;
+            }
+        }
+        return cell;
+    };
+
+    const auto ix_int = resolve_cell(fx, dir_x);
+    const auto iy_int = resolve_cell(fy, dir_y);
+    const auto iz_int = resolve_cell(fz, dir_z);
+    if (ix_int < 0 || iy_int < 0 || iz_int < 0) {
         return false;
     }
-    const auto ix = static_cast<std::uint32_t>(fx);
-    const auto iy = static_cast<std::uint32_t>(fy);
-    const auto iz = static_cast<std::uint32_t>(fz);
+    const auto ix = static_cast<std::uint32_t>(ix_int);
+    const auto iy = static_cast<std::uint32_t>(iy_int);
+    const auto iz = static_cast<std::uint32_t>(iz_int);
     if (ix >= nx || iy >= ny || iz >= nz) {
         return false;
     }

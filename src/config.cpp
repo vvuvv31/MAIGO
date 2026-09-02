@@ -653,6 +653,16 @@ void TransportConfig::validate() const {
                 throw std::invalid_argument(
                     "Nuclear elastic scattering is not supported under Schneider primary cross section mode");
             }
+            if (maximum_relative_energy_loss > 0.005 + 1e-6) {
+                throw std::invalid_argument(
+                    "Schneider primary cross section mode requires maximum_relative_energy_loss <= 0.005, got " +
+                    std::to_string(maximum_relative_energy_loss));
+            }
+            if (maximum_step_mm > 1.0 + 1e-6) {
+                throw std::invalid_argument(
+                    "Schneider primary cross section mode requires maximum_step_mm <= 1.0, got " +
+                    std::to_string(maximum_step_mm));
+            }
         }
     }
     if (!std::isfinite(straggling_scale) || straggling_scale < 0.0) {
