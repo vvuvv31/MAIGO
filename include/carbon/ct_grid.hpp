@@ -225,14 +225,7 @@ inline bool ct_sample(const float x_mm,
     const auto fz = (z_mm - origin_z) / spacing_z;
 
     auto resolve_cell = [](float f, float dir) noexcept -> int {
-        int cell = static_cast<int>(std::floor(f));
-        if (dir < -1.0e-6F) {
-            const float round_f = std::round(f);
-            if (std::fabs(f - round_f) <= 1.0e-5F) {
-                cell = static_cast<int>(round_f) - 1;
-            }
-        }
-        return cell;
+        return dir < 0.0F ? static_cast<int>(std::ceil(f)) - 1 : static_cast<int>(std::floor(f));
     };
 
     const auto ix_int = resolve_cell(fx, dir_x);
@@ -529,6 +522,51 @@ inline float ct_dda_distance_to_next_face(const CtDdaState& state) noexcept {
         t = state.t_max_z;
     }
     return t;
+}
+
+struct CtFaceClampResult {
+    float step_mm{0.0F};
+    bool hit_face{false};
+    std::uint8_t axis_mask{0}; // 1 = x, 2 = y, 4 = z
+};
+
+inline CtFaceClampResult clamp_step_to_ct_faces_exact(
+    const float step_mm,
+    const float x_mm,
+    const float y_mm,
+    const float z_mm,
+    const float dx,
+    const float dy,
+    const float dz,
+    const float origin_x,
+    const float origin_y,
+    const float origin_z,
+    const float spacing_x,
+    const float spacing_y,
+    const float spacing_z,
+    const std::uint32_t nx,
+    const std::uint32_t ny,
+    const std::uint32_t nz) noexcept {
+    CtFaceClampResult result{step_mm, false, 0};
+    if (nx == 0 || ny == 0 || nz == 0) {
+        return result;
+    }
+    CtDdaState state{};
+    if (!ct_dda_init(x_mm, y_mm, z_mm, dx, dy, dz, origin_x, origin_y, origin_z,
+                     spacing_x, spacing_y, spacing_z, nx, ny, nz, state)) {
+        return result;
+    }
+    const float t_face = ct_dda_distance_to_next_face(state);
+    if (t_face > 0.0F && t_face <= step_mm) {
+        result.step_mm = t_face;
+        result.hit_face = true;
+        result.axis_mask = 0;
+        constexpr float kEps = 1.0e-6F;
+        if (state.t_max_x <= t_face + kEps) result.axis_mask |= 1;
+        if (state.t_max_y <= t_face + kEps) result.axis_mask |= 2;
+        if (state.t_max_z <= t_face + kEps) result.axis_mask |= 4;
+    }
+    return result;
 }
 
 // Advance exactly one face (the nearest). Returns false if the next cell is

@@ -1704,21 +1704,14 @@ TransportResult transport_sycl(const TransportConfig& config,
                             step_mm = sycl::fmin(step_mm, insert_step);
                         }
                     }
-                    bool ct_face_clamped = false;
+                    CtFaceClampResult ct_clamp_res{step_mm, false, 0};
                     if (enable_ct_grid && in_ct) {
-                        const float pre_ct_step = step_mm;
-                        const bool skip_homo =
-                            use_schneider_primary_xs ? false : ct_skip_homogeneous_face_clamp;
-                        step_mm = clamp_step_to_ct_faces_near_z_if_needed(
+                        ct_clamp_res = clamp_step_to_ct_faces_exact(
                             step_mm, position_x_mm, position_y_mm, position_z_mm,
                             direction_x, direction_y, direction_z, ct_origin_x,
                             ct_origin_y, ct_origin_z, ct_spacing_x, ct_spacing_y,
-                            ct_spacing_z, ct_nx, ct_ny, ct_nz, ct_density_device,
-                            ct_material_device, local_density_g_per_cm3, ct_material,
-                            skip_homo, nullptr);
-                        if (step_mm < pre_ct_step - 1.0e-7F) {
-                            ct_face_clamped = true;
-                        }
+                            ct_spacing_z, ct_nx, ct_ny, ct_nz);
+                        step_mm = ct_clamp_res.step_mm;
                     }
                     if (enable_voxel_scoring && voxel_scorer_clamps_transport &&
                         absolute_direction_x >= 1.0e-6F) {
@@ -2137,30 +2130,24 @@ TransportResult transport_sycl(const TransportConfig& config,
                     position_y_mm += seg_dir_y * step_mm;
                     position_z_mm += seg_dir_z * step_mm;
 
-                    if (enable_ct_grid && in_ct && !inelastic_this_step) {
-                        if (sycl::fabs(seg_dir_x) > 1.0e-6F) {
+                    if (enable_ct_grid && in_ct && ct_clamp_res.hit_face && !inelastic_this_step) {
+                        if ((ct_clamp_res.axis_mask & 1) != 0 && sycl::fabs(seg_dir_x) > 1.0e-6F) {
                             const float fx = (position_x_mm - ct_origin_x) / ct_spacing_x;
                             const int face_x = static_cast<int>(sycl::round(fx));
                             const float b_x = ct_origin_x + static_cast<float>(face_x) * ct_spacing_x;
-                            if (sycl::fabs(position_x_mm - b_x) <= 1.0e-5F) {
-                                position_x_mm = sycl::nextafter(b_x, seg_dir_x > 0.0F ? 1.0e30F : -1.0e30F);
-                            }
+                            position_x_mm = sycl::nextafter(b_x, seg_dir_x > 0.0F ? 1.0e30F : -1.0e30F);
                         }
-                        if (sycl::fabs(seg_dir_y) > 1.0e-6F) {
+                        if ((ct_clamp_res.axis_mask & 2) != 0 && sycl::fabs(seg_dir_y) > 1.0e-6F) {
                             const float fy = (position_y_mm - ct_origin_y) / ct_spacing_y;
                             const int face_y = static_cast<int>(sycl::round(fy));
                             const float b_y = ct_origin_y + static_cast<float>(face_y) * ct_spacing_y;
-                            if (sycl::fabs(position_y_mm - b_y) <= 1.0e-5F) {
-                                position_y_mm = sycl::nextafter(b_y, seg_dir_y > 0.0F ? 1.0e30F : -1.0e30F);
-                            }
+                            position_y_mm = sycl::nextafter(b_y, seg_dir_y > 0.0F ? 1.0e30F : -1.0e30F);
                         }
-                        if (sycl::fabs(seg_dir_z) > 1.0e-6F) {
+                        if ((ct_clamp_res.axis_mask & 4) != 0 && sycl::fabs(seg_dir_z) > 1.0e-6F) {
                             const float fz = (position_z_mm - ct_origin_z) / ct_spacing_z;
                             const int face_z = static_cast<int>(sycl::round(fz));
                             const float b_z = ct_origin_z + static_cast<float>(face_z) * ct_spacing_z;
-                            if (sycl::fabs(position_z_mm - b_z) <= 1.0e-5F) {
-                                position_z_mm = sycl::nextafter(b_z, seg_dir_z > 0.0F ? 1.0e30F : -1.0e30F);
-                            }
+                            position_z_mm = sycl::nextafter(b_z, seg_dir_z > 0.0F ? 1.0e30F : -1.0e30F);
                         }
                     }
 
@@ -3052,7 +3039,7 @@ TransportResult transport_sycl(const TransportConfig& config,
                                     ct_origin_z, ct_spacing_x, ct_spacing_y, ct_spacing_z,
                                     ct_nx, ct_ny, ct_nz, ct_density_device,
                                     ct_material_device, sec_local_density_g_per_cm3,
-                                    sec_ct_material, frag.dir_x, frag.dir_y, frag.dir_z);
+                                    sec_ct_material, sec_dx, sec_dy, sec_dz);
                             }
                             const auto exposure_cell = use_cinel02
                                 ? cinel02_exposure_cell_index_device(

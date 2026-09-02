@@ -4825,6 +4825,76 @@ void test_step11_piecewise_nuclear_optical_depth() {
 #endif
 }
 
+void test_step11_ct_sample_directional_boundaries() {
+    for (const float spacing : {0.05F, 1.0F, 10.0F}) {
+        const float densities[2] = {1.0F, 2.0F};
+        const std::uint8_t materials[2] = {8, 20};
+        float rho = 0.0F;
+        std::uint8_t mat = 0;
+
+        const float face_z = spacing; // boundary between voxel 0 and voxel 1
+
+        // 1. Exact on face: dz = +1 -> voxel 1 (material 20, rho 2.0)
+        require(carbon::ct_sample(0.0F, 0.0F, face_z, 0.0F, 0.0F, 0.0F,
+                                  10.0F, 10.0F, spacing, 1, 1, 2,
+                                  densities, materials, rho, mat, 0.0F, 0.0F, 1.0F), "Exact face +z");
+        require(mat == 20 && std::fabs(rho - 2.0F) < 1e-6F, "Exact face +z must sample voxel 1");
+
+        // 2. Exact on face: dz = -1 -> voxel 0 (material 8, rho 1.0)
+        require(carbon::ct_sample(0.0F, 0.0F, face_z, 0.0F, 0.0F, 0.0F,
+                                  10.0F, 10.0F, spacing, 1, 1, 2,
+                                  densities, materials, rho, mat, 0.0F, 0.0F, -1.0F), "Exact face -z");
+        require(mat == 8 && std::fabs(rho - 1.0F) < 1e-6F, "Exact face -z must sample voxel 0");
+
+        // 3. Face + 5 nm: dz = -1 -> voxel 1 (still inside voxel 1, must NOT jump prematurely!)
+        const float z_plus_5nm = face_z + 5.0e-6F;
+        require(carbon::ct_sample(0.0F, 0.0F, z_plus_5nm, 0.0F, 0.0F, 0.0F,
+                                  10.0F, 10.0F, spacing, 1, 1, 2,
+                                  densities, materials, rho, mat, 0.0F, 0.0F, -1.0F), "Face + 5nm -z");
+        require(mat == 20 && std::fabs(rho - 2.0F) < 1e-6F, "Face + 5nm moving -z must remain in voxel 1");
+
+        // 4. Face - 5 nm: dz = +1 -> voxel 0 (still inside voxel 0, must NOT jump prematurely!)
+        const float z_minus_5nm = face_z - 5.0e-6F;
+        require(carbon::ct_sample(0.0F, 0.0F, z_minus_5nm, 0.0F, 0.0F, 0.0F,
+                                  10.0F, 10.0F, spacing, 1, 1, 2,
+                                  densities, materials, rho, mat, 0.0F, 0.0F, 1.0F), "Face - 5nm +z");
+        require(mat == 8 && std::fabs(rho - 1.0F) < 1e-6F, "Face - 5nm moving +z must remain in voxel 0");
+
+        // 5. Face + 1 ULP: dz = -1 -> voxel 1
+        const float z_plus_ulp = std::nextafter(face_z, 1.0e30F);
+        require(carbon::ct_sample(0.0F, 0.0F, z_plus_ulp, 0.0F, 0.0F, 0.0F,
+                                  10.0F, 10.0F, spacing, 1, 1, 2,
+                                  densities, materials, rho, mat, 0.0F, 0.0F, -1.0F), "Face + ULP -z");
+        require(mat == 20 && std::fabs(rho - 2.0F) < 1e-6F, "Face + ULP moving -z must be in voxel 1");
+
+        // 6. Face - 1 ULP: dz = +1 -> voxel 0
+        const float z_minus_ulp = std::nextafter(face_z, -1.0e30F);
+        require(carbon::ct_sample(0.0F, 0.0F, z_minus_ulp, 0.0F, 0.0F, 0.0F,
+                                  10.0F, 10.0F, spacing, 1, 1, 2,
+                                  densities, materials, rho, mat, 0.0F, 0.0F, 1.0F), "Face - ULP +z");
+        require(mat == 8 && std::fabs(rho - 1.0F) < 1e-6F, "Face - ULP moving +z must be in voxel 0");
+    }
+}
+
+void test_step11_ct_clamp_pre_face_no_nudge() {
+    // 1. Ray starts at z = 0.0 mm in a voxel of length 10.0 mm.
+    // Propose step_mm = 9.999995 mm (stops 5 nm before face at z = 10.0 mm).
+    const auto clamp_res = carbon::clamp_step_to_ct_faces_exact(
+        9.999995F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 1.0F,
+        -5.0F, -5.0F, 0.0F, 10.0F, 10.0F, 10.0F, 1, 1, 2);
+    require(!clamp_res.hit_face, "Step ending 5 nm before face must NOT have hit_face=true");
+    require(std::fabs(clamp_res.step_mm - 9.999995F) < 1.0e-7F, "Step length must be preserved");
+    require(clamp_res.axis_mask == 0, "Axis mask must be 0 when face is not hit");
+
+    // 2. Propose step_mm = 12.0 mm (exceeds face at z = 10.0 mm)
+    const auto clamp_hit = carbon::clamp_step_to_ct_faces_exact(
+        12.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 1.0F,
+        -5.0F, -5.0F, 0.0F, 10.0F, 10.0F, 10.0F, 1, 1, 2);
+    require(clamp_hit.hit_face, "Step exceeding face must have hit_face=true");
+    require(std::fabs(clamp_hit.step_mm - 10.0F) < 1.0e-6F, "Step length must be clamped to 10.0 mm");
+    require((clamp_hit.axis_mask & 4) != 0, "Z axis mask must be set");
+}
+
 void test_step11_schneider_step_energy_error_bound() {
     const auto source_dir = std::filesystem::path(CARBON_SOURCE_DIR);
     const auto xs_path = source_dir / "data/schneider/c12_schneider_inelastic_mass_xs.csv";
@@ -4843,20 +4913,19 @@ void test_step11_schneider_step_energy_error_bound() {
             schneider_grid.mass_xs_per_mm_at_1g_cm3.data(), 25, 860, 0.5F, 2.0F, sec, e_mevu);
     };
 
+    // Part A: Clinical condensed-history step audit (100, 200, 300 MeV/u x 25 sections x 4 densities)
     const std::vector<float> test_energies = {100.0F, 200.0F, 300.0F};
     const std::vector<float> test_densities = {0.26F, 1.0F, 1.5F, 2.0F};
 
     const float max_step_mm = static_cast<float>(cfg.maximum_step_mm);
     const float max_rel_loss = static_cast<float>(cfg.maximum_relative_energy_loss);
-    float max_error = 0.0F;
+    float max_clinical_error = 0.0F;
 
     for (const auto e0 : test_energies) {
-        // StoppingPowerTable::interpolate takes energy_MeVu directly
         const float sp_water_mev_per_mm = static_cast<float>(sp_table.interpolate(static_cast<double>(e0)));
         for (std::uint32_t sec = 0; sec < 25; ++sec) {
             for (const auto rho : test_densities) {
                 const float sp_material = sp_water_mev_per_mm * rho;
-                // Condensed-history step formula in transport
                 const float step_mm = std::min(max_step_mm, max_rel_loss * (e0 * 12.0F) / sp_material);
                 const float de_u = (sp_material / 12.0F) * step_mm;
                 const float e1 = e0 - de_u;
@@ -4871,17 +4940,41 @@ void test_step11_schneider_step_energy_error_bound() {
 
                 if (tau_simpson > 1.0e-8F) {
                     const float rel_err = std::fabs(tau_start - tau_simpson) / tau_simpson;
-                    if (rel_err > max_error) {
-                        max_error = rel_err;
+                    if (rel_err > max_clinical_error) {
+                        max_clinical_error = rel_err;
                     }
                 }
             }
         }
     }
 
-    std::cout << "[step-energy-bound] Maximum |tau_start - tau_simpson| / tau_simpson across all 25 sections = "
-              << max_error * 100.0F << "% (threshold < 0.2%)\n";
-    require(max_error < 0.002F, "Step-energy error bound exceeds 0.2%");
+    std::cout << "[step-energy-bound] Clinical trajectory audit max |tau_start - tau_simpson| / tau_simpson = "
+              << max_clinical_error * 100.0F << "% (threshold < 0.2%)\n";
+    require(max_clinical_error < 0.002F, "Clinical step-energy error bound exceeds 0.2%");
+
+    // Part B: Stopping-independent full 0.5-430 MeV/u grid sweep (all 860 energy nodes x 25 sections)
+    constexpr float kRelLoss = 0.005F;
+    float max_grid_error = 0.0F;
+    for (std::size_t i = 0; i < schneider_grid.energy_nodes(); ++i) {
+        const float e0 = static_cast<float>(schneider_grid.transport_energies_MeVu[i]);
+        if (e0 < 5.0F) continue; // Vanishing nuclear interaction rate below 5 MeV/u
+        const float e1 = e0 * (1.0F - kRelLoss);
+        const float e_mid = 0.5F * (e0 + e1);
+        for (std::uint32_t sec = 0; sec < 25; ++sec) {
+            const float s0 = section_xs(sec, e0);
+            const float s_mid = section_xs(sec, e_mid);
+            const float s1 = section_xs(sec, e1);
+            const float s_simp = (s0 + 4.0F * s_mid + s1) / 6.0F;
+            if (s_simp > 1.0e-6F) {
+                const float rel_err = std::fabs(s0 - s_simp) / s_simp;
+                if (rel_err > max_grid_error) {
+                    max_grid_error = rel_err;
+                }
+            }
+        }
+    }
+    std::cout << "[step-energy-bound] Stopping-independent grid sweep (E >= 5 MeV/u, dE/E=0.5%) max error = "
+              << max_grid_error * 100.0F << "%\n";
 }
 
 void test_step11_schneider_primary_mode_safety() {
@@ -5215,6 +5308,8 @@ int main(int argc, char** argv) {
 #endif
         run("test_step10_schneider_primary_xs_device_path", test_step10_schneider_primary_xs_device_path);
         run("test_step11_piecewise_nuclear_optical_depth", test_step11_piecewise_nuclear_optical_depth);
+        run("test_step11_ct_sample_directional_boundaries", test_step11_ct_sample_directional_boundaries);
+        run("test_step11_ct_clamp_pre_face_no_nudge", test_step11_ct_clamp_pre_face_no_nudge);
         run("test_step11_schneider_step_energy_error_bound", test_step11_schneider_step_energy_error_bound);
         run("test_step11_schneider_primary_mode_safety", test_step11_schneider_primary_mode_safety);
         run("test_step11_schneider_production_tiny_cctg_transport", test_step11_schneider_production_tiny_cctg_transport);

@@ -172,4 +172,5 @@ YYYY-MM-DD HH:MM TZ | step NN | OLD -> NEW | commit/hash or blocker | evidence p
 2026-09-02 18:03 CST | step 11 | TODO -> DONE | feat(ct): preserve nuclear optical depth across Schneider voxels | tests/carbon_tests.cpp
 2026-09-02 18:29 CST | step 11A | DONE -> DONE | fix(ct): close production Schneider face stepping | tests/carbon_tests.cpp
 2026-09-02 18:58 CST | step 11B | DONE -> DONE | fix(ct): native 860-node XS upload, exact error bound and boundary crossing | tests/carbon_tests.cpp
+2026-09-02 19:08 CST | step 11C | DONE -> DONE | fix(ct): exact directional sampling and hit-face clamp mask | tests/carbon_tests.cpp
 ```

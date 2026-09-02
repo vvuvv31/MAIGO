@@ -305,10 +305,10 @@ Step11TestResult run_step11_piecewise_hazard_gpu_test(
                 const float macro_xs = dens * mass_rate;
 
                 const float max_substep = max_track_length_mm - path_traversed;
-                const float t_face = clamp_step_to_ct_faces_near_z_if_needed(
+                const auto clamp_res = clamp_step_to_ct_faces_exact(
                     max_substep, pos_x, pos_y, pos_z, dx, dy, dz,
-                    org_x, org_y, org_z, sp_x, sp_y, sp_z, nx, ny, nz,
-                    density_dev, material_dev, dens, mat, false, nullptr);
+                    org_x, org_y, org_z, sp_x, sp_y, sp_z, nx, ny, nz);
+                const float t_face = clamp_res.step_mm;
 
                 if (!(t_face > 0.0F)) {
                     sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
@@ -328,7 +328,7 @@ Step11TestResult run_step11_piecewise_hazard_gpu_test(
                 std::uint8_t mat_mid = 0;
                 if (ct_sample(pos_x + test_mid * dx, pos_y + test_mid * dy, pos_z + test_mid * dz,
                               org_x, org_y, org_z, sp_x, sp_y, sp_z, nx, ny, nz,
-                              density_dev, material_dev, dens_mid, mat_mid)) {
+                              density_dev, material_dev, dens_mid, mat_mid, dx, dy, dz)) {
                     if (mat_mid != mat || sycl::fabs(dens_mid - dens) > 1.0e-4F) {
                         sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
                                          sycl::memory_scope::device,
@@ -370,33 +370,29 @@ Step11TestResult run_step11_piecewise_hazard_gpu_test(
                     pos_z += t_face * dz;
                     path_traversed += t_face;
 
-                    sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
-                                     sycl::memory_scope::device,
-                                     sycl::access::address_space::global_space>
-                        fc(*face_cross_dev);
-                    fc.fetch_add(1U);
+                    if (clamp_res.hit_face) {
+                        sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
+                                         sycl::memory_scope::device,
+                                         sycl::access::address_space::global_space>
+                            fc(*face_cross_dev);
+                        fc.fetch_add(1U);
 
-                    if (sycl::fabs(dx) > 1.0e-6F) {
-                        const float fx = (pos_x - org_x) / sp_x;
-                        const int face_x = static_cast<int>(sycl::round(fx));
-                        const float b_x = org_x + static_cast<float>(face_x) * sp_x;
-                        if (sycl::fabs(pos_x - b_x) <= 1.0e-5F) {
+                        if ((clamp_res.axis_mask & 1) != 0 && sycl::fabs(dx) > 1.0e-6F) {
+                            const float fx = (pos_x - org_x) / sp_x;
+                            const int face_x = static_cast<int>(sycl::round(fx));
+                            const float b_x = org_x + static_cast<float>(face_x) * sp_x;
                             pos_x = sycl::nextafter(b_x, dx > 0.0F ? 1.0e30F : -1.0e30F);
                         }
-                    }
-                    if (sycl::fabs(dy) > 1.0e-6F) {
-                        const float fy = (pos_y - org_y) / sp_y;
-                        const int face_y = static_cast<int>(sycl::round(fy));
-                        const float b_y = org_y + static_cast<float>(face_y) * sp_y;
-                        if (sycl::fabs(pos_y - b_y) <= 1.0e-5F) {
+                        if ((clamp_res.axis_mask & 2) != 0 && sycl::fabs(dy) > 1.0e-6F) {
+                            const float fy = (pos_y - org_y) / sp_y;
+                            const int face_y = static_cast<int>(sycl::round(fy));
+                            const float b_y = org_y + static_cast<float>(face_y) * sp_y;
                             pos_y = sycl::nextafter(b_y, dy > 0.0F ? 1.0e30F : -1.0e30F);
                         }
-                    }
-                    if (sycl::fabs(dz) > 1.0e-6F) {
-                        const float fz = (pos_z - org_z) / sp_z;
-                        const int face_z = static_cast<int>(sycl::round(fz));
-                        const float b_z = org_z + static_cast<float>(face_z) * sp_z;
-                        if (sycl::fabs(pos_z - b_z) <= 1.0e-5F) {
+                        if ((clamp_res.axis_mask & 4) != 0 && sycl::fabs(dz) > 1.0e-6F) {
+                            const float fz = (pos_z - org_z) / sp_z;
+                            const int face_z = static_cast<int>(sycl::round(fz));
+                            const float b_z = org_z + static_cast<float>(face_z) * sp_z;
                             pos_z = sycl::nextafter(b_z, dz > 0.0F ? 1.0e30F : -1.0e30F);
                         }
                     }
