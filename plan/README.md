@@ -68,9 +68,9 @@ The executor updates only the `Status` column and the execution log. Never rewri
 | [11](steps/11-voxel-boundary-hazard.md) | DONE | Piecewise-material optical-depth stepping | 10 |
 | [12](steps/12-primary-only-observables.md) | DONE | Explicit primary-only mode and validation scorers | 11 |
 | [13](steps/13-primary-ct-validation.md) | DONE | Slab + staircase primary CT milestone | 12 |
-| [14](steps/14-schneider-stopping.md) | IN_PROGRESS | TOPAS-derived 25-section stopping tables | 13 |
-| [15](steps/15-schneider-mcs.md) | TODO | Exact 25-section radiation-length MCS path | 14 |
-| [16](steps/16-cinel03-schema.md) | TODO | Element-target correlated-event package schema | 15 |
+| [14](steps/14-schneider-stopping.md) | DONE | TOPAS-derived 25-section stopping tables | 13 |
+| [15](steps/15-schneider-mcs.md) | DONE | Exact 25-section radiation-length MCS path | 14 |
+| [16](steps/16-cinel03-schema.md) | DONE | Element-target correlated-event package schema | 15 |
 | [17](steps/17-c12-element-campaigns.md) | TODO | C12 x 13-target TOPAS final-state campaigns | 16 |
 | [18](steps/18-material-target-runtime.md) | TODO | Partial-rate target selection and CINEL03 replay | 17 |
 | [19](steps/19-c12-fragment-validation.md) | TODO | C12 fragmentation validation in Schneider media | 18 |
@@ -179,4 +179,8 @@ YYYY-MM-DD HH:MM TZ | step NN | OLD -> NEW | commit/hash or blocker | evidence p
 2026-09-02 20:55 CST | step 12 | TODO -> IN_PROGRESS | feat(ct): implement primary-only validation mode, dynamic SHA256 provenance check, terminal state conservation, decoupled energy accounting, and IDD/Bragg peak metrics | tests/carbon_tests.cpp
 2026-09-02 21:40 CST | step 12 | IN_PROGRESS -> IN_PROGRESS | fix(ct): segregate other_terminal energy ledger, move provenance check early, and add watchdog regression test | tests/carbon_tests.cpp
 2026-09-02 22:05 CST | step 12 | IN_PROGRESS -> DONE | fix(ct): prioritize physical terminals over watchdog, early provenance before queue, fail-closed mandatory buffers, strict uint32 parsing, and simultaneous terminal tests | tests/carbon_tests.cpp
+2026-09-02 23:45 CST | step 13 | TODO -> DONE | feat(ct): validate primary C12 slab and staircase CT transmission against TOPAS | evidence/step-13/
+2026-09-03 01:30 CST | step 14 | IN_PROGRESS -> DONE | feat(ct): apply 25-section Schneider stopping tables with mass-SPR scaling | evidence/step-14/
+2026-09-03 11:21 CST | step 15 | TODO -> DONE | feat(ct): use Schneider section radiation lengths for MCS | evidence/step-15/
+2026-09-03 11:32 CST | step 16 | TODO -> DONE | feat(cinel): add versioned elemental-target event package | evidence/step-16/
 ```
