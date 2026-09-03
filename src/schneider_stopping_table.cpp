@@ -3,56 +3,236 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <cmath>
 #include <cstring>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <map>
 #include <sstream>
 #include <stdexcept>
+#include <string>
 #include <string_view>
+#include <vector>
 
 namespace carbon {
 
 namespace {
 
-constexpr std::array<std::string_view, 25> kCanonicalSchneiderCompositionHashes = {{
-    "9a5e655bc67c888f1ba3ad3532a6114dcb69e1054738c46bb86996e571e32a43", // sec 0: PatientTissueFromHUNegative975
-    "d85f60883acd556b0d54a7b05eda07dae753c5d7d3d49c5e777eff2228c01acb", // sec 1: PatientTissueFromHUNegative535
-    "c979ebe99d85d61ee6e6dd657bcd594ee5aa17a95c86af8d383e23182fc34fa8", // sec 2: PatientTissueFromHUNegative102
-    "b754d221929076adf060245ea9df9fc802f8a1cc850f4784ffacdf35fcbc96f9", // sec 3: PatientTissueFromHUNegative68
-    "180fbed0d50a66b0e680d4fa0a77b34b359418c08d1d86af5395893bb9d5282b", // sec 4: PatientTissueFromHUNegative38
-    "1340176e48a2ee30bb74de2bc44277716aa73eb89daa3869c505f36f3c1a9f4c", // sec 5: PatientTissueFromHUNegative8
-    "4feda65b1b00754db48b3c90ab5a2eddf48163209fcb838ce4fb27645a2ac9d9", // sec 6: PatientTissueFromHU12
-    "3224284d45c417ea1a1153495a5de59800e6f4f31a0b93e1cfaa833533a8ff5a", // sec 7: PatientTissueFromHU49
-    "bb0aa41d37f7f932c7e79d1c6aecde17efe27b28e6c28bd959dc2c0d6b9d1ffe", // sec 8: PatientTissueFromHU100
-    "5cf10aa24ee479b9c76b3ee379e974bafebdf1365b961eb94df0d2c63db02876", // sec 9: PatientTissueFromHU160
-    "4cfe354b748faaff62581c2e2c77500e68317f8e2df30764eb196d21928bb850", // sec 10: PatientTissueFromHU250
-    "274aa82d5a4eeb248f472707e7edf9e375be74c4a51772f3cd3ebe23adcee114", // sec 11: PatientTissueFromHU350
-    "84596ab01c4e118e60b57712082c25d7d667b15b5f9b78535071eb2ee4abce45", // sec 12: PatientTissueFromHU450
-    "b6c5e7b66fa67d76de71dbc46633b6aabf34656eb40f5f0eb88a69a3b1bacfce", // sec 13: PatientTissueFromHU550
-    "1986e360a3f3151c014a848d06cbab774e13eb2481b068b2b3dd613404b35838", // sec 14: PatientTissueFromHU650
-    "e5eff8bf427eed45554ff967d3593377a04d854c9813c92c37b83bf8e0cf5161", // sec 15: PatientTissueFromHU750
-    "4c05cb552f9c4a3d0925ead691e00c3856faf61f27c39d841b7756219429fd7c", // sec 16: PatientTissueFromHU850
-    "ebecc0310944118f64263e9a91b183dbfbcf00fe845e583cbcf4901831570d50", // sec 17: PatientTissueFromHU950
-    "27a8942e42e3d45c11b65efee97fd33e1ede99e76a7574618a3a40b79d270a0a", // sec 18: PatientTissueFromHU1050
-    "6b1d932fcff7507eb0c79f9e23f09aefc22c4d1b208fc6bfdfcb9140791024d4", // sec 19: PatientTissueFromHU1150
-    "1947d9de30f6e1b8723ddcd38cca594782857cd8e8c08552fc055d795de7a66f", // sec 20: PatientTissueFromHU1250
-    "0b3645352552795265980ed78fa9541d63071c0c886088c0b3ffa4a7e5b79bbd", // sec 21: PatientTissueFromHU1350
-    "515d7e2f04bce4e6c7e217a7bb2e3d2d991dc94a038709346cf6b21d4f736ffa", // sec 22: PatientTissueFromHU1450
-    "bdef38f6ba2806369cff1d54bcd467fb6f9cd08446852dbd6da04530e6230572", // sec 23: PatientTissueFromHU2247
-    "4ed07b9386302fddbdbed3b43bcd979ffd64077ec5c23560d778bd1719d32e58"  // sec 24: PatientTissueFromHU2995
+constexpr std::array<std::string_view, 25> kCanonicalSchneiderMaterialNames = {{
+    "PatientTissueFromHUNegative975",
+    "PatientTissueFromHUNegative535",
+    "PatientTissueFromHUNegative102",
+    "PatientTissueFromHUNegative68",
+    "PatientTissueFromHUNegative38",
+    "PatientTissueFromHUNegative8",
+    "PatientTissueFromHU12",
+    "PatientTissueFromHU49",
+    "PatientTissueFromHU100",
+    "PatientTissueFromHU160",
+    "PatientTissueFromHU250",
+    "PatientTissueFromHU350",
+    "PatientTissueFromHU450",
+    "PatientTissueFromHU550",
+    "PatientTissueFromHU650",
+    "PatientTissueFromHU750",
+    "PatientTissueFromHU850",
+    "PatientTissueFromHU950",
+    "PatientTissueFromHU1050",
+    "PatientTissueFromHU1150",
+    "PatientTissueFromHU1250",
+    "PatientTissueFromHU1350",
+    "PatientTissueFromHU1450",
+    "PatientTissueFromHU2247",
+    "PatientTissueFromHU2995"
 }};
 
-std::string extract_json_field(const std::string& json, const std::string& key) {
-    const std::string pattern = "\"" + key + "\": \"";
-    const auto pos = json.find(pattern);
-    if (pos == std::string::npos) return {};
-    const auto start = pos + pattern.size();
-    const auto end = json.find('"', start);
-    if (end == std::string::npos) return {};
-    return json.substr(start, end - start);
-}
+constexpr std::array<std::string_view, 25> kCanonicalSchneiderCompositionHashes = {{
+    "9a5e655bc67c888f1ba3ad3532a6114dcb69e1054738c46bb86996e571e32a43", // sec 0
+    "d85f60883acd556b0d54a7b05eda07dae753c5d7d3d49c5e777eff2228c01acb", // sec 1
+    "c979ebe99d85d61ee6e6dd657bcd594ee5aa17a95c86af8d383e23182fc34fa8", // sec 2
+    "b754d221929076adf060245ea9df9fc802f8a1cc850f4784ffacdf35fcbc96f9", // sec 3
+    "180fbed0d50a66b0e680d4fa0a77b34b359418c08d1d86af5395893bb9d5282b", // sec 4
+    "1340176e48a2ee30bb74de2bc44277716aa73eb89daa3869c505f36f3c1a9f4c", // sec 5
+    "4feda65b1b00754db48b3c90ab5a2eddf48163209fcb838ce4fb27645a2ac9d9", // sec 6
+    "3224284d45c417ea1a1153495a5de59800e6f4f31a0b93e1cfaa833533a8ff5a", // sec 7
+    "bb0aa41d37f7f932c7e79d1c6aecde17efe27b28e6c28bd959dc2c0d6b9d1ffe", // sec 8
+    "5cf10aa24ee479b9c76b3ee379e974bafebdf1365b961eb94df0d2c63db02876", // sec 9
+    "4cfe354b748faaff62581c2e2c77500e68317f8e2df30764eb196d21928bb850", // sec 10
+    "274aa82d5a4eeb248f472707e7edf9e375be74c4a51772f3cd3ebe23adcee114", // sec 11
+    "84596ab01c4e118e60b57712082c25d7d667b15b5f9b78535071eb2ee4abce45", // sec 12
+    "b6c5e7b66fa67d76de71dbc46633b6aabf34656eb40f5f0eb88a69a3b1bacfce", // sec 13
+    "1986e360a3f3151c014a848d06cbab774e13eb2481b068b2b3dd613404b35838", // sec 14
+    "e5eff8bf427eed45554ff967d3593377a04d854c9813c92c37b83bf8e0cf5161", // sec 15
+    "4c05cb552f9c4a3d0925ead691e00c3856faf61f27c39d841b7756219429fd7c", // sec 16
+    "ebecc0310944118f64263e9a91b183dbfbcf00fe845e583cbcf4901831570d50", // sec 17
+    "27a8942e42e3d45c11b65efee97fd33e1ede99e76a7574618a3a40b79d270a0a", // sec 18
+    "6b1d932fcff7507eb0c79f9e23f09aefc22c4d1b208fc6bfdfcb9140791024d4", // sec 19
+    "1947d9de30f6e1b8723ddcd38cca594782857cd8e8c08552fc055d795de7a66f", // sec 20
+    "0b3645352552795265980ed78fa9541d63071c0c886088c0b3ffa4a7e5b79bbd", // sec 21
+    "515d7e2f04bce4e6c7e217a7bb2e3d2d991dc94a038709346cf6b21d4f736ffa", // sec 22
+    "bdef38f6ba2806369cff1d54bcd467fb6f9cd08446852dbd6da04530e6230572", // sec 23
+    "4ed07b9386302fddbdbed3b43bcd979ffd64077ec5c23560d778bd1719d32e58"  // sec 24
+}};
+
+struct JsonVal {
+    enum Type { Null, String, Number, Boolean, Array, Object } type{Null};
+    std::string str_val{};
+    double num_val{0.0};
+    bool bool_val{false};
+    std::vector<JsonVal> arr{};
+    std::map<std::string, JsonVal> obj{};
+
+    bool has(const std::string& key) const {
+        return obj.find(key) != obj.end();
+    }
+    const JsonVal& operator[](const std::string& key) const {
+        auto it = obj.find(key);
+        if (it == obj.end()) throw std::runtime_error("JSON key not found: '" + key + "'");
+        return it->second;
+    }
+    const JsonVal& operator[](std::size_t idx) const {
+        if (idx >= arr.size()) throw std::runtime_error("JSON array index out of bounds: " + std::to_string(idx));
+        return arr[idx];
+    }
+};
+
+class JsonParser {
+    std::string src_;
+    std::size_t pos_{0};
+
+    void skip_whitespace() {
+        while (pos_ < src_.size() && (std::isspace(static_cast<unsigned char>(src_[pos_])) || src_[pos_] == '\0')) {
+            ++pos_;
+        }
+    }
+    char peek() {
+        skip_whitespace();
+        return (pos_ < src_.size()) ? src_[pos_] : '\0';
+    }
+    char get() {
+        skip_whitespace();
+        if (pos_ >= src_.size()) throw std::runtime_error("Unexpected EOF in JSON");
+        return src_[pos_++];
+    }
+
+    std::string parse_string() {
+        if (get() != '"') throw std::runtime_error("Expected '\"' in string");
+        std::string s;
+        while (pos_ < src_.size()) {
+            char c = src_[pos_++];
+            if (c == '"') return s;
+            if (c == '\\') {
+                if (pos_ >= src_.size()) throw std::runtime_error("Truncated escape in JSON string");
+                char esc = src_[pos_++];
+                if (esc == '"' || esc == '\\' || esc == '/') s += esc;
+                else if (esc == 'b') s += '\b';
+                else if (esc == 'f') s += '\f';
+                else if (esc == 'n') s += '\n';
+                else if (esc == 'r') s += '\r';
+                else if (esc == 't') s += '\t';
+                else s += esc;
+            } else {
+                s += c;
+            }
+        }
+        throw std::runtime_error("Unterminated string in JSON");
+    }
+
+    JsonVal parse_number() {
+        skip_whitespace();
+        std::size_t start = pos_;
+        if (src_[pos_] == '-') ++pos_;
+        while (pos_ < src_.size() && (std::isdigit(static_cast<unsigned char>(src_[pos_])) || src_[pos_] == '.' ||
+                                      src_[pos_] == 'e' || src_[pos_] == 'E' ||
+                                      src_[pos_] == '+' || src_[pos_] == '-')) {
+            ++pos_;
+        }
+        std::string num_str = src_.substr(start, pos_ - start);
+        JsonVal v;
+        v.type = JsonVal::Number;
+        v.num_val = std::stod(num_str);
+        return v;
+    }
+
+public:
+    explicit JsonParser(std::string src) : src_(std::move(src)) {}
+
+    JsonVal parse_value() {
+        skip_whitespace();
+        char c = peek();
+        if (c == '{') return parse_object();
+        if (c == '[') return parse_array();
+        if (c == '"') {
+            JsonVal v;
+            v.type = JsonVal::String;
+            v.str_val = parse_string();
+            return v;
+        }
+        if (c == 't' || c == 'f') {
+            std::string b;
+            while (std::isalpha(static_cast<unsigned char>(peek()))) b += get();
+            JsonVal v;
+            v.type = JsonVal::Boolean;
+            v.bool_val = (b == "true");
+            return v;
+        }
+        if (c == 'n') {
+            for (int i = 0; i < 4; ++i) get();
+            JsonVal v;
+            v.type = JsonVal::Null;
+            return v;
+        }
+        if (std::isdigit(static_cast<unsigned char>(c)) || c == '-') {
+            return parse_number();
+        }
+        throw std::runtime_error(std::string("Unexpected character in JSON: '") + c + "'");
+    }
+
+    JsonVal parse_object() {
+        if (get() != '{') throw std::runtime_error("Expected '{'");
+        JsonVal v;
+        v.type = JsonVal::Object;
+        skip_whitespace();
+        if (peek() == '}') { get(); return v; }
+        while (true) {
+            std::string key = parse_string();
+            skip_whitespace();
+            if (get() != ':') throw std::runtime_error("Expected ':' after object key");
+            JsonVal val = parse_value();
+            v.obj[key] = std::move(val);
+            skip_whitespace();
+            char c = get();
+            if (c == '}') break;
+            if (c != ',') throw std::runtime_error("Expected ',' or '}' in object");
+        }
+        return v;
+    }
+
+    JsonVal parse_array() {
+        if (get() != '[') throw std::runtime_error("Expected '['");
+        JsonVal v;
+        v.type = JsonVal::Array;
+        skip_whitespace();
+        if (peek() == ']') { get(); return v; }
+        while (true) {
+            v.arr.push_back(parse_value());
+            skip_whitespace();
+            char c = get();
+            if (c == ']') break;
+            if (c != ',') throw std::runtime_error("Expected ',' or ']' in array");
+        }
+        return v;
+    }
+
+    JsonVal parse() {
+        auto val = parse_value();
+        skip_whitespace();
+        if (pos_ < src_.size()) throw std::runtime_error("Trailing characters after JSON root");
+        return val;
+    }
+};
 
 }  // namespace
 
@@ -115,7 +295,7 @@ SchneiderStoppingTable SchneiderStoppingTable::from_binary(
         throw std::runtime_error("Truncated CSDA ranges in: " + binary_path.string());
     }
 
-    // Strict structural metadata validation
+    // Strict structural metadata validation using recursive descent JSON parser
     const auto effective_meta_path = metadata_path.empty()
         ? (binary_path.parent_path() / (binary_path.stem().string() + ".metadata.json"))
         : metadata_path;
@@ -132,31 +312,91 @@ SchneiderStoppingTable SchneiderStoppingTable::from_binary(
     const std::string meta_content((std::istreambuf_iterator<char>(meta_in)),
                                    std::istreambuf_iterator<char>());
 
-    const auto recorded_sha = extract_json_field(meta_content, "data_sha256");
-    if (recorded_sha.empty()) {
-        throw std::runtime_error("Missing data_sha256 in metadata sidecar: " + effective_meta_path.string());
+    JsonVal root;
+    try {
+        JsonParser parser(meta_content);
+        root = parser.parse();
+    } catch (const std::exception& e) {
+        throw std::runtime_error("Malformed JSON in metadata sidecar " + effective_meta_path.string() + ": " + e.what());
     }
+
+    if (root.type != JsonVal::Object) {
+        throw std::runtime_error("Metadata root must be a JSON object: " + effective_meta_path.string());
+    }
+
+    // 1. Schema version & format
+    if (!root.has("schema_version") || root["schema_version"].num_val < 1.0) {
+        throw std::runtime_error("Missing or invalid schema_version in metadata");
+    }
+    if (!root.has("format") || root["format"].str_val != "binary") {
+        throw std::runtime_error("Metadata format must be 'binary', got: " + (root.has("format") ? root["format"].str_val : "none"));
+    }
+    if (!root.has("data_filename") || root["data_filename"].str_val != "schneider_stopping_v1.bin") {
+        throw std::runtime_error("Metadata data_filename must be 'schneider_stopping_v1.bin'");
+    }
+
+    // 2. Binary SHA256 match
     const auto actual_bin_sha = compute_file_sha256_hex(binary_path);
-    if (recorded_sha != actual_bin_sha) {
-        throw std::runtime_error("Schneider stopping binary SHA256 mismatch: recorded=" + recorded_sha +
+    if (!root.has("data_sha256") || root["data_sha256"].str_val != actual_bin_sha) {
+        throw std::runtime_error("Schneider stopping binary SHA256 mismatch: recorded=" +
+                                 (root.has("data_sha256") ? root["data_sha256"].str_val : "none") +
                                  ", actual=" + actual_bin_sha);
     }
 
-    // Section Identity & Composition Hash Contract: verify all 25 sections in sequence
+    // 3. Projectile validation: GenericIon(6,12)
+    if (!root.has("projectile") || root["projectile"].type != JsonVal::Object) {
+        throw std::runtime_error("Missing projectile object in metadata");
+    }
+    const auto& proj = root["projectile"];
+    if (!proj.has("z") || static_cast<int>(proj["z"].num_val) != 6 ||
+        !proj.has("a") || static_cast<int>(proj["a"].num_val) != 12) {
+        throw std::runtime_error("Metadata projectile must have z=6, a=12");
+    }
+
+    // 4. Dimensions
+    if (!root.has("sections_count") || static_cast<std::size_t>(root["sections_count"].num_val) != kSchneiderStoppingNumSections) {
+        throw std::runtime_error("Invalid sections_count in metadata");
+    }
+    if (!root.has("energies_count") || static_cast<std::size_t>(root["energies_count"].num_val) != kSchneiderStoppingNumEnergies) {
+        throw std::runtime_error("Invalid energies_count in metadata");
+    }
+
+    // 5. Section Manifest verification
+    if (!root.has("section_manifest") || root["section_manifest"].type != JsonVal::Array) {
+        throw std::runtime_error("Missing section_manifest array in metadata");
+    }
+    const auto& manifest = root["section_manifest"].arr;
+    if (manifest.size() != kSchneiderStoppingNumSections) {
+        throw std::runtime_error("section_manifest count mismatch: " + std::to_string(manifest.size()) +
+                                 " (expected 25)");
+    }
+
     for (std::size_t s = 0; s < kSchneiderStoppingNumSections; ++s) {
-        const std::string sec_pattern = "\"section_id\": " + std::to_string(s) + ",";
-        const auto sec_pos = meta_content.find(sec_pattern);
-        if (sec_pos == std::string::npos) {
-            throw std::runtime_error("Metadata missing section_id " + std::to_string(s) + " in " + effective_meta_path.string());
+        const auto& sec = manifest[s];
+        if (sec.type != JsonVal::Object) {
+            throw std::runtime_error("section_manifest entry " + std::to_string(s) + " must be an object");
+        }
+        if (!sec.has("section_id") || static_cast<std::size_t>(sec["section_id"].num_val) != s) {
+            throw std::runtime_error("Section ID mismatch or duplicate at index " + std::to_string(s));
         }
 
-        const auto comp_hash = kCanonicalSchneiderCompositionHashes[s];
-        const std::string hash_pattern = "\"composition_sha256\": \"" + std::string(comp_hash) + "\"";
-        const auto hash_pos = meta_content.find(hash_pattern, sec_pos);
-        if (hash_pos == std::string::npos || hash_pos > sec_pos + 400) {
-            throw std::runtime_error(
-                "Schneider stopping table section identity / composition permutation detected at section " +
-                std::to_string(s) + " (expected composition hash " + std::string(comp_hash) + ")");
+        const auto expected_name = kCanonicalSchneiderMaterialNames[s];
+        if (!sec.has("material_name") || sec["material_name"].str_val != expected_name) {
+            throw std::runtime_error("Section material name mismatch at section " + std::to_string(s) +
+                                     ": expected '" + std::string(expected_name) + "', got '" +
+                                     (sec.has("material_name") ? sec["material_name"].str_val : "none") + "'");
+        }
+
+        if (!sec.has("nominal_density_g_cm3") ||
+            std::abs(sec["nominal_density_g_cm3"].num_val - table.densities_[s]) > 1e-4) {
+            throw std::runtime_error("Section nominal density mismatch at section " + std::to_string(s));
+        }
+
+        const auto expected_hash = kCanonicalSchneiderCompositionHashes[s];
+        if (!sec.has("composition_sha256") || sec["composition_sha256"].str_val != expected_hash) {
+            throw std::runtime_error("Section composition hash mismatch at section " + std::to_string(s) +
+                                     ": expected " + std::string(expected_hash) + ", got " +
+                                     (sec.has("composition_sha256") ? sec["composition_sha256"].str_val : "none"));
         }
     }
 

@@ -6563,6 +6563,128 @@ void test_schneider_stopping_permutation_rejection() {
     std::filesystem::remove_all(tmp_dir);
 }
 
+void test_schneider_stopping_metadata_schema_failures() {
+    const auto bin_path = std::filesystem::path("data/schneider/schneider_stopping_v1.bin");
+    const auto meta_path = std::filesystem::path("data/schneider/schneider_stopping_v1.metadata.json");
+
+    const auto tmp_dir = std::filesystem::temp_directory_path() / "schneider_meta_schema_tests";
+    std::filesystem::create_directories(tmp_dir);
+    const auto corrupt_meta_path = tmp_dir / "corrupt.json";
+
+    std::ifstream orig_in(meta_path);
+    const std::string valid_json((std::istreambuf_iterator<char>(orig_in)), std::istreambuf_iterator<char>());
+
+    const auto check_reject = [&](const std::string& modified_json, const std::string& msg) {
+        std::ofstream out(corrupt_meta_path);
+        out << modified_json;
+        out.close();
+        require_throws<std::runtime_error>([&]() {
+            (void)carbon::SchneiderStoppingTable::from_binary(bin_path, corrupt_meta_path);
+        }, msg);
+    };
+
+    // 1. Malformed / invalid JSON syntax
+    check_reject("{\"schema_version\": 2, \"unclosed_string: 123", "Malformed JSON syntax must throw");
+
+    // 2. Wrong projectile (Z=1 instead of Z=6)
+    {
+        auto bad = valid_json;
+        const auto pos = bad.find("\"z\": 6");
+        require(pos != std::string::npos, "Could not find Z in metadata");
+        bad.replace(pos, 6, "\"z\": 1");
+        check_reject(bad, "Wrong projectile Z=1 must throw");
+    }
+
+    // 3. Wrong material name in section 8
+    {
+        auto bad = valid_json;
+        const auto pos = bad.find("\"PatientTissueFromHU100\"");
+        require(pos != std::string::npos, "Could not find material name in metadata");
+        bad.replace(pos, 24, "\"CorruptedMaterialName\"");
+        check_reject(bad, "Wrong material name in section must throw");
+    }
+
+    // 4. Duplicate section ID (change section 1 to section 0)
+    {
+        auto bad = valid_json;
+        const auto pos = bad.find("\"section_id\": 1");
+        require(pos != std::string::npos, "Could not find section 1 in metadata");
+        bad.replace(pos, 15, "\"section_id\": 0");
+        check_reject(bad, "Duplicate section ID must throw");
+    }
+
+    std::filesystem::remove_all(tmp_dir);
+}
+
+void test_schneider_stopping_source_energy_domain_fail_closed() {
+    const auto cctg_path = std::filesystem::path("/mnt/sda/wuwei/step14_schneider_stopping/transport_benchmarks/cctg/soft_tissue_200mevu_bragg.cctg");
+    if (!std::filesystem::exists(cctg_path)) return;
+
+    carbon::TransportConfig base_cfg;
+    base_cfg.phantom_length_mm = 50.0;
+    base_cfg.depth_bin_width_mm = 1.0;
+    base_cfg.primary_atomic_number = 6;
+    base_cfg.primary_mass_number = 12;
+    base_cfg.initial_energy_MeVu = 200.0;
+    base_cfg.enable_ct_grid = true;
+    base_cfg.ct_grid_file = cctg_path.string();
+    base_cfg.ct_schneider_stopping_power_file = "data/schneider/schneider_stopping_v1.bin";
+    base_cfg.ct_schneider_cross_section_file = "data/schneider/c12_schneider_inelastic_mass_xs.csv";
+    base_cfg.nuclear_model = "geant4";
+    base_cfg.number_of_histories = 100;
+    base_cfg.validate();
+
+    const auto water_sp = carbon::StoppingPowerTable::from_csv("data/stopping_power_water_geant4_11_3_2.csv");
+    const auto zero_xs = zero_cross_section();
+
+    // 1. Single beam energy > 430 MeV/u must be rejected
+    {
+        auto bad = base_cfg;
+        bad.initial_energy_MeVu = 435.0;
+        require_throws<std::invalid_argument>([&]() {
+            (void)carbon::transport_sycl(bad, water_sp, zero_xs, "default");
+        }, "Initial energy 435 MeV/u must be rejected in Schneider mode");
+    }
+
+    // 2. Single beam spread allowing > 430.11 MeV/u must be rejected
+    {
+        auto bad = base_cfg;
+        bad.initial_energy_MeVu = 420.0;
+        bad.beam_energy_spread = 0.05; // 420 * (1 + 3 * 0.05) = 483 > 430.11
+        require_throws<std::invalid_argument>([&]() {
+            (void)carbon::transport_sycl(bad, water_sp, zero_xs, "default");
+        }, "Single beam spread exceeding 430.11 MeV/u must be rejected in Schneider mode");
+    }
+
+    // 3. Production spot batch with energy > 430 MeV/u (e.g. 435 MeV/u = 5220 MeV) must be rejected
+    {
+        auto bad = base_cfg;
+        carbon::PrimarySpotBatchEntry spot{};
+        spot.history_begin = 0;
+        spot.history_end = bad.number_of_histories;
+        spot.floats[0] = 5220.0F; // 435 MeV/u * 12
+        spot.floats[1] = 0.0F;
+        bad.primary_spot_batch = {spot};
+        require_throws<std::invalid_argument>([&]() {
+            (void)carbon::transport_sycl(bad, water_sp, zero_xs, "default");
+        }, "Production spot with 435 MeV/u must be rejected in Schneider mode");
+    }
+
+    // 4. Production spot batch with spread exceeding 430.11 MeV/u must be rejected
+    {
+        auto bad = base_cfg;
+        carbon::PrimarySpotBatchEntry spot{};
+        spot.history_begin = 0;
+        spot.history_end = bad.number_of_histories;
+        spot.floats[0] = 420.0F * 12.0F; // 420 MeV/u
+        spot.floats[1] = 0.05F; // 420 * (1 + 3 * 0.05) = 483 > 430.11
+        bad.primary_spot_batch = {spot};
+        require_throws<std::invalid_argument>([&]() {
+            (void)carbon::transport_sycl(bad, water_sp, zero_xs, "default");
+        }, "Production spot with spread exceeding 430.11 MeV/u must be rejected in Schneider mode");
+    }
+}
+
 void test_schneider_stopping_host_device_equivalence() {
     const auto bin_path = std::filesystem::path("data/schneider/schneider_stopping_v1.bin");
     const auto meta_path = std::filesystem::path("data/schneider/schneider_stopping_v1.metadata.json");
@@ -6756,7 +6878,9 @@ int main(int argc, char** argv) {
 #endif
         run("test_step14_schneider_stopping_power_tables", test_step14_schneider_stopping_power_tables);
         run("test_schneider_stopping_permutation_rejection", test_schneider_stopping_permutation_rejection);
+        run("test_schneider_stopping_metadata_schema_failures", test_schneider_stopping_metadata_schema_failures);
 #ifdef CARBON_HAS_SYCL
+        run("test_schneider_stopping_source_energy_domain_fail_closed", test_schneider_stopping_source_energy_domain_fail_closed);
         run("test_schneider_stopping_host_device_equivalence", test_schneider_stopping_host_device_equivalence);
 #endif
         std::cout << "All carbon_tests passed\n";

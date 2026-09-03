@@ -5,10 +5,10 @@ tools/verify_step14_schneider_stopping.py
 Step 14 Comprehensive Acceptance Verifier:
 Enforces all acceptance gates from plan/steps/14-schneider-stopping.md and review directives:
   Gate 1: Data Integrity, Metadata, 4302-node Grid (430 MeV/u source domain), Section Identity & Composition Hashes
-  Gate 2: Table & Independent Numerical CSDA Integrator Equivalence
-  Gate 3: Independent Full Monte Carlo Transport Bragg Peak & Distal R80 Verification (Fail-closed, 100/200/300 MeV/u)
+  Gate 2: Table & Independent Numerical CSDA Integrator Equivalence (<0.5% threshold across 25 sections)
+  Gate 3: Independent Full Monte Carlo Transport Bragg Peak & Distal R80 Verification (Fail-closed contract map, 100/200/300 MeV/u)
   Gate 4: Non-Nominal Empirical Density Scaling Invariance Audit (Geant4 density effect < 0.05% across 4x4 matrix)
-  Gate 5: Automated CTest Suite (Host/Device microkernel equivalence & Permutation rejection)
+  Gate 5: Automated CTest Suite (Host/Device microkernel equivalence & Schema/Permutation rejection)
 """
 
 import argparse
@@ -27,6 +27,7 @@ BIN_PATH = REPO_ROOT / "data/schneider/schneider_stopping_v1.bin"
 BIN_META_PATH = REPO_ROOT / "data/schneider/schneider_stopping_v1.metadata.json"
 CSV_PATH = REPO_ROOT / "data/schneider/c12_schneider_stopping_power.csv"
 CSV_META_PATH = REPO_ROOT / "data/schneider/c12_schneider_stopping_power.metadata.json"
+SCHNEIDER_TXT_PATH = REPO_ROOT / "data/HUtoMaterialSchneider.txt"
 BENCH_DIR = Path("/mnt/sda/wuwei/step14_schneider_stopping/transport_benchmarks")
 
 EXPECTED_SECTIONS = 25
@@ -80,9 +81,12 @@ def verify_gate1_data_integrity():
         return False, f"Missing CSV file: {CSV_PATH}"
     if not CSV_META_PATH.is_file():
         return False, f"Missing CSV metadata file: {CSV_META_PATH}"
+    if not SCHNEIDER_TXT_PATH.is_file():
+        return False, f"Missing Schneider HU material file: {SCHNEIDER_TXT_PATH}"
 
     actual_bin_sha = sha256_file(BIN_PATH)
     actual_csv_sha = sha256_file(CSV_PATH)
+    actual_schneider_sha = sha256_file(SCHNEIDER_TXT_PATH)
 
     with open(BIN_META_PATH) as f:
         bin_meta = json.load(f)
@@ -90,6 +94,8 @@ def verify_gate1_data_integrity():
         return False, f"Binary SHA256 mismatch: recorded {bin_meta.get('data_sha256')}, actual {actual_bin_sha}"
     if bin_meta.get("data_filename") != "schneider_stopping_v1.bin":
         return False, f"Binary metadata data_filename mismatch: {bin_meta.get('data_filename')}"
+    if bin_meta.get("schneider_source_sha256") != actual_schneider_sha:
+        return False, f"Schneider source SHA256 mismatch in metadata: {bin_meta.get('schneider_source_sha256')} vs actual {actual_schneider_sha}"
 
     with open(CSV_META_PATH) as f:
         csv_meta = json.load(f)
@@ -175,27 +181,25 @@ def verify_gate2_table_and_integrator_equivalence():
                 return False, f"Non-monotonic CSDA range at s={s}, e={e_idx}"
 
     # 2. Independent numerical CSDA integration in python:
-    # R_csda(E) = \int_0^E 12 dE' / S_linear(E')
-    # Using trapezoidal integration from the linear stopping power values
-    # Compare with stored csda_range_mm (difference should be < 0.5% due to trapezoidal vs Geant4 32-point spline)
-    for s in [0, 8, 20, 24]: # Check Lung, Soft tissue, Bone, Titanium
+    # Stored CSDA values were computed via continuous log-linear integration of the stopping power values.
+    # We independently integrate trapezoidally: R_csda(E) = \int_0^E 12 dE' / S_linear(E')
+    # and require agreement within strict 0.5% (0.005) threshold across all 25 sections.
+    for s in range(EXPECTED_SECTIONS):
         cum_r = 0.0
         for i in range(1, EXPECTED_ENERGIES):
             dE = ENERGY_STEP
             l_prev = csv_linear_sp[s][i - 1]
             l_curr = csv_linear_sp[s][i]
-            # 12 MeV per MeV/u for C12
             step_r = 12.0 * dE * 0.5 * (1.0 / l_prev + 1.0 / l_curr)
             cum_r += step_r
-            # Spot check at 100, 200, 300, 430 MeV/u
             e = ENERGY_MIN + i * ENERGY_STEP
             if abs(e - 100.0) < 0.05 or abs(e - 200.0) < 0.05 or abs(e - 300.0) < 0.05 or abs(e - 430.0) < 0.05:
                 stored_r = csda_r[s][i]
                 rel_err = abs(cum_r - stored_r) / stored_r
-                if rel_err > 0.02: # < 2% trapezoidal difference from continuous spline
-                    return False, f"Independent CSDA numerical integration mismatch at s={s}, e={e:.1f}: integ={cum_r:.2f} mm vs stored={stored_r:.2f} mm (rel_err={rel_err:.3f})"
+                if rel_err > 0.005:  # Strict < 0.5% contract
+                    return False, f"Independent CSDA numerical integration mismatch at s={s}, e={e:.1f}: integ={cum_r:.2f} mm vs stored={stored_r:.2f} mm (rel_err={rel_err:.4f} > 0.005)"
 
-    print("  -> Gate 2 PASSED: 100% Binary/CSV equivalence, unit conversion, and independent numerical CSDA integration verified.")
+    print("  -> Gate 2 PASSED: 100% Binary/CSV equivalence, unit conversion, and independent numerical CSDA integration verified (<0.5% threshold).")
     return True, "PASS"
 
 def parse_strict_topas_csv(csv_path, nx, ny, nz, dz, oz=0.0):
@@ -265,24 +269,31 @@ def verify_gate3_independent_transport_bragg():
     with open(manifest_path) as f:
         cases = json.load(f)
 
-    # Fail-closed check: require fixed required cases
+    # Fail-closed physical contract map: requires exact physical parameters
     REQUIRED_CASES = {
-        "adipose_100mevu_bragg",
-        "soft_tissue_200mevu_bragg",
-        "dense_bone_200mevu_bragg",
-        "titanium_100mevu_bragg",
-        "soft_tissue_300mevu_bragg"
+        "adipose_100mevu_bragg": {"section_id": 2, "energy_mevu": 100.0, "spacing_z_mm": 1.0, "min_histories": 50000},
+        "soft_tissue_200mevu_bragg": {"section_id": 8, "energy_mevu": 200.0, "spacing_z_mm": 1.0, "min_histories": 50000},
+        "dense_bone_200mevu_bragg": {"section_id": 20, "energy_mevu": 200.0, "spacing_z_mm": 1.0, "min_histories": 50000},
+        "titanium_100mevu_bragg": {"section_id": 24, "energy_mevu": 100.0, "spacing_z_mm": 0.5, "min_histories": 50000},
+        "soft_tissue_300mevu_bragg": {"section_id": 8, "energy_mevu": 300.0, "spacing_z_mm": 2.0, "min_histories": 50000},
     }
-    found_case_ids = {c.get("id") for c in cases}
-    missing_cases = REQUIRED_CASES - found_case_ids
-    if missing_cases:
-        return False, f"Gate 3 fail-closed: missing required benchmark cases: {missing_cases}"
 
-    for c in cases:
-        cid = c["id"]
-        if cid not in REQUIRED_CASES:
-            continue
+    manifest_map = {c.get("id"): c for c in cases}
+    for req_id, req_props in REQUIRED_CASES.items():
+        if req_id not in manifest_map:
+            return False, f"Gate 3 fail-closed: missing required benchmark case '{req_id}' in manifest"
+        c = manifest_map[req_id]
+        if c.get("section_id") != req_props["section_id"]:
+            return False, f"Manifest section_id mismatch for {req_id}: {c.get('section_id')} vs expected {req_props['section_id']}"
+        if abs(c.get("energy_mevu", 0.0) - req_props["energy_mevu"]) > 1e-4:
+            return False, f"Manifest energy_mevu mismatch for {req_id}: {c.get('energy_mevu')} vs expected {req_props['energy_mevu']}"
+        if abs(c.get("spacing_z_mm", 0.0) - req_props["spacing_z_mm"]) > 1e-4:
+            return False, f"Manifest spacing_z_mm mismatch for {req_id}: {c.get('spacing_z_mm')} vs expected {req_props['spacing_z_mm']}"
+        if c.get("histories", 0) < req_props["min_histories"]:
+            return False, f"Manifest histories for {req_id} ({c.get('histories')}) below minimum {req_props['min_histories']}"
 
+    for req_id, req_props in REQUIRED_CASES.items():
+        c = manifest_map[req_id]
         topas_csv = Path(c["topas_dose_csv"])
         gpu_json = Path(c["gpu_json_output"])
 
@@ -297,36 +308,47 @@ def verify_gate3_independent_transport_bragg():
         dz = c["spacing_z_mm"]
         topas_res, err_msg = parse_strict_topas_csv(topas_csv, nx, ny, nz, dz)
         if not topas_res:
-            return False, f"Strict TOPAS dose parsing failed for {cid}: {err_msg}"
+            return False, f"Strict TOPAS dose parsing failed for {req_id}: {err_msg}"
 
         with open(gpu_json) as f:
             gpu_data = json.load(f)
+
+        # Cross-verify GPU JSON physical properties
+        if gpu_data.get("id") != req_id:
+            return False, f"GPU JSON ID mismatch: {gpu_data.get('id')} vs expected {req_id}"
+        if gpu_data.get("section_id") != req_props["section_id"]:
+            return False, f"GPU JSON section_id mismatch for {req_id}: {gpu_data.get('section_id')} vs expected {req_props['section_id']}"
+        if abs(gpu_data.get("energy_mevu", 0.0) - req_props["energy_mevu"]) > 1e-4:
+            return False, f"GPU JSON energy_mevu mismatch for {req_id}: {gpu_data.get('energy_mevu')} vs expected {req_props['energy_mevu']}"
+        if gpu_data.get("histories", 0) < req_props["min_histories"]:
+            return False, f"GPU JSON histories for {req_id} ({gpu_data.get('histories')}) below minimum {req_props['min_histories']}"
+
         gpu_res = gpu_data.get("bragg_peak_metrics")
         if not gpu_res:
             return False, f"Missing bragg_peak_metrics in {gpu_json}"
 
         if not gpu_res.get("found_r80", False):
-            return False, f"GPU simulation failed to resolve distal R80 for {cid}"
+            return False, f"GPU simulation failed to resolve distal R80 for {req_id}"
 
         allowed_diff = max(0.5, dz)
 
         gpu_peak = gpu_res.get("peak_depth_mm")
         topas_peak = topas_res.get("peak_depth_mm")
         if not (math.isfinite(gpu_peak) and math.isfinite(topas_peak)):
-            return False, f"Non-finite Bragg peak depth for {cid}"
+            return False, f"Non-finite Bragg peak depth for {req_id}"
         peak_diff = abs(gpu_peak - topas_peak)
         if peak_diff > allowed_diff:
-            return False, f"Bragg peak depth gate violated for {cid}: TOPAS={topas_peak:.2f} mm, GPU={gpu_peak:.2f} mm (diff={peak_diff:.2f} > limit {allowed_diff:.2f})"
+            return False, f"Bragg peak depth gate violated for {req_id}: TOPAS={topas_peak:.2f} mm, GPU={gpu_peak:.2f} mm (diff={peak_diff:.2f} > limit {allowed_diff:.2f})"
 
         gpu_r80 = gpu_res.get("r80_distal_mm")
         topas_r80 = topas_res.get("r80_depth_mm")
         if not (topas_r80 is not None and math.isfinite(topas_r80) and gpu_r80 is not None and math.isfinite(gpu_r80)):
-            return False, f"Non-finite R80 distal falloff for {cid}"
+            return False, f"Non-finite R80 distal falloff for {req_id}"
         r80_diff = abs(gpu_r80 - topas_r80)
         if r80_diff > allowed_diff:
-            return False, f"R80 distal falloff gate violated for {cid}: TOPAS={topas_r80:.2f} mm, GPU={gpu_r80:.2f} mm (diff={r80_diff:.2f} > limit {allowed_diff:.2f})"
+            return False, f"R80 distal falloff gate violated for {req_id}: TOPAS={topas_r80:.2f} mm, GPU={gpu_r80:.2f} mm (diff={r80_diff:.2f} > limit {allowed_diff:.2f})"
 
-        print(f"    {cid:<28}: Peak diff = {peak_diff:4.2f} mm, R80 diff = {r80_diff:4.2f} mm (limit = {allowed_diff:4.2f} mm) PASS")
+        print(f"    {req_id:<28}: Peak diff = {peak_diff:4.2f} mm, R80 diff = {r80_diff:4.2f} mm (limit = {allowed_diff:4.2f} mm) PASS")
 
     print("  -> Gate 3 PASSED: All independent full Monte Carlo transport Bragg observables verified across 100/200/300 MeV/u.")
     return True, "PASS"
@@ -363,18 +385,18 @@ def verify_gate4_density_scaling_invariance():
         for t in tests:
             e = t["energy_mevu"]
             err = t["max_rel_err"]
-            if err > 0.0005:  # 0.05% threshold
+            if err > 0.0005:  # Strict 0.05% threshold
                 return False, f"Empirical density scaling invariance violated for {lbl} at {e} MeV/u: rel_err={err:.2e} > 0.0005"
 
     print("  -> Gate 4 PASSED: Geant4 mass stopping power empirical density-scaling invariance verified (<0.05% threshold across full 4x4 matrix).")
     return True, "PASS"
 
 def verify_gate5_runtime_ctest():
-    print("[Gate 5] Running Automated Unit Tests (ctest: Host/Device Equivalence & Negative Permutation Test)...")
+    print("[Gate 5] Running Automated Unit Tests (ctest: Host/Device Equivalence, Source Guard & Schema Rejection)...")
     res = subprocess.run(["ctest", "--output-on-failure"], cwd=REPO_ROOT / "build", capture_output=True, text=True)
     if res.returncode != 0:
         return False, f"CTest failed:\n{res.stdout}\n{res.stderr}"
-    print("  -> Gate 5 PASSED: All unit tests passed cleanly (including host/device microkernel equivalence and permutation rejection).")
+    print("  -> Gate 5 PASSED: All unit tests passed cleanly (including host/device microkernel equivalence, spot/spread domain guards, and structural schema validation).")
     return True, "PASS"
 
 def main():
@@ -396,7 +418,7 @@ def main():
     print(f"  Gate 2 (Table & CSDA Integrator Equivalence):  {'PASS' if g2_pass else 'FAIL: ' + g2_msg}")
     print(f"  Gate 3 (Independent Transport Bragg Peaks):    {'PASS' if g3_pass else 'FAIL: ' + g3_msg}")
     print(f"  Gate 4 (Empirical Density Scaling Audit):      {'PASS' if g4_pass else 'FAIL: ' + g4_msg}")
-    print(f"  Gate 5 (CTest Host/Device & Permutation Test): {'PASS' if g5_pass else 'FAIL: ' + g5_msg}")
+    print(f"  Gate 5 (CTest Host/Device & Schema Guards):    {'PASS' if g5_pass else 'FAIL: ' + g5_msg}")
     print("================================================================================")
 
     if not all_pass:

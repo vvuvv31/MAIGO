@@ -848,6 +848,30 @@ TransportResult transport_sycl(const TransportConfig& config,
                         std::to_string(kSchneiderStoppingEnergyMax) + " MeV/u");
                 }
             }
+
+            // Audit all primary spots in spot batch
+            for (std::size_t si = 0; si < config.primary_spot_batch.size(); ++si) {
+                const auto& spot = config.primary_spot_batch[si];
+                const double spot_e = static_cast<double>(spot.floats[0]) / 12.0; // total MeV to MeV/u for C12
+                if (spot_e < kSchneiderStoppingEnergyMin || spot_e > 430.0 + 1e-5) {
+                    throw std::invalid_argument(
+                        "Schneider stopping power mode: spot " + std::to_string(si) +
+                        " energy " + std::to_string(spot_e) + " MeV/u is outside valid domain [" +
+                        std::to_string(kSchneiderStoppingEnergyMin) + ", 430.0] MeV/u");
+                }
+                const double spot_spread = static_cast<double>(spot.floats[1]);
+                if (spot_spread > 0.0) {
+                    const double max_spot_e = spot_e * (1.0 + 3.0 * spot_spread);
+                    if (max_spot_e > kSchneiderStoppingEnergyMax) {
+                        throw std::invalid_argument(
+                            "Schneider stopping power mode: spot " + std::to_string(si) +
+                            " energy spread allows birth energies up to " +
+                            std::to_string(max_spot_e) + " MeV/u, exceeding table maximum " +
+                            std::to_string(kSchneiderStoppingEnergyMax) + " MeV/u");
+                    }
+                }
+            }
+
             if (std::abs(config.ct_stopping_power_scale - 1.0) > 1e-6) {
                 throw std::invalid_argument(
                     "Exact Schneider stopping power mode requires ct_stopping_power_scale == 1.0; calibration scaling is forbidden");
@@ -1659,8 +1683,9 @@ TransportResult transport_sycl(const TransportConfig& config,
                         rng::uniform01(spot_seed, rng_history, 0, 40), 1.0e-12F);
                     const auto u1 = rng::uniform01(spot_seed, rng_history, 0, 41);
                     constexpr float two_pi = 6.2831853071795864769F;
-                    const auto gauss =
+                    const auto raw_gauss =
                         sycl::sqrt(-2.0F * sycl::log(u0)) * sycl::cos(two_pi * u1);
+                    const auto gauss = sycl::clamp(raw_gauss, -3.0F, 3.0F);
                     energy_MeV =
                         spot_initial_energy_MeV * (1.0F + spot_energy_spread * gauss);
                     if (energy_MeV < energy_cutoff_MeV) {
