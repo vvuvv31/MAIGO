@@ -5,6 +5,7 @@
 #include "carbon/schneider_rate_table.hpp"
 #include "carbon/schneider_stopping_table.hpp"
 #include "carbon/schneider_target_sampler.hpp"
+#include "carbon/secondary_rate_table.hpp"
 #include "carbon/electron_transport.hpp"
 #include "carbon/energy_loss_fluctuation.hpp"
 #include "carbon/multiple_scattering.hpp"
@@ -7688,9 +7689,107 @@ void test_step18_target_sampler_cpu_gpu_equivalence_and_diagnostics() {
     sycl::free(dev_diag, queue);
     sycl::free(dev_targets, queue);
     sycl::free(dev_event_ids, queue);
+    std::cout << "[step18-test] CPU/GPU equivalence and diagnostics PASSED.\n";
+}
 #endif
 
-    std::cout << "[step18-test] CPU/GPU equivalence and diagnostics PASSED.\n";
+void test_step20_secondary_rate_table_and_cinel03_package() {
+    std::cout << "[step20-test] Running secondary rate table and cinel03 package tests...\n";
+
+    // 1. Validate SecondaryRateTable
+    const auto rate_table = SecondaryRateTable::from_binary("data/schneider/secondary_inelastic_rates_v1.bin");
+    require(rate_table.num_projectiles() == 13, "Must have 13 secondary projectiles");
+    require(rate_table.projectile_index(1, 1) >= 0, "Proton must be present");
+    require(rate_table.projectile_index(1, 2) >= 0, "Deuteron must be present");
+    require(rate_table.projectile_index(1, 3) >= 0, "Triton must be present");
+    require(rate_table.projectile_index(2, 3) >= 0, "He3 must be present");
+    require(rate_table.projectile_index(2, 4) >= 0, "Alpha must be present");
+    require(rate_table.projectile_index(3, 6) >= 0, "Li6 must be present");
+    require(rate_table.projectile_index(3, 7) >= 0, "Li7 must be present");
+    require(rate_table.projectile_index(4, 7) >= 0, "Be7 must be present");
+    require(rate_table.projectile_index(4, 9) >= 0, "Be9 must be present");
+    require(rate_table.projectile_index(4, 10) >= 0, "Be10 must be present");
+    require(rate_table.projectile_index(5, 10) >= 0, "B10 must be present");
+    require(rate_table.projectile_index(5, 11) >= 0, "B11 must be present");
+    require(rate_table.projectile_index(6, 11) >= 0, "C11 must be present");
+    require(rate_table.projectile_index(4, 6) == -1, "Be6 must be excluded (TopasCompatKill policy)");
+
+    // Partial sum conservation check across all projectiles, sections, and sampled energies
+    for (std::size_t p = 0; p < 13; ++p) {
+        for (std::size_t s : {0, 8, 12, 20, 24}) {
+            for (std::size_t e : {0, 100, 400, 859}) {
+                double sum_part = 0.0;
+                for (std::size_t t = 0; t < 13; ++t) {
+                    sum_part += rate_table.mass_partial_rate(p, s, t, e);
+                }
+                const double tot = rate_table.mass_total_rate(p, s, e);
+                require(std::abs(sum_part - tot) < 1.0e-11, "Partial sum must equal total rate");
+            }
+        }
+    }
+
+    // 2. Validate cinel03_secondary_targets.bin
+    const auto sec_pkg = InelasticPackageV3Table::from_binary("data/schneider/cinel03_secondary_targets.bin");
+    require(sec_pkg.interactions().size() > 25000, "Must contain >25k interactions");
+    require(sec_pkg.products().size() > 200000, "Must contain >200k products");
+
+    // Lookups for secondary projectiles on tissue elements
+    // Proton on O (Z=1, A=1 on Z=8)
+    const auto ev_p_O = sec_pkg.find_event(1, 1, 8, 200.0F, 50.0F, 0.5F);
+    require(ev_p_O != InelasticPackageV3Table::invalid, "Proton on Oxygen lookup must succeed");
+
+    // Alpha on C (Z=2, A=4 on Z=6)
+    const auto ev_a_C = sec_pkg.find_event(2, 4, 6, 200.0F, 50.0F, 0.5F);
+    require(ev_a_C != InelasticPackageV3Table::invalid, "Alpha on Carbon lookup must succeed");
+
+    // B11 on Ca (Z=5, A=11 on Z=20)
+    const auto ev_b11_Ca = sec_pkg.find_event(5, 11, 20, 200.0F, 50.0F, 0.5F);
+    require(ev_b11_Ca != InelasticPackageV3Table::invalid, "B11 on Calcium lookup must succeed");
+
+    // Fail-closed policy for Be-6 (excluded by policy)
+    bool threw_be6 = false;
+    try {
+        sec_pkg.find_event(4, 6, 8, 200.0F, 50.0F, 0.5F, false);
+    } catch (const std::exception&) {
+        threw_be6 = true;
+    }
+    require(threw_be6, "Production query for excluded Be6 must fail closed");
+
+#ifdef CARBON_HAS_SYCL
+    // 3. GPU execution check on RTX 2080 Ti
+    sycl::queue queue{sycl::default_selector_v, sycl::property::queue::in_order{}};
+    const auto dev_tables = sec_pkg.make_device_tables();
+
+    Cinel03EnergyNode* dev_nodes = sycl::malloc_device<Cinel03EnergyNode>(dev_tables.energy_nodes.size(), queue);
+    std::uint32_t* dev_offsets = sycl::malloc_device<std::uint32_t>(dev_tables.event_offsets.size(), queue);
+    std::uint32_t* dev_indices = sycl::malloc_device<std::uint32_t>(dev_tables.event_indices.size(), queue);
+    queue.copy(dev_tables.energy_nodes.data(), dev_nodes, dev_tables.energy_nodes.size()).wait_and_throw();
+    queue.copy(dev_tables.event_offsets.data(), dev_offsets, dev_tables.event_offsets.size()).wait_and_throw();
+    queue.copy(dev_tables.event_indices.data(), dev_indices, dev_tables.event_indices.size()).wait_and_throw();
+
+    std::uint32_t* dev_results = sycl::malloc_device<std::uint32_t>(3, queue);
+    const std::uint32_t node_count = static_cast<std::uint32_t>(dev_tables.energy_nodes.size());
+    const std::uint32_t total_events = static_cast<std::uint32_t>(dev_tables.interactions.size());
+
+    queue.parallel_for(sycl::range<1>(1), [=](sycl::id<1>) {
+        dev_results[0] = cinel03_find_event_device(dev_nodes, node_count, dev_offsets, dev_indices, total_events, 1, 1, 8, 200.0F, 50.0F, 0.3F);
+        dev_results[1] = cinel03_find_event_device(dev_nodes, node_count, dev_offsets, dev_indices, total_events, 2, 4, 6, 200.0F, 50.0F, 0.4F);
+        dev_results[2] = cinel03_find_event_device(dev_nodes, node_count, dev_offsets, dev_indices, total_events, 5, 11, 20, 200.0F, 50.0F, 0.5F);
+    }).wait_and_throw();
+
+    std::uint32_t host_results[3];
+    queue.copy(dev_results, host_results, 3).wait_and_throw();
+    require(host_results[0] != 0xFFFFFFFFU, "GPU proton on O event lookup failed");
+    require(host_results[1] != 0xFFFFFFFFU, "GPU alpha on C event lookup failed");
+    require(host_results[2] != 0xFFFFFFFFU, "GPU B11 on Ca event lookup failed");
+
+    sycl::free(dev_nodes, queue);
+    sycl::free(dev_offsets, queue);
+    sycl::free(dev_indices, queue);
+    sycl::free(dev_results, queue);
+#endif
+
+    std::cout << "[step20-test] Secondary rate table and cinel03 package tests PASSED.\n";
 }
 
 }  // namespace
@@ -7828,6 +7927,7 @@ int main(int argc, char** argv) {
         run("test_step18_target_sampler_density_independence_and_library_reuse", test_step18_target_sampler_density_independence_and_library_reuse);
         run("test_step18_target_sampler_missing_target_fail_closed", test_step18_target_sampler_missing_target_fail_closed);
         run("test_step18_target_sampler_cpu_gpu_equivalence_and_diagnostics", test_step18_target_sampler_cpu_gpu_equivalence_and_diagnostics);
+        run("test_step20_secondary_rate_table_and_cinel03_package", test_step20_secondary_rate_table_and_cinel03_package);
         std::cout << "All carbon_tests passed\n";
         return EXIT_SUCCESS;
     } catch (const std::exception& error) {

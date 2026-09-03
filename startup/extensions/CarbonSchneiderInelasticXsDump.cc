@@ -144,19 +144,44 @@ void CarbonSchneiderInelasticXsDump::Output() {
 }
 
 void CarbonSchneiderInelasticXsDump::DumpCrossSections() {
-    // 1. Locate C12 ion definition
-    G4ParticleTable* particle_table = G4ParticleTable::GetParticleTable();
-    G4ParticleDefinition* projectile = particle_table->GetIonTable()->GetIon(6, 12, 0.0);
-    if (!projectile) {
-        G4Exception("CarbonSchneiderInelasticXsDump", "MissingProjectile", FatalException,
-                    "Failed to find C12 ion definition in G4ParticleTable!");
+    // 1. Locate projectile ion definition
+    G4int proj_z = 6;
+    G4int proj_a = 12;
+    if (fPm->ParameterExists(GetFullParmName("ProjectileZ"))) {
+        proj_z = fPm->GetIntegerParameter(GetFullParmName("ProjectileZ"));
+    }
+    if (fPm->ParameterExists(GetFullParmName("ProjectileA"))) {
+        proj_a = fPm->GetIntegerParameter(GetFullParmName("ProjectileA"));
     }
 
-    // 2. Strict Process Verification: C12 must have exactly 1 attached hadronic inelastic process
+    G4ParticleTable* particle_table = G4ParticleTable::GetParticleTable();
+    G4ParticleDefinition* projectile = nullptr;
+    if (proj_z == 1 && proj_a == 1) {
+        projectile = particle_table->FindParticle("proton");
+    } else if (proj_z == 1 && proj_a == 2) {
+        projectile = particle_table->FindParticle("deuteron");
+    } else if (proj_z == 1 && proj_a == 3) {
+        projectile = particle_table->FindParticle("triton");
+    } else if (proj_z == 2 && proj_a == 3) {
+        projectile = particle_table->FindParticle("He3");
+    } else if (proj_z == 2 && proj_a == 4) {
+        projectile = particle_table->FindParticle("alpha");
+    } else {
+        projectile = particle_table->GetIonTable()->GetIon(proj_z, proj_a, 0.0);
+    }
+
+    if (!projectile) {
+        const G4String msg = "Failed to find projectile Z=" + std::to_string(proj_z) +
+                             " A=" + std::to_string(proj_a) + " in G4ParticleTable!";
+        G4Exception("CarbonSchneiderInelasticXsDump", "MissingProjectile", FatalException, msg.c_str());
+    }
+
+    // 2. Strict Process Verification: Projectile must have attached hadronic inelastic process
     G4ProcessManager* pman = projectile->GetProcessManager();
     if (!pman) {
-        G4Exception("CarbonSchneiderInelasticXsDump", "MissingProcessManager", FatalException,
-                    "C12 projectile has null G4ProcessManager!");
+        const G4String msg = "Projectile Z=" + std::to_string(proj_z) + " A=" + std::to_string(proj_a) +
+                             " has null G4ProcessManager!";
+        G4Exception("CarbonSchneiderInelasticXsDump", "MissingProcessManager", FatalException, msg.c_str());
     }
 
     G4ProcessVector* pvec = pman->GetProcessList();
@@ -173,9 +198,10 @@ void CarbonSchneiderInelasticXsDump::DumpCrossSections() {
         }
     }
 
-    if (inelastic_count != 1 || !inelastic_process) {
-        const G4String msg = "Expected exactly 1 attached hadronic inelastic process for C12, found " +
-                             std::to_string(inelastic_count);
+    if (inelastic_count < 1 || !inelastic_process) {
+        const G4String msg = "Expected attached hadronic inelastic process for projectile Z=" +
+                             std::to_string(proj_z) + " A=" + std::to_string(proj_a) +
+                             ", found " + std::to_string(inelastic_count);
         G4Exception("CarbonSchneiderInelasticXsDump", "AmbiguousInelasticProcess", FatalException,
                     msg.c_str());
     }
@@ -245,14 +271,14 @@ void CarbonSchneiderInelasticXsDump::DumpCrossSections() {
         const G4double* frac_vec = mat->GetFractionVector();
 
         for (const double e_mevu : energies) {
-            const G4double total_kinetic_energy = 12.0 * e_mevu * MeV;
+            const G4double total_kinetic_energy = static_cast<double>(proj_a) * e_mevu * MeV;
             const G4double total_macro = store->GetInelasticCrossSectionPerVolume(
                 projectile, total_kinetic_energy, mat) / (1.0 / mm);
             const G4double mass_total = total_macro / density;
 
             EnergyPointData pt{};
             pt.energy_mevu = e_mevu;
-            pt.total_energy_mev = 12.0 * e_mevu;
+            pt.total_energy_mev = static_cast<double>(proj_a) * e_mevu;
             pt.total_macro_per_mm = total_macro;
             pt.mass_total_per_mm_at_1g_cm3 = mass_total;
 
@@ -362,9 +388,7 @@ void CarbonSchneiderInelasticXsDump::DumpCrossSections() {
         jout << "    \"process_sub_type_name\": \"fHadronInelastic\",\n";
         jout << "    \"dataset_model_identity\": \"not_introspected\"\n";
         jout << "  },\n";
-        jout << "  \"projectile\": \"C12\",\n";
-        jout << "  \"projectile_z\": 6,\n";
-        jout << "  \"projectile_a\": 12,\n";
+        jout << "  \"projectile\": \"" << projectile->GetParticleName() << "\",\n  \"projectile_z\": " << proj_z << ",\n  \"projectile_a\": " << proj_a << ",\n";
         jout << "  \"min_energy_mevu\": " << min_energy_mevu_ << ",\n";
         jout << "  \"max_energy_mevu\": " << max_energy_mevu_ << ",\n";
         jout << "  \"energy_points_count\": " << energies.size() << ",\n";

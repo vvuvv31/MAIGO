@@ -57,6 +57,7 @@ add_library(carbon_core
     src/schneider_rate_table.cpp
     src/schneider_stopping_table.cpp
     src/schneider_target_sampler.cpp
+    src/secondary_rate_table.cpp
     src/topas_spots.cpp
     src/tps_source.cpp
     src/transport_cpu.cpp
@@ -194,6 +195,16 @@ if(BUILD_TESTING)
         target_compile_options(run_step19_gpu PRIVATE -fsycl)
         if(CARBON_SYCL_TARGETS)
             target_compile_options(run_step19_gpu PRIVATE
+                -fsycl-targets=${CARBON_SYCL_TARGETS})
+        endif()
+    endif()
+
+    add_executable(run_step20_gpu tools/run_step20_gpu.cpp)
+    target_link_libraries(run_step20_gpu PRIVATE carbon_core)
+    if(CARBON_ENABLE_SYCL)
+        target_compile_options(run_step20_gpu PRIVATE -fsycl)
+        if(CARBON_SYCL_TARGETS)
+            target_compile_options(run_step20_gpu PRIVATE
                 -fsycl-targets=${CARBON_SYCL_TARGETS})
         endif()
     endif()

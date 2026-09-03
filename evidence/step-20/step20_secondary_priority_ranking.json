@@ -1,0 +1,174 @@
+{
+  "step": 20,
+  "name": "secondary_projectile_priority_ranking",
+  "total_primaries": 650000,
+  "total_inelastic": 51420,
+  "total_fragments": 388549,
+  "phase_breakdown": {
+    "B": 0.9663131779880355,
+    "A": 0.025889003550574996,
+    "C": 0.007797818461389526
+  },
+  "ranked_projectiles": [
+    {
+      "symbol": "H1",
+      "z": 1,
+      "a": 1,
+      "phase": "B",
+      "produced_count": 213891.30000000002,
+      "sigma_geom_rel": 12.389288407452291,
+      "range_factor": 1.0,
+      "raw_demand": 2649961.0035449006,
+      "demand_fraction": 0.46798197661732244,
+      "cumulative_fraction": 0.46798197661732244
+    },
+    {
+      "symbol": "He4",
+      "z": 2,
+      "a": 4,
+      "phase": "B",
+      "produced_count": 108444.7,
+      "sigma_geom_rel": 16.86944630766254,
+      "range_factor": 1.0,
+      "raw_demand": 1829402.0440005716,
+      "demand_fraction": 0.3230716163120516,
+      "cumulative_fraction": 0.791053592929374
+    },
+    {
+      "symbol": "H2",
+      "z": 1,
+      "a": 2,
+      "phase": "B",
+      "produced_count": 19012.56,
+      "sigma_geom_rel": 14.286609467713793,
+      "range_factor": 2.0,
+      "raw_demand": 543250.0394029531,
+      "demand_fraction": 0.09593772395033082,
+      "cumulative_fraction": 0.886991316879705
+    },
+    {
+      "symbol": "He3",
+      "z": 2,
+      "a": 3,
+      "phase": "B",
+      "produced_count": 19137.3,
+      "sigma_geom_rel": 15.698170402253261,
+      "range_factor": 0.75,
+      "raw_demand": 225315.44732928099,
+      "demand_fraction": 0.039790611357117846,
+      "cumulative_fraction": 0.9267819282368228
+    },
+    {
+      "symbol": "H3",
+      "z": 1,
+      "a": 3,
+      "phase": "B",
+      "produced_count": 4753.14,
+      "sigma_geom_rel": 15.698170402253261,
+      "range_factor": 3.0,
+      "raw_demand": 223846.8049972982,
+      "demand_fraction": 0.03953124975121279,
+      "cumulative_fraction": 0.9663131779880355
+    },
+    {
+      "symbol": "Li7",
+      "z": 3,
+      "a": 7,
+      "phase": "A",
+      "produced_count": 3114.2999999999997,
+      "sigma_geom_rel": 19.64947897459669,
+      "range_factor": 0.7777777777777778,
+      "raw_demand": 47595.62295490059,
+      "demand_fraction": 0.008405366599346554,
+      "cumulative_fraction": 0.974718544587382
+    },
+    {
+      "symbol": "B11",
+      "z": 5,
+      "a": 11,
+      "phase": "A",
+      "produced_count": 4550.400000000001,
+      "sigma_geom_rel": 22.503848973743047,
+      "range_factor": 0.44,
+      "raw_demand": 45056.666322852965,
+      "demand_fraction": 0.007956987947124182,
+      "cumulative_fraction": 0.9826755325345063
+    },
+    {
+      "symbol": "C11",
+      "z": 6,
+      "a": 11,
+      "phase": "C",
+      "produced_count": 6421.5,
+      "sigma_geom_rel": 22.503848973743047,
+      "range_factor": 0.3055555555555556,
+      "raw_demand": 44155.36466760558,
+      "demand_fraction": 0.007797818461389526,
+      "cumulative_fraction": 0.9904733509958958
+    },
+    {
+      "symbol": "Be9",
+      "z": 4,
+      "a": 9,
+      "phase": "A",
+      "produced_count": 1510.2,
+      "sigma_geom_rel": 21.159318495630615,
+      "range_factor": 0.5625,
+      "raw_demand": 17974.576570557012,
+      "demand_fraction": 0.0031743025127902247,
+      "cumulative_fraction": 0.9936476535086861
+    },
+    {
+      "symbol": "Li6",
+      "z": 3,
+      "a": 6,
+      "phase": "A",
+      "produced_count": 1334.7,
+      "sigma_geom_rel": 18.80924539719408,
+      "range_factor": 0.6666666666666666,
+      "raw_demand": 16736.466554423292,
+      "demand_fraction": 0.0029556528149852867,
+      "cumulative_fraction": 0.9966033063236713
+    },
+    {
+      "symbol": "B10",
+      "z": 5,
+      "a": 10,
+      "phase": "A",
+      "produced_count": 1137.6000000000001,
+      "sigma_geom_rel": 21.848863507865204,
+      "range_factor": 0.4,
+      "raw_demand": 9942.106850618984,
+      "demand_fraction": 0.0017557718054979896,
+      "cumulative_fraction": 0.9983590781291695
+    },
+    {
+      "symbol": "Be7",
+      "z": 4,
+      "a": 7,
+      "phase": "A",
+      "produced_count": 880.9499999999999,
+      "sigma_geom_rel": 19.64947897459669,
+      "range_factor": 0.4375,
+      "raw_demand": 7573.216219918542,
+      "demand_fraction": 0.0013374267361696273,
+      "cumulative_fraction": 0.9996965048653391
+    },
+    {
+      "symbol": "Be10",
+      "z": 4,
+      "a": 10,
+      "phase": "A",
+      "produced_count": 125.85000000000001,
+      "sigma_geom_rel": 21.848863507865204,
+      "range_factor": 0.625,
+      "raw_demand": 1718.5496702905225,
+      "demand_fraction": 0.0003034951346611314,
+      "cumulative_fraction": 1.0000000000000002
+    }
+  ],
+  "policy": {
+    "be6_status": "EXCLUDED (TopasCompatKill)",
+    "aliasing_status": "FORBIDDEN (No O/H alias, strict target element Z lookup)"
+  }
+}

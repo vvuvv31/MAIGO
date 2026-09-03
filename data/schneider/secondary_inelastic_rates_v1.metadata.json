@@ -1,0 +1,177 @@
+{
+  "schema_version": 1,
+  "data_filename": "secondary_inelastic_rates_v1.bin",
+  "data_sha256": "4e067f10034eddad30852eaaf36e97ac8c6e334066419a32fd971f695fe611c4",
+  "binary_magic": "SCHN2RAT",
+  "binary_version": 1,
+  "num_projectiles": 13,
+  "projectiles": [
+    {
+      "id": "b11",
+      "symbol": "B11",
+      "z": 5,
+      "a": 11,
+      "particle": "GenericIon(5,11)"
+    },
+    {
+      "id": "b10",
+      "symbol": "B10",
+      "z": 5,
+      "a": 10,
+      "particle": "GenericIon(5,10)"
+    },
+    {
+      "id": "be9",
+      "symbol": "Be9",
+      "z": 4,
+      "a": 9,
+      "particle": "GenericIon(4,9)"
+    },
+    {
+      "id": "be7",
+      "symbol": "Be7",
+      "z": 4,
+      "a": 7,
+      "particle": "GenericIon(4,7)"
+    },
+    {
+      "id": "be10",
+      "symbol": "Be10",
+      "z": 4,
+      "a": 10,
+      "particle": "GenericIon(4,10)"
+    },
+    {
+      "id": "li7",
+      "symbol": "Li7",
+      "z": 3,
+      "a": 7,
+      "particle": "GenericIon(3,7)"
+    },
+    {
+      "id": "li6",
+      "symbol": "Li6",
+      "z": 3,
+      "a": 6,
+      "particle": "GenericIon(3,6)"
+    },
+    {
+      "id": "he4",
+      "symbol": "He4",
+      "z": 2,
+      "a": 4,
+      "particle": "alpha"
+    },
+    {
+      "id": "he3",
+      "symbol": "He3",
+      "z": 2,
+      "a": 3,
+      "particle": "He3"
+    },
+    {
+      "id": "h1",
+      "symbol": "H1",
+      "z": 1,
+      "a": 1,
+      "particle": "proton"
+    },
+    {
+      "id": "h2",
+      "symbol": "H2",
+      "z": 1,
+      "a": 2,
+      "particle": "deuteron"
+    },
+    {
+      "id": "h3",
+      "symbol": "H3",
+      "z": 1,
+      "a": 3,
+      "particle": "triton"
+    },
+    {
+      "id": "c11",
+      "symbol": "C11",
+      "z": 6,
+      "a": 11,
+      "particle": "GenericIon(6,11)"
+    }
+  ],
+  "num_sections": 25,
+  "num_targets": 13,
+  "canonical_targets": [
+    {
+      "name": "Hydrogen",
+      "z": 1
+    },
+    {
+      "name": "Carbon",
+      "z": 6
+    },
+    {
+      "name": "Nitrogen",
+      "z": 7
+    },
+    {
+      "name": "Oxygen",
+      "z": 8
+    },
+    {
+      "name": "Magnesium",
+      "z": 12
+    },
+    {
+      "name": "Phosphorus",
+      "z": 15
+    },
+    {
+      "name": "Sulfur",
+      "z": 16
+    },
+    {
+      "name": "Chlorine",
+      "z": 17
+    },
+    {
+      "name": "Argon",
+      "z": 18
+    },
+    {
+      "name": "Calcium",
+      "z": 20
+    },
+    {
+      "name": "Sodium",
+      "z": 11
+    },
+    {
+      "name": "Potassium",
+      "z": 19
+    },
+    {
+      "name": "Titanium",
+      "z": 22
+    }
+  ],
+  "canonical_z_order": [
+    1,
+    6,
+    7,
+    8,
+    12,
+    15,
+    16,
+    17,
+    18,
+    20,
+    11,
+    19,
+    22
+  ],
+  "num_energies": 860,
+  "energy_min_mevu": 0.5,
+  "energy_max_mevu": 430.0,
+  "energy_step_mevu": 0.5,
+  "file_size_bytes": 31304208
+}
