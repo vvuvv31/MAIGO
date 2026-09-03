@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "task": "Step 16 CINEL03 Elemental-Target Schema",
+  "validated_commit": "f14e573921a9b2f29b87de8f901f9952b3f567de",
+  "source_worktree_clean": true,
+  "magic": "CINPKG04",
+  "version": 4,
+  "header_size_bytes": 136,
+  "cell_index_size_bytes": 36,
+  "interaction_record_size_bytes": 476,
+  "product_record_size_bytes": 72,
+  "energy_node_size_bytes": 12,
+  "event_key_contract": "projectile_Z, projectile_A, target_element_Z, energy_node",
+  "material_section_in_event_key": false,
+  "schneider_target_elements": [
+    1,
+    6,
+    7,
+    8,
+    11,
+    12,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    22
+  ],
+  "gates_status": {
+    "gate1_schema": "PASS",
+    "gate2_determinism_roundtrip": "PASS",
+    "gate3_fail_closed_guards": "PASS",
+    "gate4_cpu_gpu_replay": "PASS",
+    "gate5_regressions": "PASS"
+  }
+}
