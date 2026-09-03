@@ -219,6 +219,82 @@ struct Cinel03FixedReplayView {
     std::uint32_t product_count{0};
 };
 
+inline bool cinel03_node_less(
+    const Cinel03EnergyNode& node,
+    int pz, int pa, int tz, float energy) noexcept
+{
+    if (node.projectile_z != pz) return node.projectile_z < pz;
+    if (node.projectile_a != pa) return node.projectile_a < pa;
+    if (node.target_element_z != tz) return node.target_element_z < tz;
+    return node.collision_energy_MeV_per_u < energy;
+}
+
+inline bool cinel03_key_less(
+    int pz, int pa, int tz, float energy,
+    const Cinel03EnergyNode& node) noexcept
+{
+    if (pz != node.projectile_z) return pz < node.projectile_z;
+    if (pa != node.projectile_a) return pa < node.projectile_a;
+    if (tz != node.target_element_z) return tz < node.target_element_z;
+    return energy < node.collision_energy_MeV_per_u;
+}
+
+inline std::uint32_t cinel03_find_event_device(
+    const Cinel03EnergyNode* energy_nodes,
+    std::uint32_t node_count,
+    const std::uint32_t* event_offsets,
+    const std::uint32_t* event_indices,
+    std::uint32_t total_events,
+    int proj_z, int proj_a, int target_z,
+    float energy, float tolerance, float u01) noexcept
+{
+    if (energy_nodes == nullptr || event_offsets == nullptr || event_indices == nullptr || node_count == 0) {
+        return 0xFFFFFFFFU;
+    }
+    const float min_e = energy - tolerance;
+    const float max_e = energy + tolerance;
+
+    std::uint32_t low = 0;
+    std::uint32_t high = node_count;
+    while (low < high) {
+        const std::uint32_t mid = low + (high - low) / 2;
+        if (cinel03_node_less(energy_nodes[mid], proj_z, proj_a, target_z, min_e)) {
+            low = mid + 1;
+        } else {
+            high = mid;
+        }
+    }
+    const std::uint32_t first_node = low;
+
+    low = first_node;
+    high = node_count;
+    while (low < high) {
+        const std::uint32_t mid = low + (high - low) / 2;
+        if (cinel03_key_less(proj_z, proj_a, target_z, max_e, energy_nodes[mid])) {
+            high = mid;
+        } else {
+            low = mid + 1;
+        }
+    }
+    const std::uint32_t last_node = low;
+
+    if (first_node >= last_node) {
+        return 0xFFFFFFFFU;
+    }
+
+    const std::uint32_t first_event = event_offsets[first_node];
+    const std::uint32_t last_event = event_offsets[last_node];
+    if (first_event >= last_event || last_event > total_events) {
+        return 0xFFFFFFFFU;
+    }
+
+    const std::uint32_t count = last_event - first_event;
+    const float u = u01 < 0.0F ? 0.0F : (u01 >= 1.0F ? 0.9999999F : u01);
+    const std::uint32_t pick = static_cast<std::uint32_t>(u * count);
+    const std::uint32_t chosen = (pick < count) ? pick : count - 1;
+    return event_indices[first_event + chosen];
+}
+
 // Target Element Registry for Schneider Materials
 // Elements in Schneider CT materials: H (1), C (6), N (7), O (8), Na (11),
 // Mg (12), P (15), S (16), Cl (17), Ar (18), K (19), Ca (20), Ti (22).
@@ -239,6 +315,8 @@ inline constexpr std::array<int, 13> kSchneiderTargetElements{
 
 class InelasticPackageV3Table {
 public:
+    static constexpr std::uint64_t invalid = std::numeric_limits<std::uint64_t>::max();
+
     static InelasticPackageV3Table from_binary(const std::filesystem::path& path);
     void to_binary(const std::filesystem::path& path) const;
 

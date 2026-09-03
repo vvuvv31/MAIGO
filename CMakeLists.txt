@@ -56,6 +56,7 @@ add_library(carbon_core
     src/stopping_power.cpp
     src/schneider_rate_table.cpp
     src/schneider_stopping_table.cpp
+    src/schneider_target_sampler.cpp
     src/topas_spots.cpp
     src/tps_source.cpp
     src/transport_cpu.cpp

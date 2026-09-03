@@ -4,6 +4,7 @@
 #include "carbon/cross_section.hpp"
 #include "carbon/schneider_rate_table.hpp"
 #include "carbon/schneider_stopping_table.hpp"
+#include "carbon/schneider_target_sampler.hpp"
 #include "carbon/electron_transport.hpp"
 #include "carbon/energy_loss_fluctuation.hpp"
 #include "carbon/multiple_scattering.hpp"
@@ -7451,6 +7452,247 @@ void test_step16_cinel03_synthetic_cpu_gpu_replay() {
 #endif
 }
 
+using namespace carbon;
+
+void test_step18_target_sampler_synthetic_and_known_ratios() {
+    std::cout << "[step18-test] Running synthetic and known-ratio target sampler tests...\n";
+    const auto rate_table = SchneiderRateTable::from_binary("data/schneider/schneider_inelastic_rates_v1.bin");
+    const SchneiderTargetSampler sampler(rate_table);
+
+    for (std::size_t s = 0; s < 25; ++s) {
+        for (std::size_t e = 0; e < 860; ++e) {
+            const float total = sampler.total_mass_rate(s, 0.5F + static_cast<float>(e) * 0.5F);
+            require(std::isfinite(total) && total >= 0.0F, "Total mass rate must be non-negative finite");
+            const auto probs = sampler.target_probabilities(s, 0.5F + static_cast<float>(e) * 0.5F);
+            float sum_p = 0.0F;
+            for (float p : probs) {
+                require(p >= 0.0F && p <= 1.0F, "Individual target probability out of [0, 1]");
+                sum_p += p;
+            }
+            if (total > 1.0e-7F) {
+                require(std::abs(sum_p - 1.0F) < 1.0e-4F, "Sum of target probabilities must close to 1.0");
+            }
+        }
+    }
+
+    const auto sample_low = sampler.sample_target(8, 200.0F, 0.0F);
+    require(sample_low.target_z == 1, "u=0 in soft tissue should sample first element Hydrogen Z=1");
+    const auto sample_high = sampler.sample_target(8, 200.0F, 0.99999F);
+    require(sample_high.target_z > 0, "u=0.99999 should sample valid positive target Z");
+
+    std::cout << "[step18-test] Synthetic and known-ratio checks PASSED.\n";
+}
+
+void test_step18_target_sampler_statistical_goodness_of_fit() {
+    std::cout << "[step18-test] Running statistical goodness-of-fit tests...\n";
+    const auto rate_table = SchneiderRateTable::from_binary("data/schneider/schneider_inelastic_rates_v1.bin");
+    const SchneiderTargetSampler sampler(rate_table);
+
+    const std::size_t sections_to_test[] = {8, 20};
+    const std::size_t N = 100000;
+
+    for (std::size_t s : sections_to_test) {
+        const auto probs = sampler.target_probabilities(s, 200.0F);
+        std::array<std::size_t, 13> counts{};
+
+        for (std::size_t i = 0; i < N; ++i) {
+            const float u = static_cast<float>((i + 0.5) / static_cast<double>(N));
+            const auto sample = sampler.sample_target(s, 200.0F, u);
+            counts[sample.target_index]++;
+        }
+
+        double chi2 = 0.0;
+        int degrees_of_freedom = 0;
+        for (std::size_t k = 0; k < 13; ++k) {
+            const double expected = static_cast<double>(N) * probs[k];
+            if (expected >= 5.0) {
+                const double diff = static_cast<double>(counts[k]) - expected;
+                chi2 += (diff * diff) / expected;
+                degrees_of_freedom++;
+            }
+        }
+        degrees_of_freedom = std::max(1, degrees_of_freedom - 1);
+        std::cout << "[step18-test] Section " << s << " Chi2=" << chi2 << " with df=" << degrees_of_freedom << "\n";
+        require(chi2 < 10.0, "Categorical target distribution Chi-square goodness-of-fit failed");
+    }
+    std::cout << "[step18-test] Statistical goodness-of-fit PASSED.\n";
+}
+
+void test_step18_target_sampler_density_independence_and_library_reuse() {
+    std::cout << "[step18-test] Running density-independence and library reuse tests...\n";
+    const auto rate_table = SchneiderRateTable::from_binary("data/schneider/schneider_inelastic_rates_v1.bin");
+    const SchneiderTargetSampler sampler(rate_table);
+    const auto package = InelasticPackageV3Table::from_binary("data/schneider/cinel03_c12_targets.bin");
+
+    const auto base_probs = sampler.target_probabilities(8, 200.0F);
+    const float densities[] = {0.2F, 0.5F, 1.0F, 1.5F, 2.5F};
+    for (float rho : densities) {
+        const float macro_rate = rho * sampler.total_mass_rate(8, 200.0F);
+        require(macro_rate > 0.0F, "Macro rate must be positive");
+        const auto p = sampler.target_probabilities(8, 200.0F);
+        for (std::size_t k = 0; k < 13; ++k) {
+            require(std::abs(p[k] - base_probs[k]) < 1.0e-6F, "Target probability changed with density");
+        }
+    }
+
+    const auto ev_id5 = package.find_event(6, 12, 8, 200.0F, 50.0F, 0.25F);
+    const auto ev_id8 = package.find_event(6, 12, 8, 200.0F, 50.0F, 0.25F);
+    const auto ev_id20 = package.find_event(6, 12, 8, 200.0F, 50.0F, 0.25F);
+    require(ev_id5 != InelasticPackageV3Table::invalid, "Oxygen query failed");
+    require(ev_id5 == ev_id8 && ev_id8 == ev_id20, "Oxygen library must be identically reused across sections");
+
+    std::cout << "[step18-test] Density independence and library reuse PASSED.\n";
+}
+
+void test_step18_target_sampler_missing_target_fail_closed() {
+    std::cout << "[step18-test] Running fail-closed missing target tests...\n";
+    const auto package = InelasticPackageV3Table::from_binary("data/schneider/cinel03_c12_targets.bin");
+
+    bool threw_exception = false;
+    try {
+        package.find_event(6, 12, 99, 200.0F, 50.0F, 0.5F, false);
+    } catch (const std::runtime_error& err) {
+        threw_exception = true;
+        const std::string msg = err.what();
+        require(msg.find("Missing target element Z=99") != std::string::npos, "Exception message must identify missing target Z");
+    }
+    require(threw_exception, "Production query for missing target must throw runtime_error (never alias to O)");
+
+    std::uint64_t missing_counter = 0;
+    const auto ev_audit = package.find_event(6, 12, 99, 200.0F, 50.0F, 0.5F, true, &missing_counter);
+    require(ev_audit == InelasticPackageV3Table::invalid, "Audit query must return invalid");
+    require(missing_counter == 1, "Audit query must increment missing_target_counter");
+
+    std::cout << "[step18-test] Fail-closed missing target checks PASSED.\n";
+}
+
+void test_step18_target_sampler_cpu_gpu_equivalence_and_diagnostics() {
+    std::cout << "[step18-test] Running CPU/GPU equivalence and diagnostics tests...\n";
+    const auto rate_table = SchneiderRateTable::from_binary("data/schneider/schneider_inelastic_rates_v1.bin");
+    const SchneiderTargetSampler sampler(rate_table);
+    const auto package = InelasticPackageV3Table::from_binary("data/schneider/cinel03_c12_targets.bin");
+    const auto device_tables = package.make_device_tables();
+
+#ifdef CARBON_HAS_SYCL
+    sycl::queue queue{sycl::default_selector_v, sycl::property::queue::in_order{}};
+    const auto dev_sampler = sampler.device_table();
+
+    float* dev_cdf = sycl::malloc_device<float>(sampler.cdf_table().size(), queue);
+    float* dev_total = sycl::malloc_device<float>(sampler.total_mass_rates().size(), queue);
+    queue.copy(sampler.cdf_table().data(), dev_cdf, sampler.cdf_table().size()).wait_and_throw();
+    queue.copy(sampler.total_mass_rates().data(), dev_total, sampler.total_mass_rates().size()).wait_and_throw();
+
+    SchneiderTargetSamplerDeviceTable gpu_sampler_table = dev_sampler;
+    gpu_sampler_table.cdf_table = dev_cdf;
+    gpu_sampler_table.total_mass_rates = dev_total;
+
+    Cinel03EnergyNode* dev_nodes = sycl::malloc_device<Cinel03EnergyNode>(device_tables.energy_nodes.size(), queue);
+    std::uint32_t* dev_offsets = sycl::malloc_device<std::uint32_t>(device_tables.event_offsets.size(), queue);
+    std::uint32_t* dev_indices = sycl::malloc_device<std::uint32_t>(device_tables.event_indices.size(), queue);
+    queue.copy(device_tables.energy_nodes.data(), dev_nodes, device_tables.energy_nodes.size()).wait_and_throw();
+    queue.copy(device_tables.event_offsets.data(), dev_offsets, device_tables.event_offsets.size()).wait_and_throw();
+    queue.copy(device_tables.event_indices.data(), dev_indices, device_tables.event_indices.size()).wait_and_throw();
+
+    const std::uint32_t node_count = static_cast<std::uint32_t>(device_tables.energy_nodes.size());
+    const std::uint32_t total_events = static_cast<std::uint32_t>(device_tables.interactions.size());
+
+    SchneiderTargetDiagnostics* dev_diag = sycl::malloc_device<SchneiderTargetDiagnostics>(1, queue);
+    queue.memset(dev_diag, 0, sizeof(SchneiderTargetDiagnostics)).wait_and_throw();
+
+    const std::size_t num_queries = 1000;
+    int* dev_targets = sycl::malloc_device<int>(num_queries, queue);
+    std::uint32_t* dev_event_ids = sycl::malloc_device<std::uint32_t>(num_queries, queue);
+
+    queue.parallel_for(sycl::range<1>(num_queries), [=](sycl::id<1> idx) {
+        const std::size_t i = idx[0];
+        const std::size_t section = i % 25;
+        const float energy = 20.0F + static_cast<float>(i % 40) * 10.0F;
+        const float u_target = static_cast<float>((i * 37) % 1000) / 1000.0F;
+        const float u_event = static_cast<float>((i * 73) % 1000) / 1000.0F;
+
+        const int target_z = sample_schneider_target_device(gpu_sampler_table, section, energy, u_target);
+        dev_targets[i] = target_z;
+
+        const std::uint32_t event_id = cinel03_find_event_device(
+            dev_nodes, node_count, dev_offsets, dev_indices, total_events,
+            6, 12, target_z, energy, 50.0F, u_event);
+        dev_event_ids[i] = event_id;
+
+        if (target_z > 0 && target_z < 32) {
+            sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
+                             sycl::memory_scope::device,
+                             sycl::access::address_space::global_space>
+                target_ref(dev_diag->interactions_by_target_z[target_z]);
+            target_ref.fetch_add(1U);
+        }
+        if (section < 25) {
+            sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
+                             sycl::memory_scope::device,
+                             sycl::access::address_space::global_space>
+                sec_ref(dev_diag->interactions_by_section[section]);
+            sec_ref.fetch_add(1U);
+        }
+        const auto e_bin = static_cast<std::size_t>(energy);
+        if (e_bin < 450) {
+            sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
+                             sycl::memory_scope::device,
+                             sycl::access::address_space::global_space>
+                ebin_ref(dev_diag->interactions_by_energy_bin[e_bin]);
+            ebin_ref.fetch_add(1U);
+        }
+        if (event_id != 0xFFFFFFFFU) {
+            sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
+                             sycl::memory_scope::device,
+                             sycl::access::address_space::global_space>
+                succ_ref(dev_diag->lookup_success_count);
+            succ_ref.fetch_add(1U);
+        } else {
+            sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
+                             sycl::memory_scope::device,
+                             sycl::access::address_space::global_space>
+                fail_ref(dev_diag->lookup_failure_count);
+            fail_ref.fetch_add(1U);
+        }
+    }).wait_and_throw();
+
+    std::vector<int> host_targets(num_queries);
+    std::vector<std::uint32_t> host_events(num_queries);
+    SchneiderTargetDiagnostics host_diag{};
+    queue.copy(dev_targets, host_targets.data(), num_queries).wait_and_throw();
+    queue.copy(dev_event_ids, host_events.data(), num_queries).wait_and_throw();
+    queue.copy(dev_diag, &host_diag, 1).wait_and_throw();
+
+    std::size_t match_count = 0;
+    for (std::size_t i = 0; i < num_queries; ++i) {
+        const std::size_t section = i % 25;
+        const float energy = 20.0F + static_cast<float>(i % 40) * 10.0F;
+        const float u_target = static_cast<float>((i * 37) % 1000) / 1000.0F;
+        const float u_event = static_cast<float>((i * 73) % 1000) / 1000.0F;
+
+        const auto cpu_target = sampler.sample_target(section, energy, u_target);
+        require(cpu_target.target_z == host_targets[i], "CPU/GPU target sampling mismatch");
+
+        const auto cpu_event = package.find_event(6, 12, cpu_target.target_z, energy, 50.0F, u_event);
+        require(cpu_event == host_events[i], "CPU/GPU event lookup mismatch");
+        match_count++;
+    }
+    require(match_count == num_queries, "All 1000 CPU/GPU queries must match bitwise");
+    require(host_diag.lookup_success_count == num_queries, "All queries should succeed");
+    require(host_diag.lookup_failure_count == 0, "No lookup failure allowed");
+
+    sycl::free(dev_cdf, queue);
+    sycl::free(dev_total, queue);
+    sycl::free(dev_nodes, queue);
+    sycl::free(dev_offsets, queue);
+    sycl::free(dev_indices, queue);
+    sycl::free(dev_diag, queue);
+    sycl::free(dev_targets, queue);
+    sycl::free(dev_event_ids, queue);
+#endif
+
+    std::cout << "[step18-test] CPU/GPU equivalence and diagnostics PASSED.\n";
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -7581,6 +7823,11 @@ int main(int argc, char** argv) {
         run("test_step16_cinel03_round_trip_and_determinism", test_step16_cinel03_round_trip_and_determinism);
         run("test_step16_cinel03_rejections_and_fail_closed", test_step16_cinel03_rejections_and_fail_closed);
         run("test_step16_cinel03_synthetic_cpu_gpu_replay", test_step16_cinel03_synthetic_cpu_gpu_replay);
+        run("test_step18_target_sampler_synthetic_and_known_ratios", test_step18_target_sampler_synthetic_and_known_ratios);
+        run("test_step18_target_sampler_statistical_goodness_of_fit", test_step18_target_sampler_statistical_goodness_of_fit);
+        run("test_step18_target_sampler_density_independence_and_library_reuse", test_step18_target_sampler_density_independence_and_library_reuse);
+        run("test_step18_target_sampler_missing_target_fail_closed", test_step18_target_sampler_missing_target_fail_closed);
+        run("test_step18_target_sampler_cpu_gpu_equivalence_and_diagnostics", test_step18_target_sampler_cpu_gpu_equivalence_and_diagnostics);
         std::cout << "All carbon_tests passed\n";
         return EXIT_SUCCESS;
     } catch (const std::exception& error) {

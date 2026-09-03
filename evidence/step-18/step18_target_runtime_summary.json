@@ -1,0 +1,25 @@
+{
+  "step": 18,
+  "name": "material_target_runtime_and_cinel03_replay",
+  "overall_passed": true,
+  "gates": {
+    "gate1_goodness_of_fit": {
+      "passed": true
+    },
+    "gate2_density_independence": {
+      "passed": true
+    },
+    "gate3_library_reuse": {
+      "passed": true
+    },
+    "gate4_fail_closed": {
+      "passed": true
+    },
+    "gate5_cpu_gpu_equivalence": {
+      "passed": true
+    },
+    "full_regression_suite": {
+      "passed": true
+    }
+  }
+}
