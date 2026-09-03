@@ -2402,9 +2402,14 @@ TransportResult transport_sycl(const TransportConfig& config,
                         auto radiation_length_g_per_cm2 =
                             static_cast<float>(water_radiation_length_g_per_cm2);
                         if (enable_ct_grid && in_ct && enable_ct_material_mcs) {
-                            radiation_length_g_per_cm2 =
-                                ct_material_radiation_length_g_per_cm2(
-                                    ct_material_class(ct_material, ct_material_ids_are_schneider_sections));
+                            if (ct_material_ids_are_schneider_sections) {
+                                radiation_length_g_per_cm2 = static_cast<float>(
+                                    schneider_section_radiation_length_g_per_cm2(ct_material));
+                            } else {
+                                radiation_length_g_per_cm2 = static_cast<float>(
+                                    ct_material_radiation_length_g_per_cm2(
+                                        ct_material_class(ct_material, false)));
+                            }
                         } else if (in_insert) {
                             radiation_length_g_per_cm2 = insert_radiation_length_g_per_cm2;
                         } else if (slab_layer_count > 0) {

@@ -6973,6 +6973,108 @@ void test_schneider_stopping_host_device_equivalence() {
     sycl::free(dev_energies, queue);
     sycl::free(dev_results, queue);
 }
+
+void test_step15_schneider_radiation_lengths_and_sentinel() {
+    auto json_path = std::filesystem::path("data/schneider/schneider_radiation_lengths.json");
+    if (!std::filesystem::exists(json_path)) {
+        json_path = std::filesystem::path("../data/schneider/schneider_radiation_lengths.json");
+    }
+    require(std::filesystem::exists(json_path), "Missing schneider_radiation_lengths.json");
+
+    std::ifstream in(json_path);
+    require(in.is_open(), "Cannot open schneider_radiation_lengths.json");
+    std::string content((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+
+    // 1. Validate all 25 values against compiled JSON product
+    for (unsigned s = 0; s < 25; ++s) {
+        const std::string sec_needle = "\"section_id\": " + std::to_string(s);
+        const auto pos = content.find(sec_needle);
+        require(pos != std::string::npos, "Cannot find section_id " + std::to_string(s));
+
+        const std::string rad_needle = "\"radiation_length_g_per_cm2\": ";
+        const auto rad_pos = content.find(rad_needle, pos);
+        require(rad_pos != std::string::npos, "Cannot find radiation_length_g_per_cm2 for section " + std::to_string(s));
+
+        const auto val_start = rad_pos + rad_needle.length();
+        const auto val_end = content.find_first_of(",\n}", val_start);
+        const double expected_val = std::stod(content.substr(val_start, val_end - val_start));
+
+        const double actual_val = carbon::schneider_section_radiation_length_g_per_cm2(s);
+        require_near(actual_val, expected_val, 1e-5,
+                     "schneider_section_radiation_length_g_per_cm2(" + std::to_string(s) + ") mismatch");
+    }
+
+    // 2. Out-of-bounds safety fallback
+    require_near(carbon::schneider_section_radiation_length_g_per_cm2(25), 36.0830, 1e-4,
+                 "Out-of-bounds section must fall back to water");
+    require_near(carbon::schneider_section_radiation_length_g_per_cm2(100), 36.0830, 1e-4,
+                 "Out-of-bounds section 100 must fall back to water");
+
+    // 3. Sentinel device-index test catching four-class collapse
+    // Section 2 (Adipose): exact 42.08 vs collapsed 36.0830
+    {
+        const double exact_x0 = carbon::schneider_section_radiation_length_g_per_cm2(2);
+        const double collapsed_x0 = carbon::ct_material_radiation_length_g_per_cm2(carbon::ct_material_class(2, true));
+        require(std::abs(exact_x0 - collapsed_x0) > 5.0, "Sentinel failed: Section 2 must differ from 4-class collapse");
+        const double theta_exact = carbon::highland_projected_rms_angle_material_rad(2400.0, 6, 12, 1.0, 0.92, exact_x0);
+        const double theta_collapsed = carbon::highland_projected_rms_angle_material_rad(2400.0, 6, 12, 1.0, 0.92, collapsed_x0);
+        const double rel_diff = std::abs(theta_exact - theta_collapsed) / theta_exact;
+        require(rel_diff > 0.07, "Section 2 Highland angle relative difference must exceed 7%");
+    }
+
+    // Section 11 (Trabecular Bone): exact 34.17 vs collapsed 30.4866
+    {
+        const double exact_x0 = carbon::schneider_section_radiation_length_g_per_cm2(11);
+        const double collapsed_x0 = carbon::ct_material_radiation_length_g_per_cm2(carbon::ct_material_class(11, true));
+        require(std::abs(exact_x0 - collapsed_x0) > 3.0, "Sentinel failed: Section 11 must differ from 4-class collapse");
+        const double theta_exact = carbon::highland_projected_rms_angle_material_rad(2400.0, 6, 12, 1.0, 1.23, exact_x0);
+        const double theta_collapsed = carbon::highland_projected_rms_angle_material_rad(2400.0, 6, 12, 1.0, 1.23, collapsed_x0);
+        const double rel_diff = std::abs(theta_exact - theta_collapsed) / theta_exact;
+        require(rel_diff > 0.05, "Section 11 Highland angle relative difference must exceed 5%");
+    }
+
+    // Section 20 (Dense Bone): exact 27.98 vs collapsed 30.4866
+    {
+        const double exact_x0 = carbon::schneider_section_radiation_length_g_per_cm2(20);
+        const double collapsed_x0 = carbon::ct_material_radiation_length_g_per_cm2(carbon::ct_material_class(20, true));
+        require(std::abs(exact_x0 - collapsed_x0) > 2.0, "Sentinel failed: Section 20 must differ from 4-class collapse");
+        const double theta_exact = carbon::highland_projected_rms_angle_material_rad(2400.0, 6, 12, 1.0, 1.82, exact_x0);
+        const double theta_collapsed = carbon::highland_projected_rms_angle_material_rad(2400.0, 6, 12, 1.0, 1.82, collapsed_x0);
+        const double rel_diff = std::abs(theta_exact - theta_collapsed) / theta_exact;
+        require(rel_diff > 0.04, "Section 20 Highland angle relative difference must exceed 4%");
+    }
+
+    // Section 24 (Titanium): exact 16.16 vs collapsed 30.4866
+    {
+        const double exact_x0 = carbon::schneider_section_radiation_length_g_per_cm2(24);
+        const double collapsed_x0 = carbon::ct_material_radiation_length_g_per_cm2(carbon::ct_material_class(24, true));
+        require(std::abs(exact_x0 - collapsed_x0) > 14.0, "Sentinel failed: Section 24 must differ from 4-class collapse");
+        const double theta_exact = carbon::highland_projected_rms_angle_material_rad(2400.0, 6, 12, 1.0, 4.55, exact_x0);
+        const double theta_collapsed = carbon::highland_projected_rms_angle_material_rad(2400.0, 6, 12, 1.0, 4.55, collapsed_x0);
+        const double rel_diff = std::abs(theta_exact - theta_collapsed) / theta_exact;
+        require(rel_diff > 0.25, "Section 24 Highland angle relative difference must exceed 25%");
+    }
+
+#ifdef CARBON_HAS_SYCL
+    // 4. SYCL Device execution test
+    sycl::queue queue{sycl::default_selector_v};
+    auto* dev_results = sycl::malloc_device<float>(25, queue);
+    queue.parallel_for(sycl::range<1>(25), [=](sycl::id<1> idx) {
+        const auto s = static_cast<unsigned>(idx[0]);
+        dev_results[s] = static_cast<float>(carbon::schneider_section_radiation_length_g_per_cm2(s));
+    }).wait_and_throw();
+
+    std::vector<float> host_dev(25);
+    queue.copy(dev_results, host_dev.data(), 25).wait_and_throw();
+    for (unsigned s = 0; s < 25; ++s) {
+        const double host_val = carbon::schneider_section_radiation_length_g_per_cm2(s);
+        require_near(static_cast<double>(host_dev[s]), host_val, 1e-4,
+                     "Host vs Device radiation length mismatch at section " + std::to_string(s));
+    }
+    sycl::free(dev_results, queue);
+#endif
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -7099,6 +7201,7 @@ int main(int argc, char** argv) {
         run("test_schneider_stopping_source_energy_domain_fail_closed", test_schneider_stopping_source_energy_domain_fail_closed);
         run("test_schneider_stopping_host_device_equivalence", test_schneider_stopping_host_device_equivalence);
 #endif
+        run("test_step15_schneider_radiation_lengths_and_sentinel", test_step15_schneider_radiation_lengths_and_sentinel);
         std::cout << "All carbon_tests passed\n";
         return EXIT_SUCCESS;
     } catch (const std::exception& error) {

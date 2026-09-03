@@ -1,0 +1,209 @@
+{
+  "schema_version": 1,
+  "description": "Exact 25-section Schneider radiation lengths derived from TOPAS/Geant4 11.03.p02",
+  "number_of_sections": 25,
+  "source_truth_file": "topas-schneider-materials.json",
+  "source_truth_sha256": "d8a5c771b4c74949991a4e089846d1e4a92022c056ca60eebf8e9218b8d93b6b",
+  "sections": [
+    {
+      "section_id": 0,
+      "representative_hu": -975,
+      "material_name": "PatientTissueFromHUNegative975",
+      "density_g_cm3": 0.0393235,
+      "radiation_length_mm": 9309.6942772425,
+      "radiation_length_g_per_cm2": 36.60897629111455
+    },
+    {
+      "section_id": 1,
+      "representative_hu": -535,
+      "material_name": "PatientTissueFromHUNegative535",
+      "density_g_cm3": 0.470041,
+      "radiation_length_mm": 777.11298309134,
+      "radiation_length_g_per_cm2": 36.52749636852366
+    },
+    {
+      "section_id": 2,
+      "representative_hu": -102,
+      "material_name": "PatientTissueFromHUNegative102",
+      "density_g_cm3": 0.874911,
+      "radiation_length_mm": 480.95883552018,
+      "radiation_length_g_per_cm2": 42.07961757437962
+    },
+    {
+      "section_id": 3,
+      "representative_hu": -68,
+      "material_name": "PatientTissueFromHUNegative68",
+      "density_g_cm3": 0.912686,
+      "radiation_length_mm": 448.23606739287,
+      "radiation_length_g_per_cm2": 40.9098783404529
+    },
+    {
+      "section_id": 4,
+      "representative_hu": -38,
+      "material_name": "PatientTissueFromHUNegative38",
+      "density_g_cm3": 0.947183,
+      "radiation_length_mm": 419.61723860495,
+      "radiation_length_g_per_cm2": 39.745431491355234
+    },
+    {
+      "section_id": 5,
+      "representative_hu": -8,
+      "material_name": "PatientTissueFromHUNegative8",
+      "density_g_cm3": 0.980389,
+      "radiation_length_mm": 396.11784927977,
+      "radiation_length_g_per_cm2": 38.83495821375444
+    },
+    {
+      "section_id": 6,
+      "representative_hu": 12,
+      "material_name": "PatientTissueFromHU12",
+      "density_g_cm3": 1.00386,
+      "radiation_length_mm": 380.06210016334,
+      "radiation_length_g_per_cm2": 38.15291398699705
+    },
+    {
+      "section_id": 7,
+      "representative_hu": 49,
+      "material_name": "PatientTissueFromHU49",
+      "density_g_cm3": 1.04308,
+      "radiation_length_mm": 352.89153340128,
+      "radiation_length_g_per_cm2": 36.80941006602072
+    },
+    {
+      "section_id": 8,
+      "representative_hu": 100,
+      "material_name": "PatientTissueFromHU100",
+      "density_g_cm3": 1.0788,
+      "radiation_length_mm": 345.64949550249,
+      "radiation_length_g_per_cm2": 37.28866757480863
+    },
+    {
+      "section_id": 9,
+      "representative_hu": 160,
+      "material_name": "PatientTissueFromHU160",
+      "density_g_cm3": 1.10857,
+      "radiation_length_mm": 332.07018729075,
+      "radiation_length_g_per_cm2": 36.812304752490675
+    },
+    {
+      "section_id": 10,
+      "representative_hu": 250,
+      "material_name": "PatientTissueFromHU250",
+      "density_g_cm3": 1.16606,
+      "radiation_length_mm": 304.02467669233,
+      "radiation_length_g_per_cm2": 35.451101450385835
+    },
+    {
+      "section_id": 11,
+      "representative_hu": 350,
+      "material_name": "PatientTissueFromHU350",
+      "density_g_cm3": 1.23146,
+      "radiation_length_mm": 277.48676039752,
+      "radiation_length_g_per_cm2": 34.171384595913004
+    },
+    {
+      "section_id": 12,
+      "representative_hu": 450,
+      "material_name": "PatientTissueFromHU450",
+      "density_g_cm3": 1.29658,
+      "radiation_length_mm": 254.94343168299,
+      "radiation_length_g_per_cm2": 33.055455465153116
+    },
+    {
+      "section_id": 13,
+      "representative_hu": 550,
+      "material_name": "PatientTissueFromHU550",
+      "density_g_cm3": 1.36063,
+      "radiation_length_mm": 236.39256549255,
+      "radiation_length_g_per_cm2": 32.164281638612835
+    },
+    {
+      "section_id": 14,
+      "representative_hu": 650,
+      "material_name": "PatientTissueFromHU650",
+      "density_g_cm3": 1.42585,
+      "radiation_length_mm": 219.74704048423,
+      "radiation_length_g_per_cm2": 31.332631767443942
+    },
+    {
+      "section_id": 15,
+      "representative_hu": 750,
+      "material_name": "PatientTissueFromHU750",
+      "density_g_cm3": 1.4919,
+      "radiation_length_mm": 205.13303103685,
+      "radiation_length_g_per_cm2": 30.603796900387657
+    },
+    {
+      "section_id": 16,
+      "representative_hu": 850,
+      "material_name": "PatientTissueFromHU850",
+      "density_g_cm3": 1.55922,
+      "radiation_length_mm": 191.83063393419,
+      "radiation_length_g_per_cm2": 29.910616104286778
+    },
+    {
+      "section_id": 17,
+      "representative_hu": 950,
+      "material_name": "PatientTissueFromHU950",
+      "density_g_cm3": 1.62478,
+      "radiation_length_mm": 180.79000348633,
+      "radiation_length_g_per_cm2": 29.37439818645192
+    },
+    {
+      "section_id": 18,
+      "representative_hu": 1050,
+      "material_name": "PatientTissueFromHU1050",
+      "density_g_cm3": 1.68904,
+      "radiation_length_mm": 170.91474908162,
+      "radiation_length_g_per_cm2": 28.868184778881943
+    },
+    {
+      "section_id": 19,
+      "representative_hu": 1150,
+      "material_name": "PatientTissueFromHU1150",
+      "density_g_cm3": 1.75636,
+      "radiation_length_mm": 161.57106586598,
+      "radiation_length_g_per_cm2": 28.377695724437263
+    },
+    {
+      "section_id": 20,
+      "representative_hu": 1250,
+      "material_name": "PatientTissueFromHU1250",
+      "density_g_cm3": 1.8216,
+      "radiation_length_mm": 153.62141558492,
+      "radiation_length_g_per_cm2": 27.983677062949027
+    },
+    {
+      "section_id": 21,
+      "representative_hu": 1350,
+      "material_name": "PatientTissueFromHU1350",
+      "density_g_cm3": 1.88756,
+      "radiation_length_mm": 146.2462595807,
+      "radiation_length_g_per_cm2": 27.60485897341461
+    },
+    {
+      "section_id": 22,
+      "representative_hu": 1450,
+      "material_name": "PatientTissueFromHU1450",
+      "density_g_cm3": 1.95424,
+      "radiation_length_mm": 139.39154432277,
+      "radiation_length_g_per_cm2": 27.240453157733004
+    },
+    {
+      "section_id": 23,
+      "representative_hu": 2247,
+      "material_name": "PatientTissueFromHU2247",
+      "density_g_cm3": 2.4196,
+      "radiation_length_mm": 111.56488576399,
+      "radiation_length_g_per_cm2": 26.994239759455024
+    },
+    {
+      "section_id": 24,
+      "representative_hu": 2995,
+      "material_name": "PatientTissueFromHU2995",
+      "density_g_cm3": 4.55248,
+      "radiation_length_mm": 35.504378990157,
+      "radiation_length_g_per_cm2": 16.163297526510995
+    }
+  ]
+}
