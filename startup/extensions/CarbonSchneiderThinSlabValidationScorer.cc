@@ -168,6 +168,26 @@ G4bool CarbonSchneiderThinSlabValidationScorer::ProcessHits(G4Step* step, G4Touc
                 total_contamination_count_++;
             }
 
+            const auto* proc_ptr = step->GetPostStepPoint()->GetProcessDefinedStep();
+            const auto* had_proc = dynamic_cast<const G4HadronicProcess*>(proc_ptr);
+            if (had_proc != nullptr) {
+                const auto* target = had_proc->GetTargetNucleus();
+                if (target != nullptr) {
+                    target_element_counts_[target->GetZ_asInt()]++;
+                }
+            }
+            const auto* secondaries = step->GetSecondaryInCurrentStep();
+            if (secondaries != nullptr) {
+                for (const auto* sec_track : *secondaries) {
+                    if (sec_track != nullptr && sec_track->GetDefinition() != nullptr) {
+                        const G4int sz = sec_track->GetDefinition()->GetAtomicNumber();
+                        if (sz > 0) {
+                            secondary_species_counts_[sz]++;
+                        }
+                    }
+                }
+            }
+
             if (first_interactions_.size() < max_detailed_interactions_) {
                 FirstInteractionRecord rec;
                 rec.event_id = event_id;
@@ -211,6 +231,14 @@ void CarbonSchneiderThinSlabValidationScorer::AbsorbResultsFromWorkerScorer(TsVS
 
     for (const auto& kv : worker->process_counts_) {
         process_counts_[kv.first] += kv.second;
+    }
+
+    for (const auto& kv : worker->target_element_counts_) {
+        target_element_counts_[kv.first] += kv.second;
+    }
+
+    for (const auto& kv : worker->secondary_species_counts_) {
+        secondary_species_counts_[kv.first] += kv.second;
     }
 
     first_interaction_sample_overflow_count_ += worker->first_interaction_sample_overflow_count_;
@@ -265,6 +293,24 @@ void CarbonSchneiderThinSlabValidationScorer::WriteResultsToJson() {
     for (const auto& kv : process_counts_) {
         if (!first_proc) out << ",\n";
         first_proc = false;
+        out << "    \"" << kv.first << "\": " << kv.second;
+    }
+    out << "\n  },\n";
+
+    out << "  \"target_element_counts\": {\n";
+    bool first_tgt = true;
+    for (const auto& kv : target_element_counts_) {
+        if (!first_tgt) out << ",\n";
+        first_tgt = false;
+        out << "    \"" << kv.first << "\": " << kv.second;
+    }
+    out << "\n  },\n";
+
+    out << "  \"secondary_species_counts\": {\n";
+    bool first_sec = true;
+    for (const auto& kv : secondary_species_counts_) {
+        if (!first_sec) out << ",\n";
+        first_sec = false;
         out << "    \"" << kv.first << "\": " << kv.second;
     }
     out << "\n  },\n";

@@ -75,6 +75,8 @@ private:
 
     // Process breakdown
     std::map<G4String, G4long> process_counts_{};
+    std::map<G4int, G4long> target_element_counts_{};
+    std::map<G4int, G4long> secondary_species_counts_{};
 
     // Sample of detailed first interactions (capped to prevent huge JSON)
     std::vector<FirstInteractionRecord> first_interactions_{};

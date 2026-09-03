@@ -187,6 +187,16 @@ if(BUILD_TESTING)
                 -fsycl-targets=${CARBON_SYCL_TARGETS})
         endif()
     endif()
+
+    add_executable(run_step19_gpu tools/run_step19_gpu.cpp)
+    target_link_libraries(run_step19_gpu PRIVATE carbon_core)
+    if(CARBON_ENABLE_SYCL)
+        target_compile_options(run_step19_gpu PRIVATE -fsycl)
+        if(CARBON_SYCL_TARGETS)
+            target_compile_options(run_step19_gpu PRIVATE
+                -fsycl-targets=${CARBON_SYCL_TARGETS})
+        endif()
+    endif()
     add_test(NAME carbon_tests COMMAND carbon_tests)
     add_test(NAME inelastic_package_v2_tests COMMAND inelastic_package_v2_tests)
     set_tests_properties(carbon_tests PROPERTIES

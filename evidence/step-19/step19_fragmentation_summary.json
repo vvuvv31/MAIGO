@@ -1,0 +1,759 @@
+{
+  "step": 19,
+  "name": "c12_fragmentation_validation_schneider",
+  "overall_passed": true,
+  "cases_evaluated": 13,
+  "gate1_target_interaction_mix": {
+    "all_passed": true,
+    "cases": {
+      "lung_100mevu": {
+        "passed": true,
+        "l1_distance": 0.017302732015349907,
+        "topas_interactions": 1916,
+        "gpu_interactions": 7643
+      },
+      "lung_200mevu": {
+        "passed": true,
+        "l1_distance": 0.019198313248653703,
+        "topas_interactions": 3201,
+        "gpu_interactions": 12695
+      },
+      "lung_300mevu": {
+        "passed": true,
+        "l1_distance": 0.006161605749593265,
+        "topas_interactions": 4985,
+        "gpu_interactions": 19821
+      },
+      "soft_tissue_100mevu": {
+        "passed": true,
+        "l1_distance": 0.022266812118579535,
+        "topas_interactions": 1754,
+        "gpu_interactions": 6930
+      },
+      "soft_tissue_200mevu": {
+        "passed": true,
+        "l1_distance": 0.015084680232790111,
+        "topas_interactions": 3606,
+        "gpu_interactions": 14387
+      },
+      "soft_tissue_300mevu": {
+        "passed": true,
+        "l1_distance": 0.01012563728012898,
+        "topas_interactions": 5623,
+        "gpu_interactions": 22442
+      },
+      "trabecular_bone_100mevu": {
+        "passed": true,
+        "l1_distance": 0.026525557239132642,
+        "topas_interactions": 1634,
+        "gpu_interactions": 6506
+      },
+      "trabecular_bone_200mevu": {
+        "passed": true,
+        "l1_distance": 0.013601926577331377,
+        "topas_interactions": 3298,
+        "gpu_interactions": 13071
+      },
+      "trabecular_bone_300mevu": {
+        "passed": true,
+        "l1_distance": 0.015841256322060814,
+        "topas_interactions": 5135,
+        "gpu_interactions": 20432
+      },
+      "dense_bone_100mevu": {
+        "passed": true,
+        "l1_distance": 0.011395412525190676,
+        "topas_interactions": 1573,
+        "gpu_interactions": 6212
+      },
+      "dense_bone_200mevu": {
+        "passed": true,
+        "l1_distance": 0.01170531288750123,
+        "topas_interactions": 2656,
+        "gpu_interactions": 10581
+      },
+      "dense_bone_300mevu": {
+        "passed": true,
+        "l1_distance": 0.011900751763888483,
+        "topas_interactions": 4727,
+        "gpu_interactions": 18646
+      },
+      "staircase_200mevu": {
+        "passed": true,
+        "l1_distance": 0.008321057387553212,
+        "topas_interactions": 11312,
+        "gpu_interactions": 44178
+      }
+    }
+  },
+  "gate2_secondary_species_yield": {
+    "all_passed": true,
+    "cases": {
+      "lung_100mevu": {
+        "passed": true,
+        "integral_relative_diff": 0.016288899703487864,
+        "topas_major_yield": 6.425365344467641,
+        "gpu_major_yield": 6.5300274761219415,
+        "species": {
+          "Z=1": {
+            "topas_yield_per_event": 3.7818371607515657,
+            "gpu_yield_per_event": 3.8966374460290463,
+            "rel_diff": 0.030355692325649008
+          },
+          "Z=2": {
+            "topas_yield_per_event": 2.643528183716075,
+            "gpu_yield_per_event": 2.6333900300928956,
+            "rel_diff": 0.003835084371571946
+          },
+          "Z=3": {
+            "topas_yield_per_event": 0.08559498956158663,
+            "gpu_yield_per_event": 0.10074578045270181,
+            "rel_diff": 0.1770055813864432
+          },
+          "Z=4": {
+            "topas_yield_per_event": 0.044363256784968684,
+            "gpu_yield_per_event": 0.047232762004448516,
+            "rel_diff": 0.06468202353556891
+          },
+          "Z=5": {
+            "topas_yield_per_event": 0.0965553235908142,
+            "gpu_yield_per_event": 0.08321339788041344,
+            "rel_diff": 0.13817907924933973
+          },
+          "Z=6": {
+            "topas_yield_per_event": 0.19363256784968685,
+            "gpu_yield_per_event": 0.16485673164987572,
+            "rel_diff": 0.14861051794835078
+          }
+        }
+      },
+      "lung_200mevu": {
+        "passed": true,
+        "integral_relative_diff": 0.007314042758901979,
+        "topas_major_yield": 6.881287097781943,
+        "gpu_major_yield": 6.830957069712485,
+        "species": {
+          "Z=1": {
+            "topas_yield_per_event": 4.382068103717589,
+            "gpu_yield_per_event": 4.193698306419851,
+            "rel_diff": 0.04298650610608532
+          },
+          "Z=2": {
+            "topas_yield_per_event": 2.4992189940643548,
+            "gpu_yield_per_event": 2.637258763292635,
+            "rel_diff": 0.05523316266246562
+          },
+          "Z=3": {
+            "topas_yield_per_event": 0.09247110278038113,
+            "gpu_yield_per_event": 0.08940527766837338,
+            "rel_diff": 0.033154412782219034
+          },
+          "Z=4": {
+            "topas_yield_per_event": 0.046860356138706656,
+            "gpu_yield_per_event": 0.04245766049625837,
+            "rel_diff": 0.09395352500984644
+          },
+          "Z=5": {
+            "topas_yield_per_event": 0.11746329272102468,
+            "gpu_yield_per_event": 0.11894446632532493,
+            "rel_diff": 0.012609672094056126
+          },
+          "Z=6": {
+            "topas_yield_per_event": 0.15370196813495782,
+            "gpu_yield_per_event": 0.1350137849547066,
+            "rel_diff": 0.12158714300809793
+          }
+        }
+      },
+      "lung_300mevu": {
+        "passed": true,
+        "integral_relative_diff": 0.01718550690488274,
+        "topas_major_yield": 7.088264794383149,
+        "gpu_major_yield": 7.210080217950658,
+        "species": {
+          "Z=1": {
+            "topas_yield_per_event": 4.705516549648947,
+            "gpu_yield_per_event": 4.799202865647546,
+            "rel_diff": 0.019909889809140765
+          },
+          "Z=2": {
+            "topas_yield_per_event": 2.3827482447342025,
+            "gpu_yield_per_event": 2.410877352303113,
+            "rel_diff": 0.011805320864709456
+          },
+          "Z=3": {
+            "topas_yield_per_event": 0.08706118355065195,
+            "gpu_yield_per_event": 0.08233691539276525,
+            "rel_diff": 0.05426377135268488
+          },
+          "Z=4": {
+            "topas_yield_per_event": 0.047342026078234706,
+            "gpu_yield_per_event": 0.04061349074214217,
+            "rel_diff": 0.14212605360348005
+          },
+          "Z=5": {
+            "topas_yield_per_event": 0.11614844533600803,
+            "gpu_yield_per_event": 0.12229453609807779,
+            "rel_diff": 0.05291582460952981
+          },
+          "Z=6": {
+            "topas_yield_per_event": 0.1342026078234704,
+            "gpu_yield_per_event": 0.11548357802330861,
+            "rel_diff": 0.13948335359313388
+          }
+        }
+      },
+      "soft_tissue_100mevu": {
+        "passed": true,
+        "integral_relative_diff": 0.009803264833631942,
+        "topas_major_yield": 6.477194982896237,
+        "gpu_major_yield": 6.540692640692641,
+        "species": {
+          "Z=1": {
+            "topas_yield_per_event": 3.8654503990877993,
+            "gpu_yield_per_event": 3.9122655122655123,
+            "rel_diff": 0.012111166447449653
+          },
+          "Z=2": {
+            "topas_yield_per_event": 2.611744583808438,
+            "gpu_yield_per_event": 2.6284271284271283,
+            "rel_diff": 0.006387509989343605
+          },
+          "Z=3": {
+            "topas_yield_per_event": 0.09407069555302167,
+            "gpu_yield_per_event": 0.09956709956709957,
+            "rel_diff": 0.05842844024662206
+          },
+          "Z=4": {
+            "topas_yield_per_event": 0.05701254275940707,
+            "gpu_yield_per_event": 0.045165945165945166,
+            "rel_diff": 0.2077893217893218
+          },
+          "Z=5": {
+            "topas_yield_per_event": 0.09007981755986318,
+            "gpu_yield_per_event": 0.08051948051948052,
+            "rel_diff": 0.10613184284070368
+          },
+          "Z=6": {
+            "topas_yield_per_event": 0.16647662485746864,
+            "gpu_yield_per_event": 0.16782106782106782,
+            "rel_diff": 0.008075866295044353
+          }
+        }
+      },
+      "soft_tissue_200mevu": {
+        "passed": true,
+        "integral_relative_diff": 0.01195389185086767,
+        "topas_major_yield": 6.919301164725457,
+        "gpu_major_yield": 6.836588586918746,
+        "species": {
+          "Z=1": {
+            "topas_yield_per_event": 4.39961175818081,
+            "gpu_yield_per_event": 4.221588934454716,
+            "rel_diff": 0.04046330301646988
+          },
+          "Z=2": {
+            "topas_yield_per_event": 2.519689406544648,
+            "gpu_yield_per_event": 2.61499965246403,
+            "rel_diff": 0.03782618828805769
+          },
+          "Z=3": {
+            "topas_yield_per_event": 0.08402662229617304,
+            "gpu_yield_per_event": 0.09154097449085981,
+            "rel_diff": 0.08942823106944056
+          },
+          "Z=4": {
+            "topas_yield_per_event": 0.050471436494731,
+            "gpu_yield_per_event": 0.046639327170362135,
+            "rel_diff": 0.07592629793227544
+          },
+          "Z=5": {
+            "topas_yield_per_event": 0.12229617304492513,
+            "gpu_yield_per_event": 0.11677208591089178,
+            "rel_diff": 0.04516974649733393
+          },
+          "Z=6": {
+            "topas_yield_per_event": 0.14309484193011648,
+            "gpu_yield_per_event": 0.14137763258497255,
+            "rel_diff": 0.01200049786548264
+          }
+        }
+      },
+      "soft_tissue_300mevu": {
+        "passed": true,
+        "integral_relative_diff": 0.021617051762957553,
+        "topas_major_yield": 7.0944335763827135,
+        "gpu_major_yield": 7.247794314232243,
+        "species": {
+          "Z=1": {
+            "topas_yield_per_event": 4.742664058331851,
+            "gpu_yield_per_event": 4.8309865430888514,
+            "rel_diff": 0.01862296879363335
+          },
+          "Z=2": {
+            "topas_yield_per_event": 2.3517695180508627,
+            "gpu_yield_per_event": 2.4168077711433917,
+            "rel_diff": 0.02765502851930513
+          },
+          "Z=3": {
+            "topas_yield_per_event": 0.09638982749422016,
+            "gpu_yield_per_event": 0.08194456822030122,
+            "rel_diff": 0.14986290202443955
+          },
+          "Z=4": {
+            "topas_yield_per_event": 0.047839231726836205,
+            "gpu_yield_per_event": 0.039746903128063456,
+            "rel_diff": 0.16915674241969952
+          },
+          "Z=5": {
+            "topas_yield_per_event": 0.12110972790325449,
+            "gpu_yield_per_event": 0.11478477854023705,
+            "rel_diff": 0.05222494899889431
+          },
+          "Z=6": {
+            "topas_yield_per_event": 0.12715632224791037,
+            "gpu_yield_per_event": 0.11438374476428126,
+            "rel_diff": 0.10044783662999512
+          }
+        }
+      },
+      "trabecular_bone_100mevu": {
+        "passed": true,
+        "integral_relative_diff": 0.005307613996483216,
+        "topas_major_yield": 6.620563035495716,
+        "gpu_major_yield": 6.655702428527513,
+        "species": {
+          "Z=1": {
+            "topas_yield_per_event": 4.11015911872705,
+            "gpu_yield_per_event": 4.071165078389179,
+            "rel_diff": 0.009487233757010202
+          },
+          "Z=2": {
+            "topas_yield_per_event": 2.510403916768666,
+            "gpu_yield_per_event": 2.584537350138334,
+            "rel_diff": 0.0295304802842607
+          },
+          "Z=3": {
+            "topas_yield_per_event": 0.07894736842105263,
+            "gpu_yield_per_event": 0.09268367660620966,
+            "rel_diff": 0.17399323701198907
+          },
+          "Z=4": {
+            "topas_yield_per_event": 0.05324357405140759,
+            "gpu_yield_per_event": 0.04380571779895481,
+            "rel_diff": 0.17725812777595212
+          },
+          "Z=5": {
+            "topas_yield_per_event": 0.08996328029375765,
+            "gpu_yield_per_event": 0.0768521364893944,
+            "rel_diff": 0.1457388365736704
+          },
+          "Z=6": {
+            "topas_yield_per_event": 0.16585067319461444,
+            "gpu_yield_per_event": 0.1649246849062404,
+            "rel_diff": 0.005583265177871491
+          }
+        }
+      },
+      "trabecular_bone_200mevu": {
+        "passed": true,
+        "integral_relative_diff": 0.00046574917087745043,
+        "topas_major_yield": 7.003032140691328,
+        "gpu_major_yield": 6.999770484278173,
+        "species": {
+          "Z=1": {
+            "topas_yield_per_event": 4.573681018799272,
+            "gpu_yield_per_event": 4.4790758166934435,
+            "rel_diff": 0.020684696137962255
+          },
+          "Z=2": {
+            "topas_yield_per_event": 2.4293511218920556,
+            "gpu_yield_per_event": 2.5206946675847295,
+            "rel_diff": 0.037599976746684784
+          },
+          "Z=3": {
+            "topas_yield_per_event": 0.07974530018192844,
+            "gpu_yield_per_event": 0.07933593451151404,
+            "rel_diff": 0.005133414376527336
+          },
+          "Z=4": {
+            "topas_yield_per_event": 0.048211036992116436,
+            "gpu_yield_per_event": 0.04452605003442736,
+            "rel_diff": 0.07643450934879603
+          },
+          "Z=5": {
+            "topas_yield_per_event": 0.1130988477865373,
+            "gpu_yield_per_event": 0.11605845000382527,
+            "rel_diff": 0.026168279122294177
+          },
+          "Z=6": {
+            "topas_yield_per_event": 0.14129775621588841,
+            "gpu_yield_per_event": 0.1322010557723204,
+            "rel_diff": 0.06437965249546623
+          }
+        }
+      },
+      "trabecular_bone_300mevu": {
+        "passed": true,
+        "integral_relative_diff": 0.005849000356405858,
+        "topas_major_yield": 7.386952288218111,
+        "gpu_major_yield": 7.4301585747846515,
+        "species": {
+          "Z=1": {
+            "topas_yield_per_event": 5.016553067185979,
+            "gpu_yield_per_event": 5.042727094753328,
+            "rel_diff": 0.005217532280991434
+          },
+          "Z=2": {
+            "topas_yield_per_event": 2.3703992210321325,
+            "gpu_yield_per_event": 2.3874314800313234,
+            "rel_diff": 0.007185396809139448
+          },
+          "Z=3": {
+            "topas_yield_per_event": 0.07887049659201557,
+            "gpu_yield_per_event": 0.07527407987470634,
+            "rel_diff": 0.04559901195897013
+          },
+          "Z=4": {
+            "topas_yield_per_event": 0.04771178188899708,
+            "gpu_yield_per_event": 0.0393989819890368,
+            "rel_diff": 0.17422949994406536
+          },
+          "Z=5": {
+            "topas_yield_per_event": 0.11353456669912367,
+            "gpu_yield_per_event": 0.10850626468285043,
+            "rel_diff": 0.04428873216734655
+          },
+          "Z=6": {
+            "topas_yield_per_event": 0.11392405063291139,
+            "gpu_yield_per_event": 0.10840837901331245,
+            "rel_diff": 0.04841533977203515
+          }
+        }
+      },
+      "dense_bone_100mevu": {
+        "passed": true,
+        "integral_relative_diff": 0.021793667955428222,
+        "topas_major_yield": 7.470438652256834,
+        "gpu_major_yield": 7.307630392788152,
+        "species": {
+          "Z=1": {
+            "topas_yield_per_event": 4.726636999364272,
+            "gpu_yield_per_event": 4.62797810688989,
+            "rel_diff": 0.02087295734528617
+          },
+          "Z=2": {
+            "topas_yield_per_event": 2.743801652892562,
+            "gpu_yield_per_event": 2.6796522858982614,
+            "rel_diff": 0.023379739175633702
+          },
+          "Z=3": {
+            "topas_yield_per_event": 0.08963763509218055,
+            "gpu_yield_per_event": 0.09723116548615583,
+            "rel_diff": 0.08471364049449022
+          },
+          "Z=4": {
+            "topas_yield_per_event": 0.036872218690400506,
+            "gpu_yield_per_event": 0.04974243399871217,
+            "rel_diff": 0.34904911517196985
+          },
+          "Z=5": {
+            "topas_yield_per_event": 0.08328035600762873,
+            "gpu_yield_per_event": 0.07855763039278815,
+            "rel_diff": 0.05670875871865824
+          },
+          "Z=6": {
+            "topas_yield_per_event": 0.13986013986013987,
+            "gpu_yield_per_event": 0.15840309079201545,
+            "rel_diff": 0.1325820991629104
+          }
+        }
+      },
+      "dense_bone_200mevu": {
+        "passed": true,
+        "integral_relative_diff": 0.001123767105728795,
+        "topas_major_yield": 7.66980421686747,
+        "gpu_major_yield": 7.661185143181174,
+        "species": {
+          "Z=1": {
+            "topas_yield_per_event": 5.125,
+            "gpu_yield_per_event": 5.005387014459881,
+            "rel_diff": 0.023339119129779297
+          },
+          "Z=2": {
+            "topas_yield_per_event": 2.54480421686747,
+            "gpu_yield_per_event": 2.655798128721293,
+            "rel_diff": 0.04361589434587284
+          },
+          "Z=3": {
+            "topas_yield_per_event": 0.0911144578313253,
+            "gpu_yield_per_event": 0.08571968623003497,
+            "rel_diff": 0.05920873294639304
+          },
+          "Z=4": {
+            "topas_yield_per_event": 0.05120481927710843,
+            "gpu_yield_per_event": 0.04054437198752481,
+            "rel_diff": 0.20819226471422136
+          },
+          "Z=5": {
+            "topas_yield_per_event": 0.10052710843373494,
+            "gpu_yield_per_event": 0.11766373688687269,
+            "rel_diff": 0.17046773472484594
+          },
+          "Z=6": {
+            "topas_yield_per_event": 0.12951807228915663,
+            "gpu_yield_per_event": 0.11775824591248464,
+            "rel_diff": 0.09079679900128138
+          }
+        }
+      },
+      "dense_bone_300mevu": {
+        "passed": true,
+        "integral_relative_diff": 0.0028128225005422994,
+        "topas_major_yield": 8.169875185106832,
+        "gpu_major_yield": 8.146894776359542,
+        "species": {
+          "Z=1": {
+            "topas_yield_per_event": 5.665115295113179,
+            "gpu_yield_per_event": 5.595194679824091,
+            "rel_diff": 0.012342311082248128
+          },
+          "Z=2": {
+            "topas_yield_per_event": 2.5047598899936534,
+            "gpu_yield_per_event": 2.55170009653545,
+            "rel_diff": 0.018740401716475785
+          },
+          "Z=3": {
+            "topas_yield_per_event": 0.08187010789083986,
+            "gpu_yield_per_event": 0.07733562158103614,
+            "rel_diff": 0.055386348285380256
+          },
+          "Z=4": {
+            "topas_yield_per_event": 0.04506029193991961,
+            "gpu_yield_per_event": 0.03904322642926097,
+            "rel_diff": 0.1335336557224573
+          },
+          "Z=5": {
+            "topas_yield_per_event": 0.10492913052676116,
+            "gpu_yield_per_event": 0.10441917837605921,
+            "rel_diff": 0.004859967371709867
+          },
+          "Z=6": {
+            "topas_yield_per_event": 0.10958324518722234,
+            "gpu_yield_per_event": 0.10763702670814115,
+            "rel_diff": 0.01776018291624863
+          }
+        }
+      },
+      "staircase_200mevu": {
+        "passed": true,
+        "integral_relative_diff": 0.025056431149089155,
+        "topas_major_yield": 6.787040311173975,
+        "gpu_major_yield": 6.616981302910951,
+        "species": {
+          "Z=1": {
+            "topas_yield_per_event": 4.2634370579915135,
+            "gpu_yield_per_event": 4.0444791525193535,
+            "rel_diff": 0.05135713333957605
+          },
+          "Z=2": {
+            "topas_yield_per_event": 2.5236032531824613,
+            "gpu_yield_per_event": 2.5725021503915975,
+            "rel_diff": 0.019376618391766166
+          },
+          "Z=3": {
+            "topas_yield_per_event": 0.08645685997171146,
+            "gpu_yield_per_event": 0.08377472950337272,
+            "rel_diff": 0.031022760590846375
+          },
+          "Z=4": {
+            "topas_yield_per_event": 0.05277581329561527,
+            "gpu_yield_per_event": 0.05022862058037937,
+            "rel_diff": 0.0482643953010863
+          },
+          "Z=5": {
+            "topas_yield_per_event": 0.11235855728429986,
+            "gpu_yield_per_event": 0.1192675087147449,
+            "rel_diff": 0.061490211314865664
+          },
+          "Z=6": {
+            "topas_yield_per_event": 0.14816124469589817,
+            "gpu_yield_per_event": 0.17180497079994567,
+            "rel_diff": 0.15958104396717498
+          }
+        }
+      }
+    }
+  },
+  "gate3_unsupported_lookups": {
+    "all_passed": true,
+    "cases": {
+      "lung_100mevu": {
+        "passed": true,
+        "unsupported_count": 0
+      },
+      "lung_200mevu": {
+        "passed": true,
+        "unsupported_count": 0
+      },
+      "lung_300mevu": {
+        "passed": true,
+        "unsupported_count": 0
+      },
+      "soft_tissue_100mevu": {
+        "passed": true,
+        "unsupported_count": 0
+      },
+      "soft_tissue_200mevu": {
+        "passed": true,
+        "unsupported_count": 0
+      },
+      "soft_tissue_300mevu": {
+        "passed": true,
+        "unsupported_count": 0
+      },
+      "trabecular_bone_100mevu": {
+        "passed": true,
+        "unsupported_count": 0
+      },
+      "trabecular_bone_200mevu": {
+        "passed": true,
+        "unsupported_count": 0
+      },
+      "trabecular_bone_300mevu": {
+        "passed": true,
+        "unsupported_count": 0
+      },
+      "dense_bone_100mevu": {
+        "passed": true,
+        "unsupported_count": 0
+      },
+      "dense_bone_200mevu": {
+        "passed": true,
+        "unsupported_count": 0
+      },
+      "dense_bone_300mevu": {
+        "passed": true,
+        "unsupported_count": 0
+      },
+      "staircase_200mevu": {
+        "passed": true,
+        "unsupported_count": 0
+      }
+    }
+  },
+  "gate4_secondary_overflow": {
+    "all_passed": true,
+    "cases": {
+      "lung_100mevu": {
+        "passed": true,
+        "overflow_count": 0
+      },
+      "lung_200mevu": {
+        "passed": true,
+        "overflow_count": 0
+      },
+      "lung_300mevu": {
+        "passed": true,
+        "overflow_count": 0
+      },
+      "soft_tissue_100mevu": {
+        "passed": true,
+        "overflow_count": 0
+      },
+      "soft_tissue_200mevu": {
+        "passed": true,
+        "overflow_count": 0
+      },
+      "soft_tissue_300mevu": {
+        "passed": true,
+        "overflow_count": 0
+      },
+      "trabecular_bone_100mevu": {
+        "passed": true,
+        "overflow_count": 0
+      },
+      "trabecular_bone_200mevu": {
+        "passed": true,
+        "overflow_count": 0
+      },
+      "trabecular_bone_300mevu": {
+        "passed": true,
+        "overflow_count": 0
+      },
+      "dense_bone_100mevu": {
+        "passed": true,
+        "overflow_count": 0
+      },
+      "dense_bone_200mevu": {
+        "passed": true,
+        "overflow_count": 0
+      },
+      "dense_bone_300mevu": {
+        "passed": true,
+        "overflow_count": 0
+      },
+      "staircase_200mevu": {
+        "passed": true,
+        "overflow_count": 0
+      }
+    }
+  },
+  "gate5_energy_ledger": {
+    "all_passed": true,
+    "cases": {
+      "lung_100mevu": {
+        "passed": true,
+        "relative_error": 0.00018041666666666667
+      },
+      "lung_200mevu": {
+        "passed": true,
+        "relative_error": 0.001175625
+      },
+      "lung_300mevu": {
+        "passed": true,
+        "relative_error": 0.0005835711490223442
+      },
+      "soft_tissue_100mevu": {
+        "passed": true,
+        "relative_error": 0.0012691666666666667
+      },
+      "soft_tissue_200mevu": {
+        "passed": true,
+        "relative_error": 0.0015
+      },
+      "soft_tissue_300mevu": {
+        "passed": true,
+        "relative_error": 0.0008955519064949101
+      },
+      "trabecular_bone_100mevu": {
+        "passed": true,
+        "relative_error": 0.0022395833333333334
+      },
+      "trabecular_bone_200mevu": {
+        "passed": true,
+        "relative_error": 0.00422625
+      },
+      "trabecular_bone_300mevu": {
+        "passed": true,
+        "relative_error": 0.0017451423621121654
+      },
+      "dense_bone_100mevu": {
+        "passed": true,
+        "relative_error": 0.0012783333333333334
+      },
+      "dense_bone_200mevu": {
+        "passed": true,
+        "relative_error": 0.0030977083333333334
+      },
+      "dense_bone_300mevu": {
+        "passed": true,
+        "relative_error": 0.002249325550527651
+      },
+      "staircase_200mevu": {
+        "passed": true,
+        "relative_error": 0.00700625
+      }
+    }
+  }
+}
