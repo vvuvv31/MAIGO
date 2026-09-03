@@ -193,6 +193,9 @@ struct TransportConfig {
     // Optional energy-dependent mass XS for every Schneider section. When set
     // on a CCTG v2/v3 grid, this supersedes the legacy four-class XS tables.
     std::filesystem::path ct_schneider_cross_section_file{};
+    // Optional energy-dependent mass stopping power for every Schneider section.
+    // When set on a Schneider CT grid, this supersedes approximate Z/A+I scaling.
+    std::filesystem::path ct_schneider_stopping_power_file{"data/schneider/schneider_stopping_v1.bin"};
     std::filesystem::path ct_cinel02_rate_file{};
     std::filesystem::path ct_hu_stopping_power_lut_file{};
     // Optional CT validation mode. Supported: "none", "primary-attenuation-only".

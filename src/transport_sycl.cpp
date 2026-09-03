@@ -12,6 +12,7 @@
 #include "carbon/rng.hpp"
 #include "carbon/slab_phantom.hpp"
 #include "carbon/stopping_power.hpp"
+#include "carbon/schneider_stopping_table.hpp"
 #include "carbon/detail/device_memory_tracker.hpp"
 #include "carbon/straggling.hpp"
 #include "carbon/transport.hpp"
@@ -164,6 +165,77 @@ TransportResult transport_sycl(const TransportConfig& config,
         }
     }
 
+    std::string early_verified_stopping_sha256 = "";
+    if (config.is_primary_attenuation_only_mode()) {
+        const auto sp_file = config.ct_schneider_stopping_power_file;
+        if (sp_file.empty() || !std::filesystem::exists(sp_file)) {
+            throw std::runtime_error("Schneider stopping power file missing in validation mode: " + sp_file.string());
+        }
+        const auto meta_path = sp_file.parent_path() / (sp_file.stem().string() + ".metadata.json");
+        if (!std::filesystem::exists(meta_path)) {
+            throw std::runtime_error("Schneider stopping power metadata file missing: " + meta_path.string());
+        }
+        std::ifstream meta_in(meta_path);
+        if (!meta_in.is_open()) {
+            throw std::runtime_error("Failed to open Schneider stopping power metadata file: " + meta_path.string());
+        }
+        std::string source_sha256 = "";
+        std::string line;
+        while (std::getline(meta_in, line)) {
+            if (line.find("\"data_sha256\"") != std::string::npos) {
+                const auto colon = line.find(':');
+                const auto quote1 = line.find('"', colon);
+                const auto quote2 = line.find('"', quote1 + 1);
+                if (quote1 != std::string::npos && quote2 != std::string::npos) {
+                    source_sha256 = line.substr(quote1 + 1, quote2 - quote1 - 1);
+                    break;
+                }
+            }
+        }
+        if (source_sha256.empty() || !is_valid_64hex(source_sha256)) {
+            throw std::runtime_error(
+                "Schneider stopping power metadata missing or malformed data_sha256 in: " + meta_path.string());
+        }
+        const auto actual_sha256 = compute_file_sha256_hex(sp_file);
+        if (source_sha256 != actual_sha256) {
+            throw std::runtime_error(
+                "Schneider stopping power runtime SHA256 mismatch: file=" + actual_sha256 +
+                ", metadata=" + source_sha256);
+        }
+        early_verified_stopping_sha256 = actual_sha256;
+    } else if (!config.ct_schneider_stopping_power_file.empty() &&
+               std::filesystem::exists(config.ct_schneider_stopping_power_file)) {
+        const auto sp_file = config.ct_schneider_stopping_power_file;
+        const auto meta_path = sp_file.parent_path() / (sp_file.stem().string() + ".metadata.json");
+        if (std::filesystem::exists(meta_path)) {
+            std::ifstream meta_in(meta_path);
+            if (meta_in.is_open()) {
+                std::string source_sha256 = "";
+                std::string line;
+                while (std::getline(meta_in, line)) {
+                    if (line.find("\"data_sha256\"") != std::string::npos) {
+                        const auto colon = line.find(':');
+                        const auto quote1 = line.find('"', colon);
+                        const auto quote2 = line.find('"', quote1 + 1);
+                        if (quote1 != std::string::npos && quote2 != std::string::npos) {
+                            source_sha256 = line.substr(quote1 + 1, quote2 - quote1 - 1);
+                            break;
+                        }
+                    }
+                }
+                if (!source_sha256.empty() && is_valid_64hex(source_sha256)) {
+                    const auto actual_sha256 = compute_file_sha256_hex(sp_file);
+                    if (source_sha256 != actual_sha256) {
+                        throw std::runtime_error(
+                            "Schneider stopping power runtime SHA256 mismatch: file=" + actual_sha256 +
+                            ", metadata=" + source_sha256);
+                    }
+                    early_verified_stopping_sha256 = actual_sha256;
+                }
+            }
+        }
+    }
+
     const bool use_cinel02 = config.nuclear_model == "cinel02";
     std::optional<InelasticPackageV2Table> cinel02_package;
     std::optional<InelasticRateV2Table> cinel02_rates;
@@ -245,6 +317,13 @@ TransportResult transport_sycl(const TransportConfig& config,
     float schneider_xs_e_min = 0.0F;
     float schneider_xs_inv_dE = 0.0F;
     bool use_schneider_primary_xs = false;
+    float* schneider_stopping_device = nullptr;
+    std::uint32_t schneider_sp_sections = 0;
+    std::uint32_t schneider_sp_energies = 0;
+    float schneider_sp_e_min = 0.0F;
+    float schneider_sp_e_max = 0.0F;
+    float schneider_sp_inv_dE = 0.0F;
+    bool use_schneider_stopping = false;
 
     Cinel02DeviceInteraction* cinel02_interactions_device = nullptr;
     Cinel02DeviceProduct* cinel02_products_device = nullptr;
@@ -741,6 +820,62 @@ TransportResult transport_sycl(const TransportConfig& config,
                 std::cout << "[ct-validation-mode] primary-attenuation-only\n"
                           << "  verified_source_sha256=" << early_verified_sha256 << "\n";
             }
+        }
+
+        if (ct_material_ids_are_schneider_sections) {
+            if (config.ct_schneider_stopping_power_file.empty()) {
+                throw std::runtime_error(
+                    "Schneider CT grid requires ct_schneider_stopping_power_file; silent fallback to legacy SP is strictly forbidden");
+            }
+            if (!std::filesystem::exists(config.ct_schneider_stopping_power_file)) {
+                throw std::runtime_error(
+                    "Schneider stopping power file missing: " + config.ct_schneider_stopping_power_file.string());
+            }
+
+            // Verify all voxel material IDs are strictly in [0, 24]
+            for (std::size_t vi = 0; vi < grid.material_id.size(); ++vi) {
+                if (grid.material_id[vi] >= kSchneiderStoppingNumSections) {
+                    throw std::runtime_error(
+                        "Schneider CT grid contains invalid material ID " + std::to_string(grid.material_id[vi]) +
+                        " at voxel " + std::to_string(vi) + " (must be in [0, 24])");
+                }
+            }
+
+            const auto meta_path = config.ct_schneider_stopping_power_file.parent_path() /
+                                   (config.ct_schneider_stopping_power_file.stem().string() + ".metadata.json");
+            const auto stopping_table = SchneiderStoppingTable::from_binary(
+                config.ct_schneider_stopping_power_file, meta_path);
+            schneider_sp_sections = static_cast<std::uint32_t>(stopping_table.num_sections());
+            schneider_sp_energies = static_cast<std::uint32_t>(stopping_table.num_energies());
+            schneider_sp_e_min = static_cast<float>(stopping_table.energy_min_mevu());
+            schneider_sp_e_max = static_cast<float>(stopping_table.energy_max_mevu());
+            const float dE = static_cast<float>(stopping_table.energy_step_mevu());
+            schneider_sp_inv_dE = 1.0F / dE;
+
+            if (schneider_sp_sections != 25 || schneider_sp_energies != 4302) {
+                throw std::runtime_error(
+                    "Schneider stopping table dimension mismatch: sections=" + std::to_string(schneider_sp_sections) +
+                    ", energies=" + std::to_string(schneider_sp_energies) + " (expected 25x4302)");
+            }
+
+            const auto flat_sp = stopping_table.to_flat_mass_stopping_float();
+            const std::size_t total_sp_elements = flat_sp.size();
+            schneider_stopping_device = mem_tracker.allocate<float>(total_sp_elements);
+            if (schneider_stopping_device == nullptr) {
+                throw std::bad_alloc();
+            }
+            queue.copy(flat_sp.data(), schneider_stopping_device, total_sp_elements).wait_and_throw();
+            use_schneider_stopping = true;
+
+            std::cout << "[schneider-stopping-power] mode=exact-schneider-v1\n"
+                      << "  sections=" << schneider_sp_sections << "\n"
+                      << "  energies=" << schneider_sp_energies << "\n"
+                      << "  bytes=" << total_sp_elements * sizeof(float) << "\n"
+                      << "  E_min=" << schneider_sp_e_min << " MeV/u\n"
+                      << "  E_max=" << schneider_sp_e_max << " MeV/u\n"
+                      << "  inv_dE=" << schneider_sp_inv_dE << "\n"
+                      << "  source=" << config.ct_schneider_stopping_power_file << "\n"
+                      << "  source_sha256=" << (early_verified_stopping_sha256.empty() ? "unknown" : early_verified_stopping_sha256) << "\n";
         }
 
         if (use_ct_mass_sp) {
@@ -1729,24 +1864,39 @@ TransportResult transport_sycl(const TransportConfig& config,
                             : 0U;
                     float stopping_power_MeV_per_mm = 0.0F;
                     if (enable_ct_grid) {
-                        const auto water_sp =
-                            table_device[index] +
-                            fraction * (table_device[index + 1] - table_device[index]);
-                        if (use_ct_mass_sp && in_ct && ct_mass_sp_factor_lut_device != nullptr &&
-                            ct_n_mass_factors > 0) {
-                            const auto mass_factor = ct_lookup_mass_sp_factor(
-                                ct_mass_sp_factor_lut_device,
-                                use_ct_density_mass_spr ? ct_density_spr_n_rho : ct_n_mass_factors,
-                                table_size, use_ct_density_mass_spr,
-                                ct_mass_spr_log_rho_min, ct_mass_spr_inv_dlog,
-                                static_cast<std::uint32_t>(ct_material), local_density_g_per_cm3,
-                                static_cast<std::size_t>(index), fraction,
-                                [](float x) { return sycl::log(x); });
-                            stopping_power_MeV_per_mm = ct_mass_scaled_stopping_power(
-                                water_sp, local_density_g_per_cm3, mass_factor);
+                        if (use_schneider_stopping && in_ct) {
+                            const auto floating_sp_index = (energy_MeVu - schneider_sp_e_min) * schneider_sp_inv_dE;
+                            auto sp_index = static_cast<int>(sycl::floor(floating_sp_index));
+                            sp_index = sycl::max(0, sycl::min(sp_index, static_cast<int>(schneider_sp_energies) - 2));
+                            const auto sp_fraction = sycl::clamp(floating_sp_index - static_cast<float>(sp_index), 0.0F, 1.0F);
+
+                            const auto sec_id = static_cast<std::size_t>(
+                                sycl::min(static_cast<std::uint32_t>(ct_material), schneider_sp_sections - 1));
+                            const auto base = sec_id * schneider_sp_energies;
+                            const auto mass_sp = schneider_stopping_device[base + sp_index] +
+                                                 sp_fraction * (schneider_stopping_device[base + sp_index + 1] -
+                                                                schneider_stopping_device[base + sp_index]);
+                            stopping_power_MeV_per_mm = mass_sp * sycl::fmax(local_density_g_per_cm3, 1.0e-6F);
                         } else {
-                            stopping_power_MeV_per_mm =
-                                water_sp * sycl::fmax(local_density_g_per_cm3, 1.0e-6F);
+                            const auto water_sp =
+                                table_device[index] +
+                                fraction * (table_device[index + 1] - table_device[index]);
+                            if (use_ct_mass_sp && in_ct && ct_mass_sp_factor_lut_device != nullptr &&
+                                ct_n_mass_factors > 0) {
+                                const auto mass_factor = ct_lookup_mass_sp_factor(
+                                    ct_mass_sp_factor_lut_device,
+                                    use_ct_density_mass_spr ? ct_density_spr_n_rho : ct_n_mass_factors,
+                                    table_size, use_ct_density_mass_spr,
+                                    ct_mass_spr_log_rho_min, ct_mass_spr_inv_dlog,
+                                    static_cast<std::uint32_t>(ct_material), local_density_g_per_cm3,
+                                    static_cast<std::size_t>(index), fraction,
+                                    [](float x) { return sycl::log(x); });
+                                stopping_power_MeV_per_mm = ct_mass_scaled_stopping_power(
+                                    water_sp, local_density_g_per_cm3, mass_factor);
+                            } else {
+                                stopping_power_MeV_per_mm =
+                                    water_sp * sycl::fmax(local_density_g_per_cm3, 1.0e-6F);
+                            }
                         }
                     } else if (in_insert && use_insert_material_tables) {
                         stopping_power_MeV_per_mm =

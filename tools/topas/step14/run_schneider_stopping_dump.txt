@@ -1,0 +1,33 @@
+includeFile = /mnt/sdb/wuwei/MAIGO/data/HUtoMaterialSchneider.txt
+
+s:Ge/World/Material = "Vacuum"
+d:Ge/World/HLX = 1.0 m
+d:Ge/World/HLY = 1.0 m
+d:Ge/World/HLZ = 1.0 m
+b:Ge/World/Invisible = "TRUE"
+
+s:Ge/Patient/Parent = "World"
+s:Ge/Patient/Material = "G4_WATER"
+s:Ge/Patient/Type = "TsDicomPatient"
+s:Ge/Patient/DicomDirectory = "/mnt/sda/wuwei/maigo-ct-schneider/step-03/DICOM_Box/DICOM_Box"
+b:Ge/Patient/PreLoadAllMaterials = "True"
+
+sv:Ph/Default/Modules = 6 "g4em-standard_opt4" "g4h-phy_QGSP_BIC_HP" "g4decay" "g4ion-binarycascade" "g4h-elastic_HP" "g4stopping"
+
+s:So/Demo/Type = "Beam"
+s:So/Demo/Component = "BeamPosition"
+s:So/Demo/BeamParticle = "GenericIon(6,12)"
+d:So/Demo/BeamEnergy = 200.0 MeV
+u:So/Demo/BeamEnergySpread = 0.0
+s:So/Demo/BeamPositionDistribution = "None"
+s:So/Demo/BeamAngularDistribution = "None"
+i:So/Demo/NumberOfHistoriesInRun = 1
+
+s:Sc/SchneiderStoppingDump/Quantity = "CarbonSchneiderStoppingPowerDump"
+s:Sc/SchneiderStoppingDump/Component = "Patient"
+s:Sc/SchneiderStoppingDump/OutputJsonFile = "/mnt/sda/wuwei/step14_schneider_stopping/raw/topas_c12_schneider_stopping.json"
+s:Sc/SchneiderStoppingDump/OutputCsvFile = "/mnt/sda/wuwei/step14_schneider_stopping/raw/topas_c12_schneider_stopping.csv"
+d:Sc/SchneiderStoppingDump/MinEnergyMeVu = 0.01 MeV
+d:Sc/SchneiderStoppingDump/MaxEnergyMeVu = 430.11 MeV
+d:Sc/SchneiderStoppingDump/EnergyStepMeVu = 0.1 MeV
+s:Sc/SchneiderStoppingDump/IfOutputFileAlreadyExists = "Overwrite"

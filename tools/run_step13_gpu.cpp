@@ -150,6 +150,7 @@ int main(int argc, char* argv[]) {
             cfg.enable_ct_grid = true;
             cfg.ct_grid_file = tc.cctg_file;
             cfg.ct_schneider_cross_section_file = xs_path.string();
+            cfg.ct_schneider_stopping_power_file = (repo_dir / "data/schneider/schneider_stopping_v1.bin").string();
             cfg.ct_validation_mode = "primary-attenuation-only";
             cfg.nuclear_model = "geant4";
             cfg.enable_inelastic = true;

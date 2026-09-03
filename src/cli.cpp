@@ -68,6 +68,8 @@ void apply_cli_overrides(int argc, char** argv, TransportConfig& config, CliStat
             config.ct_grid_file = argv[++index];
         } else if (argument == "--ct-stopping-power-scale" && index + 1 < argc) {
             config.ct_stopping_power_scale = std::stod(argv[++index]);
+        } else if (argument == "--ct-schneider-stopping-power-file" && index + 1 < argc) {
+            config.ct_schneider_stopping_power_file = argv[++index];
         } else if (argument == "--spots" && index + 1 < argc) {
             if (!spots_cli_override) {
                 config.topas_spots_file.clear();

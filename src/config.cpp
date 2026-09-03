@@ -1505,6 +1505,13 @@ TransportConfig load_config(const std::filesystem::path& path) {
         config.ct_schneider_cross_section_file = resolve_input_path_from_config(
             config.ct_schneider_cross_section_file, path);
     }
+    config.ct_schneider_stopping_power_file = parse_path(
+        values, "ct_schneider_stopping_power_file",
+        config.ct_schneider_stopping_power_file);
+    if (!config.ct_schneider_stopping_power_file.empty()) {
+        config.ct_schneider_stopping_power_file = resolve_input_path_from_config(
+            config.ct_schneider_stopping_power_file, path);
+    }
     config.ct_cinel02_rate_file = parse_path(
         values, "ct_cinel02_rate_file", config.ct_cinel02_rate_file);
     config.ct_hu_stopping_power_lut_file = parse_path(

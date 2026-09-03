@@ -1,0 +1,573 @@
+{
+  "schema_version": 2,
+  "data_filename": "schneider_stopping_v1.bin",
+  "data_sha256": "9786dba071f61e660fcc5940a844e8109c4e480ccb603d7929d2fcfaae152c2f",
+  "canonical_csv_filename": "c12_schneider_stopping_power.csv",
+  "canonical_csv_sha256": "d39e65ac7842f836bcbcecb02901b29d29cfa845111e51366cf77669d08e92a9",
+  "binary_magic": "SCHNSTOP",
+  "binary_version": 1,
+  "topas_version": "4.2.p3",
+  "geant4_version": "geant4-11-03-patch-02 [MT]",
+  "em_physics_module": "g4em-standard_opt4",
+  "projectile": {
+    "name": "GenericIon(6,12)",
+    "z": 6,
+    "a": 12
+  },
+  "schneider_source_path": "data/HUtoMaterialSchneider.txt",
+  "schneider_source_sha256": "5022cd89617b28dbd8ee8bf8b095ea20cfd99f6405218693c0df238b3617a139",
+  "sections_count": 25,
+  "energies_count": 4302,
+  "energy_grid": {
+    "type": "uniform",
+    "min_MeVu": 0.01,
+    "max_MeVu": 430.11,
+    "step_MeVu": 0.1,
+    "nodes": 4302,
+    "covers_430mevu_domain": true,
+    "has_guard_node": true
+  },
+  "section_manifest": [
+    {
+      "section_id": 0,
+      "material_name": "PatientTissueFromHUNegative975",
+      "nominal_density_g_cm3": 0.0393235,
+      "composition_sha256": "9a5e655bc67c888f1ba3ad3532a6114dcb69e1054738c46bb86996e571e32a43",
+      "element_weights": [
+        0.0,
+        0.0,
+        0.755,
+        0.232,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.013,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "section_id": 1,
+      "material_name": "PatientTissueFromHUNegative535",
+      "nominal_density_g_cm3": 0.470041,
+      "composition_sha256": "d85f60883acd556b0d54a7b05eda07dae753c5d7d3d49c5e777eff2228c01acb",
+      "element_weights": [
+        0.103,
+        0.105,
+        0.031,
+        0.749,
+        0.0,
+        0.002,
+        0.003,
+        0.003,
+        0.0,
+        0.0,
+        0.002,
+        0.002,
+        0.0
+      ]
+    },
+    {
+      "section_id": 2,
+      "material_name": "PatientTissueFromHUNegative102",
+      "nominal_density_g_cm3": 0.874911,
+      "composition_sha256": "c979ebe99d85d61ee6e6dd657bcd594ee5aa17a95c86af8d383e23182fc34fa8",
+      "element_weights": [
+        0.116,
+        0.681,
+        0.002,
+        0.198,
+        0.0,
+        0.0,
+        0.001,
+        0.001,
+        0.0,
+        0.0,
+        0.001,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "section_id": 3,
+      "material_name": "PatientTissueFromHUNegative68",
+      "nominal_density_g_cm3": 0.912686,
+      "composition_sha256": "b754d221929076adf060245ea9df9fc802f8a1cc850f4784ffacdf35fcbc96f9",
+      "element_weights": [
+        0.113,
+        0.567,
+        0.009,
+        0.308,
+        0.0,
+        0.0,
+        0.001,
+        0.001,
+        0.0,
+        0.0,
+        0.001,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "section_id": 4,
+      "material_name": "PatientTissueFromHUNegative38",
+      "nominal_density_g_cm3": 0.947183,
+      "composition_sha256": "180fbed0d50a66b0e680d4fa0a77b34b359418c08d1d86af5395893bb9d5282b",
+      "element_weights": [
+        0.11,
+        0.458,
+        0.015,
+        0.411,
+        0.0,
+        0.001,
+        0.002,
+        0.002,
+        0.0,
+        0.0,
+        0.001,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "section_id": 5,
+      "material_name": "PatientTissueFromHUNegative8",
+      "nominal_density_g_cm3": 0.980389,
+      "composition_sha256": "1340176e48a2ee30bb74de2bc44277716aa73eb89daa3869c505f36f3c1a9f4c",
+      "element_weights": [
+        0.108,
+        0.356,
+        0.022,
+        0.509,
+        0.0,
+        0.001,
+        0.002,
+        0.002,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "section_id": 6,
+      "material_name": "PatientTissueFromHU12",
+      "nominal_density_g_cm3": 1.00386,
+      "composition_sha256": "4feda65b1b00754db48b3c90ab5a2eddf48163209fcb838ce4fb27645a2ac9d9",
+      "element_weights": [
+        0.106,
+        0.284,
+        0.026,
+        0.578,
+        0.0,
+        0.001,
+        0.002,
+        0.002,
+        0.0,
+        0.0,
+        0.0,
+        0.001,
+        0.0
+      ]
+    },
+    {
+      "section_id": 7,
+      "material_name": "PatientTissueFromHU49",
+      "nominal_density_g_cm3": 1.04308,
+      "composition_sha256": "3224284d45c417ea1a1153495a5de59800e6f4f31a0b93e1cfaa833533a8ff5a",
+      "element_weights": [
+        0.103,
+        0.134,
+        0.03,
+        0.723,
+        0.0,
+        0.002,
+        0.002,
+        0.002,
+        0.0,
+        0.0,
+        0.002,
+        0.002,
+        0.0
+      ]
+    },
+    {
+      "section_id": 8,
+      "material_name": "PatientTissueFromHU100",
+      "nominal_density_g_cm3": 1.0788,
+      "composition_sha256": "bb0aa41d37f7f932c7e79d1c6aecde17efe27b28e6c28bd959dc2c0d6b9d1ffe",
+      "element_weights": [
+        0.094,
+        0.207,
+        0.062,
+        0.622,
+        0.0,
+        0.0,
+        0.006,
+        0.003,
+        0.0,
+        0.0,
+        0.006,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "section_id": 9,
+      "material_name": "PatientTissueFromHU160",
+      "nominal_density_g_cm3": 1.10857,
+      "composition_sha256": "5cf10aa24ee479b9c76b3ee379e974bafebdf1365b961eb94df0d2c63db02876",
+      "element_weights": [
+        0.095,
+        0.455,
+        0.025,
+        0.355,
+        0.0,
+        0.021,
+        0.001,
+        0.001,
+        0.0,
+        0.045,
+        0.001,
+        0.001,
+        0.0
+      ]
+    },
+    {
+      "section_id": 10,
+      "material_name": "PatientTissueFromHU250",
+      "nominal_density_g_cm3": 1.16606,
+      "composition_sha256": "4cfe354b748faaff62581c2e2c77500e68317f8e2df30764eb196d21928bb850",
+      "element_weights": [
+        0.089,
+        0.423,
+        0.027,
+        0.363,
+        0.0,
+        0.03,
+        0.001,
+        0.001,
+        0.0,
+        0.064,
+        0.001,
+        0.001,
+        0.0
+      ]
+    },
+    {
+      "section_id": 11,
+      "material_name": "PatientTissueFromHU350",
+      "nominal_density_g_cm3": 1.23146,
+      "composition_sha256": "274aa82d5a4eeb248f472707e7edf9e375be74c4a51772f3cd3ebe23adcee114",
+      "element_weights": [
+        0.082,
+        0.391,
+        0.029,
+        0.372,
+        0.0,
+        0.039,
+        0.001,
+        0.001,
+        0.0,
+        0.083,
+        0.001,
+        0.001,
+        0.0
+      ]
+    },
+    {
+      "section_id": 12,
+      "material_name": "PatientTissueFromHU450",
+      "nominal_density_g_cm3": 1.29658,
+      "composition_sha256": "84596ab01c4e118e60b57712082c25d7d667b15b5f9b78535071eb2ee4abce45",
+      "element_weights": [
+        0.076,
+        0.361,
+        0.03,
+        0.38,
+        0.001,
+        0.047,
+        0.002,
+        0.001,
+        0.0,
+        0.101,
+        0.001,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "section_id": 13,
+      "material_name": "PatientTissueFromHU550",
+      "nominal_density_g_cm3": 1.36063,
+      "composition_sha256": "b6c5e7b66fa67d76de71dbc46633b6aabf34656eb40f5f0eb88a69a3b1bacfce",
+      "element_weights": [
+        0.071,
+        0.335,
+        0.032,
+        0.387,
+        0.001,
+        0.054,
+        0.002,
+        0.0,
+        0.0,
+        0.117,
+        0.001,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "section_id": 14,
+      "material_name": "PatientTissueFromHU650",
+      "nominal_density_g_cm3": 1.42585,
+      "composition_sha256": "1986e360a3f3151c014a848d06cbab774e13eb2481b068b2b3dd613404b35838",
+      "element_weights": [
+        0.066,
+        0.31,
+        0.033,
+        0.394,
+        0.001,
+        0.061,
+        0.002,
+        0.0,
+        0.0,
+        0.132,
+        0.001,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "section_id": 15,
+      "material_name": "PatientTissueFromHU750",
+      "nominal_density_g_cm3": 1.4919,
+      "composition_sha256": "e5eff8bf427eed45554ff967d3593377a04d854c9813c92c37b83bf8e0cf5161",
+      "element_weights": [
+        0.061,
+        0.287,
+        0.035,
+        0.4,
+        0.001,
+        0.067,
+        0.002,
+        0.0,
+        0.0,
+        0.146,
+        0.001,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "section_id": 16,
+      "material_name": "PatientTissueFromHU850",
+      "nominal_density_g_cm3": 1.55922,
+      "composition_sha256": "4c05cb552f9c4a3d0925ead691e00c3856faf61f27c39d841b7756219429fd7c",
+      "element_weights": [
+        0.056,
+        0.265,
+        0.036,
+        0.405,
+        0.002,
+        0.073,
+        0.003,
+        0.0,
+        0.0,
+        0.159,
+        0.001,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "section_id": 17,
+      "material_name": "PatientTissueFromHU950",
+      "nominal_density_g_cm3": 1.62478,
+      "composition_sha256": "ebecc0310944118f64263e9a91b183dbfbcf00fe845e583cbcf4901831570d50",
+      "element_weights": [
+        0.052,
+        0.246,
+        0.037,
+        0.411,
+        0.002,
+        0.078,
+        0.003,
+        0.0,
+        0.0,
+        0.17,
+        0.001,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "section_id": 18,
+      "material_name": "PatientTissueFromHU1050",
+      "nominal_density_g_cm3": 1.68904,
+      "composition_sha256": "27a8942e42e3d45c11b65efee97fd33e1ede99e76a7574618a3a40b79d270a0a",
+      "element_weights": [
+        0.049,
+        0.227,
+        0.038,
+        0.416,
+        0.002,
+        0.083,
+        0.003,
+        0.0,
+        0.0,
+        0.181,
+        0.001,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "section_id": 19,
+      "material_name": "PatientTissueFromHU1150",
+      "nominal_density_g_cm3": 1.75636,
+      "composition_sha256": "6b1d932fcff7507eb0c79f9e23f09aefc22c4d1b208fc6bfdfcb9140791024d4",
+      "element_weights": [
+        0.045,
+        0.21,
+        0.039,
+        0.42,
+        0.002,
+        0.088,
+        0.003,
+        0.0,
+        0.0,
+        0.192,
+        0.001,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "section_id": 20,
+      "material_name": "PatientTissueFromHU1250",
+      "nominal_density_g_cm3": 1.8216,
+      "composition_sha256": "1947d9de30f6e1b8723ddcd38cca594782857cd8e8c08552fc055d795de7a66f",
+      "element_weights": [
+        0.042,
+        0.194,
+        0.04,
+        0.425,
+        0.002,
+        0.092,
+        0.003,
+        0.0,
+        0.0,
+        0.201,
+        0.001,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "section_id": 21,
+      "material_name": "PatientTissueFromHU1350",
+      "nominal_density_g_cm3": 1.88756,
+      "composition_sha256": "0b3645352552795265980ed78fa9541d63071c0c886088c0b3ffa4a7e5b79bbd",
+      "element_weights": [
+        0.039,
+        0.179,
+        0.041,
+        0.429,
+        0.002,
+        0.096,
+        0.003,
+        0.0,
+        0.0,
+        0.21,
+        0.001,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "section_id": 22,
+      "material_name": "PatientTissueFromHU1450",
+      "nominal_density_g_cm3": 1.95424,
+      "composition_sha256": "515d7e2f04bce4e6c7e217a7bb2e3d2d991dc94a038709346cf6b21d4f736ffa",
+      "element_weights": [
+        0.036,
+        0.165,
+        0.042,
+        0.432,
+        0.002,
+        0.1,
+        0.003,
+        0.0,
+        0.0,
+        0.219,
+        0.001,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "section_id": 23,
+      "material_name": "PatientTissueFromHU2247",
+      "nominal_density_g_cm3": 2.4196,
+      "composition_sha256": "bdef38f6ba2806369cff1d54bcd467fb6f9cd08446852dbd6da04530e6230572",
+      "element_weights": [
+        0.034,
+        0.155,
+        0.042,
+        0.435,
+        0.002,
+        0.103,
+        0.003,
+        0.0,
+        0.0,
+        0.225,
+        0.001,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "section_id": 24,
+      "material_name": "PatientTissueFromHU2995",
+      "nominal_density_g_cm3": 4.55248,
+      "composition_sha256": "4ed07b9386302fddbdbed3b43bcd979ffd64077ec5c23560d778bd1719d32e58",
+      "element_weights": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    }
+  ],
+  "dimension_order": {
+    "payload_1": [
+      "section_id (0..24)",
+      "energy_node (0..4301)"
+    ],
+    "payload_2": [
+      "section_id (0..24)",
+      "energy_node (0..4301)"
+    ]
+  },
+  "units": {
+    "mass_stopping_power": "(MeV/mm) / (g/cm3)",
+    "csda_range": "mm",
+    "density": "g/cm3",
+    "energy": "MeV/u"
+  }
+}

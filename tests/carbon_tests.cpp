@@ -3,6 +3,7 @@
 #include "carbon/minibeam_collimator.hpp"
 #include "carbon/cross_section.hpp"
 #include "carbon/schneider_rate_table.hpp"
+#include "carbon/schneider_stopping_table.hpp"
 #include "carbon/electron_transport.hpp"
 #include "carbon/energy_loss_fluctuation.hpp"
 #include "carbon/multiple_scattering.hpp"
@@ -6424,6 +6425,95 @@ void test_step12_device_memory_tracker_exception_safety() {
     }
 }
 #endif
+
+void test_step14_schneider_stopping_power_tables() {
+    const auto bin_path = std::filesystem::path("data/schneider/schneider_stopping_v1.bin");
+    const auto meta_path = std::filesystem::path("data/schneider/schneider_stopping_v1.metadata.json");
+    const auto csv_path = std::filesystem::path("data/schneider/c12_schneider_stopping_power.csv");
+
+    require(std::filesystem::exists(bin_path), "schneider_stopping_v1.bin must exist");
+    require(std::filesystem::exists(meta_path), "schneider_stopping_v1.metadata.json must exist");
+    require(std::filesystem::exists(csv_path), "c12_schneider_stopping_power.csv must exist");
+
+    // 1. Binary load & header validation
+    const auto bin_table = carbon::SchneiderStoppingTable::from_binary(bin_path, meta_path);
+    require(bin_table.num_sections() == 25, "Must have exactly 25 sections");
+    require(bin_table.num_energies() == 4302, "Must have exactly 4302 energy nodes");
+    require_near(bin_table.energy_min_mevu(), 0.01, 1e-6, "E_min must be 0.01 MeV/u");
+    require_near(bin_table.energy_max_mevu(), 430.11, 1e-6, "E_max must be 430.11 MeV/u");
+    require_near(bin_table.energy_step_mevu(), 0.1, 1e-6, "E_step must be 0.1 MeV/u");
+
+    // 2. CSV load & cross-table equivalence
+    const auto csv_table = carbon::SchneiderStoppingTable::from_csv(csv_path);
+    for (std::size_t s = 0; s < 25; ++s) {
+        require_near(bin_table.density(s), csv_table.density(s), 1e-6, "Density mismatch between bin and csv");
+        require(bin_table.density(s) > 0.0, "Density must be positive");
+
+        for (std::size_t e = 0; e < 4302; ++e) {
+            const double bin_sp = bin_table.mass_stopping_power(s, e);
+            const double csv_sp = csv_table.mass_stopping_power(s, e);
+            require_near(bin_sp, csv_sp, 1e-6, "Mass SP mismatch between bin and csv");
+            require(bin_sp > 0.0, "Mass SP must be positive");
+
+            const double bin_r = bin_table.csda_range_mm(s, e);
+            const double csv_r = csv_table.csda_range_mm(s, e);
+            require_near(bin_r, csv_r, 1e-6, "CSDA range mismatch between bin and csv");
+            require(bin_r > 0.0, "CSDA range must be positive");
+
+            if (e > 0) {
+                require(bin_r > bin_table.csda_range_mm(s, e - 1), "CSDA range must be strictly monotonic");
+            }
+        }
+    }
+
+    // 3. Float flattened array validation
+    const auto flat_sp = bin_table.to_flat_mass_stopping_float();
+    require(flat_sp.size() == 25 * 4302, "Flat float SP array size mismatch");
+    for (std::size_t s = 0; s < 25; ++s) {
+        for (std::size_t e = 0; e < 4302; ++e) {
+            const double expected = bin_table.mass_stopping_power(s, e);
+            const double actual = static_cast<double>(flat_sp[s * 4302 + e]);
+            require(std::abs(actual - expected) / expected < 1e-5,
+                    "Float conversion precision mismatch");
+        }
+    }
+
+    // 4. Physical range spot-check (Section 8 soft tissue ~24 mm at 100 MeV/u, ~81 mm at 200 MeV/u)
+    const std::size_t idx_100 = 999;
+    const std::size_t idx_200 = 1999;
+    require_near(bin_table.csda_range_mm(8, idx_100), 24.13, 0.5, "Soft tissue CSDA range at 100 MeV/u out of expected range");
+    require_near(bin_table.csda_range_mm(8, idx_200), 81.13, 1.0, "Soft tissue CSDA range at 200 MeV/u out of expected range");
+
+    // 5. Interpolation consistency
+    const double test_energy = 150.06;
+    const double interp_val = bin_table.interpolate_mass_stopping(8, test_energy);
+    const std::size_t lo_idx = static_cast<std::size_t>(std::floor((test_energy - 0.01) / 0.1));
+    const double expected_val = 0.5 * (bin_table.mass_stopping_power(8, lo_idx) + bin_table.mass_stopping_power(8, lo_idx + 1));
+    require_near(interp_val, expected_val, 1e-5, "Interpolation mismatch");
+
+    // 6. Mandatory P1 Contract Tests: 400.01, 430.00, 430.01, 430.11, nextafter(Emax,+inf)
+    const double sp_400_01 = bin_table.interpolate_mass_stopping(8, 400.01);
+    require_near(sp_400_01, bin_table.mass_stopping_power(8, 4000), 1e-6, "400.01 MeV/u node exact check");
+    const double sp_430_00 = bin_table.interpolate_mass_stopping(8, 430.00);
+    require(sp_430_00 > 0.0 && sp_430_00 < sp_400_01, "430.00 MeV/u stopping power must be positive and physically less than 400.01 MeV/u");
+    const double sp_430_01 = bin_table.interpolate_mass_stopping(8, 430.01);
+    require_near(sp_430_01, bin_table.mass_stopping_power(8, 4300), 1e-6, "430.01 MeV/u node exact check");
+    const double sp_430_11 = bin_table.interpolate_mass_stopping(8, 430.11);
+    require_near(sp_430_11, bin_table.mass_stopping_power(8, 4301), 1e-6, "430.11 MeV/u node exact check");
+
+    // Guard upper bound: nextafter(430.11, +inf) must safely clamp to endpoint without crashing
+    const double sp_beyond = bin_table.interpolate_mass_stopping(8, std::nextafter(430.11, 1000.0));
+    require_near(sp_beyond, sp_430_11, 1e-6, "nextafter(430.11, +inf) must safely clamp to maximum table endpoint");
+
+    // Guard lower bound: nextafter(0.01, -inf) must safely clamp to 0.01 endpoint
+    const double sp_below = bin_table.interpolate_mass_stopping(8, std::nextafter(0.01, -1000.0));
+    require_near(sp_below, bin_table.mass_stopping_power(8, 0), 1e-6, "nextafter(0.01, -inf) must clamp to minimum endpoint");
+
+    // 7. Out-of-bounds error handling
+    require_throws<std::out_of_range>([&]() { (void)bin_table.density(25); }, "density(25) must throw out_of_range");
+    require_throws<std::out_of_range>([&]() { (void)bin_table.mass_stopping_power(25, 0); }, "mass_stopping_power(25, 0) must throw out_of_range");
+    require_throws<std::out_of_range>([&]() { (void)bin_table.mass_stopping_power(0, 4302); }, "mass_stopping_power(0, 4302) must throw out_of_range");
+}
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -6542,6 +6632,7 @@ int main(int argc, char** argv) {
         run("test_step12_gpu_transport", test_step12_gpu_transport);
         run("test_step12_device_memory_tracker_exception_safety", test_step12_device_memory_tracker_exception_safety);
 #endif
+        run("test_step14_schneider_stopping_power_tables", test_step14_schneider_stopping_power_tables);
         std::cout << "All carbon_tests passed\n";
         return EXIT_SUCCESS;
     } catch (const std::exception& error) {
