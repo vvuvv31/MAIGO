@@ -1239,8 +1239,8 @@
         "histories": 100000,
         "sum_terminal_counts": 100000,
         "counts": {
-          "stopped": 83961,
-          "inelastic": 16039,
+          "stopped": 83849,
+          "inelastic": 16151,
           "other": 0,
           "escaped": 0
         },
@@ -1259,7 +1259,7 @@
           0,
           0,
           0,
-          16039,
+          16151,
           0,
           0,
           0,
@@ -1286,7 +1286,7 @@
           0,
           0,
           0,
-          16039,
+          16151,
           0,
           0,
           0,
@@ -1332,7 +1332,7 @@
           "primary_other_terminal_count": 0
         }
       },
-      "energy_balance_rel_error": 2.443715602e-07
+      "energy_balance_rel_error": 4.262060565e-07
     },
     {
       "id": "dense_bone_100mevu_bragg",

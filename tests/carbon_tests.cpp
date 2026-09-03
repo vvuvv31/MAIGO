@@ -6688,6 +6688,83 @@ void test_schneider_stopping_metadata_schema_failures() {
     std::filesystem::remove_all(tmp_dir);
 }
 
+void test_schneider_stopping_payload_physical_validation() {
+    const auto orig_bin = std::filesystem::path("data/schneider/schneider_stopping_v1.bin");
+    const auto orig_meta = std::filesystem::path("data/schneider/schneider_stopping_v1.metadata.json");
+    if (!std::filesystem::exists(orig_bin) || !std::filesystem::exists(orig_meta)) return;
+
+    const auto tmp_dir = std::filesystem::temp_directory_path() / "schneider_payload_neg_test";
+    std::filesystem::create_directories(tmp_dir);
+
+    const auto test_bin = tmp_dir / "schneider_stopping_v1.bin";
+    const auto test_meta = tmp_dir / "schneider_stopping_v1.metadata.json";
+
+    std::ifstream orig_meta_in(orig_meta);
+    const std::string orig_meta_str((std::istreambuf_iterator<char>(orig_meta_in)),
+                                    std::istreambuf_iterator<char>());
+    const std::string orig_sha = carbon::compute_file_sha256_hex(orig_bin);
+
+    auto run_corrupted = [&](const std::string& desc, auto corrupt_fn) {
+        std::ifstream bin_in(orig_bin, std::ios::binary);
+        std::vector<char> bytes((std::istreambuf_iterator<char>(bin_in)),
+                                std::istreambuf_iterator<char>());
+        corrupt_fn(bytes);
+
+        {
+            std::ofstream bin_out(test_bin, std::ios::binary);
+            bin_out.write(bytes.data(), bytes.size());
+        }
+
+        const std::string new_sha = carbon::compute_file_sha256_hex(test_bin);
+        auto meta_copy = orig_meta_str;
+        const auto sha_pos = meta_copy.find(orig_sha);
+        require(sha_pos != std::string::npos, "Could not find original SHA in metadata");
+        meta_copy.replace(sha_pos, orig_sha.size(), new_sha);
+
+        {
+            std::ofstream meta_out(test_meta);
+            meta_out << meta_copy;
+        }
+
+        require_throws<std::runtime_error>([&]() {
+            (void)carbon::SchneiderStoppingTable::from_binary(test_bin, test_meta);
+        }, desc);
+    };
+
+    const std::size_t header_size = sizeof(carbon::SchneiderStoppingHeader);
+
+    // 1. Negative density in binary payload
+    run_corrupted("Negative density in binary must be rejected", [&](std::vector<char>& bytes) {
+        const std::size_t offset = header_size; // section 0 density
+        double neg_val = -1.0;
+        std::memcpy(bytes.data() + offset, &neg_val, sizeof(double));
+    });
+
+    // 2. NaN in mass stopping power payload
+    run_corrupted("NaN in mass stopping power must be rejected", [&](std::vector<char>& bytes) {
+        const std::size_t offset = header_size + 25 * sizeof(double) + 100 * sizeof(double); // in mass stopping power array
+        double nan_val = std::numeric_limits<double>::quiet_NaN();
+        std::memcpy(bytes.data() + offset, &nan_val, sizeof(double));
+    });
+
+    // 3. Non-monotonic CSDA range in binary payload
+    run_corrupted("Non-monotonic CSDA range must be rejected", [&](std::vector<char>& bytes) {
+        const std::size_t csda_offset = header_size + 25 * sizeof(double) + 25 * 4302 * sizeof(double);
+        // set csda[1] = csda[0] - 0.5
+        double r0 = 0.0;
+        std::memcpy(&r0, bytes.data() + csda_offset, sizeof(double));
+        double bad_r = r0 - 0.5;
+        std::memcpy(bytes.data() + csda_offset + sizeof(double), &bad_r, sizeof(double));
+    });
+
+    // 4. Trailing extra byte at end of binary file
+    run_corrupted("Trailing byte after binary payload must be rejected", [](std::vector<char>& bytes) {
+        bytes.push_back('\0');
+    });
+
+    std::filesystem::remove_all(tmp_dir);
+}
+
 void test_schneider_stopping_source_energy_domain_fail_closed() {
     // Completely self-contained: create a programmatic 1x1x2 Schneider CCTG
     const auto tmp_dir = std::filesystem::temp_directory_path() / "schneider_domain_test";
@@ -7017,6 +7094,7 @@ int main(int argc, char** argv) {
         run("test_step14_schneider_stopping_power_tables", test_step14_schneider_stopping_power_tables);
         run("test_schneider_stopping_permutation_rejection", test_schneider_stopping_permutation_rejection);
         run("test_schneider_stopping_metadata_schema_failures", test_schneider_stopping_metadata_schema_failures);
+        run("test_schneider_stopping_payload_physical_validation", test_schneider_stopping_payload_physical_validation);
 #ifdef CARBON_HAS_SYCL
         run("test_schneider_stopping_source_energy_domain_fail_closed", test_schneider_stopping_source_energy_domain_fail_closed);
         run("test_schneider_stopping_host_device_equivalence", test_schneider_stopping_host_device_equivalence);

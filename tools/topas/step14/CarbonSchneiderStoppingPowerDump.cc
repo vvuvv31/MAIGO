@@ -213,35 +213,47 @@ G4bool CarbonSchneiderStoppingPowerDump::ProcessHits(G4Step*, G4TouchableHistory
     }
 
     
-    // 4b. Density scaling audit (Non-nominal density vs S_mass * rho)
+    // 4b. Density scaling audit across ALL 25 Schneider sections at lower bound HU, rep HU, and upper bound HU
     std::vector<std::string> density_audit_json;
-    const std::vector<std::pair<std::size_t, std::string>> audit_sections = {
-        {1, "Lung"}, {2, "Adipose"}, {8, "SoftTissue"}, {20, "DenseBone"}
-    };
-    const double audit_energies_mevu[] = {100.0, 200.0, 300.0, 430.0};
+    const double audit_energies_mevu[] = {0.5, 5.0, 20.0, 100.0, 200.0, 300.0, 430.0};
+    constexpr std::size_t num_audit_energies = 7;
 
-    std::cout << "[CarbonSchneiderStoppingPowerDump] Auditing non-nominal density effect..." << std::endl;
-    for (const auto& [sec_id, sec_label] : audit_sections) {
-        const G4Material* base_mat = materials[sec_id];
-        const double base_rho = densities[sec_id];
-        const double rho_low = base_rho * 0.92;
-        const double rho_high = base_rho * 1.08;
+    std::cout << "[CarbonSchneiderStoppingPowerDump] Auditing section-internal density scaling for all 25 sections across 7 energies..." << std::endl;
+    for (std::size_t s = 0; s < 25; ++s) {
+        const auto& probe = kSectionProbes[s];
+        const int hu_low = probe.hu_min;
+        const int hu_rep = probe.rep_hu;
+        const int hu_high = (s == 24) ? 2995 : (probe.hu_max - 1);
 
-        G4Material* mat_low = new G4Material(base_mat->GetName() + "_LowRho", rho_low * g/cm3, const_cast<G4Material*>(base_mat));
-        G4Material* mat_high = new G4Material(base_mat->GetName() + "_HighRho", rho_high * g/cm3, const_cast<G4Material*>(base_mat));
+        const G4String name_low = MaterialNameFromHU(hu_low);
+        const G4String name_rep = MaterialNameFromHU(hu_rep);
+        const G4String name_high = MaterialNameFromHU(hu_high);
+
+        const G4Material* mat_low = G4Material::GetMaterial(name_low, false);
+        const G4Material* mat_rep = materials[s];
+        const G4Material* mat_high = G4Material::GetMaterial(name_high, false);
+
+        if (!mat_low) mat_low = mat_rep;
+        if (!mat_high) mat_high = mat_rep;
+
+        const double rho_low = mat_low->GetDensity() / (g / cm3);
+        const double rho_rep = densities[s];
+        const double rho_high = mat_high->GetDensity() / (g / cm3);
 
         std::stringstream ss;
         ss << "    {\n"
-           << "      \"section_id\": " << sec_id << ",\n"
-           << "      \"label\": \"" << sec_label << "\",\n"
-           << "      \"nominal_density_g_cm3\": " << base_rho << ",\n"
+           << "      \"section_id\": " << s << ",\n"
+           << "      \"label\": \"" << mat_names[s] << "\",\n"
+           << "      \"hu_bounds\": [" << hu_low << ", " << hu_rep << ", " << hu_high << "],\n"
+           << "      \"densities_g_cm3\": [" << rho_low << ", " << rho_rep << ", " << rho_high << "],\n"
+           << "      \"nominal_density_g_cm3\": " << rho_rep << ",\n"
            << "      \"tests\": [\n";
 
-        for (size_t ei = 0; ei < 4; ++ei) {
+        for (size_t ei = 0; ei < num_audit_energies; ++ei) {
             const double e_mevu = audit_energies_mevu[ei];
             const G4double total_energy = 12.0 * e_mevu * MeV;
 
-            const double s_nom_mass = em_calc.ComputeTotalDEDX(total_energy, projectile, base_mat) / (MeV/mm) / base_rho;
+            const double s_nom_mass = em_calc.ComputeTotalDEDX(total_energy, projectile, mat_rep) / (MeV/mm) / rho_rep;
             const double s_low_mass = em_calc.ComputeTotalDEDX(total_energy, projectile, mat_low) / (MeV/mm) / rho_low;
             const double s_high_mass = em_calc.ComputeTotalDEDX(total_energy, projectile, mat_high) / (MeV/mm) / rho_high;
 
@@ -254,7 +266,7 @@ G4bool CarbonSchneiderStoppingPowerDump::ProcessHits(G4Step*, G4TouchableHistory
                << ", \"s_mass_low\": " << s_low_mass
                << ", \"s_mass_high\": " << s_high_mass
                << ", \"max_rel_err\": " << max_rel_err << "}"
-               << (ei + 1 < 4 ? ",\n" : "\n");
+               << (ei + 1 < num_audit_energies ? ",\n" : "\n");
         }
         ss << "      ]\n    }";
         density_audit_json.push_back(ss.str());

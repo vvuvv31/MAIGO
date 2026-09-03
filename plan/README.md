@@ -67,8 +67,8 @@ The executor updates only the `Status` column and the execution log. Never rewri
 | [10](steps/10-primary-xs-device-path.md) | DONE | Correct device upload/index/density scaling | 09 |
 | [11](steps/11-voxel-boundary-hazard.md) | DONE | Piecewise-material optical-depth stepping | 10 |
 | [12](steps/12-primary-only-observables.md) | DONE | Explicit primary-only mode and validation scorers | 11 |
-| [13](steps/13-primary-ct-validation.md) | TODO | Slab + staircase primary CT milestone | 12 |
-| [14](steps/14-schneider-stopping.md) | TODO | TOPAS-derived 25-section stopping tables | 13 |
+| [13](steps/13-primary-ct-validation.md) | DONE | Slab + staircase primary CT milestone | 12 |
+| [14](steps/14-schneider-stopping.md) | IN_PROGRESS | TOPAS-derived 25-section stopping tables | 13 |
 | [15](steps/15-schneider-mcs.md) | TODO | Exact 25-section radiation-length MCS path | 14 |
 | [16](steps/16-cinel03-schema.md) | TODO | Element-target correlated-event package schema | 15 |
 | [17](steps/17-c12-element-campaigns.md) | TODO | C12 x 13-target TOPAS final-state campaigns | 16 |

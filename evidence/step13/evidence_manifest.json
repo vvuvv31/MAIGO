@@ -1,12 +1,12 @@
 {
   "schema_version": 2,
   "task": "Step 13 P2 Milestone Cryptographic Provenance Manifest",
-  "validated_source_commit_sha": "b38c8814b80ec836e8a760b8310cdb68340b4fae",
+  "validated_source_commit_sha": "e1c4247383a53d12f22da2e575dc4b4eefaaccf6",
   "worktree_clean_at_validation": true,
   "environment": {
     "topas_version": "4.2.p3",
     "geant4_version": "geant4-11-03-patch-02 [MT]",
-    "topas_binary_sha256": "c914ece1997d33a10a5232fadf170d315e9c17f8a9e62bbb9abc9160b39c10d3",
+    "topas_binary_sha256": "30836720d35cf2ef1950ded6ad5b2c6f512dd805297f09e32b613f37fa399bd2",
     "topas_scorer_cc_sha256": "fdfa1405621d7e954a76454dcfa2e854d23982241ca75e22fe4404bc35ae1f7c",
     "topas_scorer_hh_sha256": "6754f5d0e853546c05177dd17d880b1de19c511c0350926a88416234fa70fbd4"
   },
@@ -17,7 +17,7 @@
   },
   "tools_provenance": {
     "generate_step13_suite_py_sha256": "e8acd257895d3887715b9746fb8ee9af5cda1d0c53da6f4396b756b9b9900831",
-    "run_step13_gpu_cpp_sha256": "a8515c9103c72b9079c42c3771f6fe91ae3065e822d37e2766720b9dc63f4fd9",
+    "run_step13_gpu_cpp_sha256": "f7a37251e624b0306bbc913d9ae891df710e6f6f0359c8fa24a2e8ba8d8c3c1f",
     "verify_step13_p2_gates_py_sha256": "5bd635471ee2d19bb993e01f00813ff6401a1c6052f6880b4bea4908e3717950"
   },
   "overall_validation_pass": true,
@@ -189,7 +189,7 @@
       "param_file_sha256": "2c66f6329021339026eb6d81a5d7f22486acffed24fdc5056a75b1d283b6ac2c",
       "topas_json_sha256": "79772fbdd2733f93057b55513347b0b868ab126ae8251c3609f9de382ad8a4f2",
       "topas_dose_csv_sha256": "64031065da4d770794f5486ae5150b9b65fcd61119a2a86a171df9866beadcdb",
-      "gpu_json_sha256": "c2bbdd0d6a1503dff8fbb01304faaf5042086ce8a3d363ef0e44ce34d0277183"
+      "gpu_json_sha256": "e95e695af2458bf4dc58cc967dfb87893c7b0d8ac494d45ab2d2488644a83897"
     },
     {
       "id": "dense_bone_100mevu_bragg",

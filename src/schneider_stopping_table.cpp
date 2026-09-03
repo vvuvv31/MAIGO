@@ -390,6 +390,52 @@ SchneiderStoppingTable SchneiderStoppingTable::from_binary(
         throw std::runtime_error("Truncated CSDA ranges in: " + binary_path.string());
     }
 
+    // Check for trailing data in binary file
+    char trailing_byte;
+    in.read(&trailing_byte, 1);
+    if (in.gcount() > 0) {
+        throw std::runtime_error("Unexpected trailing data after payload in: " + binary_path.string());
+    }
+
+    // Physical payload validation (fail-fast before GPU upload)
+    for (std::size_t s = 0; s < kSchneiderStoppingNumSections; ++s) {
+        const double rho = table.densities_[s];
+        if (!std::isfinite(rho) || rho <= 0.0) {
+            throw std::runtime_error("Invalid non-positive or non-finite density at section " +
+                                     std::to_string(s) + " in: " + binary_path.string());
+        }
+    }
+
+    for (std::size_t i = 0; i < total_elements; ++i) {
+        const double sp = table.mass_stopping_powers_[i];
+        if (!std::isfinite(sp) || sp <= 0.0) {
+            const std::size_t s = i / kSchneiderStoppingNumEnergies;
+            const std::size_t e = i % kSchneiderStoppingNumEnergies;
+            throw std::runtime_error("Invalid non-positive or non-finite mass stopping power at section " +
+                                     std::to_string(s) + ", energy index " + std::to_string(e) +
+                                     " in: " + binary_path.string());
+        }
+    }
+
+    for (std::size_t s = 0; s < kSchneiderStoppingNumSections; ++s) {
+        const std::size_t base = s * kSchneiderStoppingNumEnergies;
+        double prev_r = 0.0;
+        for (std::size_t e = 0; e < kSchneiderStoppingNumEnergies; ++e) {
+            const double r = table.csda_ranges_mm_[base + e];
+            if (!std::isfinite(r) || r <= 0.0) {
+                throw std::runtime_error("Invalid non-positive or non-finite CSDA range at section " +
+                                         std::to_string(s) + ", energy index " + std::to_string(e) +
+                                         " in: " + binary_path.string());
+            }
+            if (e > 0 && r <= prev_r) {
+                throw std::runtime_error("Non-monotonically increasing CSDA range at section " +
+                                         std::to_string(s) + ", energy index " + std::to_string(e) +
+                                         " in: " + binary_path.string());
+            }
+            prev_r = r;
+        }
+    }
+
     // Strict structural metadata validation using recursive descent JSON parser
     const auto effective_meta_path = metadata_path.empty()
         ? (binary_path.parent_path() / (binary_path.stem().string() + ".metadata.json"))
