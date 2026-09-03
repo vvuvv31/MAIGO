@@ -6658,6 +6658,33 @@ void test_schneider_stopping_metadata_schema_failures() {
         check_reject(bad, "Duplicate section ID must throw");
     }
 
+    // 10. Huge integer exceeding size_t range (1e100)
+    {
+        auto bad = valid_json;
+        const auto pos = bad.find("\"sections_count\": 25");
+        require(pos != std::string::npos, "Could not find sections_count in metadata");
+        bad.replace(pos, 20, "\"sections_count\": 1e100");
+        check_reject(bad, "Huge integer 1e100 for size_t must throw");
+    }
+
+    // 11. Huge integer exceeding int range (1e100)
+    {
+        auto bad = valid_json;
+        const auto pos = bad.find("\"z\": 6");
+        require(pos != std::string::npos, "Could not find Z in metadata");
+        bad.replace(pos, 6, "\"z\": 1e100");
+        check_reject(bad, "Huge integer 1e100 for int must throw");
+    }
+
+    // 12. Invalid JSON whitespace (vertical tab \v)
+    {
+        auto bad = valid_json;
+        const auto pos = bad.find("\"schema_version\": 2");
+        require(pos != std::string::npos, "Could not find schema_version in metadata");
+        bad.insert(pos, "\v");
+        check_reject(bad, "Invalid JSON whitespace vertical tab must throw");
+    }
+
     std::filesystem::remove_all(tmp_dir);
 }
 
@@ -6763,6 +6790,34 @@ void test_schneider_stopping_source_energy_domain_fail_closed() {
         require_throws<std::invalid_argument>([&]() {
             (void)carbon::transport_sycl(bad, water_sp, zero_xs, "default");
         }, "Production spot with spread dropping below 0.01 MeV/u must be rejected in Schneider mode");
+    }
+
+    // 7. Production spot batch with upper spread exceeding 430.11 MeV/u must be rejected
+    {
+        auto bad = base_cfg;
+        carbon::PrimarySpotBatchEntry spot{};
+        spot.history_begin = 0;
+        spot.history_end = bad.number_of_histories;
+        spot.floats[0] = static_cast<float>(420.0 * 12.0); // 420 MeV/u
+        spot.floats[1] = 0.05F; // 420 * (1 + 7.434 * 0.05) = 576 > 430.11
+        bad.primary_spot_batch = {spot};
+        require_throws<std::invalid_argument>([&]() {
+            (void)carbon::transport_sycl(bad, water_sp, zero_xs, "default");
+        }, "Production spot with spread exceeding 430.11 MeV/u must be rejected in Schneider mode");
+    }
+
+    // 8. Production spot batch with NaN energy must be rejected
+    {
+        auto bad = base_cfg;
+        carbon::PrimarySpotBatchEntry spot{};
+        spot.history_begin = 0;
+        spot.history_end = bad.number_of_histories;
+        spot.floats[0] = std::numeric_limits<float>::quiet_NaN();
+        spot.floats[1] = 0.0F;
+        bad.primary_spot_batch = {spot};
+        require_throws<std::invalid_argument>([&]() {
+            (void)carbon::transport_sycl(bad, water_sp, zero_xs, "default");
+        }, "Production spot with NaN energy must be rejected in Schneider mode");
     }
 
     std::filesystem::remove_all(tmp_dir);

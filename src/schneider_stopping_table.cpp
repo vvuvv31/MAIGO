@@ -9,6 +9,7 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <limits>
 #include <map>
 #include <sstream>
 #include <stdexcept>
@@ -106,6 +107,10 @@ std::size_t get_strict_uint(const JsonVal& val, const std::string& field_name) {
     if (!std::isfinite(d) || d < 0.0 || std::floor(d) != d) {
         throw std::runtime_error(field_name + " must be a non-negative integer, got " + std::to_string(d));
     }
+    constexpr double kMaxDoubleForSizeT = static_cast<double>(std::numeric_limits<std::size_t>::max());
+    if (d > kMaxDoubleForSizeT) {
+        throw std::runtime_error(field_name + " exceeds maximum size_t range");
+    }
     return static_cast<std::size_t>(d);
 }
 
@@ -117,6 +122,11 @@ int get_strict_int(const JsonVal& val, const std::string& field_name) {
     if (!std::isfinite(d) || std::floor(d) != d) {
         throw std::runtime_error(field_name + " must be an integer, got " + std::to_string(d));
     }
+    constexpr double kMinDoubleForInt = static_cast<double>(std::numeric_limits<int>::min());
+    constexpr double kMaxDoubleForInt = static_cast<double>(std::numeric_limits<int>::max());
+    if (d < kMinDoubleForInt || d > kMaxDoubleForInt) {
+        throw std::runtime_error(field_name + " exceeds integer range");
+    }
     return static_cast<int>(d);
 }
 
@@ -125,8 +135,13 @@ class JsonParser {
     std::size_t pos_{0};
 
     void skip_whitespace() {
-        while (pos_ < src_.size() && (std::isspace(static_cast<unsigned char>(src_[pos_])) || src_[pos_] == '\0')) {
-            ++pos_;
+        while (pos_ < src_.size()) {
+            char c = src_[pos_];
+            if (c == ' ' || c == '\t' || c == '\n' || c == '\r') {
+                ++pos_;
+            } else {
+                break;
+            }
         }
     }
     char peek() {

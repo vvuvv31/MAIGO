@@ -4,7 +4,7 @@ Step 14 Comprehensive Acceptance Verifier:
 Enforces all acceptance gates from plan/steps/14-schneider-stopping.md and review directives:
   Gate 1: Data Integrity, Metadata, 4302-node Grid (430 MeV/u source domain), Section Identity & Composition Hashes
   Gate 2: Table & Independent Numerical CSDA Integrator Equivalence (Strict <0.5% threshold across 25 sections)
-  Gate 3: Independent Full Monte Carlo Transport Bragg Peak & Distal R80 Verification (Fail-closed contract map, TOPAS param provenance, 3D IDD metrics)
+  Gate 3: Independent Full Monte Carlo Transport Bragg Peak & Distal R80 Verification (Fail-closed contract map, TOPAS param AST provenance, Mandatory Fail-Closed 3D IDD metrics)
   Gate 4: Non-Nominal Empirical Density Scaling Invariance Audit (Geant4 density effect < 0.05% across 4x4 matrix)
   Gate 5: Automated CTest Suite (Host/Device microkernel equivalence, Spot/Spread domain guards, Strict AST schema rejection)
 """
@@ -211,8 +211,8 @@ def parse_strict_topas_csv(csv_path, nx, ny, nz, dz, oz=0.0):
             if not line or line.startswith('#'):
                 continue
             parts = [p.strip() for p in line.split(',')]
-            if len(parts) < 4:
-                return None, None, "malformed row"
+            if len(parts) != 4:
+                return None, None, f"malformed row (expected exactly 4 columns, got {len(parts)})"
             try:
                 ix = int(parts[0])
                 iy = int(parts[1])
@@ -257,30 +257,80 @@ def parse_strict_topas_csv(csv_path, nx, ny, nz, dz, oz=0.0):
 
     return idd, {"peak_depth_mm": peak_depth, "r80_depth_mm": r80_depth, "r50_depth_mm": r50_depth}, "OK"
 
-def verify_topas_param_provenance(param_path, expected_energy_mevu, expected_material, min_histories, expected_nz):
-    content = param_path.read_text(encoding='utf-8')
-    if 's:So/CarbonBeam/BeamParticle = "GenericIon(6,12)"' not in content:
-        return False, "TOPAS param missing GenericIon(6,12)"
+def parse_topas_parameters(param_path):
+    params = {}
+    with open(param_path, 'r', encoding='utf-8') as f:
+        for line_num, line in enumerate(f, 1):
+            line = line.split('#')[0].strip()
+            if not line:
+                continue
+            if '=' not in line:
+                continue
+            left, right = line.split('=', 1)
+            left = left.strip()
+            right = right.strip()
+            if ':' in left:
+                type_prefix, name = left.split(':', 1)
+                type_prefix = type_prefix.strip()
+                name = name.strip()
+            else:
+                type_prefix = ""
+                name = left
+            full_key = f"{type_prefix}:{name}" if type_prefix else name
+            if full_key in params and params[full_key] != right:
+                raise ValueError(f"Conflicting duplicate parameter '{full_key}' in {param_path}:{line_num}")
+            params[full_key] = right
+    return params
+
+def verify_topas_param_provenance(param_path, expected_energy_mevu, expected_material, min_histories, expected_nx, expected_ny, expected_nz):
+    params = parse_topas_parameters(param_path)
+
+    # 1. Particle verification
+    particle = params.get("s:So/CarbonBeam/BeamParticle", "").strip('"')
+    if particle != "GenericIon(6,12)":
+        return False, f"TOPAS param particle mismatch: expected 'GenericIon(6,12)', got '{particle}'"
+
+    # 2. Energy verification
+    energy_str = params.get("d:So/CarbonBeam/BeamEnergy", "")
+    parts = energy_str.split()
+    if not parts:
+        return False, "TOPAS param missing BeamEnergy"
+    try:
+        energy_val = float(parts[0])
+    except ValueError:
+        return False, f"TOPAS param non-numeric BeamEnergy: '{energy_str}'"
     expected_energy_mev = expected_energy_mevu * 12.0
-    if f"d:So/CarbonBeam/BeamEnergy = {expected_energy_mev}" not in content and f"d:So/CarbonBeam/BeamEnergy = {expected_energy_mev:.1f}" not in content:
-        return False, f"TOPAS param beam energy mismatch: expected {expected_energy_mev} MeV"
-    if f's:Ge/Phantom/Material = "{expected_material}"' not in content:
-        return False, f"TOPAS param material mismatch: expected {expected_material}"
-    found_histories = False
-    found_nz = False
-    for line in content.splitlines():
-        if "NumberOfHistoriesInRun" in line:
-            parts = line.split("=")[1].strip()
-            if int(parts) < min_histories:
-                return False, f"TOPAS histories {parts} < {min_histories}"
-            found_histories = True
-        if "ZBins" in line and "Dose3D" in line:
-            parts = line.split("=")[1].strip()
-            if int(parts) != expected_nz:
-                return False, f"TOPAS ZBins {parts} != {expected_nz}"
-            found_nz = True
-    if not (found_histories and found_nz):
-        return False, "TOPAS param missing history count or ZBins specification"
+    if abs(energy_val - expected_energy_mev) > 1e-4:
+        return False, f"TOPAS param beam energy mismatch: expected {expected_energy_mev} MeV, got {energy_val} MeV"
+
+    # 3. Material verification
+    material = params.get("s:Ge/Phantom/Material", "").strip('"')
+    if material != expected_material:
+        return False, f"TOPAS param material mismatch: expected '{expected_material}', got '{material}'"
+
+    # 4. Histories verification
+    hist_str = params.get("i:So/CarbonBeam/NumberOfHistoriesInRun", "")
+    try:
+        hist_val = int(hist_str)
+    except ValueError:
+        return False, f"TOPAS param non-integer NumberOfHistoriesInRun: '{hist_str}'"
+    if hist_val < min_histories:
+        return False, f"TOPAS histories ({hist_val}) below required minimum ({min_histories})"
+
+    # 5. 3D Grid dimensions verification
+    xbins_str = params.get("i:Sc/Dose3D/XBins", "")
+    ybins_str = params.get("i:Sc/Dose3D/YBins", "")
+    zbins_str = params.get("i:Sc/Dose3D/ZBins", "")
+    try:
+        xb = int(xbins_str)
+        yb = int(ybins_str)
+        zb = int(zbins_str)
+    except ValueError:
+        return False, f"TOPAS param invalid Dose3D grid bins: X={xbins_str}, Y={ybins_str}, Z={zbins_str}"
+
+    if xb != expected_nx or yb != expected_ny or zb != expected_nz:
+        return False, f"TOPAS param Dose3D grid mismatch: expected {expected_nx}x{expected_ny}x{expected_nz}, got {xb}x{yb}x{zb}"
+
     return True, "OK"
 
 def verify_gate3_independent_transport_bragg():
@@ -336,11 +386,12 @@ def verify_gate3_independent_transport_bragg():
         nz = c.get("nz", c.get("depth_bins", 100))
         dz = c["spacing_z_mm"]
 
-        # Verify TOPAS parameter file physical provenance
-        param_ok, param_msg = verify_topas_param_provenance(topas_param, req_props["energy_mevu"], req_props["material_name"], req_props["min_histories"], nz)
+        # 1. Verify TOPAS parameter file physical provenance via AST parser
+        param_ok, param_msg = verify_topas_param_provenance(topas_param, req_props["energy_mevu"], req_props["material_name"], req_props["min_histories"], nx, ny, nz)
         if not param_ok:
             return False, f"TOPAS param provenance validation failed for {req_id}: {param_msg}"
 
+        # 2. Strict TOPAS Dose3D parsing (exact 4-column CSV grid)
         topas_idd, topas_res, err_msg = parse_strict_topas_csv(topas_csv, nx, ny, nz, dz)
         if not topas_res:
             return False, f"Strict TOPAS dose parsing failed for {req_id}: {err_msg}"
@@ -383,25 +434,38 @@ def verify_gate3_independent_transport_bragg():
         if r80_diff > allowed_diff:
             return False, f"R80 distal falloff gate violated for {req_id}: TOPAS={topas_r80:.2f} mm, GPU={gpu_r80:.2f} mm (diff={r80_diff:.2f} > limit {allowed_diff:.2f})"
 
-        # IDD / Dose profile shape differences
-        gpu_idd = gpu_data.get("idd_dose_MeV", [])[:nz]
-        if len(gpu_idd) == nz:
-            p_topas = max(topas_idd)
-            p_gpu = max(gpu_idd)
-            norm_topas = [x / p_topas for x in topas_idd]
-            norm_gpu = [x / p_gpu for x in gpu_idd]
-            nrmse = math.sqrt(sum((g - t)**2 for g, t in zip(norm_gpu, norm_topas)) / nz)
-            max_res = max(abs(g - t) for g, t in zip(norm_gpu, norm_topas))
+        # 3. Mandatory Fail-Closed 3D IDD / Dose Profile Metrics
+        if "idd_dose_MeV" not in gpu_data:
+            return False, f"Missing mandatory 'idd_dose_MeV' in GPU result {gpu_json}"
+        gpu_idd = gpu_data["idd_dose_MeV"]
+        if len(gpu_idd) != nz:
+            return False, f"GPU idd_dose_MeV length mismatch for {req_id}: expected {nz}, got {len(gpu_idd)}"
+        if not all(math.isfinite(x) and x >= 0.0 for x in gpu_idd):
+            return False, f"GPU idd_dose_MeV contains non-finite or negative values for {req_id}"
 
-            s_topas = sum(topas_idd)
-            s_gpu = sum(gpu_idd)
-            area_topas = [x / s_topas for x in topas_idd]
-            area_gpu = [x / s_gpu for x in gpu_idd]
-            area_nrmse = math.sqrt(sum((g - t)**2 for g, t in zip(area_gpu, area_topas)) / nz)
+        p_topas = max(topas_idd)
+        p_gpu = max(gpu_idd)
+        if p_topas <= 0.0 or p_gpu <= 0.0:
+            return False, f"Non-positive peak dose for IDD comparison in {req_id}"
 
-            print(f"    {req_id:<28} {peak_diff:4.2f} mm   {r80_diff:4.2f} mm   {nrmse*100:5.2f}%       {max_res*100:5.2f}%       {area_nrmse*100:5.3f}%       PASS")
-        else:
-            print(f"    {req_id:<28} {peak_diff:4.2f} mm   {r80_diff:4.2f} mm   PASS")
+        norm_topas = [x / p_topas for x in topas_idd]
+        norm_gpu = [x / p_gpu for x in gpu_idd]
+        nrmse = math.sqrt(sum((g - t)**2 for g, t in zip(norm_gpu, norm_topas)) / nz)
+        max_res = max(abs(g - t) for g, t in zip(norm_gpu, norm_topas))
+
+        s_topas = sum(topas_idd)
+        s_gpu = sum(gpu_idd)
+        if s_topas <= 0.0 or s_gpu <= 0.0:
+            return False, f"Non-positive integrated dose for IDD comparison in {req_id}"
+
+        area_topas = [x / s_topas for x in topas_idd]
+        area_gpu = [x / s_gpu for x in gpu_idd]
+        area_nrmse = math.sqrt(sum((g - t)**2 for g, t in zip(area_gpu, area_topas)) / nz)
+
+        if not (math.isfinite(nrmse) and math.isfinite(max_res) and math.isfinite(area_nrmse)):
+            return False, f"Calculated non-finite IDD shape metric for {req_id}"
+
+        print(f"    {req_id:<28} {peak_diff:4.2f} mm   {r80_diff:4.2f} mm   {nrmse*100:5.2f}%       {max_res*100:5.2f}%       {area_nrmse*100:5.3f}%       PASS")
 
     print("  -> Gate 3 PASSED: All independent full Monte Carlo transport Bragg observables & IDD shapes verified across 100/200/300 MeV/u.")
     return True, "PASS"
@@ -448,7 +512,7 @@ def verify_gate5_runtime_ctest():
     print("[Gate 5] Running Automated Unit Tests (ctest: Host/Device Equivalence, Source Guard & Schema Rejection)...")
     res = subprocess.run(["ctest", "--output-on-failure"], cwd=REPO_ROOT / "build", capture_output=True, text=True)
     if res.returncode != 0:
-        return False, f"CTest failed:\\n{res.stdout}\\n{res.stderr}"
+        return False, f"CTest failed:\n{res.stdout}\n{res.stderr}"
     print("  -> Gate 5 PASSED: All unit tests passed cleanly (including host/device microkernel equivalence, spot/spread domain guards, and structural schema validation).")
     return True, "PASS"
 
