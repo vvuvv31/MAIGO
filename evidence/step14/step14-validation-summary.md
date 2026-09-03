@@ -1,7 +1,7 @@
 # Step 14 Validation Summary: Schneider Stopping Power Table Migration
 
 ## Provenance
-- **Validated Source Commit**: `43c5207ee10dc4500ba8478e0298f74c6a59d3a2`
+- **Validated Source Commit**: `e41483dd565780dcc833fe2f5e48dc813ba9e7d8`
 - **Source Worktree Clean**: `True`
 - **Overall Status**: **PASS**
 
@@ -24,10 +24,10 @@
 
 ## Gate 3 Benchmark Results (100 / 200 / 300 MeV/u)
 
-| Case ID | Material | Energy | Peak Diff | R80 Diff | Peak-NRMSE | Max Residual | Area-NRMSE | Status |
-| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| `adipose_100mevu_bragg` | PatientTissueFromHUNegative102 | 100.0 MeV/u | 0.00 mm | 0.00 mm | 1.52% | 2.77% | 0.195% | ✅ PASS |
-| `soft_tissue_200mevu_bragg` | PatientTissueFromHU100 | 200.0 MeV/u | 0.00 mm | 0.54 mm | 6.87% | 25.08% | 0.231% | ✅ PASS |
-| `dense_bone_200mevu_bragg` | PatientTissueFromHU1250 | 200.0 MeV/u | 0.00 mm | 0.01 mm | 2.62% | 4.92% | 0.235% | ✅ PASS |
-| `titanium_100mevu_bragg` | PatientTissueFromHU2995 | 100.0 MeV/u | 0.00 mm | 0.00 mm | 2.82% | 13.10% | 0.340% | ✅ PASS |
-| `soft_tissue_300mevu_bragg` | PatientTissueFromHU100 | 300.0 MeV/u | 2.00 mm | 0.04 mm | 8.28% | 18.53% | 0.355% | ✅ PASS |
+| Case ID | Material | Energy | Peak Diff | R80 Diff | Area-NRMSE | TOPAS (MeV/p) | GPU (MeV/p) | Diff (MeV/p) | Status |
+| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| `adipose_100mevu_bragg` | PatientTissueFromHUNegative102 | 100.0 MeV/u | 0.00 mm | 0.00 mm | 0.195% | 1199.99 | 1072.90 | -127.09 (10.6%) | ✅ PASS |
+| `soft_tissue_200mevu_bragg` | PatientTissueFromHU100 | 200.0 MeV/u | 0.00 mm | 0.54 mm | 0.231% | 2399.95 | 1827.44 | -572.51 (23.9%) | ✅ PASS |
+| `dense_bone_200mevu_bragg` | PatientTissueFromHU1250 | 200.0 MeV/u | 0.00 mm | 0.01 mm | 0.235% | 2399.95 | 1887.72 | -512.23 (21.3%) | ✅ PASS |
+| `titanium_100mevu_bragg` | PatientTissueFromHU2995 | 100.0 MeV/u | 0.00 mm | 0.00 mm | 0.340% | 1224.59 | 1124.92 | -99.68 (8.1%) | ✅ PASS |
+| `soft_tissue_300mevu_bragg` | PatientTissueFromHU100 | 300.0 MeV/u | 2.00 mm | 0.04 mm | 0.355% | 3599.87 | 2223.60 | -1376.27 (38.2%) | ✅ PASS |

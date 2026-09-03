@@ -2,7 +2,7 @@
   "schema_version": 2,
   "step": "14-schneider-stopping",
   "title": "Step 14 Acceptance Verification: Schneider Stopping Power Table Migration",
-  "validated_source_commit_sha": "43c5207ee10dc4500ba8478e0298f74c6a59d3a2",
+  "validated_source_commit_sha": "e41483dd565780dcc833fe2f5e48dc813ba9e7d8",
   "source_worktree_clean": true,
   "overall_status": "PASS",
   "configuration": {
@@ -35,8 +35,12 @@
       "peak_nrmse": 0.015228,
       "max_residual": 0.027653,
       "area_nrmse": 0.001949,
-      "gpu_integrated_dose_MeV": 53645109.125,
-      "topas_integrated_dose_raw": 2.7468
+      "topas_integrated_dose_MeV_per_primary": 1199.9914,
+      "gpu_integrated_dose_MeV_per_primary": 1072.9022,
+      "absolute_diff_MeV_per_primary": -127.0892,
+      "dose_integral_relative_diff_pct": 10.5908,
+      "gpu_total_deposited_MeV": 53645109.125,
+      "topas_total_deposited_MeV": 59999570.078
     },
     {
       "id": "soft_tissue_200mevu_bragg",
@@ -48,8 +52,12 @@
       "peak_nrmse": 0.068659,
       "max_residual": 0.250841,
       "area_nrmse": 0.002307,
-      "gpu_integrated_dose_MeV": 91371903.6885,
-      "topas_integrated_dose_raw": 4.4553
+      "topas_integrated_dose_MeV_per_primary": 2399.9463,
+      "gpu_integrated_dose_MeV_per_primary": 1827.4381,
+      "absolute_diff_MeV_per_primary": -572.5082,
+      "dose_integral_relative_diff_pct": 23.855,
+      "gpu_total_deposited_MeV": 91371903.6885,
+      "topas_total_deposited_MeV": 119997313.5535
     },
     {
       "id": "dense_bone_200mevu_bragg",
@@ -61,8 +69,12 @@
       "peak_nrmse": 0.026157,
       "max_residual": 0.049178,
       "area_nrmse": 0.002353,
-      "gpu_integrated_dose_MeV": 94385772.75,
-      "topas_integrated_dose_raw": 2.6386
+      "topas_integrated_dose_MeV_per_primary": 2399.9497,
+      "gpu_integrated_dose_MeV_per_primary": 1887.7155,
+      "absolute_diff_MeV_per_primary": -512.2342,
+      "dose_integral_relative_diff_pct": 21.3435,
+      "gpu_total_deposited_MeV": 94385772.75,
+      "topas_total_deposited_MeV": 119997483.1231
     },
     {
       "id": "titanium_100mevu_bragg",
@@ -74,8 +86,12 @@
       "peak_nrmse": 0.028213,
       "max_residual": 0.130982,
       "area_nrmse": 0.003398,
-      "gpu_integrated_dose_MeV": 56245805.75,
-      "topas_integrated_dose_raw": 1.0774
+      "topas_integrated_dose_MeV_per_primary": 1224.5935,
+      "gpu_integrated_dose_MeV_per_primary": 1124.9161,
+      "absolute_diff_MeV_per_primary": -99.6774,
+      "dose_integral_relative_diff_pct": 8.1396,
+      "gpu_total_deposited_MeV": 56245805.75,
+      "topas_total_deposited_MeV": 61229675.624
     },
     {
       "id": "soft_tissue_300mevu_bragg",
@@ -87,8 +103,12 @@
       "peak_nrmse": 0.082818,
       "max_residual": 0.18527,
       "area_nrmse": 0.003549,
-      "gpu_integrated_dose_MeV": 111180041.125,
-      "topas_integrated_dose_raw": 3.3415
+      "topas_integrated_dose_MeV_per_primary": 3599.8723,
+      "gpu_integrated_dose_MeV_per_primary": 2223.6008,
+      "absolute_diff_MeV_per_primary": -1376.2714,
+      "dose_integral_relative_diff_pct": 38.2311,
+      "gpu_total_deposited_MeV": 111180041.125,
+      "topas_total_deposited_MeV": 179993613.2539
     }
   ],
   "gate4_density_audit_summary": {
