@@ -75,7 +75,7 @@ The executor updates only the `Status` column and the execution log. Never rewri
 | [18](steps/18-material-target-runtime.md) | DONE | Partial-rate target selection and CINEL03 replay | 17 |
 | [19](steps/19-c12-fragment-validation.md) | DONE | C12 fragmentation validation in Schneider media | 18 |
 | [20](steps/20-secondary-projectiles.md) | DONE | Prioritized secondary projectile coverage | 19 |
-| [21](steps/21-heterogeneous-and-dicom-gates.md) | TODO | Heterogeneous and real-DICOM research gates | 20 |
+| [21](steps/21-heterogeneous-and-dicom-gates.md) | DONE | Heterogeneous and real-DICOM research gates | 20 |
 
 ## Phase gates
 
@@ -190,4 +190,6 @@ YYYY-MM-DD HH:MM TZ | step NN | OLD -> NEW | commit/hash or blocker | evidence p
 2026-09-03 12:28 CST | step 19 | TODO -> IN_PROGRESS | start C12 fragmentation validation in Schneider media | tools/
 2026-09-03 13:05 CST | step 19 | IN_PROGRESS -> DONE | test(ct): validate C12 fragmentation in Schneider materials | evidence/step-19/
 2026-09-03 13:30 CST | step 20 | IN_PROGRESS -> DONE | feat(ct): enable secondary-ion Schneider nuclear transport | evidence/step-20/
+2026-09-03 13:35 CST | step 21 | TODO -> IN_PROGRESS | start heterogeneous and real-DICOM final research gates | plan/steps/21-heterogeneous-and-dicom-gates.md
+2026-09-03 14:32 CST | step 21 | IN_PROGRESS -> DONE | test(ct): add end-to-end Schneider DICOM reference | tests/test_schneider_dicom_reference.cpp
 ```

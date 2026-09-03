@@ -208,9 +208,34 @@ if(BUILD_TESTING)
                 -fsycl-targets=${CARBON_SYCL_TARGETS})
         endif()
     endif()
+
+    add_executable(run_step21_level3_gpu tools/run_step21_level3_gpu.cpp)
+    target_link_libraries(run_step21_level3_gpu PRIVATE carbon_core)
+    if(CARBON_ENABLE_SYCL)
+        target_compile_options(run_step21_level3_gpu PRIVATE -fsycl)
+        if(CARBON_SYCL_TARGETS)
+            target_compile_options(run_step21_level3_gpu PRIVATE
+                -fsycl-targets=${CARBON_SYCL_TARGETS})
+        endif()
+    endif()
+
+    add_executable(test_schneider_dicom_reference tests/test_schneider_dicom_reference.cpp)
+    target_link_libraries(test_schneider_dicom_reference PRIVATE carbon_core)
+    if(CARBON_ENABLE_SYCL)
+        target_compile_options(test_schneider_dicom_reference PRIVATE -fsycl)
+        if(CARBON_SYCL_TARGETS)
+            target_compile_options(test_schneider_dicom_reference PRIVATE
+                -fsycl-targets=${CARBON_SYCL_TARGETS})
+        endif()
+    endif()
+
     add_test(NAME carbon_tests COMMAND carbon_tests)
     add_test(NAME inelastic_package_v2_tests COMMAND inelastic_package_v2_tests)
+    add_test(NAME test_schneider_dicom_reference COMMAND test_schneider_dicom_reference)
     set_tests_properties(carbon_tests PROPERTIES
+        TIMEOUT 300
+        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
+    set_tests_properties(test_schneider_dicom_reference PROPERTIES
         TIMEOUT 300
         WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
 endif()
