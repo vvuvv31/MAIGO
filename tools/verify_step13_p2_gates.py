@@ -29,6 +29,7 @@ CRYPTOGRAPHIC PROVENANCE V2:
 - Per-case SHA256 of CCTG v3 grid, TOPAS param, TOPAS JSON, TOPAS Dose3D CSV, and GPU JSON.
 """
 
+import argparse
 import hashlib
 import json
 import math
@@ -47,6 +48,8 @@ TOPAS_SCORER_CC = Path("/home/wuwei/topas/extensions/CarbonSchneiderThinSlabVali
 TOPAS_SCORER_HH = Path("/home/wuwei/topas/extensions/CarbonSchneiderThinSlabValidationScorer.hh")
 SCHNEIDER_TXT = REPO_ROOT / "data/HUtoMaterialSchneider.txt"
 SCHNEIDER_XS = REPO_ROOT / "data/schneider/c12_schneider_inelastic_mass_xs.csv"
+SCHNEIDER_SP = REPO_ROOT / "data/schneider/schneider_stopping_v1.bin"
+SCHNEIDER_SP_META = REPO_ROOT / "data/schneider/schneider_stopping_v1.metadata.json"
 WATER_SP = REPO_ROOT / "data/stopping_power_water_geant4_11_3_2.csv"
 GEN_SCRIPT = REPO_ROOT / "tools/generate_step13_suite.py"
 RUN_SCRIPT = REPO_ROOT / "tools/run_step13_gpu.cpp"
@@ -143,6 +146,10 @@ def find_bragg_metrics(idd: list, spacing_z: float, origin_z: float):
     }
 
 def main():
+    parser = argparse.ArgumentParser(description="Step 13 P2 Gate Verification")
+    parser.add_argument("--generate-evidence", action="store_true", help="Generate and update evidence files")
+    args = parser.parse_args()
+
     if not MANIFEST_PATH.exists():
         print(f"Error: Manifest not found: {MANIFEST_PATH}")
         sys.exit(1)
@@ -180,6 +187,21 @@ def main():
 
         with open(gpu_json_path) as f:
             gpu_data = json.load(f)
+
+        # Enforce exact Schneider stopping power binary and metadata binding
+        expected_sp_bin_sha = sha256_file(SCHNEIDER_SP)
+        expected_sp_meta_sha = sha256_file(SCHNEIDER_SP_META)
+        actual_gpu_sp_sha = gpu_data.get("verified_stopping_power_sha256")
+        actual_gpu_meta_sha = gpu_data.get("verified_stopping_metadata_sha256")
+
+        if actual_gpu_sp_sha != expected_sp_bin_sha:
+            case_errors.append(
+                f"GPU stopping binary SHA mismatch: got {actual_gpu_sp_sha}, expected {expected_sp_bin_sha}"
+            )
+        if actual_gpu_meta_sha != expected_sp_meta_sha:
+            case_errors.append(
+                f"GPU stopping metadata SHA mismatch: got {actual_gpu_meta_sha}, expected {expected_sp_meta_sha}"
+            )
 
         topas_data = None
         if topas_json_path.is_file():
@@ -495,86 +517,90 @@ def main():
         "cases": results
     }
 
-    SDA_EVIDENCE_DIR.mkdir(parents=True, exist_ok=True)
-    REPO_EVIDENCE_DIR.mkdir(parents=True, exist_ok=True)
-
-    sda_report_json = SDA_EVIDENCE_DIR / "step13-validation-report.json"
-    repo_report_json = REPO_EVIDENCE_DIR / "step13-validation-report.json"
-    with open(sda_report_json, "w") as f:
-        json.dump(report_dict, f, indent=2)
-    with open(repo_report_json, "w") as f:
-        json.dump(report_dict, f, indent=2)
-
-    def write_summary_md(path: Path):
-        with open(path, "w") as f:
-            f.write("# Step 13 — C12 Primary CT Milestone Validation Report\n\n")
-            f.write(f"**Overall Status**: {'PASS' if all_cases_pass else 'FAIL'}\n")
-            f.write(f"**Passed Cases**: {sum(1 for r in results if r['passed_all_gates'])} / {len(results)}\n\n")
-            f.write("## Acceptance Gates Summary Table\n\n")
-            f.write("| Case ID | Category | Survival Int Diff (<1%) | First Int NRMSE (<2%) | Bragg Diff (mm) | Term Conservation | Section Match | Overflow | Status |\n")
-            f.write("| --- | --- | --- | --- | --- | --- | --- | --- | --- |\n")
-            for r in results:
-                s_diff = f"{r['gate1_survival_integral']['rel_diff']*100:.3f}%" if r['gate1_survival_integral']['rel_diff'] is not None else ("N/A" if not r['gate1_survival_integral']['required'] else "FAIL (missing)")
-                f_nrmse = f"{r['gate2_first_interaction_nrmse']['nrmse']*100:.3f}%" if r['gate2_first_interaction_nrmse']['nrmse'] is not None else ("N/A" if not r['gate2_first_interaction_nrmse']['required'] else "FAIL (missing)")
-                b_diff = f"{r['gate3_bragg_range']['peak_diff_mm']:.2f}" if r['gate3_bragg_range']['peak_diff_mm'] is not None else ("N/A" if not r['gate3_bragg_range']['required'] else "FAIL (missing)")
-                cons = "EXACT" if r['gate4_terminal_conservation']['gate_passed'] else "FAIL"
-                sec = "MATCH (0)" if r['gate5_section_mapping']['gate_passed'] else f"FAIL ({r['gate5_section_mapping']['mismatches']})"
-                ovf = "0" if r['gate7_overflow_count']['gate_passed'] else "FAIL"
-                st = "✅ PASS" if r['passed_all_gates'] else "❌ FAIL"
-                f.write(f"| {r['id']} | {r['category']} | {s_diff} | {f_nrmse} | {b_diff} | {cons} | {sec} | {ovf} | {st} |\n")
-
-    write_summary_md(SDA_EVIDENCE_DIR / "step13-validation-summary.md")
-    write_summary_md(REPO_EVIDENCE_DIR / "step13-validation-summary.md")
-
-    # Cryptographic Provenance Manifest v2
-    git_head = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, cwd=str(REPO_ROOT)).stdout.strip()
-    status_out = subprocess.run(["git", "status", "--porcelain", "--", ":!evidence/"], capture_output=True, text=True, cwd=str(REPO_ROOT)).stdout.strip()
-
-    evidence_manifest = {
-        "schema_version": 2,
-        "task": "Step 13 P2 Milestone Cryptographic Provenance Manifest",
-        "validated_source_commit_sha": git_head,
-        "worktree_clean_at_validation": (len(status_out) == 0),
-        "environment": {
-            "topas_version": "4.2.p3",
-            "geant4_version": "geant4-11-03-patch-02 [MT]",
-            "topas_binary_sha256": sha256_file(TOPAS_BIN),
-            "topas_scorer_cc_sha256": sha256_file(TOPAS_SCORER_CC),
-            "topas_scorer_hh_sha256": sha256_file(TOPAS_SCORER_HH),
-        },
-        "physics_inputs": {
-            "schneider_hu_material_table_sha256": sha256_file(SCHNEIDER_TXT),
-            "schneider_c12_inelastic_xs_sha256": sha256_file(SCHNEIDER_XS),
-            "water_stopping_power_table_sha256": sha256_file(WATER_SP),
-        },
-        "tools_provenance": {
-            "generate_step13_suite_py_sha256": sha256_file(GEN_SCRIPT),
-            "run_step13_gpu_cpp_sha256": sha256_file(RUN_SCRIPT),
-            "verify_step13_p2_gates_py_sha256": sha256_file(VERIFY_SCRIPT),
-        },
-        "overall_validation_pass": all_cases_pass,
-        "cases": []
-    }
-    for c in manifest["cases"]:
-        cid = c["id"]
-        evidence_manifest["cases"].append({
-            "id": cid,
-            "category": c["category"],
-            "required_gates": c.get("required_gates", []),
-            "cctg_sha256": sha256_file(Path(c["cctg_file"])),
-            "param_file_sha256": sha256_file(Path(c["param_file"])),
-            "topas_json_sha256": sha256_file(Path(c["topas_json_output"])),
-            "topas_dose_csv_sha256": sha256_file(Path(c["topas_dose_csv"])),
-            "gpu_json_sha256": sha256_file(Path(c["gpu_json_output"])),
-        })
-
-    with open(REPO_EVIDENCE_DIR / "evidence_manifest.json", "w") as f:
-        json.dump(evidence_manifest, f, indent=2)
-
     print(f"Validation finished. Overall Pass: {all_cases_pass}")
     print(f"Passed: {sum(1 for r in results if r['passed_all_gates'])} / {len(results)}")
-    print(f"Saved reports to {sda_report_json} and {repo_report_json}")
-    print(f"Saved evidence manifest v2 to {REPO_EVIDENCE_DIR / 'evidence_manifest.json'}")
+
+    if args.generate_evidence:
+        SDA_EVIDENCE_DIR.mkdir(parents=True, exist_ok=True)
+        REPO_EVIDENCE_DIR.mkdir(parents=True, exist_ok=True)
+
+        sda_report_json = SDA_EVIDENCE_DIR / "step13-validation-report.json"
+        repo_report_json = REPO_EVIDENCE_DIR / "step13-validation-report.json"
+        with open(sda_report_json, "w") as f:
+            json.dump(report_dict, f, indent=2)
+        with open(repo_report_json, "w") as f:
+            json.dump(report_dict, f, indent=2)
+
+        def write_summary_md(path: Path):
+            with open(path, "w") as f:
+                f.write("# Step 13 — C12 Primary CT Milestone Validation Report\n\n")
+                f.write(f"**Overall Status**: {'PASS' if all_cases_pass else 'FAIL'}\n")
+                f.write(f"**Passed Cases**: {sum(1 for r in results if r['passed_all_gates'])} / {len(results)}\n\n")
+                f.write("## Acceptance Gates Summary Table\n\n")
+                f.write("| Case ID | Category | Survival Int Diff (<1%) | First Int NRMSE (<2%) | Bragg Diff (mm) | Term Conservation | Section Match | Overflow | Status |\n")
+                f.write("| --- | --- | --- | --- | --- | --- | --- | --- | --- |\n")
+                for r in results:
+                    s_diff = f"{r['gate1_survival_integral']['rel_diff']*100:.3f}%" if r['gate1_survival_integral']['rel_diff'] is not None else ("N/A" if not r['gate1_survival_integral']['required'] else "FAIL (missing)")
+                    f_nrmse = f"{r['gate2_first_interaction_nrmse']['nrmse']*100:.3f}%" if r['gate2_first_interaction_nrmse']['nrmse'] is not None else ("N/A" if not r['gate2_first_interaction_nrmse']['required'] else "FAIL (missing)")
+                    b_diff = f"{r['gate3_bragg_range']['peak_diff_mm']:.2f}" if r['gate3_bragg_range']['peak_diff_mm'] is not None else ("N/A" if not r['gate3_bragg_range']['required'] else "FAIL (missing)")
+                    cons = "EXACT" if r['gate4_terminal_conservation']['gate_passed'] else "FAIL"
+                    sec = "MATCH (0)" if r['gate5_section_mapping']['gate_passed'] else f"FAIL ({r['gate5_section_mapping']['mismatches']})"
+                    ovf = "0" if r['gate7_overflow_count']['gate_passed'] else "FAIL"
+                    st = "✅ PASS" if r['passed_all_gates'] else "❌ FAIL"
+                    f.write(f"| {r['id']} | {r['category']} | {s_diff} | {f_nrmse} | {b_diff} | {cons} | {sec} | {ovf} | {st} |\n")
+
+        write_summary_md(SDA_EVIDENCE_DIR / "step13-validation-summary.md")
+        write_summary_md(REPO_EVIDENCE_DIR / "step13-validation-summary.md")
+
+        # Cryptographic Provenance Manifest v2
+        git_head = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, cwd=str(REPO_ROOT)).stdout.strip()
+        status_out = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True, cwd=str(REPO_ROOT)).stdout.strip()
+
+        evidence_manifest = {
+            "schema_version": 2,
+            "task": "Step 13 P2 Milestone Cryptographic Provenance Manifest",
+            "validated_source_commit_sha": git_head,
+            "worktree_clean_at_validation": (len(status_out) == 0),
+            "environment": {
+                "topas_version": "4.2.p3",
+                "geant4_version": "geant4-11-03-patch-02 [MT]",
+                "topas_binary_sha256": sha256_file(TOPAS_BIN),
+                "topas_scorer_cc_sha256": sha256_file(TOPAS_SCORER_CC),
+                "topas_scorer_hh_sha256": sha256_file(TOPAS_SCORER_HH),
+            },
+            "physics_inputs": {
+                "schneider_hu_material_table_sha256": sha256_file(SCHNEIDER_TXT),
+                "schneider_c12_inelastic_xs_sha256": sha256_file(SCHNEIDER_XS),
+                "schneider_stopping_power_table_sha256": sha256_file(SCHNEIDER_SP),
+                "schneider_stopping_power_metadata_sha256": sha256_file(SCHNEIDER_SP_META),
+                "water_stopping_power_table_sha256": sha256_file(WATER_SP),
+            },
+            "tools_provenance": {
+                "generate_step13_suite_py_sha256": sha256_file(GEN_SCRIPT),
+                "run_step13_gpu_cpp_sha256": sha256_file(RUN_SCRIPT),
+                "verify_step13_p2_gates_py_sha256": sha256_file(VERIFY_SCRIPT),
+            },
+            "overall_validation_pass": all_cases_pass,
+            "cases": []
+        }
+        for c in manifest["cases"]:
+            cid = c["id"]
+            evidence_manifest["cases"].append({
+                "id": cid,
+                "category": c["category"],
+                "required_gates": c.get("required_gates", []),
+                "cctg_sha256": sha256_file(Path(c["cctg_file"])),
+                "param_file_sha256": sha256_file(Path(c["param_file"])),
+                "topas_json_sha256": sha256_file(Path(c["topas_json_output"])),
+                "topas_dose_csv_sha256": sha256_file(Path(c["topas_dose_csv"])),
+                "gpu_json_sha256": sha256_file(Path(c["gpu_json_output"])),
+            })
+
+        with open(REPO_EVIDENCE_DIR / "evidence_manifest.json", "w") as f:
+            json.dump(evidence_manifest, f, indent=2)
+
+        print(f"Saved reports to {sda_report_json} and {repo_report_json}")
+        print(f"Saved evidence manifest v2 to {REPO_EVIDENCE_DIR / 'evidence_manifest.json'}")
 
     if not all_cases_pass:
         sys.exit(1)

@@ -1,6 +1,7 @@
 #include "carbon/cross_section.hpp"
 #include "carbon/ct_grid.hpp"
 #include "carbon/stopping_power.hpp"
+#include "carbon/sha256.hpp"
 #include "carbon/transport.hpp"
 #include "carbon/transport_config.hpp"
 
@@ -267,6 +268,10 @@ int main(int argc, char* argv[]) {
             std::filesystem::path out_path = tc.gpu_json_output;
             std::filesystem::create_directories(out_path.parent_path());
             std::ofstream out(out_path);
+            const std::string stopping_file_sha = carbon::compute_file_sha256_hex(cfg.ct_schneider_stopping_power_file);
+            const auto meta_sidecar = repo_dir / "data/schneider/schneider_stopping_v1.metadata.json";
+            const std::string stopping_meta_sha = carbon::compute_file_sha256_hex(meta_sidecar);
+
             out << std::setprecision(10);
             out << "{\n";
             out << "  \"schema_version\": 1,\n";
@@ -278,6 +283,9 @@ int main(int argc, char* argv[]) {
             out << "  \"depth_bins\": " << tc.depth_bins << ",\n";
             out << "  \"histories\": " << tc.histories << ",\n";
             out << "  \"entering_primaries\": " << tc.histories << ",\n";
+            out << "  \"verified_stopping_power_file\": \"" << cfg.ct_schneider_stopping_power_file.string() << "\",\n";
+            out << "  \"verified_stopping_power_sha256\": \"" << stopping_file_sha << "\",\n";
+            out << "  \"verified_stopping_metadata_sha256\": \"" << stopping_meta_sha << "\",\n";
             out << "  \"total_first_inelastic_count\": " << n_inelastic << ",\n";
             out << "  \"survived_count\": " << n_survived << ",\n";
             out << "  \"survival_fraction\": " << (static_cast<double>(n_survived) / static_cast<double>(tc.histories)) << ",\n";

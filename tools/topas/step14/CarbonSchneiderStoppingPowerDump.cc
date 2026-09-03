@@ -233,8 +233,14 @@ G4bool CarbonSchneiderStoppingPowerDump::ProcessHits(G4Step*, G4TouchableHistory
         const G4Material* mat_rep = materials[s];
         const G4Material* mat_high = G4Material::GetMaterial(name_high, false);
 
-        if (!mat_low) mat_low = mat_rep;
-        if (!mat_high) mat_high = mat_rep;
+        if (!mat_low) {
+            const G4String msg = "Missing lower boundary Schneider material: " + name_low;
+            G4Exception("CarbonSchneiderStoppingPowerDump", "MissingBoundaryMaterial", FatalException, msg.c_str());
+        }
+        if (!mat_high) {
+            const G4String msg = "Missing upper boundary Schneider material: " + name_high;
+            G4Exception("CarbonSchneiderStoppingPowerDump", "MissingBoundaryMaterial", FatalException, msg.c_str());
+        }
 
         const double rho_low = mat_low->GetDensity() / (g / cm3);
         const double rho_rep = densities[s];
