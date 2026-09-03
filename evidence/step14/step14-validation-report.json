@@ -1,0 +1,105 @@
+{
+  "schema_version": 2,
+  "step": "14-schneider-stopping",
+  "title": "Step 14 Acceptance Verification: Schneider Stopping Power Table Migration",
+  "validated_source_commit_sha": "43c5207ee10dc4500ba8478e0298f74c6a59d3a2",
+  "source_worktree_clean": true,
+  "overall_status": "PASS",
+  "configuration": {
+    "num_sections": 25,
+    "num_energies": 4302,
+    "energy_min_mevu": 0.01,
+    "energy_max_mevu": 430.11,
+    "energy_step_mevu": 0.1,
+    "binary_file": "data/schneider/schneider_stopping_v1.bin",
+    "binary_sha256": "9786dba071f61e660fcc5940a844e8109c4e480ccb603d7929d2fcfaae152c2f",
+    "csv_file": "data/schneider/c12_schneider_stopping_power.csv",
+    "csv_sha256": "d39e65ac7842f836bcbcecb02901b29d29cfa845111e51366cf77669d08e92a9"
+  },
+  "gates": {
+    "gate1_data_integrity_and_hashes": "PASS",
+    "gate2_table_and_csda_integrator_equivalence": "PASS",
+    "gate3_independent_transport_bragg_and_idd": "PASS",
+    "gate4_25_section_density_scaling_invariance": "PASS",
+    "gate5_automated_unit_tests": "PASS",
+    "gate6_p2_attenuation_regression": "PASS"
+  },
+  "gate3_benchmark_cases": [
+    {
+      "id": "adipose_100mevu_bragg",
+      "section_id": 2,
+      "material_name": "PatientTissueFromHUNegative102",
+      "energy_mevu": 100.0,
+      "peak_depth_diff_mm": 0.0,
+      "r80_diff_mm": 0.0003,
+      "peak_nrmse": 0.015228,
+      "max_residual": 0.027653,
+      "area_nrmse": 0.001949,
+      "gpu_integrated_dose_MeV": 53645109.125,
+      "topas_integrated_dose_raw": 2.7468
+    },
+    {
+      "id": "soft_tissue_200mevu_bragg",
+      "section_id": 8,
+      "material_name": "PatientTissueFromHU100",
+      "energy_mevu": 200.0,
+      "peak_depth_diff_mm": 0.0,
+      "r80_diff_mm": 0.5384,
+      "peak_nrmse": 0.068659,
+      "max_residual": 0.250841,
+      "area_nrmse": 0.002307,
+      "gpu_integrated_dose_MeV": 91371903.6885,
+      "topas_integrated_dose_raw": 4.4553
+    },
+    {
+      "id": "dense_bone_200mevu_bragg",
+      "section_id": 20,
+      "material_name": "PatientTissueFromHU1250",
+      "energy_mevu": 200.0,
+      "peak_depth_diff_mm": 0.0,
+      "r80_diff_mm": 0.0066,
+      "peak_nrmse": 0.026157,
+      "max_residual": 0.049178,
+      "area_nrmse": 0.002353,
+      "gpu_integrated_dose_MeV": 94385772.75,
+      "topas_integrated_dose_raw": 2.6386
+    },
+    {
+      "id": "titanium_100mevu_bragg",
+      "section_id": 24,
+      "material_name": "PatientTissueFromHU2995",
+      "energy_mevu": 100.0,
+      "peak_depth_diff_mm": 0.0,
+      "r80_diff_mm": 0.0042,
+      "peak_nrmse": 0.028213,
+      "max_residual": 0.130982,
+      "area_nrmse": 0.003398,
+      "gpu_integrated_dose_MeV": 56245805.75,
+      "topas_integrated_dose_raw": 1.0774
+    },
+    {
+      "id": "soft_tissue_300mevu_bragg",
+      "section_id": 8,
+      "material_name": "PatientTissueFromHU100",
+      "energy_mevu": 300.0,
+      "peak_depth_diff_mm": 2.0,
+      "r80_diff_mm": 0.0449,
+      "peak_nrmse": 0.082818,
+      "max_residual": 0.18527,
+      "area_nrmse": 0.003549,
+      "gpu_integrated_dose_MeV": 111180041.125,
+      "topas_integrated_dose_raw": 3.3415
+    }
+  ],
+  "gate4_density_audit_summary": {
+    "sections_audited": 25,
+    "total_evaluations": 175,
+    "maximum_relative_error": 4.38556e-06,
+    "threshold": 0.0005
+  },
+  "gate6_p2_attenuation_summary": {
+    "required_cases": 18,
+    "passed_cases": 18,
+    "status": "PASS"
+  }
+}

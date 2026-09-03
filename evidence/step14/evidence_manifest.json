@@ -1,0 +1,29 @@
+{
+  "schema_version": 2,
+  "step": "14-schneider-stopping",
+  "task": "Step 14 TOPAS-Derived Schneider Stopping Power Migration Provenance Manifest",
+  "validated_source_commit_sha": "43c5207ee10dc4500ba8478e0298f74c6a59d3a2",
+  "worktree_clean_at_validation": true,
+  "environment": {
+    "topas_version": "4.2.p3",
+    "geant4_version": "geant4-11-03-patch-02 [MT]",
+    "topas_binary_sha256": "30836720d35cf2ef1950ded6ad5b2c6f512dd805297f09e32b613f37fa399bd2",
+    "topas_extractor_cc_sha256": "c76c6d58e5fcefb31b01b5869a5fd74735ff6151f8a558ba28018b77850dc068"
+  },
+  "physics_inputs": {
+    "schneider_hu_material_table_sha256": "5022cd89617b28dbd8ee8bf8b095ea20cfd99f6405218693c0df238b3617a139",
+    "schneider_c12_stopping_bin_sha256": "9786dba071f61e660fcc5940a844e8109c4e480ccb603d7929d2fcfaae152c2f",
+    "schneider_c12_stopping_csv_sha256": "d39e65ac7842f836bcbcecb02901b29d29cfa845111e51366cf77669d08e92a9",
+    "schneider_c12_stopping_bin_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+    "schneider_c12_stopping_csv_metadata_sha256": "402d531e499c8cab8ac04fd0233641c1f2911ad7b4751f714be6856d214196c2"
+  },
+  "tools_provenance": {
+    "compile_schneider_stopping_py_sha256": "a5da5db2fad264fb25131e616ada38cbc8c4e14d39aaf7d8e104985005c89c12",
+    "verify_step14_schneider_stopping_py_sha256": "1080bb7a40027d54d49cf51a4c318f564478e4d62d86218519ed745fb2ada7ff"
+  },
+  "overall_validation_pass": true,
+  "evidence_files": {
+    "report_json_sha256": "97ee14f4619485be5098107e7e59731994e6d2d550c246c44b8b4e8f12dafbb2",
+    "summary_md_sha256": "a25e61289370d6e4b7f5fd9a9093da941ff586a10e15e550389ca5e5224c174f"
+  }
+}
