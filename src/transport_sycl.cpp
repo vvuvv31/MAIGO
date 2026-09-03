@@ -833,19 +833,30 @@ TransportResult transport_sycl(const TransportConfig& config,
 
             // 2. Fail-closed Energy Domain Guard: Primary birth energies must be within [0.01, 430.0] MeV/u
             const double initial_e = config.initial_energy_MeVu;
-            if (initial_e < kSchneiderStoppingEnergyMin || initial_e > 430.0 + 1e-5) {
+            if (!std::isfinite(initial_e) || initial_e < kSchneiderStoppingEnergyMin || initial_e > 430.0 + 1e-5) {
                 throw std::invalid_argument(
-                    "Schneider stopping power mode requires initial_energy_MeVu in [" +
+                    "Schneider stopping power mode requires finite initial_energy_MeVu in [" +
                     std::to_string(kSchneiderStoppingEnergyMin) + ", 430.0] MeV/u, got " +
                     std::to_string(initial_e));
             }
+            if (!std::isfinite(config.beam_energy_spread) || config.beam_energy_spread < 0.0) {
+                throw std::invalid_argument("Schneider stopping power mode requires finite beam_energy_spread >= 0.0");
+            }
+            constexpr double kMaxGaussianSupport = 7.433851508; // sqrt(-2 ln 1e-12)
             if (config.beam_energy_spread > 0.0) {
-                const double max_possible_e = initial_e * (1.0 + 3.0 * config.beam_energy_spread);
+                const double max_possible_e = initial_e * (1.0 + kMaxGaussianSupport * config.beam_energy_spread);
+                const double min_possible_e = initial_e * (1.0 - kMaxGaussianSupport * config.beam_energy_spread);
                 if (max_possible_e > kSchneiderStoppingEnergyMax) {
                     throw std::invalid_argument(
                         "Schneider stopping power mode: beam energy spread allows birth energies up to " +
                         std::to_string(max_possible_e) + " MeV/u, exceeding table maximum " +
                         std::to_string(kSchneiderStoppingEnergyMax) + " MeV/u");
+                }
+                if (min_possible_e < kSchneiderStoppingEnergyMin) {
+                    throw std::invalid_argument(
+                        "Schneider stopping power mode: beam energy spread allows birth energies down to " +
+                        std::to_string(min_possible_e) + " MeV/u, below table minimum " +
+                        std::to_string(kSchneiderStoppingEnergyMin) + " MeV/u");
                 }
             }
 
@@ -853,21 +864,34 @@ TransportResult transport_sycl(const TransportConfig& config,
             for (std::size_t si = 0; si < config.primary_spot_batch.size(); ++si) {
                 const auto& spot = config.primary_spot_batch[si];
                 const double spot_e = static_cast<double>(spot.floats[0]) / 12.0; // total MeV to MeV/u for C12
-                if (spot_e < kSchneiderStoppingEnergyMin || spot_e > 430.0 + 1e-5) {
+                if (!std::isfinite(spot_e) || spot_e < kSchneiderStoppingEnergyMin || spot_e > 430.0 + 1e-5) {
                     throw std::invalid_argument(
                         "Schneider stopping power mode: spot " + std::to_string(si) +
                         " energy " + std::to_string(spot_e) + " MeV/u is outside valid domain [" +
                         std::to_string(kSchneiderStoppingEnergyMin) + ", 430.0] MeV/u");
                 }
                 const double spot_spread = static_cast<double>(spot.floats[1]);
+                if (!std::isfinite(spot_spread) || spot_spread < 0.0) {
+                    throw std::invalid_argument(
+                        "Schneider stopping power mode: spot " + std::to_string(si) +
+                        " energy spread must be finite and >= 0.0");
+                }
                 if (spot_spread > 0.0) {
-                    const double max_spot_e = spot_e * (1.0 + 3.0 * spot_spread);
+                    const double max_spot_e = spot_e * (1.0 + kMaxGaussianSupport * spot_spread);
+                    const double min_spot_e = spot_e * (1.0 - kMaxGaussianSupport * spot_spread);
                     if (max_spot_e > kSchneiderStoppingEnergyMax) {
                         throw std::invalid_argument(
                             "Schneider stopping power mode: spot " + std::to_string(si) +
                             " energy spread allows birth energies up to " +
                             std::to_string(max_spot_e) + " MeV/u, exceeding table maximum " +
                             std::to_string(kSchneiderStoppingEnergyMax) + " MeV/u");
+                    }
+                    if (min_spot_e < kSchneiderStoppingEnergyMin) {
+                        throw std::invalid_argument(
+                            "Schneider stopping power mode: spot " + std::to_string(si) +
+                            " energy spread allows birth energies down to " +
+                            std::to_string(min_spot_e) + " MeV/u, below table minimum " +
+                            std::to_string(kSchneiderStoppingEnergyMin) + " MeV/u");
                     }
                 }
             }
@@ -1683,9 +1707,8 @@ TransportResult transport_sycl(const TransportConfig& config,
                         rng::uniform01(spot_seed, rng_history, 0, 40), 1.0e-12F);
                     const auto u1 = rng::uniform01(spot_seed, rng_history, 0, 41);
                     constexpr float two_pi = 6.2831853071795864769F;
-                    const auto raw_gauss =
+                    const auto gauss =
                         sycl::sqrt(-2.0F * sycl::log(u0)) * sycl::cos(two_pi * u1);
-                    const auto gauss = sycl::clamp(raw_gauss, -3.0F, 3.0F);
                     energy_MeV =
                         spot_initial_energy_MeV * (1.0F + spot_energy_spread * gauss);
                     if (energy_MeV < energy_cutoff_MeV) {

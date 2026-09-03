@@ -183,6 +183,8 @@ def main():
         r_sec = raw_sections[s]
         if r_sec.get("section_id") != s:
             raise ValueError(f"Raw JSON section_id mismatch at index {s}: {r_sec.get('section_id')}")
+        if r_sec.get("rep_hu") != CANONICAL_PROBES[s][1]:
+            raise ValueError(f"Raw JSON rep_hu mismatch at section {s}: {r_sec.get('rep_hu')} vs {CANONICAL_PROBES[s][1]}")
         if r_sec.get("material_name") != material_names[s]:
             raise ValueError(f"Raw JSON material_name mismatch at section {s}: {r_sec.get('material_name')} vs {material_names[s]}")
         if abs(r_sec.get("density_g_cm3", 0.0) - densities[s]) > 1e-5:

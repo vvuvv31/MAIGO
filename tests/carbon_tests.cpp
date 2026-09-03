@@ -6595,7 +6595,52 @@ void test_schneider_stopping_metadata_schema_failures() {
         check_reject(bad, "Wrong projectile Z=1 must throw");
     }
 
-    // 3. Wrong material name in section 8
+    // 3. Non-integer projectile Z (Z=6.9)
+    {
+        auto bad = valid_json;
+        const auto pos = bad.find("\"z\": 6");
+        require(pos != std::string::npos, "Could not find Z in metadata");
+        bad.replace(pos, 6, "\"z\": 6.9");
+        check_reject(bad, "Non-integer projectile Z=6.9 must throw");
+    }
+
+    // 4. Non-integer section_id (section_id=0.9)
+    {
+        auto bad = valid_json;
+        const auto pos = bad.find("\"section_id\": 0");
+        require(pos != std::string::npos, "Could not find section 0 in metadata");
+        bad.replace(pos, 15, "\"section_id\": 0.9");
+        check_reject(bad, "Non-integer section_id=0.9 must throw");
+    }
+
+    // 5. Invalid literal token (truely)
+    {
+        auto bad = valid_json;
+        const auto pos = bad.find("true");
+        require(pos != std::string::npos, "Could not find 'true' in metadata");
+        bad.replace(pos, 4, "truely");
+        check_reject(bad, "Invalid literal 'truely' must throw");
+    }
+
+    // 6. Invalid escape sequence in string (\x)
+    {
+        auto bad = valid_json;
+        const auto pos = bad.find("\"schneider_stopping_v1.bin\"");
+        require(pos != std::string::npos, "Could not find data_filename in metadata");
+        bad.replace(pos, 27, "\"schneider_\\xstopping_v1.bin\"");
+        check_reject(bad, "Invalid escape sequence \\x must throw");
+    }
+
+    // 7. Duplicate object keys
+    {
+        auto bad = valid_json;
+        const auto pos = bad.find("\"format\": \"binary\",");
+        require(pos != std::string::npos, "Could not find format in metadata");
+        bad.insert(pos, "\"format\": \"binary\",\n  ");
+        check_reject(bad, "Duplicate object key 'format' must throw");
+    }
+
+    // 8. Wrong material name in section 8
     {
         auto bad = valid_json;
         const auto pos = bad.find("\"PatientTissueFromHU100\"");
@@ -6604,7 +6649,7 @@ void test_schneider_stopping_metadata_schema_failures() {
         check_reject(bad, "Wrong material name in section must throw");
     }
 
-    // 4. Duplicate section ID (change section 1 to section 0)
+    // 9. Duplicate section ID (change section 1 to section 0)
     {
         auto bad = valid_json;
         const auto pos = bad.find("\"section_id\": 1");
@@ -6617,11 +6662,28 @@ void test_schneider_stopping_metadata_schema_failures() {
 }
 
 void test_schneider_stopping_source_energy_domain_fail_closed() {
-    const auto cctg_path = std::filesystem::path("/mnt/sda/wuwei/step14_schneider_stopping/transport_benchmarks/cctg/soft_tissue_200mevu_bragg.cctg");
-    if (!std::filesystem::exists(cctg_path)) return;
+    // Completely self-contained: create a programmatic 1x1x2 Schneider CCTG
+    const auto tmp_dir = std::filesystem::temp_directory_path() / "schneider_domain_test";
+    std::filesystem::create_directories(tmp_dir);
+    const auto cctg_path = tmp_dir / "tiny_schneider.cctg";
+
+    carbon::CtGrid test_grid;
+    test_grid.file_version = carbon::CtGrid::version_v2;
+    test_grid.nx = 1;
+    test_grid.ny = 1;
+    test_grid.nz = 2;
+    test_grid.spacing_x_mm = 1.0;
+    test_grid.spacing_y_mm = 1.0;
+    test_grid.spacing_z_mm = 1.0;
+    test_grid.origin_x_mm = 0.0;
+    test_grid.origin_y_mm = 0.0;
+    test_grid.origin_z_mm = 0.0;
+    test_grid.density_g_per_cm3 = {1.0F, 1.0F};
+    test_grid.material_id = {8, 8}; // section 8
+    test_grid.write_binary(cctg_path);
 
     carbon::TransportConfig base_cfg;
-    base_cfg.phantom_length_mm = 50.0;
+    base_cfg.phantom_length_mm = 2.0;
     base_cfg.depth_bin_width_mm = 1.0;
     base_cfg.primary_atomic_number = 6;
     base_cfg.primary_mass_number = 12;
@@ -6646,17 +6708,36 @@ void test_schneider_stopping_source_energy_domain_fail_closed() {
         }, "Initial energy 435 MeV/u must be rejected in Schneider mode");
     }
 
-    // 2. Single beam spread allowing > 430.11 MeV/u must be rejected
+    // 2. Single beam upper spread exceeding 430.11 MeV/u must be rejected
     {
         auto bad = base_cfg;
         bad.initial_energy_MeVu = 420.0;
-        bad.beam_energy_spread = 0.05; // 420 * (1 + 3 * 0.05) = 483 > 430.11
+        bad.beam_energy_spread = 0.05; // 420 * (1 + 7.434 * 0.05) = 576 > 430.11
         require_throws<std::invalid_argument>([&]() {
             (void)carbon::transport_sycl(bad, water_sp, zero_xs, "default");
         }, "Single beam spread exceeding 430.11 MeV/u must be rejected in Schneider mode");
     }
 
-    // 3. Production spot batch with energy > 430 MeV/u (e.g. 435 MeV/u = 5220 MeV) must be rejected
+    // 3. Single beam lower spread dropping below 0.01 MeV/u must be rejected
+    {
+        auto bad = base_cfg;
+        bad.initial_energy_MeVu = 0.011;
+        bad.beam_energy_spread = 0.10; // 0.011 * (1 - 7.434 * 0.10) = 0.0028 < 0.01
+        require_throws<std::invalid_argument>([&]() {
+            (void)carbon::transport_sycl(bad, water_sp, zero_xs, "default");
+        }, "Single beam lower spread below 0.01 MeV/u must be rejected in Schneider mode");
+    }
+
+    // 4. Non-finite single beam energy must be rejected
+    {
+        auto bad = base_cfg;
+        bad.initial_energy_MeVu = std::numeric_limits<double>::quiet_NaN();
+        require_throws<std::invalid_argument>([&]() {
+            (void)carbon::transport_sycl(bad, water_sp, zero_xs, "default");
+        }, "Non-finite initial energy must be rejected in Schneider mode");
+    }
+
+    // 5. Production spot batch with energy > 430 MeV/u (e.g. 435 MeV/u = 5220 MeV) must be rejected
     {
         auto bad = base_cfg;
         carbon::PrimarySpotBatchEntry spot{};
@@ -6670,19 +6751,21 @@ void test_schneider_stopping_source_energy_domain_fail_closed() {
         }, "Production spot with 435 MeV/u must be rejected in Schneider mode");
     }
 
-    // 4. Production spot batch with spread exceeding 430.11 MeV/u must be rejected
+    // 6. Production spot batch with spread dropping below 0.01 MeV/u must be rejected
     {
         auto bad = base_cfg;
         carbon::PrimarySpotBatchEntry spot{};
         spot.history_begin = 0;
         spot.history_end = bad.number_of_histories;
-        spot.floats[0] = 420.0F * 12.0F; // 420 MeV/u
-        spot.floats[1] = 0.05F; // 420 * (1 + 3 * 0.05) = 483 > 430.11
+        spot.floats[0] = static_cast<float>(0.011 * 12.0); // 0.011 MeV/u
+        spot.floats[1] = 0.10F;
         bad.primary_spot_batch = {spot};
         require_throws<std::invalid_argument>([&]() {
             (void)carbon::transport_sycl(bad, water_sp, zero_xs, "default");
-        }, "Production spot with spread exceeding 430.11 MeV/u must be rejected in Schneider mode");
+        }, "Production spot with spread dropping below 0.01 MeV/u must be rejected in Schneider mode");
     }
+
+    std::filesystem::remove_all(tmp_dir);
 }
 
 void test_schneider_stopping_host_device_equivalence() {

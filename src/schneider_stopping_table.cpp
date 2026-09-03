@@ -98,6 +98,28 @@ struct JsonVal {
     }
 };
 
+std::size_t get_strict_uint(const JsonVal& val, const std::string& field_name) {
+    if (val.type != JsonVal::Number) {
+        throw std::runtime_error(field_name + " must be a number");
+    }
+    const double d = val.num_val;
+    if (!std::isfinite(d) || d < 0.0 || std::floor(d) != d) {
+        throw std::runtime_error(field_name + " must be a non-negative integer, got " + std::to_string(d));
+    }
+    return static_cast<std::size_t>(d);
+}
+
+int get_strict_int(const JsonVal& val, const std::string& field_name) {
+    if (val.type != JsonVal::Number) {
+        throw std::runtime_error(field_name + " must be a number");
+    }
+    const double d = val.num_val;
+    if (!std::isfinite(d) || std::floor(d) != d) {
+        throw std::runtime_error(field_name + " must be an integer, got " + std::to_string(d));
+    }
+    return static_cast<int>(d);
+}
+
 class JsonParser {
     std::string src_;
     std::size_t pos_{0};
@@ -132,7 +154,9 @@ class JsonParser {
                 else if (esc == 'n') s += '\n';
                 else if (esc == 'r') s += '\r';
                 else if (esc == 't') s += '\t';
-                else s += esc;
+                else throw std::runtime_error(std::string("Invalid escape sequence '\\") + esc + "' in JSON string");
+            } else if (static_cast<unsigned char>(c) < 0x20) {
+                throw std::runtime_error("Unescaped control character in JSON string");
             } else {
                 s += c;
             }
@@ -144,10 +168,39 @@ class JsonParser {
         skip_whitespace();
         std::size_t start = pos_;
         if (src_[pos_] == '-') ++pos_;
-        while (pos_ < src_.size() && (std::isdigit(static_cast<unsigned char>(src_[pos_])) || src_[pos_] == '.' ||
-                                      src_[pos_] == 'e' || src_[pos_] == 'E' ||
-                                      src_[pos_] == '+' || src_[pos_] == '-')) {
+        if (pos_ >= src_.size() || !std::isdigit(static_cast<unsigned char>(src_[pos_]))) {
+            throw std::runtime_error("Malformed number in JSON");
+        }
+        if (src_[pos_] == '0') {
             ++pos_;
+            if (pos_ < src_.size() && std::isdigit(static_cast<unsigned char>(src_[pos_]))) {
+                throw std::runtime_error("Leading zero in JSON number");
+            }
+        } else {
+            while (pos_ < src_.size() && std::isdigit(static_cast<unsigned char>(src_[pos_]))) {
+                ++pos_;
+            }
+        }
+        if (pos_ < src_.size() && src_[pos_] == '.') {
+            ++pos_;
+            if (pos_ >= src_.size() || !std::isdigit(static_cast<unsigned char>(src_[pos_]))) {
+                throw std::runtime_error("Expected digit after decimal point in JSON number");
+            }
+            while (pos_ < src_.size() && std::isdigit(static_cast<unsigned char>(src_[pos_]))) {
+                ++pos_;
+            }
+        }
+        if (pos_ < src_.size() && (src_[pos_] == 'e' || src_[pos_] == 'E')) {
+            ++pos_;
+            if (pos_ < src_.size() && (src_[pos_] == '+' || src_[pos_] == '-')) {
+                ++pos_;
+            }
+            if (pos_ >= src_.size() || !std::isdigit(static_cast<unsigned char>(src_[pos_]))) {
+                throw std::runtime_error("Expected digit in exponent in JSON number");
+            }
+            while (pos_ < src_.size() && std::isdigit(static_cast<unsigned char>(src_[pos_]))) {
+                ++pos_;
+            }
         }
         std::string num_str = src_.substr(start, pos_ - start);
         JsonVal v;
@@ -170,16 +223,40 @@ public:
             v.str_val = parse_string();
             return v;
         }
-        if (c == 't' || c == 'f') {
-            std::string b;
-            while (std::isalpha(static_cast<unsigned char>(peek()))) b += get();
+        if (c == 't') {
+            if (src_.compare(pos_, 4, "true") != 0) {
+                throw std::runtime_error("Invalid literal in JSON (expected 'true')");
+            }
+            pos_ += 4;
+            if (pos_ < src_.size() && (std::isalnum(static_cast<unsigned char>(src_[pos_])) || src_[pos_] == '_')) {
+                throw std::runtime_error("Invalid token starting with 'true'");
+            }
             JsonVal v;
             v.type = JsonVal::Boolean;
-            v.bool_val = (b == "true");
+            v.bool_val = true;
+            return v;
+        }
+        if (c == 'f') {
+            if (src_.compare(pos_, 5, "false") != 0) {
+                throw std::runtime_error("Invalid literal in JSON (expected 'false')");
+            }
+            pos_ += 5;
+            if (pos_ < src_.size() && (std::isalnum(static_cast<unsigned char>(src_[pos_])) || src_[pos_] == '_')) {
+                throw std::runtime_error("Invalid token starting with 'false'");
+            }
+            JsonVal v;
+            v.type = JsonVal::Boolean;
+            v.bool_val = false;
             return v;
         }
         if (c == 'n') {
-            for (int i = 0; i < 4; ++i) get();
+            if (src_.compare(pos_, 4, "null") != 0) {
+                throw std::runtime_error("Invalid literal in JSON (expected 'null')");
+            }
+            pos_ += 4;
+            if (pos_ < src_.size() && (std::isalnum(static_cast<unsigned char>(src_[pos_])) || src_[pos_] == '_')) {
+                throw std::runtime_error("Invalid token starting with 'null'");
+            }
             JsonVal v;
             v.type = JsonVal::Null;
             return v;
@@ -198,6 +275,9 @@ public:
         if (peek() == '}') { get(); return v; }
         while (true) {
             std::string key = parse_string();
+            if (v.obj.find(key) != v.obj.end()) {
+                throw std::runtime_error("Duplicate key in JSON object: '" + key + "'");
+            }
             skip_whitespace();
             if (get() != ':') throw std::runtime_error("Expected ':' after object key");
             JsonVal val = parse_value();
@@ -325,8 +405,12 @@ SchneiderStoppingTable SchneiderStoppingTable::from_binary(
     }
 
     // 1. Schema version & format
-    if (!root.has("schema_version") || root["schema_version"].num_val < 1.0) {
-        throw std::runtime_error("Missing or invalid schema_version in metadata");
+    if (!root.has("schema_version")) {
+        throw std::runtime_error("Missing schema_version in metadata");
+    }
+    const auto schema_version = get_strict_uint(root["schema_version"], "schema_version");
+    if (schema_version < 1) {
+        throw std::runtime_error("Invalid schema_version in metadata");
     }
     if (!root.has("format") || root["format"].str_val != "binary") {
         throw std::runtime_error("Metadata format must be 'binary', got: " + (root.has("format") ? root["format"].str_val : "none"));
@@ -348,16 +432,16 @@ SchneiderStoppingTable SchneiderStoppingTable::from_binary(
         throw std::runtime_error("Missing projectile object in metadata");
     }
     const auto& proj = root["projectile"];
-    if (!proj.has("z") || static_cast<int>(proj["z"].num_val) != 6 ||
-        !proj.has("a") || static_cast<int>(proj["a"].num_val) != 12) {
+    if (!proj.has("z") || get_strict_int(proj["z"], "projectile.z") != 6 ||
+        !proj.has("a") || get_strict_int(proj["a"], "projectile.a") != 12) {
         throw std::runtime_error("Metadata projectile must have z=6, a=12");
     }
 
     // 4. Dimensions
-    if (!root.has("sections_count") || static_cast<std::size_t>(root["sections_count"].num_val) != kSchneiderStoppingNumSections) {
+    if (!root.has("sections_count") || get_strict_uint(root["sections_count"], "sections_count") != kSchneiderStoppingNumSections) {
         throw std::runtime_error("Invalid sections_count in metadata");
     }
-    if (!root.has("energies_count") || static_cast<std::size_t>(root["energies_count"].num_val) != kSchneiderStoppingNumEnergies) {
+    if (!root.has("energies_count") || get_strict_uint(root["energies_count"], "energies_count") != kSchneiderStoppingNumEnergies) {
         throw std::runtime_error("Invalid energies_count in metadata");
     }
 
@@ -376,8 +460,8 @@ SchneiderStoppingTable SchneiderStoppingTable::from_binary(
         if (sec.type != JsonVal::Object) {
             throw std::runtime_error("section_manifest entry " + std::to_string(s) + " must be an object");
         }
-        if (!sec.has("section_id") || static_cast<std::size_t>(sec["section_id"].num_val) != s) {
-            throw std::runtime_error("Section ID mismatch or duplicate at index " + std::to_string(s));
+        if (!sec.has("section_id") || get_strict_uint(sec["section_id"], "section_manifest.section_id") != s) {
+            throw std::runtime_error("Section ID mismatch, non-integer, or duplicate at index " + std::to_string(s));
         }
 
         const auto expected_name = kCanonicalSchneiderMaterialNames[s];
