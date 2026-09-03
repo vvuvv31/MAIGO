@@ -25,6 +25,7 @@
 #include "carbon/inelastic.hpp"
 #include "carbon/device.hpp"
 #include "carbon/detail/device_memory_tracker.hpp"
+#include <sycl/sycl.hpp>
 
 #include <algorithm>
 #include <array>
@@ -5469,11 +5470,18 @@ void test_step12_primary_only_mode_contract() {
             bad.beam_energy_spread = 0.01;
             require_throws([&]() { bad.validate(); }, "beam_energy_spread > 0 must be rejected");
         }
-        // Density mass SPR disabled rejected
+        // Density mass SPR disabled rejected when exact Schneider table is not configured
         {
             auto bad = base_cfg;
+            bad.ct_schneider_stopping_power_file.clear();
             bad.ct_use_density_mass_spr = false;
-            require_throws([&]() { bad.validate(); }, "ct_use_density_mass_spr = false must be rejected");
+            require_throws([&]() { bad.validate(); }, "ct_use_density_mass_spr = false must be rejected when exact table not set");
+        }
+        // When exact Schneider stopping table is present, ct_use_density_mass_spr = false is permitted
+        {
+            auto exact_cfg = base_cfg;
+            exact_cfg.ct_use_density_mass_spr = false;
+            exact_cfg.validate();
         }
         // Stopping scale != 1.0 rejected
         {
@@ -6023,6 +6031,7 @@ void run_step12_4d(const std::filesystem::path& temp_dir,
         cfg_nodensity.enable_secondary_transport = false;
         cfg_nodensity.enable_energy_straggling = false;
         cfg_nodensity.beam_energy_spread = 0.0;
+        cfg_nodensity.ct_schneider_stopping_power_file.clear();
         cfg_nodensity.ct_use_density_mass_spr = true;
         cfg_nodensity.ct_air_stopping_power_file = "nonexistent_air_table.csv";
         cfg_nodensity.ct_stopping_power_scale = 1.0;
@@ -6032,7 +6041,16 @@ void run_step12_4d(const std::filesystem::path& temp_dir,
 
         require_throws([&]() {
             carbon::transport_sycl(cfg_nodensity, water_sp, zero_xs, "default");
-        }, "transport_sycl must throw when density-mass-SPR fails to construct in validation mode");
+        }, "transport_sycl must throw when legacy density-mass-SPR fails to construct in validation mode");
+
+        // When exact Schneider stopping table is active, nonexistent legacy air table is completely ignored
+        {
+            auto exact_cfg = cfg_nodensity;
+            exact_cfg.ct_schneider_stopping_power_file = "data/schneider/schneider_stopping_v1.bin";
+            exact_cfg.validate();
+            const auto res = carbon::transport_sycl(exact_cfg, water_sp, zero_xs, "default");
+            require(res.nuclear_interactions > 0, "Exact Schneider mode must run without legacy air table");
+        }
     }
 }
 
@@ -6514,6 +6532,110 @@ void test_step14_schneider_stopping_power_tables() {
     require_throws<std::out_of_range>([&]() { (void)bin_table.mass_stopping_power(25, 0); }, "mass_stopping_power(25, 0) must throw out_of_range");
     require_throws<std::out_of_range>([&]() { (void)bin_table.mass_stopping_power(0, 4302); }, "mass_stopping_power(0, 4302) must throw out_of_range");
 }
+
+void test_schneider_stopping_permutation_rejection() {
+    const auto bin_path = std::filesystem::path("data/schneider/schneider_stopping_v1.bin");
+    const auto meta_path = std::filesystem::path("data/schneider/schneider_stopping_v1.metadata.json");
+
+    // Create a temporary corrupted metadata where section 2 has the hash of section 8
+    const auto tmp_dir = std::filesystem::temp_directory_path() / "schneider_meta_corrupt_test";
+    std::filesystem::create_directories(tmp_dir);
+    const auto corrupt_meta_path = tmp_dir / "schneider_stopping_v1.metadata.json";
+
+    std::ifstream orig_in(meta_path);
+    std::string content((std::istreambuf_iterator<char>(orig_in)), std::istreambuf_iterator<char>());
+
+    const std::string sec2_hash = "c979ebe99d85d61ee6e6dd657bcd594ee5aa17a95c86af8d383e23182fc34fa8";
+    const std::string sec8_hash = "bb0aa41d37f7f932c7e79d1c6aecde17efe27b28e6c28bd959dc2c0d6b9d1ffe";
+    auto pos = content.find(sec2_hash);
+    require(pos != std::string::npos, "Could not locate section 2 hash in metadata");
+    content.replace(pos, sec2_hash.length(), sec8_hash);
+
+    std::ofstream corrupt_out(corrupt_meta_path);
+    corrupt_out << content;
+    corrupt_out.close();
+
+    // Verify SchneiderStoppingTable::from_binary strictly throws runtime_error
+    require_throws<std::runtime_error>([&]() {
+        (void)carbon::SchneiderStoppingTable::from_binary(bin_path, corrupt_meta_path);
+    }, "SchneiderStoppingTable must strictly throw when section composition hash is permuted or mismatched");
+
+    std::filesystem::remove_all(tmp_dir);
+}
+
+void test_schneider_stopping_host_device_equivalence() {
+    const auto bin_path = std::filesystem::path("data/schneider/schneider_stopping_v1.bin");
+    const auto meta_path = std::filesystem::path("data/schneider/schneider_stopping_v1.metadata.json");
+    const auto bin_table = carbon::SchneiderStoppingTable::from_binary(bin_path, meta_path);
+    const auto flat_sp = bin_table.to_flat_mass_stopping_float();
+
+    sycl::queue queue;
+    auto* device_table = sycl::malloc_device<float>(flat_sp.size(), queue);
+    require(device_table != nullptr, "Device memory allocation failed for stopping table test");
+    queue.copy(flat_sp.data(), device_table, flat_sp.size()).wait_and_throw();
+
+    // Test matrix: sections {0, 8, 24} x energies {below Emin, Emin, 400.01, 430.00, 430.01, 430.11, above Emax}
+    const std::vector<std::uint32_t> test_sections = {0, 8, 24};
+    const std::vector<float> test_energies = {
+        0.005F, 0.01F, 400.01F, 430.00F, 430.01F, 430.11F, 435.00F
+    };
+    const std::size_t n_queries = test_sections.size() * test_energies.size();
+
+    auto* dev_sections = sycl::malloc_device<std::uint32_t>(n_queries, queue);
+    auto* dev_energies = sycl::malloc_device<float>(n_queries, queue);
+    auto* dev_results = sycl::malloc_device<float>(n_queries, queue);
+
+    std::vector<std::uint32_t> host_secs(n_queries);
+    std::vector<float> host_ens(n_queries);
+    std::size_t qi = 0;
+    for (auto sec : test_sections) {
+        for (auto en : test_energies) {
+            host_secs[qi] = sec;
+            host_ens[qi] = en;
+            ++qi;
+        }
+    }
+
+    queue.copy(host_secs.data(), dev_sections, n_queries);
+    queue.copy(host_ens.data(), dev_energies, n_queries).wait_and_throw();
+
+    const float e_min = 0.01F;
+    const float inv_dE = 10.0F;
+    const std::uint32_t num_energies = 4302;
+
+    queue.parallel_for(sycl::range<1>(n_queries), [=](sycl::id<1> idx) {
+        const auto i = idx[0];
+        const auto sec = dev_sections[i];
+        const auto en = dev_energies[i];
+
+        const auto floating_sp_index = (en - e_min) * inv_dE;
+        auto sp_index = static_cast<int>(sycl::floor(floating_sp_index));
+        sp_index = sycl::max(0, sycl::min(sp_index, static_cast<int>(num_energies) - 2));
+        const auto sp_fraction = sycl::clamp(floating_sp_index - static_cast<float>(sp_index), 0.0F, 1.0F);
+
+        const auto base_idx = static_cast<std::size_t>(sec) * num_energies + static_cast<std::size_t>(sp_index);
+        dev_results[i] = device_table[base_idx] + sp_fraction * (device_table[base_idx + 1] - device_table[base_idx]);
+    }).wait_and_throw();
+
+    std::vector<float> host_dev_results(n_queries);
+    queue.copy(dev_results, host_dev_results.data(), n_queries).wait_and_throw();
+
+    // Verify host interpolate_mass_stopping vs device lookup
+    for (std::size_t i = 0; i < n_queries; ++i) {
+        const auto sec = host_secs[i];
+        const auto en = host_ens[i];
+        const double host_val = bin_table.interpolate_mass_stopping(sec, en);
+        const float dev_val = host_dev_results[i];
+        require_near(static_cast<double>(dev_val), host_val, 1e-4,
+                     "Host vs Device stopping lookup mismatch at section " + std::to_string(sec) +
+                     ", energy " + std::to_string(en) + " MeV/u");
+    }
+
+    sycl::free(device_table, queue);
+    sycl::free(dev_sections, queue);
+    sycl::free(dev_energies, queue);
+    sycl::free(dev_results, queue);
+}
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -6633,6 +6755,10 @@ int main(int argc, char** argv) {
         run("test_step12_device_memory_tracker_exception_safety", test_step12_device_memory_tracker_exception_safety);
 #endif
         run("test_step14_schneider_stopping_power_tables", test_step14_schneider_stopping_power_tables);
+        run("test_schneider_stopping_permutation_rejection", test_schneider_stopping_permutation_rejection);
+#ifdef CARBON_HAS_SYCL
+        run("test_schneider_stopping_host_device_equivalence", test_schneider_stopping_host_device_equivalence);
+#endif
         std::cout << "All carbon_tests passed\n";
         return EXIT_SUCCESS;
     } catch (const std::exception& error) {

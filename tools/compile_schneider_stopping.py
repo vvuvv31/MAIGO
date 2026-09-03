@@ -2,7 +2,7 @@
 """
 tools/compile_schneider_stopping.py
 
-Step 14 Compiler:
+Step 14 Canonical Stopping Power Compiler:
 Compiles raw TOPAS/Geant4 C12 stopping-power extraction into official repository data products:
   1. data/schneider/c12_schneider_stopping_power.csv + .metadata.json
   2. data/schneider/schneider_stopping_v1.bin + .metadata.json
@@ -14,7 +14,8 @@ Enforces:
   - Full domain coverage up to 430.11 MeV/u (supporting 430.0 MeV/u source domain plus guard node)
   - Unit consistency check: linear_stopping == mass_stopping * density within 1e-4 relative
   - Monotonicity of energy and CSDA range
-  - Strict Section Provenance & Composition Hash binding to data/HUtoMaterialSchneider.txt
+  - Section Identity & Composition Hash verification against data/HUtoMaterialSchneider.txt
+  - Clean, separate metadata sidecars for binary and CSV
 """
 
 import argparse
@@ -24,7 +25,6 @@ import json
 import math
 import os
 import struct
-import subprocess
 import sys
 from pathlib import Path
 
@@ -37,12 +37,25 @@ ENERGY_MIN = 0.01
 ENERGY_MAX = 430.11
 ENERGY_STEP = 0.1
 
+CANONICAL_PROBES = [
+    (0, -975), (1, -535), (2, -102), (3, -68), (4, -38), (5, -8),
+    (6, 12), (7, 49), (8, 100), (9, 160), (10, 250), (11, 350),
+    (12, 450), (13, 550), (14, 650), (15, 750), (16, 850), (17, 950),
+    (18, 1050), (19, 1150), (20, 1250), (21, 1350), (22, 1450),
+    (23, 2247), (24, 2995)
+]
+
 def sha256_file(filepath):
     h = hashlib.sha256()
     with open(filepath, 'rb') as f:
         while chunk := f.read(65536):
             h.update(chunk)
     return h.hexdigest()
+
+def mat_name_from_hu(hu):
+    if hu < 0:
+        return f"PatientTissueFromHUNegative{-hu}"
+    return f"PatientTissueFromHU{hu}"
 
 def parse_schneider_compositions():
     schneider_txt = SCHNEIDER_TXT.read_text()
@@ -83,11 +96,7 @@ def main():
 
     weights, comp_hashes = parse_schneider_compositions()
 
-    with open(raw_json_path) as f:
-        raw_meta = json.load(f)
-
     # 1. Parse CSV data into [section][energy_idx]
-    # Header: energy_mevu,section_id,material_name,density_g_cm3,mass_stopping_power_mev_mm_per_g_cm3,linear_stopping_power_mev_per_mm,csda_range_mm
     mass_sp = [[0.0] * EXPECTED_ENERGIES for _ in range(EXPECTED_SECTIONS)]
     linear_sp = [[0.0] * EXPECTED_ENERGIES for _ in range(EXPECTED_SECTIONS)]
     csda_range = [[0.0] * EXPECTED_ENERGIES for _ in range(EXPECTED_SECTIONS)]
@@ -115,6 +124,11 @@ def main():
                 print(f"Error: section out of range: {s}")
                 sys.exit(1)
 
+            # Check Section Identity against canonical probe
+            expected_name = mat_name_from_hu(CANONICAL_PROBES[s][1])
+            if mat != expected_name:
+                raise ValueError(f"Section identity mismatch at section {s}: expected material name '{expected_name}', got '{mat}'")
+
             mass_sp[s][e_idx] = m_sp
             linear_sp[s][e_idx] = l_sp
             csda_range[s][e_idx] = r_mm
@@ -133,10 +147,8 @@ def main():
             assert m > 0.0, f"Non-positive mass stopping power at s={s}, i={i}"
             assert l > 0.0, f"Non-positive linear stopping power at s={s}, i={i}"
             assert r > 0.0, f"Non-positive CSDA range at s={s}, i={i}"
-            # Linear == mass * density within 1e-4 relative
             rel_err = abs(l - m * rho) / l
             assert rel_err < 1e-4, f"Mass/linear mismatch at s={s}, i={i}: l={l}, m*rho={m*rho}, rel_err={rel_err}"
-            # Monotonicity of range
             if i > 0:
                 assert r > csda_range[s][i-1], f"Non-monotonic CSDA range at s={s}, i={i}"
 
@@ -154,19 +166,6 @@ def main():
     print(f"Wrote canonical CSV: {canon_csv_path}")
 
     # 4. Binary Output: schneider_stopping_v1.bin
-    # Magic: 8 bytes 'SCHNSTOP'
-    # Header:
-    #   uint32 version(1)
-    #   uint32 num_sections(25)
-    #   uint32 num_energies(4302)
-    #   double energy_min(0.01)
-    #   double energy_max(430.11)
-    #   double energy_step(0.1)
-    #   double section_densities[25]
-    # Payload 1:
-    #   double mass_stopping_power[25][4302]
-    # Payload 2:
-    #   double csda_range_mm[25][4302]
     bin_path = out_dir / "schneider_stopping_v1.bin"
     with open(bin_path, 'wb') as f:
         f.write(b"SCHNSTOP")
@@ -184,7 +183,7 @@ def main():
                 f.write(struct.pack("<d", csda_range[s][i]))
     print(f"Wrote canonical binary: {bin_path} ({bin_path.stat().st_size} bytes)")
 
-    # 5. Metadata JSONs with full Section Identity & Composition Provenance
+    # 5. Metadata JSONs (Distinct sidecars for Binary and CSV)
     bin_sha = sha256_file(bin_path)
     csv_sha = sha256_file(canon_csv_path)
     schneider_sha = sha256_file(SCHNEIDER_TXT)
@@ -194,19 +193,13 @@ def main():
         section_manifest.append({
             "section_id": s,
             "material_name": material_names[s],
-            "nominal_density_g_cm3": densities[s],
+            "nominal_density_g_cm3": round(densities[s], 7),
             "composition_sha256": comp_hashes[s],
             "element_weights": weights[s]
         })
 
-    meta_dict = {
+    common_meta = {
         "schema_version": 2,
-        "data_filename": "schneider_stopping_v1.bin",
-        "data_sha256": bin_sha,
-        "canonical_csv_filename": "c12_schneider_stopping_power.csv",
-        "canonical_csv_sha256": csv_sha,
-        "binary_magic": "SCHNSTOP",
-        "binary_version": 1,
         "topas_version": "4.2.p3",
         "geant4_version": "geant4-11-03-patch-02 [MT]",
         "em_physics_module": "g4em-standard_opt4",
@@ -237,13 +230,27 @@ def main():
         }
     }
 
+    # Binary sidecar metadata
+    bin_meta = dict(common_meta)
+    bin_meta["data_filename"] = "schneider_stopping_v1.bin"
+    bin_meta["data_sha256"] = bin_sha
+    bin_meta["format"] = "binary"
+    bin_meta["binary_magic"] = "SCHNSTOP"
+    bin_meta["binary_version"] = 1
+
+    # CSV sidecar metadata
+    csv_meta = dict(common_meta)
+    csv_meta["data_filename"] = "c12_schneider_stopping_power.csv"
+    csv_meta["data_sha256"] = csv_sha
+    csv_meta["format"] = "csv"
+
     bin_meta_path = out_dir / "schneider_stopping_v1.metadata.json"
     csv_meta_path = out_dir / "c12_schneider_stopping_power.metadata.json"
     with open(bin_meta_path, 'w') as f:
-        json.dump(meta_dict, f, indent=2)
+        json.dump(bin_meta, f, indent=2)
     with open(csv_meta_path, 'w') as f:
-        json.dump(meta_dict, f, indent=2)
-    print(f"Wrote metadata: {bin_meta_path} and {csv_meta_path}")
+        json.dump(csv_meta, f, indent=2)
+    print(f"Wrote clean separate metadata: {bin_meta_path} and {csv_meta_path}")
 
 if __name__ == "__main__":
     main()

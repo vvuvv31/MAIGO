@@ -823,13 +823,49 @@ TransportResult transport_sycl(const TransportConfig& config,
         }
 
         if (ct_material_ids_are_schneider_sections) {
-            if (config.ct_schneider_stopping_power_file.empty()) {
+            // 1. Fail-closed Projectile Guard: Table v1 is validated exclusively for C12 (Z=6, A=12)
+            if (config.primary_atomic_number != 6 || config.primary_mass_number != 12) {
                 throw std::runtime_error(
-                    "Schneider CT grid requires ct_schneider_stopping_power_file; silent fallback to legacy SP is strictly forbidden");
+                    "Schneider stopping power table v1 is currently validated exclusively for C12 (Z=6, A=12); "
+                    "received primary ion Z=" + std::to_string(config.primary_atomic_number) +
+                    ", A=" + std::to_string(config.primary_mass_number));
             }
-            if (!std::filesystem::exists(config.ct_schneider_stopping_power_file)) {
+
+            // 2. Fail-closed Energy Domain Guard: Primary birth energies must be within [0.01, 430.0] MeV/u
+            const double initial_e = config.initial_energy_MeVu;
+            if (initial_e < kSchneiderStoppingEnergyMin || initial_e > 430.0 + 1e-5) {
+                throw std::invalid_argument(
+                    "Schneider stopping power mode requires initial_energy_MeVu in [" +
+                    std::to_string(kSchneiderStoppingEnergyMin) + ", 430.0] MeV/u, got " +
+                    std::to_string(initial_e));
+            }
+            if (config.beam_energy_spread > 0.0) {
+                const double max_possible_e = initial_e * (1.0 + 3.0 * config.beam_energy_spread);
+                if (max_possible_e > kSchneiderStoppingEnergyMax) {
+                    throw std::invalid_argument(
+                        "Schneider stopping power mode: beam energy spread allows birth energies up to " +
+                        std::to_string(max_possible_e) + " MeV/u, exceeding table maximum " +
+                        std::to_string(kSchneiderStoppingEnergyMax) + " MeV/u");
+                }
+            }
+            if (std::abs(config.ct_stopping_power_scale - 1.0) > 1e-6) {
+                throw std::invalid_argument(
+                    "Exact Schneider stopping power mode requires ct_stopping_power_scale == 1.0; calibration scaling is forbidden");
+            }
+
+            auto stopping_file = config.ct_schneider_stopping_power_file;
+            if (stopping_file.empty()) {
+                const auto default_stopping_bin = std::filesystem::path("data/schneider/schneider_stopping_v1.bin");
+                if (std::filesystem::exists(default_stopping_bin)) {
+                    stopping_file = default_stopping_bin;
+                } else {
+                    throw std::runtime_error(
+                        "Schneider CT grid requires ct_schneider_stopping_power_file; silent fallback to legacy SP is strictly forbidden");
+                }
+            }
+            if (!std::filesystem::exists(stopping_file)) {
                 throw std::runtime_error(
-                    "Schneider stopping power file missing: " + config.ct_schneider_stopping_power_file.string());
+                    "Schneider stopping power file missing: " + stopping_file.string());
             }
 
             // Verify all voxel material IDs are strictly in [0, 24]
@@ -841,10 +877,10 @@ TransportResult transport_sycl(const TransportConfig& config,
                 }
             }
 
-            const auto meta_path = config.ct_schneider_stopping_power_file.parent_path() /
-                                   (config.ct_schneider_stopping_power_file.stem().string() + ".metadata.json");
+            const auto meta_path = stopping_file.parent_path() /
+                                   (stopping_file.stem().string() + ".metadata.json");
             const auto stopping_table = SchneiderStoppingTable::from_binary(
-                config.ct_schneider_stopping_power_file, meta_path);
+                stopping_file, meta_path);
             schneider_sp_sections = static_cast<std::uint32_t>(stopping_table.num_sections());
             schneider_sp_energies = static_cast<std::uint32_t>(stopping_table.num_energies());
             schneider_sp_e_min = static_cast<float>(stopping_table.energy_min_mevu());
@@ -878,7 +914,7 @@ TransportResult transport_sycl(const TransportConfig& config,
                       << "  source_sha256=" << (early_verified_stopping_sha256.empty() ? "unknown" : early_verified_stopping_sha256) << "\n";
         }
 
-        if (use_ct_mass_sp) {
+        if (use_ct_mass_sp && !use_schneider_stopping) {
             ct_n_mass_factors = static_cast<std::uint32_t>(grid.mass_sp_za_rel.size());
             std::vector<float> mass_factor_lut(
                 static_cast<std::size_t>(ct_n_mass_factors) * table_size);
@@ -1504,7 +1540,9 @@ TransportResult transport_sycl(const TransportConfig& config,
     const auto maximum_relative_energy_loss =
         static_cast<float>(config.maximum_relative_energy_loss);
     const auto maximum_primary_steps = config.maximum_primary_steps;
-    const auto energy_cutoff_MeV = static_cast<float>(config.energy_cutoff_MeV);
+    const auto energy_cutoff_MeV = static_cast<float>(
+        use_schneider_stopping ? std::max(config.energy_cutoff_MeV, 12.0 * static_cast<double>(schneider_sp_e_min))
+                               : config.energy_cutoff_MeV);
 
     if (is_cuda_backend && !config.enable_minibeam) {
         cuda_clock_warmup(queue, mem_tracker);

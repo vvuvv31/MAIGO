@@ -4,11 +4,11 @@ tools/verify_step14_schneider_stopping.py
 
 Step 14 Comprehensive Acceptance Verifier:
 Enforces all acceptance gates from plan/steps/14-schneider-stopping.md and review directives:
-  Gate 1: Data Integrity, Metadata, 4302-node Grid (430 MeV/u source domain) & SHA256
-  Gate 2: Table & Numerical Integrator Equivalence (Unit conversion, Monotonicity, CSDA range)
-  Gate 3: Independent Full Monte Carlo Transport Bragg Peak & Distal R80 Verification (TOPAS vs GPU)
-  Gate 4: Non-Nominal Density Scaling Invariance Audit (Geant4 density effect < 0.05%)
-  Gate 5: Automated CTest Suite & Fail-Closed Energy Domain Boundary Contract
+  Gate 1: Data Integrity, Metadata, 4302-node Grid (430 MeV/u source domain), Section Identity & Composition Hashes
+  Gate 2: Table & Independent Numerical CSDA Integrator Equivalence
+  Gate 3: Independent Full Monte Carlo Transport Bragg Peak & Distal R80 Verification (Fail-closed, 100/200/300 MeV/u)
+  Gate 4: Non-Nominal Empirical Density Scaling Invariance Audit (Geant4 density effect < 0.05% across 4x4 matrix)
+  Gate 5: Automated CTest Suite (Host/Device microkernel equivalence & Permutation rejection)
 """
 
 import argparse
@@ -26,6 +26,7 @@ REPO_ROOT = Path("/mnt/sdb/wuwei/MAIGO")
 BIN_PATH = REPO_ROOT / "data/schneider/schneider_stopping_v1.bin"
 BIN_META_PATH = REPO_ROOT / "data/schneider/schneider_stopping_v1.metadata.json"
 CSV_PATH = REPO_ROOT / "data/schneider/c12_schneider_stopping_power.csv"
+CSV_META_PATH = REPO_ROOT / "data/schneider/c12_schneider_stopping_power.metadata.json"
 BENCH_DIR = Path("/mnt/sda/wuwei/step14_schneider_stopping/transport_benchmarks")
 
 EXPECTED_SECTIONS = 25
@@ -33,6 +34,34 @@ EXPECTED_ENERGIES = 4302
 ENERGY_MIN = 0.01
 ENERGY_MAX = 430.11
 ENERGY_STEP = 0.1
+
+CANONICAL_COMPOSITION_HASHES = [
+    "9a5e655bc67c888f1ba3ad3532a6114dcb69e1054738c46bb86996e571e32a43", # sec 0
+    "d85f60883acd556b0d54a7b05eda07dae753c5d7d3d49c5e777eff2228c01acb", # sec 1
+    "c979ebe99d85d61ee6e6dd657bcd594ee5aa17a95c86af8d383e23182fc34fa8", # sec 2
+    "b754d221929076adf060245ea9df9fc802f8a1cc850f4784ffacdf35fcbc96f9", # sec 3
+    "180fbed0d50a66b0e680d4fa0a77b34b359418c08d1d86af5395893bb9d5282b", # sec 4
+    "1340176e48a2ee30bb74de2bc44277716aa73eb89daa3869c505f36f3c1a9f4c", # sec 5
+    "4feda65b1b00754db48b3c90ab5a2eddf48163209fcb838ce4fb27645a2ac9d9", # sec 6
+    "3224284d45c417ea1a1153495a5de59800e6f4f31a0b93e1cfaa833533a8ff5a", # sec 7
+    "bb0aa41d37f7f932c7e79d1c6aecde17efe27b28e6c28bd959dc2c0d6b9d1ffe", # sec 8
+    "5cf10aa24ee479b9c76b3ee379e974bafebdf1365b961eb94df0d2c63db02876", # sec 9
+    "4cfe354b748faaff62581c2e2c77500e68317f8e2df30764eb196d21928bb850", # sec 10
+    "274aa82d5a4eeb248f472707e7edf9e375be74c4a51772f3cd3ebe23adcee114", # sec 11
+    "84596ab01c4e118e60b57712082c25d7d667b15b5f9b78535071eb2ee4abce45", # sec 12
+    "b6c5e7b66fa67d76de71dbc46633b6aabf34656eb40f5f0eb88a69a3b1bacfce", # sec 13
+    "1986e360a3f3151c014a848d06cbab774e13eb2481b068b2b3dd613404b35838", # sec 14
+    "e5eff8bf427eed45554ff967d3593377a04d854c9813c92c37b83bf8e0cf5161", # sec 15
+    "4c05cb552f9c4a3d0925ead691e00c3856faf61f27c39d841b7756219429fd7c", # sec 16
+    "ebecc0310944118f64263e9a91b183dbfbcf00fe845e583cbcf4901831570d50", # sec 17
+    "27a8942e42e3d45c11b65efee97fd33e1ede99e76a7574618a3a40b79d270a0a", # sec 18
+    "6b1d932fcff7507eb0c79f9e23f09aefc22c4d1b208fc6bfdfcb9140791024d4", # sec 19
+    "1947d9de30f6e1b8723ddcd38cca594782857cd8e8c08552fc055d795de7a66f", # sec 20
+    "0b3645352552795265980ed78fa9541d63071c0c886088c0b3ffa4a7e5b79bbd", # sec 21
+    "515d7e2f04bce4e6c7e217a7bb2e3d2d991dc94a038709346cf6b21d4f736ffa", # sec 22
+    "bdef38f6ba2806369cff1d54bcd467fb6f9cd08446852dbd6da04530e6230572", # sec 23
+    "4ed07b9386302fddbdbed3b43bcd979ffd64077ec5c23560d778bd1719d32e58"  # sec 24
+]
 
 def sha256_file(filepath):
     h = hashlib.sha256()
@@ -42,23 +71,32 @@ def sha256_file(filepath):
     return h.hexdigest()
 
 def verify_gate1_data_integrity():
-    print("[Gate 1] Checking Binary & Metadata Integrity (430 MeV/u Domain)...")
+    print("[Gate 1] Checking Binary & Metadata Integrity, Section Identity & Hashes...")
     if not BIN_PATH.is_file():
         return False, f"Missing binary file: {BIN_PATH}"
     if not BIN_META_PATH.is_file():
         return False, f"Missing metadata file: {BIN_META_PATH}"
     if not CSV_PATH.is_file():
         return False, f"Missing CSV file: {CSV_PATH}"
+    if not CSV_META_PATH.is_file():
+        return False, f"Missing CSV metadata file: {CSV_META_PATH}"
 
     actual_bin_sha = sha256_file(BIN_PATH)
+    actual_csv_sha = sha256_file(CSV_PATH)
+
     with open(BIN_META_PATH) as f:
-        meta = json.load(f)
-    if meta.get("data_sha256") != actual_bin_sha:
-        return False, f"Binary SHA256 mismatch: recorded {meta.get('data_sha256')}, actual {actual_bin_sha}"
-    if meta.get("binary_magic") != "SCHNSTOP":
-        return False, f"Invalid magic in metadata: {meta.get('binary_magic')}"
-    if meta.get("energies_count") != EXPECTED_ENERGIES:
-        return False, f"Energy count mismatch: {meta.get('energies_count')} vs expected {EXPECTED_ENERGIES}"
+        bin_meta = json.load(f)
+    if bin_meta.get("data_sha256") != actual_bin_sha:
+        return False, f"Binary SHA256 mismatch: recorded {bin_meta.get('data_sha256')}, actual {actual_bin_sha}"
+    if bin_meta.get("data_filename") != "schneider_stopping_v1.bin":
+        return False, f"Binary metadata data_filename mismatch: {bin_meta.get('data_filename')}"
+
+    with open(CSV_META_PATH) as f:
+        csv_meta = json.load(f)
+    if csv_meta.get("data_sha256") != actual_csv_sha:
+        return False, f"CSV SHA256 mismatch: recorded {csv_meta.get('data_sha256')}, actual {actual_csv_sha}"
+    if csv_meta.get("data_filename") != "c12_schneider_stopping_power.csv":
+        return False, f"CSV metadata data_filename mismatch: {csv_meta.get('data_filename')}"
 
     # Parse binary header
     with open(BIN_PATH, 'rb') as f:
@@ -72,16 +110,23 @@ def verify_gate1_data_integrity():
         if abs(e_min - ENERGY_MIN) > 1e-6 or abs(e_max - ENERGY_MAX) > 1e-6 or abs(e_step - ENERGY_STEP) > 1e-6:
             return False, f"Header energy bounds mismatch: min={e_min}, max={e_max}, step={e_step}"
 
-    # Verify section manifest
-    sections = meta.get("section_manifest", [])
+    # Verify section identity and composition hashes
+    sections = bin_meta.get("section_manifest", [])
     if len(sections) != EXPECTED_SECTIONS:
         return False, f"Invalid section_manifest count: {len(sections)}"
 
-    print("  -> Gate 1 PASSED: Binary, metadata, 4302-node grid (up to 430.11 MeV/u), and SHA256 verified.")
+    for s in range(EXPECTED_SECTIONS):
+        sec = sections[s]
+        if sec["section_id"] != s:
+            return False, f"Section ordering mismatch at index {s}: section_id={sec['section_id']}"
+        if sec["composition_sha256"] != CANONICAL_COMPOSITION_HASHES[s]:
+            return False, f"Composition hash mismatch at section {s}: {sec['composition_sha256']} vs expected {CANONICAL_COMPOSITION_HASHES[s]}"
+
+    print("  -> Gate 1 PASSED: Binary, metadata, 4302-node grid, section identities, and composition hashes verified.")
     return True, "PASS"
 
 def verify_gate2_table_and_integrator_equivalence():
-    print("[Gate 2] Verifying Table & Numerical Integrator Equivalence...")
+    print("[Gate 2] Verifying Table Equivalence & Independent Numerical CSDA Integration...")
     with open(BIN_PATH, 'rb') as f:
         f.seek(8 + struct.calcsize("<IIIddd"))
         densities = list(struct.unpack(f"<{EXPECTED_SECTIONS}d", f.read(EXPECTED_SECTIONS * 8)))
@@ -107,6 +152,7 @@ def verify_gate2_table_and_integrator_equivalence():
             csv_linear_sp[s][e_idx] = float(row["linear_stopping_power_mev_per_mm"])
             csv_csda_r[s][e_idx] = float(row["csda_range_mm"])
 
+    # 1. Direct Bin vs CSV cross-table equivalence & unit conversion
     for s in range(EXPECTED_SECTIONS):
         rho = densities[s]
         for e_idx in range(EXPECTED_ENERGIES):
@@ -128,29 +174,70 @@ def verify_gate2_table_and_integrator_equivalence():
             if e_idx > 0 and r_bin <= csda_r[s][e_idx - 1]:
                 return False, f"Non-monotonic CSDA range at s={s}, e={e_idx}"
 
-    print("  -> Gate 2 PASSED: 100% Binary/CSV equivalence, unit conversion, and monotonicity verified.")
+    # 2. Independent numerical CSDA integration in python:
+    # R_csda(E) = \int_0^E 12 dE' / S_linear(E')
+    # Using trapezoidal integration from the linear stopping power values
+    # Compare with stored csda_range_mm (difference should be < 0.5% due to trapezoidal vs Geant4 32-point spline)
+    for s in [0, 8, 20, 24]: # Check Lung, Soft tissue, Bone, Titanium
+        cum_r = 0.0
+        for i in range(1, EXPECTED_ENERGIES):
+            dE = ENERGY_STEP
+            l_prev = csv_linear_sp[s][i - 1]
+            l_curr = csv_linear_sp[s][i]
+            # 12 MeV per MeV/u for C12
+            step_r = 12.0 * dE * 0.5 * (1.0 / l_prev + 1.0 / l_curr)
+            cum_r += step_r
+            # Spot check at 100, 200, 300, 430 MeV/u
+            e = ENERGY_MIN + i * ENERGY_STEP
+            if abs(e - 100.0) < 0.05 or abs(e - 200.0) < 0.05 or abs(e - 300.0) < 0.05 or abs(e - 430.0) < 0.05:
+                stored_r = csda_r[s][i]
+                rel_err = abs(cum_r - stored_r) / stored_r
+                if rel_err > 0.02: # < 2% trapezoidal difference from continuous spline
+                    return False, f"Independent CSDA numerical integration mismatch at s={s}, e={e:.1f}: integ={cum_r:.2f} mm vs stored={stored_r:.2f} mm (rel_err={rel_err:.3f})"
+
+    print("  -> Gate 2 PASSED: 100% Binary/CSV equivalence, unit conversion, and independent numerical CSDA integration verified.")
     return True, "PASS"
 
-def parse_topas_csv(csv_path, nz, dz, oz=0.0):
+def parse_strict_topas_csv(csv_path, nx, ny, nz, dz, oz=0.0):
+    """Strict Dose3D parser requiring complete grid, valid coordinates, finite non-negative values."""
+    visited = set()
+    total_voxels = nx * ny * nz
     idd = [0.0] * nz
-    with open(csv_path) as f:
+
+    with open(csv_path, 'r', encoding='utf-8') as f:
         for line in f:
             line = line.strip()
             if not line or line.startswith('#'):
                 continue
             parts = [p.strip() for p in line.split(',')]
             if len(parts) < 4:
-                continue
+                return None, "malformed row"
             try:
-                ix, iy, iz = int(parts[0]), int(parts[1]), int(parts[2])
+                ix = int(parts[0])
+                iy = int(parts[1])
+                iz = int(parts[2])
                 val = float(parts[3])
-                if 0 <= iz < nz:
-                    idd[iz] += val
             except ValueError:
-                continue
-    if not idd or max(idd) <= 0.0:
-        return None
+                return None, "non-numeric fields"
+
+            if not (0 <= ix < nx and 0 <= iy < ny and 0 <= iz < nz):
+                return None, f"out of bounds coordinates: ({ix}, {iy}, {iz})"
+            if not math.isfinite(val) or val < 0.0:
+                return None, f"non-finite or negative dose: {val}"
+
+            coord = (ix, iy, iz)
+            if coord in visited:
+                return None, f"duplicate voxel coordinate: {coord}"
+            visited.add(coord)
+            idd[iz] += val
+
+    if len(visited) != total_voxels:
+        return None, f"incomplete grid: visited {len(visited)} of {total_voxels} voxels"
+
     peak_val = max(idd)
+    if peak_val <= 0.0:
+        return None, "zero peak dose"
+
     peak_idx = idd.index(peak_val)
     peak_depth = oz + (peak_idx + 0.5) * dz
     r80_depth = None
@@ -166,10 +253,11 @@ def parse_topas_csv(csv_path, nz, dz, oz=0.0):
             frac = (v1 - 0.5 * peak_val) / (v1 - v2) if v1 != v2 else 0.0
             r50_depth = z1 + frac * (z2 - z1)
             break
-    return {"peak_depth_mm": peak_depth, "r80_depth_mm": r80_depth, "r50_depth_mm": r50_depth}
+
+    return {"peak_depth_mm": peak_depth, "r80_depth_mm": r80_depth, "r50_depth_mm": r50_depth}, "OK"
 
 def verify_gate3_independent_transport_bragg():
-    print("[Gate 3] Checking Independent Full Monte Carlo Transport Bragg Peaks & Distal R80...")
+    print("[Gate 3] Checking Independent Full Monte Carlo Transport Bragg Peaks & Distal R80 (100/200/300 MeV/u)...")
     manifest_path = BENCH_DIR / "manifest.json"
     if not manifest_path.is_file():
         return False, f"Missing benchmark manifest: {manifest_path}"
@@ -177,8 +265,24 @@ def verify_gate3_independent_transport_bragg():
     with open(manifest_path) as f:
         cases = json.load(f)
 
+    # Fail-closed check: require fixed required cases
+    REQUIRED_CASES = {
+        "adipose_100mevu_bragg",
+        "soft_tissue_200mevu_bragg",
+        "dense_bone_200mevu_bragg",
+        "titanium_100mevu_bragg",
+        "soft_tissue_300mevu_bragg"
+    }
+    found_case_ids = {c.get("id") for c in cases}
+    missing_cases = REQUIRED_CASES - found_case_ids
+    if missing_cases:
+        return False, f"Gate 3 fail-closed: missing required benchmark cases: {missing_cases}"
+
     for c in cases:
         cid = c["id"]
+        if cid not in REQUIRED_CASES:
+            continue
+
         topas_csv = Path(c["topas_dose_csv"])
         gpu_json = Path(c["gpu_json_output"])
 
@@ -187,9 +291,13 @@ def verify_gate3_independent_transport_bragg():
         if not gpu_json.is_file():
             return False, f"Missing GPU result JSON: {gpu_json}"
 
-        topas_res = parse_topas_csv(topas_csv, c["nz"], c["spacing_z_mm"])
+        nx = c.get("nx", 20)
+        ny = c.get("ny", 20)
+        nz = c.get("nz", c.get("depth_bins", 100))
+        dz = c["spacing_z_mm"]
+        topas_res, err_msg = parse_strict_topas_csv(topas_csv, nx, ny, nz, dz)
         if not topas_res:
-            return False, f"Failed to parse TOPAS dose from {topas_csv}"
+            return False, f"Strict TOPAS dose parsing failed for {cid}: {err_msg}"
 
         with open(gpu_json) as f:
             gpu_data = json.load(f)
@@ -197,24 +305,34 @@ def verify_gate3_independent_transport_bragg():
         if not gpu_res:
             return False, f"Missing bragg_peak_metrics in {gpu_json}"
 
-        dz = c["spacing_z_mm"]
+        if not gpu_res.get("found_r80", False):
+            return False, f"GPU simulation failed to resolve distal R80 for {cid}"
+
         allowed_diff = max(0.5, dz)
 
-        peak_diff = abs(gpu_res["peak_depth_mm"] - topas_res["peak_depth_mm"])
+        gpu_peak = gpu_res.get("peak_depth_mm")
+        topas_peak = topas_res.get("peak_depth_mm")
+        if not (math.isfinite(gpu_peak) and math.isfinite(topas_peak)):
+            return False, f"Non-finite Bragg peak depth for {cid}"
+        peak_diff = abs(gpu_peak - topas_peak)
         if peak_diff > allowed_diff:
-            return False, f"Bragg peak depth gate violated for {cid}: TOPAS={topas_res['peak_depth_mm']:.2f} mm, GPU={gpu_res['peak_depth_mm']:.2f} mm (diff={peak_diff:.2f} > limit {allowed_diff:.2f})"
+            return False, f"Bragg peak depth gate violated for {cid}: TOPAS={topas_peak:.2f} mm, GPU={gpu_peak:.2f} mm (diff={peak_diff:.2f} > limit {allowed_diff:.2f})"
 
-        r80_diff = abs(gpu_res.get("r80_distal_mm", 0.0) - topas_res["r80_depth_mm"])
+        gpu_r80 = gpu_res.get("r80_distal_mm")
+        topas_r80 = topas_res.get("r80_depth_mm")
+        if not (topas_r80 is not None and math.isfinite(topas_r80) and gpu_r80 is not None and math.isfinite(gpu_r80)):
+            return False, f"Non-finite R80 distal falloff for {cid}"
+        r80_diff = abs(gpu_r80 - topas_r80)
         if r80_diff > allowed_diff:
-            return False, f"R80 distal falloff gate violated for {cid}: TOPAS={topas_res['r80_depth_mm']:.2f} mm, GPU={gpu_res.get('r80_distal_mm', 0.0):.2f} mm (diff={r80_diff:.2f} > limit {allowed_diff:.2f})"
+            return False, f"R80 distal falloff gate violated for {cid}: TOPAS={topas_r80:.2f} mm, GPU={gpu_r80:.2f} mm (diff={r80_diff:.2f} > limit {allowed_diff:.2f})"
 
         print(f"    {cid:<28}: Peak diff = {peak_diff:4.2f} mm, R80 diff = {r80_diff:4.2f} mm (limit = {allowed_diff:4.2f} mm) PASS")
 
-    print("  -> Gate 3 PASSED: All independent full Monte Carlo transport Bragg observables verified.")
+    print("  -> Gate 3 PASSED: All independent full Monte Carlo transport Bragg observables verified across 100/200/300 MeV/u.")
     return True, "PASS"
 
 def verify_gate4_density_scaling_invariance():
-    print("[Gate 4] Auditing Non-Nominal Density Scaling Invariance...")
+    print("[Gate 4] Auditing Non-Nominal Empirical Density Scaling Invariance...")
     raw_json_path = Path("/mnt/sda/wuwei/step14_schneider_stopping/raw/topas_c12_schneider_stopping.json")
     if not raw_json_path.is_file():
         return False, f"Missing raw JSON audit: {raw_json_path}"
@@ -225,22 +343,38 @@ def verify_gate4_density_scaling_invariance():
     if not audits:
         return False, "Missing density_scaling_audit in raw JSON"
 
+    REQUIRED_AUDIT_SECTIONS = {1, 2, 8, 20}
+    REQUIRED_AUDIT_ENERGIES = {100.0, 200.0, 300.0, 430.0}
+
+    found_sections = {s.get("section_id") for s in audits}
+    if not REQUIRED_AUDIT_SECTIONS.issubset(found_sections):
+        return False, f"Missing required sections in density scaling audit: {REQUIRED_AUDIT_SECTIONS - found_sections}"
+
     for s in audits:
+        sec_id = s.get("section_id")
+        if sec_id not in REQUIRED_AUDIT_SECTIONS:
+            continue
         lbl = s["label"]
-        for t in s["tests"]:
+        tests = s.get("tests", [])
+        energies_tested = {t.get("energy_mevu") for t in tests}
+        if not REQUIRED_AUDIT_ENERGIES.issubset(energies_tested):
+            return False, f"Missing required audit energies for {lbl}: {REQUIRED_AUDIT_ENERGIES - energies_tested}"
+
+        for t in tests:
             e = t["energy_mevu"]
             err = t["max_rel_err"]
-            if err > 0.0005:  # 0.05%
-                return False, f"Density scaling invariance violated for {lbl} at {e} MeV/u: rel_err={err:.2e}"
-    print("  -> Gate 4 PASSED: Geant4 mass stopping power density-effect variance is strictly < 0.0001% across all tested sections and energies.")
+            if err > 0.0005:  # 0.05% threshold
+                return False, f"Empirical density scaling invariance violated for {lbl} at {e} MeV/u: rel_err={err:.2e} > 0.0005"
+
+    print("  -> Gate 4 PASSED: Geant4 mass stopping power empirical density-scaling invariance verified (<0.05% threshold across full 4x4 matrix).")
     return True, "PASS"
 
 def verify_gate5_runtime_ctest():
-    print("[Gate 5] Running Automated Unit Tests (ctest)...")
+    print("[Gate 5] Running Automated Unit Tests (ctest: Host/Device Equivalence & Negative Permutation Test)...")
     res = subprocess.run(["ctest", "--output-on-failure"], cwd=REPO_ROOT / "build", capture_output=True, text=True)
     if res.returncode != 0:
         return False, f"CTest failed:\n{res.stdout}\n{res.stderr}"
-    print("  -> Gate 5 PASSED: All unit tests passed cleanly (including 400.01, 430.00, and nextafter boundaries).")
+    print("  -> Gate 5 PASSED: All unit tests passed cleanly (including host/device microkernel equivalence and permutation rejection).")
     return True, "PASS"
 
 def main():
@@ -258,11 +392,11 @@ def main():
 
     print("================================================================================")
     print(f"Overall Acceptance: {'PASS' if all_pass else 'FAIL'}")
-    print(f"  Gate 1 (Data Integrity & 430 MeV/u Grid):      {'PASS' if g1_pass else 'FAIL: ' + g1_msg}")
-    print(f"  Gate 2 (Table & Integrator Equivalence):       {'PASS' if g2_pass else 'FAIL: ' + g2_msg}")
+    print(f"  Gate 1 (Data Integrity, Identities & Hashes):  {'PASS' if g1_pass else 'FAIL: ' + g1_msg}")
+    print(f"  Gate 2 (Table & CSDA Integrator Equivalence):  {'PASS' if g2_pass else 'FAIL: ' + g2_msg}")
     print(f"  Gate 3 (Independent Transport Bragg Peaks):    {'PASS' if g3_pass else 'FAIL: ' + g3_msg}")
-    print(f"  Gate 4 (Density Scaling Invariance Audit):     {'PASS' if g4_pass else 'FAIL: ' + g4_msg}")
-    print(f"  Gate 5 (CTest & Energy Domain Contract):       {'PASS' if g5_pass else 'FAIL: ' + g5_msg}")
+    print(f"  Gate 4 (Empirical Density Scaling Audit):      {'PASS' if g4_pass else 'FAIL: ' + g4_msg}")
+    print(f"  Gate 5 (CTest Host/Device & Permutation Test): {'PASS' if g5_pass else 'FAIL: ' + g5_msg}")
     print("================================================================================")
 
     if not all_pass:

@@ -1,11 +1,5 @@
 {
   "schema_version": 2,
-  "data_filename": "schneider_stopping_v1.bin",
-  "data_sha256": "9786dba071f61e660fcc5940a844e8109c4e480ccb603d7929d2fcfaae152c2f",
-  "canonical_csv_filename": "c12_schneider_stopping_power.csv",
-  "canonical_csv_sha256": "d39e65ac7842f836bcbcecb02901b29d29cfa845111e51366cf77669d08e92a9",
-  "binary_magic": "SCHNSTOP",
-  "binary_version": 1,
   "topas_version": "4.2.p3",
   "geant4_version": "geant4-11-03-patch-02 [MT]",
   "em_physics_module": "g4em-standard_opt4",
@@ -569,5 +563,10 @@
     "csda_range": "mm",
     "density": "g/cm3",
     "energy": "MeV/u"
-  }
+  },
+  "data_filename": "schneider_stopping_v1.bin",
+  "data_sha256": "9786dba071f61e660fcc5940a844e8109c4e480ccb603d7929d2fcfaae152c2f",
+  "format": "binary",
+  "binary_magic": "SCHNSTOP",
+  "binary_version": 1
 }

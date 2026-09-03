@@ -719,8 +719,8 @@ void TransportConfig::validate() const {
         if (beam_energy_spread != 0.0) {
             throw std::invalid_argument("ct_validation_mode 'primary-attenuation-only' requires beam_energy_spread = 0.0");
         }
-        if (!ct_use_density_mass_spr) {
-            throw std::invalid_argument("ct_validation_mode 'primary-attenuation-only' requires ct_use_density_mass_spr = true");
+        if (ct_schneider_stopping_power_file.empty() && !ct_use_density_mass_spr) {
+            throw std::invalid_argument("ct_validation_mode 'primary-attenuation-only' requires ct_use_density_mass_spr = true when exact stopping table is not set");
         }
         if (std::abs(ct_stopping_power_scale - 1.0) > 1e-6) {
             throw std::invalid_argument("ct_validation_mode 'primary-attenuation-only' requires ct_stopping_power_scale = 1.0");
