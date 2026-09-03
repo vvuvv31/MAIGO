@@ -50,6 +50,7 @@ add_library(carbon_core
     src/fred_table1.cpp
     src/fred_event_library.cpp
     src/inelastic_package_v2.cpp
+    src/inelastic_package_v3.cpp
     src/multiple_scattering.cpp
     src/run_quality.cpp
     src/stopping_power.cpp

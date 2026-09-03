@@ -23,6 +23,8 @@
 #include "carbon/fred_event_library.hpp"
 #include "carbon/fred_table1.hpp"
 #include "carbon/inelastic.hpp"
+#include "carbon/inelastic_identity.hpp"
+#include "carbon/inelastic_package_v3.hpp"
 #include "carbon/device.hpp"
 #include "carbon/detail/device_memory_tracker.hpp"
 #include <sycl/sycl.hpp>
@@ -7075,6 +7077,380 @@ void test_step15_schneider_radiation_lengths_and_sentinel() {
 #endif
 }
 
+carbon::InelasticPackageV3Table make_synthetic_cinel03_table() {
+    carbon::InelasticPackageV3Table table;
+    table.set_metadata(100.0F, 100.0F, 1, "00000000-0000-4000-8000-000000000016");
+
+    // Event 1: C12 on Target H (Z=1, A=1) at 200 MeV/u (2400 MeV)
+    {
+        carbon::Cinel03InteractionRecord ev{};
+        ev.run_id = 1;
+        ev.event_id = 1;
+        ev.projectile_pdg = 1000060120;
+        ev.projectile_z = 6;
+        ev.projectile_a = 12;
+        ev.projectile_charge = 6.0F;
+        ev.projectile_rest_mass = static_cast<float>(12.0 * carbon::inelastic_nucleon_rest_mass_MeV);
+        ev.collision_energy_MeV = 2400.0F;
+        ev.collision_energy_MeV_per_u = 200.0F;
+        ev.collision_direction_z = 1.0F;
+        ev.target_element_z = 1; // Hydrogen
+        ev.target_a = 1;
+        ev.parent_status = 2; // Destroyed
+        ev.parent_pdg = 1000060120;
+        ev.parent_z = 6;
+        ev.parent_a = 12;
+        ev.parent_charge = 6.0F;
+        ev.parent_rest_mass = ev.projectile_rest_mass;
+        ev.parent_energy_MeV = 0.0F;
+        ev.parent_direction_z = 1.0F;
+        ev.track_weight = 1.0F;
+        ev.parent_weight = 1.0F;
+        ev.process_local_deposit_MeV = 20.0F;
+        ev.direct_product_count = 3;
+        std::strncpy(ev.material_name, "G4_WATER", sizeof(ev.material_name));
+        std::strncpy(ev.process_name, "ionInelastic", sizeof(ev.process_name));
+        std::strncpy(ev.model_name, "BinaryCascade", sizeof(ev.model_name));
+
+        std::vector<carbon::Cinel03ProductRecord> prods(3);
+        prods[0].pdg = 1000050110;
+        prods[0].z = 5;
+        prods[0].a = 11;
+        prods[0].charge = 5.0F;
+        prods[0].rest_mass = static_cast<float>(11.0 * carbon::inelastic_nucleon_rest_mass_MeV);
+        prods[0].kinetic_energy_MeV = 2100.0F;
+        prods[0].direction_z = 1.0F;
+        prods[0].local_direction_z = 1.0F;
+        prods[0].weight = 1.0F;
+        prods[0].role = 0;
+
+        prods[1].pdg = 2212;
+        prods[1].z = 1;
+        prods[1].a = 1;
+        prods[1].charge = 1.0F;
+        prods[1].rest_mass = static_cast<float>(carbon::inelastic_proton_rest_mass_MeV);
+        prods[1].kinetic_energy_MeV = 180.0F;
+        prods[1].direction_z = 1.0F;
+        prods[1].local_direction_z = 1.0F;
+        prods[1].weight = 1.0F;
+        prods[1].role = 0;
+
+        prods[2].pdg = 2112;
+        prods[2].z = 0;
+        prods[2].a = 1;
+        prods[2].charge = 0.0F;
+        prods[2].rest_mass = static_cast<float>(carbon::inelastic_neutron_rest_mass_MeV);
+        prods[2].kinetic_energy_MeV = 100.0F;
+        prods[2].direction_z = 1.0F;
+        prods[2].local_direction_z = 1.0F;
+        prods[2].weight = 1.0F;
+        prods[2].role = 0;
+
+        table.add_event(ev, prods);
+    }
+
+    // Event 2: C12 on Target C (Z=6, A=12) at 200 MeV/u (2400 MeV)
+    {
+        carbon::Cinel03InteractionRecord ev{};
+        ev.run_id = 1;
+        ev.event_id = 2;
+        ev.projectile_pdg = 1000060120;
+        ev.projectile_z = 6;
+        ev.projectile_a = 12;
+        ev.projectile_charge = 6.0F;
+        ev.projectile_rest_mass = static_cast<float>(12.0 * carbon::inelastic_nucleon_rest_mass_MeV);
+        ev.collision_energy_MeV = 2400.0F;
+        ev.collision_energy_MeV_per_u = 200.0F;
+        ev.collision_direction_z = 1.0F;
+        ev.target_element_z = 6; // Carbon
+        ev.target_a = 12;
+        ev.parent_status = 2;
+        ev.parent_pdg = 1000060120;
+        ev.parent_z = 6;
+        ev.parent_a = 12;
+        ev.parent_charge = 6.0F;
+        ev.parent_rest_mass = ev.projectile_rest_mass;
+        ev.parent_energy_MeV = 0.0F;
+        ev.parent_direction_z = 1.0F;
+        ev.track_weight = 1.0F;
+        ev.parent_weight = 1.0F;
+        ev.process_local_deposit_MeV = 30.0F;
+        ev.direct_product_count = 2;
+        std::strncpy(ev.material_name, "Schneider_Tissue", sizeof(ev.material_name));
+        std::strncpy(ev.process_name, "ionInelastic", sizeof(ev.process_name));
+        std::strncpy(ev.model_name, "BinaryCascade", sizeof(ev.model_name));
+
+        std::vector<carbon::Cinel03ProductRecord> prods(2);
+        prods[0].pdg = 1000060110;
+        prods[0].z = 6;
+        prods[0].a = 11;
+        prods[0].charge = 6.0F;
+        prods[0].rest_mass = static_cast<float>(11.0 * carbon::inelastic_nucleon_rest_mass_MeV);
+        prods[0].kinetic_energy_MeV = 2150.0F;
+        prods[0].direction_z = 1.0F;
+        prods[0].local_direction_z = 1.0F;
+        prods[0].weight = 1.0F;
+        prods[0].role = 0;
+
+        prods[1].pdg = 2112;
+        prods[1].z = 0;
+        prods[1].a = 1;
+        prods[1].charge = 0.0F;
+        prods[1].rest_mass = static_cast<float>(carbon::inelastic_neutron_rest_mass_MeV);
+        prods[1].kinetic_energy_MeV = 220.0F;
+        prods[1].direction_z = 1.0F;
+        prods[1].local_direction_z = 1.0F;
+        prods[1].weight = 1.0F;
+        prods[1].role = 0;
+
+        table.add_event(ev, prods);
+    }
+
+    // Event 3: C12 on Target O (Z=8, A=16) at 200 MeV/u (2400 MeV)
+    {
+        carbon::Cinel03InteractionRecord ev{};
+        ev.run_id = 1;
+        ev.event_id = 3;
+        ev.projectile_pdg = 1000060120;
+        ev.projectile_z = 6;
+        ev.projectile_a = 12;
+        ev.projectile_charge = 6.0F;
+        ev.projectile_rest_mass = static_cast<float>(12.0 * carbon::inelastic_nucleon_rest_mass_MeV);
+        ev.collision_energy_MeV = 2400.0F;
+        ev.collision_energy_MeV_per_u = 200.0F;
+        ev.collision_direction_z = 1.0F;
+        ev.target_element_z = 8; // Oxygen
+        ev.target_a = 16;
+        ev.parent_status = 2;
+        ev.parent_pdg = 1000060120;
+        ev.parent_z = 6;
+        ev.parent_a = 12;
+        ev.parent_charge = 6.0F;
+        ev.parent_rest_mass = ev.projectile_rest_mass;
+        ev.parent_energy_MeV = 0.0F;
+        ev.parent_direction_z = 1.0F;
+        ev.track_weight = 1.0F;
+        ev.parent_weight = 1.0F;
+        ev.process_local_deposit_MeV = 50.0F;
+        ev.direct_product_count = 3;
+        std::strncpy(ev.material_name, "Schneider_Bone", sizeof(ev.material_name));
+        std::strncpy(ev.process_name, "ionInelastic", sizeof(ev.process_name));
+        std::strncpy(ev.model_name, "BinaryCascade", sizeof(ev.model_name));
+
+        std::vector<carbon::Cinel03ProductRecord> prods(3);
+        prods[0].pdg = 1000040070;
+        prods[0].z = 4;
+        prods[0].a = 7;
+        prods[0].charge = 4.0F;
+        prods[0].rest_mass = static_cast<float>(7.0 * carbon::inelastic_nucleon_rest_mass_MeV);
+        prods[0].kinetic_energy_MeV = 1350.0F;
+        prods[0].direction_z = 1.0F;
+        prods[0].local_direction_z = 1.0F;
+        prods[0].weight = 1.0F;
+        prods[0].role = 0;
+
+        prods[1].pdg = 1000020040;
+        prods[1].z = 2;
+        prods[1].a = 4;
+        prods[1].charge = 2.0F;
+        prods[1].rest_mass = static_cast<float>(4.0 * carbon::inelastic_nucleon_rest_mass_MeV);
+        prods[1].kinetic_energy_MeV = 750.0F;
+        prods[1].direction_z = 1.0F;
+        prods[1].local_direction_z = 1.0F;
+        prods[1].weight = 1.0F;
+        prods[1].role = 0;
+
+        prods[2].pdg = 2212;
+        prods[2].z = 1;
+        prods[2].a = 1;
+        prods[2].charge = 1.0F;
+        prods[2].rest_mass = static_cast<float>(carbon::inelastic_proton_rest_mass_MeV);
+        prods[2].kinetic_energy_MeV = 250.0F;
+        prods[2].direction_z = 1.0F;
+        prods[2].local_direction_z = 1.0F;
+        prods[2].weight = 1.0F;
+        prods[2].role = 0;
+
+        table.add_event(ev, prods);
+    }
+
+    table.finalize();
+    return table;
+}
+
+void test_step16_cinel03_round_trip_and_determinism() {
+    const auto table = make_synthetic_cinel03_table();
+    const auto p_a = std::filesystem::path("test_cinel03_a.cinpkg");
+    const auto p_b = std::filesystem::path("test_cinel03_b.cinpkg");
+
+    table.to_binary(p_a);
+    table.to_binary(p_b);
+
+    require(std::filesystem::exists(p_a), "CINEL03 output A missing");
+    require(std::filesystem::exists(p_b), "CINEL03 output B missing");
+
+    // Check deterministic bitwise serialization
+    std::ifstream in_a(p_a, std::ios::binary);
+    std::ifstream in_b(p_b, std::ios::binary);
+    std::string bytes_a((std::istreambuf_iterator<char>(in_a)), std::istreambuf_iterator<char>());
+    std::string bytes_b((std::istreambuf_iterator<char>(in_b)), std::istreambuf_iterator<char>());
+    require(bytes_a.size() > 0, "CINEL03 file is empty");
+    require(bytes_a == bytes_b, "CINEL03 serialization is non-deterministic");
+
+    // Deserialize and check contents
+    const auto loaded = carbon::InelasticPackageV3Table::from_binary(p_a);
+    require(loaded.cells().size() == 3, "Cell count mismatch");
+    require(loaded.interactions().size() == 3, "Interaction count mismatch");
+    require(loaded.products().size() == 8, "Product count mismatch");
+    require(loaded.energy_nodes().size() == 3, "Energy node count mismatch");
+    require(loaded.campaign_uuid() == "00000000-0000-4000-8000-000000000016", "UUID mismatch");
+
+    // Validate key contract: event key is projectile_Z, projectile_A, target_element_Z, energy_node
+    require(loaded.energy_nodes()[0].target_element_z == 1, "Target element 1 mismatch");
+    require(loaded.energy_nodes()[1].target_element_z == 6, "Target element 6 mismatch");
+    require(loaded.energy_nodes()[2].target_element_z == 8, "Target element 8 mismatch");
+
+    std::filesystem::remove(p_a);
+    std::filesystem::remove(p_b);
+}
+
+void test_step16_cinel03_rejections_and_fail_closed() {
+    const auto table = make_synthetic_cinel03_table();
+    const auto p_valid = std::filesystem::path("test_cinel03_valid.cinpkg");
+    table.to_binary(p_valid);
+
+    // 1. Missing target fail-closed in production mode
+    require_throws([&]() {
+        // Calcium Z=20 is not in table
+        const auto loaded = carbon::InelasticPackageV3Table::from_binary(p_valid);
+        (void)loaded.find_event(6, 12, 20, 200.0F, 1.0F, 0.5F, false);
+    }, "CINEL03: Missing target element Z=20");
+
+    // 2. Missing target non-fatal in audit mode (increments named counter)
+    {
+        const auto loaded = carbon::InelasticPackageV3Table::from_binary(p_valid);
+        std::uint64_t missing_counter = 0;
+        const auto ev = loaded.find_event(6, 12, 20, 200.0F, 1.0F, 0.5F, true, &missing_counter);
+        require(ev == std::numeric_limits<std::uint64_t>::max(), "Audit mode must return invalid index for missing target");
+        require(missing_counter == 1, "Audit mode must increment missing target counter");
+    }
+
+    // 3. Truncated header rejection
+    {
+        const auto p_bad = std::filesystem::path("test_cinel03_truncated.cinpkg");
+        std::ofstream out(p_bad, std::ios::binary);
+        char buf[50] = {0};
+        out.write(buf, 50);
+        out.close();
+        require_throws([&]() {
+            carbon::InelasticPackageV3Table::from_binary(p_bad);
+        }, "Truncated CINPKG04 header");
+        std::filesystem::remove(p_bad);
+    }
+
+    // 4. Unsupported magic / legacy CINEL02 rejection
+    {
+        const auto p_bad = std::filesystem::path("test_cinel03_badmagic.cinpkg");
+        std::ifstream in(p_valid, std::ios::binary);
+        std::string bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        in.close();
+        bytes[0] = 'X'; // Corrupt magic
+        std::ofstream out(p_bad, std::ios::binary);
+        out.write(bytes.data(), bytes.size());
+        out.close();
+        require_throws([&]() {
+            carbon::InelasticPackageV3Table::from_binary(p_bad);
+        }, "Unsupported or non-authoritative CINPKG04 header");
+        std::filesystem::remove(p_bad);
+    }
+
+    // 5. Corrupted CRC32 checksum rejection
+    {
+        const auto p_bad = std::filesystem::path("test_cinel03_badcrc.cinpkg");
+        std::ifstream in(p_valid, std::ios::binary);
+        std::string bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        in.close();
+        bytes[bytes.size() - 5] ^= 0x55; // Flip payload bit
+        std::ofstream out(p_bad, std::ios::binary);
+        out.write(bytes.data(), bytes.size());
+        out.close();
+        require_throws([&]() {
+            carbon::InelasticPackageV3Table::from_binary(p_bad);
+        }, "CINPKG04 checksum mismatch");
+        std::filesystem::remove(p_bad);
+    }
+
+    std::filesystem::remove(p_valid);
+}
+
+void test_step16_cinel03_synthetic_cpu_gpu_replay() {
+    const auto table = make_synthetic_cinel03_table();
+    const auto compact = table.make_device_tables();
+
+    // CPU lookup and replay
+    const auto ev_idx = table.find_event(6, 12, 8, 200.0F, 1.0F, 0.0F);
+    require(ev_idx != std::numeric_limits<std::uint64_t>::max(), "CPU find_event failed for O16 target");
+    const auto replay = table.fixed_replay(ev_idx, compact);
+    require(replay.product_count == 3, "Product count mismatch on CPU");
+    require(replay.compact_products[0].z == 4 && replay.compact_products[0].a == 7, "Product 0 Be7 mismatch");
+    require(replay.compact_products[1].z == 2 && replay.compact_products[1].a == 4, "Product 1 He4 mismatch");
+    require(replay.compact_products[2].z == 1 && replay.compact_products[2].a == 1, "Product 2 Proton mismatch");
+
+#ifdef CARBON_HAS_SYCL
+    // GPU Replay Test
+    sycl::queue queue{sycl::default_selector_v};
+    auto* dev_nodes = sycl::malloc_device<carbon::Cinel03EnergyNode>(compact.energy_nodes.size(), queue);
+    auto* dev_offsets = sycl::malloc_device<std::uint32_t>(compact.event_offsets.size(), queue);
+    auto* dev_indices = sycl::malloc_device<std::uint32_t>(compact.event_indices.size(), queue);
+    auto* dev_interactions = sycl::malloc_device<carbon::Cinel03DeviceInteraction>(compact.interactions.size(), queue);
+    auto* dev_products = sycl::malloc_device<carbon::Cinel03DeviceProduct>(compact.products.size(), queue);
+
+    queue.copy(compact.energy_nodes.data(), dev_nodes, compact.energy_nodes.size()).wait_and_throw();
+    queue.copy(compact.event_offsets.data(), dev_offsets, compact.event_offsets.size()).wait_and_throw();
+    queue.copy(compact.event_indices.data(), dev_indices, compact.event_indices.size()).wait_and_throw();
+    queue.copy(compact.interactions.data(), dev_interactions, compact.interactions.size()).wait_and_throw();
+    queue.copy(compact.products.data(), dev_products, compact.products.size()).wait_and_throw();
+
+    // Output buffer: [0]=product_count, [1]=prod0_z, [2]=prod0_a, [3]=prod1_z, [4]=prod1_a, [5]=prod2_z, [6]=prod2_a
+    auto* dev_out = sycl::malloc_device<int>(10, queue);
+    queue.memset(dev_out, 0, 10 * sizeof(int)).wait_and_throw();
+
+    const auto num_nodes = compact.energy_nodes.size();
+    queue.single_task([=]() {
+        // Device search for target_element_z == 8
+        for (std::size_t i = 0; i < num_nodes; ++i) {
+            if (dev_nodes[i].projectile_z == 6 && dev_nodes[i].projectile_a == 12 &&
+                dev_nodes[i].target_element_z == 8) {
+                const auto ev_id = dev_indices[dev_offsets[i]];
+                const auto& inter = dev_interactions[ev_id];
+                dev_out[0] = static_cast<int>(inter.direct_product_count);
+                const auto p_off = inter.product_offset;
+                for (std::uint32_t p = 0; p < inter.direct_product_count; ++p) {
+                    dev_out[1 + p * 2 + 0] = dev_products[p_off + p].z;
+                    dev_out[1 + p * 2 + 1] = dev_products[p_off + p].a;
+                }
+                break;
+            }
+        }
+    }).wait_and_throw();
+
+    std::vector<int> host_out(10);
+    queue.copy(dev_out, host_out.data(), 10).wait_and_throw();
+
+    require(host_out[0] == 3, "GPU replay product count mismatch");
+    require(host_out[1] == 4 && host_out[2] == 7, "GPU product 0 Be7 mismatch");
+    require(host_out[3] == 2 && host_out[4] == 4, "GPU product 1 He4 mismatch");
+    require(host_out[5] == 1 && host_out[6] == 1, "GPU product 2 Proton mismatch");
+
+    sycl::free(dev_nodes, queue);
+    sycl::free(dev_offsets, queue);
+    sycl::free(dev_indices, queue);
+    sycl::free(dev_interactions, queue);
+    sycl::free(dev_products, queue);
+    sycl::free(dev_out, queue);
+#endif
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -7202,6 +7578,9 @@ int main(int argc, char** argv) {
         run("test_schneider_stopping_host_device_equivalence", test_schneider_stopping_host_device_equivalence);
 #endif
         run("test_step15_schneider_radiation_lengths_and_sentinel", test_step15_schneider_radiation_lengths_and_sentinel);
+        run("test_step16_cinel03_round_trip_and_determinism", test_step16_cinel03_round_trip_and_determinism);
+        run("test_step16_cinel03_rejections_and_fail_closed", test_step16_cinel03_rejections_and_fail_closed);
+        run("test_step16_cinel03_synthetic_cpu_gpu_replay", test_step16_cinel03_synthetic_cpu_gpu_replay);
         std::cout << "All carbon_tests passed\n";
         return EXIT_SUCCESS;
     } catch (const std::exception& error) {
