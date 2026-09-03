@@ -1,0 +1,78 @@
+{
+  "step": 17,
+  "name": "generate_c12_element_campaigns",
+  "overall_passed": true,
+  "gates": {
+    "gate1_target_coverage": {
+      "gate1_passed": true,
+      "total_cells": 5461,
+      "covered_elements": [
+        1,
+        6,
+        7,
+        8,
+        11,
+        12,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        22
+      ],
+      "missing_elements": [],
+      "unexpected_elements": [],
+      "aliasing_errors": 0,
+      "non_c12_projectiles": 0
+    },
+    "gate2_energy_statistics": {
+      "gate2_passed": true,
+      "min_energy_MeV_per_u": 1.0,
+      "max_energy_MeV_per_u": 430.0,
+      "min_events_per_target": 1694,
+      "target_counts": {
+        "1": 2591,
+        "6": 2944,
+        "7": 2499,
+        "8": 2350,
+        "11": 2072,
+        "12": 2461,
+        "15": 2360,
+        "16": 2333,
+        "17": 2218,
+        "18": 2148,
+        "19": 1694,
+        "20": 2126,
+        "22": 2317
+      },
+      "total_interactions": 30113,
+      "total_rejected_events": 27,
+      "rejected_fraction": 0.0008958195089581951
+    },
+    "gate3_kinematics_integrity": {
+      "gate3_passed": true,
+      "sampled_interactions": 30113,
+      "sampled_products": 53533,
+      "unit_norm_violations": 0,
+      "invalid_roles": 0,
+      "invalid_ke": 0,
+      "closure_violations": 0
+    },
+    "gate4_binary_provenance": {
+      "gate4_passed": true,
+      "magic": "CINPKG04",
+      "file_size_bytes": 46208476,
+      "actual_sha256": "cc9a328a76e18f9e866e9dc4296a69483656ed06fa35e668de0fd7f6aae5a036",
+      "declared_sha256": "cc9a328a76e18f9e866e9dc4296a69483656ed06fa35e668de0fd7f6aae5a036",
+      "sha_match": true,
+      "missing_metadata_keys": []
+    },
+    "gate5_runtime_compatibility": {
+      "gate5_passed": true,
+      "returncode": 0,
+      "stdout": "SUCCESS",
+      "stderr": ""
+    }
+  }
+}

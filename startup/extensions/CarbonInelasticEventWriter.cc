@@ -115,32 +115,7 @@ bool TransportIdentity(const CarbonCinel02Product& product) {
     if (product.pdg == 22 || product.pdg == 2112) {
         return true;
     }
-    if (product.z <= 0 || product.a < product.z) {
-        return false;
-    }
-    // Keep the capture writer's transport-identification domain synchronized
-    // with carbon-isotope-mass-v2.  The target material remains explicitly
-    // H-1/O-16; this list covers captured final-state nuclei, not material
-    // composition.  The package compiler and loader perform the authoritative
-    // mass/excitation check using the same versioned table.
-    const auto known_ion =
-        (product.z == 1 && product.a >= 1 && product.a <= 3) ||
-        (product.z == 2 && (product.a == 3 || product.a == 4 ||
-                            product.a == 6 || product.a == 8)) ||
-        (product.z == 3 && product.a >= 6 && product.a <= 9) ||
-        (product.z == 4 && (product.a == 4 || product.a == 6 ||
-                            product.a == 7 || (product.a >= 9 && product.a <= 12))) ||
-        (product.z == 5 && (product.a == 8 || (product.a >= 10 && product.a <= 14))) ||
-        (product.z == 6 && ((product.a >= 9 && product.a <= 16) || product.a == 18)) ||
-        (product.z == 7 && product.a >= 12 && product.a <= 19) ||
-        (product.z == 8 && product.a >= 13 && product.a <= 21) ||
-        (product.z == 9 && product.a >= 17 && product.a <= 23) ||
-        (product.z == 10 && product.a >= 16 && product.a <= 24) ||
-        (product.z == 11 && product.a >= 20 && product.a <= 25) ||
-        (product.z == 12 && product.a >= 19 && product.a <= 26) ||
-        (product.z == 13 && product.a >= 22 && product.a <= 27) ||
-        (product.z == 14 && product.a == 27);
-    if (!known_ion) {
+    if (product.z <= 0 || product.a < product.z || product.z > 32) {
         return false;
     }
     const auto expected_pdg =
@@ -148,10 +123,6 @@ bool TransportIdentity(const CarbonCinel02Product& product) {
     if (product.z == 1 && product.a == 1 && product.pdg == 2212) {
         return product.excitation <= 1.0e-4F;
     }
-    // The first replay stage transports only ground-state ions.  A valid
-    // Geant4 isomer is still serialized losslessly, but it must be marked as
-    // an explicit unsupported product because the EM+Elastic secondary state
-    // does not carry excitation energy.
     return product.pdg == expected_pdg && product.excitation <= 1.0e-4F;
 }
 

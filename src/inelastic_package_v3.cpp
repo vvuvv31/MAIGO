@@ -357,16 +357,15 @@ InelasticPackageV3Table InelasticPackageV3Table::from_binary(
         const auto identity = classify_inelastic_species(
             product.pdg, product.z, product.a, product.charge,
             product.rest_mass, product.excitation);
-        const bool supported_identity = identity.runtime_supported();
-        if (!identity.valid() ||
-            !std::isfinite(product.kinetic_energy_MeV) || product.kinetic_energy_MeV < 0.0F ||
+        const bool supported_identity = identity.valid() && identity.runtime_supported();
+        if (!std::isfinite(product.kinetic_energy_MeV) || product.kinetic_energy_MeV < 0.0F ||
             !std::isfinite(product.weight) || std::abs(product.weight - 1.0F) > 1.0e-6F ||
             !unit_direction(product.direction_x, product.direction_y, product.direction_z) ||
             !unit_direction(product.local_direction_x, product.local_direction_y,
                             product.local_direction_z) ||
             product.role < 0 || product.role > 2 ||
             (product.role == 2 && supported_identity) ||
-            (!supported_identity && product.role != 2)) {
+            (product.role != 2 && !supported_identity)) {
             throw std::runtime_error("Invalid CINPKG04 product at index " +
                                      std::to_string(product_index) + ": " + path.string());
         }

@@ -71,8 +71,8 @@ The executor updates only the `Status` column and the execution log. Never rewri
 | [14](steps/14-schneider-stopping.md) | DONE | TOPAS-derived 25-section stopping tables | 13 |
 | [15](steps/15-schneider-mcs.md) | DONE | Exact 25-section radiation-length MCS path | 14 |
 | [16](steps/16-cinel03-schema.md) | DONE | Element-target correlated-event package schema | 15 |
-| [17](steps/17-c12-element-campaigns.md) | TODO | C12 x 13-target TOPAS final-state campaigns | 16 |
-| [18](steps/18-material-target-runtime.md) | TODO | Partial-rate target selection and CINEL03 replay | 17 |
+| [17](steps/17-c12-element-campaigns.md) | DONE | C12 x 13-target TOPAS final-state campaigns | 16 |
+| [18](steps/18-material-target-runtime.md) | IN_PROGRESS | Partial-rate target selection and CINEL03 replay | 17 |
 | [19](steps/19-c12-fragment-validation.md) | TODO | C12 fragmentation validation in Schneider media | 18 |
 | [20](steps/20-secondary-projectiles.md) | TODO | Prioritized secondary projectile coverage | 19 |
 | [21](steps/21-heterogeneous-and-dicom-gates.md) | TODO | Heterogeneous and real-DICOM research gates | 20 |
@@ -183,4 +183,7 @@ YYYY-MM-DD HH:MM TZ | step NN | OLD -> NEW | commit/hash or blocker | evidence p
 2026-09-03 01:30 CST | step 14 | IN_PROGRESS -> DONE | feat(ct): apply 25-section Schneider stopping tables with mass-SPR scaling | evidence/step-14/
 2026-09-03 11:21 CST | step 15 | TODO -> DONE | feat(ct): use Schneider section radiation lengths for MCS | evidence/step-15/
 2026-09-03 11:32 CST | step 16 | TODO -> DONE | feat(cinel): add versioned elemental-target event package | evidence/step-16/
+2026-09-03 11:36 CST | step 17 | TODO -> IN_PROGRESS | start C12 elemental-target TOPAS campaigns for 13 elements | /mnt/sda/wuwei/cinel03-c12-element-campaigns/
+2026-09-03 12:19 CST | step 17 | IN_PROGRESS -> DONE | feat(topas): extract C12 elemental-target CINEL events | evidence/step-17/
+2026-09-03 12:20 CST | step 18 | TODO -> IN_PROGRESS | start partial-rate target selection and CINEL03 replay | include/carbon/inelastic_package_v3.hpp
 ```
