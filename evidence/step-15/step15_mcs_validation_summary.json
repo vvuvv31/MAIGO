@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "task": "Step 15 Multiple Coulomb Scattering Verification",
+  "validated_commit": "ebbcb7bb5a9382d6488d11c6000516f59d964bba",
+  "source_worktree_clean": true,
+  "verified_radiation_lengths_sha256": "f7a412110cc8928ddb6fb6dc112ca7d9b748e1025bd50790159a78f59a54909a",
+  "cases": [
+    {
+      "id": "mcs_lung_150mevu",
+      "energy_mevu": 150.0,
+      "thickness_mm": 50.0,
+      "topas_endpoint_sigma_r_mm": 0.6113131723288885,
+      "gpu_endpoint_sigma_r_mm": 0.5455235507,
+      "topas_endpoint_core_halo_ratio": 1.0,
+      "gpu_endpoint_core_halo_ratio": 1
+    },
+    {
+      "id": "mcs_soft_tissue_200mevu",
+      "energy_mevu": 200.0,
+      "thickness_mm": 40.0,
+      "topas_endpoint_sigma_r_mm": 0.5891740562642171,
+      "gpu_endpoint_sigma_r_mm": 0.5176501904,
+      "topas_endpoint_core_halo_ratio": 1.0,
+      "gpu_endpoint_core_halo_ratio": 1
+    },
+    {
+      "id": "mcs_trabecular_bone_200mevu",
+      "energy_mevu": 200.0,
+      "thickness_mm": 30.0,
+      "topas_endpoint_sigma_r_mm": 0.6037505029881198,
+      "gpu_endpoint_sigma_r_mm": 0.5043611262,
+      "topas_endpoint_core_halo_ratio": 1.0,
+      "gpu_endpoint_core_halo_ratio": 1
+    },
+    {
+      "id": "mcs_dense_bone_200mevu",
+      "energy_mevu": 200.0,
+      "thickness_mm": 25.0,
+      "topas_endpoint_sigma_r_mm": 0.6063053525193327,
+      "gpu_endpoint_sigma_r_mm": 0.505078902,
+      "topas_endpoint_core_halo_ratio": 1.0,
+      "gpu_endpoint_core_halo_ratio": 1
+    },
+    {
+      "id": "mcs_interface_tissue_bone_200mevu",
+      "energy_mevu": 200.0,
+      "thickness_mm": 40.0,
+      "topas_endpoint_sigma_r_mm": 0.8100261117778529,
+      "gpu_endpoint_sigma_r_mm": 0.5196375799,
+      "topas_endpoint_core_halo_ratio": 1.0,
+      "gpu_endpoint_core_halo_ratio": 1
+    },
+    {
+      "id": "mcs_interface_tissue_lung_200mevu",
+      "energy_mevu": 200.0,
+      "thickness_mm": 50.0,
+      "topas_endpoint_sigma_r_mm": 0.5742704306208011,
+      "gpu_endpoint_sigma_r_mm": 0.5704758532,
+      "topas_endpoint_core_halo_ratio": 1.0,
+      "gpu_endpoint_core_halo_ratio": 1
+    }
+  ]
+}
