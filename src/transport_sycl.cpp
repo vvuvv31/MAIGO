@@ -2938,7 +2938,10 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                         if (enable_ct_grid && in_ct && enable_ct_material_mcs) {
                             if (ct_material_ids_are_schneider_sections) {
                                 radiation_length_g_per_cm2 = static_cast<float>(
-                                    schneider_section_radiation_length_g_per_cm2(ct_material));
+                                    select_transport_radiation_length_g_per_cm2(
+                                        ct_material_ids_are_schneider_sections, in_ct,
+                                        ct_material, enable_ct_material_mcs,
+                                        water_radiation_length_g_per_cm2));
                             } else {
                                 radiation_length_g_per_cm2 = static_cast<float>(
                                     ct_material_radiation_length_g_per_cm2(
@@ -5693,6 +5696,19 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                 constexpr float two_pi = 6.2831853071795864769F;
                                 float theta_scat = 0.0F;
                                 float phi_scat = 0.0F;
+                                // Secondary MCS material selection shares the
+                                // primary helper: Schneider CT voxels use the
+                                // section X0, everywhere else falls back to
+                                // water. Density is the local CT density
+                                // (== water outside CT), never double-counted.
+                                const auto sec_radiation_length_g_per_cm2 =
+                                    static_cast<float>(
+                                        select_transport_radiation_length_g_per_cm2(
+                                            ct_material_ids_are_schneider_sections,
+                                            sec_in_ct,
+                                            static_cast<unsigned>(sec_ct_material),
+                                            enable_ct_material_mcs,
+                                            water_radiation_length_g_per_cm2));
                                 if (use_fred_2gr_mcs) {
                                     const auto mixture = rng::uniform01(
                                         2026, frag.rng_stream, sec_steps, 0);
@@ -5703,15 +5719,16 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                     theta_scat = fred_2gr_angle_device(
                                         fred_2gr_mcs_device, sec_e / frag_a,
                                         static_cast<int>(frag.z), static_cast<int>(frag.a),
-                                        water_density_g_per_cm3 * sec_step_mm / 10.0F,
-                                        static_cast<float>(water_radiation_length_g_per_cm2),
+                                        sec_local_density_g_per_cm3 * sec_step_mm / 10.0F,
+                                        sec_radiation_length_g_per_cm2,
                                         extrapolate_fred_2gr_high_energy,
                                         multiple_scattering_scale, mixture, radial);
                                 } else {
                                     const auto theta_rms = highland_projected_rms_angle_device(
                                         sec_e, static_cast<int>(frag.z),
                                         static_cast<int>(frag.a), sec_step_mm,
-                                        water_density_g_per_cm3) * multiple_scattering_scale;
+                                        sec_local_density_g_per_cm3,
+                                        sec_radiation_length_g_per_cm2) * multiple_scattering_scale;
                                     const auto u_msc0 = sycl::fmax(rng::uniform01(
                                         2026, frag.rng_stream, sec_steps, 0),
                                         1.0e-10F);

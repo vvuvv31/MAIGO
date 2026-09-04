@@ -7083,6 +7083,111 @@ void test_step15_schneider_radiation_lengths_and_sentinel() {
 #endif
 }
 
+void test_secondary_schneider_mcs_x0_selection() {
+    constexpr double water_x0 = carbon::water_radiation_length_g_per_cm2;
+    // 1. Water / disabled paths must return the water fallback exactly.
+    require_near(carbon::select_transport_radiation_length_g_per_cm2(
+                     false, true, 8, true, water_x0), water_x0, 0.0,
+                 "Non-Schneider CT must use water X0");
+    require_near(carbon::select_transport_radiation_length_g_per_cm2(
+                     true, false, 8, true, water_x0), water_x0, 0.0,
+                 "Outside CT must use water X0");
+    require_near(carbon::select_transport_radiation_length_g_per_cm2(
+                     true, true, 8, false, water_x0), water_x0, 0.0,
+                 "Disabled ct_material_mcs must use water X0");
+    require_near(carbon::select_transport_radiation_length_g_per_cm2(
+                     true, true, 2, false, water_x0), water_x0, 0.0,
+                 "Secondary water-mode gate must use water X0");
+    // 2/3/4. Schneider sections hit the LUT exactly (soft tissue 8,
+    // lung 1, dense bone 20).
+    for (const unsigned s : {1U, 8U, 20U}) {
+        const double expected = carbon::schneider_section_radiation_length_g_per_cm2(s);
+        require_near(carbon::select_transport_radiation_length_g_per_cm2(
+                         true, true, s, true, water_x0), expected, 0.0,
+                     "Section " + std::to_string(s) + " must use section LUT X0");
+    }
+    // 6. Boundaries 0 and 24 legal; >24 defensive water fallback
+    // (upstream launch validation rejects Schneider voxel material_id >= 25).
+    require_near(carbon::select_transport_radiation_length_g_per_cm2(
+                     true, true, 0, true, water_x0),
+                 carbon::schneider_section_radiation_length_g_per_cm2(0), 0.0,
+                 "Section 0 must be legal");
+    require_near(carbon::select_transport_radiation_length_g_per_cm2(
+                     true, true, 24, true, water_x0),
+                 carbon::schneider_section_radiation_length_g_per_cm2(24), 0.0,
+                 "Section 24 must be legal");
+    for (const unsigned s : {25U, 100U, 255U}) {
+        require_near(carbon::select_transport_radiation_length_g_per_cm2(
+                         true, true, s, true, water_x0), water_x0, 0.0,
+                     "Section " + std::to_string(s) + " must fall back to water");
+    }
+    // 7. Primary and secondary gates share one helper: identical inputs
+    // give identical X0 (primary: ct_material_ids_are_schneider_sections +
+    // in_ct; secondary: same flag + sec_in_ct).
+    for (const unsigned s : {0U, 1U, 2U, 8U, 11U, 20U, 24U}) {
+        const double primary_x0 = carbon::select_transport_radiation_length_g_per_cm2(
+            true, true, s, true, water_x0);
+        const double secondary_x0 = carbon::select_transport_radiation_length_g_per_cm2(
+            true, true, s, true, water_x0);
+        require_near(primary_x0, secondary_x0, 0.0,
+                     "Primary/secondary X0 selection must agree at section " +
+                         std::to_string(s));
+    }
+    // 5. Host Highland angle fed by helper X0 equals angle fed by LUT X0
+    // (formula untouched; only its X0 input changed), and differs from
+    // the old water-X0 value for non-water sections (lung sec 1 is only
+    // 1.2% off water, so the move check uses soft tissue 8 and bone 20).
+    for (const unsigned s : {1U, 8U, 20U}) {
+        const double helper_x0 = carbon::select_transport_radiation_length_g_per_cm2(
+            true, true, s, true, water_x0);
+        const double theta_helper = carbon::highland_projected_rms_angle_material_rad(
+            1200.0, 6, 12, 1.0, 1.0, helper_x0);
+        const double theta_lut = carbon::highland_projected_rms_angle_material_rad(
+            1200.0, 6, 12, 1.0, 1.0,
+            carbon::schneider_section_radiation_length_g_per_cm2(s));
+        require_near(theta_helper, theta_lut, 0.0,
+                     "Helper-fed Highland angle must equal LUT-fed angle");
+    }
+    for (const unsigned s : {8U, 20U}) {
+        const double helper_x0 = carbon::select_transport_radiation_length_g_per_cm2(
+            true, true, s, true, water_x0);
+        const double theta_helper = carbon::highland_projected_rms_angle_material_rad(
+            1200.0, 6, 12, 1.0, 1.0, helper_x0);
+        const double theta_old = carbon::highland_projected_rms_angle_material_rad(
+            1200.0, 6, 12, 1.0, 1.0, water_x0);
+        require(std::abs(theta_helper - theta_old) / theta_old > 0.01,
+                "Section " + std::to_string(s) + " angle must move off water value");
+    }
+#ifdef CARBON_HAS_SYCL
+    // 5 (device): helper X0 selection on device matches host exactly.
+    {
+        const std::vector<unsigned> sections{0U, 1U, 2U, 8U, 11U, 20U, 24U, 25U, 255U};
+        sycl::queue queue{sycl::default_selector_v};
+        auto* dev_out = sycl::malloc_device<float>(sections.size(), queue);
+        auto* dev_sec = sycl::malloc_device<unsigned>(sections.size(), queue);
+        queue.copy(sections.data(), dev_sec, sections.size()).wait_and_throw();
+        const double w = water_x0;
+        queue.parallel_for(sycl::range<1>(sections.size()), [=](sycl::id<1> idx) {
+            const auto i = idx[0];
+            dev_out[i] = static_cast<float>(
+                carbon::select_transport_radiation_length_g_per_cm2(
+                    true, true, dev_sec[i], true, w));
+        }).wait_and_throw();
+        std::vector<float> host_out(sections.size());
+        queue.copy(dev_out, host_out.data(), sections.size()).wait_and_throw();
+        for (std::size_t i = 0; i < sections.size(); ++i) {
+            const double expected = carbon::select_transport_radiation_length_g_per_cm2(
+                true, true, sections[i], true, water_x0);
+            require_near(static_cast<double>(host_out[i]), expected, 1e-4,
+                         "Device X0 selection mismatch at section " +
+                             std::to_string(sections[i]));
+        }
+        sycl::free(dev_out, queue);
+        sycl::free(dev_sec, queue);
+    }
+#endif
+}
+
 carbon::InelasticPackageV3Table make_synthetic_cinel03_table() {
     carbon::InelasticPackageV3Table table;
     table.set_metadata(100.0F, 100.0F, 1, "00000000-0000-4000-8000-000000000016");
@@ -9647,6 +9752,7 @@ int main(int argc, char** argv) {
         run("test_schneider_stopping_host_device_equivalence", test_schneider_stopping_host_device_equivalence);
 #endif
         run("test_step15_schneider_radiation_lengths_and_sentinel", test_step15_schneider_radiation_lengths_and_sentinel);
+        run("test_secondary_schneider_mcs_x0_selection", test_secondary_schneider_mcs_x0_selection);
         run("test_step16_cinel03_round_trip_and_determinism", test_step16_cinel03_round_trip_and_determinism);
         run("test_step16_cinel03_rejections_and_fail_closed", test_step16_cinel03_rejections_and_fail_closed);
         run("test_step16_cinel03_synthetic_cpu_gpu_replay", test_step16_cinel03_synthetic_cpu_gpu_replay);

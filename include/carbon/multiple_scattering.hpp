@@ -113,6 +113,25 @@ constexpr double schneider_section_radiation_length_g_per_cm2(const unsigned sec
     return kSchneiderSectionRadiationLengthGPerCm2[section_id];
 }
 
+// Shared X0 selector for primary AND secondary MCS in Schneider CT.
+// Selection only: no scale, no scattering-formula change. Both transport
+// paths must call this (never a private copy) so they cannot drift apart.
+// section_id >= 25 falls back to water defensively; upstream launch-time
+// validation rejects Schneider voxel material_id >= 25, so the fallback
+// must never trigger in a valid Schneider run.
+constexpr double select_transport_radiation_length_g_per_cm2(
+    const bool ct_sections_are_schneider, const bool in_ct,
+    const unsigned section_id, const bool enable_ct_material_mcs,
+    const double fallback_water_x0) noexcept {
+    if (enable_ct_material_mcs && in_ct && ct_sections_are_schneider) {
+        if (section_id < 25U) {
+            return kSchneiderSectionRadiationLengthGPerCm2[section_id];
+        }
+        return fallback_water_x0;
+    }
+    return fallback_water_x0;
+}
+
 inline double highland_projected_rms_angle_material_rad(
     double kinetic_energy_MeV,
     int atomic_number,
