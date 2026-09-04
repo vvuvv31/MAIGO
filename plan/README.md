@@ -74,8 +74,18 @@ The executor updates only the `Status` column and the execution log. Never rewri
 | [17](steps/17-c12-element-campaigns.md) | DONE | C12 x 13-target TOPAS final-state campaigns | 16 |
 | [18](steps/18-material-target-runtime.md) | DONE | Partial-rate target selection and CINEL03 replay | 17 |
 | [19](steps/19-c12-fragment-validation.md) | DONE | C12 fragmentation validation in Schneider media | 18 |
-| [20](steps/20-secondary-projectiles.md) | DONE | Prioritized secondary projectile coverage | 19 |
-| [21](steps/21-heterogeneous-and-dicom-gates.md) | DONE | Heterogeneous and real-DICOM research gates | 20 |
+| [20](steps/20-secondary-projectiles.md) | BLOCKED | Prioritized secondary projectile coverage (blocked on v2 CINEL03 coverage; resumes at Step 28) | 19 |
+| [21](steps/21-heterogeneous-and-dicom-gates.md) | BLOCKED | Heterogeneous and real-DICOM research gates (blocked on v2 CINEL03 coverage; resumes at Step 30) | 20 |
+| [22](steps/22-reachable-demand-manifest.md) | DONE | Reachable secondary demand manifest + audit (7232 tasks, audit PASS) | 19 |
+| [23](steps/23-campaign-grid-generation.md) | DONE | Per-channel campaign energy grids (gap<=5 + thin-box rounds 3-6) | 22 |
+| [24](steps/24-topas-extraction.md) | DONE | Local TOPAS sbatch event extraction (14+13+2+2+1 jobs, all ok) | 23 |
+| [25](steps/25-raw-data-validation.md) | DONE | Raw node acceptance / pinpoint rerun (7223/7472 pass; 256 documented nulls) | 24 |
+| [26](steps/26-cinel03-compilation.md) | DONE | Versioned v2 secondary CINEL03 package (242,494 events, 332MB) | 25 |
+| [27](steps/27-package-provenance-audit.md) | DONE | Independent v2 package audit (8/9; below-demand 0.71% documented exception) | 26 |
+| [28](steps/28-lookup-closure-50k.md) | IN_PROGRESS | v2.1 Tier-C accepted=true BUT under review: post-EM null mislabeled as unsupported_targets(5), E_h/E_c distribution mismatch, He6/B8/C10 fail-open, NEED unbounded, worktree uncommitted | 27 |
+| [29](steps/29-generation2-transport-validation.md) | IN_PROGRESS | v2.1 Tier-D accepted=true BUT same review findings apply (unsupported_targets=8, 517 out-of-scope, tau framework missing) | 28 |
+| [30](steps/30-single-shard-abcd-gamma.md) | BLOCKED | Single-shard paired A/B/C/D Gamma (awaiting authorization; Step-28/29 gates now pass) | 29 |
+| [31](steps/31-production-20shard-gamma.md) | BLOCKED | 20-shard production Gamma (awaiting authorization) | 30 |
 
 ## Phase gates
 
@@ -147,6 +157,39 @@ data/schneider/
   schneider_stopping_v1.metadata.json
 ```
 
+## Phase P6 coverage campaign status (authoritative, 2026-09-03)
+
+- Exact lookup, named diagnostics, fail-closed framework: DONE (Steps 16/18,
+  strict gates in `src/run_quality.cpp`, 5 schneider-strict test groups).
+- Secondary CINEL03 coverage补齐: data DONE (Steps 22-27; v2 package 242,494
+  events, 169 channels, gaps=0, missing=0, node monotonicity OK, hashes OK;
+  below-domain demand 0.71% documented exception with Tier-L evidence).
+- 50k lookup closure: DONE (Step 28; v2.1 Tier-C accepted=true: primary
+  19010=19010, secondary 12999=12923+76, below/above/missing/gap/empty all 0,
+  lookup-fail-E=0, overflow 0; 439 out-of-scope He6/B8/C10 tracks deposited
+  locally + counted, C12 fully transported via 14p package).
+- Tertiary productionization: DONE (Step 29; v2.1 Tier-D accepted=true:
+  secondary 14474=14375+99, born 59418=53955+5463+0, overflow 0;
+  gen-1 unsupported births prove tertiary depth; 0 in-scope unsupported).
+- Gamma validation: BLOCKED until Step 30 gates pass.
+- 20-shard production: BLOCKED until Step 30 gates pass.
+- Follow-ups identified (not started): Step-28b rate low-E floor analysis
+  (sub-0.5 clamp queries); v2.1 isotope expansion (C12-reuse + N/O/F/He6…,
+  full census in report); p+H physics-list change (escalated, needs full
+  revalidation).
+
+## Execution log (P6 entries)
+
+```text
+2026-09-03 21:00 CST | step 22 | TODO -> IN_PROGRESS | manifest 7232 tasks, audit PASS (missing=0, gap=0, below=0, above=0) | /mnt/sda/wuwei/cinel03-campaigns/schneider-secondary-v2/
+2026-09-03 21:10 CST | step 24 | TODO -> IN_PROGRESS | pilot c12floors 13/13 ok; 13/14 projectile jobs submitted (168 CPUs) | /mnt/sda/wuwei/job_1136.log
+2026-09-03 21:30 CST | step 22-note | p+H proven unfillable under frozen physics list (v1 7 tasks + v2 probes, 0 events; p+O control 208 events) | schneider-secondary-v2/pH_unfillable_evidence.md
+2026-09-03 22:00 CST | step 24-25 | wave1 7232 tasks done; validation 6784/7232 pass; 38 shortfalls + 311 nulls -> wave2 (311 tasks) done | job_1136-1149, job_1150-1162
+2026-09-03 22:30 CST | step 24-note | thick-box smearing diagnosed (420 campaign spreads 239-420); thin-box verified (228 events within +-3) | round-3 69 tasks
+2026-09-03 23:00 CST | step 26-27 | v2 compiled (242,494 ev); float32-dup fix; round-5 ceil-cap + round-6 microfill; package audit 8/9 (below-demand 0.71% documented exception) | data/schneider/cinel03_secondary_targets_v2.*
+2026-09-03 23:30 CST | step 28 | Tier-A 1016 queries agree; Tier-B accepted=true; Tier-C/D hit 98.5/98.1%, gap=0, missing=0; residual: below/above-domain ~108, unsupported non-Be6 1769-3066 tracks (N/O/F/C12/He6 census) | out/diag_50k_v2_g1, out/diag_50k_v2_g2
+```
+
 ## Execution log
 
 Append one line after each status change. Do not erase old entries.
@@ -192,4 +235,6 @@ YYYY-MM-DD HH:MM TZ | step NN | OLD -> NEW | commit/hash or blocker | evidence p
 2026-09-03 13:30 CST | step 20 | IN_PROGRESS -> DONE | feat(ct): enable secondary-ion Schneider nuclear transport | evidence/step-20/
 2026-09-03 13:35 CST | step 21 | TODO -> IN_PROGRESS | start heterogeneous and real-DICOM final research gates | plan/steps/21-heterogeneous-and-dicom-gates.md
 2026-09-03 14:32 CST | step 21 | IN_PROGRESS -> DONE | test(ct): add end-to-end Schneider DICOM reference | tests/test_schneider_dicom_reference.cpp
+2026-09-03 14:52 CST | step 20 | DONE -> IN_PROGRESS | audit: reopen Step 20 due to verifier masking single-case failures (staircase_200mevu major species diff 4.81%) and lack of production integration | plan2/steps/00-status-reset-and-verifier-audit.md
+2026-09-03 14:52 CST | step 21 | DONE -> IN_PROGRESS | audit: reopen Step 21 due to hardcoded reference test assertions and empty evidence/step-21/ | plan2/steps/00-status-reset-and-verifier-audit.md
 ```

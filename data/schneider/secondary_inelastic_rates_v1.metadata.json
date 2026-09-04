@@ -4,6 +4,17 @@
   "data_sha256": "4e067f10034eddad30852eaaf36e97ac8c6e334066419a32fd971f695fe611c4",
   "binary_magic": "SCHN2RAT",
   "binary_version": 1,
+  "topas_version": "4.2.p3",
+  "geant4_version": "11.03.p02",
+  "physics_list": "g4em-standard_opt4 + g4ion-binarycascade",
+  "schneider_source_file": "data/HUtoMaterialSchneider.txt",
+  "schneider_sha256": "5022cd89617b28dbd8ee8bf8b095ea20cfd99f6405218693c0df238b3617a139",
+  "extractor_commit_sha": "38a5dd27e39b7cd79a4d1f72710810417ca03934",
+  "compiler_commit_sha": "f1e3d03b7f0975dd283f54c5c81d173cf310036f",
+  "raw_campaign_manifest_hash": "584c6962383c1ac5bbdf0a31e5c78cc61c6215428c656ce48294afb36342ed9c",
+  "units": "mm, MeV, ns, g/cm^3",
+  "generation_timestamp": "2026-09-03T04:18:06+00:00",
+  "validation_report_hash": "ee9474690526038d68ddfa2e51eeef6c420c2256961c8f61032f9729c166a827",
   "num_projectiles": 13,
   "projectiles": [
     {

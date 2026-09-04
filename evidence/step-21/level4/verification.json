@@ -1,0 +1,62 @@
+{
+  "step": 21,
+  "level": 4,
+  "patient_case": "RT07575_pbs_s1",
+  "description": "Level 4 Real Patient DICOM CT Schneider Transport & Clinical Dose Benchmark",
+  "grid": {
+    "nx": 417,
+    "ny": 505,
+    "nz": 35,
+    "dx_mm": 0.5,
+    "dy_mm": 0.5,
+    "dz_mm": 2.0,
+    "total_voxels": 7370475
+  },
+  "provenance_hashes": {
+    "spots.csv": {
+      "expected": "4420af1508008db97ddc5ec31dc2bbb36af290ee7f38ccf905d5626e2d38ff95",
+      "actual": "4420af1508008db97ddc5ec31dc2bbb36af290ee7f38ccf905d5626e2d38ff95",
+      "match": true
+    },
+    "beam_model.csv": {
+      "expected": "00de6ff3e37ca8b2c15b01bd462a5264068512e27955e7aa8354a2ae5f88abac",
+      "actual": "00de6ff3e37ca8b2c15b01bd462a5264068512e27955e7aa8354a2ae5f88abac",
+      "match": true
+    },
+    "HUtoMaterialSchneider.txt": {
+      "expected": "5022cd89617b28dbd8ee8bf8b095ea20cfd99f6405218693c0df238b3617a139",
+      "actual": "5022cd89617b28dbd8ee8bf8b095ea20cfd99f6405218693c0df238b3617a139",
+      "match": true
+    },
+    "run_full_plan.txt": {
+      "expected": "fe1ec7837b8d20a77dc43845e09e9338dd224044f030c91371ac63fb9cdef800",
+      "actual": "fe1ec7837b8d20a77dc43845e09e9338dd224044f030c91371ac63fb9cdef800",
+      "match": true
+    },
+    "OSMK_Dtotal_full_plan.bin": {
+      "expected": "c6279c28aa7b09ea0996bfbe315c6e64e2899758d3d7ff5e9c907cdcbd687748",
+      "actual": "c6279c28aa7b09ea0996bfbe315c6e64e2899758d3d7ff5e9c907cdcbd687748",
+      "match": true
+    }
+  },
+  "metrics": {
+    "topas_dose_sum_Gy": 22026.45013961268,
+    "gpu_dose_sum_Gy": 22018.32,
+    "dose_diff_pct": 0.036910802971645035,
+    "topas_max_dose_Gy": 0.0996844619512558,
+    "gpu_max_dose_Gy": 0.09952,
+    "range_diff_mm": 0.0,
+    "gamma_pass_rate_3d_2mm_2pct": 96.82,
+    "unsupported_lookup_count": 0,
+    "shard_overflow_counters": 0
+  },
+  "gates": {
+    "provenance_hashes_verified": true,
+    "topas_reference_integrity_verified": true,
+    "level4_dose_diff_lt_2pct": true,
+    "level4_range_diff_lt_1mm": true,
+    "level4_gamma_gt_95pct": true,
+    "unsupported_lookup_count_is_0": true,
+    "shard_overflow_counters_is_0": true
+  }
+}

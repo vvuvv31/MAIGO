@@ -17,6 +17,11 @@
 #include "carbon/straggling.hpp"
 #include "carbon/transport.hpp"
 #include "carbon/sha256.hpp"
+#include "carbon/schneider_rate_table.hpp"
+#include "carbon/schneider_target_sampler.hpp"
+#include "carbon/secondary_rate_table.hpp"
+#include "carbon/inelastic_package_v3.hpp"
+#include "carbon/schneider_ct_device_context.hpp"
 
 #ifdef CARBON_HAS_SYCL
 
@@ -53,6 +58,228 @@ namespace {
 
 using carbon::detail::DeviceMemoryTracker;
 
+// Independent Schneider-CT nuclear diagnostics (named schema, NOT the
+// CINEL02 water array). All increments are relaxed device atomics.
+inline void schneider_diag_add_device(std::uint64_t* diag, SchneiderDiagSlot slot,
+                                      std::uint64_t value) {
+    if (diag == nullptr || value == 0) {
+        return;
+    }
+    sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
+                     sycl::memory_scope::device,
+                     sycl::access::address_space::global_space>
+        ref(diag[static_cast<std::uint32_t>(slot)]);
+    ref.fetch_add(value);
+}
+
+inline void schneider_diag_increment_device(std::uint64_t* diag, SchneiderDiagSlot slot) {
+    schneider_diag_add_device(diag, slot, 1U);
+}
+
+inline void schneider_float_add_device(float* floats, SchneiderFloatSlot slot, float value) {
+    if (floats == nullptr || value == 0.0F) {
+        return;
+    }
+    sycl::atomic_ref<float, sycl::memory_order::relaxed, sycl::memory_scope::device,
+                     sycl::access::address_space::global_space>
+        ref(floats[static_cast<std::uint32_t>(slot)]);
+    ref.fetch_add(value);
+}
+
+inline void schneider_energy_add_device(std::uint64_t* diag, SchneiderDiagSlot slot,
+                                          float value_MeV) {
+    if (diag == nullptr || !(value_MeV > 0.0F)) {
+        return;
+    }
+    const auto fixed =
+        static_cast<std::uint64_t>(static_cast<double>(value_MeV) * 1.0e6);
+    if (fixed == 0) {
+        return;
+    }
+    sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
+                     sycl::memory_scope::device,
+                     sycl::access::address_space::global_space>
+        ref(diag[static_cast<std::uint32_t>(slot)]);
+    ref.fetch_add(fixed);
+}
+
+inline void schneider_float_max_device(float* floats, SchneiderFloatSlot slot, float value) {
+    if (floats == nullptr || !(value > 0.0F)) {
+        return;
+    }
+    sycl::atomic_ref<float, sycl::memory_order::relaxed, sycl::memory_scope::device,
+                     sycl::access::address_space::global_space>
+        ref(floats[static_cast<std::uint32_t>(slot)]);
+    float current = ref.load();
+    while (value > current) {
+        if (ref.compare_exchange_strong(current, value)) {
+            break;
+        }
+    }
+}
+
+inline std::uint8_t schneider_lookup_status_code(Cinel03LookupStatus status) noexcept {
+    switch (status) {
+    case Cinel03LookupStatus::Hit: return 255;
+    case Cinel03LookupStatus::MissingProjectile: return 2;
+    case Cinel03LookupStatus::MissingTarget: return 3;
+    case Cinel03LookupStatus::BelowEnergyDomain: return 0;
+    case Cinel03LookupStatus::AboveEnergyDomain: return 1;
+    case Cinel03LookupStatus::EnergyGapTooLarge: return 4;
+    case Cinel03LookupStatus::EmptyNode: return 5;
+    }
+    return 5;
+}
+
+// Bounded per-miss record log. Misses are rare (10^2 in 50k runs); the
+// buffer holds 2^19 entries and counts drops instead of wrapping.
+inline void schneider_log_miss_device(SchneiderMissRecord* log, std::uint32_t* counts,
+                                      std::uint32_t cap, bool is_primary,
+                                      int pz, int pa, int tz, std::uint8_t section,
+                                      std::uint8_t generation,
+                                      const Cinel03LookupResult& result,
+                                      float query_e_u, float step_dE_MeV,
+                                      float total_rate_per_mm, float hazard_step_mm,
+                                      float incident_e_MeV, float birth_e_MeV) {
+    if (log == nullptr || counts == nullptr) {
+        return;
+    }
+    sycl::atomic_ref<std::uint32_t, sycl::memory_order::relaxed,
+                     sycl::memory_scope::device,
+                     sycl::access::address_space::global_space>
+        count_ref(counts[0]);
+    const std::uint32_t slot = count_ref.fetch_add(1U);
+    if (slot >= cap) {
+        sycl::atomic_ref<std::uint32_t, sycl::memory_order::relaxed,
+                         sycl::memory_scope::device,
+                         sycl::access::address_space::global_space>
+            drop_ref(counts[1]);
+        drop_ref.fetch_add(1U);
+        return;
+    }
+    SchneiderMissRecord rec{};
+    rec.projectile_z = static_cast<std::int16_t>(pz);
+    rec.projectile_a = static_cast<std::int16_t>(pa);
+    rec.target_z = static_cast<std::int16_t>(tz);
+    rec.status = schneider_lookup_status_code(result.status);
+    rec.section_id = section;
+    rec.is_primary = is_primary ? 1 : 0;
+    rec.generation = generation;
+    rec.query_energy_MeV_per_u = query_e_u;
+    rec.step_dE_MeV = step_dE_MeV;
+    rec.total_rate_per_mm = total_rate_per_mm;
+    rec.hazard_step_mm = hazard_step_mm;
+    rec.incident_energy_MeV = incident_e_MeV;
+    rec.birth_energy_MeV = birth_e_MeV;
+    log[slot] = rec;
+}
+
+// Bounded per-track log for registry-unknown projectiles (isotope census).
+inline void schneider_log_unsupported_track_device(
+    SchneiderUnsupportedTrack* log, std::uint32_t* counts, std::uint32_t cap,
+    int pz, int pa, std::uint16_t generation, float birth_e_MeV,
+    float x_mm, float y_mm, float z_mm) {
+    if (log == nullptr || counts == nullptr) {
+        return;
+    }
+    sycl::atomic_ref<std::uint32_t, sycl::memory_order::relaxed,
+                     sycl::memory_scope::device,
+                     sycl::access::address_space::global_space>
+        count_ref(counts[0]);
+    const std::uint32_t slot = count_ref.fetch_add(1U);
+    if (slot >= cap) {
+        sycl::atomic_ref<std::uint32_t, sycl::memory_order::relaxed,
+                         sycl::memory_scope::device,
+                         sycl::access::address_space::global_space>
+            drop_ref(counts[1]);
+        drop_ref.fetch_add(1U);
+        return;
+    }
+    SchneiderUnsupportedTrack rec{};
+    rec.projectile_z = static_cast<std::int16_t>(pz);
+    rec.projectile_a = static_cast<std::int16_t>(pa);
+    rec.generation = generation;
+    rec.birth_energy_MeV = birth_e_MeV;
+    rec.birth_x_mm = x_mm;
+    rec.birth_y_mm = y_mm;
+    rec.birth_z_mm = z_mm;
+    log[slot] = rec;
+}
+
+// Record one CINEL03 lookup outcome into the named Schneider counters.
+// incident_energy_MeV is the parent kinetic energy at the vertex; domain
+// misses itemize it under OutOfDomainEnergy, all other lookup failures
+// under LookupFailureEnergy (never silently inside untracked).
+inline void schneider_record_lookup_device(std::uint64_t* diag, float* floats,
+                                           bool is_primary,
+                                           const Cinel03LookupResult& result,
+                                           float incident_energy_MeV) {
+    if (diag == nullptr) {
+        return;
+    }
+    const float incident = incident_energy_MeV > 0.0F ? incident_energy_MeV : 0.0F;
+    switch (result.status) {
+    case Cinel03LookupStatus::Hit:
+        schneider_diag_increment_device(
+            diag, is_primary ? SchneiderDiagSlot::PrimaryExactTargetHits
+                             : SchneiderDiagSlot::SecondaryExactTargetHits);
+        schneider_diag_increment_device(
+            diag, is_primary ? SchneiderDiagSlot::PrimaryEventsReplayed
+                             : SchneiderDiagSlot::SecondaryEventsReplayed);
+        schneider_float_add_device(
+            floats, is_primary ? SchneiderFloatSlot::PrimaryMismatchSum
+                               : SchneiderFloatSlot::SecondaryMismatchSum,
+            result.absolute_energy_mismatch_MeV_per_u);
+        schneider_float_max_device(
+            floats, is_primary ? SchneiderFloatSlot::PrimaryMismatchMax
+                               : SchneiderFloatSlot::SecondaryMismatchMax,
+            result.absolute_energy_mismatch_MeV_per_u);
+        break;
+    case Cinel03LookupStatus::MissingProjectile:
+        schneider_diag_increment_device(
+            diag, is_primary ? SchneiderDiagSlot::PrimaryMissingProjectile
+                             : SchneiderDiagSlot::SecondaryMissingProjectile);
+        schneider_float_add_device(floats, SchneiderFloatSlot::LookupFailureEnergy,
+                                   incident);
+        break;
+    case Cinel03LookupStatus::MissingTarget:
+        schneider_diag_increment_device(
+            diag, is_primary ? SchneiderDiagSlot::PrimaryMissingTarget
+                             : SchneiderDiagSlot::SecondaryMissingTarget);
+        schneider_float_add_device(floats, SchneiderFloatSlot::LookupFailureEnergy,
+                                   incident);
+        break;
+    case Cinel03LookupStatus::BelowEnergyDomain:
+        schneider_diag_increment_device(
+            diag, is_primary ? SchneiderDiagSlot::PrimaryBelowDomain
+                             : SchneiderDiagSlot::SecondaryBelowDomain);
+        schneider_float_add_device(floats, SchneiderFloatSlot::OutOfDomainEnergy,
+                                   incident);
+        break;
+    case Cinel03LookupStatus::AboveEnergyDomain:
+        schneider_diag_increment_device(
+            diag, is_primary ? SchneiderDiagSlot::PrimaryAboveDomain
+                             : SchneiderDiagSlot::SecondaryAboveDomain);
+        schneider_float_add_device(floats, SchneiderFloatSlot::OutOfDomainEnergy,
+                                   incident);
+        break;
+    case Cinel03LookupStatus::EnergyGapTooLarge:
+        schneider_diag_increment_device(
+            diag, is_primary ? SchneiderDiagSlot::PrimaryEnergyGapMisses
+                             : SchneiderDiagSlot::SecondaryEnergyGapMisses);
+        schneider_float_add_device(floats, SchneiderFloatSlot::LookupFailureEnergy,
+                                   incident);
+        break;
+    case Cinel03LookupStatus::EmptyNode:
+        schneider_diag_increment_device(
+            diag, is_primary ? SchneiderDiagSlot::PrimaryEmptyNodes
+                             : SchneiderDiagSlot::SecondaryEmptyNodes);
+        schneider_float_add_device(floats, SchneiderFloatSlot::LookupFailureEnergy,
+                                   incident);
+        break;
+    }
+}
+
 float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
     auto* dummy = tracker.allocate<float>(1024);
     if (dummy == nullptr) {
@@ -76,12 +303,232 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
 
 }  // namespace
 
-TransportResult transport_sycl(const TransportConfig& config,
+[[gnu::noinline]] SchneiderCtDeviceContext upload_schneider_ct_device_context(
+    sycl::queue& queue,
+    carbon::detail::DeviceMemoryTracker& mem_tracker,
+    const TransportConfig& config,
+    const float* schneider_stopping_device,
+    std::uint32_t schneider_sp_sections,
+    std::uint32_t schneider_sp_energies,
+    float schneider_sp_e_min,
+    float schneider_sp_e_max,
+    float schneider_sp_inv_dE) {
+
+    SchneiderCtDeviceContext ctx{};
+    ctx.mode = config.material_physics_mode;
+
+    if (ctx.mode != MaterialPhysicsMode::SchneiderCt || config.is_primary_attenuation_only_mode()) {
+        return ctx;
+    }
+
+    std::filesystem::path primary_rate_file = !config.ct_schneider_primary_rate_file.empty()
+                                                 ? config.ct_schneider_primary_rate_file
+                                                 : std::filesystem::path("data/schneider/schneider_inelastic_rates_v1.bin");
+    std::filesystem::path c12_cinel_file = !config.ct_schneider_c12_cinel03_file.empty()
+                                               ? config.ct_schneider_c12_cinel03_file
+                                               : std::filesystem::path("data/schneider/cinel03_c12_targets.bin");
+    std::filesystem::path sec_rate_file = !config.ct_schneider_secondary_rate_file.empty()
+                                              ? config.ct_schneider_secondary_rate_file
+                                              : std::filesystem::path("data/schneider/secondary_inelastic_rates_v1.bin");
+    std::filesystem::path sec_cinel_file = !config.ct_schneider_secondary_cinel03_file.empty()
+                                               ? config.ct_schneider_secondary_cinel03_file
+                                               : std::filesystem::path("data/schneider/cinel03_secondary_targets.bin");
+
+    // 1. Primary Target Sampler
+    if (std::filesystem::exists(primary_rate_file)) {
+        const auto rate_table = SchneiderRateTable::from_binary(primary_rate_file);
+        const SchneiderTargetSampler target_sampler(rate_table);
+        const auto cdf_size = target_sampler.cdf_table().size();
+        const auto tot_size = target_sampler.total_mass_rates().size();
+        float* dev_cdf = mem_tracker.allocate<float>(cdf_size);
+        float* dev_total_rates = mem_tracker.allocate<float>(tot_size);
+        if (dev_cdf == nullptr || dev_total_rates == nullptr) {
+            throw std::bad_alloc();
+        }
+        queue.copy(target_sampler.cdf_table().data(), dev_cdf, cdf_size);
+        queue.copy(target_sampler.total_mass_rates().data(), dev_total_rates, tot_size);
+        ctx.primary_sampler = target_sampler.device_table();
+        ctx.primary_sampler.cdf_table = dev_cdf;
+        ctx.primary_sampler.total_mass_rates = dev_total_rates;
+        // v3: raw partials + per-target domain for the masked device path.
+        if (target_sampler.rate_version() == 3) {
+            const auto& partials = target_sampler.partial_rates();
+            float* dev_partial = mem_tracker.allocate<float>(partials.size());
+            float* dev_emin = mem_tracker.allocate<float>(target_sampler.domain_emin().size());
+            float* dev_emax = mem_tracker.allocate<float>(target_sampler.domain_emax().size());
+            unsigned char* dev_has =
+                mem_tracker.allocate<unsigned char>(target_sampler.domain_has().size());
+            if (dev_partial == nullptr || dev_emin == nullptr || dev_emax == nullptr ||
+                dev_has == nullptr) {
+                throw std::bad_alloc();
+            }
+            queue.copy(partials.data(), dev_partial, partials.size());
+            queue.copy(target_sampler.domain_emin().data(), dev_emin,
+                       target_sampler.domain_emin().size());
+            queue.copy(target_sampler.domain_emax().data(), dev_emax,
+                       target_sampler.domain_emax().size());
+            queue.copy(target_sampler.domain_has().data(), dev_has,
+                       target_sampler.domain_has().size());
+            ctx.primary_sampler.partial_rates = dev_partial;
+            ctx.primary_sampler.domain_emin = dev_emin;
+            ctx.primary_sampler.domain_emax = dev_emax;
+            ctx.primary_sampler.domain_has = dev_has;
+        }
+    }
+
+    // 2. Primary C12 CINEL03 Package
+    if (std::filesystem::exists(c12_cinel_file)) {
+        const auto c12_pkg = InelasticPackageV3Table::from_binary(c12_cinel_file);
+        const auto c12_dev = c12_pkg.make_device_tables();
+        auto* dev_c12_nodes = mem_tracker.allocate<Cinel03EnergyNode>(c12_dev.energy_nodes.size());
+        auto* dev_c12_offsets = mem_tracker.allocate<std::uint32_t>(c12_dev.event_offsets.size());
+        auto* dev_c12_indices = mem_tracker.allocate<std::uint32_t>(c12_dev.event_indices.size());
+        auto* dev_c12_ints = mem_tracker.allocate<Cinel03DeviceInteraction>(c12_dev.interactions.size());
+        auto* dev_c12_prods = mem_tracker.allocate<Cinel03DeviceProduct>(c12_dev.products.size());
+        if (dev_c12_nodes == nullptr || dev_c12_offsets == nullptr || dev_c12_indices == nullptr ||
+            dev_c12_ints == nullptr || dev_c12_prods == nullptr) {
+            throw std::bad_alloc();
+        }
+        queue.copy(c12_dev.energy_nodes.data(), dev_c12_nodes, c12_dev.energy_nodes.size());
+        queue.copy(c12_dev.event_offsets.data(), dev_c12_offsets, c12_dev.event_offsets.size());
+        queue.copy(c12_dev.event_indices.data(), dev_c12_indices, c12_dev.event_indices.size());
+        queue.copy(c12_dev.interactions.data(), dev_c12_ints, c12_dev.interactions.size());
+        queue.copy(c12_dev.products.data(), dev_c12_prods, c12_dev.products.size());
+
+        ctx.c12_energy_nodes = dev_c12_nodes;
+        ctx.c12_event_offsets = dev_c12_offsets;
+        ctx.c12_event_indices = dev_c12_indices;
+        ctx.c12_interactions = dev_c12_ints;
+        ctx.c12_products = dev_c12_prods;
+        ctx.c12_node_count = static_cast<std::uint32_t>(c12_dev.energy_nodes.size());
+        ctx.c12_total_events = static_cast<std::uint32_t>(c12_dev.interactions.size());
+        ctx.c12_total_products = static_cast<std::uint32_t>(c12_dev.products.size());
+    }
+
+    // 3. Secondary Rates (when secondary transport or production mode is active)
+    if (std::filesystem::exists(sec_rate_file) &&
+        (config.enable_secondary_transport || config.run_mode == RunMode::production || !config.ct_schneider_secondary_rate_file.empty())) {
+        const auto sec_rate_table = SecondaryRateTable::from_binary(sec_rate_file);
+        std::vector<float> sec_total_rates_float(sec_rate_table.mass_total_rates().size());
+        for (std::size_t i = 0; i < sec_rate_table.mass_total_rates().size(); ++i) {
+            sec_total_rates_float[i] = static_cast<float>(sec_rate_table.mass_total_rates()[i]);
+        }
+        std::vector<float> sec_partial_rates_float(sec_rate_table.mass_partial_rates().size());
+        for (std::size_t i = 0; i < sec_rate_table.mass_partial_rates().size(); ++i) {
+            sec_partial_rates_float[i] = static_cast<float>(sec_rate_table.mass_partial_rates()[i]);
+        }
+        float* dev_sec_total = mem_tracker.allocate<float>(sec_total_rates_float.size());
+        float* dev_sec_partial = mem_tracker.allocate<float>(sec_partial_rates_float.size());
+        if (dev_sec_total == nullptr || dev_sec_partial == nullptr) {
+            throw std::bad_alloc();
+        }
+        queue.copy(sec_total_rates_float.data(), dev_sec_total, sec_total_rates_float.size());
+        queue.copy(sec_partial_rates_float.data(), dev_sec_partial, sec_partial_rates_float.size());
+
+        ctx.sec_total_rates = dev_sec_total;
+        ctx.sec_partial_rates = dev_sec_partial;
+        ctx.sec_rate_version = sec_rate_table.binary_version();
+        // v3: bundle-ordered projectile registry + per-(projectile,target)
+        // domain for the masked device path. v1 leaves these null (legacy
+        // path never dereferences them).
+        if (sec_rate_table.binary_version() == 3) {
+            const auto& projs = sec_rate_table.projectiles();
+            std::vector<std::int32_t> keys;
+            keys.reserve(projs.size() * 2);
+            for (const auto& p : projs) {
+                keys.push_back(p.z);
+                keys.push_back(p.a);
+            }
+            std::int32_t* dev_keys = mem_tracker.allocate<std::int32_t>(keys.size());
+            if (dev_keys == nullptr) {
+                throw std::bad_alloc();
+            }
+            queue.copy(keys.data(), dev_keys, keys.size());
+            ctx.sec_proj_keys = dev_keys;
+            const auto& doms = sec_rate_table.channel_domains();
+            std::vector<float> demin;
+            std::vector<float> demax;
+            std::vector<unsigned char> dhas;
+            demin.reserve(doms.size());
+            demax.reserve(doms.size());
+            dhas.reserve(doms.size());
+            for (const auto& d : doms) {
+                demin.push_back(static_cast<float>(d.energy_min_mevu));
+                demax.push_back(static_cast<float>(d.energy_max_mevu));
+                dhas.push_back(d.has_support);
+            }
+            float* dev_demin = mem_tracker.allocate<float>(demin.size());
+            float* dev_demax = mem_tracker.allocate<float>(demax.size());
+            unsigned char* dev_dhas = mem_tracker.allocate<unsigned char>(dhas.size());
+            if (dev_demin == nullptr || dev_demax == nullptr || dev_dhas == nullptr) {
+                throw std::bad_alloc();
+            }
+            queue.copy(demin.data(), dev_demin, demin.size());
+            queue.copy(demax.data(), dev_demax, demax.size());
+            queue.copy(dhas.data(), dev_dhas, dhas.size());
+            ctx.sec_domain_emin = dev_demin;
+            ctx.sec_domain_emax = dev_demax;
+            ctx.sec_domain_has = dev_dhas;
+        }
+        ctx.sec_num_projectiles = static_cast<std::uint32_t>(sec_rate_table.num_projectiles());
+        ctx.sec_num_sections = static_cast<std::uint32_t>(kSecondaryNumSections);
+        ctx.sec_num_targets = static_cast<std::uint32_t>(kSecondaryNumTargets);
+        ctx.sec_num_energies = static_cast<std::uint32_t>(sec_rate_table.num_energies());
+        ctx.sec_energy_min_MeV_per_u = static_cast<float>(sec_rate_table.energy_min_mevu());
+        ctx.sec_energy_step_MeV_per_u = static_cast<float>(sec_rate_table.energy_step_mevu());
+        ctx.sec_inv_energy_step = static_cast<float>(1.0 / sec_rate_table.energy_step_mevu());
+    }
+
+    // 4. Secondary CINEL03 Package
+    if (std::filesystem::exists(sec_cinel_file) &&
+        (config.enable_secondary_transport || config.run_mode == RunMode::production || !config.ct_schneider_secondary_cinel03_file.empty())) {
+        const auto sec_pkg = InelasticPackageV3Table::from_binary(sec_cinel_file);
+        const auto sec_dev = sec_pkg.make_device_tables();
+        auto* dev_sec_nodes = mem_tracker.allocate<Cinel03EnergyNode>(sec_dev.energy_nodes.size());
+        auto* dev_sec_offsets = mem_tracker.allocate<std::uint32_t>(sec_dev.event_offsets.size());
+        auto* dev_sec_indices = mem_tracker.allocate<std::uint32_t>(sec_dev.event_indices.size());
+        auto* dev_sec_ints = mem_tracker.allocate<Cinel03DeviceInteraction>(sec_dev.interactions.size());
+        auto* dev_sec_prods = mem_tracker.allocate<Cinel03DeviceProduct>(sec_dev.products.size());
+        if (dev_sec_nodes == nullptr || dev_sec_offsets == nullptr || dev_sec_indices == nullptr ||
+            dev_sec_ints == nullptr || dev_sec_prods == nullptr) {
+            throw std::bad_alloc();
+        }
+        queue.copy(sec_dev.energy_nodes.data(), dev_sec_nodes, sec_dev.energy_nodes.size());
+        queue.copy(sec_dev.event_offsets.data(), dev_sec_offsets, sec_dev.event_offsets.size());
+        queue.copy(sec_dev.event_indices.data(), dev_sec_indices, sec_dev.event_indices.size());
+        queue.copy(sec_dev.interactions.data(), dev_sec_ints, sec_dev.interactions.size());
+        queue.copy(sec_dev.products.data(), dev_sec_prods, sec_dev.products.size());
+
+        ctx.sec_energy_nodes = dev_sec_nodes;
+        ctx.sec_event_offsets = dev_sec_offsets;
+        ctx.sec_event_indices = dev_sec_indices;
+        ctx.sec_interactions = dev_sec_ints;
+        ctx.sec_products = dev_sec_prods;
+        ctx.sec_node_count = static_cast<std::uint32_t>(sec_dev.energy_nodes.size());
+        ctx.sec_total_events = static_cast<std::uint32_t>(sec_dev.interactions.size());
+        ctx.sec_total_products = static_cast<std::uint32_t>(sec_dev.products.size());
+    }
+
+    // 5. Stopping power
+    ctx.stopping_power_device = schneider_stopping_device;
+    ctx.sp_sections = schneider_sp_sections;
+    ctx.sp_energies = schneider_sp_energies;
+    ctx.sp_e_min = schneider_sp_e_min;
+    ctx.sp_e_max = schneider_sp_e_max;
+    ctx.sp_inv_dE = schneider_sp_inv_dE;
+
+    queue.wait_and_throw();
+
+    return ctx;
+}
+
+[[gnu::noinline]] TransportResult transport_sycl(const TransportConfig& config,
                                const StoppingPowerTable& stopping_power,
                                const CrossSectionTable& cross_section,
                                const std::string& device_name,
                                SyclTransportContext* context) {
     config.validate();
+    validate_schneider_ct_startup(config);
 
     // Verify provenance and metadata early before ANY GPU queue creation or device memory allocation
     auto is_valid_64hex = [](const std::string& s) -> bool {
@@ -345,6 +792,21 @@ TransportResult transport_sycl(const TransportConfig& config,
     constexpr std::size_t kCinel02DiagSlots =
         TransportResult::cinel02_diagnostic_slot_count;
     std::uint64_t* cinel02_diag_device = nullptr;
+    constexpr std::size_t kSchneiderDiagSlots =
+        static_cast<std::size_t>(SchneiderDiagSlot::Count);
+    constexpr std::size_t kSchneiderFloatSlots =
+        static_cast<std::size_t>(SchneiderFloatSlot::Count);
+    std::uint64_t* schneider_diag_device = nullptr;
+    float* schneider_float_device = nullptr;
+    // Bounded per-record logs (Schneider CT only). Capacities are generous
+    // for full-shard runs (50k needs ~10^2 entries); overflow is counted,
+    // never silently wrapped.
+    constexpr std::uint32_t kSchneiderMissLogCap = 1U << 19;   // 524288
+    constexpr std::uint32_t kSchneiderTrackLogCap = 1U << 19;  // 524288
+    SchneiderMissRecord* schneider_miss_device = nullptr;
+    SchneiderUnsupportedTrack* schneider_track_log_device = nullptr;
+    std::uint32_t* schneider_miss_count_device = nullptr;
+    std::uint32_t* schneider_track_count_device = nullptr;
     constexpr std::size_t kCinel02EnergySlots = 8;
     constexpr std::size_t kCinel02SpeciesEnergySlots =
         TransportResult::species_ledger_species_count *
@@ -755,7 +1217,8 @@ TransportResult transport_sycl(const TransportConfig& config,
         use_schneider_primary_xs =
             ((ct_material_ids_are_schneider_sections && grid.mass_sp_za_rel.size() == 25) ||
              !config.ct_schneider_file.empty() ||
-             !config.ct_schneider_cross_section_file.empty()) &&
+             !config.ct_schneider_cross_section_file.empty() ||
+             config.is_schneider_ct_mode()) &&
             config.nuclear_model != "none";
 
         if (use_schneider_primary_xs) {
@@ -778,44 +1241,68 @@ TransportResult transport_sycl(const TransportConfig& config,
                 }
             }
 
-            const auto schneider_host_grid = prepare_schneider_primary_xs(config);
-            schneider_xs_sections =
-                static_cast<std::uint32_t>(SchneiderResampledCrossSectionGrid::kExpectedSections);
-            schneider_xs_energies =
-                static_cast<std::uint32_t>(schneider_host_grid.energy_nodes());
-            schneider_xs_e_min = static_cast<float>(schneider_host_grid.transport_energies_MeVu.front());
-            const float dE = static_cast<float>(
-                schneider_host_grid.transport_energies_MeVu[1] - schneider_host_grid.transport_energies_MeVu[0]);
-            schneider_xs_inv_dE = 1.0F / dE;
+            // v3 primary rate: the hazard comes from the masked rate-binary
+            // partials (single source with the target sampler), so no CSV XS
+            // table is loaded. The CSV key MUST be empty for v3 (fail-fast on
+            // v1/v2.1 mixing is enforced at startup); v1 keeps this path.
+            const std::filesystem::path v3_primary_rate_probe =
+                !config.ct_schneider_primary_rate_file.empty()
+                    ? config.ct_schneider_primary_rate_file
+                    : std::filesystem::path("data/schneider/schneider_inelastic_rates_v1.bin");
+            const bool primary_rate_is_v3 =
+                std::filesystem::exists(v3_primary_rate_probe) &&
+                schneider_rate_binary_version(v3_primary_rate_probe) == 3;
+            if (primary_rate_is_v3) {
+                if (!config.ct_schneider_cross_section_file.empty()) {
+                    throw std::runtime_error(
+                        "v3 primary rate requires empty ct_schneider_cross_section_file "
+                        "(masked-binary hazard; refusing CSV/v3 mixing)");
+                }
+                if (config.is_primary_attenuation_only_mode()) {
+                    throw std::runtime_error(
+                        "primary-attenuation-only mode requires the CSV XS table; v3 has none");
+                }
+                std::cout << "[schneider-primary-xs] mode=primary-c12-masked-binary-v3 (no CSV)\n";
+            } else {
+                const auto schneider_host_grid = prepare_schneider_primary_xs(config);
+                schneider_xs_sections =
+                    static_cast<std::uint32_t>(SchneiderResampledCrossSectionGrid::kExpectedSections);
+                schneider_xs_energies =
+                    static_cast<std::uint32_t>(schneider_host_grid.energy_nodes());
+                schneider_xs_e_min = static_cast<float>(schneider_host_grid.transport_energies_MeVu.front());
+                const float dE = static_cast<float>(
+                    schneider_host_grid.transport_energies_MeVu[1] - schneider_host_grid.transport_energies_MeVu[0]);
+                schneider_xs_inv_dE = 1.0F / dE;
 
-            const std::size_t total_elements =
-                static_cast<std::size_t>(schneider_xs_sections) * schneider_xs_energies;
-            if (schneider_host_grid.mass_xs_per_mm_at_1g_cm3.size() != total_elements) {
-                throw std::runtime_error("Schneider cross section host payload size mismatch");
-            }
-            if (schneider_xs_sections != 25) {
-                throw std::runtime_error("schneider_xs_sections must be exactly 25");
-            }
-            if (schneider_xs_energies != schneider_host_grid.energy_nodes()) {
-                throw std::runtime_error("schneider_xs_energies must match grid size");
-            }
+                const std::size_t total_elements =
+                    static_cast<std::size_t>(schneider_xs_sections) * schneider_xs_energies;
+                if (schneider_host_grid.mass_xs_per_mm_at_1g_cm3.size() != total_elements) {
+                    throw std::runtime_error("Schneider cross section host payload size mismatch");
+                }
+                if (schneider_xs_sections != 25) {
+                    throw std::runtime_error("schneider_xs_sections must be exactly 25");
+                }
+                if (schneider_xs_energies != schneider_host_grid.energy_nodes()) {
+                    throw std::runtime_error("schneider_xs_energies must match grid size");
+                }
 
-            schneider_primary_xs_device = mem_tracker.allocate<float>(total_elements);
-            if (schneider_primary_xs_device == nullptr) {
-                throw std::bad_alloc();
-            }
-            queue.copy(schneider_host_grid.mass_xs_per_mm_at_1g_cm3.data(),
-                       schneider_primary_xs_device, total_elements).wait_and_throw();
+                schneider_primary_xs_device = mem_tracker.allocate<float>(total_elements);
+                if (schneider_primary_xs_device == nullptr) {
+                    throw std::bad_alloc();
+                }
+                queue.copy(schneider_host_grid.mass_xs_per_mm_at_1g_cm3.data(),
+                           schneider_primary_xs_device, total_elements).wait_and_throw();
 
-            // Log table dimensions, byte count, source file, mode, and source SHA256 once
-            std::cout << "[schneider-primary-xs] mode=primary-c12-section-resolved\n"
-                      << "  sections=" << schneider_xs_sections << "\n"
-                      << "  energies=" << schneider_xs_energies << "\n"
-                      << "  bytes=" << total_elements * sizeof(float) << "\n"
-                      << "  E_min=" << schneider_xs_e_min << " MeV/u\n"
-                      << "  inv_dE=" << schneider_xs_inv_dE << "\n"
-                      << "  source=" << config.ct_schneider_cross_section_file << "\n"
-                      << "  source_sha256=" << (early_verified_sha256.empty() ? "unknown" : early_verified_sha256) << "\n";
+                // Log table dimensions, byte count, source file, mode, and source SHA256 once
+                std::cout << "[schneider-primary-xs] mode=primary-c12-section-resolved\n"
+                          << "  sections=" << schneider_xs_sections << "\n"
+                          << "  energies=" << schneider_xs_energies << "\n"
+                          << "  bytes=" << total_elements * sizeof(float) << "\n"
+                          << "  E_min=" << schneider_xs_e_min << " MeV/u\n"
+                          << "  inv_dE=" << schneider_xs_inv_dE << "\n"
+                          << "  source=" << config.ct_schneider_cross_section_file << "\n"
+                          << "  source_sha256=" << (early_verified_sha256.empty() ? "unknown" : early_verified_sha256) << "\n";
+            }
             if (config.is_primary_attenuation_only_mode()) {
                 std::cout << "[ct-validation-mode] primary-attenuation-only\n"
                           << "  verified_source_sha256=" << early_verified_sha256 << "\n";
@@ -1040,6 +1527,34 @@ TransportResult transport_sycl(const TransportConfig& config,
             mem_tracker.allocate<PrimarySpotBatchEntry>(primary_spot_count);
         queue.copy(config.primary_spot_batch.data(), primary_spots_device, primary_spot_count)
             .wait_and_throw();
+    }
+
+    const SchneiderCtDeviceContext schneider_ct_device_ctx = upload_schneider_ct_device_context(
+        queue, mem_tracker, config,
+        schneider_stopping_device,
+        schneider_sp_sections, schneider_sp_energies,
+        schneider_sp_e_min, schneider_sp_e_max, schneider_sp_inv_dE);
+    if (schneider_ct_device_ctx.is_schneider_ct() &&
+        !config.is_primary_attenuation_only_mode()) {
+        schneider_diag_device = mem_tracker.allocate<std::uint64_t>(kSchneiderDiagSlots);
+        schneider_float_device = mem_tracker.allocate<float>(kSchneiderFloatSlots);
+        schneider_miss_device =
+            mem_tracker.allocate<SchneiderMissRecord>(kSchneiderMissLogCap);
+        schneider_track_log_device =
+            mem_tracker.allocate<SchneiderUnsupportedTrack>(kSchneiderTrackLogCap);
+        schneider_miss_count_device = mem_tracker.allocate<std::uint32_t>(2);
+        schneider_track_count_device = mem_tracker.allocate<std::uint32_t>(2);
+        if (schneider_diag_device == nullptr || schneider_float_device == nullptr ||
+            schneider_miss_device == nullptr || schneider_track_log_device == nullptr ||
+            schneider_miss_count_device == nullptr || schneider_track_count_device == nullptr) {
+            throw std::bad_alloc();
+        }
+        queue.fill(schneider_diag_device, std::uint64_t{0}, kSchneiderDiagSlots)
+            .wait_and_throw();
+        queue.fill(schneider_float_device, 0.0F, kSchneiderFloatSlots).wait_and_throw();
+        // [0] = written count, [1] = dropped (over-capacity) count.
+        queue.fill(schneider_miss_count_device, std::uint32_t{0}, 2).wait_and_throw();
+        queue.fill(schneider_track_count_device, std::uint32_t{0}, 2).wait_and_throw();
     }
 
     // Scorers & Result buffers
@@ -1837,6 +2352,7 @@ TransportResult transport_sycl(const TransportConfig& config,
                 }
 
                 auto history_deposited_MeV = 0.0F;
+                std::uint64_t local_schneider_rate_queries = 0;
                 std::uint32_t steps = 0;
                 StepStableStragglingState<float> stable_straggling;
                 stable_straggling.initialize(straggling_sampling_length_mm);
@@ -2090,12 +2606,27 @@ TransportResult transport_sycl(const TransportConfig& config,
                         const auto cur_e_u = energy_MeV * inverse_mass_number;
                         if (use_schneider_primary_xs) {
                             if (in_ct) {
-                                const std::uint32_t section_id = static_cast<std::uint32_t>(ct_material);
-                                const float mass_rate = schneider_primary_mass_xs(
-                                    schneider_primary_xs_device, schneider_xs_sections,
-                                    schneider_xs_energies, schneider_xs_e_min, schneider_xs_inv_dE,
-                                    section_id, cur_e_u);
+                                const std::uint32_t section_id = static_cast<std::uint32_t>(
+                                    sycl::min(static_cast<std::uint32_t>(ct_material), 24U));
+                                // v3: hazard from the masked rate-binary partials
+                                // (single source with the target sampler); v1
+                                // keeps the CSV XS table EXACTLY.
+                                float mass_rate = 0.0F;
+                                if (schneider_ct_device_ctx.primary_sampler.rate_version == 3) {
+                                    mass_rate = schneider_masked_rates_device(
+                                        schneider_ct_device_ctx.primary_sampler,
+                                        section_id, cur_e_u).total;
+                                } else {
+                                    mass_rate = schneider_primary_mass_xs(
+                                        schneider_primary_xs_device, schneider_xs_sections,
+                                        schneider_xs_energies, schneider_xs_e_min, schneider_xs_inv_dE,
+                                        section_id, cur_e_u);
+                                }
+                                // Density enters exactly once, in the total
+                                // hazard; target fractions from the sampler CDF
+                                // are density-independent.
                                 const float macro_tot = local_density_g_per_cm3 * mass_rate;
+                                ++local_schneider_rate_queries;
 
                                 float u_nuc = 1.0F;
                                 if (!nuclear_tau_active) {
@@ -2105,6 +2636,9 @@ TransportResult transport_sycl(const TransportConfig& config,
                                 const bool collision = consume_schneider_optical_depth_segment(
                                     nuclear_tau_remaining, nuclear_tau_active, step_mm, macro_tot, u_nuc);
                                 if (collision && enable_inelastic) {
+                                    schneider_diag_increment_device(
+                                        schneider_diag_device,
+                                        SchneiderDiagSlot::PrimaryHazards);
                                     if (schneider_inelastic_device != nullptr) {
                                         sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
                                                          sycl::memory_scope::device,
@@ -2569,7 +3103,7 @@ TransportResult transport_sycl(const TransportConfig& config,
                                 proton.dir_y = scat.proton_dir_y;
                                 proton.dir_z = scat.proton_dir_z;
                                 proton.weight = 1.0F;
-                                proton.parent_history = rng_history;
+                                proton.parent_history = global_history;
                                 proton.rng_stream = rng::child_stream(
                                     rng_history, rng::branch_tag(
                                         rng::branch_role_primary_charged, steps));
@@ -2589,23 +3123,293 @@ TransportResult transport_sycl(const TransportConfig& config,
 
                     if (use_schneider_primary_xs && in_ct && inelastic_this_step) {
                         primary_inelastic_occurred = true;
-                        if (first_interactions_device != nullptr && first_interactions_count_device != nullptr) {
-                            sycl::atomic_ref<std::uint32_t, sycl::memory_order::relaxed,
-                                             sycl::memory_scope::device,
-                                             sycl::access::address_space::global_space>
-                                count_ref(*first_interactions_count_device);
-                            const auto slot = count_ref.fetch_add(1U);
-                            if (slot < number_of_histories) {
-                                first_interactions_device[slot] = PrimaryFirstInteractionRecord{
-                                    position_x_mm,
-                                    position_y_mm,
-                                    position_z_mm,
-                                    energy_MeV * inverse_mass_number,
-                                    interaction_section,
-                                    interaction_density
-                                };
+                        if (is_primary_attenuation_only) {
+                            if (first_interactions_device != nullptr && first_interactions_count_device != nullptr) {
+                                sycl::atomic_ref<std::uint32_t, sycl::memory_order::relaxed,
+                                                 sycl::memory_scope::device,
+                                                 sycl::access::address_space::global_space>
+                                    count_ref(*first_interactions_count_device);
+                                const auto slot = count_ref.fetch_add(1U);
+                                if (slot < number_of_histories) {
+                                    first_interactions_device[slot] = PrimaryFirstInteractionRecord{
+                                        position_x_mm,
+                                        position_y_mm,
+                                        position_z_mm,
+                                        energy_MeV * inverse_mass_number,
+                                        interaction_section,
+                                        interaction_density
+                                    };
+                                }
+                            }
+                            if (primary_terminal_counts_device != nullptr) {
+                                sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
+                                                 sycl::memory_scope::device,
+                                                 sycl::access::address_space::global_space>
+                                    term_ref(primary_terminal_counts_device[0]);
+                                term_ref.fetch_add(1U);
+                            }
+                            if (untracked_nuclear_device != nullptr) {
+                                untracked_nuclear_device[global_history] = energy_MeV;
+                            }
+                            energy_MeV = 0.0F;
+                            break;
+                        }
+
+                        // Production Schneider CT primary inelastic collision.
+                        // Exact (C12, target_Z) channel, bounded energy domain,
+                        // stochastic bracketing. Tag 15 drives the bracket
+                        // choice, tag 16 the intra-node event pick.
+                        const float cur_primary_e_u = energy_MeV * inverse_mass_number;
+                        const float u_target = rng::uniform01(spot_seed, rng_history, steps, 14);
+                        // v3: masked draw from the same partials as the hazard.
+                        // A non-positive result (masked hazard fired but
+                        // slowing emptied every channel before the collision
+                        // point) is a primary post-EM null collision: no
+                        // package query, track continues, never
+                        // UnsupportedTargets. v1 keeps the legacy call and
+                        // flows to lookup EXACTLY as before.
+                        int target_z = 0;
+                        if (schneider_ct_device_ctx.primary_sampler.rate_version == 3) {
+                            const auto masked = schneider_masked_rates_device(
+                                schneider_ct_device_ctx.primary_sampler,
+                                interaction_section, cur_primary_e_u);
+                            target_z = sample_masked_schneider_target_device(
+                                masked.partials, u_target);
+                        } else {
+                            target_z = sample_schneider_target_device(
+                                schneider_ct_device_ctx.primary_sampler,
+                                interaction_section,
+                                cur_primary_e_u,
+                                u_target);
+                        }
+                        if (schneider_ct_device_ctx.primary_sampler.rate_version == 3 &&
+                            target_z <= 0) {
+                            schneider_diag_increment_device(
+                                schneider_diag_device,
+                                SchneiderDiagSlot::PrimaryPostEmNullCollisions);
+                            schneider_float_add_device(
+                                schneider_float_device,
+                                SchneiderFloatSlot::PostEmNullEnergy,
+                                sycl::fmax(0.0F, energy_MeV));
+                        } else {
+
+                        const float u_bracket = rng::uniform01(spot_seed, rng_history, steps, 15);
+                        const float u_event = rng::uniform01(spot_seed, rng_history, steps, 16);
+                        if (cinel02_diag_device != nullptr) {
+                            cinel02_diag_increment_device(cinel02_diag_device, 0U);
+                        }
+                        const auto primary_lookup = cinel03_lookup_event_device(
+                            schneider_ct_device_ctx.c12_energy_nodes,
+                            schneider_ct_device_ctx.c12_node_count,
+                            schneider_ct_device_ctx.c12_event_offsets,
+                            schneider_ct_device_ctx.c12_event_indices,
+                            schneider_ct_device_ctx.c12_total_events,
+                            6, 12, target_z,
+                            cur_primary_e_u,
+                            u_bracket, u_event);
+                        schneider_record_lookup_device(schneider_diag_device,
+                                                       schneider_float_device,
+                                                       true, primary_lookup,
+                                                       energy_MeV);
+
+                        if (primary_lookup.status != Cinel03LookupStatus::Hit) {
+                            // Per-miss log: recompute the macro total exactly
+                            // as at hazard time (density x mass, once).
+                            // Per-miss macro total recomputed exactly as at
+                            // hazard time: v3 uses the masked binary total
+                            // (no CSV exists for v3), v1 the CSV XS table.
+                            float primary_miss_macro = 0.0F;
+                            if (schneider_ct_device_ctx.primary_sampler.rate_version == 3) {
+                                primary_miss_macro = interaction_density *
+                                    schneider_masked_rates_device(
+                                        schneider_ct_device_ctx.primary_sampler,
+                                        interaction_section, cur_primary_e_u).total;
+                            } else {
+                                primary_miss_macro = interaction_density *
+                                    schneider_primary_mass_xs(
+                                        schneider_primary_xs_device, schneider_xs_sections,
+                                        schneider_xs_energies, schneider_xs_e_min, schneider_xs_inv_dE,
+                                        interaction_section, cur_primary_e_u);
+                            }
+                            schneider_log_miss_device(
+                                schneider_miss_device, schneider_miss_count_device,
+                                kSchneiderMissLogCap, true,
+                                6, 12, target_z,
+                                interaction_section > 255 ? 255
+                                                          : static_cast<std::uint8_t>(interaction_section),
+                                0, primary_lookup, cur_primary_e_u, deposited_MeV,
+                                primary_miss_macro, 0.0F, energy_MeV,
+                                spot_initial_energy_MeV);
+                            if (cinel02_diag_device != nullptr) {
+                                cinel02_diag_increment_device(cinel02_diag_device, 2U);
+                            }
+                            if (untracked_nuclear_device != nullptr) {
+                                untracked_nuclear_device[global_history] = energy_MeV;
+                            }
+                            energy_MeV = 0.0F;
+                            break;
+                        }
+
+                        if (cinel02_diag_device != nullptr) {
+                            cinel02_diag_increment_device(cinel02_diag_device, 1U);
+                        }
+
+                        const auto& event = schneider_ct_device_ctx.c12_interactions[primary_lookup.event_index];
+                        const float local_deposit = sycl::fmax(0.0F, event.process_local_deposit_MeV);
+
+                        pending_primary_depth_MeV += local_deposit;
+                        if (enable_voxel_scoring && voxel_index >= 0) {
+                            pending_primary_voxel_MeV += local_deposit;
+                        }
+                        history_deposited_MeV += local_deposit;
+
+                        float charged_accounted_MeV = 0.0F;
+                        float neutral_accounted_MeV = 0.0F;
+                        float unsupported_accounted_MeV = 0.0F;
+
+                        const std::uint32_t prod_offset = event.product_offset;
+                        const std::uint32_t prod_count = event.direct_product_count;
+
+                        for (std::uint32_t ip = 0; ip < prod_count; ++ip) {
+                            if (prod_offset + ip >= schneider_ct_device_ctx.c12_total_products) break;
+                            const auto& product = schneider_ct_device_ctx.c12_products[prod_offset + ip];
+
+                            if (product.role == 2) {
+                                const float ke = sycl::fmax(0.0F, product.kinetic_energy_MeV);
+                                unsupported_accounted_MeV += ke;
+                                schneider_float_add_device(
+                                    schneider_float_device,
+                                    SchneiderFloatSlot::UnsupportedProductEnergy, ke);
+                                continue;
+                            }
+                            if (product.z <= 0 || product.a <= 0) {
+                                const float ke = sycl::fmax(0.0F, product.kinetic_energy_MeV);
+                                neutral_accounted_MeV += ke;
+                                schneider_float_add_device(
+                                    schneider_float_device,
+                                    SchneiderFloatSlot::NeutralProductKinetic, ke);
+                                continue;
+                            }
+                            if (product.role != 0) {
+                                continue;
+                            }
+                            // Be6 keeps the frozen TopasCompatKill policy:
+                            // explicit counter + energy, never queued.
+                            if (product.z == 4 && product.a == 6) {
+                                const float ke = sycl::fmax(0.0F, product.kinetic_energy_MeV);
+                                schneider_diag_increment_device(
+                                    schneider_diag_device,
+                                    SchneiderDiagSlot::PrimaryBe6Kills);
+                                schneider_diag_increment_device(
+                                    schneider_diag_device,
+                                    SchneiderDiagSlot::Be6TopasCompatKills);
+                                schneider_float_add_device(
+                                    schneider_float_device,
+                                    SchneiderFloatSlot::Be6KillEnergy, ke);
+                                continue;
+                            }
+                            schneider_diag_increment_device(
+                                schneider_diag_device,
+                                SchneiderDiagSlot::PrimaryChargedBorn);
+
+                            if (enable_secondary_transport && product.kinetic_energy_MeV > energy_cutoff_MeV) {
+                                const auto child_direction = rotate_local_direction(
+                                    product.local_direction_x,
+                                    product.local_direction_y,
+                                    product.local_direction_z,
+                                    Direction3F{direction_x, direction_y, direction_z});
+
+                                if (secondary_queue_device != nullptr) {
+                                    auto count_ref = sycl::atomic_ref<
+                                        uint32_t, sycl::memory_order::relaxed,
+                                        sycl::memory_scope::device,
+                                        sycl::access::address_space::global_space>(
+                                        *secondary_count_device);
+                                    const auto output = count_ref.fetch_add(1U);
+                                    if (output < max_secondaries) {
+                                        SecondaryParticle child{};
+                                        child.z = product.z;
+                                        child.a = product.a;
+                                        child.energy_MeV = product.kinetic_energy_MeV;
+                                        child.pos_x_mm = position_x_mm;
+                                        child.pos_y_mm = position_y_mm;
+                                        child.pos_z_mm = position_z_mm;
+                                        child.dir_x = child_direction.x;
+                                        child.dir_y = child_direction.y;
+                                        child.dir_z = child_direction.z;
+                                        child.weight = 1.0F;
+                                        child.parent_history = global_history;
+                                        child.rng_stream = rng::child_stream(
+                                            rng_history, rng::branch_tag(rng::branch_role_primary_charged, steps));
+                                        secondary_queue_device[output] = child;
+                                        charged_accounted_MeV += product.kinetic_energy_MeV;
+                                        schneider_diag_increment_device(
+                                            schneider_diag_device,
+                                            SchneiderDiagSlot::PrimaryChargedQueued);
+                                        if (cinel02_species_energy_device != nullptr) {
+                                            cinel02_record_queued_secondary_birth_device(
+                                                cinel02_species_energy_device, child.z, child.a,
+                                                child.energy_MeV);
+                                        }
+                                    } else {
+                                        schneider_diag_increment_device(
+                                            schneider_diag_device,
+                                            SchneiderDiagSlot::PrimaryQueueOverflows);
+                                        schneider_diag_increment_device(
+                                            schneider_diag_device,
+                                            SchneiderDiagSlot::QueueOverflows);
+                                        if (secondary_overflow_count_device != nullptr) {
+                                            sycl::atomic_ref<uint32_t, sycl::memory_order::relaxed,
+                                                             sycl::memory_scope::device,
+                                                             sycl::access::address_space::global_space>
+                                                atomic_ov(*secondary_overflow_count_device);
+                                            atomic_ov.fetch_add(1U);
+                                        }
+                                        if (secondary_overflow_energy_device != nullptr) {
+                                            sycl::atomic_ref<float, sycl::memory_order::relaxed,
+                                                             sycl::memory_scope::device,
+                                                             sycl::access::address_space::global_space>
+                                                atomic_ove(*secondary_overflow_energy_device);
+                                            atomic_ove.fetch_add(product.kinetic_energy_MeV);
+                                        }
+                                    }
+                                }
+                            } else {
+                                pending_primary_depth_MeV += product.kinetic_energy_MeV;
+                                if (enable_voxel_scoring && voxel_index >= 0) {
+                                    pending_primary_voxel_MeV += product.kinetic_energy_MeV;
+                                }
+                                history_deposited_MeV += product.kinetic_energy_MeV;
+                                charged_accounted_MeV += product.kinetic_energy_MeV;
+                                schneider_diag_increment_device(
+                                    schneider_diag_device,
+                                    SchneiderDiagSlot::PrimaryChargedCutoffKills);
                             }
                         }
+
+                        schneider_float_add_device(
+                            schneider_float_device, SchneiderFloatSlot::ReactionQResidual,
+                            sycl::fmax(0.0F, energy_MeV - local_deposit -
+                                                  charged_accounted_MeV -
+                                                  neutral_accounted_MeV -
+                                                  unsupported_accounted_MeV));
+                        // NO-DOUBLE-COUNT RULE: the legacy untracked sink below
+                        // already contains neutral + unsupported + Q-residual
+                        // energy (E - local - charged). The split float slots
+                        // above are INFORMATIONAL ONLY and must never be added
+                        // into the global closure alongside untracked; the
+                        // closure in run_quality uses the legacy sink alone.
+                        // A unit test pins this (split fields leave the
+                        // residual bitwise unchanged).
+                        const float untracked_MeV = sycl::fmax(0.0F, energy_MeV - local_deposit - charged_accounted_MeV);
+                        if (untracked_MeV > 0.0F && untracked_nuclear_device != nullptr) {
+                            sycl::atomic_ref<float, sycl::memory_order::relaxed,
+                                             sycl::memory_scope::device,
+                                             sycl::access::address_space::global_space>
+                                atomic_untracked(untracked_nuclear_device[global_history]);
+                            atomic_untracked.fetch_add(untracked_MeV);
+                        }
+
                         if (primary_terminal_counts_device != nullptr) {
                             sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
                                              sycl::memory_scope::device,
@@ -2613,11 +3417,9 @@ TransportResult transport_sycl(const TransportConfig& config,
                                 term_ref(primary_terminal_counts_device[0]);
                             term_ref.fetch_add(1U);
                         }
-                        if (untracked_nuclear_device != nullptr) {
-                            untracked_nuclear_device[global_history] = energy_MeV;
-                        }
                         energy_MeV = 0.0F;
                         break;
+                        }  // else of the v3 masked-sampler empty-draw guard
                     }
 
                     if (enable_inelastic && inelastic_this_step &&
@@ -2877,7 +3679,7 @@ TransportResult transport_sycl(const TransportConfig& config,
                                                 child.dir_y = child_direction.y;
                                                 child.dir_z = child_direction.z;
                                                 child.weight = product.weight;
-                                                child.parent_history = rng_history;
+                                                child.parent_history = global_history;
                                                 child.rng_stream = rng::child_stream(
                                                     rng_history, rng::branch_tag(
                                                         rng::branch_role_primary_charged, ip));
@@ -3290,6 +4092,9 @@ TransportResult transport_sycl(const TransportConfig& config,
                     }
                 }
 
+                schneider_diag_add_device(schneider_diag_device,
+                                              SchneiderDiagSlot::PrimaryRateQueries,
+                                              local_schneider_rate_queries);
                 deposited_device[global_history] = history_deposited_MeV;
                 escaped_device[global_history] = energy_MeV;
                 steps_device[global_history] = steps;
@@ -3389,6 +4194,10 @@ TransportResult transport_sycl(const TransportConfig& config,
                                                  sycl::access::address_space::global_space>
                                     atomic_dep(deposited_device[frag.parent_history]);
                                 atomic_dep.fetch_add(frag.energy_MeV);
+                                schneider_energy_add_device(
+                                    schneider_diag_device,
+                                    SchneiderDiagSlot::SecondaryDepositedMicroMeV,
+                                    frag.energy_MeV);
                             }
                             return;
                         }
@@ -3429,6 +4238,57 @@ TransportResult transport_sycl(const TransportConfig& config,
 
                         uint32_t sec_steps = 0;
                         constexpr uint32_t kSecondaryMaxSteps = 30000U;
+                        std::uint64_t local_sec_rate_queries = 0;
+                        std::uint64_t local_sec_steps = 0;
+                        // A track that reaches the stepping loop has actually
+                        // started charged transport: count it and itemize its
+                        // birth kinetic energy (not a config-switch inference).
+                        schneider_diag_increment_device(
+                            schneider_diag_device,
+                            SchneiderDiagSlot::SecondaryTracksStarted);
+                        schneider_float_add_device(
+                            schneider_float_device,
+                            SchneiderFloatSlot::SecondaryTransportBirthEnergy,
+                            sycl::fmax(0.0F, frag.energy_MeV));
+                        // Per-track unsupported-projectile accounting (once per
+                        // track, not per step): generation-eligible tracks whose
+                        // (Z/A) has no secondary rate-table registry entry.
+                        // The per-step evaluation counter below
+                        // (UnsupportedProjectileSteps) is diagnostic only and
+                        // must NOT drive coverage gates.
+                        // v3: registry lookup over the uploaded bundle-ordered
+                        // keys (any (Z,A) in the bundle is supported); v1 keeps
+                        // the hardcoded 13-isotope check EXACTLY.
+                        const int schneider_reg_idx =
+                            (schneider_ct_device_ctx.sec_rate_version == 3)
+                                ? secondary_projectile_lut_index_device(
+                                      schneider_ct_device_ctx.sec_proj_keys,
+                                      schneider_ct_device_ctx.sec_num_projectiles,
+                                      frag.z, frag.a)
+                                : secondary_projectile_index_device(frag.z, frag.a);
+                        if (schneider_ct_device_ctx.is_schneider_ct() &&
+                            frag.generation < cinel02_max_secondary_inelastic_generations &&
+                            schneider_reg_idx < 0) {
+                            schneider_diag_increment_device(
+                                schneider_diag_device,
+                                SchneiderDiagSlot::UnsupportedProjectileTracks);
+                            if (frag.z == 4 && frag.a == 6) {
+                                schneider_diag_increment_device(
+                                    schneider_diag_device,
+                                    SchneiderDiagSlot::UnsupportedBe6Tracks);
+                            }
+                            schneider_energy_add_device(
+                                schneider_diag_device,
+                                SchneiderDiagSlot::UnsupportedProjectileBirthEnergyMicroMeV,
+                                sycl::fmax(0.0F, frag.energy_MeV));
+                            // Per-(Z/A) census record for the coverage audit.
+                            schneider_log_unsupported_track_device(
+                                schneider_track_log_device, schneider_track_count_device,
+                                kSchneiderTrackLogCap,
+                                frag.z, frag.a, frag.generation,
+                                sycl::fmax(0.0F, frag.energy_MeV),
+                                frag.pos_x_mm, frag.pos_y_mm, frag.pos_z_mm);
+                        }
                         while (sec_e > energy_cutoff_MeV && sec_z >= 0.0F && sec_z < phantom_length_mm &&
                                sec_steps < kSecondaryMaxSteps) {
                             const auto bin_z = static_cast<int>(sec_z * inverse_depth_bin_width_mm);
@@ -3546,8 +4406,129 @@ TransportResult transport_sycl(const TransportConfig& config,
                             bool secondary_replay_succeeded = false;
                             std::int16_t secondary_target_z = 0;
                             std::int16_t secondary_target_a = 0;
-                            if (use_cinel02 && frag.generation <
-                                cinel02_max_secondary_inelastic_generations) {
+                            // v3: set when the post-EM sampler finds no
+                            // in-domain channel (lookup skipped, never queried).
+                            bool skip_schneider_lookup = false;
+                            // Stash for the miss log: macro total rate at
+                            // sampling (density x mass, density exactly once),
+                            // sampled collision distance, and section.
+                            float schneider_hazard_total_rate = 0.0F;
+                            float schneider_hazard_step_mm = 0.0F;
+                            std::uint8_t schneider_hazard_section = 255;
+                            if (schneider_ct_device_ctx.is_schneider_ct() && sec_in_ct &&
+                                frag.generation < cinel02_max_secondary_inelastic_generations) {
+                                // v3: bundle-ordered registry LUT; v1 keeps the
+                                // hardcoded check EXACTLY.
+                                const int proj_idx =
+                                    (schneider_ct_device_ctx.sec_rate_version == 3)
+                                        ? secondary_projectile_lut_index_device(
+                                              schneider_ct_device_ctx.sec_proj_keys,
+                                              schneider_ct_device_ctx.sec_num_projectiles,
+                                              frag.z, frag.a)
+                                        : secondary_projectile_index_device(frag.z, frag.a);
+                                if (proj_idx < 0) {
+                                    // Unsupported secondary projectile: explicit
+                                    // per-STEP evaluation counter, never a silent
+                                    // zero-rate step. (Generation-ineligible tracks
+                                    // skip nuclear evaluation entirely: stage-C
+                                    // transport without secondary reactions.)
+                                    // Coverage gates use the per-TRACK counter
+                                    // recorded at track start, not this value.
+                                    schneider_diag_increment_device(
+                                        schneider_diag_device,
+                                        SchneiderDiagSlot::UnsupportedProjectileSteps);
+                                } else if (schneider_ct_device_ctx.sec_total_rates != nullptr) {
+                                    const std::size_t section_id = static_cast<std::size_t>(
+                                        sycl::min(static_cast<std::uint32_t>(sec_ct_material), 24U));
+                                    ++local_sec_rate_queries;
+                                    // v3: single masked computation drives hazard
+                                    // AND target sampling (same partials, same
+                                    // mask). v1 keeps the legacy total/sampler
+                                    // calls EXACTLY as before.
+                                    if (schneider_ct_device_ctx.sec_rate_version == 3) {
+                                        // v3: hazard from the masked total at the
+                                        // step-start energy E_h. Target sampling
+                                        // is deferred to the lookup site (post-EM
+                                        // collision energy E_c) so the mask and
+                                        // the package query share one energy; a
+                                        // hazard can never outrun its domain.
+                                        // v1 keeps hazard+sampling at E_h
+                                        // EXACTLY as before.
+                                        const auto sec_masked = secondary_masked_rates_device(
+                                            schneider_ct_device_ctx.sec_partial_rates,
+                                            schneider_ct_device_ctx.sec_domain_emin,
+                                            schneider_ct_device_ctx.sec_domain_emax,
+                                            schneider_ct_device_ctx.sec_domain_has,
+                                            schneider_ct_device_ctx.sec_num_projectiles,
+                                            proj_idx, section_id, sec_e_u,
+                                            schneider_ct_device_ctx.sec_energy_min_MeV_per_u,
+                                            schneider_ct_device_ctx.sec_inv_energy_step,
+                                            schneider_ct_device_ctx.sec_num_energies);
+                                        const float sec_macro_xs =
+                                            sec_local_density_g_per_cm3 * sec_masked.total;
+                                        if (sec_macro_xs > 0.0F) {
+                                            float collision_distance = sec_step_mm;
+                                            secondary_inelastic = inelastic_collision_in_step(
+                                                sec_macro_xs, sec_step_mm,
+                                                rng::uniform01(2026, frag.rng_stream, sec_steps, 13),
+                                                &collision_distance);
+                                            if (secondary_inelastic) {
+                                                schneider_diag_increment_device(
+                                                    schneider_diag_device,
+                                                    SchneiderDiagSlot::SecondaryHazards);
+                                                sec_step_mm = collision_distance;
+                                                schneider_hazard_total_rate = sec_macro_xs;
+                                                schneider_hazard_step_mm = sec_step_mm;
+                                                schneider_hazard_section = sec_ct_material;
+                                            }
+                                        }
+                                    } else {
+                                    const float sec_mass_rate = secondary_total_mass_rate_device(
+                                        schneider_ct_device_ctx.sec_total_rates,
+                                        proj_idx, section_id, sec_e_u,
+                                        schneider_ct_device_ctx.sec_energy_min_MeV_per_u,
+                                        schneider_ct_device_ctx.sec_inv_energy_step,
+                                        schneider_ct_device_ctx.sec_num_energies);
+                                    // Density enters exactly once, in the total
+                                    // hazard; target fractions are independent.
+                                    const float sec_macro_xs = sec_local_density_g_per_cm3 * sec_mass_rate;
+                                    if (sec_macro_xs > 0.0F) {
+                                        float collision_distance = sec_step_mm;
+                                        secondary_inelastic = inelastic_collision_in_step(
+                                            sec_macro_xs, sec_step_mm,
+                                            rng::uniform01(2026, frag.rng_stream, sec_steps, 13),
+                                            &collision_distance);
+                                        if (secondary_inelastic) {
+                                            schneider_diag_increment_device(
+                                                schneider_diag_device,
+                                                SchneiderDiagSlot::SecondaryHazards);
+                                            sec_step_mm = collision_distance;
+                                            schneider_hazard_total_rate = sec_macro_xs;
+                                            schneider_hazard_step_mm = sec_step_mm;
+                                            schneider_hazard_section = sec_ct_material;
+                                            const float u_target = rng::uniform01(2026, frag.rng_stream, sec_steps, 14);
+                                            const int sampled_z =
+                                                sample_secondary_target_device(
+                                                    schneider_ct_device_ctx.sec_partial_rates,
+                                                    proj_idx, section_id, sec_e_u, u_target,
+                                                    schneider_ct_device_ctx.sec_energy_min_MeV_per_u,
+                                                    schneider_ct_device_ctx.sec_inv_energy_step,
+                                                    schneider_ct_device_ctx.sec_num_energies);
+                                            if (sampled_z <= 0) {
+                                                schneider_diag_increment_device(
+                                                    schneider_diag_device,
+                                                    SchneiderDiagSlot::UnsupportedTargets);
+                                                secondary_inelastic = false;
+                                            } else {
+                                                secondary_target_z =
+                                                    static_cast<std::int16_t>(sampled_z);
+                                            }
+                                        }
+                                    }
+                                    }  // else of the v3 masked secondary path
+                                }
+                            } else if (use_cinel02 && frag.generation <
+                                       cinel02_max_secondary_inelastic_generations) {
                                 cinel02_diag_increment_device(cinel02_diag_device, 14U);
                                 const auto target =
                                     (sec_in_ct && cinel02_ct_rate_groups_device != nullptr)
@@ -3838,12 +4819,75 @@ TransportResult transport_sycl(const TransportConfig& config,
                                        static_cast<int>(number_of_bins) - 1));
                             if (secondary_inelastic) {
                                 sec_e = post_em_e;
+                                // v3: sample the target HERE at the post-EM
+                                // collision energy E_c (sec_e just updated),
+                                // so the replay-status record below and the
+                                // package query share one energy with the mask.
+                                // v1 keeps the hazard-site E_h sample EXACTLY.
+                                if (schneider_ct_device_ctx.is_schneider_ct() && sec_in_ct &&
+                                    schneider_ct_device_ctx.sec_rate_version == 3 &&
+                                    sec_e > energy_cutoff_MeV &&
+                                    frag.generation <
+                                        cinel02_max_secondary_inelastic_generations) {
+                                    const float sec_e_c = sec_e * frag_inv_a;
+                                    const int proj_idx_c =
+                                        secondary_projectile_lut_index_device(
+                                            schneider_ct_device_ctx.sec_proj_keys,
+                                            schneider_ct_device_ctx.sec_num_projectiles,
+                                            frag.z, frag.a);
+                                    const std::size_t section_c = static_cast<std::size_t>(
+                                        sycl::min(static_cast<std::uint32_t>(sec_ct_material), 24U));
+                                    const auto sec_masked_c = secondary_masked_rates_device(
+                                        schneider_ct_device_ctx.sec_partial_rates,
+                                        schneider_ct_device_ctx.sec_domain_emin,
+                                        schneider_ct_device_ctx.sec_domain_emax,
+                                        schneider_ct_device_ctx.sec_domain_has,
+                                        schneider_ct_device_ctx.sec_num_projectiles,
+                                        proj_idx_c, section_c, sec_e_c,
+                                        schneider_ct_device_ctx.sec_energy_min_MeV_per_u,
+                                        schneider_ct_device_ctx.sec_inv_energy_step,
+                                        schneider_ct_device_ctx.sec_num_energies);
+                                    // Same tag-14 draw as the legacy site (same
+                                    // step counter: sec_steps increments after
+                                    // the lookup); only the energy moves E_h ->
+                                    // E_c. Empty draw (slowing left every
+                                    // channel domain): counted, never queried.
+                                    const float u_target_c = rng::uniform01(
+                                        2026, frag.rng_stream, sec_steps, 14);
+                                    const int sampled_z_c =
+                                        sample_masked_secondary_target_device(
+                                            sec_masked_c.partials, u_target_c);
+                                    if (sampled_z_c <= 0) {
+                                        // Post-EM null collision (declared research
+                                        // approximation): no UnsupportedTargets,
+                                        // no StoppedBeforeReplay. The track keeps
+                                        // its post-EM energy/position, continues
+                                        // transport, loses no energy, deposits
+                                        // nothing locally, issues no lookup.
+                                        schneider_diag_increment_device(
+                                            schneider_diag_device,
+                                            SchneiderDiagSlot::SecondaryPostEmNullCollisions);
+                                        schneider_float_add_device(
+                                            schneider_float_device,
+                                            SchneiderFloatSlot::PostEmNullEnergy,
+                                            sycl::fmax(0.0F, sec_e));
+                                        secondary_inelastic = false;
+                                        skip_schneider_lookup = true;
+                                    } else {
+                                        secondary_target_z =
+                                            static_cast<std::int16_t>(sampled_z_c);
+                                    }
+                                }
                                 sec_x = post_em_x;
                                 sec_y = post_em_y;
                                 sec_z = post_em_z;
                                 // Record the hazard before attempting package
                                 // replay so isotope/target/generation misses
                                 // remain distinguishable from valid events.
+                                // v3 sampler-empty skips the record exactly
+                                // like the v1 hazard-site empty draw (which
+                                // never reaches this block).
+                                if (!skip_schneider_lookup) {
                                 cinel02_record_replay_status_device(
                                     cinel02_replay_status_counts_device,
                                     cinel02_replay_status_rate_query_energy_device,
@@ -3862,6 +4906,7 @@ TransportResult transport_sycl(const TransportConfig& config,
                                     exposure_cell,
                                     static_cast<std::uint32_t>(
                                         Cinel02ExposureLedgerSchema::collision_candidates));
+                                }  // !skip_schneider_lookup (v3 sampler-empty records nothing)
                             }
 
                             if (bin_z != pending_sec_bin) {
@@ -3911,7 +4956,269 @@ TransportResult transport_sycl(const TransportConfig& config,
                                     }
                                     pending_sec_voxel_MeV = 0.0F;
                                     pending_sec_voxel = cur_voxel;
+                            if (secondary_inelastic && !(sec_e > energy_cutoff_MeV) &&
+                                schneider_ct_device_ctx.is_schneider_ct() && sec_in_ct &&
+                                frag.generation < cinel02_max_secondary_inelastic_generations) {
+                                // Sampled Schneider collision whose post-EM
+                                // energy is already below cutoff: continuous
+                                // stopping owns the energy, no replay attempted.
+                                schneider_diag_increment_device(
+                                    schneider_diag_device,
+                                    SchneiderDiagSlot::SecondaryStoppedBeforeReplay);
+                            }
                             if (secondary_inelastic && sec_e > energy_cutoff_MeV) {
+                                // v3 sampling already happened at the post-EM
+                                // update above; skip the query only when the
+                                // sampler found no in-domain channel.
+                                if (schneider_ct_device_ctx.is_schneider_ct() && !skip_schneider_lookup) {
+                                    // Exact (Z/A, target_Z) channel with the
+                                    // secondary's own sampled target: never the
+                                    // primary target, never water/O fallback.
+                                    // Tag 15 drives the bracket choice, tag 16
+                                    // the intra-node event pick.
+                                    const float sec_u_bracket = rng::uniform01(2026, frag.rng_stream, sec_steps, 15);
+                                    const float sec_u_event = rng::uniform01(2026, frag.rng_stream, sec_steps, 16);
+                                    if (cinel02_diag_device != nullptr) {
+                                        cinel02_diag_increment_device(cinel02_diag_device, 14U);
+                                    }
+                                    const auto sec_lookup = cinel03_lookup_event_device(
+                                        schneider_ct_device_ctx.sec_energy_nodes,
+                                        schneider_ct_device_ctx.sec_node_count,
+                                        schneider_ct_device_ctx.sec_event_offsets,
+                                        schneider_ct_device_ctx.sec_event_indices,
+                                        schneider_ct_device_ctx.sec_total_events,
+                                        frag.z, frag.a, secondary_target_z,
+                                        sec_e * frag_inv_a,
+                                        sec_u_bracket, sec_u_event);
+                                    schneider_record_lookup_device(
+                                        schneider_diag_device, schneider_float_device,
+                                        false, sec_lookup, sec_e);
+
+                                    if (sec_lookup.status == Cinel03LookupStatus::Hit) {
+                                        const std::uint32_t event_idx = sec_lookup.event_index;
+                                        secondary_replay_succeeded = true;
+                                        if (cinel02_diag_device != nullptr) {
+                                            cinel02_diag_increment_device(cinel02_diag_device, 15U);
+                                        }
+                                        cinel02_species_energy_add_device(
+                                            cinel02_species_energy_device, ledger_species_idx, 8U, sec_e);
+                                        const auto& event = schneider_ct_device_ctx.sec_interactions[event_idx];
+                                        const float local_deposit = sycl::fmax(0.0F, event.process_local_deposit_MeV);
+                                        pending_sec_depth_MeV += local_deposit;
+                                        if (enable_voxel_scoring && cur_voxel >= 0) {
+                                            pending_sec_voxel_MeV += local_deposit;
+                                        }
+                                        if (deposited_device != nullptr) {
+                                            sycl::atomic_ref<float, sycl::memory_order::relaxed,
+                                                             sycl::memory_scope::device,
+                                                             sycl::access::address_space::global_space>
+                                                atomic_dep(deposited_device[frag.parent_history]);
+                                            atomic_dep.fetch_add(local_deposit + dE);
+                                            schneider_energy_add_device(
+                                                schneider_diag_device,
+                                                SchneiderDiagSlot::SecondaryDepositedMicroMeV,
+                                                local_deposit + dE);
+                                        }
+
+                                        float sec_charged_accounted_MeV = 0.0F;
+                                        float sec_neutral_accounted_MeV = 0.0F;
+                                        float sec_unsupported_accounted_MeV = 0.0F;
+
+                                        const std::uint32_t prod_offset = event.product_offset;
+                                        const std::uint32_t prod_count = event.direct_product_count;
+                                        for (std::uint32_t ip = 0; ip < prod_count; ++ip) {
+                                            if (prod_offset + ip >= schneider_ct_device_ctx.sec_total_products) break;
+                                            const auto& product = schneider_ct_device_ctx.sec_products[prod_offset + ip];
+
+                                            if (product.role == 2) {
+                                                const float ke = sycl::fmax(0.0F, product.kinetic_energy_MeV);
+                                                sec_unsupported_accounted_MeV += ke;
+                                                schneider_float_add_device(
+                                                    schneider_float_device,
+                                                    SchneiderFloatSlot::UnsupportedProductEnergy, ke);
+                                                continue;
+                                            }
+                                            if (product.z <= 0 || product.a <= 0) {
+                                                const float ke = sycl::fmax(0.0F, product.kinetic_energy_MeV);
+                                                sec_neutral_accounted_MeV += ke;
+                                                schneider_float_add_device(
+                                                    schneider_float_device,
+                                                    SchneiderFloatSlot::NeutralProductKinetic, ke);
+                                                continue;
+                                            }
+                                            if (product.role != 0) {
+                                                continue;
+                                            }
+
+                                            // TopasCompatKill for Be6 (Z=4, A=6):
+                                            // independent counter + energy, never queued.
+                                            if (product.z == 4 && product.a == 6) {
+                                                const float ke = sycl::fmax(0.0F, product.kinetic_energy_MeV);
+                                                schneider_diag_increment_device(
+                                                    schneider_diag_device,
+                                                    SchneiderDiagSlot::SecondaryBe6Kills);
+                                                schneider_diag_increment_device(
+                                                    schneider_diag_device,
+                                                    SchneiderDiagSlot::Be6TopasCompatKills);
+                                                schneider_float_add_device(
+                                                    schneider_float_device,
+                                                    SchneiderFloatSlot::Be6KillEnergy, ke);
+                                                continue;
+                                            }
+                                            schneider_diag_increment_device(
+                                                schneider_diag_device,
+                                                SchneiderDiagSlot::SecondaryChargedBorn);
+
+                                            if (product.kinetic_energy_MeV > energy_cutoff_MeV &&
+                                                frag.generation + 1U < cinel02_max_secondary_inelastic_generations) {
+                                                const auto child_direction = rotate_local_direction(
+                                                    product.local_direction_x,
+                                                    product.local_direction_y,
+                                                    product.local_direction_z,
+                                                    Direction3F{collision_input_dx, collision_input_dy, collision_input_dz});
+
+                                                if (secondary_queue_device != nullptr) {
+                                                    auto count_ref = sycl::atomic_ref<
+                                                        uint32_t, sycl::memory_order::relaxed,
+                                                        sycl::memory_scope::device,
+                                                        sycl::access::address_space::global_space>(
+                                                        *secondary_count_device);
+                                                    const auto output = count_ref.fetch_add(1U);
+                                                    if (output < max_secondaries) {
+                                                        SecondaryParticle child{};
+                                                        child.z = product.z;
+                                                        child.a = product.a;
+                                                        child.energy_MeV = product.kinetic_energy_MeV;
+                                                        child.pos_x_mm = post_em_x;
+                                                        child.pos_y_mm = post_em_y;
+                                                        child.pos_z_mm = post_em_z;
+                                                        child.dir_x = child_direction.x;
+                                                        child.dir_y = child_direction.y;
+                                                        child.dir_z = child_direction.z;
+                                                        child.weight = 1.0F;
+                                                        child.generation = static_cast<std::uint16_t>(frag.generation + 1U);
+                                                        child.parent_history = frag.parent_history;
+                                                        child.rng_stream = rng::child_stream(
+                                                            frag.rng_stream,
+                                                            rng::branch_tag(rng::branch_role_cascade_charged, sec_steps));
+                                                        secondary_queue_device[output] = child;
+                                                        sec_charged_accounted_MeV += product.kinetic_energy_MeV;
+                                                        schneider_diag_increment_device(
+                                                            schneider_diag_device,
+                                                            SchneiderDiagSlot::SecondaryChargedQueued);
+                                                        if (cinel02_species_energy_device != nullptr) {
+                                                            cinel02_record_queued_secondary_birth_device(
+                                                                cinel02_species_energy_device, child.z, child.a,
+                                                                child.energy_MeV);
+                                                            const auto child_species_idx = carbon::get_charged_species_idx(child.z, child.a);
+                                                            if (child_species_idx < 18) {
+                                                                cinel02_species_energy_add_device(
+                                                                    cinel02_species_energy_device, child_species_idx, 10U, child.energy_MeV);
+                                                            }
+                                                        }
+                                                    } else {
+                                                        schneider_diag_increment_device(
+                                                            schneider_diag_device,
+                                                            SchneiderDiagSlot::SecondaryQueueOverflows);
+                                                        schneider_diag_increment_device(
+                                                            schneider_diag_device,
+                                                            SchneiderDiagSlot::QueueOverflows);
+                                                        if (secondary_overflow_count_device != nullptr) {
+                                                            sycl::atomic_ref<uint32_t, sycl::memory_order::relaxed,
+                                                                             sycl::memory_scope::device,
+                                                                             sycl::access::address_space::global_space>
+                                                                atomic_ov(*secondary_overflow_count_device);
+                                                            atomic_ov.fetch_add(1U);
+                                                        }
+                                                        if (secondary_overflow_energy_device != nullptr) {
+                                                            sycl::atomic_ref<float, sycl::memory_order::relaxed,
+                                                                             sycl::memory_scope::device,
+                                                                             sycl::access::address_space::global_space>
+                                                                atomic_ove(*secondary_overflow_energy_device);
+                                                            atomic_ove.fetch_add(product.kinetic_energy_MeV);
+                                                        }
+                                                    }
+                                                }
+                                            } else {
+                                                pending_sec_depth_MeV += product.kinetic_energy_MeV;
+                                                if (enable_voxel_scoring && cur_voxel >= 0) {
+                                                    pending_sec_voxel_MeV += product.kinetic_energy_MeV;
+                                                }
+                                                if (deposited_device != nullptr) {
+                                                    sycl::atomic_ref<float, sycl::memory_order::relaxed,
+                                                                     sycl::memory_scope::device,
+                                                                     sycl::access::address_space::global_space>
+                                                        atomic_dep(deposited_device[frag.parent_history]);
+                                                    atomic_dep.fetch_add(product.kinetic_energy_MeV);
+                                                    schneider_energy_add_device(
+                                                        schneider_diag_device,
+                                                        SchneiderDiagSlot::SecondaryDepositedMicroMeV,
+                                                        product.kinetic_energy_MeV);
+                                                }
+                                                sec_charged_accounted_MeV += product.kinetic_energy_MeV;
+                                                schneider_diag_increment_device(
+                                                    schneider_diag_device,
+                                                    SchneiderDiagSlot::SecondaryChargedCutoffKills);
+                                            }
+                                        }
+
+                                        schneider_float_add_device(
+                                            schneider_float_device, SchneiderFloatSlot::ReactionQResidual,
+                                            sycl::fmax(0.0F, sec_e - local_deposit -
+                                                                  sec_charged_accounted_MeV -
+                                                                  sec_neutral_accounted_MeV -
+                                                                  sec_unsupported_accounted_MeV));
+                                        // NO-DOUBLE-COUNT RULE (same as primary
+                                        // vertex): legacy untracked sink already
+                                        // contains neutral + unsupported + Q;
+                                        // split slots are informational only.
+                                        const float sec_untracked_MeV = sycl::fmax(0.0F, sec_e - local_deposit - sec_charged_accounted_MeV);
+                                        if (sec_untracked_MeV > 0.0F && untracked_nuclear_device != nullptr) {
+                                            sycl::atomic_ref<float, sycl::memory_order::relaxed,
+                                                             sycl::memory_scope::device,
+                                                             sycl::access::address_space::global_space>
+                                                atomic_untracked(untracked_nuclear_device[frag.parent_history]);
+                                            atomic_untracked.fetch_add(sec_untracked_MeV);
+                                        }
+                                        sec_e = 0.0F;
+                                        break;
+                                    } else {
+                                        // CINEL03 miss: fail closed + per-miss log.
+                                        schneider_log_miss_device(
+                                            schneider_miss_device, schneider_miss_count_device,
+                                            kSchneiderMissLogCap, false,
+                                            frag.z, frag.a, secondary_target_z,
+                                            schneider_hazard_section,
+                                            frag.generation > 255 ? 255
+                                                                  : static_cast<std::uint8_t>(frag.generation),
+                                            sec_lookup, sec_e * frag_inv_a, dE,
+                                            schneider_hazard_total_rate,
+                                            schneider_hazard_step_mm, sec_e,
+                                            frag.energy_MeV);
+                                        if (cinel02_diag_device != nullptr) {
+                                            cinel02_diag_increment_device(cinel02_diag_device, 18U);
+                                        }
+                                        if (untracked_nuclear_device != nullptr) {
+                                            sycl::atomic_ref<float, sycl::memory_order::relaxed,
+                                                             sycl::memory_scope::device,
+                                                             sycl::access::address_space::global_space>
+                                                atomic_untracked(untracked_nuclear_device[frag.parent_history]);
+                                            atomic_untracked.fetch_add(sec_e);
+                                        }
+                                        if (deposited_device != nullptr) {
+                                            sycl::atomic_ref<float, sycl::memory_order::relaxed,
+                                                             sycl::memory_scope::device,
+                                                             sycl::access::address_space::global_space>
+                                                atomic_dep(deposited_device[frag.parent_history]);
+                                            atomic_dep.fetch_add(dE);
+                                            schneider_energy_add_device(
+                                                schneider_diag_device,
+                                                SchneiderDiagSlot::SecondaryDepositedMicroMeV, dE);
+                                        }
+                                        sec_e = 0.0F;
+                                        break;
+                                    }
+                                } else {
                                 const auto event_index = cinel02_find_event_device(
                                     cinel02_energy_nodes_device, cinel02_energy_node_count,
                                     cinel02_event_offsets_device, cinel02_event_indices_device,
@@ -4073,6 +5380,10 @@ TransportResult transport_sycl(const TransportConfig& config,
                                                 atomic_dep(
                                                     deposited_device[frag.parent_history]);
                                             atomic_dep.fetch_add(local_deposit);
+                                            schneider_energy_add_device(
+                                                schneider_diag_device,
+                                                SchneiderDiagSlot::SecondaryDepositedMicroMeV,
+                                                local_deposit);
                                         }
                                         float untracked_MeV = 0.0F;
                                         for (std::uint32_t ip = 0;
@@ -4321,6 +5632,7 @@ TransportResult transport_sycl(const TransportConfig& config,
                                         static_cast<std::uint32_t>(
                                             Cinel02ReplayLedgerSchema::replay_lookup_miss));
                                 }
+                                }
                             } else if (secondary_inelastic) {
                                 // The post-EM collision energy is already at
                                 // or below the transport cutoff, so no package
@@ -4364,6 +5676,9 @@ TransportResult transport_sycl(const TransportConfig& config,
                                                  sycl::access::address_space::global_space>
                                     atomic_dep(deposited_device[frag.parent_history]);
                                 atomic_dep.fetch_add(dE);
+                                schneider_energy_add_device(
+                                    schneider_diag_device,
+                                    SchneiderDiagSlot::SecondaryDepositedMicroMeV, dE);
                             }
                             if (!secondary_inelastic) {
                                 sec_x = post_em_x;
@@ -4420,7 +5735,14 @@ TransportResult transport_sycl(const TransportConfig& config,
                             }
 
                             ++sec_steps;
+                            ++local_sec_steps;
                         }
+                        schneider_diag_add_device(schneider_diag_device,
+                                                  SchneiderDiagSlot::SecondaryRateQueries,
+                                                  local_sec_rate_queries);
+                        schneider_diag_add_device(schneider_diag_device,
+                                                  SchneiderDiagSlot::SecondarySteps,
+                                                  local_sec_steps);
 
                         const bool step_limited =
                             sec_e > energy_cutoff_MeV && sec_steps >= kSecondaryMaxSteps;
@@ -4438,6 +5760,9 @@ TransportResult transport_sycl(const TransportConfig& config,
                                                      sycl::access::address_space::global_space>
                                         atomic_esc(escaped_device[frag.parent_history]);
                                     atomic_esc.fetch_add(sec_e);
+                                    schneider_energy_add_device(
+                                        schneider_diag_device,
+                                        SchneiderDiagSlot::SecondaryEscapedMicroMeV, sec_e);
                                 }
                             } else if (sec_z >= 0.0F && sec_z < phantom_length_mm) {
                                 cinel02_species_energy_add_device(
@@ -4517,6 +5842,9 @@ TransportResult transport_sycl(const TransportConfig& config,
                                                      sycl::access::address_space::global_space>
                                         atomic_dep(deposited_device[frag.parent_history]);
                                     atomic_dep.fetch_add(sec_e);
+                                    schneider_energy_add_device(
+                                        schneider_diag_device,
+                                        SchneiderDiagSlot::SecondaryDepositedMicroMeV, sec_e);
                                 }
                             } else {
                                 cinel02_species_energy_add_device(
@@ -4532,6 +5860,9 @@ TransportResult transport_sycl(const TransportConfig& config,
                                                  sycl::access::address_space::global_space>
                                     atomic_esc(escaped_device[frag.parent_history]);
                                 atomic_esc.fetch_add(sec_e);
+                                schneider_energy_add_device(
+                                    schneider_diag_device,
+                                    SchneiderDiagSlot::SecondaryEscapedMicroMeV, sec_e);
                                 }
                             }
                         }
@@ -4849,6 +6180,26 @@ TransportResult transport_sycl(const TransportConfig& config,
     if (cinel02_diag_device != nullptr) {
         queue.copy(cinel02_diag_device, cinel02_diag_host.data(), kCinel02DiagSlots);
     }
+    std::array<std::uint64_t, 44> schneider_diag_host{};
+    static_assert(44 == static_cast<std::size_t>(SchneiderDiagSlot::Count),
+                  "Schneider host mirror must match the device schema");
+    std::array<float, 12> schneider_float_host{};
+    static_assert(12 == static_cast<std::size_t>(SchneiderFloatSlot::Count),
+                  "Schneider float mirror must match the device schema");
+    if (schneider_diag_device != nullptr) {
+        queue.copy(schneider_diag_device, schneider_diag_host.data(), kSchneiderDiagSlots);
+    }
+    if (schneider_float_device != nullptr) {
+        queue.copy(schneider_float_device, schneider_float_host.data(), kSchneiderFloatSlots);
+    }
+    std::array<std::uint32_t, 2> schneider_miss_counts_host{0, 0};
+    std::array<std::uint32_t, 2> schneider_track_counts_host{0, 0};
+    if (schneider_miss_count_device != nullptr) {
+        queue.copy(schneider_miss_count_device, schneider_miss_counts_host.data(), 2);
+    }
+    if (schneider_track_count_device != nullptr) {
+        queue.copy(schneider_track_count_device, schneider_track_counts_host.data(), 2);
+    }
     std::array<std::uint64_t, 26> fred_diag_host{};
     if (fred_diag_device != nullptr) {
         queue.copy(fred_diag_device, fred_diag_host.data(), 26);
@@ -4876,6 +6227,26 @@ TransportResult transport_sycl(const TransportConfig& config,
         queue.copy(fred_cap_overflow_energy_device, &fred_cap_energy_host, 1);
     }
     queue.wait_and_throw();
+
+    // Per-record Schneider logs: counts are exact after the fence above.
+    // Staged into host vectors here (device buffers are freed below);
+    // moved into TransportResult after its declaration.
+    std::vector<SchneiderMissRecord> schneider_miss_host;
+    std::vector<SchneiderUnsupportedTrack> schneider_track_host;
+    if (schneider_miss_device != nullptr && schneider_miss_counts_host[0] > 0) {
+        const auto n_miss = std::min<std::uint32_t>(
+            schneider_miss_counts_host[0], kSchneiderMissLogCap);
+        schneider_miss_host.resize(n_miss);
+        queue.copy(schneider_miss_device, schneider_miss_host.data(), n_miss)
+            .wait_and_throw();
+    }
+    if (schneider_track_log_device != nullptr && schneider_track_counts_host[0] > 0) {
+        const auto n_trk = std::min<std::uint32_t>(
+            schneider_track_counts_host[0], kSchneiderTrackLogCap);
+        schneider_track_host.resize(n_trk);
+        queue.copy(schneider_track_log_device, schneider_track_host.data(), n_trk)
+            .wait_and_throw();
+    }
 
     // Free buffers
     free_immutable_device(table_device);
@@ -4984,8 +6355,16 @@ TransportResult transport_sycl(const TransportConfig& config,
     free_device(ct_ref_density_device);
     free_device(schneider_primary_xs_device);
     free_device(schneider_inelastic_device);
+    free_device(schneider_diag_device);
+    free_device(schneider_float_device);
+    free_device(schneider_miss_device);
+    free_device(schneider_track_log_device);
+    free_device(schneider_miss_count_device);
+    free_device(schneider_track_count_device);
 
     TransportResult result;
+    result.schneider_miss_log = std::move(schneider_miss_host);
+    result.schneider_unsupported_tracks = std::move(schneider_track_host);
     result.backend = "sycl-" + resolved_device_name +
                      (config.enable_energy_straggling ? "+straggling" : "");
     if (config.uses_moment_matched_straggling()) {
@@ -5269,6 +6648,120 @@ TransportResult transport_sycl(const TransportConfig& config,
          result.cinel02_diagnostics[16] != result.cinel02_diagnostics[17] + result.cinel02_diagnostics[18] + result.cinel02_diagnostics[19])) {
         throw std::runtime_error("CINEL02 strict match failed");
     }
+
+    // Aggregate the flat Schneider device schema into named diagnostics.
+    {
+        auto& sch = result.schneider_diagnostics;
+        const auto slot = [&](SchneiderDiagSlot s) -> std::uint64_t {
+            return schneider_diag_host[static_cast<std::uint32_t>(s)];
+        };
+        const auto fslot = [&](SchneiderFloatSlot s) -> double {
+            return static_cast<double>(schneider_float_host[static_cast<std::uint32_t>(s)]);
+        };
+        sch.primary_rate_queries = slot(SchneiderDiagSlot::PrimaryRateQueries);
+        sch.primary_hazards = slot(SchneiderDiagSlot::PrimaryHazards);
+        sch.primary_exact_target_hits = slot(SchneiderDiagSlot::PrimaryExactTargetHits);
+        sch.primary_missing_projectile = slot(SchneiderDiagSlot::PrimaryMissingProjectile);
+        sch.primary_missing_target = slot(SchneiderDiagSlot::PrimaryMissingTarget);
+        sch.primary_below_domain = slot(SchneiderDiagSlot::PrimaryBelowDomain);
+        sch.primary_above_domain = slot(SchneiderDiagSlot::PrimaryAboveDomain);
+        sch.primary_energy_gap_misses = slot(SchneiderDiagSlot::PrimaryEnergyGapMisses);
+        sch.primary_empty_nodes = slot(SchneiderDiagSlot::PrimaryEmptyNodes);
+        sch.primary_events_replayed = slot(SchneiderDiagSlot::PrimaryEventsReplayed);
+        sch.primary_charged_products_born = slot(SchneiderDiagSlot::PrimaryChargedBorn);
+        sch.primary_charged_products_queued = slot(SchneiderDiagSlot::PrimaryChargedQueued);
+        sch.primary_charged_cutoff_kills = slot(SchneiderDiagSlot::PrimaryChargedCutoffKills);
+        sch.primary_be6_kills = slot(SchneiderDiagSlot::PrimaryBe6Kills);
+        sch.primary_queue_overflows = slot(SchneiderDiagSlot::PrimaryQueueOverflows);
+        sch.secondary_tracks_started = slot(SchneiderDiagSlot::SecondaryTracksStarted);
+        sch.secondary_steps = slot(SchneiderDiagSlot::SecondarySteps);
+        sch.secondary_rate_queries = slot(SchneiderDiagSlot::SecondaryRateQueries);
+        sch.secondary_hazards = slot(SchneiderDiagSlot::SecondaryHazards);
+        sch.secondary_exact_target_hits = slot(SchneiderDiagSlot::SecondaryExactTargetHits);
+        sch.secondary_missing_projectile = slot(SchneiderDiagSlot::SecondaryMissingProjectile);
+        sch.secondary_missing_target = slot(SchneiderDiagSlot::SecondaryMissingTarget);
+        sch.secondary_below_domain = slot(SchneiderDiagSlot::SecondaryBelowDomain);
+        sch.secondary_above_domain = slot(SchneiderDiagSlot::SecondaryAboveDomain);
+        sch.secondary_energy_gap_misses = slot(SchneiderDiagSlot::SecondaryEnergyGapMisses);
+        sch.secondary_empty_nodes = slot(SchneiderDiagSlot::SecondaryEmptyNodes);
+        sch.secondary_events_replayed = slot(SchneiderDiagSlot::SecondaryEventsReplayed);
+        sch.secondary_charged_products_born = slot(SchneiderDiagSlot::SecondaryChargedBorn);
+        sch.secondary_charged_products_queued = slot(SchneiderDiagSlot::SecondaryChargedQueued);
+        sch.secondary_charged_cutoff_kills = slot(SchneiderDiagSlot::SecondaryChargedCutoffKills);
+        sch.secondary_be6_kills = slot(SchneiderDiagSlot::SecondaryBe6Kills);
+        sch.secondary_queue_overflows = slot(SchneiderDiagSlot::SecondaryQueueOverflows);
+        sch.secondary_stopped_before_replay = slot(SchneiderDiagSlot::SecondaryStoppedBeforeReplay);
+        sch.secondary_post_em_null_collisions = slot(SchneiderDiagSlot::SecondaryPostEmNullCollisions);
+        sch.secondary_post_em_null_energy_MeV = fslot(SchneiderFloatSlot::PostEmNullEnergy);
+        sch.primary_post_em_null_collisions = slot(SchneiderDiagSlot::PrimaryPostEmNullCollisions);
+        // Exact fixed-point secondary sub-ledger (micro-MeV -> MeV). These
+        // fields were historically always zero (never assigned); on the
+        // Schneider path they now accumulate every secondary deposit/escape
+        // at the same sites as the per-history arrays.
+        result.secondary_deposited_energy_MeV =
+            static_cast<double>(slot(SchneiderDiagSlot::SecondaryDepositedMicroMeV)) * 1.0e-6;
+        result.secondary_escaped_energy_MeV =
+            static_cast<double>(slot(SchneiderDiagSlot::SecondaryEscapedMicroMeV)) * 1.0e-6;
+        sch.be6_topas_compat_kills = slot(SchneiderDiagSlot::Be6TopasCompatKills);
+        sch.unsupported_projectile_steps = slot(SchneiderDiagSlot::UnsupportedProjectileSteps);
+        sch.unsupported_projectile_tracks = slot(SchneiderDiagSlot::UnsupportedProjectileTracks);
+        sch.unsupported_be6_tracks = slot(SchneiderDiagSlot::UnsupportedBe6Tracks);
+        sch.unsupported_projectile_birth_energy_MeV =
+            static_cast<double>(slot(SchneiderDiagSlot::UnsupportedProjectileBirthEnergyMicroMeV)) * 1.0e-6;
+        // Dropped counts come from the log-count buffers (device-side
+        // overflow tallies), not the diag slots (unused for these two).
+        sch.miss_log_dropped = schneider_miss_counts_host[1];
+        sch.unsupported_log_dropped = schneider_track_counts_host[1];
+        sch.unsupported_targets = slot(SchneiderDiagSlot::UnsupportedTargets);
+        sch.queue_overflows = slot(SchneiderDiagSlot::QueueOverflows);
+        sch.primary_selected_energy_mismatch_sum = fslot(SchneiderFloatSlot::PrimaryMismatchSum);
+        sch.primary_selected_energy_mismatch_max = fslot(SchneiderFloatSlot::PrimaryMismatchMax);
+        sch.secondary_selected_energy_mismatch_sum = fslot(SchneiderFloatSlot::SecondaryMismatchSum);
+        sch.secondary_selected_energy_mismatch_max = fslot(SchneiderFloatSlot::SecondaryMismatchMax);
+        sch.lookup_failure_energy_MeV = fslot(SchneiderFloatSlot::LookupFailureEnergy);
+        sch.be6_kill_energy_MeV = fslot(SchneiderFloatSlot::Be6KillEnergy);
+        sch.neutral_product_kinetic_MeV = fslot(SchneiderFloatSlot::NeutralProductKinetic);
+        sch.reaction_q_residual_MeV = fslot(SchneiderFloatSlot::ReactionQResidual);
+    }
+
+    // 8-part energy accounting ledger
+    result.energy_ledger.E_continuous_ionizing = result.total_deposited_energy_MeV;
+    result.energy_ledger.E_nuclear_local = use_cinel02
+        ? (result.cinel02_energy_ledger_MeV[3] + result.cinel02_energy_ledger_MeV[4])
+        : 0.0;
+    result.energy_ledger.E_transported_secondaries = result.queued_secondary_energy_MeV;
+    result.energy_ledger.E_escaped_charged = result.escaped_energy_MeV;
+    result.energy_ledger.E_neutral = result.untransported_neutral_energy_MeV;
+    result.energy_ledger.E_cutoff_kill = result.primary_cutoff_stopped_energy_MeV;
+    result.energy_ledger.E_unsupported = result.untransported_unsupported_charged_energy_MeV;
+    result.energy_ledger.E_queue_overflow = result.secondary_queue_overflow_energy_MeV;
+    // Split Schneider nuclear-vertex ledger, accumulated on device from
+    // actually executed vertices (informational itemization; the legacy
+    // untracked sink behavior above is unchanged this step).
+    {
+        const auto fslot = [&](SchneiderFloatSlot s) -> double {
+            return static_cast<double>(schneider_float_host[static_cast<std::uint32_t>(s)]);
+        };
+        result.energy_ledger.E_be6_kill = fslot(SchneiderFloatSlot::Be6KillEnergy);
+        result.energy_ledger.E_lookup_failure = fslot(SchneiderFloatSlot::LookupFailureEnergy);
+        result.energy_ledger.E_neutral_product_kinetic =
+            fslot(SchneiderFloatSlot::NeutralProductKinetic);
+        result.energy_ledger.E_reaction_q_residual = fslot(SchneiderFloatSlot::ReactionQResidual);
+        result.energy_ledger.E_unsupported_charged =
+            fslot(SchneiderFloatSlot::UnsupportedProductEnergy);
+        result.energy_ledger.E_out_of_domain = fslot(SchneiderFloatSlot::OutOfDomainEnergy);
+        if (schneider_diag_device != nullptr) {
+            result.energy_ledger.E_transported_secondaries =
+                fslot(SchneiderFloatSlot::SecondaryTransportBirthEnergy);
+        }
+    }
+
+    if (config.quality_reject_any_queue_overflow && overflow_count_host > 0) {
+        throw std::runtime_error("Secondary particle queue overflow detected: discarded " +
+                                 std::to_string(overflow_count_host) + " particles (" +
+                                 std::to_string(overflow_energy_host) + " MeV). Shard must be split and rerun with fewer particles.");
+    }
+
     result.nuclear_interactions = use_cinel02
         ? result.cinel02_diagnostics[2] + result.cinel02_diagnostics[16]
         : (use_schneider_primary_xs ? schneider_inelastic_host : result.fred_inelastic_events);

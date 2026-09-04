@@ -21,16 +21,13 @@ def load_manifest():
     with open(MANIFEST_PATH, "r", encoding="utf-8") as f:
         return json.load(f)["cases"]
 
-def run_verification():
-    EVIDENCE_DIR.mkdir(parents=True, exist_ok=True)
+def run_verification(generate_evidence: bool = False):
     cases = load_manifest()
     results = []
 
     print("=" * 100)
     print(f"{'Case ID':<25} {'Primary Inel':<14} {'Sec Inel':<10} {'Major Yield Diff':<18} {'Target Diff':<14} {'Status'}")
     print("=" * 100)
-
-    overall_pass = True
 
     for c in cases:
         cid = c["id"]
@@ -76,11 +73,7 @@ def run_verification():
 
         # Statistical uncertainty (1-sigma Poisson)
         topas_stat_unc = 1.0 / math.sqrt(max(1.0, topas_data["total_first_inelastic_count"]))
-        is_stat_consistent = major_rel_diff <= max(0.02, 3.0 * topas_stat_unc)
-
-        passed = is_stat_consistent and (inel_rel_diff < 0.05) and (e_closure < 0.01)
-        if not passed:
-            overall_pass = False
+        passed = (major_rel_diff < 0.02) and (inel_rel_diff < 0.05) and (e_closure < 0.01)
 
         status_str = "PASS" if passed else "FAIL"
         print(f"{cid:<25} {gpu_inel:<14} {gpu_data['secondary_inelastic_count']:<10} {major_rel_diff*100:6.2f}% (±{topas_stat_unc*100:4.2f}%)   {mean_tgt_diff*100:5.2f}%         {status_str}")
@@ -103,25 +96,42 @@ def run_verification():
             "pass": passed
         })
 
-    suite_mean_diff = sum(r["major_species_relative_diff"] for r in results) / len(results)
+    suite_mean_diff = sum(r["major_species_relative_diff"] for r in results) / len(results) if results else 0.0
     print("=" * 100)
     print(f"Validation Suite Mean Major Species Relative Difference: {suite_mean_diff*100:.2f}% (Target: < 2.0%)")
-    overall_pass = (suite_mean_diff < 0.02) and all(r["energy_closure_relative_error"] < 0.01 for r in results)
+    overall_pass = (
+        bool(results)
+        and all(r["pass"] for r in results)
+        and suite_mean_diff < 0.02
+    )
     print(f"Overall Step 20 Acceptance: {'PASS' if overall_pass else 'FAIL'}")
 
-    summary_file = EVIDENCE_DIR / "step20_validation_summary.json"
-    with open(summary_file, "w", encoding="utf-8") as f:
-        json.dump({
+    if generate_evidence:
+        EVIDENCE_DIR.mkdir(parents=True, exist_ok=True)
+        evidence_payload = {
             "step": 20,
-            "acceptance_target": "< 2.0% major species integral relative difference across validation suite",
+            "acceptance_target": "< 2.0% major species integral relative difference across validation suite (each case individually)",
             "suite_mean_major_species_relative_diff": suite_mean_diff,
             "overall_pass": overall_pass,
             "cases": results
-        }, f, indent=2)
-    print(f"Detailed validation summary saved to {summary_file}")
+        }
+        summary_file = EVIDENCE_DIR / "step20_validation_summary.json"
+        with open(summary_file, "w", encoding="utf-8") as f:
+            json.dump(evidence_payload, f, indent=2)
+        verification_file = EVIDENCE_DIR / "verification.json"
+        with open(verification_file, "w", encoding="utf-8") as f:
+            json.dump(evidence_payload, f, indent=2)
+        print(f"Detailed validation summary saved to {summary_file} and {verification_file}")
+    else:
+        print("Read-only mode (evidence was not modified. Pass --generate-evidence to write evidence).")
+
     return overall_pass
 
 if __name__ == "__main__":
-    success = run_verification()
+    import argparse
+    parser = argparse.ArgumentParser(description="Verify Step 20 secondary nuclear transport validation.")
+    parser.add_argument("--generate-evidence", action="store_true", help="Write summary to evidence/step-20/")
+    args = parser.parse_args()
+    success = run_verification(generate_evidence=args.generate_evidence)
     if not success:
         exit(1)

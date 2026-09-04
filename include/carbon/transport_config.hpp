@@ -20,6 +20,16 @@ enum class RunMode : std::uint8_t {
 
 [[nodiscard]] const char* run_mode_name(RunMode mode) noexcept;
 
+enum class MaterialPhysicsMode : std::uint8_t {
+    Water = 0,
+    SchneiderCt = 1,
+};
+
+[[nodiscard]] const char* material_physics_mode_name(MaterialPhysicsMode mode) noexcept;
+
+struct TransportConfig;
+void validate_schneider_ct_startup(const TransportConfig& config);
+
 // Compact per-spot source parameters consumed by one batched SYCL launch.
 // history_begin/history_end describe the half-open range in the flattened plan.
 //
@@ -190,12 +200,30 @@ struct TransportConfig {
     std::filesystem::path ct_lung_cross_section_file{};
     std::filesystem::path ct_water_cross_section_file{};
     std::filesystem::path ct_bone_cross_section_file{};
+    // Top-level physics routing mode: Water vs SchneiderCt
+    MaterialPhysicsMode material_physics_mode{MaterialPhysicsMode::Water};
+
+    // Canonical key names for water and Schneider CT physics
+    std::filesystem::path water_cinel_package_file{};
+    std::filesystem::path water_reaction_rate_file{};
+    std::filesystem::path ct_schneider_c12_cinel03_file{};
+    std::filesystem::path ct_schneider_secondary_cinel03_file{};
+    std::filesystem::path ct_schneider_primary_rate_file{};
+    std::filesystem::path ct_schneider_secondary_rate_file{};
+    // v2.1 physics bundle manifest (REQUIRED whenever any Schneider rate
+    // file is binary version 3; REFUSED with v1 files: no mixing).
+    std::filesystem::path ct_schneider_physics_bundle_file{};
+    // Out-of-scope projectile nuclear policy (Schneider CT only). The ONLY
+    // allowed value is "em_only": registry-unknown projectiles keep charged
+    // EM transport with secondary nuclear reactions disabled; no other value
+    // and no default fallback exist (empty refuses startup).
+    std::string secondary_out_of_scope_nuclear_policy{};
+    std::filesystem::path ct_schneider_stopping_power_file{"data/schneider/schneider_stopping_v1.bin"};
+    std::filesystem::path ct_schneider_radiation_length_file{"data/schneider/schneider_radiation_lengths.json"};
+
     // Optional energy-dependent mass XS for every Schneider section. When set
     // on a CCTG v2/v3 grid, this supersedes the legacy four-class XS tables.
     std::filesystem::path ct_schneider_cross_section_file{};
-    // Optional energy-dependent mass stopping power for every Schneider section.
-    // When set on a Schneider CT grid, this supersedes approximate Z/A+I scaling.
-    std::filesystem::path ct_schneider_stopping_power_file{"data/schneider/schneider_stopping_v1.bin"};
     std::filesystem::path ct_cinel02_rate_file{};
     std::filesystem::path ct_hu_stopping_power_lut_file{};
     // Optional CT validation mode. Supported: "none", "primary-attenuation-only".
@@ -626,6 +654,19 @@ struct TransportConfig {
 
     [[nodiscard]] double initial_total_energy_MeV() const noexcept {
         return initial_energy_MeVu * static_cast<double>(primary_mass_number);
+    }
+    [[nodiscard]] bool is_schneider_ct_mode() const noexcept {
+        return material_physics_mode == MaterialPhysicsMode::SchneiderCt;
+    }
+    [[nodiscard]] bool is_water_mode() const noexcept {
+        return material_physics_mode == MaterialPhysicsMode::Water;
+    }
+    void resolve_material_physics_mode() noexcept {
+        if (enable_ct_grid || !ct_grid_file.empty()) {
+            material_physics_mode = MaterialPhysicsMode::SchneiderCt;
+        } else {
+            material_physics_mode = MaterialPhysicsMode::Water;
+        }
     }
     [[nodiscard]] double resolved_primary_rest_mass_MeV() const noexcept {
         return primary_rest_mass_MeV > 0.0

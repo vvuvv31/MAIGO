@@ -229,13 +229,20 @@ if(BUILD_TESTING)
         endif()
     endif()
 
+    add_executable(test_secondary_rate_table_hardening tests/test_secondary_rate_table_hardening.cpp)
+    target_link_libraries(test_secondary_rate_table_hardening PRIVATE carbon_core)
+
     add_test(NAME carbon_tests COMMAND carbon_tests)
     add_test(NAME inelastic_package_v2_tests COMMAND inelastic_package_v2_tests)
     add_test(NAME test_schneider_dicom_reference COMMAND test_schneider_dicom_reference)
+    add_test(NAME test_secondary_rate_table_hardening COMMAND test_secondary_rate_table_hardening)
     set_tests_properties(carbon_tests PROPERTIES
         TIMEOUT 300
         WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
     set_tests_properties(test_schneider_dicom_reference PROPERTIES
+        TIMEOUT 300
+        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
+    set_tests_properties(test_secondary_rate_table_hardening PROPERTIES
         TIMEOUT 300
         WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
 endif()

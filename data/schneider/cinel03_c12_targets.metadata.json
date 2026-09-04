@@ -9,7 +9,7 @@
   "geant4_version": "geant4-11-03-patch-02",
   "physics_list": "FTFP_INCLXX",
   "schneider_source_path": "data/HUtoMaterialSchneider.txt",
-  "schneider_sha256": "4b6118d2d60bc5764d0d297d27e04ef4ad3dbb4c5b3648eb11f5feeb4ae44e45",
+  "schneider_sha256": "5022cd89617b28dbd8ee8bf8b095ea20cfd99f6405218693c0df238b3617a139",
   "extractor_git_commit": "d478f4f",
   "compiler_git_commit": "d478f4f",
   "raw_campaign_manifest_sha256": "c649b15e769148e6b199b7a671140d60c77847fce6fe17277723dc91f0b27d4c",

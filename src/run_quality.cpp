@@ -1,9 +1,12 @@
 #include "carbon/run_quality.hpp"
+#include "carbon/min_json.hpp"
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <fstream>
 #include <iomanip>
+#include <set>
 #include <sstream>
 #include <stdexcept>
 
@@ -315,6 +318,254 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
             add_issue({"energy_residual_exceeded",
                        "accounting energy ledger residual exceeds the configured tolerance",
                        report.absolute_accounting_energy_residual_MeV, allowed_residual}, true);
+        }
+    }
+
+    if (std::isfinite(report.physical_relative_energy_residual) &&
+        !report.topas_reference_energy_sink_active) {
+        if (report.physical_relative_energy_residual > config.quality_maximum_relative_energy_residual) {
+            report.failures.push_back(
+                {"physical_energy_residual_exceeded",
+                 "physical relative energy residual exceeds the configured tolerance",
+                 report.physical_relative_energy_residual,
+                 config.quality_maximum_relative_energy_residual});
+        }
+    }
+
+    // Schneider-CT production gates: any non-zero physical failure in the
+    // named diagnostics fails validation. Research mode still completes and
+    // writes diagnostics, but accepted is false. Production likewise reports
+    // accepted=false so the dose is refused as a formal result.
+    if (config.is_schneider_ct_mode() && !config.is_primary_attenuation_only_mode()) {
+        const auto& sch = result.schneider_diagnostics;
+        const auto schneider_fail = [&](const char* code, const std::string& message,
+                                        const double value) {
+            report.failures.push_back({code, message, value, 0.0});
+        };
+        if (sch.primary_missing_projectile != 0) {
+            schneider_fail("schneider_primary_missing_projectile",
+                           "Schneider primary lookup hit an unsupported projectile",
+                           static_cast<double>(sch.primary_missing_projectile));
+        }
+        if (sch.primary_missing_target != 0) {
+            schneider_fail("schneider_primary_missing_target",
+                           "Schneider primary lookup missed an exact target channel (no alias allowed)",
+                           static_cast<double>(sch.primary_missing_target));
+        }
+        if (sch.primary_below_domain != 0 || sch.primary_above_domain != 0) {
+            schneider_fail("schneider_primary_out_of_domain",
+                           "Schneider primary query outside the exact channel energy domain",
+                           static_cast<double>(sch.primary_below_domain + sch.primary_above_domain));
+        }
+        if (sch.primary_energy_gap_misses != 0) {
+            schneider_fail("schneider_primary_energy_gap",
+                           "Schneider primary bracketing gap exceeds the fixed threshold",
+                           static_cast<double>(sch.primary_energy_gap_misses));
+        }
+        if (sch.primary_empty_nodes != 0) {
+            schneider_fail("schneider_primary_empty_node",
+                           "Schneider primary lookup selected an empty event node",
+                           static_cast<double>(sch.primary_empty_nodes));
+        }
+        // Coverage gate uses the per-TRACK count (counted once per track at
+        // track start), never the inflated per-step evaluation count. Be6
+        // tracks are exempt: the frozen TopasCompatKill policy covers them
+        // (continuous slowing only, never a nuclear hazard), so they need
+        // no rate/CINEL data.
+        //
+        // v3 (bundle) amendments — v1 gates below are byte-identical:
+        // (a) missing_projectile fails only on bundle-SCOPE misses: actual
+        //     lookup misses, or logged unsupported tracks whose (Z,A) IS in
+        //     the bundle registry. Out-of-scope isotopes (no event data on
+        //     disk by design) deposit locally and are reported, not failed.
+        //     Fail-closed: log truncation (dropped>0) or missing bundle
+        //     refuses acceptance since scope cannot be proven.
+        // (b) missing_target fails only on actual package-query misses.
+        //     Sampler-empty draws (slowing left every channel domain between
+        //     hazard and collision; no query issued) resolve via
+        //     stopped-before-replay and never fail.
+        bool is_v3_bundle = false;
+        std::set<std::pair<int, int>> bundle_registry;
+        {
+            std::filesystem::path sec_rate = config.ct_schneider_secondary_rate_file;
+            if (sec_rate.empty()) {
+                sec_rate = "data/schneider/secondary_inelastic_rates_v1.bin";
+            }
+            if (std::filesystem::exists(sec_rate)) {
+                std::ifstream rate_in(sec_rate, std::ios::binary);
+                char magic[8]{};
+                std::uint32_t version{0};
+                rate_in.read(magic, 8);
+                rate_in.read(reinterpret_cast<char*>(&version), sizeof(version));
+                if (rate_in && std::memcmp(magic, "SCHN2RAT", 8) == 0 && version == 3) {
+                    is_v3_bundle = true;
+                    if (config.ct_schneider_physics_bundle_file.empty()) {
+                        schneider_fail("schneider_bundle_missing",
+                                       "v3 rate file requires ct_schneider_physics_bundle_file",
+                                       1.0);
+                    } else {
+                        std::ifstream bundle_in(config.ct_schneider_physics_bundle_file);
+                        std::string bundle_content((std::istreambuf_iterator<char>(bundle_in)),
+                                                   std::istreambuf_iterator<char>());
+                        minjson::Parser bundle_parser(bundle_content);
+                        const minjson::Value bundle_doc = bundle_parser.parse();
+                        for (const auto& entry :
+                             bundle_doc.at("projectile_registry").arr) {
+                            const int z = static_cast<int>(
+                                minjson::require_uint(entry.at("z"), "registry.z"));
+                            const int a = static_cast<int>(
+                                minjson::require_uint(entry.at("a"), "registry.a"));
+                            bundle_registry.emplace(z, a);
+                        }
+                    }
+                }
+            }
+        }
+        const auto unsupported_nonbe6_tracks =
+            sch.unsupported_projectile_tracks - std::min(sch.unsupported_projectile_tracks,
+                                                         sch.unsupported_be6_tracks);
+        if (!is_v3_bundle) {
+            if (sch.secondary_missing_projectile != 0 || unsupported_nonbe6_tracks != 0) {
+                schneider_fail("schneider_secondary_missing_projectile",
+                               "Schneider secondary lookup hit an unsupported non-Be6 projectile",
+                               static_cast<double>(sch.secondary_missing_projectile +
+                                                   unsupported_nonbe6_tracks));
+            }
+            if (sch.secondary_missing_target != 0 || sch.unsupported_targets != 0) {
+                schneider_fail("schneider_secondary_missing_target",
+                               "Schneider secondary lookup missed an exact target channel (no alias allowed)",
+                               static_cast<double>(sch.secondary_missing_target +
+                                                   sch.unsupported_targets));
+            }
+        } else {
+            if (sch.secondary_missing_projectile != 0) {
+                schneider_fail("schneider_secondary_missing_projectile",
+                               "Schneider secondary lookup hit an unsupported non-Be6 projectile",
+                               static_cast<double>(sch.secondary_missing_projectile));
+            }
+            if (sch.unsupported_log_dropped != 0) {
+                schneider_fail("schneider_unsupported_log_truncated",
+                               "unsupported-track log truncated; bundle scope unprovable",
+                               static_cast<double>(sch.unsupported_log_dropped));
+            } else {
+                std::uint64_t bundle_scope_unsupported = 0;
+                for (const auto& track : result.schneider_unsupported_tracks) {
+                    if (track.projectile_z == 4 && track.projectile_a == 6) {
+                        continue;  // Be6 TopasCompatKill exempt
+                    }
+                    if (bundle_registry.count({track.projectile_z, track.projectile_a}) != 0) {
+                        ++bundle_scope_unsupported;
+                    }
+                }
+                if (bundle_scope_unsupported != 0) {
+                    schneider_fail("schneider_secondary_missing_projectile",
+                                   "Schneider secondary bundle-scope projectile unsupported",
+                                   static_cast<double>(bundle_scope_unsupported));
+                }
+            }
+            // UnsupportedTargets is a hard failure in every mode (v1/v3):
+            // the v3 post-EM null collision has its own counter and never
+            // touches this slot.
+            if (sch.secondary_missing_target != 0 || sch.unsupported_targets != 0) {
+                schneider_fail("schneider_secondary_missing_target",
+                               "Schneider secondary lookup missed an exact target channel (no alias allowed)",
+                               static_cast<double>(sch.secondary_missing_target +
+                                                   sch.unsupported_targets));
+            }
+            // Declared research approximations (reported, never failed):
+            // post-EM null collisions resolve via track continuation.
+            if (sch.secondary_post_em_null_collisions != 0) {
+                report.approximations.push_back(
+                    {"schneider_post_em_null_collisions",
+                     "sampled candidates resolved as post-EM null collisions (track continues, no lookup)",
+                     static_cast<double>(sch.secondary_post_em_null_collisions), 0.0});
+            }
+        }
+        if (sch.secondary_below_domain != 0 || sch.secondary_above_domain != 0) {
+            schneider_fail("schneider_secondary_out_of_domain",
+                           "Schneider secondary query outside the exact channel energy domain",
+                           static_cast<double>(sch.secondary_below_domain + sch.secondary_above_domain));
+        }
+        if (sch.secondary_energy_gap_misses != 0) {
+            schneider_fail("schneider_secondary_energy_gap",
+                           "Schneider secondary bracketing gap exceeds the fixed threshold",
+                           static_cast<double>(sch.secondary_energy_gap_misses));
+        }
+        if (sch.secondary_empty_nodes != 0) {
+            schneider_fail("schneider_secondary_empty_node",
+                           "Schneider secondary lookup selected an empty event node",
+                           static_cast<double>(sch.secondary_empty_nodes));
+        }
+        // Conservation invariants: every hazard must resolve to exactly one
+        // replayed event or one explicit failure category.
+        const auto primary_failures =
+            sch.primary_missing_projectile + sch.primary_missing_target +
+            sch.primary_below_domain + sch.primary_above_domain +
+            sch.primary_energy_gap_misses + sch.primary_empty_nodes +
+            sch.primary_post_em_null_collisions;
+        if (sch.primary_post_em_null_collisions != 0) {
+            report.approximations.push_back(
+                {"schneider_primary_post_em_null_collisions",
+                 "primary candidates resolved as post-EM null collisions (track continues, no lookup)",
+                 static_cast<double>(sch.primary_post_em_null_collisions), 0.0});
+        }
+        if (sch.primary_hazards != sch.primary_events_replayed + primary_failures) {
+            schneider_fail("schneider_primary_conservation",
+                           "primary hazards != replayed + failure categories",
+                           static_cast<double>(sch.primary_hazards));
+        }
+        // Conservation: every sampled candidate resolves to exactly one
+        // replayed event, post-EM null collision, cutoff stop, or explicit
+        // lookup-failure category.
+        const auto secondary_failures =
+            sch.secondary_missing_projectile + sch.secondary_missing_target +
+            sch.secondary_below_domain + sch.secondary_above_domain +
+            sch.secondary_energy_gap_misses + sch.secondary_empty_nodes +
+            sch.secondary_stopped_before_replay + sch.secondary_post_em_null_collisions;
+        if (sch.secondary_hazards != sch.secondary_events_replayed + secondary_failures) {
+            schneider_fail("schneider_secondary_conservation",
+                           "secondary hazards != replayed + failure categories",
+                           static_cast<double>(sch.secondary_hazards));
+        }
+        // Strict equality: born counts role-0 charged products excluding Be6
+        // (which has its own TopasCompatKill sink and is NOT counted in
+        // born), so every born product must resolve to exactly one of
+        // queued / cutoff / overflow. Both directions fail: lost products
+        // (born > terminals) and phantom terminals (born < terminals).
+        const auto primary_born_terminals =
+            sch.primary_charged_products_queued + sch.primary_charged_cutoff_kills +
+            sch.primary_queue_overflows;
+        if (sch.primary_charged_products_born != primary_born_terminals) {
+            schneider_fail("schneider_primary_born_conservation",
+                           "primary charged born != queued + cutoff + overflow terminals (Be6 excluded on both sides)",
+                           static_cast<double>(sch.primary_charged_products_born) -
+                               static_cast<double>(primary_born_terminals));
+        }
+        const auto secondary_born_terminals =
+            sch.secondary_charged_products_queued + sch.secondary_charged_cutoff_kills +
+            sch.secondary_queue_overflows;
+        if (sch.secondary_charged_products_born != secondary_born_terminals) {
+            schneider_fail("schneider_secondary_born_conservation",
+                           "secondary charged born != queued + cutoff + overflow terminals (Be6 excluded on both sides)",
+                           static_cast<double>(sch.secondary_charged_products_born) -
+                               static_cast<double>(secondary_born_terminals));
+        }
+        if (sch.queue_overflows != 0 || sch.primary_queue_overflows != 0 ||
+            sch.secondary_queue_overflows != 0) {
+            schneider_fail("schneider_queue_overflow",
+                           "Schneider secondary queue overflow (shard must be split and rerun)",
+                           static_cast<double>(sch.queue_overflows + sch.primary_queue_overflows +
+                                               sch.secondary_queue_overflows));
+        }
+        if (sch.lookup_failure_energy_MeV > 0.0) {
+            schneider_fail("schneider_lookup_failure_energy",
+                           "non-zero energy absorbed by lookup failures",
+                           sch.lookup_failure_energy_MeV);
+        }
+        if (result.energy_ledger.E_out_of_domain > 0.0) {
+            schneider_fail("schneider_out_of_domain_energy",
+                           "non-zero out-of-domain query energy",
+                           result.energy_ledger.E_out_of_domain);
         }
     }
 

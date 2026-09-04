@@ -1,0 +1,117 @@
+{
+ "schema_version": 1,
+ "bundle_name": "schneider_physics_bundle_v2_1",
+ "primary_rate": {
+  "file": "data/schneider/schneider_inelastic_rates_v2_1.bin",
+  "sha256": "086ef97dbf323dc2681d5f6c5257e78c87446050f6fb628f3b0f8b24211a8370"
+ },
+ "primary_package": {
+  "file": "data/schneider/cinel03_c12_targets_v2_1.bin",
+  "sha256": "a690fb06ae97946bbc167501380fbcfa465b51e61cbedfaba7d3d373655a7ea2",
+  "channels_file": "data/schneider/cinel03_c12_targets_v2_1.channels.json",
+  "channels_sha256": "05731aafa8183adb394234749586140b1a511344fe9d2b5c7786f5509d2a9ab8"
+ },
+ "secondary_rate": {
+  "file": "data/schneider/secondary_inelastic_rates_v2_1.bin",
+  "sha256": "6aa679ee162c7a47b82da715ea1333b21b4056b6480596d8d6243a96edb67258"
+ },
+ "secondary_package": {
+  "file": "data/schneider/cinel03_secondary_targets_v2_1_14p.bin",
+  "sha256": "a0dc4259b856f0b0e7665672a64589ea4cd64ca304cae75fca16d6de50fc8006",
+  "channels_file": "data/schneider/cinel03_secondary_targets_v2_1_14p.channels.json",
+  "channels_sha256": "c478b4e2931c554387a90b83a83153e57ea0853009aac6e49d4938927a653a5a"
+ },
+ "stopping_table": {
+  "file": "data/schneider/schneider_stopping_v1.bin",
+  "sha256": "9786dba071f61e660fcc5940a844e8109c4e480ccb603d7929d2fcfaae152c2f"
+ },
+ "schneider_source": {
+  "file": "data/HUtoMaterialSchneider.txt",
+  "sha256": "5022cd89617b28dbd8ee8bf8b095ea20cfd99f6405218693c0df238b3617a139"
+ },
+ "projectile_registry": [
+  {
+   "z": 5,
+   "a": 11
+  },
+  {
+   "z": 5,
+   "a": 10
+  },
+  {
+   "z": 4,
+   "a": 9
+  },
+  {
+   "z": 4,
+   "a": 7
+  },
+  {
+   "z": 4,
+   "a": 10
+  },
+  {
+   "z": 3,
+   "a": 7
+  },
+  {
+   "z": 3,
+   "a": 6
+  },
+  {
+   "z": 2,
+   "a": 4
+  },
+  {
+   "z": 2,
+   "a": 3
+  },
+  {
+   "z": 1,
+   "a": 1
+  },
+  {
+   "z": 1,
+   "a": 2
+  },
+  {
+   "z": 1,
+   "a": 3
+  },
+  {
+   "z": 6,
+   "a": 11
+  },
+  {
+   "z": 6,
+   "a": 12
+  }
+ ],
+ "target_order": [
+  1,
+  6,
+  7,
+  8,
+  12,
+  15,
+  16,
+  17,
+  18,
+  20,
+  11,
+  19,
+  22
+ ],
+ "energy_grid": {
+  "emin": 0.1,
+  "emax": 460.1,
+  "step": 0.5,
+  "count": 921
+ },
+ "physics_list_primary": "FTFP_INCLXX",
+ "physics_list_secondary": "g4em-standard_opt4 + g4ion-binarycascade",
+ "topas_version": "4.2.p3",
+ "geant4_version": "11.03.p02",
+ "generator_commit": "1e4fc49026f633a3916920633bf24bf5c88896b6",
+ "generation_timestamp": "2026-09-04T00:51:03.512821+00:00"
+}

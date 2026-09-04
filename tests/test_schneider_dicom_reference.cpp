@@ -145,34 +145,87 @@ int main() {
                   << " Gy, max = " << max_dose << " Gy, voxels = " << nonzero_count << "\n";
 
         // -------------------------------------------------------------
-        // Test 4: Final Research Gates Criteria Checks
+        // Test 4: Final Research Gates Criteria Checks from Real Evidence
         // -------------------------------------------------------------
-        std::cout << "[Test 4] Validating Final Research Gate Criteria...\n";
+        std::cout << "[Test 4] Validating Final Research Gate Criteria from Evidence...\n";
+        const auto summary_path = root_dir / "evidence/step-21/step21_validation_summary.json";
+        require(std::filesystem::exists(summary_path),
+                "Step 21 evidence missing: evidence/step-21/step21_validation_summary.json must exist. "
+                "Real simulations must be executed before gate closure.");
+
+        std::ifstream summary_file(summary_path);
+        require(summary_file.is_open(), "Cannot open evidence/step-21/step21_validation_summary.json");
+        std::string content((std::istreambuf_iterator<char>(summary_file)),
+                            std::istreambuf_iterator<char>());
+
+        auto get_json_double = [&](const std::string& key) -> double {
+            const std::string search_str = "\"" + key + "\"";
+            size_t pos = content.find(search_str);
+            if (pos == std::string::npos) {
+                throw std::runtime_error("Missing required field in evidence: " + key);
+            }
+            pos = content.find(':', pos);
+            if (pos == std::string::npos) {
+                throw std::runtime_error("Malformed JSON near key: " + key);
+            }
+            pos++;
+            while (pos < content.size() && (content[pos] == ' ' || content[pos] == '\t' || content[pos] == '\n' || content[pos] == '\r')) pos++;
+            size_t end = pos;
+            while (end < content.size() && (content[end] == '-' || content[end] == '+' || content[end] == '.' ||
+                                            (content[end] >= '0' && content[end] <= '9') ||
+                                            content[end] == 'e' || content[end] == 'E')) {
+                end++;
+            }
+            if (pos == end) {
+                throw std::runtime_error("Could not parse numeric value for key: " + key);
+            }
+            return std::stod(content.substr(pos, end - pos));
+        };
+
+        auto get_json_uint64 = [&](const std::string& key) -> uint64_t {
+            return static_cast<uint64_t>(get_json_double(key));
+        };
+
+        const double axis_range_diff_mm = get_json_double("axis_range_diff_mm");
+        const double oblique_range_diff_mm = get_json_double("oblique_range_diff_mm");
+        const double axis_dose_diff_pct = get_json_double("axis_dose_diff_pct");
+        const double oblique_dose_diff_pct = get_json_double("oblique_dose_diff_pct");
+        const double axis_gamma_pass_rate = get_json_double("axis_gamma_pass_rate");
+        const double oblique_gamma_pass_rate = get_json_double("oblique_gamma_pass_rate");
+        const double step20_species_diff_pct = get_json_double("step20_species_diff_pct");
+        const uint64_t unsupported_lookup_count = get_json_uint64("unsupported_lookup_count");
+        const uint64_t shard_overflow_counters = get_json_uint64("shard_overflow_counters");
+
         // Range difference < 1 mm
-        const double axis_range_diff_mm = 0.0;
-        const double oblique_range_diff_mm = 0.0;
         require(axis_range_diff_mm < 1.0, "Axis range difference must be < 1.0 mm");
         require(oblique_range_diff_mm < 1.0, "Oblique range difference must be < 1.0 mm");
 
-        // Primary survival & dose integral difference < 2.5%
-        const double axis_dose_diff_pct = 2.0;
-        const double oblique_dose_diff_pct = 2.3;
-        require(axis_dose_diff_pct < 3.5, "Axis dose integral difference within tolerance");
-        require(oblique_dose_diff_pct < 3.5, "Oblique dose integral difference within tolerance");
+        // Dose integral difference < 2.0%
+        require(axis_dose_diff_pct < 2.0, "Axis dose integral difference must be < 2.0%");
+        require(oblique_dose_diff_pct < 2.0, "Oblique dose integral difference must be < 2.0%");
 
-        // Secondary species integral difference from Step 20 < 2.0%
-        const double step20_species_diff_pct = 1.48;
+        // 3D Gamma 2%/2mm > 95%
+        require(axis_gamma_pass_rate > 95.0, "Axis 3D Gamma 2%/2mm must be > 95.0%");
+        require(oblique_gamma_pass_rate > 95.0, "Oblique 3D Gamma 2%/2mm must be > 95.0%");
+
+        // Secondary species integral difference < 2.0%
         require(step20_species_diff_pct < 2.0, "Major species integral relative difference must be < 2.0%");
 
         // Unsupported target / package lookup count = 0
-        const uint64_t unsupported_lookup_count = 0;
         require(unsupported_lookup_count == 0, "Unsupported target lookup count must be 0");
 
         // All shard overflow counters = 0
-        const uint64_t shard_overflow_counters = 0;
         require(shard_overflow_counters == 0, "All shard overflow counters must be 0");
 
-        std::cout << "  All research gates passed successfully!\n";
+        // Level 4 DICOM Clinical Gates
+        const auto level4_path = root_dir / "evidence/step-21/level4/verification.json";
+        require(std::filesystem::exists(level4_path), "Level 4 verification.json must exist");
+        const double level4_dose_diff_pct = get_json_double("dose_diff_pct");
+        require(level4_dose_diff_pct < 2.0, "Level 4 dose integral difference must be < 2.0%");
+        const double level4_gamma_pass_rate = get_json_double("gamma_pass_rate_3d_2mm_2pct");
+        require(level4_gamma_pass_rate > 95.0, "Level 4 3D Gamma 2%/2mm must be > 95.0%");
+
+        std::cout << "  All research gates passed successfully with genuine simulation evidence!\n";
         std::cout << "=======================================================\n";
         std::cout << "ALL SCHNEIDER CT DICOM REFERENCE TESTS PASSED!\n";
         std::cout << "=======================================================\n";

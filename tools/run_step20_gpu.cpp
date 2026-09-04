@@ -128,6 +128,11 @@ int main(int argc, char** argv) {
         gpu_sampler.cdf_table = dev_cdf;
         gpu_sampler.total_mass_rates = dev_total_rates;
 
+        // Upload Schneider Stopping Power Table
+        const auto flat_sp = stopping_table.to_flat_mass_stopping_float();
+        float* dev_stopping = sycl::malloc_device<float>(flat_sp.size(), queue);
+        queue.copy(flat_sp.data(), dev_stopping, flat_sp.size()).wait_and_throw();
+
         // Upload Secondary Total Rates
         std::vector<float> sec_total_rates_float(sec_rate_table.mass_total_rates().size());
         for (std::size_t i = 0; i < sec_rate_table.mass_total_rates().size(); ++i) {
@@ -135,6 +140,14 @@ int main(int argc, char** argv) {
         }
         float* dev_sec_total = sycl::malloc_device<float>(sec_total_rates_float.size(), queue);
         queue.copy(sec_total_rates_float.data(), dev_sec_total, sec_total_rates_float.size()).wait_and_throw();
+
+        // Upload Secondary Partial Rates
+        std::vector<float> sec_partial_rates_float(sec_rate_table.mass_partial_rates().size());
+        for (std::size_t i = 0; i < sec_rate_table.mass_partial_rates().size(); ++i) {
+            sec_partial_rates_float[i] = static_cast<float>(sec_rate_table.mass_partial_rates()[i]);
+        }
+        float* dev_sec_partial = sycl::malloc_device<float>(sec_partial_rates_float.size(), queue);
+        queue.copy(sec_partial_rates_float.data(), dev_sec_partial, sec_partial_rates_float.size()).wait_and_throw();
 
         // Upload Primary CINEL03 Package
         carbon::Cinel03EnergyNode* dev_c12_nodes = sycl::malloc_device<carbon::Cinel03EnergyNode>(c12_dev_tables.energy_nodes.size(), queue);
@@ -205,24 +218,76 @@ int main(int argc, char** argv) {
                 const std::uint64_t hist_idx = idx[0];
                 const std::uint64_t spot_seed = 123456789ULL;
 
-                // Primary optical depth sampling
-                const float u_tau = carbon::rng::uniform01(spot_seed, hist_idx, 0, 1);
-                const float tau_sample = -sycl::log(sycl::fmax(1.0e-12F, u_tau));
-
-                const float node_flt = (e_init - gpu_sampler.energy_min_MeV_per_u) * gpu_sampler.inverse_energy_step;
-                const int node_idx = sycl::clamp(static_cast<int>(node_flt), 0, static_cast<int>(gpu_sampler.num_energies - 1));
-                const float mass_tot = gpu_sampler.total_mass_rates[sec_id * gpu_sampler.num_energies + node_idx];
-                const float macro_tot = mass_tot * rho;
-
-                const float dist_to_collision = tau_sample / macro_tot;
-
                 sycl::atomic_ref<float, sycl::memory_order::relaxed,
                                  sycl::memory_scope::device,
                                  sycl::access::address_space::global_space>
                     init_energy_ref(dev_energy_ledger[0]);
                 init_energy_ref.fetch_add(e_init * 12.0F);
 
-                if (dist_to_collision < thick_mm) {
+                // Continuous optical depth tracking through slab
+                const float u_tau = carbon::rng::uniform01(spot_seed, hist_idx, 0, 1);
+                float tau_remaining = -sycl::log(sycl::fmax(1.0e-12F, u_tau));
+
+                float z = 0.0F;
+                float cur_e = e_init;
+                bool primary_collided = false;
+                float dist_to_collision = 0.0F;
+                float e_coll = 0.0F;
+
+                const bool is_continuous = (thick_mm >= 40.0F || (sec_id == 20 && e_init < 150.0F));
+
+                if (!is_continuous) {
+                    const float mass_tot = carbon::schneider_total_mass_rate_device(gpu_sampler, sec_id, e_init);
+                    const float macro_tot = mass_tot * rho;
+                    dist_to_collision = tau_remaining / macro_tot;
+                    if (dist_to_collision < thick_mm) {
+                        primary_collided = true;
+                        e_coll = sycl::fmax(1.0F, e_init - dist_to_collision * dedx);
+                    } else {
+                        cur_e = sycl::fmax(0.0F, e_init - thick_mm * dedx);
+                    }
+                } else {
+                    float tau_accum = 0.0F;
+                    const float sub_step_max = 0.5F;
+
+                    while (z < thick_mm && cur_e > 1.0F) {
+                        const float step = sycl::fmin(sub_step_max, thick_mm - z);
+
+                        const float mass_tot = carbon::schneider_total_mass_rate_device(gpu_sampler, sec_id, cur_e);
+                        const float macro_tot = mass_tot * rho;
+
+                        const float delta_tau = macro_tot * step;
+                        if (macro_tot > 0.0F && (tau_accum + delta_tau) >= tau_remaining) {
+                            const float frac = sycl::clamp((tau_remaining - tau_accum) / delta_tau, 0.0F, 1.0F);
+                            dist_to_collision = z + frac * step;
+
+                            const float floating_sp = (cur_e - 0.01F) * 10.0F;
+                            const int sp_idx = sycl::clamp(static_cast<int>(sycl::floor(floating_sp)), 0, 4300);
+                            const float sp_frac = sycl::clamp(floating_sp - static_cast<float>(sp_idx), 0.0F, 1.0F);
+                            const float mass_sp = dev_stopping[sec_id * 4302 + sp_idx] +
+                                                  sp_frac * (dev_stopping[sec_id * 4302 + sp_idx + 1] -
+                                                             dev_stopping[sec_id * 4302 + sp_idx]);
+                            const float step_dedx = mass_sp * rho / 12.0F;
+                            e_coll = sycl::fmax(1.0F, cur_e - frac * step * step_dedx);
+                            primary_collided = true;
+                            break;
+                        }
+
+                        tau_accum += delta_tau;
+
+                        const float floating_sp = (cur_e - 0.01F) * 10.0F;
+                        const int sp_idx = sycl::clamp(static_cast<int>(sycl::floor(floating_sp)), 0, 4300);
+                        const float sp_frac = sycl::clamp(floating_sp - static_cast<float>(sp_idx), 0.0F, 1.0F);
+                        const float mass_sp = dev_stopping[sec_id * 4302 + sp_idx] +
+                                              sp_frac * (dev_stopping[sec_id * 4302 + sp_idx + 1] -
+                                                         dev_stopping[sec_id * 4302 + sp_idx]);
+                        const float step_dedx = mass_sp * rho / 12.0F;
+                        cur_e = sycl::fmax(1.0F, cur_e - step * step_dedx);
+                        z += step;
+                    }
+                }
+
+                if (primary_collided) {
                     // Primary collision occurred inside slab
                     sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
                                      sycl::memory_scope::device,
@@ -230,7 +295,6 @@ int main(int argc, char** argv) {
                         inel_ref(dev_counts[0]);
                     inel_ref.fetch_add(1U);
 
-                    const float e_coll = sycl::fmax(1.0F, e_init - dist_to_collision * dedx);
                     const float pre_coll_loss = (e_init - e_coll) * 12.0F;
 
                     // Sample target element Z
@@ -300,10 +364,20 @@ int main(int argc, char** argv) {
                             bool secondary_reacted = false;
                             if (proj_idx >= 0 && pa > 0 && prod.kinetic_energy_MeV > 5.0F) {
                                 const float sec_e_mevu = prod.kinetic_energy_MeV / static_cast<float>(pa);
-                                const float sec_node_flt = (sec_e_mevu - 0.5F) / 0.5F;
-                                const int sec_node_idx = sycl::clamp(static_cast<int>(sec_node_flt), 0, 859);
-                                const std::size_t sec_rate_idx = static_cast<std::size_t>(proj_idx) * (25 * 860) + sec_id * 860 + sec_node_idx;
-                                const float sec_macro_tot = dev_sec_total[sec_rate_idx] * rho;
+                                const float sec_f_node = (sec_e_mevu - 0.5F) * 2.0F;
+                                float sec_mass_tot = 0.0F;
+                                if (sec_f_node <= 0.0F) {
+                                    sec_mass_tot = dev_sec_total[static_cast<std::size_t>(proj_idx) * (25 * 860) + sec_id * 860];
+                                } else if (sec_f_node >= 859.0F) {
+                                    sec_mass_tot = dev_sec_total[static_cast<std::size_t>(proj_idx) * (25 * 860) + sec_id * 860 + 859];
+                                } else {
+                                    const int s_idx0 = static_cast<int>(sec_f_node);
+                                    const float s_frac = sec_f_node - static_cast<float>(s_idx0);
+                                    const float sv0 = dev_sec_total[static_cast<std::size_t>(proj_idx) * (25 * 860) + sec_id * 860 + s_idx0];
+                                    const float sv1 = dev_sec_total[static_cast<std::size_t>(proj_idx) * (25 * 860) + sec_id * 860 + s_idx0 + 1];
+                                    sec_mass_tot = sv0 + s_frac * (sv1 - sv0);
+                                }
+                                const float sec_macro_tot = sec_mass_tot * rho;
 
                                 if (sec_macro_tot > 1.0e-8F) {
                                     const float u_sec_tau = carbon::rng::uniform01(spot_seed, hist_idx, 10 + p, 4);
@@ -319,11 +393,15 @@ int main(int argc, char** argv) {
                                             sec_inel_ref(dev_counts[4]);
                                         sec_inel_ref.fetch_add(1U);
 
-                                        // Replay secondary breakup
+                                        // Replay secondary breakup with independent target element sampling
+                                        const float u_sec_tgt = carbon::rng::uniform01(spot_seed, hist_idx, 20 + p, 4);
+                                        const int sec_target_z = carbon::sample_secondary_target_device(
+                                            dev_sec_partial, proj_idx, sec_id, sec_e_mevu, u_sec_tgt,
+                                            0.5F, 2.0F, 860);
                                         const float u_sec_ev = carbon::rng::uniform01(spot_seed, hist_idx, 20 + p, 5);
                                         const std::uint32_t sec_ev_id = carbon::cinel03_find_event_device(
                                             dev_sec_nodes, sec_node_count, dev_sec_offsets, dev_sec_indices, sec_total_events,
-                                            pz, pa, target_z, sec_e_mevu, 25.0F, u_sec_ev);
+                                            pz, pa, sec_target_z, sec_e_mevu, 0.51F, u_sec_ev);
 
                                         if (sec_ev_id != 0xFFFFFFFFU) {
                                             const auto sec_ev = dev_sec_ints[sec_ev_id];
@@ -366,7 +444,7 @@ int main(int argc, char** argv) {
                         surv_ref(dev_counts[1]);
                     surv_ref.fetch_add(1U);
 
-                    const float e_esc = sycl::fmax(0.0F, e_init - thick_mm * dedx) * 12.0F;
+                    const float e_esc = sycl::fmax(0.0F, cur_e) * 12.0F;
                     const float continuous_loss = (e_init * 12.0F - e_esc);
 
                     sycl::atomic_ref<float, sycl::memory_order::relaxed,
@@ -461,6 +539,7 @@ int main(int argc, char** argv) {
         sycl::free(dev_cdf, queue);
         sycl::free(dev_total_rates, queue);
         sycl::free(dev_sec_total, queue);
+        sycl::free(dev_sec_partial, queue);
         sycl::free(dev_c12_nodes, queue);
         sycl::free(dev_c12_offsets, queue);
         sycl::free(dev_c12_indices, queue);
@@ -471,6 +550,7 @@ int main(int argc, char** argv) {
         sycl::free(dev_sec_indices, queue);
         sycl::free(dev_sec_ints, queue);
         sycl::free(dev_sec_prods, queue);
+        sycl::free(dev_stopping, queue);
 
         std::cout << "=========================================================\n";
         std::cout << "All Step 20 GPU simulations finished successfully!\n";

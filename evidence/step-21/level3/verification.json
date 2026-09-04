@@ -1,0 +1,42 @@
+{
+  "step": 21,
+  "level": 3,
+  "axis_range_diff_mm": 0.0,
+  "oblique_range_diff_mm": 0.0,
+  "axis_dose_diff_pct": 0.18042327384353635,
+  "oblique_dose_diff_pct": 0.22564196391637764,
+  "axis_gamma_pass_rate": 98.11320754716981,
+  "oblique_gamma_pass_rate": 95.56962025316456,
+  "step20_species_diff_pct": 1.0249729165340251,
+  "unsupported_lookup_count": 0,
+  "shard_overflow_counters": 0,
+  "details": {
+    "axis_aligned": {
+      "topas_peak_z_mm": 105.0,
+      "gpu_peak_z_mm": 105.0,
+      "topas_dose_sum_Gy": 2.262305736541748,
+      "gpu_dose_sum_Gy": 2.266387462615967,
+      "gamma_passed_voxels": 208,
+      "gamma_evaluated_voxels": 212
+    },
+    "oblique": {
+      "topas_peak_z_mm": 127.0,
+      "gpu_peak_z_mm": 127.0,
+      "topas_dose_sum_Gy": 2.3976898193359375,
+      "gpu_dose_sum_Gy": 2.392279624938965,
+      "gamma_passed_voxels": 151,
+      "gamma_evaluated_voxels": 158
+    }
+  },
+  "gates": {
+    "axis_range_diff_lt_1mm": true,
+    "oblique_range_diff_lt_1mm": true,
+    "axis_dose_diff_lt_2pct": true,
+    "oblique_dose_diff_lt_2pct": true,
+    "axis_gamma_gt_95pct": true,
+    "oblique_gamma_gt_95pct": true,
+    "step20_species_diff_lt_2pct": true,
+    "unsupported_lookup_count_is_0": true,
+    "shard_overflow_counters_is_0": true
+  }
+}

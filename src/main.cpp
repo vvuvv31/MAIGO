@@ -100,6 +100,9 @@ int main(int argc, char* argv[]) {
                     config.primary_inelastic_cross_section_file);
             }
         }
+        if (cross_section.energies().empty()) {
+            cross_section = carbon::zero_cross_section();
+        }
 
 #ifdef CARBON_HAS_SYCL
         if (config.device != "serial") {
@@ -434,6 +437,12 @@ int main(int argc, char* argv[]) {
         carbon::write_run_quality_report_json(quality_report_path, quality);
         carbon::write_energy_ledger_json(quality_directory / "energy_ledger.json", config,
                                          result);
+        if (config.is_schneider_ct_mode()) {
+            carbon::write_schneider_miss_log_json(
+                quality_directory / "schneider_miss_log.json", result);
+            carbon::write_schneider_unsupported_tracks_json(
+                quality_directory / "schneider_unsupported_tracks.json", result);
+        }
         std::cout << "Run mode: " << carbon::run_mode_name(config.run_mode) << '\n'
                   << "Quality status: " << quality.status() << '\n'
                   << "Quality report: " << quality_report_path << '\n';
@@ -453,7 +462,11 @@ int main(int argc, char* argv[]) {
                       << result.fred_neutron_ke_MeV << '/' << result.fred_remnant_local_MeV
                       << '/' << result.fred_model_residual_MeV << '\n';
         }
-        if (!quality.accepted) {
+        // Production refuses the dose as a formal result: throw before any
+        // dose scorer is written. Research completes (writes dose + ledger +
+        // diagnostics for analysis) but still exits non-zero via the throw
+        // after all outputs, with accepted=false recorded in JSON.
+        if (!quality.accepted && config.run_mode == carbon::RunMode::production) {
             throw std::runtime_error(quality.summary());
         }
 
@@ -785,6 +798,13 @@ int main(int argc, char* argv[]) {
                           << config.charged_origin_voxel_mhd_output_prefix.string()
                           << '\n';
             }
+        }
+        // Research mode with quality failures: all outputs above are written
+        // for analysis, but the run is still refused (non-zero exit,
+        // accepted=false in quality_report.json). Production already threw
+        // before any dose scorer was written.
+        if (!quality.accepted) {
+            throw std::runtime_error(quality.summary());
         }
         return EXIT_SUCCESS;
     } catch (const std::exception& error) {

@@ -92,6 +92,9 @@ struct TransportConfig;
 [[nodiscard]] SchneiderResampledCrossSectionGrid prepare_schneider_primary_xs(
     const TransportConfig& config);
 
+// Canonical zero cross-section table fallback.
+[[nodiscard]] CrossSectionTable zero_cross_section();
+
 // Single canonical layout indexing helper shared by host and GPU device code.
 // Contiguous layout: [section][energy]
 // index = section_id * energy_nodes + energy_index
@@ -103,6 +106,12 @@ inline constexpr std::size_t schneider_cross_section_index(
 }
 
 // Evaluates mass cross section rate (mm^-1 / (g/cm^3)) via linear interpolation on host or device.
+// LEGACY CSV path: unconditional endpoint clamp (committed behavior).
+// Rationale: the CSV subsystem carries no binary-version tag, and the v3
+// runtime never calls this function (v3 primary hazard comes from the
+// masked rate-binary partials; v3 configs must leave the CSV key empty).
+// The v1 CSV grid therefore keeps its exact frozen behavior; grid-sniffing
+// branches do not belong here (review: branch on explicit binary version).
 inline float schneider_primary_mass_xs(
     const float* __restrict table,
     std::uint32_t section_count,

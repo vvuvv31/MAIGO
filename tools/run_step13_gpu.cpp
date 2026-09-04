@@ -269,7 +269,16 @@ int main(int argc, char* argv[]) {
             std::filesystem::create_directories(out_path.parent_path());
             std::ofstream out(out_path);
             const std::string stopping_file_sha = carbon::compute_file_sha256_hex(cfg.ct_schneider_stopping_power_file);
-            const auto meta_sidecar = repo_dir / "data/schneider/schneider_stopping_v1.metadata.json";
+            std::filesystem::path meta_sidecar = cfg.ct_schneider_stopping_power_file.string() + ".metadata.json";
+            if (!std::filesystem::exists(meta_sidecar)) {
+                std::string s = cfg.ct_schneider_stopping_power_file.string();
+                if (s.size() > 4 && s.substr(s.size() - 4) == ".bin") {
+                    meta_sidecar = s.substr(0, s.size() - 4) + ".metadata.json";
+                }
+            }
+            if (!std::filesystem::exists(meta_sidecar)) {
+                meta_sidecar = repo_dir / "data/schneider/schneider_stopping_v1.metadata.json";
+            }
             const std::string stopping_meta_sha = carbon::compute_file_sha256_hex(meta_sidecar);
 
             out << std::setprecision(10);

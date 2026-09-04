@@ -89,4 +89,13 @@ void write_validation_scorer_csvs(const std::filesystem::path& directory,
                                   const TransportConfig& config,
                                   const TransportResult& result);
 
+// Per-record Schneider miss log + bucket summary (empty vector writes a
+// valid empty report; never throws on empty input).
+void write_schneider_miss_log_json(const std::filesystem::path& path,
+                                   const TransportResult& result);
+
+// Per-(Z/A) unsupported-track census from the bounded track log.
+void write_schneider_unsupported_tracks_json(const std::filesystem::path& path,
+                                             const TransportResult& result);
+
 }  // namespace carbon

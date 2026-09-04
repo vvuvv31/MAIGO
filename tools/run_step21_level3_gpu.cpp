@@ -6,6 +6,7 @@
 #include "carbon/schneider_stopping_table.hpp"
 #include "carbon/schneider_target_sampler.hpp"
 #include "carbon/secondary_rate_table.hpp"
+#include "carbon/straggling.hpp"
 #include "carbon/rng.hpp"
 
 #include <cmath>
@@ -118,11 +119,15 @@ int main(int argc, char* argv[]) {
 
         // Upload Radiation Lengths for Schneider sections
         std::vector<float> rad_lengths(25);
+        std::vector<float> canonical_densities(25);
         for (unsigned s = 0; s < 25; ++s) {
             rad_lengths[s] = static_cast<float>(carbon::schneider_section_radiation_length_g_per_cm2(s));
+            canonical_densities[s] = static_cast<float>(stopping_table.density(s));
         }
         auto* dev_rad_lengths = sycl::malloc_device<float>(25, queue);
+        auto* dev_canonical_densities = sycl::malloc_device<float>(25, queue);
         queue.copy(rad_lengths.data(), dev_rad_lengths, 25);
+        queue.copy(canonical_densities.data(), dev_canonical_densities, 25);
 
         // Upload Sampler CDF and Total Rates
         const auto sampler_dev = target_sampler.device_table();
@@ -220,7 +225,7 @@ int main(int argc, char* argv[]) {
 
                     const size_t v_idx = static_cast<size_t>(iz) * (nx * ny) + static_cast<size_t>(iy) * nx + ix;
                     const uint8_t sec_id = dev_materials[v_idx];
-                    const float rho = dev_densities[v_idx];
+                    const float rho = dev_canonical_densities[sec_id < 25 ? sec_id : 24];
                     const float X0 = dev_rad_lengths[sec_id < 25 ? sec_id : 24];
 
                     // Distance to next voxel boundary along direction
@@ -233,25 +238,46 @@ int main(int argc, char* argv[]) {
                     float d_face = sycl::fmin(d_x, sycl::fmin(d_y, d_z));
                     if (d_face <= 0.0F) d_face = 1.0e-4F;
 
-                    // Continuous stopping power (MeV/u per mm)
+                    // Continuous stopping power (MeV/u per mm) with linear interpolation
                     float s_idx_f = (E - 0.01F) * 10.0F;
                     int s_idx = sycl::clamp(static_cast<int>(s_idx_f), 0, 4300);
-                    float mass_sp = dev_stopping[sec_id * 4302 + s_idx];
+                    float s_frac = s_idx_f - static_cast<float>(s_idx);
+                    float mass_sp = dev_stopping[sec_id * 4302 + s_idx] +
+                                    s_frac * (dev_stopping[sec_id * 4302 + s_idx + 1] - dev_stopping[sec_id * 4302 + s_idx]);
                     float dedx = mass_sp * rho; // MeV/mm (total for C12)
 
-                    // Nuclear inelastic rate (1/mm)
+                    // Nuclear inelastic rate (1/mm) with linear interpolation
                     float r_idx_f = (E - gpu_sampler.energy_min_MeV_per_u) * gpu_sampler.inverse_energy_step;
-                    int r_idx = sycl::clamp(static_cast<int>(r_idx_f), 0, static_cast<int>(gpu_sampler.num_energies - 1));
-                    float mass_rate = gpu_sampler.total_mass_rates[sec_id * gpu_sampler.num_energies + r_idx];
+                    int r_idx = sycl::clamp(static_cast<int>(r_idx_f), 0, static_cast<int>(gpu_sampler.num_energies - 2));
+                    float r_frac = r_idx_f - static_cast<float>(r_idx);
+                    float mass_rate = gpu_sampler.total_mass_rates[sec_id * gpu_sampler.num_energies + r_idx] +
+                                      r_frac * (gpu_sampler.total_mass_rates[sec_id * gpu_sampler.num_energies + r_idx + 1] -
+                                                gpu_sampler.total_mass_rates[sec_id * gpu_sampler.num_energies + r_idx]);
                     float macro_rate = mass_rate * rho; // 1/mm
 
                     float d_coll = (macro_rate > 1.0e-12F) ? (tau / macro_rate) : 1.0e9F;
                     float d_stop = (dedx > 1.0e-6F) ? ((E - 0.5F) * 12.0F / dedx) : 1.0e9F;
 
                     float ds = sycl::fmin(d_face + 1.0e-4F, sycl::fmin(d_coll, d_stop));
-                    if (ds > 1.0F) ds = 1.0F; // 1mm max step clamp
+                    if (ds > 0.5F) ds = 0.5F; // 0.5mm max step for sharp Bragg peak precision
 
                     float dE_total = sycl::fmin(E * 12.0F, dedx * ds);
+
+                    // Continuous energy straggling with effective charge
+                    float gamma_ion = 1.0F + E / 931.4941F;
+                    float beta_ion = sycl::sqrt(sycl::fmax(0.0F, 1.0F - 1.0F / (gamma_ion * gamma_ion)));
+                    float z_eff = 6.0F * (1.0F - sycl::exp(-125.0F * beta_ion * 0.302853F));
+                    float var_MeV2 = carbon::condensed_total_loss_variance_MeV2<float>(
+                        E, 12.0F * 931.4941F, z_eff, ds, rho, 1.0F);
+                    if (var_MeV2 > 0.0F) {
+                        float u_strag0 = sycl::fmax(1.0e-12F, carbon::rng::uniform01(seed, hist, step_count, 8));
+                        float u_strag1 = carbon::rng::uniform01(seed, hist, step_count, 9);
+                        float gauss_strag = sycl::sqrt(-2.0F * sycl::log(u_strag0)) * sycl::cos(6.2831853F * u_strag1);
+                        constexpr float strag_scale = 1.15F; // Scale factor for G4UniversalFluctuation on carbon ions
+                        dE_total += strag_scale * sycl::sqrt(var_MeV2) * gauss_strag;
+                        dE_total = sycl::clamp(dE_total, 0.0F, E * 12.0F);
+                    }
+
                     E -= (dE_total / 12.0F);
 
                     // Deposit energy into current voxel
@@ -303,8 +329,16 @@ int main(int argc, char* argv[]) {
                                 const int pa_ion = prod.a;
                                 float e_sec = prod.kinetic_energy_MeV;
 
-                                if (pz_ion <= 0 || pa_ion <= 0 || e_sec <= 0.5F) {
-                                    // Neutral or below cutoff: deposit locally in current voxel
+                                if (pz_ion <= 0 || pa_ion <= 0) {
+                                    // Elastic recoil protons from secondary neutrons in tissue (~4% of neutron energy)
+                                    if (pz_ion == 0 && pa_ion == 1 && e_sec > 1.0F) {
+                                        constexpr float f_np_recoil = 0.04F;
+                                        v_edep.fetch_add(e_sec * f_np_recoil);
+                                    }
+                                    continue;
+                                }
+                                if (e_sec <= 0.5F) {
+                                    // Sub-cutoff charged particle: deposit residual kinetic energy locally
                                     v_edep.fetch_add(e_sec);
                                     continue;
                                 }
@@ -330,7 +364,7 @@ int main(int argc, char* argv[]) {
 
                                     const size_t sv_idx = static_cast<size_t>(siz) * (nx * ny) + static_cast<size_t>(siy) * nx + six;
                                     const uint8_t ssec_id = dev_materials[sv_idx];
-                                    const float srho = dev_densities[sv_idx];
+                                    const float srho = dev_canonical_densities[ssec_id < 25 ? ssec_id : 24];
                                     const float sX0 = dev_rad_lengths[ssec_id < 25 ? ssec_id : 24];
 
                                     float sd_x = (su_dir.x > 1.0e-6F) ? (ox + (six + 1) * dx - spx) / su_dir.x :
@@ -345,7 +379,9 @@ int main(int argc, char* argv[]) {
                                     float e_per_u = e_sec / static_cast<float>(pa_ion);
                                     float s_idx_f2 = (e_per_u - 0.01F) * 10.0F;
                                     int s_idx2 = sycl::clamp(static_cast<int>(s_idx_f2), 0, 4300);
-                                    float sp_c12 = dev_stopping[ssec_id * 4302 + s_idx2];
+                                    float s_frac2 = s_idx_f2 - static_cast<float>(s_idx2);
+                                    float sp_c12 = dev_stopping[ssec_id * 4302 + s_idx2] +
+                                                   s_frac2 * (dev_stopping[ssec_id * 4302 + s_idx2 + 1] - dev_stopping[ssec_id * 4302 + s_idx2]);
                                     float s_dedx = sp_c12 * z2_scale * srho; // MeV/mm
 
                                     float sds = sycl::fmin(sd_face + 1.0e-4F, 2.0F);
@@ -374,8 +410,33 @@ int main(int argc, char* argv[]) {
                                         float slz = sycl::sqrt(sycl::fmax(0.0F, 1.0F - slx*slx - sly*sly));
                                         su_dir = rotate_local_direction(slx, sly, slz, su_dir);
                                     }
+                                    // Secondary particle residual deposit on stopping below cutoff
+                                    if (e_sec <= 0.5F && e_sec > 0.0F) {
+                                        sycl::atomic_ref<float, sycl::memory_order::relaxed,
+                                                         sycl::memory_scope::device,
+                                                         sycl::access::address_space::global_space>
+                                            sv_edep(dev_voxel_edep[sv_idx]);
+                                        sv_edep.fetch_add(e_sec);
+                                    }
                                 }
                             }
+                        }
+                    }
+
+                    // Primary residual deposit on stopping below cutoff
+                    if (alive && E <= 0.5F && E > 0.0F) {
+                        int ix = static_cast<int>(sycl::floor((px - ox) / dx));
+                        int iy = static_cast<int>(sycl::floor((py - oy) / dy));
+                        int iz = static_cast<int>(sycl::floor((pz - oz) / dz));
+                        if (ix >= 0 && ix < static_cast<int>(nx) &&
+                            iy >= 0 && iy < static_cast<int>(ny) &&
+                            iz >= 0 && iz < static_cast<int>(nz)) {
+                            const size_t v_idx = static_cast<size_t>(iz) * (nx * ny) + static_cast<size_t>(iy) * nx + ix;
+                            sycl::atomic_ref<float, sycl::memory_order::relaxed,
+                                             sycl::memory_scope::device,
+                                             sycl::access::address_space::global_space>
+                                v_edep(dev_voxel_edep[v_idx]);
+                            v_edep.fetch_add(E * 12.0F);
                         }
                     }
                 }
@@ -402,7 +463,8 @@ int main(int argc, char* argv[]) {
                     for (size_t ix = 0; ix < nx; ++ix) {
                         const size_t idx = iz * (nx * ny) + iy * nx + ix;
                         const double edep_mev = host_edep[idx];
-                        const double rho = ct_grid.density_g_per_cm3[idx];
+                        const uint8_t s_id = ct_grid.material_id[idx];
+                        const double rho = canonical_densities[s_id < 25 ? s_id : 24];
                         const double mass_kg = rho * voxel_vol_cm3 * 1.0e-3;
                         const double dose_gy = (mass_kg > 0.0) 
                             ? (edep_mev * 1.602176634e-13 / mass_kg) : 0.0;

@@ -481,14 +481,21 @@ SchneiderResampledCrossSectionGrid prepare_schneider_primary_xs(
 
 SchneiderResampledCrossSectionGrid prepare_schneider_primary_xs(
     const TransportConfig& config) {
-    constexpr std::size_t kNativeSchneiderNodes = 860;
-    constexpr double kNativeSchneiderEmin = 0.5;
-    constexpr double kNativeSchneiderStep = 0.5;
-    std::vector<double> native_energies(kNativeSchneiderNodes);
-    for (std::size_t i = 0; i < kNativeSchneiderNodes; ++i) {
-        native_energies[i] = kNativeSchneiderEmin + static_cast<double>(i) * kNativeSchneiderStep;
+    // Native grid is DATA-DRIVEN (the CSV's own energy column): v1 files keep
+    // their exact 860-node [0.5,430] grid (bitwise reproducibility), v2.1
+    // files use their native [0.1,460.1]/921 grid. Never hardcode one grid.
+    if (config.ct_schneider_cross_section_file.empty()) {
+        throw std::runtime_error(
+            "prepare_schneider_primary_xs: ct_schneider_cross_section_file is empty");
     }
-    return prepare_schneider_primary_xs(config, native_energies);
+    const auto tables = CrossSectionTable::from_schneider_csv(
+        config.ct_schneider_cross_section_file);
+    if (tables.size() != SchneiderResampledCrossSectionGrid::kExpectedSections) {
+        throw std::runtime_error(
+            "prepare_schneider_primary_xs: expected exactly 25 section tables, got " +
+            std::to_string(tables.size()));
+    }
+    return prepare_schneider_primary_xs(config, tables.front().energies());
 }
 
 const std::vector<double>& CrossSectionTable::macro_h_per_mm() const noexcept {
@@ -726,6 +733,10 @@ float NeutralCrossSectionTables::minimum_log_energy() const noexcept {
 
 float NeutralCrossSectionTables::log_energy_step() const noexcept {
     return log_energy_step_;
+}
+
+CrossSectionTable zero_cross_section() {
+    return CrossSectionTable({0.01, 400.0}, {0.0, 0.0});
 }
 
 }  // namespace carbon

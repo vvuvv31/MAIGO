@@ -1,5 +1,6 @@
 #include "carbon/inelastic_package_v3.hpp"
 #include "carbon/inelastic_identity.hpp"
+#include "carbon/sha256.hpp"
 
 #include <algorithm>
 #include <array>
@@ -342,6 +343,13 @@ InelasticPackageV3Table InelasticPackageV3Table::from_binary(
                                      std::to_string(index) + ": " + path.string());
         }
 
+        if (interaction.direct_product_count > 64) {
+            throw std::runtime_error("CINPKG04 event direct_product_count exceeds limit (64): " +
+                                     std::to_string(interaction.direct_product_count) + " at index " + std::to_string(index));
+        }
+        if (expected_product_count > std::numeric_limits<std::uint32_t>::max()) {
+            throw std::overflow_error("CINPKG04 product offset exceeds uint32 max at index " + std::to_string(index));
+        }
         table.product_offsets_[index] = static_cast<std::uint32_t>(expected_product_count);
         expected_product_count += interaction.direct_product_count;
     }
@@ -416,6 +424,36 @@ InelasticPackageV3Table InelasticPackageV3Table::from_binary(
 
     if (input.peek() != std::ifstream::traits_type::eof()) {
         throw std::runtime_error("CINPKG04 has trailing bytes: " + path.string());
+    }
+
+    // Companion metadata SHA-256 validation
+    std::filesystem::path sidecar = path.string() + ".metadata.json";
+    if (!std::filesystem::exists(sidecar)) {
+        std::string s = path.string();
+        if (s.size() > 4 && s.substr(s.size() - 4) == ".bin") {
+            sidecar = s.substr(0, s.size() - 4) + ".metadata.json";
+        }
+    }
+    if (std::filesystem::exists(sidecar)) {
+        std::ifstream meta_file(sidecar);
+        if (meta_file) {
+            std::string meta_content((std::istreambuf_iterator<char>(meta_file)),
+                                     std::istreambuf_iterator<char>());
+            const auto sha_pos = meta_content.find("\"data_sha256\"");
+            if (sha_pos != std::string::npos) {
+                const auto colon = meta_content.find(':', sha_pos);
+                const auto q1 = (colon != std::string::npos) ? meta_content.find('"', colon) : std::string::npos;
+                const auto q2 = (q1 != std::string::npos) ? meta_content.find('"', q1 + 1) : std::string::npos;
+                if (q1 != std::string::npos && q2 != std::string::npos) {
+                    const std::string expected_sha = meta_content.substr(q1 + 1, q2 - q1 - 1);
+                    const std::string actual_sha = compute_file_sha256_hex(path);
+                    if (actual_sha != expected_sha) {
+                        throw std::runtime_error("CINEL03 package SHA-256 mismatch for " + path.string() +
+                                                 ": expected " + expected_sha + ", got " + actual_sha);
+                    }
+                }
+            }
+        }
     }
 
     return table;
@@ -508,6 +546,193 @@ const std::vector<std::uint64_t>& InelasticPackageV3Table::event_indices() const
     return event_indices_;
 }
 
+InelasticPackageV3Table::ChannelDomain InelasticPackageV3Table::channel_domain(
+    const int projectile_z, const int projectile_a, const int target_element_z) const noexcept {
+    ChannelDomain domain{};
+    if (energy_nodes_.empty() || event_offsets_.size() != energy_nodes_.size() + 1U) {
+        return domain;
+    }
+    const auto proj_begin = std::lower_bound(
+        energy_nodes_.begin(), energy_nodes_.end(),
+        std::tuple{projectile_z, projectile_a, -1000, -1.0F},
+        [](const Cinel03EnergyNode& node, const auto& key) {
+            return energy_node_key(node) < key;
+        });
+    const auto proj_end = std::upper_bound(
+        proj_begin, energy_nodes_.end(),
+        std::tuple{projectile_z, projectile_a, 1000, 1.0e30F},
+        [](const auto& key, const Cinel03EnergyNode& node) {
+            return key < energy_node_key(node);
+        });
+    if (proj_begin >= proj_end) {
+        return domain;
+    }
+    domain.found_projectile = true;
+    const auto tgt_begin = std::lower_bound(
+        proj_begin, proj_end, target_element_z,
+        [](const Cinel03EnergyNode& node, const int tz) {
+            return node.target_element_z < tz;
+        });
+    const auto tgt_end = std::upper_bound(
+        tgt_begin, proj_end, target_element_z,
+        [](const int tz, const Cinel03EnergyNode& node) {
+            return tz < node.target_element_z;
+        });
+    if (tgt_begin >= tgt_end) {
+        return domain;
+    }
+    domain.found_target = true;
+    domain.energy_min_MeV_per_u = tgt_begin->collision_energy_MeV_per_u;
+    domain.energy_max_MeV_per_u = (tgt_end - 1)->collision_energy_MeV_per_u;
+    domain.node_count = static_cast<std::size_t>(tgt_end - tgt_begin);
+    float max_gap = 0.0F;
+    for (auto it = tgt_begin + 1; it != tgt_end; ++it) {
+        const float gap = it->collision_energy_MeV_per_u - (it - 1)->collision_energy_MeV_per_u;
+        if (gap > max_gap) {
+            max_gap = gap;
+        }
+    }
+    domain.maximum_node_gap_MeV_per_u = max_gap;
+    return domain;
+}
+
+Cinel03LookupResult InelasticPackageV3Table::lookup_event(
+    const int projectile_z, const int projectile_a, const int target_element_z,
+    const float energy, const float u_bracket, const float u_event,
+    const float max_allowed_gap_MeV_per_u) const noexcept {
+    Cinel03LookupResult out{};
+    out.query_energy_MeV_per_u = energy;
+    if (!std::isfinite(energy) || !std::isfinite(u_bracket) || !std::isfinite(u_event) ||
+        energy_nodes_.empty() || event_offsets_.size() != energy_nodes_.size() + 1U) {
+        out.status = Cinel03LookupStatus::MissingProjectile;
+        return out;
+    }
+
+    const auto proj_begin = std::lower_bound(
+        energy_nodes_.begin(), energy_nodes_.end(),
+        std::tuple{projectile_z, projectile_a, -1000, -1.0F},
+        [](const Cinel03EnergyNode& node, const auto& key) {
+            return energy_node_key(node) < key;
+        });
+    const auto proj_end = std::upper_bound(
+        proj_begin, energy_nodes_.end(),
+        std::tuple{projectile_z, projectile_a, 1000, 1.0e30F},
+        [](const auto& key, const Cinel03EnergyNode& node) {
+            return key < energy_node_key(node);
+        });
+    if (proj_begin >= proj_end) {
+        out.status = Cinel03LookupStatus::MissingProjectile;
+        return out;
+    }
+    const auto tgt_begin = std::lower_bound(
+        proj_begin, proj_end, target_element_z,
+        [](const Cinel03EnergyNode& node, const int tz) {
+            return node.target_element_z < tz;
+        });
+    const auto tgt_end = std::upper_bound(
+        tgt_begin, proj_end, target_element_z,
+        [](const int tz, const Cinel03EnergyNode& node) {
+            return tz < node.target_element_z;
+        });
+    if (tgt_begin >= tgt_end) {
+        out.status = Cinel03LookupStatus::MissingTarget;
+        return out;
+    }
+
+    const auto channel_first = static_cast<std::size_t>(tgt_begin - energy_nodes_.begin());
+    const auto channel_last = static_cast<std::size_t>(tgt_end - energy_nodes_.begin());
+    const float channel_min = tgt_begin->collision_energy_MeV_per_u;
+    const float channel_max = (tgt_end - 1)->collision_energy_MeV_per_u;
+    if (!(energy >= channel_min)) {
+        out.status = Cinel03LookupStatus::BelowEnergyDomain;
+        out.selected_energy_MeV_per_u = channel_min;
+        out.absolute_energy_mismatch_MeV_per_u = channel_min - energy;
+        return out;
+    }
+    if (energy > channel_max) {
+        out.status = Cinel03LookupStatus::AboveEnergyDomain;
+        out.selected_energy_MeV_per_u = channel_max;
+        out.absolute_energy_mismatch_MeV_per_u = energy - channel_max;
+        return out;
+    }
+
+    const auto e1_it = std::lower_bound(
+        tgt_begin, tgt_end, energy,
+        [](const Cinel03EnergyNode& node, const float value) {
+            return node.collision_energy_MeV_per_u < value;
+        });
+    auto e1 = static_cast<std::size_t>(e1_it - energy_nodes_.begin());
+    if (e1 >= channel_last) {
+        e1 = channel_last - 1;
+    }
+    auto e0 = e1;
+    if (e1 > channel_first && energy_nodes_[e1].collision_energy_MeV_per_u > energy) {
+        e0 = e1 - 1;
+    }
+    const float e0_energy = energy_nodes_[e0].collision_energy_MeV_per_u;
+    const float e1_energy = energy_nodes_[e1].collision_energy_MeV_per_u;
+
+    std::size_t chosen_node = e0;
+    if (e1_energy > e0_energy) {
+        const float gap = e1_energy - e0_energy;
+        if (gap > max_allowed_gap_MeV_per_u) {
+            out.status = Cinel03LookupStatus::EnergyGapTooLarge;
+            out.selected_energy_MeV_per_u =
+                (energy - e0_energy <= e1_energy - energy) ? e0_energy : e1_energy;
+            out.absolute_energy_mismatch_MeV_per_u =
+                (energy - e0_energy <= e1_energy - energy) ? (energy - e0_energy) : (e1_energy - energy);
+            return out;
+        }
+        const float p_up = (energy - e0_energy) / gap;
+        const float ub = u_bracket < 0.0F ? 0.0F : (u_bracket >= 1.0F ? 0.9999999F : u_bracket);
+        chosen_node = (ub < p_up) ? e1 : e0;
+    }
+
+    const auto first_event = event_offsets_[chosen_node];
+    const auto last_event = event_offsets_[chosen_node + 1];
+    if (first_event >= last_event || last_event > event_indices_.size()) {
+        out.status = Cinel03LookupStatus::EmptyNode;
+        out.energy_node_index = static_cast<std::uint32_t>(chosen_node);
+        out.selected_energy_MeV_per_u = energy_nodes_[chosen_node].collision_energy_MeV_per_u;
+        out.absolute_energy_mismatch_MeV_per_u =
+            std::abs(energy - out.selected_energy_MeV_per_u);
+        return out;
+    }
+    const auto count = last_event - first_event;
+    const float ue = u_event < 0.0F ? 0.0F : (u_event >= 1.0F ? 0.9999999F : u_event);
+    auto pick = static_cast<std::uint64_t>(static_cast<double>(ue) * static_cast<double>(count));
+    if (pick >= count) {
+        pick = count - 1;
+    }
+    const auto event_index = event_indices_[static_cast<std::size_t>(first_event + pick)];
+    if (event_index >= interactions_.size()) {
+        out.status = Cinel03LookupStatus::EmptyNode;
+        out.energy_node_index = static_cast<std::uint32_t>(chosen_node);
+        return out;
+    }
+    out.event_index = static_cast<std::uint32_t>(event_index);
+    out.energy_node_index = static_cast<std::uint32_t>(chosen_node);
+    out.status = Cinel03LookupStatus::Hit;
+    out.selected_energy_MeV_per_u = energy_nodes_[chosen_node].collision_energy_MeV_per_u;
+    out.absolute_energy_mismatch_MeV_per_u = std::abs(energy - out.selected_energy_MeV_per_u);
+    return out;
+}
+
+namespace {
+const char* cinel03_status_name(const Cinel03LookupStatus status) noexcept {
+    switch (status) {
+    case Cinel03LookupStatus::Hit: return "Hit";
+    case Cinel03LookupStatus::MissingProjectile: return "MissingProjectile";
+    case Cinel03LookupStatus::MissingTarget: return "MissingTarget";
+    case Cinel03LookupStatus::BelowEnergyDomain: return "BelowEnergyDomain";
+    case Cinel03LookupStatus::AboveEnergyDomain: return "AboveEnergyDomain";
+    case Cinel03LookupStatus::EnergyGapTooLarge: return "EnergyGapTooLarge";
+    case Cinel03LookupStatus::EmptyNode: return "EmptyNode";
+    }
+    return "Unknown";
+}
+} // namespace
+
 std::uint64_t InelasticPackageV3Table::find_event(
     const int projectile_z, const int projectile_a, const int target_element_z,
     const float energy, const float tolerance, const float u01,
@@ -532,65 +757,32 @@ std::uint64_t InelasticPackageV3Table::find_event(
         throw std::runtime_error("CINEL03: Invalid lookup arguments or empty table");
     }
 
-    const auto lower_energy = energy - tolerance;
-    const auto upper_energy = energy + tolerance;
-    const auto lower_key = std::tuple{projectile_z, projectile_a, target_element_z, lower_energy};
-    const auto upper_key = std::tuple{projectile_z, projectile_a, target_element_z, upper_energy};
-
-    const auto first = std::lower_bound(
-        energy_nodes_.begin(), energy_nodes_.end(), lower_key,
-        [](const Cinel03EnergyNode& node, const auto& key) {
-            return energy_node_key(node) < key;
-        });
-    const auto last = std::upper_bound(
-        first, energy_nodes_.end(), upper_key,
-        [](const auto& key, const Cinel03EnergyNode& node) {
-            return key < energy_node_key(node);
-        });
-
-    const auto first_node = static_cast<std::size_t>(first - energy_nodes_.begin());
-    const auto last_node = static_cast<std::size_t>(last - energy_nodes_.begin());
-
-    if (first_node >= last_node || last_node >= event_offsets_.size()) {
-        if (audit_mode) {
-            if (missing_target_counter != nullptr) (*missing_target_counter)++;
-            return invalid;
-        }
+    // Strict exact-target + bounded-domain semantics shared with the device.
+    // The legacy tolerance window no longer widens the match; the fixed
+    // channel gap rule governs. The single uniform drives both the bracket
+    // choice and the intra-node pick.
+    const auto result = lookup_event(projectile_z, projectile_a, target_element_z,
+                                     energy, u01, u01);
+    if (result.status == Cinel03LookupStatus::Hit) {
+        return result.event_index;
+    }
+    if (audit_mode) {
+        if (missing_target_counter != nullptr) (*missing_target_counter)++;
+        return invalid;
+    }
+    if (result.status == Cinel03LookupStatus::MissingTarget) {
         throw std::runtime_error(
             "CINEL03: Missing target element Z=" + std::to_string(target_element_z) +
             " for projectile Z=" + std::to_string(projectile_z) +
             " A=" + std::to_string(projectile_a) +
             " at E=" + std::to_string(energy) + " MeV/u");
     }
-
-    const auto first_event = event_offsets_[first_node];
-    const auto last_event = event_offsets_[last_node];
-    if (first_event >= last_event || last_event > event_indices_.size()) {
-        if (audit_mode) {
-            if (missing_target_counter != nullptr) (*missing_target_counter)++;
-            return invalid;
-        }
-        throw std::runtime_error("CINEL03: Corrupt event offsets for target Z=" + std::to_string(target_element_z));
-    }
-
-    const auto count = last_event - first_event;
-    const auto pick = u01 >= 1.0F
-                          ? count - 1U
-                          : static_cast<std::uint64_t>(static_cast<double>(u01) * count);
-    if (pick >= count) {
-        return invalid;
-    }
-    const auto event_index = event_indices_[static_cast<std::size_t>(first_event + pick)];
-    if (event_index >= interactions_.size()) {
-        return invalid;
-    }
-    const auto& event_record = interactions_[static_cast<std::size_t>(event_index)];
-    if (event_record.projectile_z != projectile_z || event_record.projectile_a != projectile_a ||
-        event_record.target_element_z != target_element_z ||
-        std::abs(event_record.collision_energy_MeV_per_u - energy) > tolerance) {
-        return invalid;
-    }
-    return event_index;
+    throw std::runtime_error(
+        std::string("CINEL03: ") + cinel03_status_name(result.status) +
+        " for projectile Z=" + std::to_string(projectile_z) +
+        " A=" + std::to_string(projectile_a) +
+        " target Z=" + std::to_string(target_element_z) +
+        " at E=" + std::to_string(energy) + " MeV/u");
 }
 
 const Cinel03CellIndex* InelasticPackageV3Table::find_cell(
@@ -673,17 +865,35 @@ Cinel03DeviceTables InelasticPackageV3Table::make_device_tables() const {
                 global[2] * axis[2]};
     };
 
+    if (interactions_.size() > std::numeric_limits<std::uint32_t>::max() ||
+        products_.size() > std::numeric_limits<std::uint32_t>::max() ||
+        energy_nodes_.size() > std::numeric_limits<std::uint32_t>::max() ||
+        event_offsets_.size() > std::numeric_limits<std::uint32_t>::max() ||
+        event_indices_.size() > std::numeric_limits<std::uint32_t>::max()) {
+        throw std::overflow_error("CINEL03 table counts exceed uint32 bounds for device upload");
+    }
+
     Cinel03DeviceTables tables;
     tables.interactions.reserve(interactions_.size());
     for (std::size_t index = 0; index < interactions_.size(); ++index) {
         const auto& event = interactions_[index];
+        const std::uint64_t count = event.direct_product_count;
+        const std::uint64_t offset = product_offsets_[index];
+        if (count > 64) {
+            throw std::runtime_error("CINEL03 event direct_product_count exceeds limit (64): " + std::to_string(count));
+        }
+        if (offset > UINT32_MAX - count || offset + count > products_.size()) {
+            throw std::runtime_error("CINEL03 product range overflow or out of bounds: offset=" +
+                                     std::to_string(offset) + ", count=" + std::to_string(count) +
+                                     ", total_products=" + std::to_string(products_.size()));
+        }
         const auto local = parent_local_direction(event);
         tables.interactions.push_back(Cinel03DeviceInteraction{
             event.collision_energy_MeV_per_u,
             event.process_local_deposit_MeV,
             event.nonionizing_deposit_MeV,
-            product_offsets_[index],
-            event.direct_product_count,
+            static_cast<std::uint32_t>(offset),
+            static_cast<std::uint32_t>(count),
             event.parent_energy_MeV,
             event.parent_pdg,
             event.parent_z,

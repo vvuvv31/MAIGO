@@ -4,6 +4,7 @@
 #include "carbon/cross_section.hpp"
 #include "carbon/schneider_rate_table.hpp"
 #include "carbon/schneider_stopping_table.hpp"
+#include "carbon/min_json.hpp"
 #include "carbon/schneider_target_sampler.hpp"
 #include "carbon/secondary_rate_table.hpp"
 #include "carbon/electron_transport.hpp"
@@ -27,6 +28,7 @@
 #include "carbon/inelastic.hpp"
 #include "carbon/inelastic_identity.hpp"
 #include "carbon/inelastic_package_v3.hpp"
+#include "carbon/schneider_ct_device_context.hpp"
 #include "carbon/device.hpp"
 #include "carbon/detail/device_memory_tracker.hpp"
 #include <sycl/sycl.hpp>
@@ -6769,6 +6771,16 @@ void test_schneider_stopping_payload_physical_validation() {
     std::filesystem::remove_all(tmp_dir);
 }
 
+[[gnu::noinline]] void require_transport_sycl_throws(
+    const carbon::TransportConfig& bad,
+    const carbon::StoppingPowerTable& water_sp,
+    const carbon::CrossSectionTable& zero_xs,
+    const std::string& message) {
+    require_throws<std::invalid_argument>([&]() {
+        (void)carbon::transport_sycl(bad, water_sp, zero_xs, "default");
+    }, message);
+}
+
 void test_schneider_stopping_source_energy_domain_fail_closed() {
     // Completely self-contained: create a programmatic 1x1x2 Schneider CCTG
     const auto tmp_dir = std::filesystem::temp_directory_path() / "schneider_domain_test";
@@ -6811,9 +6823,8 @@ void test_schneider_stopping_source_energy_domain_fail_closed() {
     {
         auto bad = base_cfg;
         bad.initial_energy_MeVu = 435.0;
-        require_throws<std::invalid_argument>([&]() {
-            (void)carbon::transport_sycl(bad, water_sp, zero_xs, "default");
-        }, "Initial energy 435 MeV/u must be rejected in Schneider mode");
+        require_transport_sycl_throws(bad, water_sp, zero_xs,
+            "Initial energy 435 MeV/u must be rejected in Schneider mode");
     }
 
     // 2. Single beam upper spread exceeding 430.11 MeV/u must be rejected
@@ -6821,9 +6832,8 @@ void test_schneider_stopping_source_energy_domain_fail_closed() {
         auto bad = base_cfg;
         bad.initial_energy_MeVu = 420.0;
         bad.beam_energy_spread = 0.05; // 420 * (1 + 7.434 * 0.05) = 576 > 430.11
-        require_throws<std::invalid_argument>([&]() {
-            (void)carbon::transport_sycl(bad, water_sp, zero_xs, "default");
-        }, "Single beam spread exceeding 430.11 MeV/u must be rejected in Schneider mode");
+        require_transport_sycl_throws(bad, water_sp, zero_xs,
+            "Single beam spread exceeding 430.11 MeV/u must be rejected in Schneider mode");
     }
 
     // 3. Single beam lower spread dropping below 0.01 MeV/u must be rejected
@@ -6831,18 +6841,16 @@ void test_schneider_stopping_source_energy_domain_fail_closed() {
         auto bad = base_cfg;
         bad.initial_energy_MeVu = 0.011;
         bad.beam_energy_spread = 0.10; // 0.011 * (1 - 7.434 * 0.10) = 0.0028 < 0.01
-        require_throws<std::invalid_argument>([&]() {
-            (void)carbon::transport_sycl(bad, water_sp, zero_xs, "default");
-        }, "Single beam lower spread below 0.01 MeV/u must be rejected in Schneider mode");
+        require_transport_sycl_throws(bad, water_sp, zero_xs,
+            "Single beam lower spread below 0.01 MeV/u must be rejected in Schneider mode");
     }
 
     // 4. Non-finite single beam energy must be rejected
     {
         auto bad = base_cfg;
         bad.initial_energy_MeVu = std::numeric_limits<double>::quiet_NaN();
-        require_throws<std::invalid_argument>([&]() {
-            (void)carbon::transport_sycl(bad, water_sp, zero_xs, "default");
-        }, "Non-finite initial energy must be rejected in Schneider mode");
+        require_transport_sycl_throws(bad, water_sp, zero_xs,
+            "Non-finite initial energy must be rejected in Schneider mode");
     }
 
     // 5. Production spot batch with energy > 430 MeV/u (e.g. 435 MeV/u = 5220 MeV) must be rejected
@@ -6854,9 +6862,8 @@ void test_schneider_stopping_source_energy_domain_fail_closed() {
         spot.floats[0] = 5220.0F; // 435 MeV/u * 12
         spot.floats[1] = 0.0F;
         bad.primary_spot_batch = {spot};
-        require_throws<std::invalid_argument>([&]() {
-            (void)carbon::transport_sycl(bad, water_sp, zero_xs, "default");
-        }, "Production spot with 435 MeV/u must be rejected in Schneider mode");
+        require_transport_sycl_throws(bad, water_sp, zero_xs,
+            "Production spot with 435 MeV/u must be rejected in Schneider mode");
     }
 
     // 6. Production spot batch with spread dropping below 0.01 MeV/u must be rejected
@@ -6868,9 +6875,8 @@ void test_schneider_stopping_source_energy_domain_fail_closed() {
         spot.floats[0] = static_cast<float>(0.011 * 12.0); // 0.011 MeV/u
         spot.floats[1] = 0.10F;
         bad.primary_spot_batch = {spot};
-        require_throws<std::invalid_argument>([&]() {
-            (void)carbon::transport_sycl(bad, water_sp, zero_xs, "default");
-        }, "Production spot with spread dropping below 0.01 MeV/u must be rejected in Schneider mode");
+        require_transport_sycl_throws(bad, water_sp, zero_xs,
+            "Production spot with spread dropping below 0.01 MeV/u must be rejected in Schneider mode");
     }
 
     // 7. Production spot batch with upper spread exceeding 430.11 MeV/u must be rejected
@@ -6882,9 +6888,8 @@ void test_schneider_stopping_source_energy_domain_fail_closed() {
         spot.floats[0] = static_cast<float>(420.0 * 12.0); // 420 MeV/u
         spot.floats[1] = 0.05F; // 420 * (1 + 7.434 * 0.05) = 576 > 430.11
         bad.primary_spot_batch = {spot};
-        require_throws<std::invalid_argument>([&]() {
-            (void)carbon::transport_sycl(bad, water_sp, zero_xs, "default");
-        }, "Production spot with spread exceeding 430.11 MeV/u must be rejected in Schneider mode");
+        require_transport_sycl_throws(bad, water_sp, zero_xs,
+            "Production spot with spread exceeding 430.11 MeV/u must be rejected in Schneider mode");
     }
 
     // 8. Production spot batch with NaN energy must be rejected
@@ -6896,9 +6901,8 @@ void test_schneider_stopping_source_energy_domain_fail_closed() {
         spot.floats[0] = std::numeric_limits<float>::quiet_NaN();
         spot.floats[1] = 0.0F;
         bad.primary_spot_batch = {spot};
-        require_throws<std::invalid_argument>([&]() {
-            (void)carbon::transport_sycl(bad, water_sp, zero_xs, "default");
-        }, "Production spot with NaN energy must be rejected in Schneider mode");
+        require_transport_sycl_throws(bad, water_sp, zero_xs,
+            "Production spot with NaN energy must be rejected in Schneider mode");
     }
 
     std::filesystem::remove_all(tmp_dir);
@@ -7733,14 +7737,31 @@ void test_step20_secondary_rate_table_and_cinel03_package() {
     require(sec_pkg.interactions().size() > 25000, "Must contain >25k interactions");
     require(sec_pkg.products().size() > 200000, "Must contain >200k products");
 
-    // Lookups for secondary projectiles on tissue elements
-    // Proton on O (Z=1, A=1 on Z=8)
+    // Lookups for secondary projectiles on tissue elements under the strict
+    // exact-target + bounded-domain contract (no alias, no endpoint clamp).
+    // Proton on O (Z=1, A=1 on Z=8): brackets tightly at 200 MeV/u.
     const auto ev_p_O = sec_pkg.find_event(1, 1, 8, 200.0F, 50.0F, 0.5F);
     require(ev_p_O != InelasticPackageV3Table::invalid, "Proton on Oxygen lookup must succeed");
 
-    // Alpha on C (Z=2, A=4 on Z=6)
-    const auto ev_a_C = sec_pkg.find_event(2, 4, 6, 200.0F, 50.0F, 0.5F);
-    require(ev_a_C != InelasticPackageV3Table::invalid, "Alpha on Carbon lookup must succeed");
+    // Alpha on C (Z=2, A=4 on Z=6): the 200 MeV/u query falls in a wide
+    // campaign gap, so it must report EnergyGapTooLarge rather than silently
+    // clamping to a distant endpoint.
+    {
+        const auto gap_result = sec_pkg.lookup_event(2, 4, 6, 200.0F, 0.5F, 0.5F);
+        require(gap_result.status == carbon::Cinel03LookupStatus::EnergyGapTooLarge,
+                "Alpha on Carbon at 200 MeV/u must report EnergyGapTooLarge");
+        std::uint64_t gap_counter = 0;
+        const auto gap_audit = sec_pkg.find_event(2, 4, 6, 200.0F, 50.0F, 0.5F, true, &gap_counter);
+        require(gap_audit == InelasticPackageV3Table::invalid, "Gap query must miss in audit mode");
+        require(gap_counter == 1, "Gap query must increment the miss counter");
+    }
+    // Alpha on C at an exact campaign node energy must still hit.
+    {
+        const auto domain = sec_pkg.channel_domain(2, 4, 6);
+        require(domain.found_projectile && domain.found_target, "Alpha+C channel must exist");
+        const auto ev_a_C = sec_pkg.find_event(2, 4, 6, domain.energy_min_MeV_per_u, 50.0F, 0.5F);
+        require(ev_a_C != InelasticPackageV3Table::invalid, "Alpha on Carbon lookup must succeed at a campaign node");
+    }
 
     // B11 on Ca (Z=5, A=11 on Z=20)
     const auto ev_b11_Ca = sec_pkg.find_event(5, 11, 20, 200.0F, 50.0F, 0.5F);
@@ -7773,33 +7794,1740 @@ void test_step20_secondary_rate_table_and_cinel03_package() {
 
     queue.parallel_for(sycl::range<1>(1), [=](sycl::id<1>) {
         dev_results[0] = cinel03_find_event_device(dev_nodes, node_count, dev_offsets, dev_indices, total_events, 1, 1, 8, 200.0F, 50.0F, 0.3F);
-        dev_results[1] = cinel03_find_event_device(dev_nodes, node_count, dev_offsets, dev_indices, total_events, 2, 4, 6, 200.0F, 50.0F, 0.4F);
-        dev_results[2] = cinel03_find_event_device(dev_nodes, node_count, dev_offsets, dev_indices, total_events, 5, 11, 20, 200.0F, 50.0F, 0.5F);
+        dev_results[1] = cinel03_find_event_device(dev_nodes, node_count, dev_offsets, dev_indices, total_events, 5, 11, 20, 200.0F, 50.0F, 0.5F);
+        const auto gap_lookup = cinel03_lookup_event_device(
+            dev_nodes, node_count, dev_offsets, dev_indices, total_events,
+            2, 4, 6, 200.0F, 0.4F, 0.4F);
+        dev_results[2] = static_cast<std::uint32_t>(gap_lookup.status);
     }).wait_and_throw();
 
     std::uint32_t host_results[3];
     queue.copy(dev_results, host_results, 3).wait_and_throw();
     require(host_results[0] != 0xFFFFFFFFU, "GPU proton on O event lookup failed");
-    require(host_results[1] != 0xFFFFFFFFU, "GPU alpha on C event lookup failed");
-    require(host_results[2] != 0xFFFFFFFFU, "GPU B11 on Ca event lookup failed");
+    require(host_results[1] != 0xFFFFFFFFU, "GPU B11 on Ca event lookup failed");
+    require(host_results[2] == static_cast<std::uint32_t>(carbon::Cinel03LookupStatus::EnergyGapTooLarge),
+            "GPU alpha on C at 200 MeV/u must report EnergyGapTooLarge");
 
     sycl::free(dev_nodes, queue);
     sycl::free(dev_offsets, queue);
     sycl::free(dev_indices, queue);
     sycl::free(dev_results, queue);
 #endif
-
     std::cout << "[step20-test] Secondary rate table and cinel03 package tests PASSED.\n";
+}
+
+void test_step27_v2_package_load_and_lookup_equivalence() {
+    // Tier-A GPU validation for the v2 secondary package (Step 27/28 prep):
+    // C++ load (header/monotonicity/offsets/checksum/metadata-SHA), 169
+    // exact channels present, and host/device lookup equivalence over node
+    // energies, midpoints, domain edges, and exact-target mismatches.
+    std::cout << "[step27-test] v2 package load and lookup equivalence...\n";
+    const auto v2 = InelasticPackageV3Table::from_binary(
+        "data/schneider/cinel03_secondary_targets_v2.bin");
+    require(v2.interactions().size() > 200000, "v2 must contain >200k interactions");
+    constexpr int kProjs[13][2] = {{5, 11}, {5, 10}, {4, 9}, {4, 7}, {4, 10},
+                                   {3, 7}, {3, 6}, {2, 4}, {2, 3}, {1, 1},
+                                   {1, 2}, {1, 3}, {6, 11}};
+    constexpr int kTargets[13] = {1, 6, 7, 8, 11, 12, 15, 16, 17, 18, 19, 20, 22};
+    std::size_t channel_count = 0;
+    for (const auto& pr : kProjs) {
+        for (const int tz : kTargets) {
+            const auto dom = v2.channel_domain(pr[0], pr[1], tz);
+            require(dom.found_projectile && dom.found_target,
+                    "v2 must contain all 169 exact channels");
+            require(dom.maximum_node_gap_MeV_per_u <= 5.0F + 1e-4F,
+                    "v2 channel max gap must be <= 5 MeV/u");
+            ++channel_count;
+        }
+    }
+    require(channel_count == 169, "v2 must have exactly 169 channels");
+    // p+H exists now (high-E nodes); a low-E query must report BelowDomain,
+    // never MissingTarget (no alias, exact channel present).
+    {
+        const auto r = v2.lookup_event(1, 1, 1, 100.0F, 0.5F, 0.5F);
+        require(r.status == carbon::Cinel03LookupStatus::BelowEnergyDomain,
+                "p+H at 100 MeV/u must be BelowEnergyDomain (channel exists)");
+    }
+    // C12 is not a secondary projectile: must be MissingProjectile.
+    {
+        const auto r = v2.lookup_event(6, 12, 8, 200.0F, 0.5F, 0.5F);
+        require(r.status == carbon::Cinel03LookupStatus::MissingProjectile,
+                "C12 must be MissingProjectile in the secondary package");
+    }
+#ifdef CARBON_HAS_SYCL
+    if (is_sycl_available()) {
+        struct Query { int pz, pa, tz; float e, ub, ue; };
+        std::vector<Query> queries;
+        for (const auto& pr : kProjs) {
+            for (const int tz : kTargets) {
+                const auto dom = v2.channel_domain(pr[0], pr[1], tz);
+                const float lo = dom.energy_min_MeV_per_u;
+                const float hi = dom.energy_max_MeV_per_u;
+                const float mid = 0.5F * (lo + hi);
+                queries.push_back({pr[0], pr[1], tz, lo, 0.5F, 0.5F});
+                queries.push_back({pr[0], pr[1], tz, hi, 0.5F, 0.5F});
+                queries.push_back({pr[0], pr[1], tz, mid, 0.25F, 0.75F});
+                queries.push_back({pr[0], pr[1], tz, mid, 0.75F, 0.25F});
+                queries.push_back({pr[0], pr[1], tz, lo - 1.0F, 0.5F, 0.5F});
+                queries.push_back({pr[0], pr[1], tz, hi + 1.0F, 0.5F, 0.5F});
+            }
+        }
+        // exact-target mismatches: valid projectile, absent target Z=99
+        queries.push_back({2, 4, 99, 100.0F, 0.5F, 0.5F});
+        queries.push_back({1, 1, 99, 100.0F, 0.5F, 0.5F});
+        const auto dev_tables = v2.make_device_tables();
+        sycl::queue queue{sycl::default_selector_v, sycl::property::queue::in_order{}};
+        Cinel03EnergyNode* dev_nodes = sycl::malloc_device<Cinel03EnergyNode>(dev_tables.energy_nodes.size(), queue);
+        std::uint32_t* dev_offsets = sycl::malloc_device<std::uint32_t>(dev_tables.event_offsets.size(), queue);
+        std::uint32_t* dev_indices = sycl::malloc_device<std::uint32_t>(dev_tables.event_indices.size(), queue);
+        queue.copy(dev_tables.energy_nodes.data(), dev_nodes, dev_tables.energy_nodes.size()).wait_and_throw();
+        queue.copy(dev_tables.event_offsets.data(), dev_offsets, dev_tables.event_offsets.size()).wait_and_throw();
+        queue.copy(dev_tables.event_indices.data(), dev_indices, dev_tables.event_indices.size()).wait_and_throw();
+        const std::uint32_t node_count = static_cast<std::uint32_t>(dev_tables.energy_nodes.size());
+        const std::uint32_t total_events = static_cast<std::uint32_t>(dev_tables.interactions.size());
+        struct DevOut { std::uint32_t status, event_index, node_index; };
+        DevOut* dev_out = sycl::malloc_device<DevOut>(queries.size(), queue);
+        Query* dev_q = sycl::malloc_device<Query>(queries.size(), queue);
+        queue.copy(queries.data(), dev_q, queries.size()).wait_and_throw();
+        queue.parallel_for(sycl::range<1>(queries.size()), [=](sycl::id<1> idx) {
+            const auto q = dev_q[idx[0]];
+            const auto r = cinel03_lookup_event_device(
+                dev_nodes, node_count, dev_offsets, dev_indices, total_events,
+                q.pz, q.pa, q.tz, q.e, q.ub, q.ue);
+            dev_out[idx[0]] = DevOut{static_cast<std::uint32_t>(r.status),
+                                     r.event_index, r.energy_node_index};
+        }).wait_and_throw();
+        std::vector<DevOut> host_out(queries.size());
+        queue.copy(dev_out, host_out.data(), queries.size()).wait_and_throw();
+        for (std::size_t i = 0; i < queries.size(); ++i) {
+            const auto& q = queries[i];
+            const auto h = v2.lookup_event(q.pz, q.pa, q.tz, q.e, q.ub, q.ue);
+            require(host_out[i].status == static_cast<std::uint32_t>(h.status),
+                    "host/device lookup status must agree on v2");
+            require(host_out[i].event_index == h.event_index,
+                    "host/device event index must agree on v2");
+            require(host_out[i].node_index == h.energy_node_index,
+                    "host/device node index must agree on v2");
+        }
+        sycl::free(dev_nodes, queue);
+        sycl::free(dev_offsets, queue);
+        sycl::free(dev_indices, queue);
+        sycl::free(dev_out, queue);
+        sycl::free(dev_q, queue);
+        std::cout << "[step27-test] " << queries.size() << " host/device queries agree.\n";
+    }
+#endif
+    std::cout << "[step27-test] v2 package load and lookup equivalence PASSED.\n";
+}
+
+void test_step28_v3_rate_domain_mask_equivalence() {
+    // Step 28: v3 rate products (14-projectile secondary + C12 primary) with
+    // data-driven registry and mask-before-interpolation. Covers the review
+    // findings: registry/LUT, per-channel domain in rate data, host/device
+    // boundary equivalence, metadata/bundle schema.
+    std::cout << "[step28-test] v3 rate domain mask equivalence...\n";
+
+    const auto sec = SecondaryRateTable::from_binary(
+        "data/schneider/secondary_inelastic_rates_v2_1.bin");
+    const auto pri = SchneiderRateTable::from_binary(
+        "data/schneider/schneider_inelastic_rates_v2_1.bin");
+    require(sec.binary_version() == 3, "secondary v2.1 must be binary version 3");
+    require(pri.binary_version() == 3, "primary v2.1 must be binary version 3");
+    require(sec.num_projectiles() == 14, "secondary v2.1 must have 14 projectiles");
+    require(sec.num_energies() == 921 && pri.num_energies() == 921, "v3 grids must be 921 nodes");
+    require(sec.has_channel_domains() && sec.channel_domains().size() == 182,
+            "secondary v3 must carry 182 channel domains");
+    require(pri.has_channel_domains() && pri.channel_domains().size() == 13,
+            "primary v3 must carry 13 channel domains");
+
+    // v1 frozen path untouched: versions, no domains, legacy clamp pinned.
+    {
+        const auto sec1 = SecondaryRateTable::from_binary(
+            "data/schneider/secondary_inelastic_rates_v1.bin");
+        const auto pri1 = SchneiderRateTable::from_binary(
+            "data/schneider/schneider_inelastic_rates_v1.bin");
+        require(sec1.binary_version() == 1 && pri1.binary_version() == 1, "v1 versions must stay 1");
+        require(!sec1.has_channel_domains() && !pri1.has_channel_domains(),
+                "v1 must have no channel domains");
+        require_near(sec1.interpolate_mass_total(0, 3, -5.0),
+                     sec1.mass_total_rate(0, 3, 0), 0.0, "v1 secondary clamp pinned");
+        require_near(pri1.interpolate_mass_total(3, -5.0),
+                     pri1.mass_total_rate(3, 0), 0.0, "v1 primary clamp pinned");
+    }
+
+    // Registry LUT over the bundle-ordered keys.
+    std::vector<std::int32_t> keys;
+    for (const auto& p : sec.projectiles()) {
+        keys.push_back(p.z);
+        keys.push_back(p.a);
+    }
+    require(sec.projectile_index(6, 12) == 13, "C12 must be registry index 13");
+    require(carbon::secondary_projectile_lut_index_device(keys.data(), 14, 6, 12) == 13,
+            "device LUT must find C12 at 13");
+    require(carbon::secondary_projectile_lut_index_device(keys.data(), 14, 1, 1) ==
+                sec.projectile_index(1, 1),
+            "device LUT must agree with host registry");
+    for (const auto [pz, pa] : {std::pair<int, int>{6, 10}, {2, 6}, {5, 8},
+                                {7, 14}, {8, 16}, {4, 6}, {6, 13}}) {
+        require(sec.projectile_index(pz, pa) == -1, "out-of-scope isotope must be absent");
+        require(carbon::secondary_projectile_lut_index_device(keys.data(), 14, pz, pa) == -1,
+                "device LUT must reject out-of-scope isotope");
+    }
+    require(carbon::secondary_projectile_lut_index_device(nullptr, 14, 6, 12) == -1,
+            "null LUT must return -1");
+
+    // Float device buffers mirror the kernel upload path.
+    std::vector<float> sec_partial;
+    sec_partial.reserve(sec.mass_partial_rates().size());
+    for (const double v : sec.mass_partial_rates()) {
+        sec_partial.push_back(static_cast<float>(v));
+    }
+    std::vector<float> sec_emin, sec_emax;
+    std::vector<unsigned char> sec_has;
+    for (const auto& d : sec.channel_domains()) {
+        sec_emin.push_back(static_cast<float>(d.energy_min_mevu));
+        sec_emax.push_back(static_cast<float>(d.energy_max_mevu));
+        sec_has.push_back(d.has_support);
+    }
+
+    const double eps = 1e-3;
+    const double gmin = sec.energy_min_mevu();
+    const double gmax = sec.energy_max_mevu();
+    auto check_sec_total = [&](std::size_t p, std::size_t s, double e, const char* label) {
+        const double host = sec.interpolate_mass_total(p, s, e);
+        const auto masked = carbon::secondary_masked_rates_device(
+            sec_partial.data(), sec_emin.data(), sec_emax.data(), sec_has.data(), 14,
+            static_cast<int>(p), s, static_cast<float>(e), static_cast<float>(gmin), 2.0F, 921);
+        const double tol = 1e-3 * (1.0 + std::abs(host));
+        require(std::abs(static_cast<double>(masked.total) - host) <= tol,
+                std::string("host/device secondary total must agree: ") + label);
+        // Masked partials must sum to the masked total (single-pass invariant).
+        double psum = 0.0;
+        for (const float v : masked.partials) {
+            psum += v;
+        }
+        require(std::abs(psum - masked.total) <= 1e-6F * (1.0F + std::abs(masked.total)),
+                "device masked partials must sum to device total");
+    };
+    // Global grid edges.
+    for (const std::size_t p : {std::size_t{0}, std::size_t{13}}) {
+        for (const std::size_t s : {std::size_t{0}, std::size_t{24}}) {
+            check_sec_total(p, s, gmin - eps, "global emin-eps");
+            check_sec_total(p, s, gmin, "global emin");
+            check_sec_total(p, s, gmax, "global emax");
+            check_sec_total(p, s, gmax + eps, "global emax+eps");
+            const double host_out = sec.interpolate_mass_total(p, s, gmax + eps);
+            require(host_out == 0.0, "host must be exactly 0 outside global grid");
+            const auto dev_out = carbon::secondary_masked_rates_device(
+                sec_partial.data(), sec_emin.data(), sec_emax.data(), sec_has.data(), 14,
+                static_cast<int>(p), s, static_cast<float>(gmax + eps),
+                static_cast<float>(gmin), 2.0F, 921);
+            require(dev_out.total == 0.0F, "device must be exactly 0 outside global grid");
+        }
+    }
+    // Per-channel edges (C12/O: floor ~2.49, a NEED point at 2.1 kept raw).
+    {
+        const std::size_t p = 13;
+        const std::size_t t_o = 3;  // canonical index of Z=8
+        const auto& dom = sec.channel_domain(p, t_o);
+        require(dom.has_support == 1, "C12/O must have support");
+        const double flo = dom.energy_min_mevu;
+        const double fhi = dom.energy_max_mevu;
+        for (const std::size_t s : {std::size_t{0}, std::size_t{12}}) {
+            check_sec_total(p, s, flo - eps, "C12/O emin-eps");
+            check_sec_total(p, s, flo, "C12/O emin");
+            check_sec_total(p, s, flo + eps, "C12/O emin+eps");
+            check_sec_total(p, s, fhi - eps, "C12/O emax-eps");
+            check_sec_total(p, s, fhi, "C12/O emax");
+            check_sec_total(p, s, fhi + eps, "C12/O emax+eps");
+            check_sec_total(p, s, 100.0, "C12/O mid");
+            check_sec_total(p, s, 100.25, "C12/O midpoint");
+        }
+        // Boundary-leak regression: E=2.1 is BELOW the C12/Ar18 floor but
+        // the kept-raw node (section 0, frozen NEED evidence) is nonzero;
+        // the masked query must still be exactly 0 for that channel (mask
+        // before interpolation, not node zeroing).
+        const std::size_t t_ar = 8;  // canonical index of Z=18
+        const auto& dom_ar = sec.channel_domain(p, t_ar);
+        require(dom_ar.energy_min_mevu > 2.1, "C12/Ar18 floor must exceed 2.1");
+        const std::size_t j_need = static_cast<std::size_t>((2.1 - gmin) / 0.5);
+        const double raw_node = sec.mass_partial_rate(p, 0, t_ar, j_need);
+        require(raw_node > 0.0, "C12/Ar18 NEED node must be kept raw (nonzero)");
+        const auto masked_need = carbon::secondary_masked_rates_device(
+            sec_partial.data(), sec_emin.data(), sec_emax.data(), sec_has.data(), 14,
+            static_cast<int>(p), 0, 2.1F, static_cast<float>(gmin), 2.0F, 921);
+        require(masked_need.partials[t_ar] == 0.0F,
+                "below-floor channel partial must be exactly 0 despite nonzero raw node");
+        check_sec_total(p, 0, 2.1, "C12 NEED energy host/device agreement");
+    }
+    // Sampler degenerate rows (synthetic, no data dependence).
+    {
+        const float zeros[13] = {};
+        require(carbon::sample_masked_secondary_target_device(zeros, 0.5F) == 0,
+                "all-zero row must return invalid target 0");
+        float single[13] = {};
+        single[5] = 2.0F;
+        for (const float u : {0.0F, 0.37F, 0.999F}) {
+            require(carbon::sample_masked_secondary_target_device(single, u) == 15,
+                    "single-valid-target row must always select Z=15");
+        }
+        // Float-sliver unity: sub-threshold totals are exactly zero so a
+        // hazard can never fire where the sampler draws empty.
+        float sliver[13] = {};
+        sliver[2] = 1.0e-13F;
+        sliver[9] = 5.0e-13F;
+        require(carbon::sample_masked_secondary_target_device(sliver, 0.5F) == 0,
+                "sub-threshold row must return invalid target 0");
+        {
+            // Full masked-path sliver clamp: one projectile/section, two
+            // energy nodes, all supported, sub-threshold partials.
+            const std::uint32_t ne = 2;
+            std::vector<float> partials(13 * ne, 0.0F);
+            partials[2 * ne + 0] = 1.0e-13F;
+            partials[2 * ne + 1] = 2.0e-13F;
+            std::vector<float> demin(13, 0.1F), demax(13, 460.1F);
+            std::vector<unsigned char> dhas(13, 1);
+            const auto masked = carbon::secondary_masked_rates_device(
+                partials.data(), demin.data(), demax.data(), dhas.data(), 1, 0, 0,
+                0.35F, 0.1F, 2.0F, ne);
+            require(masked.total == 0.0F, "sub-threshold masked total must be exactly 0");
+            for (const float v : masked.partials) {
+                require(v == 0.0F, "sub-threshold masked partials must be exactly 0");
+            }
+            carbon::SchneiderTargetSamplerDeviceTable table;
+            table.partial_rates = partials.data();
+            table.domain_emin = demin.data();
+            table.domain_emax = demax.data();
+            table.domain_has = dhas.data();
+            table.rate_version = 3;
+            table.num_sections = 1;
+            table.num_energies = ne;
+            table.num_targets = 13;
+            table.energy_min_MeV_per_u = 0.1F;
+            table.energy_step_MeV_per_u = 0.5F;
+            table.inverse_energy_step = 2.0F;
+            const auto pmasked = carbon::schneider_masked_rates_device(table, 0, 0.35F);
+            require(pmasked.total == 0.0F, "primary sub-threshold masked total must be exactly 0");
+        }
+    }
+
+    // Primary device/host equivalence.
+    SchneiderTargetSampler sampler(pri);
+    require(sampler.rate_version() == 3, "v3 sampler must report version 3");
+    auto check_pri_total = [&](std::size_t s, double e, const char* label) {
+        const double host = pri.interpolate_mass_total(s, e);
+        const auto dev_table = sampler.device_table();
+        const auto masked = carbon::schneider_masked_rates_device(dev_table, s,
+                                                                  static_cast<float>(e));
+        const double tol = 1e-3 * (1.0 + std::abs(host));
+        require(std::abs(static_cast<double>(masked.total) - host) <= tol,
+                std::string("host/device primary total must agree: ") + label);
+        const float host_s = sampler.total_mass_rate(s, static_cast<float>(e));
+        require(std::abs(static_cast<double>(host_s) - host) <= tol,
+                "sampler host total must agree with table host total");
+    };
+    {
+        const auto& dom = pri.channel_domain(3);  // Z=8
+        const double flo = dom.energy_min_mevu;
+        const double fhi = dom.energy_max_mevu;
+        for (const std::size_t s : {std::size_t{0}, std::size_t{24}}) {
+            check_pri_total(s, gmin - eps, "primary global emin-eps");
+            check_pri_total(s, gmax + eps, "primary global emax+eps");
+            check_pri_total(s, flo - eps, "primary ch emin-eps");
+            check_pri_total(s, flo + eps, "primary ch emin+eps");
+            check_pri_total(s, fhi - eps, "primary ch emax-eps");
+            check_pri_total(s, fhi + eps, "primary ch emax+eps");
+            check_pri_total(s, 200.0, "primary mid");
+        }
+        require(pri.interpolate_mass_total(3, 0.3) == 0.0, "primary below-floor must be exactly 0");
+    }
+    // v3 sampler draw consistency on a dominant-target point.
+    {
+        bool covered = false;
+        for (const std::size_t s : {std::size_t{0}, std::size_t{8}, std::size_t{24}}) {
+            for (const double e : {50.0, 150.0, 300.0}) {
+                const auto probs = sampler.target_probabilities(s, static_cast<float>(e));
+                float mx = 0.0F;
+                int arg = -1;
+                for (int k = 0; k < 13; ++k) {
+                    if (probs[k] > mx) {
+                        mx = probs[k];
+                        arg = k;
+                    }
+                }
+                if (mx > 0.9F) {
+                    const auto dev_table = sampler.device_table();
+                    for (const float u : {0.1F, 0.5F, 0.9F}) {
+                        const auto masked =
+                            carbon::schneider_masked_rates_device(dev_table, s,
+                                                                  static_cast<float>(e));
+                        const int dev_pick =
+                            carbon::sample_masked_schneider_target_device(masked.partials, u);
+                        const auto host_pick = sampler.sample_target(s, static_cast<float>(e), u);
+                        require(dev_pick == host_pick.target_z,
+                                "dominant-target device/host draws must agree");
+                        require(dev_pick == carbon::kSchneiderCanonicalZ[arg],
+                                "dominant draw must pick the dominant target");
+                    }
+                    covered = true;
+                }
+            }
+        }
+        require(covered, "must cover at least one dominant-target draw point");
+    }
+
+    // Bundle schema: SHAs pinned, registry == rate keys.
+    {
+        std::ifstream bundle_in("data/schneider/schneider_physics_bundle_v2_1.json");
+        require(bundle_in.good(), "bundle file must exist");
+        std::string content((std::istreambuf_iterator<char>(bundle_in)),
+                            std::istreambuf_iterator<char>());
+        carbon::minjson::Parser parser(content);
+        const carbon::minjson::Value b = parser.parse();
+        require(carbon::minjson::require_uint(b.at("schema_version"), "schema_version") == 1,
+                "bundle schema must be 1");
+        const auto& reg = b.at("projectile_registry");
+        require(reg.type == carbon::minjson::Value::Type::Array && reg.arr.size() == 14,
+                "bundle registry must have 14 entries");
+        for (std::size_t i = 0; i < 14; ++i) {
+            const int z = static_cast<int>(carbon::minjson::require_uint(reg.arr[i].at("z"), "z"));
+            const int a = static_cast<int>(carbon::minjson::require_uint(reg.arr[i].at("a"), "a"));
+            require(z == sec.projectiles()[i].z && a == sec.projectiles()[i].a,
+                    "bundle registry must equal rate keys in order");
+        }
+        for (const char* role : {"primary_rate", "secondary_rate", "primary_package",
+                                 "secondary_package", "stopping_table"}) {
+            const auto& sec_meta = b.at(role);
+            const std::string fn =
+                carbon::minjson::require_string(sec_meta.at("file"), "file");
+            const std::string pinned =
+                carbon::minjson::require_string(sec_meta.at("sha256"), "sha256");
+            require(carbon::compute_file_sha256_hex(fn) == pinned,
+                    std::string("bundle SHA must match: ") + role);
+        }
+    }
+    std::cout << "[step28-test] v3 rate domain mask equivalence PASSED.\n";
+}
+
+void test_step02_material_physics_routing() {
+    std::cout << "[step02-test] Starting test_step02_material_physics_routing...\n";
+
+    // 1. Enum names
+    require(std::string(material_physics_mode_name(MaterialPhysicsMode::Water)) == "Water", "Water mode name");
+    require(std::string(material_physics_mode_name(MaterialPhysicsMode::SchneiderCt)) == "SchneiderCt", "SchneiderCt mode name");
+
+    // 2. Default config has MaterialPhysicsMode::Water
+    carbon::TransportConfig water_cfg;
+    water_cfg.resolve_material_physics_mode();
+    require(water_cfg.material_physics_mode == MaterialPhysicsMode::Water, "Default mode must be Water");
+    require(water_cfg.is_water_mode(), "is_water_mode() must be true");
+    require(!water_cfg.is_schneider_ct_mode(), "is_schneider_ct_mode() must be false");
+
+    // 3. Enabling CT switches mode to SchneiderCt
+    carbon::TransportConfig ct_cfg;
+    ct_cfg.enable_ct_grid = true;
+    ct_cfg.ct_grid_file = "data/schneider/heterogeneous_level3.cctg";
+    ct_cfg.resolve_material_physics_mode();
+    require(ct_cfg.material_physics_mode == MaterialPhysicsMode::SchneiderCt, "CT mode must be SchneiderCt");
+    require(ct_cfg.is_schneider_ct_mode(), "is_schneider_ct_mode() must be true");
+    require(!ct_cfg.is_water_mode(), "is_water_mode() must be false");
+
+    // 4. CT mode rejects legacy four-class tables
+    ct_cfg.ct_air_stopping_power_file = "some_file.csv";
+    require_throws([&]() { ct_cfg.validate(); }, "CT mode must reject four-class stopping power table");
+    ct_cfg.ct_air_stopping_power_file.clear();
+
+    ct_cfg.ct_bone_cross_section_file = "some_file.csv";
+    require_throws([&]() { ct_cfg.validate(); }, "CT mode must reject four-class cross section table");
+    ct_cfg.ct_bone_cross_section_file.clear();
+
+    // 5. Fail-closed startup checks
+    ct_cfg.ct_schneider_primary_rate_file = "data/schneider/schneider_inelastic_rates_v1.bin";
+    ct_cfg.ct_schneider_c12_cinel03_file = "data/schneider/cinel03_c12_targets.bin";
+    ct_cfg.ct_schneider_secondary_rate_file = "data/schneider/secondary_inelastic_rates_v1.bin";
+    ct_cfg.ct_schneider_secondary_cinel03_file = "data/schneider/cinel03_secondary_targets.bin";
+    ct_cfg.ct_schneider_stopping_power_file = "data/schneider/schneider_stopping_v1.bin";
+    validate_schneider_ct_startup(ct_cfg);
+
+    // Missing file throws
+    carbon::TransportConfig bad_cfg = ct_cfg;
+    bad_cfg.ct_schneider_c12_cinel03_file = "data/schneider/nonexistent_cinel03.bin";
+    require_throws([&]() { validate_schneider_ct_startup(bad_cfg); }, "Missing binary must throw");
+
+    // Water mode skips Schneider startup checks
+    water_cfg.ct_schneider_c12_cinel03_file = "nonexistent.bin";
+    validate_schneider_ct_startup(water_cfg);
+
+    std::cout << "[step02-test] test_step02_material_physics_routing PASSED.\n";
+}
+
+#ifdef CARBON_HAS_SYCL
+void test_step03_schneider_device_data_wiring() {
+    std::cout << "[step03-test] Starting test_step03_schneider_device_data_wiring...\n";
+    if (!is_sycl_available()) {
+        std::cout << "[step03-test] SYCL unavailable, skipping.\n";
+        return;
+    }
+
+    auto queue = carbon::make_sycl_queue("default");
+
+    // 1. Water mode: no tables allocated, all device pointers null
+    {
+        carbon::detail::DeviceMemoryTracker mem_tracker{queue};
+        carbon::TransportConfig water_cfg;
+        water_cfg.enable_ct_grid = false;
+        water_cfg.resolve_material_physics_mode();
+
+        const auto ctx = upload_schneider_ct_device_context(queue, mem_tracker, water_cfg);
+        require(ctx.mode == MaterialPhysicsMode::Water, "Context mode must be Water");
+        require(!ctx.is_schneider_ct(), "is_schneider_ct() must be false in Water mode");
+        require(ctx.primary_sampler.cdf_table == nullptr, "Water mode CDF must be null");
+        require(ctx.primary_sampler.total_mass_rates == nullptr, "Water mode total rates must be null");
+        require(ctx.c12_energy_nodes == nullptr, "Water mode C12 nodes must be null");
+        require(ctx.sec_total_rates == nullptr, "Water mode secondary rates must be null");
+        require(ctx.sec_energy_nodes == nullptr, "Water mode secondary nodes must be null");
+        require(mem_tracker.active_allocation_count() == 0, "Water mode must allocate 0 device buffers");
+    }
+
+    // 2. Schneider CT mode: all tables allocated and match host binary data
+    {
+        carbon::detail::DeviceMemoryTracker mem_tracker{queue};
+        carbon::TransportConfig ct_cfg;
+        ct_cfg.enable_ct_grid = true;
+        ct_cfg.ct_grid_file = "data/schneider/heterogeneous_level3.cctg";
+        ct_cfg.ct_schneider_primary_rate_file = "data/schneider/schneider_inelastic_rates_v1.bin";
+        ct_cfg.ct_schneider_c12_cinel03_file = "data/schneider/cinel03_c12_targets.bin";
+        ct_cfg.ct_schneider_secondary_rate_file = "data/schneider/secondary_inelastic_rates_v1.bin";
+        ct_cfg.ct_schneider_secondary_cinel03_file = "data/schneider/cinel03_secondary_targets.bin";
+        ct_cfg.ct_schneider_stopping_power_file = "data/schneider/schneider_stopping_v1.bin";
+        ct_cfg.enable_secondary_transport = true;
+        ct_cfg.resolve_material_physics_mode();
+
+        const auto ctx = upload_schneider_ct_device_context(queue, mem_tracker, ct_cfg);
+        require(ctx.mode == MaterialPhysicsMode::SchneiderCt, "Context mode must be SchneiderCt");
+        require(ctx.is_schneider_ct(), "is_schneider_ct() must be true");
+
+        // Verify primary sampler
+        require(ctx.primary_sampler.cdf_table != nullptr, "Primary CDF device pointer must be non-null");
+        require(ctx.primary_sampler.total_mass_rates != nullptr, "Primary total rates pointer must be non-null");
+        require(ctx.primary_sampler.num_sections == 25, "Primary num_sections must be 25");
+        require(ctx.primary_sampler.num_energies == 860, "Primary num_energies must be 860");
+        require(ctx.primary_sampler.num_targets == 13, "Primary num_targets must be 13");
+
+        // Verify primary C12 CINEL03 package
+        require(ctx.c12_energy_nodes != nullptr, "C12 energy nodes pointer must be non-null");
+        require(ctx.c12_event_offsets != nullptr, "C12 event offsets pointer must be non-null");
+        require(ctx.c12_event_indices != nullptr, "C12 event indices pointer must be non-null");
+        require(ctx.c12_interactions != nullptr, "C12 interactions pointer must be non-null");
+        require(ctx.c12_products != nullptr, "C12 products pointer must be non-null");
+        require(ctx.c12_node_count > 0, "C12 node count must be > 0");
+        require(ctx.c12_total_events > 0, "C12 total events must be > 0");
+        require(ctx.c12_total_products > 0, "C12 total products must be > 0");
+
+        // Verify secondary rates
+        require(ctx.sec_total_rates != nullptr, "Secondary total rates pointer must be non-null");
+        require(ctx.sec_partial_rates != nullptr, "Secondary partial rates pointer must be non-null");
+        require(ctx.sec_num_projectiles == 13, "Secondary num_projectiles must be 13");
+        require(ctx.sec_num_sections == 25, "Secondary num_sections must be 25");
+        require(ctx.sec_num_energies == 860, "Secondary num_energies must be 860");
+
+        // Verify secondary CINEL03 package
+        require(ctx.sec_energy_nodes != nullptr, "Secondary energy nodes pointer must be non-null");
+        require(ctx.sec_event_offsets != nullptr, "Secondary event offsets pointer must be non-null");
+        require(ctx.sec_event_indices != nullptr, "Secondary event indices pointer must be non-null");
+        require(ctx.sec_interactions != nullptr, "Secondary interactions pointer must be non-null");
+        require(ctx.sec_products != nullptr, "Secondary products pointer must be non-null");
+        require(ctx.sec_node_count > 0, "Secondary node count must be > 0");
+        require(ctx.sec_total_events > 0, "Secondary total events must be > 0");
+        require(ctx.sec_total_products > 0, "Secondary total products must be > 0");
+
+        // Verify data integrity: read back primary rates to host and compare with host SchneiderRateTable
+        const auto host_rate_table = SchneiderRateTable::from_binary(ct_cfg.ct_schneider_primary_rate_file);
+        const SchneiderTargetSampler host_sampler(host_rate_table);
+        std::vector<float> readback_rates(100);
+        queue.copy(ctx.primary_sampler.total_mass_rates, readback_rates.data(), 100).wait_and_throw();
+        for (std::size_t i = 0; i < 100; ++i) {
+            require_near(readback_rates[i], host_sampler.total_mass_rates()[i], 1e-6,
+                         "Device total mass rate mismatch at index " + std::to_string(i));
+        }
+
+        // Verify read back of primary CDF
+        std::vector<float> readback_cdf(100);
+        queue.copy(ctx.primary_sampler.cdf_table, readback_cdf.data(), 100).wait_and_throw();
+        for (std::size_t i = 0; i < 100; ++i) {
+            require_near(readback_cdf[i], host_sampler.cdf_table()[i], 1e-6,
+                         "Device CDF mismatch at index " + std::to_string(i));
+        }
+
+        // Verify read back of secondary rates
+        const auto host_sec_table = SecondaryRateTable::from_binary(ct_cfg.ct_schneider_secondary_rate_file);
+        std::vector<float> readback_sec_rates(100);
+        queue.copy(ctx.sec_total_rates, readback_sec_rates.data(), 100).wait_and_throw();
+        for (std::size_t i = 0; i < 100; ++i) {
+            require_near(readback_sec_rates[i], static_cast<float>(host_sec_table.mass_total_rates()[i]), 1e-6,
+                         "Device secondary total rate mismatch at index " + std::to_string(i));
+        }
+
+        // Verify memory tracker has tracked all 14 device allocations
+        require(mem_tracker.active_allocation_count() == 14, "Must have exactly 14 active device allocations");
+    }
+
+    std::cout << "[step03-test] test_step03_schneider_device_data_wiring PASSED.\n";
+}
+
+void test_step04_ct_primary_nuclear_interaction() {
+    std::cout << "[step04-test] Starting test_step04_ct_primary_nuclear_interaction...\n";
+    if (!is_sycl_available()) {
+        std::cout << "[step04-test] SYCL unavailable, skipping.\n";
+        return;
+    }
+
+    auto queue = carbon::make_sycl_queue("default");
+
+    // 1. Linear density scaling test
+    {
+        carbon::detail::DeviceMemoryTracker mem_tracker{queue};
+        carbon::TransportConfig ct_cfg;
+        ct_cfg.enable_ct_grid = true;
+        ct_cfg.ct_grid_file = "data/schneider/heterogeneous_level3.cctg";
+        ct_cfg.ct_schneider_primary_rate_file = "data/schneider/schneider_inelastic_rates_v1.bin";
+        ct_cfg.ct_schneider_c12_cinel03_file = "data/schneider/cinel03_c12_targets.bin";
+        ct_cfg.ct_schneider_secondary_rate_file = "data/schneider/secondary_inelastic_rates_v1.bin";
+        ct_cfg.ct_schneider_secondary_cinel03_file = "data/schneider/cinel03_secondary_targets.bin";
+        ct_cfg.ct_schneider_stopping_power_file = "data/schneider/schneider_stopping_v1.bin";
+        ct_cfg.resolve_material_physics_mode();
+
+        const auto ctx = upload_schneider_ct_device_context(queue, mem_tracker, ct_cfg);
+        auto* dev_rates = mem_tracker.allocate<float>(4);
+        const auto sampler_table = ctx.primary_sampler;
+        queue.parallel_for(sycl::nd_range<1>{sycl::range<1>{4}, sycl::range<1>{1}}, [=](sycl::nd_item<1> item) {
+            const auto idx = item.get_global_id(0);
+            const float rhos[4] = {0.5F, 1.0F, 1.8F, 2.5F};
+            const float base = schneider_total_mass_rate_device(sampler_table, 10, 200.0F);
+            dev_rates[idx] = rhos[idx] * base;
+        }).wait_and_throw();
+
+        std::vector<float> host_dev_rates(4);
+        queue.copy(dev_rates, host_dev_rates.data(), 4).wait_and_throw();
+
+        const auto host_rate_table = SchneiderRateTable::from_binary(ct_cfg.ct_schneider_primary_rate_file);
+        const SchneiderTargetSampler host_sampler(host_rate_table);
+        const float expected_base = host_sampler.total_mass_rate(10, 200.0F);
+        require(expected_base > 0.0F, "Base total mass rate must be > 0");
+
+        const float rhos[4] = {0.5F, 1.0F, 1.8F, 2.5F};
+        for (int i = 0; i < 4; ++i) {
+            const float computed_base = host_dev_rates[i] / rhos[i];
+            require_near(computed_base, expected_base, 1e-5, "Macro rate must scale strictly linearly with rho on device");
+        }
+    }
+
+    // 2. Continuous optical depth across voxel faces
+    {
+        float tau_remaining = 0.0F;
+        bool tau_active = false;
+        const float u_initial = 0.35F; // -log(0.35) ~= 1.049822
+
+        // Segment 1 in voxel 1: length 10 mm, macro_xs = 0.05 mm^-1 (delta_tau = 0.5)
+        float step1 = 10.0F;
+        const float macro_xs1 = 0.05F;
+        bool hit1 = consume_schneider_optical_depth_segment(tau_remaining, tau_active, step1, macro_xs1, u_initial);
+        require(!hit1, "No collision in first step");
+        require(tau_active, "tau_active must remain true across boundary");
+        const float expected_remaining = -std::log(u_initial) - 0.5F;
+        require_near(tau_remaining, expected_remaining, 1e-6, "Optical depth correctly depleted in segment 1");
+
+        // Segment 2 in voxel 2: entered with new macro_xs = 0.10 mm^-1, step length 15 mm
+        // Collision should occur at collision_s = tau_remaining / macro_xs2
+        float step2 = 15.0F;
+        const float macro_xs2 = 0.10F;
+        const float expected_s2 = expected_remaining / macro_xs2;
+        bool hit2 = consume_schneider_optical_depth_segment(tau_remaining, tau_active, step2, macro_xs2, 1.0F);
+        require(hit2, "Collision must occur in second step");
+        require(!tau_active, "tau_active must reset after collision");
+        require_near(step2, expected_s2, 1e-6, "Collision distance matches exact analytical remaining optical depth");
+    }
+
+    // 3. Target sampling distribution matches 13 partial rates
+    {
+        const auto rate_table = SchneiderRateTable::from_binary("data/schneider/schneider_inelastic_rates_v1.bin");
+        const SchneiderTargetSampler sampler(rate_table);
+        const auto dev_table = sampler.device_table();
+
+        const std::size_t test_section = 12; // Cortical bone or similar
+        const float test_energy = 200.0F;
+        const auto theoretical_probs = sampler.target_probabilities(test_section, test_energy);
+
+        // Draw 100,000 samples
+        constexpr int kSamples = 100000;
+        std::array<int, 13> counts{};
+        for (int i = 0; i < kSamples; ++i) {
+            const float u = (static_cast<float>(i) + 0.5F) / static_cast<float>(kSamples);
+            const int z = sample_schneider_target_device(dev_table, test_section, test_energy, u);
+            for (std::size_t k = 0; k < 13; ++k) {
+                if (kSchneiderCanonicalZ[k] == z) {
+                    counts[k]++;
+                    break;
+                }
+            }
+        }
+
+        // Verify frequencies match theoretical probabilities within 0.5%
+        for (std::size_t k = 0; k < 13; ++k) {
+            const float freq = static_cast<float>(counts[k]) / static_cast<float>(kSamples);
+            require_near(freq, theoretical_probs[k], 0.005,
+                         "Target Z=" + std::to_string(kSchneiderCanonicalZ[k]) + " frequency mismatch");
+        }
+    }
+
+    // 4. CINEL03 Replay: valid lookup vs fail-closed miss
+    {
+        const auto c12_pkg = InelasticPackageV3Table::from_binary("data/schneider/cinel03_c12_targets.bin");
+        const auto dev_tables = c12_pkg.make_device_tables();
+
+        // Valid query: C12 on Oxygen (Z=8) at 200 MeV/u
+        const std::uint32_t valid_idx = cinel03_find_event_device(
+            dev_tables.energy_nodes.data(),
+            static_cast<std::uint32_t>(dev_tables.energy_nodes.size()),
+            dev_tables.event_offsets.data(),
+            dev_tables.event_indices.data(),
+            static_cast<std::uint32_t>(dev_tables.interactions.size()),
+            6, 12, 8, 200.0F, 0.51F, 0.5F);
+        require(valid_idx != 0xFFFFFFFFU, "Valid C12 on O query must succeed");
+        require(valid_idx < dev_tables.interactions.size(), "Event index within bounds");
+        const auto& ev = dev_tables.interactions[valid_idx];
+        require(ev.target_element_z == 8, "Target element Z must be 8");
+        require(ev.direct_product_count > 0, "Must have products");
+
+        // Invalid query: Target Z=99 (unsupported)
+        const std::uint32_t miss_idx = cinel03_find_event_device(
+            dev_tables.energy_nodes.data(),
+            static_cast<std::uint32_t>(dev_tables.energy_nodes.size()),
+            dev_tables.event_offsets.data(),
+            dev_tables.event_indices.data(),
+            static_cast<std::uint32_t>(dev_tables.interactions.size()),
+            6, 12, 99, 200.0F, 0.51F, 0.5F);
+        require(miss_idx == 0xFFFFFFFFU, "Invalid target query must fail-closed with 0xFFFFFFFFU");
+    }
+
+    std::cout << "[step04-test] test_step04_ct_primary_nuclear_interaction PASSED.\n";
+}
+
+void test_step05_ct_secondary_nuclear_transport() {
+    std::cout << "[step05-test] Starting test_step05_ct_secondary_nuclear_transport...\n";
+    if (!is_sycl_available()) {
+        std::cout << "[step05-test] SYCL unavailable, skipping.\n";
+        return;
+    }
+
+    auto queue = carbon::make_sycl_queue("default");
+
+    // 1. Independent secondary target sampling matching partial rate tensor
+    {
+        const auto sec_table = SecondaryRateTable::from_binary("data/schneider/secondary_inelastic_rates_v1.bin");
+        std::vector<float> sec_partials_float(sec_table.mass_partial_rates().size());
+        for (std::size_t i = 0; i < sec_table.mass_partial_rates().size(); ++i) {
+            sec_partials_float[i] = static_cast<float>(sec_table.mass_partial_rates()[i]);
+        }
+
+        // Test two different fragments from the same event: He4 (Z=2, A=4) and Proton (Z=1, A=1)
+        const int proj_he4 = secondary_projectile_index_device(2, 4);
+        const int proj_p = secondary_projectile_index_device(1, 1);
+        require(proj_he4 >= 0, "He4 projectile index must be valid");
+        require(proj_p >= 0, "Proton projectile index must be valid");
+        require(proj_he4 != proj_p, "He4 and Proton must have distinct projectile indices");
+
+        const std::size_t test_section = 12; // Bone
+        const float test_energy = 100.0F;
+        constexpr int kSamples = 100000;
+
+        // Draw 100,000 independent samples for He4
+        std::array<int, 13> he4_counts{};
+        for (int i = 0; i < kSamples; ++i) {
+            const float u = (static_cast<float>(i) + 0.5F) / static_cast<float>(kSamples);
+            const int z = sample_secondary_target_device(
+                sec_partials_float.data(), proj_he4, test_section, test_energy, u,
+                0.5F, 2.0F, 860);
+            constexpr int kSecCanonicalTargets[13] = {1, 6, 7, 8, 12, 15, 16, 17, 18, 20, 11, 19, 22};
+            for (std::size_t k = 0; k < 13; ++k) {
+                if (kSecCanonicalTargets[k] == z) {
+                    he4_counts[k]++;
+                    break;
+                }
+            }
+        }
+
+        // Compute theoretical probabilities for He4
+        const std::size_t e_idx = static_cast<std::size_t>((test_energy - 0.5F) * 2.0F);
+        double total_rate_he4 = 0.0;
+        std::array<double, 13> theoretical_he4{};
+        for (std::size_t t = 0; t < 13; ++t) {
+            theoretical_he4[t] = sec_table.mass_partial_rate(proj_he4, test_section, t, e_idx);
+            total_rate_he4 += theoretical_he4[t];
+        }
+        for (std::size_t t = 0; t < 13; ++t) {
+            theoretical_he4[t] /= total_rate_he4;
+            const float freq = static_cast<float>(he4_counts[t]) / static_cast<float>(kSamples);
+            require_near(freq, static_cast<float>(theoretical_he4[t]), 0.005,
+                         "Secondary He4 target element frequency mismatch");
+        }
+
+        // Draw 100,000 independent samples for Proton
+        std::array<int, 13> p_counts{};
+        for (int i = 0; i < kSamples; ++i) {
+            const float u = (static_cast<float>(i) + 0.5F) / static_cast<float>(kSamples);
+            const int z = sample_secondary_target_device(
+                sec_partials_float.data(), proj_p, test_section, test_energy, u,
+                0.5F, 2.0F, 860);
+            constexpr int kSecCanonicalTargets[13] = {1, 6, 7, 8, 12, 15, 16, 17, 18, 20, 11, 19, 22};
+            for (std::size_t k = 0; k < 13; ++k) {
+                if (kSecCanonicalTargets[k] == z) {
+                    p_counts[k]++;
+                    break;
+                }
+            }
+        }
+
+        // Verify He4 and Proton have distinct distributions (decoupled)
+        bool distributions_differ = false;
+        for (std::size_t t = 0; t < 13; ++t) {
+            if (std::abs(he4_counts[t] - p_counts[t]) > 200) {
+                distributions_differ = true;
+                break;
+            }
+        }
+        require(distributions_differ, "Secondary fragments must have independent, projectile-dependent target distributions");
+    }
+
+    // 2. Be6 TopasCompatKill validation
+    {
+        // Be6 (Z=4, A=6) must trigger TopasCompatKill
+        require(cinel02_should_topas_compat_kill(true, 4, 6), "Be6 must trigger TopasCompatKill");
+        require(!cinel02_should_topas_compat_kill(true, 4, 7), "Be7 must NOT trigger TopasCompatKill");
+        require(!cinel02_should_topas_compat_kill(true, 2, 4), "He4 must NOT trigger TopasCompatKill");
+        require(!cinel02_should_topas_compat_kill(true, 1, 1), "Proton must NOT trigger TopasCompatKill");
+    }
+
+    // 3. Secondary CINEL03 Replay & Fail-Closed Miss
+    {
+        const auto sec_pkg = InelasticPackageV3Table::from_binary("data/schneider/cinel03_secondary_targets.bin");
+        const auto dev_tables = sec_pkg.make_device_tables();
+
+        // Valid query: He4 (Z=2, A=4) on Oxygen (Z=8) at 100 MeV/u
+        require(!dev_tables.energy_nodes.empty(), "Secondary CINEL03 must contain energy nodes");
+        const auto& test_node = dev_tables.energy_nodes.front();
+        const std::uint32_t valid_idx = cinel03_find_event_device(
+            dev_tables.energy_nodes.data(),
+            static_cast<std::uint32_t>(dev_tables.energy_nodes.size()),
+            dev_tables.event_offsets.data(),
+            dev_tables.event_indices.data(),
+            static_cast<std::uint32_t>(dev_tables.interactions.size()),
+            test_node.projectile_z, test_node.projectile_a, test_node.target_element_z,
+            test_node.collision_energy_MeV_per_u, 0.51F, 0.5F);
+        require(valid_idx != 0xFFFFFFFFU, "Known secondary node query must succeed");
+        const auto& ev = dev_tables.interactions[valid_idx];
+        require(ev.parent_z == test_node.projectile_z && ev.parent_a == test_node.projectile_a, "Projectile mismatch");
+        require(ev.target_element_z == test_node.target_element_z, "Target mismatch");
+
+        // Invalid query: Target Z=99
+        const std::uint32_t miss_idx = cinel03_find_event_device(
+            dev_tables.energy_nodes.data(),
+            static_cast<std::uint32_t>(dev_tables.energy_nodes.size()),
+            dev_tables.event_offsets.data(),
+            dev_tables.event_indices.data(),
+            static_cast<std::uint32_t>(dev_tables.interactions.size()),
+            2, 4, 99, 100.0F, 0.51F, 0.5F);
+        require(miss_idx == 0xFFFFFFFFU, "Invalid target secondary query must fail-closed with 0xFFFFFFFFU");
+    }
+
+    std::cout << "[step05-test] test_step05_ct_secondary_nuclear_transport PASSED.\n";
+}
+#endif
+
+void test_step06_energy_accounting_and_overflow_ledger() {
+    std::cout << "[step06-test] Starting test_step06_energy_accounting_and_overflow_ledger...\n";
+
+    // 1. 8-part energy accounting ledger definition and conservation check
+    {
+        carbon::EnergyAccountingLedger ledger{};
+        ledger.E_continuous_ionizing = 1500.0;
+        ledger.E_nuclear_local = 25.0;
+        ledger.E_transported_secondaries = 350.0;
+        ledger.E_escaped_charged = 100.0;
+        ledger.E_neutral = 15.0;
+        ledger.E_cutoff_kill = 5.0;
+        ledger.E_unsupported = 3.0;
+        ledger.E_queue_overflow = 2.0;
+
+        const double expected_total = 2000.0;
+        require_near(ledger.total_accounted_MeV(), expected_total, 1e-6,
+                     "8-part energy accounting ledger must strictly sum all 8 categories");
+    }
+
+    // 2. Queue overflow rejection by quality gate
+    {
+        carbon::TransportConfig config;
+        config.run_mode = carbon::RunMode::production;
+        config.quality_reject_any_queue_overflow = true;
+
+        carbon::TransportResult result;
+        result.secondary_queue_overflow = 42;
+        result.secondary_queue_overflow_energy_MeV = 123.45;
+
+        const auto report = carbon::evaluate_run_quality(config, result);
+        require(!report.accepted, "Quality gate must reject run with secondary queue overflow");
+        bool found_overflow_failure = false;
+        for (const auto& fail : report.failures) {
+            if (fail.code == "secondary_queue_overflow") {
+                found_overflow_failure = true;
+                require(fail.value == 42.0, "Failure value must match overflow count");
+                break;
+            }
+        }
+        require(found_overflow_failure, "Report failures must list secondary_queue_overflow issue");
+    }
+
+    // 3. Absence of fake local deposit check
+    {
+        // Verified: process local deposit in CINEL03 interactions only contains Geant4 ProcessLocalDeposit
+        const auto c12_pkg = InelasticPackageV3Table::from_binary("data/schneider/cinel03_c12_targets.bin");
+        const auto dev_tables = c12_pkg.make_device_tables();
+        for (const auto& inter : dev_tables.interactions) {
+            // Local deposit must never equal total kinetic energy of products
+            float prod_ke = 0.0F;
+            for (std::uint32_t p = 0; p < inter.direct_product_count; ++p) {
+                prod_ke += dev_tables.products[inter.product_offset + p].kinetic_energy_MeV;
+            }
+            if (prod_ke > 10.0F) {
+                // If there are significant products, local deposit must be strictly less than product KE
+                require(inter.process_local_deposit_MeV < prod_ke,
+                        "Process local deposit must not alias or swallow product kinetic energy");
+            }
+        }
+    }
+
+    std::cout << "[step06-test] test_step06_energy_accounting_and_overflow_ledger PASSED.\n";
+}
+
+void test_step08_cinel03_limits_and_provenance() {
+    std::cout << "[step08-test] Starting test_step08_cinel03_limits_and_provenance...\n";
+
+    // 1. Valid baseline CINEL03 packages load and device tables check
+    {
+        const auto c12_pkg = InelasticPackageV3Table::from_binary("data/schneider/cinel03_c12_targets.bin");
+        const auto c12_dev = c12_pkg.make_device_tables();
+        require(!c12_dev.interactions.empty(), "C12 device interactions must not be empty");
+        require(!c12_dev.products.empty(), "C12 device products must not be empty");
+        for (const auto& inter : c12_dev.interactions) {
+            require(inter.direct_product_count <= 64, "All C12 events must have <= 64 products");
+            require(static_cast<std::uint64_t>(inter.product_offset) + inter.direct_product_count <= c12_dev.products.size(),
+                    "Product offset + count must be within products bounds");
+        }
+
+        const auto sec_pkg = InelasticPackageV3Table::from_binary("data/schneider/cinel03_secondary_targets.bin");
+        const auto sec_dev = sec_pkg.make_device_tables();
+        require(!sec_dev.interactions.empty(), "Secondary device interactions must not be empty");
+        require(!sec_dev.products.empty(), "Secondary device products must not be empty");
+        for (const auto& inter : sec_dev.interactions) {
+            require(inter.direct_product_count <= 64, "All secondary events must have <= 64 products");
+            require(static_cast<std::uint64_t>(inter.product_offset) + inter.direct_product_count <= sec_dev.products.size(),
+                    "Product offset + count must be within products bounds");
+        }
+    }
+
+    // 2. Metadata completeness and exact SHA-256 binding check
+    {
+        const std::string sec_bin = "data/schneider/secondary_inelastic_rates_v1.bin";
+        const std::string sec_meta = "data/schneider/secondary_inelastic_rates_v1.metadata.json";
+        const std::string actual_sha = compute_file_sha256_hex(sec_bin);
+
+        std::ifstream mf(sec_meta);
+        require(mf.good(), "Must open secondary rate metadata");
+        std::string meta_str((std::istreambuf_iterator<char>(mf)), std::istreambuf_iterator<char>());
+        require(meta_str.find(actual_sha) != std::string::npos, "Metadata must contain exact file SHA256");
+        require(meta_str.find("\"topas_version\"") != std::string::npos, "Must have topas_version");
+        require(meta_str.find("\"geant4_version\"") != std::string::npos, "Must have geant4_version");
+        require(meta_str.find("\"physics_list\"") != std::string::npos, "Must have physics_list");
+        require(meta_str.find("placeholder") == std::string::npos, "No placeholder permitted");
+        require(meta_str.find("unknown") == std::string::npos, "No unknown permitted");
+    }
+
+    std::cout << "[step08-test] test_step08_cinel03_limits_and_provenance PASSED.\n";
+}
+
+void test_step09_production_integration_suite() {
+    std::cout << "[step09-test] Starting test_step09_production_integration_suite...\n";
+
+    // Dimension 1: Water / Schneider CT dual-path routing & fail-closed checks
+    {
+        carbon::TransportConfig water_cfg;
+        water_cfg.enable_ct_grid = false;
+        water_cfg.resolve_material_physics_mode();
+        require(water_cfg.material_physics_mode == carbon::MaterialPhysicsMode::Water,
+                "Config without CT grid must resolve to Water mode");
+
+        carbon::TransportConfig ct_cfg;
+        ct_cfg.enable_ct_grid = true;
+        ct_cfg.ct_grid_file = "data/schneider/heterogeneous_level3.cctg";
+        ct_cfg.resolve_material_physics_mode();
+        require(ct_cfg.material_physics_mode == carbon::MaterialPhysicsMode::SchneiderCt,
+                "Config with CT grid must resolve to SchneiderCt mode");
+
+        carbon::TransportConfig empty_ct_cfg;
+        empty_ct_cfg.enable_ct_grid = true;
+        empty_ct_cfg.ct_grid_file = "";
+        empty_ct_cfg.resolve_material_physics_mode();
+        bool threw_empty_ct = false;
+        try {
+            empty_ct_cfg.validate();
+        } catch (const std::invalid_argument&) {
+            threw_empty_ct = true;
+        }
+        require(threw_empty_ct, "SchneiderCt with empty ct_grid_file must fail validation");
+
+        carbon::TransportConfig bad_cfg;
+        bad_cfg.enable_ct_grid = true;
+        bad_cfg.ct_grid_file = "data/non_existent_file.cctg";
+        bad_cfg.resolve_material_physics_mode();
+        bool threw_bad_ct = false;
+        try {
+            (void)carbon::CtGrid::from_binary(bad_cfg.ct_grid_file);
+        } catch (const std::exception&) {
+            threw_bad_ct = true;
+        }
+        require(threw_bad_ct, "Non-existent CT grid file must fail closed");
+    }
+
+    // Dimension 2: Water physics regression protection (identical results, 0 Schneider device memory)
+#ifdef CARBON_HAS_SYCL
+    if (is_sycl_available()) {
+        auto queue = carbon::make_sycl_queue("default");
+        carbon::detail::DeviceMemoryTracker mem_tracker{queue};
+        carbon::TransportConfig water_cfg;
+        water_cfg.enable_ct_grid = false;
+        water_cfg.resolve_material_physics_mode();
+
+        const auto ctx = upload_schneider_ct_device_context(queue, mem_tracker, water_cfg);
+        require(ctx.mode == carbon::MaterialPhysicsMode::Water, "Context mode must be Water");
+        require(mem_tracker.active_allocation_count() == 0, "Water mode must allocate 0 device buffers");
+    }
+#endif
+
+    // Dimension 3: CT production end-to-end transport call with 8-part energy ledger
+#ifdef CARBON_HAS_SYCL
+    if (is_sycl_available()) {
+        const auto temp_dir = std::filesystem::temp_directory_path() / "test_step09_integration";
+        std::filesystem::create_directories(temp_dir);
+        const auto cctg_file = temp_dir / "two_voxel_test.cctg";
+
+        // Create a 2-voxel CT grid
+        carbon::CtGrid grid;
+        grid.file_version = carbon::CtGrid::version_v2;
+        grid.nx = 1;
+        grid.ny = 1;
+        grid.nz = 2;
+        grid.spacing_x_mm = 10.0;
+        grid.spacing_y_mm = 10.0;
+        grid.spacing_z_mm = 10.0;
+        grid.origin_x_mm = -5.0;
+        grid.origin_y_mm = -5.0;
+        grid.origin_z_mm = 0.0;
+        grid.density_g_per_cm3 = {1.0F, 1.5F};
+        grid.material_id = {8, 20}; // Soft tissue & Dense bone
+        grid.mass_sp_za_rel.resize(25, 1.0);
+        grid.write_binary(cctg_file);
+
+        carbon::TransportConfig config;
+        config.phantom_length_mm = 20.0;
+        config.depth_bin_width_mm = 1.0;
+        config.voxel_size_z_mm = 1.0;
+        config.primary_atomic_number = 6;
+        config.primary_mass_number = 12;
+        config.initial_energy_MeVu = 150.0;
+        config.run_mode = carbon::RunMode::production;
+        config.enable_voxel_scoring = true;
+        config.enable_secondary_transport = true;
+        config.enable_ct_grid = true;
+        config.ct_grid_file = cctg_file.string();
+        config.ct_schneider_primary_rate_file = "data/schneider/schneider_inelastic_rates_v1.bin";
+        config.ct_schneider_c12_cinel03_file = "data/schneider/cinel03_c12_targets.bin";
+        config.ct_schneider_secondary_rate_file = "data/schneider/secondary_inelastic_rates_v1.bin";
+        config.ct_schneider_secondary_cinel03_file = "data/schneider/cinel03_secondary_targets.bin";
+        config.ct_schneider_stopping_power_file = "data/schneider/schneider_stopping_v1.bin";
+        config.ct_schneider_cross_section_file = "data/schneider/c12_schneider_inelastic_mass_xs.csv";
+        config.number_of_histories = 2000;
+        config.energy_cutoff_MeV = 0.5F;
+        config.resolve_material_physics_mode();
+
+        const auto stopping_power = carbon::StoppingPowerTable::from_csv(
+            "data/stopping_power_water_geant4_11_3_2.csv");
+        const auto cross_section = zero_cross_section();
+
+        const auto result = carbon::transport_sycl(config, stopping_power, cross_section, "default");
+        require(result.total_deposited_energy_MeV > 0.0, "Total deposited energy must be positive");
+        require(result.total_steps > 0, "Steps must be executed");
+        require(result.secondary_queue_overflow == 0, "No secondary queue overflow in production run");
+        require(result.energy_ledger.total_accounted_MeV() > 0.0, "Energy ledger must account for energy");
+        require(!result.voxel_deposited_energy_MeV.empty(), "3D voxel dose must be scored");
+    }
+#endif
+
+    // Dimension 4: Missing data Fail-Closed Interception
+    {
+        const auto sec_pkg = carbon::InelasticPackageV3Table::from_binary("data/schneider/cinel03_secondary_targets.bin");
+        const auto dev_tables = sec_pkg.make_device_tables();
+        const std::uint32_t miss_idx = carbon::cinel03_find_event_device(
+            dev_tables.energy_nodes.data(),
+            static_cast<std::uint32_t>(dev_tables.energy_nodes.size()),
+            dev_tables.event_offsets.data(),
+            dev_tables.event_indices.data(),
+            static_cast<std::uint32_t>(dev_tables.interactions.size()),
+            2, 4, 99, 100.0F, 0.51F, 0.5F);
+        require(miss_idx == 0xFFFFFFFFU, "Unsupported target Z=99 must fail closed with 0xFFFFFFFFU");
+    }
+
+    // Dimension 5 & 6: Hardened Rate Table and CINEL03 limits
+    {
+        const auto sec_table = carbon::SecondaryRateTable::from_binary("data/schneider/secondary_inelastic_rates_v1.bin");
+        bool threw_oob = false;
+        try {
+            (void)sec_table.mass_partial_rate(13, 0, 0, 0);
+        } catch (const std::out_of_range&) {
+            threw_oob = true;
+        }
+        require(threw_oob, "SecondaryRateTable out-of-bounds must throw out_of_range");
+    }
+
+    // Dimension 7: Verifier quality gate regression test
+    {
+        const int ret = std::system("python3 tests/test_verify_step20_regression.py > /dev/null 2>&1");
+        require(ret == 0, "tests/test_verify_step20_regression.py must pass with 0 exit code");
+    }
+
+    std::cout << "[step09-test] test_step09_production_integration_suite PASSED.\n";
+}
+
+#ifdef CARBON_HAS_SYCL
+void test_schneider_tertiary_transport_generations() {
+    // Generation semantics under test (see kernel: hazard requires
+    // frag.generation < max; child queuing requires frag.generation+1 < max):
+    //   max=1: gen-0 secondaries react once, but their charged products are
+    //          NOT queued (0+1<1 false) -> cutoff only, tertiary closed.
+    //   max=2: gen-0 reaction products (gen-1) ARE queued and transported;
+    //          gen-1 may react once, its products cut off. Tertiary open.
+    // This test proves the semantics empirically on a small synthetic CT:
+    // max=1 must yield queued==0 while max=2 must yield queued>0, both with
+    // zero overflow and exact secondary born closure. Acceptance is NOT
+    // asserted (sparse secondary campaign gaps still fail the gate).
+    std::cout << "[schneider-tertiary] starting tertiary generation test...\n";
+    if (!is_sycl_available()) {
+        std::cout << "[schneider-tertiary] SYCL unavailable, skipping.\n";
+        return;
+    }
+    const auto temp_dir = std::filesystem::temp_directory_path() / "test_schneider_tertiary";
+    std::filesystem::create_directories(temp_dir);
+    const auto cctg_file = temp_dir / "tertiary_test.cctg";
+    {
+        carbon::CtGrid grid;
+        grid.file_version = carbon::CtGrid::version_v2;
+        grid.nx = 1;
+        grid.ny = 1;
+        grid.nz = 10;
+        grid.spacing_x_mm = 10.0;
+        grid.spacing_y_mm = 10.0;
+        grid.spacing_z_mm = 10.0;
+        grid.origin_x_mm = -5.0;
+        grid.origin_y_mm = -5.0;
+        grid.origin_z_mm = 0.0;
+        grid.density_g_per_cm3 = std::vector<float>(10, 1.0F);
+        grid.material_id = std::vector<std::uint8_t>(10, 8); // soft tissue
+        grid.mass_sp_za_rel.resize(25, 1.0);
+        grid.write_binary(cctg_file);
+    }
+    const auto run_case = [&](std::uint32_t max_generations) {
+        carbon::TransportConfig config;
+        config.phantom_length_mm = 100.0;
+        config.depth_bin_width_mm = 1.0;
+        config.voxel_size_z_mm = 1.0;
+        config.primary_atomic_number = 6;
+        config.primary_mass_number = 12;
+        config.initial_energy_MeVu = 220.0;
+        config.run_mode = carbon::RunMode::research;
+        config.enable_voxel_scoring = true;
+        config.enable_inelastic = true;
+        config.enable_secondary_transport = true;
+        config.cinel02_max_secondary_inelastic_generations = max_generations;
+        config.enable_ct_grid = true;
+        config.ct_grid_file = cctg_file.string();
+        config.ct_schneider_primary_rate_file = "data/schneider/schneider_inelastic_rates_v1.bin";
+        config.ct_schneider_c12_cinel03_file = "data/schneider/cinel03_c12_targets.bin";
+        config.ct_schneider_secondary_rate_file = "data/schneider/secondary_inelastic_rates_v1.bin";
+        config.ct_schneider_secondary_cinel03_file = "data/schneider/cinel03_secondary_targets.bin";
+        config.ct_schneider_stopping_power_file = "data/schneider/schneider_stopping_v1.bin";
+        config.ct_schneider_cross_section_file = "data/schneider/c12_schneider_inelastic_mass_xs.csv";
+        config.number_of_histories = 3000;
+        config.energy_cutoff_MeV = 0.5F;
+        config.resolve_material_physics_mode();
+        const auto stopping_power = carbon::StoppingPowerTable::from_csv(
+            "data/stopping_power_water_geant4_11_3_2.csv");
+        // Heap-allocated: TransportResult is ~1.5MB; never hold two alive.
+        auto result = std::make_unique<carbon::TransportResult>(
+            carbon::transport_sycl(config, stopping_power, zero_cross_section(), "default"));
+        return result;
+    };
+    std::uint64_t q1 = 0, b1 = 0, h1 = 0, r1 = 0, t1 = 0;
+    {
+        auto res1 = run_case(1);
+        const auto& s = res1->schneider_diagnostics;
+        q1 = s.secondary_charged_products_queued;
+        b1 = s.secondary_charged_products_born;
+        h1 = s.secondary_hazards;
+        r1 = s.secondary_events_replayed;
+        t1 = s.secondary_tracks_started;
+        std::cout << "[schneider-tertiary] max=1: tracks=" << t1 << " haz=" << h1
+                  << " replayed=" << r1 << " born=" << b1 << " queued=" << q1 << "\n";
+        require(t1 > 0, "max=1 control must start secondary tracks");
+        require(h1 > 0, "max=1 control must sample secondary hazards");
+        require(b1 > 0, "max=1 control must produce secondary charged products");
+        require(q1 == 0, "max=1 must queue zero tertiary products (tertiary closed)");
+        require(b1 == s.secondary_charged_cutoff_kills + s.secondary_queue_overflows,
+                "max=1 secondary born must close exactly");
+        require(res1->secondary_queue_overflow == 0, "max=1 must have no overflow");
+        require(s.secondary_queue_overflows == 0 && s.queue_overflows == 0,
+                "max=1 must have no Schneider overflow");
+    }
+    {
+        auto res2 = run_case(2);
+        const auto& s = res2->schneider_diagnostics;
+        const auto q2 = s.secondary_charged_products_queued;
+        const auto b2 = s.secondary_charged_products_born;
+        std::cout << "[schneider-tertiary] max=2: tracks=" << s.secondary_tracks_started
+                  << " haz=" << s.secondary_hazards << " replayed=" << s.secondary_events_replayed
+                  << " born=" << b2 << " queued=" << q2 << "\n";
+        require(s.secondary_tracks_started > t1,
+                "max=2 must transport strictly more tracks than max=1 (tertiary open)");
+        require(q2 > 0, "max=2 must queue tertiary products (gen-1 children)");
+        require(b2 == q2 + s.secondary_charged_cutoff_kills + s.secondary_queue_overflows,
+                "max=2 secondary born must close exactly");
+        require(res2->secondary_queue_overflow == 0, "max=2 must have no overflow");
+        require(s.secondary_queue_overflows == 0 && s.queue_overflows == 0,
+                "max=2 must have no Schneider overflow");
+    }
+    std::cout << "[schneider-tertiary] tertiary generation test PASSED.\n";
+}
+#endif
+
+[[gnu::noinline]] void run_test_dispatch(const std::string& filter, const std::string& name, void (*fn)()) {
+    if (filter.empty() || name.find(filter) != std::string::npos) {
+        fn();
+    }
+}
+
+namespace schneider_strict_test {
+
+carbon::Cinel03InteractionRecord make_lookup_event(int pz, int pa, int tz, int ta,
+                                                   float e_MeV_per_u,
+                                                   std::uint64_t event_id) {
+    carbon::Cinel03InteractionRecord ev{};
+    ev.run_id = 1;
+    ev.event_id = event_id;
+    ev.projectile_pdg = 1000060120;
+    ev.projectile_z = static_cast<std::int16_t>(pz);
+    ev.projectile_a = static_cast<std::int16_t>(pa);
+    ev.projectile_charge = static_cast<float>(pz);
+    ev.projectile_rest_mass = static_cast<float>(pa * carbon::inelastic_nucleon_rest_mass_MeV);
+    ev.collision_energy_MeV = e_MeV_per_u * static_cast<float>(pa);
+    ev.collision_energy_MeV_per_u = e_MeV_per_u;
+    ev.collision_direction_z = 1.0F;
+    ev.target_element_z = static_cast<std::int16_t>(tz);
+    ev.target_a = static_cast<std::int16_t>(ta);
+    ev.parent_status = 2;
+    ev.parent_pdg = 1000060120;
+    ev.parent_z = static_cast<std::int16_t>(pz);
+    ev.parent_a = static_cast<std::int16_t>(pa);
+    ev.parent_charge = static_cast<float>(pz);
+    ev.parent_rest_mass = ev.projectile_rest_mass;
+    ev.parent_energy_MeV = 0.0F;
+    ev.parent_direction_z = 1.0F;
+    ev.track_weight = 1.0F;
+    ev.parent_weight = 1.0F;
+    ev.process_local_deposit_MeV = 5.0F;
+    ev.direct_product_count = 0;
+    std::strncpy(ev.material_name, "G4_WATER", sizeof(ev.material_name));
+    std::strncpy(ev.process_name, "ionInelastic", sizeof(ev.process_name));
+    std::strncpy(ev.model_name, "BinaryCascade", sizeof(ev.model_name));
+    return ev;
+}
+
+carbon::InelasticPackageV3Table make_two_node_table() {
+    carbon::InelasticPackageV3Table table;
+    table.set_metadata(100.0F, 100.0F, 1, "00000000-0000-4000-8000-000000000021");
+    // C12 on O at 200 and 204 MeV/u (gap 4 <= 5: stochastic bracketing).
+    table.add_event(make_lookup_event(6, 12, 8, 16, 200.0F, 1), {});
+    table.add_event(make_lookup_event(6, 12, 8, 16, 204.0F, 2), {});
+    // C12 on C at 200 MeV/u only (for exact-target negative tests).
+    table.add_event(make_lookup_event(6, 12, 6, 12, 200.0F, 3), {});
+    // p on C at 100 MeV/u only (p+H must miss: no alias to C).
+    table.add_event(make_lookup_event(1, 1, 6, 12, 100.0F, 4), {});
+    table.finalize();
+    return table;
+}
+
+}  // namespace schneider_strict_test
+
+void test_cinel03_exact_target_no_alias() {
+    std::cout << "[schneider-strict] exact-target no-alias tests...\n";
+    const auto table = schneider_strict_test::make_two_node_table();
+
+    // Exact hit: C12 on O at a campaign node.
+    {
+        const auto hit = table.lookup_event(6, 12, 8, 200.0F, 0.5F, 0.5F);
+        require(hit.status == carbon::Cinel03LookupStatus::Hit, "C12+O at 200 must Hit");
+        require(hit.event_index != 0xFFFFFFFFU, "Hit must carry an event index");
+    }
+    // C12 on Ca with only C12+O/C data: must be MissingTarget, never alias.
+    {
+        const auto miss = table.lookup_event(6, 12, 20, 200.0F, 0.5F, 0.5F);
+        require(miss.status == carbon::Cinel03LookupStatus::MissingTarget,
+                "C12+Ca with only O/C data must be MissingTarget");
+        const auto dev_tables = table.make_device_tables();
+        const auto dev_miss = carbon::cinel03_lookup_event_device(
+            dev_tables.energy_nodes.data(),
+            static_cast<std::uint32_t>(dev_tables.energy_nodes.size()),
+            dev_tables.event_offsets.data(), dev_tables.event_indices.data(),
+            static_cast<std::uint32_t>(dev_tables.interactions.size()),
+            6, 12, 20, 200.0F, 0.5F, 0.5F);
+        require(dev_miss.status == carbon::Cinel03LookupStatus::MissingTarget,
+                "device C12+Ca must be MissingTarget (no closest-Z fallback)");
+        require(dev_miss.event_index == 0xFFFFFFFFU, "miss must not return an event");
+        std::uint64_t counter = 0;
+        require(table.find_event(6, 12, 20, 200.0F, 50.0F, 0.5F, true, &counter) ==
+                    carbon::InelasticPackageV3Table::invalid,
+                "audit C12+Ca must miss");
+        require(counter == 1, "audit miss must increment the counter");
+        bool threw = false;
+        try {
+            (void)table.find_event(6, 12, 20, 200.0F, 50.0F, 0.5F, false);
+        } catch (const std::runtime_error&) {
+            threw = true;
+        }
+        require(threw, "production C12+Ca must throw");
+    }
+    // p on H with only p+C data: must be MissingTarget, never alias to C.
+    {
+        const auto miss = table.lookup_event(1, 1, 1, 100.0F, 0.5F, 0.5F);
+        require(miss.status == carbon::Cinel03LookupStatus::MissingTarget,
+                "p+H with only p+C data must be MissingTarget");
+        const auto dev_tables = table.make_device_tables();
+        const auto dev_miss = carbon::cinel03_lookup_event_device(
+            dev_tables.energy_nodes.data(),
+            static_cast<std::uint32_t>(dev_tables.energy_nodes.size()),
+            dev_tables.event_offsets.data(), dev_tables.event_indices.data(),
+            static_cast<std::uint32_t>(dev_tables.interactions.size()),
+            1, 1, 1, 100.0F, 0.5F, 0.5F);
+        require(dev_miss.status == carbon::Cinel03LookupStatus::MissingTarget,
+                "device p+H must be MissingTarget");
+    }
+    // Missing projectile entirely.
+    {
+        const auto miss = table.lookup_event(2, 4, 8, 200.0F, 0.5F, 0.5F);
+        require(miss.status == carbon::Cinel03LookupStatus::MissingProjectile,
+                "alpha projectile with no data must be MissingProjectile");
+    }
+    std::cout << "[schneider-strict] exact-target no-alias tests PASSED.\n";
+}
+
+void test_cinel03_bounded_domain_and_bracketing() {
+    std::cout << "[schneider-strict] bounded-domain and bracketing tests...\n";
+    const auto table = schneider_strict_test::make_two_node_table();
+    const auto dev_tables = table.make_device_tables();
+    const auto* nodes = dev_tables.energy_nodes.data();
+    const auto node_count = static_cast<std::uint32_t>(dev_tables.energy_nodes.size());
+    const auto* offsets = dev_tables.event_offsets.data();
+    const auto* indices = dev_tables.event_indices.data();
+    const auto total = static_cast<std::uint32_t>(dev_tables.interactions.size());
+
+    // Channel domain introspection.
+    {
+        const auto domain = table.channel_domain(6, 12, 8);
+        require(domain.found_projectile && domain.found_target, "C12+O channel must exist");
+        require_near(domain.energy_min_MeV_per_u, 200.0, 1.0e-4, "channel min");
+        require_near(domain.energy_max_MeV_per_u, 204.0, 1.0e-4, "channel max");
+        require(domain.node_count == 2, "channel must have 2 nodes");
+        require_near(domain.maximum_node_gap_MeV_per_u, 4.0, 1.0e-4, "channel max gap");
+    }
+    // Below / above domain rejected, never clamped.
+    {
+        const auto below = table.lookup_event(6, 12, 8, 199.0F, 0.5F, 0.5F);
+        require(below.status == carbon::Cinel03LookupStatus::BelowEnergyDomain,
+                "query below channel min must be BelowEnergyDomain");
+        const auto above = table.lookup_event(6, 12, 8, 205.0F, 0.5F, 0.5F);
+        require(above.status == carbon::Cinel03LookupStatus::AboveEnergyDomain,
+                "query above channel max must be AboveEnergyDomain");
+        const auto dev_below = carbon::cinel03_lookup_event_device(
+            nodes, node_count, offsets, indices, total, 6, 12, 8, 199.0F, 0.5F, 0.5F);
+        require(dev_below.status == carbon::Cinel03LookupStatus::BelowEnergyDomain,
+                "device below-domain must agree");
+    }
+    // Gap rejection on a wide channel is tested against production data in
+    // test_step20 (alpha+C at 200 MeV/u). Here the 4 MeV/u gap is allowed.
+    // Stochastic bracketing statistics at the midpoint: P(E1) = 0.5.
+    {
+        constexpr int draws = 4000;
+        int e1_count = 0;
+        for (int i = 0; i < draws; ++i) {
+            const float u = (static_cast<float>(i) + 0.5F) / static_cast<float>(draws);
+            const auto r = table.lookup_event(6, 12, 8, 202.0F, u, 0.5F);
+            require(r.status == carbon::Cinel03LookupStatus::Hit, "midpoint query must Hit");
+            if (r.selected_energy_MeV_per_u > 202.0F) {
+                ++e1_count;
+            }
+        }
+        const double frac = static_cast<double>(e1_count) / draws;
+        require(std::abs(frac - 0.5) < 0.06, "stochastic bracketing must select E1 with ~50% probability");
+    }
+    // Host/device bitwise consistency across a sweep (hits and misses).
+    {
+        int checked = 0;
+        for (int ei = 195; ei <= 208; ++ei) {
+            for (int ui = 0; ui <= 10; ++ui) {
+                const float energy = static_cast<float>(ei);
+                const float u = static_cast<float>(ui) / 10.0F;
+                const auto host = table.lookup_event(6, 12, 8, energy, u, u);
+                const auto dev = carbon::cinel03_lookup_event_device(
+                    nodes, node_count, offsets, indices, total, 6, 12, 8, energy, u, u);
+                require(host.status == dev.status, "host/device status must agree");
+                require(host.event_index == dev.event_index, "host/device event must agree");
+                require(host.energy_node_index == dev.energy_node_index,
+                        "host/device node must agree");
+                ++checked;
+            }
+        }
+        require(checked > 100, "sweep must cover hit/miss cases");
+    }
+    std::cout << "[schneider-strict] bounded-domain and bracketing tests PASSED.\n";
+}
+
+void test_schneider_quality_gate_rejects_failures() {
+    std::cout << "[schneider-strict] quality-gate failure tests...\n";
+    carbon::TransportConfig config;
+    config.material_physics_mode = carbon::MaterialPhysicsMode::SchneiderCt;
+    config.run_mode = carbon::RunMode::research;
+
+    // Clean run: no hazards, zero residual -> accepted.
+    {
+        carbon::TransportResult result;
+        result.initial_energy_MeV = 1000.0;
+        result.total_deposited_energy_MeV = 1000.0;
+        const auto report = carbon::evaluate_run_quality(config, result);
+        require(report.accepted, "clean Schneider run must be accepted");
+        require(report.failures.empty(), "clean run must have no failures");
+    }
+    // One missing target -> accepted=false even in research mode.
+    {
+        carbon::TransportResult result;
+        result.initial_energy_MeV = 1000.0;
+        result.total_deposited_energy_MeV = 1000.0;
+        result.schneider_diagnostics.primary_hazards = 10;
+        result.schneider_diagnostics.primary_events_replayed = 9;
+        result.schneider_diagnostics.primary_missing_target = 1;
+        const auto report = carbon::evaluate_run_quality(config, result);
+        require(!report.accepted, "missing target must not be accepted");
+        require(!report.failures.empty(), "missing target must record a failure");
+    }
+    // Conservation break -> accepted=false.
+    {
+        carbon::TransportResult result;
+        result.initial_energy_MeV = 1000.0;
+        result.total_deposited_energy_MeV = 1000.0;
+        result.schneider_diagnostics.primary_hazards = 10;
+        result.schneider_diagnostics.primary_events_replayed = 7;
+        result.schneider_diagnostics.primary_missing_target = 1;
+        const auto report = carbon::evaluate_run_quality(config, result);
+        require(!report.accepted, "conservation break must not be accepted");
+    }
+    // Queue overflow -> accepted=false.
+    {
+        carbon::TransportResult result;
+        result.initial_energy_MeV = 1000.0;
+        result.total_deposited_energy_MeV = 1000.0;
+        result.schneider_diagnostics.secondary_queue_overflows = 2;
+        result.schneider_diagnostics.queue_overflows = 2;
+        const auto report = carbon::evaluate_run_quality(config, result);
+        require(!report.accepted, "queue overflow must not be accepted");
+    }
+    // Production mode likewise refuses the dose as a formal result.
+    {
+        config.run_mode = carbon::RunMode::production;
+        carbon::TransportResult result;
+        result.initial_energy_MeV = 1000.0;
+        result.total_deposited_energy_MeV = 1000.0;
+        result.schneider_diagnostics.primary_hazards = 5;
+        result.schneider_diagnostics.primary_events_replayed = 4;
+        result.schneider_diagnostics.primary_energy_gap_misses = 1;
+        const auto report = carbon::evaluate_run_quality(config, result);
+        require(!report.accepted, "production gap miss must not be accepted");
+    }
+    std::cout << "[schneider-strict] quality-gate failure tests PASSED.\n";
+}
+
+void test_schneider_post_em_null_gate_taxonomy() {
+    // Post-EM null collisions: reported approximation, never a failure;
+    // UnsupportedTargets is a hard failure in every mode.
+    std::cout << "[schneider-strict] post-EM null gate taxonomy tests...\n";
+    carbon::TransportConfig v3config;
+    v3config.material_physics_mode = carbon::MaterialPhysicsMode::SchneiderCt;
+    v3config.run_mode = carbon::RunMode::research;
+    v3config.ct_schneider_secondary_rate_file = "data/schneider/secondary_inelastic_rates_v2_1.bin";
+    v3config.ct_schneider_physics_bundle_file = "data/schneider/schneider_physics_bundle_v2_1.json";
+    const auto fresh_v3 = [&]() {
+        auto result = std::make_unique<carbon::TransportResult>();
+        result->initial_energy_MeV = 1000.0;
+        result->total_deposited_energy_MeV = 1000.0;
+        return result;
+    };
+    // Post-EM nulls close conservation and do not fail.
+    {
+        auto result = fresh_v3();
+        result->schneider_diagnostics.secondary_hazards = 10;
+        result->schneider_diagnostics.secondary_events_replayed = 8;
+        result->schneider_diagnostics.secondary_post_em_null_collisions = 2;
+        const auto report = carbon::evaluate_run_quality(v3config, *result);
+        require(report.accepted, "post-EM nulls must be accepted (declared approximation)");
+        require(report.failures.empty(), "post-EM nulls must record no failure");
+        bool found = false;
+        for (const auto& issue : report.approximations) {
+            if (issue.code == "schneider_post_em_null_collisions" && issue.value == 2.0) {
+                found = true;
+            }
+        }
+        require(found, "post-EM nulls must appear in approximations with count 2");
+    }
+    // Explicit UnsupportedTargets=1 fails under v3.
+    {
+        auto result = fresh_v3();
+        result->schneider_diagnostics.secondary_hazards = 10;
+        result->schneider_diagnostics.secondary_events_replayed = 9;
+        result->schneider_diagnostics.unsupported_targets = 1;
+        const auto report = carbon::evaluate_run_quality(v3config, *result);
+        require(!report.accepted, "v3 UnsupportedTargets=1 must not be accepted");
+        bool found = false;
+        for (const auto& failure : report.failures) {
+            if (failure.code == "schneider_secondary_missing_target") {
+                found = true;
+            }
+        }
+        require(found, "v3 UnsupportedTargets must fail as missing_target");
+    }
+    // Cutoff stops still close conservation without failing.
+    {
+        auto result = fresh_v3();
+        result->schneider_diagnostics.secondary_hazards = 10;
+        result->schneider_diagnostics.secondary_events_replayed = 8;
+        result->schneider_diagnostics.secondary_stopped_before_replay = 2;
+        const auto report = carbon::evaluate_run_quality(v3config, *result);
+        require(report.accepted, "cutoff stops must be accepted");
+        require(report.failures.empty(), "cutoff stops must record no failure");
+    }
+    // Primary post-EM null closes the primary equation as an approximation.
+    {
+        auto result = fresh_v3();
+        result->schneider_diagnostics.primary_hazards = 10;
+        result->schneider_diagnostics.primary_events_replayed = 9;
+        result->schneider_diagnostics.primary_post_em_null_collisions = 1;
+        const auto report = carbon::evaluate_run_quality(v3config, *result);
+        require(report.accepted, "primary post-EM null must be accepted (declared approximation)");
+        require(report.failures.empty(), "primary post-EM null must record no failure");
+        bool found = false;
+        for (const auto& issue : report.approximations) {
+            if (issue.code == "schneider_primary_post_em_null_collisions" && issue.value == 1.0) {
+                found = true;
+            }
+        }
+        require(found, "primary post-EM null must appear in approximations with count 1");
+    }
+    // v1 keeps the legacy strictness: UnsupportedTargets=1 fails.
+    {
+        carbon::TransportConfig v1config;
+        v1config.material_physics_mode = carbon::MaterialPhysicsMode::SchneiderCt;
+        v1config.run_mode = carbon::RunMode::research;
+        auto result = std::make_unique<carbon::TransportResult>();
+        result->initial_energy_MeV = 1000.0;
+        result->total_deposited_energy_MeV = 1000.0;
+        result->schneider_diagnostics.secondary_hazards = 10;
+        result->schneider_diagnostics.secondary_events_replayed = 9;
+        result->schneider_diagnostics.unsupported_targets = 1;
+        const auto report = carbon::evaluate_run_quality(v1config, *result);
+        require(!report.accepted, "v1 UnsupportedTargets=1 must not be accepted");
+    }
+    std::cout << "[schneider-strict] post-EM null gate taxonomy tests PASSED.\n";
+}
+
+void test_schneider_born_strict_equality_and_ledger_disjoint() {
+    std::cout << "[schneider-strict] born strict-equality and ledger-disjoint tests..." << std::endl;
+    carbon::TransportConfig config;
+    config.material_physics_mode = carbon::MaterialPhysicsMode::SchneiderCt;
+    config.run_mode = carbon::RunMode::research;
+    // NOTE: TransportResult is ~1.5MB (multi-MB ledger arrays). The compiler
+    // does not reliably overlay sequential stack instances (observed 12.5MB
+    // frame -> instant segfault), so every instance below is heap-allocated.
+    const auto fresh_result = []() {
+        auto result = std::make_unique<carbon::TransportResult>();
+        result->initial_energy_MeV = 1000.0;
+        result->total_deposited_energy_MeV = 1000.0;
+        return result;
+    };
+    // Lost product: born=10 but only 9 terminals -> must fail.
+    {
+        auto result = fresh_result();
+        result->schneider_diagnostics.primary_charged_products_born = 10;
+        result->schneider_diagnostics.primary_charged_products_queued = 9;
+        const auto report = carbon::evaluate_run_quality(config, *result);
+        require(!report.accepted, "primary born > terminals (lost product) must fail");
+    }
+    // Phantom terminal: born=9 but 10 terminals -> must fail.
+    {
+        auto result = fresh_result();
+        result->schneider_diagnostics.primary_charged_products_born = 9;
+        result->schneider_diagnostics.primary_charged_products_queued = 10;
+        const auto report = carbon::evaluate_run_quality(config, *result);
+        require(!report.accepted, "primary born < terminals (phantom terminal) must fail");
+    }
+    // Exact closure -> pass.
+    {
+        auto result = fresh_result();
+        result->schneider_diagnostics.primary_charged_products_born = 10;
+        result->schneider_diagnostics.primary_charged_products_queued = 7;
+        result->schneider_diagnostics.primary_charged_cutoff_kills = 3;
+        const auto report = carbon::evaluate_run_quality(config, *result);
+        require(report.accepted, "exact primary born closure must pass");
+    }
+    // Secondary lost product -> must fail.
+    {
+        auto result = fresh_result();
+        result->schneider_diagnostics.secondary_charged_products_born = 42;
+        result->schneider_diagnostics.secondary_charged_cutoff_kills = 41;
+        const auto report = carbon::evaluate_run_quality(config, *result);
+        require(!report.accepted, "secondary born > terminals must fail");
+    }
+    // Secondary exact closure -> pass.
+    {
+        auto result = fresh_result();
+        result->schneider_diagnostics.secondary_charged_products_born = 42;
+        result->schneider_diagnostics.secondary_charged_cutoff_kills = 42;
+        const auto report = carbon::evaluate_run_quality(config, *result);
+        require(report.accepted, "exact secondary born closure must pass");
+    }
+    // Coverage gate uses per-TRACK count: tracks=1 fails...
+    {
+        auto result = fresh_result();
+        result->schneider_diagnostics.unsupported_projectile_tracks = 1;
+        result->schneider_diagnostics.unsupported_projectile_birth_energy_MeV = 50.0;
+        const auto report = carbon::evaluate_run_quality(config, *result);
+        require(!report.accepted, "unsupported track must fail the gate");
+    }
+    // ...while a large per-STEP count alone (tracks=0) does not gate.
+    {
+        auto result = fresh_result();
+        result->schneider_diagnostics.unsupported_projectile_steps = 1000000;
+        const auto report = carbon::evaluate_run_quality(config, *result);
+        require(report.accepted, "per-step count alone must not gate");
+    }
+    // Split-ledger disjointness: huge informational split fields must not
+    // move the closure residual (no double counting into the global formula).
+    double base_residual = 0.0;
+    {
+        auto baseline = fresh_result();
+        const auto base_report = carbon::evaluate_run_quality(config, *baseline);
+        require(base_report.accepted, "baseline must be accepted");
+        base_residual = base_report.relative_energy_residual;
+    }
+    {
+        // Only the purely informational fields: E_lookup_failure and
+        // E_out_of_domain are deliberate GATE inputs (non-zero must fail),
+        // so they are excluded from this doping set.
+        auto doped = fresh_result();
+        doped->energy_ledger.E_be6_kill = 1.0e9;
+        doped->energy_ledger.E_neutral_product_kinetic = 1.0e9;
+        doped->energy_ledger.E_reaction_q_residual = 1.0e9;
+        doped->energy_ledger.E_unsupported_charged = 1.0e9;
+        doped->energy_ledger.E_charged_birth = 1.0e9;
+        doped->energy_ledger.E_charged_terminal_deposit = 1.0e9;
+        const auto doped_report = carbon::evaluate_run_quality(config, *doped);
+        require(doped_report.accepted, "informational split fields must not fail");
+        require(doped_report.relative_energy_residual == base_residual,
+                "split fields must leave the residual bitwise unchanged");
+    }
+    // E_lookup_failure / E_out_of_domain are gate inputs by design.
+    {
+        auto gated = fresh_result();
+        gated->energy_ledger.E_out_of_domain = 1.0;
+        require(!carbon::evaluate_run_quality(config, *gated).accepted,
+                "out-of-domain energy must fail the gate");
+    }
+    // Float-slot public constant must track the enum (review Low item).
+    require(carbon::TransportResult::schneider_float_slot_count ==
+                static_cast<std::size_t>(carbon::SchneiderFloatSlot::Count),
+            "schneider_float_slot_count must equal SchneiderFloatSlot::Count");
+    std::cout << "[schneider-strict] born strict-equality and ledger-disjoint tests PASSED.\n";
+}
+
+void test_schneider_config_forbids_water_keys() {
+    std::cout << "[schneider-strict] config routing tests...\n";
+    const auto expect_invalid = [](carbon::TransportConfig config, const std::string& needle,
+                                   const std::string& label) {
+        bool threw = false;
+        try {
+            config.validate();
+        } catch (const std::invalid_argument& err) {
+            threw = true;
+            require(std::string(err.what()).find(needle) != std::string::npos,
+                    label + " threw the wrong error: " + err.what());
+        }
+        require(threw, label + " must fail validation");
+    };
+    // Ambiguous water keys in full Schneider CT mode must fail closed.
+    {
+        carbon::TransportConfig config;
+        config.enable_ct_grid = true;
+        config.ct_grid_file = "dummy.cctg";
+        config.primary_inelastic_package_v2_file = "water.cinpkg";
+        expect_invalid(config, "water/CINEL02", "Schneider CT with water package key");
+    }
+    {
+        carbon::TransportConfig config;
+        config.enable_ct_grid = true;
+        config.ct_grid_file = "dummy.cctg";
+        config.nuclear_model = "cinel02";
+        expect_invalid(config, "cinel02", "Schneider CT with nuclear_model cinel02");
+    }
+    {
+        carbon::TransportConfig config;
+        config.enable_ct_grid = true;
+        config.ct_grid_file = "dummy.cctg";
+        config.ct_cinel02_rate_file = "ct_rates.bin";
+        expect_invalid(config, "water/CINEL02", "Schneider CT with ct_cinel02_rate_file");
+    }
+    // Water mode keeps its own keys and never loads Schneider tables.
+    {
+        carbon::TransportConfig config;
+        config.enable_ct_grid = false;
+        config.nuclear_model = "cinel02";
+        config.primary_inelastic_package_v2_file = "water.cinpkg";
+        require(config.is_water_mode(), "CT-disabled config must stay Water mode");
+        require(config.ct_schneider_c12_cinel03_file.empty() &&
+                    config.ct_schneider_secondary_cinel03_file.empty(),
+                "Water mode must not bind Schneider tables");
+    }
+    std::cout << "[schneider-strict] config routing tests PASSED.\n";
 }
 
 }  // namespace
 
 int main(int argc, char** argv) {
     const std::string filter = (argc > 1) ? argv[1] : "";
-    const auto run = [&](const std::string& name, auto fn) {
-        if (filter.empty() || name.find(filter) != std::string::npos) {
-            fn();
-        }
+    const auto run = [&](const std::string& name, void (*fn)()) {
+        run_test_dispatch(filter, name, fn);
     };
     try {
         run("test_fred_18_isotopes_data", test_fred_18_isotopes_data);
@@ -7928,6 +9656,26 @@ int main(int argc, char** argv) {
         run("test_step18_target_sampler_missing_target_fail_closed", test_step18_target_sampler_missing_target_fail_closed);
         run("test_step18_target_sampler_cpu_gpu_equivalence_and_diagnostics", test_step18_target_sampler_cpu_gpu_equivalence_and_diagnostics);
         run("test_step20_secondary_rate_table_and_cinel03_package", test_step20_secondary_rate_table_and_cinel03_package);
+        run("test_step27_v2_package_load_and_lookup_equivalence", test_step27_v2_package_load_and_lookup_equivalence);
+        run("test_step28_v3_rate_domain_mask_equivalence", test_step28_v3_rate_domain_mask_equivalence);
+        run("test_step02_material_physics_routing", test_step02_material_physics_routing);
+#ifdef CARBON_HAS_SYCL
+        run("test_step03_schneider_device_data_wiring", test_step03_schneider_device_data_wiring);
+        run("test_step04_ct_primary_nuclear_interaction", test_step04_ct_primary_nuclear_interaction);
+        run("test_step05_ct_secondary_nuclear_transport", test_step05_ct_secondary_nuclear_transport);
+#endif
+        run("test_step06_energy_accounting_and_overflow_ledger", test_step06_energy_accounting_and_overflow_ledger);
+        run("test_step08_cinel03_limits_and_provenance", test_step08_cinel03_limits_and_provenance);
+        run("test_step09_production_integration_suite", test_step09_production_integration_suite);
+        run("test_cinel03_exact_target_no_alias", test_cinel03_exact_target_no_alias);
+        run("test_cinel03_bounded_domain_and_bracketing", test_cinel03_bounded_domain_and_bracketing);
+        run("test_schneider_quality_gate_rejects_failures", test_schneider_quality_gate_rejects_failures);
+        run("test_schneider_post_em_null_gate_taxonomy", test_schneider_post_em_null_gate_taxonomy);
+        run("test_schneider_born_strict_equality_and_ledger_disjoint", test_schneider_born_strict_equality_and_ledger_disjoint);
+#ifdef CARBON_HAS_SYCL
+        run("test_schneider_tertiary_transport_generations", test_schneider_tertiary_transport_generations);
+#endif
+        run("test_schneider_config_forbids_water_keys", test_schneider_config_forbids_water_keys);
         std::cout << "All carbon_tests passed\n";
         return EXIT_SUCCESS;
     } catch (const std::exception& error) {

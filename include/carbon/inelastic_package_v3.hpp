@@ -239,62 +239,6 @@ inline bool cinel03_key_less(
     return energy < node.collision_energy_MeV_per_u;
 }
 
-inline std::uint32_t cinel03_find_event_device(
-    const Cinel03EnergyNode* energy_nodes,
-    std::uint32_t node_count,
-    const std::uint32_t* event_offsets,
-    const std::uint32_t* event_indices,
-    std::uint32_t total_events,
-    int proj_z, int proj_a, int target_z,
-    float energy, float tolerance, float u01) noexcept
-{
-    if (energy_nodes == nullptr || event_offsets == nullptr || event_indices == nullptr || node_count == 0) {
-        return 0xFFFFFFFFU;
-    }
-    const float min_e = energy - tolerance;
-    const float max_e = energy + tolerance;
-
-    std::uint32_t low = 0;
-    std::uint32_t high = node_count;
-    while (low < high) {
-        const std::uint32_t mid = low + (high - low) / 2;
-        if (cinel03_node_less(energy_nodes[mid], proj_z, proj_a, target_z, min_e)) {
-            low = mid + 1;
-        } else {
-            high = mid;
-        }
-    }
-    const std::uint32_t first_node = low;
-
-    low = first_node;
-    high = node_count;
-    while (low < high) {
-        const std::uint32_t mid = low + (high - low) / 2;
-        if (cinel03_key_less(proj_z, proj_a, target_z, max_e, energy_nodes[mid])) {
-            high = mid;
-        } else {
-            low = mid + 1;
-        }
-    }
-    const std::uint32_t last_node = low;
-
-    if (first_node >= last_node) {
-        return 0xFFFFFFFFU;
-    }
-
-    const std::uint32_t first_event = event_offsets[first_node];
-    const std::uint32_t last_event = event_offsets[last_node];
-    if (first_event >= last_event || last_event > total_events) {
-        return 0xFFFFFFFFU;
-    }
-
-    const std::uint32_t count = last_event - first_event;
-    const float u = u01 < 0.0F ? 0.0F : (u01 >= 1.0F ? 0.9999999F : u01);
-    const std::uint32_t pick = static_cast<std::uint32_t>(u * count);
-    const std::uint32_t chosen = (pick < count) ? pick : count - 1;
-    return event_indices[first_event + chosen];
-}
-
 // Target Element Registry for Schneider Materials
 // Elements in Schneider CT materials: H (1), C (6), N (7), O (8), Na (11),
 // Mg (12), P (15), S (16), Cl (17), Ar (18), K (19), Ca (20), Ti (22).
@@ -313,6 +257,221 @@ inline constexpr std::array<int, 13> kSchneiderTargetElements{
     return z >= 1 && z <= 100;
 }
 
+// ---------------------------------------------------------------------------
+// Strict CINEL03 lookup contract (production):
+//  - Exact key only: (projectile_Z, projectile_A, target_element_Z).
+//  - NO target alias, NO closest-Z fallback, NO water/O substitution.
+//  - NO unbounded endpoint clamp / nearest-neighbor: the query must bracket
+//    inside the exact channel domain [energy_min, energy_max], and the
+//    bracketing node gap must not exceed a fixed pre-declared threshold.
+//  - In-domain queries between adjacent nodes use stochastic bracketing:
+//      E0 <= Eq <= E1,  P(select E1) = (Eq - E0) / (E1 - E0).
+//    No per-event kinetic-energy rescaling is applied.
+// ---------------------------------------------------------------------------
+
+enum class Cinel03LookupStatus : std::uint8_t {
+    Hit = 0,
+    MissingProjectile = 1,
+    MissingTarget = 2,
+    BelowEnergyDomain = 3,
+    AboveEnergyDomain = 4,
+    EnergyGapTooLarge = 5,
+    EmptyNode = 6
+};
+
+struct Cinel03LookupResult {
+    std::uint32_t event_index{0xFFFFFFFFU};
+    std::uint32_t energy_node_index{0xFFFFFFFFU};
+    Cinel03LookupStatus status{Cinel03LookupStatus::MissingProjectile};
+    float query_energy_MeV_per_u{0.0F};
+    float selected_energy_MeV_per_u{0.0F};
+    float absolute_energy_mismatch_MeV_per_u{0.0F};
+};
+
+// Fixed pre-declared maximum bracketing-node gap. Chosen once from the
+// audited C12 campaign (observed per-channel max gap ~2.8 MeV/u, see
+// data/schneider/cinel03_c12_targets.channels.json); it is NOT relaxed
+// after seeing production results. Secondary channels are sparser, so
+// out-of-gap secondary queries are honestly reported as EnergyGapTooLarge
+// instead of being silently clamped.
+inline constexpr float kCinel03MaxAllowedNodeGapMeVperU = 5.0F;
+
+// Exact-channel bounded stochastic-bracketing lookup. Device-safe (no
+// exceptions, no dynamic allocation). u_bracket drives the E0/E1 choice,
+// u_event drives the intra-node event pick; both must be in [0,1].
+inline Cinel03LookupResult cinel03_lookup_event_device(
+    const Cinel03EnergyNode* energy_nodes,
+    std::uint32_t node_count,
+    const std::uint32_t* event_offsets,
+    const std::uint32_t* event_indices,
+    std::uint32_t total_events,
+    int proj_z, int proj_a, int target_z,
+    float energy_MeV_per_u,
+    float u_bracket, float u_event,
+    float max_allowed_gap_MeV_per_u = kCinel03MaxAllowedNodeGapMeVperU) noexcept
+{
+    Cinel03LookupResult out{};
+    out.query_energy_MeV_per_u = energy_MeV_per_u;
+    if (energy_nodes == nullptr || event_offsets == nullptr ||
+        event_indices == nullptr || node_count == 0) {
+        out.status = Cinel03LookupStatus::MissingProjectile;
+        return out;
+    }
+
+    // Projectile block: all nodes are sorted by (pz, pa, tz, energy).
+    std::uint32_t p_low = 0;
+    std::uint32_t p_high = node_count;
+    while (p_low < p_high) {
+        const std::uint32_t mid = p_low + (p_high - p_low) / 2;
+        const auto& n = energy_nodes[mid];
+        if (n.projectile_z < proj_z ||
+            (n.projectile_z == proj_z && n.projectile_a < proj_a)) {
+            p_low = mid + 1;
+        } else {
+            p_high = mid;
+        }
+    }
+    const std::uint32_t proj_first = p_low;
+    p_high = node_count;
+    while (p_low < p_high) {
+        const std::uint32_t mid = p_low + (p_high - p_low) / 2;
+        const auto& n = energy_nodes[mid];
+        if (n.projectile_z == proj_z && n.projectile_a == proj_a) {
+            p_low = mid + 1;
+        } else {
+            p_high = mid;
+        }
+    }
+    const std::uint32_t proj_last = p_low;
+    if (proj_first >= proj_last) {
+        out.status = Cinel03LookupStatus::MissingProjectile;
+        return out;
+    }
+
+    // Exact target sub-block. NO closest-Z fallback: absence is MissingTarget.
+    std::uint32_t t_low = proj_first;
+    std::uint32_t t_high = proj_last;
+    while (t_low < t_high) {
+        const std::uint32_t mid = t_low + (t_high - t_low) / 2;
+        if (energy_nodes[mid].target_element_z < target_z) {
+            t_low = mid + 1;
+        } else {
+            t_high = mid;
+        }
+    }
+    const std::uint32_t channel_first = t_low;
+    t_high = proj_last;
+    while (t_low < t_high) {
+        const std::uint32_t mid = t_low + (t_high - t_low) / 2;
+        if (energy_nodes[mid].target_element_z == target_z) {
+            t_low = mid + 1;
+        } else {
+            t_high = mid;
+        }
+    }
+    const std::uint32_t channel_last = t_low;
+    if (channel_first >= channel_last) {
+        out.status = Cinel03LookupStatus::MissingTarget;
+        return out;
+    }
+
+    const float channel_min = energy_nodes[channel_first].collision_energy_MeV_per_u;
+    const float channel_max = energy_nodes[channel_last - 1].collision_energy_MeV_per_u;
+    if (!(energy_MeV_per_u >= channel_min)) {
+        out.status = Cinel03LookupStatus::BelowEnergyDomain;
+        out.selected_energy_MeV_per_u = channel_min;
+        out.absolute_energy_mismatch_MeV_per_u = channel_min - energy_MeV_per_u;
+        return out;
+    }
+    if (energy_MeV_per_u > channel_max) {
+        out.status = Cinel03LookupStatus::AboveEnergyDomain;
+        out.selected_energy_MeV_per_u = channel_max;
+        out.absolute_energy_mismatch_MeV_per_u = energy_MeV_per_u - channel_max;
+        return out;
+    }
+
+    // Bracket: E0 = greatest node <= Eq, E1 = smallest node >= Eq.
+    std::uint32_t e_low = channel_first;
+    std::uint32_t e_high = channel_last;
+    while (e_low < e_high) {
+        const std::uint32_t mid = e_low + (e_high - e_low) / 2;
+        if (energy_nodes[mid].collision_energy_MeV_per_u < energy_MeV_per_u) {
+            e_low = mid + 1;
+        } else {
+            e_high = mid;
+        }
+    }
+    std::uint32_t node_e1 = e_low;
+    if (node_e1 >= channel_last) {
+        node_e1 = channel_last - 1;
+    }
+    std::uint32_t node_e0 = node_e1;
+    if (node_e1 > channel_first &&
+        energy_nodes[node_e1].collision_energy_MeV_per_u > energy_MeV_per_u) {
+        node_e0 = node_e1 - 1;
+    }
+    const float e0 = energy_nodes[node_e0].collision_energy_MeV_per_u;
+    const float e1 = energy_nodes[node_e1].collision_energy_MeV_per_u;
+
+    std::uint32_t chosen_node = node_e0;
+    if (e1 > e0) {
+        const float gap = e1 - e0;
+        if (gap > max_allowed_gap_MeV_per_u) {
+            out.status = Cinel03LookupStatus::EnergyGapTooLarge;
+            out.selected_energy_MeV_per_u = (energy_MeV_per_u - e0 <= e1 - energy_MeV_per_u) ? e0 : e1;
+            out.absolute_energy_mismatch_MeV_per_u =
+                (energy_MeV_per_u - e0 <= e1 - energy_MeV_per_u) ? (energy_MeV_per_u - e0) : (e1 - energy_MeV_per_u);
+            return out;
+        }
+        const float p_up = (energy_MeV_per_u - e0) / gap;
+        const float ub = u_bracket < 0.0F ? 0.0F : (u_bracket >= 1.0F ? 0.9999999F : u_bracket);
+        chosen_node = (ub < p_up) ? node_e1 : node_e0;
+    }
+
+    const std::uint32_t first_event = event_offsets[chosen_node];
+    const std::uint32_t last_event = event_offsets[chosen_node + 1];
+    if (first_event >= last_event || last_event > total_events) {
+        out.status = Cinel03LookupStatus::EmptyNode;
+        out.energy_node_index = chosen_node;
+        out.selected_energy_MeV_per_u = energy_nodes[chosen_node].collision_energy_MeV_per_u;
+        float mismatch = energy_MeV_per_u - out.selected_energy_MeV_per_u;
+        out.absolute_energy_mismatch_MeV_per_u = mismatch < 0.0F ? -mismatch : mismatch;
+        return out;
+    }
+    const std::uint32_t count = last_event - first_event;
+    const float ue = u_event < 0.0F ? 0.0F : (u_event >= 1.0F ? 0.9999999F : u_event);
+    std::uint32_t pick = static_cast<std::uint32_t>(ue * static_cast<float>(count));
+    if (pick >= count) {
+        pick = count - 1;
+    }
+    out.event_index = event_indices[first_event + pick];
+    out.energy_node_index = chosen_node;
+    out.status = Cinel03LookupStatus::Hit;
+    out.selected_energy_MeV_per_u = energy_nodes[chosen_node].collision_energy_MeV_per_u;
+    float mismatch = energy_MeV_per_u - out.selected_energy_MeV_per_u;
+    out.absolute_energy_mismatch_MeV_per_u = mismatch < 0.0F ? -mismatch : mismatch;
+    return out;
+}
+
+// Legacy index-only wrapper. Exact-target + bounded-domain semantics, no
+// fallback. The single uniform drives both the bracket choice and the
+// intra-node pick. Prefer cinel03_lookup_event_device for production, which
+// reports the failure reason instead of collapsing it to 0xFFFFFFFF.
+inline std::uint32_t cinel03_find_event_device(
+    const Cinel03EnergyNode* energy_nodes,
+    std::uint32_t node_count,
+    const std::uint32_t* event_offsets,
+    const std::uint32_t* event_indices,
+    std::uint32_t total_events,
+    int proj_z, int proj_a, int target_z,
+    float energy, float /*tolerance_ignored_use_fixed_gap*/, float u01) noexcept
+{
+    const auto result = cinel03_lookup_event_device(
+        energy_nodes, node_count, event_offsets, event_indices, total_events,
+        proj_z, proj_a, target_z, energy, u01, u01);
+    return result.status == Cinel03LookupStatus::Hit ? result.event_index : 0xFFFFFFFFU;
+}
+
 class InelasticPackageV3Table {
 public:
     static constexpr std::uint64_t invalid = std::numeric_limits<std::uint64_t>::max();
@@ -327,7 +486,29 @@ public:
     [[nodiscard]] const std::vector<std::uint64_t>& event_offsets() const noexcept;
     [[nodiscard]] const std::vector<std::uint64_t>& event_indices() const noexcept;
 
-    // Primary event lookup by elemental target Z
+    struct ChannelDomain {
+        bool found_projectile{false};
+        bool found_target{false};
+        float energy_min_MeV_per_u{0.0F};
+        float energy_max_MeV_per_u{0.0F};
+        std::size_t node_count{0};
+        float maximum_node_gap_MeV_per_u{0.0F};
+    };
+
+    [[nodiscard]] ChannelDomain channel_domain(
+        int projectile_z, int projectile_a, int target_element_z) const noexcept;
+
+    // Strict host lookup with the exact device semantics (exact target, bounded
+    // domain, stochastic bracketing). u_bracket/u_event must be in [0,1].
+    [[nodiscard]] Cinel03LookupResult lookup_event(
+        int projectile_z, int projectile_a, int target_element_z,
+        float collision_energy_MeV_per_u,
+        float u_bracket, float u_event,
+        float max_allowed_gap_MeV_per_u = kCinel03MaxAllowedNodeGapMeVperU) const noexcept;
+
+    // Primary event lookup by elemental target Z (legacy index API).
+    // Exact-target + bounded-domain semantics; tolerance is accepted for
+    // backward compatibility but the fixed channel gap rule governs.
     [[nodiscard]] std::uint64_t find_event(
         int projectile_z, int projectile_a, int target_element_z,
         float collision_energy_MeV_per_u, float maximum_energy_mismatch_MeV_per_u,

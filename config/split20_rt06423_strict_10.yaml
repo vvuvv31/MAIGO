@@ -1,0 +1,79 @@
+# TOPAS 10x PBS benchmark: RT06423, production dose/LET on NVIDIA SM75.
+# The CCTG is the validated TPS-90 X-depth packing; output axes are
+# GPU (depth/lateral/lateral) = 440x34x440 and are mapped before comparison.
+run_mode: research
+scorer_mode: production
+number_of_histories: 7554587
+primary_atomic_number: 6
+primary_mass_number: 12
+maximum_step_mm: 0.5
+maximum_relative_energy_loss: 0.005
+energy_cutoff_MeV: 0.1
+
+enable_ct_grid: true
+ct_grid_file: benchmark/topas10x/RT06423/patient_ct_tps_90_xneg.bin
+ct_hu_stopping_power_lut_file: data/hu_stopping_power_lut_geant4_11_3_2.csv
+ct_skip_homogeneous_face_clamp: true
+
+enable_voxel_scoring: true
+voxel_bins_x: 440
+voxel_bins_y: 34
+voxel_bins_z: 440
+voxel_size_x_mm: 0.5
+voxel_size_y_mm: 2.0
+voxel_size_z_mm: 0.5
+phantom_length_mm: 220.0
+depth_bin_width_mm: 0.5
+scorer_area_mm2: 14960.0
+
+enable_energy_straggling: true
+straggling_scale: 1.2
+enable_multiple_scattering: true
+enable_ct_material_mcs: true
+enable_fragment_species_scoring: false
+max_device_memory_fraction: 0.84
+random_seed: 730260831
+
+enable_inelastic: true
+nuclear_model: geant4
+cinel02_max_secondary_inelastic_generations: 1
+enable_secondary_transport: true
+
+tpsSource: true
+enable_tps_coordinate_system: true
+tps_angle_convention: dicom_lps
+tps_spots_file: benchmark/topas10x/RT06423/spots.csv
+tps_beam_model_file: benchmark/topas10x/RT06423/beam_model.csv
+tps_spot_weight_mode: histories
+tps_histories_scale: 0.5
+tps_virtual_scanning_magnet_x_mm: 6227.8
+tps_virtual_scanning_magnet_y_mm: 7008.6
+tps_virtual_source_to_isocenter_mm: 450.0
+tps_sad_mm: 450.0
+tps_beam_angle_deg: 0.0
+tps_apply_topas_patient_placement: true
+spots_patient_trans_x_mm: -12.3588
+spots_patient_trans_y_mm: -5.5590
+spots_patient_trans_z_mm: 0.3945
+spots_patient_rot_z_deg: 90.0
+spots_ct_axis_min_mm: -110.0
+
+primary_stopping_power_file: data/stopping_power_water_geant4_11_3_2.csv
+let_delta_electron_fraction_file: data/let_delta_electron_fraction_water_geant4_11_3_2.csv
+use_particle_specific_stopping_power: true
+particle_stopping_power_file: data/ion_stopping_power_water_geant4_11_3_2.csv
+
+dose_to_medium: true
+dose_to_medium_type: mhd
+dose_to_medium_name: dose_10
+LET: true
+LET_type: mhd
+LET_name: let_all_hadron_10
+device: cuda
+
+ct_schneider_primary_rate_file: data/schneider/schneider_inelastic_rates_v1.bin
+ct_schneider_c12_cinel03_file: data/schneider/cinel03_c12_targets.bin
+ct_schneider_secondary_rate_file: data/schneider/secondary_inelastic_rates_v1.bin
+ct_schneider_secondary_cinel03_file: data/schneider/cinel03_secondary_targets.bin
+ct_schneider_stopping_power_file: data/schneider/schneider_stopping_v1.bin
+ct_schneider_cross_section_file: data/schneider/c12_schneider_inelastic_mass_xs.csv

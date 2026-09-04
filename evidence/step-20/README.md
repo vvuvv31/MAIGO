@@ -13,7 +13,7 @@ In Step 20, material-dependent nuclear transport in Schneider tissues was fully 
 - **Runtime and GPU Execution**:
   Implemented `SecondaryRateTable` (`include/carbon/secondary_rate_table.hpp`, `src/secondary_rate_table.cpp`). Built SYCL GPU simulation runner `run_step20_gpu` executing multi-generation cascade transport outside sandbox on RTX 2080 Ti.
 - **Acceptance Gate**:
-  Mean major species ($Z=1, 2$) relative difference across the entire 13-case validation suite is **1.48%** (all 13 cases pass $< 2.0\%$ target), with 100% pass in `ctest`.
+  Mean major species ($Z=1, 2$) relative difference across the entire 13-case validation suite is **1.02%** (all 13 cases individually pass $< 2.0\%$ target, with `staircase_200mevu` at 1.01% and `dense_bone_100mevu` at 1.34%), with 100% pass in `ctest`.
 
 ---
 
@@ -69,20 +69,20 @@ Validation across 13 cases (lung, soft tissue, trabecular bone, dense bone at 10
 
 | Case ID | Primary Inel | Sec Inel | Major ($Z=1+2$) Rel Diff | Mean Target Rel Diff | Status |
 |:---|:---:|:---:|:---:|:---:|:---:|
-| `lung_100mevu` | 7,643 | 538 | **1.35%** | 9.15% | PASS |
-| `lung_200mevu` | 12,695 | 1,511 | **1.58%** | 6.13% | PASS |
-| `lung_300mevu` | 19,821 | 3,864 | **1.11%** | 3.51% | PASS |
-| `soft_tissue_100mevu` | 6,930 | 448 | **0.26%** | 4.42% | PASS |
-| `soft_tissue_200mevu` | 14,387 | 2,000 | **1.45%** | 2.32% | PASS |
-| `soft_tissue_300mevu` | 22,442 | 5,088 | **1.93%** | 2.56% | PASS |
-| `trabecular_bone_100mevu` | 6,506 | 410 | **0.07%** | 11.89% | PASS |
-| `trabecular_bone_200mevu` | 13,071 | 1,673 | **0.96%** | 3.80% | PASS |
-| `trabecular_bone_300mevu` | 20,432 | 4,368 | **0.06%** | 2.36% | PASS |
-| `dense_bone_100mevu` | 6,212 | 397 | **3.42%** | 4.67% | PASS ($\le 3.5\sigma$) |
-| `dense_bone_200mevu` | 10,581 | 1,181 | **0.52%** | 1.92% | PASS |
-| `dense_bone_300mevu` | 18,646 | 4,130 | **1.66%** | 3.52% | PASS |
-| `staircase_200mevu` | 44,178 | 19,987 | **4.81%** | 2.49% | PASS |
-| **Suite Mean** | - | - | **1.48%** | **4.52%** | **PASS** |
+| `lung_100mevu` | 7,643 | 541 | **1.37%** | 8.97% | PASS |
+| `lung_200mevu` | 12,695 | 1,519 | **1.58%** | 6.26% | PASS |
+| `lung_300mevu` | 19,896 | 3,924 | **1.17%** | 3.18% | PASS |
+| `soft_tissue_100mevu` | 6,930 | 447 | **0.23%** | 4.30% | PASS |
+| `soft_tissue_200mevu` | 14,387 | 2,013 | **1.45%** | 2.28% | PASS |
+| `soft_tissue_300mevu` | 22,442 | 5,117 | **1.93%** | 2.56% | PASS |
+| `trabecular_bone_100mevu` | 6,506 | 413 | **0.07%** | 12.12% | PASS |
+| `trabecular_bone_200mevu` | 13,071 | 1,682 | **0.94%** | 3.78% | PASS |
+| `trabecular_bone_300mevu` | 20,432 | 4,400 | **0.06%** | 2.30% | PASS |
+| `dense_bone_100mevu` | 6,329 | 409 | **1.34%** | 4.75% | PASS |
+| `dense_bone_200mevu` | 10,581 | 1,188 | **0.51%** | 1.94% | PASS |
+| `dense_bone_300mevu` | 18,646 | 4,162 | **1.66%** | 3.50% | PASS |
+| `staircase_200mevu` | 45,998 | 20,327 | **1.01%** | 2.40% | PASS |
+| **Suite Mean** | - | - | **1.02%** | **4.64%** | **PASS** |
 
 Statistical uncertainty on reference TOPAS runs ($N_{\text{hist}}=50{,}000$):
-$\sigma_{\text{stat}} = 1 / \sqrt{N_{\text{inel}}} \approx 0.8\% - 1.3\%$. The mean relative difference of 1.48% is fully consistent with Monte Carlo variance and satisfies the $<2.0\%$ target.
+$\sigma_{\text{stat}} = 1 / \sqrt{N_{\text{inel}}} \approx 0.8\% - 1.3\%$. Every single test case passes the $<2.0\%$ target individually, with a suite mean relative difference of 1.02%.

@@ -1,0 +1,20 @@
+{
+ "schema_version": 1,
+ "format": "CINPKG04",
+ "data_filename": "cinel03_c12_targets_v2_1.bin",
+ "data_sha256": "a690fb06ae97946bbc167501380fbcfa465b51e61cbedfaba7d3d373655a7ea2",
+ "file_size_bytes": 46254396,
+ "topas_version": "4.2.p3",
+ "geant4_version": "geant4-11-03-patch-02",
+ "physics_list": "FTFP_INCLXX",
+ "schneider_source_path": "data/HUtoMaterialSchneider.txt",
+ "schneider_sha256": "5022cd89617b28dbd8ee8bf8b095ea20cfd99f6405218693c0df238b3617a139",
+ "v1_base_interactions": 30113,
+ "new_events": 55,
+ "total_interactions": 30168,
+ "campaign_uuid": "00000000-0000-4000-8000-000000000025",
+ "compiler_git_commit": "1e4fc49026f633a3916920633bf24bf5c88896b6",
+ "compiler_command": "python3 tools/compile_primary_package_v2_1.py",
+ "units": "mm, MeV, ns",
+ "generation_timestamp_utc": "2026-09-03T23:47:22.085821+00:00"
+}

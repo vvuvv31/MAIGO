@@ -2,16 +2,22 @@
 #include "carbon/cross_section.hpp"
 #include "carbon/ct_grid.hpp"
 #include "carbon/electron_transport.hpp"
+#include "carbon/min_json.hpp"
+#include "carbon/schneider_rate_table.hpp"
+#include "carbon/secondary_rate_table.hpp"
 #include "carbon/straggling.hpp"
+#include "carbon/sha256.hpp"
 
 #include <algorithm>
 #include <atomic>
 #include <cctype>
 #include <chrono>
 #include <cmath>
+#include <cstring>
 #include <fstream>
 #include <iostream>
 #include <limits>
+#include <map>
 #include <random>
 #include <sstream>
 #include <stdexcept>
@@ -429,6 +435,14 @@ const char* run_mode_name(const RunMode mode) noexcept {
     return "unknown";
 }
 
+const char* material_physics_mode_name(const MaterialPhysicsMode mode) noexcept {
+    switch (mode) {
+    case MaterialPhysicsMode::Water: return "Water";
+    case MaterialPhysicsMode::SchneiderCt: return "SchneiderCt";
+    }
+    return "unknown";
+}
+
 std::uint64_t parse_random_seed(const std::string_view value) {
     if (value == "auto") {
         return generate_auto_seed();
@@ -655,20 +669,56 @@ void TransportConfig::validate() const {
             "enable_hetero_insert and enable_layered_phantom cannot both be true "
             "(use one heterogeneity model per run)");
     }
-    if (enable_ct_grid) {
+    const_cast<TransportConfig*>(this)->resolve_material_physics_mode();
+    if (material_physics_mode == MaterialPhysicsMode::SchneiderCt) {
         if (ct_grid_file.empty()) {
-            throw std::invalid_argument("enable_ct_grid requires ct_grid_file");
+            throw std::invalid_argument("MaterialPhysicsMode::SchneiderCt requires ct_grid_file");
         }
         if (enable_layered_phantom || enable_hetero_insert) {
             throw std::invalid_argument(
                 "enable_ct_grid cannot combine with layered phantom or hetero insert");
         }
-        if (!ct_schneider_file.empty() && nuclear_model != "none" && ct_schneider_cross_section_file.empty()) {
+        if (!is_primary_attenuation_only_mode()) {
+            if (!ct_air_stopping_power_file.empty() || !ct_lung_stopping_power_file.empty() ||
+                !ct_water_stopping_power_file.empty() || !ct_bone_stopping_power_file.empty() ||
+                !ct_air_cross_section_file.empty() || !ct_lung_cross_section_file.empty() ||
+                !ct_water_cross_section_file.empty() || !ct_bone_cross_section_file.empty()) {
+                throw std::invalid_argument(
+                    "Four-class material tables (air/lung/water/bone) are strictly forbidden in production Schneider CT path");
+            }
+            // Ambiguous water/CINEL02 keys are forbidden in the full
+            // Schneider CT path: water package/rate files and the CT
+            // CINEL02 rate table must not be present, and the water
+            // nuclear model must not be selected. Schneider CT runs must
+            // use the ct_schneider_* tables exclusively.
+            if (!primary_inelastic_package_v2_file.empty() ||
+                !primary_inelastic_rate_v2_file.empty() ||
+                !water_cinel_package_file.empty() ||
+                !water_reaction_rate_file.empty() ||
+                !ct_cinel02_rate_file.empty()) {
+                throw std::invalid_argument(
+                    "Schneider CT full mode forbids water/CINEL02 physics keys "
+                    "(primary_inelastic_package_v2_file, primary_inelastic_rate_v2_file, "
+                    "water_cinel_package_file, water_reaction_rate_file, ct_cinel02_rate_file); "
+                    "use ct_schneider_* tables only");
+            }
+            if (nuclear_model == "cinel02") {
+                throw std::invalid_argument(
+                    "Schneider CT full mode forbids nuclear_model 'cinel02' (water correlated "
+                    "final states); the Schneider rate + CINEL03 path is the only allowed "
+                    "nuclear configuration on CT");
+            }
+        }
+        // v3 bundle: the masked rate-binary hazard replaces the CSV XS table,
+        // so the CSV key is intentionally empty (mixing refused elsewhere).
+        const bool v3_bundle_mode = !ct_schneider_physics_bundle_file.empty();
+        if (!ct_schneider_file.empty() && nuclear_model != "none" && ct_schneider_cross_section_file.empty() &&
+            !v3_bundle_mode) {
             throw std::invalid_argument(
                 "CT Schneider-25 mode with active nuclear model requires ct_schneider_cross_section_file; "
                 "fallback to water or four-class XS is forbidden.");
         }
-        if (!ct_schneider_cross_section_file.empty() && nuclear_model != "none") {
+        if ((!ct_schneider_cross_section_file.empty() || v3_bundle_mode) && nuclear_model != "none") {
             if (primary_atomic_number != 6 || primary_mass_number != 12) {
                 throw std::invalid_argument(
                     "Schneider primary cross section is validated for C12 (Z=6, A=12) primaries only, got Z=" +
@@ -1297,6 +1347,340 @@ void TransportConfig::validate() const {
     }
 }
 
+// v2.1 physics bundle enforcement. Content-pinning (SHA equality), not
+// path-pinning: any file with matching SHA is accepted, any v1/v3 mixing
+// is refused. Water mode never reaches here (is_schneider_ct_mode gate).
+void validate_schneider_physics_bundle(const TransportConfig& config) {
+    const std::filesystem::path primary_rate =
+        !config.ct_schneider_primary_rate_file.empty()
+            ? config.ct_schneider_primary_rate_file
+            : std::filesystem::path("data/schneider/schneider_inelastic_rates_v1.bin");
+    const std::filesystem::path secondary_rate =
+        !config.ct_schneider_secondary_rate_file.empty()
+            ? config.ct_schneider_secondary_rate_file
+            : std::filesystem::path("data/schneider/secondary_inelastic_rates_v1.bin");
+
+    auto peek_version = [](const std::filesystem::path& p) -> std::uint32_t {
+        if (!std::filesystem::exists(p)) {
+            return 0;
+        }
+        std::ifstream in(p, std::ios::binary);
+        char magic[8]{};
+        std::uint32_t version{0};
+        in.read(magic, 8);
+        in.read(reinterpret_cast<char*>(&version), sizeof(version));
+        if (!in) {
+            return 0;
+        }
+        if (std::strncmp(magic, "SCHNRATE", 8) != 0 && std::memcmp(magic, "SCHN2RAT", 8) != 0) {
+            return 0;
+        }
+        return version;
+    };
+    const std::uint32_t primary_ver = peek_version(primary_rate);
+    const std::uint32_t secondary_ver = peek_version(secondary_rate);
+
+    if (config.ct_schneider_physics_bundle_file.empty()) {
+        if (primary_ver == 3 || secondary_ver == 3) {
+            throw std::runtime_error(
+                "Schneider CT startup failed: v3 rate file requires "
+                "ct_schneider_physics_bundle_file (refusing unbundled v3)");
+        }
+        return;
+    }
+
+    const std::filesystem::path& bundle_path = config.ct_schneider_physics_bundle_file;
+    if (!std::filesystem::exists(bundle_path)) {
+        throw std::runtime_error("Schneider CT startup failed: bundle file missing: " +
+                                 bundle_path.string());
+    }
+    std::ifstream bundle_in(bundle_path);
+    std::string bundle_content((std::istreambuf_iterator<char>(bundle_in)),
+                               std::istreambuf_iterator<char>());
+    minjson::Parser parser(bundle_content);
+    const minjson::Value bundle = parser.parse();
+    if (minjson::require_uint(bundle.at("schema_version"), "schema_version") != 1) {
+        throw std::runtime_error("Schneider CT startup failed: unsupported bundle schema_version");
+    }
+
+    const std::filesystem::path c12_cinel =
+        !config.ct_schneider_c12_cinel03_file.empty()
+            ? config.ct_schneider_c12_cinel03_file
+            : std::filesystem::path("data/schneider/cinel03_c12_targets.bin");
+    const std::filesystem::path sec_cinel =
+        !config.ct_schneider_secondary_cinel03_file.empty()
+            ? config.ct_schneider_secondary_cinel03_file
+            : std::filesystem::path("data/schneider/cinel03_secondary_targets.bin");
+    const std::filesystem::path stopping =
+        !config.ct_schneider_stopping_power_file.empty()
+            ? config.ct_schneider_stopping_power_file
+            : std::filesystem::path("data/schneider/schneider_stopping_v1.bin");
+
+    auto require_pinned_sha = [](const minjson::Value& section, const std::string& role,
+                                 const std::filesystem::path& actual) {
+        const std::string pinned = minjson::require_string(section.at("sha256"), role + ".sha256");
+        if (!std::filesystem::exists(actual)) {
+            throw std::runtime_error("Schneider CT startup failed: " + role +
+                                     " missing: " + actual.string());
+        }
+        const std::string actual_sha = compute_file_sha256_hex(actual);
+        if (actual_sha != pinned) {
+            throw std::runtime_error("Schneider CT startup failed: " + role + " SHA mismatch: " +
+                                     actual.string());
+        }
+    };
+    require_pinned_sha(bundle.at("primary_rate"), "primary_rate", primary_rate);
+    require_pinned_sha(bundle.at("secondary_rate"), "secondary_rate", secondary_rate);
+    require_pinned_sha(bundle.at("primary_package"), "primary_package", c12_cinel);
+    require_pinned_sha(bundle.at("secondary_package"), "secondary_package", sec_cinel);
+    require_pinned_sha(bundle.at("stopping_table"), "stopping_table", stopping);
+
+    // v3 requires exact versions; any v1 file with a bundle is mixing.
+    if (primary_ver != 3 || secondary_ver != 3) {
+        throw std::runtime_error(
+            "Schneider CT startup failed: bundle requires v3 primary AND secondary rate files "
+            "(refusing v1/v3 mixing)");
+    }
+    // v3 has no CSV XS table; the key must be empty.
+    if (!config.ct_schneider_cross_section_file.empty()) {
+        throw std::runtime_error(
+            "Schneider CT startup failed: bundle (v3) requires empty "
+            "ct_schneider_cross_section_file (refusing CSV/v3 mixing)");
+    }
+
+    // Full rate loads: schema + masked closure + metadata verified by
+    // construction (separate from the transport loads that follow).
+    const SecondaryRateTable sec_table = SecondaryRateTable::from_binary(secondary_rate);
+    const SchneiderRateTable pri_table = SchneiderRateTable::from_binary(primary_rate);
+
+    // Registry: bundle order == rate keys (order-sensitive, no aliasing).
+    const minjson::Value& registry = bundle.at("projectile_registry");
+    if (registry.type != minjson::Value::Type::Array ||
+        registry.arr.size() != sec_table.projectiles().size()) {
+        throw std::runtime_error("Schneider CT startup failed: bundle registry size != rate keys");
+    }
+    for (std::size_t i = 0; i < registry.arr.size(); ++i) {
+        const int z = static_cast<int>(minjson::require_uint(registry.arr[i].at("z"), "registry.z"));
+        const int a = static_cast<int>(minjson::require_uint(registry.arr[i].at("a"), "registry.a"));
+        if (z != sec_table.projectiles()[i].z || a != sec_table.projectiles()[i].a) {
+            throw std::runtime_error("Schneider CT startup failed: bundle registry mismatch at index " +
+                                     std::to_string(i));
+        }
+    }
+    const minjson::Value& targets = bundle.at("target_order");
+    if (targets.type != minjson::Value::Type::Array || targets.arr.size() != 13) {
+        throw std::runtime_error("Schneider CT startup failed: bundle target_order size != 13");
+    }
+
+    // Package sidecars: SHA-pinned channels.json next to each package binary;
+    // projectile set == registry, bounds == rate domains (no 400MB load).
+    auto read_sidecar = [](const std::filesystem::path& pkg_path, const minjson::Value& pkg_section,
+                           const std::string& role) {
+        const std::string channels_name = minjson::require_string(
+            pkg_section.at("channels_file"), role + ".channels_file");
+        const std::string pinned =
+            minjson::require_string(pkg_section.at("channels_sha256"), role + ".channels_sha256");
+        const std::filesystem::path sidecar =
+            pkg_path.parent_path() / std::filesystem::path(channels_name).filename();
+        if (!std::filesystem::exists(sidecar)) {
+            throw std::runtime_error("Schneider CT startup failed: package channels sidecar missing: " +
+                                     sidecar.string());
+        }
+        if (compute_file_sha256_hex(sidecar) != pinned) {
+            throw std::runtime_error("Schneider CT startup failed: package channels SHA mismatch: " +
+                                     sidecar.string());
+        }
+        std::ifstream side_in(sidecar);
+        std::string side_content((std::istreambuf_iterator<char>(side_in)),
+                                 std::istreambuf_iterator<char>());
+        minjson::Parser side_parser(side_content);
+        return side_parser.parse();
+    };
+
+    const minjson::Value sec_side = read_sidecar(sec_cinel, bundle.at("secondary_package"), "sec");
+    {
+        std::map<std::pair<int, int>, int> proj_seen;
+        for (const auto& c : sec_side.at("channels").arr) {
+            const int pz = static_cast<int>(minjson::require_uint(c.at("projectile_z"), "ch.pz"));
+            const int pa = static_cast<int>(minjson::require_uint(c.at("projectile_a"), "ch.pa"));
+            const int tz = static_cast<int>(minjson::require_uint(c.at("target_element_z"), "ch.tz"));
+            const double lo = minjson::require_number(c.at("energy_min_MeV_per_u"), "ch.lo");
+            const double hi = minjson::require_number(c.at("energy_max_MeV_per_u"), "ch.hi");
+            proj_seen[{pz, pa}]++;
+            const int pi = sec_table.projectile_index(pz, pa);
+            if (pi < 0) {
+                throw std::runtime_error(
+                    "Schneider CT startup failed: package channel projectile not in registry");
+            }
+            const std::size_t ti = SecondaryRateTable::target_index_from_z(tz);
+            const auto& dom = sec_table.channel_domain(static_cast<std::size_t>(pi), ti);
+            if (!dom.has_support || dom.energy_min_mevu != lo || dom.energy_max_mevu != hi) {
+                throw std::runtime_error(
+                    "Schneider CT startup failed: rate/package domain mismatch");
+            }
+        }
+        if (proj_seen.size() != registry.arr.size()) {
+            throw std::runtime_error(
+                "Schneider CT startup failed: package/registry projectile count mismatch");
+        }
+    }
+    const minjson::Value pri_side = read_sidecar(c12_cinel, bundle.at("primary_package"), "pri");
+    {
+        if (pri_side.at("channels").arr.size() != 13) {
+            throw std::runtime_error(
+                "Schneider CT startup failed: primary package must have 13 channels");
+        }
+        for (const auto& c : pri_side.at("channels").arr) {
+            const int pz = static_cast<int>(minjson::require_uint(c.at("projectile_z"), "ch.pz"));
+            const int pa = static_cast<int>(minjson::require_uint(c.at("projectile_a"), "ch.pa"));
+            if (pz != 6 || pa != 12) {
+                throw std::runtime_error(
+                    "Schneider CT startup failed: primary package is C12-only");
+            }
+            const int tz = static_cast<int>(minjson::require_uint(c.at("target_element_z"), "ch.tz"));
+            const double lo = minjson::require_number(c.at("energy_min_MeV_per_u"), "ch.lo");
+            const double hi = minjson::require_number(c.at("energy_max_MeV_per_u"), "ch.hi");
+            const std::size_t ti = SchneiderRateTable::target_index_from_z(tz);
+            const auto& dom = pri_table.channel_domain(ti);
+            if (!dom.has_support || dom.energy_min_mevu != lo || dom.energy_max_mevu != hi) {
+                throw std::runtime_error(
+                    "Schneider CT startup failed: primary rate/package domain mismatch");
+            }
+        }
+    }
+
+    // Schneider source pinned by the bundle (in addition to the frozen hash).
+    const std::string schn_pinned =
+        minjson::require_string(bundle.at("schneider_source").at("sha256"), "schneider.sha256");
+    const std::filesystem::path schn_source("data/HUtoMaterialSchneider.txt");
+    if (std::filesystem::exists(schn_source) && compute_file_sha256_hex(schn_source) != schn_pinned) {
+        throw std::runtime_error("Schneider CT startup failed: Schneider source SHA != bundle pin");
+    }
+    std::cout << "[schneider-bundle] v2.1 bundle verified: "
+              << registry.arr.size() << " projectiles, 182+13 domains, 5 files SHA-pinned\n";
+}
+
+void validate_schneider_ct_startup(const TransportConfig& config) {
+    if (!config.is_schneider_ct_mode()) {
+        return;
+    }
+    if (config.ct_grid_file.empty()) {
+        throw std::invalid_argument("MaterialPhysicsMode::SchneiderCt requires ct_grid_file");
+    }
+    if (config.is_primary_attenuation_only_mode()) {
+        if (config.ct_schneider_cross_section_file.empty() ||
+            !std::filesystem::exists(config.ct_schneider_cross_section_file)) {
+            throw std::invalid_argument(
+                "ct_validation_mode 'primary-attenuation-only' requires valid ct_schneider_cross_section_file");
+        }
+        return;
+    }
+
+    if (!config.enable_inelastic && config.nuclear_model == "none") {
+        return;
+    }
+
+    // Out-of-scope nuclear policy: explicit em_only with no default fallback
+    // on the v2.1 bundle path. v1 legacy configs predate the key and keep
+    // working (frozen evidence untouched).
+    if (!config.ct_schneider_physics_bundle_file.empty() &&
+        config.secondary_out_of_scope_nuclear_policy != "em_only") {
+        throw std::invalid_argument(
+            "Schneider CT bundle mode requires secondary_out_of_scope_nuclear_policy: em_only "
+            "(registry-unknown projectiles keep EM transport with nuclear reactions disabled; "
+            "no other value or default exists)");
+    }
+
+    validate_schneider_physics_bundle(config);
+
+    // Determine primary rate / cross section source
+    std::filesystem::path primary_source = config.ct_schneider_primary_rate_file;
+    if (primary_source.empty() && !config.ct_schneider_cross_section_file.empty()) {
+        primary_source = config.ct_schneider_cross_section_file;
+    }
+    if (primary_source.empty()) {
+        primary_source = "data/schneider/schneider_inelastic_rates_v1.bin";
+    }
+
+    if (!std::filesystem::exists(primary_source)) {
+        throw std::runtime_error("Schneider CT startup failed: primary rate/XS table missing: " + primary_source.string());
+    }
+
+    // When secondary transport is active or in production mode, verify secondary rate and CINEL03 packages
+    if (config.enable_secondary_transport || config.run_mode == RunMode::production) {
+        std::filesystem::path c12_cinel = !config.ct_schneider_c12_cinel03_file.empty()
+                                              ? config.ct_schneider_c12_cinel03_file
+                                              : std::filesystem::path("data/schneider/cinel03_c12_targets.bin");
+        std::filesystem::path sec_rate = !config.ct_schneider_secondary_rate_file.empty()
+                                             ? config.ct_schneider_secondary_rate_file
+                                             : std::filesystem::path("data/schneider/secondary_inelastic_rates_v1.bin");
+        std::filesystem::path sec_cinel = !config.ct_schneider_secondary_cinel03_file.empty()
+                                              ? config.ct_schneider_secondary_cinel03_file
+                                              : std::filesystem::path("data/schneider/cinel03_secondary_targets.bin");
+        std::filesystem::path stopping_table = !config.ct_schneider_stopping_power_file.empty()
+                                                   ? config.ct_schneider_stopping_power_file
+                                                   : std::filesystem::path("data/schneider/schneider_stopping_v1.bin");
+
+        const std::vector<std::pair<std::string, std::filesystem::path>> required = {
+            {"Schneider primary rate table", primary_source},
+            {"Schneider stopping power table", stopping_table},
+            {"Schneider C12 CINEL03 package", c12_cinel},
+            {"Schneider secondary rate table", sec_rate},
+            {"Schneider secondary CINEL03 package", sec_cinel},
+        };
+
+        for (const auto& [name, path] : required) {
+            if (!std::filesystem::exists(path)) {
+                throw std::runtime_error("Schneider CT startup failed: " + name + " missing: " + path.string());
+            }
+            if (path.extension() == ".bin") {
+                // Companion metadata existence check
+                const auto meta_path = path.string() + ".metadata.json";
+                const auto meta_path_alt = std::filesystem::path(path).replace_extension(".metadata.json");
+                std::filesystem::path resolved_meta;
+                if (std::filesystem::exists(meta_path)) {
+                    resolved_meta = meta_path;
+                } else if (std::filesystem::exists(meta_path_alt)) {
+                    resolved_meta = meta_path_alt;
+                } else {
+                    throw std::runtime_error("Schneider CT startup failed: companion metadata missing for " + path.string());
+                }
+
+                // Check binary SHA-256 bound to metadata
+                std::ifstream meta_file(resolved_meta);
+                if (!meta_file.is_open()) {
+                    throw std::runtime_error("Schneider CT startup failed: cannot open metadata: " + resolved_meta.string());
+                }
+                std::string meta_content((std::istreambuf_iterator<char>(meta_file)),
+                                         std::istreambuf_iterator<char>());
+                const std::string search_key = "\"data_sha256\": \"";
+                const size_t pos = meta_content.find(search_key);
+                if (pos == std::string::npos) {
+                    throw std::runtime_error("Schneider CT startup failed: metadata missing 'data_sha256': " + resolved_meta.string());
+                }
+                const size_t end_pos = meta_content.find("\"", pos + search_key.length());
+                const std::string declared_sha256 = meta_content.substr(pos + search_key.length(), end_pos - (pos + search_key.length()));
+
+                const std::string actual_sha256 = compute_file_sha256_hex(path);
+                if (actual_sha256 != declared_sha256) {
+                    throw std::runtime_error("Schneider CT startup failed: SHA256 mismatch for " + path.string() +
+                                             " (actual=" + actual_sha256 + ", declared=" + declared_sha256 + ")");
+                }
+            }
+        }
+
+        // Verify Schneider source binding (data/HUtoMaterialSchneider.txt)
+        const std::filesystem::path schn_source = "data/HUtoMaterialSchneider.txt";
+        if (std::filesystem::exists(schn_source)) {
+            const std::string schn_sha = compute_file_sha256_hex(schn_source);
+            constexpr const char* expected_schn_sha = "5022cd89617b28dbd8ee8bf8b095ea20cfd99f6405218693c0df238b3617a139";
+            if (schn_sha != expected_schn_sha) {
+                throw std::runtime_error("Schneider CT startup failed: HUtoMaterialSchneider.txt SHA256 mismatch");
+            }
+        }
+    }
+}
+
 TransportConfig load_config(const std::filesystem::path& path) {
     auto values = read_key_values(path);
     const auto ion_physics_file = merge_ion_physics_manifest(path, values);
@@ -1512,6 +1896,52 @@ TransportConfig load_config(const std::filesystem::path& path) {
         config.ct_schneider_stopping_power_file = resolve_input_path_from_config(
             config.ct_schneider_stopping_power_file, path);
     }
+    config.water_cinel_package_file = parse_path(
+        values, "water_cinel_package_file", config.water_cinel_package_file);
+    if (config.water_cinel_package_file.empty()) {
+        config.water_cinel_package_file = config.primary_inelastic_package_v2_file;
+    }
+    config.water_reaction_rate_file = parse_path(
+        values, "water_reaction_rate_file", config.water_reaction_rate_file);
+    if (config.water_reaction_rate_file.empty()) {
+        config.water_reaction_rate_file = config.primary_inelastic_rate_v2_file;
+    }
+    config.ct_schneider_c12_cinel03_file = parse_path(
+        values, "ct_schneider_c12_cinel03_file", config.ct_schneider_c12_cinel03_file);
+    if (!config.ct_schneider_c12_cinel03_file.empty()) {
+        config.ct_schneider_c12_cinel03_file = resolve_input_path_from_config(
+            config.ct_schneider_c12_cinel03_file, path);
+    }
+    config.ct_schneider_secondary_cinel03_file = parse_path(
+        values, "ct_schneider_secondary_cinel03_file", config.ct_schneider_secondary_cinel03_file);
+    if (!config.ct_schneider_secondary_cinel03_file.empty()) {
+        config.ct_schneider_secondary_cinel03_file = resolve_input_path_from_config(
+            config.ct_schneider_secondary_cinel03_file, path);
+    }
+    config.ct_schneider_primary_rate_file = parse_path(
+        values, "ct_schneider_primary_rate_file", config.ct_schneider_primary_rate_file);
+    if (!config.ct_schneider_primary_rate_file.empty()) {
+        config.ct_schneider_primary_rate_file = resolve_input_path_from_config(
+            config.ct_schneider_primary_rate_file, path);
+    }
+    config.ct_schneider_secondary_rate_file = parse_path(
+        values, "ct_schneider_secondary_rate_file", config.ct_schneider_secondary_rate_file);
+    if (!config.ct_schneider_secondary_rate_file.empty()) {
+        config.ct_schneider_secondary_rate_file = resolve_input_path_from_config(
+            config.ct_schneider_secondary_rate_file, path);
+    }
+    config.ct_schneider_physics_bundle_file = parse_path(
+        values, "ct_schneider_physics_bundle_file", config.ct_schneider_physics_bundle_file);
+    if (!config.ct_schneider_physics_bundle_file.empty()) {
+        config.ct_schneider_physics_bundle_file = resolve_input_path_from_config(
+            config.ct_schneider_physics_bundle_file, path);
+    }
+    config.ct_schneider_radiation_length_file = parse_path(
+        values, "ct_schneider_radiation_length_file", config.ct_schneider_radiation_length_file);
+    if (!config.ct_schneider_radiation_length_file.empty()) {
+        config.ct_schneider_radiation_length_file = resolve_input_path_from_config(
+            config.ct_schneider_radiation_length_file, path);
+    }
     config.ct_cinel02_rate_file = parse_path(
         values, "ct_cinel02_rate_file", config.ct_cinel02_rate_file);
     config.ct_hu_stopping_power_lut_file = parse_path(
@@ -1524,10 +1954,15 @@ TransportConfig load_config(const std::filesystem::path& path) {
     if (const auto it = values.find("ct_validation_mode"); it != values.end()) {
         config.ct_validation_mode = it->second;
     }
+    if (const auto it = values.find("secondary_out_of_scope_nuclear_policy");
+        it != values.end()) {
+        config.secondary_out_of_scope_nuclear_policy = it->second;
+    }
     if (values.find("ct_grid_file") != values.end() &&
         values.find("enable_ct_grid") == values.end()) {
         config.enable_ct_grid = true;
     }
+    config.resolve_material_physics_mode();
     config.scorer_area_mm2 = parse_number(values, "scorer_area_mm2", config.scorer_area_mm2);
     config.dose_output_scale =
         parse_number(values, "dose_output_scale", config.dose_output_scale);
@@ -1629,22 +2064,28 @@ TransportConfig load_config(const std::filesystem::path& path) {
         if (is_schneider_mode) {
             std::cout << "[material-indexing] mode: schneider-25\n";
             if (config.nuclear_model != "none") {
-                if (config.ct_schneider_cross_section_file.empty()) {
+                // v3 bundle: masked rate-binary hazard replaces the CSV XS
+                // table (key intentionally empty, mixing refused at startup);
+                // nothing to preload here.
+                const bool v3_bundle = !config.ct_schneider_physics_bundle_file.empty();
+                if (config.ct_schneider_cross_section_file.empty() && !v3_bundle) {
                     throw std::runtime_error(
                         "CT Schneider-25 mode with active nuclear model '" + config.nuclear_model +
                         "' requires ct_schneider_cross_section_file; fallback to water or four-class XS is forbidden.");
                 }
-                if (!std::filesystem::exists(config.ct_schneider_cross_section_file)) {
-                    throw std::runtime_error(
-                        "ct_schneider_cross_section_file does not exist: " +
-                        config.ct_schneider_cross_section_file.string());
-                }
-                const auto xs_tables = CrossSectionTable::from_schneider_csv(
-                    config.ct_schneider_cross_section_file);
-                if (xs_tables.size() != SchneiderResampledCrossSectionGrid::kExpectedSections) {
-                    throw std::runtime_error(
-                        "ct_schneider_cross_section_file must contain exactly 25 sections (got " +
-                        std::to_string(xs_tables.size()) + ")");
+                if (!config.ct_schneider_cross_section_file.empty()) {
+                    if (!std::filesystem::exists(config.ct_schneider_cross_section_file)) {
+                        throw std::runtime_error(
+                            "ct_schneider_cross_section_file does not exist: " +
+                            config.ct_schneider_cross_section_file.string());
+                    }
+                    const auto xs_tables = CrossSectionTable::from_schneider_csv(
+                        config.ct_schneider_cross_section_file);
+                    if (xs_tables.size() != SchneiderResampledCrossSectionGrid::kExpectedSections) {
+                        throw std::runtime_error(
+                            "ct_schneider_cross_section_file must contain exactly 25 sections (got " +
+                            std::to_string(xs_tables.size()) + ")");
+                    }
                 }
             }
         } else {
