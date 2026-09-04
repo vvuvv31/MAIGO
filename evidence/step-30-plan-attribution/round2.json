@@ -1,0 +1,78 @@
+{
+ "note": "round-2: model-serving censuses, ablations, analytic closure",
+ "bic_for_c12": "IMPOSSIBLE: BIC-only C12 air slab shows distal dose exactly 0 (EM-only flight); capture wrapper silent. ref C12 final state is INCLXX.",
+ "dual_census_BIC_HP_inclxx": {
+  "C12": [
+   613,
+   "INCL++ undefined"
+  ],
+  "p": [
+   126,
+   "Binary Cascade"
+  ],
+  "note": "C12->INCLXX, p->BIC"
+ },
+ "dualbc_census_plus_binarycascade": {
+  "C12": [
+   609,
+   "Binary Light Ion Cascade"
+  ],
+  "note": "standalone binarycascade wins over inclxx for C12"
+ },
+ "mixedcap_census_no_BIC_HP": {
+  "C12": [
+   652,
+   "Binary Light Ion Cascade"
+  ],
+  "note": "binarycascade+inclxx without BIC_HP still BIC"
+ },
+ "mixed_air_dose_T_over_G": 0.8236,
+ "noelastic_air_dose_T_over_G": 0.8281,
+ "rotation_device": {
+  "unit": 1.79e-07,
+  "dot": 5.36e-07,
+  "identity": 1.46e-07
+ },
+ "package_vs_dual_matched200": {
+  "package_charged": 1952,
+  "dual_charged": 1989,
+  "package_n": 114,
+  "dual_n": 43
+ },
+ "analytic_csda_straightline_MeV_per_ev": 75.4,
+ "gpu_air_MeV_per_ev": 862.0,
+ "topas_air_MeV_per_ev": 38.0,
+ "gpu_he_origin_depth_shape": "rising to last bin (punch-through-like)",
+ "nosec_current_binary_sum_per_hist": 0.00037531,
+ "slurm": {
+  "dualbc": 2296,
+  "mixedcap": 2297,
+  "noelastic": 2299,
+  "dual_seeds": [
+   2301,
+   2302,
+   2303,
+   2304,
+   2305
+  ],
+  "aircensus": 2300,
+  "bisect": 2293,
+  "dual_thin_seeds": 2289,
+  "inp100": 2294,
+  "mixed_inclxx": 2295,
+  "bic_E200_E300": [
+   2280,
+   2281
+  ],
+  "dual_probe": 2287,
+  "proton_BIC": 2286,
+  "inclxx_debug": [
+   2282,
+   2283
+  ],
+  "dose_compare": [
+   2284,
+   2285
+  ]
+ }
+}
