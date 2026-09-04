@@ -1,8 +1,11 @@
-// Host-exact replica of kernel primary sampling for the TPS spot-batch
+// Host replica of kernel primary sampling for the TPS spot-batch
 // source (src/transport_sycl.cpp: sample energy dims 40/41, emittance dims
 // 30-33, pose transform, phantom-box entry clip). Emits per-history phase
 // space at box entry in TOPAS world coordinates plus per-spot JSON moments.
 // No transport is performed. Used for GPU-vs-TOPAS source truth comparison.
+// SCOPE: only the -X shuffle branch of transform_tps_90_pose_to_ct
+// (RT06423 packing); anything else aborts. This is a host-side formula
+// replica, not a dump of device-kernel samples.
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -136,9 +139,15 @@ int run(const std::string& config_path, const std::string& spots_path,
                                           static_cast<float>(config.voxel_size_y_mm);
     }
 
-    // Inverse map setup. By construction the transported beam always travels
-    // +CT-Z, and +CT-Z is -patient-X in the tps_90 packing, so the -X shuffle
-    // branch applies to every entry. Verify per entry below.
+    // Scope: this tool inverts only the -X shuffle branch of
+    // transform_tps_90_pose_to_ct (beam along -patient X, +CT-Z travel).
+    // Any entry whose beam axis is inconsistent with that packing aborts
+    // below (fail-fast); +X packings are out of scope.
+    // NOTE: host replica of the kernel sampling math for source-truth
+    // comparison, not a device-kernel dump. It proves host-formula consistency
+    // with TOPAS; kernel equivalence rests on line-by-line correspondence
+    // with src/transport_sycl.cpp sampling (dims 40/41 energy, 30-33
+    // emittance, spot-local history index, float ops, pose, box clip).
     InverseTps90 inv;
     inv.tx = config.spots_patient_trans_x_mm;
     inv.ty = config.spots_patient_trans_y_mm;
@@ -190,7 +199,6 @@ int run(const std::string& config_path, const std::string& spots_path,
         double sxx{0}, szz{0}, stx{0}, sty{0}, stxtx{0}, stzty{0}, see{0};
         double sxtx{0}, szty{0};
     };
-    std::vector<PlaneAcc> planes;
     std::vector<std::ofstream> plane_files;
     plane_files.reserve(world_planes.size());
     for (const double y0 : world_planes) {
@@ -198,7 +206,6 @@ int run(const std::string& config_path, const std::string& spots_path,
                                  std::to_string(static_cast<int>(y0)) + ".csv");
         plane_files.back()
             << "spot_id,hist_in_spot,x_mm,y_mm,z_mm,dx,dy,dz,E_MeV\n";
-        planes.push_back(PlaneAcc{y0, &plane_files.back()});
     }
 
     auto intersect_slab = [](float pos, float dir, float lo, float hi, float& t_enter,
@@ -217,6 +224,20 @@ int run(const std::string& config_path, const std::string& spots_path,
 
     for (std::size_t bi = 0; bi < batch.size(); ++bi) {
         const auto& spot = batch[bi];
+        // Fail-fast scope guard: the -X inverse maps CT +Z to patient -X,
+        // so a supported entry must satisfy -(uz_z) < 0, i.e. uz_z > 0.
+        if (!(static_cast<double>(spot.beam_uz_z()) > 0.0)) {
+            std::cerr << "scope error: batch entry needs the +X shuffle branch, "
+                         "which this tool does not implement\n";
+            return 1;
+        }
+        // Per-spot plane accumulators (must reset for every spot; streams stay
+        // global so one invocation can still emit all spots' states).
+        std::vector<PlaneAcc> planes;
+        planes.reserve(plane_files.size());
+        for (std::size_t pi = 0; pi < plane_files.size(); ++pi) {
+            planes.push_back(PlaneAcc{world_planes[pi], &plane_files[pi]});
+        }
         // batch preserves plan order with zero-allocation spots skipped
         std::size_t pi = 0, seen = 0;
         for (; pi < plan.spots.size(); ++pi) {
