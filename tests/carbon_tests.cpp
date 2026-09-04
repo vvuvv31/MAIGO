@@ -2826,6 +2826,29 @@ void test_tps_source_geometry_csv_and_switch() {
     std::filesystem::remove(ct_path, ec);
 }
 
+void test_primary_survival_buffer_gate() {
+    carbon::TransportConfig production;
+    require(!production.needs_primary_survival_buffers(),
+            "production default must not allocate survival buffers");
+    carbon::TransportConfig species = production;
+    species.enable_fragment_species_scoring = true;
+    require(species.needs_primary_survival_buffers(),
+            "fragment species scoring must allocate survival buffers");
+    carbon::TransportConfig atten = production;
+    atten.ct_validation_mode = "primary-attenuation-only";
+    require(atten.needs_primary_survival_buffers(),
+            "primary-attenuation-only mode must allocate survival buffers");
+#ifdef CARBON_VALIDATION_SCORERS
+    carbon::TransportConfig validation = production;
+    validation.scorer_mode = "validation";
+    require(validation.needs_primary_survival_buffers(),
+            "validation scorer_mode must allocate survival buffers");
+#else
+    require(!production.validation_scorers(),
+            "production binary must report validation_scorers false");
+#endif
+}
+
 #ifdef CARBON_HAS_SYCL
 
 void test_sycl_tps_source_arbitrary_gantry_transport() {
@@ -9800,6 +9823,7 @@ int main(int argc, char** argv) {
         run("test_topas_spots_parse_angle01", test_topas_spots_parse_angle01);
         run("test_topas_spot_weights_and_tps_90_transform", test_topas_spot_weights_and_tps_90_transform);
         run("test_tps_source_geometry_csv_and_switch", test_tps_source_geometry_csv_and_switch);
+        run("test_primary_survival_buffer_gate", test_primary_survival_buffer_gate);
         run("test_dose_scorer_matches_mev_conversion", test_dose_scorer_matches_mev_conversion);
         run("test_dense_voxel_mhd_writer", test_dense_voxel_mhd_writer);
         run("test_layered_voxel_dose_uses_local_mass", test_layered_voxel_dose_uses_local_mass);

@@ -732,6 +732,13 @@ struct TransportConfig {
     [[nodiscard]] bool is_primary_attenuation_only_mode() const noexcept {
         return ct_validation_mode == "primary-attenuation-only";
     }
+    // Diagnostic-only allocation gate for per-depth primary survival /
+    // inelastic-reaction buffers. Write-only diagnostics; no transport,
+    // dose, or RNG effect.
+    [[nodiscard]] bool needs_primary_survival_buffers() const noexcept {
+        return validation_scorers() || is_primary_attenuation_only_mode() ||
+               enable_fragment_species_scoring;
+    }
     void validate() const;
 };
 

@@ -1631,7 +1631,9 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
     auto* dose_device = mem_tracker.allocate<DoseAtomicT>(number_of_bins);
     std::uint64_t* primary_survival_device = nullptr;
     std::uint64_t* inelastic_reaction_device = nullptr;
-    if (config.validation_scorers() || config.is_primary_attenuation_only_mode()) {
+    // Diagnostic-only: fragment-species scoring also needs per-depth
+    // survival/reaction counts. No transport effect.
+    if (config.needs_primary_survival_buffers()) {
         primary_survival_device =
             mem_tracker.allocate<std::uint64_t>(number_of_bins);
         inelastic_reaction_device =
