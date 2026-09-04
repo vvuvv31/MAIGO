@@ -84,7 +84,7 @@ The executor updates only the `Status` column and the execution log. Never rewri
 | [27](steps/27-package-provenance-audit.md) | DONE | Independent v2 package audit (8/9; below-demand 0.71% documented exception) | 26 |
 | [28](steps/28-lookup-closure-50k.md) | DONE for declared RT06423 research scope | v2.1 Tier-C accepted=true (post-EM null taxonomy fixed, E_h/E_c documented, He6/B8/C10 em_only declared, NEED masked residual) | 27 |
 | [29](steps/29-generation2-transport-validation.md) | DONE for declared RT06423 research scope | v2.1 Tier-D accepted=true (same scope notes as Step 28) | 28 |
-| [30](steps/30-single-shard-abcd-gamma.md) | IN_PROGRESS | Single-candidate Shard01 completed (global 3%/3mm ~98%, IDD ~0.994); paired A/B/C/D dropped per scope decision | 29 |
+| [30](steps/30-single-shard-abcd-gamma.md) | IN_PROGRESS | Secondary midpoint CT stopping bug fixed: air and total energy now match TOPAS (~2%); Shard01 IDD 0.99999, global 2%/2mm 87.28%; residual Gamma attribution remains | 29 |
 | [31](steps/31-production-20shard-gamma.md) | BLOCKED | 20-shard production Gamma (awaiting authorization) | 30 |
 
 General Schneider production coverage: LIMITED. Declared scope limitations
@@ -243,6 +243,7 @@ YYYY-MM-DD HH:MM TZ | step NN | OLD -> NEW | commit/hash or blocker | evidence p
 2026-09-03 14:32 CST | step 21 | IN_PROGRESS -> DONE | test(ct): add end-to-end Schneider DICOM reference | tests/test_schneider_dicom_reference.cpp
 2026-09-03 14:52 CST | step 20 | DONE -> IN_PROGRESS | audit: reopen Step 20 due to verifier masking single-case failures (staircase_200mevu major species diff 4.81%) and lack of production integration | plan2/steps/00-status-reset-and-verifier-audit.md
 2026-09-03 14:52 CST | step 21 | DONE -> IN_PROGRESS | audit: reopen Step 21 due to hardcoded reference test assertions and empty evidence/step-21/ | plan2/steps/00-status-reset-and-verifier-audit.md
-```
 2026-09-04 19:00 CST | step 30 | IN_PROGRESS | plan-attribution diagnosis: source truth 9 spots pass (counts exact, phase-space chi2/dof 0.61); 5 energy-group patient runs show totals 0.98 but GPU air excess 3-8x growing with energy; uniform-air slab EM 1.0003 but nuclear GPU +21% with halo 7.4 vs 4.2mm; sandwich tisA 1.008 / air 0.22 / tisB 1.13. Root: secondary angular spectra (CINEL vs BIC), package frozen -> no code change, Step 30 stays IN_PROGRESS | tools/dump_tps_phase_space.cpp
 2026-09-05 00:30 CST | step 30 | IN_PROGRESS | round-2 diagnosis: BIC cannot serve C12 (distal-zero proven); ref C12 final state is INCLXX (dual census 613/613); rotation runtime device-verified (5e-7); package==campaign==dual@matched-energy; INCLXX-slab dose == BIC-slab dose, GPU still +21% with same INCLXX birth; elastic ablation nil; analytic CSDA-straight-line gives 75 MeV/ev vs GPU 862 vs TOPAS 38. Residual: secondary slowing/deposit in low-density media under identical birth. No code change (package frozen, no proven bug site). | evidence/step-30-plan-attribution/round2.json
+2026-09-05 07:00 CST | step 30 | IN_PROGRESS | supersedes prior package-angle limitation: secondary midpoint dE used unscaled density-1 water stopping in CT. Fix applies Schneider density/material factor at midpoint. Air slab T/G 0.8281->1.0052; sandwich air 0.2224->0.9634 and downstream tissue 1.1319->1.0090; RT06423 Shard01 accepted/no overflow, total T/G 0.9837->0.9979, air 0.1526->0.9786, IDD r 0.99375->0.999993, global 2%/2mm 85.34->87.28. No package/beam/MCS/scale change; 20-shard not run. | evidence/step-30-secondary-midpoint-stopping/validation.json
+```

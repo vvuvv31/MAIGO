@@ -1,0 +1,170 @@
+{
+  "schema_version": 1,
+  "status": "validated_single_shard_not_production",
+  "base_commit": "ad3a912",
+  "root_cause": "Secondary charged-particle midpoint stopping power used the density-1 water ion table directly. The midpoint value drives dE, so Schneider air was over-stopped by approximately 1/rho.",
+  "physics_changes": {
+    "changed": [
+      "Apply the same Schneider density and mass stopping-power factor at secondary step start and midpoint energy."
+    ],
+    "unchanged": [
+      "CINEL03 packages",
+      "inelastic rate tables",
+      "primary transport",
+      "water/non-CT transport",
+      "beam model",
+      "MCS formula and scale",
+      "straggling parameters",
+      "dose scale and coordinate mapping"
+    ]
+  },
+  "code_files": [
+    "include/carbon/ct_grid.hpp",
+    "src/transport_sycl.cpp",
+    "src/secondary_rate_table.cpp",
+    "tests/carbon_tests.cpp"
+  ],
+  "tests": {
+    "cmake_build": "PASS (oneapi-nvidia-release, nvptx64, sm_75)",
+    "ctest": "4/4 PASS",
+    "regression_guards": [
+      "helper water/air/bone scaling",
+      "production midpoint block must call material scaling and midpoint material-factor lookup"
+    ],
+    "secondary_rate_metadata_hardening": "v1 data_sha256 is now parsed and verified; pre-existing negative test restored"
+  },
+  "air_slab_200mevu_500k": {
+    "seed": 121260804,
+    "old_topas_over_gpu": 0.8280540695805428,
+    "new_topas_over_gpu": 1.005192807092143,
+    "new_gpu_over_old_gpu": 0.823776357867071,
+    "quality_accepted": true,
+    "overflow": 0
+  },
+  "tissue_air_tissue_200mevu_500k": {
+    "seed": 121260804,
+    "topas_over_gpu": {
+      "upstream_tissue": {
+        "old": 1.0077007578777122,
+        "new": 1.0008363236854743
+      },
+      "air": {
+        "old": 0.22237167583298678,
+        "new": 0.9633772800700761
+      },
+      "downstream_tissue": {
+        "old": 1.1318634216886205,
+        "new": 1.0090417324791887
+      }
+    }
+  },
+  "rt06423_shard01": {
+    "histories": 7554587,
+    "seed": 721260804,
+    "quality_accepted": true,
+    "overflow": 0,
+    "relative_energy_residual": 2.11347694023e-06,
+    "nominal20_total_topas_over_gpu": {
+      "old": 0.9836787800297074,
+      "new": 0.9978810658355047
+    },
+    "nominal20_air_topas_over_gpu": {
+      "old": 0.15262670382822355,
+      "new": 0.9786046576082457
+    },
+    "high_dose_correlation": {
+      "old": 0.9542079956688386,
+      "new": 0.958496515604224
+    },
+    "idd_correlation": {
+      "old": 0.9937518759654391,
+      "new": 0.9999932861345514
+    },
+    "gamma_frozen_50k_seed42_10pct": {
+      "old_nominal": {
+        "global_3pct_3mm": 98.026,
+        "global_2pct_2mm": 85.342,
+        "local_3pct_3mm": 95.488,
+        "local_2pct_2mm": 79.012
+      },
+      "new_nominal": {
+        "global_3pct_3mm": 97.858,
+        "global_2pct_2mm": 87.284,
+        "local_3pct_3mm": 94.846,
+        "local_2pct_2mm": 79.604
+      },
+      "new_ls": {
+        "scale": 18.7927,
+        "global_3pct_3mm": 96.318,
+        "global_2pct_2mm": 82.954,
+        "local_3pct_3mm": 93.244,
+        "local_2pct_2mm": 75.83
+      },
+      "interpretation": "The 10% TOPAS mask excludes most air ghost, so 3%/3mm is not expected to jump. IDD, total energy, air energy and 2%/2mm are the sensitive improvements."
+    }
+  },
+  "artifact_root": "/mnt/sda/wuwei/secondary_midpoint_fix",
+  "artifacts": {
+    "air/air_200mevu_full.yaml": {
+      "bytes": 2085,
+      "sha256": "420b80ba00e835249f8fc877f475b03e5cff18639b7ec51b68e4b3f01ec62164"
+    },
+    "air/dose.mhd": {
+      "bytes": 297,
+      "sha256": "bee7ff1f35f75ca057091a6600073e957261c8b3261f3231077728249fb61158"
+    },
+    "air/dose.raw": {
+      "bytes": 17600000,
+      "sha256": "cb514c61d061354db89b92b56c55e16772ee17d8893da67c29b92e840526b5a3"
+    },
+    "sandwich/dose.mhd": {
+      "bytes": 297,
+      "sha256": "bee7ff1f35f75ca057091a6600073e957261c8b3261f3231077728249fb61158"
+    },
+    "sandwich/dose.raw": {
+      "bytes": 17600000,
+      "sha256": "fdaafce20c0c5612371a8002b087ed7383e353f8f5ec54a3c20ad12f767b3938"
+    },
+    "sandwich/sandwich_200mevu_full.yaml": {
+      "bytes": 2095,
+      "sha256": "e8cbd8e19885d170771407ce10faec88ab470cea3815393b40d4b8d2588307f0"
+    },
+    "shard01/dose_midpoint_fix_01.mhd": {
+      "bytes": 318,
+      "sha256": "9f7d897f360f819257b549612d82d0c2bc486e0b98c4903ac290f9ccc946d16c"
+    },
+    "shard01/dose_midpoint_fix_01.raw": {
+      "bytes": 26329600,
+      "sha256": "d38c28755bdbf7d7f503ac976201b012cc55acb264cadde52f4a8b4c70f51bad"
+    },
+    "shard01/energy_ledger.json": {
+      "bytes": 563764,
+      "sha256": "3c1fe18e7f816a90b7aa719fd8b2e0f16aa91a5a43c60df9051bb5304d592e07"
+    },
+    "shard01/maigo_midpoint_fix_gamma.json": {
+      "bytes": 1186,
+      "sha256": "540a7bc3c13f93b82cfac252e6e25194f7b1c5b4c49655549d45139f91e9d5b0"
+    },
+    "shard01/quality_report.json": {
+      "bytes": 1055,
+      "sha256": "4c10a620b9d0e0ad920bfe811b99b6b58f9db27ff7be0c7f8725314512b0dcfb"
+    },
+    "shard01/rt06423_midpoint_fix_shard01.yaml": {
+      "bytes": 2967,
+      "sha256": "97b14c014383b60df6c61010d08041af19a00279e2cecc53a77bad073599e538"
+    },
+    "shard01/schneider_miss_log.json": {
+      "bytes": 97,
+      "sha256": "19c66f23a8871fc44c36588bf408a498574b1d8324797c8db12611ce0273449e"
+    },
+    "shard01/schneider_unsupported_tracks.json": {
+      "bytes": 12111787,
+      "sha256": "93aa765619153ef850b09f20067f9fde4b27f6126e838e215032184837992846"
+    }
+  },
+  "limitations": [
+    "Single shard only; no 20-shard production conclusion.",
+    "Step 30 remains in progress because 2%/2mm and local Gamma still need residual attribution.",
+    "No claim that all Schneider secondary physics is generally validated."
+  ]
+}

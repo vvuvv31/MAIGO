@@ -4446,25 +4446,27 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                             auto sec_sp = (ion_sp_table[sp_idx] +
                                            sp_frac * (ion_sp_table[sp_idx + 1] -
                                                       ion_sp_table[sp_idx]));
-                            if (enable_ct_grid && sec_in_ct) {
-                                if (use_ct_mass_sp && ct_mass_sp_factor_lut_device != nullptr &&
-                                    ct_n_mass_factors > 0U) {
-                                    const auto material_factor = ct_lookup_mass_sp_factor(
-                                        ct_mass_sp_factor_lut_device,
-                                        use_ct_density_mass_spr ? ct_density_spr_n_rho
-                                                                : ct_n_mass_factors,
-                                        table_size, use_ct_density_mass_spr,
-                                        ct_mass_spr_log_rho_min, ct_mass_spr_inv_dlog,
-                                        static_cast<std::uint32_t>(sec_ct_material),
-                                        sec_local_density_g_per_cm3,
-                                        static_cast<std::size_t>(sp_idx), sp_frac,
-                                        [](float x) { return sycl::log(x); });
-                                    sec_sp = ct_mass_scaled_stopping_power(
-                                        sec_sp, sec_local_density_g_per_cm3, material_factor);
-                                } else {
-                                    sec_sp *= sycl::fmax(sec_local_density_g_per_cm3, 1.0e-6F);
-                                }
+                            const bool sec_use_mass_sp_factor =
+                                enable_ct_grid && sec_in_ct && use_ct_mass_sp &&
+                                ct_mass_sp_factor_lut_device != nullptr &&
+                                ct_n_mass_factors > 0U;
+                            float sec_material_factor = 1.0F;
+                            if (sec_use_mass_sp_factor) {
+                                sec_material_factor = ct_lookup_mass_sp_factor(
+                                    ct_mass_sp_factor_lut_device,
+                                    use_ct_density_mass_spr ? ct_density_spr_n_rho
+                                                            : ct_n_mass_factors,
+                                    table_size, use_ct_density_mass_spr,
+                                    ct_mass_spr_log_rho_min, ct_mass_spr_inv_dlog,
+                                    static_cast<std::uint32_t>(sec_ct_material),
+                                    sec_local_density_g_per_cm3,
+                                    static_cast<std::size_t>(sp_idx), sp_frac,
+                                    [](float x) { return sycl::log(x); });
                             }
+                            sec_sp = secondary_material_stopping_power(
+                                sec_sp, enable_ct_grid && sec_in_ct,
+                                sec_local_density_g_per_cm3,
+                                sec_use_mass_sp_factor, sec_material_factor);
 
                             if (sec_sp <= 1.0e-6F) break;
 
@@ -4787,7 +4789,31 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                             auto mid_idx = static_cast<int>(sycl::floor(mid_flt));
                             mid_idx = sycl::max(0, sycl::min(mid_idx, static_cast<int>(table_size) - 2));
                             const auto mid_fr = sycl::clamp(mid_flt - static_cast<float>(mid_idx), 0.0F, 1.0F);
-                            const auto mid_sp = (ion_sp_table[mid_idx] + mid_fr * (ion_sp_table[mid_idx + 1] - ion_sp_table[mid_idx]));
+                            auto mid_sp = (ion_sp_table[mid_idx] +
+                                           mid_fr * (ion_sp_table[mid_idx + 1] -
+                                                     ion_sp_table[mid_idx]));
+                            // The midpoint value drives dE and must use the same
+                            // Schneider density/material scaling as sec_sp at the
+                            // step start. Previously this remained a density-1
+                            // water value, over-stopping secondaries by ~1/rho
+                            // (about 25x in the RT06423 air section).
+                            float mid_material_factor = 1.0F;
+                            if (sec_use_mass_sp_factor) {
+                                mid_material_factor = ct_lookup_mass_sp_factor(
+                                    ct_mass_sp_factor_lut_device,
+                                    use_ct_density_mass_spr ? ct_density_spr_n_rho
+                                                            : ct_n_mass_factors,
+                                    table_size, use_ct_density_mass_spr,
+                                    ct_mass_spr_log_rho_min, ct_mass_spr_inv_dlog,
+                                    static_cast<std::uint32_t>(sec_ct_material),
+                                    sec_local_density_g_per_cm3,
+                                    static_cast<std::size_t>(mid_idx), mid_fr,
+                                    [](float x) { return sycl::log(x); });
+                            }
+                            mid_sp = secondary_material_stopping_power(
+                                mid_sp, enable_ct_grid && sec_in_ct,
+                                sec_local_density_g_per_cm3,
+                                sec_use_mass_sp_factor, mid_material_factor);
 
                             auto dE = sycl::fmin(mid_sp * sec_step_mm, sec_e);
                             if (enable_secondary_energy_straggling &&

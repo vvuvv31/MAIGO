@@ -1051,6 +1051,38 @@ void test_ct_grid_helpers() {
     require_near(carbon::ct_mass_scaled_stopping_power(10.0F, 1.85F, 0.93F), 17.205F,
                  1.0e-3, "mass SP bone factor");
 
+    require_near(
+        carbon::secondary_material_stopping_power(10.0F, false, 0.04F, false, 1.0F),
+        10.0F, 0.0, "secondary stopping outside CT must remain water");
+    require_near(
+        carbon::secondary_material_stopping_power(10.0F, true, 0.04F, false, 1.0F),
+        0.4F, 1.0e-6, "secondary CT stopping must apply local air density");
+    require_near(
+        carbon::secondary_material_stopping_power(10.0F, true, 1.85F, true, 0.93F),
+        17.205F, 1.0e-3,
+        "secondary CT stopping must apply density and material factor");
+
+    // Guard the production call site as well as the helper math: the regression
+    // was specifically a raw water-table midpoint value bypassing CT scaling.
+    const auto transport_path =
+        std::filesystem::path(CARBON_SOURCE_DIR) / "src/transport_sycl.cpp";
+    std::ifstream transport_input(transport_path);
+    require(static_cast<bool>(transport_input),
+            "transport_sycl.cpp must be readable for midpoint stopping guard");
+    const std::string transport_source((std::istreambuf_iterator<char>(transport_input)),
+                                       std::istreambuf_iterator<char>());
+    const auto midpoint_begin = transport_source.find("// Midpoint loss");
+    const auto midpoint_end = transport_source.find("auto dE =", midpoint_begin);
+    require(midpoint_begin != std::string::npos && midpoint_end != std::string::npos,
+            "secondary midpoint stopping block must remain identifiable");
+    const auto midpoint_block = transport_source.substr(
+        midpoint_begin, midpoint_end - midpoint_begin);
+    require(midpoint_block.find("secondary_material_stopping_power(") !=
+                std::string::npos,
+            "secondary midpoint dE must apply CT density/material scaling");
+    require(midpoint_block.find("ct_lookup_mass_sp_factor(") != std::string::npos,
+            "secondary midpoint dE must evaluate the material factor at midpoint energy");
+
     require_near(carbon::distance_to_next_ct_face_1d(0.3F, 0.0F, 1.0F, 1.0F), 0.7F, 1.0e-5,
                  "ct face +x interior");
     require_near(carbon::distance_to_next_ct_face_1d(1.0F, 0.0F, 1.0F, 1.0F), 1.0F, 1.0e-4,

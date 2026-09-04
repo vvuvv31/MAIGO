@@ -273,9 +273,15 @@ SecondaryRateTable SecondaryRateTable::from_binary(
         std::string meta_content((std::istreambuf_iterator<char>(meta_file)),
                                  std::istreambuf_iterator<char>());
         if (!is_v3) {
-            if (meta_content.find("\"data_sha256\"") == std::string::npos) {
-                throw std::runtime_error("SecondaryRateTable: v1 metadata missing data_sha256: " +
-                                         resolved_meta.string());
+            minjson::Parser parser(meta_content);
+            const minjson::Value meta = parser.parse();
+            const std::string expected_sha =
+                minjson::require_string(meta.at("data_sha256"), "data_sha256");
+            const std::string actual_sha = compute_file_sha256_hex(binary_path);
+            if (actual_sha != expected_sha) {
+                throw std::runtime_error("SecondaryRateTable: SHA-256 mismatch for " +
+                                         binary_path.string() + ": expected " + expected_sha +
+                                         ", got " + actual_sha);
             }
         } else {
             minjson::Parser parser(meta_content);

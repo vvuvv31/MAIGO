@@ -298,6 +298,28 @@ inline float ct_mass_scaled_stopping_power(const float water_sp_MeV_per_mm,
            (density_g_per_cm3 > 1.0e-6F ? density_g_per_cm3 : 1.0e-6F);
 }
 
+// Apply the material scaling used by charged-secondary transport at every
+// energy evaluation (step start and midpoint). Keeping this operation in one
+// helper prevents a raw density-1 water value from leaking into the midpoint
+// dE calculation in CT. Outside CT the ion table is already an absolute water
+// stopping power and must remain unchanged.
+inline float secondary_material_stopping_power(
+    const float water_sp_MeV_per_mm,
+    const bool in_ct,
+    const float density_g_per_cm3,
+    const bool use_mass_sp_factor,
+    const float mass_sp_factor) noexcept {
+    if (!in_ct) {
+        return water_sp_MeV_per_mm;
+    }
+    if (use_mass_sp_factor) {
+        return ct_mass_scaled_stopping_power(
+            water_sp_MeV_per_mm, density_g_per_cm3, mass_sp_factor);
+    }
+    return water_sp_MeV_per_mm *
+           (density_g_per_cm3 > 1.0e-6F ? density_g_per_cm3 : 1.0e-6F);
+}
+
 // Row of the mass-SP LUT is either a Schneider section or a log-density bin.
 template <typename LogFn>
 inline float ct_lookup_mass_sp_factor(const float* lut,
