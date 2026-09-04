@@ -1,11 +1,15 @@
 {
- "schema_version": 1,
- "note": "Large .bin files are NOT in git. Regenerate with the listed generator or copy from a pinned artifact copy. tools/verify_schneider_v2_1_data.py enforces this manifest.",
+ "schema_version": 2,
+ "note": "Large .bin files are NOT in git. Regenerate with the listed generator or copy from a pinned artifact copy. tools/verify_schneider_v2_1_data.py enforces this manifest, including bundle pins, magic/version, and registry/target signatures.",
+ "bundle_registry_sha256": "8c8f978bf68e4f40f8a850ca87f6bc3318cb0aae022c4fc91f21c23c1f9d9091",
+ "bundle_target_order_sha256": "dd1b3f6a281844ab9eff93bde015cd0fd4b862e4346c55ac55a57f51665abd4f",
  "files": [
   {
    "path": "data/schneider/schneider_inelastic_rates_v2_1.bin",
    "bytes": 2579212,
    "sha256": "086ef97dbf323dc2681d5f6c5257e78c87446050f6fb628f3b0f8b24211a8370",
+   "magic": "SCHNRATE",
+   "version": 3,
    "generator": "python3 tools/compile_primary_rates_v2_1.py --accept-residual-need",
    "raw_source": [
     "/mnt/sda/wuwei/cinel03-campaigns/schneider-secondary-v2",
@@ -17,6 +21,8 @@
    "path": "data/schneider/secondary_inelastic_rates_v2_1.bin",
    "bytes": 36107784,
    "sha256": "6aa679ee162c7a47b82da715ea1333b21b4056b6480596d8d6243a96edb67258",
+   "magic": "SCHN2RAT",
+   "version": 3,
    "generator": "python3 tools/compile_rates_v2_1.py --accept-residual-need",
    "raw_source": [
     "/mnt/sda/wuwei/cinel03-campaigns/schneider-secondary-v2",
@@ -28,6 +34,8 @@
    "path": "data/schneider/cinel03_c12_targets_v2_1.bin",
    "bytes": 46254396,
    "sha256": "a690fb06ae97946bbc167501380fbcfa465b51e61cbedfaba7d3d373655a7ea2",
+   "magic": "CINPKG04",
+   "version": 4,
    "generator": "python3 tools/compile_primary_package_v2_1.py",
    "raw_source": [
     "/mnt/sda/wuwei/cinel03-campaigns/schneider-secondary-v2",
@@ -39,6 +47,8 @@
    "path": "data/schneider/cinel03_secondary_targets_v2_1_14p.bin",
    "bytes": 487366212,
    "sha256": "a0dc4259b856f0b0e7665672a64589ea4cd64ca304cae75fca16d6de50fc8006",
+   "magic": "CINPKG04",
+   "version": 4,
    "generator": "python3 tools/compile_v2_package.py --tag v2_1",
    "raw_source": [
     "/mnt/sda/wuwei/cinel03-campaigns/schneider-secondary-v2",
@@ -53,6 +63,16 @@
    "generator": "committed",
    "raw_source": [],
    "in_git": true
+  },
+  {
+   "path": "data/schneider/schneider_stopping_v1.bin",
+   "bytes": 1721044,
+   "sha256": "9786dba071f61e660fcc5940a844e8109c4e480ccb603d7929d2fcfaae152c2f",
+   "generator": "committed",
+   "raw_source": [],
+   "in_git": true,
+   "magic": "SCHNSTOP",
+   "version": 1
   },
   {
    "path": "data/schneider/c12_schneider_inelastic_mass_xs_v2_1.csv",
