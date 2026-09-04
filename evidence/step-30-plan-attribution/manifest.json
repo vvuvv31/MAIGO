@@ -1,0 +1,397 @@
+{
+ "files": {
+  "exe_production": {
+   "path": "/mnt/sdb/wuwei/MAIGO/build/carbon_mc",
+   "sha256": "0fcd0a6a9d683b9129353dc946dba8d2fd67ea2741d0c2d0671565e83bf1697b",
+   "bytes": 6644480
+  },
+  "exe_validation": {
+   "path": "/mnt/sdb/wuwei/MAIGO/build-validation/carbon_mc",
+   "sha256": "7dd54eb32d2216a572dd7a736430e0688931168e11be7f815357d12776754fda",
+   "bytes": 4531152
+  },
+  "exe_phase_space": {
+   "path": "/mnt/sdb/wuwei/MAIGO/build/dump_tps_phase_space",
+   "sha256": "af8024414e892d21b5703e101b8f92811f6b52c8439db9a4fc01dfec90315515",
+   "bytes": 1874136
+  },
+  "cfg_match": {
+   "path": "/mnt/sdb/wuwei/MAIGO/config/rt06423_schneider_v2_1_match.yaml",
+   "sha256": "06c11d9d9c5465a4800b6bf012fde82635cad68d7f72791987eb74f1f4e56c19",
+   "bytes": 2970
+  },
+  "cfg_group_g1": {
+   "path": "/mnt/sdb/wuwei/MAIGO/config/rt06423_group_g1.yaml",
+   "sha256": "b5d32c676ba9f98a9164450318accd68d1e697333b70d6c14188de2b3ddab62d",
+   "bytes": 2951
+  },
+  "cfg_group_g2": {
+   "path": "/mnt/sdb/wuwei/MAIGO/config/rt06423_group_g2.yaml",
+   "sha256": "7c6db063a0454f5a29bf9368278c54cbbd55190ea9b122d86dc3594b1e6cec84",
+   "bytes": 2951
+  },
+  "cfg_group_g3": {
+   "path": "/mnt/sdb/wuwei/MAIGO/config/rt06423_group_g3.yaml",
+   "sha256": "32468f178e126b1fe0ecda4edb3518d49fd0fc4fa131ba98788cfe53a05cc3bb",
+   "bytes": 2951
+  },
+  "cfg_group_g4": {
+   "path": "/mnt/sdb/wuwei/MAIGO/config/rt06423_group_g4.yaml",
+   "sha256": "7245ddaf1dd204d31110b8a546c99115a1006d981ddbbf852ef993eebd13d322",
+   "bytes": 2951
+  },
+  "cfg_group_g5": {
+   "path": "/mnt/sdb/wuwei/MAIGO/config/rt06423_group_g5.yaml",
+   "sha256": "cdf2610d477fe2371524b92f52abaeaed16919c239cccab318d8ace77c7098e6",
+   "bytes": 2951
+  },
+  "cfg_group_g1_origin": {
+   "path": "/mnt/sdb/wuwei/MAIGO/config/rt06423_group_g1_origin.yaml",
+   "sha256": "544a940a9e9b369862da6490111768e790b3f804312e5a1b7ff56d77a09e5fe0",
+   "bytes": 3144
+  },
+  "spots_full": {
+   "path": "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/RT06423/spots.csv",
+   "sha256": "5b9fec7a6171adf5793a272fa2057573c710f6897d8fb27add002d6fd2199a96",
+   "bytes": 27781
+  },
+  "beam_model": {
+   "path": "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/RT06423/beam_model.csv",
+   "sha256": "98488f9bca739b89124aa083916d65787b2c20074d2e73c4a7dffbed5bf8e9f6",
+   "bytes": 939
+  },
+  "ct_cctg": {
+   "path": "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/RT06423/patient_ct_tps_90_xneg.bin",
+   "sha256": "c049830cf8651f70d75a695771a9cb2c5a4c8cbf7fcc277548e168df1f4dcd46",
+   "bytes": 32912248
+  },
+  "topas_spots_subset_g1": {
+   "path": "/mnt/sda/wuwei/groups_topas/spots_g1.csv",
+   "sha256": "e3488c7f9a6707540609745871cab49fa9da90736c6894740a86656292177f10",
+   "bytes": 1080
+  },
+  "topas_param_group_g1": {
+   "path": "/mnt/sda/wuwei/groups_topas/param_g1.txt",
+   "sha256": "aadc1bf8972ae15017ac4d08c1cc5721db7d5af13309596ba8e549495dc6f6de",
+   "bytes": 2592
+  },
+  "gpu_dose_g1": {
+   "path": "/mnt/sdb/wuwei/MAIGO/out/rt06423_group_g1/dose_group_g1.raw",
+   "sha256": "11a4f5873aa689cc06660683139abb7c12006c1609945a1329e01eeda3ab2eb7",
+   "bytes": 26329600
+  },
+  "topas_dose_g1": {
+   "path": "/mnt/sda/wuwei/groups_topas/dose_g1.bin",
+   "sha256": "efd8f39e400ee5c8621ef7d4915d6de52d1f12f0680cc9bcd5d3e78306375ca9",
+   "bytes": 52659200
+  },
+  "topas_spots_subset_g2": {
+   "path": "/mnt/sda/wuwei/groups_topas/spots_g2.csv",
+   "sha256": "06406523ddd042240a082072d7e3d663631a38e7a075debdfc23ae91ee389265",
+   "bytes": 4288
+  },
+  "topas_param_group_g2": {
+   "path": "/mnt/sda/wuwei/groups_topas/param_g2.txt",
+   "sha256": "9d2b871fd6b259881713dee92c68c60533a47e4bbfaba2b1545c53c7e53b0f6a",
+   "bytes": 2593
+  },
+  "gpu_dose_g2": {
+   "path": "/mnt/sdb/wuwei/MAIGO/out/rt06423_group_g2/dose_group_g2.raw",
+   "sha256": "9692d128d6d128e85db68e22601e81d98339657adfb88fc0e10506c8d75b012b",
+   "bytes": 26329600
+  },
+  "topas_dose_g2": {
+   "path": "/mnt/sda/wuwei/groups_topas/dose_g2.bin",
+   "sha256": "43b9428a4cfb24a0fc32b14ab8945789005f0523ef4a952dec75f019b006bc8e",
+   "bytes": 52659200
+  },
+  "topas_spots_subset_g3": {
+   "path": "/mnt/sda/wuwei/groups_topas/spots_g3.csv",
+   "sha256": "313d61850e172a2b385b6a44d136c55c3dcca419b38af36061f667bafe9a5423",
+   "bytes": 8202
+  },
+  "topas_param_group_g3": {
+   "path": "/mnt/sda/wuwei/groups_topas/param_g3.txt",
+   "sha256": "ad4ac61ddd2d75480d89a4e38f6433def30b67521847bc5d06477b71a724a202",
+   "bytes": 2593
+  },
+  "gpu_dose_g3": {
+   "path": "/mnt/sdb/wuwei/MAIGO/out/rt06423_group_g3/dose_group_g3.raw",
+   "sha256": "a986b8d145df0177ed0044c80da417f63cc2a5a4aeb14a6d0afb8619bf458f98",
+   "bytes": 26329600
+  },
+  "topas_dose_g3": {
+   "path": "/mnt/sda/wuwei/groups_topas/dose_g3.bin",
+   "sha256": "731608b8a2245447b5100dd90c8721563060386d083bf2522dbbe481d62e12dc",
+   "bytes": 52659200
+  },
+  "topas_spots_subset_g4": {
+   "path": "/mnt/sda/wuwei/groups_topas/spots_g4.csv",
+   "sha256": "493911cf3bfbd6f48c5e49b50979d9706fc91d3716e655ff2b7720910734057d",
+   "bytes": 8623
+  },
+  "topas_param_group_g4": {
+   "path": "/mnt/sda/wuwei/groups_topas/param_g4.txt",
+   "sha256": "d8d235ee94f2adbda5e95d882ac658c6049c4d4e1a7ffb87b184b987f95f191e",
+   "bytes": 2593
+  },
+  "gpu_dose_g4": {
+   "path": "/mnt/sdb/wuwei/MAIGO/out/rt06423_group_g4/dose_group_g4.raw",
+   "sha256": "3b0e0b75e26680e2c375103524186325f5d0046304fea4ff34b14fa8b5508327",
+   "bytes": 26329600
+  },
+  "topas_dose_g4": {
+   "path": "/mnt/sda/wuwei/groups_topas/dose_g4.bin",
+   "sha256": "23579ad5ad3a164c61a455ae2770ae9fbf7f0ae2589b3d23214e45de85490fb4",
+   "bytes": 52659200
+  },
+  "topas_spots_subset_g5": {
+   "path": "/mnt/sda/wuwei/groups_topas/spots_g5.csv",
+   "sha256": "793c59f33970b4fa3efae5550ed5aaa7ba1a853a1f108bed3fdce37355b38299",
+   "bytes": 5732
+  },
+  "topas_param_group_g5": {
+   "path": "/mnt/sda/wuwei/groups_topas/param_g5.txt",
+   "sha256": "36d31c727e75b31b77a9d0ec4eb108e5a51c5db82cc23594233f7fdcebb5f387",
+   "bytes": 2593
+  },
+  "gpu_dose_g5": {
+   "path": "/mnt/sdb/wuwei/MAIGO/out/rt06423_group_g5/dose_group_g5.raw",
+   "sha256": "ceb1746441b3dad52ef3a034ad5c314484f8add452bd98e63f1056a96af7ce79",
+   "bytes": 26329600
+  },
+  "topas_dose_g5": {
+   "path": "/mnt/sda/wuwei/groups_topas/dose_g5.bin",
+   "sha256": "52d842ae42c8dffad77b8f5e9c479f27d1c5143715103998f8d6fd92e16051e9",
+   "bytes": 52659200
+  },
+  "air_cctg": {
+   "path": "/mnt/sda/wuwei/airtest/air_200mevu.cctg",
+   "sha256": "54ccd80f0e082853d1bd008a7975c4377162e5d020a135eafc312d2ba72dbeaa",
+   "bytes": 22000248
+  },
+  "air_gpu_em_yaml": {
+   "path": "/mnt/sda/wuwei/airtest/air_200mevu_em.yaml",
+   "sha256": "ecc80ffb8dcf7a6461aae622d154877f39368287a06b6e139174224e03e44690",
+   "bytes": 2084
+  },
+  "air_gpu_full_yaml": {
+   "path": "/mnt/sda/wuwei/airtest/air_200mevu_full.yaml",
+   "sha256": "143d5e1d8be677bf9275ffff669ee238f82026b98c0a0f293021c17b615c809d",
+   "bytes": 2085
+  },
+  "air_topas_em_param": {
+   "path": "/mnt/sda/wuwei/airtest/param_air_200mevu_em.txt",
+   "sha256": "10471e341453af94eb6b61d0ca9ec04b1bb864e82e7f1947caf0f01621858c57",
+   "bytes": 2260
+  },
+  "air_topas_full_param": {
+   "path": "/mnt/sda/wuwei/airtest/param_air_200mevu_full.txt",
+   "sha256": "4b102cd4e62c7521f7e9cfa37c33411680ce574a231d22050cecd649262b09e4",
+   "bytes": 2327
+  },
+  "air_gpu_em_dose": {
+   "path": "/mnt/sda/wuwei/airtest/em/dose.raw",
+   "sha256": "016774b419deaedb83c4be0a199238c7e06ebe8704222dd1cfafeaa094524de4",
+   "bytes": 17600000
+  },
+  "air_gpu_full_dose": {
+   "path": "/mnt/sda/wuwei/airtest/full/dose.raw",
+   "sha256": "3aca359ba821b77f590a3db77f2d0d4d1f0f6d07d3df0c940621a60aa784fb3f",
+   "bytes": 17600000
+  },
+  "air_topas_em_dose": {
+   "path": "/mnt/sda/wuwei/airtest/topas_dose3d_air_em.csv",
+   "sha256": "9bfb28ac79fa9a637b123c9b902ad96a3cc163b9d00c2764811dc08490737408",
+   "bytes": 72492825
+  },
+  "air_topas_full_dose": {
+   "path": "/mnt/sda/wuwei/airtest/topas_dose3d_air_full.csv",
+   "sha256": "f28f2bb097475ea5153e5a802deaf6d70a3ff8a2b0f4258e4edf6ea3baccae25",
+   "bytes": 96817409
+  },
+  "air_topas_full_validation": {
+   "path": "/mnt/sda/wuwei/airtest/topas_validation_air_full.json",
+   "sha256": "f2bf50e2a177da450643ace545117ee7d92aea5fc7b03740f4565e3324761ab2",
+   "bytes": 1612994
+  },
+  "sandwich_cctg": {
+   "path": "/mnt/sda/wuwei/airtest/sandwich_200mevu.cctg",
+   "sha256": "bee46c300d4651568968aa51224be5ae672e2aad953d5b1bebedad01a6a7c66f",
+   "bytes": 22000248
+  },
+  "sandwich_gpu_yaml": {
+   "path": "/mnt/sda/wuwei/airtest/sandwich_200mevu_full.yaml",
+   "sha256": "78f90e6afc8259adda1d53fa17a26c76d642cb71b33509e735b7aaee9457c8a4",
+   "bytes": 2094
+  },
+  "sandwich_topas_param": {
+   "path": "/mnt/sda/wuwei/airtest/param_sandwich_nested.txt",
+   "sha256": "55a4cfa67b52c6852a0cff26f4c2852ae67a2f83714bd650630653ed6a20e1ca",
+   "bytes": 3304
+  },
+  "sandwich_gpu_dose": {
+   "path": "/mnt/sda/wuwei/airtest/sandwich/dose.raw",
+   "sha256": "5e2ecc378b393e49c6fb2ec7047629b570918f5a8fc964f4fad91cad25cda7db",
+   "bytes": 17600000
+  },
+  "sandwich_topas_tisa": {
+   "path": "/mnt/sda/wuwei/airtest/topas_nested_tisa.csv",
+   "sha256": "91fb4478ee47f7a09551ee7a92be9857c5fabbf0ce8c718b79cfa147a10b8eb2",
+   "bytes": 26072677
+  },
+  "sandwich_topas_air": {
+   "path": "/mnt/sda/wuwei/airtest/topas_nested_air.csv",
+   "sha256": "e6e65ca4a0db90465d8c87a99de949911001bba26044a946350b9ea29a2408fb",
+   "bytes": 25837753
+  },
+  "sandwich_topas_tisb": {
+   "path": "/mnt/sda/wuwei/airtest/topas_nested_tisb.csv",
+   "sha256": "e6dca2a77af9ebbd0bcc1e8e551093b752762addfcfbe441f773f1efdee749c2",
+   "bytes": 65737015
+  },
+  "topas_ref_param": {
+   "path": "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/RT06423/replicas/s1/run_full_plan.txt",
+   "sha256": "6a29da602293b22fe68c465c418deb7753e7e5d59d337b31c1ee01855cd36bd7",
+   "bytes": 3747
+  },
+  "topas_ref_dose": {
+   "path": "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/RT06423/topas/dose.raw",
+   "sha256": "f107213b17a04a565eccc7f6c27420bf424dc72e638e802d65285edfebe53257",
+   "bytes": 26329600
+  },
+  "analysis_script": {
+   "path": "/mnt/sdb/wuwei/MAIGO/tools/analyze_plan_attribution.py",
+   "sha256": "e46f217e2caf223e6247788f16d5f2c80ea2e11b71881f3a5452f304a883c043",
+   "bytes": 6103
+  },
+  "key_numbers": {
+   "path": "/mnt/sdb/wuwei/MAIGO/evidence/step-30-plan-attribution/key_numbers.json",
+   "sha256": "81245c95485e9a603a9ce234af4879e950ff06ec6068ec173772f9a6ff46a2f0",
+   "bytes": 7922
+  },
+  "pkg_schneider_inelastic_rates_v2_1.bin": {
+   "path": "/mnt/sdb/wuwei/MAIGO/data/schneider/schneider_inelastic_rates_v2_1.bin",
+   "sha256": "086ef97dbf323dc2681d5f6c5257e78c87446050f6fb628f3b0f8b24211a8370",
+   "bytes": 2579212
+  },
+  "pkg_cinel03_c12_targets_v2_1.bin": {
+   "path": "/mnt/sdb/wuwei/MAIGO/data/schneider/cinel03_c12_targets_v2_1.bin",
+   "sha256": "a690fb06ae97946bbc167501380fbcfa465b51e61cbedfaba7d3d373655a7ea2",
+   "bytes": 46254396
+  },
+  "pkg_secondary_inelastic_rates_v2_1.bin": {
+   "path": "/mnt/sdb/wuwei/MAIGO/data/schneider/secondary_inelastic_rates_v2_1.bin",
+   "sha256": "6aa679ee162c7a47b82da715ea1333b21b4056b6480596d8d6243a96edb67258",
+   "bytes": 36107784
+  },
+  "pkg_cinel03_secondary_targets_v2_1_14p.bin": {
+   "path": "/mnt/sdb/wuwei/MAIGO/data/schneider/cinel03_secondary_targets_v2_1_14p.bin",
+   "sha256": "a0dc4259b856f0b0e7665672a64589ea4cd64ca304cae75fca16d6de50fc8006",
+   "bytes": 487366212
+  },
+  "pkg_schneider_stopping_v1.bin": {
+   "path": "/mnt/sdb/wuwei/MAIGO/data/schneider/schneider_stopping_v1.bin",
+   "sha256": "9786dba071f61e660fcc5940a844e8109c4e480ccb603d7929d2fcfaae152c2f",
+   "bytes": 1721044
+  },
+  "pkg_schneider_physics_bundle_v2_1.json": {
+   "path": "/mnt/sdb/wuwei/MAIGO/data/schneider/schneider_physics_bundle_v2_1.json",
+   "sha256": "0aeeca78628dd394fa2b043657a123739dddbc3402bfb9432b65d4c15f074587",
+   "bytes": 2320
+  }
+ },
+ "slurm_jobs": [
+  {
+   "id": 2255,
+   "task": "srcval pilot mid_center",
+   "res": "8cpu/12G",
+   "log": "/mnt/sda/wuwei/srcval/topas/pilot_2255.log"
+  },
+  {
+   "id": 2256,
+   "task": "srcval pilot retry",
+   "res": "8cpu/12G",
+   "log": "/mnt/sda/wuwei/srcval/topas/pilot_2256.log"
+  },
+  {
+   "id": 2257,
+   "task": "srcval 8 spots array",
+   "res": "8cpu/12G each",
+   "log": "/mnt/sda/wuwei/srcval/topas/batch_*.log"
+  },
+  {
+   "id": 2265,
+   "task": "srcval low_center 5x",
+   "res": "8cpu/12G",
+   "log": "/mnt/sda/wuwei/srcval/topas/rerun_*.log"
+  },
+  {
+   "id": 2266,
+   "task": "TOPAS group g1",
+   "res": "8cpu/12G",
+   "log": "/mnt/sda/wuwei/groups_topas/job_g1_2266.log"
+  },
+  {
+   "id": 2267,
+   "task": "TOPAS group g2",
+   "res": "16cpu/24G",
+   "log": "/mnt/sda/wuwei/groups_topas/job_g2_*.log"
+  },
+  {
+   "id": 2268,
+   "task": "TOPAS group g3",
+   "res": "32cpu/24G",
+   "log": "/mnt/sda/wuwei/groups_topas/job_g3_*.log"
+  },
+  {
+   "id": 2269,
+   "task": "TOPAS group g4",
+   "res": "48cpu/30G",
+   "log": "/mnt/sda/wuwei/groups_topas/job_g4_*.log"
+  },
+  {
+   "id": 2270,
+   "task": "TOPAS group g5",
+   "res": "56cpu/40G",
+   "log": "/mnt/sda/wuwei/groups_topas/job_g5_*.log"
+  },
+  {
+   "id": 2271,
+   "task": "air slab em+full array",
+   "res": "12cpu/16G each",
+   "log": "/mnt/sda/wuwei/airtest/air_2271.log+air_2272.log"
+  },
+  {
+   "id": 2273,
+   "task": "sandwich sibling-box (FAILED geometry curse)",
+   "res": "12cpu/16G",
+   "log": "/mnt/sda/wuwei/airtest/sandwich_2273.log"
+  },
+  {
+   "id": 2276,
+   "task": "sandwich rename test (FAILED, same curse)",
+   "res": "2cpu/4G",
+   "log": "/mnt/sda/wuwei/airtest/test_2276.log"
+  },
+  {
+   "id": 2278,
+   "task": "sandwich nested 12cpu (killed, slow)",
+   "res": "12cpu/16G",
+   "log": "/mnt/sda/wuwei/airtest/test_2278.log"
+  },
+  {
+   "id": 2279,
+   "task": "sandwich nested 48cpu OK",
+   "res": "48cpu/48G",
+   "log": "/mnt/sda/wuwei/airtest/test_2279.log"
+  },
+  {
+   "id": 2277,
+   "task": "sandwich DICOM (geometry misread, superseded)",
+   "res": "12cpu/16G",
+   "log": "/mnt/sda/wuwei/airtest/sandwich_dicom_*.log"
+  }
+ ],
+ "source_head": "b7e3d2f7efbfb357c506bdef6e395b886644268a"
+}
