@@ -2826,6 +2826,46 @@ void test_tps_source_geometry_csv_and_switch() {
     std::filesystem::remove(ct_path, ec);
 }
 
+void test_tps_histories_mode_allocation_edges() {
+    // GPU histories-mode rule: llround(weight*scale), minimum 1 for any
+    // positive scaled weight. NOTE: the TOPAS PencilBeamScanning extension
+    // uses llround(weight*scale) and SKIPS results <= 0, so plans with
+    // 0 < weight*scale < 0.5 diverge by construction (GPU simulates 1
+    // history, TOPAS simulates 0). RT06423 has no such spots (min nonzero
+    // weight 2 at scale 0.5), so this is a documented limitation, not an
+    // active mismatch.
+    carbon::TpsSourcePlan plan;
+    const std::vector<double> weights{0.0, 0.4, 0.5, 1.0, 2.0};
+    for (std::size_t i = 0; i < weights.size(); ++i) {
+        carbon::TpsSpot spot;
+        spot.spot_id = static_cast<int>(i + 1);
+        spot.energy_total_MeV = 2400.0;
+        spot.mu_weight = weights[i];
+        spot.energy_spread_percent = 1.0;
+        spot.sigma_x_mm = 0.0;
+        spot.sigma_y_mm = 0.0;
+        spot.sigma_x_prime = 0.0;
+        spot.sigma_y_prime = 0.0;
+        spot.correlation_x = 0.0;
+        spot.correlation_y = 0.0;
+        plan.spots.push_back(spot);
+    }
+    plan.total_mu = 3.9;
+    carbon::TransportConfig config;
+    config.tps_spot_weight_mode = "histories";
+    config.tps_histories_scale = 0.5;
+    config.random_seed = 1234;
+    const auto batch = plan.make_primary_batch(config);
+    // scaled: 0, 0.2->1, 0.25->1, 0.5->1, 1.0->1; zero-weight skipped.
+    require(batch.size() == 4, "histories-mode keeps positive scaled spots");
+    for (const auto& entry : batch) {
+        require(entry.history_end - entry.history_begin == 1,
+                "histories-mode edge rounding gives exactly 1");
+    }
+    require(batch.front().history_begin == 0 && batch.back().history_end == 4,
+            "histories-mode history ranges are contiguous");
+}
+
 void test_primary_survival_buffer_gate() {
     carbon::TransportConfig production;
     require(!production.needs_primary_survival_buffers(),
@@ -9824,6 +9864,8 @@ int main(int argc, char** argv) {
         run("test_topas_spot_weights_and_tps_90_transform", test_topas_spot_weights_and_tps_90_transform);
         run("test_tps_source_geometry_csv_and_switch", test_tps_source_geometry_csv_and_switch);
         run("test_primary_survival_buffer_gate", test_primary_survival_buffer_gate);
+        run("test_tps_histories_mode_allocation_edges",
+            test_tps_histories_mode_allocation_edges);
         run("test_dose_scorer_matches_mev_conversion", test_dose_scorer_matches_mev_conversion);
         run("test_dense_voxel_mhd_writer", test_dense_voxel_mhd_writer);
         run("test_layered_voxel_dose_uses_local_mass", test_layered_voxel_dose_uses_local_mass);
