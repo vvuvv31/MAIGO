@@ -37,6 +37,13 @@ struct RunQualityReport {
     bool topas_reference_energy_sink_active{false};
     std::uint64_t queue_overflow_count{};
     double queue_overflow_energy_MeV{};
+    // Direct host aggregation of the scored 3D voxel energy and its closure
+    // against the global deposited total. Voxel scoring covers the scoring
+    // grid only, so voxel <= total is the hard invariant (relative tolerance
+    // covers float32 device accumulation, not physics).
+    double voxel_scored_energy_MeV{};
+    double nonvoxel_deposited_energy_MeV{};
+    double voxel_to_total_deposited_ratio{};
     std::vector<QualityIssue> failures;
     std::vector<QualityIssue> approximations;
 

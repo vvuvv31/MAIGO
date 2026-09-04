@@ -833,6 +833,24 @@ void test_run_quality_gate() {
     require(!report.accepted && !report.failures.empty(),
             "Production quality gate accepted a non-finite scorer");
 
+    auto voxel_over = std::make_unique<carbon::TransportResult>(*clean);
+    voxel_over->voxel_deposited_energy_MeV = {60.0, 45.0};
+    report = carbon::evaluate_run_quality(production, *voxel_over);
+    require(!report.accepted && !report.failures.empty() &&
+                report.voxel_to_total_deposited_ratio > 1.02,
+            "Production quality gate accepted voxel energy exceeding the deposited total");
+    require_near(report.voxel_scored_energy_MeV, 105.0, 0.0,
+                 "Voxel scored energy aggregation mismatch");
+    require_near(report.nonvoxel_deposited_energy_MeV, -5.0, 0.0,
+                 "Non-voxel deposited energy mismatch");
+
+    auto voxel_ok = std::make_unique<carbon::TransportResult>(*clean);
+    voxel_ok->voxel_deposited_energy_MeV = {60.0, 39.0};
+    report = carbon::evaluate_run_quality(production, *voxel_ok);
+    require(report.accepted && report.failures.empty() &&
+                report.voxel_to_total_deposited_ratio < 1.02,
+            "Production quality gate rejected consistent voxel closure");
+
     const auto path = std::filesystem::temp_directory_path() /
                       "maigo_quality_report.json";
     report = carbon::evaluate_run_quality(production, *residual);

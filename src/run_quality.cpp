@@ -6,6 +6,7 @@
 #include <cstring>
 #include <fstream>
 #include <iomanip>
+#include <limits>
 #include <set>
 #include <sstream>
 #include <stdexcept>
@@ -151,6 +152,31 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
     add_overflow("electron_gamma_queue_overflow", "electron gamma",
                  result.electron_gamma_queue_overflow,
                  result.electron_gamma_queue_overflow_energy_MeV);
+
+    {
+        double voxel_sum_MeV = 0.0;
+        for (const double value : result.voxel_deposited_energy_MeV) {
+            voxel_sum_MeV += value;
+        }
+        report.voxel_scored_energy_MeV = voxel_sum_MeV;
+        report.nonvoxel_deposited_energy_MeV =
+            result.total_deposited_energy_MeV - voxel_sum_MeV;
+        const double total = result.total_deposited_energy_MeV;
+        report.voxel_to_total_deposited_ratio =
+            total > 0.0 ? voxel_sum_MeV / total
+                        : (voxel_sum_MeV > 0.0
+                               ? std::numeric_limits<double>::infinity()
+                               : 0.0);
+        constexpr double kVoxelOverTotalTolerance = 0.02;
+        if (config.quality_reject_voxel_over_total &&
+            report.voxel_to_total_deposited_ratio > 1.0 + kVoxelOverTotalTolerance) {
+            report.failures.push_back(
+                {"voxel_exceeds_deposited_total",
+                 "scored 3D voxel energy exceeds the global deposited total",
+                 report.voxel_to_total_deposited_ratio,
+                 1.0 + kVoxelOverTotalTolerance});
+        }
+    }
 
     const auto finite_issue = [&](const std::string& label) {
         report.failures.push_back(
@@ -606,6 +632,12 @@ void write_run_quality_report_json(const std::filesystem::path& path,
            << ",\n  \"queue_overflow_count\": " << report.queue_overflow_count
            << ",\n  \"queue_overflow_energy_MeV\": ";
     write_json_number(output, report.queue_overflow_energy_MeV);
+    output << ",\n  \"voxel_scored_energy_MeV\": ";
+    write_json_number(output, report.voxel_scored_energy_MeV);
+    output << ",\n  \"nonvoxel_deposited_energy_MeV\": ";
+    write_json_number(output, report.nonvoxel_deposited_energy_MeV);
+    output << ",\n  \"voxel_to_total_deposited_ratio\": ";
+    write_json_number(output, report.voxel_to_total_deposited_ratio);
     output << ",\n  \"failures\": ";
     write_issues(output, report.failures);
     output << ",\n  \"approximations\": ";

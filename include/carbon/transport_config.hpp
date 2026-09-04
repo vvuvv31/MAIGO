@@ -116,6 +116,9 @@ struct TransportConfig {
     double quality_maximum_absolute_energy_residual_MeV{1.0e-6};
     bool quality_reject_any_queue_overflow{true};
     bool quality_reject_nan_or_inf{true};
+    // Hard voxel/ledger closure: scored 3D voxel energy must not exceed the
+    // global deposited total beyond tolerance (catches double-counted steps).
+    bool quality_reject_voxel_over_total{true};
     // Optional single-file manifest owning the primary-ion identity and all
     // ion-dependent water physics data. Run controls remain in the main YAML.
     std::filesystem::path ion_physics_file{};

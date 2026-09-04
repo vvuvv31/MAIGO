@@ -544,9 +544,11 @@ void TransportConfig::validate() const {
             "run quality energy-residual tolerances must be finite and non-negative");
     }
     if (run_mode == RunMode::production &&
-        (!quality_reject_any_queue_overflow || !quality_reject_nan_or_inf)) {
+        (!quality_reject_any_queue_overflow || !quality_reject_nan_or_inf ||
+         !quality_reject_voxel_over_total)) {
         throw std::invalid_argument(
-            "production run_mode requires queue-overflow and NaN/Inf rejection");
+            "production run_mode requires queue-overflow, NaN/Inf and "
+            "voxel-over-total rejection");
     }
     if (enable_csda_range_energy_loss &&
         (enable_ct_grid || enable_layered_phantom || enable_hetero_insert ||
@@ -1715,6 +1717,9 @@ TransportConfig load_config(const std::filesystem::path& path) {
         config.quality_reject_any_queue_overflow);
     config.quality_reject_nan_or_inf = parse_bool(
         values, "quality_reject_nan_or_inf", config.quality_reject_nan_or_inf);
+    config.quality_reject_voxel_over_total = parse_bool(
+        values, "quality_reject_voxel_over_total",
+        config.quality_reject_voxel_over_total);
     config.ion_physics_file = ion_physics_file;
     if (!ion_physics_file.empty()) {
         config.primary_stopping_power_file.clear();
