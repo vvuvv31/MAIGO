@@ -119,6 +119,8 @@ struct TransportConfig {
     // Hard voxel/ledger closure: scored 3D voxel energy must not exceed the
     // global deposited total beyond tolerance (catches double-counted steps).
     bool quality_reject_voxel_over_total{true};
+    // Explicit grid-split closure (total ≈ in + outside, voxel ≈ in-grid).
+    bool quality_reject_grid_closure{true};
     // Optional single-file manifest owning the primary-ion identity and all
     // ion-dependent water physics data. Run controls remain in the main YAML.
     std::filesystem::path ion_physics_file{};

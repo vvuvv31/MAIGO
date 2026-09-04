@@ -111,6 +111,9 @@ void accumulate_transport_result(carbon::TransportResult& total,
 
     total.initial_energy_MeV += part.initial_energy_MeV;
     total.total_deposited_energy_MeV += part.total_deposited_energy_MeV;
+    total.in_grid_deposited_energy_MeV += part.in_grid_deposited_energy_MeV;
+    total.outside_grid_deposited_energy_MeV +=
+        part.outside_grid_deposited_energy_MeV;
     total.escaped_energy_MeV += part.escaped_energy_MeV;
     total.beamline_removed_energy_MeV +=
         part.beamline_removed_energy_MeV;

@@ -841,8 +841,6 @@ void test_run_quality_gate() {
             "Production quality gate accepted voxel energy exceeding the deposited total");
     require_near(report.voxel_scored_energy_MeV, 105.0, 0.0,
                  "Voxel scored energy aggregation mismatch");
-    require_near(report.nonvoxel_deposited_energy_MeV, -5.0, 0.0,
-                 "Non-voxel deposited energy mismatch");
 
     auto voxel_ok = std::make_unique<carbon::TransportResult>(*clean);
     voxel_ok->voxel_deposited_energy_MeV = {60.0, 39.0};
@@ -851,6 +849,34 @@ void test_run_quality_gate() {
                 report.voxel_to_total_deposited_ratio < 1.02,
             "Production quality gate rejected consistent voxel closure");
 
+    auto grid_ok = std::make_unique<carbon::TransportResult>(*clean);
+    grid_ok->voxel_deposited_energy_MeV = {60.0, 39.0};
+    grid_ok->in_grid_deposited_energy_MeV = 99.0;
+    grid_ok->outside_grid_deposited_energy_MeV = 1.0;
+    report = carbon::evaluate_run_quality(production, *grid_ok);
+    require(report.accepted && report.failures.empty(),
+            "Production quality gate rejected consistent grid closure");
+    require_near(report.grid_split_closure_ratio, 1.0, 1.0e-12,
+                 "Grid split closure ratio mismatch");
+    require_near(report.voxel_to_ingrid_ratio, 1.0, 1.0e-12,
+                 "Voxel-to-in-grid closure ratio mismatch");
+
+    auto grid_split_bad = std::make_unique<carbon::TransportResult>(*clean);
+    grid_split_bad->voxel_deposited_energy_MeV = {60.0, 39.0};
+    grid_split_bad->in_grid_deposited_energy_MeV = 90.0;
+    grid_split_bad->outside_grid_deposited_energy_MeV = 1.0;
+    report = carbon::evaluate_run_quality(production, *grid_split_bad);
+    require(!report.accepted && !report.failures.empty(),
+            "Production quality gate accepted an in+outside/total mismatch");
+
+    auto voxel_ingrid_bad = std::make_unique<carbon::TransportResult>(*clean);
+    voxel_ingrid_bad->voxel_deposited_energy_MeV = {60.0, 39.0};
+    voxel_ingrid_bad->in_grid_deposited_energy_MeV = 90.0;
+    voxel_ingrid_bad->outside_grid_deposited_energy_MeV = 10.0;
+    report = carbon::evaluate_run_quality(production, *voxel_ingrid_bad);
+    require(!report.accepted && !report.failures.empty(),
+            "Production quality gate accepted a voxel/in-grid mismatch");
+
     const auto path = std::filesystem::temp_directory_path() /
                       "maigo_quality_report.json";
     report = carbon::evaluate_run_quality(production, *residual);
@@ -858,7 +884,7 @@ void test_run_quality_gate() {
     std::ifstream input(path);
     const std::string json((std::istreambuf_iterator<char>(input)),
                            std::istreambuf_iterator<char>());
-    require(json.find("\"schema_version\": 2") != std::string::npos,
+    require(json.find("\"schema_version\": 3") != std::string::npos,
             "Run quality JSON schema version did not advance");
     require(json.find("\"accounting_relative_energy_residual\"") != std::string::npos &&
                 json.find("\"physical_relative_energy_residual\"") != std::string::npos,
@@ -3619,6 +3645,22 @@ void test_cinel02_replay_miss_mcs_semantics() {
     require(!carbon::cinel02_should_apply_secondary_mcs(
                 true, false, false, 10.0F, cutoff),
             "disabled MCS must remain disabled for a replay miss");
+}
+
+void test_secondary_step_voxel_commit() {
+    // Deterministic collision-step primitive: dE=2 into pending=5 gives 7.
+    float pending = 5.0F;
+    carbon::secondary_step_voxel_commit(pending, true, 42, 2.0F);
+    require_near(pending, 7.0F, 0.0F,
+                 "Enabled in-grid commit must add the step dE exactly once");
+    // Disabled scoring leaves pending untouched.
+    carbon::secondary_step_voxel_commit(pending, false, 42, 2.0F);
+    require_near(pending, 7.0F, 0.0F,
+                 "Disabled scoring must not accumulate voxel energy");
+    // Outside-grid voxel leaves pending untouched.
+    carbon::secondary_step_voxel_commit(pending, true, -1, 2.0F);
+    require_near(pending, 7.0F, 0.0F,
+                 "Outside-grid commit must not accumulate voxel energy");
 }
 
 void test_cinel02_ledger_schema_and_accumulator() {
@@ -9698,6 +9740,7 @@ int main(int argc, char** argv) {
     try {
         run("test_fred_18_isotopes_data", test_fred_18_isotopes_data);
         run("test_cinel02_replay_miss_mcs_semantics", test_cinel02_replay_miss_mcs_semantics);
+        run("test_secondary_step_voxel_commit", test_secondary_step_voxel_commit);
         run("test_cinel02_ledger_schema_and_accumulator", test_cinel02_ledger_schema_and_accumulator);
         run("test_ion_species_stopping_power_grid_validation", test_ion_species_stopping_power_grid_validation);
         run("test_stopping_power_csv_corruption_rejection", test_stopping_power_csv_corruption_rejection);

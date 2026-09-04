@@ -202,6 +202,17 @@ constexpr bool cinel02_should_apply_secondary_mcs(
            (!secondary_inelastic || !replay_succeeded);
 }
 
+// Collision-step voxel commit primitive. Mirrors the paired voxel-scorer
+// guard exactly: in-grid ⟺ the deposit would be scored. The kernel calls it
+// at every secondary collision-step voxel commit (replay hit, lookup miss,
+// common path) so no early break can bypass the step dE. Unit-tested.
+inline void secondary_step_voxel_commit(float& pending_voxel_MeV,
+                                        const bool enable_voxel_scoring,
+                                        const int cur_voxel,
+                                        const float amount_MeV) noexcept {
+    if (enable_voxel_scoring && cur_voxel >= 0) pending_voxel_MeV += amount_MeV;
+}
+
 // Simpson quadrature for the continuous optical-depth audit. The caller
 // supplies rates evaluated at the beginning, midpoint and end energies of the
 // same linearized stopping segment. This helper is deliberately independent
@@ -582,6 +593,11 @@ struct TransportResult {
     std::array<double, 8> cinel02_energy_ledger_MeV{};
     std::array<double, species_ledger_species_count * species_ledger_metric_count>
         cinel02_species_transport_ledger_MeV{};
+    // Explicit in-grid/outside-grid deposited-energy split (global MeV).
+    // Every deposited-ledger credit is mirrored here with that site's paired
+    // voxel-scorer guard, so total ≈ in + outside and voxel_sum ≈ in_grid.
+    double in_grid_deposited_energy_MeV{0.0};
+    double outside_grid_deposited_energy_MeV{0.0};
     std::array<std::uint64_t,
                species_ledger_species_count *
                    Cinel02SpeciesLedgerSchema::terminal_reason_count>

@@ -42,7 +42,13 @@ struct RunQualityReport {
     // grid only, so voxel <= total is the hard invariant (relative tolerance
     // covers float32 device accumulation, not physics).
     double voxel_scored_energy_MeV{};
-    double nonvoxel_deposited_energy_MeV{};
+    // Explicit device-side grid sinks (see TransportResult): in-grid and
+    // outside-grid deposited energy, plus their closure ratios. These
+    // replace any total-minus-voxel inference.
+    double in_grid_deposited_energy_MeV{};
+    double outside_grid_deposited_energy_MeV{};
+    double grid_split_closure_ratio{};
+    double voxel_to_ingrid_ratio{};
     double voxel_to_total_deposited_ratio{};
     std::vector<QualityIssue> failures;
     std::vector<QualityIssue> approximations;

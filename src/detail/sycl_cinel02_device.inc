@@ -31,6 +31,25 @@ inline void cinel02_diag_increment_device(
     counter.fetch_add(1U);
 }
 
+// Explicit in-grid/outside-grid deposited-energy split (global MeV sinks).
+// Call at every site that credits deposited_device/history ledgers, with
+// in_grid_flag mirroring that site's paired voxel-scorer guard exactly.
+// Double precision: global accumulators reach 1e10 MeV where float32
+// atomics would absorb MeV-scale adds.
+inline void grid_deposit_split_device(double* in_grid_deposited,
+                                      double* outside_grid_deposited,
+                                      bool in_grid_flag,
+                                      float value_MeV) noexcept {
+    if (!sycl::isfinite(value_MeV) || value_MeV <= 0.0F) return;
+    double* target = in_grid_flag ? in_grid_deposited : outside_grid_deposited;
+    if (target == nullptr) return;
+    sycl::atomic_ref<double, sycl::memory_order::relaxed,
+                     sycl::memory_scope::device,
+                     sycl::access::address_space::global_space>
+        acc(*target);
+    acc.fetch_add(static_cast<double>(value_MeV));
+}
+
 inline void cinel02_energy_add_device(
     float* ledger, const std::uint32_t slot, const float value) noexcept {
     if (ledger == nullptr || !sycl::isfinite(value)) return;

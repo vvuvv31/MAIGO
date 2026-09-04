@@ -1591,6 +1591,9 @@ void write_energy_ledger_json(const std::filesystem::path& path,
            << "  \"histories\": " << config.number_of_histories << ",\n"
            << "  \"E_in_MeV\": " << result.initial_energy_MeV << ",\n"
            << "  \"E_dep_MeV\": " << result.total_deposited_energy_MeV << ",\n"
+           << "  \"E_dep_in_grid_MeV\": " << result.in_grid_deposited_energy_MeV << ",\n"
+           << "  \"E_dep_outside_grid_MeV\": "
+           << result.outside_grid_deposited_energy_MeV << ",\n"
            << "  \"E_dep_depth_MeV\": " << sum_depth(result.deposited_energy_MeV)
            << ",\n"
            << "  \"E_primary_depth_MeV\": "

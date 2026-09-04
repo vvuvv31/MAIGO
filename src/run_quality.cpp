@@ -159,8 +159,10 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
             voxel_sum_MeV += value;
         }
         report.voxel_scored_energy_MeV = voxel_sum_MeV;
-        report.nonvoxel_deposited_energy_MeV =
-            result.total_deposited_energy_MeV - voxel_sum_MeV;
+        report.in_grid_deposited_energy_MeV =
+            result.in_grid_deposited_energy_MeV;
+        report.outside_grid_deposited_energy_MeV =
+            result.outside_grid_deposited_energy_MeV;
         const double total = result.total_deposited_energy_MeV;
         report.voxel_to_total_deposited_ratio =
             total > 0.0 ? voxel_sum_MeV / total
@@ -175,6 +177,45 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
                  "scored 3D voxel energy exceeds the global deposited total",
                  report.voxel_to_total_deposited_ratio,
                  1.0 + kVoxelOverTotalTolerance});
+        }
+        // Explicit grid closure from device-side sinks (no subtraction
+        // inference): total ≈ in + outside, voxel_sum ≈ in_grid. Tolerance
+        // 1e-3 covers float32/float64 atomic accumulation order only;
+        // measured device agreement is ~1e-6 on slabs and shards. The gates
+        // stay silent when the split sinks are all zero (legacy/CPU results
+        // predate them): any current-binary run with deposits records a
+        // nonzero split, since every deposited-ledger credit splits.
+        constexpr double kGridClosureTolerance = 1.0e-3;
+        const double split_sum =
+            report.in_grid_deposited_energy_MeV +
+            report.outside_grid_deposited_energy_MeV;
+        report.grid_split_closure_ratio =
+            total > 0.0 ? split_sum / total
+                        : (split_sum == 0.0
+                               ? 1.0
+                               : std::numeric_limits<double>::infinity());
+        report.voxel_to_ingrid_ratio =
+            report.in_grid_deposited_energy_MeV > 0.0
+                ? voxel_sum_MeV / report.in_grid_deposited_energy_MeV
+                : (voxel_sum_MeV > 0.0
+                       ? std::numeric_limits<double>::infinity()
+                       : 0.0);
+        if (config.quality_reject_grid_closure && split_sum > 0.0) {
+            if (std::abs(report.grid_split_closure_ratio - 1.0) >
+                kGridClosureTolerance) {
+                report.failures.push_back(
+                    {"grid_split_closure",
+                     "in-grid + outside-grid sinks disagree with the deposited total",
+                     report.grid_split_closure_ratio, 1.0});
+            }
+            if (report.in_grid_deposited_energy_MeV > 0.0 &&
+                std::abs(report.voxel_to_ingrid_ratio - 1.0) >
+                    kGridClosureTolerance) {
+                report.failures.push_back(
+                    {"voxel_ingrid_closure",
+                     "scored 3D voxel energy disagrees with the in-grid sink",
+                     report.voxel_to_ingrid_ratio, 1.0});
+            }
         }
     }
 
@@ -609,7 +650,7 @@ void write_run_quality_report_json(const std::filesystem::path& path,
         throw std::runtime_error("Cannot create run quality report: " + path.string());
     }
     output << std::setprecision(12)
-           << "{\n  \"schema_version\": 2,\n  \"status\": ";
+           << "{\n  \"schema_version\": 3,\n  \"status\": ";
     append_json_string(output, report.status());
     output << ",\n  \"run_mode\": ";
     append_json_string(output, run_mode_name(report.mode));
@@ -634,8 +675,14 @@ void write_run_quality_report_json(const std::filesystem::path& path,
     write_json_number(output, report.queue_overflow_energy_MeV);
     output << ",\n  \"voxel_scored_energy_MeV\": ";
     write_json_number(output, report.voxel_scored_energy_MeV);
-    output << ",\n  \"nonvoxel_deposited_energy_MeV\": ";
-    write_json_number(output, report.nonvoxel_deposited_energy_MeV);
+    output << ",\n  \"in_grid_deposited_energy_MeV\": ";
+    write_json_number(output, report.in_grid_deposited_energy_MeV);
+    output << ",\n  \"outside_grid_deposited_energy_MeV\": ";
+    write_json_number(output, report.outside_grid_deposited_energy_MeV);
+    output << ",\n  \"grid_split_closure_ratio\": ";
+    write_json_number(output, report.grid_split_closure_ratio);
+    output << ",\n  \"voxel_to_ingrid_ratio\": ";
+    write_json_number(output, report.voxel_to_ingrid_ratio);
     output << ",\n  \"voxel_to_total_deposited_ratio\": ";
     write_json_number(output, report.voxel_to_total_deposited_ratio);
     output << ",\n  \"failures\": ";

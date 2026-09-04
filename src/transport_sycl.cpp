@@ -813,6 +813,8 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
         TransportResult::species_ledger_metric_count;
     float* cinel02_energy_device = nullptr;
     float* cinel02_species_energy_device = nullptr;
+    double* grid_deposited_in_device = nullptr;
+    double* grid_deposited_out_device = nullptr;
     constexpr std::size_t kCinel02SpeciesTerminalSlots =
         Cinel02SpeciesLedgerSchema::species_count *
         Cinel02SpeciesLedgerSchema::terminal_reason_count;
@@ -1081,6 +1083,21 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                kCinel02SpeciesEnergySlots).wait_and_throw();
     queue.fill(cinel02_species_terminal_device, std::uint64_t{0},
                kCinel02SpeciesTerminalSlots).wait_and_throw();
+
+    // Explicit in-grid/outside-grid deposited-energy sinks (global MeV).
+    // Every site crediting deposited ledgers splits the same amount here
+    // using that site's paired voxel-scorer guard, so total ≈ in + outside
+    // and voxel_sum ≈ in_grid hold by construction. Double precision:
+    // global accumulators reach 1e10 MeV where float32 atomics would absorb
+    // MeV-scale adds.
+    grid_deposited_in_device = mem_tracker.allocate<double>(1);
+    grid_deposited_out_device = mem_tracker.allocate<double>(1);
+    if (grid_deposited_in_device == nullptr ||
+        grid_deposited_out_device == nullptr) {
+        throw std::bad_alloc();
+    }
+    queue.fill(grid_deposited_in_device, 0.0, 1).wait_and_throw();
+    queue.fill(grid_deposited_out_device, 0.0, 1).wait_and_throw();
 
     // Slab layers
     const auto enable_layered_phantom = config.enable_layered_phantom;
@@ -2931,6 +2948,9 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                         }
                     }
                     history_deposited_MeV += deposited_MeV;
+                    grid_deposit_split_device(
+                        grid_deposited_in_device, grid_deposited_out_device,
+                        enable_voxel_scoring && voxel_index >= 0, deposited_MeV);
                     last_primary_stopping_power_MeV_per_mm = stopping_power_MeV_per_mm;
                     last_primary_density_g_per_cm3 = local_density_g_per_cm3;
 
@@ -3285,6 +3305,9 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                             pending_primary_voxel_MeV += local_deposit;
                         }
                         history_deposited_MeV += local_deposit;
+                        grid_deposit_split_device(
+                            grid_deposited_in_device, grid_deposited_out_device,
+                            enable_voxel_scoring && voxel_index >= 0, local_deposit);
 
                         float charged_accounted_MeV = 0.0F;
                         float neutral_accounted_MeV = 0.0F;
@@ -3403,6 +3426,11 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                     pending_primary_voxel_MeV += product.kinetic_energy_MeV;
                                 }
                                 history_deposited_MeV += product.kinetic_energy_MeV;
+                                grid_deposit_split_device(
+                                    grid_deposited_in_device,
+                                    grid_deposited_out_device,
+                                    enable_voxel_scoring && voxel_index >= 0,
+                                    product.kinetic_energy_MeV);
                                 charged_accounted_MeV += product.kinetic_energy_MeV;
                                 schneider_diag_increment_device(
                                     schneider_diag_device,
@@ -3552,6 +3580,11 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                         pending_primary_voxel_MeV += local_deposit;
                                     }
                                     history_deposited_MeV += local_deposit;
+                                    grid_deposit_split_device(
+                                        grid_deposited_in_device,
+                                        grid_deposited_out_device,
+                                        enable_voxel_scoring && voxel_index >= 0,
+                                        local_deposit);
                                     float untracked_MeV = 0.0F;
                                     if (primary_atomic_number == 6 &&
                                         primary_mass_number == 12 &&
@@ -3828,6 +3861,11 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                 }
                                 history_deposited_MeV +=
                                     products.local_deposit_MeV;
+                                grid_deposit_split_device(
+                                    grid_deposited_in_device,
+                                    grid_deposited_out_device,
+                                    enable_voxel_scoring && voxel_index >= 0,
+                                    products.local_deposit_MeV);
                             }
 
                             float total_charged_MeV = 0.0F;
@@ -4028,6 +4066,12 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                         }
                     }
                     history_deposited_MeV += cutoff_energy_MeV;
+                    grid_deposit_split_device(
+                        grid_deposited_in_device, grid_deposited_out_device,
+                        enable_voxel_scoring && pending_primary_voxel >= 0 &&
+                            pending_primary_voxel <
+                                static_cast<std::size_t>(number_of_voxels),
+                        cutoff_energy_MeV);
                     if (cutoff_stopped_energy_device != nullptr) {
                         cutoff_stopped_energy_device[global_history] = cutoff_energy_MeV;
                     }
@@ -4221,6 +4265,27 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                     schneider_diag_device,
                                     SchneiderDiagSlot::SecondaryDepositedMicroMeV,
                                     frag.energy_MeV);
+                                {
+                                    const auto sqx = static_cast<int>(
+                                        (frag.pos_x_mm - voxel_min_x_mm) *
+                                        inverse_voxel_size_x_mm);
+                                    const auto sqy = static_cast<int>(
+                                        (frag.pos_y_mm - voxel_min_y_mm) *
+                                        inverse_voxel_size_y_mm);
+                                    const auto sqz = static_cast<int>(
+                                        frag.pos_z_mm * inverse_depth_bin_width_mm);
+                                    const bool sq_in_grid =
+                                        enable_voxel_scoring && sqx >= 0 &&
+                                        sqx < static_cast<int>(voxel_bins_x) &&
+                                        sqy >= 0 &&
+                                        sqy < static_cast<int>(voxel_bins_y) &&
+                                        sqz >= 0 &&
+                                        sqz < static_cast<int>(number_of_bins);
+                                    grid_deposit_split_device(
+                                        grid_deposited_in_device,
+                                        grid_deposited_out_device, sq_in_grid,
+                                        frag.energy_MeV);
+                                }
                             }
                             return;
                         }
@@ -5036,12 +5101,27 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                                              sycl::memory_scope::device,
                                                              sycl::access::address_space::global_space>
                                                 atomic_dep(deposited_device[frag.parent_history]);
+                                            // Ledger keeps local + step dE here; the
+                                            // common path is skipped by the break
+                                            // below, so this is the single dE credit.
                                             atomic_dep.fetch_add(local_deposit + dE);
                                             schneider_energy_add_device(
                                                 schneider_diag_device,
                                                 SchneiderDiagSlot::SecondaryDepositedMicroMeV,
                                                 local_deposit + dE);
+                                            grid_deposit_split_device(
+                                                grid_deposited_in_device,
+                                                grid_deposited_out_device,
+                                                enable_voxel_scoring && cur_voxel >= 0,
+                                                local_deposit + dE);
                                         }
+                                        // The break below skips the common-path
+                                        // voxel dE commit: commit it here so the
+                                        // collision step reaches history ledger,
+                                        // depth, voxel and species scorers.
+                                        carbon::secondary_step_voxel_commit(
+                                            pending_sec_voxel_MeV,
+                                            enable_voxel_scoring, cur_voxel, dE);
 
                                         float sec_charged_accounted_MeV = 0.0F;
                                         float sec_neutral_accounted_MeV = 0.0F;
@@ -5177,6 +5257,11 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                                         schneider_diag_device,
                                                         SchneiderDiagSlot::SecondaryDepositedMicroMeV,
                                                         product.kinetic_energy_MeV);
+                                                    grid_deposit_split_device(
+                                                        grid_deposited_in_device,
+                                                        grid_deposited_out_device,
+                                                        enable_voxel_scoring && cur_voxel >= 0,
+                                                        product.kinetic_energy_MeV);
                                                 }
                                                 sec_charged_accounted_MeV += product.kinetic_energy_MeV;
                                                 schneider_diag_increment_device(
@@ -5228,6 +5313,30 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                                 atomic_untracked(untracked_nuclear_device[frag.parent_history]);
                                             atomic_untracked.fetch_add(sec_e);
                                         }
+                                        // cur_voxel is out of scope on the miss
+                                        // path: recompute the collision voxel
+                                        // with the same formula for both the
+                                        // split and the commit below.
+                                        int miss_voxel = -1;
+                                        {
+                                            const auto miss_sbx = static_cast<int>(
+                                                (sec_x - voxel_min_x_mm) *
+                                                inverse_voxel_size_x_mm);
+                                            const auto miss_sby = static_cast<int>(
+                                                (sec_y - voxel_min_y_mm) *
+                                                inverse_voxel_size_y_mm);
+                                            if (miss_sbx >= 0 &&
+                                                miss_sbx < static_cast<int>(voxel_bins_x) &&
+                                                miss_sby >= 0 &&
+                                                miss_sby < static_cast<int>(voxel_bins_y)) {
+                                                miss_voxel =
+                                                    (collision_bin *
+                                                     static_cast<int>(voxel_bins_y) +
+                                                     miss_sby) *
+                                                        static_cast<int>(voxel_bins_x) +
+                                                    miss_sbx;
+                                            }
+                                        }
                                         if (deposited_device != nullptr) {
                                             sycl::atomic_ref<float, sycl::memory_order::relaxed,
                                                              sycl::memory_scope::device,
@@ -5237,7 +5346,18 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                             schneider_energy_add_device(
                                                 schneider_diag_device,
                                                 SchneiderDiagSlot::SecondaryDepositedMicroMeV, dE);
+                                            grid_deposit_split_device(
+                                                grid_deposited_in_device,
+                                                grid_deposited_out_device,
+                                                enable_voxel_scoring && miss_voxel >= 0,
+                                                dE);
                                         }
+                                        // Same bypass as the replay-hit path:
+                                        // the break below skips the common-path
+                                        // voxel dE commit.
+                                        carbon::secondary_step_voxel_commit(
+                                            pending_sec_voxel_MeV,
+                                            enable_voxel_scoring, miss_voxel, dE);
                                         sec_e = 0.0F;
                                         break;
                                     }
@@ -5406,6 +5526,12 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                             schneider_energy_add_device(
                                                 schneider_diag_device,
                                                 SchneiderDiagSlot::SecondaryDepositedMicroMeV,
+                                                local_deposit);
+                                            grid_deposit_split_device(
+                                                grid_deposited_in_device,
+                                                grid_deposited_out_device,
+                                                enable_voxel_scoring &&
+                                                    pending_sec_voxel >= 0,
                                                 local_deposit);
                                         }
                                         float untracked_MeV = 0.0F;
@@ -5693,6 +5819,28 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                             }
 
                             if (!secondary_inelastic) sec_e = post_em_e;
+                            // cur_voxel is out of scope on the common path:
+                            // recompute the step voxel with the same formula.
+                            int com_voxel = -1;
+                            {
+                                const auto com_sbx = static_cast<int>(
+                                    (sec_x - voxel_min_x_mm) *
+                                    inverse_voxel_size_x_mm);
+                                const auto com_sby = static_cast<int>(
+                                    (sec_y - voxel_min_y_mm) *
+                                    inverse_voxel_size_y_mm);
+                                if (com_sbx >= 0 &&
+                                    com_sbx < static_cast<int>(voxel_bins_x) &&
+                                    com_sby >= 0 &&
+                                    com_sby < static_cast<int>(voxel_bins_y)) {
+                                    com_voxel =
+                                        (collision_bin *
+                                         static_cast<int>(voxel_bins_y) +
+                                         com_sby) *
+                                            static_cast<int>(voxel_bins_x) +
+                                        com_sbx;
+                                }
+                            }
                             if (deposited_device != nullptr) {
                                 sycl::atomic_ref<float, sycl::memory_order::relaxed,
                                                  sycl::memory_scope::device,
@@ -5702,6 +5850,10 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                 schneider_energy_add_device(
                                     schneider_diag_device,
                                     SchneiderDiagSlot::SecondaryDepositedMicroMeV, dE);
+                                grid_deposit_split_device(
+                                    grid_deposited_in_device,
+                                    grid_deposited_out_device, com_voxel >= 0,
+                                    dE);
                             }
                             if (!secondary_inelastic) {
                                 sec_x = post_em_x;
@@ -5784,6 +5936,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                         const bool step_limited =
                             sec_e > energy_cutoff_MeV && sec_steps >= kSecondaryMaxSteps;
                         if (sec_e > 0.0F) {
+                            bool sec_terminal_scored = false;
                             if (step_limited) {
                                 cinel02_species_energy_add_device(
                                     cinel02_species_energy_device, ledger_species_idx,  9U, sec_e);
@@ -5860,6 +6013,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                         }
                                         if (cur_voxel >= 0) {
                                             pending_sec_voxel_MeV += sec_e;
+                                            sec_terminal_scored = true;
                                             if (in_fov_dose_device != nullptr) {
                                                 sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
                                                                  sycl::memory_scope::device,
@@ -5882,6 +6036,10 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                     schneider_energy_add_device(
                                         schneider_diag_device,
                                         SchneiderDiagSlot::SecondaryDepositedMicroMeV, sec_e);
+                                    grid_deposit_split_device(
+                                        grid_deposited_in_device,
+                                        grid_deposited_out_device,
+                                        sec_terminal_scored, sec_e);
                                 }
                             } else {
                                 cinel02_species_energy_add_device(
@@ -6087,6 +6245,8 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
     }
     std::array<float, kCinel02EnergySlots> cinel02_energy_host{};
     std::array<float, kCinel02SpeciesEnergySlots> cinel02_species_energy_host{};
+    double grid_deposited_in_host = 0.0;
+    double grid_deposited_out_host = 0.0;
     std::array<std::uint64_t, kCinel02SpeciesTerminalSlots>
         cinel02_species_terminal_host{};
     std::array<std::uint64_t, TransportResult::species_ledger_species_count>
@@ -6147,6 +6307,12 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
         queue.copy(cinel02_species_energy_device,
                    cinel02_species_energy_host.data(),
                    kCinel02SpeciesEnergySlots);
+    }
+    if (grid_deposited_in_device != nullptr) {
+        queue.copy(grid_deposited_in_device, &grid_deposited_in_host, 1);
+    }
+    if (grid_deposited_out_device != nullptr) {
+        queue.copy(grid_deposited_out_device, &grid_deposited_out_host, 1);
     }
     if (cinel02_species_terminal_device != nullptr) {
         queue.copy(cinel02_species_terminal_device,
@@ -6614,6 +6780,8 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
         result.cinel02_species_transport_ledger_MeV[i] =
             static_cast<double>(cinel02_species_energy_host[i]);
     }
+    result.in_grid_deposited_energy_MeV = grid_deposited_in_host;
+    result.outside_grid_deposited_energy_MeV = grid_deposited_out_host;
     result.cinel02_species_terminal_reason_counts =
         cinel02_species_terminal_host;
     result.cinel02_topas_compat_discarded_counts =
