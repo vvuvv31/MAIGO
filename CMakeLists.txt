@@ -152,6 +152,8 @@ if(BUILD_TESTING)
     add_executable(carbon_tests tests/carbon_tests.cpp)
     add_executable(inelastic_package_v2_tests tests/inelastic_package_v2_tests.cpp)
     target_link_libraries(inelastic_package_v2_tests PRIVATE carbon_core)
+    target_include_directories(inelastic_package_v2_tests PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src)
     if(CARBON_ENABLE_SYCL)
         target_compile_options(inelastic_package_v2_tests PRIVATE -fsycl)
         if(CARBON_SYCL_TARGETS)

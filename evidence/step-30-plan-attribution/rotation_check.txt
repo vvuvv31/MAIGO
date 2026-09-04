@@ -1,0 +1,1 @@
+rotation products=20000 max_unit_err=1.78814e-07 max_dot_err=5.36442e-07 max_identity_err=1.46001e-07

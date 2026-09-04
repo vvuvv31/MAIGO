@@ -16,6 +16,16 @@
 
 #ifdef CARBON_HAS_SYCL
 #include <sycl/sycl.hpp>
+#include "carbon/inelastic_package_v3.hpp"
+#include "carbon/multiple_scattering.hpp"
+#include "carbon/rng.hpp"
+namespace carbon {
+namespace {
+// Test-local copy of the exact runtime rotation (internal linkage in both
+// TUs, so no ODR/link clash with transport_sycl.cpp).
+#include "detail/sycl_device_math.inc"
+}  // namespace
+}  // namespace carbon
 #endif
 
 namespace {
@@ -25,6 +35,106 @@ void require(bool condition, const char* message) {
         throw std::runtime_error(message);
     }
 }
+
+#ifdef CARBON_HAS_SYCL
+namespace {
+
+// Verifies the runtime local-frame rotation used for CINEL03 replay
+// (transport_sycl.cpp rotate_local_direction call sites): for incident
+// (0,0,1) the child direction must reproduce the payload local direction,
+// and for tilted incidents dot(child, incident) must equal local_direction_z
+// with a unit child vector. Runs the identical device code object.
+void run_device_rotation_check(const std::string& package_path) {
+    const auto table =
+        carbon::InelasticPackageV3Table::from_binary(package_path);
+    struct Vec {
+        float x, y, z;
+    };
+    std::vector<Vec> locals;
+    for (const auto& p : table.products()) {
+        if (p.role != 0) {
+            continue;
+        }
+        const float n = std::sqrt(p.local_direction_x * p.local_direction_x +
+                                  p.local_direction_y * p.local_direction_y +
+                                  p.local_direction_z * p.local_direction_z);
+        if (!(n > 0.99F && n < 1.01F)) {
+            continue;
+        }
+        locals.push_back(
+            Vec{p.local_direction_x, p.local_direction_y, p.local_direction_z});
+        if (locals.size() >= 20000) {
+            break;
+        }
+    }
+    require(!locals.empty(), "no unit local directions in CINEL03 package");
+    const std::vector<Vec> incidents{
+        {0.0F, 0.0F, 1.0F},
+        {0.3F, 0.0F, 0.953939F},
+        {0.0F, 0.5F, 0.866025F},
+        {-0.2F, 0.3F, 0.932738F},
+    };
+    sycl::queue queue;
+    const std::size_t n = locals.size();
+    const std::size_t m = incidents.size();
+    auto* in = sycl::malloc_shared<Vec>(n, queue);
+    auto* out = sycl::malloc_shared<Vec>(n * m, queue);
+    require(in != nullptr && out != nullptr, "rotation test alloc failed");
+    for (std::size_t i = 0; i < n; ++i) {
+        in[i] = locals[i];
+    }
+    auto* inc = sycl::malloc_shared<Vec>(m, queue);
+    require(inc != nullptr, "rotation incident alloc failed");
+    for (std::size_t j = 0; j < m; ++j) {
+        inc[j] = incidents[j];
+    }
+    queue
+        .parallel_for(sycl::range<1>(n * m),
+                      [=](sycl::item<1> item) {
+                          const std::size_t k = item.get_linear_id();
+                          const std::size_t i = k / m;
+                          const std::size_t j = k % m;
+                          const auto r = carbon::rotate_local_direction(
+                              in[i].x, in[i].y, in[i].z,
+                              carbon::Direction3F{inc[j].x, inc[j].y, inc[j].z});
+                          out[k] = Vec{r.x, r.y, r.z};
+                      })
+        .wait_and_throw();
+    double max_unit_err = 0.0;
+    double max_dot_err = 0.0;
+    double max_identity_err = 0.0;
+    for (std::size_t i = 0; i < n; ++i) {
+        for (std::size_t j = 0; j < m; ++j) {
+            const Vec o = out[i * m + j];
+            const Vec iv = incidents[j];
+            const double norm =
+                std::sqrt(o.x * o.x + o.y * o.y + o.z * o.z);
+            max_unit_err = std::max(max_unit_err, std::abs(norm - 1.0));
+            const double dot = o.x * iv.x + o.y * iv.y + o.z * iv.z;
+            max_dot_err =
+                std::max(max_dot_err, std::abs(dot - locals[i].z));
+            if (j == 0) {
+                const double dx = static_cast<double>(o.x - locals[i].x);
+                const double dy = static_cast<double>(o.y - locals[i].y);
+                const double dz = static_cast<double>(o.z - locals[i].z);
+                max_identity_err =
+                    std::max(max_identity_err, std::sqrt(dx * dx + dy * dy + dz * dz));
+            }
+        }
+    }
+    sycl::free(in, queue);
+    sycl::free(inc, queue);
+    sycl::free(out, queue);
+    std::cout << "rotation products=" << n << " max_unit_err=" << max_unit_err
+              << " max_dot_err=" << max_dot_err
+              << " max_identity_err=" << max_identity_err << '\n';
+    require(max_unit_err < 1.0e-6, "rotated child is not a unit vector");
+    require(max_dot_err < 2.0e-5, "dot(child, incident) != local_direction_z");
+    require(max_identity_err < 1.0e-6,
+            "incident=(0,0,1) does not reproduce payload local direction");
+}
+}  // namespace
+#endif
 
 #ifdef CARBON_HAS_SYCL
 struct FixedReplaySummary {
@@ -178,6 +288,17 @@ int main(int argc, char** argv) {
             return 0;
         } catch (const std::exception& error) {
             std::cerr << "CINEL02 device replay failed: " << error.what() << '\n';
+            return 1;
+        }
+    }
+#endif
+#ifdef CARBON_HAS_SYCL
+    if (argc == 3 && std::string{argv[1]} == "--device-rotation") {
+        try {
+            run_device_rotation_check(argv[2]);
+            return 0;
+        } catch (const std::exception& error) {
+            std::cerr << "CINEL03 device rotation failed: " << error.what() << '\n';
             return 1;
         }
     }
