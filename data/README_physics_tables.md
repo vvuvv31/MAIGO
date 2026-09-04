@@ -49,3 +49,19 @@ interaction. No older layout is accepted: packages without three-dimensional
 directions, cascade depth, or local deposit fail during loading. The interaction
 probability still comes from the per-section Schneider XS; packages provide
 correlated products and the actual local deposit after an accepted interaction.
+
+## Schneider v2.1 large binaries (not in git)
+
+`data/schneider/*v2_1*.bin` (~1 GB total) are build artifacts, not
+committed. A clean checkout must obtain them before running v2.1 configs:
+
+1. Regenerate: run the `generator` command recorded per file in
+   `data/schneider/v2_1_data_manifest.json`, with raw campaigns present at
+   the fixed local paths listed under `raw_source`:
+   - `/mnt/sda/wuwei/cinel03-campaigns/schneider-secondary-v2`
+   - `/mnt/sda/wuwei/cinel03-campaigns/production`
+   - `/mnt/sda/wuwei/step20_secondary_campaigns/raw`
+   - `/mnt/sda/wuwei/secondary-rates-v2-1/raw`
+2. Or copy a pinned artifact set whose SHA256 match the manifest.
+3. Verify: `python3 tools/verify_schneider_v2_1_data.py` (fails on any
+   missing/mismatched file; never falls back to v1).
