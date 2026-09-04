@@ -82,6 +82,7 @@ def make_fake_repo(root: Path):
             {"path": "data/schneider/cinel03_c12_targets_v2_1.channels.json",
              "bytes": (d / "cinel03_c12_targets_v2_1.channels.json").stat().st_size,
              "sha256": sha((d / "cinel03_c12_targets_v2_1.channels.json").read_bytes()),
+             "channels_target_order": [1, 6, 12],
              "generator": "fake", "raw_source": [], "in_git": True},
             {"path": "data/schneider/secondary_inelastic_rates_v2_1.metadata.json",
              "bytes": (d / "secondary_inelastic_rates_v2_1.metadata.json").stat().st_size,
@@ -167,6 +168,46 @@ class TestStrictVerifier(unittest.TestCase):
         code, out = self.check()
         self.assertNotEqual(code, 0, out)
         self.assertIn("MAGIC-MISMATCH", out)
+
+    def test_metadata_missing_file_size_fails(self):
+        p = self.root / "data/schneider/secondary_inelastic_rates_v2_1.metadata.json"
+        doc = json.loads(p.read_text())
+        del doc["file_size_bytes"]
+        p.write_text(json.dumps(doc))
+        code, out = self.check()
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("file_size_bytes", out)
+
+    def test_channels_order_swap_fails(self):
+        from hashlib import sha256 as _sha256
+
+        def _sha(b: bytes) -> str:
+            return _sha256(b).hexdigest()
+
+        p = self.root / "data/schneider/cinel03_c12_targets_v2_1.channels.json"
+        doc = json.loads(p.read_text())
+        doc["channels"] = list(reversed(doc["channels"]))
+        raw = json.dumps(doc).encode()
+        p.write_bytes(raw)
+        # Re-pin size/sha (and the bundle channels pin) so that only the
+        # ordered-signature check fires.
+        mpath = self.root / "data/schneider/v2_1_data_manifest.json"
+        man = json.loads(mpath.read_text())
+        for e in man["files"]:
+            if e["path"].endswith("channels.json"):
+                e["bytes"] = len(raw)
+                e["sha256"] = _sha(raw)
+        mpath.write_text(json.dumps(man))
+        bpath = self.root / "data/schneider/schneider_physics_bundle_v2_1.json"
+        bdoc = json.loads(bpath.read_text())
+        for section in ("primary_package", "secondary_package"):
+            node = bdoc.get(section, {})
+            if node.get("channels_file", "").endswith("channels.json"):
+                node["channels_sha256"] = _sha(raw)
+        bpath.write_text(json.dumps(bdoc))
+        code, out = self.check()
+        self.assertNotEqual(code, 0, out)
+        self.assertIn("TARGET-ORDER", out)
 
 
 if __name__ == "__main__":

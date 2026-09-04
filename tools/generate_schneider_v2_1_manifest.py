@@ -80,6 +80,10 @@ def main() -> None:
             magic, version = magic_version(p)
             entry["magic"] = magic
             entry["version"] = version
+        if rel.endswith(".channels.json"):
+            doc = json.loads(p.read_text())
+            entry["channels_target_order"] = [
+                ch.get("target_element_z") for ch in doc["channels"]]
         entries.append(entry)
     bundle = json.loads(
         (REPO / "data/schneider/schneider_physics_bundle_v2_1.json").read_text())

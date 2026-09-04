@@ -82,10 +82,16 @@ The executor updates only the `Status` column and the execution log. Never rewri
 | [25](steps/25-raw-data-validation.md) | DONE | Raw node acceptance / pinpoint rerun (7223/7472 pass; 256 documented nulls) | 24 |
 | [26](steps/26-cinel03-compilation.md) | DONE | Versioned v2 secondary CINEL03 package (242,494 events, 332MB) | 25 |
 | [27](steps/27-package-provenance-audit.md) | DONE | Independent v2 package audit (8/9; below-demand 0.71% documented exception) | 26 |
-| [28](steps/28-lookup-closure-50k.md) | IN_PROGRESS | v2.1 Tier-C accepted=true BUT under review: post-EM null mislabeled as unsupported_targets(5), E_h/E_c distribution mismatch, He6/B8/C10 fail-open, NEED unbounded, worktree uncommitted | 27 |
-| [29](steps/29-generation2-transport-validation.md) | IN_PROGRESS | v2.1 Tier-D accepted=true BUT same review findings apply (unsupported_targets=8, 517 out-of-scope, tau framework missing) | 28 |
-| [30](steps/30-single-shard-abcd-gamma.md) | BLOCKED | Single-shard paired A/B/C/D Gamma (awaiting authorization; Step-28/29 gates now pass) | 29 |
+| [28](steps/28-lookup-closure-50k.md) | DONE for declared RT06423 research scope | v2.1 Tier-C accepted=true (post-EM null taxonomy fixed, E_h/E_c documented, He6/B8/C10 em_only declared, NEED masked residual) | 27 |
+| [29](steps/29-generation2-transport-validation.md) | DONE for declared RT06423 research scope | v2.1 Tier-D accepted=true (same scope notes as Step 28) | 28 |
+| [30](steps/30-single-shard-abcd-gamma.md) | IN_PROGRESS | Single-candidate Shard01 completed (global 3%/3mm ~98%, IDD ~0.994); paired A/B/C/D dropped per scope decision | 29 |
 | [31](steps/31-production-20shard-gamma.md) | BLOCKED | 20-shard production Gamma (awaiting authorization) | 30 |
+
+General Schneider production coverage: LIMITED. Declared scope limitations
+(not general transport completion): He6/B8/C10 secondary nuclear EM-only
+policy, residual NEED masked (unbounded), tertiary generations capped at 2,
+single RT06423 geometry, 3D voxel/history-ledger closure gate added after
+initial validation (see quality schema v3).
 
 ## Phase gates
 

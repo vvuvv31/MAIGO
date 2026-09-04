@@ -128,10 +128,16 @@ def main() -> int:
         if not cpath.exists():
             continue
         # Channels files store targets in sorted order per projectile group
-        # while the bundle lists rate-table target-axis order: compare sets.
+        # while the bundle lists rate-table target-axis order: compare sets
+        # for cross-file consistency, and the exact file order against the
+        # manifest-recorded ordered signature (catches swaps/reorders).
         seq = channel_target_sequence(cpath)
         if sorted(set(seq)) != sorted(bundle.get("target_order", [])):
             errors.append("TARGET-ORDER %s channel targets != bundle target set" % section)
+        ment = by_path.get(str(cpath.relative_to(repo)))
+        if ment is not None and "channels_target_order" in ment:
+            if seq != list(ment["channels_target_order"]):
+                errors.append("TARGET-ORDER %s file order != manifest signature" % section)
     for key in ("bundle_registry_sha256", "bundle_target_order_sha256"):
         if key not in manifest:
             errors.append("MANIFEST-SCHEMA missing %s" % key)
@@ -159,6 +165,8 @@ def main() -> int:
         for field in ("data_filename", "data_sha256"):
             if field not in meta:
                 errors.append("METADATA-SCHEMA %s missing %s" % (e["path"], field))
+        if "data_filename" in meta and "file_size_bytes" not in meta:
+            errors.append("METADATA-SCHEMA %s missing file_size_bytes" % e["path"])
         if "data_filename" in meta and "data_sha256" in meta:
             data_path = Path(repo) / "data" / "schneider" / meta["data_filename"]
             if not data_path.exists():
