@@ -7188,6 +7188,49 @@ void test_secondary_schneider_mcs_x0_selection() {
 #endif
 }
 
+void test_out_of_scope_isotope_summary_ledger_fields() {
+    carbon::TransportResult result;
+    result.initial_energy_MeV = 1.0e9;
+    carbon::SchneiderUnsupportedTrack he6{};
+    he6.projectile_z = 2;
+    he6.projectile_a = 6;
+    he6.birth_energy_MeV = 500.0F;
+    carbon::SchneiderUnsupportedTrack b8{};
+    b8.projectile_z = 5;
+    b8.projectile_a = 8;
+    b8.birth_energy_MeV = 300.0F;
+    result.schneider_unsupported_tracks = {he6, b8};
+    // Species 5 (He6) ledger recorded: birth/continuous/escape.
+    result.cinel02_species_transport_ledger_MeV[5 * 11 + 0] = 1000.0;
+    result.cinel02_species_transport_ledger_MeV[5 * 11 + 1] = 600.0;
+    result.cinel02_species_transport_ledger_MeV[5 * 11 + 7] = 400.0;
+    const auto tmp = std::filesystem::temp_directory_path() / "oos_summary_test.json";
+    {
+        std::ofstream out(tmp, std::ios::binary);
+        require(out.is_open(), "Cannot open temp OOS summary file");
+        carbon::write_out_of_scope_isotope_summary(out, result);
+    }
+    std::ifstream in(tmp, std::ios::binary);
+    require(in.is_open(), "Cannot read temp OOS summary file");
+    const std::string content((std::istreambuf_iterator<char>(in)),
+                              std::istreambuf_iterator<char>());
+    require(content.find("\"isotope\": \"He6\"") != std::string::npos,
+            "OOS summary must contain He6");
+    require(content.find("\"species_ledger_recorded\": true") != std::string::npos,
+            "He6 ledger must be marked recorded");
+    require(content.find("\"deposited_energy_MeV\": 600") != std::string::npos,
+            "He6 deposited must equal continuous ledger metric");
+    require(content.find("\"escaped_energy_MeV\": 400") != std::string::npos,
+            "He6 escaped must equal boundary-escape ledger metric");
+    require(content.find("\"isotope\": \"B8\"") != std::string::npos,
+            "OOS summary must contain B8");
+    // B8/C10 ledgers are all zero: fields must be null, tracks still counted.
+    require(content.find("\"ledger_birth_energy_MeV\": null") != std::string::npos,
+            "Unrecorded isotopes must report null ledger fields");
+    std::error_code ec{};
+    std::filesystem::remove(tmp, ec);
+}
+
 carbon::InelasticPackageV3Table make_synthetic_cinel03_table() {
     carbon::InelasticPackageV3Table table;
     table.set_metadata(100.0F, 100.0F, 1, "00000000-0000-4000-8000-000000000016");
@@ -9753,6 +9796,7 @@ int main(int argc, char** argv) {
 #endif
         run("test_step15_schneider_radiation_lengths_and_sentinel", test_step15_schneider_radiation_lengths_and_sentinel);
         run("test_secondary_schneider_mcs_x0_selection", test_secondary_schneider_mcs_x0_selection);
+        run("test_out_of_scope_isotope_summary_ledger_fields", test_out_of_scope_isotope_summary_ledger_fields);
         run("test_step16_cinel03_round_trip_and_determinism", test_step16_cinel03_round_trip_and_determinism);
         run("test_step16_cinel03_rejections_and_fail_closed", test_step16_cinel03_rejections_and_fail_closed);
         run("test_step16_cinel03_synthetic_cpu_gpu_replay", test_step16_cinel03_synthetic_cpu_gpu_replay);

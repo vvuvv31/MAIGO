@@ -1503,11 +1503,14 @@ void write_validation_scope(std::ofstream& output, const TransportConfig& config
            << "  },\n";
 }
 
+
+}  // namespace
+
 // Declared research approximation: out-of-scope projectiles (no event data
 // on disk) keep charged EM transport with secondary nuclear reactions
 // disabled. Tracks/birth are measured per isotope from the unsupported-track
 // log. Deposited/escaped are isotope-resolved only when the species ledger
-// recorded them (CINEL02-gated; null in Schneider mode): then the global
+// recorded them (null when the species ledger recorded nothing): then the global
 // energy closure bounds them (birth = deposited + escaped, no loss proven
 // by the balance error). Residual kinetic energy is never dumped locally.
 void write_out_of_scope_isotope_summary(std::ofstream& output, const TransportResult& result) {
@@ -1552,8 +1555,6 @@ void write_out_of_scope_isotope_summary(std::ofstream& output, const TransportRe
     }
     output << "  ],\n";
 }
-
-}  // namespace
 
 void write_energy_ledger_json(const std::filesystem::path& path,
                               const TransportConfig& config,

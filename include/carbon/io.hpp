@@ -3,6 +3,7 @@
 #include "carbon/transport.hpp"
 
 #include <filesystem>
+#include <fstream>
 
 namespace carbon {
 
@@ -84,6 +85,12 @@ void write_dense_voxel_dose_mhd(const std::filesystem::path& mhd_path,
 void write_energy_ledger_json(const std::filesystem::path& path,
                               const TransportConfig& config,
                               const TransportResult& result);
+
+// Out-of-scope isotope summary (He6/B8/C10): tracks/birth from the
+// unsupported-track log; deposited/escaped from the species ledger when
+// recorded, null otherwise. Exposed for unit testing.
+void write_out_of_scope_isotope_summary(std::ofstream& output,
+                                        const TransportResult& result);
 
 void write_validation_scorer_csvs(const std::filesystem::path& directory,
                                   const TransportConfig& config,

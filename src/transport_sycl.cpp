@@ -1062,6 +1062,26 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
         cinel02_ct_rates.reset();
     }
 
+    // Read-only species ledger is mode-independent: secondary EM transport
+    // records per-species deposited/escaped energy unconditionally on device
+    // (null-checked increments), so these two buffers must exist even when
+    // use_cinel02 is false (e.g. Schneider CT mode). No physics effect:
+    // ledger writes are isolated atomics into dedicated buffers.
+    if (cinel02_species_energy_device == nullptr) {
+        cinel02_species_energy_device =
+            mem_tracker.allocate<float>(kCinel02SpeciesEnergySlots);
+        if (cinel02_species_energy_device == nullptr) throw std::bad_alloc();
+    }
+    if (cinel02_species_terminal_device == nullptr) {
+        cinel02_species_terminal_device =
+            mem_tracker.allocate<std::uint64_t>(kCinel02SpeciesTerminalSlots);
+        if (cinel02_species_terminal_device == nullptr) throw std::bad_alloc();
+    }
+    queue.fill(cinel02_species_energy_device, 0.0F,
+               kCinel02SpeciesEnergySlots).wait_and_throw();
+    queue.fill(cinel02_species_terminal_device, std::uint64_t{0},
+               kCinel02SpeciesTerminalSlots).wait_and_throw();
+
     // Slab layers
     const auto enable_layered_phantom = config.enable_layered_phantom;
     const auto slab_layer_count =
