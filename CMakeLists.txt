@@ -229,6 +229,9 @@ if(BUILD_TESTING)
         endif()
     endif()
 
+    add_executable(dump_tps_phase_space tools/dump_tps_phase_space.cpp)
+    target_link_libraries(dump_tps_phase_space PRIVATE carbon_core)
+
     add_executable(test_secondary_rate_table_hardening tests/test_secondary_rate_table_hardening.cpp)
     target_link_libraries(test_secondary_rate_table_hardening PRIVATE carbon_core)
 
