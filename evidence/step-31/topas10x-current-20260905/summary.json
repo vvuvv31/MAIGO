@@ -1,0 +1,412 @@
+{
+  "status": "complete_research_benchmark_not_physics_promotion",
+  "source_commit": "c6fe6b44b4650d11b411b0a4b6537a9732378f2b",
+  "source_worktree_clean": false,
+  "executable": "/mnt/sdb/wuwei/MAIGO/build/oneapi-nvidia-release/carbon_mc",
+  "executable_sha256": "6ae10bb7e11bed70a9ce602a6ba25d141cfa7ad641158162f747a00b12570c0a",
+  "transport_source_sha256": "b717854b5faf9d03edf18e836024f9d4b614a96d523682640456109bb1335546",
+  "gpu": "local RTX 2080 Ti sm_75; no remote GPU jobs",
+  "total_histories": 457898870,
+  "accepted_shards": 60,
+  "overflow_count": 0,
+  "method": {
+    "threshold": "reference >= 10% maximum",
+    "distance_search_step_mm": 0.5,
+    "interpolation": "trilinear",
+    "domain": "inside evaluated volume only; no boundary extrapolation",
+    "global_normalization": "reference maximum",
+    "local_normalization": "reference dose at query voxel",
+    "sample_seed": 42,
+    "sampling": "all mask voxels, plus frozen default_rng(42) 50k subset",
+    "limitation": "finite search lattice; not exact continuous minimization",
+    "mapping": "case-specific exact voxel mapping; see each case and manifest",
+    "zero_dta": "same-voxel dose-only comparison"
+  },
+  "cases": [
+    {
+      "case": "RT06423",
+      "directory": "/mnt/sda/wuwei/topas10x_threecase_20260905_r2/RT06423",
+      "histories": 151087660,
+      "accepted_shards": 20,
+      "overflow_count": 0,
+      "elapsed_transport_seconds": 1112.522233,
+      "histories_per_second": 135806.4185311432,
+      "maximum_physical_relative_energy_residual": 0.00000810461644646,
+      "maximum_voxel_closure_relative_error": 1.1965999968666097e-8,
+      "gamma": {
+        "global_3pct_3mm": {
+          "full_mask_percent": 100,
+          "passed": 552506,
+          "evaluated": 552506,
+          "sample50k_percent": 100
+        },
+        "local_3pct_3mm": {
+          "full_mask_percent": 99.8758384524331,
+          "passed": 551820,
+          "evaluated": 552506,
+          "sample50k_percent": 99.874
+        },
+        "global_2pct_2mm": {
+          "full_mask_percent": 99.96036242140357,
+          "passed": 552287,
+          "evaluated": 552506,
+          "sample50k_percent": 99.976
+        },
+        "local_2pct_2mm": {
+          "full_mask_percent": 99.26389939656764,
+          "passed": 548439,
+          "evaluated": 552506,
+          "sample50k_percent": 99.22
+        },
+        "global_1pct_1mm": {
+          "full_mask_percent": 98.58263982653583,
+          "passed": 544675,
+          "evaluated": 552506,
+          "sample50k_percent": 98.524
+        },
+        "local_1pct_1mm": {
+          "full_mask_percent": 87.49552041063808,
+          "passed": 483418,
+          "evaluated": 552506,
+          "sample50k_percent": 87.24199999999999
+        },
+        "global_3pct_0mm": {
+          "full_mask_percent": 99.96796414880562,
+          "passed": 552329,
+          "evaluated": 552506,
+          "sample50k_percent": 99.97399999999999
+        },
+        "local_3pct_0mm": {
+          "full_mask_percent": 92.28478966744252,
+          "passed": 509879,
+          "evaluated": 552506,
+          "sample50k_percent": 92.298
+        }
+      },
+      "dose_sum_ratio_Gy_not_energy_integral": 1.0124492702507293,
+      "in_mask_dose_sum_ratio": 1.0009841717383794,
+      "high_dose_correlation": 0.9996307538178676,
+      "source_energy_MeVu": [
+        150,
+        225
+      ],
+      "coordinate_rebase_mm": [
+        0,
+        0,
+        0
+      ],
+      "artifacts": {
+        "manifest.json": {
+          "path": "/mnt/sda/wuwei/topas10x_threecase_20260905_r2/RT06423/manifest.json",
+          "sha256": "4e16ce8a1ee2bab6991b17dc92757f2b33012aad79b47c701ca8837f4d9eb602",
+          "size_bytes": 15048
+        },
+        "execution.json": {
+          "path": "/mnt/sda/wuwei/topas10x_threecase_20260905_r2/RT06423/execution.json",
+          "sha256": "3e06e3f5ee25ac1bcfad0b724b390188f5635068a46873285c0f636300ebe074",
+          "size_bytes": 9550
+        },
+        "gamma.json": {
+          "path": "/mnt/sda/wuwei/topas10x_threecase_20260905_r2/RT06423/gamma.json",
+          "sha256": "d73e4d357a15ed539f7570f259408b2d6c2ecd1c79ff099eaa6d6660110d4eb4",
+          "size_bytes": 2647
+        },
+        "gpu_sum.raw": {
+          "path": "/mnt/sda/wuwei/topas10x_threecase_20260905_r2/RT06423/gpu_sum.raw",
+          "sha256": "1a8f3888cd918723ff975b79bcb97fbace342e122c55301e1316886c6a4e95b8",
+          "size_bytes": 26329600
+        },
+        "gpu_sum.mhd": {
+          "path": "/mnt/sda/wuwei/topas10x_threecase_20260905_r2/RT06423/gpu_sum.mhd",
+          "sha256": "58d8a73fc21bab831c2f33956ba2662890405ebb093290d3a3dfa59ef0d5901c",
+          "size_bytes": 305
+        },
+        "gpu_sum_patient.raw": {
+          "path": "/mnt/sda/wuwei/topas10x_threecase_20260905_r2/RT06423/gpu_sum_patient.raw",
+          "sha256": "bcb37a0e62419b4aeb8ec45ed90c4e0c4e7ab5d97965459e378e112d864aed1f",
+          "size_bytes": 26329600
+        },
+        "gpu_sum_patient.mhd": {
+          "path": "/mnt/sda/wuwei/topas10x_threecase_20260905_r2/RT06423/gpu_sum_patient.mhd",
+          "sha256": "db131fec6cd74d84ca949cc7d8be72926122ff60393d47faf0f1038c7dee8628",
+          "size_bytes": 279
+        },
+        "topas_sum.raw": {
+          "path": "/mnt/sda/wuwei/topas10x_threecase_20260905_r2/RT06423/topas_sum.raw",
+          "sha256": "f107213b17a04a565eccc7f6c27420bf424dc72e638e802d65285edfebe53257",
+          "size_bytes": 26329600
+        },
+        "topas_sum.mhd": {
+          "path": "/mnt/sda/wuwei/topas10x_threecase_20260905_r2/RT06423/topas_sum.mhd",
+          "sha256": "fdf654b7b22e1d8af47c5019ed916734676dae2510b3648ea54f8e593bae375d",
+          "size_bytes": 273
+        }
+      },
+      "mapping": "packed_xneg: transpose(1,2,0), flip axis 2"
+    },
+    {
+      "case": "RT07575",
+      "directory": "/mnt/sda/wuwei/topas10x_threecase_20260905_r2/RT07575",
+      "histories": 129638170,
+      "accepted_shards": 20,
+      "overflow_count": 0,
+      "elapsed_transport_seconds": 1006.7303119999999,
+      "histories_per_second": 128771.49764414763,
+      "maximum_physical_relative_energy_residual": 0.0000118494198993,
+      "maximum_voxel_closure_relative_error": 2.2289999956903728e-8,
+      "gamma": {
+        "global_3pct_3mm": {
+          "full_mask_percent": 99.97215478459115,
+          "passed": 459556,
+          "evaluated": 459684,
+          "sample50k_percent": 99.976
+        },
+        "local_3pct_3mm": {
+          "full_mask_percent": 99.60864419905849,
+          "passed": 457885,
+          "evaluated": 459684,
+          "sample50k_percent": 99.58200000000001
+        },
+        "global_2pct_2mm": {
+          "full_mask_percent": 99.57035702787132,
+          "passed": 457709,
+          "evaluated": 459684,
+          "sample50k_percent": 99.55000000000001
+        },
+        "local_2pct_2mm": {
+          "full_mask_percent": 98.43544695921545,
+          "passed": 452492,
+          "evaluated": 459684,
+          "sample50k_percent": 98.372
+        },
+        "global_1pct_1mm": {
+          "full_mask_percent": 96.74406766387345,
+          "passed": 444717,
+          "evaluated": 459684,
+          "sample50k_percent": 96.748
+        },
+        "local_1pct_1mm": {
+          "full_mask_percent": 83.32136859233734,
+          "passed": 383015,
+          "evaluated": 459684,
+          "sample50k_percent": 83.514
+        },
+        "global_3pct_0mm": {
+          "full_mask_percent": 99.28146291800454,
+          "passed": 456381,
+          "evaluated": 459684,
+          "sample50k_percent": 99.272
+        },
+        "local_3pct_0mm": {
+          "full_mask_percent": 89.1360151756424,
+          "passed": 409744,
+          "evaluated": 459684,
+          "sample50k_percent": 89.408
+        }
+      },
+      "dose_sum_ratio_Gy_not_energy_integral": 1.016542943390291,
+      "in_mask_dose_sum_ratio": 0.9994135177021521,
+      "high_dose_correlation": 0.9994258676414024,
+      "source_energy_MeVu": [
+        165,
+        240
+      ],
+      "coordinate_rebase_mm": [
+        0,
+        0,
+        0
+      ],
+      "artifacts": {
+        "manifest.json": {
+          "path": "/mnt/sda/wuwei/topas10x_threecase_20260905_r2/RT07575/manifest.json",
+          "sha256": "ed74b97c0f50f42d17639e0d48889cbb099f378a2269dccfe04f839b660c26bf",
+          "size_bytes": 15666
+        },
+        "execution.json": {
+          "path": "/mnt/sda/wuwei/topas10x_threecase_20260905_r2/RT07575/execution.json",
+          "sha256": "1f3f1ec719cd37d0455bb52c7150ee9c1d95e8b0807aeeed405b5fabd8a57156",
+          "size_bytes": 9550
+        },
+        "gamma.json": {
+          "path": "/mnt/sda/wuwei/topas10x_threecase_20260905_r2/RT07575/gamma.json",
+          "sha256": "1012bea37ce634521f1c66a1d5ef868a0f88d74d8bd13a9e42ecafae70896c3a",
+          "size_bytes": 2660
+        },
+        "gpu_sum.raw": {
+          "path": "/mnt/sda/wuwei/topas10x_threecase_20260905_r2/RT07575/gpu_sum.raw",
+          "sha256": "1a8b34c7c04f81c9dfff728c0c67be652c3fbcde0bf3613c5405afc05f45ab38",
+          "size_bytes": 29481900
+        },
+        "gpu_sum.mhd": {
+          "path": "/mnt/sda/wuwei/topas10x_threecase_20260905_r2/RT07575/gpu_sum.mhd",
+          "sha256": "85971fedc4b6dc2b617a7c3d4ed13acd37cdea819b9c0ab6ed4ba2eef131ee31",
+          "size_bytes": 302
+        },
+        "gpu_sum_patient.raw": {
+          "path": "/mnt/sda/wuwei/topas10x_threecase_20260905_r2/RT07575/gpu_sum_patient.raw",
+          "sha256": "9e78979d4a7c8604eb33a61c9c64358a6205525515bfdf0c71c4a22584342485",
+          "size_bytes": 29481900
+        },
+        "gpu_sum_patient.mhd": {
+          "path": "/mnt/sda/wuwei/topas10x_threecase_20260905_r2/RT07575/gpu_sum_patient.mhd",
+          "sha256": "0f5cb7245b3b740665f2df0a59ff321ac9a538bd9b65f10dcaa6b82859ce93ec",
+          "size_bytes": 279
+        },
+        "topas_sum.raw": {
+          "path": "/mnt/sda/wuwei/topas10x_threecase_20260905_r2/RT07575/topas_sum.raw",
+          "sha256": "2e567ffd4bc445182b934f0f8bee49a4b37aef88bd00bce9904b46017917379e",
+          "size_bytes": 29481900
+        },
+        "topas_sum.mhd": {
+          "path": "/mnt/sda/wuwei/topas10x_threecase_20260905_r2/RT07575/topas_sum.mhd",
+          "sha256": "1c3e1f208dc18f29aa5b9bb8815314e90961146eb76278eda03a1ba4f33b2b65",
+          "size_bytes": 273
+        }
+      },
+      "mapping": "packed_xneg: transpose(1,2,0), flip axis 2"
+    },
+    {
+      "case": "20022516",
+      "directory": "/mnt/sda/wuwei/topas10x_threecase_20260905_r3/20022516",
+      "histories": 177173040,
+      "accepted_shards": 20,
+      "overflow_count": 0,
+      "elapsed_transport_seconds": 1281.345329,
+      "histories_per_second": 138271.1092709653,
+      "maximum_physical_relative_energy_residual": 0.00000825946265283,
+      "maximum_voxel_closure_relative_error": 1.0996300003895954e-7,
+      "gamma": {
+        "global_3pct_3mm": {
+          "full_mask_percent": 100,
+          "passed": 1068555,
+          "evaluated": 1068555,
+          "sample50k_percent": 100
+        },
+        "local_3pct_3mm": {
+          "full_mask_percent": 99.93870226614446,
+          "passed": 1067900,
+          "evaluated": 1068555,
+          "sample50k_percent": 99.938
+        },
+        "global_2pct_2mm": {
+          "full_mask_percent": 99.93729850124701,
+          "passed": 1067885,
+          "evaluated": 1068555,
+          "sample50k_percent": 99.924
+        },
+        "local_2pct_2mm": {
+          "full_mask_percent": 99.60900468389553,
+          "passed": 1064377,
+          "evaluated": 1068555,
+          "sample50k_percent": 99.59400000000001
+        },
+        "global_1pct_1mm": {
+          "full_mask_percent": 98.78892523080235,
+          "passed": 1055614,
+          "evaluated": 1068555,
+          "sample50k_percent": 98.812
+        },
+        "local_1pct_1mm": {
+          "full_mask_percent": 84.96698812882818,
+          "passed": 907919,
+          "evaluated": 1068555,
+          "sample50k_percent": 84.884
+        },
+        "global_3pct_0mm": {
+          "full_mask_percent": 94.2729199713632,
+          "passed": 1007358,
+          "evaluated": 1068555,
+          "sample50k_percent": 94.556
+        },
+        "local_3pct_0mm": {
+          "full_mask_percent": 81.35893800506291,
+          "passed": 869365,
+          "evaluated": 1068555,
+          "sample50k_percent": 81.658
+        }
+      },
+      "dose_sum_ratio_Gy_not_energy_integral": 0.9998486660309694,
+      "in_mask_dose_sum_ratio": 1.0005935332686964,
+      "high_dose_correlation": 0.9975557597698468,
+      "source_energy_MeVu": [
+        110,
+        195
+      ],
+      "coordinate_rebase_mm": [
+        0,
+        0,
+        1
+      ],
+      "artifacts": {
+        "manifest.json": {
+          "path": "/mnt/sda/wuwei/topas10x_threecase_20260905_r3/20022516/manifest.json",
+          "sha256": "571c08a062d88d49189cfa9e7851b4648398d23fba2bb3a9ddc49c1a9410fddd",
+          "size_bytes": 15293
+        },
+        "execution.json": {
+          "path": "/mnt/sda/wuwei/topas10x_threecase_20260905_r3/20022516/execution.json",
+          "sha256": "4d78a8bdabf76fddaad19880f92acdbcc2bb6272876355f1a5c23d0245d5685a",
+          "size_bytes": 9563
+        },
+        "gamma.json": {
+          "path": "/mnt/sda/wuwei/topas10x_threecase_20260905_r3/20022516/gamma.json",
+          "sha256": "1ca1895bc35ed39cbe63d1abc6305fb9768b93aec5df460a3f30b88be4bad7a3",
+          "size_bytes": 2647
+        },
+        "gpu_sum.raw": {
+          "path": "/mnt/sda/wuwei/topas10x_threecase_20260905_r3/20022516/gpu_sum.raw",
+          "sha256": "8f955a3a2b91a500fbfc976b16f5686c78991430d0f926c3917962b2167b0053",
+          "size_bytes": 97896960
+        },
+        "gpu_sum.mhd": {
+          "path": "/mnt/sda/wuwei/topas10x_threecase_20260905_r3/20022516/gpu_sum.mhd",
+          "sha256": "7bff8323714511392e7ad945f0b4bfe4b09c8b952454a4cec003a00e77ff5917",
+          "size_bytes": 305
+        },
+        "gpu_sum_patient.raw": {
+          "path": "/mnt/sda/wuwei/topas10x_threecase_20260905_r3/20022516/gpu_sum_patient.raw",
+          "sha256": "8f955a3a2b91a500fbfc976b16f5686c78991430d0f926c3917962b2167b0053",
+          "size_bytes": 97896960
+        },
+        "gpu_sum_patient.mhd": {
+          "path": "/mnt/sda/wuwei/topas10x_threecase_20260905_r3/20022516/gpu_sum_patient.mhd",
+          "sha256": "e45d6c9cac00a326e76b41d35958e28343905f24411769a198b0c4b6146bb852",
+          "size_bytes": 299
+        },
+        "topas_sum.raw": {
+          "path": "/mnt/sda/wuwei/topas10x_threecase_20260905_r3/20022516/topas_sum.raw",
+          "sha256": "254fd0d19d263122e8c9cfcacc6703c4aaa30fa942899650e7a22aee79b2a00b",
+          "size_bytes": 97896960
+        },
+        "topas_sum.mhd": {
+          "path": "/mnt/sda/wuwei/topas10x_threecase_20260905_r3/20022516/topas_sum.mhd",
+          "sha256": "8ed0a32fecf2f0bacdf2c924256ce8a4746d2164f0079d894136b5fed3f2ee60",
+          "size_bytes": 293
+        }
+      },
+      "mapping": "native (CT/source jointly rebased +1 mm Z)"
+    }
+  ],
+  "changes": "Benchmark utilities only; no transport physics/package/beam/scale tuning. Existing uncommitted entrance-mask candidate retained.",
+  "limitations": [
+    "Research v2.1 fourteen-projectile scope; quality acceptance does not imply production generalization.",
+    "20022516 native Z origin -1 mm rejected before transport. CT and source both shifted +1 mm for identical relative geometry; no density/section/LUT changes or dose fitting.",
+    "RT07575 beam-aligned CT is an exact axis permutation/reflection; half extent 104.25 mm comes from 417 x 0.5 mm geometry.",
+    "Finite 0.5 mm gamma search lattice with trilinear interpolation, not an exact continuous minimum. 0 mm is dose-only.",
+    "Full threshold-mask values are primary; sample50k values reproduce default_rng(42) method. No LS normalization.",
+    "Delta-tail extraction nodes are 150/200/225 MeV/u; no new energy/density-response validation is claimed.",
+    "Early preparation/library/output-collection failures retained; first successful RT06423 shard recovered without rerunning.",
+    "TOPAS data reused, no TOPAS rerun. Patient-coordinate outputs use exact voxel permutation, no interpolation."
+  ],
+  "tests": {
+    "gamma_unit_tests": 4,
+    "data_manifest_entries_verified": 16
+  },
+  "tool_sha256": {
+    "tools/run_topas10x_gpu_benchmark.py": "fcb1c4320dc90b332d55468574a81c38214b4c42e660b95fe76caada111cb621",
+    "tools/evaluate_topas10x_gpu_gamma.py": "cd9668f29d77dd62e8a6421b681ec677b69677dc37875fb48a7fc69efcf8fb8c",
+    "tools/prepare_topas10x_ct.cpp": "b20b123a67aaa2dd01701afcc4e51cacfd9847ac023b39d12505cc2166d152d9",
+    "tests/test_topas10x_gamma.py": "389230d9280eaa73887d8643cb041830a693d5e7408a7229a40bbea0bbe4cf46"
+  },
+  "coordinate_rebase_audit": "/mnt/sda/wuwei/topas10x_threecase_20260905_r3/coordinate_rebase_audit.json"
+}

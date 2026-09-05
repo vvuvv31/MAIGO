@@ -4,7 +4,12 @@
 > **发表期刊**：*Frontiers in Oncology* (March 25, 2022) | **DOI**：[10.3389/fonc.2022.780784](https://doi.org/10.3389/fonc.2022.780784)  
 > **作者团队**：Micol De Simoni, Giuseppe Battistoni, Angelo Schiavi, Marco Toppi, Vincenzo Patera 等（意大利国家核物理研究所 INFN 与罗马第一大学 Sapienza）  
 > **核心软件**：FRED (Fast paRticle thErapy Dose evaluator)  
-> **本地论文文件**：[`A_Data-Driven_Fragmentation_Model_for_Carbon_Therapy_GPU-Accelerated_Monte-Carlo_Dose_Recalculation.pdf`](file:///mnt/sdb/wuwei/MAIGO/A_Data-Driven_Fragmentation_Model_for_Carbon_Therapy_GPU-Accelerated_Monte-Carlo_Dose_Recalculation.pdf) (或 [`fonc-12-780784.pdf`](file:///mnt/sdb/wuwei/MAIGO/fonc-12-780784.pdf))
+> **本地论文文件**：[完整标题 PDF](../A_Data-Driven_Fragmentation_Model_for_Carbon_Therapy_GPU-Accelerated_Monte-Carlo_Dose_Recalculation.pdf)（或 [期刊 PDF](../fonc-12-780784.pdf)）
+
+本文是论文解读，不是 MAIGO 当前实现规格。当前实现见
+[TOPAS / GPU Physics Model](TOPAS_GPU_Physics_Model.md)，结果见
+[当前结果索引](results.md)。原根目录重复解读已完整移入
+[历史归档](archive/2026-09-05/root/A_Data-Driven_Fragmentation_Model_for_Carbon_Therapy.md)。
 
 ---
 

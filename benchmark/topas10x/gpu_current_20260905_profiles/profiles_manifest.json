@@ -1,0 +1,120 @@
+{
+  "method": "Exact-isocenter trilinear line extraction from full 3D dose; patient XYZ axes; native axis sampling; absolute cumulative Gy; no smoothing/scaling/registration; not IDD",
+  "script_sha256": "aa7f38f1c6a8899f0389e5b0d033b1ef375b0de8190cb57c4ef33eaff098b5e0",
+  "cases": {
+    "RT06423": {
+      "isocenter_patient_mm_xyz": [
+        -10.869,
+        93.4088,
+        609.2755
+      ],
+      "isocenter_index_xyz": [
+        208.382,
+        244.2176,
+        16.30275
+      ],
+      "isocenter_centered_patient_mm_xyz": [
+        -5.558999999999999,
+        12.3588,
+        -0.3945
+      ],
+      "parameter_file": "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/RT06423/replicas/s1/run_full_plan.txt",
+      "parameter_sha256": "6a29da602293b22fe68c465c418deb7753e7e5d59d337b31c1ee01855cd36bd7",
+      "reference_sha256": "f107213b17a04a565eccc7f6c27420bf424dc72e638e802d65285edfebe53257",
+      "gpu_patient_sha256": "bcb37a0e62419b4aeb8ec45ed90c4e0c4e7ab5d97965459e378e112d864aed1f",
+      "profiles": {
+        "X": {
+          "csv": "RT06423_X.csv",
+          "sha256": "8909e060bff6501011379f322fd899443d4d6e2fb4f7feff61b9c41ffc89d3cc",
+          "samples": 440
+        },
+        "Y": {
+          "csv": "RT06423_Y.csv",
+          "sha256": "307eef22777ac6d69142a85561fb8ed279f7e34d5fa492a377ec7678859ac9fa",
+          "samples": 440
+        },
+        "Z": {
+          "csv": "RT06423_Z.csv",
+          "sha256": "f258e55dd7d39b1cb17deac5c98819004b816b948a9d8ecd57c771fab0f6acf1",
+          "samples": 34
+        }
+      }
+    },
+    "RT07575": {
+      "isocenter_patient_mm_xyz": [
+        -12.263599999999997,
+        124.55149999999999,
+        -781.5517000000001
+      ],
+      "isocenter_index_xyz": [
+        182.4728,
+        337.703,
+        16.31915
+      ],
+      "isocenter_centered_patient_mm_xyz": [
+        -12.763599999999999,
+        42.8515,
+        -1.3617
+      ],
+      "parameter_file": "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/RT07575_pbs_s1/run_full_plan.txt",
+      "parameter_sha256": "fe1ec7837b8d20a77dc43845e09e9338dd224044f030c91371ac63fb9cdef800",
+      "reference_sha256": "2e567ffd4bc445182b934f0f8bee49a4b37aef88bd00bce9904b46017917379e",
+      "gpu_patient_sha256": "9e78979d4a7c8604eb33a61c9c64358a6205525515bfdf0c71c4a22584342485",
+      "profiles": {
+        "X": {
+          "csv": "RT07575_X.csv",
+          "sha256": "2bcd0ce568462732384f5141323690fa0a98647c0feb61991a57ca562d4834b7",
+          "samples": 417
+        },
+        "Y": {
+          "csv": "RT07575_Y.csv",
+          "sha256": "667f2c5125f4a707086c697549ad46e709608c90536f5ca91110ffe9d963e02f",
+          "samples": 505
+        },
+        "Z": {
+          "csv": "RT07575_Z.csv",
+          "sha256": "01b71f313f435e6b32a55d92ad9fc7c66b66ad4c5050f3193b8b5da8739bfdf7",
+          "samples": 35
+        }
+      }
+    },
+    "20022516": {
+      "isocenter_patient_mm_xyz": [
+        61.140495727540014,
+        -162.15871953125,
+        -418.5819
+      ],
+      "isocenter_index_xyz": [
+        618.821,
+        284.2226,
+        20.45905
+      ],
+      "isocenter_centered_patient_mm_xyz": [
+        69.6605,
+        -9.3887,
+        -0.0819
+      ],
+      "parameter_file": "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/20022516/replicas/s1/run_full_plan.txt",
+      "parameter_sha256": "9e37953272bac15e2bab768cfc019da38f6a3a482a20d8b849cfc05450a673af",
+      "reference_sha256": "254fd0d19d263122e8c9cfcacc6703c4aaa30fa942899650e7a22aee79b2a00b",
+      "gpu_patient_sha256": "8f955a3a2b91a500fbfc976b16f5686c78991430d0f926c3917962b2167b0053",
+      "profiles": {
+        "X": {
+          "csv": "20022516_X.csv",
+          "sha256": "14ade9fdc6e2a8c2c0c61ee2ace7caffad9e1bb7556873fce3513dc00dbda8f7",
+          "samples": 960
+        },
+        "Y": {
+          "csv": "20022516_Y.csv",
+          "sha256": "c0916c5869f034cd7f06b3a16864b7eae797693e5f192e2854ad94644ac5a052",
+          "samples": 607
+        },
+        "Z": {
+          "csv": "20022516_Z.csv",
+          "sha256": "a93ffe9f5b11e452e68a339763eea81215a705563f3b4811feeeebc000ba2c1d",
+          "samples": 42
+        }
+      }
+    }
+  }
+}

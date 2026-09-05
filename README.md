@@ -1,199 +1,80 @@
 # MAIGO
 
-Carbon-ion condensed-history Monte Carlo for dose and dose-averaged LET
-on Intel oneAPI / SYCL (Intel Level Zero or NVIDIA CUDA plugin).
+基于 TOPAS / Geant4 提取数据的碳离子凝聚历史 GPU Monte Carlo，目标是复现
+*A Data-Driven Fragmentation Model for Carbon Therapy: GPU-Accelerated Monte Carlo
+Dose Recalculation* 所述方法。**仅用于研究，不用于临床治疗计划。**
 
-> **Research software only** -- not for clinical treatment planning.
+当前患者计算使用 SYCL、Schneider 25 分区材料和 CINEL03 相关末态；
+GPU 不在运行时调用 Geant4。水模保留独立的 water / CINEL02 路径。
+CT 包含 H/O 靶通道，不等于已经替代水中所有 stopping、XS、MCS 和 fluctuation 数据。
 
-## Features
+当前开发与提交目标为 `master` / `origin/master`（原 `fred` 开发线）；
+迁移前的 `master` 保留为 `legacy`。历史归档中的分支名不代表现行工作流。
+commit / push 仍需用户明确授权，详见 [AGENTS](AGENTS.md)。
 
-- **Condensed-history transport** -- CSDA + Vavilov energy straggling + Highland multiple Coulomb scattering; primary nuclear attenuation.
-- **Nuclear interactions** -- data-driven reaction packages extracted from TOPAS / Geant4, charged-fragment queue with cascade (up to 2 generations), optional neutral (neutron / gamma) queue.
-- **Geometry** -- uniform water phantom, axial slab stacks, heterogeneous bone / tissue inserts, full CT voxel grids (HU-to-material conversion).
-- **Beam models** -- mono- / multi-energy pencil beams with Gaussian emittance, TOPAS spot files, TPS plan source with arbitrary gantry angles.
-- **Scoring** -- 3-D dose-to-medium, dose-averaged LET (LET_d) with numerator / denominator moments, dense MHD voxel output, fragment-species fluence, per-spot PBS scoring.
-- **Backends** -- serial C++ (subset) and full SYCL GPU transport; supports Intel Arc (Level Zero / SPIR-V) and NVIDIA GPUs (CUDA plugin / PTX).
-- **Optional Copper minibeam** -- dedicated beamline kernel (`CARBON_ENABLE_MINIBEAM`).
-- **FP32 / FP64 dose atomics** -- FP32 default for fast consumer-GPU atomics; FP64 available via CMake option.
+## 文档入口
 
-## Requirements
+- [完整文档导航](docs/README.md)
+- [源码结构](docs/structure.md)、[物理模型与局限](docs/TOPAS_GPU_Physics_Model.md)
+- [Planning / geometry](docs/planning.md)、[Scoring / Gamma](docs/scoring_validation.md)
+- [当前结果索引](docs/results.md)、[Materials and Methods](mm.md) / [中文](mm_zh.md)
+- [活动数据与恢复](data/ACTIVE_DATA.md)、[执行规则与数据最低版本](AGENTS.md)
+- [Schneider 计划进度](plan/README.md)、[电子响应计划进度](plan2/README.md)
+- [历史记录](docs/archive/README.md)、[FRED 论文解读](docs/FRED_Carbon_Fragmentation_Model.md)
 
-| Component | Minimum | Notes |
-|-----------|---------|-------|
-| CMake | 3.22 | |
-| C++ standard | C++20 | |
-| Ninja | any (recommended) | Falls back to Unix Makefiles |
-| **Serial-only build** | GCC 12+, Clang 16+, or MSVC 2022 | No GPU required |
-| **SYCL build** | Intel oneAPI DPC++ (`icpx` / IntelLLVM) | See compiler setup below |
-| NVIDIA GPU | Compute capability 7.5+ (e.g. RTX 2080 Ti) | Requires the oneAPI CUDA plugin |
-| Intel GPU | Arc / Data Center GPU (Level Zero) | SPIR-V JIT |
+## 构建
 
-### Building Intel LLVM (DPC++) from Source
+需要 CMake ≥3.22、C++20、Ninja；GPU 需要支持 NVIDIA 的 oneAPI/DPC++ SYCL 工具链。
+本仓库当前验证硬件为本地 RTX 2080 Ti（sm_75）。先按本机安装设置编译器及共享库路径。
 
-If a packaged oneAPI toolkit is unavailable or you need the latest CUDA plugin
-support, build the Intel LLVM SYCL compiler from source:
-
-```bash
-# 1. Clone the Intel LLVM fork
-git clone https://github.com/intel/llvm.git intel-llvm
-cd intel-llvm
-
-# 2. Configure with CUDA support
-#    Adjust --cuda-sdk-root to your local CUDA toolkit path.
-python buildbot/configure.py \
-  --cuda \
-  --cuda-sdk-root /usr/local/cuda \
-  -o build
-
-# 3. Build (takes a while)
-cd build
-ninja sycl-toolchain
-
-# 4. (Optional) Install to a prefix
-ninja install
-
-# 5. Put the compiler on PATH
-export PATH=$(pwd)/bin:$PATH
-export LD_LIBRARY_PATH=$(pwd)/lib:$LD_LIBRARY_PATH
-
-# Verify
-icpx --version   # should report IntelLLVM / oneAPI DPC++
+```sh
+cmake --preset oneapi-nvidia-release -DCARBON_CUDA_ARCH=sm_75
+cmake --build --preset oneapi-nvidia-release --parallel 8
 ```
 
-If you already have a packaged Intel oneAPI toolkit, source the environment
-instead:
+CPU 子集可用 `cpu-debug` preset 构建，但不作为患者 CT GPU 验证的替代后端。
+SYCL/GPU 在沙盒外执行；禁止远程/集群 GPU。TOPAS 经本地 sbatch，
+并发总预算为 192 CPU 线程 / 160 GiB，具体约束见 AGENTS。
 
-```bash
-source /opt/intel/oneapi/setvars.sh
+## 数据与运行
+
+每次 Schneider CT 运行前：
+
+```sh
+python3 tools/verify_schneider_v2_1_data.py
 ```
 
-## Build
+任一缺失、SHA/size 不符、schema 降级或 registry 不完整都必须停止。
+最新最低栈是 v2.1 / 14-projectile；文件名中的 stopping v1 和 delta-tail v1
+仍是当前数据，不能仅按名字判断过时。大文件及外部 water 包不是普通 clone 就能获得，
+依照 manifest 和 [活动数据说明](data/ACTIVE_DATA.md) 安装，不从 trash 自动 fallback。
 
-The project ships CMake presets for common configurations. Ninja is the default
-generator.
+三病例复现以 [2026-09-05 冻结配置和结果](benchmark/topas10x/gpu_current_20260905.md)
+为起点，使用新输出目录；不要直接覆盖其中的 shard 配置、日志和剂量。
+运行接口为：
 
-```bash
-# Serial CPU debug
-cmake --preset cpu-debug && cmake --build --preset cpu-debug
-
-# NVIDIA SYCL (FP32 dose, legacy CT / water / LET kernel)
-cmake --preset oneapi-nvidia-release && cmake --build --preset oneapi-nvidia-release
-
-# NVIDIA SYCL + Copper minibeam kernel
-cmake --preset oneapi-nvidia-minibeam && cmake --build --preset oneapi-nvidia-minibeam
-
-# Intel SPIR-V only
-cmake --preset oneapi-intel-release && cmake --build --preset oneapi-intel-release
-
-# Dual targets (Intel + NVIDIA)
-cmake --preset oneapi-release && cmake --build --preset oneapi-release
+```text
+./build/oneapi-nvidia-release/carbon_mc --config <准备好的新运行配置> --device cuda
 ```
 
-Or use the helper script:
+配置是项目的轻量 `key: value` 格式，不是任意 YAML。
+先核对实际逐 spot histories、几何、数据和输出路径，再运行。
+大任务必须分片，任一 secondary overflow 必须缩小分片重跑。
+不要把旧示例配置当作当前 CT 验证配置；旧 fixtures 已部分归档。
 
-```bash
-scripts/build_linux_oneapi.sh                       # default: oneapi-release
-scripts/build_linux_oneapi.sh oneapi-nvidia-release  # NVIDIA only
-```
+## 验证边界
 
-Binaries are placed under `build/<preset>/carbon_mc`.
+2026-09-05 三病例共 60/60 shards accepted、零 overflow；457,898,870 histories。
+Global 1%/1mm 为 96.74–98.79%，Global 3%/0mm 为 94.27–99.97%；
+完整 Global/Local 指标及严格定义见 [结果索引](docs/results.md)。
 
-### Manual CMake Invocation
+这些结果绑定冻结 executable 和输入，包含当时的 entrance-mask candidate；
+不表示当前工作树任意新候选已验证，也不表示 plan2 电子纵向响应完成。
+不以 Gamma 通过率声称全物理等价、任意材料/能区泛化或临床准入。
 
-```bash
-source /opt/intel/oneapi/setvars.sh   # or use the from-source compiler
-
-cmake -B build -G Ninja \
-  -DCMAKE_BUILD_TYPE=Release \
-  -DCMAKE_CXX_COMPILER=icpx \
-  -DCARBON_ENABLE_SYCL=ON \
-  -DCARBON_SYCL_TARGETS=nvptx64-nvidia-cuda \
-  -DCARBON_CUDA_ARCH=sm_75 \
-  -DCARBON_DOSE_FP32=ON
-
-cmake --build build
-```
-
-### CMake Options
-
-| Option | Default | Description |
-|--------|---------|-------------|
-| `CARBON_ENABLE_SYCL` | `OFF` | Enable the SYCL transport backend |
-| `CARBON_DOSE_FP32` | `ON` | Use FP32 dose scorer atomics (fast on consumer NVIDIA GPUs) |
-| `CARBON_DOSE_FP64` | `OFF` | Use FP64 dose scorer atomics (overrides FP32 when ON) |
-| `CARBON_LET_FP64` | `OFF` | Use FP64 LET scorer atomics |
-| `CARBON_ENABLE_MINIBEAM` | `OFF` | Build the Copper minibeam beamline kernel |
-| `CARBON_VALIDATION_SCORERS` | `OFF` | Compile extra validation scorers (species fluence, survival, ledger) |
-| `CARBON_ENABLE_TRANSPORT_PROFILE` | `OFF` | Enable low-overhead SYCL step-path profiling counters |
-| `CARBON_SYCL_TARGETS` | *(empty)* | SYCL compilation targets, e.g. `nvptx64-nvidia-cuda`, `spir64`, or both |
-| `CARBON_CUDA_ARCH` | *(empty)* | NVIDIA GPU architecture for AOT compilation, e.g. `sm_75` |
-
-With `CARBON_ENABLE_MINIBEAM=OFF` only the legacy SYCL kernel is built. With
-`CARBON_ENABLE_MINIBEAM=ON`, setting `minibeam: false` in the config still
-uses the legacy kernel while `minibeam: true` selects the Copper beamline path.
-
-## How to Run
-
-```bash
-# Basic water phantom (serial)
-./build/cpu-debug/carbon_mc --config config/beam_200MeVu.yaml
-
-# SYCL on NVIDIA GPU with fragment cascade
-./build/oneapi-nvidia-release/carbon_mc \
-  --config config/beam_200MeVu_fragment_cascade_100k.yaml \
-  --device cuda
-
-# Dose-averaged LET
-./build/oneapi-nvidia-release/carbon_mc \
-  --config config/beam_200MeVu_letd.yaml \
-  --device cuda
-
-# CT full-plan (PBS dose + LET)
-./build/oneapi-nvidia-release/carbon_mc \
-  --config config/beam_ct_fullplan_rt07575_let.yaml \
-  --device cuda
-```
-
-### CLI Flags
-
-| Flag | Description |
-|------|-------------|
-| `--config FILE` | Configuration file (simple `key: value` format) |
-| `--device DEVICE` | `serial`, `cpu`, `gpu`, `cuda` / `nvidia`, `level_zero` / `intel` / `arc`, `opencl`, `default` |
-| `--histories N` | Number of histories (per spot, or total plan with spot weights) |
-| `--spots FILE` | TOPAS-format spot file; repeat to concatenate |
-| `--spot-weights FILE` | One optimization weight per concatenated spot |
-| `--random-seed N\|auto` | Override configured RNG seed |
-| `--ct-grid FILE` | Override configured CT patient grid |
-| `--output FILE` | Energy-deposition scorer CSV |
-| `--dose-output FILE` | Dose scorer CSV (Gy) |
-| `--scorer-let` / `--no-scorer-let` | Enable / disable LET_d scoring |
-| `--let-output FILE` | LET_d CSV with raw numerator / denominator |
-| `--voxel-dose-mhd FILE` | Dense voxel dose MHD output path |
-| `--plan-only` | Parse and allocate the plan without running transport |
-| `--sequential-spots` | Disable batched SYCL plan launch |
-| `--write-canonical-config FILE` | Write normalized YAML input |
-
-Config files use simple `key: value` lines (a lightweight parser, not a full
-YAML library).
-
-## Validation Milestones
-
-- **P2 Milestone (C12 Primary CT Attenuation)**: **Achieved**. Validated against dedicated TOPAS / Geant4 baselines across the full 18-case offline validation suite under strict fail-closed contract (`tools/verify_step13_p2_gates.py`):
-  - Case 1: Homogeneous Schneider slabs (lung, soft tissue, dense bone at 100, 200, 300 MeV/u) and Bragg stopping range slabs (soft tissue, dense bone at 100 MeV/u).
-  - Case 2: 5-material set adding air (100, 200 MeV/u) and trabecular bone (100, 200, 300 MeV/u).
-  - Case 3: 25-section continuous staircase phantom (Sections 0..24 at 200 MeV/u) with per-section depth mapping audit.
-  - Case 4: Voxel-boundary stress oblique beam geometry (15 deg entrance angle at 200 MeV/u).
-  All 7 acceptance gates strictly passed across all 18 cases:
-  - Primary survival integral relative difference < 1% (observed max 0.137%)
-  - First-interaction-depth NRMSE < 2% (observed max 1.932% on full 25-section staircase)
-  - Range / Bragg position difference <= max(0.5 mm, one voxel size) (observed 0.00 mm in soft tissue, 0.50 mm in dense bone)
-  - Exact terminal particle conservation across 100% of cases
-  - Zero section mapping mismatches across all 25 sections
-  - Zero secondaries / replays in primary validation mode (verified via runtime diagnostics)
-  - Zero queue / step / resample overflows (verified via runtime diagnostics)
-  Full cryptographic manifest and report preserved in `evidence/step13/`.
+测试入口及已归档 fixtures 的限制见 [structure](docs/structure.md)。
+本轮文档整理未重跑 Monte Carlo，不修改冻结数值。
 
 ## License
 
-GPL-3.0-or-later -- see [LICENSE](LICENSE).
+[GPL-3.0-or-later](LICENSE)。

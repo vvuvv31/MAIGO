@@ -8,6 +8,16 @@
 
 - ct不要走四分类包，只走 Schneider 分区。
 
+## Git branch workflow
+
+- 当前开发、文档和新提交的目标分支为 `master`，远端为 `origin/master`。
+- 原 `fred` 开发线迁移为 `master`；不要再向 `origin/fred` 提交或推送。
+- `legacy` 保留迁移前的 `master`（`8716e7c975e5255a747a46286f3b2581d645bf18`），
+  仅供历史查询，不作为新功能或当前物理数据的默认分支。
+- docs/archive 中的旧分支名称、历史 URL 和原始记录保留原样，不是当前执行指令。
+- 仅在用户明确要求时 commit / push；默认分支约定不等于自动推送授权。
+- 提交时区分已完成改动与未验收候选，不把无关工作树修改、大数据包或 scratch 自动加入提交。
+
 ## Schneider CT minimum validated physics-data stack
 
 - Schneider CT production/research runs must use at least the currently validated
