@@ -2607,6 +2607,61 @@ void test_tps_source_geometry_csv_and_switch() {
     const auto fixed_ct_batch = fixed_ct_plan.make_primary_batch(fixed_ct_config);
     require_near(fixed_ct_batch.front().source_origin_z_mm(), 1.0, 1.0e-6,
                  "TPS fixed-CT transport z rebase");
+
+    // The public upstream-air option must affect the tpsSource batch too. It
+    // historically loaded the table in main() but silently applied it only to
+    // legacy TOPAS spot plans. Reproduce the central-ray AABB entry distance
+    // independently and require the same RK4 energy propagation.
+    const carbon::StoppingPowerTable constant_air(
+        {0.01, 500.01}, {0.01, 0.01});
+    const auto fixed_ct_air_batch =
+        fixed_ct_plan.make_primary_batch(fixed_ct_config, &constant_air);
+    const auto& unattenuated = fixed_ct_batch.front();
+    auto expected_entry = 0.0;
+    auto expected_exit = std::numeric_limits<double>::infinity();
+    const auto intersect_entry = [&](const double position,
+                                     const double direction,
+                                     const double lower,
+                                     const double upper) {
+        if (std::abs(direction) < 1.0e-12) {
+            require(position >= lower && position < upper,
+                    "TPS central ray parallel to an excluded CT slab");
+            return;
+        }
+        auto first = (lower - position) / direction;
+        auto second = (upper - position) / direction;
+        if (first > second) std::swap(first, second);
+        expected_entry = std::max(expected_entry, first);
+        expected_exit = std::min(expected_exit, second);
+    };
+    intersect_entry(unattenuated.source_origin_x_mm(),
+                    unattenuated.beam_uz_x(), fixed_ct.origin_x_mm,
+                    fixed_ct.origin_x_mm + fixed_ct.extent_x_mm());
+    intersect_entry(unattenuated.source_origin_y_mm(),
+                    unattenuated.beam_uz_y(), fixed_ct.origin_y_mm,
+                    fixed_ct.origin_y_mm + fixed_ct.extent_y_mm());
+    intersect_entry(unattenuated.source_origin_z_mm(),
+                    unattenuated.beam_uz_z(), 0.0,
+                    fixed_ct.extent_z_mm());
+    require(expected_exit >= expected_entry,
+            "TPS central ray must intersect the fixed CT in air-loss test");
+    const auto expected_entry_energy =
+        carbon::spot_entry_total_energy_after_optional_upstream_loss(
+            unattenuated.initial_energy_MeV(), fixed_ct_config.primary_mass_number,
+            expected_entry, &constant_air);
+    require_near(fixed_ct_air_batch.front().initial_energy_MeV(),
+                 expected_entry_energy, 1.0e-4,
+                 "tpsSource upstream-air entry energy");
+    require(fixed_ct_air_batch.front().initial_energy_MeV() <
+                fixed_ct_batch.front().initial_energy_MeV(),
+            "tpsSource upstream-air correction must reduce entry energy");
+    auto no_ct_air_config = config;
+    no_ct_air_config.enable_ct_grid = false;
+    require_throws([&plan, &no_ct_air_config, &constant_air] {
+        static_cast<void>(
+            plan.make_primary_batch(no_ct_air_config, &constant_air));
+    }, "tpsSource upstream-air correction requires CT geometry");
+
     auto invalid_plan = plan;
     invalid_plan.spots.front().energy_spread_percent = 21.0;
     require_throws([&invalid_plan, &config] {

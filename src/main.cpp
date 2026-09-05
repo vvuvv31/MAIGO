@@ -145,7 +145,8 @@ int main(int argc, char* argv[]) {
                     "--sequential-spots");
             }
             const auto plan = carbon::TpsSourcePlan::from_config(config);
-            const auto batch = plan.make_primary_batch(config);
+            const auto batch = plan.make_primary_batch(
+                config, upstream_air_stopping_power_ptr);
             if (!batch.empty() &&
                 batch.back().history_end != config.number_of_histories) {
                 config.number_of_histories = batch.back().history_end;

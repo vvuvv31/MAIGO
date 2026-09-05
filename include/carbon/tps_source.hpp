@@ -9,6 +9,8 @@
 
 namespace carbon {
 
+class StoppingPowerTable;
+
 // Clinical source geometry is expressed in the same DICOM LPS patient frame
 // as CtGrid: +X left, +Y posterior, +Z superior. The beam has its own local
 // orthonormal frame (u, v, w); w is the propagation direction. Gantry/couch/
@@ -56,7 +58,8 @@ struct TpsSourcePlan {
     [[nodiscard]] std::vector<std::size_t> allocate_histories(
         std::size_t total_histories) const;
     [[nodiscard]] std::vector<PrimarySpotBatchEntry> make_primary_batch(
-        const TransportConfig& config) const;
+        const TransportConfig& config,
+        const StoppingPowerTable* upstream_air_stopping_power = nullptr) const;
     [[nodiscard]] std::size_t active_spot_count() const noexcept;
 };
 

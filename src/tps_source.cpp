@@ -628,7 +628,8 @@ std::vector<std::size_t> TpsSourcePlan::allocate_histories(
 }
 
 std::vector<PrimarySpotBatchEntry> TpsSourcePlan::make_primary_batch(
-    const TransportConfig& config) const {
+    const TransportConfig& config,
+    const StoppingPowerTable* const upstream_air_stopping_power) const {
     if (config.tps_spot_weight_mode != "mu" &&
         config.tps_spot_weight_mode != "histories") {
         throw std::invalid_argument(
@@ -658,6 +659,11 @@ std::vector<PrimarySpotBatchEntry> TpsSourcePlan::make_primary_batch(
     // slice direction. The kernel stores that same orientation but rebases the
     // z low edge to zero internally. Output metadata restores the CT origin.
     double transport_z_shift_mm = 0.0;
+    double ct_min_x_mm = 0.0;
+    double ct_max_x_mm = 0.0;
+    double ct_min_y_mm = 0.0;
+    double ct_max_y_mm = 0.0;
+    double ct_max_z_mm = 0.0;
     if (config.enable_ct_grid) {
         const auto grid = CtGrid::from_config(config);
         const auto number_of_bins = config.number_of_bins();
@@ -677,7 +683,41 @@ std::vector<PrimarySpotBatchEntry> TpsSourcePlan::make_primary_batch(
                 "spacing, depth bins, and phantom length to match the CT grid");
         }
         transport_z_shift_mm = -static_cast<double>(grid.origin_z_mm);
+        ct_min_x_mm = grid.origin_x_mm;
+        ct_max_x_mm = grid.origin_x_mm + grid.extent_x_mm();
+        ct_min_y_mm = grid.origin_y_mm;
+        ct_max_y_mm = grid.origin_y_mm + grid.extent_y_mm();
+        ct_max_z_mm = grid.extent_z_mm();
+    } else if (upstream_air_stopping_power != nullptr) {
+        throw std::invalid_argument(
+            "TPS upstream air energy loss requires a CT grid");
     }
+
+    const auto distance_to_ct_entry = [&](const TpsSourcePose& pose) {
+        auto enter = 0.0;
+        auto exit = std::numeric_limits<double>::infinity();
+        const auto intersect = [&](const double position, const double direction,
+                                   const double lower, const double upper) {
+            if (std::abs(direction) < 1.0e-12) {
+                return position >= lower && position < upper;
+            }
+            auto first = (lower - position) / direction;
+            auto second = (upper - position) / direction;
+            if (first > second) std::swap(first, second);
+            enter = std::max(enter, first);
+            exit = std::min(exit, second);
+            return exit >= enter;
+        };
+        const auto transport_z = pose.origin_z_mm + transport_z_shift_mm;
+        if (!intersect(pose.origin_x_mm, pose.uz_x, ct_min_x_mm, ct_max_x_mm) ||
+            !intersect(pose.origin_y_mm, pose.uz_y, ct_min_y_mm, ct_max_y_mm) ||
+            !intersect(transport_z, pose.uz_z, 0.0, ct_max_z_mm) ||
+            !std::isfinite(enter)) {
+            throw std::invalid_argument(
+                "TPS central spot ray does not intersect the CT grid");
+        }
+        return enter;
+    };
     std::vector<PrimarySpotBatchEntry> batch;
     batch.reserve(active_spot_count());
     std::uint64_t history_begin = 0;
@@ -710,7 +750,13 @@ std::vector<PrimarySpotBatchEntry> TpsSourcePlan::make_primary_batch(
         const auto total_energy_MeV = std::isfinite(spot.energy_total_MeV)
             ? spot.energy_total_MeV
             : spot.energy_MeVu * static_cast<double>(config.primary_mass_number);
-        entry.initial_energy_MeV() = static_cast<float>(total_energy_MeV);
+        const auto entry_energy_MeV =
+            upstream_air_stopping_power == nullptr
+                ? total_energy_MeV
+                : spot_entry_total_energy_after_optional_upstream_loss(
+                      total_energy_MeV, config.primary_mass_number,
+                      distance_to_ct_entry(pose), upstream_air_stopping_power);
+        entry.initial_energy_MeV() = static_cast<float>(entry_energy_MeV);
         entry.beam_energy_spread() =
             static_cast<float>(energy_spread_percent / 100.0);
         entry.emittance_sigma_x_mm() = static_cast<float>(sigma_x_mm);
