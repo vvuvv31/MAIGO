@@ -1,0 +1,77 @@
+{
+  "schema_version": 1,
+  "timestamp": "2026-09-05T09:16:48+08:00",
+  "scope": "RT06423 single Shard 01 TPS direction fix validation",
+  "physics_fix_commit": "a5f5b1755f6a822cc3b119c404ecdbb3a9e6ff16",
+  "diagnostic_scorer_commit": "5e2b83a67817c7a5644ed26a1f702547f8bcc123",
+  "root_cause": {
+    "file": "src/transport_sycl.cpp",
+    "fault": "direction_y used uy_x * local_dy instead of uy_y * local_dy",
+    "effect": "discarded one transverse angular-divergence component for the RT06423 centre beam basis"
+  },
+  "primary_fluence_validation": {
+    "topas_histories": 49984,
+    "gpu_histories": 50104,
+    "topas_primary_fluence_sha256": "585ac67169efe27c57839bfbf41bc3b31279271de47143fb7f9f819dc3f64d24",
+    "gpu_primary_fluence_sha256": "d0f9400b9c85b0ca28d9b65befd9baf5960121f123597eb6c3003f2dc4e07534",
+    "weighted_sigma_difference_before_mm": {"patient_z": -0.567, "patient_y": 0.0002},
+    "weighted_sigma_difference_after_mm": {"patient_z": -0.0082, "patient_y": 0.0017},
+    "entry_sigma_after_mm": {
+      "topas_patient_z": 11.5062,
+      "gpu_patient_z": 11.4922,
+      "topas_patient_y": 11.7401,
+      "gpu_patient_y": 11.7280
+    },
+    "total_fluence_gpu_to_topas": 1.00450
+  },
+  "shard": {
+    "histories": 7554587,
+    "random_seed": 721260804,
+    "device": "NVIDIA GeForce RTX 2080 Ti",
+    "elapsed_seconds": 53.64757,
+    "accepted": true,
+    "failures": [],
+    "queue_overflow_count": 0,
+    "relative_energy_residual": 2.23284261678e-6,
+    "executable_sha256": "3636663684d1fda8b5102a266508834dba8a201e797f07d5021977009daa22db",
+    "config_sha256": "f6ac6e8a24e231e61d930a4afb0d08c73b7ef77641f488aa0dbfff8cff3fc3f3",
+    "dose_sha256": "cd686691cbf252f5368e6bb4af17d802c8788e6ee605ca1455840cb7298cebb3",
+    "artifact_directory": "/mnt/sda/wuwei/rt06423_direction_fix_shard01"
+  },
+  "gamma_method": {
+    "reference": "benchmark/topas10x/RT06423/topas/dose.raw",
+    "sample_count": 50000,
+    "sample_seed": 42,
+    "threshold_percent_of_topas_max": 10.0,
+    "continuous_search_step_mm": 0.5,
+    "interpolation": "trilinear",
+    "nominal_scale": 20.0,
+    "gamma_result_sha256": "961897907afa4eb8c49626ae838e392e4b7478f799c5696d301dc44bc492ef95"
+  },
+  "gamma_before": {
+    "least_squares_scale": 18.783870697021484,
+    "high_dose_pearson": 0.9593482113732589,
+    "nominal_global_3pct_3mm_percent": 97.79,
+    "nominal_global_2pct_2mm_percent": 87.39,
+    "nominal_local_3pct_3mm_percent": 94.884,
+    "nominal_local_2pct_2mm_percent": 79.692
+  },
+  "gamma_after": {
+    "least_squares_scale": 19.901077270507812,
+    "high_dose_pearson": 0.9980816082913522,
+    "nominal_global_3pct_3mm_percent": 100.0,
+    "nominal_global_2pct_2mm_percent": 99.842,
+    "nominal_local_3pct_3mm_percent": 99.902,
+    "nominal_local_2pct_2mm_percent": 98.994,
+    "least_squares_global_3pct_3mm_percent": 100.0,
+    "least_squares_global_2pct_2mm_percent": 99.898,
+    "least_squares_local_3pct_3mm_percent": 99.936,
+    "least_squares_local_2pct_2mm_percent": 99.204
+  },
+  "tests": {
+    "command": "env LD_LIBRARY_PATH=/home/wuwei/sycl_workspace/llvm/build/install/lib ctest --test-dir build --output-on-failure",
+    "passed": 4,
+    "failed": 0
+  },
+  "formal_step_30_abcd_status": "not rerun; Step 30 remains IN_PROGRESS until the predefined same-binary A/B/C/D matrix is completed"
+}
