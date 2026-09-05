@@ -1151,6 +1151,93 @@ void write_dense_voxel_dose_mhd(const std::filesystem::path& mhd_path,
            << "ElementDataFile = " << raw_path.filename().string() << '\n';
 }
 
+void write_dense_primary_voxel_fluence_mhd(
+    const std::filesystem::path& mhd_path,
+    const TransportConfig& config,
+    const TransportResult& result) {
+    if (!config.enable_voxel_scoring) {
+        throw std::invalid_argument(
+            "Primary voxel fluence output requires voxel scoring");
+    }
+    const auto nx = config.voxel_bins_x;
+    const auto ny = config.voxel_bins_y;
+    const auto nz = config.number_of_bins();
+    const auto count = config.number_of_voxels();
+    if (result.primary_voxel_track_length_mm.size() != count) {
+        throw std::invalid_argument(
+            "Primary voxel track-length buffer size does not match scorer grid");
+    }
+    const auto voxel_volume_mm3 = config.voxel_size_x_mm *
+                                  config.voxel_size_y_mm *
+                                  config.scorer_spacing_z_mm();
+    if (!(voxel_volume_mm3 > 0.0)) {
+        throw std::invalid_argument("Primary voxel fluence requires positive volume");
+    }
+
+    std::vector<float> raw(count, 0.0F);
+    for (std::size_t index = 0; index < count; ++index) {
+        raw[index] = static_cast<float>(
+            result.primary_voxel_track_length_mm[index] / voxel_volume_mm3);
+    }
+
+    std::filesystem::path mhd = mhd_path;
+    if (mhd.extension() != ".mhd") {
+        mhd += ".mhd";
+    }
+    const auto raw_path = mhd.parent_path() / (mhd.stem().string() + ".raw");
+    {
+        std::ofstream raw_out(raw_path, std::ios::binary);
+        if (!raw_out) {
+            throw std::runtime_error("Cannot create RAW file: " + raw_path.string());
+        }
+        raw_out.write(reinterpret_cast<const char*>(raw.data()),
+                      static_cast<std::streamsize>(raw.size() * sizeof(float)));
+    }
+
+    const auto x_extent_mm = static_cast<double>(nx) * config.voxel_size_x_mm;
+    const auto y_extent_mm = static_cast<double>(ny) * config.voxel_size_y_mm;
+    double origin_x = 0.5 * config.voxel_size_x_mm - 0.5 * x_extent_mm;
+    double origin_y = 0.5 * config.voxel_size_y_mm - 0.5 * y_extent_mm;
+    double origin_z = 0.5 * config.scorer_spacing_z_mm();
+    if (config.enable_ct_grid && !config.ct_grid_file.empty()) {
+        const auto grid = CtGrid::from_config(config);
+        if (grid.nx == nx && grid.ny == ny && grid.nz == nz &&
+            std::abs(static_cast<double>(grid.spacing_x_mm) -
+                     config.voxel_size_x_mm) < 1.0e-6 &&
+            std::abs(static_cast<double>(grid.spacing_y_mm) -
+                     config.voxel_size_y_mm) < 1.0e-6 &&
+            std::abs(static_cast<double>(grid.spacing_z_mm) -
+                     config.scorer_spacing_z_mm()) < 1.0e-6) {
+            origin_x = static_cast<double>(grid.origin_x_mm) +
+                       0.5 * config.voxel_size_x_mm;
+            origin_y = static_cast<double>(grid.origin_y_mm) +
+                       0.5 * config.voxel_size_y_mm;
+            origin_z = static_cast<double>(grid.origin_z_mm) +
+                       0.5 * config.scorer_spacing_z_mm();
+        }
+    }
+
+    std::ofstream header(mhd, std::ios::binary);
+    if (!header) {
+        throw std::runtime_error("Cannot create MHD file: " + mhd.string());
+    }
+    header << std::setprecision(12)
+           << "ObjectType = Image\n"
+           << "NDims = 3\n"
+           << "BinaryData = True\n"
+           << "BinaryDataByteOrderMSB = False\n"
+           << "CompressedData = False\n"
+           << "TransformMatrix = 1 0 0 0 1 0 0 0 1\n"
+           << "Offset = " << origin_x << " " << origin_y << " " << origin_z << "\n"
+           << "CenterOfRotation = 0 0 0\n"
+           << "ElementSpacing = " << config.voxel_size_x_mm << " "
+           << config.voxel_size_y_mm << " " << config.scorer_spacing_z_mm() << "\n"
+           << "DimSize = " << nx << " " << ny << " " << nz << "\n"
+           << "ElementType = MET_FLOAT\n"
+           << "FluenceUnits = 1/mm2\n"
+           << "ElementDataFile = " << raw_path.filename().string() << "\n";
+}
+
 void write_sparse_charged_origin_voxel_dose_Gy_csv(
     const std::filesystem::path& path,
     const TransportConfig& config,

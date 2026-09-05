@@ -533,6 +533,10 @@ int main(int argc, char* argv[]) {
             carbon::write_dense_voxel_dose_mhd(config.voxel_dose_mhd_output_file, config,
                                               result);
         }
+        if (!config.primary_voxel_fluence_mhd_output_file.empty()) {
+            carbon::write_dense_primary_voxel_fluence_mhd(
+                config.primary_voxel_fluence_mhd_output_file, config, result);
+        }
         if (config.enable_charged_origin_voxel_scoring &&
             !config.charged_origin_voxel_dose_Gy_output_file.empty()) {
             carbon::write_sparse_charged_origin_voxel_dose_Gy_csv(

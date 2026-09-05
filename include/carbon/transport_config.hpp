@@ -655,6 +655,9 @@ struct TransportConfig {
     // Dense MetaImage MHD/RAW (total Gy). Empty disables. Skips sparse CSV I/O
     // cost when voxel_dose_Gy_output_file is also empty.
     std::filesystem::path voxel_dose_mhd_output_file{};
+    // Diagnostic-only primary track-length fluence map (/mm2). Empty disables
+    // both the device buffer and output, so production transport is unchanged.
+    std::filesystem::path primary_voxel_fluence_mhd_output_file{};
     std::string device{"serial"};
 
     [[nodiscard]] double initial_total_energy_MeV() const noexcept {

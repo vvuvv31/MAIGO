@@ -291,6 +291,8 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
              std::initializer_list<std::pair<const char*, const std::vector<double>*>>{
                  {"depth dose", &result.deposited_energy_MeV},
                  {"voxel dose", &result.voxel_deposited_energy_MeV},
+                 {"primary voxel fluence",
+                  &result.primary_voxel_track_length_mm},
                  {"charged-origin dose", &result.charged_origin_voxel_deposited_energy_MeV},
                  {"neutral-origin dose", &result.neutral_origin_voxel_deposited_energy_MeV},
                  {"primary dose", &result.primary_deposited_energy_MeV},

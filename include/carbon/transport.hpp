@@ -512,6 +512,8 @@ struct TransportResult {
         Cinel02SpeciesLedgerSchema::metric_count;
     std::vector<double> deposited_energy_MeV;
     std::vector<double> voxel_deposited_energy_MeV;
+    // Primary track length accumulated per scorer voxel (mm).
+    std::vector<double> primary_voxel_track_length_mm;
     std::vector<double> in_fov_deposited_energy_MeV;
     // Category-major layout: category * number_of_voxels + voxel index.
     std::vector<double> charged_origin_voxel_deposited_energy_MeV;

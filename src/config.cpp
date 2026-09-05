@@ -967,6 +967,12 @@ void TransportConfig::validate() const {
             "let_voxel_mhd_output_file requires scorerLET=true and "
             "enable_voxel_scoring=true");
     }
+    if (!primary_voxel_fluence_mhd_output_file.empty() &&
+        !enable_voxel_scoring) {
+        throw std::invalid_argument(
+            "primary_voxel_fluence_mhd_output_file requires "
+            "enable_voxel_scoring=true");
+    }
     if (!fragment_species_let_output_file.empty() && !enable_let_scoring) {
         throw std::invalid_argument(
             "fragment_species_let_output_file requires scorerLET=true");
@@ -2796,6 +2802,14 @@ TransportConfig load_config(const std::filesystem::path& path) {
         const auto it = values.find("voxel_dose_mhd_output_file");
         if (it != values.end()) {
             config.voxel_dose_mhd_output_file =
+                it->second.empty() ? std::filesystem::path{}
+                                   : std::filesystem::path{it->second};
+        }
+    }
+    {
+        const auto it = values.find("primary_voxel_fluence_mhd_output_file");
+        if (it != values.end()) {
+            config.primary_voxel_fluence_mhd_output_file =
                 it->second.empty() ? std::filesystem::path{}
                                    : std::filesystem::path{it->second};
         }

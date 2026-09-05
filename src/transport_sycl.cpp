@@ -1648,6 +1648,12 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
     auto* voxel_dose_device = enable_voxel_scoring
                                   ? mem_tracker.allocate<DoseAtomicT>(number_of_voxels)
                                   : nullptr;
+    const auto enable_primary_voxel_fluence =
+        !config.primary_voxel_fluence_mhd_output_file.empty();
+    auto* primary_voxel_track_length_device =
+        enable_primary_voxel_fluence
+            ? mem_tracker.allocate<DoseAtomicT>(number_of_voxels)
+            : nullptr;
     const auto enable_charged_origin_voxel_scoring =
         config.enable_charged_origin_voxel_scoring;
     auto* charged_origin_voxel_dose_device =
@@ -2063,6 +2069,8 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
     if (dose_device == nullptr || deposited_device == nullptr ||
         escaped_device == nullptr || steps_device == nullptr ||
         (enable_voxel_scoring && (voxel_dose_device == nullptr || in_fov_dose_device == nullptr)) ||
+        (enable_primary_voxel_fluence &&
+         primary_voxel_track_length_device == nullptr) ||
         (enable_charged_origin_voxel_scoring &&
          (charged_origin_voxel_dose_device == nullptr ||
           be_isotope_origin_voxel_dose_device == nullptr)) ||
@@ -2108,6 +2116,10 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
     queue.memset(dose_device, 0, number_of_bins * sizeof(DoseAtomicT));
     if (enable_voxel_scoring) {
         queue.memset(voxel_dose_device, 0, number_of_voxels * sizeof(DoseAtomicT));
+    }
+    if (enable_primary_voxel_fluence) {
+        queue.memset(primary_voxel_track_length_device, 0,
+                     number_of_voxels * sizeof(DoseAtomicT));
     }
     if (enable_charged_origin_voxel_scoring) {
         queue.memset(charged_origin_voxel_dose_device, 0,
@@ -2791,6 +2803,21 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                 }
                             }
                         }
+                    }
+
+                    // Diagnostic only: CT face clamping above guarantees the
+                    // segment stays in its starting CT voxel. Do not score a
+                    // laterally escaped segment into a clamped edge voxel.
+                    if (enable_primary_voxel_fluence &&
+                        (!enable_ct_grid || in_ct)) {
+                        sycl::atomic_ref<
+                            DoseAtomicT, sycl::memory_order::relaxed,
+                            sycl::memory_scope::device,
+                            sycl::access::address_space::global_space>
+                            atomic_track_length(
+                                primary_voxel_track_length_device[voxel_index]);
+                        atomic_track_length.fetch_add(
+                            static_cast<DoseAtomicT>(step_mm));
                     }
 
                     float mean_loss_MeV = 0.0F;
@@ -6181,6 +6208,17 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                        [](DoseAtomicT val) { return static_cast<double>(val); });
     }
 
+    std::vector<double> primary_voxel_track_length_host;
+    if (enable_primary_voxel_fluence) {
+        std::vector<DoseAtomicT> device_host(number_of_voxels);
+        queue.copy(primary_voxel_track_length_device, device_host.data(),
+                   number_of_voxels).wait_and_throw();
+        primary_voxel_track_length_host.resize(number_of_voxels);
+        std::transform(device_host.begin(), device_host.end(),
+                       primary_voxel_track_length_host.begin(),
+                       [](DoseAtomicT val) { return static_cast<double>(val); });
+    }
+
     std::vector<double> charged_origin_voxel_dose_host;
     if (enable_charged_origin_voxel_scoring) {
         const auto value_count =
@@ -6497,6 +6535,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
     free_device(first_interactions_count_device);
     free_device(in_fov_dose_device);
     free_device(voxel_dose_device);
+    free_device(primary_voxel_track_length_device);
     free_device(charged_origin_voxel_dose_device);
     free_device(be_isotope_origin_voxel_dose_device);
     free_device(let_moments_device);
@@ -6671,6 +6710,8 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
     result.primary_deposited_energy_MeV = dose_host;
     result.deposited_energy_MeV = std::move(dose_host);
     result.voxel_deposited_energy_MeV = std::move(voxel_dose_host);
+    result.primary_voxel_track_length_mm =
+        std::move(primary_voxel_track_length_host);
     result.charged_origin_voxel_deposited_energy_MeV =
         std::move(charged_origin_voxel_dose_host);
     result.be_isotope_origin_voxel_deposited_energy_MeV =

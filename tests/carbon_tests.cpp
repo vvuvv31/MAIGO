@@ -1876,6 +1876,44 @@ void test_dense_voxel_mhd_writer() {
     std::filesystem::remove_all(dir, ec);
 }
 
+void test_dense_primary_voxel_fluence_mhd_writer() {
+    carbon::TransportConfig config;
+    config.number_of_histories = 1;
+    config.phantom_length_mm = 2.0;
+    config.depth_bin_width_mm = 1.0;
+    config.enable_voxel_scoring = true;
+    config.voxel_bins_x = 2;
+    config.voxel_bins_y = 1;
+    config.voxel_size_x_mm = 2.0;
+    config.voxel_size_y_mm = 1.0;
+    config.primary_voxel_fluence_mhd_output_file = "fluence.mhd";
+    config.validate();
+
+    carbon::TransportResult result;
+    result.primary_voxel_track_length_mm = {2.0, 4.0, 6.0, 8.0};
+    const auto dir = std::filesystem::temp_directory_path() /
+                     "carbon_primary_fluence_mhd_test";
+    std::filesystem::create_directories(dir);
+    const auto mhd = dir / "fluence.mhd";
+    carbon::write_dense_primary_voxel_fluence_mhd(mhd, config, result);
+
+    std::ifstream input(dir / "fluence.raw", std::ios::binary);
+    std::array<float, 4> fluence{};
+    input.read(reinterpret_cast<char*>(fluence.data()),
+               static_cast<std::streamsize>(fluence.size() * sizeof(float)));
+    require(input.good(), "Primary fluence RAW should contain four floats");
+    // Voxel volume is 2 mm3, so track length / volume is /mm2.
+    require_near(fluence[0], 1.0, 1.0e-7, "primary fluence voxel 0");
+    require_near(fluence[3], 4.0, 1.0e-7, "primary fluence voxel 3");
+    std::ifstream header_in(mhd);
+    const std::string header((std::istreambuf_iterator<char>(header_in)), {});
+    require(header.find("FluenceUnits = 1/mm2") != std::string::npos,
+            "Primary fluence MHD units");
+
+    std::error_code ec;
+    std::filesystem::remove_all(dir, ec);
+}
+
 void test_layered_voxel_dose_uses_local_mass() {
     carbon::TransportConfig config;
     config.number_of_histories = 1;
@@ -3012,6 +3050,7 @@ void test_sycl_tps_source_arbitrary_gantry_transport() {
     config.tps_isocenter_y_mm = 0.0;
     config.tps_isocenter_z_mm = 50.0;
     config.tps_sad_mm = 150.0;
+    config.primary_voxel_fluence_mhd_output_file = "diagnostic.mhd";
     const auto plan = carbon::TpsSourcePlan::from_config(config);
     config.primary_spot_batch = plan.make_primary_batch(config);
     config.validate();
@@ -3024,6 +3063,12 @@ void test_sycl_tps_source_arbitrary_gantry_transport() {
             "TPS source backend tag missing");
     require(result.total_deposited_energy_MeV > 0.0,
             "Arbitrary-angle TPS beam did not enter the voxel AABB");
+    require(result.primary_voxel_track_length_mm.size() ==
+                config.number_of_voxels(),
+            "Primary voxel fluence buffer size");
+    require(std::accumulate(result.primary_voxel_track_length_mm.begin(),
+                            result.primary_voxel_track_length_mm.end(), 0.0) > 0.0,
+            "Primary voxel fluence must score transported track length");
     require(result.relative_energy_balance_error() < 1.0e-6,
             "TPS arbitrary-angle gantry energy balance failed");
 }
@@ -9971,6 +10016,8 @@ int main(int argc, char** argv) {
             test_tps_histories_mode_allocation_edges);
         run("test_dose_scorer_matches_mev_conversion", test_dose_scorer_matches_mev_conversion);
         run("test_dense_voxel_mhd_writer", test_dense_voxel_mhd_writer);
+        run("test_dense_primary_voxel_fluence_mhd_writer",
+            test_dense_primary_voxel_fluence_mhd_writer);
         run("test_layered_voxel_dose_uses_local_mass", test_layered_voxel_dose_uses_local_mass);
         run("test_dense_charged_origin_mhd_uses_local_mass", test_dense_charged_origin_mhd_uses_local_mass);
         run("test_ct_aligned_mhd_offset_and_index_pairing", test_ct_aligned_mhd_offset_and_index_pairing);

@@ -82,6 +82,12 @@ void write_dense_voxel_dose_mhd(const std::filesystem::path& mhd_path,
                                 const TransportConfig& config,
                                 const TransportResult& result);
 
+// Diagnostic primary track-length fluence (/mm2), on the dense voxel grid.
+void write_dense_primary_voxel_fluence_mhd(
+    const std::filesystem::path& mhd_path,
+    const TransportConfig& config,
+    const TransportResult& result);
+
 void write_energy_ledger_json(const std::filesystem::path& path,
                               const TransportConfig& config,
                               const TransportResult& result);
