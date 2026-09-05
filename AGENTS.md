@@ -8,6 +8,43 @@
 
 - ct不要走四分类包，只走 Schneider 分区。
 
+## Schneider CT minimum validated physics-data stack
+
+- Schneider CT production/research runs must use at least the currently validated
+  `schneider_physics_bundle_v2_1` stack. Never downgrade, alias, or silently fall
+  back to an older package, rate table, schema, projectile registry, or water/
+  four-class data path.
+- The current minimum accepted files are:
+  - primary rate: `data/schneider/schneider_inelastic_rates_v2_1.bin`
+    (`SCHNRATE` v3), SHA256
+    `086ef97dbf323dc2681d5f6c5257e78c87446050f6fb628f3b0f8b24211a8370`;
+  - primary CINEL03 package: `data/schneider/cinel03_c12_targets_v2_1.bin`
+    (`CINPKG04` v4), SHA256
+    `a690fb06ae97946bbc167501380fbcfa465b51e61cbedfaba7d3d373655a7ea2`;
+  - secondary rate: `data/schneider/secondary_inelastic_rates_v2_1.bin`
+    (`SCHN2RAT` v3), SHA256
+    `6aa679ee162c7a47b82da715ea1333b21b4056b6480596d8d6243a96edb67258`;
+  - secondary CINEL03 package:
+    `data/schneider/cinel03_secondary_targets_v2_1_14p.bin`
+    (`CINPKG04` v4, 14-projectile registry), SHA256
+    `a0dc4259b856f0b0e7665672a64589ea4cd64ca304cae75fca16d6de50fc8006`;
+  - Schneider stopping table: `data/schneider/schneider_stopping_v1.bin`
+    (`SCHNSTOP` v1), SHA256
+    `9786dba071f61e660fcc5940a844e8109c4e480ccb603d7929d2fcfaae152c2f`;
+  - strict-dose section-0 delta-tail table:
+    `data/schneider/schneider_section0_c12_delta_tail_v1.csv`, SHA256
+    `ff6140f13dcfb4c6f739d6efe56941da6af4749d311e29182601f310a1184aa5`.
+- `data/schneider/schneider_physics_bundle_v2_1.json` and
+  `data/schneider/v2_1_data_manifest.json` are authoritative. Before a Schneider
+  CT run, execute `python3 tools/verify_schneider_v2_1_data.py`; any missing file,
+  SHA/size mismatch, lower binary version, missing 14-projectile coverage, or v1
+  artifact placed at a v2.1 path is a hard failure.
+- A newer data package may replace this minimum only when it has explicit
+  TOPAS/Geant4 provenance, passes the same or stronger manifest verification,
+  host/device lookup tests, 50k closure gates, one-shard A/B Gamma gate, and a
+  zero-overflow full validation. Until those gates pass, continue using the exact
+  v2.1 stack above; never use a lower version as a compatibility fallback.
+
 - topas任务需要在本地使用sbatch运行，数据放置在本地/mnt/sda/wuwei目录下，
 - topas的extension放在/home/wuwei/topas目录下，如果需要重新编译，source code和build都在/home/wuwei/topas目录下
 - 所有任务最多一共使用192线程，内存占用160G
