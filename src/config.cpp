@@ -4,6 +4,7 @@
 #include "carbon/electron_transport.hpp"
 #include "carbon/min_json.hpp"
 #include "carbon/schneider_rate_table.hpp"
+#include "carbon/schneider_delta_tail.hpp"
 #include "carbon/secondary_rate_table.hpp"
 #include "carbon/straggling.hpp"
 #include "carbon/sha256.hpp"
@@ -710,6 +711,19 @@ void TransportConfig::validate() const {
                     "final states); the Schneider rate + CINEL03 path is the only allowed "
                     "nuclear configuration on CT");
             }
+        }
+        if (!ct_schneider_delta_tail_file.empty()) {
+            if (!enable_voxel_scoring || primary_atomic_number != 6 ||
+                primary_mass_number != 12) {
+                throw std::invalid_argument(
+                    "ct_schneider_delta_tail_file requires Schneider CT 3D voxel scoring "
+                    "with a C12 primary");
+            }
+            if (enable_electron_transport) {
+                throw std::invalid_argument(
+                    "ct_schneider_delta_tail_file cannot combine with explicit electron transport");
+            }
+            (void)SchneiderDeltaTailTable::from_csv(ct_schneider_delta_tail_file);
         }
         // v3 bundle: the masked rate-binary hazard replaces the CSV XS table,
         // so the CSV key is intentionally empty (mixing refused elsewhere).
@@ -1955,6 +1969,12 @@ TransportConfig load_config(const std::filesystem::path& path) {
     if (!config.ct_schneider_radiation_length_file.empty()) {
         config.ct_schneider_radiation_length_file = resolve_input_path_from_config(
             config.ct_schneider_radiation_length_file, path);
+    }
+    config.ct_schneider_delta_tail_file = parse_path(
+        values, "ct_schneider_delta_tail_file", config.ct_schneider_delta_tail_file);
+    if (!config.ct_schneider_delta_tail_file.empty()) {
+        config.ct_schneider_delta_tail_file = resolve_input_path_from_config(
+            config.ct_schneider_delta_tail_file, path);
     }
     config.ct_cinel02_rate_file = parse_path(
         values, "ct_cinel02_rate_file", config.ct_cinel02_rate_file);

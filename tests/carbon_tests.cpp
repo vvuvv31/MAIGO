@@ -3,6 +3,7 @@
 #include "carbon/minibeam_collimator.hpp"
 #include "carbon/cross_section.hpp"
 #include "carbon/schneider_rate_table.hpp"
+#include "carbon/schneider_delta_tail.hpp"
 #include "carbon/schneider_stopping_table.hpp"
 #include "carbon/min_json.hpp"
 #include "carbon/schneider_target_sampler.hpp"
@@ -391,6 +392,82 @@ void test_electron_transport_table_and_config() {
     require_throws([&] { (void)carbon::ElectronTransportTable::from_csv(table_path); },
                    "Electron table accepted inconsistent total stopping power");
     std::filesystem::remove_all(directory);
+}
+
+void test_schneider_delta_tail_table_and_lookup() {
+    const auto path = std::filesystem::temp_directory_path() /
+                      "schneider_delta_tail_test.csv";
+    {
+        std::ofstream out(path);
+        out << "energy_MeV_per_u,moved_fraction,quantile,radius_mm\n"
+            << "150,0.09,0,3\n150,0.09,0.5,10\n150,0.09,1,50\n"
+            << "200,0.10,0,4\n200,0.10,0.5,12\n200,0.10,1,60\n";
+    }
+    const auto table = carbon::SchneiderDeltaTailTable::from_csv(path);
+    require(table.energy_count() == 2 && table.quantile_count() == 3,
+            "Schneider delta-tail rectangular shape failed");
+    float fraction = 0.0F;
+    float radius = 0.0F;
+    carbon::schneider_delta_tail_lookup_device(
+        175.0F, 0.25F, table.energies_MeV_per_u().data(),
+        table.moved_fractions().data(), table.radii_mm().data(),
+        table.energy_count(), table.quantile_count(), fraction, radius);
+    require_near(fraction, 0.095, 1.0e-7,
+                 "Schneider delta-tail energy interpolation failed");
+    require_near(radius, 7.25, 1.0e-6,
+                 "Schneider delta-tail energy/quantile interpolation failed");
+    carbon::schneider_delta_tail_lookup_device(
+        10.0F, 0.0F, table.energies_MeV_per_u().data(),
+        table.moved_fractions().data(), table.radii_mm().data(),
+        table.energy_count(), table.quantile_count(), fraction, radius);
+    require_near(fraction, 0.0, 0.0, "Out-of-domain fraction did not disable tail");
+    require_near(radius, 0.0, 0.0, "Out-of-domain radius did not disable tail");
+
+#ifdef CARBON_HAS_SYCL
+    // Execute the same lookup in a real SYCL kernel. This catches functions
+    // that merely compile as host C++ but diverge on the CUDA device path.
+    {
+        sycl::queue queue{sycl::default_selector_v};
+        auto* dev_energies = sycl::malloc_device<float>(table.energy_count(), queue);
+        auto* dev_fractions = sycl::malloc_device<float>(table.energy_count(), queue);
+        auto* dev_radii = sycl::malloc_device<float>(
+            table.energy_count() * table.quantile_count(), queue);
+        auto* dev_out = sycl::malloc_device<float>(2, queue);
+        require(dev_energies != nullptr && dev_fractions != nullptr &&
+                    dev_radii != nullptr && dev_out != nullptr,
+                "Device memory allocation failed for Schneider delta-tail test");
+        queue.copy(table.energies_MeV_per_u().data(), dev_energies, table.energy_count());
+        queue.copy(table.moved_fractions().data(), dev_fractions, table.energy_count());
+        queue.copy(table.radii_mm().data(), dev_radii,
+                   table.energy_count() * table.quantile_count()).wait_and_throw();
+        const auto energy_count = table.energy_count();
+        const auto quantile_count = table.quantile_count();
+        queue.single_task([=]() {
+            carbon::schneider_delta_tail_lookup_device(
+                175.0F, 0.25F, dev_energies, dev_fractions, dev_radii,
+                energy_count, quantile_count, dev_out[0], dev_out[1]);
+        }).wait_and_throw();
+        float host_out[2]{};
+        queue.copy(dev_out, host_out, 2).wait_and_throw();
+        require_near(host_out[0], 0.095, 1.0e-7,
+                     "Schneider delta-tail host/device fraction mismatch");
+        require_near(host_out[1], 7.25, 1.0e-6,
+                     "Schneider delta-tail host/device radius mismatch");
+        sycl::free(dev_energies, queue);
+        sycl::free(dev_fractions, queue);
+        sycl::free(dev_radii, queue);
+        sycl::free(dev_out, queue);
+    }
+#endif
+
+    {
+        std::ofstream out(path, std::ios::trunc);
+        out << "energy_MeV_per_u,moved_fraction,quantile,radius_mm\n"
+            << "150,0.09,0,3\n150,0.09,0.5,2\n150,0.09,1,50\n";
+    }
+    require_throws([&] { (void)carbon::SchneiderDeltaTailTable::from_csv(path); },
+                   "Schneider delta-tail accepted decreasing radii");
+    std::filesystem::remove(path);
 }
 
 void test_stopping_power_csda_range_helpers() {
@@ -9980,6 +10057,7 @@ int main(int argc, char** argv) {
         run("test_charged_dose_categories", test_charged_dose_categories);
         run("test_interpolation", test_interpolation);
         run("test_electron_transport_table_and_config", test_electron_transport_table_and_config);
+        run("test_schneider_delta_tail_table_and_lookup", test_schneider_delta_tail_table_and_lookup);
         run("test_stopping_power_csda_range_helpers", test_stopping_power_csda_range_helpers);
         run("test_cpu_csda_range_loss_switch", test_cpu_csda_range_loss_switch);
         run("test_cross_section_zero_endpoint_contract", test_cross_section_zero_endpoint_contract);

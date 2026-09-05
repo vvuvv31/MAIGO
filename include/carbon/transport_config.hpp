@@ -225,6 +225,9 @@ struct TransportConfig {
     std::string secondary_out_of_scope_nuclear_policy{};
     std::filesystem::path ct_schneider_stopping_power_file{"data/schneider/schneider_stopping_v1.bin"};
     std::filesystem::path ct_schneider_radiation_length_file{"data/schneider/schneider_radiation_lengths.json"};
+    // Optional TOPAS-derived primary C12 delta-electron transverse tail. Empty
+    // preserves the condensed local-deposit path exactly. Schneider section 0 only.
+    std::filesystem::path ct_schneider_delta_tail_file{};
 
     // Optional energy-dependent mass XS for every Schneider section. When set
     // on a CCTG v2/v3 grid, this supersedes the legacy four-class XS tables.

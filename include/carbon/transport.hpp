@@ -511,6 +511,13 @@ struct TransportResult {
     static constexpr std::size_t species_ledger_metric_count =
         Cinel02SpeciesLedgerSchema::metric_count;
     std::vector<double> deposited_energy_MeV;
+    // Informational subset of deposited energy redistributed by the optional
+    // Schneider section-0 primary delta-tail proxy. The fallback term stayed
+    // at the production voxel because the sampled endpoint left section 0.
+    double schneider_primary_delta_tail_moved_MeV{0.0};
+    double schneider_primary_delta_tail_fallback_MeV{0.0};
+    // Sampled delta-tail energy whose endpoint left the aligned 3-D scorer.
+    double schneider_primary_delta_tail_escaped_scorer_MeV{0.0};
     std::vector<double> voxel_deposited_energy_MeV;
     // Primary track length accumulated per scorer voxel (mm).
     std::vector<double> primary_voxel_track_length_mm;

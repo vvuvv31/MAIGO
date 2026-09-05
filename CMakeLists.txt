@@ -55,6 +55,7 @@ add_library(carbon_core
     src/run_quality.cpp
     src/stopping_power.cpp
     src/schneider_rate_table.cpp
+    src/schneider_delta_tail.cpp
     src/schneider_stopping_table.cpp
     src/schneider_target_sampler.cpp
     src/secondary_rate_table.cpp

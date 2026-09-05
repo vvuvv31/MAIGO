@@ -19,6 +19,7 @@
 #include "carbon/transport.hpp"
 #include "carbon/sha256.hpp"
 #include "carbon/schneider_rate_table.hpp"
+#include "carbon/schneider_delta_tail.hpp"
 #include "carbon/schneider_target_sampler.hpp"
 #include "carbon/secondary_rate_table.hpp"
 #include "carbon/inelastic_package_v3.hpp"
@@ -1225,6 +1226,45 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
     bool ct_material_ids_are_schneider_sections = false;
     const auto ct_skip_homogeneous_face_clamp = config.ct_skip_homogeneous_face_clamp;
 
+    const bool use_schneider_delta_tail =
+        !config.ct_schneider_delta_tail_file.empty();
+    std::optional<SchneiderDeltaTailTable> schneider_delta_tail;
+    float* schneider_delta_energies_device = nullptr;
+    float* schneider_delta_fractions_device = nullptr;
+    float* schneider_delta_radii_device = nullptr;
+    std::uint8_t* schneider_delta_source_eligible_device = nullptr;
+    std::uint64_t* schneider_delta_energy_device = nullptr;
+    std::size_t schneider_delta_energy_count = 0;
+    std::size_t schneider_delta_quantile_count = 0;
+    if (use_schneider_delta_tail) {
+        schneider_delta_tail = SchneiderDeltaTailTable::from_csv(
+            config.ct_schneider_delta_tail_file);
+        schneider_delta_energy_count = schneider_delta_tail->energy_count();
+        schneider_delta_quantile_count = schneider_delta_tail->quantile_count();
+        schneider_delta_energies_device =
+            mem_tracker.allocate<float>(schneider_delta_energy_count);
+        schneider_delta_fractions_device =
+            mem_tracker.allocate<float>(schneider_delta_energy_count);
+        schneider_delta_radii_device = mem_tracker.allocate<float>(
+            schneider_delta_energy_count * schneider_delta_quantile_count);
+        schneider_delta_energy_device = mem_tracker.allocate<std::uint64_t>(3);
+        if (schneider_delta_energies_device == nullptr ||
+            schneider_delta_fractions_device == nullptr ||
+            schneider_delta_radii_device == nullptr ||
+            schneider_delta_energy_device == nullptr) {
+            throw std::bad_alloc();
+        }
+        queue.copy(schneider_delta_tail->energies_MeV_per_u().data(),
+                   schneider_delta_energies_device, schneider_delta_energy_count);
+        queue.copy(schneider_delta_tail->moved_fractions().data(),
+                   schneider_delta_fractions_device, schneider_delta_energy_count);
+        queue.copy(schneider_delta_tail->radii_mm().data(),
+                   schneider_delta_radii_device,
+                   schneider_delta_energy_count * schneider_delta_quantile_count);
+        queue.fill(schneider_delta_energy_device, std::uint64_t{0}, 3)
+            .wait_and_throw();
+    }
+
     if (enable_ct_grid) {
         const auto grid = CtGrid::load(
             config.ct_grid_file, config.ct_schneider_file, config.ct_dicom_origin_mode);
@@ -1245,6 +1285,56 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
         ct_material_device = mem_tracker.allocate<std::uint8_t>(voxel_count);
         queue.copy(grid.density_g_per_cm3.data(), ct_density_device, voxel_count);
         queue.copy(grid.material_id.data(), ct_material_device, voxel_count).wait_and_throw();
+
+        if (use_schneider_delta_tail) {
+            if (grid.file_version < CtGrid::version_v2 || grid.material_id.size() != voxel_count) {
+                throw std::runtime_error(
+                    "Schneider delta-tail requires exact Schneider section IDs");
+            }
+            const auto aligned =
+                config.voxel_bins_x == grid.nx && config.voxel_bins_y == grid.ny &&
+                config.voxel_bins_z == grid.nz &&
+                std::abs(config.voxel_size_x_mm - grid.spacing_x_mm) < 1.0e-6 &&
+                std::abs(config.voxel_size_y_mm - grid.spacing_y_mm) < 1.0e-6 &&
+                std::abs(config.voxel_size_z_mm - grid.spacing_z_mm) < 1.0e-6 &&
+                std::abs(grid.origin_z_mm) < 1.0e-6;
+            if (!aligned) {
+                throw std::runtime_error(
+                    "Schneider delta-tail requires a scorer exactly aligned to the CCTG grid");
+            }
+            std::vector<std::uint8_t> eligible(voxel_count, 0U);
+            const auto min_spacing = std::min({grid.spacing_x_mm, grid.spacing_y_mm,
+                                               grid.spacing_z_mm});
+            for (std::uint32_t iz = 1; iz + 1 < grid.nz; ++iz) {
+                for (std::uint32_t iy = 1; iy + 1 < grid.ny; ++iy) {
+                    for (std::uint32_t ix = 1; ix + 1 < grid.nx; ++ix) {
+                        const auto index = ct_linear_index(ix, iy, iz, grid.nx, grid.ny);
+                        if (grid.material_id[index] != 0U) continue;
+                        bool clear = true;
+                        if (grid.spacing_x_mm <= min_spacing * 1.001F) {
+                            clear = clear && grid.material_id[index - 1] == 0U &&
+                                    grid.material_id[index + 1] == 0U;
+                        }
+                        if (grid.spacing_y_mm <= min_spacing * 1.001F) {
+                            clear = clear &&
+                                grid.material_id[index - grid.nx] == 0U &&
+                                grid.material_id[index + grid.nx] == 0U;
+                        }
+                        if (grid.spacing_z_mm <= min_spacing * 1.001F) {
+                            const auto plane = static_cast<std::size_t>(grid.nx) * grid.ny;
+                            clear = clear && grid.material_id[index - plane] == 0U &&
+                                    grid.material_id[index + plane] == 0U;
+                        }
+                        eligible[index] = clear ? 1U : 0U;
+                    }
+                }
+            }
+            schneider_delta_source_eligible_device =
+                mem_tracker.allocate<std::uint8_t>(voxel_count);
+            if (schneider_delta_source_eligible_device == nullptr) throw std::bad_alloc();
+            queue.copy(eligible.data(), schneider_delta_source_eligible_device,
+                       voxel_count).wait_and_throw();
+        }
 
         use_ct_mass_sp = ct_material_ids_are_schneider_sections;
         use_ct_material_sp = !config.ct_water_stopping_power_file.empty() ||
@@ -2919,6 +3009,110 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                         }
                     }
 
+                    auto local_voxel_deposit_MeV = deposited_MeV;
+                    auto delta_tail_escaped_scorer_MeV = 0.0F;
+                    if (use_schneider_delta_tail && in_ct && ct_material == 0U &&
+                        enable_voxel_scoring && voxel_index < number_of_voxels &&
+                        schneider_delta_source_eligible_device[voxel_index] != 0U) {
+                        float moved_fraction = 0.0F;
+                        float radius_mm = 0.0F;
+                        schneider_delta_tail_lookup_device(
+                            energy_MeVu,
+                            rng::uniform01(spot_seed, rng_history, steps, 17),
+                            schneider_delta_energies_device,
+                            schneider_delta_fractions_device,
+                            schneider_delta_radii_device,
+                            schneider_delta_energy_count,
+                            schneider_delta_quantile_count,
+                            moved_fraction, radius_mm);
+                        const auto moved_MeV =
+                            deposited_MeV * sycl::clamp(moved_fraction, 0.0F, 0.5F);
+                        if (moved_MeV > 0.0F && radius_mm > 0.0F) {
+                            constexpr float two_pi = 6.2831853071795864769F;
+                            const auto phi = two_pi * rng::uniform01(
+                                spot_seed, rng_history, steps, 18);
+                            const auto transverse = rotate_local_direction(
+                                sycl::cos(phi), sycl::sin(phi), 0.0F,
+                                Direction3F{direction_x, direction_y, direction_z});
+                            const auto source_x = position_x_mm + 0.5F * step_mm * direction_x;
+                            const auto source_y = position_y_mm + 0.5F * step_mm * direction_y;
+                            const auto source_z = position_z_mm + 0.5F * step_mm * direction_z;
+                            const auto destination_x = source_x + radius_mm * transverse.x;
+                            const auto destination_y = source_y + radius_mm * transverse.y;
+                            const auto destination_z = source_z + radius_mm * transverse.z;
+                            float destination_density = 0.0F;
+                            std::uint8_t destination_material = 255U;
+                            const auto destination_in_section0 = ct_sample(
+                                destination_x, destination_y, destination_z,
+                                ct_origin_x, ct_origin_y, ct_origin_z,
+                                ct_spacing_x, ct_spacing_y, ct_spacing_z,
+                                ct_nx, ct_ny, ct_nz, ct_density_device,
+                                ct_material_device, destination_density,
+                                destination_material) && destination_material == 0U;
+                            const auto destination_voxel_x = static_cast<int>(sycl::floor(
+                                (destination_x - voxel_min_x_mm) / voxel_size_x_mm));
+                            const auto destination_voxel_y = static_cast<int>(sycl::floor(
+                                (destination_y - voxel_min_y_mm) / voxel_size_y_mm));
+                            const auto destination_bin = static_cast<int>(sycl::floor(
+                                destination_z / depth_bin_width_mm));
+                            const auto destination_in_scorer =
+                                destination_voxel_x >= 0 &&
+                                destination_voxel_x < static_cast<int>(voxel_bins_x) &&
+                                destination_voxel_y >= 0 &&
+                                destination_voxel_y < static_cast<int>(voxel_bins_y) &&
+                                destination_bin >= 0 &&
+                                destination_bin < static_cast<int>(number_of_bins);
+                            const auto fixed = static_cast<std::uint64_t>(
+                                static_cast<double>(moved_MeV) * 1.0e6);
+                            if (destination_in_section0 && destination_in_scorer) {
+                                const auto destination_voxel =
+                                    static_cast<std::size_t>(destination_bin) * voxel_plane_size +
+                                    static_cast<std::size_t>(destination_voxel_y) * voxel_bins_x +
+                                    static_cast<std::size_t>(destination_voxel_x);
+                                sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
+                                                 sycl::memory_scope::device,
+                                                 sycl::access::address_space::global_space>
+                                    atomic_delta(voxel_dose_device[destination_voxel]);
+                                atomic_delta.fetch_add(static_cast<DoseAtomicT>(moved_MeV));
+                                if (enable_charged_origin_voxel_scoring) {
+                                    sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
+                                                     sycl::memory_scope::device,
+                                                     sycl::access::address_space::global_space>
+                                        atomic_origin(charged_origin_voxel_dose_device[
+                                            destination_voxel]);
+                                    atomic_origin.fetch_add(
+                                        static_cast<DoseAtomicT>(moved_MeV));
+                                }
+                                local_voxel_deposit_MeV -= moved_MeV;
+                                sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
+                                                 sycl::memory_scope::device,
+                                                 sycl::access::address_space::global_space>
+                                    atomic_moved(schneider_delta_energy_device[0]);
+                                atomic_moved.fetch_add(fixed);
+                            } else if (!destination_in_scorer) {
+                                // The aligned CCTG and dose scorer share the same bounds.
+                                // A sampled delta-electron endpoint outside those bounds must
+                                // leave the voxel score instead of being folded back into the
+                                // edge voxel. Transfer it from the in-grid sink to outside-grid.
+                                local_voxel_deposit_MeV -= moved_MeV;
+                                delta_tail_escaped_scorer_MeV += moved_MeV;
+                                sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
+                                                 sycl::memory_scope::device,
+                                                 sycl::access::address_space::global_space>
+                                    atomic_escape(schneider_delta_energy_device[2]);
+                                atomic_escape.fetch_add(fixed);
+                            } else {
+                                // Cross-material electron transport is outside this section-0
+                                // LUT. Preserve the energy locally rather than aliasing a target.
+                                sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
+                                                 sycl::memory_scope::device,
+                                                 sycl::access::address_space::global_space>
+                                    atomic_fallback(schneider_delta_energy_device[1]);
+                                atomic_fallback.fetch_add(fixed);
+                            }
+                        }
+                    }
+
                     if (bin != pending_primary_bin) {
                         if (pending_primary_depth_MeV > 0.0) {
                             sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
@@ -2970,7 +3164,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
 
                     pending_primary_depth_MeV += deposited_MeV;
                     if (enable_voxel_scoring && voxel_index >= 0) {
-                        pending_primary_voxel_MeV += deposited_MeV;
+                        pending_primary_voxel_MeV += local_voxel_deposit_MeV;
                         if (in_fov_dose_device != nullptr && pending_primary_bin >= 0 &&
                             pending_primary_bin < static_cast<int>(number_of_bins)) {
                             sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
@@ -2983,7 +3177,11 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                     history_deposited_MeV += deposited_MeV;
                     grid_deposit_split_device(
                         grid_deposited_in_device, grid_deposited_out_device,
-                        enable_voxel_scoring && voxel_index >= 0, deposited_MeV);
+                        enable_voxel_scoring && voxel_index >= 0,
+                        deposited_MeV - delta_tail_escaped_scorer_MeV);
+                    grid_deposit_split_device(
+                        grid_deposited_in_device, grid_deposited_out_device, false,
+                        delta_tail_escaped_scorer_MeV);
                     last_primary_stopping_power_MeV_per_mm = stopping_power_MeV_per_mm;
                     last_primary_density_g_per_cm3 = local_density_g_per_cm3;
 
@@ -6521,6 +6719,13 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
             .wait_and_throw();
     }
 
+    std::array<std::uint64_t, 3> schneider_delta_energy_host{};
+    if (schneider_delta_energy_device != nullptr) {
+        queue.copy(schneider_delta_energy_device,
+                   schneider_delta_energy_host.data(),
+                   schneider_delta_energy_host.size()).wait_and_throw();
+    }
+
     // Free buffers
     free_immutable_device(table_device);
     free_immutable_device(energy_grid_device);
@@ -6627,6 +6832,11 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
     free_device(ct_sp_device);
     free_device(ct_xs_device);
     free_device(ct_ref_density_device);
+    free_device(schneider_delta_energies_device);
+    free_device(schneider_delta_fractions_device);
+    free_device(schneider_delta_radii_device);
+    free_device(schneider_delta_source_eligible_device);
+    free_device(schneider_delta_energy_device);
     free_device(schneider_primary_xs_device);
     free_device(schneider_inelastic_device);
     free_device(schneider_diag_device);
@@ -6638,6 +6848,12 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
 
     TransportResult result;
     result.schneider_miss_log = std::move(schneider_miss_host);
+    result.schneider_primary_delta_tail_moved_MeV =
+        static_cast<double>(schneider_delta_energy_host[0]) * 1.0e-6;
+    result.schneider_primary_delta_tail_fallback_MeV =
+        static_cast<double>(schneider_delta_energy_host[1]) * 1.0e-6;
+    result.schneider_primary_delta_tail_escaped_scorer_MeV =
+        static_cast<double>(schneider_delta_energy_host[2]) * 1.0e-6;
     result.schneider_unsupported_tracks = std::move(schneider_track_host);
     result.backend = "sycl-" + resolved_device_name +
                      (config.enable_energy_straggling ? "+straggling" : "");
