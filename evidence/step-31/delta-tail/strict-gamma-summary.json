@@ -1,0 +1,116 @@
+{
+  "schema_version": 1,
+  "validated_source_commit": "8f15d604effa2798532119d032662314f4e43f40",
+  "scope": "RT06423 Schneider-v2.1 research scope; primary C12 section-0 delta-electron spatial tail",
+  "physics_basis": {
+    "cause": "GPU condensed primary electronic stopping deposited locally while TOPAS g4em-standard_opt4 transports delta electrons",
+    "topas_source": "TOPAS 4.2.p3 / Geant4 11.3.p02, 3D DoseToMedium only",
+    "energy_nodes_MeV_per_u": [
+      150,
+      200,
+      225
+    ],
+    "water_path_changed": false,
+    "package_changed": false,
+    "global_scale_tuned": false
+  },
+  "execution": {
+    "device": "NVIDIA GeForce RTX 2080 Ti",
+    "gpu_location": "local only; no Slurm GPU jobs",
+    "shard_count": 20,
+    "histories": 151087660,
+    "accepted_shards": 20,
+    "total_overflow": 0,
+    "max_physical_relative_energy_residual": 1.02459195582e-05
+  },
+  "nominal_metrics": {
+    "high_dose_pearson": 0.9996638561142274,
+    "mean_gpu_to_topas_high_dose": 1.002718398205763,
+    "global_1pct_1mm": {
+      "percent": 98.426,
+      "passed": 49213
+    },
+    "local_1pct_1mm": {
+      "percent": 87.786,
+      "passed": 43893
+    },
+    "global_3pct_0mm": {
+      "percent": 99.804,
+      "passed": 49902
+    },
+    "local_3pct_0mm": {
+      "percent": 93.42200000000001,
+      "passed": 46711
+    },
+    "dose_sum_Gy": 129845.2579963152
+  },
+  "paired_gain_percentage_points": {
+    "global_1pct_1mm": 7.852000000000004,
+    "local_1pct_1mm": 10.614000000000004,
+    "global_3pct_0mm": 1.4480000000000075,
+    "local_3pct_0mm": 13.948000000000008
+  },
+  "history_corrected_metrics": {
+    "high_dose_pearson": 0.9996638561142277,
+    "mean_gpu_to_topas_high_dose": 1.002711628806024,
+    "global_1pct_1mm": {
+      "percent": 98.428,
+      "passed": 49214
+    },
+    "local_1pct_1mm": {
+      "percent": 87.788,
+      "passed": 43894
+    },
+    "global_3pct_0mm": {
+      "percent": 99.804,
+      "passed": 49902
+    },
+    "local_3pct_0mm": {
+      "percent": 93.42,
+      "passed": 46710
+    },
+    "dose_sum_Gy": 129844.38140478446
+  },
+  "homogeneous_hu_minus_1000_200_MeV_per_u": {
+    "topas": {
+      "sum": 23.011371444300252,
+      "cx_mm": 0.002865212108048354,
+      "cy_mm": -0.0015083252685030857,
+      "outside_2p01_fraction": 0.102426731611899,
+      "tail_median_radius_mm": 9.48363784182682,
+      "sigma_x_mm": 5.2333811028105455,
+      "sigma_y_mm": 5.243927126306815
+    },
+    "gpu_delta_tail": {
+      "sum": 57.551954161778376,
+      "cx_mm": 0.000899993836867452,
+      "cy_mm": 0.0013391472051580422,
+      "outside_2p01_fraction": 0.10147312196304129,
+      "tail_median_radius_mm": 9.485277960639324,
+      "sigma_x_mm": 5.07349455185961,
+      "sigma_y_mm": 5.073614859397393
+    },
+    "total_ratio_topas_over_gpu": 0.3998364917308516
+  },
+  "delta_tail_energy_MeV": {
+    "moved_inside_section0": 100198912.9148,
+    "cross_material_fallback_local": 7150505.939792,
+    "escaped_3d_scorer": 9088372.223014
+  },
+  "artifact_hashes": {
+    "aggregate_dose_sha256": "3b8c12278f91b5a7e024c1c2cf6a3f7321590ac5934c445cd3f0fe9463e0f0dc",
+    "aggregate_manifest_sha256": "c0d057a7d155b30d86d2e2a7fa45e6156985d2b8dbeeaa029d0471b4b8532689",
+    "gamma_strict_sha256": "acaf6f7530887a04bbf64b7020a2009056f8f07e677b98717dd690d17c187cdf",
+    "homogeneous_validation_sha256": "8b84311e67d79c1cfd13fbbcb68af889ff86cf8932c23182c0dee56079cd838a",
+    "executable_sha256": "32fda4bd210bcd35d614ff788a9be28b39ba38f31de571840d19e131a78cedec",
+    "lut_sha256": "ff6140f13dcfb4c6f739d6efe56941da6af4749d311e29182601f310a1184aa5",
+    "lut_metadata_sha256": "4dc2557577c4837b9bb6ac896cf1ea2e77d0ef791d91a61b0c264f7b58d71f94"
+  },
+  "limitations": [
+    "Only primary C12 electronic dose in Schneider section 0 is redistributed.",
+    "Cross-material sampled endpoints remain local until a material-dependent electron kernel exists.",
+    "Voxel dose is corrected; depth-dose and LET moments retain condensed primary-step semantics.",
+    "Residual entrance-layer mismatch indicates longitudinal delta-electron build-up is not modeled.",
+    "production_generalization remains false."
+  ]
+}
