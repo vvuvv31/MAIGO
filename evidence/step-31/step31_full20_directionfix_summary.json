@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "validated_source_commit": "e63de8835a7b3417c24992b304123c0076e551fb",
+  "physics_fix_commit": "a5f5b1755f6a822cc3b119c404ecdbb3a9e6ff16",
+  "scope": "RT06423 declared Schneider-v2.1 research scope",
+  "device": "NVIDIA GeForce RTX 2080 Ti",
+  "execution": {
+    "gpu_location": "local only; no Slurm GPU jobs",
+    "shard_count": 20,
+    "histories_per_shard": 7554587,
+    "total_gpu_histories": 151091740,
+    "topas_reference_histories": 151086640,
+    "history_correction": 0.9999662456729931,
+    "accepted_shards": 20,
+    "failed_shards": 0,
+    "total_queue_overflow_count": 0,
+    "max_relative_energy_residual": 9.61959260385e-6
+  },
+  "aggregate": {
+    "operation": "float64 voxelwise sum of 20 float32 dose grids, followed by one float32 cast",
+    "shape_gpu": [440, 34, 440],
+    "dose_sha256": "0c77360c83adf88d386e4ec437cd587a61ea08d73d78399504a6ba789291e9ea",
+    "dose_sum_Gy": 129991.75155853613,
+    "artifact_directory": "/mnt/sda/wuwei/rt06423_direction_fix_full20"
+  },
+  "gamma_method": {
+    "topas_reference_sha256": "f107213b17a04a565eccc7f6c27420bf424dc72e638e802d65285edfebe53257",
+    "sample_count": 50000,
+    "sample_seed": 42,
+    "threshold": "TOPAS >= 10% of maximum",
+    "continuous_search_step_mm": 0.5,
+    "interpolation": "trilinear",
+    "coordinate_mapping": "flip(transpose(gpu,(1,2,0)),axis=2)"
+  },
+  "nominal_1x": {
+    "high_dose_pearson": 0.9990151241979867,
+    "idd_pearson": 0.9996170765153776,
+    "mean_gpu_to_topas_high_dose": 1.0072638988494873,
+    "global_3pct_3mm_percent": 99.994,
+    "local_3pct_3mm_percent": 99.504,
+    "global_2pct_2mm_percent": 99.46,
+    "local_2pct_2mm_percent": 97.122,
+    "global_1pct_1mm_percent": 91.238,
+    "local_1pct_1mm_percent": 77.486,
+    "global_3pct_0mm_percent": 98.206,
+    "local_3pct_0mm_percent": 78.996
+  },
+  "history_corrected": {
+    "scale": 0.9999662456729931,
+    "global_3pct_3mm_percent": 99.994,
+    "local_3pct_3mm_percent": 99.506,
+    "global_2pct_2mm_percent": 99.462,
+    "local_2pct_2mm_percent": 97.122,
+    "global_1pct_1mm_percent": 91.262,
+    "local_1pct_1mm_percent": 77.486,
+    "global_3pct_0mm_percent": 98.214,
+    "local_3pct_0mm_percent": 79.012
+  },
+  "least_squares": {
+    "scale": 0.995496164389277,
+    "global_3pct_3mm_percent": 99.998,
+    "local_3pct_3mm_percent": 99.646,
+    "global_2pct_2mm_percent": 99.618,
+    "local_2pct_2mm_percent": 97.808,
+    "global_1pct_1mm_percent": 92.456,
+    "local_1pct_1mm_percent": 77.422,
+    "global_3pct_0mm_percent": 98.714,
+    "local_3pct_0mm_percent": 81.234
+  },
+  "artifact_hashes": {
+    "executable_sha256": "3636663684d1fda8b5102a266508834dba8a201e797f07d5021977009daa22db",
+    "gamma_json_sha256": "a9029ccd93192a4d699755e5ee12842710f4b9cb5401377ce8d9c0e61ba092d6",
+    "aggregate_manifest_sha256": "af5d5b93c287f1e9de48e28c1149810d105a115743d6bbd442306232afe4775a",
+    "shard_status_sha256": "49daed4c24decb96ee3574540ba94326b62bb8dd0f0ffca2dfb54ee00539200f"
+  },
+  "accepted": true,
+  "production_generalization": false,
+  "note": "Step 31 acceptance is satisfied for the declared RT06423 research scope; this does not remove the documented v2.1 projectile/domain limitations."
+}

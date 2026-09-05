@@ -85,7 +85,7 @@ The executor updates only the `Status` column and the execution log. Never rewri
 | [28](steps/28-lookup-closure-50k.md) | DONE for declared RT06423 research scope | v2.1 Tier-C accepted=true (post-EM null taxonomy fixed, E_h/E_c documented, He6/B8/C10 em_only declared, NEED masked residual) | 27 |
 | [29](steps/29-generation2-transport-validation.md) | DONE for declared RT06423 research scope | v2.1 Tier-D accepted=true (same scope notes as Step 28) | 28 |
 | [30](steps/30-single-shard-abcd-gamma.md) | IN_PROGRESS | TPS direction basis bug fixed; Shard01 nominal Gamma now global 3%/3mm 100%, global 2%/2mm 99.842%, local 2%/2mm 98.994%. Formal same-binary A/B/C/D matrix remains | 29 |
-| [31](steps/31-production-20shard-gamma.md) | BLOCKED | 20-shard production Gamma (awaiting authorization) | 30 |
+| [31](steps/31-production-20shard-gamma.md) | DONE for declared RT06423 research scope | 20/20 accepted, zero overflow; nominal global Gamma 99.994% (3%/3mm) and 99.460% (2%/2mm) | 30 (explicit user authorization while formal A/B/C/D attribution remains) |
 
 General Schneider production coverage: LIMITED. Declared scope limitations
 (not general transport completion): He6/B8/C10 secondary nuclear EM-only
@@ -177,8 +177,12 @@ data/schneider/
 - Tertiary productionization: DONE (Step 29; v2.1 Tier-D accepted=true:
   secondary 14474=14375+99, born 59418=53955+5463+0, overflow 0;
   gen-1 unsupported births prove tertiary depth; 0 in-scope unsupported).
-- Gamma validation: BLOCKED until Step 30 gates pass.
-- 20-shard production: BLOCKED until Step 30 gates pass.
+- Gamma validation: PASS for the declared RT06423 research scope. Nominal
+  full-statistics global 3%/3mm = 99.994% and global 2%/2mm = 99.460%; the
+  formal same-binary A/B/C/D attribution matrix in Step 30 remains open.
+- 20-shard validation: DONE for the declared RT06423 research scope by explicit
+  user authorization (20/20 accepted, zero overflow). This does not change
+  `production_generalization=false` or the documented v2.1 limitations.
 - Follow-ups identified (not started): Step-28b rate low-E floor analysis
   (sub-0.5 clamp queries); v2.1 isotope expansion (C12-reuse + N/O/F/He6…,
   full census in report); p+H physics-list change (escalated, needs full
@@ -247,4 +251,5 @@ YYYY-MM-DD HH:MM TZ | step NN | OLD -> NEW | commit/hash or blocker | evidence p
 2026-09-05 00:30 CST | step 30 | IN_PROGRESS | round-2 diagnosis: BIC cannot serve C12 (distal-zero proven); ref C12 final state is INCLXX (dual census 613/613); rotation runtime device-verified (5e-7); package==campaign==dual@matched-energy; INCLXX-slab dose == BIC-slab dose, GPU still +21% with same INCLXX birth; elastic ablation nil; analytic CSDA-straight-line gives 75 MeV/ev vs GPU 862 vs TOPAS 38. Residual: secondary slowing/deposit in low-density media under identical birth. No code change (package frozen, no proven bug site). | evidence/step-30-plan-attribution/round2.json
 2026-09-05 07:00 CST | step 30 | IN_PROGRESS | supersedes prior package-angle limitation: secondary midpoint dE used unscaled density-1 water stopping in CT. Fix applies Schneider density/material factor at midpoint. Air slab T/G 0.8281->1.0052; sandwich air 0.2224->0.9634 and downstream tissue 1.1319->1.0090; RT06423 Shard01 accepted/no overflow, total T/G 0.9837->0.9979, air 0.1526->0.9786, IDD r 0.99375->0.999993, global 2%/2mm 85.34->87.28. No package/beam/MCS/scale change; 20-shard not run. | evidence/step-30-secondary-midpoint-stopping/validation.json
 2026-09-05 09:16 CST | step 30 | IN_PROGRESS | fixed TPS direction_y basis typo (uy_x->uy_y via shared helper). Primary fluence sigma mismatch patient-Z -0.567->-0.0082 mm; accepted Shard01/no overflow; nominal Gamma global 3%/3mm 100%, global 2%/2mm 99.842%, local 2%/2mm 98.994%, r=0.99808, LS scale=19.901. Formal same-binary A/B/C/D matrix not rerun, so Step 30 remains IN_PROGRESS and Step 31 blocked. | evidence/step-30-tps-direction-fix/validation.json
+2026-09-05 09:40 CST | step 31 | BLOCKED -> DONE for declared RT06423 research scope | explicit user authorization; 20/20 local RTX 2080 Ti shards accepted, overflow=0, 151091740 histories; nominal global Gamma 3%/3mm=99.994%, 2%/2mm=99.460%, 1%/1mm=91.238%, 3%/0mm=98.206%; r=0.999015, IDD r=0.999617. Formal Step-30 A/B/C/D attribution remains open and production_generalization=false. | evidence/step-31/step31_full20_directionfix_summary.json
 ```
