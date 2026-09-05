@@ -95,4 +95,75 @@ inline void schneider_delta_tail_lookup_device(
     radius_mm = r0 + ef * (r1 - r0);
 }
 
+// TOPAS/Geant4-derived forward delta-electron kernel for primary C-12 in
+// Schneider section 0. Supplement to the transverse tail above: a fraction
+// forward_fraction of the local deposit is carried forward along the beam
+// with an exponential range of mean lambda_mm. Same narrow scope.
+class SchneiderLongitudinalTable {
+public:
+    static SchneiderLongitudinalTable from_csv(const std::filesystem::path& path);
+
+    [[nodiscard]] const std::vector<float>& energies_MeV_per_u() const noexcept {
+        return energies_MeV_per_u_;
+    }
+    [[nodiscard]] const std::vector<float>& forward_fractions() const noexcept {
+        return forward_fractions_;
+    }
+    [[nodiscard]] const std::vector<float>& lambdas_mm() const noexcept {
+        return lambdas_mm_;
+    }
+    [[nodiscard]] std::size_t energy_count() const noexcept {
+        return energies_MeV_per_u_.size();
+    }
+
+private:
+    std::vector<float> energies_MeV_per_u_;
+    std::vector<float> forward_fractions_;
+    std::vector<float> lambdas_mm_;
+};
+
+inline void schneider_longitudinal_lookup_device(
+    const float energy_MeV_per_u,
+    const float* energies,
+    const float* forward_fractions,
+    const float* lambdas_mm,
+    const std::size_t energy_count,
+    float& forward_fraction,
+    float& lambda_mm) noexcept {
+    forward_fraction = 0.0F;
+    lambda_mm = 0.0F;
+    if (energies == nullptr || forward_fractions == nullptr ||
+        lambdas_mm == nullptr || energy_count == 0) {
+        return;
+    }
+    // Nearest-edge clamp outside the calibrated [150, 225] MeV/u interval
+    // (unlike the transverse table, which returns zero out of range). Slab
+    // fits show a weak energy dependence (A: 6.7% at 150, 7.4% at 200, 7.5%
+    // at 225), so edge values err by <10% on out-of-range spots, while
+    // returning zero would drop up to 40% of a clinical beam (all-or-nothing
+    // error). Beams routinely span 110-240 MeV/u.
+    std::size_t e0 = 0;
+    float ef = 0.0F;
+    if (energy_count > 1) {
+        if (energy_MeV_per_u <= energies[0]) {
+            e0 = 0;
+            ef = 0.0F;
+        } else if (energy_MeV_per_u >= energies[energy_count - 1]) {
+            e0 = energy_count - 2;
+            ef = 1.0F;
+        } else {
+            while (e0 + 1 < energy_count - 1 &&
+                   energy_MeV_per_u > energies[e0 + 1]) {
+                ++e0;
+            }
+            const auto de = energies[e0 + 1] - energies[e0];
+            ef = de > 0.0F ? (energy_MeV_per_u - energies[e0]) / de : 0.0F;
+        }
+    }
+    const auto e1 = energy_count > 1 ? e0 + 1 : e0;
+    forward_fraction = forward_fractions[e0] +
+                       ef * (forward_fractions[e1] - forward_fractions[e0]);
+    lambda_mm = lambdas_mm[e0] + ef * (lambdas_mm[e1] - lambdas_mm[e0]);
+}
+
 }  // namespace carbon

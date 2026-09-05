@@ -725,6 +725,21 @@ void TransportConfig::validate() const {
             }
             (void)SchneiderDeltaTailTable::from_csv(ct_schneider_delta_tail_file);
         }
+        if (!ct_schneider_delta_longitudinal_file.empty()) {
+            if (ct_schneider_delta_tail_file.empty()) {
+                throw std::invalid_argument(
+                    "ct_schneider_delta_longitudinal_file requires "
+                    "ct_schneider_delta_tail_file");
+            }
+            (void)SchneiderLongitudinalTable::from_csv(
+                ct_schneider_delta_longitudinal_file);
+        }
+        if (ct_schneider_delta_longitudinal_scale < 0.0 ||
+            ct_schneider_delta_longitudinal_scale > 2.0 ||
+            !std::isfinite(ct_schneider_delta_longitudinal_scale)) {
+            throw std::invalid_argument(
+                "ct_schneider_delta_longitudinal_scale must be in [0, 2]");
+        }
         // v3 bundle: the masked rate-binary hazard replaces the CSV XS table,
         // so the CSV key is intentionally empty (mixing refused elsewhere).
         const bool v3_bundle_mode = !ct_schneider_physics_bundle_file.empty();
@@ -1976,6 +1991,13 @@ TransportConfig load_config(const std::filesystem::path& path) {
         config.ct_schneider_delta_tail_file = resolve_input_path_from_config(
             config.ct_schneider_delta_tail_file, path);
     }
+    config.ct_schneider_delta_longitudinal_file = parse_path(
+        values, "ct_schneider_delta_longitudinal_file",
+        config.ct_schneider_delta_longitudinal_file);
+    if (!config.ct_schneider_delta_longitudinal_file.empty()) {
+        config.ct_schneider_delta_longitudinal_file = resolve_input_path_from_config(
+            config.ct_schneider_delta_longitudinal_file, path);
+    }
     config.ct_cinel02_rate_file = parse_path(
         values, "ct_cinel02_rate_file", config.ct_cinel02_rate_file);
     config.ct_hu_stopping_power_lut_file = parse_path(
@@ -1985,6 +2007,9 @@ TransportConfig load_config(const std::filesystem::path& path) {
         values, "ct_use_density_mass_spr", config.ct_use_density_mass_spr);
     config.ct_stopping_power_scale = parse_number(
         values, "ct_stopping_power_scale", config.ct_stopping_power_scale);
+    config.ct_schneider_delta_longitudinal_scale = parse_number(
+        values, "ct_schneider_delta_longitudinal_scale",
+        config.ct_schneider_delta_longitudinal_scale);
     if (const auto it = values.find("ct_validation_mode"); it != values.end()) {
         config.ct_validation_mode = it->second;
     }

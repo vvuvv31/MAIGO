@@ -1236,6 +1236,25 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
     std::uint64_t* schneider_delta_energy_device = nullptr;
     std::size_t schneider_delta_energy_count = 0;
     std::size_t schneider_delta_quantile_count = 0;
+    // Optional longitudinal (forward) supplement. Shares the transverse
+    // eligibility mask and section-0 scope; empty file disables it exactly.
+    const bool use_schneider_delta_longitudinal =
+        use_schneider_delta_tail &&
+        !config.ct_schneider_delta_longitudinal_file.empty();
+    if (use_schneider_delta_longitudinal && k_dose_atomic_fp32) {
+        throw std::runtime_error(
+            "ct_schneider_delta_longitudinal_file requires an FP64 dose build "
+            "(CARBON_DOSE_FP32=OFF): the distributed forward shares are far below "
+            "FP32 atomic granularity at clinical per-bin totals and would be "
+            "silently dropped, failing energy closure");
+    }
+    const auto schneider_long_fraction_scale = static_cast<float>(
+        config.ct_schneider_delta_longitudinal_scale);
+    std::optional<SchneiderLongitudinalTable> schneider_longitudinal;
+    float* schneider_long_energies_device = nullptr;
+    float* schneider_long_fractions_device = nullptr;
+    float* schneider_long_lambdas_device = nullptr;
+    std::size_t schneider_long_energy_count = 0;
     if (use_schneider_delta_tail) {
         schneider_delta_tail = SchneiderDeltaTailTable::from_csv(
             config.ct_schneider_delta_tail_file);
@@ -1247,7 +1266,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
             mem_tracker.allocate<float>(schneider_delta_energy_count);
         schneider_delta_radii_device = mem_tracker.allocate<float>(
             schneider_delta_energy_count * schneider_delta_quantile_count);
-        schneider_delta_energy_device = mem_tracker.allocate<std::uint64_t>(3);
+        schneider_delta_energy_device = mem_tracker.allocate<std::uint64_t>(6);
         if (schneider_delta_energies_device == nullptr ||
             schneider_delta_fractions_device == nullptr ||
             schneider_delta_radii_device == nullptr ||
@@ -1261,8 +1280,31 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
         queue.copy(schneider_delta_tail->radii_mm().data(),
                    schneider_delta_radii_device,
                    schneider_delta_energy_count * schneider_delta_quantile_count);
-        queue.fill(schneider_delta_energy_device, std::uint64_t{0}, 3)
+        queue.fill(schneider_delta_energy_device, std::uint64_t{0}, 6)
             .wait_and_throw();
+        if (use_schneider_delta_longitudinal) {
+            schneider_longitudinal = SchneiderLongitudinalTable::from_csv(
+                config.ct_schneider_delta_longitudinal_file);
+            schneider_long_energy_count = schneider_longitudinal->energy_count();
+            schneider_long_energies_device =
+                mem_tracker.allocate<float>(schneider_long_energy_count);
+            schneider_long_fractions_device =
+                mem_tracker.allocate<float>(schneider_long_energy_count);
+            schneider_long_lambdas_device =
+                mem_tracker.allocate<float>(schneider_long_energy_count);
+            if (schneider_long_energies_device == nullptr ||
+                schneider_long_fractions_device == nullptr ||
+                schneider_long_lambdas_device == nullptr) {
+                throw std::bad_alloc();
+            }
+            queue.copy(schneider_longitudinal->energies_MeV_per_u().data(),
+                       schneider_long_energies_device, schneider_long_energy_count);
+            queue.copy(schneider_longitudinal->forward_fractions().data(),
+                       schneider_long_fractions_device, schneider_long_energy_count);
+            queue.copy(schneider_longitudinal->lambdas_mm().data(),
+                       schneider_long_lambdas_device, schneider_long_energy_count)
+                .wait_and_throw();
+        }
     }
 
     if (enable_ct_grid) {
@@ -1721,7 +1763,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
             ct_origin_y + static_cast<float>(voxel_bins_y) * voxel_size_y_mm;
     }
 
-    auto* dose_device = mem_tracker.allocate<DoseAtomicT>(number_of_bins);
+    auto* dose_device = mem_tracker.allocate<DepthAtomicT>(number_of_bins);
     std::uint64_t* primary_survival_device = nullptr;
     std::uint64_t* inelastic_reaction_device = nullptr;
     // Diagnostic-only: fragment-species scoring also needs per-depth
@@ -2153,9 +2195,9 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
         : cumulative_range_device;
 
     auto* in_fov_dose_device =
-        enable_voxel_scoring ? mem_tracker.allocate<DoseAtomicT>(number_of_bins) : nullptr;
+        enable_voxel_scoring ? mem_tracker.allocate<DepthAtomicT>(number_of_bins) : nullptr;
     if (in_fov_dose_device != nullptr) {
-        queue.fill(in_fov_dose_device, DoseAtomicT{0}, number_of_bins).wait_and_throw();
+        queue.fill(in_fov_dose_device, DepthAtomicT{0}, number_of_bins).wait_and_throw();
     }
 
     if (dose_device == nullptr || deposited_device == nullptr ||
@@ -2205,7 +2247,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                    cross_section_table_size).wait_and_throw();
     }
 
-    queue.memset(dose_device, 0, number_of_bins * sizeof(DoseAtomicT));
+    queue.memset(dose_device, 0, number_of_bins * sizeof(DepthAtomicT));
     if (enable_voxel_scoring) {
         queue.memset(voxel_dose_device, 0, number_of_voxels * sizeof(DoseAtomicT));
     }
@@ -3013,6 +3055,10 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
 
                     auto local_voxel_deposit_MeV = deposited_MeV;
                     auto delta_tail_escaped_scorer_MeV = 0.0F;
+                    // Forward-redistributed energy leaves the source depth bin, so the
+                    // 1-D depth scorers must not credit it at the source bin (the 3-D
+                    // march deposits below credit the destination bins instead).
+                    auto forward_shifted_MeV = 0.0F;
                     if (use_schneider_delta_tail && in_ct && ct_material == 0U &&
                         enable_voxel_scoring && voxel_index < number_of_voxels &&
                         schneider_delta_source_eligible_device[voxel_index] != 0U) {
@@ -3113,15 +3159,201 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                 atomic_fallback.fetch_add(fixed);
                             }
                         }
+                        if (use_schneider_delta_longitudinal && deposited_MeV > 0.0F) {
+                            // Forward supplement: carry a fitted fraction of the local
+                            // deposit downstream along the particle direction with an
+                            // exponential range, distributed uniformly along the ray
+                            // (continuous-slowing-down picture). Point deposits pile
+                            // up at air-tissue interfaces; the distributed form does
+                            // not. Same eligibility and section-0 source scope as the
+                            // transverse tail above; every march voxel (air or tissue)
+                            // inside the scorer receives its path share, segments past
+                            // the scorer leave through the escape sink.
+                            float forward_fraction = 0.0F;
+                            float forward_lambda_mm = 0.0F;
+                            schneider_longitudinal_lookup_device(
+                                energy_MeVu,
+                                schneider_long_energies_device,
+                                schneider_long_fractions_device,
+                                schneider_long_lambdas_device,
+                                schneider_long_energy_count,
+                                forward_fraction, forward_lambda_mm);
+                            const auto forward_MeV =
+                                deposited_MeV * sycl::clamp(
+                                    forward_fraction * schneider_long_fraction_scale,
+                                    0.0F, 0.5F);
+                            // Density-scaled range: electron CSDA range scales ~1/rho.
+                            // The LUT is calibrated in slab air (rho_ref = 0.01132
+                            // g/cm3, uniform HU-1000 CCTG); patient section-0 air
+                            // spans ~0.011-0.06. Scale the mean range by rho_ref/rho
+                            // at the production voxel so dense voxels throw shorter
+                            // and thin air keeps the calibrated range.
+                            constexpr float kLongitudinalRhoRefGPerCm3 = 0.01132F;
+                            forward_lambda_mm *= sycl::clamp(
+                                kLongitudinalRhoRefGPerCm3 /
+                                    sycl::fmax(local_density_g_per_cm3, 1.0e-6F),
+                                0.15F, 4.0F);
+                            if (forward_MeV > 0.0F && forward_lambda_mm > 0.0F) {
+                                auto u_long = rng::uniform01(
+                                    spot_seed, rng_history, steps, 19);
+                                if (u_long < 0.0F) u_long = 0.0F;
+                                if (u_long >= 1.0F) u_long = 0.99999988F;
+                                const auto forward_dist_mm =
+                                    -forward_lambda_mm * sycl::log(1.0F - u_long);
+                                // Clamp pathological tail samples to the march window so
+                                // no segment beyond the loop bound can leak energy. The
+                                // clamp binds with probability ~1e-9 per attempt; the
+                                // clamped tail stays inside the scorer-escape logic.
+                                auto fwd_escaped_MeV = 0.0F;
+                                auto fwd_kept_MeV = 0.0F;
+                                if (forward_dist_mm <= 0.0F) {
+                                    // Degenerate range sample (u == 0, measure zero):
+                                    // keep the whole move at the production voxel so
+                                    // no energy leaks. The bookkeeping below then
+                                    // reduces to no-ops with moved == 0.
+                                    fwd_kept_MeV = forward_MeV;
+                                } else {
+                                const auto fwd_source_x =
+                                    position_x_mm + 0.5F * step_mm * direction_x;
+                                const auto fwd_source_y =
+                                    position_y_mm + 0.5F * step_mm * direction_y;
+                                const auto fwd_source_z =
+                                    position_z_mm + 0.5F * step_mm * direction_z;
+                                const auto deposit_pitch_mm = sycl::fmin(
+                                    sycl::fmin(ct_spacing_x, ct_spacing_y), ct_spacing_z);
+                                // Clamp pathological tail samples to the march window
+                                // (binds with probability ~1e-9 per attempt); the tail
+                                // beyond any scorer still leaves via escape logic.
+                                const auto fwd_range_mm = sycl::fmin(
+                                    forward_dist_mm, 1024.0F * deposit_pitch_mm);
+                                auto fwd_steps = static_cast<int>(sycl::ceil(
+                                    fwd_range_mm / deposit_pitch_mm));
+                                if (fwd_steps < 1) fwd_steps = 1;
+                                if (fwd_steps > 1024) fwd_steps = 1024;
+                                // Segment weights are normalized by the sampled range
+                                // (not the pitch) so they sum to exactly 1: every MeV
+                                // is deposited, escaped, or kept, never leaked.
+                                const auto fwd_w_norm = 1.0F / fwd_range_mm;
+                                for (int fwd_k = 0; fwd_k < fwd_steps; ++fwd_k) {
+                                    const auto seg_lo = static_cast<float>(fwd_k) *
+                                                        deposit_pitch_mm;
+                                    auto seg_hi = (static_cast<float>(fwd_k) + 1.0F) *
+                                                  deposit_pitch_mm;
+                                    if (seg_hi > fwd_range_mm) seg_hi = fwd_range_mm;
+                                    if (seg_lo >= seg_hi) break;
+                                    const auto seg_MeV =
+                                        forward_MeV * ((seg_hi - seg_lo) * fwd_w_norm);
+                                    const auto fwd_d = 0.5F * (seg_lo + seg_hi);
+                                    const auto px = fwd_source_x + fwd_d * direction_x;
+                                    const auto py = fwd_source_y + fwd_d * direction_y;
+                                    const auto pz = fwd_source_z + fwd_d * direction_z;
+                                    float p_density = 0.0F;
+                                    std::uint8_t p_material = 255U;
+                                    const auto p_sampled = ct_sample(
+                                        px, py, pz,
+                                        ct_origin_x, ct_origin_y, ct_origin_z,
+                                        ct_spacing_x, ct_spacing_y, ct_spacing_z,
+                                        ct_nx, ct_ny, ct_nz, ct_density_device,
+                                        ct_material_device, p_density,
+                                        p_material);
+                                    const auto p_voxel_x = static_cast<int>(sycl::floor(
+                                        (px - voxel_min_x_mm) / voxel_size_x_mm));
+                                    const auto p_voxel_y = static_cast<int>(sycl::floor(
+                                        (py - voxel_min_y_mm) / voxel_size_y_mm));
+                                    const auto p_bin = static_cast<int>(sycl::floor(
+                                        pz / depth_bin_width_mm));
+                                    const auto p_in_scorer =
+                                        p_voxel_x >= 0 &&
+                                        p_voxel_x < static_cast<int>(voxel_bins_x) &&
+                                        p_voxel_y >= 0 &&
+                                        p_voxel_y < static_cast<int>(voxel_bins_y) &&
+                                        p_bin >= 0 &&
+                                        p_bin < static_cast<int>(number_of_bins);
+                                    if (p_sampled && p_in_scorer) {
+                                        const auto p_voxel =
+                                            static_cast<std::size_t>(p_bin) * voxel_plane_size +
+                                            static_cast<std::size_t>(p_voxel_y) * voxel_bins_x +
+                                            static_cast<std::size_t>(p_voxel_x);
+                                        sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
+                                                         sycl::memory_scope::device,
+                                                         sycl::access::address_space::global_space>
+                                            atomic_fwd(voxel_dose_device[p_voxel]);
+                                        atomic_fwd.fetch_add(
+                                            static_cast<DoseAtomicT>(seg_MeV));
+                                        sycl::atomic_ref<DepthAtomicT, sycl::memory_order::relaxed,
+                                                         sycl::memory_scope::device,
+                                                         sycl::access::address_space::global_space>
+                                            atomic_fwd_depth(dose_device[p_bin]);
+                                        atomic_fwd_depth.fetch_add(
+                                            static_cast<DepthAtomicT>(seg_MeV));
+                                        if (in_fov_dose_device != nullptr) {
+                                            sycl::atomic_ref<DepthAtomicT, sycl::memory_order::relaxed,
+                                                             sycl::memory_scope::device,
+                                                             sycl::access::address_space::global_space>
+                                                atomic_fwd_fov(in_fov_dose_device[p_bin]);
+                                            atomic_fwd_fov.fetch_add(
+                                                static_cast<DepthAtomicT>(seg_MeV));
+                                        }
+                                        if (enable_charged_origin_voxel_scoring) {
+                                            sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
+                                                             sycl::memory_scope::device,
+                                                             sycl::access::address_space::global_space>
+                                                atomic_fwd_origin(
+                                                    charged_origin_voxel_dose_device[p_voxel]);
+                                            atomic_fwd_origin.fetch_add(
+                                                static_cast<DoseAtomicT>(seg_MeV));
+                                        }
+                                    } else if (!p_in_scorer) {
+                                        fwd_escaped_MeV += seg_MeV;
+                                    } else {
+                                        // Inside the scorer but outside the CT grid (scorer
+                                        // bounds may extend past the CT on an axis): keep
+                                        // the share at the production voxel instead of
+                                        // dropping it.
+                                        fwd_kept_MeV += seg_MeV;
+                                    }
+                                }
+                                }  // end non-degenerate range march
+                                local_voxel_deposit_MeV -= forward_MeV - fwd_kept_MeV;
+                                delta_tail_escaped_scorer_MeV += fwd_escaped_MeV;
+                                forward_shifted_MeV = forward_MeV - fwd_kept_MeV;
+                                const auto fwd_fixed = static_cast<std::uint64_t>(
+                                    static_cast<double>(
+                                        forward_MeV - fwd_escaped_MeV - fwd_kept_MeV) * 1.0e6);
+                                const auto fwd_esc_fixed = static_cast<std::uint64_t>(
+                                    static_cast<double>(fwd_escaped_MeV) * 1.0e6);
+                                const auto fwd_kept_fixed = static_cast<std::uint64_t>(
+                                    static_cast<double>(fwd_kept_MeV) * 1.0e6);
+                                sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
+                                                 sycl::memory_scope::device,
+                                                 sycl::access::address_space::global_space>
+                                    atomic_fwd_moved(schneider_delta_energy_device[3]);
+                                atomic_fwd_moved.fetch_add(fwd_fixed);
+                                if (fwd_kept_fixed > 0U) {
+                                    sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
+                                                     sycl::memory_scope::device,
+                                                     sycl::access::address_space::global_space>
+                                        atomic_fwd_kept(schneider_delta_energy_device[4]);
+                                    atomic_fwd_kept.fetch_add(fwd_kept_fixed);
+                                }
+                                if (fwd_esc_fixed > 0U) {
+                                    sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
+                                                     sycl::memory_scope::device,
+                                                     sycl::access::address_space::global_space>
+                                        atomic_fwd_escape(schneider_delta_energy_device[5]);
+                                    atomic_fwd_escape.fetch_add(fwd_esc_fixed);
+                                }
+                            }
+                        }
                     }
 
                     if (bin != pending_primary_bin) {
                         if (pending_primary_depth_MeV > 0.0) {
-                            sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
+                            sycl::atomic_ref<DepthAtomicT, sycl::memory_order::relaxed,
                                              sycl::memory_scope::device,
                                              sycl::access::address_space::global_space>
                                 atomic_dose(dose_device[pending_primary_bin]);
-                            atomic_dose.fetch_add(static_cast<DoseAtomicT>(pending_primary_depth_MeV));
+                            atomic_dose.fetch_add(static_cast<DepthAtomicT>(pending_primary_depth_MeV));
                             pending_primary_depth_MeV = 0.0;
                         }
                         if (enable_let_scoring) {
@@ -3164,16 +3396,17 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                         pending_primary_voxel = voxel_index;
                     }
 
-                    pending_primary_depth_MeV += deposited_MeV;
+                    pending_primary_depth_MeV += deposited_MeV - forward_shifted_MeV;
                     if (enable_voxel_scoring && voxel_index >= 0) {
                         pending_primary_voxel_MeV += local_voxel_deposit_MeV;
                         if (in_fov_dose_device != nullptr && pending_primary_bin >= 0 &&
                             pending_primary_bin < static_cast<int>(number_of_bins)) {
-                            sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
+                            sycl::atomic_ref<DepthAtomicT, sycl::memory_order::relaxed,
                                              sycl::memory_scope::device,
                                              sycl::access::address_space::global_space>
                                 atomic_in_fov(in_fov_dose_device[pending_primary_bin]);
-                            atomic_in_fov.fetch_add(static_cast<DoseAtomicT>(deposited_MeV));
+                            atomic_in_fov.fetch_add(static_cast<DepthAtomicT>(
+                                deposited_MeV - forward_shifted_MeV));
                         }
                     }
                     history_deposited_MeV += deposited_MeV;
@@ -4085,11 +4318,11 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                         products.local_deposit_MeV;
                                     if (in_fov_dose_device != nullptr && pending_primary_bin >= 0 &&
                                         pending_primary_bin < static_cast<int>(number_of_bins)) {
-                                        sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
+                                        sycl::atomic_ref<DepthAtomicT, sycl::memory_order::relaxed,
                                                          sycl::memory_scope::device,
                                                          sycl::access::address_space::global_space>
                                             atomic_in_fov(in_fov_dose_device[pending_primary_bin]);
-                                        atomic_in_fov.fetch_add(static_cast<DoseAtomicT>(products.local_deposit_MeV));
+                                        atomic_in_fov.fetch_add(static_cast<DepthAtomicT>(products.local_deposit_MeV));
                                     }
                                 }
                                 history_deposited_MeV +=
@@ -4291,11 +4524,11 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                         pending_primary_voxel_MeV += cutoff_energy_MeV;
                         if (in_fov_dose_device != nullptr && pending_primary_bin >= 0 &&
                             pending_primary_bin < static_cast<int>(number_of_bins)) {
-                            sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
+                            sycl::atomic_ref<DepthAtomicT, sycl::memory_order::relaxed,
                                              sycl::memory_scope::device,
                                              sycl::access::address_space::global_space>
                                 atomic_in_fov(in_fov_dose_device[pending_primary_bin]);
-                            atomic_in_fov.fetch_add(static_cast<DoseAtomicT>(cutoff_energy_MeV));
+                            atomic_in_fov.fetch_add(static_cast<DepthAtomicT>(cutoff_energy_MeV));
                         }
                     }
                     history_deposited_MeV += cutoff_energy_MeV;
@@ -4354,11 +4587,11 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                 }
 
                 if (pending_primary_depth_MeV > 0.0) {
-                    sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
+                    sycl::atomic_ref<DepthAtomicT, sycl::memory_order::relaxed,
                                      sycl::memory_scope::device,
                                      sycl::access::address_space::global_space>
                         atomic_dose(dose_device[pending_primary_bin]);
-                    atomic_dose.fetch_add(static_cast<DoseAtomicT>(pending_primary_depth_MeV));
+                    atomic_dose.fetch_add(static_cast<DepthAtomicT>(pending_primary_depth_MeV));
                 }
                 if (enable_let_scoring) {
                     flush_letd_moments_device(
@@ -4446,11 +4679,11 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                     Cinel02SpeciesLedgerSchema::initial_below_cutoff));
                             const auto bin_z = static_cast<int>(frag.pos_z_mm * inverse_depth_bin_width_mm);
                             if (bin_z >= 0 && bin_z < static_cast<int>(number_of_bins)) {
-                                sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
+                                sycl::atomic_ref<DepthAtomicT, sycl::memory_order::relaxed,
                                                  sycl::memory_scope::device,
                                                  sycl::access::address_space::global_space>
                                     atomic_dose(dose_device[bin_z]);
-                                atomic_dose.fetch_add(static_cast<DoseAtomicT>(frag.energy_MeV));
+                                atomic_dose.fetch_add(static_cast<DepthAtomicT>(frag.energy_MeV));
                             }
                             if (enable_voxel_scoring) {
                                 const auto bin_x = static_cast<int>((frag.pos_x_mm - voxel_min_x_mm) * inverse_voxel_size_x_mm);
@@ -4477,11 +4710,11 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                             static_cast<DoseAtomicT>(frag.energy_MeV));
                                     }
                                     if (in_fov_dose_device != nullptr) {
-                                        sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
+                                        sycl::atomic_ref<DepthAtomicT, sycl::memory_order::relaxed,
                                                          sycl::memory_scope::device,
                                                          sycl::access::address_space::global_space>
                                             atomic_in_fov(in_fov_dose_device[bin_z]);
-                                        atomic_in_fov.fetch_add(static_cast<DoseAtomicT>(frag.energy_MeV));
+                                        atomic_in_fov.fetch_add(static_cast<DepthAtomicT>(frag.energy_MeV));
                                         cinel02_species_energy_add_device(
                                             cinel02_species_energy_device, ledger_species_idx,
                                             6U, frag.energy_MeV);
@@ -5258,11 +5491,11 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
 
                             if (bin_z != pending_sec_bin) {
                         if (pending_sec_depth_MeV > 0.0F && pending_sec_bin >= 0 && pending_sec_bin < static_cast<int>(number_of_bins)) {
-                                    sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
+                                    sycl::atomic_ref<DepthAtomicT, sycl::memory_order::relaxed,
                                                      sycl::memory_scope::device,
                                                      sycl::access::address_space::global_space>
                                         atomic_dose(dose_device[pending_sec_bin]);
-                                    atomic_dose.fetch_add(static_cast<DoseAtomicT>(pending_sec_depth_MeV));
+                                    atomic_dose.fetch_add(static_cast<DepthAtomicT>(pending_sec_depth_MeV));
                                     pending_sec_depth_MeV = 0.0F;
                                 }
                                 pending_sec_bin = bin_z;
@@ -5761,12 +5994,12 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                                                   event.parent_energy_MeV);
                                         if (local_deposit > 0.0F) {
                                             sycl::atomic_ref<
-                                                DoseAtomicT, sycl::memory_order::relaxed,
+                                                DepthAtomicT, sycl::memory_order::relaxed,
                                                 sycl::memory_scope::device,
                                                 sycl::access::address_space::global_space>
                                                 atomic_local_depth(dose_device[collision_bin]);
                                             atomic_local_depth.fetch_add(
-                                                static_cast<DoseAtomicT>(local_deposit));
+                                                static_cast<DepthAtomicT>(local_deposit));
                                         }
                                         if (enable_voxel_scoring && pending_sec_voxel >= 0) {
                                             pending_sec_voxel_MeV += local_deposit;
@@ -6065,11 +6298,11 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                 if (cur_voxel >= 0) {
                                     pending_sec_voxel_MeV += dE;
                                     if (in_fov_dose_device != nullptr && pending_sec_bin >= 0 && pending_sec_bin < static_cast<int>(number_of_bins)) {
-                                        sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
+                                        sycl::atomic_ref<DepthAtomicT, sycl::memory_order::relaxed,
                                                          sycl::memory_scope::device,
                                                          sycl::access::address_space::global_space>
                                             atomic_in_fov(in_fov_dose_device[pending_sec_bin]);
-                                        atomic_in_fov.fetch_add(static_cast<DoseAtomicT>(dE));
+                                        atomic_in_fov.fetch_add(static_cast<DepthAtomicT>(dE));
                                         cinel02_species_energy_add_device(
                                             cinel02_species_energy_device, ledger_species_idx,
                                             2U, dE);
@@ -6227,11 +6460,11 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                     if (bin_z != pending_sec_bin) {
                                         if (pending_sec_depth_MeV > 0.0F && pending_sec_bin >= 0 &&
                                             pending_sec_bin < static_cast<int>(number_of_bins)) {
-                                            sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
+                                            sycl::atomic_ref<DepthAtomicT, sycl::memory_order::relaxed,
                                                              sycl::memory_scope::device,
                                                              sycl::access::address_space::global_space>
                                                 atomic_dose(dose_device[pending_sec_bin]);
-                                            atomic_dose.fetch_add(static_cast<DoseAtomicT>(pending_sec_depth_MeV));
+                                            atomic_dose.fetch_add(static_cast<DepthAtomicT>(pending_sec_depth_MeV));
                                             pending_sec_depth_MeV = 0.0F;
                                         }
                                         pending_sec_bin = bin_z;
@@ -6274,11 +6507,11 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                             pending_sec_voxel_MeV += sec_e;
                                             sec_terminal_scored = true;
                                             if (in_fov_dose_device != nullptr) {
-                                                sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
+                                                sycl::atomic_ref<DepthAtomicT, sycl::memory_order::relaxed,
                                                                  sycl::memory_scope::device,
                                                                  sycl::access::address_space::global_space>
                                                     atomic_in_fov(in_fov_dose_device[bin_z]);
-                                                atomic_in_fov.fetch_add(static_cast<DoseAtomicT>(sec_e));
+                                                atomic_in_fov.fetch_add(static_cast<DepthAtomicT>(sec_e));
                                                 cinel02_species_energy_add_device(
                                                     cinel02_species_energy_device, ledger_species_idx,
                                                     6U, sec_e);
@@ -6329,7 +6562,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                         }
 
                         if (pending_sec_depth_MeV > 0.0F && pending_sec_bin >= 0 && pending_sec_bin < static_cast<int>(number_of_bins)) {
-                            sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
+                            sycl::atomic_ref<DepthAtomicT, sycl::memory_order::relaxed,
                                              sycl::memory_scope::device,
                                              sycl::access::address_space::global_space>
                                 atomic_dose(dose_device[pending_sec_bin]);
@@ -6391,7 +6624,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
         }
     }
 
-    std::vector<DoseAtomicT> dose_device_host(number_of_bins);
+    std::vector<DepthAtomicT> dose_device_host(number_of_bins);
     queue.copy(dose_device, dose_device_host.data(), number_of_bins).wait_and_throw();
     std::vector<double> dose_host(number_of_bins);
     std::transform(dose_device_host.begin(), dose_device_host.end(), dose_host.begin(),
@@ -6447,7 +6680,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
 
     std::vector<double> in_fov_dose_host;
     if (enable_voxel_scoring && in_fov_dose_device != nullptr) {
-        std::vector<DoseAtomicT> in_fov_device_host(number_of_bins);
+        std::vector<DepthAtomicT> in_fov_device_host(number_of_bins);
         queue.copy(in_fov_dose_device, in_fov_device_host.data(), number_of_bins).wait_and_throw();
         in_fov_dose_host.resize(number_of_bins);
         std::transform(in_fov_device_host.begin(), in_fov_device_host.end(),
@@ -6721,7 +6954,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
             .wait_and_throw();
     }
 
-    std::array<std::uint64_t, 3> schneider_delta_energy_host{};
+    std::array<std::uint64_t, 6> schneider_delta_energy_host{};
     if (schneider_delta_energy_device != nullptr) {
         queue.copy(schneider_delta_energy_device,
                    schneider_delta_energy_host.data(),
@@ -6839,6 +7072,9 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
     free_device(schneider_delta_radii_device);
     free_device(schneider_delta_source_eligible_device);
     free_device(schneider_delta_energy_device);
+    free_device(schneider_long_energies_device);
+    free_device(schneider_long_fractions_device);
+    free_device(schneider_long_lambdas_device);
     free_device(schneider_primary_xs_device);
     free_device(schneider_inelastic_device);
     free_device(schneider_diag_device);
@@ -6856,6 +7092,12 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
         static_cast<double>(schneider_delta_energy_host[1]) * 1.0e-6;
     result.schneider_primary_delta_tail_escaped_scorer_MeV =
         static_cast<double>(schneider_delta_energy_host[2]) * 1.0e-6;
+    result.schneider_primary_delta_longitudinal_moved_MeV =
+        static_cast<double>(schneider_delta_energy_host[3]) * 1.0e-6;
+    result.schneider_primary_delta_longitudinal_fallback_MeV =
+        static_cast<double>(schneider_delta_energy_host[4]) * 1.0e-6;
+    result.schneider_primary_delta_longitudinal_escaped_scorer_MeV =
+        static_cast<double>(schneider_delta_energy_host[5]) * 1.0e-6;
     result.schneider_unsupported_tracks = std::move(schneider_track_host);
     result.backend = "sycl-" + resolved_device_name +
                      (config.enable_energy_straggling ? "+straggling" : "");

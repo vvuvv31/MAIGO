@@ -228,6 +228,13 @@ struct TransportConfig {
     // Optional TOPAS-derived primary C12 delta-electron transverse tail. Empty
     // preserves the condensed local-deposit path exactly. Schneider section 0 only.
     std::filesystem::path ct_schneider_delta_tail_file{};
+    // Optional TOPAS-derived primary C12 forward (longitudinal) delta kernel,
+    // supplementing the transverse tail. Requires ct_schneider_delta_tail_file;
+    // empty disables the forward move exactly. Schneider section 0 only.
+    std::filesystem::path ct_schneider_delta_longitudinal_file{};
+    // Research-only sensitivity scale on the longitudinal forward fraction
+    // (1.0 = as calibrated). Validated range [0, 2]; anything else refuses.
+    double ct_schneider_delta_longitudinal_scale{1.0};
 
     // Optional energy-dependent mass XS for every Schneider section. When set
     // on a CCTG v2/v3 grid, this supersedes the legacy four-class XS tables.

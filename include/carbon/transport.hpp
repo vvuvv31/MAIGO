@@ -518,6 +518,14 @@ struct TransportResult {
     double schneider_primary_delta_tail_fallback_MeV{0.0};
     // Sampled delta-tail energy whose endpoint left the aligned 3-D scorer.
     double schneider_primary_delta_tail_escaped_scorer_MeV{0.0};
+    // Informational subset redistributed by the optional longitudinal
+    // (forward) supplement: moved along the beam and distributed over the
+    // march voxels (air or tissue) inside the scorer, kept locally when a
+    // march share falls inside the scorer but outside the CT grid, escaped
+    // when it leaves the scorer.
+    double schneider_primary_delta_longitudinal_moved_MeV{0.0};
+    double schneider_primary_delta_longitudinal_fallback_MeV{0.0};
+    double schneider_primary_delta_longitudinal_escaped_scorer_MeV{0.0};
     std::vector<double> voxel_deposited_energy_MeV;
     // Primary track length accumulated per scorer voxel (mm).
     std::vector<double> primary_voxel_track_length_mm;

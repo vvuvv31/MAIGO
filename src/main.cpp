@@ -45,6 +45,15 @@ int main(int argc, char* argv[]) {
         const auto plan_only = cli.plan_only;
         const auto sequential_spots = cli.sequential_spots;
         config.validate();
+#ifdef CARBON_DOSE_FP32
+        if (!config.ct_schneider_delta_longitudinal_file.empty()) {
+            throw std::runtime_error(
+                "ct_schneider_delta_longitudinal_file requires an FP64 dose build "
+                "(CARBON_DOSE_FP32=OFF): the distributed forward shares are far below "
+                "FP32 atomic granularity at clinical per-bin totals and would be "
+                "silently dropped, failing energy closure");
+        }
+#endif
         if (!cli.canonical_config_output_path.empty()) {
             const auto parent = cli.canonical_config_output_path.parent_path();
             if (!parent.empty()) {

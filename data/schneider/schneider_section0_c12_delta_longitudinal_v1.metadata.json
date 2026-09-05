@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "scope": "primary C12, Schneider section 0 only, longitudinal supplement",
+  "source": "TOPAS 4.2.p3 / Geant4 11.3.p02 g4em-standard_opt4 DoseToMedium 3D",
+  "production_cut_mm": 0.05,
+  "beam": "zero-width C12, 1% energy spread",
+  "model": "forward exponential transport of fraction A with mean range lambda; fit deficit(z) = A*exp(-z/lambda) to lateral-integral deficit over z in [2,120] mm",
+  "kernel_mapping": {
+    "a_scale": 1.2,
+    "lambda_scale": 1.3,
+    "reason": "uniform-along-ray deposits deliver A_eff ~= 0.83*A_nom, lambda_eff ~= 0.76*lambda_nom (measured 200 MeV/u slab); stored values are pre-scaled nominals"
+  },
+  "excluded": "z < 2 mm (run-specific entrance spike in the 200 MeV/u run, absent from independent 150/225 scans)",
+  "interpolation": "linear in energy",
+  "inputs": [
+    {
+      "energy_MeV_per_u": 150.0,
+      "path": "/mnt/sda/wuwei/delta_section0/energy_scan/topas_hu_n1000_e150.csv",
+      "sha256": "16d476780962e9a482b3e306234ba7d2c3f473057c1436603bec6638b81e0d59",
+      "deep_mean_per_slice": 0.0695986369760361,
+      "physical_forward_fraction": 0.06717102702338426,
+      "physical_lambda_mm": 17.447764181067864,
+      "fitted_forward_fraction": 0.08060523242806111,
+      "fitted_lambda_mm": 22.682093435388225
+    },
+    {
+      "energy_MeV_per_u": 200.0,
+      "path": "/mnt/sda/wuwei/delta_section0/topas_dose3d_hu_n1000_em.csv",
+      "sha256": "7952721c41cc6c8980aad8985019f495883b3ea3d0743cdaf982b529fa9c47f7",
+      "deep_mean_per_slice": 0.11434945215089674,
+      "physical_forward_fraction": 0.07392211199827635,
+      "physical_lambda_mm": 19.195012500190423,
+      "fitted_forward_fraction": 0.08870653439793162,
+      "fitted_lambda_mm": 24.95351625024755
+    },
+    {
+      "energy_MeV_per_u": 225.0,
+      "path": "/mnt/sda/wuwei/delta_section0/energy_scan/topas_hu_n1000_e225.csv",
+      "sha256": "c33eb98ac72eb73ee316fd73711784851d88b683be890f4d1fae4912ff47c56b",
+      "deep_mean_per_slice": 0.052952821932842814,
+      "physical_forward_fraction": 0.07512493515245171,
+      "physical_lambda_mm": 19.733909605829616,
+      "fitted_forward_fraction": 0.09014992218294204,
+      "fitted_lambda_mm": 25.654082487578503
+    }
+  ],
+  "data_file": "data/schneider/schneider_section0_c12_delta_longitudinal_v1.csv",
+  "data_filename": "schneider_section0_c12_delta_longitudinal_v1.csv",
+  "data_sha256": "f42140bc6a99ca90ef9a7fc267c22be9a6d8002192644dbe45b7a40c4e10820b",
+  "data_size_bytes": 128,
+  "file_size_bytes": 128
+}

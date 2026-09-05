@@ -103,4 +103,53 @@ SchneiderDeltaTailTable SchneiderDeltaTailTable::from_csv(
     return out;
 }
 
+SchneiderLongitudinalTable SchneiderLongitudinalTable::from_csv(
+    const std::filesystem::path& path) {
+    std::ifstream input(path);
+    if (!input) {
+        throw std::runtime_error(
+            "Cannot open Schneider longitudinal table: " + path.string());
+    }
+    SchneiderLongitudinalTable out;
+    std::string line;
+    bool saw_header = false;
+    float previous_energy = -1.0F;
+    while (std::getline(input, line)) {
+        if (line.empty() || line[0] == '#') continue;
+        if (!saw_header) {
+            if (line != "energy_MeV_per_u,forward_fraction,lambda_mm") {
+                throw std::invalid_argument(
+                    "Unexpected Schneider longitudinal CSV header");
+            }
+            saw_header = true;
+            continue;
+        }
+        const auto fields = split_csv(line);
+        if (fields.size() != 3) {
+            throw std::invalid_argument("Malformed Schneider longitudinal CSV row");
+        }
+        const auto energy = std::stof(fields[0]);
+        const auto fraction = std::stof(fields[1]);
+        const auto lambda = std::stof(fields[2]);
+        if (!std::isfinite(energy) || !std::isfinite(fraction) ||
+            !std::isfinite(lambda) || energy <= 0.0F || fraction <= 0.0F ||
+            fraction >= 0.5F || lambda <= 0.0F) {
+            throw std::invalid_argument(
+                "Nonphysical Schneider longitudinal CSV value");
+        }
+        if (energy <= previous_energy) {
+            throw std::invalid_argument(
+                "Schneider longitudinal energies must increase");
+        }
+        previous_energy = energy;
+        out.energies_MeV_per_u_.push_back(energy);
+        out.forward_fractions_.push_back(fraction);
+        out.lambdas_mm_.push_back(lambda);
+    }
+    if (!saw_header || out.energy_count() == 0) {
+        throw std::invalid_argument("Incomplete Schneider longitudinal table");
+    }
+    return out;
+}
+
 }  // namespace carbon

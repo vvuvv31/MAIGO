@@ -1718,12 +1718,19 @@ void write_energy_ledger_json(const std::filesystem::path& path,
            << "  \"ct_schneider_stopping_power_file\": \"" << config.ct_schneider_stopping_power_file.string() << "\",\n"
            << "  \"ct_schneider_cross_section_file\": \"" << config.ct_schneider_cross_section_file.string() << "\",\n"
            << "  \"ct_schneider_delta_tail_file\": \"" << config.ct_schneider_delta_tail_file.string() << "\",\n"
+           << "  \"ct_schneider_delta_longitudinal_file\": \"" << config.ct_schneider_delta_longitudinal_file.string() << "\",\n"
            << "  \"E_schneider_primary_delta_tail_moved_MeV\": "
            << result.schneider_primary_delta_tail_moved_MeV << ",\n"
            << "  \"E_schneider_primary_delta_tail_fallback_MeV\": "
            << result.schneider_primary_delta_tail_fallback_MeV << ",\n"
            << "  \"E_schneider_primary_delta_tail_escaped_scorer_MeV\": "
            << result.schneider_primary_delta_tail_escaped_scorer_MeV << ",\n"
+           << "  \"E_schneider_primary_delta_longitudinal_moved_MeV\": "
+           << result.schneider_primary_delta_longitudinal_moved_MeV << ",\n"
+           << "  \"E_schneider_primary_delta_longitudinal_fallback_MeV\": "
+           << result.schneider_primary_delta_longitudinal_fallback_MeV << ",\n"
+           << "  \"E_schneider_primary_delta_longitudinal_escaped_scorer_MeV\": "
+           << result.schneider_primary_delta_longitudinal_escaped_scorer_MeV << ",\n"
            << "  \"ct_schneider_physics_bundle_file\": \"" << config.ct_schneider_physics_bundle_file.string() << "\",\n";
     write_schneider_physics_provenance(output, config);
     write_validation_scope(output, config);

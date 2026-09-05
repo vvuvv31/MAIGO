@@ -16,6 +16,13 @@ using DoseAtomicT = double;
 inline constexpr bool k_dose_atomic_fp32 = false;
 #endif
 
+// 1-D depth tallies (depth dose, in-FOV depth dose) always accumulate in
+// double: cross-bin redistribution models (e.g. the longitudinal delta tail)
+// add many sub-ulp(float) shares to large per-bin totals, which float atomics
+// silently drop. The 3-D voxel array above keeps the fast float path; 1-D
+// arrays are tiny (hundreds of bins) so the extra traffic is negligible.
+using DepthAtomicT = double;
+
 // LET moment accumulation follows the same consumer-GPU-friendly default.
 // Results are promoted to double on the host. Explicit validation builds can
 // retain FP64 accumulation with -DCARBON_LET_FP64=ON.
