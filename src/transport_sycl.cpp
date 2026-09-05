@@ -1302,28 +1302,30 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                 throw std::runtime_error(
                     "Schneider delta-tail requires a scorer exactly aligned to the CCTG grid");
             }
+            // Grid edges are not material interfaces: inspect existing neighbours only.
+            // Sampled endpoints still use the scorer-escape and material checks below.
             std::vector<std::uint8_t> eligible(voxel_count, 0U);
             const auto min_spacing = std::min({grid.spacing_x_mm, grid.spacing_y_mm,
                                                grid.spacing_z_mm});
-            for (std::uint32_t iz = 1; iz + 1 < grid.nz; ++iz) {
-                for (std::uint32_t iy = 1; iy + 1 < grid.ny; ++iy) {
-                    for (std::uint32_t ix = 1; ix + 1 < grid.nx; ++ix) {
+            for (std::uint32_t iz = 0; iz < grid.nz; ++iz) {
+                for (std::uint32_t iy = 0; iy < grid.ny; ++iy) {
+                    for (std::uint32_t ix = 0; ix < grid.nx; ++ix) {
                         const auto index = ct_linear_index(ix, iy, iz, grid.nx, grid.ny);
                         if (grid.material_id[index] != 0U) continue;
                         bool clear = true;
                         if (grid.spacing_x_mm <= min_spacing * 1.001F) {
-                            clear = clear && grid.material_id[index - 1] == 0U &&
-                                    grid.material_id[index + 1] == 0U;
+                            clear = clear && (ix == 0 || grid.material_id[index - 1] == 0U) &&
+                                    (ix + 1 == grid.nx || grid.material_id[index + 1] == 0U);
                         }
                         if (grid.spacing_y_mm <= min_spacing * 1.001F) {
                             clear = clear &&
-                                grid.material_id[index - grid.nx] == 0U &&
-                                grid.material_id[index + grid.nx] == 0U;
+                                (iy == 0 || grid.material_id[index - grid.nx] == 0U) &&
+                                (iy + 1 == grid.ny || grid.material_id[index + grid.nx] == 0U);
                         }
                         if (grid.spacing_z_mm <= min_spacing * 1.001F) {
                             const auto plane = static_cast<std::size_t>(grid.nx) * grid.ny;
-                            clear = clear && grid.material_id[index - plane] == 0U &&
-                                    grid.material_id[index + plane] == 0U;
+                            clear = clear && (iz == 0 || grid.material_id[index - plane] == 0U) &&
+                                    (iz + 1 == grid.nz || grid.material_id[index + plane] == 0U);
                         }
                         eligible[index] = clear ? 1U : 0U;
                     }

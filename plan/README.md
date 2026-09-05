@@ -1,5 +1,25 @@
 # Schneider CT material-dependent transport plan
 
+## Current strict-dose refinement (2026-09-05)
+
+Entrance-mask correction remains a single-shard candidate, not a replacement
+for the frozen full20 baseline. Global 3%/0mm improves 98.000 -> 98.140%
+in the paired shard; local 1%/1mm does not improve.
+Two 12-history TOPAS electron-ancestry diagnostics close against 3D dose
+within 1e-8 and show forward longitudinal energy migration missing from
+the transverse-only model. These are preliminary finite-slab measurements,
+not a validated new physics table. Next gate: bounded-output joint electron
+response and explicit escape accounting, followed by independent geometry
+validation. No package change or new full20 run.
+See [diagnostic evidence](../evidence/step-31/entrance-mask-candidate/longitudinal-diagnostic.md).
+
+Follow-up: same-seed binary TOPAS job 2338 preserves the 3D dose exactly and
+closes electron birth = family deposit + escape to 1.3e-16 relative. Joint
+radial/longitudinal histogram and nine diagnostic tests are available.
+ASCII boundary-coordinate rounding was detected and not bypassed. The
+finite-slab response remains preliminary; no GPU/package promotion or new
+Gamma/full20 run in this follow-up.
+
 ## Purpose and authority
 
 This directory is the single progress controller for the Schneider CT workstream. The water/CINEL secondary-species line is frozen at the repository state recorded by Step 00. CT work must not tune water physics or silently reuse water H/O physics for other elements.

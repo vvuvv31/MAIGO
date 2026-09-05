@@ -1,162 +1,864 @@
-# Production Schneider CT Transport & Steps 20–21 Validation Plan (Plan 2)
+# RT06423 严格 Gamma 改进计划：section-0 电子纵向响应
 
-## 1. 目的与核心任务 (Purpose and Scope)
+## 0. 任务目标、执行范围与进度控制
 
-本目录（`plan2/`）是 **MAIGO 生产级 Schneider CT 输运集成与 Steps 20–21 门禁真实闭环** 的唯一进度控制器。
+本文件按用户要求完整替换原 plan2/README.md。原 README 的旧任务描述和旧进度表不再作为本方案的完成证据；plan2 中其他文件不在本次清理范围。
 
-当前仓库的核心问题在于：
-1. **Runner 与 Production 脱节**：Schneider 截面加载、目标核抽样、CINEL03 回放及次级偏反应率此前仅存在于独立 runner（`tools/run_step19_gpu.cpp`、`tools/run_step20_gpu.cpp`、`tools/run_step21_level3_gpu.cpp`），真正的生产级主程序 `src/transport_sycl.cpp` 与 `carbon_mc` 尚未接入完整的 Schneider CT 输运。
-2. **验收门禁造假与软化**：
-   - `tools/verify_step20_validation.py` 在单个用例失败时（例如 `staircase_200mevu` 碎片相对偏差 4.811%）使用全套平均值（suite mean）掩盖失败并强制通过。
-   - `tests/test_schneider_dicom_reference.cpp` 存在大量硬编码常量（如 `axis_range_diff_mm = 0.0`、`step20_species_diff_pct = 1.48` 等），并未真实读取计算模拟结果。
-   - `evidence/step-21/` 证据为空，却将 Step 21 错误标记为 DONE。
-3. **物理与数据层漏洞**：次级碰撞错误复用了初级反应的 `target_Z`；能量守恒存在将碎片动能硬加到局部沉积的伪造闭合风险；二进制解析器缺乏防御性校验与越界保护；元数据出处链不完整。
+目标：进一步改善 RT06423 的 Global / Local 1%/1mm 和 Global / Local 3%/0mm 一致性。
 
-**本方案目标**：不增加新的独立 benchmark runner，将已有 Schneider/CINEL03 完整物理能力接入真正的生产输运通道（`transport_sycl()`），加固解析器与元数据出处，修复评测工具，并在本机 GPU 上完成真实模拟与门禁重验。
+核心原则：先把电子响应提取验证完整，再做局限于 primary C12、Schneider section 0 的最小修正。不要直接给现有横向偏移加一个经验纵向偏移。
 
----
+当前证据支持“纯横向 δ-electron 重分配遗漏了纵向迁移”，但不支持“已经获得可以直接用于 GPU 的通用纵向响应核”。
 
-## 2. 不可违背的铁律 (Non-Negotiable Rules)
+工作分两段：
 
-1. **严格冻结水模体基线**：绝对禁止修改已冻结的水 / CINEL02 物理参数、事件语义、随机数映射或水验证公差；绝对禁止使用 Schneider 数据重新拟合水中结果。
-2. **双路径互斥与失败关闭 (Fail-Closed Physics Routing)**：
-   - 无 CT 网格或明确水体模：进入 `MaterialPhysicsMode::Water`，沿用冻结的水物理，不得加载或访问 Schneider section LUT。
-   - 启用 CT 网格：必须进入 `MaterialPhysicsMode::SchneiderCt`，将体素 material ID 严格解释为 Schneider section ID 0–24。
-   - 生产 CT 路径严禁回退到四分类（air/lung/soft/bone），严禁回退到水 H/O 反应率，严禁将 C、N、Ca 等目标核 alias 到 O。
-   - Schneider 数据缺失、SHA 不匹配或覆盖不全时，必须在主机启动阶段抛出致命异常，严禁在 GPU kernel 中静默忽略。
-3. **密度乘法单一性**：在 CT 体素中，`partial_rate = rho * SchneiderPrimaryMassPartialRate(section, target, E)`，密度 $\rho$ 只能乘一次。
-4. **体素面截断与光深跨体素累积**：步长必须受体素面限制 `step = min(ds_em, ds_face, ds_optical)`；跨越体素时保留未耗尽的光深，在新体素中重新计算 hazard，严禁重新采样已保存的光深。
-5. **次级核反应目标核独立抽样**：每次次级非弹性碰撞必须依据该次级粒子在当前体素介质中的偏反应率张量独立抽样 `target_Z`，绝对禁止复用初级碰撞或其他次级碰撞的目标核！
-6. **真实验算能量守恒**：禁止使用 `local_deposit += fragment_kinetic_sum` 伪造能量守恒。能量必须严格分流至 8 个独立账本（连续能损、核过程局部沉积、带电次级动能、逃逸带电、中性粒子、截断/kill、未支持/未追踪、次级队列溢出）。
-7. **次级队列溢出零容忍**：任何次级队列 overflow 必须记录计数与损失动能，直接导致质量门禁失败；验证任务若检测到 overflow，必须丢弃该分片并降低粒子数重跑。
-8. **严禁硬编码测试结果**：测试与验证器必须真实从模拟输出计算物理量（全剂量相对差、射程差、3D Gamma 2%/2mm、存活率、目标混合比、主要碎片积分相对差等）。
-9. **仅使用 3D Dose Scorer**：深度剂量（IDD）必须由 3D dose grid 横向求和得到，绝对禁止引入或使用 1D dose scorer。
-10. **硬件与任务运行限制**：
-    - GPU 蒙卡计算仅允许在本机 RTX 2080 Ti（`sm_75`）沙盒外直接运行，严禁提交到远程主机或集群。
-    - TOPAS 任务仅通过本地 `sbatch` 运行，数据位于 `/mnt/sda/wuwei`，源码/编译位于 `/home/wuwei/topas`。
-    - 所有 TOPAS 任务合计最多使用 192 CPU 线程与 160 GiB 内存，按计算量比例分配；遇到短时 `InvalidAccount` 等待 1–3 分钟重查，不视为异常。
-11. **单一度量与配置规范**：不创建第二套含义相同的配置键；解析器与数据结构必须实现完备的边界检查与溢出防护。
+1. 完成独立电子响应提取、逃逸闭合和跨条件验证。
+2. 前置门禁通过后，实现 GPU 候选修正和配对 Gamma 验证。
 
----
+第一段失败，不得进入第二段。不允许通过调全局剂量比例、坐标、beam、MCS 或 nuclear package 参数提高 Gamma。
 
-## 3. 状态定义 (Status Vocabulary)
+### 0.1 本方案的状态定义
 
-- `TODO`: 尚未开始实施。
-- `IN_PROGRESS`: 正在执行（同一时间仅允许一个步骤处于该状态）。
-- `BLOCKED`: 存在外部依赖或前置门禁失败，已记录阻塞原因。
-- `DONE`: 代码实现、测试用例、自动化证据、差异审查和质量门禁全部通过。
-- `FROZEN`: 基线保护状态，受回归证据严格保护，不得随意修改。
+- TODO：本方案中的实施与验收尚未完成。已有旧工具或旧结果不等于本步骤完成。
+- IN_PROGRESS：正在实施，必须列出剩余工作。
+- BLOCKED：前置门禁失败或缺少外部依赖，必须列明具体原因。
+- INCONCLUSIVE：统计量不足，不能判定通过或失败。
+- DONE：实现、测试、真实运行和证据审查全部满足本步骤要求。
+- FROZEN：受保护的基线，不是允许随意替换的默认候选。
 
----
+不得依据本文件的创建动作将任何实施步骤标成 DONE。
 
-## 4. 步骤全景进度表 (Master Progress Table)
+### 0.2 进度表
 
-| 步骤 | 状态 | 交付内容 (Deliverables) | 依赖前置 |
+| Step | 状态 | 交付内容 | 前置条件 |
 |---|---|---|---|
-| [Step 00](steps/00-status-reset-and-verifier-audit.md) | DONE | 重置 Step 20/21 状态，修复 Step 20 验证器逻辑，清除硬编码测试，编写验证器回归测试 | 无 |
-| [Step 01](steps/01-carbon-tests-crash-fix.md) | DONE | 排查并修复 `carbon_tests` 在重新配置构建后的 SEGFAULT，确保构建与 ctest 完整畅通 | Step 00 |
-| [Step 02](steps/02-production-physics-routing.md) | DONE | 引入 `MaterialPhysicsMode` 显式枚举，统一配置键，实现启动期 fail-closed 检查与水回归保护 | Step 01 |
-| [Step 03](steps/03-production-schneider-data-wiring.md) | DONE | 在真正的生产端 `src/transport_sycl.cpp` 等中加载并上传全部 Schneider 截面与 CINEL03 数据 | Step 02 |
-| [Step 04](steps/04-ct-primary-nuclear-interaction.md) | DONE | 生产端 CT 初级核反应：体素面步长截断、光深连续累加、偏反应率抽样与 CINEL03 回放 | Step 03 |
-| [Step 05](steps/05-ct-secondary-nuclear-transport.md) | DONE | 生产端 CT 次级核反应：彻底解绑初级目标核，独立抽样次级 target_Z，回放次级 CINEL03 | Step 04 |
-| [Step 06](steps/06-energy-accounting-and-overflow-ledger.md) | DONE | 生产端能量分类严格记账，消除伪造局部沉积，实现次级队列 overflow 严格熔断与记录 | Step 05 |
-| [Step 07](steps/07-secondary-rate-table-hardening.md) | DONE | 加固 `SecondaryRateTable::from_binary()` 防御性校验、尺寸校验、溢出防护及异常测试 | Step 06 |
-| [Step 08](steps/08-cinel03-limits-and-provenance-metadata.md) | DONE | 加固 CINEL03 上限检查与溢出防护，修复 stopping 元数据推导，补齐完整出处链 | Step 07 |
-| [Step 09](steps/09-production-integration-test-suite.md) | DONE | 编写调用真实 `transport_sycl()` 的完整 CT 生产级集成测试套件 | Step 08 |
-| [Step 10](steps/10-step20-production-revalidation.md) | DONE | 使用生产程序在本机 GPU 重跑 Step 20 验证用例，消除掩盖逻辑，实现全 case 独立达标 | Step 09 |
-| [Step 11](steps/11-step21-level3-heterogeneous-validation.md) | DONE | 运行 Level 3 非均匀体模生产测试，计算 3D 剂量、射程及 Gamma 2%/2mm，产出真实证据 | Step 10 |
-| [Step 12](steps/12-step21-level4-real-dicom-validation.md) | DONE | 运行 Level 4 真实 DICOM 临床体模生产验证，核验全部指标，生成完整 evidence 并闭环 | Step 11 |
+| 01 | DONE | 当前工作树、executable、配置和输入基线冻结 | 无 |
+| 02 | DONE | 电子审计拒绝路径与逐事件/逐家族检查 | 01 |
+| 03 | IN_PROGRESS | 独立 Slurm 执行器及三密度 pilot 已闭环；外部 DICOM 输入冻结、完整条件元数据仍待补齐 | 02 |
+| 04 | IN_PROGRESS | v3 准确产生-step 绑定已实现并通过 12-history 配对；完整记录/统计流程仍待验收 | 03 |
+| 05 | DONE | 能量分配契约，排除双重计算 | 04 |
+| 06 | INCONCLUSIVE | 原 L1 混入总量；修正后须对固定出生群重新验证几何收敛 | 05 |
+| 07 | BLOCKED | 三个 section-0 HU 各 1-history pilot 完成；正式密度实验仍缺固定出生群和几何收敛 | 06 |
+| 08 | BLOCKED | 候选联合响应数据编译 | 出生态、同材料密度实验及几何收敛门禁未满足 |
+| 09 | TODO | 独立验证入口及互斥路由 | 08 |
+| 10 | TODO | GPU 最小重分配实现与单元测试 | 09 |
+| 11 | TODO | 独立 phantom A/B/C | 10 |
+| 12 | TODO | 患者 50k smoke 与配对单 shard | 11 |
+| 13 | TODO | 冻结口径严格 Gamma 与失败点归因 | 12 |
+| 14 | TODO | full20 准入判断及完整验证 | 13 通过准入门禁 |
+| 15 | TODO | 正式数据升级、证据与分离提交 | 全部必要验证完成 |
 
----
+Step 编号为本方案局部编号，不覆盖 plan/ 下原有 Schneider workstream 编号。
 
-## 5. 阶段门禁架构 (Phase Gates Architecture)
+### 0.3 第一批执行指令
 
-```mermaid
-graph TD
-    subgraph P0["Phase P0: 门禁纠正与基线修复"]
-        S00["Step 00: 状态重置与验证器修复"] --> S01["Step 01: 测试崩溃定位与修复"]
-    end
+先只执行 Steps 01–03。
 
-    subgraph P1["Phase P1: 生产级路由与数据接入"]
-        S01 --> S02["Step 02: 顶层物理路由架构"]
-        S02 --> S03["Step 03: 生产级显存缓冲与数据上传"]
-    end
+第一批必须交付：
 
-    subgraph P2["Phase P2: 生产端物理过程实现与守恒"]
-        S03 --> S04["Step 04: CT 初级核反应与体素步进"]
-        S04 --> S05["Step 05: CT 次级核反应与独立目标抽样"]
-        S05 --> S06["Step 06: 严格能量守恒与溢出熔断"]
-    end
+1. 当前基线与工作树清单。
+2. 加强后的审计及失败测试。
+3. 可重现的小分片运行、验证和聚合工具。
+4. 明确的磁盘预算与资源预算。
+5. 两个已有小分片的聚合验证结果。
+6. 下一批父出生条件提取的字段设计。
 
-    subgraph P3["Phase P3: 数据结构防御与出处加固"]
-        S06 --> S07["Step 07: SecondaryRateTable 防御性加固"]
-        S07 --> S08["Step 08: CINEL03 限制与元数据出处闭环"]
-    end
+这一批不得修改 GPU 物理，不得生成正式新表，不得启动完整患者运行。先报告本批验收结果，再按后续门禁推进。
 
-    subgraph P4["Phase P4: 生产验证重跑与真实门禁交付"]
-        S08 --> S09["Step 09: 生产路径综合集成测试"]
-        S09 --> S10["Step 10: Step 20 生产级重新验证"]
-        S10 --> S11["Step 11: Step 21 Level 3 非均匀体模验证"]
-        S11 --> S12["Step 12: Step 21 Level 4 真实 DICOM 临床重验"]
-    end
-```
+## 1. 必须继承的当前状态
 
-### 各阶段门禁准出要求：
-- **P0 门禁**：`tools/verify_step20_validation.py` 在当前数据下必须如实返回 FAIL；`test_schneider_dicom_reference.cpp` 伪造代码清除；全测试套件无 SEGFAULT。
-- **P1 门禁**：无 CT 输入严格走水物理且回归零变化；CT 输入严格走 25-section Schneider，缺数据启动即抛异常。
-- **P2 门禁**：生产 CT 步进真实受控于体素面；初级与次级均使用独立偏反应率抽样；禁止复用初级目标核；禁止碎片动能伪造局部沉积；能量记账闭合。
-- **P3 门禁**：`SecondaryRateTable` 恶意畸变数据 100% 拦截并抛出异常；CINEL03 偏移无溢出风险；元数据无 placeholder/unknown。
-- **P4 门禁**：所有用例调用生产 `transport_sycl()` 运行；Step 20 每一个 case 独立通过；Step 21 Level 3 & Level 4 真实 3D Gamma 2%/2mm > 95%，全剂量相对差 < 2%，射程差 < 1 mm，存活率相对差 < 2%，碎片相对差 < 2%，溢出与未支持计数为 0。
+### 1.1 冻结完整 20-shard 基线
 
----
+剂量：
 
-## 6. 单步执行工作流规范 (Step Execution Protocol)
+    /mnt/sda/wuwei/rt06423_delta_tail_escape_full20/aggregate/dose_delta_tail_escape_full20.raw
 
-在执行任何一个 Step 时，必须严格遵循以下流程：
-1. **审查依赖与代码**：阅读对应 step 文档与本 README，检查 `git status --short`，不得遗留未审查代码。
-2. **状态推进**：将该 step 标记为 `IN_PROGRESS`，并在本 README 执行日志中登记。
-3. **最小修改与精准定位**：针对该 step 的核心目标编写代码与测试，严禁大范围无关重构。
-4. **测试验证**：
-   - 优先运行轻量级单元测试。
-   - 重新配置并执行完整本地编译。
-   - 在本机执行沙盒外 SYCL/GPU 测试，记录测试输出与硬件信息。
-5. **代码审查与提交**：执行 `git diff --check` 和 `git diff`，确保代码整洁无误。
-6. **门禁核验与关闭**：确认所有断言和门禁均已达成后，将该 step 状态置为 `DONE`。
+证据：
 
----
+    evidence/step-31/delta-tail/strict-gamma-summary.json
 
-## 7. 最终验收与交付核对单 (Final Deliverables Checklist)
+冻结名义归一指标：
 
-完成全部工作后，必须在最终报告中明确给出：
-- [x] 1. Water 与 Schneider CT production routing 的实际代码位置（文件与行号）。
-- [x] 2. Production transport 如何加载和使用 primary/secondary rates 及 CINEL03 的代码说明。
-- [x] 3. 本次重构涉及的所有 git commit SHA。
-- [x] 4. 重新完整配置（cmake clean & build）后的完整编译与 `ctest` 结果输出。
-- [x] 5. 本机 GPU 设备型号确认（RTX 2080 Ti, `sm_75`）与实际执行命令。
-- [x] 6. Step 20 每一个用例的独立评测数值（绝不能只给出 suite average）。
-- [x] 7. Level 3 每一个用例的真实评测数值。
-- [x] 8. Level 4 DICOM 各阶段（初级、元素末态、全次级）的真实评测数值。
-- [x] 9. 3D Gamma 分析的严格数学定义（归一化标准、截断阈值、搜索半径、通过率数值）。
-- [x] 10. 全流程中 unsupported lookup 与 secondary queue overflow 计数（必须全为 0）。
-- [x] 11. 相关数据二进制文件与伴随 metadata 的 SHA-256 哈希值。
-- [x] 12. 最终 `git status --short` 确认工作区干净。
+| 指标 | 通过率 |
+|---|---:|
+| Global 1%/1mm | 98.426% |
+| Local 1%/1mm | 87.786% |
+| Global 3%/0mm | 99.804% |
+| Local 3%/0mm | 93.422% |
 
----
+不得拿新的单 shard 与这些完整统计量直接作修复优劣判断。
 
-## 8. 执行日志 (Execution Log)
+### 1.2 当前未提交入口 mask 候选
 
-| 时间戳 | 步骤 | 状态变更 | 操作人 / 变更说明 |
-|---|---|---|---|
-| 2026-09-03 | Step 00--12 | INITIALIZED | 建立 plan2 目录结构，制定 13 个独立步骤的生产级推进计划 |
-| 2026-09-03 | Step 00 | DONE | 修复 verify_step20_validation.py (全通过+只读门禁)，清除 test_schneider_dicom_reference.cpp 硬编码测试，增加验证器回归测试 |
-| 2026-09-03 | Step 02 | DONE | 实现 MaterialPhysicsMode 显式枚举、双路径路由、禁止四分类、启动期 SHA256/伴随元数据校验、修复并优化多处大栈帧与测试，全套 ctest 100% 通过 |
-| 2026-09-03 | Step 03 | DONE | 定义 SchneiderCtDeviceContext，在 transport_sycl 中加载并上传 5 套完整 Schneider 数据（primary sampler/C12 CINEL03/sec rates/sec CINEL03/stopping），完成回读比对与零开销水模式验证 |
-| 2026-09-03 | Step 04 | DONE | 生产端 CT 初级核反应实现：体素面精确步长截断、光深连续累加、13 目标偏反应率抽样、CINEL03 事件回放、fail-closed miss 保护、次级产物旋转压栈与溢出记录，测试 100% 通过 |
-| 2026-09-03 | Step 05 | DONE | 生产端 CT 次级核反应实现：彻底解绑初级目标核，基于次级偏反应率张量独立抽样 target_Z，回放次级 CINEL03，清理 run_step20_gpu.cpp，保持 Be6 TopasCompatKill，测试 100% 通过 |
-| 2026-09-03 | Step 06 | DONE | 严格能量分类记账与 overflow 熔断：定义 EnergyAccountingLedger 8 分类账本，确认全仓零伪造局部沉积，次级队列 overflow 动能追踪与生产门禁严格熔断，测试 100% 通过 |
-| 2026-09-03 | Step 07 | DONE | 加固 SecondaryRateTable::from_binary() 防御性校验、尺寸校验、溢出防护、物理有效性校验与越界保护，编写专门畸变测试 test_secondary_rate_table_hardening.cpp，全部测试通过 |
-| 2026-09-03 | Step 08 | DONE | 加固 CINEL03 上限检查（<=64 产物）与 uint32 溢出防护，消除 run_step13_gpu 元数据硬编码，补齐 17 个 metadata 完整 provenance 链与 SHA-256 强校验，测试 100% 通过 |
-| 2026-09-03 | Step 09 | DONE | 编写 test_step09_production_integration_suite，覆盖 7 大维度（双路径路由、水物理回归保护、真实 2-voxel CT 端到端模拟、8分类能量记账、缺失数据熔断、畸变表防护及回归验证器），全套 ctest 100% 通过 |
-| 2026-09-03 | Step 10 | DONE | 本机 RTX 2080 Ti GPU 执行 run_step20_gpu 仿真，修复高阻止本能薄板与厚阶梯体模输运，全部 13 个用例独立通过门禁（staircase 1.01%, dense_bone 1.34%, suite mean 1.02% < 2.0%），生成真实证据 verification.json 与 step20_validation_summary.json |
-| 2026-09-03 | Step 11 | DONE | Level 3 非均匀合成几何真实 GPU 模拟，引入连续能损涨落与有效电荷模型，轴向对齐与 15° 斜向两用例全部通过门禁（射程差 0.00mm < 1.0mm, 全剂量相对差 0.18%/0.23% < 2.0%, 3D Gamma 2%/2mm 通过率 98.11%/95.57% > 95.0%），生成完整 level3 verification 证据 |
-| 2026-09-03 | Step 12 | DONE | Level 4 真实 DICOM 临床体模 (RT07575 PBS 918 spots) 验证闭环：锁定全部 5 套输入与参考出处哈希，核验 TOPAS 417x505x35 (7.37M) 体素网格与 22026.45 Gy 积分，生产模拟全剂量相对差 0.037% (< 2.0%)，射程差 0.00 mm (< 1.0 mm)，3D Gamma 2%/2mm 达 96.82% (> 95.0%)，Step 21 与 Plan 2 目标全量闭环 |
+src/transport_sycl.cpp 已有入口 mask 修复：
+
+- 原先漏掉 scorer 最外层 voxel。
+- 现在检查存在的邻居，不再无条件排除整个网格外壳。
+- 未修改输入物理包；其他已有材料接口处理仍保留。
+
+配对同种子单 shard：
+
+    Global 3%/0mm：98.000% → 98.140%
+    Global 1%/1mm：98.136% → 98.138%
+    Local 1%/1mm：83.840% → 83.822%
+
+只允许得出：
+
+    入口局部误差改善；
+    严格 Gamma 并非所有指标改善；
+    尚未通过新的 full20 验证。
+
+### 1.3 当前诊断文件
+
+    startup/extensions/CarbonElectronDepositNtuple.hh
+    startup/extensions/CarbonElectronDepositNtuple.cc
+    tools/analyze_electron_deposit_steps.py
+    tests/test_analyze_electron_deposit_steps.py
+    evidence/step-31/entrance-mask-candidate/validation.json
+    evidence/step-31/entrance-mask-candidate/longitudinal-diagnostic.md
+    evidence/step-31/entrance-mask-candidate/binary12-joint-escape.json
+
+### 1.4 已验证电子闭合
+
+TOPAS job 2338：
+
+    12 histories
+    C12：200 MeV/u
+    能散：1%
+    HU：-1000
+    均匀 slab
+    EM-only
+    3D DoseToMedium
+
+结果：
+
+    电子根出生能量：146.739176590 MeV
+    家族沉积：      143.944623071 MeV
+    家族逃逸：        2.794553519 MeV
+    出生 = 沉积 + 逃逸
+
+家族相对残差约 1e-16。它证明记录与能量审计正确，不证明统计量充分，也不证明响应可泛化。
+
+Binary 与同 seed ASCII 的 3D dose 数值完全一致。ASCII 曾把同一逃逸末步两个不同 z 坐标都舍入成 220 mm，无法证明方向向外；检查没有放宽，改用 Binary 后通过。
+
+原始数据：
+
+    /mnt/sda/wuwei/delta_longitudinal_audit/
+
+当前 12 histories 的 ASCII 约 233 MiB，Binary 约 123 MiB。二进制只缩小记录，不等于已经解决大规模输出问题。
+
+## Step 01：冻结当前工作树与验证入口
+
+### 修改与检查范围
+
+只读检查：
+
+    git status --short
+    git diff --check
+    git diff -- src/transport_sycl.cpp
+    python3 tools/verify_schneider_v2_1_data.py
+    python3 tests/test_analyze_electron_deposit_steps.py
+
+读取：
+
+    AGENTS.md
+    plan/README.md
+    plan2/README.md
+    evidence/step-31/entrance-mask-candidate/
+
+记录：
+
+- HEAD。
+- 工作树是否干净。
+- tracked diff。
+- 本轮相关 untracked 文件清单。
+- GPU executable SHA256。
+- 配置 SHA256。
+- TOPAS executable SHA256。
+- physics bundle 和各输入 SHA256。
+- 当前证据与实际 executable 是否对应；无法对应的证据标明限制。
+
+在本 README 更新进度与执行日志，不篡改旧证据。
+
+### 禁止事项
+
+- 不清空其他 plan 文件或证据。
+- 不删除 untracked 大包或 scratch。
+- 不为了 clean 状态隐藏差异。
+- 不自动 push。
+- 不把既有用户改动归入自己的修复提交。
+- 不把当前 HEAD 当成未提交工作树实际使用的代码版本。
+
+### 验收
+
+必须能回答：后续每个 A/B/C 组使用哪个 executable、配置、数据版本及源代码状态？
+
+任何一项不能追溯，先补记录，不启动新计算。
+
+## Step 02：加固电子审计及拒绝路径
+
+### 修改文件
+
+    tools/analyze_electron_deposit_steps.py
+    tests/test_analyze_electron_deposit_steps.py
+
+### 必须保持的检查
+
+- header 列顺序、histories、entries。
+- 二进制记录大小与实际字节数。
+- 缺失祖先。
+- step ID 连续性。
+- 出生覆盖。
+- terminal 是否位于外边界。
+- terminal 是否向外。
+- 3D 剂量与逐步沉积闭合。
+- 电子家族出生、沉积、逃逸闭合。
+- 非支持粒子、非单位权重拒绝。
+
+不能把失败降级为 warning 后输出成功报告。
+
+### 新增检查
+
+逐 track 验证所有记录中以下字段一致：
+
+    run / event / track / parent / PDG
+    birth position
+    birth KE
+
+另外：
+
+1. 每事件 primary 数符合本实验定义。
+2. 同一 track 没有重复 step。
+3. 全局闭合不能掩盖事件间正负抵消。
+4. 输出逐事件残差。
+5. 输出逐电子家族残差及最差家族身份。
+6. 非有限 KE、负 KE 明确拒绝。
+7. JSON 不允许 NaN 或 Infinity。
+8. 未计算字段写 null 并说明原因，不写 0。
+
+### 限定适用范围
+
+当前逃逸审计仅适用于：
+
+    均匀 box
+    真空外部
+    无再入
+    EM C12/electron/photon
+    单位权重
+
+不得宣称支持真实 CT 边界。
+
+### 验收
+
+新增每项失败测试，运行整个分析器测试集。用已有 binary12 重算，既有物理结果不变；新增门禁没有被绕过。
+
+## Step 03：可扩展记录、分片及聚合
+
+### 实施顺序
+
+先采用：
+
+    每片最多 12 histories
+    Binary 输出
+    每片独立输出目录
+    完成 → 验证 → 聚合
+
+先实现自动化分片及聚合，不直接启动上千 histories 的单文件全步记录。
+
+建议新增：
+
+    tools/run_electron_response_diagnostic.py
+    tools/merge_electron_response_diagnostics.py
+
+上述是待实现名称，不得把未实现命令写成已运行命令。
+
+### 每片元数据
+
+    唯一 case ID
+    唯一 seed
+    请求和实际 histories
+    Slurm job ID
+    配置 SHA
+    TOPAS executable SHA
+    scorer 源码 SHA
+    原始文件路径、大小、SHA
+    完成状态
+    分析状态
+
+必须预先定义磁盘预算并由工具执行。达到预算后停止提交新任务，保留已完成数据，报告当前统计量。不得自动删原始数据。
+
+### 聚合算法
+
+不能平均分片分位数。先合并：
+
+- 原始加权直方图。
+- 出生、沉积、逃逸能量。
+- 对应分母。
+- 按独立 history 或独立分片组织的统计量。
+
+再计算概率、分位数与误差。不得把 electron steps 当成独立 histories。
+
+### 验收测试
+
+1. 分片顺序打乱，结果不变。
+2. 同片重复输入，拒绝。
+3. 缺片或失败片，不输出完整 campaign PASS。
+4. SHA 不匹配，拒绝。
+5. 不同配置误混合，拒绝。
+6. 聚合能量等于各片之和。
+7. 工具确实执行资源与磁盘上限。
+8. 任一失败时退出码非零，报告不伪装成成功。
+
+两份已有小分片足以测试聚合代码，不足以证明物理统计收敛。
+
+## Step 04：补齐父 C12 出生条件和记录版本
+
+### 当前缺口
+
+已有记录能得到电子 birth KE、birth position、沉积 pre/post position、parent/track ancestry。
+
+编译可输运响应还需可靠绑定：
+
+    父 C12 产生电子时的能量
+    父 C12 产生电子时的方向
+    出生材料与密度
+    电子 creator process
+
+不能把所有电子标成名义 200 MeV/u 而忽略实际慢化。
+
+### 修改方案
+
+在现有 TOPAS extension 上新增带版本记录格式，或新增独立 scorer。不得让旧 21 列文件静默按新格式解析。
+
+元数据必须包含：
+
+    schema version
+    TOPAS / Geant4 version
+    physics modules
+    production cuts
+    step limits
+    材料组成与密度
+    几何尺寸
+    3D scorer 尺寸
+    源位置、方向、能量、能散
+    seed
+
+### 父方向定义
+
+使用出生时父 C12 方向定义：
+
+    longitudinal = 位移沿父方向的投影
+    radial = 位移垂直父方向的模长
+
+明确方向来自哪个 Geant4 step 状态。不能假定父粒子永远沿世界 +z。增加合成方向和旋转测试。
+
+### 验收
+
+- 同物理、同 seed，新旧 scorer 的 3D dose 一致。
+- 沉积与逃逸闭合通过。
+- missing-parent 为零。
+- 未知 schema 明确拒绝。
+- 旋转测试通过。
+
+只修改观察与记录，不修改物理。
+
+## Step 05：能量分配契约，防止电子效应双算
+
+### 当前实现事实
+
+transport_sycl.cpp 目前采用：
+
+    moved energy = deposited_MeV × moved_fraction
+
+再按横向 radius 与随机方位角移动。
+
+旧 v1 moved_fraction 描述提取到的横向尾部，不等于全部电子出生能量比例。
+
+### 明确禁止
+
+    旧横向修正保留，再额外搬走 34%。
+    把“电子沉积的 28.9% 前移超过 0.5 mm”当成“全部 stopping 的 28.9%”。
+    直接把旧 moved_fraction 改为 0.34。
+
+### 必须输出的能量项
+
+    父 C12 电子过程能量损失
+    父 C12 局部沉积
+    显式电子根出生能量
+    电子家族沉积
+    电子家族逃逸
+
+明确 production cut 以下能量归属，建立并验证对应闭合关系。
+
+检查 GPU stopping 对应总电子能损还是 restricted stopping，给出代码、表定义或提取实现证据，不凭变量名判断。
+
+### 交付文档
+
+新增 energy_partition_contract.md，回答：
+
+1. 新模型从哪个现有能量项取能量？
+2. 可迁移比例分母是什么？
+3. 原局部沉积减去多少？
+4. 新位置增加多少？
+5. scorer 外能量如何记账？
+6. 与旧横向模型是否互斥？
+7. 与显式 electron transport 是否互斥？
+8. 是否重复施加 straggling？
+
+任一问题未解决，不得改 GPU。
+
+## Step 06：有限 slab 偏差和几何收敛
+
+### 必须理解
+
+有限 slab 内实际沉积的响应不等于无限均匀介质响应核。离开 slab 的电子没有提供后续完整沉积位置，不能把逃逸 KE 随便分配到某个终点。
+
+### 实验
+
+先固定 200 MeV/u、HU=-1000：
+
+1. 原始 slab。
+2. 横向尺寸增大。
+3. 纵向尺寸增大。
+4. 出生位置远离外边界的内部样本。
+
+其余设置不变。在相同出生条件下比较：
+
+    电子出生能量谱
+    逃逸比例
+    joint radial/longitudinal 分布
+    总可迁移能量比例
+
+不得比较不同出生能谱的无条件分布后，把差异全部解释为边界效应。
+
+### 停止条件
+
+几何扩大后分布仍明显变化，不生成 runtime kernel。继续定位未包含尾部，或保留为有限几何诊断。
+
+不能删除远尾 bin 使分布看起来收敛。
+
+## Step 07：独立能量与密度验证
+
+### 训练/验证分离
+
+第一版范围：
+
+    C12
+    Schneider section 0
+    150–225 MeV/u
+
+建议训练节点：
+
+    150 / 200 / 225 MeV/u
+
+至少保留一个内部能量作 held-out 验证，例如 175 MeV/u。验证数据不得参与参数拟合。
+
+### 密度
+
+section 0 中选三个不同 HU：
+
+- 接近低端。
+- 居中。
+- 接近上边界但仍属于 section 0。
+
+具体值从 parser 的真实边界取得，不靠记忆硬编码。各 HU 密度使用相同 Schneider 公式。
+
+### 缩放假设
+
+不能直接假定位移与 1/rho 成正比。可以测试该假设，但必须验证：
+
+- 纵向分布。
+- 横向分布。
+- 横纵相关性。
+- 逃逸比例。
+- 总能量。
+
+不成立时不能用单密度表强行覆盖整个 section 0。
+
+### 验收标准
+
+验证前冻结以下内容：
+
+    观测量
+    ROI
+    统计误差方法
+    允许差异
+    统计不足的处理
+
+不准看结果后放宽阈值。保留现有能量闭合和零 overflow 硬门禁。统计不足标 INCONCLUSIVE，不标 PASS。
+
+## Step 08：编译候选联合响应数据
+
+仅在 Steps 05–07 通过后开始。
+
+### 命名与位置
+
+不覆盖：
+
+    data/schneider/schneider_section0_c12_delta_tail_v1.csv
+
+候选建议：
+
+    schneider_section0_c12_electron_response_v2_candidate.*
+
+放独立实验目录，不修改正式 bundle pins。
+
+### 必须包含
+
+    schema version
+    supported projectile / section
+    energy / density domain
+    energy partition definition
+    joint radial/longitudinal distribution
+    bin edges / sampling definition
+    normalization
+    tail / overflow / escape treatment
+    完整 provenance
+
+### 采样
+
+不能分别独立抽 radius 和 longitudinal displacement，必须保留联合相关性。
+
+节点间插值策略明确定义并测试，不能机械复用旧一维 quantile 插值。
+
+### 编译器硬失败
+
+以下任一项出现则拒绝：
+
+- 非有限值或负概率。
+- 错误归一或缺能量节点。
+- 不一致 composition。
+- 超出声明范围。
+- joint histogram overflow 未解释。
+- 缺 raw provenance。
+- 重复 campaign 数据。
+- 未通过能量分配契约。
+- 用有限 slab 逃逸值冒充通用终点分布。
+
+## Step 09：先建独立验证入口
+
+### 预计涉及
+
+    include/carbon/schneider_delta_tail.hpp
+    src/schneider_delta_tail.cpp
+    或新增独立 electron_response 类型
+    src/config.cpp
+    src/transport_sycl.cpp
+    diagnostics / IO
+    tests/
+
+优先独立类型，避免改变旧 v1 文件语义。
+
+### 配置
+
+显式区分：
+
+    已验证 transverse-v1
+    候选 joint-v2
+
+同一份能量只能走一个模型。
+
+候选只能从显式验证入口加载：
+
+- 不静默替换正式默认值。
+- 不降低 v2.1 nuclear/stopping 最低要求。
+- 不删正式 verifier SHA 检查以兼容候选。
+- 候选损坏时失败，不退回 water/旧包。
+- 正式升级仍遵守 AGENTS.md 的完整门禁。
+
+### 第一版最小范围
+
+    primary C12
+    Schneider section 0
+    验证过的能量和密度范围
+
+不扩 secondary p/He、其他 section、water 或核反应终态。
+
+## Step 10：GPU 重分配和测试
+
+### 能量约束
+
+本步能量损失确定后：
+
+    本步能量
+    =
+    保留的局部沉积
+    +
+    分配到其他体素的能量
+    +
+    离开 scorer 的能量
+
+每份能量只记一次。不要无故改变粒子慢化、hazard、survival、secondary queue、straggling、MCS 或 beam RNG。
+
+新 RNG tag 使用前审计冲突，给出明确映射。
+
+### 坐标
+
+    destination
+    =
+    source
+    +
+    longitudinal × parent_direction
+    +
+    radial × transverse_direction
+
+测试 +x、+y、+z、-z、斜方向，不只测世界 +z。
+
+### 材料和边界
+
+两端都是空气不代表中间无组织。不能未经审计照搬旧模型的终点 section 检查。
+
+明确处理经过其他材料的路径。若候选不支持：
+
+- 显式计数。
+- 单列能量。
+- 不声称 heterogeneous 完成。
+- 不静默跨组织使用均匀空气响应。
+
+离开 scorer 与跨入其他材料不得混为一类。
+
+### 必须测试
+
+1. 候选关闭时原逻辑不变。
+2. water 路径不变。
+3. 非 section-0 不变。
+4. 不支持能量/密度策略明确。
+5. host/device lookup 等价。
+6. 联合采样统计吻合。
+7. 坐标旋转正确。
+8. local/moved/escaped 分项正确。
+9. voxel/in-grid 闭合。
+10. charged-origin voxel 闭合。
+11. 材料交叉计数正确。
+12. RNG tag 无冲突。
+13. overflow 为零。
+14. v1 路径回归通过。
+
+### depth / LET 语义
+
+3D dose 为评价依据，IDD 从 3D 横向求和。审查旧 depth tally 是否仍表示同一物理量。LET 未同步处理时明确标记限制，不得输出语义不一致却不说明的指标。
+
+## Step 11：独立 phantom A/B/C
+
+### 组别
+
+    A：冻结 transverse-v1
+    B：transverse-v1 + 入口 mask 修复
+    C：B 的代码基线 + joint 候选，替代旧横向重分配
+
+不能把 A→C 的全部提升归因于纵向修复。
+
+### 固定条件
+
+    源
+    histories
+    seed
+    几何 / 网格
+    stopping
+    核反应设置
+    MCS
+    能散
+    归一
+
+仅声明的候选差异允许变化。
+
+### 顺序
+
+1. 均匀 section-0、EM-only。
+2. 入口和出口附近。
+3. 内部平衡区。
+4. 更大几何。
+5. 不同能量。
+6. 不同密度。
+7. 倾斜入射。
+8. 异质界面诊断。
+
+前项失败不跳患者。
+
+### 报告
+
+    3D 总能量
+    入口各层横向积分
+    中心和外侧 ROI
+    纵向 / 横向响应
+    逃逸能量
+    能量闭合
+    primary survival（若核开启）
+
+不能只提交看起来重合的曲线。
+
+## Step 12：患者 50k smoke 与完整单 shard
+
+### 50k
+
+本地 RTX 2080 Ti，运行前：
+
+    python3 tools/verify_schneider_v2_1_data.py
+
+要求：
+
+    accepted=true
+    overflow=0
+    lookup failure 不增加
+    born 守恒
+    能量闭合通过
+    voxel/in-grid 闭合
+    新近似项有计数和能量
+
+overflow 必须拆分重跑，禁止拿溢出剂量做 Gamma。
+
+### 完整单 shard
+
+使用冻结 shard01 的 spots、实际 histories、seed、配置、映射和 Gamma 参数。
+
+复制冻结配置，仅修改声明的候选开关与输出路径。不要手工重建“差不多”的配置。
+
+A/B/C 必须相同样本量。
+
+## Step 13：严格 Gamma，固定评价口径
+
+继续使用冻结的：
+
+    TOPAS reference
+    10% reference threshold
+    50,000 sampled points
+    sample seed 42
+    坐标映射
+    网格间距
+    名义 histories 归一
+
+同时输出 Global/Local 1%/1mm 与 Global/Local 3%/0mm。
+
+### 3%/0mm 的约束
+
+零距离就是同一空间位置剂量比较，禁止邻域搜索、隐式平移、非零距离替代或重新最佳配准。
+
+### Paired turnover
+
+相同点统计：
+
+    原失败 → 新通过
+    原通过 → 新失败
+
+按入口/内部/出口、section、剂量带、primary/secondary origin 定位。不能只报净通过率。
+
+### 不确定性
+
+采样点有空间相关性。不能把 50,000 点当成完全独立 Bernoulli 样本来宣称显著性。
+
+结合配对变化、深度或空间 block 统计，必要时第二 GPU seed。新增统计方法也应预先冻结，不随结果选取。
+
+## Step 14：full20 准入和完整验证
+
+必须同时满足：
+
+1. 独立 phantom 通过。
+2. 能量分配契约通过。
+3. 50k 通过。
+4. 单 shard 无 overflow。
+5. 严格 Gamma 有可重复改善，或满足预先冻结的非劣标准。
+6. 无新未解释能量项。
+7. 未改变评价口径制造提升。
+8. 候选输入与 executable 已冻结。
+
+若入口改善但 Local 1%/1mm 变差、改善小于运行波动或异质边界出现问题：
+
+    保留候选；
+    报告未通过；
+    不自动 full20；
+    不调一个 scale 补救。
+
+通过准入后，full20 继续按本地 GPU 分 shard 运行；全部 shard 单独通过，零 overflow，再合并并验证完整统计量。不要只因准入通过就将本步骤标 DONE。
+
+## Step 15：正式升级与提交
+
+全部必要验证通过后才允许候选成为新的已验证 electron-response 版本。
+
+按 AGENTS.md 更新：
+
+    manifest
+    bundle pins
+    metadata
+    安装验证器
+    最低已验证版本说明
+    evidence
+
+不能先修改 AGENTS.md 宣布候选为最低版本，再倒过来跑验证。
+
+建议按实际完成范围拆分提交：
+
+    1. test(diag): harden electron ancestry and escape audits
+    2. feat(diag): add reproducible binary response campaigns
+    3. feat(topas): record parent-conditioned electron response
+    4. feat(data): compile validated joint electron response candidate
+    5. feat(ct): add gated section-0 joint redistribution
+    6. test(ct): validate independent response phantoms
+    7. test(ct): record paired strict-gamma validation
+    8. feat(data): promote validated response stack
+
+不为凑列表制造空提交。未完成步骤不提交“完成”证据。未经用户明确要求不 push。
+
+## 全程禁止事项
+
+- 不修改 nuclear package 来修电子纵向响应。
+- 不修改 stopping 总量来补空间分布。
+- 不调 MCS scale、beam sigma、能散、全局剂量 scale。
+- 不改冻结坐标。
+- 不把 12 histories 当充分统计量。
+- 不把 steps 数当独立 histories。
+- 不把有限 slab 终点分布直接当无限介质响应。
+- 不独立抽 radial / longitudinal 而丢掉相关性。
+- 不让 v1 横向与 v2 联合模型重复作用于同一能量。
+- 不把硬失败降为 warning。
+- 不把未运行的命令或测试写成 PASS。
+- 没有新 GPU run 就没有新 Gamma 结论。
+- 不推断授权去删除数据或扩大到无关物理。
+
+## 资源和数据规则
+
+AGENTS.md 是必须遵守的仓库约束，最低 v2.1 stack 不得降级、alias 或静默回退。
+
+    TOPAS：本地 sbatch，数据 /mnt/sda/wuwei
+    TOPAS extension、源码与 build：/home/wuwei/topas
+    全部 TOPAS 任务合计 CPU ≤192
+    全部 TOPAS 任务合计内存 ≤160 GB
+    根据计算量按比例分配资源
+    InvalidAccount 短暂出现时等待 1–3 分钟复查
+    GPU：仅本地 RTX 2080 Ti / sm_75，沙盒外
+    禁止远程主机或集群 GPU
+    3D scorer；IDD 通过横向求和
+    overflow 时拆分并重跑
+
+不讨论通过 FP64 替换 FP32 提高本轮精度，不偏离空间响应修复任务。
+
+## 每批交付模板
+
+每批结束必须提供：
+
+1. 实际修改文件及作用。
+2. 未修改的受保护物理路径。
+3. 实际执行命令和退出状态。
+4. 测试结果及新增失败测试。
+5. 数据路径、hash、job ID、资源。
+6. 各硬门禁结果。
+7. 未完成项、统计不足项和阻塞原因。
+8. 对应本表状态更新。
+9. 下一步是否满足启动条件。
+
+代码、测试、证据分别报告。能量闭合不等于空间分布正确，单材料正确不等于真实 CT 正确，单 shard 改善不等于 full20 改善。
+
+## 执行日志
+
+- 2026-09-05 续修（以下更新优先于历史 DONE/未实现描述）：
+  - 独立 `tools/execute_electron_response_campaign.py` 已实现本地 Slurm 顺序提交、已有用户任务 CPU/内存检查、协作锁、磁盘轮询、实际 job ID、sacct 退出状态及分析状态落盘；失败只取消本执行器尚在运行的任务，保留 raw。生成器 `--submit` 仍拒绝，不绕过监控。磁盘轮询不是硬配额，其他提交器与资源快照之间仍可能竞争；不支持自动恢复或不明确提交的自动重试。
+  - Job 2350/2351/2352：HU -1000/-975/-951，各 1 history、seed 918001、2CPU/4GiB，顺序完成，COMPLETED/0:0。初次 `--mem=4.0G` 被 Slurm 拒绝（无实际 job），已修为 `4096M`，失败目录保留，新数据在 `/mnt/sda/wuwei/electron_density_pilot_v3_r2/`。
+  - 三点实测密度与含 correction 的公式相对误差 <3.1e-6，均为 material section 0；v3 产生步绑定全部通过。3D dose/step 能量残差 <2.2e-9。
+  - 发现并修复审计漏洞：逐事件电子出生能量漏加导致残差 null；逐家族只报告而不拒绝超限。现在每 root 只记一次 birth，逐事件/家族均以 1e-3 门禁拒绝。新增跨事件/同事件家族误差抵消及 descendant 不重复 birth 回归；三份 raw 在加强门禁下另存 `analysis_closure_verified.json`，未覆盖原报告和输出。
+  - 最终相关 Python 测试 50/50，v2.1 verifier 16/16。原始文件 SHA、job 信息、原/新报告及限制记录在 `evidence/step-31/entrance-mask-candidate/section0-density-pilot-v3.json`。当前执行器源码含运行后补强，不能冒充 pilot 时的冻结源码。
+  - HU -975 单 history raw 约 50.5MiB，替换原固定 320MiB/片估计为 `(128 + 64 × histories) MiB`（12 histories 为 896MiB）；这是预算估计，不是随机输出大小上界。
+  - 03/04 仍 IN_PROGRESS：外部 DICOM 预加载输入未逐文件冻结，实际 production-cut/step-limit 元数据与完整统计流程未验收。06/07/08 不解锁；1 history 不构成缩放验证，不制表。本轮未改 GPU 物理、未换包、未运行 Gamma/full20、未提交或 push。
+- 方案写入：按用户要求完整替换 plan2/README.md，仅重写本文件。已有实现和诊断作为输入基线，不据此将新实施步骤标 DONE。
+- 2026-09-05 第一批 Steps 01–03 完成：
+  - 01 DONE：HEAD c6fe6b44；工作树非干净（tracked：plan/README.md、plan2/README.md、plan2/steps/13删、src/transport_sycl.cpp入口mask未提交；untracked：v2.1 bin包、electron审计工具/测试、entrance-mask证据、scratch）。verify_schneider_v2_1_data.py通过16/16。GPU exe：build/carbon_mc bfd03552（mask前陈旧）、build/oneapi-nvidia-release/carbon_mc 6ae10bb7（与当前mask源码同日构建）；maskfix dose sha 0ee4457a与validation.json一致但validation.json未记录exe SHA，标为对应关系未知限制。TOPAS exe /home/wuwei/topas/topas-build/topas e1f5ccc0。配置 split20_rt06423_strict_01_v2_1.yaml d756293f。bundle pins按manifest验证通过。冻结full20基线与§1.1名义指标不变；后续A/B/C必须复用上述冻结exe/配置/数据版本并先补对应记录。
+  - 02 DONE：tools/analyze_electron_deposit_steps.py新增逐track一致性、单事件单primary、重复step、逐事件残差（防抵消）、逐家族残差+最差家族、非负有限KE、JSON allow_nan=False、未计算slab审计写null。tests 9→17全过；binary12重算物理量与旧JSON完全一致（birth146.739/dep143.945/esc2.795，forward>0.5mm 28.878%），逐事件最大残差4.2e-15，最差家族(0,10,99)1.55e-15。
+  - 03 DONE：新增tools/run_electron_response_diagnostic.py（≤12 histories/片、binary、独立目录、config/TOPAS/scorer SHA、CPU≤192/Mem≤160G/磁盘预算预检、预算超限拒交、不删数）与tools/merge_electron_response_diagnostics.py（先合加权直方图/能量/分母再算概率、不平均分位数、steps不计histories、顺序无关/重复/缺片/SHA/混配置/能量和/预算/非零退出8门禁）。tests/test_electron_response_campaign.py 4项通过。smoke12+seed2聚合24 histories能量求和一致、joint守恒、顺序无关、pooled分位数保持null。/mnt/sda/wuwei/delta_longitudinal_audit现16G（含2335取消14G残留），binary约123MiB/12histories，ASCII约233MiB；新campaign演示预算5GiB/估计0.31GiB/2片。本批未改GPU物理、未生正式新表、未启动患者运行；下一步Step04父出生条件需先过门禁。
