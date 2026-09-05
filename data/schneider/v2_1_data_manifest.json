@@ -330,6 +330,26 @@
    "in_git": true
   },
   {
+   "path": "data/schneider/schneider_section0_c12_delta_tail_v1.csv",
+   "bytes": 9778,
+   "sha256": "ff6140f13dcfb4c6f739d6efe56941da6af4749d311e29182601f310a1184aa5",
+   "generator": "python3 tools/compile_schneider_delta_tail.py (see metadata inputs)",
+   "raw_source": [
+    "/mnt/sda/wuwei/delta_section0/energy_scan/topas_hu_n1000_e150.csv",
+    "/mnt/sda/wuwei/delta_section0/topas_dose3d_hu_n1000_em.csv",
+    "/mnt/sda/wuwei/delta_section0/energy_scan/topas_hu_n1000_e225.csv"
+   ],
+   "in_git": true
+  },
+  {
+   "path": "data/schneider/schneider_section0_c12_delta_tail_v1.metadata.json",
+   "bytes": 1898,
+   "sha256": "4dc2557577c4837b9bb6ac896cf1ea2e77d0ef791d91a61b0c264f7b58d71f94",
+   "generator": "python3 tools/compile_schneider_delta_tail.py (see metadata inputs)",
+   "raw_source": [],
+   "in_git": true
+  },
+  {
    "path": "data/HUtoMaterialSchneider.txt",
    "bytes": 37352,
    "sha256": "5022cd89617b28dbd8ee8bf8b095ea20cfd99f6405218693c0df238b3617a139",
