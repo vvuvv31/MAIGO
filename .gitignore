@@ -28,6 +28,9 @@ ct/
 benchmark/
 validation/
 
+# Recoverable local archives; never include discarded data in Git.
+/trash/
+
 
 # Windows-only convenience wrappers under scripts/ (not required for Linux builds)
 scripts/windows_*.cmd
