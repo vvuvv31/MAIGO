@@ -317,12 +317,14 @@ int run(const std::string& config_path, const std::string& spots_path,
                         spot.beam_uy_y() * ly;
             float pzm = spot.source_origin_z_mm() + spot.beam_ux_z() * lx +
                         spot.beam_uy_z() * ly;
-            float dx = spot.beam_ux_x() * ldx + spot.beam_uy_x() * ldy +
-                       spot.beam_uz_x() * ldz;
-            float dy = spot.beam_ux_y() * ldx + spot.beam_uy_y() * ldy +
-                       spot.beam_uz_y() * ldz;
-            float dz = spot.beam_ux_z() * ldx + spot.beam_uy_z() * ldy +
-                       spot.beam_uz_z() * ldz;
+            const auto composed = carbon::compose_tps_direction(
+                ldx, ldy, ldz, spot.beam_ux_x(), spot.beam_ux_y(),
+                spot.beam_ux_z(), spot.beam_uy_x(), spot.beam_uy_y(),
+                spot.beam_uy_z(), spot.beam_uz_x(), spot.beam_uz_y(),
+                spot.beam_uz_z());
+            float dx = composed.x;
+            float dy = composed.y;
+            float dz = composed.z;
             {
                 const float inv_n =
                     1.0F / std::sqrt(std::fmax(1.0e-20F, dx * dx + dy * dy + dz * dz));

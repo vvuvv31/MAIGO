@@ -2444,6 +2444,20 @@ void test_topas_spot_weights_and_tps_90_transform() {
     }, "Upstream propagation accepted a table outside its energy domain");
 }
 
+void test_tps_direction_basis_composition() {
+    const auto direction = carbon::compose_tps_direction(
+        2.0F, 3.0F, 5.0F,
+        7.0F, 11.0F, 13.0F,
+        17.0F, 19.0F, 23.0F,
+        29.0F, 31.0F, 37.0F);
+    require_near(direction.x, 210.0, 0.0,
+                 "TPS direction X basis composition");
+    require_near(direction.y, 234.0, 0.0,
+                 "TPS direction Y must use uy_y, not uy_x");
+    require_near(direction.z, 280.0, 0.0,
+                 "TPS direction Z basis composition");
+}
+
 void test_tps_source_geometry_csv_and_switch() {
     carbon::TransportConfig config;
     require(!config.enable_tps_source, "TPS source must default to disabled");
@@ -9949,6 +9963,8 @@ int main(int argc, char** argv) {
         run("test_minibeam_absorbing_geometry", test_minibeam_absorbing_geometry);
         run("test_topas_spots_parse_angle01", test_topas_spots_parse_angle01);
         run("test_topas_spot_weights_and_tps_90_transform", test_topas_spot_weights_and_tps_90_transform);
+        run("test_tps_direction_basis_composition",
+            test_tps_direction_basis_composition);
         run("test_tps_source_geometry_csv_and_switch", test_tps_source_geometry_csv_and_switch);
         run("test_primary_survival_buffer_gate", test_primary_survival_buffer_gate);
         run("test_tps_histories_mode_allocation_edges",

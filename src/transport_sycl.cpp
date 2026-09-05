@@ -12,6 +12,7 @@
 #include "carbon/rng.hpp"
 #include "carbon/slab_phantom.hpp"
 #include "carbon/stopping_power.hpp"
+#include "carbon/tps_source.hpp"
 #include "carbon/schneider_stopping_table.hpp"
 #include "carbon/detail/device_memory_tracker.hpp"
 #include "carbon/straggling.hpp"
@@ -2333,9 +2334,12 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                 auto position_x_mm = origin_x + ux_x * local_x_mm + uy_x * local_y_mm;
                 auto position_y_mm = origin_y + ux_y * local_x_mm + uy_y * local_y_mm;
                 auto position_z_mm = origin_z + ux_z * local_x_mm + uy_z * local_y_mm;
-                auto direction_x = ux_x * local_dx + uy_x * local_dy + uz_x * local_dz;
-                auto direction_y = ux_y * local_dx + uy_x * local_dy + uz_y * local_dz;
-                auto direction_z = ux_z * local_dx + uy_z * local_dy + uz_z * local_dz;
+                const auto composed_direction = compose_tps_direction(
+                    local_dx, local_dy, local_dz, ux_x, ux_y, ux_z,
+                    uy_x, uy_y, uy_z, uz_x, uz_y, uz_z);
+                auto direction_x = composed_direction.x;
+                auto direction_y = composed_direction.y;
+                auto direction_z = composed_direction.z;
                 {
                     const auto inv_n = sycl::rsqrt(sycl::fmax(
                         1.0e-20F, direction_x * direction_x + direction_y * direction_y +

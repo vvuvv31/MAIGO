@@ -11,6 +11,27 @@ namespace carbon {
 
 class StoppingPowerTable;
 
+struct TpsDirection3F {
+    float x{0.0F};
+    float y{0.0F};
+    float z{1.0F};
+};
+
+// Compose a beam-local direction in transport coordinates. Shared by the
+// device kernel and host phase-space diagnostics so a basis component cannot
+// silently diverge between them.
+inline constexpr TpsDirection3F compose_tps_direction(
+    const float local_dx, const float local_dy, const float local_dz,
+    const float ux_x, const float ux_y, const float ux_z,
+    const float uy_x, const float uy_y, const float uy_z,
+    const float uz_x, const float uz_y, const float uz_z) noexcept {
+    return {
+        ux_x * local_dx + uy_x * local_dy + uz_x * local_dz,
+        ux_y * local_dx + uy_y * local_dy + uz_y * local_dz,
+        ux_z * local_dx + uy_z * local_dy + uz_z * local_dz,
+    };
+}
+
 // Clinical source geometry is expressed in the same DICOM LPS patient frame
 // as CtGrid: +X left, +Y posterior, +Z superior. The beam has its own local
 // orthonormal frame (u, v, w); w is the propagation direction. Gantry/couch/
