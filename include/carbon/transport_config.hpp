@@ -232,9 +232,16 @@ struct TransportConfig {
     // supplementing the transverse tail. Requires ct_schneider_delta_tail_file;
     // empty disables the forward move exactly. Schneider section 0 only.
     std::filesystem::path ct_schneider_delta_longitudinal_file{};
-    // Research-only sensitivity scale on the longitudinal forward fraction
-    // (1.0 = as calibrated). Validated range [0, 2]; anything else refuses.
+    // Frozen diagnostic only. Per-patient calibration is forbidden.
     double ct_schneider_delta_longitudinal_scale{1.0};
+    // Explicit unvalidated 175 MeV/u uniform section-0 three-density experiment.
+    bool ct_longitudinal_homogeneous_density_diagnostic{false};
+    // Unvalidated 175 MeV/u EM-only air/soft-tissue mass-column experiment.
+    bool ct_longitudinal_interface_mass_diagnostic{false};
+    // Independent correlated bulk response, isolated EM-only interface pilot.
+    std::filesystem::path ct_electron_joint_response_diagnostic_file{};
+    std::string ct_electron_joint_response_sha256{};
+    std::string ct_electron_joint_response_metadata_sha256{};
 
     // Optional energy-dependent mass XS for every Schneider section. When set
     // on a CCTG v2/v3 grid, this supersedes the legacy four-class XS tables.

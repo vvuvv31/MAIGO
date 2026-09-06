@@ -1,0 +1,324 @@
+{
+  "status": "PASS_PILOT_ONLY",
+  "normalization": "Gy per primary; no fitted scale or alignment",
+  "windows": [
+    {
+      "depth_mm": [
+        2,
+        20
+      ],
+      "topas_replica_relative_difference": 0.0002571753698865674,
+      "gpu_base_relative_error": 0.039444462017530046,
+      "gpu_long_relative_error": 0.005471049315202148
+    },
+    {
+      "depth_mm": [
+        20,
+        50
+      ],
+      "topas_replica_relative_difference": 0.0007146807202888964,
+      "gpu_base_relative_error": 0.011580890065396865,
+      "gpu_long_relative_error": 0.004111263698067136
+    },
+    {
+      "depth_mm": [
+        50,
+        100
+      ],
+      "topas_replica_relative_difference": 0.000017035977470439552,
+      "gpu_base_relative_error": 0.0015143870179121777,
+      "gpu_long_relative_error": 0.0005099171338467379
+    },
+    {
+      "depth_mm": [
+        100,
+        120
+      ],
+      "topas_replica_relative_difference": 0.00043916822331991354,
+      "gpu_base_relative_error": 0.00003122252833698269,
+      "gpu_long_relative_error": -0.00007529134530692705
+    }
+  ],
+  "rebinned_5mm": [
+    {
+      "depth_mm": [
+        2,
+        7
+      ],
+      "topas_replica_relative_difference": 0.00019519695828399718,
+      "gpu_base_relative_error": 0.059379075116910984,
+      "gpu_long_relative_error": 0.005841802613117508
+    },
+    {
+      "depth_mm": [
+        7,
+        12
+      ],
+      "topas_replica_relative_difference": 0.0005055876874810329,
+      "gpu_base_relative_error": 0.040542326185768474,
+      "gpu_long_relative_error": 0.005896040416180748
+    },
+    {
+      "depth_mm": [
+        12,
+        17
+      ],
+      "topas_replica_relative_difference": 0.00019357795306759339,
+      "gpu_base_relative_error": 0.029468851540918273,
+      "gpu_long_relative_error": 0.00551422536747781
+    },
+    {
+      "depth_mm": [
+        17,
+        22
+      ],
+      "topas_replica_relative_difference": 0.0006763456012959186,
+      "gpu_base_relative_error": 0.02139894389158381,
+      "gpu_long_relative_error": 0.004401434910809021
+    },
+    {
+      "depth_mm": [
+        22,
+        27
+      ],
+      "topas_replica_relative_difference": 0.0009825765159980904,
+      "gpu_base_relative_error": 0.01798309989370228,
+      "gpu_long_relative_error": 0.005649248194917522
+    },
+    {
+      "depth_mm": [
+        27,
+        32
+      ],
+      "topas_replica_relative_difference": 0.0005787652507761012,
+      "gpu_base_relative_error": 0.013106911745809358,
+      "gpu_long_relative_error": 0.00399052535905664
+    },
+    {
+      "depth_mm": [
+        32,
+        37
+      ],
+      "topas_replica_relative_difference": 0.0012870866737838247,
+      "gpu_base_relative_error": 0.011544753823092835,
+      "gpu_long_relative_error": 0.004768445146426714
+    },
+    {
+      "depth_mm": [
+        37,
+        42
+      ],
+      "topas_replica_relative_difference": 0.00011221769561923677,
+      "gpu_base_relative_error": 0.008807599846789138,
+      "gpu_long_relative_error": 0.003939484453939102
+    },
+    {
+      "depth_mm": [
+        42,
+        47
+      ],
+      "topas_replica_relative_difference": 0.0006925553096209791,
+      "gpu_base_relative_error": 0.006217197577692124,
+      "gpu_long_relative_error": 0.0024732752599274654
+    },
+    {
+      "depth_mm": [
+        47,
+        52
+      ],
+      "topas_replica_relative_difference": 0.00020425431075164782,
+      "gpu_base_relative_error": 0.0062641770760401005,
+      "gpu_long_relative_error": 0.0032340340507299725
+    },
+    {
+      "depth_mm": [
+        52,
+        57
+      ],
+      "topas_replica_relative_difference": 0.00010877051911662184,
+      "gpu_base_relative_error": 0.003175053018665608,
+      "gpu_long_relative_error": 0.0011375850634580686
+    },
+    {
+      "depth_mm": [
+        57,
+        62
+      ],
+      "topas_replica_relative_difference": 0.0012370142997871324,
+      "gpu_base_relative_error": 0.0029939395976645855,
+      "gpu_long_relative_error": 0.0012722179907536102
+    },
+    {
+      "depth_mm": [
+        62,
+        67
+      ],
+      "topas_replica_relative_difference": 0.0016004116859369552,
+      "gpu_base_relative_error": 0.002752787140293922,
+      "gpu_long_relative_error": 0.0014064627668586294
+    },
+    {
+      "depth_mm": [
+        67,
+        72
+      ],
+      "topas_replica_relative_difference": 0.0011251039895674169,
+      "gpu_base_relative_error": 0.0013912334989827357,
+      "gpu_long_relative_error": 0.000282130671851899
+    },
+    {
+      "depth_mm": [
+        72,
+        77
+      ],
+      "topas_replica_relative_difference": 0.0007654599997051929,
+      "gpu_base_relative_error": 0.0006991520944334972,
+      "gpu_long_relative_error": -0.00007163215373495735
+    },
+    {
+      "depth_mm": [
+        77,
+        82
+      ],
+      "topas_replica_relative_difference": 0.001021391960407479,
+      "gpu_base_relative_error": 0.00041998324292435996,
+      "gpu_long_relative_error": -0.00020261062599069568
+    },
+    {
+      "depth_mm": [
+        82,
+        87
+      ],
+      "topas_replica_relative_difference": 0.00008277113311385314,
+      "gpu_base_relative_error": -0.0009156331882004265,
+      "gpu_long_relative_error": -0.001403948596082949
+    },
+    {
+      "depth_mm": [
+        87,
+        92
+      ],
+      "topas_replica_relative_difference": 0.0010297549629439359,
+      "gpu_base_relative_error": 0.0027800948818672566,
+      "gpu_long_relative_error": 0.002215311730944025
+    },
+    {
+      "depth_mm": [
+        92,
+        97
+      ],
+      "topas_replica_relative_difference": 0.0018116415177817566,
+      "gpu_base_relative_error": -0.0000368735810378773,
+      "gpu_long_relative_error": -0.000307212346815966
+    },
+    {
+      "depth_mm": [
+        97,
+        102
+      ],
+      "topas_replica_relative_difference": 0.000720615657773907,
+      "gpu_base_relative_error": -0.0007772091183905205,
+      "gpu_long_relative_error": -0.0007783721564440516
+    },
+    {
+      "depth_mm": [
+        102,
+        107
+      ],
+      "topas_replica_relative_difference": 0.0011789815166941904,
+      "gpu_base_relative_error": -0.0002654420308467742,
+      "gpu_long_relative_error": -0.0003874556697922582
+    },
+    {
+      "depth_mm": [
+        107,
+        112
+      ],
+      "topas_replica_relative_difference": 0.00017862464956380523,
+      "gpu_base_relative_error": -0.00006406906411471347,
+      "gpu_long_relative_error": -0.00021051853561282474
+    },
+    {
+      "depth_mm": [
+        112,
+        117
+      ],
+      "topas_replica_relative_difference": 0.0008848734793363657,
+      "gpu_base_relative_error": -0.0006734455555847951,
+      "gpu_long_relative_error": -0.0006696859004519107
+    },
+    {
+      "depth_mm": [
+        117,
+        120
+      ],
+      "topas_replica_relative_difference": 0.0012627402381199255,
+      "gpu_base_relative_error": 0.0023790282136042507,
+      "gpu_long_relative_error": 0.0020550618210823934
+    }
+  ],
+  "integrals_MeV_per_primary": {
+    "topas": 38.872537157642164,
+    "gpu_base": 38.98913581524556,
+    "gpu_long": 38.81148819183444
+  },
+  "noise_pilot_gate": true,
+  "quality_gate": true,
+  "candidate_error_gate": true,
+  "candidate_improves": true,
+  "quality": {
+    "gpu_base": {
+      "accepted": true,
+      "failures": []
+    },
+    "gpu_long": {
+      "accepted": false,
+      "failures": [
+        "unvalidated_longitudinal_candidate"
+      ]
+    }
+  },
+  "artifacts": {
+    "/mnt/sda/wuwei/longitudinal_holdout_175_20260906/topas_s1/dose.csv": "66fc05308a5e38cffff5520298ea56fdb85fc0ae9d8bc4c7ced4edb64299b0c4",
+    "/mnt/sda/wuwei/longitudinal_holdout_175_20260906/topas_s2/dose.csv": "31de5ec674bb66872cc63dcebd5ff5c54a84dba949e96868c0deb19e24ff4f83",
+    "/mnt/sda/wuwei/longitudinal_holdout_175_20260906/campaign.json": "0d9bbc67cfbd8ff1a6f49324c4cbe5dc09a1fe48d086d3411cf76a8b928816ef",
+    "/mnt/sda/wuwei/longitudinal_holdout_175_20260906/gpu_base/run.yaml": "23b9c1fcce5034c5910e5c6f919ee70126577089519f3c5c524461ceb9dae55e",
+    "/mnt/sda/wuwei/longitudinal_holdout_175_20260906/gpu_base/dose.mhd": "bee7ff1f35f75ca057091a6600073e957261c8b3261f3231077728249fb61158",
+    "/mnt/sda/wuwei/longitudinal_holdout_175_20260906/gpu_base/dose.raw": "95067faa59ed55fdbb1669507ffa79a780e153459c4d23f638b196c0af17fe58",
+    "/mnt/sda/wuwei/longitudinal_holdout_175_20260906/gpu_base/out/run/quality_report.json": "9176cf312593bf29cf77f8a18db5c40dfb3057b44a350aab72be92c5dcf35c0a",
+    "/mnt/sda/wuwei/longitudinal_holdout_175_20260906/gpu_base/out/run/energy_ledger.json": "371f4b9a7f273c233b52e6840d1f317901687f942840ee7951be9e5b95dae4d8",
+    "/mnt/sda/wuwei/longitudinal_holdout_175_20260906/gpu_long/run.yaml": "7c7b113b4973556a01f579e250cde824bcef3d8a9d3c92213c6f59a9886d4dac",
+    "/mnt/sda/wuwei/longitudinal_holdout_175_20260906/gpu_long/dose.mhd": "bee7ff1f35f75ca057091a6600073e957261c8b3261f3231077728249fb61158",
+    "/mnt/sda/wuwei/longitudinal_holdout_175_20260906/gpu_long/dose.raw": "8b6ed0365bbd96073b6090a35640a353701b3ef55a5a7d23e05176c2ce4e6fbc",
+    "/mnt/sda/wuwei/longitudinal_holdout_175_20260906/gpu_long/out/run/quality_report.json": "c71c315a6da96769ed0ec56ed26b2c4ecfb304f2aa75a10d92b99ce323c2071c",
+    "/mnt/sda/wuwei/longitudinal_holdout_175_20260906/gpu_long/out/run/energy_ledger.json": "c93eab546f9192d2243596b25703e7b4338403f8de89667d34318a8d6bd91607",
+    "/mnt/sda/wuwei/longitudinal_holdout_175_20260906/topas_s1/run.txt": "135fe23e8bdbbd6c25cff0572c71b418502c6ef02c8eb3b800d3d89c39744972",
+    "/mnt/sda/wuwei/longitudinal_holdout_175_20260906/topas_s2/run.txt": "f15edb2f497716a0e1570381f4803f2e28940779871c46fc3e4150a90b2baf80"
+  },
+  "limitations": [
+    "Pilot only; two replicas cannot establish full statistical confidence.",
+    "No rescaling, fitting, package edits or promotion of longitudinal candidate.",
+    "Density/interface/joint-response gates remain separate."
+  ],
+  "execution": {
+    "topas_jobs": [
+      2353,
+      2354
+    ],
+    "topas_exit_codes": [
+      "0:0",
+      "0:0"
+    ],
+    "topas_elapsed_seconds": [
+      187,
+      186
+    ],
+    "allocated_total_cpus": 48,
+    "allocated_total_memory_GB": 20,
+    "gpu_location": "local RTX 2080 Ti",
+    "gpu_baseline_exit": 0,
+    "gpu_candidate_exit": 1,
+    "gpu_candidate_exit_reason": "expected unvalidated_longitudinal_candidate",
+    "worktree_clean": false
+  }
+}

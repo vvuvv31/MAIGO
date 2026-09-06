@@ -1,0 +1,52 @@
+{
+  "record_count": 521,
+  "unique_histories": 45,
+  "classification": {
+    "below": 521
+  },
+  "energy_counter_residual_MeV": 0.0002588369049476569,
+  "ranges": {
+    "initial_energy_MeVu": [
+      168.266830444,
+      170.515075684
+    ],
+    "query_energy_MeVu": [
+      148.202392578,
+      149.997344971
+    ],
+    "step_start_z_mm": [
+      200.000015259,
+      219.500015259
+    ],
+    "step_length_mm": [
+      0.499984830618,
+      0.5
+    ],
+    "retained_MeV": [
+      0.158605962992,
+      0.937248289585
+    ]
+  },
+  "queries_by_10mm_bin": {
+    "200": 49,
+    "210": 472
+  },
+  "retained_MeV": 298.675162836905,
+  "all_initially_in_domain": true,
+  "raw_unchanged": true,
+  "artifacts": {
+    "/mnt/sda/wuwei/longitudinal_domain_trace_20260906/out/run/energy_ledger.json": "dcdabbfabfb773cc5dd5e70ebff5bf7df644f653c65859bd84cc8d57e0904e90",
+    "/mnt/sda/wuwei/longitudinal_domain_trace_20260906/run.yaml": "ef2a9d16b9e0cd18ec0c0d4ef5c474a95d8ae39e2f523288afb008957db7a915",
+    "/mnt/sda/wuwei/longitudinal_domain_trace_20260906/dose.raw": "c09d252f972e4bc888cee6b764db7ade4dbeb04003a16de4ac5de8b20322a59b",
+    "/mnt/sda/wuwei/longitudinal_uniform_gpu_20260906/hu951/on/dose.raw": "c09d252f972e4bc888cee6b764db7ade4dbeb04003a16de4ac5de8b20322a59b"
+  },
+  "status": "DIAGNOSIS_COMPLETE_COVERAGE_GATE_STILL_BLOCKED",
+  "executable_sha256": "7934ae78d5052f9b9de1710d5f0732881547d67fd7547151726a64dde4372c43",
+  "source_hashes": {
+    "src/transport_sycl.cpp": "8927d3a26ee7745d36550cb7ed0f740f04ba3cb440348cd915f3bd8bbb01b4f9",
+    "src/io.cpp": "d0f5b1dda2566c3d02378d7dee92075abe2bd96a514b50d5b9000c9d57b8d7ee",
+    "include/carbon/transport.hpp": "1b95aff93aa7eadd149e249eeb7612ee7409288a2e99f970eaefd5e1e5bd7182",
+    "tools/analyze_longitudinal_domain_log.py": "d45df7c5fef97b1728c7197b7abcecb694bcc4b3560871955f7e7217e744049a"
+  },
+  "worktree_clean": false
+}

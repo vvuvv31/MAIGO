@@ -1,0 +1,89 @@
+{
+  "status": "independent_entrance_core_improved_full20_pending",
+  "change": "Allow grid-shell section-0 sources; check existing fine-axis neighbours only. No package changes.",
+  "paired_shard_histories": 7554382,
+  "metric_order": [
+    "global_1pct_1mm",
+    "local_1pct_1mm",
+    "global_3pct_0mm",
+    "local_3pct_0mm"
+  ],
+  "before_percent": [
+    98.136,
+    83.84,
+    98.0,
+    76.406
+  ],
+  "after_percent": [
+    98.138,
+    83.822,
+    98.14,
+    76.422
+  ],
+  "entrance_global_3pct_hot_before": 1120,
+  "entrance_global_3pct_hot_after": 311,
+  "entrance_global_3pct_cold_before": 0,
+  "entrance_global_3pct_cold_after": 0,
+  "quality": {
+    "schema_version": 3,
+    "status": "non_production",
+    "run_mode": "research",
+    "accepted": true,
+    "absolute_physical_energy_residual_MeV": 47443.5429819,
+    "physical_relative_energy_residual": 2.5927098921e-06,
+    "absolute_accounting_energy_residual_MeV": 47443.5429819,
+    "accounting_relative_energy_residual": 2.5927098921e-06,
+    "absolute_energy_residual_MeV": 47443.5429819,
+    "relative_energy_residual": 2.5927098921e-06,
+    "topas_reference_energy_sink_active": false,
+    "queue_overflow_count": 0,
+    "queue_overflow_energy_MeV": 0,
+    "voxel_scored_energy_MeV": 16501419462.5,
+    "in_grid_deposited_energy_MeV": 16501419568.2,
+    "outside_grid_deposited_energy_MeV": 100393970.303,
+    "grid_split_closure_ratio": 1.00000011422,
+    "voxel_to_ingrid_ratio": 0.999999993595,
+    "voxel_to_total_deposited_ratio": 0.993952938278,
+    "failures": [],
+    "approximations": [
+      {
+        "code": "schneider_post_em_null_collisions",
+        "message": "sampled candidates resolved as post-EM null collisions (track continues, no lookup)",
+        "value": 2050,
+        "limit": 0
+      }
+    ]
+  },
+  "ctest": "4/4",
+  "data_verifier": "16/16",
+  "dose_path": "out/rt06423_maskfix_01/dose_maskfix.raw",
+  "dose_sha256": "0ee4457a6478c2a878d86b82858fc718383266ac27a4f7f497147a5401ab7b7d",
+  "limitations": [
+    "Local 1%/1mm fell 0.018 percentage points in single shard; no all-metric improvement claim.",
+    "Independent first-slice core discrepancy reduced but not eliminated; total entrance response remains incomplete.",
+    "No new full20 validation; frozen baseline unchanged.",
+    "Old reference anomalous isolated first-slice deposits remain unexplained."
+  ],
+  "independent_entrance_validation": {
+    "jobs": [
+      2333,
+      2334
+    ],
+    "state": "COMPLETED exit 0",
+    "histories_each": 10000,
+    "seed": 916204,
+    "source_z_mm": [
+      0,
+      -1
+    ],
+    "dose_values_identical": true,
+    "reference_csv_sha256": {
+      "onface": "dd90162861ce45c3fc563f3ed7594c7629b91e69d1257a6d2ce5f067795d10f2",
+      "upstream": "7082b3a7c8652810c2db6892836e174abd7609284a57ed56cd0d48df3411fe2b"
+    },
+    "first_slice_core_gpu_over_topas_before": 1.1761414427517887,
+    "first_slice_core_gpu_over_topas_after": 1.0557982546832798,
+    "first_slice_total_gpu_over_topas_after": 1.1603384439611297,
+    "interpretation": "Source-plane placement ruled out in this setup. Old reference isolated spikes not reproduced with independent seed; their cause remains unresolved. Mask fix improves independent entrance core dose; longitudinal response still incomplete."
+  }
+}

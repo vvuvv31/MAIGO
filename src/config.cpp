@@ -672,7 +672,36 @@ void TransportConfig::validate() const {
             "enable_hetero_insert and enable_layered_phantom cannot both be true "
             "(use one heterogeneity model per run)");
     }
+    if (!ct_electron_joint_response_diagnostic_file.empty() &&
+        (run_mode!=RunMode::smoke || !enable_ct_grid || !enable_voxel_scoring ||
+         enable_inelastic || enable_secondary_transport || initial_energy_MeVu!=175 ||
+         primary_atomic_number!=6 || primary_mass_number!=12 ||
+         ct_schneider_delta_tail_file.empty() || ct_schneider_physics_bundle_file.empty() || !ct_schneider_delta_longitudinal_file.empty() ||
+         ct_longitudinal_homogeneous_density_diagnostic || ct_longitudinal_interface_mass_diagnostic ||
+         ct_electron_joint_response_sha256.size()!=64 || ct_electron_joint_response_metadata_sha256.size()!=64 ||
+         !primary_spot_batch.empty() || !topas_spots_file.empty() || !topas_spots_files.empty() || !tps_spots_file.empty()))
+        throw std::invalid_argument("Joint electron response requires pinned, isolated 175 MeV/u C12 CT EM-only smoke; never stacked with longitudinal");
+    if (ct_electron_joint_response_diagnostic_file.empty() &&
+        (!ct_electron_joint_response_sha256.empty() || !ct_electron_joint_response_metadata_sha256.empty()))
+        throw std::invalid_argument("Joint response pins without data");
+    if (ct_longitudinal_homogeneous_density_diagnostic && ct_longitudinal_interface_mass_diagnostic)
+        throw std::invalid_argument("Longitudinal diagnostic modes are mutually exclusive");
+    if ((ct_longitudinal_homogeneous_density_diagnostic || ct_longitudinal_interface_mass_diagnostic) &&
+        (ct_schneider_delta_longitudinal_file.empty() || enable_inelastic ||
+         initial_energy_MeVu != 175.0 || !primary_spot_batch.empty() ||
+         !topas_spots_file.empty() || !topas_spots_files.empty() || !tps_spots_file.empty())) {
+        throw std::invalid_argument(
+            "Longitudinal diagnostic requires candidate file, "
+            "175 MeV/u single beam and nuclear off");
+    }
     const_cast<TransportConfig*>(this)->resolve_material_physics_mode();
+    if (!ct_electron_joint_response_diagnostic_file.empty() &&
+        material_physics_mode != MaterialPhysicsMode::SchneiderCt)
+        throw std::invalid_argument("Joint electron response requires Schneider CT, never water");
+    if (!ct_schneider_delta_longitudinal_file.empty() &&
+        material_physics_mode != MaterialPhysicsMode::SchneiderCt) {
+        throw std::invalid_argument("Longitudinal candidate requires Schneider CT, never water");
+    }
     if (material_physics_mode == MaterialPhysicsMode::SchneiderCt) {
         if (ct_grid_file.empty()) {
             throw std::invalid_argument("MaterialPhysicsMode::SchneiderCt requires ct_grid_file");
@@ -726,6 +755,13 @@ void TransportConfig::validate() const {
             (void)SchneiderDeltaTailTable::from_csv(ct_schneider_delta_tail_file);
         }
         if (!ct_schneider_delta_longitudinal_file.empty()) {
+            if (run_mode != RunMode::smoke ||
+                ct_schneider_delta_longitudinal_scale != 1.0) {
+                throw std::invalid_argument(
+                    "Unvalidated longitudinal candidate requires run_mode: smoke "
+                    "and ct_schneider_delta_longitudinal_scale: 1; "
+                    "research/production and patient-specific calibration are forbidden");
+            }
             if (ct_schneider_delta_tail_file.empty()) {
                 throw std::invalid_argument(
                     "ct_schneider_delta_longitudinal_file requires "
@@ -1991,6 +2027,12 @@ TransportConfig load_config(const std::filesystem::path& path) {
         config.ct_schneider_delta_tail_file = resolve_input_path_from_config(
             config.ct_schneider_delta_tail_file, path);
     }
+    config.ct_electron_joint_response_diagnostic_file = parse_path(values,
+        "ct_electron_joint_response_diagnostic_file",config.ct_electron_joint_response_diagnostic_file);
+    if(!config.ct_electron_joint_response_diagnostic_file.empty())
+        config.ct_electron_joint_response_diagnostic_file=resolve_input_path_from_config(config.ct_electron_joint_response_diagnostic_file,path);
+    if(const auto it=values.find("ct_electron_joint_response_sha256");it!=values.end())config.ct_electron_joint_response_sha256=it->second;
+    if(const auto it=values.find("ct_electron_joint_response_metadata_sha256");it!=values.end())config.ct_electron_joint_response_metadata_sha256=it->second;
     config.ct_schneider_delta_longitudinal_file = parse_path(
         values, "ct_schneider_delta_longitudinal_file",
         config.ct_schneider_delta_longitudinal_file);
@@ -2010,6 +2052,12 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.ct_schneider_delta_longitudinal_scale = parse_number(
         values, "ct_schneider_delta_longitudinal_scale",
         config.ct_schneider_delta_longitudinal_scale);
+    config.ct_longitudinal_homogeneous_density_diagnostic = parse_bool(
+        values, "ct_longitudinal_homogeneous_density_diagnostic",
+        config.ct_longitudinal_homogeneous_density_diagnostic);
+    config.ct_longitudinal_interface_mass_diagnostic = parse_bool(
+        values, "ct_longitudinal_interface_mass_diagnostic",
+        config.ct_longitudinal_interface_mass_diagnostic);
     if (const auto it = values.find("ct_validation_mode"); it != values.end()) {
         config.ct_validation_mode = it->second;
     }

@@ -1,0 +1,67 @@
+{
+  "schema": 3,
+  "binding_verified": true,
+  "runtime_eligible": false,
+  "rows": 912827,
+  "roots": 25604,
+  "missing_roots": 0,
+  "incident_MeV": 28903.01318359375,
+  "electron_birth_MeV": 147.50631779685065,
+  "electron_deposited_MeV": 144.13319216917625,
+  "electron_escaped_MeV": 3.3731256276739083,
+  "global_relative_residual": -6.293424813501353e-16,
+  "electron_relative_residual": 3.317731176292828e-15,
+  "steps_sha256": "45ea36a41b39be881eea8356081ee475da12313ee2f9cda687f8856757e8e4a7",
+  "header_sha256": "a514e5ab80e69c858fb1f210f4a89748912fbf579341fdb1e75233cca1774ac3",
+  "dose_sha256": "c87122f559728ad41bb035e27653d643678d73c7894b401353b6d2798c618bc6",
+  "analyzer_sha256": "750e2b5bd770a0b24d63e6d49e7a929b2c10d7e8af354ae9f4e163a94195d744",
+  "provenance_files": [
+    {
+      "sha256": "c4c48cf8d9aa40807b06f932b2ea425dc41356b8b92f2b8ef84462713b3c9cc1",
+      "path": "startup/extensions/CarbonElectronDepositNtupleV3.cc"
+    },
+    {
+      "sha256": "235d9e6edd546f1da0e60477e06f17da0f6d51bbcea7cf670b5925c844d0571e",
+      "path": "startup/extensions/CarbonElectronDepositNtupleV3.hh"
+    },
+    {
+      "sha256": "d50f90504eafe2b207c0cac309d14c61ad9a99de97321f4844d5388c9bd59eee",
+      "path": "/home/wuwei/topas/topas-build/topas"
+    },
+    {
+      "sha256": "ba2b01ea2afeaff7bdd5b0cebf70e54d3fd44b0b3ef77e38653d644c0d8abdd3",
+      "path": "/mnt/sda/wuwei/electron_v3_validation/case.txt"
+    },
+    {
+      "sha256": "911f351f3c1c7a30f039fce466f474f15de55518b30826548cbc0d0f13794469",
+      "path": "/mnt/sda/wuwei/electron_v3_validation/run.slurm"
+    },
+    {
+      "sha256": "84b407f60cb31156aaff3911513fb37d7947f6b365f19a3f4a82d713c537197d",
+      "path": "/mnt/sda/wuwei/electron_v2_validation/v2_new/case.txt"
+    },
+    {
+      "sha256": "ca58ee779541f4fd4967e5c8dad528a4ef9f66fa4042d05d3649fe1f2c939b86",
+      "path": "/mnt/sda/wuwei/delta_longitudinal_audit/run.txt"
+    },
+    {
+      "sha256": "5022cd89617b28dbd8ee8bf8b095ea20cfd99f6405218693c0df238b3617a139",
+      "path": "data/HUtoMaterialSchneider.txt"
+    }
+  ],
+  "job_id": 2349,
+  "histories": 12,
+  "seed": 917001,
+  "cpus": 2,
+  "mem_GB": 4,
+  "artifact_directory": "/mnt/sda/wuwei/electron_v3_validation",
+  "same_seed_v2_dose_values_bitwise_equal": true,
+  "tests": "26 analyzer + 6 campaign + 7 review + 4 v3 = 43 passing",
+  "status": "generating-step binding validated in one homogeneous 12-history case; not runtime-package validation",
+  "limitations": [
+    "Pre/post are observed step states, not process-internal sampling states",
+    "Shared-resource runner remains planning-only",
+    "Density/geometry response validation not complete",
+    "No GPU physics or Gamma change"
+  ]
+}

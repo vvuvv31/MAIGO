@@ -2,6 +2,7 @@
 #include "carbon/ct_grid.hpp"
 #include "carbon/device.hpp"
 #include "carbon/electron_transport.hpp"
+#include "carbon/electron_joint_response.hpp"
 #include "carbon/energy_loss_fluctuation.hpp"
 #include "carbon/fred_event_library.hpp"
 #include "carbon/fred_table1.hpp"
@@ -20,6 +21,7 @@
 #include "carbon/sha256.hpp"
 #include "carbon/schneider_rate_table.hpp"
 #include "carbon/schneider_delta_tail.hpp"
+#include "carbon/longitudinal_ray.hpp"
 #include "carbon/schneider_target_sampler.hpp"
 #include "carbon/secondary_rate_table.hpp"
 #include "carbon/inelastic_package_v3.hpp"
@@ -1241,6 +1243,24 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
     const bool use_schneider_delta_longitudinal =
         use_schneider_delta_tail &&
         !config.ct_schneider_delta_longitudinal_file.empty();
+    const bool use_longitudinal_interface_mass = config.ct_longitudinal_interface_mass_diagnostic;
+    const bool use_electron_joint = !config.ct_electron_joint_response_diagnostic_file.empty();
+    ElectronJointChannel* electron_joint_channels_device=nullptr;
+    ElectronJointSample* electron_joint_samples_device=nullptr;
+    std::uint64_t* electron_joint_diag_device=nullptr;
+    std::array<double,2> electron_joint_minimum{},electron_joint_maximum{};
+    if(use_electron_joint) {
+        const auto table=ElectronJointResponseTable::from_csv(config.ct_electron_joint_response_diagnostic_file,
+            config.ct_electron_joint_response_sha256,config.ct_electron_joint_response_metadata_sha256);
+        electron_joint_channels_device=mem_tracker.allocate<ElectronJointChannel>(74);
+        electron_joint_samples_device=mem_tracker.allocate<ElectronJointSample>(table.samples.size());
+        electron_joint_diag_device=mem_tracker.allocate<std::uint64_t>(6);
+        if(!electron_joint_channels_device || !electron_joint_samples_device || !electron_joint_diag_device)throw std::bad_alloc();
+        queue.copy(table.channels.data(),electron_joint_channels_device,74).wait_and_throw();
+        queue.copy(table.samples.data(),electron_joint_samples_device,table.samples.size()).wait_and_throw();
+        queue.fill(electron_joint_diag_device,std::uint64_t{0},6).wait_and_throw();
+        electron_joint_minimum=table.minimum;electron_joint_maximum=table.maximum;
+    }
     if (use_schneider_delta_longitudinal && k_dose_atomic_fp32) {
         throw std::runtime_error(
             "ct_schneider_delta_longitudinal_file requires an FP64 dose build "
@@ -1251,6 +1271,13 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
     const auto schneider_long_fraction_scale = static_cast<float>(
         config.ct_schneider_delta_longitudinal_scale);
     std::optional<SchneiderLongitudinalTable> schneider_longitudinal;
+    double schneider_long_diagnostic_density = kLongitudinalReferenceDensityGPerCm3;
+    LongitudinalDomainRecord* longitudinal_domain_device = nullptr;
+    if (config.ct_longitudinal_homogeneous_density_diagnostic || use_longitudinal_interface_mass) {
+        longitudinal_domain_device = mem_tracker.allocate<LongitudinalDomainRecord>(
+            kLongitudinalDomainLogCap);
+        if (!longitudinal_domain_device) throw std::bad_alloc();
+    }
     float* schneider_long_energies_device = nullptr;
     float* schneider_long_fractions_device = nullptr;
     float* schneider_long_lambdas_device = nullptr;
@@ -1266,7 +1293,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
             mem_tracker.allocate<float>(schneider_delta_energy_count);
         schneider_delta_radii_device = mem_tracker.allocate<float>(
             schneider_delta_energy_count * schneider_delta_quantile_count);
-        schneider_delta_energy_device = mem_tracker.allocate<std::uint64_t>(6);
+        schneider_delta_energy_device = mem_tracker.allocate<std::uint64_t>(10);
         if (schneider_delta_energies_device == nullptr ||
             schneider_delta_fractions_device == nullptr ||
             schneider_delta_radii_device == nullptr ||
@@ -1280,7 +1307,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
         queue.copy(schneider_delta_tail->radii_mm().data(),
                    schneider_delta_radii_device,
                    schneider_delta_energy_count * schneider_delta_quantile_count);
-        queue.fill(schneider_delta_energy_device, std::uint64_t{0}, 6)
+        queue.fill(schneider_delta_energy_device, std::uint64_t{0}, 10)
             .wait_and_throw();
         if (use_schneider_delta_longitudinal) {
             schneider_longitudinal = SchneiderLongitudinalTable::from_csv(
@@ -1310,6 +1337,14 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
     if (enable_ct_grid) {
         const auto grid = CtGrid::load(
             config.ct_grid_file, config.ct_schneider_file, config.ct_dicom_origin_mode);
+        if (use_longitudinal_interface_mass || use_electron_joint)
+            validate_longitudinal_interface_grid(grid.density_g_per_cm3, grid.material_id);
+        else if(use_schneider_delta_longitudinal)
+            reject_unvalidated_longitudinal_heterogeneity(grid.density_g_per_cm3, grid.material_id);
+        if (config.ct_longitudinal_homogeneous_density_diagnostic) {
+            schneider_long_diagnostic_density = longitudinal_probe_density(
+                grid.density_g_per_cm3, grid.material_id);
+        }
         ct_origin_x = grid.origin_x_mm;
         ct_origin_y = grid.origin_y_mm;
         ct_origin_z = grid.origin_z_mm;
@@ -2417,6 +2452,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                     }
                 }
 
+                const auto sampled_initial_energy_MeVu = energy_MeV * inverse_mass_number;
                 auto local_x_mm = 0.0F;
                 auto local_y_mm = 0.0F;
                 auto local_dx = 0.0F;
@@ -3059,7 +3095,69 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                     // 1-D depth scorers must not credit it at the source bin (the 3-D
                     // march deposits below credit the destination bins instead).
                     auto forward_shifted_MeV = 0.0F;
-                    if (use_schneider_delta_tail && in_ct && ct_material == 0U &&
+                    auto transverse_relocated_MeV = 0.0F;
+                    auto transverse_escaped_MeV = 0.0F;
+                    if(use_electron_joint && in_ct && enable_voxel_scoring &&
+                       voxel_index<number_of_voxels && deposited_MeV>0) {
+                        auto counter=[&](int slot,std::uint64_t amount) {
+                            sycl::atomic_ref<std::uint64_t,sycl::memory_order::relaxed,
+                                sycl::memory_scope::device,sycl::access::address_space::global_space> a(electron_joint_diag_device[slot]);a.fetch_add(amount);
+                        };
+                        counter(0,1);
+                        const auto draw=sample_electron_joint_device(ct_material,energy_MeVu,
+                            rng::uniform01(spot_seed,rng_history,steps,21),electron_joint_channels_device,
+                            electron_joint_samples_device,electron_joint_minimum,electron_joint_maximum);
+                        if(draw.status!=ElectronJointStatus::hit) {
+                            counter(draw.status==ElectronJointStatus::energy_domain ? 1 : 2,1);
+                            counter(5,static_cast<std::uint64_t>(static_cast<double>(deposited_MeV)*1e6));
+                        } else if(draw.fraction>0) {
+                            // This sampled endpoint is already an energy-weighted FULL
+                            // response deposit. Do NOT distribute it uniformly along the
+                            // ray again, and do NOT also apply the old transverse tail.
+                            const float packet=deposited_MeV*static_cast<float>(draw.fraction);
+                            const double radius=sycl::sqrt(draw.longitudinal_mass_g_cm2*draw.longitudinal_mass_g_cm2+
+                                                           draw.radial_mass_g_cm2*draw.radial_mass_g_cm2);
+                            if(radius>0 && packet>0) {
+                                const double phi=6.2831853071795864769*rng::uniform01(spot_seed,rng_history,steps,22);
+                                const auto ray=rotate_local_direction(
+                                    static_cast<float>(draw.radial_mass_g_cm2*sycl::cos(phi)/radius),
+                                    static_cast<float>(draw.radial_mass_g_cm2*sycl::sin(phi)/radius),
+                                    static_cast<float>(draw.longitudinal_mass_g_cm2/radius),
+                                    Direction3F{direction_x,direction_y,direction_z});
+                                const double birth=rng::uniform01(spot_seed,rng_history,steps,20);
+                                std::size_t target=voxel_index;int target_z=bin;
+                                const auto march=march_longitudinal_mass_segments(
+                                    {position_x_mm+birth*step_mm*direction_x,position_y_mm+birth*step_mm*direction_y,position_z_mm+birth*step_mm*direction_z},
+                                    {ray.x,ray.y,ray.z},{ct_origin_x,ct_origin_y,ct_origin_z},
+                                    {ct_spacing_x,ct_spacing_y,ct_spacing_z},
+                                    {static_cast<int>(ct_nx),static_cast<int>(ct_ny),static_cast<int>(ct_nz)},radius,
+                                    [&](const std::array<int,3>& cell) {
+                                        return static_cast<double>(ct_density_device[(static_cast<std::size_t>(cell[2])*ct_ny+cell[1])*ct_nx+cell[0]]);
+                                    },[&](const std::array<int,3>& cell,double) {
+                                        target=(static_cast<std::size_t>(cell[2])*ct_ny+cell[1])*ct_nx+cell[0];target_z=cell[2];
+                                    });
+                                if(march.invalid || march.blocked)counter(2,1);
+                                else {
+                                    if(march.escaped) {
+                                        delta_tail_escaped_scorer_MeV+=packet;
+                                        counter(4,static_cast<std::uint64_t>(static_cast<double>(packet)*1e6));
+                                    } else {
+                                        auto add=[&](auto* address) {
+                                            using T=std::remove_pointer_t<decltype(address)>;
+                                            sycl::atomic_ref<T,sycl::memory_order::relaxed,sycl::memory_scope::device,
+                                                sycl::access::address_space::global_space> a(*address);a.fetch_add(static_cast<T>(packet));
+                                        };
+                                        add(voxel_dose_device+target);add(dose_device+target_z);
+                                        if(in_fov_dose_device)add(in_fov_dose_device+target_z);
+                                        if(enable_charged_origin_voxel_scoring)add(charged_origin_voxel_dose_device+target);
+                                        counter(3,static_cast<std::uint64_t>(static_cast<double>(packet)*1e6));
+                                    }
+                                    local_voxel_deposit_MeV-=packet;forward_shifted_MeV+=packet;
+                                }
+                            }
+                        }
+                    }
+                    if (!use_electron_joint && use_schneider_delta_tail && in_ct && ct_material == 0U &&
                         enable_voxel_scoring && voxel_index < number_of_voxels &&
                         schneider_delta_source_eligible_device[voxel_index] != 0U) {
                         float moved_fraction = 0.0F;
@@ -3122,6 +3220,21 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                                  sycl::access::address_space::global_space>
                                     atomic_delta(voxel_dose_device[destination_voxel]);
                                 atomic_delta.fetch_add(static_cast<DoseAtomicT>(moved_MeV));
+                                // Mirror the actual 3-D destination. Even a pencil beam
+                                // can cross a depth face between step start and midpoint.
+                                sycl::atomic_ref<DepthAtomicT, sycl::memory_order::relaxed,
+                                    sycl::memory_scope::device,
+                                    sycl::access::address_space::global_space>
+                                    target_depth(dose_device[destination_bin]);
+                                target_depth.fetch_add(static_cast<DepthAtomicT>(moved_MeV));
+                                if (in_fov_dose_device) {
+                                    sycl::atomic_ref<DepthAtomicT, sycl::memory_order::relaxed,
+                                        sycl::memory_scope::device,
+                                        sycl::access::address_space::global_space>
+                                        target_fov(in_fov_dose_device[destination_bin]);
+                                    target_fov.fetch_add(static_cast<DepthAtomicT>(moved_MeV));
+                                }
+                                transverse_relocated_MeV = moved_MeV;
                                 if (enable_charged_origin_voxel_scoring) {
                                     sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
                                                      sycl::memory_scope::device,
@@ -3144,6 +3257,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                 // edge voxel. Transfer it from the in-grid sink to outside-grid.
                                 local_voxel_deposit_MeV -= moved_MeV;
                                 delta_tail_escaped_scorer_MeV += moved_MeV;
+                                transverse_escaped_MeV = moved_MeV;
                                 sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
                                                  sycl::memory_scope::device,
                                                  sycl::access::address_space::global_space>
@@ -3159,167 +3273,157 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                 atomic_fallback.fetch_add(fixed);
                             }
                         }
-                        if (use_schneider_delta_longitudinal && deposited_MeV > 0.0F) {
+                    }
+                        if (use_schneider_delta_longitudinal && in_ct && enable_voxel_scoring &&
+                            voxel_index < number_of_voxels && deposited_MeV > 0.0F &&
+                            (use_longitudinal_interface_mass || (ct_material==0U &&
+                             schneider_delta_source_eligible_device[voxel_index]!=0U))) {
                             // Forward supplement: carry a fitted fraction of the local
                             // deposit downstream along the particle direction with an
                             // exponential range, distributed uniformly along the ray
-                            // (continuous-slowing-down picture). Point deposits pile
-                            // up at air-tissue interfaces; the distributed form does
-                            // not. Same eligibility and section-0 source scope as the
-                            // transverse tail above; every march voxel (air or tissue)
-                            // inside the scorer receives its path share, segments past
-                            // the scorer leave through the escape sink.
+                            // (diagnostic approximation, not validated electron physics).
+                            // Only reference-density section-0 voxels receive exact
+                            // path shares. At unsupported density/material, retain the
+                            // remainder at source; at scorer exit, book escape. This
+                            // does not establish correct air-tissue interface transport.
                             float forward_fraction = 0.0F;
                             float forward_lambda_mm = 0.0F;
-                            schneider_longitudinal_lookup_device(
+                            const bool longitudinal_covered = schneider_longitudinal_lookup_device(
                                 energy_MeVu,
                                 schneider_long_energies_device,
                                 schneider_long_fractions_device,
                                 schneider_long_lambdas_device,
                                 schneider_long_energy_count,
                                 forward_fraction, forward_lambda_mm);
+                            if (!longitudinal_covered) {
+                                sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
+                                    sycl::memory_scope::device,
+                                    sycl::access::address_space::global_space>
+                                    count(schneider_delta_energy_device[6]),
+                                    energy(schneider_delta_energy_device[7]);
+                                const auto domain_slot = count.fetch_add(1);
+                                if (longitudinal_domain_device &&
+                                    domain_slot < kLongitudinalDomainLogCap) {
+                                    longitudinal_domain_device[domain_slot] = {
+                                        global_history, static_cast<std::uint32_t>(steps),
+                                        sampled_initial_energy_MeVu, energy_MeVu,
+                                        position_z_mm, step_mm, deposited_MeV};
+                                }
+                                energy.fetch_add(static_cast<std::uint64_t>(
+                                    static_cast<double>(deposited_MeV) * 1e6));
+                            }
                             const auto forward_MeV =
                                 deposited_MeV * sycl::clamp(
                                     forward_fraction * schneider_long_fraction_scale,
                                     0.0F, 0.5F);
-                            // Density-scaled range: electron CSDA range scales ~1/rho.
-                            // The LUT is calibrated in slab air (rho_ref = 0.01132
-                            // g/cm3, uniform HU-1000 CCTG); patient section-0 air
-                            // spans ~0.011-0.06. Scale the mean range by rho_ref/rho
-                            // at the production voxel so dense voxels throw shorter
-                            // and thin air keeps the calibrated range.
-                            constexpr float kLongitudinalRhoRefGPerCm3 = 0.01132F;
-                            forward_lambda_mm *= sycl::clamp(
-                                kLongitudinalRhoRefGPerCm3 /
-                                    sycl::fmax(local_density_g_per_cm3, 1.0e-6F),
-                                0.15F, 4.0F);
+                            // Default remains reference-only. Optional probe has already
+                            // verified the ENTIRE grid is homogeneous at one known density.
+                            const double rho_ref = schneider_long_diagnostic_density;
                             if (forward_MeV > 0.0F && forward_lambda_mm > 0.0F) {
-                                auto u_long = rng::uniform01(
-                                    spot_seed, rng_history, steps, 19);
-                                if (u_long < 0.0F) u_long = 0.0F;
-                                if (u_long >= 1.0F) u_long = 0.99999988F;
-                                const auto forward_dist_mm =
-                                    -forward_lambda_mm * sycl::log(1.0F - u_long);
-                                // Clamp pathological tail samples to the march window so
-                                // no segment beyond the loop bound can leak energy. The
-                                // clamp binds with probability ~1e-9 per attempt; the
-                                // clamped tail stays inside the scorer-escape logic.
-                                auto fwd_escaped_MeV = 0.0F;
-                                auto fwd_kept_MeV = 0.0F;
-                                if (forward_dist_mm <= 0.0F) {
-                                    // Degenerate range sample (u == 0, measure zero):
-                                    // keep the whole move at the production voxel so
-                                    // no energy leaks. The bookkeeping below then
-                                    // reduces to no-ops with moved == 0.
-                                    fwd_kept_MeV = forward_MeV;
-                                } else {
-                                const auto fwd_source_x =
-                                    position_x_mm + 0.5F * step_mm * direction_x;
-                                const auto fwd_source_y =
-                                    position_y_mm + 0.5F * step_mm * direction_y;
-                                const auto fwd_source_z =
-                                    position_z_mm + 0.5F * step_mm * direction_z;
-                                const auto deposit_pitch_mm = sycl::fmin(
-                                    sycl::fmin(ct_spacing_x, ct_spacing_y), ct_spacing_z);
-                                // Clamp pathological tail samples to the march window
-                                // (binds with probability ~1e-9 per attempt); the tail
-                                // beyond any scorer still leaves via escape logic.
-                                const auto fwd_range_mm = sycl::fmin(
-                                    forward_dist_mm, 1024.0F * deposit_pitch_mm);
-                                auto fwd_steps = static_cast<int>(sycl::ceil(
-                                    fwd_range_mm / deposit_pitch_mm));
-                                if (fwd_steps < 1) fwd_steps = 1;
-                                if (fwd_steps > 1024) fwd_steps = 1024;
-                                // Segment weights are normalized by the sampled range
-                                // (not the pitch) so they sum to exactly 1: every MeV
-                                // is deposited, escaped, or kept, never leaked.
-                                const auto fwd_w_norm = 1.0F / fwd_range_mm;
-                                for (int fwd_k = 0; fwd_k < fwd_steps; ++fwd_k) {
-                                    const auto seg_lo = static_cast<float>(fwd_k) *
-                                                        deposit_pitch_mm;
-                                    auto seg_hi = (static_cast<float>(fwd_k) + 1.0F) *
-                                                  deposit_pitch_mm;
-                                    if (seg_hi > fwd_range_mm) seg_hi = fwd_range_mm;
-                                    if (seg_lo >= seg_hi) break;
-                                    const auto seg_MeV =
-                                        forward_MeV * ((seg_hi - seg_lo) * fwd_w_norm);
-                                    const auto fwd_d = 0.5F * (seg_lo + seg_hi);
-                                    const auto px = fwd_source_x + fwd_d * direction_x;
-                                    const auto py = fwd_source_y + fwd_d * direction_y;
-                                    const auto pz = fwd_source_z + fwd_d * direction_z;
-                                    float p_density = 0.0F;
-                                    std::uint8_t p_material = 255U;
-                                    const auto p_sampled = ct_sample(
-                                        px, py, pz,
-                                        ct_origin_x, ct_origin_y, ct_origin_z,
-                                        ct_spacing_x, ct_spacing_y, ct_spacing_z,
-                                        ct_nx, ct_ny, ct_nz, ct_density_device,
-                                        ct_material_device, p_density,
-                                        p_material);
-                                    const auto p_voxel_x = static_cast<int>(sycl::floor(
-                                        (px - voxel_min_x_mm) / voxel_size_x_mm));
-                                    const auto p_voxel_y = static_cast<int>(sycl::floor(
-                                        (py - voxel_min_y_mm) / voxel_size_y_mm));
-                                    const auto p_bin = static_cast<int>(sycl::floor(
-                                        pz / depth_bin_width_mm));
-                                    const auto p_in_scorer =
-                                        p_voxel_x >= 0 &&
-                                        p_voxel_x < static_cast<int>(voxel_bins_x) &&
-                                        p_voxel_y >= 0 &&
-                                        p_voxel_y < static_cast<int>(voxel_bins_y) &&
-                                        p_bin >= 0 &&
-                                        p_bin < static_cast<int>(number_of_bins);
-                                    if (p_sampled && p_in_scorer) {
-                                        const auto p_voxel =
-                                            static_cast<std::size_t>(p_bin) * voxel_plane_size +
-                                            static_cast<std::size_t>(p_voxel_y) * voxel_bins_x +
-                                            static_cast<std::size_t>(p_voxel_x);
-                                        sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
-                                                         sycl::memory_scope::device,
-                                                         sycl::access::address_space::global_space>
-                                            atomic_fwd(voxel_dose_device[p_voxel]);
-                                        atomic_fwd.fetch_add(
-                                            static_cast<DoseAtomicT>(seg_MeV));
-                                        sycl::atomic_ref<DepthAtomicT, sycl::memory_order::relaxed,
-                                                         sycl::memory_scope::device,
-                                                         sycl::access::address_space::global_space>
-                                            atomic_fwd_depth(dose_device[p_bin]);
-                                        atomic_fwd_depth.fetch_add(
-                                            static_cast<DepthAtomicT>(seg_MeV));
-                                        if (in_fov_dose_device != nullptr) {
-                                            sycl::atomic_ref<DepthAtomicT, sycl::memory_order::relaxed,
-                                                             sycl::memory_scope::device,
-                                                             sycl::access::address_space::global_space>
-                                                atomic_fwd_fov(in_fov_dose_device[p_bin]);
-                                            atomic_fwd_fov.fetch_add(
-                                                static_cast<DepthAtomicT>(seg_MeV));
-                                        }
-                                        if (enable_charged_origin_voxel_scoring) {
-                                            sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
-                                                             sycl::memory_scope::device,
-                                                             sycl::access::address_space::global_space>
-                                                atomic_fwd_origin(
-                                                    charged_origin_voxel_dose_device[p_voxel]);
-                                            atomic_fwd_origin.fetch_add(
-                                                static_cast<DoseAtomicT>(seg_MeV));
-                                        }
-                                    } else if (!p_in_scorer) {
-                                        fwd_escaped_MeV += seg_MeV;
-                                    } else {
-                                        // Inside the scorer but outside the CT grid (scorer
-                                        // bounds may extend past the CT on an axis): keep
-                                        // the share at the production voxel instead of
-                                        // dropping it.
-                                        fwd_kept_MeV += seg_MeV;
+                                const auto u = rng::uniform01(spot_seed, rng_history, steps, 19);
+                                const double range = -static_cast<double>(forward_lambda_mm) *
+                                    (kLongitudinalReferenceDensityGPerCm3 / rho_ref) *
+                                    sycl::log(1.0 - sycl::clamp(static_cast<double>(u), 0.0, 0.99999988));
+                                double fwd_escaped_MeV = 0, fwd_kept_MeV = 0, fwd_scored_MeV = 0;
+                                if (use_longitudinal_interface_mass && range > 0) {
+                                    // Diagnostic hypothesis: the fixed air kernel expressed
+                                    // in mass thickness, with sources on BOTH sides. Same
+                                    // fraction/range table; no interface-fitted multiplier.
+                                    // The ion loses energy along the ENTIRE step, not at
+                                    // its midpoint. In tissue lambda is sub-voxel; midpoint
+                                    // emission biases cross-face fluence. Independent tag20
+                                    // integrates uniform per-step births without a grid phase.
+                                    const double birth_fraction=rng::uniform01(spot_seed,rng_history,steps,20);
+                                    const auto march = march_longitudinal_mass_segments(
+                                        {position_x_mm + birth_fraction * step_mm * direction_x,
+                                         position_y_mm + birth_fraction * step_mm * direction_y,
+                                         position_z_mm + birth_fraction * step_mm * direction_z},
+                                        {direction_x, direction_y, direction_z},
+                                        {ct_origin_x, ct_origin_y, ct_origin_z},
+                                        {ct_spacing_x, ct_spacing_y, ct_spacing_z},
+                                        {static_cast<int>(ct_nx), static_cast<int>(ct_ny),
+                                         static_cast<int>(ct_nz)}, range * rho_ref / 10.0,
+                                        [&](const std::array<int,3>& cell) {
+                                            return static_cast<double>(ct_density_device[
+                                                (static_cast<std::size_t>(cell[2])*ct_ny+cell[1])*ct_nx+cell[0]]);
+                                        },
+                                        [&](const std::array<int,3>& cell,double fraction) {
+                                            const auto index=(static_cast<std::size_t>(cell[2])*ct_ny+cell[1])*ct_nx+cell[0];
+                                            const double share=static_cast<double>(forward_MeV)*fraction;
+                                            auto add=[&](auto* address) {
+                                                using T=std::remove_pointer_t<decltype(address)>;
+                                                sycl::atomic_ref<T,sycl::memory_order::relaxed,
+                                                    sycl::memory_scope::device,
+                                                    sycl::access::address_space::global_space> atom(*address);
+                                                atom.fetch_add(static_cast<T>(share));
+                                            };
+                                            add(voxel_dose_device+index);
+                                            add(dose_device+cell[2]);
+                                            if(in_fov_dose_device) add(in_fov_dose_device+cell[2]);
+                                            if(enable_charged_origin_voxel_scoring)
+                                                add(charged_origin_voxel_dose_device+index);
+                                            fwd_scored_MeV+=share;
+                                        });
+                                    const double remainder=sycl::fmax(0.0,static_cast<double>(forward_MeV)-fwd_scored_MeV);
+                                    if(march.escaped) fwd_escaped_MeV=remainder;
+                                    else fwd_kept_MeV=remainder;
+                                    if(march.invalid || march.blocked) {
+                                        sycl::atomic_ref<std::uint64_t,sycl::memory_order::relaxed,
+                                            sycl::memory_scope::device,
+                                            sycl::access::address_space::global_space> invalid(schneider_delta_energy_device[9]);
+                                        invalid.fetch_add(1);
                                     }
-                                }
-                                }  // end non-degenerate range march
+                                } else if (range > 0 &&
+                                    sycl::fabs(static_cast<double>(local_density_g_per_cm3)-rho_ref)
+                                        <= rho_ref * 1e-4) {
+                                    const auto march = march_longitudinal_segments(
+                                        {position_x_mm + 0.5 * step_mm * direction_x,
+                                         position_y_mm + 0.5 * step_mm * direction_y,
+                                         position_z_mm + 0.5 * step_mm * direction_z},
+                                        {direction_x, direction_y, direction_z},
+                                        {ct_origin_x, ct_origin_y, ct_origin_z},
+                                        {ct_spacing_x, ct_spacing_y, ct_spacing_z},
+                                        {static_cast<int>(ct_nx), static_cast<int>(ct_ny),
+                                         static_cast<int>(ct_nz)}, range,
+                                        [&](const std::array<int,3>& cell, double length) {
+                                            const auto index = (static_cast<std::size_t>(cell[2]) *
+                                                ct_ny + cell[1]) * ct_nx + cell[0];
+                                            if (ct_material_device[index] != 0U ||
+                                                sycl::fabs(static_cast<double>(ct_density_device[index]) -
+                                                           rho_ref) > rho_ref * 1e-4) return false;
+                                            const double share = static_cast<double>(forward_MeV) * length / range;
+                                            auto add = [&](auto* address) {
+                                                using T = std::remove_pointer_t<decltype(address)>;
+                                                sycl::atomic_ref<T, sycl::memory_order::relaxed,
+                                                    sycl::memory_scope::device,
+                                                    sycl::access::address_space::global_space> atom(*address);
+                                                atom.fetch_add(static_cast<T>(share));
+                                            };
+                                            add(voxel_dose_device + index);
+                                            add(dose_device + cell[2]);
+                                            if (in_fov_dose_device) add(in_fov_dose_device + cell[2]);
+                                            if (enable_charged_origin_voxel_scoring)
+                                                add(charged_origin_voxel_dose_device + index);
+                                            fwd_scored_MeV += share;
+                                            return true;
+                                        });
+                                    const double remainder = sycl::fmax(
+                                        0.0, static_cast<double>(forward_MeV)-fwd_scored_MeV);
+                                    if (march.escaped) fwd_escaped_MeV = remainder;
+                                    else fwd_kept_MeV = remainder;
+                                    if (march.invalid) {
+                                        sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
+                                            sycl::memory_scope::device,
+                                            sycl::access::address_space::global_space>
+                                            invalid(schneider_delta_energy_device[9]);
+                                        invalid.fetch_add(1);
+                                    }
+                                } else fwd_kept_MeV = forward_MeV;
                                 local_voxel_deposit_MeV -= forward_MeV - fwd_kept_MeV;
                                 delta_tail_escaped_scorer_MeV += fwd_escaped_MeV;
                                 forward_shifted_MeV = forward_MeV - fwd_kept_MeV;
                                 const auto fwd_fixed = static_cast<std::uint64_t>(
-                                    static_cast<double>(
-                                        forward_MeV - fwd_escaped_MeV - fwd_kept_MeV) * 1.0e6);
+                                    fwd_scored_MeV * 1.0e6);
                                 const auto fwd_esc_fixed = static_cast<std::uint64_t>(
                                     static_cast<double>(fwd_escaped_MeV) * 1.0e6);
                                 const auto fwd_kept_fixed = static_cast<std::uint64_t>(
@@ -3345,8 +3449,6 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                 }
                             }
                         }
-                    }
-
                     if (bin != pending_primary_bin) {
                         if (pending_primary_depth_MeV > 0.0) {
                             sycl::atomic_ref<DepthAtomicT, sycl::memory_order::relaxed,
@@ -3396,7 +3498,10 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                         pending_primary_voxel = voxel_index;
                     }
 
-                    pending_primary_depth_MeV += deposited_MeV - forward_shifted_MeV;
+                    // Keep the legacy unrestricted-depth escape convention, but
+                    // remove relocated energy now tallied at its destination.
+                    pending_primary_depth_MeV += deposited_MeV - forward_shifted_MeV -
+                        transverse_relocated_MeV;
                     if (enable_voxel_scoring && voxel_index >= 0) {
                         pending_primary_voxel_MeV += local_voxel_deposit_MeV;
                         if (in_fov_dose_device != nullptr && pending_primary_bin >= 0 &&
@@ -3406,7 +3511,8 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                              sycl::access::address_space::global_space>
                                 atomic_in_fov(in_fov_dose_device[pending_primary_bin]);
                             atomic_in_fov.fetch_add(static_cast<DepthAtomicT>(
-                                deposited_MeV - forward_shifted_MeV));
+                                deposited_MeV - forward_shifted_MeV -
+                                transverse_relocated_MeV - transverse_escaped_MeV));
                         }
                     }
                     history_deposited_MeV += deposited_MeV;
@@ -6954,14 +7060,29 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
             .wait_and_throw();
     }
 
-    std::array<std::uint64_t, 6> schneider_delta_energy_host{};
+    std::array<std::uint64_t, 10> schneider_delta_energy_host{};
+    std::array<std::uint64_t,6> electron_joint_diag_host{};
+    if(electron_joint_diag_device)queue.copy(electron_joint_diag_device,electron_joint_diag_host.data(),6).wait_and_throw();
     if (schneider_delta_energy_device != nullptr) {
         queue.copy(schneider_delta_energy_device,
                    schneider_delta_energy_host.data(),
                    schneider_delta_energy_host.size()).wait_and_throw();
     }
 
+    std::vector<LongitudinalDomainRecord> longitudinal_domain_host;
+    if (longitudinal_domain_device) {
+        longitudinal_domain_host.resize(std::min<std::uint64_t>(
+            schneider_delta_energy_host[6], kLongitudinalDomainLogCap));
+        if (!longitudinal_domain_host.empty())
+            queue.copy(longitudinal_domain_device, longitudinal_domain_host.data(),
+                       longitudinal_domain_host.size()).wait_and_throw();
+        std::sort(longitudinal_domain_host.begin(), longitudinal_domain_host.end(),
+            [](const auto& a, const auto& b) {
+                return a.history < b.history || (a.history == b.history && a.step < b.step);
+            });
+    }
     // Free buffers
+    free_device(electron_joint_channels_device);free_device(electron_joint_samples_device);free_device(electron_joint_diag_device);
     free_immutable_device(table_device);
     free_immutable_device(energy_grid_device);
     free_immutable_device(cumulative_range_device);
@@ -7072,6 +7193,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
     free_device(schneider_delta_radii_device);
     free_device(schneider_delta_source_eligible_device);
     free_device(schneider_delta_energy_device);
+    free_device(longitudinal_domain_device);
     free_device(schneider_long_energies_device);
     free_device(schneider_long_fractions_device);
     free_device(schneider_long_lambdas_device);
@@ -7098,6 +7220,14 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
         static_cast<double>(schneider_delta_energy_host[4]) * 1.0e-6;
     result.schneider_primary_delta_longitudinal_escaped_scorer_MeV =
         static_cast<double>(schneider_delta_energy_host[5]) * 1.0e-6;
+    result.schneider_primary_delta_longitudinal_domain_queries = schneider_delta_energy_host[6];
+    result.schneider_primary_delta_longitudinal_domain_energy_MeV =
+        static_cast<double>(schneider_delta_energy_host[7]) * 1e-6;
+    result.schneider_primary_delta_longitudinal_invalid_marches = schneider_delta_energy_host[9];
+    result.longitudinal_diagnostic_density_g_cm3 = schneider_long_diagnostic_density;
+    result.longitudinal_domain_log = std::move(longitudinal_domain_host);
+    result.electron_joint_diagnostics={electron_joint_diag_host[0],electron_joint_diag_host[1],electron_joint_diag_host[2],
+        static_cast<double>(electron_joint_diag_host[3])*1e-6,static_cast<double>(electron_joint_diag_host[4])*1e-6,static_cast<double>(electron_joint_diag_host[5])*1e-6};
     result.schneider_unsupported_tracks = std::move(schneider_track_host);
     result.backend = "sycl-" + resolved_device_name +
                      (config.enable_energy_straggling ? "+straggling" : "");

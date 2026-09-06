@@ -46,6 +46,7 @@ add_library(carbon_core
     src/io.cpp
     src/plan_run.cpp
     src/electron_transport.cpp
+    src/electron_joint_response.cpp
     src/energy_loss_fluctuation.cpp
     src/fred_table1.cpp
     src/fred_event_library.cpp
@@ -239,6 +240,18 @@ if(BUILD_TESTING)
     target_link_libraries(test_secondary_rate_table_hardening PRIVATE carbon_core)
 
     add_test(NAME carbon_tests COMMAND carbon_tests)
+    add_executable(test_schneider_longitudinal tests/test_schneider_longitudinal.cpp)
+    target_link_libraries(test_schneider_longitudinal PRIVATE carbon_core)
+    target_compile_definitions(test_schneider_longitudinal PRIVATE
+        CARBON_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+    if(CARBON_ENABLE_SYCL)
+        target_compile_options(test_schneider_longitudinal PRIVATE -fsycl)
+        if(CARBON_SYCL_TARGETS)
+            target_compile_options(test_schneider_longitudinal PRIVATE
+                -fsycl-targets=${CARBON_SYCL_TARGETS})
+        endif()
+    endif()
+    add_test(NAME test_schneider_longitudinal COMMAND test_schneider_longitudinal)
     add_test(NAME inelastic_package_v2_tests COMMAND inelastic_package_v2_tests)
     add_test(NAME test_schneider_dicom_reference COMMAND test_schneider_dicom_reference)
     add_test(NAME test_secondary_rate_table_hardening COMMAND test_secondary_rate_table_hardening)

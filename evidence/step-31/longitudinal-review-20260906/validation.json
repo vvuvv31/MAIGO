@@ -1,0 +1,349 @@
+{
+  "status": "numerical_safety_verified_physics_blocked",
+  "source_base_commit": "693655e68a3b719f78067c54c0ba65dbe5ad1c27",
+  "source_worktree_clean": false,
+  "source_file_sha256": {
+    "src/transport_sycl.cpp": "f01599f96697e2c8fcff41cc227d67eb6c49447835567fcbefd520e7c089253a",
+    "src/config.cpp": "0a42bc734e4fe1d87f2f67fee417cf5afbc46a9240e4777228fb4c751b88307f",
+    "src/run_quality.cpp": "de8b5ebb821a0fb6b58e4714fcd26b1589817547c343aca19a09f460f3f65242",
+    "src/io.cpp": "9ac50b00ee54ed4cba84e29a73aeb29630634e2aa385bbeb40a34d2bc4244538",
+    "src/schneider_delta_tail.cpp": "a369fe4bbce6ea816a2b2a0e559dd24b5bc44ecf294e0cdf7edf98097bbb9c92",
+    "src/detail/sycl_dose_atomic.inc": "7d1abfadbb9b108f48c043cc600d57ac8782f52e960b2d8d1a158797a2a5c97b",
+    "include/carbon/schneider_delta_tail.hpp": "e8aaa12862f56565eee42710ecbae99bed36733d4a910f3ff0c9e145b7f7c1fe",
+    "include/carbon/longitudinal_ray.hpp": "ba0b8ef73d6d3653c314ab0a9b6094d7bf78465e43a6d8185ddeeef478206167",
+    "include/carbon/transport.hpp": "0ec93e82fdfcc58afcecd2ad3d61250c215f96740dcd050ef32181f8aac215bd",
+    "include/carbon/transport_config.hpp": "9840ee981a9a97c1b9af8727837c82b86c7278ec6e985a0693436bcda4d12d2d",
+    "tests/test_schneider_longitudinal.cpp": "996bfdb8c0739ce370b51e6b51e18075daeb0845236d7ace523ab0431392616e",
+    "CMakeLists.txt": "ab102980df08cb35381ce11d57062bef3728a62b68ff714a4aae2f08db360a72"
+  },
+  "executable_sha256": "2a6a80b677e4f164ed85df7b392d51e495ca9bf9d27eefb9edda1cad7ebb4690",
+  "executable": "build/oneapi-nvidia-fp64/carbon_mc",
+  "artifacts": [
+    {
+      "path": "/mnt/sda/wuwei/schneider_longitudinal_review_20260906_tuvUBr/baseline/config.yaml",
+      "size": 2350,
+      "sha256": "39f771c42a55ee7d05f89095e7aad5010d524b0dabeebf052b19e6a0cc837d43"
+    },
+    {
+      "path": "/mnt/sda/wuwei/schneider_longitudinal_review_20260906_tuvUBr/baseline/energy_ledger.json",
+      "size": 562689,
+      "sha256": "df440402f48b422ccfcbfcdb9990217b40484840d70190c4ad7bd1fdfa2c58c0"
+    },
+    {
+      "path": "/mnt/sda/wuwei/schneider_longitudinal_review_20260906_tuvUBr/baseline/quality_report.json",
+      "size": 1204,
+      "sha256": "f7b1ddae732fe97fb23c8209f94bcbdace79d67b27ecb022749228745a696756"
+    },
+    {
+      "path": "/mnt/sda/wuwei/schneider_longitudinal_review_20260906_tuvUBr/baseline/run.log",
+      "size": 980,
+      "sha256": "e34c7df5f06cabc65f3e7ea8eccfcb0752274fa7affcc67b993ec1ac640f6b9f"
+    },
+    {
+      "path": "/mnt/sda/wuwei/schneider_longitudinal_review_20260906_tuvUBr/below_domain/config.yaml",
+      "size": 2477,
+      "sha256": "218caab65fc15be4ca64c16288c4dcca135c332269c4e6e1cce2e8493c2ef6c6"
+    },
+    {
+      "path": "/mnt/sda/wuwei/schneider_longitudinal_review_20260906_tuvUBr/below_domain/energy_ledger.json",
+      "size": 563181,
+      "sha256": "87cd1cf0b6e60d943751fc0c7d4aef7d20a026539a3929deeb4b22a32ebb71b5"
+    },
+    {
+      "path": "/mnt/sda/wuwei/schneider_longitudinal_review_20260906_tuvUBr/below_domain/quality_report.json",
+      "size": 1346,
+      "sha256": "a558f6470b90a7547a094c581c7387fe1ec8da56c455917f10ac3e6bb5902ec9"
+    },
+    {
+      "path": "/mnt/sda/wuwei/schneider_longitudinal_review_20260906_tuvUBr/below_domain/run.log",
+      "size": 1867,
+      "sha256": "24b0ede937a4f48c36010be2d53cf76409802126b60ba958a05cbcd733023b8d"
+    },
+    {
+      "path": "/mnt/sda/wuwei/schneider_longitudinal_review_20260906_tuvUBr/controlled_base/config.yaml",
+      "size": 2356,
+      "sha256": "26ea6fd5ed17100048a259c024a949caa4baaf75e8f2d3e1dd8f936c9dabf486"
+    },
+    {
+      "path": "/mnt/sda/wuwei/schneider_longitudinal_review_20260906_tuvUBr/controlled_base/energy_ledger.json",
+      "size": 562689,
+      "sha256": "6b61d720ea10e57c1da2ec44fddb0a753128ae8de4f7aeaec6b3d7c4cc20e3cb"
+    },
+    {
+      "path": "/mnt/sda/wuwei/schneider_longitudinal_review_20260906_tuvUBr/controlled_base/quality_report.json",
+      "size": 878,
+      "sha256": "a5ea60daf600450b9e7165a2a25a611812af111b1cda477be029ae36733bb49a"
+    },
+    {
+      "path": "/mnt/sda/wuwei/schneider_longitudinal_review_20260906_tuvUBr/controlled_base/run.log",
+      "size": 997,
+      "sha256": "88ab83f84439af2b6437ea13fff71f8703bccf862163dfd7c0520b5dcb586008"
+    },
+    {
+      "path": "/mnt/sda/wuwei/schneider_longitudinal_review_20260906_tuvUBr/controlled_in/config.yaml",
+      "size": 2477,
+      "sha256": "f00c4c091697f58e991521c3fefa44f85f529aafe962aa127e788787c8ed4f4a"
+    },
+    {
+      "path": "/mnt/sda/wuwei/schneider_longitudinal_review_20260906_tuvUBr/controlled_in/energy_ledger.json",
+      "size": 563214,
+      "sha256": "8fdecde79bb8587f20cdf74e4f8502fc86682acce5e42a53638ef69a66a593ce"
+    },
+    {
+      "path": "/mnt/sda/wuwei/schneider_longitudinal_review_20260906_tuvUBr/controlled_in/quality_report.json",
+      "size": 1039,
+      "sha256": "ce2238499c6dfa95bbcbbc581dfff4bf4a35ac92b2cfc611f61811841662965a"
+    },
+    {
+      "path": "/mnt/sda/wuwei/schneider_longitudinal_review_20260906_tuvUBr/controlled_in/run.log",
+      "size": 985,
+      "sha256": "0e774fdc80e97aa5e836c5a4848a344f7e6d749ced6ae8207beb7b5104208ebf"
+    },
+    {
+      "path": "/mnt/sda/wuwei/schneider_longitudinal_review_20260906_tuvUBr/controlled_out/config.yaml",
+      "size": 2478,
+      "sha256": "170e9c7747ff4c285337eb78096afb2743307ae5a76ddce145163aeaff169c31"
+    },
+    {
+      "path": "/mnt/sda/wuwei/schneider_longitudinal_review_20260906_tuvUBr/controlled_out/controlled_out.mhd",
+      "size": 307,
+      "sha256": "4933ac87dcaf517cbe3ca4ebb5b16f142419a0c9064db44959ab47652c1fc815"
+    },
+    {
+      "path": "/mnt/sda/wuwei/schneider_longitudinal_review_20260906_tuvUBr/controlled_out/controlled_out.raw",
+      "size": 17600000,
+      "sha256": "4f72a3db32448a6100ac134f1aae9ccd938aa8eec66152d527472f1ce929cc1b"
+    },
+    {
+      "path": "/mnt/sda/wuwei/schneider_longitudinal_review_20260906_tuvUBr/controlled_out/energy_ledger.json",
+      "size": 563178,
+      "sha256": "9247fe91f3442e11b6c9bafe2f04bbfddff79cc1d499c5519f611b30cc02cb69"
+    },
+    {
+      "path": "/mnt/sda/wuwei/schneider_longitudinal_review_20260906_tuvUBr/controlled_out/quality_report.json",
+      "size": 1015,
+      "sha256": "b5e38d894b09436c74ab59719d2c1751516ef857a2546ba36d4e8ebfa07737a1"
+    },
+    {
+      "path": "/mnt/sda/wuwei/schneider_longitudinal_review_20260906_tuvUBr/controlled_out/run.log",
+      "size": 1834,
+      "sha256": "c40aad245274cc000a05b33869bd723e68ce956130b77332f163da1aa271240b"
+    },
+    {
+      "path": "/mnt/sda/wuwei/schneider_longitudinal_review_20260906_tuvUBr/controlled_out_base/config.yaml",
+      "size": 2360,
+      "sha256": "cde2fad188ff97acbb6bc3f9829c90f286a319283e2688b4022ddae6eadb921b"
+    },
+    {
+      "path": "/mnt/sda/wuwei/schneider_longitudinal_review_20260906_tuvUBr/controlled_out_base/controlled_out_base.mhd",
+      "size": 312,
+      "sha256": "754a2ccbc1a60570c122fc4a06ba9753b2abc79925567e0989904a0a61b51cbc"
+    },
+    {
+      "path": "/mnt/sda/wuwei/schneider_longitudinal_review_20260906_tuvUBr/controlled_out_base/controlled_out_base.raw",
+      "size": 17600000,
+      "sha256": "4f72a3db32448a6100ac134f1aae9ccd938aa8eec66152d527472f1ce929cc1b"
+    },
+    {
+      "path": "/mnt/sda/wuwei/schneider_longitudinal_review_20260906_tuvUBr/controlled_out_base/energy_ledger.json",
+      "size": 562659,
+      "sha256": "37b4a4f397bcd799c54501a3ac107fff57881d7a2d5a2bb4baba44a0e4c8721c"
+    },
+    {
+      "path": "/mnt/sda/wuwei/schneider_longitudinal_review_20260906_tuvUBr/controlled_out_base/quality_report.json",
+      "size": 855,
+      "sha256": "3f544f20ae25709c377823d7e2d0b1b5f344e42797db5bdef7fc197991a16978"
+    },
+    {
+      "path": "/mnt/sda/wuwei/schneider_longitudinal_review_20260906_tuvUBr/controlled_out_base/run.log",
+      "size": 1703,
+      "sha256": "944c09542f518a1abb4bc0f51554bea6dbb82cb7c91f52609fbb113058f7dd07"
+    },
+    {
+      "path": "/mnt/sda/wuwei/schneider_longitudinal_review_20260906_tuvUBr/in_domain/config.yaml",
+      "size": 2474,
+      "sha256": "672082a6b120571ee11b3fa331280fc53cdd40557d0c86416e519e3799962eed"
+    },
+    {
+      "path": "/mnt/sda/wuwei/schneider_longitudinal_review_20260906_tuvUBr/in_domain/energy_ledger.json",
+      "size": 563214,
+      "sha256": "60081cb27f39a4d01ba6e4218244c111febfc73702a2bc0b82f064034084fc67"
+    },
+    {
+      "path": "/mnt/sda/wuwei/schneider_longitudinal_review_20260906_tuvUBr/in_domain/quality_report.json",
+      "size": 1372,
+      "sha256": "7b088c76954498e8f7128a25d69aeb155cd5f4e85eb4e87699f71555eb0d736f"
+    },
+    {
+      "path": "/mnt/sda/wuwei/schneider_longitudinal_review_20260906_tuvUBr/in_domain/run.log",
+      "size": 981,
+      "sha256": "19dc200c606a903240245efa719ddc89c7d3e062f4f5a0f36ec44cd27f35fc99"
+    }
+  ],
+  "cases": {
+    "baseline": {
+      "accepted": false,
+      "failures": [
+        {
+          "code": "physical_energy_residual_exceeded",
+          "message": "physical relative energy residual exceeds the configured tolerance",
+          "value": 0.000109346086184,
+          "limit": 0.0001
+        }
+      ],
+      "voxel_to_ingrid_ratio": 0.999999999964,
+      "physical_relative_energy_residual": 0.000109346086184,
+      "longitudinal_candidate": null,
+      "moved_MeV": 0,
+      "dose_output_complete": false
+    },
+    "below_domain": {
+      "accepted": false,
+      "failures": [
+        {
+          "code": "unvalidated_longitudinal_candidate",
+          "message": "Diagnostic only: independent energy/density/interface validation is incomplete",
+          "value": 1,
+          "limit": 0
+        },
+        {
+          "code": "physical_energy_residual_exceeded",
+          "message": "physical relative energy residual exceeds the configured tolerance",
+          "value": 0.000109344114198,
+          "limit": 0.0001
+        }
+      ],
+      "voxel_to_ingrid_ratio": 1,
+      "physical_relative_energy_residual": 0.000109344114198,
+      "longitudinal_candidate": {
+        "status": "unvalidated_diagnostic",
+        "scale": 1,
+        "data_sha256": "f42140bc6a99ca90ef9a7fc267c22be9a6d8002192644dbe45b7a40c4e10820b",
+        "metadata_sha256": "32a37a8235d75954ea020685cd659be2ed6c7d766fad5725eaabdae91035339a",
+        "manifest_sha256": "1a8f8880e17dd3a7832d6a10e75f414171b6fed0615b0890cc208c028c28cd0e",
+        "out_of_domain_queries": 435605,
+        "out_of_domain_local_energy_MeV": 50995.556038,
+        "invalid_marches": 0
+      },
+      "moved_MeV": 0,
+      "dose_output_complete": false
+    },
+    "controlled_base": {
+      "accepted": true,
+      "failures": [],
+      "voxel_to_ingrid_ratio": 1.00000000162,
+      "physical_relative_energy_residual": 1.89145406087e-7,
+      "longitudinal_candidate": null,
+      "moved_MeV": 0,
+      "dose_output_complete": false
+    },
+    "controlled_in": {
+      "accepted": false,
+      "failures": [
+        {
+          "code": "unvalidated_longitudinal_candidate",
+          "message": "Diagnostic only: independent energy/density/interface validation is incomplete",
+          "value": 1,
+          "limit": 0
+        }
+      ],
+      "voxel_to_ingrid_ratio": 1.00000000343,
+      "physical_relative_energy_residual": 1.89145406087e-7,
+      "longitudinal_candidate": {
+        "status": "unvalidated_diagnostic",
+        "scale": 1,
+        "data_sha256": "f42140bc6a99ca90ef9a7fc267c22be9a6d8002192644dbe45b7a40c4e10820b",
+        "metadata_sha256": "32a37a8235d75954ea020685cd659be2ed6c7d766fad5725eaabdae91035339a",
+        "manifest_sha256": "1a8f8880e17dd3a7832d6a10e75f414171b6fed0615b0890cc208c028c28cd0e",
+        "out_of_domain_queries": 0,
+        "out_of_domain_local_energy_MeV": 0,
+        "invalid_marches": 0
+      },
+      "moved_MeV": 2969.639425,
+      "dose_output_complete": false
+    },
+    "controlled_out": {
+      "accepted": false,
+      "failures": [
+        {
+          "code": "unvalidated_longitudinal_candidate",
+          "message": "Diagnostic only: independent energy/density/interface validation is incomplete",
+          "value": 1,
+          "limit": 0
+        }
+      ],
+      "voxel_to_ingrid_ratio": 1,
+      "physical_relative_energy_residual": 1.05963812934e-7,
+      "longitudinal_candidate": {
+        "status": "unvalidated_diagnostic",
+        "scale": 1,
+        "data_sha256": "f42140bc6a99ca90ef9a7fc267c22be9a6d8002192644dbe45b7a40c4e10820b",
+        "metadata_sha256": "32a37a8235d75954ea020685cd659be2ed6c7d766fad5725eaabdae91035339a",
+        "manifest_sha256": "1a8f8880e17dd3a7832d6a10e75f414171b6fed0615b0890cc208c028c28cd0e",
+        "out_of_domain_queries": 439000,
+        "out_of_domain_local_energy_MeV": 50817.782,
+        "invalid_marches": 0
+      },
+      "moved_MeV": 0,
+      "dose_output_complete": true
+    },
+    "controlled_out_base": {
+      "accepted": true,
+      "failures": [],
+      "voxel_to_ingrid_ratio": 1,
+      "physical_relative_energy_residual": 1.05963812934e-7,
+      "longitudinal_candidate": null,
+      "moved_MeV": 0,
+      "dose_output_complete": true
+    },
+    "in_domain": {
+      "accepted": false,
+      "failures": [
+        {
+          "code": "unvalidated_longitudinal_candidate",
+          "message": "Diagnostic only: independent energy/density/interface validation is incomplete",
+          "value": 1,
+          "limit": 0
+        },
+        {
+          "code": "physical_energy_residual_exceeded",
+          "message": "physical relative energy residual exceeds the configured tolerance",
+          "value": 0.000109346086184,
+          "limit": 0.0001
+        }
+      ],
+      "voxel_to_ingrid_ratio": 1.00000000031,
+      "physical_relative_energy_residual": 0.000109346086184,
+      "longitudinal_candidate": {
+        "status": "unvalidated_diagnostic",
+        "scale": 1,
+        "data_sha256": "f42140bc6a99ca90ef9a7fc267c22be9a6d8002192644dbe45b7a40c4e10820b",
+        "metadata_sha256": "32a37a8235d75954ea020685cd659be2ed6c7d766fad5725eaabdae91035339a",
+        "manifest_sha256": "1a8f8880e17dd3a7832d6a10e75f414171b6fed0615b0890cc208c028c28cd0e",
+        "out_of_domain_queries": 0,
+        "out_of_domain_local_energy_MeV": 0,
+        "invalid_marches": 0
+      },
+      "moved_MeV": 2979.250085,
+      "dose_output_complete": false
+    }
+  },
+  "notes": [
+    "No TOPAS or patient run performed.",
+    "Controlled tests disable MCS, energy spread and straggling to isolate redistribution; not physical calibration.",
+    "Initial realistic 1k controls fail the same preexisting global/boundary checks with and without candidate.",
+    "Controlled 200 MeV/u candidate ON and OFF both fail the depth-bin writer at bin 1 (diff 0.008273 MeV; tolerances 0.001846 and 0.002019 MeV). Quality acceptance is not end-to-end success. No complete 200 MeV/u dose output is claimed.",
+    "Controlled 120 MeV/u candidate ON/OFF raw outputs are byte-identical. All candidate quality reports reject physical acceptance by design.",
+    "Source/executable fields above bind the smoke runs before a comment-only source correction. Final rebuilt executable and source hashes are separately recorded below.",
+    "Full legacy CTest regression was not run. No commit or push performed."
+  ],
+  "final_rebuild": {
+    "executable_sha256": "15cc1d23f61aa928398f66f743941980635bf318a1d9ff58cbbba5b4a826086d",
+    "transport_source_sha256": "3373f5ca30598e06d820c3ab0e5e8621feb77f5eff91c84883469c4f34dcc40f",
+    "change_since_smoke": "transport comment only; documentation corrections",
+    "cuda_ctest": "test_schneider_longitudinal PASS, 1.96 s",
+    "python_tests": "8/8 PASS",
+    "minimum_stack_verifier": "16/16 PASS",
+    "candidate_verifier_with_raw": "PASS"
+  }
+}

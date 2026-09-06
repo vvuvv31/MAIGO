@@ -1,0 +1,61 @@
+{
+  "status": "prespecified_pilot",
+  "energy_MeV_u": 175,
+  "histories_per_run": 20000,
+  "source_z_mm": 0.01,
+  "energy_spread_percent": 1,
+  "scale": 1,
+  "root": "/mnt/sda/wuwei/longitudinal_holdout_175_20260906",
+  "topas_seeds": [
+    1906175,
+    2906175
+  ],
+  "gpu_seed": 1906175,
+  "density_g_cm3": 0.01131606474518776,
+  "geometry": {
+    "dims": [
+      100,
+      100,
+      440
+    ],
+    "spacing_mm": [
+      2,
+      2,
+      0.5
+    ]
+  },
+  "excluded_depth_mm": [
+    0,
+    2
+  ],
+  "windows_mm": [
+    [
+      2,
+      20
+    ],
+    [
+      20,
+      50
+    ],
+    [
+      50,
+      100
+    ],
+    [
+      100,
+      120
+    ]
+  ],
+  "diagnostic_gates": {
+    "window_abs_relative_error_max": 0.01,
+    "window_replica_relative_difference_max": 0.01,
+    "depth_rebin_mm": 5,
+    "rebin_abs_relative_error_max": 0.02,
+    "require_improvement_over_baseline": true
+  },
+  "limitations": [
+    "Pilot only; two replicas cannot establish full statistical confidence.",
+    "No rescaling, fitting, package edits or promotion of longitudinal candidate.",
+    "Density/interface/joint-response gates remain separate."
+  ]
+}

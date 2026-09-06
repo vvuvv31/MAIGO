@@ -1732,6 +1732,62 @@ void write_energy_ledger_json(const std::filesystem::path& path,
            << "  \"E_schneider_primary_delta_longitudinal_escaped_scorer_MeV\": "
            << result.schneider_primary_delta_longitudinal_escaped_scorer_MeV << ",\n"
            << "  \"ct_schneider_physics_bundle_file\": \"" << config.ct_schneider_physics_bundle_file.string() << "\",\n";
+    if(!config.ct_electron_joint_response_diagnostic_file.empty()) {
+        const auto& d=result.electron_joint_diagnostics;
+        output<<"  \"electron_joint_response\": {\"status\": \"unvalidated_interface_diagnostic\", "
+              <<"\"data_sha256\": \""<<config.ct_electron_joint_response_sha256<<"\", "
+              <<"\"metadata_sha256\": \""<<config.ct_electron_joint_response_metadata_sha256<<"\", "
+              <<"\"replaces_transverse_tail\": true, \"queries\": "<<d.queries
+              <<", \"domain_misses\": "<<d.domain_misses<<", \"invalid_marches\": "<<d.invalid_marches
+              <<", \"redistributed_MeV\": "<<d.redistributed_MeV<<", \"escaped_MeV\": "<<d.escaped_MeV
+              <<", \"domain_retained_MeV\": "<<d.domain_retained_MeV<<"},\n";
+    }
+    if (!config.ct_schneider_delta_longitudinal_file.empty()) {
+        const auto& file = config.ct_schneider_delta_longitudinal_file;
+        const auto metadata = file.parent_path() / (file.stem().string() + ".metadata.json");
+        const auto manifest = file.parent_path() / (file.stem().string() + ".candidate.json");
+        output << "  \"longitudinal_candidate\": {\"status\": \"unvalidated_diagnostic\", "
+               << "\"scale\": " << config.ct_schneider_delta_longitudinal_scale
+               << ", \"homogeneous_density_diagnostic\": "
+               << (config.ct_longitudinal_homogeneous_density_diagnostic ? "true" : "false")
+               << ", \"interface_mass_diagnostic\": "
+               << (config.ct_longitudinal_interface_mass_diagnostic ? "true" : "false")
+               << ", \"runtime_kernel\": \""
+               << (config.ct_longitudinal_interface_mass_diagnostic
+                       ? "interface_mass_column_uniform_birth_diagnostic_v2" : config.ct_longitudinal_homogeneous_density_diagnostic
+                       ? "homogeneous_mass_thickness_diagnostic_v1"
+                       : "homogeneous_reference_density_v1")
+               << "\", \"kernel_density_g_cm3\": "
+               << result.longitudinal_diagnostic_density_g_cm3
+               << ", \"data_sha256\": \"" << compute_file_sha256_hex(file)
+               << "\", \"metadata_sha256\": \"" << compute_file_sha256_hex(metadata)
+               << "\", \"manifest_sha256\": \"" << compute_file_sha256_hex(manifest)
+               << "\", \"out_of_domain_queries\": "
+               << result.schneider_primary_delta_longitudinal_domain_queries
+               << ", \"out_of_domain_local_energy_MeV\": "
+               << result.schneider_primary_delta_longitudinal_domain_energy_MeV
+               << ", \"invalid_marches\": "
+               << result.schneider_primary_delta_longitudinal_invalid_marches
+               << "},\n";
+        if (config.ct_longitudinal_homogeneous_density_diagnostic || config.ct_longitudinal_interface_mass_diagnostic) {
+            output << "  \"longitudinal_domain_log\": {\"capacity\": "
+                   << kLongitudinalDomainLogCap << ", \"truncated\": "
+                   << (result.schneider_primary_delta_longitudinal_domain_queries >
+                       result.longitudinal_domain_log.size() ? "true" : "false")
+                   << ", \"records\": [";
+            for (std::size_t i=0; i<result.longitudinal_domain_log.size(); ++i) {
+                const auto& r = result.longitudinal_domain_log[i];
+                if (i) output << ',';
+                output << "{\"history\":" << r.history << ",\"step\":" << r.step
+                       << ",\"initial_energy_MeVu\":" << r.initial_energy_MeVu
+                       << ",\"query_energy_MeVu\":" << r.query_energy_MeVu
+                       << ",\"step_start_z_mm\":" << r.step_start_z_mm
+                       << ",\"step_length_mm\":" << r.step_length_mm
+                       << ",\"retained_MeV\":" << r.retained_MeV << '}';
+            }
+            output << "]},\n";
+        }
+    }
     write_schneider_physics_provenance(output, config);
     write_validation_scope(output, config);
     output << "  \"schneider_diagnostics\": {\n"

@@ -1,0 +1,1413 @@
+{
+  "status": "FAILED",
+  "cases": {
+    "hu1000": {
+      "off": {
+        "numerical_and_pilot_gate": true,
+        "accepted": false,
+        "failures": [
+          "unvalidated_longitudinal_candidate"
+        ],
+        "raw_sha256": "8b6ed0365bbd96073b6090a35640a353701b3ef55a5a7d23e05176c2ce4e6fbc",
+        "metrics": {
+          "windows": [
+            {
+              "depth_mm": [
+                2,
+                20
+              ],
+              "relative_error": 0.005471049315202148
+            },
+            {
+              "depth_mm": [
+                20,
+                50
+              ],
+              "relative_error": 0.004111263698066914
+            },
+            {
+              "depth_mm": [
+                50,
+                100
+              ],
+              "relative_error": 0.0005099171338467379
+            },
+            {
+              "depth_mm": [
+                100,
+                120
+              ],
+              "relative_error": -0.00007529134530703807
+            }
+          ],
+          "rebinned_5mm": [
+            {
+              "depth_mm": [
+                2,
+                7
+              ],
+              "relative_error": 0.005841802613117508
+            },
+            {
+              "depth_mm": [
+                7,
+                12
+              ],
+              "relative_error": 0.005896040416180748
+            },
+            {
+              "depth_mm": [
+                12,
+                17
+              ],
+              "relative_error": 0.00551422536747781
+            },
+            {
+              "depth_mm": [
+                17,
+                22
+              ],
+              "relative_error": 0.004401434910809021
+            },
+            {
+              "depth_mm": [
+                22,
+                27
+              ],
+              "relative_error": 0.005649248194917522
+            },
+            {
+              "depth_mm": [
+                27,
+                32
+              ],
+              "relative_error": 0.00399052535905664
+            },
+            {
+              "depth_mm": [
+                32,
+                37
+              ],
+              "relative_error": 0.004768445146426714
+            },
+            {
+              "depth_mm": [
+                37,
+                42
+              ],
+              "relative_error": 0.003939484453939102
+            },
+            {
+              "depth_mm": [
+                42,
+                47
+              ],
+              "relative_error": 0.0024732752599274654
+            },
+            {
+              "depth_mm": [
+                47,
+                52
+              ],
+              "relative_error": 0.0032340340507299725
+            },
+            {
+              "depth_mm": [
+                52,
+                57
+              ],
+              "relative_error": 0.0011375850634580686
+            },
+            {
+              "depth_mm": [
+                57,
+                62
+              ],
+              "relative_error": 0.0012722179907536102
+            },
+            {
+              "depth_mm": [
+                62,
+                67
+              ],
+              "relative_error": 0.0014064627668586294
+            },
+            {
+              "depth_mm": [
+                67,
+                72
+              ],
+              "relative_error": 0.000282130671851899
+            },
+            {
+              "depth_mm": [
+                72,
+                77
+              ],
+              "relative_error": -0.00007163215373495735
+            },
+            {
+              "depth_mm": [
+                77,
+                82
+              ],
+              "relative_error": -0.00020261062599069568
+            },
+            {
+              "depth_mm": [
+                82,
+                87
+              ],
+              "relative_error": -0.001403948596082949
+            },
+            {
+              "depth_mm": [
+                87,
+                92
+              ],
+              "relative_error": 0.002215311730944025
+            },
+            {
+              "depth_mm": [
+                92,
+                97
+              ],
+              "relative_error": -0.000307212346816077
+            },
+            {
+              "depth_mm": [
+                97,
+                102
+              ],
+              "relative_error": -0.0007783721564440516
+            },
+            {
+              "depth_mm": [
+                102,
+                107
+              ],
+              "relative_error": -0.0003874556697922582
+            },
+            {
+              "depth_mm": [
+                107,
+                112
+              ],
+              "relative_error": -0.00021051853561282474
+            },
+            {
+              "depth_mm": [
+                112,
+                117
+              ],
+              "relative_error": -0.0006696859004517997
+            },
+            {
+              "depth_mm": [
+                117,
+                120
+              ],
+              "relative_error": 0.0020550618210823934
+            }
+          ],
+          "max_window_error": 0.005471049315202148,
+          "max_rebin_error": 0.005896040416180748
+        },
+        "moved_MeV": 62272.083314,
+        "kernel": {
+          "status": "unvalidated_diagnostic",
+          "scale": 1,
+          "homogeneous_density_diagnostic": false,
+          "runtime_kernel": "homogeneous_reference_density_v1",
+          "kernel_density_g_cm3": 0.0113160647452,
+          "data_sha256": "f42140bc6a99ca90ef9a7fc267c22be9a6d8002192644dbe45b7a40c4e10820b",
+          "metadata_sha256": "32a37a8235d75954ea020685cd659be2ed6c7d766fad5725eaabdae91035339a",
+          "manifest_sha256": "1a8f8880e17dd3a7832d6a10e75f414171b6fed0615b0890cc208c028c28cd0e",
+          "out_of_domain_queries": 0,
+          "out_of_domain_local_energy_MeV": 0,
+          "invalid_marches": 0
+        },
+        "config_sha256": "70c3daf300de0618fd721fea5260ea53340b3aff9088d20034b7a7d561a09fe9"
+      },
+      "on": {
+        "numerical_and_pilot_gate": true,
+        "accepted": false,
+        "failures": [
+          "unvalidated_longitudinal_candidate"
+        ],
+        "raw_sha256": "8b6ed0365bbd96073b6090a35640a353701b3ef55a5a7d23e05176c2ce4e6fbc",
+        "metrics": {
+          "windows": [
+            {
+              "depth_mm": [
+                2,
+                20
+              ],
+              "relative_error": 0.005471049315202148
+            },
+            {
+              "depth_mm": [
+                20,
+                50
+              ],
+              "relative_error": 0.004111263698066914
+            },
+            {
+              "depth_mm": [
+                50,
+                100
+              ],
+              "relative_error": 0.0005099171338467379
+            },
+            {
+              "depth_mm": [
+                100,
+                120
+              ],
+              "relative_error": -0.00007529134530703807
+            }
+          ],
+          "rebinned_5mm": [
+            {
+              "depth_mm": [
+                2,
+                7
+              ],
+              "relative_error": 0.005841802613117508
+            },
+            {
+              "depth_mm": [
+                7,
+                12
+              ],
+              "relative_error": 0.005896040416180748
+            },
+            {
+              "depth_mm": [
+                12,
+                17
+              ],
+              "relative_error": 0.00551422536747781
+            },
+            {
+              "depth_mm": [
+                17,
+                22
+              ],
+              "relative_error": 0.004401434910809021
+            },
+            {
+              "depth_mm": [
+                22,
+                27
+              ],
+              "relative_error": 0.005649248194917522
+            },
+            {
+              "depth_mm": [
+                27,
+                32
+              ],
+              "relative_error": 0.00399052535905664
+            },
+            {
+              "depth_mm": [
+                32,
+                37
+              ],
+              "relative_error": 0.004768445146426714
+            },
+            {
+              "depth_mm": [
+                37,
+                42
+              ],
+              "relative_error": 0.003939484453939102
+            },
+            {
+              "depth_mm": [
+                42,
+                47
+              ],
+              "relative_error": 0.0024732752599274654
+            },
+            {
+              "depth_mm": [
+                47,
+                52
+              ],
+              "relative_error": 0.0032340340507299725
+            },
+            {
+              "depth_mm": [
+                52,
+                57
+              ],
+              "relative_error": 0.0011375850634580686
+            },
+            {
+              "depth_mm": [
+                57,
+                62
+              ],
+              "relative_error": 0.0012722179907536102
+            },
+            {
+              "depth_mm": [
+                62,
+                67
+              ],
+              "relative_error": 0.0014064627668586294
+            },
+            {
+              "depth_mm": [
+                67,
+                72
+              ],
+              "relative_error": 0.000282130671851899
+            },
+            {
+              "depth_mm": [
+                72,
+                77
+              ],
+              "relative_error": -0.00007163215373495735
+            },
+            {
+              "depth_mm": [
+                77,
+                82
+              ],
+              "relative_error": -0.00020261062599069568
+            },
+            {
+              "depth_mm": [
+                82,
+                87
+              ],
+              "relative_error": -0.001403948596082949
+            },
+            {
+              "depth_mm": [
+                87,
+                92
+              ],
+              "relative_error": 0.002215311730944025
+            },
+            {
+              "depth_mm": [
+                92,
+                97
+              ],
+              "relative_error": -0.000307212346816077
+            },
+            {
+              "depth_mm": [
+                97,
+                102
+              ],
+              "relative_error": -0.0007783721564440516
+            },
+            {
+              "depth_mm": [
+                102,
+                107
+              ],
+              "relative_error": -0.0003874556697922582
+            },
+            {
+              "depth_mm": [
+                107,
+                112
+              ],
+              "relative_error": -0.00021051853561282474
+            },
+            {
+              "depth_mm": [
+                112,
+                117
+              ],
+              "relative_error": -0.0006696859004517997
+            },
+            {
+              "depth_mm": [
+                117,
+                120
+              ],
+              "relative_error": 0.0020550618210823934
+            }
+          ],
+          "max_window_error": 0.005471049315202148,
+          "max_rebin_error": 0.005896040416180748
+        },
+        "moved_MeV": 62272.083314,
+        "kernel": {
+          "status": "unvalidated_diagnostic",
+          "scale": 1,
+          "homogeneous_density_diagnostic": true,
+          "runtime_kernel": "homogeneous_mass_thickness_diagnostic_v1",
+          "kernel_density_g_cm3": 0.0113160647452,
+          "data_sha256": "f42140bc6a99ca90ef9a7fc267c22be9a6d8002192644dbe45b7a40c4e10820b",
+          "metadata_sha256": "32a37a8235d75954ea020685cd659be2ed6c7d766fad5725eaabdae91035339a",
+          "manifest_sha256": "1a8f8880e17dd3a7832d6a10e75f414171b6fed0615b0890cc208c028c28cd0e",
+          "out_of_domain_queries": 0,
+          "out_of_domain_local_energy_MeV": 0,
+          "invalid_marches": 0
+        },
+        "config_sha256": "242120d9f3eb1c0585baf6a2a871b4964f170e8f2e93d6ab3789965c095c40f6"
+      }
+    },
+    "hu975": {
+      "off": {
+        "numerical_and_pilot_gate": true,
+        "accepted": false,
+        "failures": [
+          "unvalidated_longitudinal_candidate"
+        ],
+        "raw_sha256": "83305069c0ac32be8b64307a626090e260d3b9f2727e3c9daeafa9ec4dd0dbbd",
+        "metrics": {
+          "windows": [
+            {
+              "depth_mm": [
+                2,
+                20
+              ],
+              "relative_error": 0.012839165965362387
+            },
+            {
+              "depth_mm": [
+                20,
+                50
+              ],
+              "relative_error": -0.00006975849347690133
+            },
+            {
+              "depth_mm": [
+                50,
+                100
+              ],
+              "relative_error": -0.000046773050281889716
+            },
+            {
+              "depth_mm": [
+                100,
+                120
+              ],
+              "relative_error": -0.0003014623670261063
+            }
+          ],
+          "rebinned_5mm": [
+            {
+              "depth_mm": [
+                2,
+                7
+              ],
+              "relative_error": 0.028064063198054212
+            },
+            {
+              "depth_mm": [
+                7,
+                12
+              ],
+              "relative_error": 0.012280116439005617
+            },
+            {
+              "depth_mm": [
+                12,
+                17
+              ],
+              "relative_error": 0.005084538137142047
+            },
+            {
+              "depth_mm": [
+                17,
+                22
+              ],
+              "relative_error": 0.0012330556070403453
+            },
+            {
+              "depth_mm": [
+                22,
+                27
+              ],
+              "relative_error": 0.0006841250636040463
+            },
+            {
+              "depth_mm": [
+                27,
+                32
+              ],
+              "relative_error": -0.00044823815889205587
+            },
+            {
+              "depth_mm": [
+                32,
+                37
+              ],
+              "relative_error": -0.00023653055603101159
+            },
+            {
+              "depth_mm": [
+                37,
+                42
+              ],
+              "relative_error": -0.0005937247217493447
+            },
+            {
+              "depth_mm": [
+                42,
+                47
+              ],
+              "relative_error": 0.00006133890017734345
+            },
+            {
+              "depth_mm": [
+                47,
+                52
+              ],
+              "relative_error": 0.0002718710235882771
+            },
+            {
+              "depth_mm": [
+                52,
+                57
+              ],
+              "relative_error": -0.0003360789091827465
+            },
+            {
+              "depth_mm": [
+                57,
+                62
+              ],
+              "relative_error": -0.0001639537067538166
+            },
+            {
+              "depth_mm": [
+                62,
+                67
+              ],
+              "relative_error": -0.00042445253576006703
+            },
+            {
+              "depth_mm": [
+                67,
+                72
+              ],
+              "relative_error": -0.0007850237323325793
+            },
+            {
+              "depth_mm": [
+                72,
+                77
+              ],
+              "relative_error": 0.00041150388035893215
+            },
+            {
+              "depth_mm": [
+                77,
+                82
+              ],
+              "relative_error": 0.00013780674564189965
+            },
+            {
+              "depth_mm": [
+                82,
+                87
+              ],
+              "relative_error": -0.0004628193699143246
+            },
+            {
+              "depth_mm": [
+                87,
+                92
+              ],
+              "relative_error": 0.0015620174153978539
+            },
+            {
+              "depth_mm": [
+                92,
+                97
+              ],
+              "relative_error": 0.00039611444142262364
+            },
+            {
+              "depth_mm": [
+                97,
+                102
+              ],
+              "relative_error": -0.00183195031432426
+            },
+            {
+              "depth_mm": [
+                102,
+                107
+              ],
+              "relative_error": 0.00009090020441870905
+            },
+            {
+              "depth_mm": [
+                107,
+                112
+              ],
+              "relative_error": -0.0008873618677126549
+            },
+            {
+              "depth_mm": [
+                112,
+                117
+              ],
+              "relative_error": -0.0006876394922478157
+            },
+            {
+              "depth_mm": [
+                117,
+                120
+              ],
+              "relative_error": 0.0018497063751110598
+            }
+          ],
+          "max_window_error": 0.012839165965362387,
+          "max_rebin_error": 0.028064063198054212
+        },
+        "moved_MeV": 0,
+        "kernel": {
+          "status": "unvalidated_diagnostic",
+          "scale": 1,
+          "homogeneous_density_diagnostic": false,
+          "runtime_kernel": "homogeneous_reference_density_v1",
+          "kernel_density_g_cm3": 0.0113160647452,
+          "data_sha256": "f42140bc6a99ca90ef9a7fc267c22be9a6d8002192644dbe45b7a40c4e10820b",
+          "metadata_sha256": "32a37a8235d75954ea020685cd659be2ed6c7d766fad5725eaabdae91035339a",
+          "manifest_sha256": "1a8f8880e17dd3a7832d6a10e75f414171b6fed0615b0890cc208c028c28cd0e",
+          "out_of_domain_queries": 0,
+          "out_of_domain_local_energy_MeV": 0,
+          "invalid_marches": 0
+        },
+        "config_sha256": "563e9e26b63f568387c70d90cb137fc9f2ad4eb80bc6ba47e975979826796d45"
+      },
+      "on": {
+        "numerical_and_pilot_gate": true,
+        "accepted": false,
+        "failures": [
+          "unvalidated_longitudinal_candidate"
+        ],
+        "raw_sha256": "512fcd3f64ce9f789db75f92f01b9e8f10bb75bb2a70c4c55a8d5567e47fbb4b",
+        "metrics": {
+          "windows": [
+            {
+              "depth_mm": [
+                2,
+                20
+              ],
+              "relative_error": 0.003239265044992612
+            },
+            {
+              "depth_mm": [
+                20,
+                50
+              ],
+              "relative_error": -0.0002576970997399952
+            },
+            {
+              "depth_mm": [
+                50,
+                100
+              ],
+              "relative_error": -0.00005390173780717156
+            },
+            {
+              "depth_mm": [
+                100,
+                120
+              ],
+              "relative_error": -0.0002901572294836674
+            }
+          ],
+          "rebinned_5mm": [
+            {
+              "depth_mm": [
+                2,
+                7
+              ],
+              "relative_error": 0.004576974375872123
+            },
+            {
+              "depth_mm": [
+                7,
+                12
+              ],
+              "relative_error": 0.004572054922762803
+            },
+            {
+              "depth_mm": [
+                12,
+                17
+              ],
+              "relative_error": 0.0020934125509075585
+            },
+            {
+              "depth_mm": [
+                17,
+                22
+              ],
+              "relative_error": 0.0001741114216280426
+            },
+            {
+              "depth_mm": [
+                22,
+                27
+              ],
+              "relative_error": 0.0002157683021082324
+            },
+            {
+              "depth_mm": [
+                27,
+                32
+              ],
+              "relative_error": -0.0007080140650389533
+            },
+            {
+              "depth_mm": [
+                32,
+                37
+              ],
+              "relative_error": -0.00026371312445472306
+            },
+            {
+              "depth_mm": [
+                37,
+                42
+              ],
+              "relative_error": -0.000502957559037287
+            },
+            {
+              "depth_mm": [
+                42,
+                47
+              ],
+              "relative_error": 0.00003944985769277487
+            },
+            {
+              "depth_mm": [
+                47,
+                52
+              ],
+              "relative_error": 0.00011832392150545878
+            },
+            {
+              "depth_mm": [
+                52,
+                57
+              ],
+              "relative_error": -0.00022633745869127253
+            },
+            {
+              "depth_mm": [
+                57,
+                62
+              ],
+              "relative_error": -0.00029363499625079115
+            },
+            {
+              "depth_mm": [
+                62,
+                67
+              ],
+              "relative_error": -0.0004627329555126902
+            },
+            {
+              "depth_mm": [
+                67,
+                72
+              ],
+              "relative_error": -0.0007711889229441438
+            },
+            {
+              "depth_mm": [
+                72,
+                77
+              ],
+              "relative_error": 0.00044349476082561345
+            },
+            {
+              "depth_mm": [
+                77,
+                82
+              ],
+              "relative_error": 0.00015847890694553612
+            },
+            {
+              "depth_mm": [
+                82,
+                87
+              ],
+              "relative_error": -0.0004261213051511836
+            },
+            {
+              "depth_mm": [
+                87,
+                92
+              ],
+              "relative_error": 0.0013924753923690858
+            },
+            {
+              "depth_mm": [
+                92,
+                97
+              ],
+              "relative_error": 0.00048466443779182633
+            },
+            {
+              "depth_mm": [
+                97,
+                102
+              ],
+              "relative_error": -0.0016706031429685186
+            },
+            {
+              "depth_mm": [
+                102,
+                107
+              ],
+              "relative_error": 0.0001434882236697188
+            },
+            {
+              "depth_mm": [
+                107,
+                112
+              ],
+              "relative_error": -0.0009596789899981584
+            },
+            {
+              "depth_mm": [
+                112,
+                117
+              ],
+              "relative_error": -0.0006862148101220988
+            },
+            {
+              "depth_mm": [
+                117,
+                120
+              ],
+              "relative_error": 0.001696123459930643
+            }
+          ],
+          "max_window_error": 0.003239265044992612,
+          "max_rebin_error": 0.004576974375872123
+        },
+        "moved_MeV": 227090.3091,
+        "kernel": {
+          "status": "unvalidated_diagnostic",
+          "scale": 1,
+          "homogeneous_density_diagnostic": true,
+          "runtime_kernel": "homogeneous_mass_thickness_diagnostic_v1",
+          "kernel_density_g_cm3": 0.0393234528601,
+          "data_sha256": "f42140bc6a99ca90ef9a7fc267c22be9a6d8002192644dbe45b7a40c4e10820b",
+          "metadata_sha256": "32a37a8235d75954ea020685cd659be2ed6c7d766fad5725eaabdae91035339a",
+          "manifest_sha256": "1a8f8880e17dd3a7832d6a10e75f414171b6fed0615b0890cc208c028c28cd0e",
+          "out_of_domain_queries": 0,
+          "out_of_domain_local_energy_MeV": 0,
+          "invalid_marches": 0
+        },
+        "config_sha256": "09a2c86224f453a15b9d7330d99718b062627e54ad5ba0061328b8b63002d4b7"
+      }
+    },
+    "hu951": {
+      "off": {
+        "numerical_and_pilot_gate": true,
+        "accepted": false,
+        "failures": [
+          "unvalidated_longitudinal_candidate"
+        ],
+        "raw_sha256": "99c170f75e389045bdf4c171ba28e33e03f7a950e286691bb2384821abb9eb5e",
+        "metrics": {
+          "windows": [
+            {
+              "depth_mm": [
+                2,
+                20
+              ],
+              "relative_error": 0.005627282832159963
+            },
+            {
+              "depth_mm": [
+                20,
+                50
+              ],
+              "relative_error": -0.00031676381580425517
+            },
+            {
+              "depth_mm": [
+                50,
+                100
+              ],
+              "relative_error": -0.00038533184361955186
+            },
+            {
+              "depth_mm": [
+                100,
+                120
+              ],
+              "relative_error": -0.00015811806883059276
+            }
+          ],
+          "rebinned_5mm": [
+            {
+              "depth_mm": [
+                2,
+                7
+              ],
+              "relative_error": 0.01699669501307688
+            },
+            {
+              "depth_mm": [
+                7,
+                12
+              ],
+              "relative_error": 0.004173734027739018
+            },
+            {
+              "depth_mm": [
+                12,
+                17
+              ],
+              "relative_error": -0.00006341070488713463
+            },
+            {
+              "depth_mm": [
+                17,
+                22
+              ],
+              "relative_error": -0.000963903661481913
+            },
+            {
+              "depth_mm": [
+                22,
+                27
+              ],
+              "relative_error": -0.00037894495091783664
+            },
+            {
+              "depth_mm": [
+                27,
+                32
+              ],
+              "relative_error": -0.0006228877883841522
+            },
+            {
+              "depth_mm": [
+                32,
+                37
+              ],
+              "relative_error": 0.00021394472831204325
+            },
+            {
+              "depth_mm": [
+                37,
+                42
+              ],
+              "relative_error": -0.000854228989003003
+            },
+            {
+              "depth_mm": [
+                42,
+                47
+              ],
+              "relative_error": 0.00013726841335337525
+            },
+            {
+              "depth_mm": [
+                47,
+                52
+              ],
+              "relative_error": 0.00004958263160270704
+            },
+            {
+              "depth_mm": [
+                52,
+                57
+              ],
+              "relative_error": -0.0007889419037501177
+            },
+            {
+              "depth_mm": [
+                57,
+                62
+              ],
+              "relative_error": -0.0007607537477180015
+            },
+            {
+              "depth_mm": [
+                62,
+                67
+              ],
+              "relative_error": -0.0003572071569206692
+            },
+            {
+              "depth_mm": [
+                67,
+                72
+              ],
+              "relative_error": -0.0002691107750332211
+            },
+            {
+              "depth_mm": [
+                72,
+                77
+              ],
+              "relative_error": 0.000017908724348147942
+            },
+            {
+              "depth_mm": [
+                77,
+                82
+              ],
+              "relative_error": -0.00044958851361009966
+            },
+            {
+              "depth_mm": [
+                82,
+                87
+              ],
+              "relative_error": -0.0008397639040972349
+            },
+            {
+              "depth_mm": [
+                87,
+                92
+              ],
+              "relative_error": 0.0008590009812063926
+            },
+            {
+              "depth_mm": [
+                92,
+                97
+              ],
+              "relative_error": -0.0004459909953268282
+            },
+            {
+              "depth_mm": [
+                97,
+                102
+              ],
+              "relative_error": -0.0013529823717689515
+            },
+            {
+              "depth_mm": [
+                102,
+                107
+              ],
+              "relative_error": -0.00047900546520540654
+            },
+            {
+              "depth_mm": [
+                107,
+                112
+              ],
+              "relative_error": 0.00008972028283782407
+            },
+            {
+              "depth_mm": [
+                112,
+                117
+              ],
+              "relative_error": -0.0008515730718368086
+            },
+            {
+              "depth_mm": [
+                117,
+                120
+              ],
+              "relative_error": 0.0017391421284180808
+            }
+          ],
+          "max_window_error": 0.005627282832159963,
+          "max_rebin_error": 0.01699669501307688
+        },
+        "moved_MeV": 0,
+        "kernel": {
+          "status": "unvalidated_diagnostic",
+          "scale": 1,
+          "homogeneous_density_diagnostic": false,
+          "runtime_kernel": "homogeneous_reference_density_v1",
+          "kernel_density_g_cm3": 0.0113160647452,
+          "data_sha256": "f42140bc6a99ca90ef9a7fc267c22be9a6d8002192644dbe45b7a40c4e10820b",
+          "metadata_sha256": "32a37a8235d75954ea020685cd659be2ed6c7d766fad5725eaabdae91035339a",
+          "manifest_sha256": "1a8f8880e17dd3a7832d6a10e75f414171b6fed0615b0890cc208c028c28cd0e",
+          "out_of_domain_queries": 521,
+          "out_of_domain_local_energy_MeV": 298.674904,
+          "invalid_marches": 0
+        },
+        "config_sha256": "db573db6cbfd0b9bf744e74ec805332fbaebd7a04b1c36f50115c937831ceaf0"
+      },
+      "on": {
+        "numerical_and_pilot_gate": false,
+        "accepted": false,
+        "failures": [
+          "unvalidated_longitudinal_candidate"
+        ],
+        "raw_sha256": "c09d252f972e4bc888cee6b764db7ade4dbeb04003a16de4ac5de8b20322a59b",
+        "metrics": {
+          "windows": [
+            {
+              "depth_mm": [
+                2,
+                20
+              ],
+              "relative_error": 0.0013363971315669687
+            },
+            {
+              "depth_mm": [
+                20,
+                50
+              ],
+              "relative_error": -0.0003378211307090151
+            },
+            {
+              "depth_mm": [
+                50,
+                100
+              ],
+              "relative_error": -0.00038452802028332567
+            },
+            {
+              "depth_mm": [
+                100,
+                120
+              ],
+              "relative_error": -0.00015016899923259164
+            }
+          ],
+          "rebinned_5mm": [
+            {
+              "depth_mm": [
+                2,
+                7
+              ],
+              "relative_error": 0.004335096379323389
+            },
+            {
+              "depth_mm": [
+                7,
+                12
+              ],
+              "relative_error": 0.0018223789081501796
+            },
+            {
+              "depth_mm": [
+                12,
+                17
+              ],
+              "relative_error": -0.0006842783063663038
+            },
+            {
+              "depth_mm": [
+                17,
+                22
+              ],
+              "relative_error": -0.0009744917506816497
+            },
+            {
+              "depth_mm": [
+                22,
+                27
+              ],
+              "relative_error": -0.0004588269713176052
+            },
+            {
+              "depth_mm": [
+                27,
+                32
+              ],
+              "relative_error": -0.0006584792873597367
+            },
+            {
+              "depth_mm": [
+                32,
+                37
+              ],
+              "relative_error": 0.0003045812717419327
+            },
+            {
+              "depth_mm": [
+                37,
+                42
+              ],
+              "relative_error": -0.0007833592634431952
+            },
+            {
+              "depth_mm": [
+                42,
+                47
+              ],
+              "relative_error": 0.00006552313766272633
+            },
+            {
+              "depth_mm": [
+                47,
+                52
+              ],
+              "relative_error": -0.00001461712736594567
+            },
+            {
+              "depth_mm": [
+                52,
+                57
+              ],
+              "relative_error": -0.0006838589692357289
+            },
+            {
+              "depth_mm": [
+                57,
+                62
+              ],
+              "relative_error": -0.0008713743227545256
+            },
+            {
+              "depth_mm": [
+                62,
+                67
+              ],
+              "relative_error": -0.0003984159777170593
+            },
+            {
+              "depth_mm": [
+                67,
+                72
+              ],
+              "relative_error": -0.00023737747606367154
+            },
+            {
+              "depth_mm": [
+                72,
+                77
+              ],
+              "relative_error": 0.00006700604526233
+            },
+            {
+              "depth_mm": [
+                77,
+                82
+              ],
+              "relative_error": -0.00046226242672742224
+            },
+            {
+              "depth_mm": [
+                82,
+                87
+              ],
+              "relative_error": -0.0008243950751902762
+            },
+            {
+              "depth_mm": [
+                87,
+                92
+              ],
+              "relative_error": 0.0007603833458957876
+            },
+            {
+              "depth_mm": [
+                92,
+                97
+              ],
+              "relative_error": -0.00038030384004239526
+            },
+            {
+              "depth_mm": [
+                97,
+                102
+              ],
+              "relative_error": -0.0012197402630786947
+            },
+            {
+              "depth_mm": [
+                102,
+                107
+              ],
+              "relative_error": -0.00047204844235837484
+            },
+            {
+              "depth_mm": [
+                107,
+                112
+              ],
+              "relative_error": -0.000048568957459638185
+            },
+            {
+              "depth_mm": [
+                112,
+                117
+              ],
+              "relative_error": -0.000817011302457038
+            },
+            {
+              "depth_mm": [
+                117,
+                120
+              ],
+              "relative_error": 0.001724637971194376
+            }
+          ],
+          "max_window_error": 0.0013363971315669687,
+          "max_rebin_error": 0.004335096379323389
+        },
+        "moved_MeV": 388132.834202,
+        "kernel": {
+          "status": "unvalidated_diagnostic",
+          "scale": 1,
+          "homogeneous_density_diagnostic": true,
+          "runtime_kernel": "homogeneous_mass_thickness_diagnostic_v1",
+          "kernel_density_g_cm3": 0.0662101581693,
+          "data_sha256": "f42140bc6a99ca90ef9a7fc267c22be9a6d8002192644dbe45b7a40c4e10820b",
+          "metadata_sha256": "32a37a8235d75954ea020685cd659be2ed6c7d766fad5725eaabdae91035339a",
+          "manifest_sha256": "1a8f8880e17dd3a7832d6a10e75f414171b6fed0615b0890cc208c028c28cd0e",
+          "out_of_domain_queries": 521,
+          "out_of_domain_local_energy_MeV": 298.674904,
+          "invalid_marches": 0
+        },
+        "config_sha256": "ccce94b8e952dbc95610ea976c98240c462ccc14d9df94e9876c2a8a96b7a3e8"
+      }
+    },
+    "mixed_density": {
+      "rejected": true,
+      "grid_sha256": "384b3605c5f28bc422d9acbeef52428459ea051991fdf60b03c838e40155cae8",
+      "config_sha256": "b16e31e92ef9fc84c608dd591d547aa1788e6f1baf767e4cb9f0db9c74b06fa5"
+    },
+    "mixed_section": {
+      "rejected": true,
+      "grid_sha256": "870c7517fbae9146725ac9a0f0c10b7680b24da66d408b385cd6330cd89e4df6",
+      "config_sha256": "a521545871404805ba4ab42350cdf08d5e6a269fd4bffee55e9057f2ceecb0c2"
+    }
+  },
+  "binary_sha256": "63669a268550b70db2d35126c62ea9d9a293413f3b2fe730bab12f7a557d74f3",
+  "runner_sha256": "8e562732a752f824bf40b040e14f1a99256bf0cc98f7aaa3e541808dc93f3bba",
+  "scope": "Uniform 175 MeV/u section-0 only; no patient/interface authorization",
+  "offline_comparison": {
+    "hu1000": {
+      "max_window_relative_difference": 0.00010359091182898794,
+      "max_5mm_relative_difference": 0.00021203331743802067
+    },
+    "hu975": {
+      "max_window_relative_difference": 0.00009264907687422941,
+      "max_5mm_relative_difference": 0.00015852377603198242
+    },
+    "hu951": {
+      "max_window_relative_difference": 0.00008633557136472625,
+      "max_5mm_relative_difference": 0.00017294333543449447
+    }
+  },
+  "remaining_gate": {
+    "case": "hu951/on",
+    "reason": "521 out-of-domain queries; strict zero-query gate retained",
+    "locally_retained_MeV": 298.674904,
+    "fraction_of_nominal_beam_energy": 0.000007111307238095239,
+    "fraction_of_voxel_energy": 0.00006340529851437261
+  },
+  "source_hashes": {
+    "src/transport_sycl.cpp": "9b1ce773fe920c80241cb85357900983739475522f5dc39618b82558760efcb1",
+    "src/config.cpp": "729ae7b85493a1e739d6c93e034660f078d597bc6f5717f3e0a5acf819f8e25a",
+    "include/carbon/schneider_delta_tail.hpp": "2208c018a3cc688fda0eb3b48ab3f5368e81cee37a4a435b37f969b61cf96547"
+  },
+  "worktree_clean": false
+}

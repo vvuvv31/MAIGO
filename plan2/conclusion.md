@@ -1,5 +1,60 @@
 # plan2 结论记录（RT06423 section-0 电子纵向响应）
 
+## 2026-09-06 优先修正：数值安全实现，物理验收 BLOCKED
+
+521域外查询已逐条定位（无截断，45histories）：初始168.27–170.52MeV/u，
+全部减速后降至148.20–149.997MeV/u，位置200–219.5mm。记录前后raw
+逐字节一致。根因是低能覆盖不足；入口2–120mm通过不等于全路径覆盖。
+下一步补低于150MeV/u的独立响应参考与留出点，再考虑新版本诊断表，
+不clamp、不缩短phantom、不豁免零域外门。证据：
+`evidence/step-31/longitudinal-domain-trace/`。
+
+均匀三密度GPU诊断实现已测，但整组门禁FAILED：新显式flag只允许175MeV/u
+单束、核off、smoke/scale=1，全网格同一已知密度且section0。HU=-975/-951
+实际入口误差+0.324%/+0.134%，与离线预测分箱差<0.022%；默认off逐字节
+复现旧结果，混合密度/材料真实launch均拒绝。HU=-951仍有521次域外查询
+（298.674904MeV留源），零域外门不豁免。下一步只读定位这些查询能量/深度，
+再决定补能量覆盖，不开放患者/界面。见
+`evidence/step-31/longitudinal-uniform-gpu/`。
+
+固定质量厚度离线预测已通过pilot：scale=1，冻结175MeV/u参数，
+参考密度离线/GPU最大5mm分箱差0.0212%；HU=-975/-951的2–20mm
+预测误差+0.318%/+0.126%，最大5mm误差0.452%/0.418%。这些是离线
+预测，两个密度的GPU候选仍不生效；不能写成新的GPU/Gamma提升。
+下一步限于显式未验收的均匀section-0三密度GPU诊断，异质CT路由不得
+开放。固定出生群/joint/界面仍未完成。证据见
+`evidence/step-31/longitudinal-mass-thickness/`。
+
+密度参考 pilot 已完成：175 MeV/u、HU=-975/-951，各两份 TOPAS20k
+（2355–2358，全0:0）及GPU开关配对20k。2–20 mm基线偏差分别+1.284%/
++0.563%，20mm以后窗口偏差绝对值<0.06%。候选因密度限制不生效，
+开关raw逐字节一致、纵向搬运为0；这里只关闭参考采集/域外保护检查，
+不关闭Step07物理密度模型门禁。下一步先离线检验固定参数质量厚度预测，
+仍需固定出生群、joint及界面验证。见 `evidence/step-31/longitudinal-density-175/`。
+
+后续独立能量 pilot：175 MeV/u、同源/同密度/scale=1，两份 TOPAS 20k
+（2353/2354，0:0）与 GPU base/long20k 完成。入口2–20 mm偏差由
++3.944%降至+0.547%，各5mm分箱候选偏差最大0.590%。仅记
+PASS_PILOT_ONLY，不是通用核或患者Gamma验收。无参数修改，密度与界面
+仍 BLOCKED。详见 `evidence/step-31/longitudinal-holdout-175/`。
+
+后续更新：共享 200 MeV/u writer 失败已定位并修复为横向 δ-tail 的深度诊断
+同步缺失（不是 3-D 剂量物理错误）。六个 1k CUDA 回归全部输出闭合，包括
+200/120 MeV/u 开关、斜向与贴边；域外 raw 与修复前逐字节一致。
+下方关于该 writer 阻塞的描述保留为历史。真实响应的独立物理验证仍 BLOCKED，
+原先有能散小样本的 physical-residual 门禁未声称解决。无新患者 Gamma。
+见 `evidence/step-31/longitudinal-review-20260906/depth-mirror-fix.md`。
+
+逐病例标定的历史三例不构成通用核独立验证，旧 Gamma 不适用于本次修复代码。
+当前候选锁定 CSV/metadata/contract、smoke + scale=1；域外不 clamp，
+仅参考密度均匀 section-0 内按真实体素交界分配，跨材料余量保留为诊断近似。
+候选质量报告必含 `unvalidated_longitudinal_candidate`，不得发布为 accepted 物理。
+真实 CUDA host/device 单测通过；120 MeV/u 域外 on/off raw 完全一致。
+200 MeV/u on/off 两者均在 writer 出现相同 bin 闭合失败，即使 baseline quality
+accepted 也不等于输出成功。全套旧回归未运行，不宣称全部通过。
+未运行新患者 Gamma，未升级数据栈。密度/能量/界面/joint 验证与共享 writer
+问题仍未关闭；证据见 `evidence/step-31/longitudinal-review-20260906/`。
+
 > 约定：每完成一个 Step 即向本文件追加一节。旧结论不改写；统计不足标
 > INCONCLUSIVE，门禁失败标 BLOCKED 并写明原因。正式新表与 full20 结论以
 > plan2/README.md 冻结口径为准。

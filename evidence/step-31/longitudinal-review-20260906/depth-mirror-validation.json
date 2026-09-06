@@ -1,0 +1,65 @@
+{
+  "binary_sha256": "20563c95093344905ba1426c1128cc237eccc286e2c65666834397e2fbc5bdae",
+  "source_config_sha256": "26ea6fd5ed17100048a259c024a949caa4baaf75e8f2d3e1dd8f936c9dabf486",
+  "cases": {
+    "base200": {
+      "passed": true,
+      "returncode": 0,
+      "failures": [],
+      "dose_complete": true,
+      "config_sha256": "f52b4a02ec99b6b6b7b19acf3ebdc541cf3d03f43273d4585f49da7ab42ed7a6",
+      "raw_sha256": "ecb746cc45af46fc43c00514719d0446bedcc54e5b615822d8e325dcaf20c6c7"
+    },
+    "long200": {
+      "passed": true,
+      "returncode": 1,
+      "failures": [
+        "unvalidated_longitudinal_candidate"
+      ],
+      "dose_complete": true,
+      "config_sha256": "d48f93160617b9e788601a4306466cd4b9cc522a7ded321c331fc5c96305d1a9",
+      "raw_sha256": "baa17d6bb0c6a05c89f3c2f3922b142a6317e82586812d85153f7864b5814a1a"
+    },
+    "base120": {
+      "passed": true,
+      "returncode": 0,
+      "failures": [],
+      "dose_complete": true,
+      "config_sha256": "5980f1dc48ba95379575b9548f391a17ef81197fd54a3fc990fb03fe2f6eb8f5",
+      "raw_sha256": "4f72a3db32448a6100ac134f1aae9ccd938aa8eec66152d527472f1ce929cc1b"
+    },
+    "long120": {
+      "passed": true,
+      "returncode": 1,
+      "failures": [
+        "unvalidated_longitudinal_candidate"
+      ],
+      "dose_complete": true,
+      "config_sha256": "c0e99f163be3d7e1d352b844d6fd72d45766960a84acd8fd899551732c7b8d6b",
+      "raw_sha256": "4f72a3db32448a6100ac134f1aae9ccd938aa8eec66152d527472f1ce929cc1b"
+    },
+    "oblique200": {
+      "passed": true,
+      "returncode": 0,
+      "failures": [],
+      "dose_complete": true,
+      "config_sha256": "6f38ef211a482d680da2ae8cedab38035539155189b3b47d1a4b49ac22307edb",
+      "raw_sha256": "8221a92efda936b8df533d916e0384ed9184c8246d9bbfc0c3d2cc83b1b5bb3c"
+    },
+    "edge200": {
+      "passed": true,
+      "returncode": 0,
+      "failures": [],
+      "dose_complete": true,
+      "config_sha256": "136531a7befb83c45d82e085a1bb9e9025936805fb06c5f741659bb2991d1132",
+      "raw_sha256": "3026d51321cbbc669fae48f76181823b4e617417188262f1551c51a095dc43fc"
+    }
+  },
+  "out_of_domain_raw_equal": true,
+  "passed": true,
+  "transport_source_sha256": "57bec011db701a1d7bf13ae5c6157db133e5c64c6efc3cf6eb6a79a68ba7fa9f",
+  "runner_sha256": "8b08144fa464b841111d3290b783de8ccef5861d884944706c5c0bd4f3dc30c0",
+  "artifact_root": "/mnt/sda/wuwei/schneider_depth_mirror_20260906_KOQgiH",
+  "worktree_clean": false,
+  "scope": "Diagnostic tally synchronization only; no patient Gamma validation"
+}

@@ -3,8 +3,51 @@
 #include <cstddef>
 #include <filesystem>
 #include <vector>
+#include <cstdint>
+#include <stdexcept>
 
 namespace carbon {
+
+// Actual float density in the frozen HU=-1000 extraction CCTG, not rounded 0.01132.
+inline constexpr double kLongitudinalReferenceDensityGPerCm3 = 0.01131606474518776;
+
+// Host preflight: every voxel must be the SAME frozen probe density/section.
+// No tolerance permitting hidden density steps; never authorize patient CT.
+inline double longitudinal_probe_density(const std::vector<float>& density,
+                                         const std::vector<std::uint8_t>& sections) {
+    if (density.empty() || density.size() != sections.size())
+        throw std::invalid_argument("Longitudinal homogeneous diagnostic: invalid grid");
+    const float rho = density.front();
+    if (rho != static_cast<float>(kLongitudinalReferenceDensityGPerCm3) &&
+        rho != 0.03932345286011696F && rho != 0.06621015816926956F)
+        throw std::invalid_argument("Longitudinal homogeneous diagnostic: unsupported density");
+    for (std::size_t i=0; i<density.size(); ++i)
+        if (sections[i] != 0 || density[i] != rho)
+            throw std::invalid_argument("Longitudinal homogeneous diagnostic: heterogeneous grid");
+    return rho;
+}
+
+// Narrow, explicit interface experiment; rejects all patient material grids.
+inline void reject_unvalidated_longitudinal_heterogeneity(const std::vector<float>& density,
+                                                        const std::vector<std::uint8_t>& sections) {
+    if(density.empty() || density.size()!=sections.size())
+        throw std::invalid_argument("Longitudinal candidate: invalid grid");
+    for(std::size_t i=1;i<density.size();++i)
+        if(density[i]!=density[0] || sections[i]!=sections[0])
+            throw std::invalid_argument("Unvalidated longitudinal candidate rejects heterogeneous grids; explicit isolated interface diagnostic required");
+}
+
+inline void validate_longitudinal_interface_grid(const std::vector<float>& density,
+                                                const std::vector<std::uint8_t>& sections) {
+    if (density.empty() || density.size()!=sections.size())
+        throw std::invalid_argument("Longitudinal interface diagnostic: invalid grid");
+    for(std::size_t i=0;i<density.size();++i) {
+        const bool air=sections[i]==0 && density[i]==static_cast<float>(kLongitudinalReferenceDensityGPerCm3);
+        const bool tissue=sections[i]==8 && density[i]==1.0787997245788574F;
+        if(!air && !tissue)
+            throw std::invalid_argument("Longitudinal interface diagnostic: only HU -1000/100 probes allowed");
+    }
+}
 
 // TOPAS/Geant4-derived transverse delta-electron tail for primary C-12 in
 // Schneider section 0.  The table is intentionally narrow in scope: it is not
@@ -95,10 +138,8 @@ inline void schneider_delta_tail_lookup_device(
     radius_mm = r0 + ef * (r1 - r0);
 }
 
-// TOPAS/Geant4-derived forward delta-electron kernel for primary C-12 in
-// Schneider section 0. Supplement to the transverse tail above: a fraction
-// forward_fraction of the local deposit is carried forward along the beam
-// with an exponential range of mean lambda_mm. Same narrow scope.
+// Historical slab-fitted candidate, NOT a validated electron transport model.
+// Only pinned input data may be loaded; diagnostic scope is enforced by config.
 class SchneiderLongitudinalTable {
 public:
     static SchneiderLongitudinalTable from_csv(const std::filesystem::path& path);
@@ -122,7 +163,7 @@ private:
     std::vector<float> lambdas_mm_;
 };
 
-inline void schneider_longitudinal_lookup_device(
+inline bool schneider_longitudinal_lookup_device(
     const float energy_MeV_per_u,
     const float* energies,
     const float* forward_fractions,
@@ -134,14 +175,12 @@ inline void schneider_longitudinal_lookup_device(
     lambda_mm = 0.0F;
     if (energies == nullptr || forward_fractions == nullptr ||
         lambdas_mm == nullptr || energy_count == 0) {
-        return;
+        return false;
     }
-    // Nearest-edge clamp outside the calibrated [150, 225] MeV/u interval
-    // (unlike the transverse table, which returns zero out of range). Slab
-    // fits show a weak energy dependence (A: 6.7% at 150, 7.4% at 200, 7.5%
-    // at 225), so edge values err by <10% on out-of-range spots, while
-    // returning zero would drop up to 40% of a clinical beam (all-or-nothing
-    // error). Beams routinely span 110-240 MeV/u.
+    // No extrapolation, including NaN/Inf. A rejected query retains local
+    // energy and is counted by transport; it does not lose beam energy.
+    if (!(energy_MeV_per_u >= energies[0] &&
+          energy_MeV_per_u <= energies[energy_count - 1])) return false;
     std::size_t e0 = 0;
     float ef = 0.0F;
     if (energy_count > 1) {
@@ -164,6 +203,7 @@ inline void schneider_longitudinal_lookup_device(
     forward_fraction = forward_fractions[e0] +
                        ef * (forward_fractions[e1] - forward_fractions[e0]);
     lambda_mm = lambdas_mm[e0] + ef * (lambdas_mm[e1] - lambdas_mm[e0]);
+    return true;
 }
 
 }  // namespace carbon

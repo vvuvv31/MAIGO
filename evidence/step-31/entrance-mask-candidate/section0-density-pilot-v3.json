@@ -1,0 +1,271 @@
+{
+  "schema_version": 1,
+  "scope": "Three 1-history local TOPAS section-0 pilots; diagnostic chain and output sizing only",
+  "status": "PILOT_VALIDATED_PHYSICS_INCONCLUSIVE",
+  "no_gpu_run": true,
+  "no_gamma_update": true,
+  "no_physics_or_package_change": true,
+  "cases": [
+    {
+      "hu": -1000,
+      "job_id": "2350",
+      "slurm_state": "COMPLETED",
+      "exit_code": "0:0",
+      "histories": 1,
+      "seed": 918001,
+      "cpus": 2,
+      "memory_GiB": 4,
+      "material_identity": {
+        "hu": -1000,
+        "material_section": 0,
+        "material_hu_bounds": [
+          -1000,
+          -950
+        ],
+        "density_formula_segment": 0,
+        "density_correction": 9.35212,
+        "density_g_cm3": 0.011316065199999998,
+        "schneider_sha256": "5022cd89617b28dbd8ee8bf8b095ea20cfd99f6405218693c0df238b3617a139"
+      },
+      "measured_density_g_cm3": 0.0113161,
+      "density_relative_error": 0.0000030752739037520627,
+      "rows": 79612,
+      "electron_roots": 2186,
+      "parent_step_binding_verified": true,
+      "dose3d_over_steps": 1.0000000006525482,
+      "global_relative_residual": 4.799620938680021e-15,
+      "event_electron_relative_residual": -1.3324130660923814e-15,
+      "max_family_relative_residual": 1.3994094043875082e-15,
+      "files": [
+        {
+          "path": "/mnt/sda/wuwei/electron_density_pilot_v3_r2/hu1000/campaign_manifest.json",
+          "sha256": "61c68f6cd0be504b73e54018d7e7d1627ccecd47781e16158398a094240485bd",
+          "size_bytes": 43709
+        },
+        {
+          "path": "/mnt/sda/wuwei/electron_density_pilot_v3_r2/hu1000/execution.json",
+          "sha256": "37c9e597187d5e00168490968f3078e4648b384659b811ded26a51f89919dfc9",
+          "size_bytes": 807
+        },
+        {
+          "path": "/mnt/sda/wuwei/electron_density_pilot_v3_r2/hu1000/electron_response_shard000_seed918001/metadata.json",
+          "sha256": "db0d05e8389b03162209a39a472e2ad4d8b1691764eda596e5851a8bda453e43",
+          "size_bytes": 3042
+        },
+        {
+          "path": "/mnt/sda/wuwei/electron_density_pilot_v3_r2/hu1000/electron_response_shard000_seed918001/analysis.json",
+          "sha256": "54c8883ebc5bbd363f498b12b22f766fc07020068ee0a953b76755e6e0b5ada0",
+          "size_bytes": 2195137
+        },
+        {
+          "path": "/mnt/sda/wuwei/electron_density_pilot_v3_r2/hu1000/electron_response_shard000_seed918001/analysis_closure_verified.json",
+          "sha256": "12dc45c385e2bb0c5f11177567cce9598c2f2d8fdbd06bcf2e746cdf9a291c6e",
+          "size_bytes": 2195210
+        },
+        {
+          "path": "/mnt/sda/wuwei/electron_density_pilot_v3_r2/hu1000/electron_response_shard000_seed918001/steps.phsp",
+          "sha256": "e4e66be8fcb4fccc288deb69cd866748860cec9276a701cd462b697cbaa240b8",
+          "size_bytes": 18469984
+        },
+        {
+          "path": "/mnt/sda/wuwei/electron_density_pilot_v3_r2/hu1000/electron_response_shard000_seed918001/steps.header",
+          "sha256": "6d251343bb3b1e1a768f4730bb2de8e954466ad05164fac9954de32adabbd455",
+          "size_bytes": 673
+        },
+        {
+          "path": "/mnt/sda/wuwei/electron_density_pilot_v3_r2/hu1000/electron_response_shard000_seed918001/dose.csv",
+          "sha256": "7b69bdcd54d022ec89526790086edde0c9f493e0ba21dbadec32ace803feaec3",
+          "size_bytes": 64064992
+        }
+      ],
+      "original_analyzer_sha256": "750e2b5bd770a0b24d63e6d49e7a929b2c10d7e8af354ae9f4e163a94195d744"
+    },
+    {
+      "hu": -975,
+      "job_id": "2351",
+      "slurm_state": "COMPLETED",
+      "exit_code": "0:0",
+      "histories": 1,
+      "seed": 918001,
+      "cpus": 2,
+      "memory_GiB": 4,
+      "material_identity": {
+        "hu": -975,
+        "material_section": 0,
+        "material_hu_bounds": [
+          -1000,
+          -950
+        ],
+        "density_formula_segment": 0,
+        "density_correction": 1.45899,
+        "density_g_cm3": 0.03932345223756601,
+        "schneider_sha256": "5022cd89617b28dbd8ee8bf8b095ea20cfd99f6405218693c0df238b3617a139"
+      },
+      "measured_density_g_cm3": 0.0393235,
+      "density_relative_error": 0.0000012146042951410863,
+      "rows": 227942,
+      "electron_roots": 7765,
+      "parent_step_binding_verified": true,
+      "dose3d_over_steps": 0.9999999994186751,
+      "global_relative_residual": -1.7086650541700876e-14,
+      "event_electron_relative_residual": -3.4338561703429707e-15,
+      "max_family_relative_residual": 1.874773071243114e-15,
+      "files": [
+        {
+          "path": "/mnt/sda/wuwei/electron_density_pilot_v3_r2/hu975/campaign_manifest.json",
+          "sha256": "bc749c7482f06ff78f11976dd1f5f61664d1268ab4060e632a31f1808e9f2a36",
+          "size_bytes": 43703
+        },
+        {
+          "path": "/mnt/sda/wuwei/electron_density_pilot_v3_r2/hu975/execution.json",
+          "sha256": "8239fe47bf119c63ad6a2be20511d136aa72ca4f84e78a4c7eb3dbfd6e198347",
+          "size_bytes": 806
+        },
+        {
+          "path": "/mnt/sda/wuwei/electron_density_pilot_v3_r2/hu975/electron_response_shard000_seed918001/metadata.json",
+          "sha256": "131b76c83115ead05f398876196dd49dd445404ac1e60a740b7b8bf9d9bed49b",
+          "size_bytes": 3034
+        },
+        {
+          "path": "/mnt/sda/wuwei/electron_density_pilot_v3_r2/hu975/electron_response_shard000_seed918001/analysis.json",
+          "sha256": "76b0a18fdaab71e587f6080550c8fb79e53e9a5ea19117403d728cf862bdf02a",
+          "size_bytes": 6829789
+        },
+        {
+          "path": "/mnt/sda/wuwei/electron_density_pilot_v3_r2/hu975/electron_response_shard000_seed918001/analysis_closure_verified.json",
+          "sha256": "b05f382344dec7445612e703656c6530df44433a50f052e9525573776c4bf7d1",
+          "size_bytes": 6829861
+        },
+        {
+          "path": "/mnt/sda/wuwei/electron_density_pilot_v3_r2/hu975/electron_response_shard000_seed918001/steps.phsp",
+          "sha256": "2718e7cef42db3a233da9bf80304d184898264011b4c8fcd00d32aa43fc9434c",
+          "size_bytes": 52882544
+        },
+        {
+          "path": "/mnt/sda/wuwei/electron_density_pilot_v3_r2/hu975/electron_response_shard000_seed918001/steps.header",
+          "sha256": "0a50b9b0846b8999982517ac28a809f8db7049e31ed381c33c05e1ca25b1d14f",
+          "size_bytes": 674
+        },
+        {
+          "path": "/mnt/sda/wuwei/electron_density_pilot_v3_r2/hu975/electron_response_shard000_seed918001/dose.csv",
+          "sha256": "6ba3fb61cb863fc155e05b553c69a43ee10d8758ac8141db78a5b746296774ce",
+          "size_bytes": 64065651
+        }
+      ],
+      "original_analyzer_sha256": "750e2b5bd770a0b24d63e6d49e7a929b2c10d7e8af354ae9f4e163a94195d744"
+    },
+    {
+      "hu": -951,
+      "job_id": "2352",
+      "slurm_state": "COMPLETED",
+      "exit_code": "0:0",
+      "histories": 1,
+      "seed": 918001,
+      "cpus": 2,
+      "memory_GiB": 4,
+      "material_identity": {
+        "hu": -951,
+        "material_section": 0,
+        "material_hu_bounds": [
+          -1000,
+          -950
+        ],
+        "density_formula_segment": 0,
+        "density_correction": 1.28152,
+        "density_g_cm3": 0.06621015702613457,
+        "schneider_sha256": "5022cd89617b28dbd8ee8bf8b095ea20cfd99f6405218693c0df238b3617a139"
+      },
+      "measured_density_g_cm3": 0.0662102,
+      "density_relative_error": 6.490524619984228e-7,
+      "rows": 189807,
+      "electron_roots": 7687,
+      "parent_step_binding_verified": true,
+      "dose3d_over_steps": 0.9999999978324257,
+      "global_relative_residual": -3.8396967509440167e-16,
+      "event_electron_relative_residual": -1.027001727705671e-15,
+      "max_family_relative_residual": 1.896738392837892e-15,
+      "files": [
+        {
+          "path": "/mnt/sda/wuwei/electron_density_pilot_v3_r2/hu951/campaign_manifest.json",
+          "sha256": "534a983f20cdabe6a7df00431dda31f6d4584f38e6920b086630ad0bb870ceee",
+          "size_bytes": 43703
+        },
+        {
+          "path": "/mnt/sda/wuwei/electron_density_pilot_v3_r2/hu951/execution.json",
+          "sha256": "6c37e2d41a2a1563c1ed99ae96cb7685e7db7d194980f8aaa9644372a0a35641",
+          "size_bytes": 806
+        },
+        {
+          "path": "/mnt/sda/wuwei/electron_density_pilot_v3_r2/hu951/electron_response_shard000_seed918001/metadata.json",
+          "sha256": "e1079509ad6fe14c08c3ca9b357e3efbcc39cb68d097601cd8d8262f770f1ef5",
+          "size_bytes": 3034
+        },
+        {
+          "path": "/mnt/sda/wuwei/electron_density_pilot_v3_r2/hu951/electron_response_shard000_seed918001/analysis.json",
+          "sha256": "232c059f27adc611e22ec571eba63bc36f238341d1fba177bb60671d1b94ef37",
+          "size_bytes": 6536594
+        },
+        {
+          "path": "/mnt/sda/wuwei/electron_density_pilot_v3_r2/hu951/electron_response_shard000_seed918001/analysis_closure_verified.json",
+          "sha256": "68c8f7ec06bab40d9221c4a7ea8566a3ef8c906cc40669c957e5052add5ba0c1",
+          "size_bytes": 6536665
+        },
+        {
+          "path": "/mnt/sda/wuwei/electron_density_pilot_v3_r2/hu951/electron_response_shard000_seed918001/steps.phsp",
+          "sha256": "44b957d135fc4f20d9d8b7eee54aefaf62f2bf77f08cc643f816d4fa8442c380",
+          "size_bytes": 44035224
+        },
+        {
+          "path": "/mnt/sda/wuwei/electron_density_pilot_v3_r2/hu951/electron_response_shard000_seed918001/steps.header",
+          "sha256": "82cdfbab39822b952c0010245c9be5cf4b42f09a8c09b492830e387e45f410d1",
+          "size_bytes": 674
+        },
+        {
+          "path": "/mnt/sda/wuwei/electron_density_pilot_v3_r2/hu951/electron_response_shard000_seed918001/dose.csv",
+          "sha256": "0a2065274f071bd0257277d9e039ab550718bcbeee39de793cdaa5d82be922e0",
+          "size_bytes": 64056369
+        }
+      ],
+      "original_analyzer_sha256": "750e2b5bd770a0b24d63e6d49e7a929b2c10d7e8af354ae9f4e163a94195d744"
+    }
+  ],
+  "current_validation_sources": [
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO/tools/analyze_electron_deposit_steps.py",
+      "sha256": "aca090f8114503743133b0d7526cc2f4b46b520d64ba20a79977fcbc6da490be",
+      "size_bytes": 35308
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO/tools/execute_electron_response_campaign.py",
+      "sha256": "cc3b1f507a3056aabdfad1533a1e33e95fa991814a4725d974e060850e93089b",
+      "size_bytes": 14471
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO/tools/run_electron_response_diagnostic.py",
+      "sha256": "80ed73526b2b371fea9fdd638c6556a30e9b077601c74e6aa4c0f74218c1a3a9",
+      "size_bytes": 13361
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO/tools/audit_schneider_response_scope.py",
+      "sha256": "d82ada0f97862ecf1b25d1610415082d83fc79ee069b4f5b9b0d08001955f14d",
+      "size_bytes": 3406
+    }
+  ],
+  "failed_first_attempt": {
+    "execution": {
+      "path": "/mnt/sda/wuwei/electron_density_pilot_v3/hu1000/execution.json",
+      "sha256": "535754619ed049fc42549231ebc33285e12501592a51713ea540cece8ed435c7",
+      "size_bytes": 694
+    },
+    "reason": "Slurm rejected --mem=4.0G; no job submitted. Replaced by integer MiB in fresh r2 directory."
+  },
+  "limitations": [
+    "One history per HU: no density-scaling/shape/uncertainty conclusion; no response compilation authorization.",
+    "Original metadata/report retained. Density and event/family checks were added AFTER jobs; separate analysis_closure_verified.json is authoritative for those gates.",
+    "Original executor was not source-pinned at submission; current source includes post-pilot strengthening, not the original executed revision.",
+    "Input include chain and executable pinned; external DICOM directory contents used for material preload not recursively pinned.",
+    "Disk monitoring is sampled, not a hard quota; unrelated submitters can race resource snapshots.",
+    "No automatic resume/retry; ambiguous submissions require reconciliation.",
+    "Production cuts, matched birth cohorts and fixed-birth geometry convergence remain unvalidated."
+  ]
+}

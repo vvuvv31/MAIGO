@@ -82,6 +82,17 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
                                       const TransportResult& result) {
     RunQualityReport report;
     report.mode = config.run_mode;
+    if(!config.ct_electron_joint_response_diagnostic_file.empty()) {
+        report.failures.push_back({"unvalidated_electron_joint_response","Independent bulk response interface pilot; not patient/production validated",1.,0.});
+        if(result.electron_joint_diagnostics.domain_misses || result.electron_joint_diagnostics.invalid_marches)
+            report.failures.push_back({"electron_joint_lookup_or_geometry_failure","Joint response query or mass geometry failed",static_cast<double>(result.electron_joint_diagnostics.domain_misses+result.electron_joint_diagnostics.invalid_marches),0.});
+    }
+    if (!config.ct_schneider_delta_longitudinal_file.empty()) {
+        report.failures.push_back(
+            {"unvalidated_longitudinal_candidate",
+             "Diagnostic only: independent energy/density/interface validation is incomplete",
+             1.0, 0.0});
+    }
 
     // Keep the two closure equations explicit.  The physical residual omits
     // the intentional TOPAS compatibility sink; the accounting residual

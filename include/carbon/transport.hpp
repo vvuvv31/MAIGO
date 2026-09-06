@@ -492,7 +492,24 @@ struct SchneiderUnsupportedTrack {
 };
 static_assert(sizeof(SchneiderUnsupportedTrack) == 24, "unsupported-track layout");
 
+struct LongitudinalDomainRecord {
+    std::uint64_t history;
+    std::uint32_t step;
+    float initial_energy_MeVu;
+    float query_energy_MeVu;
+    float step_start_z_mm;
+    float step_length_mm;
+    float retained_MeV;
+};
+struct ElectronJointDiagnostics {
+    std::uint64_t queries{},domain_misses{},invalid_marches{};
+    double redistributed_MeV{},escaped_MeV{},domain_retained_MeV{};
+};
+inline constexpr std::size_t kLongitudinalDomainLogCap = 4096;
+
 struct TransportResult {
+    std::vector<LongitudinalDomainRecord> longitudinal_domain_log{};
+    ElectronJointDiagnostics electron_joint_diagnostics{};
     EnergyAccountingLedger energy_ledger{};
     SchneiderNuclearDiagnostics schneider_diagnostics{};
     // Bounded per-record logs (empty on water path / when logging disabled).
@@ -526,6 +543,10 @@ struct TransportResult {
     double schneider_primary_delta_longitudinal_moved_MeV{0.0};
     double schneider_primary_delta_longitudinal_fallback_MeV{0.0};
     double schneider_primary_delta_longitudinal_escaped_scorer_MeV{0.0};
+    std::uint64_t schneider_primary_delta_longitudinal_domain_queries{0};
+    double schneider_primary_delta_longitudinal_domain_energy_MeV{0.0};
+    std::uint64_t schneider_primary_delta_longitudinal_invalid_marches{0};
+    double longitudinal_diagnostic_density_g_cm3{0.0};
     std::vector<double> voxel_deposited_energy_MeV;
     // Primary track length accumulated per scorer voxel (mm).
     std::vector<double> primary_voxel_track_length_mm;

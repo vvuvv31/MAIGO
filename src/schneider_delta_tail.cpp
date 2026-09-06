@@ -1,4 +1,6 @@
 #include "carbon/schneider_delta_tail.hpp"
+#include "carbon/sha256.hpp"
+#include "carbon/min_json.hpp"
 
 #include <cmath>
 #include <fstream>
@@ -105,6 +107,33 @@ SchneiderDeltaTailTable SchneiderDeltaTailTable::from_csv(
 
 SchneiderLongitudinalTable SchneiderLongitudinalTable::from_csv(
     const std::filesystem::path& path) {
+    // Immutable candidate pins, NOT an upgrade of the validated CT stack.
+    const auto metadata = path.parent_path() / (path.stem().string() + ".metadata.json");
+    const auto manifest = path.parent_path() / (path.stem().string() + ".candidate.json");
+    const std::string data_sha =
+        "f42140bc6a99ca90ef9a7fc267c22be9a6d8002192644dbe45b7a40c4e10820b";
+    const std::string metadata_sha =
+        "32a37a8235d75954ea020685cd659be2ed6c7d766fad5725eaabdae91035339a";
+    if (compute_file_sha256_hex(path) != data_sha ||
+        compute_file_sha256_hex(metadata) != metadata_sha ||
+        std::filesystem::file_size(path) != 128U) {
+        throw std::invalid_argument("Longitudinal candidate CSV/metadata SHA or size mismatch");
+    }
+    std::ifstream manifest_input(manifest);
+    if (!manifest_input) throw std::invalid_argument("Missing longitudinal candidate manifest");
+    const auto contract = minjson::Parser(std::string(
+        std::istreambuf_iterator<char>(manifest_input), std::istreambuf_iterator<char>())).parse();
+    if (contract.at("schema_version").number != 1 ||
+        contract.at("status").str != "unvalidated_diagnostic" ||
+        contract.at("data_sha256").str != data_sha ||
+        contract.at("metadata_sha256").str != metadata_sha ||
+        contract.at("scale").number != 1 ||
+        contract.at("energy_min_MeV_u").number != 150 ||
+        contract.at("energy_max_MeV_u").number != 225 ||
+        contract.at("reference_density_g_cm3").number != kLongitudinalReferenceDensityGPerCm3 ||
+        contract.at("kernel").str != "homogeneous_only_exact_voxel_segments_v1") {
+        throw std::invalid_argument("Invalid longitudinal candidate contract");
+    }
     std::ifstream input(path);
     if (!input) {
         throw std::runtime_error(

@@ -1,0 +1,153 @@
+{
+  "status": "REFERENCE_INCONSISTENT",
+  "cases": {
+    "air_to_tissue": {
+      "windows": [
+        {
+          "relative_depth_mm": [
+            -5,
+            -2
+          ],
+          "gpu_relative_error": 0.012760774405553565,
+          "topas_replica_relative_difference": 0.0005650816410176305
+        },
+        {
+          "relative_depth_mm": [
+            -2,
+            0
+          ],
+          "gpu_relative_error": 0.02104491166307687,
+          "topas_replica_relative_difference": 0.00039730862820788347
+        },
+        {
+          "relative_depth_mm": [
+            0,
+            2
+          ],
+          "gpu_relative_error": -0.001325783122492541,
+          "topas_replica_relative_difference": 0.00008273118107754393
+        },
+        {
+          "relative_depth_mm": [
+            2,
+            5
+          ],
+          "gpu_relative_error": -0.44667647175628145,
+          "topas_replica_relative_difference": 0.8526999663771513
+        }
+      ],
+      "quality_accepted": true,
+      "reference_consistent": false,
+      "total_MeV_per_primary": {
+        "topas": 149.1681516554173,
+        "gpu": 102.7023440708643
+      },
+      "artifacts": {
+        "/mnt/sda/wuwei/air_tissue_interface_20260906/air_to_tissue/gpu/dose.raw": "c0fb3a0387753b62b29493ca458a41e7b5e35d689d322ea7ca7c676b2dc96ab4",
+        "/mnt/sda/wuwei/air_tissue_interface_20260906/air_to_tissue/gpu/dose.mhd": "dee07e3db4dd33666bdcc6285920f2d44190538b8c606cdcf49c98f121817b43",
+        "/mnt/sda/wuwei/air_tissue_interface_20260906/air_to_tissue/gpu/out/run/quality_report.json": "75656e74d39f2911e05345af0b87a80dcc5aa0b038e326cd781a8fa700105f1e",
+        "/mnt/sda/wuwei/air_tissue_interface_20260906/air_to_tissue/s1/dose0.csv": "962659920316ef4b21175f62a04ee75e6aa1aa889437d23cff44850447bf0d34",
+        "/mnt/sda/wuwei/air_tissue_interface_20260906/air_to_tissue/s1/dose1.csv": "8d51972dbc19dd71c0dbe2f4597a49ee240bf1df7c184726d5bca9d8ff920de4",
+        "/mnt/sda/wuwei/air_tissue_interface_20260906/air_to_tissue/s2/dose0.csv": "ccb9f249218a38048c7b0784f239bd111867a633e175408f6f1e16fff40297c1",
+        "/mnt/sda/wuwei/air_tissue_interface_20260906/air_to_tissue/s2/dose1.csv": "11e607f626fab8971aa2119db79b29a6c2b514bf17d33c661b12de13cc3e077e"
+      }
+    },
+    "tissue_to_air": {
+      "windows": [
+        {
+          "relative_depth_mm": [
+            -5,
+            -2
+          ],
+          "gpu_relative_error": 0.002424756296884878,
+          "topas_replica_relative_difference": 0.0002946814413163059
+        },
+        {
+          "relative_depth_mm": [
+            -2,
+            0
+          ],
+          "gpu_relative_error": -0.0016855865302082274,
+          "topas_replica_relative_difference": 0.0003894861360033938
+        },
+        {
+          "relative_depth_mm": [
+            0,
+            2
+          ],
+          "gpu_relative_error": 0.012681115355550165,
+          "topas_replica_relative_difference": 0.0021749394368673004
+        },
+        {
+          "relative_depth_mm": [
+            2,
+            5
+          ],
+          "gpu_relative_error": -0.000047400242056960806,
+          "topas_replica_relative_difference": 0.000416624236224886
+        }
+      ],
+      "quality_accepted": true,
+      "reference_consistent": true,
+      "total_MeV_per_primary": {
+        "topas": 102.41095128701289,
+        "gpu": 102.50825527401413
+      },
+      "artifacts": {
+        "/mnt/sda/wuwei/air_tissue_interface_20260906/tissue_to_air/gpu/dose.raw": "dbd6950a77b59a765aea3acd774a6f1e81494f1daeb41d1bd4063042b074a2f5",
+        "/mnt/sda/wuwei/air_tissue_interface_20260906/tissue_to_air/gpu/dose.mhd": "dee07e3db4dd33666bdcc6285920f2d44190538b8c606cdcf49c98f121817b43",
+        "/mnt/sda/wuwei/air_tissue_interface_20260906/tissue_to_air/gpu/out/run/quality_report.json": "417e81a9899e7e5a212e7ae057da28d7029d9ca5dd1abc6dd29787c963a4908c",
+        "/mnt/sda/wuwei/air_tissue_interface_20260906/tissue_to_air/s1/dose0.csv": "89c6f2e7816d05861d5d0e5fe9097417930f14e029aefb9160eae0464d394c89",
+        "/mnt/sda/wuwei/air_tissue_interface_20260906/tissue_to_air/s1/dose1.csv": "a95551a8f122501865172c2aa1ff4f16d69b16f3ecc71ff1595e877f0525a4d8",
+        "/mnt/sda/wuwei/air_tissue_interface_20260906/tissue_to_air/s2/dose0.csv": "92c793ecfb56c10f41992273c8a4cceb0a3defd6aaec550f1b351a7b446bd9ea",
+        "/mnt/sda/wuwei/air_tissue_interface_20260906/tissue_to_air/s2/dose1.csv": "541dd7572ddd06f59e6d49480bdf7fa95a2bea3ba4cf40e65de79b22f9c6e82d"
+      }
+    }
+  },
+  "longitudinal_candidate_tested": false,
+  "patient_gamma_improvement_proven": false,
+  "execution": {
+    "jobs": [
+      2359,
+      2360,
+      2361,
+      2362
+    ],
+    "states": [
+      "COMPLETED",
+      "COMPLETED",
+      "COMPLETED",
+      "COMPLETED"
+    ],
+    "padding_jobs": [
+      2363,
+      2364
+    ],
+    "padding_exit_codes": [
+      "0:0",
+      "0:0"
+    ],
+    "resource_peak": {
+      "cpus": 96,
+      "memory_GB": 40
+    },
+    "gpu": "local RTX 2080 Ti",
+    "new_patient_gamma": false
+  },
+  "padding_control": {
+    "root": "/mnt/sda/wuwei/air_tissue_interface_padded_20260906",
+    "change": "only vacuum mother HLX/HLY +1mm, HLZ +1mm; physical layers, source, scorer fixed",
+    "upstream_2mm_relative_error": 0.020770393105411955,
+    "downstream_2mm_relative_error": -0.0012835819864193132,
+    "downstream_2_to_5mm_relative_error": -0.5121988897742118,
+    "downstream_2_to_5mm_replica_difference": 0.03629530857914274,
+    "resolved": false
+  },
+  "provenance": {
+    "topas_sha256": "d50f90504eafe2b207c0cac309d14c61ad9a99de97321f4844d5388c9bd59eee",
+    "gpu_sha256": "7934ae78d5052f9b9de1710d5f0732881547d67fd7547151726a64dde4372c43",
+    "generator_sha256": "81cbf24aa31a1c8549c17271d6568e0a929865b62c142c900e5e5173dc0d03c7",
+    "analyzer_sha256": "d177665a95258c48375c75aa6ef0a1dc0f32d758c0dda12956418562d7d30371",
+    "worktree_clean": false
+  }
+}

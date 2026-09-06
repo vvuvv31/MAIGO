@@ -1,0 +1,40 @@
+{
+  "status": "REFERENCE_ONLY_UNSUPPORTED_DENSITY",
+  "energy_MeV_u": 175,
+  "allowed_total_cpus": 96,
+  "allowed_total_mem_GB": 40,
+  "grid_template_sha256": "0d626419351333a12804f25a0ce45ec5728f9ab4859b656d45f1ed6dec16b6d8",
+  "schneider_sha256": "5022cd89617b28dbd8ee8bf8b095ea20cfd99f6405218693c0df238b3617a139",
+  "cases": {
+    "-975": {
+      "density_g_cm3": 0.03932345286011696,
+      "phantom_sha256": "7ac252935a5dd65f65f31703d30edd480dfd832e1dfc97bd487c343726c000b3",
+      "material_id": 0,
+      "unchanged_header_and_composition": true
+    },
+    "-951": {
+      "density_g_cm3": 0.06621015816926956,
+      "phantom_sha256": "8eb00f3994b9c045e75f53fabcaf04fdb7c897d410b1d609806956dd5c8f0c0e",
+      "material_id": 0,
+      "unchanged_header_and_composition": true
+    }
+  },
+  "prepared_files": {
+    "hu951/campaign.json": "326398d81cbd77b399a59f8dd972d4af7537da8bece276852739f40714668181",
+    "hu951/gpu_base/run.yaml": "1e5c014bf81a2a3b95c74837cc6793742ceb5b18e9dc6ca045f5f180ae847aa2",
+    "hu951/gpu_long/run.yaml": "39e70e517733b21f34fc897b222398eb6d7264bf83b094d4a1ae3a35ab44dc5e",
+    "hu951/phantom.cctg": "8eb00f3994b9c045e75f53fabcaf04fdb7c897d410b1d609806956dd5c8f0c0e",
+    "hu951/topas_s1/run.slurm": "e2fd720704a18c18364cc0c78752be16ccecd4570fab5cca44c866b13f438698",
+    "hu951/topas_s1/run.txt": "398449be8a16d5c510db93d3ca87f5c070d035f97560e590fb884e2d4e7a1005",
+    "hu951/topas_s2/run.slurm": "7e61200bb63aad19bcd02017d9952f6ef50dee1dbd19f18861c0834747cdee23",
+    "hu951/topas_s2/run.txt": "aebd1007acacfc189e3cba403dd33ab51e97b73197fcbd693d01c7b6fae33aef",
+    "hu975/campaign.json": "21e514ec5ce514858f36aeecc70e7edc2acb10868ef6009da57790dbd8079171",
+    "hu975/gpu_base/run.yaml": "8f791f9ed476d337a081ae47efb6e98ba21729324665f19ac3a1545263a258b0",
+    "hu975/gpu_long/run.yaml": "40362c82e96f7db60a54e4b45a713bdf8e87956a1e49b3eb3eae7fbb1b3602bd",
+    "hu975/phantom.cctg": "7ac252935a5dd65f65f31703d30edd480dfd832e1dfc97bd487c343726c000b3",
+    "hu975/topas_s1/run.slurm": "5b349a92796b14584c9e40c5c0b097b30cd4123e6af6eb0f45bd52704393b503",
+    "hu975/topas_s1/run.txt": "dc9af7a1d5040a059d0a4353df225cf8184c8da6e356cb67d9ee51c61a7cc6c6",
+    "hu975/topas_s2/run.slurm": "8ac4a14485ddf6dec429e4d576b58e1527eb87cf8ebb7cfdfd3f6bf1f3eeff62",
+    "hu975/topas_s2/run.txt": "fa73cbb3df875a9439539b56d6dcfaa6b5034df043854c0e2d0dd49a4ae8cfc9"
+  }
+}

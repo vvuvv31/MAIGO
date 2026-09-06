@@ -13,8 +13,9 @@ META = REPO / "data/schneider/schneider_section0_c12_delta_longitudinal_v1.metad
 
 
 def lookup(energies, fracs, lambdas, energy):
-    # Mirrors schneider_longitudinal_lookup_device, including nearest-edge
-    # clamp outside the calibrated interval.
+    # Supplemental Python check only; CTest exercises the real C++/SYCL code.
+    if not energies[0] <= energy <= energies[-1]:
+        return 0.0, 0.0
     if energy <= energies[0]:
         return fracs[0], lambdas[0]
     if energy >= energies[-1]:
@@ -34,6 +35,29 @@ def lookup(energies, fracs, lambdas, energy):
 
 
 class LongitudinalTableTests(unittest.TestCase):
+    def test_compiler_refuses_existing_output(self):
+        cmd = [sys.executable, str(REPO / "tools/compile_schneider_delta_longitudinal.py"),
+               "--input", "200:unused.csv", "--output", str(DATA), "--metadata", str(META)]
+        r = subprocess.run(cmd, capture_output=True, text=True)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("Refusing to overwrite", r.stderr)
+
+    def test_compiler_rejects_incomplete_and_flat_scorers(self):
+        sys.path.insert(0, str(REPO / "tools"))
+        from compile_schneider_delta_longitudinal import lateral_integral, fit_forward
+        import numpy as np
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "bad.csv"
+            path.write_text("# not a 3D scorer\n" * 8 + "0,0,0,1\n")
+            with self.assertRaises(ValueError):
+                lateral_integral(path)
+        with self.assertRaises(ValueError):
+            fit_forward((np.arange(440) + .5) * .5, np.ones(440))
+
+    def test_candidate_verifier(self):
+        sys.path.insert(0, str(REPO / "tools"))
+        from verify_schneider_longitudinal_candidate import verify
+        self.assertEqual(verify(DATA)["status"], "unvalidated_diagnostic")
     def test_csv_and_metadata_consistent(self):
         with DATA.open() as f:
             rows = list(csv.DictReader(f))
@@ -72,11 +96,11 @@ class LongitudinalTableTests(unittest.TestCase):
         f, lam = lookup(energies, fracs, lambdas, mid)
         self.assertAlmostEqual(f, 0.5 * (fracs[0] + fracs[1]))
         self.assertAlmostEqual(lam, 0.5 * (lambdas[0] + lambdas[1]))
-        # Nearest-edge clamp outside the calibrated interval.
+        # Out-of-domain requests retain local energy rather than extrapolate.
         self.assertEqual(lookup(energies, fracs, lambdas, energies[0] - 0.1),
-                         (fracs[0], lambdas[0]))
+                         (0.0, 0.0))
         self.assertEqual(lookup(energies, fracs, lambdas, energies[-1] + 0.1),
-                         (fracs[-1], lambdas[-1]))
+                         (0.0, 0.0))
 
     def test_exponential_range_covers_entrance_scale(self):
         # Mean range must resolve the observed ~15-20 mm entrance decay and
@@ -101,25 +125,12 @@ class LongitudinalTableTests(unittest.TestCase):
             subprocess.run(cmd, check=True, cwd=REPO)
             self.assertEqual(out.read_text(), DATA.read_text())
 
-    def test_fp32_build_refuses_longitudinal(self):
-        # Fail-closed: FP32 builds must refuse the longitudinal key at
-        # plan-only time (tiny shares would be silently dropped); the FP64
-        # build must accept the same config.
-        fp32 = REPO / "build/oneapi-nvidia-release/carbon_mc"
-        fp64 = REPO / "build/oneapi-nvidia-fp64/carbon_mc"
-        cfg = "/tmp/long_slab/base.yaml"
-        if not fp32.exists() or not Path(cfg).exists():
-            self.skipTest("fp32 binary or slab config missing")
-        r = subprocess.run([str(fp32), "--config", cfg, "--device", "cuda",
-                            "--plan-only"], capture_output=True, text=True)
-        self.assertNotEqual(r.returncode, 0)
-        self.assertIn("FP64 dose build", r.stderr)
-        if not fp64.exists():
-            self.skipTest("fp64 binary missing")
-        r = subprocess.run([str(fp64), "--config", cfg, "--device", "cuda",
-                            "--plan-only"], capture_output=True, text=True)
-        self.assertEqual(r.returncode, 0)
-
+    def test_candidate_manifest_is_diagnostic(self):
+        manifest = json.loads(DATA.with_suffix(".candidate.json").read_text())
+        self.assertEqual(manifest["status"], "unvalidated_diagnostic")
+        self.assertEqual(manifest["scale"], 1)
+        self.assertEqual(manifest["data_sha256"], hashlib.sha256(DATA.read_bytes()).hexdigest())
+        self.assertEqual(manifest["metadata_sha256"], hashlib.sha256(META.read_bytes()).hexdigest())
 
 if __name__ == "__main__":
     unittest.main()
