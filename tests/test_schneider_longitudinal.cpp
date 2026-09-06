@@ -255,6 +255,21 @@ int main(int argc, char** argv) {
         bool blocked=false;
         for(const auto& f:quality.failures) if(f.code=="unvalidated_longitudinal_candidate") blocked=true;
         require(blocked && !quality.accepted,"candidate cannot pass quality");
+        {
+            TransportConfig joint;
+            joint.ct_electron_joint_response_diagnostic_file="diagnostic.csv";
+            const auto q=evaluate_run_quality(joint,*result);
+            bool unvalidated=false;
+            for(const auto& f:q.failures)if(f.code=="unvalidated_electron_joint_response")unvalidated=true;
+            require(unvalidated && !q.accepted,"joint candidate cannot pass quality");
+            for(auto mode:{RunMode::research,RunMode::production}) {
+                joint.run_mode=mode;bool refused=false;
+                try {joint.validate();}catch(const std::exception& e) {
+                    refused=std::string(e.what()).find("Joint electron response requires pinned, isolated")!=std::string::npos;
+                }
+                require(refused,"joint patient/production scope rejection");
+            }
+        }
         config.enable_ct_grid=true;
         config.enable_voxel_scoring=true;
         config.ct_grid_file="diagnostic-grid-not-read";

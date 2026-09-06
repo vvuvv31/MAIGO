@@ -1737,6 +1737,8 @@ void write_energy_ledger_json(const std::filesystem::path& path,
         output<<"  \"electron_joint_response\": {\"status\": \"unvalidated_interface_diagnostic\", "
               <<"\"data_sha256\": \""<<config.ct_electron_joint_response_sha256<<"\", "
               <<"\"metadata_sha256\": \""<<config.ct_electron_joint_response_metadata_sha256<<"\", "
+              <<"\"ordered_path_sha256\": \""<<result.electron_ordered_path_sha256<<"\", "
+              <<"\"ordered_path_replays\": "<<d.ordered_path_replays<<", "
               <<"\"replaces_transverse_tail\": true, \"queries\": "<<d.queries
               <<", \"domain_misses\": "<<d.domain_misses<<", \"invalid_marches\": "<<d.invalid_marches
               <<", \"redistributed_MeV\": "<<d.redistributed_MeV<<", \"escaped_MeV\": "<<d.escaped_MeV

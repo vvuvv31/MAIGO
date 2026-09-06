@@ -1247,23 +1247,32 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
     const bool use_electron_joint = !config.ct_electron_joint_response_diagnostic_file.empty();
     ElectronJointChannel* electron_joint_channels_device=nullptr;
     ElectronJointSample* electron_joint_samples_device=nullptr;
+    ElectronPathRange* electron_path_ranges_device=nullptr;
+    std::array<double,3>* electron_path_vectors_device=nullptr;
+    std::string electron_path_sha256;
     std::uint64_t* electron_joint_diag_device=nullptr;
     std::array<double,2> electron_joint_minimum{},electron_joint_maximum{};
     if(use_electron_joint) {
         const auto table=ElectronJointResponseTable::from_csv(config.ct_electron_joint_response_diagnostic_file,
             config.ct_electron_joint_response_sha256,config.ct_electron_joint_response_metadata_sha256);
-        // Ordered-path schema can be inspected by standalone loader tests,
-        // but GPU replay is not yet implemented/authorized. Never silently
-        // discard the path and score its collapsed endpoint instead.
-        if(!table.path_ranges.empty())
-            throw std::invalid_argument("Ordered electron paths are offline-only: GPU replay is not enabled");
+        // Explicitly authorized ISOLATED smoke diagnostic only. Config still
+        // rejects research/production, spots, other energies and nuclear-on;
+        // quality still always reports unvalidated_electron_joint_response.
         electron_joint_channels_device=mem_tracker.allocate<ElectronJointChannel>(74);
         electron_joint_samples_device=mem_tracker.allocate<ElectronJointSample>(table.samples.size());
-        electron_joint_diag_device=mem_tracker.allocate<std::uint64_t>(6);
+        electron_joint_diag_device=mem_tracker.allocate<std::uint64_t>(7);
         if(!electron_joint_channels_device || !electron_joint_samples_device || !electron_joint_diag_device)throw std::bad_alloc();
         queue.copy(table.channels.data(),electron_joint_channels_device,74).wait_and_throw();
         queue.copy(table.samples.data(),electron_joint_samples_device,table.samples.size()).wait_and_throw();
-        queue.fill(electron_joint_diag_device,std::uint64_t{0},6).wait_and_throw();
+        if(!table.path_ranges.empty()) {
+            electron_path_sha256=table.path_sha256;
+            electron_path_ranges_device=mem_tracker.allocate<ElectronPathRange>(table.path_ranges.size());
+            electron_path_vectors_device=mem_tracker.allocate<std::array<double,3>>(table.path_vectors.size());
+            if(!electron_path_ranges_device || !electron_path_vectors_device)throw std::bad_alloc();
+            queue.copy(table.path_ranges.data(),electron_path_ranges_device,table.path_ranges.size()).wait_and_throw();
+            queue.copy(table.path_vectors.data(),electron_path_vectors_device,table.path_vectors.size()).wait_and_throw();
+        }
+        queue.fill(electron_joint_diag_device,std::uint64_t{0},7).wait_and_throw();
         electron_joint_minimum=table.minimum;electron_joint_maximum=table.maximum;
     }
     if (use_schneider_delta_longitudinal && k_dose_atomic_fp32) {
@@ -3122,16 +3131,39 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                             const float packet=deposited_MeV*static_cast<float>(draw.fraction);
                             const double radius=sycl::sqrt(draw.longitudinal_mass_g_cm2*draw.longitudinal_mass_g_cm2+
                                                            draw.radial_mass_g_cm2*draw.radial_mass_g_cm2);
-                            if(radius>0 && packet>0) {
+                            if((radius>0 || electron_path_vectors_device) && packet>0) {
                                 const double phi=6.2831853071795864769*rng::uniform01(spot_seed,rng_history,steps,22);
-                                const auto ray=rotate_local_direction(
+                                const auto ray=radius>0 ? rotate_local_direction(
                                     static_cast<float>(draw.radial_mass_g_cm2*sycl::cos(phi)/radius),
                                     static_cast<float>(draw.radial_mass_g_cm2*sycl::sin(phi)/radius),
                                     static_cast<float>(draw.longitudinal_mass_g_cm2/radius),
-                                    Direction3F{direction_x,direction_y,direction_z});
+                                    Direction3F{direction_x,direction_y,direction_z}) : Direction3F{0,0,1};
                                 const double birth=rng::uniform01(spot_seed,rng_history,steps,20);
                                 std::size_t target=voxel_index;int target_z=bin;
-                                const auto march=march_longitudinal_mass_segments(
+                                LongitudinalMarchResult march;
+                                if(electron_path_vectors_device) {
+                                    counter(6,1);
+                                    const auto range=electron_path_ranges_device[draw.sample_index];
+                                    const auto ex=rotate_local_direction(static_cast<float>(sycl::cos(phi)),static_cast<float>(sycl::sin(phi)),0,Direction3F{direction_x,direction_y,direction_z});
+                                    const auto ey=rotate_local_direction(static_cast<float>(-sycl::sin(phi)),static_cast<float>(sycl::cos(phi)),0,Direction3F{direction_x,direction_y,direction_z});
+                                    const auto path=replay_mass_polyline_indexed(
+                                        {position_x_mm+birth*step_mm*direction_x,position_y_mm+birth*step_mm*direction_y,position_z_mm+birth*step_mm*direction_z},range.count,
+                                        [&](std::size_t j) {
+                                            const auto v=electron_path_vectors_device[range.offset+j];
+                                            return std::array<double,3>{v[0]*ex.x+v[1]*ey.x+v[2]*direction_x,
+                                                v[0]*ex.y+v[1]*ey.y+v[2]*direction_y,v[0]*ex.z+v[1]*ey.z+v[2]*direction_z};
+                                        },{ct_origin_x,ct_origin_y,ct_origin_z},{ct_spacing_x,ct_spacing_y,ct_spacing_z},
+                                        {static_cast<int>(ct_nx),static_cast<int>(ct_ny),static_cast<int>(ct_nz)},
+                                        [&](const std::array<int,3>& c) {return static_cast<double>(ct_density_device[(static_cast<std::size_t>(c[2])*ct_ny+c[1])*ct_nx+c[0]]);});
+                                    march.invalid=path.invalid;march.escaped=path.escaped;
+                                    if(!march.invalid && !march.escaped) {
+                                        const int x=static_cast<int>(sycl::floor((path.endpoint[0]-ct_origin_x)/ct_spacing_x));
+                                        const int y=static_cast<int>(sycl::floor((path.endpoint[1]-ct_origin_y)/ct_spacing_y));
+                                        const int z=static_cast<int>(sycl::floor((path.endpoint[2]-ct_origin_z)/ct_spacing_z));
+                                        if(x<0 || y<0 || z<0 || x>=static_cast<int>(ct_nx) || y>=static_cast<int>(ct_ny) || z>=static_cast<int>(ct_nz))march.escaped=true;
+                                        else {target=(static_cast<std::size_t>(z)*ct_ny+y)*ct_nx+x;target_z=z;}
+                                    }
+                                } else march=march_longitudinal_mass_segments(
                                     {position_x_mm+birth*step_mm*direction_x,position_y_mm+birth*step_mm*direction_y,position_z_mm+birth*step_mm*direction_z},
                                     {ray.x,ray.y,ray.z},{ct_origin_x,ct_origin_y,ct_origin_z},
                                     {ct_spacing_x,ct_spacing_y,ct_spacing_z},
@@ -7066,8 +7098,8 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
     }
 
     std::array<std::uint64_t, 10> schneider_delta_energy_host{};
-    std::array<std::uint64_t,6> electron_joint_diag_host{};
-    if(electron_joint_diag_device)queue.copy(electron_joint_diag_device,electron_joint_diag_host.data(),6).wait_and_throw();
+    std::array<std::uint64_t,7> electron_joint_diag_host{};
+    if(electron_joint_diag_device)queue.copy(electron_joint_diag_device,electron_joint_diag_host.data(),7).wait_and_throw();
     if (schneider_delta_energy_device != nullptr) {
         queue.copy(schneider_delta_energy_device,
                    schneider_delta_energy_host.data(),
@@ -7088,6 +7120,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
     }
     // Free buffers
     free_device(electron_joint_channels_device);free_device(electron_joint_samples_device);free_device(electron_joint_diag_device);
+    free_device(electron_path_ranges_device);free_device(electron_path_vectors_device);
     free_immutable_device(table_device);
     free_immutable_device(energy_grid_device);
     free_immutable_device(cumulative_range_device);
@@ -7232,7 +7265,8 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
     result.longitudinal_diagnostic_density_g_cm3 = schneider_long_diagnostic_density;
     result.longitudinal_domain_log = std::move(longitudinal_domain_host);
     result.electron_joint_diagnostics={electron_joint_diag_host[0],electron_joint_diag_host[1],electron_joint_diag_host[2],
-        static_cast<double>(electron_joint_diag_host[3])*1e-6,static_cast<double>(electron_joint_diag_host[4])*1e-6,static_cast<double>(electron_joint_diag_host[5])*1e-6};
+        static_cast<double>(electron_joint_diag_host[3])*1e-6,static_cast<double>(electron_joint_diag_host[4])*1e-6,static_cast<double>(electron_joint_diag_host[5])*1e-6,electron_joint_diag_host[6]};
+    result.electron_ordered_path_sha256=electron_path_sha256;
     result.schneider_unsupported_tracks = std::move(schneider_track_host);
     result.backend = "sycl-" + resolved_device_name +
                      (config.enable_energy_straggling ? "+straggling" : "");

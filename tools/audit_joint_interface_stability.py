@@ -8,10 +8,17 @@ import numpy as np
 from analyze_air_tissue_interface_pilot import analyze,gpu
 from analyze_longitudinal_holdout import sha
 
+def radial_metrics(image,radius2):
+    image=np.asarray(image,dtype=float)
+    if image.shape!=radius2.shape or not np.isfinite(image).all() or np.any(image<0) or image.sum()<=0:
+        raise ValueError('Invalid radial dose image')
+    return dict(radial_rms_mm=float(np.sqrt((image*radius2).sum()/image.sum())),
+                outer_10mm_fraction=float(image[radius2>100].sum()/image.sum()))
+
 def audit(root,labels):
     manifest=json.loads((root/'manifest.json').read_text())
     reference=analyze(root)
-    result={}
+    result={};reference_seeds={}
     xy=(np.arange(100)+.5)*2-100
     radius2=xy[:,None]**2+xy[None,:]**2
     for name,spec in manifest['cases'].items():
@@ -28,6 +35,11 @@ def audit(root,labels):
                 layers.append(layer)
             refs.append(np.concatenate(layers)/manifest['histories'])
         truth=(refs[0]+refs[1])/2
+        reference_seeds[name]=[]
+        for w in reference['cases'][name]['windows']:
+            low,high=w['relative_depth_mm'];take=(z>=low)&(z<high)
+            reference_seeds[name].append(dict(relative_depth_mm=[low,high],
+                seeds=[radial_metrics(v[take].sum(axis=0),radius2) for v in refs]))
         variants={}
         for label in labels:
             folder=case/label
@@ -56,7 +68,9 @@ def audit(root,labels):
                 artifacts={str(p):sha(p) for p in (folder/'dose.raw',folder/'run.yaml',folder/'out/run/quality_report.json')})
         result[name]=variants
     return dict(scope='175 MeV/u axis-aligned HU -1000/100 EM-only; radial metrics diagnostic, not an acceptance gate',
-                patient_gamma_improvement_proven=False,cases=result)
+                patient_gamma_improvement_proven=False,cases=result,
+                reference_seed_windows=reference_seeds,
+                uncertainty_note='Two seeds describe observed spread, not a confidence interval; GPU seeds share a fixed response table and do not measure bulk-response uncertainty.')
 
 if __name__=='__main__':
     p=argparse.ArgumentParser();p.add_argument('root',type=Path)

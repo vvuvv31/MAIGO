@@ -37,6 +37,8 @@ def compare(roots,candidate="gpu_mass_candidate"):
                 numerical_ok=[f["code"] for f in q["failures"]]==expected
                 kernel=l.get("electron_joint_response" if joint else "longitudinal_candidate",{})
                 numerical_ok &= kernel.get("domain_misses",0)==0
+                if kernel.get("ordered_path_sha256"):
+                    numerical_ok &= len(kernel["ordered_path_sha256"])==64 and kernel.get("ordered_path_replays",0)>0
                 numerical_ok &= kernel.get("invalid_marches",0)==0 and kernel.get("out_of_domain_queries",0)==0
                 entry=dict(window_relative_errors=errors,
                     bin_relative_errors=(actual[roi]/truth-1).tolist(),
@@ -49,7 +51,8 @@ def compare(roots,candidate="gpu_mass_candidate"):
     candidates=[v for c in out.values() for k,v in c["variants"].items() if k.endswith("/"+candidate)]
     complete=len(candidates)==2*len(roots)
     passed=reference_ok and complete and all(c["interface_error_gate"] for c in candidates)
-    return dict(status="PASS_NARROW_INTERFACE_DIAGNOSTIC" if passed else "FAILED_OR_INCOMPLETE",
+    return dict(status="PASS_INTERFACE_DEPTH_WINDOWS_ONLY" if passed else "FAILED_OR_INCOMPLETE",
+        full_3d_interface_validated=False,
         reference_gate=bool(reference_ok),candidate_complete=complete,
         thresholds=dict(replica_and_buffer=.01,window_error=.01,individual_half_mm_bin_error=.02),
         scope="175 MeV/u, EM-only HU -1000/100 axis-aligned interfaces; no patient/general-CT validation",
@@ -64,4 +67,4 @@ if __name__=="__main__":
     if a.output:
         with a.output.open("x") as f:f.write(text)
     else:print(text)
-    raise SystemExit(0 if r["status"]=="PASS_NARROW_INTERFACE_DIAGNOSTIC" else 1)
+    raise SystemExit(0 if r["status"]=="PASS_INTERFACE_DEPTH_WINDOWS_ONLY" else 1)

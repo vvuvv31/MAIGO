@@ -504,12 +504,14 @@ struct LongitudinalDomainRecord {
 struct ElectronJointDiagnostics {
     std::uint64_t queries{},domain_misses{},invalid_marches{};
     double redistributed_MeV{},escaped_MeV{},domain_retained_MeV{};
+    std::uint64_t ordered_path_replays{};
 };
 inline constexpr std::size_t kLongitudinalDomainLogCap = 4096;
 
 struct TransportResult {
     std::vector<LongitudinalDomainRecord> longitudinal_domain_log{};
     ElectronJointDiagnostics electron_joint_diagnostics{};
+    std::string electron_ordered_path_sha256{};
     EnergyAccountingLedger energy_ledger{};
     SchneiderNuclearDiagnostics schneider_diagnostics{};
     // Bounded per-record logs (empty on water path / when logging disabled).

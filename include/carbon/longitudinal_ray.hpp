@@ -109,15 +109,15 @@ struct MassPathResult {
     bool escaped{false},invalid{false};
     std::size_t completed_segments{};
 };
-template<class Density>
-inline MassPathResult replay_mass_polyline(
-    const std::array<double,3>& birth,const std::array<double,3>* segments,std::size_t count,
+template<class Segment, class Density>
+inline MassPathResult replay_mass_polyline_indexed(
+    const std::array<double,3>& birth,std::size_t count,Segment segment,
     const std::array<double,3>& origin,const std::array<double,3>& spacing,
     const std::array<int,3>& dims,Density density) {
     MassPathResult out;out.endpoint=birth;
-    if(!segments || !count) {out.invalid=true;return out;}
+    if(!count) {out.invalid=true;return out;}
     for(std::size_t i=0;i<count;++i) {
-        const auto v=segments[i];double norm=0;
+        const auto v=segment(i);double norm=0;
         for(double x:v)norm+=x*x;
         norm=std::sqrt(norm);
         if(!std::isfinite(norm)) {out.invalid=true;return out;}
@@ -131,5 +131,13 @@ inline MassPathResult replay_mass_polyline(
         ++out.completed_segments;
     }
     return out;
+}
+template<class Density>
+inline MassPathResult replay_mass_polyline(
+    const std::array<double,3>& birth,const std::array<double,3>* segments,std::size_t count,
+    const std::array<double,3>& origin,const std::array<double,3>& spacing,
+    const std::array<int,3>& dims,Density density) {
+    if(!segments) {MassPathResult r;r.endpoint=birth;r.invalid=true;return r;}
+    return replay_mass_polyline_indexed(birth,count,[&](std::size_t i){return segments[i];},origin,spacing,dims,density);
 }
 } // namespace carbon
