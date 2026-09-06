@@ -2,6 +2,7 @@
 #include "carbon/min_json.hpp"
 #include "carbon/sha256.hpp"
 #include <algorithm>
+#include <cstring>
 #include <fstream>
 #include <limits>
 #include <sstream>
@@ -16,7 +17,8 @@ ElectronJointResponseTable ElectronJointResponseTable::from_csv(const std::files
     std::ifstream mf(meta);std::stringstream text;text<<mf.rdbuf();
     const auto m=minjson::Parser(text.str()).parse();
     auto number=[](const minjson::Value& v) {if(v.type!=minjson::Value::Type::Number || !std::isfinite(v.number))throw std::invalid_argument("Joint metadata number");return v.number;};
-    if(number(m.at("schema_version"))!=1 || m.at("status").str!="UNVALIDATED_INTERFACE_DIAGNOSTIC" ||
+    const double schema=number(m.at("schema_version"));
+    if((schema!=1 && schema!=2) || m.at("status").str!="UNVALIDATED_INTERFACE_DIAGNOSTIC" ||
        number(m.at("energy_bin_width_MeVu"))!=5 || number(m.at("energy_max_MeVu"))!=185 ||
        m.at("data_sha256").str!=data_pin || m.at("data_filename").str!=path.filename().string() ||
        number(m.at("data_size_bytes"))!=static_cast<double>(std::filesystem::file_size(path)) ||
@@ -68,6 +70,42 @@ ElectronJointResponseTable ElectronJointResponseTable::from_csv(const std::files
         if(!ch.count || out.samples[ch.offset+ch.count-1].cdf!=1)throw std::invalid_argument("Incomplete joint channel");
     }
     if(!std::isfinite(out.minimum[0]) || !std::isfinite(out.minimum[1]))throw std::invalid_argument("Missing joint material");
+    if(schema==1 && m.contains("ordered_path_file"))throw std::invalid_argument("Ordered paths require explicit schema 2");
+    if(schema==2) {
+        const auto filename=m.at("ordered_path_file").str;
+        if(filename.empty() || std::filesystem::path(filename).filename().string()!=filename)
+            throw std::invalid_argument("Ordered path must be a companion filename");
+        const auto binary=path.parent_path()/filename;
+        out.path_sha256=m.at("ordered_path_sha256").str;
+        if(out.path_sha256.size()!=64 || compute_file_sha256_hex(binary)!=out.path_sha256 ||
+           number(m.at("ordered_path_size_bytes"))!=static_cast<double>(std::filesystem::file_size(binary)))
+            throw std::invalid_argument("Ordered path SHA/size mismatch");
+        std::ifstream f(binary,std::ios::binary);char magic[8];std::uint32_t version=0,ns=0,nv=0;
+        f.read(magic,8);f.read(reinterpret_cast<char*>(&version),4);f.read(reinterpret_cast<char*>(&ns),4);f.read(reinterpret_cast<char*>(&nv),4);
+        if(!f || std::memcmp(magic,"ELPATH01",8)!=0 || version!=1 || ns!=out.samples.size() || !nv || nv>20000000 ||
+           std::filesystem::file_size(binary)!=20ULL+8ULL*ns+24ULL*nv)
+            throw std::invalid_argument("Ordered path header/count mismatch");
+        static_assert(sizeof(ElectronPathRange)==8 && sizeof(std::array<double,3>)==24);
+        out.path_ranges.resize(ns);out.path_vectors.resize(nv);
+        f.read(reinterpret_cast<char*>(out.path_ranges.data()),8ULL*ns);
+        f.read(reinterpret_cast<char*>(out.path_vectors.data()),24ULL*nv);
+        if(!f)throw std::invalid_argument("Truncated ordered paths");
+        std::size_t next=0;
+        for(std::size_t i=0;i<ns;++i) {
+            const auto r=out.path_ranges[i];std::array<double,3> net{};
+            if(r.offset!=next || !r.count || r.count>4096 || std::uint64_t(r.offset)+r.count>nv)
+                throw std::invalid_argument("Ordered path range");
+            for(std::size_t j=r.offset;j<r.offset+r.count;++j)for(int a=0;a<3;++a) {
+                const double v=out.path_vectors[j][a];
+                if(!std::isfinite(v))throw std::invalid_argument("Nonfinite ordered vector");net[a]+=v;
+            }
+            const auto s=out.samples[i];
+            if(std::abs(net[0]-s.radial_mass_g_cm2)>1e-9 || std::abs(net[1])>1e-9 || std::abs(net[2]-s.longitudinal_mass_g_cm2)>1e-9)
+                throw std::invalid_argument("Ordered endpoint/CSV mismatch");
+            next+=r.count;
+        }
+        if(next!=nv)throw std::invalid_argument("Unreferenced ordered vectors");
+    }
     return out;
 }
 } // namespace carbon

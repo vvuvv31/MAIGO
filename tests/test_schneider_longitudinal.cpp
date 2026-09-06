@@ -108,8 +108,34 @@ static std::array<double,12> exercise_mass() {
     out[11]=r.escaped || r.invalid || r.blocked;
     return out;
 }
+static void ordered_loader_fixtures() {
+    const auto dir=std::filesystem::temp_directory_path()/("maigo-ordered-loader-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    std::filesystem::create_directory(dir);
+    const auto csv=dir/"joint.csv",meta=dir/"joint.metadata.json",binary=dir/"paths.bin";
+    {std::ofstream f(csv);f<<"section_id,energy_bin,nonlocal_fraction,cdf,longitudinal_mass_g_cm2,radial_mass_g_cm2\n0,35,0.25,1,0.1,0.1\n8,35,0.25,1,0.1,0.1\n";}
+    auto write=[&](int fault) {
+        {std::ofstream f(binary,std::ios::binary);f.write(fault==1?"BADMAGIC":"ELPATH01",8);
+         const std::uint32_t header[]{1,2,2};f.write(reinterpret_cast<const char*>(header),sizeof(header));
+         const ElectronPathRange ranges[]={{0,1},{1,static_cast<std::uint32_t>(fault==2?2:1)}};
+         f.write(reinterpret_cast<const char*>(ranges),sizeof(ranges));
+         const std::array<double,3> vectors[]={{.1,0,.1},{fault==3?.2:.1,0,.1}};
+         f.write(reinterpret_cast<const char*>(vectors),sizeof(vectors));}
+        std::ofstream f(meta);
+        f<<"{\"schema_version\":2,\"status\":\"UNVALIDATED_INTERFACE_DIAGNOSTIC\",\"projectile\":[6,12],\"energy_bin_width_MeVu\":5,\"energy_max_MeVu\":185,\"charged_escape_allowed\":false,\"fixed_parent_inset_mm\":{\"air\":100,\"tissue\":5},\"sources\":[{}],\"data_filename\":\"joint.csv\",\"data_sha256\":\""<<compute_file_sha256_hex(csv)<<"\",\"data_size_bytes\":"<<std::filesystem::file_size(csv)
+         <<",\"ordered_path_file\":\"paths.bin\",\"ordered_path_sha256\":\""<<compute_file_sha256_hex(binary)<<"\",\"ordered_path_size_bytes\":"<<std::filesystem::file_size(binary)<<",\"channels\":[";
+        for(int sec:{0,8}) {if(sec)f<<',';
+            f<<"{\"section_id\":"<<sec<<",\"energy_bin\":35,\"energy_min_MeVu\":175,\"energy_max_MeVu\":180,\"nonlocal_fraction\":0.25,\"parent_loss_MeV\":1,\"terminal_local_excess_MeV\":0,\"raw_kinetic_closure_residual_MeV\":0,\"redistribution_inactive\":false}";}
+        f<<"]}";
+    };
+    auto load=[&]{return ElectronJointResponseTable::from_csv(csv,compute_file_sha256_hex(csv),compute_file_sha256_hex(meta));};
+    write(0);require(load().path_vectors.size()==2,"ordered fixture");
+    for(int fault:{1,2,3}) {write(fault);rejects(load);}
+    write(0);std::filesystem::remove(binary);rejects(load);
+    std::filesystem::remove_all(dir);
+}
 int main(int argc, char** argv) {
     try {
+        ordered_loader_fixtures();
         // Optional external diagnostic payload: no dependency on unshipped data
         // in the ordinary regression suite.
         if(argc==2) {

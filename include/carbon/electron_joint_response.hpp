@@ -10,10 +10,12 @@ namespace carbon {
 inline constexpr int kElectronJointEnergyBins=37;
 struct ElectronJointSample { double cdf{},longitudinal_mass_g_cm2{},radial_mass_g_cm2{}; };
 struct ElectronJointChannel { std::uint32_t offset{},count{}; double fraction{}; };
+struct ElectronPathRange { std::uint32_t offset{},count{}; };
 enum class ElectronJointStatus { hit,unsupported_section,energy_domain,invalid_payload };
 struct ElectronJointDraw {
     ElectronJointStatus status{ElectronJointStatus::invalid_payload};
     double fraction{},longitudinal_mass_g_cm2{},radial_mass_g_cm2{};
+    std::uint32_t sample_index{};
 };
 inline ElectronJointDraw sample_electron_joint_device(unsigned section,double energy,double u,
     const ElectronJointChannel* channels,const ElectronJointSample* samples,
@@ -36,6 +38,7 @@ inline ElectronJointDraw sample_electron_joint_device(unsigned section,double en
         if(u<samples[ch.offset+mid].cdf)hi=mid;else lo=mid+1;}
     const auto v=samples[ch.offset+lo];
     out.status=ElectronJointStatus::hit;out.fraction=ch.fraction;
+    out.sample_index=ch.offset+lo;
     out.longitudinal_mass_g_cm2=v.longitudinal_mass_g_cm2;
     out.radial_mass_g_cm2=v.radial_mass_g_cm2;return out;
 }
@@ -43,6 +46,9 @@ struct ElectronJointResponseTable {
     std::array<ElectronJointChannel,74> channels{};
     std::array<double,2> minimum{},maximum{};
     std::vector<ElectronJointSample> samples;
+    std::vector<ElectronPathRange> path_ranges;
+    std::vector<std::array<double,3>> path_vectors;
+    std::string path_sha256;
     static ElectronJointResponseTable from_csv(const std::filesystem::path& path,
         const std::string& expected_data_sha256,const std::string& expected_metadata_sha256);
 };

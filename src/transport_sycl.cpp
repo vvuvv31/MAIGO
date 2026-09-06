@@ -1252,6 +1252,11 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
     if(use_electron_joint) {
         const auto table=ElectronJointResponseTable::from_csv(config.ct_electron_joint_response_diagnostic_file,
             config.ct_electron_joint_response_sha256,config.ct_electron_joint_response_metadata_sha256);
+        // Ordered-path schema can be inspected by standalone loader tests,
+        // but GPU replay is not yet implemented/authorized. Never silently
+        // discard the path and score its collapsed endpoint instead.
+        if(!table.path_ranges.empty())
+            throw std::invalid_argument("Ordered electron paths are offline-only: GPU replay is not enabled");
         electron_joint_channels_device=mem_tracker.allocate<ElectronJointChannel>(74);
         electron_joint_samples_device=mem_tracker.allocate<ElectronJointSample>(table.samples.size());
         electron_joint_diag_device=mem_tracker.allocate<std::uint64_t>(6);
