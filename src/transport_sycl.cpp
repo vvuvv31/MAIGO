@@ -25,6 +25,7 @@
 #include "carbon/schneider_target_sampler.hpp"
 #include "carbon/secondary_rate_table.hpp"
 #include "carbon/inelastic_package_v3.hpp"
+#include "carbon/cinel03_event_rotation.hpp"
 #include "carbon/schneider_ct_device_context.hpp"
 
 #ifdef CARBON_HAS_SYCL
@@ -3697,6 +3698,13 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                         const std::uint32_t prod_offset = event.product_offset;
                         const std::uint32_t prod_count = event.direct_product_count;
 
+                        // Finite event-library azimuths are not a preferred
+                        // laboratory direction. Rotate the whole event once.
+                        const float event_phi = 6.2831853071795864769F * rng::uniform01(
+                            spot_seed, rng_history, steps, cinel03_event_azimuth_dimension);
+                        const float event_cos = sycl::cos(event_phi);
+                        const float event_sin = sycl::sin(event_phi);
+
                         for (std::uint32_t ip = 0; ip < prod_count; ++ip) {
                             if (prod_offset + ip >= schneider_ct_device_ctx.c12_total_products) break;
                             const auto& product = schneider_ct_device_ctx.c12_products[prod_offset + ip];
@@ -3740,10 +3748,13 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                 SchneiderDiagSlot::PrimaryChargedBorn);
 
                             if (enable_secondary_transport && product.kinetic_energy_MeV > energy_cutoff_MeV) {
+                                const auto local_direction = rotate_cinel03_event_azimuth(
+                                    product.local_direction_x, product.local_direction_y,
+                                    product.local_direction_z, event_cos, event_sin);
                                 const auto child_direction = rotate_local_direction(
-                                    product.local_direction_x,
-                                    product.local_direction_y,
-                                    product.local_direction_z,
+                                    local_direction.x,
+                                    local_direction.y,
+                                    local_direction.z,
                                     Direction3F{direction_x, direction_y, direction_z});
 
                                 if (secondary_queue_device != nullptr) {
@@ -4908,6 +4919,10 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                                 Cinel02SpeciesLedgerSchema::cinel03_replay_step_dE_fov, dE);
                                         }
                                         const auto& event = schneider_ct_device_ctx.sec_interactions[event_idx];
+                                        const float event_phi = 6.2831853071795864769F * rng::uniform01(
+                                            2026, frag.rng_stream, sec_steps, cinel03_event_azimuth_dimension);
+                                        const float event_cos = sycl::cos(event_phi);
+                                        const float event_sin = sycl::sin(event_phi);
                                         const float local_deposit = sycl::fmax(0.0F, event.process_local_deposit_MeV);
                                         pending_sec_depth_MeV += local_deposit;
                                         if (enable_voxel_scoring && cur_voxel >= 0) {
@@ -4994,10 +5009,13 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
 
                                             if (product.kinetic_energy_MeV > energy_cutoff_MeV &&
                                                 frag.generation + 1U < cinel02_max_secondary_inelastic_generations) {
+                                                const auto local_direction = rotate_cinel03_event_azimuth(
+                                                    product.local_direction_x, product.local_direction_y,
+                                                    product.local_direction_z, event_cos, event_sin);
                                                 const auto child_direction = rotate_local_direction(
-                                                    product.local_direction_x,
-                                                    product.local_direction_y,
-                                                    product.local_direction_z,
+                                                    local_direction.x,
+                                                    local_direction.y,
+                                                    local_direction.z,
                                                     Direction3F{collision_input_dx, collision_input_dy, collision_input_dz});
 
                                                 if (secondary_queue_device != nullptr) {

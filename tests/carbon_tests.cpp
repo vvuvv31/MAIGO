@@ -15,6 +15,7 @@
 #include "carbon/particle.hpp"
 #include "carbon/plan_run.hpp"
 #include "carbon/rng.hpp"
+#include "carbon/cinel03_event_rotation.hpp"
 #include "carbon/run_quality.hpp"
 #include "carbon/sha256.hpp"
 
@@ -62,6 +63,44 @@ void require_near(double actual, double expected, double tolerance, const std::s
         throw std::runtime_error(message + ": actual=" + std::to_string(actual) +
                                  ", expected=" + std::to_string(expected));
     }
+}
+
+void test_cinel03_common_event_azimuth() {
+    using carbon::rotate_cinel03_event_azimuth;
+    const auto quarter = rotate_cinel03_event_azimuth(1,0,0,0,1);
+    require_near(quarter.x,0,0,"quarter turn x");
+    require_near(quarter.y,1,0,"quarter turn y");
+    double mean_x=0, mean_y=0;
+    for (int k=0;k<256;++k) {
+        const float phi=6.2831853071795864769F*k/256;
+        const float c=std::cos(phi),s=std::sin(phi);
+        const auto a=rotate_cinel03_event_azimuth(.6F,0,.8F,c,s);
+        const auto b=rotate_cinel03_event_azimuth(-.2F,.4F,.5F,c,s);
+        require_near(a.x*a.x+a.y*a.y+a.z*a.z,1,3e-7,"norm preserved");
+        require_near(a.z,.8F,0,"polar angle preserved");
+        require_near(a.x*b.x+a.y*b.y+a.z*b.z,.28,2e-7,"product pair correlation");
+        const auto sum=rotate_cinel03_event_azimuth(.4F,.4F,1.3F,c,s);
+        require_near(a.x+b.x,sum.x,2e-7,"event momentum rotation linearity");
+        require_near(a.y+b.y,sum.y,2e-7,"event momentum rotation linearity");
+        mean_x+=a.x;mean_y+=a.y;
+    }
+    require_near(mean_x/256,0,1e-7,"azimuth mean x");
+    require_near(mean_y/256,0,1e-7,"azimuth mean y");
+    sycl::queue q;
+    auto* output=sycl::malloc_shared<carbon::Cinel03LocalDirection>(256,q);
+    require(output!=nullptr,"azimuth device allocation");
+    q.parallel_for(sycl::range<1>(256),[=](sycl::id<1> id){
+        const float phi=6.2831853071795864769F*id[0]/256;
+        output[id[0]]=carbon::rotate_cinel03_event_azimuth(.6F,0,.8F,sycl::cos(phi),sycl::sin(phi));
+    }).wait_and_throw();
+    for (int k=0;k<256;++k) {
+        const float phi=6.2831853071795864769F*k/256;
+        const auto host=rotate_cinel03_event_azimuth(.6F,0,.8F,std::cos(phi),std::sin(phi));
+        require_near(output[k].x,host.x,3e-7,"host/device x");
+        require_near(output[k].y,host.y,3e-7,"host/device y");
+        require_near(output[k].z,host.z,0,"host/device z");
+    }
+    sycl::free(output,q);
 }
 
 template <typename ExceptionType = std::exception, typename Operation>
@@ -10131,6 +10170,7 @@ int main(int argc, char** argv) {
         run_test_dispatch(filter, name, fn);
     };
     try {
+        run("test_cinel03_common_event_azimuth", test_cinel03_common_event_azimuth);
         run("test_fred_18_isotopes_data", test_fred_18_isotopes_data);
         run("test_cinel02_replay_miss_mcs_semantics", test_cinel02_replay_miss_mcs_semantics);
         run("test_secondary_step_voxel_commit", test_secondary_step_voxel_commit);
