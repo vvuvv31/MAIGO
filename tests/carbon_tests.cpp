@@ -699,6 +699,7 @@ void test_unified_water_config_and_quality() {
     invalid([](auto& c){c.enable_ct_grid=true;});
     invalid([](auto& c){c.enable_layered_phantom=true;});
     invalid([](auto& c){c.water_cinel_package_file="legacy.bin";});
+    invalid([](auto& c){c.nuclear_model="cinel02";});
     invalid([](auto& c){c.ct_schneider_physics_bundle_file.clear();});
     invalid([](auto& c){c.unified_water_material_sha256=std::string(64,'0');});
     invalid([](auto& c){c.initial_energy_MeVu=500;});
@@ -8333,8 +8334,8 @@ void test_step20_secondary_rate_table_and_cinel03_package() {
     std::cout << "[step20-test] Running secondary rate table and cinel03 package tests...\n";
 
     // 1. Validate SecondaryRateTable
-    const auto rate_table = SecondaryRateTable::from_binary("data/schneider/secondary_inelastic_rates_v1.bin");
-    require(rate_table.num_projectiles() == 13, "Must have 13 secondary projectiles");
+    const auto rate_table = SecondaryRateTable::from_binary("data/schneider/secondary_inelastic_rates_v2_1.bin");
+    require(rate_table.num_projectiles() == 14, "Must have 14 secondary projectiles");
     require(rate_table.projectile_index(1, 1) >= 0, "Proton must be present");
     require(rate_table.projectile_index(1, 2) >= 0, "Deuteron must be present");
     require(rate_table.projectile_index(1, 3) >= 0, "Triton must be present");
@@ -8351,12 +8352,12 @@ void test_step20_secondary_rate_table_and_cinel03_package() {
     require(rate_table.projectile_index(4, 6) == -1, "Be6 must be excluded (TopasCompatKill policy)");
 
     // Partial sum conservation check across all projectiles, sections, and sampled energies
-    for (std::size_t p = 0; p < 13; ++p) {
+    for (std::size_t p = 0; p < rate_table.num_projectiles(); ++p) {
         for (std::size_t s : {0, 8, 12, 20, 24}) {
-            for (std::size_t e : {0, 100, 400, 859}) {
+            for (std::size_t e : {0, 100, 400, 859, 920}) {
                 double sum_part = 0.0;
                 for (std::size_t t = 0; t < 13; ++t) {
-                    sum_part += rate_table.mass_partial_rate(p, s, t, e);
+                    sum_part += rate_table.masked_partial_at_node(p, s, t, e);
                 }
                 const double tot = rate_table.mass_total_rate(p, s, e);
                 require(std::abs(sum_part - tot) < 1.0e-11, "Partial sum must equal total rate");
@@ -8364,8 +8365,8 @@ void test_step20_secondary_rate_table_and_cinel03_package() {
         }
     }
 
-    // 2. Validate cinel03_secondary_targets.bin
-    const auto sec_pkg = InelasticPackageV3Table::from_binary("data/schneider/cinel03_secondary_targets.bin");
+    // 2. Validate cinel03_secondary_targets_v2_1_14p.bin
+    const auto sec_pkg = InelasticPackageV3Table::from_binary("data/schneider/cinel03_secondary_targets_v2_1_14p.bin");
     require(sec_pkg.interactions().size() > 25000, "Must contain >25k interactions");
     require(sec_pkg.products().size() > 200000, "Must contain >200k products");
 
@@ -8375,17 +8376,12 @@ void test_step20_secondary_rate_table_and_cinel03_package() {
     const auto ev_p_O = sec_pkg.find_event(1, 1, 8, 200.0F, 50.0F, 0.5F);
     require(ev_p_O != InelasticPackageV3Table::invalid, "Proton on Oxygen lookup must succeed");
 
-    // Alpha on C (Z=2, A=4 on Z=6): the 200 MeV/u query falls in a wide
-    // campaign gap, so it must report EnergyGapTooLarge rather than silently
-    // clamping to a distant endpoint.
+    // Current v2.1 fills the former campaign gap; both host and device
+    // must hit. Oversized-gap rejection remains covered by synthetic tests.
     {
-        const auto gap_result = sec_pkg.lookup_event(2, 4, 6, 200.0F, 0.5F, 0.5F);
-        require(gap_result.status == carbon::Cinel03LookupStatus::EnergyGapTooLarge,
-                "Alpha on Carbon at 200 MeV/u must report EnergyGapTooLarge");
-        std::uint64_t gap_counter = 0;
-        const auto gap_audit = sec_pkg.find_event(2, 4, 6, 200.0F, 50.0F, 0.5F, true, &gap_counter);
-        require(gap_audit == InelasticPackageV3Table::invalid, "Gap query must miss in audit mode");
-        require(gap_counter == 1, "Gap query must increment the miss counter");
+        const auto lookup = sec_pkg.lookup_event(2, 4, 6, 200.0F, 0.5F, 0.5F);
+        require(lookup.status == carbon::Cinel03LookupStatus::Hit,
+                "Current alpha+C channel at 200 MeV/u must hit");
     }
     // Alpha on C at an exact campaign node energy must still hit.
     {
@@ -8437,8 +8433,8 @@ void test_step20_secondary_rate_table_and_cinel03_package() {
     queue.copy(dev_results, host_results, 3).wait_and_throw();
     require(host_results[0] != 0xFFFFFFFFU, "GPU proton on O event lookup failed");
     require(host_results[1] != 0xFFFFFFFFU, "GPU B11 on Ca event lookup failed");
-    require(host_results[2] == static_cast<std::uint32_t>(carbon::Cinel03LookupStatus::EnergyGapTooLarge),
-            "GPU alpha on C at 200 MeV/u must report EnergyGapTooLarge");
+    require(host_results[2] == static_cast<std::uint32_t>(carbon::Cinel03LookupStatus::Hit),
+            "GPU current alpha on C at 200 MeV/u must hit");
 
     sycl::free(dev_nodes, queue);
     sycl::free(dev_offsets, queue);
@@ -9154,81 +9150,54 @@ void test_step05_ct_secondary_nuclear_transport() {
 
     auto queue = carbon::make_sycl_queue("default");
 
-    // 1. Independent secondary target sampling matching partial rate tensor
+    // Current v3 sampler: data-driven registry, channel mask, independent
+    // host interpolation reference, and deterministic categorical frequencies.
     {
-        const auto sec_table = SecondaryRateTable::from_binary("data/schneider/secondary_inelastic_rates_v1.bin");
-        std::vector<float> sec_partials_float(sec_table.mass_partial_rates().size());
-        for (std::size_t i = 0; i < sec_table.mass_partial_rates().size(); ++i) {
-            sec_partials_float[i] = static_cast<float>(sec_table.mass_partial_rates()[i]);
+        const auto table = SecondaryRateTable::from_binary(
+            "data/schneider/secondary_inelastic_rates_v2_1.bin");
+        require(table.num_projectiles()==14 && table.binary_version()==3, "Current registry/schema");
+        std::vector<float> partials(table.mass_partial_rates().begin(),table.mass_partial_rates().end());
+        std::vector<std::int32_t> keys;
+        for(const auto& p:table.projectiles()) { keys.push_back(p.z);keys.push_back(p.a); }
+        std::vector<float> lo,hi;std::vector<unsigned char> has;
+        for(const auto& d:table.channel_domains()) {
+            lo.push_back(d.energy_min_mevu);hi.push_back(d.energy_max_mevu);has.push_back(d.has_support);
         }
-
-        // Test two different fragments from the same event: He4 (Z=2, A=4) and Proton (Z=1, A=1)
-        const int proj_he4 = secondary_projectile_index_device(2, 4);
-        const int proj_p = secondary_projectile_index_device(1, 1);
-        require(proj_he4 >= 0, "He4 projectile index must be valid");
-        require(proj_p >= 0, "Proton projectile index must be valid");
-        require(proj_he4 != proj_p, "He4 and Proton must have distinct projectile indices");
-
-        const std::size_t test_section = 12; // Bone
-        const float test_energy = 100.0F;
-        constexpr int kSamples = 100000;
-
-        // Draw 100,000 independent samples for He4
-        std::array<int, 13> he4_counts{};
-        for (int i = 0; i < kSamples; ++i) {
-            const float u = (static_cast<float>(i) + 0.5F) / static_cast<float>(kSamples);
-            const int z = sample_secondary_target_device(
-                sec_partials_float.data(), proj_he4, test_section, test_energy, u,
-                0.5F, 2.0F, 860);
-            constexpr int kSecCanonicalTargets[13] = {1, 6, 7, 8, 12, 15, 16, 17, 18, 20, 11, 19, 22};
-            for (std::size_t k = 0; k < 13; ++k) {
-                if (kSecCanonicalTargets[k] == z) {
-                    he4_counts[k]++;
-                    break;
-                }
+        std::array<std::array<int,13>,2> counts{};
+        const std::array<int,13> targets{1,6,7,8,12,15,16,17,18,20,11,19,22};
+        for(int species=0;species<2;++species) {
+            const int z=species==0?2:1, mass=species==0?4:1;
+            const int p=secondary_projectile_lut_index_device(keys.data(),table.num_projectiles(),z,mass);
+            require(p==table.projectile_index(z,mass) && p>=0,"Host/device registry mismatch");
+            constexpr float energy=100.F;constexpr std::size_t section=12;
+            const auto rates=secondary_masked_rates_device(partials.data(),lo.data(),hi.data(),has.data(),
+                table.num_projectiles(),p,section,energy,table.energy_min_mevu(),
+                1.F/table.energy_step_mevu(),table.num_energies());
+            require(rates.total>0,"Current target sampler unexercised");
+            const double node=(energy-table.energy_min_mevu())/table.energy_step_mevu();
+            const auto e=static_cast<std::size_t>(node);const double f=node-e;
+            double expected[13]{},sum=0;
+            for(std::size_t t=0;t<13;++t) {
+                const auto& d=table.channel_domain(p,t);
+                if(d.has_support && energy>=d.energy_min_mevu && energy<=d.energy_max_mevu)
+                    expected[t]=(1-f)*table.mass_partial_rate(p,section,t,e)+f*table.mass_partial_rate(p,section,t,e+1);
+                sum+=expected[t];
             }
-        }
-
-        // Compute theoretical probabilities for He4
-        const std::size_t e_idx = static_cast<std::size_t>((test_energy - 0.5F) * 2.0F);
-        double total_rate_he4 = 0.0;
-        std::array<double, 13> theoretical_he4{};
-        for (std::size_t t = 0; t < 13; ++t) {
-            theoretical_he4[t] = sec_table.mass_partial_rate(proj_he4, test_section, t, e_idx);
-            total_rate_he4 += theoretical_he4[t];
-        }
-        for (std::size_t t = 0; t < 13; ++t) {
-            theoretical_he4[t] /= total_rate_he4;
-            const float freq = static_cast<float>(he4_counts[t]) / static_cast<float>(kSamples);
-            require_near(freq, static_cast<float>(theoretical_he4[t]), 0.005,
-                         "Secondary He4 target element frequency mismatch");
-        }
-
-        // Draw 100,000 independent samples for Proton
-        std::array<int, 13> p_counts{};
-        for (int i = 0; i < kSamples; ++i) {
-            const float u = (static_cast<float>(i) + 0.5F) / static_cast<float>(kSamples);
-            const int z = sample_secondary_target_device(
-                sec_partials_float.data(), proj_p, test_section, test_energy, u,
-                0.5F, 2.0F, 860);
-            constexpr int kSecCanonicalTargets[13] = {1, 6, 7, 8, 12, 15, 16, 17, 18, 20, 11, 19, 22};
-            for (std::size_t k = 0; k < 13; ++k) {
-                if (kSecCanonicalTargets[k] == z) {
-                    p_counts[k]++;
-                    break;
-                }
+            for(int i=0;i<100000;++i) {
+                const int target=sample_masked_secondary_target_device(rates.partials,(i+.5F)/100000.F);
+                const auto it=std::find(targets.begin(),targets.end(),target);
+                require(it!=targets.end(),"Invalid current sampler target");
+                ++counts[species][it-targets.begin()];
             }
+            for(std::size_t t=0;t<13;++t)
+                require_near(counts[species][t]/100000.,expected[t]/sum,0.0001,
+                             "Masked categorical probability differs from independent interpolation");
         }
-
-        // Verify He4 and Proton have distinct distributions (decoupled)
-        bool distributions_differ = false;
-        for (std::size_t t = 0; t < 13; ++t) {
-            if (std::abs(he4_counts[t] - p_counts[t]) > 200) {
-                distributions_differ = true;
-                break;
-            }
-        }
-        require(distributions_differ, "Secondary fragments must have independent, projectile-dependent target distributions");
+        require(counts[0]!=counts[1],"Projectile-dependent distributions were aliased");
+        require(secondary_projectile_lut_index_device(keys.data(),table.num_projectiles(),6,12)>=0,
+                "C12 secondary registry entry lost");
+        require(secondary_projectile_lut_index_device(keys.data(),table.num_projectiles(),99,99)==-1,
+                "Unknown projectile aliased");
     }
 
     // 2. Be6 TopasCompatKill validation
@@ -9242,7 +9211,7 @@ void test_step05_ct_secondary_nuclear_transport() {
 
     // 3. Secondary CINEL03 Replay & Fail-Closed Miss
     {
-        const auto sec_pkg = InelasticPackageV3Table::from_binary("data/schneider/cinel03_secondary_targets.bin");
+        const auto sec_pkg = InelasticPackageV3Table::from_binary("data/schneider/cinel03_secondary_targets_v2_1_14p.bin");
         const auto dev_tables = sec_pkg.make_device_tables();
 
         // Valid query: He4 (Z=2, A=4) on Oxygen (Z=8) at 100 MeV/u

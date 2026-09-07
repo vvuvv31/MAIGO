@@ -38,23 +38,12 @@ SecondaryRateTable SecondaryRateTable::from_binary(
     if (std::memcmp(header.magic, "SCHN2RAT", 8) != 0) {
         throw std::runtime_error("Invalid magic in secondary rate binary: " + binary_path.string());
     }
-    // Version 1: frozen [0.5, 430.0]/860 grid, 13 projectiles, legacy
-    // endpoint clamp. Version 3: v2.1 data product (variable projectile
-    // count, data-driven registry) with an appended per-(projectile,target)
-    // valid-domain block and masked totals. Version 2 was a retired
-    // intermediate that never shipped; it is rejected explicitly.
-    if (header.version == 2) {
-        throw std::runtime_error("Retired version 2 in secondary rate binary (never shipped): " + binary_path.string());
+    // Only the current domain-masked schema is supported.
+    if (header.version != 3) {
+        throw std::runtime_error("Secondary rate requires SCHN2RAT v3; legacy versions are retired: " + binary_path.string());
     }
-    const bool is_v3 = (header.version == 3);
-    if (header.version != 1 && !is_v3) {
-        throw std::runtime_error("Unsupported version in secondary rate binary: " + std::to_string(header.version));
-    }
-    if (!is_v3 && header.num_projectiles != kSecondaryNumProjectiles) {
-        throw std::runtime_error("Invalid num_projectiles in secondary rate binary: " + std::to_string(header.num_projectiles));
-    }
-    if (is_v3 && (header.num_projectiles == 0 || header.num_projectiles > 64)) {
-        throw std::runtime_error("Invalid num_projectiles in v3 secondary rate binary: " + std::to_string(header.num_projectiles));
+    if (header.num_projectiles == 0 || header.num_projectiles > 64) {
+        throw std::runtime_error("Invalid num_projectiles in v3 secondary rate binary");
     }
     if (header.num_sections != kSecondaryNumSections) {
         throw std::runtime_error("Invalid num_sections in secondary rate binary: " + std::to_string(header.num_sections));
@@ -62,9 +51,9 @@ SecondaryRateTable SecondaryRateTable::from_binary(
     if (header.num_targets != kSecondaryNumTargets) {
         throw std::runtime_error("Invalid num_targets in secondary rate binary: " + std::to_string(header.num_targets));
     }
-    const std::size_t expect_energies = is_v3 ? kSecondaryV2NumEnergies : kSecondaryNumEnergies;
-    const double expect_emin = is_v3 ? kSecondaryV2EnergyMin : kSecondaryV1EnergyMin;
-    const double expect_emax = is_v3 ? kSecondaryV2EnergyMax : kSecondaryV1EnergyMax;
+    const std::size_t expect_energies = kSecondaryV2NumEnergies;
+    const double expect_emin = kSecondaryV2EnergyMin;
+    const double expect_emax = kSecondaryV2EnergyMax;
     if (header.num_energies != expect_energies) {
         throw std::runtime_error("Invalid num_energies in secondary rate binary: " + std::to_string(header.num_energies));
     }
@@ -97,7 +86,7 @@ SecondaryRateTable SecondaryRateTable::from_binary(
                                     header.num_targets * sizeof(int32_t) +
                                     num_partial * sizeof(double) +
                                     num_total * sizeof(double);
-    if (is_v3) {
+    {
         constexpr std::uint64_t max_dom =
             std::numeric_limits<std::size_t>::max() / sizeof(SecondaryRateDomainEntry);
         if (static_cast<std::uint64_t>(header.num_projectiles) *
@@ -163,7 +152,7 @@ SecondaryRateTable SecondaryRateTable::from_binary(
         throw std::runtime_error("Failed to read full payload from secondary rate binary: " + binary_path.string());
     }
 
-    if (is_v3) {
+    {
         const std::size_t num_domains =
             static_cast<std::size_t>(header.num_projectiles) *
             static_cast<std::size_t>(header.num_targets);
@@ -218,11 +207,10 @@ SecondaryRateTable SecondaryRateTable::from_binary(
             for (std::size_t e = 0; e < header.num_energies; ++e) {
                 double part_sum = 0.0;
                 for (std::size_t t = 0; t < header.num_targets; ++t) {
-                    part_sum += is_v3 ? table.masked_partial_at_node(p, s, t, e)
-                                      : table.mass_partial_rate(p, s, t, e);
+                    part_sum += table.masked_partial_at_node(p, s, t, e);
                 }
                 const double tot = table.mass_total_rate(p, s, e);
-                if (is_v3) {
+                {
                     if (part_sum != tot) {
                         throw std::runtime_error(
                             "Secondary rate v3 masked-total mismatch for proj=" + std::to_string(p) +
@@ -230,13 +218,6 @@ SecondaryRateTable SecondaryRateTable::from_binary(
                             ": sum(masked)=" + std::to_string(part_sum) +
                             " total=" + std::to_string(tot));
                     }
-                    continue;
-                }
-                const double diff = std::abs(part_sum - tot);
-                if (diff > 1e-4 * (tot + 1e-6)) {
-                    throw std::runtime_error("Secondary rate consistency failure for proj=" + std::to_string(p) +
-                                             " sec=" + std::to_string(s) + " e=" + std::to_string(e) +
-                                             ": sum(partial)=" + std::to_string(part_sum) + " total=" + std::to_string(tot));
                 }
             }
         }
@@ -249,9 +230,6 @@ SecondaryRateTable SecondaryRateTable::from_binary(
         if (s.size() > 4 && s.substr(s.size() - 4) == ".bin") {
             resolved_meta = s.substr(0, s.size() - 4) + ".metadata.json";
         }
-        if (!std::filesystem::exists(resolved_meta)) {
-            resolved_meta = binary_path.string() + ".metadata.json";
-        }
     }
 
     // Companion metadata: REQUIRED (no silent loads). Strict schema:
@@ -259,8 +237,7 @@ SecondaryRateTable SecondaryRateTable::from_binary(
     // and binary_version equal the binary header, projectile list / target
     // order / energy grid / channel domains equal the binary content, plus
     // provenance presence (physics list, TOPAS/Geant4 versions, Schneider
-    // hash, compiler commit). v1 metadata predates this schema: v1 loads
-    // require only data_sha256 presence + match (frozen path unchanged).
+    // hash, compiler commit). Older metadata schemas are no longer accepted.
     if (resolved_meta.empty() || !std::filesystem::exists(resolved_meta)) {
         throw std::runtime_error("SecondaryRateTable: companion metadata file is required but missing for: " +
                                  binary_path.string());
@@ -272,18 +249,7 @@ SecondaryRateTable SecondaryRateTable::from_binary(
         }
         std::string meta_content((std::istreambuf_iterator<char>(meta_file)),
                                  std::istreambuf_iterator<char>());
-        if (!is_v3) {
-            minjson::Parser parser(meta_content);
-            const minjson::Value meta = parser.parse();
-            const std::string expected_sha =
-                minjson::require_string(meta.at("data_sha256"), "data_sha256");
-            const std::string actual_sha = compute_file_sha256_hex(binary_path);
-            if (actual_sha != expected_sha) {
-                throw std::runtime_error("SecondaryRateTable: SHA-256 mismatch for " +
-                                         binary_path.string() + ": expected " + expected_sha +
-                                         ", got " + actual_sha);
-            }
-        } else {
+        {
             minjson::Parser parser(meta_content);
             const minjson::Value meta = parser.parse();
             const std::string data_filename =
@@ -448,53 +414,37 @@ double SecondaryRateTable::interpolate_mass_total(std::size_t proj_idx, std::siz
     // v3 (binary version 3): host mirror of the device mask. The channel
     // domain is applied per target BEFORE interpolation; the total is the
     // sum of masked partials. Strict zero outside the global grid; no clamp,
-    // no extrapolation. v1 keeps the legacy endpoint clamp EXACTLY.
-    if (binary_version_ == 3) {
-        if (!(energy_mevu >= energy_min_mevu_) || !(energy_mevu <= energy_max_mevu_)) {
-            return 0.0;
-        }
-        const double node_flt = (energy_mevu - energy_min_mevu_) / energy_step_mevu_;
-        std::size_t idx0 = static_cast<std::size_t>(node_flt);
-        if (idx0 >= num_energies_ - 1) {
-            idx0 = num_energies_ - 2;
-        }
-        const std::size_t idx1 = idx0 + 1;
-        const double alpha = node_flt - static_cast<double>(idx0);
-        double sum = 0.0;
-        for (std::size_t t = 0; t < kSecondaryNumTargets; ++t) {
-            const SecondaryRateDomainEntry& dom = channel_domain(proj_idx, t);
-            if (dom.has_support == 0 || energy_mevu < dom.energy_min_mevu ||
-                energy_mevu > dom.energy_max_mevu) {
-                continue;
-            }
-            const double y0 = mass_partial_rate(proj_idx, section_id, t, idx0);
-            const double y1 = mass_partial_rate(proj_idx, section_id, t, idx1);
-            double v = (1.0 - alpha) * y0 + alpha * y1;
-            if (v < 0.0) {
-                v = 0.0;
-            }
-            sum += v;
-        }
-        // Hazard/sampler unity with the device (float-sliver guard).
-        if (!(sum > 1e-12)) {
-            return 0.0;
-        }
-        return sum;
-    }
-    if (energy_mevu <= energy_min_mevu_) {
-        return mass_total_rate(proj_idx, section_id, 0);
-    }
-    if (energy_mevu >= energy_max_mevu_) {
-        return mass_total_rate(proj_idx, section_id, num_energies_ - 1);
+    // no extrapolation.
+    if (!(energy_mevu >= energy_min_mevu_) || !(energy_mevu <= energy_max_mevu_)) {
+        return 0.0;
     }
     const double node_flt = (energy_mevu - energy_min_mevu_) / energy_step_mevu_;
-    const std::size_t idx0 = static_cast<std::size_t>(node_flt);
-    const std::size_t idx1 = std::min(idx0 + 1, num_energies_ - 1);
+    std::size_t idx0 = static_cast<std::size_t>(node_flt);
+    if (idx0 >= num_energies_ - 1) {
+        idx0 = num_energies_ - 2;
+    }
+    const std::size_t idx1 = idx0 + 1;
     const double alpha = node_flt - static_cast<double>(idx0);
-
-    const double y0 = mass_total_rate(proj_idx, section_id, idx0);
-    const double y1 = mass_total_rate(proj_idx, section_id, idx1);
-    return (1.0 - alpha) * y0 + alpha * y1;
+    double sum = 0.0;
+    for (std::size_t t = 0; t < kSecondaryNumTargets; ++t) {
+        const SecondaryRateDomainEntry& dom = channel_domain(proj_idx, t);
+        if (dom.has_support == 0 || energy_mevu < dom.energy_min_mevu ||
+            energy_mevu > dom.energy_max_mevu) {
+            continue;
+        }
+        const double y0 = mass_partial_rate(proj_idx, section_id, t, idx0);
+        const double y1 = mass_partial_rate(proj_idx, section_id, t, idx1);
+        double v = (1.0 - alpha) * y0 + alpha * y1;
+        if (v < 0.0) {
+            v = 0.0;
+        }
+        sum += v;
+    }
+    // Hazard/sampler unity with the device (float-sliver guard).
+    if (!(sum > 1e-12)) {
+        return 0.0;
+    }
+    return sum;
 }
 
 }  // namespace carbon

@@ -2,6 +2,9 @@
 #include <iostream>
 #include <limits>
 #include <stdexcept>
+#include <fstream>
+#include <cstring>
+#include <unistd.h>
 #ifdef CARBON_HAS_SYCL
 #include <sycl/sycl.hpp>
 #endif
@@ -13,6 +16,38 @@ template<class F> void rejects(F f) {
     require(threw,"Expected fail-closed rejection");
 }
 void synthetic() {
+    // Header-only retired schemas must fail at the version gate, not later
+    // at a missing payload/metadata check. Never mutate the frozen binaries.
+    char filename[]="/tmp/maigo-retired-rate-XXXXXX";
+    const int fd=mkstemp(filename);
+    require(fd>=0,"Cannot create isolated schema fixture");
+    close(fd);
+    struct Cleanup {
+        const char* path;
+        ~Cleanup() { std::error_code ec; std::filesystem::remove(path,ec); }
+    } cleanup{filename};
+    for (const unsigned version : {0U,1U,2U,4U,99U}) {
+        carbon::SchneiderRateHeader primary{};
+        std::memcpy(primary.magic,"SCHNRATE",8);primary.version=version;
+        { std::ofstream out(filename,std::ios::binary|std::ios::trunc);
+          out.write(reinterpret_cast<const char*>(&primary),sizeof(primary)); }
+        bool rejected=false;
+        try { (void)carbon::SchneiderRateTable::from_binary(filename); }
+        catch(const std::runtime_error& e) {
+            rejected=std::string(e.what()).find("requires SCHNRATE v3")!=std::string::npos;
+        }
+        require(rejected,"Primary retired schema did not fail at version gate");
+        carbon::SecondaryRateHeader secondary{};
+        std::memcpy(secondary.magic,"SCHN2RAT",8);secondary.version=version;
+        { std::ofstream out(filename,std::ios::binary|std::ios::trunc);
+          out.write(reinterpret_cast<const char*>(&secondary),sizeof(secondary)); }
+        rejected=false;
+        try { (void)carbon::SecondaryRateTable::from_binary(filename); }
+        catch(const std::runtime_error& e) {
+            rejected=std::string(e.what()).find("requires SCHN2RAT v3")!=std::string::npos;
+        }
+        require(rejected,"Secondary retired schema did not fail at version gate");
+    }
     std::array<double,25> w{},r{};w[1]=.2;w[2]=.4;r[1]=.002;r[2]=.004;
     require(std::abs(carbon::recover_element_mass_rate(r,w).per_unit_mass_fraction-.01)<1.e-15,"Unmixing units");
     auto bad=r;bad[2]*=1.01;rejects([&]{carbon::recover_element_mass_rate(bad,w);});

@@ -72,7 +72,6 @@ struct SchneiderCtDeviceContext {
     const float* sec_domain_emin{nullptr};
     const float* sec_domain_emax{nullptr};
     const unsigned char* sec_domain_has{nullptr};
-    std::uint32_t sec_rate_version{1};
     std::uint32_t sec_num_projectiles{13};
     std::uint32_t sec_num_sections{25};
     std::uint32_t sec_num_targets{13};

@@ -1,5 +1,11 @@
 # RT06423 严格 Gamma 改进计划：section-0 电子纵向响应
 
+## 当前代码消融任务
+
+第五批候选：删除恒空旧诊断生命周期，water10k全部配对通过；CT50k剂量逐位相同、核计数/grid/55个旧字段不变，但新增species账本2ppm检查有两个氘核连续沉积槽略超（2.03–2.07ppm）。6次baseline最大成对波动1.53ppm，未放宽门限、未标DONE；候选留工作树，尚未commit/push。详见下方消融记录第五批。
+
+基线 8d9ab4d；前四批已清理旧核率schema/文件回退、GPU次级v1分流、旧次级辅助接口/运行器、CINEL02独占加载/上传及约485行固定关闭kernel分支，use_cinel02已零残留。四批水10k和真实CT50k均与基线剂量逐位一致、核计数一致、无overflow。Step05/20已迁移当前14p；旧诊断/FRED event-library/备用分支与旧测试依赖未清完。无新Gamma/完整验收声明。详见 [package_legacy_ablation.md](package_legacy_ablation.md) 的证据、构建SHA与剩余清理清单。本轮未commit/push。
+
 ## 当前执行指令（覆盖下方历史 smoke-only 限制）
 
 按用户要求，默认和 production 使用共享 CINEL03 框架。无 CT 网格时使用真实水材料，存在 CT 网格时使用 Schneider25；旧 water/CINEL02 回退不再允许。CLI 默认配置为 `config/unified_water_production.yaml`。water TOPAS match 推迟，不作为框架启用门禁；完整性、核覆盖、能量闭合及 overflow 门禁保留。水电子响应仍缺失，禁止借用 CT 电子表。此次不改 stopping/package 数值，默认水配置仍明确使用原有 75 eV stopping，精确水匹配待办。以下历史“仍不切生产默认”不再是当前执行要求。

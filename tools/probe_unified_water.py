@@ -80,9 +80,9 @@ def main():
     for path,h in pins.items():
         if sha(Path(path))!=h:raise RuntimeError('Input changed: '+path)
     with (out/'manifest.json').open('x') as stream:
-        json.dump(dict(status='SMOKE_ONLY_NOT_PRODUCTION',em_only=args.em_only,histories=args.histories,generations=args.generations,
+        json.dump(dict(status='SHARED_FRAMEWORK_SAFETY_PASS_MATCH_PENDING',em_only=args.em_only,histories=args.histories,generations=args.generations,
             pins=pins,dose_sha256=sha(out/'dose.raw'),quality=quality),stream,indent=2)
-    print('Unified native water smoke gate PASS; production remains refused:',out,flush=True)
+    print('Unified native water safety gate PASS; TOPAS match pending:',out,flush=True)
 
 
 if __name__=='__main__':main()

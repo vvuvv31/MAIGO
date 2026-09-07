@@ -343,18 +343,10 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
         view.partials=partials;view.domains=domains;return view;
     };
 
-    std::filesystem::path primary_rate_file = !config.ct_schneider_primary_rate_file.empty()
-                                                 ? config.ct_schneider_primary_rate_file
-                                                 : std::filesystem::path("data/schneider/schneider_inelastic_rates_v1.bin");
-    std::filesystem::path c12_cinel_file = !config.ct_schneider_c12_cinel03_file.empty()
-                                               ? config.ct_schneider_c12_cinel03_file
-                                               : std::filesystem::path("data/schneider/cinel03_c12_targets.bin");
-    std::filesystem::path sec_rate_file = !config.ct_schneider_secondary_rate_file.empty()
-                                              ? config.ct_schneider_secondary_rate_file
-                                              : std::filesystem::path("data/schneider/secondary_inelastic_rates_v1.bin");
-    std::filesystem::path sec_cinel_file = !config.ct_schneider_secondary_cinel03_file.empty()
-                                               ? config.ct_schneider_secondary_cinel03_file
-                                               : std::filesystem::path("data/schneider/cinel03_secondary_targets.bin");
+    std::filesystem::path primary_rate_file = config.ct_schneider_primary_rate_file;
+    std::filesystem::path c12_cinel_file = config.ct_schneider_c12_cinel03_file;
+    std::filesystem::path sec_rate_file = config.ct_schneider_secondary_rate_file;
+    std::filesystem::path sec_cinel_file = config.ct_schneider_secondary_cinel03_file;
 
     // 1. Primary Target Sampler
     if (std::filesystem::exists(primary_rate_file)) {
@@ -453,11 +445,9 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
 
         ctx.sec_total_rates = dev_sec_total;
         ctx.sec_partial_rates = dev_sec_partial;
-        ctx.sec_rate_version = sec_rate_table.binary_version();
         // v3: bundle-ordered projectile registry + per-(projectile,target)
-        // domain for the masked device path. v1 leaves these null (legacy
-        // path never dereferences them).
-        if (sec_rate_table.binary_version() == 3) {
+        // domain for the only supported, masked device path.
+        {
             const auto& projs = sec_rate_table.projectiles();
             std::vector<std::int32_t> keys;
             keys.reserve(projs.size() * 2);
@@ -709,22 +699,6 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
         }
     }
 
-    const bool use_cinel02 = config.nuclear_model == "cinel02";
-    std::optional<InelasticPackageV2Table> cinel02_package;
-    std::optional<InelasticRateV2Table> cinel02_rates;
-    std::optional<InelasticMaterialRateTable> cinel02_ct_rates;
-    std::optional<Cinel02DeviceTables> cinel02_host_tables;
-    if (use_cinel02) {
-        cinel02_package.emplace(InelasticPackageV2Table::from_binary(
-            config.primary_inelastic_package_v2_file));
-        cinel02_rates.emplace(InelasticRateV2Table::from_csv(
-            config.primary_inelastic_rate_v2_file));
-        if (config.enable_ct_grid && !config.ct_cinel02_rate_file.empty()) {
-            cinel02_ct_rates.emplace(InelasticMaterialRateTable::from_csv(
-                config.ct_cinel02_rate_file));
-        }
-        cinel02_host_tables.emplace(cinel02_package->make_device_tables());
-    }
     const auto start = std::chrono::steady_clock::now();
     const auto& table_energies = stopping_power.energies();
     if (table_energies.size() < 2 || !is_uniform_grid(table_energies)) {
@@ -816,9 +790,6 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
     std::uint32_t cinel02_ct_rate_group_count = 0U;
     std::uint32_t cinel02_ct_rate_sample_count = 0U;
     float cinel02_ct_rate_reference_density_g_per_cm3 = 1.0F;
-    constexpr std::size_t kCinel02DiagSlots =
-        TransportResult::cinel02_diagnostic_slot_count;
-    std::uint64_t* cinel02_diag_device = nullptr;
     constexpr std::size_t kSchneiderDiagSlots =
         static_cast<std::size_t>(SchneiderDiagSlot::Count);
     constexpr std::size_t kSchneiderFloatSlots =
@@ -834,11 +805,9 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
     SchneiderUnsupportedTrack* schneider_track_log_device = nullptr;
     std::uint32_t* schneider_miss_count_device = nullptr;
     std::uint32_t* schneider_track_count_device = nullptr;
-    constexpr std::size_t kCinel02EnergySlots = 8;
     constexpr std::size_t kCinel02SpeciesEnergySlots =
         TransportResult::species_ledger_species_count *
         TransportResult::species_ledger_metric_count;
-    float* cinel02_energy_device = nullptr;
     float* cinel02_species_energy_device = nullptr;
     double* grid_deposited_in_device = nullptr;
     double* grid_deposited_out_device = nullptr;
@@ -846,255 +815,12 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
         Cinel02SpeciesLedgerSchema::species_count *
         Cinel02SpeciesLedgerSchema::terminal_reason_count;
     std::uint64_t* cinel02_species_terminal_device = nullptr;
-    std::uint64_t* cinel02_topas_compat_discarded_counts_device = nullptr;
-    float* cinel02_topas_compat_discarded_kinetic_device = nullptr;
-    float* cinel02_replay_delta_device = nullptr;
-    float* cinel02_replay_abs_delta_device = nullptr;
-    std::uint64_t* cinel02_replay_delta_positive_device = nullptr;
-    std::uint64_t* cinel02_replay_delta_negative_device = nullptr;
-    std::uint64_t* cinel02_replay_valid_device = nullptr;
-    constexpr std::size_t kCinel02ReplayStatusSlots =
-        Cinel02ReplayLedgerSchema::status_slot_count;
-    constexpr std::size_t kCinel02ParentOutcomeSlots =
-        Cinel02ReplayLedgerSchema::parent_outcome_cell_count;
-    constexpr std::size_t kCinel02TransitionSlots =
-        Cinel02ReplayLedgerSchema::transition_cell_count;
-    std::uint64_t* cinel02_replay_status_counts_device = nullptr;
-    float* cinel02_replay_status_rate_query_energy_device = nullptr;
-    float* cinel02_replay_status_replay_query_energy_device = nullptr;
-    float* cinel02_replay_status_continuous_loss_device = nullptr;
-    float* cinel02_replay_status_delta_device = nullptr;
-    float* cinel02_replay_status_abs_delta_device = nullptr;
-    constexpr std::size_t kCinel02ExposureSumSlots =
-        Cinel02ExposureLedgerSchema::sum_slot_count;
-    constexpr std::size_t kCinel02ExposureCountSlots =
-        Cinel02ExposureLedgerSchema::count_slot_count;
-    float* cinel02_secondary_exposure_sums_device = nullptr;
-    std::uint64_t* cinel02_secondary_exposure_counts_device = nullptr;
-    std::uint64_t* cinel02_parent_outcome_counts_device = nullptr;
-    float* cinel02_parent_outcome_incident_device = nullptr;
-    float* cinel02_parent_outcome_after_device = nullptr;
-    float* cinel02_parent_outcome_local_device = nullptr;
-    float* cinel02_parent_outcome_export_device = nullptr;
-    float* cinel02_parent_outcome_import_device = nullptr;
-    std::uint64_t* cinel02_generated_transition_counts_device = nullptr;
-    float* cinel02_generated_transition_energy_device = nullptr;
-    std::uint64_t* cinel02_queued_transition_counts_device = nullptr;
-    float* cinel02_queued_transition_energy_device = nullptr;
-    if (use_cinel02) {
-        const auto checked_u32 = [](const std::size_t value, const char* label) {
-            if (value > std::numeric_limits<std::uint32_t>::max()) {
-                throw std::overflow_error(std::string("CINEL02 ") + label +
-                                          " exceeds uint32 range");
-            }
-            return static_cast<std::uint32_t>(value);
-        };
-        cinel02_interaction_count = checked_u32(
-            cinel02_host_tables->interactions.size(), "interaction count");
-        cinel02_product_count = checked_u32(
-            cinel02_host_tables->products.size(), "product count");
-        cinel02_energy_node_count = checked_u32(
-            cinel02_host_tables->energy_nodes.size(), "energy-node count");
-        cinel02_rate_group_count = checked_u32(
-            cinel02_rates->groups().size(), "rate-group count");
-        cinel02_rate_sample_count = checked_u32(
-            cinel02_rates->samples().size(), "rate-sample count");
-        if (cinel02_ct_rates) {
-            cinel02_ct_rate_group_count = checked_u32(
-                cinel02_ct_rates->groups().size(), "CT rate-group count");
-            cinel02_ct_rate_sample_count = checked_u32(
-                cinel02_ct_rates->samples().size(), "CT rate-sample count");
-            cinel02_ct_rate_reference_density_g_per_cm3 =
-                cinel02_ct_rates->reference_material_density_g_per_cm3();
-        }
-        const auto immutable_bytes = cinel02_host_tables->bytes() +
-            cinel02_rates->groups().size() * sizeof(Cinel02RateGroup) +
-            cinel02_rates->samples().size() * sizeof(Cinel02RateSample) +
-            (cinel02_ct_rates ? cinel02_ct_rates->groups().size() * sizeof(Cinel02MaterialRateGroup) +
-                                     cinel02_ct_rates->samples().size() * sizeof(Cinel02RateSample)
-                               : 0U);
-        const auto global_bytes =
-            device.get_info<sycl::info::device::global_mem_size>();
-        const auto configured_limit = static_cast<std::uint64_t>(
-            static_cast<double>(global_bytes) * config.max_device_memory_fraction);
-        if (immutable_bytes > configured_limit) {
-            throw std::runtime_error(
-                "CINEL02 compact tables exceed max_device_memory_fraction: need " +
-                std::to_string(immutable_bytes) + " bytes, limit " +
-                std::to_string(configured_limit));
-        }
-        std::cout << "CINEL02 compact device tables: " << immutable_bytes
-                  << " bytes (" << cinel02_interaction_count << " interactions, "
-                  << cinel02_product_count << " products)\n";
-        cinel02_interactions_device = mem_tracker.allocate<Cinel02DeviceInteraction>(cinel02_interaction_count);
-        cinel02_products_device = mem_tracker.allocate<Cinel02DeviceProduct>(cinel02_product_count);
-        cinel02_energy_nodes_device = mem_tracker.allocate<Cinel02EnergyNode>(cinel02_energy_node_count);
-        cinel02_event_offsets_device = mem_tracker.allocate<std::uint32_t>(cinel02_host_tables->event_offsets.size());
-        cinel02_event_indices_device = mem_tracker.allocate<std::uint32_t>(cinel02_host_tables->event_indices.size());
-        cinel02_rate_groups_device = mem_tracker.allocate<Cinel02RateGroup>(cinel02_rate_group_count);
-        cinel02_rate_samples_device = mem_tracker.allocate<Cinel02RateSample>(cinel02_rate_sample_count);
-        if (cinel02_ct_rate_group_count > 0U) {
-            cinel02_ct_rate_groups_device = mem_tracker.allocate<Cinel02MaterialRateGroup>(cinel02_ct_rate_group_count);
-            cinel02_ct_rate_samples_device = mem_tracker.allocate<Cinel02RateSample>(cinel02_ct_rate_sample_count);
-        }
-        cinel02_diag_device =
-            mem_tracker.allocate<std::uint64_t>(kCinel02DiagSlots);
-        cinel02_energy_device =
-            mem_tracker.allocate<float>(kCinel02EnergySlots);
-        cinel02_species_energy_device =
-            mem_tracker.allocate<float>(kCinel02SpeciesEnergySlots);
-        cinel02_species_terminal_device = mem_tracker.allocate<std::uint64_t>(kCinel02SpeciesTerminalSlots);
-        cinel02_topas_compat_discarded_counts_device = mem_tracker.allocate<std::uint64_t>(Cinel02SpeciesLedgerSchema::species_count);
-        cinel02_topas_compat_discarded_kinetic_device = mem_tracker.allocate<float>(Cinel02SpeciesLedgerSchema::species_count);
-        cinel02_replay_delta_device = mem_tracker.allocate<float>(TransportResult::species_ledger_species_count);
-        cinel02_replay_abs_delta_device = mem_tracker.allocate<float>(TransportResult::species_ledger_species_count);
-        cinel02_replay_delta_positive_device = mem_tracker.allocate<std::uint64_t>(TransportResult::species_ledger_species_count);
-        cinel02_replay_delta_negative_device = mem_tracker.allocate<std::uint64_t>(TransportResult::species_ledger_species_count);
-        cinel02_replay_valid_device = mem_tracker.allocate<std::uint64_t>(TransportResult::species_ledger_species_count);
-        cinel02_replay_status_counts_device = mem_tracker.allocate<std::uint64_t>(kCinel02ReplayStatusSlots);
-        cinel02_replay_status_rate_query_energy_device = mem_tracker.allocate<float>(kCinel02ReplayStatusSlots);
-        cinel02_replay_status_replay_query_energy_device = mem_tracker.allocate<float>(kCinel02ReplayStatusSlots);
-        cinel02_replay_status_continuous_loss_device = mem_tracker.allocate<float>(kCinel02ReplayStatusSlots);
-        cinel02_replay_status_delta_device = mem_tracker.allocate<float>(kCinel02ReplayStatusSlots);
-        cinel02_replay_status_abs_delta_device = mem_tracker.allocate<float>(kCinel02ReplayStatusSlots);
-        cinel02_secondary_exposure_sums_device = mem_tracker.allocate<float>(kCinel02ExposureSumSlots);
-        cinel02_secondary_exposure_counts_device = mem_tracker.allocate<std::uint64_t>(kCinel02ExposureCountSlots);
-        cinel02_parent_outcome_counts_device = mem_tracker.allocate<std::uint64_t>(kCinel02ParentOutcomeSlots);
-        cinel02_parent_outcome_incident_device = mem_tracker.allocate<float>(kCinel02ParentOutcomeSlots);
-        cinel02_parent_outcome_after_device = mem_tracker.allocate<float>(kCinel02ParentOutcomeSlots);
-        cinel02_parent_outcome_local_device = mem_tracker.allocate<float>(kCinel02ParentOutcomeSlots);
-        cinel02_parent_outcome_export_device = mem_tracker.allocate<float>(kCinel02ParentOutcomeSlots);
-        cinel02_parent_outcome_import_device = mem_tracker.allocate<float>(kCinel02ParentOutcomeSlots);
-        cinel02_generated_transition_counts_device = mem_tracker.allocate<std::uint64_t>(kCinel02TransitionSlots);
-        cinel02_generated_transition_energy_device = mem_tracker.allocate<float>(kCinel02TransitionSlots);
-        cinel02_queued_transition_counts_device = mem_tracker.allocate<std::uint64_t>(kCinel02TransitionSlots);
-        cinel02_queued_transition_energy_device = mem_tracker.allocate<float>(kCinel02TransitionSlots);
-        if (cinel02_interactions_device == nullptr || cinel02_products_device == nullptr ||
-            cinel02_energy_nodes_device == nullptr || cinel02_event_offsets_device == nullptr ||
-            cinel02_event_indices_device == nullptr || cinel02_rate_groups_device == nullptr ||
-            cinel02_rate_samples_device == nullptr ||
-            (cinel02_ct_rate_group_count > 0U &&
-             (cinel02_ct_rate_groups_device == nullptr || cinel02_ct_rate_samples_device == nullptr)) ||
-            cinel02_diag_device == nullptr ||
-            cinel02_energy_device == nullptr || cinel02_species_energy_device == nullptr ||
-            cinel02_species_terminal_device == nullptr ||
-            cinel02_topas_compat_discarded_counts_device == nullptr ||
-            cinel02_topas_compat_discarded_kinetic_device == nullptr ||
-            cinel02_replay_delta_device == nullptr ||
-            cinel02_replay_abs_delta_device == nullptr ||
-            cinel02_replay_delta_positive_device == nullptr ||
-            cinel02_replay_delta_negative_device == nullptr ||
-            cinel02_replay_valid_device == nullptr ||
-            cinel02_replay_status_counts_device == nullptr ||
-            cinel02_replay_status_rate_query_energy_device == nullptr ||
-            cinel02_replay_status_replay_query_energy_device == nullptr ||
-            cinel02_replay_status_continuous_loss_device == nullptr ||
-            cinel02_replay_status_delta_device == nullptr ||
-            cinel02_replay_status_abs_delta_device == nullptr ||
-            cinel02_secondary_exposure_sums_device == nullptr ||
-            cinel02_secondary_exposure_counts_device == nullptr ||
-            cinel02_parent_outcome_counts_device == nullptr ||
-            cinel02_parent_outcome_incident_device == nullptr ||
-            cinel02_parent_outcome_after_device == nullptr ||
-            cinel02_parent_outcome_local_device == nullptr ||
-            cinel02_parent_outcome_export_device == nullptr ||
-            cinel02_parent_outcome_import_device == nullptr ||
-            cinel02_generated_transition_counts_device == nullptr ||
-            cinel02_generated_transition_energy_device == nullptr ||
-            cinel02_queued_transition_counts_device == nullptr ||
-            cinel02_queued_transition_energy_device == nullptr) {
-            throw std::bad_alloc();
-        }
-        queue.copy(cinel02_host_tables->interactions.data(),
-                   cinel02_interactions_device, cinel02_interaction_count);
-        queue.copy(cinel02_host_tables->products.data(),
-                   cinel02_products_device, cinel02_product_count);
-        queue.copy(cinel02_host_tables->energy_nodes.data(),
-                   cinel02_energy_nodes_device, cinel02_energy_node_count);
-        queue.copy(cinel02_host_tables->event_offsets.data(),
-                   cinel02_event_offsets_device,
-                   cinel02_host_tables->event_offsets.size());
-        queue.copy(cinel02_host_tables->event_indices.data(),
-                   cinel02_event_indices_device,
-                   cinel02_host_tables->event_indices.size());
-        queue.copy(cinel02_rates->groups().data(), cinel02_rate_groups_device,
-                   cinel02_rate_group_count);
-        queue.copy(cinel02_rates->samples().data(), cinel02_rate_samples_device,
-                   cinel02_rate_sample_count);
-        if (cinel02_ct_rates) {
-            queue.copy(cinel02_ct_rates->groups().data(), cinel02_ct_rate_groups_device,
-                       cinel02_ct_rate_group_count);
-            queue.copy(cinel02_ct_rates->samples().data(), cinel02_ct_rate_samples_device,
-                       cinel02_ct_rate_sample_count);
-        }
-        queue.fill(cinel02_diag_device, std::uint64_t{0}, kCinel02DiagSlots)
-            .wait_and_throw();
-        queue.fill(cinel02_energy_device, 0.0F, kCinel02EnergySlots)
-            .wait_and_throw();
-        queue.fill(cinel02_species_energy_device, 0.0F,
-                   kCinel02SpeciesEnergySlots).wait_and_throw();
-        queue.fill(cinel02_species_terminal_device, std::uint64_t{0},
-                   kCinel02SpeciesTerminalSlots).wait_and_throw();
-        queue.fill(cinel02_topas_compat_discarded_counts_device, std::uint64_t{0},
-                   Cinel02SpeciesLedgerSchema::species_count).wait_and_throw();
-        queue.fill(cinel02_topas_compat_discarded_kinetic_device, 0.0F,
-                   Cinel02SpeciesLedgerSchema::species_count).wait_and_throw();
-        queue.fill(cinel02_replay_delta_device, 0.0F,
-                   TransportResult::species_ledger_species_count).wait_and_throw();
-        queue.fill(cinel02_replay_abs_delta_device, 0.0F,
-                   TransportResult::species_ledger_species_count).wait_and_throw();
-        queue.fill(cinel02_replay_delta_positive_device, std::uint64_t{0},
-                   TransportResult::species_ledger_species_count).wait_and_throw();
-        queue.fill(cinel02_replay_delta_negative_device, std::uint64_t{0},
-                   TransportResult::species_ledger_species_count).wait_and_throw();
-        queue.fill(cinel02_replay_valid_device, std::uint64_t{0},
-                   TransportResult::species_ledger_species_count).wait_and_throw();
-        queue.fill(cinel02_replay_status_counts_device, std::uint64_t{0},
-                   kCinel02ReplayStatusSlots).wait_and_throw();
-        queue.fill(cinel02_replay_status_rate_query_energy_device, 0.0F,
-                   kCinel02ReplayStatusSlots).wait_and_throw();
-        queue.fill(cinel02_replay_status_replay_query_energy_device, 0.0F,
-                   kCinel02ReplayStatusSlots).wait_and_throw();
-        queue.fill(cinel02_replay_status_continuous_loss_device, 0.0F,
-                   kCinel02ReplayStatusSlots).wait_and_throw();
-        queue.fill(cinel02_replay_status_delta_device, 0.0F,
-                   kCinel02ReplayStatusSlots).wait_and_throw();
-        queue.fill(cinel02_replay_status_abs_delta_device, 0.0F,
-                   kCinel02ReplayStatusSlots).wait_and_throw();
-        queue.fill(cinel02_secondary_exposure_sums_device, 0.0F,
-                   kCinel02ExposureSumSlots).wait_and_throw();
-        queue.fill(cinel02_secondary_exposure_counts_device, std::uint64_t{0},
-                   kCinel02ExposureCountSlots).wait_and_throw();
-        queue.fill(cinel02_parent_outcome_counts_device, std::uint64_t{0},
-                   kCinel02ParentOutcomeSlots).wait_and_throw();
-        queue.fill(cinel02_parent_outcome_incident_device, 0.0F,
-                   kCinel02ParentOutcomeSlots).wait_and_throw();
-        queue.fill(cinel02_parent_outcome_after_device, 0.0F,
-                   kCinel02ParentOutcomeSlots).wait_and_throw();
-        queue.fill(cinel02_parent_outcome_local_device, 0.0F,
-                   kCinel02ParentOutcomeSlots).wait_and_throw();
-        queue.fill(cinel02_parent_outcome_export_device, 0.0F,
-                   kCinel02ParentOutcomeSlots).wait_and_throw();
-        queue.fill(cinel02_parent_outcome_import_device, 0.0F,
-                   kCinel02ParentOutcomeSlots).wait_and_throw();
-        queue.fill(cinel02_generated_transition_counts_device, std::uint64_t{0},
-                   kCinel02TransitionSlots).wait_and_throw();
-        queue.fill(cinel02_generated_transition_energy_device, 0.0F,
-                   kCinel02TransitionSlots).wait_and_throw();
-        queue.fill(cinel02_queued_transition_counts_device, std::uint64_t{0},
-                   kCinel02TransitionSlots).wait_and_throw();
-        queue.fill(cinel02_queued_transition_energy_device, 0.0F,
-                   kCinel02TransitionSlots).wait_and_throw();
-        cinel02_host_tables.reset();
-        cinel02_package.reset();
-        cinel02_rates.reset();
-        cinel02_ct_rates.reset();
-    }
+    // CINEL02-only package/rate uploads and diagnostic allocations retired.
 
     // Read-only species ledger is mode-independent: secondary EM transport
     // records per-species deposited/escaped energy unconditionally on device
-    // (null-checked increments), so these two buffers must exist even when
-    // use_cinel02 is false (e.g. Schneider CT mode). No physics effect:
+    // (null-checked increments), so these two buffers remain in the shared
+    // CINEL03 framework. No physics effect:
     // ledger writes are isolated atomics into dedicated buffers.
     if (cinel02_species_energy_device == nullptr) {
         cinel02_species_energy_device =
@@ -1505,9 +1231,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
             // table is loaded. The CSV key MUST be empty for v3 (fail-fast on
             // v1/v2.1 mixing is enforced at startup); v1 keeps this path.
             const std::filesystem::path v3_primary_rate_probe =
-                !config.ct_schneider_primary_rate_file.empty()
-                    ? config.ct_schneider_primary_rate_file
-                    : std::filesystem::path("data/schneider/schneider_inelastic_rates_v1.bin");
+                config.ct_schneider_primary_rate_file;
             const bool primary_rate_is_v3 =
                 std::filesystem::exists(v3_primary_rate_probe) &&
                 schneider_rate_binary_version(v3_primary_rate_probe) == 3;
@@ -1834,8 +1558,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
     // Scorers & Result buffers
     const auto cinel02_max_secondary_inelastic_generations =
         config.cinel02_max_secondary_inelastic_generations;
-    const auto cinel02_topas_compatibility_mode =
-        use_cinel02 && config.cinel02_topas_compatibility_mode;
+    constexpr bool cinel02_topas_compatibility_mode = false;
     const auto enable_voxel_scoring = config.enable_voxel_scoring;
     const auto enable_let_scoring = config.enable_let_scoring;
     const auto voxel_scorer_clamps_transport = config.voxel_scorer_clamps_transport;
@@ -2967,33 +2690,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                             }
                         } else {
                             float macro_xs = 0.0F;
-                            if (use_cinel02) {
-                                cinel02_diag_increment_device(cinel02_diag_device, 0U);
-                                const auto target =
-                                    (in_ct && cinel02_ct_rate_groups_device != nullptr)
-                                        ? cinel02_select_material_target_device(
-                                              cinel02_ct_rate_groups_device,
-                                              cinel02_ct_rate_group_count,
-                                              cinel02_ct_rate_samples_device,
-                                              cinel02_ct_rate_sample_count,
-                                              static_cast<int>(ct_material),
-                                              primary_atomic_number, primary_mass_number, cur_e_u,
-                                              local_density_g_per_cm3,
-                                              cinel02_ct_rate_reference_density_g_per_cm3,
-                                              rng::uniform01(spot_seed, rng_history, steps, 12))
-                                        : cinel02_select_water_target_device(
-                                              cinel02_rate_groups_device, cinel02_rate_group_count,
-                                              cinel02_rate_samples_device, cinel02_rate_sample_count,
-                                              primary_atomic_number, primary_mass_number, cur_e_u,
-                                              local_density_g_per_cm3, water_density_g_per_cm3,
-                                              rng::uniform01(spot_seed, rng_history, steps, 12));
-                                if (target.covered) {
-                                    cinel02_diag_increment_device(cinel02_diag_device, 1U);
-                                    macro_xs = target.total_rate_per_mm;
-                                    cinel02_target_z_step = target.target_z;
-                                    cinel02_target_a_step = target.target_a;
-                                }
-                            } else if (enable_inelastic && cross_section_device != nullptr) {
+                            if (enable_inelastic && cross_section_device != nullptr) {
                                 const auto xs_flt =
                                     (cur_e_u - minimum_table_energy) * inverse_table_step;
                                 auto xs_idx = static_cast<int>(sycl::floor(xs_flt));
@@ -3032,18 +2729,6 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                     u_br * macro_tot < macro_el) {
                                     elastic_this_step = true;
                                 } else if (enable_inelastic) {
-                                    if (use_cinel02) {
-                                        cinel02_diag_increment_device(cinel02_diag_device, 2U);
-                                        cinel02_diag_increment_device(
-                                            cinel02_diag_device,
-                                            cinel02_target_z_step == 1 ? 6U : 7U);
-                                        cinel02_diag_increment_device(
-                                            cinel02_diag_device,
-                                            cinel02_hazard_diag_slot_device(
-                                                primary_atomic_number, primary_mass_number,
-                                                cinel02_target_z_step, 0U,
-                                                energy_MeV * inverse_mass_number));
-                                    }
                                     if (inelastic_reaction_device != nullptr) {
                                         sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
                                                          sycl::memory_scope::device,
@@ -3944,9 +3629,6 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
 
                         const float u_bracket = rng::uniform01(spot_seed, rng_history, steps, 15);
                         const float u_event = rng::uniform01(spot_seed, rng_history, steps, 16);
-                        if (cinel02_diag_device != nullptr) {
-                            cinel02_diag_increment_device(cinel02_diag_device, 0U);
-                        }
                         const auto primary_lookup = cinel03_lookup_event_device(
                             schneider_ct_device_ctx.c12_energy_nodes,
                             schneider_ct_device_ctx.c12_node_count,
@@ -3988,9 +3670,6 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                 0, primary_lookup, cur_primary_e_u, deposited_MeV,
                                 primary_miss_macro, 0.0F, energy_MeV,
                                 spot_initial_energy_MeV);
-                            if (cinel02_diag_device != nullptr) {
-                                cinel02_diag_increment_device(cinel02_diag_device, 2U);
-                            }
                             if (untracked_nuclear_device != nullptr) {
                                 untracked_nuclear_device[global_history] = energy_MeV;
                             }
@@ -3998,9 +3677,6 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                             break;
                         }
 
-                        if (cinel02_diag_device != nullptr) {
-                            cinel02_diag_increment_device(cinel02_diag_device, 1U);
-                        }
 
                         const auto& event = schneider_ct_device_ctx.c12_interactions[primary_lookup.event_index];
                         const float local_deposit = sycl::fmax(0.0F, event.process_local_deposit_MeV);
@@ -4180,358 +3856,8 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
 
                     if (enable_inelastic && inelastic_this_step &&
                         energy_MeV > energy_cutoff_MeV &&
-                        (use_cinel02 || cross_section_device != nullptr)) {
-                        if (use_cinel02) {
-                            constexpr float cinel02_energy_tolerance_MeV_per_u = 0.51F;
-                            const auto event_index = cinel02_find_event_device(
-                                cinel02_energy_nodes_device, cinel02_energy_node_count,
-                                cinel02_event_offsets_device, cinel02_event_indices_device,
-                                cinel02_interactions_device, cinel02_interaction_count,
-                                primary_atomic_number, primary_mass_number,
-                                cinel02_target_z_step, cinel02_target_a_step,
-                                energy_MeV * inverse_mass_number,
-                                cinel02_energy_tolerance_MeV_per_u,
-                                rng::uniform01(spot_seed, rng_history, steps, 13));
-                            const auto replay_runtime_energy_MeV = sycl::fmax(0.0F, energy_MeV);
-                            cinel02_record_replay_status_device(
-                                cinel02_replay_status_counts_device,
-                                cinel02_replay_status_rate_query_energy_device,
-                                cinel02_replay_status_replay_query_energy_device,
-                                cinel02_replay_status_continuous_loss_device,
-                                cinel02_replay_status_delta_device,
-                                cinel02_replay_status_abs_delta_device,
-                                primary_atomic_number, primary_mass_number,
-                                cinel02_target_z_step, 0U,
-                                primary_rate_query_energy_MeV,
-                                replay_runtime_energy_MeV,
-                                sycl::fmax(0.0F,
-                                    primary_rate_query_energy_MeV -
-                                        replay_runtime_energy_MeV),
-                                0.0F,
-                                static_cast<std::uint32_t>(
-                                    Cinel02ReplayLedgerSchema::collision_candidate));
-                            if (event_index != std::numeric_limits<std::uint32_t>::max()) {
-                                cinel02_diag_increment_device(cinel02_diag_device, 3U);
-                                const auto event = cinel02_interactions_device[event_index];
-                                const auto product_end =
-                                    static_cast<std::uint64_t>(event.product_offset) +
-                                    event.product_count;
-                                const auto replay_status =
-                                    product_end <= cinel02_product_count &&
-                                    (event.parent_status == 0 || event.parent_status == 2)
-                                        ? Cinel02ReplayLedgerSchema::replay_valid
-                                        : Cinel02ReplayLedgerSchema::replay_invalid_event;
-                                cinel02_record_replay_status_device(
-                                    cinel02_replay_status_counts_device,
-                                    cinel02_replay_status_rate_query_energy_device,
-                                    cinel02_replay_status_replay_query_energy_device,
-                                    cinel02_replay_status_continuous_loss_device,
-                                    cinel02_replay_status_delta_device,
-                                    cinel02_replay_status_abs_delta_device,
-                                    primary_atomic_number, primary_mass_number,
-                                    cinel02_target_z_step, 0U,
-                                    primary_rate_query_energy_MeV,
-                                    replay_runtime_energy_MeV,
-                                    sycl::fmax(0.0F,
-                                        primary_rate_query_energy_MeV -
-                                            replay_runtime_energy_MeV),
-                                    event.incident_energy_MeV_per_u -
-                                        replay_runtime_energy_MeV * inverse_mass_number,
-                                    static_cast<std::uint32_t>(replay_status));
-                                if (product_end <= cinel02_product_count &&
-                                    (event.parent_status == 0 || event.parent_status == 2)) {
-                                    cinel02_diag_increment_device(
-                                        cinel02_diag_device,
-                                        event.parent_status == 0 ? 8U : 9U);
-                                    cinel02_record_replay_delta_device(
-                                        cinel02_replay_delta_device,
-                                        cinel02_replay_abs_delta_device,
-                                        cinel02_replay_delta_positive_device,
-                                        cinel02_replay_delta_negative_device,
-                                        cinel02_replay_valid_device,
-                                        carbon::get_charged_species_idx(
-                                            primary_atomic_number, primary_mass_number),
-                                        event.incident_energy_MeV_per_u -
-                                            sycl::fmax(0.0F,
-                                                energy_MeV * inverse_mass_number));
-                                    const auto local_deposit = sycl::fmax(
-                                        0.0F, event.process_local_deposit_MeV);
-                                    const auto parent_after = event.parent_status == 0
-                                        ? sycl::fmax(0.0F, event.parent_energy_MeV)
-                                        : 0.0F;
-                                    const auto reaction_handoff_delta = energy_MeV -
-                                        parent_after - local_deposit;
-                                    cinel02_record_parent_outcome_device(
-                                        cinel02_parent_outcome_counts_device,
-                                        cinel02_parent_outcome_incident_device,
-                                        cinel02_parent_outcome_after_device,
-                                        cinel02_parent_outcome_local_device,
-                                        cinel02_parent_outcome_export_device,
-                                        cinel02_parent_outcome_import_device,
-                                        primary_atomic_number, primary_mass_number,
-                                        cinel02_target_z_step, 0U, event.parent_status,
-                                        energy_MeV, parent_after, local_deposit,
-                                        sycl::fmax(0.0F, reaction_handoff_delta),
-                                        sycl::fmax(0.0F, -reaction_handoff_delta));
-                                    cinel02_energy_add_device(cinel02_energy_device, 0U, energy_MeV);
-                                    cinel02_energy_add_device(cinel02_energy_device, 1U, deposited_MeV);
-                                    cinel02_energy_add_device(cinel02_energy_device, 2U, local_deposit);
-                                    cinel02_energy_add_device(cinel02_energy_device, 3U,
-                                                              event.nonionizing_deposit_MeV);
-                                    cinel02_energy_add_device(cinel02_energy_device, 4U,
-                                                              event.parent_energy_MeV);
-                                    pending_primary_depth_MeV += local_deposit;
-                                    if (enable_voxel_scoring && voxel_index >= 0) {
-                                        pending_primary_voxel_MeV += local_deposit;
-                                    }
-                                    history_deposited_MeV += local_deposit;
-                                    grid_deposit_split_device(
-                                        grid_deposited_in_device,
-                                        grid_deposited_out_device,
-                                        enable_voxel_scoring && voxel_index >= 0,
-                                        local_deposit);
-                                    float untracked_MeV = 0.0F;
-                                    if (primary_atomic_number == 6 &&
-                                        primary_mass_number == 12 &&
-                                        cinel02_target_z_step == 8 &&
-                                        cinel02_target_a_step == 16) {
-                                        const auto parent_energy_MeV_per_u = sycl::fmax(
-                                            0.0F, energy_MeV * inverse_mass_number);
-                                        const auto parent_energy_bin = sycl::min(
-                                            static_cast<std::uint32_t>(
-                                                parent_energy_MeV_per_u / 50.0F),
-                                            7U);
-                                        cinel02_diag_add_device(
-                                            cinel02_diag_device, 1596U + parent_energy_bin,
-                                            static_cast<std::uint64_t>(
-                                                parent_energy_MeV_per_u * 1000.0F + 0.5F));
-                                    }
-                                    for (std::uint32_t ip = 0; ip < event.product_count; ++ip) {
-                                        const auto product =
-                                            cinel02_products_device[event.product_offset + ip];
-                                        cinel02_energy_add_device(
-                                            cinel02_energy_device,
-                                            product.role == 2
-                                                ? 7U
-                                                : ((product.role == 0 && product.z > 0 &&
-                                                    carbon::get_charged_species_idx(
-                                                        product.z, product.a) >= 0)
-                                                       ? 5U
-                                                       : 6U),
-                                            product.kinetic_energy_MeV);
-                                        cinel02_diag_increment_device(
-                                            cinel02_diag_device,
-                                            product.role <= 2 ? 10U + product.role : 13U);
-                                        if (product.role == 0 && product.z >= 1 && product.z <= 6) {
-                                            cinel02_diag_increment_device(
-                                                cinel02_diag_device,
-                                                22U + static_cast<std::uint32_t>(product.z - 1));
-                                        }
-                                        if (product.role == 0) {
-                                            cinel02_record_transition_device(
-                                                cinel02_generated_transition_counts_device,
-                                                cinel02_generated_transition_energy_device,
-                                                primary_atomic_number, primary_mass_number,
-                                                product.z, product.a,
-                                                sycl::fmax(0.0F, product.kinetic_energy_MeV));
-                                        }
-                                        if (product.role == 0 && product.z == 4) {
-                                            const auto birth_slot =
-                                                cinel02_be_isotope_birth_diag_slot_device(
-                                                    primary_atomic_number, cinel02_target_z_step,
-                                                    0U, product.a);
-                                            if (birth_slot !=
-                                                std::numeric_limits<std::uint32_t>::max()) {
-                                                cinel02_diag_increment_device(
-                                                    cinel02_diag_device, birth_slot);
-                                                cinel02_diag_add_device(
-                                                    cinel02_diag_device, birth_slot + 48U,
-                                                    static_cast<std::uint64_t>(sycl::fmax(
-                                                        0.0F, product.kinetic_energy_MeV) *
-                                                        1000.0F + 0.5F));
-                                                cinel02_diag_add_device(
-                                                    cinel02_diag_device, birth_slot + 96U,
-                                                    static_cast<std::uint64_t>(sycl::fmax(
-                                                        0.0F, position_z_mm) * 1000.0F + 0.5F));
-                                                cinel02_diag_add_device(
-                                                    cinel02_diag_device, birth_slot + 144U,
-                                                    static_cast<std::uint64_t>((sycl::clamp(
-                                                        product.local_direction_z, -1.0F, 1.0F) +
-                                                        1.0F) * 1000000.0F + 0.5F));
-                                            }
-                                            if (product.a == 10 && cinel02_target_z_step == 8) {
-                                                const auto parent_energy_bin = sycl::min(
-                                                    static_cast<std::uint32_t>(sycl::fmax(
-                                                        0.0F, energy_MeV * inverse_mass_number) /
-                                                        50.0F), 7U);
-                                                cinel02_diag_increment_device(
-                                                    cinel02_diag_device, 1580U + parent_energy_bin);
-                                                cinel02_diag_add_device(
-                                                    cinel02_diag_device, 1588U + parent_energy_bin,
-                                                    static_cast<std::uint64_t>(sycl::fmax(
-                                                        0.0F, product.kinetic_energy_MeV) *
-                                                        1000.0F + 0.5F));
-                                            }
-                                            if (cinel02_target_z_step == 8 &&
-                                                (product.a == 6 || product.a == 7 ||
-                                                 product.a == 9 || product.a == 10)) {
-                                                const auto isotope_bin =
-                                                    product.a == 6 ? 0U :
-                                                    (product.a == 7 ? 1U :
-                                                     (product.a == 9 ? 2U : 3U));
-                                                const auto parent_energy_bin = sycl::min(
-                                                    static_cast<std::uint32_t>(sycl::fmax(
-                                                        0.0F, energy_MeV * inverse_mass_number) /
-                                                        50.0F), 7U);
-                                                const auto isotope_energy_slot =
-                                                    isotope_bin * 8U + parent_energy_bin;
-                                                cinel02_diag_increment_device(
-                                                    cinel02_diag_device,
-                                                    1604U + isotope_energy_slot);
-                                                cinel02_diag_add_device(
-                                                    cinel02_diag_device,
-                                                    1636U + isotope_energy_slot,
-                                                    static_cast<std::uint64_t>(sycl::fmax(
-                                                        0.0F, product.kinetic_energy_MeV) *
-                                                        1000.0F + 0.5F));
-                                            }
-                                        }
-                                        if (product.role == 1) continue;
-                                        if (product.role == 0 && product.z > 0 && product.a > 0 &&
-                                            cinel02_should_topas_compat_kill(
-                                                cinel02_topas_compatibility_mode,
-                                                product.z, product.a)) {
-                                            // Match TOPAS/Geant4's unsupported prompt-ion
-                                            // fallback: generated, then killed before queue,
-                                            // with no daughter and no local deposit.
-                                            cinel02_record_topas_compat_discard_device(
-                                                cinel02_topas_compat_discarded_counts_device,
-                                                cinel02_topas_compat_discarded_kinetic_device,
-                                                product.z, product.a,
-                                                sycl::fmax(0.0F, product.kinetic_energy_MeV));
-                                            continue;
-                                        }
-                                        if (product.role != 0 || product.z <= 0 || product.a <= 0) {
-                                            untracked_MeV += sycl::fmax(
-                                                0.0F, product.kinetic_energy_MeV);
-                                            continue;
-                                        }
-                                        const auto child_direction = rotate_local_direction(
-                                            product.local_direction_x,
-                                            product.local_direction_y,
-                                            product.local_direction_z,
-                                            Direction3F{direction_x, direction_y, direction_z});
-                                        if (secondary_queue_device != nullptr) {
-                                            auto count_ref = sycl::atomic_ref<
-                                                uint32_t, sycl::memory_order::relaxed,
-                                                sycl::memory_scope::device,
-                                                sycl::access::address_space::global_space>(
-                                                *secondary_count_device);
-                                            const auto output = count_ref.fetch_add(1U);
-                                            if (output < max_secondaries) {
-                                                SecondaryParticle child{};
-                                                child.z = product.z;
-                                                child.a = product.a;
-                                                child.energy_MeV = product.kinetic_energy_MeV;
-                                                child.pos_x_mm = position_x_mm;
-                                                child.pos_y_mm = position_y_mm;
-                                                child.pos_z_mm = position_z_mm;
-                                                child.dir_x = child_direction.x;
-                                                child.dir_y = child_direction.y;
-                                                child.dir_z = child_direction.z;
-                                                child.weight = product.weight;
-                                                child.parent_history = global_history;
-                                                child.rng_stream = rng::child_stream(
-                                                    rng_history, rng::branch_tag(
-                                                        rng::branch_role_primary_charged, ip));
-                                                if (product.z >= 1 && product.z <= 6) {
-                                                    cinel02_diag_increment_device(
-                                                        cinel02_diag_device,
-                                                        28U + static_cast<std::uint32_t>(product.z - 1));
-                                                }
-                                                secondary_queue_device[output] = child;
-                                                cinel02_record_queued_secondary_birth_device(
-                                                    cinel02_species_energy_device, product.z, product.a,
-                                                    sycl::fmax(0.0F, product.kinetic_energy_MeV));
-                                                cinel02_record_transition_device(
-                                                    cinel02_queued_transition_counts_device,
-                                                    cinel02_queued_transition_energy_device,
-                                                    primary_atomic_number, primary_mass_number,
-                                                    product.z, product.a,
-                                                    sycl::fmax(0.0F, product.kinetic_energy_MeV));
-                                            } else {
-                                                untracked_MeV += sycl::fmax(
-                                                    0.0F, product.kinetic_energy_MeV);
-                                                if (secondary_overflow_count_device != nullptr) {
-                                                    sycl::atomic_ref<
-                                                        uint32_t, sycl::memory_order::relaxed,
-                                                        sycl::memory_scope::device,
-                                                        sycl::access::address_space::global_space>
-                                                        atomic_overflow(
-                                                            *secondary_overflow_count_device);
-                                                    atomic_overflow.fetch_add(1U);
-                                                }
-                                                if (secondary_overflow_energy_device != nullptr) {
-                                                    sycl::atomic_ref<float, sycl::memory_order::relaxed,
-                                                                     sycl::memory_scope::device,
-                                                                     sycl::access::address_space::global_space>
-                                                        atomic_overflow_energy(
-                                                            *secondary_overflow_energy_device);
-                                                    atomic_overflow_energy.fetch_add(sycl::fmax(
-                                                        0.0F, product.kinetic_energy_MeV));
-                                                }
-                                            }
-                                        }
-                                    }
-                                    if (untracked_MeV > 0.0F &&
-                                        untracked_nuclear_device != nullptr) {
-                                        sycl::atomic_ref<
-                                            float, sycl::memory_order::relaxed,
-                                            sycl::memory_scope::device,
-                                            sycl::access::address_space::global_space>
-                                            atomic_untracked(
-                                                untracked_nuclear_device[global_history]);
-                                        atomic_untracked.fetch_add(untracked_MeV);
-                                    }
-                                    if (event.parent_status == 0) {
-                                        energy_MeV = sycl::fmax(0.0F, event.parent_energy_MeV);
-                                        const auto parent_direction = rotate_local_direction(
-                                            event.parent_local_direction_x,
-                                            event.parent_local_direction_y,
-                                            event.parent_local_direction_z,
-                                            Direction3F{direction_x, direction_y, direction_z});
-                                        direction_x = parent_direction.x;
-                                        direction_y = parent_direction.y;
-                                        direction_z = parent_direction.z;
-                                    } else {
-                                        energy_MeV = 0.0F;
-                                    }
-                                }
-                                else {
-                                    cinel02_diag_increment_device(cinel02_diag_device, 5U);
-                                    cinel02_record_replay_status_device(
-                                        cinel02_replay_status_counts_device,
-                                        cinel02_replay_status_rate_query_energy_device,
-                                        cinel02_replay_status_replay_query_energy_device,
-                                        cinel02_replay_status_continuous_loss_device,
-                                        cinel02_replay_status_delta_device,
-                                        cinel02_replay_status_abs_delta_device,
-                                        primary_atomic_number, primary_mass_number,
-                                        cinel02_target_z_step, 0U,
-                                        primary_rate_query_energy_MeV,
-                                        replay_runtime_energy_MeV,
-                                        sycl::fmax(0.0F,
-                                            primary_rate_query_energy_MeV -
-                                                replay_runtime_energy_MeV),
-                                        0.0F,
-                                        static_cast<std::uint32_t>(
-                                            Cinel02ReplayLedgerSchema::replay_lookup_miss));
-                                }
-                            }
-                            else {
-                                cinel02_diag_increment_device(cinel02_diag_device, 4U);
-                            }
-                        } else {
+                        cross_section_device != nullptr) {
+                        {
                         const float p_target_h = p_target_h_step;
                         {
                             const Direction3F cur_dir{direction_x, direction_y,
@@ -5000,7 +4326,6 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                         const auto charged_sp_idx = carbon::get_charged_species_idx(static_cast<int>(frag.z), static_cast<int>(frag.a));
                         const auto ledger_species_idx = charged_sp_idx;
                         if (charged_sp_idx < 0) {
-                            cinel02_diag_increment_device(cinel02_diag_device, 34U);
                             if (untracked_nuclear_device != nullptr) {
                                 sycl::atomic_ref<float, sycl::memory_order::relaxed,
                                                  sycl::memory_scope::device,
@@ -5051,15 +4376,12 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                         // (UnsupportedProjectileSteps) is diagnostic only and
                         // must NOT drive coverage gates.
                         // v3: registry lookup over the uploaded bundle-ordered
-                        // keys (any (Z,A) in the bundle is supported); v1 keeps
-                        // the hardcoded 13-isotope check EXACTLY.
+                        // keys (any (Z,A) in the bundle is supported).
                         const int schneider_reg_idx =
-                            (schneider_ct_device_ctx.sec_rate_version == 3)
-                                ? secondary_projectile_lut_index_device(
+                            secondary_projectile_lut_index_device(
                                       schneider_ct_device_ctx.sec_proj_keys,
                                       schneider_ct_device_ctx.sec_num_projectiles,
-                                      frag.z, frag.a)
-                                : secondary_projectile_index_device(frag.z, frag.a);
+                                      frag.z, frag.a);
                         if (schneider_ct_device_ctx.uses_cinel03() &&
                             frag.generation < cinel02_max_secondary_inelastic_generations &&
                             schneider_reg_idx < 0) {
@@ -5103,42 +4425,10 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                     ct_material_device, sec_local_density_g_per_cm3,
                                     sec_ct_material, sec_dx, sec_dy, sec_dz);
                             }
-                            const auto exposure_cell = use_cinel02
-                                ? cinel02_exposure_cell_index_device(
-                                      frag.z, frag.a, frag.generation, sec_e_u)
-                                : std::numeric_limits<std::uint32_t>::max();
-                            const bool secondary_generation_eligible =
-                                use_cinel02 && frag.generation <
-                                    cinel02_max_secondary_inelastic_generations;
+                            constexpr auto exposure_cell = std::numeric_limits<std::uint32_t>::max();
+                            constexpr bool secondary_generation_eligible = false;
                             Cinel02DeviceRateLookup exposure_h_lookup{};
                             Cinel02DeviceRateLookup exposure_o_lookup{};
-                            if (use_cinel02) {
-                                if (sec_in_ct && cinel02_ct_rate_groups_device != nullptr) {
-                                    exposure_h_lookup = cinel02_material_rate_lookup_device(
-                                        cinel02_ct_rate_groups_device,
-                                        cinel02_ct_rate_group_count,
-                                        cinel02_ct_rate_samples_device,
-                                        cinel02_ct_rate_sample_count,
-                                        static_cast<int>(sec_ct_material), frag.z, frag.a,
-                                        1, 1, sec_e_u);
-                                    exposure_o_lookup = cinel02_material_rate_lookup_device(
-                                        cinel02_ct_rate_groups_device,
-                                        cinel02_ct_rate_group_count,
-                                        cinel02_ct_rate_samples_device,
-                                        cinel02_ct_rate_sample_count,
-                                        static_cast<int>(sec_ct_material), frag.z, frag.a,
-                                        8, 16, sec_e_u);
-                                } else {
-                                    exposure_h_lookup = cinel02_rate_lookup_device(
-                                        cinel02_rate_groups_device, cinel02_rate_group_count,
-                                        cinel02_rate_samples_device, cinel02_rate_sample_count,
-                                        frag.z, frag.a, 1, 1, sec_e_u);
-                                    exposure_o_lookup = cinel02_rate_lookup_device(
-                                        cinel02_rate_groups_device, cinel02_rate_group_count,
-                                        cinel02_rate_samples_device, cinel02_rate_sample_count,
-                                        frag.z, frag.a, 8, 16, sec_e_u);
-                                }
-                            }
                             const bool exposure_h_covered = exposure_h_lookup.covered;
                             const bool exposure_o_covered = exposure_o_lookup.covered;
                             const bool exposure_rate_covered =
@@ -5223,15 +4513,12 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                             std::uint8_t schneider_hazard_section = 255;
                             if (schneider_ct_device_ctx.uses_cinel03() && (sec_in_ct || use_unified_water) &&
                                 frag.generation < cinel02_max_secondary_inelastic_generations) {
-                                // v3: bundle-ordered registry LUT; v1 keeps the
-                                // hardcoded check EXACTLY.
+                                // Bundle-ordered registry LUT; no hardcoded isotope fallback.
                                 const int proj_idx =
-                                    (schneider_ct_device_ctx.sec_rate_version == 3)
-                                        ? secondary_projectile_lut_index_device(
+                                    secondary_projectile_lut_index_device(
                                               schneider_ct_device_ctx.sec_proj_keys,
                                               schneider_ct_device_ctx.sec_num_projectiles,
-                                              frag.z, frag.a)
-                                        : secondary_projectile_index_device(frag.z, frag.a);
+                                              frag.z, frag.a);
                                 if (proj_idx < 0) {
                                     // Unsupported secondary projectile: explicit
                                     // per-STEP evaluation counter, never a silent
@@ -5249,17 +4536,14 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                     ++local_sec_rate_queries;
                                     // v3: single masked computation drives hazard
                                     // AND target sampling (same partials, same
-                                    // mask). v1 keeps the legacy total/sampler
-                                    // calls EXACTLY as before.
-                                    if (schneider_ct_device_ctx.sec_rate_version == 3) {
+                                    // mask), without an older total/sampler alternative.
+                                    {
                                         // v3: hazard from the masked total at the
                                         // step-start energy E_h. Target sampling
                                         // is deferred to the lookup site (post-EM
                                         // collision energy E_c) so the mask and
-                                        // the package query share one energy; a
-                                        // hazard can never outrun its domain.
-                                        // v1 keeps hazard+sampling at E_h
-                                        // EXACTLY as before.
+                                        // the package query share one energy.
+                                        // A post-EM empty draw remains a classified null collision.
                                         const auto sec_masked = schneider_ct_device_ctx.secondary_rates(
                                             proj_idx, section_id, sec_e_u);
                                         const float sec_macro_xs =
@@ -5280,97 +4564,6 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                                 schneider_hazard_section = use_unified_water ? 255U : sec_ct_material;
                                             }
                                         }
-                                    } else {
-                                    const float sec_mass_rate = secondary_total_mass_rate_device(
-                                        schneider_ct_device_ctx.sec_total_rates,
-                                        proj_idx, section_id, sec_e_u,
-                                        schneider_ct_device_ctx.sec_energy_min_MeV_per_u,
-                                        schneider_ct_device_ctx.sec_inv_energy_step,
-                                        schneider_ct_device_ctx.sec_num_energies);
-                                    // Density enters exactly once, in the total
-                                    // hazard; target fractions are independent.
-                                    const float sec_macro_xs = sec_local_density_g_per_cm3 * sec_mass_rate;
-                                    if (sec_macro_xs > 0.0F) {
-                                        float collision_distance = sec_step_mm;
-                                        secondary_inelastic = inelastic_collision_in_step(
-                                            sec_macro_xs, sec_step_mm,
-                                            rng::uniform01(2026, frag.rng_stream, sec_steps, 13),
-                                            &collision_distance);
-                                        if (secondary_inelastic) {
-                                            schneider_diag_increment_device(
-                                                schneider_diag_device,
-                                                SchneiderDiagSlot::SecondaryHazards);
-                                            sec_step_mm = collision_distance;
-                                            schneider_hazard_total_rate = sec_macro_xs;
-                                            schneider_hazard_step_mm = sec_step_mm;
-                                            schneider_hazard_section = use_unified_water ? 255U : sec_ct_material;
-                                            const float u_target = rng::uniform01(2026, frag.rng_stream, sec_steps, 14);
-                                            const int sampled_z =
-                                                sample_secondary_target_device(
-                                                    schneider_ct_device_ctx.sec_partial_rates,
-                                                    proj_idx, section_id, sec_e_u, u_target,
-                                                    schneider_ct_device_ctx.sec_energy_min_MeV_per_u,
-                                                    schneider_ct_device_ctx.sec_inv_energy_step,
-                                                    schneider_ct_device_ctx.sec_num_energies);
-                                            if (sampled_z <= 0) {
-                                                schneider_diag_increment_device(
-                                                    schneider_diag_device,
-                                                    SchneiderDiagSlot::UnsupportedTargets);
-                                                secondary_inelastic = false;
-                                            } else {
-                                                secondary_target_z =
-                                                    static_cast<std::int16_t>(sampled_z);
-                                            }
-                                        }
-                                    }
-                                    }  // else of the v3 masked secondary path
-                                }
-                            } else if (use_cinel02 && frag.generation <
-                                       cinel02_max_secondary_inelastic_generations) {
-                                cinel02_diag_increment_device(cinel02_diag_device, 14U);
-                                const auto target =
-                                    (sec_in_ct && cinel02_ct_rate_groups_device != nullptr)
-                                        ? cinel02_select_material_target_device(
-                                              cinel02_ct_rate_groups_device,
-                                              cinel02_ct_rate_group_count,
-                                              cinel02_ct_rate_samples_device,
-                                              cinel02_ct_rate_sample_count,
-                                              static_cast<int>(sec_ct_material), frag.z,
-                                              frag.a, sec_e_u, sec_local_density_g_per_cm3,
-                                              cinel02_ct_rate_reference_density_g_per_cm3,
-                                              rng::uniform01(2026, frag.rng_stream,
-                                                             sec_steps, 12))
-                                        : cinel02_select_water_target_device(
-                                              cinel02_rate_groups_device,
-                                              cinel02_rate_group_count,
-                                              cinel02_rate_samples_device,
-                                              cinel02_rate_sample_count, frag.z, frag.a,
-                                              sec_e_u, sec_local_density_g_per_cm3,
-                                              water_density_g_per_cm3,
-                                              rng::uniform01(2026, frag.rng_stream,
-                                                             sec_steps, 12));
-                                if (target.covered) {
-                                    cinel02_diag_increment_device(cinel02_diag_device, 15U);
-                                    float collision_distance = sec_step_mm;
-                                    secondary_inelastic = inelastic_collision_in_step(
-                                        target.total_rate_per_mm, sec_step_mm,
-                                        rng::uniform01(2026, frag.rng_stream,
-                                                       sec_steps, 13),
-                                        &collision_distance);
-                                    if (secondary_inelastic) {
-                                        cinel02_diag_increment_device(cinel02_diag_device, 16U);
-                                        cinel02_diag_increment_device(
-                                            cinel02_diag_device,
-                                            target.target_z == 1 ? 20U : 21U);
-                                        cinel02_diag_increment_device(
-                                            cinel02_diag_device,
-                                            cinel02_hazard_diag_slot_device(
-                                                frag.z, frag.a, target.target_z,
-                                                static_cast<std::uint32_t>(frag.generation) + 1U,
-                                                sec_e_u));
-                                        sec_step_mm = collision_distance;
-                                        secondary_target_z = target.target_z;
-                                        secondary_target_a = target.target_a;
                                     }
                                 }
                             }
@@ -5381,110 +4574,30 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                             // generation-blocked path is kept separate and never
                             // folded into an apparent uncovered rate segment.
                             if (exposure_cell != std::numeric_limits<std::uint32_t>::max()) {
-                                cinel02_exposure_sum_add_device(
-                                    cinel02_secondary_exposure_sums_device,
-                                    exposure_cell,
-                                    static_cast<std::uint32_t>(
-                                        Cinel02ExposureLedgerSchema::path_mm_total),
-                                    sec_step_mm);
                                 if (secondary_generation_eligible) {
-                                    cinel02_exposure_sum_add_device(
-                                        cinel02_secondary_exposure_sums_device,
-                                        exposure_cell,
-                                        static_cast<std::uint32_t>(
-                                            Cinel02ExposureLedgerSchema::path_mm_generation_eligible),
-                                        sec_step_mm);
                                     if (exposure_rate_covered) {
-                                        cinel02_exposure_sum_add_device(
-                                            cinel02_secondary_exposure_sums_device,
-                                            exposure_cell,
-                                            static_cast<std::uint32_t>(
-                                                Cinel02ExposureLedgerSchema::path_mm_rate_covered),
-                                            sec_step_mm);
                                     } else {
-                                        cinel02_exposure_sum_add_device(
-                                            cinel02_secondary_exposure_sums_device,
-                                            exposure_cell,
-                                            static_cast<std::uint32_t>(
-                                                Cinel02ExposureLedgerSchema::path_mm_rate_uncovered),
-                                            sec_step_mm);
                                     }
                                     if (!exposure_h_covered) {
-                                        cinel02_exposure_sum_add_device(
-                                            cinel02_secondary_exposure_sums_device,
-                                            exposure_cell,
-                                            static_cast<std::uint32_t>(
-                                                Cinel02ExposureLedgerSchema::path_mm_h_uncovered),
-                                            sec_step_mm);
                                     }
                                     if (!exposure_o_covered) {
-                                        cinel02_exposure_sum_add_device(
-                                            cinel02_secondary_exposure_sums_device,
-                                            exposure_cell,
-                                            static_cast<std::uint32_t>(
-                                                Cinel02ExposureLedgerSchema::path_mm_o_uncovered),
-                                            sec_step_mm);
                                     }
                                     if (exposure_h_covered) {
-                                        cinel02_exposure_sum_add_device(
-                                            cinel02_secondary_exposure_sums_device,
-                                            exposure_cell,
-                                            static_cast<std::uint32_t>(
-                                                Cinel02ExposureLedgerSchema::hazard_h),
-                                            exposure_h_lookup.value_per_mm * sec_step_mm);
                                     }
                                     if (exposure_o_covered) {
-                                        cinel02_exposure_sum_add_device(
-                                            cinel02_secondary_exposure_sums_device,
-                                            exposure_cell,
-                                            static_cast<std::uint32_t>(
-                                                Cinel02ExposureLedgerSchema::hazard_o),
-                                            exposure_o_lookup.value_per_mm * sec_step_mm);
                                     }
                                     if (exposure_rate_covered) {
-                                        cinel02_exposure_sum_add_device(
-                                            cinel02_secondary_exposure_sums_device,
-                                            exposure_cell,
-                                            static_cast<std::uint32_t>(
-                                                Cinel02ExposureLedgerSchema::hazard_total),
-                                            (exposure_h_lookup.value_per_mm +
-                                             exposure_o_lookup.value_per_mm) * sec_step_mm);
                                     }
                                 } else {
-                                    cinel02_exposure_sum_add_device(
-                                        cinel02_secondary_exposure_sums_device,
-                                        exposure_cell,
-                                        static_cast<std::uint32_t>(
-                                            Cinel02ExposureLedgerSchema::path_mm_generation_blocked),
-                                        sec_step_mm);
                                     // Counterfactual hazard for this blocked segment.
                                     // Keep H/O separate when only one target is covered;
                                     // total is defined only for a complete H/O pair, exactly
                                     // as in the runtime target selector.
                                     if (exposure_h_covered) {
-                                        cinel02_exposure_sum_add_device(
-                                            cinel02_secondary_exposure_sums_device,
-                                            exposure_cell,
-                                            static_cast<std::uint32_t>(
-                                                Cinel02ExposureLedgerSchema::hazard_blocked_h),
-                                            exposure_h_lookup.value_per_mm * sec_step_mm);
                                     }
                                     if (exposure_o_covered) {
-                                        cinel02_exposure_sum_add_device(
-                                            cinel02_secondary_exposure_sums_device,
-                                            exposure_cell,
-                                            static_cast<std::uint32_t>(
-                                                Cinel02ExposureLedgerSchema::hazard_blocked_o),
-                                            exposure_o_lookup.value_per_mm * sec_step_mm);
                                     }
                                     if (exposure_rate_covered) {
-                                        cinel02_exposure_sum_add_device(
-                                            cinel02_secondary_exposure_sums_device,
-                                            exposure_cell,
-                                            static_cast<std::uint32_t>(
-                                                Cinel02ExposureLedgerSchema::hazard_blocked_total),
-                                            (exposure_h_lookup.value_per_mm +
-                                             exposure_o_lookup.value_per_mm) * sec_step_mm);
                                     }
                                 }
                             }
@@ -5574,42 +4687,12 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                             Cinel02DeviceRateLookup continuous_o_mid{};
                             Cinel02DeviceRateLookup continuous_h_end{};
                             Cinel02DeviceRateLookup continuous_o_end{};
-                            if (use_cinel02) {
-                                continuous_h_mid = cinel02_rate_lookup_device(
-                                    cinel02_rate_groups_device, cinel02_rate_group_count,
-                                    cinel02_rate_samples_device, cinel02_rate_sample_count,
-                                    frag.z, frag.a, 1, 1, continuous_mid_e_u);
-                                continuous_o_mid = cinel02_rate_lookup_device(
-                                    cinel02_rate_groups_device, cinel02_rate_group_count,
-                                    cinel02_rate_samples_device, cinel02_rate_sample_count,
-                                    frag.z, frag.a, 8, 16, continuous_mid_e_u);
-                                continuous_h_end = cinel02_rate_lookup_device(
-                                    cinel02_rate_groups_device, cinel02_rate_group_count,
-                                    cinel02_rate_samples_device, cinel02_rate_sample_count,
-                                    frag.z, frag.a, 1, 1, continuous_end_e_u);
-                                continuous_o_end = cinel02_rate_lookup_device(
-                                    cinel02_rate_groups_device, cinel02_rate_group_count,
-                                    cinel02_rate_samples_device, cinel02_rate_sample_count,
-                                    frag.z, frag.a, 8, 16, continuous_end_e_u);
-                            }
                             const bool continuous_rate_covered =
                                 exposure_h_lookup.covered && exposure_o_lookup.covered &&
                                 continuous_h_mid.covered && continuous_o_mid.covered &&
                                 continuous_h_end.covered && continuous_o_end.covered;
                             if (exposure_cell != std::numeric_limits<std::uint32_t>::max()) {
-                                cinel02_exposure_sum_add_device(
-                                    cinel02_secondary_exposure_sums_device,
-                                    exposure_cell,
-                                    static_cast<std::uint32_t>(
-                                        Cinel02ExposureLedgerSchema::stopping_loss_MeV),
-                                    dE);
                                 if (continuous_rate_covered) {
-                                    cinel02_exposure_sum_add_device(
-                                        cinel02_secondary_exposure_sums_device,
-                                        exposure_cell,
-                                        static_cast<std::uint32_t>(
-                                            Cinel02ExposureLedgerSchema::path_mm_continuous_rate_covered),
-                                        sec_step_mm);
                                     const auto lambda_start =
                                         exposure_h_lookup.value_per_mm +
                                         exposure_o_lookup.value_per_mm;
@@ -5623,21 +4706,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                         cinel02_simpson_hazard(
                                             lambda_start, lambda_mid, lambda_end,
                                             sec_step_mm);
-                                    cinel02_exposure_sum_add_device(
-                                        cinel02_secondary_exposure_sums_device,
-                                        exposure_cell,
-                                        static_cast<std::uint32_t>(
-                                            secondary_generation_eligible
-                                                ? Cinel02ExposureLedgerSchema::hazard_continuous
-                                                : Cinel02ExposureLedgerSchema::hazard_blocked_continuous),
-                                        tau_continuous);
                                 } else {
-                                    cinel02_exposure_sum_add_device(
-                                        cinel02_secondary_exposure_sums_device,
-                                        exposure_cell,
-                                        static_cast<std::uint32_t>(
-                                            Cinel02ExposureLedgerSchema::path_mm_continuous_rate_uncovered),
-                                        sec_step_mm);
                                 }
                             }
                             const auto collision_bin = sycl::max(
@@ -5679,9 +4748,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                 // collision energy E_c (sec_e just updated),
                                 // so the replay-status record below and the
                                 // package query share one energy with the mask.
-                                // v1 keeps the hazard-site E_h sample EXACTLY.
                                 if (schneider_ct_device_ctx.uses_cinel03() && (sec_in_ct || use_unified_water) &&
-                                    schneider_ct_device_ctx.sec_rate_version == 3 &&
                                     sec_e > energy_cutoff_MeV &&
                                     frag.generation <
                                         cinel02_max_secondary_inelastic_generations) {
@@ -5736,24 +4803,6 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                 // like the v1 hazard-site empty draw (which
                                 // never reaches this block).
                                 if (!skip_schneider_lookup) {
-                                cinel02_record_replay_status_device(
-                                    cinel02_replay_status_counts_device,
-                                    cinel02_replay_status_rate_query_energy_device,
-                                    cinel02_replay_status_replay_query_energy_device,
-                                    cinel02_replay_status_continuous_loss_device,
-                                    cinel02_replay_status_delta_device,
-                                    cinel02_replay_status_abs_delta_device,
-                                    frag.z, frag.a, secondary_target_z,
-                                    static_cast<std::uint32_t>(frag.generation) + 1U,
-                                    secondary_rate_query_energy_MeV,
-                                    sycl::fmax(0.0F, sec_e), dE, 0.0F,
-                                    static_cast<std::uint32_t>(
-                                        Cinel02ReplayLedgerSchema::collision_candidate));
-                                cinel02_exposure_count_increment_device(
-                                    cinel02_secondary_exposure_counts_device,
-                                    exposure_cell,
-                                    static_cast<std::uint32_t>(
-                                        Cinel02ExposureLedgerSchema::collision_candidates));
                                 }  // !skip_schneider_lookup (v3 sampler-empty records nothing)
                             }
 
@@ -5825,9 +4874,6 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                     // the intra-node event pick.
                                     const float sec_u_bracket = rng::uniform01(2026, frag.rng_stream, sec_steps, 15);
                                     const float sec_u_event = rng::uniform01(2026, frag.rng_stream, sec_steps, 16);
-                                    if (cinel02_diag_device != nullptr) {
-                                        cinel02_diag_increment_device(cinel02_diag_device, 14U);
-                                    }
                                     const auto sec_lookup = cinel03_lookup_event_device(
                                         schneider_ct_device_ctx.sec_energy_nodes,
                                         schneider_ct_device_ctx.sec_node_count,
@@ -5844,9 +4890,6 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                     if (sec_lookup.status == Cinel03LookupStatus::Hit) {
                                         const std::uint32_t event_idx = sec_lookup.event_index;
                                         secondary_replay_succeeded = true;
-                                        if (cinel02_diag_device != nullptr) {
-                                            cinel02_diag_increment_device(cinel02_diag_device, 15U);
-                                        }
                                         cinel02_species_energy_add_device(
                                             cinel02_species_energy_device, ledger_species_idx, 8U, sec_e);
                                         // Use the collision vertex, not the source
@@ -6080,9 +5123,6 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                             schneider_hazard_total_rate,
                                             schneider_hazard_step_mm, sec_e,
                                             frag.energy_MeV);
-                                        if (cinel02_diag_device != nullptr) {
-                                            cinel02_diag_increment_device(cinel02_diag_device, 18U);
-                                        }
                                         if (untracked_nuclear_device != nullptr) {
                                             sycl::atomic_ref<float, sycl::memory_order::relaxed,
                                                              sycl::memory_scope::device,
@@ -6149,7 +5189,6 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                                    sec_steps, 14));
                                 if (event_index !=
                                     std::numeric_limits<std::uint32_t>::max()) {
-                                    cinel02_diag_increment_device(cinel02_diag_device, 17U);
                                     const auto event =
                                         cinel02_interactions_device[event_index];
                                     const auto product_end =
@@ -6161,61 +5200,20 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                          event.parent_status == 2)
                                             ? Cinel02ReplayLedgerSchema::replay_valid
                                             : Cinel02ReplayLedgerSchema::replay_invalid_event;
-                                    cinel02_record_replay_status_device(
-                                        cinel02_replay_status_counts_device,
-                                        cinel02_replay_status_rate_query_energy_device,
-                                        cinel02_replay_status_replay_query_energy_device,
-                                        cinel02_replay_status_continuous_loss_device,
-                                        cinel02_replay_status_delta_device,
-                                        cinel02_replay_status_abs_delta_device,
-                                        frag.z, frag.a, secondary_target_z,
-                                        static_cast<std::uint32_t>(frag.generation) + 1U,
-                                        secondary_rate_query_energy_MeV,
-                                        sycl::fmax(0.0F, sec_e), dE,
-                                        event.incident_energy_MeV_per_u -
-                                            sycl::fmax(0.0F, sec_e * frag_inv_a),
-                                        static_cast<std::uint32_t>(replay_status));
                                     if (product_end <= cinel02_product_count &&
                                         (event.parent_status == 0 ||
                                          event.parent_status == 2)) {
                                         secondary_replay_succeeded = true;
-                                        cinel02_exposure_count_increment_device(
-                                            cinel02_secondary_exposure_counts_device,
-                                            exposure_cell,
-                                            static_cast<std::uint32_t>(
-                                                Cinel02ExposureLedgerSchema::replay_valid));
-                                        cinel02_exposure_count_increment_device(
-                                            cinel02_secondary_exposure_counts_device,
-                                            exposure_cell,
-                                            static_cast<std::uint32_t>(
-                                                event.parent_status == 0
-                                                    ? Cinel02ExposureLedgerSchema::parent_continued
-                                                    : Cinel02ExposureLedgerSchema::parent_killed));
-                                        cinel02_diag_increment_device(
-                                            cinel02_diag_device,
-                                            event.parent_status == 0 ? 8U : 9U);
                                         if (frag.z >= 1 && frag.z <= 6) {
                                             const auto incident_keV =
                                                 static_cast<std::uint64_t>(sycl::fmax(
                                                     0.0F, sec_e) * 1000.0F + 0.5F);
-                                            cinel02_diag_add_device(
-                                                cinel02_diag_device,
-                                                1120U + sycl::min<std::uint32_t>(
-                                                    frag.generation, 1U) * 6U +
-                                                    static_cast<std::uint32_t>(frag.z - 1),
-                                                incident_keV);
                                         }
                                         if (frag.z == 4) {
                                             const auto be_incident_slot =
                                                 cinel02_be_incident_diag_slot_device(
                                                     secondary_target_z, frag.generation,
                                                     sec_e * frag_inv_a);
-                                            cinel02_diag_increment_device(
-                                                cinel02_diag_device, be_incident_slot);
-                                            cinel02_diag_add_device(
-                                                cinel02_diag_device, be_incident_slot + 32U,
-                                                static_cast<std::uint64_t>(sycl::fmax(
-                                                    0.0F, sec_e) * 1000.0F + 0.5F));
                                         }
                                         const auto parent_outcome_slot =
                                             cinel02_parent_outcome_diag_slot_device(
@@ -6223,8 +5221,6 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                                 static_cast<std::uint32_t>(frag.generation));
                                         if (parent_outcome_slot !=
                                             std::numeric_limits<std::uint32_t>::max()) {
-                                            cinel02_diag_increment_device(
-                                                cinel02_diag_device, parent_outcome_slot);
                                         }
                                         const auto local_deposit = sycl::fmax(
                                             0.0F, event.process_local_deposit_MeV);
@@ -6233,19 +5229,6 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                             : 0.0F;
                                         const auto reaction_handoff_delta = sec_e -
                                             parent_after - local_deposit;
-                                        cinel02_record_parent_outcome_device(
-                                            cinel02_parent_outcome_counts_device,
-                                            cinel02_parent_outcome_incident_device,
-                                            cinel02_parent_outcome_after_device,
-                                            cinel02_parent_outcome_local_device,
-                                            cinel02_parent_outcome_export_device,
-                                            cinel02_parent_outcome_import_device,
-                                            frag.z, frag.a, secondary_target_z,
-                                            static_cast<std::uint32_t>(frag.generation) + 1U,
-                                            event.parent_status, sec_e, parent_after,
-                                            local_deposit,
-                                            sycl::fmax(0.0F, reaction_handoff_delta),
-                                            sycl::fmax(0.0F, -reaction_handoff_delta));
                                         cinel02_species_energy_add_device(
                                             cinel02_species_energy_device, ledger_species_idx,
                                             static_cast<std::uint32_t>(
@@ -6261,22 +5244,6 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                             static_cast<std::uint32_t>(
                                                 Cinel02SpeciesLedgerSchema::reaction_import_kinetic),
                                             sycl::fmax(0.0F, -reaction_handoff_delta));
-                                        cinel02_record_replay_delta_device(
-                                            cinel02_replay_delta_device,
-                                            cinel02_replay_abs_delta_device,
-                                            cinel02_replay_delta_positive_device,
-                                            cinel02_replay_delta_negative_device,
-                                            cinel02_replay_valid_device,
-                                            ledger_species_idx,
-                                            event.incident_energy_MeV_per_u -
-                                                sycl::fmax(0.0F, sec_e * frag_inv_a));
-                                        cinel02_energy_add_device(cinel02_energy_device, 0U, sec_e);
-                                        cinel02_energy_add_device(cinel02_energy_device, 1U, dE);
-                                        cinel02_energy_add_device(cinel02_energy_device, 2U, local_deposit);
-                                        cinel02_energy_add_device(cinel02_energy_device, 3U,
-                                                                  event.nonionizing_deposit_MeV);
-                                        cinel02_energy_add_device(cinel02_energy_device, 4U,
-                                                                  event.parent_energy_MeV);
                                         if (local_deposit > 0.0F) {
                                             sycl::atomic_ref<
                                                 DepthAtomicT, sycl::memory_order::relaxed,
@@ -6316,23 +5283,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                              ip < event.product_count; ++ip) {
                                             const auto product = cinel02_products_device[
                                                 event.product_offset + ip];
-                                            cinel02_energy_add_device(
-                                                cinel02_energy_device,
-                                                product.role == 2
-                                                ? 7U
-                                                : ((product.role == 0 && product.z > 0 &&
-                                                    carbon::get_charged_species_idx(
-                                                        product.z, product.a) >= 0)
-                                                       ? 5U
-                                                       : 6U),
-                                                product.kinetic_energy_MeV);
-                                            cinel02_diag_increment_device(
-                                                cinel02_diag_device,
-                                                product.role <= 2 ? 10U + product.role : 13U);
                                             if (product.role == 0 && product.z >= 1 && product.z <= 6) {
-                                                cinel02_diag_increment_device(
-                                                    cinel02_diag_device,
-                                                    22U + static_cast<std::uint32_t>(product.z - 1));
                                             }
                                             if (product.role == 0 && product.z == 4) {
                                                 const auto birth_slot =
@@ -6341,22 +5292,6 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                                         frag.generation + 1U, product.a);
                                                 if (birth_slot !=
                                                     std::numeric_limits<std::uint32_t>::max()) {
-                                                    cinel02_diag_increment_device(
-                                                        cinel02_diag_device, birth_slot);
-                                                    cinel02_diag_add_device(
-                                                        cinel02_diag_device, birth_slot + 48U,
-                                                        static_cast<std::uint64_t>(sycl::fmax(
-                                                            0.0F, product.kinetic_energy_MeV) *
-                                                            1000.0F + 0.5F));
-                                                    cinel02_diag_add_device(
-                                                        cinel02_diag_device, birth_slot + 96U,
-                                                        static_cast<std::uint64_t>(sycl::fmax(
-                                                            0.0F, sec_z) * 1000.0F + 0.5F));
-                                                    cinel02_diag_add_device(
-                                                        cinel02_diag_device, birth_slot + 144U,
-                                                        static_cast<std::uint64_t>((sycl::clamp(
-                                                            product.local_direction_z, -1.0F, 1.0F) +
-                                                            1.0F) * 1000000.0F + 0.5F));
                                                 }
                                                 const auto be_channel_slot =
                                                     cinel02_be_channel_diag_slot_device(
@@ -6364,38 +5299,19 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                                         frag.generation, sec_e * frag_inv_a);
                                                 if (be_channel_slot !=
                                                     std::numeric_limits<std::uint32_t>::max()) {
-                                                    cinel02_diag_increment_device(
-                                                        cinel02_diag_device, be_channel_slot);
-                                                    cinel02_diag_add_device(
-                                                        cinel02_diag_device,
-                                                        be_channel_slot + 96U,
-                                                        static_cast<std::uint64_t>(sycl::fmax(
-                                                            0.0F, product.kinetic_energy_MeV) *
-                                                            1000.0F + 0.5F));
                                                 }
                                             }
                                             if (product.role == 0) {
-                                                cinel02_record_transition_device(
-                                                    cinel02_generated_transition_counts_device,
-                                                    cinel02_generated_transition_energy_device,
-                                                    frag.z, frag.a, product.z, product.a,
-                                                    sycl::fmax(0.0F,
-                                                        product.kinetic_energy_MeV));
                                                 const auto transition_slot =
                                                     cinel02_transition_diag_slot_device(
                                                         frag.z, product.z,
                                                         static_cast<std::uint32_t>(frag.generation));
                                                 if (transition_slot !=
                                                     std::numeric_limits<std::uint32_t>::max()) {
-                                                    cinel02_diag_increment_device(
-                                                        cinel02_diag_device, transition_slot);
                                                     const auto kinetic_keV =
                                                         static_cast<std::uint64_t>(sycl::fmax(
                                                             0.0F, product.kinetic_energy_MeV) *
                                                             1000.0F + 0.5F);
-                                                    cinel02_diag_add_device(
-                                                        cinel02_diag_device,
-                                                        transition_slot + 108U, kinetic_keV);
                                                 }
                                             }
                                             if (product.role == 0 && product.z > 0 &&
@@ -6406,11 +5322,6 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                                 // Match TOPAS/Geant4's unsupported prompt-ion
                                                 // fallback: generated, then killed before queue,
                                                 // with no daughter and no local deposit.
-                                                cinel02_record_topas_compat_discard_device(
-                                                    cinel02_topas_compat_discarded_counts_device,
-                                                    cinel02_topas_compat_discarded_kinetic_device,
-                                                    product.z, product.a,
-                                                    sycl::fmax(0.0F, product.kinetic_energy_MeV));
                                                 continue;
                                             }
                                             if (product.role != 0 || product.z <= 0 ||
@@ -6458,20 +5369,11 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                                     static_cast<std::uint16_t>(
                                                         frag.generation + 1U);
                                                 if (product.z >= 1 && product.z <= 6) {
-                                                    cinel02_diag_increment_device(
-                                                        cinel02_diag_device,
-                                                        28U + static_cast<std::uint32_t>(product.z - 1));
                                                 }
                                                 secondary_queue_device[output] = child;
                                                 cinel02_record_queued_secondary_birth_device(
                                                     cinel02_species_energy_device, product.z, product.a,
                                                     sycl::fmax(0.0F, product.kinetic_energy_MeV));
-                                                cinel02_record_transition_device(
-                                                    cinel02_queued_transition_counts_device,
-                                                    cinel02_queued_transition_energy_device,
-                                                    frag.z, frag.a, product.z, product.a,
-                                                    sycl::fmax(0.0F,
-                                                        product.kinetic_energy_MeV));
                                             } else if (secondary_overflow_count_device !=
                                                        nullptr) {
                                                 sycl::atomic_ref<
@@ -6526,37 +5428,9 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                         }
                                     }
                                     else {
-                                        cinel02_diag_increment_device(cinel02_diag_device, 19U);
-                                        cinel02_record_replay_status_device(
-                                            cinel02_replay_status_counts_device,
-                                            cinel02_replay_status_rate_query_energy_device,
-                                            cinel02_replay_status_replay_query_energy_device,
-                                            cinel02_replay_status_continuous_loss_device,
-                                            cinel02_replay_status_delta_device,
-                                            cinel02_replay_status_abs_delta_device,
-                                            frag.z, frag.a, secondary_target_z,
-                                            static_cast<std::uint32_t>(frag.generation) + 1U,
-                                            secondary_rate_query_energy_MeV,
-                                            sycl::fmax(0.0F, sec_e), dE, 0.0F,
-                                            static_cast<std::uint32_t>(
-                                                Cinel02ReplayLedgerSchema::replay_invalid_event));
                                     }
                                 }
                                 else {
-                                    cinel02_diag_increment_device(cinel02_diag_device, 18U);
-                                    cinel02_record_replay_status_device(
-                                        cinel02_replay_status_counts_device,
-                                        cinel02_replay_status_rate_query_energy_device,
-                                        cinel02_replay_status_replay_query_energy_device,
-                                        cinel02_replay_status_continuous_loss_device,
-                                        cinel02_replay_status_delta_device,
-                                        cinel02_replay_status_abs_delta_device,
-                                        frag.z, frag.a, secondary_target_z,
-                                        static_cast<std::uint32_t>(frag.generation) + 1U,
-                                        secondary_rate_query_energy_MeV,
-                                        sycl::fmax(0.0F, sec_e), dE, 0.0F,
-                                        static_cast<std::uint32_t>(
-                                            Cinel02ReplayLedgerSchema::replay_lookup_miss));
                                 }
                                 }
                             } else if (secondary_inelastic) {
@@ -6564,19 +5438,6 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                 // or below the transport cutoff, so no package
                                 // event is eligible.  Keep the candidate in
                                 // the status partition as post_em_below_cutoff.
-                                cinel02_record_replay_status_device(
-                                    cinel02_replay_status_counts_device,
-                                    cinel02_replay_status_rate_query_energy_device,
-                                    cinel02_replay_status_replay_query_energy_device,
-                                    cinel02_replay_status_continuous_loss_device,
-                                    cinel02_replay_status_delta_device,
-                                    cinel02_replay_status_abs_delta_device,
-                                    frag.z, frag.a, secondary_target_z,
-                                    static_cast<std::uint32_t>(frag.generation) + 1U,
-                                    secondary_rate_query_energy_MeV,
-                                    sycl::fmax(0.0F, sec_e), dE, 0.0F,
-                                    static_cast<std::uint32_t>(
-                                        Cinel02ReplayLedgerSchema::post_em_below_cutoff));
                             }
                                     pending_sec_voxel = cur_voxel;
                                 }
@@ -7039,146 +5900,19 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
             queue.copy(first_interactions_device, first_interactions_host.data(), actual_count).wait_and_throw();
         }
     }
-    std::array<float, kCinel02EnergySlots> cinel02_energy_host{};
+    // Only shared species and grid ledgers are backed by device buffers.
     std::array<float, kCinel02SpeciesEnergySlots> cinel02_species_energy_host{};
+    std::array<std::uint64_t, kCinel02SpeciesTerminalSlots> cinel02_species_terminal_host{};
     double grid_deposited_in_host = 0.0;
     double grid_deposited_out_host = 0.0;
-    std::array<std::uint64_t, kCinel02SpeciesTerminalSlots>
-        cinel02_species_terminal_host{};
-    std::array<std::uint64_t, TransportResult::species_ledger_species_count>
-        cinel02_topas_compat_discarded_counts_host{};
-    std::array<float, TransportResult::species_ledger_species_count>
-        cinel02_topas_compat_discarded_kinetic_host{};
-    std::array<float, TransportResult::species_ledger_species_count>
-        cinel02_replay_delta_host{};
-    std::array<float, TransportResult::species_ledger_species_count>
-        cinel02_replay_abs_delta_host{};
-    std::array<std::uint64_t, TransportResult::species_ledger_species_count>
-        cinel02_replay_delta_positive_host{};
-    std::array<std::uint64_t, TransportResult::species_ledger_species_count>
-        cinel02_replay_delta_negative_host{};
-    std::array<std::uint64_t, TransportResult::species_ledger_species_count>
-        cinel02_replay_valid_host{};
-    std::array<std::uint64_t, kCinel02ReplayStatusSlots>
-        cinel02_replay_status_counts_host{};
-    std::array<float, kCinel02ReplayStatusSlots>
-        cinel02_replay_status_rate_query_energy_host{};
-    std::array<float, kCinel02ReplayStatusSlots>
-        cinel02_replay_status_replay_query_energy_host{};
-    std::array<float, kCinel02ReplayStatusSlots>
-        cinel02_replay_status_continuous_loss_host{};
-    std::array<float, kCinel02ReplayStatusSlots>
-        cinel02_replay_status_delta_host{};
-    std::array<float, kCinel02ReplayStatusSlots>
-        cinel02_replay_status_abs_delta_host{};
-    std::array<float, kCinel02ExposureSumSlots>
-        cinel02_secondary_exposure_sums_host{};
-    std::array<std::uint64_t, kCinel02ExposureCountSlots>
-        cinel02_secondary_exposure_counts_host{};
-    std::array<std::uint64_t, kCinel02ParentOutcomeSlots>
-        cinel02_parent_outcome_counts_host{};
-    std::array<float, kCinel02ParentOutcomeSlots>
-        cinel02_parent_outcome_incident_host{};
-    std::array<float, kCinel02ParentOutcomeSlots>
-        cinel02_parent_outcome_after_host{};
-    std::array<float, kCinel02ParentOutcomeSlots>
-        cinel02_parent_outcome_local_host{};
-    std::array<float, kCinel02ParentOutcomeSlots>
-        cinel02_parent_outcome_export_host{};
-    std::array<float, kCinel02ParentOutcomeSlots>
-        cinel02_parent_outcome_import_host{};
-    std::array<std::uint64_t, kCinel02TransitionSlots>
-        cinel02_generated_transition_counts_host{};
-    std::array<float, kCinel02TransitionSlots>
-        cinel02_generated_transition_energy_host{};
-    std::array<std::uint64_t, kCinel02TransitionSlots>
-        cinel02_queued_transition_counts_host{};
-    std::array<float, kCinel02TransitionSlots>
-        cinel02_queued_transition_energy_host{};
-    if (cinel02_energy_device != nullptr) {
-        queue.copy(cinel02_energy_device, cinel02_energy_host.data(),
-                   kCinel02EnergySlots);
-    }
-    if (cinel02_species_energy_device != nullptr) {
-        queue.copy(cinel02_species_energy_device,
-                   cinel02_species_energy_host.data(),
-                   kCinel02SpeciesEnergySlots);
-    }
-    if (grid_deposited_in_device != nullptr) {
+    queue.copy(cinel02_species_energy_device, cinel02_species_energy_host.data(),
+               kCinel02SpeciesEnergySlots);
+    queue.copy(cinel02_species_terminal_device, cinel02_species_terminal_host.data(),
+               kCinel02SpeciesTerminalSlots);
+    if (grid_deposited_in_device != nullptr)
         queue.copy(grid_deposited_in_device, &grid_deposited_in_host, 1);
-    }
-    if (grid_deposited_out_device != nullptr) {
+    if (grid_deposited_out_device != nullptr)
         queue.copy(grid_deposited_out_device, &grid_deposited_out_host, 1);
-    }
-    if (cinel02_species_terminal_device != nullptr) {
-        queue.copy(cinel02_species_terminal_device,
-                   cinel02_species_terminal_host.data(),
-                   kCinel02SpeciesTerminalSlots);
-    }
-    if (cinel02_topas_compat_discarded_counts_device != nullptr) {
-        queue.copy(cinel02_topas_compat_discarded_counts_device,
-                   cinel02_topas_compat_discarded_counts_host.data(),
-                   TransportResult::species_ledger_species_count);
-        queue.copy(cinel02_topas_compat_discarded_kinetic_device,
-                   cinel02_topas_compat_discarded_kinetic_host.data(),
-                   TransportResult::species_ledger_species_count);
-    }
-    if (cinel02_replay_delta_device != nullptr) {
-        queue.copy(cinel02_replay_delta_device, cinel02_replay_delta_host.data(),
-                   TransportResult::species_ledger_species_count);
-        queue.copy(cinel02_replay_abs_delta_device, cinel02_replay_abs_delta_host.data(),
-                   TransportResult::species_ledger_species_count);
-        queue.copy(cinel02_replay_delta_positive_device,
-                   cinel02_replay_delta_positive_host.data(),
-                   TransportResult::species_ledger_species_count);
-        queue.copy(cinel02_replay_delta_negative_device,
-                   cinel02_replay_delta_negative_host.data(),
-                   TransportResult::species_ledger_species_count);
-        queue.copy(cinel02_replay_valid_device, cinel02_replay_valid_host.data(),
-                   TransportResult::species_ledger_species_count);
-    }
-    if (cinel02_replay_status_counts_device != nullptr) {
-        queue.copy(cinel02_replay_status_counts_device,
-                   cinel02_replay_status_counts_host.data(), kCinel02ReplayStatusSlots);
-        queue.copy(cinel02_replay_status_rate_query_energy_device,
-                   cinel02_replay_status_rate_query_energy_host.data(), kCinel02ReplayStatusSlots);
-        queue.copy(cinel02_replay_status_replay_query_energy_device,
-                   cinel02_replay_status_replay_query_energy_host.data(), kCinel02ReplayStatusSlots);
-        queue.copy(cinel02_replay_status_continuous_loss_device,
-                   cinel02_replay_status_continuous_loss_host.data(), kCinel02ReplayStatusSlots);
-        queue.copy(cinel02_replay_status_delta_device,
-                   cinel02_replay_status_delta_host.data(), kCinel02ReplayStatusSlots);
-        queue.copy(cinel02_replay_status_abs_delta_device,
-                   cinel02_replay_status_abs_delta_host.data(), kCinel02ReplayStatusSlots);
-        queue.copy(cinel02_secondary_exposure_sums_device,
-                   cinel02_secondary_exposure_sums_host.data(), kCinel02ExposureSumSlots);
-        queue.copy(cinel02_secondary_exposure_counts_device,
-                   cinel02_secondary_exposure_counts_host.data(), kCinel02ExposureCountSlots);
-        queue.copy(cinel02_parent_outcome_counts_device,
-                   cinel02_parent_outcome_counts_host.data(), kCinel02ParentOutcomeSlots);
-        queue.copy(cinel02_parent_outcome_incident_device,
-                   cinel02_parent_outcome_incident_host.data(), kCinel02ParentOutcomeSlots);
-        queue.copy(cinel02_parent_outcome_after_device,
-                   cinel02_parent_outcome_after_host.data(), kCinel02ParentOutcomeSlots);
-        queue.copy(cinel02_parent_outcome_local_device,
-                   cinel02_parent_outcome_local_host.data(), kCinel02ParentOutcomeSlots);
-        queue.copy(cinel02_parent_outcome_export_device,
-                   cinel02_parent_outcome_export_host.data(), kCinel02ParentOutcomeSlots);
-        queue.copy(cinel02_parent_outcome_import_device,
-                   cinel02_parent_outcome_import_host.data(), kCinel02ParentOutcomeSlots);
-        queue.copy(cinel02_generated_transition_counts_device,
-                   cinel02_generated_transition_counts_host.data(), kCinel02TransitionSlots);
-        queue.copy(cinel02_generated_transition_energy_device,
-                   cinel02_generated_transition_energy_host.data(), kCinel02TransitionSlots);
-        queue.copy(cinel02_queued_transition_counts_device,
-                   cinel02_queued_transition_counts_host.data(), kCinel02TransitionSlots);
-        queue.copy(cinel02_queued_transition_energy_device,
-                   cinel02_queued_transition_energy_host.data(), kCinel02TransitionSlots);
-    }
-    std::array<std::uint64_t, kCinel02DiagSlots> cinel02_diag_host{};
-    if (cinel02_diag_device != nullptr) {
-        queue.copy(cinel02_diag_device, cinel02_diag_host.data(), kCinel02DiagSlots);
-    }
     std::array<std::uint64_t, 44> schneider_diag_host{};
     static_assert(44 == static_cast<std::size_t>(SchneiderDiagSlot::Count),
                   "Schneider host mirror must match the device schema");
@@ -7305,35 +6039,8 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
     free_device(cinel02_rate_samples_device);
     free_device(cinel02_ct_rate_groups_device);
     free_device(cinel02_ct_rate_samples_device);
-    free_device(cinel02_diag_device);
-    free_device(cinel02_energy_device);
     free_device(cinel02_species_energy_device);
     free_device(cinel02_species_terminal_device);
-    free_device(cinel02_topas_compat_discarded_counts_device);
-    free_device(cinel02_topas_compat_discarded_kinetic_device);
-    free_device(cinel02_replay_delta_device);
-    free_device(cinel02_replay_abs_delta_device);
-    free_device(cinel02_replay_delta_positive_device);
-    free_device(cinel02_replay_delta_negative_device);
-    free_device(cinel02_replay_valid_device);
-    free_device(cinel02_replay_status_counts_device);
-    free_device(cinel02_replay_status_rate_query_energy_device);
-    free_device(cinel02_replay_status_replay_query_energy_device);
-    free_device(cinel02_replay_status_continuous_loss_device);
-    free_device(cinel02_replay_status_delta_device);
-    free_device(cinel02_replay_status_abs_delta_device);
-    free_device(cinel02_secondary_exposure_sums_device);
-    free_device(cinel02_secondary_exposure_counts_device);
-    free_device(cinel02_parent_outcome_counts_device);
-    free_device(cinel02_parent_outcome_incident_device);
-    free_device(cinel02_parent_outcome_after_device);
-    free_device(cinel02_parent_outcome_local_device);
-    free_device(cinel02_parent_outcome_export_device);
-    free_device(cinel02_parent_outcome_import_device);
-    free_device(cinel02_generated_transition_counts_device);
-    free_device(cinel02_generated_transition_energy_device);
-    free_device(cinel02_queued_transition_counts_device);
-    free_device(cinel02_queued_transition_energy_device);
     free_device(untracked_nuclear_device);
     free_device(other_terminal_energy_device);
     free_device(cutoff_stopped_energy_device);
@@ -7624,88 +6331,15 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
     result.fred_invert_error_tgt_o = invert_err_tgt_o;
     result.secondary_queue_overflow = overflow_count_host;
     result.secondary_queue_overflow_energy_MeV = static_cast<double>(overflow_energy_host);
-    result.cinel02_diagnostics = cinel02_diag_host;
-    for (std::size_t i = 0; i < kCinel02EnergySlots; ++i) {
-        result.cinel02_energy_ledger_MeV[i] =
-            static_cast<double>(cinel02_energy_host[i]);
-    }
+    // Retired CINEL02 diagnostics retain their zero-initialized result fields.
+    // Current shared species/grid measurements must still be copied.
     for (std::size_t i = 0; i < kCinel02SpeciesEnergySlots; ++i) {
         result.cinel02_species_transport_ledger_MeV[i] =
             static_cast<double>(cinel02_species_energy_host[i]);
     }
     result.in_grid_deposited_energy_MeV = grid_deposited_in_host;
     result.outside_grid_deposited_energy_MeV = grid_deposited_out_host;
-    result.cinel02_species_terminal_reason_counts =
-        cinel02_species_terminal_host;
-    result.cinel02_topas_compat_discarded_counts =
-        cinel02_topas_compat_discarded_counts_host;
-    for (std::size_t i = 0; i < TransportResult::species_ledger_species_count; ++i) {
-        result.cinel02_topas_compat_discarded_kinetic_MeV[i] =
-            static_cast<double>(cinel02_topas_compat_discarded_kinetic_host[i]);
-    }
-    for (std::size_t i = 0; i < TransportResult::species_ledger_species_count; ++i) {
-        result.cinel02_replay_delta_MeV_per_u[i] =
-            static_cast<double>(cinel02_replay_delta_host[i]);
-        result.cinel02_replay_abs_delta_MeV_per_u[i] =
-            static_cast<double>(cinel02_replay_abs_delta_host[i]);
-        result.cinel02_replay_delta_positive_counts[i] =
-            cinel02_replay_delta_positive_host[i];
-        result.cinel02_replay_delta_negative_counts[i] =
-            cinel02_replay_delta_negative_host[i];
-        result.cinel02_replay_valid_counts[i] = cinel02_replay_valid_host[i];
-    }
-    for (std::size_t i = 0; i < kCinel02ReplayStatusSlots; ++i) {
-        result.cinel02_replay_status_counts[i] = cinel02_replay_status_counts_host[i];
-        result.cinel02_replay_status_rate_query_energy_MeV[i] =
-            static_cast<double>(cinel02_replay_status_rate_query_energy_host[i]);
-        result.cinel02_replay_status_replay_query_energy_MeV[i] =
-            static_cast<double>(cinel02_replay_status_replay_query_energy_host[i]);
-        result.cinel02_replay_status_continuous_loss_to_collision_MeV[i] =
-            static_cast<double>(cinel02_replay_status_continuous_loss_host[i]);
-        result.cinel02_replay_status_delta_MeV_per_u[i] =
-            static_cast<double>(cinel02_replay_status_delta_host[i]);
-        result.cinel02_replay_status_abs_delta_MeV_per_u[i] =
-            static_cast<double>(cinel02_replay_status_abs_delta_host[i]);
-    }
-    for (std::size_t i = 0; i < kCinel02ExposureSumSlots; ++i) {
-        result.cinel02_secondary_exposure_sums[i] =
-            static_cast<double>(cinel02_secondary_exposure_sums_host[i]);
-    }
-    for (std::size_t i = 0; i < kCinel02ExposureCountSlots; ++i) {
-        result.cinel02_secondary_exposure_counts[i] =
-            cinel02_secondary_exposure_counts_host[i];
-    }
-    for (std::size_t i = 0; i < kCinel02ParentOutcomeSlots; ++i) {
-        result.cinel02_parent_outcome_counts[i] = cinel02_parent_outcome_counts_host[i];
-        result.cinel02_parent_outcome_incident_energy_MeV[i] =
-            static_cast<double>(cinel02_parent_outcome_incident_host[i]);
-        result.cinel02_parent_outcome_after_energy_MeV[i] =
-            static_cast<double>(cinel02_parent_outcome_after_host[i]);
-        result.cinel02_parent_outcome_local_deposit_MeV[i] =
-            static_cast<double>(cinel02_parent_outcome_local_host[i]);
-        result.cinel02_parent_outcome_export_MeV[i] =
-            static_cast<double>(cinel02_parent_outcome_export_host[i]);
-        result.cinel02_parent_outcome_import_MeV[i] =
-            static_cast<double>(cinel02_parent_outcome_import_host[i]);
-    }
-    for (std::size_t i = 0; i < kCinel02TransitionSlots; ++i) {
-        result.cinel02_generated_transition_counts[i] =
-            cinel02_generated_transition_counts_host[i];
-        result.cinel02_generated_transition_kinetic_MeV[i] =
-            static_cast<double>(cinel02_generated_transition_energy_host[i]);
-        result.cinel02_queued_transition_counts[i] =
-            cinel02_queued_transition_counts_host[i];
-        result.cinel02_queued_transition_kinetic_MeV[i] =
-            static_cast<double>(cinel02_queued_transition_energy_host[i]);
-    }
-    if (use_cinel02 && config.cinel02_strict_match &&
-        (result.cinel02_diagnostics[4] != 0U || result.cinel02_diagnostics[5] != 0U ||
-         result.cinel02_diagnostics[18] != 0U || result.cinel02_diagnostics[19] != 0U ||
-         result.cinel02_diagnostics[34] != 0U ||
-         result.cinel02_diagnostics[2] != result.cinel02_diagnostics[3] + result.cinel02_diagnostics[4] + result.cinel02_diagnostics[5] ||
-         result.cinel02_diagnostics[16] != result.cinel02_diagnostics[17] + result.cinel02_diagnostics[18] + result.cinel02_diagnostics[19])) {
-        throw std::runtime_error("CINEL02 strict match failed");
-    }
+    result.cinel02_species_terminal_reason_counts = cinel02_species_terminal_host;
 
     // Aggregate the flat Schneider device schema into named diagnostics.
     {
@@ -7784,9 +6418,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
 
     // 8-part energy accounting ledger
     result.energy_ledger.E_continuous_ionizing = result.total_deposited_energy_MeV;
-    result.energy_ledger.E_nuclear_local = use_cinel02
-        ? (result.cinel02_energy_ledger_MeV[3] + result.cinel02_energy_ledger_MeV[4])
-        : 0.0;
+    result.energy_ledger.E_nuclear_local = 0.0;
     result.energy_ledger.E_transported_secondaries = result.queued_secondary_energy_MeV;
     result.energy_ledger.E_escaped_charged = result.escaped_energy_MeV;
     result.energy_ledger.E_neutral = result.untransported_neutral_energy_MeV;
@@ -7820,9 +6452,8 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                  std::to_string(overflow_energy_host) + " MeV). Shard must be split and rerun with fewer particles.");
     }
 
-    result.nuclear_interactions = use_cinel02
-        ? result.cinel02_diagnostics[2] + result.cinel02_diagnostics[16]
-        : (use_schneider_primary_xs ? schneider_inelastic_host : result.fred_inelastic_events);
+    result.nuclear_interactions =
+        use_schneider_primary_xs ? schneider_inelastic_host : result.fred_inelastic_events;
     result.total_steps = std::accumulate(steps_host.begin(), steps_host.end(), std::uint64_t{0});
 
     result.elapsed_seconds =

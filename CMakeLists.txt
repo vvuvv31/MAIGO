@@ -213,16 +213,6 @@ if(BUILD_TESTING)
         endif()
     endif()
 
-    add_executable(run_step20_gpu tools/run_step20_gpu.cpp)
-    target_link_libraries(run_step20_gpu PRIVATE carbon_core)
-    if(CARBON_ENABLE_SYCL)
-        target_compile_options(run_step20_gpu PRIVATE -fsycl)
-        if(CARBON_SYCL_TARGETS)
-            target_compile_options(run_step20_gpu PRIVATE
-                -fsycl-targets=${CARBON_SYCL_TARGETS})
-        endif()
-    endif()
-
     add_executable(run_step21_level3_gpu tools/run_step21_level3_gpu.cpp)
     target_link_libraries(run_step21_level3_gpu PRIVATE carbon_core)
     if(CARBON_ENABLE_SYCL)

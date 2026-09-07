@@ -57,17 +57,9 @@ SchneiderRateTable SchneiderRateTable::from_binary(
     if (std::strncmp(header.magic, "SCHNRATE", 8) != 0) {
         throw std::runtime_error("Invalid magic in Schneider rate binary: " + binary_path.string());
     }
-    // Version 1: frozen [0.5, 430.0]/860 grid, legacy endpoint clamp.
-    // Version 3: v2.1 C12 product ([0.1, 460.1]/921) with an appended
-    // per-target valid-domain block and masked totals. Version 2 was a
-    // retired intermediate that never shipped; rejected explicitly.
-    if (header.version == 2) {
-        throw std::runtime_error("Retired version 2 in Schneider rate binary (never shipped): " +
-                                 binary_path.string());
-    }
-    const bool is_v3 = (header.version == 3);
-    if (header.version != 1 && !is_v3) {
-        throw std::runtime_error("Unsupported binary version in: " + binary_path.string());
+    // Only the current v2.1 domain-masked rate schema is supported.
+    if (header.version != 3) {
+        throw std::runtime_error("Schneider rate requires SCHNRATE v3; legacy versions are retired: " + binary_path.string());
     }
     if (header.num_sections != kSchneiderNumSections) {
         throw std::runtime_error("Invalid section count in: " + binary_path.string());
@@ -75,9 +67,9 @@ SchneiderRateTable SchneiderRateTable::from_binary(
     if (header.num_targets != kSchneiderNumTargets) {
         throw std::runtime_error("Invalid target count in: " + binary_path.string());
     }
-    const std::size_t expect_energies = is_v3 ? 921 : kSchneiderNumEnergies;
-    const double expect_emin = is_v3 ? 0.1 : 0.5;
-    const double expect_emax = is_v3 ? 460.1 : 430.0;
+    const std::size_t expect_energies = 921;
+    const double expect_emin = 0.1;
+    const double expect_emax = 460.1;
     if (header.num_energies != expect_energies) {
         throw std::runtime_error("Invalid energy count in: " + binary_path.string());
     }
@@ -117,7 +109,7 @@ SchneiderRateTable SchneiderRateTable::from_binary(
         throw std::runtime_error("Truncated total rate payload in: " + binary_path.string());
     }
 
-    if (is_v3) {
+    {
         table.channel_domains_.resize(kSchneiderNumTargets);
         in.read(reinterpret_cast<char*>(table.channel_domains_.data()),
                 kSchneiderNumTargets * sizeof(SchneiderRateDomainEntry));
@@ -168,9 +160,7 @@ SchneiderRateTable SchneiderRateTable::from_binary(
         }
     }
 
-    // Companion metadata: REQUIRED. v1 keeps the legacy data_sha256
-    // presence check (frozen path); substring filename matching is removed.
-    // v3 requires the full schema with binary<->metadata equality on
+    // Companion metadata requires the full schema with binary<->metadata equality on
     // filename, SHA, magic, version, target order, grid, and domains.
     std::filesystem::path resolved_meta = metadata_path;
     if (resolved_meta.empty()) {
@@ -190,12 +180,7 @@ SchneiderRateTable SchneiderRateTable::from_binary(
         }
         std::string meta_content((std::istreambuf_iterator<char>(meta_in)),
                                  std::istreambuf_iterator<char>());
-        if (!is_v3) {
-            if (meta_content.find("\"data_sha256\"") == std::string::npos) {
-                throw std::runtime_error("SchneiderRateTable: v1 metadata missing data_sha256: " +
-                                         resolved_meta.string());
-            }
-        } else {
+        {
             minjson::Parser parser(meta_content);
             const minjson::Value meta = parser.parse();
             const std::string data_filename =
@@ -300,30 +285,13 @@ double SchneiderRateTable::interpolate_mass_partial(
         throw std::out_of_range("SchneiderRateTable section or target index out of range");
     }
     // v3: mask before interpolation; exactly 0 outside the channel domain.
-    if (binary_version_ == 3) {
-        const SchneiderRateDomainEntry& dom = channel_domain(target_idx);
-        if (dom.has_support == 0 || !(energy_mevu >= energy_min_mevu_) ||
-            !(energy_mevu <= energy_max_mevu_) || energy_mevu < dom.energy_min_mevu ||
-            energy_mevu > dom.energy_max_mevu) {
-            return 0.0;
-        }
-        return interpolate_masked_partial(section_id, target_idx, energy_mevu);
+    const SchneiderRateDomainEntry& dom = channel_domain(target_idx);
+    if (dom.has_support == 0 || !(energy_mevu >= energy_min_mevu_) ||
+        !(energy_mevu <= energy_max_mevu_) || energy_mevu < dom.energy_min_mevu ||
+        energy_mevu > dom.energy_max_mevu) {
+        return 0.0;
     }
-    if (energy_mevu <= energy_min_mevu_) {
-        return mass_partial_rate(section_id, target_idx, 0);
-    }
-    if (energy_mevu >= energy_max_mevu_) {
-        return mass_partial_rate(section_id, target_idx, num_energies_ - 1);
-    }
-
-    const double frac_idx = (energy_mevu - energy_min_mevu_) / energy_step_mevu_;
-    const auto lower_idx = static_cast<std::size_t>(std::floor(frac_idx));
-    const auto upper_idx = std::min(lower_idx + 1, num_energies_ - 1);
-    const double alpha = frac_idx - static_cast<double>(lower_idx);
-
-    const double y0 = mass_partial_rate(section_id, target_idx, lower_idx);
-    const double y1 = mass_partial_rate(section_id, target_idx, upper_idx);
-    return (1.0 - alpha) * y0 + alpha * y1;
+    return interpolate_masked_partial(section_id, target_idx, energy_mevu);
 }
 
 double SchneiderRateTable::interpolate_mass_total(
@@ -332,35 +300,18 @@ double SchneiderRateTable::interpolate_mass_total(
         throw std::out_of_range("SchneiderRateTable section index out of range");
     }
     // v3: host mirror of the device mask; total = sum of masked partials.
-    if (binary_version_ == 3) {
-        if (!(energy_mevu >= energy_min_mevu_) || !(energy_mevu <= energy_max_mevu_)) {
-            return 0.0;
-        }
-        double sum = 0.0;
-        for (std::size_t t = 0; t < kSchneiderNumTargets; ++t) {
-            sum += interpolate_mass_partial(section_id, t, energy_mevu);
-        }
-        // Hazard/sampler unity with the device (float-sliver guard).
-        if (!(sum > 1e-12)) {
-            return 0.0;
-        }
-        return sum;
+    if (!(energy_mevu >= energy_min_mevu_) || !(energy_mevu <= energy_max_mevu_)) {
+        return 0.0;
     }
-    if (energy_mevu <= energy_min_mevu_) {
-        return mass_total_rate(section_id, 0);
+    double sum = 0.0;
+    for (std::size_t t = 0; t < kSchneiderNumTargets; ++t) {
+        sum += interpolate_mass_partial(section_id, t, energy_mevu);
     }
-    if (energy_mevu >= energy_max_mevu_) {
-        return mass_total_rate(section_id, num_energies_ - 1);
+    // Hazard/sampler unity with the device (float-sliver guard).
+    if (!(sum > 1e-12)) {
+        return 0.0;
     }
-
-    const double frac_idx = (energy_mevu - energy_min_mevu_) / energy_step_mevu_;
-    const auto lower_idx = static_cast<std::size_t>(std::floor(frac_idx));
-    const auto upper_idx = std::min(lower_idx + 1, num_energies_ - 1);
-    const double alpha = frac_idx - static_cast<double>(lower_idx);
-
-    const double y0 = mass_total_rate(section_id, lower_idx);
-    const double y1 = mass_total_rate(section_id, upper_idx);
-    return (1.0 - alpha) * y0 + alpha * y1;
+    return sum;
 }
 
 double SchneiderRateTable::interpolate_masked_partial(std::size_t section_id, std::size_t target_idx,

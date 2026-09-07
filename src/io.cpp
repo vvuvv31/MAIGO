@@ -1533,21 +1533,13 @@ std::string schneider_package_provenance_json(const std::filesystem::path& path)
 
 void write_schneider_physics_provenance(std::ofstream& output, const TransportConfig& config) {
     const std::filesystem::path primary_rate =
-        !config.ct_schneider_primary_rate_file.empty()
-            ? config.ct_schneider_primary_rate_file
-            : std::filesystem::path("data/schneider/schneider_inelastic_rates_v1.bin");
+        config.ct_schneider_primary_rate_file;
     const std::filesystem::path secondary_rate =
-        !config.ct_schneider_secondary_rate_file.empty()
-            ? config.ct_schneider_secondary_rate_file
-            : std::filesystem::path("data/schneider/secondary_inelastic_rates_v1.bin");
+        config.ct_schneider_secondary_rate_file;
     const std::filesystem::path primary_pkg =
-        !config.ct_schneider_c12_cinel03_file.empty()
-            ? config.ct_schneider_c12_cinel03_file
-            : std::filesystem::path("data/schneider/cinel03_c12_targets.bin");
+        config.ct_schneider_c12_cinel03_file;
     const std::filesystem::path secondary_pkg =
-        !config.ct_schneider_secondary_cinel03_file.empty()
-            ? config.ct_schneider_secondary_cinel03_file
-            : std::filesystem::path("data/schneider/cinel03_secondary_targets.bin");
+        config.ct_schneider_secondary_cinel03_file;
     output << "  \"schneider_physics_provenance\": {\n"
            << "    \"primary_rate\": " << schneider_rate_provenance_json(primary_rate) << ",\n"
            << "    \"secondary_rate\": " << schneider_rate_provenance_json(secondary_rate) << ",\n"
@@ -1562,9 +1554,7 @@ void write_validation_scope(std::ofstream& output, const TransportConfig& config
                                      : config.ct_grid_file.filename().string();
     std::string registry = "unknown";
     const std::filesystem::path sec_rate =
-        !config.ct_schneider_secondary_rate_file.empty()
-            ? config.ct_schneider_secondary_rate_file
-            : std::filesystem::path("data/schneider/secondary_inelastic_rates_v1.bin");
+        config.ct_schneider_secondary_rate_file;
     if (std::filesystem::exists(sec_rate)) {
         std::ifstream in(sec_rate, std::ios::binary);
         char magic[8]{};

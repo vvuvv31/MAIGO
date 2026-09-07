@@ -533,6 +533,9 @@ bool TransportConfig::validation_scorers() const noexcept {
 }
 
 void TransportConfig::validate() const {
+    if (nuclear_model == "cinel02") {
+        throw std::invalid_argument("nuclear_model cinel02 is retired; use the current shared CINEL03 bundle with geant4 selector");
+    }
     if (config_schema_version != 1U) {
         throw std::invalid_argument(
             "config_schema_version must be 1 for the current flat configuration schema");
@@ -1464,13 +1467,9 @@ void TransportConfig::validate() const {
 // is refused. Water mode never reaches here (is_schneider_ct_mode gate).
 void validate_schneider_physics_bundle(const TransportConfig& config) {
     const std::filesystem::path primary_rate =
-        !config.ct_schneider_primary_rate_file.empty()
-            ? config.ct_schneider_primary_rate_file
-            : std::filesystem::path("data/schneider/schneider_inelastic_rates_v1.bin");
+        config.ct_schneider_primary_rate_file;
     const std::filesystem::path secondary_rate =
-        !config.ct_schneider_secondary_rate_file.empty()
-            ? config.ct_schneider_secondary_rate_file
-            : std::filesystem::path("data/schneider/secondary_inelastic_rates_v1.bin");
+        config.ct_schneider_secondary_rate_file;
 
     auto peek_version = [](const std::filesystem::path& p) -> std::uint32_t {
         if (!std::filesystem::exists(p)) {
@@ -1498,7 +1497,10 @@ void validate_schneider_physics_bundle(const TransportConfig& config) {
                 "Schneider CT startup failed: v3 rate file requires "
                 "ct_schneider_physics_bundle_file (refusing unbundled v3)");
         }
-        return;
+        throw std::runtime_error("Current CINEL03 requires a v2.1 physics bundle; unbundled legacy rates are retired");
+    }
+    if (primary_ver != 3 || secondary_ver != 3) {
+        throw std::runtime_error("Current CINEL03 requires primary and secondary v3 rate binaries");
     }
 
     const std::filesystem::path& bundle_path = config.ct_schneider_physics_bundle_file;
@@ -1516,13 +1518,9 @@ void validate_schneider_physics_bundle(const TransportConfig& config) {
     }
 
     const std::filesystem::path c12_cinel =
-        !config.ct_schneider_c12_cinel03_file.empty()
-            ? config.ct_schneider_c12_cinel03_file
-            : std::filesystem::path("data/schneider/cinel03_c12_targets.bin");
+        config.ct_schneider_c12_cinel03_file;
     const std::filesystem::path sec_cinel =
-        !config.ct_schneider_secondary_cinel03_file.empty()
-            ? config.ct_schneider_secondary_cinel03_file
-            : std::filesystem::path("data/schneider/cinel03_secondary_targets.bin");
+        config.ct_schneider_secondary_cinel03_file;
     const std::filesystem::path stopping =
         !config.ct_schneider_stopping_power_file.empty()
             ? config.ct_schneider_stopping_power_file
@@ -1692,9 +1690,7 @@ void validate_schneider_ct_startup(const TransportConfig& config) {
         return;
     }
 
-    // Out-of-scope nuclear policy: explicit em_only with no default fallback
-    // on the v2.1 bundle path. v1 legacy configs predate the key and keep
-    // working (frozen evidence untouched).
+    // Explicit em_only policy on the mandatory current bundle path.
     if (!config.ct_schneider_physics_bundle_file.empty() &&
         config.secondary_out_of_scope_nuclear_policy != "em_only") {
         throw std::invalid_argument(
@@ -1707,11 +1703,8 @@ void validate_schneider_ct_startup(const TransportConfig& config) {
 
     // Determine primary rate / cross section source
     std::filesystem::path primary_source = config.ct_schneider_primary_rate_file;
-    if (primary_source.empty() && !config.ct_schneider_cross_section_file.empty()) {
-        primary_source = config.ct_schneider_cross_section_file;
-    }
     if (primary_source.empty()) {
-        primary_source = "data/schneider/schneider_inelastic_rates_v1.bin";
+        throw std::runtime_error("Current CINEL03 requires an explicit primary rate binary; legacy fallback is retired");
     }
 
     if (!std::filesystem::exists(primary_source)) {
@@ -1720,15 +1713,9 @@ void validate_schneider_ct_startup(const TransportConfig& config) {
 
     // When secondary transport is active or in production mode, verify secondary rate and CINEL03 packages
     if (config.enable_secondary_transport || config.run_mode == RunMode::production) {
-        std::filesystem::path c12_cinel = !config.ct_schneider_c12_cinel03_file.empty()
-                                              ? config.ct_schneider_c12_cinel03_file
-                                              : std::filesystem::path("data/schneider/cinel03_c12_targets.bin");
-        std::filesystem::path sec_rate = !config.ct_schneider_secondary_rate_file.empty()
-                                             ? config.ct_schneider_secondary_rate_file
-                                             : std::filesystem::path("data/schneider/secondary_inelastic_rates_v1.bin");
-        std::filesystem::path sec_cinel = !config.ct_schneider_secondary_cinel03_file.empty()
-                                              ? config.ct_schneider_secondary_cinel03_file
-                                              : std::filesystem::path("data/schneider/cinel03_secondary_targets.bin");
+        std::filesystem::path c12_cinel = config.ct_schneider_c12_cinel03_file;
+        std::filesystem::path sec_rate = config.ct_schneider_secondary_rate_file;
+        std::filesystem::path sec_cinel = config.ct_schneider_secondary_cinel03_file;
         std::filesystem::path stopping_table = !config.ct_schneider_stopping_power_file.empty()
                                                    ? config.ct_schneider_stopping_power_file
                                                    : std::filesystem::path("data/schneider/schneider_stopping_v1.bin");
