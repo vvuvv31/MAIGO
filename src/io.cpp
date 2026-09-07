@@ -1557,7 +1557,7 @@ void write_schneider_physics_provenance(std::ofstream& output, const TransportCo
 }
 
 void write_validation_scope(std::ofstream& output, const TransportConfig& config) {
-    const std::string geometry = config.ct_grid_file.empty()
+    const std::string geometry = config.unified_water_nuclear_transport ? "native_G4_WATER" : config.ct_grid_file.empty()
                                      ? "none"
                                      : config.ct_grid_file.filename().string();
     std::string registry = "unknown";
@@ -1585,7 +1585,7 @@ void write_validation_scope(std::ofstream& output, const TransportConfig& config
            << "    \"out_of_scope_projectiles\": [\"He6\", \"B8\", \"C10\"],\n"
            << "    \"secondary_out_of_scope_nuclear_policy\": \""
            << config.secondary_out_of_scope_nuclear_policy << "\",\n"
-           << "    \"purpose\": \"GPU_TOPAS_CT_DOSE_MATCH_RESEARCH\",\n"
+           << "    \"purpose\": \"" << (config.unified_water_nuclear_transport ? "UNIFIED_WATER_FRAMEWORK_MATCH_PENDING" : "GPU_TOPAS_CT_DOSE_MATCH_RESEARCH") << "\",\n"
            << "    \"production_generalization\": false\n"
            << "  },\n";
 }
@@ -1620,7 +1620,8 @@ void write_out_of_scope_isotope_summary(std::ofstream& output, const TransportRe
             }
         }
         const auto at = [&](std::size_t metric) {
-            return result.cinel02_species_transport_ledger_MeV[iso.species * 11 + metric];
+            return result.cinel02_species_transport_ledger_MeV[
+                iso.species * Cinel02SpeciesLedgerSchema::metric_count + metric];
         };
         const bool recorded = (at(0) != 0.0 || at(1) != 0.0 || at(3) != 0.0 ||
                                at(5) != 0.0 || at(7) != 0.0 || at(9) != 0.0);
@@ -1711,6 +1712,13 @@ void write_energy_ledger_json(const std::filesystem::path& path,
            << result.neutral_package_closure_residual_MeV << ",\n"
            << "  \"nuclear_interactions\": " << result.nuclear_interactions << ",\n"
            << "  \"material_physics_mode\": \"" << material_physics_mode_name(config.material_physics_mode) << "\",\n"
+           << "  \"upstream_air_mcs_covariance_enabled\": " << (config.spots_enable_upstream_air_mcs ? "true" : "false") << ",\n"
+           << "  \"ct_primary_midpoint_stopping_diagnostic\": " << (config.ct_primary_midpoint_stopping_diagnostic ? "true" : "false") << ",\n"
+           << "  \"ct_secondary_exact_faces_diagnostic\": " << (config.ct_secondary_exact_faces_diagnostic ? "true" : "false") << ",\n"
+           << "  \"ct_secondary_mcs_off_diagnostic\": " << (config.ct_secondary_mcs_off_diagnostic ? "true" : "false") << ",\n"
+           << "  \"ct_secondary_schneider_sp_diagnostic\": " << (config.ct_secondary_schneider_sp_diagnostic ? "true" : "false") << ",\n"
+           << "  \"upstream_air_mcs_file\": \"" << config.spots_upstream_air_mcs_file.string() << "\",\n"
+           << "  \"upstream_air_mcs_sha256\": \"" << config.spots_upstream_air_mcs_sha256 << "\",\n"
            << "  \"ct_schneider_primary_rate_file\": \"" << config.ct_schneider_primary_rate_file.string() << "\",\n"
            << "  \"ct_schneider_c12_cinel03_file\": \"" << config.ct_schneider_c12_cinel03_file.string() << "\",\n"
            << "  \"ct_schneider_secondary_rate_file\": \"" << config.ct_schneider_secondary_rate_file.string() << "\",\n"
@@ -1732,9 +1740,18 @@ void write_energy_ledger_json(const std::filesystem::path& path,
            << "  \"E_schneider_primary_delta_longitudinal_escaped_scorer_MeV\": "
            << result.schneider_primary_delta_longitudinal_escaped_scorer_MeV << ",\n"
            << "  \"ct_schneider_physics_bundle_file\": \"" << config.ct_schneider_physics_bundle_file.string() << "\",\n";
+    output << "  \"ct_electron_segment_transport\": "
+           << (!config.ct_electron_joint_response_diagnostic_file.empty() ? "true" : "false") << ",\n";
+    output << "  \"unified_water_nuclear_transport\": " << (config.unified_water_nuclear_transport ? "true" : "false") << ",\n";
+    if (config.unified_water_nuclear_transport) {
+        output << "  \"unified_water_material_sha256\": \"" << config.unified_water_material_sha256 << "\",\n"
+               << "  \"unified_water_primary_stopping_file\": \"" << config.primary_stopping_power_file.string() << "\",\n"
+               << "  \"unified_water_material_id_note\": \"255 is a diagnostic sentinel, not a Schneider section; rate uses a separate water row\",\n";
+    }
     if(!config.ct_electron_joint_response_diagnostic_file.empty()) {
         const auto& d=result.electron_joint_diagnostics;
         output<<"  \"electron_joint_response\": {\"status\": \"unvalidated_interface_diagnostic\", "
+              <<"\"patient_experiment\": "<<(config.ct_electron_joint_patient_experiment ? "true" : "false")<<", "
               <<"\"data_sha256\": \""<<config.ct_electron_joint_response_sha256<<"\", "
               <<"\"metadata_sha256\": \""<<config.ct_electron_joint_response_metadata_sha256<<"\", "
               <<"\"ordered_path_sha256\": \""<<result.electron_ordered_path_sha256<<"\", "
@@ -1937,14 +1954,17 @@ void write_energy_ledger_json(const std::filesystem::path& path,
         result.cinel02_energy_ledger_MeV[7];
     output << "],\n"
            << "  \"cinel02_species_transport_ledger_layout\": "
-              "{\"shape\":[18,11],\"order\":[\"species\",\"metric\"],"
+              "{\"shape\":[" << Cinel02SpeciesLedgerSchema::species_count << ","
+           << Cinel02SpeciesLedgerSchema::metric_count
+           << "],\"order\":[\"species\",\"metric\"],"
               "\"species\":[\"1H\",\"2H\",\"3H\",\"3He\",\"4He\",\"6He\","
               "\"6Li\",\"7Li\",\"7Be\",\"9Be\",\"10Be\",\"8B\",\"10B\","
               "\"11B\",\"10C\",\"11C\",\"12C\",\"6Be\"],"
               "\"metric\":[\"queued_birth_kinetic\",\"continuous_deposit_all\","
               "\"continuous_deposit_fov\",\"nuclear_local_deposit_all\","
               "\"nuclear_local_deposit_fov\",\"terminal_deposit_all\","
-              "\"terminal_deposit_fov\",\"boundary_escape_kinetic\",\"reaction_export_kinetic\",\"step_limit_escape_kinetic\",\"reaction_import_kinetic\"]},\n"
+              "\"terminal_deposit_fov\",\"boundary_escape_kinetic\",\"reaction_export_kinetic\",\"step_limit_escape_kinetic\",\"reaction_import_kinetic\","
+              "\"cinel03_replay_input_fov\",\"cinel03_replay_step_dE_fov\"]},\n"
            << "  \"cinel02_species_transport_ledger_MeV\": [";
     for (std::size_t i = 0;
          i < result.cinel02_species_transport_ledger_MeV.size(); ++i) {

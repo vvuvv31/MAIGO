@@ -674,13 +674,15 @@ void TransportConfig::validate() const {
     }
     if (!ct_electron_joint_response_diagnostic_file.empty() &&
         (run_mode!=RunMode::smoke || !enable_ct_grid || !enable_voxel_scoring ||
-         enable_inelastic || enable_secondary_transport || initial_energy_MeVu!=175 ||
+         (!ct_electron_joint_patient_experiment && (enable_inelastic || enable_secondary_transport || initial_energy_MeVu!=175)) ||
          primary_atomic_number!=6 || primary_mass_number!=12 ||
          ct_schneider_delta_tail_file.empty() || ct_schneider_physics_bundle_file.empty() || !ct_schneider_delta_longitudinal_file.empty() ||
          ct_longitudinal_homogeneous_density_diagnostic || ct_longitudinal_interface_mass_diagnostic ||
          ct_electron_joint_response_sha256.size()!=64 || ct_electron_joint_response_metadata_sha256.size()!=64 ||
-         !primary_spot_batch.empty() || !topas_spots_file.empty() || !topas_spots_files.empty() || !tps_spots_file.empty()))
+         (!ct_electron_joint_patient_experiment && (!primary_spot_batch.empty() || !topas_spots_file.empty() || !topas_spots_files.empty() || !tps_spots_file.empty()))))
         throw std::invalid_argument("Joint electron response requires pinned, isolated 175 MeV/u C12 CT EM-only smoke; never stacked with longitudinal");
+    if(ct_electron_joint_patient_experiment && (ct_electron_joint_response_diagnostic_file.empty() || run_mode!=RunMode::smoke))
+        throw std::invalid_argument("Patient electron experiment requires explicit pinned data and smoke mode; production forbidden");
     if (ct_electron_joint_response_diagnostic_file.empty() &&
         (!ct_electron_joint_response_sha256.empty() || !ct_electron_joint_response_metadata_sha256.empty()))
         throw std::invalid_argument("Joint response pins without data");
@@ -695,6 +697,27 @@ void TransportConfig::validate() const {
             "175 MeV/u single beam and nuclear off");
     }
     const_cast<TransportConfig*>(this)->resolve_material_physics_mode();
+    if (unified_water_nuclear_transport) {
+        if (!is_water_mode() || enable_ct_grid ||
+            !ct_grid_file.empty() || enable_layered_phantom || enable_hetero_insert ||
+            !enable_voxel_scoring || primary_atomic_number != 6 || primary_mass_number != 12 ||
+            nuclear_model != "geant4" || enable_nuclear_elastic ||
+            initial_energy_MeVu > 430.0 ||
+            maximum_step_mm > 1.0 || maximum_relative_energy_loss > 0.005 + 1.e-6)
+            throw std::invalid_argument("Unified water requires C12 native homogeneous water, 3D scoring, geant4 selector and CT step limits; legacy water routing is retired");
+        if (!primary_inelastic_package_v2_file.empty() || !primary_inelastic_rate_v2_file.empty() ||
+            !water_cinel_package_file.empty() || !water_reaction_rate_file.empty() || !ct_cinel02_rate_file.empty())
+            throw std::invalid_argument("Unified water forbids CINEL02/water event and rate fallback keys");
+        if (!ct_electron_joint_response_diagnostic_file.empty() || !ct_schneider_delta_tail_file.empty() ||
+            !ct_schneider_delta_longitudinal_file.empty() || enable_electron_transport)
+            throw std::invalid_argument("Unified water has no validated pure-water electron response; CT response cannot substitute");
+        if (ct_schneider_physics_bundle_file.empty() || ct_schneider_primary_rate_file.empty() ||
+            ct_schneider_secondary_rate_file.empty() || ct_schneider_c12_cinel03_file.empty() ||
+            ct_schneider_secondary_cinel03_file.empty() || ct_schneider_stopping_power_file.empty() ||
+            unified_water_material_file.empty() || unified_water_material_sha256 !=
+                "60be17929880fe18f1758edc02350b3fa7140b817ab0d21cb75bd87dbc891f31")
+            throw std::invalid_argument("Unified water requires explicit v2.1 bundle paths and pinned G4_WATER material");
+    }
     if (!ct_electron_joint_response_diagnostic_file.empty() &&
         material_physics_mode != MaterialPhysicsMode::SchneiderCt)
         throw std::invalid_argument("Joint electron response requires Schneider CT, never water");
@@ -1365,6 +1388,22 @@ void TransportConfig::validate() const {
                 "enable_tps_coordinate_system requires DICOM LPS beam geometry");
         }
     }
+    if ((ct_secondary_exact_faces_diagnostic || ct_secondary_mcs_off_diagnostic) &&
+        (run_mode!=RunMode::smoke || !enable_ct_grid || ct_schneider_physics_bundle_file.empty()))
+        throw std::invalid_argument("Secondary exact faces requires smoke Schneider CT bundle");
+    if (ct_secondary_schneider_sp_diagnostic &&
+        (run_mode!=RunMode::smoke || !enable_ct_grid || ct_schneider_physics_bundle_file.empty() ||
+         ct_schneider_stopping_power_file.empty() || ct_stopping_power_scale!=1.0))
+        throw std::invalid_argument("Secondary Schneider stopping diagnostic requires smoke CT bundle, exact primary stopping and unit scale");
+    if (ct_primary_midpoint_stopping_diagnostic &&
+        (run_mode!=RunMode::smoke || !enable_ct_grid || ct_schneider_stopping_power_file.empty() || enable_csda_range_energy_loss))
+        throw std::invalid_argument("CT midpoint stopping requires smoke Schneider CT without legacy CSDA override");
+    if (spots_enable_upstream_air_mcs &&
+        (run_mode != RunMode::smoke || !enable_tps_source || !enable_ct_grid ||
+         !spots_enable_upstream_air_energy_loss || !enable_multiple_scattering ||
+         spots_upstream_air_mcs_file.empty() || spots_upstream_air_mcs_sha256.size()!=64)) {
+        throw std::invalid_argument("upstream air MCS requires smoke TPS CT, air energy loss and MCS enabled");
+    }
     if (spots_enable_upstream_air_energy_loss) {
         if (!enable_tps_coordinate_system &&
             spots_geometry_mode != "tps_90" &&
@@ -1634,10 +1673,10 @@ void validate_schneider_physics_bundle(const TransportConfig& config) {
 }
 
 void validate_schneider_ct_startup(const TransportConfig& config) {
-    if (!config.is_schneider_ct_mode()) {
+    if (!config.is_schneider_ct_mode() && !config.unified_water_nuclear_transport) {
         return;
     }
-    if (config.ct_grid_file.empty()) {
+    if (config.is_schneider_ct_mode() && config.ct_grid_file.empty()) {
         throw std::invalid_argument("MaterialPhysicsMode::SchneiderCt requires ct_grid_file");
     }
     if (config.is_primary_attenuation_only_mode()) {
@@ -1977,6 +2016,14 @@ TransportConfig load_config(const std::filesystem::path& path) {
     }
     config.water_cinel_package_file = parse_path(
         values, "water_cinel_package_file", config.water_cinel_package_file);
+    config.unified_water_nuclear_transport = parse_bool(values,
+        "unified_water_nuclear_transport", config.unified_water_nuclear_transport);
+    config.unified_water_material_file = parse_path(values,
+        "unified_water_material_file", config.unified_water_material_file);
+    if (!config.unified_water_material_file.empty())
+        config.unified_water_material_file = resolve_input_path_from_config(config.unified_water_material_file, path);
+    if (const auto it = values.find("unified_water_material_sha256"); it != values.end())
+        config.unified_water_material_sha256 = it->second;
     if (config.water_cinel_package_file.empty()) {
         config.water_cinel_package_file = config.primary_inelastic_package_v2_file;
     }
@@ -2029,10 +2076,26 @@ TransportConfig load_config(const std::filesystem::path& path) {
     }
     config.ct_electron_joint_response_diagnostic_file = parse_path(values,
         "ct_electron_joint_response_diagnostic_file",config.ct_electron_joint_response_diagnostic_file);
+    config.ct_electron_joint_patient_experiment = parse_bool(values,
+        "ct_electron_joint_patient_experiment",config.ct_electron_joint_patient_experiment);
     if(!config.ct_electron_joint_response_diagnostic_file.empty())
         config.ct_electron_joint_response_diagnostic_file=resolve_input_path_from_config(config.ct_electron_joint_response_diagnostic_file,path);
     if(const auto it=values.find("ct_electron_joint_response_sha256");it!=values.end())config.ct_electron_joint_response_sha256=it->second;
     if(const auto it=values.find("ct_electron_joint_response_metadata_sha256");it!=values.end())config.ct_electron_joint_response_metadata_sha256=it->second;
+    // YAML master switch for the response replay. Absence preserves legacy
+    // file-driven activation. OFF leaves the YAML pins reusable but removes
+    // the effective response, including its experimental quality marker.
+    if (values.find("ct_electron_segment_transport") != values.end()) {
+        if (parse_bool(values, "ct_electron_segment_transport", false)) {
+            if (config.ct_electron_joint_response_diagnostic_file.empty())
+                throw std::invalid_argument("ct_electron_segment_transport=true requires ct_electron_joint_response_diagnostic_file");
+        } else {
+            config.ct_electron_joint_response_diagnostic_file.clear();
+            config.ct_electron_joint_response_sha256.clear();
+            config.ct_electron_joint_response_metadata_sha256.clear();
+            config.ct_electron_joint_patient_experiment = false;
+        }
+    }
     config.ct_schneider_delta_longitudinal_file = parse_path(
         values, "ct_schneider_delta_longitudinal_file",
         config.ct_schneider_delta_longitudinal_file);
@@ -2621,6 +2684,18 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.spots_enable_upstream_air_energy_loss = parse_bool(
         values, "spots_enable_upstream_air_energy_loss",
         config.spots_enable_upstream_air_energy_loss);
+    config.spots_enable_upstream_air_mcs = parse_bool(
+        values, "spots_enable_upstream_air_mcs", config.spots_enable_upstream_air_mcs);
+    config.ct_primary_midpoint_stopping_diagnostic = parse_bool(values,
+        "ct_primary_midpoint_stopping_diagnostic", config.ct_primary_midpoint_stopping_diagnostic);
+    config.ct_secondary_exact_faces_diagnostic = parse_bool(values,
+        "ct_secondary_exact_faces_diagnostic", config.ct_secondary_exact_faces_diagnostic);
+    config.ct_secondary_mcs_off_diagnostic = parse_bool(values,
+        "ct_secondary_mcs_off_diagnostic", config.ct_secondary_mcs_off_diagnostic);
+    config.ct_secondary_schneider_sp_diagnostic = parse_bool(values,
+        "ct_secondary_schneider_sp_diagnostic", config.ct_secondary_schneider_sp_diagnostic);
+    config.spots_upstream_air_mcs_file = parse_path(values, "spots_upstream_air_mcs_file", config.spots_upstream_air_mcs_file);
+    if (const auto it=values.find("spots_upstream_air_mcs_sha256");it!=values.end()) config.spots_upstream_air_mcs_sha256=it->second;
     config.spots_upstream_air_stopping_power_file = parse_path(
         values, "spots_upstream_air_stopping_power_file",
         config.spots_upstream_air_stopping_power_file);

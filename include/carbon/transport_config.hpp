@@ -210,6 +210,10 @@ struct TransportConfig {
 
     // Canonical key names for water and Schneider CT physics
     std::filesystem::path water_cinel_package_file{};
+    // Derived routing: native water material, shared CINEL03 framework. No legacy fallback.
+    bool unified_water_nuclear_transport{true};
+    std::filesystem::path unified_water_material_file{};
+    std::string unified_water_material_sha256{};
     std::filesystem::path water_reaction_rate_file{};
     std::filesystem::path ct_schneider_c12_cinel03_file{};
     std::filesystem::path ct_schneider_secondary_cinel03_file{};
@@ -240,6 +244,7 @@ struct TransportConfig {
     bool ct_longitudinal_interface_mass_diagnostic{false};
     // Independent correlated bulk response, isolated EM-only interface pilot.
     std::filesystem::path ct_electron_joint_response_diagnostic_file{};
+    bool ct_electron_joint_patient_experiment{false};
     std::string ct_electron_joint_response_sha256{};
     std::string ct_electron_joint_response_metadata_sha256{};
 
@@ -514,6 +519,14 @@ struct TransportConfig {
     // CT in-grid air material handling. It applies only to TPS spot geometry
     // modes, is disabled by default, and currently omits air MCS/straggling.
     bool spots_enable_upstream_air_energy_loss{false};
+    // Smoke-only uniform World-Air MCS covariance; no beam-model file tuning.
+    bool spots_enable_upstream_air_mcs{false};
+    bool ct_primary_midpoint_stopping_diagnostic{false};
+    bool ct_secondary_exact_faces_diagnostic{false};
+    bool ct_secondary_mcs_off_diagnostic{false};
+    bool ct_secondary_schneider_sp_diagnostic{false};
+    std::filesystem::path spots_upstream_air_mcs_file{};
+    std::string spots_upstream_air_mcs_sha256{};
     std::filesystem::path spots_upstream_air_stopping_power_file{};
     // Keep all clinical geometry in the fixed DICOM LPS patient frame. This is
     // independent of the spot input format (TOPAS TimeFeature or TPS CSV).
@@ -692,6 +705,7 @@ struct TransportConfig {
         } else {
             material_physics_mode = MaterialPhysicsMode::Water;
         }
+        unified_water_nuclear_transport = is_water_mode();
     }
     [[nodiscard]] double resolved_primary_rest_mass_MeV() const noexcept {
         return primary_rest_mass_MeV > 0.0

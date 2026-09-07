@@ -320,10 +320,28 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
 
     SchneiderCtDeviceContext ctx{};
     ctx.mode = config.material_physics_mode;
+    ctx.unified_water = config.unified_water_nuclear_transport;
 
-    if (ctx.mode != MaterialPhysicsMode::SchneiderCt || config.is_primary_attenuation_only_mode()) {
+    if (!ctx.uses_cinel03() || config.is_primary_attenuation_only_mode()) {
         return ctx;
     }
+    PureWaterMaterial water_material{};
+    SchneiderMaterialTable water_source_materials{};
+    if (ctx.unified_water) {
+        water_material = PureWaterMaterial::from_probe(config.unified_water_material_file,
+                                                       config.unified_water_material_sha256);
+        water_source_materials = SchneiderMaterialTable::from_topas_file("data/HUtoMaterialSchneider.txt");
+        ctx.water_radiation_length_g_cm2 = water_material.radiation_length_g_cm2;
+    }
+    const auto upload_water_rates = [&](const MaterialNuclearRates& rates) {
+        auto view = rates.view();
+        auto* partials = mem_tracker.allocate<double>(rates.partials().size());
+        auto* domains = mem_tracker.allocate<MaterialRateDomain>(rates.domains().size());
+        if (!partials || !domains) throw std::bad_alloc();
+        queue.copy(rates.partials().data(),partials,rates.partials().size()).wait_and_throw();
+        queue.copy(rates.domains().data(),domains,rates.domains().size()).wait_and_throw();
+        view.partials=partials;view.domains=domains;return view;
+    };
 
     std::filesystem::path primary_rate_file = !config.ct_schneider_primary_rate_file.empty()
                                                  ? config.ct_schneider_primary_rate_file
@@ -341,6 +359,8 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
     // 1. Primary Target Sampler
     if (std::filesystem::exists(primary_rate_file)) {
         const auto rate_table = SchneiderRateTable::from_binary(primary_rate_file);
+        if (ctx.unified_water) ctx.water_primary_rates = upload_water_rates(
+            MaterialNuclearRates::water_primary(rate_table,water_source_materials,water_material.hydrogen_mass_fraction));
         const SchneiderTargetSampler target_sampler(rate_table);
         const auto cdf_size = target_sampler.cdf_table().size();
         const auto tot_size = target_sampler.total_mass_rates().size();
@@ -413,6 +433,8 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
     if (std::filesystem::exists(sec_rate_file) &&
         (config.enable_secondary_transport || config.run_mode == RunMode::production || !config.ct_schneider_secondary_rate_file.empty())) {
         const auto sec_rate_table = SecondaryRateTable::from_binary(sec_rate_file);
+        if (ctx.unified_water) ctx.water_secondary_rates = upload_water_rates(
+            MaterialNuclearRates::water_secondary(sec_rate_table,water_source_materials,water_material.hydrogen_mass_fraction));
         std::vector<float> sec_total_rates_float(sec_rate_table.mass_total_rates().size());
         for (std::size_t i = 0; i < sec_rate_table.mass_total_rates().size(); ++i) {
             sec_total_rates_float[i] = static_cast<float>(sec_rate_table.mass_total_rates()[i]);
@@ -767,7 +789,8 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
     std::uint32_t schneider_xs_energies = 0;
     float schneider_xs_e_min = 0.0F;
     float schneider_xs_inv_dE = 0.0F;
-    bool use_schneider_primary_xs = false;
+    const bool use_unified_water = config.unified_water_nuclear_transport;
+    bool use_schneider_primary_xs = use_unified_water;
     float* schneider_stopping_device = nullptr;
     std::uint32_t schneider_sp_sections = 0;
     std::uint32_t schneider_sp_energies = 0;
@@ -1227,6 +1250,9 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
     bool use_ct_material_xs = false;
     bool ct_material_ids_are_schneider_sections = false;
     const auto ct_skip_homogeneous_face_clamp = config.ct_skip_homogeneous_face_clamp;
+    const auto ct_primary_midpoint_stopping = config.ct_primary_midpoint_stopping_diagnostic;
+    const auto ct_secondary_exact_faces = config.ct_secondary_exact_faces_diagnostic;
+    const auto ct_secondary_mcs_off = config.ct_secondary_mcs_off_diagnostic;
 
     const bool use_schneider_delta_tail =
         !config.ct_schneider_delta_tail_file.empty();
@@ -1249,31 +1275,43 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
     ElectronJointSample* electron_joint_samples_device=nullptr;
     ElectronPathRange* electron_path_ranges_device=nullptr;
     std::array<double,3>* electron_path_vectors_device=nullptr;
+    MassPathBounds* electron_path_bounds_device=nullptr;
     std::string electron_path_sha256;
     std::uint64_t* electron_joint_diag_device=nullptr;
-    std::array<double,2> electron_joint_minimum{},electron_joint_maximum{};
+    std::array<double,kElectronJointSections> electron_joint_minimum{},electron_joint_maximum{};
+    double electron_joint_ceiling=185;
     if(use_electron_joint) {
         const auto table=ElectronJointResponseTable::from_csv(config.ct_electron_joint_response_diagnostic_file,
             config.ct_electron_joint_response_sha256,config.ct_electron_joint_response_metadata_sha256);
+        if(config.ct_electron_joint_patient_experiment && !table.full_schneider_scope)
+            throw std::invalid_argument("Patient experiment requires full 25-section multi-energy schema 3, not a two-material pilot");
         // Explicitly authorized ISOLATED smoke diagnostic only. Config still
         // rejects research/production, spots, other energies and nuclear-on;
         // quality still always reports unvalidated_electron_joint_response.
-        electron_joint_channels_device=mem_tracker.allocate<ElectronJointChannel>(74);
+        electron_joint_channels_device=mem_tracker.allocate<ElectronJointChannel>(kElectronJointChannels);
         electron_joint_samples_device=mem_tracker.allocate<ElectronJointSample>(table.samples.size());
         electron_joint_diag_device=mem_tracker.allocate<std::uint64_t>(7);
         if(!electron_joint_channels_device || !electron_joint_samples_device || !electron_joint_diag_device)throw std::bad_alloc();
-        queue.copy(table.channels.data(),electron_joint_channels_device,74).wait_and_throw();
+        queue.copy(table.channels.data(),electron_joint_channels_device,kElectronJointChannels).wait_and_throw();
         queue.copy(table.samples.data(),electron_joint_samples_device,table.samples.size()).wait_and_throw();
         if(!table.path_ranges.empty()) {
             electron_path_sha256=table.path_sha256;
             electron_path_ranges_device=mem_tracker.allocate<ElectronPathRange>(table.path_ranges.size());
             electron_path_vectors_device=mem_tracker.allocate<std::array<double,3>>(table.path_vectors.size());
-            if(!electron_path_ranges_device || !electron_path_vectors_device)throw std::bad_alloc();
+            electron_path_bounds_device=mem_tracker.allocate<MassPathBounds>(table.path_ranges.size());
+            if(!electron_path_ranges_device || !electron_path_vectors_device || !electron_path_bounds_device)throw std::bad_alloc();
+            std::vector<MassPathBounds> bounds(table.path_ranges.size());
+            for(std::size_t i=0;i<bounds.size();++i) {
+                const auto r=table.path_ranges[i];
+                bounds[i]=mass_path_bounds(r.count,[&](std::size_t j){return table.path_vectors[r.offset+j];});
+            }
+            queue.copy(bounds.data(),electron_path_bounds_device,bounds.size()).wait_and_throw();
             queue.copy(table.path_ranges.data(),electron_path_ranges_device,table.path_ranges.size()).wait_and_throw();
             queue.copy(table.path_vectors.data(),electron_path_vectors_device,table.path_vectors.size()).wait_and_throw();
         }
         queue.fill(electron_joint_diag_device,std::uint64_t{0},7).wait_and_throw();
         electron_joint_minimum=table.minimum;electron_joint_maximum=table.maximum;
+        electron_joint_ceiling=table.energy_ceiling_MeVu;
     }
     if (use_schneider_delta_longitudinal && k_dose_atomic_fp32) {
         throw std::runtime_error(
@@ -1351,7 +1389,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
     if (enable_ct_grid) {
         const auto grid = CtGrid::load(
             config.ct_grid_file, config.ct_schneider_file, config.ct_dicom_origin_mode);
-        if (use_longitudinal_interface_mass || use_electron_joint)
+        if (use_longitudinal_interface_mass || (use_electron_joint && !config.ct_electron_joint_patient_experiment))
             validate_longitudinal_interface_grid(grid.density_g_per_cm3, grid.material_id);
         else if(use_schneider_delta_longitudinal)
             reject_unvalidated_longitudinal_heterogeneity(grid.density_g_per_cm3, grid.material_id);
@@ -1670,13 +1708,28 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                       << "  source_sha256=" << (early_verified_stopping_sha256.empty() ? "unknown" : early_verified_stopping_sha256) << "\n";
         }
 
-        if (use_ct_mass_sp && !use_schneider_stopping) {
+        // Exact C12 stopping only replaces the PRIMARY lookup. Secondary ions
+        // still need their 25-section material factors; previously this guard
+        // also suppressed their LUT, leaving water stopping times density.
+        if (use_ct_mass_sp && (!use_schneider_stopping || config.ct_secondary_schneider_sp_diagnostic)) {
+            if (config.ct_secondary_schneider_sp_diagnostic) {
+                if (!ct_material_ids_are_schneider_sections || grid.mass_sp_za_rel.size()!=25 || grid.mass_sp_I_eV.size()!=25)
+                    throw std::invalid_argument("Secondary Schneider stopping requires 25 exact section Z/A and I entries");
+                for (std::size_t s=0;s<25;++s)
+                    if (!std::isfinite(grid.mass_sp_za_rel[s]) || grid.mass_sp_za_rel[s]<=0 ||
+                        !std::isfinite(grid.mass_sp_I_eV[s]) || grid.mass_sp_I_eV[s]<=0)
+                        throw std::invalid_argument("Invalid secondary Schneider material parameters");
+                std::cout << "[secondary-schneider-stopping] diagnostic: 25-section Z/A,I Bethe factors; exact primary table unchanged; no four-class LUT\n";
+            }
             ct_n_mass_factors = static_cast<std::uint32_t>(grid.mass_sp_za_rel.size());
             std::vector<float> mass_factor_lut(
                 static_cast<std::size_t>(ct_n_mass_factors) * table_size);
             const auto sp_scale = static_cast<float>(config.ct_stopping_power_scale);
 
             const auto try_density_spr = [&]() -> bool {
+                // This diagnostic is exclusively Schneider-25. Do not enter
+                // the legacy air/lung/bone density-LUT branch below.
+                if (config.ct_secondary_schneider_sp_diagnostic) return false;
                 if (!config.ct_use_density_mass_spr) {
                     return false;
                 }
@@ -1755,7 +1808,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
         schneider_stopping_device,
         schneider_sp_sections, schneider_sp_energies,
         schneider_sp_e_min, schneider_sp_e_max, schneider_sp_inv_dE);
-    if (schneider_ct_device_ctx.is_schneider_ct() &&
+    if (schneider_ct_device_ctx.uses_cinel03() &&
         !config.is_primary_attenuation_only_mode()) {
         schneider_diag_device = mem_tracker.allocate<std::uint64_t>(kSchneiderDiagSlots);
         schneider_float_device = mem_tracker.allocate<float>(kSchneiderFloatSlots);
@@ -2194,7 +2247,21 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
     float* ion_energy_grid_device = nullptr;
     float* ion_csda_a1_device = nullptr;
     if (enable_inelastic) {
-        std::filesystem::path ion_sp_path = "data/ion_stopping_power_water_geant4_11_3_2.csv";
+        // Native unified water must honor its explicit material-specific table.
+        // Preserve the frozen CT/legacy route until separately validated.
+        std::filesystem::path ion_sp_path = use_unified_water
+            ? config.particle_stopping_power_file
+            : std::filesystem::path("data/ion_stopping_power_water_geant4_11_3_2.csv");
+        if (use_unified_water) {
+            if (ion_sp_path.empty() || !std::filesystem::exists(ion_sp_path)) {
+                throw std::runtime_error("Unified water requires its configured ion stopping table");
+            }
+            // The device loader indexes rows by primary-table index. Reject
+            // different energy grids before uploading rather than misindexing.
+            (void)IonStoppingPowerTables::from_csv(ion_sp_path, stopping_power);
+            std::cout << "Unified water active ion stopping table: " << ion_sp_path
+                      << " SHA256=" << compute_file_sha256_hex(ion_sp_path) << '\n';
+        }
         if (!std::filesystem::exists(ion_sp_path)) {
             const auto cur_p = std::filesystem::current_path();
             if (std::filesystem::exists(cur_p / "data" / "ion_stopping_power_water_geant4_11_3_2.csv")) {
@@ -2371,6 +2438,8 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
     const auto multiple_scattering_scale =
         static_cast<float>(config.multiple_scattering_scale);
     const auto water_density_g_per_cm3 = static_cast<float>(config.water_density_g_per_cm3);
+    const auto active_water_radiation_length = use_unified_water
+        ? schneider_ct_device_ctx.water_radiation_length_g_cm2 : water_radiation_length_g_per_cm2;
     const auto enable_multiple_scattering = config.enable_multiple_scattering;
     const auto use_fred_2gr_mcs = config.uses_fred_2gr_mcs();
     const auto extrapolate_fred_2gr_high_energy =
@@ -2844,16 +2913,15 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                         energy_MeV > energy_cutoff_MeV) {
                         const auto cur_e_u = energy_MeV * inverse_mass_number;
                         if (use_schneider_primary_xs) {
-                            if (in_ct) {
-                                const std::uint32_t section_id = static_cast<std::uint32_t>(
+                            if (in_ct || use_unified_water) {
+                                const std::uint32_t section_id = use_unified_water ? 255U : static_cast<std::uint32_t>(
                                     sycl::min(static_cast<std::uint32_t>(ct_material), 24U));
                                 // v3: hazard from the masked rate-binary partials
                                 // (single source with the target sampler); v1
                                 // keeps the CSV XS table EXACTLY.
                                 float mass_rate = 0.0F;
                                 if (schneider_ct_device_ctx.primary_sampler.rate_version == 3) {
-                                    mass_rate = schneider_masked_rates_device(
-                                        schneider_ct_device_ctx.primary_sampler,
+                                    mass_rate = schneider_ct_device_ctx.primary_rates(
                                         section_id, cur_e_u).total;
                                 } else {
                                     mass_rate = schneider_primary_mass_xs(
@@ -3005,7 +3073,17 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                     }
 
                     float mean_loss_MeV = 0.0F;
-                    if (enable_csda_range_energy_loss && energy_grid_device != nullptr &&
+                    if (ct_primary_midpoint_stopping && use_schneider_stopping && in_ct) {
+                        mean_loss_MeV=midpoint_continuous_energy_loss(energy_MeV,step_mm,
+                            stopping_power_MeV_per_mm,[&](float mid_energy) {
+                                const float f=(mid_energy*inverse_mass_number-schneider_sp_e_min)*schneider_sp_inv_dE;
+                                const int i=sycl::clamp(static_cast<int>(sycl::floor(f)),0,static_cast<int>(schneider_sp_energies)-2);
+                                const float w=sycl::clamp(f-static_cast<float>(i),0.0F,1.0F);
+                                const auto base=static_cast<std::size_t>(ct_material)*schneider_sp_energies;
+                                const float mass_sp=schneider_stopping_device[base+i]+w*(schneider_stopping_device[base+i+1]-schneider_stopping_device[base+i]);
+                                return mass_sp*sycl::fmax(local_density_g_per_cm3,1.0e-6F);
+                            });
+                    } else if (enable_csda_range_energy_loss && energy_grid_device != nullptr &&
                         cumulative_range_device != nullptr) {
                         const auto end_energy_MeVu = csda_energy_after_distance_device(
                             ion_energy_grid_device, primary_water_sp_device,
@@ -3104,6 +3182,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                     }
 
                     auto local_voxel_deposit_MeV = deposited_MeV;
+                    auto same_voxel_electron_packet_MeV = 0.0F;
                     auto delta_tail_escaped_scorer_MeV = 0.0F;
                     // Forward-redistributed energy leaves the source depth bin, so the
                     // 1-D depth scorers must not credit it at the source bin (the 3-D
@@ -3120,7 +3199,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                         counter(0,1);
                         const auto draw=sample_electron_joint_device(ct_material,energy_MeVu,
                             rng::uniform01(spot_seed,rng_history,steps,21),electron_joint_channels_device,
-                            electron_joint_samples_device,electron_joint_minimum,electron_joint_maximum);
+                            electron_joint_samples_device,electron_joint_minimum,electron_joint_maximum,electron_joint_ceiling);
                         if(draw.status!=ElectronJointStatus::hit) {
                             counter(draw.status==ElectronJointStatus::energy_domain ? 1 : 2,1);
                             counter(5,static_cast<std::uint64_t>(static_cast<double>(deposited_MeV)*1e6));
@@ -3146,7 +3225,16 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                     const auto range=electron_path_ranges_device[draw.sample_index];
                                     const auto ex=rotate_local_direction(static_cast<float>(sycl::cos(phi)),static_cast<float>(sycl::sin(phi)),0,Direction3F{direction_x,direction_y,direction_z});
                                     const auto ey=rotate_local_direction(static_cast<float>(-sycl::sin(phi)),static_cast<float>(sycl::cos(phi)),0,Direction3F{direction_x,direction_y,direction_z});
-                                    const auto path=replay_mass_polyline_indexed(
+                                    MassPathResult path;
+                                    path.endpoint={position_x_mm+birth*step_mm*direction_x,position_y_mm+birth*step_mm*direction_y,position_z_mm+birth*step_mm*direction_z};
+                                    const bool same_cell=try_same_voxel_mass_path(path.endpoint,
+                                        electron_path_bounds_device[draw.sample_index],
+                                        {{{ex.x,ex.y,ex.z},{ey.x,ey.y,ey.z},{direction_x,direction_y,direction_z}}},
+                                        {ct_origin_x,ct_origin_y,ct_origin_z},{ct_spacing_x,ct_spacing_y,ct_spacing_z},
+                                        {static_cast<int>(ct_nx),static_cast<int>(ct_ny),static_cast<int>(ct_nz)},
+                                        [&](const std::array<int,3>& c){return static_cast<double>(ct_density_device[(static_cast<std::size_t>(c[2])*ct_ny+c[1])*ct_nx+c[0]]);});
+                                    if(same_cell)path.completed_segments=range.count;
+                                    else path=replay_mass_polyline_indexed(
                                         {position_x_mm+birth*step_mm*direction_x,position_y_mm+birth*step_mm*direction_y,position_z_mm+birth*step_mm*direction_z},range.count,
                                         [&](std::size_t j) {
                                             const auto v=electron_path_vectors_device[range.offset+j];
@@ -3184,9 +3272,16 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                             sycl::atomic_ref<T,sycl::memory_order::relaxed,sycl::memory_scope::device,
                                                 sycl::access::address_space::global_space> a(*address);a.fetch_add(static_cast<T>(packet));
                                         };
-                                        add(voxel_dose_device+target);add(dose_device+target_z);
-                                        if(in_fov_dose_device)add(in_fov_dose_device+target_z);
-                                        if(enable_charged_origin_voxel_scoring)add(charged_origin_voxel_dose_device+target);
+                                        if(target==voxel_index && target_z==bin) {
+                                            // The replay still happened. Cache its original
+                                            // packet separately, preserving rounded dE-p
+                                            // and p rather than replacing them by dE.
+                                            same_voxel_electron_packet_MeV=packet;
+                                        } else {
+                                            add(voxel_dose_device+target);add(dose_device+target_z);
+                                            if(in_fov_dose_device)add(in_fov_dose_device+target_z);
+                                            if(enable_charged_origin_voxel_scoring)add(charged_origin_voxel_dose_device+target);
+                                        }
                                         counter(3,static_cast<std::uint64_t>(static_cast<double>(packet)*1e6));
                                     }
                                     local_voxel_deposit_MeV-=packet;forward_shifted_MeV+=packet;
@@ -3539,8 +3634,10 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                     // remove relocated energy now tallied at its destination.
                     pending_primary_depth_MeV += deposited_MeV - forward_shifted_MeV -
                         transverse_relocated_MeV;
+                    pending_primary_depth_MeV += same_voxel_electron_packet_MeV;
                     if (enable_voxel_scoring && voxel_index >= 0) {
                         pending_primary_voxel_MeV += local_voxel_deposit_MeV;
+                        pending_primary_voxel_MeV += same_voxel_electron_packet_MeV;
                         if (in_fov_dose_device != nullptr && pending_primary_bin >= 0 &&
                             pending_primary_bin < static_cast<int>(number_of_bins)) {
                             sycl::atomic_ref<DepthAtomicT, sycl::memory_order::relaxed,
@@ -3549,7 +3646,8 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                 atomic_in_fov(in_fov_dose_device[pending_primary_bin]);
                             atomic_in_fov.fetch_add(static_cast<DepthAtomicT>(
                                 deposited_MeV - forward_shifted_MeV -
-                                transverse_relocated_MeV - transverse_escaped_MeV));
+                                transverse_relocated_MeV - transverse_escaped_MeV)+
+                                static_cast<DepthAtomicT>(same_voxel_electron_packet_MeV));
                         }
                     }
                     history_deposited_MeV += deposited_MeV;
@@ -3583,7 +3681,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
 
                     if (enable_multiple_scattering) {
                         auto radiation_length_g_per_cm2 =
-                            static_cast<float>(water_radiation_length_g_per_cm2);
+                            static_cast<float>(active_water_radiation_length);
                         if (enable_ct_grid && in_ct && enable_ct_material_mcs) {
                             if (ct_material_ids_are_schneider_sections) {
                                 radiation_length_g_per_cm2 = static_cast<float>(
@@ -3773,7 +3871,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                         }
                     }
 
-                    if (use_schneider_primary_xs && in_ct && inelastic_this_step) {
+                    if (use_schneider_primary_xs && (in_ct || use_unified_water) && inelastic_this_step) {
                         primary_inelastic_occurred = true;
                         if (is_primary_attenuation_only) {
                             if (first_interactions_device != nullptr && first_interactions_count_device != nullptr) {
@@ -3822,8 +3920,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                         // flows to lookup EXACTLY as before.
                         int target_z = 0;
                         if (schneider_ct_device_ctx.primary_sampler.rate_version == 3) {
-                            const auto masked = schneider_masked_rates_device(
-                                schneider_ct_device_ctx.primary_sampler,
+                            const auto masked = schneider_ct_device_ctx.primary_rates(
                                 interaction_section, cur_primary_e_u);
                             target_z = sample_masked_schneider_target_device(
                                 masked.partials, u_target);
@@ -3873,8 +3970,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                             float primary_miss_macro = 0.0F;
                             if (schneider_ct_device_ctx.primary_sampler.rate_version == 3) {
                                 primary_miss_macro = interaction_density *
-                                    schneider_masked_rates_device(
-                                        schneider_ct_device_ctx.primary_sampler,
+                                    schneider_ct_device_ctx.primary_rates(
                                         interaction_section, cur_primary_e_u).total;
                             } else {
                                 primary_miss_macro = interaction_density *
@@ -4920,6 +5016,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                 static_cast<std::size_t>(charged_sp_idx) * table_size];
 
                         bool sec_terminal_recorded = false;
+                        ContinuousSpeciesTrackTally continuous_species_tally;
                         float sec_e = frag.energy_MeV;
                         float sec_x = frag.pos_x_mm;
                         float sec_y = frag.pos_y_mm;
@@ -4963,7 +5060,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                       schneider_ct_device_ctx.sec_num_projectiles,
                                       frag.z, frag.a)
                                 : secondary_projectile_index_device(frag.z, frag.a);
-                        if (schneider_ct_device_ctx.is_schneider_ct() &&
+                        if (schneider_ct_device_ctx.uses_cinel03() &&
                             frag.generation < cinel02_max_secondary_inelastic_generations &&
                             schneider_reg_idx < 0) {
                             schneider_diag_increment_device(
@@ -5087,7 +5184,14 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                 const auto dz_step = (bz - sec_z) / sec_dz;
                                 if (dz_step > 1.0e-5F) sec_step_mm = sycl::fmin(sec_step_mm, dz_step);
                             }
-                            if (enable_ct_grid && sec_in_ct) {
+                            CtFaceClampResult sec_face_clamp{sec_step_mm,false,0};
+                            if (enable_ct_grid && sec_in_ct && ct_secondary_exact_faces) {
+                                sec_face_clamp = clamp_step_to_ct_faces_exact(
+                                    sec_step_mm, sec_x, sec_y, sec_z, sec_dx, sec_dy,
+                                    sec_dz, ct_origin_x, ct_origin_y, ct_origin_z,
+                                    ct_spacing_x, ct_spacing_y, ct_spacing_z, ct_nx, ct_ny, ct_nz);
+                                sec_step_mm = sec_face_clamp.step_mm;
+                            } else if (enable_ct_grid && sec_in_ct) {
                                 sec_step_mm = clamp_step_to_ct_faces_near_z_if_needed(
                                     sec_step_mm, sec_x, sec_y, sec_z, sec_dx, sec_dy,
                                     sec_dz, ct_origin_x, ct_origin_y, ct_origin_z,
@@ -5096,7 +5200,10 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                     sec_local_density_g_per_cm3, sec_ct_material,
                                     ct_skip_homogeneous_face_clamp, nullptr);
                             }
-                            sec_step_mm = sycl::fmax(sec_step_mm, 1.0e-5F);
+                            // Do not enlarge a real face distance to the legacy
+                            // minimum step: that would cross the material again.
+                            if (!ct_secondary_exact_faces || !sec_face_clamp.hit_face)
+                                sec_step_mm = sycl::fmax(sec_step_mm, 1.0e-5F);
                             bool secondary_inelastic = false;
                             // A nuclear hazard is not necessarily a replayed
                             // event. Keep this separate so lookup misses and
@@ -5114,7 +5221,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                             float schneider_hazard_total_rate = 0.0F;
                             float schneider_hazard_step_mm = 0.0F;
                             std::uint8_t schneider_hazard_section = 255;
-                            if (schneider_ct_device_ctx.is_schneider_ct() && sec_in_ct &&
+                            if (schneider_ct_device_ctx.uses_cinel03() && (sec_in_ct || use_unified_water) &&
                                 frag.generation < cinel02_max_secondary_inelastic_generations) {
                                 // v3: bundle-ordered registry LUT; v1 keeps the
                                 // hardcoded check EXACTLY.
@@ -5137,7 +5244,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                         schneider_diag_device,
                                         SchneiderDiagSlot::UnsupportedProjectileSteps);
                                 } else if (schneider_ct_device_ctx.sec_total_rates != nullptr) {
-                                    const std::size_t section_id = static_cast<std::size_t>(
+                                    const std::size_t section_id = use_unified_water ? 255U : static_cast<std::size_t>(
                                         sycl::min(static_cast<std::uint32_t>(sec_ct_material), 24U));
                                     ++local_sec_rate_queries;
                                     // v3: single masked computation drives hazard
@@ -5153,16 +5260,8 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                         // hazard can never outrun its domain.
                                         // v1 keeps hazard+sampling at E_h
                                         // EXACTLY as before.
-                                        const auto sec_masked = secondary_masked_rates_device(
-                                            schneider_ct_device_ctx.sec_partial_rates,
-                                            schneider_ct_device_ctx.sec_domain_emin,
-                                            schneider_ct_device_ctx.sec_domain_emax,
-                                            schneider_ct_device_ctx.sec_domain_has,
-                                            schneider_ct_device_ctx.sec_num_projectiles,
-                                            proj_idx, section_id, sec_e_u,
-                                            schneider_ct_device_ctx.sec_energy_min_MeV_per_u,
-                                            schneider_ct_device_ctx.sec_inv_energy_step,
-                                            schneider_ct_device_ctx.sec_num_energies);
+                                        const auto sec_masked = schneider_ct_device_ctx.secondary_rates(
+                                            proj_idx, section_id, sec_e_u);
                                         const float sec_macro_xs =
                                             sec_local_density_g_per_cm3 * sec_masked.total;
                                         if (sec_macro_xs > 0.0F) {
@@ -5178,7 +5277,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                                 sec_step_mm = collision_distance;
                                                 schneider_hazard_total_rate = sec_macro_xs;
                                                 schneider_hazard_step_mm = sec_step_mm;
-                                                schneider_hazard_section = sec_ct_material;
+                                                schneider_hazard_section = use_unified_water ? 255U : sec_ct_material;
                                             }
                                         }
                                     } else {
@@ -5204,7 +5303,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                             sec_step_mm = collision_distance;
                                             schneider_hazard_total_rate = sec_macro_xs;
                                             schneider_hazard_step_mm = sec_step_mm;
-                                            schneider_hazard_section = sec_ct_material;
+                                            schneider_hazard_section = use_unified_water ? 255U : sec_ct_material;
                                             const float u_target = rng::uniform01(2026, frag.rng_stream, sec_steps, 14);
                                             const int sampled_z =
                                                 sample_secondary_target_device(
@@ -5449,9 +5548,15 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                             const auto collision_input_dy = sec_dy;
                             const auto collision_input_dz = sec_dz;
                             const auto post_em_e = sycl::fmax(0.0F, sec_e - dE);
-                            const auto post_em_x = sec_x + collision_input_dx * sec_step_mm;
-                            const auto post_em_y = sec_y + collision_input_dy * sec_step_mm;
-                            const auto post_em_z = sec_z + collision_input_dz * sec_step_mm;
+                            auto post_em_x = sec_x + collision_input_dx * sec_step_mm;
+                            auto post_em_y = sec_y + collision_input_dy * sec_step_mm;
+                            auto post_em_z = sec_z + collision_input_dz * sec_step_mm;
+                            if (ct_secondary_exact_faces && sec_face_clamp.hit_face && !secondary_inelastic) {
+                                const auto endpoint=ct_finish_exact_face_step(sec_face_clamp,sec_step_mm,
+                                    {sec_x,sec_y,sec_z},{collision_input_dx,collision_input_dy,collision_input_dz},
+                                    {ct_origin_x,ct_origin_y,ct_origin_z},{ct_spacing_x,ct_spacing_y,ct_spacing_z});
+                                post_em_x=endpoint[0];post_em_y=endpoint[1];post_em_z=endpoint[2];
+                            }
 
                             // Independent continuous optical-depth audit.  The
                             // runtime sampler uses the step-start rates above;
@@ -5540,6 +5645,34 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                        static_cast<int>(post_em_z *
                                            inverse_depth_bin_width_mm),
                                        static_cast<int>(number_of_bins) - 1));
+                            // Exact-face transport keeps continuous loss inside
+                            // the SOURCE voxel. Do not mix source x/y with the
+                            // endpoint z, or credit this loss at a nuclear vertex.
+                            // Commit once here before a replay can update sec_x/y/z
+                            // or break; the legacy dE commits below are suppressed.
+                            const bool source_voxel_continuous_loss =
+                                ct_secondary_exact_faces && enable_ct_grid && sec_in_ct && enable_voxel_scoring;
+                            int continuous_step_voxel = -1;
+                            if (source_voxel_continuous_loss) {
+                                const int sx=static_cast<int>(sycl::floor((sec_x-voxel_min_x_mm)*inverse_voxel_size_x_mm));
+                                const int sy=static_cast<int>(sycl::floor((sec_y-voxel_min_y_mm)*inverse_voxel_size_y_mm));
+                                if (sx>=0 && sy>=0 && bin_z>=0 && sx<static_cast<int>(voxel_bins_x) &&
+                                    sy<static_cast<int>(voxel_bins_y) && bin_z<static_cast<int>(number_of_bins)) {
+                                    continuous_step_voxel=(bin_z*static_cast<int>(voxel_bins_y)+sy)*static_cast<int>(voxel_bins_x)+sx;
+                                    sycl::atomic_ref<DoseAtomicT,sycl::memory_order::relaxed,
+                                        sycl::memory_scope::device,sycl::access::address_space::global_space>
+                                        a(voxel_dose_device[continuous_step_voxel]);
+                                    a.fetch_add(static_cast<DoseAtomicT>(dE));
+                                    if (enable_charged_origin_voxel_scoring) {
+                                        sycl::atomic_ref<DoseAtomicT,sycl::memory_order::relaxed,
+                                            sycl::memory_scope::device,sycl::access::address_space::global_space>
+                                            origin(charged_origin_voxel_dose_device[charged_origin_voxel_offset+continuous_step_voxel]);
+                                        origin.fetch_add(static_cast<DoseAtomicT>(dE));
+                                        score_be_isotope_origin_voxel_device(be_isotope_origin_voxel_dose_device,
+                                            be_isotope_category,number_of_voxels,continuous_step_voxel,static_cast<DoseAtomicT>(dE));
+                                    }
+                                }
+                            }
                             if (secondary_inelastic) {
                                 sec_e = post_em_e;
                                 // v3: sample the target HERE at the post-EM
@@ -5547,7 +5680,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                 // so the replay-status record below and the
                                 // package query share one energy with the mask.
                                 // v1 keeps the hazard-site E_h sample EXACTLY.
-                                if (schneider_ct_device_ctx.is_schneider_ct() && sec_in_ct &&
+                                if (schneider_ct_device_ctx.uses_cinel03() && (sec_in_ct || use_unified_water) &&
                                     schneider_ct_device_ctx.sec_rate_version == 3 &&
                                     sec_e > energy_cutoff_MeV &&
                                     frag.generation <
@@ -5558,18 +5691,10 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                             schneider_ct_device_ctx.sec_proj_keys,
                                             schneider_ct_device_ctx.sec_num_projectiles,
                                             frag.z, frag.a);
-                                    const std::size_t section_c = static_cast<std::size_t>(
+                                    const std::size_t section_c = use_unified_water ? 255U : static_cast<std::size_t>(
                                         sycl::min(static_cast<std::uint32_t>(sec_ct_material), 24U));
-                                    const auto sec_masked_c = secondary_masked_rates_device(
-                                        schneider_ct_device_ctx.sec_partial_rates,
-                                        schneider_ct_device_ctx.sec_domain_emin,
-                                        schneider_ct_device_ctx.sec_domain_emax,
-                                        schneider_ct_device_ctx.sec_domain_has,
-                                        schneider_ct_device_ctx.sec_num_projectiles,
-                                        proj_idx_c, section_c, sec_e_c,
-                                        schneider_ct_device_ctx.sec_energy_min_MeV_per_u,
-                                        schneider_ct_device_ctx.sec_inv_energy_step,
-                                        schneider_ct_device_ctx.sec_num_energies);
+                                    const auto sec_masked_c = schneider_ct_device_ctx.secondary_rates(
+                                        proj_idx_c, section_c, sec_e_c);
                                     // Same tag-14 draw as the legacy site (same
                                     // step counter: sec_steps increments after
                                     // the lookup); only the energy moves E_h ->
@@ -5644,8 +5769,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                 pending_sec_bin = bin_z;
                             }
                             pending_sec_depth_MeV += dE;
-                            cinel02_species_energy_add_device(
-                                cinel02_species_energy_device, ledger_species_idx, 1U, dE);
+                            continuous_species_tally.add_all(dE);
 
                             if (enable_voxel_scoring || secondary_inelastic) {
                                 int cur_voxel = -1;
@@ -5680,7 +5804,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                     pending_sec_voxel_MeV = 0.0F;
                                     pending_sec_voxel = cur_voxel;
                             if (secondary_inelastic && !(sec_e > energy_cutoff_MeV) &&
-                                schneider_ct_device_ctx.is_schneider_ct() && sec_in_ct &&
+                                schneider_ct_device_ctx.uses_cinel03() && (sec_in_ct || use_unified_water) &&
                                 frag.generation < cinel02_max_secondary_inelastic_generations) {
                                 // Sampled Schneider collision whose post-EM
                                 // energy is already below cutoff: continuous
@@ -5693,7 +5817,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                 // v3 sampling already happened at the post-EM
                                 // update above; skip the query only when the
                                 // sampler found no in-domain channel.
-                                if (schneider_ct_device_ctx.is_schneider_ct() && !skip_schneider_lookup) {
+                                if (schneider_ct_device_ctx.uses_cinel03() && !skip_schneider_lookup) {
                                     // Exact (Z/A, target_Z) channel with the
                                     // secondary's own sampled target: never the
                                     // primary target, never water/O fallback.
@@ -5725,6 +5849,21 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                         }
                                         cinel02_species_energy_add_device(
                                             cinel02_species_energy_device, ledger_species_idx, 8U, sec_e);
+                                        // Use the collision vertex, not the source
+                                        // voxel or legacy pre-x/post-z mixed index.
+                                        // These are subsets, never extra energy sinks.
+                                        if (enable_voxel_scoring && replay_vertex_in_scoring_box(
+                                                {post_em_x,post_em_y,post_em_z},
+                                                {voxel_min_x_mm,voxel_min_y_mm,0.0F},
+                                                {voxel_max_x_mm,voxel_max_y_mm,
+                                                 static_cast<float>(number_of_bins)*depth_bin_width_mm})) {
+                                            cinel02_species_energy_add_device(
+                                                cinel02_species_energy_device, ledger_species_idx,
+                                                Cinel02SpeciesLedgerSchema::cinel03_replay_input_fov, sec_e);
+                                            cinel02_species_energy_add_device(
+                                                cinel02_species_energy_device, ledger_species_idx,
+                                                Cinel02SpeciesLedgerSchema::cinel03_replay_step_dE_fov, dE);
+                                        }
                                         const auto& event = schneider_ct_device_ctx.sec_interactions[event_idx];
                                         const float local_deposit = sycl::fmax(0.0F, event.process_local_deposit_MeV);
                                         pending_sec_depth_MeV += local_deposit;
@@ -5744,11 +5883,14 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                                 schneider_diag_device,
                                                 SchneiderDiagSlot::SecondaryDepositedMicroMeV,
                                                 local_deposit + dE);
-                                            grid_deposit_split_device(
-                                                grid_deposited_in_device,
-                                                grid_deposited_out_device,
-                                                enable_voxel_scoring && cur_voxel >= 0,
-                                                local_deposit + dE);
+                                            if (source_voxel_continuous_loss) {
+                                                grid_deposit_split_device(grid_deposited_in_device,grid_deposited_out_device,
+                                                    cur_voxel>=0,local_deposit);
+                                                grid_deposit_split_device(grid_deposited_in_device,grid_deposited_out_device,
+                                                    continuous_step_voxel>=0,dE);
+                                            } else grid_deposit_split_device(
+                                                grid_deposited_in_device,grid_deposited_out_device,
+                                                enable_voxel_scoring && cur_voxel>=0,local_deposit+dE);
                                         }
                                         // The break below skips the common-path
                                         // voxel dE commit: commit it here so the
@@ -5756,7 +5898,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                         // depth, voxel and species scorers.
                                         carbon::secondary_step_voxel_commit(
                                             pending_sec_voxel_MeV,
-                                            enable_voxel_scoring, cur_voxel, dE);
+                                            enable_voxel_scoring && !source_voxel_continuous_loss, cur_voxel, dE);
 
                                         float sec_charged_accounted_MeV = 0.0F;
                                         float sec_neutral_accounted_MeV = 0.0F;
@@ -5984,7 +6126,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                             grid_deposit_split_device(
                                                 grid_deposited_in_device,
                                                 grid_deposited_out_device,
-                                                enable_voxel_scoring && miss_voxel >= 0,
+                                                enable_voxel_scoring && (source_voxel_continuous_loss ? continuous_step_voxel>=0 : miss_voxel>=0),
                                                 dE);
                                         }
                                         // Same bypass as the replay-hit path:
@@ -5992,7 +6134,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                         // voxel dE commit.
                                         carbon::secondary_step_voxel_commit(
                                             pending_sec_voxel_MeV,
-                                            enable_voxel_scoring, miss_voxel, dE);
+                                            enable_voxel_scoring && !source_voxel_continuous_loss, miss_voxel, dE);
                                         sec_e = 0.0F;
                                         break;
                                     }
@@ -6439,16 +6581,14 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                     pending_sec_voxel = cur_voxel;
                                 }
                                 if (cur_voxel >= 0) {
-                                    pending_sec_voxel_MeV += dE;
+                                    if (!source_voxel_continuous_loss) pending_sec_voxel_MeV += dE;
                                     if (in_fov_dose_device != nullptr && pending_sec_bin >= 0 && pending_sec_bin < static_cast<int>(number_of_bins)) {
                                         sycl::atomic_ref<DepthAtomicT, sycl::memory_order::relaxed,
                                                          sycl::memory_scope::device,
                                                          sycl::access::address_space::global_space>
                                             atomic_in_fov(in_fov_dose_device[pending_sec_bin]);
                                         atomic_in_fov.fetch_add(static_cast<DepthAtomicT>(dE));
-                                        cinel02_species_energy_add_device(
-                                            cinel02_species_energy_device, ledger_species_idx,
-                                            2U, dE);
+                                        continuous_species_tally.add_fov(dE);
                                     }
                                 }
                             }
@@ -6487,7 +6627,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                     SchneiderDiagSlot::SecondaryDepositedMicroMeV, dE);
                                 grid_deposit_split_device(
                                     grid_deposited_in_device,
-                                    grid_deposited_out_device, com_voxel >= 0,
+                                    grid_deposited_out_device, source_voxel_continuous_loss ? continuous_step_voxel>=0 : com_voxel>=0,
                                     dE);
                             }
                             if (!secondary_inelastic) {
@@ -6498,7 +6638,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
 
                             if (cinel02_should_apply_secondary_mcs(
                                     secondary_inelastic, secondary_replay_succeeded,
-                                    enable_multiple_scattering, sec_e,
+                                    enable_multiple_scattering && !ct_secondary_mcs_off, sec_e,
                                     energy_cutoff_MeV)) {
                                 constexpr float two_pi = 6.2831853071795864769F;
                                 float theta_scat = 0.0F;
@@ -6515,7 +6655,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                             sec_in_ct,
                                             static_cast<unsigned>(sec_ct_material),
                                             enable_ct_material_mcs,
-                                            water_radiation_length_g_per_cm2));
+                                            active_water_radiation_length));
                                 if (use_fred_2gr_mcs) {
                                     const auto mixture = rng::uniform01(
                                         2026, frag.rng_stream, sec_steps, 0);
@@ -6561,6 +6701,16 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                             ++sec_steps;
                             ++local_sec_steps;
                         }
+                        // Small per-step deposits must not contend directly on
+                        // one global species scalar. Preserve original scoring
+                        // guards and reduce per track; all replay breaks arrive
+                        // here too. This changes diagnostics only, not dose.
+                        cinel02_species_energy_add_device(
+                            cinel02_species_energy_device, ledger_species_idx, 1U,
+                            continuous_species_tally.all_MeV);
+                        cinel02_species_energy_add_device(
+                            cinel02_species_energy_device, ledger_species_idx, 2U,
+                            continuous_species_tally.fov_MeV);
                         schneider_diag_add_device(schneider_diag_device,
                                                   SchneiderDiagSlot::SecondaryRateQueries,
                                                   local_sec_rate_queries);
@@ -7119,6 +7269,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
             });
     }
     // Free buffers
+    free_device(electron_path_bounds_device);
     free_device(electron_joint_channels_device);free_device(electron_joint_samples_device);free_device(electron_joint_diag_device);
     free_device(electron_path_ranges_device);free_device(electron_path_vectors_device);
     free_immutable_device(table_device);

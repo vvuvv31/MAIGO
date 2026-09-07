@@ -7,7 +7,7 @@
 namespace carbon {
 
 struct CliState {
-    std::filesystem::path config_path{"config/beam_200MeVu.yaml"};
+    std::filesystem::path config_path{"config/unified_water_production.yaml"};
     std::filesystem::path canonical_config_output_path{};
     bool help{false};
     bool histories_overridden{false};

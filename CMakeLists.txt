@@ -56,6 +56,7 @@ add_library(carbon_core
     src/run_quality.cpp
     src/stopping_power.cpp
     src/schneider_rate_table.cpp
+    src/material_nuclear_rates.cpp
     src/schneider_delta_tail.cpp
     src/schneider_stopping_table.cpp
     src/schneider_target_sampler.cpp
@@ -164,6 +165,15 @@ if(BUILD_TESTING)
         endif()
     endif()
     target_link_libraries(carbon_tests PRIVATE carbon_core)
+    add_executable(test_material_nuclear_rates tests/test_material_nuclear_rates.cpp)
+    target_link_libraries(test_material_nuclear_rates PRIVATE carbon_core)
+    if(CARBON_ENABLE_SYCL)
+        target_compile_options(test_material_nuclear_rates PRIVATE -fsycl)
+        if(CARBON_SYCL_TARGETS)
+            target_compile_options(test_material_nuclear_rates PRIVATE -fsycl-targets=${CARBON_SYCL_TARGETS})
+        endif()
+    endif()
+    add_test(NAME material_nuclear_rates COMMAND test_material_nuclear_rates)
     if(CARBON_ENABLE_SYCL)
         target_compile_options(carbon_tests PRIVATE -fsycl)
         if(CARBON_SYCL_TARGETS)

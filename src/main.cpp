@@ -447,7 +447,7 @@ int main(int argc, char* argv[]) {
         carbon::write_run_quality_report_json(quality_report_path, quality);
         carbon::write_energy_ledger_json(quality_directory / "energy_ledger.json", config,
                                          result);
-        if (config.is_schneider_ct_mode()) {
+        if (config.is_schneider_ct_mode() || config.unified_water_nuclear_transport) {
             carbon::write_schneider_miss_log_json(
                 quality_directory / "schneider_miss_log.json", result);
             carbon::write_schneider_unsupported_tracks_json(

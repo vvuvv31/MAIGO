@@ -32,7 +32,9 @@ def save(p, x):
 
 def config_write(p,c):
     # Native parser accepts simple scalar YAML, not Python/null spellings.
-    p.write_text("\n".join(f"{k}: {str(v).lower() if isinstance(v,bool) else v}" for k,v in c.items())+"\n")
+    # yaml.safe_load turns an intentionally empty optional output into None.
+    # Preserve the empty value on a second write, never a literal file "None".
+    p.write_text("\n".join(f"{k}: {'' if v is None else str(v).lower() if isinstance(v,bool) else v}" for k,v in c.items())+"\n")
 
 
 def header(p):

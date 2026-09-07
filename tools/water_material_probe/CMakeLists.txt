@@ -1,0 +1,7 @@
+cmake_minimum_required(VERSION 3.22)
+project(maigo_water_material_probe LANGUAGES CXX)
+find_package(Geant4 11.3.2 EXACT REQUIRED)
+add_executable(water_material_probe main.cpp)
+target_include_directories(water_material_probe PRIVATE ${Geant4_INCLUDE_DIRS})
+target_link_libraries(water_material_probe PRIVATE ${Geant4_LIBRARIES})
+target_compile_features(water_material_probe PRIVATE cxx_std_17)

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <limits>
 
 namespace carbon {
 // Geometry-only diagnostic integrator. Each visitor receives exactly the path
@@ -109,7 +110,85 @@ struct MassPathResult {
     bool escaped{false},invalid{false};
     std::size_t completed_segments{};
 };
-template<class Segment, class Density>
+// A straight segment whose endpoints are strictly inside one voxel cannot
+// cross an interface. Use its constant density directly; uncertain faces,
+// invalid inputs and crossings must fall through to the reference marcher.
+template<class Density>
+inline bool try_same_voxel_mass_segment(std::array<double,3>& point,
+    const std::array<double,3>& v,const std::array<double,3>& origin,
+    const std::array<double,3>& spacing,const std::array<int,3>& dims,Density density) {
+    std::array<int,3> cell{};
+    std::array<double,3> low{},high{},guard{},next{};
+    for(int a=0;a<3;++a) {
+        if(!(spacing[a]>0) || !std::isfinite(spacing[a]) || dims[a]<=0 ||
+           !std::isfinite(point[a]) || !std::isfinite(origin[a]) || !std::isfinite(v[a]))return false;
+        const double u=(point[a]-origin[a])/spacing[a];
+        if(!(u>=0 && u<dims[a]))return false; // Before integer conversion.
+        cell[a]=static_cast<int>(std::floor(u));
+        low[a]=origin[a]+cell[a]*spacing[a];high[a]=low[a]+spacing[a];
+        guard[a]=64*std::numeric_limits<double>::epsilon()*
+            std::max(1.0,std::max(std::abs(low[a]),std::abs(high[a])));
+        if(!(point[a]>low[a]+guard[a] && point[a]<high[a]-guard[a]))return false;
+    }
+    const double rho=density(cell);
+    if(!(rho>0) || !std::isfinite(rho))return false;
+    const double scale=10.0/rho;
+    for(int a=0;a<3;++a) {
+        next[a]=point[a]+scale*v[a];
+        if(!(next[a]>low[a]+guard[a] && next[a]<high[a]-guard[a]))return false;
+    }
+    point=next;return true;
+}
+struct MassPathBounds {
+    std::array<double,3> low{},high{},net{};
+};
+template<class Segment>
+inline MassPathBounds mass_path_bounds(std::size_t count,Segment segment) {
+    MassPathBounds b;
+    for(std::size_t i=0;i<count;++i) {
+        const auto v=segment(i);
+        for(int a=0;a<3;++a) {
+            b.net[a]+=v[a];b.low[a]=std::min(b.low[a],b.net[a]);
+            b.high[a]=std::max(b.high[a],b.net[a]);
+        }
+    }
+    return b;
+}
+// Conservative rotated bounds include EVERY prefix and the source, not just
+// the chord endpoints. Only skip the polyline when all of it fits one voxel.
+template<class Density>
+inline bool try_same_voxel_mass_path(std::array<double,3>& point,const MassPathBounds& b,
+    const std::array<std::array<double,3>,3>& basis,
+    const std::array<double,3>& origin,const std::array<double,3>& spacing,
+    const std::array<int,3>& dims,Density density) {
+    std::array<int,3> cell{};std::array<double,3> next{};
+    for(int a=0;a<3;++a) {
+        if(!(spacing[a]>0) || !std::isfinite(spacing[a]) || dims[a]<=0 ||
+           !std::isfinite(point[a]) || !std::isfinite(origin[a]))return false;
+        const double u=(point[a]-origin[a])/spacing[a];
+        if(!(u>=0 && u<dims[a]))return false;
+        cell[a]=static_cast<int>(std::floor(u));
+    }
+    const double rho=density(cell);
+    if(!(rho>0) || !std::isfinite(rho))return false;
+    const double scale=10.0/rho;
+    for(int a=0;a<3;++a) {
+        double low=0,high=0,net=0;
+        for(int k=0;k<3;++k) {
+            if(!std::isfinite(b.low[k]) || !std::isfinite(b.high[k]) || !std::isfinite(b.net[k]) ||
+               !std::isfinite(basis[k][a]) || b.low[k]>0 || b.high[k]<0 || b.net[k]<b.low[k] || b.net[k]>b.high[k])return false;
+            const double l=b.low[k]*basis[k][a],h=b.high[k]*basis[k][a];
+            low+=std::min(l,h);high+=std::max(l,h);net+=b.net[k]*basis[k][a];
+        }
+        const double face=origin[a]+cell[a]*spacing[a],end=face+spacing[a];
+        const double guard=64*std::numeric_limits<double>::epsilon()*std::max(1.0,std::max(std::abs(face),std::abs(end)));
+        if(!(point[a]+scale*low>face+guard && point[a]+scale*high<end-guard))return false;
+        next[a]=point[a]+scale*net;
+        if(!(next[a]>face+guard && next[a]<end-guard))return false;
+    }
+    point=next;return true;
+}
+template<bool SameVoxelFast=true,class Segment, class Density>
 inline MassPathResult replay_mass_polyline_indexed(
     const std::array<double,3>& birth,std::size_t count,Segment segment,
     const std::array<double,3>& origin,const std::array<double,3>& spacing,
@@ -119,9 +198,14 @@ inline MassPathResult replay_mass_polyline_indexed(
     for(std::size_t i=0;i<count;++i) {
         const auto v=segment(i);double norm=0;
         for(double x:v)norm+=x*x;
-        norm=std::sqrt(norm);
         if(!std::isfinite(norm)) {out.invalid=true;return out;}
         if(norm==0) {++out.completed_segments;continue;}
+        if constexpr(SameVoxelFast) {
+            if(try_same_voxel_mass_segment(out.endpoint,v,origin,spacing,dims,density)) {
+                ++out.completed_segments;continue;
+            }
+        }
+        norm=std::sqrt(norm);
         const std::array<double,3> direction{v[0]/norm,v[1]/norm,v[2]/norm};
         const auto m=march_longitudinal_mass_segments(out.endpoint,direction,origin,spacing,dims,norm,density,
             [](const std::array<int,3>&,double){});

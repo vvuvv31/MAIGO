@@ -14,6 +14,13 @@ constexpr double kSchneiderStoppingEnergyMin = 0.01;
 constexpr double kSchneiderStoppingEnergyMax = 430.11;
 constexpr double kSchneiderStoppingEnergyStep = 0.1;
 
+template<class Scalar,class Lookup>
+inline Scalar midpoint_continuous_energy_loss(Scalar energy, Scalar distance,
+                                             Scalar initial_stopping, Lookup stopping) {
+    const Scalar mid=energy-Scalar{0.5}*distance*initial_stopping;
+    return distance*stopping(mid>Scalar{0}?mid:Scalar{0});
+}
+
 #pragma pack(push, 1)
 struct SchneiderStoppingHeader {
     char magic[8];             // "SCHNSTOP"

@@ -3,6 +3,7 @@
 #include "carbon/transport_config.hpp"
 #include "carbon/schneider_target_sampler.hpp"
 #include "carbon/inelastic_package_v3.hpp"
+#include "carbon/material_nuclear_rates.hpp"
 
 #include <cstdint>
 
@@ -22,6 +23,29 @@ namespace carbon {
 struct SchneiderCtDeviceContext {
     // Active physics mode
     MaterialPhysicsMode mode{MaterialPhysicsMode::Water};
+    bool unified_water{false};
+    MaterialNuclearRateView water_primary_rates{}, water_secondary_rates{};
+    double water_radiation_length_g_cm2{};
+
+    [[nodiscard]] bool uses_cinel03() const noexcept {
+        return is_schneider_ct() || unified_water;
+    }
+    [[nodiscard]] SchneiderMaskedRates primary_rates(std::size_t section,float energy) const noexcept {
+        if (!unified_water) return schneider_masked_rates_device(primary_sampler,section,energy);
+        const auto rates=water_primary_rates.evaluate(0,energy);
+        SchneiderMaskedRates out{};
+        for(std::size_t t=0;t<13;++t) { out.partials[t]=static_cast<float>(rates.partials[t]); out.total+=out.partials[t]; }
+        return out;
+    }
+    [[nodiscard]] SecondaryMaskedRates secondary_rates(int projectile,std::size_t section,float energy) const noexcept {
+        if (!unified_water) return secondary_masked_rates_device(sec_partial_rates,sec_domain_emin,
+            sec_domain_emax,sec_domain_has,sec_num_projectiles,projectile,section,energy,
+            sec_energy_min_MeV_per_u,sec_inv_energy_step,sec_num_energies);
+        const auto rates=water_secondary_rates.evaluate(static_cast<std::size_t>(projectile),energy);
+        SecondaryMaskedRates out{};
+        for(std::size_t t=0;t<13;++t) { out.partials[t]=static_cast<float>(rates.partials[t]); out.total+=out.partials[t]; }
+        return out;
+    }
 
     // Primary Target Sampler
     SchneiderTargetSamplerDeviceTable primary_sampler{};

@@ -1,9 +1,230 @@
 # RT06423 严格 Gamma 改进计划：section-0 电子纵向响应
 
+## 当前执行指令（覆盖下方历史 smoke-only 限制）
+
+按用户要求，默认和 production 使用共享 CINEL03 框架。无 CT 网格时使用真实水材料，存在 CT 网格时使用 Schneider25；旧 water/CINEL02 回退不再允许。CLI 默认配置为 `config/unified_water_production.yaml`。water TOPAS match 推迟，不作为框架启用门禁；完整性、核覆盖、能量闭合及 overflow 门禁保留。水电子响应仍缺失，禁止借用 CT 电子表。此次不改 stopping/package 数值，默认水配置仍明确使用原有 75 eV stopping，精确水匹配待办。以下历史“仍不切生产默认”不再是当前执行要求。
+
+## 最新用户任务：以当前CT方案统一water/CT路径
+
+最新续验（2026-09-07）：同ROI4He反应输入GPU171.1748 vs TOPAS150.0749MeV/primary，GPU框外仅0.0874、该步电离0.1328，空间范围不足以解释差异。独立TOPAS G4_WATER率探针（Slurm2581）对alpha 398个H/O均覆盖点最大相对差0.083%，host/device真实查询通过；不支持调核率。实际GPU初代alpha出生谱已读取：58190 vs TOPAS58429个（同KE>0.1），平均KE403.620 vs403.084MeV，能谱CDF差0.0131；He3有偏硬迹象，仍有条件记录/粗角度分箱限制。水、CT50k和出生谱开关dose均逐位不变；仅追加诊断槽（schema13，旧11槽不变）和消除stride硬编码。17项Python、4项C++聚焦及真实率表host/device测试通过；无新Gamma、无物理/包修改、无commit/push。下一步实际出生谱驱动独立CSDA+核率积分，检验kernel反应统计/路径暴露；仍不切生产默认。
+
+2026-09-07最新续修：0.25/0.125/0.0625mm同binary水模诊断未显示总剂量随步长向TOPAS收敛，4He核反应导出均约171MeV/primary。过程中发现species连续沉积诊断逐步全局累加不闭合；已改为轨迹内汇总后一次提交（无物理/剂量修改）。原步长、最细步长和CT50k三组新旧dose全部逐位一致，核计数不变，最细步长4He账本偏差−26.27%→+0.00193%，CT约−2.50%→−0.00068%。新binary在build/oneapi-nvidia-water-ledger，旧binary保留。5+6项Python、2项C++聚焦测试通过；未跑新Gamma、未commit/push。下一步对齐TOPAS/GPU的4He核反应能量和空间范围（当前TOPAS ROI约150，GPU全输运约171MeV/primary），先核查暴露/能谱，不能直接调rate/package。
+
+最新续验：出生诊断已修复为复用原ROI分箱副本。Slurm2578/2579排除截面查询假设：有/无查询dose逐位相同，但Water传播scorer新增Water_1x1x1平行世界。2580只复用ROI_64x64x800后，dose与无scorer对照及原参考均逐位一致。He条件出生分析完成：4He primary KE TOPAS471.036/GPU469.723MeV/primary（−0.279%），3He67.567/71.738（+6.17%），6He2.591/1.703。不能凭此调package产额；下一步优先4He出生后核反应能量流出/逃逸/代数截断，并保留ROI、first-tracked及谱形限制。详见water_ct_unification.md；无GPU物理修改，无commit/push，水统一仍未生产验收。
+
+2026-09-07 氦出生续验：Slurm2577完成（50k、72CPU/48GiB），但新增CarbonCascadeNtuple后同seed总dose不再逐位一致：1645013体素变化，总积分约−0.005716%。严格非侵入门拒绝，未生成出生归因结论；证据见unified_water300_helium_birth_20260907/noninvasiveness_failure.json。scorer额外调用Geant4截面查询是待隔离候选，并非已证根因。下一步应做独立无截面查询的出生记录对照，先通过总dose不变门，再比较He出生与输运。新增4项诊断门测试通过；无物理/包/默认修改，无commit/push。
+
+最新父粒子归属完整闭合：2576已完成并分析，TOPAS总dose逐位不变、未分类仅0.0043MeV/primary。氦GPU低27.03MeV/primary（6.25%），是最大带电分项；初级低8.62MeV（0.39%）。当前包母粒子剩余KE全部为0，排除该遗漏猜测。下一步比较He出生计数/能谱与输运，不调scale/package；仍未生产验收。
+
+初次级分项续验：两端总dose均逐位不变、各自分项闭合。TOPAS非中性电子265.25MeV/primary跨越初级/碎片归属，GPU primary落在TOPAS primary与primary+全部电子之间，不能把剩余37MeV唯一归因次级。核后C12标签也不同；下一步按直接父粒子/首次核反应前后对齐诊断定义，primary survival尚未测量。未改物理。
+
+谱系续验完成：300MeV TOPAS中子/光子谱系合计18.51MeV/primary，相当于55.52MeV缺口的33.33%；数值扣除后仍37.01MeV，不能将缺口全归因中性遗漏或直接补偿。total与原参考逐位一致，分项在输出舍入界内闭合。下一步同水模primary/带电次级拆分；未改物理或默认。
+
+300MeV隔离续验：核关闭总能量GPU/TOPAS=1.0000867；完整核输运两seed均偏低，均值−1.9218%。缺口主要随核开启出现；待拆分中性谱系/带电碎片贡献。gen3试验被原0–2限制拒绝，未放宽、未声称排除代数截断。生产门禁继续保留。
+
+多能量续验已完成：100/200/300MeV/u各50k独立TOPAS对照，峰位全同bin，R80差−0.014/−0.041/−0.130mm。总能量仍低0.60/0.81/2.09%，100MeV碎片尾偏窄尚未解决。未切生产；下一步300MeV EM/核隔离和独立seed，不调package。
+
+续修：发现并修复统一水核开启时忽略YAML ion-stopping路径的硬编码；真实G4_WATER78eV候选表50k使R80偏差−0.507→−0.041mm、深度RMSE1.78%→0.40%。新binary配旧表dose逐位复现，CT50k回归dose逐位一致。候选表仅到400.01MeV/u，仍保留实验门禁；总能量−0.81%及横向偏窄未解决，不切生产默认。
+
+2026-09-07续：独立TOPAS200MeV/u水模50k已完成（Slurm2567）；GPU/TOPAS总能量0.992795，R80提前0.507mm，横向RMS仍偏窄。尚非多能量/密度或生产验收，保持smoke-only门禁；详见下方专题记录。
+
+见 [water_ct_unification.md](water_ct_unification.md)。真实G4_WATER属性、H/O rate适配器及显式开启的共用CINEL03 GPU路径已接通。原生water 50k闭合/零overflow通过，代数关闭对照通过，CT同输入50k新旧dose逐位一致。仍smoke-only；独立TOPAS水剂量、多能量/密度验证和纯水电子响应待完成，不切换旧water默认，不宣称生产统一完成。
+
+## 当前用户范围：暂停Gamma诊断，提供手动电子逐段输运开关
+
+`config/20022516_electron_segment_transport.yaml` 提供完整20022516临床175MeV/u单spot、300k示例（不是全患者计划）。`ct_electron_segment_transport: true/false` 控制逐段响应重放；false可保留YAML中的表和SHA，但有效配置清空响应/患者实验标记，离子和原section-0 delta-tail路径不变。不写键保持原按文件开启行为。true必须提供响应表，原SHA及smoke-only门禁保持不变。
+
+新构建 `build/oneapi-nvidia-electron-switch/carbon_mc`；不得把新YAML交给不认识该键的旧冻结binary。ledger输出有效开关状态；诊断runner的显式YAML false优先于其joint便利参数。C++聚焦测试覆盖ON/OFF/省略/非法bool/缺表/production拒绝，运行器退出检查3项通过，diff检查通过。本任务不新增物理改动、不跑Gamma、不提交或推送。
+
+## 最新续修（2026-09-07）：EM单束局部误差必须先扣清统计解释
+
+- Slurm2563临床175MeV/u、300k EM-only已完成（opt4+decay、同CT/临床源、GPU冻结bounds/0.25mm/电子r3）。总剂量GPU/TOPAS=0.998975；G11=98.62941、L11=68.94485、G30=98.02798、L30=52.93143。证据 `/mnt/sda/wuwei/ct_clinical_em_control_20260907/comparison.json`。核关闭后仍有低Local通过率，但**不能未经噪声评估就归因primary/电子模型缺陷**。
+- 仅关闭涨落、同seed/config/binary：L11=65.91318（下降3.03167pp）、L30=53.39375（上升0.46232pp）；总量0.998852。该消融不是修复，禁止将关闭涨落推广。证据 `ct_clinical_em_no_straggling_20260907/comparison.json`。
+- 原EM物理独立GPU seed9296301完成：L11=69.25374、L30=53.57377。10–20%/20–50%/≥50%剂量带原误差RMS=4.965/4.553/4.971%局部剂量；GPU单run噪声估计=3.531/3.318/3.252%。公式(A-B)/sqrt(2)，不是均值噪声。证据 `ct_clinical_em_seed9296301_20260907/comparison.json`；这与患者半计划的噪声不同，不能互相替代。
+- 本地Slurm2564（96CPU/64GiB）独立100k TOPAS seed9396301已0:0完成，日志确认100000 histories；估计原300k参考噪声，公式(R300-3R100)/2。`ct_clinical_em_reference_noise_20260907/analysis.json`：10–20%/20–50%/≥50%带TOPAS噪声=3.470/3.124/3.268%，合成噪声=4.951/4.557/4.610%，对应实测误差4.965/4.553/4.971%。参考归一总量比1.000310。两低剂量带误差与噪声相当，不能凭低统计Local通过率认定EM模型有缺陷；高剂量带仍有余量。单独一对seed估计及含噪mask有局限，不宣称系统误差全为零，不计算“去噪Gamma”。
+- 本次新增仅诊断工具 `probe_clinical_em_straggling.py` / `probe_clinical_em_reference_noise.py`；未新改输运/包/源/scale，未提交推送。退出检查3tests+空路径2tests通过，新增工具语法与diff检查通过；不是全套物理验收。
+- 已确认primary方差helper的Z/A参数当前未传入材料值；尚未修改，不把接线缺口直接当作Local偏差主因。三个此前物理候选保持默认关闭。
+- 下一步回到患者半计划可重复的肺10–50%内部残差，使用现有GPU/TOPAS独立复本做空间区域交叉验证；不要继续用本300k单束的低Local率调整包或涨落。患者原10–20%带误差3.557% vs 合成噪声1.759%仍存在，不能因本次单束噪声结论抹去。优先锁定跨独立半样本同符号的区域，再检验材料路径与局部源贡献。
+- 本段任务均已结束，无遗留GPU/Slurm任务。本轮没有新患者Gamma提升，也没有生产物理修复完成声明。
+
+下方运行中记录为历史，以上最新状态优先。
+
+## 较早续修（2026-09-07）：primary EM独立对照准备
+
+### 已完成，本轮没有患者全量Gamma提升结论
+
+- 次级连续dE记分存在源/终点混用：普通步用源x/y+终点z，核步把连续dE记到顶点。在**精确面诊断候选内**改为源体素一次提交，核局部沉积仍在顶点；正常/replay/miss早退均抑制旧dE提交，in/out同步分账。默认生产路径未改。
+- 构建 `build/oneapi-nvidia-secondary-source-score`，SHA `e5fa84b04af587c394313297d773b61abefc648493f02a6a70fdf6e4d96abb22`。300k seed9196301 OFF逐位复现原OFF；新ON L11=65.26665、L30=48.06840，相比仅几何候选ON的65.25537/48.02005变化很小，未解决Local11回归，仍不推广。
+- 与仅几何候选相比所有计数类Schneider诊断及电子查询/replay数不变；voxel/in=1，split=1.00000002256。验证脚本 `tools/verify_secondary_source_score.py`、证据 `ct_secondary_source_score_20260907/scoring_invariance.json`。浮点能量原子累加允许微小顺序差；不把JSON中恰好为整数的能量字段当计数，不宣称完整轨迹逐位证明。
+- Origin首跑输出失败（空配置路径经YAML读成None，二次写配置变为文件名None，误触发稀疏writer），保留 `/mnt/sda/wuwei/ct_local_origin_20260907`。已修复 `config_write` 保持空路径；两项回归+原半计划runner三项通过。
+- Origin r2成功 `/mnt/sda/wuwei/ct_local_origin_r2_20260907/analysis.json`：总dose与不开origin逐位一致，八类闭合max=7.5646e-6%峰值。单束Local失败区域GPU剂量primary约92–93%，He+p约4–5%；primary含电子响应，不等于93%误差归primary。Local11有3153个hot失败点，超额大于全部GPU次级剂量；但这是单束结论，不外推全患者。
+- 10,335份次级保存配置均为opt4+QGSP_BIC_HP+ion-INCLXX+CapturePhysics+elastic_HP+stopping；bundle的secondary binarycascade标签来自生成器硬编码。没有配置级模型错配证据，不更换包，不把标签作为BIC/INCL物理根因。
+- 另复现接线缺口：精确primary Schneider stopping开启后，`use_ct_mass_sp && !use_schneider_stopping`跳过次级材料LUT构建，次级实际上为water SP×rho。新增默认false、smoke-only `ct_secondary_schneider_sp_diagnostic`，恢复25分区Z/A,I简化Bethe因子；强制禁止四分类density-LUT分支，保持primary精确表。此因子仍是近似，不是独立Geant4逐离子表。
+- 构建 `build/oneapi-nvidia-secondary-schneider-sp` SHA `81ab5b0f7122ad8561c51a5e9cbed0ddcc47dad727e726f87a602a8cc3745115`。独立300k A/B（不混入精确面候选）L11=68.09677→68.18218、L30=46.96601→46.91282，收益不足且混合，不推广。日志确认为25-section、无four-class，OFF逐位复现基线；`test_ct_grid_helpers`聚焦测试通过。
+- 运行器加强退出检查：quality拒绝和I/O异常同为EXIT_FAILURE，必须匹配唯一预期终止消息且dose.raw/mhd存在；`tests/test_probe_exit_guard.py`三项通过。没有宣称完整旧测试套件通过。
+
+### 当前自动任务
+
+`tools/run_clinical_em_control.py`：原175MeV/u临床单spot（真实束宽/1%能散）、同CT/源，只关闭核反应；TOPAS只用opt4+decay，GPU冻结bounds、步长0.25mm，电子响应仍为实验。TOPAS本地Slurm **2563，48CPU/32GiB**；GPU本地300k已完成。目录 `/mnt/sda/wuwei/ct_clinical_em_control_20260907`，manifest固定输入；等TOPAS 0:0与Finalization后自动生成33/22/11/30 Global/Local。这个对照用于区分primary/电子路径与核反应贡献，不是生产验证。
+
+所有候选默认关闭；未提交、未推送、未改package/scale/beam。下方较早的“无遗留任务”和“次级散射优先”等记录由本段覆盖。
+
+## 2026-09-07 无人值守：次级跨界漏检已复现，候选未推广
+
+### 本轮最终门禁状态（覆盖下方运行中记录）
+
+- 次级MCS关闭的counterfactual已完成：精确面OFF/ON的L11=68.1226/65.3875（−2.7350pp），L30=47.2174/48.3585（+1.1411pp）。与原MCS开启的−2.8414/+1.0540pp接近，**不支持次级MCS是本候选Local11回归的主因**；不能再按此假说修改散射公式。
+- 两seed平均（各侧共600k，对300k TOPAS名义×0.5）：L11=69.0090→66.2868，L30=53.4820→54.8278；均值噪声RMS=2.7171→2.7072%局部参考剂量，几乎不变。回归没有随双seed平均消失。文件 `ct_secondary_exact_faces_20260907/two_seed_analysis.json`。
+- 原同seed主反应hazard/replay=99239/99239，电子查询517046212、路径replay238851979及redistributed能量均相同；次级步数258049038→299366378。`E_primary_depth_MeV`是混合账本字段，不当作纯primary能量不变的证明。
+- 几何漏检有独立复现，候选只修复该几何行为；它不是已验证的Local精度修复。两个诊断开关继续默认false，未接入患者/生产，未跑新half/full计划。当前无遗留GPU任务。
+- 已完成：独立构建、host/device几何回归、非smoke拒绝、双seed同binary A/B、次级MCS消融、双seed平均、输入SHA/零overflow/预期质量门检查。仅focused验证，未声称旧完整测试套件通过。
+- 下一项需要分离次级步的跨体素记分归属与跨材质连续能损，以实测空间剖面决定后续修复；不根据本轮混合Gamma结果调scale、package或MCS。
+
+独立seed9196301已完成：L11 68.0968→65.2554（−2.8414pp），L30 46.9660→48.0200（+1.0540pp），方向复现首seed。几何候选仍未推广。已启动只关闭次级MCS的counterfactual A/B（主粒子MCS不动），开关 `ct_secondary_mcs_off_diagnostic` 默认false且与exact-face同样仅smoke+bundle；独立构建 `build/oneapi-nvidia-secondary-faces-ablation`，输出 `/mnt/sda/wuwei/ct_secondary_exact_faces_seed9196301_20260907_no_secondary_mcs`。关闭次级散射不是候选生产方案，所得Gamma只用于开关交互诊断，不作为修复提升。
+
+- 双方噪声：现有TOPAS四复本（独立seed2001–2004）逐SHA核验，求和在mask内逐位重建冻结参考。10–20%剂量带GPU/TOPAS/合成相对噪声RMS=1.3806/1.0894/1.7586%，实测差异RMS=3.5566%。文件 `electron_ct_half10_step025_20260906/20022516/local_gamma_diagnosis_with_reference_noise.json`；不声称去噪Gamma或全部差异属于GPU。
+- 排除“电子全部从步起点发射”：当前出生位置已均匀采样于步内。原拟MCS/straggling开关矩阵尚未执行，优先处理下述实证。
+- 发现次级旧clamp快路径漏掉异质界面：距面0.01mm，0.05mm微步直接放行；0.9mm步跨过中间异材但终点同材也放行。host复现旧返回0.05/0.9，精确返回0.00999999mm。主粒子已经使用精确clamp。
+- 新增 `ct_secondary_exact_faces_diagnostic`，默认false，仅smoke+Schneider bundle。开启时次级精确面截断，不把微小真实面距扩成1e-5；完成整段才nextafter进入目的体素，核碰撞提前截断不吸附面。旧生产/水路径保持关闭。
+- 独立构建 `build/oneapi-nvidia-secondary-faces`，binary SHA `a525f796fb76e812e8dcd7ba101c1fd7eaeb131e7e8ee84c9318711c92f875e5`。host/device三轴正负向、角点、提前截断测试通过；非smoke拒绝测试补齐SYCL运行库后通过（首次环境错误不计通过）。未宣称完整旧测试套件通过。
+- 300k临床175MeV/u、0.25mm同源同binary A/B：OFF逐位等于冻结旧dose；两组零overflow，仅预期电子未验收标记。ON：G11 98.7300→98.6091，L11 69.9840→67.5053；G30 97.3278→97.5083，L30 48.6841→49.7993。局部11回归，禁止推广或宣称整体改善。
+- 已启动独立seed9196301重复（不跑全患者），工具 `tools/probe_secondary_exact_faces.py --seed 9196301`。输出 `/mnt/sda/wuwei/ct_secondary_exact_faces_seed9196301_20260907`。完成前不声称回归显著性；下一步需区分几何修正、步数和散射非可加性。
+- 未提交、未推送、未改package/scale/beam。原计划大规模扩跑没有执行。
+
+## 2026-09-07 更新：20022516 半计划配对已完成
+
+后续已完成：0.125mm同单片L30继续改善，但L11从83.546→82.995%，不推广。0.25mm完整半计划Local分解已复现冻结通过率，肺占L11/L30失败72.17%/76.24%，主要组合是肺10–50%剂量带内部。分析工具 `tools/diagnose_local_gamma.py`，结果 `electron_ct_half10_step025_20260906/20022516/local_gamma_diagnosis.json`。只读分析，无物理修改；完整表已补入下述报告。下文单片“运行中”状态已由本段覆盖。
+
+0.5→0.25mm，同88,586,520 histories/10片/源/seed/binary：Global G11=99.50475→99.74629%，G30=94.47179→98.26439%；Local L11=87.13637→87.74654%，L30=83.70631→86.82333%。全片零overflow；预期电子未验收标记仍保留，不改生产状态。
+
+肺G30失败40,064→8,030，噪声几乎不变；界面失败22,334→11,930。runner总耗时+45.72%。完整表与解释见 `benchmark/topas10x/gpu_step_refinement_20260907.md`。
+
+下一步仅单片0.125mm收敛，工具 `tools/check_patient_step_convergence.py`，输出 `/mnt/sda/wuwei/ct_step0125_shard01_20260907`。沿用冻结bounds和全部v2.1数据，空气矩/中点积分不启用。单片结果产生前不宣称收敛，不自动推广生产。
+
+下方“3/10运行中”等为历史状态，由本更新覆盖。
+
+## 无人值守修复进展（2026-09-06，未提交；生产默认未改）
+
+### 续跑核查（23:40 CST 后）
+
+- 细步长半计划已完成3/10，第4片运行中；无overflow排除。冻结bounds binary和物理输入不变。
+- 已排队同统计量Gamma核对，再自动运行 `tools/diagnose_half10_residual.py --run /mnt/sda/wuwei/electron_ct_half10_step025_20260906/20022516`。诊断入口新增完整10片/历史数/无overflow检查；脚本语法、CLI与diff检查通过，完整结果未产生前不宣称通过。
+- 代码确认当前默认为逐步Highland，修正项含本步厚度的对数。在155MeV/u固定能量、固定总路程下，把0.5mm拆成两个0.25mm会使模型累计角方差比变为0.9324（空气rho=0.01132）、0.9414（肺rho=0.26）、0.9445（rho=1）。这是公式的数值非可加性检查，不是患者模拟实测，也不证明它是剩余Gamma的主因；因此不能把细步长收益简单称为“已修复记分共振”。本轮不改散射公式或scale。
+- 未提交/推送；空气矩和中点积分候选保持默认关闭。结果观察器只生成诊断，不自动改变生产配置。
+
+### 已完成的诊断与候选判定
+
+- 临床单能层 CT 三例（135/155/175 MeV/u，300k，各原1%能散/发射度）TOPAS Slurm2511–2513均0:0完成。0.5→0.25mm：G30约97.02→97.55、97.02→97.81、96.86→97.33；G11略降或基本不变。原始表：`/mnt/sda/wuwei/ct_single_spot_residual_20260906/comparison.json`。
+- 理想155 MeV/u pencil（零束宽/发散/能散）纯EM也有误差：RMS6.375%峰值，G30=55.0，G11=61.515；核开启G30=53.376/G11=55.414。参考Slurm2514/2515，各50k。
+- 上游真空对照（Slurm2516；CT不变，GPU同时关闭入射空气能损）：纯EM RMS降到2.750%，G30=71.795/G11=65.934。支持上游空气缺失是部分原因，不能据此排除其他CT误差。
+- 入口相空间r1探针朝向错误，无前向C12，作废但保留。r2（Slurm2518）50000个前向C12完整，平面/方向通过；实测sigma位置约0.084mm、角度0.000487rad。原GPU源只补空气能损，不含空气MCS。
+- 简单Highland空气协方差候选（`ct_air_mcs_candidate_20260906`）位置sigma预测0.124mm过宽；纯EM RMS改善但G11跌到36.97，**不推广**。尝试撤回先前未验证coalesce代码被执行保护拒绝，未执行该撤回；新binary关闭物理开关的50k剂量与冻结bounds逐位一致，但不是全量coalesce验收。
+- 独立实测空气矩表：`/mnt/sda/wuwei/upstream_air_moments_r2_20260906/upstream_air_moments_v1.csv`，22节点（110–210MeV/u，L=300/315mm），C12、纯G4_AIR、独立seed。这里v1是**新增空气矩表的格式**，不是Schneider核栈降级；原v2.1核/stopping包全未改。SHA `c9c60fcedf99eac7d107b5300c41f1cdaaec0396cbf0517da815415fd7aeaab6`。每节点50000前向C12；raw/配置/exe SHA在collected_manifest.json。r1部分启动失败因beam model缺精确节点；已取消失败依赖链pending作业，未混入r2。r2 Slurm2541–2562全部成功。
+- 实测空气矩155MeV/u留出点：位置方差偏差+0.77%、位置角度协方差+0.40%、角方差−3.30%，不声称零误差。用于理想pencil后G30=80.303/G11=68.939/RMS2.529%，但175MeV/u临床单spot G30/G11略降（96.785/98.611）。因此仍是smoke-only候选，**不是患者主修复项**。
+- CT primary中点积分开关（同Schneider表、不调SP）：解析单测通过，但175MeV/u临床单spot G30/G11=96.794/98.717，未比原始改善，**不推广**。
+- 代码候选都默认关闭：`spots_enable_upstream_air_mcs`必须提供精确SHA的测量表且仅smoke/TPS/C12/域内；`ct_primary_midpoint_stopping_diagnostic`仅smoke CT。新构建`build/oneapi-nvidia-ct-midpoint`；只读字段记录开关及空气表SHA。节点/插值/域外/NaN/非PSD/重复节点测试通过。完整旧carbon_tests依赖已移走的旧FRED包和示例spots而失败；没有恢复旧数据，也不声称全套通过。
+
+### 当前运行：只验证细步长的患者收益，不混入上述代码候选
+
+- 同20022516 shard01，冻结bounds binary、相同8858906 histories/seed：0.5→0.25mm，G11 **98.72997→99.02888**，G30 **92.96349→96.39710**，L11 **82.86742→83.54619**，L30 **66.44553→69.91479**。细步长耗时553.19秒，相比原约382秒增加约45%；该改善尚未证明具体积分/MCS/记分子机制。
+- 用户授权无人值守后，已启动半fullplan细步长10 shards：`/mnt/sda/wuwei/electron_ct_half10_step025_20260906/20022516`，88,586,520 histories。第1份通过源配置（spots以内容SHA比较）、seed、binary、dose SHA核验后复用单shard结果，避免重复计算；记录在reuse_first.json。余下9份串行本机GPU。
+- 命令语义为 `run_electron_ct_full20.py --half --chunk 131072 --maximum-step-mm 0.25`；其他源/物理/坐标/scale不变，新空气矩及中点积分均未启用。零overflow且仅允许原electron-response未验收标记。
+- 完成后与**原同粒子数half10**做33/22/11/30 Global/Local对照；不得只引用旧full20来夸大改善。未通过完整对照前不修改生产默认，不宣称物理修复完成。下方较早“参考运行中”等文字由本段更新。
+
+## 当前任务：剩余 G30 与真实 CT 单 spot 诊断（2026-09-06，进行中）
+
+半 fullplan 已完成10/10，88,586,520 histories，零 overflow。新 G11/G30=99.504752%/94.471787%，旧全量=98.788925%/94.272920%；Global/Local 全表在 `electron_ct_half10_20260906/20022516/gamma.json`。不是严格同binary A/B，不宣称生产验收。
+
+- 只读剩余误差分析：`/mnt/sda/wuwei/electron_ct_half10_20260906/20022516/residual_diagnosis.json`。59,072个G30失败，肺sec1占40,064（67.8%），空气sec0仅159；高剂量带≥50%峰值占35,993个失败。全mask误差RMS=1.45167%峰值，交错5+5分片估计噪声RMS=0.28035%峰值。肺沿束相邻误差相关=-0.16018；不能仅据此宣布步长共振/物理缺陷。
+- 新独立临床单能层/中心spot：135/155/175 MeV/u，原1%能散、原束宽/发射度、同真实DICOM CT、每例300k histories，不是理想零能散pencil。TOPAS三维DoseToMedium，Slurm2511/2512/2513，总36CPU/48GiB，运行中；绝不把1D scorer当参考。
+- 目录 `/mnt/sda/wuwei/ct_single_spot_residual_20260906`，manifest固定输入与源。GPU同已验证bounds binary，0.5/0.25mm两档全部6组已完成，未修改物理代码或package；0.25mm仅为收敛诊断，不是生产参数修改。
+- TOPAS全部0:0结束后自动运行 `tools/compare_ct_single_spot_diagnosis.py`，输出 comparison.json / comparison.log。先比较单束G11/G30与IDD峰位/总量，判断单束CT误差及步长变化是否向参考收敛；若未向参考改善，不推广0.25mm，不以调参追Gamma。
+- 本段写入时无新根因闭环、无输运修复、无新生产结论。下方“半计划运行中”现为历史记录。
+
+## 当前任务：20022516 半 fullplan / 10 shards（2026-09-06，运行中）
+
+- 用户优先级：暂停代码优化，先计算患者 Gamma。此前 full20 调度及 shard07 已停止；已完成 6 shards 保留，不混入本次结果。
+- 新输出：`/mnt/sda/wuwei/electron_ct_half10_20260906/20022516`。
+- 将冻结 full20 的 20 份源按 spot_id 汇总并验证身份；1234 spots 各自精确减半，再分配 10 shards，共 **88,586,520 histories**。不是直接截取前 10 个旧 shards。
+- 使用已实测 bounds binary：`build/oneapi-nvidia-electron-bounds/carbon_mc`，SHA256 `253e9ce8e3a5b15cafd111013438573d12cccf9d7b7d23b5167e47be71fca4fc`；不使用尚未验收的 coalesce binary。
+- chunk_size=131072。固定 1,107,416 histories 的测试：默认16384两次52.920836/53.880822秒，131072两次50.447985/49.928479秒，平均吞吐提升6.40%。32768/65536分别52.750998/51.566361秒。六次 dose.raw 逐位一致、电子计数一致、零 domain/geometry/overflow。结果在 `/mnt/sda/wuwei/electron_chunk_sweep_20260906/20022516`（复测单独在 repeat_131072）。这不是满 shard 的速度承诺。
+- v2.1 数据保持冻结；电子响应使用 r3，多材料逐段路径仍为未验收实验。仅允许 `unvalidated_electron_joint_response`；其他失败停止，overflow 剂量排除并按 spot 拆分重跑。
+- 所有新 raw 保存实际半计划剂量；Gamma 时新聚合 ×2、历史 full20 ×1，对相同冻结 TOPAS raw，禁止拟合 scale/坐标。输出 Global/Local 33、22、11、30；明确半统计量与全统计量不同，不宣称纯物理配对 A/B。
+- runner 增加 `--half --chunk 131072`，小型测试覆盖10份聚合、×2归一、硬失败和 overflow 排除。实际完成情况以新目录 execution.json / gamma.json 为准；本段写入时 shard01 运行中，尚无新 Gamma。
+- 未提交、未推送、未启用生产。下方 full20 已恢复等文字属于历史记录，由本段更新。
+
+## 最小加速候选（2026-09-06；未替换运行中的full20）
+
+最新实测：20022516 shard01（8858630 histories，同配置/seed/响应，独占GPU）
+原逐段版447.13808s、19811.844 histories/s；快路径版404.26031s、21913.183 histories/s。
+吞吐+10.6065%，耗时−9.5894%；primary kernel 422.7561→379.76508s。
+两份dose.raw SHA完全相同（`8c0ecbda53360827e8b7383e3d920dfedf00b2bc9c316a9beacc96a710043499`），
+查询/replay/escape计数相同，domain/geometry/overflow均零；仅保留未验收响应标记。
+实测报告：`/mnt/sda/wuwei/electron_fast_probe_20260906/20022516/performance_comparison.json`。
+测速在当前分片结束后临时暂停full20调度，结束后已恢复；full20仍使用原binary。
+下面“尚未证明/排队等待”属于测速前记录，由本段实测更新，不是待执行任务。
+
+- `longitudinal_ray.hpp` 新增单段同体素快路径：起点/终点严格在同一体素内部，
+  直接以局域密度推进；64 double-ULP 量级保守边界带、跨界、异常输入回原算法。
+- 保留 `<false>` 原算法实例用于对照，未改响应包、路径顺序、份额、RNG、记分与队列。
+- 独立 `build/oneapi-nvidia-electron-fast`（sm_75）构建通过。
+  host/device 512组×12段对照状态一致，端点误差<1e-9mm，真实响应加载测试通过。
+- 尚未证明患者吞吐提高；不宣称位级剂量相同。新binary SHA：
+  `f9d81ce80ed690b1b72018ab8f3d4c238146ad2565fb3eb8dcd70a19f8665f44`。
+- 当前full20继续使用原binary `11cc5c039e05006b75754da5dfb7de6b3a6a93a463a53ac43c87b93c305a0094`，
+  有效运行目录为 `/mnt/sda/wuwei/electron_ct_full20_r2_20260906/20022516`。
+  下方无r2目录是首次低能域元数据失败尝试，不得合并。
+- 已排队等待该full20进程结束后，用新binary跑20022516同shard01；
+  输出 `/mnt/sda/wuwei/electron_fast_probe_20260906/20022516`，随后核对实际耗时与剂量。
+
+## 最新任务：20022516 新响应 full20 vs 历史 full20（2026-09-06）
+
+用户已明确要求该病例 full20，覆盖下方旧的“暂不跑full20”限制；不等于生产物理验收授权。
+响应已导出为独立 schema3：25分区×100能量bin、340747路径、8289928向量。
+真实加载/host-device测试通过。500MeV/u端点约3ULP的超出在导出时数值规范化，
+超过8ULP仍拒绝；未调整物理数据分布。核反应/stopping v2.1不变。
+
+- 复用冻结 r3/20022516 的20份配置/spot分配，共177173040 histories。
+- 新输出：`/mnt/sda/wuwei/electron_ct_full20_20260906/20022516`，运行中，尚无full20新Gamma。
+- 实验表：`/mnt/sda/wuwei/schneider_electron_ct_runtime_r2_20260906/joint_response.csv`。
+- 运行器：`tools/run_electron_ct_full20.py`，逐片真实失败即停，overflow丢弃并递归拆分，
+  全部有效历史数精确合并后自动计算Global/Local 11、30、33、22，名义scale=1。
+- 对照为历史full20而非同binary隔离A/B；不能把全部变化只归因于电子响应。
+- 当前基线G11=98.788925%、G30=94.272920%、L11=84.966988%、L30=81.358938%。
+- 每片仍有明确的未验收响应标记，`production_accepted=false`，不宣称生产通过。
+
+此前RT07575 A保留；B尚未运行，优先级转为本病例full20。
+
+## 最新执行指令：最小覆盖后先测患者 Gamma（2026-09-06，覆盖下方旧顺序）
+
+用户明确要求停止把完整隔离界面验收作为患者探索实验的前置条件。
+现在先用最少代码支持 25 个 Schneider 分区、0–500 MeV/u 分箱的独立电子响应，
+然后 RT07575 shard01 同 binary / spots / seed / histories 配对 A/B，优先报告
+Global/Local 11、30 和 33、22 回归。不得拟合 scale、改 beam 或改核反应包。
+
+- TOPAS 25 材料提取已完成；28 份成功 raw（空气拆为四份），响应表正在编译。
+- 实验入口仅显式 `ct_electron_joint_patient_experiment` + smoke；正式生产仍拒绝。
+- 保留 v2.1 核反应/stopping stack，新增响应不替换权威 bundle。
+- 数据域失败、无效路径和 overflow 仍阻止有效 A/B；不把预期的“未验收”标记当作生产通过。
+- 当前尚无新患者 Gamma；以实际配对结果决定是否值得继续补完整验收，不先跑 full20。
+- RT07575 A 已完成：6,481,909 histories，59.56 s，accepted=true、failures=[]。
+  全参考10% mask、名义历史数归一：Global11=96.719268%、Global30=97.396255%，
+  Local11=78.785862%、Local30=73.463945%。这是单 shard 基线，不能混比旧full20。
+  B 的导出/加载/运行/Gamma 串行任务已启动，等待最后空气原始路径编译；尚无 B 结果。
+- 数据根：`/mnt/sda/wuwei/schneider_electron_ct_pilot_r4_20260906`；
+  当前患者运行根：`/mnt/sda/wuwei/rt07575_electron_ct_ab_r3_20260906`。
+
+下方“患者未准入”等描述为先前完整验收路线的历史状态，不禁止上述显式探索实验。
+
 ## 用户最新优先级：异质界面 → 患者11/30（2026-09-06）
 
 主线改由 [界面与患者验证方案](interface_patient_focus.md) 控制；低能补表暂缓。
 最新执行顺序：隔离GPU界面验证 → 通过后补齐材料/能量/粒子覆盖 → 患者配对 → 生产。
+审查后修正：§1尚未完成。旧stratum verdict的“联合不确定度已解释残差”撤回：
+bulk全能谱中点RMS不是界面窗口RMS，chord消融不是有限路径采样误差。
+已修bootstrap为有序路径精确终点、分能量、manifest链校验及异常值拒绝。
+同56 raw/256采样数换压缩seed，空气→组织末2mm RMS 4.255→3.877mm，
+证实压缩尚未收敛。正在做1024路径对照和双界面薄层诊断；不开放患者/生产。
 继续验证：0.02mm双seed及双buffer深度门通过（最大窗口0.474%、单bin0.700%）；
 横向RMS残差仍存在，buffer敏感性<0.002mm。P0不关闭，下一步检查独立源组
 横向统计敏感性；能量份额bootstrap不能替代3D验收。

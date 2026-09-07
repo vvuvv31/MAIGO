@@ -125,6 +125,8 @@ TransportResult transport_serial(const TransportConfig& config,
                                  const StoppingPowerTable& stopping_power,
                                  const CrossSectionTable& cross_section) {
     config.validate();
+    if (config.unified_water_nuclear_transport)
+        throw std::invalid_argument("Unified water CINEL03 transport is currently GPU-only; CPU fallback forbidden");
     if (config.nuclear_model == "cinel02") {
         throw std::logic_error(
             "CINEL02 is supported only by the SYCL backend after runtime integration");

@@ -53,6 +53,38 @@ static std::array<double,5> exercise_polyline() {
         [](const std::array<int,3>& c){return c[2]<2 ? 1. : 10.;});
     return {r.endpoint[0],r.endpoint[1],r.endpoint[2],double(r.invalid || r.escaped),double(r.completed_segments)};
 }
+// Compare the fast path with the unchanged marcher, on both host and GPU.
+static std::array<double,4> exercise_same_voxel_fast() {
+    std::array<double,4> out{}; // status mismatches, max error, hits, unexpected hits
+    const std::array<double,3> origin{-1,-2,-3},spacing{.5,1,2};
+    const std::array<int,3> dims{8,6,4};
+    auto rho=[](const std::array<int,3>& c){return c[0]%2 ? .011316 : 1.0788;};
+    for(int k=0;k<512;++k) {
+        std::array<double,3> p{-.9+(k%7)*.5,-1.7+(k%5),-2.5+(k%3)*2};
+        if(k%11==0)p[0]=-.5; // Face starts, positive and negative directions.
+        if(k%17==0)p[0]=-1.1; // Outside.
+        if(k%19==0)p[0]=std::nextafter(-.5,0.); // Nearly on face.
+        auto seg=[&](std::size_t i){const double sign=(k+i)%2 ? -1. : 1.;
+            const double size=k%3==0 ? .02 : .000001;
+            return std::array<double,3>{sign*size,sign*size*.3,-sign*size*.1};};
+        const auto fast=replay_mass_polyline_indexed<true>(p,12,seg,origin,spacing,dims,rho);
+        const auto slow=replay_mass_polyline_indexed<false>(p,12,seg,origin,spacing,dims,rho);
+        out[0]+=(fast.invalid!=slow.invalid || fast.escaped!=slow.escaped || fast.completed_segments!=slow.completed_segments);
+        for(int a=0;a<3;++a)out[1]=std::max(out[1],std::abs(fast.endpoint[a]-slow.endpoint[a]));
+        out[2]+=try_same_voxel_mass_segment(p,seg(0),origin,spacing,dims,rho);
+    }
+    for(double x:{-.5,std::nextafter(-.5,0.),-1.1}) {
+        std::array<double,3> p{x,-1.7,-2.5};
+        out[3]+=try_same_voxel_mass_segment(p,{.000001,0,0},origin,spacing,dims,rho);
+    }
+    std::array<double,3> p{-.75,-1.7,-2.5};
+    const auto initial=p;
+    out[3]+=try_same_voxel_mass_segment(p,{.02697,0,0},origin,spacing,dims,rho); // exact face
+    out[3]+=(p!=initial); // Rejected fast path cannot modify the endpoint.
+    out[3]+=try_same_voxel_mass_segment(p,{1,0,0},origin,spacing,dims,[](auto){return 0.;});
+    out[3]+=try_same_voxel_mass_segment(p,{std::numeric_limits<double>::infinity(),0,0},origin,spacing,dims,rho);
+    return out;
+}
 static std::array<double,16> exercise() {
     std::array<double,16> out{};
     const float e[]{150,200,225}, f[]{0.08F,0.09F,0.1F}, l[]{20,25,30};
@@ -85,6 +117,35 @@ static std::array<double,16> exercise() {
         [](const std::array<int,3>&,double){return true;});
     out[15]=r.invalid;
     return out;
+}
+static std::array<double,3> exercise_path_bounds_fast() {
+    std::array<double,3> result{}; // hits, worst endpoint error, unsafe acceptance
+    const std::array<double,3> origin{-1,-2,-3},spacing{.5,1,2};
+    const std::array<int,3> dims{8,6,4};
+    auto density=[](const std::array<int,3>& c){return c[0]%2 ? .011316 : 1.0788;};
+    for(int k=0;k<512;++k) {
+        const double phi=k*.1,co=std::cos(phi),si=std::sin(phi);
+        const std::array<std::array<double,3>,3> basis{{{co,si,0},{-si,co,0},{0,0,1}}};
+        auto local=[&](std::size_t i){const double sign=i%2 ? -1. : 1.;
+            const double size=k%3==0 ? .02 : .000001;
+            return std::array<double,3>{sign*size,sign*size*.3,-sign*size*.1};};
+        auto world=[&](std::size_t i){const auto v=local(i);return std::array<double,3>{co*v[0]-si*v[1],si*v[0]+co*v[1],v[2]};};
+        std::array<double,3> p{-.75+(k%7)*.5,-1.7+(k%5),-2.5+(k%3)*2};
+        if(k%11==0)p[0]=-.5;
+        const auto before=p;
+        const auto b=mass_path_bounds(12,local);
+        if(try_same_voxel_mass_path(p,b,basis,origin,spacing,dims,density)) {
+            ++result[0];const auto ref=replay_mass_polyline_indexed<false>(before,12,world,origin,spacing,dims,density);
+            result[2]+=ref.invalid || ref.escaped;
+            for(int a=0;a<3;++a)result[1]=std::max(result[1],std::abs(p[a]-ref.endpoint[a]));
+        } else result[2]+=(p!=before);
+    }
+    // Same net endpoint is NOT evidence that the path stays in its voxel.
+    const auto loop=mass_path_bounds(2,[](std::size_t i){return std::array<double,3>{i ? -.2 : .2,0,0};});
+    std::array<double,3> p{.25,.25,.25};
+    result[2]+=try_same_voxel_mass_path(p,loop,{{{1,0,0},{0,1,0},{0,0,1}}},
+        {0,0,0},{.5,.5,.5},{8,8,8},[](auto){return 1.;});
+    return result;
 }
 static std::array<double,12> exercise_mass() {
     std::array<double,12> out{};
@@ -133,9 +194,29 @@ static void ordered_loader_fixtures() {
     write(0);std::filesystem::remove(binary);rejects(load);
     std::filesystem::remove_all(dir);
 }
+std::array<double,6> exercise_full_joint() {
+    std::array<ElectronJointChannel,kElectronJointChannels> channels{};
+    std::array<double,kElectronJointSections> low{},high{};high.fill(500);
+    const ElectronJointSample samples[]={{1,.01,.02},{1,.03,.04}};
+    for(int sec=0;sec<25;++sec) {
+        channels[sec*kElectronJointEnergyBins+80]={0,1,.25};
+        channels[sec*kElectronJointEnergyBins+99]={1,1,.1};
+    }
+    auto draw=[&](unsigned sec,double e){return sample_electron_joint_device(sec,e,.5,channels.data(),samples,low,high,500);};
+    return {draw(24,400).fraction,draw(24,500).fraction,
+        double(draw(12,470).status==ElectronJointStatus::invalid_payload),
+        double(draw(25,400).status==ElectronJointStatus::unsupported_section),
+        double(draw(1,-.1).status==ElectronJointStatus::energy_domain),
+        double(draw(1,500.01).status==ElectronJointStatus::energy_domain)};
+}
 int main(int argc, char** argv) {
     try {
         ordered_loader_fixtures();
+        const auto fast_host=exercise_same_voxel_fast();
+        require(fast_host[0]==0 && fast_host[1]<1e-9 && fast_host[2]>100 && fast_host[3]==0,
+                "same-voxel fast path/reference equivalence and conservative rejection");
+        const auto bounds_host=exercise_path_bounds_fast();
+        require(bounds_host[0]>100 && bounds_host[1]<1e-9 && bounds_host[2]==0,"path bounds must contain all turns");
         // Optional external diagnostic payload: no dependency on unshipped data
         // in the ordinary regression suite.
         if(argc==2) {
@@ -198,6 +279,22 @@ int main(int argc, char** argv) {
         // Unlike the old Python mirror, exercise the compiled device function.
 #ifdef CARBON_HAS_SYCL
         sycl::queue queue(sycl::gpu_selector_v);
+        auto* bounds_device=sycl::malloc_shared<std::array<double,3>>(1,queue);
+        queue.single_task([=]{*bounds_device=exercise_path_bounds_fast();}).wait_and_throw();
+        require((*bounds_device)[0]==bounds_host[0] && (*bounds_device)[1]<1e-9 && (*bounds_device)[2]==0,
+            "device conservative rotated path bounds");
+        sycl::free(bounds_device,queue);
+        auto* fast_device=sycl::malloc_shared<std::array<double,4>>(1,queue);
+        queue.single_task([=]{*fast_device=exercise_same_voxel_fast();}).wait_and_throw();
+        require((*fast_device)[0]==0 && (*fast_device)[1]<1e-9 && (*fast_device)[2]==fast_host[2] && (*fast_device)[3]==0,
+                "GPU same-voxel fast path/reference equivalence");
+        sycl::free(fast_device,queue);
+        const auto full_joint=exercise_full_joint();
+        require(full_joint==std::array<double,6>{.25,.1,1,1,1,1},"25-section/500 MeVu lookup semantics");
+        auto* full_device=sycl::malloc_shared<std::array<double,6>>(1,queue);
+        queue.single_task([=]{*full_device=exercise_full_joint();}).wait_and_throw();
+        require(*full_device==full_joint,"25-section host/device equivalence");
+        sycl::free(full_device,queue);
         const auto polyline=exercise_polyline();
         const std::array<double,5> expected_polyline{2,0,-1,0,4};
         for(int i=0;i<5;++i)require(std::abs(polyline[i]-expected_polyline[i])<1e-12,"ordered path interface identity");

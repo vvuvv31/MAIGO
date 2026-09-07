@@ -7,6 +7,7 @@
 #include "carbon/schneider_ct_device_context.hpp"
 
 #include <array>
+#include <cmath>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -92,9 +93,30 @@ constexpr bool cinel02_should_topas_compat_kill(
                Cinel02UnstableIonPolicy::TopasCompatKill;
 }
 
+// Diagnostic-only track-local reduction. No values feed particle transport or
+// dose scorers. Commit once after the stepping loop, including replay breaks.
+struct ContinuousSpeciesTrackTally {
+    float all_MeV{0.0F};
+    float fov_MeV{0.0F};
+    void add_all(float value) noexcept {
+        if (std::isfinite(value) && value > 0.0F) all_MeV += value;
+    }
+    void add_fov(float value) noexcept {
+        if (std::isfinite(value) && value > 0.0F) fov_MeV += value;
+    }
+};
+
+inline bool replay_vertex_in_scoring_box(
+    const std::array<float,3>& point, const std::array<float,3>& minimum,
+    const std::array<float,3>& maximum) noexcept {
+    for (std::size_t i=0; i<3; ++i)
+        if (!(point[i]>=minimum[i] && point[i]<maximum[i])) return false;
+    return true;
+}
+
 struct Cinel02SpeciesLedgerSchema {
     static constexpr std::size_t species_count = 18;
-    static constexpr std::size_t metric_count = 11;
+    static constexpr std::size_t metric_count = 13;
     static constexpr std::size_t terminal_reason_count = 6;
     enum Metric : std::size_t {
         queued_birth_kinetic = 0, continuous_deposit_all = 1,
@@ -102,7 +124,9 @@ struct Cinel02SpeciesLedgerSchema {
         nuclear_local_deposit_fov = 4, terminal_deposit_all = 5,
         terminal_deposit_fov = 6, boundary_escape_kinetic = 7,
         reaction_export_kinetic = 8, step_limit_escape_kinetic = 9,
-        reaction_import_kinetic = 10
+        reaction_import_kinetic = 10,
+        // Informational CINEL03 successful-replay subsets, not extra sinks.
+        cinel03_replay_input_fov = 11, cinel03_replay_step_dE_fov = 12
     };
     enum TerminalReason : std::size_t {
         initial_below_cutoff = 0, reaction_killed = 1, terminal_deposit = 2,

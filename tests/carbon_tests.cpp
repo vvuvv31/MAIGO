@@ -11,6 +11,7 @@
 #include "carbon/electron_transport.hpp"
 #include "carbon/energy_loss_fluctuation.hpp"
 #include "carbon/multiple_scattering.hpp"
+#include "carbon/upstream_air_scattering.hpp"
 #include "carbon/particle.hpp"
 #include "carbon/plan_run.hpp"
 #include "carbon/rng.hpp"
@@ -678,6 +679,82 @@ void test_primary_ion_definition() {
                 carbon::ion_effective_charge(10, 200.0) >
                     carbon::ion_effective_charge(6, 200.0),
             "Generic effective charge does not cover proton through neon");
+}
+
+void test_unified_water_config_and_quality() {
+    const auto base = carbon::load_config("config/unified_water_cinel03_smoke.yaml");
+    require(base.unified_water_nuclear_transport && base.is_water_mode() && !base.enable_ct_grid,
+            "Unified nuclear transport must retain native Water geometry identity");
+    require(carbon::TransportConfig{}.unified_water_nuclear_transport,"Water must default to shared framework");
+    const auto invalid = [&](auto change) {
+        auto cfg=base;change(cfg);require_throws([&]{cfg.validate();},"Invalid unified-water config accepted");
+    };
+    auto production=base; production.run_mode=carbon::RunMode::production; production.validate();
+    const auto default_production=carbon::load_config("config/unified_water_production.yaml");
+    require(default_production.unified_water_nuclear_transport &&
+            default_production.run_mode==carbon::RunMode::production,
+            "Default production config did not select shared water framework");
+    auto no_legacy=base; no_legacy.unified_water_nuclear_transport=false; no_legacy.validate();
+    require(no_legacy.unified_water_nuclear_transport,"Explicit false restored legacy water routing");
+    invalid([](auto& c){c.enable_ct_grid=true;});
+    invalid([](auto& c){c.enable_layered_phantom=true;});
+    invalid([](auto& c){c.water_cinel_package_file="legacy.bin";});
+    invalid([](auto& c){c.ct_schneider_physics_bundle_file.clear();});
+    invalid([](auto& c){c.unified_water_material_sha256=std::string(64,'0');});
+    invalid([](auto& c){c.initial_energy_MeVu=500;});
+    invalid([](auto& c){c.ct_electron_joint_response_diagnostic_file="tissue_response.csv";});
+    const carbon::StoppingPowerTable stopping({1.,430.},{1.,1.});
+    require_throws([&]{(void)carbon::transport_serial(base,stopping,{});},"CPU silently used legacy water transport");
+    auto result=std::make_unique<carbon::TransportResult>();
+    result->schneider_diagnostics.primary_missing_target=1;
+    const auto quality=carbon::evaluate_run_quality(base,*result);
+    bool unvalidated=false,missing=false;
+    for(const auto& failure:quality.failures) {
+        unvalidated |= failure.code=="unvalidated_unified_water_transport";
+        missing |= failure.code=="schneider_primary_missing_target";
+    }
+    require(!quality.accepted && !unvalidated && missing,"Water bypassed shared nuclear safety gates");
+}
+
+void test_ct_electron_segment_yaml_switch() {
+    std::ifstream input("config/20022516_electron_segment_transport.yaml");
+    require(input.good(), "Missing electron toggle example");
+    const std::string original((std::istreambuf_iterator<char>(input)), {});
+    const auto path = std::filesystem::temp_directory_path() / "maigo_electron_segment_switch.yaml";
+    const auto load = [&](std::string text) {
+        { std::ofstream output(path); output << text; }
+        return carbon::load_config(path);
+    };
+    const std::string key = "ct_electron_segment_transport: true";
+    const auto at = original.find(key);
+    require(at != std::string::npos, "Example must expose toggle");
+    const auto enabled = load(original);
+    require(!enabled.ct_electron_joint_response_diagnostic_file.empty() &&
+            enabled.ct_electron_joint_patient_experiment, "ON lost response configuration");
+    auto off = original;
+    off.replace(at, key.size(), "ct_electron_segment_transport: false");
+    const auto disabled = load(off);
+    require(disabled.ct_electron_joint_response_diagnostic_file.empty() &&
+            disabled.ct_electron_joint_response_sha256.empty() &&
+            disabled.ct_electron_joint_response_metadata_sha256.empty() &&
+            !disabled.ct_electron_joint_patient_experiment, "OFF retained response or quality marker");
+    require(disabled.ct_schneider_delta_tail_file == enabled.ct_schneider_delta_tail_file &&
+            disabled.ct_schneider_stopping_power_file == enabled.ct_schneider_stopping_power_file,
+            "OFF changed baseline physics");
+    auto legacy = original;
+    legacy.erase(at, key.size());
+    require(load(legacy).ct_electron_joint_response_diagnostic_file ==
+            enabled.ct_electron_joint_response_diagnostic_file, "Absent toggle broke legacy activation");
+    auto bad = original;
+    bad.replace(at, key.size(), "ct_electron_segment_transport: maybe");
+    require_throws([&] { (void)load(bad); }, "Invalid boolean accepted");
+    require_throws([&] { (void)load("ct_electron_segment_transport: true\n"); },
+                   "ON without table accepted");
+    bad = original;
+    const auto mode = bad.find("run_mode: smoke");
+    bad.replace(mode, std::string("run_mode: smoke").size(), "run_mode: production");
+    require_throws([&] { (void)load(bad); }, "Toggle bypassed experimental production gate");
+    std::filesystem::remove(path);
 }
 
 void test_ion_physics_manifest_loading() {
@@ -2559,6 +2636,37 @@ void test_topas_spot_weights_and_tps_90_transform() {
     }, "Upstream propagation accepted a table outside its energy domain");
 }
 
+void test_upstream_air_covariance() {
+    const auto m=carbon::add_measured_air_covariance({0.,0.,0.},300.,{.007,.000035,.00000024});
+    const double xx=m.sigma_position_mm*m.sigma_position_mm;
+    const double aa=m.sigma_angle_rad*m.sigma_angle_rad;
+    const double xa=m.correlation*m.sigma_position_mm*m.sigma_angle_rad;
+    require_near(xx+600*xa+90000*aa,.007,1e-12,"measured position moment at entrance");
+    require_near(xa+300*aa,.000035,1e-14,"measured covariance at entrance");
+    const auto analytic=100.-std::sqrt(10000.-1000.);
+    const auto midpoint=carbon::midpoint_continuous_energy_loss(100.,.5,10.,[](double E){return 1000./E;});
+    require(std::abs(midpoint-analytic)<std::abs(5.-analytic)/20,"midpoint must converge toward analytic slowing solution");
+    require_near(carbon::midpoint_continuous_energy_loss(100.,.5,10.,[](double){return 10.;}),5.,0.,"constant stopping unchanged");
+    using carbon::add_upstream_air_covariance;
+    const carbon::SourcePlaneCovariance source{3.,.006,.7};
+    const double L=307.,theta=.0005;
+    for (auto s : {source, carbon::SourcePlaneCovariance{0.,0.,0.}}) {
+        const auto c=add_upstream_air_covariance(s,L,theta);
+        const double dx=c.sigma_position_mm*c.sigma_position_mm-s.sigma_position_mm*s.sigma_position_mm;
+        const double da=c.sigma_angle_rad*c.sigma_angle_rad-s.sigma_angle_rad*s.sigma_angle_rad;
+        const double dc=c.correlation*c.sigma_position_mm*c.sigma_angle_rad-s.correlation*s.sigma_position_mm*s.sigma_angle_rad;
+        require_near(da,theta*theta,1e-15,"air angular variance");
+        require_near(dc+L*da,L*theta*theta/2.,1e-14,"air entrance covariance");
+        require_near(dx+2*L*dc+L*L*da,L*L*theta*theta/3.,1e-12,"air entrance spatial variance");
+    }
+    const auto zero=add_upstream_air_covariance(source,0.,theta);
+    require_near(zero.sigma_position_mm,source.sigma_position_mm,0.,"zero air unchanged");
+    require_near(zero.correlation,source.correlation,0.,"zero air correlation unchanged");
+    require_throws([&]{add_upstream_air_covariance(source,-1.,theta);},"negative length rejected");
+    carbon::TransportConfig cfg;cfg.spots_enable_upstream_air_mcs=true;
+    require_throws([&]{cfg.validate();},"unscoped air MCS rejected");
+}
+
 void test_tps_direction_basis_composition() {
     const auto direction = carbon::compose_tps_direction(
         2.0F, 3.0F, 5.0F,
@@ -3933,6 +4041,34 @@ void test_cinel02_replay_miss_mcs_semantics() {
             "disabled MCS must remain disabled for a replay miss");
 }
 
+void test_continuous_species_track_tally() {
+    const std::array<float,3> lo{-64.0F,-64.0F,0.0F},hi{64.0F,64.0F,400.0F};
+    require(carbon::replay_vertex_in_scoring_box(lo,lo,hi), "lower faces included");
+    require(!carbon::replay_vertex_in_scoring_box(hi,lo,hi), "upper faces excluded");
+    require(!carbon::replay_vertex_in_scoring_box({-64.01F,0,1},lo,hi), "outside x excluded");
+    require(!carbon::replay_vertex_in_scoring_box({0,0,std::numeric_limits<float>::quiet_NaN()},lo,hi), "NaN excluded");
+    carbon::ContinuousSpeciesTrackTally tally;
+    for (int step = 0; step < 4000; ++step) {
+        tally.add_all(0.125F);
+        if (step % 2 == 0) tally.add_fov(0.125F);
+    }
+    require_near(tally.all_MeV, 500.0F, 0.0F, "all track steps counted once");
+    require_near(tally.fov_MeV, 250.0F, 0.0F, "FOV guard preserved");
+    for (float v : {0.0F, -1.0F, std::numeric_limits<float>::infinity(),
+                    std::numeric_limits<float>::quiet_NaN()}) {
+        tally.add_all(v); tally.add_fov(v);
+    }
+    require_near(tally.all_MeV, 500.0F, 0.0F, "invalid additions ignored");
+    require_near(tally.fov_MeV, 250.0F, 0.0F, "invalid FOV additions ignored");
+    carbon::ContinuousSpeciesTrackTally next;
+    require_near(next.all_MeV, 0.0F, 0.0F, "next track starts empty");
+    for (int step = 0; step < 100; ++step) {
+        next.add_all(0.5F);
+        if (step == 3) break;
+    }
+    require_near(next.all_MeV, 2.0F, 0.0F, "break retains completed collision step");
+}
+
 void test_secondary_step_voxel_commit() {
     // Deterministic collision-step primitive: dE=2 into pending=5 gives 7.
     float pending = 5.0F;
@@ -3979,9 +4115,10 @@ void test_cinel02_ledger_schema_and_accumulator() {
     using Replay = carbon::Cinel02ReplayLedgerSchema;
     using Exposure = carbon::Cinel02ExposureLedgerSchema;
     static_assert(Schema::species_count == 18);
-    static_assert(Schema::metric_count == 11);
+    static_assert(Schema::metric_count == 13);
     static_assert(Schema::terminal_reason_count == 6);
-    static_assert(Schema::reaction_import_kinetic + 1 == Schema::metric_count);
+    static_assert(Schema::reaction_import_kinetic == 10);
+    static_assert(Schema::cinel03_replay_step_dE_fov + 1 == Schema::metric_count);
     static_assert(Schema::continuous_stop + 1 == Schema::terminal_reason_count);
     static_assert(Replay::status_count == 5);
     static_assert(Replay::status_slot_count == 18 * 2 * 3 * 40 * 5);
@@ -7547,9 +7684,10 @@ void test_out_of_scope_isotope_summary_ledger_fields() {
     b8.birth_energy_MeV = 300.0F;
     result.schneider_unsupported_tracks = {he6, b8};
     // Species 5 (He6) ledger recorded: birth/continuous/escape.
-    result.cinel02_species_transport_ledger_MeV[5 * 11 + 0] = 1000.0;
-    result.cinel02_species_transport_ledger_MeV[5 * 11 + 1] = 600.0;
-    result.cinel02_species_transport_ledger_MeV[5 * 11 + 7] = 400.0;
+    constexpr auto stride = carbon::Cinel02SpeciesLedgerSchema::metric_count;
+    result.cinel02_species_transport_ledger_MeV[5 * stride + 0] = 1000.0;
+    result.cinel02_species_transport_ledger_MeV[5 * stride + 1] = 600.0;
+    result.cinel02_species_transport_ledger_MeV[5 * stride + 7] = 400.0;
     const auto tmp = std::filesystem::temp_directory_path() / "oos_summary_test.json";
     {
         std::ofstream out(tmp, std::ios::binary);
@@ -10027,6 +10165,7 @@ int main(int argc, char** argv) {
         run("test_fred_18_isotopes_data", test_fred_18_isotopes_data);
         run("test_cinel02_replay_miss_mcs_semantics", test_cinel02_replay_miss_mcs_semantics);
         run("test_secondary_step_voxel_commit", test_secondary_step_voxel_commit);
+        run("test_continuous_species_track_tally", test_continuous_species_track_tally);
         run("test_cinel02_ledger_schema_and_accumulator", test_cinel02_ledger_schema_and_accumulator);
         run("test_ion_species_stopping_power_grid_validation", test_ion_species_stopping_power_grid_validation);
         run("test_stopping_power_csv_corruption_rejection", test_stopping_power_csv_corruption_rejection);
@@ -10064,6 +10203,8 @@ int main(int argc, char** argv) {
         run("test_fragment_stopping_power_scale", test_fragment_stopping_power_scale);
         run("test_primary_ion_definition", test_primary_ion_definition);
         run("test_ion_physics_manifest_loading", test_ion_physics_manifest_loading);
+        run("test_ct_electron_segment_yaml_switch", test_ct_electron_segment_yaml_switch);
+        run("test_unified_water_config_and_quality", test_unified_water_config_and_quality);
         run("test_strict_config_parsing_and_canonicalization", test_strict_config_parsing_and_canonicalization);
         run("test_run_quality_gate", test_run_quality_gate);
         run("test_particle_specific_stopping_power_tables", test_particle_specific_stopping_power_tables);
@@ -10086,6 +10227,7 @@ int main(int argc, char** argv) {
         run("test_minibeam_absorbing_geometry", test_minibeam_absorbing_geometry);
         run("test_topas_spots_parse_angle01", test_topas_spots_parse_angle01);
         run("test_topas_spot_weights_and_tps_90_transform", test_topas_spot_weights_and_tps_90_transform);
+        run("test_upstream_air_covariance", test_upstream_air_covariance);
         run("test_tps_direction_basis_composition",
             test_tps_direction_basis_composition);
         run("test_tps_source_geometry_csv_and_switch", test_tps_source_geometry_csv_and_switch);

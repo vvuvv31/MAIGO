@@ -2,6 +2,9 @@
 
 #include "carbon/ct_grid.hpp"
 #include "carbon/topas_spots.hpp"
+#include "carbon/upstream_air_scattering.hpp"
+#include "carbon/sha256.hpp"
+#include <optional>
 
 #include <algorithm>
 #include <array>
@@ -719,6 +722,12 @@ std::vector<PrimarySpotBatchEntry> TpsSourcePlan::make_primary_batch(
         return enter;
     };
     std::vector<PrimarySpotBatchEntry> batch;
+    std::optional<AirMomentTable> air_moments;
+    if (config.spots_enable_upstream_air_mcs) {
+        if (compute_file_sha256_hex(config.spots_upstream_air_mcs_file)!=config.spots_upstream_air_mcs_sha256)
+            throw std::invalid_argument("Air moment table SHA mismatch");
+        air_moments=AirMomentTable::read(config.spots_upstream_air_mcs_file);
+    }
     batch.reserve(active_spot_count());
     std::uint64_t history_begin = 0;
     for (std::size_t index = 0; index < spots.size(); ++index) {
@@ -765,6 +774,22 @@ std::vector<PrimarySpotBatchEntry> TpsSourcePlan::make_primary_batch(
         entry.emittance_sigma_y_prime() = static_cast<float>(sigma_y_prime);
         entry.emittance_correlation_x() = static_cast<float>(correlation_x);
         entry.emittance_correlation_y() = static_cast<float>(correlation_y);
+        if (config.spots_enable_upstream_air_mcs) {
+            if (upstream_air_stopping_power == nullptr)
+                throw std::invalid_argument("Air MCS requires the upstream stopping table");
+            const auto length = distance_to_ct_entry(pose);
+            if (config.primary_atomic_number!=6 || config.primary_mass_number!=12)
+                throw std::invalid_argument("Measured air moment table supports C12 only");
+            const auto moments=air_moments->sample(total_energy_MeV/12.,length);
+            const auto x = add_measured_air_covariance({sigma_x_mm, sigma_x_prime, correlation_x}, length, moments);
+            const auto y = add_measured_air_covariance({sigma_y_mm, sigma_y_prime, correlation_y}, length, moments);
+            entry.emittance_sigma_x_mm() = static_cast<float>(x.sigma_position_mm);
+            entry.emittance_sigma_y_mm() = static_cast<float>(y.sigma_position_mm);
+            entry.emittance_sigma_x_prime() = static_cast<float>(x.sigma_angle_rad);
+            entry.emittance_sigma_y_prime() = static_cast<float>(y.sigma_angle_rad);
+            entry.emittance_correlation_x() = static_cast<float>(x.correlation);
+            entry.emittance_correlation_y() = static_cast<float>(y.correlation);
+        }
         entry.source_origin_x_mm() = static_cast<float>(pose.origin_x_mm);
         entry.source_origin_y_mm() = static_cast<float>(pose.origin_y_mm);
         entry.source_origin_z_mm() =

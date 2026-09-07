@@ -82,6 +82,9 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
                                       const TransportResult& result) {
     RunQualityReport report;
     report.mode = config.run_mode;
+    if (config.unified_water_nuclear_transport)
+        report.approximations.push_back({"water_topas_match_pending",
+            "Shared CINEL03 framework enabled for production; water TOPAS accuracy validation remains incomplete",1.,0.});
     if(!config.ct_electron_joint_response_diagnostic_file.empty()) {
         report.failures.push_back({"unvalidated_electron_joint_response","Independent bulk response interface pilot; not patient/production validated",1.,0.});
         if(result.electron_joint_diagnostics.domain_misses || result.electron_joint_diagnostics.invalid_marches)
@@ -416,7 +419,7 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
     // named diagnostics fails validation. Research mode still completes and
     // writes diagnostics, but accepted is false. Production likewise reports
     // accepted=false so the dose is refused as a formal result.
-    if (config.is_schneider_ct_mode() && !config.is_primary_attenuation_only_mode()) {
+    if ((config.is_schneider_ct_mode() || config.unified_water_nuclear_transport) && !config.is_primary_attenuation_only_mode()) {
         const auto& sch = result.schneider_diagnostics;
         const auto schneider_fail = [&](const char* code, const std::string& message,
                                         const double value) {

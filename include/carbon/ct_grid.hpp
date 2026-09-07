@@ -591,6 +591,25 @@ inline CtFaceClampResult clamp_step_to_ct_faces_exact(
     return result;
 }
 
+// Snap only a fully traversed face-limited segment, never a nuclear-truncated
+// segment. nextafter assigns both positive and negative crossings to the
+// destination cell; merely flooring a negative-going face leaves it upstream.
+inline std::array<float,3> ct_finish_exact_face_step(
+    const CtFaceClampResult& clamp, const float used_step,
+    const std::array<float,3>& start, const std::array<float,3>& direction,
+    const std::array<float,3>& origin, const std::array<float,3>& spacing) noexcept {
+    std::array<float,3> result{};
+    for (int axis=0;axis<3;++axis) {
+        result[axis]=start[axis]+used_step*direction[axis];
+        if (clamp.hit_face && used_step==clamp.step_mm &&
+            (clamp.axis_mask & (1U<<axis)) && std::fabs(direction[axis])>1e-6F) {
+            const float face=origin[axis]+std::round((result[axis]-origin[axis])/spacing[axis])*spacing[axis];
+            result[axis]=std::nextafter(face,direction[axis]>0 ? 1e30F : -1e30F);
+        }
+    }
+    return result;
+}
+
 // Advance exactly one face (the nearest). Returns false if the next cell is
 // outside the grid.
 inline bool ct_dda_step(CtDdaState& state,
