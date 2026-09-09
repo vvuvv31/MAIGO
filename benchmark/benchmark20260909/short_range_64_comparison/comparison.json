@@ -1,0 +1,74 @@
+{
+  "scope": "64 histories, single timing trial; NOT throughput or Gamma acceptance",
+  "results": [
+    {
+      "name": "off",
+      "primary_kernel_seconds": 61.2625,
+      "primary_kernel_histories_per_second": 1.0446847582126095,
+      "process_wall_histories_per_second": 0.23793971249253446,
+      "reported_histories_per_second": 0.24731573,
+      "shortcut_packets": 0,
+      "failures": [
+        {
+          "code": "unvalidated_material_electron_response",
+          "message": "Candidate main-kernel material response; patient accuracy and complete density coverage not validated",
+          "value": 1,
+          "limit": 0
+        }
+      ],
+      "overflow": 0,
+      "physical_relative_energy_residual": 2.02326875456e-07,
+      "voxel_to_ingrid_ratio": 1.00000000012,
+      "max_absolute_dose_difference_Gy": 0.0,
+      "max_difference_percent_baseline_peak": 0.0,
+      "dose_array_sum_relative_difference": 0.0,
+      "primary_kernel_speedup": 1
+    },
+    {
+      "name": "mm010",
+      "primary_kernel_seconds": 61.588422,
+      "primary_kernel_histories_per_second": 1.039156353121046,
+      "process_wall_histories_per_second": 0.24207564797385325,
+      "reported_histories_per_second": 0.25170195,
+      "shortcut_packets": 27941,
+      "failures": [
+        {
+          "code": "unvalidated_material_electron_response",
+          "message": "Candidate main-kernel material response; patient accuracy and complete density coverage not validated",
+          "value": 1,
+          "limit": 0
+        }
+      ],
+      "overflow": 0,
+      "physical_relative_energy_residual": 1.98475360145e-07,
+      "voxel_to_ingrid_ratio": 1.00000000012,
+      "max_absolute_dose_difference_Gy": 0.0,
+      "max_difference_percent_baseline_peak": 0.0,
+      "dose_array_sum_relative_difference": 0.0,
+      "primary_kernel_speedup": 0.9947080637980951
+    },
+    {
+      "name": "mm025",
+      "primary_kernel_seconds": 61.594563,
+      "primary_kernel_histories_per_second": 1.0390527488603174,
+      "process_wall_histories_per_second": 0.24133415222983728,
+      "reported_histories_per_second": 0.25086752,
+      "shortcut_packets": 29257,
+      "failures": [
+        {
+          "code": "unvalidated_material_electron_response",
+          "message": "Candidate main-kernel material response; patient accuracy and complete density coverage not validated",
+          "value": 1,
+          "limit": 0
+        }
+      ],
+      "overflow": 0,
+      "physical_relative_energy_residual": 1.93660966007e-07,
+      "voxel_to_ingrid_ratio": 1.00000000012,
+      "max_absolute_dose_difference_Gy": 0.0,
+      "max_difference_percent_baseline_peak": 0.0,
+      "dose_array_sum_relative_difference": 0.0,
+      "primary_kernel_speedup": 0.9946088910477375
+    }
+  ]
+}
