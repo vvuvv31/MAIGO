@@ -95,7 +95,11 @@ inline Scalar sample_energy_loss_ratio_from_grid(
 class EnergyLossFluctuationTable {
 public:
     static EnergyLossFluctuationTable from_csv(
-        const std::filesystem::path& path);
+        const std::filesystem::path& path, bool mean_loss_fraction_axis = false);
+
+    [[nodiscard]] const std::vector<double>& second_axis_values() const noexcept {
+        return areal_densities_g_per_cm2_;
+    }
 
     [[nodiscard]] double sample_loss_ratio(
         double energy_MeVu,

@@ -74,6 +74,9 @@ ChargedOriginDoseToMedium::ParseRequestedCategory(const G4String& input) {
     if (value == "be_other") return OriginCategory::BeOther;
     if (value == "lithium" || value == "z3") return OriginCategory::Lithium;
     if (value == "helium" || value == "z2") return OriginCategory::Helium;
+    if (value == "he3") return OriginCategory::He3;
+    if (value == "he4") return OriginCategory::He4;
+    if (value == "he_other") return OriginCategory::HeOther;
     if (value == "z1" || value == "hydrogen") return OriginCategory::Z1;
     if (value == "other_charged") return OriginCategory::OtherCharged;
     if (value == "neutral_origin") return OriginCategory::NeutralOrigin;
@@ -82,7 +85,7 @@ ChargedOriginDoseToMedium::ParseRequestedCategory(const G4String& input) {
     G4ExceptionDescription description;
     description << "Unknown OriginCategory: " << input
                 << ". Expected primary_c, secondary_c, boron, beryllium, "
-                << "be6, be7, be9, be10, be_other, lithium, helium, z1, "
+                << "be6, be7, be9, be10, be_other, lithium, helium, he3, he4, he_other, z1, "
                 << "other_charged, neutral_origin, or unclassified.";
     G4Exception("ChargedOriginDoseToMedium", "InvalidOriginCategory",
                 FatalException, description);
@@ -108,7 +111,12 @@ ChargedOriginDoseToMedium::CategoryForChargedNucleus(
         return OriginCategory::BeOther;
     }
     if (z == 3) return OriginCategory::Lithium;
-    if (z == 2) return OriginCategory::Helium;
+    if (z == 2) {
+        const G4int a = definition->GetAtomicMass();
+        if (a == 3) return OriginCategory::He3;
+        if (a == 4) return OriginCategory::He4;
+        return OriginCategory::HeOther;
+    }
     if (z == 1) return OriginCategory::Z1;
     return OriginCategory::OtherCharged;
 }
@@ -169,8 +177,12 @@ G4bool ChargedOriginDoseToMedium::ProcessHits(
         origin == OriginCategory::Be6 || origin == OriginCategory::Be7 ||
         origin == OriginCategory::Be9 || origin == OriginCategory::Be10 ||
         origin == OriginCategory::BeOther;
+    const bool any_helium =
+        origin == OriginCategory::He3 || origin == OriginCategory::He4 ||
+        origin == OriginCategory::HeOther;
     if (origin != requested_category_ &&
-        !(requested_category_ == OriginCategory::Beryllium && any_beryllium)) {
+        !(requested_category_ == OriginCategory::Beryllium && any_beryllium) &&
+        !(requested_category_ == OriginCategory::Helium && any_helium)) {
         return false;
     }
 

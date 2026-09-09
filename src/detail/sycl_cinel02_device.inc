@@ -9,6 +9,17 @@ inline void score_be_isotope_origin_voxel_device(
         atomic(dose[category * voxel_count + voxel]);
     atomic.fetch_add(amount);
 }
+inline void score_he_isotope_origin_voxel_device(
+    DoseAtomicT* dose, const std::size_t category, const std::size_t voxel_count,
+    const std::size_t voxel, const DoseAtomicT amount) noexcept {
+    if (dose == nullptr || category >= he_isotope_origin_category_count ||
+        voxel >= voxel_count || amount <= DoseAtomicT{0}) return;
+    sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
+                     sycl::memory_scope::device,
+                     sycl::access::address_space::global_space>
+        atomic(dose[category * voxel_count + voxel]);
+    atomic.fetch_add(amount);
+}
 
 inline void cinel02_diag_add_device(
     std::uint64_t* diagnostics, const std::uint32_t slot,

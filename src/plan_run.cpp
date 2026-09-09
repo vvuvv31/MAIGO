@@ -118,6 +118,15 @@ void accumulate_transport_result(carbon::TransportResult& total,
     total.beamline_removed_energy_MeV +=
         part.beamline_removed_energy_MeV;
     total.untracked_nuclear_energy_MeV += part.untracked_nuclear_energy_MeV;
+    total.material_electron_untracked_MeV += part.material_electron_untracked_MeV;
+    total.material_electron_photon_untracked_MeV += part.material_electron_photon_untracked_MeV;
+    total.electron_joint_diagnostics.queries += part.electron_joint_diagnostics.queries;
+    total.electron_joint_diagnostics.domain_misses += part.electron_joint_diagnostics.domain_misses;
+    total.electron_joint_diagnostics.invalid_marches += part.electron_joint_diagnostics.invalid_marches;
+    total.electron_joint_diagnostics.redistributed_MeV += part.electron_joint_diagnostics.redistributed_MeV;
+    total.electron_joint_diagnostics.escaped_MeV += part.electron_joint_diagnostics.escaped_MeV;
+    total.electron_joint_diagnostics.domain_retained_MeV += part.electron_joint_diagnostics.domain_retained_MeV;
+    total.electron_joint_diagnostics.ordered_path_replays += part.electron_joint_diagnostics.ordered_path_replays;
     total.fred_model_unassigned_MeV += part.fred_model_unassigned_MeV;
     total.nuclear_interactions += part.nuclear_interactions;
     for (std::size_t i = 0; i < total.cinel02_diagnostics.size(); ++i) {

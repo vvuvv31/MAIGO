@@ -47,6 +47,7 @@ add_library(carbon_core
     src/plan_run.cpp
     src/electron_transport.cpp
     src/electron_joint_response.cpp
+    src/water_electron_response.cpp
     src/energy_loss_fluctuation.cpp
     src/fred_table1.cpp
     src/fred_event_library.cpp
@@ -152,6 +153,24 @@ add_executable(carbon_mc src/main.cpp)
 target_link_libraries(carbon_mc PRIVATE carbon_core)
 
 if(BUILD_TESTING)
+    if(CARBON_ENABLE_SYCL)
+        add_executable(material_electron_boundary_gpu_smoke tests/material_electron_boundary_gpu_smoke.cpp)
+        target_link_libraries(material_electron_boundary_gpu_smoke PRIVATE carbon_core)
+        target_compile_options(material_electron_boundary_gpu_smoke PRIVATE
+            $<TARGET_PROPERTY:carbon_core,COMPILE_OPTIONS>)
+        # Explicit real-data/local-GPU invocation, not an automatic CTest run.
+        add_executable(material_electron_density_gpu_smoke tests/material_electron_density_gpu_smoke.cpp)
+        target_link_libraries(material_electron_density_gpu_smoke PRIVATE carbon_core)
+        target_compile_options(material_electron_density_gpu_smoke PRIVATE
+            $<TARGET_PROPERTY:carbon_core,COMPILE_OPTIONS>)
+    endif()
+    add_executable(water_electron_response_unit tests/water_electron_response_unit.cpp)
+    target_include_directories(water_electron_response_unit PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_link_libraries(water_electron_response_unit PRIVATE carbon_core)
+    add_test(NAME water_electron_response_unit COMMAND water_electron_response_unit)
+    add_test(NAME water_electron_config_guard COMMAND water_electron_response_unit
+        ${CMAKE_CURRENT_SOURCE_DIR}/config/unified_water_production.yaml)
+    set_tests_properties(water_electron_config_guard PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
     add_executable(carbon_tests tests/carbon_tests.cpp)
     add_executable(inelastic_package_v2_tests tests/inelastic_package_v2_tests.cpp)
     target_link_libraries(inelastic_package_v2_tests PRIVATE carbon_core)

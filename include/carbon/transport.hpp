@@ -17,6 +17,15 @@ namespace carbon {
 
 class SyclTransportContext;
 
+// Read-only snapshots of queued He births, captured after GPU transport.
+// history is the source-history index, NOT a Geant4 parent track ID.
+struct HeliumBirthRecord {
+    std::uint64_t history{};
+    unsigned generation{}, mass_number{};
+    double kinetic_energy_MeV{}, x_mm{}, y_mm{}, z_mm{};
+    double direction_x{}, direction_y{}, direction_z{}, weight{};
+};
+
 struct MinibeamDiagnostics {
     static constexpr std::size_t slit_count = 15;
     static constexpr std::size_t touched_energy_bin_count = 12;
@@ -580,6 +589,7 @@ struct TransportResult {
     // Category-major layout: category * number_of_voxels + voxel index.
     std::vector<double> charged_origin_voxel_deposited_energy_MeV;
     std::vector<double> be_isotope_origin_voxel_deposited_energy_MeV;
+    std::vector<double> he_isotope_origin_voxel_deposited_energy_MeV;
     std::vector<double> neutral_origin_voxel_deposited_energy_MeV;
     std::vector<double> primary_deposited_energy_MeV;
     std::vector<double> secondary_carbon_deposited_energy_MeV;
@@ -616,6 +626,10 @@ struct TransportResult {
     // in particle.hpp birth_* constants. Counts are event tallies (not /primary).
     // Histograms are species × generation × bin (see birth_hist_index).
     std::vector<std::uint64_t> birth_counts_by_generation;  // cat * gen_bins
+    std::vector<HeliumBirthRecord> helium_birth_records; // opt-in birth spectrum only
+    // Diagnostic only: tau(start), tau(Simpson), E*tau(Simpson), candidates,
+    // candidate post-EM energy, actual path length. He4, generation eligible.
+    std::array<double, 6> helium4_hazard_audit{};
     std::vector<double> birth_ke_sum_MeV_by_generation;     // cat * gen_bins
     std::vector<std::uint64_t> birth_mevu_hist;             // cat*gen*mevu_bins
     std::vector<std::uint64_t> birth_depth_hist;            // cat*gen*depth_bins
@@ -638,6 +652,8 @@ struct TransportResult {
     // optional minibeam beamline.
     double beamline_removed_energy_MeV{0.0};
     double untracked_nuclear_energy_MeV{0.0};
+    double material_electron_untracked_MeV{0.0};
+    double material_electron_photon_untracked_MeV{0.0}; // informational subset
     double fred_model_unassigned_MeV{0.0};
     std::uint64_t nuclear_interactions{0};
     // Step 12 primary-only & validation counters

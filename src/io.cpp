@@ -558,6 +558,27 @@ void write_fragment_birth_spectrum_csv(const std::filesystem::path& prefix,
     };
 
     {
+        auto output = write_open("_helium_joint.csv");
+        output << "source_history,generation,Z,A,kinetic_energy_MeV,x_mm,y_mm,z_mm,direction_x,direction_y,direction_z,weight\n"
+               << std::setprecision(17);
+        for (const auto& birth : result.helium_birth_records) {
+            output << birth.history << ',' << birth.generation << ",2," << birth.mass_number
+                   << ',' << birth.kinetic_energy_MeV << ',' << birth.x_mm << ',' << birth.y_mm
+                   << ',' << birth.z_mm << ',' << birth.direction_x << ',' << birth.direction_y
+                   << ',' << birth.direction_z << ',' << birth.weight << '\n';
+        }
+        if (!output) throw std::runtime_error("Failed to write helium joint birth spectrum");
+    }
+    {
+        auto output = write_open("_he4_hazard.csv");
+        output << "tau_start,tau_simpson,energy_tau_simpson_MeV,candidates,candidate_energy_MeV,path_mm\n"
+               << std::setprecision(17);
+        for (std::size_t i=0; i<result.helium4_hazard_audit.size(); ++i)
+            output << (i ? "," : "") << result.helium4_hazard_audit[i];
+        output << '\n';
+        if (!output) throw std::runtime_error("Failed to write He4 hazard audit");
+    }
+    {
         auto output = write_open("_summary.csv");
         output << "species,generation,count,mean_kinetic_energy_MeV,"
                   "yield_per_primary\n"
@@ -1406,7 +1427,7 @@ void write_dense_charged_origin_voxel_dose_mhd(
                << "DoseOriginCategory = " << labels[category] << '\n'
                << "ElementDataFile = " << raw_path.filename().string() << '\n';
     }
-    if (result.be_isotope_origin_voxel_deposited_energy_MeV.empty()) return;
+    if (!result.be_isotope_origin_voxel_deposited_energy_MeV.empty()) {
     if (result.be_isotope_origin_voxel_deposited_energy_MeV.size() !=
         be_isotope_origin_category_count * voxel_count) {
         throw std::invalid_argument("Be-isotope origin voxel result size mismatch");
@@ -1426,6 +1447,32 @@ void write_dense_charged_origin_voxel_dose_mhd(
         std::ofstream output(raw_path, std::ios::binary);
         if (!output) {
             throw std::runtime_error("Cannot create Be-isotope RAW file: " +
+                                     raw_path.string());
+        }
+        output.write(reinterpret_cast<const char*>(raw.data()),
+                     static_cast<std::streamsize>(raw.size() * sizeof(float)));
+    }
+    }
+    if (result.he_isotope_origin_voxel_deposited_energy_MeV.empty()) return;
+    if (result.he_isotope_origin_voxel_deposited_energy_MeV.size() !=
+        he_isotope_origin_category_count * voxel_count) {
+        throw std::invalid_argument("He-isotope origin voxel result size mismatch");
+    }
+    constexpr std::array<const char*, he_isotope_origin_category_count>
+        he_labels{"he3", "he4", "he_other"};
+    for (std::size_t category = 0; category < he_labels.size(); ++category) {
+        const auto raw_path = base.parent_path() /
+            (base.filename().string() + "_" + he_labels[category] + ".raw");
+        std::vector<float> raw(voxel_count, 0.0F);
+        const auto offset = category * voxel_count;
+        for (std::size_t voxel = 0; voxel < voxel_count; ++voxel) {
+            raw[voxel] = static_cast<float>(scored_dose_Gy(
+                config, result.he_isotope_origin_voxel_deposited_energy_MeV[
+                            offset + voxel], masses_kg[voxel]));
+        }
+        std::ofstream output(raw_path, std::ios::binary);
+        if (!output) {
+            throw std::runtime_error("Cannot create He-isotope RAW file: " +
                                      raw_path.string());
         }
         output.write(reinterpret_cast<const char*>(raw.data()),
@@ -1684,6 +1731,8 @@ void write_energy_ledger_json(const std::filesystem::path& path,
            << "  \"E_beamline_MeV\": " << result.beamline_removed_energy_MeV
            << ",\n"
            << "  \"E_untracked_MeV\": " << result.untracked_nuclear_energy_MeV << ",\n"
+           << "  \"E_material_electron_untracked_MeV\": " << result.material_electron_untracked_MeV << ",\n"
+           << "  \"E_material_photon_untracked_MeV\": " << result.material_electron_photon_untracked_MeV << ",\n"
            << "  \"E_topas_compat_discarded_kinetic_MeV\": " << result.topas_compat_discarded_kinetic_total_MeV() << ",\n"
            << "  \"E_queue_lost_MeV\": "
            << result.secondary_queue_overflow_energy_MeV +
@@ -1737,6 +1786,34 @@ void write_energy_ledger_json(const std::filesystem::path& path,
         output << "  \"unified_water_material_sha256\": \"" << config.unified_water_material_sha256 << "\",\n"
                << "  \"unified_water_primary_stopping_file\": \"" << config.primary_stopping_power_file.string() << "\",\n"
                << "  \"unified_water_material_id_note\": \"255 is a diagnostic sentinel, not a Schneider section; rate uses a separate water row\",\n";
+    }
+    if(!config.material_electron_response_index_file.empty()) {
+        const auto& d=result.electron_joint_diagnostics;
+        output<<"  \"material_electron_response\": {\"status\": \"unvalidated_main_kernel_integration\", "
+              <<"\"density_sampling\": \""<<(config.enable_ct_grid?"candidate_same_section_density_mixture_birth_energy_packets":"deposited_fraction_weighted_brackets_no_coordinate_scaling")<<"\", "
+              <<"\"index_sha256\": \""<<config.material_electron_response_index_sha256<<"\", "
+              <<"\"memory_mode\": \""<<config.material_electron_response_memory_mode<<"\", "
+              <<"\"density_g_cm3\": "<<(config.enable_ct_grid?"null":std::to_string(config.water_density_g_per_cm3))<<", "
+              <<"\"heterogeneous_continuation\": "<<(config.enable_ct_grid?"true":"false")
+              <<", \"unresolved_photon_policy\": \""<<(config.enable_ct_grid?"separate_untracked_energy_not_patient_escape":"explicit_escape_bound_not_validated")<<"\", "
+              <<"\"queries\": "<<d.queries<<", \"domain_misses\": "<<d.domain_misses
+              <<", \"invalid_paths\": "<<d.invalid_marches<<", \"path_replays\": "<<d.ordered_path_replays
+              <<", \"voxel_redistributed_MeV\": "<<d.redistributed_MeV
+              <<", \"outside_packet_MeV\": "<<d.escaped_MeV<<"},\n";
+    }
+    if(!config.water_electron_response_diagnostic_file.empty()) {
+        const auto& d=result.electron_joint_diagnostics;
+        output<<"  \"water_electron_response\": {\"status\": \""
+              <<(config.water_electron_nuclear_diagnostic ? "unvalidated_water_nuclear_diagnostic" : "unvalidated_water_em_diagnostic")<<"\", "
+              <<"\"nuclear_diagnostic\": "<<(config.water_electron_nuclear_diagnostic ? "true" : "false")<<", "
+              <<"\"data_sha256\": \""<<config.water_electron_response_sha256<<"\", "
+              <<"\"metadata_sha256\": \""<<config.water_electron_response_metadata_sha256<<"\", "
+              <<"\"unresolved_photon_policy\": \"explicit_escape_bound_not_validated\", "
+              <<"\"queries\": "<<d.queries<<", \"domain_misses\": "<<d.domain_misses
+              <<", \"invalid_paths\": "<<d.invalid_marches<<", \"path_replays\": "<<d.ordered_path_replays
+              <<", \"voxel_redistributed_MeV\": "<<d.redistributed_MeV
+              <<", \"physical_or_scorer_outside_packet_MeV\": "<<d.escaped_MeV
+              <<", \"lookup_retained_MeV\": "<<d.domain_retained_MeV<<"},\n";
     }
     if(!config.ct_electron_joint_response_diagnostic_file.empty()) {
         const auto& d=result.electron_joint_diagnostics;

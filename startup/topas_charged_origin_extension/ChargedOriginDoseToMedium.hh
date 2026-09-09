@@ -38,7 +38,10 @@ private:
         Be7 = 11,
         Be9 = 12,
         Be10 = 13,
-        BeOther = 14
+        BeOther = 14,
+        He3 = 15,
+        He4 = 16,
+        HeOther = 17
     };
 
     OriginCategory ResolveOrigin(const G4Track*);

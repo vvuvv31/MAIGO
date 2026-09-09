@@ -34,6 +34,16 @@ inline std::uint64_t child_stream(const std::uint64_t parent_stream,
     return z ^ (z >> 31U);
 }
 
+// Event identity and product ordinal are separate levels: siblings must never
+// share subsequent transport draws. Atomic queue positions are not identities.
+inline std::uint64_t event_product_stream(std::uint64_t parent,
+                                          std::uint32_t collision_index,
+                                          std::uint32_t role,
+                                          std::uint32_t product_index) noexcept {
+    return child_stream(child_stream(parent, collision_index),
+                        branch_tag(role, product_index));
+}
+
 inline PhiloxBlock philox4x32_10(PhiloxBlock counter,
                                 std::uint32_t key0,
                                 std::uint32_t key1) noexcept {

@@ -218,8 +218,13 @@ void test_units() {
 }
 
 void test_csda_range_loss_validation() {
-    const auto rejected = [](auto configure, const char* message) {
-        carbon::TransportConfig config;
+    auto native = carbon::load_config(std::filesystem::path(CARBON_SOURCE_DIR) /
+                                     "config/unified_water_production.yaml");
+    native.enable_inelastic = false;
+    native.enable_secondary_transport = false;
+    native.use_particle_specific_stopping_power = false;
+    const auto rejected = [&native](auto configure, const char* message) {
+        auto config = native;
         config.enable_csda_range_energy_loss = true;
         configure(config);
         require_throws([&config] { config.validate(); }, message);
@@ -234,7 +239,7 @@ void test_csda_range_loss_validation() {
              "CSDA range loss accepted minibeam transport");
     rejected([](auto& config) { config.use_particle_specific_stopping_power = true; },
              "CSDA range loss accepted particle-specific stopping power");
-    carbon::TransportConfig enabled;
+    auto enabled = native;
     enabled.enable_csda_range_energy_loss = true;
     enabled.validate();
 }
@@ -1492,6 +1497,22 @@ void test_philox_rng() {
         parent, carbon::rng::branch_tag(carbon::rng::branch_role_primary_neutral, 0));
     require(a == a2 && a != 0 && a != parent, "child_stream not deterministic");
     require(a != b && a != n, "child_stream collisions across tags");
+    std::vector<std::uint64_t> streams;
+    for (std::uint32_t event = 0; event < 8; ++event) {
+        for (std::uint32_t product = 0; product < 64; ++product) {
+            const auto stream = carbon::rng::event_product_stream(
+                parent, event, carbon::rng::branch_role_primary_charged, product);
+            require(stream == carbon::rng::event_product_stream(
+                parent, event, carbon::rng::branch_role_primary_charged, product),
+                "Event product stream must be deterministic");
+            require(std::find(streams.begin(), streams.end(), stream) == streams.end(),
+                "Sibling/event transport streams must not alias");
+            require(stream != carbon::rng::event_product_stream(
+                parent, event, carbon::rng::branch_role_cascade_charged, product),
+                "Primary/cascade roles must not alias");
+            streams.push_back(stream);
+        }
+    }
     require(sizeof(carbon::SecondaryParticle3D) == 48 &&
                 sizeof(carbon::NeutralParticle3D) == 48,
             "Particle layout size changed unexpectedly");
@@ -10003,6 +10024,24 @@ void test_schneider_post_em_null_gate_taxonomy() {
     std::cout << "[schneider-strict] post-EM null gate taxonomy tests PASSED.\n";
 }
 
+void test_material_electron_untracked_energy_accounting() {
+    auto result=std::make_unique<carbon::TransportResult>();
+    result->initial_energy_MeV=100;
+    result->total_deposited_energy_MeV=70;
+    result->escaped_energy_MeV=10;
+    result->untracked_nuclear_energy_MeV=5;
+    result->material_electron_untracked_MeV=15;
+    result->material_electron_photon_untracked_MeV=7; // informational subset, never added twice
+    require(result->physical_relative_energy_balance_error()==0,"Material untracked energy must close exactly once");
+    require(result->relative_energy_balance_error()==0,"Accounting closure must include material untracked energy");
+    carbon::TransportConfig config;config.run_mode=carbon::RunMode::research;
+    require(carbon::evaluate_run_quality(config,*result).absolute_physical_energy_residual_MeV==0,
+            "Quality JSON closure must agree with TransportResult");
+    result->material_electron_untracked_MeV=0;
+    require(std::abs(result->physical_relative_energy_balance_error()-0.15)<1e-12,
+            "Missing material energy must remain visible, photon subset must not hide it");
+}
+
 void test_schneider_born_strict_equality_and_ledger_disjoint() {
     std::cout << "[schneider-strict] born strict-equality and ledger-disjoint tests..." << std::endl;
     carbon::TransportConfig config;
@@ -10328,6 +10367,7 @@ int main(int argc, char** argv) {
         run("test_schneider_quality_gate_rejects_failures", test_schneider_quality_gate_rejects_failures);
         run("test_schneider_post_em_null_gate_taxonomy", test_schneider_post_em_null_gate_taxonomy);
         run("test_schneider_born_strict_equality_and_ledger_disjoint", test_schneider_born_strict_equality_and_ledger_disjoint);
+        run("test_material_electron_untracked_energy_accounting", test_material_electron_untracked_energy_accounting);
 #ifdef CARBON_HAS_SYCL
         run("test_schneider_tertiary_transport_generations", test_schneider_tertiary_transport_generations);
 #endif

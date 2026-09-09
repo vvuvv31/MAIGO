@@ -76,7 +76,7 @@ int parse_positive_integer(const std::string& field,
 }  // namespace
 
 EnergyLossFluctuationTable EnergyLossFluctuationTable::from_csv(
-    const std::filesystem::path& path) {
+    const std::filesystem::path& path, bool mean_loss_fraction_axis) {
     std::ifstream input(path);
     if (!input) {
         throw std::runtime_error(
@@ -105,7 +105,8 @@ EnergyLossFluctuationTable EnergyLossFluctuationTable::from_csv(
                     "Energy-loss fluctuation CSV requires at least three quantiles: " +
                     path.string());
             }
-            const auto prefix_fields = split_csv(expected_prefix);
+            auto prefix_fields = split_csv(expected_prefix);
+            if (mean_loss_fraction_axis) prefix_fields[4] = "mean_loss_fraction";
             if (!std::equal(prefix_fields.begin(), prefix_fields.end(), fields.begin())) {
                 throw std::runtime_error(
                     "Energy-loss fluctuation CSV has an unexpected identity/grid header: " +
@@ -151,6 +152,9 @@ EnergyLossFluctuationTable EnergyLossFluctuationTable::from_csv(
             fields[3], path, line_number, "energy_MeV_per_u");
         row.areal_density_g_per_cm2 = parse_number(
             fields[4], path, line_number, "areal_density_g_per_cm2");
+        if (mean_loss_fraction_axis && row.areal_density_g_per_cm2 > 1.0) {
+            throw std::runtime_error("mean_loss_fraction must be in (0,1]: " + path.string());
+        }
         if (row.mass_number < row.atomic_number || row.material.empty() ||
             row.energy_MeVu <= 0.0 || row.areal_density_g_per_cm2 <= 0.0) {
             throw std::runtime_error(
@@ -247,6 +251,10 @@ EnergyLossFluctuationTable EnergyLossFluctuationTable::from_csv(
             rows.begin() + static_cast<std::ptrdiff_t>(begin), rows.end(),
             [energy](const auto& row) { return row.energy_MeVu != energy; });
         const auto end_index = static_cast<std::size_t>(end - rows.begin());
+        if (mean_loss_fraction_axis &&
+            end_index - begin != result.areal_densities_g_per_cm2_.size()) {
+            throw std::runtime_error("Fraction-axis package requires a complete rectangular grid: " + path.string());
+        }
         if (end_index - begin < 2) {
             throw std::runtime_error(
                 "Each fluctuation energy requires at least two areal-density points: " +

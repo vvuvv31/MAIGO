@@ -1,8 +1,10 @@
 #pragma once
 #include "TsVNtupleScorer.hh"
 #include <map>
+#include <set>
 #include <utility>
 class G4Track;
+class G4Material;
 
 // Schema 3: 29 legacy columns plus generating parent step ID and post state.
 // parent_ke/dir are the PRE state of the exact generating step. The post
@@ -23,6 +25,13 @@ private:
     G4int schema_version_, parent_valid_, creator_process_id_, parent_step_;
     G4double parent_ke_, parent_dir_x_, parent_dir_y_, parent_dir_z_, birth_density_;
     G4double parent_post_ke_, parent_post_dx_, parent_post_dy_, parent_post_dz_;
+    // Opt-in schema 4: actual electron momentum is not the step chord.
+    G4bool record_transport_state_{false};
+    G4double pre_dx_, pre_dy_, pre_dz_, post_dx_, post_dy_, post_dz_;
+    G4double step_length_, post_density_;
+    G4int pre_material_, post_material_, post_step_status_, track_status_;
+    std::set<G4int> reported_materials_;
+    void ReportMaterial(const G4Material*);
     struct ParentState {
         G4double ke, dx, dy, dz, post_ke, post_dx, post_dy, post_dz;
         G4int step;

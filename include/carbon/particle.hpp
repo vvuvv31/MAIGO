@@ -39,6 +39,12 @@ inline PrimaryIonDefinition make_primary_ion_definition(
 inline constexpr std::size_t charged_origin_category_count = 8;
 inline constexpr std::size_t primary_charged_origin_category = 0;
 inline constexpr std::size_t be_isotope_origin_category_count = 4;
+inline constexpr std::size_t he_isotope_origin_category_count = 3;
+
+constexpr std::size_t he_isotope_origin_category(const int z, const int a) noexcept {
+    if (z != 2) return he_isotope_origin_category_count;
+    return a == 3 ? 0 : (a == 4 ? 1 : 2);
+}
 
 constexpr std::size_t be_isotope_origin_category(const int atomic_number,
                                                  const int mass_number) noexcept {

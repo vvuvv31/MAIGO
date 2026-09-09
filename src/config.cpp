@@ -721,6 +721,64 @@ void TransportConfig::validate() const {
                 "60be17929880fe18f1758edc02350b3fa7140b817ab0d21cb75bd87dbc891f31")
             throw std::invalid_argument("Unified water requires explicit v2.1 bundle paths and pinned G4_WATER material");
     }
+    if (!water_electron_response_diagnostic_file.empty() &&
+        (!unified_water_nuclear_transport || run_mode!=RunMode::smoke ||
+         (!water_electron_nuclear_diagnostic && (enable_inelastic || enable_secondary_transport)) ||
+         enable_let_scoring || water_density_g_per_cm3!=1.0 ||
+         initial_energy_MeVu>(water_electron_high_energy_diagnostic ? 450 : 300) ||
+         water_electron_response_sha256.size()!=64 || water_electron_response_metadata_sha256.size()!=64))
+        throw std::invalid_argument("Water electron response requires pinned native Water_75eV C12 smoke within declared energy domain, EM-only unless nuclear diagnostic explicitly enabled; production forbidden");
+    if(!std::isfinite(material_electron_short_range_mm) || material_electron_short_range_mm<0 ||
+       material_electron_short_range_mm>0.25 ||
+       (material_electron_short_range_mm>0 && (run_mode!=RunMode::research || !enable_ct_grid ||
+        material_electron_response_index_file.empty() || enable_let_scoring)))
+        throw std::invalid_argument("Short-range electron candidate requires CT material response research, threshold 0..0.25 mm, no LET");
+    if(!material_electron_response_index_file.empty()) {
+        if(material_electron_response_memory_mode!="device" && material_electron_response_memory_mode!="host_mapped")
+            throw std::invalid_argument("Material response memory mode must be device or host_mapped");
+        if(material_electron_response_host_budget_MiB==0 || material_electron_response_host_budget_MiB>98304)
+            throw std::invalid_argument("Material response mapped bank budget must be within 96 GiB (reserve build/runtime headroom)");
+        if(material_electron_response_index_sha256.size()!=64 ||
+           material_electron_response_device_budget_MiB==0 || material_electron_response_device_budget_MiB>10240 ||
+           primary_atomic_number!=6 || primary_mass_number!=12 || !enable_voxel_scoring || enable_let_scoring ||
+           !water_electron_response_diagnostic_file.empty() || !ct_electron_joint_response_diagnostic_file.empty() ||
+           !ct_schneider_delta_longitudinal_file.empty() || !ct_schneider_delta_tail_file.empty() || enable_electron_transport)
+            throw std::invalid_argument("Material electron response requires pinned C12 voxel scope and exclusive response selection");
+        if((!enable_ct_grid || ct_grid_file.empty()) && !unified_water_nuclear_transport)
+            throw std::invalid_argument("Material electron response requires Schneider CT or explicit unified water");
+        const auto covered=[](double e,double s){return std::isfinite(e) && e>0 && std::isfinite(s) && s>=0 && e*(1+8*s)<=450;};
+        if(primary_spot_batch.empty()) {
+            if(!covered(initial_energy_MeVu,beam_energy_spread))throw std::invalid_argument("Material response source energy envelope exceeds 450 MeV/u");
+        } else for(const auto& spot:primary_spot_batch)
+            if(!covered(spot.initial_energy_MeV()/primary_mass_number,spot.beam_energy_spread()))
+                throw std::invalid_argument("Material response spot energy envelope exceeds 450 MeV/u");
+    } else if(!material_electron_response_index_sha256.empty())
+        throw std::invalid_argument("Material electron response pin without index");
+    if(water_electron_high_energy_diagnostic && water_electron_response_diagnostic_file.empty())
+        throw std::invalid_argument("Water electron high-energy diagnostic requires explicit response data");
+    if (!water_electron_response_diagnostic_file.empty()) {
+        // The device Box-Muller uses u >= 1e-12: |Gaussian| < 7.44.
+        // An 8-sigma envelope includes float rounding without clipping a source.
+        const double ceiling=water_electron_high_energy_diagnostic ? 450.0 : 300.0;
+        const auto covered = [ceiling](double energy, double spread) {
+            return std::isfinite(energy) && std::isfinite(spread) && energy>0 &&
+                spread>=0 && energy*(1.0+8.0*spread)<=ceiling;
+        };
+        if (primary_spot_batch.empty()) {
+            if (!covered(initial_energy_MeVu, beam_energy_spread))
+                throw std::invalid_argument("Water electron response source energy envelope exceeds declared data coverage");
+        } else {
+            for (const auto& spot : primary_spot_batch)
+                if (!covered(spot.initial_energy_MeV()/primary_mass_number, spot.beam_energy_spread()))
+                    throw std::invalid_argument("Water electron response spot energy envelope exceeds declared data coverage");
+        }
+    }
+    if (water_electron_response_diagnostic_file.empty() &&
+        (!water_electron_response_sha256.empty() || !water_electron_response_metadata_sha256.empty()))
+        throw std::invalid_argument("Water electron pins without data");
+    if(water_electron_nuclear_diagnostic && (water_electron_response_diagnostic_file.empty() ||
+        run_mode!=RunMode::smoke || !enable_inelastic || !enable_secondary_transport))
+        throw std::invalid_argument("Water electron nuclear diagnostic requires explicit pinned response and full nuclear smoke transport");
     if (!ct_electron_joint_response_diagnostic_file.empty() &&
         material_physics_mode != MaterialPhysicsMode::SchneiderCt)
         throw std::invalid_argument("Joint electron response requires Schneider CT, never water");
@@ -896,15 +954,33 @@ void TransportConfig::validate() const {
         energy_straggling_model != "legacy_calibrated" &&
         energy_straggling_model != "moment_matched" &&
         energy_straggling_model != "vavilov_landau" &&
-        energy_straggling_model != "packaged_fluctuation") {
+        energy_straggling_model != "packaged_fluctuation" &&
+        energy_straggling_model != "packaged_fluctuation_fraction" &&
+        energy_straggling_model != "packaged_fluctuation_fraction_hybrid") {
         throw std::invalid_argument(
             "energy_straggling_model must be gaussian_clamped, "
-            "legacy_calibrated, moment_matched, vavilov_landau, or packaged_fluctuation");
+            "legacy_calibrated, moment_matched, vavilov_landau, packaged_fluctuation, packaged_fluctuation_fraction, or packaged_fluctuation_fraction_hybrid");
     }
     if (uses_packaged_fluctuation() && energy_straggling_package_file.empty()) {
         throw std::invalid_argument(
             "packaged_fluctuation requires energy_straggling_package_file");
     }
+    if (enable_primary_loss_query_audit && run_mode != RunMode::smoke) {
+        throw std::invalid_argument("enable_primary_loss_query_audit requires smoke mode");
+    }
+    if (enable_terminal_generation_em_transport && run_mode != RunMode::smoke) {
+        throw std::invalid_argument("enable_terminal_generation_em_transport requires smoke mode");
+    }
+    if ((energy_straggling_model == "packaged_fluctuation_fraction" ||
+         energy_straggling_model == "packaged_fluctuation_fraction_hybrid") &&
+        (run_mode != RunMode::smoke || enable_ct_grid ||
+         primary_atomic_number != 6 || primary_mass_number != 12 ||
+         enable_secondary_energy_straggling || enable_step_stable_straggling ||
+         straggling_scale != 1.0 || !straggling_scale_energies_MeVu.empty())) {
+        throw std::invalid_argument("Fraction-axis fluctuation is a smoke-only C12 water candidate; unit scale and primary-only straggling required");
+    }
+    if (energy_straggling_model == "packaged_fluctuation_fraction_hybrid" && !enable_primary_loss_query_audit)
+        throw std::invalid_argument("Fraction hybrid requires enable_primary_loss_query_audit to report its thin-step scope");
     if (nuclear_model != "geant4" && nuclear_model != "fred_paper" &&
         nuclear_model != "cinel02" && nuclear_model != "none") {
         throw std::invalid_argument(
@@ -1957,6 +2033,8 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.ct_grid_file = parse_path(values, "ct_grid_file", config.ct_grid_file);
     config.ct_schneider_file =
         parse_path(values, "ct_schneider_file", config.ct_schneider_file);
+    if(!config.ct_schneider_file.empty())
+        config.ct_schneider_file=resolve_input_path_from_config(config.ct_schneider_file,path);
     {
         const auto it = values.find("ct_dicom_origin_mode");
         if (it != values.end() && !it->second.empty()) {
@@ -2061,6 +2139,32 @@ TransportConfig load_config(const std::filesystem::path& path) {
         config.ct_schneider_delta_tail_file = resolve_input_path_from_config(
             config.ct_schneider_delta_tail_file, path);
     }
+    config.material_electron_response_index_file=parse_path(values,"material_electron_response_index_file",config.material_electron_response_index_file);
+    if(!config.material_electron_response_index_file.empty())config.material_electron_response_index_file=resolve_input_path_from_config(config.material_electron_response_index_file,path);
+    if(const auto it=values.find("material_electron_response_index_sha256");it!=values.end())config.material_electron_response_index_sha256=it->second;
+    if(const auto it=values.find("material_electron_response_device_budget_MiB");it!=values.end()) {
+        std::size_t used=0;const auto value=std::stoull(it->second,&used);
+        if(used!=it->second.size() || it->second.empty() || it->second[0]=='-' || value==0 || value>10240)
+            throw std::invalid_argument("Invalid material response device budget");
+        config.material_electron_response_device_budget_MiB=value;
+    }
+    if(const auto it=values.find("material_electron_response_memory_mode");it!=values.end())
+        config.material_electron_response_memory_mode=it->second;
+    config.material_electron_short_range_mm=parse_number(values,"material_electron_short_range_mm",config.material_electron_short_range_mm);
+    if(const auto it=values.find("material_electron_response_host_budget_MiB");it!=values.end()) {
+        std::size_t used=0;const auto value=std::stoull(it->second,&used);
+        if(used!=it->second.size() || it->second.empty() || it->second[0]=='-' || value==0 || value>98304)
+            throw std::invalid_argument("Invalid mapped material response budget (maximum 96 GiB)");
+        config.material_electron_response_host_budget_MiB=value;
+    }
+    config.water_electron_response_diagnostic_file=parse_path(values,
+        "water_electron_response_diagnostic_file",config.water_electron_response_diagnostic_file);
+    config.water_electron_nuclear_diagnostic=parse_bool(values,"water_electron_nuclear_diagnostic",config.water_electron_nuclear_diagnostic);
+    config.water_electron_high_energy_diagnostic=parse_bool(values,"water_electron_high_energy_diagnostic",config.water_electron_high_energy_diagnostic);
+    if(!config.water_electron_response_diagnostic_file.empty())
+        config.water_electron_response_diagnostic_file=resolve_input_path_from_config(config.water_electron_response_diagnostic_file,path);
+    if(const auto it=values.find("water_electron_response_sha256");it!=values.end())config.water_electron_response_sha256=it->second;
+    if(const auto it=values.find("water_electron_response_metadata_sha256");it!=values.end())config.water_electron_response_metadata_sha256=it->second;
     config.ct_electron_joint_response_diagnostic_file = parse_path(values,
         "ct_electron_joint_response_diagnostic_file",config.ct_electron_joint_response_diagnostic_file);
     config.ct_electron_joint_patient_experiment = parse_bool(values,
@@ -2263,6 +2367,10 @@ TransportConfig load_config(const std::filesystem::path& path) {
     }
     config.enable_energy_straggling =
         parse_bool(values, "enable_energy_straggling", config.enable_energy_straggling);
+    config.enable_primary_loss_query_audit = parse_bool(
+        values, "enable_primary_loss_query_audit", config.enable_primary_loss_query_audit);
+    config.enable_terminal_generation_em_transport = parse_bool(
+        values, "enable_terminal_generation_em_transport", config.enable_terminal_generation_em_transport);
     config.enable_csda_range_energy_loss = parse_bool(
         values, "enable_csda_range_energy_loss", config.enable_csda_range_energy_loss);
     config.enable_step_stable_straggling = parse_bool(

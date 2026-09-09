@@ -247,6 +247,18 @@ struct TransportConfig {
     bool ct_electron_joint_patient_experiment{false};
     std::string ct_electron_joint_response_sha256{};
     std::string ct_electron_joint_response_metadata_sha256{};
+    // Unvalidated pure Water_75eV EM-only experiment; never a CT alias.
+    std::filesystem::path water_electron_response_diagnostic_file{};
+    std::string water_electron_response_sha256{};
+    bool water_electron_high_energy_diagnostic{false};
+    std::string water_electron_response_metadata_sha256{};
+    bool water_electron_nuclear_diagnostic{false};
+    std::filesystem::path material_electron_response_index_file{};
+    std::string material_electron_response_index_sha256{};
+    std::uint64_t material_electron_response_device_budget_MiB{8192};
+    std::string material_electron_response_memory_mode{"device"};
+    double material_electron_short_range_mm{0.0}; // research-only, zero disables
+    std::uint64_t material_electron_response_host_budget_MiB{98304};
 
     // Optional energy-dependent mass XS for every Schneider section. When set
     // on a CCTG v2/v3 grid, this supersedes the legacy four-class XS tables.
@@ -304,13 +316,18 @@ struct TransportConfig {
     double voxel_size_y_mm{5.0};
     double voxel_size_z_mm{0.0};
     bool enable_energy_straggling{false};
+    // Smoke-only read-only primary query histogram; no RNG or physics changes.
+    bool enable_primary_loss_query_audit{false};
+    // Smoke ablation: transport terminal-generation charged products with EM
+    // while retaining the existing cap on their nuclear interactions.
+    bool enable_terminal_generation_em_transport{false};
     // gaussian_clamped / legacy_calibrated: historical Gaussian + [0, 2μ] cap.
     // moment_matched: positive Gamma/Gaussian sampler that keeps mean/variance
     // without a 2μ clamp; scale tables are rejected.
     std::string energy_straggling_model{"gaussian_clamped"};
     std::filesystem::path energy_straggling_package_file{};
-    // Optional CPU-only CSDA residual-range energy loss. Disabled preserves
-    // the historical local stopping_power * step path; SYCL is unaffected.
+    // Optional homogeneous-water CSDA residual-range energy loss on CPU/SYCL.
+    // Disabled preserves each backend's existing local-loss calculation.
     bool enable_csda_range_energy_loss{false};
     // When enabled, primary straggling is sampled on fixed physical blocks so
     // subdividing a transport step does not create new independent Gaussians.
@@ -746,7 +763,9 @@ struct TransportConfig {
         return nuclear_model == "fred_paper";
     }
     [[nodiscard]] bool uses_packaged_fluctuation() const noexcept {
-        return energy_straggling_model == "packaged_fluctuation";
+        return energy_straggling_model == "packaged_fluctuation" ||
+               energy_straggling_model == "packaged_fluctuation_fraction" ||
+               energy_straggling_model == "packaged_fluctuation_fraction_hybrid";
     }
     [[nodiscard]] bool uses_fred_2gr_mcs() const noexcept {
         return multiple_scattering_model == "fred_2gr";

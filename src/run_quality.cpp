@@ -82,9 +82,22 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
                                       const TransportResult& result) {
     RunQualityReport report;
     report.mode = config.run_mode;
+    if(!config.material_electron_response_index_file.empty()) {
+        report.failures.push_back({"unvalidated_material_electron_response","Candidate main-kernel material response; patient accuracy and complete density coverage not validated",1.,0.});
+        if(result.material_electron_photon_untracked_MeV>0)
+            report.approximations.push_back({"material_photon_untracked","Photon continuation not covered; separate energy sink, not local dose or patient escape",
+                result.material_electron_photon_untracked_MeV,0.});
+        if(result.electron_joint_diagnostics.domain_misses || result.electron_joint_diagnostics.invalid_marches)
+            report.failures.push_back({"material_electron_lookup_or_geometry_failure","Material response lookup or ancestry failed",static_cast<double>(result.electron_joint_diagnostics.domain_misses+result.electron_joint_diagnostics.invalid_marches),0.});
+    }
     if (config.unified_water_nuclear_transport)
         report.approximations.push_back({"water_topas_match_pending",
             "Shared CINEL03 framework enabled for production; water TOPAS accuracy validation remains incomplete",1.,0.});
+    if(!config.water_electron_response_diagnostic_file.empty()) {
+        report.failures.push_back({"unvalidated_water_electron_response","Independent water electron response pilot; finite-box photon remainder explicit, no production validation",1.,0.});
+        if(result.electron_joint_diagnostics.domain_misses || result.electron_joint_diagnostics.invalid_marches)
+            report.failures.push_back({"water_electron_lookup_or_geometry_failure","Water response lookup or ancestry failed",static_cast<double>(result.electron_joint_diagnostics.domain_misses+result.electron_joint_diagnostics.invalid_marches),0.});
+    }
     if(!config.ct_electron_joint_response_diagnostic_file.empty()) {
         report.failures.push_back({"unvalidated_electron_joint_response","Independent bulk response interface pilot; not patient/production validated",1.,0.});
         if(result.electron_joint_diagnostics.domain_misses || result.electron_joint_diagnostics.invalid_marches)
@@ -104,7 +117,8 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
     const auto physical_raw_residual =
         result.initial_energy_MeV - result.total_deposited_energy_MeV -
         result.escaped_energy_MeV - result.beamline_removed_energy_MeV -
-        result.untracked_nuclear_energy_MeV - result.fred_model_unassigned_MeV;
+        result.untracked_nuclear_energy_MeV - result.fred_model_unassigned_MeV -
+        result.material_electron_untracked_MeV;
     const auto accounting_raw_residual =
         physical_raw_residual - result.topas_compat_discarded_kinetic_total_MeV();
     report.absolute_physical_energy_residual_MeV = std::abs(physical_raw_residual);

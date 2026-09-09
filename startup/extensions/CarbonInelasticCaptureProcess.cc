@@ -16,6 +16,8 @@
 #include <cstdlib>
 #include <cfloat>
 #include <cstring>
+#include <sstream>
+#include <iomanip>
 
 namespace {
 
@@ -163,7 +165,20 @@ G4VParticleChange* CarbonInelasticCaptureProcess::PostStepDoIt(
         G4Exception("CarbonInelasticCaptureProcess", "CINEL02-CONTRACT", FatalException,
                     description);
     }
-    if (IsUnchangedNoOp(track, *particle_change)) {
+    const bool unchanged_noop = IsUnchangedNoOp(track, *particle_change);
+    // Opt-in observation only: include rejected candidates that raw capture
+    // intentionally omits. No target/model query, random draw or state update.
+    const auto* audit = std::getenv("CARBON_HE4_CANDIDATE_AUDIT");
+    if (audit != nullptr && std::strcmp(audit, "1") == 0 &&
+        track.GetDefinition()->GetAtomicNumber() == 2 &&
+        track.GetDefinition()->GetAtomicMass() == 4) {
+        std::ostringstream line;
+        line << std::setprecision(17) << "HE4_CANDIDATE "
+             << input.event_id << ' ' << track.GetTrackID() << ' '
+             << input.collision_energy_MeV << ' ' << unchanged_noop;
+        G4cout << line.str() << G4endl;
+    }
+    if (unchanged_noop) {
         // Keep the wrapper transparent and tell the exposure scorer that this
         // process-defined step did not contain an authoritative collision.
         last_input_valid_ = false;
