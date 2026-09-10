@@ -154,101 +154,64 @@ CT 的 X0_mass 来自 25 分区 LUT，rho 来自实际体素。
 Water/FRED-2GR 是独立配置，不是冻结 CT 的 Highland 模型。
 见 [MCS 定义](include/carbon/multiple_scattering.hpp) 与 [GPU 计算](src/detail/sycl_device_math.inc)。
 
-## 4. 核重放与次级范围
+## 4. 非弹性核过程
 
-### 4.1. 离线提取与在线输运各做什么？
+**MAIGO 的处理：先抽取碰撞，再重放 TOPAS 派生的相关末态事件。**
 
-```text
-TOPAS/Geant4 提取
-  → 按 projectile/target 分解的反应率 + 相关末态事件
-  → 编译、来源审计与二进制 schema 检查
-  → 固定版本的反应率表和 CINPKG04 事件包
-GPU 运行
-  → 根据反应率决定碰撞位置
-  → 选择靶元素、能量节点与事件
-  → 整体旋转事件并输运已支持的带电产物
-```
+1. **确定碰撞位置。** 局部宏观反应率为 `Sigma = rho × sum(元素质量反应率 partials)`。
+   原发 C12 沿路径消耗抽样光学深度 `tau = -ln(U)`，由剩余光学深度确定碰撞距离；
+   已支持次级使用各自 projectile 的反应率。平均自由程是统计尺度，不是固定碰撞距离。
+2. **选择靶元素与事件。** 按元素 partial-rate 比例选靶，在 EM 能损后的能量处选择相邻
+   能量节点，再抽取一个完整 CINEL03 事件。保留产物能量与角度的关联，
+   用同一个随机方位角将整个事件旋转到入射坐标系。
+3. **输运末态产物。** 用抽样末态替代入射轨迹，已支持的带电碎片进入 GPU 队列，
+   继续电磁输运及符合条件的后续非弹性反应。不支持通道、能量截断和代数限制显式记账；
+   队列 overflow 使运行无效。
 
-反应率回答“多久发生、打在哪种靶上”，事件库回答“产生哪些相关产物”。
-重放事件不能替代反应率计算；总反应率正确也不自动证明碎片能谱和角分布正确。
+当前最低要求是固定的 Schneider v2.1 数据栈，次级核 registry 覆盖 14 种 projectile。
+缺通道不以近邻靶替代，不整体缩放产物动能。如果 EM 能损后没有有效靶，
+则作为 null candidate 保留剩余动能继续，不重放事件、不局部倾倒能量。
+冻结 generation 设置为 2；He6/B8/C10 遵循声明的 EM-only 核策略。
 
-### 4.2. 碰撞位置与元素靶选择
+**与 TOPAS 的区别**
 
-最低数据栈为 Schneider v2.1：SCHNRATE/SCHN2RAT v3 rates、
-CINPKG04 v4 primary 和 14-projectile secondary 包、SCHNSTOP v1。
-哈希由 [AGENTS](AGENTS.md) 和 [manifest](data/schneider/v2_1_data_manifest.json) 固定。
-
-Hazard 为局部密度乘有效元素 partial-rate 总和，查询时按通道域 mask。
-Lookup 精确匹配 projectile Z/A 和 target Z。
-有效 bracket 上节点概率为 (Eq−E0)/(E1−E0)，非精确节点 gap >5 MeV/u 拒绝。
-节点内抽取完整相关事件、保留能量，方向旋转到入射系；
-无近邻靶 alias，无整体产物 KE 缩放。
-
-9 月 7 日起，primary 和 secondary CINEL03 replay 对每个事件抽取一个绕入射轴的
-均匀方位角（Philox dimension 60），对所有产物施加同一个旋转，保留相对角及事件关联。
-不能逐产物独立随机化方位角。这一改动晚于 9 月 5 日冻结 executable。
-见 [旋转函数](include/carbon/cinel03_event_rotation.hpp)。
-
-对 projectile p、分区 s、靶元素 j，记有效质量反应率 partial 为 r_j(s,p,E)：
-
-```text
-lambda(s,p,E,rho) = rho × sum_j r_j(s,p,E)       # 运行时为逆长度单位
-P(target=j | collision) = r_j / sum_k r_k
-恒定 lambda 的一步内不碰撞概率 = exp(-lambda h)
-```
-
-原发 C12 抽取剩余光学深度 tau=-ln(U)，跨段消耗 lambda×h。
-若本段耗尽 tau，则碰撞距离限制步长；跨材料面改变局部率，不在每个几何步重新抽取自由程。
-已支持的次级分支使用自身 projectile 的 masked rates，在碎片步进内决定碰撞。
-恒定率公式是有限步近似：能损与 post-EM 查询可能改变碰撞位置处的有效通道。
-
-### 4.3. Post-EM 查询与相关事件重放
-
-在 E0 <= E <= E1 时，以上节点概率 (E-E0)/(E1-E0) 选择事件能点，再从该节点抽取一个完整事件。
-这是混合事件分布，不是逐个插值产物动能。事件能量保留为所选节点的值；
-查询能量与节点能量的差是需要审计的近似，不能据此整体归一化产物能量。
-精确节点、缺通道、域外和大 gap 均由 [CINEL03 查询](include/carbon/inelastic_package_v3.hpp) 显式处理。
-
-Post-EM null 保留能量继续，不 replay、不局部倾倒；null 和失败分开报告。
-有限步能量差与域屏蔽仍是声明近似，不证明无限制物理覆盖。
-
-### 4.4. 产物队列与能量记账
-
-带电产物入队进行 EM 与已支持核输运。
-冻结 generation=2，不是无限 cascade。
-He6/B8/C10 采用 scope 外 EM-only 核策略，Be6 单列。
-Overflow 使运行无效；本批独立 nuclear elastic 关闭，
-非弹性末态不意味着隐含包含 elastic。通用 neutral/衰变输运未验证。
-
-成功的非弹性事件以末态产物替代入射轨迹；若存在 projectile-like 存活碎片，
-应由事件表达，不能再额外继续一份原发粒子。
-已支持产物携带 Z/A、总动能、位置、方向、generation、谱系与子随机流进入次级输运。
-Cutoff、不支持物种、中性/未追踪能量、队列 overflow 和 generation 限制需要分别记账。
-一种粒子能查 EM stopping，不代表它还允许再次核反应。
-
-队列以有界 GPU 工作批处理，支持时继续后续批次。
-例如 born = queued + cutoff + overflow + 其他声明终态，必须用实际互斥计数核对。
-不支持能量不能消失，也不能通过重叠的 ledger 汇总重复相加。
-
-### 4.5. 弹性过程：包含库仑散射，CT 不包含独立核弹性
-
-| 过程 | 当前 Schneider CT 处理 | 不能据此推断 |
+| 比较项 | MAIGO | TOPAS / Geant4 参考 |
 |---|---|---|
-| 大量小角库仑偏转 | 凝聚 Highland MCS，使用分区 X0 与局部 rho | 不是通用强子弹性模型 |
-| 独立强子/核弹性事件 | 不支持；开启核弹性会被拒绝 | 不由非弹性 replay 隐含提供 |
-| 非弹性反应的产物角度 | CINEL03 相关末态 | 不是弹性截面表 |
-| 历史 C12–H 弹性函数 | 独立旧 `fred_paper` 选项 | 不属于当前 CT 或统一水能力 |
+| 碰撞概率 | 插值提取的元素反应率表，并限定有效域 | 使用配置物理列表的截面数据与过程步进 |
+| 核末态 | 从离散能量节点的有限相关事件库抽样 | 在相互作用状态调用适用核模型，生成产物 |
+| 模型执行 | 不在线计算核内级联 | 参考 C12 已观察到调用 INCLXX；实际模型随 projectile 和能量变化 |
+| 后续输运 | 已支持带电物种及有限核反应代数；中性/衰变范围受限 | 按启用的粒子过程和跟踪截断继续输运产物 |
 
-历史函数抽取 C12–H 两体末态，更新碳离子动能/方向，并可将反冲质子入队。
-存在这段代码不等于覆盖通用 ion–element 弹性。
-当前 Schneider 配置拒绝 `enable_nuclear_elastic=true`，统一水也禁止开启。
-因此参考 TOPAS 的 `g4h-elastic_HP` 模块在本批 GPU 中没有通用的一一对应实现。
-这是声明的模型缺项，不能说它已被拟合进 MCS 或非弹性率。
-见 [配置检查](src/config.cpp) 与 [输运弹性分支](src/transport_sycl.cpp)。
+复用 TOPAS 派生事件保留了抽样事件内部关联，并省去在线核模型计算。
+这不意味着两套引擎等价：事件库统计量、能量节点抽样、步进和次级覆盖仍有差异。
+事件共用方位角旋转加入于 9 月 5 日冻结 benchmark 之后。
+见 [CINEL03 查询](include/carbon/inelastic_package_v3.hpp) 与 [GPU 输运](src/transport_sycl.cpp)。
 
-## 5. 电子响应
+## 5. 弹性核过程
 
-### 5.1. “电子包”实际指三类不同对象
+**当前 Schneider CT 不模拟独立核弹性碰撞。**
+Schneider 配置拒绝开启 `enable_nuclear_elastic`，统一水也禁止开启。
+这些路径不单独抽取核弹性碰撞位置、反冲能量或角分布。
+
+带电轨迹仍进行第 3 节所述的 **Highland 库仑多重散射**，非弹性碎片也具有抽样发射角。
+这两项都不提供缺失的独立核弹性过程。
+
+**与 TOPAS 的区别**
+
+| 比较项 | MAIGO Schneider CT | TOPAS / Geant4 参考 |
+|---|---|---|
+| 库仑多重散射 | 凝聚 Highland 处理 | 配置物理列表中的电磁散射过程 |
+| 独立强子弹性 | 不包含 | 参考列表包含 `g4h-elastic_HP`，由适用弹性数据与模型决定碰撞和末态 |
+| 影响 | 没有独立核弹性带来的偏转及反冲剂量贡献 | 已启用弹性过程可贡献粒子偏转和能量转移 |
+
+仓库保留独立旧 `fred_paper` 分支的 C12–H 两体弹性函数，但它不属于当前 CT 弹性覆盖。
+缺少该过程是模型限制，不能假设其效果已包含在 MCS 或非弹性包中。
+对剂量影响有多大，需要匹配 TOPAS 过程设置进行受控比较。
+见 [配置检查](src/config.cpp)。
+
+## 6. 电子响应
+
+### 6.1. “电子包”实际指三类不同对象
 
 | 对象 | 保存的信息 | 运行作用与验证范围 |
 |---|---|---|
@@ -259,7 +222,7 @@ Cutoff、不支持物种、中性/未追踪能量、队列 overflow 和 generati
 它们不是 CINEL03 核末态事件包。其作用是改变已预算电磁能损的记分位置，
 不在 stopping 之外额外扣除一份碳离子能量。
 
-### 5.2. 冻结横向响应
+### 6.2. 冻结横向响应
 
 严格剂量栈含 TOPAS 派生的 section-0 primary C12 部分能损横向重分配，
 提取点为 150/200/225 MeV/u。
@@ -274,7 +237,7 @@ Joint 候选则使用相关纵向/径向坐标，独立抽取两者边缘分布�
 有序路径实现属于独立实验，不受该 benchmark 验证。有序重放保留记录的路径和谱系，
 不把轨迹简化为起终点之间的直线。
 
-### 5.3. 材料响应的提取与加载
+### 6.3. 材料响应的提取与加载
 
 TOPAS [电子 scorer](startup/extensions/CarbonElectronDepositNtupleV3.hh) 记录
 run/event/track/parent 标识、pre/post 动能、沉积能量、位置与材料/密度。
@@ -296,7 +259,7 @@ Transport-state 扩展还记录真实动量方向、物理步长、状态和 pos
 电子出生材料与边界遍历必须采用一致的体素归属；响应库支持显式预算的设备内存或
 host-mapped 内存模式。
 
-### 5.4. 出生抽样与能量包预算
+### 6.4. 出生抽样与能量包预算
 
 在原发 C12 CT 分支的有效材料响应查询中，沿碳离子本步抽取出生位置，并从响应取可搬运比例 f：
 
@@ -311,7 +274,7 @@ W 是统计能量权重，不等于抽样电子的物理动能；重放不能再
 比例为 (1-w)f0+w f1，出生表按这两项能量贡献加权选择；续接采用自身条件采样器。
 不以近邻材料 alias 隐藏跨 section，也不能从此插值公式推断已验证 1/rho 轨迹缩放。
 
-### 5.5. 沿记录家族抽取一条能量谱系
+### 6.5. 沿记录家族抽取一条能量谱系
 
 一个完整原始电子步的物理状态必须满足：
 
@@ -341,7 +304,7 @@ flowchart TD
     D -->|患者逃逸| H[逃逸账本，不记剂量]
 ```
 
-### 5.6. 界面、覆盖缺口与终态归属
+### 6.6. 界面、覆盖缺口与终态归属
 
 到 CT 界面时游标裁剪到边界，根据下一材料/密度选择兼容续接；
 两端都是空气，不足以允许沿空气路径穿过中间组织。
@@ -361,7 +324,7 @@ DeltaE_C12 = 保留的局部能量 + 包在 scorer 内的沉积
 这些是互斥能量归属，诊断子项不能再次加到已包含它们的总项。
 能量闭合证明账目一致，不证明空间响应正确。
 
-### 5.7. 启用条件与验证边界
+### 6.7. 启用条件与验证边界
 
 材料候选与旧 delta-tail、joint 和显式电子模式互斥，要求 3D 记分并关闭 LET。
 质量报告仍拒收为 `unvalidated_material_electron_response`，闭合通过不能消除此项。
@@ -369,7 +332,7 @@ DeltaE_C12 = 保留的局部能量 + 包在 scorer 内的沉积
 [密度采样](include/carbon/material_electron_density.hpp) 和 [质量门禁](src/run_quality.cpp)。
 跨密度、几何、出生条件和正式升级门禁仍由 [plan2](plan2/README.md) 管理。
 
-## 6. 记分与质量
+## 7. 记分与质量
 
 Dose(Gy) = Edep(MeV) × 1.602176634e−13 / mass(kg)，
 mass = density(g/cm3) × volume(mm3) × 1e−6。
@@ -386,7 +349,7 @@ Origin dose 只是诊断，不是独立 TOPAS 分种类参考。
 全局闭合不证明每个核顶点的精确质量/Q 闭合。
 字段与兼容条件详见 [记分契约](docs/scoring_validation.md)。
 
-## 7. 评价与局限
+## 8. 评价与局限
 
 2026-09-05 数据集为 60 个 accepted shards、457,898,870 histories、零 overflow。
 数值维护于 [当前结果索引](docs/results.md) 与冻结证据。
@@ -402,7 +365,7 @@ Global 容差基于 Dmax，Local 基于当前参考体素剂量。
 未证明唯一电子原因或全物理等价。
 本批不代表 plan2 完成、包升级或临床准入。
 
-## 8. 后续评价与性能研究
+## 9. 后续评价与性能研究
 
 本地未纳入 Git 的 `benchmark/topas10x/gpu_current_20260909.md` 记录后续三病例
 60-shard 运行、Gamma 加密重评及 RT07575 实验性电子 full20 A/B。
@@ -427,7 +390,7 @@ chunk、记分选项和硬件；小样本 smoke 不能证明相对 TOPAS 的全�
 没有证明加速。短路要求完整、无子代的终止尾段位于当前体素内，阈值默认零。
 后续缓存尾长实现仍是候选，不构成已验收性能结果。
 
-## 9. 复现与验收流程
+## 10. 复现与验收流程
 
 构建由 [CMake](CMakeLists.txt) 和 [presets](CMakePresets.json) 定义：C++20、开启 SYCL、
 NVIDIA target `nvptx64-nvidia-cuda`、本地架构 `sm_75`。

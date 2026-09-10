@@ -174,114 +174,74 @@ elastic collision. Water/FRED-2GR options are separate configurations, not the f
 CT Highland model. See [MCS definitions](include/carbon/multiple_scattering.hpp) and
 [GPU arithmetic](src/detail/sycl_device_math.inc).
 
-## 4. Nuclear replay and secondary scope
+## 4. Inelastic nuclear interactions
 
-### 4.1. Offline extraction versus online transport
+**MAIGO: sample the collision, then replay a TOPAS-derived correlated event.**
 
-```text
-TOPAS/Geant4 extraction
-  → projectile/target-resolved interaction rates + correlated final-state events
-  → compiler, provenance audit and binary schema checks
-  → pinned rate tables and CINPKG04 event packages
-GPU runtime
-  → decide where a collision occurs from rates
-  → choose target, energy node and event
-  → rotate the whole event and transport supported charged products
-```
+1. **Locate the collision.** The local macroscopic rate is `Sigma = rho × sum(elemental mass-rate partials)`.
+   Primary C12 consumes a sampled optical depth `tau = -ln(U)` along its path;
+   the remaining optical depth determines the collision distance. Supported secondary
+   ions use their own projectile-dependent rates. A mean free path is a statistical
+   scale, not a fixed collision distance.
+2. **Select the target and event.** Choose the target element according to its partial
+   rate. At the post-EM energy, select one of the two bracketing energy nodes and
+   sample a complete CINEL03 event. Retain the correlated product energies and angles;
+   rotate the event into the incident frame with one shared random azimuth.
+3. **Transport the products.** Replace the incident track with the sampled final state.
+   Supported charged fragments enter GPU queues for electromagnetic transport and
+   eligible further inelastic reactions. Unsupported channels, energy cutoffs and
+   generation limits have explicit accounting; queue overflow invalidates the run.
 
-Rates answer “how often and on which target”; the event bank answers “which correlated
-products”. Replaying an event cannot replace the rate calculation. Conversely, a correct
-total reaction rate does not establish the accuracy of fragment energies or angles.
+The current minimum is the pinned Schneider v2.1 stack with a 14-projectile secondary
+nuclear registry. Missing channels are not replaced by a nearby target, and product
+energies are not globally rescaled. If no valid target remains after EM loss, a null
+candidate continues with its remaining energy instead of replaying or depositing it locally.
+The frozen generation setting is 2; He6/B8/C10 follow the declared EM-only nuclear policy.
 
-### 4.2. Collision location and elemental target selection
+**Difference from TOPAS**
 
-Minimum stack: Schneider v2.1 SCHNRATE/SCHN2RAT v3 rates, CINPKG04 v4 primary and
-14-projectile secondary packages, SCHNSTOP v1. Hashes are pinned by [AGENTS](AGENTS.md)
-and the [manifest](data/schneider/v2_1_data_manifest.json).
-
-Hazard is local density times valid elemental partial-rate sum. Per-channel domains
-mask invalid partials at query time. Lookup requires exact projectile Z/A and target Z.
-For a valid bracket, P(upper)=(Eq−E0)/(E1−E0); gaps >5 MeV/u are rejected except
-exact-node hits. A correlated event is sampled within the node, retaining its energies;
-directions rotate into the incident frame. There is no closest-target alias or global
-product-KE rescaling.
-
-Since September 7, primary and secondary CINEL03 replay also sample one common
-uniform azimuth about the incident axis per event (Philox dimension 60). The same
-rotation acts on every product, preserving relative angles and correlated kinematics;
-independent per-product azimuths would destroy those correlations. This code change
-postdates the September 5 executable. See [rotation helper](include/carbon/cinel03_event_rotation.hpp).
-
-For projectile p, section s and target j, let r_j(s,p,E) be the valid mass-rate partial:
-
-```text
-lambda(s,p,E,rho) = rho × sum_j r_j(s,p,E)       # runtime inverse-length units
-P(target=j | collision) = r_j / sum_k r_k
-P(no collision over h at constant lambda) = exp(-lambda h)
-```
-
-Primary C12 samples a remaining optical depth tau=-ln(U) and consumes lambda×h
-across segments. If the segment exhausts tau, the collision distance limits the step.
-Thus a material boundary changes the local rate without independently resampling a
-new flight on every geometry step. The supported secondary branch uses its own
-projectile-resolved masked rates and collision decision during fragment stepping.
-The constant-rate expression is a finite-step transport approximation: energy loss
-and the post-EM lookup can change which channels are valid at the collision.
-
-### 4.3. Post-EM lookup and correlated event replay
-
-For E0 <= E <= E1, select the upper event node with probability (E-E0)/(E1-E0),
-then sample one complete event from that node. This mixes event distributions instead
-of interpolating each product's energy. The event energies remain those of the sampled
-node; the query-to-node energy difference is an approximation to audit, not an invitation
-to renormalize all products. Exact-node, missing-channel, out-of-domain and large-gap
-outcomes are handled explicitly by [CINEL03 lookup](include/carbon/inelastic_package_v3.hpp).
-
-Post-EM null candidates retain energy and continue without replay/local dumping.
-Nulls and failures are reported separately. Finite-step energy skew and masked domains
-remain declared approximations, not proof of unrestricted physical coverage.
-
-### 4.4. Product queues and energy accounting
-
-Charged products enter queues for EM and supported nuclear transport.
-The frozen generation setting is 2, not unlimited cascade.
-He6/B8/C10 have the declared out-of-scope EM-only nuclear policy; Be6 handling is separate.
-Overflow invalidates a run. Independent nuclear elastic is disabled in this benchmark
-and is not implicitly included in inelastic events. General neutral/decay transport is not validated.
-
-For an accepted inelastic event the incident track is replaced by its final-state products;
-a surviving projectile-like fragment is represented by the event, not by continuing an
-extra copy of the original primary. Supported products carry Z/A, total KE, position,
-direction, generation, ancestry and a child random stream into secondary transport.
-Cutoff, unsupported species, neutral/untracked energy, queue overflow and generation
-limits must be accounted for separately. A particle can be supported for EM stopping
-without being eligible for another nuclear interaction.
-
-Queue processing is bounded GPU work, followed by further batches where supported.
-The recorded identities, such as born = queued + cutoff + overflow + other declared
-terminals, are checked with the actual mutually exclusive counters. Unsupported energy
-must not disappear or be added twice through overlapping ledger summaries.
-
-### 4.5. Elastic processes: included Coulomb scattering, excluded CT nuclear elastic
-
-| Process | Current Schneider CT treatment | What must not be inferred |
+| Aspect | MAIGO | TOPAS / Geant4 reference |
 |---|---|---|
-| Many small Coulomb deflections | Condensed Highland MCS, section X0 and local rho | Not a general hadronic elastic model |
-| Separate hadronic/nuclear elastic event | Not supported; enabling nuclear elastic is rejected | Not implicitly supplied by inelastic replay |
-| Product angles from inelastic reactions | Correlated CINEL03 final states | Not an elastic cross-section table |
-| Legacy C12–H elastic helper | Separate historical `fred_paper` option | Not current CT or unified-water capability |
+| Collision probability | Interpolated extracted elemental rate tables with explicit validity domains | Cross-section datasets and process tracking of the configured physics list |
+| Nuclear final state | Samples a finite bank of precomputed correlated events at discrete energy nodes | Invokes the applicable nuclear model at the interaction state to generate products |
+| Model execution | No online intranuclear cascade calculation | Reference C12 was observed to invoke INCLXX; the active model depends on projectile and energy |
+| Subsequent transport | Supported charged species and bounded nuclear generations; neutral/decay scope is limited | Transports products using the enabled particle processes and tracking cuts |
 
-The legacy helper samples a two-body C12–H outcome, updates carbon KE/direction and can
-queue the recoil proton. Its existence is not evidence of general ion–element elastic
-coverage. Current Schneider configuration rejects `enable_nuclear_elastic=true`, and
-unified water also forbids it. TOPAS's `g4h-elastic_HP` reference module therefore has
-no general one-to-one GPU counterpart in these runs. This omitted process is a declared
-model limitation, not an effect absorbed into a fitted MCS or inelastic rate.
-See [configuration checks](src/config.cpp) and the elastic branch in [transport](src/transport_sycl.cpp).
+Reusing TOPAS-derived events preserves the sampled event correlations and avoids online
+nuclear-model computation. It does not make the two engines identical: finite event
+statistics, energy-node sampling, stepping and secondary coverage remain differences.
+The shared event-azimuth rotation was added after the September 5 frozen benchmark.
+See [CINEL03 lookup](include/carbon/inelastic_package_v3.hpp) and
+[GPU transport](src/transport_sycl.cpp).
 
-## 5. Electron response
+## 5. Elastic nuclear interactions
 
-### 5.1. Three different meanings of “electron package”
+**Current Schneider CT: independent nuclear elastic collisions are not simulated.**
+Enabling `enable_nuclear_elastic` is rejected by the Schneider configuration; unified
+water also forbids it. There is no separate sampling of nuclear-elastic collision
+locations, recoil energies or angular distributions in these routes.
+
+Charged tracks still undergo **Coulomb multiple scattering**, represented by the
+Highland model described in Section 3. Inelastic fragments also have sampled emission
+angles. Neither treatment supplies the missing independent nuclear-elastic process.
+
+**Difference from TOPAS**
+
+| Aspect | MAIGO Schneider CT | TOPAS / Geant4 reference |
+|---|---|---|
+| Coulomb multiple scattering | Condensed Highland treatment | Electromagnetic scattering processes from the configured physics list |
+| Independent hadronic elastic | Not included | The reference list includes `g4h-elastic_HP`; applicable elastic datasets/models determine collisions and final states |
+| Consequence | No dedicated nuclear-elastic contribution to deflection and recoil dose | Enabled elastic processes can contribute to particle deflection and energy transfer |
+
+A historical C12–H two-body elastic helper remains in a separate `fred_paper` branch;
+it is not current CT elastic coverage. The omitted process is a model limitation, not
+an effect assumed to be absorbed into MCS or the inelastic package. Its quantitative
+dose impact requires a controlled comparison with matching TOPAS process settings.
+See [configuration checks](src/config.cpp).
+
+## 6. Electron response
+
+### 6.1. Three different meanings of “electron package”
 
 | Object | Stored information | Runtime role / validation scope |
 |---|---|---|
@@ -293,7 +253,7 @@ These objects are not CINEL03 nuclear final-state packages. They alter where an 
 budgeted electromagnetic loss is scored, rather than introducing an additional carbon
 energy loss on top of stopping.
 
-### 5.2. Frozen transverse response
+### 6.2. Frozen transverse response
 
 The strict-dose stack includes a TOPAS-derived transverse redistribution of part of primary
 C12 loss in section 0, extracted at 150/200/225 MeV/u.
@@ -311,7 +271,7 @@ longitudinal, joint and ordered full-family response implementations are separat
 experiments; that benchmark does not validate them. Ordered replay preserves the
 recorded path and ancestry rather than replacing a trajectory by its endpoint chord.
 
-### 5.3. Material response extraction and loading
+### 6.3. Material response extraction and loading
 
 The TOPAS [electron scorer](startup/extensions/CarbonElectronDepositNtupleV3.hh) records
 run/event/track/parent identity, pre/post KE, deposited energy, positions and material/density.
@@ -338,7 +298,7 @@ remain unvalidated. Electron birth material and boundary traversal must use cons
 voxel ownership. The runtime supports device-resident or host-mapped response banks
 with explicit memory budgets.
 
-### 5.4. Birth selection and the packet energy budget
+### 6.4. Birth selection and the packet energy budget
 
 For a valid material-response query in the primary C12 CT branch, the code samples a
 birth point along the carbon step and obtains the movable fraction f from the response:
@@ -356,7 +316,7 @@ by these fractional energy contributions. Continuation has its own conditional s
 No crossing to another section is hidden by a nearest-material alias, and no unvalidated
 1/rho trajectory rescaling is implied by the interpolation formula.
 
-### 5.5. Follow one energy lineage through the recorded family
+### 6.5. Follow one energy lineage through the recorded family
 
 At a complete recorded electron step, the raw physical state must satisfy:
 
@@ -388,7 +348,7 @@ flowchart TD
     D -->|Patient escape| H[Escape ledger, no dose]
 ```
 
-### 5.6. Interfaces, missing coverage and terminal ownership
+### 6.6. Interfaces, missing coverage and terminal ownership
 
 At a CT interface the cursor is clipped to the boundary and the next material/density
 selects a compatible continuation; two air endpoints do not justify crossing tissue using
@@ -410,7 +370,7 @@ These are mutually exclusive energy owners; diagnostic subcategories must not be
 again to totals that already contain them. Energy closure verifies accounting, not the
 correctness of the spatial response.
 
-### 5.7. Activation and validation boundary
+### 6.7. Activation and validation boundary
 
 The material candidate is mutually exclusive with the older delta-tail, joint and explicit
 electron modes and requires 3D scoring with LET disabled. Run quality still reports
@@ -420,7 +380,7 @@ See [packet transport](include/carbon/electron_packet_transport.hpp),
 [quality gates](src/run_quality.cpp). General density/geometry/birth conditioning and
 promotion gates remain under [plan2](plan2/README.md).
 
-## 6. Scoring and quality
+## 7. Scoring and quality
 
 Dose(Gy) = Edep(MeV) × 1.602176634e−13 / mass(kg), with
 mass = density(g/cm3) × volume(mm3) × 1e−6.
@@ -437,7 +397,7 @@ and voxel sum = in-grid with implemented relative tolerance 1e−3.
 Global closure is not exact nuclear mass/Q closure at every vertex.
 See [scoring contract](docs/scoring_validation.md) for fields and compatibility conditions.
 
-## 7. Evaluation and limitations
+## 8. Evaluation and limitations
 
 The 2026-09-05 dataset has 60 accepted shards, 457,898,870 histories and zero overflow.
 Numerical results reside in the [current index](docs/results.md) and frozen artifacts.
@@ -453,7 +413,7 @@ Results apply only to frozen inputs/executable. Strict local and low-density/int
 residuals remain; neither a unique electron cause nor full physics equivalence is established.
 This benchmark does not close plan2, upgrade packages or establish clinical readiness.
 
-## 8. Later evaluation and performance work
+## 9. Later evaluation and performance work
 
 The local, untracked report `benchmark/topas10x/gpu_current_20260909.md` records a later
 60-shard three-case run, refined Gamma and an experimental RT07575 electron full20 A/B.
@@ -484,7 +444,7 @@ The shortcut requires a complete childless terminal tail contained in the curren
 the default threshold is zero. The later cached-tail implementation remains a candidate,
 not an accepted performance result.
 
-## 9. Reproduction and validation procedure
+## 10. Reproduction and validation procedure
 
 Build settings are specified by [CMake](CMakeLists.txt) and [presets](CMakePresets.json):
 C++20, SYCL enabled, NVIDIA target `nvptx64-nvidia-cuda`, local `sm_75`.
