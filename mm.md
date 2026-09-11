@@ -239,7 +239,39 @@ an effect assumed to be absorbed into MCS or the inelastic package. Its quantita
 dose impact requires a controlled comparison with matching TOPAS process settings.
 See [configuration checks](src/config.cpp).
 
-## 6. Electron response
+## 6. Electron tracking and energy deposition
+
+### 6.0. What the current CT calculation actually runs
+
+The September 11 final-stopping lung calculation (primary midpoint ON, secondary
+material stopping ON, secondary exact-faces ON) uses **continuous ion energy loss plus
+the section-0 transverse delta-tail response**. It does not create and advance an
+individual track for every ionization electron. Changing the ion stopping table does
+not automatically enable a different electron transport model.
+
+| Configuration / response | State in that calculation | Meaning |
+|---|---|---|
+| `ct_schneider_delta_tail_file` | Pinned section-0 table enabled | Redistributes a fraction of primary C12 loss transversely |
+| `material_electron_response_index_file` | Empty | No material electron packet replay |
+| `ct_electron_joint_response_diagnostic_file` | Unset | No joint longitudinal/radial response |
+| `ct_electron_segment_transport` | `false` | No ordered joint-path replay |
+| `ct_schneider_delta_longitudinal_file` | Unset | No longitudinal supplement |
+| `enable_electron_transport` | Default `false` | No explicit-electron mode; its configuration validation rejects CT |
+
+The loss computed from stopping, after any enabled fluctuation, supplies the energy
+budget. The ordinary charged-ion scoring path deposits that budget without resolving
+the individual electron collisions. The enabled tail response moves some of the primary
+budget to another scoring location; it does not subtract extra kinetic energy from the
+carbon. This section-0 response is called in the primary branch, not in the secondary-ion
+loop. Secondary material-specific stopping therefore does not imply that secondary-born
+electron families are tracked using the material response bank.
+
+The separate `ElectronTransportTable` contains electron/positron collisional, radiative,
+total stopping and CSDA ranges. The presence of those tables and an explicit-electron
+configuration key is not evidence of active CT electron tracking. The configuration
+validator limits that key to homogeneous water and excludes the serial backend.
+See [configuration validation](src/config.cpp), [GPU branches](src/transport_sycl.cpp),
+and [electron stopping table](include/carbon/electron_transport.hpp).
 
 ### 6.1. Three different meanings of “electron package”
 
@@ -256,13 +288,37 @@ energy loss on top of stopping.
 ### 6.2. Frozen transverse response
 
 The strict-dose stack includes a TOPAS-derived transverse redistribution of part of primary
-C12 loss in section 0, extracted at 150/200/225 MeV/u.
-It relocates already-accounted loss, not additional energy. Source eligibility, destination
-material and scorer escape constrain its scope; it is not general electron transport.
-For eligible steps it computes W=f_tail(E)×DeltaE, samples a transverse radius and azimuth,
-and relocates W in the plane perpendicular to the carbon direction. Local scoring loses
-exactly the relocated amount; supported destinations receive it, with scorer escape
-accounted separately. The longitudinal displacement is zero in this transverse model.
+C12 loss in section 0, extracted at 150/200/225 MeV/u. Runtime processing is:
+
+1. **Check the source.** The primary step must be inside a section-0 voxel, with an
+   aligned 3D scorer and an eligible source-mask entry. The mask examines existing
+   face neighbours along axes with the minimum CT spacing; these neighbours must
+   also be section 0. Grid edges alone are not treated as material interfaces.
+2. **Sample the response.** Query the table at the current C12 energy for a moved
+   fraction and sampled radius. Form `W = DeltaE × clamp(f_tail, 0, 0.5)` and sample
+   one uniform azimuth. The source point is the midpoint of the carbon step.
+3. **Place the endpoint.** Rotate the sampled transverse displacement into the frame
+   perpendicular to the current carbon direction:
+   `x_target = x_mid + r × (cos(phi) e1 + sin(phi) e2)`.
+   Longitudinal displacement relative to that midpoint is zero. For an oblique beam,
+   the endpoint can nevertheless have a different world z coordinate.
+4. **Assign energy once.** Apply the destination rules below. This is endpoint
+   redistribution: no electron momentum, scattering history or intervening material
+   sequence is propagated along this transverse displacement.
+
+| Sampled destination | Dose and energy accounting |
+|---|---|
+| Inside the scorer and section 0 | Subtract W from local loss and score W in the destination 3D voxel |
+| Outside the scorer | Subtract W locally and record scorer escape; do not fold it into an edge voxel |
+| Inside the scorer but another section | Retain W locally and increment the unsupported-destination counter |
+| Source ineligible, or sampled fraction/radius not positive | Keep the loss on the ordinary local scoring path |
+
+The moved, retained-on-unsupported-destination and escaped energies have separate
+counters. A destination in section 0 does not prove the entire displacement stayed in
+section 0; this model does not solve general air/tissue electron boundary transport.
+The accounting is `DeltaE = local remainder + relocated dose + scorer escape`, with
+the unsupported-destination amount already included in the local remainder.
+
 A joint candidate instead uses correlated longitudinal/radial coordinates; independently
 sampling their marginals would discard the measured correlation.
 
@@ -271,7 +327,7 @@ longitudinal, joint and ordered full-family response implementations are separat
 experiments; that benchmark does not validate them. Ordered replay preserves the
 recorded path and ancestry rather than replacing a trajectory by its endpoint chord.
 
-### 6.3. Material response extraction and loading
+### 6.3. Optional material packet tracking: extraction and loading
 
 The TOPAS [electron scorer](startup/extensions/CarbonElectronDepositNtupleV3.hh) records
 run/event/track/parent identity, pre/post KE, deposited energy, positions and material/density.
@@ -353,6 +409,9 @@ flowchart TD
 At a CT interface the cursor is clipped to the boundary and the next material/density
 selects a compatible continuation; two air endpoints do not justify crossing tissue using
 an air path. At source exhaustion, positive remaining KE requires continuation sampling.
+An optional short-range shortcut can terminate a packet at its birth point only after
+a containment check; it belongs to the material candidate and is inactive in the CT
+calculation described in Section 6.0.
 Missing photon continuation is a separate uncovered-energy sink; it is not a local deposit
 or patient escape. Invalid geometry, unresolved electrons and an exhausted iteration cap
 retain explicit failure accounting. A rejected birth query is not silently treated as normal
