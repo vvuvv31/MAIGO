@@ -82,7 +82,15 @@ def run_all():
              "S2_secmcs_off": {"run_mode": "smoke",
                                "ct_secondary_mcs_off_diagnostic": True},
              "S3_sefaces": {"run_mode": "smoke",
-                            "ct_secondary_exact_faces_diagnostic": True}}
+                            "ct_secondary_exact_faces_diagnostic": True},
+             "B_midpoint": {"run_mode": "smoke",
+                            "ct_primary_midpoint_stopping_diagnostic": True},
+             "S0_025": {"run_mode": "smoke", "maximum_step_mm": 0.25},
+             "S0_seedshift": {"run_mode": "smoke", "random_seed": 9000000001},
+             "B_mid_025": {"run_mode": "smoke", "maximum_step_mm": 0.25,
+                           "ct_primary_midpoint_stopping_diagnostic": True},
+             "C_schsp": {"run_mode": "smoke",
+                         "ct_secondary_schneider_sp_diagnostic": True}}
     for tag, change in cases.items():
         cfg = base_config()
         cfg.update(change)
@@ -116,7 +124,13 @@ def analyze():
     pairs = [(("S0_base", "S1_nosec"), "secondary_transport_OFF"),
                (("S0_smoke", "S2_secmcs_off"), "secondary_MCS_OFF"),
                (("S0_smoke", "S3_sefaces"), "secondary_exact_faces_ON"),
-               (("S0_base", "S0_smoke"), "smoke_vs_research_baseline")]
+               (("S0_base", "S0_smoke"), "smoke_vs_research_baseline"),
+               (("S0_smoke", "B_midpoint"), "primary_midpoint_ON"),
+               (("S0_smoke", "C_schsp"), "secondary_schneider_sp_ON"),
+               (("S0_smoke", "S0_025"), "baseline_step_0.5_to_0.25"),
+               (("B_midpoint", "B_mid_025"), "midpoint_step_0.5_to_0.25"),
+               (("S0_025", "B_mid_025"), "midpoint_vs_entry_at_0.25"),
+               (("S0_smoke", "S0_seedshift"), "lung_seed_noise_floor")]
     for (a_name, b_name), label in pairs:
         b = load_dose(b_name).reshape(shape).astype(float)[mask]
         a = load_dose(a_name).reshape(shape).astype(float)[mask]

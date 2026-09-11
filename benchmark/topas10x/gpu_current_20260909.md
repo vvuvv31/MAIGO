@@ -158,6 +158,29 @@ OFF 臂与冻结二进制逐比特一致，故 A/B 差为纯电子重分布。
 
 Local30 残余约 3%（峰冷/R80 短等 1% 级效应仍开放，见上）。
 
+## 最终方案实施状态（中点 + 次级 25 分区专表）
+
+A. 原发预测中点：正式键 `ct_primary_midpoint_stopping`
+（诊断别名保留，CSDA 互斥保留）。单片 footprint 2.36% rms，
+但 full20 gamma 中性偏负（肺 local30 81.35→80.62，
+细化 local11 98.25→98.20；带均值改善、尾部略宽，
+疑与 0.5% 步长上限在峰区相互作用）。按既定标准
+（步长收敛 + gamma）判定：**默认 OFF（保持步首法）**，
+键保留供研究。新构建默认配置单片与冻结 S0 逐比特一致。
+
+B. 次级 25 分区专表（SCHNIOSP v1）：格式 + loader +
+kernel 双点查找（步首/中点）+ 配置（缺数据 fail-closed
+回退现路径）+ 合成向量单测，全部实现；C-scheme1
+（Z/A,I 因子）单片验证仅 0.54%，确认现路径与 scheme-1
+等价，故 scheme-2 是唯一 remaining 的次级改进。
+数据待提取：`IonSchneiderStoppingPowerDump` 扩展
+（已写入 /home/wuwei/topas/extensions/，25 分区×18 物种×
+4302 能量，unrestricted electronic），run 文件 +
+`tools/compile_schneider_ion_stopping.py`（C12 交叉门，
+E≥5 MeV/u，容差 2%）+ `tools/submit_ion_section_stopping.py`
+（一键 dry-run/注册/提交链）就绪；TOPAS 扩展构建 +
+sbatch 提取 + manifest 门待执行（未动冻结 TOPAS）。
+
 ## P3 肺例小尺度残余：次级边界是主犯（单片敏感性 + full20 验证）
 
 20022516 shard_01 同源单片（冻结二进制）：次级输运全关改变剂量

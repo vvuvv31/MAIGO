@@ -550,6 +550,20 @@ struct TransportConfig {
     // Smoke-only uniform World-Air MCS covariance; no beam-model file tuning.
     bool spots_enable_upstream_air_mcs{false};
     bool ct_primary_midpoint_stopping_diagnostic{false};
+    // Formal predictor-midpoint Schneider stopping (second-order
+    // in-step energy loss vs entry-value first order). Default OFF:
+    // full20 gamma validation was neutral-to-negative (lung local30
+    // 81.35->80.62, refined local11 98.25->98.20; band means improve
+    // but tails widen slightly, likely 0.5%-cap interplay near the
+    // Bragg peak). Available for research via this key or the
+    // diagnostic alias.
+    bool ct_primary_midpoint_stopping{false};
+    // Scheme-2 secondary stopping: per-ion per-Schneider-section Geant4
+    // tables (SCHNIOSP v1). Empty = current water x material-factor path.
+    // Values are unrestricted totals (electron contract preserved).
+    std::filesystem::path ct_secondary_ion_section_stopping_file{};
+    std::string ct_secondary_ion_section_stopping_sha256{};
+    std::string ct_secondary_ion_section_stopping_metadata_sha256{};
     bool ct_secondary_exact_faces_diagnostic{false};
     // Promoted formal behavior (validated: lung full20 local30 81.35->91.41,
     // single-shard cost +7%). Default ON. The diagnostic key above remains

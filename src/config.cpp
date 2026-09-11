@@ -1477,7 +1477,9 @@ void TransportConfig::validate() const {
         throw std::invalid_argument("Secondary Schneider stopping diagnostic requires smoke CT bundle, exact primary stopping and unit scale");
     if (ct_primary_midpoint_stopping_diagnostic &&
         (run_mode!=RunMode::smoke || !enable_ct_grid || ct_schneider_stopping_power_file.empty() || enable_csda_range_energy_loss))
-        throw std::invalid_argument("CT midpoint stopping requires smoke Schneider CT without legacy CSDA override");
+        throw std::invalid_argument("CT midpoint stopping diagnostic requires smoke Schneider CT without legacy CSDA override");
+    if (ct_primary_midpoint_stopping && enable_csda_range_energy_loss)
+        throw std::invalid_argument("Formal midpoint stopping is mutually exclusive with legacy CSDA range override");
     if (spots_enable_upstream_air_mcs &&
         (run_mode != RunMode::smoke || !enable_tps_source || !enable_ct_grid ||
          !spots_enable_upstream_air_energy_loss || !enable_multiple_scattering ||
@@ -2788,6 +2790,11 @@ TransportConfig load_config(const std::filesystem::path& path) {
         values, "spots_enable_upstream_air_mcs", config.spots_enable_upstream_air_mcs);
     config.ct_primary_midpoint_stopping_diagnostic = parse_bool(values,
         "ct_primary_midpoint_stopping_diagnostic", config.ct_primary_midpoint_stopping_diagnostic);
+    config.ct_primary_midpoint_stopping = parse_bool(values,
+        "ct_primary_midpoint_stopping", config.ct_primary_midpoint_stopping);
+    if (values.find("ct_primary_midpoint_stopping_diagnostic") != values.end()) {
+        config.ct_primary_midpoint_stopping = config.ct_primary_midpoint_stopping_diagnostic;
+    }
     config.ct_secondary_exact_faces_diagnostic = parse_bool(values,
         "ct_secondary_exact_faces_diagnostic", config.ct_secondary_exact_faces_diagnostic);
     config.ct_secondary_exact_faces = parse_bool(values,
@@ -2799,6 +2806,23 @@ TransportConfig load_config(const std::filesystem::path& path) {
         "ct_secondary_mcs_off_diagnostic", config.ct_secondary_mcs_off_diagnostic);
     config.ct_secondary_schneider_sp_diagnostic = parse_bool(values,
         "ct_secondary_schneider_sp_diagnostic", config.ct_secondary_schneider_sp_diagnostic);
+    config.ct_secondary_ion_section_stopping_file = parse_path(values,
+        "ct_secondary_ion_section_stopping_file",
+        config.ct_secondary_ion_section_stopping_file);
+    if (const auto it = values.find("ct_secondary_ion_section_stopping_sha256"); it != values.end())
+        config.ct_secondary_ion_section_stopping_sha256 = it->second;
+    if (const auto it = values.find("ct_secondary_ion_section_stopping_metadata_sha256"); it != values.end())
+        config.ct_secondary_ion_section_stopping_metadata_sha256 = it->second;
+    if (!config.ct_secondary_ion_section_stopping_file.empty()) {
+        if (!config.enable_ct_grid)
+            throw std::invalid_argument("Section ion stopping requires enable_ct_grid=true");
+        if (config.ct_secondary_ion_section_stopping_sha256.size() != 64 ||
+            config.ct_secondary_ion_section_stopping_metadata_sha256.size() != 64)
+            throw std::invalid_argument("Section ion stopping requires pinned sha256 + metadata sha256");
+    } else if (!config.ct_secondary_ion_section_stopping_sha256.empty() ||
+               !config.ct_secondary_ion_section_stopping_metadata_sha256.empty()) {
+        throw std::invalid_argument("Section ion stopping pins without data file");
+    }
     config.spots_upstream_air_mcs_file = parse_path(values, "spots_upstream_air_mcs_file", config.spots_upstream_air_mcs_file);
     if (const auto it=values.find("spots_upstream_air_mcs_sha256");it!=values.end()) config.spots_upstream_air_mcs_sha256=it->second;
     config.spots_upstream_air_stopping_power_file = parse_path(

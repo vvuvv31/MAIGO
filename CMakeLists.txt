@@ -60,6 +60,7 @@ add_library(carbon_core
     src/material_nuclear_rates.cpp
     src/schneider_delta_tail.cpp
     src/schneider_stopping_table.cpp
+    src/schneider_ion_stopping_table.cpp
     src/schneider_target_sampler.cpp
     src/secondary_rate_table.cpp
     src/topas_spots.cpp
@@ -271,6 +272,9 @@ if(BUILD_TESTING)
         endif()
     endif()
     add_test(NAME test_schneider_longitudinal COMMAND test_schneider_longitudinal)
+    add_executable(test_schneider_ion_stopping tests/test_schneider_ion_stopping.cpp)
+    target_link_libraries(test_schneider_ion_stopping PRIVATE carbon_core)
+    add_test(NAME test_schneider_ion_stopping COMMAND test_schneider_ion_stopping)
     add_test(NAME inelastic_package_v2_tests COMMAND inelastic_package_v2_tests)
     add_test(NAME test_schneider_dicom_reference COMMAND test_schneider_dicom_reference)
     add_test(NAME test_secondary_rate_table_hardening COMMAND test_secondary_rate_table_hardening)

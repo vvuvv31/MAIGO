@@ -23,6 +23,7 @@
 #include "carbon/stopping_power.hpp"
 #include "carbon/tps_source.hpp"
 #include "carbon/schneider_stopping_table.hpp"
+#include "carbon/schneider_ion_stopping_table.hpp"
 #include "carbon/detail/device_memory_tracker.hpp"
 #include "carbon/straggling.hpp"
 #include "carbon/transport.hpp"
@@ -788,6 +789,10 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
     float schneider_sp_e_max = 0.0F;
     float schneider_sp_inv_dE = 0.0F;
     bool use_schneider_stopping = false;
+    // Scheme-2 secondary section stopping (SCHNIOSP v1). Null = current
+    // water x material-factor path (fail-closed default).
+    float* schneider_ion_sp_device = nullptr;
+    bool use_schneider_ion_sp = false;
 
     Cinel02DeviceInteraction* cinel02_interactions_device = nullptr;
     Cinel02DeviceProduct* cinel02_products_device = nullptr;
@@ -992,7 +997,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
     bool use_ct_material_xs = false;
     bool ct_material_ids_are_schneider_sections = false;
     const auto ct_skip_homogeneous_face_clamp = config.ct_skip_homogeneous_face_clamp;
-    const auto ct_primary_midpoint_stopping = config.ct_primary_midpoint_stopping_diagnostic;
+    const auto ct_primary_midpoint_stopping = config.ct_primary_midpoint_stopping;
     const auto ct_secondary_exact_faces = config.ct_secondary_exact_faces;
     const auto ct_secondary_mcs_off = config.ct_secondary_mcs_off_diagnostic;
 
@@ -1536,6 +1541,35 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
             }
             queue.copy(flat_sp.data(), schneider_stopping_device, total_sp_elements).wait_and_throw();
             use_schneider_stopping = true;
+
+            if (!config.ct_secondary_ion_section_stopping_file.empty()) {
+                const auto ion_meta_path =
+                    config.ct_secondary_ion_section_stopping_file.parent_path() /
+                    (config.ct_secondary_ion_section_stopping_file.stem().string() +
+                     ".metadata.json");
+                if (compute_file_sha256_hex(ion_meta_path) !=
+                    config.ct_secondary_ion_section_stopping_metadata_sha256)
+                    throw std::runtime_error(
+                        "Section ion stopping metadata SHA256 mismatch");
+                if (compute_file_sha256_hex(
+                        config.ct_secondary_ion_section_stopping_file) !=
+                    config.ct_secondary_ion_section_stopping_sha256)
+                    throw std::runtime_error(
+                        "Section ion stopping data SHA256 mismatch");
+                SchneiderIonStoppingTable ion_table = SchneiderIonStoppingTable::from_binary(
+                    config.ct_secondary_ion_section_stopping_file, ion_meta_path);
+                const auto flat_ion = ion_table.to_flat_float();
+                schneider_ion_sp_device = mem_tracker.allocate<float>(flat_ion.size());
+                if (schneider_ion_sp_device == nullptr) {
+                    throw std::bad_alloc();
+                }
+                queue.copy(flat_ion.data(), schneider_ion_sp_device, flat_ion.size())
+                    .wait_and_throw();
+                use_schneider_ion_sp = true;
+                std::cout << "[schneider-ion-stopping] mode=section-ion-v1 sections=25 "
+                          << "species=18 energies=4302 source="
+                          << config.ct_secondary_ion_section_stopping_file << '\n';
+            }
 
             std::cout << "[schneider-stopping-power] mode=exact-schneider-v1\n"
                       << "  sections=" << schneider_sp_sections << "\n"
@@ -4885,7 +4919,47 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                 ct_mass_sp_factor_lut_device != nullptr &&
                                 ct_n_mass_factors > 0U;
                             float sec_material_factor = 1.0F;
-                            if (sec_use_mass_sp_factor) {
+                            // Scheme-2: per-ion per-Schneider-section Geant4
+                            // table (linear at unit density), scaled by local
+                            // density. Unrestricted totals (electron contract
+                            // preserved). Falls back to the water x factor
+                            // path when data is absent or out of domain.
+                            // Scheme-2 section stopping: linear at unit
+                            // density, scaled by local density. Returns
+                            // negative when data is absent/out of domain
+                            // (caller falls back to water x factor path).
+                            auto scheme2_linear_sp = [&](float energy_mevu) {
+                                if (!(use_schneider_ion_sp && sec_in_ct) ||
+                                    schneider_ion_sp_device == nullptr ||
+                                    charged_sp_idx < 0 ||
+                                    sec_ct_material >= 25U)
+                                    return -1.0F;
+                                float eidx = (energy_mevu - 0.01F) * 10.0F;
+                                int ei = static_cast<int>(sycl::floor(eidx));
+                                ei = sycl::max(0, sycl::min(ei, 4302 - 2));
+                                const float ef = sycl::clamp(
+                                    eidx - static_cast<float>(ei), 0.0F, 1.0F);
+                                const std::size_t base =
+                                    (static_cast<std::size_t>(sec_ct_material) * 18U +
+                                     static_cast<std::size_t>(charged_sp_idx)) *
+                                    4302U;
+                                const float s0 =
+                                    schneider_ion_sp_device[base + static_cast<std::size_t>(ei)];
+                                const float s1 =
+                                    schneider_ion_sp_device[base + static_cast<std::size_t>(ei) + 1U];
+                                const float unit_sp = s0 + ef * (s1 - s0);
+                                if (!(unit_sp > 1.0e-6F)) return -1.0F;
+                                return unit_sp * sycl::fmax(sec_local_density_g_per_cm3, 1.0e-6F);
+                            };
+                            bool sec_scheme2_hit = false;
+                            {
+                                const float scheme2_sp = scheme2_linear_sp(sec_e_u);
+                                if (scheme2_sp > 0.0F) {
+                                    sec_sp = scheme2_sp;
+                                    sec_scheme2_hit = true;
+                                }
+                            }
+                            if (sec_use_mass_sp_factor && !sec_scheme2_hit) {
                                 sec_material_factor = ct_lookup_mass_sp_factor(
                                     ct_mass_sp_factor_lut_device,
                                     use_ct_density_mass_spr ? ct_density_spr_n_rho
@@ -4897,10 +4971,14 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                     static_cast<std::size_t>(sp_idx), sp_frac,
                                     [](float x) { return sycl::log(x); });
                             }
-                            sec_sp = secondary_material_stopping_power(
-                                sec_sp, enable_ct_grid && sec_in_ct,
-                                sec_local_density_g_per_cm3,
-                                sec_use_mass_sp_factor, sec_material_factor);
+                            // Scheme-2 value is already linear stopping at
+                            // local density; bypass water x density scaling.
+                            if (!sec_scheme2_hit) {
+                                sec_sp = secondary_material_stopping_power(
+                                    sec_sp, enable_ct_grid && sec_in_ct,
+                                    sec_local_density_g_per_cm3,
+                                    sec_use_mass_sp_factor, sec_material_factor);
+                            }
 
                             if (sec_sp <= 1.0e-6F) break;
 
@@ -5052,6 +5130,17 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                             auto mid_sp = (ion_sp_table[mid_idx] +
                                            mid_fr * (ion_sp_table[mid_idx + 1] -
                                                      ion_sp_table[mid_idx]));
+                            // Scheme-2 at midpoint energy; falls back below.
+                            // Already linear at local density: bypass the
+                            // water x density scaling entirely.
+                            bool mid_scheme2_hit = false;
+                            {
+                                const float scheme2_mid = scheme2_linear_sp(mid_e_u);
+                                if (scheme2_mid > 0.0F) {
+                                    mid_sp = scheme2_mid;
+                                    mid_scheme2_hit = true;
+                                }
+                            }
                             // The midpoint value drives dE and must use the same
                             // Schneider density/material scaling as sec_sp at the
                             // step start. Previously this remained a density-1
@@ -5070,10 +5159,12 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                     static_cast<std::size_t>(mid_idx), mid_fr,
                                     [](float x) { return sycl::log(x); });
                             }
-                            mid_sp = secondary_material_stopping_power(
-                                mid_sp, enable_ct_grid && sec_in_ct,
-                                sec_local_density_g_per_cm3,
-                                sec_use_mass_sp_factor, mid_material_factor);
+                            if (!mid_scheme2_hit) {
+                                mid_sp = secondary_material_stopping_power(
+                                    mid_sp, enable_ct_grid && sec_in_ct,
+                                    sec_local_density_g_per_cm3,
+                                    sec_use_mass_sp_factor, mid_material_factor);
+                            }
 
                             auto dE = sycl::fmin(mid_sp * sec_step_mm, sec_e);
                             if (enable_secondary_energy_straggling &&
