@@ -328,6 +328,27 @@ int main() {
                   crossing.edges.size()-1,crossing.rows.size()};
     ElectronEnergyPacket ep;ep.status=ElectronPacketStatus::active;ep.cursor=exh.next;ep.weight_MeV=7.25;
     auto restarted=transport_electron_packet_step(ep,&ft,1,box,uniform);
+    assert(restarted.material_table_index==0);
+    // Cached material lookup must preserve sampling, state and RNG consumption.
+    for(unsigned seed=1;seed<=32;++seed) {
+        std::uint64_t ra=seed,rb=seed;
+        auto ua=[&](){ra=ra*6364136223846793005ULL+1442695040888963407ULL;return double(ra>>11)*0x1.0p-53;};
+        auto ub=[&](){rb=rb*6364136223846793005ULL+1442695040888963407ULL;return double(rb>>11)*0x1.0p-53;};
+        auto a=ep,b=ep;b.material_table_index=0;
+        for(unsigned step=0;step<8 && a.status==ElectronPacketStatus::active;++step) {
+            a.material_table_index=std::numeric_limits<std::size_t>::max();
+            a=transport_electron_packet_step(a,&ft,1,box,ua);
+            b=transport_electron_packet_step(b,&ft,1,box,ub);
+            assert(ra==rb && a.status==b.status && a.gap==b.gap);
+            assert(a.weight_MeV==b.weight_MeV && a.deposit_position==b.deposit_position);
+            assert(a.cursor.position==b.cursor.position && a.cursor.direction==b.cursor.direction);
+            assert(a.cursor.source==b.cursor.source && a.cursor.row==b.cursor.row);
+            assert(a.cursor.energy_MeV==b.cursor.energy_MeV && a.cursor.fraction==b.cursor.fraction);
+            assert(a.advances==b.advances && a.source_restarts==b.source_restarts);
+        }
+    }
+    auto wrong_index=ep;wrong_index.material_table_index=1;
+    assert(transport_electron_packet_step(wrong_index,&ft,1,box,uniform).status==ElectronPacketStatus::invalid);
     assert(restarted.status==ElectronPacketStatus::active && restarted.source_restarts==1);
     assert(restarted.cursor.energy_MeV==6 && restarted.weight_MeV==7.25);
     assert(restarted.cursor.position==ep.cursor.position && restarted.cursor.direction==ep.cursor.direction);

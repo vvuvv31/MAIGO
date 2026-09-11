@@ -993,7 +993,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
     bool ct_material_ids_are_schneider_sections = false;
     const auto ct_skip_homogeneous_face_clamp = config.ct_skip_homogeneous_face_clamp;
     const auto ct_primary_midpoint_stopping = config.ct_primary_midpoint_stopping_diagnostic;
-    const auto ct_secondary_exact_faces = config.ct_secondary_exact_faces_diagnostic;
+    const auto ct_secondary_exact_faces = config.ct_secondary_exact_faces;
     const auto ct_secondary_mcs_off = config.ct_secondary_mcs_off_diagnostic;
 
     const bool use_schneider_delta_tail =
@@ -1013,6 +1013,10 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
         !config.ct_schneider_delta_longitudinal_file.empty();
     const bool use_longitudinal_interface_mass = config.ct_longitudinal_interface_mass_diagnostic;
     const bool use_electron_joint = !config.ct_electron_joint_response_diagnostic_file.empty();
+    // Production speed switch: skip reporting-only joint diagnostic atomics.
+    // Slots 1 (energy domain) and 2 (miss/blocked) stay always-on: they feed
+    // fail-closed quality gates. Skipped counters never feed transport.
+    const bool enable_electron_joint_diagnostics = config.electron_joint_diagnostics;
     const bool use_material_electron=!config.material_electron_response_index_file.empty();
     const bool use_material_ct=use_material_electron && config.enable_ct_grid;
     const bool use_water_electron=(use_material_electron && !use_material_ct) || !config.water_electron_response_diagnostic_file.empty();
@@ -3113,6 +3117,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                             const float weight=deposited_MeV*static_cast<float>(birth.fraction);
                             local_voxel_deposit_MeV-=weight;forward_shifted_MeV+=weight;
                             ElectronEnergyPacket packet;packet.weight_MeV=weight;
+                            packet.material_table_index=ti;
                             packet.cursor=bind_electron_birth(birth,material_electron_views[ti],
                                 birth_position,{direction_x,direction_y,direction_z},uniform());
                             packet.cursor.physical_density_g_cm3=birth_material.density;
@@ -3263,6 +3268,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                     if(use_electron_joint && in_ct && enable_voxel_scoring &&
                        voxel_index<number_of_voxels && deposited_MeV>0) {
                         auto counter=[&](int slot,std::uint64_t amount) {
+                            if(!enable_electron_joint_diagnostics && slot!=1 && slot!=2) return;
                             sycl::atomic_ref<std::uint64_t,sycl::memory_order::relaxed,
                                 sycl::memory_scope::device,sycl::access::address_space::global_space> a(electron_joint_diag_device[slot]);a.fetch_add(amount);
                         };
@@ -3295,24 +3301,46 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                     const auto range=electron_path_ranges_device[draw.sample_index];
                                     const auto ex=rotate_local_direction(static_cast<float>(sycl::cos(phi)),static_cast<float>(sycl::sin(phi)),0,Direction3F{direction_x,direction_y,direction_z});
                                     const auto ey=rotate_local_direction(static_cast<float>(-sycl::sin(phi)),static_cast<float>(sycl::cos(phi)),0,Direction3F{direction_x,direction_y,direction_z});
+                                    // FP32 electron march: identical algorithm to the
+                                    // validated double march; endpoints agree to
+                                    // ~1e-4 mm (voxel scale 0.5 mm). Validated by
+                                    // gamma equivalence, not bitwise identity.
+                                    const std::array<float,3> birth_f{
+                                        position_x_mm+static_cast<float>(birth)*step_mm*direction_x,
+                                        position_y_mm+static_cast<float>(birth)*step_mm*direction_y,
+                                        position_z_mm+static_cast<float>(birth)*step_mm*direction_z};
+                                    const std::array<float,3> origin_f{ct_origin_x,ct_origin_y,ct_origin_z};
+                                    const std::array<float,3> spacing_f{ct_spacing_x,ct_spacing_y,ct_spacing_z};
+                                    const std::array<int,3> dims_i{static_cast<int>(ct_nx),static_cast<int>(ct_ny),static_cast<int>(ct_nz)};
+                                    auto density_f=[&](const std::array<int,3>& c) {
+                                        return ct_density_device[(static_cast<std::size_t>(c[2])*ct_ny+c[1])*ct_nx+c[0]];};
                                     MassPathResult path;
-                                    path.endpoint={position_x_mm+birth*step_mm*direction_x,position_y_mm+birth*step_mm*direction_y,position_z_mm+birth*step_mm*direction_z};
-                                    const bool same_cell=try_same_voxel_mass_path(path.endpoint,
-                                        electron_path_bounds_device[draw.sample_index],
-                                        {{{ex.x,ex.y,ex.z},{ey.x,ey.y,ey.z},{direction_x,direction_y,direction_z}}},
-                                        {ct_origin_x,ct_origin_y,ct_origin_z},{ct_spacing_x,ct_spacing_y,ct_spacing_z},
-                                        {static_cast<int>(ct_nx),static_cast<int>(ct_ny),static_cast<int>(ct_nz)},
-                                        [&](const std::array<int,3>& c){return static_cast<double>(ct_density_device[(static_cast<std::size_t>(c[2])*ct_ny+c[1])*ct_nx+c[0]]);});
+                                    path.endpoint={birth_f[0],birth_f[1],birth_f[2]};
+                                    const auto stored_bounds=electron_path_bounds_device[draw.sample_index];
+                                    MassPathBoundsT<float> bounds_f;
+                                    for(int bi=0;bi<3;++bi) {
+                                        bounds_f.low[bi]=static_cast<float>(stored_bounds.low[bi]);
+                                        bounds_f.high[bi]=static_cast<float>(stored_bounds.high[bi]);
+                                        bounds_f.net[bi]=static_cast<float>(stored_bounds.net[bi]);
+                                    }
+                                    const std::array<std::array<float,3>,3> basis_f{
+                                        {{ex.x,ex.y,ex.z},{ey.x,ey.y,ey.z},{direction_x,direction_y,direction_z}}};
+                                    std::array<float,3> probe_f{birth_f[0],birth_f[1],birth_f[2]};
+                                    const bool same_cell=try_same_voxel_mass_path<float>(probe_f,
+                                        bounds_f,basis_f,origin_f,spacing_f,dims_i,density_f);
+                                    if(same_cell) {
+                                        path.endpoint={probe_f[0],probe_f[1],probe_f[2]};
+                                    }
                                     if(same_cell)path.completed_segments=range.count;
-                                    else path=replay_mass_polyline_indexed(
-                                        {position_x_mm+birth*step_mm*direction_x,position_y_mm+birth*step_mm*direction_y,position_z_mm+birth*step_mm*direction_z},range.count,
+                                    else path=replay_mass_polyline_indexed<float>(
+                                        birth_f,range.count,
                                         [&](std::size_t j) {
                                             const auto v=electron_path_vectors_device[range.offset+j];
-                                            return std::array<double,3>{v[0]*ex.x+v[1]*ey.x+v[2]*direction_x,
-                                                v[0]*ex.y+v[1]*ey.y+v[2]*direction_y,v[0]*ex.z+v[1]*ey.z+v[2]*direction_z};
-                                        },{ct_origin_x,ct_origin_y,ct_origin_z},{ct_spacing_x,ct_spacing_y,ct_spacing_z},
-                                        {static_cast<int>(ct_nx),static_cast<int>(ct_ny),static_cast<int>(ct_nz)},
-                                        [&](const std::array<int,3>& c) {return static_cast<double>(ct_density_device[(static_cast<std::size_t>(c[2])*ct_ny+c[1])*ct_nx+c[0]]);});
+                                            return std::array<float,3>{
+                                                static_cast<float>(v[0])*ex.x+static_cast<float>(v[1])*ey.x+static_cast<float>(v[2])*direction_x,
+                                                static_cast<float>(v[0])*ex.y+static_cast<float>(v[1])*ey.y+static_cast<float>(v[2])*direction_y,
+                                                static_cast<float>(v[0])*ex.z+static_cast<float>(v[1])*ey.z+static_cast<float>(v[2])*direction_z};
+                                        },origin_f,spacing_f,dims_i,density_f);
                                     march.invalid=path.invalid;march.escaped=path.escaped;
                                     if(!march.invalid && !march.escaped) {
                                         const int x=static_cast<int>(sycl::floor((path.endpoint[0]-ct_origin_x)/ct_spacing_x));

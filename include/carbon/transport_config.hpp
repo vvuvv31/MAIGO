@@ -245,6 +245,17 @@ struct TransportConfig {
     // Independent correlated bulk response, isolated EM-only interface pilot.
     std::filesystem::path ct_electron_joint_response_diagnostic_file{};
     bool ct_electron_joint_patient_experiment{false};
+    // Explicit opt-in: allow the joint patient experiment in research mode
+    // (smoke stays allowed as before; production stays forbidden). Quality
+    // still reports unvalidated_electron_joint_response, so runs remain
+    // non-accepting until the joint data passes production validation.
+    bool ct_electron_joint_allow_research{false};
+    // Production speed switch (default ON = current diagnostic behavior).
+    // false skips reporting-only joint diagnostic atomics (queries,
+    // redistributed/escaped/untracked energy, path replays). Miss/lookup
+    // counters stay always-on: they feed fail-closed quality gates.
+    // Skipped counters never feed transport, so dose is bit-identical.
+    bool electron_joint_diagnostics{true};
     std::string ct_electron_joint_response_sha256{};
     std::string ct_electron_joint_response_metadata_sha256{};
     // Unvalidated pure Water_75eV EM-only experiment; never a CT alias.
@@ -540,6 +551,12 @@ struct TransportConfig {
     bool spots_enable_upstream_air_mcs{false};
     bool ct_primary_midpoint_stopping_diagnostic{false};
     bool ct_secondary_exact_faces_diagnostic{false};
+    // Promoted formal behavior (validated: lung full20 local30 81.35->91.41,
+    // single-shard cost +7%). Default ON. The diagnostic key above remains
+    // as a deprecated explicit alias: when present it overrides this field,
+    // so frozen runs stay bit-reproducible with an explicit false.
+    // Inert without a CT grid (callers branch on enable_ct_grid && sec_in_ct).
+    bool ct_secondary_exact_faces{true};
     bool ct_secondary_mcs_off_diagnostic{false};
     bool ct_secondary_schneider_sp_diagnostic{false};
     std::filesystem::path spots_upstream_air_mcs_file{};

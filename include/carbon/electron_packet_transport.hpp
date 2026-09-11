@@ -15,6 +15,7 @@ struct ElectronEnergyPacket {
     double weight_MeV{};
     std::array<double,3> deposit_position{};
     std::uint64_t advances{},electron_children{},photon_children{},source_restarts{},boundary_restarts{};
+    std::size_t material_table_index{std::numeric_limits<std::size_t>::max()};
 };
 
 // Same-material finite electron sources are continued by the existing exact
@@ -58,12 +59,19 @@ inline ElectronEnergyPacket transport_electron_packet_step(
        !std::isfinite(packet.cursor.energy_MeV) || packet.cursor.energy_MeV<=0 || !tables) {
         packet.status=ElectronPacketStatus::invalid;return packet;
     }
-    std::size_t current=count;
-    for(std::size_t t=0;t<count;++t)
-        if(tables[t].section==packet.cursor.section && tables[t].density_g_cm3==packet.cursor.density_g_cm3)current=t;
+    std::size_t current=packet.material_table_index;
+    if(current==std::numeric_limits<std::size_t>::max()) {
+        current=count;
+        for(std::size_t t=0;t<count;++t)
+            if(tables[t].section==packet.cursor.section && tables[t].density_g_cm3==packet.cursor.density_g_cm3)current=t;
+    } else if(current>=count || tables[current].section!=packet.cursor.section ||
+              tables[current].density_g_cm3!=packet.cursor.density_g_cm3) {
+        packet.status=ElectronPacketStatus::invalid;return packet;
+    }
     if(current==count) {
         packet.status=ElectronPacketStatus::coverage_missing;packet.gap=ElectronPacketGap::material;return packet;
     }
+    packet.material_table_index=current;
     if(packet.cursor.row==kElectronContinuationEnd) {
         packet=resume_electron_packet(packet,tables[current],uniform,packet.cursor.physical_density_g_cm3);
         if(packet.status==ElectronPacketStatus::active)++packet.source_restarts;
@@ -99,6 +107,7 @@ inline ElectronEnergyPacket transport_electron_packet_step(
         if(!std::isfinite(mix) || mix<0 || mix>=1) {packet.status=ElectronPacketStatus::invalid;return packet;}
         const auto destination=mix<bracket.upper_weight?bracket.high:bracket.low;
         packet=resume_electron_packet(packet,tables[destination],uniform,advanced.boundary.to_density);
+        packet.material_table_index=destination;
         if(packet.status==ElectronPacketStatus::active)++packet.boundary_restarts;
         return packet;
     }

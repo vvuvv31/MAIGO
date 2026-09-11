@@ -49,7 +49,7 @@ static std::array<double,5> exercise_polyline() {
     // Two crossings and a return to the original z. The collapsed vector
     // lands at x=11mm; retaining the turns must return x=2mm instead.
     const std::array<double,3> v[]={{.1,0,.1},{1,0,1},{0,0,-1},{0,0,-.1}};
-    const auto r=replay_mass_polyline({0,0,-1},v,4,{-1,-1,-2},{1,1,1},{20,2,4},
+    const auto r=replay_mass_polyline<double>({0,0,-1},v,4,{-1,-1,-2},{1,1,1},{20,2,4},
         [](const std::array<int,3>& c){return c[2]<2 ? 1. : 10.;});
     return {r.endpoint[0],r.endpoint[1],r.endpoint[2],double(r.invalid || r.escaped),double(r.completed_segments)};
 }
@@ -67,22 +67,22 @@ static std::array<double,4> exercise_same_voxel_fast() {
         auto seg=[&](std::size_t i){const double sign=(k+i)%2 ? -1. : 1.;
             const double size=k%3==0 ? .02 : .000001;
             return std::array<double,3>{sign*size,sign*size*.3,-sign*size*.1};};
-        const auto fast=replay_mass_polyline_indexed<true>(p,12,seg,origin,spacing,dims,rho);
-        const auto slow=replay_mass_polyline_indexed<false>(p,12,seg,origin,spacing,dims,rho);
+        const auto fast=replay_mass_polyline_indexed<double, true>(p,12,seg,origin,spacing,dims,rho);
+        const auto slow=replay_mass_polyline_indexed<double, false>(p,12,seg,origin,spacing,dims,rho);
         out[0]+=(fast.invalid!=slow.invalid || fast.escaped!=slow.escaped || fast.completed_segments!=slow.completed_segments);
         for(int a=0;a<3;++a)out[1]=std::max(out[1],std::abs(fast.endpoint[a]-slow.endpoint[a]));
-        out[2]+=try_same_voxel_mass_segment(p,seg(0),origin,spacing,dims,rho);
+        out[2]+=try_same_voxel_mass_segment<double>(p,seg(0),origin,spacing,dims,rho);
     }
     for(double x:{-.5,std::nextafter(-.5,0.),-1.1}) {
         std::array<double,3> p{x,-1.7,-2.5};
-        out[3]+=try_same_voxel_mass_segment(p,{.000001,0,0},origin,spacing,dims,rho);
+        out[3]+=try_same_voxel_mass_segment<double>(p,{.000001,0,0},origin,spacing,dims,rho);
     }
     std::array<double,3> p{-.75,-1.7,-2.5};
     const auto initial=p;
-    out[3]+=try_same_voxel_mass_segment(p,{.02697,0,0},origin,spacing,dims,rho); // exact face
+    out[3]+=try_same_voxel_mass_segment<double>(p,{.02697,0,0},origin,spacing,dims,rho); // exact face
     out[3]+=(p!=initial); // Rejected fast path cannot modify the endpoint.
-    out[3]+=try_same_voxel_mass_segment(p,{1,0,0},origin,spacing,dims,[](auto){return 0.;});
-    out[3]+=try_same_voxel_mass_segment(p,{std::numeric_limits<double>::infinity(),0,0},origin,spacing,dims,rho);
+    out[3]+=try_same_voxel_mass_segment<double>(p,{1,0,0},origin,spacing,dims,[](auto){return 0.;});
+    out[3]+=try_same_voxel_mass_segment<double>(p,{std::numeric_limits<double>::infinity(),0,0},origin,spacing,dims,rho);
     return out;
 }
 static std::array<double,16> exercise() {
@@ -96,23 +96,23 @@ static std::array<double,16> exercise() {
     out[5]=schneider_longitudinal_lookup_device(226,e,f,l,3,fraction,lambda);
     out[6]=schneider_longitudinal_lookup_device(
         std::numeric_limits<float>::quiet_NaN(),e,f,l,3,fraction,lambda);
-    auto r=march_longitudinal_segments({0.4,0.25,0.25},{1,0,0},
+    auto r=march_longitudinal_segments<double>({0.4,0.25,0.25},{1,0,0},
         {0,0,0},{0.5,0.5,0.5},{4,1,1},0.5,
         [&](const std::array<int,3>& cell,double length) {
             out[7+cell[0]]+=length/0.5;return true;
         });
     out[9]=r.traversed_mm;
-    r=march_longitudinal_segments({0.5,0.25,0.25},{-1,0,0},
+    r=march_longitudinal_segments<double>({0.5,0.25,0.25},{-1,0,0},
         {0,0,0},{0.5,0.5,0.5},{4,1,1},1,
         [&](const std::array<int,3>& cell,double length) {
             out[10]+=length;out[11]=cell[0];return true;
         });
     out[12]=r.escaped;
-    r=march_longitudinal_segments({0.4,0.25,0.25},{1,0,0},
+    r=march_longitudinal_segments<double>({0.4,0.25,0.25},{1,0,0},
         {0,0,0},{0.5,0.5,0.5},{4,1,1},1,
         [&](const std::array<int,3>& cell,double) {return cell[0]==0;});
     out[13]=r.blocked;out[14]=r.traversed_mm;
-    r=march_longitudinal_segments({0.25,0.25,0.25},{0,0,0},
+    r=march_longitudinal_segments<double>({0.25,0.25,0.25},{0,0,0},
         {0,0,0},{0.5,0.5,0.5},{4,1,1},1,
         [](const std::array<int,3>&,double){return true;});
     out[15]=r.invalid;
@@ -133,37 +133,37 @@ static std::array<double,3> exercise_path_bounds_fast() {
         std::array<double,3> p{-.75+(k%7)*.5,-1.7+(k%5),-2.5+(k%3)*2};
         if(k%11==0)p[0]=-.5;
         const auto before=p;
-        const auto b=mass_path_bounds(12,local);
-        if(try_same_voxel_mass_path(p,b,basis,origin,spacing,dims,density)) {
-            ++result[0];const auto ref=replay_mass_polyline_indexed<false>(before,12,world,origin,spacing,dims,density);
+        const auto b=mass_path_bounds<double>(12,local);
+        if(try_same_voxel_mass_path<double>(p,b,basis,origin,spacing,dims,density)) {
+            ++result[0];const auto ref=replay_mass_polyline_indexed<double, false>(before,12,world,origin,spacing,dims,density);
             result[2]+=ref.invalid || ref.escaped;
             for(int a=0;a<3;++a)result[1]=std::max(result[1],std::abs(p[a]-ref.endpoint[a]));
         } else result[2]+=(p!=before);
     }
     // Same net endpoint is NOT evidence that the path stays in its voxel.
-    const auto loop=mass_path_bounds(2,[](std::size_t i){return std::array<double,3>{i ? -.2 : .2,0,0};});
+    const auto loop=mass_path_bounds<double>(2,[](std::size_t i){return std::array<double,3>{i ? -.2 : .2,0,0};});
     std::array<double,3> p{.25,.25,.25};
-    result[2]+=try_same_voxel_mass_path(p,loop,{{{1,0,0},{0,1,0},{0,0,1}}},
+    result[2]+=try_same_voxel_mass_path<double>(p,loop,{{{1,0,0},{0,1,0},{0,0,1}}},
         {0,0,0},{.5,.5,.5},{8,8,8},[](auto){return 1.;});
     return result;
 }
 static std::array<double,12> exercise_mass() {
     std::array<double,12> out{};
     auto rho=[](const std::array<int,3>& c){return c[0]==0 ? 1.0 : 10.0;};
-    auto r=march_longitudinal_mass_segments({0,0.25,0.25},{1,0,0},
+    auto r=march_longitudinal_mass_segments<double>({0,0.25,0.25},{1,0,0},
         {0,0,0},{0.5,0.5,0.5},{2,1,1},0.15,rho,
         [&](const std::array<int,3>& c,double share){out[c[0]]+=share;});
     out[2]=r.traversed_mm;out[3]=r.invalid || r.blocked || r.escaped;
-    r=march_longitudinal_mass_segments({1,0.25,0.25},{-1,0,0},
+    r=march_longitudinal_mass_segments<double>({1,0.25,0.25},{-1,0,0},
         {0,0,0},{0.5,0.5,0.5},{2,1,1},0.6,rho,
         [&](const std::array<int,3>& c,double share){out[4+c[0]]+=share;});
     out[6]=r.escaped;out[7]=r.traversed_mm;
-    r=march_longitudinal_mass_segments({0,0.25,0.25},{1,0,0},
+    r=march_longitudinal_mass_segments<double>({0,0.25,0.25},{1,0,0},
         {0,0,0},{0.5,0.5,0.5},{2,1,1},0.1,
         [](const std::array<int,3>&){return 0.0;},
         [&](const std::array<int,3>&,double){out[8]+=1;});
     out[9]=r.invalid;
-    r=march_longitudinal_mass_segments({0,0.25,0.25},{1,0,0},
+    r=march_longitudinal_mass_segments<double>({0,0.25,0.25},{1,0,0},
         {0,0,0},{0.5,0.5,0.5},{2,1,1},0.55,rho,
         [&](const std::array<int,3>&,double share){out[10]+=share;});
     out[11]=r.escaped || r.invalid || r.blocked;
@@ -267,7 +267,7 @@ int main(int argc, char** argv) {
         }
         for (double shift : {0.0,0.123,100.0}) {
             double total=0;
-            const auto r=march_longitudinal_segments(
+            const auto r=march_longitudinal_segments<double>(
                 {shift+0.1,shift+0.2,shift+0.3},{0.6,0,0.8},
                 {shift,shift,shift},{0.5,1,2},{20,20,20},7.3,
                 [&](const std::array<int,3>& c,double len) {

@@ -676,7 +676,7 @@ void TransportConfig::validate() const {
             "(use one heterogeneity model per run)");
     }
     if (!ct_electron_joint_response_diagnostic_file.empty() &&
-        (run_mode!=RunMode::smoke || !enable_ct_grid || !enable_voxel_scoring ||
+        ((run_mode!=RunMode::smoke && !(run_mode==RunMode::research && ct_electron_joint_allow_research)) || !enable_ct_grid || !enable_voxel_scoring ||
          (!ct_electron_joint_patient_experiment && (enable_inelastic || enable_secondary_transport || initial_energy_MeVu!=175)) ||
          primary_atomic_number!=6 || primary_mass_number!=12 ||
          ct_schneider_delta_tail_file.empty() || ct_schneider_physics_bundle_file.empty() || !ct_schneider_delta_longitudinal_file.empty() ||
@@ -684,8 +684,9 @@ void TransportConfig::validate() const {
          ct_electron_joint_response_sha256.size()!=64 || ct_electron_joint_response_metadata_sha256.size()!=64 ||
          (!ct_electron_joint_patient_experiment && (!primary_spot_batch.empty() || !topas_spots_file.empty() || !topas_spots_files.empty() || !tps_spots_file.empty()))))
         throw std::invalid_argument("Joint electron response requires pinned, isolated 175 MeV/u C12 CT EM-only smoke; never stacked with longitudinal");
-    if(ct_electron_joint_patient_experiment && (ct_electron_joint_response_diagnostic_file.empty() || run_mode!=RunMode::smoke))
-        throw std::invalid_argument("Patient electron experiment requires explicit pinned data and smoke mode; production forbidden");
+    if(ct_electron_joint_patient_experiment && (ct_electron_joint_response_diagnostic_file.empty() ||
+        (run_mode!=RunMode::smoke && !(run_mode==RunMode::research && ct_electron_joint_allow_research))))
+        throw std::invalid_argument("Patient electron experiment requires explicit pinned data and smoke mode (or explicit research opt-in); production forbidden");
     if (ct_electron_joint_response_diagnostic_file.empty() &&
         (!ct_electron_joint_response_sha256.empty() || !ct_electron_joint_response_metadata_sha256.empty()))
         throw std::invalid_argument("Joint response pins without data");
@@ -1467,9 +1468,9 @@ void TransportConfig::validate() const {
                 "enable_tps_coordinate_system requires DICOM LPS beam geometry");
         }
     }
-    if ((ct_secondary_exact_faces_diagnostic || ct_secondary_mcs_off_diagnostic) &&
+    if (ct_secondary_mcs_off_diagnostic &&
         (run_mode!=RunMode::smoke || !enable_ct_grid || ct_schneider_physics_bundle_file.empty()))
-        throw std::invalid_argument("Secondary exact faces requires smoke Schneider CT bundle");
+        throw std::invalid_argument("Secondary MCS-off requires smoke Schneider CT bundle");
     if (ct_secondary_schneider_sp_diagnostic &&
         (run_mode!=RunMode::smoke || !enable_ct_grid || ct_schneider_physics_bundle_file.empty() ||
          ct_schneider_stopping_power_file.empty() || ct_stopping_power_scale!=1.0))
@@ -2169,6 +2170,10 @@ TransportConfig load_config(const std::filesystem::path& path) {
         "ct_electron_joint_response_diagnostic_file",config.ct_electron_joint_response_diagnostic_file);
     config.ct_electron_joint_patient_experiment = parse_bool(values,
         "ct_electron_joint_patient_experiment",config.ct_electron_joint_patient_experiment);
+    config.ct_electron_joint_allow_research = parse_bool(values,
+        "ct_electron_joint_allow_research",config.ct_electron_joint_allow_research);
+    config.electron_joint_diagnostics = parse_bool(values,
+        "electron_joint_diagnostics",config.electron_joint_diagnostics);
     if(!config.ct_electron_joint_response_diagnostic_file.empty())
         config.ct_electron_joint_response_diagnostic_file=resolve_input_path_from_config(config.ct_electron_joint_response_diagnostic_file,path);
     if(const auto it=values.find("ct_electron_joint_response_sha256");it!=values.end())config.ct_electron_joint_response_sha256=it->second;
@@ -2785,6 +2790,11 @@ TransportConfig load_config(const std::filesystem::path& path) {
         "ct_primary_midpoint_stopping_diagnostic", config.ct_primary_midpoint_stopping_diagnostic);
     config.ct_secondary_exact_faces_diagnostic = parse_bool(values,
         "ct_secondary_exact_faces_diagnostic", config.ct_secondary_exact_faces_diagnostic);
+    config.ct_secondary_exact_faces = parse_bool(values,
+        "ct_secondary_exact_faces", config.ct_secondary_exact_faces);
+    if (values.find("ct_secondary_exact_faces_diagnostic") != values.end()) {
+        config.ct_secondary_exact_faces = config.ct_secondary_exact_faces_diagnostic;
+    }
     config.ct_secondary_mcs_off_diagnostic = parse_bool(values,
         "ct_secondary_mcs_off_diagnostic", config.ct_secondary_mcs_off_diagnostic);
     config.ct_secondary_schneider_sp_diagnostic = parse_bool(values,
