@@ -130,7 +130,7 @@ private:
 };
 
 std::size_t strict_uint(const JsonVal2& v, const std::string& name) {
-    if (v.type != JsonVal2::Type::Number || v.num_val < 0 ||
+    if (v.type != JsonVal2::Type::Number || !std::isfinite(v.num_val) || v.num_val < 0 ||
         std::floor(v.num_val) != v.num_val)
         throw std::runtime_error("Expected uint field: " + name);
     return static_cast<std::size_t>(v.num_val);
@@ -155,7 +155,8 @@ SchneiderIonStoppingTable SchneiderIonStoppingTable::from_binary(
         header.num_species != kSchneiderIonSpecies ||
         header.num_energies != kSchneiderIonEnergies)
         throw std::runtime_error("Dimension mismatch in: " + binary_path.string());
-    if (std::abs(header.energy_min_mevu - kSchneiderIonEnergyMin) > 1e-6 ||
+    if (!std::isfinite(header.energy_min_mevu) || !std::isfinite(header.energy_max_mevu) ||
+        !std::isfinite(header.energy_step_mevu) || std::abs(header.energy_min_mevu - kSchneiderIonEnergyMin) > 1e-6 ||
         std::abs(header.energy_max_mevu - kSchneiderIonEnergyMax) > 1e-6 ||
         std::abs(header.energy_step_mevu - kSchneiderIonEnergyStep) > 1e-6)
         throw std::runtime_error("Grid mismatch in: " + binary_path.string());
@@ -177,6 +178,8 @@ SchneiderIonStoppingTable SchneiderIonStoppingTable::from_binary(
     if (in.gcount() > 0)
         throw std::runtime_error("Trailing data in: " + binary_path.string());
 
+    for (double rho : table.densities_)
+        if (!std::isfinite(rho) || rho <= 0) throw std::runtime_error("Invalid reference density");
     for (std::size_t i = 0; i < total; ++i) {
         if (!std::isfinite(table.values_[i]) || table.values_[i] <= 0.0)
             throw std::runtime_error("Non-positive value in ion stopping table");
@@ -195,7 +198,7 @@ SchneiderIonStoppingTable SchneiderIonStoppingTable::from_binary(
     JsonVal2 root = parser.parse();
     if (root.type != JsonVal2::Type::Object)
         throw std::runtime_error("Metadata root must be object");
-    if (strict_uint(root["schema_version"], "schema_version") < 1)
+    if (strict_uint(root["schema_version"], "schema_version") != 1)
         throw std::runtime_error("Bad schema_version");
     if (!root.has("format") || root["format"].str_val != "binary")
         throw std::runtime_error("Metadata format must be 'binary'");
@@ -211,23 +214,32 @@ SchneiderIonStoppingTable SchneiderIonStoppingTable::from_binary(
         throw std::runtime_error("Metadata dimension mismatch");
     if (!root.has("provenance") || root["provenance"].str_val.empty())
         throw std::runtime_error("Metadata provenance required");
+    if (root["quantity"].str_val != "unrestricted electronic dE/dx, linear at unit density")
+        throw std::runtime_error("Wrong stopping quantity");
+    const auto& grid = root["energy_grid_MeV_per_u"];
+    for (const auto& entry : std::array<std::pair<const char*,double>,3>{{
+            {"minimum",kSchneiderIonEnergyMin},{"maximum",kSchneiderIonEnergyMax},{"step",kSchneiderIonEnergyStep}}}) {
+        const auto& value = grid[entry.first];
+        if (value.type != JsonVal2::Type::Number || !std::isfinite(value.num_val) ||
+            std::abs(value.num_val-entry.second)>1e-8) throw std::runtime_error("Metadata energy grid mismatch");
+    }
+    constexpr std::array<std::pair<int,int>,18> species{{{1,1},{1,2},{1,3},{2,3},{2,4},{2,6},{3,6},{3,7},
+        {4,7},{4,9},{4,10},{5,8},{5,10},{5,11},{6,10},{6,11},{6,12},{4,6}}};
+    const auto& registry=root["species_za"];
+    if (registry.type != JsonVal2::Type::Array || registry.arr.size()!=18) throw std::runtime_error("Missing species registry");
+    for (std::size_t i=0;i<18;++i) {
+        const auto& row=registry.arr[i];
+        if(row.type!=JsonVal2::Type::Array || row.arr.size()!=2 ||
+            strict_uint(row.arr[0],"Z")!=static_cast<std::size_t>(species[i].first) ||
+            strict_uint(row.arr[1],"A")!=static_cast<std::size_t>(species[i].second)) throw std::runtime_error("Species registry mismatch");
+    }
     return table;
 }
 
 double SchneiderIonStoppingTable::linear_stopping_at_unit_density(
     std::size_t species_idx, std::size_t section_id, double energy_mevu) const noexcept {
-    if (species_idx >= kSchneiderIonSpecies || section_id >= kSchneiderIonSections ||
-        values_.empty())
-        return -1.0;
-    if (!(energy_mevu >= kSchneiderIonEnergyMin)) energy_mevu = kSchneiderIonEnergyMin;
-    if (energy_mevu > kSchneiderIonEnergyMax) return -1.0;
-    const double f = (energy_mevu - kSchneiderIonEnergyMin) / kSchneiderIonEnergyStep;
-    std::size_t i = static_cast<std::size_t>(f);
-    if (i >= kSchneiderIonEnergies - 1) i = kSchneiderIonEnergies - 2;
-    double w = f - static_cast<double>(i);
-    if (!(w >= 0.0) || !(w <= 1.0)) return -1.0;
-    const std::size_t base = (section_id * kSchneiderIonSpecies + species_idx) * kSchneiderIonEnergies;
-    return values_[base + i] * (1.0 - w) + values_[base + i + 1] * w;
+    return schneider_ion_stopping_lookup(values_.empty() ? nullptr : values_.data(),
+                                         species_idx, section_id, energy_mevu);
 }
 
 std::vector<float> SchneiderIonStoppingTable::to_flat_float() const {

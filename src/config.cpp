@@ -2793,6 +2793,9 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.ct_primary_midpoint_stopping = parse_bool(values,
         "ct_primary_midpoint_stopping", config.ct_primary_midpoint_stopping);
     if (values.find("ct_primary_midpoint_stopping_diagnostic") != values.end()) {
+        if (values.find("ct_primary_midpoint_stopping") != values.end() &&
+            config.ct_primary_midpoint_stopping != config.ct_primary_midpoint_stopping_diagnostic)
+            throw std::invalid_argument("Conflicting midpoint formal and diagnostic keys");
         config.ct_primary_midpoint_stopping = config.ct_primary_midpoint_stopping_diagnostic;
     }
     config.ct_secondary_exact_faces_diagnostic = parse_bool(values,
@@ -2800,6 +2803,9 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.ct_secondary_exact_faces = parse_bool(values,
         "ct_secondary_exact_faces", config.ct_secondary_exact_faces);
     if (values.find("ct_secondary_exact_faces_diagnostic") != values.end()) {
+        if (values.find("ct_secondary_exact_faces") != values.end() &&
+            config.ct_secondary_exact_faces != config.ct_secondary_exact_faces_diagnostic)
+            throw std::invalid_argument("Conflicting exact-faces formal and diagnostic keys");
         config.ct_secondary_exact_faces = config.ct_secondary_exact_faces_diagnostic;
     }
     config.ct_secondary_mcs_off_diagnostic = parse_bool(values,
@@ -2814,8 +2820,11 @@ TransportConfig load_config(const std::filesystem::path& path) {
     if (const auto it = values.find("ct_secondary_ion_section_stopping_metadata_sha256"); it != values.end())
         config.ct_secondary_ion_section_stopping_metadata_sha256 = it->second;
     if (!config.ct_secondary_ion_section_stopping_file.empty()) {
-        if (!config.enable_ct_grid)
-            throw std::invalid_argument("Section ion stopping requires enable_ct_grid=true");
+        config.ct_secondary_ion_section_stopping_file = resolve_input_path_from_config(config.ct_secondary_ion_section_stopping_file, path);
+        if (!config.enable_ct_grid || config.ct_schneider_stopping_power_file.empty() ||
+            !config.enable_inelastic || !config.enable_secondary_transport || !config.ct_primary_midpoint_stopping ||
+            !config.ct_secondary_exact_faces || config.ct_secondary_schneider_sp_diagnostic)
+            throw std::invalid_argument("Final section-ion stopping requires Schneider CT, primary midpoint, secondary transport and exact faces; factor diagnostic forbidden");
         if (config.ct_secondary_ion_section_stopping_sha256.size() != 64 ||
             config.ct_secondary_ion_section_stopping_metadata_sha256.size() != 64)
             throw std::invalid_argument("Section ion stopping requires pinned sha256 + metadata sha256");

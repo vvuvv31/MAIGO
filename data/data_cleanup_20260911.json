@@ -1,0 +1,111 @@
+{
+  "archived": [
+    {
+      "source": "data/packages/fred_3_76_mcs_2gr.metadata.json",
+      "destination": "trash/data_cleanup_20260911/data/packages/fred_3_76_mcs_2gr.metadata.json",
+      "bytes": 2442,
+      "sha256": "9f1c557a2079fb1d4385bca458a79aaf827fc0858cfd43396db6e8842a9e1982",
+      "reason": "Historical documentation or optional/candidate data outside current CT and unified-water benchmark"
+    },
+    {
+      "source": "data/packages/c12_G4_WATER_fluctuation_topas_4_2_p3_g4_11_3_2_50k.audit.json",
+      "destination": "trash/data_cleanup_20260911/data/packages/c12_G4_WATER_fluctuation_topas_4_2_p3_g4_11_3_2_50k.audit.json",
+      "bytes": 1152,
+      "sha256": "d0bfab87e99b9817fda25525a9bd3258a19fa8a76a17bd2e60a39712d4c305c7",
+      "reason": "Historical documentation or optional/candidate data outside current CT and unified-water benchmark"
+    },
+    {
+      "source": "data/packages/c12_G4_WATER_fluctuation_topas_4_2_p3_g4_11_3_2_50k.csv",
+      "destination": "trash/data_cleanup_20260911/data/packages/c12_G4_WATER_fluctuation_topas_4_2_p3_g4_11_3_2_50k.csv",
+      "bytes": 205603,
+      "sha256": "1e1b54b3a4476343792f82f3907886ab953706d1890a1a788da03d6067ea15cf",
+      "reason": "Historical documentation or optional/candidate data outside current CT and unified-water benchmark"
+    },
+    {
+      "source": "data/packages/fred_3_76_mcs_2gr.bin",
+      "destination": "trash/data_cleanup_20260911/data/packages/fred_3_76_mcs_2gr.bin",
+      "bytes": 58772,
+      "sha256": "85a5bad77f7bb7c66dc3c49d47a9f23444c45dfa343510074a225b2088ac34b1",
+      "reason": "Historical documentation or optional/candidate data outside current CT and unified-water benchmark"
+    },
+    {
+      "source": "data/packages/c12_G4_WATER_fluctuation_topas_4_2_p3_g4_11_3_2_50k.metadata.json",
+      "destination": "trash/data_cleanup_20260911/data/packages/c12_G4_WATER_fluctuation_topas_4_2_p3_g4_11_3_2_50k.metadata.json",
+      "bytes": 2457,
+      "sha256": "37b8fe3d213906c6293cda82544b29bd2ecddb8758f294b2208da163c5a3e059",
+      "reason": "Historical documentation or optional/candidate data outside current CT and unified-water benchmark"
+    },
+    {
+      "source": "data/water_unified/g4_water78_primary_v1.csv",
+      "destination": "trash/data_cleanup_20260911/data/water_unified/g4_water78_primary_v1.csv",
+      "bytes": 58579,
+      "sha256": "16dd7c16b68c4bb1f1b34a7efd753756e7f58050c033a07792719b7106a1c2e5",
+      "reason": "Historical documentation or optional/candidate data outside current CT and unified-water benchmark"
+    },
+    {
+      "source": "data/water_unified/g4_water78_stopping_v1.metadata.json",
+      "destination": "trash/data_cleanup_20260911/data/water_unified/g4_water78_stopping_v1.metadata.json",
+      "bytes": 5244,
+      "sha256": "89e7e4f82a7d7561076b404ca9d5babb280c68f371af813d3c0fbcde79536713",
+      "reason": "Historical documentation or optional/candidate data outside current CT and unified-water benchmark"
+    },
+    {
+      "source": "data/water_unified/g4_water78_ions_v1.csv",
+      "destination": "trash/data_cleanup_20260911/data/water_unified/g4_water78_ions_v1.csv",
+      "bytes": 6039294,
+      "sha256": "6b3bd9c2f605db154629e0c54aad09234ad9ecbb1ab01f2f942a019e42d76354",
+      "reason": "Historical documentation or optional/candidate data outside current CT and unified-water benchmark"
+    },
+    {
+      "source": "data/schneider/schneider_section0_c12_delta_longitudinal_v1.candidate.json",
+      "destination": "trash/data_cleanup_20260911/data/schneider/schneider_section0_c12_delta_longitudinal_v1.candidate.json",
+      "bytes": 669,
+      "sha256": "1a8f8880e17dd3a7832d6a10e75f414171b6fed0615b0890cc208c028c28cd0e",
+      "reason": "Historical documentation or optional/candidate data outside current CT and unified-water benchmark"
+    },
+    {
+      "source": "data/schneider/schneider_section0_c12_delta_longitudinal_v1.metadata.json",
+      "destination": "trash/data_cleanup_20260911/data/schneider/schneider_section0_c12_delta_longitudinal_v1.metadata.json",
+      "bytes": 2516,
+      "sha256": "32a37a8235d75954ea020685cd659be2ed6c7d766fad5725eaabdae91035339a",
+      "reason": "Historical documentation or optional/candidate data outside current CT and unified-water benchmark"
+    },
+    {
+      "source": "data/schneider/schneider_section0_c12_delta_longitudinal_v1.csv",
+      "destination": "trash/data_cleanup_20260911/data/schneider/schneider_section0_c12_delta_longitudinal_v1.csv",
+      "bytes": 128,
+      "sha256": "f42140bc6a99ca90ef9a7fc267c22be9a6d8002192644dbe45b7a40c4e10820b",
+      "reason": "Historical documentation or optional/candidate data outside current CT and unified-water benchmark"
+    },
+    {
+      "source": "data/README_physics_tables.md",
+      "destination": "trash/data_cleanup_20260911/data/README_physics_tables.md",
+      "bytes": 4093,
+      "sha256": "c2838963ab4b28cd8c8fc32c35c662d4507c11de3c5f402bb18e70cbb2330825",
+      "reason": "Historical documentation or optional/candidate data outside current CT and unified-water benchmark"
+    },
+    {
+      "source": "data/data_archive_20260905.json",
+      "destination": "trash/data_cleanup_20260911/data/data_archive_20260905.json",
+      "bytes": 39051,
+      "sha256": "b00e9a4ce8f1ec84b60d8e9d8ad739d819f8a42c476de322b1187a3546477f11",
+      "reason": "Historical documentation or optional/candidate data outside current CT and unified-water benchmark"
+    }
+  ],
+  "relocated": [
+    {
+      "source": "/mnt/sda/wuwei/ion_section_stopping_20260911_extended/compiled/schneider_ion_section_stopping_v1.bin",
+      "destination": "data/schneider/schneider_ion_section_stopping_v1.bin",
+      "bytes": 216007448,
+      "sha256": "ef87ad19bd0b0552d846a6c4e23eb635746e375432a40f40fb79b202235dec20",
+      "source_compatibility_symlink": true
+    },
+    {
+      "source": "/mnt/sda/wuwei/ion_section_stopping_20260911_extended/compiled/schneider_ion_section_stopping_v1.metadata.json",
+      "destination": "data/schneider/schneider_ion_section_stopping_v1.metadata.json",
+      "bytes": 12381,
+      "sha256": "c815808fd22e56e9db26475eeddb99aa596a9bc56aa01d0b8800c2e5e1ec12b8",
+      "source_compatibility_symlink": true
+    }
+  ]
+}

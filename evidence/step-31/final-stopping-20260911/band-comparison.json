@@ -1,0 +1,170 @@
+{
+  "frozen": [
+    {
+      "dose_band": [
+        10,
+        20
+      ],
+      "mean_error_percent": 0.44554349879354144,
+      "rms_error_percent": 5.791918187625645,
+      "negative_over3_percent": 10.341758852975712,
+      "positive_over3_percent": 16.299775456811485
+    },
+    {
+      "dose_band": [
+        20,
+        50
+      ],
+      "mean_error_percent": 0.38504309532017716,
+      "rms_error_percent": 3.6436286821831714,
+      "negative_over3_percent": 6.228508018750501,
+      "positive_over3_percent": 12.304699861185535
+    },
+    {
+      "dose_band": [
+        50,
+        80
+      ],
+      "mean_error_percent": -0.1787437827943943,
+      "rms_error_percent": 2.7010429181419324,
+      "negative_over3_percent": 5.937223241904224,
+      "positive_over3_percent": 6.4188625482922825
+    },
+    {
+      "dose_band": [
+        80,
+        101
+      ],
+      "mean_error_percent": -0.5284649369682914,
+      "rms_error_percent": 4.218547900890467,
+      "negative_over3_percent": 10.223483151659947,
+      "positive_over3_percent": 10.355383007316709
+    }
+  ],
+  "midpoint": [
+    {
+      "dose_band": [
+        10,
+        20
+      ],
+      "mean_error_percent": 0.04669013087078467,
+      "rms_error_percent": 5.747791085292711,
+      "negative_over3_percent": 13.272768473312322,
+      "positive_over3_percent": 13.52285602455555
+    },
+    {
+      "dose_band": [
+        20,
+        50
+      ],
+      "mean_error_percent": 0.19878227807524243,
+      "rms_error_percent": 3.676978012001699,
+      "negative_over3_percent": 8.275704936984983,
+      "positive_over3_percent": 11.652398452366386
+    },
+    {
+      "dose_band": [
+        50,
+        80
+      ],
+      "mean_error_percent": -0.10482351124843164,
+      "rms_error_percent": 2.7002001195183114,
+      "negative_over3_percent": 6.114027544249208,
+      "positive_over3_percent": 6.5051789862792155
+    },
+    {
+      "dose_band": [
+        80,
+        101
+      ],
+      "mean_error_percent": -0.35654893606792215,
+      "rms_error_percent": 4.203870450553271,
+      "negative_over3_percent": 10.196107709919865,
+      "positive_over3_percent": 10.355383007316709
+    }
+  ],
+  "exactfaces": [
+    {
+      "dose_band": [
+        10,
+        20
+      ],
+      "mean_error_percent": 0.4358530685323113,
+      "rms_error_percent": 2.4529026104725307,
+      "negative_over3_percent": 5.00257503656552,
+      "positive_over3_percent": 12.105143893043282
+    },
+    {
+      "dose_band": [
+        20,
+        50
+      ],
+      "mean_error_percent": 0.386894520851034,
+      "rms_error_percent": 1.9548003247214452,
+      "negative_over3_percent": 1.7712557013084003,
+      "positive_over3_percent": 8.201445526925365
+    },
+    {
+      "dose_band": [
+        50,
+        80
+      ],
+      "mean_error_percent": -0.1890534071886842,
+      "rms_error_percent": 0.9576004968820162,
+      "negative_over3_percent": 0.12706806484321856,
+      "positive_over3_percent": 0.8423072480137593
+    },
+    {
+      "dose_band": [
+        80,
+        101
+      ],
+      "mean_error_percent": -0.5603359681466064,
+      "rms_error_percent": 0.8841259114085576,
+      "negative_over3_percent": 0.04479617739286248,
+      "positive_over3_percent": 0.0
+    }
+  ],
+  "final": [
+    {
+      "dose_band": [
+        10,
+        20
+      ],
+      "mean_error_percent": 0.010859646500973099,
+      "rms_error_percent": 2.381333357757649,
+      "negative_over3_percent": 8.427167665780855,
+      "positive_over3_percent": 8.333230331870713
+    },
+    {
+      "dose_band": [
+        20,
+        50
+      ],
+      "mean_error_percent": 0.18084916071925417,
+      "rms_error_percent": 2.026024728779227,
+      "negative_over3_percent": 4.2070487369571365,
+      "positive_over3_percent": 7.129536258422747
+    },
+    {
+      "dose_band": [
+        50,
+        80
+      ],
+      "mean_error_percent": -0.10728158358360299,
+      "rms_error_percent": 0.9563181237894439,
+      "negative_over3_percent": 0.42195582138594034,
+      "positive_over3_percent": 0.7951380421249888
+    },
+    {
+      "dose_band": [
+        80,
+        101
+      ],
+      "mean_error_percent": -0.33272634795448025,
+      "rms_error_percent": 0.7647318093205697,
+      "negative_over3_percent": 0.02239808869643124,
+      "positive_over3_percent": 0.0
+    }
+  ]
+}

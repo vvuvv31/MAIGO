@@ -1,36 +1,12 @@
 #!/usr/bin/env python3
-"""Scheme-2 data campaign: per-ion per-Schneider-section Geant4 stopping.
-
-Chain (all steps pinned, fail-closed):
-  1. TOPAS extension IonSchneiderStoppingPowerDump (already placed at
-     /home/wuwei/topas/extensions/): 25 sections x 18 species x 4302
-     energies, UNRESTRICTED electronic dE/dx, DICOM_Box Schneider patient.
-  2. Register scorer: TsExtensionManager.cc if-chain +
-     topas-build/extensions/CMakeLists.txt lists (see --apply-topas-registration).
-  3. Rebuild TOPAS extension lib (never touch the frozen binary in place;
-     build a campaign binary or verify extension reload path first).
-  4. sbatch 1-history calculator job (G4EmCalculator, seconds-minutes).
-  5. tools/compile_schneider_ion_stopping.py -> SCHNIOSP v1 + manifest
-     (C12 cross-check vs validated Schneider table, E>=5 MeV/u, tol 2%).
-  6. tools/verify_schneider_v2_1_data.py extension + host/device lookup
-     tests + 50k closure gates before any production use.
-
-Usage:
-  python3 tools/submit_ion_section_stopping.py --dry-run   # print all steps
-  python3 tools/submit_ion_section_stopping.py --apply-topas-registration
-  python3 tools/submit_ion_section_stopping.py --submit    # sbatch the job
+"""Prepare/submit a local single-thread TOPAS material stopping extraction.
+Requires an independently built extractor binary. Never edits a reference build.
 """
-import argparse
-import hashlib
-import shutil
-import subprocess
-import sys
+import argparse, hashlib, json, os, shlex, subprocess
 from pathlib import Path
-
 REPO = Path(__file__).resolve().parents[1]
-EXT_SRC = Path("/home/wuwei/topas/extensions")
-BUILD_EXT = Path("/home/wuwei/topas/topas-build/extensions")
-OUT = Path("/mnt/sda/wuwei/ion_section_stopping")
+def sha(p):
+    with Path(p).open('rb') as f: return hashlib.file_digest(f, 'sha256').hexdigest()
 
 RUN_FILE = """includeFile = /mnt/sdb/wuwei/MAIGO/data/HUtoMaterialSchneider.txt
 
@@ -46,7 +22,19 @@ s:Ge/Patient/Type = "TsDicomPatient"
 s:Ge/Patient/DicomDirectory = "/mnt/sda/wuwei/maigo-ct-schneider/step-03/DICOM_Box/DICOM_Box"
 b:Ge/Patient/PreLoadAllMaterials = "True"
 
-sv:Ph/Default/Modules = 6 "g4em-standard_opt4" "g4h-phy_QGSP_BIC_HP" "g4decay" "g4ion-binarycascade" "g4h-elastic_HP" "g4stopping"
+i:Ts/NumberOfThreads = 1
+i:Ts/Seed = 918711
+sv:Ph/Default/Modules = 7 "g4em-standard_opt4" "g4h-phy_QGSP_BIC_HP" "g4decay" "g4ion-inclxx" "g4h-elastic_HP" "g4stopping" "g4radioactivedecay"
+s:Ge/Probe/Type = "TsBox"
+s:Ge/Probe/Parent = "World"
+s:Ge/Probe/Material = "G4_WATER"
+d:Ge/Probe/HLX = 1 mm
+d:Ge/Probe/HLY = 1 mm
+d:Ge/Probe/HLZ = 1 mm
+d:Ge/Probe/TransZ = -800 mm
+s:Ge/BeamPosition/Type = "Group"
+d:Ge/BeamPosition/TransZ = -800 mm
+s:Ge/BeamPosition/Parent = "World"
 
 s:So/Demo/Type = "Beam"
 s:So/Demo/Component = "BeamPosition"
@@ -58,113 +46,47 @@ s:So/Demo/BeamAngularDistribution = "None"
 i:So/Demo/NumberOfHistoriesInRun = 1
 
 s:Sc/IonStoppingDump/Quantity = "IonSchneiderStoppingPowerDump"
-s:Sc/IonStoppingDump/Component = "Patient"
+s:Sc/IonStoppingDump/Component = "Probe"
 s:Sc/IonStoppingDump/OutputJsonFile = "{out}/raw/topas_ion_schneider_stopping.json"
 s:Sc/IonStoppingDump/OutputCsvFile = "{out}/raw/topas_ion_schneider_stopping.csv"
 d:Sc/IonStoppingDump/MinEnergyMeVu = 0.01 MeV
-d:Sc/IonStoppingDump/MaxEnergyMeVu = 430.11 MeV
+d:Sc/IonStoppingDump/MaxEnergyMeVu = 6000.11 MeV
 d:Sc/IonStoppingDump/EnergyStepMeVu = 0.1 MeV
-s:Sc/IonStoppingDump/IfOutputFileAlreadyExists = "Overwrite"
+s:Sc/IonStoppingDump/IfOutputFileAlreadyExists = "Exit"
 """
-
-SBATCH = """#!/bin/bash
-#SBATCH --job-name=ion_schneider_sp
-#SBATCH --partition=compute
-#SBATCH --nodes=1
-#SBATCH --cpus-per-task=10
-#SBATCH --mem=10G
-#SBATCH --output=/mnt/sda/%u/job_%j.log
-#SBATCH --error=/mnt/sda/%u/job_%j.err
-{topas} --config {runfile}
-"""
-
-
-def sha(p):
-    h = hashlib.sha256()
-    with open(p, "rb") as f:
-        for b in iter(lambda: f.read(1 << 20), b""):
-            h.update(b)
-    return h.hexdigest()
-
-
-def registration_edits():
-    mgr = BUILD_EXT / "TsExtensionManager.cc"
-    text = mgr.read_text()
-    anchor = ('\t\t\t\t\tif (quantityNameLower=="carbonschneiderstoppingpowerdump")\n'
-              '\t\t\t\t\treturn new CarbonSchneiderStoppingPowerDump(pM, mM, gM, scM, this, '
-              'currentScorerName, quantityName, outFileName, isSubScorer);\n')
-    assert anchor in text, "manager anchor changed"
-    add = anchor + ('\t\t\t\t\tif (quantityNameLower=="ionschneiderstoppingpowerdump")\n'
-                    '\t\t\t\t\treturn new IonSchneiderStoppingPowerDump(pM, mM, gM, scM, this, '
-                    'currentScorerName, quantityName, outFileName, isSubScorer);\n')
-    include = '#include "CarbonSchneiderStoppingPowerDump.hh"\n'
-    assert include in text, "manager include anchor changed"
-    return [(str(mgr), include, include + '#include "IonSchneiderStoppingPowerDump.hh"\n'),
-            (str(mgr), anchor, add)]
-
 
 def main():
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--dry-run", action="store_true")
-    ap.add_argument("--apply-topas-registration", action="store_true")
-    ap.add_argument("--submit", action="store_true")
-    ap.add_argument("--topas", default="/home/wuwei/topas/topas-frozen-d50f90504eafe2b2")
-    a = ap.parse_args()
-
-    for f in ("IonSchneiderStoppingPowerDump.cc", "IonSchneiderStoppingPowerDump.hh"):
-        assert (EXT_SRC / f).exists(), f"missing extension source {f}"
-        print(f"extension source present: {f} sha={sha(EXT_SRC / f)[:12]}")
-
-    steps = [
-        "1. copy IonSchneiderStoppingPowerDump.{cc,hh} into topas-build/extensions/",
-        "2. TsExtensionManager.{cc,hh}: include + if-chain entry",
-        "3. topas-build/extensions/CMakeLists.txt: header+source lists",
-        "4. rebuild TOPAS extension lib (frozen binary untouched)",
-        "5. sbatch calculator job -> raw CSV+JSON",
-        "6. tools/compile_schneider_ion_stopping.py -> SCHNIOSP v1 + manifest",
-        "7. extend manifest verifier + lookup tests + 50k gates",
-    ]
-    print("\n".join(steps))
-
-    if a.dry_run and not (a.apply_topas_registration or a.submit):
-        print("dry-run only; no changes made")
-        return
-
-    if a.apply_topas_registration:
-        for name in ("IonSchneiderStoppingPowerDump.cc", "IonSchneiderStoppingPowerDump.hh"):
-            dst = BUILD_EXT / name
-            if dst.exists():
-                assert sha(dst) == sha(EXT_SRC / name), f"build copy differs: {name}"
-                print(f"build copy already in sync: {name}")
-            else:
-                shutil.copy2(EXT_SRC / name, dst)
-                print(f"copied to build tree: {name}")
-        for path, old, new in registration_edits():
-            text = Path(path).read_text()
-            if new in text:
-                print(f"registration already present in {path}")
-            else:
-                Path(path).write_text(text.replace(old, new))
-                print(f"patched registration in {path}")
-        print("CMakeLists list entries still required (manual review): "
-              "IonSchneiderStoppingPowerDump.hh/.cc")
-        return
-
+    ap=argparse.ArgumentParser(description=__doc__)
+    ap.add_argument('--topas', required=True, type=Path)
+    ap.add_argument('--out', required=True, type=Path)
+    ap.add_argument('--submit', action='store_true')
+    ap.add_argument('--dry-run', action='store_true')
+    a=ap.parse_args()
+    if not a.topas.is_file(): raise ValueError('Missing extraction binary')
+    if a.dry_run:
+        print(RUN_FILE.format(out=a.out)); return
+    a.out.mkdir(parents=True, exist_ok=False)
+    (a.out/'raw').mkdir()
+    run=a.out/'run.txt'; run.write_text(RUN_FILE.format(out=a.out))
+    sb=a.out/'submit.slurm'
+    sb.write_text('#!/bin/bash\n#SBATCH --job-name=ion_schneider_sp\n#SBATCH --partition=compute\n#SBATCH --nodes=1\n#SBATCH --cpus-per-task=1\n#SBATCH --mem=10G\n#SBATCH --output='+str(a.out/'job_%j.log')+'\n#SBATCH --error='+str(a.out/'job_%j.err')+'\nset -euo pipefail\ncd '+shlex.quote(str(a.out))+'\nsource /software/geant4-11.3.2/bin/geant4.sh\n'+shlex.quote(str(a.topas))+' '+shlex.quote(str(run))+'\n')
+    pins={'binary':str(a.topas),'binary_sha256':sha(a.topas),'run_sha256':sha(run),
+          'hu_sha256':sha(REPO/'data/HUtoMaterialSchneider.txt'),
+          'source_sha256':sha(REPO/'startup/extensions/IonSchneiderStoppingPowerDump.cc')}
+    # Freeze all external DICOM inputs as well as executable and run file.
+    dicom=Path('/mnt/sda/wuwei/maigo-ct-schneider/step-03/DICOM_Box/DICOM_Box')
+    pins['dicom']={str(p):sha(p) for p in sorted(dicom.rglob('*')) if p.is_file()}
+    if not pins['dicom']: raise ValueError('No DICOM inputs')
+    (a.out/'manifest.json').write_text(json.dumps(pins,indent=2)+'\n')
     if a.submit:
-        OUT.mkdir(parents=True, exist_ok=True)
-        (OUT / "raw").mkdir(exist_ok=True)
-        runfile = OUT / "run_ion_schneider_stopping_dump.txt"
-        runfile.write_text(RUN_FILE.format(out=OUT))
-        sb = OUT / "submit.slurm"
-        sb.write_text(SBATCH.format(topas=a.topas, runfile=runfile))
-        print(f"wrote {runfile} and {sb}")
-        print("NOTE: build the extension into the campaign binary BEFORE submitting.")
-        reply = input("Submit now with sbatch? [y/N] ")
-        if reply.strip().lower() != "y":
-            print("not submitted")
-            return
-        subprocess.run(["sbatch", str(sb)], check=True)
-
-
-if __name__ == "__main__":
-    main()
+        rows=subprocess.check_output(['squeue','-u',os.environ.get('USER','wuwei'),'-h','-o','%C|%m'],text=True)
+        cpu=0; mem=0
+        for line in rows.splitlines():
+            c,m=line.split('|');cpu+=int(c); unit=m[-1];v=float(m[:-1]) if unit in 'KMG' else float(m)
+            mem+=v*({'K':1/1048576,'M':1/1024,'G':1}.get(unit,1/1024))
+        if cpu+1>192 or mem+10>160: raise RuntimeError('Insufficient job resource headroom')
+        pins['job_id']=subprocess.check_output(['sbatch','--parsable',str(sb)],text=True).strip()
+        (a.out/'manifest.json').write_text(json.dumps(pins,indent=2)+'\n')
+        print(pins['job_id'])
+    else: print(sb)
+if __name__=='__main__':main()

@@ -1,0 +1,137 @@
+[
+  {
+    "Z": 1,
+    "A": 1,
+    "section": 0,
+    "energy_MeVu": 100.01,
+    "material_unit_density_dedx": 0.6445982649052093,
+    "water_dedx": 0.729472,
+    "ratio": 0.8836504552679326
+  },
+  {
+    "Z": 1,
+    "A": 1,
+    "section": 1,
+    "energy_MeVu": 100.01,
+    "material_unit_density_dedx": 0.7299563850813015,
+    "water_dedx": 0.729472,
+    "ratio": 1.0006640214858165
+  },
+  {
+    "Z": 1,
+    "A": 1,
+    "section": 5,
+    "energy_MeVu": 100.01,
+    "material_unit_density_dedx": 0.7381713532077573,
+    "water_dedx": 0.729472,
+    "ratio": 1.0119255478041067
+  },
+  {
+    "Z": 1,
+    "A": 1,
+    "section": 15,
+    "energy_MeVu": 100.01,
+    "material_unit_density_dedx": 0.6821169917554797,
+    "water_dedx": 0.729472,
+    "ratio": 0.9350831721511993
+  },
+  {
+    "Z": 1,
+    "A": 1,
+    "section": 23,
+    "energy_MeVu": 100.01,
+    "material_unit_density_dedx": 0.6489063737807902,
+    "water_dedx": 0.729472,
+    "ratio": 0.8895562458611025
+  },
+  {
+    "Z": 2,
+    "A": 4,
+    "section": 0,
+    "energy_MeVu": 100.01,
+    "material_unit_density_dedx": 2.5665566645898767,
+    "water_dedx": 2.90401,
+    "ratio": 0.8837974609556706
+  },
+  {
+    "Z": 2,
+    "A": 4,
+    "section": 1,
+    "energy_MeVu": 100.01,
+    "material_unit_density_dedx": 2.905735712416577,
+    "water_dedx": 2.90401,
+    "ratio": 1.0005942515406547
+  },
+  {
+    "Z": 2,
+    "A": 4,
+    "section": 5,
+    "energy_MeVu": 100.01,
+    "material_unit_density_dedx": 2.937978422850522,
+    "water_dedx": 2.90401,
+    "ratio": 1.0116970750274696
+  },
+  {
+    "Z": 2,
+    "A": 4,
+    "section": 15,
+    "energy_MeVu": 100.01,
+    "material_unit_density_dedx": 2.71498629800925,
+    "water_dedx": 2.90401,
+    "ratio": 0.9349094176704797
+  },
+  {
+    "Z": 2,
+    "A": 4,
+    "section": 23,
+    "energy_MeVu": 100.01,
+    "material_unit_density_dedx": 2.5830050644734666,
+    "water_dedx": 2.90401,
+    "ratio": 0.8894614909981255
+  },
+  {
+    "Z": 6,
+    "A": 12,
+    "section": 0,
+    "energy_MeVu": 100.01,
+    "material_unit_density_dedx": 23.098249825168157,
+    "water_dedx": 26.1319,
+    "ratio": 0.8839100802149157
+  },
+  {
+    "Z": 6,
+    "A": 12,
+    "section": 1,
+    "energy_MeVu": 100.01,
+    "material_unit_density_dedx": 26.15715780112799,
+    "water_dedx": 26.1319,
+    "ratio": 1.0009665505044787
+  },
+  {
+    "Z": 6,
+    "A": 12,
+    "section": 5,
+    "energy_MeVu": 100.01,
+    "material_unit_density_dedx": 26.44497989063525,
+    "water_dedx": 26.1319,
+    "ratio": 1.0119807549636746
+  },
+  {
+    "Z": 6,
+    "A": 12,
+    "section": 15,
+    "energy_MeVu": 100.01,
+    "material_unit_density_dedx": 24.440442871506132,
+    "water_dedx": 26.1319,
+    "ratio": 0.9352723250703596
+  },
+  {
+    "Z": 6,
+    "A": 12,
+    "section": 23,
+    "energy_MeVu": 100.01,
+    "material_unit_density_dedx": 23.255168027773188,
+    "water_dedx": 26.1319,
+    "ratio": 0.889914932621554
+  }
+]

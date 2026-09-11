@@ -1,0 +1,304 @@
+{
+  "schema_version": 1,
+  "format": "binary",
+  "data_filename": "schneider_ion_section_stopping_v1.bin",
+  "data_sha256": "ef87ad19bd0b0552d846a6c4e23eb635746e375432a40f40fb79b202235dec20",
+  "data_size_bytes": 216007448,
+  "sections_count": 25,
+  "species_count": 18,
+  "energies_count": 60002,
+  "species_za": [
+    [
+      1,
+      1
+    ],
+    [
+      1,
+      2
+    ],
+    [
+      1,
+      3
+    ],
+    [
+      2,
+      3
+    ],
+    [
+      2,
+      4
+    ],
+    [
+      2,
+      6
+    ],
+    [
+      3,
+      6
+    ],
+    [
+      3,
+      7
+    ],
+    [
+      4,
+      7
+    ],
+    [
+      4,
+      9
+    ],
+    [
+      4,
+      10
+    ],
+    [
+      5,
+      8
+    ],
+    [
+      5,
+      10
+    ],
+    [
+      5,
+      11
+    ],
+    [
+      6,
+      10
+    ],
+    [
+      6,
+      11
+    ],
+    [
+      6,
+      12
+    ],
+    [
+      4,
+      6
+    ]
+  ],
+  "energy_grid_MeV_per_u": {
+    "minimum": 0.01,
+    "maximum": 6000.11,
+    "step": 0.1
+  },
+  "quantity": "unrestricted electronic dE/dx, linear at unit density",
+  "provenance": "TOPAS/Geant4 G4EmCalculator ComputeElectronicDEDX",
+  "geant4_version": "$Name: geant4-11-03-patch-02 [MT]$",
+  "sections": [
+    {
+      "section_id": 0,
+      "material_name": "PatientTissueFromHUNegative975",
+      "density_g_cm3": 0.0393235,
+      "c12_linear_at_100_01_mevu": 0.908304027
+    },
+    {
+      "section_id": 1,
+      "material_name": "PatientTissueFromHUNegative535",
+      "density_g_cm3": 0.470041,
+      "c12_linear_at_100_01_mevu": 12.29493661
+    },
+    {
+      "section_id": 2,
+      "material_name": "PatientTissueFromHUNegative102",
+      "density_g_cm3": 0.874911,
+      "c12_linear_at_100_01_mevu": 23.48754894
+    },
+    {
+      "section_id": 3,
+      "material_name": "PatientTissueFromHUNegative68",
+      "density_g_cm3": 0.912686,
+      "c12_linear_at_100_01_mevu": 24.36926234
+    },
+    {
+      "section_id": 4,
+      "material_name": "PatientTissueFromHUNegative38",
+      "density_g_cm3": 0.947183,
+      "c12_linear_at_100_01_mevu": 25.14798784
+    },
+    {
+      "section_id": 5,
+      "material_name": "PatientTissueFromHUNegative8",
+      "density_g_cm3": 0.980389,
+      "c12_linear_at_100_01_mevu": 25.92636739
+    },
+    {
+      "section_id": 6,
+      "material_name": "PatientTissueFromHU12",
+      "density_g_cm3": 1.00386,
+      "c12_linear_at_100_01_mevu": 26.44883986
+    },
+    {
+      "section_id": 7,
+      "material_name": "PatientTissueFromHU49",
+      "density_g_cm3": 1.04308,
+      "c12_linear_at_100_01_mevu": 27.30223412
+    },
+    {
+      "section_id": 8,
+      "material_name": "PatientTissueFromHU100",
+      "density_g_cm3": 1.0788,
+      "c12_linear_at_100_01_mevu": 27.96728918
+    },
+    {
+      "section_id": 9,
+      "material_name": "PatientTissueFromHU160",
+      "density_g_cm3": 1.10857,
+      "c12_linear_at_100_01_mevu": 28.74480971
+    },
+    {
+      "section_id": 10,
+      "material_name": "PatientTissueFromHU250",
+      "density_g_cm3": 1.16606,
+      "c12_linear_at_100_01_mevu": 29.92223992
+    },
+    {
+      "section_id": 11,
+      "material_name": "PatientTissueFromHU350",
+      "density_g_cm3": 1.23146,
+      "c12_linear_at_100_01_mevu": 31.23017756
+    },
+    {
+      "section_id": 12,
+      "material_name": "PatientTissueFromHU450",
+      "density_g_cm3": 1.29658,
+      "c12_linear_at_100_01_mevu": 32.53843765
+    },
+    {
+      "section_id": 13,
+      "material_name": "PatientTissueFromHU550",
+      "density_g_cm3": 1.36063,
+      "c12_linear_at_100_01_mevu": 33.84648992
+    },
+    {
+      "section_id": 14,
+      "material_name": "PatientTissueFromHU650",
+      "density_g_cm3": 1.42585,
+      "c12_linear_at_100_01_mevu": 35.15442607
+    },
+    {
+      "section_id": 15,
+      "material_name": "PatientTissueFromHU750",
+      "density_g_cm3": 1.4919,
+      "c12_linear_at_100_01_mevu": 36.46269672
+    },
+    {
+      "section_id": 16,
+      "material_name": "PatientTissueFromHU850",
+      "density_g_cm3": 1.55922,
+      "c12_linear_at_100_01_mevu": 37.77089092
+    },
+    {
+      "section_id": 17,
+      "material_name": "PatientTissueFromHU950",
+      "density_g_cm3": 1.62478,
+      "c12_linear_at_100_01_mevu": 39.07895508
+    },
+    {
+      "section_id": 18,
+      "material_name": "PatientTissueFromHU1050",
+      "density_g_cm3": 1.68904,
+      "c12_linear_at_100_01_mevu": 40.3874182
+    },
+    {
+      "section_id": 19,
+      "material_name": "PatientTissueFromHU1150",
+      "density_g_cm3": 1.75636,
+      "c12_linear_at_100_01_mevu": 41.69584532
+    },
+    {
+      "section_id": 20,
+      "material_name": "PatientTissueFromHU1250",
+      "density_g_cm3": 1.8216,
+      "c12_linear_at_100_01_mevu": 43.00362288
+    },
+    {
+      "section_id": 21,
+      "material_name": "PatientTissueFromHU1350",
+      "density_g_cm3": 1.88756,
+      "c12_linear_at_100_01_mevu": 44.31183637
+    },
+    {
+      "section_id": 22,
+      "material_name": "PatientTissueFromHU1450",
+      "density_g_cm3": 1.95424,
+      "c12_linear_at_100_01_mevu": 45.62027735
+    },
+    {
+      "section_id": 23,
+      "material_name": "PatientTissueFromHU2247",
+      "density_g_cm3": 2.4196,
+      "c12_linear_at_100_01_mevu": 56.26820456
+    },
+    {
+      "section_id": 24,
+      "material_name": "PatientTissueFromHU2995",
+      "density_g_cm3": 4.55248,
+      "c12_linear_at_100_01_mevu": 83.75441264
+    }
+  ],
+  "campaign": {
+    "binary": "/home/wuwei/topas/ion-section-stopping-build-20260911/topas",
+    "binary_sha256": "1b099ec155d095787819423594a4044c1c5c0574738dbd5dbee56e49fcd827dd",
+    "run_sha256": "604311ba28417ae766394b7bf2a4250b2fa417a9fdad42ed1dfc74ec6284a30a",
+    "hu_sha256": "5022cd89617b28dbd8ee8bf8b095ea20cfd99f6405218693c0df238b3617a139",
+    "source_sha256": "9b2ff4bd7a7d9e193309db371fe2755239a331451991e5bf2be92fd53b1eb417",
+    "dicom": {
+      "/mnt/sda/wuwei/maigo-ct-schneider/step-03/DICOM_Box/DICOM_Box/image000.dcm": "4aa894d6c57efe8ceb865a040ab0da671d8664884060d77418ad256b5d3b44c6",
+      "/mnt/sda/wuwei/maigo-ct-schneider/step-03/DICOM_Box/DICOM_Box/image001.dcm": "38402b2197b6ee05f1ced89b9c61625b850c3b326a41aea33b4434bd24cde0e5",
+      "/mnt/sda/wuwei/maigo-ct-schneider/step-03/DICOM_Box/DICOM_Box/image002.dcm": "ad7cd69e9abff95f19090133be9ec47c5d6c071b30726d4b0c71a3a09366da00",
+      "/mnt/sda/wuwei/maigo-ct-schneider/step-03/DICOM_Box/DICOM_Box/image003.dcm": "f8bb07227a660d0e45d898ed19034bceae3647029f05dba269559b0631d467b4",
+      "/mnt/sda/wuwei/maigo-ct-schneider/step-03/DICOM_Box/DICOM_Box/image004.dcm": "300df1b37fc0deed724d2fb23663e9fba8f69750f49873d7f722591835782a26",
+      "/mnt/sda/wuwei/maigo-ct-schneider/step-03/DICOM_Box/DICOM_Box/image005.dcm": "aa05d3bf038135b5cb608a3a4e174baafa5ee2419cd8bb3edb5465d2925823c1",
+      "/mnt/sda/wuwei/maigo-ct-schneider/step-03/DICOM_Box/DICOM_Box/image006.dcm": "c813cf3f12c1285de8054e063c352184603c0b751f75812430ffbfc476aaa614",
+      "/mnt/sda/wuwei/maigo-ct-schneider/step-03/DICOM_Box/DICOM_Box/image007.dcm": "d28abbcd73b192e53f78c0991cffc76fea3be95161d37bae5bd3c3c8ac6cac0a",
+      "/mnt/sda/wuwei/maigo-ct-schneider/step-03/DICOM_Box/DICOM_Box/image008.dcm": "59cad286b2549612d8f9e4d1d3e6a030c7967bcf67683eef4c3da4a2b323c941",
+      "/mnt/sda/wuwei/maigo-ct-schneider/step-03/DICOM_Box/DICOM_Box/image009.dcm": "63b0300e6aa11e2f5b7b863a185fba12d736545a2f01d019f42a8349e7b3ee43",
+      "/mnt/sda/wuwei/maigo-ct-schneider/step-03/DICOM_Box/DICOM_Box/image010.dcm": "a3e2983a2f80b7a6c7d682daa17ec9c4277552446486a258cea6ab6a8d9689fd",
+      "/mnt/sda/wuwei/maigo-ct-schneider/step-03/DICOM_Box/DICOM_Box/image011.dcm": "5d8c7ce2d0d0e8ba076e6ad85d705b82c3eae6f8b33aa777a38a9493ce877e8d",
+      "/mnt/sda/wuwei/maigo-ct-schneider/step-03/DICOM_Box/DICOM_Box/image012.dcm": "636f9e1fe9489862c82e8b9d4663e1b5c2b440a8c8879e73d75e558f75265e4c",
+      "/mnt/sda/wuwei/maigo-ct-schneider/step-03/DICOM_Box/DICOM_Box/image013.dcm": "9dbec2dc25c070284b0f8846f198756c05d4549a024f94368ac320e028708d6b",
+      "/mnt/sda/wuwei/maigo-ct-schneider/step-03/DICOM_Box/DICOM_Box/image014.dcm": "963a5ace5b4e02dfe5d352a8e06e50edaecbd0a75af9aa45ada431abbac41457",
+      "/mnt/sda/wuwei/maigo-ct-schneider/step-03/DICOM_Box/DICOM_Box/image015.dcm": "d21425b6057d5fe2445aa18d089e35b0899552596209095b610900558953bc48",
+      "/mnt/sda/wuwei/maigo-ct-schneider/step-03/DICOM_Box/DICOM_Box/image016.dcm": "35abe6adcbb3fa7f3f6ad50fd7a8858141b7bc07598fdf65195d5e1babee7a0c",
+      "/mnt/sda/wuwei/maigo-ct-schneider/step-03/DICOM_Box/DICOM_Box/image017.dcm": "7cfb99c1a6bb4485365bc7166407fc59b7d51fa909090bbb1b99e2bb339cdb7c",
+      "/mnt/sda/wuwei/maigo-ct-schneider/step-03/DICOM_Box/DICOM_Box/image018.dcm": "27bdb7380b4c2e32802656e326fe58e8cbced443ce341948db526b41d732759a",
+      "/mnt/sda/wuwei/maigo-ct-schneider/step-03/DICOM_Box/DICOM_Box/image019.dcm": "268f562c1e02e51df69f54dae59c533b5ba0eeb189927d58d1a554210a1e879e",
+      "/mnt/sda/wuwei/maigo-ct-schneider/step-03/DICOM_Box/DICOM_Box/image020.dcm": "1fe222272ce507385c356b93fc3cb0360cfe4cf84912c963dbc85df411b8c95f",
+      "/mnt/sda/wuwei/maigo-ct-schneider/step-03/DICOM_Box/DICOM_Box/image021.dcm": "86fe7b44200173944f274309cf9e26fe5eae4f77e9cb8937f8ac15bb03aed7d8",
+      "/mnt/sda/wuwei/maigo-ct-schneider/step-03/DICOM_Box/DICOM_Box/image022.dcm": "0c22c0fac2cb0d054b0ac8572d5b826b83de2879ef469d783ccf0ae605e60338",
+      "/mnt/sda/wuwei/maigo-ct-schneider/step-03/DICOM_Box/DICOM_Box/image023.dcm": "ed95eef923e68e79088021db824b95dfc8b8efa7d214cbf232006e6ff38a33f6",
+      "/mnt/sda/wuwei/maigo-ct-schneider/step-03/DICOM_Box/DICOM_Box/image024.dcm": "bc306453f34a28db00832cccdc0ea25af7674096fef16f3fbf8a978bccaa2142",
+      "/mnt/sda/wuwei/maigo-ct-schneider/step-03/DICOM_Box/DICOM_Box/image025.dcm": "eaab615d2f919fd631e2decef49abd910c1b013dafac900bfd939aabd40fab91",
+      "/mnt/sda/wuwei/maigo-ct-schneider/step-03/DICOM_Box/DICOM_Box/image026.dcm": "0db082a78a04a3ef7ed0fbe680217f81f6dd6c6cd83053c4ceab328ccea1ddc4",
+      "/mnt/sda/wuwei/maigo-ct-schneider/step-03/DICOM_Box/DICOM_Box/image027.dcm": "39e77aec2214e0aef2089b945562eed853327745ccc924b5cb7ced8c1dbdae14",
+      "/mnt/sda/wuwei/maigo-ct-schneider/step-03/DICOM_Box/DICOM_Box/image028.dcm": "b16d44043badf3365bd3d2b1fb89afe9b89eac8beb3466c6968407cceab1c806",
+      "/mnt/sda/wuwei/maigo-ct-schneider/step-03/DICOM_Box/DICOM_Box/image029.dcm": "2dc1d9e429630eb8ee3bda7471fa9be81e120058fa5f2796f97f984b53c8c4a3",
+      "/mnt/sda/wuwei/maigo-ct-schneider/step-03/DICOM_Box/DICOM_Box/image030.dcm": "2bed81ef195b17f2dc7b4f65fed191e343b52431fa670f6e30f2c03ac2c8a1f3",
+      "/mnt/sda/wuwei/maigo-ct-schneider/step-03/DICOM_Box/DICOM_Box/image031.dcm": "116e2b07ae027239424678a7c0db6968683ff633bbf15bd00461c3b133b169b8",
+      "/mnt/sda/wuwei/maigo-ct-schneider/step-03/DICOM_Box/DICOM_Box/image032.dcm": "df8eed345ad42a42614a349cc708918f2112e00e68598b2740bdf367e81cc5e2",
+      "/mnt/sda/wuwei/maigo-ct-schneider/step-03/DICOM_Box/DICOM_Box/image033.dcm": "7a57d3045ca666d35fd5c381dbe18c0f16e3641379c41ee1d024c0902229af16",
+      "/mnt/sda/wuwei/maigo-ct-schneider/step-03/DICOM_Box/DICOM_Box/image034.dcm": "442a497402664507674708e5f49b5176824c146bb16fb76e1b76251a7215b24d",
+      "/mnt/sda/wuwei/maigo-ct-schneider/step-03/DICOM_Box/DICOM_Box/image035.dcm": "e5f8b56eef2c5fc117eab10df6ca27426ef27afdafefad070615ba5e28b515e4",
+      "/mnt/sda/wuwei/maigo-ct-schneider/step-03/DICOM_Box/DICOM_Box/image036.dcm": "d08a7f61a0bd103784635b4c580f78ba2f398f9238b6b76db42335fe07578241",
+      "/mnt/sda/wuwei/maigo-ct-schneider/step-03/DICOM_Box/DICOM_Box/image037.dcm": "d5443aa73609ba5ac6cf91ab527526f607975d29065c1e3635c0bda08e4018bc"
+    },
+    "job_id": "4001"
+  },
+  "raw_csv": "/mnt/sda/wuwei/ion_section_stopping_20260911_extended/raw/topas_ion_schneider_stopping.csv",
+  "raw_json": "/mnt/sda/wuwei/ion_section_stopping_20260911_extended/raw/topas_ion_schneider_stopping.json",
+  "raw_csv_sha256": "811376924f66597f978710394757a279039e126b2f5165f7c8e52a02444e52da",
+  "raw_json_sha256": "8e63e1ecd90e789bf20bd82f35ff9d99785a637ade66c21ee5c0b22333f5f1fa",
+  "compiler_sha256": "512ace3998cd9539678661e1d15d7a1e84bfe4c9ffcf84c0a2628688430ff1de",
+  "c12_cross_check": {
+    "minimum_energy_MeVu": 5,
+    "tolerance": 0.02,
+    "max_relative_difference": 0.0006214279573980282,
+    "low_energy_max_relative_difference": 0.1193279579982006,
+    "reference_sha256": "9786dba071f61e660fcc5940a844e8109c4e480ccb603d7929d2fcfaae152c2f"
+  }
+}

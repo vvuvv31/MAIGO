@@ -49,7 +49,10 @@ void write_synthetic(const std::filesystem::path& bin,
       << "\"data_filename\": \"" << bin.filename().string() << "\", "
       << "\"data_sha256\": \"" << sha << "\", "
       << "\"sections_count\": 25, \"species_count\": 18, "
-      << "\"energies_count\": 4302, "
+      << "\"energies_count\": 60002, "
+      << "\"quantity\": \"unrestricted electronic dE/dx, linear at unit density\", "
+      << "\"energy_grid_MeV_per_u\": {\"minimum\":0.01,\"maximum\":6000.11,\"step\":0.1}, "
+      << "\"species_za\": [[1,1],[1,2],[1,3],[2,3],[2,4],[2,6],[3,6],[3,7],[4,7],[4,9],[4,10],[5,8],[5,10],[5,11],[6,10],[6,11],[6,12],[4,6]], "
       << "\"provenance\": \"synthetic unit test vectors only\"}";
 }
 
@@ -64,21 +67,22 @@ int main() {
     auto t = carbon::SchneiderIonStoppingTable::from_binary(bin, meta);
     check(t.num_sections() == 25, "sections");
     check(t.num_species() == 18, "species");
-    check(t.num_energies() == 4302, "energies");
+    check(t.num_energies() == 60002, "energies");
     // section 3, species 5, energy 10.01 + 0.05 (mid-node interpolation)
     double got = t.linear_stopping_at_unit_density(5, 3, 10.06);
     double want = 1000.0 + 300.0 + 50.0 + 0.001 * (100.5);
     check(std::abs(got - want) < 1e-9, "interp");
-    // boundaries: below min clamps, above max rejects
-    check(t.linear_stopping_at_unit_density(0, 0, 0.0) ==
-              t.linear_stopping_at_unit_density(0, 0, 0.01),
-          "low clamp");
-    check(t.linear_stopping_at_unit_density(0, 0, 500.0) < 0, "high reject");
+    // Domain violations must reject; no density-only fallback or NaN clamp.
+    check(t.linear_stopping_at_unit_density(0,0,0.0)<0,"low reject");
+    check(t.linear_stopping_at_unit_density(0,0,NAN)<0,"NaN reject");
+    check(t.linear_stopping_at_unit_density(0,0,INFINITY)<0,"infinity reject");
+    check(t.linear_stopping_at_unit_density(0,0,6000.11)>0,"upper endpoint");
+    check(t.linear_stopping_at_unit_density(0, 0, 7000.0) < 0, "high reject");
     check(t.linear_stopping_at_unit_density(99, 0, 100.0) < 0, "bad species");
     check(t.linear_stopping_at_unit_density(0, 99, 100.0) < 0, "bad section");
     auto flat = t.to_flat_float();
-    check(flat.size() == 25u * 18u * 4302u, "flat size");
-    const std::size_t base = (3u * 18u + 5u) * 4302u;
+    check(flat.size() == 25u * 18u * 60002u, "flat size");
+    const std::size_t base = (3u * 18u + 5u) * 60002u;
     check(std::abs(flat[base + 100] - float(1000.0 + 300.0 + 50.0 + 0.1)) < 1e-3f,
           "flat layout");
     // corrupted magic must throw

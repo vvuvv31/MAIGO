@@ -155,6 +155,11 @@ target_link_libraries(carbon_mc PRIVATE carbon_core)
 
 if(BUILD_TESTING)
     if(CARBON_ENABLE_SYCL)
+        # Explicit invocation with a verified real table on the local GPU.
+        add_executable(schneider_ion_stopping_gpu tests/schneider_ion_stopping_gpu.cpp)
+        target_link_libraries(schneider_ion_stopping_gpu PRIVATE carbon_core)
+        target_compile_options(schneider_ion_stopping_gpu PRIVATE
+            $<TARGET_PROPERTY:carbon_core,COMPILE_OPTIONS>)
         add_executable(material_electron_boundary_gpu_smoke tests/material_electron_boundary_gpu_smoke.cpp)
         target_link_libraries(material_electron_boundary_gpu_smoke PRIVATE carbon_core)
         target_compile_options(material_electron_boundary_gpu_smoke PRIVATE

@@ -70,50 +70,49 @@ GPU 不逐碰撞调用 Geant4 电磁过程管理器。
 下文 T 为粒子总动能（MeV），E=T/A 为每核子动能（MeV/u），
 rho 为局部密度（g/cm³），h 为步长（mm）。查表用的每核子能量不能与能量守恒中的总动能混淆。
 
-### 3.2. 原发与次级 stopping 是不同路径
+### 3.2. 原发与次级：预测中点能损
 
-步长受最大长度、相对能损、几何、核光学深度与终止条件约束。
-三病例冻结上限为 0.5 mm 和 0.005。
-Primary C12 使用 Schneider mass stopping/range 及局部密度；
-默认精确 Schneider CT 路径的次级使用 water-ion stopping 并按局部密度缩放。
-分区材料因子仅在下述显式诊断路径开启时施加，不属于默认计算；
-这不是直接提取的完整 isotope×section stopping 数据集。
-Upstream air 能损独立处理。
+当前修复采用显式最终配置：`ct_primary_midpoint_stopping: true`，
+`ct_secondary_exact_faces: true`，并加载 SHA 固定的 Schneider 次级离子材料表。
+该组合的验证结果单独记录；历史冻结结果不能直接当作此组合的验证。
+未指定材料表的旧配置仍走旧路径，不能只凭可执行文件版本判断物理配置。
 
-对 CT 中的原发 C12，在 SCHNSTOP 对应分区行按能量线性插值，得到单位密度下的
-线性阻止本领 S1(s,E)。实际换算为：
+查表先用每核子动能 E=T/A。原发 C12 使用已验证的 SCHNSTOP 分区表；
+次级按自身 (Z,A) 与 Schneider 分区选择 TOPAS/Geant4 直接提取的电子 stopping。
+新表覆盖 25 分区、18 种带电粒子及 0.01–6000.11 MeV/u；
+扩展上限是因为次级质子可超过 430.11 MeV/u，不能沿用原发每核子能量上限。
+18 种 stopping 粒子与非弹性反应的 14-projectile registry 用途不同。
 
-```text
-S_C12(s,E,rho) [MeV/mm] = S1(s,E) × rho / (1 g/cm³)
-h_loss = maximum_relative_energy_loss × T / S_C12
-h <= min(maximum_step_mm, h_loss, 适用的几何边界与碰撞距离)
-```
-
-二进制表已经包含自身单位约定，运行时不能再额外乘除十。
-默认精确 Schneider 原发分支取平均能损 S_C12(T)×h。
-独立的 `ct_primary_midpoint_stopping_diagnostic` 默认关闭，开启才使用预测中点 stopping；
-其他 water/CSDA 分支不能被描述成默认 CT 积分器。
-
-带电碎片从 `data/ion_stopping_power_water_geant4_11_3_2.csv` 选择对应物种行，
-按 E=T/A 插值。CT 加载器直接使用该水中离子表，填写另一条通用 particle stopping
-路径不会自动获得完整 CT 同位素表。次级计算为：
+两类表都将参考材料的线性 stopping 除以提取时密度，保存单位密度值：
 
 ```text
-S_secondary(T,s,rho) = S_water,ion(T/A) × rho/(1 g/cm³) × F(s,T/A)
-默认精确 Schneider CT：F = 1
-显式 ct_secondary_schneider_sp_diagnostic：F = Schneider Z/A、I 的 Bethe 材料因子
-T_mid = max(0.01×A MeV, T - S_secondary(T)×h/2)
-次级平均能损 = min(S_secondary(T_mid)×h, T)
+S1(s,ion,E) = S_TOPAS(s,ion,E,rho_ref) / [rho_ref/(1 g/cm³)]
+S(T,s,rho) [MeV/mm] = S1(s,ion,T/A) × rho/(1 g/cm³)
 ```
 
-步首和中点都应用相同的密度/材料策略。诊断根据 25 分区的组成 Z/A 与平均激发能 I
-构造因子，并没有逐同位素重新提取材料 stopping。
-LUT 仅在 `use_ct_mass_sp && (!use_schneider_stopping || ct_secondary_schneider_sp_diagnostic)`
-成立时加载。精确原发 stopping 开启且诊断关闭时，次级材料因子 LUT 不存在。
-带电 stopping 的 18 行 lookup 与核反应的 14-projectile registry 用途不同，不能视为同一覆盖清单。
+因此局部密度换算并非重复乘密度，也不是水 stopping 缩放；材料组成已经在分区行中。
+最终组合的次级在步首与中点均查同一材料表，不再额外乘 Bethe 材料因子。
+非法核素、分区、能量或密度导致整次运行失败，不回退水表、不合并失败剂量。
 
-代码：[加载与步进](src/transport_sycl.cpp)、[次级缩放函数](include/carbon/ct_grid.hpp)、
-[默认开关](include/carbon/transport_config.hpp)。
+```text
+S_start = S(T,s,rho)
+h_loss = maximum_relative_energy_loss × T / S_start
+h <= min(maximum_step_mm, h_loss, 几何边界、核碰撞距离及其他终止约束)
+T_mid = T - S_start × h/2
+平均能损 = S(T_mid,s,rho) × h（随后受可用动能约束）
+```
+
+最大长度保留为冻结配置的 0.5 mm；上述 h_loss 和 0.005 相对能损限制用于原发。
+当前次级步长由最大长度、几何及核碰撞截断，没有同样的相对能损步长限制；
+其次级中点能损受剩余总动能约束。
+原发中点查询在原发表域内插值；次级预测中点设 0.01 MeV/u 下界。
+exact-faces 在次级跨材料前截断步长，使该步使用当前体素材料与密度。
+平均能损再进入下节的涨落与电子能量分配，不能把预测中点能量当作实际输运终态。
+上游空气能损独立处理。
+
+代码：[加载与步进](src/transport_sycl.cpp)、
+[材料表及查表域](include/carbon/schneider_ion_stopping_table.hpp)、
+[最终组合验证脚本](tools/run_final_stopping_validation.py)。
 
 ### 3.3. 能损涨落
 

@@ -790,9 +790,10 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
     float schneider_sp_inv_dE = 0.0F;
     bool use_schneider_stopping = false;
     // Scheme-2 secondary section stopping (SCHNIOSP v1). Null = current
-    // water x material-factor path (fail-closed default).
+    // legacy water path when the material bank is not explicitly configured.
     float* schneider_ion_sp_device = nullptr;
     bool use_schneider_ion_sp = false;
+    std::uint32_t* ion_stopping_failures = nullptr;
 
     Cinel02DeviceInteraction* cinel02_interactions_device = nullptr;
     Cinel02DeviceProduct* cinel02_products_device = nullptr;
@@ -999,6 +1000,10 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
     const auto ct_skip_homogeneous_face_clamp = config.ct_skip_homogeneous_face_clamp;
     const auto ct_primary_midpoint_stopping = config.ct_primary_midpoint_stopping;
     const auto ct_secondary_exact_faces = config.ct_secondary_exact_faces;
+    std::cout << "[stopping-config] primary_midpoint=" << ct_primary_midpoint_stopping
+              << " secondary_exact_faces=" << ct_secondary_exact_faces
+              << " secondary_ion_section_file=" << config.ct_secondary_ion_section_stopping_file
+              << " sha256=" << config.ct_secondary_ion_section_stopping_sha256 << '\n';
     const auto ct_secondary_mcs_off = config.ct_secondary_mcs_off_diagnostic;
 
     const bool use_schneider_delta_tail =
@@ -1566,8 +1571,10 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                 queue.copy(flat_ion.data(), schneider_ion_sp_device, flat_ion.size())
                     .wait_and_throw();
                 use_schneider_ion_sp = true;
+                ion_stopping_failures = mem_tracker.allocate<std::uint32_t>(8);
+                queue.fill(ion_stopping_failures, std::uint32_t{0}, 8).wait_and_throw();
                 std::cout << "[schneider-ion-stopping] mode=section-ion-v1 sections=25 "
-                          << "species=18 energies=4302 source="
+                          << "species=18 energies=" << kSchneiderIonEnergies << " source="
                           << config.ct_secondary_ion_section_stopping_file << '\n';
             }
 
@@ -4919,41 +4926,34 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                 ct_mass_sp_factor_lut_device != nullptr &&
                                 ct_n_mass_factors > 0U;
                             float sec_material_factor = 1.0F;
-                            // Scheme-2: per-ion per-Schneider-section Geant4
-                            // table (linear at unit density), scaled by local
-                            // density. Unrestricted totals (electron contract
-                            // preserved). Falls back to the water x factor
-                            // path when data is absent or out of domain.
-                            // Scheme-2 section stopping: linear at unit
-                            // density, scaled by local density. Returns
-                            // negative when data is absent/out of domain
-                            // (caller falls back to water x factor path).
+                            // Enabled bank is mandatory inside CT. A failed query aborts
+                            // the run at readback; never substitute a water/material factor.
                             auto scheme2_linear_sp = [&](float energy_mevu) {
-                                if (!(use_schneider_ion_sp && sec_in_ct) ||
-                                    schneider_ion_sp_device == nullptr ||
-                                    charged_sp_idx < 0 ||
-                                    sec_ct_material >= 25U)
+                                if (!(use_schneider_ion_sp && sec_in_ct)) return -1.0F;
+                                const float unit_sp = schneider_ion_stopping_lookup(
+                                    schneider_ion_sp_device, static_cast<std::size_t>(charged_sp_idx),
+                                    static_cast<std::size_t>(sec_ct_material), energy_mevu);
+                                if (!(unit_sp > 0) || !sycl::isfinite(sec_local_density_g_per_cm3) ||
+                                    !(sec_local_density_g_per_cm3 > 0)) {
+                                    sycl::atomic_ref<std::uint32_t, sycl::memory_order::relaxed,
+                                        sycl::memory_scope::device, sycl::access::address_space::global_space>
+                                        failures(*ion_stopping_failures);
+                                    const auto failure_index = failures.fetch_add(1);
+                                    if (failure_index == 0) {
+                                        ion_stopping_failures[1] = frag.z;
+                                        ion_stopping_failures[2] = frag.a;
+                                        ion_stopping_failures[3] = sec_ct_material;
+                                        ion_stopping_failures[4] = sycl::bit_cast<std::uint32_t>(energy_mevu);
+                                        ion_stopping_failures[5] = sycl::bit_cast<std::uint32_t>(sec_local_density_g_per_cm3);
+                                    }
                                     return -1.0F;
-                                float eidx = (energy_mevu - 0.01F) * 10.0F;
-                                int ei = static_cast<int>(sycl::floor(eidx));
-                                ei = sycl::max(0, sycl::min(ei, 4302 - 2));
-                                const float ef = sycl::clamp(
-                                    eidx - static_cast<float>(ei), 0.0F, 1.0F);
-                                const std::size_t base =
-                                    (static_cast<std::size_t>(sec_ct_material) * 18U +
-                                     static_cast<std::size_t>(charged_sp_idx)) *
-                                    4302U;
-                                const float s0 =
-                                    schneider_ion_sp_device[base + static_cast<std::size_t>(ei)];
-                                const float s1 =
-                                    schneider_ion_sp_device[base + static_cast<std::size_t>(ei) + 1U];
-                                const float unit_sp = s0 + ef * (s1 - s0);
-                                if (!(unit_sp > 1.0e-6F)) return -1.0F;
-                                return unit_sp * sycl::fmax(sec_local_density_g_per_cm3, 1.0e-6F);
+                                }
+                                return unit_sp * sec_local_density_g_per_cm3;
                             };
                             bool sec_scheme2_hit = false;
                             {
                                 const float scheme2_sp = scheme2_linear_sp(sec_e_u);
+                                if (use_schneider_ion_sp && sec_in_ct && !(scheme2_sp > 0)) break;
                                 if (scheme2_sp > 0.0F) {
                                     sec_sp = scheme2_sp;
                                     sec_scheme2_hit = true;
@@ -5130,12 +5130,13 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                             auto mid_sp = (ion_sp_table[mid_idx] +
                                            mid_fr * (ion_sp_table[mid_idx + 1] -
                                                      ion_sp_table[mid_idx]));
-                            // Scheme-2 at midpoint energy; falls back below.
+                            // Query the same material bank at the predicted midpoint.
                             // Already linear at local density: bypass the
                             // water x density scaling entirely.
                             bool mid_scheme2_hit = false;
                             {
                                 const float scheme2_mid = scheme2_linear_sp(mid_e_u);
+                                if (use_schneider_ion_sp && sec_in_ct && !(scheme2_mid > 0)) break;
                                 if (scheme2_mid > 0.0F) {
                                     mid_sp = scheme2_mid;
                                     mid_scheme2_hit = true;
@@ -6595,6 +6596,21 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
         free_device(primary_loss_query_audit);
         for (int b=0;b<14;++b)
             std::cout << "PRIMARY_LOSS_QUERY," << b << ',' << audit[b] << ',' << audit[b+14] << '\n';
+    }
+    if (ion_stopping_failures) {
+        std::array<std::uint32_t, 8> failures{};
+        queue.copy(ion_stopping_failures, failures.data(), failures.size()).wait_and_throw();
+        free_device(ion_stopping_failures);
+        free_device(schneider_ion_sp_device);
+        if (failures[0]) {
+            float energy, density;
+            std::memcpy(&energy, &failures[4], sizeof(float));
+            std::memcpy(&density, &failures[5], sizeof(float));
+            throw std::runtime_error("Schneider ion stopping domain failure: " + std::to_string(failures[0]) +
+                " first Z=" + std::to_string(failures[1]) + " A=" + std::to_string(failures[2]) +
+                " section=" + std::to_string(failures[3]) + " E_MeVu=" + std::to_string(energy) +
+                " rho=" + std::to_string(density));
+        }
     }
     if (fluct_domain_failures) {
         std::uint32_t failures=0;

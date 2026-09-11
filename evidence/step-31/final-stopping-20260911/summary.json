@@ -1,0 +1,37 @@
+{
+  "case": "20022516",
+  "status": "complete_research_validation",
+  "histories": 177173040,
+  "shards": 20,
+  "queue_overflow_count": 0,
+  "max_physical_relative_energy_residual": 5.23990173019e-06,
+  "all_quality_accepted": true,
+  "transport_wall_seconds": 2020.1708031239978,
+  "binary_sha256": "3c9f24ededd94df1170b6430ed4c3425da67e30eda760082037e06db2e214315",
+  "preserved_binary": "/mnt/sda/wuwei/final_stopping_20260911/20022516_extended/validated_carbon_mc",
+  "table_sha256": "ef87ad19bd0b0552d846a6c4e23eb635746e375432a40f40fb79b202235dec20",
+  "metadata_sha256": "c815808fd22e56e9db26475eeddb99aa596a9bc56aa01d0b8800c2e5e1ec12b8",
+  "dose_sha256": "cd156b7b666b916950f11e27d74f5c1487f4a0528448845129c1b2de7d3aa8b9",
+  "output": "/mnt/sda/wuwei/final_stopping_20260911/20022516_extended",
+  "metrics": {
+    "global_3pct_3mm": 100.0,
+    "local_3pct_3mm": 99.93823434451198,
+    "global_2pct_2mm": 99.93776642287949,
+    "local_2pct_2mm": 99.54050095689973,
+    "global_1pct_1mm": 99.00809972345832,
+    "local_1pct_1mm": 85.45109984979715,
+    "global_3pct_0mm": 99.80029104725541,
+    "local_3pct_0mm": 90.80824103579133
+  },
+  "dose_sum_ratio": 0.9989288306989212,
+  "promotion": "No global physics-bundle promotion; single lung case only",
+  "final_build": {
+    "binary": "/mnt/sdb/wuwei/MAIGO/build/oneapi-nvidia-stopping-final/carbon_mc",
+    "binary_sha256": "9e6e06ed8bbda42e365c490a828710a1a9fc583810a961c0baea85ca01dde4a1",
+    "closure_status": "closure_complete",
+    "quality_accepted": true,
+    "queue_overflow_count": 0,
+    "physical_relative_energy_residual": 4.79494154524e-06,
+    "difference_from_full20_binary": "Log energy count uses kSchneiderIonEnergies instead of literal 4302; comments corrected. No transport algorithm changes."
+  }
+}

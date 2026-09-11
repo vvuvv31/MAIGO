@@ -1,0 +1,103 @@
+{
+  "case": "20022516",
+  "histories": 177173040,
+  "status": "RESEARCH_VALIDATION",
+  "physics": "primary midpoint ON; secondary material stopping ON; secondary exact faces ON",
+  "table_sha256": "ef87ad19bd0b0552d846a6c4e23eb635746e375432a40f40fb79b202235dec20",
+  "binary_sha256": "3c9f24ededd94df1170b6430ed4c3425da67e30eda760082037e06db2e214315",
+  "method": "reference >=10% maximum; 0.5 mm spherical lattice, trilinear interpolation; 0 mm is same-voxel dose difference",
+  "dose_scale": 1.0,
+  "gamma": {
+    "global_3pct_3mm": {
+      "full_mask_percent": 100.0,
+      "passed": 1068555,
+      "evaluated": 1068555
+    },
+    "local_3pct_3mm": {
+      "full_mask_percent": 99.93823434451198,
+      "passed": 1067895,
+      "evaluated": 1068555
+    },
+    "global_2pct_2mm": {
+      "full_mask_percent": 99.93776642287949,
+      "passed": 1067890,
+      "evaluated": 1068555
+    },
+    "local_2pct_2mm": {
+      "full_mask_percent": 99.54050095689973,
+      "passed": 1063645,
+      "evaluated": 1068555
+    },
+    "global_1pct_1mm": {
+      "full_mask_percent": 99.00809972345832,
+      "passed": 1057956,
+      "evaluated": 1068555
+    },
+    "local_1pct_1mm": {
+      "full_mask_percent": 85.45109984979715,
+      "passed": 913092,
+      "evaluated": 1068555
+    },
+    "global_3pct_0mm": {
+      "full_mask_percent": 99.80029104725541,
+      "passed": 1066421,
+      "evaluated": 1068555
+    },
+    "local_3pct_0mm": {
+      "full_mask_percent": 90.80824103579133,
+      "passed": 970336,
+      "evaluated": 1068555
+    }
+  },
+  "dose_bands": [
+    {
+      "reference_percent_max": [
+        10,
+        20
+      ],
+      "voxels": 242715,
+      "mean_local_error_pct": 0.010859646500973099,
+      "rms_local_error_pct": 2.381333357757649,
+      "negative_beyond_3pct_percent": 8.427167665780855,
+      "positive_beyond_3pct_percent": 8.333230331870713
+    },
+    {
+      "reference_percent_max": [
+        20,
+        50
+      ],
+      "voxels": 474014,
+      "mean_local_error_pct": 0.18084916071925417,
+      "rms_local_error_pct": 2.026024728779227,
+      "negative_beyond_3pct_percent": 4.2070487369571365,
+      "positive_beyond_3pct_percent": 7.129536258422747
+    },
+    {
+      "reference_percent_max": [
+        50,
+        80
+      ],
+      "voxels": 311644,
+      "mean_local_error_pct": -0.10728158358360299,
+      "rms_local_error_pct": 0.9563181237894439,
+      "negative_beyond_3pct_percent": 0.42195582138594034,
+      "positive_beyond_3pct_percent": 0.7951380421249888
+    },
+    {
+      "reference_percent_max": [
+        80,
+        101
+      ],
+      "voxels": 40182,
+      "mean_local_error_pct": -0.33272634795448025,
+      "rms_local_error_pct": 0.7647318093205697,
+      "negative_beyond_3pct_percent": 0.02239808869643124,
+      "positive_beyond_3pct_percent": 0.0
+    }
+  ],
+  "dose_sum_ratio": 0.9989288306989212,
+  "overflow_attempts_excluded": [],
+  "gpu_sha256": "cd156b7b666b916950f11e27d74f5c1487f4a0528448845129c1b2de7d3aa8b9",
+  "reference_sha256": "254fd0d19d263122e8c9cfcacc6703c4aaa30fa942899650e7a22aee79b2a00b",
+  "source_sha256": "3f9f1a72084ad46342eff86b6771bfd1b3670cc2656ec983bf148f40c1746e2e"
+}

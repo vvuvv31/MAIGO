@@ -1,0 +1,44 @@
+{
+  "frozen": {
+    "directory": "/mnt/sda/wuwei/ct_previous_full20_20260909/20022516",
+    "report": "gamma.json",
+    "metrics": {
+      "global_3pct_3mm": 100.0,
+      "local_3pct_3mm": 99.93860868181797,
+      "global_2pct_2mm": 99.93598832067605,
+      "local_2pct_2mm": 99.60956618985452,
+      "global_1pct_1mm": 98.78359092419203,
+      "local_1pct_1mm": 84.97952842857877,
+      "global_3pct_0mm": 94.27928370556499,
+      "local_3pct_0mm": 81.34967315673971
+    }
+  },
+  "exactfaces": {
+    "directory": "/mnt/sda/wuwei/exactfaces_full20_20260910/20022516",
+    "report": "gamma_coarse.json",
+    "metrics": {
+      "global_3pct_3mm": 100.0,
+      "local_3pct_3mm": 99.93860868181797,
+      "global_2pct_2mm": 99.93673699528803,
+      "local_2pct_2mm": 99.532639873474,
+      "global_1pct_1mm": 99.03392899757148,
+      "local_1pct_1mm": 85.28835670601887,
+      "global_3pct_0mm": 99.80422158896828,
+      "local_3pct_0mm": 91.40577696047465
+    }
+  },
+  "midpoint": {
+    "directory": "/mnt/sda/wuwei/midpoint_full20_20260910/20022516",
+    "report": "gamma_coarse.json",
+    "metrics": {
+      "global_3pct_3mm": 100.0,
+      "local_3pct_3mm": 99.93842151316498,
+      "global_2pct_2mm": 99.93598832067605,
+      "local_2pct_2mm": 99.61789519491275,
+      "global_1pct_1mm": 98.7500877353061,
+      "local_1pct_1mm": 84.95519650368956,
+      "global_3pct_0mm": 94.28050030180945,
+      "local_3pct_0mm": 80.6201833316956
+    }
+  }
+}

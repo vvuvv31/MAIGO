@@ -1,0 +1,59 @@
+{
+  "case": "RT07575",
+  "status": "complete_research_validation",
+  "histories": 129638170,
+  "shards": 20,
+  "queue_overflow_count": 0,
+  "all_quality_accepted": true,
+  "max_physical_relative_energy_residual": 3.85685396692e-06,
+  "wall_seconds_full_shards": 1497.8471004639941,
+  "binary_sha256": "9e6e06ed8bbda42e365c490a828710a1a9fc583810a961c0baea85ca01dde4a1",
+  "table_sha256": "ef87ad19bd0b0552d846a6c4e23eb635746e375432a40f40fb79b202235dec20",
+  "metadata_sha256": "c815808fd22e56e9db26475eeddb99aa596a9bc56aa01d0b8800c2e5e1ec12b8",
+  "dose_sha256": "9a140900e055ac9ddbff455c38d00df7b3c0a4e5841ed72241f4271a6cbf05bf",
+  "mapping": "packed_xneg",
+  "output": "/mnt/sda/wuwei/final_stopping_20260911/RT07575",
+  "metrics": {
+    "global_3pct_3mm": {
+      "latest_percent": 99.97258986608192,
+      "previous_percent": 99.97237232533654,
+      "change_percentage_points": 0.0002175407453819389
+    },
+    "local_3pct_3mm": {
+      "latest_percent": 99.61691074738297,
+      "previous_percent": 99.60733895458618,
+      "change_percentage_points": 0.009571792796791101
+    },
+    "global_2pct_2mm": {
+      "latest_percent": 99.5753604650151,
+      "previous_percent": 99.56687637594521,
+      "change_percentage_points": 0.008484089069881406
+    },
+    "local_2pct_2mm": {
+      "latest_percent": 98.4552431670452,
+      "previous_percent": 98.44327842604919,
+      "change_percentage_points": 0.01196474099600664
+    },
+    "global_1pct_1mm": {
+      "latest_percent": 96.7978002279827,
+      "previous_percent": 96.73906422672967,
+      "change_percentage_points": 0.05873600125303824
+    },
+    "local_1pct_1mm": {
+      "latest_percent": 84.19196665535455,
+      "previous_percent": 83.33681398525944,
+      "change_percentage_points": 0.8551526700951086
+    },
+    "global_3pct_0mm": {
+      "latest_percent": 99.29908371838046,
+      "previous_percent": 99.28037521427764,
+      "change_percentage_points": 0.018708504102818324
+    },
+    "local_3pct_0mm": {
+      "latest_percent": 89.41947076687462,
+      "previous_percent": 89.14689221291148,
+      "change_percentage_points": 0.2725785539631431
+    }
+  },
+  "dose_sum_ratio": 1.0134495197751996
+}

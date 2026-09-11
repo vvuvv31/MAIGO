@@ -1,0 +1,25 @@
+{
+  "schema_version": 3,
+  "status": "non_production",
+  "run_mode": "research",
+  "accepted": true,
+  "absolute_physical_energy_residual_MeV": 453.880567312,
+  "physical_relative_energy_residual": 4.79504427138e-06,
+  "absolute_accounting_energy_residual_MeV": 453.880567312,
+  "accounting_relative_energy_residual": 4.79504427138e-06,
+  "absolute_energy_residual_MeV": 453.880567312,
+  "relative_energy_residual": 4.79504427138e-06,
+  "topas_reference_energy_sink_active": false,
+  "queue_overflow_count": 0,
+  "queue_overflow_energy_MeV": 0,
+  "voxel_scored_energy_MeV": 88921123.497,
+  "in_grid_deposited_energy_MeV": 88921123.515,
+  "outside_grid_deposited_energy_MeV": 1377759.61869,
+  "grid_split_closure_ratio": 1.00000001252,
+  "voxel_to_ingrid_ratio": 0.999999999797,
+  "voxel_to_total_deposited_ratio": 0.984742241811,
+  "failures": [  ],
+  "approximations": [
+    {"code": "schneider_post_em_null_collisions", "message": "sampled candidates resolved as post-EM null collisions (track continues, no lookup)", "value": 7, "limit": 0}
+  ]
+}
