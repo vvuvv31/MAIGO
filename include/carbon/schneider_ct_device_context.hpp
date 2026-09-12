@@ -37,6 +37,9 @@ struct SchneiderCtDeviceContext {
         for(std::size_t t=0;t<13;++t) { out.partials[t]=static_cast<float>(rates.partials[t]); out.total+=out.partials[t]; }
         return out;
     }
+    [[nodiscard]] SchneiderMaskedRates elastic_rates(std::size_t section,float energy) const noexcept {
+        return schneider_masked_rates_device(elastic_sampler,section,energy);
+    }
     [[nodiscard]] SecondaryMaskedRates secondary_rates(int projectile,std::size_t section,float energy) const noexcept {
         if (!unified_water) return secondary_masked_rates_device(sec_partial_rates,sec_domain_emin,
             sec_domain_emax,sec_domain_has,sec_num_projectiles,projectile,section,energy,
@@ -49,6 +52,9 @@ struct SchneiderCtDeviceContext {
 
     // Primary Target Sampler
     SchneiderTargetSamplerDeviceTable primary_sampler{};
+    // Elastic Target Sampler (SCHNELXS v1, same layout; empty when the
+    // elastic rate file is absent, in which case elastic stays disabled).
+    SchneiderTargetSamplerDeviceTable elastic_sampler{};
 
     // Primary C12 CINEL03 Package
     const Cinel03EnergyNode* c12_energy_nodes{nullptr};

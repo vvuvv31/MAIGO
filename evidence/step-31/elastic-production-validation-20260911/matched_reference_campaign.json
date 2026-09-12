@@ -1,0 +1,204 @@
+{
+  "status": "submitted_not_accepted",
+  "node": "ps",
+  "cpu_limit": 192,
+  "memory_limit_GiB": 144,
+  "topas_sha256": "95db30ffc16a62cccc5136a95d3eaaec45f27927a4b357556836d0e8410bde81",
+  "cases": [
+    {
+      "case": "RT07575",
+      "histories": 129638170,
+      "replicas": [
+        {
+          "directory": "/mnt/sda/wuwei/elastic_production_validation_20260911/matched_full_references/RT07575/replica_01",
+          "expected_histories": 25927634,
+          "original_config": "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/RT07575_pbs_s1/run_full_plan.txt",
+          "original_config_sha256": "fe1ec7837b8d20a77dc43845e09e9338dd224044f030c91371ac63fb9cdef800",
+          "config_sha256": "4fb8b0dc3a7145f9cae27f40a518d0cb7d5f803cdc82e1bb17a0f3a18651848b",
+          "dicom_directory": "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/RT07575_pbs_s1/dicom",
+          "inputs": {
+            "spots.csv": "4420af1508008db97ddc5ec31dc2bbb36af290ee7f38ccf905d5626e2d38ff95",
+            "beam_model.csv": "00de6ff3e37ca8b2c15b01bd462a5264068512e27955e7aa8354a2ae5f88abac",
+            "HUtoMaterialSchneider.txt": "5022cd89617b28dbd8ee8bf8b095ea20cfd99f6405218693c0df238b3617a139"
+          }
+        },
+        {
+          "directory": "/mnt/sda/wuwei/elastic_production_validation_20260911/matched_full_references/RT07575/replica_02",
+          "expected_histories": 25927634,
+          "original_config": "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/RT07575_pbs_s2/run_full_plan.txt",
+          "original_config_sha256": "c3668bbd53e7e7bd7d524e4744513cb5e77a9f64ce0cd880254553e26742ccbf",
+          "config_sha256": "d3b732ef9b0d8c60d67f3bacfa8629e71c6e39f38a0978a1db53b3b0fea0790b",
+          "dicom_directory": "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/RT07575_pbs_s2/dicom",
+          "inputs": {
+            "spots.csv": "4420af1508008db97ddc5ec31dc2bbb36af290ee7f38ccf905d5626e2d38ff95",
+            "beam_model.csv": "00de6ff3e37ca8b2c15b01bd462a5264068512e27955e7aa8354a2ae5f88abac",
+            "HUtoMaterialSchneider.txt": "5022cd89617b28dbd8ee8bf8b095ea20cfd99f6405218693c0df238b3617a139"
+          }
+        },
+        {
+          "directory": "/mnt/sda/wuwei/elastic_production_validation_20260911/matched_full_references/RT07575/replica_03",
+          "expected_histories": 25927634,
+          "original_config": "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/RT07575_pbs_s3/run_full_plan.txt",
+          "original_config_sha256": "9e362e609e3c6ede20d768b0a6824d94abe9535692dd74d0881d63bfd8192029",
+          "config_sha256": "c6591776a176aaf77f7ab7bfd0fcdeafcfda06c3a5945bb823dbeb2c8a6ae4ed",
+          "dicom_directory": "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/RT07575_pbs_s3/dicom",
+          "inputs": {
+            "spots.csv": "4420af1508008db97ddc5ec31dc2bbb36af290ee7f38ccf905d5626e2d38ff95",
+            "beam_model.csv": "00de6ff3e37ca8b2c15b01bd462a5264068512e27955e7aa8354a2ae5f88abac",
+            "HUtoMaterialSchneider.txt": "5022cd89617b28dbd8ee8bf8b095ea20cfd99f6405218693c0df238b3617a139"
+          }
+        },
+        {
+          "directory": "/mnt/sda/wuwei/elastic_production_validation_20260911/matched_full_references/RT07575/replica_04",
+          "expected_histories": 25927634,
+          "original_config": "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/RT07575_pbs_s4/run_full_plan.txt",
+          "original_config_sha256": "d40c776399f1d1aacd3a2bd34e790f4b1755d59a7c16357ba756fd7bc40e68ad",
+          "config_sha256": "0d3a6531cc44122354dcdde4a715680317c43b4516c6ad15e436d043c1e22156",
+          "dicom_directory": "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/RT07575_pbs_s4/dicom",
+          "inputs": {
+            "spots.csv": "4420af1508008db97ddc5ec31dc2bbb36af290ee7f38ccf905d5626e2d38ff95",
+            "beam_model.csv": "00de6ff3e37ca8b2c15b01bd462a5264068512e27955e7aa8354a2ae5f88abac",
+            "HUtoMaterialSchneider.txt": "5022cd89617b28dbd8ee8bf8b095ea20cfd99f6405218693c0df238b3617a139"
+          }
+        },
+        {
+          "directory": "/mnt/sda/wuwei/elastic_production_validation_20260911/matched_full_references/RT07575/replica_05",
+          "expected_histories": 25927634,
+          "original_config": "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/RT07575_pbs_s5/run_full_plan.txt",
+          "original_config_sha256": "373f29596285ded43a33e501bfdc2c31fa6c122ef316e40203252ad4e63bc74b",
+          "config_sha256": "9984a3a9e11a84b8a0a326a9c8a3c0c980d225281314f198ef16e0513318d7c2",
+          "dicom_directory": "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/RT07575_pbs_s5/dicom",
+          "inputs": {
+            "spots.csv": "4420af1508008db97ddc5ec31dc2bbb36af290ee7f38ccf905d5626e2d38ff95",
+            "beam_model.csv": "00de6ff3e37ca8b2c15b01bd462a5264068512e27955e7aa8354a2ae5f88abac",
+            "HUtoMaterialSchneider.txt": "5022cd89617b28dbd8ee8bf8b095ea20cfd99f6405218693c0df238b3617a139"
+          }
+        }
+      ],
+      "submit_script": "/mnt/sda/wuwei/elastic_production_validation_20260911/matched_full_references/RT07575/submit.slurm"
+    },
+    {
+      "case": "RT06423",
+      "histories": 151087660,
+      "replicas": [
+        {
+          "directory": "/mnt/sda/wuwei/elastic_production_validation_20260911/matched_full_references/RT06423/replica_01",
+          "expected_histories": 37771915,
+          "original_config": "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/RT06423/replicas/s1/run_full_plan.txt",
+          "original_config_sha256": "6a29da602293b22fe68c465c418deb7753e7e5d59d337b31c1ee01855cd36bd7",
+          "config_sha256": "21d3ca386fddb829eedf98e17428161a256cbbee25fbe801c12d1f8d5079ece4",
+          "dicom_directory": "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/RT06423/dicom",
+          "inputs": {
+            "spots.csv": "5b9fec7a6171adf5793a272fa2057573c710f6897d8fb27add002d6fd2199a96",
+            "beam_model.csv": "98488f9bca739b89124aa083916d65787b2c20074d2e73c4a7dffbed5bf8e9f6",
+            "HUtoMaterialSchneider.txt": "5022cd89617b28dbd8ee8bf8b095ea20cfd99f6405218693c0df238b3617a139"
+          }
+        },
+        {
+          "directory": "/mnt/sda/wuwei/elastic_production_validation_20260911/matched_full_references/RT06423/replica_02",
+          "expected_histories": 37771915,
+          "original_config": "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/RT06423/replicas/s2/run_full_plan.txt",
+          "original_config_sha256": "74a13a3666c15265404740d86a815307cbf43897e9ed495e6f2c6d1c67a39bee",
+          "config_sha256": "eac1032fad421bbf24b2b641f2c9247b7e9d395997a515e9c6355e8ef4b7b298",
+          "dicom_directory": "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/RT06423/dicom",
+          "inputs": {
+            "spots.csv": "5b9fec7a6171adf5793a272fa2057573c710f6897d8fb27add002d6fd2199a96",
+            "beam_model.csv": "98488f9bca739b89124aa083916d65787b2c20074d2e73c4a7dffbed5bf8e9f6",
+            "HUtoMaterialSchneider.txt": "5022cd89617b28dbd8ee8bf8b095ea20cfd99f6405218693c0df238b3617a139"
+          }
+        },
+        {
+          "directory": "/mnt/sda/wuwei/elastic_production_validation_20260911/matched_full_references/RT06423/replica_03",
+          "expected_histories": 37771915,
+          "original_config": "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/RT06423/replicas/s3/run_full_plan.txt",
+          "original_config_sha256": "16438b2895efe305588cc50483dc6209562ccd246c55165386cab5d88ea0e0e3",
+          "config_sha256": "f94ff993da741630e917d9fb0cf21fdc39d766f6111bbbfee4329c1fbe168fde",
+          "dicom_directory": "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/RT06423/dicom",
+          "inputs": {
+            "spots.csv": "5b9fec7a6171adf5793a272fa2057573c710f6897d8fb27add002d6fd2199a96",
+            "beam_model.csv": "98488f9bca739b89124aa083916d65787b2c20074d2e73c4a7dffbed5bf8e9f6",
+            "HUtoMaterialSchneider.txt": "5022cd89617b28dbd8ee8bf8b095ea20cfd99f6405218693c0df238b3617a139"
+          }
+        },
+        {
+          "directory": "/mnt/sda/wuwei/elastic_production_validation_20260911/matched_full_references/RT06423/replica_04",
+          "expected_histories": 37771915,
+          "original_config": "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/RT06423/replicas/s4/run_full_plan.txt",
+          "original_config_sha256": "3e34ef33935a3232d90061690dce784963a3c9022fdfcb13fa53bf44e42d8a56",
+          "config_sha256": "266504fb6b1fb71024e97bf61a7c5b4426750649da98927b30ebb836422608d9",
+          "dicom_directory": "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/RT06423/dicom",
+          "inputs": {
+            "spots.csv": "5b9fec7a6171adf5793a272fa2057573c710f6897d8fb27add002d6fd2199a96",
+            "beam_model.csv": "98488f9bca739b89124aa083916d65787b2c20074d2e73c4a7dffbed5bf8e9f6",
+            "HUtoMaterialSchneider.txt": "5022cd89617b28dbd8ee8bf8b095ea20cfd99f6405218693c0df238b3617a139"
+          }
+        }
+      ],
+      "submit_script": "/mnt/sda/wuwei/elastic_production_validation_20260911/matched_full_references/RT06423/submit.slurm"
+    },
+    {
+      "case": "20022516",
+      "histories": 177173040,
+      "replicas": [
+        {
+          "directory": "/mnt/sda/wuwei/elastic_production_validation_20260911/matched_full_references/20022516/replica_01",
+          "expected_histories": 44293260,
+          "original_config": "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/20022516/replicas/s1/run_full_plan.txt",
+          "original_config_sha256": "9e37953272bac15e2bab768cfc019da38f6a3a482a20d8b849cfc05450a673af",
+          "config_sha256": "74606ddad2de076b6a75cf0f4f8c026c2974eda4b7b078b62287c58f17b2e5a5",
+          "dicom_directory": "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/20022516/dicom",
+          "inputs": {
+            "spots.csv": "712940908aec7d66a662525f6411214878b3d8a6b1ccc3cf01d2050ccc3bdf97",
+            "beam_model.csv": "95be0caf950fbfe33a149e2f3eea6087b75ce61a34ce9b6c99c0ff093248ea2d",
+            "HUtoMaterialSchneider.txt": "5022cd89617b28dbd8ee8bf8b095ea20cfd99f6405218693c0df238b3617a139"
+          }
+        },
+        {
+          "directory": "/mnt/sda/wuwei/elastic_production_validation_20260911/matched_full_references/20022516/replica_02",
+          "expected_histories": 44293260,
+          "original_config": "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/20022516/replicas/s2/run_full_plan.txt",
+          "original_config_sha256": "039f3de5026b12eebccd04664116487bd4cbcf3f22d91d8bf2f208a5ff8ce8b9",
+          "config_sha256": "4d928ea0ff904e64d745e5d9bf9ddcce13d70be7ca17b514fce4c83ccccce1ca",
+          "dicom_directory": "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/20022516/dicom",
+          "inputs": {
+            "spots.csv": "712940908aec7d66a662525f6411214878b3d8a6b1ccc3cf01d2050ccc3bdf97",
+            "beam_model.csv": "95be0caf950fbfe33a149e2f3eea6087b75ce61a34ce9b6c99c0ff093248ea2d",
+            "HUtoMaterialSchneider.txt": "5022cd89617b28dbd8ee8bf8b095ea20cfd99f6405218693c0df238b3617a139"
+          }
+        },
+        {
+          "directory": "/mnt/sda/wuwei/elastic_production_validation_20260911/matched_full_references/20022516/replica_03",
+          "expected_histories": 44293260,
+          "original_config": "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/20022516/replicas/s3/run_full_plan.txt",
+          "original_config_sha256": "31f021232a77b60041a5f3029dec152f2c93b4b791cdf8e6dfc70c548d092de2",
+          "config_sha256": "b8fbf7cf67566d3b907c49218acd2ff8bfa4228ef0c17960f8aaff84e7167e08",
+          "dicom_directory": "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/20022516/dicom",
+          "inputs": {
+            "spots.csv": "712940908aec7d66a662525f6411214878b3d8a6b1ccc3cf01d2050ccc3bdf97",
+            "beam_model.csv": "95be0caf950fbfe33a149e2f3eea6087b75ce61a34ce9b6c99c0ff093248ea2d",
+            "HUtoMaterialSchneider.txt": "5022cd89617b28dbd8ee8bf8b095ea20cfd99f6405218693c0df238b3617a139"
+          }
+        },
+        {
+          "directory": "/mnt/sda/wuwei/elastic_production_validation_20260911/matched_full_references/20022516/replica_04",
+          "expected_histories": 44293260,
+          "original_config": "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/20022516/replicas/s4/run_full_plan.txt",
+          "original_config_sha256": "9e17332bf9c2f2774f9ab60a5a6eee598e5c86478847c1cbe33d36aa07c56e6b",
+          "config_sha256": "ad178b15d72dbc98908f87caaa4cfb91feb70b99f29a35b192f6bb8ae32d4222",
+          "dicom_directory": "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/20022516/dicom",
+          "inputs": {
+            "spots.csv": "712940908aec7d66a662525f6411214878b3d8a6b1ccc3cf01d2050ccc3bdf97",
+            "beam_model.csv": "95be0caf950fbfe33a149e2f3eea6087b75ce61a34ce9b6c99c0ff093248ea2d",
+            "HUtoMaterialSchneider.txt": "5022cd89617b28dbd8ee8bf8b095ea20cfd99f6405218693c0df238b3617a139"
+          }
+        }
+      ],
+      "submit_script": "/mnt/sda/wuwei/elastic_production_validation_20260911/matched_full_references/20022516/submit.slurm"
+    }
+  ],
+  "job_arrays": {
+    "RT07575": 4613,
+    "RT06423": 4614,
+    "20022516": 4615
+  }
+}

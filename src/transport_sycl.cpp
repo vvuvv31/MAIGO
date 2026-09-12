@@ -24,6 +24,8 @@
 #include "carbon/tps_source.hpp"
 #include "carbon/schneider_stopping_table.hpp"
 #include "carbon/schneider_ion_stopping_table.hpp"
+#include "carbon/nuclear_elastic_scattering.hpp"
+#include "carbon/all_ion_elastic.hpp"
 #include "carbon/detail/device_memory_tracker.hpp"
 #include "carbon/straggling.hpp"
 #include "carbon/transport.hpp"
@@ -401,6 +403,53 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
             ctx.primary_sampler.domain_emax = dev_emax;
             ctx.primary_sampler.domain_has = dev_has;
         }
+    }
+
+    // 1b. Elastic C12 SCHNELXS sampler (diagnostic only; absent file
+    // keeps elastic disabled with zero behavior change).
+    if (!config.ct_elastic_section_rate_file.empty()) {
+        const auto elastic_table = SchneiderRateTable::from_binary(
+            config.ct_elastic_section_rate_file, {}, "SCHNELXS", 3);
+        if (compute_file_sha256_hex(config.ct_elastic_section_rate_file) !=
+            config.ct_elastic_section_rate_sha256)
+            throw std::runtime_error("Elastic rate data SHA256 mismatch");
+        const SchneiderTargetSampler elastic_sampler(elastic_table);
+        const auto cdf_size = elastic_sampler.cdf_table().size();
+        const auto tot_size = elastic_sampler.total_mass_rates().size();
+        float* dev_cdf = mem_tracker.allocate<float>(cdf_size);
+        float* dev_total_rates = mem_tracker.allocate<float>(tot_size);
+        if (dev_cdf == nullptr || dev_total_rates == nullptr) {
+            throw std::bad_alloc();
+        }
+        queue.copy(elastic_sampler.cdf_table().data(), dev_cdf, cdf_size);
+        queue.copy(elastic_sampler.total_mass_rates().data(), dev_total_rates, tot_size);
+        ctx.elastic_sampler = elastic_sampler.device_table();
+        ctx.elastic_sampler.cdf_table = dev_cdf;
+        ctx.elastic_sampler.total_mass_rates = dev_total_rates;
+        const auto& partials = elastic_sampler.partial_rates();
+        float* dev_partial = mem_tracker.allocate<float>(partials.size());
+        float* dev_emin = mem_tracker.allocate<float>(elastic_sampler.domain_emin().size());
+        float* dev_emax = mem_tracker.allocate<float>(elastic_sampler.domain_emax().size());
+        unsigned char* dev_has =
+            mem_tracker.allocate<unsigned char>(elastic_sampler.domain_has().size());
+        if (dev_partial == nullptr || dev_emin == nullptr || dev_emax == nullptr ||
+            dev_has == nullptr) {
+            throw std::bad_alloc();
+        }
+        queue.copy(partials.data(), dev_partial, partials.size());
+        queue.copy(elastic_sampler.domain_emin().data(), dev_emin,
+                   elastic_sampler.domain_emin().size());
+        queue.copy(elastic_sampler.domain_emax().data(), dev_emax,
+                   elastic_sampler.domain_emax().size());
+        queue.copy(elastic_sampler.domain_has().data(), dev_has,
+                   elastic_sampler.domain_has().size());
+        ctx.elastic_sampler.partial_rates = dev_partial;
+        ctx.elastic_sampler.domain_emin = dev_emin;
+        ctx.elastic_sampler.domain_emax = dev_emax;
+        ctx.elastic_sampler.domain_has = dev_has;
+        std::cout << "[schneider-elastic-rates] mode=elastic-diagnostic sections=25 "
+                  << "targets=13 energies=921 source="
+                  << config.ct_elastic_section_rate_file << '\n';
     }
 
     // 2. Primary C12 CINEL03 Package
@@ -1023,6 +1072,9 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
         !config.ct_schneider_delta_longitudinal_file.empty();
     const bool use_longitudinal_interface_mass = config.ct_longitudinal_interface_mass_diagnostic;
     const bool use_electron_joint = !config.ct_electron_joint_response_diagnostic_file.empty();
+    // Legacy C12-only diagnostic is separate from the all-projectile bank.
+    const bool use_ct_elastic = config.ct_elastic_diagnostic;
+    const bool ct_elastic_all_targets = config.ct_elastic_all_targets;
     // Production speed switch: skip reporting-only joint diagnostic atomics.
     // Slots 1 (energy domain) and 2 (miss/blocked) stay always-on: they feed
     // fail-closed quality gates. Skipped counters never feed transport.
@@ -1684,6 +1736,33 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
             .wait_and_throw();
     }
 
+    const bool use_all_elastic = !config.all_ion_elastic_file.empty();
+    AllIonElasticView all_elastic{};
+    ElasticRecoilStoppingView recoil_stopping{};
+    float* elastic_energy = nullptr; // local, queued charged, overflow
+    std::uint32_t* elastic_audit = nullptr; // primary, secondary, bad query, unsupported recoil
+    if(use_all_elastic) {
+        const auto stop=ElasticRecoilStoppingTable::load(config.elastic_recoil_stopping_file,config.elastic_recoil_stopping_sha256);
+        auto* keys=mem_tracker.allocate<std::int32_t>(stop.keys.size());
+        auto* se=mem_tracker.allocate<float>(stop.energies.size());auto* sv=mem_tracker.allocate<float>(stop.values.size());
+        if(!keys||!se||!sv)throw std::bad_alloc();
+        queue.copy(stop.keys.data(),keys,stop.keys.size());queue.copy(stop.energies.data(),se,stop.energies.size());queue.copy(stop.values.data(),sv,stop.values.size()).wait_and_throw();
+        recoil_stopping={keys,se,sv,static_cast<std::uint32_t>(stop.keys.size()/2),static_cast<std::uint32_t>(stop.energies.size())};
+        const auto bank=AllIonElasticTable::load(config.all_ion_elastic_file,config.all_ion_elastic_sha256);
+        auto* e=mem_tracker.allocate<float>(bank.energies.size());
+        auto* r=mem_tracker.allocate<float>(bank.rates.size());
+        auto* a=mem_tracker.allocate<ElasticSample>(bank.samples.size());
+        auto* m=mem_tracker.allocate<double>(18);
+        elastic_audit=mem_tracker.allocate<std::uint32_t>(12);
+        elastic_energy=mem_tracker.allocate<float>(3);
+        if(!elastic_energy)throw std::bad_alloc();
+        queue.fill(elastic_energy,0.0F,3);
+        if(!e||!r||!a||!m||!elastic_audit)throw std::bad_alloc();
+        queue.copy(bank.energies.data(),e,bank.energies.size());queue.copy(bank.rates.data(),r,bank.rates.size());
+        queue.copy(bank.samples.data(),a,bank.samples.size());queue.copy(bank.masses.data(),m,18);
+        queue.fill(elastic_audit,std::uint32_t{0},12).wait_and_throw();
+        all_elastic={e,r,a,m,static_cast<std::uint32_t>(bank.energies.size()),bank.nq};
+    }
     const SchneiderCtDeviceContext schneider_ct_device_ctx = upload_schneider_ct_device_context(
         queue, mem_tracker, config,
         schneider_stopping_device,
@@ -2836,6 +2915,10 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
 
                     bool inelastic_this_step = false;
                     bool elastic_this_step = false;
+                    // Dedicated CT-elastic flag: the shared elastic_this_step
+                    // can also be raised by the FRED water path, which the CT
+                    // handler below must never consume.
+                    bool ct_elastic_this_step = false;
                     float p_target_h_step = 0.5F;
                     std::int16_t cinel02_target_z_step = 0;
                     std::int16_t cinel02_target_a_step = 0;
@@ -2862,7 +2945,36 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                 // Density enters exactly once, in the total
                                 // hazard; target fractions from the sampler CDF
                                 // are density-independent.
-                                float macro_tot = local_density_g_per_cm3 * mass_rate;
+                                // Full-section elastic hazard (diagnostic): same
+                                // optical-depth competition as inelastic; the
+                                // branch below splits them exclusively, so no
+                                // double counting of the total rate.
+                                float macro_el_ct = 0.0F;
+                                const bool elastic_armed =
+                                    (use_all_elastic && (in_ct || use_unified_water)) ||
+                                    (use_ct_elastic && in_ct &&
+                                    schneider_ct_device_ctx.elastic_sampler.rate_version == 3);
+                                if (use_all_elastic && elastic_armed) {
+                                    const float rate=all_elastic.rate(16,use_unified_water?25:section_id,cur_e_u);
+                                    if(rate<0) {
+                                        sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_audit[2]).fetch_add(1);
+                                    sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_audit[4]).fetch_add(1);
+                                        break;
+                                    }
+                                    macro_el_ct=local_density_g_per_cm3*rate;
+                                } else if (elastic_armed) {
+                                    const auto el_rates =
+                                        schneider_ct_device_ctx.elastic_rates(
+                                            section_id, cur_e_u);
+                                    // Default H-only (validated FRED physics);
+                                    // all-target isotropic needs explicit
+                                    // opt-in (unphysical for heavy nuclei).
+                                    macro_el_ct = local_density_g_per_cm3 *
+                                        (ct_elastic_all_targets
+                                             ? el_rates.total
+                                             : el_rates.partials[0]);
+                                }
+                                float macro_tot = local_density_g_per_cm3 * mass_rate + macro_el_ct;
 #ifdef CARBON_DIAGNOSTIC_G4_HADRONIC_CACHE
                                 macro_tot = primary_hadronic_cache.update(cur_e_u, macro_tot);
 #endif
@@ -2875,7 +2987,17 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                 }
                                 const bool collision = consume_schneider_optical_depth_segment(
                                     nuclear_tau_remaining, nuclear_tau_active, step_mm, macro_tot, u_nuc);
-                                if (collision && enable_inelastic) {
+                                bool elastic_branch = false;
+                                if (collision && elastic_armed && macro_tot > 0.0F) {
+                                    const float u_br_el = rng::uniform01(
+                                        spot_seed, rng_history, steps, 9);
+                                    elastic_branch = (u_br_el * macro_tot < macro_el_ct);
+                                }
+                                if (elastic_branch) {
+                                    ct_elastic_this_step = true;
+                                    interaction_section = section_id;
+                                    interaction_density = local_density_g_per_cm3;
+                                } else if (collision && enable_inelastic) {
                                     schneider_diag_increment_device(
                                         schneider_diag_device,
                                         SchneiderDiagSlot::PrimaryHazards);
@@ -3899,7 +4021,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                     position_y_mm += seg_dir_y * step_mm;
                     position_z_mm += seg_dir_z * step_mm;
 
-                    if (enable_ct_grid && in_ct && ct_clamp_res.hit_face && !inelastic_this_step) {
+                    if (enable_ct_grid && in_ct && ct_clamp_res.hit_face && !inelastic_this_step && !ct_elastic_this_step) {
                         if ((ct_clamp_res.axis_mask & 1) != 0 && sycl::fabs(seg_dir_x) > 1.0e-6F) {
                             const float fx = (position_x_mm - ct_origin_x) / ct_spacing_x;
                             const int face_x = static_cast<int>(sycl::round(fx));
@@ -3958,6 +4080,110 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
 
                     energy_MeV -= deposited_MeV;
 
+                    // Elastic endpoint: full bank uses target-specific TOPAS samples;
+                    // the separate legacy diagnostic retains its explicit isotropic law.
+                    // Supported recoils are queued; below-cutoff energy is scored locally.
+                    if(use_all_elastic && ct_elastic_this_step && energy_MeV>energy_cutoff_MeV &&
+                       all_elastic.rate(16,use_unified_water?25:interaction_section,energy_MeV*inverse_mass_number)==0) {
+                        ct_elastic_this_step=false;
+                        sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_audit[10]).fetch_add(1);
+                    }
+                    if ((use_ct_elastic || use_all_elastic) && ct_elastic_this_step &&
+                        energy_MeV > energy_cutoff_MeV) {
+                        const float u_tgt = rng::uniform01(
+                            spot_seed, rng_history, steps, 12);
+                        const auto draw = use_all_elastic ? all_elastic.draw(16,
+                            use_unified_water?25:interaction_section,energy_MeV,direction_x,direction_y,direction_z,
+                            u_tgt,rng::uniform01(spot_seed,rng_history,steps,70),
+                            rng::uniform01(spot_seed,rng_history,steps,71),rng::uniform01(spot_seed,rng_history,steps,11)) : ElasticDraw{};
+                        if(use_all_elastic && !draw.valid) {
+                            sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_audit[2]).fetch_add(1);
+                                    sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_audit[5]).fetch_add(1);
+                            break;
+                        }
+                        const int target_z=use_all_elastic?draw.target_z:(ct_elastic_all_targets?
+                            sample_schneider_target_device(schneider_ct_device_ctx.elastic_sampler,interaction_section,
+                                energy_MeV*inverse_mass_number,u_tgt):1);
+                        const int target_idx=carbon::elastic_target_index_from_z(target_z);
+                        const int target_a=use_all_elastic?draw.target_a:static_cast<int>(carbon::kElasticTargetMassU[target_idx<0?0:target_idx]);
+                        if (target_idx >= 0) {
+                            const auto scat=use_all_elastic?draw.outcome:carbon::sample_c12_target_elastic(
+                                energy_MeV,direction_x,direction_y,direction_z,
+                                rng::uniform01(spot_seed,rng_history,steps,10),rng::uniform01(spot_seed,rng_history,steps,11),
+                                carbon::kElasticTargetMassU[target_idx]);
+                            if(use_all_elastic)sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_audit[0]).fetch_add(1);
+                            energy_MeV = scat.projectile_ke_MeV;
+                            direction_x = scat.proj_dir_x;
+                            direction_y = scat.proj_dir_y;
+                            direction_z = scat.proj_dir_z;
+                            if ((carbon::get_charged_species_idx(target_z,target_a)>=0 ||
+                                 (use_all_elastic&&recoil_stopping.projectile(target_z,target_a)>=0)) && enable_secondary_transport &&
+                                scat.recoil_ke_MeV > energy_cutoff_MeV &&
+                                secondary_queue_device != nullptr) {
+                                // Elastic recoil born accounting: mirrors the
+                                // inelastic born/queued pair so the born
+                                // conservation gate stays exact.
+                                schneider_diag_increment_device(
+                                    schneider_diag_device,
+                                    SchneiderDiagSlot::PrimaryChargedBorn);
+                                auto count_ref = sycl::atomic_ref<
+                                    uint32_t, sycl::memory_order::relaxed,
+                                    sycl::memory_scope::device,
+                                    sycl::access::address_space::global_space>(
+                                    *secondary_count_device);
+                                const auto base_idx = count_ref.fetch_add(1U);
+                                if (base_idx < max_secondaries) {
+                                    SecondaryParticle proton{};
+                                    proton.z = target_z;
+                                    proton.a = target_a;
+                                    if(carbon::get_charged_species_idx(target_z,target_a)<0)proton.generation=cinel02_max_secondary_inelastic_generations;
+                                    proton.energy_MeV = scat.recoil_ke_MeV;
+                                    proton.pos_x_mm = position_x_mm;
+                                    proton.pos_y_mm = position_y_mm;
+                                    proton.pos_z_mm = position_z_mm;
+                                    proton.dir_x = scat.recoil_dir_x;
+                                    proton.dir_y = scat.recoil_dir_y;
+                                    proton.dir_z = scat.recoil_dir_z;
+                                    proton.weight = 1.0F;
+                                    proton.parent_history = global_history;
+                                    proton.rng_stream = rng::child_stream(
+                                        rng_history, rng::branch_tag(
+                                            rng::branch_role_primary_charged, steps));
+                                    secondary_queue_device[base_idx] = proton;
+                                    if(use_all_elastic){sycl::atomic_ref<float,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_energy[1]).fetch_add(scat.recoil_ke_MeV);}
+                                    schneider_diag_increment_device(
+                                        schneider_diag_device,
+                                        SchneiderDiagSlot::PrimaryChargedQueued);
+                                    if (cinel02_species_energy_device != nullptr) {
+                                        cinel02_record_queued_secondary_birth_device(
+                                            cinel02_species_energy_device, proton.z, proton.a,
+                                            proton.energy_MeV);
+                                    }
+                                } else if (secondary_overflow_count_device != nullptr) {
+                                    sycl::atomic_ref<uint32_t, sycl::memory_order::relaxed,
+                                                     sycl::memory_scope::device,
+                                                     sycl::access::address_space::global_space>
+                                        atomic_ov(*secondary_overflow_count_device);
+                                    atomic_ov.fetch_add(1U);
+                                    if(use_all_elastic){sycl::atomic_ref<float,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_energy[2]).fetch_add(scat.recoil_ke_MeV);sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_audit[11]).fetch_add(1);}
+                                    sycl::atomic_ref<float,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(*secondary_overflow_energy_device).fetch_add(scat.recoil_ke_MeV);
+                                }
+                            } else if(use_all_elastic && scat.recoil_ke_MeV>energy_cutoff_MeV) {
+                                sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_audit[3]).fetch_add(1);
+                                sycl::atomic_ref<float,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(untracked_nuclear_device[global_history]).fetch_add(scat.recoil_ke_MeV);
+                            } else if (scat.recoil_ke_MeV > 0.0F) {
+                                if (enable_voxel_scoring && voxel_index >= 0 &&
+                                    voxel_index < number_of_voxels) {
+                                    pending_primary_voxel_MeV += scat.recoil_ke_MeV;
+                                }
+                                history_deposited_MeV += scat.recoil_ke_MeV;
+                                if(use_all_elastic){sycl::atomic_ref<float,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_energy[0]).fetch_add(scat.recoil_ke_MeV);}
+                                pending_primary_depth_MeV += scat.recoil_ke_MeV;
+                                grid_deposit_split_device(grid_deposited_in_device,grid_deposited_out_device,
+                                    enable_voxel_scoring&&voxel_index>=0,scat.recoil_ke_MeV);
+                            }
+                        }
+                    }
                     if (enable_nuclear_elastic && elastic_this_step &&
                         energy_MeV > energy_cutoff_MeV) {
                         const float u_cos = rng::uniform01(
@@ -4805,7 +5031,9 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                         const auto frag_inv_a = 1.0F / frag_a;
                         const auto charged_sp_idx = carbon::get_charged_species_idx(static_cast<int>(frag.z), static_cast<int>(frag.a));
                         const auto ledger_species_idx = charged_sp_idx;
-                        if (charged_sp_idx < 0) {
+                        const int recoil_sp_idx=use_all_elastic?recoil_stopping.projectile(frag.z,frag.a):-1;
+                        const bool generic_recoil=charged_sp_idx<0&&recoil_sp_idx>=0;
+                        if (charged_sp_idx < 0 && !generic_recoil) {
                             if (untracked_nuclear_device != nullptr) {
                                 sycl::atomic_ref<float, sycl::memory_order::relaxed,
                                                  sycl::memory_scope::device,
@@ -4818,7 +5046,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                         }
                         const float* ion_sp_table =
                             &ion_species_sp_device[
-                                static_cast<std::size_t>(charged_sp_idx) * table_size];
+                                static_cast<std::size_t>(charged_sp_idx<0?0:charged_sp_idx) * table_size];
 
                         bool sec_terminal_recorded = false;
                         ContinuousSpeciesTrackTally continuous_species_tally;
@@ -4929,6 +5157,12 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                             // Enabled bank is mandatory inside CT. A failed query aborts
                             // the run at readback; never substitute a water/material factor.
                             auto scheme2_linear_sp = [&](float energy_mevu) {
+                                if(generic_recoil) {
+                                    const float v=recoil_stopping.stopping(recoil_sp_idx,sec_in_ct?sec_ct_material:25,energy_mevu);
+                                    if(!(v>0)){sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_audit[2]).fetch_add(1);
+                                    sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_audit[6]).fetch_add(1);}
+                                    return v*sec_local_density_g_per_cm3;
+                                }
                                 if (!(use_schneider_ion_sp && sec_in_ct)) return -1.0F;
                                 const float unit_sp = schneider_ion_stopping_lookup(
                                     schneider_ion_sp_device, static_cast<std::size_t>(charged_sp_idx),
@@ -4953,7 +5187,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                             bool sec_scheme2_hit = false;
                             {
                                 const float scheme2_sp = scheme2_linear_sp(sec_e_u);
-                                if (use_schneider_ion_sp && sec_in_ct && !(scheme2_sp > 0)) break;
+                                if ((generic_recoil||(use_schneider_ion_sp && sec_in_ct)) && !(scheme2_sp > 0)) break;
                                 if (scheme2_sp > 0.0F) {
                                     sec_sp = scheme2_sp;
                                     sec_scheme2_hit = true;
@@ -5012,7 +5246,9 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                             // minimum step: that would cross the material again.
                             if (!ct_secondary_exact_faces || !sec_face_clamp.hit_face)
                                 sec_step_mm = sycl::fmax(sec_step_mm, 1.0e-5F);
+                            if(generic_recoil)sec_step_mm=sycl::fmin(sec_step_mm,0.005F*sec_e/sec_sp);
                             bool secondary_inelastic = false;
+                            bool secondary_elastic = false;
                             // A nuclear hazard is not necessarily a replayed
                             // event. Keep this separate so lookup misses and
                             // invalid records follow null-collision transport
@@ -5074,9 +5310,6 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                                 rng::uniform01(2026, frag.rng_stream, sec_steps, 13),
                                                 &collision_distance);
                                             if (secondary_inelastic) {
-                                                schneider_diag_increment_device(
-                                                    schneider_diag_device,
-                                                    SchneiderDiagSlot::SecondaryHazards);
                                                 sec_step_mm = collision_distance;
                                                 schneider_hazard_total_rate = sec_macro_xs;
                                                 schneider_hazard_step_mm = sec_step_mm;
@@ -5086,6 +5319,23 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                     }
                                 }
                             }
+
+                            // Independent exponential elastic clock competes with the already
+                            // sampled inelastic distance. Elastic is NOT generation-limited.
+                            if(use_all_elastic && !generic_recoil && (sec_in_ct || use_unified_water)) {
+                                const int p=all_elastic.projectile(frag.z,frag.a);
+                                const float rate=all_elastic.rate(p,use_unified_water?25:sec_ct_material,sec_e_u);
+                                if(rate<0) {
+                                    sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_audit[2]).fetch_add(1);
+                                    sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_audit[7]).fetch_add(1);
+                                    break;
+                                }
+                                float distance=sec_step_mm;
+                                secondary_elastic=inelastic_collision_in_step(rate*sec_local_density_g_per_cm3,
+                                    sec_step_mm,rng::uniform01(2026,frag.rng_stream,sec_steps,70),&distance);
+                                if(secondary_elastic){sec_step_mm=distance;secondary_inelastic=false;}
+                            }
+                            if(secondary_inelastic)schneider_diag_increment_device(schneider_diag_device,SchneiderDiagSlot::SecondaryHazards);
 
                             // Record the actual charged-track exposure after any
                             // collision truncation.  Coverage is evaluated at the
@@ -5122,7 +5372,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                             }
 
                             // Midpoint loss
-                            const auto mid_e_u = sycl::fmax(0.01F, (sec_e - 0.5F * sec_sp * sec_step_mm) * frag_inv_a);
+                            const auto mid_e_u = sycl::fmax(generic_recoil?recoil_stopping.energies[0]:0.01F, (sec_e - 0.5F * sec_sp * sec_step_mm) * frag_inv_a);
                             const auto mid_flt = (mid_e_u - minimum_table_energy) * inverse_table_step;
                             auto mid_idx = static_cast<int>(sycl::floor(mid_flt));
                             mid_idx = sycl::max(0, sycl::min(mid_idx, static_cast<int>(table_size) - 2));
@@ -5136,7 +5386,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                             bool mid_scheme2_hit = false;
                             {
                                 const float scheme2_mid = scheme2_linear_sp(mid_e_u);
-                                if (use_schneider_ion_sp && sec_in_ct && !(scheme2_mid > 0)) break;
+                                if ((generic_recoil||(use_schneider_ion_sp && sec_in_ct)) && !(scheme2_mid > 0)) break;
                                 if (scheme2_mid > 0.0F) {
                                     mid_sp = scheme2_mid;
                                     mid_scheme2_hit = true;
@@ -5218,7 +5468,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                             auto post_em_x = sec_x + collision_input_dx * sec_step_mm;
                             auto post_em_y = sec_y + collision_input_dy * sec_step_mm;
                             auto post_em_z = sec_z + collision_input_dz * sec_step_mm;
-                            if (ct_secondary_exact_faces && sec_face_clamp.hit_face && !secondary_inelastic) {
+                            if (ct_secondary_exact_faces && sec_face_clamp.hit_face && !secondary_inelastic && !secondary_elastic) {
                                 const auto endpoint=ct_finish_exact_face_step(sec_face_clamp,sec_step_mm,
                                     {sec_x,sec_y,sec_z},{collision_input_dx,collision_input_dy,collision_input_dz},
                                     {ct_origin_x,ct_origin_y,ct_origin_z},{ct_spacing_x,ct_spacing_y,ct_spacing_z});
@@ -6132,6 +6382,70 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                 sec_dz = rotated.z;
                             }
 
+                            // A hazard sampled at step start can leave a supported rate
+                            // interval after EM loss. Treat the zero-rate endpoint as a
+                            // null collision; retain post-EM energy, position and MCS.
+                            if(secondary_elastic && sec_e>energy_cutoff_MeV &&
+                               all_elastic.rate(all_elastic.projectile(frag.z,frag.a),use_unified_water?25:sec_ct_material,sec_e*frag_inv_a)==0) {
+                                secondary_elastic=false;
+                                sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_audit[9]).fetch_add(1);
+                            }
+                            if(secondary_elastic && sec_e>energy_cutoff_MeV) {
+                                const int p=all_elastic.projectile(frag.z,frag.a);
+                                const auto draw=all_elastic.draw(p,use_unified_water?25:sec_ct_material,
+                                    sec_e,sec_dx,sec_dy,sec_dz,
+                                    rng::uniform01(2026,frag.rng_stream,sec_steps,71),rng::uniform01(2026,frag.rng_stream,sec_steps,72),
+                                    rng::uniform01(2026,frag.rng_stream,sec_steps,73),rng::uniform01(2026,frag.rng_stream,sec_steps,74));
+                                if(!draw.valid){
+                                    sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_audit[2]).fetch_add(1);
+                                    sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_audit[8]).fetch_add(1);break;
+                                }
+                                sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_audit[1]).fetch_add(1);
+                                const auto scat=draw.outcome;sec_e=scat.projectile_ke_MeV;
+                                sec_dx=scat.proj_dir_x;sec_dy=scat.proj_dir_y;sec_dz=scat.proj_dir_z;
+                                const float recoil=scat.recoil_ke_MeV;
+                                const int child_species=carbon::get_charged_species_idx(draw.target_z,draw.target_a);
+                                if(recoil>energy_cutoff_MeV && (child_species>=0||recoil_stopping.projectile(draw.target_z,draw.target_a)>=0)) {
+                                    schneider_diag_increment_device(schneider_diag_device,SchneiderDiagSlot::SecondaryChargedBorn);
+                                    const auto output=sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(*secondary_count_device).fetch_add(1);
+                                    if(output<max_secondaries){
+                                        SecondaryParticle child{};child.z=draw.target_z;child.a=draw.target_a;child.energy_MeV=recoil;
+                                        child.pos_x_mm=sec_x;child.pos_y_mm=sec_y;child.pos_z_mm=sec_z;
+                                        child.dir_x=scat.recoil_dir_x;child.dir_y=scat.recoil_dir_y;child.dir_z=scat.recoil_dir_z;
+                                        child.weight=1;child.generation=child_species>=0?frag.generation:cinel02_max_secondary_inelastic_generations;child.parent_history=frag.parent_history;
+                                        child.rng_stream=rng::event_product_stream(frag.rng_stream,sec_steps,rng::branch_role_cascade_charged,0xE1U);
+                                        secondary_queue_device[output]=child;
+                                        sycl::atomic_ref<float,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_energy[1]).fetch_add(recoil);
+                                        schneider_diag_increment_device(schneider_diag_device,SchneiderDiagSlot::SecondaryChargedQueued);
+                                        cinel02_record_queued_secondary_birth_device(cinel02_species_energy_device,child.z,child.a,recoil);
+                                        cinel02_species_energy_add_device(cinel02_species_energy_device,child_species,10U,recoil);
+                                    }else{
+                                        sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(*secondary_overflow_count_device).fetch_add(1);
+                                        sycl::atomic_ref<float,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(*secondary_overflow_energy_device).fetch_add(recoil);
+                                        sycl::atomic_ref<float,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_energy[2]).fetch_add(recoil);
+                                        sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_audit[11]).fetch_add(1);
+                                    }
+                                    cinel02_species_energy_add_device(cinel02_species_energy_device,ledger_species_idx,8U,recoil);
+                                }else if(recoil>energy_cutoff_MeV){
+                                    sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_audit[3]).fetch_add(1);
+                                    sycl::atomic_ref<float,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(untracked_nuclear_device[frag.parent_history]).fetch_add(recoil);
+                                    cinel02_species_energy_add_device(cinel02_species_energy_device,ledger_species_idx,8U,recoil);
+                                }else if(recoil>0){
+                                    sycl::atomic_ref<float,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_energy[0]).fetch_add(recoil);
+                                    const int vx=static_cast<int>(sycl::floor((sec_x-voxel_min_x_mm)/voxel_size_x_mm));
+                                    const int vy=static_cast<int>(sycl::floor((sec_y-voxel_min_y_mm)/voxel_size_y_mm));
+                                    const int vz=static_cast<int>(sycl::floor(sec_z*inverse_depth_bin_width_mm));
+                                    const bool inside=enable_voxel_scoring&&vx>=0&&vy>=0&&vz>=0&&vx<static_cast<int>(voxel_bins_x)&&vy<static_cast<int>(voxel_bins_y)&&vz<static_cast<int>(number_of_bins);
+                                    if(inside){const int v=(vz*voxel_bins_y+vy)*voxel_bins_x+vx;
+                                        sycl::atomic_ref<DoseAtomicT,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(voxel_dose_device[v]).fetch_add(static_cast<DoseAtomicT>(recoil));}
+                                    sycl::atomic_ref<float,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(deposited_device[frag.parent_history]).fetch_add(recoil);
+                                    grid_deposit_split_device(grid_deposited_in_device,grid_deposited_out_device,inside,recoil);
+                                    schneider_energy_add_device(schneider_diag_device,SchneiderDiagSlot::SecondaryDepositedMicroMeV,recoil);
+                                    cinel02_species_energy_add_device(cinel02_species_energy_device,ledger_species_idx,3U,recoil);
+                                    if(inside)cinel02_species_energy_add_device(cinel02_species_energy_device,ledger_species_idx,4U,recoil);
+                                }
+                            }
+
                             ++sec_steps;
                             ++local_sec_steps;
                         }
@@ -6464,6 +6778,16 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
     }
 
     std::vector<std::uint64_t> primary_survival_host;
+    std::array<std::uint32_t,12> elastic_counts_host{};
+    std::array<float,3> elastic_energy_host{};
+    if(use_all_elastic) {
+        auto& counts=elastic_counts_host;queue.copy(elastic_audit,counts.data(),12);
+        queue.copy(elastic_energy,elastic_energy_host.data(),3).wait_and_throw();
+        std::cout<<"[all-ion-elastic] primary="<<counts[0]<<" secondary="<<counts[1]
+                 <<" bad_queries="<<counts[2]<<" unsupported_recoils="<<counts[3]<<'\n';
+        std::cout<<"[elastic-failure-sites] primary_rate="<<counts[4]<<" primary_draw="<<counts[5]<<" recoil_stopping="<<counts[6]<<" secondary_rate="<<counts[7]<<" secondary_draw="<<counts[8]<<" null_post_em="<<counts[9]<<'\n';
+        if(counts[2]||counts[3])throw std::runtime_error("All-ion elastic coverage failure: missing bank query or recoil transport; dose rejected");
+    }
     std::vector<std::uint64_t> inelastic_reaction_host;
     if (primary_survival_device != nullptr) {
         primary_survival_host.resize(number_of_bins);
@@ -6761,6 +7085,13 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
     free_device(schneider_track_count_device);
 
     TransportResult result;
+    result.primary_elastic_interactions=elastic_counts_host[0];
+    result.secondary_elastic_interactions=elastic_counts_host[1];
+    result.elastic_post_em_null_collisions=elastic_counts_host[9]+elastic_counts_host[10];
+    result.elastic_local_deposited_energy_MeV=elastic_energy_host[0];
+    result.elastic_queued_charged_energy_MeV=elastic_energy_host[1];
+    result.elastic_queue_overflow_energy_MeV=elastic_energy_host[2];
+    result.elastic_queue_overflow=elastic_counts_host[11];
     result.schneider_miss_log = std::move(schneider_miss_host);
     result.schneider_primary_delta_tail_moved_MeV =
         static_cast<double>(schneider_delta_energy_host[0]) * 1.0e-6;

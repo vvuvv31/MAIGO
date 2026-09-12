@@ -50,9 +50,13 @@ class SchneiderRateTable {
 public:
     SchneiderRateTable() = default;
 
+    // expected_magic/version default to the SCHNRATE v3 inelastic family;
+    // the SCHNELXS v1 elastic family shares the identical layout.
     static SchneiderRateTable from_binary(
         const std::filesystem::path& binary_path,
-        const std::filesystem::path& metadata_path = {});
+        const std::filesystem::path& metadata_path = {},
+        const std::string& expected_magic = "SCHNRATE",
+        std::uint32_t expected_version = 3);
 
     [[nodiscard]] double energy_min_mevu() const noexcept { return energy_min_mevu_; }
     [[nodiscard]] double energy_max_mevu() const noexcept { return energy_max_mevu_; }

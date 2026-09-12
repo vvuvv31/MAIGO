@@ -1,0 +1,17 @@
+{
+  "format": "ELRSP001",
+  "quantity": "total electronic plus nuclear stopping, linear MeV/mm at unit density",
+  "physics_scope": "EM-only transport for elastic recoil isotopes outside the existing 18-projectile registry; no invented elastic/inelastic rates for these extra recoils",
+  "sha256": "96d48062b9a976caabb9774534ae486a079157e18ee37e4cbce261e5b2c3a4b2",
+  "bytes": 528040,
+  "raw_sha256": "96d48062b9a976caabb9774534ae486a079157e18ee37e4cbce261e5b2c3a4b2",
+  "input_sha256": {
+    "/mnt/sda/wuwei/all_ion_elastic_20260911/recoil_stopping.txt": "618e249a3eeee1e1a03b6f94fed32fb76cfb9f28464b8539f828053e38649091",
+    "/home/wuwei/topas/all-ion-elastic-build-20260911/topas-recoil": "393839d1bcd8f3a68020d4dbd12f592f9262a6ec64f108e6a59c51e7a9c7edea",
+    "startup/extensions/AllIonElasticDump.cc": "2d34bd9c37ac24d525b443257f0198a5a7ede0a73097e5dda7f67dfcb005aa05",
+    "data/HUtoMaterialSchneider.txt": "5022cd89617b28dbd8ee8bf8b095ea20cfd99f6405218693c0df238b3617a139"
+  },
+  "source_snapshots": {
+    "startup/extensions/AllIonElasticDump.cc": "/mnt/sda/wuwei/all_ion_elastic_20260911/frozen/AllIonElasticDump_recoil.cc"
+  }
+}

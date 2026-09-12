@@ -2120,6 +2120,43 @@ TransportConfig load_config(const std::filesystem::path& path) {
     }
     config.ct_schneider_secondary_rate_file = parse_path(
         values, "ct_schneider_secondary_rate_file", config.ct_schneider_secondary_rate_file);
+    config.ct_elastic_section_rate_file = parse_path(
+        values, "ct_elastic_section_rate_file", config.ct_elastic_section_rate_file);
+    if (const auto it = values.find("ct_elastic_section_rate_sha256"); it != values.end())
+        config.ct_elastic_section_rate_sha256 = it->second;
+    config.ct_elastic_diagnostic = parse_bool(values,
+        "ct_elastic_diagnostic", config.ct_elastic_diagnostic);
+    if (!config.ct_elastic_section_rate_file.empty()) {
+        if (config.ct_elastic_section_rate_sha256.size() != 64)
+            throw std::invalid_argument("Elastic rate file requires pinned sha256");
+        if (!config.ct_elastic_diagnostic)
+            throw std::invalid_argument("Elastic rate file requires ct_elastic_diagnostic=true");
+        config.ct_elastic_section_rate_file = resolve_input_path_from_config(
+            config.ct_elastic_section_rate_file, path);
+    } else if (!config.ct_elastic_section_rate_sha256.empty()) {
+        throw std::invalid_argument("Elastic rate sha without data file");
+    }
+    config.ct_elastic_all_targets = parse_bool(values,
+        "ct_elastic_all_targets", config.ct_elastic_all_targets);
+    if (config.ct_elastic_diagnostic &&
+        (config.run_mode != RunMode::smoke || !config.enable_ct_grid))
+        throw std::invalid_argument("Full-section elastic requires smoke Schneider CT");
+    if (config.ct_elastic_diagnostic && config.ct_elastic_section_rate_file.empty())
+        throw std::invalid_argument("ct_elastic_diagnostic=true requires ct_elastic_section_rate_file");
+    config.all_ion_elastic_file = parse_path(values,"all_ion_elastic_file",config.all_ion_elastic_file);
+    if(const auto it=values.find("all_ion_elastic_sha256");it!=values.end())config.all_ion_elastic_sha256=it->second;
+    config.elastic_recoil_stopping_file=parse_path(values,"elastic_recoil_stopping_file",config.elastic_recoil_stopping_file);
+    if(const auto it=values.find("elastic_recoil_stopping_sha256");it!=values.end())config.elastic_recoil_stopping_sha256=it->second;
+    if(!config.all_ion_elastic_file.empty()) {
+        if(config.elastic_recoil_stopping_file.empty()||config.elastic_recoil_stopping_sha256.size()!=64)
+            throw std::invalid_argument("All-ion elastic requires pinned recoil stopping");
+        config.elastic_recoil_stopping_file=resolve_input_path_from_config(config.elastic_recoil_stopping_file,path);
+        config.all_ion_elastic_file=resolve_input_path_from_config(config.all_ion_elastic_file,path);
+        if(config.all_ion_elastic_sha256.size()!=64||config.ct_elastic_diagnostic||config.enable_nuclear_elastic)
+            throw std::invalid_argument("All-ion elastic requires SHA pin and no legacy elastic mode");
+        if(config.run_mode==RunMode::production)
+            throw std::invalid_argument("All-ion elastic remains a validation candidate: use smoke/research");
+    } else if(!config.all_ion_elastic_sha256.empty())throw std::invalid_argument("Elastic SHA without bank");
     if (!config.ct_schneider_secondary_rate_file.empty()) {
         config.ct_schneider_secondary_rate_file = resolve_input_path_from_config(
             config.ct_schneider_secondary_rate_file, path);
@@ -3215,6 +3252,14 @@ TransportConfig load_config(const std::filesystem::path& path) {
     if (!config.electron_transport_data_file.empty()) {
         config.electron_transport_data_file = resolve_input_path_from_config(
             config.electron_transport_data_file, path);
+    }
+    if(!config.all_ion_elastic_file.empty()) {
+        if(config.primary_atomic_number!=6||config.primary_mass_number!=12||
+           !config.enable_inelastic||!config.enable_secondary_transport||config.enable_let_scoring||
+           (!config.enable_ct_grid&&!config.unified_water_nuclear_transport))
+            throw std::invalid_argument("All-ion elastic requires Schneider CT/unified-water nuclear transport, secondary transport and LET off");
+        if(config.enable_ct_grid && (!config.ct_secondary_exact_faces||config.ct_schneider_stopping_power_file.empty()))
+            throw std::invalid_argument("All-ion elastic requires Schneider stopping and secondary exact faces");
     }
     reject_unknown_config_keys(values, path);
     config.canonical_config_text = canonicalize_config(

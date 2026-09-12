@@ -82,6 +82,11 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
                                       const TransportResult& result) {
     RunQualityReport report;
     report.mode = config.run_mode;
+    if(!config.all_ion_elastic_file.empty()) {
+        report.approximations.push_back({"all_ion_elastic_candidate",
+            "Finite TOPAS elastic event bank; additional heavy recoil isotopes use total stopping and MCS with EM-only transport; patient gamma and bank convergence validation pending",1.,0.});
+    }
+
     if(!config.material_electron_response_index_file.empty()) {
         report.failures.push_back({"unvalidated_material_electron_response","Candidate main-kernel material response; patient accuracy and complete density coverage not validated",1.,0.});
         if(result.material_electron_photon_untracked_MeV>0)

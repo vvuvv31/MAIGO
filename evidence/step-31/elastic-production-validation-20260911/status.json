@@ -1,0 +1,112 @@
+{
+  "status": "in_progress_not_production_accepted",
+  "historical_elastic_projectiles": 5,
+  "matched_elastic_projectiles": 18,
+  "models_match_existing_bank": true,
+  "candidate_host_device_checks_each": 2808,
+  "quality": {
+    "gpu_samples2048": {
+      "schema_version": 3,
+      "status": "non_production",
+      "run_mode": "research",
+      "accepted": true,
+      "absolute_physical_energy_residual_MeV": 63531.5238792,
+      "physical_relative_energy_residual": 3.771556281e-06,
+      "absolute_accounting_energy_residual_MeV": 63531.5238792,
+      "accounting_relative_energy_residual": 3.771556281e-06,
+      "absolute_energy_residual_MeV": 63531.5238792,
+      "relative_energy_residual": 3.771556281e-06,
+      "topas_reference_energy_sink_active": false,
+      "queue_overflow_count": 0,
+      "queue_overflow_energy_MeV": 0,
+      "voxel_scored_energy_MeV": 14902133753.5,
+      "in_grid_deposited_energy_MeV": 14902341645.9,
+      "outside_grid_deposited_energy_MeV": 89735889.0112,
+      "grid_split_closure_ratio": 1.00000008183,
+      "voxel_to_ingrid_ratio": 0.99998604968,
+      "voxel_to_total_deposited_ratio": 0.99400066056,
+      "failures": [],
+      "approximations": [
+        {
+          "code": "all_ion_elastic_candidate",
+          "message": "Finite TOPAS elastic event bank; additional heavy recoil isotopes use total stopping and MCS with EM-only transport; patient gamma and bank convergence validation pending",
+          "value": 1,
+          "limit": 0
+        },
+        {
+          "code": "schneider_post_em_null_collisions",
+          "message": "sampled candidates resolved as post-EM null collisions (track continues, no lookup)",
+          "value": 1639,
+          "limit": 0
+        }
+      ]
+    },
+    "gpu_grid40": {
+      "schema_version": 3,
+      "status": "non_production",
+      "run_mode": "research",
+      "accepted": true,
+      "absolute_physical_energy_residual_MeV": 65189.7160854,
+      "physical_relative_energy_residual": 3.86999505358e-06,
+      "absolute_accounting_energy_residual_MeV": 65189.7160854,
+      "accounting_relative_energy_residual": 3.86999505358e-06,
+      "absolute_energy_residual_MeV": 65189.7160854,
+      "relative_energy_residual": 3.86999505358e-06,
+      "topas_reference_energy_sink_active": false,
+      "queue_overflow_count": 0,
+      "queue_overflow_energy_MeV": 0,
+      "voxel_scored_energy_MeV": 14902412336,
+      "in_grid_deposited_energy_MeV": 14902620427.6,
+      "outside_grid_deposited_energy_MeV": 89685899.9204,
+      "grid_split_closure_ratio": 1.00000008148,
+      "voxel_to_ingrid_ratio": 0.999986036578,
+      "voxel_to_total_deposited_ratio": 0.994004072806,
+      "failures": [],
+      "approximations": [
+        {
+          "code": "all_ion_elastic_candidate",
+          "message": "Finite TOPAS elastic event bank; additional heavy recoil isotopes use total stopping and MCS with EM-only transport; patient gamma and bank convergence validation pending",
+          "value": 1,
+          "limit": 0
+        },
+        {
+          "code": "schneider_post_em_null_collisions",
+          "message": "sampled candidates resolved as post-EM null collisions (track continues, no lookup)",
+          "value": 1550,
+          "limit": 0
+        }
+      ]
+    }
+  },
+  "remaining": [
+    "Low-energy cross-section onset interpolation",
+    "Dose and tail convergence across cases/materials",
+    "Additional EM-only recoil spatial contribution",
+    "Matched full-statistics TOPAS/GPU validation",
+    "Freeze manifest and switch default only after acceptance"
+  ],
+  "reference_job_arrays": {
+    "RT07575": 4613,
+    "RT06423": 4614,
+    "20022516": 4615
+  },
+  "pilot": {
+    "histories": 51852,
+    "threads": 8,
+    "wall_seconds": 1064.77,
+    "max_rss_KiB": 5331112
+  },
+  "source_pins": {
+    "startup/extensions/AllIonElasticDump.cc": "ef227355b9cf21c60a6acedcfb8b582adec109a36d82d6d9a5e08928bb095657",
+    "tools/compare_elastic_sample_banks.py": "bec90432604b91e6c2bfb961cf961c643e52de316a4dbb28400d8803836e5c61",
+    "tools/prepare_matched_elastic_references.py": "f5edb443f6af774125c76a942ad69664ced9065137152f359c71bb7be2bba836",
+    "tools/verify_all_ion_elastic.py": "0c92ad9a6fb326d7630ea8b0d2425f125603a7b47637fb3e8eb30ac200de6b29"
+  },
+  "reference_job_arrays_cancelled": [
+    4613,
+    4614,
+    4615
+  ],
+  "current_local_rt06423_job": 4849,
+  "reference_migration": "../elastic-migration-20260912"
+}

@@ -188,25 +188,24 @@ Water/FRED-2GR 是独立配置，不是冻结 CT 的 Highland 模型。
 
 ## 5. 弹性核过程
 
-**当前 Schneider CT 不模拟独立核弹性碰撞。**
-Schneider 配置拒绝开启 `enable_nuclear_elastic`，统一水也禁止开启。
-这些路径不单独抽取核弹性碰撞位置、反冲能量或角分布。
+**研究配置已支持原发 C12 在内的全部 18 种带电粒子、13 个 Schneider 靶元素，覆盖 CT 和统一水。** 默认生产配置仍保持无独立核弹性，等待匹配参考验收。库仑 MCS 是独立的电磁过程。
 
-带电轨迹仍进行第 3 节所述的 **Highland 库仑多重散射**，非弹性碎片也具有抽样发射角。
-这两项都不提供缺失的独立核弹性过程。
+1. **确定碰撞位置。** 原发按弹性与非弹性宏观率之和消耗抽样核光学深度，再按反应率选择类型。次级弹性距离与非弹性距离竞争，弹性不受非弹性代数上限限制；几何、连续能损和 cutoff 可进一步缩短步长。
+2. **抽样靶与动量转移。** 按材料元素 partial-rate 选靶，按率加权抽样相邻能量节点，读取 TOPAS 联合样本中的靶同位素、核质量和 `t/tmax`。使用当前能量与随机方位角，通过相对论两体运动学生成守恒末态，不对全部靶假设各向同性。
+3. **输运反冲。** 既有 18 种物种中的反冲进入通常的带电队列；额外天然靶反冲使用覆盖 37 同位素的材料特异总 stopping 与 MCS，不继续显式核反应。总 stopping 包含凝聚核 stopping；cutoff 以下残余能量局部沉积。队列溢出或必需数据缺失使运行失败。
 
-**与 TOPAS 的区别**
-
-| 比较项 | MAIGO Schneider CT | TOPAS / Geant4 参考 |
+| 比较项 | GPU 研究实现 | 匹配 TOPAS 参考 |
 |---|---|---|
-| 库仑多重散射 | 凝聚 Highland 处理 | 配置物理列表中的电磁散射过程 |
-| 独立强子弹性 | 不包含 | 参考列表包含 `g4h-elastic_HP`，由适用弹性数据与模型决定碰撞和末态 |
-| 影响 | 没有独立核弹性带来的偏转及反冲剂量贡献 | 已启用弹性过程可贡献粒子偏转和能量转移 |
+| 反应率与末态 | 有限材料率表、靶同位素/动量转移样本 | 在线截面查询与 Geant4 模型求解 |
+| 弹性模型 | p: hElasticCHIPS；d/t/He3/alpha: hElasticLHEP；其他既有离子: NNDiffuseElastic | 启用 CarbonIonElasticPhysics，挂载相同弹性模型 |
+| 反冲覆盖 | 既有18物种及额外 EM-only 靶反冲 | 对生成粒子继续适用的物理过程 |
+| 库仑散射 | 凝聚 Highland 模型 | 配置的 Geant4 电磁过程 |
 
-仓库保留独立旧 `fred_paper` 分支的 C12–H 两体弹性函数，但它不属于当前 CT 弹性覆盖。
-缺少该过程是模型限制，不能假设其效果已包含在 MCS 或非弹性包中。
-对剂量影响有多大，需要匹配 TOPAS 过程设置进行受控比较。
-见 [配置检查](src/config.cpp)。
+**旧 topas10x 不能直接作为新模型的匹配参考。** 审计确认旧列表只有 p、d、t、He3、alpha 有核弹性，GenericIon/C12 未挂载；新增 `CarbonIonElasticPhysics` 后补齐。匹配重跑保留原电磁、非弹性、stopping、衰变模块以及 CT、源、3D 剂量网格和总 histories，仅省略 LET scorer。
+
+基准库为137能量节点、每节点512末态。运动学、host/device查询、水闭合及RT07575的6481909 histories分片验证通过且零溢出；2048样本及加密网格候选也通过分片闭合。低能截面起始区插值、额外反冲贡献及全统计匹配剂量验收仍未完成，尚未切换默认生产配置。
+
+使用 [CT研究配置](config/rt07575_elastic_research.yaml) 或 [水研究配置](config/unified_water_elastic_research.yaml)，不是旧 `enable_nuclear_elastic` 开关。11.3.2 Release不含新弹性数据。详见[实现与数据](docs/all_ion_elastic.md)、[验收记录](evidence/step-31/elastic-production-validation-20260911/README.md)和[9月12日参考迁移](evidence/step-31/elastic-migration-20260912/README.md)。
 
 ## 6. 电子响应
 

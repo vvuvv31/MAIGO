@@ -1,0 +1,52 @@
+{
+  "cancelled_local_arrays": [
+    4613,
+    4614,
+    4615
+  ],
+  "partial_outputs_excluded": true,
+  "local": {
+    "case": "RT06423",
+    "job": 4849,
+    "threads": 192,
+    "memory_GiB": 144,
+    "histories": 151087660,
+    "replicas": 4,
+    "root": "/mnt/sda/wuwei/elastic_production_validation_20260912/RT06423_192"
+  },
+  "remote": {
+    "ssh": "cluster",
+    "partition": "cpup6",
+    "job": 2001593,
+    "probe_job": 2001592,
+    "cancelled_io_wait_probe": 2001591,
+    "nodes": 5,
+    "threads_per_node": 56,
+    "execution": "RT07575 then 20022516 on each node",
+    "root": "/LustreData6/home/wuwei/maigo_elastic_ct_20260912",
+    "totals": {
+      "RT07575": {
+        "total_histories": 129638170,
+        "shard_histories": [
+          25927634,
+          25927634,
+          25927634,
+          25927634,
+          25927634
+        ],
+        "partitioning": "Exact aggregate per-spot integer histories preserved, split evenly over five nodes; scale=1"
+      },
+      "20022516": {
+        "total_histories": 177173040,
+        "shard_histories": [
+          35434608,
+          35434608,
+          35434608,
+          35434608,
+          35434608
+        ],
+        "partitioning": "Exact aggregate per-spot integer histories preserved, split evenly over five nodes; scale=1"
+      }
+    }
+  }
+}

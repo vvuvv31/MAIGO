@@ -1,0 +1,36 @@
+{
+  "case": "RT07575",
+  "histories": 6481909,
+  "scope": "One original shard, BODY reference >=10%; original TOPAS total scaled only by history count; no fitted dose normalization; 0.125mm search",
+  "limitation": "Existing TOPAS reference may not include the added CarbonIonElasticPhysics module; this comparison is diagnostic, not matched-physics validation. One-shard noise is larger than full20.",
+  "results": {
+    "previous_no_elastic": {
+      "sha256": "c69f96437cbca4bd9563ff4bed7045ca14d87a07a01d21298e13f53c45cda138",
+      "gamma": {
+        "global_33": 100.0,
+        "local_33": 100.0,
+        "global_22": 100.0,
+        "local_22": 100.0,
+        "global_11": 99.93892711493403,
+        "local_11": 99.81906444330923,
+        "global_30": 98.02312208013106,
+        "local_30": 78.56598582766601
+      },
+      "body_mean_local_error_pct": -0.48790886998176575
+    },
+    "all_ion_elastic": {
+      "sha256": "80e17027dd2e842723cc1a84dd65e9c7c46613b86a94fb31fa3ce1e13a084aa1",
+      "gamma": {
+        "global_33": 100.0,
+        "local_33": 100.0,
+        "global_22": 100.0,
+        "local_22": 100.0,
+        "global_11": 99.95833345224472,
+        "local_11": 99.84474930151454,
+        "global_30": 98.17608968010936,
+        "local_30": 79.13704584176415
+      },
+      "body_mean_local_error_pct": -0.3515697419643402
+    }
+  }
+}

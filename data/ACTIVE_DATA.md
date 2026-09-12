@@ -64,3 +64,12 @@ so frozen benchmark configurations and metadata pins remain valid without
 rewriting historical records. Extraction raw data remain at their original
 location. To restore an archived input, verify its recorded SHA256, ensure
 its original path is absent, and move it back together with its sidecars.
+
+## Additional elastic research data (not in the 11.3.2 Release)
+
+`schneider/all_ion_elastic_v1.bin` and `schneider/elastic_recoil_stopping_v1.bin`,
+with their metadata sidecars, support the new all-ion elastic research presets.
+They are additive packages; the pinned v2.1 stack remains unchanged.
+Verify with `python3 tools/verify_all_ion_elastic.py`.
+See [elastic scope, configuration and validation](../docs/all_ion_elastic.md).
+The 11.3.2 ZIP predates these files and has not been replaced.

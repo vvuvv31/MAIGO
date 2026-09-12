@@ -1787,6 +1787,12 @@ void write_energy_ledger_json(const std::filesystem::path& path,
     output << "  \"ct_electron_segment_transport\": "
            << (!config.ct_electron_joint_response_diagnostic_file.empty() ? "true" : "false") << ",\n";
     output << "  \"unified_water_nuclear_transport\": " << (config.unified_water_nuclear_transport ? "true" : "false") << ",\n";
+    output << "  \"all_ion_primary_elastic_interactions\": " << result.primary_elastic_interactions << ",\n"
+           << "  \"all_ion_secondary_elastic_interactions\": " << result.secondary_elastic_interactions << ",\n"
+           << "  \"elastic_post_em_null_collisions\": " << result.elastic_post_em_null_collisions << ",\n";
+    output << "  \"all_ion_elastic_file\": \"" << config.all_ion_elastic_file.string() << "\",\n"
+           << "  \"all_ion_elastic_sha256\": \"" << config.all_ion_elastic_sha256 << "\",\n"
+           << "  \"elastic_recoil_stopping_sha256\": \"" << config.elastic_recoil_stopping_sha256 << "\",\n";
     if (config.unified_water_nuclear_transport) {
         output << "  \"unified_water_material_sha256\": \"" << config.unified_water_material_sha256 << "\",\n"
                << "  \"unified_water_primary_stopping_file\": \"" << config.primary_stopping_power_file.string() << "\",\n"

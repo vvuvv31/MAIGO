@@ -575,6 +575,7 @@ int main(int argc, char* argv[]) {
                   << result.charged_after_neutral_kernel_seconds << " s\n"
                   << "Energy balance error: " << result.relative_energy_balance_error() << '\n'
                   << "Nuclear interactions: " << result.nuclear_interactions << '\n'
+                  << "Secondary elastic interactions: " << result.secondary_elastic_interactions << '\n'
                   << "Primary elastic interactions: "
                   << result.primary_elastic_interactions
                   << " (local=" << result.elastic_local_deposited_energy_MeV

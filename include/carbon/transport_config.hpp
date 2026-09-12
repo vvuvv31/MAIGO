@@ -219,6 +219,21 @@ struct TransportConfig {
     std::filesystem::path ct_schneider_secondary_cinel03_file{};
     std::filesystem::path ct_schneider_primary_rate_file{};
     std::filesystem::path ct_schneider_secondary_rate_file{};
+    // C12 elastic rates on the Schneider grid (SCHNELXS v1, same layout as
+    // SCHNRATE v3). Empty = elastic disabled (current production behavior).
+    std::filesystem::path ct_elastic_section_rate_file{};
+    std::string ct_elastic_section_rate_sha256{};
+    // Diagnostic master switch for section elastic (default off;
+    // smoke-gated until halo/profile validation promotes it).
+    bool ct_elastic_diagnostic{false};
+    // Legacy C12 isotropic-CM diagnostic, not a TOPAS angular distribution.
+    // Use the separate all-ion bank for physical target-specific sampling.
+    bool ct_elastic_all_targets{false};
+    // Independent all-projectile TOPAS elastic bank; never uses the C12 isotropic fallback.
+    std::filesystem::path all_ion_elastic_file{};
+    std::string all_ion_elastic_sha256{};
+    std::filesystem::path elastic_recoil_stopping_file{};
+    std::string elastic_recoil_stopping_sha256{};
     // v2.1 physics bundle manifest (REQUIRED whenever any Schneider rate
     // file is binary version 3; REFUSED with v1 files: no mixing).
     std::filesystem::path ct_schneider_physics_bundle_file{};

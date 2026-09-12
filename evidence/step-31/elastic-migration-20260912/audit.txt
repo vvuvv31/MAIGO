@@ -1,0 +1,63 @@
+# RT07575 full plan as PencilBeamScanning, replica seed 7501.
+# Geometry lock: keep Patient/RotZ=90 and IEC_G/RotZ=0.  Do not set IEC_G=90;
+# that would rotate the world-space beam to +X and would not match this case.
+# Base K=100 allocation: 12,963,817 histories.
+# HistoriesScale = 1.0 gives 25,927,634 histories per replica (effective K=50).
+# Five replicas give 129,638,170 histories, i.e. 10x K=100 (effective K=10).
+# After summing five dose grids, multiply the sum by 10 for absolute dose.
+# Merge LET_d voxelwise with dose weighting; do not multiply LET_d by 10.
+
+i:Ts/Seed = 7501
+i:Ts/NumberOfThreads = 1
+i:Ts/ShowHistoryCountAtInterval = 10000
+i:Ts/ParameterizationErrorMaxReports = 10
+i:Ts/UnscoredHitMaxReports = 10
+i:Ts/IndexErrorMaxReports = 10
+b:Gr/Enable = "False"
+
+s:Ge/World/Material  = "Air"
+d:Ge/World/HLX       = 2.0 m
+d:Ge/World/HLY       = 2.0 m
+d:Ge/World/HLZ       = 2.0 m
+s:Ge/World/Color     = "white"
+
+s:Ge/Patient/Type = "TsDicomPatient"
+s:Ge/Patient/Parent = "World"
+d:Ge/Patient/TransX = -42.8515 mm
+d:Ge/Patient/TransY = -12.7636 mm
+d:Ge/Patient/TransZ = 1.3617 mm
+d:Ge/Patient/RotX = 0. deg
+d:Ge/Patient/RotY = 0. deg
+d:Ge/Patient/RotZ = 90.0000 deg
+s:Ge/Patient/DicomDirectory = "/LustreData6/home/wuwei/maigo_elastic_ct_20260912/shared/RT07575/dicom"
+sv:Ge/Patient/DicomModalityTags = 1 "CT"
+includeFile = /LustreData6/home/wuwei/maigo_elastic_ct_20260912/shared/RT07575/HUtoMaterialSchneider.txt
+
+s:Ge/IEC_F/Parent = "World"
+s:Ge/IEC_F/Type   = "Group"
+s:Ge/IEC_G/Parent = "IEC_F"
+s:Ge/IEC_G/Type   = "Group"
+d:Ge/IEC_G/RotX = 0. deg
+d:Ge/IEC_G/RotY = 0. deg
+d:Ge/IEC_G/RotZ = 0. deg
+
+s:Ge/PBSBeamFrame/Parent = "IEC_G"
+s:Ge/PBSBeamFrame/Type   = "Group"
+
+
+
+
+
+sv:Ph/Default/Modules = 8 "g4em-standard_opt4" "g4h-phy_QGSP_BIC_HP" "g4decay" "g4ion-inclxx" "g4h-elastic_HP" "g4stopping" "g4radioactivedecay" "CarbonIonElasticPhysics"
+s:So/Probe/Type = "Beam"
+s:So/Probe/Component = "PBSBeamFrame"
+s:So/Probe/BeamParticle = "GenericIon(6,12,6)"
+d:So/Probe/BeamEnergy = 200 MeV
+u:So/Probe/BeamEnergySpread = 0
+s:So/Probe/BeamPositionDistribution = "None"
+s:So/Probe/BeamAngularDistribution = "None"
+i:So/Probe/NumberOfHistoriesInRun = 1
+s:Sc/Audit/Quantity = "AllIonElasticDump"
+s:Sc/Audit/Component = "Patient"
+s:Sc/Audit/OutputFile = "process_audit"
+b:Sc/Audit/AuditAllProjectiles = "True"

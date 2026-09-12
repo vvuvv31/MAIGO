@@ -213,28 +213,53 @@ See [CINEL03 lookup](include/carbon/inelastic_package_v3.hpp) and
 
 ## 5. Elastic nuclear interactions
 
-**Current Schneider CT: independent nuclear elastic collisions are not simulated.**
-Enabling `enable_nuclear_elastic` is rejected by the Schneider configuration; unified
-water also forbids it. There is no separate sampling of nuclear-elastic collision
-locations, recoil energies or angular distributions in these routes.
+**Available in research configurations for Schneider CT and unified water:** all 18
+supported charged species, including primary C12, against all 13 Schneider target
+elements. Existing default production configurations still omit this process while
+matched-reference validation is in progress. Coulomb MCS remains a separate EM process.
 
-Charged tracks still undergo **Coulomb multiple scattering**, represented by the
-Highland model described in Section 3. Inelastic fragments also have sampled emission
-angles. Neither treatment supplies the missing independent nuclear-elastic process.
+1. **Locate the collision.** Primary C12 consumes sampled nuclear optical depth using
+   the sum of elastic and inelastic macroscopic rates, then selects the reaction type
+   by their relative rates. Secondary elastic and inelastic collision distances compete;
+   elastic remains active beyond the nonelastic generation limit. Geometry, EM loss and
+   energy cutoff can shorten the step before either collision.
+2. **Sample the target and transfer.** Select the element by its material-specific
+   partial rate and the neighboring energy node by rate-weighted interpolation. A joint
+   TOPAS sample provides the target isotope, its nuclear mass and `t/tmax`. The current
+   energy and a random azimuth determine the relativistic two-body final state. This
+   preserves energy and momentum rather than assuming isotropic scattering for every target.
+3. **Transport the recoil.** Recoils within the existing 18-species registry enter normal
+   charged transport. Additional natural target isotopes use a 37-isotope material-specific
+   total-stopping table and MCS, without subsequent explicit nuclear reactions. That total
+   stopping includes condensed nuclear stopping. Below-cutoff residual energy deposits locally;
+   queue overflow or missing required data rejects the run.
 
-**Difference from TOPAS**
-
-| Aspect | MAIGO Schneider CT | TOPAS / Geant4 reference |
+| Aspect | GPU research implementation | Matched TOPAS reference |
 |---|---|---|
-| Coulomb multiple scattering | Condensed Highland treatment | Electromagnetic scattering processes from the configured physics list |
-| Independent hadronic elastic | Not included | The reference list includes `g4h-elastic_HP`; applicable elastic datasets/models determine collisions and final states |
-| Consequence | No dedicated nuclear-elastic contribution to deflection and recoil dose | Enabled elastic processes can contribute to particle deflection and energy transfer |
+| Elastic rate and final state | Finite, material-specific rate tables and isotope/transfer samples | Online Geant4 cross-section and final-state model evaluation |
+| Models represented | p: hElasticCHIPS; d/t/He3/alpha: hElasticLHEP; other supported ions: NNDiffuseElastic | Same attached elastic models, with `CarbonIonElasticPhysics` enabled |
+| Recoil coverage | Existing 18 species plus EM-only additional target recoils | Applicable processes for the generated particles |
+| Coulomb scattering | Condensed Highland treatment | Configured Geant4 EM processes |
 
-A historical C12–H two-body elastic helper remains in a separate `fred_paper` branch;
-it is not current CT elastic coverage. The omitted process is a model limitation, not
-an effect assumed to be absorbed into MCS or the inelastic package. Its quantitative
-dose impact requires a controlled comparison with matching TOPAS process settings.
-See [configuration checks](src/config.cpp).
+**Why new TOPAS references are necessary.** The historical `topas10x` physics list had
+elastic processes for p, d, t, He3 and alpha, but not GenericIon/C12. Adding
+`CarbonIonElasticPhysics` enables the missing ion elastic process. The matched reruns
+retain the previous EM, inelastic, stopping and decay modules, patient geometry, source,
+3D dose grid and total histories; LET scorers are omitted for this dose validation.
+
+The baseline bank has 137 energy nodes and 512 samples per projectile/target/node.
+Tests cover relativistic kinematics, host/device lookup, water closure and a 6,481,909-history
+RT07575 shard with zero overflow. Independent 2048-sample and denser-grid banks also pass
+shard closure, but low-energy cross-section onset interpolation, additional recoil
+contributions and full-statistics matched dose validation remain open. These checks do
+not yet establish production acceptance.
+
+Use [CT research configuration](config/rt07575_elastic_research.yaml) or
+[water research configuration](config/unified_water_elastic_research.yaml); the legacy
+`enable_nuclear_elastic` switch is not the activation method for this path. New elastic
+packages are not included in Release 11.3.2. See [implementation and data](docs/all_ion_elastic.md),
+[validation evidence](evidence/step-31/elastic-production-validation-20260911/README.md) and
+[September 12 reference migration](evidence/step-31/elastic-migration-20260912/README.md).
 
 ## 6. Electron tracking and energy deposition
 

@@ -56,6 +56,7 @@ add_library(carbon_core
     src/multiple_scattering.cpp
     src/run_quality.cpp
     src/stopping_power.cpp
+    src/all_ion_elastic.cpp
     src/schneider_rate_table.cpp
     src/material_nuclear_rates.cpp
     src/schneider_delta_tail.cpp
@@ -156,6 +157,9 @@ target_link_libraries(carbon_mc PRIVATE carbon_core)
 if(BUILD_TESTING)
     if(CARBON_ENABLE_SYCL)
         # Explicit invocation with a verified real table on the local GPU.
+        add_executable(all_ion_elastic_gpu tests/all_ion_elastic_gpu.cpp)
+        target_link_libraries(all_ion_elastic_gpu PRIVATE carbon_core)
+        target_compile_options(all_ion_elastic_gpu PRIVATE $<TARGET_PROPERTY:carbon_core,COMPILE_OPTIONS>)
         add_executable(schneider_ion_stopping_gpu tests/schneider_ion_stopping_gpu.cpp)
         target_link_libraries(schneider_ion_stopping_gpu PRIVATE carbon_core)
         target_compile_options(schneider_ion_stopping_gpu PRIVATE
@@ -280,6 +284,9 @@ if(BUILD_TESTING)
     add_executable(test_schneider_ion_stopping tests/test_schneider_ion_stopping.cpp)
     target_link_libraries(test_schneider_ion_stopping PRIVATE carbon_core)
     add_test(NAME test_schneider_ion_stopping COMMAND test_schneider_ion_stopping)
+    add_executable(test_nuclear_elastic_scattering tests/test_nuclear_elastic_scattering.cpp)
+    target_link_libraries(test_nuclear_elastic_scattering PRIVATE carbon_core)
+    add_test(NAME test_nuclear_elastic_scattering COMMAND test_nuclear_elastic_scattering)
     add_test(NAME inelastic_package_v2_tests COMMAND inelastic_package_v2_tests)
     add_test(NAME test_schneider_dicom_reference COMMAND test_schneider_dicom_reference)
     add_test(NAME test_secondary_rate_table_hardening COMMAND test_secondary_rate_table_hardening)

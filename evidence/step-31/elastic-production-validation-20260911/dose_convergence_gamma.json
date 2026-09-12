@@ -1,0 +1,50 @@
+{
+  "case": "RT07575",
+  "histories": 6481909,
+  "scope": "One original shard, BODY reference >=10%; original TOPAS total scaled only by history count; no fitted dose normalization; 0.125mm search",
+  "limitation": "Existing TOPAS reference may not include the added CarbonIonElasticPhysics module; this comparison is diagnostic, not matched-physics validation. One-shard noise is larger than full20.",
+  "results": {
+    "baseline_512_grid20": {
+      "sha256": "80e17027dd2e842723cc1a84dd65e9c7c46613b86a94fb31fa3ce1e13a084aa1",
+      "gamma": {
+        "global_33": 100.0,
+        "local_33": 100.0,
+        "global_22": 100.0,
+        "local_22": 100.0,
+        "global_11": 99.95833345224472,
+        "local_11": 99.84474930151454,
+        "global_30": 98.17608968010936,
+        "local_30": 79.13704584176415
+      },
+      "body_mean_local_error_pct": -0.3515697419643402
+    },
+    "samples2048": {
+      "sha256": "604422a4a0257d88561ec762adb3606cf6aea99b4a3ed727db4addaed00e6485",
+      "gamma": {
+        "global_33": 100.0,
+        "local_33": 100.0,
+        "global_22": 100.0,
+        "local_22": 100.0,
+        "global_11": 99.95861883955811,
+        "local_11": 99.84788856196187,
+        "global_30": 98.17066732115491,
+        "local_30": 79.0973770052026
+      },
+      "body_mean_local_error_pct": -0.35155123472213745
+    },
+    "grid40": {
+      "sha256": "e4d33000348a783d9eeed57bd0ac4017a3458a74e535609a58ec9a7bc7a920b5",
+      "gamma": {
+        "global_33": 100.0,
+        "local_33": 100.0,
+        "global_22": 100.0,
+        "local_22": 100.0,
+        "global_11": 99.95947500149829,
+        "local_11": 99.85673556867704,
+        "global_30": 98.15497101891833,
+        "local_30": 79.15588140444805
+      },
+      "body_mean_local_error_pct": -0.34899669885635376
+    }
+  }
+}

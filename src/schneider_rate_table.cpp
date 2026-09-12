@@ -42,7 +42,9 @@ std::size_t SchneiderRateTable::target_index_from_z(int target_z) {
 
 SchneiderRateTable SchneiderRateTable::from_binary(
     const std::filesystem::path& binary_path,
-    const std::filesystem::path& metadata_path) {
+    const std::filesystem::path& metadata_path,
+    const std::string& expected_magic,
+    std::uint32_t expected_version) {
     std::ifstream in(binary_path, std::ios::binary);
     if (!in) {
         throw std::runtime_error("Cannot open Schneider rate binary file: " + binary_path.string());
@@ -54,12 +56,13 @@ SchneiderRateTable SchneiderRateTable::from_binary(
         throw std::runtime_error("Truncated header in Schneider rate binary: " + binary_path.string());
     }
 
-    if (std::strncmp(header.magic, "SCHNRATE", 8) != 0) {
+    if (std::strncmp(header.magic, expected_magic.c_str(), 8) != 0 ||
+        std::strlen(expected_magic.c_str()) != 8) {
         throw std::runtime_error("Invalid magic in Schneider rate binary: " + binary_path.string());
     }
-    // Only the current v2.1 domain-masked rate schema is supported.
-    if (header.version != 3) {
-        throw std::runtime_error("Schneider rate requires SCHNRATE v3; legacy versions are retired: " + binary_path.string());
+    // Only the current domain-masked rate schema is supported.
+    if (header.version != expected_version) {
+        throw std::runtime_error("Schneider rate version mismatch in: " + binary_path.string());
     }
     if (header.num_sections != kSchneiderNumSections) {
         throw std::runtime_error("Invalid section count in: " + binary_path.string());
@@ -197,7 +200,7 @@ SchneiderRateTable SchneiderRateTable::from_binary(
                 throw std::runtime_error("SchneiderRateTable: SHA-256 mismatch for " + binary_path.string());
             }
             const std::string magic = minjson::require_string(meta.at("binary_magic"), "binary_magic");
-            if (magic != "SCHNRATE") {
+            if (magic != expected_magic) {
                 throw std::runtime_error("SchneiderRateTable: metadata binary_magic mismatch: " + magic);
             }
             if (minjson::require_uint(meta.at("binary_version"), "binary_version") != header.version) {

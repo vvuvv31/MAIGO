@@ -781,6 +781,8 @@ struct TransportResult {
     double untransported_unsupported_charged_energy_MeV{0.0};
     double nuclear_energy_not_in_direct_secondaries_MeV{0.0};
     std::uint64_t primary_elastic_interactions{0};
+    std::uint64_t secondary_elastic_interactions{0};
+    std::uint64_t elastic_post_em_null_collisions{0};
     double elastic_local_deposited_energy_MeV{0.0};
     double elastic_queued_charged_energy_MeV{0.0};
     double elastic_queued_neutral_energy_MeV{0.0};

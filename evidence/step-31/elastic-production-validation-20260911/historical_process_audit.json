@@ -1,0 +1,92 @@
+[
+  {
+    "log": "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/RT07575_pbs_s2/slurm_rt07575_pbs_s2.out",
+    "sha256": "443d11cbca012afd1a5fd17fe81cdcfc37b254b3636fdecab6390ab82e0f2999",
+    "generic_ion_process_block": "  Process: ionInelastic\n        Model:          INCL++ undefined: 0 eV /n ---> 3 GeV/n\n        Model:                      FTFP: 2.9 GeV/n ---> 100 TeV/n\n     Cr_sctns:  Glauber-Gribov Nucl-nucl: 0 eV  ---> 25.6 PeV\n  Process: RadioactiveDecay",
+    "has_elastic": false,
+    "processes": [
+      "ionInelastic",
+      "RadioactiveDecay"
+    ]
+  },
+  {
+    "log": "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/RT07575_pbs_s4/slurm_rt07575_pbs_s4.out",
+    "sha256": "0f1a1ea63186b9afd9ba83eeac22cc21300df8b2ccc16596fbb71bc1ec78817f",
+    "generic_ion_process_block": "  Process: ionInelastic\n        Model:          INCL++ undefined: 0 eV /n ---> 3 GeV/n\n        Model:                      FTFP: 2.9 GeV/n ---> 100 TeV/n\n     Cr_sctns:  Glauber-Gribov Nucl-nucl: 0 eV  ---> 25.6 PeV\n  Process: RadioactiveDecay",
+    "has_elastic": false,
+    "processes": [
+      "ionInelastic",
+      "RadioactiveDecay"
+    ]
+  },
+  {
+    "log": "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/RT07575_pbs_s5/slurm_rt07575_pbs_s5.out",
+    "sha256": "1a0b82a621328dfb71bac2c4a5aae65c252990fe107ef7e3e49327e8127aac56",
+    "generic_ion_process_block": "  Process: ionInelastic\n        Model:          INCL++ undefined: 0 eV /n ---> 3 GeV/n\n        Model:                      FTFP: 2.9 GeV/n ---> 100 TeV/n\n     Cr_sctns:  Glauber-Gribov Nucl-nucl: 0 eV  ---> 25.6 PeV\n  Process: RadioactiveDecay",
+    "has_elastic": false,
+    "processes": [
+      "ionInelastic",
+      "RadioactiveDecay"
+    ]
+  },
+  {
+    "log": "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/RT07575_pbs_s1/slurm_rt07575_pbs_s1.out",
+    "sha256": "5aeb21b12a6fadf194089722865a81a0392eef5eba2dddee21f2075053e4e28f",
+    "generic_ion_process_block": "  Process: ionInelastic\n        Model:          INCL++ undefined: 0 eV /n ---> 3 GeV/n\n        Model:                      FTFP: 2.9 GeV/n ---> 100 TeV/n\n     Cr_sctns:  Glauber-Gribov Nucl-nucl: 0 eV  ---> 25.6 PeV\n  Process: RadioactiveDecay",
+    "has_elastic": false,
+    "processes": [
+      "ionInelastic",
+      "RadioactiveDecay"
+    ]
+  },
+  {
+    "log": "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/RT07575_pbs_s3/slurm_rt07575_pbs_s3.out",
+    "sha256": "d1c00f2852d5f62b6169282ed838af521a6d0ed262b0997d3c44ac8491973ee3",
+    "generic_ion_process_block": "  Process: ionInelastic\n        Model:          INCL++ undefined: 0 eV /n ---> 3 GeV/n\n        Model:                      FTFP: 2.9 GeV/n ---> 100 TeV/n\n     Cr_sctns:  Glauber-Gribov Nucl-nucl: 0 eV  ---> 25.6 PeV\n  Process: RadioactiveDecay",
+    "has_elastic": false,
+    "processes": [
+      "ionInelastic",
+      "RadioactiveDecay"
+    ]
+  },
+  {
+    "log": "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/20022516/replicas/s2/slurm_lung22516_tps_s2.out",
+    "sha256": "9564f6d38a5894b1ef9c404c961dca40841f9351e5222e31bd219bc70b33e8e6",
+    "generic_ion_process_block": "  Process: ionInelastic\n        Model:          INCL++ undefined: 0 eV /n ---> 3 GeV/n\n        Model:                      FTFP: 2.9 GeV/n ---> 100 TeV/n\n     Cr_sctns:  Glauber-Gribov Nucl-nucl: 0 eV  ---> 25.6 PeV\n  Process: RadioactiveDecay",
+    "has_elastic": false,
+    "processes": [
+      "ionInelastic",
+      "RadioactiveDecay"
+    ]
+  },
+  {
+    "log": "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/20022516/replicas/s1/slurm_lung22516_tps_s1.out",
+    "sha256": "808349ddbb1bb64ce6e13495655e88a440ceb025db3fb0a18217558e6357f769",
+    "generic_ion_process_block": "  Process: ionInelastic\n        Model:          INCL++ undefined: 0 eV /n ---> 3 GeV/n\n        Model:                      FTFP: 2.9 GeV/n ---> 100 TeV/n\n     Cr_sctns:  Glauber-Gribov Nucl-nucl: 0 eV  ---> 25.6 PeV\n  Process: RadioactiveDecay",
+    "has_elastic": false,
+    "processes": [
+      "ionInelastic",
+      "RadioactiveDecay"
+    ]
+  },
+  {
+    "log": "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/20022516/replicas/s4/slurm_lung22516_tps_s4.out",
+    "sha256": "24b2ba0367f9fa382b144be6c421ebcd5f85effd7408e90b371256187af14486",
+    "generic_ion_process_block": "  Process: ionInelastic\n        Model:          INCL++ undefined: 0 eV /n ---> 3 GeV/n\n        Model:                      FTFP: 2.9 GeV/n ---> 100 TeV/n\n     Cr_sctns:  Glauber-Gribov Nucl-nucl: 0 eV  ---> 25.6 PeV\n  Process: RadioactiveDecay",
+    "has_elastic": false,
+    "processes": [
+      "ionInelastic",
+      "RadioactiveDecay"
+    ]
+  },
+  {
+    "log": "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/20022516/replicas/s3/slurm_lung22516_tps_s3.out",
+    "sha256": "5148ce9896e6d2545d6e6ad09ba1e81e01f9bc96830b18e4ef008e9d0a4a6a2b",
+    "generic_ion_process_block": "  Process: ionInelastic\n        Model:          INCL++ undefined: 0 eV /n ---> 3 GeV/n\n        Model:                      FTFP: 2.9 GeV/n ---> 100 TeV/n\n     Cr_sctns:  Glauber-Gribov Nucl-nucl: 0 eV  ---> 25.6 PeV\n  Process: RadioactiveDecay",
+    "has_elastic": false,
+    "processes": [
+      "ionInelastic",
+      "RadioactiveDecay"
+    ]
+  }
+]
