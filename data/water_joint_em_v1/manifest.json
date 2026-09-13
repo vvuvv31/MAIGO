@@ -1,0 +1,48 @@
+{
+  "schema": "water_joint_em_v1",
+  "validation_status": "research_candidate",
+  "model": "g4_joint_water_v1",
+  "provenance": {
+    "geant4_version": "11.3.2",
+    "em_physics": "default opt4",
+    "material": "Water_75eV",
+    "extraction_record": "scratch/water_joint_em_tables_20260913/README.md",
+    "validated_isolated_record": "scratch/water_joint_transport_20260913/validated_run_manifest.json",
+    "mass_convention": "actual ion StartTracking; CLHEP proton_mass_c2 938.272013 MeV"
+  },
+  "scope": {
+    "projectile": "C12 primary",
+    "density_g_cm3": 1,
+    "geometry": "homogeneous water",
+    "electron_energy": "local deposit",
+    "secondary_transport": "unchanged",
+    "table_energy_MeVu": [
+      1e-06,
+      400
+    ],
+    "validated_beam_energy_MeVu": [
+      100,
+      200,
+      300
+    ]
+  },
+  "electron_cut_MeV": 0.057023483021082615,
+  "step_function": {
+    "range_fraction": 0.1,
+    "final_range_mm": 0.001,
+    "overrides": [
+      "maximum_step_mm",
+      "maximum_relative_energy_loss"
+    ]
+  },
+  "files": {
+    "raw_vectors.csv": {
+      "sha256": "f09cb8f0dd601f8853d973a08c4eff3f366ddbcaedb00043183e367dd4e18101",
+      "bytes": 67903
+    },
+    "joint_nodes.csv": {
+      "sha256": "163cad049def757201d75d419c11c5af8a348ccbf280e83ee5d8b8d702d10d96",
+      "bytes": 7102287
+    }
+  }
+}

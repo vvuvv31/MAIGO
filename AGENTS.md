@@ -7,6 +7,7 @@
 - 当粒子数太多的时候需要拆分成多个任务，例如一次只跑1/10粒子数，然后再合并结果，防止溢出，检测到次级粒子overflow就需要拆分重跑
 
 - ct不要走四分类包，只走 Schneider 分区。
+- ct在计算gamma通过率的时候，首先需要根据RTSTRUCTURE的body做mask，只计算body内的voxel，然后根据DTA把搜索步长修改为1/10*DTA，对于0的DTA则不需要修改步长
 
 ## Git branch workflow
 
@@ -55,7 +56,8 @@
   zero-overflow full validation. Until those gates pass, continue using the exact
   v2.1 stack above; never use a lower version as a compatibility fallback.
 
-- topas任务需要在本地使用sbatch运行，数据放置在本地/mnt/sda/wuwei目录下，
+- 如果没有说明在哪里运行，topas任务就在本地使用sbatch运行，数据放置在本地/mnt/sda/wuwei目录下
+- 如果指定了运行的位置，例如v@10.10.10.216，cluster，则不必非要在本地sbatch，且明确允许提交
 - topas的extension放在/home/wuwei/topas目录下，如果需要重新编译，source code和build都在/home/wuwei/topas目录下
 - 所有任务最多一共使用192线程，内存占用160G
 - 提交多个任务的时候按照计算量分配线程/内存数量，控制任务差不多时间完成，防止低能快速跑完了，高能还需要跑很久

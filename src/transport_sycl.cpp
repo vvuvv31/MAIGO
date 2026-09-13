@@ -1,7 +1,8 @@
+#include "carbon/joint_em_view.hpp"
+#include <fstream>
+#include <sstream>
 #include "carbon/cross_section.hpp"
-#ifdef CARBON_DIAGNOSTIC_G4_HADRONIC_CACHE
 #include "carbon/hadronic_cache_candidate.hpp"
-#endif
 #include "carbon/ct_grid.hpp"
 #include "carbon/device.hpp"
 #include "carbon/electron_transport.hpp"
@@ -824,12 +825,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
     float schneider_xs_e_min = 0.0F;
     float schneider_xs_inv_dE = 0.0F;
     const bool use_unified_water = config.unified_water_nuclear_transport;
-#ifdef CARBON_DIAGNOSTIC_G4_HADRONIC_CACHE
-    if (!use_unified_water || config.enable_ct_grid || config.run_mode != RunMode::research) {
-        throw std::invalid_argument("Hadronic cache candidate is restricted to homogeneous water research");
-    }
-    std::cout << "[diagnostic] G4 11.3.2 primary fHadIncreasing cache candidate; not production validated\n";
-#endif
+
     bool use_schneider_primary_xs = use_unified_water;
     float* schneider_stopping_device = nullptr;
     std::uint32_t schneider_sp_sections = 0;
@@ -1048,6 +1044,32 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
     bool ct_material_ids_are_schneider_sections = false;
     const auto ct_skip_homogeneous_face_clamp = config.ct_skip_homogeneous_face_clamp;
     const auto ct_primary_midpoint_stopping = config.ct_primary_midpoint_stopping;
+    if (std::getenv("CARBON_JOINT_EM_DATA") || std::getenv("CARBON_DIAGNOSTIC_PRIMARY_START_DEDX"))
+        throw std::invalid_argument("Obsolete isolated EM environment switch; use explicit primary_em_model configuration");
+    // Explicit research model; legacy transport remains the default.
+    const auto joint_dir = config.primary_joint_em_data_directory.string();
+    const bool joint_em = config.primary_em_model == "g4_joint_water_v1";
+    JointView joint;JointNode* joint_nodes=nullptr;EmCubicSegmentCandidate<float>* joint_vectors=nullptr;
+    std::uint64_t* joint_audit=nullptr;float* joint_debug=nullptr;
+    if(joint_em) {
+        if(config.enable_ct_grid || !use_unified_water || config.run_mode!=RunMode::research || config.water_density_g_per_cm3!=1 || !config.material_electron_response_index_file.empty() || !config.water_electron_response_diagnostic_file.empty())throw std::runtime_error("Joint EM candidate requires homogeneous unit-density research water, legacy electron deposition");
+        if(config.primary_atomic_number!=6 || config.primary_mass_number!=12 || slab_layer_count || enable_hetero_insert)
+            throw std::runtime_error("Joint EM candidate supports only homogeneous C12 water");
+        if(compute_file_sha256_hex(std::string(joint_dir)+"/joint_nodes.csv")!="163cad049def757201d75d419c11c5af8a348ccbf280e83ee5d8b8d702d10d96" ||
+           compute_file_sha256_hex(std::string(joint_dir)+"/raw_vectors.csv")!="f09cb8f0dd601f8853d973a08c4eff3f366ddbcaedb00043183e367dd4e18101")
+            throw std::runtime_error("Joint EM candidate provenance hash mismatch");
+        auto rows=[](const std::string& file){std::ifstream f(file);if(!f)throw std::runtime_error("Missing joint table "+file);std::string l;std::getline(f,l);std::vector<std::vector<double>> a;while(std::getline(f,l)){std::replace(l.begin(),l.end(),',',' ');std::istringstream stream(l);std::vector<double> v;double x;while(stream>>x)v.push_back(x);a.push_back(v);}return a;};
+        const auto ns=rows(std::string(joint_dir)+"/joint_nodes.csv");std::vector<JointNode> nodes;
+        for(const auto& a:ns){if(a.size()!=10)throw std::runtime_error("Joint node schema");nodes.push_back({float(a[0]),float(a[1]),float(a[2]),float(a[3]),float(a[4]),float(a[5]),float(a[6]),float(a[7]),float(a[8]),float(a[9])});}
+        if(nodes.size()<40000 || nodes.front().e>.00001f || nodes.back().e<400)throw std::runtime_error("Joint node domain");
+        std::vector<EmCubicSegmentCandidate<float>> vs;const auto raw=rows(std::string(joint_dir)+"/raw_vectors.csv");float max_lambda=-1;
+        for(const auto& a:raw){if(a.size()!=9)throw std::runtime_error("Joint vector schema");int k=int(a[0]);if(k<0 || k>3)throw std::runtime_error("Joint kind");if(joint.counts[k]==0)joint.offsets[k]=vs.size();++joint.counts[k];vs.push_back({float(a[2]),float(a[3]),float(a[4]),float(a[5]),float(a[6]),float(a[7])});if(k==3 && a[4]>max_lambda){max_lambda=a[4];joint.peak=a[2]/(12*joint.ratio);}}
+        joint.node_count=nodes.size();joint_nodes=mem_tracker.allocate<JointNode>(nodes.size());joint_vectors=mem_tracker.allocate<EmCubicSegmentCandidate<float>>(vs.size());joint_audit=mem_tracker.allocate<std::uint64_t>(7);joint_debug=mem_tracker.allocate<float>(10);
+        if(!joint_nodes || !joint_vectors || !joint_audit || !joint_debug)throw std::bad_alloc();
+        queue.fill(joint_debug,0.f,10).wait_and_throw();
+        queue.copy(nodes.data(),joint_nodes,nodes.size()).wait_and_throw();queue.copy(vs.data(),joint_vectors,vs.size()).wait_and_throw();queue.fill(joint_audit,std::uint64_t{0},7).wait_and_throw();joint.nodes=joint_nodes;joint.vectors=joint_vectors;
+        std::cout<<"[joint-em] research C12 restricted+delta candidate; native StepFunction(0.1,0.001mm) overrides maximum_step_mm/maximum_relative_energy_loss; primary inelastic cache enabled; electron energy local; peak="<<joint.peak<<"\n";
+    }
     const auto ct_secondary_exact_faces = config.ct_secondary_exact_faces;
     std::cout << "[stopping-config] primary_midpoint=" << ct_primary_midpoint_stopping
               << " secondary_exact_faces=" << ct_secondary_exact_faces
@@ -2683,12 +2705,13 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                 auto last_primary_density_g_per_cm3 = 0.0F;
 
                 float nuclear_tau_remaining = 0.0F;
-#ifdef CARBON_DIAGNOSTIC_G4_HADRONIC_CACHE
                 HadronicIncreasingCacheCandidate primary_hadronic_cache;
-#endif
                 bool nuclear_tau_active = false;
                 std::uint32_t nuclear_tau_rng_step = 0;
                 bool primary_inelastic_occurred = false;
+                DiscreteDeltaClockCandidate<float> joint_clock;JointRateCache joint_cache;
+                std::uint64_t joint_counter=0;
+
                 std::uint32_t interaction_section = 0;
                 float interaction_density = 0.0F;
 
@@ -2848,6 +2871,20 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                         maximum_relative_energy_loss * energy_MeV /
                             sycl::fmax(stopping_power_MeV_per_mm, 1.0e-6F));
                     step_mm = sycl::fmax(step_mm, 1.0e-5F);
+                    float joint_q=0,joint_proposal_rate=0,joint_distance=1e30f;
+                    auto joint_uniform=[&](){return (rng::random_u32(spot_seed,rng_history,joint_counter++,120)>>8)*0x1p-24f;};
+                    auto joint_count=[&](int i,std::uint64_t n=1){sycl::atomic_ref<std::uint64_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space> a(joint_audit[i]);a.fetch_add(n);};
+                    if(joint_em){
+                        if(!(energy_MeVu>=joint.nodes[0].e && energy_MeVu<=joint.nodes[joint.node_count-1].e)){joint_count(0);break;}
+                        joint_q=joint.field(energy_MeVu,0);
+                        float range=joint.raw(1,energy_MeV*joint.ratio)/(joint_q*joint.ratio);
+                        step_mm=range>.001f ? .1f*range+.0009f*(2-.001f/range) : range;
+                        joint_proposal_rate=joint_cache.update(energy_MeVu,joint_q,joint);
+                        if(!joint_clock.active)joint_clock.arm(-sycl::log(sycl::fmax(joint_uniform(),1e-12f)));
+                        joint_distance=joint_clock.distance(joint_proposal_rate);
+                        step_mm=sycl::fmin(step_mm,joint_distance);
+                    }
+
 
                     if (absolute_direction_z >= 1.0e-6F) {
                         const auto boundary_z_mm =
@@ -2974,10 +3011,16 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                              ? el_rates.total
                                              : el_rates.partials[0]);
                                 }
-                                float macro_tot = local_density_g_per_cm3 * mass_rate + macro_el_ct;
-#ifdef CARBON_DIAGNOSTIC_G4_HADRONIC_CACHE
-                                macro_tot = primary_hadronic_cache.update(cur_e_u, macro_tot);
-#endif
+                                float macro_inelastic = local_density_g_per_cm3 * mass_rate;
+                                if (joint_em) {
+                                // Cache only the process whose post-step acceptance uses
+                                // this rate. Elastic retains its own local hazard and must
+                                // never enter the inelastic acceptance denominator.
+                                macro_inelastic = enable_inelastic
+                                    ? primary_hadronic_cache.update(cur_e_u, macro_inelastic)
+                                    : 0.0F;
+                                }
+                                const float macro_tot = macro_inelastic + macro_el_ct;
                                 ++local_schneider_rate_queries;
 
                                 float u_nuc = 1.0F;
@@ -3090,7 +3133,10 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                     }
 
                     float mean_loss_MeV = 0.0F;
-                    if (ct_primary_midpoint_stopping && use_schneider_stopping && in_ct) {
+                    if (joint_em) {
+                        mean_loss_MeV=joint.mean(energy_MeVu,step_mm,joint_q);
+
+                    } else if (ct_primary_midpoint_stopping && use_schneider_stopping && in_ct) {
                         mean_loss_MeV=midpoint_continuous_energy_loss(energy_MeV,step_mm,
                             stopping_power_MeV_per_mm,[&](float mid_energy) {
                                 const float f=(mid_energy*inverse_mass_number-schneider_sp_e_min)*schneider_sp_inv_dE;
@@ -3150,7 +3196,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                         energy_sum.fetch_add(static_cast<std::uint64_t>(mean_loss_MeV*1.0e6F+0.5F));
                     }
 
-                    if (enable_energy_straggling) {
+                    if (enable_energy_straggling && !joint_em) {
                         // Explicit smoke hybrid: retain the existing Gaussian
                         // only for f<1e-4; never substitute it for missing energy
                         // coverage or other out-of-domain package queries.
@@ -3229,6 +3275,29 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                         }
                     }
 
+                    if(joint_em){
+                        const float gamma=1+energy_MeV/joint.mass,beta2=1-1/(gamma*gamma),ratio_e=.51099891f/joint.mass;
+                        const float tmax=2*.51099891f*(gamma*gamma-1)/(1+2*gamma*ratio_e+ratio_e*ratio_e);
+                        if(enable_energy_straggling && mean_loss_MeV<energy_MeV){
+                            RestrictedFluctuationInput<float> input{energy_MeV,joint.mass,mean_loss_MeV,joint.field(energy_MeVu,3)*step_mm,joint.field(energy_MeVu,4)*step_mm,sycl::fmin(joint.cut,tmax),tmax,.000075f,.00001f};
+                            RestrictedFluctuationSampler<float,decltype(joint_uniform)> sampler(joint_uniform);auto draw=sampler.sample(input);
+                            if(!draw.valid){sycl::atomic_ref<std::uint64_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space> bad(joint_audit[0]);if(bad.fetch_add(1)==0){joint_debug[0]=energy_MeVu;joint_debug[1]=step_mm;joint_debug[2]=mean_loss_MeV;joint_debug[3]=input.ion_dispersion;joint_debug[4]=input.universal_dispersion;joint_debug[5]=input.cut_MeV;joint_debug[6]=input.tmax_MeV;joint_debug[7]=draw.loss;}break;}deposited_MeV=sycl::fmin(energy_MeV,draw.loss);
+                        }
+                        bool selected=step_mm>=joint_distance;
+                        joint_clock.consume(step_mm,joint_proposal_rate,selected);
+                        joint_count(1);joint_count(5,static_cast<std::uint64_t>(deposited_MeV*1e6f));
+                        if(selected){
+                            joint_count(2);joint_cache.threshold=1e30f;
+                            float post=energy_MeV-deposited_MeV;
+                            if(post>0 && joint_uniform()*joint_proposal_rate<joint.rate(post/12,joint_q)){
+                                float g=1+post/joint.mass,b2=1-1/(g*g),tm=2*.51099891f*(g*g-1)/(1+2*g*ratio_e+ratio_e*ratio_e);
+                                auto delta=sample_spin_zero_delta_candidate(joint.cut,tm,b2,joint.ff,joint_uniform);
+                                if(delta.status==DeltaDrawStatus::invalid || delta.status==DeltaDrawStatus::exhausted){joint_count(0);break;}
+                                if(delta.status==DeltaDrawStatus::accepted){float transfer=sycl::fmin(post,delta.energy_MeV);deposited_MeV+=transfer;joint_count(3);joint_count(6,static_cast<std::uint64_t>(transfer*1e6f));}
+                            }
+                        }
+                        if(deposited_MeV>energy_MeV || !sycl::isfinite(deposited_MeV)){joint_count(0);break;}
+                    }
                     auto local_voxel_deposit_MeV = deposited_MeV;
                     auto same_voxel_electron_packet_MeV = 0.0F;
                     auto delta_tail_escaped_scorer_MeV = 0.0F;
@@ -4237,8 +4306,8 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                     }
 
                     if (use_schneider_primary_xs && (in_ct || use_unified_water) && inelastic_this_step) {
-                        primary_inelastic_occurred = true;
                         if (is_primary_attenuation_only) {
+                            primary_inelastic_occurred = true;
                             if (first_interactions_device != nullptr && first_interactions_count_device != nullptr) {
                                 sycl::atomic_ref<std::uint32_t, sycl::memory_order::relaxed,
                                                  sycl::memory_scope::device,
@@ -4289,7 +4358,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                 interaction_section, cur_primary_e_u);
                             target_z = sample_masked_schneider_target_device(
                                 masked.partials, u_target);
-#ifdef CARBON_DIAGNOSTIC_G4_HADRONIC_CACHE
+                            if (joint_em) {
                             // Dedicated dimension 44; do not reuse source, loss,
                             // target, event or electron-response variates.
                             const bool accepted = primary_hadronic_cache.accept(
@@ -4298,7 +4367,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                             // Candidate-only: rejected proposal reuses the
                             // existing energy-preserving post-EM null route.
                             if (!accepted) target_z = 0;
-#endif
+                            }
                         } else {
                             target_z = sample_schneider_target_device(
                                 schneider_ct_device_ctx.primary_sampler,
@@ -4368,6 +4437,9 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                         }
 
 
+                        // A hazard proposal (including a post-EM null collision)
+                        // is not an inelastic reaction. Mark only an event hit.
+                        primary_inelastic_occurred = true;
                         const auto& event = schneider_ct_device_ctx.c12_interactions[primary_lookup.event_index];
                         const float local_deposit = sycl::fmax(0.0F, event.process_local_deposit_MeV);
 
@@ -6815,6 +6887,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
     if (cutoff_stopped_energy_device != nullptr) {
         queue.copy(cutoff_stopped_energy_device, cutoff_stopped_host.data(), number_of_histories);
     }
+    if(joint_em){std::uint64_t audit[7]{};queue.copy(joint_audit,audit,7).wait_and_throw();std::cout<<"[joint-em-audit]";for(auto x:audit)std::cout<<" "<<x;std::cout<<"\n";if(audit[0]){float debug[10];queue.copy(joint_debug,debug,10).wait_and_throw();std::cout<<"[joint-failure]";for(float x:debug)std::cout<<" "<<x;std::cout<<"\n";throw std::runtime_error("Joint EM domain/sampling failure");}mem_tracker.free(joint_debug);mem_tracker.free(joint_nodes);mem_tracker.free(joint_vectors);mem_tracker.free(joint_audit);}
     std::uint64_t schneider_inelastic_host = 0;
     if (schneider_inelastic_device != nullptr) {
         queue.copy(schneider_inelastic_device, &schneider_inelastic_host, 1);

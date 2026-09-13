@@ -1,0 +1,24 @@
+{
+  "local_11": [
+    {
+      "search_step_mm": 0.125,
+      "pass_pct": 96.77387074599072,
+      "failed": 14830,
+      "rescued": 5198
+    },
+    {
+      "search_step_mm": 0.0625,
+      "pass_pct": 96.9017847042751,
+      "failed": 14242,
+      "rescued": 588
+    }
+  ],
+  "local_33": [
+    {
+      "search_step_mm": 0.125,
+      "pass_pct": 99.69370263050268,
+      "failed": 1408,
+      "rescued": 19
+    }
+  ]
+}

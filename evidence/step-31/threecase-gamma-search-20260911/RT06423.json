@@ -1,0 +1,301 @@
+{
+  "case": "RT06423",
+  "run": "/mnt/sda/wuwei/exactfaces_full20_20260910/RT06423",
+  "reference": "/mnt/sda/wuwei/ct_previous_full20_20260909/RT06423",
+  "gpu_sha256": "7520f23f34aa6508e2425e6fcf5e92890ef8b9b07337e03e69697e216d5c6939",
+  "reference_sha256": "f107213b17a04a565eccc7f6c27420bf424dc72e638e802d65285edfebe53257",
+  "histories": 151087660,
+  "rtstruct_sha256": "19505260cfdb90d45a57c3ff03888b81ae740bc53df1b7ee0acd880e11210353",
+  "ct_file_sha256": {
+    "IMG0001.dcm": "9f537119441cef00179d3986fd34d9c97612d0a3a3415a06ce611e200cc84ebe",
+    "IMG0002.dcm": "d7fe4efb7bde1af25351f1b8f49b4acb2cc275cc26f866b07815f9b610cb2ba8",
+    "IMG0003.dcm": "96e84147379ea69be680c09765db79a6e0ae8a0397b2e1d6e05e35ba9874bbf4",
+    "IMG0004.dcm": "688baa51f46acc28b91dbdeeb383a65c5a229f36c41655c201354198d6f44c40",
+    "IMG0005.dcm": "9a67a487bef5acb2a4f30379a0f7c19706db3b9f03bb03a4fff57121500a1aef",
+    "IMG0006.dcm": "58187d89784dd6eeb46c902632ba2034f771fd63b87455d206ad04571e066890",
+    "IMG0007.dcm": "e69ac6173d235c103a437d5562e2725788d758a01f74ce48c3c79e678f82496e",
+    "IMG0008.dcm": "fbd8158946cdb31fff72f9e0ec013893dbc0fcab6cc1bbdea47e3ad3ec24727c",
+    "IMG0009.dcm": "82bdfb6afc733c79fbcb18f478bf8789ba91f2e1f9a76ea160ca2013fefe4bd5",
+    "IMG0010.dcm": "6a2b6181db66477e233966c66f7893b79fcf7d12d12d5404edb51607bc5a3e85",
+    "IMG0011.dcm": "7e68a031fc60899c2a3ade08aef69a24f62930b8d91dca5ca66d0e562745ede9",
+    "IMG0012.dcm": "5d8337ebc5fe414ea396cd1394c1aa48c66460580899c54e116aaa9116ac1519",
+    "IMG0013.dcm": "3ae5ccb23effa6a1a9c1e7fca63db5df5cfc191010164300b845b824c01769c7",
+    "IMG0014.dcm": "9aaf0fb82ffadc019319f0378dee35e2d58aec1371566395d13c7287c32cdd6c",
+    "IMG0015.dcm": "4cf0f9c8019b8747427ec1a4aee58c8faf306bb0a958f5cac4d203a0e2a610dc",
+    "IMG0016.dcm": "5347c55b18530157cf781f8e51e99ea5c15e554215699606d5bc6eedd90552f2",
+    "IMG0017.dcm": "ab97b7749b93a925db7593f6e111f7795505a0c48b3ac7821dd2368c7cf1a036",
+    "IMG0018.dcm": "855b2b701226a1595108f9862b20a93bb40973dfd5ace536bc2daefe6f8d4e17",
+    "IMG0019.dcm": "f4ab4d7921b17ead0e61fb9d31ab54942e1668fc5662f0336c3bb4df69739f07",
+    "IMG0020.dcm": "09f5066902c1d0847f34ec7870ea8f0545ecc775d6732fff27dda571b46ba445",
+    "IMG0021.dcm": "742cc2ed54c5eb89b59b508f5702b8de7987f77ae51e23be03c2c6cb9f3b927d",
+    "IMG0022.dcm": "042534faa7c326b35d50a651a72fa12cb982e2fecdace2ca98c9b3940c2d5ef5",
+    "IMG0023.dcm": "39ad4f2d7a794472a09141c30fb4f300ed6c5ecb5e034dc31bfa8fe64d29ab0a",
+    "IMG0024.dcm": "89726c95395721ca53a67b846d11ae4915a30d80f516687599dcf683c357497c",
+    "IMG0025.dcm": "8b6a40737c91431871e381fa11002de35dc615c7a343155e7270d3f65a521795",
+    "IMG0026.dcm": "1c7b333a254bcddbfa069a5db8f730783c2f4e506a1dfa1dfe78b950c3130434",
+    "IMG0027.dcm": "6173bec62fb16e48342347fa6a9131a561660ffe3b8401b03ca333c44ab4db69",
+    "IMG0028.dcm": "7aa8ed062d83724ae5451c635acbd8c57e77c1fd2e9740fb6bff258c307ff926",
+    "IMG0029.dcm": "9cac4880b9c238b69b595d91989d04281bccfb762179f74d3cd6897e3659ac2b",
+    "IMG0030.dcm": "3d257ba84fa2e8914bec0c76e216aa043ca9538a4baf04f613c4417c0e3e9949",
+    "IMG0031.dcm": "5bf53aa20f43325885b0c4fed853be6a4c94610d038be578fb5b4c26cd268487",
+    "IMG0032.dcm": "da7b57b7aa148bfbd0fa33cbdc176ba1b40a6e4136dca123d0e899d8f3c29b25",
+    "IMG0033.dcm": "e898ef9bae8cac833bdc9283b89b42213a057bcccdba236ecd2d8923e001de31",
+    "IMG0034.dcm": "9b0030a3faa1cc2345b84b655c76fc0a93ce059fef4cf254d7b3ddf6ed9a4755"
+  },
+  "roi": "Body",
+  "roi_number": 1,
+  "evaluated_voxels": 369266,
+  "body_voxels": 1742822,
+  "material_alignment": 1.0,
+  "body_mask_sha256": "335aae47a61d522217ed401bbe029fdd1be2d9c6bbd1b4a0ca072780a3c22c1b",
+  "physics_config": {
+    "ct_primary_midpoint_stopping": null,
+    "ct_primary_midpoint_stopping_diagnostic": null,
+    "ct_secondary_exact_faces": null,
+    "ct_secondary_exact_faces_diagnostic": true,
+    "ct_secondary_ion_section_stopping_file": null
+  },
+  "method": "All BODY reference voxels with TOPAS dose >=10% full-volume maximum; global normalization is full-volume TOPAS maximum; local normalization is query dose. Search full GPU dose without clipping it to BODY; trilinear interpolation; no extrapolation or dose normalization. Nested spherical lattices: previous passes remain valid. Zero DTA is same-voxel dose difference. BODY uses voxel-centre polygon rasterization and signed-distance interpolation between contour planes.",
+  "gamma": {
+    "global_33": [
+      {
+        "step_mm": 1.0,
+        "pass_percent": 100.0,
+        "passed": 369266,
+        "failed": 0,
+        "seconds": 0.009127062003244646
+      },
+      {
+        "step_mm": 0.5,
+        "pass_percent": 100.0,
+        "passed": 369266,
+        "failed": 0,
+        "seconds": 0.00041914400208042935
+      },
+      {
+        "step_mm": 0.25,
+        "pass_percent": 100.0,
+        "passed": 369266,
+        "failed": 0,
+        "seconds": 0.0004065850007464178
+      },
+      {
+        "step_mm": 0.125,
+        "pass_percent": 100.0,
+        "passed": 369266,
+        "failed": 0,
+        "seconds": 0.00041108200093731284
+      }
+    ],
+    "local_33": [
+      {
+        "step_mm": 1.0,
+        "pass_percent": 99.8719080554397,
+        "passed": 368793,
+        "failed": 473,
+        "seconds": 0.02015492099963012
+      },
+      {
+        "step_mm": 0.5,
+        "pass_percent": 99.99864596253107,
+        "passed": 369261,
+        "failed": 5,
+        "seconds": 0.018055512999126222
+      },
+      {
+        "step_mm": 0.25,
+        "pass_percent": 100.0,
+        "passed": 369266,
+        "failed": 0,
+        "seconds": 0.0297514220001176
+      },
+      {
+        "step_mm": 0.125,
+        "pass_percent": 100.0,
+        "passed": 369266,
+        "failed": 0,
+        "seconds": 0.0004083579988218844
+      }
+    ],
+    "global_22": [
+      {
+        "step_mm": 1.0,
+        "pass_percent": 99.9964795025808,
+        "passed": 369253,
+        "failed": 13,
+        "seconds": 0.008723401002498576
+      },
+      {
+        "step_mm": 0.5,
+        "pass_percent": 100.0,
+        "passed": 369266,
+        "failed": 0,
+        "seconds": 0.0024375879984290805
+      },
+      {
+        "step_mm": 0.25,
+        "pass_percent": 100.0,
+        "passed": 369266,
+        "failed": 0,
+        "seconds": 0.00040783800068311393
+      },
+      {
+        "step_mm": 0.125,
+        "pass_percent": 100.0,
+        "passed": 369266,
+        "failed": 0,
+        "seconds": 0.0004086380031367298
+      }
+    ],
+    "local_22": [
+      {
+        "step_mm": 1.0,
+        "pass_percent": 97.7804617809384,
+        "passed": 361070,
+        "failed": 8196,
+        "seconds": 0.03396333599812351
+      },
+      {
+        "step_mm": 0.5,
+        "pass_percent": 99.9190285593583,
+        "passed": 368967,
+        "failed": 299,
+        "seconds": 0.019687612999405246
+      },
+      {
+        "step_mm": 0.25,
+        "pass_percent": 99.99864596253107,
+        "passed": 369261,
+        "failed": 5,
+        "seconds": 0.03925700800027698
+      },
+      {
+        "step_mm": 0.125,
+        "pass_percent": 99.99972919250621,
+        "passed": 369265,
+        "failed": 1,
+        "seconds": 0.28515877799873124
+      }
+    ],
+    "global_11": [
+      {
+        "step_mm": 1.0,
+        "pass_percent": 93.63114936116513,
+        "passed": 345748,
+        "failed": 23518,
+        "seconds": 0.0169830010017904
+      },
+      {
+        "step_mm": 0.5,
+        "pass_percent": 99.73894157599129,
+        "passed": 368302,
+        "failed": 964,
+        "seconds": 0.010119904000021052
+      },
+      {
+        "step_mm": 0.25,
+        "pass_percent": 99.91632048442044,
+        "passed": 368957,
+        "failed": 309,
+        "seconds": 0.01253097300286754
+      },
+      {
+        "step_mm": 0.125,
+        "pass_percent": 99.92336147925886,
+        "passed": 368983,
+        "failed": 283,
+        "seconds": 0.07811859600042226
+      }
+    ],
+    "local_11": [
+      {
+        "step_mm": 1.0,
+        "pass_percent": 65.30685197120775,
+        "passed": 241156,
+        "failed": 128110,
+        "seconds": 0.05790879299820517
+      },
+      {
+        "step_mm": 0.5,
+        "pass_percent": 92.95440143419648,
+        "passed": 343249,
+        "failed": 26017,
+        "seconds": 0.08952915400004713
+      },
+      {
+        "step_mm": 0.25,
+        "pass_percent": 99.18053652380668,
+        "passed": 366240,
+        "failed": 3026,
+        "seconds": 0.0925979269995878
+      },
+      {
+        "step_mm": 0.125,
+        "pass_percent": 99.7568148705811,
+        "passed": 368368,
+        "failed": 898,
+        "seconds": 0.18108252000092762
+      }
+    ],
+    "global_30": [
+      {
+        "step_mm": 1.0,
+        "pass_percent": 99.99891677002486,
+        "passed": 369262,
+        "failed": 4,
+        "seconds": 0.007890951001172652
+      },
+      {
+        "step_mm": 0.5,
+        "pass_percent": 99.99891677002486,
+        "passed": 369262,
+        "failed": 4,
+        "seconds": 0.00044452300062403083
+      },
+      {
+        "step_mm": 0.25,
+        "pass_percent": 99.99891677002486,
+        "passed": 369262,
+        "failed": 4,
+        "seconds": 0.00043565899977693334
+      },
+      {
+        "step_mm": 0.125,
+        "pass_percent": 99.99891677002486,
+        "passed": 369262,
+        "failed": 4,
+        "seconds": 0.00042706599924713373
+      }
+    ],
+    "local_30": [
+      {
+        "step_mm": 1.0,
+        "pass_percent": 97.04142813039923,
+        "passed": 358341,
+        "failed": 10925,
+        "seconds": 0.006647789999988163
+      },
+      {
+        "step_mm": 0.5,
+        "pass_percent": 97.04142813039923,
+        "passed": 358341,
+        "failed": 10925,
+        "seconds": 0.0005195459998503793
+      },
+      {
+        "step_mm": 0.25,
+        "pass_percent": 97.04142813039923,
+        "passed": 358341,
+        "failed": 10925,
+        "seconds": 0.0004987450010958128
+      },
+      {
+        "step_mm": 0.125,
+        "pass_percent": 97.04142813039923,
+        "passed": 358341,
+        "failed": 10925,
+        "seconds": 0.00047820399777265266
+      }
+    ]
+  }
+}

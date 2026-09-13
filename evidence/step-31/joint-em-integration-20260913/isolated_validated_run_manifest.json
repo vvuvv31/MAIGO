@@ -1,0 +1,13 @@
+{
+  "binary_sha256": "0abdb474e117065cbf10bb4d2069bc8ef4c77cbc039f27fb01319b98fd151fb0",
+  "tables": {
+    "raw_vectors.csv": "f09cb8f0dd601f8853d973a08c4eff3f366ddbcaedb00043183e367dd4e18101",
+    "joint_nodes.csv": "163cad049def757201d75d419c11c5af8a348ccbf280e83ee5d8b8d702d10d96"
+  },
+  "note": "Research candidate: primary joint energy loss, local delta energy deposition; not production validated",
+  "source_sha256": {
+    "src/transport_sycl.cpp": "055710888b2c32bfe63f7a12c950770320287cbd09eb823bb1751cd0e64c2f73",
+    "include/carbon/joint_em_view.hpp": "265702eb493da24ac4f4e3843d849a6ce940775ebb77786a2f5f6a103c904bb1",
+    "include/carbon/restricted_fluctuation_candidate.hpp": "a6ce06defc4624344425af7b103e4cc0ec914941780401422da88af33d361e8d"
+  }
+}

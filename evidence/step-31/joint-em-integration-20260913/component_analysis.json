@@ -1,0 +1,26 @@
+[
+  {
+    "energy_MeVu": 100,
+    "total_difference_percent_of_topas_total": -0.31034076642503317,
+    "primary_origin_difference_percent_of_topas_total": -0.10394956689517398,
+    "other_origin_difference_percent_of_topas_total": -0.20639119952984714,
+    "primary_origin_ratio": 0.9988649848479568,
+    "other_origin_ratio": 0.9754754599655324
+  },
+  {
+    "energy_MeVu": 200,
+    "total_difference_percent_of_topas_total": -0.5182418075139102,
+    "primary_origin_difference_percent_of_topas_total": -0.14995341832465633,
+    "other_origin_difference_percent_of_topas_total": -0.36828838918929613,
+    "primary_origin_ratio": 0.9981288433935531,
+    "other_origin_ratio": 0.9814563059307709
+  },
+  {
+    "energy_MeVu": 300,
+    "total_difference_percent_of_topas_total": -0.6959912369495997,
+    "primary_origin_difference_percent_of_topas_total": -0.24417643642461642,
+    "other_origin_difference_percent_of_topas_total": -0.45181480052500517,
+    "primary_origin_ratio": 0.996570856257864,
+    "other_origin_ratio": 0.9843085856306221
+  }
+]

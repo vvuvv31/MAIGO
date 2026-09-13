@@ -82,6 +82,11 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
                                       const TransportResult& result) {
     RunQualityReport report;
     report.mode = config.run_mode;
+    if (config.primary_em_model == "g4_joint_water_v1") {
+        report.approximations.push_back({"g4_joint_water_v1_research",
+            "Primary C12 homogeneous water only; native StepFunction overrides legacy step caps; local delta deposition; primary inelastic cache enabled; high-statistics full-curve and CT validation pending", 1., 0.});
+    }
+
     if(!config.all_ion_elastic_file.empty()) {
         report.approximations.push_back({"all_ion_elastic_candidate",
             "Finite TOPAS elastic event bank; additional heavy recoil isotopes use total stopping and MCS with EM-only transport; patient gamma and bank convergence validation pending",1.,0.});

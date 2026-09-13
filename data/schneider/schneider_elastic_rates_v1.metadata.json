@@ -1,0 +1,125 @@
+{
+ "schema_version": 1,
+ "format": "SCHNELXS",
+ "binary_version": 3,
+ "data_filename": "schneider_elastic_rates_v1.bin",
+ "data_sha256": "b8f441fde3718a9853dd5cefd0c4e5a823122b07b1976231a149138d0cb900b3",
+ "file_size_bytes": 2579212,
+ "binary_magic": "SCHNELXS",
+ "target_order": [
+  1,
+  6,
+  7,
+  8,
+  12,
+  15,
+  16,
+  17,
+  18,
+  20,
+  11,
+  19,
+  22
+ ],
+ "energy_grid": {
+  "emin": 0.1,
+  "emax": 460.1,
+  "step": 0.5,
+  "count": 921
+ },
+ "channel_domains": [
+  {
+   "target_z": 1,
+   "energy_min_mevu": 0.1,
+   "energy_max_mevu": 460.1,
+   "has_support": true
+  },
+  {
+   "target_z": 6,
+   "energy_min_mevu": 1.1,
+   "energy_max_mevu": 460.1,
+   "has_support": true
+  },
+  {
+   "target_z": 7,
+   "energy_min_mevu": 1.1,
+   "energy_max_mevu": 460.1,
+   "has_support": true
+  },
+  {
+   "target_z": 8,
+   "energy_min_mevu": 1.1,
+   "energy_max_mevu": 460.1,
+   "has_support": true
+  },
+  {
+   "target_z": 12,
+   "energy_min_mevu": 1.6,
+   "energy_max_mevu": 460.1,
+   "has_support": true
+  },
+  {
+   "target_z": 15,
+   "energy_min_mevu": 1.6,
+   "energy_max_mevu": 460.1,
+   "has_support": true
+  },
+  {
+   "target_z": 16,
+   "energy_min_mevu": 1.6,
+   "energy_max_mevu": 460.1,
+   "has_support": true
+  },
+  {
+   "target_z": 17,
+   "energy_min_mevu": 1.6,
+   "energy_max_mevu": 460.1,
+   "has_support": true
+  },
+  {
+   "target_z": 18,
+   "energy_min_mevu": 1.6,
+   "energy_max_mevu": 460.1,
+   "has_support": true
+  },
+  {
+   "target_z": 20,
+   "energy_min_mevu": 2.1,
+   "energy_max_mevu": 460.1,
+   "has_support": true
+  },
+  {
+   "target_z": 11,
+   "energy_min_mevu": 1.6,
+   "energy_max_mevu": 460.1,
+   "has_support": true
+  },
+  {
+   "target_z": 19,
+   "energy_min_mevu": 1.6,
+   "energy_max_mevu": 460.1,
+   "has_support": true
+  },
+  {
+   "target_z": 22,
+   "energy_min_mevu": 2.1,
+   "energy_max_mevu": 460.1,
+   "has_support": true
+  }
+ ],
+ "companion_csv": {
+  "filename": "c12_schneider_elastic_mass_xs_v1.csv",
+  "sha256": "9dd10b0f984f2f40f587f4d1686a34c5e0c854476203fc3669378b5c4490054a",
+  "note": "raw totals audit artifact; NOT loaded by runtime"
+ },
+ "topas_version": "4.2.p3",
+ "geant4_version": "11.03.p02",
+ "physics_list": "FTFP_INCLXX",
+ "schneider_source_file": "data/HUtoMaterialSchneider.txt",
+ "schneider_sha256": "5022cd89617b28dbd8ee8bf8b095ea20cfd99f6405218693c0df238b3617a139",
+ "zeroing_policy": "zero iff extracted XS==0; raw positives kept (no package domains exist for elastic)",
+ "units": "mm, MeV, ns, g/cm^3",
+ "generation_timestamp": "2026-09-11T10:28:36.742683+00:00",
+ "compiler_commit": "fbc1625d3d0a5d1063743f92c328b1feb0f4d6de",
+ "compiler_command": "python3 tools/compile_schneider_elastic_rates_v1.py --raw-json /mnt/sda/wuwei/elastic_xs_extraction/raw/topas_c12_schneider_elastic_xs.json"
+}

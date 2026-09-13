@@ -1,2 +1,0 @@
-spot_id,energy_MeVu,x_mm,y_mm,mu_weight,energy_spread_percent,sigma_x_mm,sigma_y_mm,sigma_x_prime,sigma_y_prime,correlation_x,correlation_y
-1,200,0,0,100000,0.0,0.2,0.2,0.0,0.0,0.0,0.0

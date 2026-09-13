@@ -78,7 +78,7 @@ Symbols used below: T is total particle kinetic energy in MeV, E=T/A is MeV/u,
 rho is local density in g/cm³, and h is step length in mm. Quantities tabulated per
 nucleon must not be confused with total particle energies used for energy conservation.
 
-### 3.2. Primary and secondary predictor-midpoint energy loss
+### 3.2. Existing CT primary and secondary predictor-midpoint energy loss
 
 The current repair uses an explicit final configuration:
 `ct_primary_midpoint_stopping: true`, `ct_secondary_exact_faces: true`, and a
@@ -170,6 +170,95 @@ from the actual voxel. This Coulomb deflection is distinct from an explicit hadr
 elastic collision. Water/FRED-2GR options are separate configurations, not the frozen
 CT Highland model. See [MCS definitions](include/carbon/multiple_scattering.hpp) and
 [GPU arithmetic](src/detail/sycl_device_math.inc).
+
+### 3.5. Joint EM model for primary C12 in homogeneous water (research)
+
+**The production default remains `primary_em_model: legacy`.** The explicit
+`g4_joint_water_v1` research option integrates the following algorithms into one
+primary transport loop. Sections 3.2–3.3 describe the existing paths; selecting this
+option replaces their primary-water energy-loss handling, not Schneider CT or secondary EM.
+
+| Component | Existing water path | Joint water candidate |
+|---|---|---|
+| Continuous mean loss | Total stopping with the existing finite-step integration, including midpoint evaluation | Native restricted DEDX and range/inverse-range, with actual transport mass/charge scaling and ion corrections |
+| Fluctuations | Selected condensed-loss approximation or separate quantile package | Restricted Geant4 ion and Universal/Glandz distributions, using the same electron production threshold |
+| Hard delta production | No independent delta-collision clock in the compared local-deposition baseline | Sampled electron optical depth, rate cache, post-step acceptance and electron energy sampling |
+| Primary step | Preset maximum step and relative-loss limit, then geometry/nuclear truncation | Native ion StepFunction(0.1, 0.001 mm), then competing geometry, nuclear and electron distances |
+| Electron dose | Local deposition in this water comparison | Still local deposition; no complete electron spatial tracking |
+| MCS and secondary EM | Existing configured transport | Unchanged |
+
+**One primary step:**
+
+1. Query native restricted stopping, range, effective charge and electron reaction rate
+   at the current energy. Raw Geant4 spline intervals are retained rather than replaced
+   by a newly smoothed range curve.
+2. Determine the continuous-process step from the remaining range R:
+
+   ```text
+   h_EM = 0.1 R + 0.0009 mm × (2 − 0.001 mm/R),  R > 0.001 mm
+   h_EM = R,                                    otherwise
+   ```
+
+   This **overrides** `maximum_step_mm` and `maximum_relative_energy_loss` for
+   candidate primary steps. Geometry and nuclear/electron collision distances can
+   shorten it further. The electron clock consumes the final path length; the distance
+   comes from remaining sampled optical depth, not a fixed mean free path.
+3. Calculate restricted mean loss. Short steps use restricted stopping × length;
+   larger estimated losses (above the 2% linear-loss threshold) use inverse range,
+   keeping the pre-step mass/charge scaling during inversion. Apply the corresponding
+   along-step ion correction and low-energy replacement, with the remaining kinetic
+   energy as the upper bound.
+4. Sample enabled restricted fluctuations. At an electron candidate, use the post-loss
+   energy for the integral acceptance test, then sample the delta-electron spectrum
+   and form-factor veto. Reset the electron clock/cache after the candidate.
+5. Deduct and score each contribution once:
+
+   ```text
+   DeltaT = sampled restricted continuous loss + accepted delta-electron energy
+   ```
+
+   Restricted stopping excludes the above-threshold transfers treated explicitly.
+   Both terms are currently deposited locally. Do not stack the older proportional
+   electron response on top of this candidate.
+
+The shipped water data use a delta threshold of approximately **57.023 keV** and
+Geant4 11.3.2 default opt4 / Water_75eV extraction. The configuration requires
+`straggling_scale: 1.0`, without an energy-dependent scale. No TOPAS parameter or
+empirical straggling scale was adjusted to obtain the reported improvement.
+
+The configuration also enables the previously isolated **primary inelastic rate-cache
+candidate**. This is a companion nuclear change, not an EM interaction: only inelastic
+rates enter that cache and its post-EM acceptance test; elastic retains its local rate.
+Consequently full-physics improvement cannot be attributed solely to EM. Independent
+pure-EM comparisons support the EM improvement but do not isolate each component's contribution.
+
+```yaml
+run_mode: research
+primary_em_model: g4_joint_water_v1
+primary_joint_em_data_directory: /absolute/path/to/MAIGO/data/water_joint_em_v1
+```
+
+Run `python3 tools/verify_water_joint_em_data.py` before use. The GPU loader also pins
+both table hashes. Missing/corrupt data fail; obsolete isolated environment switches
+are rejected. Supported scope is **local GPU, primary C12, homogeneous unit-density
+water and zero beam energy spread**. CT, material slabs, heterogeneous inserts, other
+primaries and electron-response stacking are not admitted. Table coverage alone does
+not validate other beam energies or geometries.
+
+**Evidence and remaining limits.** With unchanged default TOPAS, 50k histories per
+energy and 3D dose summed laterally, full-physics peak errors at 100/200/300 MeV/u
+changed from −2.729/−4.775/−2.565% to +0.148/+0.103/+0.101%. Independent 0.1 mm
+pure-EM depth scoring gave peak errors within approximately ±0.15%. All six integrated
+runs reproduced isolated transport audit counts, with zero overflow and sampling failures.
+These are finite-statistics results, not a production acceptance or a Gamma result.
+Full-physics integral dose remains low by 0.3–0.7%, and the 300 MeV/u high-dose mean
+absolute relative error slightly increased. Peak improvement does not establish whole-curve,
+lateral halo, CT or minibeam accuracy. Explicit delta generation here is not full electron tracking.
+
+See [implementation and acceptance record](docs/physics/water_joint_em_v1.md),
+[data provenance](data/water_joint_em_v1/manifest.json),
+[joint lookup](include/carbon/joint_em_view.hpp), and
+[restricted fluctuation sampler](include/carbon/restricted_fluctuation_candidate.hpp).
 
 ## 4. Inelastic nuclear interactions
 

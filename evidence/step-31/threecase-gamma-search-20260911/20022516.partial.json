@@ -1,0 +1,309 @@
+{
+  "case": "20022516",
+  "run": "/mnt/sda/wuwei/final_stopping_20260911/20022516_extended",
+  "reference": "/mnt/sda/wuwei/ct_previous_full20_20260909/20022516",
+  "gpu_sha256": "cd156b7b666b916950f11e27d74f5c1487f4a0528448845129c1b2de7d3aa8b9",
+  "reference_sha256": "254fd0d19d263122e8c9cfcacc6703c4aaa30fa942899650e7a22aee79b2a00b",
+  "histories": 177173040,
+  "rtstruct_sha256": "b4e1016aabc3d3626f44c740dcd8fca7e8af2f8f15055a1d85211e92f09de25a",
+  "ct_file_sha256": {
+    "IMG0001.dcm": "7777a6260574b4edade541fcb8b7ace787f72a905d3d04f320bc5f7f6a44a54d",
+    "IMG0002.dcm": "49fdf2c4ed17ac10b88ea017ff2ae204ed77d7b17f71b3cb1aa8e786104a723a",
+    "IMG0003.dcm": "3d7946f116aa7b3a709dc57d9d9a74f317315b2a4b7a516443cbe718ce57b391",
+    "IMG0004.dcm": "33bd4ffbfbae00b8b5d138e1c6bcba70f89b4cb89c8147fa20eabb5ad0e6e4fa",
+    "IMG0005.dcm": "8803650e094e0ffa4a30ee4e05ad17d975dee905498471e73f42049a7ea6b5fe",
+    "IMG0006.dcm": "76843486841a951cbf3735ce355f9fab71bc130485dc168ce306c56c07afdcc2",
+    "IMG0007.dcm": "9c8c6532e4a8f1a2708aded7b568e036764a74e27fabd9533f05fb4565c07b46",
+    "IMG0008.dcm": "e3b865e0a2bf837a2f33258dfea9fe82732abd386e57a552e83fdff6af2b1be1",
+    "IMG0009.dcm": "31b4191a699475b3cf510c5ccb050f66f09781b2670ad2f159879501d75ac3cb",
+    "IMG0010.dcm": "9992d690c4917adc735eec5e8b205fd33af70e8d6b2c7f41bc24bf73e6079938",
+    "IMG0011.dcm": "ffbb7a2ed217e0658808bd27dbcb4643615c7037e836ac2e67a0b8ca60d74729",
+    "IMG0012.dcm": "15ff8c858089ad5f03c85959a59a6f8754eaab4f5f9bbc6f8ae8505a382cbc76",
+    "IMG0013.dcm": "f68d4e027684926b9ab725c7034cfe44b2892785f1b56cdabc0d24facfa30505",
+    "IMG0014.dcm": "b44bf8f345a77a1c0d5d76c3a5f39481d978cc3c8e909c21cc95ac058faaf181",
+    "IMG0015.dcm": "bb77948dc8ae8f14e4e357c6b83b59deb94b07b0943c74943cb287b5ceeafa8e",
+    "IMG0016.dcm": "ec2be056cb0cccf48bc98b3ba4efe8e967c63dbd439ea16b6e29f742f557f87b",
+    "IMG0017.dcm": "28455b26ace6dbeb4f3b3bbefa68b6241a4131fda984e0ebe330063a112de7a5",
+    "IMG0018.dcm": "04d7c62ec727cf5e3ac353a3faf1418c11affb43cebb1d7dc8542d6b8f4bffb0",
+    "IMG0019.dcm": "bb02d9663688dfbe69a47241963f5a25214d01681b62abdf57fd1c1701054ddc",
+    "IMG0020.dcm": "20fb941aa819ba82715bc65a547d6a735e68e27f54ba69f3fea3bb05b46d7554",
+    "IMG0021.dcm": "9f26665ba7e31f9834333b8020c2dd9fb3beec58ff9b0ebd282ba9ab0de6a486",
+    "IMG0022.dcm": "90bc89e585bba15ab23961bedc688b94c3c5c29780b7ae273d0be8c90ef6b937",
+    "IMG0023.dcm": "89ef42bc02f995f7c54e4fe97543f2da4febf4d0e27f461064d8113435f78a8e",
+    "IMG0024.dcm": "e9f4de4b74a48bea4abdf8146aa288949f98e72910d577876c78447c4dd3418b",
+    "IMG0025.dcm": "03cb1c74e3f5a5c4176cedc73c2ed2b7c553fc9a4cffc1363c35640c38becb1b",
+    "IMG0026.dcm": "8473effb48081459b06ba7167cd384390dfb4b09dac5eb42824a56d831e5c22d",
+    "IMG0027.dcm": "7c5377eb4923a72c1e3169b7d2b8f08f684851aa047b4ba0e778a7ea79f1f628",
+    "IMG0028.dcm": "72ce5ddf41677a25d064c959e0c68027b608453e9edcf91af3590a1e3691bde8",
+    "IMG0029.dcm": "ede765b3e1d49783827d5212092e444f7ea84244828e4c29bd8de0a94b2930a5",
+    "IMG0030.dcm": "99e16b1a3a1101951870f3b1d079db9d609a66c8339a266d26a6424a60c1adba",
+    "IMG0031.dcm": "d86a37783428a17ea54be419cd44591a5de4e2e8fbfced04146758b1e73ec3a5",
+    "IMG0032.dcm": "62a7ded9e6f3b2012130c71d3a7dcf12ddd183911d007c25f6b3b46f86f8cc83",
+    "IMG0033.dcm": "56364f85daf95e84ed24c6654e8ee7e415449102d94b1bc5631eabda3154418d",
+    "IMG0034.dcm": "7012c9e2f36cda990ed5c8b57ee0d7285e7c6390510e12f52ebe3eb6fd513622",
+    "IMG0035.dcm": "711571ab4ed5f1c6b2e63875d7ce3d6a573188240f0833d55314ff5e1a9d0b49",
+    "IMG0036.dcm": "a5418fdd19c63e735fadfcd8b56141f807d98996aa0b8dc1e6351d26c73040b2",
+    "IMG0037.dcm": "63d6597dd932bea25f8b7ddd05df41e55109292c3029f56716c876b50f9c633f",
+    "IMG0038.dcm": "e9efe5155a8e1e3bb8f65e1ee59aefdbac09f7b70453099ef9c54c1e304ccff8",
+    "IMG0039.dcm": "d4d2870f4879b7b62728d1b96c88f1ad75ae5d227c64d37e5d29dcb336720722",
+    "IMG0040.dcm": "d8bb525940fd5528e608bcfc155cf2ef6391348f3003ad13f2deefbd2bb89e99",
+    "IMG0041.dcm": "5e75c16656155fe7c77de92bc997444bab9592beb9f8bd3885482c19454f33a0",
+    "IMG0042.dcm": "243e2bf6f7814201dbb5da35720d72fc827153ff83d3c1569e89c37d4656a2f4"
+  },
+  "roi": "Body",
+  "roi_number": 1,
+  "evaluated_voxels": 806092,
+  "body_voxels": 11302407,
+  "material_alignment": 1.0,
+  "body_mask_sha256": "186875af616c2ecfca1f9e560c6c83526706099508fa79e61a2dcfb53137252d",
+  "physics_config": {
+    "ct_primary_midpoint_stopping": true,
+    "ct_primary_midpoint_stopping_diagnostic": null,
+    "ct_secondary_exact_faces": true,
+    "ct_secondary_exact_faces_diagnostic": null,
+    "ct_secondary_ion_section_stopping_file": "/mnt/sda/wuwei/ion_section_stopping_20260911_extended/compiled/schneider_ion_section_stopping_v1.bin"
+  },
+  "method": "All BODY reference voxels with TOPAS dose >=10% full-volume maximum; global normalization is full-volume TOPAS maximum; local normalization is query dose. Search full GPU dose without clipping it to BODY; trilinear interpolation; no extrapolation or dose normalization. Nested spherical lattices: previous passes remain valid. Zero DTA is same-voxel dose difference. BODY uses voxel-centre polygon rasterization and signed-distance interpolation between contour planes.",
+  "gamma": {
+    "global_33": [
+      {
+        "step_mm": 1.0,
+        "pass_percent": 100.0,
+        "passed": 806092,
+        "failed": 0,
+        "seconds": 0.0219158250001783
+      },
+      {
+        "step_mm": 0.5,
+        "pass_percent": 100.0,
+        "passed": 806092,
+        "failed": 0,
+        "seconds": 0.0009148040007858071
+      },
+      {
+        "step_mm": 0.25,
+        "pass_percent": 100.0,
+        "passed": 806092,
+        "failed": 0,
+        "seconds": 0.0008804429999145214
+      },
+      {
+        "step_mm": 0.125,
+        "pass_percent": 100.0,
+        "passed": 806092,
+        "failed": 0,
+        "seconds": 0.0008813240019662771
+      }
+    ],
+    "local_33": [
+      {
+        "step_mm": 1.0,
+        "pass_percent": 99.79220734109754,
+        "passed": 804417,
+        "failed": 1675,
+        "seconds": 0.06388747099845205
+      },
+      {
+        "step_mm": 0.5,
+        "pass_percent": 99.99863539149378,
+        "passed": 806081,
+        "failed": 11,
+        "seconds": 0.021527778000745457
+      },
+      {
+        "step_mm": 0.25,
+        "pass_percent": 99.99950377872501,
+        "passed": 806088,
+        "failed": 4,
+        "seconds": 0.12916866000159644
+      },
+      {
+        "step_mm": 0.125,
+        "pass_percent": 99.99950377872501,
+        "passed": 806088,
+        "failed": 4,
+        "seconds": 1.0215897919988493
+      }
+    ],
+    "global_22": [
+      {
+        "step_mm": 1.0,
+        "pass_percent": 99.99553400852508,
+        "passed": 806056,
+        "failed": 36,
+        "seconds": 0.022325855999952182
+      },
+      {
+        "step_mm": 0.5,
+        "pass_percent": 100.0,
+        "passed": 806092,
+        "failed": 0,
+        "seconds": 0.00551158099915483
+      },
+      {
+        "step_mm": 0.25,
+        "pass_percent": 100.0,
+        "passed": 806092,
+        "failed": 0,
+        "seconds": 0.0009967480000341311
+      },
+      {
+        "step_mm": 0.125,
+        "pass_percent": 100.0,
+        "passed": 806092,
+        "failed": 0,
+        "seconds": 0.0009024559985846281
+      }
+    ],
+    "local_22": [
+      {
+        "step_mm": 1.0,
+        "pass_percent": 96.47844166670801,
+        "passed": 777705,
+        "failed": 28387,
+        "seconds": 0.12000982999961707
+      },
+      {
+        "step_mm": 0.5,
+        "pass_percent": 99.85882504726507,
+        "passed": 804954,
+        "failed": 1138,
+        "seconds": 0.07861396600128501
+      },
+      {
+        "step_mm": 0.25,
+        "pass_percent": 99.97990303836288,
+        "passed": 805930,
+        "failed": 162,
+        "seconds": 0.06588271999862627
+      },
+      {
+        "step_mm": 0.125,
+        "pass_percent": 99.98114359155035,
+        "passed": 805940,
+        "failed": 152,
+        "seconds": 0.47313718399891513
+      }
+    ],
+    "global_11": [
+      {
+        "step_mm": 1.0,
+        "pass_percent": 94.97203793115426,
+        "passed": 765562,
+        "failed": 40530,
+        "seconds": 0.038967238997429376
+      },
+      {
+        "step_mm": 0.5,
+        "pass_percent": 99.70003423926798,
+        "passed": 803674,
+        "failed": 2418,
+        "seconds": 0.022099722998973448
+      },
+      {
+        "step_mm": 0.25,
+        "pass_percent": 99.85845288130884,
+        "passed": 804951,
+        "failed": 1141,
+        "seconds": 0.030839509003271814
+      },
+      {
+        "step_mm": 0.125,
+        "pass_percent": 99.8630429281025,
+        "passed": 804988,
+        "failed": 1104,
+        "seconds": 0.19456992100094794
+      }
+    ],
+    "local_11": [
+      {
+        "step_mm": 1.0,
+        "pass_percent": 62.091423807704324,
+        "passed": 500514,
+        "failed": 305578,
+        "seconds": 0.14616661200125236
+      },
+      {
+        "step_mm": 0.5,
+        "pass_percent": 88.14812701279754,
+        "passed": 710555,
+        "failed": 95537,
+        "seconds": 0.30158762900100555
+      },
+      {
+        "step_mm": 0.25,
+        "pass_percent": 98.92580499496336,
+        "passed": 797433,
+        "failed": 8659,
+        "seconds": 0.28460753399849636
+      },
+      {
+        "step_mm": 0.125,
+        "pass_percent": 99.52784545684612,
+        "passed": 802286,
+        "failed": 3806,
+        "seconds": 0.6194182399995043
+      }
+    ],
+    "global_30": [
+      {
+        "step_mm": 1.0,
+        "pass_percent": 99.99677456171256,
+        "passed": 806066,
+        "failed": 26,
+        "seconds": 0.02090825000050245
+      },
+      {
+        "step_mm": 0.5,
+        "pass_percent": 99.99677456171256,
+        "passed": 806066,
+        "failed": 26,
+        "seconds": 0.0009527719994366635
+      },
+      {
+        "step_mm": 0.25,
+        "pass_percent": 99.99677456171256,
+        "passed": 806066,
+        "failed": 26,
+        "seconds": 0.0009526020003249869
+      },
+      {
+        "step_mm": 0.125,
+        "pass_percent": 99.99677456171256,
+        "passed": 806066,
+        "failed": 26,
+        "seconds": 0.0009275939992221538
+      }
+    ],
+    "local_30": [
+      {
+        "step_mm": 1.0,
+        "pass_percent": 93.83172144122507,
+        "passed": 756370,
+        "failed": 49722,
+        "seconds": 0.017511859998194268
+      },
+      {
+        "step_mm": 0.5,
+        "pass_percent": 93.83172144122507,
+        "passed": 756370,
+        "failed": 49722,
+        "seconds": 0.0015863799999351613
+      },
+      {
+        "step_mm": 0.25,
+        "pass_percent": 93.83172144122507,
+        "passed": 756370,
+        "failed": 49722,
+        "seconds": 0.0015660190001653973
+      },
+      {
+        "step_mm": 0.125,
+        "pass_percent": 93.83172144122507,
+        "passed": 756370,
+        "failed": 49722,
+        "seconds": 0.00154742200174951
+      }
+    ]
+  }
+}

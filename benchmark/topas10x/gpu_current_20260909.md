@@ -158,6 +158,45 @@ OFF 臂与冻结二进制逐比特一致，故 A/B 差为纯电子重分布。
 
 Local30 残余约 3%（峰冷/R80 短等 1% 级效应仍开放，见上）。
 
+## CT 全材料弹性（早期诊断记录，已被后续事件库候选取代）
+
+以下保留当时各向同性模型的状态，不代表当前全部离子弹性事件库或生产配置。
+
+现状：生产仅 C+H 水模型且全关；TOPAS 有全核弹性。
+消融证据：TOPAS 去弹性 halo 缺口只补约 1/5，峰不动——
+弹性主攻 halo，与峰冷正交。
+
+已实现（未提交）：
+- `CarbonSchneiderElasticXsDump`（TOPAS 侧，25 分区×13 靶，
+  fHadronElastic，921 点网格；已注册进 topas-build 扩展链）。
+- `tools/compile_schneider_elastic_rates_v1.py`（SCHNELXS v1，
+  与 SCHNRATE v3 同版式；无 package 域，raw 正值全留）。
+- 运行时：loader 复用（magic/version 参数化）、device 上传、
+  光学深度联合 hazard（密度只进一次）、elastic/inelastic
+  互斥分支、靶抽样复用、推广运动学（H 极限与 FRED 逐比特
+  一致，2880 场对照）、H 反冲沿用质子队列、重反冲局域沉积、
+  born/queued 配对记数（守恒门已适配）。
+- 配置：`ct_elastic_section_rate_file(+sha)` +
+  `ct_elastic_diagnostic`（默认 false，smoke 门）。
+- 分支活性验证（合成 H-only 数据，/tmp，禁入生产）：
+  全零文件与默认逐比特一致；常数 H 文件搬运 ~4% rms、
+  方向合理（中心降温），quality clean。
+
+弹性提取已执行（job 4368，52 s，CSV+JSON 取回），
+SCHNELXS v1 已编译（C++ loader 闭合通过；顺带发现并修复
+编译器 Python3.12 sum() Neumaier 取整问题）。
+elastic/inelastic ≈ 0.6，H 占其中 ~13%（组织）。
+
+H-only 真实数据 full20（肺，同源）：
+local30 81.35→87.73（+6.4pp），global30 94.28→99.72，
+带求和全部 →1.0000；但 local11 粗 84.98→83.38、
+细 98.25→96.58（−1.7pp）。带均值修好、体素散射变差——
+正是缺少前冲衍射的症状：各向同性搬运太多剂量穿过梯度。
+结论：H-only 各向同性**不转正**；重靶各向同性更不得行。
+衍射 dσ/dt 数据下来之前，弹性封存（ machinery 已验证保留）。
+当前最优验证配置仍是电子+exact-faces（肺 local30 95.70，
+细化 local11 99.12）。
+
 ## 最终方案实施状态（中点 + 次级 25 分区专表）
 
 A. 原发预测中点：正式键 `ct_primary_midpoint_stopping`

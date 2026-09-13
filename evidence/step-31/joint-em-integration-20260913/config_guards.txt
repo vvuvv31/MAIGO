@@ -1,0 +1,10 @@
+PASS primary_em_model unknown
+PASS primary_joint_em_data_directory None
+PASS run_mode production
+PASS enable_ct_grid true
+PASS water_density_g_per_cm3 1.1
+PASS primary_atomic_number 2
+PASS beam_energy_spread 0.01
+PASS straggling_scale 0.9
+PASS material_electron_response_index_file forbidden.json
+PASS primary_em_model legacy

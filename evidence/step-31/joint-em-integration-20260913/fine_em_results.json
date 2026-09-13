@@ -1,0 +1,68 @@
+[
+  {
+    "energy_MeVu": 100,
+    "histories": 50000,
+    "overflow": 0,
+    "seconds": 9.772093296051025,
+    "baseline_peak_error_percent": 4.912997398177699,
+    "candidate_peak_error_percent": 0.09509739011235308,
+    "at_reference_peak_percent": 0.09509739011235308,
+    "high_dose_mare_percent": 0.09841321602687438,
+    "total_energy_ratio": 0.9999964465270511,
+    "audit": [
+      [
+        0,
+        42418446,
+        27461391,
+        25994430,
+        0,
+        57689437837572,
+        2309249430370
+      ]
+    ]
+  },
+  {
+    "energy_MeVu": 200,
+    "histories": 50000,
+    "overflow": 0,
+    "seconds": 10.404329061508179,
+    "baseline_peak_error_percent": 0.762379258015522,
+    "candidate_peak_error_percent": 0.1348588059574718,
+    "at_reference_peak_percent": 0.1348588059574718,
+    "high_dose_mare_percent": 0.07036906773090308,
+    "total_energy_ratio": 1.0000107207060676,
+    "audit": [
+      [
+        0,
+        128198647,
+        82741137,
+        74597039,
+        0,
+        111862535897880,
+        8136077351614
+      ]
+    ]
+  },
+  {
+    "energy_MeVu": 300,
+    "histories": 50000,
+    "overflow": 0,
+    "seconds": 10.932514429092407,
+    "baseline_peak_error_percent": 0.8152500751561043,
+    "candidate_peak_error_percent": -0.14076186332964147,
+    "at_reference_peak_percent": -0.14076186332964147,
+    "high_dose_mare_percent": 0.09282218317025409,
+    "total_energy_ratio": 1.0000162794234289,
+    "audit": [
+      [
+        0,
+        227862727,
+        139823307,
+        124678993,
+        0,
+        164796095067340,
+        15202454282826
+      ]
+    ]
+  }
+]

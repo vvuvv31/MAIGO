@@ -1,0 +1,9 @@
+{
+  "local33_depth_from_entrance_mm": {
+    "min": 0.25,
+    "max": 12.25,
+    "median": 1.25,
+    "within3mm_percent": 71.51988636363636
+  },
+  "old_local11_failures_removed_by_search_refinement_pct": 80.40100733482873
+}

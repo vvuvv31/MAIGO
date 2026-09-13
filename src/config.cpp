@@ -595,6 +595,23 @@ void TransportConfig::validate() const {
     if (phantom_length_mm <= 0.0 || depth_bin_width_mm <= 0.0 || maximum_step_mm <= 0.0) {
         throw std::invalid_argument("phantom and step lengths must be positive");
     }
+    if (primary_em_model != "legacy" && primary_em_model != "g4_joint_water_v1")
+        throw std::invalid_argument("Unknown primary_em_model: " + primary_em_model);
+    if (primary_em_model == "legacy" && !primary_joint_em_data_directory.empty())
+        throw std::invalid_argument("primary_joint_em_data_directory requires g4_joint_water_v1");
+    if (primary_em_model == "g4_joint_water_v1") {
+        if (primary_joint_em_data_directory.empty())
+            throw std::invalid_argument("g4_joint_water_v1 requires primary_joint_em_data_directory");
+        if (run_mode != RunMode::research || enable_ct_grid || !unified_water_nuclear_transport ||
+            water_density_g_per_cm3 != 1.0 || primary_atomic_number != 6 || primary_mass_number != 12 ||
+            !slab_layers.empty() || enable_hetero_insert || beam_energy_spread != 0.0)
+            throw std::invalid_argument("g4_joint_water_v1 requires research homogeneous unit-density C12 water with zero energy spread");
+        if (!material_electron_response_index_file.empty() || !water_electron_response_diagnostic_file.empty() ||
+            !ct_schneider_delta_tail_file.empty() || !ct_schneider_delta_longitudinal_file.empty())
+            throw std::invalid_argument("g4_joint_water_v1 deposits delta energy locally; electron response stacking is forbidden");
+        if (straggling_scale != 1.0 || !straggling_scale_energies_MeVu.empty() || !straggling_scale_values.empty())
+            throw std::invalid_argument("g4_joint_water_v1 requires unscaled native fluctuations");
+    }
     if (maximum_primary_steps == 0) {
         throw std::invalid_argument("maximum_primary_steps must be greater than zero");
     }
@@ -1936,6 +1953,9 @@ TransportConfig load_config(const std::filesystem::path& path) {
         values, "primary_rest_mass_MeV", config.primary_rest_mass_MeV);
     config.phantom_length_mm = parse_number(values, "phantom_length_mm", config.phantom_length_mm);
     config.depth_bin_width_mm = parse_number(values, "depth_bin_width_mm", config.depth_bin_width_mm);
+    if (const auto it = values.find("primary_em_model"); it != values.end())
+        config.primary_em_model = it->second;
+    config.primary_joint_em_data_directory = parse_path(values, "primary_joint_em_data_directory", config.primary_joint_em_data_directory);
     config.maximum_step_mm = parse_number(values, "maximum_step_mm", config.maximum_step_mm);
     config.maximum_relative_energy_loss =
         parse_number(values, "maximum_relative_energy_loss", config.maximum_relative_energy_loss);

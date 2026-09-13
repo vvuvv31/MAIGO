@@ -125,6 +125,8 @@ TransportResult transport_serial(const TransportConfig& config,
                                  const StoppingPowerTable& stopping_power,
                                  const CrossSectionTable& cross_section) {
     config.validate();
+    if (config.primary_em_model != "legacy")
+        throw std::invalid_argument("Joint primary EM requires the local SYCL GPU backend");
     if (config.unified_water_nuclear_transport)
         throw std::invalid_argument("Unified water CINEL03 transport is currently GPU-only; CPU fallback forbidden");
     if (config.nuclear_model == "cinel02") {

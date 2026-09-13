@@ -1,0 +1,8 @@
+{
+  "case": "RT07575",
+  "status": "blocked_before_transport",
+  "reason": "Schneider section 23 density above response-bank maximum",
+  "ct_max_density_g_cm3": 2.8667839,
+  "bank_max_density_g_cm3": 2.8667599,
+  "no_density_clamp_or_table_alias": true
+}
