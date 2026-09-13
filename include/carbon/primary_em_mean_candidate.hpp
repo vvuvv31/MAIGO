@@ -28,11 +28,11 @@ template<class Real> struct PrimaryRestrictedMeanCandidate {
 template<class Real,class InverseRange,class Correction>
 PrimaryRestrictedMeanCandidate<Real> primary_restricted_mean_candidate(
     Real kinetic,Real step,Real prestep_restricted_stopping,Real range,
-    InverseRange&& inverse_range,Correction&& correction) {
+    InverseRange&& inverse_range,Correction&& correction,Real linear_limit=Real(.02)) {
     if(step<=0)return {};
     if(step>=range)return {kinetic,false,true};
     Real loss=prestep_restricted_stopping*step;
-    bool use_range=loss>Real(.02)*kinetic;
+    bool use_range=loss>linear_limit*kinetic;
     if(use_range){Real de=kinetic-inverse_range(range-step);if(de>0)loss=de;}
     if(loss>=kinetic)return {kinetic,use_range,true};
     Real midpoint=std::max(kinetic-loss*Real(.5),kinetic*Real(.5));

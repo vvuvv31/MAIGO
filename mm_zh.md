@@ -235,6 +235,24 @@ primary_joint_em_data_directory: /absolute/path/to/MAIGO/data/water_joint_em_v1
 [联合查表](include/carbon/joint_em_view.hpp) 与
 [受限涨落采样](include/carbon/restricted_fluctuation_candidate.hpp)。
 
+### 3.6. 水 / Schneider 全部 18 种离子的统一 EM（研究候选）
+
+`em_model: g4_material_joint_v1` 使用一个 `data/em/unified_em_v1.bin`，
+将原生联合 EM 扩展到原发 C12 和全部 18 种已支持带电离子，覆盖水及 25 个
+Schneider 分区的材料—密度节点。每种离子使用自己的受限 stopping/range、
+δ 反应率、StepFunction、步内修正、涨落模型、自旋和形状因子；原发与次级共用输运函数。
+
+每步先计算原生平均受限能损，再按 IonFluc 或 Universal/Urban 采样涨落，
+并由剩余光学深度决定 δ 电子候选碰撞。δ 电子能量采用局部沉积。
+原发和次级的能损涨落均应开启，`straggling_scale: 1.0`。
+材料变化时清除反应率缓存、保留未消耗光学深度；步长截在 CT 体素面，
+离开 CT 的次级记为带电粒子逃逸。18 种注册离子之外的重反冲同位素保留原反冲路径。
+
+该选项仍为显式**研究候选**，生产默认保持 legacy EM，不能叠加旧水联合模型或
+电子响应包。现有已验证核过程和反冲数据仍需保留。初步全部离子组件检查和每例
+5 万粒子的输运检查已通过，密度插值及患者 Gamma 尚需进一步验收。
+详见[数据包、配置与验证记录](docs/physics/unified_em_v1.md)。
+
 ## 4. 非弹性核过程
 
 **MAIGO 的处理：先抽取碰撞，再重放 TOPAS 派生的相关末态事件。**

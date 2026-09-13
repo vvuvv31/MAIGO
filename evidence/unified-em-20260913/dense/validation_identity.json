@@ -1,0 +1,9 @@
+{
+  "package_sha256": "8c5d970b3b639bfca2f448730271bed4fc04721aba73100e2efbe09dffe44855",
+  "binary_sha256": "e46b3b4be7152c2f034c51424e32375070fa93a48095a856be23aa8f68cb74d4",
+  "source_sha256": {
+    "src/transport_sycl.cpp": "f18b6b3e70215382540f5cf82575b359f2436d1745ef7669f778b13ab41247e1",
+    "include/carbon/unified_em_view.hpp": "b306318a158735f7d8b7b34ec84ca693684098aff74b6267e25641f245ea7e08",
+    "src/config.cpp": "762ff1c9b38064bc15e46e226293cf80d8fb35c45f1c8246af253d2e59174c40"
+  }
+}

@@ -1,0 +1,11 @@
+maximum_mean section=0 rho=0.0118695 Z=1 A=1 E=0.1 relative=7.74874e-06
+maximum_mean section=0 rho=0.0124499 Z=1 A=1 E=0.1 relative=1.03864e-05
+maximum_mean section=0 rho=0.0124499 Z=1 A=2 E=0.1 relative=1.58303e-05
+maximum_mean section=0 rho=0.0124499 Z=1 A=3 E=0.1 relative=1.77101e-05
+maximum_mean section=0 rho=0.020069 Z=1 A=2 E=0.1 relative=2.11072e-05
+maximum_mean section=0 rho=0.0280335 Z=1 A=3 E=0.1 relative=2.47501e-05
+maximum_mean section=0 rho=0.0473994 Z=1 A=1 E=1 relative=8.51056e-05
+maximum_mean section=0 rho=0.0473994 Z=1 A=2 E=1 relative=8.51108e-05
+maximum_mean section=0 rho=0.0473994 Z=2 A=3 E=1 relative=8.51814e-05
+maximum_mean section=0 rho=0.0497175 Z=1 A=1 E=1 relative=0.00786893
+withheld_node_queries=15750 max_mean_relative=0.00786893 max_range_relative=0.00669399 max_rate_relative=95.3642

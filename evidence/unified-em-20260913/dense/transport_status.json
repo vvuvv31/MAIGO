@@ -1,0 +1,401 @@
+{
+  "b4_soft_bone": {
+    "complete": true,
+    "returncode": 0,
+    "histories": 50000,
+    "elapsed_s": 22.394281148910522,
+    "audit": [
+      " 0 87656077 42213017 91148280 81676897 127774989514620 9519628105700 0"
+    ],
+    "quality": {
+      "schema_version": 3,
+      "status": "non_production",
+      "run_mode": "research",
+      "accepted": true,
+      "absolute_physical_energy_residual_MeV": 663.386736751,
+      "physical_relative_energy_residual": 4.42222663566e-06,
+      "absolute_accounting_energy_residual_MeV": 663.386736751,
+      "accounting_relative_energy_residual": 4.42222663566e-06,
+      "absolute_energy_residual_MeV": 663.386736751,
+      "relative_energy_residual": 4.42222663566e-06,
+      "topas_reference_energy_sink_active": false,
+      "queue_overflow_count": 0,
+      "queue_overflow_energy_MeV": 0,
+      "voxel_scored_energy_MeV": 137957850.667,
+      "in_grid_deposited_energy_MeV": 137957844.823,
+      "outside_grid_deposited_energy_MeV": 0,
+      "grid_split_closure_ratio": 0.999999909053,
+      "voxel_to_ingrid_ratio": 1.00000004237,
+      "voxel_to_total_deposited_ratio": 0.999999951419,
+      "failures": [],
+      "approximations": [
+        {
+          "code": "unified_material_em_research",
+          "message": "One density-resolved water/Schneider package for all 18 charged ions; local delta deposition; density interpolation, all-ion closure and patient Gamma not yet production validated",
+          "value": 1,
+          "limit": 0
+        },
+        {
+          "code": "all_ion_elastic_candidate",
+          "message": "Finite TOPAS elastic event bank; additional heavy recoil isotopes use total stopping and MCS with EM-only transport; patient gamma and bank convergence validation pending",
+          "value": 1,
+          "limit": 0
+        },
+        {
+          "code": "schneider_post_em_null_collisions",
+          "message": "sampled candidates resolved as post-EM null collisions (track continues, no lookup)",
+          "value": 3,
+          "limit": 0
+        },
+        {
+          "code": "schneider_primary_post_em_null_collisions",
+          "message": "primary candidates resolved as post-EM null collisions (track continues, no lookup)",
+          "value": 1,
+          "limit": 0
+        }
+      ]
+    }
+  },
+  "b1_300": {
+    "complete": true,
+    "returncode": 0,
+    "histories": 50000,
+    "elapsed_s": 21.162094593048096,
+    "audit": [
+      " 0 104616457 76421082 119866130 106715666 142008620868546 13140428760258 0"
+    ],
+    "quality": {
+      "schema_version": 3,
+      "status": "non_production",
+      "run_mode": "research",
+      "accepted": true,
+      "absolute_physical_energy_residual_MeV": 874.817929268,
+      "physical_relative_energy_residual": 4.86009960704e-06,
+      "absolute_accounting_energy_residual_MeV": 874.817929268,
+      "accounting_relative_energy_residual": 4.86009960704e-06,
+      "absolute_energy_residual_MeV": 874.817929268,
+      "relative_energy_residual": 4.86009960704e-06,
+      "topas_reference_energy_sink_active": false,
+      "queue_overflow_count": 0,
+      "queue_overflow_energy_MeV": 0,
+      "voxel_scored_energy_MeV": 155158664.752,
+      "in_grid_deposited_energy_MeV": 155158664.09,
+      "outside_grid_deposited_energy_MeV": 1312912.89461,
+      "grid_split_closure_ratio": 1.00000015296,
+      "voxel_to_ingrid_ratio": 1.00000000426,
+      "voxel_to_total_deposited_ratio": 0.99160941223,
+      "failures": [],
+      "approximations": [
+        {
+          "code": "unified_material_em_research",
+          "message": "One density-resolved water/Schneider package for all 18 charged ions; local delta deposition; density interpolation, all-ion closure and patient Gamma not yet production validated",
+          "value": 1,
+          "limit": 0
+        },
+        {
+          "code": "all_ion_elastic_candidate",
+          "message": "Finite TOPAS elastic event bank; additional heavy recoil isotopes use total stopping and MCS with EM-only transport; patient gamma and bank convergence validation pending",
+          "value": 1,
+          "limit": 0
+        },
+        {
+          "code": "water_topas_match_pending",
+          "message": "Shared CINEL03 framework enabled for production; water TOPAS accuracy validation remains incomplete",
+          "value": 1,
+          "limit": 0
+        },
+        {
+          "code": "schneider_post_em_null_collisions",
+          "message": "sampled candidates resolved as post-EM null collisions (track continues, no lookup)",
+          "value": 4,
+          "limit": 0
+        }
+      ]
+    }
+  },
+  "b3_layers": {
+    "complete": true,
+    "returncode": 0,
+    "histories": 50000,
+    "elapsed_s": 23.25855541229248,
+    "audit": [
+      " 0 124933320 56115994 129334314 113163399 125610340804480 10981478715728 0"
+    ],
+    "quality": {
+      "schema_version": 3,
+      "status": "non_production",
+      "run_mode": "research",
+      "accepted": true,
+      "absolute_physical_energy_residual_MeV": 550.438288152,
+      "physical_relative_energy_residual": 3.66945468478e-06,
+      "absolute_accounting_energy_residual_MeV": 550.438288152,
+      "accounting_relative_energy_residual": 3.66945468478e-06,
+      "absolute_energy_residual_MeV": 550.438288152,
+      "relative_energy_residual": 3.66945468478e-06,
+      "topas_reference_energy_sink_active": false,
+      "queue_overflow_count": 0,
+      "queue_overflow_energy_MeV": 0,
+      "voxel_scored_energy_MeV": 137293326.584,
+      "in_grid_deposited_energy_MeV": 137293322.928,
+      "outside_grid_deposited_energy_MeV": 0,
+      "grid_split_closure_ratio": 0.999999912,
+      "voxel_to_ingrid_ratio": 1.00000002663,
+      "voxel_to_total_deposited_ratio": 0.999999938626,
+      "failures": [],
+      "approximations": [
+        {
+          "code": "unified_material_em_research",
+          "message": "One density-resolved water/Schneider package for all 18 charged ions; local delta deposition; density interpolation, all-ion closure and patient Gamma not yet production validated",
+          "value": 1,
+          "limit": 0
+        },
+        {
+          "code": "all_ion_elastic_candidate",
+          "message": "Finite TOPAS elastic event bank; additional heavy recoil isotopes use total stopping and MCS with EM-only transport; patient gamma and bank convergence validation pending",
+          "value": 1,
+          "limit": 0
+        },
+        {
+          "code": "schneider_primary_post_em_null_collisions",
+          "message": "primary candidates resolved as post-EM null collisions (track continues, no lookup)",
+          "value": 1,
+          "limit": 0
+        }
+      ]
+    }
+  },
+  "b2_250": {
+    "complete": true,
+    "returncode": 0,
+    "histories": 50000,
+    "elapsed_s": 20.247777938842773,
+    "audit": [
+      " 0 91852607 51483771 100453724 89784240 126602498264154 10469128842749 0"
+    ],
+    "quality": {
+      "schema_version": 3,
+      "status": "non_production",
+      "run_mode": "research",
+      "accepted": true,
+      "absolute_physical_energy_residual_MeV": 830.432785273,
+      "physical_relative_energy_residual": 5.53624043844e-06,
+      "absolute_accounting_energy_residual_MeV": 830.432785273,
+      "accounting_relative_energy_residual": 5.53624043844e-06,
+      "absolute_energy_residual_MeV": 830.432785273,
+      "relative_energy_residual": 5.53624043844e-06,
+      "topas_reference_energy_sink_active": false,
+      "queue_overflow_count": 0,
+      "queue_overflow_energy_MeV": 0,
+      "voxel_scored_energy_MeV": 137082163.032,
+      "in_grid_deposited_energy_MeV": 137082163.279,
+      "outside_grid_deposited_energy_MeV": 712148.048574,
+      "grid_split_closure_ratio": 1.00000012795,
+      "voxel_to_ingrid_ratio": 0.999999998196,
+      "voxel_to_total_deposited_ratio": 0.994831929206,
+      "failures": [],
+      "approximations": [
+        {
+          "code": "unified_material_em_research",
+          "message": "One density-resolved water/Schneider package for all 18 charged ions; local delta deposition; density interpolation, all-ion closure and patient Gamma not yet production validated",
+          "value": 1,
+          "limit": 0
+        },
+        {
+          "code": "all_ion_elastic_candidate",
+          "message": "Finite TOPAS elastic event bank; additional heavy recoil isotopes use total stopping and MCS with EM-only transport; patient gamma and bank convergence validation pending",
+          "value": 1,
+          "limit": 0
+        },
+        {
+          "code": "water_topas_match_pending",
+          "message": "Shared CINEL03 framework enabled for production; water TOPAS accuracy validation remains incomplete",
+          "value": 1,
+          "limit": 0
+        },
+        {
+          "code": "schneider_post_em_null_collisions",
+          "message": "sampled candidates resolved as post-EM null collisions (track continues, no lookup)",
+          "value": 3,
+          "limit": 0
+        },
+        {
+          "code": "schneider_primary_post_em_null_collisions",
+          "message": "primary candidates resolved as post-EM null collisions (track continues, no lookup)",
+          "value": 1,
+          "limit": 0
+        }
+      ]
+    }
+  },
+  "b1_200": {
+    "complete": true,
+    "returncode": 0,
+    "histories": 50000,
+    "elapsed_s": 19.050195693969727,
+    "audit": [
+      " 0 75111517 28559401 77382886 69678791 106052375107171 7619939055494 0"
+    ],
+    "quality": {
+      "schema_version": 3,
+      "status": "non_production",
+      "run_mode": "research",
+      "accepted": true,
+      "absolute_physical_energy_residual_MeV": 571.029817462,
+      "physical_relative_energy_residual": 4.75858181218e-06,
+      "absolute_accounting_energy_residual_MeV": 571.029817462,
+      "accounting_relative_energy_residual": 4.75858181218e-06,
+      "absolute_energy_residual_MeV": 571.029817462,
+      "relative_energy_residual": 4.75858181218e-06,
+      "topas_reference_energy_sink_active": false,
+      "queue_overflow_count": 0,
+      "queue_overflow_energy_MeV": 0,
+      "voxel_scored_energy_MeV": 113790544.293,
+      "in_grid_deposited_energy_MeV": 113790544.362,
+      "outside_grid_deposited_energy_MeV": 259798.390122,
+      "grid_split_closure_ratio": 1.00000006443,
+      "voxel_to_ingrid_ratio": 0.99999999939,
+      "voxel_to_total_deposited_ratio": 0.997722136366,
+      "failures": [],
+      "approximations": [
+        {
+          "code": "unified_material_em_research",
+          "message": "One density-resolved water/Schneider package for all 18 charged ions; local delta deposition; density interpolation, all-ion closure and patient Gamma not yet production validated",
+          "value": 1,
+          "limit": 0
+        },
+        {
+          "code": "all_ion_elastic_candidate",
+          "message": "Finite TOPAS elastic event bank; additional heavy recoil isotopes use total stopping and MCS with EM-only transport; patient gamma and bank convergence validation pending",
+          "value": 1,
+          "limit": 0
+        },
+        {
+          "code": "water_topas_match_pending",
+          "message": "Shared CINEL03 framework enabled for production; water TOPAS accuracy validation remains incomplete",
+          "value": 1,
+          "limit": 0
+        },
+        {
+          "code": "schneider_post_em_null_collisions",
+          "message": "sampled candidates resolved as post-EM null collisions (track continues, no lookup)",
+          "value": 2,
+          "limit": 0
+        },
+        {
+          "code": "schneider_primary_post_em_null_collisions",
+          "message": "primary candidates resolved as post-EM null collisions (track continues, no lookup)",
+          "value": 4,
+          "limit": 0
+        }
+      ]
+    }
+  },
+  "b4_soft_lung": {
+    "complete": true,
+    "returncode": 0,
+    "histories": 50000,
+    "elapsed_s": 24.81651782989502,
+    "audit": [
+      " 0 137839589 60585425 141991085 124926865 119915950729700 11501220678704 0"
+    ],
+    "quality": {
+      "schema_version": 3,
+      "status": "non_production",
+      "run_mode": "research",
+      "accepted": true,
+      "absolute_physical_energy_residual_MeV": 591.082145572,
+      "physical_relative_energy_residual": 3.9403940531e-06,
+      "absolute_accounting_energy_residual_MeV": 591.082145572,
+      "accounting_relative_energy_residual": 3.9403940531e-06,
+      "absolute_energy_residual_MeV": 591.082145572,
+      "relative_energy_residual": 3.9403940531e-06,
+      "topas_reference_energy_sink_active": false,
+      "queue_overflow_count": 0,
+      "queue_overflow_energy_MeV": 0,
+      "voxel_scored_energy_MeV": 131980625.966,
+      "in_grid_deposited_energy_MeV": 131980625.672,
+      "outside_grid_deposited_energy_MeV": 0,
+      "grid_split_closure_ratio": 0.999999947396,
+      "voxel_to_ingrid_ratio": 1.00000000223,
+      "voxel_to_total_deposited_ratio": 0.999999949627,
+      "failures": [],
+      "approximations": [
+        {
+          "code": "unified_material_em_research",
+          "message": "One density-resolved water/Schneider package for all 18 charged ions; local delta deposition; density interpolation, all-ion closure and patient Gamma not yet production validated",
+          "value": 1,
+          "limit": 0
+        },
+        {
+          "code": "all_ion_elastic_candidate",
+          "message": "Finite TOPAS elastic event bank; additional heavy recoil isotopes use total stopping and MCS with EM-only transport; patient gamma and bank convergence validation pending",
+          "value": 1,
+          "limit": 0
+        },
+        {
+          "code": "schneider_post_em_null_collisions",
+          "message": "sampled candidates resolved as post-EM null collisions (track continues, no lookup)",
+          "value": 3,
+          "limit": 0
+        }
+      ]
+    }
+  },
+  "b1_100": {
+    "complete": true,
+    "returncode": 0,
+    "histories": 50000,
+    "elapsed_s": 17.655300855636597,
+    "audit": [
+      " 0 30171885 3504535 26699158 25243321 56537522902084 2245438289364 0"
+    ],
+    "quality": {
+      "schema_version": 3,
+      "status": "non_production",
+      "run_mode": "research",
+      "accepted": true,
+      "absolute_physical_energy_residual_MeV": 323.566730887,
+      "physical_relative_energy_residual": 5.39277884811e-06,
+      "absolute_accounting_energy_residual_MeV": 323.566730887,
+      "accounting_relative_energy_residual": 5.39277884811e-06,
+      "absolute_energy_residual_MeV": 323.566730887,
+      "relative_energy_residual": 5.39277884811e-06,
+      "topas_reference_energy_sink_active": false,
+      "queue_overflow_count": 0,
+      "queue_overflow_energy_MeV": 0,
+      "voxel_scored_energy_MeV": 58947365.2003,
+      "in_grid_deposited_energy_MeV": 58947364.9384,
+      "outside_grid_deposited_energy_MeV": 131.477045262,
+      "grid_split_closure_ratio": 1.00000000715,
+      "voxel_to_ingrid_ratio": 1.00000000444,
+      "voxel_to_total_deposited_ratio": 0.999997781183,
+      "failures": [],
+      "approximations": [
+        {
+          "code": "unified_material_em_research",
+          "message": "One density-resolved water/Schneider package for all 18 charged ions; local delta deposition; density interpolation, all-ion closure and patient Gamma not yet production validated",
+          "value": 1,
+          "limit": 0
+        },
+        {
+          "code": "all_ion_elastic_candidate",
+          "message": "Finite TOPAS elastic event bank; additional heavy recoil isotopes use total stopping and MCS with EM-only transport; patient gamma and bank convergence validation pending",
+          "value": 1,
+          "limit": 0
+        },
+        {
+          "code": "water_topas_match_pending",
+          "message": "Shared CINEL03 framework enabled for production; water TOPAS accuracy validation remains incomplete",
+          "value": 1,
+          "limit": 0
+        },
+        {
+          "code": "schneider_primary_post_em_null_collisions",
+          "message": "primary candidates resolved as post-EM null collisions (track continues, no lookup)",
+          "value": 2,
+          "limit": 0
+        }
+      ]
+    }
+  }
+}

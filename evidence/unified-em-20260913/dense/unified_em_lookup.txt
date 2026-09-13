@@ -1,0 +1,1 @@
+records=3150 queries=700000 stopping=4.9257e-07 range=6.04894e-07 lambda=0.000364472 mixed_relative=0.000240275

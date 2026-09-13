@@ -49,6 +49,7 @@ add_library(carbon_core
     src/electron_joint_response.cpp
     src/water_electron_response.cpp
     src/energy_loss_fluctuation.cpp
+    src/unified_em_package.cpp
     src/fred_table1.cpp
     src/fred_event_library.cpp
     src/inelastic_package_v2.cpp
@@ -156,6 +157,9 @@ target_link_libraries(carbon_mc PRIVATE carbon_core)
 
 if(BUILD_TESTING)
     if(CARBON_ENABLE_SYCL)
+        add_executable(unified_em_gpu tests/unified_em_gpu.cpp)
+        target_link_libraries(unified_em_gpu PRIVATE carbon_core)
+        target_compile_options(unified_em_gpu PRIVATE $<TARGET_PROPERTY:carbon_core,COMPILE_OPTIONS>)
         # Explicit invocation with a verified real table on the local GPU.
         add_executable(all_ion_elastic_gpu tests/all_ion_elastic_gpu.cpp)
         target_link_libraries(all_ion_elastic_gpu PRIVATE carbon_core)
@@ -174,6 +178,16 @@ if(BUILD_TESTING)
         target_compile_options(material_electron_density_gpu_smoke PRIVATE
             $<TARGET_PROPERTY:carbon_core,COMPILE_OPTIONS>)
     endif()
+    add_executable(unified_em_density tests/unified_em_density.cpp)
+    target_link_libraries(unified_em_density PRIVATE carbon_core)
+    add_executable(unified_em_distribution tests/unified_em_distribution.cpp)
+    target_link_libraries(unified_em_distribution PRIVATE carbon_core)
+    add_executable(unified_em_delta tests/unified_em_delta.cpp)
+    target_link_libraries(unified_em_delta PRIVATE carbon_core)
+    add_executable(unified_em_mean tests/unified_em_mean.cpp)
+    target_link_libraries(unified_em_mean PRIVATE carbon_core)
+    add_executable(unified_em_lookup tests/unified_em_lookup.cpp)
+    target_link_libraries(unified_em_lookup PRIVATE carbon_core)
     add_executable(primary_em_mean_candidate_unit tests/primary_em_mean_candidate_unit.cpp)
     target_include_directories(primary_em_mean_candidate_unit PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
     add_test(NAME primary_em_mean_candidate_unit COMMAND primary_em_mean_candidate_unit)

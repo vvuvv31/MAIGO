@@ -3,8 +3,8 @@
 #include <limits>
 
 namespace carbon {
-// Isolated spin-zero C12 / homogeneous-water research building blocks.
-// No production transport path enables these helpers yet.
+// Research building blocks for native charged-ion delta production.
+// Enabled only by the explicit water or unified-material EM candidates.
 enum class DeltaDrawStatus { accepted, below_cut, form_factor_null, exhausted, invalid };
 
 template <typename Real> struct DeltaDraw {
@@ -39,6 +39,32 @@ DeltaDraw<Real> sample_spin_zero_delta_candidate(
         return {transfer, DeltaDrawStatus::accepted};
     }
     return {0, DeltaDrawStatus::exhausted};
+}
+
+// Geant4 BetheBloch/Lindhard-Sorensen proposal for supported charged ions.
+// Spin and magnetic-moment terms are supplied by the extracted projectile record.
+template<typename Real,typename Uniform>
+DeltaDraw<Real> sample_charged_delta_candidate(Real cut,Real tmax,Real beta2,Real form_factor,Real mass,Real kinetic,Real spin,Real magnetic_moment2,Uniform& uniform) {
+    if(!(mass>0 && kinetic>0 && cut>0 && tmax>=0 && beta2>=0 && beta2<1 && form_factor>=0))return {};
+    if(tmax<=cut)return {0,DeltaDrawStatus::below_cut};
+    const Real total2=(kinetic+mass)*(kinetic+mass);
+    const Real bound=1+(spin>0?Real(.5)*tmax*tmax/total2:0);
+    for(int trial=0;trial<128;++trial){
+        Real u=uniform(),v=uniform();if(!(u>=0 && u<1 && v>=0 && v<1))return {};
+        Real e=cut*tmax/(cut*(1-u)+tmax*u);
+        Real f1=spin>0?Real(.5)*e*e/total2:0;
+        Real f=1-beta2*e/tmax+f1;
+        if(bound*v>f)continue;
+        Real x=form_factor*e;
+        if(x>Real(1e-6)){
+            Real accept=1/((1+x)*(1+x));
+            if(spin>0){Real x2=Real(.5*.51099891)*e/(mass*mass);accept*=1+magnetic_moment2*(x2-f1/f)/(1+x2);}
+            Real w=uniform();if(!(w>=0 && w<1))return {};
+            if(w>accept)return {0,DeltaDrawStatus::form_factor_null};
+        }
+        return {e,DeltaDrawStatus::accepted};
+    }
+    return {0,DeltaDrawStatus::exhausted};
 }
 
 // Two-phase clock: inspect candidate distances, choose the winning process,

@@ -1,3 +1,4 @@
+#include "carbon/unified_em_view.hpp"
 #include "carbon/joint_em_view.hpp"
 #include <fstream>
 #include <sstream>
@@ -1044,6 +1045,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
     bool ct_material_ids_are_schneider_sections = false;
     const auto ct_skip_homogeneous_face_clamp = config.ct_skip_homogeneous_face_clamp;
     const auto ct_primary_midpoint_stopping = config.ct_primary_midpoint_stopping;
+
     if (std::getenv("CARBON_JOINT_EM_DATA") || std::getenv("CARBON_DIAGNOSTIC_PRIMARY_START_DEDX"))
         throw std::invalid_argument("Obsolete isolated EM environment switch; use explicit primary_em_model configuration");
     // Explicit research model; legacy transport remains the default.
@@ -1069,6 +1071,27 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
         queue.fill(joint_debug,0.f,10).wait_and_throw();
         queue.copy(nodes.data(),joint_nodes,nodes.size()).wait_and_throw();queue.copy(vs.data(),joint_vectors,vs.size()).wait_and_throw();queue.fill(joint_audit,std::uint64_t{0},7).wait_and_throw();joint.nodes=joint_nodes;joint.vectors=joint_vectors;
         std::cout<<"[joint-em] research C12 restricted+delta candidate; native StepFunction(0.1,0.001mm) overrides maximum_step_mm/maximum_relative_energy_loss; primary inelastic cache enabled; electron energy local; peak="<<joint.peak<<"\n";
+    }
+    const bool unified_em=config.em_model=="g4_material_joint_v1";
+    UnifiedEmDevice unified_device;
+    UnifiedEmMaterial* unified_materials=nullptr;
+    UnifiedEmSpecies* unified_species=nullptr;
+    UnifiedEmRecord* unified_records=nullptr;
+    UnifiedEmNode* unified_nodes=nullptr;
+    EmCubicSegmentCandidate<float>* unified_segments=nullptr;
+    std::uint64_t* unified_audit=nullptr;
+    if(unified_em){
+        auto package=UnifiedEmPackage::load(config.em_package_file,config.em_package_sha256);
+        auto upload=[&]<class T>(const std::vector<T>& values){
+            auto* ptr=mem_tracker.allocate<T>(values.size());if(!ptr)throw std::bad_alloc();
+            queue.copy(values.data(),ptr,values.size()).wait_and_throw();return ptr;
+        };
+        unified_materials=upload(package.materials);unified_species=upload(package.species);
+        unified_records=upload(package.records);unified_nodes=upload(package.nodes);unified_segments=upload(package.segments);
+        unified_audit=mem_tracker.allocate<std::uint64_t>(8);if(!unified_audit)throw std::bad_alloc();
+        queue.fill(unified_audit,std::uint64_t{0},8).wait_and_throw();
+        unified_device={unified_materials,unified_species,unified_records,unified_nodes,unified_segments,static_cast<unsigned>(package.materials.size())};
+        std::cout<<"[unified-em] all 18 charged ions; water + Schneider density nodes; native particle step parameters override legacy caps; local delta deposition; research only\n";
     }
     const auto ct_secondary_exact_faces = config.ct_secondary_exact_faces;
     std::cout << "[stopping-config] primary_midpoint=" << ct_primary_midpoint_stopping
@@ -2709,6 +2732,9 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                 bool nuclear_tau_active = false;
                 std::uint32_t nuclear_tau_rng_step = 0;
                 bool primary_inelastic_occurred = false;
+                UnifiedEmClock unified_primary_clock;
+                std::uint64_t unified_primary_counter=0;
+                const int unified_primary_species=unified_em?unified_device.species_index(primary_atomic_number,primary_mass_number):-1;
                 DiscreteDeltaClockCandidate<float> joint_clock;JointRateCache joint_cache;
                 std::uint64_t joint_counter=0;
 
@@ -2871,6 +2897,21 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                         maximum_relative_energy_loss * energy_MeV /
                             sycl::fmax(stopping_power_MeV_per_mm, 1.0e-6F));
                     step_mm = sycl::fmax(step_mm, 1.0e-5F);
+                    UnifiedEmState unified_primary_state;
+                    float unified_primary_rate=0,unified_primary_distance=std::numeric_limits<float>::infinity();
+                    auto unified_uniform=[&](){return (rng::random_u32(spot_seed,rng_history,unified_primary_counter++,120)>>8)*0x1p-24f;};
+                    auto unified_count=[&](int index,std::uint64_t count=1){
+                        sycl::atomic_ref<std::uint64_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space> a(unified_audit[index]);a.fetch_add(count);
+                    };
+                    if(unified_em){
+                        unified_primary_state=unified_device.select(enable_ct_grid?(in_ct?int(ct_material):-2):-1,local_density_g_per_cm3,unified_primary_species);
+                        if(!unified_primary_state.covers(energy_MeV)){unified_count(0);break;}
+                        if(unified_primary_clock.last_section!=unified_primary_state.section || unified_primary_clock.last_density!=unified_primary_state.density)primary_hadronic_cache.valid=false;
+                        unified_primary_rate=unified_primary_clock.update(unified_primary_state,energy_MeV,unified_primary_state.lo.factor(energy_MeV),unified_primary_state.hi.factor(energy_MeV));
+                        if(!unified_primary_clock.clock.active)unified_primary_clock.clock.arm(-sycl::log(sycl::fmax(unified_uniform(),1e-12f)));
+                        unified_primary_distance=unified_primary_clock.clock.distance(unified_primary_rate);
+                        step_mm=sycl::fmin(unified_primary_state.step(energy_MeV),unified_primary_distance);
+                    }
                     float joint_q=0,joint_proposal_rate=0,joint_distance=1e30f;
                     auto joint_uniform=[&](){return (rng::random_u32(spot_seed,rng_history,joint_counter++,120)>>8)*0x1p-24f;};
                     auto joint_count=[&](int i,std::uint64_t n=1){sycl::atomic_ref<std::uint64_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space> a(joint_audit[i]);a.fetch_add(n);};
@@ -3012,7 +3053,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                              : el_rates.partials[0]);
                                 }
                                 float macro_inelastic = local_density_g_per_cm3 * mass_rate;
-                                if (joint_em) {
+                                if (joint_em || unified_em) {
                                 // Cache only the process whose post-step acceptance uses
                                 // this rate. Elastic retains its own local hazard and must
                                 // never enter the inelastic acceptance denominator.
@@ -3133,7 +3174,9 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                     }
 
                     float mean_loss_MeV = 0.0F;
-                    if (joint_em) {
+                    if(unified_em){
+                        mean_loss_MeV=unified_primary_state.mean(energy_MeV,step_mm);
+                    } else if (joint_em) {
                         mean_loss_MeV=joint.mean(energy_MeVu,step_mm,joint_q);
 
                     } else if (ct_primary_midpoint_stopping && use_schneider_stopping && in_ct) {
@@ -3196,7 +3239,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                         energy_sum.fetch_add(static_cast<std::uint64_t>(mean_loss_MeV*1.0e6F+0.5F));
                     }
 
-                    if (enable_energy_straggling && !joint_em) {
+                    if (enable_energy_straggling && !joint_em && !unified_em) {
                         // Explicit smoke hybrid: retain the existing Gaussian
                         // only for f<1e-4; never substitute it for missing energy
                         // coverage or other out-of-domain package queries.
@@ -3297,6 +3340,12 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                             }
                         }
                         if(deposited_MeV>energy_MeV || !sycl::isfinite(deposited_MeV)){joint_count(0);break;}
+                    }
+                    if(unified_em){
+                        auto draw=unified_em_loss(unified_primary_state,unified_primary_clock,energy_MeV,step_mm,unified_primary_rate,unified_primary_distance,enable_energy_straggling,unified_uniform);
+                        if(!draw.valid){unified_count(0);break;}
+                        deposited_MeV=draw.loss;unified_count(1);unified_count(3,draw.proposed);unified_count(4,draw.accepted);
+                        unified_count(5,static_cast<std::uint64_t>(draw.continuous*1e6f));unified_count(6,static_cast<std::uint64_t>(draw.delta*1e6f));
                     }
                     auto local_voxel_deposit_MeV = deposited_MeV;
                     auto same_voxel_electron_packet_MeV = 0.0F;
@@ -4358,7 +4407,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                 interaction_section, cur_primary_e_u);
                             target_z = sample_masked_schneider_target_device(
                                 masked.partials, u_target);
-                            if (joint_em) {
+                            if (joint_em || unified_em) {
                             // Dedicated dimension 44; do not reuse source, loss,
                             // target, event or electron-response variates.
                             const bool accepted = primary_hadronic_cache.accept(
@@ -5121,6 +5170,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                 static_cast<std::size_t>(charged_sp_idx<0?0:charged_sp_idx) * table_size];
 
                         bool sec_terminal_recorded = false;
+                        bool unified_secondary_escaped_ct = false;
                         ContinuousSpeciesTrackTally continuous_species_tally;
                         double he4_audit[6]{};
                         float sec_e = frag.energy_MeV;
@@ -5136,6 +5186,13 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                         float pending_sec_depth_MeV = 0.0F;
                         float pending_sec_voxel_MeV = 0.0F;
 
+                        const bool unified_secondary=unified_em && !generic_recoil;
+                        const int unified_secondary_species=unified_secondary?unified_device.species_index(frag.z,frag.a):-1;
+                        UnifiedEmClock unified_secondary_clock;std::uint64_t unified_secondary_counter=0;
+                        auto unified_secondary_uniform=[&](){return (rng::random_u32(2026,frag.rng_stream,unified_secondary_counter++,121)>>8)*0x1p-24f;};
+                        auto unified_secondary_count=[&](int index,std::uint64_t count=1){
+                            sycl::atomic_ref<std::uint64_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space> a(unified_audit[index]);a.fetch_add(count);
+                        };
                         uint32_t sec_steps = 0;
                         constexpr uint32_t kSecondaryMaxSteps = 30000U;
                         std::uint64_t local_sec_rate_queries = 0;
@@ -5205,6 +5262,12 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                     ct_nx, ct_ny, ct_nz, ct_density_device,
                                     ct_material_device, sec_local_density_g_per_cm3,
                                     sec_ct_material, sec_dx, sec_dy, sec_dz);
+                            }
+                            // The unified package has no exterior material. Leaving the
+                            // CT volume is a charged-particle escape, not a lookup error.
+                            if (unified_secondary && enable_ct_grid && !sec_in_ct) {
+                                unified_secondary_escaped_ct = true;
+                                break;
                             }
                             constexpr auto exposure_cell = std::numeric_limits<std::uint32_t>::max();
                             constexpr bool secondary_generation_eligible = false;
@@ -5289,6 +5352,17 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                             if (sec_sp <= 1.0e-6F) break;
 
                             float sec_step_mm = maximum_step_mm;
+                            UnifiedEmState unified_secondary_state;
+                            float unified_secondary_rate=0,unified_secondary_distance=std::numeric_limits<float>::infinity();
+                            if(unified_secondary){
+                                unified_secondary_state=unified_device.select(enable_ct_grid?(sec_in_ct?int(sec_ct_material):-2):-1,sec_local_density_g_per_cm3,unified_secondary_species);
+                                if(!unified_secondary_state.covers(sec_e)){unified_secondary_count(0);break;}
+                                unified_secondary_rate=unified_secondary_clock.update(unified_secondary_state,sec_e,unified_secondary_state.lo.factor(sec_e),unified_secondary_state.hi.factor(sec_e));
+                                if(!unified_secondary_clock.clock.active)unified_secondary_clock.clock.arm(-sycl::log(sycl::fmax(unified_secondary_uniform(),1e-12f)));
+                                unified_secondary_distance=unified_secondary_clock.clock.distance(unified_secondary_rate);
+                                sec_step_mm=sycl::fmin(unified_secondary_state.step(sec_e),unified_secondary_distance);
+                            }
+
                             if (sec_dz > 1.0e-6F) {
                                 const auto bz = static_cast<float>(bin_z + 1) * depth_bin_width_mm;
                                 const auto dz_step = (bz - sec_z) / sec_dz;
@@ -5316,7 +5390,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                             }
                             // Do not enlarge a real face distance to the legacy
                             // minimum step: that would cross the material again.
-                            if (!ct_secondary_exact_faces || !sec_face_clamp.hit_face)
+                            if (!unified_secondary && (!ct_secondary_exact_faces || !sec_face_clamp.hit_face))
                                 sec_step_mm = sycl::fmax(sec_step_mm, 1.0e-5F);
                             if(generic_recoil)sec_step_mm=sycl::fmin(sec_step_mm,0.005F*sec_e/sec_sp);
                             bool secondary_inelastic = false;
@@ -5490,7 +5564,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                             }
 
                             auto dE = sycl::fmin(mid_sp * sec_step_mm, sec_e);
-                            if (enable_secondary_energy_straggling &&
+                            if (!unified_secondary && enable_secondary_energy_straggling &&
                                 use_packaged_fluctuation && frag.z == 6 && frag.a == 12) {
                                 const auto u_loss = rng::uniform01(
                                     2026, frag.rng_stream, sec_steps, 2);
@@ -5515,6 +5589,12 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                             const auto collision_input_dx = sec_dx;
                             const auto collision_input_dy = sec_dy;
                             const auto collision_input_dz = sec_dz;
+                            if(unified_secondary){
+                                auto draw=unified_em_loss(unified_secondary_state,unified_secondary_clock,sec_e,sec_step_mm,unified_secondary_rate,unified_secondary_distance,enable_secondary_energy_straggling,unified_secondary_uniform);
+                                if(!draw.valid){unified_secondary_count(0);unified_secondary_count(7);break;}
+                                dE=draw.loss;unified_secondary_count(2);unified_secondary_count(3,draw.proposed);unified_secondary_count(4,draw.accepted);
+                                unified_secondary_count(5,static_cast<std::uint64_t>(draw.continuous*1e6f));unified_secondary_count(6,static_cast<std::uint64_t>(draw.delta*1e6f));
+                            }
                             const auto post_em_e = sycl::fmax(0.0F, sec_e - dE);
                             if (he4_hazard_audit_device && frag.z == 2 && frag.a == 4 &&
                                 frag.generation < cinel02_max_secondary_inelastic_generations &&
@@ -6568,7 +6648,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                         schneider_diag_device,
                                         SchneiderDiagSlot::SecondaryEscapedMicroMeV, sec_e);
                                 }
-                            } else if (sec_z >= 0.0F && sec_z < phantom_length_mm) {
+                            } else if (!unified_secondary_escaped_ct && sec_z >= 0.0F && sec_z < phantom_length_mm) {
                                 cinel02_species_energy_add_device(
                                     cinel02_species_energy_device, ledger_species_idx, 5U, sec_e);
                                 cinel02_species_terminal_increment_device(
@@ -6888,6 +6968,13 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
         queue.copy(cutoff_stopped_energy_device, cutoff_stopped_host.data(), number_of_histories);
     }
     if(joint_em){std::uint64_t audit[7]{};queue.copy(joint_audit,audit,7).wait_and_throw();std::cout<<"[joint-em-audit]";for(auto x:audit)std::cout<<" "<<x;std::cout<<"\n";if(audit[0]){float debug[10];queue.copy(joint_debug,debug,10).wait_and_throw();std::cout<<"[joint-failure]";for(float x:debug)std::cout<<" "<<x;std::cout<<"\n";throw std::runtime_error("Joint EM domain/sampling failure");}mem_tracker.free(joint_debug);mem_tracker.free(joint_nodes);mem_tracker.free(joint_vectors);mem_tracker.free(joint_audit);}
+    if(unified_em){
+        std::uint64_t audit[8]{};queue.copy(unified_audit,audit,8).wait_and_throw();
+        std::cout<<"[unified-em-audit]";for(auto count:audit)std::cout<<" "<<count;std::cout<<"\n";
+        if(audit[0])throw std::runtime_error("Unified EM missing domain or sampling failure; dose rejected");
+        mem_tracker.free(unified_materials);mem_tracker.free(unified_species);mem_tracker.free(unified_records);
+        mem_tracker.free(unified_nodes);mem_tracker.free(unified_segments);mem_tracker.free(unified_audit);
+    }
     std::uint64_t schneider_inelastic_host = 0;
     if (schneider_inelastic_device != nullptr) {
         queue.copy(schneider_inelastic_device, &schneider_inelastic_host, 1);

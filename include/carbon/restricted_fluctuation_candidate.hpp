@@ -121,14 +121,14 @@ template<class Real, class Uniform> class RestrictedFluctuationSampler {
     }
 public:
     explicit RestrictedFluctuationSampler(Uniform& rng):uniform(rng){}
-    RestrictedFluctuationDraw<Real> sample(const RestrictedFluctuationInput<Real>& p) {
+    RestrictedFluctuationDraw<Real> sample(const RestrictedFluctuationInput<Real>& p, bool ion_model=true, Real ion_charge=Real(6)) {
         draws=0;good=true;
         if(!(p.kinetic_MeV>0 && p.mass_MeV>0 && p.mean_MeV>=0 &&
              p.ion_dispersion>=0 && p.universal_dispersion>=0 && p.cut_MeV>0 &&
              p.tmax_MeV>=p.cut_MeV && p.excitation_MeV>0 && p.e0_MeV>0))return {};
         if(p.mean_MeV<=Real(1e-9))return {p.mean_MeV,true};
         Real loss;
-        if(p.kinetic_MeV>Real(60.0/938.272013)*p.mass_MeV)loss=universal(p);
+        if(!ion_model || p.kinetic_MeV>Real(10.0/938.272013)*ion_charge*p.mass_MeV)loss=universal(p);
         else {
             Real var=p.ion_dispersion;
             if(p.mean_MeV>Real(.2)*p.kinetic_MeV) {

@@ -595,6 +595,24 @@ void TransportConfig::validate() const {
     if (phantom_length_mm <= 0.0 || depth_bin_width_mm <= 0.0 || maximum_step_mm <= 0.0) {
         throw std::invalid_argument("phantom and step lengths must be positive");
     }
+    if (em_model != "legacy" && em_model != "g4_material_joint_v1")
+        throw std::invalid_argument("Unknown em_model: " + em_model);
+    if (em_model == "legacy" && (!em_package_file.empty() || !em_package_sha256.empty()))
+        throw std::invalid_argument("em_package_file requires g4_material_joint_v1");
+    if (em_model == "g4_material_joint_v1") {
+        if (run_mode != RunMode::research || primary_em_model != "legacy" || !primary_joint_em_data_directory.empty())
+            throw std::invalid_argument("Unified EM is a separate research candidate; do not stack the old water model");
+        if (em_package_file.empty() || em_package_sha256.size()!=64)
+            throw std::invalid_argument("Unified EM requires one em_package_file and its SHA256");
+        if ((!enable_ct_grid && !is_water_mode()) || !slab_layers.empty() || enable_hetero_insert || enable_let_scoring)
+            throw std::invalid_argument("Unified EM requires unified water or a Schneider CT grid, with LET off");
+        if (!ct_secondary_exact_faces || straggling_scale!=1.0 || !straggling_scale_energies_MeVu.empty() || !straggling_scale_values.empty())
+            throw std::invalid_argument("Unified EM requires exact CT faces and native unscaled fluctuations");
+        if (!material_electron_response_index_file.empty() || !water_electron_response_diagnostic_file.empty() ||
+            !ct_schneider_delta_tail_file.empty() || !ct_schneider_delta_longitudinal_file.empty() ||
+            !ct_electron_joint_response_diagnostic_file.empty() || enable_electron_transport)
+            throw std::invalid_argument("Unified EM uses local delta deposition; electron response stacking is forbidden");
+    }
     if (primary_em_model != "legacy" && primary_em_model != "g4_joint_water_v1")
         throw std::invalid_argument("Unknown primary_em_model: " + primary_em_model);
     if (primary_em_model == "legacy" && !primary_joint_em_data_directory.empty())
@@ -1953,6 +1971,11 @@ TransportConfig load_config(const std::filesystem::path& path) {
         values, "primary_rest_mass_MeV", config.primary_rest_mass_MeV);
     config.phantom_length_mm = parse_number(values, "phantom_length_mm", config.phantom_length_mm);
     config.depth_bin_width_mm = parse_number(values, "depth_bin_width_mm", config.depth_bin_width_mm);
+    if (const auto it = values.find("em_model"); it != values.end()) config.em_model=it->second;
+    config.em_package_file=parse_path(values,"em_package_file",config.em_package_file);
+    if (!config.em_package_file.empty())
+        config.em_package_file=resolve_input_path_from_config(config.em_package_file,path);
+    if (const auto it = values.find("em_package_sha256"); it != values.end()) config.em_package_sha256=it->second;
     if (const auto it = values.find("primary_em_model"); it != values.end())
         config.primary_em_model = it->second;
     config.primary_joint_em_data_directory = parse_path(values, "primary_joint_em_data_directory", config.primary_joint_em_data_directory);

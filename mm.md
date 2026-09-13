@@ -260,6 +260,28 @@ See [implementation and acceptance record](docs/physics/water_joint_em_v1.md),
 [joint lookup](include/carbon/joint_em_view.hpp), and
 [restricted fluctuation sampler](include/carbon/restricted_fluctuation_candidate.hpp).
 
+### 3.6. Unified water / Schneider EM for all 18 ions (research)
+
+`em_model: g4_material_joint_v1` extends the native joint EM treatment to primary
+C12 and all 18 supported charged ions using one `data/em/unified_em_v1.bin` package.
+It covers water and all 25 Schneider sections with density-resolved tables.
+Each ion uses its own native restricted stopping/range, delta rate, StepFunction,
+along-step correction, fluctuation law, spin and form-factor parameters.
+This option uses the same transport helpers for primary and secondary particles.
+
+The native mean-loss update is followed by IonFluc or Universal/Urban fluctuations
+and a discrete delta proposal selected from remaining optical depth. Delta energy
+is deposited locally. Enable both primary and secondary energy straggling with
+`straggling_scale: 1.0`. Material changes reset cached rates while preserving the
+remaining optical depth; CT faces limit steps and escaping secondaries are tallied
+as charged escape. Extra heavy recoil isotopes keep the existing recoil path.
+
+This is an explicit **research** option: production still defaults to legacy EM.
+It cannot be stacked with the old water joint model or electron-response packages.
+The existing validated nuclear/recoil inputs remain required. Initial all-ion
+component and 50k transport checks passed, but density interpolation and patient
+Gamma require further validation. See [package, configuration and validation](docs/physics/unified_em_v1.md).
+
 ## 4. Inelastic nuclear interactions
 
 **MAIGO: sample the collision, then replay a TOPAS-derived correlated event.**

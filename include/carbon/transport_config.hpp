@@ -142,6 +142,9 @@ struct TransportConfig {
     double phantom_length_mm{400.0};
     double depth_bin_width_mm{0.5};
     // Research-only native Geant4 joint EM model; legacy remains production default.
+    std::string em_model{"legacy"};
+    std::filesystem::path em_package_file{};
+    std::string em_package_sha256{};
     std::string primary_em_model{"legacy"};
     std::filesystem::path primary_joint_em_data_directory{};
     double maximum_step_mm{0.5};
