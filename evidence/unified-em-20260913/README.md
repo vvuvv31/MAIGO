@@ -1,6 +1,7 @@
 # Unified all-ion EM integration, 2026-09-13
 
-Research candidate; no production promotion. GPU runs use the local RTX 2080 Ti.
+Research validation snapshot before production integration. See `production/` for
+the subsequent user-authorized activation and runtime checks. GPU runs use the local RTX 2080 Ti.
 TOPAS reference doses are the unchanged `benchmark/benchmark20260913` references.
 CPU extraction/probe runs use `v@10.10.10.216`, one thread per sequential export.
 
@@ -61,4 +62,6 @@ normalized per primary; they are not a patient Gamma promotion gate.
 
 Independent density/interpolation acceptance, all-ion 50k closure in additional
 materials, patient one-shard BODY-only Gamma with search step DTA/10, and a full
-zero-overflow patient comparison remain required. Defaults are unchanged.
+zero-overflow patient comparison remain outstanding accuracy checks. The later
+AGENTS exception permits production execution before these are complete; it does
+not turn these research results into a completed patient accuracy validation.

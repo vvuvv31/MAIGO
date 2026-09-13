@@ -1,8 +1,11 @@
 # Unified water / Schneider charged-ion EM package
 
-Research implementation, 2026-09-13. The option `em_model: g4_material_joint_v1`
-selects one binary and a shared primary/secondary transport algorithm. It does not
-change the production default or replace the validated v2.1 nuclear stack.
+Production integration authorized 2026-09-13 under the explicit exception in
+`AGENTS.md`. `em_model: g4_material_joint_v1` selects one binary and a shared
+primary/secondary transport algorithm. The water production entry and new RT07575
+production entry select this model; historical configs retain legacy behaviour.
+The validated v2.1 nuclear stack remains mandatory. Production execution does not
+assert completion of density cut-onset or patient Gamma accuracy validation.
 
 ## Coverage and data
 
@@ -55,16 +58,20 @@ Old electron-response redistribution must not be stacked on this EM option.
 
 ## Configuration
 
-Prepared examples: [`config/unified_em_water_research.yaml`](../../config/unified_em_water_research.yaml)
-and [`config/rt07575_unified_em_research.yaml`](../../config/rt07575_unified_em_research.yaml).
+Production entries: [`config/unified_water_production.yaml`](../../config/unified_water_production.yaml)
+and [`config/rt07575_unified_em_production.yaml`](../../config/rt07575_unified_em_production.yaml).
+The two earlier research configs remain available for diagnostics and for
+all-ion nuclear elastic, which has its own existing research-only guard.
+The new CT production entry does not enable that elastic bank; this EM exception
+does not authorize a separate nuclear-elastic promotion.
 The patient example retains the existing machine-specific CT/spot paths and is
 not a completed patient validation. Apply these fields to other complete configs:
 
 ```yaml
-run_mode: research
+run_mode: production
 em_model: g4_material_joint_v1
 em_package_file: /absolute/path/to/MAIGO/data/em/unified_em_v1.bin
-em_package_sha256: <package_sha256 from the accompanying JSON>
+em_package_sha256: 8c5d970b3b639bfca2f448730271bed4fc04721aba73100e2efbe09dffe44855
 primary_em_model: legacy
 enable_energy_straggling: true
 enable_secondary_energy_straggling: true
@@ -105,10 +112,14 @@ errors alone are unsuitable at a zero reference rate. This region still requires
 an independent density-specific closure gate; it is not validated by the
 explicit-density b3/b4 cases.
 
-Research status is deliberate: arbitrary-density accuracy, patient one-shard
-BODY-masked Gamma, and a full zero-overflow patient comparison remain promotion
-gates. Do not interpret table completeness or a `quality.accepted` research result
-as production validation.
+The user authorized production integration before the remaining accuracy gates.
+Arbitrary-density accuracy, patient one-shard BODY-masked Gamma and a full patient
+comparison remain outstanding. The quality report always includes
+`unified_material_em_accuracy_pending`; `status: pass` only means the runtime
+checks passed. Production configs reject a different package hash or disabled
+primary/secondary fluctuations. Scope, SHA, energy and overflow checks remain active.
+The 1.29 GiB binary is not stored in Git and has not been added to an existing
+GitHub Release in this change; copy it separately and run the verifier.
 
 ## Reproduction
 

@@ -178,6 +178,8 @@ if(BUILD_TESTING)
         target_compile_options(material_electron_density_gpu_smoke PRIVATE
             $<TARGET_PROPERTY:carbon_core,COMPILE_OPTIONS>)
     endif()
+    add_executable(unified_em_production tests/unified_em_production.cpp)
+    target_link_libraries(unified_em_production PRIVATE carbon_core)
     add_executable(unified_em_density tests/unified_em_density.cpp)
     target_link_libraries(unified_em_density PRIVATE carbon_core)
     add_executable(unified_em_distribution tests/unified_em_distribution.cpp)

@@ -235,7 +235,7 @@ primary_joint_em_data_directory: /absolute/path/to/MAIGO/data/water_joint_em_v1
 [联合查表](include/carbon/joint_em_view.hpp) 与
 [受限涨落采样](include/carbon/restricted_fluctuation_candidate.hpp)。
 
-### 3.6. 水 / Schneider 全部 18 种离子的统一 EM（研究候选）
+### 3.6. 水 / Schneider 全部 18 种离子的统一 EM
 
 `em_model: g4_material_joint_v1` 使用一个 `data/em/unified_em_v1.bin`，
 将原生联合 EM 扩展到原发 C12 和全部 18 种已支持带电离子，覆盖水及 25 个
@@ -248,9 +248,13 @@ Schneider 分区的材料—密度节点。每种离子使用自己的受限 sto
 材料变化时清除反应率缓存、保留未消耗光学深度；步长截在 CT 体素面，
 离开 CT 的次级记为带电粒子逃逸。18 种注册离子之外的重反冲同位素保留原反冲路径。
 
-该选项仍为显式**研究候选**，生产默认保持 legacy EM，不能叠加旧水联合模型或
-电子响应包。现有已验证核过程和反冲数据仍需保留。初步全部离子组件检查和每例
-5 万粒子的输运检查已通过，密度插值及患者 Gamma 尚需进一步验收。
+已按用户授权的 `AGENTS.md` 例外接入正式运行。水生产配置
+`config/unified_water_production.yaml` 和 CT 配置
+`config/rt07575_unified_em_production.yaml` 均选择固定哈希的统一包；
+未设置 `em_model` 的历史配置仍保持 legacy EM。核弹性库的研究模式限制独立保留；
+新的 CT 生产入口不启用该库，需要联合核弹性时继续使用研究配置。不能叠加旧水联合模型或电子响应包，
+现有已验证核过程和反冲数据仍需保留。全部离子组件检查和每例 5 万粒子的输运检查
+已通过；低密度阈值区及患者 Gamma 尚需验收，正式运行通过时质量报告仍保留此说明。
 详见[数据包、配置与验证记录](docs/physics/unified_em_v1.md)。
 
 ## 4. 非弹性核过程

@@ -1,8 +1,17 @@
 # Current CT / water benchmark physics data
 
-Updated 2026-09-11. Paths below are relative to the repository root.
+Updated 2026-09-13. Paths below are relative to the repository root.
 
 ## Required data
+
+- Unified EM production entries now also require `data/em/unified_em_v1.bin`
+  (1,386,682,652 bytes) and `data/em/unified_em_v1.json`. SHA256:
+  `8c5d970b3b639bfca2f448730271bed4fc04721aba73100e2efbe09dffe44855`.
+  This one package covers water, 25 Schneider sections and 18 charged ions.
+  The binary is distributed separately from Git; this change does not upload
+  it to GitHub Releases. Older release archives do not supply this new package.
+  Production activation uses the explicit AGENTS exception; density cut-onset
+  and patient Gamma accuracy validation remain pending.
 
 - Schneider CT and unified-water nuclear transport use the exact v2.1 stack.
   `data/schneider/v2_1_data_manifest.json` and
@@ -19,8 +28,8 @@ Updated 2026-09-11. Paths below are relative to the repository root.
   Primary midpoint stopping and secondary exact-face transport remain enabled
   by that runner. This additional table does not replace the pinned primary
   Schneider stopping table or modify the v2.1 bundle.
-- `config/unified_water_production.yaml` uses the water primary/ion stopping
-  CSVs, `data/water_unified/g4_water_material.json`, and the same v2.1 nuclear
+- `config/unified_water_production.yaml` retains the water primary/ion stopping
+  CSV inputs and selects the unified EM package above, `data/water_unified/g4_water_material.json`, and the same v2.1 nuclear
   packages. It does not require the historical CINEL02/FRED packages.
 - Water/air stopping, HU stopping LUT, water cross-section defaults, LET
   electron fractions, HU material definitions, Schneider radiation-length
@@ -33,6 +42,7 @@ From the repository root:
 
 ```sh
 python3 tools/verify_schneider_v2_1_data.py
+python3 tools/verify_unified_em_data.py
 python3 tools/verify_schneider_ion_stopping.py data/schneider/schneider_ion_section_stopping_v1.bin
 ```
 

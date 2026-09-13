@@ -56,6 +56,19 @@
   zero-overflow full validation. Until those gates pass, continue using the exact
   v2.1 stack above; never use a lower version as a compatibility fallback.
 
+## Unified EM production integration exception (user-authorized 2026-09-13)
+
+- 用户已明确允许本次例外：将 `g4_material_joint_v1`（水、25 个 Schneider 分区、
+  全部 18 种带电离子）接入正式运行选项及生产配置，无需等待低密度阈值闭合和
+  患者 Gamma 验收完成。该授权允许本次配置/代码修改、验证、第二次 commit 和 push。
+- 例外仅适用于 `data/em/unified_em_v1.bin`，SHA256
+  `8c5d970b3b639bfca2f448730271bed4fc04721aba73100e2efbe09dffe44855`。
+  不取消上文 v2.1 核数据最低要求，不允许旧包回退。
+- 正式运行仍必须校验包哈希、材料/离子覆盖、能量记账和 overflow；原发及次级
+  开启原生涨落，`straggling_scale=1.0`，使用精确 CT 体素边界。
+- 质量报告和文档必须保留低密度 production-cut 阈值区与患者 Gamma 精度验收
+  尚未完成的说明；运行质量通过不等于上述精度已验证。其他包不继承本次例外。
+
 - 如果没有说明在哪里运行，topas任务就在本地使用sbatch运行，数据放置在本地/mnt/sda/wuwei目录下
 - 如果指定了运行的位置，例如v@10.10.10.216，cluster，则不必非要在本地sbatch，且明确允许提交
 - topas的extension放在/home/wuwei/topas目录下，如果需要重新编译，source code和build都在/home/wuwei/topas目录下

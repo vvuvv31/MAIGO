@@ -1091,7 +1091,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
         unified_audit=mem_tracker.allocate<std::uint64_t>(8);if(!unified_audit)throw std::bad_alloc();
         queue.fill(unified_audit,std::uint64_t{0},8).wait_and_throw();
         unified_device={unified_materials,unified_species,unified_records,unified_nodes,unified_segments,static_cast<unsigned>(package.materials.size())};
-        std::cout<<"[unified-em] all 18 charged ions; water + Schneider density nodes; native particle step parameters override legacy caps; local delta deposition; research only\n";
+        std::cout<<"[unified-em] all 18 charged ions; water + Schneider density nodes; native particle step parameters override legacy caps; local delta deposition; density cut-onset/patient accuracy validation pending\n";
     }
     const auto ct_secondary_exact_faces = config.ct_secondary_exact_faces;
     std::cout << "[stopping-config] primary_midpoint=" << ct_primary_midpoint_stopping

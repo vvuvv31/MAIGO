@@ -260,7 +260,7 @@ See [implementation and acceptance record](docs/physics/water_joint_em_v1.md),
 [joint lookup](include/carbon/joint_em_view.hpp), and
 [restricted fluctuation sampler](include/carbon/restricted_fluctuation_candidate.hpp).
 
-### 3.6. Unified water / Schneider EM for all 18 ions (research)
+### 3.6. Unified water / Schneider EM for all 18 ions
 
 `em_model: g4_material_joint_v1` extends the native joint EM treatment to primary
 C12 and all 18 supported charged ions using one `data/em/unified_em_v1.bin` package.
@@ -276,11 +276,16 @@ is deposited locally. Enable both primary and secondary energy straggling with
 remaining optical depth; CT faces limit steps and escaping secondaries are tallied
 as charged escape. Extra heavy recoil isotopes keep the existing recoil path.
 
-This is an explicit **research** option: production still defaults to legacy EM.
+Production execution is enabled under the user-authorized exception in `AGENTS.md`.
+`config/unified_water_production.yaml` and `config/rt07575_unified_em_production.yaml`
+select the pinned unified package. Historical configs without `em_model` retain legacy EM.
+All-ion nuclear elastic retains its separate research-only guard; the new CT
+production entry omits that bank. Use the research config for the combined model.
 It cannot be stacked with the old water joint model or electron-response packages.
 The existing validated nuclear/recoil inputs remain required. Initial all-ion
 component and 50k transport checks passed, but density interpolation and patient
-Gamma require further validation. See [package, configuration and validation](docs/physics/unified_em_v1.md).
+Gamma require further validation; the quality report retains this warning even
+when production runtime checks pass. See [package, configuration and validation](docs/physics/unified_em_v1.md).
 
 ## 4. Inelastic nuclear interactions
 

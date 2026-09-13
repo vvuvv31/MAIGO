@@ -141,7 +141,7 @@ struct TransportConfig {
     // in turn default to the native patient CT header.
     double phantom_length_mm{400.0};
     double depth_bin_width_mm{0.5};
-    // Research-only native Geant4 joint EM model; legacy remains production default.
+    // Explicit unified EM selection; legacy preserves historical input behaviour.
     std::string em_model{"legacy"};
     std::filesystem::path em_package_file{};
     std::string em_package_sha256{};

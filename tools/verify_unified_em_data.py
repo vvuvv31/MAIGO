@@ -25,7 +25,7 @@ def verify(package):
         required={(1,1),(1,2),(1,3),(2,3),(2,4),(2,6),(3,6),(3,7),(4,6),(4,7),(4,9),(4,10),(5,8),(5,10),(5,11),(6,10),(6,11),(6,12)}
         if set(species)!=required or species!=[tuple(x) for x in meta['species_za']]:raise ValueError('Ion registry mismatch')
     print(f'OK: {nm} material/density nodes x {ns} ions, SHA256={digest.hexdigest()}')
-    print('Research package only; manifest integrity does not establish production validation.')
+    print('Integrity verified; production execution uses the AGENTS exception, while density cut-onset/patient accuracy validation remains pending.')
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('package',nargs='?',type=Path,default=Path(__file__).resolve().parents[1]/'data/em/unified_em_v1.bin')

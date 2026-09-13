@@ -1,0 +1,46 @@
+{
+  "complete": true,
+  "returncode": 0,
+  "elapsed_s": 22.095630884170532,
+  "binary_sha256": "c4fc5c8d203561525b25533fd2ec7f302d330c40687a7a3924b92faaea33cb56",
+  "config_sha256": "b3d3b5fbe81ebbf3de61d0f18ac45df04516b6617cc609aa00dbade2a474c7f8",
+  "quality": {
+    "schema_version": 3,
+    "status": "pass",
+    "run_mode": "production",
+    "accepted": true,
+    "absolute_physical_energy_residual_MeV": 426.779276133,
+    "physical_relative_energy_residual": 2.84509135334e-06,
+    "absolute_accounting_energy_residual_MeV": 426.779276133,
+    "accounting_relative_energy_residual": 2.84509135334e-06,
+    "absolute_energy_residual_MeV": 426.779276133,
+    "relative_energy_residual": 2.84509135334e-06,
+    "topas_reference_energy_sink_active": false,
+    "queue_overflow_count": 0,
+    "queue_overflow_energy_MeV": 0,
+    "voxel_scored_energy_MeV": 136972867.927,
+    "in_grid_deposited_energy_MeV": 136972868.086,
+    "outside_grid_deposited_energy_MeV": 0,
+    "grid_split_closure_ratio": 0.99999999959,
+    "voxel_to_ingrid_ratio": 0.999999998838,
+    "voxel_to_total_deposited_ratio": 0.999999998427,
+    "failures": [],
+    "approximations": [
+      {
+        "code": "unified_material_em_accuracy_pending",
+        "message": "Unified water/Schneider EM for all 18 charged ions; local delta deposition; production execution authorized, density cut-onset and patient Gamma accuracy gates remain pending",
+        "value": 1,
+        "limit": 0
+      },
+      {
+        "code": "schneider_primary_post_em_null_collisions",
+        "message": "primary candidates resolved as post-EM null collisions (track continues, no lookup)",
+        "value": 1,
+        "limit": 0
+      }
+    ]
+  },
+  "audit": [
+    " 0 124592203 56457869 129185104 113035827 125497452538164 10971963971470 0"
+  ]
+}

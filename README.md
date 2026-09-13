@@ -5,7 +5,7 @@
 Dose Recalculation* 所述方法。**仅用于研究，不用于临床治疗计划。**
 
 当前患者计算使用 SYCL、Schneider 25 分区材料和 CINEL03 相关末态；
-GPU 不在运行时调用 Geant4。水模保留独立的 water / CINEL02 路径。
+GPU 不在运行时调用 Geant4。当前水生产入口使用共享 CINEL03 框架和统一 EM 包。
 CT 包含 H/O 靶通道，不等于已经替代水中所有 stopping、XS、MCS 和 fluctuation 数据。
 
 当前开发与提交目标为 `master` / `origin/master`（原 `fred` 开发线）；
@@ -37,6 +37,15 @@ SYCL/GPU 在沙盒外执行；禁止远程/集群 GPU。TOPAS 经本地 sbatch�
 并发总预算为 192 CPU 线程 / 160 GiB，具体约束见 AGENTS。
 
 ## 数据与运行
+
+统一 EM 已按 [AGENTS.md](AGENTS.md) 中的授权例外接入正式运行：
+[水生产配置](config/unified_water_production.yaml)、
+[RT07575 生产配置](config/rt07575_unified_em_production.yaml)。
+原发 C12 和全部 18 种带电离子共用水 / Schneider EM 包。
+低密度阈值区和患者 Gamma 精度验收尚未完成，质量报告保留提示。
+核弹性仍受原有研究模式限制；联合核弹性计算继续使用研究配置。
+新 EM 二进制约 1.29 GiB，需单独复制，尚未上传到 Release；
+详见[数据说明](data/ACTIVE_DATA.md)和[实现说明](docs/physics/unified_em_v1.md)。
 
 每次 Schneider CT 运行前：
 
