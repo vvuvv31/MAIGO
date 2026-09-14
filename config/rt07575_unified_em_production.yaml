@@ -77,3 +77,5 @@ history_chunk_size: 34816
 # Species scheduling authorized; dose equivalence investigation remains open.
 enable_secondary_unified_em: true
 secondary_species_grouping: true
+# Compact survivors after 64 complete steps; queues below 8192 finish directly.
+secondary_step_chunking: true

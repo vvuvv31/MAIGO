@@ -1,0 +1,26 @@
+{
+  "segment_elastic_base_1m -> segment_elastic_base_1m_r2": {
+    "max_percent_peak": 3.3546898991751e-05,
+    "voxel_index": 2535940,
+    "ref_dose": 0.002527243923395872,
+    "eval_dose": 0.002527241362258792
+  },
+  "segment_elastic_64_1m -> segment_elastic_64_1m_r2": {
+    "max_percent_peak": 3.9646335172069366e-05,
+    "voxel_index": 4122643,
+    "ref_dose": 0.0023160958662629128,
+    "eval_dose": 0.0023160988930612803
+  },
+  "segment_elastic_base_1m -> segment_elastic_64_1m": {
+    "max_percent_peak": 0.000954561762219824,
+    "voxel_index": 3593944,
+    "ref_dose": 0.002162871416658163,
+    "eval_dose": 0.0021627985406666994
+  },
+  "segment_elastic_base_1m_r2 -> segment_elastic_64_1m_r2": {
+    "max_percent_peak": 0.0009515120441296647,
+    "voxel_index": 3593944,
+    "ref_dose": 0.002162871416658163,
+    "eval_dose": 0.002162798773497343
+  }
+}

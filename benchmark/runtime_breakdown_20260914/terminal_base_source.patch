@@ -1,0 +1,59 @@
+--- a/src/transport_sycl.cpp
++++ b/src/transport_sycl.cpp
+@@ -76,6 +76,12 @@
+ 
+ // Integer diagnostics are accumulated per track using the original per-step
+ // conversion. Flush on every loop exit, including replay/escape/failure breaks.
++struct SecondaryTerminalRecord {
++    std::uint64_t stream,rng;
++    std::uint32_t parent,generation,z,a,steps,flags,bin,voxel;
++    float values[16];
++};
++static_assert(sizeof(SecondaryTerminalRecord)==112);
+ struct UnifiedEmFailureRecord {int reason,section,z,a;float energy,density,step;};
+ inline void record_unified_em_failure(unsigned* count,UnifiedEmFailureRecord* records,
+     int reason,int section,int z,int a,float energy,float density,float step) {
+@@ -5045,6 +5051,8 @@
+                   << " histories" << std::endl;
+     }
+ 
++    std::ofstream terminal_file("secondary_terminal.bin",std::ios::binary);
++    if(!terminal_file)throw std::runtime_error("terminal output open");
+     double secondary_kernel_seconds = 0.0;
+     const bool enable_secondary_unified_em = config.enable_secondary_unified_em;
+     // Reorder indices only: RNG streams and parent histories belong to particles.
+@@ -5110,6 +5118,9 @@
+                     secondary_group_seconds += std::chrono::duration<double>(
+                         std::chrono::steady_clock::now() - grouping_start).count();
+                 }
++                auto* terminal_records=mem_tracker.allocate<SecondaryTerminalRecord>(generation_end-generation_begin);
++                if(!terminal_records)throw std::bad_alloc();
++                queue.fill(terminal_records,SecondaryTerminalRecord{},generation_end-generation_begin).wait_and_throw();
+                 auto sec_event = queue.submit([&](sycl::handler& cgh) {
+                 cgh.parallel_for<CarbonSecondaryTransportKernel<EmMode>>(
+                     sycl::range<1>(generation_end - generation_begin),
+@@ -6710,6 +6721,12 @@
+                                 sec_prof[40+sec_slot]+=static_cast<std::uint64_t>(dE*1e6f);
+                             }
+                         }
++                        terminal_records[sec_idx-generation_begin]={frag.rng_stream,unified_secondary_counter,
++                            frag.parent_history,unsigned(frag.generation),unsigned(frag.z),unsigned(frag.a),sec_steps,
++                            1u|(unsigned(unified_secondary_clock.clock.active)<<1)|(unsigned(sec_terminal_recorded)<<2)|(unsigned(unified_secondary_escaped_ct)<<3),unsigned(pending_sec_bin),unsigned(pending_sec_voxel),
++                            {sec_e,sec_x,sec_y,sec_z,sec_dx,sec_dy,sec_dz,pending_sec_depth_MeV,pending_sec_voxel_MeV,
++                             unified_secondary_clock.clock.remaining,unified_secondary_clock.threshold,unified_secondary_clock.rate0,unified_secondary_clock.rate1,unified_secondary_clock.last_density,
++                             continuous_species_tally.all_MeV,continuous_species_tally.fov_MeV}};
+                         if(unified_secondary && CARBON_EM_LOCAL_AUDIT)flush_unified_em_audit(unified_audit,unified_secondary_audit);
+                         if constexpr(CARBON_SECONDARY_STEP_PROFILE) {
+                             for(int sec_pi=0;sec_pi<60;++sec_pi) if(sec_prof[sec_pi]) {
+@@ -6920,6 +6937,11 @@
+             });
+             sec_event.wait_and_throw();
+                 secondary_kernel_seconds += event_duration_seconds(sec_event);
++                { std::vector<SecondaryTerminalRecord> records(generation_end-generation_begin);
++                  queue.copy(terminal_records,records.data(),records.size()).wait_and_throw();
++                  terminal_file.write(reinterpret_cast<const char*>(records.data()),records.size()*sizeof(SecondaryTerminalRecord));
++                  if(!terminal_file)throw std::runtime_error("terminal output write"); }
++                mem_tracker.free(terminal_records);
+                 const auto batch_end = generation_end;
+                 generation_begin = batch_end;
+                 queue.copy(secondary_count_device, &secondary_count_host, 1)

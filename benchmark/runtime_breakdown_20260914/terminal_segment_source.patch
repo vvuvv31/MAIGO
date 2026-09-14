@@ -1,0 +1,59 @@
+--- a/src/transport_sycl.cpp
++++ b/src/transport_sycl.cpp
+@@ -101,6 +101,12 @@
+     std::array<double,6> he4_audit{};
+     std::array<std::uint64_t,CARBON_SECONDARY_STEP_PROFILE?60:0> sec_prof{};
+ };
++struct SecondaryTerminalRecord {
++    std::uint64_t stream,rng;
++    std::uint32_t parent,generation,z,a,steps,flags,bin,voxel;
++    float values[16];
++};
++static_assert(sizeof(SecondaryTerminalRecord)==112);
+ struct UnifiedEmFailureRecord {int reason,section,z,a;float energy,density,step;};
+ inline void record_unified_em_failure(unsigned* count,UnifiedEmFailureRecord* records,
+     int reason,int section,int z,int a,float energy,float density,float step) {
+@@ -5070,6 +5076,8 @@
+                   << " histories" << std::endl;
+     }
+ 
++    std::ofstream terminal_file("secondary_terminal.bin",std::ios::binary);
++    if(!terminal_file)throw std::runtime_error("terminal output open");
+     double secondary_kernel_seconds = 0.0;
+     const bool enable_secondary_unified_em = config.enable_secondary_unified_em;
+     // Reorder indices only: RNG streams and parent histories belong to particles.
+@@ -5135,6 +5143,9 @@
+                     secondary_group_seconds += std::chrono::duration<double>(
+                         std::chrono::steady_clock::now() - grouping_start).count();
+                 }
++                auto* terminal_records=mem_tracker.allocate<SecondaryTerminalRecord>(generation_end-generation_begin);
++                if(!terminal_records)throw std::bad_alloc();
++                queue.fill(terminal_records,SecondaryTerminalRecord{},generation_end-generation_begin).wait_and_throw();
+                 const unsigned resume_capacity=generation_end-generation_begin;
+                 auto* resume_states=mem_tracker.allocate<SecondaryResumeState>(resume_capacity);
+                 auto* resume_ready=mem_tracker.allocate<unsigned>(resume_capacity);
+@@ -6816,6 +6827,12 @@
+                             resume_states[state_idx]=saved;resume_ready[state_idx]=1;keep[item_id[0]]=1;
+                             return; // Suspend: no terminal scoring or audit flush.
+                         }
++                        terminal_records[sec_idx-generation_begin]={frag.rng_stream,unified_secondary_counter,
++                            frag.parent_history,unsigned(frag.generation),unsigned(frag.z),unsigned(frag.a),sec_steps,
++                            1u|(unsigned(unified_secondary_clock.clock.active)<<1)|(unsigned(sec_terminal_recorded)<<2)|(unsigned(unified_secondary_escaped_ct)<<3),unsigned(pending_sec_bin),unsigned(pending_sec_voxel),
++                            {sec_e,sec_x,sec_y,sec_z,sec_dx,sec_dy,sec_dz,pending_sec_depth_MeV,pending_sec_voxel_MeV,
++                             unified_secondary_clock.clock.remaining,unified_secondary_clock.threshold,unified_secondary_clock.rate0,unified_secondary_clock.rate1,unified_secondary_clock.last_density,
++                             continuous_species_tally.all_MeV,continuous_species_tally.fov_MeV}};
+                         if(unified_secondary && CARBON_EM_LOCAL_AUDIT)flush_unified_em_audit(unified_audit,unified_secondary_audit);
+                         if constexpr(CARBON_SECONDARY_STEP_PROFILE) {
+                             for(int sec_pi=0;sec_pi<60;++sec_pi) if(sec_prof[sec_pi]) {
+@@ -7044,6 +7061,11 @@
+                 std::cout<<"[segmented-secondary] rounds="<<segment_rounds<<" compaction_s="<<compact_seconds<<"\n";
+                 mem_tracker.free(resume_states);
+                 for(auto* ptr:{resume_ready,active_order,next_order,keep,ranks,block_counts,block_offsets,active_count})mem_tracker.free(ptr);
++                { std::vector<SecondaryTerminalRecord> records(generation_end-generation_begin);
++                  queue.copy(terminal_records,records.data(),records.size()).wait_and_throw();
++                  terminal_file.write(reinterpret_cast<const char*>(records.data()),records.size()*sizeof(SecondaryTerminalRecord));
++                  if(!terminal_file)throw std::runtime_error("terminal output write"); }
++                mem_tracker.free(terminal_records);
+                 const auto batch_end = generation_end;
+                 generation_begin = batch_end;
+                 queue.copy(secondary_count_device, &secondary_count_host, 1)

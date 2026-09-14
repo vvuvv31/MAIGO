@@ -1,0 +1,2421 @@
+{
+  "baseline_capacity_proxy": 2857294816,
+  "em_calls": 676418285,
+  "rows": [
+    {
+      "block": 32,
+      "tail_cutoff": 1024,
+      "em_calls": 676418285,
+      "warp_capacity_proxy": 752772544,
+      "warp_useful_fraction": 0.8985692828350551,
+      "proxy_capacity_reduction_percent": 73.65436216855545,
+      "transport_launches": 128,
+      "compaction_boundaries": 126,
+      "survivor_resumptions": 19458863,
+      "transport_entries": 23527573,
+      "tail_em_work_share_percent": 0.2580537869404284,
+      "state_traffic_GB": {
+        "128": 4.981468928,
+        "256": 9.962937856,
+        "512": 19.925875712
+      },
+      "boundaries": [
+        {
+          "batch": 0,
+          "input_tracks": 2882145,
+          "survivors": 1803540
+        },
+        {
+          "batch": 0,
+          "input_tracks": 1803540,
+          "survivors": 1521461
+        },
+        {
+          "batch": 0,
+          "input_tracks": 1521461,
+          "survivors": 1356776
+        },
+        {
+          "batch": 0,
+          "input_tracks": 1356776,
+          "survivors": 1224592
+        },
+        {
+          "batch": 0,
+          "input_tracks": 1224592,
+          "survivors": 1106636
+        },
+        {
+          "batch": 0,
+          "input_tracks": 1106636,
+          "survivors": 1003841
+        },
+        {
+          "batch": 0,
+          "input_tracks": 1003841,
+          "survivors": 919195
+        },
+        {
+          "batch": 0,
+          "input_tracks": 919195,
+          "survivors": 847759
+        },
+        {
+          "batch": 0,
+          "input_tracks": 847759,
+          "survivors": 782115
+        },
+        {
+          "batch": 0,
+          "input_tracks": 782115,
+          "survivors": 718991
+        },
+        {
+          "batch": 0,
+          "input_tracks": 718991,
+          "survivors": 654623
+        },
+        {
+          "batch": 0,
+          "input_tracks": 654623,
+          "survivors": 586333
+        },
+        {
+          "batch": 0,
+          "input_tracks": 586333,
+          "survivors": 515582
+        },
+        {
+          "batch": 0,
+          "input_tracks": 515582,
+          "survivors": 447808
+        },
+        {
+          "batch": 0,
+          "input_tracks": 447808,
+          "survivors": 392428
+        },
+        {
+          "batch": 0,
+          "input_tracks": 392428,
+          "survivors": 351826
+        },
+        {
+          "batch": 0,
+          "input_tracks": 351826,
+          "survivors": 323334
+        },
+        {
+          "batch": 0,
+          "input_tracks": 323334,
+          "survivors": 300283
+        },
+        {
+          "batch": 0,
+          "input_tracks": 300283,
+          "survivors": 277287
+        },
+        {
+          "batch": 0,
+          "input_tracks": 277287,
+          "survivors": 250568
+        },
+        {
+          "batch": 0,
+          "input_tracks": 250568,
+          "survivors": 219849
+        },
+        {
+          "batch": 0,
+          "input_tracks": 219849,
+          "survivors": 187554
+        },
+        {
+          "batch": 0,
+          "input_tracks": 187554,
+          "survivors": 157842
+        },
+        {
+          "batch": 0,
+          "input_tracks": 157842,
+          "survivors": 133073
+        },
+        {
+          "batch": 0,
+          "input_tracks": 133073,
+          "survivors": 112532
+        },
+        {
+          "batch": 0,
+          "input_tracks": 112532,
+          "survivors": 96253
+        },
+        {
+          "batch": 0,
+          "input_tracks": 96253,
+          "survivors": 83188
+        },
+        {
+          "batch": 0,
+          "input_tracks": 83188,
+          "survivors": 72933
+        },
+        {
+          "batch": 0,
+          "input_tracks": 72933,
+          "survivors": 65137
+        },
+        {
+          "batch": 0,
+          "input_tracks": 65137,
+          "survivors": 58759
+        },
+        {
+          "batch": 0,
+          "input_tracks": 58759,
+          "survivors": 53633
+        },
+        {
+          "batch": 0,
+          "input_tracks": 53633,
+          "survivors": 49229
+        },
+        {
+          "batch": 0,
+          "input_tracks": 49229,
+          "survivors": 45375
+        },
+        {
+          "batch": 0,
+          "input_tracks": 45375,
+          "survivors": 41983
+        },
+        {
+          "batch": 0,
+          "input_tracks": 41983,
+          "survivors": 38721
+        },
+        {
+          "batch": 0,
+          "input_tracks": 38721,
+          "survivors": 35624
+        },
+        {
+          "batch": 0,
+          "input_tracks": 35624,
+          "survivors": 32617
+        },
+        {
+          "batch": 0,
+          "input_tracks": 32617,
+          "survivors": 29765
+        },
+        {
+          "batch": 0,
+          "input_tracks": 29765,
+          "survivors": 27163
+        },
+        {
+          "batch": 0,
+          "input_tracks": 27163,
+          "survivors": 24866
+        },
+        {
+          "batch": 0,
+          "input_tracks": 24866,
+          "survivors": 22771
+        },
+        {
+          "batch": 0,
+          "input_tracks": 22771,
+          "survivors": 20913
+        },
+        {
+          "batch": 0,
+          "input_tracks": 20913,
+          "survivors": 19112
+        },
+        {
+          "batch": 0,
+          "input_tracks": 19112,
+          "survivors": 17483
+        },
+        {
+          "batch": 0,
+          "input_tracks": 17483,
+          "survivors": 16018
+        },
+        {
+          "batch": 0,
+          "input_tracks": 16018,
+          "survivors": 14622
+        },
+        {
+          "batch": 0,
+          "input_tracks": 14622,
+          "survivors": 13292
+        },
+        {
+          "batch": 0,
+          "input_tracks": 13292,
+          "survivors": 12144
+        },
+        {
+          "batch": 0,
+          "input_tracks": 12144,
+          "survivors": 11133
+        },
+        {
+          "batch": 0,
+          "input_tracks": 11133,
+          "survivors": 10152
+        },
+        {
+          "batch": 0,
+          "input_tracks": 10152,
+          "survivors": 9315
+        },
+        {
+          "batch": 0,
+          "input_tracks": 9315,
+          "survivors": 8555
+        },
+        {
+          "batch": 0,
+          "input_tracks": 8555,
+          "survivors": 7871
+        },
+        {
+          "batch": 0,
+          "input_tracks": 7871,
+          "survivors": 7219
+        },
+        {
+          "batch": 0,
+          "input_tracks": 7219,
+          "survivors": 6588
+        },
+        {
+          "batch": 0,
+          "input_tracks": 6588,
+          "survivors": 6055
+        },
+        {
+          "batch": 0,
+          "input_tracks": 6055,
+          "survivors": 5529
+        },
+        {
+          "batch": 0,
+          "input_tracks": 5529,
+          "survivors": 5046
+        },
+        {
+          "batch": 0,
+          "input_tracks": 5046,
+          "survivors": 4634
+        },
+        {
+          "batch": 0,
+          "input_tracks": 4634,
+          "survivors": 4282
+        },
+        {
+          "batch": 0,
+          "input_tracks": 4282,
+          "survivors": 3944
+        },
+        {
+          "batch": 0,
+          "input_tracks": 3944,
+          "survivors": 3695
+        },
+        {
+          "batch": 0,
+          "input_tracks": 3695,
+          "survivors": 3434
+        },
+        {
+          "batch": 0,
+          "input_tracks": 3434,
+          "survivors": 3215
+        },
+        {
+          "batch": 0,
+          "input_tracks": 3215,
+          "survivors": 2999
+        },
+        {
+          "batch": 0,
+          "input_tracks": 2999,
+          "survivors": 2799
+        },
+        {
+          "batch": 0,
+          "input_tracks": 2799,
+          "survivors": 2593
+        },
+        {
+          "batch": 0,
+          "input_tracks": 2593,
+          "survivors": 2399
+        },
+        {
+          "batch": 0,
+          "input_tracks": 2399,
+          "survivors": 2233
+        },
+        {
+          "batch": 0,
+          "input_tracks": 2233,
+          "survivors": 2094
+        },
+        {
+          "batch": 0,
+          "input_tracks": 2094,
+          "survivors": 1952
+        },
+        {
+          "batch": 0,
+          "input_tracks": 1952,
+          "survivors": 1835
+        },
+        {
+          "batch": 0,
+          "input_tracks": 1835,
+          "survivors": 1721
+        },
+        {
+          "batch": 0,
+          "input_tracks": 1721,
+          "survivors": 1625
+        },
+        {
+          "batch": 0,
+          "input_tracks": 1625,
+          "survivors": 1533
+        },
+        {
+          "batch": 0,
+          "input_tracks": 1533,
+          "survivors": 1460
+        },
+        {
+          "batch": 0,
+          "input_tracks": 1460,
+          "survivors": 1397
+        },
+        {
+          "batch": 0,
+          "input_tracks": 1397,
+          "survivors": 1327
+        },
+        {
+          "batch": 0,
+          "input_tracks": 1327,
+          "survivors": 1270
+        },
+        {
+          "batch": 0,
+          "input_tracks": 1270,
+          "survivors": 1202
+        },
+        {
+          "batch": 0,
+          "input_tracks": 1202,
+          "survivors": 1160
+        },
+        {
+          "batch": 0,
+          "input_tracks": 1160,
+          "survivors": 1122
+        },
+        {
+          "batch": 0,
+          "input_tracks": 1122,
+          "survivors": 1076
+        },
+        {
+          "batch": 0,
+          "input_tracks": 1076,
+          "survivors": 1039
+        },
+        {
+          "batch": 0,
+          "input_tracks": 1039,
+          "survivors": 989
+        },
+        {
+          "batch": 1,
+          "input_tracks": 1186565,
+          "survivors": 381871
+        },
+        {
+          "batch": 1,
+          "input_tracks": 381871,
+          "survivors": 285423
+        },
+        {
+          "batch": 1,
+          "input_tracks": 285423,
+          "survivors": 240302
+        },
+        {
+          "batch": 1,
+          "input_tracks": 240302,
+          "survivors": 209623
+        },
+        {
+          "batch": 1,
+          "input_tracks": 209623,
+          "survivors": 183049
+        },
+        {
+          "batch": 1,
+          "input_tracks": 183049,
+          "survivors": 158404
+        },
+        {
+          "batch": 1,
+          "input_tracks": 158404,
+          "survivors": 135846
+        },
+        {
+          "batch": 1,
+          "input_tracks": 135846,
+          "survivors": 115216
+        },
+        {
+          "batch": 1,
+          "input_tracks": 115216,
+          "survivors": 96424
+        },
+        {
+          "batch": 1,
+          "input_tracks": 96424,
+          "survivors": 79295
+        },
+        {
+          "batch": 1,
+          "input_tracks": 79295,
+          "survivors": 63541
+        },
+        {
+          "batch": 1,
+          "input_tracks": 63541,
+          "survivors": 49960
+        },
+        {
+          "batch": 1,
+          "input_tracks": 49960,
+          "survivors": 38640
+        },
+        {
+          "batch": 1,
+          "input_tracks": 38640,
+          "survivors": 30337
+        },
+        {
+          "batch": 1,
+          "input_tracks": 30337,
+          "survivors": 24260
+        },
+        {
+          "batch": 1,
+          "input_tracks": 24260,
+          "survivors": 20082
+        },
+        {
+          "batch": 1,
+          "input_tracks": 20082,
+          "survivors": 17039
+        },
+        {
+          "batch": 1,
+          "input_tracks": 17039,
+          "survivors": 14614
+        },
+        {
+          "batch": 1,
+          "input_tracks": 14614,
+          "survivors": 12643
+        },
+        {
+          "batch": 1,
+          "input_tracks": 12643,
+          "survivors": 10864
+        },
+        {
+          "batch": 1,
+          "input_tracks": 10864,
+          "survivors": 9356
+        },
+        {
+          "batch": 1,
+          "input_tracks": 9356,
+          "survivors": 7944
+        },
+        {
+          "batch": 1,
+          "input_tracks": 7944,
+          "survivors": 6750
+        },
+        {
+          "batch": 1,
+          "input_tracks": 6750,
+          "survivors": 5698
+        },
+        {
+          "batch": 1,
+          "input_tracks": 5698,
+          "survivors": 4855
+        },
+        {
+          "batch": 1,
+          "input_tracks": 4855,
+          "survivors": 4227
+        },
+        {
+          "batch": 1,
+          "input_tracks": 4227,
+          "survivors": 3645
+        },
+        {
+          "batch": 1,
+          "input_tracks": 3645,
+          "survivors": 3228
+        },
+        {
+          "batch": 1,
+          "input_tracks": 3228,
+          "survivors": 2812
+        },
+        {
+          "batch": 1,
+          "input_tracks": 2812,
+          "survivors": 2533
+        },
+        {
+          "batch": 1,
+          "input_tracks": 2533,
+          "survivors": 2274
+        },
+        {
+          "batch": 1,
+          "input_tracks": 2274,
+          "survivors": 2057
+        },
+        {
+          "batch": 1,
+          "input_tracks": 2057,
+          "survivors": 1857
+        },
+        {
+          "batch": 1,
+          "input_tracks": 1857,
+          "survivors": 1684
+        },
+        {
+          "batch": 1,
+          "input_tracks": 1684,
+          "survivors": 1540
+        },
+        {
+          "batch": 1,
+          "input_tracks": 1540,
+          "survivors": 1428
+        },
+        {
+          "batch": 1,
+          "input_tracks": 1428,
+          "survivors": 1318
+        },
+        {
+          "batch": 1,
+          "input_tracks": 1318,
+          "survivors": 1211
+        },
+        {
+          "batch": 1,
+          "input_tracks": 1211,
+          "survivors": 1109
+        },
+        {
+          "batch": 1,
+          "input_tracks": 1109,
+          "survivors": 1027
+        },
+        {
+          "batch": 1,
+          "input_tracks": 1027,
+          "survivors": 956
+        }
+      ]
+    },
+    {
+      "block": 32,
+      "tail_cutoff": 8192,
+      "em_calls": 676418285,
+      "warp_capacity_proxy": 771998080,
+      "warp_useful_fraction": 0.8761916674715046,
+      "proxy_capacity_reduction_percent": 72.9815041949105,
+      "transport_launches": 77,
+      "compaction_boundaries": 75,
+      "survivor_resumptions": 19319188,
+      "transport_entries": 23387898,
+      "tail_em_work_share_percent": 0.9517012095555637,
+      "state_traffic_GB": {
+        "128": 4.945712128,
+        "256": 9.891424256,
+        "512": 19.782848512
+      },
+      "boundaries": [
+        {
+          "batch": 0,
+          "input_tracks": 2882145,
+          "survivors": 1803540
+        },
+        {
+          "batch": 0,
+          "input_tracks": 1803540,
+          "survivors": 1521461
+        },
+        {
+          "batch": 0,
+          "input_tracks": 1521461,
+          "survivors": 1356776
+        },
+        {
+          "batch": 0,
+          "input_tracks": 1356776,
+          "survivors": 1224592
+        },
+        {
+          "batch": 0,
+          "input_tracks": 1224592,
+          "survivors": 1106636
+        },
+        {
+          "batch": 0,
+          "input_tracks": 1106636,
+          "survivors": 1003841
+        },
+        {
+          "batch": 0,
+          "input_tracks": 1003841,
+          "survivors": 919195
+        },
+        {
+          "batch": 0,
+          "input_tracks": 919195,
+          "survivors": 847759
+        },
+        {
+          "batch": 0,
+          "input_tracks": 847759,
+          "survivors": 782115
+        },
+        {
+          "batch": 0,
+          "input_tracks": 782115,
+          "survivors": 718991
+        },
+        {
+          "batch": 0,
+          "input_tracks": 718991,
+          "survivors": 654623
+        },
+        {
+          "batch": 0,
+          "input_tracks": 654623,
+          "survivors": 586333
+        },
+        {
+          "batch": 0,
+          "input_tracks": 586333,
+          "survivors": 515582
+        },
+        {
+          "batch": 0,
+          "input_tracks": 515582,
+          "survivors": 447808
+        },
+        {
+          "batch": 0,
+          "input_tracks": 447808,
+          "survivors": 392428
+        },
+        {
+          "batch": 0,
+          "input_tracks": 392428,
+          "survivors": 351826
+        },
+        {
+          "batch": 0,
+          "input_tracks": 351826,
+          "survivors": 323334
+        },
+        {
+          "batch": 0,
+          "input_tracks": 323334,
+          "survivors": 300283
+        },
+        {
+          "batch": 0,
+          "input_tracks": 300283,
+          "survivors": 277287
+        },
+        {
+          "batch": 0,
+          "input_tracks": 277287,
+          "survivors": 250568
+        },
+        {
+          "batch": 0,
+          "input_tracks": 250568,
+          "survivors": 219849
+        },
+        {
+          "batch": 0,
+          "input_tracks": 219849,
+          "survivors": 187554
+        },
+        {
+          "batch": 0,
+          "input_tracks": 187554,
+          "survivors": 157842
+        },
+        {
+          "batch": 0,
+          "input_tracks": 157842,
+          "survivors": 133073
+        },
+        {
+          "batch": 0,
+          "input_tracks": 133073,
+          "survivors": 112532
+        },
+        {
+          "batch": 0,
+          "input_tracks": 112532,
+          "survivors": 96253
+        },
+        {
+          "batch": 0,
+          "input_tracks": 96253,
+          "survivors": 83188
+        },
+        {
+          "batch": 0,
+          "input_tracks": 83188,
+          "survivors": 72933
+        },
+        {
+          "batch": 0,
+          "input_tracks": 72933,
+          "survivors": 65137
+        },
+        {
+          "batch": 0,
+          "input_tracks": 65137,
+          "survivors": 58759
+        },
+        {
+          "batch": 0,
+          "input_tracks": 58759,
+          "survivors": 53633
+        },
+        {
+          "batch": 0,
+          "input_tracks": 53633,
+          "survivors": 49229
+        },
+        {
+          "batch": 0,
+          "input_tracks": 49229,
+          "survivors": 45375
+        },
+        {
+          "batch": 0,
+          "input_tracks": 45375,
+          "survivors": 41983
+        },
+        {
+          "batch": 0,
+          "input_tracks": 41983,
+          "survivors": 38721
+        },
+        {
+          "batch": 0,
+          "input_tracks": 38721,
+          "survivors": 35624
+        },
+        {
+          "batch": 0,
+          "input_tracks": 35624,
+          "survivors": 32617
+        },
+        {
+          "batch": 0,
+          "input_tracks": 32617,
+          "survivors": 29765
+        },
+        {
+          "batch": 0,
+          "input_tracks": 29765,
+          "survivors": 27163
+        },
+        {
+          "batch": 0,
+          "input_tracks": 27163,
+          "survivors": 24866
+        },
+        {
+          "batch": 0,
+          "input_tracks": 24866,
+          "survivors": 22771
+        },
+        {
+          "batch": 0,
+          "input_tracks": 22771,
+          "survivors": 20913
+        },
+        {
+          "batch": 0,
+          "input_tracks": 20913,
+          "survivors": 19112
+        },
+        {
+          "batch": 0,
+          "input_tracks": 19112,
+          "survivors": 17483
+        },
+        {
+          "batch": 0,
+          "input_tracks": 17483,
+          "survivors": 16018
+        },
+        {
+          "batch": 0,
+          "input_tracks": 16018,
+          "survivors": 14622
+        },
+        {
+          "batch": 0,
+          "input_tracks": 14622,
+          "survivors": 13292
+        },
+        {
+          "batch": 0,
+          "input_tracks": 13292,
+          "survivors": 12144
+        },
+        {
+          "batch": 0,
+          "input_tracks": 12144,
+          "survivors": 11133
+        },
+        {
+          "batch": 0,
+          "input_tracks": 11133,
+          "survivors": 10152
+        },
+        {
+          "batch": 0,
+          "input_tracks": 10152,
+          "survivors": 9315
+        },
+        {
+          "batch": 0,
+          "input_tracks": 9315,
+          "survivors": 8555
+        },
+        {
+          "batch": 0,
+          "input_tracks": 8555,
+          "survivors": 7871
+        },
+        {
+          "batch": 1,
+          "input_tracks": 1186565,
+          "survivors": 381871
+        },
+        {
+          "batch": 1,
+          "input_tracks": 381871,
+          "survivors": 285423
+        },
+        {
+          "batch": 1,
+          "input_tracks": 285423,
+          "survivors": 240302
+        },
+        {
+          "batch": 1,
+          "input_tracks": 240302,
+          "survivors": 209623
+        },
+        {
+          "batch": 1,
+          "input_tracks": 209623,
+          "survivors": 183049
+        },
+        {
+          "batch": 1,
+          "input_tracks": 183049,
+          "survivors": 158404
+        },
+        {
+          "batch": 1,
+          "input_tracks": 158404,
+          "survivors": 135846
+        },
+        {
+          "batch": 1,
+          "input_tracks": 135846,
+          "survivors": 115216
+        },
+        {
+          "batch": 1,
+          "input_tracks": 115216,
+          "survivors": 96424
+        },
+        {
+          "batch": 1,
+          "input_tracks": 96424,
+          "survivors": 79295
+        },
+        {
+          "batch": 1,
+          "input_tracks": 79295,
+          "survivors": 63541
+        },
+        {
+          "batch": 1,
+          "input_tracks": 63541,
+          "survivors": 49960
+        },
+        {
+          "batch": 1,
+          "input_tracks": 49960,
+          "survivors": 38640
+        },
+        {
+          "batch": 1,
+          "input_tracks": 38640,
+          "survivors": 30337
+        },
+        {
+          "batch": 1,
+          "input_tracks": 30337,
+          "survivors": 24260
+        },
+        {
+          "batch": 1,
+          "input_tracks": 24260,
+          "survivors": 20082
+        },
+        {
+          "batch": 1,
+          "input_tracks": 20082,
+          "survivors": 17039
+        },
+        {
+          "batch": 1,
+          "input_tracks": 17039,
+          "survivors": 14614
+        },
+        {
+          "batch": 1,
+          "input_tracks": 14614,
+          "survivors": 12643
+        },
+        {
+          "batch": 1,
+          "input_tracks": 12643,
+          "survivors": 10864
+        },
+        {
+          "batch": 1,
+          "input_tracks": 10864,
+          "survivors": 9356
+        },
+        {
+          "batch": 1,
+          "input_tracks": 9356,
+          "survivors": 7944
+        }
+      ]
+    },
+    {
+      "block": 32,
+      "tail_cutoff": 34816,
+      "em_calls": 676418285,
+      "warp_capacity_proxy": 816039328,
+      "warp_useful_fraction": 0.8289040267921989,
+      "proxy_capacity_reduction_percent": 71.44014249315742,
+      "transport_launches": 53,
+      "compaction_boundaries": 51,
+      "survivor_resumptions": 18937211,
+      "transport_entries": 23005921,
+      "tail_em_work_share_percent": 2.870396680657443,
+      "state_traffic_GB": {
+        "128": 4.847926016,
+        "256": 9.695852032,
+        "512": 19.391704064
+      },
+      "boundaries": [
+        {
+          "batch": 0,
+          "input_tracks": 2882145,
+          "survivors": 1803540
+        },
+        {
+          "batch": 0,
+          "input_tracks": 1803540,
+          "survivors": 1521461
+        },
+        {
+          "batch": 0,
+          "input_tracks": 1521461,
+          "survivors": 1356776
+        },
+        {
+          "batch": 0,
+          "input_tracks": 1356776,
+          "survivors": 1224592
+        },
+        {
+          "batch": 0,
+          "input_tracks": 1224592,
+          "survivors": 1106636
+        },
+        {
+          "batch": 0,
+          "input_tracks": 1106636,
+          "survivors": 1003841
+        },
+        {
+          "batch": 0,
+          "input_tracks": 1003841,
+          "survivors": 919195
+        },
+        {
+          "batch": 0,
+          "input_tracks": 919195,
+          "survivors": 847759
+        },
+        {
+          "batch": 0,
+          "input_tracks": 847759,
+          "survivors": 782115
+        },
+        {
+          "batch": 0,
+          "input_tracks": 782115,
+          "survivors": 718991
+        },
+        {
+          "batch": 0,
+          "input_tracks": 718991,
+          "survivors": 654623
+        },
+        {
+          "batch": 0,
+          "input_tracks": 654623,
+          "survivors": 586333
+        },
+        {
+          "batch": 0,
+          "input_tracks": 586333,
+          "survivors": 515582
+        },
+        {
+          "batch": 0,
+          "input_tracks": 515582,
+          "survivors": 447808
+        },
+        {
+          "batch": 0,
+          "input_tracks": 447808,
+          "survivors": 392428
+        },
+        {
+          "batch": 0,
+          "input_tracks": 392428,
+          "survivors": 351826
+        },
+        {
+          "batch": 0,
+          "input_tracks": 351826,
+          "survivors": 323334
+        },
+        {
+          "batch": 0,
+          "input_tracks": 323334,
+          "survivors": 300283
+        },
+        {
+          "batch": 0,
+          "input_tracks": 300283,
+          "survivors": 277287
+        },
+        {
+          "batch": 0,
+          "input_tracks": 277287,
+          "survivors": 250568
+        },
+        {
+          "batch": 0,
+          "input_tracks": 250568,
+          "survivors": 219849
+        },
+        {
+          "batch": 0,
+          "input_tracks": 219849,
+          "survivors": 187554
+        },
+        {
+          "batch": 0,
+          "input_tracks": 187554,
+          "survivors": 157842
+        },
+        {
+          "batch": 0,
+          "input_tracks": 157842,
+          "survivors": 133073
+        },
+        {
+          "batch": 0,
+          "input_tracks": 133073,
+          "survivors": 112532
+        },
+        {
+          "batch": 0,
+          "input_tracks": 112532,
+          "survivors": 96253
+        },
+        {
+          "batch": 0,
+          "input_tracks": 96253,
+          "survivors": 83188
+        },
+        {
+          "batch": 0,
+          "input_tracks": 83188,
+          "survivors": 72933
+        },
+        {
+          "batch": 0,
+          "input_tracks": 72933,
+          "survivors": 65137
+        },
+        {
+          "batch": 0,
+          "input_tracks": 65137,
+          "survivors": 58759
+        },
+        {
+          "batch": 0,
+          "input_tracks": 58759,
+          "survivors": 53633
+        },
+        {
+          "batch": 0,
+          "input_tracks": 53633,
+          "survivors": 49229
+        },
+        {
+          "batch": 0,
+          "input_tracks": 49229,
+          "survivors": 45375
+        },
+        {
+          "batch": 0,
+          "input_tracks": 45375,
+          "survivors": 41983
+        },
+        {
+          "batch": 0,
+          "input_tracks": 41983,
+          "survivors": 38721
+        },
+        {
+          "batch": 0,
+          "input_tracks": 38721,
+          "survivors": 35624
+        },
+        {
+          "batch": 0,
+          "input_tracks": 35624,
+          "survivors": 32617
+        },
+        {
+          "batch": 1,
+          "input_tracks": 1186565,
+          "survivors": 381871
+        },
+        {
+          "batch": 1,
+          "input_tracks": 381871,
+          "survivors": 285423
+        },
+        {
+          "batch": 1,
+          "input_tracks": 285423,
+          "survivors": 240302
+        },
+        {
+          "batch": 1,
+          "input_tracks": 240302,
+          "survivors": 209623
+        },
+        {
+          "batch": 1,
+          "input_tracks": 209623,
+          "survivors": 183049
+        },
+        {
+          "batch": 1,
+          "input_tracks": 183049,
+          "survivors": 158404
+        },
+        {
+          "batch": 1,
+          "input_tracks": 158404,
+          "survivors": 135846
+        },
+        {
+          "batch": 1,
+          "input_tracks": 135846,
+          "survivors": 115216
+        },
+        {
+          "batch": 1,
+          "input_tracks": 115216,
+          "survivors": 96424
+        },
+        {
+          "batch": 1,
+          "input_tracks": 96424,
+          "survivors": 79295
+        },
+        {
+          "batch": 1,
+          "input_tracks": 79295,
+          "survivors": 63541
+        },
+        {
+          "batch": 1,
+          "input_tracks": 63541,
+          "survivors": 49960
+        },
+        {
+          "batch": 1,
+          "input_tracks": 49960,
+          "survivors": 38640
+        },
+        {
+          "batch": 1,
+          "input_tracks": 38640,
+          "survivors": 30337
+        }
+      ]
+    },
+    {
+      "block": 64,
+      "tail_cutoff": 1024,
+      "em_calls": 676418285,
+      "warp_capacity_proxy": 833259712,
+      "warp_useful_fraction": 0.811773658630936,
+      "proxy_capacity_reduction_percent": 70.83746110712855,
+      "transport_launches": 66,
+      "compaction_boundaries": 64,
+      "survivor_resumptions": 9120465,
+      "transport_entries": 13189175,
+      "tail_em_work_share_percent": 0.24911493928642098,
+      "state_traffic_GB": {
+        "128": 2.33483904,
+        "256": 4.66967808,
+        "512": 9.33935616
+      },
+      "boundaries": [
+        {
+          "batch": 0,
+          "input_tracks": 2882145,
+          "survivors": 1521461
+        },
+        {
+          "batch": 0,
+          "input_tracks": 1521461,
+          "survivors": 1224592
+        },
+        {
+          "batch": 0,
+          "input_tracks": 1224592,
+          "survivors": 1003841
+        },
+        {
+          "batch": 0,
+          "input_tracks": 1003841,
+          "survivors": 847759
+        },
+        {
+          "batch": 0,
+          "input_tracks": 847759,
+          "survivors": 718991
+        },
+        {
+          "batch": 0,
+          "input_tracks": 718991,
+          "survivors": 586333
+        },
+        {
+          "batch": 0,
+          "input_tracks": 586333,
+          "survivors": 447808
+        },
+        {
+          "batch": 0,
+          "input_tracks": 447808,
+          "survivors": 351826
+        },
+        {
+          "batch": 0,
+          "input_tracks": 351826,
+          "survivors": 300283
+        },
+        {
+          "batch": 0,
+          "input_tracks": 300283,
+          "survivors": 250568
+        },
+        {
+          "batch": 0,
+          "input_tracks": 250568,
+          "survivors": 187554
+        },
+        {
+          "batch": 0,
+          "input_tracks": 187554,
+          "survivors": 133073
+        },
+        {
+          "batch": 0,
+          "input_tracks": 133073,
+          "survivors": 96253
+        },
+        {
+          "batch": 0,
+          "input_tracks": 96253,
+          "survivors": 72933
+        },
+        {
+          "batch": 0,
+          "input_tracks": 72933,
+          "survivors": 58759
+        },
+        {
+          "batch": 0,
+          "input_tracks": 58759,
+          "survivors": 49229
+        },
+        {
+          "batch": 0,
+          "input_tracks": 49229,
+          "survivors": 41983
+        },
+        {
+          "batch": 0,
+          "input_tracks": 41983,
+          "survivors": 35624
+        },
+        {
+          "batch": 0,
+          "input_tracks": 35624,
+          "survivors": 29765
+        },
+        {
+          "batch": 0,
+          "input_tracks": 29765,
+          "survivors": 24866
+        },
+        {
+          "batch": 0,
+          "input_tracks": 24866,
+          "survivors": 20913
+        },
+        {
+          "batch": 0,
+          "input_tracks": 20913,
+          "survivors": 17483
+        },
+        {
+          "batch": 0,
+          "input_tracks": 17483,
+          "survivors": 14622
+        },
+        {
+          "batch": 0,
+          "input_tracks": 14622,
+          "survivors": 12144
+        },
+        {
+          "batch": 0,
+          "input_tracks": 12144,
+          "survivors": 10152
+        },
+        {
+          "batch": 0,
+          "input_tracks": 10152,
+          "survivors": 8555
+        },
+        {
+          "batch": 0,
+          "input_tracks": 8555,
+          "survivors": 7219
+        },
+        {
+          "batch": 0,
+          "input_tracks": 7219,
+          "survivors": 6055
+        },
+        {
+          "batch": 0,
+          "input_tracks": 6055,
+          "survivors": 5046
+        },
+        {
+          "batch": 0,
+          "input_tracks": 5046,
+          "survivors": 4282
+        },
+        {
+          "batch": 0,
+          "input_tracks": 4282,
+          "survivors": 3695
+        },
+        {
+          "batch": 0,
+          "input_tracks": 3695,
+          "survivors": 3215
+        },
+        {
+          "batch": 0,
+          "input_tracks": 3215,
+          "survivors": 2799
+        },
+        {
+          "batch": 0,
+          "input_tracks": 2799,
+          "survivors": 2399
+        },
+        {
+          "batch": 0,
+          "input_tracks": 2399,
+          "survivors": 2094
+        },
+        {
+          "batch": 0,
+          "input_tracks": 2094,
+          "survivors": 1835
+        },
+        {
+          "batch": 0,
+          "input_tracks": 1835,
+          "survivors": 1625
+        },
+        {
+          "batch": 0,
+          "input_tracks": 1625,
+          "survivors": 1460
+        },
+        {
+          "batch": 0,
+          "input_tracks": 1460,
+          "survivors": 1327
+        },
+        {
+          "batch": 0,
+          "input_tracks": 1327,
+          "survivors": 1202
+        },
+        {
+          "batch": 0,
+          "input_tracks": 1202,
+          "survivors": 1122
+        },
+        {
+          "batch": 0,
+          "input_tracks": 1122,
+          "survivors": 1039
+        },
+        {
+          "batch": 0,
+          "input_tracks": 1039,
+          "survivors": 947
+        },
+        {
+          "batch": 1,
+          "input_tracks": 1186565,
+          "survivors": 285423
+        },
+        {
+          "batch": 1,
+          "input_tracks": 285423,
+          "survivors": 209623
+        },
+        {
+          "batch": 1,
+          "input_tracks": 209623,
+          "survivors": 158404
+        },
+        {
+          "batch": 1,
+          "input_tracks": 158404,
+          "survivors": 115216
+        },
+        {
+          "batch": 1,
+          "input_tracks": 115216,
+          "survivors": 79295
+        },
+        {
+          "batch": 1,
+          "input_tracks": 79295,
+          "survivors": 49960
+        },
+        {
+          "batch": 1,
+          "input_tracks": 49960,
+          "survivors": 30337
+        },
+        {
+          "batch": 1,
+          "input_tracks": 30337,
+          "survivors": 20082
+        },
+        {
+          "batch": 1,
+          "input_tracks": 20082,
+          "survivors": 14614
+        },
+        {
+          "batch": 1,
+          "input_tracks": 14614,
+          "survivors": 10864
+        },
+        {
+          "batch": 1,
+          "input_tracks": 10864,
+          "survivors": 7944
+        },
+        {
+          "batch": 1,
+          "input_tracks": 7944,
+          "survivors": 5698
+        },
+        {
+          "batch": 1,
+          "input_tracks": 5698,
+          "survivors": 4227
+        },
+        {
+          "batch": 1,
+          "input_tracks": 4227,
+          "survivors": 3228
+        },
+        {
+          "batch": 1,
+          "input_tracks": 3228,
+          "survivors": 2533
+        },
+        {
+          "batch": 1,
+          "input_tracks": 2533,
+          "survivors": 2057
+        },
+        {
+          "batch": 1,
+          "input_tracks": 2057,
+          "survivors": 1684
+        },
+        {
+          "batch": 1,
+          "input_tracks": 1684,
+          "survivors": 1428
+        },
+        {
+          "batch": 1,
+          "input_tracks": 1428,
+          "survivors": 1211
+        },
+        {
+          "batch": 1,
+          "input_tracks": 1211,
+          "survivors": 1027
+        },
+        {
+          "batch": 1,
+          "input_tracks": 1027,
+          "survivors": 879
+        }
+      ]
+    },
+    {
+      "block": 64,
+      "tail_cutoff": 8192,
+      "em_calls": 676418285,
+      "warp_capacity_proxy": 851622496,
+      "warp_useful_fraction": 0.794270099929347,
+      "proxy_capacity_reduction_percent": 70.1947978475596,
+      "transport_launches": 40,
+      "compaction_boundaries": 38,
+      "survivor_resumptions": 9056351,
+      "transport_entries": 13125061,
+      "tail_em_work_share_percent": 0.9159663683544569,
+      "state_traffic_GB": {
+        "128": 2.318425856,
+        "256": 4.636851712,
+        "512": 9.273703424
+      },
+      "boundaries": [
+        {
+          "batch": 0,
+          "input_tracks": 2882145,
+          "survivors": 1521461
+        },
+        {
+          "batch": 0,
+          "input_tracks": 1521461,
+          "survivors": 1224592
+        },
+        {
+          "batch": 0,
+          "input_tracks": 1224592,
+          "survivors": 1003841
+        },
+        {
+          "batch": 0,
+          "input_tracks": 1003841,
+          "survivors": 847759
+        },
+        {
+          "batch": 0,
+          "input_tracks": 847759,
+          "survivors": 718991
+        },
+        {
+          "batch": 0,
+          "input_tracks": 718991,
+          "survivors": 586333
+        },
+        {
+          "batch": 0,
+          "input_tracks": 586333,
+          "survivors": 447808
+        },
+        {
+          "batch": 0,
+          "input_tracks": 447808,
+          "survivors": 351826
+        },
+        {
+          "batch": 0,
+          "input_tracks": 351826,
+          "survivors": 300283
+        },
+        {
+          "batch": 0,
+          "input_tracks": 300283,
+          "survivors": 250568
+        },
+        {
+          "batch": 0,
+          "input_tracks": 250568,
+          "survivors": 187554
+        },
+        {
+          "batch": 0,
+          "input_tracks": 187554,
+          "survivors": 133073
+        },
+        {
+          "batch": 0,
+          "input_tracks": 133073,
+          "survivors": 96253
+        },
+        {
+          "batch": 0,
+          "input_tracks": 96253,
+          "survivors": 72933
+        },
+        {
+          "batch": 0,
+          "input_tracks": 72933,
+          "survivors": 58759
+        },
+        {
+          "batch": 0,
+          "input_tracks": 58759,
+          "survivors": 49229
+        },
+        {
+          "batch": 0,
+          "input_tracks": 49229,
+          "survivors": 41983
+        },
+        {
+          "batch": 0,
+          "input_tracks": 41983,
+          "survivors": 35624
+        },
+        {
+          "batch": 0,
+          "input_tracks": 35624,
+          "survivors": 29765
+        },
+        {
+          "batch": 0,
+          "input_tracks": 29765,
+          "survivors": 24866
+        },
+        {
+          "batch": 0,
+          "input_tracks": 24866,
+          "survivors": 20913
+        },
+        {
+          "batch": 0,
+          "input_tracks": 20913,
+          "survivors": 17483
+        },
+        {
+          "batch": 0,
+          "input_tracks": 17483,
+          "survivors": 14622
+        },
+        {
+          "batch": 0,
+          "input_tracks": 14622,
+          "survivors": 12144
+        },
+        {
+          "batch": 0,
+          "input_tracks": 12144,
+          "survivors": 10152
+        },
+        {
+          "batch": 0,
+          "input_tracks": 10152,
+          "survivors": 8555
+        },
+        {
+          "batch": 0,
+          "input_tracks": 8555,
+          "survivors": 7219
+        },
+        {
+          "batch": 1,
+          "input_tracks": 1186565,
+          "survivors": 285423
+        },
+        {
+          "batch": 1,
+          "input_tracks": 285423,
+          "survivors": 209623
+        },
+        {
+          "batch": 1,
+          "input_tracks": 209623,
+          "survivors": 158404
+        },
+        {
+          "batch": 1,
+          "input_tracks": 158404,
+          "survivors": 115216
+        },
+        {
+          "batch": 1,
+          "input_tracks": 115216,
+          "survivors": 79295
+        },
+        {
+          "batch": 1,
+          "input_tracks": 79295,
+          "survivors": 49960
+        },
+        {
+          "batch": 1,
+          "input_tracks": 49960,
+          "survivors": 30337
+        },
+        {
+          "batch": 1,
+          "input_tracks": 30337,
+          "survivors": 20082
+        },
+        {
+          "batch": 1,
+          "input_tracks": 20082,
+          "survivors": 14614
+        },
+        {
+          "batch": 1,
+          "input_tracks": 14614,
+          "survivors": 10864
+        },
+        {
+          "batch": 1,
+          "input_tracks": 10864,
+          "survivors": 7944
+        }
+      ]
+    },
+    {
+      "block": 64,
+      "tail_cutoff": 34816,
+      "em_calls": 676418285,
+      "warp_capacity_proxy": 891873216,
+      "warp_useful_fraction": 0.7584242612797557,
+      "proxy_capacity_reduction_percent": 68.78609757012907,
+      "transport_launches": 28,
+      "compaction_boundaries": 26,
+      "survivor_resumptions": 8886893,
+      "transport_entries": 12955603,
+      "tail_em_work_share_percent": 2.722810487005093,
+      "state_traffic_GB": {
+        "128": 2.275044608,
+        "256": 4.550089216,
+        "512": 9.100178432
+      },
+      "boundaries": [
+        {
+          "batch": 0,
+          "input_tracks": 2882145,
+          "survivors": 1521461
+        },
+        {
+          "batch": 0,
+          "input_tracks": 1521461,
+          "survivors": 1224592
+        },
+        {
+          "batch": 0,
+          "input_tracks": 1224592,
+          "survivors": 1003841
+        },
+        {
+          "batch": 0,
+          "input_tracks": 1003841,
+          "survivors": 847759
+        },
+        {
+          "batch": 0,
+          "input_tracks": 847759,
+          "survivors": 718991
+        },
+        {
+          "batch": 0,
+          "input_tracks": 718991,
+          "survivors": 586333
+        },
+        {
+          "batch": 0,
+          "input_tracks": 586333,
+          "survivors": 447808
+        },
+        {
+          "batch": 0,
+          "input_tracks": 447808,
+          "survivors": 351826
+        },
+        {
+          "batch": 0,
+          "input_tracks": 351826,
+          "survivors": 300283
+        },
+        {
+          "batch": 0,
+          "input_tracks": 300283,
+          "survivors": 250568
+        },
+        {
+          "batch": 0,
+          "input_tracks": 250568,
+          "survivors": 187554
+        },
+        {
+          "batch": 0,
+          "input_tracks": 187554,
+          "survivors": 133073
+        },
+        {
+          "batch": 0,
+          "input_tracks": 133073,
+          "survivors": 96253
+        },
+        {
+          "batch": 0,
+          "input_tracks": 96253,
+          "survivors": 72933
+        },
+        {
+          "batch": 0,
+          "input_tracks": 72933,
+          "survivors": 58759
+        },
+        {
+          "batch": 0,
+          "input_tracks": 58759,
+          "survivors": 49229
+        },
+        {
+          "batch": 0,
+          "input_tracks": 49229,
+          "survivors": 41983
+        },
+        {
+          "batch": 0,
+          "input_tracks": 41983,
+          "survivors": 35624
+        },
+        {
+          "batch": 0,
+          "input_tracks": 35624,
+          "survivors": 29765
+        },
+        {
+          "batch": 1,
+          "input_tracks": 1186565,
+          "survivors": 285423
+        },
+        {
+          "batch": 1,
+          "input_tracks": 285423,
+          "survivors": 209623
+        },
+        {
+          "batch": 1,
+          "input_tracks": 209623,
+          "survivors": 158404
+        },
+        {
+          "batch": 1,
+          "input_tracks": 158404,
+          "survivors": 115216
+        },
+        {
+          "batch": 1,
+          "input_tracks": 115216,
+          "survivors": 79295
+        },
+        {
+          "batch": 1,
+          "input_tracks": 79295,
+          "survivors": 49960
+        },
+        {
+          "batch": 1,
+          "input_tracks": 49960,
+          "survivors": 30337
+        }
+      ]
+    },
+    {
+      "block": 128,
+      "tail_cutoff": 1024,
+      "em_calls": 676418285,
+      "warp_capacity_proxy": 1006976608,
+      "warp_useful_fraction": 0.6717318750268328,
+      "proxy_capacity_reduction_percent": 64.75769310323768,
+      "transport_launches": 35,
+      "compaction_boundaries": 33,
+      "survivor_resumptions": 4057314,
+      "transport_entries": 8126024,
+      "tail_em_work_share_percent": 0.23263356933055113,
+      "state_traffic_GB": {
+        "128": 1.038672384,
+        "256": 2.077344768,
+        "512": 4.154689536
+      },
+      "boundaries": [
+        {
+          "batch": 0,
+          "input_tracks": 2882145,
+          "survivors": 1224592
+        },
+        {
+          "batch": 0,
+          "input_tracks": 1224592,
+          "survivors": 847759
+        },
+        {
+          "batch": 0,
+          "input_tracks": 847759,
+          "survivors": 586333
+        },
+        {
+          "batch": 0,
+          "input_tracks": 586333,
+          "survivors": 351826
+        },
+        {
+          "batch": 0,
+          "input_tracks": 351826,
+          "survivors": 250568
+        },
+        {
+          "batch": 0,
+          "input_tracks": 250568,
+          "survivors": 133073
+        },
+        {
+          "batch": 0,
+          "input_tracks": 133073,
+          "survivors": 72933
+        },
+        {
+          "batch": 0,
+          "input_tracks": 72933,
+          "survivors": 49229
+        },
+        {
+          "batch": 0,
+          "input_tracks": 49229,
+          "survivors": 35624
+        },
+        {
+          "batch": 0,
+          "input_tracks": 35624,
+          "survivors": 24866
+        },
+        {
+          "batch": 0,
+          "input_tracks": 24866,
+          "survivors": 17483
+        },
+        {
+          "batch": 0,
+          "input_tracks": 17483,
+          "survivors": 12144
+        },
+        {
+          "batch": 0,
+          "input_tracks": 12144,
+          "survivors": 8555
+        },
+        {
+          "batch": 0,
+          "input_tracks": 8555,
+          "survivors": 6055
+        },
+        {
+          "batch": 0,
+          "input_tracks": 6055,
+          "survivors": 4282
+        },
+        {
+          "batch": 0,
+          "input_tracks": 4282,
+          "survivors": 3215
+        },
+        {
+          "batch": 0,
+          "input_tracks": 3215,
+          "survivors": 2399
+        },
+        {
+          "batch": 0,
+          "input_tracks": 2399,
+          "survivors": 1835
+        },
+        {
+          "batch": 0,
+          "input_tracks": 1835,
+          "survivors": 1460
+        },
+        {
+          "batch": 0,
+          "input_tracks": 1460,
+          "survivors": 1202
+        },
+        {
+          "batch": 0,
+          "input_tracks": 1202,
+          "survivors": 1039
+        },
+        {
+          "batch": 0,
+          "input_tracks": 1039,
+          "survivors": 888
+        },
+        {
+          "batch": 1,
+          "input_tracks": 1186565,
+          "survivors": 209623
+        },
+        {
+          "batch": 1,
+          "input_tracks": 209623,
+          "survivors": 115216
+        },
+        {
+          "batch": 1,
+          "input_tracks": 115216,
+          "survivors": 49960
+        },
+        {
+          "batch": 1,
+          "input_tracks": 49960,
+          "survivors": 20082
+        },
+        {
+          "batch": 1,
+          "input_tracks": 20082,
+          "survivors": 10864
+        },
+        {
+          "batch": 1,
+          "input_tracks": 10864,
+          "survivors": 5698
+        },
+        {
+          "batch": 1,
+          "input_tracks": 5698,
+          "survivors": 3228
+        },
+        {
+          "batch": 1,
+          "input_tracks": 3228,
+          "survivors": 2057
+        },
+        {
+          "batch": 1,
+          "input_tracks": 2057,
+          "survivors": 1428
+        },
+        {
+          "batch": 1,
+          "input_tracks": 1428,
+          "survivors": 1027
+        },
+        {
+          "batch": 1,
+          "input_tracks": 1027,
+          "survivors": 771
+        }
+      ]
+    },
+    {
+      "block": 128,
+      "tail_cutoff": 8192,
+      "em_calls": 676418285,
+      "warp_capacity_proxy": 1021564512,
+      "warp_useful_fraction": 0.662139568333008,
+      "proxy_capacity_reduction_percent": 64.24714361711843,
+      "transport_launches": 22,
+      "compaction_boundaries": 20,
+      "survivor_resumptions": 4032483,
+      "transport_entries": 8101193,
+      "tail_em_work_share_percent": 0.7892245254724302,
+      "state_traffic_GB": {
+        "128": 1.032315648,
+        "256": 2.064631296,
+        "512": 4.129262592
+      },
+      "boundaries": [
+        {
+          "batch": 0,
+          "input_tracks": 2882145,
+          "survivors": 1224592
+        },
+        {
+          "batch": 0,
+          "input_tracks": 1224592,
+          "survivors": 847759
+        },
+        {
+          "batch": 0,
+          "input_tracks": 847759,
+          "survivors": 586333
+        },
+        {
+          "batch": 0,
+          "input_tracks": 586333,
+          "survivors": 351826
+        },
+        {
+          "batch": 0,
+          "input_tracks": 351826,
+          "survivors": 250568
+        },
+        {
+          "batch": 0,
+          "input_tracks": 250568,
+          "survivors": 133073
+        },
+        {
+          "batch": 0,
+          "input_tracks": 133073,
+          "survivors": 72933
+        },
+        {
+          "batch": 0,
+          "input_tracks": 72933,
+          "survivors": 49229
+        },
+        {
+          "batch": 0,
+          "input_tracks": 49229,
+          "survivors": 35624
+        },
+        {
+          "batch": 0,
+          "input_tracks": 35624,
+          "survivors": 24866
+        },
+        {
+          "batch": 0,
+          "input_tracks": 24866,
+          "survivors": 17483
+        },
+        {
+          "batch": 0,
+          "input_tracks": 17483,
+          "survivors": 12144
+        },
+        {
+          "batch": 0,
+          "input_tracks": 12144,
+          "survivors": 8555
+        },
+        {
+          "batch": 0,
+          "input_tracks": 8555,
+          "survivors": 6055
+        },
+        {
+          "batch": 1,
+          "input_tracks": 1186565,
+          "survivors": 209623
+        },
+        {
+          "batch": 1,
+          "input_tracks": 209623,
+          "survivors": 115216
+        },
+        {
+          "batch": 1,
+          "input_tracks": 115216,
+          "survivors": 49960
+        },
+        {
+          "batch": 1,
+          "input_tracks": 49960,
+          "survivors": 20082
+        },
+        {
+          "batch": 1,
+          "input_tracks": 20082,
+          "survivors": 10864
+        },
+        {
+          "batch": 1,
+          "input_tracks": 10864,
+          "survivors": 5698
+        }
+      ]
+    },
+    {
+      "block": 128,
+      "tail_cutoff": 34816,
+      "em_calls": 676418285,
+      "warp_capacity_proxy": 1054041280,
+      "warp_useful_fraction": 0.6417379450262137,
+      "proxy_capacity_reduction_percent": 63.11051718927698,
+      "transport_launches": 16,
+      "compaction_boundaries": 14,
+      "survivor_resumptions": 3971684,
+      "transport_entries": 8040394,
+      "tail_em_work_share_percent": 2.2316253618129203,
+      "state_traffic_GB": {
+        "128": 1.016751104,
+        "256": 2.033502208,
+        "512": 4.067004416
+      },
+      "boundaries": [
+        {
+          "batch": 0,
+          "input_tracks": 2882145,
+          "survivors": 1224592
+        },
+        {
+          "batch": 0,
+          "input_tracks": 1224592,
+          "survivors": 847759
+        },
+        {
+          "batch": 0,
+          "input_tracks": 847759,
+          "survivors": 586333
+        },
+        {
+          "batch": 0,
+          "input_tracks": 586333,
+          "survivors": 351826
+        },
+        {
+          "batch": 0,
+          "input_tracks": 351826,
+          "survivors": 250568
+        },
+        {
+          "batch": 0,
+          "input_tracks": 250568,
+          "survivors": 133073
+        },
+        {
+          "batch": 0,
+          "input_tracks": 133073,
+          "survivors": 72933
+        },
+        {
+          "batch": 0,
+          "input_tracks": 72933,
+          "survivors": 49229
+        },
+        {
+          "batch": 0,
+          "input_tracks": 49229,
+          "survivors": 35624
+        },
+        {
+          "batch": 0,
+          "input_tracks": 35624,
+          "survivors": 24866
+        },
+        {
+          "batch": 1,
+          "input_tracks": 1186565,
+          "survivors": 209623
+        },
+        {
+          "batch": 1,
+          "input_tracks": 209623,
+          "survivors": 115216
+        },
+        {
+          "batch": 1,
+          "input_tracks": 115216,
+          "survivors": 49960
+        },
+        {
+          "batch": 1,
+          "input_tracks": 49960,
+          "survivors": 20082
+        }
+      ]
+    }
+  ]
+}

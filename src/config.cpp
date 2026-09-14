@@ -601,6 +601,10 @@ void TransportConfig::validate() const {
     if((em_primary_step_scale!=1.0 || em_secondary_step_scale!=1.0) &&
        (em_model!="g4_material_joint_v1" || run_mode!=RunMode::research))
         throw std::invalid_argument("EM step extension requires research unified EM");
+    if (secondary_step_chunking &&
+        (em_model != "g4_material_joint_v1" || !enable_secondary_unified_em ||
+         !enable_secondary_transport || !enable_inelastic))
+        throw std::invalid_argument("secondary_step_chunking requires unified secondary EM and inelastic secondary transport");
     if (em_model != "legacy" && em_model != "g4_material_joint_v1")
         throw std::invalid_argument("Unknown em_model: " + em_model);
     if (em_model == "legacy" &&
@@ -2471,6 +2475,8 @@ TransportConfig load_config(const std::filesystem::path& path) {
         config.enable_secondary_unified_em);
     config.secondary_species_grouping = parse_bool(
         values, "secondary_species_grouping", config.secondary_species_grouping);
+    config.secondary_step_chunking = parse_bool(
+        values, "secondary_step_chunking", config.secondary_step_chunking);
     {
         const auto it = values.find("energy_straggling_model");
         if (it != values.end() && !it->second.empty()) {

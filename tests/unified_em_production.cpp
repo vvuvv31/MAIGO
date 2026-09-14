@@ -10,8 +10,13 @@ int main(int argc,char** argv) {
         throw std::runtime_error("Expected production unified EM config");
     if (!baseline.enable_secondary_unified_em || !baseline.secondary_species_grouping)
         throw std::runtime_error("Production preset must enable full secondary EM and grouping");
+    if (!baseline.secondary_step_chunking)
+        throw std::runtime_error("Production preset must enable secondary continuation");
     baseline.validate();
     unsigned checks=1;
+    auto unsegmented = baseline;
+    unsegmented.secondary_step_chunking = false;
+    unsegmented.validate(); ++checks;
     auto ungrouped = baseline;
     ungrouped.secondary_species_grouping = false;
     ungrouped.validate(); ++checks;
@@ -23,6 +28,8 @@ int main(int argc,char** argv) {
         }
         throw std::runtime_error("Missing rejection: "+expected);
     };
+    rejects([](auto& c){c.enable_secondary_unified_em=false;},"secondary_step_chunking requires");
+    rejects([](auto& c){c.enable_secondary_transport=false;},"secondary_step_chunking requires");
     rejects([](auto& c){c.em_package_sha256=std::string(64,'0');},"authorized package");
     rejects([](auto& c){c.enable_energy_straggling=false;},"primary/secondary fluctuations");
     rejects([](auto& c){c.enable_secondary_energy_straggling=false;},"primary/secondary fluctuations");

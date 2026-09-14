@@ -74,8 +74,33 @@ template<int EmMode> class CarbonSecondaryTransportKernel;
 
 namespace {
 
-// Integer diagnostics are accumulated per track using the original per-step
-// conversion. Flush on every loop exit, including replay/escape/failure breaks.
+// State persists across launch boundaries; a pause must not finalize dose or
+// diagnostics. Only survivor indices move during stable compaction.
+struct SecondaryResumeState {
+    bool sec_terminal_recorded{};
+    bool unified_secondary_escaped_ct{};
+    ContinuousSpeciesTrackTally continuous_species_tally{};
+    float sec_e{};
+    float sec_x{};
+    float sec_y{};
+    float sec_z{};
+    float sec_dx{};
+    float sec_dy{};
+    float sec_dz{};
+    float pending_sec_depth_MeV{};
+    float pending_sec_voxel_MeV{};
+    int pending_sec_bin{};
+    int pending_sec_voxel{};
+    UnifiedEmClock unified_secondary_clock{};
+    std::uint64_t unified_secondary_counter{};
+    UnifiedEmState unified_secondary_state{};
+    std::array<std::uint64_t,8> unified_secondary_audit{};
+    uint32_t sec_steps{};
+    std::uint64_t local_sec_rate_queries{};
+    std::uint64_t local_sec_steps{};
+    std::array<double,6> he4_audit{};
+    std::array<std::uint64_t,CARBON_SECONDARY_STEP_PROFILE?60:0> sec_prof{};
+};
 struct UnifiedEmFailureRecord {int reason,section,z,a;float energy,density,step;};
 inline void record_unified_em_failure(unsigned* count,UnifiedEmFailureRecord* records,
     int reason,int section,int z,int a,float energy,float density,float step) {
@@ -3214,7 +3239,10 @@ template<int EmMode>
 
                     float mean_loss_MeV = 0.0F;
                     if(unified_em){
-                        mean_loss_MeV=unified_primary_state.mean(energy_MeV,step_mm);
+                        // The unified loss sampler computes the physical mean below.
+                        // This separate query is needed only by the optional audit.
+                        if (primary_loss_query_audit)
+                            mean_loss_MeV=unified_primary_state.mean(energy_MeV,step_mm);
                     } else if (ct_primary_midpoint_stopping && use_schneider_stopping && in_ct) {
                         mean_loss_MeV=midpoint_continuous_energy_loss(energy_MeV,step_mm,
                             stopping_power_MeV_per_mm,[&](float mid_energy) {
@@ -5044,6 +5072,7 @@ template<int EmMode>
 
     double secondary_kernel_seconds = 0.0;
     const bool enable_secondary_unified_em = config.enable_secondary_unified_em;
+    const bool segment_secondaries = config.secondary_step_chunking;
     // Reorder indices only: RNG streams and parent histories belong to particles.
     const bool group_secondaries = config.secondary_species_grouping &&
         enable_inelastic && enable_secondary_transport;
@@ -5107,12 +5136,41 @@ template<int EmMode>
                     secondary_group_seconds += std::chrono::duration<double>(
                         std::chrono::steady_clock::now() - grouping_start).count();
                 }
+                const unsigned resume_capacity = generation_end - generation_begin;
+                const unsigned state_capacity = segment_secondaries ? resume_capacity : 0;
+                auto* resume_states = mem_tracker.allocate<SecondaryResumeState>(state_capacity);
+                auto* resume_ready = mem_tracker.allocate<unsigned>(state_capacity);
+                auto* active_order = mem_tracker.allocate<unsigned>(state_capacity);
+                auto* next_order = mem_tracker.allocate<unsigned>(state_capacity);
+                auto* keep = mem_tracker.allocate<unsigned>(state_capacity);
+                auto* ranks = mem_tracker.allocate<unsigned>(state_capacity);
+                auto* block_counts = mem_tracker.allocate<unsigned>((state_capacity + 255) / 256);
+                auto* block_offsets = mem_tracker.allocate<unsigned>((state_capacity + 255) / 256);
+                auto* active_count = mem_tracker.allocate<unsigned>(segment_secondaries ? 1 : 0);
+                if (segment_secondaries) {
+                    if (!resume_states || !resume_ready || !active_order || !next_order ||
+                        !keep || !ranks || !block_counts || !block_offsets || !active_count)
+                        throw std::runtime_error("Secondary continuation allocation failed; reduce histories per shard");
+                    queue.fill(resume_ready, 0u, resume_capacity).wait_and_throw();
+                    queue.parallel_for(sycl::range<1>(resume_capacity), [=](sycl::id<1> i) {
+                        active_order[i[0]] = i[0];
+                    }).wait_and_throw();
+                    std::cout << "[segmented-secondary] step_limit=64 tail_threshold=8192 state_bytes="
+                              << sizeof(SecondaryResumeState) << " capacity=" << resume_capacity << "\n";
+                }
+                unsigned resume_active = resume_capacity, segment_rounds = 0;
+                double compact_seconds = 0;
+                while (resume_active) {
+                const bool finish_tail = !segment_secondaries || resume_active < 8192;
                 auto sec_event = queue.submit([&](sycl::handler& cgh) {
                 cgh.parallel_for<CarbonSecondaryTransportKernel<EmMode>>(
-                    sycl::range<1>(generation_end - generation_begin),
+                    sycl::range<1>(resume_active),
                     [=](sycl::id<1> item_id) {
-                        const auto sec_idx = group_secondaries ? secondary_order[item_id[0]]
-                            : generation_begin + item_id[0];
+                        const unsigned state_idx = segment_secondaries ? active_order[item_id[0]] : item_id[0];
+                        const bool resumed = segment_secondaries && resume_ready[state_idx] != 0;
+                        if (segment_secondaries) keep[item_id[0]] = 0;
+                        const auto sec_idx = group_secondaries ? secondary_order[state_idx]
+                            : generation_begin + state_idx;
                         const auto frag = secondary_queue_device[sec_idx];
                         if (frag.z <= 0 || frag.a <= 0) return;
                         const auto charged_origin_category =
@@ -5278,6 +5336,12 @@ template<int EmMode>
                         constexpr uint32_t kSecondaryMaxSteps = 30000U;
                         std::uint64_t local_sec_rate_queries = 0;
                         std::uint64_t local_sec_steps = 0;
+                        const int schneider_reg_idx =
+                            secondary_projectile_lut_index_device(
+                                      schneider_ct_device_ctx.sec_proj_keys,
+                                      schneider_ct_device_ctx.sec_num_projectiles,
+                                      frag.z, frag.a);
+                        if(!resumed){
                         // A track that reaches the stepping loop has actually
                         // started charged transport: count it and itemize its
                         // birth kinetic energy (not a config-switch inference).
@@ -5296,11 +5360,7 @@ template<int EmMode>
                         // must NOT drive coverage gates.
                         // v3: registry lookup over the uploaded bundle-ordered
                         // keys (any (Z,A) in the bundle is supported).
-                        const int schneider_reg_idx =
-                            secondary_projectile_lut_index_device(
-                                      schneider_ct_device_ctx.sec_proj_keys,
-                                      schneider_ct_device_ctx.sec_num_projectiles,
-                                      frag.z, frag.a);
+
                         if (schneider_ct_device_ctx.uses_cinel03() &&
                             frag.generation < cinel02_max_secondary_inelastic_generations &&
                             schneider_reg_idx < 0) {
@@ -5324,8 +5384,38 @@ template<int EmMode>
                                 sycl::fmax(0.0F, frag.energy_MeV),
                                 frag.pos_x_mm, frag.pos_y_mm, frag.pos_z_mm);
                         }
+                        }
+                        if(resumed){
+                            const auto saved=resume_states[state_idx];
+                            sec_terminal_recorded=saved.sec_terminal_recorded;
+                            unified_secondary_escaped_ct=saved.unified_secondary_escaped_ct;
+                            continuous_species_tally=saved.continuous_species_tally;
+                            sec_e=saved.sec_e;
+                            sec_x=saved.sec_x;
+                            sec_y=saved.sec_y;
+                            sec_z=saved.sec_z;
+                            sec_dx=saved.sec_dx;
+                            sec_dy=saved.sec_dy;
+                            sec_dz=saved.sec_dz;
+                            pending_sec_depth_MeV=saved.pending_sec_depth_MeV;
+                            pending_sec_voxel_MeV=saved.pending_sec_voxel_MeV;
+                            pending_sec_bin=saved.pending_sec_bin;
+                            pending_sec_voxel=saved.pending_sec_voxel;
+                            unified_secondary_clock=saved.unified_secondary_clock;
+                            unified_secondary_counter=saved.unified_secondary_counter;
+                            unified_secondary_state=saved.unified_secondary_state;
+                            unified_secondary_audit=saved.unified_secondary_audit;
+                            sec_steps=saved.sec_steps;
+                            local_sec_rate_queries=saved.local_sec_rate_queries;
+                            local_sec_steps=saved.local_sec_steps;
+                            for(int j=0;j<6;++j)he4_audit[j]=saved.he4_audit[j];
+                            if constexpr(CARBON_SECONDARY_STEP_PROFILE)for(int j=0;j<60;++j)sec_prof[j]=saved.sec_prof[j];
+                        }
+                        unsigned segment_steps=0;bool segment_paused=false;
                         while (sec_e > energy_cutoff_MeV && sec_z >= 0.0F && sec_z < phantom_length_mm &&
                                sec_steps < kSecondaryMaxSteps) {
+                            if(!finish_tail && segment_steps>=64){segment_paused=true;break;}
+                            ++segment_steps;
                             const auto bin_z = static_cast<int>(sec_z * inverse_depth_bin_width_mm);
 
                             if (bin_z < 0 || bin_z >= static_cast<int>(number_of_bins)) break;
@@ -6707,6 +6797,34 @@ template<int EmMode>
                                 sec_prof[40+sec_slot]+=static_cast<std::uint64_t>(dE*1e6f);
                             }
                         }
+                        if(segment_paused){
+                            SecondaryResumeState saved;
+                            saved.sec_terminal_recorded=sec_terminal_recorded;
+                            saved.unified_secondary_escaped_ct=unified_secondary_escaped_ct;
+                            saved.continuous_species_tally=continuous_species_tally;
+                            saved.sec_e=sec_e;
+                            saved.sec_x=sec_x;
+                            saved.sec_y=sec_y;
+                            saved.sec_z=sec_z;
+                            saved.sec_dx=sec_dx;
+                            saved.sec_dy=sec_dy;
+                            saved.sec_dz=sec_dz;
+                            saved.pending_sec_depth_MeV=pending_sec_depth_MeV;
+                            saved.pending_sec_voxel_MeV=pending_sec_voxel_MeV;
+                            saved.pending_sec_bin=pending_sec_bin;
+                            saved.pending_sec_voxel=pending_sec_voxel;
+                            saved.unified_secondary_clock=unified_secondary_clock;
+                            saved.unified_secondary_counter=unified_secondary_counter;
+                            saved.unified_secondary_state=unified_secondary_state;
+                            saved.unified_secondary_audit=unified_secondary_audit;
+                            saved.sec_steps=sec_steps;
+                            saved.local_sec_rate_queries=local_sec_rate_queries;
+                            saved.local_sec_steps=local_sec_steps;
+                            for(int j=0;j<6;++j)saved.he4_audit[j]=he4_audit[j];
+                            if constexpr(CARBON_SECONDARY_STEP_PROFILE)for(int j=0;j<60;++j)saved.sec_prof[j]=sec_prof[j];
+                            resume_states[state_idx]=saved;resume_ready[state_idx]=1;keep[item_id[0]]=1;
+                            return; // Suspend: no terminal scoring or audit flush.
+                        }
                         if(unified_secondary && CARBON_EM_LOCAL_AUDIT)flush_unified_em_audit(unified_audit,unified_secondary_audit);
                         if constexpr(CARBON_SECONDARY_STEP_PROFILE) {
                             for(int sec_pi=0;sec_pi<60;++sec_pi) if(sec_prof[sec_pi]) {
@@ -6917,6 +7035,25 @@ template<int EmMode>
             });
             sec_event.wait_and_throw();
                 secondary_kernel_seconds += event_duration_seconds(sec_event);
+                ++segment_rounds;
+                if (finish_tail) break; // No suspended tracks; avoid an empty compaction.
+                const auto compact_start=std::chrono::steady_clock::now();
+                const unsigned resume_groups=(resume_active+255)/256;
+                queue.parallel_for(sycl::nd_range<1>(resume_groups*256,256),[=](sycl::nd_item<1> it){
+                    const auto i=it.get_global_linear_id();const unsigned flag=i<resume_active?keep[i]:0;
+                    const auto rank=sycl::exclusive_scan_over_group(it.get_group(),flag,sycl::plus<unsigned>());
+                    const auto count=sycl::reduce_over_group(it.get_group(),flag,sycl::plus<unsigned>());
+                    if(i<resume_active)ranks[i]=rank;
+                    if(it.get_local_linear_id()==0)block_counts[it.get_group_linear_id()]=count;
+                }).wait_and_throw();
+                queue.single_task([=](){unsigned sum=0;for(unsigned i=0;i<resume_groups;++i){block_offsets[i]=sum;sum+=block_counts[i];}*active_count=sum;}).wait_and_throw();
+                queue.parallel_for(sycl::range<1>(resume_active),[=](sycl::id<1> id){const auto i=id[0];if(keep[i])next_order[block_offsets[i/256]+ranks[i]]=active_order[i];}).wait_and_throw();
+                queue.copy(active_count,&resume_active,1).wait_and_throw();std::swap(active_order,next_order);
+                compact_seconds+=std::chrono::duration<double>(std::chrono::steady_clock::now()-compact_start).count();
+                }
+                if (segment_secondaries) std::cout<<"[segmented-secondary] rounds="<<segment_rounds<<" compaction_s="<<compact_seconds<<"\n";
+                mem_tracker.free(resume_states);
+                for(auto* ptr:{resume_ready,active_order,next_order,keep,ranks,block_counts,block_offsets,active_count})mem_tracker.free(ptr);
                 const auto batch_end = generation_end;
                 generation_begin = batch_end;
                 queue.copy(secondary_count_device, &secondary_count_host, 1)

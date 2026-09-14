@@ -23,6 +23,7 @@ ion-INCLXX、elastic、stopping 和衰变模块。模块名不等于每个 proje
 | 原发 / 次级涨落 | 均开启，`straggling_scale: 1.0` |
 | `ct_secondary_exact_faces` | `true` |
 | `secondary_species_grouping` | `true`；设为 `false` 恢复原调度 |
+| `secondary_step_chunking` | `true`：64 次完整循环后压紧存活队列 |
 | 非弹性 / 次级输运 | 开启；次级非弹性代数上限为 2 |
 | 独立全离子核弹性 | 这两个生产配置不载入该库；属于研究选项 |
 | 电子剂量 | 抽样 δ 能量局部沉积，不运行电子能量包 tracking |
@@ -228,9 +229,38 @@ overflow 使该片无效，必须拆分重跑。全局能量闭合不证明空�
 
 ## 8. 种类分组与实测吞吐
 
+### 默认次级续跑（2026-09-14）
+
+两个生产预设均启用 `secondary_step_chunking: true`，与种类分组一起使用。
+每次 kernel 最多执行 64 次完整次级循环，保存存活轨迹并稳定压紧其索引；
+队列少于 8192 时直接跑完剩余轨迹，不缩短或合并物理步。
+续跑保留能量、位置/方向、RNG 计数、δ 时钟、材料缓存、待写回沉积及诊断累计量；
+只有真正终止才做末端计分，每代完成后才开始子代。设为 `false` 恢复整条轨迹
+单次运行且不分配续跑缓冲；种类分组由自己的开关控制。
+
+默认构建每条当前代次级需要 336 字节状态及约 20 字节索引/标志。
+实测 288 万次级约增加 1.03 GB 显存。分配失败会停止运行，应减少每个 shard 的
+原发数后合并结果。同时原发已去掉一次重复平均能损查询，只有可选审计需要时
+才执行；实际能损抽样保持原样。
+
+已验证原型在 RT07575、100 万原发下：不加独立弹性时 29.5–29.6k histories/s，
+相比已消除重复查询的基线提高 36.6–39.7%；含全离子弹性时 28.2–28.6k，
+提高 34.7–39.2%。计数、EM 审计、步数一致，零 overflow。
+弹性最大剂量差为峰值的 0.000955%（该体素局部约 0.00337%），用户已接受并授权
+接入生产。该稳定差异超过自重复波动，原因尚未证明；质量报告记录
+`secondary_step_chunking_accepted`。本轮是 GPU 调度比较，没有重新计算 TOPAS Gamma，
+原有低密度阈值区及患者 Gamma 验收未完成的说明继续保留。
+正式源码开关对照：RT07575 1M、不加独立弹性为 21,559 → 29,535 histories/s
+（+37.0%），最大差为峰值的 0.0000966%。已重建的日常生产二进制也通过含弹性
+1M 检查，吞吐为 28,534 histories/s。
+参见[验证记录](benchmark/runtime_breakdown_20260914/SEGMENT_VALIDATION.md)及
+[正式接入](benchmark/runtime_breakdown_20260914/SEGMENT_PRODUCTION.md)。
+
+
+
 `secondary_species_grouping: true` 在 GPU 上对每代次级建立索引排列，分为 18 种离子
 及其他产物共 19 桶。Histogram、prefix sum、scatter 保留粒子记录、parent history 和
-RNG stream，子代仍在下一代处理。正式实现不含额外的 kernel 分裂，额外索引内存约为每队列槽 4 字节。
+RNG stream，子代仍在下一代处理。此前的物种专用 kernel 分裂候选仍未接入，额外索引内存约为每队列槽 4 字节。
 
 两个生产 YAML 显式开启；配置结构默认 false，以兼容旧配置。日志输出模式及分组时间；
 授权接入后质量报告仍保留 `secondary_species_grouping_accuracy_pending`。

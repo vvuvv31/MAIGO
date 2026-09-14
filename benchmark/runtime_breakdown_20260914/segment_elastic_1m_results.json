@@ -1,0 +1,378 @@
+{
+  "baseline": {
+    "complete": true,
+    "returncode": 0,
+    "wall_s": 49.60181736946106,
+    "config_sha256": "552105d65934f75d3761a921ea62dde83a557067cbb940f0190512d16d47e074",
+    "binary_sha256": "48d8c1dddc04dc2a36217e0cfd7e1f39fd23d5884fbfbac930e429049b83df95",
+    "audit": [
+      [
+        0,
+        2202336874,
+        677436317,
+        2250796010,
+        1984096010,
+        2128670856432941,
+        163157300599876,
+        0
+      ]
+    ],
+    "quality": {
+      "schema_version": 3,
+      "status": "non_production",
+      "run_mode": "research",
+      "accepted": true,
+      "absolute_physical_energy_residual_MeV": 9310.9716987,
+      "physical_relative_energy_residual": 3.5828541041e-06,
+      "absolute_accounting_energy_residual_MeV": 9310.9716987,
+      "accounting_relative_energy_residual": 3.5828541041e-06,
+      "absolute_energy_residual_MeV": 9310.9716987,
+      "relative_energy_residual": 3.5828541041e-06,
+      "topas_reference_energy_sink_active": false,
+      "queue_overflow_count": 0,
+      "queue_overflow_energy_MeV": 0,
+      "voxel_scored_energy_MeV": 2296748468.92,
+      "in_grid_deposited_energy_MeV": 2296748516.38,
+      "outside_grid_deposited_energy_MeV": 438.120262217,
+      "grid_split_closure_ratio": 1.00000001189,
+      "voxel_to_ingrid_ratio": 0.999999979335,
+      "voxel_to_total_deposited_ratio": 0.99999980047,
+      "failures": [],
+      "approximations": [
+        {
+          "code": "secondary_species_grouping_accuracy_pending",
+          "message": "GPU species index grouping; RNG identities preserved; production integration authorized; RT07575 scheduling dose difference 0.0203% of peak remains under investigation",
+          "value": 1,
+          "limit": 0
+        },
+        {
+          "code": "unified_material_em_accuracy_pending",
+          "message": "Unified water/Schneider EM for all 18 charged ions; local delta deposition; production execution authorized, density cut-onset and patient Gamma accuracy gates remain pending",
+          "value": 1,
+          "limit": 0
+        },
+        {
+          "code": "all_ion_elastic_candidate",
+          "message": "Finite TOPAS elastic event bank; additional heavy recoil isotopes use total stopping and MCS with EM-only transport; patient gamma and bank convergence validation pending",
+          "value": 1,
+          "limit": 0
+        },
+        {
+          "code": "schneider_post_em_null_collisions",
+          "message": "sampled candidates resolved as post-EM null collisions (track continues, no lookup)",
+          "value": 25,
+          "limit": 0
+        },
+        {
+          "code": "schneider_primary_post_em_null_collisions",
+          "message": "primary candidates resolved as post-EM null collisions (track continues, no lookup)",
+          "value": 28,
+          "limit": 0
+        }
+      ]
+    },
+    "elapsed_s": 47.796929,
+    "throughput": 20921.846,
+    "primary_s": 21.447998,
+    "secondary_s": 22.278869,
+    "steps": 2201922441
+  },
+  "candidate": {
+    "complete": true,
+    "returncode": 0,
+    "wall_s": 37.21117448806763,
+    "config_sha256": "552105d65934f75d3761a921ea62dde83a557067cbb940f0190512d16d47e074",
+    "binary_sha256": "a8c1f6ad400e5db354bc4bada92cb5e938b7dd84b317dc470fc8a3c573a551ab",
+    "audit": [
+      [
+        0,
+        2202336874,
+        677436317,
+        2250796010,
+        1984096010,
+        2128670856432941,
+        163157300599876,
+        0
+      ]
+    ],
+    "quality": {
+      "schema_version": 3,
+      "status": "non_production",
+      "run_mode": "research",
+      "accepted": true,
+      "absolute_physical_energy_residual_MeV": 9306.57173151,
+      "physical_relative_energy_residual": 3.58116100041e-06,
+      "absolute_accounting_energy_residual_MeV": 9306.57173151,
+      "accounting_relative_energy_residual": 3.58116100041e-06,
+      "absolute_energy_residual_MeV": 9306.57173151,
+      "relative_energy_residual": 3.58116100041e-06,
+      "topas_reference_energy_sink_active": false,
+      "queue_overflow_count": 0,
+      "queue_overflow_energy_MeV": 0,
+      "voxel_scored_energy_MeV": 2296748467.84,
+      "in_grid_deposited_energy_MeV": 2296748516.39,
+      "outside_grid_deposited_energy_MeV": 438.120262217,
+      "grid_split_closure_ratio": 1.00000001381,
+      "voxel_to_ingrid_ratio": 0.999999978863,
+      "voxel_to_total_deposited_ratio": 0.999999801921,
+      "failures": [],
+      "approximations": [
+        {
+          "code": "secondary_species_grouping_accuracy_pending",
+          "message": "GPU species index grouping; RNG identities preserved; production integration authorized; RT07575 scheduling dose difference 0.0203% of peak remains under investigation",
+          "value": 1,
+          "limit": 0
+        },
+        {
+          "code": "unified_material_em_accuracy_pending",
+          "message": "Unified water/Schneider EM for all 18 charged ions; local delta deposition; production execution authorized, density cut-onset and patient Gamma accuracy gates remain pending",
+          "value": 1,
+          "limit": 0
+        },
+        {
+          "code": "all_ion_elastic_candidate",
+          "message": "Finite TOPAS elastic event bank; additional heavy recoil isotopes use total stopping and MCS with EM-only transport; patient gamma and bank convergence validation pending",
+          "value": 1,
+          "limit": 0
+        },
+        {
+          "code": "schneider_post_em_null_collisions",
+          "message": "sampled candidates resolved as post-EM null collisions (track continues, no lookup)",
+          "value": 25,
+          "limit": 0
+        },
+        {
+          "code": "schneider_primary_post_em_null_collisions",
+          "message": "primary candidates resolved as post-EM null collisions (track continues, no lookup)",
+          "value": 28,
+          "limit": 0
+        }
+      ]
+    },
+    "elapsed_s": 35.491446,
+    "throughput": 28175.803,
+    "primary_s": 21.912409,
+    "secondary_s": 9.3325586,
+    "steps": 2201922441
+  },
+  "ledger_integer_counts": {
+    "histories": [
+      1000000,
+      1000000
+    ],
+    "E_beamline_MeV": [
+      0,
+      0
+    ],
+    "E_material_electron_untracked_MeV": [
+      0,
+      0
+    ],
+    "E_material_photon_untracked_MeV": [
+      0,
+      0
+    ],
+    "E_topas_compat_discarded_kinetic_MeV": [
+      0,
+      0
+    ],
+    "E_queue_lost_MeV": [
+      0,
+      0
+    ],
+    "E_queue_lost_MeV_included_in_untracked": [
+      0,
+      0
+    ],
+    "E_secondary_overflow_MeV": [
+      0,
+      0
+    ],
+    "E_neutral_overflow_MeV": [
+      0,
+      0
+    ],
+    "E_neutral_unsupported_product_MeV": [
+      0,
+      0
+    ],
+    "E_neutral_package_closure_residual_MeV": [
+      0,
+      0
+    ],
+    "nuclear_interactions": [
+      414461,
+      414461
+    ],
+    "upstream_air_mcs_covariance_enabled": [
+      false,
+      false
+    ],
+    "ct_primary_midpoint_stopping": [
+      true,
+      true
+    ],
+    "ct_secondary_exact_faces": [
+      true,
+      true
+    ],
+    "ct_primary_midpoint_stopping_diagnostic": [
+      false,
+      false
+    ],
+    "ct_secondary_exact_faces_diagnostic": [
+      false,
+      false
+    ],
+    "ct_secondary_mcs_off_diagnostic": [
+      false,
+      false
+    ],
+    "ct_secondary_schneider_sp_diagnostic": [
+      false,
+      false
+    ],
+    "E_schneider_primary_delta_tail_moved_MeV": [
+      0,
+      0
+    ],
+    "E_schneider_primary_delta_tail_fallback_MeV": [
+      0,
+      0
+    ],
+    "E_schneider_primary_delta_tail_escaped_scorer_MeV": [
+      0,
+      0
+    ],
+    "E_schneider_primary_delta_longitudinal_moved_MeV": [
+      0,
+      0
+    ],
+    "E_schneider_primary_delta_longitudinal_fallback_MeV": [
+      0,
+      0
+    ],
+    "E_schneider_primary_delta_longitudinal_escaped_scorer_MeV": [
+      0,
+      0
+    ],
+    "ct_electron_segment_transport": [
+      false,
+      false
+    ],
+    "unified_water_nuclear_transport": [
+      false,
+      false
+    ],
+    "all_ion_primary_elastic_interactions": [
+      267920,
+      267920
+    ],
+    "all_ion_secondary_elastic_interactions": [
+      255848,
+      255848
+    ],
+    "elastic_post_em_null_collisions": [
+      48,
+      48
+    ],
+    "fred_inelastic_events": [
+      28,
+      28
+    ],
+    "fred_energy_scaled_events": [
+      0,
+      0
+    ],
+    "fred_energy_scaled_fraction": [
+      0,
+      0
+    ],
+    "fred_projectile_az_open_events": [
+      0,
+      0
+    ],
+    "fred_mean_leftover_projectile_a": [
+      0,
+      0
+    ],
+    "fred_mean_leftover_projectile_z": [
+      0,
+      0
+    ],
+    "fred_q_MeV": [
+      0,
+      0
+    ],
+    "fred_resample_failed_events": [
+      0,
+      0
+    ],
+    "fred_resample_failed_energy_MeV": [
+      0,
+      0
+    ],
+    "fred_product_capacity_overflow_events": [
+      0,
+      0
+    ],
+    "fred_product_capacity_overflow_energy_MeV": [
+      0,
+      0
+    ],
+    "fred_invert_error_proj_h": [
+      0,
+      0
+    ],
+    "fred_invert_error_proj_o": [
+      0,
+      0
+    ],
+    "fred_invert_error_tgt_h": [
+      0,
+      0
+    ],
+    "fred_invert_error_tgt_o": [
+      0,
+      0
+    ],
+    "cinel02_kinetic_q_excitation_bucket_MeV": [
+      0,
+      0
+    ],
+    "primary_elastic_interactions": [
+      267920,
+      267920
+    ],
+    "elastic_queued_neutral_MeV": [
+      0,
+      0
+    ],
+    "elastic_queue_overflow": [
+      0,
+      0
+    ],
+    "elastic_queue_overflow_MeV": [
+      0,
+      0
+    ],
+    "cascade_interactions": [
+      0,
+      0
+    ],
+    "secondary_queue_overflow": [
+      0,
+      0
+    ],
+    "cascade_queue_overflow": [
+      0,
+      0
+    ],
+    "neutral_queue_overflow": [
+      0,
+      0
+    ]
+  },
+  "max_dose_difference_percent_peak": 0.000954561762219824,
+  "gain_percent": 34.67168719242078
+}

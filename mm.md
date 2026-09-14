@@ -25,6 +25,7 @@ The two current unified-EM production entry points are
 | Primary / secondary fluctuations | Both enabled, `straggling_scale: 1.0` |
 | `ct_secondary_exact_faces` | `true` |
 | `secondary_species_grouping` | `true`; restore original scheduling with `false` |
+| `secondary_step_chunking` | `true`: 64 complete iterations, then survivor compaction |
 | Inelastic / secondary transport | Enabled; secondary inelastic generation limit 2 |
 | Independent all-ion elastic | Bank omitted in these two production presets; research option |
 | Electron dose | Local deposition of sampled delta energy; no electron packet tracking |
@@ -305,11 +306,44 @@ Global energy closure does not establish spatial-dose accuracy or close every nu
 
 ## 8. Species grouping and measured throughput
 
+### Default secondary continuation (2026-09-14)
+
+Both production presets now enable `secondary_step_chunking: true` alongside species
+grouping. A launch performs up to 64 complete secondary loop iterations, saves the
+surviving tracks and stably compacts their indices. Queues below 8192 finish directly.
+No physical step is shortened or merged. Energy, position/direction, RNG counter,
+delta clock, material cache, pending deposits and diagnostics persist across launches;
+terminal scoring happens only when the track actually terminates. Each generation
+finishes before its descendants start. Setting the option to `false` restores full-track
+launches without continuation buffers; species grouping is controlled separately.
+
+The default build needs 336 bytes of state plus about 20 bytes of indices/flags per
+secondary in the current generation. The measured 2.88M-track pool needs about 1.03 GB
+extra memory. Allocation failure stops the run; reduce histories per shard and merge
+outputs. Primary transport also skips a duplicate mean-loss lookup unless its optional
+audit needs it; the physical loss sampler remains unchanged.
+
+Validated prototype RT07575 1M throughput was 29.5–29.6k histories/s without independent
+elastic (+36.6–39.7% over the mean-lookup-optimized baseline), and 28.2–28.6k with
+all-ion elastic (+34.7–39.2%). Counts, EM audits and steps matched, with zero overflow.
+The maximum elastic dose difference was 0.000955% of peak (about 0.00337% locally at
+the worst voxel); the user accepted it for production. This stable difference exceeds
+self-repeat noise and its origin remains unproven. The quality report records
+`secondary_step_chunking_accepted`; these GPU scheduling checks are not a new TOPAS
+Gamma validation. The existing low-density and patient-Gamma caveats remain.
+The production-source ON/OFF check measured 21,559 → 29,535 histories/s (+37.0%)
+for RT07575 1M without independent elastic, with a maximum dose difference of
+0.0000966% of peak. The rebuilt daily production binary also passed the elastic
+1M check at 28,534 histories/s.
+See [validation](benchmark/runtime_breakdown_20260914/SEGMENT_VALIDATION.md) and
+[production integration](benchmark/runtime_breakdown_20260914/SEGMENT_PRODUCTION.md).
+
+
+
 `secondary_species_grouping: true` creates a GPU index permutation for each secondary
 generation: 18 species buckets plus other products. Histogram, prefix sum and scatter
 leave particle records, parent histories and RNG streams intact. Descendants are
-processed in the next generation. The implementation does not include the extra
-split kernels. Additional index memory is approximately 4 bytes per queue slot.
+processed in the next generation. The earlier species-specific split-kernel candidate remains excluded. Additional index memory is approximately 4 bytes per queue slot.
 
 The two production YAML files explicitly opt in; the configuration-structure default
 is false for compatibility. Logs print the mode and grouping time. The quality report

@@ -42,6 +42,10 @@ SYCL/GPU 在沙盒外执行；禁止远程/集群 GPU。TOPAS 经本地 sbatch�
 [水生产配置](config/unified_water_production.yaml)、
 [RT07575 生产配置](config/rt07575_unified_em_production.yaml)。
 原发 C12 和全部 18 种带电离子共用水 / Schneider EM 包。
+两个生产预设默认开启 `secondary_step_chunking: true`（每 64 次完整次级循环
+保存状态并压紧存活索引）；设为 `false` 可关闭，详见
+[接入验证](benchmark/runtime_breakdown_20260914/SEGMENT_PRODUCTION.md)。
+使用前需重新构建二进制，旧构建不能执行新配置开关。
 低密度阈值区和患者 Gamma 精度验收尚未完成，质量报告保留提示。
 核弹性仍受原有研究模式限制；联合核弹性计算继续使用研究配置。
 新 EM 二进制约 1.29 GiB，需单独复制，尚未上传到 Release；

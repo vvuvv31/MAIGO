@@ -92,6 +92,9 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
         config.enable_secondary_transport)
         report.approximations.push_back({"secondary_species_grouping_accuracy_pending",
             "GPU species index grouping; RNG identities preserved; production integration authorized; RT07575 scheduling dose difference 0.0203% of peak remains under investigation", 1., 0.});
+    if (config.secondary_step_chunking)
+        report.approximations.push_back({"secondary_step_chunking_accepted",
+            "64 complete iterations per launch, stable survivor index compaction, tail below 8192; user-accepted RT07575 1M elastic dose difference up to 0.000955% of peak (not a new TOPAS Gamma validation)", 1., 0.});
     if(config.em_model=="g4_material_joint_v1")
         report.approximations.push_back({"unified_material_em_accuracy_pending",
             "Unified water/Schneider EM for all 18 charged ions; local delta deposition; production execution authorized, density cut-onset and patient Gamma accuracy gates remain pending",1.,0.});

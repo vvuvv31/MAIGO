@@ -378,6 +378,9 @@ struct TransportConfig {
     bool enable_secondary_unified_em{false};
     // GPU generation-wise species ordering. Production YAML opts in explicitly.
     bool secondary_species_grouping{false};
+    // Pause after 64 complete secondary iterations and compact survivor indices.
+    // Production presets opt in; false retains full-track scheduling without state buffers.
+    bool secondary_step_chunking{false};
     // Scalar fallback for Bohr straggling. If the two optional tables below
     // are populated, the scale is linearly interpolated using the current
     // particle E/A rather than the incident beam energy. Empty tables retain
