@@ -1,0 +1,17 @@
+{
+  "case": "b4_soft_bone",
+  "topas_peak_mm": 95.75,
+  "gpu_peak_mm": 95.75,
+  "topas_MeV_per_primary": 2780.882327542456,
+  "gpu_MeV_per_primary": 2757.915757574152,
+  "energy_ratio_GPU_TOPAS": 0.9917412650866819,
+  "IDD_RMSE_percent_TOPAS_peak": 0.44263555646664376,
+  "gpu_elapsed_s": 8.413486242294312,
+  "topas_elapsed_s": 6640.974675416946,
+  "wall_time_ratio_TOPAS_GPU": 789.3249580694612,
+  "gpu_voxel_energy_to_ledger_ratio": 0.9999986111702225,
+  "primary_em_model": "legacy",
+  "em_model": "g4_material_joint_v1",
+  "peak_error_percent": -1.647028441823284,
+  "high_dose_mare_percent": 1.0025586633992418
+}

@@ -1,0 +1,167 @@
+--- a/include/carbon/primary_em_mean_candidate.hpp
++++ b/include/carbon/primary_em_mean_candidate.hpp
+@@ -9,0 +10,8 @@
++    Real derivative(Real x) const {
++        if(x<lower || x>upper)return 0;
++        const Real w=(x-lower)/(upper-lower),a=w-Real(1.0/3),b=w-Real(2.0/3),c=w-1;
++        return (-Real(4.5)*y0*(a*b+a*c+b*c)
++            +Real(13.5)*ythird*(b*c+w*(b+c))
++            -Real(13.5)*ytwothirds*(a*c+w*(a+c))
++            +Real(4.5)*y1*(a*b+w*(a+b)))/(upper-lower);
++    }
+--- a/include/carbon/unified_em_view.hpp
++++ b/include/carbon/unified_em_view.hpp
+@@ -1,0 +2 @@
++#include "carbon/delta_moments_candidate.hpp"
+@@ -47,0 +49 @@
++    float delta_stopping{},delta_variance{},stopping_slope{},delta_slope{};
+@@ -55,0 +58 @@
++    const float* delta_means{};
+@@ -70 +73 @@
+-    UnifiedEmNode at(float e)const {
++    UnifiedEmNode at(float e,float* delta_mean=nullptr,float* delta_variance=nullptr,float* delta_slope=nullptr)const {
+@@ -75,0 +79,3 @@
++        if(delta_mean)*delta_mean=delta_means?mix(delta_means[2*lo],delta_means[2*lo+2]):0.f;
++        if(delta_variance)*delta_variance=delta_means?mix(delta_means[2*lo+1],delta_means[2*lo+3]):0.f;
++        if(delta_slope)*delta_slope=delta_means?(delta_means[2*lo+2]-delta_means[2*lo])/(b.energy-a.energy)/record->a:0.f;
+@@ -78 +84 @@
+-    float raw(int kind,float x)const {
++    float raw(int kind,float x,float* slope=nullptr)const {
+@@ -81 +87 @@
+-            if(kind==3)return 0;
++            if(kind==3){if(slope)*slope=0;return 0;}
+@@ -82,0 +89 @@
++            if(slope)*slope=x>0?v[0].y0*(kind==2?2*w/v[0].lower:1/(2*std::sqrt(w)*v[0].lower)):0.f;
+@@ -86,0 +94 @@
++        if(slope)*slope=v[lo].derivative(x);
+@@ -93 +101 @@
+-        const auto& r=*record;const auto n=at(kinetic/r.a);
++        const auto& r=*record;float delta=0,variance=0,delta_slope=0,raw_slope=0;const auto n=at(kinetic/r.a,&delta,&variance,&delta_slope);
+@@ -95 +103,2 @@
+-        return {f,raw(1,kinetic*r.ratio)/(f*r.ratio),f*raw(0,kinetic*r.ratio),
++        const float stop=f*raw(0,kinetic*r.ratio,&raw_slope);
++        return {f,raw(1,kinetic*r.ratio)/(f*r.ratio),stop,
+@@ -97 +106 @@
+-                n.fluctuation==1};
++                n.fluctuation==1,delta*density_scale,variance*density_scale,f*r.ratio*raw_slope,delta_slope*density_scale};
+@@ -101 +110,8 @@
+-        return primary_restricted_mean_candidate(kinetic,length,pre.stopping,pre.range,
++        // Correct only the native linear restricted branch. Range inversion
++        // already integrates energy dependence and must not be corrected twice.
++        float stopping=pre.stopping;
++        if(length<pre.range && stopping*length<=r.linear_limit*kinetic) {
++            const float corrected=stopping-.5f*length*(stopping+pre.delta_stopping)*pre.stopping_slope;
++            if(corrected>0 && corrected*length<=r.linear_limit*kinetic)stopping=corrected;
++        }
++        return primary_restricted_mean_candidate(kinetic,length,stopping,pre.range,
+@@ -104,0 +121 @@
++                mid=std::max(.5f*kinetic,mid-.5f*pre.delta_stopping*h);
+@@ -151,0 +169 @@
++    const float* delta_means{};
+@@ -182 +200 @@
+-        auto point=[&](int i){auto* r=records+i*18+ion;return UnifiedEmPoint{r,nodes+r->node_offset,segments,density/materials[i].density,energy_index?energy_index+(i*18+ion)*unified_em_index_stride:nullptr};};
++        auto point=[&](int i){auto* r=records+i*18+ion;return UnifiedEmPoint{r,nodes+r->node_offset,segments,density/materials[i].density,energy_index?energy_index+(i*18+ion)*unified_em_index_stride:nullptr,delta_means?delta_means+2*r->node_offset:nullptr};};
+@@ -222,11 +240,9 @@
+-    const bool selected=h>=distance;cache.clock.consume(h,proposal_rate,selected);out.proposed=selected;
+-    if(selected){
+-        cache.threshold=std::numeric_limits<float>::max();float post=t-loss;
+-        if(post>0 && uniform()*proposal_rate<s.rate(post,CARBON_EM_STEP_CACHE?pre.lo.factor:s.lo.factor(t),CARBON_EM_STEP_CACHE?pre.hi.factor:s.hi.factor(t))){
+-            float u=post/r.mass,beta2=u*(u+2)/((u+1)*(u+1));
+-            float max_transfer=2*.51099891f*u*(u+2)/(1+2*(u+1)*ratio+ratio*ratio);
+-            auto delta=sample_charged_delta_candidate(s.cut(),max_transfer,beta2,r.form_factor,r.mass,post,r.spin,r.magnetic_moment2,uniform);
+-            if(delta.status==DeltaDrawStatus::invalid || delta.status==DeltaDrawStatus::exhausted)return out;
+-            if(delta.status==DeltaDrawStatus::accepted){out.delta=std::min(post,delta.energy_MeV);loss+=out.delta;out.accepted=true;}
+-        }
+-    }
++    // Aggregate delta draw; native restricted fluctuation remains independent.
++    const float delta0=s.mix(pre.lo.delta_stopping,pre.hi.delta_stopping);
++    const float delta_slope=s.mix(pre.lo.delta_slope,pre.hi.delta_slope);
++    const float delta_mean=std::max(0.f,delta0-.5f*(mean+delta0*h)*delta_slope)*h;
++    if(!(delta_mean>=0 && std::isfinite(delta_mean)))return out;
++    const float delta_variance=s.mix(pre.lo.delta_variance,pre.hi.delta_variance)*h;
++    const float delta=fluctuations?delta_moment_draw(delta_mean,delta_variance,uniform):delta_mean;
++    if(!(delta>=0 && std::isfinite(delta)))return out;
++    out.delta=std::min(t-loss,delta);loss+=out.delta;
+--- /dev/null
++++ b/include/carbon/delta_moments_candidate.hpp
+@@ -0,0 +1,27 @@
++#pragma once
++#include <cmath>
++#include <algorithm>
++#include <limits>
++namespace carbon {
++// Moment-matched aggregate delta loss. Compound-Poisson cumulants are
++// mean=h*lambda*E[accepted epsilon], variance=h*lambda*E[accepted epsilon^2].
++// Gamma approximates the distribution, including its zero-event atom/tail.
++// Returned draw is uncapped; transport caps against remaining kinetic energy.
++template<class Uniform> float delta_moment_draw(float mean,float variance,Uniform& uniform) {
++    if(!(mean>=0 && variance>=0 && std::isfinite(mean) && std::isfinite(variance)))return std::numeric_limits<float>::quiet_NaN();
++    if(mean==0 || variance==0)return mean;
++    float shape=mean*(mean/variance),scale=variance/mean;
++    if(!(shape>0 && std::isfinite(shape) && std::isfinite(scale)))return std::numeric_limits<float>::quiet_NaN();
++    const bool small=shape<1;
++    const float d=(small?shape+1:shape)-1.f/3.f,c=1/std::sqrt(9*d);
++    auto u=[&](){float v=uniform();return (v>=0 && v<1)?std::max(v,1e-12f):std::numeric_limits<float>::quiet_NaN();};
++    for(int tries=0;tries<256;++tries){
++        const float x=std::sqrt(-2*std::log(u()))*std::cos(6.283185307179586f*u());
++        float v=1+c*x;if(v<=0)continue;v=v*v*v;
++        const float w=u();
++        if(w<1-.0331f*x*x*x*x || std::log(w)<.5f*x*x+d*(1-v+std::log(v)))
++            return scale*d*v*(small?std::pow(u(),1/shape):1.f);
++    }
++    return std::numeric_limits<float>::quiet_NaN();
++}
++}
+--- a/src/transport_sycl.cpp
++++ b/src/transport_sycl.cpp
+@@ -0,0 +1 @@
++#include "carbon/sha256.hpp"
+@@ -1119,0 +1121 @@
++    float* delta_mean_device=nullptr;
+@@ -1133,0 +1136,16 @@
++        const std::filesystem::path delta_mean_path="/mnt/sdb/wuwei/MAIGO/scratch/delta_moments_current_20260915/delta_moments.bin";
++        if(config.em_package_sha256!="8c5d970b3b639bfca2f448730271bed4fc04721aba73100e2efbe09dffe44855" ||
++           compute_file_sha256_hex(delta_mean_path)!="c551bc52fa30ff7e3ea229c8b89792e8ecd2b0fb12f18fcad50d1c6f206bc7cc")
++            throw std::runtime_error("Delta mean table provenance/SHA mismatch");
++        std::ifstream delta_in(delta_mean_path,std::ios::binary);
++        char delta_magic[8];std::uint32_t delta_header[2];
++        delta_in.read(delta_magic,8);delta_in.read(reinterpret_cast<char*>(delta_header),8);
++        if(!delta_in || std::string(delta_magic,8)!="EMDMOMT2" || delta_header[0]!=2 ||
++           delta_header[1]!=package.nodes.size() || std::filesystem::file_size(delta_mean_path)!=16+8*package.nodes.size())
++            throw std::runtime_error("Delta mean table layout mismatch");
++        std::vector<float> delta_means(2*package.nodes.size());
++        delta_in.read(reinterpret_cast<char*>(delta_means.data()),delta_means.size()*sizeof(float));
++        if(!delta_in)throw std::runtime_error("Delta mean table truncated");
++        for(float v:delta_means)if(!(v>=0 && std::isfinite(v)))throw std::runtime_error("Invalid delta mean");
++        delta_mean_device=upload(delta_means);
++        std::cout<<"[delta-moments] aggregate gamma mean/variance, no delta clock; nodes="<<delta_means.size()<<" SHA256=c551bc52fa30ff7e3ea229c8b89792e8ecd2b0fb12f18fcad50d1c6f206bc7cc\n";
+@@ -1153 +1171 @@
+-        unified_device={unified_materials,unified_species,unified_records,unified_nodes,unified_segments,static_cast<unsigned>(package.materials.size()),unified_sections,unified_energy_index};
++        unified_device={unified_materials,unified_species,unified_records,unified_nodes,unified_segments,static_cast<unsigned>(package.materials.size()),unified_sections,unified_energy_index,delta_mean_device};
+@@ -2986,0 +3005,3 @@
++                        // Preserve material cache invalidation without updating a delta clock.
++                        unified_primary_clock.last_section=unified_primary_state.section;
++                        unified_primary_clock.last_density=unified_primary_state.density;
+@@ -2988,3 +3008,0 @@
+-                        unified_primary_rate=unified_primary_clock.update(unified_primary_state,energy_MeV,(CARBON_EM_STEP_CACHE?unified_primary_pre.lo.factor:unified_primary_state.lo.factor(energy_MeV)),(CARBON_EM_STEP_CACHE?unified_primary_pre.hi.factor:unified_primary_state.hi.factor(energy_MeV)));
+-                        if(!unified_primary_clock.clock.active)unified_primary_clock.clock.arm(-sycl::log(sycl::fmax(unified_uniform(),1e-12f)));
+-                        unified_primary_distance=unified_primary_clock.clock.distance(unified_primary_rate);
+@@ -2991,0 +3010,3 @@
++                        // Bound combined mean loss, not the old restricted range alone.
++                        const float delta_sp=unified_primary_state.mix(unified_primary_pre.lo.delta_stopping,unified_primary_pre.hi.delta_stopping);
++                        if(delta_sp>0) step_mm=sycl::fmin(step_mm,.01f*energy_MeV/sycl::fmax(1e-12f,delta_sp+unified_primary_state.mix(unified_primary_pre.lo.stopping,unified_primary_pre.hi.stopping)));
+@@ -5537,3 +5557,0 @@
+-                                unified_secondary_rate=unified_secondary_clock.update(unified_secondary_state,sec_e,(CARBON_EM_STEP_CACHE?unified_secondary_pre.lo.factor:unified_secondary_state.lo.factor(sec_e)),(CARBON_EM_STEP_CACHE?unified_secondary_pre.hi.factor:unified_secondary_state.hi.factor(sec_e)));
+-                                if(!unified_secondary_clock.clock.active)unified_secondary_clock.clock.arm(-sycl::log(sycl::fmax(unified_secondary_uniform(),1e-12f)));
+-                                unified_secondary_distance=unified_secondary_clock.clock.distance(unified_secondary_rate);
+@@ -5540,0 +5559,3 @@
++                        // Bound combined mean loss, not the old restricted range alone.
++                        const float delta_sp=unified_secondary_state.mix(unified_secondary_pre.lo.delta_stopping,unified_secondary_pre.hi.delta_stopping);
++                        if(delta_sp>0) sec_step_mm=sycl::fmin(sec_step_mm,.01f*sec_e/sycl::fmax(1e-12f,delta_sp+unified_secondary_state.mix(unified_secondary_pre.lo.stopping,unified_secondary_pre.hi.stopping)));
+@@ -7241 +7262 @@
+-        mem_tracker.free(unified_energy_index);mem_tracker.free(unified_sections);mem_tracker.free(unified_materials);mem_tracker.free(unified_species);mem_tracker.free(unified_records);
++        mem_tracker.free(delta_mean_device);mem_tracker.free(unified_energy_index);mem_tracker.free(unified_sections);mem_tracker.free(unified_materials);mem_tracker.free(unified_species);mem_tracker.free(unified_records);
+--- a/src/run_quality.cpp
++++ b/src/run_quality.cpp
+@@ -84,0 +85 @@
++    report.approximations.push_back({"delta_alongstep_candidate", "Research candidate: no delta clock; aggregate gamma delta compensation with first and second moments from pinned native spectrum/rate table, original restricted fluctuations retained; 1% combined mean-loss step cap; second-order restricted linear-branch and delta mean correction, original delta variance; delta spectrum shape and zero-event atom approximated, kinetic cap may alter moments; plot review pending", 1., 0.});

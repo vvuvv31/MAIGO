@@ -1,0 +1,10 @@
+{
+  "png_pdf_pairs": 67,
+  "cases": 10,
+  "nine_depths_each": true,
+  "zero_overflow": true,
+  "production_unchanged": true,
+  "production_binary_sha256": "1d32f4fee006f982b93eca963da57cceee8340d74b807d816a25035ec8f21d99",
+  "candidate_binary_sha256": "dc02362263d4994545d9d845c84a7023c815f3e9370032a3dce2ff27b94ebf6a",
+  "patient_gamma_computed": false
+}

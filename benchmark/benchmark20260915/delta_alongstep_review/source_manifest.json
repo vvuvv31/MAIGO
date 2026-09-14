@@ -1,0 +1,14 @@
+{
+  "include/carbon/primary_em_mean_candidate.hpp": {
+    "parent": "04ee0ac7ef7a770a65c08287333bd3f965b82535802d472d29b57a7de7798ce1",
+    "candidate": "036270dac8f2d7d5b5e75b2e3077c6e44b596efa78cff274c9db5cd636e7ecd6"
+  },
+  "include/carbon/unified_em_view.hpp": {
+    "parent": "300bf824fbe3ae3c2d44991194a3c9bfccc6f77c604c93199013fdb67227d932",
+    "candidate": "ab1136b9781d0feb7601a19bcf8ee317cab617ad7c83330e1f70e3e889206f3b"
+  },
+  "src/run_quality.cpp": {
+    "parent": "97f6046e9ea1673a296fb001ab211ebbdb597cb65b543a0a0f1eb6a87b7dda50",
+    "candidate": "e917f143ed82655936d1f46501310397e04e40d35b68b2359794c0b79bf38cee"
+  }
+}

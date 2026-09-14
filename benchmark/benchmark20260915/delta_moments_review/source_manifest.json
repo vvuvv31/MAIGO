@@ -1,0 +1,18 @@
+{
+  "include/carbon/unified_em_view.hpp": {
+    "base": "32e80a8a5e0befbabf666f33c2e827cccc701ca470bc9ba638bd83e51feed283",
+    "candidate": "300bf824fbe3ae3c2d44991194a3c9bfccc6f77c604c93199013fdb67227d932"
+  },
+  "include/carbon/delta_moments_candidate.hpp": {
+    "base": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "candidate": "6967ff11dde99a8255d91078f95aa4765383fe8e3534ed4701d5b9c7446f5716"
+  },
+  "src/transport_sycl.cpp": {
+    "base": "dca24049f91c23365a2c5ec65706e66527658fc2e8a22a29bf94dae250436a91",
+    "candidate": "38de6c32d4e1af2cc01578185cce5ba9f76fa8eb01e26f38a142625daf9d2392"
+  },
+  "src/run_quality.cpp": {
+    "base": "4fe8d9184d4811b22932a8d2551cfef44d9816bbf34b07a8d81e9ceb16bbf65d",
+    "candidate": "97f6046e9ea1673a296fb001ab211ebbdb597cb65b543a0a0f1eb6a87b7dda50"
+  }
+}

@@ -1,0 +1,188 @@
+{
+  "histories": 6481909,
+  "parts": [
+    {
+      "histories": 3241168,
+      "status": {
+        "complete": true,
+        "returncode": 0,
+        "wall_s": 33.1855571269989,
+        "config_sha256": "b2c9534e9110627947e959204e8470f7ce67c3650d9db4412400b52c77615914",
+        "binary_sha256": "dc02362263d4994545d9d845c84a7023c815f3e9370032a3dce2ff27b94ebf6a",
+        "audit": [
+          [
+            0,
+            1035340710,
+            1430725159,
+            0,
+            0,
+            6897443740677175,
+            528509386610526,
+            0
+          ]
+        ],
+        "quality": {
+          "schema_version": 3,
+          "status": "pass",
+          "run_mode": "production",
+          "accepted": true,
+          "absolute_physical_energy_residual_MeV": 31103.4697136,
+          "physical_relative_energy_residual": 3.6926792289e-06,
+          "absolute_accounting_energy_residual_MeV": 31103.4697136,
+          "accounting_relative_energy_residual": 3.6926792289e-06,
+          "absolute_energy_residual_MeV": 31103.4697136,
+          "relative_energy_residual": 3.6926792289e-06,
+          "topas_reference_energy_sink_active": false,
+          "queue_overflow_count": 0,
+          "queue_overflow_energy_MeV": 0,
+          "voxel_scored_energy_MeV": 7437070797.91,
+          "in_grid_deposited_energy_MeV": 7437070928.69,
+          "outside_grid_deposited_energy_MeV": 0.65358003974,
+          "grid_split_closure_ratio": 1.00000000185,
+          "voxel_to_ingrid_ratio": 0.999999982416,
+          "voxel_to_total_deposited_ratio": 0.999999984179,
+          "failures": [],
+          "approximations": [
+            {
+              "code": "delta_alongstep_candidate",
+              "message": "Research candidate: no delta clock; aggregate gamma delta compensation with first and second moments from pinned native spectrum/rate table, original restricted fluctuations retained; 1% combined mean-loss step cap; second-order restricted linear-branch and delta mean correction, original delta variance; delta spectrum shape and zero-event atom approximated, kinetic cap may alter moments; plot review pending",
+              "value": 1,
+              "limit": 0
+            },
+            {
+              "code": "secondary_species_grouping_accuracy_pending",
+              "message": "GPU species index grouping; RNG identities preserved; production integration authorized; RT07575 scheduling dose difference 0.0203% of peak remains under investigation",
+              "value": 1,
+              "limit": 0
+            },
+            {
+              "code": "secondary_step_chunking_accepted",
+              "message": "64 complete iterations per launch, stable survivor index compaction, tail below 8192; user-accepted RT07575 1M elastic dose difference up to 0.000955% of peak (not a new TOPAS Gamma validation)",
+              "value": 1,
+              "limit": 0
+            },
+            {
+              "code": "unified_material_em_accuracy_pending",
+              "message": "Unified water/Schneider EM for all 18 charged ions; local delta deposition; production execution authorized, density cut-onset and patient Gamma accuracy gates remain pending",
+              "value": 1,
+              "limit": 0
+            },
+            {
+              "code": "schneider_post_em_null_collisions",
+              "message": "sampled candidates resolved as post-EM null collisions (track continues, no lookup)",
+              "value": 51,
+              "limit": 0
+            },
+            {
+              "code": "schneider_primary_post_em_null_collisions",
+              "message": "primary candidates resolved as post-EM null collisions (track continues, no lookup)",
+              "value": 92,
+              "limit": 0
+            }
+          ]
+        },
+        "elapsed_s": 31.43527,
+        "throughput": 103106.1,
+        "primary_s": 9.2853154,
+        "secondary_s": 17.977161,
+        "steps": 1033996042
+      }
+    },
+    {
+      "histories": 3240741,
+      "status": {
+        "complete": true,
+        "returncode": 0,
+        "wall_s": 33.351479291915894,
+        "config_sha256": "9b1183ac282433e1b4267e7266ada4c290df5c96e943cadad06983077490fe74",
+        "binary_sha256": "dc02362263d4994545d9d845c84a7023c815f3e9370032a3dce2ff27b94ebf6a",
+        "audit": [
+          [
+            0,
+            1035473862,
+            1428822524,
+            0,
+            0,
+            6897650953404582,
+            528532545996863,
+            0
+          ]
+        ],
+        "quality": {
+          "schema_version": 3,
+          "status": "pass",
+          "run_mode": "production",
+          "accepted": true,
+          "absolute_physical_energy_residual_MeV": 30452.0707511,
+          "physical_relative_energy_residual": 3.61580309826e-06,
+          "absolute_accounting_energy_residual_MeV": 30452.0707511,
+          "accounting_relative_energy_residual": 3.61580309826e-06,
+          "absolute_energy_residual_MeV": 30452.0707511,
+          "relative_energy_residual": 3.61580309826e-06,
+          "topas_reference_energy_sink_active": false,
+          "queue_overflow_count": 0,
+          "queue_overflow_energy_MeV": 0,
+          "voxel_scored_energy_MeV": 7437212885.22,
+          "in_grid_deposited_energy_MeV": 7437213006.34,
+          "outside_grid_deposited_energy_MeV": 0.567091047764,
+          "grid_split_closure_ratio": 1.00000000192,
+          "voxel_to_ingrid_ratio": 0.999999983714,
+          "voxel_to_total_deposited_ratio": 0.999999985555,
+          "failures": [],
+          "approximations": [
+            {
+              "code": "delta_alongstep_candidate",
+              "message": "Research candidate: no delta clock; aggregate gamma delta compensation with first and second moments from pinned native spectrum/rate table, original restricted fluctuations retained; 1% combined mean-loss step cap; second-order restricted linear-branch and delta mean correction, original delta variance; delta spectrum shape and zero-event atom approximated, kinetic cap may alter moments; plot review pending",
+              "value": 1,
+              "limit": 0
+            },
+            {
+              "code": "secondary_species_grouping_accuracy_pending",
+              "message": "GPU species index grouping; RNG identities preserved; production integration authorized; RT07575 scheduling dose difference 0.0203% of peak remains under investigation",
+              "value": 1,
+              "limit": 0
+            },
+            {
+              "code": "secondary_step_chunking_accepted",
+              "message": "64 complete iterations per launch, stable survivor index compaction, tail below 8192; user-accepted RT07575 1M elastic dose difference up to 0.000955% of peak (not a new TOPAS Gamma validation)",
+              "value": 1,
+              "limit": 0
+            },
+            {
+              "code": "unified_material_em_accuracy_pending",
+              "message": "Unified water/Schneider EM for all 18 charged ions; local delta deposition; production execution authorized, density cut-onset and patient Gamma accuracy gates remain pending",
+              "value": 1,
+              "limit": 0
+            },
+            {
+              "code": "schneider_post_em_null_collisions",
+              "message": "sampled candidates resolved as post-EM null collisions (track continues, no lookup)",
+              "value": 66,
+              "limit": 0
+            },
+            {
+              "code": "schneider_primary_post_em_null_collisions",
+              "message": "primary candidates resolved as post-EM null collisions (track continues, no lookup)",
+              "value": 85,
+              "limit": 0
+            }
+          ]
+        },
+        "elapsed_s": 31.703736,
+        "throughput": 102219.53,
+        "primary_s": 9.4016567,
+        "secondary_s": 18.067282,
+        "steps": 1034130151
+      }
+    }
+  ],
+  "total_wall_s": 66.5370364189148,
+  "total_elapsed_s": 63.139005999999995,
+  "throughput_hps": 102660.92880841362,
+  "wall_throughput_hps": 97418.05990862192,
+  "primary_s": 18.6869721,
+  "secondary_s": 36.044443,
+  "single_attempt": "not attempted; use same two subdivisions as delta-OFF for comparable timing",
+  "split": "per-spot floor/ceil halves; seed of second part offset by 1000003",
+  "merge_seconds": 0.053535313985776156
+}

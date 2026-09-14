@@ -1,0 +1,93 @@
+{
+  "complete": true,
+  "returncode": 0,
+  "elapsed_s": 9.349367618560791,
+  "model": "g4_material_joint_v1",
+  "primary_em_model": "legacy",
+  "binary_sha256": "91971a966b43bd2898cb78bdecc5c7408c753034d8fc31ef68bd5c901eab6004",
+  "config_sha256": "07203d4d7b496d8d1c213d086f22cec225073268e38c090c8e9b29ed80db2cca",
+  "quality": {
+    "schema_version": 3,
+    "status": "non_production",
+    "run_mode": "research",
+    "accepted": true,
+    "absolute_physical_energy_residual_MeV": 2377.31351233,
+    "physical_relative_energy_residual": 2.47636824201e-06,
+    "absolute_accounting_energy_residual_MeV": 2377.31351233,
+    "accounting_relative_energy_residual": 2.47636824201e-06,
+    "absolute_energy_residual_MeV": 2377.31351233,
+    "relative_energy_residual": 2.47636824201e-06,
+    "topas_reference_energy_sink_active": false,
+    "queue_overflow_count": 0,
+    "queue_overflow_energy_MeV": 0,
+    "voxel_scored_energy_MeV": 686087277.453,
+    "in_grid_deposited_energy_MeV": 686087276.197,
+    "outside_grid_deposited_energy_MeV": 9589507.44657,
+    "grid_split_closure_ratio": 0.999999953723,
+    "voxel_to_ingrid_ratio": 1.00000000183,
+    "voxel_to_total_deposited_ratio": 0.986215526856,
+    "failures": [],
+    "approximations": [
+      {
+        "code": "delta_moments_candidate",
+        "message": "Research candidate: no delta clock; aggregate gamma delta compensation with first and second moments from pinned native spectrum/rate table, original restricted fluctuations retained; 1% combined mean-loss step cap; delta spectrum shape and zero-event atom approximated, kinetic cap may alter moments; plot review pending",
+        "value": 1,
+        "limit": 0
+      },
+      {
+        "code": "secondary_species_grouping_accuracy_pending",
+        "message": "GPU species index grouping; RNG identities preserved; production integration authorized; RT07575 scheduling dose difference 0.0203% of peak remains under investigation",
+        "value": 1,
+        "limit": 0
+      },
+      {
+        "code": "secondary_step_chunking_accepted",
+        "message": "64 complete iterations per launch, stable survivor index compaction, tail below 8192; user-accepted RT07575 1M elastic dose difference up to 0.000955% of peak (not a new TOPAS Gamma validation)",
+        "value": 1,
+        "limit": 0
+      },
+      {
+        "code": "unified_material_em_accuracy_pending",
+        "message": "Unified water/Schneider EM for all 18 charged ions; local delta deposition; production execution authorized, density cut-onset and patient Gamma accuracy gates remain pending",
+        "value": 1,
+        "limit": 0
+      },
+      {
+        "code": "all_ion_elastic_candidate",
+        "message": "Finite TOPAS elastic event bank; additional heavy recoil isotopes use total stopping and MCS with EM-only transport; patient gamma and bank convergence validation pending",
+        "value": 1,
+        "limit": 0
+      },
+      {
+        "code": "water_topas_match_pending",
+        "message": "Shared CINEL03 framework enabled for production; water TOPAS accuracy validation remains incomplete",
+        "value": 1,
+        "limit": 0
+      },
+      {
+        "code": "schneider_post_em_null_collisions",
+        "message": "sampled candidates resolved as post-EM null collisions (track continues, no lookup)",
+        "value": 19,
+        "limit": 0
+      },
+      {
+        "code": "schneider_primary_post_em_null_collisions",
+        "message": "primary candidates resolved as post-EM null collisions (track continues, no lookup)",
+        "value": 444,
+        "limit": 0
+      }
+    ]
+  },
+  "audit": [
+    [
+      0,
+      71753091,
+      322010283,
+      0,
+      0,
+      615824676532595,
+      68048753131526,
+      0
+    ]
+  ]
+}

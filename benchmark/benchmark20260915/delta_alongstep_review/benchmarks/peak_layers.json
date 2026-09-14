@@ -1,0 +1,122 @@
+[
+  {
+    "case": "b1_100",
+    "depth_mm": 24.75,
+    "topas_peak_fraction": 0.4875994945282476,
+    "old_local_error_percent": -2.2193304380779377,
+    "new_local_error_percent": 0.7893949695733538,
+    "production_local_error_percent": -0.2031226427217092
+  },
+  {
+    "case": "b1_100",
+    "depth_mm": 25.25,
+    "topas_peak_fraction": 0.6321215064998074,
+    "old_local_error_percent": -3.927560278038289,
+    "new_local_error_percent": 2.122922683175821,
+    "production_local_error_percent": -0.21015836307962665
+  },
+  {
+    "case": "b1_100",
+    "depth_mm": 25.75,
+    "topas_peak_fraction": 1.0,
+    "old_local_error_percent": 1.8313322406027677,
+    "new_local_error_percent": -2.9429575725282042,
+    "production_local_error_percent": 0.1065657314252455
+  },
+  {
+    "case": "b1_100",
+    "depth_mm": 26.25,
+    "topas_peak_fraction": 0.05383443590663876,
+    "old_local_error_percent": 108.93613962651129,
+    "new_local_error_percent": -34.060464169645165,
+    "production_local_error_percent": 5.239004805892833
+  },
+  {
+    "case": "b1_100",
+    "depth_mm": 26.75,
+    "topas_peak_fraction": 0.013598497140377367,
+    "old_local_error_percent": 5.863249585908248,
+    "new_local_error_percent": 2.6939132597839643,
+    "production_local_error_percent": 4.65338146113583
+  },
+  {
+    "case": "b1_200",
+    "depth_mm": 85.75,
+    "topas_peak_fraction": 0.6397172914982501,
+    "old_local_error_percent": -5.942749947059756,
+    "new_local_error_percent": 1.630194859674372,
+    "production_local_error_percent": -0.2711531121194488
+  },
+  {
+    "case": "b1_200",
+    "depth_mm": 86.25,
+    "topas_peak_fraction": 0.8469672274193428,
+    "old_local_error_percent": -10.457512230675958,
+    "new_local_error_percent": 3.2768097714368283,
+    "production_local_error_percent": -0.34864313203031294
+  },
+  {
+    "case": "b1_200",
+    "depth_mm": 86.75,
+    "topas_peak_fraction": 1.0,
+    "old_local_error_percent": 2.368902136365203,
+    "new_local_error_percent": -3.636640896330512,
+    "production_local_error_percent": -0.05022672268867323
+  },
+  {
+    "case": "b1_200",
+    "depth_mm": 87.25,
+    "topas_peak_fraction": 0.32106707933142314,
+    "old_local_error_percent": 71.28233414629983,
+    "new_local_error_percent": -19.382522271032066,
+    "production_local_error_percent": 1.703767343804552
+  },
+  {
+    "case": "b1_200",
+    "depth_mm": 87.75,
+    "topas_peak_fraction": 0.04714625534481182,
+    "old_local_error_percent": 48.04720901547406,
+    "new_local_error_percent": -6.255655540939353,
+    "production_local_error_percent": 1.3611215837537882
+  },
+  {
+    "case": "b1_300",
+    "depth_mm": 170.75,
+    "topas_peak_fraction": 0.7803188829792979,
+    "old_local_error_percent": -7.367087288601903,
+    "new_local_error_percent": 1.6436594536469507,
+    "production_local_error_percent": -0.8240591416619258
+  },
+  {
+    "case": "b1_300",
+    "depth_mm": 171.25,
+    "topas_peak_fraction": 0.9442446066922853,
+    "old_local_error_percent": -7.864564368474635,
+    "new_local_error_percent": 1.6655870216537805,
+    "production_local_error_percent": -0.6365252587238635
+  },
+  {
+    "case": "b1_300",
+    "depth_mm": 171.75,
+    "topas_peak_fraction": 1.0,
+    "old_local_error_percent": 0.830517326145852,
+    "new_local_error_percent": -1.6361773589037343,
+    "production_local_error_percent": -0.2281137549456691
+  },
+  {
+    "case": "b1_300",
+    "depth_mm": 172.25,
+    "topas_peak_fraction": 0.6912941104902303,
+    "old_local_error_percent": 24.00722039158285,
+    "new_local_error_percent": -7.197638235537129,
+    "production_local_error_percent": 0.749349615853312
+  },
+  {
+    "case": "b1_300",
+    "depth_mm": 172.75,
+    "topas_peak_fraction": 0.2856585326862967,
+    "old_local_error_percent": 50.14139360426479,
+    "new_local_error_percent": -13.607197724772014,
+    "production_local_error_percent": 0.5322340593071129
+  }
+]

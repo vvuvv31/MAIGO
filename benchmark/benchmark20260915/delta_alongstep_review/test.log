@@ -1,0 +1,4 @@
+h=0.2 exact=3.96027 candidate=3.96 error=0.000265597
+h=0.1 exact=1.99003 candidate=1.99 error=3.32701e-05
+h=0.05 exact=0.997504 candidate=0.9975 error=4.1143e-06
+Cubic derivatives, second-order convergence, zero slope, total-loss coupling PASS

@@ -1,0 +1,7 @@
+shape=0.001 mean=0.000988728 variance=0.000988964 mean_rel=0.0112723 var_rel=0.0110358
+shape=0.01 mean=0.0100882 variance=0.0100518 mean_rel=0.00882291 var_rel=0.0051779
+shape=0.1 mean=0.100004 variance=0.100833 mean_rel=4.07655e-05 var_rel=0.00832962
+shape=1 mean=0.999955 variance=1.00012 mean_rel=4.50244e-05 var_rel=0.000124267
+shape=10 mean=9.9983 variance=10.0034 mean_rel=0.000169729 var_rel=0.000342229
+shape=100 mean=100.004 variance=100.202 mean_rel=3.87477e-05 var_rel=0.00201863
+shape=1000 mean=999.972 variance=1000.51 mean_rel=2.76895e-05 var_rel=0.000507623
