@@ -1,145 +1,122 @@
 # 材料与方法
 
-修订日期：2026-09-10。当前科研方法稿，不声明临床准入或通用 Geant4 等价。
-[English](mm.md)。[物理规格](docs/TOPAS_GPU_Physics_Model.md) 描述 9 月 5 日基线；
-后续实现变化在下文单列，并与源码核对。
-旧稿的质子/多离子探索完整保留在 [归档](docs/archive/README.md)，不提升为已验证 CT 能力。
+修订日期：2026-09-14。描述当前工作树及指定配置，不视为冻结发布、临床准入或通用 Geant4 等价声明。[English](mm.md)。
+历史数值只绑定对应的 executable、数据和配置，不能作为所有当前开关的验证。
 
-本次核对源码与构建图、配置及数据加载、TOPAS 提取工具、测试、benchmark 产物和研究计划，
-源码检查点为 `f6245c5`（2026-09-09）。已有未提交输运修改不属于冻结发布版本。
-除非另行标注，下文 CT 数值和 benchmark 配置均指 Git 中的 9 月 5 日数据集，
-不代表当前全部代码路径。
+## 1. 计算框架与当前配置
 
-## 1. 计算框架与参考
+MAIGO 是 C++20 / SYCL 带电离子凝聚历史 Monte Carlo，在本地 RTX 2080 Ti
+（`sm_75`）运行。GPU 查询 TOPAS/Geant4 派生表并重放核事件，不在线执行核内级联。
+患者实现为 [transport_sycl.cpp](src/transport_sycl.cpp)，串行后端只支持子集。
 
-MAIGO 使用 C++20 / SYCL 实现带电离子凝聚历史 Monte Carlo。
-患者后端为 [transport_sycl.cpp](src/transport_sycl.cpp)，串行后端仅支持子集。
-本批使用本地 NVIDIA RTX 2080 Ti（sm_75）。
-GPU 插值输运表并重放相关核末态，不在运行时调用 Geant4 或核级联生成器。
+参考采用 TOPAS 4.2.p3 / Geant4 11.3.2，含 standard_opt4 EM、QGSP_BIC_HP、
+ion-INCLXX、elastic、stopping 和衰变模块。模块名不等于每个 projectile 实际挂载的模型；
+已观察到 C12 使用 INCLXX。全离子弹性比较还需第 5 节所述的匹配扩展。
 
-参考为 TOPAS 4.2.p3 / Geant4 11.3.2，模块：
-g4em-standard_opt4、g4h-phy_QGSP_BIC_HP、g4decay、g4ion-inclxx、
-g4h-elastic_HP、g4stopping、g4radioactivedecay。
-模块名不能证明每种粒子的实际模型；参考 C12 已观察到调用 INCLXX，
-不能因 list 含 BIC 就解释成 C12 BIC 与 INCLXX 的差异。
+当前统一 EM 生产入口为[水](config/unified_water_production.yaml)和
+[RT07575](config/rt07575_unified_em_production.yaml)：
 
-随机流按历史和过程通道索引。复现绑定 executable、输入、seed 和分配，
-不保证跨设备/构建逐位一致。
+| 设置 | 两个生产配置的显式取值 / 行为 |
+|---|---|
+| `em_model` | `g4_material_joint_v1`，水 / Schneider 共用一个包 |
+| `enable_secondary_unified_em` | `true`：全部 18 种已支持带电离子使用统一 EM |
+| 原发 / 次级涨落 | 均开启，`straggling_scale: 1.0` |
+| `ct_secondary_exact_faces` | `true` |
+| `secondary_species_grouping` | `true`；设为 `false` 恢复原调度 |
+| 非弹性 / 次级输运 | 开启；次级非弹性代数上限为 2 |
+| 独立全离子核弹性 | 这两个生产配置不载入该库；属于研究选项 |
+| 电子剂量 | 抽样 δ 能量局部沉积，不运行电子能量包 tracking |
+
+其中 `primary_em_model: legacy` **不代表此时仍使用旧 stopping**：
+`em_model: g4_material_joint_v1` 选择统一路径，原 primary-only 选项不是叠加模型。
+反过来，只写 `em_model` 也不会自动开启次级统一 EM；配置结构中的次级开关默认 false，
+完整次级性能实验均显式设为 true。更新 executable 不会自动升级所有历史 / 研究 YAML。
+GPU 上 Legacy EM（`em_model: legacy`）已被拒绝；serial/cpu 后端（含 `transport_cpu`
+与 CPU 测试）保留 legacy 路由。Joint water EM（`g4_joint_water_v1`）实现已删除，
+其 YAML 键会被拒绝。
+
+统一 EM 和种类分组已获准接入；低密度 production-cut 区、患者 Gamma，以及分组引起的
+剂量差异仍待调查。执行质量接受与物理精度验收是不同结论。
 
 ## 2. 材料、源与几何
 
-HU 映射为连续密度和 25 个 Schneider section，组成含 13 元素。
-组成用共享 LUT，不复制到每体素；不能用材料探针代表密度替代 CT 实际密度。
-CCTG/DICOM 与记分几何共同核对。
+CT HU 映射到实际体素密度及 25 个 Schneider 组分区之一，使用 13 种元素组成。
+CT 不走四分类回退。水采用独立、固定 SHA 的 G4_WATER，不冒充某个 Schneider 分区。
+统一 EM 包覆盖水、25 分区及 18 种带电离子；密度节点查询保留材料 stopping 和阈值特性。
 
-当前源采用 TPS spots CSV histories、beam-model emittance、能散、
-虚拟扫描磁铁和显式 TOPAS placement。匹配每个 replica 的逐 spot 整数 histories，
-再分配 GPU shards。TOPAS 被动 RotZ 的 world→patient 组件局部坐标为
-R(+RotZ) × (world − Trans)，方向只旋转不平移。
-source、placement、CT packing 是三个操作；按冻结映射恢复患者剂量，
-不做剂量拟合配准。见 [planning](docs/planning.md)。
+源由 TPS spot CSV histories、能散、发射度、扫描磁铁和患者摆位定义。分片前应与参考匹配
+每个 spot 的整数 histories。TOPAS passive RotZ 使用 `R(+RotZ) × (world − Trans)`，
+方向只旋转不平移。CT 打包、源摆位、剂量映射分别核对，不采用剂量拟合配准。
+见[源与几何](docs/planning.md)。
 
-当前均匀水模与 CT 共用 CINEL03 核输运框架，使用 SHA 固定的原生 G4_WATER 组成，
-并从材料 partial-rate 表恢复 H/O 元素反应率；不伪造 Schneider 水分区。
-水的 stopping、密度、辐射长度和涨落输入仍按自身材料定义，不能静默换成 CT 表。
-统一水路由拒绝旧 CINEL02 event/rate 配置键。允许水模 `run_mode: production`
-不等于 TOPAS 精度已验收，质量报告仍明确记录验证未完成。
-见 [统一框架记录](plan2/water_ct_unification.md) 与
-[材料反应率接口](include/carbon/material_nuclear_rates.hpp)。
+## 3. 电磁过程
 
-## 3. 电磁输运
+### 3.1. 当前统一模型的一步
 
-### 3.1. 一个带电粒子步内发生什么？
+1. 读取物种、动能、材料和密度，从统一包准备受限 stopping、range、离子修正、涨落参数和 δ 候选率。
+2. 由原生 EM StepFunction、几何、核候选和抽样 δ 候选距离取最短允许步长，并应用低能停止 / 终止规则。
+   统一路径中的原生 EM 步长取代旧 maximum-step 和相对能损限制。
+3. 用 stopping 或 range 反演计算平均受限能损，加入离子修正，再抽样受限能损涨落。
+4. 按实际步长消耗 δ 时钟。在候选点用能损后能量进行反应率接受检验，再抽电子能谱和形状因子 veto。
+5. 只扣除一次连续能损与接受的 δ 能量，局部记分、推进并应用配置的 MCS，然后处理核候选并排入产物。
 
-```mermaid
-flowchart TD
-    A[位置、方向、动能、Z/A] --> B[读取 CT 密度与 Schneider 分区]
-    B --> C[插值 stopping 并计算核反应率]
-    C --> D[由能损、几何与核光学深度限制步长]
-    D --> E[计算平均能损并采样已启用的涨落]
-    E --> F[分配局部剂量与选定的电子响应能量]
-    F --> G[推进位置并施加已启用的库仑多重散射]
-    G --> H[更新动能并处理核碰撞候选]
-    H --> I[继续轨迹、产物入队或终止记账]
-```
+这是物理依赖顺序；kernel 内几何、记分和各过程分支交织执行。
+随机流绑定 history 与过程身份；分组不会替换 Philox 或重启计数器。
 
-图中展示主数据依赖；实际 kernel 中穿插体素面处理与诊断分支。
-C12 和带电碎片采用凝聚历史输运：微观电离由一步能损及散射规律表示，
-GPU 不逐碰撞调用 Geant4 电磁过程管理器。
+### 3.2. 受限平均能损与密度
 
-下文 T 为粒子总动能（MeV），E=T/A 为每核子动能（MeV/u），
-rho 为局部密度（g/cm³），h 为步长（mm）。查表用的每核子能量不能与能量守恒中的总动能混淆。
+令 `T` 为粒子总动能 MeV，`E=T/A` 为 MeV/u，`h` 为步长 mm。
+统一包保留原生受限 stopping、range 和 inverse-range 的 spline 段。
+每个选中的密度节点先按实际密度 / 节点密度计算，再在相邻密度节点之间插值准备量和平均能损；
+不能把当前模型概括成水 stopping 乘密度。
 
-### 3.2. 原有 CT 原发与次级：预测中点能损
-
-当前修复采用显式最终配置：`ct_primary_midpoint_stopping: true`，
-`ct_secondary_exact_faces: true`，并加载 SHA 固定的 Schneider 次级离子材料表。
-该组合的验证结果单独记录；历史冻结结果不能直接当作此组合的验证。
-未指定材料表的旧配置仍走旧路径，不能只凭可执行文件版本判断物理配置。
-
-查表先用每核子动能 E=T/A。原发 C12 使用已验证的 SCHNSTOP 分区表；
-次级按自身 (Z,A) 与 Schneider 分区选择 TOPAS/Geant4 直接提取的电子 stopping。
-新表覆盖 25 分区、18 种带电粒子及 0.01–6000.11 MeV/u；
-扩展上限是因为次级质子可超过 430.11 MeV/u，不能沿用原发每核子能量上限。
-18 种 stopping 粒子与非弹性反应的 14-projectile registry 用途不同。
-
-两类表都将参考材料的线性 stopping 除以提取时密度，保存单位密度值：
+原生 StepFunction 参数为 `f`、`r_final`，剩余 range 为 `R`：
 
 ```text
-S1(s,ion,E) = S_TOPAS(s,ion,E,rho_ref) / [rho_ref/(1 g/cm³)]
-S(T,s,rho) [MeV/mm] = S1(s,ion,T/A) × rho/(1 g/cm³)
+h_EM = f R + r_final (1 − f) (2 − r_final/R)，R > r_final
+h_EM = R，                                 其他情况
 ```
 
-因此局部密度换算并非重复乘密度，也不是水 stopping 缩放；材料组成已经在分区行中。
-最终组合的次级在步首与中点均查同一材料表，不再额外乘 Bethe 材料因子。
-非法核素、分区、能量或密度导致整次运行失败，不回退水表、不合并失败剂量。
+参数由每种离子的包记录提供；原发 C12 数据使用 `f=0.1`、`r_final=0.001 mm`，
+不能未经核对套到全部物种。线性能损阈值同样来自包。
+
+估计受限能损较小时用 `S_restricted(T) × h`；较大时用 inverse range 求末端能量，
+反演期间保持步首质量 / 电荷缩放。离子修正在中间能量处查询，并含低能替换分支。
+这不是旧的总 stopping 预测中点算法。结果受可用动能限制，包内最低动能可触发最终停止。
+
+旧 `ct_primary_midpoint_stopping` 与材料特异次级 stopping 仍供非统一路径使用，表中保存：
 
 ```text
-S_start = S(T,s,rho)
-h_loss = maximum_relative_energy_loss × T / S_start
-h <= min(maximum_step_mm, h_loss, 几何边界、核碰撞距离及其他终止约束)
-T_mid = T - S_start × h/2
-平均能损 = S(T_mid,s,rho) × h（随后受可用动能约束）
+S1(section,ion,E) = S_extracted / [rho_reference/(1 g/cm³)]
+S(T,section,rho) = S1(section,ion,T/A) × rho/(1 g/cm³)
 ```
 
-最大长度保留为冻结配置的 0.5 mm；上述 h_loss 和 0.005 相对能损限制用于原发。
-当前次级步长由最大长度、几何及核碰撞截断，没有同样的相对能损步长限制；
-其次级中点能损受剩余总动能约束。
-原发中点查询在原发表域内插值；次级预测中点设 0.01 MeV/u 下界。
-exact-faces 在次级跨材料前截断步长，使该步使用当前体素材料与密度。
-平均能损再进入下节的涨落与电子能量分配，不能把预测中点能量当作实际输运终态。
-上游空气能损独立处理。
+这里密度没有重复计算。但这些旧表 / 开关不决定当前统一模型的受限平均能损。
+未注册的额外重反冲仍用专门的 stopping 路径。见[统一查询与能损](include/carbon/unified_em_view.hpp)。
 
-代码：[加载与步进](src/transport_sycl.cpp)、
-[材料表及查表域](include/carbon/schneider_ion_stopping_table.hpp)、
-[最终组合验证脚本](tools/run_final_stopping_validation.py)。
+### 3.3. 涨落与显式 δ 候选
 
-### 3.3. 能损涨落
+受限连续能损按适用情形使用包内 IonFluc 或 Universal/Urban 相关采样器。
+原发及已支持次级均开启原生涨落，scale 为 1.0；旧 CT 的 scale 1.2 和次级 CSDA
+属于历史配置，不是这两个生产入口。
 
-平均能损提供能量预算；选定的 straggling sampler 产生非负且不超过可用 T 的实际能损。
-原发输运提供解析凝聚能损方差路径，以及独立选择的 TOPAS 涨落分位数包。
-解析方差与有效电荷、密度、步长和相对论最大电子转移能有关。
-对截断高斯采样器：
+δ 时钟抽样 `tau = −ln(U)`，沿实际路径消耗候选光学深度；局部候选距离为
+`tau_remaining / Sigma_proposal`。候选不一定产生电子，还要经过能损后的率接受检验及
+能谱 / 形状因子接受步骤。材料或密度变化使缓存率失效，但保留未消耗光学深度。
+平均自由程是统计尺度，不是固定碰撞位置。
 
 ```text
-sigma = configured_scale × sqrt(condensed_loss_variance)
-DeltaE = clamp(mean_loss + sigma × N(0,1), 0, min(2×mean_loss, T))
+DeltaT = 抽样受限连续能损 + 接受的 δ 电子动能
+T_out  = T_in − DeltaT
 ```
 
-其他可选采样器采用各自的正支撑/矩近似，不能统一套用这个公式。
-包模式按声明的能量、面密度或相对能损网格抽取能损比，再作用于平均能损；
-域检查和候选限制仍然有效。涨落表不等于电子空间响应包。
-
-冻结 CT 配置开启原发涨落、scale=1.2，关闭次级涨落。
-可选 Vavilov/Landau 相关模式或 TOPAS 数据包的存在，不证明精确复现 Geant4 离子涨落算法。
-见 [采样器](include/carbon/straggling.hpp) 与 [涨落包加载](src/energy_loss_fluctuation.cpp)。
+受限 stopping 排除了显式处理的阈值以上转移；δ 阈值随材料 / 密度变化，不能将水中约
+57 keV 的示例用于所有 CT 分区。当前 δ 能量局部沉积，不再叠加旧比例电子响应。
+`em_macro_ticks` 已不是当前支持的开关；撤回的宏 tick / RNG 实验不代表生产算法。
 
 ### 3.4. 库仑多重散射
 
-本批 primary/secondary 都用 section X0 与局部密度的 Highland MCS，
-不是 Geant4 msc 算法复刻。
-
-实现中的投影 RMS 散射角使用粒子动量 p 和 beta：
+配置的 Highland 近似使用分区辐射长度和局部密度：
 
 ```text
 t = rho × (h/10) / X0_mass
@@ -147,115 +124,9 @@ C = max(0, 1 + 0.038 ln(t Z²/beta²))
 theta0 = 13.6 MeV × Z/(beta p c) × sqrt(t) × C
 ```
 
-在局部横向坐标系抽取偏转，再旋转到当前入射方向；所选输运分支更新方向及相应空间散射。
-CT 的 X0_mass 来自 25 分区 LUT，rho 来自实际体素。
-这里的库仑偏转不同于一次显式强子弹性碰撞。
-Water/FRED-2GR 是独立配置，不是冻结 CT 的 Highland 模型。
-见 [MCS 定义](include/carbon/multiple_scattering.hpp) 与 [GPU 计算](src/detail/sycl_device_math.inc)。
-
-### 3.5. 均匀水中原发 C12 的联合 EM 模型（研究候选）
-
-**生产默认仍为 `primary_em_model: legacy`。** 显式研究选项
-`g4_joint_water_v1` 将以下算法接入同一个原发输运循环。
-3.2–3.3 节描述原有路径；选择新模型后，替换的是原发碳在水中的能损处理，
-不是 Schneider CT 或次级离子的电磁处理。
-
-| 环节 | 原有水模路径 | 联合水 EM 候选 |
-|---|---|---|
-| 连续平均能损 | 总 stopping 与原有有限步积分，包括中点估计 | 原生受限 DEDX、range/inverse-range，加实际输运质量/电荷缩放及离子修正 |
-| 涨落 | 所选凝聚能损近似或独立分位数包 | 与电子产生阈值一致的受限 Geant4 离子及 Universal/Glandz 分布 |
-| 高能 δ 电子产生 | 本次局部沉积基准没有独立 δ 电子碰撞时钟 | 抽样电子光学深度、缓存反应率、步末接受判断及电子能量抽样 |
-| 原发步长 | 最大步长与相对能损限制，再由几何/核碰撞截短 | 原生离子 StepFunction(0.1, 0.001 mm)，再与几何、核及电子碰撞距离竞争 |
-| 电子剂量 | 本次水模对照采用局部沉积 | 仍局部沉积，没有完整电子空间 tracking |
-| MCS 与次级 EM | 原有配置路径 | 保持原路径 |
-
-**原发一步内的处理：**
-
-1. 按当前能量查询原生受限 stopping、射程、有效电荷与电子反应率。
-   保留 Geant4 原始样条区间，不另造一条更平滑的射程曲线。
-2. 根据剩余射程 R 确定连续过程步长：
-
-   ```text
-   h_EM = 0.1 R + 0.0009 mm × (2 − 0.001 mm/R)，R > 0.001 mm
-   h_EM = R，                               其余情况
-   ```
-
-   此规则**覆盖**候选原发步的 `maximum_step_mm` 和
-   `maximum_relative_energy_loss`。几何、核碰撞与电子碰撞还会进一步截短。
-   电子时钟按最终路径长度消耗；碰撞距离由剩余抽样光学深度确定，
-   不是使用固定平均自由程。
-3. 计算受限平均能损。短步使用受限 stopping × 步长；较大估计能损步
-   （超过 2% 线性能损阈值）通过 inverse-range 计算，反演期间保持步首质量/电荷缩放。
-   随后应用对应的沿步离子修正与低能替代处理，能损不超过剩余总动能。
-4. 抽样已启用的受限涨落。到达电子候选位置后，用扣除连续损失后的能量进行
-   integral 接受判断，再抽 δ 电子能谱并执行形状因子 veto。
-   电子候选处理后重置其时钟/缓存。
-5. 各部分只扣能、记分一次：
-
-   ```text
-   DeltaT = 抽样后的受限连续损失 + 被接受的 δ 电子能量
-   ```
-
-   受限 stopping 不包含已显式处理的阈值以上电子能量转移。
-   当前两部分均局部沉积，不能再叠加旧的按比例电子响应。
-
-当前水数据采用约 **57.023 keV** 的 δ 电子产生阈值，来源为
-Geant4 11.3.2 默认 opt4 / Water_75eV 提取。
-配置要求 `straggling_scale: 1.0`，不允许分能量缩放。
-本次改善没有通过调整 TOPAS 参数或经验涨落系数获得。
-
-该配置还启用了此前隔离实验中的**原发非弹性反应率缓存候选**。
-这是配套核过程改动，不是新增电磁相互作用：只有非弹性率进入该缓存及步末接受判断；
-弹性仍使用局部反应率。因此完整物理的改善不能全部归因于 EM。
-独立纯 EM 对照支持电磁处理的改善，但尚未单独分离每一项改动的净贡献。
-
-```yaml
-run_mode: research
-primary_em_model: g4_joint_water_v1
-primary_joint_em_data_directory: /absolute/path/to/MAIGO/data/water_joint_em_v1
-```
-
-使用前运行 `python3 tools/verify_water_joint_em_data.py`；GPU 加载时还会校验两个表的
-固定 hash。数据缺失或损坏直接失败，旧隔离环境开关被拒绝。
-当前仅支持**本地 GPU、原发 C12、密度 1 g/cm³ 的均匀水、零束流能散**。
-不接受 CT、材料分层、异质插入、其他原发及电子响应叠加。
-查表能量域覆盖不等于其他束流能量或几何已通过验证。
-
-**证据与剩余限制。** 固定默认 TOPAS，每个能量 50k 粒子，使用三维剂量横向求和：
-100/200/300 MeV/u 完整物理峰值误差由 −2.729/−4.775/−2.565%
-变为 +0.148/+0.103/+0.101%。独立 0.1 mm 深度网格纯 EM 对照的峰差约在 ±0.15% 内。
-六组集成运行均复现隔离版输运审计计数，overflow 与采样失败均为零。
-这些是有限统计量结果，不是生产验收或 Gamma 结果。
-完整物理积分剂量仍低约 0.3%–0.7%，300 MeV/u 高剂量区平均绝对相对误差略有增加。
-峰值改善不证明整条曲线、横向 halo、CT 或 minibeam 的准确度；
-显式产生 δ 电子也不等于完整电子 tracking。
-
-见 [实现与验收记录](docs/physics/water_joint_em_v1.md)、
-[数据来源](data/water_joint_em_v1/manifest.json)、
-[联合查表](include/carbon/joint_em_view.hpp) 与
-[受限涨落采样](include/carbon/restricted_fluctuation_candidate.hpp)。
-
-### 3.6. 水 / Schneider 全部 18 种离子的统一 EM
-
-`em_model: g4_material_joint_v1` 使用一个 `data/em/unified_em_v1.bin`，
-将原生联合 EM 扩展到原发 C12 和全部 18 种已支持带电离子，覆盖水及 25 个
-Schneider 分区的材料—密度节点。每种离子使用自己的受限 stopping/range、
-δ 反应率、StepFunction、步内修正、涨落模型、自旋和形状因子；原发与次级共用输运函数。
-
-每步先计算原生平均受限能损，再按 IonFluc 或 Universal/Urban 采样涨落，
-并由剩余光学深度决定 δ 电子候选碰撞。δ 电子能量采用局部沉积。
-原发和次级的能损涨落均应开启，`straggling_scale: 1.0`。
-材料变化时清除反应率缓存、保留未消耗光学深度；步长截在 CT 体素面，
-离开 CT 的次级记为带电粒子逃逸。18 种注册离子之外的重反冲同位素保留原反冲路径。
-
-已按用户授权的 `AGENTS.md` 例外接入正式运行。水生产配置
-`config/unified_water_production.yaml` 和 CT 配置
-`config/rt07575_unified_em_production.yaml` 均选择固定哈希的统一包；
-未设置 `em_model` 的历史配置仍保持 legacy EM。核弹性库的研究模式限制独立保留；
-新的 CT 生产入口不启用该库，需要联合核弹性时继续使用研究配置。不能叠加旧水联合模型或电子响应包，
-现有已验证核过程和反冲数据仍需保留。全部离子组件检查和每例 5 万粒子的输运检查
-已通过；低密度阈值区及患者 Gamma 尚需验收，正式运行通过时质量报告仍保留此说明。
-详见[数据包、配置与验证记录](docs/physics/unified_em_v1.md)。
+在局部横向坐标系抽取偏转，再旋转到粒子方向；空间 / 方向更新遵循选中的输运分支。
+散射 scale 默认 1.0，两个生产配置没有调参。此近似不等于 Geant4 完整 msc，
+也不能替代强相互作用核弹性。见[MCS](include/carbon/multiple_scattering.hpp)。
 
 ## 4. 非弹性核过程
 
@@ -311,208 +182,177 @@ Schneider 分区的材料—密度节点。每种离子使用自己的受限 sto
 
 使用 [CT研究配置](config/rt07575_elastic_research.yaml) 或 [水研究配置](config/unified_water_elastic_research.yaml)，不是旧 `enable_nuclear_elastic` 开关。11.3.2 Release不含新弹性数据。详见[实现与数据](docs/all_ion_elastic.md)、[验收记录](evidence/step-31/elastic-production-validation-20260911/README.md)和[9月12日参考迁移](evidence/step-31/elastic-migration-20260912/README.md)。
 
-## 6. 电子响应
+## 6. 电子与中性产物
 
-### 6.1. “电子包”实际指三类不同对象
+当前统一 EM 抽样 δ 转移，但不空间跟踪这些电子。受限能损与 δ 能量形成局部剂量；
+局部沉积本身是近似，在界面、横向尾部和 minibeam valley 尤其需要验证。
+当前没有可再通过关闭而大幅提速的完整电子 tracking kernel。
 
-| 对象 | 保存的信息 | 运行作用与验证范围 |
+仓库另有旧 section-0 delta-tail 搬运、材料电子家族 / 能量包重放候选。
+能量包沿记录状态和续接路径搬运已经预算的能量，不让离子再损失第二份能量。
+这些候选不在统一生产入口中启用，也不能直接叠加到受限加显式 δ 模型。
+材料响应精度仍未验收。见[能量包输运](include/carbon/electron_packet_transport.hpp)和[电子计划](plan2/README.md)。
+
+中子、光子及衰变产物尚非全部具有完整生产输运链。不支持能量、逃逸和兼容 sinks
+分别记账；总能量占比小不代表其局部 halo / valley 剂量一定可忽略。
+当前模型不能描述成覆盖全部次级的完整 Geant4 输运。
+
+## 7. 记分与剂量比较
+
+```text
+Dose(Gy) = Edep(MeV) × 1.602176634e−13 / voxel_mass(kg)
+voxel_mass(kg) = rho(g/cm³) × volume(mm³) × 1e−6
+```
+
+使用累计 3D DoseToMedium。IDD 从 3D 记分横向求和得到；异质体素应先按质量将剂量
+还原为沉积能量，再形成能量沉积 IDD，不能把裸 Gy 求和当成能量和。
+横向 profile、core / halo 宽度分别评价。LET 为独立选项，当前剂量性能对照关闭 LET。
+
+当前 CT Gamma 口径：
+
+- 根据 RTSTRUCT 构造 BODY mask，只评价 BODY 内参考体素中心；记录 ROI、轮廓栅格化 / 插值方法及 mask SHA。
+- 按现用 10% 剂量阈值，评价 `BODY ∩ {Dref >= 0.1 Dmax}`，`Dmax` 为参考全体积最大值。
+  BODY 归属和剂量阈值是两个独立筛选条件。
+- Global 容差以 `Dmax` 为基准，local 以查询点参考剂量为基准；粒子数和几何匹配后评价
+  3%/3 mm、2%/2 mm、1%/1 mm、3%/0 mm。
+- DTA > 0 时搜索步长为 `DTA/10`，分别 0.3、0.2、0.1 mm，使用三线性插值。
+  BODY 限定参考查询点，不把 GPU 的 BODY 外剂量强制置零。格点搜索不等于解析连续最小值。
+- DTA = 0 时只比较同体素，不受搜索步长影响。
+
+不拟合剂量归一或配准。9 月 5 日无 BODY、固定 0.5 mm 的结果保留为历史证据；
+部分旧评价脚本仍使用该口径，不能不改参数直接作为当前方法。
+可参考[BODY 评价实现](benchmark/benchmark20260912/RT06423_replica01/evaluate.py)。
+
+质量检查包括有限数值、数据来源、抽样 audit、能量记账和零 queue overflow。
+overflow 使该片无效，必须拆分重跑。全局能量闭合不证明空间剂量正确，也不等于每个核顶点 Q 值闭合。
+
+## 8. 种类分组与实测吞吐
+
+`secondary_species_grouping: true` 在 GPU 上对每代次级建立索引排列，分为 18 种离子
+及其他产物共 19 桶。Histogram、prefix sum、scatter 保留粒子记录、parent history 和
+RNG stream，子代仍在下一代处理。正式实现不含额外的 kernel 分裂，额外索引内存约为每队列槽 4 字节。
+
+两个生产 YAML 显式开启；配置结构默认 false，以兼容旧配置。日志输出模式及分组时间；
+授权接入后质量报告仍保留 `secondary_species_grouping_accuracy_pending`。
+
+RT07575，100 万原发，完整次级统一 EM **加研究模式核弹性**，两轮均值：
+
+| 调度 | histories/s | 相对提升 |
+|---|---:|---:|
+| 原调度 | 11,154 | — |
+| 种类分组 | 14,691 | 31.7% |
+| 分组 + 隔离的 kernel 分裂 | 14,828 | 32.9%；分裂未接入 |
+
+计时分母已包含分组开销。这不是两个不启用独立弹性的生产 preset 的测量值。
+分组与基线的最大体素差为峰值的 0.0203%，原调度自身重复差为 0.0047%。
+计数和 EM audit 相同，但较大差异原因仍待追查；授权接入不等于剂量等价性门槛通过。
+
+正式入口另验证 RT07575 200k、水 50k，分组开 / 关各一次，完整次级 EM、不含独立弹性。
+四次均通过执行质量、零 overflow，步数 / audit / 反应计数一致；最大剂量差分别为峰值的
+0.0000133% 和 0.000172%。它们不能消除上述含弹性 1M 的未决差异。
+见[实验与接入记录](benchmark/benchmark20260914/secondary_schedule/README.md)。
+
+性能需分别报告 kernel、程序内部 transport elapsed、完整进程墙钟。
+加载、预处理、传输、后处理和输出影响后两者；不能把它们的差值当成某个物理过程的实测耗时。
+
+## 9. 可大幅提速的近似方向——尚未启用
+
+本次文档更新不启用下列近似。目标是在声明误差预算下减少工作量；目前没有达到 50k/s。
+分组后的含弹性 1M 实验，原发仍约 37.7 s、次级约 26.2 s，而 50k/s 只允许总耗时 20 s。
+因此仅简化次级不可能达到目标，原发输运也必须显著降低成本。
+
+| 候选 | 省略的重复工作 | 潜力与主要限制 |
 |---|---|---|
-| 冻结 section-0 横向 delta-tail | 随 C12 能量变化的搬运比例和横向响应 | 9 月 5 日 CT 使用的窄范围剂量重分配 |
-| Joint / ordered 响应候选 | 联合纵横响应或完整家族有序路径 | 独立实验分支 |
-| 材料电子响应库 | 出生样本、原始状态/段、子代链接和续接索引 | 能量包重放候选；物理未验收 |
+| 联合 EM 块传播 | 多次连续涨落、δ 时钟、散射微步 | 覆盖面最大；联合分布及几何验收困难 |
+| 短射程反冲 / 碎片终止核 | 完全终止在同一体素内的很多低能步 | 适用范围较小；先测其实际时间占比 |
+| 次级带权 roulette | 只追踪抽中的次级并提高幸存者权重 | 原发 histories/s 增加可能被方差增加抵消 |
+| 次级 CSDA / 仅均值快速模式 | 次级 δ 时钟及随机能损细节 | 显式有偏替代模型，不能算完整统一 EM |
+| 降低 MCS 准备 / 更新频率 | 重复角度与位移运算 | 改变有限步散射；单独提供数倍收益的依据不足 |
 
-它们不是 CINEL03 核末态事件包。其作用是改变已预算电磁能损的记分位置，
-不在 stopping 之外额外扣除一份碳离子能量。
+### 9.1. 主攻方向：联合 EM 转移，不是只批量抽 δ
 
-### 6.2. 冻结横向响应
+从当前微步模型建立以 `(物种, 材料, 密度, 能量, 块长度)` 为条件的传播模型。
+必须**联合**描述受限损失、δ 损失、末端动能、角度 / 位移和块内沉积位置。
+stopping 和反应率随动能非线性变化，这些量相互关联；只匹配 δ 均值、方差不够。
 
-严格剂量栈含 TOPAS 派生的 section-0 primary C12 部分能损横向重分配，
-提取点为 150/200/225 MeV/u。
-它搬运已记账能量，不额外加能；source eligibility、目的材料和 scorer 逃逸限定范围，
-不是通用电子输运。
-对符合条件的步，计算 W=f_tail(E)×DeltaE，抽取横向半径与方位角，
-在垂直于碳离子方向的平面内搬运 W。局部记分减去相同能量，由支持的目的位置接收，
-scorer 逃逸另行记账；这个横向模型的纵向位移为零。
-Joint 候选则使用相关纵向/径向坐标，独立抽取两者边缘分布会丢失实测关联。
+传播块不能跳过首次核碰撞或材料边界。核光学深度积分必须与抽样能量轨迹一致，
+仅用末端核反应率更新并不等价。路径可能离开后重入体素，不能只检查两端位置。
+先限定同质区、远离射程末端和界面的短块，设计明确的回退 / 过渡规则；
+不能丢弃所有越界样本后重新抽取“留在体素内”的路径，这会引入条件选择偏差。
 
-9 月 5 日三病例 executable 含 entrance-mask candidate。后续纵向、联合响应及完整电子家族
-有序路径实现属于独立实验，不受该 benchmark 验证。有序重放保留记录的路径和谱系，
-不把轨迹简化为起终点之间的直线。
+Bragg peak、低密度 production-cut 起始区和界面附近先保留原逐步算法。
+总损失与块内空间记分需一致，全部能量堆在块首 / 块尾会增加另一种空间近似。
+小型联合分布表或降维条件模型可能省掉大量循环，但表体积、查表成本和回退比例也可能抵消收益。
+目前没有实测倍数，不承诺达到 50k/s。
 
-### 6.3. 材料响应的提取与加载
+与已失败的复合 Poisson / δ 分位数方案的区别是：旧候选仅保留或近似部分联合传播，
+同时改变连续涨落和 MCS 的步长。这里不建议原样重跑旧方案。
 
-TOPAS [电子 scorer](startup/extensions/CarbonElectronDepositNtupleV3.hh) 记录
-run/event/track/parent 标识、pre/post 动能、沉积能量、位置与材料/密度。
-Transport-state 扩展还记录真实动量方向、物理步长、状态和 post-material，
-不能用起终点弦方向代替动量。
-生成电子的 C12 step 被显式绑定，后代通过离线谱系继承家族归属，不能重复计为独立 C12 出生。
+### 9.2. 较小范围的候选：短射程终止
 
-离线工具构建材料字典、出生通道、有序状态数组、子代链接和续接查询结构。
-加载时核对来源 SHA、schema、材料身份、能量覆盖与内存预算。
-有限提取盒中的逃逸是源数据边界条件，不自动等于患者逃逸。
-见 [状态编译器](tools/compile_electron_state_catalog.py) 与
-[段编译器](tools/compile_water_electron_segments.py)。
+先针对额外的 EM-only 重反冲，判断剩余输运相对于各体素面的距离和剂量梯度尺度是否足够小。
+用一个终止沉积分布替代很多步；只有在声明的更严格范围内才近似为出生点局部沉积。
+CSDA range 是平均估计，不是严格射程上界，必须给出射程尾部 / 跨材料逃逸的误差预算。
+完整保留残余能量，不将该规则泛化到所有低能 proton / alpha。
+对仍可能发生核反应的物种，还要控制被忽略的核碰撞概率。
+minibeam 要相对于束宽 / valley 尺度判断，不能只与粗体素尺寸比较。
+实施前先按物种和剩余 range 分解步数 / 时间；目前不能断言该项占据大部分耗时。
 
-进一步的材料响应候选为 water 或 Schneider CT 加载 SHA 固定的出生分布、原始电子段和
-续接索引。其输运对象是具有能量单位的统计包 W，与抽样电子的动能不同。
-每个包只能有一个最终能量归属：沉积、患者/记分网格逃逸或明确的未覆盖能量。
-有限源路径耗尽需要续接，不等于患者逃逸；缺失的光子续接单独记账，不局部沉积。
-同 section 密度插值混合实测条件分布，完整密度域和界面精度仍未验证。
-电子出生材料与边界遍历必须采用一致的体素归属；响应库支持显式预算的设备内存或
-host-mapped 内存模式。
+### 9.3. 带权抽样与显式简化次级 EM
 
-### 6.4. 出生抽样与能量包预算
+roulette 存活概率为 `p` 时，幸存粒子权重改为 `w/p`。只有所有子代、dose / LET、
+逃逸和能量账本正确传递权重，剂量期望才保持。当前队列 / 记分存在单位权重路径，
+不是加一个开关就能实现；逐 history 实现能量闭合和估计量记账需要重新设计。
+真实 overflow / 丢失检查必须与 roulette 的统计涨落分开。
 
-在原发 C12 CT 分支的有效材料响应查询中，沿碳离子本步抽取出生位置，并从响应取可搬运比例 f：
+用固定统计不确定度所需时间评价，例如 `1/(time × variance)`，不能只看原发 histories/s。
+稀有碎片的相关丢弃可能恶化 local Gamma、halo 和 valley 的统计精度。
+次级仅均值模型则引入系统偏差，必须单列为近似模式，不能继续声称完整统一 EM。
+整体关闭次级涨落、核弹性或中性剂量不适合作为 minibeam / valley 默认模型。
 
-```text
-W = f × DeltaE_C12
-碳离子保留的局部沉积 = DeltaE_C12 - W
-EM 后碳离子动能 = EM 前动能 - DeltaE_C12
-```
+### 9.4. 不重复的路线与验收顺序
 
-W 是统计能量权重，不等于抽样电子的物理动能；重放不能再次让碳离子慢化。
-对同一 section 内两个密度节点，w=(rho-rho0)/(rho1-rho0)，
-比例为 (1-w)f0+w f1，出生表按这两项能量贡献加权选择；续接采用自身条件采样器。
-不以近邻材料 alias 隐藏跨 section，也不能从此插值公式推断已验证 1/rho 轨迹缩放。
+- RNG dummy 的加速不是物理抽样加速。已撤回的 buffer / macro-tick 不属于生产选项，
+  secOFF / K 的旧速度不能作为完整统一 EM 基准。
+- 逐电子 Poisson 批处理已测得更慢。只处理 δ 的分位数候选曾在单轮 RT07575 提速约
+  10.9%，但未通过 peak / R80 筛选，不属于保精度替代方案。
+  见[批处理](docs/delta_batch_sampling.md)和[分位数结果](docs/rt07575_quantile_optimization.md)。
+- 当前电子已局部沉积、核末态已查表重放；关闭并未运行的完整电子 tracking、
+  或“替代在线核级联”，都不能在当前实现中再省出相应成本。
 
-### 6.5. 沿记录家族抽取一条能量谱系
+先测可覆盖区域 / 物种的时间和步数。若可优化部分占总时间 `f`、自身加速 `s`，
+不计新增开销的总加速上限为 `1 / [(1−f) + f/s]`。
+随后验证条件损失分布及相关性、射程 / 末端状态分布和能量记账。
+使用默认 TOPAS 参数验证 100/200/300 MeV/u、b3/b4 界面及 RT07575，350/400 作补充。
+同粒子数、多独立 seed 比较 IDD peak / R80、core / halo、横向 profile 和 BODY 内 local / global Gamma。
+近似算法通常不再要求事件计数完全相同，应评价统计一致性和剂量偏差，而非套用调度重排的逐计数等价门槛。
 
-一个完整原始电子步的物理状态必须满足：
+可暂沿用此前“峰误差增加 ≤0.3 个百分点、R80 位移 ≤0.1 mm”作为继续投入的筛选，
+它们不是已成立的临床验收标准；正式比较前还需预先声明允许的 Gamma 降幅及统计不确定度。
+扩展 minibeam 时增加 valley 剂量 / PVDR 和空间尾部验证，不能调整参考 TOPAS 去追随近似模型。
 
-```text
-T_in = dE_local + T_parent,out + sum(T_children)
-P(沉积) = dE_local/T_in
-P(父粒子继续) = T_parent,out/T_in
-P(子代 j) = T_child,j/T_in
-```
+## 10. 复现与数据
 
-算法按能量比例选择其中一个分支，让同一个 W 沿它继续，不把 W 复制给全部子代。
-选中沉积则在该段抽样位置记 W；否则游标跟随父粒子或选中的子代。
-这是家族能量分布的统计估计器，不是逐一模拟全部物理电子；其方差与精度需要独立验证。
-抽分支前先核对原始谱系及能量闭合。
-见 [能量谱系选择](include/carbon/electron_energy_lineage.hpp)。
+按 C++20 / SYCL、`nvptx64-nvidia-cuda`、本地 `sm_75` 构建，冻结 executable、
+解析后 YAML、数据 SHA、CT / 源变换、histories / spot 分配、seed、记分与分片 manifest。
+除 clone 外还需大物理二进制及外部 CT / 源输入，不能从旧 Release 标签推断当前所需数据已齐备。
 
-```mermaid
-flowchart TD
-    A[从碳离子 EM 能损分出 W] --> B[抽取出生并绑定原始电子状态]
-    B --> C[推进到下一步或 CT 边界]
-    C --> D{按能量比例选择谱系}
-    D -->|沉积| E[在目的体素只记一次 W]
-    D -->|父粒子或电子子代| C
-    D -->|材料边界或有限源结束| F[条件续接查询]
-    F -->|覆盖| C
-    F -->|覆盖缺失| G[显式未追踪能量与诊断]
-    D -->|患者逃逸| H[逃逸账本，不记剂量]
-```
+Schneider CT 每次运行前执行 `python3 tools/verify_schneider_v2_1_data.py`。
+精确的 v2.1 核 / stopping 栈仍是最低要求，不允许水 / 四分类或旧 schema 回退。
+统一 EM 使用 `data/em/unified_em_v1.bin`，SHA256：
+`8c5d970b3b639bfca2f448730271bed4fc04721aba73100e2efbe09dffe44855`。
+未来传播 / 反冲近似表属于新候选数据，不自动继承该包的授权或验证。
 
-### 6.6. 界面、覆盖缺口与终态归属
+GPU 只在本地。未指定 TOPAS 环境时使用本地 `sbatch`，数据放 `/mnt/sda/wuwei`；
+明确指定远程 CPU 主机 / 集群时按仓库规则允许提交。所有任务合计最多 192 CPU 线程、160 GB 内存。
+大任务按需分片，任何 overflow 片必须拆小重跑，只合并逐片接受的结果。
 
-到 CT 界面时游标裁剪到边界，根据下一材料/密度选择兼容续接；
-两端都是空气，不足以允许沿空气路径穿过中间组织。
-有限源结束但仍有正动能时，必须请求续接。
-缺失光子续接是独立未覆盖能量，不是局部沉积，也不是患者逃逸。
-几何无效、未解决电子与迭代上限耗尽均保留显式失败记账；
-出生查询失败不能静默当作正常局部 stopping 剂量。
+本次只更新方法和研究建议，没有新增输运近似或物理精度验证；已有生产接入检查列于第 8 节。
 
-对每份父粒子能损，记账目标为：
+## 参考
 
-```text
-DeltaE_C12 = 保留的局部能量 + 包在 scorer 内的沉积
-          + 包在 scorer 外的能量 / 物理逃逸
-          + 显式未追踪的包能量
-```
-
-这些是互斥能量归属，诊断子项不能再次加到已包含它们的总项。
-能量闭合证明账目一致，不证明空间响应正确。
-
-### 6.7. 启用条件与验证边界
-
-材料候选与旧 delta-tail、joint 和显式电子模式互斥，要求 3D 记分并关闭 LET。
-质量报告仍拒收为 `unvalidated_material_electron_response`，闭合通过不能消除此项。
-见 [能量包输运](include/carbon/electron_packet_transport.hpp)、
-[密度采样](include/carbon/material_electron_density.hpp) 和 [质量门禁](src/run_quality.cpp)。
-跨密度、几何、出生条件和正式升级门禁仍由 [plan2](plan2/README.md) 管理。
-
-## 7. 记分与质量
-
-Dose(Gy) = Edep(MeV) × 1.602176634e−13 / mass(kg)，
-mass = density(g/cm3) × volume(mm3) × 1e−6。
-输出为累计 3D DoseToMedium；IDD 由横向求和得到，不使用 1D scorer。
-等中心 profile 为插值取线，不是 IDD。
-
-可选 LET_d = sum(L × dE)/sum(dE)，多片先合两类矩再相除。
-本批 dose benchmark 关闭 LET，不提供新 LET 验证。
-Origin dose 只是诊断，不是独立 TOPAS 分种类参考。
-
-验收包含有限数值、严格粒子/candidate 计数、零 overflow、数据 provenance 与能量闭合。
-显式 sinks 检查 deposited = in-grid + outside-grid、voxel sum = in-grid，
-当前实现相对容差为 1e−3。
-全局闭合不证明每个核顶点的精确质量/Q 闭合。
-字段与兼容条件详见 [记分契约](docs/scoring_validation.md)。
-
-## 8. 评价与局限
-
-2026-09-05 数据集为 60 个 accepted shards、457,898,870 histories、零 overflow。
-数值维护于 [当前结果索引](docs/results.md) 与冻结证据。
-
-采用名义累计 Gy，无 LS scale、无拟合配准。
-Mask 为全 reference 体积 Dref ≥10% 全体积 Dmax，无 BODY mask。
-Global 容差基于 Dmax，Local 基于当前参考体素剂量。
-判据为 3%/3mm、2%/2mm、1%/1mm、3%/0mm。
-非零距离为 0.5 mm 球内格点加三线性插值，不是解析连续最小化；
-3%/0mm 比较同体素。
-
-结果仅绑定冻结输入/executable。严格 Local、低密度和界面残差仍存在，
-未证明唯一电子原因或全物理等价。
-本批不代表 plan2 完成、包升级或临床准入。
-
-## 9. 后续评价与性能研究
-
-本地未纳入 Git 的 `benchmark/topas10x/gpu_current_20260909.md` 记录后续三病例
-60-shard 运行、Gamma 加密重评及 RT07575 实验性电子 full20 A/B。
-本次仅更新两个方法文件，不发布这些本地产物，也不以其替换已发布的 9 月 5 日证据。
-其中电子实验不提升最低物理数据版本；复现需对应 executable、配置、原始剂量 SHA
-和质量报告。
-
-后续工具 `tools/evaluate_gamma_adaptive.py`（源码检查点 `f6245c5`）先复现冻结的
-0.5 mm pass mask，仅对失败点使用同一三线性插值体上的 0.25 mm 格点重搜。
-保留粗筛通过点，3%/0mm 不变。工具核对剂量 SHA 和 histories，独立写入
-`gamma_refined.json`，不覆盖冻结结果。粗细结果必须分别标注：搜索加密改变数值评价，
-不改变输运剂量；两种有限格点都不是精确连续最小值。该工具属于后续本地提交，
-不包含在本次仅文档发布中。
-
-性能报告区分 primary+secondary GPU kernel 时间、程序内部 transport elapsed，
-以及包含响应库加载和 I/O 的完整进程墙钟。Histories/s 必须说明时间分母、统计量、
-chunk、记分选项和硬件；小样本 smoke 不能证明相对 TOPAS 的全计划加速。
-
-[已入库的 64-history 短程对比](benchmark/benchmark20260909/short_range_64_comparison/README.md)
-使用患者 20022516，阈值为 0、0.1、0.25 mm。三组 raw dose 逐位相同、overflow 为零，
-但均因材料响应未验证而拒收。Primary kernel 分别为 61.2625、61.5884、61.5946 s，
-没有证明加速。短路要求完整、无子代的终止尾段位于当前体素内，阈值默认零。
-后续缓存尾长实现仍是候选，不构成已验收性能结果。
-
-## 10. 复现与验收流程
-
-构建由 [CMake](CMakeLists.txt) 和 [presets](CMakePresets.json) 定义：C++20、开启 SYCL、
-NVIDIA target `nvptx64-nvidia-cuda`、本地架构 `sm_75`。
-冻结 executable SHA、解析后配置、source/CT 变换、全部数据 pins、spot 分配、seed、
-记分选项和 shard manifest。每批 Schneider CT 运行前执行
-`python3 tools/verify_schneider_v2_1_data.py`；缺文件、SHA/大小/schema 不符或
-14-projectile 覆盖缺失均为硬失败。新 clone 不保证包含大二进制包和外部原始响应。
-
-GPU 仅在本地 RTX 2080 Ti 运行。TOPAS 提取使用本地 `sbatch`，数据位于
-`/mnt/sda/wuwei`，源码、构建与 extension 位于 `/home/wuwei/topas`。
-所有任务合计最多 192 CPU 线程、160 GB 内存，并按计算量分配。
-大量 GPU histories 必须分片；任何次级 overflow 都需要缩小分片重跑。
-仅合并逐片验收通过的结果，再检查聚合能量和 histories 记账。
-
-数据升级要求明确 TOPAS/Geant4 provenance、manifest 与 host/device lookup 检查、
-50k 闭合、配对单 shard Gamma 和零溢出完整验证；电子候选另需独立 phantom、域及几何门禁。
-历史 fixtures 和旧文档不证明当前测试已通过；本次方法稿更新没有新增输运或物理精度验证。
-
-## 参考与追溯
-
-- [FRED 论文解读与源文入口](docs/FRED_Carbon_Fragmentation_Model.md)
-- [物理规格](docs/TOPAS_GPU_Physics_Model.md) 与 [代码地图](docs/structure.md)
-- [冻结 benchmark 与 provenance](benchmark/topas10x/gpu_current_20260905.md)
+- [FRED carbon 文献分析](docs/FRED_Carbon_Fragmentation_Model.md)
+- [统一 EM 数据与模型](docs/physics/unified_em_v1.md)
+- [旧 primary-water 联合模型，已从代码移除](docs/physics/water_joint_em_v1.md)
+- [历史物理规格](docs/TOPAS_GPU_Physics_Model.md)
+- [记分契约](docs/scoring_validation.md)与[旧稿归档](docs/archive/README.md)

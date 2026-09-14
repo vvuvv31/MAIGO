@@ -887,6 +887,10 @@ private:
     struct Impl;
     std::unique_ptr<Impl> impl_;
 
+    template<int EmMode>
+    friend TransportResult transport_sycl_impl(
+        const TransportConfig&, const StoppingPowerTable&, const CrossSectionTable&,
+        const std::string&, SyclTransportContext*);
     friend TransportResult transport_sycl(
         const TransportConfig&, const StoppingPowerTable&, const CrossSectionTable&,
         const std::string&, SyclTransportContext*);

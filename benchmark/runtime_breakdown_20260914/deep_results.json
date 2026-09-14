@@ -1,0 +1,433 @@
+{
+  "status": {
+    "complete": true,
+    "returncode": 0,
+    "wall_s": 54.129300117492676,
+    "config_sha256": "94f7dfbc149af0d097afefea56871e4cfd864597c3e3791155ef2ce74f3107d3",
+    "binary_sha256": "c8122ff977326386777f1f34c8643d718a7220630790115aa4d562ca9b5a0ae0",
+    "audit": [
+      [
+        0,
+        2202034783,
+        676418285,
+        2250786233,
+        1984087180,
+        2127998197667042,
+        163178812370929,
+        0
+      ]
+    ],
+    "quality": {
+      "schema_version": 3,
+      "status": "pass",
+      "run_mode": "production",
+      "accepted": true,
+      "absolute_physical_energy_residual_MeV": 9022.53292206,
+      "physical_relative_energy_residual": 3.47186310465e-06,
+      "absolute_accounting_energy_residual_MeV": 9022.53292206,
+      "accounting_relative_energy_residual": 3.47186310465e-06,
+      "absolute_energy_residual_MeV": 9022.53292206,
+      "relative_energy_residual": 3.47186310465e-06,
+      "topas_reference_energy_sink_active": false,
+      "queue_overflow_count": 0,
+      "queue_overflow_energy_MeV": 0,
+      "voxel_scored_energy_MeV": 2294592218.11,
+      "in_grid_deposited_energy_MeV": 2294592225.55,
+      "outside_grid_deposited_energy_MeV": 0.151111379266,
+      "grid_split_closure_ratio": 1.0000000079,
+      "voxel_to_ingrid_ratio": 0.999999996757,
+      "voxel_to_total_deposited_ratio": 1.00000000459,
+      "failures": [],
+      "approximations": [
+        {
+          "code": "secondary_species_grouping_accuracy_pending",
+          "message": "GPU species index grouping; RNG identities preserved; production integration authorized; RT07575 scheduling dose difference 0.0203% of peak remains under investigation",
+          "value": 1,
+          "limit": 0
+        },
+        {
+          "code": "unified_material_em_accuracy_pending",
+          "message": "Unified water/Schneider EM for all 18 charged ions; local delta deposition; production execution authorized, density cut-onset and patient Gamma accuracy gates remain pending",
+          "value": 1,
+          "limit": 0
+        },
+        {
+          "code": "schneider_post_em_null_collisions",
+          "message": "sampled candidates resolved as post-EM null collisions (track continues, no lookup)",
+          "value": 27,
+          "limit": 0
+        },
+        {
+          "code": "schneider_primary_post_em_null_collisions",
+          "message": "primary candidates resolved as post-EM null collisions (track continues, no lookup)",
+          "value": 32,
+          "limit": 0
+        }
+      ]
+    },
+    "elapsed_s": 52.401675,
+    "throughput": 19083.36,
+    "primary_s": 26.262915,
+    "secondary_s": 22.31935,
+    "steps": 2201619774
+  },
+  "cycles": {
+    "0": [
+      12293909451,
+      1075545
+    ],
+    "1": [
+      82176790969,
+      1075545
+    ],
+    "2": [
+      6271644948,
+      1075545
+    ],
+    "3": [
+      12050842089,
+      1075545
+    ],
+    "4": [
+      5719018494,
+      1075545
+    ],
+    "5": [
+      5129882074,
+      1075545
+    ],
+    "6": [
+      8769475701,
+      1075545
+    ],
+    "7": [
+      10808799889,
+      1075545
+    ],
+    "8": [
+      3518047910,
+      330793
+    ],
+    "9": [
+      24921785444,
+      330667
+    ],
+    "10": [
+      3837114081,
+      661196
+    ],
+    "11": [
+      3293835333,
+      330529
+    ],
+    "12": [
+      1890774379,
+      330667
+    ],
+    "13": [
+      354380674,
+      330529
+    ],
+    "14": [
+      3964375781,
+      330667
+    ],
+    "15": [
+      2998368228,
+      330667
+    ],
+    "16": [
+      19492679334,
+      1075545
+    ],
+    "17": [
+      39720490416,
+      1075545
+    ],
+    "18": [
+      21067607555,
+      1075545
+    ],
+    "19": [
+      0,
+      0
+    ],
+    "20": [
+      4779008464,
+      330667
+    ],
+    "21": [
+      13258436511,
+      330667
+    ],
+    "22": [
+      5771814533,
+      330667
+    ],
+    "23": [
+      0,
+      0
+    ],
+    "24": [
+      22777501570,
+      1075545
+    ],
+    "25": [
+      56534643317,
+      1075545
+    ],
+    "26": [
+      36780213020,
+      1075545
+    ],
+    "27": [
+      17704633979,
+      1075545
+    ],
+    "28": [
+      14554282678,
+      330667
+    ],
+    "29": [
+      7406089145,
+      330667
+    ],
+    "30": [
+      7111980730,
+      330667
+    ],
+    "31": [
+      1930440959,
+      330667
+    ],
+    "32": [
+      0,
+      0
+    ],
+    "33": [
+      0,
+      0
+    ],
+    "34": [
+      0,
+      0
+    ],
+    "35": [
+      0,
+      0
+    ],
+    "36": [
+      0,
+      0
+    ],
+    "37": [
+      0,
+      0
+    ],
+    "38": [
+      0,
+      0
+    ],
+    "39": [
+      0,
+      0
+    ]
+  },
+  "regions": {
+    "Primary": [
+      {
+        "slot": 0,
+        "region": "CT/material and initial state",
+        "cycles": 12293909451,
+        "intervals": 1075545,
+        "share_percent": 4.437956397629253
+      },
+      {
+        "slot": 6,
+        "region": "EM material selection/coverage",
+        "cycles": 8769475701,
+        "intervals": 1075545,
+        "share_percent": 3.165677358062984
+      },
+      {
+        "slot": 26,
+        "region": "EM stopping/range/fluctuation parameter preparation",
+        "cycles": 36780213020,
+        "intervals": 1075545,
+        "share_percent": 13.277223354284468
+      },
+      {
+        "slot": 27,
+        "region": "Delta rate/clock/EM step",
+        "cycles": 17704633979,
+        "intervals": 1075545,
+        "share_percent": 6.391164173443309
+      },
+      {
+        "slot": 7,
+        "region": "Geometry clamps",
+        "cycles": 10808799889,
+        "intervals": 1075545,
+        "share_percent": 3.9018493514428854
+      },
+      {
+        "slot": 24,
+        "region": "Nuclear rate/hazard",
+        "cycles": 22777501570,
+        "intervals": 1075545,
+        "share_percent": 8.222409577481429
+      },
+      {
+        "slot": 25,
+        "region": "Pre-loss mean/audit/legacy branches",
+        "cycles": 56534643317,
+        "intervals": 1075545,
+        "share_percent": 20.40833983659768
+      },
+      {
+        "slot": 1,
+        "region": "Unified EM loss",
+        "cycles": 82176790969,
+        "intervals": 1075545,
+        "share_percent": 29.664852882729708
+      },
+      {
+        "slot": 2,
+        "region": "Scoring branches",
+        "cycles": 6271644948,
+        "intervals": 1075545,
+        "share_percent": 2.263989899353927
+      },
+      {
+        "slot": 3,
+        "region": "MCS",
+        "cycles": 12050842089,
+        "intervals": 1075545,
+        "share_percent": 4.350211945098327
+      },
+      {
+        "slot": 4,
+        "region": "Advance/face handling",
+        "cycles": 5719018494,
+        "intervals": 1075545,
+        "share_percent": 2.064498263531851
+      },
+      {
+        "slot": 5,
+        "region": "Nuclear resolution/bookkeeping",
+        "cycles": 5129882074,
+        "intervals": 1075545,
+        "share_percent": 1.8518269603441802
+      }
+    ],
+    "Secondary": [
+      {
+        "slot": 8,
+        "region": "CT/material/stopping and initial state",
+        "cycles": 3518047910,
+        "intervals": 330793,
+        "share_percent": 4.642358695344916
+      },
+      {
+        "slot": 14,
+        "region": "EM material selection/coverage",
+        "cycles": 3964375781,
+        "intervals": 330667,
+        "share_percent": 5.231325680991121
+      },
+      {
+        "slot": 28,
+        "region": "EM stopping/range/fluctuation parameter preparation",
+        "cycles": 14554282678,
+        "intervals": 330667,
+        "share_percent": 19.20559425943724
+      },
+      {
+        "slot": 29,
+        "region": "Delta rate/clock/EM step",
+        "cycles": 7406089145,
+        "intervals": 330667,
+        "share_percent": 9.772954553308042
+      },
+      {
+        "slot": 15,
+        "region": "Geometry clamps",
+        "cycles": 2998368228,
+        "intervals": 330667,
+        "share_percent": 3.956597855172963
+      },
+      {
+        "slot": 30,
+        "region": "Nuclear rate/hazard",
+        "cycles": 7111980730,
+        "intervals": 330667,
+        "share_percent": 9.384853881379057
+      },
+      {
+        "slot": 31,
+        "region": "Other pre-loss/recoil/legacy branches",
+        "cycles": 1930440959,
+        "intervals": 330667,
+        "share_percent": 2.547378432905886
+      },
+      {
+        "slot": 9,
+        "region": "Unified EM loss",
+        "cycles": 24921785444,
+        "intervals": 330667,
+        "share_percent": 32.88638197069742
+      },
+      {
+        "slot": 10,
+        "region": "Post-EM geometry/scoring",
+        "cycles": 3837114081,
+        "intervals": 661196,
+        "share_percent": 5.0633932154041545
+      },
+      {
+        "slot": 11,
+        "region": "MCS",
+        "cycles": 3293835333,
+        "intervals": 330529,
+        "share_percent": 4.346491432286056
+      },
+      {
+        "slot": 12,
+        "region": "Inelastic replay/scoring",
+        "cycles": 1890774379,
+        "intervals": 330667,
+        "share_percent": 2.495035060305939
+      },
+      {
+        "slot": 13,
+        "region": "Elastic/bookkeeping",
+        "cycles": 354380674,
+        "intervals": 330529,
+        "share_percent": 0.46763496276720457
+      }
+    ]
+  },
+  "max_dose_delta_percent_peak": 2.173963034125809e-05,
+  "event_counts": {
+    "nuclear_interactions": [
+      415041,
+      415041
+    ],
+    "all_ion_primary_elastic_interactions": [
+      0,
+      0
+    ],
+    "all_ion_secondary_elastic_interactions": [
+      0,
+      0
+    ],
+    "primary_elastic_interactions": [
+      0,
+      0
+    ],
+    "cascade_interactions": [
+      0,
+      0
+    ]
+  }
+}

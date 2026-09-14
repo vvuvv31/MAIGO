@@ -1,161 +1,150 @@
 # Materials and Methods
 
-Revision: 2026-09-10. Current research draft, not a clinical or general Geant4-equivalence claim.
-[中文](mm_zh.md). The [physics specification](docs/TOPAS_GPU_Physics_Model.md) describes the September 5 baseline;
-subsequent implementation changes are identified below and checked against source code.
-Original drafts, including exploratory proton/multi-ion material,
-are preserved in the [archive](docs/archive/README.md), not promoted to validated CT capabilities.
+Revision: 2026-09-14. Describes the current working tree and named presets, not a frozen release or a claim of clinical/Geant4 equivalence. [中文](mm_zh.md).
+Historical numerical results remain bound to their original executable, data and configuration; they do not validate every current option.
 
-This revision reviews the source/build graph, configuration and data loaders, TOPAS
-extraction tools, tests, benchmark artifacts and research plans through source checkpoint
-`f6245c5` (2026-09-09). Existing uncommitted transport changes are not a frozen release.
-Unless explicitly labelled otherwise, numerical CT results and benchmark settings below
-refer to the Git-tracked September 5 dataset, not to every current code path.
+## 1. Framework and active configuration
 
-## 1. Computational framework and reference
+MAIGO is a C++20/SYCL condensed-history charged-ion Monte Carlo, running locally on
+an NVIDIA RTX 2080 Ti (`sm_75`). The GPU interpolates TOPAS/Geant4-derived tables
+and replays nuclear events rather than executing an intranuclear cascade generator.
+The patient implementation is [transport_sycl.cpp](src/transport_sycl.cpp); the serial backend supports a subset.
 
-MAIGO is a C++20/SYCL condensed-history charged-ion Monte Carlo.
-The patient backend is [transport_sycl.cpp](src/transport_sycl.cpp); the serial backend is a subset.
-This benchmark uses a local NVIDIA RTX 2080 Ti (sm_75).
-The GPU interpolates transport tables and replays correlated nuclear final states without
-running Geant4 or an intranuclear cascade generator.
+The reference uses TOPAS 4.2.p3 / Geant4 11.3.2, including standard_opt4 EM,
+QGSP_BIC_HP, ion-INCLXX, elastic, stopping and decay modules. A module list alone
+does not identify the model attached to every projectile; C12 was observed to use INCLXX.
+All-ion elastic comparisons require the matched extension described in Section 5.
 
-Reference: TOPAS 4.2.p3 / Geant4 11.3.2 with g4em-standard_opt4,
-g4h-phy_QGSP_BIC_HP, g4decay, g4ion-inclxx, g4h-elastic_HP, g4stopping,
-g4radioactivedecay. Module names do not identify the active model for every projectile.
-Reference C12 was observed to use INCLXX; BIC in the list does not establish a C12
-BIC-versus-INCLXX discrepancy.
+The two current unified-EM production entry points are
+[water](config/unified_water_production.yaml) and [RT07575](config/rt07575_unified_em_production.yaml):
 
-Counter-based streams index histories and process channels. Reproducibility requires
-the frozen executable, inputs, seeds and allocations, not an assumption of bitwise
-equivalence across devices/builds.
+| Setting | Explicit production-preset value / behavior |
+|---|---|
+| `em_model` | `g4_material_joint_v1`, one water/Schneider package |
+| `enable_secondary_unified_em` | `true`: all 18 supported charged species use unified EM |
+| Primary / secondary fluctuations | Both enabled, `straggling_scale: 1.0` |
+| `ct_secondary_exact_faces` | `true` |
+| `secondary_species_grouping` | `true`; restore original scheduling with `false` |
+| Inelastic / secondary transport | Enabled; secondary inelastic generation limit 2 |
+| Independent all-ion elastic | Bank omitted in these two production presets; research option |
+| Electron dose | Local deposition of sampled delta energy; no electron packet tracking |
+
+`primary_em_model: legacy` in these presets does **not** select legacy stopping:
+`em_model: g4_material_joint_v1` selects the unified path. The old primary-only
+selector is not an extra model to stack on top. Conversely, `em_model` alone does
+not enable unified secondary EM: that switch defaults to false in the configuration
+structure. The full-secondary performance experiments explicitly enabled it.
+Legacy and research YAML files are not automatically upgraded by updating the executable.
+Legacy EM (`em_model: legacy`) is rejected on GPU devices; serial/cpu backends
+retain legacy routing (incl. `transport_cpu` and CPU tests). The joint water EM
+(`g4_joint_water_v1`) implementation was deleted; its YAML keys are rejected.
+
+Execution of unified EM and species grouping has been authorized. Low-density
+production-cut behavior, patient Gamma and the scheduling-dose difference remain
+under investigation; execution-quality acceptance is not accuracy acceptance.
 
 ## 2. Materials, source and geometry
 
-HU maps to continuous density and one of 25 Schneider sections with 13-element compositions.
-Composition is a shared LUT, not copied into each voxel. Probe-material representative
-densities must not replace actual CT densities. CCTG/DICOM and scorer geometry are checked together.
+CT HU maps to actual voxel density and one of 25 Schneider composition sections,
+using 13 elemental constituents. CT does not use a four-class material fallback.
+Water uses native SHA-pinned G4_WATER, not a fictitious Schneider section.
+The unified EM package covers water, all 25 sections and 18 charged species;
+its density-node queries preserve material-specific stopping and cut behavior.
 
-Current source generation uses TPS spot CSV histories, beam-model emittance, energy spread,
-virtual scanning magnets and explicit TOPAS placement. Each replica's integer spot histories
-are matched before GPU sharding. TOPAS passive RotZ gives component world-to-patient coordinates
-R(+RotZ) × (world − Trans); vectors rotate without translation.
-Source, placement and CT packing are separate operations. Dose is restored to patient coordinates
-using the frozen mapping, without dose-fitted registration. See [planning](docs/planning.md).
-
-Current homogeneous-water runs share the CINEL03 nuclear transport framework with CT,
-using native, SHA-pinned G4_WATER composition and H/O elemental rates reconstructed
-from the material partial-rate tables. Water is not assigned a fictitious Schneider section.
-Its stopping, density, radiation length and fluctuation inputs remain material-specific;
-CT tables do not silently replace them. Legacy CINEL02 event/rate configuration keys
-are rejected by the unified-water route. Allowing water `run_mode: production` does not
-establish TOPAS accuracy: run quality retains an explicit incomplete-validation note.
-See the [unification record](plan2/water_ct_unification.md) and
-[material rate interface](include/carbon/material_nuclear_rates.hpp).
+TPS spot CSV histories, energy spread, emittance, scanning magnets and patient
+placement define the source. Integer spot allocations must match the reference
+before sharding. TOPAS passive RotZ uses `R(+RotZ) × (world − Trans)`; vectors
+rotate without translation. CT packing, source placement and dose mapping are
+checked separately, without dose-fitted registration. See [source geometry](docs/planning.md).
 
 ## 3. Electromagnetic transport
 
-### 3.1. What happens in one charged-particle step?
+### 3.1. One step in the current unified model
 
-```mermaid
-flowchart TD
-    A[Position, direction, kinetic energy, Z/A] --> B[Read CT density and Schneider section]
-    B --> C[Interpolate stopping and evaluate nuclear rate]
-    C --> D[Limit step by energy loss, geometry and optical depth]
-    D --> E[Compute mean loss and sample enabled fluctuations]
-    E --> F[Partition energy into local dose and selected electron response]
-    F --> G[Advance position and apply enabled Coulomb MCS]
-    G --> H[Update energy and resolve nuclear candidate]
-    H --> I[Continue track, queue products, or record termination]
-```
+1. Read species, kinetic energy, material section and density. Prepare restricted stopping,
+   range, ion corrections, fluctuation inputs and delta proposal rate from the unified package.
+2. Select the shortest allowed distance from the native EM StepFunction, geometry,
+   nuclear candidate and sampled delta candidate. Low-energy stopping/termination
+   rules also apply. The native EM limit replaces the legacy maximum-step and
+   relative-loss limits on this path.
+3. Compute restricted mean energy loss using stopping or range inversion, apply
+   ion corrections and sample the enabled restricted-loss fluctuation law.
+4. Consume the delta clock along the actual step. At a candidate, perform the
+   post-loss rate acceptance test and sample the electron spectrum/form-factor veto.
+5. Deduct continuous loss plus accepted delta energy once, score their local dose,
+   advance and apply configured MCS, then resolve any nuclear candidate and queue products.
 
-The diagram summarizes the main data dependencies; geometry face handling and diagnostic
-branches are interleaved in the kernel. C12 and charged fragments undergo condensed-history
-transport: microscopic ionizations are represented by a step energy loss and scattering law.
-The GPU does not invoke a Geant4 electromagnetic process manager for every collision.
+This is the physical dependency order; geometry/scoring and process-specific
+branches are interleaved in the kernel. Particle streams retain their history and
+process identity; regrouping does not replace Philox or restart its counters.
 
-Symbols used below: T is total particle kinetic energy in MeV, E=T/A is MeV/u,
-rho is local density in g/cm³, and h is step length in mm. Quantities tabulated per
-nucleon must not be confused with total particle energies used for energy conservation.
+### 3.2. Restricted mean energy loss and density
 
-### 3.2. Existing CT primary and secondary predictor-midpoint energy loss
+Let `T` be total kinetic energy (MeV), `E=T/A` energy per nucleon, and `h` length (mm).
+The current package retains native restricted stopping, range and inverse-range
+spline segments. Each selected density node is evaluated with the actual/node
+density ratio; prepared quantities and mean losses are then interpolated between
+bracketing density nodes. This is more than a water stopping curve multiplied by density.
 
-The current repair uses an explicit final configuration:
-`ct_primary_midpoint_stopping: true`, `ct_secondary_exact_faces: true`, and a
-SHA-pinned Schneider secondary-ion material table. Validation of this combination
-is recorded separately; historical frozen results do not validate it. Old configurations
-without the material bank retain their previous route, so the executable version alone
-does not identify the physics configuration.
-
-Queries use kinetic energy per nucleon E=T/A. Primary C12 uses the validated SCHNSTOP
-section table. Secondaries select directly extracted TOPAS/Geant4 electronic stopping
-by (Z,A) and Schneider section. The new bank covers 25 sections, 18 charged species and
-0.01–6000.11 MeV/u. Its range extends beyond the primary grid because secondary protons
-can exceed 430.11 MeV/u. The 18 stopping species and 14 nuclear projectiles serve different purposes.
-
-Both tables store linear stopping divided by the extraction material's reference density:
+For native StepFunction parameters `f` and `r_final`, with remaining range `R`:
 
 ```text
-S1(s,ion,E) = S_TOPAS(s,ion,E,rho_ref) / [rho_ref/(1 g/cm³)]
-S(T,s,rho) [MeV/mm] = S1(s,ion,T/A) × rho/(1 g/cm³)
+h_EM = f R + r_final (1 − f) (2 − r_final/R),  R > r_final
+h_EM = R,                                    otherwise
 ```
 
-Local density scaling therefore does not count density twice. Material composition is
-already represented by the section row. In the final configuration, both secondary
-step-start and midpoint queries use that material bank without an extra Bethe factor.
-Invalid species, section, energy or density rejects the run; no water fallback or failed-dose merge is allowed.
+Parameters are read per ion from the package; the primary C12 data use
+`f=0.1`, `r_final=0.001 mm`. Do not assign these values to every species without
+checking its record. The package also supplies the linear-loss threshold.
+
+For a sufficiently small estimated restricted loss, use `S_restricted(T) × h`.
+For larger losses, obtain the outgoing energy by inverse range, retaining the
+pre-step mass/charge scaling during inversion. The implemented ion correction
+uses an intermediate energy and includes a low-energy replacement. This is not
+the old predictor-midpoint total-stopping algorithm. Available kinetic energy
+bounds the result; the package's lowest kinetic energy can trigger final stopping.
+
+The older `ct_primary_midpoint_stopping` and material-secondary stopping paths remain
+for non-unified transport. Their tables store density-normalized total stopping:
 
 ```text
-S_start = S(T,s,rho)
-h_loss = maximum_relative_energy_loss × T / S_start
-h <= min(maximum_step_mm, h_loss, geometry, nuclear collision and termination distances)
-T_mid = T - S_start × h/2
-mean loss = S(T_mid,s,rho) × h (subsequently bounded by available kinetic energy)
+S1(section,ion,E) = S_extracted / [rho_reference/(1 g/cm³)]
+S(T,section,rho) = S1(section,ion,T/A) × rho/(1 g/cm³)
 ```
 
-The frozen maximum step remains 0.5 mm. The h_loss limiter and 0.005 relative-loss
-limit above apply to primaries. Secondary steps use the maximum length, geometry and
-nuclear collision truncation without the same relative-loss step limiter; their midpoint
-loss is bounded by remaining kinetic energy. The primary midpoint query interpolates within
-the primary table domain; the secondary predicted midpoint has a 0.01 MeV/u floor.
-Exact face truncation prevents a secondary step from using the starting material across
-a material boundary. The mean loss then enters fluctuation and electron-energy sharing;
-the predicted midpoint is not the transported end-state energy. Upstream air loss is separate.
+That density scaling does not double-count density. Those tables and switches do
+not determine the unified model's restricted mean loss. Extra unregistered heavy
+recoils retain their dedicated stopping path. See [unified lookup/mean loss](include/carbon/unified_em_view.hpp).
 
-Implementation: [loader and stepping](src/transport_sycl.cpp),
-[material table and query domain](include/carbon/schneider_ion_stopping_table.hpp),
-[configuration switches](include/carbon/transport_config.hpp).
+### 3.3. Fluctuations and explicit delta proposals
 
-### 3.3. Energy-loss fluctuations
+Restricted continuous loss uses the packaged IonFluc or Universal/Urban-related
+sampler as applicable. Both primary and supported secondary ions enable native
+fluctuations with scale 1.0. The former CT scale 1.2 and secondary-CSDA choices are
+historical configurations, not these production presets.
 
-The mean loss defines the energy budget; the selected straggling sampler produces a
-nonnegative realization bounded by the available T. Primary transport offers an analytic
-condensed-loss variance path and separately selected TOPAS fluctuation-quantile packages.
-The analytic variance depends on effective charge, density, step length and relativistic
-maximum electron transfer. For the clamped Gaussian sampler:
+The delta clock samples optical depth `tau = −ln(U)`. Over a segment it consumes
+proposal optical depth; locally the candidate distance is `tau_remaining / Sigma_proposal`.
+A candidate is not necessarily an accepted electron: the post-loss rate test and
+spectrum/form-factor acceptance still apply. Material/density changes invalidate
+cached rates while retaining unconsumed optical depth. A mean free path is a
+statistical scale, not a fixed collision distance.
 
 ```text
-sigma = configured_scale × sqrt(condensed_loss_variance)
-DeltaE = clamp(mean_loss + sigma × N(0,1), 0, min(2×mean_loss, T))
+DeltaT = sampled restricted continuous loss + accepted delta kinetic energy
+T_out  = T_in − DeltaT
 ```
 
-Other selectable samplers have their own positive-support/moment approximations; this
-formula must not be attributed to every sampler. A packaged fluctuation mode samples
-an energy-loss ratio from its declared energy/thickness or fractional-loss grid and applies
-it to the mean loss. Domain checks and candidate restrictions remain part of that mode.
-A table of fluctuations is not an electron spatial-response package.
-
-The frozen CT settings enable primary straggling with scale 1.2 and disable secondary
-straggling. Neither a selectable Vavilov/Landau-related mode nor the presence of a TOPAS
-package proves exact reproduction of Geant4's ion fluctuation algorithm.
-See [samplers](include/carbon/straggling.hpp) and [package loader](src/energy_loss_fluctuation.cpp).
+Restricted stopping excludes above-threshold transfers already treated explicitly.
+The delta threshold is material/density dependent; the water example near 57 keV
+must not be imposed on every CT section. Delta energy is currently deposited
+locally. No proportional electron response is stacked on top of this budget.
+`em_macro_ticks` is not a supported current switch; rejected macro-tick and RNG
+experiments do not describe the production algorithm.
 
 ### 3.4. Coulomb multiple scattering
 
-The benchmark uses Highland MCS with section X0 and local density for both primary and
-secondary tracks, not the exact Geant4 msc algorithm.
-
-The implemented projected RMS angle uses the particle momentum p and beta:
+The configured Highland approximation uses section radiation length and local density:
 
 ```text
 t = rho × (h/10) / X0_mass
@@ -163,129 +152,11 @@ C = max(0, 1 + 0.038 ln(t Z²/beta²))
 theta0 = 13.6 MeV × Z/(beta p c) × sqrt(t) × C
 ```
 
-Random deflections are generated in a local transverse frame and rotated into the
-current direction; transport updates the direction and the associated spatial scattering
-according to the selected branch. For CT, X0_mass comes from the 25-section LUT and rho
-from the actual voxel. This Coulomb deflection is distinct from an explicit hadronic
-elastic collision. Water/FRED-2GR options are separate configurations, not the frozen
-CT Highland model. See [MCS definitions](include/carbon/multiple_scattering.hpp) and
-[GPU arithmetic](src/detail/sycl_device_math.inc).
-
-### 3.5. Joint EM model for primary C12 in homogeneous water (research)
-
-**The production default remains `primary_em_model: legacy`.** The explicit
-`g4_joint_water_v1` research option integrates the following algorithms into one
-primary transport loop. Sections 3.2–3.3 describe the existing paths; selecting this
-option replaces their primary-water energy-loss handling, not Schneider CT or secondary EM.
-
-| Component | Existing water path | Joint water candidate |
-|---|---|---|
-| Continuous mean loss | Total stopping with the existing finite-step integration, including midpoint evaluation | Native restricted DEDX and range/inverse-range, with actual transport mass/charge scaling and ion corrections |
-| Fluctuations | Selected condensed-loss approximation or separate quantile package | Restricted Geant4 ion and Universal/Glandz distributions, using the same electron production threshold |
-| Hard delta production | No independent delta-collision clock in the compared local-deposition baseline | Sampled electron optical depth, rate cache, post-step acceptance and electron energy sampling |
-| Primary step | Preset maximum step and relative-loss limit, then geometry/nuclear truncation | Native ion StepFunction(0.1, 0.001 mm), then competing geometry, nuclear and electron distances |
-| Electron dose | Local deposition in this water comparison | Still local deposition; no complete electron spatial tracking |
-| MCS and secondary EM | Existing configured transport | Unchanged |
-
-**One primary step:**
-
-1. Query native restricted stopping, range, effective charge and electron reaction rate
-   at the current energy. Raw Geant4 spline intervals are retained rather than replaced
-   by a newly smoothed range curve.
-2. Determine the continuous-process step from the remaining range R:
-
-   ```text
-   h_EM = 0.1 R + 0.0009 mm × (2 − 0.001 mm/R),  R > 0.001 mm
-   h_EM = R,                                    otherwise
-   ```
-
-   This **overrides** `maximum_step_mm` and `maximum_relative_energy_loss` for
-   candidate primary steps. Geometry and nuclear/electron collision distances can
-   shorten it further. The electron clock consumes the final path length; the distance
-   comes from remaining sampled optical depth, not a fixed mean free path.
-3. Calculate restricted mean loss. Short steps use restricted stopping × length;
-   larger estimated losses (above the 2% linear-loss threshold) use inverse range,
-   keeping the pre-step mass/charge scaling during inversion. Apply the corresponding
-   along-step ion correction and low-energy replacement, with the remaining kinetic
-   energy as the upper bound.
-4. Sample enabled restricted fluctuations. At an electron candidate, use the post-loss
-   energy for the integral acceptance test, then sample the delta-electron spectrum
-   and form-factor veto. Reset the electron clock/cache after the candidate.
-5. Deduct and score each contribution once:
-
-   ```text
-   DeltaT = sampled restricted continuous loss + accepted delta-electron energy
-   ```
-
-   Restricted stopping excludes the above-threshold transfers treated explicitly.
-   Both terms are currently deposited locally. Do not stack the older proportional
-   electron response on top of this candidate.
-
-The shipped water data use a delta threshold of approximately **57.023 keV** and
-Geant4 11.3.2 default opt4 / Water_75eV extraction. The configuration requires
-`straggling_scale: 1.0`, without an energy-dependent scale. No TOPAS parameter or
-empirical straggling scale was adjusted to obtain the reported improvement.
-
-The configuration also enables the previously isolated **primary inelastic rate-cache
-candidate**. This is a companion nuclear change, not an EM interaction: only inelastic
-rates enter that cache and its post-EM acceptance test; elastic retains its local rate.
-Consequently full-physics improvement cannot be attributed solely to EM. Independent
-pure-EM comparisons support the EM improvement but do not isolate each component's contribution.
-
-```yaml
-run_mode: research
-primary_em_model: g4_joint_water_v1
-primary_joint_em_data_directory: /absolute/path/to/MAIGO/data/water_joint_em_v1
-```
-
-Run `python3 tools/verify_water_joint_em_data.py` before use. The GPU loader also pins
-both table hashes. Missing/corrupt data fail; obsolete isolated environment switches
-are rejected. Supported scope is **local GPU, primary C12, homogeneous unit-density
-water and zero beam energy spread**. CT, material slabs, heterogeneous inserts, other
-primaries and electron-response stacking are not admitted. Table coverage alone does
-not validate other beam energies or geometries.
-
-**Evidence and remaining limits.** With unchanged default TOPAS, 50k histories per
-energy and 3D dose summed laterally, full-physics peak errors at 100/200/300 MeV/u
-changed from −2.729/−4.775/−2.565% to +0.148/+0.103/+0.101%. Independent 0.1 mm
-pure-EM depth scoring gave peak errors within approximately ±0.15%. All six integrated
-runs reproduced isolated transport audit counts, with zero overflow and sampling failures.
-These are finite-statistics results, not a production acceptance or a Gamma result.
-Full-physics integral dose remains low by 0.3–0.7%, and the 300 MeV/u high-dose mean
-absolute relative error slightly increased. Peak improvement does not establish whole-curve,
-lateral halo, CT or minibeam accuracy. Explicit delta generation here is not full electron tracking.
-
-See [implementation and acceptance record](docs/physics/water_joint_em_v1.md),
-[data provenance](data/water_joint_em_v1/manifest.json),
-[joint lookup](include/carbon/joint_em_view.hpp), and
-[restricted fluctuation sampler](include/carbon/restricted_fluctuation_candidate.hpp).
-
-### 3.6. Unified water / Schneider EM for all 18 ions
-
-`em_model: g4_material_joint_v1` extends the native joint EM treatment to primary
-C12 and all 18 supported charged ions using one `data/em/unified_em_v1.bin` package.
-It covers water and all 25 Schneider sections with density-resolved tables.
-Each ion uses its own native restricted stopping/range, delta rate, StepFunction,
-along-step correction, fluctuation law, spin and form-factor parameters.
-This option uses the same transport helpers for primary and secondary particles.
-
-The native mean-loss update is followed by IonFluc or Universal/Urban fluctuations
-and a discrete delta proposal selected from remaining optical depth. Delta energy
-is deposited locally. Enable both primary and secondary energy straggling with
-`straggling_scale: 1.0`. Material changes reset cached rates while preserving the
-remaining optical depth; CT faces limit steps and escaping secondaries are tallied
-as charged escape. Extra heavy recoil isotopes keep the existing recoil path.
-
-Production execution is enabled under the user-authorized exception in `AGENTS.md`.
-`config/unified_water_production.yaml` and `config/rt07575_unified_em_production.yaml`
-select the pinned unified package. Historical configs without `em_model` retain legacy EM.
-All-ion nuclear elastic retains its separate research-only guard; the new CT
-production entry omits that bank. Use the research config for the combined model.
-It cannot be stacked with the old water joint model or electron-response packages.
-The existing validated nuclear/recoil inputs remain required. Initial all-ion
-component and 50k transport checks passed, but density interpolation and patient
-Gamma require further validation; the quality report retains this warning even
-when production runtime checks pass. See [package, configuration and validation](docs/physics/unified_em_v1.md).
+Deflections are generated in the local transverse frame and rotated into the track
+frame, with spatial/directional updates according to the selected transport branch.
+The scale defaults to 1.0 and is not tuned in the two production presets.
+This is not Geant4's full msc implementation and does not replace hadronic elastic.
+See [MCS](include/carbon/multiple_scattering.hpp).
 
 ## 4. Inelastic nuclear interactions
 
@@ -377,294 +248,224 @@ packages are not included in Release 11.3.2. See [implementation and data](docs/
 [validation evidence](evidence/step-31/elastic-production-validation-20260911/README.md) and
 [September 12 reference migration](evidence/step-31/elastic-migration-20260912/README.md).
 
-## 6. Electron tracking and energy deposition
+## 6. Electrons and neutral products
 
-### 6.0. What the current CT calculation actually runs
+The active unified EM model samples delta transfers but does not track those electrons
+spatially. Restricted and delta losses contribute local dose; local deposition itself
+is an approximation, particularly for interfaces, lateral tails and minibeam valleys.
+There is no active electron packet kernel to disable for another large speed gain.
 
-The September 11 final-stopping lung calculation (primary midpoint ON, secondary
-material stopping ON, secondary exact-faces ON) uses **continuous ion energy loss plus
-the section-0 transverse delta-tail response**. It does not create and advance an
-individual track for every ionization electron. Changing the ion stopping table does
-not automatically enable a different electron transport model.
+The repository also contains old section-0 delta-tail redistribution and material
+electron-family/packet replay candidates. Packets move an already budgeted energy
+weight through recorded states and continuations; they are not a second energy loss
+charged to the ion. They are not enabled by the unified production presets and
+cannot simply be stacked on the restricted-plus-delta model. Material-response
+accuracy remains unvalidated. See [packet transport](include/carbon/electron_packet_transport.hpp)
+and [electron plans](plan2/README.md).
 
-| Configuration / response | State in that calculation | Meaning |
+Neutrons, photons and decay products do not all have a complete production transport
+chain. Unsupported energy, escape and compatibility sinks are recorded explicitly;
+small integrated energy does not prove a negligible local halo/valley contribution.
+Do not describe the current model as complete Geant4 transport of all secondaries.
+
+## 7. Scoring and dose comparison
+
+```text
+Dose(Gy) = Edep(MeV) × 1.602176634e−13 / voxel_mass(kg)
+voxel_mass(kg) = rho(g/cm³) × volume(mm³) × 1e−6
+```
+
+Use cumulative 3D DoseToMedium. Obtain IDD by lateral summation of the 3D scorer;
+for heterogeneous voxels convert dose back to deposited energy with voxel mass
+before forming an energy-deposition IDD. A bare sum of Gy is not an energy sum.
+Lateral profiles and core/halo widths are separate observables. LET remains a
+separate option; the present dose performance comparisons disable LET.
+
+Current CT Gamma evaluation:
+
+- Build the BODY mask from RTSTRUCT and evaluate only reference voxel centers inside it.
+  Record the ROI identity, rasterization/interpolation method and mask hash.
+- With the current 10% dose cutoff, evaluate `BODY ∩ {Dref >= 0.1 Dmax}`;
+  `Dmax` is the full-volume reference maximum. BODY membership and dose threshold are distinct.
+- Global tolerance uses `Dmax`; local tolerance uses the reference dose at the query voxel.
+  Compare 3%/3 mm, 2%/2 mm, 1%/1 mm and 3%/0 mm at matched histories and geometry.
+- For positive DTA, use search spacing `DTA/10`: 0.3, 0.2 and 0.1 mm respectively,
+  with trilinear interpolation. BODY selects reference query points; do not zero
+  the evaluated dose outside BODY. A discrete search is not an analytic continuous minimum.
+- Zero DTA compares the same voxel and has no search-step dependence.
+
+No fitted dose normalization or registration is used. The older September 5
+whole-volume/no-BODY/0.5-mm results remain historical; some old evaluator scripts
+still implement that convention and must not be used as the current protocol unchanged.
+A current implementation example is [BODY evaluation](benchmark/benchmark20260912/RT06423_replica01/evaluate.py).
+
+Quality checks cover finite values, provenance, sampling audits, energy accounting
+and zero queue overflow. An overflow invalidates the shard: split and rerun.
+Global energy closure does not establish spatial-dose accuracy or close every nuclear Q value.
+
+## 8. Species grouping and measured throughput
+
+`secondary_species_grouping: true` creates a GPU index permutation for each secondary
+generation: 18 species buckets plus other products. Histogram, prefix sum and scatter
+leave particle records, parent histories and RNG streams intact. Descendants are
+processed in the next generation. The implementation does not include the extra
+split kernels. Additional index memory is approximately 4 bytes per queue slot.
+
+The two production YAML files explicitly opt in; the configuration-structure default
+is false for compatibility. Logs print the mode and grouping time. The quality report
+retains `secondary_species_grouping_accuracy_pending` after the authorized integration.
+
+RT07575, 1M histories, full secondary unified EM **and research elastic enabled**, two runs:
+
+| Scheduling | Mean histories/s | Relative gain |
+|---|---:|---:|
+| Original | 11,154 | — |
+| Species grouping | 14,691 | 31.7% |
+| Grouping + isolated split | 14,828 | 32.9%; split not integrated |
+
+This denominator includes grouping overhead. These numbers are not measurements of
+the two production presets with elastic omitted. Grouping changed maximum voxel dose
+by 0.0203% of peak; original-schedule repeats differed by 0.0047%. Counts and EM audits
+matched, but the origin of the larger difference remains unresolved. Authorization
+to integrate is not a passed dose-equivalence gate.
+
+Production-entry checks used RT07575 200k and water 50k, with grouping on/off,
+full secondary EM and no independent elastic. All four runs passed execution quality,
+zero overflow and matching step/audit/reaction counts; maximum dose differences were
+0.0000133% and 0.000172% of peak. These do not resolve the elastic-enabled 1M discrepancy.
+See [study and integration records](benchmark/benchmark20260914/secondary_schedule/README.md).
+
+Report kernel time, program transport elapsed and full process wall time separately.
+Loading, preprocessing, transfers, finalization and output affect the last two;
+do not label their difference as a measured individual physics-process cost.
+
+## 9. Approximation options for substantial acceleration — proposals only
+
+No approximation below was enabled by this documentation update. The target is
+reduced computational work with a declared error budget; 50k histories/s has not been achieved.
+After grouping, the 1M elastic study still spent about 37.7 s in primary kernels and
+26.2 s in secondary kernels. A 50k/s target allows 20 s total. Eliminating secondary
+work alone cannot reach it: primary transport must also become substantially cheaper.
+
+| Candidate | Work removed | Potential and main limitation |
 |---|---|---|
-| `ct_schneider_delta_tail_file` | Pinned section-0 table enabled | Redistributes a fraction of primary C12 loss transversely |
-| `material_electron_response_index_file` | Empty | No material electron packet replay |
-| `ct_electron_joint_response_diagnostic_file` | Unset | No joint longitudinal/radial response |
-| `ct_electron_segment_transport` | `false` | No ordered joint-path replay |
-| `ct_schneider_delta_longitudinal_file` | Unset | No longitudinal supplement |
-| `enable_electron_transport` | Default `false` | No explicit-electron mode; its configuration validation rejects CT |
+| Joint EM block propagator | Many continuous-loss, delta-clock and scattering microsteps | Highest broad potential; difficult joint-distribution and geometry validation |
+| Short-range recoil/fragment terminal kernel | Many low-energy steps ending inside one voxel | More localized scope; contribution to runtime must be measured first |
+| Secondary weighted roulette | Transport only a sampled subset, increase surviving weights | Higher raw histories/s may come with proportionally worse variance |
+| Secondary CSDA/mean-only fast mode | Secondary delta clocks and stochastic loss detail | Explicitly biased alternative model; cannot count as full unified EM |
+| Less frequent MCS preparation/updates | Repeated angular/displacement work | Separate scattering length changes finite-step physics; unlikely alone to supply a multi-fold gain |
 
-The loss computed from stopping, after any enabled fluctuation, supplies the energy
-budget. The ordinary charged-ion scoring path deposits that budget without resolving
-the individual electron collisions. The enabled tail response moves some of the primary
-budget to another scoring location; it does not subtract extra kinetic energy from the
-carbon. This section-0 response is called in the primary branch, not in the secondary-ion
-loop. Secondary material-specific stopping therefore does not imply that secondary-born
-electron families are tracked using the material response bank.
+### 9.1. Primary research direction: a joint EM transition, not delta-only batching
 
-The separate `ElectronTransportTable` contains electron/positron collisional, radiative,
-total stopping and CSDA ranges. The presence of those tables and an explicit-electron
-configuration key is not evidence of active CT electron tracking. The configuration
-validator limits that key to homogeneous water and excludes the serial backend.
-See [configuration validation](src/config.cpp), [GPU branches](src/transport_sycl.cpp),
-and [electron stopping table](include/carbon/electron_transport.hpp).
+Build a conditional propagator from the current microstep model for
+`(species, material, density, energy, block length)`. It must represent **together**
+restricted loss, delta loss, outgoing energy, angular/displacement changes and
+intrablock dose placement. The nonlinear change of stopping and rate with energy
+couples these quantities; matching delta mean and variance alone is insufficient.
 
-### 6.1. Three different meanings of “electron package”
+A block cannot jump past the first competing nuclear collision or a material boundary.
+Energy-dependent integrated nuclear hazard must be consistent with the sampled
+energy trajectory; evaluating the nuclear rate only at the endpoint is not equivalent.
+An endpoint-only spatial check is insufficient for a path that can leave and re-enter
+its voxel. Begin with short blocks in homogeneous regions, away from range end and
+interfaces, with an explicit fallback/transition rule that does not reject and resample
+boundary-crossing outcomes into a biased contained-path distribution.
 
-| Object | Stored information | Runtime role / validation scope |
-|---|---|---|
-| Frozen section-0 transverse delta-tail | Moved fraction and transverse response versus C12 energy | Narrow dose redistribution used in September 5 CT |
-| Joint / ordered response candidate | Correlated longitudinal–radial response or ordered full-family paths | Independent experimental branch |
-| Material electron response bank | Birth samples, raw states/segments, child links and continuation indices | Energy-packet replay candidate; not accepted physics |
+Near the Bragg peak, low-density production-cut onset and interfaces, retain the
+original stepping initially. Sample total loss and intrablock deposition consistently;
+placing all block energy at its start/end would add a separate spatial approximation.
+A small interpolated joint distribution or reduced conditional model may remove
+repeated work, but its table size, lookup cost and fallback frequency can erase the gain.
+No speed factor is established for this proposal.
 
-These objects are not CINEL03 nuclear final-state packages. They alter where an already
-budgeted electromagnetic loss is scored, rather than introducing an additional carbon
-energy loss on top of stopping.
+This differs from the rejected compound-Poisson/delta-quantile candidates:
+those retained or approximated only parts of the joint propagation while changing
+continuous-fluctuation and MCS step lengths. Re-running them unchanged is not proposed.
 
-### 6.2. Frozen transverse response
+### 9.2. Lower-scope candidate: short-range termination
 
-The strict-dose stack includes a TOPAS-derived transverse redistribution of part of primary
-C12 loss in section 0, extracted at 150/200/225 MeV/u. Runtime processing is:
+For additional EM-only heavy recoils, estimate whether the entire remaining
+transport is negligible relative to distance to each face and the dose-gradient scale.
+Replace many steps by a terminal deposition distribution or, in a declared tighter
+limit, local deposition. A CSDA range is a mean estimate, not a hard upper bound:
+range tails and material escape need a bound/error budget. Preserve residual energy
+exactly; do not apply this rule indiscriminately to all low-energy protons or alphas.
+For particles that can still undergo nuclear reactions, quantify the omitted reaction
+probability before any shortcut. Minibeam use requires a bound relative to beam/valley
+width, not merely a coarse voxel size. Measure step/time share by species and range
+before implementation; no existing breakdown proves this alone has a large gain.
 
-1. **Check the source.** The primary step must be inside a section-0 voxel, with an
-   aligned 3D scorer and an eligible source-mask entry. The mask examines existing
-   face neighbours along axes with the minimum CT spacing; these neighbours must
-   also be section 0. Grid edges alone are not treated as material interfaces.
-2. **Sample the response.** Query the table at the current C12 energy for a moved
-   fraction and sampled radius. Form `W = DeltaE × clamp(f_tail, 0, 0.5)` and sample
-   one uniform azimuth. The source point is the midpoint of the carbon step.
-3. **Place the endpoint.** Rotate the sampled transverse displacement into the frame
-   perpendicular to the current carbon direction:
-   `x_target = x_mid + r × (cos(phi) e1 + sin(phi) e2)`.
-   Longitudinal displacement relative to that midpoint is zero. For an oblique beam,
-   the endpoint can nevertheless have a different world z coordinate.
-4. **Assign energy once.** Apply the destination rules below. This is endpoint
-   redistribution: no electron momentum, scattering history or intervening material
-   sequence is propagated along this transverse displacement.
+### 9.3. Weighted sampling and deliberately simplified secondary EM
 
-| Sampled destination | Dose and energy accounting |
-|---|---|
-| Inside the scorer and section 0 | Subtract W from local loss and score W in the destination 3D voxel |
-| Outside the scorer | Subtract W locally and record scorer escape; do not fold it into an edge voxel |
-| Inside the scorer but another section | Retain W locally and increment the unsupported-destination counter |
-| Source ineligible, or sampled fraction/radius not positive | Keep the loss on the ordinary local scoring path |
+With roulette survival probability `p`, surviving track weight becomes `w/p`.
+The expectation is preserved only if every descendant, dose/LET tally, escape and
+energy ledger propagates the weight correctly. Current transport has unit-weight
+queue/scoring paths; this is not a drop-in configuration switch. Realized per-history
+energy closure and estimator bookkeeping need redesign; ordinary overflow/loss
+checks must remain separate from statistical roulette fluctuations.
 
-The moved, retained-on-unsupported-destination and escaped energies have separate
-counters. A destination in section 0 does not prove the entire displacement stayed in
-section 0; this model does not solve general air/tissue electron boundary transport.
-The accounting is `DeltaE = local remainder + relocated dose + scorer escape`, with
-the unsupported-destination amount already included in the local remainder.
+Judge roulette by time to fixed uncertainty (for example `1/(time × variance)`),
+not raw primary histories/s. Correlated loss of rare fragments can worsen local Gamma,
+halo or valley precision. A mean-only secondary model instead introduces bias:
+it must be labelled a separate approximate mode, with no claim of full-unified accuracy.
+A blanket removal of secondary fluctuations, nuclear elastic, or neutral dose is
+particularly unsuitable as a minibeam/valley default.
 
-A joint candidate instead uses correlated longitudinal/radial coordinates; independently
-sampling their marginals would discard the measured correlation.
+### 9.4. What not to repeat, and how to accept a new approximation
 
-The September 5 three-case executable includes the entrance-mask candidate. Later
-longitudinal, joint and ordered full-family response implementations are separate
-experiments; that benchmark does not validate them. Ordered replay preserves the
-recorded path and ancestry rather than replacing a trajectory by its endpoint chord.
+- RNG dummy gains do not establish faster physical sampling. Reverted buffering and
+  macro-tick experiments are not production options; secOFF/K speed figures cannot
+  serve as full-unified baselines.
+- The per-electron Poisson batching experiment was slower. The delta-only quantile
+  candidate gained about 10.9% in one RT07575 run but failed peak/R80 screens;
+  it was not a successful precision-preserving replacement. See
+  [batching](docs/delta_batch_sampling.md) and [quantile results](docs/rt07575_quantile_optimization.md).
+- Current electron deposition is already local and nuclear final states already use
+  table replay. Disabling a nonexistent full-electron track or replacing an online
+  nuclear cascade cannot supply additional savings in this implementation.
 
-### 6.3. Optional material packet tracking: extraction and loading
+First measure how much time and how many steps the eligible region/species consumes.
+If fraction `f` of runtime can be accelerated by `s`, total speedup is at most
+`1 / [(1−f) + f/s]`, before new lookup/scheduling overhead. Then validate conditional
+loss distributions and their correlations, range/end-state distributions, and energy accounting.
+Use unchanged default TOPAS for 100/200/300 MeV/u, b3/b4 interfaces and RT07575;
+350/400 MeV/u are supplementary. Compare IDD peak/R80, core/halo widths, lateral
+profiles and BODY local/global Gamma at matched histories and across independent seeds.
+For approximations, identical event counts are not generally expected; statistical
+agreement and dose bias replace scheduling-only bitwise/count equivalence tests.
 
-The TOPAS [electron scorer](startup/extensions/CarbonElectronDepositNtupleV3.hh) records
-run/event/track/parent identity, pre/post KE, deposited energy, positions and material/density.
-Its transport-state extension also records actual momentum directions, physical step length,
-status and post-material information. A chord direction is not substituted for momentum.
-The generating C12 step is bound explicitly; descendants inherit their family association
-through the offline genealogy rather than being counted as new independent C12 births.
+Provisional continuation gates may reuse the earlier peak-error increase ≤0.3 percentage
+points and R80 displacement ≤0.1 mm screens; they are screening criteria, not current
+clinical acceptance. Prespecify allowed Gamma degradation and uncertainty before testing.
+Minibeam extension additionally needs valley dose/PVDR and spatial-tail validation.
+Do not tune the reference TOPAS to match the approximation.
 
-Offline tools build material dictionaries, birth channels, ordered state arrays, child-link
-indices and continuation lookup structures. Source hashes, schema, material identity,
-energy coverage and memory budgets are checked at loading. Recorded finite-box escape
-is an extraction boundary condition, not automatically an escape from the patient.
-See [state compiler](tools/compile_electron_state_catalog.py) and
-[segment compiler](tools/compile_water_electron_segments.py).
+## 10. Reproduction and data
 
-A further material-response candidate loads SHA-pinned birth distributions, raw electron
-segments and continuation indices for water or Schneider CT. It transports an energy-valued
-statistical packet W, distinct from the sampled electron kinetic energy. Each packet has
-one terminal energy owner: deposit, patient/scorer escape or explicitly uncovered energy.
-Finite source exhaustion requests continuation; it is not patient escape. Missing photon
-continuation is reported separately and is not deposited locally. Same-section density
-interpolation mixes measured conditional distributions; full density and interface accuracy
-remain unvalidated. Electron birth material and boundary traversal must use consistent
-voxel ownership. The runtime supports device-resident or host-mapped response banks
-with explicit memory budgets.
+Build C++20/SYCL for local `nvptx64-nvidia-cuda`, `sm_75`. Freeze the executable,
+resolved YAML, data hashes, CT/source transforms, histories/spot allocation, seed,
+scoring and shard manifest. Large physics binaries and external CT/source inputs
+are required in addition to a clone; never infer current data coverage from an older release tag.
 
-### 6.4. Birth selection and the packet energy budget
+Before Schneider CT runs execute `python3 tools/verify_schneider_v2_1_data.py`.
+The exact v2.1 nuclear/stopping bundle remains the minimum; no water/four-class or
+older-schema fallback is allowed. Unified EM uses `data/em/unified_em_v1.bin`, SHA256
+`8c5d970b3b639bfca2f448730271bed4fc04721aba73100e2efbe09dffe44855`.
+New propagator/recoil approximation tables would be new candidate data, not an
+automatic extension of that package's authorization or validation.
 
-For a valid material-response query in the primary C12 CT branch, the code samples a
-birth point along the carbon step and obtains the movable fraction f from the response:
+GPU jobs stay local. If no TOPAS environment is specified, use local `sbatch` and
+`/mnt/sda/wuwei`; an explicitly named remote CPU host/cluster is allowed under the
+repository rules. Aggregate limits are 192 CPU threads and 160 GB RAM. Split runs
+when needed and rerun every overflowed shard; merge only accepted shards.
 
-```text
-W = f × DeltaE_C12
-local carbon deposit = DeltaE_C12 - W
-carbon KE after EM = carbon KE before EM - DeltaE_C12
-```
+This revision updates documentation and proposals; it adds no new physics validation
+or transport approximation. Current production-integration checks are recorded in Section 8.
 
-W is a statistical energy weight, not a new electron's sampled kinetic energy. Replaying
-it does not slow the carbon a second time. For two density nodes in the same section,
-w=(rho-rho0)/(rho1-rho0), the fraction is (1-w)f0+w f1; birth-table selection is weighted
-by these fractional energy contributions. Continuation has its own conditional sampler.
-No crossing to another section is hidden by a nearest-material alias, and no unvalidated
-1/rho trajectory rescaling is implied by the interpolation formula.
+## References
 
-### 6.5. Follow one energy lineage through the recorded family
-
-At a complete recorded electron step, the raw physical state must satisfy:
-
-```text
-T_in = dE_local + T_parent,out + sum(T_children)
-P(deposit) = dE_local/T_in
-P(parent continuation) = T_parent,out/T_in
-P(child j) = T_child,j/T_in
-```
-
-The algorithm selects one of these energy-proportional branches and carries the same W
-along it. It does not clone W into all children. If deposition is selected, W is scored at
-the sampled location of that segment; otherwise the cursor follows the parent or selected
-child. This is an estimator of the energy distribution through the family, not a one-to-one
-simulation of every physical electron. Its stochastic variance and accuracy need independent
-validation. Raw genealogy and closure are checked before the branch is selected.
-See [energy-lineage selection](include/carbon/electron_energy_lineage.hpp).
-
-```mermaid
-flowchart TD
-    A[W from carbon EM loss] --> B[Sample birth and bind raw electron state]
-    B --> C[Advance to next step or CT boundary]
-    C --> D{Energy-lineage selection}
-    D -->|Deposit| E[Score W once in destination voxel]
-    D -->|Parent or electron child| C
-    D -->|Material boundary or finite-source end| F[Conditioned continuation lookup]
-    F -->|Covered| C
-    F -->|Missing coverage| G[Explicit untracked energy and diagnostics]
-    D -->|Patient escape| H[Escape ledger, no dose]
-```
-
-### 6.6. Interfaces, missing coverage and terminal ownership
-
-At a CT interface the cursor is clipped to the boundary and the next material/density
-selects a compatible continuation; two air endpoints do not justify crossing tissue using
-an air path. At source exhaustion, positive remaining KE requires continuation sampling.
-An optional short-range shortcut can terminate a packet at its birth point only after
-a containment check; it belongs to the material candidate and is inactive in the CT
-calculation described in Section 6.0.
-Missing photon continuation is a separate uncovered-energy sink; it is not a local deposit
-or patient escape. Invalid geometry, unresolved electrons and an exhausted iteration cap
-retain explicit failure accounting. A rejected birth query is not silently treated as normal
-local stopping dose.
-
-For each parent loss, the accounting objective is:
-
-```text
-DeltaE_C12 = retained local energy + packet energy deposited in scorer
-          + packet energy outside scorer / physically escaped
-          + explicitly untracked packet energy
-```
-
-These are mutually exclusive energy owners; diagnostic subcategories must not be added
-again to totals that already contain them. Energy closure verifies accounting, not the
-correctness of the spatial response.
-
-### 6.7. Activation and validation boundary
-
-The material candidate is mutually exclusive with the older delta-tail, joint and explicit
-electron modes and requires 3D scoring with LET disabled. Run quality still reports
-`unvalidated_material_electron_response`; closure alone cannot remove this failure.
-See [packet transport](include/carbon/electron_packet_transport.hpp),
-[density sampling](include/carbon/material_electron_density.hpp) and
-[quality gates](src/run_quality.cpp). General density/geometry/birth conditioning and
-promotion gates remain under [plan2](plan2/README.md).
-
-## 7. Scoring and quality
-
-Dose(Gy) = Edep(MeV) × 1.602176634e−13 / mass(kg), with
-mass = density(g/cm3) × volume(mm3) × 1e−6.
-Output is cumulative 3D DoseToMedium. IDD is derived by transverse summation, not a 1D scorer;
-isocenter profiles are interpolated lines, not IDD.
-
-Optional LET_d = sum(L × dE)/sum(dE); shards merge both moments before division.
-LET is disabled in this three-case dose benchmark, which supplies no new LET validation.
-Origin-dose outputs are diagnostics, not independent TOPAS species references.
-
-Checks include finite outputs, exact particle/candidate accounting, zero overflow,
-data provenance and energy closure. Explicit sinks check deposited = in-grid + outside-grid
-and voxel sum = in-grid with implemented relative tolerance 1e−3.
-Global closure is not exact nuclear mass/Q closure at every vertex.
-See [scoring contract](docs/scoring_validation.md) for fields and compatibility conditions.
-
-## 8. Evaluation and limitations
-
-The 2026-09-05 dataset has 60 accepted shards, 457,898,870 histories and zero overflow.
-Numerical results reside in the [current index](docs/results.md) and frozen artifacts.
-
-Evaluation uses nominal cumulative Gy without LS scaling or fitted registration.
-The mask includes every reference voxel ≥10% of whole-volume Dmax, with no BODY mask.
-Global tolerances use Dmax; local tolerances use the reference voxel dose.
-Criteria: 3%/3mm, 2%/2mm, 1%/1mm, 3%/0mm.
-Nonzero distances use a 0.5 mm spherical lattice and trilinear interpolation,
-not an analytic continuous minimum; 3%/0mm compares the same voxel.
-
-Results apply only to frozen inputs/executable. Strict local and low-density/interface
-residuals remain; neither a unique electron cause nor full physics equivalence is established.
-This benchmark does not close plan2, upgrade packages or establish clinical readiness.
-
-## 9. Later evaluation and performance work
-
-The local, untracked report `benchmark/topas10x/gpu_current_20260909.md` records a later
-60-shard three-case run, refined Gamma and an experimental RT07575 electron full20 A/B.
-These local artifacts are not supplied by this two-file documentation update and are not
-a replacement for the published September 5 evidence. Their experimental electron
-results do not promote the minimum physics stack; reproduction requires the corresponding
-executable, configuration, raw-dose hashes and quality reports.
-
-The later `tools/evaluate_gamma_adaptive.py` tool (source checkpoint `f6245c5`) first
-reproduces the frozen 0.5 mm pass mask, then searches only failures on a 0.25 mm lattice
-using the same trilinear interpolant. Coarse passes are retained, and 3%/0mm is unchanged.
-It checks dose hashes/history counts and writes a separate `gamma_refined.json` without
-overwriting the frozen result. Refined and coarse rates must be labelled separately:
-search refinement changes numerical evaluation, not transported dose. Neither finite
-lattice is an exact continuous minimum. The tool is a later local commit, not part of
-this documentation-only publication.
-
-Performance reporting separates primary-plus-secondary GPU kernel time, the program's
-transport elapsed time, and complete process wall time including response loading and I/O.
-Histories/s must identify its denominator, statistics, chunk size, scorer settings and
-hardware; a small smoke test cannot establish full-plan acceleration against TOPAS.
-
-The [tracked 64-history short-range comparison](benchmark/benchmark20260909/short_range_64_comparison/README.md)
-uses patient 20022516 and thresholds 0, 0.1 and 0.25 mm. Raw dose is bitwise equal,
-overflow is zero, but all runs remain rejected for unvalidated material response.
-Primary kernel times are 61.2625, 61.5884 and 61.5946 s: no speedup was demonstrated.
-The shortcut requires a complete childless terminal tail contained in the current voxel;
-the default threshold is zero. The later cached-tail implementation remains a candidate,
-not an accepted performance result.
-
-## 10. Reproduction and validation procedure
-
-Build settings are specified by [CMake](CMakeLists.txt) and [presets](CMakePresets.json):
-C++20, SYCL enabled, NVIDIA target `nvptx64-nvidia-cuda`, local `sm_75`.
-Freeze executable SHA, parsed configuration, source/CT transforms, all data pins,
-spot allocations, seeds, scorer options and shard manifests. Run
-`python3 tools/verify_schneider_v2_1_data.py` before every Schneider CT campaign;
-missing files, hash/size/schema mismatch or incomplete 14-projectile coverage are hard failures.
-Large binaries and external raw responses are not guaranteed to be present in a fresh clone.
-
-GPU work runs only on the local RTX 2080 Ti. TOPAS extraction uses local `sbatch`,
-raw data under `/mnt/sda/wuwei`, and source/build/extensions under `/home/wuwei/topas`.
-All jobs together are limited to 192 CPU threads and 160 GB memory, allocated by workload.
-Split large GPU history sets; any secondary overflow requires smaller shards and reruns.
-Merge only individually acceptable shards and verify aggregate energy and history accounting.
-
-Data promotion requires explicit TOPAS/Geant4 provenance, manifest and host/device lookup
-checks, 50k closure gates, paired one-shard Gamma, and zero-overflow full validation.
-Independent phantom/domain/geometry tests are also required for electron candidates.
-Historical test fixtures and old documentation are not evidence that current tests passed;
-this methods update itself runs no new transport or physical-accuracy validation.
-
-## References and traceability
-
-- [FRED paper interpretation / source pointers](docs/FRED_Carbon_Fragmentation_Model.md)
-- [Physics specification](docs/TOPAS_GPU_Physics_Model.md) and [code map](docs/structure.md)
-- [Frozen benchmark and provenance](benchmark/topas10x/gpu_current_20260905.md)
+- [FRED carbon model analysis](docs/FRED_Carbon_Fragmentation_Model.md)
+- [Unified EM data/model](docs/physics/unified_em_v1.md)
+- [Older primary-water model, removed from code](docs/physics/water_joint_em_v1.md)
+- [Historical physics specification](docs/TOPAS_GPU_Physics_Model.md)
+- [Scoring contract](docs/scoring_validation.md) and [archived drafts](docs/archive/README.md)

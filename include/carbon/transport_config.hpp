@@ -145,6 +145,9 @@ struct TransportConfig {
     std::string em_model{"legacy"};
     std::filesystem::path em_package_file{};
     std::string em_package_sha256{};
+    // Research-only step extension, applied away from stopping/cut-onset regions.
+    double em_primary_step_scale{1.0};
+    double em_secondary_step_scale{1.0};
     std::string primary_em_model{"legacy"};
     double maximum_step_mm{0.5};
     double maximum_relative_energy_loss{0.005};
@@ -373,6 +376,8 @@ struct TransportConfig {
     // clock, material-specific stopping). Off = CSDA fallback
     // (mid_sp x step, packaged fluctuation for C12 only).
     bool enable_secondary_unified_em{false};
+    // GPU generation-wise species ordering. Production YAML opts in explicitly.
+    bool secondary_species_grouping{false};
     // Scalar fallback for Bohr straggling. If the two optional tables below
     // are populated, the scale is linearly interpolated using the current
     // particle E/A rather than the incident beam energy. Empty tables retain

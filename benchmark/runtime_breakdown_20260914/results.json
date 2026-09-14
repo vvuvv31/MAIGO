@@ -1,0 +1,246 @@
+{
+  "runs": [
+    {
+      "label": "runtime_current_1m_baseline",
+      "status": {
+        "complete": true,
+        "returncode": 0,
+        "wall_s": 52.775105237960815,
+        "config_sha256": "94f7dfbc149af0d097afefea56871e4cfd864597c3e3791155ef2ce74f3107d3",
+        "binary_sha256": "c56bc1c9ab1f31bacbcd5048c9d0c8d176cd45263fc6f862f54fdf8eb454b883",
+        "audit": [
+          [
+            0,
+            2202034783,
+            676418285,
+            2250786233,
+            1984087180,
+            2127998197667042,
+            163178812370929,
+            0
+          ]
+        ],
+        "quality": {
+          "schema_version": 3,
+          "status": "pass",
+          "run_mode": "production",
+          "accepted": true,
+          "absolute_physical_energy_residual_MeV": 9022.62406471,
+          "physical_relative_energy_residual": 3.47189817627e-06,
+          "absolute_accounting_energy_residual_MeV": 9022.62406471,
+          "accounting_relative_energy_residual": 3.47189817627e-06,
+          "absolute_energy_residual_MeV": 9022.62406471,
+          "relative_energy_residual": 3.47189817627e-06,
+          "topas_reference_energy_sink_active": false,
+          "queue_overflow_count": 0,
+          "queue_overflow_energy_MeV": 0,
+          "voxel_scored_energy_MeV": 2294592217.8,
+          "in_grid_deposited_energy_MeV": 2294592225.55,
+          "outside_grid_deposited_energy_MeV": 0.151111379266,
+          "grid_split_closure_ratio": 1.00000000786,
+          "voxel_to_ingrid_ratio": 0.999999996625,
+          "voxel_to_total_deposited_ratio": 1.00000000442,
+          "failures": [],
+          "approximations": [
+            {
+              "code": "secondary_species_grouping_accuracy_pending",
+              "message": "GPU species index grouping; RNG identities preserved; production integration authorized; RT07575 scheduling dose difference 0.0203% of peak remains under investigation",
+              "value": 1,
+              "limit": 0
+            },
+            {
+              "code": "unified_material_em_accuracy_pending",
+              "message": "Unified water/Schneider EM for all 18 charged ions; local delta deposition; production execution authorized, density cut-onset and patient Gamma accuracy gates remain pending",
+              "value": 1,
+              "limit": 0
+            },
+            {
+              "code": "schneider_post_em_null_collisions",
+              "message": "sampled candidates resolved as post-EM null collisions (track continues, no lookup)",
+              "value": 27,
+              "limit": 0
+            },
+            {
+              "code": "schneider_primary_post_em_null_collisions",
+              "message": "primary candidates resolved as post-EM null collisions (track continues, no lookup)",
+              "value": 32,
+              "limit": 0
+            }
+          ]
+        },
+        "elapsed_s": 51.057075,
+        "throughput": 19585.924,
+        "primary_s": 25.594509,
+        "secondary_s": 21.639727,
+        "steps": 2201619774
+      },
+      "host_scopes_seconds": {
+        "ct_load_preprocess": 0.057996172,
+        "config_load": 0.015618141,
+        "tps_plan_load": 0.00064861,
+        "ct_from_config_including_load": 0.033461395000000005,
+        "tps_source_batch": 0.175474637,
+        "input_and_source_preparation": 0.44103577,
+        "unified_em_package_load_verify": 1.302868831,
+        "transport_setup_including_upload": 4.506003218,
+        "transport_loop_including_scoring_and_queue_transfers": 47.242979223,
+        "transport_readback_and_host_finalize": 0.056485442,
+        "transport_total": 51.821337023,
+        "quality_and_output": 0.441739584,
+        "process_main": 52.708498632
+      },
+      "host_scope_warning": "Nested scopes must not be summed",
+      "grouping_seconds": 0.0037019,
+      "fused_work": "CT lookup/boundaries, EM, nuclear processes, MCS and dose atomics are fused; no independent process seconds measured",
+      "WET": "No independent WET map stage in this configuration"
+    },
+    {
+      "label": "runtime_current_1m_profile",
+      "status": {
+        "complete": true,
+        "returncode": 0,
+        "wall_s": 55.68575167655945,
+        "config_sha256": "94f7dfbc149af0d097afefea56871e4cfd864597c3e3791155ef2ce74f3107d3",
+        "binary_sha256": "c56bc1c9ab1f31bacbcd5048c9d0c8d176cd45263fc6f862f54fdf8eb454b883",
+        "audit": [
+          [
+            0,
+            2202034783,
+            676418285,
+            2250786233,
+            1984087180,
+            2127998197667042,
+            163178812370929,
+            0
+          ]
+        ],
+        "quality": {
+          "schema_version": 3,
+          "status": "pass",
+          "run_mode": "production",
+          "accepted": true,
+          "absolute_physical_energy_residual_MeV": 9022.84755829,
+          "physical_relative_energy_residual": 3.47198417641e-06,
+          "absolute_accounting_energy_residual_MeV": 9022.84755829,
+          "accounting_relative_energy_residual": 3.47198417641e-06,
+          "absolute_energy_residual_MeV": 9022.84755829,
+          "relative_energy_residual": 3.47198417641e-06,
+          "topas_reference_energy_sink_active": false,
+          "queue_overflow_count": 0,
+          "queue_overflow_energy_MeV": 0,
+          "voxel_scored_energy_MeV": 2294592217.96,
+          "in_grid_deposited_energy_MeV": 2294592225.55,
+          "outside_grid_deposited_energy_MeV": 0.151111379266,
+          "grid_split_closure_ratio": 1.00000000776,
+          "voxel_to_ingrid_ratio": 0.999999996695,
+          "voxel_to_total_deposited_ratio": 1.00000000439,
+          "failures": [],
+          "approximations": [
+            {
+              "code": "secondary_species_grouping_accuracy_pending",
+              "message": "GPU species index grouping; RNG identities preserved; production integration authorized; RT07575 scheduling dose difference 0.0203% of peak remains under investigation",
+              "value": 1,
+              "limit": 0
+            },
+            {
+              "code": "unified_material_em_accuracy_pending",
+              "message": "Unified water/Schneider EM for all 18 charged ions; local delta deposition; production execution authorized, density cut-onset and patient Gamma accuracy gates remain pending",
+              "value": 1,
+              "limit": 0
+            },
+            {
+              "code": "schneider_post_em_null_collisions",
+              "message": "sampled candidates resolved as post-EM null collisions (track continues, no lookup)",
+              "value": 27,
+              "limit": 0
+            },
+            {
+              "code": "schneider_primary_post_em_null_collisions",
+              "message": "primary candidates resolved as post-EM null collisions (track continues, no lookup)",
+              "value": 32,
+              "limit": 0
+            }
+          ]
+        },
+        "elapsed_s": 52.082721,
+        "throughput": 19200.226,
+        "primary_s": 26.170875,
+        "secondary_s": 22.056791,
+        "steps": 2201619774
+      },
+      "host_scopes_seconds": {
+        "config_load": 0.015743601,
+        "tps_plan_load": 0.000653858,
+        "ct_load_preprocess": 0.05206898,
+        "ct_from_config_including_load": 0.040409448,
+        "tps_source_batch": 0.175898277,
+        "input_and_source_preparation": 0.480677951,
+        "unified_em_package_load_verify": 1.350513358,
+        "transport_setup_including_upload": 4.520280514,
+        "transport_loop_including_scoring_and_queue_transfers": 48.236167065,
+        "transport_readback_and_host_finalize": 0.053106178,
+        "transport_total": 52.82441184,
+        "quality_and_output": 0.43617613,
+        "process_main": 53.746215547
+      },
+      "host_scope_warning": "Nested scopes must not be summed",
+      "grouping_seconds": 0.00387981,
+      "fused_work": "CT lookup/boundaries, EM, nuclear processes, MCS and dose atomics are fused; no independent process seconds measured",
+      "WET": "No independent WET map stage in this configuration",
+      "cuda_copies": [
+        {
+          "direction": "Host-to-Device",
+          "seconds": 0.138603846,
+          "bytes": 1791399990,
+          "count": 45
+        },
+        {
+          "direction": "Device-to-Host",
+          "seconds": 0.004419655000000001,
+          "bytes": 57741256,
+          "count": 37
+        }
+      ],
+      "cuda_kernels": [
+        {
+          "name": "Typeinfo name for carbon::<unnamed>::cuda_clock_warmup(sycl::_V1::queue &, carbon::detail::DeviceMemoryTracker &)::[lambda(sycl::_V1::nd_item<(int)1>) (instance 1)]",
+          "seconds": 1.5360000000000002e-06,
+          "count": 1,
+          "registers": 16.0
+        },
+        {
+          "name": "Typeinfo name for carbon::TransportResult carbon::transport_sycl_impl<(int)1>(const carbon::TransportConfig &, const carbon::StoppingPowerTable &, const carbon::CrossSectionTable &, const std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char>> &, carbon::SyclTransportContext *)::[lambda(sycl::_V1::nd_item<(int)1>) (instance 1)]",
+          "seconds": 26.169106843,
+          "count": 29,
+          "registers": 255.0
+        },
+        {
+          "name": "Typeinfo name for sycl::_V1::detail::RoundedRangeKernel<sycl::_V1::item<(int)1, (bool)1>, (int)1, carbon::TransportResult carbon::transport_sycl_impl<(int)1>(const carbon::TransportConfig &, const carbon::StoppingPowerTable &, const carbon::CrossSectionTable &, const std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char>> &, carbon::SyclTransportContext *)::[lambda(sycl::_V1::id<(int)1>) (instance 1)]>",
+          "seconds": 0.001662571,
+          "count": 2,
+          "registers": 16.0
+        },
+        {
+          "name": "Typeinfo name for carbon::TransportResult carbon::transport_sycl_impl<(int)1>(const carbon::TransportConfig &, const carbon::StoppingPowerTable &, const carbon::CrossSectionTable &, const std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char>> &, carbon::SyclTransportContext *)::[lambda() (instance 3)]",
+          "seconds": 3.904e-06,
+          "count": 2,
+          "registers": 16.0
+        },
+        {
+          "name": "Typeinfo name for sycl::_V1::detail::RoundedRangeKernel<sycl::_V1::item<(int)1, (bool)1>, (int)1, carbon::TransportResult carbon::transport_sycl_impl<(int)1>(const carbon::TransportConfig &, const carbon::StoppingPowerTable &, const carbon::CrossSectionTable &, const std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char>> &, carbon::SyclTransportContext *)::[lambda(sycl::_V1::id<(int)1>) (instance 2)]>",
+          "seconds": 0.0017509860000000002,
+          "count": 2,
+          "registers": 16.0
+        },
+        {
+          "name": "Typeinfo name for sycl::_V1::detail::__pf_kernel_wrapper<carbon::CarbonSecondaryTransportKernel<(int)1>>",
+          "seconds": 22.056504420000003,
+          "count": 2,
+          "registers": 178.0
+        }
+      ]
+    }
+  ],
+  "profiler_elapsed_overhead_fraction": 0.02008822479548633,
+  "warning": "CUDA activities are nested inside host scopes; do not add the two timelines"
+}

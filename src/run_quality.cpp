@@ -82,6 +82,16 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
                                       const TransportResult& result) {
     RunQualityReport report;
     report.mode = config.run_mode;
+    if(config.em_primary_step_scale!=1.0)
+        report.approximations.push_back({"em_primary_step_extension",
+            "Research EM step multiplier; only E/A >=20 MeV, both node ranges >=5 mm and density >=0.2 g/cm3; accuracy gate pending",config.em_primary_step_scale,1.0});
+    if(config.em_secondary_step_scale!=1.0)
+        report.approximations.push_back({"em_secondary_step_extension",
+            "Research EM step multiplier; only E/A >=20 MeV, both node ranges >=5 mm and density >=0.2 g/cm3; accuracy gate pending",config.em_secondary_step_scale,1.0});
+    if (config.secondary_species_grouping && config.enable_inelastic &&
+        config.enable_secondary_transport)
+        report.approximations.push_back({"secondary_species_grouping_accuracy_pending",
+            "GPU species index grouping; RNG identities preserved; production integration authorized; RT07575 scheduling dose difference 0.0203% of peak remains under investigation", 1., 0.});
     if(config.em_model=="g4_material_joint_v1")
         report.approximations.push_back({"unified_material_em_accuracy_pending",
             "Unified water/Schneider EM for all 18 charged ions; local delta deposition; production execution authorized, density cut-onset and patient Gamma accuracy gates remain pending",1.,0.});

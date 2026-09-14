@@ -1,8 +1,6 @@
-# Independent all-ion nuclear elastic remains research-only; use the research entry for that combination.
-# Authorized unified EM production entry; density cut-onset/patient Gamma accuracy remain pending.
 run_mode: production
 scorer_mode: production
-number_of_histories: 6481909
+number_of_histories: 1000000
 primary_atomic_number: 6
 primary_mass_number: 12
 maximum_step_mm: 0.5
@@ -26,7 +24,7 @@ secondary_out_of_scope_nuclear_policy: em_only
 tpsSource: true
 enable_tps_coordinate_system: true
 tps_angle_convention: dicom_lps
-tps_spots_file: /mnt/sda/wuwei/topas10x_threecase_20260905_r2/RT07575/shard_01/spots.csv
+tps_spots_file: /mnt/sdb/wuwei/MAIGO/scratch/unified_em_ablation_20260913/ct_inputs/1000000/RT07575/spots.csv
 tps_beam_model_file: /mnt/sdb/wuwei/MAIGO/benchmark/topas10x/RT07575_pbs_s1/beam_model.csv
 tps_spot_weight_mode: histories
 tps_histories_scale: 1.0
@@ -63,7 +61,6 @@ ct_primary_midpoint_stopping: true
 ct_secondary_ion_section_stopping_file: data/schneider/schneider_ion_section_stopping_v1.bin
 ct_secondary_ion_section_stopping_sha256: ef87ad19bd0b0552d846a6c4e23eb635746e375432a40f40fb79b202235dec20
 ct_secondary_ion_section_stopping_metadata_sha256: c815808fd22e56e9db26475eeddb99aa596a9bc56aa01d0b8800c2e5e1ec12b8
-
 em_model: g4_material_joint_v1
 em_package_file: data/em/unified_em_v1.bin
 em_package_sha256: 8c5d970b3b639bfca2f448730271bed4fc04721aba73100e2efbe09dffe44855
@@ -73,7 +70,5 @@ enable_secondary_energy_straggling: true
 straggling_scale: 1.0
 ct_secondary_exact_faces: true
 history_chunk_size: 34816
-
-# Species scheduling authorized; dose equivalence investigation remains open.
 enable_secondary_unified_em: true
 secondary_species_grouping: true

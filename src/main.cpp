@@ -1,3 +1,4 @@
+#include "carbon/runtime_timing.hpp"
 #include "carbon/cli.hpp"
 #include "carbon/cross_section.hpp"
 #include "carbon/ct_grid.hpp"
@@ -28,6 +29,8 @@
 #include <vector>
 
 int main(int argc, char* argv[]) {
+    carbon::RuntimeScope runtime_main("process_main");
+    carbon::RuntimeScope runtime_inputs("input_and_source_preparation");
     // Line-buffer stdout so progress is visible when piped (tee/logs) and during
     // long CUDA kernels that would otherwise freeze WSL with no feedback.
     std::setvbuf(stdout, nullptr, _IOLBF, 0);
@@ -39,7 +42,7 @@ int main(int argc, char* argv[]) {
             return EXIT_SUCCESS;
         }
 
-        auto config = carbon::load_config(cli.config_path);
+        auto config = carbon::runtime_call("config_load",[&]{return carbon::load_config(cli.config_path);});
         carbon::apply_cli_overrides(argc, argv, config, cli);
         const auto histories_cli_override = cli.histories_overridden;
         const auto plan_only = cli.plan_only;
@@ -153,9 +156,9 @@ int main(int argc, char* argv[]) {
                     "tpsSource=true uses the GPU primary batch and does not support "
                     "--sequential-spots");
             }
-            const auto plan = carbon::TpsSourcePlan::from_config(config);
-            const auto batch = plan.make_primary_batch(
-                config, upstream_air_stopping_power_ptr);
+            const auto plan = carbon::runtime_call("tps_plan_load",[&]{return carbon::TpsSourcePlan::from_config(config);});
+            const auto batch = carbon::runtime_call("tps_source_batch",[&]{return plan.make_primary_batch(
+                config, upstream_air_stopping_power_ptr);});
             if (!batch.empty() &&
                 batch.back().history_end != config.number_of_histories) {
                 config.number_of_histories = batch.back().history_end;
@@ -260,6 +263,7 @@ int main(int argc, char* argv[]) {
             batch_config.validate();
             std::cout << "  batched SYCL launch: " << batch.size() << " TPS spots, "
                       << config.number_of_histories << " histories\n";
+            runtime_inputs.finish();
             result = carbon::run_transport(batch_config, stopping_power, cross_section,
                                            sycl_context);
             if (!plan.spots.empty()) {
@@ -400,6 +404,7 @@ int main(int argc, char* argv[]) {
                 std::cout << "  batched SYCL launch: "
                           << batch_config.primary_spot_batch.size() << " spots, "
                           << total_histories << " histories\n";
+                runtime_inputs.finish();
                 result = carbon::run_transport(batch_config, stopping_power, cross_section,
                                                sycl_context);
             } else {
@@ -409,6 +414,7 @@ int main(int argc, char* argv[]) {
                     carbon::apply_spot_to_config(spot_config, plan, spot, i, base_seed,
                                          upstream_air_stopping_power_ptr);
                     spot_config.validate();
+                    runtime_inputs.finish();
                     auto spot_result = carbon::run_transport(
                         spot_config, stopping_power, cross_section, sycl_context);
                     if (i == 0) {
@@ -430,9 +436,12 @@ int main(int argc, char* argv[]) {
                 config.beam_energy_spread = first_spot_config.beam_energy_spread;
             }
         } else {
+            runtime_inputs.finish();
             result = carbon::run_transport(config, stopping_power, cross_section, nullptr);
         }
 
+        runtime_inputs.finish();
+        carbon::RuntimeScope runtime_outputs("quality_and_output");
         const auto quality_directory = config.validation_scorers()
                                            ? (config.validation_output_directory.empty()
                                                   ? std::filesystem::path{

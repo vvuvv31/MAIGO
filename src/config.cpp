@@ -595,6 +595,12 @@ void TransportConfig::validate() const {
     if (phantom_length_mm <= 0.0 || depth_bin_width_mm <= 0.0 || maximum_step_mm <= 0.0) {
         throw std::invalid_argument("phantom and step lengths must be positive");
     }
+    for(double scale : {em_primary_step_scale,em_secondary_step_scale})
+        if(!std::isfinite(scale) || scale<1.0 || scale>1.5)
+            throw std::invalid_argument("Unified EM step scales must be finite in [1,1.5]");
+    if((em_primary_step_scale!=1.0 || em_secondary_step_scale!=1.0) &&
+       (em_model!="g4_material_joint_v1" || run_mode!=RunMode::research))
+        throw std::invalid_argument("EM step extension requires research unified EM");
     if (em_model != "legacy" && em_model != "g4_material_joint_v1")
         throw std::invalid_argument("Unknown em_model: " + em_model);
     if (em_model == "legacy" &&
@@ -1964,6 +1970,8 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.phantom_length_mm = parse_number(values, "phantom_length_mm", config.phantom_length_mm);
     config.depth_bin_width_mm = parse_number(values, "depth_bin_width_mm", config.depth_bin_width_mm);
     if (const auto it = values.find("em_model"); it != values.end()) config.em_model=it->second;
+    config.em_primary_step_scale=parse_number(values,"em_primary_step_scale",config.em_primary_step_scale);
+    config.em_secondary_step_scale=parse_number(values,"em_secondary_step_scale",config.em_secondary_step_scale);
     config.em_package_file=parse_path(values,"em_package_file",config.em_package_file);
     if (!config.em_package_file.empty())
         config.em_package_file=resolve_input_path_from_config(config.em_package_file,path);
@@ -2461,6 +2469,8 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.enable_secondary_unified_em = parse_bool(
         values, "enable_secondary_unified_em",
         config.enable_secondary_unified_em);
+    config.secondary_species_grouping = parse_bool(
+        values, "secondary_species_grouping", config.secondary_species_grouping);
     {
         const auto it = values.find("energy_straggling_model");
         if (it != values.end() && !it->second.empty()) {

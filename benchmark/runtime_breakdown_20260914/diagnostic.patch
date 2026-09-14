@@ -1,0 +1,228 @@
+--- a/src/transport_sycl.cpp
++++ b/src/transport_sycl.cpp
+@@ -1094,6 +1094,9 @@
+     UnifiedEmNode* unified_nodes=nullptr;
+     EmCubicSegmentCandidate<float>* unified_segments=nullptr;
+     std::uint64_t* unified_audit=nullptr;
++    auto* phase_data=mem_tracker.allocate<std::uint64_t>(48);
++    if(!phase_data)throw std::bad_alloc();
++    queue.fill(phase_data,std::uint64_t{0},48).wait_and_throw();
+     std::uint64_t* sec_step_profile_device=nullptr;
+     if(CARBON_SECONDARY_STEP_PROFILE) {
+         sec_step_profile_device=mem_tracker.allocate<std::uint64_t>(60);
+@@ -2782,6 +2785,7 @@
+                 const std::uint32_t max_primary_steps = maximum_primary_steps;
+                 int last_survival_bin = -1;
+                 while (energy_MeV > energy_cutoff_MeV && steps < max_primary_steps) {
++                    DevicePhaseProbe step_probe(phase_data,0,((rng_history ^ (std::uint64_t(steps)*0x9e3779b9u))&2047u)==0);
+                     // The rate/target hazard is evaluated from the energy at
+                     // the beginning of this step.  The replay event is
+                     // queried after the continuous EM loss below, so retain
+@@ -2941,6 +2945,7 @@
+                         maximum_relative_energy_loss * energy_MeV /
+                             sycl::fmax(stopping_power_MeV_per_mm, 1.0e-6F));
+                     step_mm = sycl::fmax(step_mm, 1.0e-5F);
++                    step_probe.mark(6);
+                     UnifiedEmStep unified_primary_pre;
+                     float unified_primary_rate=0,unified_primary_distance=std::numeric_limits<float>::infinity();
+                     auto unified_uniform=[&](){return (rng::random_u32(spot_seed,rng_history,unified_primary_counter++,120)>>8)*0x1p-24f;};
+@@ -2966,6 +2971,7 @@
+                         step_mm=sycl::fmin((em_primary_step_scale!=1.f?unified_primary_state.research_step(energy_MeV,CARBON_EM_STEP_CACHE?unified_primary_pre:unified_primary_state.prepare(energy_MeV),em_primary_step_scale):(CARBON_EM_STEP_CACHE?unified_primary_state.step(unified_primary_pre):unified_primary_state.step(energy_MeV))),unified_primary_distance);
+                     }
+ 
++                    step_probe.mark(7);
+                     if (absolute_direction_z >= 1.0e-6F) {
+                         const auto boundary_z_mm =
+                             direction_z < 0.0F
+@@ -3355,13 +3361,15 @@
+                     }
+ 
+                     if(unified_em){
+-                        auto draw=unified_em_loss(unified_primary_state,unified_primary_clock,energy_MeV,step_mm,unified_primary_rate,unified_primary_distance,enable_energy_straggling,unified_primary_pre,unified_uniform);
++                        step_probe.mark(1);
++                        auto draw=unified_em_loss(unified_primary_state,unified_primary_clock,energy_MeV,step_mm,unified_primary_rate,unified_primary_distance,enable_energy_straggling,unified_primary_pre,unified_uniform,phase_data,16,step_probe.active);
+                         if(!draw.valid){
+                             record_unified_em_failure(unified_failure_count,unified_failure_records,2,unified_primary_state.section,primary_atomic_number,primary_mass_number,energy_MeV,local_density_g_per_cm3,step_mm);
+                             unified_count(0);break;}
+                         deposited_MeV=draw.loss;unified_count(1);unified_count(3,draw.proposed);unified_count(4,draw.accepted);
+                         unified_count(5,static_cast<std::uint64_t>(draw.continuous*1e6f));unified_count(6,static_cast<std::uint64_t>(draw.delta*1e6f));
+                     }
++                    step_probe.mark(2);
+                     auto local_voxel_deposit_MeV = deposited_MeV;
+                     auto same_voxel_electron_packet_MeV = 0.0F;
+                     auto delta_tail_escaped_scorer_MeV = 0.0F;
+@@ -4069,6 +4077,7 @@
+                         }
+                     }
+ 
++                    step_probe.mark(3);
+                     const float seg_dir_x = direction_x;
+                     const float seg_dir_y = direction_y;
+                     const float seg_dir_z = direction_z;
+@@ -4150,6 +4159,7 @@
+                         direction_z = rotated.z;
+                     }
+ 
++                    step_probe.mark(4);
+                     position_x_mm += seg_dir_x * step_mm;
+                     position_y_mm += seg_dir_y * step_mm;
+                     position_z_mm += seg_dir_z * step_mm;
+@@ -4221,6 +4231,7 @@
+                         ct_elastic_this_step=false;
+                         sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_audit[10]).fetch_add(1);
+                     }
++                    step_probe.mark(5);
+                     if ((use_ct_elastic || use_all_elastic) && ct_elastic_this_step &&
+                         energy_MeV > energy_cutoff_MeV) {
+                         const float u_tgt = rng::uniform01(
+@@ -5326,6 +5337,7 @@
+                         }
+                         while (sec_e > energy_cutoff_MeV && sec_z >= 0.0F && sec_z < phantom_length_mm &&
+                                sec_steps < kSecondaryMaxSteps) {
++                            DevicePhaseProbe step_probe(phase_data,8,((frag.rng_stream ^ (std::uint64_t(sec_steps)*0x9e3779b9u))&2047u)==0);
+                             const auto bin_z = static_cast<int>(sec_z * inverse_depth_bin_width_mm);
+ 
+                             if (bin_z < 0 || bin_z >= static_cast<int>(number_of_bins)) break;
+@@ -5433,6 +5445,7 @@
+                             if (sec_sp <= 1.0e-6F) break;
+ 
+                             float sec_step_mm = maximum_step_mm;
++                            step_probe.mark(14);
+                             UnifiedEmStep unified_secondary_pre;
+                             float unified_secondary_rate=0,unified_secondary_distance=std::numeric_limits<float>::infinity();
+                             if(unified_secondary){
+@@ -5450,6 +5463,7 @@
+                                 sec_step_mm=sycl::fmin((em_secondary_step_scale!=1.f?unified_secondary_state.research_step(sec_e,CARBON_EM_STEP_CACHE?unified_secondary_pre:unified_secondary_state.prepare(sec_e),em_secondary_step_scale):(CARBON_EM_STEP_CACHE?unified_secondary_state.step(unified_secondary_pre):unified_secondary_state.step(sec_e))),unified_secondary_distance);
+                             }
+ 
++                            step_probe.mark(15);
+                             if (sec_dz > 1.0e-6F) {
+                                 const auto bz = static_cast<float>(bin_z + 1) * depth_bin_width_mm;
+                                 const auto dz_step = (bz - sec_z) / sec_dz;
+@@ -5687,13 +5701,15 @@
+                             const auto collision_input_dy = sec_dy;
+                             const auto collision_input_dz = sec_dz;
+                             if(unified_secondary){
+-                                auto draw=unified_em_loss(unified_secondary_state,unified_secondary_clock,sec_e,sec_step_mm,unified_secondary_rate,unified_secondary_distance,enable_secondary_energy_straggling,unified_secondary_pre,unified_secondary_uniform);
++                                step_probe.mark(9);
++                                auto draw=unified_em_loss(unified_secondary_state,unified_secondary_clock,sec_e,sec_step_mm,unified_secondary_rate,unified_secondary_distance,enable_secondary_energy_straggling,unified_secondary_pre,unified_secondary_uniform,phase_data,20,step_probe.active);
+                                 if(!draw.valid){
+                                     record_unified_em_failure(unified_failure_count,unified_failure_records,4,unified_secondary_state.section,frag.z,frag.a,sec_e,sec_local_density_g_per_cm3,sec_step_mm);
+                                     unified_secondary_count(0);unified_secondary_count(7);break;}
+                                 dE=draw.loss;unified_secondary_count(2);unified_secondary_count(3,draw.proposed);unified_secondary_count(4,draw.accepted);
+                                 unified_secondary_count(5,static_cast<std::uint64_t>(draw.continuous*1e6f));unified_secondary_count(6,static_cast<std::uint64_t>(draw.delta*1e6f));
+                             }
++                            step_probe.mark(10);
+                             const auto post_em_e = sycl::fmax(0.0F, sec_e - dE);
+                             if (he4_hazard_audit_device && frag.z == 2 && frag.a == 4 &&
+                                 frag.generation < cinel02_max_secondary_inelastic_generations &&
+@@ -5799,6 +5815,7 @@
+                                     }
+                                 }
+                             }
++                            step_probe.mark(12);
+                             if (secondary_inelastic) {
+                                 sec_e = post_em_e;
+                                 // v3: sample the target HERE at the post-EM
+@@ -6528,6 +6545,7 @@
+                                 }
+                             }
+ 
++                            step_probe.mark(10);
+                             if (!secondary_inelastic) sec_e = post_em_e;
+                             // cur_voxel is out of scope on the common path:
+                             // recompute the step voxel with the same formula.
+@@ -6571,6 +6589,7 @@
+                                 sec_z = post_em_z;
+                             }
+ 
++                            step_probe.mark(11);
+                             if (cinel02_should_apply_secondary_mcs(
+                                     secondary_inelastic, secondary_replay_succeeded,
+                                     enable_multiple_scattering && !ct_secondary_mcs_off, sec_e,
+@@ -6641,6 +6660,7 @@
+                                 secondary_elastic=false;
+                                 sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_audit[9]).fetch_add(1);
+                             }
++                            step_probe.mark(13);
+                             if(secondary_elastic && sec_e>energy_cutoff_MeV) {
+                                 const int p=all_elastic.projectile(frag.z,frag.a);
+                                 const auto draw=all_elastic.draw(p,use_unified_water?25:sec_ct_material,
+@@ -6951,6 +6971,9 @@
+     }
+ 
+     runtime_steps.finish();
++    { std::uint64_t host_phase[48]{};queue.copy(phase_data,host_phase,48).wait_and_throw();
++      for(int i=0;i<24;++i)std::cout<<"[phase-cycles] "<<i<<" "<<host_phase[i]<<" "<<host_phase[24+i]<<"\n"; }
++
+     RuntimeScope runtime_post("transport_readback_and_host_finalize");
+     std::vector<DepthAtomicT> dose_device_host(number_of_bins);
+     queue.copy(dose_device, dose_device_host.data(), number_of_bins).wait_and_throw();
+--- a/include/carbon/unified_em_view.hpp
++++ b/include/carbon/unified_em_view.hpp
+@@ -1,3 +1,4 @@
++#include "carbon/device_phase_probe.hpp"
+ #pragma once
+ #include "carbon/unified_em_package.hpp"
+ #include "carbon/discrete_delta_candidate.hpp"
+@@ -197,11 +198,13 @@
+ };
+ struct UnifiedEmLoss {float loss{},continuous{},delta{};bool valid{false};unsigned proposed{},accepted{};};
+ template<class Uniform>
+-UnifiedEmLoss unified_em_explicit_loss(const UnifiedEmState& s,UnifiedEmClock& cache,float t,float h,float proposal_rate,float distance,bool fluctuations,const UnifiedEmStep& pre,Uniform& uniform){
++UnifiedEmLoss unified_em_explicit_loss(const UnifiedEmState& s,UnifiedEmClock& cache,float t,float h,float proposal_rate,float distance,bool fluctuations,const UnifiedEmStep& pre,Uniform& uniform,std::uint64_t* phase_data,int phase_offset,bool phase_sample){
++    DevicePhaseProbe loss_probe(phase_data,phase_offset,phase_sample);
+     UnifiedEmLoss out;const auto& r=*s.lo.record;
+     float mean=CARBON_EM_STEP_CACHE?s.mean(t,h,pre):s.mean(t,h),tau=t/r.mass,ratio=.51099891f/r.mass;
+     float tmax=2*.51099891f*tau*(tau+2)/(1+2*(tau+1)*ratio+ratio*ratio);
+     float cut=std::min(s.cut(),tmax);float loss=mean;
++    loss_probe.mark(phase_offset+1);
+     if(fluctuations && mean<t){
+         UnifiedEmPointStep fluct_lo=pre.lo,fluct_hi=pre.hi;
+         if constexpr(!CARBON_EM_STEP_CACHE) {
+@@ -219,6 +222,7 @@
+     }
+     if(t-loss<=r.lowest_kinetic)loss=t;
+     out.continuous=loss;
++    loss_probe.mark(phase_offset+2);
+     const bool selected=h>=distance;cache.clock.consume(h,proposal_rate,selected);out.proposed=selected;
+     if(selected){
+         cache.threshold=std::numeric_limits<float>::max();float post=t-loss;
+@@ -233,7 +237,7 @@
+     out.loss=loss;out.valid=std::isfinite(loss) && loss>=0 && loss<=t;return out;
+ }
+ template<class Uniform>
+-UnifiedEmLoss unified_em_loss(const UnifiedEmState& s,UnifiedEmClock& cache,float t,float h,float proposal_rate,float distance,bool fluctuations,const UnifiedEmStep& pre,Uniform& uniform){
+-    return unified_em_explicit_loss(s,cache,t,h,proposal_rate,distance,fluctuations,pre,uniform);
++UnifiedEmLoss unified_em_loss(const UnifiedEmState& s,UnifiedEmClock& cache,float t,float h,float proposal_rate,float distance,bool fluctuations,const UnifiedEmStep& pre,Uniform& uniform,std::uint64_t* phase_data=nullptr,int phase_offset=0,bool phase_sample=false){
++    return unified_em_explicit_loss(s,cache,t,h,proposal_rate,distance,fluctuations,pre,uniform,phase_data,phase_offset,phase_sample);
+ }
+ } // namespace carbon
+--- a/include/carbon/device_phase_probe.hpp
++++ b/include/carbon/device_phase_probe.hpp
+@@ -0,0 +1,25 @@
++#pragma once
++#include <sycl/sycl.hpp>
++#include <cstdint>
++namespace carbon {
++// Diagnostic sampled lane elapsed cycles, NOT wall-time or exclusive SM occupancy.
++inline std::uint64_t phase_clock() {
++    std::uint64_t t=0;
++#if defined(__SYCL_DEVICE_ONLY__) && defined(__NVPTX__)
++    asm volatile("mov.u64 %0, %%clock64;" : "=l"(t) :: "memory");
++#endif
++    return t;
++}
++struct DevicePhaseProbe {
++    std::uint64_t* data; int slot; bool active; std::uint64_t last;
++    DevicePhaseProbe(std::uint64_t* d,int s,bool a):data(d),slot(s),active(a),last(a?phase_clock():0){}
++    void flush() {
++        if(!active)return;
++        const auto now=phase_clock();
++        sycl::atomic_ref<std::uint64_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(data[slot]).fetch_add(now-last);
++        sycl::atomic_ref<std::uint64_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(data[24+slot]).fetch_add(1);
++    }
++    void mark(int s){if(active){flush();slot=s;last=phase_clock();}}
++    ~DevicePhaseProbe(){flush();}
++};
++}

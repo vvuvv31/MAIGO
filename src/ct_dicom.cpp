@@ -1,3 +1,4 @@
+#include "carbon/runtime_timing.hpp"
 #include "carbon/ct_grid.hpp"
 
 #include <algorithm>
@@ -481,6 +482,7 @@ CtGrid CtGrid::from_dicom_directory(const std::filesystem::path& directory,
 CtGrid CtGrid::load(const std::filesystem::path& path,
                     const std::filesystem::path& schneider_file,
                     const std::string_view origin_mode) {
+    RuntimeScope runtime_ct("ct_load_preprocess");
     if (std::filesystem::is_directory(path)) {
         return from_dicom_directory(path, schneider_file, origin_mode);
     }

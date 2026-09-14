@@ -1,0 +1,10 @@
+{
+  "Input/source preparation": 0.44103577,
+  "Transport setup (includes uploads)": 4.506003218,
+  "Primary kernels": 25.594509,
+  "Secondary kernels": 21.639727,
+  "Loop host/synchronization/other GPU work": 0.008743222999999745,
+  "Readback/host finalization": 0.056485442,
+  "Quality/output": 0.441739584,
+  "Other process time": 0.08686200096081365
+}

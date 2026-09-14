@@ -55,3 +55,7 @@ enable_secondary_energy_straggling: true
 straggling_scale: 1.0
 ct_secondary_exact_faces: true
 history_chunk_size: 10000
+
+# Species scheduling authorized; dose equivalence investigation remains open.
+enable_secondary_unified_em: true
+secondary_species_grouping: true

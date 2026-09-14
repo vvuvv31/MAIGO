@@ -1,3 +1,4 @@
+#include "carbon/runtime_timing.hpp"
 #include "carbon/ct_grid.hpp"
 #include "carbon/transport_config.hpp"
 
@@ -444,6 +445,7 @@ std::uint8_t density_to_material_id(float density_g_per_cm3) noexcept {
 }
 
 CtGrid CtGrid::from_config(const TransportConfig& config) {
+    RuntimeScope runtime_ct("ct_from_config_including_load");
     return load(config.ct_grid_file, config.ct_schneider_file,
                 config.ct_dicom_origin_mode);
 }

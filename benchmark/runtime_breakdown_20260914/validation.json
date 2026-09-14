@@ -1,0 +1,54 @@
+[
+  {
+    "label": "runtime_current_1m_profile",
+    "max_dose_delta_percent_peak": 1.932411585889608e-05,
+    "events": {
+      "nuclear_interactions": [
+        415041,
+        415041
+      ],
+      "all_ion_primary_elastic_interactions": [
+        0,
+        0
+      ],
+      "all_ion_secondary_elastic_interactions": [
+        0,
+        0
+      ],
+      "primary_elastic_interactions": [
+        0,
+        0
+      ],
+      "cascade_interactions": [
+        0,
+        0
+      ]
+    }
+  },
+  {
+    "label": "runtime_current_1m_phase",
+    "max_dose_delta_percent_peak": 2.6570659305982108e-05,
+    "events": {
+      "nuclear_interactions": [
+        415041,
+        415041
+      ],
+      "all_ion_primary_elastic_interactions": [
+        0,
+        0
+      ],
+      "all_ion_secondary_elastic_interactions": [
+        0,
+        0
+      ],
+      "primary_elastic_interactions": [
+        0,
+        0
+      ],
+      "cascade_interactions": [
+        0,
+        0
+      ]
+    }
+  }
+]

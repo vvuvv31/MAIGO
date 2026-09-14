@@ -9,6 +9,10 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <memory>
+#ifdef CARBON_OPENSSL_SHA256
+#include <openssl/evp.h>
+#endif
 
 namespace carbon {
 
@@ -208,12 +212,31 @@ inline std::string compute_file_sha256_hex(const std::filesystem::path& path) {
     if (!stream) {
         throw std::runtime_error("compute_file_sha256_hex: cannot open file " + path.string());
     }
+#ifdef CARBON_OPENSSL_SHA256
+    std::unique_ptr<EVP_MD_CTX,decltype(&EVP_MD_CTX_free)> ctx(EVP_MD_CTX_new(),EVP_MD_CTX_free);
+    if(!ctx || EVP_DigestInit_ex(ctx.get(),EVP_sha256(),nullptr)!=1)
+        throw std::runtime_error("Cannot initialize SHA256");
+    std::vector<char> buffer(1024*1024);
+    while(stream.read(buffer.data(),buffer.size()) || stream.gcount()>0) {
+        if(EVP_DigestUpdate(ctx.get(),buffer.data(),static_cast<std::size_t>(stream.gcount()))!=1)
+            throw std::runtime_error("SHA256 update failed");
+    }
+    if(stream.bad())throw std::runtime_error("SHA256 file read failed: "+path.string());
+    std::array<unsigned char,EVP_MAX_MD_SIZE> digest{};unsigned size=0;
+    if(EVP_DigestFinal_ex(ctx.get(),digest.data(),&size)!=1 || size!=32)
+        throw std::runtime_error("SHA256 finalization failed");
+    std::ostringstream out;out<<std::hex<<std::setfill('0');
+    for(unsigned i=0;i<size;++i)out<<std::setw(2)<<unsigned(digest[i]);
+    return out.str();
+#else
     Sha256 ctx;
     std::array<char, 4096> buffer{};
     while (stream.read(buffer.data(), buffer.size()) || stream.gcount() > 0) {
         ctx.update(buffer.data(), static_cast<std::size_t>(stream.gcount()));
     }
+    if(stream.bad())throw std::runtime_error("SHA256 file read failed: "+path.string());
     return ctx.finalize_hex();
+#endif
 }
 
 }  // namespace carbon

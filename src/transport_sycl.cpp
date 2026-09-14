@@ -1,3 +1,4 @@
+#include "carbon/runtime_timing.hpp"
 #include "carbon/unified_em_view.hpp"
 #ifndef CARBON_SECONDARY_STEP_PROFILE
 #define CARBON_SECONDARY_STEP_PROFILE 0
@@ -63,6 +64,7 @@
 #include <vector>
 
 namespace carbon {
+template<int EmMode> class CarbonSecondaryTransportKernel;
 
 #include "detail/sycl_dose_atomic.inc"
 #include "detail/sycl_profile.inc"
@@ -71,6 +73,28 @@ namespace carbon {
 #include "detail/sycl_cinel02_device.inc"
 
 namespace {
+
+// Integer diagnostics are accumulated per track using the original per-step
+// conversion. Flush on every loop exit, including replay/escape/failure breaks.
+struct UnifiedEmFailureRecord {int reason,section,z,a;float energy,density,step;};
+inline void record_unified_em_failure(unsigned* count,UnifiedEmFailureRecord* records,
+    int reason,int section,int z,int a,float energy,float density,float step) {
+    if(!count)return;
+    sycl::atomic_ref<unsigned,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space> counter(*count);
+    const auto slot=counter.fetch_add(1);if(slot<16)records[slot]={reason,section,z,a,energy,density,step};
+}
+inline void flush_unified_em_audit(std::uint64_t* global,
+                                  const std::array<std::uint64_t,8>& local) {
+#pragma unroll
+    for(int i=0;i<8;++i) {
+        if(local[i]) {
+            sycl::atomic_ref<std::uint64_t,sycl::memory_order::relaxed,
+                sycl::memory_scope::device,sycl::access::address_space::global_space>
+                count(global[i]);
+            count.fetch_add(local[i]);
+        }
+    }
+}
 
 #include "detail/sycl_device_math.inc"
 #include "detail/sycl_inelastic_device.inc"
@@ -602,11 +626,14 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
     return ctx;
 }
 
-[[gnu::noinline]] TransportResult transport_sycl(const TransportConfig& config,
+template<int EmMode>
+[[gnu::noinline]] TransportResult transport_sycl_impl(const TransportConfig& config,
                                const StoppingPowerTable& stopping_power,
                                const CrossSectionTable& cross_section,
                                const std::string& device_name,
                                SyclTransportContext* context) {
+    RuntimeScope runtime_transport("transport_total");
+    RuntimeScope runtime_setup("transport_setup_including_upload");
     config.validate();
     validate_schneider_ct_startup(config);
 
@@ -1051,10 +1078,18 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
     if (std::getenv("CARBON_JOINT_EM_DATA") || std::getenv("CARBON_DIAGNOSTIC_PRIMARY_START_DEDX"))
         throw std::invalid_argument("Obsolete isolated EM environment switch; use explicit primary_em_model configuration");
     // Explicit research model; legacy transport remains the default.
-    const bool unified_em=config.em_model=="g4_material_joint_v1";
+    const bool unified_em=EmMode<0?config.em_model=="g4_material_joint_v1":EmMode==1;
+    const float em_primary_step_scale=static_cast<float>(config.em_primary_step_scale);
+    const float em_secondary_step_scale=static_cast<float>(config.em_secondary_step_scale);
+    if(unified_em)std::cout<<"[em-performance] material_cache="<<CARBON_EM_MATERIAL_CACHE
+        <<" step_cache="<<CARBON_EM_STEP_CACHE<<" local_audit="<<CARBON_EM_LOCAL_AUDIT<<"\n";
     UnifiedEmDevice unified_device;
     UnifiedEmMaterial* unified_materials=nullptr;
     UnifiedEmSpecies* unified_species=nullptr;
+    UnifiedEmSectionRange* unified_sections=nullptr;
+    unsigned* unified_energy_index=nullptr;
+    unsigned* unified_failure_count=nullptr;
+    UnifiedEmFailureRecord* unified_failure_records=nullptr;
     UnifiedEmRecord* unified_records=nullptr;
     UnifiedEmNode* unified_nodes=nullptr;
     EmCubicSegmentCandidate<float>* unified_segments=nullptr;
@@ -1066,16 +1101,31 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
         queue.fill(sec_step_profile_device,std::uint64_t{0},60).wait_and_throw();
     }
     if(unified_em){
-        auto package=UnifiedEmPackage::load(config.em_package_file,config.em_package_sha256);
+        auto package=runtime_call("unified_em_package_load_verify",[&]{return UnifiedEmPackage::load(config.em_package_file,config.em_package_sha256);});
         auto upload=[&]<class T>(const std::vector<T>& values){
             auto* ptr=mem_tracker.allocate<T>(values.size());if(!ptr)throw std::bad_alloc();
             queue.copy(values.data(),ptr,values.size()).wait_and_throw();return ptr;
         };
+        std::vector<UnifiedEmSectionRange> sections(26);
+        for(unsigned i=0;i<package.materials.size();++i) {
+            auto& range=sections[package.materials[i].section+1];
+            if(range.begin<0)range.begin=i;
+            range.end=i;
+        }
+        unified_failure_count=mem_tracker.allocate<unsigned>(1);
+        unified_failure_records=mem_tracker.allocate<UnifiedEmFailureRecord>(16);
+        if(!unified_failure_count || !unified_failure_records)throw std::bad_alloc();
+        queue.fill(unified_failure_count,0u,1).wait_and_throw();
+        unified_sections=upload(sections);
+        if constexpr(CARBON_EM_EXACT_INDEX) {
+            const auto index=build_unified_em_index(package);
+            unified_energy_index=upload(index);
+        }
         unified_materials=upload(package.materials);unified_species=upload(package.species);
         unified_records=upload(package.records);unified_nodes=upload(package.nodes);unified_segments=upload(package.segments);
         unified_audit=mem_tracker.allocate<std::uint64_t>(8);if(!unified_audit)throw std::bad_alloc();
         queue.fill(unified_audit,std::uint64_t{0},8).wait_and_throw();
-        unified_device={unified_materials,unified_species,unified_records,unified_nodes,unified_segments,static_cast<unsigned>(package.materials.size())};
+        unified_device={unified_materials,unified_species,unified_records,unified_nodes,unified_segments,static_cast<unsigned>(package.materials.size()),unified_sections,unified_energy_index};
         std::cout<<"[unified-em] all 18 charged ions; water + Schneider density nodes; native particle step parameters override legacy caps; local delta deposition; density cut-onset/patient accuracy validation pending\n";
     }
     const auto ct_secondary_exact_faces = config.ct_secondary_exact_faces;
@@ -1086,7 +1136,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
     const auto ct_secondary_mcs_off = config.ct_secondary_mcs_off_diagnostic;
 
     const bool use_schneider_delta_tail =
-        !config.ct_schneider_delta_tail_file.empty();
+        EmMode!=1 && !config.ct_schneider_delta_tail_file.empty();
     std::optional<SchneiderDeltaTailTable> schneider_delta_tail;
     float* schneider_delta_energies_device = nullptr;
     float* schneider_delta_fractions_device = nullptr;
@@ -1101,7 +1151,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
         use_schneider_delta_tail &&
         !config.ct_schneider_delta_longitudinal_file.empty();
     const bool use_longitudinal_interface_mass = config.ct_longitudinal_interface_mass_diagnostic;
-    const bool use_electron_joint = !config.ct_electron_joint_response_diagnostic_file.empty();
+    const bool use_electron_joint = EmMode!=1 && !config.ct_electron_joint_response_diagnostic_file.empty();
     // Legacy C12-only diagnostic is separate from the all-projectile bank.
     const bool use_ct_elastic = config.ct_elastic_diagnostic;
     const bool ct_elastic_all_targets = config.ct_elastic_all_targets;
@@ -1109,9 +1159,9 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
     // Slots 1 (energy domain) and 2 (miss/blocked) stay always-on: they feed
     // fail-closed quality gates. Skipped counters never feed transport.
     const bool enable_electron_joint_diagnostics = config.electron_joint_diagnostics;
-    const bool use_material_electron=!config.material_electron_response_index_file.empty();
+    const bool use_material_electron=EmMode!=1 && !config.material_electron_response_index_file.empty();
     const bool use_material_ct=use_material_electron && config.enable_ct_grid;
-    const bool use_water_electron=(use_material_electron && !use_material_ct) || !config.water_electron_response_diagnostic_file.empty();
+    const bool use_water_electron=EmMode!=1 && ((use_material_electron && !use_material_ct) || !config.water_electron_response_diagnostic_file.empty());
     std::optional<MaterialElectronDeviceBank> material_electron_bank;
     const MaterialElectronResponseView* material_electron_views=nullptr;
     std::size_t material_electron_view_count=0;
@@ -1826,7 +1876,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
         config.cinel02_max_secondary_inelastic_generations;
     constexpr bool cinel02_topas_compatibility_mode = false;
     const auto enable_voxel_scoring = config.enable_voxel_scoring;
-    const auto enable_let_scoring = config.enable_let_scoring;
+    const auto enable_let_scoring = EmMode!=1 && config.enable_let_scoring;
     const auto voxel_scorer_clamps_transport = config.voxel_scorer_clamps_transport;
     const auto voxel_bins_x = config.voxel_bins_x;
     const auto voxel_bins_y = config.voxel_bins_y;
@@ -2513,6 +2563,8 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
     const auto inverse_table_step =
         1.0f / static_cast<float>(stopping_power.energies()[1] - stopping_power.energies()[0]);
 
+    runtime_setup.finish();
+    RuntimeScope runtime_steps("transport_loop_including_scoring_and_queue_transfers");
     double primary_kernel_seconds = 0.0;
 
     for (std::size_t hist_offset = 0; hist_offset < number_of_histories;
@@ -2717,9 +2769,13 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                 bool nuclear_tau_active = false;
                 std::uint32_t nuclear_tau_rng_step = 0;
                 bool primary_inelastic_occurred = false;
+                bool unified_primary_escaped_ct = false;
                 UnifiedEmClock unified_primary_clock;
+                UnifiedEmState unified_primary_state;
+                std::array<std::uint64_t,8> unified_primary_audit{};
                 std::uint64_t unified_primary_counter=0;
                 const int unified_primary_species=unified_em?unified_device.species_index(primary_atomic_number,primary_mass_number):-1;
+
                 std::uint32_t interaction_section = 0;
                 float interaction_density = 0.0F;
 
@@ -2808,6 +2864,12 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                         }
                     }
 
+                    // Mirror secondary CT escape: the EM package has no exterior material.
+                    if(unified_em && enable_ct_grid && !in_ct) {
+                        unified_primary_escaped_ct=true;
+                        break;
+                    }
+
                     const auto layer_for_material =
                         slab_layer_count > 0
                             ? slab_layer_index(position_z_mm, slab_z_ends_device, slab_layer_count)
@@ -2879,20 +2941,29 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                         maximum_relative_energy_loss * energy_MeV /
                             sycl::fmax(stopping_power_MeV_per_mm, 1.0e-6F));
                     step_mm = sycl::fmax(step_mm, 1.0e-5F);
-                    UnifiedEmState unified_primary_state;
+                    UnifiedEmStep unified_primary_pre;
                     float unified_primary_rate=0,unified_primary_distance=std::numeric_limits<float>::infinity();
                     auto unified_uniform=[&](){return (rng::random_u32(spot_seed,rng_history,unified_primary_counter++,120)>>8)*0x1p-24f;};
                     auto unified_count=[&](int index,std::uint64_t count=1){
-                        sycl::atomic_ref<std::uint64_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space> a(unified_audit[index]);a.fetch_add(count);
+                        if constexpr(CARBON_EM_LOCAL_AUDIT) unified_primary_audit[index]+=count;
+                            else {
+                                sycl::atomic_ref<std::uint64_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space> a(unified_audit[index]);a.fetch_add(count);
+                            }
                     };
                     if(unified_em){
-                        unified_primary_state=unified_device.select(enable_ct_grid?(in_ct?int(ct_material):-2):-1,local_density_g_per_cm3,unified_primary_species);
-                        if(!unified_primary_state.covers(energy_MeV)){unified_count(0);break;}
+                        const int section=enable_ct_grid?(in_ct?int(ct_material):-2):-1;
+                        if(!CARBON_EM_MATERIAL_CACHE || !unified_primary_state.valid || unified_primary_state.section!=section ||
+                           unified_primary_state.density!=local_density_g_per_cm3)
+                            unified_primary_state=unified_device.select(section,local_density_g_per_cm3,unified_primary_species);
+                        if(!unified_primary_state.covers(energy_MeV)){
+                            record_unified_em_failure(unified_failure_count,unified_failure_records,1,section,primary_atomic_number,primary_mass_number,energy_MeV,local_density_g_per_cm3,0);
+                            unified_count(0);break;}
                         if(unified_primary_clock.last_section!=unified_primary_state.section || unified_primary_clock.last_density!=unified_primary_state.density)primary_hadronic_cache.valid=false;
-                        unified_primary_rate=unified_primary_clock.update(unified_primary_state,energy_MeV,unified_primary_state.lo.factor(energy_MeV),unified_primary_state.hi.factor(energy_MeV));
+                        if constexpr(CARBON_EM_STEP_CACHE) unified_primary_pre=unified_primary_state.prepare(energy_MeV);
+                        unified_primary_rate=unified_primary_clock.update(unified_primary_state,energy_MeV,(CARBON_EM_STEP_CACHE?unified_primary_pre.lo.factor:unified_primary_state.lo.factor(energy_MeV)),(CARBON_EM_STEP_CACHE?unified_primary_pre.hi.factor:unified_primary_state.hi.factor(energy_MeV)));
                         if(!unified_primary_clock.clock.active)unified_primary_clock.clock.arm(-sycl::log(sycl::fmax(unified_uniform(),1e-12f)));
                         unified_primary_distance=unified_primary_clock.clock.distance(unified_primary_rate);
-                        step_mm=sycl::fmin(unified_primary_state.step(energy_MeV),unified_primary_distance);
+                        step_mm=sycl::fmin((em_primary_step_scale!=1.f?unified_primary_state.research_step(energy_MeV,CARBON_EM_STEP_CACHE?unified_primary_pre:unified_primary_state.prepare(energy_MeV),em_primary_step_scale):(CARBON_EM_STEP_CACHE?unified_primary_state.step(unified_primary_pre):unified_primary_state.step(energy_MeV))),unified_primary_distance);
                     }
 
                     if (absolute_direction_z >= 1.0e-6F) {
@@ -3284,8 +3355,10 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                     }
 
                     if(unified_em){
-                        auto draw=unified_em_loss(unified_primary_state,unified_primary_clock,energy_MeV,step_mm,unified_primary_rate,unified_primary_distance,enable_energy_straggling,unified_uniform);
-                        if(!draw.valid){unified_count(0);break;}
+                        auto draw=unified_em_loss(unified_primary_state,unified_primary_clock,energy_MeV,step_mm,unified_primary_rate,unified_primary_distance,enable_energy_straggling,unified_primary_pre,unified_uniform);
+                        if(!draw.valid){
+                            record_unified_em_failure(unified_failure_count,unified_failure_records,2,unified_primary_state.section,primary_atomic_number,primary_mass_number,energy_MeV,local_density_g_per_cm3,step_mm);
+                            unified_count(0);break;}
                         deposited_MeV=draw.loss;unified_count(1);unified_count(3,draw.proposed);unified_count(4,draw.accepted);
                         unified_count(5,static_cast<std::uint64_t>(draw.continuous*1e6f));unified_count(6,static_cast<std::uint64_t>(draw.delta*1e6f));
                     }
@@ -4842,7 +4915,9 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                     ++steps;
                 }
 
-                const bool inside_phantom = (position_z_mm >= 0.0F && position_z_mm < phantom_length_mm);
+                if(unified_em && CARBON_EM_LOCAL_AUDIT)flush_unified_em_audit(unified_audit,unified_primary_audit);
+
+                const bool inside_phantom = !unified_primary_escaped_ct && (position_z_mm >= 0.0F && position_z_mm < phantom_length_mm);
 
                 if (energy_MeV > 0.0F && energy_MeV <= energy_cutoff_MeV && inside_phantom) {
                     const auto cutoff_energy_MeV = energy_MeV;
@@ -4969,6 +5044,22 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
 
     double secondary_kernel_seconds = 0.0;
     const bool enable_secondary_unified_em = config.enable_secondary_unified_em;
+    // Reorder indices only: RNG streams and parent histories belong to particles.
+    const bool group_secondaries = config.secondary_species_grouping &&
+        enable_inelastic && enable_secondary_transport;
+    std::uint32_t* secondary_order = nullptr;
+    std::uint32_t* secondary_group_counts = nullptr;
+    std::uint32_t* secondary_group_cursors = nullptr;
+    double secondary_group_seconds = 0.0;
+    if (group_secondaries && secondary_queue_device) {
+        secondary_order = mem_tracker.allocate<std::uint32_t>(max_secondaries);
+        secondary_group_counts = mem_tracker.allocate<std::uint32_t>(19);
+        secondary_group_cursors = mem_tracker.allocate<std::uint32_t>(19);
+        if (!secondary_order || !secondary_group_counts || !secondary_group_cursors)
+            throw std::bad_alloc();
+    }
+    std::cout << "[secondary-schedule] group=" << group_secondaries
+              << "; particle state and RNG identities preserved\n";
     std::vector<SecondaryParticle> birth_secondaries_host;
     if (enable_inelastic && enable_secondary_transport &&
         secondary_count_device != nullptr && secondary_queue_device != nullptr) {
@@ -4982,11 +5073,46 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
             std::uint32_t generation_end = secondary_count_host;
             while (generation_begin < generation_end) {
                 const auto batch_begin = generation_begin;
+                if (group_secondaries) {
+                    const auto grouping_start = std::chrono::steady_clock::now();
+                    queue.fill(secondary_group_counts, 0u, 19).wait_and_throw();
+                    queue.parallel_for(sycl::range<1>(generation_end - generation_begin),
+                        [=](sycl::id<1> id) {
+                            const auto frag = secondary_queue_device[generation_begin + id[0]];
+                            const int species = carbon::get_charged_species_idx(frag.z, frag.a);
+                            const unsigned bucket = species >= 0 ? unsigned(species) : 18u;
+                            sycl::atomic_ref<std::uint32_t, sycl::memory_order::relaxed,
+                                sycl::memory_scope::device, sycl::access::address_space::global_space>
+                                count(secondary_group_counts[bucket]);
+                            count.fetch_add(1);
+                        }).wait_and_throw();
+                    queue.single_task([=]() {
+                        unsigned total = 0;
+                        for (unsigned k = 0; k < 19; ++k) {
+                            secondary_group_cursors[k] = total;
+                            total += secondary_group_counts[k];
+                        }
+                    }).wait_and_throw();
+                    queue.parallel_for(sycl::range<1>(generation_end - generation_begin),
+                        [=](sycl::id<1> id) {
+                            const unsigned index = generation_begin + id[0];
+                            const auto frag = secondary_queue_device[index];
+                            const int species = carbon::get_charged_species_idx(frag.z, frag.a);
+                            const unsigned bucket = species >= 0 ? unsigned(species) : 18u;
+                            sycl::atomic_ref<std::uint32_t, sycl::memory_order::relaxed,
+                                sycl::memory_scope::device, sycl::access::address_space::global_space>
+                                cursor(secondary_group_cursors[bucket]);
+                            secondary_order[cursor.fetch_add(1)] = index;
+                        }).wait_and_throw();
+                    secondary_group_seconds += std::chrono::duration<double>(
+                        std::chrono::steady_clock::now() - grouping_start).count();
+                }
                 auto sec_event = queue.submit([&](sycl::handler& cgh) {
-                cgh.parallel_for<class CarbonSecondaryTransportKernel>(
+                cgh.parallel_for<CarbonSecondaryTransportKernel<EmMode>>(
                     sycl::range<1>(generation_end - generation_begin),
                     [=](sycl::id<1> item_id) {
-                        const auto sec_idx = generation_begin + item_id[0];
+                        const auto sec_idx = group_secondaries ? secondary_order[item_id[0]]
+                            : generation_begin + item_id[0];
                         const auto frag = secondary_queue_device[sec_idx];
                         if (frag.z <= 0 || frag.a <= 0) return;
                         const auto charged_origin_category =
@@ -5131,13 +5257,22 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
 
                         const bool unified_secondary=unified_em && !generic_recoil && enable_secondary_unified_em;
                         const int unified_secondary_species=unified_secondary?unified_device.species_index(frag.z,frag.a):-1;
-                        UnifiedEmClock unified_secondary_clock;std::uint64_t unified_secondary_counter=0;
+                        UnifiedEmClock unified_secondary_clock;
+                        std::uint64_t unified_secondary_counter=0;
+                        // Diagnostic species profile: 20 slots x {steps,
+                        // short-range steps, deposited uMeV}. Zero production
+                        // impact (compiled out when profiling is off).
                         std::uint64_t sec_prof[60];
                         if constexpr(CARBON_SECONDARY_STEP_PROFILE)
                             for(int sec_pi=0;sec_pi<60;++sec_pi)sec_prof[sec_pi]=0;
+                        UnifiedEmState unified_secondary_state;
+                        std::array<std::uint64_t,8> unified_secondary_audit{};
                         auto unified_secondary_uniform=[&](){return (rng::random_u32(2026,frag.rng_stream,unified_secondary_counter++,121)>>8)*0x1p-24f;};
                         auto unified_secondary_count=[&](int index,std::uint64_t count=1){
-                            sycl::atomic_ref<std::uint64_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space> a(unified_audit[index]);a.fetch_add(count);
+                            if constexpr(CARBON_EM_LOCAL_AUDIT) unified_secondary_audit[index]+=count;
+                            else {
+                                sycl::atomic_ref<std::uint64_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space> a(unified_audit[index]);a.fetch_add(count);
+                            }
                         };
                         uint32_t sec_steps = 0;
                         constexpr uint32_t kSecondaryMaxSteps = 30000U;
@@ -5298,15 +5433,21 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                             if (sec_sp <= 1.0e-6F) break;
 
                             float sec_step_mm = maximum_step_mm;
-                            UnifiedEmState unified_secondary_state;
+                            UnifiedEmStep unified_secondary_pre;
                             float unified_secondary_rate=0,unified_secondary_distance=std::numeric_limits<float>::infinity();
                             if(unified_secondary){
-                                unified_secondary_state=unified_device.select(enable_ct_grid?(sec_in_ct?int(sec_ct_material):-2):-1,sec_local_density_g_per_cm3,unified_secondary_species);
-                                if(!unified_secondary_state.covers(sec_e)){unified_secondary_count(0);break;}
-                                unified_secondary_rate=unified_secondary_clock.update(unified_secondary_state,sec_e,unified_secondary_state.lo.factor(sec_e),unified_secondary_state.hi.factor(sec_e));
+                                const int section=enable_ct_grid?(sec_in_ct?int(sec_ct_material):-2):-1;
+                                if(!CARBON_EM_MATERIAL_CACHE || !unified_secondary_state.valid || unified_secondary_state.section!=section ||
+                                   unified_secondary_state.density!=sec_local_density_g_per_cm3)
+                                    unified_secondary_state=unified_device.select(section,sec_local_density_g_per_cm3,unified_secondary_species);
+                                if(!unified_secondary_state.covers(sec_e)){
+                                    record_unified_em_failure(unified_failure_count,unified_failure_records,3,section,frag.z,frag.a,sec_e,sec_local_density_g_per_cm3,0);
+                                    unified_secondary_count(0);break;}
+                                if constexpr(CARBON_EM_STEP_CACHE) unified_secondary_pre=unified_secondary_state.prepare(sec_e);
+                                unified_secondary_rate=unified_secondary_clock.update(unified_secondary_state,sec_e,(CARBON_EM_STEP_CACHE?unified_secondary_pre.lo.factor:unified_secondary_state.lo.factor(sec_e)),(CARBON_EM_STEP_CACHE?unified_secondary_pre.hi.factor:unified_secondary_state.hi.factor(sec_e)));
                                 if(!unified_secondary_clock.clock.active)unified_secondary_clock.clock.arm(-sycl::log(sycl::fmax(unified_secondary_uniform(),1e-12f)));
                                 unified_secondary_distance=unified_secondary_clock.clock.distance(unified_secondary_rate);
-                                sec_step_mm=sycl::fmin(unified_secondary_state.step(sec_e),unified_secondary_distance);
+                                sec_step_mm=sycl::fmin((em_secondary_step_scale!=1.f?unified_secondary_state.research_step(sec_e,CARBON_EM_STEP_CACHE?unified_secondary_pre:unified_secondary_state.prepare(sec_e),em_secondary_step_scale):(CARBON_EM_STEP_CACHE?unified_secondary_state.step(unified_secondary_pre):unified_secondary_state.step(sec_e))),unified_secondary_distance);
                             }
 
                             if (sec_dz > 1.0e-6F) {
@@ -5489,35 +5630,37 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                     mid_scheme2_hit = true;
                                 }
                             }
-                            // The midpoint value drives dE and must use the same
-                            // Schneider density/material scaling as sec_sp at the
-                            // step start. Previously this remained a density-1
-                            // water value, over-stopping secondaries by ~1/rho
-                            // (about 25x in the RT06423 air section).
-                            // Unified EM overwrites dE below: skip this block.
-                            float mid_material_factor = 1.0F;
                             if (!unified_secondary) {
-                            if (sec_use_mass_sp_factor) {
-                                mid_material_factor = ct_lookup_mass_sp_factor(
-                                    ct_mass_sp_factor_lut_device,
-                                    use_ct_density_mass_spr ? ct_density_spr_n_rho
-                                                            : ct_n_mass_factors,
-                                    table_size, use_ct_density_mass_spr,
-                                    ct_mass_spr_log_rho_min, ct_mass_spr_inv_dlog,
-                                    static_cast<std::uint32_t>(sec_ct_material),
-                                    sec_local_density_g_per_cm3,
-                                    static_cast<std::size_t>(mid_idx), mid_fr,
-                                    [](float x) { return sycl::log(x); });
-                            }
+                                mid_sp = (ion_sp_table[mid_idx] +
+                                          mid_fr * (ion_sp_table[mid_idx + 1] -
+                                                    ion_sp_table[mid_idx]));
+                                // The midpoint value drives dE and must use the same
+                                // Schneider density/material scaling as sec_sp at the
+                                // step start. Previously this remained a density-1
+                                // water value, over-stopping secondaries by ~1/rho
+                                // (about 25x in the RT06423 air section).
+                                float mid_material_factor = 1.0F;
+                                if (sec_use_mass_sp_factor) {
+                                    mid_material_factor = ct_lookup_mass_sp_factor(
+                                        ct_mass_sp_factor_lut_device,
+                                        use_ct_density_mass_spr ? ct_density_spr_n_rho
+                                                                : ct_n_mass_factors,
+                                        table_size, use_ct_density_mass_spr,
+                                        ct_mass_spr_log_rho_min, ct_mass_spr_inv_dlog,
+                                        static_cast<std::uint32_t>(sec_ct_material),
+                                        sec_local_density_g_per_cm3,
+                                        static_cast<std::size_t>(mid_idx), mid_fr,
+                                        [](float x) { return sycl::log(x); });
+                                }
                             if (!mid_scheme2_hit) {
                                 mid_sp = secondary_material_stopping_power(
                                     mid_sp, enable_ct_grid && sec_in_ct,
                                     sec_local_density_g_per_cm3,
                                     sec_use_mass_sp_factor, mid_material_factor);
                             }
-                            } // end non-unified midpoint evaluation
+                            }
 
-                            auto dE = sycl::fmin(mid_sp * sec_step_mm, sec_e);
+                            float dE = sycl::fmin(mid_sp * sec_step_mm, sec_e);
                             if (!unified_secondary && enable_secondary_energy_straggling &&
                                 use_packaged_fluctuation && frag.z == 6 && frag.a == 12) {
                                 const auto u_loss = rng::uniform01(
@@ -5544,8 +5687,10 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                             const auto collision_input_dy = sec_dy;
                             const auto collision_input_dz = sec_dz;
                             if(unified_secondary){
-                                auto draw=unified_em_loss(unified_secondary_state,unified_secondary_clock,sec_e,sec_step_mm,unified_secondary_rate,unified_secondary_distance,enable_secondary_energy_straggling,unified_secondary_uniform);
-                                if(!draw.valid){unified_secondary_count(0);unified_secondary_count(7);break;}
+                                auto draw=unified_em_loss(unified_secondary_state,unified_secondary_clock,sec_e,sec_step_mm,unified_secondary_rate,unified_secondary_distance,enable_secondary_energy_straggling,unified_secondary_pre,unified_secondary_uniform);
+                                if(!draw.valid){
+                                    record_unified_em_failure(unified_failure_count,unified_failure_records,4,unified_secondary_state.section,frag.z,frag.a,sec_e,sec_local_density_g_per_cm3,sec_step_mm);
+                                    unified_secondary_count(0);unified_secondary_count(7);break;}
                                 dE=draw.loss;unified_secondary_count(2);unified_secondary_count(3,draw.proposed);unified_secondary_count(4,draw.accepted);
                                 unified_secondary_count(5,static_cast<std::uint64_t>(draw.continuous*1e6f));unified_secondary_count(6,static_cast<std::uint64_t>(draw.delta*1e6f));
                             }
@@ -6562,6 +6707,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                                 sec_prof[40+sec_slot]+=static_cast<std::uint64_t>(dE*1e6f);
                             }
                         }
+                        if(unified_secondary && CARBON_EM_LOCAL_AUDIT)flush_unified_em_audit(unified_audit,unified_secondary_audit);
                         if constexpr(CARBON_SECONDARY_STEP_PROFILE) {
                             for(int sec_pi=0;sec_pi<60;++sec_pi) if(sec_prof[sec_pi]) {
                                 sycl::atomic_ref<std::uint64_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space> pa(sec_step_profile_device[sec_pi]);pa.fetch_add(sec_prof[sec_pi]);
@@ -6781,6 +6927,8 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                           << batch_begin << ", " << batch_end << ") particles; queued="
                           << generation_end << std::endl;
             }
+            std::cout << "[secondary-schedule] grouping_seconds="
+                      << secondary_group_seconds << "\n";
             if (!config.fragment_birth_spectrum_output_file.empty()) {
                 birth_secondaries_host.resize(generation_end);
                 queue.copy(secondary_queue_device, birth_secondaries_host.data(),
@@ -6802,6 +6950,8 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
         }
     }
 
+    runtime_steps.finish();
+    RuntimeScope runtime_post("transport_readback_and_host_finalize");
     std::vector<DepthAtomicT> dose_device_host(number_of_bins);
     queue.copy(dose_device, dose_device_host.data(), number_of_bins).wait_and_throw();
     std::vector<double> dose_host(number_of_bins);
@@ -6933,17 +7083,25 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
     if (cutoff_stopped_energy_device != nullptr) {
         queue.copy(cutoff_stopped_energy_device, cutoff_stopped_host.data(), number_of_histories);
     }
-    if(unified_em){
+        if(unified_em){
         std::uint64_t audit[8]{};queue.copy(unified_audit,audit,8).wait_and_throw();
         std::cout<<"[unified-em-audit]";for(auto count:audit)std::cout<<" "<<count;std::cout<<"\n";
+        if(audit[0]) {
+            unsigned count=0;queue.copy(unified_failure_count,&count,1).wait_and_throw();
+            std::vector<UnifiedEmFailureRecord> records(std::min(count,16u));
+            queue.copy(unified_failure_records,records.data(),records.size()).wait_and_throw();
+            for(const auto& f:records)std::cerr<<"[unified-em-failure] reason="<<f.reason<<" section="<<f.section<<" Z="<<f.z<<" A="<<f.a<<" kinetic_MeV="<<f.energy<<" density="<<f.density<<" step_mm="<<f.step<<"\n";
+            std::cerr<<"[runtime-rejected-kernel] primary_s="<<primary_kernel_seconds<<" secondary_s="<<secondary_kernel_seconds<<" histories="<<number_of_histories<<"\n";
+            throw std::runtime_error("Unified EM missing domain or sampling failure; dose rejected");
+        }
+        mem_tracker.free(unified_failure_count);mem_tracker.free(unified_failure_records);
         if constexpr(CARBON_SECONDARY_STEP_PROFILE) {
             std::uint64_t secprof[60]{};queue.copy(sec_step_profile_device,secprof,60).wait_and_throw();
             std::cout<<"[secondary-step-profile] slot steps short depMeV\n";
             for(int sec_si=0;sec_si<20;++sec_si)
                 std::cout<<"[secondary-step-profile] "<<sec_si<<" "<<secprof[sec_si]<<" "<<secprof[20+sec_si]<<" "<<(static_cast<double>(secprof[40+sec_si])*1e-6)<<"\n";
         }
-        if(audit[0])throw std::runtime_error("Unified EM missing domain or sampling failure; dose rejected");
-        mem_tracker.free(unified_materials);mem_tracker.free(unified_species);mem_tracker.free(unified_records);
+        mem_tracker.free(unified_energy_index);mem_tracker.free(unified_sections);mem_tracker.free(unified_materials);mem_tracker.free(unified_species);mem_tracker.free(unified_records);
         mem_tracker.free(unified_nodes);mem_tracker.free(unified_segments);mem_tracker.free(unified_audit);
         if constexpr(CARBON_SECONDARY_STEP_PROFILE) mem_tracker.free(sec_step_profile_device);
     }
@@ -7622,6 +7780,18 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
     result.primary_kernel_seconds = primary_kernel_seconds;
     result.secondary_kernel_seconds = secondary_kernel_seconds;
     return result;
+}
+
+[[gnu::noinline]] TransportResult transport_sycl(const TransportConfig& config,
+    const StoppingPowerTable& stopping_power,const CrossSectionTable& cross_section,
+    const std::string& device_name,SyclTransportContext* context) {
+#if CARBON_EM_SPECIALIZE
+    if(config.em_model=="g4_material_joint_v1")
+        return transport_sycl_impl<1>(config,stopping_power,cross_section,device_name,context);
+    return transport_sycl_impl<0>(config,stopping_power,cross_section,device_name,context);
+#else
+    return transport_sycl_impl<-1>(config,stopping_power,cross_section,device_name,context);
+#endif
 }
 
 }  // namespace carbon

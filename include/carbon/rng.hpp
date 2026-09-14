@@ -68,9 +68,9 @@ inline PhiloxBlock philox4x32_10(PhiloxBlock counter,
 }
 
 inline std::uint32_t random_u32(std::uint64_t seed,
-                                std::uint64_t history_id,
-                                std::uint64_t interaction_index,
-                                std::uint32_t random_dimension) noexcept {
+                                 std::uint64_t history_id,
+                                 std::uint64_t interaction_index,
+                                 std::uint32_t random_dimension) noexcept {
     const auto block = random_dimension / 4U;
     PhiloxBlock counter{
         static_cast<std::uint32_t>(history_id),

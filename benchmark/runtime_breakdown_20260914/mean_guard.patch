@@ -1,0 +1,14 @@
+--- a/src/transport_sycl.cpp
++++ b/src/transport_sycl.cpp
+@@ -3214,7 +3214,10 @@
+ 
+                     float mean_loss_MeV = 0.0F;
+                     if(unified_em){
+-                        mean_loss_MeV=unified_primary_state.mean(energy_MeV,step_mm);
++                        // The unified loss sampler computes the physical mean below.
++                        // This separate query is needed only by the optional audit.
++                        if (primary_loss_query_audit)
++                            mean_loss_MeV=unified_primary_state.mean(energy_MeV,step_mm);
+                     } else if (ct_primary_midpoint_stopping && use_schneider_stopping && in_ct) {
+                         mean_loss_MeV=midpoint_continuous_energy_loss(energy_MeV,step_mm,
+                             stopping_power_MeV_per_mm,[&](float mid_energy) {
