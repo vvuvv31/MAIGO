@@ -597,10 +597,13 @@ void TransportConfig::validate() const {
     }
     if (em_model != "legacy" && em_model != "g4_material_joint_v1")
         throw std::invalid_argument("Unknown em_model: " + em_model);
+    if (em_model == "legacy" &&
+        (device == "cuda" || device == "nvidia" || device == "gpu" || device == "default"))
+        throw std::invalid_argument("Legacy EM removed on GPU; use em_model g4_material_joint_v1 (serial/cpu backends retain legacy routing)");
     if (em_model == "legacy" && (!em_package_file.empty() || !em_package_sha256.empty()))
         throw std::invalid_argument("em_package_file requires g4_material_joint_v1");
     if (em_model == "g4_material_joint_v1") {
-        if (primary_em_model != "legacy" || !primary_joint_em_data_directory.empty())
+        if (primary_em_model != "legacy")
             throw std::invalid_argument("Unified EM must not be stacked with the old water model");
         if (em_package_file.empty() || em_package_sha256.size()!=64)
             throw std::invalid_argument("Unified EM requires one em_package_file and its SHA256");
@@ -617,23 +620,8 @@ void TransportConfig::validate() const {
             !ct_electron_joint_response_diagnostic_file.empty() || enable_electron_transport)
             throw std::invalid_argument("Unified EM uses local delta deposition; electron response stacking is forbidden");
     }
-    if (primary_em_model != "legacy" && primary_em_model != "g4_joint_water_v1")
+    if (primary_em_model != "legacy")
         throw std::invalid_argument("Unknown primary_em_model: " + primary_em_model);
-    if (primary_em_model == "legacy" && !primary_joint_em_data_directory.empty())
-        throw std::invalid_argument("primary_joint_em_data_directory requires g4_joint_water_v1");
-    if (primary_em_model == "g4_joint_water_v1") {
-        if (primary_joint_em_data_directory.empty())
-            throw std::invalid_argument("g4_joint_water_v1 requires primary_joint_em_data_directory");
-        if (run_mode != RunMode::research || enable_ct_grid || !unified_water_nuclear_transport ||
-            water_density_g_per_cm3 != 1.0 || primary_atomic_number != 6 || primary_mass_number != 12 ||
-            !slab_layers.empty() || enable_hetero_insert || beam_energy_spread != 0.0)
-            throw std::invalid_argument("g4_joint_water_v1 requires research homogeneous unit-density C12 water with zero energy spread");
-        if (!material_electron_response_index_file.empty() || !water_electron_response_diagnostic_file.empty() ||
-            !ct_schneider_delta_tail_file.empty() || !ct_schneider_delta_longitudinal_file.empty())
-            throw std::invalid_argument("g4_joint_water_v1 deposits delta energy locally; electron response stacking is forbidden");
-        if (straggling_scale != 1.0 || !straggling_scale_energies_MeVu.empty() || !straggling_scale_values.empty())
-            throw std::invalid_argument("g4_joint_water_v1 requires unscaled native fluctuations");
-    }
     if (maximum_primary_steps == 0) {
         throw std::invalid_argument("maximum_primary_steps must be greater than zero");
     }
@@ -1982,7 +1970,6 @@ TransportConfig load_config(const std::filesystem::path& path) {
     if (const auto it = values.find("em_package_sha256"); it != values.end()) config.em_package_sha256=it->second;
     if (const auto it = values.find("primary_em_model"); it != values.end())
         config.primary_em_model = it->second;
-    config.primary_joint_em_data_directory = parse_path(values, "primary_joint_em_data_directory", config.primary_joint_em_data_directory);
     config.maximum_step_mm = parse_number(values, "maximum_step_mm", config.maximum_step_mm);
     config.maximum_relative_energy_loss =
         parse_number(values, "maximum_relative_energy_loss", config.maximum_relative_energy_loss);
@@ -2471,6 +2458,9 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.enable_secondary_energy_straggling = parse_bool(
         values, "enable_secondary_energy_straggling",
         config.enable_secondary_energy_straggling);
+    config.enable_secondary_unified_em = parse_bool(
+        values, "enable_secondary_unified_em",
+        config.enable_secondary_unified_em);
     {
         const auto it = values.find("energy_straggling_model");
         if (it != values.end() && !it->second.empty()) {

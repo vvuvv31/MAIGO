@@ -1,3 +1,6 @@
+> REMOVED from code (2026-09-14): `g4_joint_water_v1` / joint EM support deleted.
+> This file is history only; b1 runs on legacy or unified EM.
+
 # C12 均匀水联合电磁候选
 
 状态：已接入主代码的显式研究路径，尚未替换生产默认。原始默认 TOPAS 参数保持不变。

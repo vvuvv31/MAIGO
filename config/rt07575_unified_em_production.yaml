@@ -72,4 +72,4 @@ enable_energy_straggling: true
 enable_secondary_energy_straggling: true
 straggling_scale: 1.0
 ct_secondary_exact_faces: true
-history_chunk_size: 10000
+history_chunk_size: 34816

@@ -146,7 +146,6 @@ struct TransportConfig {
     std::filesystem::path em_package_file{};
     std::string em_package_sha256{};
     std::string primary_em_model{"legacy"};
-    std::filesystem::path primary_joint_em_data_directory{};
     double maximum_step_mm{0.5};
     double maximum_relative_energy_loss{0.005};
     std::uint32_t maximum_primary_steps{2000000U};
@@ -370,6 +369,10 @@ struct TransportConfig {
     // Historical validation applied straggling only to primary ion.
     // Enable this separately to apply Bohr straggling to charged fragments.
     bool enable_secondary_energy_straggling{false};
+    // Unified EM for secondary charged fragments (native fluctuations, delta
+    // clock, material-specific stopping). Off = CSDA fallback
+    // (mid_sp x step, packaged fluctuation for C12 only).
+    bool enable_secondary_unified_em{false};
     // Scalar fallback for Bohr straggling. If the two optional tables below
     // are populated, the scale is linearly interpolated using the current
     // particle E/A rather than the incident beam energy. Empty tables retain

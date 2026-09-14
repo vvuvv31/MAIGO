@@ -85,10 +85,6 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
     if(config.em_model=="g4_material_joint_v1")
         report.approximations.push_back({"unified_material_em_accuracy_pending",
             "Unified water/Schneider EM for all 18 charged ions; local delta deposition; production execution authorized, density cut-onset and patient Gamma accuracy gates remain pending",1.,0.});
-    if (config.primary_em_model == "g4_joint_water_v1") {
-        report.approximations.push_back({"g4_joint_water_v1_research",
-            "Primary C12 homogeneous water only; native StepFunction overrides legacy step caps; local delta deposition; primary inelastic cache enabled; high-statistics full-curve and CT validation pending", 1., 0.});
-    }
 
     if(!config.all_ion_elastic_file.empty()) {
         report.approximations.push_back({"all_ion_elastic_candidate",

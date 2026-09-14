@@ -80,8 +80,11 @@ endif()
 
 if(CARBON_ENABLE_TRANSPORT_PROFILE)
     target_compile_definitions(carbon_core PUBLIC CARBON_TRANSPORT_PROFILE=1)
-    message(STATUS "CARBON_ENABLE_TRANSPORT_PROFILE=ON")
+    message(STATUS "CARBON_TRANSPORT_PROFILE=ON")
 endif()
+option(CARBON_SECONDARY_STEP_PROFILE "Per-species secondary step profile (diagnostic only)" OFF)
+target_compile_definitions(carbon_core PUBLIC
+    CARBON_SECONDARY_STEP_PROFILE=$<BOOL:${CARBON_SECONDARY_STEP_PROFILE}>)
 
 if(CARBON_DOSE_FP32)
     target_compile_definitions(carbon_core PUBLIC CARBON_DOSE_FP32=1)
