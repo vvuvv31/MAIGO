@@ -1,0 +1,13 @@
+{
+  "case": "b2_250",
+  "topas_peak_mm": 124.75,
+  "gpu_peak_mm": 124.75,
+  "topas_MeV_per_primary": 2761.842292494211,
+  "gpu_MeV_per_primary": 2744.755375757027,
+  "energy_ratio_GPU_TOPAS": 0.9938132177989958,
+  "IDD_RMSE_percent_TOPAS_peak": 0.1579804151974938,
+  "gpu_elapsed_s": 7.733810663223267,
+  "topas_elapsed_s": 6355.396498918533,
+  "wall_time_ratio_TOPAS_GPU": 821.7677902486633,
+  "gpu_voxel_energy_to_ledger_ratio": 1.0000000028188403
+}

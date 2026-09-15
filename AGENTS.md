@@ -104,3 +104,10 @@ When modifying source files:
 - For large edits, make smaller independent edits instead of one large handwritten patch.
 - After editing, inspect `git diff --check` and `git diff` before proceeding.
 - Never spend more than two attempts fixing patch syntax.
+
+
+## Condensed delta production integration (user-authorized 2026-09-15)
+
+- 用户已验收并要求将两矩 Gamma δ 聚合及解析 Poisson 分步修正接入正式生产，允许 commit/push。
+- 该授权包含由固定统一 EM 核心包派生的 `data/em/unified_em_delta_moments_v2.bin`，SHA256 `c551bc52fa30ff7e3ea229c8b89792e8ecd2b0fb12f18fcad50d1c6f206bc7cc`；源包哈希和上文一致。用 `tools/build_delta_moments.py` 生成并严格校验。
+- 不改变 v2.1 核数据最低要求、独立核弹性的研究状态、原生受限涨落 scale=1 与精确 CT 边界；患者 BODY Gamma 和低密度阈值验证仍待完成。

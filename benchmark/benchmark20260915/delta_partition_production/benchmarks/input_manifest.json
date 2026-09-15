@@ -1,0 +1,33 @@
+{
+  "commit": "a7c382de2daf1274a66979005d9530af360c5b63",
+  "binary_sha256": "db4e7345e05bdd941e38076a8e2c51ed6ff5187d9cb31293808eaf97b02b6316",
+  "histories_per_case": 200000,
+  "topas_reference": "unchanged completed benchmark20260914 K=1 reference",
+  "models": {
+    "b1_100": "g4_material_joint_v1",
+    "b1_200": "g4_material_joint_v1",
+    "b1_300": "g4_material_joint_v1",
+    "b1_400": "g4_material_joint_v1",
+    "b2_150": "g4_material_joint_v1",
+    "b2_250": "g4_material_joint_v1",
+    "b2_350": "g4_material_joint_v1",
+    "b3_layers": "g4_material_joint_v1",
+    "b4_soft_lung": "g4_material_joint_v1",
+    "b4_soft_bone": "g4_material_joint_v1"
+  },
+  "config_changes": {},
+  "sha256": {
+    "b1_100/gpu.yaml": "daae6c2b8a9d8ce8931cf79e49840523595731ca79c7b15421a6dad44dde7807",
+    "b1_200/gpu.yaml": "79571133a58c7c7211ec16338e32c642523289d04a3f0ed5049717c61e582ae0",
+    "b1_300/gpu.yaml": "5212ab45d92f7d2b01ed97c074a27e0763917dfb474ccaf454cda723a7b05a91",
+    "b1_400/gpu.yaml": "07203d4d7b496d8d1c213d086f22cec225073268e38c090c8e9b29ed80db2cca",
+    "b2_150/gpu.yaml": "f9baf1d62b5256a4c0993f765011cb2e300f0bf39928eef56304a9d5bbf0a163",
+    "b2_250/gpu.yaml": "d4451a16a064e7f257f0ae098a9132b0a2ab5a1d5b35f650d8e8f5a50cba536f",
+    "b2_350/gpu.yaml": "39e642ba12b97c790debf0f160bdbef365b12ac4c9884942909fb19f03fe48dd",
+    "b3_layers/gpu.yaml": "c6292f1e6047c2c33bb6b0ca27f757db5a77c9ab9fd2d327d1c71868980d21a8",
+    "b4_soft_lung/gpu.yaml": "b72bab041ef0c2ce0f71e0c3a6f7913bf453a5d684743bb636dec22726007499",
+    "b4_soft_bone/gpu.yaml": "1e89a1c2246a7e21bb707d60eecae3145d29b713aa251d8254bc156a448afbd7"
+  },
+  "candidate": "delta_partition_production",
+  "baseline_directory": "/mnt/sdb/wuwei/MAIGO/benchmark/benchmark20260914/production_continuation"
+}

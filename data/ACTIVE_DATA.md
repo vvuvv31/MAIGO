@@ -83,3 +83,15 @@ They are additive packages; the pinned v2.1 stack remains unchanged.
 Verify with `python3 tools/verify_all_ion_elastic.py`.
 See [elastic scope, configuration and validation](../docs/all_ion_elastic.md).
 The 11.3.2 ZIP predates these files and has not been replaced.
+
+
+## Production delta moments (2026-09-15)
+
+The unified EM production model also requires `data/em/unified_em_delta_moments_v2.bin` (206,977,416 bytes). It is derived from the existing pinned `unified_em_v1.bin`; older Release archives do not contain it. After installing the core data, run from the repository root (Python + NumPy required):
+
+```sh
+python3 tools/build_delta_moments.py
+python3 tools/verify_unified_em_data.py
+```
+
+The generator and runtime verify the exact source and output hashes; see `data/em/unified_em_delta_moments_v2.json`. The large derived binary is not stored in Git. Both water and Schneider production use this companion, without changing the required v2.1 nuclear stack.

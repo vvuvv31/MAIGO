@@ -64,7 +64,9 @@ ct_secondary_ion_section_stopping_file: data/schneider/schneider_ion_section_sto
 ct_secondary_ion_section_stopping_sha256: ef87ad19bd0b0552d846a6c4e23eb635746e375432a40f40fb79b202235dec20
 ct_secondary_ion_section_stopping_metadata_sha256: c815808fd22e56e9db26475eeddb99aa596a9bc56aa01d0b8800c2e5e1ec12b8
 
+# User-accepted condensed delta + Poisson partition mean correction (2026-09-15).
 em_model: g4_material_joint_v1
+em_delta_moments_file: data/em/unified_em_delta_moments_v2.bin
 em_package_file: data/em/unified_em_v1.bin
 em_package_sha256: 8c5d970b3b639bfca2f448730271bed4fc04721aba73100e2efbe09dffe44855
 primary_em_model: legacy

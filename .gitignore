@@ -36,3 +36,6 @@ validation/
 scripts/windows_*.cmd
 scripts/build_windows_*.cmd
 scripts/run_windows_*.cmd
+
+# Derived EM moments are reproducible, SHA-pinned data, not Git source artifacts.
+/data/em/unified_em_delta_moments_v2.bin

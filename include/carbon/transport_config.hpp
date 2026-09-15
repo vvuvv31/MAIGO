@@ -145,6 +145,8 @@ struct TransportConfig {
     std::string em_model{"legacy"};
     std::filesystem::path em_package_file{};
     std::string em_package_sha256{};
+    // Empty selects unified_em_delta_moments_v2.bin next to em_package_file.
+    std::filesystem::path em_delta_moments_file{};
     // Research-only step extension, applied away from stopping/cut-onset regions.
     double em_primary_step_scale{1.0};
     double em_secondary_step_scale{1.0};

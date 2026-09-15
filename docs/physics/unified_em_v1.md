@@ -32,29 +32,9 @@ form factor, magnetic moment and the native low-energy stopping threshold.
 
 ## One step
 
-1. Select projectile, Schneider section (or explicit water), and density endpoints.
-   Rescale each endpoint to local density and interpolate endpoint responses.
-2. Use the projectile's native StepFunction range limit. Voxel faces, nuclear
-   collisions and the remaining delta optical depth can shorten that step.
-   Native step parameters replace the legacy maximum-step/relative-loss caps.
-3. Compute restricted mean loss using native stopping or range inversion and
-   the species-specific along-step correction. The native scaled-energy model
-   boundary is explicitly sampled on both sides; it is not assumed to be exactly
-   2 MeV/u for every isotope.
-4. Sample the species' IonFluc or Universal/Urban law when its fluctuation switch
-   is enabled. IonFluc's transition to Universal depends on Z and the native mass.
-   `straggling_scale` must be 1.0; there is no fitted rescaling.
-5. Debit the delta optical depth over the final travelled step; use the post-loss
-   rate to accept the proposal, then sample electron energy using the extracted
-   spin and form-factor parameters. Delta energy is deposited locally.
-6. Update kinetic energy and deposition once. Material changes invalidate rate
-   caches while preserving unspent optical depth. A secondary leaving the CT
-   volume is recorded as escaped charged energy.
+Production uses the two-moment Gamma delta aggregate and analytic Poisson-partition correction accepted on 2026-09-15. See [Methods, Section 3](../../mm.md) for equations and limitations. Native restricted stopping/range, ion corrections and restricted fluctuations remain active. No discrete delta clock or collision step limit remains. An additional 1% mean-loss guard applies only where delta stopping is positive. Nuclear optical depth and MCS remain separate; delta energy is deposited locally.
 
-Primary inelastic transport shares the previously introduced native-style rate
-cache; nuclear elastic, event replay and MCS remain separate processes.
-This implementation does **not** add electron spatial tracking or a new MCS model.
-Old electron-response redistribution must not be stacked on this EM option.
+The required companion `unified_em_delta_moments_v2.bin` is reproducibly derived from the pinned core EM package, including accepted-spectrum moments for all material/ion nodes. Run `python3 tools/build_delta_moments.py` after installing the core package; verification pins both SHA256 hashes. No old/water-table fallback is allowed. This table is not bundled in older releases.
 
 ## Configuration
 
@@ -71,6 +51,7 @@ not a completed patient validation. Apply these fields to other complete configs
 run_mode: production
 em_model: g4_material_joint_v1
 em_package_file: /absolute/path/to/MAIGO/data/em/unified_em_v1.bin
+em_delta_moments_file: /absolute/path/to/MAIGO/data/em/unified_em_delta_moments_v2.bin
 em_package_sha256: 8c5d970b3b639bfca2f448730271bed4fc04721aba73100e2efbe09dffe44855
 primary_em_model: legacy
 enable_energy_straggling: true
@@ -80,8 +61,8 @@ ct_secondary_exact_faces: true
 ```
 
 Remove `primary_joint_em_data_directory` and electron-response/delta-tail options.
-Keep the required v2.1 nuclear/stopping inputs and recoil inputs. One new joint EM
-binary serves both geometries; this is not a claim that the entire simulation now
+Keep the required v2.1 nuclear/stopping inputs and recoil inputs. One joint EM core plus its derived moment companion
+serves both geometries; this is not a claim that the entire simulation now
 needs only one physics file. GPU execution is local only. Before a Schneider run:
 
 ```sh
@@ -91,7 +72,7 @@ python3 tools/verify_unified_em_data.py
 
 The binary loader checks SHA, schema, sizes, all sections and the exact ion registry.
 A nonzero first counter in `[unified-em-audit]` rejects the output. Counters are:
-failure, primary steps, secondary steps, delta proposals, accepted deltas,
+failure, primary steps, secondary steps, delta proposals (zero), accepted deltas (zero),
 continuous micro-MeV, delta micro-MeV, secondary sampling failures.
 Any secondary queue overflow also invalidates a validation run.
 

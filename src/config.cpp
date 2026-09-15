@@ -610,7 +610,7 @@ void TransportConfig::validate() const {
     if (em_model == "legacy" &&
         (device == "cuda" || device == "nvidia" || device == "gpu" || device == "default"))
         throw std::invalid_argument("Legacy EM removed on GPU; use em_model g4_material_joint_v1 (serial/cpu backends retain legacy routing)");
-    if (em_model == "legacy" && (!em_package_file.empty() || !em_package_sha256.empty()))
+    if (em_model == "legacy" && (!em_package_file.empty() || !em_package_sha256.empty() || !em_delta_moments_file.empty()))
         throw std::invalid_argument("em_package_file requires g4_material_joint_v1");
     if (em_model == "g4_material_joint_v1") {
         if (primary_em_model != "legacy")
@@ -1980,6 +1980,9 @@ TransportConfig load_config(const std::filesystem::path& path) {
     if (!config.em_package_file.empty())
         config.em_package_file=resolve_input_path_from_config(config.em_package_file,path);
     if (const auto it = values.find("em_package_sha256"); it != values.end()) config.em_package_sha256=it->second;
+    config.em_delta_moments_file=parse_path(values,"em_delta_moments_file",config.em_delta_moments_file);
+    if(!config.em_delta_moments_file.empty())
+        config.em_delta_moments_file=resolve_input_path_from_config(config.em_delta_moments_file,path);
     if (const auto it = values.find("primary_em_model"); it != values.end())
         config.primary_em_model = it->second;
     config.maximum_step_mm = parse_number(values, "maximum_step_mm", config.maximum_step_mm);

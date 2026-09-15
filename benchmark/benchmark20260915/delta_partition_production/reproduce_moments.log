@@ -1,0 +1,11 @@
+OK: 175 material/density nodes x 18 ions, SHA256=8c5d970b3b639bfca2f448730271bed4fc04721aba73100e2efbe09dffe44855
+Integrity verified; production execution uses the AGENTS exception, while density cut-onset/patient accuracy validation remains pending.
+0/3150 material-ion records
+500/3150 material-ion records
+1000/3150 material-ion records
+1500/3150 material-ion records
+2000/3150 material-ion records
+2500/3150 material-ion records
+3000/3150 material-ion records
+OK: condensed delta moments, 25872175 nodes, SHA256=c551bc52fa30ff7e3ea229c8b89792e8ecd2b0fb12f18fcad50d1c6f206bc7cc
+Generated scratch/delta_partition_current_20260915/reproduced_moments.bin; max quadrature discrepancy=1.01e-07

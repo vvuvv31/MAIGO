@@ -1,6 +1,6 @@
 # Materials and Methods
 
-Revision: 2026-09-14. Describes the current working tree and named presets, not a frozen release or a claim of clinical/Geant4 equivalence. [中文](mm_zh.md).
+Revision: 2026-09-15. Describes the current working tree and named presets, not a frozen release or a claim of clinical/Geant4 equivalence. [中文](mm_zh.md).
 Historical numerical results remain bound to their original executable, data and configuration; they do not validate every current option.
 
 ## 1. Framework and active configuration
@@ -20,7 +20,7 @@ The two current unified-EM production entry points are
 
 | Setting | Explicit production-preset value / behavior |
 |---|---|
-| `em_model` | `g4_material_joint_v1`, one water/Schneider package |
+| `em_model` | `g4_material_joint_v1`, one water/Schneider core + derived moment table |
 | `enable_secondary_unified_em` | `true`: all 18 supported charged species use unified EM |
 | Primary / secondary fluctuations | Both enabled, `straggling_scale: 1.0` |
 | `ct_secondary_exact_faces` | `true` |
@@ -62,22 +62,15 @@ checked separately, without dose-fitted registration. See [source geometry](docs
 
 ### 3.1. One step in the current unified model
 
-1. Read species, kinetic energy, material section and density. Prepare restricted stopping,
-   range, ion corrections, fluctuation inputs and delta proposal rate from the unified package.
-2. Select the shortest allowed distance from the native EM StepFunction, geometry,
-   nuclear candidate and sampled delta candidate. Low-energy stopping/termination
-   rules also apply. The native EM limit replaces the legacy maximum-step and
-   relative-loss limits on this path.
-3. Compute restricted mean energy loss using stopping or range inversion, apply
-   ion corrections and sample the enabled restricted-loss fluctuation law.
-4. Consume the delta clock along the actual step. At a candidate, perform the
-   post-loss rate acceptance test and sample the electron spectrum/form-factor veto.
-5. Deduct continuous loss plus accepted delta energy once, score their local dose,
-   advance and apply configured MCS, then resolve any nuclear candidate and queue products.
+Following user acceptance on 2026-09-15, water and all 18 supported Schneider ions use two-moment Gamma delta aggregation with an analytic partition correction.
 
-This is the physical dependency order; geometry/scoring and process-specific
-branches are interleaved in the kernel. Particle streams retain their history and
-process identity; regrouping does not replace Philox or restart its counters.
+1. Prepare species/material/density-specific restricted stopping/range, ion corrections, native fluctuations and delta moments.
+2. Limit distance by native StepFunction, exact voxel faces and nuclear collision distance. Only where delta stopping is positive, also require `h ≤ 0.01 T/(S0+D0)`.
+3. Correct the restricted linear-loss branch for Poisson partitioning as below; do not apply it again to range inversion. Retain native restricted fluctuations at scale 1.
+4. Sample one Gamma aggregate for the step's delta loss, debit energy and deposit locally. No individual electron collision or delta-clock step limit is sampled.
+5. Advance, apply configured MCS, resolve nuclear candidates and queue products. Nuclear optical depth remains a separate mechanism.
+
+Philox streams retain particle identity and continuation counters. The 1% guard bounds estimated mean loss, not the sampled loss.
 
 ### 3.2. Restricted mean energy loss and density
 
@@ -98,7 +91,7 @@ Parameters are read per ion from the package; the primary C12 data use
 `f=0.1`, `r_final=0.001 mm`. Do not assign these values to every species without
 checking its record. The package also supplies the linear-loss threshold.
 
-For a sufficiently small estimated restricted loss, use `S_restricted(T) × h`.
+For a sufficiently small estimated restricted loss, start from `S_restricted(T) × h` and apply Section 3.3.
 For larger losses, obtain the outgoing energy by inverse range, retaining the
 pre-step mass/charge scaling during inversion. The implemented ion correction
 uses an intermediate energy and includes a low-energy replacement. This is not
@@ -117,31 +110,23 @@ That density scaling does not double-count density. Those tables and switches do
 not determine the unified model's restricted mean loss. Extra unregistered heavy
 recoils retain their dedicated stopping path. See [unified lookup/mean loss](include/carbon/unified_em_view.hpp).
 
-### 3.3. Fluctuations and explicit delta proposals
+### 3.3. Restricted fluctuations, delta aggregation and partition correction
 
-Restricted continuous loss uses the packaged IonFluc or Universal/Urban-related
-sampler as applicable. Both primary and supported secondary ions enable native
-fluctuations with scale 1.0. The former CT scale 1.2 and secondary-CSDA choices are
-historical configurations, not these production presets.
-
-The delta clock samples optical depth `tau = −ln(U)`. Over a segment it consumes
-proposal optical depth; locally the candidate distance is `tau_remaining / Sigma_proposal`.
-A candidate is not necessarily an accepted electron: the post-loss rate test and
-spectrum/form-factor acceptance still apply. Material/density changes invalidate
-cached rates while retaining unconsumed optical depth. A mean free path is a
-statistical scale, not a fixed collision distance.
+`S0` is restricted stopping, `D0=M1` is delta mean loss per length, and `lambda_native` is density-scaled native GetLambda. Restricted fluctuations retain the applicable IonFluc or Universal/Urban sampler. For the restricted linear branch:
 
 ```text
-DeltaT = sampled restricted continuous loss + accepted delta kinetic energy
-T_out  = T_in − DeltaT
+x = lambda_native h
+F(x) = 1 - 2/x + 2(1-exp(-x))/x²    [F(0)=0]
+S_eff = S0 - h/2 (S0 F(x) + D0) dS0/dT
+mu_delta = h max(0, D0 - (mean_restricted + D0 h)/2 dD0/dT)
+v_delta = h M2(T)
+Gamma shape = mu_delta²/v_delta; scale = v_delta/mu_delta
 ```
 
-Restricted stopping excludes above-threshold transfers already treated explicitly.
-The delta threshold is material/density dependent; the water example near 57 keV
-must not be imposed on every CT section. Delta energy is currently deposited
-locally. No proportional electron response is stacked on top of this budget.
-`em_macro_ticks` is not a supported current switch; rejected macro-tick and RNG
-experiments do not describe the production algorithm.
+`F` scales continuous self-drift only; the delta-jump drift remains complete. The ion-correction intermediate energy also includes mean delta loss. This constant-rate, locally linear Poisson-partition approximation compensates the mean-loss change when discrete delta partitions are removed; it has no TOPAS-fitted coefficient.
+Means and samples are bounded by available kinetic energy; zero moments skip sampling. Gamma does not preserve the discrete zero-collision atom or higher moments.
+The companion table integrates the native spectrum with spin, form-factor and magnetic acceptance, using step-start M2 for variance. Transfers excluded from restricted stopping enter the delta aggregate exactly once. Thresholds remain material/density dependent.
+No electron spatial tracking or old electron response is added. `em_macro_ticks` is not a supported current switch.
 
 ### 3.4. Coulomb multiple scattering
 
@@ -251,7 +236,7 @@ packages are not included in Release 11.3.2. See [implementation and data](docs/
 
 ## 6. Electrons and neutral products
 
-The active unified EM model samples delta transfers but does not track those electrons
+The active unified EM model samples aggregate delta loss but does not track those electrons
 spatially. Restricted and delta losses contribute local dose; local deposition itself
 is an approximation, particularly for interfaces, lateral tails and minibeam valleys.
 There is no active electron packet kernel to disable for another large speed gain.
@@ -306,13 +291,16 @@ Global energy closure does not establish spatial-dose accuracy or close every nu
 
 ## 8. Species grouping and measured throughput
 
+Current production algorithm (2026-09-15): the accepted candidate ran RT07575's 1/20 shard (6,481,909 primaries, two subdivisions) in 68.61 s wall / 65.20 s program elapsed, 99.4k histories/s, zero overflow. b1 peak errors at 100/200/300 MeV/u were −0.0715%, −0.1098%, +0.0424%. Patient BODY Gamma remains unvalidated. Older timings below and Section 9 proposals are historical research; delta aggregation is now enabled together with partition correction.
+
+
 ### Default secondary continuation (2026-09-14)
 
 Both production presets now enable `secondary_step_chunking: true` alongside species
 grouping. A launch performs up to 64 complete secondary loop iterations, saves the
 surviving tracks and stably compacts their indices. Queues below 8192 finish directly.
 No physical step is shortened or merged. Energy, position/direction, RNG counter,
-delta clock, material cache, pending deposits and diagnostics persist across launches;
+material cache, pending deposits and diagnostics persist across launches;
 terminal scoring happens only when the track actually terminates. Each generation
 finishes before its descendants start. Setting the option to `false` restores full-track
 launches without continuation buffers; species grouping is controlled separately.
@@ -475,6 +463,9 @@ Minibeam extension additionally needs valley dose/PVDR and spatial-tail validati
 Do not tune the reference TOPAS to match the approximation.
 
 ## 10. Reproduction and data
+
+Production EM additionally requires `data/em/unified_em_delta_moments_v2.bin`. After installing core data, run `python3 tools/build_delta_moments.py`, then `python3 tools/verify_unified_em_data.py`. This pinned derivative covers all material/ion nodes; older releases do not include it.
+
 
 Build C++20/SYCL for local `nvptx64-nvidia-cuda`, `sm_75`. Freeze the executable,
 resolved YAML, data hashes, CT/source transforms, histories/spot allocation, seed,

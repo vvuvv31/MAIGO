@@ -50,6 +50,7 @@ add_library(carbon_core
     src/water_electron_response.cpp
     src/energy_loss_fluctuation.cpp
     src/unified_em_package.cpp
+    src/delta_moments_data.cpp
     src/fred_table1.cpp
     src/fred_event_library.cpp
     src/inelastic_package_v2.cpp
@@ -217,6 +218,15 @@ if(BUILD_TESTING)
     add_executable(sha256_file tests/sha256_file.cpp)
     target_link_libraries(sha256_file PRIVATE carbon_core)
     add_test(NAME sha256_file COMMAND sha256_file)
+    foreach(test_name delta_partition delta_loss_sampling delta_moments_data_test)
+        add_executable(${test_name} tests/${test_name}.cpp)
+        target_link_libraries(${test_name} PRIVATE carbon_core)
+    endforeach()
+    add_test(NAME delta_partition COMMAND delta_partition)
+    add_test(NAME delta_loss_sampling COMMAND delta_loss_sampling)
+    add_test(NAME delta_moments_data COMMAND delta_moments_data_test ${CMAKE_CURRENT_SOURCE_DIR}/data/em/unified_em_delta_moments_v2.bin)
+    add_test(NAME unified_em_production_config COMMAND unified_em_production ${CMAKE_CURRENT_SOURCE_DIR}/config/unified_water_production.yaml)
+    set_tests_properties(unified_em_production_config PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
     add_executable(unified_em_step tests/unified_em_step.cpp)
     target_link_libraries(unified_em_step PRIVATE carbon_core)
     add_test(NAME unified_em_step COMMAND unified_em_step)

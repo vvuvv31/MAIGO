@@ -25,7 +25,7 @@ int main(int argc,char** argv){
     q.parallel_for(sycl::range<1>(queries.size()),[=](sycl::id<1> idx){
         auto input=inputs[idx];const auto* r=records+input.record;
         carbon::UnifiedEmPoint view{r,nodes+r->node_offset,segments,1};
-        float value=view.mean(input.kinetic,input.length);if(input.kinetic-value<=r->lowest_kinetic)value=input.kinetic;
+        float value=view.native_mean(input.kinetic,input.length);if(input.kinetic-value<=r->lowest_kinetic)value=input.kinetic;
         values[idx]=value;
     }).wait_and_throw();
     unsigned failures=0;float maximum=0;

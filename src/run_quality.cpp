@@ -82,6 +82,9 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
                                       const TransportResult& result) {
     RunQualityReport report;
     report.mode = config.run_mode;
+    if(config.em_model=="g4_material_joint_v1")
+        report.approximations.push_back({"condensed_delta_partition_v1",
+            "User-authorized 2026-09-15: aggregate Gamma delta loss from pinned first/second moments, analytic Poisson partition mean correction, no discrete delta clock; local deposition, 1% combined mean-loss guard; higher spectrum moments and patient BODY Gamma not validated",1.,0.});
     if(config.em_primary_step_scale!=1.0)
         report.approximations.push_back({"em_primary_step_extension",
             "Research EM step multiplier; only E/A >=20 MeV, both node ranges >=5 mm and density >=0.2 g/cm3; accuracy gate pending",config.em_primary_step_scale,1.0});

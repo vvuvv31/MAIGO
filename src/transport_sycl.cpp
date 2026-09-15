@@ -1,3 +1,4 @@
+#include "carbon/delta_moments_data.hpp"
 #include "carbon/runtime_timing.hpp"
 #include "carbon/unified_em_view.hpp"
 #ifndef CARBON_SECONDARY_STEP_PROFILE
@@ -1117,6 +1118,7 @@ template<int EmMode>
     UnifiedEmFailureRecord* unified_failure_records=nullptr;
     UnifiedEmRecord* unified_records=nullptr;
     UnifiedEmNode* unified_nodes=nullptr;
+    float* delta_mean_device=nullptr;
     EmCubicSegmentCandidate<float>* unified_segments=nullptr;
     std::uint64_t* unified_audit=nullptr;
     std::uint64_t* sec_step_profile_device=nullptr;
@@ -1131,6 +1133,15 @@ template<int EmMode>
             auto* ptr=mem_tracker.allocate<T>(values.size());if(!ptr)throw std::bad_alloc();
             queue.copy(values.data(),ptr,values.size()).wait_and_throw();return ptr;
         };
+        const auto delta_path=config.em_delta_moments_file.empty()
+            ? config.em_package_file.parent_path()/delta_moments_filename
+            : config.em_delta_moments_file;
+        const auto delta_means=runtime_call("delta_moments_load_verify",[&]{
+            return load_delta_moments(delta_path,config.em_package_sha256,package.nodes.size());
+        });
+        delta_mean_device=upload(delta_means);
+        std::cout<<"[delta-moments] condensed_partition_v1; aggregate Gamma; no delta clock; nodes="
+                 <<package.nodes.size()<<" SHA256="<<delta_moments_sha256<<"\n";
         std::vector<UnifiedEmSectionRange> sections(26);
         for(unsigned i=0;i<package.materials.size();++i) {
             auto& range=sections[package.materials[i].section+1];
@@ -1150,8 +1161,8 @@ template<int EmMode>
         unified_records=upload(package.records);unified_nodes=upload(package.nodes);unified_segments=upload(package.segments);
         unified_audit=mem_tracker.allocate<std::uint64_t>(8);if(!unified_audit)throw std::bad_alloc();
         queue.fill(unified_audit,std::uint64_t{0},8).wait_and_throw();
-        unified_device={unified_materials,unified_species,unified_records,unified_nodes,unified_segments,static_cast<unsigned>(package.materials.size()),unified_sections,unified_energy_index};
-        std::cout<<"[unified-em] all 18 charged ions; water + Schneider density nodes; native particle step parameters override legacy caps; local delta deposition; density cut-onset/patient accuracy validation pending\n";
+        unified_device={unified_materials,unified_species,unified_records,unified_nodes,unified_segments,static_cast<unsigned>(package.materials.size()),unified_sections,unified_energy_index,delta_mean_device};
+        std::cout<<"[unified-em] all 18 charged ions; water + Schneider density nodes; native particle step parameters plus 1% combined mean-loss guard; local aggregate delta deposition; density cut-onset/patient accuracy validation pending\n";
     }
     const auto ct_secondary_exact_faces = config.ct_secondary_exact_faces;
     std::cout << "[stopping-config] primary_midpoint=" << ct_primary_midpoint_stopping
@@ -2984,11 +2995,14 @@ template<int EmMode>
                             record_unified_em_failure(unified_failure_count,unified_failure_records,1,section,primary_atomic_number,primary_mass_number,energy_MeV,local_density_g_per_cm3,0);
                             unified_count(0);break;}
                         if(unified_primary_clock.last_section!=unified_primary_state.section || unified_primary_clock.last_density!=unified_primary_state.density)primary_hadronic_cache.valid=false;
-                        if constexpr(CARBON_EM_STEP_CACHE) unified_primary_pre=unified_primary_state.prepare(energy_MeV);
-                        unified_primary_rate=unified_primary_clock.update(unified_primary_state,energy_MeV,(CARBON_EM_STEP_CACHE?unified_primary_pre.lo.factor:unified_primary_state.lo.factor(energy_MeV)),(CARBON_EM_STEP_CACHE?unified_primary_pre.hi.factor:unified_primary_state.hi.factor(energy_MeV)));
-                        if(!unified_primary_clock.clock.active)unified_primary_clock.clock.arm(-sycl::log(sycl::fmax(unified_uniform(),1e-12f)));
-                        unified_primary_distance=unified_primary_clock.clock.distance(unified_primary_rate);
+                        // Preserve material cache invalidation without updating a delta clock.
+                        unified_primary_clock.last_section=unified_primary_state.section;
+                        unified_primary_clock.last_density=unified_primary_state.density;
+                        unified_primary_pre=unified_primary_state.prepare(energy_MeV);
                         step_mm=sycl::fmin((em_primary_step_scale!=1.f?unified_primary_state.research_step(energy_MeV,CARBON_EM_STEP_CACHE?unified_primary_pre:unified_primary_state.prepare(energy_MeV),em_primary_step_scale):(CARBON_EM_STEP_CACHE?unified_primary_state.step(unified_primary_pre):unified_primary_state.step(energy_MeV))),unified_primary_distance);
+                        // Bound combined mean loss, not the old restricted range alone.
+                        const float delta_sp=unified_primary_state.mix(unified_primary_pre.lo.delta_stopping,unified_primary_pre.hi.delta_stopping);
+                        if(delta_sp>0) step_mm=sycl::fmin(step_mm,.01f*energy_MeV/sycl::fmax(1e-12f,delta_sp+unified_primary_state.mix(unified_primary_pre.lo.stopping,unified_primary_pre.hi.stopping)));
                     }
 
                     if (absolute_direction_z >= 1.0e-6F) {
@@ -5533,11 +5547,11 @@ template<int EmMode>
                                 if(!unified_secondary_state.covers(sec_e)){
                                     record_unified_em_failure(unified_failure_count,unified_failure_records,3,section,frag.z,frag.a,sec_e,sec_local_density_g_per_cm3,0);
                                     unified_secondary_count(0);break;}
-                                if constexpr(CARBON_EM_STEP_CACHE) unified_secondary_pre=unified_secondary_state.prepare(sec_e);
-                                unified_secondary_rate=unified_secondary_clock.update(unified_secondary_state,sec_e,(CARBON_EM_STEP_CACHE?unified_secondary_pre.lo.factor:unified_secondary_state.lo.factor(sec_e)),(CARBON_EM_STEP_CACHE?unified_secondary_pre.hi.factor:unified_secondary_state.hi.factor(sec_e)));
-                                if(!unified_secondary_clock.clock.active)unified_secondary_clock.clock.arm(-sycl::log(sycl::fmax(unified_secondary_uniform(),1e-12f)));
-                                unified_secondary_distance=unified_secondary_clock.clock.distance(unified_secondary_rate);
+                                unified_secondary_pre=unified_secondary_state.prepare(sec_e);
                                 sec_step_mm=sycl::fmin((em_secondary_step_scale!=1.f?unified_secondary_state.research_step(sec_e,CARBON_EM_STEP_CACHE?unified_secondary_pre:unified_secondary_state.prepare(sec_e),em_secondary_step_scale):(CARBON_EM_STEP_CACHE?unified_secondary_state.step(unified_secondary_pre):unified_secondary_state.step(sec_e))),unified_secondary_distance);
+                                // Bound combined mean loss, not the old restricted range alone.
+                                const float delta_sp=unified_secondary_state.mix(unified_secondary_pre.lo.delta_stopping,unified_secondary_pre.hi.delta_stopping);
+                                if(delta_sp>0) sec_step_mm=sycl::fmin(sec_step_mm,.01f*sec_e/sycl::fmax(1e-12f,delta_sp+unified_secondary_state.mix(unified_secondary_pre.lo.stopping,unified_secondary_pre.hi.stopping)));
                             }
 
                             if (sec_dz > 1.0e-6F) {
@@ -7238,7 +7252,7 @@ template<int EmMode>
             for(int sec_si=0;sec_si<20;++sec_si)
                 std::cout<<"[secondary-step-profile] "<<sec_si<<" "<<secprof[sec_si]<<" "<<secprof[20+sec_si]<<" "<<(static_cast<double>(secprof[40+sec_si])*1e-6)<<"\n";
         }
-        mem_tracker.free(unified_energy_index);mem_tracker.free(unified_sections);mem_tracker.free(unified_materials);mem_tracker.free(unified_species);mem_tracker.free(unified_records);
+        mem_tracker.free(delta_mean_device);mem_tracker.free(unified_energy_index);mem_tracker.free(unified_sections);mem_tracker.free(unified_materials);mem_tracker.free(unified_species);mem_tracker.free(unified_records);
         mem_tracker.free(unified_nodes);mem_tracker.free(unified_segments);mem_tracker.free(unified_audit);
         if constexpr(CARBON_SECONDARY_STEP_PROFILE) mem_tracker.free(sec_step_profile_device);
     }

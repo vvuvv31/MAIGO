@@ -17,7 +17,7 @@ int main(int argc,char** argv){
             std::ifstream in(path);if(!in)throw std::runtime_error("Missing probe "+path.string());std::string line;std::getline(in,line);
             while(std::getline(in,line)){
                 std::replace(line.begin(),line.end(),',',' ');std::istringstream row(line);float e,h,reference,native,range;row>>e>>h>>reference>>native>>range;
-                float value=point.mean(e*r.a,h);if(e*r.a-value<=r.lowest_kinetic)value=e*r.a;float error=std::abs(value-reference)/std::max(reference,1e-5f);
+                float value=point.native_mean(e*r.a,h);if(e*r.a-value<=r.lowest_kinetic)value=e*r.a;float error=std::abs(value-reference)/std::max(reference,1e-5f);
                 if(error>maximum){maximum=error;if(error>.002)std::cerr<<name.str()<<" Z="<<r.z<<" A="<<r.a<<" E="<<e<<" h="<<h<<" ref="<<reference<<" got="<<value<<" relative="<<error<<"\n";}
                 if(error>.002 && std::abs(value-reference)>1e-5)++failed;
                 ++queries;

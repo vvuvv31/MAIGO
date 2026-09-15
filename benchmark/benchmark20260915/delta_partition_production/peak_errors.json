@@ -1,0 +1,42 @@
+[
+  {
+    "case": "b1_100",
+    "peak_error_percent": -0.07148736578447279
+  },
+  {
+    "case": "b1_200",
+    "peak_error_percent": -0.10981161289830288
+  },
+  {
+    "case": "b1_300",
+    "peak_error_percent": 0.04237232599895169
+  },
+  {
+    "case": "b1_400",
+    "peak_error_percent": -0.8366453941811569
+  },
+  {
+    "case": "b2_150",
+    "peak_error_percent": -0.11738007930141015
+  },
+  {
+    "case": "b2_250",
+    "peak_error_percent": -0.508913970960545
+  },
+  {
+    "case": "b2_350",
+    "peak_error_percent": -0.7616748825095221
+  },
+  {
+    "case": "b3_layers",
+    "peak_error_percent": -0.8152514099194597
+  },
+  {
+    "case": "b4_soft_lung",
+    "peak_error_percent": -0.47371874655657287
+  },
+  {
+    "case": "b4_soft_bone",
+    "peak_error_percent": -1.3788381385663295
+  }
+]

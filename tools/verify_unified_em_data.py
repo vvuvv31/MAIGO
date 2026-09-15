@@ -29,4 +29,8 @@ def verify(package):
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('package',nargs='?',type=Path,default=Path(__file__).resolve().parents[1]/'data/em/unified_em_v1.bin')
-    verify(parser.parse_args().package)
+    parser.add_argument("--core-only",action="store_true",help="Verify the source package before generating delta moments")
+    args=parser.parse_args();verify(args.package)
+    if not args.core_only:
+        from verify_delta_moments import verify as verify_moments
+        verify_moments(args.package.parent/"unified_em_delta_moments_v2.bin",args.package)
