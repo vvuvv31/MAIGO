@@ -289,10 +289,63 @@ Quality checks cover finite values, provenance, sampling audits, energy accounti
 and zero queue overflow. An overflow invalidates the shard: split and rerun.
 Global energy closure does not establish spatial-dose accuracy or close every nuclear Q value.
 
+### Full-history three-case comparison (2026-09-15, running)
+
+Retrieved TOPAS doses, inputs and logs are in `benchmark/ctbenchmark20260915/<case>/`;
+GPU outputs reside in each case's `gpu/`, and analysis in `benchmark/ctbenchmark20260915/result/`.
+
+| Case | Primaries in each GPU / TOPAS total | Current GPU shard plan |
+|---|---:|---|
+| RT07575 | 129,638,170 | Preserve 20 completed small shards; replace the remainder with 14 larger shards |
+| RT06423 | 151,087,660 | 31 shards |
+| 20022516 | 177,173,040 | 37 shards |
+
+Allocation failures or overflow may increase the final accepted shard count. Material-to-DICOM
+alignment was 100% for all three cases. Gamma follows the BODY, 10% cutoff and DTA/10 protocol
+above; unfinished pass rates are not reported as validation. TOPAS includes
+`CarbonIonElasticPhysics`, while current GPU production omits independent nuclear elastic.
+The reference logs also retain a 600 MeV EM table upper limit and unscored-step warnings;
+this is not an isolated EM comparison with fully matched physics.
+
+Derive the exact isocenter from TOPAS placement at world origin, then use trilinear
+extraction at fractional indices for axial XY, coronal XZ and sagittal YZ dose planes
+and their two orthogonal center lines. Do not substitute the dose maximum or nearest
+voxel. Plot `GPU − TOPAS` with fixed limits `±0.05 × full-volume TOPAS Dmax`;
+retain unclipped numerical data, with no fitted scaling or registration. Mask 2D display
+outside BODY.
+
 ## 8. Species grouping and measured throughput
 
 Current production algorithm (2026-09-15): the accepted candidate ran RT07575's 1/20 shard (6,481,909 primaries, two subdivisions) in 68.61 s wall / 65.20 s program elapsed, 99.4k histories/s, zero overflow. b1 peak errors at 100/200/300 MeV/u were −0.0715%, −0.1098%, +0.0424%. Patient BODY Gamma remains unvalidated. Older timings below and Section 9 proposals are historical research; delta aggregation is now enabled together with partition correction.
 
+
+### Current memory use and shard sizing (2026-09-15)
+
+Primaries launch in `history_chunk_size` batches, but the secondary queue is not emptied
+after each primary batch: all primaries in the shard finish before secondary generations
+are transported. The queue has a fixed **32,000,000**-entry capacity. Continuation also
+allocates **352 bytes of state** per current-generation secondary plus indices/flags.
+Shard histories therefore affect peak secondary memory; the roughly 4.4 GB observed
+during the primary phase is not the whole-run peak.
+
+| RT07575 diagnostic | Primaries | Primary batch | Full wall s | Program histories/s | Sampled peak MiB |
+|---|---:|---:|---:|---:|---:|
+| Larger primary batch | 3,240,955 | 131,072 | 34.65 | 99,216 | 7,817 |
+| Larger shard | 4,861,226 | 34,816 | 48.88 | 102,989 | 9,517 |
+
+Both passed quality checks with zero overflow and unchanged production physics.
+Memory was sampled every 0.25 s and may miss shorter transients. The earlier approximately
+3.24M-history / 34,816-batch runs took 34–35 s; single measurements do not establish a
+speedup confidence interval. The larger primary batch showed no clear benefit, so the
+production batch remains **34,816**. This CT benchmark targets at most **4.9M primaries**
+per remaining shard; this is a scheduling choice, not a universal safe limit or a physics
+change. Different CTs and spectra still require checks. Allocation failures or secondary
+overflows exclude the attempt from dose and trigger subdivision. Diagnostic doses are
+excluded, and repartitioning conserves every spot's integer history total.
+
+The production integration replay of RT07575's 6,481,909 primaries took **68.76 s wall** /
+**65.45 s program elapsed**, approximately **99.0k histories/s**, consistent with the
+accepted candidate above.
 
 ### Default secondary continuation (2026-09-14)
 
@@ -305,9 +358,9 @@ terminal scoring happens only when the track actually terminates. Each generatio
 finishes before its descendants start. Setting the option to `false` restores full-track
 launches without continuation buffers; species grouping is controlled separately.
 
-The default build needs 336 bytes of state plus about 20 bytes of indices/flags per
-secondary in the current generation. The measured 2.88M-track pool needs about 1.03 GB
-extra memory. Allocation failure stops the run; reduce histories per shard and merge
+The September 14 prototype used 336 bytes of state plus about 20 bytes of indices/flags per
+secondary; its 2.88M-track pool needed about 1.03 GB extra memory. The current state is
+352 bytes per secondary, as described above. Allocation failure stops the run; reduce histories per shard and merge
 outputs. Primary transport also skips a duplicate mean-loss lookup unless its optional
 audit needs it; the physical loss sampler remains unchanged.
 

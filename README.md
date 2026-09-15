@@ -33,7 +33,7 @@ cmake --build --preset oneapi-nvidia-release --parallel 8
 ```
 
 CPU 子集可用 `cpu-debug` preset 构建，但不作为患者 CT GPU 验证的替代后端。
-SYCL/GPU 在沙盒外执行；禁止远程/集群 GPU。TOPAS 经本地 sbatch，
+SYCL/GPU 在沙盒外执行；禁止远程/集群 GPU。未指定环境时 TOPAS 经本地 sbatch；明确指定远端时可在该处运行。
 并发总预算为 192 CPU 线程 / 160 GiB，具体约束见 AGENTS。
 
 ## 数据与运行
@@ -41,7 +41,11 @@ SYCL/GPU 在沙盒外执行；禁止远程/集群 GPU。TOPAS 经本地 sbatch�
 统一 EM 已按 [AGENTS.md](AGENTS.md) 中的授权例外接入正式运行：
 [水生产配置](config/unified_water_production.yaml)、
 [RT07575 生产配置](config/rt07575_unified_em_production.yaml)。
-原发 C12 和全部 18 种带电离子共用水 / Schneider EM 包。
+原发 C12 和全部 18 种已支持带电离子共用水 / Schneider EM 核心包与派生矩表。
+当前默认采用**两矩 Gamma δ 聚合＋解析 Poisson 分步修正**：保留材料特异受限
+stopping/range、原生受限涨落（scale=1）及 MCS，取消逐 δ 碰撞抽样与 δ 时钟限步；
+δ 能量局部沉积，不运行电子空间 tracking。仅 δ stopping>0 时追加 1% 组合平均能损限步。
+非弹性事件重放保持开启；独立核弹性仍是研究选项。公式和近似边界见 [mm_zh.md](mm_zh.md)。
 两个生产预设默认开启 `secondary_step_chunking: true`（每 64 次完整次级循环
 保存状态并压紧存活索引）；设为 `false` 可关闭，详见
 [接入验证](benchmark/runtime_breakdown_20260914/SEGMENT_PRODUCTION.md)。
@@ -51,10 +55,18 @@ SYCL/GPU 在沙盒外执行；禁止远程/集群 GPU。TOPAS 经本地 sbatch�
 新 EM 二进制约 1.29 GiB，需单独复制，尚未上传到 Release；
 详见[数据说明](data/ACTIVE_DATA.md)和[实现说明](docs/physics/unified_em_v1.md)。
 
+安装核心数据后，还需生成 206,977,416 字节的派生矩表；旧 Release 不含该表，
+Git 只提供生成器与固定 SHA256 清单。需要 Python、NumPy：
+
+```sh
+python3 tools/build_delta_moments.py
+```
+
 每次 Schneider CT 运行前：
 
 ```sh
 python3 tools/verify_schneider_v2_1_data.py
+python3 tools/verify_unified_em_data.py
 ```
 
 任一缺失、SHA/size 不符、schema 降级或 registry 不完整都必须停止。
@@ -62,8 +74,9 @@ python3 tools/verify_schneider_v2_1_data.py
 仍是当前数据，不能仅按名字判断过时。大文件及外部 water 包不是普通 clone 就能获得，
 依照 manifest 和 [活动数据说明](data/ACTIVE_DATA.md) 安装，不从 trash 自动 fallback。
 
-三病例复现以 [2026-09-05 冻结配置和结果](benchmark/topas10x/gpu_current_20260905.md)
-为起点，使用新输出目录；不要直接覆盖其中的 shard 配置、日志和剂量。
+新计算从上述当前生产配置出发，按病例核对 CT、spot、beam model 和几何。
+[2026-09-05 冻结配置和结果](benchmark/topas10x/gpu_current_20260905.md) 仅供历史比较；
+不要覆盖原有配置、日志和剂量。
 运行接口为：
 
 ```text
@@ -74,6 +87,37 @@ python3 tools/verify_schneider_v2_1_data.py
 先核对实际逐 spot histories、几何、数据和输出路径，再运行。
 大任务必须分片，任一 secondary overflow 必须缩小分片重跑。
 不要把旧示例配置当作当前 CT 验证配置；旧 fixtures 已部分归档。
+
+## 当前吞吐与 CT benchmark
+
+正式接入回归：RT07575 6,481,909 粒子，wall **68.76 s**、程序 elapsed **65.45 s**，
+约 **99.0k histories/s**，零 overflow。b1–b4 全部 10 个 200k 用例通过运行质量检查；
+100/200/300 MeV/u 零能散峰高误差约 −0.0715% / −0.1098% / +0.0424%。
+详见[接入验证](benchmark/benchmark20260915/delta_partition_production/README.md)。
+
+最近 RT07575 单片测试：4,861,226 粒子用时 **48.88 s**，程序吞吐 **103.0k/s**，
+采样显存峰值 **9,517 MiB**，零 overflow。把原发批量增至 131,072 未见明确收益，
+保留 `history_chunk_size=34816`；本次剩余任务目标上限为每片 490 万粒子。
+次级队列固定 3,200 万条，原发全部完成后才处理次级；当前代续跑状态为 352 字节/条
+另加索引，不能以原发阶段约 4.4 GB 占用判断整片显存余量。该分片上限不是对任意病例的安全保证。
+
+本次三病例全粒子数比较**运行中**：
+
+| Case | GPU / TOPAS 各自总粒子数 | GPU 分片安排 |
+|---|---:|---|
+| RT07575 | 129,638,170 | 20 个已完成小片＋14 个剩余大片 |
+| RT06423 | 151,087,660 | 31 片 |
+| 20022516 | 177,173,040 | 37 片 |
+
+原始 TOPAS 及 GPU 结果按病例保存在 `benchmark/ctbenchmark20260915/<case>/`，
+后处理保存在 `benchmark/ctbenchmark20260915/result/`。这些本地大数据不是普通 clone 的内容。
+每个 spot 的整数总粒子数保持一致，测试剂量不计入；显存不足或 overflow 须拆小重跑。
+
+比较 BODY 内 TOPAS ≥10% 全局最大剂量的体素，输出 3%/3mm、2%/2mm、1%/1mm、
+3%/0mm 的 global/local Gamma。搜索步长依次为 0.3、0.2、0.1 mm；0mm 不做空间搜索。
+等中心处三解剖面输出 1D 曲线、2D 剂量及 GPU−TOPAS 差值，差值色标固定为
+±5% TOPAS 全局最大剂量。累计 Gy 不拟合归一、不做剂量配准。
+本批 TOPAS 启用独立核弹性，GPU 最新生产配置未启用；报告保留这一物理范围差异。
 
 ## 验证边界
 
@@ -86,20 +130,8 @@ Global 1%/1mm 为 96.74–98.79%，Global 3%/0mm 为 94.27–99.97%；
 不以 Gamma 通过率声称全物理等价、任意材料/能区泛化或临床准入。
 
 测试入口及已归档 fixtures 的限制见 [structure](docs/structure.md)。
-本轮文档整理未重跑 Monte Carlo，不修改冻结数值。
+本轮全粒子数计算仍在运行；未完成结果不作为已通过验收的证据。
 
 ## License
 
 [GPL-3.0-or-later](LICENSE)。
-
-
-## Production delta moments (2026-09-15)
-
-The unified EM production model also requires `data/em/unified_em_delta_moments_v2.bin` (206,977,416 bytes). It is derived from the existing pinned `unified_em_v1.bin`; older Release archives do not contain it. After installing the core data, run from the repository root (Python + NumPy required):
-
-```sh
-python3 tools/build_delta_moments.py
-python3 tools/verify_unified_em_data.py
-```
-
-The generator and runtime verify the exact source and output hashes; see `data/em/unified_em_delta_moments_v2.json`. The large derived binary is not stored in Git. Both water and Schneider production use this companion, without changing the required v2.1 nuclear stack.
