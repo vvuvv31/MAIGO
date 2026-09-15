@@ -25,16 +25,16 @@
 #include "carbon/tps_source.hpp"
 #include "carbon/transport.hpp"
 #include "carbon/transport_config.hpp"
-#include "carbon/detail/fred_fragmentation_data.hpp"
-#include "carbon/fred_event_library.hpp"
-#include "carbon/fred_table1.hpp"
+#include "carbon/charged_species.hpp"
 #include "carbon/inelastic.hpp"
 #include "carbon/inelastic_identity.hpp"
 #include "carbon/inelastic_package_v3.hpp"
 #include "carbon/schneider_ct_device_context.hpp"
 #include "carbon/device.hpp"
 #include "carbon/detail/device_memory_tracker.hpp"
+#ifdef CARBON_HAS_SYCL
 #include <sycl/sycl.hpp>
+#endif
 
 #include <algorithm>
 #include <array>
@@ -86,6 +86,7 @@ void test_cinel03_common_event_azimuth() {
     }
     require_near(mean_x/256,0,1e-7,"azimuth mean x");
     require_near(mean_y/256,0,1e-7,"azimuth mean y");
+#ifdef CARBON_HAS_SYCL
     sycl::queue q;
     auto* output=sycl::malloc_shared<carbon::Cinel03LocalDirection>(256,q);
     require(output!=nullptr,"azimuth device allocation");
@@ -101,6 +102,7 @@ void test_cinel03_common_event_azimuth() {
         require_near(output[k].z,host.z,0,"host/device z");
     }
     sycl::free(output,q);
+#endif
 }
 
 template <typename ExceptionType = std::exception, typename Operation>
@@ -998,7 +1000,7 @@ void test_run_quality_gate() {
         compatibility.cinel02_topas_compatibility_mode = true;
         auto sink = std::make_unique<carbon::TransportResult>(*clean);
         sink->total_deposited_energy_MeV = 90.0;
-        sink->fred_model_unassigned_MeV = 5.0;
+        sink->untracked_nuclear_energy_MeV = 5.0;
         sink->cinel02_topas_compat_discarded_kinetic_MeV.back() = 5.0;
         const auto sink_report = carbon::evaluate_run_quality(compatibility, *sink);
         require(sink_report.accepted && sink_report.topas_reference_energy_sink_active,
@@ -3618,18 +3620,7 @@ void test_sycl_layered_slab_range_shift() {
 }
 #endif
 
-void test_fred_18_isotopes_data() {
-    require(carbon::kFredIsotopes.size() == 18, "kFredIsotopes must contain 18 isotopes");
-    require(carbon::kFredCdfH.size() == 18, "kFredCdfH must contain 18 entries");
-    require(carbon::kFredCdfO.size() == 18, "kFredCdfO must contain 18 entries");
-    require(std::abs(carbon::kFredCdfH.back() - 1.0f) < 1e-4f, "kFredCdfH must terminate at 1.0");
-    require(std::abs(carbon::kFredCdfO.back() - 1.0f) < 1e-4f, "kFredCdfO must terminate at 1.0");
-
-    for (std::size_t i = 1; i < 18; ++i) {
-        require(carbon::kFredCdfH[i] >= carbon::kFredCdfH[i - 1], "kFredCdfH must be non-decreasing");
-        require(carbon::kFredCdfO[i] >= carbon::kFredCdfO[i - 1], "kFredCdfO must be non-decreasing");
-    }
-
+void test_charged_species_registry() {
     // Verify all 18 charged species mapping
     require(carbon::get_charged_species_idx(1, 1) == 0, "1H (p) index");
     require(carbon::get_charged_species_idx(1, 2) == 1, "2H (d) index");
@@ -3681,141 +3672,12 @@ void test_stopping_power_csv_corruption_rejection() {
     std::filesystem::remove(bad_csv_path);
 }
 
-void test_kox_icru_cross_sections() {
-    // 100 MeV/u
-    const float sig_H_100 = carbon::calculate_icru_sigma_H(100.0f);
-    const float sig_O_100 = carbon::calculate_kox_sigma_O(100.0f, 1200.0f);
-    const float prob_H_100 = carbon::calculate_target_prob_H(sig_H_100, sig_O_100);
-    require(sig_H_100 > 250.0f && sig_H_100 < 300.0f, "sigma_H at 100 MeV/u in [250, 300] mb");
-    require(sig_O_100 > 900.0f && sig_O_100 < 1500.0f, "sigma_O at 100 MeV/u in [900, 1500] mb");
-    require(prob_H_100 > 0.25f && prob_H_100 < 0.45f, "P(H) at 100 MeV/u in [0.25, 0.45]");
-
-    // 400 MeV/u
-    const float sig_H_400 = carbon::calculate_icru_sigma_H(400.0f);
-    const float sig_O_400 = carbon::calculate_kox_sigma_O(400.0f, 4800.0f);
-    const float prob_H_400 = carbon::calculate_target_prob_H(sig_H_400, sig_O_400);
-    require_near(sig_H_400, 250.0f, 0.1f, "sigma_H at 400 MeV/u is 250 mb plateau");
-    require(sig_O_400 > 1100.0f && sig_O_400 < 1600.0f, "sigma_O at 400 MeV/u in [1100, 1600] mb");
-    require(prob_H_400 > 0.20f && prob_H_400 < 0.35f, "P(H) at 400 MeV/u in [0.20, 0.35]");
-}
 
 
-void test_fred_2gr_package() {
-    const auto table = carbon::Fred2GrMcsTable::from_binary(
-        std::filesystem::path(CARBON_SOURCE_DIR) /
-        "data/packages/fred_3_76_mcs_2gr.bin");
-    require(table.values.size() == 6U * 51U * 48U, "2GR table dimensions");
-    const auto w1 = carbon::fred_2gr_parameter(
-        table.values.data(), 0, 100.0F, 0.01F);
-    const auto sigma_c = carbon::fred_2gr_parameter(
-        table.values.data(), 1, 100.0F, 0.01F);
-    const auto m = carbon::fred_2gr_parameter(
-        table.values.data(), 5, 100.0F, 0.01F);
-    require(w1 >= 0.0F && w1 <= 1.0F, "2GR core weight in [0,1]");
-    require(sigma_c > 0.0F, "2GR core width positive");
-    require(m > 0.5F, "2GR Rutherford exponent valid");
-    require(carbon::fred_2gr_parameter(
-                table.values.data(), 0, 300.0F, 0.01F) < 0.0F,
-            "2GR rejects energy outside FRED table domain");
 
-    require_near(carbon::fred_2gr_high_energy_angle_scale(236.0), 1.0,
-                 1.0e-12, "2GR extrapolation is continuous at 236 MeV/u");
-    const auto scale_300 = carbon::fred_2gr_high_energy_angle_scale(300.0);
-    const auto scale_400 = carbon::fred_2gr_high_energy_angle_scale(400.0);
-    require(scale_300 > 0.0 && scale_300 < 1.0,
-            "2GR 300 MeV/u extrapolation scale is physical");
-    require(scale_400 > 0.0 && scale_400 < scale_300,
-            "2GR extrapolation scale decreases with energy");
 
-    carbon::TransportConfig legacy;
-    require(legacy.fred_2gr_high_energy_mode == "zero" &&
-                !legacy.uses_fred_2gr_high_energy_extrapolation(),
-            "2GR legacy high-energy behavior is the default");
-    carbon::TransportConfig extrapolated;
-    extrapolated.multiple_scattering_model = "fred_2gr";
-    extrapolated.fred_2gr_mcs_file = "fred_2gr.bin";
-    extrapolated.fred_2gr_high_energy_mode = "kinematic_extrapolation";
-    extrapolated.validate();
-    require(extrapolated.uses_fred_2gr_high_energy_extrapolation(),
-            "2GR kinematic extrapolation mode was not enabled");
-    auto invalid_mode = extrapolated;
-    invalid_mode.fred_2gr_high_energy_mode = "kinematic";
-    require_throws([&invalid_mode] { invalid_mode.validate(); },
-                   "Unknown 2GR high-energy mode was accepted");
-    auto invalid_model = extrapolated;
-    invalid_model.multiple_scattering_model = "highland";
-    require_throws([&invalid_model] { invalid_model.validate(); },
-                   "2GR extrapolation was accepted with Highland MCS");
-}
 
-void test_multi_energy_fred_event_libraries() {
-    for (const auto energy : {95, 200, 300, 400}) {
-        for (const auto& target : {std::string("H1"), std::string("C12"),
-                                   std::string("O16")}) {
-            const auto path = std::filesystem::path(CARBON_SOURCE_DIR) /
-                "data/packages" /
-                ("c12_" + target + "_" + std::to_string(energy) +
-                 "MeVu_events.bin");
-            const auto lib = carbon::load_fred_event_library(path);
-            require_near(lib.reference_energy_MeVu, static_cast<float>(energy),
-                         1.0e-4F, "event-library reference energy");
-            require(lib.event_count > 3000, "multi-energy library event count");
-            const int expected_z = target == "H1" ? 1 : (target == "C12" ? 6 : 8);
-            const int expected_a = target == "H1" ? 1 : (target == "C12" ? 12 : 16);
-            require(lib.target_z == expected_z && lib.target_a == expected_a,
-                    "event-library target identity");
-        }
-    }
-}
-void test_fred_event_library_load() {
-    const auto lib = carbon::load_fred_event_library(
-        std::filesystem::path(CARBON_SOURCE_DIR) /
-        "data/packages/c12_H1_95MeVu_events.bin");
-    require(lib.event_count > 1000, "H1 event library has events");
-    require(lib.max_fragments == 8, "max fragments");
-    require_near(lib.reference_energy_MeVu, 95.0F, 1.0e-3F, "95 MeV/u reference");
-    require(lib.fragment_count[0] >= 1, "first event has a charged fragment");
-}
 
-void test_topas_c12_h_elastic_table() {
-    const float s100 = carbon::calculate_sigma_el_H_mb(100.0F);
-    const float s400 = carbon::calculate_sigma_el_H_mb(400.0F);
-    require(s100 > 50.0F && s100 < 200.0F, "TOPAS C+p elastic at 100 MeV/u");
-    require(s400 > 20.0F && s400 < s100, "elastic XS falls with energy");
-    const float m100 = carbon::water_elastic_h_macro_per_mm(100.0F, 1.0F);
-    require(m100 > 1.0e-4F && m100 < 5.0e-3F, "water H elastic macro/mm");
-}
-
-void test_fred_paper_sigma_cc_and_water_macro() {
-    const float sig_cc_95 = carbon::calculate_sigma_cc_mb(95.0F);
-    require(sig_cc_95 > 700.0F && sig_cc_95 < 1100.0F, "C-C fit at 95 MeV/u near paper 760–1000 mb");
-    const float sig_o_scaled = carbon::calculate_sigma_nonel_mb(
-        12.0F, 6.0F, 16.0F, 8.0F, 95.0F, 1140.0F);
-    const float sig_o_raw = carbon::calculate_kox_sigma_O(95.0F, 1140.0F);
-    require(sig_o_scaled > 800.0F && sig_o_scaled < 1600.0F, "scaled C-O inelastic");
-    require(std::fabs(sig_o_scaled - sig_o_raw) > 1.0F,
-            "Kox ratio times C-C is not raw Kox C-O");
-    const auto table = carbon::CrossSectionTable::from_fred_paper_water(1.0);
-    require(table.energies().size() == 401, "1 MeV/u paper grid");
-    const double tot = table.interpolate(200.0);
-    require(tot > 0.003 && tot < 0.03, "water macroscopic XS /mm at 200 MeV/u");
-    require(table.interpolate_target_h_fraction(200.0) > 0.2 &&
-                table.interpolate_target_h_fraction(200.0) < 0.5,
-            "paper P(H) in water");
-}
-
-void test_c12_hydrogen_elastic_kinematics() {
-    const float e0 = 2400.0F;
-    const auto scat = carbon::sample_c12_hydrogen_elastic(e0, 0.0F, 0.0F, 1.0F, 0.25F, 0.1F);
-    require_near(scat.projectile_ke_MeV + scat.proton_ke_MeV, e0, 1.0e-3F,
-                 "elastic KE conserved");
-    require(scat.projectile_ke_MeV < e0, "projectile loses energy");
-    require(scat.proton_ke_MeV > 0.0F, "recoil proton");
-    const float pn = std::sqrt(scat.proj_dir_x * scat.proj_dir_x +
-                               scat.proj_dir_y * scat.proj_dir_y +
-                               scat.proj_dir_z * scat.proj_dir_z);
-    require_near(pn, 1.0F, 1.0e-5F, "projectile direction unit");
-}
 
 void test_vavilov_landau_straggling_sampler() {
     carbon::TransportConfig cfg;
@@ -3833,155 +3695,21 @@ void test_vavilov_landau_straggling_sampler() {
     require(mean > 0.4 && mean < 2.0, "vavilov-like mean stays O(mean loss)");
 }
 
-void test_table1_no_np_evaporation_dump() {
-    float uniforms[16];
-    uint8_t idx[8];
-    int leftover_n = 0;
-    int saw_c12 = 0;
-    int n_events = 4000;
-    double counts[18]{};
-    int nfrag_sum = 0;
-    for (int e = 0; e < n_events; ++e) {
-        for (int k = 0; k < 16; ++k) {
-            uniforms[k] = static_cast<float>((e * 16 + k) % 997) / 997.0F;
-        }
-        leftover_n = 0;
-        const int n = carbon::fill_projectile_table1_fragments(
-            carbon::kFredProbH.data(), uniforms, 16, idx, 8, &leftover_n);
-        require(n >= 1 && n <= 8, "projectile fragment count");
-        nfrag_sum += n;
-        int a = 0, z = 0;
-        for (int i = 0; i < n; ++i) {
-            require(idx[i] < 18, "isotope index");
-            counts[idx[i]] += 1.0;
-            a += carbon::kFredIsotopes[idx[i]].a;
-            z += carbon::kFredIsotopes[idx[i]].z;
-            if (idx[i] == 17) {
-                ++saw_c12;
-            }
-        }
-        require(z <= 6 && a + leftover_n <= 12, "A/Z bound without n/p dump");
-    }
-    require(saw_c12 > 0, "12C reachable");
-    require(counts[1] > 0.0 && counts[5] > 0.0, "1H and 4He appear in Table 1 sampling");
-    const double mean_frags = static_cast<double>(nfrag_sum) / static_cast<double>(n_events);
-    require(mean_frags < 6.0, "no nucleon-by-nucleon evaporation dump");
-}
 
-void test_energy_dependent_inclusive_yields() {
-    float w95[18]{};
-    float w200[18]{};
-    float w250[18]{};
-    float w300[18]{};
-    float w400[18]{};
-    float wO300[18]{};
-    carbon::fill_energy_dependent_inclusive_weights(95.0F, carbon::kFredProbH.data(), w95);
-    carbon::fill_energy_dependent_inclusive_weights(200.0F, carbon::kFredProbH.data(), w200);
-    carbon::fill_energy_dependent_inclusive_weights(250.0F, carbon::kFredProbH.data(), w250);
-    carbon::fill_energy_dependent_inclusive_weights(300.0F, carbon::kFredProbH.data(), w300);
-    carbon::fill_energy_dependent_inclusive_weights(400.0F, carbon::kFredProbH.data(), w400);
-    carbon::fill_energy_dependent_inclusive_weights(300.0F, carbon::kFredProbO.data(), wO300);
-    for (int i = 0; i < 18; ++i) {
-        require(std::isfinite(w95[i]) && w95[i] >= 0.0F, "95 MeV/u weight finite non-negative");
-        require_near(w95[i], carbon::kFredProbH[static_cast<std::size_t>(i)], 1.0e-5F,
-                     "weights at 95 MeV/u match Table 1");
-        require_near(w200[i], w95[i], 1.0e-5F, "paper yields fixed at 200 MeV/u");
-        require_near(w250[i], w95[i], 1.0e-5F, "paper yields fixed at 250 MeV/u");
-        require_near(w300[i], w95[i], 1.0e-5F, "paper yields fixed at 300 MeV/u");
-        require_near(w400[i], w95[i], 1.0e-5F, "paper yields fixed at 400 MeV/u");
-    }
-    require_near(wO300[0], carbon::kFredProbO[0], 1.0e-5F,
-                 "O-target paper yields use O Table 1");
-}
 
-void test_projectile_joint_channel() {
-    uint8_t idx[8];
-    int leftover_n = 0;
-    int saw_c12 = 0;
-    int n_events = 4000;
-    int nfrag_sum = 0;
-    double counts[18]{};
-    for (int e = 0; e < n_events; ++e) {
-        float uniforms[8]{};
-        for (int j = 0; j < 8; ++j) {
-            uniforms[j] =
-                static_cast<float>((e * 17 + j * 31 + 3) % 997) / 997.0F;
-        }
-        leftover_n = 0;
-        float w[18]{};
-        carbon::fill_energy_dependent_inclusive_weights(200.0F, carbon::kFredProbH.data(), w);
-        const int n = carbon::fill_projectile_constrained_channel(
-            w, uniforms, 8, idx, 8, &leftover_n);
-        require(n >= 1 && n <= 8, "constrained channel has charged fragments");
-        nfrag_sum += n;
-        int a = 0;
-        int z = 0;
-        for (int i = 0; i < n; ++i) {
-            require(idx[i] < 18, "joint isotope index");
-            counts[idx[i]] += 1.0;
-            a += carbon::kFredIsotopes[idx[i]].a;
-            z += carbon::kFredIsotopes[idx[i]].z;
-            if (idx[i] == 17) {
-                ++saw_c12;
-            }
-        }
-        require(z == 6 && a + leftover_n == 12, "projectile channel closes A/Z exactly");
-        require(leftover_n >= 0, "leftover neutrons non-negative");
-    }
-    require(saw_c12 > 0, "12C reachable in joint channel");
-    require(counts[5] > 0.0 || counts[1] > 0.0, "He or p appears in joint channel");
-    const double mean_frags = static_cast<double>(nfrag_sum) / static_cast<double>(n_events);
-    require(mean_frags < 7.0, "constrained channel remains below proton-only completion");
-}
 
-void test_inelastic_neutron_kerma_fraction() {
-    require(carbon::inelastic_neutron_kerma_MeV(0.0F) == 0.0F, "zero neutron KE scores no kerma");
-    require(carbon::inelastic_neutron_kerma_MeV(100.0F) == 0.0F,
-            "paper mode scores no fixed neutron vertex kerma");
-}
 
-void test_inelastic_optical_depth_in_step() {
-    float s = 0.0F;
-    require(carbon::inelastic_collision_in_step(0.02F, 1.0F, 0.0F, &s), "u=0 collides");
-    require(s > 0.0F && s <= 1.0F, "collision distance inside step");
-    require(!carbon::inelastic_collision_in_step(0.02F, 1.0F, 0.999F, &s),
-            "large u may miss a short step");
-    require_near(s, 1.0F, 1.0e-6F, "miss keeps full step");
-}
 
-void test_inelastic_fail_residual_not_double_counted() {
-    const float incident = 1200.0F;
-    carbon::InelasticProductSet failed{};
-    failed.resample_failed = 1;
-    failed.model_unassigned_MeV = incident;
-    failed.untracked_energy_MeV = 0.0F;
-    const float residual = carbon::inelastic_numerical_residual_MeV(
-        incident, 0.0F, 0.0F, failed.untracked_energy_MeV, failed.model_unassigned_MeV);
-    require_near(residual, 0.0, 1.0e-4, "resample-fail leftover must not appear again as residual");
-    require(failed.untracked_energy_MeV == 0.0F, "resample fail must not dump KE into untracked");
-    require_near(carbon::inelastic_fail_unassigned_if_no_products(1, 1200.0F), 0.0, 1.0e-6,
-                 "fallback charged product carries KE, unassigned is 0");
-    require_near(carbon::inelastic_fail_unassigned_if_no_products(0, 1200.0F), 1200.0, 1.0e-6,
-                 "empty product list would leave incident unassigned");
-}
 
-void test_eq13_first_fragment_not_scaled_down() {
-    for (const float p : {100.0F, 200.0F, 300.0F, 400.0F}) {
-        const float e = carbon::sample_projectile_fragment_Eu(95.0F, p, 11, 0.0F, 0.0F);
-        require(e > 0.0F, "first-fragment E/A must be finite");
-        require_near(e, p, 1.0e-3F * p, "first fragment E/A must match incident E/A, not 0.6 P");
-        require(e > 0.9F * p, "first fragment must not be 0.6x incident E/A");
-    }
-}
 
-void test_eq12_component_choice() {
-    require(carbon::eq12_sample_gaussian(1, 1, false, 0.1F, 0.5F), "projectile 1H mix can be Gaussian");
-    require(!carbon::eq12_sample_gaussian(1, 1, false, 0.9F, 0.5F), "projectile 1H mix can be exponential");
-    require(carbon::eq12_sample_gaussian(1, 2, true, 0.1F, 0.5F), "target 2H mix can be Gaussian");
-    require(!carbon::eq12_sample_gaussian(1, 3, true, 0.9F, 0.5F), "target 3H mix can be exponential");
-    require(carbon::eq12_sample_gaussian(6, 12, false, 0.99F, 0.01F), "projectile 12C is Gaussian");
-    require(!carbon::eq12_sample_gaussian(6, 12, true, 0.0F, 0.99F), "target 12C is exponential");
-}
+
+
+
+
+
+
+
+
 
 void test_csv_target_h_fraction() {
     const auto xs = carbon::CrossSectionTable::from_csv(
@@ -4014,71 +3742,7 @@ void test_csda_remnant_local_stop() {
     require(r > 12.0F * 2.0F / 10.0F * 0.5F, "CSDA uses integrated 1/S not a single E/S dump");
 }
 
-void test_table1_newton_invert() {
-    double raw_counts[18]{};
-    unsigned raw_closed = 0;
-    carbon::simulate_projectile_inclusive(carbon::kFredProbH.data(), 4000U, 7U, raw_counts,
-                                          &raw_closed);
-    double raw_sum = 0.0;
-    for (int i = 0; i < 18; ++i) {
-        raw_sum += raw_counts[i];
-    }
-    require(raw_sum > 0.0, "raw sequential sampling must emit fragments");
-    require(raw_counts[17] > 0.0, "raw Table 1 sequential sampling must emit 12C");
 
-    double table_sum = 0.0;
-    for (int i = 0; i < 18; ++i) {
-        table_sum += static_cast<double>(carbon::kFredProbH[static_cast<std::size_t>(i)]);
-    }
-    float raw_max = 0.0F;
-    for (int i = 0; i < 18; ++i) {
-        const auto fe = static_cast<double>(carbon::kFredProbH[static_cast<std::size_t>(i)]) /
-                        table_sum;
-        const auto fn = raw_counts[i] / raw_sum;
-        raw_max = std::max(raw_max, static_cast<float>(std::fabs(fn - fe)));
-    }
-
-    const auto inverted = carbon::invert_table1_independent_probs(
-        carbon::kFredProbH.data(), 12, 6, 2500U, 5U, 11U);
-    require(inverted.events == 2500U, "invert must run requested events");
-    require(inverted.inclusive_fraction[17] > 0.0, "inverted sampling must keep 12C");
-    require(inverted.max_abs_fraction_error <= raw_max + 0.05F,
-            "CRN Newton invert should not degrade Table 1 fraction match");
-
-    const auto inverted_o16 = carbon::invert_table1_independent_probs(
-        carbon::kFredProbO.data(), 16, 8, 2500U, 5U, 13U);
-    require(inverted_o16.events == 2500U, "O-16 invert must run requested events");
-    double o16_counts[18]{};
-    carbon::simulate_nucleon_conserving_inclusive(
-        inverted_o16.sample_prob.data(), 16, 8, 2000U, 13U, o16_counts, nullptr);
-    double o16_sum = 0.0;
-    for (int i = 0; i < 18; ++i) {
-        o16_sum += o16_counts[i];
-    }
-    require(o16_sum > 0.0, "O-16 nucleon-conserving sampling must emit fragments");
-}
-
-void test_table1_inclusive_sampling() {
-    bool saw_c12_h = false;
-    bool saw_c12_o = false;
-    bool saw_n_h = false;
-    for (int trial = 0; trial < 10000; ++trial) {
-        float u = (static_cast<float>(trial) + 0.5f) / 10000.0f;
-        int iso_h = carbon::sample_table1_isotope(carbon::kFredProbH.data(), 12, 6, u);
-        require(iso_h >= 0 && iso_h < 18, "Valid isotope index on H");
-        require(carbon::kFredIsotopes[iso_h].a <= 12 && carbon::kFredIsotopes[iso_h].z <= 6, "Nucleon bound on H");
-        if (iso_h == 17) saw_c12_h = true;
-        if (iso_h == 0) saw_n_h = true;
-
-        int iso_o = carbon::sample_table1_isotope(carbon::kFredProbO.data(), 12, 6, u);
-        require(iso_o >= 0 && iso_o < 18, "Valid isotope index on O");
-        require(carbon::kFredIsotopes[iso_o].a <= 12 && carbon::kFredIsotopes[iso_o].z <= 6, "Nucleon bound on O");
-        if (iso_o == 17) saw_c12_o = true;
-    }
-    require(saw_c12_h, "Table 1 H sampling must be able to return 12C");
-    require(saw_c12_o, "Table 1 O sampling must be able to return 12C");
-    require(saw_n_h, "Table 1 H sampling must be able to return neutrons");
-}
 
 void test_cinel02_replay_miss_mcs_semantics() {
     constexpr float cutoff = 1.0F;
@@ -4150,7 +3814,7 @@ void test_cinel02_ledger_schema_and_accumulator() {
     require(carbon::cinel02_unstable_ion_policy(4, 6) ==
                 carbon::Cinel02UnstableIonPolicy::TopasCompatKill,
             "Be-6 must use the TOPAS compatibility policy");
-    for (const auto& isotope : carbon::kFredIsotopes) {
+    for (const auto& isotope : carbon::kChargedIons) {
         const auto policy = carbon::cinel02_unstable_ion_policy(isotope.z, isotope.a);
         require(policy == ((isotope.z == 4 && isotope.a == 6)
                                ? carbon::Cinel02UnstableIonPolicy::TopasCompatKill
@@ -4169,7 +3833,7 @@ void test_cinel02_ledger_schema_and_accumulator() {
     compat_config.primary_inelastic_rate_v2_file = "rates.csv";
     compat_config.cinel02_topas_compatibility_mode = true;
     compat_config.validate();
-    compat_config.nuclear_model = "fred_paper";
+    compat_config.nuclear_model = "geant4";
     require_throws([&compat_config] { compat_config.validate(); },
                    "compatibility mode accepted a non-CINEL02 model");
     using Schema = carbon::Cinel02SpeciesLedgerSchema;
@@ -7315,6 +6979,7 @@ void test_schneider_stopping_payload_physical_validation() {
     std::filesystem::remove_all(tmp_dir);
 }
 
+#ifdef CARBON_HAS_SYCL
 [[gnu::noinline]] void require_transport_sycl_throws(
     const carbon::TransportConfig& bad,
     const carbon::StoppingPowerTable& water_sp,
@@ -7525,6 +7190,8 @@ void test_schneider_stopping_host_device_equivalence() {
     sycl::free(dev_energies, queue);
     sycl::free(dev_results, queue);
 }
+
+#endif
 
 void test_step15_schneider_radiation_lengths_and_sentinel() {
     auto json_path = std::filesystem::path("data/schneider/schneider_radiation_lengths.json");
@@ -8387,8 +8054,8 @@ void test_step18_target_sampler_cpu_gpu_equivalence_and_diagnostics() {
     sycl::free(dev_targets, queue);
     sycl::free(dev_event_ids, queue);
     std::cout << "[step18-test] CPU/GPU equivalence and diagnostics PASSED.\n";
-}
 #endif
+}
 
 void test_step20_secondary_rate_table_and_cinel03_package() {
     std::cout << "[step20-test] Running secondary rate table and cinel03 package tests...\n";
@@ -10210,33 +9877,28 @@ int main(int argc, char** argv) {
     };
     try {
         run("test_cinel03_common_event_azimuth", test_cinel03_common_event_azimuth);
-        run("test_fred_18_isotopes_data", test_fred_18_isotopes_data);
+        run("test_charged_species_registry", test_charged_species_registry);
         run("test_cinel02_replay_miss_mcs_semantics", test_cinel02_replay_miss_mcs_semantics);
         run("test_secondary_step_voxel_commit", test_secondary_step_voxel_commit);
         run("test_continuous_species_track_tally", test_continuous_species_track_tally);
         run("test_cinel02_ledger_schema_and_accumulator", test_cinel02_ledger_schema_and_accumulator);
         run("test_ion_species_stopping_power_grid_validation", test_ion_species_stopping_power_grid_validation);
         run("test_stopping_power_csv_corruption_rejection", test_stopping_power_csv_corruption_rejection);
-        run("test_kox_icru_cross_sections", test_kox_icru_cross_sections);
-        run("test_topas_c12_h_elastic_table", test_topas_c12_h_elastic_table);
-        run("test_fred_event_library_load", test_fred_event_library_load);
-        run("test_fred_2gr_package", test_fred_2gr_package);
-        run("test_multi_energy_fred_event_libraries", test_multi_energy_fred_event_libraries);
-        run("test_fred_paper_sigma_cc_and_water_macro", test_fred_paper_sigma_cc_and_water_macro);
-        run("test_c12_hydrogen_elastic_kinematics", test_c12_hydrogen_elastic_kinematics);
+
+
+
         run("test_vavilov_landau_straggling_sampler", test_vavilov_landau_straggling_sampler);
-        run("test_table1_no_np_evaporation_dump", test_table1_no_np_evaporation_dump);
-        run("test_energy_dependent_inclusive_yields", test_energy_dependent_inclusive_yields);
-        run("test_projectile_joint_channel", test_projectile_joint_channel);
-        run("test_inelastic_neutron_kerma_fraction", test_inelastic_neutron_kerma_fraction);
-        run("test_inelastic_optical_depth_in_step", test_inelastic_optical_depth_in_step);
-        run("test_inelastic_fail_residual_not_double_counted", test_inelastic_fail_residual_not_double_counted);
-        run("test_eq13_first_fragment_not_scaled_down", test_eq13_first_fragment_not_scaled_down);
-        run("test_eq12_component_choice", test_eq12_component_choice);
+
+
+
+
+
+
+
+
         run("test_csv_target_h_fraction", test_csv_target_h_fraction);
         run("test_csda_remnant_local_stop", test_csda_remnant_local_stop);
-        run("test_table1_inclusive_sampling", test_table1_inclusive_sampling);
-        run("test_table1_newton_invert", test_table1_newton_invert);
+
         run("test_units", test_units);
         run("test_csda_range_loss_validation", test_csda_range_loss_validation);
         run("test_hu_stopping_power_lut_loading", test_hu_stopping_power_lut_loading);

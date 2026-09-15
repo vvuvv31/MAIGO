@@ -1,3 +1,5 @@
+#include "carbon/nuclear_collision.hpp"
+#include "carbon/charged_species.hpp"
 #include "carbon/delta_moments_data.hpp"
 #include "carbon/runtime_timing.hpp"
 #include "carbon/unified_em_view.hpp"
@@ -18,8 +20,6 @@
 #include "carbon/electron_packet_transport.hpp"
 #include "carbon/electron_short_range.hpp"
 #include "carbon/energy_loss_fluctuation.hpp"
-#include "carbon/fred_event_library.hpp"
-#include "carbon/fred_table1.hpp"
 #include "carbon/inelastic.hpp"
 #include "carbon/inelastic_package_v2.hpp"
 #include "carbon/multiple_scattering.hpp"
@@ -123,7 +123,6 @@ inline void flush_unified_em_audit(std::uint64_t* global,
 }
 
 #include "detail/sycl_device_math.inc"
-#include "detail/sycl_inelastic_device.inc"
 #include "detail/sycl_score_device.inc"
 
 using carbon::detail::DeviceMemoryTracker;
@@ -1506,10 +1505,7 @@ template<int EmMode>
                     "Schneider primary cross section is validated for C12 (Z=6, A=12) primaries only, got Z=" +
                     std::to_string(config.primary_atomic_number) + ", A=" + std::to_string(config.primary_mass_number));
             }
-            if (config.enable_nuclear_elastic) {
-                throw std::runtime_error(
-                    "Nuclear elastic scattering is not supported under Schneider primary cross section mode");
-            }
+
             // Validate all voxel material_id < 25 before kernel launch
             for (std::size_t i = 0; i < grid.material_id.size(); ++i) {
                 if (grid.material_id[i] >= SchneiderResampledCrossSectionGrid::kExpectedSections) {
@@ -1995,7 +1991,9 @@ template<int EmMode>
 
     const bool is_primary_attenuation_only = config.is_primary_attenuation_only_mode();
     const auto enable_inelastic = config.enable_inelastic;
-    const auto enable_nuclear_elastic = config.enable_nuclear_elastic;
+    if (enable_inelastic && !use_schneider_primary_xs) {
+        throw std::runtime_error("Nuclear transport requires the validated Schneider/unified-water CINEL03 path");
+    }
     const auto enable_secondary_transport = config.enable_secondary_transport;
 
     auto* deposited_device = mem_tracker.allocate<float>(number_of_histories);
@@ -2058,7 +2056,7 @@ template<int EmMode>
     }
 
     const bool need_secondary_buffers =
-        !is_primary_attenuation_only && (enable_inelastic || enable_nuclear_elastic);
+        !is_primary_attenuation_only && enable_inelastic;
 
     constexpr std::size_t max_secondaries = 32000000;
     auto* secondary_queue_device =
@@ -2077,204 +2075,13 @@ template<int EmMode>
         need_secondary_buffers
             ? mem_tracker.allocate<float>(1)
             : nullptr;
-    float* fred_model_residual_device =
-        (need_secondary_buffers && enable_inelastic)
-            ? mem_tracker.allocate<float>(1)
-            : nullptr;
-    float* fred_q_device =
-        (need_secondary_buffers && enable_inelastic)
-            ? mem_tracker.allocate<float>(1)
-            : nullptr;
-    float* fred_neutron_device =
-        (need_secondary_buffers && enable_inelastic)
-            ? mem_tracker.allocate<float>(1)
-            : nullptr;
-    float* fred_remnant_device =
-        (need_secondary_buffers && enable_inelastic)
-            ? mem_tracker.allocate<float>(1)
-            : nullptr;
-    uint32_t* fred_fail_count_device =
-        (need_secondary_buffers && enable_inelastic)
-            ? mem_tracker.allocate<uint32_t>(1)
-            : nullptr;
-    float* fred_fail_energy_device =
-        (need_secondary_buffers && enable_inelastic)
-            ? mem_tracker.allocate<float>(1)
-            : nullptr;
-    uint32_t* fred_cap_overflow_count_device = nullptr;
-    float* fred_cap_overflow_energy_device = nullptr;
-    if (need_secondary_buffers && enable_inelastic) {
-        fred_cap_overflow_count_device = mem_tracker.allocate<uint32_t>(1);
-        fred_cap_overflow_energy_device = mem_tracker.allocate<float>(1);
-        const bool inelastic_ok =
-            secondary_queue_device != nullptr && secondary_count_device != nullptr &&
-            secondary_overflow_count_device != nullptr &&
-            secondary_overflow_energy_device != nullptr &&
-            fred_model_residual_device != nullptr && fred_q_device != nullptr &&
-            fred_neutron_device != nullptr && fred_remnant_device != nullptr &&
-            fred_fail_count_device != nullptr && fred_fail_energy_device != nullptr &&
-            fred_cap_overflow_count_device != nullptr &&
-            fred_cap_overflow_energy_device != nullptr;
-        if (!inelastic_ok) {
-            free_device(secondary_queue_device);
-            free_device(secondary_count_device);
-            free_device(secondary_overflow_count_device);
-            free_device(secondary_overflow_energy_device);
-            free_device(fred_model_residual_device);
-            free_device(fred_q_device);
-            free_device(fred_neutron_device);
-            free_device(fred_remnant_device);
-            free_device(fred_fail_count_device);
-            free_device(fred_fail_energy_device);
-            free_device(fred_cap_overflow_count_device);
-            free_device(fred_cap_overflow_energy_device);
+    if (need_secondary_buffers) {
+        if (!secondary_queue_device || !secondary_count_device ||
+            !secondary_overflow_count_device || !secondary_overflow_energy_device)
             throw std::bad_alloc();
-        }
-        queue.fill(secondary_count_device, 0U, 1);
-        queue.fill(secondary_overflow_count_device, 0U, 1);
-        queue.fill(secondary_overflow_energy_device, 0.0F, 1);
-        queue.fill(fred_model_residual_device, 0.0F, 1);
-        queue.fill(fred_q_device, 0.0F, 1);
-        queue.fill(fred_neutron_device, 0.0F, 1);
-        queue.fill(fred_remnant_device, 0.0F, 1);
-        queue.fill(fred_fail_count_device, 0U, 1);
-        queue.fill(fred_fail_energy_device, 0.0F, 1);
-        queue.fill(fred_cap_overflow_count_device, 0U, 1);
-        queue.fill(fred_cap_overflow_energy_device, 0.0F, 1).wait_and_throw();
-    } else if (need_secondary_buffers && enable_nuclear_elastic) {
-        if (secondary_queue_device == nullptr || secondary_count_device == nullptr ||
-            secondary_overflow_count_device == nullptr ||
-            secondary_overflow_energy_device == nullptr) {
-            throw std::bad_alloc();
-        }
         queue.fill(secondary_count_device, 0U, 1);
         queue.fill(secondary_overflow_count_device, 0U, 1);
         queue.fill(secondary_overflow_energy_device, 0.0F, 1).wait_and_throw();
-    }
-
-    constexpr std::size_t kFredDiagSlots = 26;
-    float* fred_prob_proj_h_device = nullptr;
-    float* fred_prob_proj_o_device = nullptr;
-    float* fred_prob_tgt_h_device = nullptr;
-    float* fred_prob_tgt_o_device = nullptr;
-    std::uint64_t* fred_diag_device = nullptr;
-    float invert_err_proj_h = 0.0F;
-    float invert_err_proj_o = 0.0F;
-    float invert_err_tgt_h = 0.0F;
-    float invert_err_tgt_o = 0.0F;
-    if (enable_inelastic) {
-        static std::array<float, 18> cached_proj_h{};
-        static std::array<float, 18> cached_proj_o{};
-        static std::array<float, 18> cached_tgt_h{};
-        static std::array<float, 18> cached_tgt_o{};
-        static float cached_err_proj_h = 0.0F;
-        static float cached_err_proj_o = 0.0F;
-        static float cached_err_tgt_h = 0.0F;
-        static float cached_err_tgt_o = 0.0F;
-        static bool cached_sample_ready = false;
-        if (!cached_sample_ready) {
-            cached_proj_h = kFredProbH;
-            cached_proj_o = kFredProbO;
-            cached_tgt_h = kFredProbH;
-            cached_tgt_o = kFredProbO;
-            cached_err_proj_h = 0.0F;
-            cached_err_proj_o = 0.0F;
-            cached_err_tgt_h = 0.0F;
-            cached_err_tgt_o = 0.0F;
-            cached_sample_ready = true;
-        }
-        invert_err_proj_h = cached_err_proj_h;
-        invert_err_proj_o = cached_err_proj_o;
-        invert_err_tgt_h = cached_err_tgt_h;
-        invert_err_tgt_o = cached_err_tgt_o;
-        fred_prob_proj_h_device = mem_tracker.allocate<float>(18);
-        fred_prob_proj_o_device = mem_tracker.allocate<float>(18);
-        fred_prob_tgt_h_device = mem_tracker.allocate<float>(18);
-        fred_prob_tgt_o_device = mem_tracker.allocate<float>(18);
-        fred_diag_device = mem_tracker.allocate<std::uint64_t>(kFredDiagSlots);
-        if (fred_prob_proj_h_device == nullptr || fred_prob_proj_o_device == nullptr ||
-            fred_prob_tgt_h_device == nullptr || fred_prob_tgt_o_device == nullptr ||
-            fred_diag_device == nullptr) {
-            free_device(fred_prob_proj_h_device);
-            free_device(fred_prob_proj_o_device);
-            free_device(fred_prob_tgt_h_device);
-            free_device(fred_prob_tgt_o_device);
-            free_device(fred_diag_device);
-            throw std::bad_alloc();
-        }
-        queue.copy(cached_proj_h.data(), fred_prob_proj_h_device, 18);
-        queue.copy(cached_proj_o.data(), fred_prob_proj_o_device, 18);
-        queue.copy(cached_tgt_h.data(), fred_prob_tgt_h_device, 18);
-        queue.copy(cached_tgt_o.data(), fred_prob_tgt_o_device, 18);
-        queue.fill(fred_diag_device, static_cast<std::uint64_t>(0), kFredDiagSlots)
-            .wait_and_throw();
-    }
-
-    carbon::FredEventLibSetDevice lib_h_view{};
-    carbon::FredEventLibSetDevice lib_o_view{};
-    std::vector<void*> event_lib_device_allocations;
-    const auto upload_event_set = [&](std::vector<std::filesystem::path> paths,
-                                      const std::filesystem::path& legacy_path,
-                                      const std::uint16_t expected_z,
-                                      const std::uint16_t expected_a,
-                                      carbon::FredEventLibSetDevice& set) {
-        if (paths.empty() && !legacy_path.empty()) paths.push_back(legacy_path);
-        std::vector<carbon::FredEventLibrary> hosts;
-        for (const auto& path : paths) {
-            if (path.empty() || !std::filesystem::exists(path))
-                throw std::runtime_error("Missing FRED event library: " + path.string());
-            auto host = carbon::load_fred_event_library(path);
-            if (host.target_z != expected_z || host.target_a != expected_a)
-                throw std::runtime_error("FRED event-library target identity mismatch: " +
-                                         path.string());
-            hosts.push_back(std::move(host));
-        }
-        std::sort(hosts.begin(), hosts.end(), [](const auto& a, const auto& b) {
-            return a.reference_energy_MeVu < b.reference_energy_MeVu;
-        });
-        if (hosts.size() > 4) throw std::runtime_error("At most four event-library energies are supported");
-        for (std::size_t k = 1; k < hosts.size(); ++k)
-            if (hosts[k].reference_energy_MeVu <= hosts[k - 1].reference_energy_MeVu)
-                throw std::runtime_error("Event-library energies must be unique");
-        set.count = static_cast<std::uint32_t>(hosts.size());
-        for (std::size_t k = 0; k < hosts.size(); ++k) {
-            const auto& host = hosts[k];
-            const auto n = host.event_count;
-            const auto slots = static_cast<std::size_t>(n) * host.max_fragments;
-            auto alloc = [&](auto*& pointer, std::size_t count) {
-                using T = std::remove_pointer_t<std::remove_reference_t<decltype(pointer)>>;
-                pointer = mem_tracker.allocate<T>(count);
-                if (pointer == nullptr) throw std::bad_alloc();
-                event_lib_device_allocations.push_back(static_cast<void*>(pointer));
-            };
-            std::uint8_t* nfrag{}; float* nke{}; std::int8_t* z{}; std::int8_t* a{};
-            float* ke{}; float* ux{}; float* uy{}; float* uz{};
-            alloc(nfrag, n); alloc(nke, n); alloc(z, slots); alloc(a, slots);
-            alloc(ke, slots); alloc(ux, slots); alloc(uy, slots); alloc(uz, slots);
-            queue.copy(host.fragment_count.data(), nfrag, n);
-            queue.copy(host.neutron_ke_MeV.data(), nke, n);
-            queue.copy(host.z.data(), z, slots); queue.copy(host.a.data(), a, slots);
-            queue.copy(host.ke_MeV.data(), ke, slots); queue.copy(host.ux.data(), ux, slots);
-            queue.copy(host.uy.data(), uy, slots); queue.copy(host.uz.data(), uz, slots)
-                .wait_and_throw();
-            set.libraries[k] = carbon::FredEventLibDevice{
-                n, host.max_fragments, host.reference_energy_MeVu,
-                nfrag, nke, z, a, ke, ux, uy, uz};
-            std::cout << "Loaded FRED event library at " << host.reference_energy_MeVu
-                      << " MeV/u (" << n << " events)\n";
-        }
-    };
-    if (enable_inelastic) {
-        upload_event_set(config.fred_event_library_h_files,
-                         config.fred_event_library_h_file, 1, 1, lib_h_view);
-        upload_event_set(config.fred_event_library_o_files,
-                         config.fred_event_library_o_file, 8, 16, lib_o_view);
-        for (const auto& path : config.fred_event_library_c_files) {
-            const auto host = carbon::load_fred_event_library(path);
-            if (host.target_z != 6 || host.target_a != 12)
-                throw std::runtime_error("FRED carbon event-library target mismatch: " +
-                                         path.string());
-        }
     }
 
     float* fluct_energy_device = nullptr;
@@ -2336,16 +2143,6 @@ template<int EmMode>
         std::cout << "Loaded packaged C-12 fluctuation grid (" << fluct_energy_count
                   << " energies, " << fluct_density_count << " thicknesses, "
                   << fluct_probability_count << " quantiles)\n";
-    }
-
-    float* fred_2gr_mcs_device = nullptr;
-    if (config.uses_fred_2gr_mcs()) {
-        const auto host = carbon::Fred2GrMcsTable::from_binary(config.fred_2gr_mcs_file);
-        fred_2gr_mcs_device = mem_tracker.allocate<float>(host.values.size());
-        if (fred_2gr_mcs_device == nullptr) throw std::bad_alloc();
-        queue.copy(host.values.data(), fred_2gr_mcs_device, host.values.size())
-            .wait_and_throw();
-        std::cout << "Loaded FRED 3.76 2GR MCS table (51x48x6)\n";
     }
 
     float* ion_species_sp_device = nullptr;
@@ -2555,9 +2352,6 @@ template<int EmMode>
     const auto active_water_radiation_length = use_unified_water
         ? schneider_ct_device_ctx.water_radiation_length_g_cm2 : water_radiation_length_g_per_cm2;
     const auto enable_multiple_scattering = config.enable_multiple_scattering;
-    const auto use_fred_2gr_mcs = config.uses_fred_2gr_mcs();
-    const auto extrapolate_fred_2gr_high_energy =
-        config.uses_fred_2gr_high_energy_extrapolation();
     const auto enable_ct_material_mcs = config.enable_ct_material_mcs;
     const auto enable_tps_source = config.uses_fixed_patient_coordinates();
     const auto random_seed = config.random_seed;
@@ -3070,15 +2864,11 @@ template<int EmMode>
                     }
 
                     bool inelastic_this_step = false;
-                    bool elastic_this_step = false;
-                    // Dedicated CT-elastic flag: the shared elastic_this_step
-                    // can also be raised by the FRED water path, which the CT
-                    // handler below must never consume.
+                    // Elastic candidates are resolved only by the configured CT/water bank.
                     bool ct_elastic_this_step = false;
-                    float p_target_h_step = 0.5F;
                     std::int16_t cinel02_target_z_step = 0;
                     std::int16_t cinel02_target_a_step = 0;
-                    if ((enable_inelastic || enable_nuclear_elastic) &&
+                    if (enable_inelastic &&
                         energy_MeV > energy_cutoff_MeV) {
                         const auto cur_e_u = energy_MeV * inverse_mass_number;
                         if (use_schneider_primary_xs) {
@@ -3122,7 +2912,7 @@ template<int EmMode>
                                     const auto el_rates =
                                         schneider_ct_device_ctx.elastic_rates(
                                             section_id, cur_e_u);
-                                    // Default H-only (validated FRED physics);
+                                    // Legacy diagnostic H-only target selection;
                                     // all-target isotropic needs explicit
                                     // opt-in (unphysical for heavy nuclei).
                                     macro_el_ct = local_density_g_per_cm3 *
@@ -3180,57 +2970,6 @@ template<int EmMode>
                                     inelastic_this_step = true;
                                     interaction_section = section_id;
                                     interaction_density = local_density_g_per_cm3;
-                                }
-                            }
-                        } else {
-                            float macro_xs = 0.0F;
-                            if (enable_inelastic && cross_section_device != nullptr) {
-                                const auto xs_flt =
-                                    (cur_e_u - minimum_table_energy) * inverse_table_step;
-                                auto xs_idx = static_cast<int>(sycl::floor(xs_flt));
-                                xs_idx = sycl::max(
-                                    0, sycl::min(xs_idx,
-                                                 static_cast<int>(cross_section_table_size) - 2));
-                                const auto xs_fr =
-                                    sycl::clamp(xs_flt - static_cast<float>(xs_idx), 0.0F, 1.0F);
-                                macro_xs =
-                                    cross_section_device[xs_idx] +
-                                    xs_fr * (cross_section_device[xs_idx + 1] -
-                                             cross_section_device[xs_idx]);
-                                if (target_h_fraction_device != nullptr) {
-                                    p_target_h_step =
-                                        target_h_fraction_device[xs_idx] +
-                                        xs_fr * (target_h_fraction_device[xs_idx + 1] -
-                                                 target_h_fraction_device[xs_idx]);
-                                }
-                            }
-                            const float macro_el =
-                                enable_nuclear_elastic
-                                    ? carbon::water_elastic_h_macro_per_mm(
-                                          cur_e_u, water_density_g_per_cm3)
-                                    : 0.0F;
-                            const float macro_tot = macro_xs + macro_el;
-                            const auto u_nuc = rng::uniform01(
-                                spot_seed, rng_history, steps, 8);
-                            float collision_s = step_mm;
-                            const bool collision = carbon::inelastic_collision_in_step(
-                                macro_tot, step_mm, u_nuc, &collision_s);
-                            if (collision) {
-                                step_mm = collision_s;
-                                const float u_br = rng::uniform01(
-                                    spot_seed, rng_history, steps, 9);
-                                if (enable_nuclear_elastic && macro_tot > 0.0F &&
-                                    u_br * macro_tot < macro_el) {
-                                    elastic_this_step = true;
-                                } else if (enable_inelastic) {
-                                    if (inelastic_reaction_device != nullptr) {
-                                        sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
-                                                         sycl::memory_scope::device,
-                                                         sycl::access::address_space::global_space>
-                                            reaction(inelastic_reaction_device[bin]);
-                                        reaction.fetch_add(1U);
-                                    }
-                                    inelastic_this_step = true;
                                 }
                             }
                         }
@@ -4139,23 +3878,7 @@ template<int EmMode>
                         float theta_x = 0.0F;
                         float theta_y = 0.0F;
                         constexpr float two_pi = 6.2831853071795864769F;
-                        if (use_fred_2gr_mcs) {
-                            const auto mixture = rng::uniform01(
-                                spot_seed, rng_history, steps, 3);
-                            const auto radial = rng::uniform01(
-                                spot_seed, rng_history, steps, 4);
-                            const auto azimuth = two_pi * rng::uniform01(
-                                spot_seed, rng_history, steps, 5);
-                            const auto angle = fred_2gr_angle_device(
-                                fred_2gr_mcs_device, energy_MeVu,
-                                primary_atomic_number, primary_mass_number,
-                                local_density_g_per_cm3 * step_mm / 10.0F,
-                                radiation_length_g_per_cm2,
-                                extrapolate_fred_2gr_high_energy,
-                                multiple_scattering_scale, mixture, radial);
-                            theta_x = angle * sycl::cos(azimuth);
-                            theta_y = angle * sycl::sin(azimuth);
-                        } else {
+                        {
                             const auto theta0 = highland_projected_rms_angle_device(
                                 energy_MeV, primary_atomic_number, primary_mass_number,
                                 step_mm, local_density_g_per_cm3,
@@ -4359,57 +4082,7 @@ template<int EmMode>
                             }
                         }
                     }
-                    if (enable_nuclear_elastic && elastic_this_step &&
-                        energy_MeV > energy_cutoff_MeV) {
-                        const float u_cos = rng::uniform01(
-                            spot_seed, rng_history, steps, 10);
-                        const float u_phi = rng::uniform01(
-                            spot_seed, rng_history, steps, 11);
-                        const auto scat = carbon::sample_c12_hydrogen_elastic(
-                            energy_MeV, direction_x, direction_y, direction_z,
-                            u_cos, u_phi);
-                        energy_MeV = scat.projectile_ke_MeV;
-                        direction_x = scat.proj_dir_x;
-                        direction_y = scat.proj_dir_y;
-                        direction_z = scat.proj_dir_z;
-                        if (enable_secondary_transport &&
-                            scat.proton_ke_MeV > energy_cutoff_MeV &&
-                            secondary_queue_device != nullptr) {
-                            auto count_ref = sycl::atomic_ref<
-                                uint32_t, sycl::memory_order::relaxed,
-                                sycl::memory_scope::device,
-                                sycl::access::address_space::global_space>(
-                                *secondary_count_device);
-                            const auto base_idx = count_ref.fetch_add(1U);
-                            if (base_idx < max_secondaries) {
-                                SecondaryParticle proton{};
-                                proton.z = 1;
-                                proton.a = 1;
-                                proton.energy_MeV = scat.proton_ke_MeV;
-                                proton.pos_x_mm = position_x_mm;
-                                proton.pos_y_mm = position_y_mm;
-                                proton.pos_z_mm = position_z_mm;
-                                proton.dir_x = scat.proton_dir_x;
-                                proton.dir_y = scat.proton_dir_y;
-                                proton.dir_z = scat.proton_dir_z;
-                                proton.weight = 1.0F;
-                                proton.parent_history = global_history;
-                                proton.rng_stream = rng::child_stream(
-                                    rng_history, rng::branch_tag(
-                                        rng::branch_role_primary_charged, steps));
-                                secondary_queue_device[base_idx] = proton;
-                                cinel02_record_queued_secondary_birth_device(
-                                    cinel02_species_energy_device, proton.z, proton.a,
-                                    proton.energy_MeV);
-                            } else if (secondary_overflow_count_device != nullptr) {
-                                sycl::atomic_ref<uint32_t, sycl::memory_order::relaxed,
-                                                 sycl::memory_scope::device,
-                                                 sycl::access::address_space::global_space>
-                                    atomic_ov(*secondary_overflow_count_device);
-                                atomic_ov.fetch_add(1U);
-                            }
-                        }
-                    }
+
 
                     if (use_schneider_primary_xs && (in_ct || use_unified_water) && inelastic_this_step) {
                         if (is_primary_attenuation_only) {
@@ -4483,6 +4156,8 @@ template<int EmMode>
                         }
                         if (schneider_ct_device_ctx.primary_sampler.rate_version == 3 &&
                             target_z <= 0) {
+                            // Null collision: retain the surviving track and complete this EM step.
+                            inelastic_this_step = false;
                             schneider_diag_increment_device(
                                 schneider_diag_device,
                                 SchneiderDiagSlot::PrimaryPostEmNullCollisions);
@@ -4732,227 +4407,7 @@ template<int EmMode>
                         }  // else of the v3 masked-sampler empty-draw guard
                     }
 
-                    if (enable_inelastic && inelastic_this_step &&
-                        energy_MeV > energy_cutoff_MeV &&
-                        cross_section_device != nullptr) {
-                        {
-                        const float p_target_h = p_target_h_step;
-                        {
-                            const Direction3F cur_dir{direction_x, direction_y,
-                                                      direction_z};
-                            const auto products =
-                                sample_carbon_inelastic_products_device(
-                                    energy_MeV, position_x_mm, position_y_mm,
-                                    position_z_mm, cur_dir, spot_seed, rng_history, steps,
-                                    fred_prob_proj_h_device, fred_prob_proj_o_device,
-                                    fred_prob_tgt_h_device, fred_prob_tgt_o_device,
-                                    ion_species_sp_device,
-                                    static_cast<int>(table_size),
-                                    minimum_table_energy, inverse_table_step,
-                                    ion_energy_grid_device, ion_csda_a1_device,
-                                    energy_cutoff_MeV, p_target_h,
-                                    lib_h_view, lib_o_view);
 
-                            if (products.local_deposit_MeV > 0.0F) {
-                                pending_primary_depth_MeV +=
-                                    products.local_deposit_MeV;
-                                if (enable_voxel_scoring && voxel_index >= 0) {
-                                    pending_primary_voxel_MeV +=
-                                        products.local_deposit_MeV;
-                                    if (in_fov_dose_device != nullptr && pending_primary_bin >= 0 &&
-                                        pending_primary_bin < static_cast<int>(number_of_bins)) {
-                                        sycl::atomic_ref<DepthAtomicT, sycl::memory_order::relaxed,
-                                                         sycl::memory_scope::device,
-                                                         sycl::access::address_space::global_space>
-                                            atomic_in_fov(in_fov_dose_device[pending_primary_bin]);
-                                        atomic_in_fov.fetch_add(static_cast<DepthAtomicT>(products.local_deposit_MeV));
-                                    }
-                                }
-                                history_deposited_MeV +=
-                                    products.local_deposit_MeV;
-                                grid_deposit_split_device(
-                                    grid_deposited_in_device,
-                                    grid_deposited_out_device,
-                                    enable_voxel_scoring && voxel_index >= 0,
-                                    products.local_deposit_MeV);
-                            }
-
-                            float total_charged_MeV = 0.0F;
-                            for (uint8_t ip = 0; ip < products.count; ++ip) {
-                                total_charged_MeV += products.products[ip].energy_MeV;
-                            }
-                            float untracked_MeV = products.untracked_energy_MeV;
-                            const float residual_MeV = inelastic_numerical_residual_MeV(
-                                energy_MeV, total_charged_MeV, products.local_deposit_MeV,
-                                untracked_MeV, products.model_unassigned_MeV);
-                            if (products.model_unassigned_MeV > 0.0F &&
-                                fred_model_residual_device != nullptr) {
-                                sycl::atomic_ref<float, sycl::memory_order::relaxed,
-                                                 sycl::memory_scope::device,
-                                                 sycl::access::address_space::global_space>
-                                    atomic_un(*fred_model_residual_device);
-                                atomic_un.fetch_add(products.model_unassigned_MeV);
-                            }
-                            if (residual_MeV > 0.0F && products.resample_failed == 0 &&
-                                products.model_unassigned_MeV <= 0.0F &&
-                                fred_model_residual_device != nullptr) {
-                                sycl::atomic_ref<float, sycl::memory_order::relaxed,
-                                                 sycl::memory_scope::device,
-                                                 sycl::access::address_space::global_space>
-                                    atomic_res(*fred_model_residual_device);
-                                atomic_res.fetch_add(residual_MeV);
-                            }
-
-                            if (fred_q_device != nullptr) {
-                                sycl::atomic_ref<float, sycl::memory_order::relaxed,
-                                                 sycl::memory_scope::device,
-                                                 sycl::access::address_space::global_space>
-                                    atomic_q(*fred_q_device);
-                                atomic_q.fetch_add(products.q_MeV);
-                                sycl::atomic_ref<float, sycl::memory_order::relaxed,
-                                                 sycl::memory_scope::device,
-                                                 sycl::access::address_space::global_space>
-                                    atomic_nke(*fred_neutron_device);
-                                atomic_nke.fetch_add(products.neutron_ke_MeV);
-                                sycl::atomic_ref<float, sycl::memory_order::relaxed,
-                                                 sycl::memory_scope::device,
-                                                 sycl::access::address_space::global_space>
-                                    atomic_rem(*fred_remnant_device);
-                                atomic_rem.fetch_add(products.remnant_local_MeV);
-                            }
-                            if (products.product_capacity_overflow != 0 &&
-                                fred_cap_overflow_count_device != nullptr) {
-                                sycl::atomic_ref<uint32_t, sycl::memory_order::relaxed,
-                                                 sycl::memory_scope::device,
-                                                 sycl::access::address_space::global_space>
-                                    atomic_cap(*fred_cap_overflow_count_device);
-                                atomic_cap.fetch_add(1U);
-                                sycl::atomic_ref<float, sycl::memory_order::relaxed,
-                                                 sycl::memory_scope::device,
-                                                 sycl::access::address_space::global_space>
-                                    atomic_cape(*fred_cap_overflow_energy_device);
-                                atomic_cape.fetch_add(products.product_capacity_overflow_MeV);
-                            }
-                            if (products.resample_failed != 0 && fred_fail_count_device != nullptr) {
-                                sycl::atomic_ref<uint32_t, sycl::memory_order::relaxed,
-                                                 sycl::memory_scope::device,
-                                                 sycl::access::address_space::global_space>
-                                    atomic_fail(*fred_fail_count_device);
-                                atomic_fail.fetch_add(1U);
-                                sycl::atomic_ref<float, sycl::memory_order::relaxed,
-                                                 sycl::memory_scope::device,
-                                                 sycl::access::address_space::global_space>
-                                    atomic_fe(*fred_fail_energy_device);
-                                atomic_fe.fetch_add(products.untracked_energy_MeV);
-                            }
-
-                            if (fred_diag_device != nullptr) {
-                                sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
-                                                 sycl::memory_scope::device,
-                                                 sycl::access::address_space::global_space>
-                                    atomic_n(fred_diag_device[18]);
-                                atomic_n.fetch_add(1U);
-                                sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
-                                                 sycl::memory_scope::device,
-                                                 sycl::access::address_space::global_space>
-                                    atomic_retry(fred_diag_device[19]);
-                                atomic_retry.fetch_add(static_cast<std::uint64_t>(products.retries_used));
-                                if (products.energy_scaled != 0) {
-                                    sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
-                                                     sycl::memory_scope::device,
-                                                     sycl::access::address_space::global_space>
-                                        atomic_sc(fred_diag_device[20]);
-                                    atomic_sc.fetch_add(1U);
-                                }
-                                if (products.leftover_proj_a != 0 || products.leftover_proj_z != 0) {
-                                    sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
-                                                     sycl::memory_scope::device,
-                                                     sycl::access::address_space::global_space>
-                                        atomic_open(fred_diag_device[21]);
-                                    atomic_open.fetch_add(1U);
-                                }
-                                sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
-                                                 sycl::memory_scope::device,
-                                                 sycl::access::address_space::global_space>
-                                    atomic_ta(fred_diag_device[22]);
-                                atomic_ta.fetch_add(static_cast<std::uint64_t>(
-                                    sycl::max(static_cast<int>(products.leftover_tgt_a), 0)));
-                                sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
-                                                 sycl::memory_scope::device,
-                                                 sycl::access::address_space::global_space>
-                                    atomic_tz(fred_diag_device[23]);
-                                atomic_tz.fetch_add(static_cast<std::uint64_t>(
-                                    sycl::max(static_cast<int>(products.leftover_tgt_z), 0)));
-                                sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
-                                                 sycl::memory_scope::device,
-                                                 sycl::access::address_space::global_space>
-                                    atomic_pa(fred_diag_device[24]);
-                                atomic_pa.fetch_add(static_cast<std::uint64_t>(
-                                    sycl::max(static_cast<int>(products.leftover_proj_a), 0)));
-                                sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
-                                                 sycl::memory_scope::device,
-                                                 sycl::access::address_space::global_space>
-                                    atomic_pz(fred_diag_device[25]);
-                                atomic_pz.fetch_add(static_cast<std::uint64_t>(
-                                    sycl::max(static_cast<int>(products.leftover_proj_z), 0)));
-                                for (uint8_t s = 0; s < products.n_emitted && s < 12; ++s) {
-                                    const auto idx = products.emitted_idx[s];
-                                    if (idx < 18) {
-                                        sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
-                                                         sycl::memory_scope::device,
-                                                         sycl::access::address_space::global_space>
-                                            atomic_iso(fred_diag_device[idx]);
-                                        atomic_iso.fetch_add(1U);
-                                    }
-                                }
-                            }
-
-                            if (products.count > 0 &&
-                                secondary_queue_device != nullptr) {
-                                auto count_ref = sycl::atomic_ref<
-                                    uint32_t, sycl::memory_order::relaxed,
-                                    sycl::memory_scope::device,
-                                    sycl::access::address_space::global_space>(
-                                    *secondary_count_device);
-                                const auto base_idx =
-                                    count_ref.fetch_add(products.count);
-                                for (uint8_t ip = 0; ip < products.count; ++ip) {
-                                    if (base_idx + ip < max_secondaries) {
-                                        auto queued_product = products.products[ip];
-                                        queued_product.rng_stream = rng::child_stream(
-                                            rng_history, rng::branch_tag(
-                                                rng::branch_role_primary_charged, ip));
-                                        secondary_queue_device[base_idx + ip] = queued_product;
-                                    } else if (secondary_overflow_count_device != nullptr) {
-                                        sycl::atomic_ref<uint32_t, sycl::memory_order::relaxed,
-                                                         sycl::memory_scope::device,
-                                                         sycl::access::address_space::global_space>
-                                            atomic_ov(*secondary_overflow_count_device);
-                                        atomic_ov.fetch_add(1U);
-                                        sycl::atomic_ref<float, sycl::memory_order::relaxed,
-                                                         sycl::memory_scope::device,
-                                                         sycl::access::address_space::global_space>
-                                            atomic_ove(*secondary_overflow_energy_device);
-                                        atomic_ove.fetch_add(products.products[ip].energy_MeV);
-                                        untracked_MeV += products.products[ip].energy_MeV;
-                                    }
-                                }
-                            }
-
-                            if (untracked_MeV > 0.0F && untracked_nuclear_device != nullptr) {
-                                sycl::atomic_ref<float, sycl::memory_order::relaxed,
-                                                 sycl::memory_scope::device,
-                                                 sycl::access::address_space::global_space>
-                                    atomic_untracked(untracked_nuclear_device[global_history]);
-                                atomic_untracked.fetch_add(untracked_MeV);
-                            }
-
-                            energy_MeV = 0.0F;
-                            ++steps;
-                            break;
-                        }
-                        }
-                    }
 
                     ++steps;
                 }
@@ -5646,10 +5101,11 @@ template<int EmMode>
                                         schneider_hazard_total_rate = sec_macro_xs;
                                         if (sec_macro_xs > 0.0F) {
                                             float collision_distance = sec_step_mm;
-                                            secondary_inelastic = inelastic_collision_in_step(
+                                            const auto collision = sample_exponential_collision(
                                                 sec_macro_xs, sec_step_mm,
-                                                rng::uniform01(2026, frag.rng_stream, sec_steps, 13),
-                                                &collision_distance);
+                                                rng::uniform01(2026, frag.rng_stream, sec_steps, 13));
+                                            secondary_inelastic = collision.occurred;
+                                            collision_distance = collision.distance_mm;
                                             if (secondary_inelastic) {
                                                 sec_step_mm = collision_distance;
                                                 schneider_hazard_total_rate = sec_macro_xs;
@@ -5671,10 +5127,14 @@ template<int EmMode>
                                     sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_audit[7]).fetch_add(1);
                                     break;
                                 }
-                                float distance=sec_step_mm;
-                                secondary_elastic=inelastic_collision_in_step(rate*sec_local_density_g_per_cm3,
-                                    sec_step_mm,rng::uniform01(2026,frag.rng_stream,sec_steps,70),&distance);
-                                if(secondary_elastic){sec_step_mm=distance;secondary_inelastic=false;}
+                                const auto collision = sample_exponential_collision(
+                                    rate * sec_local_density_g_per_cm3, sec_step_mm,
+                                    rng::uniform01(2026, frag.rng_stream, sec_steps, 70));
+                                secondary_elastic = collision.occurred;
+                                if (secondary_elastic) {
+                                    sec_step_mm = collision.distance_mm;
+                                    secondary_inelastic = false;
+                                }
                             }
                             if(secondary_inelastic)schneider_diag_increment_device(schneider_diag_device,SchneiderDiagSlot::SecondaryHazards);
 
@@ -6695,21 +6155,7 @@ template<int EmMode>
                                             static_cast<unsigned>(sec_ct_material),
                                             enable_ct_material_mcs,
                                             active_water_radiation_length));
-                                if (use_fred_2gr_mcs) {
-                                    const auto mixture = rng::uniform01(
-                                        2026, frag.rng_stream, sec_steps, 0);
-                                    const auto radial = rng::uniform01(
-                                        2026, frag.rng_stream, sec_steps, 1);
-                                    phi_scat = two_pi * rng::uniform01(
-                                        2026, frag.rng_stream, sec_steps, 3);
-                                    theta_scat = fred_2gr_angle_device(
-                                        fred_2gr_mcs_device, sec_e / frag_a,
-                                        static_cast<int>(frag.z), static_cast<int>(frag.a),
-                                        sec_local_density_g_per_cm3 * sec_step_mm / 10.0F,
-                                        sec_radiation_length_g_per_cm2,
-                                        extrapolate_fred_2gr_high_energy,
-                                        multiple_scattering_scale, mixture, radial);
-                                } else {
+                                {
                                     const auto theta_rms = highland_projected_rms_angle_device(
                                         sec_e, static_cast<int>(frag.z),
                                         static_cast<int>(frag.a), sec_step_mm,
@@ -7307,31 +6753,11 @@ template<int EmMode>
     if (schneider_track_count_device != nullptr) {
         queue.copy(schneider_track_count_device, schneider_track_counts_host.data(), 2);
     }
-    std::array<std::uint64_t, 26> fred_diag_host{};
-    if (fred_diag_device != nullptr) {
-        queue.copy(fred_diag_device, fred_diag_host.data(), 26);
-    }
     uint32_t overflow_count_host = 0;
     float overflow_energy_host = 0.0F;
-    float model_residual_host = 0.0F;
-    float fred_q_host = 0.0F;
-    float fred_neutron_host = 0.0F;
-    float fred_remnant_host = 0.0F;
-    uint32_t fred_fail_count_host = 0;
-    float fred_fail_energy_host = 0.0F;
-    uint32_t fred_cap_count_host = 0;
-    float fred_cap_energy_host = 0.0F;
     if (secondary_overflow_count_device != nullptr) {
         queue.copy(secondary_overflow_count_device, &overflow_count_host, 1);
         queue.copy(secondary_overflow_energy_device, &overflow_energy_host, 1);
-        queue.copy(fred_model_residual_device, &model_residual_host, 1);
-        queue.copy(fred_q_device, &fred_q_host, 1);
-        queue.copy(fred_neutron_device, &fred_neutron_host, 1);
-        queue.copy(fred_remnant_device, &fred_remnant_host, 1);
-        queue.copy(fred_fail_count_device, &fred_fail_count_host, 1);
-        queue.copy(fred_fail_energy_device, &fred_fail_energy_host, 1);
-        queue.copy(fred_cap_overflow_count_device, &fred_cap_count_host, 1);
-        queue.copy(fred_cap_overflow_energy_device, &fred_cap_energy_host, 1);
     }
     queue.wait_and_throw();
 
@@ -7466,29 +6892,12 @@ template<int EmMode>
     free_device(untracked_nuclear_device);
     free_device(other_terminal_energy_device);
     free_device(cutoff_stopped_energy_device);
-    free_device(fred_prob_proj_h_device);
-    free_device(fred_prob_proj_o_device);
-    free_device(fred_prob_tgt_h_device);
-    free_device(fred_prob_tgt_o_device);
-    for (auto* allocation : event_lib_device_allocations) {
-        free_device(allocation);
-    }
     free_device(fluct_energy_device);
     free_device(fluct_density_device);
     free_device(fluct_probability_device);
     free_device(fluct_quantile_device);
-    free_device(fred_2gr_mcs_device);
-    free_device(fred_diag_device);
     free_device(secondary_overflow_count_device);
     free_device(secondary_overflow_energy_device);
-    free_device(fred_model_residual_device);
-    free_device(fred_q_device);
-    free_device(fred_neutron_device);
-    free_device(fred_remnant_device);
-    free_device(fred_fail_count_device);
-    free_device(fred_fail_energy_device);
-    free_device(fred_cap_overflow_count_device);
-    free_device(fred_cap_overflow_energy_device);
     free_device(escaped_device);
     free_device(sampled_incident_device);
     free_device(steps_device);
@@ -7775,30 +7184,6 @@ template<int EmMode>
     result.primary_cutoff_stopped_energy_MeV =
         std::accumulate(cutoff_stopped_host.begin(), cutoff_stopped_host.end(), 0.0);
     result.primary_first_interactions = std::move(first_interactions_host);
-    for (std::size_t i = 0; i < 18; ++i) {
-        result.fred_isotope_counts[i] = fred_diag_host[i];
-    }
-    result.fred_inelastic_events = fred_diag_host[18];
-    result.fred_retry_sum = fred_diag_host[19];
-    result.fred_energy_scaled_events = fred_diag_host[20];
-    result.fred_projectile_az_open_events = fred_diag_host[21];
-    result.fred_leftover_target_a_sum = fred_diag_host[22];
-    result.fred_leftover_target_z_sum = fred_diag_host[23];
-    result.fred_leftover_projectile_a_sum = fred_diag_host[24];
-    result.fred_leftover_projectile_z_sum = fred_diag_host[25];
-    result.fred_model_residual_MeV = static_cast<double>(model_residual_host);
-    result.fred_model_unassigned_MeV = static_cast<double>(model_residual_host);
-    result.fred_q_MeV = static_cast<double>(fred_q_host);
-    result.fred_neutron_ke_MeV = static_cast<double>(fred_neutron_host);
-    result.fred_remnant_local_MeV = static_cast<double>(fred_remnant_host);
-    result.fred_resample_failed_events = fred_fail_count_host;
-    result.fred_resample_failed_energy_MeV = static_cast<double>(fred_fail_energy_host);
-    result.fred_product_capacity_overflow_events = fred_cap_count_host;
-    result.fred_product_capacity_overflow_energy_MeV = static_cast<double>(fred_cap_energy_host);
-    result.fred_invert_error_proj_h = invert_err_proj_h;
-    result.fred_invert_error_proj_o = invert_err_proj_o;
-    result.fred_invert_error_tgt_h = invert_err_tgt_h;
-    result.fred_invert_error_tgt_o = invert_err_tgt_o;
     result.secondary_queue_overflow = overflow_count_host;
     result.secondary_queue_overflow_energy_MeV = static_cast<double>(overflow_energy_host);
     // Retired CINEL02 diagnostics retain their zero-initialized result fields.
@@ -7923,7 +7308,7 @@ template<int EmMode>
     }
 
     result.nuclear_interactions =
-        use_schneider_primary_xs ? schneider_inelastic_host : result.fred_inelastic_events;
+        schneider_inelastic_host;
     result.total_steps = std::accumulate(steps_host.begin(), steps_host.end(), std::uint64_t{0});
 
     result.elapsed_seconds =

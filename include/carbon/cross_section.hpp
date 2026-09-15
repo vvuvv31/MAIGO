@@ -15,7 +15,6 @@ public:
 
     static CrossSectionTable from_csv(const std::filesystem::path& path);
     // Paper C-C fit + Kox(C,O)/Kox(C,C) + ICRU-H macroscopic water table.
-    static CrossSectionTable from_fred_paper_water(double density_g_per_cm3 = 1.0);
     static std::vector<CrossSectionTable> from_schneider_csv(
         const std::filesystem::path& path);
 

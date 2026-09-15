@@ -60,7 +60,7 @@ Dose atomics 默认 FP32；本工作不通过精度类型调参。
 3. `test_schneider_dicom_reference`
 4. `test_secondary_rate_table_hardening`
 
-另有 `run_step13_gpu`、`run_step15_gpu`、`run_step19_gpu`、
+另有 `run_step13_gpu`、`run_step19_gpu`、
 `run_step20_gpu`、`run_step21_level3_gpu` 和 `dump_tps_phase_space`
 等辅助 executable；它们不是每个都注册为 CTest。
 

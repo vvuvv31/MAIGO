@@ -1,6 +1,5 @@
 #include "carbon/cross_section.hpp"
 #include "carbon/transport_config.hpp"
-#include "carbon/detail/fred_fragmentation_data.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -263,41 +262,7 @@ std::vector<CrossSectionTable> CrossSectionTable::from_schneider_csv(
     return tables;
 }
 
-CrossSectionTable CrossSectionTable::from_fred_paper_water(double density_g_per_cm3) {
-    if (!(density_g_per_cm3 > 0.0) || !std::isfinite(density_g_per_cm3)) {
-        throw std::invalid_argument("fred paper water density must be positive");
-    }
-    std::vector<double> energies;
-    std::vector<double> macros;
-    std::vector<double> hfrac;
-    std::vector<double> mh;
-    std::vector<double> mo;
-    energies.reserve(401);
-    for (int i = 0; i <= 400; ++i) {
-        const float e = static_cast<float>(i);
-        const float incident = e * 12.0F;
-        const float sig_h = calculate_icru_sigma_H(e);
-        const float sig_o = calculate_sigma_nonel_mb(12.0F, 6.0F, 16.0F, 8.0F, e, incident);
-        const float p_h = calculate_target_prob_H(sig_h, sig_o);
-        const float tot = water_macroscopic_xs_per_mm(sig_h, sig_o,
-                                                     static_cast<float>(density_g_per_cm3));
-        constexpr float n_a = 6.02214076e23F;
-        constexpr float m_water = 18.01528F;
-        constexpr float mb_to_cm2 = 1.0e-27F;
-        const float n_mol = static_cast<float>(density_g_per_cm3) * n_a / m_water;
-        const float macro_h = 2.0F * n_mol * sig_h * mb_to_cm2 * 0.1F;
-        const float macro_o = n_mol * sig_o * mb_to_cm2 * 0.1F;
-        energies.push_back(static_cast<double>(e));
-        macros.push_back(static_cast<double>(tot));
-        hfrac.push_back(static_cast<double>(p_h));
-        mh.push_back(static_cast<double>(macro_h));
-        mo.push_back(static_cast<double>(macro_o));
-    }
-    CrossSectionTable table(std::move(energies), std::move(macros));
-    table.set_target_h_fractions(std::move(hfrac));
-    table.set_partial_macros(std::move(mh), std::move(mo));
-    return table;
-}
+
 
 double CrossSectionTable::interpolate(double energy_MeVu) const noexcept {
     if (!std::isfinite(energy_MeVu) || energy_MeVu <= energies_MeVu_.front()) {

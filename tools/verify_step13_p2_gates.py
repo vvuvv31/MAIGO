@@ -422,15 +422,13 @@ def main():
             el_ovf = diag.get("elastic_queue_overflow", -1)
             neut_ovf = diag.get("neutral_queue_overflow", -1)
             elec_ovf = diag.get("electron_queue_overflow", -1)
-            resamp = diag.get("fred_resample_failed_events", -1)
-            cap_ovf = diag.get("fred_product_capacity_overflow_events", -1)
             other_term = diag.get("primary_other_terminal_count", -1)
             if (sec_ovf == 0 and el_ovf == 0 and neut_ovf == 0 and elec_ovf == 0 and
-                resamp == 0 and cap_ovf == 0 and other_term == 0):
+                other_term == 0):
                 gate7_pass = True
-                gate7_reason = "PASS (all overflow/retry diagnostics == 0)"
+                gate7_reason = "PASS (all overflow/terminal diagnostics == 0)"
             else:
-                gate7_reason = f"FAIL (sec_ovf={sec_ovf}, el_ovf={el_ovf}, neut_ovf={neut_ovf}, elec_ovf={elec_ovf}, resamp={resamp}, cap_ovf={cap_ovf}, other_term={other_term})"
+                gate7_reason = f"FAIL (sec_ovf={sec_ovf}, el_ovf={el_ovf}, neut_ovf={neut_ovf}, elec_ovf={elec_ovf}, other_term={other_term})"
 
         case_all_pass = (gate1_pass and gate2_pass and gate3_pass and gate4_pass and
                           gate5_pass and gate6_pass and gate7_pass)
@@ -499,8 +497,6 @@ def main():
                     "elastic_queue_overflow": diag.get("elastic_queue_overflow") if diag else None,
                     "neutral_queue_overflow": diag.get("neutral_queue_overflow") if diag else None,
                     "electron_queue_overflow": diag.get("electron_queue_overflow") if diag else None,
-                    "fred_resample_failed_events": diag.get("fred_resample_failed_events") if diag else None,
-                    "fred_product_capacity_overflow_events": diag.get("fred_product_capacity_overflow_events") if diag else None,
                     "primary_other_terminal_count": diag.get("primary_other_terminal_count") if diag else None
                 }
             },

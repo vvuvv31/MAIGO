@@ -135,3 +135,5 @@ Global 1%/1mm 为 96.74–98.79%，Global 3%/0mm 为 94.27–99.97%；
 ## License
 
 [GPL-3.0-or-later](LICENSE)。
+
+旧 FRED 功能及解析碎裂代码的移除范围、通用模块替代和验证结果见[清理报告](docs/fred_cleanup.md)。

@@ -87,67 +87,6 @@ Direction3F rotate_local_direction(const float local_x,
 }
 
 
-float fred_2gr_parameter_device(const float* table, const int parameter,
-                                const float energy_MeVu,
-                                const float areal_density_g_per_cm2) noexcept {
-    if (table == nullptr || energy_MeVu < 1.0F || energy_MeVu > 236.0F ||
-        areal_density_g_per_cm2 < 1.0e-4F || areal_density_g_per_cm2 > 10.0F)
-        return -1.0F;
-    const auto x = (energy_MeVu - 1.0F) / 5.0F;
-    const auto y = (sycl::log10(areal_density_g_per_cm2) + 4.0F) / 0.1F;
-    const auto ix = sycl::max(0, sycl::min(46, static_cast<int>(sycl::floor(x))));
-    const auto iy = sycl::max(0, sycl::min(49, static_cast<int>(sycl::floor(y))));
-    const auto fx = x - static_cast<float>(ix);
-    const auto fy = y - static_cast<float>(iy);
-    const auto at = [&](const int yy, const int xx) {
-        return table[(parameter * 51 + yy) * 48 + xx];
-    };
-    const auto lo = at(iy, ix) + fx * (at(iy, ix + 1) - at(iy, ix));
-    const auto hi = at(iy + 1, ix) + fx * (at(iy + 1, ix + 1) - at(iy + 1, ix));
-    return lo + fy * (hi - lo);
-}
-
-float fred_2gr_angle_device(const float* table, const float energy_MeVu,
-                            const int atomic_number, const int mass_number,
-                            const float areal_density_g_per_cm2,
-                            const float radiation_length_g_per_cm2,
-                            const bool extrapolate_high_energy,
-                            const float global_scale, const float mixture_uniform,
-                            const float radial_uniform) noexcept {
-    auto lookup_energy_MeVu = energy_MeVu;
-    auto high_energy_scale = 1.0F;
-    if (energy_MeVu > static_cast<float>(fred_2gr_max_energy_MeVu)) {
-        if (!extrapolate_high_energy) return 0.0F;
-        lookup_energy_MeVu = static_cast<float>(fred_2gr_max_energy_MeVu);
-        high_energy_scale = fred_2gr_high_energy_angle_scale(energy_MeVu);
-    }
-    const auto w1 = fred_2gr_parameter_device(
-        table, 0, lookup_energy_MeVu, areal_density_g_per_cm2);
-    if (w1 < 0.0F) return 0.0F;
-    const auto sigma_c = fred_2gr_parameter_device(
-        table, 1, lookup_energy_MeVu, areal_density_g_per_cm2);
-    const auto w2 = fred_2gr_parameter_device(
-        table, 2, lookup_energy_MeVu, areal_density_g_per_cm2);
-    const auto sigma_t = fred_2gr_parameter_device(
-        table, 3, lookup_energy_MeVu, areal_density_g_per_cm2);
-    const auto b = fred_2gr_parameter_device(
-        table, 4, lookup_energy_MeVu, areal_density_g_per_cm2);
-    const auto m = fred_2gr_parameter_device(
-        table, 5, lookup_energy_MeVu, areal_density_g_per_cm2);
-    const auto omu = sycl::fmax(1.0F - radial_uniform, 1.1920929e-7F);
-    float angle = 0.0F;
-    if (mixture_uniform <= w1) {
-        (void)atomic_number;
-        (void)mass_number;
-        angle = sigma_c * sycl::sqrt(-2.0F * sycl::log(omu)) * global_scale;
-    } else if (mixture_uniform <= w1 + w2) {
-        angle = sigma_t * sycl::sqrt(-2.0F * sycl::log(omu));
-    } else if (b > 0.0F && m > 0.5001F) {
-        angle = sycl::sqrt(b * (sycl::pow(omu, -1.0F / (2.0F * m - 1.0F)) - 1.0F));
-    }
-    return angle * high_energy_scale *
-           sycl::sqrt(36.08F / sycl::fmax(radiation_length_g_per_cm2, 1.0e-6F));
-}
 float highland_projected_rms_angle_device(const float kinetic_energy_MeV,
                                           const int atomic_number,
                                           const int mass_number,

@@ -1019,10 +1019,10 @@ void TransportConfig::validate() const {
     }
     if (energy_straggling_model == "packaged_fluctuation_fraction_hybrid" && !enable_primary_loss_query_audit)
         throw std::invalid_argument("Fraction hybrid requires enable_primary_loss_query_audit to report its thin-step scope");
-    if (nuclear_model != "geant4" && nuclear_model != "fred_paper" &&
+    if (nuclear_model != "geant4" &&
         nuclear_model != "cinel02" && nuclear_model != "none") {
         throw std::invalid_argument(
-            "nuclear_model must be geant4, fred_paper, cinel02, or none");
+            "nuclear_model must be geant4, cinel02, or none");
     }
     if (nuclear_model == "cinel02" &&
         (primary_inelastic_package_v2_file.empty() ||
@@ -1039,9 +1039,9 @@ void TransportConfig::validate() const {
         throw std::invalid_argument(
             "cinel02_topas_compatibility_mode requires nuclear_model: cinel02");
     }
-    if (enable_nuclear_elastic && nuclear_model != "fred_paper") {
+    if (enable_nuclear_elastic) {
         throw std::invalid_argument(
-            "enable_nuclear_elastic requires nuclear_model: fred_paper");
+            "enable_nuclear_elastic is retired; use the all-ion elastic configuration");
     }
     if (uses_moment_matched_straggling() &&
         std::abs(straggling_scale - 1.0) > 1.0e-12) {
@@ -1089,22 +1089,8 @@ void TransportConfig::validate() const {
             }
         }
     }
-    if (multiple_scattering_model != "highland" &&
-        multiple_scattering_model != "fred_2gr") {
-        throw std::invalid_argument(
-            "multiple_scattering_model must be highland or fred_2gr");
-    }
-    if (uses_fred_2gr_mcs() && fred_2gr_mcs_file.empty()) {
-        throw std::invalid_argument("fred_2gr requires fred_2gr_mcs_file");
-    }
-    if (fred_2gr_high_energy_mode != "zero" &&
-        fred_2gr_high_energy_mode != "kinematic_extrapolation") {
-        throw std::invalid_argument(
-            "fred_2gr_high_energy_mode must be zero or kinematic_extrapolation");
-    }
-    if (!uses_fred_2gr_mcs() && fred_2gr_high_energy_mode != "zero") {
-        throw std::invalid_argument(
-            "fred_2gr_high_energy_mode requires multiple_scattering_model: fred_2gr");
+    if (multiple_scattering_model != "highland") {
+        throw std::invalid_argument("multiple_scattering_model must be highland");
     }
 
     if (!std::isfinite(multiple_scattering_scale) ||
@@ -2523,32 +2509,6 @@ TransportConfig load_config(const std::filesystem::path& path) {
         values, "cinel02_strict_match", config.cinel02_strict_match);
     config.enable_nuclear_elastic =
         parse_bool(values, "enable_nuclear_elastic", config.enable_nuclear_elastic);
-    config.fred_event_library_h_file = parse_path(
-        values, "fred_event_library_h_file", config.fred_event_library_h_file);
-    config.fred_event_library_o_file = parse_path(
-        values, "fred_event_library_o_file", config.fred_event_library_o_file);
-    if (const auto it = values.find("fred_event_library_h_files"); it != values.end())
-        config.fred_event_library_h_files = parse_path_list(it->second);
-    if (const auto it = values.find("fred_event_library_c_files"); it != values.end())
-        config.fred_event_library_c_files = parse_path_list(it->second);
-    if (const auto it = values.find("fred_event_library_o_files"); it != values.end())
-        config.fred_event_library_o_files = parse_path_list(it->second);
-    if (!config.fred_event_library_h_file.empty() &&
-        !config.fred_event_library_h_files.empty())
-        throw std::invalid_argument("use singular or plural H event-library key, not both");
-    if (!config.fred_event_library_o_file.empty() &&
-        !config.fred_event_library_o_files.empty())
-        throw std::invalid_argument("use singular or plural O event-library key, not both");
-    if (config.nuclear_model == "fred_paper") {
-        if (config.fred_event_library_h_file.empty()) {
-            config.fred_event_library_h_file =
-                "data/packages/c12_H1_95MeVu_events.bin";
-        }
-        if (config.fred_event_library_o_file.empty()) {
-            config.fred_event_library_o_file =
-                "data/packages/c12_O16_95MeVu_events.bin";
-        }
-    }
     config.primary_inelastic_cross_section_file =
         parse_path(values, "primary_inelastic_cross_section_file",
                    config.primary_inelastic_cross_section_file);
@@ -2562,16 +2522,6 @@ TransportConfig load_config(const std::filesystem::path& path) {
         std::transform(config.multiple_scattering_model.begin(),
                        config.multiple_scattering_model.end(),
                        config.multiple_scattering_model.begin(), [](unsigned char c) {
-                           return static_cast<char>(std::tolower(c));
-                       });
-    }
-    config.fred_2gr_mcs_file = parse_path(
-        values, "fred_2gr_mcs_file", config.fred_2gr_mcs_file);
-    if (const auto it = values.find("fred_2gr_high_energy_mode"); it != values.end()) {
-        config.fred_2gr_high_energy_mode = it->second;
-        std::transform(config.fred_2gr_high_energy_mode.begin(),
-                       config.fred_2gr_high_energy_mode.end(),
-                       config.fred_2gr_high_energy_mode.begin(), [](unsigned char c) {
                            return static_cast<char>(std::tolower(c));
                        });
     }

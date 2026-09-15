@@ -1,3 +1,4 @@
+#include "carbon/secondary_schedule.hpp"
 #include "carbon/run_quality.hpp"
 #include "carbon/min_json.hpp"
 
@@ -96,8 +97,14 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
         report.approximations.push_back({"secondary_species_grouping_accuracy_pending",
             "GPU species index grouping; RNG identities preserved; production integration authorized; RT07575 scheduling dose difference 0.0203% of peak remains under investigation", 1., 0.});
     if (config.secondary_step_chunking)
-        report.approximations.push_back({"secondary_step_chunking_accepted",
-            "64 complete iterations per launch, stable survivor index compaction, tail below 8192; user-accepted RT07575 1M elastic dose difference up to 0.000955% of peak (not a new TOPAS Gamma validation)", 1., 0.});
+        report.approximations.push_back({
+            kSecondarySegmentSteps == 64 ? "secondary_step_chunking_accepted" : "secondary_step_chunking_candidate",
+            std::to_string(kSecondarySegmentSteps) +
+            " complete iterations per launch, stable survivor index compaction, tail below 8192; " +
+            (kSecondarySegmentSteps == 64
+                ? "user-accepted RT07575 1M elastic dose difference up to 0.000955% of peak (not a new TOPAS Gamma validation)"
+                : "experimental scheduling interval; production default remains 64; not a new TOPAS Gamma validation"),
+            1., 0.});
     if(config.em_model=="g4_material_joint_v1")
         report.approximations.push_back({"unified_material_em_accuracy_pending",
             "Unified water/Schneider EM for all 18 charged ions; local delta deposition; production execution authorized, density cut-onset and patient Gamma accuracy gates remain pending",1.,0.});
@@ -137,12 +144,11 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
 
     // Keep the two closure equations explicit.  The physical residual omits
     // the intentional TOPAS compatibility sink; the accounting residual
-    // includes it.  Both use the same fred_model_unassigned term as the
-    // corresponding TransportResult helper.
+    // includes it. No independent analytic-model residual bucket remains.
     const auto physical_raw_residual =
         result.initial_energy_MeV - result.total_deposited_energy_MeV -
         result.escaped_energy_MeV - result.beamline_removed_energy_MeV -
-        result.untracked_nuclear_energy_MeV - result.fred_model_unassigned_MeV -
+        result.untracked_nuclear_energy_MeV -
         result.material_electron_untracked_MeV;
     const auto accounting_raw_residual =
         physical_raw_residual - result.topas_compat_discarded_kinetic_total_MeV();
@@ -393,42 +399,7 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
                   false);
     }
 
-    if (result.fred_inelastic_events > 0) {
-        const auto scaled_frac =
-            static_cast<double>(result.fred_energy_scaled_events) /
-            static_cast<double>(result.fred_inelastic_events);
-        if (scaled_frac > 0.05) {
-            add_issue({"fred_energy_scale_fraction",
-                       "inelastic energy-rescale fraction exceeds 5%",
-                       scaled_frac, 0.05},
-                      false);
-        }
-        const auto residual_frac =
-            (result.initial_energy_MeV > 0.0)
-                ? result.fred_model_residual_MeV / result.initial_energy_MeV
-                : 0.0;
-        if (residual_frac > 1.0e-3) {
-            add_issue({"fred_model_residual",
-                       "labeled inelastic model residual exceeds 0.1% of incident energy",
-                       residual_frac, 1.0e-3},
-                      false);
-        }
-        if (result.fred_resample_failed_events > 0) {
-            const auto fail_frac =
-                static_cast<double>(result.fred_resample_failed_events) /
-                static_cast<double>(result.fred_inelastic_events);
-            add_issue({"fred_resample_failed",
-                       "inelastic resampling exhausted without an accepted set",
-                       fail_frac, 0.01},
-                      fail_frac > 0.01);
-        }
-        if (result.fred_projectile_az_open_events > 0) {
-            add_issue({"fred_projectile_az_open",
-                       "projectile A/Z leftover after accepted inelastic event",
-                       static_cast<double>(result.fred_projectile_az_open_events), 0.0},
-                      false);
-        }
-    }
+
 
     if (std::isfinite(report.absolute_accounting_energy_residual_MeV) &&
         std::isfinite(report.accounting_relative_energy_residual)) {

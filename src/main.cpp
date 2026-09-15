@@ -101,13 +101,7 @@ int main(int argc, char* argv[]) {
             upstream_air_stopping_power ? &*upstream_air_stopping_power : nullptr;
         carbon::CrossSectionTable cross_section;
         if (config.enable_inelastic) {
-            if (config.uses_fred_paper_nuclear()) {
-                cross_section = carbon::CrossSectionTable::from_fred_paper_water(
-                    config.water_density_g_per_cm3);
-                std::cout << "Nuclear model: fred_paper (C-C + Kox + ICRU-H"
-                          << (config.enable_nuclear_elastic ? ", H elastic)\n"
-                                                            : ")\n");
-            } else if (!config.primary_inelastic_cross_section_file.empty()) {
+            if (!config.primary_inelastic_cross_section_file.empty()) {
                 cross_section = carbon::CrossSectionTable::from_csv(
                     config.primary_inelastic_cross_section_file);
             }
@@ -465,22 +459,7 @@ int main(int argc, char* argv[]) {
         std::cout << "Run mode: " << carbon::run_mode_name(config.run_mode) << '\n'
                   << "Quality status: " << quality.status() << '\n'
                   << "Quality report: " << quality_report_path << '\n';
-        if (result.fred_inelastic_events > 0) {
-            const auto n = static_cast<double>(result.fred_inelastic_events);
-            std::cout << "FRED inelastic events: " << result.fred_inelastic_events
-                      << "  mean retries: " << (static_cast<double>(result.fred_retry_sum) / n)
-                      << "  energy-scaled fraction: "
-                      << (static_cast<double>(result.fred_energy_scaled_events) / n)
-                      << "  proj A/Z open: " << result.fred_projectile_az_open_events
-                      << "  mean leftover target A/Z: "
-                      << (static_cast<double>(result.fred_leftover_target_a_sum) / n) << '/'
-                      << (static_cast<double>(result.fred_leftover_target_z_sum) / n)
-                      << "  12C count: " << result.fred_isotope_counts[17]
-                      << "  resample_failed: " << result.fred_resample_failed_events
-                      << "  Q/neutron/remnant/residual MeV: " << result.fred_q_MeV << '/'
-                      << result.fred_neutron_ke_MeV << '/' << result.fred_remnant_local_MeV
-                      << '/' << result.fred_model_residual_MeV << '\n';
-        }
+
         // Production refuses the dose as a formal result: throw before any
         // dose scorer is written. Research completes (writes dose + ledger +
         // diagnostics for analysis) but still exits non-zero via the throw

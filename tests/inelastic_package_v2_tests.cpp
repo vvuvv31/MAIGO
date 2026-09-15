@@ -1,5 +1,5 @@
 #include "carbon/inelastic_package_v2.hpp"
-#include "carbon/detail/fred_fragmentation_data.hpp"
+#include "carbon/charged_species.hpp"
 
 #include <algorithm>
 #include <cmath>

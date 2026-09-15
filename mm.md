@@ -164,8 +164,12 @@ See [MCS](include/carbon/multiple_scattering.hpp).
 
 The current minimum is the pinned Schneider v2.1 stack with a 14-projectile secondary
 nuclear registry. Missing channels are not replaced by a nearby target, and product
-energies are not globally rescaled. If no valid target remains after EM loss, a null
-candidate continues with its remaining energy instead of replaying or depositing it locally.
+energies are not globally rescaled. Primary and secondary post-EM null candidates
+retain the track and its remaining energy without a nuclear replay or nuclear local
+energy dump. The primary branch clears the collision flag and completes the current
+EM step, including scoring. The former analytic fragmentation fallback and its
+empirical parameters have been removed. Nuclear transport requires the validated
+Schneider/unified-water CINEL03 path. See the [removal report](docs/fred_cleanup.md).
 The frozen generation setting is 2; He6/B8/C10 follow the declared EM-only nuclear policy.
 
 **Difference from TOPAS**

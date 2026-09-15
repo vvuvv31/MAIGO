@@ -242,8 +242,6 @@ int main(int argc, char* argv[]) {
             const uint64_t elastic_overflow = result.elastic_queue_overflow;
             const uint64_t neutral_overflow = result.neutral_queue_overflow;
             const uint64_t electron_overflow = result.electron_queue_overflow;
-            const uint64_t fred_resample_failed = result.fred_resample_failed_events;
-            const uint64_t fred_cap_overflow = result.fred_product_capacity_overflow_events;
             uint64_t replay_valid_sum = 0;
             for (const auto v : result.cinel02_replay_valid_counts) {
                 replay_valid_sum += v;
@@ -316,8 +314,6 @@ int main(int argc, char* argv[]) {
             out << "    \"neutral_queue_overflow\": " << neutral_overflow << ",\n";
             out << "    \"electron_queue_overflow\": " << electron_overflow << ",\n";
             out << "    \"primary_other_terminal_count\": " << other_term << ",\n";
-            out << "    \"fred_resample_failed_events\": " << fred_resample_failed << ",\n";
-            out << "    \"fred_product_capacity_overflow_events\": " << fred_cap_overflow << ",\n";
             out << "    \"cinel02_replay_valid_sum\": " << replay_valid_sum << "\n";
             out << "  },\n";
             out << "  \"first_interactions_by_expected_section\": [";

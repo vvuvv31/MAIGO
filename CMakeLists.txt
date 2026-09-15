@@ -51,11 +51,8 @@ add_library(carbon_core
     src/energy_loss_fluctuation.cpp
     src/unified_em_package.cpp
     src/delta_moments_data.cpp
-    src/fred_table1.cpp
-    src/fred_event_library.cpp
     src/inelastic_package_v2.cpp
     src/inelastic_package_v3.cpp
-    src/multiple_scattering.cpp
     src/run_quality.cpp
     src/stopping_power.cpp
     src/all_ion_elastic.cpp
@@ -99,6 +96,7 @@ endforeach()
 option(CARBON_SECONDARY_STEP_PROFILE "Per-species secondary step profile (diagnostic only)" OFF)
 target_compile_definitions(carbon_core PUBLIC
     CARBON_SECONDARY_STEP_PROFILE=$<BOOL:${CARBON_SECONDARY_STEP_PROFILE}>)
+
 
 
 if(MSVC)
@@ -215,6 +213,9 @@ if(BUILD_TESTING)
         target_link_libraries(unified_em_index PRIVATE carbon_core)
         target_compile_options(unified_em_index PRIVATE $<TARGET_PROPERTY:carbon_core,COMPILE_OPTIONS>)
     endif()
+    add_executable(nuclear_collision tests/nuclear_collision.cpp)
+    target_link_libraries(nuclear_collision PRIVATE carbon_core)
+    add_test(NAME nuclear_collision COMMAND nuclear_collision)
     add_executable(sha256_file tests/sha256_file.cpp)
     target_link_libraries(sha256_file PRIVATE carbon_core)
     add_test(NAME sha256_file COMMAND sha256_file)
@@ -302,16 +303,6 @@ if(BUILD_TESTING)
         target_compile_options(run_step13_gpu PRIVATE -fsycl)
         if(CARBON_SYCL_TARGETS)
             target_compile_options(run_step13_gpu PRIVATE
-                -fsycl-targets=${CARBON_SYCL_TARGETS})
-        endif()
-    endif()
-
-    add_executable(run_step15_gpu tools/run_step15_gpu.cpp)
-    target_link_libraries(run_step15_gpu PRIVATE carbon_core)
-    if(CARBON_ENABLE_SYCL)
-        target_compile_options(run_step15_gpu PRIVATE -fsycl)
-        if(CARBON_SYCL_TARGETS)
-            target_compile_options(run_step15_gpu PRIVATE
                 -fsycl-targets=${CARBON_SYCL_TARGETS})
         endif()
     endif()

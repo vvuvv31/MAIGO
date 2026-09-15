@@ -2,7 +2,7 @@
 #include "carbon/ct_grid.hpp"
 #include "carbon/particle.hpp"
 #include "carbon/sha256.hpp"
-#include "carbon/detail/fred_fragmentation_data.hpp"
+#include "carbon/charged_species.hpp"
 
 
 #include <algorithm>
@@ -1952,68 +1952,6 @@ void write_energy_ledger_json(const std::filesystem::path& path,
            << "    \"E_unsupported_charged_MeV\": " << result.energy_ledger.E_unsupported_charged << ",\n"
            << "    \"E_out_of_domain_MeV\": " << result.energy_ledger.E_out_of_domain << "\n"
            << "  },\n"
-           << "  \"fred_inelastic_events\": " << result.fred_inelastic_events << ",\n"
-           << "  \"fred_mean_retries\": "
-           << (result.fred_inelastic_events == 0
-                   ? 0.0
-                   : static_cast<double>(result.fred_retry_sum) /
-                         static_cast<double>(result.fred_inelastic_events))
-           << ",\n"
-           << "  \"fred_energy_scaled_events\": " << result.fred_energy_scaled_events
-           << ",\n"
-           << "  \"fred_energy_scaled_fraction\": "
-           << (result.fred_inelastic_events == 0
-                   ? 0.0
-                   : static_cast<double>(result.fred_energy_scaled_events) /
-                         static_cast<double>(result.fred_inelastic_events))
-           << ",\n"
-           << "  \"fred_projectile_az_open_events\": "
-           << result.fred_projectile_az_open_events << ",\n"
-           << "  \"fred_mean_leftover_target_a\": "
-           << (result.fred_inelastic_events == 0
-                   ? 0.0
-                   : static_cast<double>(result.fred_leftover_target_a_sum) /
-                         static_cast<double>(result.fred_inelastic_events))
-           << ",\n"
-           << "  \"fred_mean_leftover_target_z\": "
-           << (result.fred_inelastic_events == 0
-                   ? 0.0
-                   : static_cast<double>(result.fred_leftover_target_z_sum) /
-                         static_cast<double>(result.fred_inelastic_events))
-           << ",\n"
-           << "  \"fred_mean_leftover_projectile_a\": "
-           << (result.fred_inelastic_events == 0
-                   ? 0.0
-                   : static_cast<double>(result.fred_leftover_projectile_a_sum) /
-                         static_cast<double>(result.fred_inelastic_events))
-           << ",\n"
-           << "  \"fred_mean_leftover_projectile_z\": "
-           << (result.fred_inelastic_events == 0
-                   ? 0.0
-                   : static_cast<double>(result.fred_leftover_projectile_z_sum) /
-                         static_cast<double>(result.fred_inelastic_events))
-           << ",\n"
-           << "  \"fred_model_residual_MeV\": " << result.fred_model_residual_MeV << ",\n"
-           << "  \"fred_q_MeV\": " << result.fred_q_MeV << ",\n"
-           << "  \"fred_neutron_ke_MeV\": " << result.fred_neutron_ke_MeV << ",\n"
-           << "  \"fred_remnant_local_MeV\": " << result.fred_remnant_local_MeV << ",\n"
-           << "  \"fred_resample_failed_events\": " << result.fred_resample_failed_events
-           << ",\n"
-           << "  \"fred_resample_failed_energy_MeV\": "
-           << result.fred_resample_failed_energy_MeV << ",\n"
-           << "  \"fred_product_capacity_overflow_events\": "
-           << result.fred_product_capacity_overflow_events << ",\n"
-           << "  \"fred_product_capacity_overflow_energy_MeV\": "
-           << result.fred_product_capacity_overflow_energy_MeV << ",\n"
-           << "  \"fred_invert_error_proj_h\": " << result.fred_invert_error_proj_h << ",\n"
-           << "  \"fred_invert_error_proj_o\": " << result.fred_invert_error_proj_o << ",\n"
-           << "  \"fred_invert_error_tgt_h\": " << result.fred_invert_error_tgt_h << ",\n"
-           << "  \"fred_invert_error_tgt_o\": " << result.fred_invert_error_tgt_o << ",\n"
-           << "  \"fred_isotope_counts\": [";
-    for (std::size_t i = 0; i < result.fred_isotope_counts.size(); ++i) {
-        output << (i == 0 ? "" : ", ") << result.fred_isotope_counts[i];
-    }
-    output << "],\n"
            << "  \"cinel02_energy_ledger_layout\": "
               "[\"collision_input_kinetic\", \"pre_collision_em_loss\", "
               "\"process_local_deposit\", \"niel_diagnostic_only\", "

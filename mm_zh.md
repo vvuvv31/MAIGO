@@ -145,8 +145,11 @@ theta0 = 13.6 MeV × Z/(beta p c) × sqrt(t) × C
    队列 overflow 使运行无效。
 
 当前最低要求是固定的 Schneider v2.1 数据栈，次级核 registry 覆盖 14 种 projectile。
-缺通道不以近邻靶替代，不整体缩放产物动能。如果 EM 能损后没有有效靶，
-则作为 null candidate 保留剩余动能继续，不重放事件、不局部倾倒能量。
+缺通道不以近邻靶替代，不整体缩放产物动能。原发和次级的 post-EM null candidate
+保留轨迹和剩余动能，不重放核事件、不将剩余能量作为核反应局部沉积。
+原发分支清除碰撞标志，并完成当前 EM 步及其剂量记分。
+原先的解析碎裂备用路径及经验参数已移除；核输运必须使用经过验证的
+Schneider/统一水 CINEL03 路径。详见[清理报告](docs/fred_cleanup.md)。
 冻结 generation 设置为 2；He6/B8/C10 遵循声明的 EM-only 核策略。
 
 **与 TOPAS 的区别**

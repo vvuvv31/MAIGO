@@ -164,7 +164,7 @@ inline Scalar sample_moment_matched_energy_loss(
     return std::clamp(sampled, Scalar{0}, available_energy_MeV);
 }
 
-// FRED-like condensed fluctuation: Landau/Moyal for thin steps (small κ),
+// Condensed fluctuation: Landau/Moyal for thin steps (small κ),
 // Gaussian for thick steps. κ uses Vavilov ξ/Tmax ≈ σ² / Tmax².
 template <typename Scalar>
 inline Scalar sample_vavilov_landau_energy_loss(

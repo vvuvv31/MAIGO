@@ -34,7 +34,7 @@ GPU 重放提取的相关末态，不运行 INCLXX/BIC。相同模型来源也�
 | 材料 | HU → 连续密度 + 25 section，元素组成用全局 LUT | 水/指定 phantom 材料 |
 | C12 stopping | SCHNSTOP v1 的 section mass stopping × 局部密度 | water primary stopping |
 | 次级 stopping | water-ion stopping × CT 材料因子 × 局部密度 | water-ion stopping |
-| MCS | primary/secondary 共用 25-section X0 选择，使用局部密度 | water X0；可选 FRED 2GR 数据 |
+| MCS | primary/secondary 共用 25-section X0 选择，使用局部密度 | water X0；Highland MCS（旧2GR已退役） |
 | 非弹性率与靶选择 | SCHNRATE/SCHN2RAT v3，section/projectile/target partials | water XS 与对应 CINEL02 rates |
 | 核末态 | CINEL03 接口读取 CINPKG04 v4，精确靶通道 | CINEL02 water 事件包 |
 | 涨落 | 配置选择的凝聚能损采样 | 可选已保留的 TOPAS water fluctuation 数据 |

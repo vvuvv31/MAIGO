@@ -380,7 +380,7 @@ struct TransportConfig {
     bool enable_secondary_unified_em{false};
     // GPU generation-wise species ordering. Production YAML opts in explicitly.
     bool secondary_species_grouping{false};
-    // Pause after 64 complete secondary iterations and compact survivor indices.
+    // Pause after the compile-time secondary iteration limit (default 64) and compact survivors.
     // Production presets opt in; false retains full-track scheduling without state buffers.
     bool secondary_step_chunking{false};
     // Scalar fallback for Bohr straggling. If the two optional tables below
@@ -392,7 +392,6 @@ struct TransportConfig {
     std::vector<double> straggling_scale_values{};
     bool enable_inelastic{false};
     // geant4: load the configured macroscopic table as-is.
-    // fred_paper: C-C fit + Kox scaling + ICRU-H; optional H-target elastic.
     std::string nuclear_model{"geant4"};
     // TOPAS-derived correlated multi-generation final states and independent
     // target-conditioned interaction rates (CINPKG03 / CINEL02_RATE_V1).
@@ -410,23 +409,11 @@ struct TransportConfig {
     // hazard/outcome counters do not close.
     bool cinel02_strict_match{false};
     bool enable_nuclear_elastic{false};
-    std::filesystem::path fred_event_library_h_file{};
-    std::filesystem::path fred_event_library_o_file{};
-    std::vector<std::filesystem::path> fred_event_library_h_files{};
-    std::vector<std::filesystem::path> fred_event_library_c_files{};
-    std::vector<std::filesystem::path> fred_event_library_o_files{};
     std::filesystem::path primary_inelastic_cross_section_file{
         "data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv"};
     bool enable_secondary_transport{true};
     bool enable_multiple_scattering{false};
-    // highland / fred_2gr. The latter uses the FRED 3.76 tabulated mixture.
     std::string multiple_scattering_model{"highland"};
-    std::filesystem::path fred_2gr_mcs_file{
-        "data/packages/fred_3_76_mcs_2gr.bin"};
-    // zero preserves FRED 3.76 table-domain behavior;
-    // kinematic_extrapolation freezes the 236 MeV/u mixture and scales
-    // the sampled angle by (beta*p)_236/(beta*p)_E.
-    std::string fred_2gr_high_energy_mode{"zero"};
     // Multiplies Highland projected RMS angle for charged MCS (primary +
     // secondary). 1.0 is the historical default. Values >1 increase lateral
     // fill; keep ≤~1.5 without new validation. Not a per-patient fit.
@@ -824,20 +811,14 @@ struct TransportConfig {
     [[nodiscard]] bool uses_vavilov_landau_straggling() const noexcept {
         return energy_straggling_model == "vavilov_landau";
     }
-    [[nodiscard]] bool uses_fred_paper_nuclear() const noexcept {
-        return nuclear_model == "fred_paper";
-    }
+
     [[nodiscard]] bool uses_packaged_fluctuation() const noexcept {
         return energy_straggling_model == "packaged_fluctuation" ||
                energy_straggling_model == "packaged_fluctuation_fraction" ||
                energy_straggling_model == "packaged_fluctuation_fraction_hybrid";
     }
-    [[nodiscard]] bool uses_fred_2gr_mcs() const noexcept {
-        return multiple_scattering_model == "fred_2gr";
-    }
-    [[nodiscard]] bool uses_fred_2gr_high_energy_extrapolation() const noexcept {
-        return fred_2gr_high_energy_mode == "kinematic_extrapolation";
-    }
+
+
     [[nodiscard]] int straggling_sampler_id() const noexcept {
         if (uses_moment_matched_straggling()) {
             return 1;
