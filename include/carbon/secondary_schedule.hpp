@@ -1,7 +1,7 @@
 #pragma once
 
 #ifndef CARBON_SECONDARY_SEGMENT_STEPS
-#define CARBON_SECONDARY_SEGMENT_STEPS 64
+#define CARBON_SECONDARY_SEGMENT_STEPS 16
 #endif
 
 namespace carbon {

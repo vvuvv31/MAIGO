@@ -13,8 +13,9 @@ carbon::UnifiedEmState reference(const carbon::UnifiedEmDevice& d,int section,fl
     int low=begin;while(low<end && d.materials[low+1].density<density)++low;
     int high=std::min(low+1,end);
     s.weight=high==low?0:std::clamp((density-d.materials[low].density)/(d.materials[high].density-d.materials[low].density),0.f,1.f);
-    auto point=[&](int i){auto* r=d.records+i*18+ion;return carbon::UnifiedEmPoint{r,d.nodes+r->node_offset,d.segments,density/d.materials[i].density};};
-    s.lo=point(low);s.hi=point(high);s.density=density;s.section=section;s.valid=true;return s;
+    s.tables=&d;s.lo_mat=static_cast<unsigned>(low);s.hi_mat=static_cast<unsigned>(high);s.ion=ion;
+    s.lo_scale=density/d.materials[low].density;s.hi_scale=density/d.materials[high].density;
+    s.density=density;s.section=section;s.valid=true;return s;
 }
 int main(int argc,char** argv) {
     if(argc!=3)throw std::runtime_error("usage: unified_em_selection package sha");
@@ -27,10 +28,10 @@ int main(int argc,char** argv) {
         auto expected=reference(d,section,rho,ion),actual=d.select(section,rho,ion);
         auto same=[](float a,float b){return std::bit_cast<unsigned>(a)==std::bit_cast<unsigned>(b);};
         if(expected.valid!=actual.valid || (actual.valid &&
-            (expected.lo.record!=actual.lo.record || expected.hi.record!=actual.hi.record ||
-             expected.lo.nodes!=actual.lo.nodes || expected.hi.nodes!=actual.hi.nodes ||
-             !same(expected.weight,actual.weight) || !same(expected.lo.density_scale,actual.lo.density_scale) ||
-             !same(expected.hi.density_scale,actual.hi.density_scale))))throw std::runtime_error("Selection changed");
+            (expected.lo().record!=actual.lo().record || expected.hi().record!=actual.hi().record ||
+             expected.lo().nodes!=actual.lo().nodes || expected.hi().nodes!=actual.hi().nodes ||
+             !same(expected.weight,actual.weight) || !same(expected.lo().density_scale,actual.lo().density_scale) ||
+             !same(expected.hi().density_scale,actual.hi().density_scale))))throw std::runtime_error("Selection changed");
         ++checks;
     };
     for(unsigned m=0;m<p.materials.size();++m)for(int ion=0;ion<18;++ion) {

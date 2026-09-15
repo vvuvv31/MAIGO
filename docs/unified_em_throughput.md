@@ -88,7 +88,7 @@ RT07575 的 1M 运行记录了 2,878,453,068 次原发/次级 EM 步进，2,250,
 - RT07575 200k 和 1M 的同修复基线/候选审计及核事件一致，剂量差异见 `rt07575_comparison.json`。未计算或宣称新的 BODY gamma。
 - 材料选择 56,540 个边界查询逐位一致；host/GPU 各 94,500 个 G4 能损点零失败；候选粗索引 82,741,572 个 GPU 查询逐位一致。SHA 两种后端覆盖 13 个分块/补齐边界，并校验真实 EM 包；配置保护与研究步长区域限制测试通过。
 - 首次 CT pilot 无效结果完整保留：4 个原发 C12 的 section=-2 域失败；没有拿这些剂量做性能/精度验收。修复保持残余能量为 escaped，正常域错误仍硬失败。
-- 默认 CMake：`CARBON_EM_MATERIAL_CACHE=ON`、`CARBON_EM_STEP_CACHE=ON`、`CARBON_EM_LOCAL_AUDIT=OFF`、`CARBON_EM_SPECIALIZE=ON`、`CARBON_EM_EXACT_INDEX=OFF`、`CARBON_USE_OPENSSL_SHA256=ON`（可用时）。研究步长两个倍率均为 1.0。
+- 默认 CMake：`CARBON_EM_MATERIAL_CACHE=ON`、`CARBON_EM_STEP_CACHE=ON`、`CARBON_EM_LOCAL_AUDIT=OFF`、`CARBON_EM_SPECIALIZE=ON`、`CARBON_EM_EXACT_INDEX=ON`、`CARBON_USE_OPENSSL_SHA256=ON`（可用时）。研究步长两个倍率均为 1.0。关闭精确索引用预设 `oneapi-nvidia-index-off`。
 - 所有脚本/小结果在 `benchmark/unified_em_performance_20260913`；原始剂量、日志、二进制和 Nsight 报告在 `scratch/unified_em_perf_20260913` 与 `scratch/unified_em_ablation_20260913`。两处均未自动加入 Git。原始 benchmark、TOPAS 参考和物理包未覆盖。
 - `ablation.py`、`final_pairs.py`、`prepare_rt07575.py`/`rt07575_pairs.py` 可重现运行；`summarize_ablation.py`、`compare_final.py`、`compare_ct_performance.py`、`runtime_breakdown.py`、`plot_results.py` 和本脚本生成报告。运行前验证 Schneider manifest，仅本地 GPU，发现 overflow 须拆分基线/候选重跑。
 

@@ -59,22 +59,33 @@
       }
     },
     {
-      "name": "oneapi-nvidia-secondary16",
-      "displayName": "NVIDIA secondary scheduling candidate (16 complete steps)",
+      "name": "oneapi-nvidia-secondary64",
+      "displayName": "NVIDIA secondary scheduling rollback (64 complete steps)",
       "inherits": "oneapi-nvidia-release",
-      "binaryDir": "${sourceDir}/build/oneapi-nvidia-secondary16",
+      "binaryDir": "${sourceDir}/build/oneapi-nvidia-secondary64",
       "cacheVariables": {
         "CARBON_CUDA_ARCH": "sm_75",
-        "CARBON_SECONDARY_SEGMENT_STEPS": "16"
+        "CARBON_SECONDARY_SEGMENT_STEPS": "64"
       }
     },
     {
-      "name": "oneapi-nvidia-secondary16-indexed",
-      "displayName": "NVIDIA secondary16 + exact EM search index candidate",
-      "inherits": "oneapi-nvidia-secondary16",
-      "binaryDir": "${sourceDir}/build/oneapi-nvidia-secondary16-indexed",
+      "name": "oneapi-nvidia-indexed",
+      "displayName": "NVIDIA secondary16 + exact EM search index (explicit ON)",
+      "inherits": "oneapi-nvidia-release",
+      "binaryDir": "${sourceDir}/build/oneapi-nvidia-indexed",
       "cacheVariables": {
+        "CARBON_CUDA_ARCH": "sm_75",
         "CARBON_EM_EXACT_INDEX": "ON"
+      }
+    },
+    {
+      "name": "oneapi-nvidia-index-off",
+      "displayName": "NVIDIA exact EM search index rollback (binary search only)",
+      "inherits": "oneapi-nvidia-release",
+      "binaryDir": "${sourceDir}/build/oneapi-nvidia-index-off",
+      "cacheVariables": {
+        "CARBON_CUDA_ARCH": "sm_75",
+        "CARBON_EM_EXACT_INDEX": "OFF"
       }
     },
     {
@@ -96,8 +107,9 @@
     { "name": "oneapi-release", "configurePreset": "oneapi-release" },
     { "name": "oneapi-nvidia-release", "configurePreset": "oneapi-nvidia-release" },
     { "name": "oneapi-nvidia-minibeam", "configurePreset": "oneapi-nvidia-minibeam" },
-    { "name": "oneapi-nvidia-secondary16", "configurePreset": "oneapi-nvidia-secondary16" },
-    { "name": "oneapi-nvidia-secondary16-indexed", "configurePreset": "oneapi-nvidia-secondary16-indexed" },
+    { "name": "oneapi-nvidia-secondary64", "configurePreset": "oneapi-nvidia-secondary64" },
+    { "name": "oneapi-nvidia-indexed", "configurePreset": "oneapi-nvidia-indexed" },
+    { "name": "oneapi-nvidia-index-off", "configurePreset": "oneapi-nvidia-index-off" },
     { "name": "oneapi-intel-release", "configurePreset": "oneapi-intel-release" }
   ]
 }

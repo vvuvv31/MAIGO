@@ -98,12 +98,12 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
             "GPU species index grouping; RNG identities preserved; production integration authorized; RT07575 scheduling dose difference 0.0203% of peak remains under investigation", 1., 0.});
     if (config.secondary_step_chunking)
         report.approximations.push_back({
-            kSecondarySegmentSteps == 64 ? "secondary_step_chunking_accepted" : "secondary_step_chunking_candidate",
+            kSecondarySegmentSteps == 16 ? "secondary_step_chunking_accepted" : "secondary_step_chunking_candidate",
             std::to_string(kSecondarySegmentSteps) +
             " complete iterations per launch, stable survivor index compaction, tail below 8192; " +
-            (kSecondarySegmentSteps == 64
-                ? "user-accepted RT07575 1M elastic dose difference up to 0.000955% of peak (not a new TOPAS Gamma validation)"
-                : "experimental scheduling interval; production default remains 64; not a new TOPAS Gamma validation"),
+            (kSecondarySegmentSteps == 16
+                ? "user-accepted 2026-09-15 production interval; RT07575 compact+16 dose difference 0.00033% of peak vs 64-step (not a new TOPAS Gamma validation)"
+                : "experimental scheduling interval; production default is 16; not a new TOPAS Gamma validation"),
             1., 0.});
     if(config.em_model=="g4_material_joint_v1")
         report.approximations.push_back({"unified_material_em_accuracy_pending",

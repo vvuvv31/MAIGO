@@ -25,7 +25,7 @@ RT07575 每次 3,240,963 原发，按 64→候选→候选→64 顺序比较。�
 
 ## 使用与范围
 
-CMake参数 `CARBON_SECONDARY_SEGMENT_STEPS` 支持8/16/32/64/128，默认仍64。新增独立预设 `oneapi-nvidia-secondary16`。必须启用配置中的 `secondary_step_chunking` 才生效；非64步质量报告保留candidate标记。
+CMake参数 `CARBON_SECONDARY_SEGMENT_STEPS` 支持8/16/32/64/128。2026-09-15 起生产默认是 16；64 步用预设 `oneapi-nvidia-secondary64`。必须启用配置中的 `secondary_step_chunking` 才生效；非16步质量报告标记 candidate。精确 EM 查表索引默认开启，关闭用 `oneapi-nvidia-index-off`。
 
 ```bash
 cmake --preset oneapi-nvidia-secondary16 -DCMAKE_CXX_COMPILER=/home/wuwei/sycl_workspace/llvm/build/install/bin/icpx

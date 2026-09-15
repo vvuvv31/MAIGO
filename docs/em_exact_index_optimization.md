@@ -34,8 +34,24 @@ Elapsed口径吞吐提升 3.15%；最大体素差/基线峰值 0.00004618%。基
 ## 复现
 
 ```bash
-cmake --preset oneapi-nvidia-secondary16-indexed -DCMAKE_CXX_COMPILER=/home/wuwei/sycl_workspace/llvm/build/install/bin/icpx
-cmake --build --preset oneapi-nvidia-secondary16-indexed --parallel 8
+cmake --preset oneapi-nvidia-indexed -DCMAKE_CXX_COMPILER=/home/wuwei/sycl_workspace/llvm/build/install/bin/icpx
+cmake --build --preset oneapi-nvidia-indexed --parallel 8
 ```
 
-已验证程序为 `scratch/lookup_20260915/build/carbon_mc`。基线为 `scratch/secondary_20260915_latest/build16/carbon_mc`。脚本、结果、日志及剂量均保存在 `scratch/lookup_20260915/`。生产默认仍64步且精确索引OFF，生产二进制未覆盖。
+已验证程序为 `scratch/lookup_20260915/build/carbon_mc`。基线为 `scratch/secondary_20260915_latest/build16/carbon_mc`。脚本、结果、日志及剂量均保存在 `scratch/lookup_20260915/`。
+
+生产默认 `CARBON_EM_EXACT_INDEX=ON`（2026-09-15，紧凑对齐续跑验收后）。关闭用预设 `oneapi-nvidia-index-off`。
+
+紧凑续跑必须在装载后把 `tables` 重新绑到当前核的 `unified_device`（捕获对象指针不能跨 launch 使用）；`SecondaryResumeState` 按 16 字节对齐（272 字节）。264 字节未对齐且先绑 `tables` 再整体覆盖时，次级续跑会 CUDA misaligned/illegal address。
+
+## 对齐续跑 + 装载后绑定（2026-09-15 晚）
+
+同一 sm_75 标志，RT07575 hardware_profile 3,240,963 原发；顺序 base16 → indexed16 → indexed16 → base16。`state_bytes=272`，`exact_index` 与二进制一致。GPU `unified_em_index` 82,741,572 查询失败数 0。水 50k INDEX ON 通过。
+
+| 指标 | base16 中位数 | indexed16 中位数 |
+|---|---:|---:|
+| elapsed_s | 30.548580 | 29.575662 |
+| primary_s | 9.407599 | 9.657995 |
+| secondary_s | 16.789649 | 15.477556 |
+
+Elapsed 口径约 +3.19%；次级核约 +7.81%。审计 `0 1036320939 1429988519 0 0 6897079514135703 528848467657861 0`。最大体素差/峰值 0.00005684%；基线自身重复 0.00003552%。质量通过、零 overflow。日志与剂量在 `scratch/kernel_deadpath_20260915/align_*`。

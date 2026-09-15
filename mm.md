@@ -25,7 +25,8 @@ The two current unified-EM production entry points are
 | Primary / secondary fluctuations | Both enabled, `straggling_scale: 1.0` |
 | `ct_secondary_exact_faces` | `true` |
 | `secondary_species_grouping` | `true`; restore original scheduling with `false` |
-| `secondary_step_chunking` | `true`: 64 complete iterations, then survivor compaction |
+| `secondary_step_chunking` | `true`: 16 complete iterations, then survivor compaction |
+| EM table search | `CARBON_EM_EXACT_INDEX=ON`: exponent buckets only narrow binary search; same knots and interpolation |
 | Inelastic / secondary transport | Enabled; secondary inelastic generation limit 2 |
 | Independent all-ion elastic | Bank omitted in these two production presets; research option |
 | Electron dose | Local deposition of sampled delta energy; no electron packet tracking |
@@ -328,7 +329,7 @@ Current production algorithm (2026-09-15): the accepted candidate ran RT07575's 
 Primaries launch in `history_chunk_size` batches, but the secondary queue is not emptied
 after each primary batch: all primaries in the shard finish before secondary generations
 are transported. The queue has a fixed **32,000,000**-entry capacity. Continuation also
-allocates **352 bytes of state** per current-generation secondary plus indices/flags.
+allocates **272 bytes of state** per current-generation secondary plus indices/flags.
 Shard histories therefore affect peak secondary memory; the roughly 4.4 GB observed
 during the primary phase is not the whole-run peak.
 
@@ -354,7 +355,7 @@ accepted candidate above.
 ### Default secondary continuation (2026-09-14)
 
 Both production presets now enable `secondary_step_chunking: true` alongside species
-grouping. A launch performs up to 64 complete secondary loop iterations, saves the
+grouping. A launch performs up to 16 complete secondary loop iterations, saves the
 surviving tracks and stably compacts their indices. Queues below 8192 finish directly.
 No physical step is shortened or merged. Energy, position/direction, RNG counter,
 material cache, pending deposits and diagnostics persist across launches;
@@ -364,7 +365,7 @@ launches without continuation buffers; species grouping is controlled separately
 
 The September 14 prototype used 336 bytes of state plus about 20 bytes of indices/flags per
 secondary; its 2.88M-track pool needed about 1.03 GB extra memory. The current state is
-352 bytes per secondary, as described above. Allocation failure stops the run; reduce histories per shard and merge
+272 bytes per secondary (16-byte aligned compact resume), as described above. Allocation failure stops the run; reduce histories per shard and merge
 outputs. Primary transport also skips a duplicate mean-loss lookup unless its optional
 audit needs it; the physical loss sampler remains unchanged.
 

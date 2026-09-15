@@ -380,7 +380,7 @@ struct TransportConfig {
     bool enable_secondary_unified_em{false};
     // GPU generation-wise species ordering. Production YAML opts in explicitly.
     bool secondary_species_grouping{false};
-    // Pause after the compile-time secondary iteration limit (default 64) and compact survivors.
+    // Pause after the compile-time secondary iteration limit (default 16) and compact survivors.
     // Production presets opt in; false retains full-track scheduling without state buffers.
     bool secondary_step_chunking{false};
     // Scalar fallback for Bohr straggling. If the two optional tables below

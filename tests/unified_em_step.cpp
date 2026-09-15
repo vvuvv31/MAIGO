@@ -2,7 +2,7 @@
 #include <iostream>
 int main() {
     carbon::UnifiedEmRecord r{};r.a=12;r.step_fraction=.2f;r.final_range=1.f;
-    carbon::UnifiedEmState s;s.lo.record=&r;s.hi.record=&r;s.density=1;s.valid=true;
+    carbon::UnifiedEmState s;s.host_record=&r;s.density=1;s.valid=true;
     carbon::UnifiedEmStep pre;pre.lo.range=10;pre.hi.range=10;
     auto native=s.step(pre);
     auto check=[](bool x){if(!x)throw std::runtime_error("Step extension guard failed");};

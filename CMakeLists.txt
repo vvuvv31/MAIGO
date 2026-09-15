@@ -69,7 +69,7 @@ add_library(carbon_core
 )
 
 target_include_directories(carbon_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
-option(CARBON_EM_EXACT_INDEX "Narrow EM searches with exact exponent buckets" OFF)
+option(CARBON_EM_EXACT_INDEX "Narrow EM searches with exact exponent buckets" ON)
 target_compile_definitions(carbon_core PUBLIC CARBON_EM_EXACT_INDEX=$<BOOL:${CARBON_EM_EXACT_INDEX}>)
 option(CARBON_EM_SPECIALIZE "Specialize unified and legacy EM transport kernels" ON)
 target_compile_definitions(carbon_core PUBLIC CARBON_EM_SPECIALIZE=$<BOOL:${CARBON_EM_SPECIALIZE}>)
@@ -97,8 +97,8 @@ option(CARBON_SECONDARY_STEP_PROFILE "Per-species secondary step profile (diagno
 target_compile_definitions(carbon_core PUBLIC
     CARBON_SECONDARY_STEP_PROFILE=$<BOOL:${CARBON_SECONDARY_STEP_PROFILE}>)
 
-set(CARBON_SECONDARY_SEGMENT_STEPS "64" CACHE STRING
-    "Complete secondary iterations per continuation launch (8/16/32/64/128; production default 64)")
+set(CARBON_SECONDARY_SEGMENT_STEPS "16" CACHE STRING
+    "Complete secondary iterations per continuation launch (8/16/32/64/128; production default 16)")
 set_property(CACHE CARBON_SECONDARY_SEGMENT_STEPS PROPERTY STRINGS 8 16 32 64 128)
 if(NOT CARBON_SECONDARY_SEGMENT_STEPS MATCHES "^(8|16|32|64|128)$")
     message(FATAL_ERROR "CARBON_SECONDARY_SEGMENT_STEPS must be 8, 16, 32, 64 or 128")

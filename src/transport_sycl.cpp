@@ -78,7 +78,7 @@ namespace {
 
 // State persists across launch boundaries; a pause must not finalize dose or
 // diagnostics. Only survivor indices move during stable compaction.
-struct SecondaryResumeState {
+struct alignas(16) SecondaryResumeState {
     bool sec_terminal_recorded{};
     bool unified_secondary_escaped_ct{};
     ContinuousSpeciesTrackTally continuous_species_tally{};
@@ -93,7 +93,6 @@ struct SecondaryResumeState {
     float pending_sec_voxel_MeV{};
     int pending_sec_bin{};
     int pending_sec_voxel{};
-    UnifiedEmClock unified_secondary_clock{};
     std::uint64_t unified_secondary_counter{};
     UnifiedEmState unified_secondary_state{};
     std::array<std::uint64_t,8> unified_secondary_audit{};
@@ -103,6 +102,7 @@ struct SecondaryResumeState {
     std::array<double,6> he4_audit{};
     std::array<std::uint64_t,CARBON_SECONDARY_STEP_PROFILE?60:0> sec_prof{};
 };
+static_assert(sizeof(SecondaryResumeState) % 16 == 0);
 struct UnifiedEmFailureRecord {int reason,section,z,a;float energy,density,step;};
 inline void record_unified_em_failure(unsigned* count,UnifiedEmFailureRecord* records,
     int reason,int section,int z,int a,float energy,float density,float step) {
@@ -1108,7 +1108,8 @@ template<int EmMode>
     const float em_primary_step_scale=static_cast<float>(config.em_primary_step_scale);
     const float em_secondary_step_scale=static_cast<float>(config.em_secondary_step_scale);
     if(unified_em)std::cout<<"[em-performance] material_cache="<<CARBON_EM_MATERIAL_CACHE
-        <<" step_cache="<<CARBON_EM_STEP_CACHE<<" local_audit="<<CARBON_EM_LOCAL_AUDIT<<"\n";
+        <<" step_cache="<<CARBON_EM_STEP_CACHE<<" local_audit="<<CARBON_EM_LOCAL_AUDIT
+        <<" exact_index="<<CARBON_EM_EXACT_INDEX<<"\n";
     UnifiedEmDevice unified_device;
     UnifiedEmMaterial* unified_materials=nullptr;
     UnifiedEmSpecies* unified_species=nullptr;
@@ -4871,9 +4872,9 @@ template<int EmMode>
                             pending_sec_voxel_MeV=saved.pending_sec_voxel_MeV;
                             pending_sec_bin=saved.pending_sec_bin;
                             pending_sec_voxel=saved.pending_sec_voxel;
-                            unified_secondary_clock=saved.unified_secondary_clock;
                             unified_secondary_counter=saved.unified_secondary_counter;
                             unified_secondary_state=saved.unified_secondary_state;
+                            unified_secondary_state.tables=&unified_device;
                             unified_secondary_audit=saved.unified_secondary_audit;
                             sec_steps=saved.sec_steps;
                             local_sec_rate_queries=saved.local_sec_rate_queries;
@@ -6274,7 +6275,6 @@ template<int EmMode>
                             saved.pending_sec_voxel_MeV=pending_sec_voxel_MeV;
                             saved.pending_sec_bin=pending_sec_bin;
                             saved.pending_sec_voxel=pending_sec_voxel;
-                            saved.unified_secondary_clock=unified_secondary_clock;
                             saved.unified_secondary_counter=unified_secondary_counter;
                             saved.unified_secondary_state=unified_secondary_state;
                             saved.unified_secondary_audit=unified_secondary_audit;
