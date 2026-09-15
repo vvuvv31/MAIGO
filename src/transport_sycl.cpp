@@ -103,6 +103,24 @@ struct alignas(16) SecondaryResumeState {
     std::array<std::uint64_t,CARBON_SECONDARY_STEP_PROFILE?60:0> sec_prof{};
 };
 static_assert(sizeof(SecondaryResumeState) % 16 == 0);
+// Secondary index reordering only: particles are already independent and keep
+// their RNG identity. Within one species, sorting by an energy bucket keeps a
+// warp reading the same EM node/segment region, which improves L1 locality of
+// the exact-index table probes without changing transport arithmetic.
+inline constexpr unsigned kSecondaryEnergyBucketCount = 16;
+inline constexpr unsigned kSecondaryGroupBucketCount =
+    19 * kSecondaryEnergyBucketCount;
+inline unsigned secondary_group_bucket(int z, int a, float energy_MeV) {
+    const int species = carbon::get_charged_species_idx(z, a);
+    const unsigned sp = species >= 0 ? static_cast<unsigned>(species) : 18u;
+    unsigned eb = 0u;
+    if (energy_MeV > 0.0F) {
+        const float level = sycl::log2(energy_MeV * 8.0F);
+        eb = static_cast<unsigned>(sycl::clamp(
+            level, 0.0F, static_cast<float>(kSecondaryEnergyBucketCount - 1)));
+    }
+    return sp * kSecondaryEnergyBucketCount + eb;
+}
 struct UnifiedEmFailureRecord {int reason,section,z,a;float energy,density,step;};
 inline void record_unified_em_failure(unsigned* count,UnifiedEmFailureRecord* records,
     int reason,int section,int z,int a,float energy,float density,float step) {
@@ -4553,8 +4571,10 @@ template<int EmMode>
     double secondary_group_seconds = 0.0;
     if (group_secondaries && secondary_queue_device) {
         secondary_order = mem_tracker.allocate<std::uint32_t>(max_secondaries);
-        secondary_group_counts = mem_tracker.allocate<std::uint32_t>(19);
-        secondary_group_cursors = mem_tracker.allocate<std::uint32_t>(19);
+        secondary_group_counts =
+            mem_tracker.allocate<std::uint32_t>(kSecondaryGroupBucketCount);
+        secondary_group_cursors =
+            mem_tracker.allocate<std::uint32_t>(kSecondaryGroupBucketCount);
         if (!secondary_order || !secondary_group_counts || !secondary_group_cursors)
             throw std::bad_alloc();
     }
@@ -4575,12 +4595,13 @@ template<int EmMode>
                 const auto batch_begin = generation_begin;
                 if (group_secondaries) {
                     const auto grouping_start = std::chrono::steady_clock::now();
-                    queue.fill(secondary_group_counts, 0u, 19).wait_and_throw();
+                    queue.fill(secondary_group_counts, 0u,
+                               kSecondaryGroupBucketCount).wait_and_throw();
                     queue.parallel_for(sycl::range<1>(generation_end - generation_begin),
                         [=](sycl::id<1> id) {
                             const auto frag = secondary_queue_device[generation_begin + id[0]];
-                            const int species = carbon::get_charged_species_idx(frag.z, frag.a);
-                            const unsigned bucket = species >= 0 ? unsigned(species) : 18u;
+                            const unsigned bucket =
+                                secondary_group_bucket(frag.z, frag.a, frag.energy_MeV);
                             sycl::atomic_ref<std::uint32_t, sycl::memory_order::relaxed,
                                 sycl::memory_scope::device, sycl::access::address_space::global_space>
                                 count(secondary_group_counts[bucket]);
@@ -4588,7 +4609,7 @@ template<int EmMode>
                         }).wait_and_throw();
                     queue.single_task([=]() {
                         unsigned total = 0;
-                        for (unsigned k = 0; k < 19; ++k) {
+                        for (unsigned k = 0; k < kSecondaryGroupBucketCount; ++k) {
                             secondary_group_cursors[k] = total;
                             total += secondary_group_counts[k];
                         }
@@ -4597,8 +4618,8 @@ template<int EmMode>
                         [=](sycl::id<1> id) {
                             const unsigned index = generation_begin + id[0];
                             const auto frag = secondary_queue_device[index];
-                            const int species = carbon::get_charged_species_idx(frag.z, frag.a);
-                            const unsigned bucket = species >= 0 ? unsigned(species) : 18u;
+                            const unsigned bucket =
+                                secondary_group_bucket(frag.z, frag.a, frag.energy_MeV);
                             sycl::atomic_ref<std::uint32_t, sycl::memory_order::relaxed,
                                 sycl::memory_scope::device, sycl::access::address_space::global_space>
                                 cursor(secondary_group_cursors[bucket]);

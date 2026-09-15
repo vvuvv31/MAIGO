@@ -59,6 +59,22 @@ removed from the tree; benchmark records stay frozen for provenance.
 - Exact single-draw Poisson inversion (validated chi2 < 21): **0%**.
 - Global `-ffast-math`: +2.8% (finite-math broke host parsing separately).
 - `maxrregcount=128`: 0% (spill cancelled occupancy).
+- Direct `prepare`/`loss` field interpolation without a full `UnifiedEmNode`
+  temporary (2026-09-15, vs compact+index production): audit-identical, RT07575
+  elapsed about 3% slower, secondary kernel slower; reverted. Turing still
+  rounds ~203 regs to an 8-warp SM cap; this did not cross the 168–192
+  register band that would allow 10–12 warps.
+- Sticky last-interval search plus independent stopping/range cubics
+  (2026-09-15): audit-identical, resume 272→304 bytes, RT07575 elapsed about
+  9% slower (primary and secondary). Extra hint state and hit/miss branches
+  outweighed the already-narrow exact-index binary search; reverted.
+- Add birth-voxel Schneider section to the secondary regrouping key,
+  `(section, species, energy)` with 26×19×16 buckets (2026-09-15): quality
+  pass, zero overflow, dose within atomic-order noise, but RT07575 secondary
+  about 3% slower than the accepted `(species, energy)` key. Section/density
+  changes along the track diluted the locality benefit and added a CT material
+  load plus more atomic buckets per regroup; reverted. Only the species × 16
+  energy key was kept.
 - Dummy-RNG separation: Philox ALU ~= 4% of primary step; the 2.8x
   constant-dummy effect was divergence elimination, not RNG math.
 - Interval narrowing (`CARBON_EM_EXACT_INDEX` style): -1.1%.
