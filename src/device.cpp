@@ -6,6 +6,7 @@
 
 #ifdef CARBON_HAS_SYCL
 
+#include <algorithm>
 #include <cmath>
 
 #include <exception>
@@ -62,7 +63,32 @@ int backend_gpu_score(const sycl::device& device, sycl::backend wanted) {
     if (device.has(sycl::aspect::atomic64)) {
         score += 100;
     }
+    // Among equally capable GPUs prefer the one with the most global memory
+    // (in GiB, bounded to keep the score in range), then more compute units.
+    try {
+        score += static_cast<int>(
+            device.get_info<sycl::info::device::global_mem_size>() >> 30);
+        score += static_cast<int>(
+            std::min<std::size_t>(
+                device.get_info<sycl::info::device::max_compute_units>(), 1024));
+    } catch (const sycl::exception&) {
+    }
     return score;
+}
+
+bool selector_matches(const sycl::device& device, const std::string& device_name) {
+    if (device_name == "gpu") return device.is_gpu();
+    if (device_name == "cpu") return device.is_cpu();
+    if (device_name == "default") return true;
+    if (device_name == "cuda" || device_name == "nvidia") {
+        return device.is_gpu() && device.get_backend() == sycl::backend::ext_oneapi_cuda;
+    }
+    if (device_name == "level_zero" || device_name == "intel" || device_name == "arc") {
+        return device.is_gpu() &&
+               device.get_backend() == sycl::backend::ext_oneapi_level_zero;
+    }
+    if (device_name == "opencl") return device.get_backend() == sycl::backend::opencl;
+    return false;
 }
 
 sycl::queue make_backend_gpu_queue(sycl::backend wanted, const std::string& label) {
@@ -130,6 +156,71 @@ std::string describe_sycl_device(const std::string& device_name) {
     description += " atomic64=";
     description += device.has(sycl::aspect::atomic64) ? "yes" : "no";
     return description;
+}
+
+DeviceCapabilities probe_sycl_device(const std::string& device_name) {
+    std::vector<sycl::device> matches;
+    for (const auto& device : sycl::device::get_devices()) {
+        if (selector_matches(device, device_name)) {
+            matches.push_back(device);
+        }
+    }
+    if (matches.empty()) {
+        throw std::runtime_error(
+            "No SYCL device matches selector '" + device_name +
+            "' (set ONEAPI_DEVICE_SELECTOR or install the matching runtime)");
+    }
+    const auto mem = [](const sycl::device& d) {
+        try {
+            return static_cast<std::size_t>(
+                d.get_info<sycl::info::device::global_mem_size>());
+        } catch (const sycl::exception&) {
+            return std::size_t{0};
+        }
+    };
+    const auto cu = [](const sycl::device& d) {
+        try {
+            return static_cast<std::size_t>(
+                d.get_info<sycl::info::device::max_compute_units>());
+        } catch (const sycl::exception&) {
+            return std::size_t{0};
+        }
+    };
+    std::size_t best = 0;
+    for (std::size_t i = 1; i < matches.size(); ++i) {
+        if (mem(matches[i]) > mem(matches[best]) ||
+            (mem(matches[i]) == mem(matches[best]) && cu(matches[i]) > cu(matches[best]))) {
+            best = i;
+        }
+    }
+    const auto& device = matches[best];
+    DeviceCapabilities caps;
+    caps.device_count = matches.size();
+    caps.name = device.get_info<sycl::info::device::name>();
+    caps.vendor = device.get_info<sycl::info::device::vendor>();
+    caps.backend = backend_name(device.get_backend());
+    caps.global_mem_bytes = mem(device);
+    caps.max_compute_units = cu(device);
+    const auto info_or = [&](auto tag, std::size_t fallback) {
+        try {
+            return static_cast<std::size_t>(device.get_info<decltype(tag)>());
+        } catch (const sycl::exception&) {
+            return fallback;
+        }
+    };
+    caps.max_alloc_bytes = info_or(sycl::info::device::max_mem_alloc_size{}, 0);
+    caps.max_work_group_size =
+        info_or(sycl::info::device::max_work_group_size{}, 0);
+    try {
+        const auto sizes = device.get_info<sycl::info::device::sub_group_sizes>();
+        for (const auto size : sizes) {
+            caps.sub_group_size = std::max(caps.sub_group_size, static_cast<std::size_t>(size));
+        }
+    } catch (const sycl::exception&) {
+    }
+    caps.fp64 = device.has(sycl::aspect::fp64);
+    caps.atomic64 = device.has(sycl::aspect::atomic64);
+    return caps;
 }
 
 std::vector<float> test_schneider_device_lookup_batch(

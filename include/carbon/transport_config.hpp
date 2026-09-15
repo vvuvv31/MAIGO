@@ -699,6 +699,11 @@ struct TransportConfig {
     // Secondary particle queue capacity. Default matches the validated
     // production value; larger cards may raise it for big merged shards.
     std::size_t secondary_queue_capacity{32000000};
+    // When true, query the selected SYCL device before transport and adapt the
+    // explicit USM budget (from total global memory) and cap the secondary
+    // queue capacity to what that budget can hold. Read-only; never overrides
+    // an explicit positive device_memory_budget_gib.
+    bool auto_device_tuning{false};
     // Primary kernel launch chunk (histories per GPU submit). 0 = auto:
     // CUDA defaults to a small chunk so WSL/Windows can reclaim the GPU between
     // launches (long single kernels freeze WSL). Intel GPU uses a larger default.

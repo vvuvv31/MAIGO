@@ -2,6 +2,8 @@
 #include "carbon/cli.hpp"
 #include "carbon/cross_section.hpp"
 #include "carbon/ct_grid.hpp"
+#include "carbon/device.hpp"
+#include "carbon/inelastic.hpp"
 #include "carbon/io.hpp"
 #include "carbon/plan_run.hpp"
 #include "carbon/run_quality.hpp"
@@ -144,6 +146,52 @@ int main(int argc, char* argv[]) {
                     "' but shard 1 requests '" + shards[0].config.device + "'");
             }
         }
+#ifdef CARBON_HAS_SYCL
+        // Optional device-adaptive defaults: read the selected device (global
+        // memory, compute units, work-group size, device count) and derive a
+        // safe USM budget; cap the secondary queue capacity to what that budget
+        // can hold. Never overrides an explicit positive budget and is off by
+        // default so validated production numbers are unchanged.
+        if (!shards.empty() && shards[0].config.auto_device_tuning &&
+            shards[0].config.device != "serial") {
+            const auto caps = carbon::probe_sycl_device(shards[0].config.device);
+            const double gib = 1024.0 * 1024.0 * 1024.0;
+            std::cout << "[device-capabilities] name=\"" << caps.name
+                      << "\" vendor=\"" << caps.vendor << "\" backend=" << caps.backend
+                      << " devices=" << caps.device_count
+                      << " global_mem_GiB=" << caps.global_mem_bytes / gib
+                      << " max_alloc_GiB=" << caps.max_alloc_bytes / gib
+                      << " compute_units=" << caps.max_compute_units
+                      << " max_work_group=" << caps.max_work_group_size
+                      << " sub_group=" << caps.sub_group_size
+                      << " fp64=" << (caps.fp64 ? "yes" : "no")
+                      << " atomic64=" << (caps.atomic64 ? "yes" : "no") << '\n';
+            const double usable_budget_GiB = 0.85 * caps.global_mem_bytes / gib;
+            for (auto& shard : shards) {
+                if (shard.config.device_memory_budget_gib <= 0.0) {
+                    shard.config.device_memory_budget_gib = usable_budget_GiB;
+                    std::cout << "[device-tuning] device_memory_budget_gib -> "
+                              << shard.config.device_memory_budget_gib
+                              << " (0.85 x global memory)\n";
+                }
+                const auto budget_bytes = static_cast<std::size_t>(
+                    shard.config.device_memory_budget_gib * gib);
+                const std::size_t queue_bytes =
+                    static_cast<std::size_t>(sizeof(carbon::SecondaryParticle));
+                const std::size_t max_capacity =
+                    queue_bytes ? (budget_bytes / 2) / queue_bytes : 0;
+                if (max_capacity > 0 &&
+                    shard.config.secondary_queue_capacity > max_capacity) {
+                    std::cout << "[device-tuning] secondary_queue_capacity "
+                              << shard.config.secondary_queue_capacity << " -> "
+                              << max_capacity << " to fit "
+                              << shard.config.device_memory_budget_gib << " GiB\n";
+                    shard.config.secondary_queue_capacity = max_capacity;
+                }
+            }
+        }
+#endif
+
         // Reject cross-shard output collisions after resolving each shard's
         // actual output paths. No silent overwrite or automatic renaming.
         if (shards.size() > 1) {

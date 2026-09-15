@@ -27,6 +27,8 @@ void print_usage(const char* executable) {
                  "  --random-seed N|auto Override the configured RNG seed\n"
                  "  --ct-grid FILE       Override the configured CCTG patient grid\n"
                  "  --ct-stopping-power-scale X  Override the CT mass stopping-power scale\n"
+                 "  --auto-device-tuning   Derive USM budget/queue capacity from the\n"
+                 "                       selected SYCL device's global memory\n"
                  "  --secondary-queue-capacity N  Override charged secondary queue capacity\n"
                  "  --neutral-queue-capacity N  Override neutral queue capacity\n"
                  "  --write-canonical-config FILE  Write strict normalized YAML input\n"
@@ -76,6 +78,8 @@ void apply_cli_overrides(int argc, char** argv, TransportConfig& config, CliStat
             config.ct_grid_file = argv[++index];
         } else if (argument == "--ct-stopping-power-scale" && index + 1 < argc) {
             config.ct_stopping_power_scale = std::stod(argv[++index]);
+        } else if (argument == "--auto-device-tuning") {
+            config.auto_device_tuning = true;
         } else if (argument == "--ct-schneider-stopping-power-file" && index + 1 < argc) {
             config.ct_schneider_stopping_power_file = argv[++index];
         } else if (argument == "--spots" && index + 1 < argc) {

@@ -199,3 +199,70 @@ histories 129,638,170、BODY 评价体素 351,014，均与既有基准一致；�
 与 §4.2 门槛判定（§7）、以及本轮唯一内核候选的采样与审计（§9）。当前数据不再支持新的内核
 搜索优化；不重启已否决的非弹性拆核、搜索键分离、RNG 替换或寄存器限额扫描。生产默认仍未
 替换，未 commit/push。
+
+## 10. 设备自适应参数（2026-09-16，可选，默认关闭）
+
+新增 `auto_device_tuning`（默认 false）。开启后，在创建 context 与输运前用 SYCL 设备查询读取
+所选设备的能力（不创建额外队列），按结果调整只读参数：
+
+- 探测并记录 `[device-capabilities]`：设备名、vendor、backend、**匹配设备数**、global memory、
+  max single allocation、compute units、max work group、sub-group、fp64/atomic64。
+- 多设备时按 backend 选择器匹配所有设备，取 **global memory 最大（其次 compute units 最多）**
+  的设备；`cuda`/`level_zero` 的 queue 选择器评分也加入显存与 SM 数偏好。
+- 若 `device_memory_budget_gib` 未显式给出（0），设为 **0.85 × global memory**；显式正值不覆盖。
+- 若 `secondary_queue_capacity` 在预算下放不下（预算一半 / `sizeof(SecondaryParticle)`=56 B），
+  下调到可容纳值并记录 `[device-tuning]`；只下调、不上调。
+
+实测（RTX 2080 Ti）：识别 10.57 GiB / 68 SM / work-group 1024 / sub-group 32；预算自动设为
+8.99 GiB，`tracked_peak_GiB=6.345` 低于预算，质量通过、Elapsed 无回归；显式预算 1 GiB 时
+容量由 32,000,000 下调到 9,586,980。默认关闭时行为与日志不变。
+
+注意：该自适应只调整显存预算与队列容量；不改变物理、RNG、步长或已验收的生产默认。
+
+## 11. A6000 并发利用实验（2026-09-16）
+
+针对“A6000 FP32 约 2×、显存 48 GiB”为何用不上：实测内核 SM 吞吐 ~6%、DRAM ~19%、
+`long_sb` ~70%、次级 191 寄存器 → 每 SM 仅 1 个 256 线程 block（25% occupancy），属延迟受限；
+单纯加算力/带宽无效。唯一不动物理的利用方式是把多个分片的 host 段与 kernel 段互相交叠、
+并在有空闲寄存器/SM 时让不同 kernel 的 block 共驻。
+
+A6000、RT07575 原分片、同源二进制，每个分片一个独立进程：
+
+| 方式 | 分片数 | wall | 吞吐 |
+|---|---:|---:|---:|
+| 顺序 | 2 | 71.31 s | 90,901 h/s |
+| 并发 | 2 | 61.04 s | 106,197 h/s (+16.8%) |
+| 顺序 | 4 | 143.85 s | 90,119 h/s |
+| 并发 | 4 | 109.78 s | 118,084 h/s (+31.0%) |
+| 并发 | 6 | 154.09 s | 126,195 h/s |
+
+缓存 + 并发组合（每进程一个 `--plan-manifest` 组，组内复用 host 缓存）：
+
+| 组数 | wall | 吞吐 | 相对 1 组 |
+|---:|---:|---:|---:|
+| 1（缓存顺序） | 172.71 s | 112,594 h/s | — |
+| 2 | 164.16 s | 118,453 h/s | +5.2% |
+| 3 | 157.53 s | 123,445 h/s | +9.6% |
+| 6 | 153.17 s | 126,954 h/s | +12.8% |
+
+结论：并发在 A6000 上稳定有效但**有上限**（6 组约 +13%，之后接近饱和），主要来自 host 初始化与
+kernel 交叠及少量 block 交错；显存允许约 6 个 ~6.3 GiB 分片同时驻留。所有并发运行均 fail-closed、
+零质量失败。要进一步兑现 FP32，需要每线程处理 2 条独立轨迹提高 ILP，或降低寄存器让多个
+kernel 的 block 真正共驻——两者都要改动输运/RNG 结构，属下一轮大改。
+
+当前并发以“多进程 / 多组 manifest”方式可用，不改物理与 RNG；未作为生产默认，未 commit。
+
+### 11.1 正式并发入口
+
+新增 `tools/plan_concurrent.py`：把 manifest 的配置轮转分成 N 组，每组一个
+`carbon_mc --plan-manifest` 进程并发运行（组内仍复用 §3.1 主机缓存），任一组失败即整体
+非零退出、不产生“部分成功”。仅编排，不改物理/RNG/记分。
+
+```bash
+python3 tools/plan_concurrent.py --manifest plan.txt --groups 3 \
+    --executable build/oneapi-nvidia-release/carbon_mc --device cuda
+```
+
+验证：A6000 六片三组 = 123,992 h/s，与手写实验 123,445 h/s 一致；组失败时 fail-closed。
+提示：组数受显存限制（每组约 6.3 GiB 常驻），2080 Ti 11 GiB 只能 1 组（2 组会 OOM 并已按
+fail-closed 退出），A6000 48 GiB 可到约 6 组。

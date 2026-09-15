@@ -2653,6 +2653,8 @@ TransportConfig load_config(const std::filesystem::path& path) {
         values, "device_memory_budget_gib", config.device_memory_budget_gib);
     config.secondary_queue_capacity = parse_number(
         values, "secondary_queue_capacity", config.secondary_queue_capacity);
+    config.auto_device_tuning = parse_bool(
+        values, "auto_device_tuning", config.auto_device_tuning);
     config.history_chunk_size =
         parse_number(values, "history_chunk_size", config.history_chunk_size);
     config.robust_boundary_nudge = parse_bool(
