@@ -26,24 +26,55 @@ constexpr std::uint32_t endian_marker = 0x01020304U;
 constexpr std::uint32_t required_flags = 0x0FU;
 constexpr std::uint32_t known_flags = required_flags | cinel03_global_energy_index_flag | cinel03_crc32_checksum_flag;
 
-// Standard IEEE 802.3 CRC32
+// Standard IEEE 802.3 CRC32, slicing-by-8. Identical polynomial (0xEDB88320),
+// initial value (0), final inversion and incremental concatenation semantics as
+// the previous byte-at-a-time version; only the number of table lookups per
+// byte changes. `previous_crc` is the finalized CRC of the preceding chunks.
 std::uint32_t compute_crc32(const void* data, std::size_t length, std::uint32_t previous_crc = 0) noexcept {
-    static constexpr auto table = []() constexpr {
-        std::array<std::uint32_t, 256> t{};
+    static constexpr auto tables = []() constexpr {
+        std::array<std::array<std::uint32_t, 256>, 8> t{};
         for (std::uint32_t i = 0; i < 256; ++i) {
             std::uint32_t c = i;
             for (int k = 0; k < 8; ++k) {
                 c = (c & 1) ? (0xEDB88320U ^ (c >> 1)) : (c >> 1);
             }
-            t[i] = c;
+            t[0][i] = c;
+        }
+        for (std::uint32_t i = 0; i < 256; ++i) {
+            std::uint32_t c = t[0][i];
+            for (int k = 1; k < 8; ++k) {
+                c = t[0][c & 0xFF] ^ (c >> 8);
+                t[k][i] = c;
+            }
         }
         return t;
     }();
 
     std::uint32_t c = ~previous_crc;
     const auto* bytes = static_cast<const std::uint8_t*>(data);
-    for (std::size_t i = 0; i < length; ++i) {
-        c = table[(c ^ bytes[i]) & 0xFF] ^ (c >> 8);
+    while (length >= 8) {
+        const std::uint32_t lo =
+            static_cast<std::uint32_t>(bytes[0]) |
+            (static_cast<std::uint32_t>(bytes[1]) << 8) |
+            (static_cast<std::uint32_t>(bytes[2]) << 16) |
+            (static_cast<std::uint32_t>(bytes[3]) << 24);
+        const std::uint32_t hi =
+            static_cast<std::uint32_t>(bytes[4]) |
+            (static_cast<std::uint32_t>(bytes[5]) << 8) |
+            (static_cast<std::uint32_t>(bytes[6]) << 16) |
+            (static_cast<std::uint32_t>(bytes[7]) << 24);
+        const std::uint32_t x = c ^ lo;
+        c = tables[7][x & 0xFF] ^ tables[6][(x >> 8) & 0xFF] ^
+            tables[5][(x >> 16) & 0xFF] ^ tables[4][(x >> 24) & 0xFF] ^
+            tables[3][hi & 0xFF] ^ tables[2][(hi >> 8) & 0xFF] ^
+            tables[1][(hi >> 16) & 0xFF] ^ tables[0][(hi >> 24) & 0xFF];
+        bytes += 8;
+        length -= 8;
+    }
+    while (length > 0) {
+        c = tables[0][(c ^ *bytes) & 0xFF] ^ (c >> 8);
+        ++bytes;
+        --length;
     }
     return ~c;
 }

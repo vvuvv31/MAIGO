@@ -1,5 +1,6 @@
 #include "carbon/cli.hpp"
 
+#include <fstream>
 #include <iostream>
 #include <stdexcept>
 #include <string>
@@ -12,7 +13,10 @@ void print_usage(const char* executable) {
                  " [--spots FILE] [--straggling-scale X] [--output FILE]"
                  " [--dose-output FILE] [--scorer-let|--no-scorer-let]"
                  " [--let-output FILE] [--write-canonical-config FILE]"
-                 " [--plan-only] [--sequential-spots]\n"
+                 " [--plan-manifest FILE] [--plan-only] [--sequential-spots]\n"
+                 "  --plan-manifest FILE  Run each config listed in FILE sequentially in\n"
+                 "                       one process, reusing validated read-only physics\n"
+                 "                       data across shards\n"
                  "  --device DEVICE      serial | cpu | gpu | default |\n"
                  "                       cuda|nvidia | level_zero|intel|arc | opencl\n"
                  "                       (gpu respects ONEAPI_DEVICE_SELECTOR;\n"
@@ -41,6 +45,8 @@ void parse_config_and_help(int argc, char** argv, CliState& state) {
         const std::string argument = argv[index];
         if (argument == "--config" && index + 1 < argc) {
             state.config_path = argv[++index];
+        } else if (argument == "--plan-manifest" && index + 1 < argc) {
+            state.plan_manifest = argv[++index];
         } else if (argument == "--write-canonical-config" && index + 1 < argc) {
             state.canonical_config_output_path = argv[++index];
         } else if (argument == "--help" || argument == "-h") {
@@ -54,6 +60,8 @@ void apply_cli_overrides(int argc, char** argv, TransportConfig& config, CliStat
     for (int index = 1; index < argc; ++index) {
         const std::string argument = argv[index];
         if (argument == "--config") {
+            ++index;
+        } else if (argument == "--plan-manifest" && index + 1 < argc) {
             ++index;
         } else if (argument == "--write-canonical-config" && index + 1 < argc) {
             ++index;
@@ -105,6 +113,33 @@ void apply_cli_overrides(int argc, char** argv, TransportConfig& config, CliStat
             throw std::invalid_argument("Unknown or incomplete argument: " + argument);
         }
     }
+}
+
+std::vector<std::filesystem::path> load_plan_manifest(
+    const std::filesystem::path& manifest_path) {
+    std::ifstream input(manifest_path);
+    if (!input) {
+        throw std::runtime_error("Cannot open plan manifest: " +
+                                 manifest_path.string());
+    }
+    const auto base = manifest_path.parent_path();
+    std::vector<std::filesystem::path> entries;
+    std::string line;
+    while (std::getline(input, line)) {
+        // Trim leading/trailing whitespace without extra dependencies.
+        const auto first = line.find_first_not_of(" \t\r\n");
+        if (first == std::string::npos) continue;
+        const auto last = line.find_last_not_of(" \t\r\n");
+        const auto trimmed = line.substr(first, last - first + 1);
+        if (trimmed.empty() || trimmed[0] == '#') continue;
+        std::filesystem::path entry(trimmed);
+        if (entry.is_relative() && !base.empty()) entry = base / entry;
+        entries.push_back(std::move(entry));
+    }
+    if (entries.empty()) {
+        throw std::runtime_error("Plan manifest is empty: " + manifest_path.string());
+    }
+    return entries;
 }
 
 }  // namespace carbon

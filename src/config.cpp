@@ -1231,6 +1231,21 @@ void TransportConfig::validate() const {
         throw std::invalid_argument(
             "max_device_memory_fraction must be in (0.05, 1.0]");
     }
+    if (!std::isfinite(device_memory_budget_gib) || device_memory_budget_gib < 0.0) {
+        throw std::invalid_argument(
+            "device_memory_budget_gib must be finite and nonnegative (0 = unlimited)");
+    }
+    if (device_memory_budget_gib >
+        static_cast<double>(std::numeric_limits<std::size_t>::max()) /
+            (1024.0 * 1024.0 * 1024.0)) {
+        throw std::invalid_argument(
+            "device_memory_budget_gib exceeds the addressable byte range");
+    }
+    if (secondary_queue_capacity == 0 ||
+        secondary_queue_capacity > 4000000000ULL) {
+        throw std::invalid_argument(
+            "secondary_queue_capacity must be in (0, 4e9]");
+    }
     if (electronic_buildup_fraction < 0.0 || electronic_buildup_fraction > 0.5) {
         throw std::invalid_argument(
             "electronic_buildup_fraction must be in [0, 0.5]");
@@ -2634,6 +2649,10 @@ TransportConfig load_config(const std::filesystem::path& path) {
         config.electronic_buildup_lateral_sigma_mm);
     config.max_device_memory_fraction = parse_number(
         values, "max_device_memory_fraction", config.max_device_memory_fraction);
+    config.device_memory_budget_gib = parse_number(
+        values, "device_memory_budget_gib", config.device_memory_budget_gib);
+    config.secondary_queue_capacity = parse_number(
+        values, "secondary_queue_capacity", config.secondary_queue_capacity);
     config.history_chunk_size =
         parse_number(values, "history_chunk_size", config.history_chunk_size);
     config.robust_boundary_nudge = parse_bool(

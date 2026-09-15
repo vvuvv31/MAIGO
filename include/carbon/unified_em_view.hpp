@@ -21,6 +21,14 @@
 #ifndef CARBON_EM_EXACT_INDEX
 #define CARBON_EM_EXACT_INDEX 0
 #endif
+// Candidate A: split the binary-search keys out of the 52 B node records and
+// 24 B segment records into contiguous float arrays so each cache line holds
+// 16/32 keys instead of 2/5. Search arithmetic, interval choice and every
+// downstream interpolation stay byte-for-byte identical; only the memory read
+// during the search changes. 0 keeps the validated path.
+#ifndef CARBON_EM_SPLIT_SEARCH_KEYS
+#define CARBON_EM_SPLIT_SEARCH_KEYS 0
+#endif
 namespace carbon {
 // Coarse exponent buckets only narrow the search; original knots and arithmetic stay intact.
 inline constexpr unsigned unified_em_index_stride=5*257;
@@ -57,6 +65,9 @@ struct UnifiedEmPoint {
     float density_scale{1};
     const unsigned* index{};
     const float* delta_means{};
+    // Candidate A search keys (global node index / global segment index).
+    const float* node_energy_keys{};
+    const float* segment_lower_keys{};
     void bounds(unsigned kind,float x,unsigned& lo,unsigned& hi)const {
         if constexpr(CARBON_EM_EXACT_INDEX) {
             if(index && x>0 && std::isfinite(x)) {
@@ -73,7 +84,13 @@ struct UnifiedEmPoint {
     }
     UnifiedEmNode at(float e,float* delta_mean=nullptr,float* delta_variance=nullptr,float* delta_slope=nullptr)const {
         unsigned lo=0,hi=record->node_count-2;bounds(0,e,lo,hi);
-        while(lo<hi){auto m=(lo+hi+1)/2;if(nodes[m].energy<=e)lo=m;else hi=m-1;}
+        if constexpr(CARBON_EM_SPLIT_SEARCH_KEYS) {
+            const float* key=node_energy_keys;
+            if(key)while(lo<hi){auto m=(lo+hi+1)/2;if(key[m]<=e)lo=m;else hi=m-1;}
+            else while(lo<hi){auto m=(lo+hi+1)/2;if(nodes[m].energy<=e)lo=m;else hi=m-1;}
+        } else {
+            while(lo<hi){auto m=(lo+hi+1)/2;if(nodes[m].energy<=e)lo=m;else hi=m-1;}
+        }
         const auto& a=nodes[lo];const auto& b=nodes[lo+1];
         float w=std::clamp((e-a.energy)/(b.energy-a.energy),0.f,1.f);
         auto mix=[&](float x,float y){return x+w*(y-x);};
@@ -84,6 +101,8 @@ struct UnifiedEmPoint {
     }
     float raw(int kind,float x,float* slope=nullptr)const {
         const auto* v=segments+record->offsets[kind];unsigned lo=0,hi=record->counts[kind]-1;
+        const float* lk=nullptr;
+        if constexpr(CARBON_EM_SPLIT_SEARCH_KEYS) lk=segment_lower_keys?segment_lower_keys+record->offsets[kind]:nullptr;
         if(x<v[0].lower){
             if(kind==3){if(slope)*slope=0;return 0;}
             float w=std::max(0.f,x/v[0].lower);
@@ -91,7 +110,8 @@ struct UnifiedEmPoint {
             return v[0].y0*(kind==2?w*w:std::sqrt(w));
         }
         bounds(kind+1,x,lo,hi);
-        while(lo<hi){auto m=(lo+hi+1)/2;if(v[m].lower<=x)lo=m;else hi=m-1;}
+        if(lk)while(lo<hi){auto m=(lo+hi+1)/2;if(lk[m]<=x)lo=m;else hi=m-1;}
+        else while(lo<hi){auto m=(lo+hi+1)/2;if(v[m].lower<=x)lo=m;else hi=m-1;}
         if(slope)*slope=v[lo].derivative(x);
         return v[lo].value(x);
     }
@@ -185,6 +205,9 @@ struct UnifiedEmDevice {
     const UnifiedEmSectionRange* section_ranges{};
     const unsigned* energy_index{};
     const float* delta_means{};
+    // Candidate A search keys (global arrays; null disables the split path).
+    const float* node_energy_keys{};
+    const float* segment_lower_keys{};
     int species_index(unsigned z,unsigned a)const {
         for(int i=0;i<18;++i)if(species[i].z==z && species[i].a==a)return i;
         return -1;
@@ -193,7 +216,9 @@ struct UnifiedEmDevice {
         auto* r=records+material*18+ion;
         return {r,nodes+r->node_offset,segments,density_scale,
             energy_index?energy_index+(material*18+ion)*unified_em_index_stride:nullptr,
-            delta_means?delta_means+2*r->node_offset:nullptr};
+            delta_means?delta_means+2*r->node_offset:nullptr,
+            node_energy_keys?node_energy_keys+r->node_offset:nullptr,
+            segment_lower_keys};
     }
     UnifiedEmState select(int section,float density,int ion)const {
         UnifiedEmState state;if(ion<0 || ion>=18 || section< -1 || section>24 || !(density>0))return state;

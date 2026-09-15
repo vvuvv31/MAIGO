@@ -93,6 +93,9 @@ foreach(feature MATERIAL_CACHE STEP_CACHE LOCAL_AUDIT)
     target_compile_definitions(carbon_core PUBLIC
         CARBON_EM_${feature}=$<BOOL:${CARBON_EM_${feature}}>)
 endforeach()
+option(CARBON_EM_SPLIT_SEARCH_KEYS "Separate EM node/segment binary-search key arrays (candidate A)" OFF)
+target_compile_definitions(carbon_core PUBLIC
+    CARBON_EM_SPLIT_SEARCH_KEYS=$<BOOL:${CARBON_EM_SPLIT_SEARCH_KEYS}>)
 option(CARBON_SECONDARY_STEP_PROFILE "Per-species secondary step profile (diagnostic only)" OFF)
 target_compile_definitions(carbon_core PUBLIC
     CARBON_SECONDARY_STEP_PROFILE=$<BOOL:${CARBON_SECONDARY_STEP_PROFILE}>)

@@ -692,6 +692,13 @@ struct TransportConfig {
     // Pair with a host watchdog (run scripts) that kills the process if live VRAM
     // exceeds this fraction — prevents Arc driver lockups / host freezes.
     double max_device_memory_fraction{0.50};
+    // Explicit tracked-USM allocation budget in GiB. 0 keeps the historical
+    // unbounded behavior; a positive value makes the DeviceMemoryTracker reject
+    // an allocation that would exceed it (driver/runtime memory excluded).
+    double device_memory_budget_gib{0.0};
+    // Secondary particle queue capacity. Default matches the validated
+    // production value; larger cards may raise it for big merged shards.
+    std::size_t secondary_queue_capacity{32000000};
     // Primary kernel launch chunk (histories per GPU submit). 0 = auto:
     // CUDA defaults to a small chunk so WSL/Windows can reclaim the GPU between
     // launches (long single kernels freeze WSL). Intel GPU uses a larger default.

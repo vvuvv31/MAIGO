@@ -75,6 +75,29 @@ removed from the tree; benchmark records stay frozen for provenance.
   changes along the track diluted the locality benefit and added a CT material
   load plus more atomic buckets per regroup; reverted. Only the species × 16
   energy key was kept.
+- Splitting the secondary inelastic final-state block into a separate kernel
+  (2026-09-15, plan in `gpustructure.md`): stopped before implementation.
+  Removing the entire event block in a diagnostic stub only changed the
+  secondary kernel from 178 to 174 registers (stack 2096→1984 B); primary
+  unchanged at 168. Neither 32-thread (11 warps) nor 128-thread (2 blocks)
+  occupancy crosses a threshold, so the split cannot raise occupancy, and the
+  event path runs only ~1.3e6 times against >1e9 secondary steps. Production
+  unchanged. Evidence: `scratch/opt_gpu_20260915/binary_inelastic_stub`.
+- Splitting the EM node/segment binary-search keys into contiguous float
+  arrays (candidate A from `gpustructure.md`, 2026-09-15): SASS sampling showed
+  the search compares (`LD.E.SYS` stride 52 B node / 24 B segment) are ~11% of
+  the secondary kernel's long_scoreboard samples, but the separated-key build
+  (`CARBON_EM_SPLIT_SEARCH_KEYS=ON`) was ~4% slower on the secondary kernel
+  (15.36 vs 14.73 s) with dose within atomic noise. The binary search still
+  performs the same number of dependent loads; the extra key stream adds a
+  second global read per step and the 52 B/24 B records were already L2-resident.
+  Kept OFF (default); code isolated behind the compile switch.
+- Adding a 2-bit mantissa sub-index to each exact-index exponent bucket
+  (2026-09-16): table audit (`tools/audit_em_index_widths.py`) shows the current
+  8-bit exponent index already leaves a median candidate interval of 1 for the
+  binary search (mean 1.31 comparisons/query). A 10-bit exponent+2-mantissa
+  index only lowers this to 1.13 comparisons/query while multiplying the index
+  space and upload cost ~4x. Not implemented.
 - Dummy-RNG separation: Philox ALU ~= 4% of primary step; the 2.8x
   constant-dummy effect was divergence elimination, not RNG math.
 - Interval narrowing (`CARBON_EM_EXACT_INDEX` style): -1.1%.

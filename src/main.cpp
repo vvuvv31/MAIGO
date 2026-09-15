@@ -21,6 +21,7 @@
 #include <iomanip>
 #include <iostream>
 #include <limits>
+#include <map>
 #include <memory>
 #include <optional>
 #include <stdexcept>
@@ -28,8 +29,64 @@
 #include <utility>
 #include <vector>
 
+namespace {
+
+// Output paths a shard will write, resolved with the same rules as the output
+// section of main(). Used only to reject cross-shard collisions before any
+// transport work; it must not create directories or open files.
+std::vector<std::filesystem::path> shard_output_paths(
+    const carbon::TransportConfig& config,
+    const std::filesystem::path& config_path) {
+    std::vector<std::filesystem::path> paths;
+    const auto add = [&](const std::filesystem::path& p) {
+        if (!p.empty()) paths.push_back(p);
+    };
+    add(config.output_file);
+    add(config.fragment_species_output_file);
+    if (config.enable_let_scoring) add(config.let_output_file);
+    add(config.fragment_species_let_output_file);
+    add(config.light_isotope_let_output_file);
+    add(config.fragment_birth_spectrum_output_file);
+    add(config.let_voxel_mhd_output_file);
+    if (config.enable_voxel_scoring) add(config.voxel_dose_output_file);
+    if (config.enable_charged_origin_voxel_scoring) {
+        add(config.charged_origin_voxel_output_file);
+        add(config.charged_origin_voxel_dose_Gy_output_file);
+        if (!config.charged_origin_voxel_mhd_output_prefix.empty()) {
+            paths.push_back(config.charged_origin_voxel_mhd_output_prefix);
+        }
+    }
+    add(config.dose_output_file);
+    add(config.fragment_species_dose_output_file);
+    if (config.enable_voxel_scoring) add(config.voxel_dose_Gy_output_file);
+    if (config.enable_voxel_scoring) add(config.voxel_dose_mhd_output_file);
+    add(config.primary_voxel_fluence_mhd_output_file);
+    if (config.validation_scorers()) {
+        const auto dir = config.validation_output_directory.empty()
+                             ? std::filesystem::path{"benchmark/scorer/results"}
+                             : config.validation_output_directory;
+        paths.push_back(dir / "energy_ledger.json");
+        paths.push_back(dir / "validation_scorers");
+    } else {
+        const auto stem = config_path.stem().empty()
+                              ? std::filesystem::path{"run"}
+                              : config_path.stem();
+        const auto dir = std::filesystem::path{"out"} / stem;
+        paths.push_back(dir / "quality_report.json");
+        paths.push_back(dir / "energy_ledger.json");
+    }
+    return paths;
+}
+
+}  // namespace
+
 int main(int argc, char* argv[]) {
     carbon::RuntimeScope runtime_main("process_main");
+    // Independent wall clock from process start to the point every result file
+    // has been written. Unlike TransportResult::elapsed_seconds it includes
+    // input preparation and output, and unlike process_main it excludes the
+    // final device teardown that happens while local scopes are destroyed.
+    carbon::RuntimeScope runtime_wall("process_wall_to_result_written");
     carbon::RuntimeScope runtime_inputs("input_and_source_preparation");
     // Line-buffer stdout so progress is visible when piped (tee/logs) and during
     // long CUDA kernels that would otherwise freeze WSL with no feedback.
@@ -42,12 +99,91 @@ int main(int argc, char* argv[]) {
             return EXIT_SUCCESS;
         }
 
-        auto config = carbon::runtime_call("config_load",[&]{return carbon::load_config(cli.config_path);});
-        carbon::apply_cli_overrides(argc, argv, config, cli);
-        const auto histories_cli_override = cli.histories_overridden;
-        const auto plan_only = cli.plan_only;
-        const auto sequential_spots = cli.sequential_spots;
-        config.validate();
+        std::vector<std::filesystem::path> plan_config_paths;
+        if (!cli.plan_manifest.empty()) {
+            plan_config_paths = carbon::load_plan_manifest(cli.plan_manifest);
+            std::cout << "Plan manifest: " << cli.plan_manifest << " ("
+                      << plan_config_paths.size() << " shards, one process)\n";
+        } else {
+            plan_config_paths.push_back(cli.config_path);
+        }
+
+        // Resolve and validate every shard before any transport work. Each
+        // shard gets its own CLI state (histories_overridden is set by
+        // apply_cli_overrides and must not leak between shards).
+        struct ResolvedShard {
+            std::filesystem::path config_path;
+            carbon::TransportConfig config;
+            bool histories_overridden{false};
+            bool plan_only{false};
+            bool sequential_spots{false};
+        };
+        std::vector<ResolvedShard> shards;
+        shards.reserve(plan_config_paths.size());
+        for (const auto& path : plan_config_paths) {
+            carbon::CliState shard_cli = cli;
+            shard_cli.histories_overridden = false;
+            ResolvedShard shard;
+            shard.config_path = path;
+            shard.config = carbon::runtime_call(
+                "config_load", [&] { return carbon::load_config(path); });
+            carbon::apply_cli_overrides(argc, argv, shard.config, shard_cli);
+            shard.config.validate();
+            shard.histories_overridden = shard_cli.histories_overridden;
+            shard.plan_only = shard_cli.plan_only;
+            shard.sequential_spots = shard_cli.sequential_spots;
+            shards.push_back(std::move(shard));
+        }
+        // One manifest = one device selection. Reusing the first shard's queue
+        // for a different requested device would silently ignore the request.
+        for (std::size_t i = 1; i < shards.size(); ++i) {
+            if (shards[i].config.device != shards[0].config.device) {
+                throw std::invalid_argument(
+                    "Plan manifest shards must use the same device: shard " +
+                    std::to_string(i + 1) + " requests '" + shards[i].config.device +
+                    "' but shard 1 requests '" + shards[0].config.device + "'");
+            }
+        }
+        // Reject cross-shard output collisions after resolving each shard's
+        // actual output paths. No silent overwrite or automatic renaming.
+        if (shards.size() > 1) {
+            if (!cli.canonical_config_output_path.empty()) {
+                throw std::invalid_argument(
+                    "--write-canonical-config would be overwritten by every shard; "
+                    "run shards separately when writing a canonical config");
+            }
+            std::map<std::string, std::size_t> output_owner;
+            for (std::size_t i = 0; i < shards.size(); ++i) {
+                for (const auto& output : shard_output_paths(shards[i].config,
+                                                             shards[i].config_path)) {
+                    const auto key = output.lexically_normal().string();
+                    const auto [it, inserted] = output_owner.emplace(key, i);
+                    if (!inserted) {
+                        throw std::invalid_argument(
+                            "Output path conflict between shards " +
+                            std::to_string(it->second + 1) + " and " +
+                            std::to_string(i + 1) + ": " + key);
+                    }
+                }
+            }
+        }
+        // One context per process: validated read-only physics data is cached
+        // across shards. Per-shard dose, queues, counters and quality reports
+        // are recreated inside the loop.
+        carbon::SyclTransportContext* sycl_context = nullptr;
+#ifdef CARBON_HAS_SYCL
+        std::unique_ptr<carbon::SyclTransportContext> sycl_context_storage;
+#endif
+        for (std::size_t plan_index = 0; plan_index < shards.size();
+             ++plan_index) {
+        const auto& active_config_path = shards[plan_index].config_path;
+        const auto histories_cli_override = shards[plan_index].histories_overridden;
+        const auto plan_only = shards[plan_index].plan_only;
+        const auto sequential_spots = shards[plan_index].sequential_spots;
+        auto config = shards[plan_index].config;
+        std::cout << "[plan-shard] " << (plan_index + 1) << "/"
+                  << shards.size() << " config=" << active_config_path
+                  << '\n';
 #ifdef CARBON_DOSE_FP32
         if (!config.ct_schneider_delta_longitudinal_file.empty()) {
             throw std::runtime_error(
@@ -121,14 +257,13 @@ int main(int argc, char* argv[]) {
             spots_files.push_back(config.topas_spots_file);
         }
         if (plan_only && spots_files.empty() && !config.enable_tps_source) {
-            std::cout << "Plan-only validation passed; transport not started\n";
-            return EXIT_SUCCESS;
+            std::cout << "[plan-only] shard " << (plan_index + 1) << "/"
+                      << shards.size() << " validated; transport not started\n";
+            continue;
         }
 
-        carbon::SyclTransportContext* sycl_context = nullptr;
 #ifdef CARBON_HAS_SYCL
-        std::unique_ptr<carbon::SyclTransportContext> sycl_context_storage;
-        if (config.device != "serial" &&
+        if (sycl_context == nullptr && config.device != "serial" &&
             (!spots_files.empty() || config.enable_tps_source)) {
             sycl_context_storage =
                 std::make_unique<carbon::SyclTransportContext>(config.device);
@@ -243,7 +378,7 @@ int main(int argc, char* argv[]) {
                           << "  central direction: (" << direction.beam_uz_x() << ", "
                           << direction.beam_uz_y() << ", "
                           << direction.beam_uz_z() << ")\n";
-                return EXIT_SUCCESS;
+                continue;
             }
             auto batch_config = config;
             batch_config.primary_spot_batch = batch;
@@ -373,7 +508,7 @@ int main(int argc, char* argv[]) {
                               << max_air_path << "] mm; total primary-ion loss=["
                               << min_air_loss << ", " << max_air_loss << "] MeV\n";
                 }
-                return EXIT_SUCCESS;
+                continue;
             }
 
             if (config.device != "serial" && !sequential_spots) {
@@ -442,9 +577,9 @@ int main(int argc, char* argv[]) {
                                                         "benchmark/scorer/results"}
                                                   : config.validation_output_directory)
                                            : std::filesystem::path{"out"} /
-                                                 (cli.config_path.stem().empty()
+                                                 (active_config_path.stem().empty()
                                                       ? std::filesystem::path{"run"}
-                                                      : cli.config_path.stem());
+                                                      : active_config_path.stem());
         const auto quality_report_path = quality_directory / "quality_report.json";
         const auto quality = carbon::evaluate_run_quality(config, result);
         carbon::write_run_quality_report_json(quality_report_path, quality);
@@ -809,6 +944,12 @@ int main(int argc, char* argv[]) {
         if (!quality.accepted) {
             throw std::runtime_error(quality.summary());
         }
+        std::cout << "[plan-shard-done] " << (plan_index + 1) << "/"
+                  << shards.size() << " config=" << active_config_path
+                  << " histories=" << config.number_of_histories
+                  << " quality=" << quality.status() << '\n';
+        }  // for each plan shard (one process)
+        runtime_wall.finish();
         return EXIT_SUCCESS;
     } catch (const std::exception& error) {
         std::cerr << "carbon_mc: " << error.what() << '\n';

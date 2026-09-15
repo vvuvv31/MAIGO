@@ -59,6 +59,7 @@
 #include <filesystem>
 #include <iostream>
 #include <limits>
+#include <memory>
 #include <numeric>
 #include <optional>
 #include <stdexcept>
@@ -389,6 +390,22 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
         std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count());
 }
 
+// Content identity for cached read-only tables: FNV-1a over the bytes that are
+// actually uploaded. Paths are never used as equivalence proof.
+inline std::uint64_t fnv1a64_bytes(const void* data, std::size_t bytes,
+                                   std::uint64_t h = 1469598103934665603ULL) {
+    const auto* p = static_cast<const unsigned char*>(data);
+    for (std::size_t i = 0; i < bytes; ++i) {
+        h ^= p[i];
+        h *= 1099511628211ULL;
+    }
+    return h;
+}
+template <class T>
+inline std::uint64_t fnv1a64_vec(const std::vector<T>& values, std::uint64_t h) {
+    return fnv1a64_bytes(values.data(), values.size() * sizeof(T), h);
+}
+
 }  // namespace
 
 [[gnu::noinline]] SchneiderCtDeviceContext upload_schneider_ct_device_context(
@@ -400,7 +417,8 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
     std::uint32_t schneider_sp_energies,
     float schneider_sp_e_min,
     float schneider_sp_e_max,
-    float schneider_sp_inv_dE) {
+    float schneider_sp_inv_dE,
+    SchneiderHostCache* host_cache = nullptr) {
 
     SchneiderCtDeviceContext ctx{};
     ctx.mode = config.material_physics_mode;
@@ -435,41 +453,59 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
 
     // 1. Primary Target Sampler
     if (std::filesystem::exists(primary_rate_file)) {
-        const auto rate_table = SchneiderRateTable::from_binary(primary_rate_file);
+        const SchneiderRateTable* rate_table = nullptr;
+        const SchneiderTargetSampler* target_sampler = nullptr;
+        std::shared_ptr<SchneiderRateTable> local_rate_table;
+        std::shared_ptr<SchneiderTargetSampler> local_target_sampler;
+        if (host_cache && host_cache->primary_rate && host_cache->primary_sampler) {
+            rate_table = host_cache->primary_rate.get();
+            target_sampler = host_cache->primary_sampler.get();
+            ++host_cache->hits;
+        } else {
+            local_rate_table = std::make_shared<SchneiderRateTable>(
+                SchneiderRateTable::from_binary(primary_rate_file));
+            local_target_sampler = std::make_shared<SchneiderTargetSampler>(*local_rate_table);
+            rate_table = local_rate_table.get();
+            target_sampler = local_target_sampler.get();
+            if (host_cache) {
+                host_cache->primary_rate = local_rate_table;
+                host_cache->primary_sampler = local_target_sampler;
+                ++host_cache->misses;
+            }
+        }
         if (ctx.unified_water) ctx.water_primary_rates = upload_water_rates(
-            MaterialNuclearRates::water_primary(rate_table,water_source_materials,water_material.hydrogen_mass_fraction));
-        const SchneiderTargetSampler target_sampler(rate_table);
-        const auto cdf_size = target_sampler.cdf_table().size();
-        const auto tot_size = target_sampler.total_mass_rates().size();
+            MaterialNuclearRates::water_primary(*rate_table,water_source_materials,water_material.hydrogen_mass_fraction));
+        const auto cdf_size = target_sampler->cdf_table().size();
+        const auto tot_size = target_sampler->total_mass_rates().size();
         float* dev_cdf = mem_tracker.allocate<float>(cdf_size);
         float* dev_total_rates = mem_tracker.allocate<float>(tot_size);
         if (dev_cdf == nullptr || dev_total_rates == nullptr) {
             throw std::bad_alloc();
         }
-        queue.copy(target_sampler.cdf_table().data(), dev_cdf, cdf_size);
-        queue.copy(target_sampler.total_mass_rates().data(), dev_total_rates, tot_size);
-        ctx.primary_sampler = target_sampler.device_table();
+        queue.copy(target_sampler->cdf_table().data(), dev_cdf, cdf_size);
+        queue.copy(target_sampler->total_mass_rates().data(), dev_total_rates, tot_size);
+        ctx.primary_sampler = target_sampler->device_table();
         ctx.primary_sampler.cdf_table = dev_cdf;
         ctx.primary_sampler.total_mass_rates = dev_total_rates;
         // v3: raw partials + per-target domain for the masked device path.
-        if (target_sampler.rate_version() == 3) {
-            const auto& partials = target_sampler.partial_rates();
+        if (target_sampler->rate_version() == 3) {
+            const auto& partials = target_sampler->partial_rates();
             float* dev_partial = mem_tracker.allocate<float>(partials.size());
-            float* dev_emin = mem_tracker.allocate<float>(target_sampler.domain_emin().size());
-            float* dev_emax = mem_tracker.allocate<float>(target_sampler.domain_emax().size());
+            float* dev_emin = mem_tracker.allocate<float>(target_sampler->domain_emin().size());
+            float* dev_emax = mem_tracker.allocate<float>(target_sampler->domain_emax().size());
             unsigned char* dev_has =
-                mem_tracker.allocate<unsigned char>(target_sampler.domain_has().size());
+                mem_tracker.allocate<unsigned char>(target_sampler->domain_has().size());
             if (dev_partial == nullptr || dev_emin == nullptr || dev_emax == nullptr ||
                 dev_has == nullptr) {
                 throw std::bad_alloc();
             }
             queue.copy(partials.data(), dev_partial, partials.size());
-            queue.copy(target_sampler.domain_emin().data(), dev_emin,
-                       target_sampler.domain_emin().size());
-            queue.copy(target_sampler.domain_emax().data(), dev_emax,
-                       target_sampler.domain_emax().size());
-            queue.copy(target_sampler.domain_has().data(), dev_has,
-                       target_sampler.domain_has().size());
+            queue.copy(target_sampler->domain_emin().data(), dev_emin,
+                       target_sampler->domain_emin().size());
+            queue.copy(target_sampler->domain_emax().data(), dev_emax,
+                       target_sampler->domain_emax().size());
+            queue.copy(target_sampler->domain_has().data(), dev_has,
+                       target_sampler->domain_has().size());
             ctx.primary_sampler.partial_rates = dev_partial;
             ctx.primary_sampler.domain_emin = dev_emin;
             ctx.primary_sampler.domain_emax = dev_emax;
@@ -526,46 +562,75 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
 
     // 2. Primary C12 CINEL03 Package
     if (std::filesystem::exists(c12_cinel_file)) {
-        const auto c12_pkg = InelasticPackageV3Table::from_binary(c12_cinel_file);
-        const auto c12_dev = c12_pkg.make_device_tables();
-        auto* dev_c12_nodes = mem_tracker.allocate<Cinel03EnergyNode>(c12_dev.energy_nodes.size());
-        auto* dev_c12_offsets = mem_tracker.allocate<std::uint32_t>(c12_dev.event_offsets.size());
-        auto* dev_c12_indices = mem_tracker.allocate<std::uint32_t>(c12_dev.event_indices.size());
-        auto* dev_c12_ints = mem_tracker.allocate<Cinel03DeviceInteraction>(c12_dev.interactions.size());
-        auto* dev_c12_prods = mem_tracker.allocate<Cinel03DeviceProduct>(c12_dev.products.size());
+        const Cinel03DeviceTables* c12_dev = nullptr;
+        std::shared_ptr<InelasticPackageV3Table> local_c12_pkg;
+        std::shared_ptr<Cinel03DeviceTables> local_c12_dev;
+        if (host_cache && host_cache->c12_package && host_cache->c12_device_tables) {
+            c12_dev = host_cache->c12_device_tables.get();
+            ++host_cache->hits;
+        } else {
+            local_c12_pkg = std::make_shared<InelasticPackageV3Table>(
+                InelasticPackageV3Table::from_binary(c12_cinel_file));
+            local_c12_dev = std::make_shared<Cinel03DeviceTables>(
+                local_c12_pkg->make_device_tables());
+            c12_dev = local_c12_dev.get();
+            if (host_cache) {
+                host_cache->c12_package = local_c12_pkg;
+                host_cache->c12_device_tables = local_c12_dev;
+                ++host_cache->misses;
+            }
+        }
+        auto* dev_c12_nodes = mem_tracker.allocate<Cinel03EnergyNode>(c12_dev->energy_nodes.size());
+        auto* dev_c12_offsets = mem_tracker.allocate<std::uint32_t>(c12_dev->event_offsets.size());
+        auto* dev_c12_indices = mem_tracker.allocate<std::uint32_t>(c12_dev->event_indices.size());
+        auto* dev_c12_ints = mem_tracker.allocate<Cinel03DeviceInteraction>(c12_dev->interactions.size());
+        auto* dev_c12_prods = mem_tracker.allocate<Cinel03DeviceProduct>(c12_dev->products.size());
         if (dev_c12_nodes == nullptr || dev_c12_offsets == nullptr || dev_c12_indices == nullptr ||
             dev_c12_ints == nullptr || dev_c12_prods == nullptr) {
             throw std::bad_alloc();
         }
-        queue.copy(c12_dev.energy_nodes.data(), dev_c12_nodes, c12_dev.energy_nodes.size());
-        queue.copy(c12_dev.event_offsets.data(), dev_c12_offsets, c12_dev.event_offsets.size());
-        queue.copy(c12_dev.event_indices.data(), dev_c12_indices, c12_dev.event_indices.size());
-        queue.copy(c12_dev.interactions.data(), dev_c12_ints, c12_dev.interactions.size());
-        queue.copy(c12_dev.products.data(), dev_c12_prods, c12_dev.products.size());
+        queue.copy(c12_dev->energy_nodes.data(), dev_c12_nodes, c12_dev->energy_nodes.size());
+        queue.copy(c12_dev->event_offsets.data(), dev_c12_offsets, c12_dev->event_offsets.size());
+        queue.copy(c12_dev->event_indices.data(), dev_c12_indices, c12_dev->event_indices.size());
+        queue.copy(c12_dev->interactions.data(), dev_c12_ints, c12_dev->interactions.size());
+        queue.copy(c12_dev->products.data(), dev_c12_prods, c12_dev->products.size());
 
         ctx.c12_energy_nodes = dev_c12_nodes;
         ctx.c12_event_offsets = dev_c12_offsets;
         ctx.c12_event_indices = dev_c12_indices;
         ctx.c12_interactions = dev_c12_ints;
         ctx.c12_products = dev_c12_prods;
-        ctx.c12_node_count = static_cast<std::uint32_t>(c12_dev.energy_nodes.size());
-        ctx.c12_total_events = static_cast<std::uint32_t>(c12_dev.interactions.size());
-        ctx.c12_total_products = static_cast<std::uint32_t>(c12_dev.products.size());
+        ctx.c12_node_count = static_cast<std::uint32_t>(c12_dev->energy_nodes.size());
+        ctx.c12_total_events = static_cast<std::uint32_t>(c12_dev->interactions.size());
+        ctx.c12_total_products = static_cast<std::uint32_t>(c12_dev->products.size());
     }
 
     // 3. Secondary Rates (when secondary transport or production mode is active)
     if (std::filesystem::exists(sec_rate_file) &&
         (config.enable_secondary_transport || config.run_mode == RunMode::production || !config.ct_schneider_secondary_rate_file.empty())) {
-        const auto sec_rate_table = SecondaryRateTable::from_binary(sec_rate_file);
-        if (ctx.unified_water) ctx.water_secondary_rates = upload_water_rates(
-            MaterialNuclearRates::water_secondary(sec_rate_table,water_source_materials,water_material.hydrogen_mass_fraction));
-        std::vector<float> sec_total_rates_float(sec_rate_table.mass_total_rates().size());
-        for (std::size_t i = 0; i < sec_rate_table.mass_total_rates().size(); ++i) {
-            sec_total_rates_float[i] = static_cast<float>(sec_rate_table.mass_total_rates()[i]);
+        const SecondaryRateTable* sec_rate_table = nullptr;
+        std::shared_ptr<SecondaryRateTable> local_sec_rate_table;
+        if (host_cache && host_cache->secondary_rate) {
+            sec_rate_table = host_cache->secondary_rate.get();
+            ++host_cache->hits;
+        } else {
+            local_sec_rate_table = std::make_shared<SecondaryRateTable>(
+                SecondaryRateTable::from_binary(sec_rate_file));
+            sec_rate_table = local_sec_rate_table.get();
+            if (host_cache) {
+                host_cache->secondary_rate = local_sec_rate_table;
+                ++host_cache->misses;
+            }
         }
-        std::vector<float> sec_partial_rates_float(sec_rate_table.mass_partial_rates().size());
-        for (std::size_t i = 0; i < sec_rate_table.mass_partial_rates().size(); ++i) {
-            sec_partial_rates_float[i] = static_cast<float>(sec_rate_table.mass_partial_rates()[i]);
+        if (ctx.unified_water) ctx.water_secondary_rates = upload_water_rates(
+            MaterialNuclearRates::water_secondary(*sec_rate_table,water_source_materials,water_material.hydrogen_mass_fraction));
+        std::vector<float> sec_total_rates_float(sec_rate_table->mass_total_rates().size());
+        for (std::size_t i = 0; i < sec_rate_table->mass_total_rates().size(); ++i) {
+            sec_total_rates_float[i] = static_cast<float>(sec_rate_table->mass_total_rates()[i]);
+        }
+        std::vector<float> sec_partial_rates_float(sec_rate_table->mass_partial_rates().size());
+        for (std::size_t i = 0; i < sec_rate_table->mass_partial_rates().size(); ++i) {
+            sec_partial_rates_float[i] = static_cast<float>(sec_rate_table->mass_partial_rates()[i]);
         }
         float* dev_sec_total = mem_tracker.allocate<float>(sec_total_rates_float.size());
         float* dev_sec_partial = mem_tracker.allocate<float>(sec_partial_rates_float.size());
@@ -580,7 +645,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
         // v3: bundle-ordered projectile registry + per-(projectile,target)
         // domain for the only supported, masked device path.
         {
-            const auto& projs = sec_rate_table.projectiles();
+            const auto& projs = sec_rate_table->projectiles();
             std::vector<std::int32_t> keys;
             keys.reserve(projs.size() * 2);
             for (const auto& p : projs) {
@@ -593,7 +658,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
             }
             queue.copy(keys.data(), dev_keys, keys.size());
             ctx.sec_proj_keys = dev_keys;
-            const auto& doms = sec_rate_table.channel_domains();
+            const auto& doms = sec_rate_table->channel_domains();
             std::vector<float> demin;
             std::vector<float> demax;
             std::vector<unsigned char> dhas;
@@ -618,43 +683,60 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
             ctx.sec_domain_emax = dev_demax;
             ctx.sec_domain_has = dev_dhas;
         }
-        ctx.sec_num_projectiles = static_cast<std::uint32_t>(sec_rate_table.num_projectiles());
+        ctx.sec_num_projectiles = static_cast<std::uint32_t>(sec_rate_table->num_projectiles());
         ctx.sec_num_sections = static_cast<std::uint32_t>(kSecondaryNumSections);
         ctx.sec_num_targets = static_cast<std::uint32_t>(kSecondaryNumTargets);
-        ctx.sec_num_energies = static_cast<std::uint32_t>(sec_rate_table.num_energies());
-        ctx.sec_energy_min_MeV_per_u = static_cast<float>(sec_rate_table.energy_min_mevu());
-        ctx.sec_energy_step_MeV_per_u = static_cast<float>(sec_rate_table.energy_step_mevu());
-        ctx.sec_inv_energy_step = static_cast<float>(1.0 / sec_rate_table.energy_step_mevu());
+        ctx.sec_num_energies = static_cast<std::uint32_t>(sec_rate_table->num_energies());
+        ctx.sec_energy_min_MeV_per_u = static_cast<float>(sec_rate_table->energy_min_mevu());
+        ctx.sec_energy_step_MeV_per_u = static_cast<float>(sec_rate_table->energy_step_mevu());
+        ctx.sec_inv_energy_step = static_cast<float>(1.0 / sec_rate_table->energy_step_mevu());
     }
 
     // 4. Secondary CINEL03 Package
     if (std::filesystem::exists(sec_cinel_file) &&
         (config.enable_secondary_transport || config.run_mode == RunMode::production || !config.ct_schneider_secondary_cinel03_file.empty())) {
-        const auto sec_pkg = InelasticPackageV3Table::from_binary(sec_cinel_file);
-        const auto sec_dev = sec_pkg.make_device_tables();
-        auto* dev_sec_nodes = mem_tracker.allocate<Cinel03EnergyNode>(sec_dev.energy_nodes.size());
-        auto* dev_sec_offsets = mem_tracker.allocate<std::uint32_t>(sec_dev.event_offsets.size());
-        auto* dev_sec_indices = mem_tracker.allocate<std::uint32_t>(sec_dev.event_indices.size());
-        auto* dev_sec_ints = mem_tracker.allocate<Cinel03DeviceInteraction>(sec_dev.interactions.size());
-        auto* dev_sec_prods = mem_tracker.allocate<Cinel03DeviceProduct>(sec_dev.products.size());
+        const Cinel03DeviceTables* sec_dev = nullptr;
+        std::shared_ptr<InelasticPackageV3Table> local_sec_pkg;
+        std::shared_ptr<Cinel03DeviceTables> local_sec_dev;
+        if (host_cache && host_cache->secondary_cinel03 &&
+            host_cache->secondary_cinel03_device_tables) {
+            sec_dev = host_cache->secondary_cinel03_device_tables.get();
+            ++host_cache->hits;
+        } else {
+            local_sec_pkg = std::make_shared<InelasticPackageV3Table>(
+                InelasticPackageV3Table::from_binary(sec_cinel_file));
+            local_sec_dev = std::make_shared<Cinel03DeviceTables>(
+                local_sec_pkg->make_device_tables());
+            sec_dev = local_sec_dev.get();
+            if (host_cache) {
+                host_cache->secondary_cinel03 = local_sec_pkg;
+                host_cache->secondary_cinel03_device_tables = local_sec_dev;
+                ++host_cache->misses;
+            }
+        }
+        auto* dev_sec_nodes = mem_tracker.allocate<Cinel03EnergyNode>(sec_dev->energy_nodes.size());
+        auto* dev_sec_offsets = mem_tracker.allocate<std::uint32_t>(sec_dev->event_offsets.size());
+        auto* dev_sec_indices = mem_tracker.allocate<std::uint32_t>(sec_dev->event_indices.size());
+        auto* dev_sec_ints = mem_tracker.allocate<Cinel03DeviceInteraction>(sec_dev->interactions.size());
+        auto* dev_sec_prods = mem_tracker.allocate<Cinel03DeviceProduct>(sec_dev->products.size());
         if (dev_sec_nodes == nullptr || dev_sec_offsets == nullptr || dev_sec_indices == nullptr ||
             dev_sec_ints == nullptr || dev_sec_prods == nullptr) {
             throw std::bad_alloc();
         }
-        queue.copy(sec_dev.energy_nodes.data(), dev_sec_nodes, sec_dev.energy_nodes.size());
-        queue.copy(sec_dev.event_offsets.data(), dev_sec_offsets, sec_dev.event_offsets.size());
-        queue.copy(sec_dev.event_indices.data(), dev_sec_indices, sec_dev.event_indices.size());
-        queue.copy(sec_dev.interactions.data(), dev_sec_ints, sec_dev.interactions.size());
-        queue.copy(sec_dev.products.data(), dev_sec_prods, sec_dev.products.size());
+        queue.copy(sec_dev->energy_nodes.data(), dev_sec_nodes, sec_dev->energy_nodes.size());
+        queue.copy(sec_dev->event_offsets.data(), dev_sec_offsets, sec_dev->event_offsets.size());
+        queue.copy(sec_dev->event_indices.data(), dev_sec_indices, sec_dev->event_indices.size());
+        queue.copy(sec_dev->interactions.data(), dev_sec_ints, sec_dev->interactions.size());
+        queue.copy(sec_dev->products.data(), dev_sec_prods, sec_dev->products.size());
 
         ctx.sec_energy_nodes = dev_sec_nodes;
         ctx.sec_event_offsets = dev_sec_offsets;
         ctx.sec_event_indices = dev_sec_indices;
         ctx.sec_interactions = dev_sec_ints;
         ctx.sec_products = dev_sec_prods;
-        ctx.sec_node_count = static_cast<std::uint32_t>(sec_dev.energy_nodes.size());
-        ctx.sec_total_events = static_cast<std::uint32_t>(sec_dev.interactions.size());
-        ctx.sec_total_products = static_cast<std::uint32_t>(sec_dev.products.size());
+        ctx.sec_node_count = static_cast<std::uint32_t>(sec_dev->energy_nodes.size());
+        ctx.sec_total_events = static_cast<std::uint32_t>(sec_dev->interactions.size());
+        ctx.sec_total_products = static_cast<std::uint32_t>(sec_dev->products.size());
     }
 
     // 5. Stopping power
@@ -851,7 +933,12 @@ template<int EmMode>
     const auto backend = queue.get_backend();
     const bool is_cuda_backend = backend == sycl::backend::ext_oneapi_cuda;
 
-    DeviceMemoryTracker mem_tracker{queue};
+    const auto device_memory_budget_bytes =
+        config.device_memory_budget_gib > 0.0
+            ? static_cast<std::size_t>(config.device_memory_budget_gib *
+                                       1024.0 * 1024.0 * 1024.0)
+            : std::size_t{0};
+    DeviceMemoryTracker mem_tracker{queue, device_memory_budget_bytes};
 
     const auto free_device = [&](auto* pointer) {
         mem_tracker.free(pointer);
@@ -866,7 +953,19 @@ template<int EmMode>
 
     const bool reuse_immutable_buffers = context != nullptr;
     if (context != nullptr) {
-        context->impl_->ensure_initialized(stopping_power, cross_section);
+        // Identity is the content actually uploaded (stopping values, energy
+        // grid, cumulative range and the cross-section resampled from these
+        // arrays), not the file path. A zero cross-section hashes differently
+        // from a real one.
+        std::uint64_t physics_hash = 1469598103934665603ULL;
+        physics_hash = fnv1a64_vec(stopping_power.values(), physics_hash);
+        physics_hash = fnv1a64_vec(stopping_power.energies(), physics_hash);
+        physics_hash = fnv1a64_vec(stopping_power.cumulative_ranges_mm(), physics_hash);
+        physics_hash = fnv1a64_vec(cross_section.energies(), physics_hash);
+        physics_hash = fnv1a64_vec(cross_section.values(), physics_hash);
+        const std::string physics_signature = std::to_string(physics_hash);
+        context->impl_->ensure_initialized(stopping_power, cross_section,
+                                           physics_signature);
     }
 
     float* table_device = context != nullptr ? context->impl_->table_device
@@ -1139,6 +1238,8 @@ template<int EmMode>
     UnifiedEmNode* unified_nodes=nullptr;
     float* delta_mean_device=nullptr;
     EmCubicSegmentCandidate<float>* unified_segments=nullptr;
+    const float* unified_node_energy_keys=nullptr;
+    const float* unified_segment_lower_keys=nullptr;
     std::uint64_t* unified_audit=nullptr;
     std::uint64_t* sec_step_profile_device=nullptr;
     if(CARBON_SECONDARY_STEP_PROFILE) {
@@ -1147,17 +1248,46 @@ template<int EmMode>
         queue.fill(sec_step_profile_device,std::uint64_t{0},60).wait_and_throw();
     }
     if(unified_em){
-        auto package=runtime_call("unified_em_package_load_verify",[&]{return UnifiedEmPackage::load(config.em_package_file,config.em_package_sha256);});
+        const std::string unified_em_signature =
+            config.em_package_file.string()+"|"+config.em_package_sha256+"|"+
+            (config.em_delta_moments_file.empty()?std::string():config.em_delta_moments_file.string());
+        std::shared_ptr<const UnifiedEmPackage> unified_package;
+        std::shared_ptr<const std::vector<float>> unified_delta_means;
+        bool unified_em_cache_hit=false;
+        if(context!=nullptr){
+            auto& cached=context->impl_->unified_em_cache;
+            if(cached.valid && cached.signature==unified_em_signature){
+                unified_package=cached.package;unified_delta_means=cached.delta_means;
+                unified_em_cache_hit=true;++context->impl_->physics_cache_hits;
+            }
+        }
+        if(!unified_package){
+            unified_package=std::make_shared<UnifiedEmPackage>(
+                runtime_call("unified_em_package_load_verify",[&]{return UnifiedEmPackage::load(config.em_package_file,config.em_package_sha256);}));
+            const auto delta_path=config.em_delta_moments_file.empty()
+                ? config.em_package_file.parent_path()/delta_moments_filename
+                : config.em_delta_moments_file;
+            unified_delta_means=std::make_shared<std::vector<float>>(
+                runtime_call("delta_moments_load_verify",[&]{
+                    return load_delta_moments(delta_path,config.em_package_sha256,unified_package->nodes.size());
+                }));
+            if(context!=nullptr){
+                auto& cached=context->impl_->unified_em_cache;
+                cached.valid=true;cached.signature=unified_em_signature;
+                cached.package=unified_package;cached.delta_means=unified_delta_means;
+                cached.package_node_count=unified_package->nodes.size();
+                ++context->impl_->physics_cache_misses;
+            }
+        }
+        const auto& package=*unified_package;
+        const auto& delta_means=*unified_delta_means;
         auto upload=[&]<class T>(const std::vector<T>& values){
             auto* ptr=mem_tracker.allocate<T>(values.size());if(!ptr)throw std::bad_alloc();
             queue.copy(values.data(),ptr,values.size()).wait_and_throw();return ptr;
         };
-        const auto delta_path=config.em_delta_moments_file.empty()
-            ? config.em_package_file.parent_path()/delta_moments_filename
-            : config.em_delta_moments_file;
-        const auto delta_means=runtime_call("delta_moments_load_verify",[&]{
-            return load_delta_moments(delta_path,config.em_package_sha256,package.nodes.size());
-        });
+        std::cout<<"[physics-cache] unified_em="<<(unified_em_cache_hit?"hit":"miss")
+                 <<" nodes="<<package.nodes.size()<<"\n";
+        RuntimeScope t_em_device("setup_em_device_upload");
         delta_mean_device=upload(delta_means);
         std::cout<<"[delta-moments] condensed_partition_v1; aggregate Gamma; no delta clock; nodes="
                  <<package.nodes.size()<<" SHA256="<<delta_moments_sha256<<"\n";
@@ -1178,10 +1308,46 @@ template<int EmMode>
         }
         unified_materials=upload(package.materials);unified_species=upload(package.species);
         unified_records=upload(package.records);unified_nodes=upload(package.nodes);unified_segments=upload(package.segments);
+        if constexpr(CARBON_EM_SPLIT_SEARCH_KEYS) {
+            std::vector<float> node_keys(package.nodes.size());
+            for(std::size_t i=0;i<package.nodes.size();++i)node_keys[i]=package.nodes[i].energy;
+            std::vector<float> segment_keys(package.segments.size());
+            for(std::size_t i=0;i<package.segments.size();++i)segment_keys[i]=package.segments[i].lower;
+            unified_node_energy_keys=upload(node_keys);
+            unified_segment_lower_keys=upload(segment_keys);
+            std::cout<<"[em-search-keys] node_keys="<<node_keys.size()
+                     <<" segment_keys="<<segment_keys.size()<<"\n";
+        }
         unified_audit=mem_tracker.allocate<std::uint64_t>(8);if(!unified_audit)throw std::bad_alloc();
         queue.fill(unified_audit,std::uint64_t{0},8).wait_and_throw();
-        unified_device={unified_materials,unified_species,unified_records,unified_nodes,unified_segments,static_cast<unsigned>(package.materials.size()),unified_sections,unified_energy_index,delta_mean_device};
+        unified_device={unified_materials,unified_species,unified_records,unified_nodes,unified_segments,static_cast<unsigned>(package.materials.size()),unified_sections,unified_energy_index,delta_mean_device,unified_node_energy_keys,unified_segment_lower_keys};
+        t_em_device.finish();
         std::cout<<"[unified-em] all 18 charged ions; water + Schneider density nodes; native particle step parameters plus 1% combined mean-loss guard; local aggregate delta deposition; density cut-onset/patient accuracy validation pending\n";
+    }
+    // One host-table cache per process, shared by the Schneider stopping/ion
+    // stops below and by upload_schneider_ct_device_context(). Reset only when
+    // the validated inputs or device change.
+    SchneiderHostCache* schneider_host_cache = nullptr;
+    if (context != nullptr) {
+        auto& cache = context->impl_->schneider_host_cache;
+        const std::string schneider_signature =
+            config.ct_schneider_stopping_power_file.string() + "|" +
+            config.ct_schneider_primary_rate_file.string() + "|" +
+            config.ct_schneider_c12_cinel03_file.string() + "|" +
+            config.ct_schneider_secondary_rate_file.string() + "|" +
+            config.ct_schneider_secondary_cinel03_file.string() + "|" +
+            config.ct_secondary_ion_section_stopping_file.string() + "|" +
+            config.ct_secondary_ion_section_stopping_sha256 + "|" +
+            config.ct_secondary_ion_section_stopping_metadata_sha256 + "|" +
+            config.ct_elastic_section_rate_file.string() + "|" +
+            (config.unified_water_nuclear_transport ? "water" : "ct") + "|" +
+            device_name;
+        if (!cache.valid || cache.signature != schneider_signature) {
+            cache = SchneiderHostCache{};
+            cache.signature = schneider_signature;
+            cache.valid = true;
+        }
+        schneider_host_cache = &cache;
     }
     const auto ct_secondary_exact_faces = config.ct_secondary_exact_faces;
     std::cout << "[stopping-config] primary_midpoint=" << ct_primary_midpoint_stopping
@@ -1705,15 +1871,36 @@ template<int EmMode>
                 }
             }
 
+            RuntimeScope t_ro_sp_dev("setup_schneider_stopping_ion_device");
             const auto meta_path = stopping_file.parent_path() /
                                    (stopping_file.stem().string() + ".metadata.json");
-            const auto stopping_table = SchneiderStoppingTable::from_binary(
-                stopping_file, meta_path);
-            schneider_sp_sections = static_cast<std::uint32_t>(stopping_table.num_sections());
-            schneider_sp_energies = static_cast<std::uint32_t>(stopping_table.num_energies());
-            schneider_sp_e_min = static_cast<float>(stopping_table.energy_min_mevu());
-            schneider_sp_e_max = static_cast<float>(stopping_table.energy_max_mevu());
-            const float dE = static_cast<float>(stopping_table.energy_step_mevu());
+            const SchneiderStoppingTable* stopping_table = nullptr;
+            const std::vector<float>* flat_sp = nullptr;
+            std::shared_ptr<SchneiderStoppingTable> local_stopping;
+            std::shared_ptr<std::vector<float>> local_flat_sp;
+            if (schneider_host_cache && schneider_host_cache->schneider_stopping &&
+                schneider_host_cache->schneider_stopping_flat) {
+                stopping_table = schneider_host_cache->schneider_stopping.get();
+                flat_sp = schneider_host_cache->schneider_stopping_flat.get();
+                ++schneider_host_cache->hits;
+            } else {
+                local_stopping = std::make_shared<SchneiderStoppingTable>(
+                    SchneiderStoppingTable::from_binary(stopping_file, meta_path));
+                local_flat_sp = std::make_shared<std::vector<float>>(
+                    local_stopping->to_flat_mass_stopping_float());
+                stopping_table = local_stopping.get();
+                flat_sp = local_flat_sp.get();
+                if (schneider_host_cache) {
+                    schneider_host_cache->schneider_stopping = local_stopping;
+                    schneider_host_cache->schneider_stopping_flat = local_flat_sp;
+                    ++schneider_host_cache->misses;
+                }
+            }
+            schneider_sp_sections = static_cast<std::uint32_t>(stopping_table->num_sections());
+            schneider_sp_energies = static_cast<std::uint32_t>(stopping_table->num_energies());
+            schneider_sp_e_min = static_cast<float>(stopping_table->energy_min_mevu());
+            schneider_sp_e_max = static_cast<float>(stopping_table->energy_max_mevu());
+            const float dE = static_cast<float>(stopping_table->energy_step_mevu());
             schneider_sp_inv_dE = 1.0F / dE;
 
             if (schneider_sp_sections != 25 || schneider_sp_energies != 4302) {
@@ -1722,13 +1909,12 @@ template<int EmMode>
                     ", energies=" + std::to_string(schneider_sp_energies) + " (expected 25x4302)");
             }
 
-            const auto flat_sp = stopping_table.to_flat_mass_stopping_float();
-            const std::size_t total_sp_elements = flat_sp.size();
+            const std::size_t total_sp_elements = flat_sp->size();
             schneider_stopping_device = mem_tracker.allocate<float>(total_sp_elements);
             if (schneider_stopping_device == nullptr) {
                 throw std::bad_alloc();
             }
-            queue.copy(flat_sp.data(), schneider_stopping_device, total_sp_elements).wait_and_throw();
+            queue.copy(flat_sp->data(), schneider_stopping_device, total_sp_elements).wait_and_throw();
             use_schneider_stopping = true;
 
             if (!config.ct_secondary_ion_section_stopping_file.empty()) {
@@ -1736,23 +1922,42 @@ template<int EmMode>
                     config.ct_secondary_ion_section_stopping_file.parent_path() /
                     (config.ct_secondary_ion_section_stopping_file.stem().string() +
                      ".metadata.json");
-                if (compute_file_sha256_hex(ion_meta_path) !=
-                    config.ct_secondary_ion_section_stopping_metadata_sha256)
-                    throw std::runtime_error(
-                        "Section ion stopping metadata SHA256 mismatch");
-                if (compute_file_sha256_hex(
-                        config.ct_secondary_ion_section_stopping_file) !=
-                    config.ct_secondary_ion_section_stopping_sha256)
-                    throw std::runtime_error(
-                        "Section ion stopping data SHA256 mismatch");
-                SchneiderIonStoppingTable ion_table = SchneiderIonStoppingTable::from_binary(
-                    config.ct_secondary_ion_section_stopping_file, ion_meta_path);
-                const auto flat_ion = ion_table.to_flat_float();
-                schneider_ion_sp_device = mem_tracker.allocate<float>(flat_ion.size());
+                const std::vector<float>* flat_ion = nullptr;
+                std::shared_ptr<SchneiderIonStoppingTable> local_ion_table;
+                std::shared_ptr<std::vector<float>> local_flat_ion;
+                if (schneider_host_cache &&
+                    schneider_host_cache->schneider_ion_stopping &&
+                    schneider_host_cache->schneider_ion_stopping_flat) {
+                    flat_ion = schneider_host_cache->schneider_ion_stopping_flat.get();
+                    ++schneider_host_cache->hits;
+                } else {
+                    // Verified once per session; reuse after that.
+                    if (compute_file_sha256_hex(ion_meta_path) !=
+                        config.ct_secondary_ion_section_stopping_metadata_sha256)
+                        throw std::runtime_error(
+                            "Section ion stopping metadata SHA256 mismatch");
+                    if (compute_file_sha256_hex(
+                            config.ct_secondary_ion_section_stopping_file) !=
+                        config.ct_secondary_ion_section_stopping_sha256)
+                        throw std::runtime_error(
+                            "Section ion stopping data SHA256 mismatch");
+                    local_ion_table = std::make_shared<SchneiderIonStoppingTable>(
+                        SchneiderIonStoppingTable::from_binary(
+                            config.ct_secondary_ion_section_stopping_file, ion_meta_path));
+                    local_flat_ion = std::make_shared<std::vector<float>>(
+                        local_ion_table->to_flat_float());
+                    flat_ion = local_flat_ion.get();
+                    if (schneider_host_cache) {
+                        schneider_host_cache->schneider_ion_stopping = local_ion_table;
+                        schneider_host_cache->schneider_ion_stopping_flat = local_flat_ion;
+                        ++schneider_host_cache->misses;
+                    }
+                }
+                schneider_ion_sp_device = mem_tracker.allocate<float>(flat_ion->size());
                 if (schneider_ion_sp_device == nullptr) {
                     throw std::bad_alloc();
                 }
-                queue.copy(flat_ion.data(), schneider_ion_sp_device, flat_ion.size())
+                queue.copy(flat_ion->data(), schneider_ion_sp_device, flat_ion->size())
                     .wait_and_throw();
                 use_schneider_ion_sp = true;
                 ion_stopping_failures = mem_tracker.allocate<std::uint32_t>(8);
@@ -1761,6 +1966,7 @@ template<int EmMode>
                           << "species=18 energies=" << kSchneiderIonEnergies << " source="
                           << config.ct_secondary_ion_section_stopping_file << '\n';
             }
+            t_ro_sp_dev.finish();
 
             std::cout << "[schneider-stopping-power] mode=exact-schneider-v1\n"
                       << "  sections=" << schneider_sp_sections << "\n"
@@ -1895,11 +2101,18 @@ template<int EmMode>
         queue.fill(elastic_audit,std::uint32_t{0},12).wait_and_throw();
         all_elastic={e,r,a,m,static_cast<std::uint32_t>(bank.energies.size()),bank.nq};
     }
+    RuntimeScope t_sch_ctx("setup_schneider_ctx_host_and_device");
     const SchneiderCtDeviceContext schneider_ct_device_ctx = upload_schneider_ct_device_context(
         queue, mem_tracker, config,
         schneider_stopping_device,
         schneider_sp_sections, schneider_sp_energies,
-        schneider_sp_e_min, schneider_sp_e_max, schneider_sp_inv_dE);
+        schneider_sp_e_min, schneider_sp_e_max, schneider_sp_inv_dE,
+        schneider_host_cache);
+    t_sch_ctx.finish();
+    if (context != nullptr && schneider_host_cache != nullptr) {
+        std::cout << "[physics-cache] schneider hits=" << schneider_host_cache->hits
+                  << " misses=" << schneider_host_cache->misses << "\n";
+    }
     if (schneider_ct_device_ctx.uses_cinel03() &&
         !config.is_primary_attenuation_only_mode()) {
         schneider_diag_device = mem_tracker.allocate<std::uint64_t>(kSchneiderDiagSlots);
@@ -2078,7 +2291,7 @@ template<int EmMode>
     const bool need_secondary_buffers =
         !is_primary_attenuation_only && enable_inelastic;
 
-    constexpr std::size_t max_secondaries = 32000000;
+    const std::size_t max_secondaries = config.secondary_queue_capacity;
     auto* secondary_queue_device =
         need_secondary_buffers
             ? mem_tracker.allocate<SecondaryParticle>(max_secondaries)
