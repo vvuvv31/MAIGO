@@ -59,6 +59,25 @@
       }
     },
     {
+      "name": "oneapi-nvidia-secondary16",
+      "displayName": "NVIDIA secondary scheduling candidate (16 complete steps)",
+      "inherits": "oneapi-nvidia-release",
+      "binaryDir": "${sourceDir}/build/oneapi-nvidia-secondary16",
+      "cacheVariables": {
+        "CARBON_CUDA_ARCH": "sm_75",
+        "CARBON_SECONDARY_SEGMENT_STEPS": "16"
+      }
+    },
+    {
+      "name": "oneapi-nvidia-secondary16-indexed",
+      "displayName": "NVIDIA secondary16 + exact EM search index candidate",
+      "inherits": "oneapi-nvidia-secondary16",
+      "binaryDir": "${sourceDir}/build/oneapi-nvidia-secondary16-indexed",
+      "cacheVariables": {
+        "CARBON_EM_EXACT_INDEX": "ON"
+      }
+    },
+    {
       "name": "oneapi-intel-release",
       "displayName": "oneAPI SYCL Intel SPIR-V only",
       "generator": "Ninja",
@@ -77,6 +96,8 @@
     { "name": "oneapi-release", "configurePreset": "oneapi-release" },
     { "name": "oneapi-nvidia-release", "configurePreset": "oneapi-nvidia-release" },
     { "name": "oneapi-nvidia-minibeam", "configurePreset": "oneapi-nvidia-minibeam" },
+    { "name": "oneapi-nvidia-secondary16", "configurePreset": "oneapi-nvidia-secondary16" },
+    { "name": "oneapi-nvidia-secondary16-indexed", "configurePreset": "oneapi-nvidia-secondary16-indexed" },
     { "name": "oneapi-intel-release", "configurePreset": "oneapi-intel-release" }
   ]
 }

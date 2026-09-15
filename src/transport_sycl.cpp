@@ -1,5 +1,6 @@
 #include "carbon/nuclear_collision.hpp"
 #include "carbon/charged_species.hpp"
+#include "carbon/secondary_schedule.hpp"
 #include "carbon/delta_moments_data.hpp"
 #include "carbon/runtime_timing.hpp"
 #include "carbon/unified_em_view.hpp"
@@ -4624,7 +4625,7 @@ template<int EmMode>
                     queue.parallel_for(sycl::range<1>(resume_capacity), [=](sycl::id<1> i) {
                         active_order[i[0]] = i[0];
                     }).wait_and_throw();
-                    std::cout << "[segmented-secondary] step_limit=64 tail_threshold=8192 state_bytes="
+                    std::cout << "[segmented-secondary] step_limit=" << kSecondarySegmentSteps << " tail_threshold=8192 state_bytes="
                               << sizeof(SecondaryResumeState) << " capacity=" << resume_capacity << "\n";
                 }
                 unsigned resume_active = resume_capacity, segment_rounds = 0;
@@ -4883,7 +4884,7 @@ template<int EmMode>
                         unsigned segment_steps=0;bool segment_paused=false;
                         while (sec_e > energy_cutoff_MeV && sec_z >= 0.0F && sec_z < phantom_length_mm &&
                                sec_steps < kSecondaryMaxSteps) {
-                            if(!finish_tail && segment_steps>=64){segment_paused=true;break;}
+                            if(!finish_tail && segment_steps>=kSecondarySegmentSteps){segment_paused=true;break;}
                             ++segment_steps;
                             const auto bin_z = static_cast<int>(sec_z * inverse_depth_bin_width_mm);
 

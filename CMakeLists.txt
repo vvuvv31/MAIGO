@@ -97,7 +97,14 @@ option(CARBON_SECONDARY_STEP_PROFILE "Per-species secondary step profile (diagno
 target_compile_definitions(carbon_core PUBLIC
     CARBON_SECONDARY_STEP_PROFILE=$<BOOL:${CARBON_SECONDARY_STEP_PROFILE}>)
 
-
+set(CARBON_SECONDARY_SEGMENT_STEPS "64" CACHE STRING
+    "Complete secondary iterations per continuation launch (8/16/32/64/128; production default 64)")
+set_property(CACHE CARBON_SECONDARY_SEGMENT_STEPS PROPERTY STRINGS 8 16 32 64 128)
+if(NOT CARBON_SECONDARY_SEGMENT_STEPS MATCHES "^(8|16|32|64|128)$")
+    message(FATAL_ERROR "CARBON_SECONDARY_SEGMENT_STEPS must be 8, 16, 32, 64 or 128")
+endif()
+target_compile_definitions(carbon_core PUBLIC
+    CARBON_SECONDARY_SEGMENT_STEPS=${CARBON_SECONDARY_SEGMENT_STEPS})
 
 if(MSVC)
     target_compile_options(carbon_core PRIVATE /W4 /permissive-)
