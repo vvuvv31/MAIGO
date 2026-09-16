@@ -96,7 +96,9 @@ struct alignas(16) SecondaryResumeState {
     int pending_sec_voxel{};
     std::uint64_t unified_secondary_counter{};
     UnifiedEmState unified_secondary_state{};
+#if CARBON_EM_LOCAL_AUDIT
     std::array<std::uint64_t,8> unified_secondary_audit{};
+#endif
     uint32_t sec_steps{};
     std::uint64_t local_sec_rate_queries{};
     std::uint64_t local_sec_steps{};
@@ -129,6 +131,12 @@ inline void record_unified_em_failure(unsigned* count,UnifiedEmFailureRecord* re
     sycl::atomic_ref<unsigned,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space> counter(*count);
     const auto slot=counter.fetch_add(1);if(slot<16)records[slot]={reason,section,z,a,energy,density,step};
 }
+// The eight diagnostic counters are spread across logical threads so a warp's
+// same-index increments do not serialize on one global address. Counter i lane
+// s lives at global[i*kShards+s]; flush writes shard 0, and shipment merges all
+// shards back into the eight original counters without changing their values.
+inline constexpr unsigned kUnifiedEmAuditShards = 64;
+inline constexpr unsigned kUnifiedEmAuditCounters = 8;
 inline void flush_unified_em_audit(std::uint64_t* global,
                                   const std::array<std::uint64_t,8>& local) {
 #pragma unroll
@@ -136,7 +144,7 @@ inline void flush_unified_em_audit(std::uint64_t* global,
         if(local[i]) {
             sycl::atomic_ref<std::uint64_t,sycl::memory_order::relaxed,
                 sycl::memory_scope::device,sycl::access::address_space::global_space>
-                count(global[i]);
+                count(global[static_cast<std::size_t>(i)*kUnifiedEmAuditShards]);
             count.fetch_add(local[i]);
         }
     }
@@ -1318,8 +1326,8 @@ template<int EmMode>
             std::cout<<"[em-search-keys] node_keys="<<node_keys.size()
                      <<" segment_keys="<<segment_keys.size()<<"\n";
         }
-        unified_audit=mem_tracker.allocate<std::uint64_t>(8);if(!unified_audit)throw std::bad_alloc();
-        queue.fill(unified_audit,std::uint64_t{0},8).wait_and_throw();
+        unified_audit=mem_tracker.allocate<std::uint64_t>(kUnifiedEmAuditCounters*kUnifiedEmAuditShards);if(!unified_audit)throw std::bad_alloc();
+        queue.fill(unified_audit,std::uint64_t{0},kUnifiedEmAuditCounters*kUnifiedEmAuditShards).wait_and_throw();
         unified_device={unified_materials,unified_species,unified_records,unified_nodes,unified_segments,static_cast<unsigned>(package.materials.size()),unified_sections,unified_energy_index,delta_mean_device,unified_node_energy_keys,unified_segment_lower_keys};
         t_em_device.finish();
         std::cout<<"[unified-em] all 18 charged ions; water + Schneider density nodes; native particle step parameters plus 1% combined mean-loss guard; local aggregate delta deposition; density cut-onset/patient accuracy validation pending\n";
@@ -3008,9 +3016,10 @@ template<int EmMode>
                     float unified_primary_rate=0,unified_primary_distance=std::numeric_limits<float>::infinity();
                     auto unified_uniform=[&](){return (rng::random_u32(spot_seed,rng_history,unified_primary_counter++,120)>>8)*0x1p-24f;};
                     auto unified_count=[&](int index,std::uint64_t count=1){
+                        if(count==0)return; // zero-increment diagnostics must not touch globals
                         if constexpr(CARBON_EM_LOCAL_AUDIT) unified_primary_audit[index]+=count;
                             else {
-                                sycl::atomic_ref<std::uint64_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space> a(unified_audit[index]);a.fetch_add(count);
+                                sycl::atomic_ref<std::uint64_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space> a(unified_audit[static_cast<std::size_t>(index)*kUnifiedEmAuditShards+lane%kUnifiedEmAuditShards]);a.fetch_add(count);
                             }
                     };
                     if(unified_em){
@@ -5029,13 +5038,17 @@ template<int EmMode>
                         if constexpr(CARBON_SECONDARY_STEP_PROFILE)
                             for(int sec_pi=0;sec_pi<60;++sec_pi)sec_prof[sec_pi]=0;
                         UnifiedEmState unified_secondary_state;
+#if CARBON_EM_LOCAL_AUDIT
                         std::array<std::uint64_t,8> unified_secondary_audit{};
+#endif
                         auto unified_secondary_uniform=[&](){return (rng::random_u32(2026,frag.rng_stream,unified_secondary_counter++,121)>>8)*0x1p-24f;};
                         auto unified_secondary_count=[&](int index,std::uint64_t count=1){
-                            if constexpr(CARBON_EM_LOCAL_AUDIT) unified_secondary_audit[index]+=count;
-                            else {
-                                sycl::atomic_ref<std::uint64_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space> a(unified_audit[index]);a.fetch_add(count);
-                            }
+                            if(count==0)return; // zero-increment diagnostics must not touch globals
+#if CARBON_EM_LOCAL_AUDIT
+                            unified_secondary_audit[index]+=count;
+#else
+                            sycl::atomic_ref<std::uint64_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space> a(unified_audit[static_cast<std::size_t>(index)*kUnifiedEmAuditShards+item_id[0]%kUnifiedEmAuditShards]);a.fetch_add(count);
+#endif
                         };
                         uint32_t sec_steps = 0;
                         constexpr uint32_t kSecondaryMaxSteps = 30000U;
@@ -5109,7 +5122,9 @@ template<int EmMode>
                             unified_secondary_counter=saved.unified_secondary_counter;
                             unified_secondary_state=saved.unified_secondary_state;
                             unified_secondary_state.tables=&unified_device;
+#if CARBON_EM_LOCAL_AUDIT
                             unified_secondary_audit=saved.unified_secondary_audit;
+#endif
                             sec_steps=saved.sec_steps;
                             local_sec_rate_queries=saved.local_sec_rate_queries;
                             local_sec_steps=saved.local_sec_steps;
@@ -6511,7 +6526,9 @@ template<int EmMode>
                             saved.pending_sec_voxel=pending_sec_voxel;
                             saved.unified_secondary_counter=unified_secondary_counter;
                             saved.unified_secondary_state=unified_secondary_state;
+#if CARBON_EM_LOCAL_AUDIT
                             saved.unified_secondary_audit=unified_secondary_audit;
+#endif
                             saved.sec_steps=sec_steps;
                             saved.local_sec_rate_queries=local_sec_rate_queries;
                             saved.local_sec_steps=local_sec_steps;
@@ -6520,7 +6537,9 @@ template<int EmMode>
                             resume_states[state_idx]=saved;resume_ready[state_idx]=1;keep[item_id[0]]=1;
                             return; // Suspend: no terminal scoring or audit flush.
                         }
-                        if(unified_secondary && CARBON_EM_LOCAL_AUDIT)flush_unified_em_audit(unified_audit,unified_secondary_audit);
+#if CARBON_EM_LOCAL_AUDIT
+                        if(unified_secondary)flush_unified_em_audit(unified_audit,unified_secondary_audit);
+#endif
                         if constexpr(CARBON_SECONDARY_STEP_PROFILE) {
                             for(int sec_pi=0;sec_pi<60;++sec_pi) if(sec_prof[sec_pi]) {
                                 sycl::atomic_ref<std::uint64_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space> pa(sec_step_profile_device[sec_pi]);pa.fetch_add(sec_prof[sec_pi]);
@@ -6916,7 +6935,12 @@ template<int EmMode>
         queue.copy(cutoff_stopped_energy_device, cutoff_stopped_host.data(), number_of_histories);
     }
         if(unified_em){
-        std::uint64_t audit[8]{};queue.copy(unified_audit,audit,8).wait_and_throw();
+        std::array<std::uint64_t,kUnifiedEmAuditCounters*kUnifiedEmAuditShards> shard_audit{};
+        queue.copy(unified_audit,shard_audit.data(),shard_audit.size()).wait_and_throw();
+        std::uint64_t audit[8]{};
+        for(unsigned shard=0;shard<kUnifiedEmAuditShards;++shard)
+            for(unsigned counter=0;counter<kUnifiedEmAuditCounters;++counter)
+                audit[counter]+=shard_audit[static_cast<std::size_t>(counter)*kUnifiedEmAuditShards+shard];
         std::cout<<"[unified-em-audit]";for(auto count:audit)std::cout<<" "<<count;std::cout<<"\n";
         if(audit[0]) {
             unsigned count=0;queue.copy(unified_failure_count,&count,1).wait_and_throw();
