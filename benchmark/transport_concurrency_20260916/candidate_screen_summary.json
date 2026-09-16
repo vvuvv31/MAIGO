@@ -1,0 +1,118 @@
+{
+  "schema": "transport_candidate_screen_v1",
+  "candidates": [
+    {
+      "candidate": "audit1",
+      "screening_only": true,
+      "measured_pairs": 1,
+      "gain_percent": {
+        "wall_s": -2.009794424058664,
+        "elapsed_s": -2.2075842019894987,
+        "primary_s": 0.7194161343947236,
+        "secondary_s": -5.129464859588051
+      },
+      "audit_identical": true,
+      "max_dose_difference_percent_peak": 3.552494031987651e-05,
+      "quality_accepted": true,
+      "overflow": 0,
+      "promotable": false
+    },
+    {
+      "candidate": "audit128",
+      "screening_only": true,
+      "measured_pairs": 1,
+      "gain_percent": {
+        "wall_s": 0.034934080965887127,
+        "elapsed_s": 0.0625878970924143,
+        "primary_s": -0.34001008533657284,
+        "secondary_s": 0.38288392376699676
+      },
+      "audit_identical": true,
+      "max_dose_difference_percent_peak": 3.552494031987651e-05,
+      "quality_accepted": true,
+      "overflow": 0,
+      "promotable": false
+    },
+    {
+      "candidate": "audit256",
+      "screening_only": true,
+      "measured_pairs": 1,
+      "gain_percent": {
+        "wall_s": -2.5774303154842193,
+        "elapsed_s": -2.4761523989646927,
+        "primary_s": 0.024100594426146316,
+        "secondary_s": -0.12727857627412575
+      },
+      "audit_identical": true,
+      "max_dose_difference_percent_peak": 3.5524937795833916e-05,
+      "quality_accepted": true,
+      "overflow": 0,
+      "promotable": false
+    },
+    {
+      "candidate": "audit32",
+      "screening_only": true,
+      "measured_pairs": 1,
+      "gain_percent": {
+        "wall_s": -0.010175209431528831,
+        "elapsed_s": 0.10105614066517887,
+        "primary_s": -0.44831463480276,
+        "secondary_s": -0.15835164168935822
+      },
+      "audit_identical": true,
+      "max_dose_difference_percent_peak": 3.197244628788886e-05,
+      "quality_accepted": true,
+      "overflow": 0,
+      "promotable": false
+    },
+    {
+      "candidate": "fine",
+      "screening_only": true,
+      "measured_pairs": 1,
+      "gain_percent": {
+        "wall_s": -4.839960488957217,
+        "elapsed_s": -5.1857669956483,
+        "primary_s": -5.42910039665122,
+        "secondary_s": -5.938143237116278
+      },
+      "audit_identical": true,
+      "max_dose_difference_percent_peak": 3.5524937795833916e-05,
+      "quality_accepted": true,
+      "overflow": 0,
+      "promotable": false
+    },
+    {
+      "candidate": "init",
+      "screening_only": true,
+      "measured_pairs": 1,
+      "gain_percent": {
+        "wall_s": -0.5331880017613644,
+        "elapsed_s": -0.479651120479041,
+        "primary_s": -0.6457747419468807,
+        "secondary_s": -0.47966419482109446
+      },
+      "audit_identical": true,
+      "max_dose_difference_percent_peak": 3.5524937795833916e-05,
+      "quality_accepted": true,
+      "overflow": 0,
+      "promotable": false
+    },
+    {
+      "candidate": "shared",
+      "screening_only": true,
+      "measured_pairs": 1,
+      "gain_percent": {
+        "wall_s": -0.021652592345489108,
+        "elapsed_s": 0.02481500309148288,
+        "primary_s": 0.6591308944676522,
+        "secondary_s": 0.1975883367702158
+      },
+      "audit_identical": true,
+      "max_dose_difference_percent_peak": 3.5524937795833916e-05,
+      "quality_accepted": true,
+      "overflow": 0,
+      "promotable": false
+    }
+  ],
+  "warning": "Exploratory rejection evidence only; never sufficient for promotion."
+}

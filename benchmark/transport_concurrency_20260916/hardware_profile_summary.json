@@ -1,0 +1,349 @@
+{
+  "primary_steady": {
+    "samples": 3,
+    "identity": {
+      "launch_skip": 10,
+      "history_chunk": 10
+    },
+    "registers_per_thread": {
+      "median": 172.0,
+      "minimum": 172.0,
+      "maximum": 172.0
+    },
+    "block_size": {
+      "median": 128.0,
+      "minimum": 128.0,
+      "maximum": 128.0
+    },
+    "occupancy_limit_register_blocks": {
+      "median": 2.0,
+      "minimum": 2.0,
+      "maximum": 2.0
+    },
+    "active_warps_per_scheduler": {
+      "median": 1.97569,
+      "minimum": 1.974714,
+      "maximum": 1.98041
+    },
+    "eligible_warps_per_scheduler": {
+      "median": 0.097029,
+      "minimum": 0.096128,
+      "maximum": 0.097148
+    },
+    "long_scoreboard_cycles_per_issue": {
+      "median": 9.314466,
+      "minimum": 9.283518,
+      "maximum": 9.521968
+    },
+    "active_lanes_per_warp": {
+      "median": 18.5,
+      "minimum": 18.5,
+      "maximum": 18.5
+    },
+    "predicated_lanes_per_warp": {
+      "median": 17.5,
+      "minimum": 17.5,
+      "maximum": 17.5
+    },
+    "l1_hit_percent": {
+      "median": 65.610183,
+      "minimum": 65.543307,
+      "maximum": 65.626953
+    },
+    "l2_hit_percent": {
+      "median": 85.904227,
+      "minimum": 85.725974,
+      "maximum": 85.940396
+    },
+    "local_memory_metrics": {
+      "memory_l2_theoretical_sectors_local": {
+        "median": 1110067215.0,
+        "minimum": 1110067215.0,
+        "maximum": 1110067215.0
+      }
+    },
+    "kernel_names": [
+      "Typeinfo name for TransportResult transport_sycl_impl<1>(const TransportConfig &, const StoppingPowerTable &, const CrossSectionTable &, const basic_string<char, char_traits<char>, allocator<char>> &, SyclTransportContext *)::[lambda(nd_item<1>) (instance 1)]"
+    ]
+  },
+  "secondary_early": {
+    "samples": 3,
+    "identity": {
+      "launch_skip": 0,
+      "begin": 0,
+      "round": 0,
+      "active": 9337479,
+      "tail": "segment"
+    },
+    "registers_per_thread": {
+      "median": 186.0,
+      "minimum": 186.0,
+      "maximum": 186.0
+    },
+    "block_size": {
+      "median": 32.0,
+      "minimum": 32.0,
+      "maximum": 32.0
+    },
+    "occupancy_limit_register_blocks": {
+      "median": 8.0,
+      "minimum": 8.0,
+      "maximum": 8.0
+    },
+    "active_warps_per_scheduler": {
+      "median": 1.949713,
+      "minimum": 1.949244,
+      "maximum": 1.950177
+    },
+    "eligible_warps_per_scheduler": {
+      "median": 0.086167,
+      "minimum": 0.085584,
+      "maximum": 0.086327
+    },
+    "long_scoreboard_cycles_per_issue": {
+      "median": 10.290009,
+      "minimum": 10.204306,
+      "maximum": 10.54523
+    },
+    "active_lanes_per_warp": {
+      "median": 22.33,
+      "minimum": 22.33,
+      "maximum": 22.33
+    },
+    "predicated_lanes_per_warp": {
+      "median": 21.12,
+      "minimum": 21.11,
+      "maximum": 21.12
+    },
+    "l1_hit_percent": {
+      "median": 64.279068,
+      "minimum": 64.278565,
+      "maximum": 64.28437
+    },
+    "l2_hit_percent": {
+      "median": 86.740659,
+      "minimum": 86.724949,
+      "maximum": 86.765643
+    },
+    "local_memory_metrics": {
+      "memory_l2_theoretical_sectors_local": {
+        "median": 10178868489.0,
+        "minimum": 10178858912.0,
+        "maximum": 10179131620.0
+      }
+    },
+    "kernel_names": [
+      "Typeinfo name for __pf_kernel_wrapper<CarbonSecondaryTransportKernel<1>>"
+    ]
+  },
+  "secondary_middle": {
+    "samples": 3,
+    "identity": {
+      "launch_skip": 17,
+      "begin": 0,
+      "round": 17,
+      "active": 1760852,
+      "tail": "segment"
+    },
+    "registers_per_thread": {
+      "median": 186.0,
+      "minimum": 186.0,
+      "maximum": 186.0
+    },
+    "block_size": {
+      "median": 32.0,
+      "minimum": 32.0,
+      "maximum": 32.0
+    },
+    "occupancy_limit_register_blocks": {
+      "median": 8.0,
+      "minimum": 8.0,
+      "maximum": 8.0
+    },
+    "active_warps_per_scheduler": {
+      "median": 1.993657,
+      "minimum": 1.982185,
+      "maximum": 1.994258
+    },
+    "eligible_warps_per_scheduler": {
+      "median": 0.08534,
+      "minimum": 0.085256,
+      "maximum": 0.085378
+    },
+    "long_scoreboard_cycles_per_issue": {
+      "median": 14.660244,
+      "minimum": 14.562025,
+      "maximum": 14.672197
+    },
+    "active_lanes_per_warp": {
+      "median": 20.71,
+      "minimum": 20.71,
+      "maximum": 20.71
+    },
+    "predicated_lanes_per_warp": {
+      "median": 19.59,
+      "minimum": 19.59,
+      "maximum": 19.59
+    },
+    "l1_hit_percent": {
+      "median": 63.271702,
+      "minimum": 63.258348,
+      "maximum": 63.314197
+    },
+    "l2_hit_percent": {
+      "median": 82.947005,
+      "minimum": 82.714084,
+      "maximum": 83.598594
+    },
+    "local_memory_metrics": {
+      "memory_l2_theoretical_sectors_local": {
+        "median": 2530402740.0,
+        "minimum": 2530134343.0,
+        "maximum": 2530636972.0
+      }
+    },
+    "kernel_names": [
+      "Typeinfo name for __pf_kernel_wrapper<CarbonSecondaryTransportKernel<1>>"
+    ]
+  },
+  "secondary_late": {
+    "samples": 3,
+    "identity": {
+      "launch_skip": 34,
+      "begin": 0,
+      "round": 34,
+      "active": 10533,
+      "tail": "segment"
+    },
+    "registers_per_thread": {
+      "median": 186.0,
+      "minimum": 186.0,
+      "maximum": 186.0
+    },
+    "block_size": {
+      "median": 64.0,
+      "minimum": 64.0,
+      "maximum": 64.0
+    },
+    "occupancy_limit_register_blocks": {
+      "median": 4.0,
+      "minimum": 4.0,
+      "maximum": 4.0
+    },
+    "active_warps_per_scheduler": {
+      "median": 1.295672,
+      "minimum": 1.292388,
+      "maximum": 1.303667
+    },
+    "eligible_warps_per_scheduler": {
+      "median": 0.067755,
+      "minimum": 0.067652,
+      "maximum": 0.067949
+    },
+    "long_scoreboard_cycles_per_issue": {
+      "median": 11.388585,
+      "minimum": 11.3751,
+      "maximum": 11.466661
+    },
+    "active_lanes_per_warp": {
+      "median": 18.92,
+      "minimum": 18.91,
+      "maximum": 18.92
+    },
+    "predicated_lanes_per_warp": {
+      "median": 17.91,
+      "minimum": 17.91,
+      "maximum": 17.92
+    },
+    "l1_hit_percent": {
+      "median": 65.7682,
+      "minimum": 65.738065,
+      "maximum": 65.773665
+    },
+    "l2_hit_percent": {
+      "median": 81.60252,
+      "minimum": 80.573419,
+      "maximum": 82.618619
+    },
+    "local_memory_metrics": {
+      "memory_l2_theoretical_sectors_local": {
+        "median": 14262452.0,
+        "minimum": 14258199.0,
+        "maximum": 14263178.0
+      }
+    },
+    "kernel_names": [
+      "Typeinfo name for __pf_kernel_wrapper<CarbonSecondaryTransportKernel<1>>"
+    ]
+  },
+  "secondary_generation2": {
+    "samples": 3,
+    "identity": {
+      "launch_skip": 36,
+      "begin": 9337479,
+      "round": 0,
+      "active": 3855348,
+      "tail": "segment"
+    },
+    "registers_per_thread": {
+      "median": 186.0,
+      "minimum": 186.0,
+      "maximum": 186.0
+    },
+    "block_size": {
+      "median": 256.0,
+      "minimum": 256.0,
+      "maximum": 256.0
+    },
+    "occupancy_limit_register_blocks": {
+      "median": 1.0,
+      "minimum": 1.0,
+      "maximum": 1.0
+    },
+    "active_warps_per_scheduler": {
+      "median": 1.942659,
+      "minimum": 1.940748,
+      "maximum": 1.952999
+    },
+    "eligible_warps_per_scheduler": {
+      "median": 0.088138,
+      "minimum": 0.088136,
+      "maximum": 0.088241
+    },
+    "long_scoreboard_cycles_per_issue": {
+      "median": 15.033698,
+      "minimum": 14.72366,
+      "maximum": 15.093196
+    },
+    "active_lanes_per_warp": {
+      "median": 21.21,
+      "minimum": 21.21,
+      "maximum": 21.21
+    },
+    "predicated_lanes_per_warp": {
+      "median": 20.07,
+      "minimum": 20.07,
+      "maximum": 20.07
+    },
+    "l1_hit_percent": {
+      "median": 66.571117,
+      "minimum": 66.46743,
+      "maximum": 66.572163
+    },
+    "l2_hit_percent": {
+      "median": 81.621712,
+      "minimum": 80.835845,
+      "maximum": 81.822163
+    },
+    "local_memory_metrics": {
+      "memory_l2_theoretical_sectors_local": {
+        "median": 3054626927.0,
+        "minimum": 3054539256.0,
+        "maximum": 3054750505.0
+      }
+    },
+    "kernel_names": [
+      "Typeinfo name for __pf_kernel_wrapper<CarbonSecondaryTransportKernel<1>>"
+    ]
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "baseline_repeats": 5,
+  "candidate_repeats": 0,
+  "baseline_envelope_abs": 5.122274160385132e-09,
+  "baseline_envelope_pct_peak": 3.9077431575417316e-05,
+  "audit_identical": true,
+  "quality_pass": true,
+  "promotion_allowed": false,
+  "outstanding_gates": [
+    "matched hardware repetitions",
+    "other CT cases and 50k water",
+    "path and sampling equivalence"
+  ]
+}

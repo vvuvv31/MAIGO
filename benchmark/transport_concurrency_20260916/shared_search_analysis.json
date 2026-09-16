@@ -1,0 +1,86 @@
+{
+  "baseline_repeats": 5,
+  "candidate_repeats": 5,
+  "baseline_envelope_abs": 6.05359673500061e-09,
+  "baseline_envelope_pct_peak": 4.618242241583946e-05,
+  "audit_identical": true,
+  "quality_pass": true,
+  "promotion_allowed": false,
+  "outstanding_gates": [
+    "matched hardware repetitions",
+    "other CT cases and 50k water",
+    "path and sampling equivalence"
+  ],
+  "max_candidate_diff_abs": 5.587935447692871e-09,
+  "max_candidate_diff_pct_peak": 4.262992838385181e-05,
+  "dose_global_envelope_pass": true,
+  "max_voxels_outside_baseline_interval": 68643,
+  "timing": {
+    "wall_s": {
+      "base_median_s": 24.632030752982246,
+      "candidate_median_s": 24.62789964998956,
+      "mean_paired_gain": 0.005691713975031254,
+      "paired_gain_ci95": [
+        -0.010629683898990328,
+        0.022013111849052837
+      ],
+      "paired_gains": [
+        -0.0037352884847358103,
+        -0.02364755256018347,
+        0.0016172625948869257,
+        0.026800043038053944,
+        0.02742410528713468
+      ]
+    },
+    "elapsed_s": {
+      "base_median_s": 22.96861,
+      "candidate_median_s": 22.972862,
+      "mean_paired_gain": 0.005943379473634635,
+      "paired_gain_ci95": [
+        -0.008982712920881885,
+        0.020869471868151156
+      ],
+      "paired_gains": [
+        -0.0013546391897055754,
+        -0.021670978020660203,
+        0.0011376698163221288,
+        0.025780984537320473,
+        0.025823860224896356
+      ]
+    },
+    "primary_s": {
+      "base_median_s": 8.5606045,
+      "candidate_median_s": 8.4930557,
+      "mean_paired_gain": 0.007353959804440003,
+      "paired_gain_ci95": [
+        0.005755880119252677,
+        0.009278945570063923
+      ],
+      "paired_gains": [
+        0.004968757149817371,
+        0.01107351196455153,
+        0.008082567973738852,
+        0.006448037571555876,
+        0.006196924362536382
+      ]
+    },
+    "secondary_s": {
+      "base_median_s": 11.083788,
+      "candidate_median_s": 11.097761,
+      "mean_paired_gain": -0.00013892088449631856,
+      "paired_gain_ci95": [
+        -0.004372098214201858,
+        0.004528518852656149
+      ],
+      "paired_gains": [
+        -0.007190456731524852,
+        0.008044055986053733,
+        -0.0012590828005757393,
+        -5.8629982130020686e-05,
+        -0.00023049089430471348
+      ]
+    }
+  },
+  "throughput_gate_pass": false,
+  "extend_to_ten_pairs": false
+}
