@@ -1,0 +1,1118 @@
+{
+  "schema": "carbon.secondary_context_abi.analysis.v1",
+  "date": "2026-09-16",
+  "gpu": "NVIDIA GeForce RTX 2080 Ti",
+  "architecture": "sm_75",
+  "base_commit": "d4e579ab885fb01526fd0a099fc2ffc35072e509",
+  "candidate": {
+    "cmake_option": "CARBON_SECONDARY_CONTEXT_POINTER",
+    "default": false,
+    "design": "immutable device SecondaryTransportContext pointer plus explicit per-round captures",
+    "closure_contract": "trivially copyable and sizeof <= 64 bytes",
+    "decision": "retain as default-off research candidate",
+    "decision_reasons": [
+      "RT07575 throughput, correctness, eligible, ready fraction, long-scoreboard, and local-traffic gates pass",
+      "registers increase 186 to 187",
+      "secondary active warps do not increase and late-stage active warps decrease",
+      "the required RT06423 and 20022516 five-pair promotion regressions were not run because the hardware promotion gate already failed"
+    ]
+  },
+  "abi_probe": {
+    "payload_bytes": 1984,
+    "by_value_large_closure": {
+      "constant0_bytes": 2368,
+      "stack_bytes_per_thread": 2016,
+      "registers_per_thread": 55
+    },
+    "device_context_pointer": {
+      "constant0_bytes": 376,
+      "stack_bytes_per_thread": 0,
+      "registers_per_thread": 47
+    },
+    "conclusion": "device context pointer removes backend closure materialization in the isolated probe"
+  },
+  "failed_intermediate_experiments": [
+    {
+      "id": "opaque_lambda_device_closure",
+      "result": "quality failure",
+      "resources": {
+        "baseline_wrapper": {
+          "constant0_bytes": 1984,
+          "stack_bytes_per_thread": 1840,
+          "registers_per_thread": 186
+        },
+        "candidate_wrapper": {
+          "constant0_bytes": 376,
+          "stack_bytes_per_thread": 232,
+          "registers_per_thread": 182
+        }
+      },
+      "reason": "compiler-generated lambda closure is not a stable explicit device ABI"
+    },
+    {
+      "id": "immutable_context_with_round_pointers",
+      "result": "quality failure after first continuation restore",
+      "baseline_round2_active": 5841290,
+      "candidate_round2_active": 3929615,
+      "reason": "resume/compaction pointers must remain explicit per-round captures"
+    }
+  ],
+  "wrapper_resources": {
+    "baseline_default_off": {
+      "constant0_bytes": 1984,
+      "stack_bytes_per_thread": 1840,
+      "registers_per_thread": 186,
+      "register_limit_blocks_per_sm_at_32_threads": 8
+    },
+    "candidate_on": {
+      "constant0_bytes": 408,
+      "stack_bytes_per_thread": 264,
+      "registers_per_thread": 187,
+      "register_limit_blocks_per_sm_at_32_threads": 8
+    },
+    "named_candidate": {
+      "constant0_bytes": 394,
+      "stack_bytes_per_thread": 464,
+      "registers_per_thread": 180
+    }
+  },
+  "correctness": {
+    "config": "scratch/secondary_context_abi_20260916/config_50k.yaml",
+    "histories": 3240963,
+    "steps": 1034976717,
+    "nuclear_interactions": 1344312,
+    "unified_em_audit": [
+      0,
+      1036320939,
+      1429988519,
+      0,
+      0,
+      6897079514135703,
+      528848467657861,
+      0
+    ],
+    "quality": "pass",
+    "overflow": 0,
+    "energy_balance_error": 3.6833317e-06,
+    "continuation_active_counts": "exact baseline match",
+    "dose": {
+      "paired_max_abs_difference_percent_of_baseline_peak": [
+        3.9077431575417316e-05,
+        3.197244628788886e-05,
+        4.26299253550007e-05,
+        3.5524937795833916e-05,
+        3.5524937795833916e-05
+      ],
+      "five_run_mean_max_abs_difference_percent_of_baseline_peak": 1.989396544703634e-05,
+      "five_baseline_run_global_envelope_percent_of_mean_peak": 4.262992596077089e-05,
+      "gate": "pass: five-run mean difference is inside five-run baseline global fluctuation envelope"
+    },
+    "final_log": "scratch/secondary_context_abi_20260916/current_final_check/run.log",
+    "fallback_default_off": {
+      "quality": "pass",
+      "steps": 1034976717,
+      "unified_em_audit": [
+        0,
+        1036320939,
+        1429988519,
+        0,
+        0,
+        6897079514135703,
+        528848467657861,
+        0
+      ],
+      "overflow": 0,
+      "log": "scratch/secondary_context_abi_20260916/current_fallback_check/run.log"
+    }
+  },
+  "performance": {
+    "protocol": {
+      "warmups": 2,
+      "formal_pairs": 5,
+      "order": "alternating forward/reverse",
+      "improvement_definition": "baseline/candidate - 1"
+    },
+    "wall_improvement_percent": {
+      "median": 8.035460347033352,
+      "minimum": 7.843096065252042,
+      "maximum": 8.42302282217502,
+      "values": [
+        7.932931029069823,
+        8.42302282217502,
+        7.843096065252042,
+        8.035460347033352,
+        8.158053687618327
+      ]
+    },
+    "elapsed_improvement_percent": {
+      "median": 8.640102994433473,
+      "minimum": 8.517260321126919,
+      "maximum": 9.07390794910119,
+      "values": [
+        8.517260321126919,
+        9.07390794910119,
+        8.520026878870347,
+        8.640102994433473,
+        8.784378761327428
+      ]
+    },
+    "primary_improvement_percent": {
+      "median": 0.014586325557863766,
+      "minimum": -0.6314831330989312,
+      "maximum": 0.3481078698528428,
+      "values": [
+        -0.6314831330989312,
+        0.2935805629334709,
+        0.3481078698528428,
+        -0.04063831545421115,
+        0.014586325557863766
+      ]
+    },
+    "secondary_improvement_percent": {
+      "median": 19.968492567405782,
+      "minimum": 19.245294652628985,
+      "maximum": 20.327753470482058,
+      "values": [
+        20.033780117148936,
+        20.327753470482058,
+        19.245294652628985,
+        19.91214823634295,
+        19.968492567405782
+      ]
+    },
+    "runs": [
+      {
+        "phase": "warm",
+        "pair": 0,
+        "variant": "base",
+        "wall_s": 24.041612960980274,
+        "elapsed_s": 22.215834,
+        "primary_s": 8.2674077,
+        "secondary_s": 10.582076,
+        "telemetry_before": "52, 300",
+        "telemetry_after": "69, 1845"
+      },
+      {
+        "phase": "warm",
+        "pair": 0,
+        "variant": "pod",
+        "wall_s": 22.384547529974952,
+        "elapsed_s": 20.672523,
+        "primary_s": 8.3841753,
+        "secondary_s": 8.896126,
+        "telemetry_before": "69, 1845",
+        "telemetry_after": "76, 1830"
+      },
+      {
+        "phase": "warm",
+        "pair": 1,
+        "variant": "pod",
+        "wall_s": 22.512697661004495,
+        "elapsed_s": 20.810173,
+        "primary_s": 8.4314155,
+        "secondary_s": 8.9949053,
+        "telemetry_before": "76, 1830",
+        "telemetry_after": "79, 1815"
+      },
+      {
+        "phase": "warm",
+        "pair": 1,
+        "variant": "base",
+        "wall_s": 24.686098149977624,
+        "elapsed_s": 22.981776,
+        "primary_s": 8.5029106,
+        "secondary_s": 11.098674,
+        "telemetry_before": "79, 1815",
+        "telemetry_after": "80, 1815"
+      },
+      {
+        "phase": "run",
+        "pair": 0,
+        "variant": "base",
+        "wall_s": 24.915504201024305,
+        "elapsed_s": 23.202363,
+        "primary_s": 8.609855,
+        "secondary_s": 11.19686,
+        "telemetry_before": "80, 1815",
+        "telemetry_after": "81, 1815"
+      },
+      {
+        "phase": "run",
+        "pair": 0,
+        "variant": "pod",
+        "wall_s": 23.084246822050773,
+        "elapsed_s": 21.381265,
+        "primary_s": 8.6645703,
+        "secondary_s": 9.3280908,
+        "telemetry_before": "81, 1815",
+        "telemetry_after": "81, 1815"
+      },
+      {
+        "phase": "run",
+        "pair": 1,
+        "variant": "pod",
+        "wall_s": 23.157632802031003,
+        "elapsed_s": 21.454174,
+        "primary_s": 8.6835449,
+        "secondary_s": 9.3906191,
+        "telemetry_before": "81, 1815",
+        "telemetry_after": "81, 1815"
+      },
+      {
+        "phase": "run",
+        "pair": 1,
+        "variant": "base",
+        "wall_s": 25.10820549802156,
+        "elapsed_s": 23.400906,
+        "primary_s": 8.7090381,
+        "secondary_s": 11.299521,
+        "telemetry_before": "81, 1815",
+        "telemetry_after": "81, 1815"
+      },
+      {
+        "phase": "run",
+        "pair": 2,
+        "variant": "base",
+        "wall_s": 25.137133623997215,
+        "elapsed_s": 23.439373,
+        "primary_s": 8.7577905,
+        "secondary_s": 11.294268,
+        "telemetry_before": "81, 1815",
+        "telemetry_after": "82, 1815"
+      },
+      {
+        "phase": "run",
+        "pair": 2,
+        "variant": "pod",
+        "wall_s": 23.308987353986595,
+        "elapsed_s": 21.599122,
+        "primary_s": 8.7274097,
+        "secondary_s": 9.471458,
+        "telemetry_before": "81, 1815",
+        "telemetry_after": "82, 1815"
+      },
+      {
+        "phase": "run",
+        "pair": 3,
+        "variant": "pod",
+        "wall_s": 23.29422467504628,
+        "elapsed_s": 21.5934,
+        "primary_s": 8.761436,
+        "secondary_s": 9.4460938,
+        "telemetry_before": "81, 1815",
+        "telemetry_after": "81, 1815"
+      },
+      {
+        "phase": "run",
+        "pair": 3,
+        "variant": "base",
+        "wall_s": 25.16602286195848,
+        "elapsed_s": 23.459092,
+        "primary_s": 8.7578755,
+        "secondary_s": 11.327014,
+        "telemetry_before": "81, 1815",
+        "telemetry_after": "81, 1815"
+      },
+      {
+        "phase": "run",
+        "pair": 4,
+        "variant": "base",
+        "wall_s": 25.213297148991842,
+        "elapsed_s": 23.510716,
+        "primary_s": 8.7382246,
+        "secondary_s": 11.373224,
+        "telemetry_before": "81, 1815",
+        "telemetry_after": "81, 1815"
+      },
+      {
+        "phase": "run",
+        "pair": 4,
+        "variant": "pod",
+        "wall_s": 23.311530014965683,
+        "elapsed_s": 21.612217,
+        "primary_s": 8.7369502,
+        "secondary_s": 9.4801758,
+        "telemetry_before": "81, 1815",
+        "telemetry_after": "81, 1815"
+      }
+    ]
+  },
+  "hardware_profiles": {
+    "primary_steady": {
+      "identity": {
+        "launch_skip": 10,
+        "history_chunk": 10
+      },
+      "baseline": {
+        "registers_per_thread": {
+          "median": 172.0,
+          "minimum": 172.0,
+          "maximum": 172.0
+        },
+        "block_size": {
+          "median": 128.0,
+          "minimum": 128.0,
+          "maximum": 128.0
+        },
+        "occupancy_limit_register_blocks": {
+          "median": 2.0,
+          "minimum": 2.0,
+          "maximum": 2.0
+        },
+        "active_warps_per_scheduler": {
+          "median": 1.97569,
+          "minimum": 1.974714,
+          "maximum": 1.98041
+        },
+        "eligible_warps_per_scheduler": {
+          "median": 0.097029,
+          "minimum": 0.096128,
+          "maximum": 0.097148
+        },
+        "long_scoreboard_cycles_per_issue": {
+          "median": 9.314466,
+          "minimum": 9.283518,
+          "maximum": 9.521968
+        },
+        "local_sectors": {
+          "median": 1110067215.0,
+          "minimum": 1110067215.0,
+          "maximum": 1110067215.0
+        },
+        "ready_fraction": {
+          "median": 0.049111449670747945
+        }
+      },
+      "candidate": {
+        "registers_per_thread": {
+          "median": 172.0,
+          "minimum": 172.0,
+          "maximum": 172.0,
+          "values": [
+            172.0,
+            172.0,
+            172.0
+          ]
+        },
+        "block_size": {
+          "median": 128.0,
+          "minimum": 128.0,
+          "maximum": 128.0,
+          "values": [
+            128.0,
+            128.0,
+            128.0
+          ]
+        },
+        "occupancy_limit_register_blocks": {
+          "median": 2.0,
+          "minimum": 2.0,
+          "maximum": 2.0,
+          "values": [
+            2.0,
+            2.0,
+            2.0
+          ]
+        },
+        "active_warps_per_scheduler": {
+          "median": 1.977963,
+          "minimum": 1.974293,
+          "maximum": 1.979541,
+          "values": [
+            1.977963,
+            1.979541,
+            1.974293
+          ]
+        },
+        "eligible_warps_per_scheduler": {
+          "median": 0.096359,
+          "minimum": 0.09605,
+          "maximum": 0.096526,
+          "values": [
+            0.09605,
+            0.096359,
+            0.096526
+          ]
+        },
+        "long_scoreboard_cycles_per_issue": {
+          "median": 9.482868,
+          "minimum": 9.414016,
+          "maximum": 9.51743,
+          "values": [
+            9.51743,
+            9.482868,
+            9.414016
+          ]
+        },
+        "local_sectors": {
+          "median": 1110067215.0,
+          "minimum": 1110067215.0,
+          "maximum": 1110067215.0,
+          "values": [
+            1110067215.0,
+            1110067215.0,
+            1110067215.0
+          ]
+        },
+        "ready_fraction": {
+          "median": 0.0486774459331734,
+          "minimum": 0.04856005901020393,
+          "maximum": 0.048891425943363015,
+          "values": [
+            0.04856005901020393,
+            0.0486774459331734,
+            0.048891425943363015
+          ]
+        }
+      },
+      "candidate_vs_baseline_percent": {
+        "active_warps_per_scheduler": 0.11504841346567929,
+        "eligible_warps_per_scheduler": -0.6905152067938514,
+        "long_scoreboard_cycles_per_issue": 1.8079619379146372,
+        "local_sectors": 0.0,
+        "ready_fraction": -0.883711925598174
+      },
+      "candidate_samples": [
+        "scratch/secondary_context_abi_20260916/ncu_primary_current_r1/metrics.csv",
+        "scratch/secondary_context_abi_20260916/ncu_primary_current_r2/metrics.csv",
+        "scratch/secondary_context_abi_20260916/ncu_primary_current_r3/metrics.csv"
+      ]
+    },
+    "secondary_early": {
+      "identity": {
+        "launch_skip": 0,
+        "begin": 0,
+        "round": 0,
+        "active": 9337479,
+        "tail": "segment"
+      },
+      "baseline": {
+        "registers_per_thread": {
+          "median": 186.0,
+          "minimum": 186.0,
+          "maximum": 186.0
+        },
+        "block_size": {
+          "median": 32.0,
+          "minimum": 32.0,
+          "maximum": 32.0
+        },
+        "occupancy_limit_register_blocks": {
+          "median": 8.0,
+          "minimum": 8.0,
+          "maximum": 8.0
+        },
+        "active_warps_per_scheduler": {
+          "median": 1.949713,
+          "minimum": 1.949244,
+          "maximum": 1.950177
+        },
+        "eligible_warps_per_scheduler": {
+          "median": 0.086167,
+          "minimum": 0.085584,
+          "maximum": 0.086327
+        },
+        "long_scoreboard_cycles_per_issue": {
+          "median": 10.290009,
+          "minimum": 10.204306,
+          "maximum": 10.54523
+        },
+        "local_sectors": {
+          "median": 10178868489.0,
+          "minimum": 10178858912.0,
+          "maximum": 10179131620.0
+        },
+        "ready_fraction": {
+          "median": 0.0441947096829123
+        }
+      },
+      "candidate": {
+        "registers_per_thread": {
+          "median": 187.0,
+          "minimum": 187.0,
+          "maximum": 187.0,
+          "values": [
+            187.0,
+            187.0,
+            187.0
+          ]
+        },
+        "block_size": {
+          "median": 32.0,
+          "minimum": 32.0,
+          "maximum": 32.0,
+          "values": [
+            32.0,
+            32.0,
+            32.0
+          ]
+        },
+        "occupancy_limit_register_blocks": {
+          "median": 8.0,
+          "minimum": 8.0,
+          "maximum": 8.0,
+          "values": [
+            8.0,
+            8.0,
+            8.0
+          ]
+        },
+        "active_warps_per_scheduler": {
+          "median": 1.938523,
+          "minimum": 1.937185,
+          "maximum": 1.940522,
+          "values": [
+            1.937185,
+            1.940522,
+            1.938523
+          ]
+        },
+        "eligible_warps_per_scheduler": {
+          "median": 0.102961,
+          "minimum": 0.102539,
+          "maximum": 0.103024,
+          "values": [
+            0.102539,
+            0.103024,
+            0.102961
+          ]
+        },
+        "long_scoreboard_cycles_per_issue": {
+          "median": 5.731262,
+          "minimum": 5.68451,
+          "maximum": 5.821248,
+          "values": [
+            5.821248,
+            5.731262,
+            5.68451
+          ]
+        },
+        "local_sectors": {
+          "median": 6117467447.0,
+          "minimum": 6116630203.0,
+          "maximum": 6117954773.0,
+          "values": [
+            6117467447.0,
+            6116630203.0,
+            6117954773.0
+          ]
+        },
+        "ready_fraction": {
+          "median": 0.05309086936401649,
+          "minimum": 0.05293196055100571,
+          "maximum": 0.053113117564248656,
+          "values": [
+            0.05293196055100571,
+            0.05309086936401649,
+            0.053113117564248656
+          ]
+        }
+      },
+      "candidate_vs_baseline_percent": {
+        "active_warps_per_scheduler": -0.5739306246611675,
+        "eligible_warps_per_scheduler": 19.490059999767894,
+        "long_scoreboard_cycles_per_issue": -44.30265318524016,
+        "local_sectors": -39.90031943520083,
+        "ready_fraction": 20.12946740669246
+      },
+      "candidate_samples": [
+        "scratch/secondary_context_abi_20260916/ncu_early_current_r1/metrics.csv",
+        "scratch/secondary_context_abi_20260916/ncu_early_current_r2/metrics.csv",
+        "scratch/secondary_context_abi_20260916/ncu_early_current_r3/metrics.csv"
+      ]
+    },
+    "secondary_middle": {
+      "identity": {
+        "launch_skip": 17,
+        "begin": 0,
+        "round": 17,
+        "active": 1760852,
+        "tail": "segment"
+      },
+      "baseline": {
+        "registers_per_thread": {
+          "median": 186.0,
+          "minimum": 186.0,
+          "maximum": 186.0
+        },
+        "block_size": {
+          "median": 32.0,
+          "minimum": 32.0,
+          "maximum": 32.0
+        },
+        "occupancy_limit_register_blocks": {
+          "median": 8.0,
+          "minimum": 8.0,
+          "maximum": 8.0
+        },
+        "active_warps_per_scheduler": {
+          "median": 1.993657,
+          "minimum": 1.982185,
+          "maximum": 1.994258
+        },
+        "eligible_warps_per_scheduler": {
+          "median": 0.08534,
+          "minimum": 0.085256,
+          "maximum": 0.085378
+        },
+        "long_scoreboard_cycles_per_issue": {
+          "median": 14.660244,
+          "minimum": 14.562025,
+          "maximum": 14.672197
+        },
+        "local_sectors": {
+          "median": 2530402740.0,
+          "minimum": 2530134343.0,
+          "maximum": 2530636972.0
+        },
+        "ready_fraction": {
+          "median": 0.04280575846296529
+        }
+      },
+      "candidate": {
+        "registers_per_thread": {
+          "median": 187.0,
+          "minimum": 187.0,
+          "maximum": 187.0,
+          "values": [
+            187.0,
+            187.0,
+            187.0
+          ]
+        },
+        "block_size": {
+          "median": 64.0,
+          "minimum": 64.0,
+          "maximum": 64.0,
+          "values": [
+            64.0,
+            64.0,
+            64.0
+          ]
+        },
+        "occupancy_limit_register_blocks": {
+          "median": 4.0,
+          "minimum": 4.0,
+          "maximum": 4.0,
+          "values": [
+            4.0,
+            4.0,
+            4.0
+          ]
+        },
+        "active_warps_per_scheduler": {
+          "median": 1.951811,
+          "minimum": 1.944036,
+          "maximum": 1.952851,
+          "values": [
+            1.952851,
+            1.944036,
+            1.951811
+          ]
+        },
+        "eligible_warps_per_scheduler": {
+          "median": 0.098549,
+          "minimum": 0.098095,
+          "maximum": 0.099149,
+          "values": [
+            0.098095,
+            0.098549,
+            0.099149
+          ]
+        },
+        "long_scoreboard_cycles_per_issue": {
+          "median": 10.798772,
+          "minimum": 10.779039,
+          "maximum": 11.115382,
+          "values": [
+            11.115382,
+            10.798772,
+            10.779039
+          ]
+        },
+        "local_sectors": {
+          "median": 1478046049.0,
+          "minimum": 1478008126.0,
+          "maximum": 1478230522.0,
+          "values": [
+            1478008126.0,
+            1478046049.0,
+            1478230522.0
+          ]
+        },
+        "ready_fraction": {
+          "median": 0.05069299128205444,
+          "minimum": 0.05023168690289224,
+          "maximum": 0.05079846358074629,
+          "values": [
+            0.05023168690289224,
+            0.05069299128205444,
+            0.05079846358074629
+          ]
+        }
+      },
+      "candidate_vs_baseline_percent": {
+        "active_warps_per_scheduler": -2.098956841623212,
+        "eligible_warps_per_scheduler": 15.478087649402394,
+        "long_scoreboard_cycles_per_issue": -26.33975259893355,
+        "local_sectors": -41.58850582812757,
+        "ready_fraction": 18.425635013366314
+      },
+      "candidate_samples": [
+        "scratch/secondary_context_abi_20260916/ncu_middle_current_r1/metrics.csv",
+        "scratch/secondary_context_abi_20260916/ncu_middle_current_r2/metrics.csv",
+        "scratch/secondary_context_abi_20260916/ncu_middle_current_r3/metrics.csv"
+      ]
+    },
+    "secondary_late": {
+      "identity": {
+        "launch_skip": 34,
+        "begin": 0,
+        "round": 34,
+        "active": 10533,
+        "tail": "segment"
+      },
+      "baseline": {
+        "registers_per_thread": {
+          "median": 186.0,
+          "minimum": 186.0,
+          "maximum": 186.0
+        },
+        "block_size": {
+          "median": 64.0,
+          "minimum": 64.0,
+          "maximum": 64.0
+        },
+        "occupancy_limit_register_blocks": {
+          "median": 4.0,
+          "minimum": 4.0,
+          "maximum": 4.0
+        },
+        "active_warps_per_scheduler": {
+          "median": 1.295672,
+          "minimum": 1.292388,
+          "maximum": 1.303667
+        },
+        "eligible_warps_per_scheduler": {
+          "median": 0.067755,
+          "minimum": 0.067652,
+          "maximum": 0.067949
+        },
+        "long_scoreboard_cycles_per_issue": {
+          "median": 11.388585,
+          "minimum": 11.3751,
+          "maximum": 11.466661
+        },
+        "local_sectors": {
+          "median": 14262452.0,
+          "minimum": 14258199.0,
+          "maximum": 14263178.0
+        },
+        "ready_fraction": {
+          "median": 0.05229332732358189
+        }
+      },
+      "candidate": {
+        "registers_per_thread": {
+          "median": 187.0,
+          "minimum": 187.0,
+          "maximum": 187.0,
+          "values": [
+            187.0,
+            187.0,
+            187.0
+          ]
+        },
+        "block_size": {
+          "median": 128.0,
+          "minimum": 128.0,
+          "maximum": 128.0,
+          "values": [
+            128.0,
+            128.0,
+            128.0
+          ]
+        },
+        "occupancy_limit_register_blocks": {
+          "median": 2.0,
+          "minimum": 2.0,
+          "maximum": 2.0,
+          "values": [
+            2.0,
+            2.0,
+            2.0
+          ]
+        },
+        "active_warps_per_scheduler": {
+          "median": 0.994872,
+          "minimum": 0.993966,
+          "maximum": 1.003799,
+          "values": [
+            0.994872,
+            1.003799,
+            0.993966
+          ]
+        },
+        "eligible_warps_per_scheduler": {
+          "median": 0.081361,
+          "minimum": 0.08127,
+          "maximum": 0.081396,
+          "values": [
+            0.08127,
+            0.081361,
+            0.081396
+          ]
+        },
+        "long_scoreboard_cycles_per_issue": {
+          "median": 3.692529,
+          "minimum": 3.691638,
+          "maximum": 3.719547,
+          "values": [
+            3.692529,
+            3.719547,
+            3.691638
+          ]
+        },
+        "local_sectors": {
+          "median": 40793297.0,
+          "minimum": 40586759.0,
+          "maximum": 40850479.0,
+          "values": [
+            40793297.0,
+            40850479.0,
+            40586759.0
+          ]
+        },
+        "ready_fraction": {
+          "median": 0.08168890068270089,
+          "minimum": 0.08105307935154347,
+          "maximum": 0.0818901250143365,
+          "values": [
+            0.08168890068270089,
+            0.08105307935154347,
+            0.0818901250143365
+          ]
+        }
+      },
+      "candidate_vs_baseline_percent": {
+        "active_warps_per_scheduler": -23.21575213479955,
+        "eligible_warps_per_scheduler": 20.08117482104643,
+        "long_scoreboard_cycles_per_issue": -67.57692900391051,
+        "local_sectors": 186.01882060672318,
+        "ready_fraction": 56.21285709594337
+      },
+      "candidate_samples": [
+        "scratch/secondary_context_abi_20260916/ncu_late_current_r1/metrics.csv",
+        "scratch/secondary_context_abi_20260916/ncu_late_current_r2/metrics.csv",
+        "scratch/secondary_context_abi_20260916/ncu_late_current_r3/metrics.csv"
+      ]
+    },
+    "secondary_generation2": {
+      "identity": {
+        "launch_skip": 36,
+        "begin": 9337479,
+        "round": 0,
+        "active": 3855348,
+        "tail": "segment"
+      },
+      "baseline": {
+        "registers_per_thread": {
+          "median": 186.0,
+          "minimum": 186.0,
+          "maximum": 186.0
+        },
+        "block_size": {
+          "median": 256.0,
+          "minimum": 256.0,
+          "maximum": 256.0
+        },
+        "occupancy_limit_register_blocks": {
+          "median": 1.0,
+          "minimum": 1.0,
+          "maximum": 1.0
+        },
+        "active_warps_per_scheduler": {
+          "median": 1.942659,
+          "minimum": 1.940748,
+          "maximum": 1.952999
+        },
+        "eligible_warps_per_scheduler": {
+          "median": 0.088138,
+          "minimum": 0.088136,
+          "maximum": 0.088241
+        },
+        "long_scoreboard_cycles_per_issue": {
+          "median": 15.033698,
+          "minimum": 14.72366,
+          "maximum": 15.093196
+        },
+        "local_sectors": {
+          "median": 3054626927.0,
+          "minimum": 3054539256.0,
+          "maximum": 3054750505.0
+        },
+        "ready_fraction": {
+          "median": 0.04536977410858004
+        }
+      },
+      "candidate": {
+        "registers_per_thread": {
+          "median": 187.0,
+          "minimum": 187.0,
+          "maximum": 187.0,
+          "values": [
+            187.0,
+            187.0,
+            187.0
+          ]
+        },
+        "block_size": {
+          "median": 64.0,
+          "minimum": 64.0,
+          "maximum": 64.0,
+          "values": [
+            64.0,
+            64.0,
+            64.0
+          ]
+        },
+        "occupancy_limit_register_blocks": {
+          "median": 4.0,
+          "minimum": 4.0,
+          "maximum": 4.0,
+          "values": [
+            4.0,
+            4.0,
+            4.0
+          ]
+        },
+        "active_warps_per_scheduler": {
+          "median": 1.933969,
+          "minimum": 1.93225,
+          "maximum": 1.935243,
+          "values": [
+            1.935243,
+            1.93225,
+            1.933969
+          ]
+        },
+        "eligible_warps_per_scheduler": {
+          "median": 0.102762,
+          "minimum": 0.102532,
+          "maximum": 0.102818,
+          "values": [
+            0.102762,
+            0.102818,
+            0.102532
+          ]
+        },
+        "long_scoreboard_cycles_per_issue": {
+          "median": 9.773923,
+          "minimum": 9.747228,
+          "maximum": 9.880141,
+          "values": [
+            9.747228,
+            9.773923,
+            9.880141
+          ]
+        },
+        "local_sectors": {
+          "median": 1245673390.0,
+          "minimum": 1245530334.0,
+          "maximum": 1245675201.0,
+          "values": [
+            1245673390.0,
+            1245530334.0,
+            1245675201.0
+          ]
+        },
+        "ready_fraction": {
+          "median": 0.05310030833337209,
+          "minimum": 0.0530163616893549,
+          "maximum": 0.05321154094967007,
+          "values": [
+            0.05310030833337209,
+            0.05321154094967007,
+            0.0530163616893549
+          ]
+        }
+      },
+      "candidate_vs_baseline_percent": {
+        "active_warps_per_scheduler": -0.4473250323396849,
+        "eligible_warps_per_scheduler": 16.59216229095284,
+        "long_scoreboard_cycles_per_issue": -34.986568175042486,
+        "local_sectors": -59.22011362535207,
+        "ready_fraction": 17.038952423018785
+      },
+      "candidate_samples": [
+        "scratch/secondary_context_abi_20260916/ncu_gen2_current_r1/metrics.csv",
+        "scratch/secondary_context_abi_20260916/ncu_gen2_current_r2/metrics.csv",
+        "scratch/secondary_context_abi_20260916/ncu_gen2_current_r3/metrics.csv"
+      ]
+    }
+  },
+  "validation": {
+    "schneider_v2_1": "pass",
+    "unified_em_sha256": "8c5d970b3b639bfca2f448730271bed4fc04721aba73100e2efbe09dffe44855",
+    "delta_moments_sha256": "c551bc52fa30ff7e3ea229c8b89792e8ecd2b0fb12f18fcad50d1c6f206bc7cc",
+    "patient_body_gamma": "pending",
+    "low_density_production_cut_accuracy": "pending"
+  },
+  "hashes": {
+    "worktree_transport_sycl_cpp": "0d45cd79a23a2e55375cd3e7d78f928144259c590f965f931c67be1640a6e776",
+    "worktree_cmakelists": "e50213b0a91026dbb5654cb8df04ef3805207071a52c5f8725a3150d085b4f50",
+    "candidate_binary_current": "e2cdff5ba61c9546563e8ace8a08feba15abb45a1a0a24ff9248f6f0bc313bef",
+    "fallback_binary_current": "cb4e86fd8f339591a857aa0452f288b6aa0b901da5e6da78646b4287d8afc314",
+    "config": "6d1896b34716e07eb92fc0dcbe0c6455f0148da95a47c7cd3aa704caa3ac8855",
+    "abi_probe_source": "46478cf53ffbf6dbafc113cabf369c5bab64966a37f6e741db1951f1fee181d4"
+  },
+  "evidence_roots": [
+    "scratch/secondary_context_abi_20260916/paired_current",
+    "scratch/secondary_context_abi_20260916/current_final_check",
+    "scratch/secondary_context_abi_20260916/ncu_early_current_r1",
+    "scratch/secondary_context_abi_20260916/ncu_middle_current_r1",
+    "scratch/secondary_context_abi_20260916/ncu_late_current_r1",
+    "scratch/secondary_context_abi_20260916/ncu_gen2_current_r1",
+    "scratch/secondary_context_abi_20260916/ncu_primary_current_r1",
+    "scratch/secondary_context_abi_20260916/current_fallback_check"
+  ],
+  "commit_port": {
+    "base_commit": "d4e579ab885fb01526fd0a099fc2ffc35072e509",
+    "purpose": "exclude unrelated default-off EM research changes already present in the working tree",
+    "source_sha256": "be3d714da4b9579422199255559518d1b8e2dafb02e675c93784a95c975aac35",
+    "cmakelists_sha256": "c4b96d6fa042021caf47279845362958237bcea59ced81af02f984ee74700316",
+    "candidate_binary_sha256": "a391332fe59802236f554d9f11f5e1de7582e92b95e79c90e1d8f1de7dc035d0",
+    "fallback_binary_sha256": "78fbb764755f34cb7e76fae8a2b94c45406bdc7a8653ac1af46c6a9e981437d9",
+    "candidate_check": {
+      "quality": "pass",
+      "steps": 1034976717,
+      "nuclear_interactions": 1344312,
+      "overflow": 0,
+      "elapsed_s": 20.968864,
+      "primary_s": 8.5868562,
+      "secondary_s": 9.0323769,
+      "energy_balance_error": 3.6833251e-06
+    },
+    "fallback_check": {
+      "quality": "pass",
+      "steps": 1034976717,
+      "nuclear_interactions": 1344312,
+      "overflow": 0,
+      "elapsed_s": 23.047568,
+      "primary_s": 8.6658428,
+      "secondary_s": 11.039693,
+      "energy_balance_error": 3.6833297e-06
+    },
+    "audit": [
+      0,
+      1036320939,
+      1429988519,
+      0,
+      0,
+      6897079514135703,
+      528848467657861,
+      0
+    ],
+    "note": "single hot confirmation only; formal performance claims use the five-pair campaign above"
+  }
+}

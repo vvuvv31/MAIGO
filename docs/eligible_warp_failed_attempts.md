@@ -302,3 +302,62 @@ long-scoreboard、local-memory事务、block共驻或以此为目的的状态/li
   包装入口的 `LDC.U8 → STL.U8` lambda捕获物化，下一候选应缩小实际包装层捕获对象。
 - 证据：`docs/transport_local_memory_attribution_20260916.md`，
   `benchmark/local_memory_attribution_20260916/analysis.json`。
+
+### 2026-09-16 `opaque_lambda_device_closure`：把编译器lambda对象复制到device
+
+- 基线：commit `d4e579a`后的隔离工作树，RTX 2080 Ti/sm_75；实际入口为
+  `__pf_kernel_wrapper<CarbonSecondaryTransportKernel<1>>`。
+- 目标：把约2 KB的lambda closure整体上传到device，wrapper只capture该指针并调用原
+  `operator()`，验证能否绕开constant参数到每线程local stack的逐字节物化。
+- 资源结果：wrapper从186 registers、1840 B stack、1984 B constant0变为182 registers、
+  232 B stack、约376 B constant0。active/eligible、long-scoreboard和动态local sectors未测，
+  因为正确性门槛先失败。
+- 正确性：次级粒子数量、统一EM整数审计和能量记账分叉，production quality失败；端到端
+  性能和3D剂量未进入正式测量。
+- 结论：完全回退。编译器生成的lambda closure类型不能作为跨host/device复制的稳定显式ABI。
+- 允许重试所需证据：只有后端明确保证该closure对象表示和device copy/call语义时才可重开；
+  当前替代方案是手写trivially-copyable POD context。
+- 证据：`docs/secondary_context_abi_20260916.md`，
+  `benchmark/secondary_context_abi_20260916/analysis.json`，
+  `scratch/secondary_context_abi_20260916/dump_candidate/resources.txt`。
+
+### 2026-09-16 `immutable_context_with_round_pointers`：续跑热指针放入只读context
+
+- 基线和入口同上一条。
+- 目标：用显式POD替代opaque lambda closure，但把 `resume_states`、`resume_ready`、
+  `active_order` 和 `keep` 一并保存在每generation上传一次的context中。
+- 资源结果：大closure物化消失，隔离wrapper约180 registers、232 B stack、376 B
+  constant0；active/eligible、long-scoreboard和动态local sectors未测。
+- 正确性：第0轮和第一次压紧完全匹配；第一次恢复后active count分叉，基线round 2为
+  5,841,290，候选为3,929,615，随后审计与能量记账失败。性能和3D剂量未进入正式测量。
+- 结论：完全回退。续跑和压紧指针必须留在per-round显式capture中，不能经一次上传的
+  immutable transport context访问。
+- 允许重试所需证据：仅当context在每次指针交换后重新上传并证明其成本低于显式capture时
+  才可重开；现有小closure实现已无此需要。
+- 证据：同上一条，以及 `scratch/secondary_context_abi_20260916/diag_pod/run.log`。
+
+### 2026-09-16 `secondary_context_pointer`：结构成功但未通过warp/SM推广门槛
+
+- 候选：`CARBON_SECONDARY_CONTEXT_POINTER=ON`；正式campaign源码工作树SHA256
+  `0d45cd79a23a2e55375cd3e7d78f928144259c590f965f931c67be1640a6e776`，干净 `d4e579a`
+  提交版源码SHA256 `be3d714da4b9579422199255559518d1b8e2dafb02e675c93784a95c975aac35`；
+  RTX 2080 Ti/sm_75。
+  实际入口为 `__pf_kernel_wrapper<CarbonSecondaryTransportKernel<1>>`。
+- 机制：immutable物理/几何/计分参数经一个device POD指针访问；续跑热指针和round标量使用
+  显式capture；closure具有trivially-copyable和不大于64 B的编译期契约。
+- 结构结果：wrapper constant0 1984→408 B、每线程stack 1840→264 B；但registers
+  186→187，32线程时寄存器限制仍为8 blocks/SM，没有跨过168门槛。
+- 三次matched NCU中，次级早段eligible 0.0862→0.1030、ready fraction 4.42%→5.31%、
+  long-scoreboard 10.29→5.73、local sectors降低39.90%；中段和第二代也提高eligible并降低
+  long-scoreboard/local sectors。晚段eligible提高20.08%，但自动block 64→128，active warp
+  1.296→0.995，local sectors增加186.02%。次级各阶段active warp均未提高。
+- 五次无profiler正式配对：wall中位改善8.04%，Elapsed改善8.64%，次级改善19.97%，原发
+  改善0.01%。五对Elapsed改善范围8.52%–9.07%。
+- 正确性：3,240,963 histories的续跑active count和8项整数审计一致，quality通过，
+  overflow=0，能量误差 `3.6833317e-06`；五次3D剂量均值差在五次基线全局波动包络内。
+- 结论：候选保留但默认关闭。它成功修复主要的closure local-memory与readiness问题，却未
+  满足最终组合要求的active warp/驻留提升；硬件门槛失败后未继续RT06423和20022516推广回归。
+- 允许推广所需证据：在此小closure入口上继续删除body live state，使实际wrapper达到不高于
+  168 registers，并在匹配阶段观察到active warp增加；然后重新扫描block并完成全部回归门槛。
+- 证据：`docs/secondary_context_abi_20260916.md`，
+  `benchmark/secondary_context_abi_20260916/analysis.json`。

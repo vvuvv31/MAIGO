@@ -37,6 +37,8 @@ def main():
     p.add_argument('--config', type=Path, required=True)
     p.add_argument('--timing-log', type=Path, required=True)
     p.add_argument('--output', type=Path, required=True)
+    p.add_argument('--data-dir', type=Path,
+                   help='Directory linked as ./data for runtime default files')
     p.add_argument('--repeats', type=int, default=3)
     p.add_argument('--ncu', default='/usr/local/cuda-12.6/bin/ncu')
     a = p.parse_args()
@@ -46,7 +48,8 @@ def main():
     with a.binary.open('rb') as f:
         digest = hashlib.file_digest(f, 'sha256').hexdigest()
     (out/'selection.json').write_text(json.dumps(dict(binary_sha256=digest, stages=selected,
-        timing_log=str(a.timing_log.resolve()), protocol='three independent application runs; kernel replay; clocks unchanged'), indent=2))
+        timing_log=str(a.timing_log.resolve()),
+        protocol=f'{a.repeats} independent application runs; kernel replay; clocks unchanged'), indent=2))
     env = dict(os.environ, ONEAPI_DEVICE_SELECTOR='cuda:*', CARBON_SECONDARY_TAIL_DIAG='1',
                LD_LIBRARY_PATH='/home/wuwei/sycl_workspace/llvm/build/install/lib:' + os.environ.get('LD_LIBRARY_PATH', ''))
     rows = []
@@ -56,10 +59,19 @@ def main():
             dest.mkdir()
             config = a.config.resolve()
             # All campaign inputs are frozen absolute paths. data supplies defaults.
-            (dest/'data').symlink_to(config.parent/'source/data', target_is_directory=True)
-            pattern = ('regex:.*transport_sycl_impl.*nd_item.*' if name.startswith('primary')
-                       else 'regex:.*CarbonSecondaryTransportKernel.*')
-            cmd = [a.ncu, '--kernel-name-base', 'demangled', '--kernel-name', pattern,
+            data_dir = (a.data_dir.resolve() if a.data_dir else config.parent/'source/data')
+            (dest/'data').symlink_to(data_dir, target_is_directory=True)
+            if name.startswith('primary'):
+                kernel_name_base = 'demangled'
+                pattern = 'regex:.*transport_sycl_impl.*nd_item.*'
+            else:
+                # The NVIDIA backend exposes the actual SYCL wrapper under this
+                # mangled typeinfo name. Matching the named device function can
+                # silently profile a different entry or no entry at all.
+                kernel_name_base = 'mangled'
+                pattern = ('regex:_ZTSN4sycl3_V16detail19__pf_kernel_wrapperIN6carbon'
+                           '30CarbonSecondaryTransportKernel.*')
+            cmd = [a.ncu, '--kernel-name-base', kernel_name_base, '--kernel-name', pattern,
                    '--launch-skip', str(identity['launch_skip']), '--launch-count', '1', '--kill', 'yes',
                    '--clock-control', 'none', '--export', 'report']
             for section in ('SpeedOfLight','Occupancy','SchedulerStats','WarpStateStats','LaunchStats',

@@ -106,6 +106,11 @@ target_compile_definitions(carbon_core PUBLIC
 option(CARBON_SECONDARY_STEP_PROFILE "Per-species secondary step profile (diagnostic only)" OFF)
 target_compile_definitions(carbon_core PUBLIC
     CARBON_SECONDARY_STEP_PROFILE=$<BOOL:${CARBON_SECONDARY_STEP_PROFILE}>)
+option(CARBON_SECONDARY_CONTEXT_POINTER
+       "Research: pass immutable secondary transport parameters through a device context pointer"
+       OFF)
+target_compile_definitions(carbon_core PUBLIC
+    CARBON_SECONDARY_CONTEXT_POINTER=$<BOOL:${CARBON_SECONDARY_CONTEXT_POINTER}>)
 
 set(CARBON_SECONDARY_SEGMENT_STEPS "16" CACHE STRING
     "Complete secondary iterations per continuation launch (8/16/32/64/128; production default 16)")
