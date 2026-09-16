@@ -1,0 +1,29 @@
+--- scratch/transport_concurrency_20260916/source/src/transport_sycl.cpp	2026-09-16 14:46:52.052330509 +0800
++++ scratch/resume_state_local_20260916/source/src/transport_sycl.cpp	2026-09-16 16:14:09.784593922 +0800
+@@ -5137,7 +5137,7 @@
+                         }
+                         }
+                         if(resumed){
+-                            const auto saved=resume_states[state_idx];
++                            const auto& saved=resume_states[state_idx];
+                             sec_terminal_recorded=saved.sec_terminal_recorded;
+                             unified_secondary_escaped_ct=saved.unified_secondary_escaped_ct;
+                             continuous_species_tally=saved.continuous_species_tally;
+@@ -6542,7 +6542,7 @@
+                             }
+                         }
+                         if(segment_paused){
+-                            SecondaryResumeState saved;
++                            auto& saved=resume_states[state_idx];
+                             saved.sec_terminal_recorded=sec_terminal_recorded;
+                             saved.unified_secondary_escaped_ct=unified_secondary_escaped_ct;
+                             saved.continuous_species_tally=continuous_species_tally;
+@@ -6567,7 +6567,7 @@
+                             saved.local_sec_steps=local_sec_steps;
+                             for(int j=0;j<6;++j)saved.he4_audit[j]=he4_audit[j];
+                             if constexpr(CARBON_SECONDARY_STEP_PROFILE)for(int j=0;j<60;++j)saved.sec_prof[j]=sec_prof[j];
+-                            resume_states[state_idx]=saved;resume_ready[state_idx]=1;keep[item_id[0]]=1;
++                            resume_ready[state_idx]=1;keep[item_id[0]]=1;
+                             return; // Suspend: no terminal scoring or audit flush.
+                         }
+ #if CARBON_EM_LOCAL_AUDIT

@@ -1,0 +1,336 @@
+{
+  "schema": "local_memory_attribution_v1",
+  "date": "2026-09-16",
+  "gpu": "NVIDIA GeForce RTX 2080 Ti",
+  "architecture": "sm_75",
+  "baseline": {
+    "campaign_binary_sha256": "1202cd92c2ae54f129a53e6207ade7018729ecb130848a70df7641575189dfca",
+    "rebuilt_binary_sha256": "1202cd92c2ae54f129a53e6207ade7018729ecb130848a70df7641575189dfca",
+    "source_transport_sha256": "d58c1791b55ad9e9fd6e4ee0097a5c305a9a7e17c8c291bb7d2f7622a74c210c",
+    "device_image_sha256": "cc3e311fef6a3c9e4c87f654a5aebf4caaeeca5d2fcf6404376a4f1850c10258",
+    "resources": {
+      "named_secondary": {
+        "registers_per_thread": 178,
+        "stack_bytes": 2080,
+        "constant0_bytes": 1976
+      },
+      "launched_wrapper": {
+        "registers_per_thread": 186,
+        "stack_bytes": 1840,
+        "constant0_bytes": 1984
+      }
+    },
+    "sass": {
+      "named_secondary": {
+        "instructions": 22536,
+        "LDL": 505,
+        "STL": 859
+      },
+      "launched_wrapper": {
+        "instructions": 25256,
+        "LDL": 122,
+        "STL": 136
+      }
+    }
+  },
+  "candidate": {
+    "id": "resume_fieldwise_reference",
+    "binary_sha256": "182ee286bd65f4b7d26bbdb7ee64a75ec7e49076b05476dad1f93faa81503c6c",
+    "source_transport_sha256": "de18b506713550ee1bd03853690d598959b9ef5f4a0b0157f02103b535642603",
+    "device_image_sha256": "c3766526b4fd66eeea0f0654061ac2c157a578ebce24bcae074f626af2352c24",
+    "patch": "resume_fieldwise.patch",
+    "resources": {
+      "named_secondary": {
+        "registers_per_thread": 178,
+        "stack_bytes": 2080,
+        "constant0_bytes": 1976
+      },
+      "launched_wrapper": {
+        "registers_per_thread": 186,
+        "stack_bytes": 1840,
+        "constant0_bytes": 1984
+      }
+    },
+    "sass": {
+      "named_secondary": {
+        "instructions": 22672,
+        "LDL": 506,
+        "STL": 858
+      },
+      "launched_wrapper": {
+        "instructions": 25256,
+        "LDL": 122,
+        "STL": 136
+      }
+    },
+    "timing": "not measured: stopped at structural gate",
+    "ncu": "not measured: resources and static local instructions did not improve",
+    "correctness": "not run: no code-generation benefit"
+  },
+  "ready_fraction": {
+    "primary_steady": {
+      "active_warps_per_scheduler": 1.97569,
+      "eligible_warps_per_scheduler": 0.097029,
+      "ready_fraction": 0.049111449670747945
+    },
+    "secondary_early": {
+      "active_warps_per_scheduler": 1.949713,
+      "eligible_warps_per_scheduler": 0.086167,
+      "ready_fraction": 0.0441947096829123
+    },
+    "secondary_middle": {
+      "active_warps_per_scheduler": 1.993657,
+      "eligible_warps_per_scheduler": 0.08534,
+      "ready_fraction": 0.04280575846296529
+    },
+    "secondary_late": {
+      "active_warps_per_scheduler": 1.295672,
+      "eligible_warps_per_scheduler": 0.067755,
+      "ready_fraction": 0.05229332732358189
+    },
+    "secondary_generation2": {
+      "active_warps_per_scheduler": 1.942659,
+      "eligible_warps_per_scheduler": 0.088138,
+      "ready_fraction": 0.04536977410858004
+    }
+  },
+  "source_counter_replay": {
+    "primary_steady": {
+      "static_local_instructions": 1396,
+      "source_attributed_local_sectors": 64540415.0,
+      "stl_u8_sectors": 6584759.0,
+      "stl_u8_fraction": 0.10202535883910879,
+      "store_fraction": 0.6799865944462861,
+      "load_fraction": 0.3200134055537139,
+      "local_long_sb_samples": 43.0,
+      "top": [
+        {
+          "address": "0x74f7afa6f930",
+          "sass": "STL.64 [R1+0xa78], R158",
+          "sectors": 3935610.0,
+          "inst": 504828.0,
+          "long_sb": 0.0
+        },
+        {
+          "address": "0x74f7afa6f950",
+          "sass": "STL.64 [R1+0xa80], R156",
+          "sectors": 3935610.0,
+          "inst": 504828.0,
+          "long_sb": 0.0
+        },
+        {
+          "address": "0x74f7afa6f960",
+          "sass": "STL.64 [R1+0xa88], R152",
+          "sectors": 3935610.0,
+          "inst": 504828.0,
+          "long_sb": 0.0
+        },
+        {
+          "address": "0x74f7afa8fda0",
+          "sass": "LDL.64 R22, [R1+0xa68]",
+          "sectors": 3935610.0,
+          "inst": 504828.0,
+          "long_sb": 0.0
+        },
+        {
+          "address": "0x74f7afa8fdb0",
+          "sass": "LDL.64 R16, [R1+0xa60]",
+          "sectors": 3935610.0,
+          "inst": 504828.0,
+          "long_sb": 0.0
+        }
+      ]
+    },
+    "secondary_early": {
+      "static_local_instructions": 236,
+      "source_attributed_local_sectors": 2374841847.0,
+      "stl_u8_sectors": 1911504091.0,
+      "stl_u8_fraction": 0.8048974265021868,
+      "store_fraction": 0.8982111784389489,
+      "load_fraction": 0.1017888215610511,
+      "local_long_sb_samples": 10013.0,
+      "top": [
+        {
+          "address": "0x784c45b463c0",
+          "sass": "LDL.64 R44, [R1+0x6e8]",
+          "sectors": 32355550.0,
+          "inst": 4172283.0,
+          "long_sb": 0.0
+        },
+        {
+          "address": "0x784c45b463d0",
+          "sass": "LDL.64 R12, [R1+0x6f0]",
+          "sectors": 32355550.0,
+          "inst": 4172283.0,
+          "long_sb": 0.0
+        },
+        {
+          "address": "0x784c45b44ce0",
+          "sass": "STL.64 [R1+0x668], R12",
+          "sectors": 31981558.0,
+          "inst": 4137500.0,
+          "long_sb": 0.0
+        },
+        {
+          "address": "0x784c45b44d00",
+          "sass": "STL.64 [R1+0x660], R44",
+          "sectors": 31981558.0,
+          "inst": 4137500.0,
+          "long_sb": 0.0
+        },
+        {
+          "address": "0x784c45b44d50",
+          "sass": "STL.64 [R1+0x670], R52",
+          "sectors": 31981558.0,
+          "inst": 4137500.0,
+          "long_sb": 0.0
+        }
+      ]
+    },
+    "secondary_middle": {
+      "static_local_instructions": 236,
+      "source_attributed_local_sectors": 460974106.0,
+      "stl_u8_sectors": 360976143.0,
+      "stl_u8_fraction": 0.7830724943148976,
+      "store_fraction": 0.886910504686786,
+      "load_fraction": 0.11308949531321397,
+      "local_long_sb_samples": 12100.0,
+      "top": [
+        {
+          "address": "0x758ac5b463c0",
+          "sass": "LDL.64 R44, [R1+0x6e8]",
+          "sectors": 7041546.0,
+          "inst": 880406.0,
+          "long_sb": 0.0
+        },
+        {
+          "address": "0x758ac5b463d0",
+          "sass": "LDL.64 R12, [R1+0x6f0]",
+          "sectors": 7041546.0,
+          "inst": 880406.0,
+          "long_sb": 0.0
+        },
+        {
+          "address": "0x758ac5b44ce0",
+          "sass": "STL.64 [R1+0x668], R12",
+          "sectors": 7041502.0,
+          "inst": 880406.0,
+          "long_sb": 0.0
+        },
+        {
+          "address": "0x758ac5b44d00",
+          "sass": "STL.64 [R1+0x660], R44",
+          "sectors": 7041502.0,
+          "inst": 880406.0,
+          "long_sb": 0.0
+        },
+        {
+          "address": "0x758ac5b44d50",
+          "sass": "STL.64 [R1+0x670], R52",
+          "sectors": 7041502.0,
+          "inst": 880406.0,
+          "long_sb": 0.0
+        }
+      ]
+    },
+    "secondary_late": {
+      "static_local_instructions": 236,
+      "source_attributed_local_sectors": 2759840.0,
+      "stl_u8_sectors": 2164752.0,
+      "stl_u8_fraction": 0.7843759058496145,
+      "store_fraction": 0.8874536204997391,
+      "load_fraction": 0.11254637950026089,
+      "local_long_sb_samples": 1124.0,
+      "top": [
+        {
+          "address": "0x716da3b44ce0",
+          "sass": "STL.64 [R1+0x668], R12",
+          "sectors": 42144.0,
+          "inst": 5280.0,
+          "long_sb": 0.0
+        },
+        {
+          "address": "0x716da3b44d00",
+          "sass": "STL.64 [R1+0x660], R44",
+          "sectors": 42144.0,
+          "inst": 5280.0,
+          "long_sb": 0.0
+        },
+        {
+          "address": "0x716da3b44d50",
+          "sass": "STL.64 [R1+0x670], R52",
+          "sectors": 42144.0,
+          "inst": 5280.0,
+          "long_sb": 0.0
+        },
+        {
+          "address": "0x716da3b44dd0",
+          "sass": "STL.64 [R1+0x698], R154",
+          "sectors": 42144.0,
+          "inst": 5280.0,
+          "long_sb": 0.0
+        },
+        {
+          "address": "0x716da3b463c0",
+          "sass": "LDL.64 R44, [R1+0x6e8]",
+          "sectors": 42144.0,
+          "inst": 5280.0,
+          "long_sb": 0.0
+        }
+      ]
+    },
+    "secondary_generation2": {
+      "static_local_instructions": 236,
+      "source_attributed_local_sectors": 933841055.0,
+      "stl_u8_sectors": 787574016.0,
+      "stl_u8_fraction": 0.8433705198364833,
+      "store_fraction": 0.918854030250362,
+      "load_fraction": 0.08114596974963796,
+      "local_long_sb_samples": 10347.0,
+      "top": [
+        {
+          "address": "0x7bfecfb0e870",
+          "sass": "STL.U8 [R29+0x8], R5",
+          "sectors": 13011840.0,
+          "inst": 3252960.0,
+          "long_sb": 0.0
+        },
+        {
+          "address": "0x7bfecfb0e890",
+          "sass": "STL.U8 [R29+0x9], R6",
+          "sectors": 13011840.0,
+          "inst": 3252960.0,
+          "long_sb": 0.0
+        },
+        {
+          "address": "0x7bfecfb0e8b0",
+          "sass": "STL.U8 [R29+0xa], R7",
+          "sectors": 13011840.0,
+          "inst": 3252960.0,
+          "long_sb": 0.0
+        },
+        {
+          "address": "0x7bfecfb0e8d0",
+          "sass": "STL.U8 [R29+0xb], R8",
+          "sectors": 13011840.0,
+          "inst": 3252960.0,
+          "long_sb": 0.0
+        },
+        {
+          "address": "0x7bfecfb0e8f0",
+          "sass": "STL.U8 [R29+0xc], R9",
+          "sectors": 13011840.0,
+          "inst": 3252960.0,
+          "long_sb": 0.0
+        }
+      ]
+    }
+  },
+  "interpretation": {
+    "resume_aggregate_hypothesis": "rejected: compiler already scalarized/eliminated the outer SecondaryResumeState temporary",
+    "secondary_local_traffic": "important and predominantly associated with wrapper-entry LDC.U8 to STL.U8 capture materialization in SourceCounters replay",
+    "primary_local_traffic": "important but not dominated by the same U8 wrapper-copy signature",
+    "caveat": "SourceCounters replay totals are not interchangeable with raw MemoryWorkloadAnalysis totals; stall samples identify the stalled consumer and do not directly assign full latency to a module."
+  },
+  "decision": "candidate rejected at structural gate; production source unchanged"
+}

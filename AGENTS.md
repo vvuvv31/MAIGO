@@ -105,6 +105,20 @@ When modifying source files:
 - After editing, inspect `git diff --check` and `git diff` before proceeding.
 - Never spend more than two attempts fixing patch syntax.
 
+## Eligible warp / warp/SM failed-attempt ledger
+
+- Any experiment intended to improve registers/thread, theoretical or actual
+  warps/SM, active/eligible warps, occupancy, long-scoreboard, local-memory
+  traffic, or block co-residency that fails its promotion gate must be appended
+  to `docs/eligible_warp_failed_attempts.md` before the task is considered
+  complete or committed.
+- Record the actual launched kernel, baseline/candidate resource and timing
+  measurements, correctness gates, evidence paths, final disposition, and the
+  new evidence required before retrying. Write unmeasured fields as unmeasured;
+  never infer spills from stack size or module time from a stall percentage.
+- Keep the ledger append-only. Correct an earlier entry with a dated
+  superseding note instead of silently deleting the failed attempt.
+
 
 ## Condensed delta production integration (user-authorized 2026-09-15)
 
