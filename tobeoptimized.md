@@ -163,14 +163,38 @@ image 与本地 sm_75 相同（寄存器/block 一致），每 SM 行为可参�
 
 ### 5.1 抬高驻留 warp（最高优先级，但门槛明确）
 
-- 原发 128 线程：现在 172（2080Ti）/182（A6000）寄存器，2 block = 8 warp；
-  需 **≤170 寄存器**才能到 3 block = 12 warp。
-- 次级 32 线程：现在 186/180 寄存器，8 block = 8 warp；
-  需 **≤170 寄存器**才能到 10–12 warp。
+**门槛修正为每线程 ≤168 寄存器**（原稿的 ≤170 是忽略了分配粒度与子分区的粗算）。
+Turing/Ampere 每个 SM 四个子分区，各 16 384 个寄存器；寄存器按 warp 粒度 256 个分配，
+等价于每线程按 8 个向上取整：`R_alloc = 8*ceil(R/8)`，于是
+
+```
+W_SM = 4 * floor(16384 / (32 * R_alloc))
+```
+
+关键断层在 168：
+
+```
+R=170 → R_alloc=176 → 176*32*3 = 16 896 > 16 384 → 每子分区仍只能 2 warp
+R=168 → R_alloc=168 → 168*32*3 = 16 128 ≤ 16 384 → 每子分区可放 3 warp
+```
+
+代入当前值（不足 168 的差额）：
+
+| GPU / kernel | 当前寄存器 | 分配后 | 寄存器限制的 warp/SM | 到 ≤168 还需减少 |
+|---|---:|---:|---:|---:|
+| 2080Ti 原发 | 172 | 176 | 8 | 4 |
+| 2080Ti 次级 | 186 | 192 | 8 | 18 |
+| A6000 原发 | 182 | 184 | 8 | 14 |
+| A6000 次级 | 180 | 184 | 8 | 12 |
+
+达到 ≤168 后，理论驻留上限为：原发 3×128 线程 = **12 warp/SM**，次级 12×32 线程 =
+**12 warp/SM**。这是上限，实际均值仍受启动/结束/负载不均影响。
+
 - 单纯设置寄存器上限会把值挤到 local memory，反而增加当前最怕的访存等待，必须先做
   「消除不必要状态/缩短存活区间」的实验，再看门槛。He-4 裁剪已试并否决（198 寄存器）。
 - 下一步应从实际 SASS/资源报告出发，定位仍占用寄存器但可缩短存活区间的量，
   而不是机械降低上限。
+- 即使到 12 warp，也不会自动解决 eligible 极低（见下），必须同时减少关键加载依赖。
 
 ### 5.2 主机端 setup / 包加载（A6000/Titan 的净值瓶颈）
 
@@ -198,7 +222,77 @@ image 与本地 sm_75 相同（寄存器/block 一致），每 SM 行为可参�
 
 ---
 
-## 6. 复现位置
+## 6. fix.md 第二轮实验记录（2026-09-16 续）
+
+第一目标是让 2080Ti 原发 172→≤168。本轮先做代价最小的两个源码实验，再做加载归因。
+
+### 6.1 实验 A：delta 确定性参数提前合成 —— 否决
+
+把 `unified_em_explicit_loss()` 中 `delta0/delta_slope/delta_mean/delta_variance` 的计算
+挪到 restricted fluctuation 抽样之前（有效性检查与 RNG 调用顺序不变）。
+
+结果（sm_75 反汇编，`transport_sycl_impl<1>` 的 `nd_item` lambda）：
+
+| 内核 | 改前 | 改后 |
+|---|---:|---:|
+| 原发 `transport_sycl_impl<1>` | 172 | 172 |
+| 次级 wrapper | 186 | 186 |
+
+寄存器无变化（编译器已自行重排），按「SASS 未变即结束」否决并回退。
+
+### 6.2 实验 B：masked rate total-only 接口 —— 否决
+
+新增 `schneider_masked_total_rate_device` / `secondary_masked_total_rate_device` 及
+`primary_total`/`secondary_total`，只在纯总量查询点（原发 hazard、原发 miss 日志、次级
+hazard、He-4 诊断）使用，保留逐通道能区屏蔽、插值与 `1e-12` 阈值。
+
+结果：原发仍 172、次级 wrapper 仍 186 —— 纯总量点上的 13 个 partials 已被编译器 DCE。
+按同口径否决并回退。
+
+### 6.3 实验 C：纯 rate 查询与 EM prepare 错开 —— 未实施
+
+`mass_rate`/`el_rates` 的输入（`section_id`、`cur_e_u`、密度）在 `prepare()` 之前就可用，
+理论上可前移；但它嵌在 `if(enable_inelastic…)` 内，且相邻的 hadronic cache 更新、
+光学深度消耗、弹性分支、RNG 都有副作用，必须原序保留。鉴于 A/B 已显示编译器会自行
+调度这些标量的存活区间，手动大范围重排的风险/收益比不佳，本轮不实施，留待 A/B 类
+小改动确实产生寄存器收益后再评估。
+
+### 6.4 实验 D：加载归因 —— 本地内存是 long-scoreboard 的重要来源
+
+2080Ti，ncu 2024.3.2，代表性单次启动：
+
+| 指标 | 原发 | 次级 |
+|---|---:|---:|
+| global load sectors | 1 400 166 271 | 2 146 120 782 |
+| **local load sectors** | **899 040 026** | **1 082 838 732** |
+| local store sectors | 147 794 098 | 430 968 867 |
+| long scoreboard（占 warp-active） | 43.31% | 57.06% |
+| short scoreboard | 0.84% | 0.84% |
+| warps/SM | 7.87 | 7.90 |
+| eligible warp/scheduler | 0.09 | 0.08 |
+
+local load 占（global+local）load sector 的比例：原发约 **39%**、次级约 **33%**。
+也就是说 long-scoreboard 有相当一部分来自线程私有 local memory，而不是 EM 表。
+
+SASS 静态统计（sm_75，`cuobjdump -sass`）：
+
+| 内核 | LDL | STL | stack frame |
+|---|---:|---:|---:|
+| 原发 `transport_sycl_impl<1>` | 88 | 1326 | 2816 B |
+| 原发 `transport_sycl_impl<0>` | 1985 | 4217 | 6544 B |
+| 次级 `CarbonSecondaryTransportKernel<1>` | 505 | 859 | 2080 B |
+
+原发 STL 遍布整个函数体（代码地址 0xd0–0x625e0），local 偏移覆盖 0x8–0xafc，
+即存在贯穿始终、约 2.8 KB 的线程私有帧；次级约 2.0 KB。
+
+**结论：** 当前 long-scoreboard 主要由「EM 表 + 核反应率 + 约 2–2.8 KB 线程私有 local
+帧」共同构成，单纯继续改查表顺序不足以提高 eligible。下一轮的定位目标是这份本地帧的
+来源（spill 还是编译器放置的聚合/动态索引对象），并用 ncu 的 local/global sector 与
+实际耗时验证；只有确认收益后才考虑 §5.1 的驻留门槛。
+
+---
+
+## 7. 复现位置
 
 - 本轮实验产物：`scratch/eligible_warp_20260916/`（`ab_final/`、`ab_shards*/`、
   `combo/`、`failtest/`、`ncu_*`）。
