@@ -141,6 +141,29 @@ if(CARBON_SECONDARY_PRODUCTION_SPECIALIZE AND NOT CARBON_SECONDARY_CONTEXT_POINT
 endif()
 target_compile_definitions(carbon_core PUBLIC
     CARBON_SECONDARY_PRODUCTION_SPECIALIZE=$<BOOL:${CARBON_SECONDARY_PRODUCTION_SPECIALIZE}>)
+option(CARBON_SECONDARY_KNOWN_SPECIES_PROBE
+       "Compile-only probe: remove generic-recoil transport from the specialized secondary kernel"
+       OFF)
+if(CARBON_SECONDARY_KNOWN_SPECIES_PROBE AND NOT CARBON_SECONDARY_PRODUCTION_SPECIALIZE)
+    message(FATAL_ERROR
+        "CARBON_SECONDARY_KNOWN_SPECIES_PROBE requires CARBON_SECONDARY_PRODUCTION_SPECIALIZE")
+endif()
+target_compile_definitions(carbon_core PUBLIC
+    CARBON_SECONDARY_KNOWN_SPECIES_PROBE=$<BOOL:${CARBON_SECONDARY_KNOWN_SPECIES_PROBE}>)
+option(CARBON_SECONDARY_NON_HE4_PROBE
+       "Compile-only probe: remove He-4 hazard auditing from the known-species kernel"
+       OFF)
+if(CARBON_SECONDARY_NON_HE4_PROBE AND NOT CARBON_SECONDARY_KNOWN_SPECIES_PROBE)
+    message(FATAL_ERROR
+        "CARBON_SECONDARY_NON_HE4_PROBE requires CARBON_SECONDARY_KNOWN_SPECIES_PROBE")
+endif()
+target_compile_definitions(carbon_core PUBLIC
+    CARBON_SECONDARY_NON_HE4_PROBE=$<BOOL:${CARBON_SECONDARY_NON_HE4_PROBE}>)
+option(CARBON_PRIMARY_PRODUCTION_SPECIALIZE
+       "Research: host-dispatch a primary kernel specialized for the validated CT production path"
+       OFF)
+target_compile_definitions(carbon_core PUBLIC
+    CARBON_PRIMARY_PRODUCTION_SPECIALIZE=$<BOOL:${CARBON_PRIMARY_PRODUCTION_SPECIALIZE}>)
 
 set(CARBON_SECONDARY_SEGMENT_STEPS "16" CACHE STRING
     "Complete secondary iterations per continuation launch (8/16/32/64/128; production default 16)")

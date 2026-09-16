@@ -440,3 +440,33 @@ long-scoreboard、local-memory事务、block共驻或以此为目的的状态/li
   单项端到端收益不足5%，且A6000、跨病例组合回归和重复硬件采样尚未完成。
 - 证据：`docs/secondary_production_specialization_20260916.md`，
   `benchmark/secondary_production_specialization_20260916/analysis.json`。
+
+### 2026-09-16 `primary_production_specialize`：资源与吞吐成功，严格剂量包络失败
+
+- 目标：将固定统一EM + Schneider CT生产配置在host-dispatch层特化，删除通用原发kernel中
+  不可达的诊断、all-elastic、额外voxel clamp和旧物理路径。
+- 资源结果：实际非offset入口从170降到162 registers/thread，stack从2864降到2848 B，跨过
+  sm_75的168寄存器驻留档位。
+- 十次交错配对：wall中位改善5.20%，Elapsed改善5.70%，原发kernel改善13.83%；十对Elapsed
+  改善范围5.00%–6.65%。次级中位变化+0.48%，处于波动范围。
+- 输运审计：每次3,240,963 histories、1,034,976,717 steps、1,344,312次核反应；八项统一EM
+  整数审计一致、quality通过、overflow=0。
+- 失败门槛：候选最大3D dose差为峰值`0.00005684%`，十次控制重复包络为`0.00004618%`；扩大
+  到十次后仍未覆盖。差异量级约一个FP32原子ULP，但既定严格包络不允许据此豁免。
+- 结论：默认关闭，不进入组合、不做跨病例推广。若将来改变确定性dose归并方法，可在新基线
+  重新测量；不得沿用本轮性能结果直接推广。
+- 证据：`docs/transport_occupancy_followup_20260916.md`，
+  `benchmark/transport_occupancy_followup_20260916/analysis.json`。
+
+### 2026-09-16 `secondary_known_species/non_he4`：compile-only上界，尚无安全调度
+
+- known-species删除generic recoil后，实际164-register wrapper降到155；再删除non-He4路径中的
+  `he4_audit[6]`、三点rate查询和续跑保存/恢复后降到145。stack均为352 B。
+- 145达到继续研究路径级拆分的结构门槛，但仍未到约128的下一明显驻留档。
+- 当前species×energy grouping只生成一个全局`secondary_order`；continuation state和compaction
+  覆盖整个generation，没有按bucket子范围隔离。直接启用probe会让He-4审计语义缺失，也不能
+  安全容纳未来all-elastic generic recoil配置。
+- 结论：两个probe默认关闭，不进行正式计时、不进入组合。只有完成known non-He4、He-4和
+  unknown/recoil的独立bucket范围调度，并逐粒子验证RNG/续跑/审计后，才可转成运行候选。
+- 证据：`docs/transport_occupancy_followup_20260916.md`，
+  `benchmark/transport_occupancy_followup_20260916/analysis.json`。

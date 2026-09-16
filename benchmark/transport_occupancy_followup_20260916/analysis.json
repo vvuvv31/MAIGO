@@ -1,0 +1,260 @@
+{
+  "schema": "carbon.transport_occupancy_followup.analysis.v1",
+  "date": "2026-09-16",
+  "gpu": "NVIDIA GeForce RTX 2080 Ti",
+  "architecture": "sm_75",
+  "base_commit": "ebdb6bc807fe9afc8c9ac79f3cd2f5ebb319bd4f",
+  "hashes": {
+    "config_sha256": "6d1896b34716e07eb92fc0dcbe0c6455f0148da95a47c7cd3aa704caa3ac8855",
+    "cmake_sha256": "740a4b4602f37c1ac3b37d2aa6f6ac3753578bdb0c83df52aa5d3ac13fe0d32f",
+    "transport_sycl_sha256": "6cba19b4bb1083dde1a2a1bfc51bb0c6baa02d6bddb7759374f8e3c1aae29c1e",
+    "known_species_probe_binary_sha256": "f4ead83d08af51cd2e0a8649a5a8759e83f5ef3d9a5cf98d1ed9f1b4f1220429",
+    "non_he4_probe_binary_sha256": "9af587ffefd966c6c192b22474c58f0f9fa82d80a4c65334ffdf7f865e822c26",
+    "formal_timing_control_binary_sha256": "44ea75af8cc1dee4285650e72c096581ae7be9b1c23b4f540d76d78fcbe77387",
+    "formal_timing_candidate_binary_sha256": "d0d18ddf5a67e0eadd9832af9f1a904950170ce178d5638cfcb5ac3b03900c9c",
+    "final_verify_control_binary_sha256": "7397e982bbc541460103d5030def84094b0911c17e333c1814be5222428d71e8",
+    "final_verify_candidate_binary_sha256": "61cda110901e07a4ff85062c1856179d3356ed5a073119aeae8ed6b697df37c9"
+  },
+  "primary_production_specialization": {
+    "default": false,
+    "decision": "failed strict 3D dose repeat-envelope gate; do not promote",
+    "resources": {
+      "control": {
+        "registers_per_thread": 170,
+        "stack_bytes_per_thread": 2864
+      },
+      "candidate": {
+        "registers_per_thread": 162,
+        "stack_bytes_per_thread": 2848
+      }
+    },
+    "protocol": {
+      "warmups": 2,
+      "formal_pairs": 10,
+      "order": "alternating forward/reverse",
+      "profiler_attached_to_timing": false,
+      "improvement_definition": "control/candidate - 1"
+    },
+    "performance_improvement_percent": {
+      "wall_s": {
+        "values": [
+          4.556020455602039,
+          5.306495882891116,
+          4.643678160919551,
+          5.4263565891472965,
+          5.084745762711873,
+          5.534531693472089,
+          5.068493150684938,
+          5.794392523364489,
+          5.018248175182483,
+          5.904059040590415
+        ],
+        "median": 5.195620822801494,
+        "minimum": 4.556020455602039,
+        "maximum": 5.904059040590415,
+        "mean": 5.233702143456629
+      },
+      "elapsed_s": {
+        "values": [
+          5.003107025304998,
+          5.822682782350452,
+          5.120158981721823,
+          5.919121499388624,
+          5.525529829884079,
+          6.650592579804959,
+          5.572959621443996,
+          6.293357390443077,
+          5.426251874866828,
+          6.3990449729004695
+        ],
+        "median": 5.697821201897224,
+        "minimum": 5.003107025304998,
+        "maximum": 6.650592579804959,
+        "mean": 5.773280655810931
+      },
+      "primary_s": {
+        "values": [
+          13.607499947313872,
+          14.612863475888327,
+          13.77052273111341,
+          14.676908420604406,
+          13.421221906456315,
+          15.068637903022154,
+          13.784575128971799,
+          13.87088125887872,
+          13.581488634356532,
+          14.496371569564047
+        ],
+        "median": 13.82772819392526,
+        "minimum": 13.421221906456315,
+        "maximum": 15.068637903022154,
+        "mean": 14.089097097616959
+      },
+      "secondary_s": {
+        "values": [
+          -0.8470063069069389,
+          0.3976415688323742,
+          -0.4974475644839771,
+          0.5081200595542068,
+          0.5775465307826133,
+          1.1967322883460918,
+          0.45349117250701454,
+          1.6854511716601461,
+          0.20994138281242858,
+          1.4341011546503468
+        ],
+        "median": 0.48080561603061067,
+        "minimum": -0.8470063069069389,
+        "maximum": 1.6854511716601461,
+        "mean": 0.5118571457754306
+      }
+    },
+    "correctness": {
+      "histories": 3240963,
+      "steps": 1034976717,
+      "nuclear_interactions": 1344312,
+      "audit_identical_all_runs": true,
+      "quality_pass_all_runs": true,
+      "overflow_all_runs": true,
+      "baseline_repeat_envelope_abs": 6.05359673500061e-09,
+      "baseline_repeat_envelope_pct_peak": 4.6182419134584095e-05,
+      "candidate_max_dose_diff_abs": 7.450580596923828e-09,
+      "candidate_max_dose_diff_pct_peak": 5.6839900473334274e-05,
+      "dose_global_envelope_pass": false
+    },
+    "final_source_hot_check": {
+      "control": {
+        "quality": "pass",
+        "histories": 3240963,
+        "steps": 1034976717,
+        "nuclear_interactions": 1344312,
+        "elapsed_s": 20.138978,
+        "primary_s": 8.5869809,
+        "secondary_s": 8.2199023,
+        "registers_per_thread": 170,
+        "stack_bytes_per_thread": 2864
+      },
+      "candidate": {
+        "quality": "pass",
+        "histories": 3240963,
+        "steps": 1034976717,
+        "nuclear_interactions": 1344312,
+        "elapsed_s": 19.331151,
+        "primary_s": 7.610415,
+        "secondary_s": 8.3340713,
+        "registers_per_thread": 162,
+        "stack_bytes_per_thread": 2848
+      },
+      "audit_identical": true,
+      "overflow_zero": true
+    }
+  },
+  "secondary_compile_only_upper_bounds": {
+    "production_control": {
+      "registers_per_thread": 164,
+      "stack_bytes_per_thread": 352
+    },
+    "known_species_only": {
+      "registers_per_thread": 155,
+      "stack_bytes_per_thread": 352,
+      "production_safe_dispatch_implemented": false
+    },
+    "known_species_non_he4": {
+      "registers_per_thread": 145,
+      "stack_bytes_per_thread": 352,
+      "production_safe_dispatch_implemented": false
+    },
+    "decision": "retain default off; bucket-scoped continuation and compaction are required before runtime validation"
+  },
+  "secondary_164_attribution": {
+    "protocol": "one sample per stage; kernel replay; cache-control=all; actual rounded wrapper; clocks unchanged",
+    "stages": {
+      "secondary_early": {
+        "identity": {
+          "launch_skip": 0,
+          "begin": 0,
+          "round": 0,
+          "active": 9337479,
+          "tail": "segment"
+        },
+        "block_size": "(32, 1, 1)",
+        "registers_per_thread": 164,
+        "active_warps_per_sm": 11.574388,
+        "eligible_warps_per_scheduler": 0.121833,
+        "ready_fraction": 0.04210434279548948,
+        "long_scoreboard_per_issue_active": 9.872142,
+        "global_sectors": 16352453582,
+        "local_sectors": 6920277539,
+        "local_fraction_global_plus_local": 0.2973556263345273,
+        "l1_hit_pct": 67.618649,
+        "l2_hit_pct": 93.916062
+      },
+      "secondary_middle": {
+        "identity": {
+          "launch_skip": 17,
+          "begin": 0,
+          "round": 17,
+          "active": 1760852,
+          "tail": "segment"
+        },
+        "block_size": "(64, 1, 1)",
+        "registers_per_thread": 164,
+        "active_warps_per_sm": 10.737444,
+        "eligible_warps_per_scheduler": 0.104985,
+        "ready_fraction": 0.03910986637043229,
+        "long_scoreboard_per_issue_active": 14.623169,
+        "global_sectors": 3693152784,
+        "local_sectors": 1633093429,
+        "local_fraction_global_plus_local": 0.3066124553187267,
+        "l1_hit_pct": 65.819828,
+        "l2_hit_pct": 87.8761
+      },
+      "secondary_late": {
+        "identity": {
+          "launch_skip": 34,
+          "begin": 0,
+          "round": 34,
+          "active": 10533,
+          "tail": "segment"
+        },
+        "block_size": "(128, 1, 1)",
+        "registers_per_thread": 164,
+        "active_warps_per_sm": 4.005696,
+        "eligible_warps_per_scheduler": 0.079619,
+        "ready_fraction": 0.07950578376392016,
+        "long_scoreboard_per_issue_active": 4.047893,
+        "global_sectors": 54207092,
+        "local_sectors": 45098544,
+        "local_fraction_global_plus_local": 0.45413881645146503,
+        "l1_hit_pct": 79.157176,
+        "l2_hit_pct": 96.607977
+      },
+      "secondary_generation2": {
+        "identity": {
+          "launch_skip": 36,
+          "begin": 9337479,
+          "round": 0,
+          "active": 3855348,
+          "tail": "segment"
+        },
+        "block_size": "(64, 1, 1)",
+        "registers_per_thread": 164,
+        "active_warps_per_sm": 10.678168,
+        "eligible_warps_per_scheduler": 0.109034,
+        "ready_fraction": 0.04084371026940202,
+        "long_scoreboard_per_issue_active": 13.658616,
+        "global_sectors": 3269952070,
+        "local_sectors": 1409163236,
+        "local_fraction_global_plus_local": 0.30116018602769606,
+        "l1_hit_pct": 68.837831,
+        "l2_hit_pct": 91.953646
+      }
+    },
+    "sass_findings": {
+      "largest_stride_52_consumers": "dependent comparisons immediately after LD.E.SYS; layout matches UnifiedEmNode",
+      "largest_stride_24_consumers": "dependent comparisons immediately after LD.E.SYS; layout matches EmCubicSegmentCandidate<float>",
+      "remaining_local_example": "LDL [R1+0x88] followed by PRMT and a dependent table lookup",
+      "interpretation": "closure materialization is no longer the dominant long-scoreboard source; exact EM lookup dependencies lead early samples"
+    }
+  }
+}

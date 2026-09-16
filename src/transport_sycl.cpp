@@ -22,6 +22,15 @@
 #ifndef CARBON_SECONDARY_PRODUCTION_SPECIALIZE
 #define CARBON_SECONDARY_PRODUCTION_SPECIALIZE 0
 #endif
+#ifndef CARBON_PRIMARY_PRODUCTION_SPECIALIZE
+#define CARBON_PRIMARY_PRODUCTION_SPECIALIZE 0
+#endif
+#ifndef CARBON_SECONDARY_KNOWN_SPECIES_PROBE
+#define CARBON_SECONDARY_KNOWN_SPECIES_PROBE 0
+#endif
+#ifndef CARBON_SECONDARY_NON_HE4_PROBE
+#define CARBON_SECONDARY_NON_HE4_PROBE 0
+#endif
 #if CARBON_SECONDARY_CONTEXT_POINTER
 #define CARBON_SECONDARY_CONTEXT_FIELD(name) secondary_transport_ctx->name
 #else
@@ -87,6 +96,8 @@
 #include <vector>
 
 namespace carbon {
+template<int EmMode, bool ProductionPath = false>
+class CarbonPrimaryTransportKernel;
 template<int EmMode, bool ProductionPath = false>
 class CarbonSecondaryTransportKernel;
 
@@ -2661,6 +2672,16 @@ template<int EmMode>
     runtime_setup.finish();
     RuntimeScope runtime_steps("transport_loop_including_scoring_and_queue_transfers");
     double primary_kernel_seconds = 0.0;
+#if CARBON_PRIMARY_PRODUCTION_SPECIALIZE
+    const bool use_production_primary_path =
+        EmMode == 1 && enable_ct_grid && enable_voxel_scoring && enable_inelastic &&
+        enable_multiple_scattering && enable_ct_material_mcs &&
+        use_schneider_primary_xs && use_schneider_stopping &&
+        !use_unified_water && !voxel_scorer_clamps_transport &&
+        primary_loss_query_audit == nullptr &&
+        !enable_primary_voxel_fluence && !enable_charged_origin_voxel_scoring &&
+        !use_all_elastic;
+#endif
 
     for (std::size_t hist_offset = 0; hist_offset < number_of_histories;
          hist_offset += history_chunk) {
@@ -2668,7 +2689,11 @@ template<int EmMode>
             std::min(history_chunk, number_of_histories - hist_offset);
         const auto chunk_global =
             ((chunk_count + local_size - 1) / local_size) * local_size;
-        auto kernel_event = queue.parallel_for(
+        const auto launch_primary_chunk = [&](auto production_path_tag) {
+            constexpr bool kProductionPrimaryPath =
+                decltype(production_path_tag)::value;
+            return queue.parallel_for<CarbonPrimaryTransportKernel<
+                EmMode, kProductionPrimaryPath>>(
             sycl::nd_range<1>{sycl::range<1>{chunk_global}, sycl::range<1>{local_size}},
             [=](sycl::nd_item<1> item) {
                 const auto lane = item.get_global_linear_id();
@@ -2821,7 +2846,7 @@ template<int EmMode>
                             hit = false;
                         }
                     };
-                    if (enable_voxel_scoring) {
+                    if ((kProductionPrimaryPath || enable_voxel_scoring)) {
                         intersect_slab(position_x_mm, direction_x, voxel_min_x_mm, voxel_max_x_mm);
                         intersect_slab(position_y_mm, direction_y, voxel_min_y_mm, voxel_max_y_mm);
                     }
@@ -2907,7 +2932,7 @@ template<int EmMode>
 
                     auto voxel_x = static_cast<int>(voxel_bins_x / 2);
                     auto voxel_y = static_cast<int>(voxel_bins_y / 2);
-                    if (enable_voxel_scoring) {
+                    if ((kProductionPrimaryPath || enable_voxel_scoring)) {
                         const auto x_coordinate =
                             (position_x_mm - voxel_min_x_mm) / voxel_size_x_mm;
                         const auto y_coordinate =
@@ -2947,7 +2972,7 @@ template<int EmMode>
                     }
                     std::uint8_t ct_material = 2;
                     auto in_ct = false;
-                    if (enable_ct_grid) {
+                    if ((kProductionPrimaryPath || enable_ct_grid)) {
                         float ct_rho = water_density_g_per_cm3;
                         in_ct = ct_sample(position_x_mm, position_y_mm, position_z_mm,
                                           ct_origin_x, ct_origin_y, ct_origin_z, ct_spacing_x,
@@ -2960,7 +2985,7 @@ template<int EmMode>
                     }
 
                     // Mirror secondary CT escape: the EM package has no exterior material.
-                    if(unified_em && enable_ct_grid && !in_ct) {
+                    if(unified_em && (kProductionPrimaryPath || enable_ct_grid) && !in_ct) {
                         unified_primary_escaped_ct=true;
                         break;
                     }
@@ -2970,8 +2995,8 @@ template<int EmMode>
                             ? slab_layer_index(position_z_mm, slab_z_ends_device, slab_layer_count)
                             : 0U;
                     float stopping_power_MeV_per_mm = 0.0F;
-                    if (enable_ct_grid) {
-                        if (use_schneider_stopping && in_ct) {
+                    if ((kProductionPrimaryPath || enable_ct_grid)) {
+                        if ((kProductionPrimaryPath || use_schneider_stopping) && in_ct) {
                             const auto floating_sp_index = (energy_MeVu - schneider_sp_e_min) * schneider_sp_inv_dE;
                             auto sp_index = static_cast<int>(sycl::floor(floating_sp_index));
                             sp_index = sycl::max(0, sycl::min(sp_index, static_cast<int>(schneider_sp_energies) - 2));
@@ -3047,7 +3072,7 @@ template<int EmMode>
                             }
                     };
                     if(unified_em){
-                        const int section=enable_ct_grid?(in_ct?int(ct_material):-2):-1;
+                        const int section=(kProductionPrimaryPath || enable_ct_grid)?(in_ct?int(ct_material):-2):-1;
                         if(!CARBON_EM_MATERIAL_CACHE || !unified_primary_state.valid || unified_primary_state.section!=section ||
                            unified_primary_state.density!=local_density_g_per_cm3)
                             unified_primary_state=unified_device.select(section,local_density_g_per_cm3,unified_primary_species);
@@ -3093,7 +3118,7 @@ template<int EmMode>
                         }
                     }
                     CtFaceClampResult ct_clamp_res{step_mm, false, 0};
-                    if (enable_ct_grid && in_ct) {
+                    if ((kProductionPrimaryPath || enable_ct_grid) && in_ct) {
                         ct_clamp_res = clamp_step_to_ct_faces_exact(
                             step_mm, position_x_mm, position_y_mm, position_z_mm,
                             direction_x, direction_y, direction_z, ct_origin_x,
@@ -3101,7 +3126,7 @@ template<int EmMode>
                             ct_spacing_z, ct_nx, ct_ny, ct_nz);
                         step_mm = ct_clamp_res.step_mm;
                     }
-                    if (enable_voxel_scoring && voxel_scorer_clamps_transport &&
+                    if ((kProductionPrimaryPath || enable_voxel_scoring) && (!kProductionPrimaryPath && voxel_scorer_clamps_transport) &&
                         absolute_direction_x >= 1.0e-6F) {
                         const auto boundary_x_mm =
                             voxel_min_x_mm +
@@ -3112,7 +3137,7 @@ template<int EmMode>
                             step_mm = sycl::fmin(step_mm, dx_step);
                         }
                     }
-                    if (enable_voxel_scoring && voxel_scorer_clamps_transport &&
+                    if ((kProductionPrimaryPath || enable_voxel_scoring) && (!kProductionPrimaryPath && voxel_scorer_clamps_transport) &&
                         absolute_direction_y >= 1.0e-6F) {
                         const auto boundary_y_mm =
                             voxel_min_y_mm +
@@ -3134,12 +3159,12 @@ template<int EmMode>
                     bool ct_elastic_this_step = false;
                     std::int16_t cinel02_target_z_step = 0;
                     std::int16_t cinel02_target_a_step = 0;
-                    if (enable_inelastic &&
+                    if ((kProductionPrimaryPath || enable_inelastic) &&
                         energy_MeV > energy_cutoff_MeV) {
                         const auto cur_e_u = energy_MeV * inverse_mass_number;
-                        if (use_schneider_primary_xs) {
-                            if (in_ct || use_unified_water) {
-                                const std::uint32_t section_id = use_unified_water ? 255U : static_cast<std::uint32_t>(
+                        if ((kProductionPrimaryPath || use_schneider_primary_xs)) {
+                            if (in_ct || (!kProductionPrimaryPath && use_unified_water)) {
+                                const std::uint32_t section_id = (!kProductionPrimaryPath && use_unified_water) ? 255U : static_cast<std::uint32_t>(
                                     sycl::min(static_cast<std::uint32_t>(ct_material), 24U));
                                 // v3: hazard from the masked rate-binary partials
                                 // (single source with the target sampler); v1
@@ -3163,11 +3188,11 @@ template<int EmMode>
                                 // double counting of the total rate.
                                 float macro_el_ct = 0.0F;
                                 const bool elastic_armed =
-                                    (use_all_elastic && (in_ct || use_unified_water)) ||
+                                    ((!kProductionPrimaryPath && use_all_elastic) && (in_ct || (!kProductionPrimaryPath && use_unified_water))) ||
                                     (use_ct_elastic && in_ct &&
                                     schneider_ct_device_ctx.elastic_sampler.rate_version == 3);
-                                if (use_all_elastic && elastic_armed) {
-                                    const float rate=all_elastic.rate(16,use_unified_water?25:section_id,cur_e_u);
+                                if ((!kProductionPrimaryPath && use_all_elastic) && elastic_armed) {
+                                    const float rate=all_elastic.rate(16,(!kProductionPrimaryPath && use_unified_water)?25:section_id,cur_e_u);
                                     if(rate<0) {
                                         sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_audit[2]).fetch_add(1);
                                     sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_audit[4]).fetch_add(1);
@@ -3191,7 +3216,7 @@ template<int EmMode>
                                 // Cache only the process whose post-step acceptance uses
                                 // this rate. Elastic retains its own local hazard and must
                                 // never enter the inelastic acceptance denominator.
-                                macro_inelastic = enable_inelastic
+                                macro_inelastic = (kProductionPrimaryPath || enable_inelastic)
                                     ? primary_hadronic_cache.update(cur_e_u, macro_inelastic)
                                     : 0.0F;
                                 }
@@ -3215,7 +3240,7 @@ template<int EmMode>
                                     ct_elastic_this_step = true;
                                     interaction_section = section_id;
                                     interaction_density = local_density_g_per_cm3;
-                                } else if (collision && enable_inelastic) {
+                                } else if (collision && (kProductionPrimaryPath || enable_inelastic)) {
                                     schneider_diag_increment_device(
                                         schneider_diag_device,
                                         SchneiderDiagSlot::PrimaryHazards);
@@ -3244,8 +3269,8 @@ template<int EmMode>
                     // Diagnostic only: CT face clamping above guarantees the
                     // segment stays in its starting CT voxel. Do not score a
                     // laterally escaped segment into a clamped edge voxel.
-                    if (enable_primary_voxel_fluence &&
-                        (!enable_ct_grid || in_ct)) {
+                    if ((!kProductionPrimaryPath && enable_primary_voxel_fluence) &&
+                        (!(kProductionPrimaryPath || enable_ct_grid) || in_ct)) {
                         sycl::atomic_ref<
                             DoseAtomicT, sycl::memory_order::relaxed,
                             sycl::memory_scope::device,
@@ -3260,9 +3285,9 @@ template<int EmMode>
                     if(unified_em){
                         // The unified loss sampler computes the physical mean below.
                         // This separate query is needed only by the optional audit.
-                        if (primary_loss_query_audit)
+                        if ((kProductionPrimaryPath ? nullptr : primary_loss_query_audit))
                             mean_loss_MeV=unified_primary_state.mean(energy_MeV,step_mm);
-                    } else if (ct_primary_midpoint_stopping && use_schneider_stopping && in_ct) {
+                    } else if (ct_primary_midpoint_stopping && (kProductionPrimaryPath || use_schneider_stopping) && in_ct) {
                         mean_loss_MeV=midpoint_continuous_energy_loss(energy_MeV,step_mm,
                             stopping_power_MeV_per_mm,[&](float mid_energy) {
                                 const float f=(mid_energy*inverse_mass_number-schneider_sp_e_min)*schneider_sp_inv_dE;
@@ -3308,16 +3333,16 @@ template<int EmMode>
                     }
                     auto deposited_MeV = sycl::fmin(mean_loss_MeV, energy_MeV);
 
-                    if (primary_loss_query_audit && mean_loss_MeV > 0 && energy_MeV > 0) {
+                    if ((kProductionPrimaryPath ? nullptr : primary_loss_query_audit) && mean_loss_MeV > 0 && energy_MeV > 0) {
                         // Bin 0: f<1e-12; bins 1..12: decades; bin 13: f>=1.
                         const float f = mean_loss_MeV / energy_MeV;
                         const int b = sycl::clamp(static_cast<int>(sycl::floor(sycl::log10(f)))+13, 0, 13);
                         sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
                             sycl::memory_scope::device, sycl::access::address_space::global_space>
-                            count(primary_loss_query_audit[b]);
+                            count((kProductionPrimaryPath ? nullptr : primary_loss_query_audit)[b]);
                         sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
                             sycl::memory_scope::device, sycl::access::address_space::global_space>
-                            energy_sum(primary_loss_query_audit[b+14]);
+                            energy_sum((kProductionPrimaryPath ? nullptr : primary_loss_query_audit)[b+14]);
                         count.fetch_add(1);
                         energy_sum.fetch_add(static_cast<std::uint64_t>(mean_loss_MeV*1.0e6F+0.5F));
                     }
@@ -3498,7 +3523,7 @@ template<int EmMode>
                                     if(dz>=0 && dz<static_cast<int>(number_of_bins)) {
                                         add(dose_device+dz);if(in_fov_dose_device)add(in_fov_dose_device+dz);
                                     }
-                                    if(enable_charged_origin_voxel_scoring)add(charged_origin_voxel_dose_device+target);
+                                    if((!kProductionPrimaryPath && enable_charged_origin_voxel_scoring))add(charged_origin_voxel_dose_device+target);
                                     count(3,static_cast<std::uint64_t>(double(weight)*1e6));
                                 } else {delta_tail_escaped_scorer_MeV+=weight;count(4,static_cast<std::uint64_t>(double(weight)*1e6));}
                             } else if(packet.status==ElectronPacketStatus::escaped) {
@@ -3599,7 +3624,7 @@ template<int EmMode>
                                             if(dz>=0 && dz<static_cast<int>(number_of_bins)) {
                                                 add(dose_device+dz);if(in_fov_dose_device)add(in_fov_dose_device+dz);
                                             }
-                                            if(enable_charged_origin_voxel_scoring)add(charged_origin_voxel_dose_device+target);
+                                            if((!kProductionPrimaryPath && enable_charged_origin_voxel_scoring))add(charged_origin_voxel_dose_device+target);
                                             counter(3,static_cast<double>(packet)*1e6);
                                         } else {delta_tail_escaped_scorer_MeV+=packet;counter(4,static_cast<double>(packet)*1e6);}
                                     }
@@ -3608,7 +3633,7 @@ template<int EmMode>
                         }
                         history_water_electron_escaped_MeV+=water_physical_escape_MeV;
                     }
-                    if(use_electron_joint && in_ct && enable_voxel_scoring &&
+                    if(use_electron_joint && in_ct && (kProductionPrimaryPath || enable_voxel_scoring) &&
                        voxel_index<number_of_voxels && deposited_MeV>0) {
                         auto counter=[&](int slot,std::uint64_t amount) {
                             if(!enable_electron_joint_diagnostics && slot!=1 && slot!=2) return;
@@ -3721,7 +3746,7 @@ template<int EmMode>
                                         } else {
                                             add(voxel_dose_device+target);add(dose_device+target_z);
                                             if(in_fov_dose_device)add(in_fov_dose_device+target_z);
-                                            if(enable_charged_origin_voxel_scoring)add(charged_origin_voxel_dose_device+target);
+                                            if((!kProductionPrimaryPath && enable_charged_origin_voxel_scoring))add(charged_origin_voxel_dose_device+target);
                                         }
                                         counter(3,static_cast<std::uint64_t>(static_cast<double>(packet)*1e6));
                                     }
@@ -3731,7 +3756,7 @@ template<int EmMode>
                         }
                     }
                     if (!use_electron_joint && use_schneider_delta_tail && in_ct && ct_material == 0U &&
-                        enable_voxel_scoring && voxel_index < number_of_voxels &&
+                        (kProductionPrimaryPath || enable_voxel_scoring) && voxel_index < number_of_voxels &&
                         schneider_delta_source_eligible_device[voxel_index] != 0U) {
                         float moved_fraction = 0.0F;
                         float radius_mm = 0.0F;
@@ -3808,7 +3833,7 @@ template<int EmMode>
                                     target_fov.fetch_add(static_cast<DepthAtomicT>(moved_MeV));
                                 }
                                 transverse_relocated_MeV = moved_MeV;
-                                if (enable_charged_origin_voxel_scoring) {
+                                if ((!kProductionPrimaryPath && enable_charged_origin_voxel_scoring)) {
                                     sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
                                                      sycl::memory_scope::device,
                                                      sycl::access::address_space::global_space>
@@ -3847,7 +3872,7 @@ template<int EmMode>
                             }
                         }
                     }
-                        if (use_schneider_delta_longitudinal && in_ct && enable_voxel_scoring &&
+                        if (use_schneider_delta_longitudinal && in_ct && (kProductionPrimaryPath || enable_voxel_scoring) &&
                             voxel_index < number_of_voxels && deposited_MeV > 0.0F &&
                             (use_longitudinal_interface_mass || (ct_material==0U &&
                              schneider_delta_source_eligible_device[voxel_index]!=0U))) {
@@ -3933,7 +3958,7 @@ template<int EmMode>
                                             add(voxel_dose_device+index);
                                             add(dose_device+cell[2]);
                                             if(in_fov_dose_device) add(in_fov_dose_device+cell[2]);
-                                            if(enable_charged_origin_voxel_scoring)
+                                            if((!kProductionPrimaryPath && enable_charged_origin_voxel_scoring))
                                                 add(charged_origin_voxel_dose_device+index);
                                             fwd_scored_MeV+=share;
                                         });
@@ -3975,7 +4000,7 @@ template<int EmMode>
                                             add(voxel_dose_device + index);
                                             add(dose_device + cell[2]);
                                             if (in_fov_dose_device) add(in_fov_dose_device + cell[2]);
-                                            if (enable_charged_origin_voxel_scoring)
+                                            if ((!kProductionPrimaryPath && enable_charged_origin_voxel_scoring))
                                                 add(charged_origin_voxel_dose_device + index);
                                             fwd_scored_MeV += share;
                                             return true;
@@ -4041,7 +4066,7 @@ template<int EmMode>
                         }
                         pending_primary_bin = bin;
                     }
-                    if (enable_voxel_scoring && voxel_index != pending_primary_voxel) {
+                    if ((kProductionPrimaryPath || enable_voxel_scoring) && voxel_index != pending_primary_voxel) {
                         if (pending_primary_voxel_MeV > 0.0 && pending_primary_voxel >= 0 &&
                             pending_primary_voxel < static_cast<std::size_t>(number_of_voxels)) {
                             sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
@@ -4049,7 +4074,7 @@ template<int EmMode>
                                              sycl::access::address_space::global_space>
                                 atomic_voxel_dose(voxel_dose_device[pending_primary_voxel]);
                             atomic_voxel_dose.fetch_add(static_cast<DoseAtomicT>(pending_primary_voxel_MeV));
-                            if (enable_charged_origin_voxel_scoring) {
+                            if ((!kProductionPrimaryPath && enable_charged_origin_voxel_scoring)) {
                                 sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
                                                  sycl::memory_scope::device,
                                                  sycl::access::address_space::global_space>
@@ -4076,7 +4101,7 @@ template<int EmMode>
                     pending_primary_depth_MeV += deposited_MeV - forward_shifted_MeV -
                         transverse_relocated_MeV;
                     pending_primary_depth_MeV += same_voxel_electron_packet_MeV;
-                    if (enable_voxel_scoring && voxel_index >= 0) {
+                    if ((kProductionPrimaryPath || enable_voxel_scoring) && voxel_index >= 0) {
                         pending_primary_voxel_MeV += local_voxel_deposit_MeV;
                         pending_primary_voxel_MeV += same_voxel_electron_packet_MeV;
                         if (in_fov_dose_device != nullptr && pending_primary_bin >= 0 &&
@@ -4094,7 +4119,7 @@ template<int EmMode>
                     history_deposited_MeV += deposited_MeV-water_physical_escape_MeV-material_untracked_MeV;
                     grid_deposit_split_device(
                         grid_deposited_in_device, grid_deposited_out_device,
-                        enable_voxel_scoring && voxel_index >= 0,
+                        (kProductionPrimaryPath || enable_voxel_scoring) && voxel_index >= 0,
                         deposited_MeV - delta_tail_escaped_scorer_MeV-water_physical_escape_MeV-material_untracked_MeV);
                     grid_deposit_split_device(
                         grid_deposited_in_device, grid_deposited_out_device, false,
@@ -4120,15 +4145,15 @@ template<int EmMode>
                     const float seg_dir_y = direction_y;
                     const float seg_dir_z = direction_z;
 
-                    if (enable_multiple_scattering) {
+                    if ((kProductionPrimaryPath || enable_multiple_scattering)) {
                         auto radiation_length_g_per_cm2 =
                             static_cast<float>(active_water_radiation_length);
-                        if (enable_ct_grid && in_ct && enable_ct_material_mcs) {
+                        if ((kProductionPrimaryPath || enable_ct_grid) && in_ct && (kProductionPrimaryPath || enable_ct_material_mcs)) {
                             if (ct_material_ids_are_schneider_sections) {
                                 radiation_length_g_per_cm2 = static_cast<float>(
                                     select_transport_radiation_length_g_per_cm2(
                                         ct_material_ids_are_schneider_sections, in_ct,
-                                        ct_material, enable_ct_material_mcs,
+                                        ct_material, (kProductionPrimaryPath || enable_ct_material_mcs),
                                         water_radiation_length_g_per_cm2));
                             } else {
                                 radiation_length_g_per_cm2 = static_cast<float>(
@@ -4185,7 +4210,7 @@ template<int EmMode>
                     position_y_mm += seg_dir_y * step_mm;
                     position_z_mm += seg_dir_z * step_mm;
 
-                    if (enable_ct_grid && in_ct && ct_clamp_res.hit_face && !inelastic_this_step && !ct_elastic_this_step) {
+                    if ((kProductionPrimaryPath || enable_ct_grid) && in_ct && ct_clamp_res.hit_face && !inelastic_this_step && !ct_elastic_this_step) {
                         if ((ct_clamp_res.axis_mask & 1) != 0 && sycl::fabs(seg_dir_x) > 1.0e-6F) {
                             const float fx = (position_x_mm - ct_origin_x) / ct_spacing_x;
                             const int face_x = static_cast<int>(sycl::round(fx));
@@ -4217,7 +4242,7 @@ template<int EmMode>
                                 direction_z > 0.0F ? 1.0e30F : -1.0e30F);
                         }
                     }
-                    if (enable_voxel_scoring && voxel_scorer_clamps_transport &&
+                    if ((kProductionPrimaryPath || enable_voxel_scoring) && (!kProductionPrimaryPath && voxel_scorer_clamps_transport) &&
                         absolute_direction_x >= 1.0e-6F) {
                         const auto boundary_x_mm =
                             voxel_min_x_mm +
@@ -4229,7 +4254,7 @@ template<int EmMode>
                                 direction_x > 0.0F ? 1.0e30F : -1.0e30F);
                         }
                     }
-                    if (enable_voxel_scoring && voxel_scorer_clamps_transport &&
+                    if ((kProductionPrimaryPath || enable_voxel_scoring) && (!kProductionPrimaryPath && voxel_scorer_clamps_transport) &&
                         absolute_direction_y >= 1.0e-6F) {
                         const auto boundary_y_mm =
                             voxel_min_y_mm +
@@ -4247,41 +4272,41 @@ template<int EmMode>
                     // Elastic endpoint: full bank uses target-specific TOPAS samples;
                     // the separate legacy diagnostic retains its explicit isotropic law.
                     // Supported recoils are queued; below-cutoff energy is scored locally.
-                    if(use_all_elastic && ct_elastic_this_step && energy_MeV>energy_cutoff_MeV &&
-                       all_elastic.rate(16,use_unified_water?25:interaction_section,energy_MeV*inverse_mass_number)==0) {
+                    if((!kProductionPrimaryPath && use_all_elastic) && ct_elastic_this_step && energy_MeV>energy_cutoff_MeV &&
+                       all_elastic.rate(16,(!kProductionPrimaryPath && use_unified_water)?25:interaction_section,energy_MeV*inverse_mass_number)==0) {
                         ct_elastic_this_step=false;
                         sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_audit[10]).fetch_add(1);
                     }
-                    if ((use_ct_elastic || use_all_elastic) && ct_elastic_this_step &&
+                    if ((use_ct_elastic || (!kProductionPrimaryPath && use_all_elastic)) && ct_elastic_this_step &&
                         energy_MeV > energy_cutoff_MeV) {
                         const float u_tgt = rng::uniform01(
                             spot_seed, rng_history, steps, 12);
-                        const auto draw = use_all_elastic ? all_elastic.draw(16,
-                            use_unified_water?25:interaction_section,energy_MeV,direction_x,direction_y,direction_z,
+                        const auto draw = (!kProductionPrimaryPath && use_all_elastic) ? all_elastic.draw(16,
+                            (!kProductionPrimaryPath && use_unified_water)?25:interaction_section,energy_MeV,direction_x,direction_y,direction_z,
                             u_tgt,rng::uniform01(spot_seed,rng_history,steps,70),
                             rng::uniform01(spot_seed,rng_history,steps,71),rng::uniform01(spot_seed,rng_history,steps,11)) : ElasticDraw{};
-                        if(use_all_elastic && !draw.valid) {
+                        if((!kProductionPrimaryPath && use_all_elastic) && !draw.valid) {
                             sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_audit[2]).fetch_add(1);
                                     sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_audit[5]).fetch_add(1);
                             break;
                         }
-                        const int target_z=use_all_elastic?draw.target_z:(ct_elastic_all_targets?
+                        const int target_z=(!kProductionPrimaryPath && use_all_elastic)?draw.target_z:(ct_elastic_all_targets?
                             sample_schneider_target_device(schneider_ct_device_ctx.elastic_sampler,interaction_section,
                                 energy_MeV*inverse_mass_number,u_tgt):1);
                         const int target_idx=carbon::elastic_target_index_from_z(target_z);
-                        const int target_a=use_all_elastic?draw.target_a:static_cast<int>(carbon::kElasticTargetMassU[target_idx<0?0:target_idx]);
+                        const int target_a=(!kProductionPrimaryPath && use_all_elastic)?draw.target_a:static_cast<int>(carbon::kElasticTargetMassU[target_idx<0?0:target_idx]);
                         if (target_idx >= 0) {
-                            const auto scat=use_all_elastic?draw.outcome:carbon::sample_c12_target_elastic(
+                            const auto scat=(!kProductionPrimaryPath && use_all_elastic)?draw.outcome:carbon::sample_c12_target_elastic(
                                 energy_MeV,direction_x,direction_y,direction_z,
                                 rng::uniform01(spot_seed,rng_history,steps,10),rng::uniform01(spot_seed,rng_history,steps,11),
                                 carbon::kElasticTargetMassU[target_idx]);
-                            if(use_all_elastic)sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_audit[0]).fetch_add(1);
+                            if((!kProductionPrimaryPath && use_all_elastic))sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_audit[0]).fetch_add(1);
                             energy_MeV = scat.projectile_ke_MeV;
                             direction_x = scat.proj_dir_x;
                             direction_y = scat.proj_dir_y;
                             direction_z = scat.proj_dir_z;
                             if ((carbon::get_charged_species_idx(target_z,target_a)>=0 ||
-                                 (use_all_elastic&&recoil_stopping.projectile(target_z,target_a)>=0)) && enable_secondary_transport &&
+                                 ((!kProductionPrimaryPath && use_all_elastic)&&recoil_stopping.projectile(target_z,target_a)>=0)) && enable_secondary_transport &&
                                 scat.recoil_ke_MeV > energy_cutoff_MeV &&
                                 secondary_queue_device != nullptr) {
                                 // Elastic recoil born accounting: mirrors the
@@ -4314,7 +4339,7 @@ template<int EmMode>
                                         rng_history, rng::branch_tag(
                                             rng::branch_role_primary_charged, steps));
                                     secondary_queue_device[base_idx] = proton;
-                                    if(use_all_elastic){sycl::atomic_ref<float,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_energy[1]).fetch_add(scat.recoil_ke_MeV);}
+                                    if((!kProductionPrimaryPath && use_all_elastic)){sycl::atomic_ref<float,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_energy[1]).fetch_add(scat.recoil_ke_MeV);}
                                     schneider_diag_increment_device(
                                         schneider_diag_device,
                                         SchneiderDiagSlot::PrimaryChargedQueued);
@@ -4329,28 +4354,28 @@ template<int EmMode>
                                                      sycl::access::address_space::global_space>
                                         atomic_ov(*secondary_overflow_count_device);
                                     atomic_ov.fetch_add(1U);
-                                    if(use_all_elastic){sycl::atomic_ref<float,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_energy[2]).fetch_add(scat.recoil_ke_MeV);sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_audit[11]).fetch_add(1);}
+                                    if((!kProductionPrimaryPath && use_all_elastic)){sycl::atomic_ref<float,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_energy[2]).fetch_add(scat.recoil_ke_MeV);sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_audit[11]).fetch_add(1);}
                                     sycl::atomic_ref<float,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(*secondary_overflow_energy_device).fetch_add(scat.recoil_ke_MeV);
                                 }
-                            } else if(use_all_elastic && scat.recoil_ke_MeV>energy_cutoff_MeV) {
+                            } else if((!kProductionPrimaryPath && use_all_elastic) && scat.recoil_ke_MeV>energy_cutoff_MeV) {
                                 sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_audit[3]).fetch_add(1);
                                 sycl::atomic_ref<float,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(untracked_nuclear_device[global_history]).fetch_add(scat.recoil_ke_MeV);
                             } else if (scat.recoil_ke_MeV > 0.0F) {
-                                if (enable_voxel_scoring && voxel_index >= 0 &&
+                                if ((kProductionPrimaryPath || enable_voxel_scoring) && voxel_index >= 0 &&
                                     voxel_index < number_of_voxels) {
                                     pending_primary_voxel_MeV += scat.recoil_ke_MeV;
                                 }
                                 history_deposited_MeV += scat.recoil_ke_MeV;
-                                if(use_all_elastic){sycl::atomic_ref<float,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_energy[0]).fetch_add(scat.recoil_ke_MeV);}
+                                if((!kProductionPrimaryPath && use_all_elastic)){sycl::atomic_ref<float,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_energy[0]).fetch_add(scat.recoil_ke_MeV);}
                                 pending_primary_depth_MeV += scat.recoil_ke_MeV;
                                 grid_deposit_split_device(grid_deposited_in_device,grid_deposited_out_device,
-                                    enable_voxel_scoring&&voxel_index>=0,scat.recoil_ke_MeV);
+                                    (kProductionPrimaryPath || enable_voxel_scoring)&&voxel_index>=0,scat.recoil_ke_MeV);
                             }
                         }
                     }
 
 
-                    if (use_schneider_primary_xs && (in_ct || use_unified_water) && inelastic_this_step) {
+                    if ((kProductionPrimaryPath || use_schneider_primary_xs) && (in_ct || (!kProductionPrimaryPath && use_unified_water)) && inelastic_this_step) {
                         if (is_primary_attenuation_only) {
                             primary_inelastic_occurred = true;
                             if (first_interactions_device != nullptr && first_interactions_count_device != nullptr) {
@@ -4491,13 +4516,13 @@ template<int EmMode>
                         const float local_deposit = sycl::fmax(0.0F, event.process_local_deposit_MeV);
 
                         pending_primary_depth_MeV += local_deposit;
-                        if (enable_voxel_scoring && voxel_index >= 0) {
+                        if ((kProductionPrimaryPath || enable_voxel_scoring) && voxel_index >= 0) {
                             pending_primary_voxel_MeV += local_deposit;
                         }
                         history_deposited_MeV += local_deposit;
                         grid_deposit_split_device(
                             grid_deposited_in_device, grid_deposited_out_device,
-                            enable_voxel_scoring && voxel_index >= 0, local_deposit);
+                            (kProductionPrimaryPath || enable_voxel_scoring) && voxel_index >= 0, local_deposit);
 
                         float charged_accounted_MeV = 0.0F;
                         float neutral_accounted_MeV = 0.0F;
@@ -4622,14 +4647,14 @@ template<int EmMode>
                                 }
                             } else {
                                 pending_primary_depth_MeV += product.kinetic_energy_MeV;
-                                if (enable_voxel_scoring && voxel_index >= 0) {
+                                if ((kProductionPrimaryPath || enable_voxel_scoring) && voxel_index >= 0) {
                                     pending_primary_voxel_MeV += product.kinetic_energy_MeV;
                                 }
                                 history_deposited_MeV += product.kinetic_energy_MeV;
                                 grid_deposit_split_device(
                                     grid_deposited_in_device,
                                     grid_deposited_out_device,
-                                    enable_voxel_scoring && voxel_index >= 0,
+                                    (kProductionPrimaryPath || enable_voxel_scoring) && voxel_index >= 0,
                                     product.kinetic_energy_MeV);
                                 charged_accounted_MeV += product.kinetic_energy_MeV;
                                 schneider_diag_increment_device(
@@ -4685,7 +4710,7 @@ template<int EmMode>
                 if (energy_MeV > 0.0F && energy_MeV <= energy_cutoff_MeV && inside_phantom) {
                     const auto cutoff_energy_MeV = energy_MeV;
                     pending_primary_depth_MeV += cutoff_energy_MeV;
-                    if (enable_voxel_scoring && pending_primary_voxel >= 0 &&
+                    if ((kProductionPrimaryPath || enable_voxel_scoring) && pending_primary_voxel >= 0 &&
                         pending_primary_voxel < static_cast<std::size_t>(number_of_voxels)) {
                         pending_primary_voxel_MeV += cutoff_energy_MeV;
                         if (in_fov_dose_device != nullptr && pending_primary_bin >= 0 &&
@@ -4700,7 +4725,7 @@ template<int EmMode>
                     history_deposited_MeV += cutoff_energy_MeV;
                     grid_deposit_split_device(
                         grid_deposited_in_device, grid_deposited_out_device,
-                        enable_voxel_scoring && pending_primary_voxel >= 0 &&
+                        (kProductionPrimaryPath || enable_voxel_scoring) && pending_primary_voxel >= 0 &&
                             pending_primary_voxel <
                                 static_cast<std::size_t>(number_of_voxels),
                         cutoff_energy_MeV);
@@ -4765,7 +4790,7 @@ template<int EmMode>
                         static_cast<std::size_t>(pending_primary_bin), nullptr, 0, 0,
                         pending_let_numerator, pending_let_denominator, true);
                 }
-                if (enable_voxel_scoring && pending_primary_voxel >= 0 &&
+                if ((kProductionPrimaryPath || enable_voxel_scoring) && pending_primary_voxel >= 0 &&
                     pending_primary_voxel < static_cast<std::size_t>(number_of_voxels)) {
                     if (pending_primary_voxel_MeV > 0.0) {
                         sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
@@ -4773,7 +4798,7 @@ template<int EmMode>
                                          sycl::access::address_space::global_space>
                             atomic_voxel_dose(voxel_dose_device[pending_primary_voxel]);
                         atomic_voxel_dose.fetch_add(static_cast<DoseAtomicT>(pending_primary_voxel_MeV));
-                        if (enable_charged_origin_voxel_scoring) {
+                        if ((!kProductionPrimaryPath && enable_charged_origin_voxel_scoring)) {
                             sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
                                              sycl::memory_scope::device,
                                              sycl::access::address_space::global_space>
@@ -4798,6 +4823,14 @@ template<int EmMode>
                 escaped_device[global_history] = energy_MeV+history_water_electron_escaped_MeV;
                 steps_device[global_history] = steps;
             });
+        };
+#if CARBON_PRIMARY_PRODUCTION_SPECIALIZE
+        auto kernel_event = use_production_primary_path
+            ? launch_primary_chunk(std::true_type{})
+            : launch_primary_chunk(std::false_type{});
+#else
+        auto kernel_event = launch_primary_chunk(std::false_type{});
+#endif
         kernel_event.wait_and_throw();
         primary_kernel_seconds += event_duration_seconds(kernel_event);
         std::cout << "[progress] primary batch completed: "
@@ -5166,6 +5199,11 @@ template<int EmMode>
                 const auto launch_secondary_round = [&](auto production_path_tag) {
                 constexpr bool kProductionSecondaryPath =
                     decltype(production_path_tag)::value;
+                constexpr bool kKnownSpeciesOnly =
+                    CARBON_SECONDARY_KNOWN_SPECIES_PROBE &&
+                    kProductionSecondaryPath;
+                constexpr bool kNonHe4Only =
+                    CARBON_SECONDARY_NON_HE4_PROBE && kKnownSpeciesOnly;
                 return queue.submit([&](sycl::handler& cgh) {
                 const auto secondary_kernel =
 #if CARBON_SECONDARY_CONTEXT_POINTER
@@ -5299,7 +5337,8 @@ template<int EmMode>
                         const auto charged_sp_idx = carbon::get_charged_species_idx(static_cast<int>(frag.z), static_cast<int>(frag.a));
                         const auto ledger_species_idx = charged_sp_idx;
                         const int recoil_sp_idx=CARBON_SECONDARY_CONTEXT_FIELD(use_all_elastic)?CARBON_SECONDARY_CONTEXT_FIELD(recoil_stopping).projectile(frag.z,frag.a):-1;
-                        const bool generic_recoil=charged_sp_idx<0&&recoil_sp_idx>=0;
+                        const bool generic_recoil=
+                            !kKnownSpeciesOnly && charged_sp_idx<0 && recoil_sp_idx>=0;
                         if (charged_sp_idx < 0 && !generic_recoil) {
                             if (CARBON_SECONDARY_CONTEXT_FIELD(untracked_nuclear_device) != nullptr) {
                                 sycl::atomic_ref<float, sycl::memory_order::relaxed,
@@ -5437,7 +5476,8 @@ template<int EmMode>
                             sec_steps=saved.sec_steps;
                             local_sec_rate_queries=saved.local_sec_rate_queries;
                             local_sec_steps=saved.local_sec_steps;
-                            for(int j=0;j<6;++j)he4_audit[j]=saved.he4_audit[j];
+                            if constexpr (!kNonHe4Only)
+                                for(int j=0;j<6;++j)he4_audit[j]=saved.he4_audit[j];
                             if constexpr(CARBON_SECONDARY_STEP_PROFILE)for(int j=0;j<60;++j)sec_prof[j]=saved.sec_prof[j];
                         }
                         unsigned segment_steps=0;bool segment_paused=false;
@@ -5823,6 +5863,7 @@ template<int EmMode>
                                 unified_secondary_count(5,static_cast<std::uint64_t>(draw.continuous*1e6f));unified_secondary_count(6,static_cast<std::uint64_t>(draw.delta*1e6f));
                             }
                             const auto post_em_e = sycl::fmax(0.0F, sec_e - dE);
+                            if constexpr (!kNonHe4Only) {
                             if (CARBON_SECONDARY_CONTEXT_FIELD(he4_hazard_audit_device) && frag.z == 2 && frag.a == 4 &&
                                 frag.generation < CARBON_SECONDARY_CONTEXT_FIELD(cinel02_max_secondary_inelastic_generations) &&
                                 CARBON_SECONDARY_CONTEXT_FIELD(schneider_ct_device_ctx).uses_cinel03() && (sec_in_ct || CARBON_SECONDARY_CONTEXT_FIELD(use_unified_water))) {
@@ -5848,6 +5889,7 @@ template<int EmMode>
                                 he4_audit[3] += secondary_inelastic ? 1 : 0;
                                 he4_audit[4] += secondary_inelastic ? post_em_e : 0;
                                 he4_audit[5] += sec_step_mm;
+                            }
                             }
                             auto post_em_x = sec_x + collision_input_dx * sec_step_mm;
                             auto post_em_y = sec_y + collision_input_dy * sec_step_mm;
@@ -6854,7 +6896,8 @@ template<int EmMode>
                             saved.sec_steps=sec_steps;
                             saved.local_sec_rate_queries=local_sec_rate_queries;
                             saved.local_sec_steps=local_sec_steps;
-                            for(int j=0;j<6;++j)saved.he4_audit[j]=he4_audit[j];
+                            if constexpr (!kNonHe4Only)
+                                for(int j=0;j<6;++j)saved.he4_audit[j]=he4_audit[j];
                             if constexpr(CARBON_SECONDARY_STEP_PROFILE)for(int j=0;j<60;++j)saved.sec_prof[j]=sec_prof[j];
                             resume_states[state_idx]=saved;resume_ready[state_idx]=1;keep[item_id[0]]=1;
                             return; // Suspend: no terminal scoring or audit flush.
@@ -6868,6 +6911,7 @@ template<int EmMode>
                             }
                         }
                         // Small per-step deposits must not contend directly on
+                        if constexpr (!kNonHe4Only) {
                         if (CARBON_SECONDARY_CONTEXT_FIELD(he4_hazard_audit_device) && frag.z == 2 && frag.a == 4) {
                             for (int i=0; i<6; ++i) {
                                 sycl::atomic_ref<double, sycl::memory_order::relaxed,
@@ -6875,6 +6919,7 @@ template<int EmMode>
                                     tally(CARBON_SECONDARY_CONTEXT_FIELD(he4_hazard_audit_device)[i]);
                                 tally.fetch_add(he4_audit[i]);
                             }
+                        }
                         }
                         // Small per-step deposits must not contend directly on
                         // one global species scalar. Preserve original scoring
