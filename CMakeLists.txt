@@ -96,6 +96,13 @@ endforeach()
 option(CARBON_EM_SPLIT_SEARCH_KEYS "Separate EM node/segment binary-search key arrays (candidate A)" OFF)
 target_compile_definitions(carbon_core PUBLIC
     CARBON_EM_SPLIT_SEARCH_KEYS=$<BOOL:${CARBON_EM_SPLIT_SEARCH_KEYS}>)
+set(CARBON_EM_AUDIT_SHARDS "64" CACHE STRING
+    "Unified EM diagnostic counter shards per counter (positive integer)")
+if(NOT CARBON_EM_AUDIT_SHARDS MATCHES "^[1-9][0-9]*$")
+    message(FATAL_ERROR "CARBON_EM_AUDIT_SHARDS must be a positive integer")
+endif()
+target_compile_definitions(carbon_core PUBLIC
+    CARBON_EM_AUDIT_SHARDS=${CARBON_EM_AUDIT_SHARDS})
 option(CARBON_SECONDARY_STEP_PROFILE "Per-species secondary step profile (diagnostic only)" OFF)
 target_compile_definitions(carbon_core PUBLIC
     CARBON_SECONDARY_STEP_PROFILE=$<BOOL:${CARBON_SECONDARY_STEP_PROFILE}>)

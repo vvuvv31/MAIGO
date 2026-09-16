@@ -77,6 +77,9 @@ template<int EmMode> class CarbonSecondaryTransportKernel;
 
 namespace {
 
+#ifndef CARBON_EM_AUDIT_SHARDS
+#define CARBON_EM_AUDIT_SHARDS 64
+#endif
 // State persists across launch boundaries; a pause must not finalize dose or
 // diagnostics. Only survivor indices move during stable compaction.
 struct alignas(16) SecondaryResumeState {
@@ -135,7 +138,7 @@ inline void record_unified_em_failure(unsigned* count,UnifiedEmFailureRecord* re
 // same-index increments do not serialize on one global address. Counter i lane
 // s lives at global[i*kShards+s]; flush writes shard 0, and shipment merges all
 // shards back into the eight original counters without changing their values.
-inline constexpr unsigned kUnifiedEmAuditShards = 64;
+inline constexpr unsigned kUnifiedEmAuditShards = CARBON_EM_AUDIT_SHARDS;
 inline constexpr unsigned kUnifiedEmAuditCounters = 8;
 inline void flush_unified_em_audit(std::uint64_t* global,
                                   const std::array<std::uint64_t,8>& local) {

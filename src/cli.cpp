@@ -13,7 +13,8 @@ void print_usage(const char* executable) {
                  " [--spots FILE] [--straggling-scale X] [--output FILE]"
                  " [--dose-output FILE] [--scorer-let|--no-scorer-let]"
                  " [--let-output FILE] [--write-canonical-config FILE]"
-                 " [--plan-manifest FILE] [--plan-only] [--sequential-spots]\n"
+                 " [--plan-manifest FILE] [--plan-only] [--plan-preflight]"
+                 " [--sequential-spots]\n"
                  "  --plan-manifest FILE  Run each config listed in FILE sequentially in\n"
                  "                       one process, reusing validated read-only physics\n"
                  "                       data across shards\n"
@@ -33,6 +34,10 @@ void print_usage(const char* executable) {
                  "  --neutral-queue-capacity N  Override neutral queue capacity\n"
                  "  --write-canonical-config FILE  Write strict normalized YAML input\n"
                  "  --plan-only          Parse/allocate/transform plan without transport\n"
+                 "  --plan-preflight     Validate every manifest shard (config, CLI\n"
+                 "                       overrides, device consistency, output collisions)\n"
+                 "                       without transport or output; used before splitting\n"
+                 "                       a manifest across concurrent processes\n"
                  "  --sequential-spots   Disable batched SYCL plan launch\n"
                  "  --output FILE        MeV energy-deposition scorer CSV\n"
                  "  --dose-output FILE   Dose scorer CSV (total Gy); empty disables\n"
@@ -51,6 +56,8 @@ void parse_config_and_help(int argc, char** argv, CliState& state) {
             state.plan_manifest = argv[++index];
         } else if (argument == "--write-canonical-config" && index + 1 < argc) {
             state.canonical_config_output_path = argv[++index];
+        } else if (argument == "--plan-preflight") {
+            state.plan_preflight = true;
         } else if (argument == "--help" || argument == "-h") {
             state.help = true;
         }
@@ -111,6 +118,8 @@ void apply_cli_overrides(int argc, char** argv, TransportConfig& config, CliStat
             config.voxel_dose_mhd_output_file = argv[++index];
         } else if (argument == "--plan-only") {
             state.plan_only = true;
+        } else if (argument == "--plan-preflight") {
+            // Mode flag, consumed here so shard parsing accepts it.
         } else if (argument == "--sequential-spots") {
             state.sequential_spots = true;
         } else if (argument != "--help" && argument != "-h") {

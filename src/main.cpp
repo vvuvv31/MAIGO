@@ -215,6 +215,18 @@ int main(int argc, char* argv[]) {
                 }
             }
         }
+        if (cli.plan_preflight) {
+            // Global validation for concurrent runners: every shard of the full
+            // manifest is loaded with its CLI overrides and checked for device
+            // consistency and output collisions, but no context is created and
+            // no transport or output runs. A concurrent split must preflight the
+            // unsplit manifest, otherwise per-process checks cannot see
+            // collisions between shards assigned to different processes.
+            std::cout << "[plan-preflight] shards=" << shards.size() << " device=\""
+                      << (shards.empty() ? std::string{} : shards[0].config.device)
+                      << "\" ok\n";
+            return EXIT_SUCCESS;
+        }
         // One context per process: validated read-only physics data is cached
         // across shards. Per-shard dose, queues, counters and quality reports
         // are recreated inside the loop.

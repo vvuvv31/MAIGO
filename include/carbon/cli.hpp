@@ -14,6 +14,7 @@ struct CliState {
     bool help{false};
     bool histories_overridden{false};
     bool plan_only{false};
+    bool plan_preflight{false};
     bool sequential_spots{false};
 };
 
