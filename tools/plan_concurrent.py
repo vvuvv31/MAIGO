@@ -66,22 +66,36 @@ def main() -> int:
         log = (tmp / f"group_{g}.log").open("w")
         procs.append((g, members, subprocess.Popen(cmd, cwd=base, stdout=log,
                                                     stderr=subprocess.STDOUT), log))
+    import re
     failed = None
-    for g, members, proc, log in procs:
-        rc = proc.wait()
-        log.close()
-        if rc != 0 and failed is None:
-            failed = g
+    remaining = list(procs)
+    while remaining:
+        for item in list(remaining):
+            g, members, proc, log = item
+            rc = proc.poll()
+            if rc is not None:
+                remaining.remove(item)
+                log.close()
+                if rc != 0 and failed is None:
+                    failed = g
+        if failed is not None:
+            for g, members, proc, log in remaining:
+                proc.terminate()
+            for g, members, proc, log in remaining:
+                proc.wait()
+                log.close()
+            break
+        time.sleep(0.2)
     wall = time.monotonic() - started
     if failed is not None:
         raise SystemExit(f"group {failed} failed; see {tmp}/group_{failed}.log")
 
+    # Throughput numerator: sum the histories the binary reports as completed,
+    # not the requested config values.
     histories = 0
-    for cfg in configs:
-        for line in cfg.read_text().splitlines():
-            if line.strip().startswith("number_of_histories:"):
-                histories += int(float(line.split(":", 1)[1].strip()))
-                break
+    for g in range(len(groups)):
+        text = (tmp / f"group_{g}.log").read_text(errors="replace")
+        histories += sum(int(m) for m in re.findall(r"\[plan-shard-done\][^\n]*histories=(\d+)", text))
     print(f"plan_concurrent: shards={len(configs)} groups={len(groups)} "
           f"histories={histories} wall={wall:.3f}s "
           f"throughput={histories / wall:.1f} h/s logs={tmp}")

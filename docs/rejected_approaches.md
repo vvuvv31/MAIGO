@@ -98,6 +98,27 @@ removed from the tree; benchmark records stay frozen for provenance.
   binary search (mean 1.31 comparisons/query). A 10-bit exponent+2-mantissa
   index only lowers this to 1.13 comparisons/query while multiplying the index
   space and upload cost ~4x. Not implemented.
+- Lowering the secondary continue-tail threshold below 8192 (2026-09-16):
+  per-round instrumentation shows the finish-tail round and all under-covered
+  rounds together are <1% of the secondary kernel, and the 8192/2048/512 sweep
+  made Elapsed slower (2048 +0.6%, 512 +1.5%) with dose unchanged. Kept 8192.
+- Compile-time specialization of production-off scoring flags
+  (enable_charged_origin_voxel_scoring forced false, 2026-09-16): secondary
+  named kernel 178->174 registers but the launched wrapper stayed at 191, and
+  RT07575 timing did not improve (Elapsed 27.93->28.24 s). The runtime branches
+  are already cheap; specialization alone does not cross a resource threshold.
+- MPS and EM step-scale relaxation (2026-09-16): MPS ON/OFF over 1/3/6
+  concurrent groups on A6000 differed by <0.3% (191 regs/block prevents SM
+  co-residency). Relaxing em_*_step_scale to 2x/4x (source cap raised to [1,4],
+  research_step gates removed) bought at most ~5% Elapsed for up to 6.16% of
+  peak same-voxel dose deviation; step counts fell only 5-8%. Both stopped.
+- Relaxing the 1% combined mean-loss step guard to 5% (2026-09-16): the real
+  binding step limit. Primary steps -22.4%, secondary -12.9%, Elapsed -11%, but
+  same-voxel dose differs by up to 57.4% of peak and the peak depth moves +2.0 mm
+  (R80/R50 unchanged). Not a viable throughput lever; restored to 1%.
+- The controlled step limits maximum_step_mm and maximum_relative_energy_loss are
+  non-binding (the primary unified path overwrites the latter), so they cannot be
+  relaxed for speed either. Step size is set by dose accuracy, not a slack knob.
 - Dummy-RNG separation: Philox ALU ~= 4% of primary step; the 2.8x
   constant-dummy effect was divergence elimination, not RNG math.
 - Interval narrowing (`CARBON_EM_EXACT_INDEX` style): -1.1%.
@@ -122,3 +143,18 @@ registers/occupancy, species/range grouping, workgroup tuning, lookup
 fusion), or approximations with explicit error budgets (§9.2 short-range
 termination after share measurement, roulette with full weight machinery).
 Sharing EM evaluations across ticks is closed (items 1-5).
+
+
+## Universal conditional-sum lookup (2026-09-16; not promoted)
+
+Keeping the original Poisson N and replacing only the explicit transfer sum with a normalized conditional quantile table (N=2..24, R<=128, exact fallback elsewhere) improves the isolated complete restricted-fluctuation sampler by only 6.36–7.56% over four interleaved replay rounds. The approximately 10.5 MiB table also introduces interpolation error. No full-transport or patient-accuracy benefit has been demonstrated; do not integrate into production. Evidence and numerical error bounds over the tested grid are in `docs/em_cost_evaluation_20260916.md`, with executable experiments under `scratch/em_cost_20260916/fluctuation/conditional/`. This result does not reject a future joint compound-Poisson distribution sampler, which is a different, untested candidate.
+
+
+## Joint Universal compound-Poisson lookup (2026-09-16; rejected for integration)
+
+A joint Poisson-count plus transfer-sum quantile table with explicit zero-event mass, bounded lambda/R coverage and exact fallback improved isolated sampler throughput by 11–13% after compression to 1.7 MiB. However, a secondary-only research transport candidate on RT07575 failed the end-to-end gate: five interleaved runs gave median Elapsed 27.645→28.060 s and secondary kernel 14.731→15.075 s. Run integrity passed with zero overflow, but dose accuracy is unresolved after changed random consumption; no patient acceptance is implied. Do not integrate or expand this candidate based on microbenchmark gains. Evidence: `docs/em_cost_evaluation_20260916.md` and `scratch/em_cost_20260916/fluctuation/compound/compact/transport_results.json`.
+
+
+## 2026-09-16：EM 覆盖边界缓存未达到推广收益
+
+独立候选将 covers 所需节点能区端点缓存到 UnifiedEmState。真实包 1,294,650 次检查等价；完整 RT07575 五次穿插审计一致，剂量差处于 baseline 重复波动量级，零 overflow。两轮候选相对前后 baseline 均值的 primary 耗时约 −3%、secondary 约 +0.8%，Elapsed 仅 −0.6%。未证明稳定且实用的端到端收益，停止推广；不据此否定所有索引缓存。原始日志、脚本和哈希在 `scratch/em_cost_20260916/coverage_cache/`。基线已有 research_step 旧保护断言失败，见 `docs/em_cost_evaluation_20260916.md` 第五轮。
