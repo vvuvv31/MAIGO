@@ -1,0 +1,214 @@
+{
+  "schema": "carbon.secondary_production_specialization.analysis.v2",
+  "date": "2026-09-16",
+  "gpu": "NVIDIA GeForce RTX 2080 Ti",
+  "architecture": "sm_75",
+  "base_commit": "b3b906d983c6a87640e1a9a483bf11126d4561f2",
+  "candidate": {
+    "cmake_option": "CARBON_SECONDARY_PRODUCTION_SPECIALIZE",
+    "default": false,
+    "requires": "CARBON_SECONDARY_CONTEXT_POINTER=ON",
+    "decision": "structural and throughput success; retain default off pending combination promotion gates",
+    "specialized_invariants": [
+      "EmMode == 1",
+      "enable_secondary_unified_em",
+      "enable_ct_grid",
+      "enable_voxel_scoring",
+      "ct_secondary_exact_faces",
+      "ct_skip_homogeneous_face_clamp"
+    ]
+  },
+  "protocol": {
+    "warmups": 2,
+    "formal_pairs": 5,
+    "order": "alternating forward/reverse",
+    "profiler_attached_to_timing": false,
+    "improvement_definition": "control/candidate - 1"
+  },
+  "hashes": {
+    "config_sha256": "6d1896b34716e07eb92fc0dcbe0c6455f0148da95a47c7cd3aa704caa3ac8855",
+    "control_binary_sha256": "ed15e97f234c2a9ac4d5778ee671e311b5fd08ae774c60022258c6b68299dcbd",
+    "candidate_binary_sha256": "db7718c126244312b444238b61cb9935db1058c6037e8f31d288e2055901657d",
+    "transport_sycl_sha256": "ae335b141ed34d4f981ed87565235798a57ff30bb404281efc5d2742554a3234",
+    "cmake_sha256": "e7fd0e1b3bde86fea4acfae3cb1aebaf7d5afb324491ea8e645dbdc596be4c4d"
+  },
+  "performance_improvement_percent": {
+    "wall_s": {
+      "values": [
+        3.163215377007611,
+        4.2224612766678105,
+        3.6327238911210147,
+        3.5193980860608765,
+        3.8054645743214044
+      ],
+      "median": 3.6327238911210147,
+      "minimum": 3.163215377007611,
+      "maximum": 4.2224612766678105
+    },
+    "elapsed_s": {
+      "values": [
+        3.407708548162236,
+        4.588922527926198,
+        3.9225231025673324,
+        3.851075068671461,
+        4.114338946674478
+      ],
+      "median": 3.9225231025673324,
+      "minimum": 3.407708548162236,
+      "maximum": 4.588922527926198
+    },
+    "primary_s": {
+      "values": [
+        -0.5950296261545418,
+        0.4609892328679033,
+        0.06490866817236984,
+        -0.1850017835868245,
+        -0.10620884117730212
+      ],
+      "median": -0.10620884117730212,
+      "minimum": -0.5950296261545418,
+      "maximum": 0.4609892328679033
+    },
+    "secondary_s": {
+      "values": [
+        8.712467336457985,
+        10.533078427951548,
+        9.486842591780364,
+        9.69472738077648,
+        9.851876629845524
+      ],
+      "median": 9.69472738077648,
+      "minimum": 8.712467336457985,
+      "maximum": 10.533078427951548
+    }
+  },
+  "correctness": {
+    "histories": 3240963,
+    "steps": 1034976717,
+    "nuclear_interactions": 1344312,
+    "audit_identical_all_runs": true,
+    "quality_pass_all_runs": true,
+    "overflow_all_runs": true,
+    "candidate_max_dose_diff_pct_peak": 3.907743435186416e-05,
+    "baseline_repeat_envelope_pct_peak": 3.907743435186416e-05
+  },
+  "static_resources": {
+    "control_actual_wrapper": {
+      "registers_per_thread": 177,
+      "stack_bytes_per_thread": 352,
+      "constant0_bytes": 408
+    },
+    "candidate_actual_wrapper": {
+      "registers_per_thread": 164,
+      "stack_bytes_per_thread": 352,
+      "constant0_bytes": 408
+    }
+  },
+  "matched_ncu": {
+    "protocol": "one independent application per stage; kernel replay; cache-control=all; clocks unchanged; separate from timing",
+    "samples_per_stage": 1,
+    "scheduler_count_per_sm": 4,
+    "metrics": {
+      "control": {
+        "primary_steady": {
+          "registers_per_thread": 170,
+          "block_size": 128,
+          "active_warps_per_scheduler": 1.977944,
+          "active_warps_per_sm": 7.911776,
+          "eligible_warps_per_scheduler": 0.091931,
+          "ready_fraction": 0.04647806004618938,
+          "long_scoreboard_per_issue_active": 10.452981
+        },
+        "secondary_early": {
+          "registers_per_thread": 177,
+          "block_size": 32,
+          "active_warps_per_scheduler": 1.940763,
+          "active_warps_per_sm": 7.763052,
+          "eligible_warps_per_scheduler": 0.099301,
+          "ready_fraction": 0.051165958955318086,
+          "long_scoreboard_per_issue_active": 6.865019
+        },
+        "secondary_middle": {
+          "registers_per_thread": 177,
+          "block_size": 64,
+          "active_warps_per_scheduler": 1.95726,
+          "active_warps_per_sm": 7.82904,
+          "eligible_warps_per_scheduler": 0.094956,
+          "ready_fraction": 0.0485147604303976,
+          "long_scoreboard_per_issue_active": 12.152961
+        },
+        "secondary_late": {
+          "registers_per_thread": 177,
+          "block_size": 128,
+          "active_warps_per_scheduler": 1.000777,
+          "active_warps_per_sm": 4.003108,
+          "eligible_warps_per_scheduler": 0.079847,
+          "ready_fraction": 0.07978500704952252,
+          "long_scoreboard_per_issue_active": 4.13171
+        },
+        "secondary_generation2": {
+          "registers_per_thread": 177,
+          "block_size": 64,
+          "active_warps_per_scheduler": 1.934463,
+          "active_warps_per_sm": 7.737852,
+          "eligible_warps_per_scheduler": 0.097843,
+          "ready_fraction": 0.050578894504573105,
+          "long_scoreboard_per_issue_active": 11.226589
+        }
+      },
+      "candidate": {
+        "primary_steady": {
+          "registers_per_thread": 170,
+          "block_size": 128,
+          "active_warps_per_scheduler": 1.973067,
+          "active_warps_per_sm": 7.892268,
+          "eligible_warps_per_scheduler": 0.091647,
+          "ready_fraction": 0.04644900553301029,
+          "long_scoreboard_per_issue_active": 10.516266
+        },
+        "secondary_early": {
+          "registers_per_thread": 164,
+          "block_size": 32,
+          "active_warps_per_scheduler": 2.877771,
+          "active_warps_per_sm": 11.511084,
+          "eligible_warps_per_scheduler": 0.120939,
+          "ready_fraction": 0.04202523411348575,
+          "long_scoreboard_per_issue_active": 9.977438
+        },
+        "secondary_middle": {
+          "registers_per_thread": 164,
+          "block_size": 64,
+          "active_warps_per_scheduler": 2.662666,
+          "active_warps_per_sm": 10.650664,
+          "eligible_warps_per_scheduler": 0.104904,
+          "ready_fraction": 0.03939810701004181,
+          "long_scoreboard_per_issue_active": 14.880586
+        },
+        "secondary_late": {
+          "registers_per_thread": 164,
+          "block_size": 128,
+          "active_warps_per_scheduler": 1.000622,
+          "active_warps_per_sm": 4.002488,
+          "eligible_warps_per_scheduler": 0.079463,
+          "ready_fraction": 0.07941360473785307,
+          "long_scoreboard_per_issue_active": 4.094687
+        },
+        "secondary_generation2": {
+          "registers_per_thread": 164,
+          "block_size": 64,
+          "active_warps_per_scheduler": 2.652987,
+          "active_warps_per_sm": 10.611948,
+          "eligible_warps_per_scheduler": 0.109902,
+          "ready_fraction": 0.041425758965271973,
+          "long_scoreboard_per_issue_active": 13.441309
+        }
+      }
+    }
+  },
+  "limitations": [
+    "single matched NCU sample per stage; repeat sampling is still required for promotion",
+    "patient BODY-masked Gamma validation is incomplete",
+    "low-density production-cut threshold accuracy validation is incomplete",
+    "A6000 promotion validation is incomplete"
+  ]
+}

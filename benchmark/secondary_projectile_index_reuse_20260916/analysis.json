@@ -1,0 +1,1482 @@
+{
+  "schema": "carbon.secondary_projectile_index_reuse.analysis.v1",
+  "date": "2026-09-16",
+  "gpu": "NVIDIA GeForce RTX 2080 Ti",
+  "architecture": "sm_75",
+  "base_commit": "b3b906d983c6a87640e1a9a483bf11126d4561f2",
+  "candidate": {
+    "cmake_option": "CARBON_SECONDARY_REUSE_PROJECTILE_INDEX",
+    "default": false,
+    "decision": "reject from combination; retain default off",
+    "mechanism": "reuse immutable per-particle registry index only; recompute all energy/material/rate-dependent data",
+    "reason": "no paired throughput improvement and wrapper registers increase from 187 to 228"
+  },
+  "protocol": {
+    "warmups": 2,
+    "formal_pairs": 5,
+    "order": "alternating forward/reverse",
+    "profiler_attached": false,
+    "improvement_definition": "baseline/candidate - 1"
+  },
+  "resources": {
+    "control_wrapper": {
+      "registers_per_thread": 187,
+      "stack_bytes_per_thread": 264,
+      "constant0_bytes": 408
+    },
+    "candidate_wrapper": {
+      "registers_per_thread": 228,
+      "stack_bytes_per_thread": 264,
+      "constant0_bytes": 408
+    }
+  },
+  "performance": {
+    "wall_s": {
+      "values": [
+        -0.4828816433425698,
+        0.5200118555010569,
+        -0.1513299575808147,
+        0.14235690526001044,
+        -0.1213400507081297
+      ],
+      "median": -0.1213400507081297,
+      "minimum": -0.4828816433425698,
+      "maximum": 0.5200118555010569
+    },
+    "elapsed_s": {
+      "values": [
+        -0.4783044984606799,
+        0.5359367018484829,
+        -0.14377146434745303,
+        0.20047203850381834,
+        -0.06462053649616273
+      ],
+      "median": -0.06462053649616273,
+      "minimum": -0.4783044984606799,
+      "maximum": 0.5359367018484829
+    },
+    "primary_s": {
+      "values": [
+        -0.5550828391249096,
+        0.1987588423771891,
+        -0.4232528115094447,
+        0.14579028666805716,
+        0.002186155111894017
+      ],
+      "median": 0.002186155111894017,
+      "minimum": -0.5550828391249096,
+      "maximum": 0.1987588423771891
+    },
+    "secondary_s": {
+      "values": [
+        -0.6587352526091439,
+        0.89680101744396,
+        0.2318081841979458,
+        0.5088339485094906,
+        -0.08726906431473225
+      ],
+      "median": 0.2318081841979458,
+      "minimum": -0.6587352526091439,
+      "maximum": 0.89680101744396
+    }
+  },
+  "correctness": {
+    "histories": 3240963,
+    "steps": 1034976717,
+    "nuclear_interactions": 1344312,
+    "unified_em_audit": [
+      0,
+      1036320939,
+      1429988519,
+      0,
+      0,
+      6897079514135703,
+      528848467657861,
+      0
+    ],
+    "quality": "pass",
+    "overflow": 0,
+    "five_run_mean_max_abs_difference_percent_of_baseline_peak": 1.705197038695517e-05,
+    "five_baseline_run_global_envelope_percent_of_mean_peak": 2.557795557381572e-05,
+    "dose_gate": "pass"
+  },
+  "validation": {
+    "schneider_v2_1": "pass",
+    "patient_body_gamma": "pending",
+    "low_density_production_cut_accuracy": "pending"
+  },
+  "hashes": {
+    "cmakelists": "0b01105e6d0a0ce0637da4918cc49c4d67951fb8bf435a33d3b37564c056552b",
+    "transport_sycl_cpp": "465869054935c6f08802fca640766ffd58454027406b66dd97967015d8673fe8",
+    "control_binary": "c2fb088a8886a1689dba379a744d9b0eb7f1139f5c9f8d91dc3d9318f0fc984a",
+    "candidate_binary": "8c3bea84aa334d65df6658ac99e29f302682f84a97a4f529bcd19f3c222afe54",
+    "config": "6d1896b34716e07eb92fc0dcbe0c6455f0148da95a47c7cd3aa704caa3ac8855"
+  },
+  "evidence_root": "scratch/context_registry_reuse_paired_v2_20260916",
+  "runs": [
+    {
+      "kind": "base",
+      "index": 0,
+      "warmup": true,
+      "wall_s": 22.03818706801394,
+      "elapsed_s": 20.228121,
+      "primary_s": 8.2445447,
+      "secondary_s": 8.6686836,
+      "histories": 3240963.0,
+      "energy_error": 3.683333e-06,
+      "compaction_s": 0.03132207,
+      "stages": {
+        "ct_load_preprocess": 0.049016847999999995,
+        "config_load": 0.013180051,
+        "tps_plan_load": 0.000660427,
+        "ct_from_config_including_load": 0.031069766,
+        "tps_source_batch": 0.175750052,
+        "input_and_source_preparation": 0.467487264,
+        "unified_em_package_load_verify": 1.334004733,
+        "delta_moments_load_verify": 0.234474485,
+        "setup_em_device_upload": 0.183244944,
+        "setup_schneider_stopping_ion_device": 0.390792032,
+        "setup_schneider_ctx_host_and_device": 0.935267029,
+        "transport_setup_including_upload": 3.867951756,
+        "transport_loop_including_scoring_and_queue_transfers": 16.9916516,
+        "transport_readback_and_host_finalize": 0.088204098,
+        "transport_total": 20.963726793,
+        "quality_and_output": 0.444148166,
+        "process_wall_to_result_written": 21.884192051,
+        "process_main": 21.966277746
+      },
+      "audit": [
+        "[unified-em-audit] 0 1036320939 1429988519 0 0 6897079514135703 528848467657861 0"
+      ],
+      "quality": {
+        "schema_version": 3,
+        "status": "pass",
+        "run_mode": "production",
+        "accepted": true,
+        "absolute_physical_energy_residual_MeV": 31022.9905977,
+        "physical_relative_energy_residual": 3.68333299693e-06,
+        "absolute_accounting_energy_residual_MeV": 31022.9905977,
+        "accounting_relative_energy_residual": 3.68333299693e-06,
+        "absolute_energy_residual_MeV": 31022.9905977,
+        "relative_energy_residual": 3.68333299693e-06,
+        "topas_reference_energy_sink_active": false,
+        "queue_overflow_count": 0,
+        "queue_overflow_energy_MeV": 0,
+        "voxel_scored_energy_MeV": 7437058137.64,
+        "in_grid_deposited_energy_MeV": 7437058260.48,
+        "outside_grid_deposited_energy_MeV": 0.386508911848,
+        "grid_split_closure_ratio": 1.00000000219,
+        "voxel_to_ingrid_ratio": 0.999999983483,
+        "voxel_to_total_deposited_ratio": 0.999999985623,
+        "failures": [],
+        "approximations": [
+          {
+            "code": "condensed_delta_partition_v1",
+            "message": "User-authorized 2026-09-15: aggregate Gamma delta loss from pinned first/second moments, analytic Poisson partition mean correction, no discrete delta clock; local deposition, 1% combined mean-loss guard; higher spectrum moments and patient BODY Gamma not validated",
+            "value": 1,
+            "limit": 0
+          },
+          {
+            "code": "secondary_species_grouping_accuracy_pending",
+            "message": "GPU species index grouping; RNG identities preserved; production integration authorized; RT07575 scheduling dose difference 0.0203% of peak remains under investigation",
+            "value": 1,
+            "limit": 0
+          },
+          {
+            "code": "secondary_step_chunking_accepted",
+            "message": "16 complete iterations per launch, stable survivor index compaction, tail below 8192; user-accepted 2026-09-15 production interval; RT07575 compact+16 dose difference 0.00033% of peak vs 64-step (not a new TOPAS Gamma validation)",
+            "value": 1,
+            "limit": 0
+          },
+          {
+            "code": "unified_material_em_accuracy_pending",
+            "message": "Unified water/Schneider EM for all 18 charged ions; local delta deposition; production execution authorized, density cut-onset and patient Gamma accuracy gates remain pending",
+            "value": 1,
+            "limit": 0
+          },
+          {
+            "code": "schneider_post_em_null_collisions",
+            "message": "sampled candidates resolved as post-EM null collisions (track continues, no lookup)",
+            "value": 68,
+            "limit": 0
+          },
+          {
+            "code": "schneider_primary_post_em_null_collisions",
+            "message": "primary candidates resolved as post-EM null collisions (track continues, no lookup)",
+            "value": 90,
+            "limit": 0
+          }
+        ]
+      },
+      "dose_sha256": "6672afc6ae6e871b595368645ce64775bcc076929f2ea9793f94484930ea8151"
+    },
+    {
+      "kind": "cand",
+      "index": 0,
+      "warmup": true,
+      "wall_s": 22.116869391000364,
+      "elapsed_s": 20.426987,
+      "primary_s": 8.3236597,
+      "secondary_s": 8.7369863,
+      "histories": 3240963.0,
+      "energy_error": 3.6833319e-06,
+      "compaction_s": 0.03163532,
+      "stages": {
+        "ct_load_preprocess": 0.052372448,
+        "config_load": 0.015375798,
+        "tps_plan_load": 0.000648911,
+        "ct_from_config_including_load": 0.031864507,
+        "tps_source_batch": 0.175572664,
+        "input_and_source_preparation": 0.340840952,
+        "unified_em_package_load_verify": 1.37694982,
+        "delta_moments_load_verify": 0.234233362,
+        "setup_em_device_upload": 0.181690005,
+        "setup_schneider_stopping_ion_device": 0.395680837,
+        "setup_schneider_ctx_host_and_device": 0.937307361,
+        "transport_setup_including_upload": 3.916573698,
+        "transport_loop_including_scoring_and_queue_transfers": 17.145545535,
+        "transport_readback_and_host_finalize": 0.084613914,
+        "transport_total": 21.162673247,
+        "quality_and_output": 0.446350272,
+        "process_wall_to_result_written": 21.956445993,
+        "process_main": 22.041058836
+      },
+      "audit": [
+        "[unified-em-audit] 0 1036320939 1429988519 0 0 6897079514135703 528848467657861 0"
+      ],
+      "quality": {
+        "schema_version": 3,
+        "status": "pass",
+        "run_mode": "production",
+        "accepted": true,
+        "absolute_physical_energy_residual_MeV": 31022.9812136,
+        "physical_relative_energy_residual": 3.68333188276e-06,
+        "absolute_accounting_energy_residual_MeV": 31022.9812136,
+        "accounting_relative_energy_residual": 3.68333188276e-06,
+        "absolute_energy_residual_MeV": 31022.9812136,
+        "relative_energy_residual": 3.68333188276e-06,
+        "topas_reference_energy_sink_active": false,
+        "queue_overflow_count": 0,
+        "queue_overflow_energy_MeV": 0,
+        "voxel_scored_energy_MeV": 7437058136.23,
+        "in_grid_deposited_energy_MeV": 7437058260.47,
+        "outside_grid_deposited_energy_MeV": 0.386508911848,
+        "grid_split_closure_ratio": 1.00000000219,
+        "voxel_to_ingrid_ratio": 0.999999983295,
+        "voxel_to_total_deposited_ratio": 0.999999985435,
+        "failures": [],
+        "approximations": [
+          {
+            "code": "condensed_delta_partition_v1",
+            "message": "User-authorized 2026-09-15: aggregate Gamma delta loss from pinned first/second moments, analytic Poisson partition mean correction, no discrete delta clock; local deposition, 1% combined mean-loss guard; higher spectrum moments and patient BODY Gamma not validated",
+            "value": 1,
+            "limit": 0
+          },
+          {
+            "code": "secondary_species_grouping_accuracy_pending",
+            "message": "GPU species index grouping; RNG identities preserved; production integration authorized; RT07575 scheduling dose difference 0.0203% of peak remains under investigation",
+            "value": 1,
+            "limit": 0
+          },
+          {
+            "code": "secondary_step_chunking_accepted",
+            "message": "16 complete iterations per launch, stable survivor index compaction, tail below 8192; user-accepted 2026-09-15 production interval; RT07575 compact+16 dose difference 0.00033% of peak vs 64-step (not a new TOPAS Gamma validation)",
+            "value": 1,
+            "limit": 0
+          },
+          {
+            "code": "unified_material_em_accuracy_pending",
+            "message": "Unified water/Schneider EM for all 18 charged ions; local delta deposition; production execution authorized, density cut-onset and patient Gamma accuracy gates remain pending",
+            "value": 1,
+            "limit": 0
+          },
+          {
+            "code": "schneider_post_em_null_collisions",
+            "message": "sampled candidates resolved as post-EM null collisions (track continues, no lookup)",
+            "value": 68,
+            "limit": 0
+          },
+          {
+            "code": "schneider_primary_post_em_null_collisions",
+            "message": "primary candidates resolved as post-EM null collisions (track continues, no lookup)",
+            "value": 90,
+            "limit": 0
+          }
+        ]
+      },
+      "dose_sha256": "7391447564f39d1ed80cace81cd660414185e675d59a9b1c087e18e4172b6610"
+    },
+    {
+      "kind": "base",
+      "index": 1,
+      "warmup": true,
+      "wall_s": 22.382248724985402,
+      "elapsed_s": 20.653742,
+      "primary_s": 8.4103118,
+      "secondary_s": 8.8971699,
+      "histories": 3240963.0,
+      "energy_error": 3.6833329e-06,
+      "compaction_s": 0.031645440000000004,
+      "stages": {
+        "ct_load_preprocess": 0.051050690999999995,
+        "config_load": 0.013791194,
+        "tps_plan_load": 0.000679076,
+        "ct_from_config_including_load": 0.031815113,
+        "tps_source_batch": 0.176956294,
+        "input_and_source_preparation": 0.373907094,
+        "unified_em_package_load_verify": 1.352955433,
+        "delta_moments_load_verify": 0.237719118,
+        "setup_em_device_upload": 0.184068559,
+        "setup_schneider_stopping_ion_device": 0.39369719,
+        "setup_schneider_ctx_host_and_device": 0.940510219,
+        "transport_setup_including_upload": 3.904271273,
+        "transport_loop_including_scoring_and_queue_transfers": 17.388589656,
+        "transport_readback_and_host_finalize": 0.084710611,
+        "transport_total": 21.394450739,
+        "quality_and_output": 0.445434238,
+        "process_wall_to_result_written": 22.22183508,
+        "process_main": 22.305674966
+      },
+      "audit": [
+        "[unified-em-audit] 0 1036320939 1429988519 0 0 6897079514135703 528848467657861 0"
+      ],
+      "quality": {
+        "schema_version": 3,
+        "status": "pass",
+        "run_mode": "production",
+        "accepted": true,
+        "absolute_physical_energy_residual_MeV": 31022.9899759,
+        "physical_relative_energy_residual": 3.6833329231e-06,
+        "absolute_accounting_energy_residual_MeV": 31022.9899759,
+        "accounting_relative_energy_residual": 3.6833329231e-06,
+        "absolute_energy_residual_MeV": 31022.9899759,
+        "relative_energy_residual": 3.6833329231e-06,
+        "topas_reference_energy_sink_active": false,
+        "queue_overflow_count": 0,
+        "queue_overflow_energy_MeV": 0,
+        "voxel_scored_energy_MeV": 7437058137.19,
+        "in_grid_deposited_energy_MeV": 7437058260.47,
+        "outside_grid_deposited_energy_MeV": 0.386508911848,
+        "grid_split_closure_ratio": 1.00000000219,
+        "voxel_to_ingrid_ratio": 0.999999983424,
+        "voxel_to_total_deposited_ratio": 0.999999985562,
+        "failures": [],
+        "approximations": [
+          {
+            "code": "condensed_delta_partition_v1",
+            "message": "User-authorized 2026-09-15: aggregate Gamma delta loss from pinned first/second moments, analytic Poisson partition mean correction, no discrete delta clock; local deposition, 1% combined mean-loss guard; higher spectrum moments and patient BODY Gamma not validated",
+            "value": 1,
+            "limit": 0
+          },
+          {
+            "code": "secondary_species_grouping_accuracy_pending",
+            "message": "GPU species index grouping; RNG identities preserved; production integration authorized; RT07575 scheduling dose difference 0.0203% of peak remains under investigation",
+            "value": 1,
+            "limit": 0
+          },
+          {
+            "code": "secondary_step_chunking_accepted",
+            "message": "16 complete iterations per launch, stable survivor index compaction, tail below 8192; user-accepted 2026-09-15 production interval; RT07575 compact+16 dose difference 0.00033% of peak vs 64-step (not a new TOPAS Gamma validation)",
+            "value": 1,
+            "limit": 0
+          },
+          {
+            "code": "unified_material_em_accuracy_pending",
+            "message": "Unified water/Schneider EM for all 18 charged ions; local delta deposition; production execution authorized, density cut-onset and patient Gamma accuracy gates remain pending",
+            "value": 1,
+            "limit": 0
+          },
+          {
+            "code": "schneider_post_em_null_collisions",
+            "message": "sampled candidates resolved as post-EM null collisions (track continues, no lookup)",
+            "value": 68,
+            "limit": 0
+          },
+          {
+            "code": "schneider_primary_post_em_null_collisions",
+            "message": "primary candidates resolved as post-EM null collisions (track continues, no lookup)",
+            "value": 90,
+            "limit": 0
+          }
+        ]
+      },
+      "dose_sha256": "13f0cce44ecc1fe665e81dc713cf190a8b00d447292cafe9e1abf92df654710c"
+    },
+    {
+      "kind": "cand",
+      "index": 1,
+      "warmup": true,
+      "wall_s": 22.426874648954254,
+      "elapsed_s": 20.73521,
+      "primary_s": 8.4361968,
+      "secondary_s": 8.9180527,
+      "histories": 3240963.0,
+      "energy_error": 3.683321e-06,
+      "compaction_s": 0.03186278,
+      "stages": {
+        "ct_load_preprocess": 0.050449173,
+        "config_load": 0.01405324,
+        "tps_plan_load": 0.000661119,
+        "ct_from_config_including_load": 0.031098641,
+        "tps_source_batch": 0.175620206,
+        "input_and_source_preparation": 0.341620179,
+        "unified_em_package_load_verify": 1.379680836,
+        "delta_moments_load_verify": 0.234353864,
+        "setup_em_device_upload": 0.187159658,
+        "setup_schneider_stopping_ion_device": 0.396151679,
+        "setup_schneider_ctx_host_and_device": 0.938991375,
+        "transport_setup_including_upload": 3.93100618,
+        "transport_loop_including_scoring_and_queue_transfers": 17.43791426,
+        "transport_readback_and_host_finalize": 0.086069894,
+        "transport_total": 21.470742661,
+        "quality_and_output": 0.444870196,
+        "process_wall_to_result_written": 22.264147161,
+        "process_main": 22.352763982
+      },
+      "audit": [
+        "[unified-em-audit] 0 1036320939 1429988519 0 0 6897079514135703 528848467657861 0"
+      ],
+      "quality": {
+        "schema_version": 3,
+        "status": "pass",
+        "run_mode": "production",
+        "accepted": true,
+        "absolute_physical_energy_residual_MeV": 31022.8895426,
+        "physical_relative_energy_residual": 3.68332099874e-06,
+        "absolute_accounting_energy_residual_MeV": 31022.8895426,
+        "accounting_relative_energy_residual": 3.68332099874e-06,
+        "absolute_energy_residual_MeV": 31022.8895426,
+        "relative_energy_residual": 3.68332099874e-06,
+        "topas_reference_energy_sink_active": false,
+        "queue_overflow_count": 0,
+        "queue_overflow_energy_MeV": 0,
+        "voxel_scored_energy_MeV": 7437058137.84,
+        "in_grid_deposited_energy_MeV": 7437058260.46,
+        "outside_grid_deposited_energy_MeV": 0.386508911848,
+        "grid_split_closure_ratio": 1.0000000022,
+        "voxel_to_ingrid_ratio": 0.999999983512,
+        "voxel_to_total_deposited_ratio": 0.999999985664,
+        "failures": [],
+        "approximations": [
+          {
+            "code": "condensed_delta_partition_v1",
+            "message": "User-authorized 2026-09-15: aggregate Gamma delta loss from pinned first/second moments, analytic Poisson partition mean correction, no discrete delta clock; local deposition, 1% combined mean-loss guard; higher spectrum moments and patient BODY Gamma not validated",
+            "value": 1,
+            "limit": 0
+          },
+          {
+            "code": "secondary_species_grouping_accuracy_pending",
+            "message": "GPU species index grouping; RNG identities preserved; production integration authorized; RT07575 scheduling dose difference 0.0203% of peak remains under investigation",
+            "value": 1,
+            "limit": 0
+          },
+          {
+            "code": "secondary_step_chunking_accepted",
+            "message": "16 complete iterations per launch, stable survivor index compaction, tail below 8192; user-accepted 2026-09-15 production interval; RT07575 compact+16 dose difference 0.00033% of peak vs 64-step (not a new TOPAS Gamma validation)",
+            "value": 1,
+            "limit": 0
+          },
+          {
+            "code": "unified_material_em_accuracy_pending",
+            "message": "Unified water/Schneider EM for all 18 charged ions; local delta deposition; production execution authorized, density cut-onset and patient Gamma accuracy gates remain pending",
+            "value": 1,
+            "limit": 0
+          },
+          {
+            "code": "schneider_post_em_null_collisions",
+            "message": "sampled candidates resolved as post-EM null collisions (track continues, no lookup)",
+            "value": 68,
+            "limit": 0
+          },
+          {
+            "code": "schneider_primary_post_em_null_collisions",
+            "message": "primary candidates resolved as post-EM null collisions (track continues, no lookup)",
+            "value": 90,
+            "limit": 0
+          }
+        ]
+      },
+      "dose_sha256": "58964babb8406552f05238d70ebd629abd74ffd88da10bc3fdb5f97f3392233b"
+    },
+    {
+      "kind": "base",
+      "index": 0,
+      "warmup": false,
+      "wall_s": 22.630885655991733,
+      "elapsed_s": 20.938477,
+      "primary_s": 8.4656021,
+      "secondary_s": 9.0941631,
+      "histories": 3240963.0,
+      "energy_error": 3.6833366e-06,
+      "compaction_s": 0.03222859,
+      "stages": {
+        "ct_load_preprocess": 0.05040615799999999,
+        "config_load": 0.013647778,
+        "tps_plan_load": 0.000646136,
+        "ct_from_config_including_load": 0.031097619,
+        "tps_source_batch": 0.175737803,
+        "input_and_source_preparation": 0.340911498,
+        "unified_em_package_load_verify": 1.376756638,
+        "delta_moments_load_verify": 0.235811866,
+        "setup_em_device_upload": 0.188123524,
+        "setup_schneider_stopping_ion_device": 0.395646384,
+        "setup_schneider_ctx_host_and_device": 0.938881809,
+        "transport_setup_including_upload": 3.929939549,
+        "transport_loop_including_scoring_and_queue_transfers": 17.644832196,
+        "transport_readback_and_host_finalize": 0.084102692,
+        "transport_total": 21.676030304,
+        "quality_and_output": 0.444326675,
+        "process_wall_to_result_written": 22.467819795,
+        "process_main": 22.556733936
+      },
+      "audit": [
+        "[unified-em-audit] 0 1036320939 1429988519 0 0 6897079514135703 528848467657861 0"
+      ],
+      "quality": {
+        "schema_version": 3,
+        "status": "pass",
+        "run_mode": "production",
+        "accepted": true,
+        "absolute_physical_energy_residual_MeV": 31023.0213556,
+        "physical_relative_energy_residual": 3.68333664879e-06,
+        "absolute_accounting_energy_residual_MeV": 31023.0213556,
+        "accounting_relative_energy_residual": 3.68333664879e-06,
+        "absolute_energy_residual_MeV": 31023.0213556,
+        "relative_energy_residual": 3.68333664879e-06,
+        "topas_reference_energy_sink_active": false,
+        "queue_overflow_count": 0,
+        "queue_overflow_energy_MeV": 0,
+        "voxel_scored_energy_MeV": 7437058136.55,
+        "in_grid_deposited_energy_MeV": 7437058260.46,
+        "outside_grid_deposited_energy_MeV": 0.386508911848,
+        "grid_split_closure_ratio": 1.00000000219,
+        "voxel_to_ingrid_ratio": 0.999999983339,
+        "voxel_to_total_deposited_ratio": 0.999999985473,
+        "failures": [],
+        "approximations": [
+          {
+            "code": "condensed_delta_partition_v1",
+            "message": "User-authorized 2026-09-15: aggregate Gamma delta loss from pinned first/second moments, analytic Poisson partition mean correction, no discrete delta clock; local deposition, 1% combined mean-loss guard; higher spectrum moments and patient BODY Gamma not validated",
+            "value": 1,
+            "limit": 0
+          },
+          {
+            "code": "secondary_species_grouping_accuracy_pending",
+            "message": "GPU species index grouping; RNG identities preserved; production integration authorized; RT07575 scheduling dose difference 0.0203% of peak remains under investigation",
+            "value": 1,
+            "limit": 0
+          },
+          {
+            "code": "secondary_step_chunking_accepted",
+            "message": "16 complete iterations per launch, stable survivor index compaction, tail below 8192; user-accepted 2026-09-15 production interval; RT07575 compact+16 dose difference 0.00033% of peak vs 64-step (not a new TOPAS Gamma validation)",
+            "value": 1,
+            "limit": 0
+          },
+          {
+            "code": "unified_material_em_accuracy_pending",
+            "message": "Unified water/Schneider EM for all 18 charged ions; local delta deposition; production execution authorized, density cut-onset and patient Gamma accuracy gates remain pending",
+            "value": 1,
+            "limit": 0
+          },
+          {
+            "code": "schneider_post_em_null_collisions",
+            "message": "sampled candidates resolved as post-EM null collisions (track continues, no lookup)",
+            "value": 68,
+            "limit": 0
+          },
+          {
+            "code": "schneider_primary_post_em_null_collisions",
+            "message": "primary candidates resolved as post-EM null collisions (track continues, no lookup)",
+            "value": 90,
+            "limit": 0
+          }
+        ]
+      },
+      "dose_sha256": "7d05598b83e311b425cdb38d0707d9dc697736149a02ff723bbe0bacce5349a5",
+      "audit_identical": true,
+      "max_diff_pct_peak": 0.0
+    },
+    {
+      "kind": "cand",
+      "index": 0,
+      "warmup": false,
+      "wall_s": 22.74069630401209,
+      "elapsed_s": 21.039108,
+      "primary_s": 8.5128555,
+      "secondary_s": 9.1544668,
+      "histories": 3240963.0,
+      "energy_error": 3.6833208e-06,
+      "compaction_s": 0.03245695,
+      "stages": {
+        "ct_load_preprocess": 0.054311869,
+        "config_load": 0.017333395,
+        "tps_plan_load": 0.000670523,
+        "ct_from_config_including_load": 0.03195219,
+        "tps_source_batch": 0.176926739,
+        "input_and_source_preparation": 0.347610408,
+        "unified_em_package_load_verify": 1.379949211,
+        "delta_moments_load_verify": 0.234903695,
+        "setup_em_device_upload": 0.181685178,
+        "setup_schneider_stopping_ion_device": 0.395622679,
+        "setup_schneider_ctx_host_and_device": 0.93670435,
+        "transport_setup_including_upload": 3.922910361,
+        "transport_loop_including_scoring_and_queue_transfers": 17.751437383,
+        "transport_readback_and_host_finalize": 0.085232089,
+        "transport_total": 21.776482696,
+        "quality_and_output": 0.444006201,
+        "process_wall_to_result_written": 22.574578494,
+        "process_main": 22.660308274
+      },
+      "audit": [
+        "[unified-em-audit] 0 1036320939 1429988519 0 0 6897079514135703 528848467657861 0"
+      ],
+      "quality": {
+        "schema_version": 3,
+        "status": "pass",
+        "run_mode": "production",
+        "accepted": true,
+        "absolute_physical_energy_residual_MeV": 31022.8875589,
+        "physical_relative_energy_residual": 3.68332076322e-06,
+        "absolute_accounting_energy_residual_MeV": 31022.8875589,
+        "accounting_relative_energy_residual": 3.68332076322e-06,
+        "absolute_energy_residual_MeV": 31022.8875589,
+        "relative_energy_residual": 3.68332076322e-06,
+        "topas_reference_energy_sink_active": false,
+        "queue_overflow_count": 0,
+        "queue_overflow_energy_MeV": 0,
+        "voxel_scored_energy_MeV": 7437058137.61,
+        "in_grid_deposited_energy_MeV": 7437058260.47,
+        "outside_grid_deposited_energy_MeV": 0.386508911848,
+        "grid_split_closure_ratio": 1.0000000022,
+        "voxel_to_ingrid_ratio": 0.99999998348,
+        "voxel_to_total_deposited_ratio": 0.999999985633,
+        "failures": [],
+        "approximations": [
+          {
+            "code": "condensed_delta_partition_v1",
+            "message": "User-authorized 2026-09-15: aggregate Gamma delta loss from pinned first/second moments, analytic Poisson partition mean correction, no discrete delta clock; local deposition, 1% combined mean-loss guard; higher spectrum moments and patient BODY Gamma not validated",
+            "value": 1,
+            "limit": 0
+          },
+          {
+            "code": "secondary_species_grouping_accuracy_pending",
+            "message": "GPU species index grouping; RNG identities preserved; production integration authorized; RT07575 scheduling dose difference 0.0203% of peak remains under investigation",
+            "value": 1,
+            "limit": 0
+          },
+          {
+            "code": "secondary_step_chunking_accepted",
+            "message": "16 complete iterations per launch, stable survivor index compaction, tail below 8192; user-accepted 2026-09-15 production interval; RT07575 compact+16 dose difference 0.00033% of peak vs 64-step (not a new TOPAS Gamma validation)",
+            "value": 1,
+            "limit": 0
+          },
+          {
+            "code": "unified_material_em_accuracy_pending",
+            "message": "Unified water/Schneider EM for all 18 charged ions; local delta deposition; production execution authorized, density cut-onset and patient Gamma accuracy gates remain pending",
+            "value": 1,
+            "limit": 0
+          },
+          {
+            "code": "schneider_post_em_null_collisions",
+            "message": "sampled candidates resolved as post-EM null collisions (track continues, no lookup)",
+            "value": 68,
+            "limit": 0
+          },
+          {
+            "code": "schneider_primary_post_em_null_collisions",
+            "message": "primary candidates resolved as post-EM null collisions (track continues, no lookup)",
+            "value": 90,
+            "limit": 0
+          }
+        ]
+      },
+      "dose_sha256": "731ba4f536934273046b04347d5cbe4497600aa424e9c5a4bf515ea144234cf2",
+      "audit_identical": true,
+      "max_diff_pct_peak": 3.5524937795833916e-05
+    },
+    {
+      "kind": "cand",
+      "index": 1,
+      "warmup": false,
+      "wall_s": 22.826045939989854,
+      "elapsed_s": 21.134772,
+      "primary_s": 8.5749141,
+      "secondary_s": 9.1945703,
+      "histories": 3240963.0,
+      "energy_error": 3.6833371e-06,
+      "compaction_s": 0.03252653,
+      "stages": {
+        "ct_load_preprocess": 0.049235408,
+        "config_load": 0.0124649,
+        "tps_plan_load": 0.000669332,
+        "ct_from_config_including_load": 0.031113112000000002,
+        "tps_source_batch": 0.176924797,
+        "input_and_source_preparation": 0.341019721,
+        "unified_em_package_load_verify": 1.375754724,
+        "delta_moments_load_verify": 0.23496055,
+        "setup_em_device_upload": 0.182615474,
+        "setup_schneider_stopping_ion_device": 0.394690491,
+        "setup_schneider_ctx_host_and_device": 0.940510581,
+        "transport_setup_including_upload": 3.923861377,
+        "transport_loop_including_scoring_and_queue_transfers": 17.85006008,
+        "transport_readback_and_host_finalize": 0.082299398,
+        "transport_total": 21.873197852,
+        "quality_and_output": 0.44346942,
+        "process_wall_to_result_written": 22.664216227,
+        "process_main": 22.751263007
+      },
+      "audit": [
+        "[unified-em-audit] 0 1036320939 1429988519 0 0 6897079514135703 528848467657861 0"
+      ],
+      "quality": {
+        "schema_version": 3,
+        "status": "pass",
+        "run_mode": "production",
+        "accepted": true,
+        "absolute_physical_energy_residual_MeV": 31023.0248575,
+        "physical_relative_energy_residual": 3.68333706457e-06,
+        "absolute_accounting_energy_residual_MeV": 31023.0248575,
+        "accounting_relative_energy_residual": 3.68333706457e-06,
+        "absolute_energy_residual_MeV": 31023.0248575,
+        "relative_energy_residual": 3.68333706457e-06,
+        "topas_reference_energy_sink_active": false,
+        "queue_overflow_count": 0,
+        "queue_overflow_energy_MeV": 0,
+        "voxel_scored_energy_MeV": 7437058137.16,
+        "in_grid_deposited_energy_MeV": 7437058260.47,
+        "outside_grid_deposited_energy_MeV": 0.386508911848,
+        "grid_split_closure_ratio": 1.00000000219,
+        "voxel_to_ingrid_ratio": 0.99999998342,
+        "voxel_to_total_deposited_ratio": 0.999999985554,
+        "failures": [],
+        "approximations": [
+          {
+            "code": "condensed_delta_partition_v1",
+            "message": "User-authorized 2026-09-15: aggregate Gamma delta loss from pinned first/second moments, analytic Poisson partition mean correction, no discrete delta clock; local deposition, 1% combined mean-loss guard; higher spectrum moments and patient BODY Gamma not validated",
+            "value": 1,
+            "limit": 0
+          },
+          {
+            "code": "secondary_species_grouping_accuracy_pending",
+            "message": "GPU species index grouping; RNG identities preserved; production integration authorized; RT07575 scheduling dose difference 0.0203% of peak remains under investigation",
+            "value": 1,
+            "limit": 0
+          },
+          {
+            "code": "secondary_step_chunking_accepted",
+            "message": "16 complete iterations per launch, stable survivor index compaction, tail below 8192; user-accepted 2026-09-15 production interval; RT07575 compact+16 dose difference 0.00033% of peak vs 64-step (not a new TOPAS Gamma validation)",
+            "value": 1,
+            "limit": 0
+          },
+          {
+            "code": "unified_material_em_accuracy_pending",
+            "message": "Unified water/Schneider EM for all 18 charged ions; local delta deposition; production execution authorized, density cut-onset and patient Gamma accuracy gates remain pending",
+            "value": 1,
+            "limit": 0
+          },
+          {
+            "code": "schneider_post_em_null_collisions",
+            "message": "sampled candidates resolved as post-EM null collisions (track continues, no lookup)",
+            "value": 68,
+            "limit": 0
+          },
+          {
+            "code": "schneider_primary_post_em_null_collisions",
+            "message": "primary candidates resolved as post-EM null collisions (track continues, no lookup)",
+            "value": 90,
+            "limit": 0
+          }
+        ]
+      },
+      "dose_sha256": "9ae8b699c2a52d84f8d0745b2b2ac53ad3cdf1db8233f2064cfd80d6e0885023",
+      "audit_identical": true,
+      "max_diff_pct_peak": 3.5524937795833916e-05
+    },
+    {
+      "kind": "base",
+      "index": 1,
+      "warmup": false,
+      "wall_s": 22.94474408501992,
+      "elapsed_s": 21.248041,
+      "primary_s": 8.5919575,
+      "secondary_s": 9.2770273,
+      "histories": 3240963.0,
+      "energy_error": 3.6833255e-06,
+      "compaction_s": 0.0328621,
+      "stages": {
+        "ct_load_preprocess": 0.049862565,
+        "config_load": 0.013188624,
+        "tps_plan_load": 0.000669071,
+        "ct_from_config_including_load": 0.031742643,
+        "tps_source_batch": 0.176127172,
+        "input_and_source_preparation": 0.343715574,
+        "unified_em_package_load_verify": 1.380519532,
+        "delta_moments_load_verify": 0.234061642,
+        "setup_em_device_upload": 0.190929794,
+        "setup_schneider_stopping_ion_device": 0.396249085,
+        "setup_schneider_ctx_host_and_device": 0.936294651,
+        "transport_setup_including_upload": 3.931221697,
+        "transport_loop_including_scoring_and_queue_transfers": 17.950603168,
+        "transport_readback_and_host_finalize": 0.085052066,
+        "transport_total": 21.983945246,
+        "quality_and_output": 0.442580697,
+        "process_wall_to_result_written": 22.77726038,
+        "process_main": 22.865496366
+      },
+      "audit": [
+        "[unified-em-audit] 0 1036320939 1429988519 0 0 6897079514135703 528848467657861 0"
+      ],
+      "quality": {
+        "schema_version": 3,
+        "status": "pass",
+        "run_mode": "production",
+        "accepted": true,
+        "absolute_physical_energy_residual_MeV": 31022.9272852,
+        "physical_relative_energy_residual": 3.68332547989e-06,
+        "absolute_accounting_energy_residual_MeV": 31022.9272852,
+        "accounting_relative_energy_residual": 3.68332547989e-06,
+        "absolute_energy_residual_MeV": 31022.9272852,
+        "relative_energy_residual": 3.68332547989e-06,
+        "topas_reference_energy_sink_active": false,
+        "queue_overflow_count": 0,
+        "queue_overflow_energy_MeV": 0,
+        "voxel_scored_energy_MeV": 7437058137.09,
+        "in_grid_deposited_energy_MeV": 7437058260.47,
+        "outside_grid_deposited_energy_MeV": 0.386508911848,
+        "grid_split_closure_ratio": 1.0000000022,
+        "voxel_to_ingrid_ratio": 0.99999998341,
+        "voxel_to_total_deposited_ratio": 0.999999985558,
+        "failures": [],
+        "approximations": [
+          {
+            "code": "condensed_delta_partition_v1",
+            "message": "User-authorized 2026-09-15: aggregate Gamma delta loss from pinned first/second moments, analytic Poisson partition mean correction, no discrete delta clock; local deposition, 1% combined mean-loss guard; higher spectrum moments and patient BODY Gamma not validated",
+            "value": 1,
+            "limit": 0
+          },
+          {
+            "code": "secondary_species_grouping_accuracy_pending",
+            "message": "GPU species index grouping; RNG identities preserved; production integration authorized; RT07575 scheduling dose difference 0.0203% of peak remains under investigation",
+            "value": 1,
+            "limit": 0
+          },
+          {
+            "code": "secondary_step_chunking_accepted",
+            "message": "16 complete iterations per launch, stable survivor index compaction, tail below 8192; user-accepted 2026-09-15 production interval; RT07575 compact+16 dose difference 0.00033% of peak vs 64-step (not a new TOPAS Gamma validation)",
+            "value": 1,
+            "limit": 0
+          },
+          {
+            "code": "unified_material_em_accuracy_pending",
+            "message": "Unified water/Schneider EM for all 18 charged ions; local delta deposition; production execution authorized, density cut-onset and patient Gamma accuracy gates remain pending",
+            "value": 1,
+            "limit": 0
+          },
+          {
+            "code": "schneider_post_em_null_collisions",
+            "message": "sampled candidates resolved as post-EM null collisions (track continues, no lookup)",
+            "value": 68,
+            "limit": 0
+          },
+          {
+            "code": "schneider_primary_post_em_null_collisions",
+            "message": "primary candidates resolved as post-EM null collisions (track continues, no lookup)",
+            "value": 90,
+            "limit": 0
+          }
+        ]
+      },
+      "dose_sha256": "248605ffacd8b1bc21bc1a57fc550b2128c1a3b64421d1e8da110dcf7e84d87e",
+      "audit_identical": true,
+      "max_diff_pct_peak": 3.9077431575417316e-05
+    },
+    {
+      "kind": "base",
+      "index": 2,
+      "warmup": false,
+      "wall_s": 22.98981602297863,
+      "elapsed_s": 21.289295,
+      "primary_s": 8.5998213,
+      "secondary_s": 9.3170781,
+      "histories": 3240963.0,
+      "energy_error": 3.6833337e-06,
+      "compaction_s": 0.032829660000000004,
+      "stages": {
+        "ct_load_preprocess": 0.053700574,
+        "config_load": 0.016349619,
+        "tps_plan_load": 0.000680047,
+        "ct_from_config_including_load": 0.032291451,
+        "tps_source_batch": 0.177502299,
+        "input_and_source_preparation": 0.346309933,
+        "unified_em_package_load_verify": 1.380495526,
+        "delta_moments_load_verify": 0.234074001,
+        "setup_em_device_upload": 0.180601471,
+        "setup_schneider_stopping_ion_device": 0.395945697,
+        "setup_schneider_ctx_host_and_device": 0.93750553,
+        "transport_setup_including_upload": 3.924586822,
+        "transport_loop_including_scoring_and_queue_transfers": 18.000278903,
+        "transport_readback_and_host_finalize": 0.085935011,
+        "transport_total": 22.028858434,
+        "quality_and_output": 0.444398164,
+        "process_wall_to_result_written": 22.82739708,
+        "process_main": 22.914268345
+      },
+      "audit": [
+        "[unified-em-audit] 0 1036320939 1429988519 0 0 6897079514135703 528848467657861 0"
+      ],
+      "quality": {
+        "schema_version": 3,
+        "status": "pass",
+        "run_mode": "production",
+        "accepted": true,
+        "absolute_physical_energy_residual_MeV": 31022.9967279,
+        "physical_relative_energy_residual": 3.68333372477e-06,
+        "absolute_accounting_energy_residual_MeV": 31022.9967279,
+        "accounting_relative_energy_residual": 3.68333372477e-06,
+        "absolute_energy_residual_MeV": 31022.9967279,
+        "relative_energy_residual": 3.68333372477e-06,
+        "topas_reference_energy_sink_active": false,
+        "queue_overflow_count": 0,
+        "queue_overflow_energy_MeV": 0,
+        "voxel_scored_energy_MeV": 7437058136.85,
+        "in_grid_deposited_energy_MeV": 7437058260.46,
+        "outside_grid_deposited_energy_MeV": 0.386508911848,
+        "grid_split_closure_ratio": 1.00000000219,
+        "voxel_to_ingrid_ratio": 0.999999983379,
+        "voxel_to_total_deposited_ratio": 0.999999985517,
+        "failures": [],
+        "approximations": [
+          {
+            "code": "condensed_delta_partition_v1",
+            "message": "User-authorized 2026-09-15: aggregate Gamma delta loss from pinned first/second moments, analytic Poisson partition mean correction, no discrete delta clock; local deposition, 1% combined mean-loss guard; higher spectrum moments and patient BODY Gamma not validated",
+            "value": 1,
+            "limit": 0
+          },
+          {
+            "code": "secondary_species_grouping_accuracy_pending",
+            "message": "GPU species index grouping; RNG identities preserved; production integration authorized; RT07575 scheduling dose difference 0.0203% of peak remains under investigation",
+            "value": 1,
+            "limit": 0
+          },
+          {
+            "code": "secondary_step_chunking_accepted",
+            "message": "16 complete iterations per launch, stable survivor index compaction, tail below 8192; user-accepted 2026-09-15 production interval; RT07575 compact+16 dose difference 0.00033% of peak vs 64-step (not a new TOPAS Gamma validation)",
+            "value": 1,
+            "limit": 0
+          },
+          {
+            "code": "unified_material_em_accuracy_pending",
+            "message": "Unified water/Schneider EM for all 18 charged ions; local delta deposition; production execution authorized, density cut-onset and patient Gamma accuracy gates remain pending",
+            "value": 1,
+            "limit": 0
+          },
+          {
+            "code": "schneider_post_em_null_collisions",
+            "message": "sampled candidates resolved as post-EM null collisions (track continues, no lookup)",
+            "value": 68,
+            "limit": 0
+          },
+          {
+            "code": "schneider_primary_post_em_null_collisions",
+            "message": "primary candidates resolved as post-EM null collisions (track continues, no lookup)",
+            "value": 90,
+            "limit": 0
+          }
+        ]
+      },
+      "dose_sha256": "7d9c8a810f15e3b032008373ed4ec2b70f66b60d4c5211c0d3f99130db11925b",
+      "audit_identical": true,
+      "max_diff_pct_peak": 4.6182419134584095e-05
+    },
+    {
+      "kind": "cand",
+      "index": 2,
+      "warmup": false,
+      "wall_s": 23.024659230024554,
+      "elapsed_s": 21.319947,
+      "primary_s": 8.636375,
+      "secondary_s": 9.2955303,
+      "histories": 3240963.0,
+      "energy_error": 3.6833305e-06,
+      "compaction_s": 0.03293903,
+      "stages": {
+        "ct_load_preprocess": 0.050741050999999995,
+        "config_load": 0.013838556,
+        "tps_plan_load": 0.000663943,
+        "ct_from_config_including_load": 0.031547957,
+        "tps_source_batch": 0.176784314,
+        "input_and_source_preparation": 0.345604708,
+        "unified_em_package_load_verify": 1.38517094,
+        "delta_moments_load_verify": 0.235175625,
+        "setup_em_device_upload": 0.184908157,
+        "setup_schneider_stopping_ion_device": 0.396361135,
+        "setup_schneider_ctx_host_and_device": 0.941618374,
+        "transport_setup_including_upload": 3.940963102,
+        "transport_loop_including_scoring_and_queue_transfers": 18.016049227,
+        "transport_readback_and_host_finalize": 0.085868329,
+        "transport_total": 22.058903353,
+        "quality_and_output": 0.443505014,
+        "process_wall_to_result_written": 22.855263288,
+        "process_main": 22.948922257
+      },
+      "audit": [
+        "[unified-em-audit] 0 1036320939 1429988519 0 0 6897079514135703 528848467657861 0"
+      ],
+      "quality": {
+        "schema_version": 3,
+        "status": "pass",
+        "run_mode": "production",
+        "accepted": true,
+        "absolute_physical_energy_residual_MeV": 31022.969388,
+        "physical_relative_energy_residual": 3.68333047872e-06,
+        "absolute_accounting_energy_residual_MeV": 31022.969388,
+        "accounting_relative_energy_residual": 3.68333047872e-06,
+        "absolute_energy_residual_MeV": 31022.969388,
+        "relative_energy_residual": 3.68333047872e-06,
+        "topas_reference_energy_sink_active": false,
+        "queue_overflow_count": 0,
+        "queue_overflow_energy_MeV": 0,
+        "voxel_scored_energy_MeV": 7437058136.31,
+        "in_grid_deposited_energy_MeV": 7437058260.47,
+        "outside_grid_deposited_energy_MeV": 0.386508911848,
+        "grid_split_closure_ratio": 1.00000000219,
+        "voxel_to_ingrid_ratio": 0.999999983304,
+        "voxel_to_total_deposited_ratio": 0.999999985447,
+        "failures": [],
+        "approximations": [
+          {
+            "code": "condensed_delta_partition_v1",
+            "message": "User-authorized 2026-09-15: aggregate Gamma delta loss from pinned first/second moments, analytic Poisson partition mean correction, no discrete delta clock; local deposition, 1% combined mean-loss guard; higher spectrum moments and patient BODY Gamma not validated",
+            "value": 1,
+            "limit": 0
+          },
+          {
+            "code": "secondary_species_grouping_accuracy_pending",
+            "message": "GPU species index grouping; RNG identities preserved; production integration authorized; RT07575 scheduling dose difference 0.0203% of peak remains under investigation",
+            "value": 1,
+            "limit": 0
+          },
+          {
+            "code": "secondary_step_chunking_accepted",
+            "message": "16 complete iterations per launch, stable survivor index compaction, tail below 8192; user-accepted 2026-09-15 production interval; RT07575 compact+16 dose difference 0.00033% of peak vs 64-step (not a new TOPAS Gamma validation)",
+            "value": 1,
+            "limit": 0
+          },
+          {
+            "code": "unified_material_em_accuracy_pending",
+            "message": "Unified water/Schneider EM for all 18 charged ions; local delta deposition; production execution authorized, density cut-onset and patient Gamma accuracy gates remain pending",
+            "value": 1,
+            "limit": 0
+          },
+          {
+            "code": "schneider_post_em_null_collisions",
+            "message": "sampled candidates resolved as post-EM null collisions (track continues, no lookup)",
+            "value": 68,
+            "limit": 0
+          },
+          {
+            "code": "schneider_primary_post_em_null_collisions",
+            "message": "primary candidates resolved as post-EM null collisions (track continues, no lookup)",
+            "value": 90,
+            "limit": 0
+          }
+        ]
+      },
+      "dose_sha256": "6debff0a0eedb49d0b2f23b73f2a37cb25e038a6357443182275dbf60972110b",
+      "audit_identical": true,
+      "max_diff_pct_peak": 3.5524937795833916e-05
+    },
+    {
+      "kind": "cand",
+      "index": 3,
+      "warmup": false,
+      "wall_s": 23.04372026596684,
+      "elapsed_s": 21.340632,
+      "primary_s": 8.6415908,
+      "secondary_s": 9.3158682,
+      "histories": 3240963.0,
+      "energy_error": 3.6833264e-06,
+      "compaction_s": 0.03306395,
+      "stages": {
+        "ct_load_preprocess": 0.052030569,
+        "config_load": 0.014866529,
+        "tps_plan_load": 0.000679877,
+        "ct_from_config_including_load": 0.032014585,
+        "tps_source_batch": 0.17674121,
+        "input_and_source_preparation": 0.350059858,
+        "unified_em_package_load_verify": 1.380614115,
+        "delta_moments_load_verify": 0.234789803,
+        "setup_em_device_upload": 0.184485789,
+        "setup_schneider_stopping_ion_device": 0.397003785,
+        "setup_schneider_ctx_host_and_device": 0.940128683,
+        "transport_setup_including_upload": 3.934558157,
+        "transport_loop_including_scoring_and_queue_transfers": 18.043546526,
+        "transport_readback_and_host_finalize": 0.084954199,
+        "transport_total": 22.079921716,
+        "quality_and_output": 0.444175757,
+        "process_wall_to_result_written": 22.880986467,
+        "process_main": 22.968799986
+      },
+      "audit": [
+        "[unified-em-audit] 0 1036320939 1429988519 0 0 6897079514135703 528848467657861 0"
+      ],
+      "quality": {
+        "schema_version": 3,
+        "status": "pass",
+        "run_mode": "production",
+        "accepted": true,
+        "absolute_physical_energy_residual_MeV": 31022.9349642,
+        "physical_relative_energy_residual": 3.68332639161e-06,
+        "absolute_accounting_energy_residual_MeV": 31022.9349642,
+        "accounting_relative_energy_residual": 3.68332639161e-06,
+        "absolute_energy_residual_MeV": 31022.9349642,
+        "relative_energy_residual": 3.68332639161e-06,
+        "topas_reference_energy_sink_active": false,
+        "queue_overflow_count": 0,
+        "queue_overflow_energy_MeV": 0,
+        "voxel_scored_energy_MeV": 7437058136.55,
+        "in_grid_deposited_energy_MeV": 7437058260.46,
+        "outside_grid_deposited_energy_MeV": 0.386508911848,
+        "grid_split_closure_ratio": 1.0000000022,
+        "voxel_to_ingrid_ratio": 0.999999983339,
+        "voxel_to_total_deposited_ratio": 0.999999985484,
+        "failures": [],
+        "approximations": [
+          {
+            "code": "condensed_delta_partition_v1",
+            "message": "User-authorized 2026-09-15: aggregate Gamma delta loss from pinned first/second moments, analytic Poisson partition mean correction, no discrete delta clock; local deposition, 1% combined mean-loss guard; higher spectrum moments and patient BODY Gamma not validated",
+            "value": 1,
+            "limit": 0
+          },
+          {
+            "code": "secondary_species_grouping_accuracy_pending",
+            "message": "GPU species index grouping; RNG identities preserved; production integration authorized; RT07575 scheduling dose difference 0.0203% of peak remains under investigation",
+            "value": 1,
+            "limit": 0
+          },
+          {
+            "code": "secondary_step_chunking_accepted",
+            "message": "16 complete iterations per launch, stable survivor index compaction, tail below 8192; user-accepted 2026-09-15 production interval; RT07575 compact+16 dose difference 0.00033% of peak vs 64-step (not a new TOPAS Gamma validation)",
+            "value": 1,
+            "limit": 0
+          },
+          {
+            "code": "unified_material_em_accuracy_pending",
+            "message": "Unified water/Schneider EM for all 18 charged ions; local delta deposition; production execution authorized, density cut-onset and patient Gamma accuracy gates remain pending",
+            "value": 1,
+            "limit": 0
+          },
+          {
+            "code": "schneider_post_em_null_collisions",
+            "message": "sampled candidates resolved as post-EM null collisions (track continues, no lookup)",
+            "value": 68,
+            "limit": 0
+          },
+          {
+            "code": "schneider_primary_post_em_null_collisions",
+            "message": "primary candidates resolved as post-EM null collisions (track continues, no lookup)",
+            "value": 90,
+            "limit": 0
+          }
+        ]
+      },
+      "dose_sha256": "c48e0f21ae521d2c2c786a05ab4a830a774930e6a604034a36fb7b6c80da4873",
+      "audit_identical": true,
+      "max_diff_pct_peak": 4.6182419134584095e-05
+    },
+    {
+      "kind": "base",
+      "index": 3,
+      "warmup": false,
+      "wall_s": 23.076524592994247,
+      "elapsed_s": 21.383414,
+      "primary_s": 8.6541894,
+      "secondary_s": 9.3632705,
+      "histories": 3240963.0,
+      "energy_error": 3.6833294e-06,
+      "compaction_s": 0.03307775,
+      "stages": {
+        "ct_load_preprocess": 0.052250935,
+        "config_load": 0.016041043,
+        "tps_plan_load": 0.000658976,
+        "ct_from_config_including_load": 0.031899949999999996,
+        "tps_source_batch": 0.176477892,
+        "input_and_source_preparation": 0.344451686,
+        "unified_em_package_load_verify": 1.376837601,
+        "delta_moments_load_verify": 0.233780227,
+        "setup_em_device_upload": 0.181144391,
+        "setup_schneider_stopping_ion_device": 0.396208855,
+        "setup_schneider_ctx_host_and_device": 0.934603246,
+        "transport_setup_including_upload": 3.920140997,
+        "transport_loop_including_scoring_and_queue_transfers": 18.099341574,
+        "transport_readback_and_host_finalize": 0.083989271,
+        "transport_total": 22.120467617,
+        "quality_and_output": 0.44215255,
+        "process_wall_to_result_written": 22.914203388,
+        "process_main": 23.002097297
+      },
+      "audit": [
+        "[unified-em-audit] 0 1036320939 1429988519 0 0 6897079514135703 528848467657861 0"
+      ],
+      "quality": {
+        "schema_version": 3,
+        "status": "pass",
+        "run_mode": "production",
+        "accepted": true,
+        "absolute_physical_energy_residual_MeV": 31022.9600801,
+        "physical_relative_energy_residual": 3.6833293736e-06,
+        "absolute_accounting_energy_residual_MeV": 31022.9600801,
+        "accounting_relative_energy_residual": 3.6833293736e-06,
+        "absolute_energy_residual_MeV": 31022.9600801,
+        "relative_energy_residual": 3.6833293736e-06,
+        "topas_reference_energy_sink_active": false,
+        "queue_overflow_count": 0,
+        "queue_overflow_energy_MeV": 0,
+        "voxel_scored_energy_MeV": 7437058137.74,
+        "in_grid_deposited_energy_MeV": 7437058260.46,
+        "outside_grid_deposited_energy_MeV": 0.386508911848,
+        "grid_split_closure_ratio": 1.00000000219,
+        "voxel_to_ingrid_ratio": 0.999999983499,
+        "voxel_to_total_deposited_ratio": 0.999999985641,
+        "failures": [],
+        "approximations": [
+          {
+            "code": "condensed_delta_partition_v1",
+            "message": "User-authorized 2026-09-15: aggregate Gamma delta loss from pinned first/second moments, analytic Poisson partition mean correction, no discrete delta clock; local deposition, 1% combined mean-loss guard; higher spectrum moments and patient BODY Gamma not validated",
+            "value": 1,
+            "limit": 0
+          },
+          {
+            "code": "secondary_species_grouping_accuracy_pending",
+            "message": "GPU species index grouping; RNG identities preserved; production integration authorized; RT07575 scheduling dose difference 0.0203% of peak remains under investigation",
+            "value": 1,
+            "limit": 0
+          },
+          {
+            "code": "secondary_step_chunking_accepted",
+            "message": "16 complete iterations per launch, stable survivor index compaction, tail below 8192; user-accepted 2026-09-15 production interval; RT07575 compact+16 dose difference 0.00033% of peak vs 64-step (not a new TOPAS Gamma validation)",
+            "value": 1,
+            "limit": 0
+          },
+          {
+            "code": "unified_material_em_accuracy_pending",
+            "message": "Unified water/Schneider EM for all 18 charged ions; local delta deposition; production execution authorized, density cut-onset and patient Gamma accuracy gates remain pending",
+            "value": 1,
+            "limit": 0
+          },
+          {
+            "code": "schneider_post_em_null_collisions",
+            "message": "sampled candidates resolved as post-EM null collisions (track continues, no lookup)",
+            "value": 68,
+            "limit": 0
+          },
+          {
+            "code": "schneider_primary_post_em_null_collisions",
+            "message": "primary candidates resolved as post-EM null collisions (track continues, no lookup)",
+            "value": 90,
+            "limit": 0
+          }
+        ]
+      },
+      "dose_sha256": "0eae23583435c4d8f641d0567cce8aa81ecd6eb036548a8573c141cf4545c8b3",
+      "audit_identical": true,
+      "max_diff_pct_peak": 3.5524937795833916e-05
+    },
+    {
+      "kind": "base",
+      "index": 4,
+      "warmup": false,
+      "wall_s": 23.088913178013172,
+      "elapsed_s": 21.397314,
+      "primary_s": 8.6912476,
+      "secondary_s": 9.3446367,
+      "histories": 3240963.0,
+      "energy_error": 3.6833359e-06,
+      "compaction_s": 0.0328602,
+      "stages": {
+        "ct_load_preprocess": 0.049254940000000004,
+        "config_load": 0.013925297,
+        "tps_plan_load": 0.000656812,
+        "ct_from_config_including_load": 0.030654058,
+        "tps_source_batch": 0.175582639,
+        "input_and_source_preparation": 0.342556132,
+        "unified_em_package_load_verify": 1.377231005,
+        "delta_moments_load_verify": 0.233750121,
+        "setup_em_device_upload": 0.181245975,
+        "setup_schneider_stopping_ion_device": 0.395681638,
+        "setup_schneider_ctx_host_and_device": 0.937483087,
+        "transport_setup_including_upload": 3.917231552,
+        "transport_loop_including_scoring_and_queue_transfers": 18.117319344,
+        "transport_readback_and_host_finalize": 0.083457538,
+        "transport_total": 22.133923705,
+        "quality_and_output": 0.442676793,
+        "process_wall_to_result_written": 22.925199278,
+        "process_main": 23.014421696
+      },
+      "audit": [
+        "[unified-em-audit] 0 1036320939 1429988519 0 0 6897079514135703 528848467657861 0"
+      ],
+      "quality": {
+        "schema_version": 3,
+        "status": "pass",
+        "run_mode": "production",
+        "accepted": true,
+        "absolute_physical_energy_residual_MeV": 31023.0151033,
+        "physical_relative_energy_residual": 3.68333590646e-06,
+        "absolute_accounting_energy_residual_MeV": 31023.0151033,
+        "accounting_relative_energy_residual": 3.68333590646e-06,
+        "absolute_energy_residual_MeV": 31023.0151033,
+        "relative_energy_residual": 3.68333590646e-06,
+        "topas_reference_energy_sink_active": false,
+        "queue_overflow_count": 0,
+        "queue_overflow_energy_MeV": 0,
+        "voxel_scored_energy_MeV": 7437058134.53,
+        "in_grid_deposited_energy_MeV": 7437058260.47,
+        "outside_grid_deposited_energy_MeV": 0.386508911848,
+        "grid_split_closure_ratio": 1.00000000219,
+        "voxel_to_ingrid_ratio": 0.999999983066,
+        "voxel_to_total_deposited_ratio": 0.999999985202,
+        "failures": [],
+        "approximations": [
+          {
+            "code": "condensed_delta_partition_v1",
+            "message": "User-authorized 2026-09-15: aggregate Gamma delta loss from pinned first/second moments, analytic Poisson partition mean correction, no discrete delta clock; local deposition, 1% combined mean-loss guard; higher spectrum moments and patient BODY Gamma not validated",
+            "value": 1,
+            "limit": 0
+          },
+          {
+            "code": "secondary_species_grouping_accuracy_pending",
+            "message": "GPU species index grouping; RNG identities preserved; production integration authorized; RT07575 scheduling dose difference 0.0203% of peak remains under investigation",
+            "value": 1,
+            "limit": 0
+          },
+          {
+            "code": "secondary_step_chunking_accepted",
+            "message": "16 complete iterations per launch, stable survivor index compaction, tail below 8192; user-accepted 2026-09-15 production interval; RT07575 compact+16 dose difference 0.00033% of peak vs 64-step (not a new TOPAS Gamma validation)",
+            "value": 1,
+            "limit": 0
+          },
+          {
+            "code": "unified_material_em_accuracy_pending",
+            "message": "Unified water/Schneider EM for all 18 charged ions; local delta deposition; production execution authorized, density cut-onset and patient Gamma accuracy gates remain pending",
+            "value": 1,
+            "limit": 0
+          },
+          {
+            "code": "schneider_post_em_null_collisions",
+            "message": "sampled candidates resolved as post-EM null collisions (track continues, no lookup)",
+            "value": 68,
+            "limit": 0
+          },
+          {
+            "code": "schneider_primary_post_em_null_collisions",
+            "message": "primary candidates resolved as post-EM null collisions (track continues, no lookup)",
+            "value": 90,
+            "limit": 0
+          }
+        ]
+      },
+      "dose_sha256": "d1d2b1ac78bf4e67919c5d6f977cf5ee0e68095e7235ebf91b53eae171d0fa2f",
+      "audit_identical": true,
+      "max_diff_pct_peak": 3.9077431575417316e-05
+    },
+    {
+      "kind": "cand",
+      "index": 4,
+      "warmup": false,
+      "wall_s": 23.11696331301937,
+      "elapsed_s": 21.41115,
+      "primary_s": 8.6910576,
+      "secondary_s": 9.3527988,
+      "histories": 3240963.0,
+      "energy_error": 3.6833366e-06,
+      "compaction_s": 0.03353189,
+      "stages": {
+        "ct_load_preprocess": 0.054270225,
+        "config_load": 0.017191601,
+        "tps_plan_load": 0.00066876,
+        "ct_from_config_including_load": 0.03200484,
+        "tps_source_batch": 0.175823292,
+        "input_and_source_preparation": 0.347489385,
+        "unified_em_package_load_verify": 1.377632451,
+        "delta_moments_load_verify": 0.233792145,
+        "setup_em_device_upload": 0.181609484,
+        "setup_schneider_stopping_ion_device": 0.395806998,
+        "setup_schneider_ctx_host_and_device": 0.936242823,
+        "transport_setup_including_upload": 3.916895173,
+        "transport_loop_including_scoring_and_queue_transfers": 18.130115915,
+        "transport_readback_and_host_finalize": 0.08338639,
+        "transport_total": 22.149458313,
+        "quality_and_output": 0.443730194,
+        "process_wall_to_result_written": 22.946529943,
+        "process_main": 23.040129392
+      },
+      "audit": [
+        "[unified-em-audit] 0 1036320939 1429988519 0 0 6897079514135703 528848467657861 0"
+      ],
+      "quality": {
+        "schema_version": 3,
+        "status": "pass",
+        "run_mode": "production",
+        "accepted": true,
+        "absolute_physical_energy_residual_MeV": 31023.0211115,
+        "physical_relative_energy_residual": 3.6833366198e-06,
+        "absolute_accounting_energy_residual_MeV": 31023.0211115,
+        "accounting_relative_energy_residual": 3.6833366198e-06,
+        "absolute_energy_residual_MeV": 31023.0211115,
+        "relative_energy_residual": 3.6833366198e-06,
+        "topas_reference_energy_sink_active": false,
+        "queue_overflow_count": 0,
+        "queue_overflow_energy_MeV": 0,
+        "voxel_scored_energy_MeV": 7437058136.02,
+        "in_grid_deposited_energy_MeV": 7437058260.47,
+        "outside_grid_deposited_energy_MeV": 0.386508911848,
+        "grid_split_closure_ratio": 1.00000000219,
+        "voxel_to_ingrid_ratio": 0.999999983265,
+        "voxel_to_total_deposited_ratio": 0.999999985401,
+        "failures": [],
+        "approximations": [
+          {
+            "code": "condensed_delta_partition_v1",
+            "message": "User-authorized 2026-09-15: aggregate Gamma delta loss from pinned first/second moments, analytic Poisson partition mean correction, no discrete delta clock; local deposition, 1% combined mean-loss guard; higher spectrum moments and patient BODY Gamma not validated",
+            "value": 1,
+            "limit": 0
+          },
+          {
+            "code": "secondary_species_grouping_accuracy_pending",
+            "message": "GPU species index grouping; RNG identities preserved; production integration authorized; RT07575 scheduling dose difference 0.0203% of peak remains under investigation",
+            "value": 1,
+            "limit": 0
+          },
+          {
+            "code": "secondary_step_chunking_accepted",
+            "message": "16 complete iterations per launch, stable survivor index compaction, tail below 8192; user-accepted 2026-09-15 production interval; RT07575 compact+16 dose difference 0.00033% of peak vs 64-step (not a new TOPAS Gamma validation)",
+            "value": 1,
+            "limit": 0
+          },
+          {
+            "code": "unified_material_em_accuracy_pending",
+            "message": "Unified water/Schneider EM for all 18 charged ions; local delta deposition; production execution authorized, density cut-onset and patient Gamma accuracy gates remain pending",
+            "value": 1,
+            "limit": 0
+          },
+          {
+            "code": "schneider_post_em_null_collisions",
+            "message": "sampled candidates resolved as post-EM null collisions (track continues, no lookup)",
+            "value": 68,
+            "limit": 0
+          },
+          {
+            "code": "schneider_primary_post_em_null_collisions",
+            "message": "primary candidates resolved as post-EM null collisions (track continues, no lookup)",
+            "value": 90,
+            "limit": 0
+          }
+        ]
+      },
+      "dose_sha256": "29e58d3ffb30fd5eb809f39928de758c6dc50a2385900f810da189d84b5a8eaa",
+      "audit_identical": true,
+      "max_diff_pct_peak": 3.9077431575417316e-05
+    }
+  ]
+}

@@ -41,6 +41,12 @@ def main():
                    help='Directory linked as ./data for runtime default files')
     p.add_argument('--repeats', type=int, default=3)
     p.add_argument('--ncu', default='/usr/local/cuda-12.6/bin/ncu')
+    p.add_argument('--secondary-entry', choices=('rounded-wrapper', 'named'),
+                   default='rounded-wrapper',
+                   help='Actual secondary launch entry produced by the selected build')
+    p.add_argument('--replay-mode', choices=('kernel', 'application'), default='kernel')
+    p.add_argument('--cache-control', choices=('all', 'none'), default='all',
+                   help='Keep identical between compared binaries; none preserves application cache state')
     a = p.parse_args()
     out = a.output.resolve()
     out.mkdir(parents=True, exist_ok=False)
@@ -49,7 +55,10 @@ def main():
         digest = hashlib.file_digest(f, 'sha256').hexdigest()
     (out/'selection.json').write_text(json.dumps(dict(binary_sha256=digest, stages=selected,
         timing_log=str(a.timing_log.resolve()),
-        protocol=f'{a.repeats} independent application runs; kernel replay; clocks unchanged'), indent=2))
+        secondary_entry=a.secondary_entry, replay_mode=a.replay_mode,
+        cache_control=a.cache_control,
+        protocol=(f'{a.repeats} independent application runs; {a.replay_mode} replay; '
+                  f'cache-control={a.cache_control}; clocks unchanged')), indent=2))
     env = dict(os.environ, ONEAPI_DEVICE_SELECTOR='cuda:*', CARBON_SECONDARY_TAIL_DIAG='1',
                LD_LIBRARY_PATH='/home/wuwei/sycl_workspace/llvm/build/install/lib:' + os.environ.get('LD_LIBRARY_PATH', ''))
     rows = []
@@ -64,16 +73,20 @@ def main():
             if name.startswith('primary'):
                 kernel_name_base = 'demangled'
                 pattern = 'regex:.*transport_sycl_impl.*nd_item.*'
-            else:
+            elif a.secondary_entry == 'rounded-wrapper':
                 # The NVIDIA backend exposes the actual SYCL wrapper under this
                 # mangled typeinfo name. Matching the named device function can
                 # silently profile a different entry or no entry at all.
                 kernel_name_base = 'mangled'
                 pattern = ('regex:_ZTSN4sycl3_V16detail19__pf_kernel_wrapperIN6carbon'
                            '30CarbonSecondaryTransportKernel.*')
+            else:
+                kernel_name_base = 'mangled'
+                pattern = 'regex:_ZTSN6carbon30CarbonSecondaryTransportKernel.*'
             cmd = [a.ncu, '--kernel-name-base', kernel_name_base, '--kernel-name', pattern,
                    '--launch-skip', str(identity['launch_skip']), '--launch-count', '1', '--kill', 'yes',
-                   '--clock-control', 'none', '--export', 'report']
+                   '--clock-control', 'none', '--replay-mode', a.replay_mode,
+                   '--cache-control', a.cache_control, '--export', 'report']
             for section in ('SpeedOfLight','Occupancy','SchedulerStats','WarpStateStats','LaunchStats',
                             'MemoryWorkloadAnalysis','ComputeWorkloadAnalysis','SourceCounters'):
                 cmd += ['--section', section]

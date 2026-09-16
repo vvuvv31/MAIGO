@@ -111,6 +111,36 @@ option(CARBON_SECONDARY_CONTEXT_POINTER
        OFF)
 target_compile_definitions(carbon_core PUBLIC
     CARBON_SECONDARY_CONTEXT_POINTER=$<BOOL:${CARBON_SECONDARY_CONTEXT_POINTER}>)
+option(CARBON_SECONDARY_EXPLICIT_ND_RANGE
+       "Research: launch the small-closure secondary kernel through an explicit nd_range"
+       OFF)
+set(CARBON_SECONDARY_ND_RANGE_SIZE "64" CACHE STRING
+    "Work-group size for the explicit secondary nd_range candidate (32/64/128)")
+set_property(CACHE CARBON_SECONDARY_ND_RANGE_SIZE PROPERTY STRINGS 32 64 128)
+if(NOT CARBON_SECONDARY_ND_RANGE_SIZE MATCHES "^(32|64|128)$")
+    message(FATAL_ERROR "CARBON_SECONDARY_ND_RANGE_SIZE must be 32, 64 or 128")
+endif()
+if(CARBON_SECONDARY_EXPLICIT_ND_RANGE AND NOT CARBON_SECONDARY_CONTEXT_POINTER)
+    message(FATAL_ERROR
+        "CARBON_SECONDARY_EXPLICIT_ND_RANGE requires CARBON_SECONDARY_CONTEXT_POINTER")
+endif()
+target_compile_definitions(carbon_core PUBLIC
+    CARBON_SECONDARY_EXPLICIT_ND_RANGE=$<BOOL:${CARBON_SECONDARY_EXPLICIT_ND_RANGE}>
+    CARBON_SECONDARY_ND_RANGE_SIZE=${CARBON_SECONDARY_ND_RANGE_SIZE})
+option(CARBON_SECONDARY_REUSE_PROJECTILE_INDEX
+       "Research: reuse the per-launch immutable secondary projectile registry index"
+       OFF)
+target_compile_definitions(carbon_core PUBLIC
+    CARBON_SECONDARY_REUSE_PROJECTILE_INDEX=$<BOOL:${CARBON_SECONDARY_REUSE_PROJECTILE_INDEX}>)
+option(CARBON_SECONDARY_PRODUCTION_SPECIALIZE
+       "Research: host-dispatch a secondary kernel specialized for the validated CT production path"
+       OFF)
+if(CARBON_SECONDARY_PRODUCTION_SPECIALIZE AND NOT CARBON_SECONDARY_CONTEXT_POINTER)
+    message(FATAL_ERROR
+        "CARBON_SECONDARY_PRODUCTION_SPECIALIZE requires CARBON_SECONDARY_CONTEXT_POINTER")
+endif()
+target_compile_definitions(carbon_core PUBLIC
+    CARBON_SECONDARY_PRODUCTION_SPECIALIZE=$<BOOL:${CARBON_SECONDARY_PRODUCTION_SPECIALIZE}>)
 
 set(CARBON_SECONDARY_SEGMENT_STEPS "16" CACHE STRING
     "Complete secondary iterations per continuation launch (8/16/32/64/128; production default 16)")

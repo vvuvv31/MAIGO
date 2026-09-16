@@ -10,8 +10,10 @@ long-scoreboard 降 **44.30%**，eligible warp/scheduler 升 **19.49%**。
 
 候选由 `CARBON_SECONDARY_CONTEXT_POINTER` 控制，当前默认 **OFF**。它没有跨过168寄存器
 门槛：实际 wrapper 从186升到187 registers/thread，次级各匹配阶段的active warp没有提高，
-晚段还因后端自动选择128线程block而明显下降。因此它通过了正确性、吞吐和依赖等待的
-结构门槛，但没有通过最终组合要求的驻留门槛，不能切为默认。
+晚段还因后端自动选择128线程block而明显下降。这些结果说明驻留量尚未改善，但所有采样
+次级阶段的eligible和ready fraction均提高，完整RT07575吞吐也超过5%门槛。因此168寄存器
+是后续提高驻留量的研究目标，不再作为否决这个已获得吞吐收益候选的必要条件。RTX 2080 Ti
+上的跨病例推广现已通过；候选当前保持默认关闭的原因仅剩A6000推广验证尚未完成。
 
 机器可读结果见
 `benchmark/secondary_context_abi_20260916/analysis.json`。未提交的原始profile、运行日志、
@@ -95,6 +97,9 @@ SM 1815 MHz。改善定义为 `baseline / candidate - 1`。
 五对Elapsed改善为 `8.52%, 9.07%, 8.52%, 8.64%, 8.78%`，超过5%推广吞吐门槛且远大于
 重复波动。原发未被此候选改写，实测保持不变。
 
+次级 `+19.97%` 使用 `baseline/candidate - 1` 定义，即速度约为基线的1.20倍，对应次级耗时
+减少约16.64%。它不表示次级耗时减少19.97%。
+
 复现时分别以 `-DCARBON_SECONDARY_CONTEXT_POINTER=OFF/ON` 构建sm_75二进制，再用
 `tools/benchmark_single_gpu.py` 指定同一个冻结config执行2次预热和至少5次交错配对。计时结束
 后单独运行 `tools/profile_transport_stages.py`；次级实际wrapper使用mangled名称匹配，脚本已
@@ -133,14 +138,50 @@ ready fraction定义为 `eligible / active`。
 
 ## 默认与后续工作
 
-`CARBON_SECONDARY_CONTEXT_POINTER=OFF` 保持默认。结构候选已经证明closure ABI是次级
-local-memory和ready fraction的重要杠杆，但当前187 registers仍只能提供约8 warp/SM，且
-次级active warp未满足最终门槛。由于硬件推广门槛已经失败，本轮没有继续消耗资源做
-RT06423和20022516各5次的最终推广回归；50k固定分片的正确性和5对性能已完成。
+`CARBON_SECONDARY_CONTEXT_POINTER=OFF` 暂时保持默认。结构候选已经证明closure ABI是次级
+local-memory和ready fraction的重要杠杆；当前187 registers仍只能提供约8 warp/SM，但这
+不抵消RT07575上已验证的8.64%完整吞吐收益。当前状态是“RTX 2080 Ti上的RT07575、
+RT06423、20022516和50k水模通过；A6000推广待完成；occupancy目标未达到”。晚段active warp
+下降需要结合所有尾部启动的总耗时占比判断，不能单独作为吞吐否决条件。
 
-下一步应在这个小closure入口上做production context类型专门化，使关闭的计分、诊断和研究
-字段在形成kernel ABI前不存在，目标是把实际wrapper从187降到不高于168。达到该结构门槛后
-再扫描32/64/128线程block，并补齐RT06423、20022516和50k水模推广回归。
+后续隔离生产路径特化已把次级wrapper从177降到164 registers/thread，并在匹配早段观察到
+active warp/SM从7.76升到11.51；RT07575次级中位再改善9.69%、Elapsed改善3.92%。该项通过
+结构门槛但仍默认关闭，详见`docs/secondary_production_specialization_20260916.md`。
+
+后续已经在这个小closure上完成两项独立实验：显式`nd_range`使端到端吞吐下降
+6.50%–7.59%；不变projectile registry索引复用使wrapper增至228寄存器，五对吞吐变化处于
+波动内。两者均保持默认关闭并已写入失败台账。下一项结构研究应是少量host-dispatch生产
+路径特化。结构指标用于解释机制；是否推广由正确性、完整吞吐和代表性配置回归决定。
+
+## 编译配置兼容修复
+
+后续检查发现原始候选把剂量context字段固定写成`float*`，且`CARBON_EM_SPECIALIZE=OFF`的
+`transport_sycl_impl<-1>`没有把运行时`unified_em`值带入小closure。修复后：
+
+- 深度计分使用`DepthAtomicT*`，3D及来源分解计分使用`DoseAtomicT*`，没有指针强制转换；
+- `EmMode < 0`从device context读取运行时EM模式，`EmMode >= 0`仍由模板常量折叠；
+- context经`DeviceMemoryTracker`分配和释放，copy、提交或等待抛异常时由tracker清理。
+
+sm_75/NVPTX的四种组合均完成设备代码编译和链接：EM特化ON/OFF × dose FP32/FP64。最终
+FP32特化构建又完成同一固定分片：3,240,963 histories、1,034,976,717 steps、整数审计完全
+一致、quality通过、overflow为0。通用EM FP32、特化FP64和通用EM FP64分别以同一物理配置
+的缩小history scale完成GPU smoke，均为3,532 histories、1,110,124 steps、quality通过且
+overflow为0。该smoke只验证公开开关组合可运行，不替代FP64性能或剂量推广验收。
+
+## RTX 2080 Ti推广回归
+
+兼容修复后用同一组context OFF/ON固定二进制补齐代表性配置。患者分片各2次预热、5次
+交错正式配对；50k水模初次5对剂量均值差略超小样本基线包络，因此扩为10对后再判定。
+
+|配置|正式配对|Elapsed变化|次级速度变化|3D剂量均值差/基线包络|
+|---|---:|---:|---:|---:|
+|RT06423固定分片|5|+7.73%|+19.74%|0.00001819% / 0.00002577%|
+|20022516固定分片|5|+6.50%|+19.11%|0.00001695% / 0.00002712%|
+|50k水模|10|+1.35%|+16.94%|0.00002991% / 0.00020365%|
+
+三组整数审计、步数、核相互作用和quality均通过，overflow为0。两例患者端到端收益超过5%；
+50k水模端到端变化范围−1.15%至+3.96%、中位+1.35%，满足回退不超过2%的门槛。A6000尚无
+本轮二进制的运行结果，因此仍不切换默认。
 
 患者BODY Gamma和低密度production-cut阈值精度验收仍未完成；本轮quality通过不代表这两项
 精度已经验证。

@@ -361,3 +361,82 @@ long-scoreboard、local-memory事务、block共驻或以此为目的的状态/li
   168 registers，并在匹配阶段观察到active warp增加；然后重新扫描block并完成全部回归门槛。
 - 证据：`docs/secondary_context_abi_20260916.md`，
   `benchmark/secondary_context_abi_20260916/analysis.json`。
+
+### 2026-09-16 更正：`secondary_context_pointer`不是吞吐失败候选
+
+- 更正上一条的采用解释：168 registers/thread和active warp提高仍是occupancy研究目标，但
+  不再是接受吞吐优化的必要条件。候选在所有匹配次级阶段提高eligible和ready fraction，
+  RT07575五对Elapsed中位改善8.64%、次级速度改善19.97%，已经修复原问题中的readiness和
+  local-memory部分。
+- 当前状态：候选保留、默认关闭；RTX 2080 Ti上的RT07575、RT06423、20022516和50k水模
+  正确性及吞吐回归通过，occupancy目标未达到，A6000推广待完成。晚段active下降属于需以
+  尾部总耗时加权调查的硬件现象，实测两个直接完成轮次仅占次级时间约0.32%。
+- 编译兼容修复：context计分指针恢复为`DepthAtomicT*`/`DoseAtomicT*`；通用EM实例从context
+  读取运行时模式；context纳入`DeviceMemoryTracker`。sm_75上EM特化ON/OFF × FP32/FP64四种
+  组合均完成设备编译链接，FP32固定分片和其余三种GPU smoke均quality通过、overflow为0。
+- RTX 2080 Ti推广：RT06423/20022516五对Elapsed分别改善7.73%/6.50%，次级改善
+  19.74%/19.11%；50k水模10对Elapsed中位改善1.35%，最差−1.15%。三组3D剂量均值差均在
+  各自基线包络内，审计一致且overflow=0。
+- 允许默认推广所需证据：A6000结果需在可用主机上补测。是否跨过168档位作为机制结果单独
+  报告，不作为唯一否决条件。
+- 证据：`docs/secondary_context_abi_20260916.md`，
+  `benchmark/secondary_context_abi_20260916/analysis.json`，
+  `scratch/context_compat_validation_fp32_specialized_20260916/run.log`。
+
+### 2026-09-16 `secondary_explicit_nd_range`：小closure具名入口
+
+- 基线：修复编译兼容后的`CARBON_SECONDARY_CONTEXT_POINTER=ON` range入口；RTX 2080 Ti/
+  sm_75。候选用显式`nd_range`和越界早退，分别固定32、64、128线程；物理循环、有效粒子
+  range和RNG身份不变。
+- 实际入口：基线为
+  `__pf_kernel_wrapper<CarbonSecondaryTransportKernel<1>>`；候选为具名
+  `CarbonSecondaryTransportKernel<1>`。补齐线程在任何续跑数组访问前返回。
+- 资源结果：基线wrapper为187 registers、264 B stack、408 B constant0；候选具名入口为
+  170 registers、480 B stack、400 B constant0，三种block相同。仍未跨过168档位。动态
+  active/eligible、long-scoreboard和local sectors未测，因为无profiler吞吐stop gate已失败。
+- 单次完整筛选：range control Elapsed/secondary为20.229883/8.631476 s；32、64、128候选
+  分别为21.636933/10.102255、21.832124/10.129329、21.891748/10.128049 s。按
+  `baseline/candidate-1`，端到端退化6.50%–7.59%，次级速度退化14.56%–14.79%。三个尺寸
+  方向一致且远超重复波动，未进入五对正式计时。
+- 正确性：四版均为3,240,963 histories、1,034,976,717 steps、1,344,312次核相互作用；
+  整数审计一致，quality通过，overflow=0。3D剂量未做五次统计，因为性能门槛先失败。
+- 尾部归因：range control两个直接完成轮次合计0.027502 s，占次级时间0.32%；不能把单个
+  晚段occupancy样本与稳态阶段等权作为context-pointer候选的否决依据。
+- 结论：候选保留默认关闭，不进入组合。只有后端版本变化、具名入口stack显著下降或出现
+  与当前完整计时相反的新codegen证据时才重试。
+- 证据：`docs/secondary_ndrange_entry_20260916.md`，
+  `benchmark/secondary_ndrange_entry_20260916/analysis.json`。
+
+### 2026-09-16 `secondary_projectile_index_reuse`：延长物种索引live range
+
+- 基线：兼容修复后的context-pointer range入口，RTX 2080 Ti/sm_75；实际入口为
+  `__pf_kernel_wrapper<CarbonSecondaryTransportKernel<1>>`。
+- 目标：复用continuation入口已计算的`(Z,A) → registry index`，删除步内hazard、He-4审计和
+  步后碰撞处的重复身份映射；能量、材料、密度、rates和partials仍逐步精确查询。
+- 资源结果：wrapper从187增至228 registers/thread；stack保持264 B、constant0保持408 B。
+  active/eligible、long-scoreboard和动态local sectors未测，因为正式配对没有吞吐收益。
+- 五次交错配对：Elapsed中位变化−0.065%，范围−0.478%至+0.536%；次级速度中位变化
+  +0.232%，范围−0.659%至+0.897%。改善定义为`baseline/candidate-1`，结果处于重复波动内。
+- 正确性：3,240,963 histories、1,034,976,717 steps、1,344,312次核相互作用逐次匹配；
+  整数审计一致、quality通过、overflow=0。五次3D剂量均值差为峰值0.00001705%，在本轮
+  五次基线0.00002558%全局波动包络内。
+- 结论：默认关闭，不进入组合。除非编译器codegen变化后索引复用不再增加寄存器，或SASS
+  证明身份映射成为新的动态热点，否则不重试。
+- 证据：`docs/secondary_projectile_index_reuse_20260916.md`，
+  `benchmark/secondary_projectile_index_reuse_20260916/analysis.json`。
+
+### 2026-09-16 更正：`secondary_production_specialize`不是失败候选
+
+- 隔离`b3b906d`源码排除dense/shared/fine EM和步长研究改动后，实际生产wrapper从context通用
+  实例的177降到164 registers/thread，stack均为352 B，首次跨过sm_75的168寄存器档位。
+- RT07575五次正式配对：Elapsed中位改善3.92%（3.41%–4.59%），次级中位改善9.69%
+  （8.71%–10.53%）；审计一致、quality通过、overflow=0，3D剂量差不超过基线重复包络。
+- 一次匹配NCU中，次级早/中/第二代active warp/SM分别从7.76/7.83/7.74提高到
+  11.51/10.65/10.61，eligible/scheduler分别从0.0993/0.0950/0.0978提高到
+  0.1209/0.1049/0.1099。晚段仍受tail underfill限制。
+- ready fraction在稳态阶段下降，long-scoreboard上升；该候选通过增加驻留warp隐藏延迟，
+  没有减少单warp等待。动态结果目前每阶段仅一次采样，推广前仍需重复。
+- 结论：从失败列表更正为“结构和次级吞吐成功、默认推广待完成”。候选保持默认关闭，因为
+  单项端到端收益不足5%，且A6000、跨病例组合回归和重复硬件采样尚未完成。
+- 证据：`docs/secondary_production_specialization_20260916.md`，
+  `benchmark/secondary_production_specialization_20260916/analysis.json`。

@@ -9,12 +9,13 @@
     "default": false,
     "design": "immutable device SecondaryTransportContext pointer plus explicit per-round captures",
     "closure_contract": "trivially copyable and sizeof <= 64 bytes",
-    "decision": "retain as default-off research candidate",
+    "decision": "retain default-off only because A6000 promotion validation remains pending",
     "decision_reasons": [
       "RT07575 throughput, correctness, eligible, ready fraction, long-scoreboard, and local-traffic gates pass",
-      "registers increase 186 to 187",
-      "secondary active warps do not increase and late-stage active warps decrease",
-      "the required RT06423 and 20022516 five-pair promotion regressions were not run because the hardware promotion gate already failed"
+      "RT06423 and 20022516 five-pair regressions pass with positive end-to-end gains and dose mean differences inside baseline envelopes",
+      "50k water ten-pair regression has no throughput regression and its dose mean difference is inside the ten-run baseline envelope",
+      "registers increase 186 to 187 and occupancy does not improve; this remains a mechanism result rather than a throughput veto",
+      "A6000 promotion validation remains pending"
     ]
   },
   "abi_probe": {
@@ -335,7 +336,9 @@
         "telemetry_before": "81, 1815",
         "telemetry_after": "81, 1815"
       }
-    ]
+    ],
+    "secondary_speed_factor": 1.1996849256740578,
+    "secondary_time_reduction_percent": 16.6447807587365
   },
   "hardware_profiles": {
     "primary_steady": {
@@ -1056,7 +1059,8 @@
     "unified_em_sha256": "8c5d970b3b639bfca2f448730271bed4fc04721aba73100e2efbe09dffe44855",
     "delta_moments_sha256": "c551bc52fa30ff7e3ea229c8b89792e8ecd2b0fb12f18fcad50d1c6f206bc7cc",
     "patient_body_gamma": "pending",
-    "low_density_production_cut_accuracy": "pending"
+    "low_density_production_cut_accuracy": "pending",
+    "promotion_status": "RTX 2080 Ti: RT07575, RT06423, 20022516, and 50k water pass; A6000 pending"
   },
   "hashes": {
     "worktree_transport_sycl_cpp": "0d45cd79a23a2e55375cd3e7d78f928144259c590f965f931c67be1640a6e776",
@@ -1114,5 +1118,325 @@
       0
     ],
     "note": "single hot confirmation only; formal performance claims use the five-pair campaign above"
+  },
+  "compatibility_fix_validation": {
+    "source_sha256": "d103e2279440a7bf3ec327e63c4a17fde176203318a62b0de1f21668821b625d",
+    "changes": [
+      "context scoring pointers use original DepthAtomicT and DoseAtomicT types",
+      "EmMode -1 reads runtime unified_em mode through the device context while specialized modes remain compile-time constants",
+      "SecondaryTransportContext allocation is owned by DeviceMemoryTracker"
+    ],
+    "sm75_nvptx_build_matrix": [
+      {
+        "em_specialize": true,
+        "dose": "fp32",
+        "status": "pass",
+        "binary_sha256": "6602dc684dfabe7c3390b2bd15d3250e98716dfe10943a90ddf440671ee1fb4a"
+      },
+      {
+        "em_specialize": true,
+        "dose": "fp64",
+        "status": "pass",
+        "binary_sha256": "86715b61f127b17317da6715fd668183fa98e634148dcbc8e3cd6ed46612199c"
+      },
+      {
+        "em_specialize": false,
+        "dose": "fp32",
+        "status": "pass",
+        "binary_sha256": "9813084ac60e5c2449b5443d1f1babb1671136459585b3bc90449e2df2901afc"
+      },
+      {
+        "em_specialize": false,
+        "dose": "fp64",
+        "status": "pass",
+        "binary_sha256": "fc33952e41720db9eae42a7297749d58f709f09a9bd043bf41a1199105298079"
+      }
+    ],
+    "full_fixed_shard": {
+      "em_specialize": true,
+      "dose": "fp32",
+      "histories": 3240963,
+      "steps": 1034976717,
+      "nuclear_interactions": 1344312,
+      "quality": "pass",
+      "overflow": 0,
+      "energy_balance_error": 3.6833226e-06,
+      "elapsed_s": 20.207615,
+      "primary_s": 8.1779756,
+      "secondary_s": 8.6162588,
+      "unified_em_audit": [
+        0,
+        1036320939,
+        1429988519,
+        0,
+        0,
+        6897079514135703,
+        528848467657861,
+        0
+      ],
+      "log": "scratch/context_compat_validation_fp32_specialized_20260916/run.log"
+    },
+    "gpu_smoke": [
+      {
+        "em_specialize": false,
+        "dose": "fp32",
+        "histories": 3532,
+        "steps": 1110124,
+        "elapsed_s": 3.3137925,
+        "quality": "pass",
+        "overflow": 0,
+        "log": "scratch/context_compat_smoke_off_fp32_20260916/run.log"
+      },
+      {
+        "em_specialize": true,
+        "dose": "fp64",
+        "histories": 3532,
+        "steps": 1110124,
+        "elapsed_s": 3.3465932,
+        "quality": "pass",
+        "overflow": 0,
+        "log": "scratch/context_compat_smoke_on_fp64_20260916/run.log"
+      },
+      {
+        "em_specialize": false,
+        "dose": "fp64",
+        "histories": 3532,
+        "steps": 1110124,
+        "elapsed_s": 3.3952757,
+        "quality": "pass",
+        "overflow": 0,
+        "log": "scratch/context_compat_smoke_off_fp64_20260916/run.log"
+      }
+    ],
+    "note": "smoke runs validate executable configurations only; they are not FP64 performance or dose-promotion evidence"
+  },
+  "promotion_regressions": {
+    "gpu": "NVIDIA GeForce RTX 2080 Ti",
+    "architecture": "sm_75",
+    "baseline_context_off_binary_sha256": "7699473bcd8ce1157e6030dacfe3f0e50388b53ebb949bf4f7f27152a405d2c0",
+    "candidate_context_on_binary_sha256": "c2fb088a8886a1689dba379a744d9b0eb7f1139f5c9f8d91dc3d9318f0fc984a",
+    "protocol": "2 warmups; alternating forward/reverse formal pairs; no profiler; scale=1; exact CT faces; 16-step continuation",
+    "cases": {
+      "RT06423": {
+        "formal_pairs": 5,
+        "config_sha256": "e7d59ba67ec29133eb39678626dd9d27679e5ff89daae9f6b19ad6da46f265e5",
+        "metrics_percent": {
+          "wall_s": {
+            "median": 7.0254859094252,
+            "minimum": 6.432432331217397,
+            "maximum": 7.342100099528204,
+            "values": [
+              6.432432331217397,
+              7.201682752177718,
+              6.795921844934427,
+              7.342100099528204,
+              7.0254859094252
+            ]
+          },
+          "elapsed_s": {
+            "median": 7.732614857707487,
+            "minimum": 7.140137388754253,
+            "maximum": 8.022943586326715,
+            "values": [
+              7.140137388754253,
+              7.980020439335189,
+              7.452100970223574,
+              8.022943586326715,
+              7.732614857707487
+            ]
+          },
+          "primary_s": {
+            "median": -0.3310074970163668,
+            "minimum": -0.4889076324347097,
+            "maximum": 0.5074803872394229,
+            "values": [
+              -0.3310074970163668,
+              0.5074803872394229,
+              -0.42139434271534215,
+              -0.13773019538471098,
+              -0.4889076324347097
+            ]
+          },
+          "secondary_s": {
+            "median": 19.739621993724874,
+            "minimum": 18.486698851844597,
+            "maximum": 20.31613780330128,
+            "values": [
+              18.486698851844597,
+              19.739621993724874,
+              19.124773777995863,
+              20.31613780330128,
+              20.099769375205323
+            ]
+          }
+        },
+        "correctness": {
+          "histories": 3214630,
+          "steps": 1060398953,
+          "nuclear_interactions": 1214598,
+          "audit": "[unified-em-audit] 0 1061613460 1220643998 0 0 6528742566003172 469957117690637 0",
+          "quality": "pass",
+          "overflow": 0,
+          "dose_mean_max_abs_difference_percent_of_baseline_peak": 1.8187270232239537e-05,
+          "baseline_global_envelope_percent_of_mean_peak": 2.576529949449641e-05,
+          "dose_gate": "pass"
+        },
+        "evidence_root": "scratch/context_crosscase_rt06423_paired_20260916"
+      },
+      "20022516": {
+        "formal_pairs": 5,
+        "config_sha256": "85cf47801691d9419f45881f9f7d5c28380869126d7ba3a0fafc6b3de0728717",
+        "metrics_percent": {
+          "wall_s": {
+            "median": 5.996117474427476,
+            "minimum": 5.562180123876792,
+            "maximum": 6.12226541843548,
+            "values": [
+              6.12226541843548,
+              5.959416805026785,
+              6.0204108893019415,
+              5.996117474427476,
+              5.562180123876792
+            ]
+          },
+          "elapsed_s": {
+            "median": 6.5012689864758055,
+            "minimum": 6.172015313513657,
+            "maximum": 6.696636647259258,
+            "values": [
+              6.696636647259258,
+              6.484576265952091,
+              6.5012689864758055,
+              6.614901422749608,
+              6.172015313513657
+            ]
+          },
+          "primary_s": {
+            "median": 0.12321743082779335,
+            "minimum": -0.28021575066563553,
+            "maximum": 0.3465327601823942,
+            "values": [
+              0.3465327601823942,
+              0.12321743082779335,
+              0.07502113561626,
+              0.19551872902590084,
+              -0.28021575066563553
+            ]
+          },
+          "secondary_s": {
+            "median": 19.105106194816646,
+            "minimum": 18.74706119506213,
+            "maximum": 19.410000658383588,
+            "values": [
+              19.410000658383588,
+              19.105106194816646,
+              18.963822059869774,
+              19.270250127900002,
+              18.74706119506213
+            ]
+          }
+        },
+        "correctness": {
+          "histories": 3221317,
+          "steps": 1411397748,
+          "nuclear_interactions": 943023,
+          "audit": "[unified-em-audit] 0 1412340683 1253605461 0 0 5265315270472692 461240701637966 0",
+          "quality": "pass",
+          "overflow": 0,
+          "dose_mean_max_abs_difference_percent_of_baseline_peak": 1.6950676666774867e-05,
+          "baseline_global_envelope_percent_of_mean_peak": 2.712108266052517e-05,
+          "dose_gate": "pass"
+        },
+        "evidence_root": "scratch/context_crosscase_20022516_paired_20260916"
+      },
+      "water_50k": {
+        "formal_pairs": 10,
+        "config_sha256": "150d75fe9a94374e878e4ecea34cc133ce329f0408367411e489ace29fc06db9",
+        "metrics_percent": {
+          "wall_s": {
+            "median": 0.8991160308301716,
+            "minimum": -0.6857173107397863,
+            "maximum": 2.7312422064999398,
+            "values": [
+              2.0366192324165366,
+              1.5802145819036717,
+              1.9803588213076484,
+              0.9612608610450879,
+              -0.6857173107397863,
+              2.7312422064999398,
+              0.5920771361513699,
+              0.8369712006152552,
+              0.18558610533847553,
+              -0.2617783219326819
+            ]
+          },
+          "elapsed_s": {
+            "median": 1.3483840040594997,
+            "minimum": -1.1494665569338647,
+            "maximum": 3.957075499418994,
+            "values": [
+              3.527539719222239,
+              2.3196371659749415,
+              2.746263893919587,
+              1.2966514174907129,
+              -1.1494665569338647,
+              3.957075499418994,
+              1.4001165906282864,
+              1.2680357681452037,
+              0.09055038243255265,
+              -0.05208544744627064
+            ]
+          },
+          "primary_s": {
+            "median": 0.40304012085359275,
+            "minimum": -23.25368748054747,
+            "maximum": 20.994951619281533,
+            "values": [
+              -0.48749791599281833,
+              14.53187790412489,
+              20.994951619281533,
+              -0.8331959296880909,
+              1.231768928115362,
+              0.23419956452852553,
+              16.494122329505288,
+              0.57188067717866,
+              -23.25368748054747,
+              -20.555941586669533
+            ]
+          },
+          "secondary_s": {
+            "median": 16.940702091278695,
+            "minimum": 9.644638546237339,
+            "maximum": 37.94646837923015,
+            "values": [
+              15.819094102204456,
+              28.796241290372993,
+              37.94646837923015,
+              14.957062970046575,
+              15.465481334375442,
+              22.728194295615634,
+              19.238391426907995,
+              15.960459446422682,
+              9.644638546237339,
+              17.920944736134704
+            ]
+          }
+        },
+        "correctness": {
+          "histories": 50000,
+          "steps": 12565731,
+          "nuclear_interactions": 19006,
+          "audit": "[unified-em-audit] 0 12584737 19530004 0 0 104468335886224 7564061420386 0",
+          "quality": "pass",
+          "overflow": 0,
+          "dose_mean_max_abs_difference_percent_of_baseline_peak": 2.99142004311887e-05,
+          "baseline_global_envelope_percent_of_mean_peak": 0.00020364667218677557,
+          "dose_gate": "pass"
+        },
+        "evidence_root": "scratch/context_crosscase_water50k_paired10_20260916"
+      }
+    },
+    "local_gate": "pass",
+    "a6000": "pending"
   }
 }

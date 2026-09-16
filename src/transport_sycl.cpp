@@ -10,6 +10,18 @@
 #ifndef CARBON_SECONDARY_CONTEXT_POINTER
 #define CARBON_SECONDARY_CONTEXT_POINTER 0
 #endif
+#ifndef CARBON_SECONDARY_EXPLICIT_ND_RANGE
+#define CARBON_SECONDARY_EXPLICIT_ND_RANGE 0
+#endif
+#ifndef CARBON_SECONDARY_ND_RANGE_SIZE
+#define CARBON_SECONDARY_ND_RANGE_SIZE 64
+#endif
+#ifndef CARBON_SECONDARY_REUSE_PROJECTILE_INDEX
+#define CARBON_SECONDARY_REUSE_PROJECTILE_INDEX 0
+#endif
+#ifndef CARBON_SECONDARY_PRODUCTION_SPECIALIZE
+#define CARBON_SECONDARY_PRODUCTION_SPECIALIZE 0
+#endif
 #if CARBON_SECONDARY_CONTEXT_POINTER
 #define CARBON_SECONDARY_CONTEXT_FIELD(name) secondary_transport_ctx->name
 #else
@@ -75,7 +87,8 @@
 #include <vector>
 
 namespace carbon {
-template<int EmMode> class CarbonSecondaryTransportKernel;
+template<int EmMode, bool ProductionPath = false>
+class CarbonSecondaryTransportKernel;
 
 #include "detail/sycl_dose_atomic.inc"
 #include "detail/sycl_profile.inc"
@@ -4795,6 +4808,9 @@ template<int EmMode>
     double secondary_kernel_seconds = 0.0;
     const bool enable_secondary_unified_em = config.enable_secondary_unified_em;
     const bool segment_secondaries = config.secondary_step_chunking;
+    constexpr unsigned secondary_tail_threshold = 8192U;
+    const bool secondary_tail_diag =
+        std::getenv("CARBON_SECONDARY_TAIL_DIAG") != nullptr;
     // Reorder indices only: RNG streams and parent histories belong to particles.
     const bool group_secondaries = config.secondary_species_grouping &&
         enable_inelastic && enable_secondary_transport;
@@ -4880,11 +4896,13 @@ template<int EmMode>
                     queue.parallel_for(sycl::range<1>(resume_capacity), [=](sycl::id<1> i) {
                         active_order[i[0]] = i[0];
                     }).wait_and_throw();
-                    std::cout << "[segmented-secondary] step_limit=" << kSecondarySegmentSteps << " tail_threshold=8192 state_bytes="
+                    std::cout << "[segmented-secondary] step_limit=" << kSecondarySegmentSteps << " tail_threshold="
+                              << secondary_tail_threshold << " state_bytes="
                               << sizeof(SecondaryResumeState) << " capacity=" << resume_capacity << "\n";
                 }
                 unsigned resume_active = resume_capacity, segment_rounds = 0;
-                double compact_seconds = 0;
+                unsigned tail_rounds = 0;
+                double compact_seconds = 0, generation_kernel_seconds = 0, generation_tail_seconds = 0;
 #if CARBON_SECONDARY_CONTEXT_POINTER
                 struct SecondaryTransportContext {
                     bool group_secondaries;
@@ -4897,7 +4915,7 @@ template<int EmMode>
                     std::uint64_t * cinel02_species_terminal_device;
                     float inverse_depth_bin_width_mm;
                     std::size_t number_of_bins;
-                    float * dose_device;
+                    DepthAtomicT * dose_device;
                     bool enable_voxel_scoring;
                     float voxel_min_x_mm;
                     float inverse_voxel_size_x_mm;
@@ -4905,12 +4923,12 @@ template<int EmMode>
                     float inverse_voxel_size_y_mm;
                     std::size_t voxel_bins_x;
                     std::size_t voxel_bins_y;
-                    float * voxel_dose_device;
+                    DoseAtomicT * voxel_dose_device;
                     bool enable_charged_origin_voxel_scoring;
-                    float * charged_origin_voxel_dose_device;
-                    float * be_isotope_origin_voxel_dose_device;
-                    float * he_isotope_origin_voxel_dose_device;
-                    float * in_fov_dose_device;
+                    DoseAtomicT * charged_origin_voxel_dose_device;
+                    DoseAtomicT * be_isotope_origin_voxel_dose_device;
+                    DoseAtomicT * he_isotope_origin_voxel_dose_device;
+                    DepthAtomicT * in_fov_dose_device;
                     float * deposited_device;
                     std::uint64_t * schneider_diag_device;
                     double * grid_deposited_in_device;
@@ -4920,6 +4938,7 @@ template<int EmMode>
                     float * untracked_nuclear_device;
                     float * ion_species_sp_device;
                     std::size_t table_size;
+                    bool unified_em;
                     bool enable_secondary_unified_em;
                     UnifiedEmDevice unified_device;
                     std::uint64_t * unified_audit;
@@ -5042,6 +5061,7 @@ template<int EmMode>
                     untracked_nuclear_device,
                     ion_species_sp_device,
                     table_size,
+                    unified_em,
                     enable_secondary_unified_em,
                     unified_device,
                     unified_audit,
@@ -5130,20 +5150,40 @@ template<int EmMode>
                     sec_step_profile_device
                 };
                 auto* secondary_transport_ctx =
-                    sycl::malloc_device<SecondaryTransportContext>(1, queue);
+                    mem_tracker.allocate<SecondaryTransportContext>(1);
                 if (secondary_transport_ctx == nullptr) throw std::bad_alloc();
                 queue.copy(&secondary_transport, secondary_transport_ctx, 1)
                     .wait_and_throw();
 #endif
+#if CARBON_SECONDARY_PRODUCTION_SPECIALIZE
+                const bool use_production_secondary_path =
+                    EmMode == 1 && enable_secondary_unified_em && enable_ct_grid &&
+                    enable_voxel_scoring && ct_secondary_exact_faces &&
+                    ct_skip_homogeneous_face_clamp;
+#endif
                 while (resume_active) {
-                const bool finish_tail = !segment_secondaries || resume_active < 8192;
-                auto sec_event = queue.submit([&](sycl::handler& cgh) {
+                const bool finish_tail = !segment_secondaries || resume_active < secondary_tail_threshold;
+                const auto launch_secondary_round = [&](auto production_path_tag) {
+                constexpr bool kProductionSecondaryPath =
+                    decltype(production_path_tag)::value;
+                return queue.submit([&](sycl::handler& cgh) {
                 const auto secondary_kernel =
 #if CARBON_SECONDARY_CONTEXT_POINTER
                     [secondary_transport_ctx, resume_states, resume_ready, active_order,
-                     keep, segment_secondaries, finish_tail](sycl::id<1> item_id) {
+                     keep, segment_secondaries, finish_tail
+#if CARBON_SECONDARY_EXPLICIT_ND_RANGE
+                     , resume_active
+#endif
+                    ]
 #else
-                    [=](sycl::id<1> item_id) {
+                    [=]
+#endif
+#if CARBON_SECONDARY_EXPLICIT_ND_RANGE
+                    (sycl::nd_item<1> item) {
+                        const auto item_id = item.get_global_id();
+                        if (item_id[0] >= resume_active) return;
+#else
+                    (sycl::id<1> item_id) {
 #endif
                         const unsigned state_idx = segment_secondaries ? active_order[item_id[0]] : item_id[0];
                         const bool resumed = segment_secondaries && resume_ready[state_idx] != 0;
@@ -5179,7 +5219,7 @@ template<int EmMode>
                                     atomic_dose(CARBON_SECONDARY_CONTEXT_FIELD(dose_device)[bin_z]);
                                 atomic_dose.fetch_add(static_cast<DepthAtomicT>(frag.energy_MeV));
                             }
-                            if (CARBON_SECONDARY_CONTEXT_FIELD(enable_voxel_scoring)) {
+                            if ((kProductionSecondaryPath ? true : CARBON_SECONDARY_CONTEXT_FIELD(enable_voxel_scoring))) {
                                 const auto bin_x = static_cast<int>((frag.pos_x_mm - CARBON_SECONDARY_CONTEXT_FIELD(voxel_min_x_mm)) * CARBON_SECONDARY_CONTEXT_FIELD(inverse_voxel_size_x_mm));
                                 const auto bin_y = static_cast<int>((frag.pos_y_mm - CARBON_SECONDARY_CONTEXT_FIELD(voxel_min_y_mm)) * CARBON_SECONDARY_CONTEXT_FIELD(inverse_voxel_size_y_mm));
                                 if (bin_x >= 0 && bin_x < static_cast<int>(CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_x)) &&
@@ -5239,7 +5279,7 @@ template<int EmMode>
                                     const auto sqz = static_cast<int>(
                                         frag.pos_z_mm * CARBON_SECONDARY_CONTEXT_FIELD(inverse_depth_bin_width_mm));
                                     const bool sq_in_grid =
-                                        CARBON_SECONDARY_CONTEXT_FIELD(enable_voxel_scoring) && sqx >= 0 &&
+                                        (kProductionSecondaryPath ? true : CARBON_SECONDARY_CONTEXT_FIELD(enable_voxel_scoring)) && sqx >= 0 &&
                                         sqx < static_cast<int>(CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_x)) &&
                                         sqy >= 0 &&
                                         sqy < static_cast<int>(CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_y)) &&
@@ -5292,7 +5332,11 @@ template<int EmMode>
                         float pending_sec_depth_MeV = 0.0F;
                         float pending_sec_voxel_MeV = 0.0F;
 
-                        const bool unified_secondary=unified_em && !generic_recoil && CARBON_SECONDARY_CONTEXT_FIELD(enable_secondary_unified_em);
+                        const bool unified_secondary=
+                            (EmMode < 0 ? CARBON_SECONDARY_CONTEXT_FIELD(unified_em)
+                                        : EmMode == 1) &&
+                            !generic_recoil &&
+                            (kProductionSecondaryPath ? true : CARBON_SECONDARY_CONTEXT_FIELD(enable_secondary_unified_em));
                         const int unified_secondary_species=unified_secondary?CARBON_SECONDARY_CONTEXT_FIELD(unified_device).species_index(frag.z,frag.a):-1;
                         UnifiedEmClock unified_secondary_clock;
                         std::uint64_t unified_secondary_counter=0;
@@ -5411,7 +5455,7 @@ template<int EmMode>
                             float sec_local_density_g_per_cm3 = CARBON_SECONDARY_CONTEXT_FIELD(water_density_g_per_cm3);
                             std::uint8_t sec_ct_material = 2U;
                             bool sec_in_ct = false;
-                            if (CARBON_SECONDARY_CONTEXT_FIELD(enable_ct_grid)) {
+                            if ((kProductionSecondaryPath ? true : CARBON_SECONDARY_CONTEXT_FIELD(enable_ct_grid))) {
                                 sec_in_ct = ct_sample(
                                     sec_x, sec_y, sec_z, CARBON_SECONDARY_CONTEXT_FIELD(ct_origin_x), CARBON_SECONDARY_CONTEXT_FIELD(ct_origin_y),
                                     CARBON_SECONDARY_CONTEXT_FIELD(ct_origin_z), CARBON_SECONDARY_CONTEXT_FIELD(ct_spacing_x), CARBON_SECONDARY_CONTEXT_FIELD(ct_spacing_y), CARBON_SECONDARY_CONTEXT_FIELD(ct_spacing_z),
@@ -5421,7 +5465,7 @@ template<int EmMode>
                             }
                             // The unified package has no exterior material. Leaving the
                             // CT volume is a charged-particle escape, not a lookup error.
-                            if (unified_secondary && CARBON_SECONDARY_CONTEXT_FIELD(enable_ct_grid) && !sec_in_ct) {
+                            if (unified_secondary && (kProductionSecondaryPath ? true : CARBON_SECONDARY_CONTEXT_FIELD(enable_ct_grid)) && !sec_in_ct) {
                                 unified_secondary_escaped_ct = true;
                                 break;
                             }
@@ -5441,7 +5485,7 @@ template<int EmMode>
                                            sp_frac * (ion_sp_table[sp_idx + 1] -
                                                       ion_sp_table[sp_idx]));
                             const bool sec_use_mass_sp_factor =
-                                CARBON_SECONDARY_CONTEXT_FIELD(enable_ct_grid) && sec_in_ct && CARBON_SECONDARY_CONTEXT_FIELD(use_ct_mass_sp) &&
+                                (kProductionSecondaryPath ? true : CARBON_SECONDARY_CONTEXT_FIELD(enable_ct_grid)) && sec_in_ct && CARBON_SECONDARY_CONTEXT_FIELD(use_ct_mass_sp) &&
                                 CARBON_SECONDARY_CONTEXT_FIELD(ct_mass_sp_factor_lut_device) != nullptr &&
                                 CARBON_SECONDARY_CONTEXT_FIELD(ct_n_mass_factors) > 0U;
                             float sec_material_factor = 1.0F;
@@ -5500,7 +5544,7 @@ template<int EmMode>
                             // local density; bypass water x density scaling.
                             if (!sec_scheme2_hit) {
                                 sec_sp = secondary_material_stopping_power(
-                                    sec_sp, CARBON_SECONDARY_CONTEXT_FIELD(enable_ct_grid) && sec_in_ct,
+                                    sec_sp, (kProductionSecondaryPath ? true : CARBON_SECONDARY_CONTEXT_FIELD(enable_ct_grid)) && sec_in_ct,
                                     sec_local_density_g_per_cm3,
                                     sec_use_mass_sp_factor, sec_material_factor);
                             }
@@ -5511,7 +5555,7 @@ template<int EmMode>
                             UnifiedEmStep unified_secondary_pre;
                             float unified_secondary_rate=0,unified_secondary_distance=std::numeric_limits<float>::infinity();
                             if(unified_secondary){
-                                const int section=CARBON_SECONDARY_CONTEXT_FIELD(enable_ct_grid)?(sec_in_ct?int(sec_ct_material):-2):-1;
+                                const int section=(kProductionSecondaryPath ? true : CARBON_SECONDARY_CONTEXT_FIELD(enable_ct_grid))?(sec_in_ct?int(sec_ct_material):-2):-1;
                                 if(!CARBON_EM_MATERIAL_CACHE || !unified_secondary_state.valid || unified_secondary_state.section!=section ||
                                    unified_secondary_state.density!=sec_local_density_g_per_cm3)
                                     unified_secondary_state=CARBON_SECONDARY_CONTEXT_FIELD(unified_device).select(section,sec_local_density_g_per_cm3,unified_secondary_species);
@@ -5535,24 +5579,24 @@ template<int EmMode>
                                 if (dz_step > 1.0e-5F) sec_step_mm = sycl::fmin(sec_step_mm, dz_step);
                             }
                             CtFaceClampResult sec_face_clamp{sec_step_mm,false,0};
-                            if (CARBON_SECONDARY_CONTEXT_FIELD(enable_ct_grid) && sec_in_ct && CARBON_SECONDARY_CONTEXT_FIELD(ct_secondary_exact_faces)) {
+                            if ((kProductionSecondaryPath ? true : CARBON_SECONDARY_CONTEXT_FIELD(enable_ct_grid)) && sec_in_ct && (kProductionSecondaryPath ? true : CARBON_SECONDARY_CONTEXT_FIELD(ct_secondary_exact_faces))) {
                                 sec_face_clamp = clamp_step_to_ct_faces_exact(
                                     sec_step_mm, sec_x, sec_y, sec_z, sec_dx, sec_dy,
                                     sec_dz, CARBON_SECONDARY_CONTEXT_FIELD(ct_origin_x), CARBON_SECONDARY_CONTEXT_FIELD(ct_origin_y), CARBON_SECONDARY_CONTEXT_FIELD(ct_origin_z),
                                     CARBON_SECONDARY_CONTEXT_FIELD(ct_spacing_x), CARBON_SECONDARY_CONTEXT_FIELD(ct_spacing_y), CARBON_SECONDARY_CONTEXT_FIELD(ct_spacing_z), CARBON_SECONDARY_CONTEXT_FIELD(ct_nx), CARBON_SECONDARY_CONTEXT_FIELD(ct_ny), CARBON_SECONDARY_CONTEXT_FIELD(ct_nz));
                                 sec_step_mm = sec_face_clamp.step_mm;
-                            } else if (CARBON_SECONDARY_CONTEXT_FIELD(enable_ct_grid) && sec_in_ct) {
+                            } else if ((kProductionSecondaryPath ? true : CARBON_SECONDARY_CONTEXT_FIELD(enable_ct_grid)) && sec_in_ct) {
                                 sec_step_mm = clamp_step_to_ct_faces_near_z_if_needed(
                                     sec_step_mm, sec_x, sec_y, sec_z, sec_dx, sec_dy,
                                     sec_dz, CARBON_SECONDARY_CONTEXT_FIELD(ct_origin_x), CARBON_SECONDARY_CONTEXT_FIELD(ct_origin_y), CARBON_SECONDARY_CONTEXT_FIELD(ct_origin_z),
                                     CARBON_SECONDARY_CONTEXT_FIELD(ct_spacing_x), CARBON_SECONDARY_CONTEXT_FIELD(ct_spacing_y), CARBON_SECONDARY_CONTEXT_FIELD(ct_spacing_z), CARBON_SECONDARY_CONTEXT_FIELD(ct_nx), CARBON_SECONDARY_CONTEXT_FIELD(ct_ny),
                                     CARBON_SECONDARY_CONTEXT_FIELD(ct_nz), CARBON_SECONDARY_CONTEXT_FIELD(ct_density_device), CARBON_SECONDARY_CONTEXT_FIELD(ct_material_device),
                                     sec_local_density_g_per_cm3, sec_ct_material,
-                                    CARBON_SECONDARY_CONTEXT_FIELD(ct_skip_homogeneous_face_clamp), nullptr);
+                                    (kProductionSecondaryPath ? true : CARBON_SECONDARY_CONTEXT_FIELD(ct_skip_homogeneous_face_clamp)), nullptr);
                             }
                             // Do not enlarge a real face distance to the legacy
                             // minimum step: that would cross the material again.
-                            if (!unified_secondary && (!CARBON_SECONDARY_CONTEXT_FIELD(ct_secondary_exact_faces) || !sec_face_clamp.hit_face))
+                            if (!unified_secondary && (!(kProductionSecondaryPath ? true : CARBON_SECONDARY_CONTEXT_FIELD(ct_secondary_exact_faces)) || !sec_face_clamp.hit_face))
                                 sec_step_mm = sycl::fmax(sec_step_mm, 1.0e-5F);
                             // Generic EM-only recoils take CSDA steps without
                             // fluctuations: a 5% relative-loss cap keeps
@@ -5581,10 +5625,14 @@ template<int EmMode>
                                 frag.generation < CARBON_SECONDARY_CONTEXT_FIELD(cinel02_max_secondary_inelastic_generations)) {
                                 // Bundle-ordered registry LUT; no hardcoded isotope fallback.
                                 const int proj_idx =
+#if CARBON_SECONDARY_REUSE_PROJECTILE_INDEX
+                                    schneider_reg_idx;
+#else
                                     secondary_projectile_lut_index_device(
                                               CARBON_SECONDARY_CONTEXT_FIELD(schneider_ct_device_ctx).sec_proj_keys,
                                               CARBON_SECONDARY_CONTEXT_FIELD(schneider_ct_device_ctx).sec_num_projectiles,
                                               frag.z, frag.a);
+#endif
                                 if (proj_idx < 0) {
                                     // Unsupported secondary projectile: explicit
                                     // per-STEP evaluation counter, never a silent
@@ -5734,7 +5782,7 @@ template<int EmMode>
                                 }
                             if (!mid_scheme2_hit) {
                                 mid_sp = secondary_material_stopping_power(
-                                    mid_sp, CARBON_SECONDARY_CONTEXT_FIELD(enable_ct_grid) && sec_in_ct,
+                                    mid_sp, (kProductionSecondaryPath ? true : CARBON_SECONDARY_CONTEXT_FIELD(enable_ct_grid)) && sec_in_ct,
                                     sec_local_density_g_per_cm3,
                                     sec_use_mass_sp_factor, mid_material_factor);
                             }
@@ -5778,9 +5826,14 @@ template<int EmMode>
                             if (CARBON_SECONDARY_CONTEXT_FIELD(he4_hazard_audit_device) && frag.z == 2 && frag.a == 4 &&
                                 frag.generation < CARBON_SECONDARY_CONTEXT_FIELD(cinel02_max_secondary_inelastic_generations) &&
                                 CARBON_SECONDARY_CONTEXT_FIELD(schneider_ct_device_ctx).uses_cinel03() && (sec_in_ct || CARBON_SECONDARY_CONTEXT_FIELD(use_unified_water))) {
-                                const auto p = secondary_projectile_lut_index_device(
+                                const auto p =
+#if CARBON_SECONDARY_REUSE_PROJECTILE_INDEX
+                                    schneider_reg_idx;
+#else
+                                    secondary_projectile_lut_index_device(
                                     CARBON_SECONDARY_CONTEXT_FIELD(schneider_ct_device_ctx).sec_proj_keys,
                                     CARBON_SECONDARY_CONTEXT_FIELD(schneider_ct_device_ctx).sec_num_projectiles, 2, 4);
+#endif
                                 const auto section = CARBON_SECONDARY_CONTEXT_FIELD(use_unified_water) ? 255U : sec_ct_material;
                                 const double start = schneider_hazard_total_rate;
                                 const double middle = sec_local_density_g_per_cm3 *
@@ -5799,7 +5852,7 @@ template<int EmMode>
                             auto post_em_x = sec_x + collision_input_dx * sec_step_mm;
                             auto post_em_y = sec_y + collision_input_dy * sec_step_mm;
                             auto post_em_z = sec_z + collision_input_dz * sec_step_mm;
-                            if (CARBON_SECONDARY_CONTEXT_FIELD(ct_secondary_exact_faces) && sec_face_clamp.hit_face && !secondary_inelastic && !secondary_elastic) {
+                            if ((kProductionSecondaryPath ? true : CARBON_SECONDARY_CONTEXT_FIELD(ct_secondary_exact_faces)) && sec_face_clamp.hit_face && !secondary_inelastic && !secondary_elastic) {
                                 const auto endpoint=ct_finish_exact_face_step(sec_face_clamp,sec_step_mm,
                                     {sec_x,sec_y,sec_z},{collision_input_dx,collision_input_dy,collision_input_dz},
                                     {CARBON_SECONDARY_CONTEXT_FIELD(ct_origin_x),CARBON_SECONDARY_CONTEXT_FIELD(ct_origin_y),CARBON_SECONDARY_CONTEXT_FIELD(ct_origin_z)},{CARBON_SECONDARY_CONTEXT_FIELD(ct_spacing_x),CARBON_SECONDARY_CONTEXT_FIELD(ct_spacing_y),CARBON_SECONDARY_CONTEXT_FIELD(ct_spacing_z)});
@@ -5855,7 +5908,7 @@ template<int EmMode>
                             // Commit once here before a replay can update sec_x/y/z
                             // or break; the legacy dE commits below are suppressed.
                             const bool source_voxel_continuous_loss =
-                                CARBON_SECONDARY_CONTEXT_FIELD(ct_secondary_exact_faces) && CARBON_SECONDARY_CONTEXT_FIELD(enable_ct_grid) && sec_in_ct && CARBON_SECONDARY_CONTEXT_FIELD(enable_voxel_scoring);
+                                (kProductionSecondaryPath ? true : CARBON_SECONDARY_CONTEXT_FIELD(ct_secondary_exact_faces)) && (kProductionSecondaryPath ? true : CARBON_SECONDARY_CONTEXT_FIELD(enable_ct_grid)) && sec_in_ct && (kProductionSecondaryPath ? true : CARBON_SECONDARY_CONTEXT_FIELD(enable_voxel_scoring));
                             int continuous_step_voxel = -1;
                             if (source_voxel_continuous_loss) {
                                 const int sx=static_cast<int>(sycl::floor((sec_x-CARBON_SECONDARY_CONTEXT_FIELD(voxel_min_x_mm))*CARBON_SECONDARY_CONTEXT_FIELD(inverse_voxel_size_x_mm)));
@@ -5891,10 +5944,14 @@ template<int EmMode>
                                         CARBON_SECONDARY_CONTEXT_FIELD(cinel02_max_secondary_inelastic_generations)) {
                                     const float sec_e_c = sec_e * frag_inv_a;
                                     const int proj_idx_c =
+#if CARBON_SECONDARY_REUSE_PROJECTILE_INDEX
+                                        schneider_reg_idx;
+#else
                                         secondary_projectile_lut_index_device(
                                             CARBON_SECONDARY_CONTEXT_FIELD(schneider_ct_device_ctx).sec_proj_keys,
                                             CARBON_SECONDARY_CONTEXT_FIELD(schneider_ct_device_ctx).sec_num_projectiles,
                                             frag.z, frag.a);
+#endif
                                     const std::size_t section_c = CARBON_SECONDARY_CONTEXT_FIELD(use_unified_water) ? 255U : static_cast<std::size_t>(
                                         sycl::min(static_cast<std::uint32_t>(sec_ct_material), 24U));
                                     const auto sec_masked_c = CARBON_SECONDARY_CONTEXT_FIELD(schneider_ct_device_ctx).secondary_rates(
@@ -5957,7 +6014,7 @@ template<int EmMode>
                             pending_sec_depth_MeV += dE;
                             continuous_species_tally.add_all(dE);
 
-                            if (CARBON_SECONDARY_CONTEXT_FIELD(enable_voxel_scoring) || secondary_inelastic) {
+                            if ((kProductionSecondaryPath ? true : CARBON_SECONDARY_CONTEXT_FIELD(enable_voxel_scoring)) || secondary_inelastic) {
                                 int cur_voxel = -1;
                                 const auto score_bin_x = static_cast<int>(
                                     (sec_x - CARBON_SECONDARY_CONTEXT_FIELD(voxel_min_x_mm)) * CARBON_SECONDARY_CONTEXT_FIELD(inverse_voxel_size_x_mm));
@@ -6037,7 +6094,7 @@ template<int EmMode>
                                         // Use the collision vertex, not the source
                                         // voxel or legacy pre-x/post-z mixed index.
                                         // These are subsets, never extra energy sinks.
-                                        if (CARBON_SECONDARY_CONTEXT_FIELD(enable_voxel_scoring) && replay_vertex_in_scoring_box(
+                                        if ((kProductionSecondaryPath ? true : CARBON_SECONDARY_CONTEXT_FIELD(enable_voxel_scoring)) && replay_vertex_in_scoring_box(
                                                 {post_em_x,post_em_y,post_em_z},
                                                 {CARBON_SECONDARY_CONTEXT_FIELD(voxel_min_x_mm),CARBON_SECONDARY_CONTEXT_FIELD(voxel_min_y_mm),0.0F},
                                                 {CARBON_SECONDARY_CONTEXT_FIELD(voxel_max_x_mm),CARBON_SECONDARY_CONTEXT_FIELD(voxel_max_y_mm),
@@ -6056,7 +6113,7 @@ template<int EmMode>
                                         const float event_sin = sycl::sin(event_phi);
                                         const float local_deposit = sycl::fmax(0.0F, event.process_local_deposit_MeV);
                                         pending_sec_depth_MeV += local_deposit;
-                                        if (CARBON_SECONDARY_CONTEXT_FIELD(enable_voxel_scoring) && cur_voxel >= 0) {
+                                        if ((kProductionSecondaryPath ? true : CARBON_SECONDARY_CONTEXT_FIELD(enable_voxel_scoring)) && cur_voxel >= 0) {
                                             pending_sec_voxel_MeV += local_deposit;
                                         }
                                         if (CARBON_SECONDARY_CONTEXT_FIELD(deposited_device) != nullptr) {
@@ -6079,7 +6136,7 @@ template<int EmMode>
                                                     continuous_step_voxel>=0,dE);
                                             } else grid_deposit_split_device(
                                                 CARBON_SECONDARY_CONTEXT_FIELD(grid_deposited_in_device),CARBON_SECONDARY_CONTEXT_FIELD(grid_deposited_out_device),
-                                                CARBON_SECONDARY_CONTEXT_FIELD(enable_voxel_scoring) && cur_voxel>=0,local_deposit+dE);
+                                                (kProductionSecondaryPath ? true : CARBON_SECONDARY_CONTEXT_FIELD(enable_voxel_scoring)) && cur_voxel>=0,local_deposit+dE);
                                         }
                                         // The break below skips the common-path
                                         // voxel dE commit: commit it here so the
@@ -6087,7 +6144,7 @@ template<int EmMode>
                                         // depth, voxel and species scorers.
                                         carbon::secondary_step_voxel_commit(
                                             pending_sec_voxel_MeV,
-                                            CARBON_SECONDARY_CONTEXT_FIELD(enable_voxel_scoring) && !source_voxel_continuous_loss, cur_voxel, dE);
+                                            (kProductionSecondaryPath ? true : CARBON_SECONDARY_CONTEXT_FIELD(enable_voxel_scoring)) && !source_voxel_continuous_loss, cur_voxel, dE);
 
                                         float sec_charged_accounted_MeV = 0.0F;
                                         float sec_neutral_accounted_MeV = 0.0F;
@@ -6218,7 +6275,7 @@ template<int EmMode>
                                                 }
                                             } else {
                                                 pending_sec_depth_MeV += product.kinetic_energy_MeV;
-                                                if (CARBON_SECONDARY_CONTEXT_FIELD(enable_voxel_scoring) && cur_voxel >= 0) {
+                                                if ((kProductionSecondaryPath ? true : CARBON_SECONDARY_CONTEXT_FIELD(enable_voxel_scoring)) && cur_voxel >= 0) {
                                                     pending_sec_voxel_MeV += product.kinetic_energy_MeV;
                                                 }
                                                 if (CARBON_SECONDARY_CONTEXT_FIELD(deposited_device) != nullptr) {
@@ -6234,7 +6291,7 @@ template<int EmMode>
                                                     grid_deposit_split_device(
                                                         CARBON_SECONDARY_CONTEXT_FIELD(grid_deposited_in_device),
                                                         CARBON_SECONDARY_CONTEXT_FIELD(grid_deposited_out_device),
-                                                        CARBON_SECONDARY_CONTEXT_FIELD(enable_voxel_scoring) && cur_voxel >= 0,
+                                                        (kProductionSecondaryPath ? true : CARBON_SECONDARY_CONTEXT_FIELD(enable_voxel_scoring)) && cur_voxel >= 0,
                                                         product.kinetic_energy_MeV);
                                                 }
                                                 sec_charged_accounted_MeV += product.kinetic_energy_MeV;
@@ -6320,7 +6377,7 @@ template<int EmMode>
                                             grid_deposit_split_device(
                                                 CARBON_SECONDARY_CONTEXT_FIELD(grid_deposited_in_device),
                                                 CARBON_SECONDARY_CONTEXT_FIELD(grid_deposited_out_device),
-                                                CARBON_SECONDARY_CONTEXT_FIELD(enable_voxel_scoring) && (source_voxel_continuous_loss ? continuous_step_voxel>=0 : miss_voxel>=0),
+                                                (kProductionSecondaryPath ? true : CARBON_SECONDARY_CONTEXT_FIELD(enable_voxel_scoring)) && (source_voxel_continuous_loss ? continuous_step_voxel>=0 : miss_voxel>=0),
                                                 dE);
                                         }
                                         // Same bypass as the replay-hit path:
@@ -6328,7 +6385,7 @@ template<int EmMode>
                                         // voxel dE commit.
                                         carbon::secondary_step_voxel_commit(
                                             pending_sec_voxel_MeV,
-                                            CARBON_SECONDARY_CONTEXT_FIELD(enable_voxel_scoring) && !source_voxel_continuous_loss, miss_voxel, dE);
+                                            (kProductionSecondaryPath ? true : CARBON_SECONDARY_CONTEXT_FIELD(enable_voxel_scoring)) && !source_voxel_continuous_loss, miss_voxel, dE);
                                         sec_e = 0.0F;
                                         break;
                                     }
@@ -6407,7 +6464,7 @@ template<int EmMode>
                                             atomic_local_depth.fetch_add(
                                                 static_cast<DepthAtomicT>(local_deposit));
                                         }
-                                        if (CARBON_SECONDARY_CONTEXT_FIELD(enable_voxel_scoring) && pending_sec_voxel >= 0) {
+                                        if ((kProductionSecondaryPath ? true : CARBON_SECONDARY_CONTEXT_FIELD(enable_voxel_scoring)) && pending_sec_voxel >= 0) {
                                             pending_sec_voxel_MeV += local_deposit;
                                             cinel02_species_energy_add_device(
                                                 CARBON_SECONDARY_CONTEXT_FIELD(cinel02_species_energy_device), ledger_species_idx,
@@ -6428,7 +6485,7 @@ template<int EmMode>
                                             grid_deposit_split_device(
                                                 CARBON_SECONDARY_CONTEXT_FIELD(grid_deposited_in_device),
                                                 CARBON_SECONDARY_CONTEXT_FIELD(grid_deposited_out_device),
-                                                CARBON_SECONDARY_CONTEXT_FIELD(enable_voxel_scoring) &&
+                                                (kProductionSecondaryPath ? true : CARBON_SECONDARY_CONTEXT_FIELD(enable_voxel_scoring)) &&
                                                     pending_sec_voxel >= 0,
                                                 local_deposit);
                                         }
@@ -6752,7 +6809,7 @@ template<int EmMode>
                                     const int vx=static_cast<int>(sycl::floor((sec_x-CARBON_SECONDARY_CONTEXT_FIELD(voxel_min_x_mm))/CARBON_SECONDARY_CONTEXT_FIELD(voxel_size_x_mm)));
                                     const int vy=static_cast<int>(sycl::floor((sec_y-CARBON_SECONDARY_CONTEXT_FIELD(voxel_min_y_mm))/CARBON_SECONDARY_CONTEXT_FIELD(voxel_size_y_mm)));
                                     const int vz=static_cast<int>(sycl::floor(sec_z*CARBON_SECONDARY_CONTEXT_FIELD(inverse_depth_bin_width_mm)));
-                                    const bool inside=CARBON_SECONDARY_CONTEXT_FIELD(enable_voxel_scoring)&&vx>=0&&vy>=0&&vz>=0&&vx<static_cast<int>(CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_x))&&vy<static_cast<int>(CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_y))&&vz<static_cast<int>(CARBON_SECONDARY_CONTEXT_FIELD(number_of_bins));
+                                    const bool inside=(kProductionSecondaryPath ? true : CARBON_SECONDARY_CONTEXT_FIELD(enable_voxel_scoring))&&vx>=0&&vy>=0&&vz>=0&&vx<static_cast<int>(CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_x))&&vy<static_cast<int>(CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_y))&&vz<static_cast<int>(CARBON_SECONDARY_CONTEXT_FIELD(number_of_bins));
                                     if(inside){const int v=(vz*CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_y)+vy)*CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_x)+vx;
                                         sycl::atomic_ref<DoseAtomicT,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(CARBON_SECONDARY_CONTEXT_FIELD(voxel_dose_device)[v]).fetch_add(static_cast<DoseAtomicT>(recoil));}
                                     sycl::atomic_ref<float,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(CARBON_SECONDARY_CONTEXT_FIELD(deposited_device)[frag.parent_history]).fetch_add(recoil);
@@ -6881,7 +6938,7 @@ template<int EmMode>
                                         pending_sec_bin = bin_z;
                                     }
                                     pending_sec_depth_MeV += sec_e;
-                                    if (CARBON_SECONDARY_CONTEXT_FIELD(enable_voxel_scoring)) {
+                                    if ((kProductionSecondaryPath ? true : CARBON_SECONDARY_CONTEXT_FIELD(enable_voxel_scoring))) {
                                         int cur_voxel = -1;
                                         if (bin_x >= 0 && bin_x < static_cast<int>(CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_x)) &&
                                             bin_y >= 0 && bin_y < static_cast<int>(CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_y))) {
@@ -6984,7 +7041,7 @@ template<int EmMode>
                                 atomic_dose(CARBON_SECONDARY_CONTEXT_FIELD(dose_device)[pending_sec_bin]);
                             atomic_dose.fetch_add(static_cast<DoseAtomicT>(pending_sec_depth_MeV));
                         }
-                        if (CARBON_SECONDARY_CONTEXT_FIELD(enable_voxel_scoring) && pending_sec_voxel_MeV > 0.0F && pending_sec_voxel >= 0 && pending_sec_voxel < static_cast<int>(CARBON_SECONDARY_CONTEXT_FIELD(number_of_voxels))) {
+                        if ((kProductionSecondaryPath ? true : CARBON_SECONDARY_CONTEXT_FIELD(enable_voxel_scoring)) && pending_sec_voxel_MeV > 0.0F && pending_sec_voxel >= 0 && pending_sec_voxel < static_cast<int>(CARBON_SECONDARY_CONTEXT_FIELD(number_of_voxels))) {
                             sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
                                              sycl::memory_scope::device,
                                              sycl::access::address_space::global_space>
@@ -7016,11 +7073,46 @@ template<int EmMode>
                 static_assert(sizeof(secondary_kernel) <= 64,
                               "secondary kernel closure exceeded its ABI budget");
 #endif
-                cgh.parallel_for<CarbonSecondaryTransportKernel<EmMode>>(
+#if CARBON_SECONDARY_EXPLICIT_ND_RANGE
+                constexpr std::size_t secondary_local_size =
+                    CARBON_SECONDARY_ND_RANGE_SIZE;
+                const auto secondary_global_size =
+                    ((static_cast<std::size_t>(resume_active) + secondary_local_size - 1) /
+                     secondary_local_size) * secondary_local_size;
+                cgh.parallel_for<CarbonSecondaryTransportKernel<EmMode,
+                                                                 kProductionSecondaryPath>>(
+                    sycl::nd_range<1>{secondary_global_size, secondary_local_size},
+                    secondary_kernel);
+#else
+                cgh.parallel_for<CarbonSecondaryTransportKernel<EmMode,
+                                                                 kProductionSecondaryPath>>(
                     sycl::range<1>(resume_active), secondary_kernel);
+#endif
             });
+                };
+#if CARBON_SECONDARY_PRODUCTION_SPECIALIZE
+                auto sec_event = use_production_secondary_path
+                    ? launch_secondary_round(std::true_type{})
+                    : launch_secondary_round(std::false_type{});
+#else
+                auto sec_event =
+                    launch_secondary_round(std::false_type{});
+#endif
             sec_event.wait_and_throw();
-                secondary_kernel_seconds += event_duration_seconds(sec_event);
+                const double round_seconds = event_duration_seconds(sec_event);
+                secondary_kernel_seconds += round_seconds;
+                generation_kernel_seconds += round_seconds;
+                if (finish_tail) {
+                    generation_tail_seconds += round_seconds;
+                    ++tail_rounds;
+                }
+                if (secondary_tail_diag) {
+                    std::cout << "[secondary-round] begin=" << batch_begin
+                              << " round=" << segment_rounds << " active=" << resume_active
+                              << " blocks256=" << ((resume_active + 255) / 256)
+                              << (finish_tail ? " finish_tail" : " segment")
+                              << " kernel_s=" << round_seconds << "\n";
+                }
                 ++segment_rounds;
                 if (finish_tail) break; // No suspended tracks; avoid an empty compaction.
                 const auto compact_start=std::chrono::steady_clock::now();
@@ -7037,9 +7129,13 @@ template<int EmMode>
                 queue.copy(active_count,&resume_active,1).wait_and_throw();std::swap(active_order,next_order);
                 compact_seconds+=std::chrono::duration<double>(std::chrono::steady_clock::now()-compact_start).count();
                 }
-                if (segment_secondaries) std::cout<<"[segmented-secondary] rounds="<<segment_rounds<<" compaction_s="<<compact_seconds<<"\n";
+                if (segment_secondaries) std::cout<<"[segmented-secondary] rounds="<<segment_rounds
+                    <<" tail_rounds="<<tail_rounds<<" tail_s="<<generation_tail_seconds
+                    <<" kernel_s="<<generation_kernel_seconds
+                    <<" compaction_s="<<compact_seconds
+                    <<" begin="<<batch_begin<<" end="<<generation_end<<"\n";
 #if CARBON_SECONDARY_CONTEXT_POINTER
-                sycl::free(secondary_transport_ctx, queue);
+                mem_tracker.free(secondary_transport_ctx);
 #endif
                 mem_tracker.free(resume_states);
                 for(auto* ptr:{resume_ready,active_order,next_order,keep,ranks,block_counts,block_offsets,active_count})mem_tracker.free(ptr);

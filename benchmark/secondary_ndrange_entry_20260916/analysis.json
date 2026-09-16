@@ -1,0 +1,164 @@
+{
+  "schema": "carbon.secondary_ndrange_entry.analysis.v1",
+  "date": "2026-09-16",
+  "gpu": "NVIDIA GeForce RTX 2080 Ti",
+  "architecture": "sm_75",
+  "base_commit": "b3b906d983c6a87640e1a9a483bf11126d4561f2",
+  "candidate": {
+    "cmake_option": "CARBON_SECONDARY_EXPLICIT_ND_RANGE",
+    "default": false,
+    "requires": "CARBON_SECONDARY_CONTEXT_POINTER=ON",
+    "decision": "reject from combination; retain default off",
+    "reason": "all three work-group sizes regress full-run and secondary throughput"
+  },
+  "protocol": {
+    "type": "single full-shard screening after structural build gate",
+    "profiler_attached": false,
+    "formal_pairs": 0,
+    "stop_gate": "three sizes show consistent regression beyond known repeat variation",
+    "improvement_definition": "baseline/candidate - 1"
+  },
+  "control": {
+    "entry": "__pf_kernel_wrapper<CarbonSecondaryTransportKernel<1>>",
+    "elapsed_s": 20.229883,
+    "primary_s": 8.206793,
+    "secondary_s": 8.6314756,
+    "tail_s": 0.027502,
+    "tail_fraction_of_secondary": 0.0031862454665341346,
+    "binary_sha256": "c2fb088a8886a1689dba379a744d9b0eb7f1139f5c9f8d91dc3d9318f0fc984a",
+    "resources": {
+      "registers_per_thread": 187,
+      "stack_bytes_per_thread": 264,
+      "constant0_bytes": 408
+    },
+    "log": "scratch/context_range_control_screen_20260916/run.log"
+  },
+  "variants": [
+    {
+      "work_group_size": 32,
+      "elapsed_s": 21.636933,
+      "primary_s": 8.175998,
+      "secondary_s": 10.102255,
+      "elapsed_throughput_change_percent": -6.503001141612808,
+      "secondary_speed_change_percent": -14.558921745689446,
+      "secondary_time_increase_percent": 17.03972145851862,
+      "binary_sha256": "934a8f1f136ec65883c650d5c9da60e9521498493bd66dfd93b1f6604fbfdedc",
+      "resources": {
+        "entry": "CarbonSecondaryTransportKernel<1>",
+        "registers_per_thread": 170,
+        "stack_bytes_per_thread": 480,
+        "constant0_bytes": 400
+      },
+      "correctness": {
+        "histories": 3240963,
+        "steps": 1034976717,
+        "nuclear_interactions": 1344312,
+        "quality": "pass",
+        "overflow": 0,
+        "audit": "exact control match"
+      },
+      "log": "scratch/context_ndrange_screen_32_20260916/run.log"
+    },
+    {
+      "work_group_size": 64,
+      "elapsed_s": 21.832124,
+      "primary_s": 8.3131836,
+      "secondary_s": 10.129329,
+      "elapsed_throughput_change_percent": -7.3389148944005616,
+      "secondary_speed_change_percent": -14.787291438554329,
+      "secondary_time_increase_percent": 17.35338740921657,
+      "binary_sha256": "47dd8deb3a6517311323cb5927958dfb50ae24291e620074e4898e1da71ad09e",
+      "resources": {
+        "entry": "CarbonSecondaryTransportKernel<1>",
+        "registers_per_thread": 170,
+        "stack_bytes_per_thread": 480,
+        "constant0_bytes": 400
+      },
+      "correctness": {
+        "histories": 3240963,
+        "steps": 1034976717,
+        "nuclear_interactions": 1344312,
+        "quality": "pass",
+        "overflow": 0,
+        "audit": "exact control match"
+      },
+      "log": "scratch/context_ndrange_screen_64_20260916/run.log"
+    },
+    {
+      "work_group_size": 128,
+      "elapsed_s": 21.891748,
+      "primary_s": 8.3678125,
+      "secondary_s": 10.128049,
+      "elapsed_throughput_change_percent": -7.591285081483667,
+      "secondary_speed_change_percent": -14.776522112007962,
+      "secondary_time_increase_percent": 17.338557963368405,
+      "binary_sha256": "ff3dd65b6e5ad4c8fc3ced94359ec4d046a761bfc2d7b31f0ffc9b31827abea5",
+      "resources": {
+        "entry": "CarbonSecondaryTransportKernel<1>",
+        "registers_per_thread": 170,
+        "stack_bytes_per_thread": 480,
+        "constant0_bytes": 400
+      },
+      "correctness": {
+        "histories": 3240963,
+        "steps": 1034976717,
+        "nuclear_interactions": 1344312,
+        "quality": "pass",
+        "overflow": 0,
+        "audit": "exact control match"
+      },
+      "log": "scratch/context_ndrange_screen_128_20260916/run.log"
+    }
+  ],
+  "fixed_correctness": {
+    "histories": 3240963,
+    "steps": 1034976717,
+    "nuclear_interactions": 1344312,
+    "unified_em_audit": [
+      0,
+      1036320939,
+      1429988519,
+      0,
+      0,
+      6897079514135703,
+      528848467657861,
+      0
+    ],
+    "quality": "pass",
+    "overflow": 0
+  },
+  "profiler": {
+    "dynamic_metrics": "not collected after timing stop gate",
+    "script_support": {
+      "secondary_entry": [
+        "rounded-wrapper",
+        "named"
+      ],
+      "replay_mode": [
+        "kernel",
+        "application"
+      ],
+      "cache_control": [
+        "all",
+        "none"
+      ]
+    }
+  },
+  "validation": {
+    "schneider_v2_1": "pass",
+    "patient_body_gamma": "pending",
+    "low_density_production_cut_accuracy": "pending"
+  },
+  "hashes": {
+    "cmakelists": "df01d779deb931fa6b4ce70e86113b36f3a93d564acb85ccc2d3a3e1338b3389",
+    "transport_sycl_cpp": "17f68cfbdc929ec0a755737c1cf24b20aa45425729d09fc6254b9207644707ec",
+    "profile_script": "9fc647ddf69ebf8a5cb3b5e6f7357d1cbc9a5857f4ca1777c1b095c464de8280",
+    "config": "6d1896b34716e07eb92fc0dcbe0c6455f0148da95a47c7cd3aa704caa3ac8855"
+  },
+  "evidence_roots": [
+    "scratch/context_range_control_screen_20260916",
+    "scratch/context_ndrange_screen_32_20260916",
+    "scratch/context_ndrange_screen_64_20260916",
+    "scratch/context_ndrange_screen_128_20260916"
+  ]
+}
