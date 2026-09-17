@@ -1,0 +1,34 @@
+# GPU counterpart of validation/topas/carbon_200MeVu_water_letd.txt.
+number_of_histories: 100000
+initial_energy_MeVu: 200.0
+primary_atomic_number: 6
+primary_mass_number: 12
+phantom_length_mm: 400.0
+depth_bin_width_mm: 0.5
+maximum_step_mm: 0.1
+maximum_relative_energy_loss: 0.001
+energy_cutoff_MeV: 0.1
+water_density_g_per_cm3: 1.0
+scorer_area_mm2: 90000.0
+enable_voxel_scoring: false
+enable_energy_straggling: true
+straggling_scale: 1.0
+enable_multiple_scattering: true
+electronic_buildup_fraction: 0.06
+electronic_buildup_mfp_mm: 0.5
+# CUDA auto (4/history) overflows cascade at 100k–400 MeV and truncates
+# fragment transport → all-hadron LET tail error. Keep ≥20 slots/history.
+max_device_memory_fraction: 0.50
+random_seed: 20260715
+primary_stopping_power_file: data/stopping_power_water_geant4_11_3_2.csv
+# Exact isotope SP tables: required for best all-hadron LET agreement.
+use_particle_specific_stopping_power: true
+particle_stopping_power_file: data/ion_stopping_power_water_geant4_11_3_2.csv
+output_file: out/letd_water/gpu_idd.csv
+fragment_species_output_file:
+dose_output_file:
+fragment_species_dose_output_file:
+let_output_file: out/letd_water/gpu_letd.csv
+let_delta_electron_fraction_file: data/let_delta_electron_fraction_water_geant4_11_3_2.csv
+scorerLET: false
+device: cuda

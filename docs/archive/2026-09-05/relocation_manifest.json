@@ -1,0 +1,97 @@
+{
+  "schema_version": 1,
+  "archived_on": "2026-09-05",
+  "scope": "root and docs Markdown reorganization; original bytes preserved",
+  "files": [
+    {
+      "original": "README.md",
+      "archived": "docs/archive/2026-09-05/root/README.md",
+      "sha256": "875f622367b3c1937ad067c7142de9056ac3cddb425acd1fabaae2647cb5ea39"
+    },
+    {
+      "original": "A_Data-Driven_Fragmentation_Model_for_Carbon_Therapy.md",
+      "archived": "docs/archive/2026-09-05/root/A_Data-Driven_Fragmentation_Model_for_Carbon_Therapy.md",
+      "sha256": "d74e82859a00428a0075cfd6ca34795cfe9f03c3623490395e67b1ef3b439503"
+    },
+    {
+      "original": "model.md",
+      "archived": "docs/archive/2026-09-05/root/model.md",
+      "sha256": "8fe39fba009da14bedfdc020e4636f6ca1122938e65f409dd834273fab96dc76"
+    },
+    {
+      "original": "mm.md",
+      "archived": "docs/archive/2026-09-05/root/mm.md",
+      "sha256": "f2c64b8aaa3e2dccb5fbaaca7f7e010964c25eaf802af678af7f76a245e809b9"
+    },
+    {
+      "original": "mm_zh.md",
+      "archived": "docs/archive/2026-09-05/root/mm_zh.md",
+      "sha256": "18767ea683bf1995babb8262e1998a884d8cd448073b0bbf38479e871acfa72a"
+    },
+    {
+      "original": "scorer_benchmark.md",
+      "archived": "docs/archive/2026-09-05/root/scorer_benchmark.md",
+      "sha256": "93cb1361ad8777c9d0d7e51d8342f22628f08abc168b4e789fce6e218de660c9"
+    },
+    {
+      "original": "issue.md",
+      "archived": "docs/archive/2026-09-05/root/issue.md",
+      "sha256": "dd310e8bffffdd927a4222aca0f68a157dbbdc2c1558f904dbb4f62d0b2439c1"
+    },
+    {
+      "original": "plan.md",
+      "archived": "docs/archive/2026-09-05/root/plan.md",
+      "sha256": "7ef4d8cfce0a0f61aeeeb8a7cee840c821022e4491afd1d2eb8fda45cbaf0a37"
+    },
+    {
+      "original": "session.md",
+      "archived": "docs/archive/2026-09-05/root/session.md",
+      "sha256": "3a52176c69b3649bf1d71e7851ccf4a769da401503b124da2fbd7e7476f50e07"
+    },
+    {
+      "original": "docs/BRANCH_WORKFLOW.md",
+      "archived": "docs/archive/2026-09-05/docs/BRANCH_WORKFLOW.md",
+      "sha256": "1fa215e7199500c61db707d467eea36b63fdff75b1bf11664c419aa743591b33"
+    },
+    {
+      "original": "docs/PATH_A_FRED.md",
+      "archived": "docs/archive/2026-09-05/docs/PATH_A_FRED.md",
+      "sha256": "b9e20a86bf2289306a2c0757967d621e4a1d0d694987e2b713b4d6eaac39fb42"
+    },
+    {
+      "original": "docs/PROJECT_PROGRESS_2026-08-22.md",
+      "archived": "docs/archive/2026-09-05/docs/PROJECT_PROGRESS_2026-08-22.md",
+      "sha256": "867ab3277a2744dfb6f7ce2e4ffe9e172aad1602032821b3ac0b2fa52f664779"
+    },
+    {
+      "original": "docs/TOPAS_GPU_Physics_Model.md",
+      "archived": "docs/archive/2026-09-05/docs/TOPAS_GPU_Physics_Model.md",
+      "sha256": "e713079b59ccc2aa7ab2f3e5e49af0ea97d0d0ed0b50c560c622b13f4ea41568"
+    },
+    {
+      "original": "docs/structure.md",
+      "archived": "docs/archive/2026-09-05/docs/structure.md",
+      "sha256": "0ac6faf1b9fe69e9b497ce9bd4ca4df472274ded9063045f4ab8e9db0624ce54"
+    },
+    {
+      "original": "docs/geometry_rotation.md",
+      "archived": "docs/archive/2026-09-05/docs/geometry_rotation.md",
+      "sha256": "32b733302c52c791afbdbd64d14139949a474ffe8a22bbe62795f724e9ca30fd"
+    },
+    {
+      "original": "docs/ctplan.md",
+      "archived": "docs/archive/2026-09-05/docs/ctplan.md",
+      "sha256": "ac3c0cc6d95838d85f5d26c7e38df2a0dad2b5667295c42e2aa48c93b1b568c4"
+    },
+    {
+      "original": "docs/ctResult.md",
+      "archived": "docs/archive/2026-09-05/docs/ctResult.md",
+      "sha256": "c8a4fe6e114c662d9180144777dc84588dd44a1a864fef1f5f0a65a03dd448e4"
+    },
+    {
+      "original": "docs/minibeamStructure.md",
+      "archived": "docs/archive/2026-09-05/docs/minibeamStructure.md",
+      "sha256": "9ef5cc123d8161d1167eaf63ef57c9f02475d571b278e933e0065de2862161a9"
+    }
+  ]
+}

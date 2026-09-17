@@ -1,0 +1,56 @@
+# 20022516 K=10 PBS: TPS 0° beam, native DICOM LPS CT, spots.csv + beam_model.
+# TOPAS counterpart: Patient RotZ=0 then Trans, IEC_G=0, HistoriesScale=2.5 x 4 seeds.
+# Do not set tps_apply_topas_patient_placement (that packs tps_90). RotZ=0 stays LPS.
+number_of_histories: 17717177
+primary_atomic_number: 6
+primary_mass_number: 12
+maximum_step_mm: 0.1
+maximum_relative_energy_loss: 0.001
+energy_cutoff_MeV: 0.1
+enable_ct_grid: true
+ct_grid_file: benchmark/ct/20022516/grid/patient_ct.bin
+ct_hu_stopping_power_lut_file: data/hu_stopping_power_lut_geant4_11_3_2.csv
+ct_skip_homogeneous_face_clamp: true
+enable_voxel_scoring: true
+enable_charged_origin_voxel_scoring: false
+
+enable_energy_straggling: true
+straggling_scale: 1.2
+enable_multiple_scattering: true
+enable_ct_material_mcs: false
+enable_fragment_species_scoring: false
+secondary_batch_size: 65536
+max_device_memory_fraction: 0.84
+random_seed: 20260819
+
+tpsSource: true
+enable_tps_coordinate_system: true
+tps_spots_file: benchmark/ct/result_x10/20022516/spots.csv
+tps_beam_model_file: benchmark/ct/result_x10/20022516/beam_model.csv
+tps_spot_weight_mode: histories
+tps_histories_scale: 1.0
+tps_virtual_scanning_magnet_x_mm: 6227.8
+tps_virtual_scanning_magnet_y_mm: 7008.6
+tps_virtual_source_to_isocenter_mm: 450.0
+tps_sad_mm: 450.0
+tps_beam_angle_deg: 0.0
+# CCTG low-edge origin z=-1 mm. TOPAS patient-local isocenter is -Trans;
+# slice axis is recentered by +41 mm so transport z=0 is the first-slice low edge.
+tps_isocenter_mm: [69.6605, -9.3887, 40.9181]
+spots_patient_trans_x_mm: -69.6605
+spots_patient_trans_y_mm: 9.3887
+spots_patient_trans_z_mm: 0.0819
+spots_patient_rot_z_deg: 0.0
+
+primary_stopping_power_file: data/stopping_power_water_geant4_11_3_2.csv
+let_delta_electron_fraction_file: data/let_delta_electron_fraction_water_geant4_11_3_2.csv
+use_particle_specific_stopping_power: true
+particle_stopping_power_file: data/ion_stopping_power_water_geant4_11_3_2.csv
+
+dose_to_medium: true
+dose_to_medium_type: mhd
+dose_to_medium_name: dose
+LET: true
+LET_type: mhd
+LET_name: LET
+device: cuda

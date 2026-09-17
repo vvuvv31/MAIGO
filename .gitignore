@@ -1,0 +1,55 @@
+# Build / runtime
+build/
+build-*/
+out/
+tmp/
+*.log
+*.vtk
+*.root
+__pycache__/
+*.pyc
+.venv*/
+.plot-*/
+
+# Local agent / editor clutter
+mcps/
+.agents/
+.codex/
+codex-session-*.md
+.idea/
+.vscode/
+*.swp
+*~
+*:Zone.Identifier
+
+# Local validation workspaces. They are not part of project commits while the
+# benchmark protocol and patient-dose validation are still under development.
+ct/
+benchmark/
+validation/
+
+# Recoverable local archives; never include discarded data in Git.
+/trash/
+
+
+# Windows-only convenience wrappers under scripts/ (not required for Linux builds)
+scripts/windows_*.cmd
+scripts/build_windows_*.cmd
+scripts/run_windows_*.cmd
+
+# Derived EM moments are reproducible, SHA-pinned data, not Git source artifacts.
+/data/em/unified_em_delta_moments_v2.bin
+
+# Physics data delivered as pristine-v1 GitHub release assets; never committed.
+/data/em/unified_em_v1.bin
+/data/em/unified_em_delta_moments_v2.bin
+/data/schneider/all_ion_elastic_v1.bin
+/data/schneider/cinel03_c12_targets_v2_1.bin
+/data/schneider/cinel03_secondary_targets_v2_1_14p.bin
+/data/schneider/elastic_recoil_stopping_v1.bin
+/data/schneider/schneider_elastic_rates_v1.bin
+/data/schneider/schneider_inelastic_rates_v2_1.bin
+/data/schneider/secondary_inelastic_rates_v2_1.bin
+/data/schneider/schneider_ion_section_stopping_v1.bin
+/data/schneider/elratev1_*/
+/data/ct/

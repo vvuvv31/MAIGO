@@ -1,0 +1,49 @@
+{
+  "dataset": "C-12 stopping power in G4_AIR",
+  "material": "G4_AIR",
+  "extraction_method": "G4EmCalculator via CarbonStoppingPowerNtuple",
+  "gpu_column": "electronic",
+  "topas_version": "4.2.p3",
+  "geant4_version": "geant4-11-03-patch-02",
+  "energy_grid_MeV_per_u": {
+    "minimum": 0.01,
+    "maximum": 400.01,
+    "count": 4001
+  },
+  "reference_200MeVu": {
+    "electronic_MeV_per_mm": 0.0171955,
+    "total_MeV_per_mm": 0.0171955,
+    "csda_range_mm": 0.0
+  },
+  "input_files": {
+    "ntuple": {
+      "path": "benchmark/ct/RT07575/minibeam/physics/output/air_c12_stopping_power.phsp",
+      "sha256": "d24fa8942343136e24f225f87ca347905b2af189ec3a343d6715b0123a8959f0"
+    },
+    "header": {
+      "path": "benchmark/ct/RT07575/minibeam/physics/output/air_c12_stopping_power.header",
+      "sha256": "f0399a26497813f07a42109955b9021851ba3074b699e34dc8b76b0cbeb3467e"
+    },
+    "log": {
+      "path": "benchmark/ct/RT07575/minibeam/physics/output/run_air_material_tables.log",
+      "sha256": "85199cffdb531635ae8947302157be6740d801e33bb59e2cc98d0a7f21e8b153"
+    }
+  },
+  "output_csv": "data/stopping_power_air_geant4_11_3_2.csv",
+  "full_csv": "data/stopping_power_air_geant4_11_3_2_full.csv",
+  "global_scale_applied": false,
+  "material_properties": {
+    "geant4_name": "G4_AIR",
+    "density_g_per_cm3": 0.00120479,
+    "radiation_length_mm": 303921.0,
+    "mass_radiation_length_g_per_cm2": 36.6161,
+    "source": {
+      "path": "benchmark/ct/RT07575/minibeam/physics/output/air_material_properties.phsp",
+      "sha256": "7e1678f49c238e7b1ddddf0c02ffe569051e25c72146fa7b5f39664cbfbf04ba"
+    },
+    "header": {
+      "path": "benchmark/ct/RT07575/minibeam/physics/output/air_material_properties.header",
+      "sha256": "2f3ce95252028cde9260d2347e8bda580d7677dc725d5969bc6d6bfd2ace0b48"
+    }
+  }
+}

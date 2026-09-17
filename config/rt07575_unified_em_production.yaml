@@ -1,0 +1,83 @@
+# Independent all-ion nuclear elastic remains research-only; use the research entry for that combination.
+# Authorized unified EM production entry; density cut-onset/patient Gamma accuracy remain pending.
+run_mode: production
+scorer_mode: production
+number_of_histories: 6481909
+primary_atomic_number: 6
+primary_mass_number: 12
+maximum_step_mm: 0.5
+maximum_relative_energy_loss: 0.005
+energy_cutoff_MeV: 0.1
+enable_ct_grid: true
+ct_grid_file: /mnt/sda/wuwei/topas10x_threecase_20260905_r2/rt07575_packed.bin
+ct_hu_stopping_power_lut_file: /mnt/sdb/wuwei/MAIGO/data/hu_stopping_power_lut_geant4_11_3_2.csv
+ct_skip_homogeneous_face_clamp: true
+enable_voxel_scoring: true
+enable_multiple_scattering: true
+enable_ct_material_mcs: true
+enable_fragment_species_scoring: false
+max_device_memory_fraction: 0.84
+random_seed: 9000000000
+enable_inelastic: true
+nuclear_model: geant4
+cinel02_max_secondary_inelastic_generations: 2
+enable_secondary_transport: true
+secondary_out_of_scope_nuclear_policy: em_only
+tpsSource: true
+enable_tps_coordinate_system: true
+tps_angle_convention: dicom_lps
+tps_spots_file: /mnt/sda/wuwei/topas10x_threecase_20260905_r2/RT07575/shard_01/spots.csv
+tps_beam_model_file: /mnt/sdb/wuwei/MAIGO/benchmark/topas10x/RT07575_pbs_s1/beam_model.csv
+tps_spot_weight_mode: histories
+tps_histories_scale: 1.0
+tps_virtual_scanning_magnet_x_mm: 6227.8
+tps_virtual_scanning_magnet_y_mm: 7008.6
+tps_virtual_source_to_isocenter_mm: 450.0
+tps_sad_mm: 450.0
+tps_beam_angle_deg: 0.0
+tps_apply_topas_patient_placement: true
+spots_patient_trans_x_mm: -42.8515
+spots_patient_trans_y_mm: -12.7636
+spots_patient_trans_z_mm: 1.3617
+spots_patient_rot_z_deg: 90.0
+spots_ct_axis_min_mm: -104.25
+spots_enable_upstream_air_energy_loss: true
+spots_upstream_air_stopping_power_file: /mnt/sdb/wuwei/MAIGO/data/stopping_power_air_geant4_11_3_2.csv
+primary_stopping_power_file: /mnt/sdb/wuwei/MAIGO/data/stopping_power_water_geant4_11_3_2.csv
+let_delta_electron_fraction_file: /mnt/sdb/wuwei/MAIGO/data/let_delta_electron_fraction_water_geant4_11_3_2.csv
+use_particle_specific_stopping_power: true
+particle_stopping_power_file: /mnt/sdb/wuwei/MAIGO/data/ion_stopping_power_water_geant4_11_3_2.csv
+dose_to_medium: true
+dose_to_medium_type: mhd
+dose_to_medium_name: dose
+LET: false
+device: cuda
+ct_schneider_primary_rate_file: /mnt/sdb/wuwei/MAIGO/data/schneider/schneider_inelastic_rates_v2_1.bin
+ct_schneider_c12_cinel03_file: /mnt/sdb/wuwei/MAIGO/data/schneider/cinel03_c12_targets_v2_1.bin
+ct_schneider_secondary_rate_file: /mnt/sdb/wuwei/MAIGO/data/schneider/secondary_inelastic_rates_v2_1.bin
+ct_schneider_secondary_cinel03_file: /mnt/sdb/wuwei/MAIGO/data/schneider/cinel03_secondary_targets_v2_1_14p.bin
+ct_schneider_stopping_power_file: /mnt/sdb/wuwei/MAIGO/data/schneider/schneider_stopping_v1.bin
+ct_schneider_physics_bundle_file: /mnt/sdb/wuwei/MAIGO/data/schneider/schneider_physics_bundle_v2_1.json
+ct_electron_segment_transport: false
+ct_primary_midpoint_stopping: true
+ct_secondary_ion_section_stopping_file: data/schneider/schneider_ion_section_stopping_v1.bin
+ct_secondary_ion_section_stopping_sha256: ef87ad19bd0b0552d846a6c4e23eb635746e375432a40f40fb79b202235dec20
+ct_secondary_ion_section_stopping_metadata_sha256: c815808fd22e56e9db26475eeddb99aa596a9bc56aa01d0b8800c2e5e1ec12b8
+
+# User-accepted condensed delta + Poisson partition mean correction (2026-09-15).
+em_model: g4_material_joint_v1
+em_delta_moments_file: data/em/unified_em_delta_moments_v2.bin
+em_package_file: data/em/unified_em_v1.bin
+em_package_sha256: 8c5d970b3b639bfca2f448730271bed4fc04721aba73100e2efbe09dffe44855
+primary_em_model: legacy
+enable_energy_straggling: true
+enable_secondary_energy_straggling: true
+straggling_scale: 1.0
+ct_secondary_exact_faces: true
+history_chunk_size: 34816
+
+# Species scheduling authorized; dose equivalence investigation remains open.
+enable_secondary_unified_em: true
+secondary_species_grouping: true
+# Compact survivors after 16 complete steps; queues below 8192 finish directly.
+secondary_step_chunking: true

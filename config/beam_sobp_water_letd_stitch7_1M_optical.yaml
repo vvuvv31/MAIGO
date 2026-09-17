@@ -1,0 +1,46 @@
+# A/B validation of Geant4-style accumulated primary interaction lengths.
+number_of_histories: 1000000
+initial_energy_MeVu: 148.370808
+beam_energy_spread: 0.01
+primary_atomic_number: 6
+primary_mass_number: 12
+phantom_length_mm: 150.0
+depth_bin_width_mm: 0.5
+maximum_step_mm: 0.1
+maximum_relative_energy_loss: 0.001
+energy_cutoff_MeV: 0.1
+water_density_g_per_cm3: 1.0
+scorer_area_mm2: 22500.0
+
+enable_voxel_scoring: false
+enable_flat_source: true
+flat_source_half_width_x_mm: 15.0
+flat_source_half_width_y_mm: 15.0
+enable_emittance_source: false
+
+enable_energy_straggling: true
+straggling_scale: 1.0
+enable_multiple_scattering: true
+primary_inelastic_xs_correction_file: data/c12_primary_inelastic_effective_scale_topas_1M.csv
+electronic_buildup_fraction: 0.0
+max_device_memory_fraction: 0.50
+random_seed: 20260716
+
+topas_spots_file: data/plans/spots_sobp_water_5_10cm_1M.txt
+spots_geometry_mode: beam_plus_z
+spots_sad_mm: 450.0
+
+primary_stopping_power_file: data/stopping_power_water_geant4_11_3_2.csv
+let_delta_electron_fraction_file: data/let_delta_electron_fraction_water_geant4_11_3_2.csv
+use_particle_specific_stopping_power: true
+particle_stopping_power_file: data/ion_stopping_power_water_geant4_11_3_2.csv
+
+output_file: out/sobp_stitch7_1M_optical/gpu_sobp_idd.csv
+fragment_species_output_file: out/sobp_stitch7_1M_optical/gpu_sobp_species.csv
+dose_output_file:
+fragment_species_dose_output_file:
+let_output_file: out/sobp_stitch7_1M_optical/gpu_sobp_letd.csv
+fragment_species_let_output_file: out/sobp_stitch7_1M_optical/gpu_sobp_species_letd.csv
+scorerLET: true
+device: cuda
+enable_fragment_species_scoring: true

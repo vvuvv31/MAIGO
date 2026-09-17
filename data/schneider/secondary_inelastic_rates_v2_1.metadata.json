@@ -1,0 +1,1560 @@
+{
+ "schema_version": 1,
+ "format": "SCHN2RAT",
+ "binary_version": 3,
+ "data_filename": "secondary_inelastic_rates_v2_1.bin",
+ "data_sha256": "6aa679ee162c7a47b82da715ea1333b21b4056b6480596d8d6243a96edb67258",
+ "file_size_bytes": 36107784,
+ "binary_magic": "SCHN2RAT",
+ "num_projectiles": 14,
+ "projectiles": [
+  {
+   "z": 5,
+   "a": 11
+  },
+  {
+   "z": 5,
+   "a": 10
+  },
+  {
+   "z": 4,
+   "a": 9
+  },
+  {
+   "z": 4,
+   "a": 7
+  },
+  {
+   "z": 4,
+   "a": 10
+  },
+  {
+   "z": 3,
+   "a": 7
+  },
+  {
+   "z": 3,
+   "a": 6
+  },
+  {
+   "z": 2,
+   "a": 4
+  },
+  {
+   "z": 2,
+   "a": 3
+  },
+  {
+   "z": 1,
+   "a": 1
+  },
+  {
+   "z": 1,
+   "a": 2
+  },
+  {
+   "z": 1,
+   "a": 3
+  },
+  {
+   "z": 6,
+   "a": 11
+  },
+  {
+   "z": 6,
+   "a": 12
+  }
+ ],
+ "target_order": [
+  1,
+  6,
+  7,
+  8,
+  12,
+  15,
+  16,
+  17,
+  18,
+  20,
+  11,
+  19,
+  22
+ ],
+ "energy_grid": {
+  "emin": 0.1,
+  "emax": 460.1,
+  "step": 0.5,
+  "count": 921
+ },
+ "channel_domains": [
+  {
+   "projectile_z": 5,
+   "projectile_a": 11,
+   "target_z": 1,
+   "energy_min_mevu": 0.3594706952571869,
+   "energy_max_mevu": 459.8775329589844,
+   "has_support": true
+  },
+  {
+   "projectile_z": 5,
+   "projectile_a": 11,
+   "target_z": 6,
+   "energy_min_mevu": 1.8960453271865845,
+   "energy_max_mevu": 459.9419250488281,
+   "has_support": true
+  },
+  {
+   "projectile_z": 5,
+   "projectile_a": 11,
+   "target_z": 7,
+   "energy_min_mevu": 1.580865502357483,
+   "energy_max_mevu": 459.86297607421875,
+   "has_support": true
+  },
+  {
+   "projectile_z": 5,
+   "projectile_a": 11,
+   "target_z": 8,
+   "energy_min_mevu": 1.0800544023513794,
+   "energy_max_mevu": 459.8210144042969,
+   "has_support": true
+  },
+  {
+   "projectile_z": 5,
+   "projectile_a": 11,
+   "target_z": 12,
+   "energy_min_mevu": 1.2999415397644043,
+   "energy_max_mevu": 459.6627197265625,
+   "has_support": true
+  },
+  {
+   "projectile_z": 5,
+   "projectile_a": 11,
+   "target_z": 15,
+   "energy_min_mevu": 1.7907553911209106,
+   "energy_max_mevu": 459.61981201171875,
+   "has_support": true
+  },
+  {
+   "projectile_z": 5,
+   "projectile_a": 11,
+   "target_z": 16,
+   "energy_min_mevu": 1.8238533735275269,
+   "energy_max_mevu": 459.7613220214844,
+   "has_support": true
+  },
+  {
+   "projectile_z": 5,
+   "projectile_a": 11,
+   "target_z": 17,
+   "energy_min_mevu": 3.0336265563964844,
+   "energy_max_mevu": 459.2045593261719,
+   "has_support": true
+  },
+  {
+   "projectile_z": 5,
+   "projectile_a": 11,
+   "target_z": 18,
+   "energy_min_mevu": 2.235325813293457,
+   "energy_max_mevu": 459.8389587402344,
+   "has_support": true
+  },
+  {
+   "projectile_z": 5,
+   "projectile_a": 11,
+   "target_z": 20,
+   "energy_min_mevu": 2.6091737747192383,
+   "energy_max_mevu": 459.7954406738281,
+   "has_support": true
+  },
+  {
+   "projectile_z": 5,
+   "projectile_a": 11,
+   "target_z": 11,
+   "energy_min_mevu": 1.6599640846252441,
+   "energy_max_mevu": 459.59893798828125,
+   "has_support": true
+  },
+  {
+   "projectile_z": 5,
+   "projectile_a": 11,
+   "target_z": 19,
+   "energy_min_mevu": 1.904699683189392,
+   "energy_max_mevu": 459.9734191894531,
+   "has_support": true
+  },
+  {
+   "projectile_z": 5,
+   "projectile_a": 11,
+   "target_z": 22,
+   "energy_min_mevu": 1.8113871812820435,
+   "energy_max_mevu": 458.8584289550781,
+   "has_support": true
+  },
+  {
+   "projectile_z": 5,
+   "projectile_a": 10,
+   "target_z": 1,
+   "energy_min_mevu": 0.3725491464138031,
+   "energy_max_mevu": 459.92974853515625,
+   "has_support": true
+  },
+  {
+   "projectile_z": 5,
+   "projectile_a": 10,
+   "target_z": 6,
+   "energy_min_mevu": 2.8274455070495605,
+   "energy_max_mevu": 458.9479064941406,
+   "has_support": true
+  },
+  {
+   "projectile_z": 5,
+   "projectile_a": 10,
+   "target_z": 7,
+   "energy_min_mevu": 3.127861499786377,
+   "energy_max_mevu": 459.4544372558594,
+   "has_support": true
+  },
+  {
+   "projectile_z": 5,
+   "projectile_a": 10,
+   "target_z": 8,
+   "energy_min_mevu": 4.173406600952148,
+   "energy_max_mevu": 459.99737548828125,
+   "has_support": true
+  },
+  {
+   "projectile_z": 5,
+   "projectile_a": 10,
+   "target_z": 12,
+   "energy_min_mevu": 1.81361985206604,
+   "energy_max_mevu": 459.70965576171875,
+   "has_support": true
+  },
+  {
+   "projectile_z": 5,
+   "projectile_a": 10,
+   "target_z": 15,
+   "energy_min_mevu": 2.3215885162353516,
+   "energy_max_mevu": 459.32916259765625,
+   "has_support": true
+  },
+  {
+   "projectile_z": 5,
+   "projectile_a": 10,
+   "target_z": 16,
+   "energy_min_mevu": 2.8344945907592773,
+   "energy_max_mevu": 459.86566162109375,
+   "has_support": true
+  },
+  {
+   "projectile_z": 5,
+   "projectile_a": 10,
+   "target_z": 17,
+   "energy_min_mevu": 1.975894570350647,
+   "energy_max_mevu": 459.93896484375,
+   "has_support": true
+  },
+  {
+   "projectile_z": 5,
+   "projectile_a": 10,
+   "target_z": 18,
+   "energy_min_mevu": 2.982592821121216,
+   "energy_max_mevu": 459.93035888671875,
+   "has_support": true
+  },
+  {
+   "projectile_z": 5,
+   "projectile_a": 10,
+   "target_z": 20,
+   "energy_min_mevu": 2.15450382232666,
+   "energy_max_mevu": 459.95855712890625,
+   "has_support": true
+  },
+  {
+   "projectile_z": 5,
+   "projectile_a": 10,
+   "target_z": 11,
+   "energy_min_mevu": 1.230318307876587,
+   "energy_max_mevu": 459.684814453125,
+   "has_support": true
+  },
+  {
+   "projectile_z": 5,
+   "projectile_a": 10,
+   "target_z": 19,
+   "energy_min_mevu": 2.543529510498047,
+   "energy_max_mevu": 459.9119567871094,
+   "has_support": true
+  },
+  {
+   "projectile_z": 5,
+   "projectile_a": 10,
+   "target_z": 22,
+   "energy_min_mevu": 2.8825900554656982,
+   "energy_max_mevu": 457.839111328125,
+   "has_support": true
+  },
+  {
+   "projectile_z": 4,
+   "projectile_a": 9,
+   "target_z": 1,
+   "energy_min_mevu": 0.4558676481246948,
+   "energy_max_mevu": 459.96051025390625,
+   "has_support": true
+  },
+  {
+   "projectile_z": 4,
+   "projectile_a": 9,
+   "target_z": 6,
+   "energy_min_mevu": 1.5418776273727417,
+   "energy_max_mevu": 459.07623291015625,
+   "has_support": true
+  },
+  {
+   "projectile_z": 4,
+   "projectile_a": 9,
+   "target_z": 7,
+   "energy_min_mevu": 1.773324728012085,
+   "energy_max_mevu": 459.9020690917969,
+   "has_support": true
+  },
+  {
+   "projectile_z": 4,
+   "projectile_a": 9,
+   "target_z": 8,
+   "energy_min_mevu": 2.7392232418060303,
+   "energy_max_mevu": 459.8424377441406,
+   "has_support": true
+  },
+  {
+   "projectile_z": 4,
+   "projectile_a": 9,
+   "target_z": 12,
+   "energy_min_mevu": 2.4603569507598877,
+   "energy_max_mevu": 459.9677734375,
+   "has_support": true
+  },
+  {
+   "projectile_z": 4,
+   "projectile_a": 9,
+   "target_z": 15,
+   "energy_min_mevu": 2.981513023376465,
+   "energy_max_mevu": 459.86175537109375,
+   "has_support": true
+  },
+  {
+   "projectile_z": 4,
+   "projectile_a": 9,
+   "target_z": 16,
+   "energy_min_mevu": 1.3131576776504517,
+   "energy_max_mevu": 459.9632263183594,
+   "has_support": true
+  },
+  {
+   "projectile_z": 4,
+   "projectile_a": 9,
+   "target_z": 17,
+   "energy_min_mevu": 1.4225319623947144,
+   "energy_max_mevu": 459.65045166015625,
+   "has_support": true
+  },
+  {
+   "projectile_z": 4,
+   "projectile_a": 9,
+   "target_z": 18,
+   "energy_min_mevu": 2.398083448410034,
+   "energy_max_mevu": 459.8001708984375,
+   "has_support": true
+  },
+  {
+   "projectile_z": 4,
+   "projectile_a": 9,
+   "target_z": 20,
+   "energy_min_mevu": 2.8623385429382324,
+   "energy_max_mevu": 459.9705505371094,
+   "has_support": true
+  },
+  {
+   "projectile_z": 4,
+   "projectile_a": 9,
+   "target_z": 11,
+   "energy_min_mevu": 1.4594024419784546,
+   "energy_max_mevu": 459.9172058105469,
+   "has_support": true
+  },
+  {
+   "projectile_z": 4,
+   "projectile_a": 9,
+   "target_z": 19,
+   "energy_min_mevu": 1.3774967193603516,
+   "energy_max_mevu": 459.8636169433594,
+   "has_support": true
+  },
+  {
+   "projectile_z": 4,
+   "projectile_a": 9,
+   "target_z": 22,
+   "energy_min_mevu": 2.155332565307617,
+   "energy_max_mevu": 459.7760314941406,
+   "has_support": true
+  },
+  {
+   "projectile_z": 4,
+   "projectile_a": 7,
+   "target_z": 1,
+   "energy_min_mevu": 0.696725070476532,
+   "energy_max_mevu": 459.9733581542969,
+   "has_support": true
+  },
+  {
+   "projectile_z": 4,
+   "projectile_a": 7,
+   "target_z": 6,
+   "energy_min_mevu": 1.555489182472229,
+   "energy_max_mevu": 459.5887145996094,
+   "has_support": true
+  },
+  {
+   "projectile_z": 4,
+   "projectile_a": 7,
+   "target_z": 7,
+   "energy_min_mevu": 2.016815185546875,
+   "energy_max_mevu": 459.95660400390625,
+   "has_support": true
+  },
+  {
+   "projectile_z": 4,
+   "projectile_a": 7,
+   "target_z": 8,
+   "energy_min_mevu": 4.091170310974121,
+   "energy_max_mevu": 459.92584228515625,
+   "has_support": true
+  },
+  {
+   "projectile_z": 4,
+   "projectile_a": 7,
+   "target_z": 12,
+   "energy_min_mevu": 1.3756340742111206,
+   "energy_max_mevu": 459.9670715332031,
+   "has_support": true
+  },
+  {
+   "projectile_z": 4,
+   "projectile_a": 7,
+   "target_z": 15,
+   "energy_min_mevu": 1.7757805585861206,
+   "energy_max_mevu": 459.9107360839844,
+   "has_support": true
+  },
+  {
+   "projectile_z": 4,
+   "projectile_a": 7,
+   "target_z": 16,
+   "energy_min_mevu": 3.2285349369049072,
+   "energy_max_mevu": 459.9524841308594,
+   "has_support": true
+  },
+  {
+   "projectile_z": 4,
+   "projectile_a": 7,
+   "target_z": 17,
+   "energy_min_mevu": 1.928836464881897,
+   "energy_max_mevu": 459.8545837402344,
+   "has_support": true
+  },
+  {
+   "projectile_z": 4,
+   "projectile_a": 7,
+   "target_z": 18,
+   "energy_min_mevu": 1.5756243467330933,
+   "energy_max_mevu": 459.58624267578125,
+   "has_support": true
+  },
+  {
+   "projectile_z": 4,
+   "projectile_a": 7,
+   "target_z": 20,
+   "energy_min_mevu": 2.036900281906128,
+   "energy_max_mevu": 459.3950500488281,
+   "has_support": true
+  },
+  {
+   "projectile_z": 4,
+   "projectile_a": 7,
+   "target_z": 11,
+   "energy_min_mevu": 1.2192689180374146,
+   "energy_max_mevu": 459.8875427246094,
+   "has_support": true
+  },
+  {
+   "projectile_z": 4,
+   "projectile_a": 7,
+   "target_z": 19,
+   "energy_min_mevu": 2.475893497467041,
+   "energy_max_mevu": 459.8789367675781,
+   "has_support": true
+  },
+  {
+   "projectile_z": 4,
+   "projectile_a": 7,
+   "target_z": 22,
+   "energy_min_mevu": 3.3555548191070557,
+   "energy_max_mevu": 459.2522277832031,
+   "has_support": true
+  },
+  {
+   "projectile_z": 4,
+   "projectile_a": 10,
+   "target_z": 1,
+   "energy_min_mevu": 0.3121369779109955,
+   "energy_max_mevu": 459.97235107421875,
+   "has_support": true
+  },
+  {
+   "projectile_z": 4,
+   "projectile_a": 10,
+   "target_z": 6,
+   "energy_min_mevu": 2.6354243755340576,
+   "energy_max_mevu": 459.4227600097656,
+   "has_support": true
+  },
+  {
+   "projectile_z": 4,
+   "projectile_a": 10,
+   "target_z": 7,
+   "energy_min_mevu": 1.798818588256836,
+   "energy_max_mevu": 459.96221923828125,
+   "has_support": true
+  },
+  {
+   "projectile_z": 4,
+   "projectile_a": 10,
+   "target_z": 8,
+   "energy_min_mevu": 2.282414674758911,
+   "energy_max_mevu": 459.46270751953125,
+   "has_support": true
+  },
+  {
+   "projectile_z": 4,
+   "projectile_a": 10,
+   "target_z": 12,
+   "energy_min_mevu": 1.4591416120529175,
+   "energy_max_mevu": 459.93280029296875,
+   "has_support": true
+  },
+  {
+   "projectile_z": 4,
+   "projectile_a": 10,
+   "target_z": 15,
+   "energy_min_mevu": 1.2328641414642334,
+   "energy_max_mevu": 459.93731689453125,
+   "has_support": true
+  },
+  {
+   "projectile_z": 4,
+   "projectile_a": 10,
+   "target_z": 16,
+   "energy_min_mevu": 1.3565521240234375,
+   "energy_max_mevu": 459.99261474609375,
+   "has_support": true
+  },
+  {
+   "projectile_z": 4,
+   "projectile_a": 10,
+   "target_z": 17,
+   "energy_min_mevu": 2.116004467010498,
+   "energy_max_mevu": 459.8643493652344,
+   "has_support": true
+  },
+  {
+   "projectile_z": 4,
+   "projectile_a": 10,
+   "target_z": 18,
+   "energy_min_mevu": 2.8588740825653076,
+   "energy_max_mevu": 459.95916748046875,
+   "has_support": true
+  },
+  {
+   "projectile_z": 4,
+   "projectile_a": 10,
+   "target_z": 20,
+   "energy_min_mevu": 2.2185206413269043,
+   "energy_max_mevu": 459.369873046875,
+   "has_support": true
+  },
+  {
+   "projectile_z": 4,
+   "projectile_a": 10,
+   "target_z": 11,
+   "energy_min_mevu": 1.5951850414276123,
+   "energy_max_mevu": 459.95361328125,
+   "has_support": true
+  },
+  {
+   "projectile_z": 4,
+   "projectile_a": 10,
+   "target_z": 19,
+   "energy_min_mevu": 2.543745994567871,
+   "energy_max_mevu": 459.9808044433594,
+   "has_support": true
+  },
+  {
+   "projectile_z": 4,
+   "projectile_a": 10,
+   "target_z": 22,
+   "energy_min_mevu": 2.2865045070648193,
+   "energy_max_mevu": 459.4903869628906,
+   "has_support": true
+  },
+  {
+   "projectile_z": 3,
+   "projectile_a": 7,
+   "target_z": 1,
+   "energy_min_mevu": 0.22625529766082764,
+   "energy_max_mevu": 459.9924011230469,
+   "has_support": true
+  },
+  {
+   "projectile_z": 3,
+   "projectile_a": 7,
+   "target_z": 6,
+   "energy_min_mevu": 2.264000177383423,
+   "energy_max_mevu": 459.9690246582031,
+   "has_support": true
+  },
+  {
+   "projectile_z": 3,
+   "projectile_a": 7,
+   "target_z": 7,
+   "energy_min_mevu": 1.6368769407272339,
+   "energy_max_mevu": 459.9634704589844,
+   "has_support": true
+  },
+  {
+   "projectile_z": 3,
+   "projectile_a": 7,
+   "target_z": 8,
+   "energy_min_mevu": 3.2597854137420654,
+   "energy_max_mevu": 459.96429443359375,
+   "has_support": true
+  },
+  {
+   "projectile_z": 3,
+   "projectile_a": 7,
+   "target_z": 12,
+   "energy_min_mevu": 1.0080829858779907,
+   "energy_max_mevu": 459.9961853027344,
+   "has_support": true
+  },
+  {
+   "projectile_z": 3,
+   "projectile_a": 7,
+   "target_z": 15,
+   "energy_min_mevu": 2.6611177921295166,
+   "energy_max_mevu": 459.8482360839844,
+   "has_support": true
+  },
+  {
+   "projectile_z": 3,
+   "projectile_a": 7,
+   "target_z": 16,
+   "energy_min_mevu": 2.924677610397339,
+   "energy_max_mevu": 459.9798278808594,
+   "has_support": true
+  },
+  {
+   "projectile_z": 3,
+   "projectile_a": 7,
+   "target_z": 17,
+   "energy_min_mevu": 1.5231112241744995,
+   "energy_max_mevu": 459.9600524902344,
+   "has_support": true
+  },
+  {
+   "projectile_z": 3,
+   "projectile_a": 7,
+   "target_z": 18,
+   "energy_min_mevu": 1.8259477615356445,
+   "energy_max_mevu": 459.9768371582031,
+   "has_support": true
+  },
+  {
+   "projectile_z": 3,
+   "projectile_a": 7,
+   "target_z": 20,
+   "energy_min_mevu": 1.7443416118621826,
+   "energy_max_mevu": 459.6795349121094,
+   "has_support": true
+  },
+  {
+   "projectile_z": 3,
+   "projectile_a": 7,
+   "target_z": 11,
+   "energy_min_mevu": 1.7267252206802368,
+   "energy_max_mevu": 459.9870300292969,
+   "has_support": true
+  },
+  {
+   "projectile_z": 3,
+   "projectile_a": 7,
+   "target_z": 19,
+   "energy_min_mevu": 2.7547481060028076,
+   "energy_max_mevu": 459.9836120605469,
+   "has_support": true
+  },
+  {
+   "projectile_z": 3,
+   "projectile_a": 7,
+   "target_z": 22,
+   "energy_min_mevu": 1.868939995765686,
+   "energy_max_mevu": 459.72454833984375,
+   "has_support": true
+  },
+  {
+   "projectile_z": 3,
+   "projectile_a": 6,
+   "target_z": 1,
+   "energy_min_mevu": 0.39160385727882385,
+   "energy_max_mevu": 459.9672546386719,
+   "has_support": true
+  },
+  {
+   "projectile_z": 3,
+   "projectile_a": 6,
+   "target_z": 6,
+   "energy_min_mevu": 1.9100576639175415,
+   "energy_max_mevu": 459.6761474609375,
+   "has_support": true
+  },
+  {
+   "projectile_z": 3,
+   "projectile_a": 6,
+   "target_z": 7,
+   "energy_min_mevu": 2.4526751041412354,
+   "energy_max_mevu": 459.9574890136719,
+   "has_support": true
+  },
+  {
+   "projectile_z": 3,
+   "projectile_a": 6,
+   "target_z": 8,
+   "energy_min_mevu": 3.6214511394500732,
+   "energy_max_mevu": 459.8193054199219,
+   "has_support": true
+  },
+  {
+   "projectile_z": 3,
+   "projectile_a": 6,
+   "target_z": 12,
+   "energy_min_mevu": 1.918664813041687,
+   "energy_max_mevu": 459.7372131347656,
+   "has_support": true
+  },
+  {
+   "projectile_z": 3,
+   "projectile_a": 6,
+   "target_z": 15,
+   "energy_min_mevu": 1.4849933385849,
+   "energy_max_mevu": 459.8656311035156,
+   "has_support": true
+  },
+  {
+   "projectile_z": 3,
+   "projectile_a": 6,
+   "target_z": 16,
+   "energy_min_mevu": 1.9877886772155762,
+   "energy_max_mevu": 459.9661560058594,
+   "has_support": true
+  },
+  {
+   "projectile_z": 3,
+   "projectile_a": 6,
+   "target_z": 17,
+   "energy_min_mevu": 1.8462023735046387,
+   "energy_max_mevu": 459.6643981933594,
+   "has_support": true
+  },
+  {
+   "projectile_z": 3,
+   "projectile_a": 6,
+   "target_z": 18,
+   "energy_min_mevu": 1.9003585577011108,
+   "energy_max_mevu": 459.4721984863281,
+   "has_support": true
+  },
+  {
+   "projectile_z": 3,
+   "projectile_a": 6,
+   "target_z": 20,
+   "energy_min_mevu": 2.823906660079956,
+   "energy_max_mevu": 459.7269287109375,
+   "has_support": true
+  },
+  {
+   "projectile_z": 3,
+   "projectile_a": 6,
+   "target_z": 11,
+   "energy_min_mevu": 1.1060328483581543,
+   "energy_max_mevu": 459.7796630859375,
+   "has_support": true
+  },
+  {
+   "projectile_z": 3,
+   "projectile_a": 6,
+   "target_z": 19,
+   "energy_min_mevu": 1.8473657369613647,
+   "energy_max_mevu": 459.9711608886719,
+   "has_support": true
+  },
+  {
+   "projectile_z": 3,
+   "projectile_a": 6,
+   "target_z": 22,
+   "energy_min_mevu": 1.8507987260818481,
+   "energy_max_mevu": 457.8328857421875,
+   "has_support": true
+  },
+  {
+   "projectile_z": 2,
+   "projectile_a": 4,
+   "target_z": 1,
+   "energy_min_mevu": 2.5749335289001465,
+   "energy_max_mevu": 459.9655456542969,
+   "has_support": true
+  },
+  {
+   "projectile_z": 2,
+   "projectile_a": 4,
+   "target_z": 6,
+   "energy_min_mevu": 1.0728203058242798,
+   "energy_max_mevu": 459.9965515136719,
+   "has_support": true
+  },
+  {
+   "projectile_z": 2,
+   "projectile_a": 4,
+   "target_z": 7,
+   "energy_min_mevu": 0.8053717017173767,
+   "energy_max_mevu": 459.8885498046875,
+   "has_support": true
+  },
+  {
+   "projectile_z": 2,
+   "projectile_a": 4,
+   "target_z": 8,
+   "energy_min_mevu": 1.184390664100647,
+   "energy_max_mevu": 459.8542785644531,
+   "has_support": true
+  },
+  {
+   "projectile_z": 2,
+   "projectile_a": 4,
+   "target_z": 12,
+   "energy_min_mevu": 2.7120108604431152,
+   "energy_max_mevu": 459.0192565917969,
+   "has_support": true
+  },
+  {
+   "projectile_z": 2,
+   "projectile_a": 4,
+   "target_z": 15,
+   "energy_min_mevu": 1.828045129776001,
+   "energy_max_mevu": 459.42138671875,
+   "has_support": true
+  },
+  {
+   "projectile_z": 2,
+   "projectile_a": 4,
+   "target_z": 16,
+   "energy_min_mevu": 1.7155989408493042,
+   "energy_max_mevu": 459.9861755371094,
+   "has_support": true
+  },
+  {
+   "projectile_z": 2,
+   "projectile_a": 4,
+   "target_z": 17,
+   "energy_min_mevu": 1.8317959308624268,
+   "energy_max_mevu": 459.27978515625,
+   "has_support": true
+  },
+  {
+   "projectile_z": 2,
+   "projectile_a": 4,
+   "target_z": 18,
+   "energy_min_mevu": 1.7323713302612305,
+   "energy_max_mevu": 459.9927062988281,
+   "has_support": true
+  },
+  {
+   "projectile_z": 2,
+   "projectile_a": 4,
+   "target_z": 20,
+   "energy_min_mevu": 1.9977478981018066,
+   "energy_max_mevu": 459.9755859375,
+   "has_support": true
+  },
+  {
+   "projectile_z": 2,
+   "projectile_a": 4,
+   "target_z": 11,
+   "energy_min_mevu": 2.558375597000122,
+   "energy_max_mevu": 459.83685302734375,
+   "has_support": true
+  },
+  {
+   "projectile_z": 2,
+   "projectile_a": 4,
+   "target_z": 19,
+   "energy_min_mevu": 1.9416733980178833,
+   "energy_max_mevu": 459.9711608886719,
+   "has_support": true
+  },
+  {
+   "projectile_z": 2,
+   "projectile_a": 4,
+   "target_z": 22,
+   "energy_min_mevu": 1.9662235975265503,
+   "energy_max_mevu": 459.16741943359375,
+   "has_support": true
+  },
+  {
+   "projectile_z": 2,
+   "projectile_a": 3,
+   "target_z": 1,
+   "energy_min_mevu": 4.353932857513428,
+   "energy_max_mevu": 459.9790954589844,
+   "has_support": true
+  },
+  {
+   "projectile_z": 2,
+   "projectile_a": 3,
+   "target_z": 6,
+   "energy_min_mevu": 2.373316526412964,
+   "energy_max_mevu": 459.86669921875,
+   "has_support": true
+  },
+  {
+   "projectile_z": 2,
+   "projectile_a": 3,
+   "target_z": 7,
+   "energy_min_mevu": 2.41510009765625,
+   "energy_max_mevu": 459.9329833984375,
+   "has_support": true
+  },
+  {
+   "projectile_z": 2,
+   "projectile_a": 3,
+   "target_z": 8,
+   "energy_min_mevu": 1.5919084548950195,
+   "energy_max_mevu": 459.7371826171875,
+   "has_support": true
+  },
+  {
+   "projectile_z": 2,
+   "projectile_a": 3,
+   "target_z": 12,
+   "energy_min_mevu": 1.4450026750564575,
+   "energy_max_mevu": 459.7792663574219,
+   "has_support": true
+  },
+  {
+   "projectile_z": 2,
+   "projectile_a": 3,
+   "target_z": 15,
+   "energy_min_mevu": 1.9153467416763306,
+   "energy_max_mevu": 459.6043701171875,
+   "has_support": true
+  },
+  {
+   "projectile_z": 2,
+   "projectile_a": 3,
+   "target_z": 16,
+   "energy_min_mevu": 3.213942766189575,
+   "energy_max_mevu": 459.7200927734375,
+   "has_support": true
+  },
+  {
+   "projectile_z": 2,
+   "projectile_a": 3,
+   "target_z": 17,
+   "energy_min_mevu": 3.541598320007324,
+   "energy_max_mevu": 459.75927734375,
+   "has_support": true
+  },
+  {
+   "projectile_z": 2,
+   "projectile_a": 3,
+   "target_z": 18,
+   "energy_min_mevu": 3.6154069900512695,
+   "energy_max_mevu": 459.9377136230469,
+   "has_support": true
+  },
+  {
+   "projectile_z": 2,
+   "projectile_a": 3,
+   "target_z": 20,
+   "energy_min_mevu": 2.0294528007507324,
+   "energy_max_mevu": 459.95263671875,
+   "has_support": true
+  },
+  {
+   "projectile_z": 2,
+   "projectile_a": 3,
+   "target_z": 11,
+   "energy_min_mevu": 1.640694499015808,
+   "energy_max_mevu": 459.9039611816406,
+   "has_support": true
+  },
+  {
+   "projectile_z": 2,
+   "projectile_a": 3,
+   "target_z": 19,
+   "energy_min_mevu": 2.2772951126098633,
+   "energy_max_mevu": 459.9769592285156,
+   "has_support": true
+  },
+  {
+   "projectile_z": 2,
+   "projectile_a": 3,
+   "target_z": 22,
+   "energy_min_mevu": 2.4649598598480225,
+   "energy_max_mevu": 459.549072265625,
+   "has_support": true
+  },
+  {
+   "projectile_z": 1,
+   "projectile_a": 1,
+   "target_z": 1,
+   "energy_min_mevu": 264.0652770996094,
+   "energy_max_mevu": 459.9755554199219,
+   "has_support": true
+  },
+  {
+   "projectile_z": 1,
+   "projectile_a": 1,
+   "target_z": 6,
+   "energy_min_mevu": 4.98526668548584,
+   "energy_max_mevu": 459.8097229003906,
+   "has_support": true
+  },
+  {
+   "projectile_z": 1,
+   "projectile_a": 1,
+   "target_z": 7,
+   "energy_min_mevu": 4.0314226150512695,
+   "energy_max_mevu": 459.9999694824219,
+   "has_support": true
+  },
+  {
+   "projectile_z": 1,
+   "projectile_a": 1,
+   "target_z": 8,
+   "energy_min_mevu": 4.9291605949401855,
+   "energy_max_mevu": 459.9683837890625,
+   "has_support": true
+  },
+  {
+   "projectile_z": 1,
+   "projectile_a": 1,
+   "target_z": 12,
+   "energy_min_mevu": 3.464611768722534,
+   "energy_max_mevu": 459.9376220703125,
+   "has_support": true
+  },
+  {
+   "projectile_z": 1,
+   "projectile_a": 1,
+   "target_z": 15,
+   "energy_min_mevu": 4.0678582191467285,
+   "energy_max_mevu": 459.9731140136719,
+   "has_support": true
+  },
+  {
+   "projectile_z": 1,
+   "projectile_a": 1,
+   "target_z": 16,
+   "energy_min_mevu": 3.429762601852417,
+   "energy_max_mevu": 459.95672607421875,
+   "has_support": true
+  },
+  {
+   "projectile_z": 1,
+   "projectile_a": 1,
+   "target_z": 17,
+   "energy_min_mevu": 3.570317029953003,
+   "energy_max_mevu": 459.9962158203125,
+   "has_support": true
+  },
+  {
+   "projectile_z": 1,
+   "projectile_a": 1,
+   "target_z": 18,
+   "energy_min_mevu": 4.342579364776611,
+   "energy_max_mevu": 459.9068298339844,
+   "has_support": true
+  },
+  {
+   "projectile_z": 1,
+   "projectile_a": 1,
+   "target_z": 20,
+   "energy_min_mevu": 5.026583671569824,
+   "energy_max_mevu": 459.982666015625,
+   "has_support": true
+  },
+  {
+   "projectile_z": 1,
+   "projectile_a": 1,
+   "target_z": 11,
+   "energy_min_mevu": 4.821127414703369,
+   "energy_max_mevu": 459.9189147949219,
+   "has_support": true
+  },
+  {
+   "projectile_z": 1,
+   "projectile_a": 1,
+   "target_z": 19,
+   "energy_min_mevu": 6.196566104888916,
+   "energy_max_mevu": 459.98553466796875,
+   "has_support": true
+  },
+  {
+   "projectile_z": 1,
+   "projectile_a": 1,
+   "target_z": 22,
+   "energy_min_mevu": 3.945817470550537,
+   "energy_max_mevu": 459.79986572265625,
+   "has_support": true
+  },
+  {
+   "projectile_z": 1,
+   "projectile_a": 2,
+   "target_z": 1,
+   "energy_min_mevu": 0.35237425565719604,
+   "energy_max_mevu": 459.9981689453125,
+   "has_support": true
+  },
+  {
+   "projectile_z": 1,
+   "projectile_a": 2,
+   "target_z": 6,
+   "energy_min_mevu": 1.8171577453613281,
+   "energy_max_mevu": 459.7572937011719,
+   "has_support": true
+  },
+  {
+   "projectile_z": 1,
+   "projectile_a": 2,
+   "target_z": 7,
+   "energy_min_mevu": 1.0854567289352417,
+   "energy_max_mevu": 459.90142822265625,
+   "has_support": true
+  },
+  {
+   "projectile_z": 1,
+   "projectile_a": 2,
+   "target_z": 8,
+   "energy_min_mevu": 0.8343011140823364,
+   "energy_max_mevu": 459.9774475097656,
+   "has_support": true
+  },
+  {
+   "projectile_z": 1,
+   "projectile_a": 2,
+   "target_z": 12,
+   "energy_min_mevu": 2.0520479679107666,
+   "energy_max_mevu": 459.9897155761719,
+   "has_support": true
+  },
+  {
+   "projectile_z": 1,
+   "projectile_a": 2,
+   "target_z": 15,
+   "energy_min_mevu": 1.833184003829956,
+   "energy_max_mevu": 459.9667663574219,
+   "has_support": true
+  },
+  {
+   "projectile_z": 1,
+   "projectile_a": 2,
+   "target_z": 16,
+   "energy_min_mevu": 1.4975401163101196,
+   "energy_max_mevu": 459.8677062988281,
+   "has_support": true
+  },
+  {
+   "projectile_z": 1,
+   "projectile_a": 2,
+   "target_z": 17,
+   "energy_min_mevu": 1.203919768333435,
+   "energy_max_mevu": 459.93890380859375,
+   "has_support": true
+  },
+  {
+   "projectile_z": 1,
+   "projectile_a": 2,
+   "target_z": 18,
+   "energy_min_mevu": 2.008033275604248,
+   "energy_max_mevu": 459.9667053222656,
+   "has_support": true
+  },
+  {
+   "projectile_z": 1,
+   "projectile_a": 2,
+   "target_z": 20,
+   "energy_min_mevu": 1.7476494312286377,
+   "energy_max_mevu": 459.9723205566406,
+   "has_support": true
+  },
+  {
+   "projectile_z": 1,
+   "projectile_a": 2,
+   "target_z": 11,
+   "energy_min_mevu": 1.0313588380813599,
+   "energy_max_mevu": 459.837158203125,
+   "has_support": true
+  },
+  {
+   "projectile_z": 1,
+   "projectile_a": 2,
+   "target_z": 19,
+   "energy_min_mevu": 2.3128552436828613,
+   "energy_max_mevu": 459.9244689941406,
+   "has_support": true
+  },
+  {
+   "projectile_z": 1,
+   "projectile_a": 2,
+   "target_z": 22,
+   "energy_min_mevu": 1.5220385789871216,
+   "energy_max_mevu": 459.9943542480469,
+   "has_support": true
+  },
+  {
+   "projectile_z": 1,
+   "projectile_a": 3,
+   "target_z": 1,
+   "energy_min_mevu": 0.4427289664745331,
+   "energy_max_mevu": 459.9969177246094,
+   "has_support": true
+  },
+  {
+   "projectile_z": 1,
+   "projectile_a": 3,
+   "target_z": 6,
+   "energy_min_mevu": 0.5636768341064453,
+   "energy_max_mevu": 459.9877624511719,
+   "has_support": true
+  },
+  {
+   "projectile_z": 1,
+   "projectile_a": 3,
+   "target_z": 7,
+   "energy_min_mevu": 0.4900863468647003,
+   "energy_max_mevu": 459.9743957519531,
+   "has_support": true
+  },
+  {
+   "projectile_z": 1,
+   "projectile_a": 3,
+   "target_z": 8,
+   "energy_min_mevu": 0.7848169803619385,
+   "energy_max_mevu": 459.9732360839844,
+   "has_support": true
+  },
+  {
+   "projectile_z": 1,
+   "projectile_a": 3,
+   "target_z": 12,
+   "energy_min_mevu": 0.7303077578544617,
+   "energy_max_mevu": 459.998779296875,
+   "has_support": true
+  },
+  {
+   "projectile_z": 1,
+   "projectile_a": 3,
+   "target_z": 15,
+   "energy_min_mevu": 0.9046702980995178,
+   "energy_max_mevu": 459.9425048828125,
+   "has_support": true
+  },
+  {
+   "projectile_z": 1,
+   "projectile_a": 3,
+   "target_z": 16,
+   "energy_min_mevu": 1.1383312940597534,
+   "energy_max_mevu": 459.962646484375,
+   "has_support": true
+  },
+  {
+   "projectile_z": 1,
+   "projectile_a": 3,
+   "target_z": 17,
+   "energy_min_mevu": 1.154396891593933,
+   "energy_max_mevu": 459.9700622558594,
+   "has_support": true
+  },
+  {
+   "projectile_z": 1,
+   "projectile_a": 3,
+   "target_z": 18,
+   "energy_min_mevu": 1.844854474067688,
+   "energy_max_mevu": 459.9779052734375,
+   "has_support": true
+  },
+  {
+   "projectile_z": 1,
+   "projectile_a": 3,
+   "target_z": 20,
+   "energy_min_mevu": 2.1846139430999756,
+   "energy_max_mevu": 459.9908447265625,
+   "has_support": true
+  },
+  {
+   "projectile_z": 1,
+   "projectile_a": 3,
+   "target_z": 11,
+   "energy_min_mevu": 0.8241248726844788,
+   "energy_max_mevu": 459.99755859375,
+   "has_support": true
+  },
+  {
+   "projectile_z": 1,
+   "projectile_a": 3,
+   "target_z": 19,
+   "energy_min_mevu": 1.0332534313201904,
+   "energy_max_mevu": 459.9977722167969,
+   "has_support": true
+  },
+  {
+   "projectile_z": 1,
+   "projectile_a": 3,
+   "target_z": 22,
+   "energy_min_mevu": 1.5306307077407837,
+   "energy_max_mevu": 459.7768859863281,
+   "has_support": true
+  },
+  {
+   "projectile_z": 6,
+   "projectile_a": 11,
+   "target_z": 1,
+   "energy_min_mevu": 1.0249489545822144,
+   "energy_max_mevu": 459.9839782714844,
+   "has_support": true
+  },
+  {
+   "projectile_z": 6,
+   "projectile_a": 11,
+   "target_z": 6,
+   "energy_min_mevu": 1.8193581104278564,
+   "energy_max_mevu": 459.5158996582031,
+   "has_support": true
+  },
+  {
+   "projectile_z": 6,
+   "projectile_a": 11,
+   "target_z": 7,
+   "energy_min_mevu": 2.927290201187134,
+   "energy_max_mevu": 459.7083740234375,
+   "has_support": true
+  },
+  {
+   "projectile_z": 6,
+   "projectile_a": 11,
+   "target_z": 8,
+   "energy_min_mevu": 2.5120341777801514,
+   "energy_max_mevu": 459.7869873046875,
+   "has_support": true
+  },
+  {
+   "projectile_z": 6,
+   "projectile_a": 11,
+   "target_z": 12,
+   "energy_min_mevu": 2.6749134063720703,
+   "energy_max_mevu": 459.2051696777344,
+   "has_support": true
+  },
+  {
+   "projectile_z": 6,
+   "projectile_a": 11,
+   "target_z": 15,
+   "energy_min_mevu": 4.1019744873046875,
+   "energy_max_mevu": 459.9190673828125,
+   "has_support": true
+  },
+  {
+   "projectile_z": 6,
+   "projectile_a": 11,
+   "target_z": 16,
+   "energy_min_mevu": 2.6871511936187744,
+   "energy_max_mevu": 459.8897705078125,
+   "has_support": true
+  },
+  {
+   "projectile_z": 6,
+   "projectile_a": 11,
+   "target_z": 17,
+   "energy_min_mevu": 3.5091140270233154,
+   "energy_max_mevu": 459.9356689453125,
+   "has_support": true
+  },
+  {
+   "projectile_z": 6,
+   "projectile_a": 11,
+   "target_z": 18,
+   "energy_min_mevu": 3.4555368423461914,
+   "energy_max_mevu": 459.97882080078125,
+   "has_support": true
+  },
+  {
+   "projectile_z": 6,
+   "projectile_a": 11,
+   "target_z": 20,
+   "energy_min_mevu": 2.362339973449707,
+   "energy_max_mevu": 459.9024353027344,
+   "has_support": true
+  },
+  {
+   "projectile_z": 6,
+   "projectile_a": 11,
+   "target_z": 11,
+   "energy_min_mevu": 1.355453372001648,
+   "energy_max_mevu": 459.5597839355469,
+   "has_support": true
+  },
+  {
+   "projectile_z": 6,
+   "projectile_a": 11,
+   "target_z": 19,
+   "energy_min_mevu": 2.311157464981079,
+   "energy_max_mevu": 459.6439514160156,
+   "has_support": true
+  },
+  {
+   "projectile_z": 6,
+   "projectile_a": 11,
+   "target_z": 22,
+   "energy_min_mevu": 2.486083507537842,
+   "energy_max_mevu": 459.54376220703125,
+   "has_support": true
+  },
+  {
+   "projectile_z": 6,
+   "projectile_a": 12,
+   "target_z": 1,
+   "energy_min_mevu": 0.5317121148109436,
+   "energy_max_mevu": 429.9130554199219,
+   "has_support": true
+  },
+  {
+   "projectile_z": 6,
+   "projectile_a": 12,
+   "target_z": 6,
+   "energy_min_mevu": 1.5883933305740356,
+   "energy_max_mevu": 429.9111022949219,
+   "has_support": true
+  },
+  {
+   "projectile_z": 6,
+   "projectile_a": 12,
+   "target_z": 7,
+   "energy_min_mevu": 1.7638508081436157,
+   "energy_max_mevu": 429.540283203125,
+   "has_support": true
+  },
+  {
+   "projectile_z": 6,
+   "projectile_a": 12,
+   "target_z": 8,
+   "energy_min_mevu": 2.46640944480896,
+   "energy_max_mevu": 429.0993957519531,
+   "has_support": true
+  },
+  {
+   "projectile_z": 6,
+   "projectile_a": 12,
+   "target_z": 12,
+   "energy_min_mevu": 1.7065085172653198,
+   "energy_max_mevu": 428.4971618652344,
+   "has_support": true
+  },
+  {
+   "projectile_z": 6,
+   "projectile_a": 12,
+   "target_z": 15,
+   "energy_min_mevu": 1.7129548788070679,
+   "energy_max_mevu": 429.7870178222656,
+   "has_support": true
+  },
+  {
+   "projectile_z": 6,
+   "projectile_a": 12,
+   "target_z": 16,
+   "energy_min_mevu": 1.9573040008544922,
+   "energy_max_mevu": 429.4853515625,
+   "has_support": true
+  },
+  {
+   "projectile_z": 6,
+   "projectile_a": 12,
+   "target_z": 17,
+   "energy_min_mevu": 2.4892029762268066,
+   "energy_max_mevu": 429.25634765625,
+   "has_support": true
+  },
+  {
+   "projectile_z": 6,
+   "projectile_a": 12,
+   "target_z": 18,
+   "energy_min_mevu": 2.1599385738372803,
+   "energy_max_mevu": 429.5885009765625,
+   "has_support": true
+  },
+  {
+   "projectile_z": 6,
+   "projectile_a": 12,
+   "target_z": 20,
+   "energy_min_mevu": 2.159694194793701,
+   "energy_max_mevu": 429.8964538574219,
+   "has_support": true
+  },
+  {
+   "projectile_z": 6,
+   "projectile_a": 12,
+   "target_z": 11,
+   "energy_min_mevu": 1.8468680381774902,
+   "energy_max_mevu": 429.25732421875,
+   "has_support": true
+  },
+  {
+   "projectile_z": 6,
+   "projectile_a": 12,
+   "target_z": 19,
+   "energy_min_mevu": 2.2481932640075684,
+   "energy_max_mevu": 429.6551208496094,
+   "has_support": true
+  },
+  {
+   "projectile_z": 6,
+   "projectile_a": 12,
+   "target_z": 22,
+   "energy_min_mevu": 2.2094409465789795,
+   "energy_max_mevu": 429.4680480957031,
+   "has_support": true
+  }
+ ],
+ "topas_version": "4.2.p3",
+ "geant4_version": "11.03.p02",
+ "physics_list": "g4em-standard_opt4 + g4ion-binarycascade",
+ "schneider_source_file": "data/HUtoMaterialSchneider.txt",
+ "schneider_sha256": "5022cd89617b28dbd8ee8bf8b095ea20cfd99f6405218693c0df238b3617a139",
+ "zeroing_policy": "zero iff XS==0 (model threshold), E <= per-channel max-null-beam (dynamic Geant4 nulls), or E > channel emax (package is the support map); substantial-XS-without-nodes NEVER zeroed; totals = masked-at-node sums, ascending-target order",
+ "zeroed_xs0": 1565291,
+ "zeroed_below_null": 4395,
+ "zeroed_above_emax": 15734,
+ "units": "mm, MeV, ns, g/cm^3",
+ "generation_timestamp": "2026-09-04T00:43:30.066074+00:00",
+ "compiler_command": "python3 tools/compile_rates_v2_1.py --accept-residual-need",
+ "compiler_commit": "1e4fc49026f633a3916920633bf24bf5c88896b6"
+}

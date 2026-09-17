@@ -1,0 +1,338 @@
+{
+  "date": "2026-09-15",
+  "archive_root": "trash/fred_cleanup_20260915",
+  "files": [
+    {
+      "path": "config/beam_100MeVu_cinel02_species_g1_100k_xy04.yaml",
+      "sha256": "2b4f1475f9ad130ba7f33d07c130e946de791b09c185fcd67c498c7db512be6a"
+    },
+    {
+      "path": "config/beam_100MeVu_cinel02_species_g2_100k_xy04.yaml",
+      "sha256": "e889a0ac20e1ef1b9ac7e8a179a461f29f1322c77409bbf81d73ee605b6f834d"
+    },
+    {
+      "path": "config/beam_100MeVu_fred_paper_1M.yaml",
+      "sha256": "8dbcf22c28ebce772268e4401db83d234092106670d76b2c40856e4c095c79f2"
+    },
+    {
+      "path": "config/beam_200MeVu_cinel02_e200light107_g1_100k_xy04.yaml",
+      "sha256": "a67a0bc342626af7bdea49d36e4f75219b8f8c98e4458abfb2c33e8772301483"
+    },
+    {
+      "path": "config/beam_200MeVu_cinel02_e200light107_g1_explicitsp_100k_xy04.yaml",
+      "sha256": "add8d35f4862788321d3a3f049554073619f72df53a5247efcc4dd97c4ffec56"
+    },
+    {
+      "path": "config/beam_200MeVu_cinel02_e200light107_g1_explicitsp_be6_100k_xy04.yaml",
+      "sha256": "1f3ae1fb48e6db9106ef8cebb630ffea5b42a0f6b46803cf36a0548fa32b1a57"
+    },
+    {
+      "path": "config/beam_200MeVu_cinel02_e200light107_g1_explicitsp_bebirth_100k_xy04.yaml",
+      "sha256": "3b325b9148561fa535bc9802c9f36f878954d780d894277b25361aa3e610f4b6"
+    },
+    {
+      "path": "config/beam_200MeVu_cinel02_e200light107_g1_explicitsp_beenergybin_100k_xy04.yaml",
+      "sha256": "e1fcdd9948f9feb3710d77680aed955b77b4b0835c0abd08b6410748a43018bb"
+    },
+    {
+      "path": "config/beam_200MeVu_cinel02_e200light107_g1_explicitsp_beiso_100k_xy04.yaml",
+      "sha256": "cdabe807cbd4453f5fbc9a8035e0ee11bab9313f79337730831bbd9c986d1104"
+    },
+    {
+      "path": "config/beam_200MeVu_cinel02_e200light107_g1_narrow010_100k_xy04.yaml",
+      "sha256": "e6c2ddc24f27bce25e19a444f4ed784baaeb7e6e0542315eccce0b3c7ad87bdc"
+    },
+    {
+      "path": "config/beam_200MeVu_cinel02_e200light107_g1_topascompat_100k_xy04.yaml",
+      "sha256": "42b97e07ff5e4c8ee9951e2bc7a8a8b40b85acb5dcc46ffec48ee269dd7fb0cb"
+    },
+    {
+      "path": "config/beam_200MeVu_cinel02_e200light107_g1_transitiondiag2_100k_xy04.yaml",
+      "sha256": "ae8c60ed6a1b5f7ba4b9ed3bd9af6fd85a4906ab8ff54cb194567530c17e5b1f"
+    },
+    {
+      "path": "config/beam_200MeVu_cinel02_e200light107_g1_transitiondiag3_100k_xy04.yaml",
+      "sha256": "c976e472693412f7768db92c74b41240ee69bdd2cfbcc95ed0ea3fea80e2d7b6"
+    },
+    {
+      "path": "config/beam_200MeVu_cinel02_e200light107_g1_transitiondiag4_100k_xy04.yaml",
+      "sha256": "2734bb35d6d8443d560e4d4b521f03296b11cc31ae0a3655f9929b93112a3eb4"
+    },
+    {
+      "path": "config/beam_200MeVu_cinel02_e200light107_g1_transitiondiag_100k_xy04.yaml",
+      "sha256": "dfd3ef2efbf002107e67caa078a74cb9259f4bd00c39a8f0757e20742dc761c7"
+    },
+    {
+      "path": "config/beam_200MeVu_cinel02_e200light107_g2_transitiondiag_100k_xy04.yaml",
+      "sha256": "ec316eb9f590ba17f79936d13df0c048a6d2635f0a2be787e0ab84879c14bee9"
+    },
+    {
+      "path": "config/beam_200MeVu_cinel02_e200prod103_g0_100k_xy04.yaml",
+      "sha256": "454db71e1ee4638d72826f758f21906ed182b8dcc49f9b005db43be08bd23892"
+    },
+    {
+      "path": "config/beam_200MeVu_cinel02_e200prod103_g1_100k_xy04.yaml",
+      "sha256": "b3a505c0bdbbea5fa3583f546d3ff476d924b5ea51e15a82837a0c19d0ad0969"
+    },
+    {
+      "path": "config/beam_200MeVu_cinel02_hybrid_currentz_g1_100k_xy04.yaml",
+      "sha256": "a3ea3a59f39fdd86c581986c6cb88a1a77c01d7aa6acead7e4f240d56eba89fb"
+    },
+    {
+      "path": "config/beam_200MeVu_cinel02_hybrid_demanddiag_g1_100k_xy04.yaml",
+      "sha256": "c820b5653a6c2a3e968b7024ff39349d68e1e21a316d29d05125d88a4a9df0fc"
+    },
+    {
+      "path": "config/beam_200MeVu_cinel02_hybrid_isotope_spfix_g1_100k_xy04.yaml",
+      "sha256": "73d31937eb5b184138e3e3bad04ebc35bed1c4e77f20802f4f130ef3003e7b8c"
+    },
+    {
+      "path": "config/beam_200MeVu_cinel02_hybrid_research_g1_100k_xy04.yaml",
+      "sha256": "268a4aabe817c792f37b2146de760976c22b69737ecc40b49da96392350a2b69"
+    },
+    {
+      "path": "config/beam_200MeVu_cinel02_hybrid_research_originfix_g1_100k_xy04.yaml",
+      "sha256": "69bc812ab1cd452a343c02326d15c54cdeecfba5399a275e9645873c9d7893e5"
+    },
+    {
+      "path": "config/beam_200MeVu_cinel02_hybrid_windowfix_g1_100k_xy04.yaml",
+      "sha256": "84293bb909bc82453e239d72115aa9a9ab57c5e9a3233e1508878ff86e6f4c3c"
+    },
+    {
+      "path": "config/beam_200MeVu_cinel02_oldpkg_originfix_g1_100k_xy04.yaml",
+      "sha256": "16173b4bdbf92cf19ee7a1a1700e265b7852c09ae66634093348bfe7acadfc1b"
+    },
+    {
+      "path": "config/beam_200MeVu_cinel02_species_g1_100k_xy04.yaml",
+      "sha256": "06454d8d02c233511610d6f880ee039fc7e88550ed5bb996ea5e7e11bc5a6d82"
+    },
+    {
+      "path": "config/beam_200MeVu_cinel02_species_g2_100k_xy04.yaml",
+      "sha256": "5cb867fae402b02a1005ba9eca63fa71a7031c3d387405bb2ad35f4ac53436fc"
+    },
+    {
+      "path": "config/beam_200MeVu_fred_paper.yaml",
+      "sha256": "34a0dde83f14211064f7072daf7982ee074b7f8edcf0d693e352e87723b3d5c5"
+    },
+    {
+      "path": "config/beam_200MeVu_fred_paper_1M.yaml",
+      "sha256": "d2caa5affc4f8114650ec9ccd2c4d994a8eb4986a12bc0932316ab037abbffa2"
+    },
+    {
+      "path": "config/beam_300MeVu_cinel02_species_g1_100k_xy04.yaml",
+      "sha256": "c47104dc5eb3ca652abb338151f334292bd1f31f459842a665f39c2a3bc51aa1"
+    },
+    {
+      "path": "config/beam_300MeVu_cinel02_species_g2_100k_xy04.yaml",
+      "sha256": "60f282a63205c194766306a1a86f1ed6cda1effce44fa6cde1d6261207d9bba9"
+    },
+    {
+      "path": "config/beam_300MeVu_fred_paper_1M.yaml",
+      "sha256": "5fe692d883c49eda7992eef436af059f49271a3573b75cab13ca3fcb4e1d4e72"
+    },
+    {
+      "path": "config/beam_400MeVu_cinel02_100k.yaml",
+      "sha256": "bf87f24d2b8fa207a6738ebc5a038ac5cb343739d44fa3a5ea29947ab015636e"
+    },
+    {
+      "path": "config/beam_400MeVu_cinel02_species_100k_xy04.yaml",
+      "sha256": "84caf2bc3051e4831fa6eaf7befd62fc6271f8da14ade930c6a87aea9208ed2c"
+    },
+    {
+      "path": "config/beam_400MeVu_cinel02_species_1M_xy04.yaml",
+      "sha256": "4a7ef910d3c85d464b59690e1c7c57c6b6e011be50e9304982b41b3e9b87d4cc"
+    },
+    {
+      "path": "config/beam_400MeVu_cinel02_species_g1_100k_xy04.yaml",
+      "sha256": "327fe9c270d8e0a88c70096a6f35ff73222a1fe863d96ed973a7ce8314b21cfe"
+    },
+    {
+      "path": "config/beam_400MeVu_cinel02_species_g2_100k_xy04.yaml",
+      "sha256": "c29cdadcb43b9c5abc1b30e618099b234d804d49d177384c6ffa1a6d6a2439db"
+    },
+    {
+      "path": "config/beam_400MeVu_fred_paper_1M.yaml",
+      "sha256": "7c1690ee99a9a182129d2c31c6df004a67e0362eb1dd15352991f147e7a0171e"
+    },
+    {
+      "path": "config/beam_95MeVu_fred_thin_1M.yaml",
+      "sha256": "28f3b3b21b3fdc60f85dd5ebe8cc91387cfebd4a0c9aba6e44a81987b73b04d9"
+    },
+    {
+      "path": "config/beam_95MeVu_fred_thin_smoke.yaml",
+      "sha256": "d2bc66d7455495c9a6c9d60d0e4cf68cce0dd23b820a727a75d5ce7427a41127"
+    },
+    {
+      "path": "config/beam_fred_paper_gpu_smoke.yaml",
+      "sha256": "8dcb98f84b10d81022e3c02d0c41356c935b235202678c766aaa2d152c62c1a5"
+    },
+    {
+      "path": "config/generated/be_rate_only/be10_e100.yaml",
+      "sha256": "5461a882b447694b4b8846321703d9c95e3e4ebc3b1936fe26020654c7c40315"
+    },
+    {
+      "path": "config/generated/be_rate_only/be10_e150.yaml",
+      "sha256": "9b6649e86ddaa8f55e97f953f766d455d0745e166347f49d8e1f699f8da13d29"
+    },
+    {
+      "path": "config/generated/be_rate_only/be10_e50.yaml",
+      "sha256": "f1cdbacd35f1fb53242c10d82577b4ce9235ac8549946f6bca0393fbd552d276"
+    },
+    {
+      "path": "config/generated/be_rate_only/be7_e100.yaml",
+      "sha256": "98154e88629659b712525066443a26a02fde497e31d47970d7b0f1b8a6154a2f"
+    },
+    {
+      "path": "config/generated/be_rate_only/be7_e150.yaml",
+      "sha256": "609494c7f117068435bdfdd3bf8980170a4d78cff4f8d060fa3d4482dbcf4dd7"
+    },
+    {
+      "path": "config/generated/be_rate_only/be7_e50.yaml",
+      "sha256": "9eafa3bd0a1670b0876ccdac560846f383d966408b269d60a8610e82a8b53389"
+    },
+    {
+      "path": "config/generated/be_rate_only/be9_e100.yaml",
+      "sha256": "caee03a13a39f9f673823ff1f395a56f1916decb02b8c44d989796ab76c41041"
+    },
+    {
+      "path": "config/generated/be_rate_only/be9_e150.yaml",
+      "sha256": "3a9b9fb1c1b8bc35cec6865896d8c26c2179bc29fa1cb5cfb846e7de7df659c4"
+    },
+    {
+      "path": "config/generated/be_rate_only/be9_e50.yaml",
+      "sha256": "d7490ec8151cc6320b8dbe90469f02b3dccf9d1969de6cf2d96332adb2c45230"
+    },
+    {
+      "path": "src/fred_table1.cpp",
+      "sha256": "f480095c6f880547af97f90cc19dd9a19123191233e6c4b088c3831349960c7b"
+    },
+    {
+      "path": "src/fred_event_library.cpp",
+      "sha256": "3cb5a6eb9a26e85c08ebe571a98e7e8661ccec498a9cfbb7838ffe5ea762643b"
+    },
+    {
+      "path": "include/carbon/fred_table1.hpp",
+      "sha256": "e726233ae0fe51d7c93986a77efb47585923748e1d15372e5f296e7e2627e708"
+    },
+    {
+      "path": "include/carbon/fred_event_library.hpp",
+      "sha256": "42e719810d4d3ccd07120c3a72c285f0dd2d6a83b1faf4c8d8a81e6774a4aa37"
+    },
+    {
+      "path": "src/multiple_scattering.cpp",
+      "sha256": "387fce4c7c76f8ca335a925b0f31ce34de8bbadd78d2f51a191af6f688784718"
+    },
+    {
+      "path": "tools/run_step15_gpu.cpp",
+      "sha256": "054c09ee6506c11c6907f2d8fe6da63f70625a1285523a413860b3ad3ec6270b"
+    },
+    {
+      "path": "scripts/compare_fred_topas_1m_3d.py",
+      "sha256": "261aadb812ed12b41ce8ffb97d46c0a15a19dc9cc34dc8de597bc71d48e3dc3c"
+    },
+    {
+      "path": "scripts/invert_fred_table1.py",
+      "sha256": "444b754d7aa6f1574edb013932a400ce855f4e78f5af74447ea2ceff3fccb907"
+    },
+    {
+      "path": "startup/package_tools/extract_fred_2gr.py",
+      "sha256": "2cea11ca03b5d8d2db381b915f6ce6f56e69a98176c2debe63f5053e9f5b165b"
+    },
+    {
+      "path": "startup/validation/fred_thin_95_topas.txt",
+      "sha256": "bd414d3f9a4f51e4f381391d57cf3375c3c620861120164201dd724a15aceda8"
+    },
+    {
+      "path": "startup/validation/run_fred_thin_95_topas.slurm",
+      "sha256": "397425703921ebcd8c43af76e4c29ed8465e58dd670f8406cdcc0ec281902a10"
+    },
+    {
+      "path": "scripts/generate_plots_matplotlib.py",
+      "sha256": "81c971199eea9b0439af1f74a716bd58f4985de637325f2e91a695a78288a49d"
+    },
+    {
+      "path": "scripts/generate_lateral_profiles_plot.py",
+      "sha256": "4c3e33e6cba26bff5a53c530943bbf8c17eaff24193e40f5b6d36ff806d9a88f"
+    },
+    {
+      "path": "scripts/calibrate_idd_response.py",
+      "sha256": "51d5e0ff26d2ac9e57996240b4aeae44f005dc035ddc804a33f43a701e6ae5d7"
+    },
+    {
+      "path": "startup/path_a_extract/compile_thin_events.py",
+      "sha256": "15e416d29331b2e5c859a586fb6adf103c25e6e88786a41cbf622f731c2a74b3"
+    },
+    {
+      "path": "startup/path_a_extract/run_thin_fragment.slurm",
+      "sha256": "e372bcb21481226cee14339cc0fe7e44f49126e04221fce859f32817880d498c"
+    },
+    {
+      "path": "startup/path_a_extract/thin_fragment_target.txt.in",
+      "sha256": "c4fa3a2d241c58d1cb5484b0f2c3038f72bb2e552ea10d3ae14b31ee5ff9c0ed"
+    },
+    {
+      "path": "scripts/__pycache__/generate_plots_matplotlib.cpython-312.pyc",
+      "sha256": "3007e44dc248dd38e727ccbedbbd73ffa2ea5d01a23e2ff55d9a332ac8371c51",
+      "untracked_cache": true
+    },
+    {
+      "path": "scripts/__pycache__/generate_lateral_profiles_plot.cpython-312.pyc",
+      "sha256": "dc32783c1f315ef6001955c46f45f02071affc8e9da29aa9c845f21b590df302",
+      "untracked_cache": true
+    },
+    {
+      "path": "scripts/__pycache__/compare_fred_topas_1m_3d.cpython-312.pyc",
+      "sha256": "7007b869a3cafea1217d995cc1b3d8e93e5d94a493ce97d4b2992b7ef075616c",
+      "untracked_cache": true
+    },
+    {
+      "path": "scripts/__pycache__/calibrate_idd_response.cpython-312.pyc",
+      "sha256": "c41905637ca324420b93978305c74dd0e200c59eb29da83b25b8438a146b7663",
+      "untracked_cache": true
+    },
+    {
+      "path": "startup/package_tools/__pycache__/extract_fred_2gr.cpython-312.pyc",
+      "sha256": "22509062db49bc996c3a2ca947f67f3fb6d550f6d7a250e2033b6243d19ff49d",
+      "untracked_cache": true
+    }
+  ],
+  "removed_tests": [
+    "test_fred_2gr_package",
+    "test_multi_energy_fred_event_libraries",
+    "test_fred_event_library_load",
+    "test_fred_paper_sigma_cc_and_water_macro",
+    "test_table1_newton_invert"
+  ],
+  "deleted_active_sources": [
+    {
+      "path": "include/carbon/detail/fred_fragmentation_data.hpp",
+      "action": "deleted from active source tree; not moved to archive_root"
+    },
+    {
+      "path": "src/detail/sycl_inelastic_device.inc",
+      "action": "deleted from active source tree; not moved to archive_root"
+    },
+    {
+      "path": "include/carbon/detail/c12_elastic_h_xs.hpp",
+      "action": "deleted from active source tree; not moved to archive_root"
+    }
+  ],
+  "additional_removed_tests": [
+    "test_table1_inclusive_sampling",
+    "test_eq12_component_choice",
+    "test_eq13_first_fragment_not_scaled_down",
+    "test_inelastic_fail_residual_not_double_counted",
+    "test_inelastic_optical_depth_in_step",
+    "test_inelastic_neutron_kerma_fraction",
+    "test_projectile_joint_channel",
+    "test_energy_dependent_inclusive_yields",
+    "test_table1_no_np_evaporation_dump",
+    "test_c12_hydrogen_elastic_kinematics",
+    "test_topas_c12_h_elastic_table",
+    "test_kox_icru_cross_sections"
+  ],
+  "replacement_modules": [
+    "include/carbon/charged_species.hpp",
+    "include/carbon/nuclear_collision.hpp"
+  ]
+}

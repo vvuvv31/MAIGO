@@ -1,0 +1,46 @@
+# Carbon-12 beam 100 MeV/u with emittance source and full INELASTIC fragmentation
+primary_atomic_number: 6
+primary_mass_number: 12
+initial_energy_MeVu: 100.0
+number_of_histories: 100000
+phantom_length_mm: 400.0
+depth_bin_width_mm: 0.5
+maximum_step_mm: 0.1
+maximum_relative_energy_loss: 0.01
+energy_cutoff_MeV: 0.05
+water_density_g_per_cm3: 1.0
+
+# Emittance source
+enable_emittance_source: true
+emittance_sigma_x_mm: 3.0
+emittance_sigma_y_mm: 3.0
+emittance_sigma_x_prime: 0.006
+emittance_sigma_y_prime: 0.006
+emittance_correlation_x: 0.7
+emittance_correlation_y: 0.7
+
+# Physics
+enable_energy_straggling: true
+straggling_scale: 1.0
+enable_multiple_scattering: true
+multiple_scattering_scale: 1.0
+enable_inelastic: true
+primary_inelastic_cross_section_file: data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv
+enable_secondary_transport: true
+primary_stopping_power_file: data/stopping_power_water_geant4_11_3_2.csv
+
+# 3D Voxel Scorer
+enable_voxel_scoring: true
+voxel_bins_x: 400
+voxel_bins_y: 400
+voxel_size_x_mm: 0.2
+voxel_size_y_mm: 0.2
+
+# Scorers
+output_file: out/gpu_inelastic_e100/depth_dose.csv
+dose_output_file: out/gpu_inelastic_e100/depth_dose_Gy.csv
+voxel_dose_output_file: out/gpu_inelastic_e100/voxel_dose.csv
+voxel_dose_Gy_output_file: out/gpu_inelastic_e100/voxel_dose_Gy.csv
+voxel_dose_mhd_output_file: out/gpu_inelastic_e100/voxel_dose.mhd
+random_seed: 2026084100
+device: gpu

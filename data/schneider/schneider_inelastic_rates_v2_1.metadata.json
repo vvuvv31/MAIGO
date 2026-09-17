@@ -1,0 +1,128 @@
+{
+ "schema_version": 1,
+ "format": "SCHNRATE",
+ "binary_version": 3,
+ "data_filename": "schneider_inelastic_rates_v2_1.bin",
+ "data_sha256": "086ef97dbf323dc2681d5f6c5257e78c87446050f6fb628f3b0f8b24211a8370",
+ "file_size_bytes": 2579212,
+ "binary_magic": "SCHNRATE",
+ "target_order": [
+  1,
+  6,
+  7,
+  8,
+  12,
+  15,
+  16,
+  17,
+  18,
+  20,
+  11,
+  19,
+  22
+ ],
+ "energy_grid": {
+  "emin": 0.1,
+  "emax": 460.1,
+  "step": 0.5,
+  "count": 921
+ },
+ "channel_domains": [
+  {
+   "target_z": 1,
+   "energy_min_mevu": 0.5571690797805786,
+   "energy_max_mevu": 429.8938293457031,
+   "has_support": true
+  },
+  {
+   "target_z": 6,
+   "energy_min_mevu": 1.5883933305740356,
+   "energy_max_mevu": 429.5699157714844,
+   "has_support": true
+  },
+  {
+   "target_z": 7,
+   "energy_min_mevu": 1.7638508081436157,
+   "energy_max_mevu": 429.9118347167969,
+   "has_support": true
+  },
+  {
+   "target_z": 8,
+   "energy_min_mevu": 2.46640944480896,
+   "energy_max_mevu": 429.8910217285156,
+   "has_support": true
+  },
+  {
+   "target_z": 12,
+   "energy_min_mevu": 3.219148635864258,
+   "energy_max_mevu": 429.7517395019531,
+   "has_support": true
+  },
+  {
+   "target_z": 15,
+   "energy_min_mevu": 2.2899367809295654,
+   "energy_max_mevu": 429.8116760253906,
+   "has_support": true
+  },
+  {
+   "target_z": 16,
+   "energy_min_mevu": 2.649698257446289,
+   "energy_max_mevu": 429.8152770996094,
+   "has_support": true
+  },
+  {
+   "target_z": 17,
+   "energy_min_mevu": 2.8971831798553467,
+   "energy_max_mevu": 429.9834289550781,
+   "has_support": true
+  },
+  {
+   "target_z": 18,
+   "energy_min_mevu": 3.411389112472534,
+   "energy_max_mevu": 429.4396667480469,
+   "has_support": true
+  },
+  {
+   "target_z": 20,
+   "energy_min_mevu": 2.159694194793701,
+   "energy_max_mevu": 429.606689453125,
+   "has_support": true
+  },
+  {
+   "target_z": 11,
+   "energy_min_mevu": 1.8468680381774902,
+   "energy_max_mevu": 429.6353759765625,
+   "has_support": true
+  },
+  {
+   "target_z": 19,
+   "energy_min_mevu": 2.2481932640075684,
+   "energy_max_mevu": 429.7210693359375,
+   "has_support": true
+  },
+  {
+   "target_z": 22,
+   "energy_min_mevu": 3.803250551223755,
+   "energy_max_mevu": 429.8061218261719,
+   "has_support": true
+  }
+ ],
+ "companion_csv": {
+  "filename": "c12_schneider_inelastic_mass_xs_v2_1.csv",
+  "sha256": "96aa6ea1c99e029feb9dfde7ce0b778d27fb14967acdf8096182d6a1c9e2194b",
+  "note": "masked totals audit artifact; NOT loaded by v3 runtime"
+ },
+ "topas_version": "4.2.p3",
+ "geant4_version": "11.03.p02",
+ "physics_list": "FTFP_INCLXX",
+ "schneider_source_file": "data/HUtoMaterialSchneider.txt",
+ "schneider_sha256": "5022cd89617b28dbd8ee8bf8b095ea20cfd99f6405218693c0df238b3617a139",
+ "zeroing_policy": "zero iff XS==0, E <= per-target max-null-beam, or E > target emax; substantial-XS-without-nodes NEVER zeroed; totals = masked-at-node sums",
+ "zeroed_xs0": 111011,
+ "zeroed_below_null": 277,
+ "zeroed_above_emax": 12529,
+ "units": "mm, MeV, ns, g/cm^3",
+ "generation_timestamp": "2026-09-04T00:43:59.073664+00:00",
+ "compiler_command": "python3 tools/compile_primary_rates_v2_1.py --accept-residual-need",
+ "compiler_commit": "1e4fc49026f633a3916920633bf24bf5c88896b6"
+}

@@ -1,0 +1,23 @@
+{
+  "schema": "EMDMOMT2",
+  "version": 2,
+  "nodes": 25872175,
+  "records": 3150,
+  "source_package_sha256": "8c5d970b3b639bfca2f448730271bed4fc04721aba73100e2efbe09dffe44855",
+  "sha256": "c551bc52fa30ff7e3ea229c8b89792e8ecd2b0fb12f18fcad50d1c6f206bc7cc",
+  "bytes": 206977416,
+  "quadrature_order": 32,
+  "check_order": 64,
+  "checked_nodes": 31648,
+  "max_relative_quadrature_error": 1.0144635387288048e-07,
+  "model": "native proposal rate times accepted delta first and raw second moments; same spin/form-factor/magnetic veto as GPU sampler; all existing material/density/projectile nodes",
+  "data_file": "unified_em_delta_moments_v2.bin",
+  "transport_model": "condensed_delta_partition_v1",
+  "units": [
+    "MeV/mm",
+    "MeV^2/mm"
+  ],
+  "layout": "16-byte <8sII header; interleaved little-endian float32 M1,M2 in original EM node order",
+  "generator": "tools/build_delta_moments.py",
+  "integration_authorized": "2026-09-15"
+}

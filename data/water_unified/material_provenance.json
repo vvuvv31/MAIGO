@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "status": "MATERIAL_PROPERTIES_ONLY_NOT_TRANSPORT_VALIDATED",
+  "material_file": "data/water_unified/g4_water_material.json",
+  "material_sha256": "60be17929880fe18f1758edc02350b3fa7140b817ab0d21cb75bd87dbc891f31",
+  "file_size_bytes": 389,
+  "geant4_install": "/software/geant4-11.3.2",
+  "topas_geant4_binding": "Geant4_DIR in pinned TOPAS CMakeCache.txt",
+  "slurm_job": 2566,
+  "failed_attempt": {
+    "job": 2565,
+    "exit": "127:0",
+    "reason": "Missing Geant4 shared library environment; no material output"
+  },
+  "resources": {
+    "cpus": 1,
+    "memory_GiB": 1
+  },
+  "pins": {
+    "/mnt/sda/wuwei/water_material_probe_20260907.6lQ5Ug/g4_water.json": "60be17929880fe18f1758edc02350b3fa7140b817ab0d21cb75bd87dbc891f31",
+    "tools/water_material_probe/main.cpp": "982a3d70e44ef28dddc08ee3cce97dfd2c2d4efc698744eeae2aff817ccd3825",
+    "tools/water_material_probe/CMakeLists.txt": "afd1b52a29f1f334f38e5b98a3afa613b0e5cbec64dc5a7fbe479660d2391fe8",
+    "build/water-material-probe/water_material_probe": "7715a88f4cb111543ae930d098ea74549bc47adbcb80bb6cde5e32c68ddb308d",
+    "/software/geant4-11.3.2/lib/libG4materials.so": "4832f318c2557cd22b5dc4e95934d420353ddb2e3f7e0089a0640f298e5624f0",
+    "/home/wuwei/topas/topas-build/CMakeCache.txt": "6528ffbeb4b7e6a34b2953d9100c85be6ccf8ec8999199674d98c1c97ea2701f"
+  },
+  "command": "env LD_LIBRARY_PATH=/software/geant4-11.3.2/lib /mnt/sdb/wuwei/MAIGO/build/water-material-probe/water_material_probe /mnt/sda/wuwei/water_material_probe_20260907.6lQ5Ug/g4_water.json",
+  "limits": [
+    "Does not replace any frozen Schneider v2.1 file",
+    "No water transport or Gamma acceptance",
+    "Electron r3 is not a G4_WATER response",
+    "Standalone NIST material probe, not a TOPAS particle simulation"
+  ]
+}

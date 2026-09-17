@@ -1,0 +1,20 @@
+{
+  "quantity": "step-born electron kinetic-energy fraction",
+  "definition": "E_delta / (Edep + E_delta)",
+  "topas": "4.2.p3",
+  "geant4": "11.3.2",
+  "material": "Water_75eV",
+  "production_cut_mm": 0.05,
+  "histories": 10000,
+  "measured_energy_interval_MeVu": [
+    12.462693647204992,
+    199.66401666666667
+  ],
+  "fraction_at_200_MeVu": 0.11019207421338707,
+  "above_measured_interval": "linear high-energy extrapolation capped at 0.25",
+  "inputs": {
+    "electron": "validation/topas/output/delta_reference_primary_c12_electron.csv",
+    "energy_deposit": "validation/topas/output/delta_reference_primary_c12_energy_deposit.csv",
+    "stopping_power": "data/stopping_power_water_geant4_11_3_2.csv"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "material": "G4_WATER",
+  "geant4_version_number": 1132,
+  "density_g_cm3": 1,
+  "radiation_length_g_cm2": 36.082977464022328,
+  "mean_excitation_energy_eV": 78,
+  "elements": [
+    {"z": 1, "atomic_mass_g_mol": 1.0079407526651405, "mass_fraction": 0.11189847784106703},
+    {"z": 8, "atomic_mass_g_mol": 15.999390411, "mass_fraction": 0.8881015221589329}
+  ]
+}

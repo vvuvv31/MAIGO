@@ -1,0 +1,115 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 22,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "cpu-debug",
+      "displayName": "CPU debug (serial only)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/cpu-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CARBON_ENABLE_SYCL": "OFF"
+      }
+    },
+    {
+      "name": "oneapi-release",
+      "displayName": "oneAPI SYCL dual targets, FP32 dose",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/oneapi-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_CXX_COMPILER": "icpx",
+        "CARBON_ENABLE_SYCL": "ON",
+        "CARBON_SYCL_TARGETS": "spir64,nvptx64-nvidia-cuda",
+        "CARBON_ENABLE_MINIBEAM": "OFF",
+        "CARBON_DOSE_FP32": "ON"
+      }
+    },
+    {
+      "name": "oneapi-nvidia-release",
+      "displayName": "oneAPI SYCL NVIDIA, legacy kernel, FP32 dose",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/oneapi-nvidia-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_CXX_COMPILER": "icpx",
+        "CARBON_ENABLE_SYCL": "ON",
+        "CARBON_ENABLE_MINIBEAM": "OFF",
+        "CARBON_SYCL_TARGETS": "nvptx64-nvidia-cuda",
+        "CARBON_DOSE_FP32": "ON"
+      }
+    },
+    {
+      "name": "oneapi-nvidia-minibeam",
+      "displayName": "oneAPI SYCL NVIDIA, minibeam ON, FP32 dose",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/oneapi-nvidia-minibeam",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_CXX_COMPILER": "icpx",
+        "CARBON_ENABLE_SYCL": "ON",
+        "CARBON_ENABLE_MINIBEAM": "ON",
+        "CARBON_SYCL_TARGETS": "nvptx64-nvidia-cuda",
+        "CARBON_DOSE_FP32": "ON"
+      }
+    },
+    {
+      "name": "oneapi-nvidia-secondary64",
+      "displayName": "NVIDIA secondary scheduling rollback (64 complete steps)",
+      "inherits": "oneapi-nvidia-release",
+      "binaryDir": "${sourceDir}/build/oneapi-nvidia-secondary64",
+      "cacheVariables": {
+        "CARBON_CUDA_ARCH": "sm_75",
+        "CARBON_SECONDARY_SEGMENT_STEPS": "64"
+      }
+    },
+    {
+      "name": "oneapi-nvidia-indexed",
+      "displayName": "NVIDIA secondary16 + exact EM search index (explicit ON)",
+      "inherits": "oneapi-nvidia-release",
+      "binaryDir": "${sourceDir}/build/oneapi-nvidia-indexed",
+      "cacheVariables": {
+        "CARBON_CUDA_ARCH": "sm_75",
+        "CARBON_EM_EXACT_INDEX": "ON"
+      }
+    },
+    {
+      "name": "oneapi-nvidia-index-off",
+      "displayName": "NVIDIA exact EM search index rollback (binary search only)",
+      "inherits": "oneapi-nvidia-release",
+      "binaryDir": "${sourceDir}/build/oneapi-nvidia-index-off",
+      "cacheVariables": {
+        "CARBON_CUDA_ARCH": "sm_75",
+        "CARBON_EM_EXACT_INDEX": "OFF"
+      }
+    },
+    {
+      "name": "oneapi-intel-release",
+      "displayName": "oneAPI SYCL Intel SPIR-V only",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/oneapi-intel-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_CXX_COMPILER": "icpx",
+        "CARBON_ENABLE_SYCL": "ON",
+        "CARBON_SYCL_TARGETS": "spir64",
+        "CARBON_DOSE_FP32": "OFF"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "cpu-debug", "configurePreset": "cpu-debug" },
+    { "name": "oneapi-release", "configurePreset": "oneapi-release" },
+    { "name": "oneapi-nvidia-release", "configurePreset": "oneapi-nvidia-release" },
+    { "name": "oneapi-nvidia-minibeam", "configurePreset": "oneapi-nvidia-minibeam" },
+    { "name": "oneapi-nvidia-secondary64", "configurePreset": "oneapi-nvidia-secondary64" },
+    { "name": "oneapi-nvidia-indexed", "configurePreset": "oneapi-nvidia-indexed" },
+    { "name": "oneapi-nvidia-index-off", "configurePreset": "oneapi-nvidia-index-off" },
+    { "name": "oneapi-intel-release", "configurePreset": "oneapi-intel-release" }
+  ]
+}
