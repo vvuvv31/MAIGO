@@ -25,6 +25,19 @@
 #ifndef CARBON_PRIMARY_PRODUCTION_SPECIALIZE
 #define CARBON_PRIMARY_PRODUCTION_SPECIALIZE 0
 #endif
+// Pass the immutable primary-kernel closures (Schneider CT context and unified
+// EM device view) through a device-resident context pointer instead of capturing
+// them by value. Required on GPU backends whose kernel-argument limit is 2048 B
+// (Intel Arc OpenCL/Level Zero); harmless and ABI-compatible on CUDA.
+#ifndef CARBON_PRIMARY_CONTEXT_POINTER
+#define CARBON_PRIMARY_CONTEXT_POINTER 0
+#endif
+// When the primary context pointer is enabled, also move the unified EM device
+// view out of the argument list. Set to 0 to keep unified_device by value (only
+// SchneiderCtDeviceContext moved) for isolation/debugging.
+#ifndef CARBON_PRIMARY_CONTEXT_MOVE_UNIFIED
+#define CARBON_PRIMARY_CONTEXT_MOVE_UNIFIED 1
+#endif
 #ifndef CARBON_SECONDARY_KNOWN_SPECIES_PROBE
 #define CARBON_SECONDARY_KNOWN_SPECIES_PROBE 0
 #endif
@@ -170,12 +183,13 @@ inline unsigned secondary_group_bucket(int z, int a, float energy_MeV) {
     }
     return sp * kSecondaryEnergyBucketCount + eb;
 }
-struct UnifiedEmFailureRecord {int reason,section,z,a;float energy,density,step;};
+struct UnifiedEmFailureRecord {int reason,section,z,a;float energy,density,step;float d0,d1,d2;};
 inline void record_unified_em_failure(unsigned* count,UnifiedEmFailureRecord* records,
-    int reason,int section,int z,int a,float energy,float density,float step) {
+    int reason,int section,int z,int a,float energy,float density,float step,
+    float d0=0.0F,float d1=0.0F,float d2=0.0F) {
     if(!count)return;
     sycl::atomic_ref<unsigned,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space> counter(*count);
-    const auto slot=counter.fetch_add(1);if(slot<16)records[slot]={reason,section,z,a,energy,density,step};
+    const auto slot=counter.fetch_add(1);if(slot<16)records[slot]={reason,section,z,a,energy,density,step,d0,d1,d2};
 }
 // The eight diagnostic counters are spread across logical threads so a warp's
 // same-index increments do not serialize on one global address. Counter i lane
@@ -2710,6 +2724,39 @@ template<int EmMode>
     const auto inverse_table_step =
         1.0f / static_cast<float>(stopping_power.energies()[1] - stopping_power.energies()[0]);
 
+#if CARBON_PRIMARY_CONTEXT_POINTER
+    // Move the two large immutable closures out of the primary kernel's argument
+    // list. Intel GPU backends cap kernel arguments at 2048 B; the by-value
+    // captures alone exceed that. The kernel body aliases these pointers with the
+    // original names, so the physics code is unchanged.
+    static_assert(std::is_trivially_copyable_v<UnifiedEmDevice>);
+    static_assert(std::is_trivially_copyable_v<SchneiderCtDeviceContext>);
+#if CARBON_PRIMARY_CONTEXT_MOVE_UNIFIED
+    auto* primary_unified_device_ptr = mem_tracker.allocate<UnifiedEmDevice>(1);
+#endif
+    auto* primary_schneider_ct_ptr = mem_tracker.allocate<SchneiderCtDeviceContext>(1);
+#if CARBON_PRIMARY_CONTEXT_MOVE_UNIFIED
+    if (primary_unified_device_ptr == nullptr || primary_schneider_ct_ptr == nullptr) {
+#else
+    if (primary_schneider_ct_ptr == nullptr) {
+#endif
+        throw std::bad_alloc();
+    }
+#if CARBON_PRIMARY_CONTEXT_MOVE_UNIFIED
+    queue.memcpy(primary_unified_device_ptr, &unified_device, sizeof(UnifiedEmDevice));
+#endif
+    queue.memcpy(primary_schneider_ct_ptr, &schneider_ct_device_ctx,
+                 sizeof(SchneiderCtDeviceContext));
+    queue.wait_and_throw();
+    std::cout << "[primary-context] device context pointer enabled; moved "
+              << (sizeof(SchneiderCtDeviceContext)
+#if CARBON_PRIMARY_CONTEXT_MOVE_UNIFIED
+                  + sizeof(UnifiedEmDevice)
+#endif
+                  )
+              << " B of closures out of the kernel argument list\n";
+#endif
+
     runtime_setup.finish();
     RuntimeScope runtime_steps("transport_loop_including_scoring_and_queue_transfers");
     double primary_kernel_seconds = 0.0;
@@ -2755,6 +2802,14 @@ template<int EmMode>
                     return;
                 }
                 const auto global_history = hist_offset + lane;
+#if CARBON_PRIMARY_CONTEXT_POINTER
+                // Shadow the host-side closures with device-resident views so the
+                // rest of the kernel body is byte-for-byte identical.
+#if CARBON_PRIMARY_CONTEXT_MOVE_UNIFIED
+                const auto& unified_device = *primary_unified_device_ptr;
+#endif
+                const auto& schneider_ct_device_ctx = *primary_schneider_ct_ptr;
+#endif
 
                 const PrimarySpotBatchEntry* spot = nullptr;
                 std::uint64_t rng_history = global_history;
@@ -3483,7 +3538,7 @@ template<int EmMode>
                     if(unified_em){
                         auto draw=unified_em_loss(unified_primary_state,unified_primary_clock,energy_MeV,step_mm,unified_primary_rate,unified_primary_distance,enable_energy_straggling,unified_primary_pre,unified_uniform);
                         if(!draw.valid){
-                            record_unified_em_failure(unified_failure_count,unified_failure_records,2,unified_primary_state.section,primary_atomic_number,primary_mass_number,energy_MeV,local_density_g_per_cm3,step_mm);
+                            record_unified_em_failure(unified_failure_count,unified_failure_records,20+static_cast<int>(draw.failure_stage),unified_primary_state.section,primary_atomic_number,primary_mass_number,energy_MeV,local_density_g_per_cm3,step_mm,draw.mean,draw.delta_mean,draw.delta_variance);
                             unified_count(0);break;}
                         deposited_MeV=draw.loss;unified_count(1);unified_count(3,draw.proposed);unified_count(4,draw.accepted);
                         unified_count(5,static_cast<std::uint64_t>(draw.continuous*1e6f));unified_count(6,static_cast<std::uint64_t>(draw.delta*1e6f));
@@ -6009,7 +6064,7 @@ template<int EmMode>
                             if(unified_secondary){
                                 auto draw=unified_em_loss(unified_secondary_state,unified_secondary_clock,sec_e,sec_step_mm,unified_secondary_rate,unified_secondary_distance,CARBON_SECONDARY_CONTEXT_FIELD(enable_secondary_energy_straggling),unified_secondary_pre,unified_secondary_uniform);
                                 if(!draw.valid){
-                                    record_unified_em_failure(CARBON_SECONDARY_CONTEXT_FIELD(unified_failure_count),CARBON_SECONDARY_CONTEXT_FIELD(unified_failure_records),4,unified_secondary_state.section,transport_z,transport_a,sec_e,sec_local_density_g_per_cm3,sec_step_mm);
+                                    record_unified_em_failure(CARBON_SECONDARY_CONTEXT_FIELD(unified_failure_count),CARBON_SECONDARY_CONTEXT_FIELD(unified_failure_records),40+static_cast<int>(draw.failure_stage),unified_secondary_state.section,transport_z,transport_a,sec_e,sec_local_density_g_per_cm3,sec_step_mm);
                                     unified_secondary_count(0);unified_secondary_count(7);break;}
                                 dE=draw.loss;unified_secondary_count(2);unified_secondary_count(3,draw.proposed);unified_secondary_count(4,draw.accepted);
                                 unified_secondary_count(5,static_cast<std::uint64_t>(draw.continuous*1e6f));unified_secondary_count(6,static_cast<std::uint64_t>(draw.delta*1e6f));
@@ -7590,7 +7645,7 @@ template<int EmMode>
             unsigned count=0;queue.copy(unified_failure_count,&count,1).wait_and_throw();
             std::vector<UnifiedEmFailureRecord> records(std::min(count,16u));
             queue.copy(unified_failure_records,records.data(),records.size()).wait_and_throw();
-            for(const auto& f:records)std::cerr<<"[unified-em-failure] reason="<<f.reason<<" section="<<f.section<<" Z="<<f.z<<" A="<<f.a<<" kinetic_MeV="<<f.energy<<" density="<<f.density<<" step_mm="<<f.step<<"\n";
+            for(const auto& f:records)std::cerr<<"[unified-em-failure] reason="<<f.reason<<" section="<<f.section<<" Z="<<f.z<<" A="<<f.a<<" kinetic_MeV="<<f.energy<<" density="<<f.density<<" step_mm="<<f.step<<" mean="<<f.d0<<" delta_mean="<<f.d1<<" delta_variance="<<f.d2<<"\n";
             std::cerr<<"[runtime-rejected-kernel] primary_s="<<primary_kernel_seconds<<" secondary_s="<<secondary_kernel_seconds<<" histories="<<number_of_histories<<"\n";
             throw std::runtime_error("Unified EM missing domain or sampling failure; dose rejected");
         }

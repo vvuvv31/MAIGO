@@ -193,7 +193,9 @@ struct UnifiedEmPoint {
         float w=std::clamp((e-a.energy)/(b.energy-a.energy),0.f,1.f);
         auto mix=[&](float x,float y){return x+w*(y-x);};
         if(delta_mean)*delta_mean=delta_means?mix(delta_means[2*lo],delta_means[2*lo+2]):0.f;
-        if(delta_variance)*delta_variance=delta_means?mix(delta_means[2*lo+1],delta_means[2*lo+3]):0.f;
+        // Stored moments are guaranteed >= 0; clamp the interpolated variance so
+        // fp32 rounding of x + w*(y-x) cannot hand a tiny negative to the sampler.
+        if(delta_variance)*delta_variance=delta_means?std::max(0.f,mix(delta_means[2*lo+1],delta_means[2*lo+3])):0.f;
         if(delta_slope)*delta_slope=delta_means?(delta_means[2*lo+2]-delta_means[2*lo])/(b.energy-a.energy)/record->a:0.f;
         return {e,mix(a.full,b.full),mix(a.restricted,b.restricted),mix(a.stopping,b.stopping),mix(a.range,b.range),mix(a.lambda,b.lambda),mix(a.factor,b.factor),mix(a.correction,b.correction),mix(a.dispersion,b.dispersion),mix(a.universal_dispersion,b.universal_dispersion),mix(a.q2,b.q2),a.model,a.fluctuation};
     }
@@ -405,11 +407,12 @@ struct UnifiedEmClock {
         return s.mix(rate0,rate1);
     }
 };
-struct UnifiedEmLoss {float loss{},continuous{},delta{};bool valid{false};unsigned proposed{},accepted{};};
+struct UnifiedEmLoss {float loss{},continuous{},delta{};bool valid{false};unsigned proposed{},accepted{};std::uint8_t failure_stage{0};float mean{},delta_mean{},delta_variance{};};
 template<class Uniform>
 UnifiedEmLoss unified_em_explicit_loss(const UnifiedEmState& s,UnifiedEmClock& cache,float t,float h,float proposal_rate,float distance,bool fluctuations,const UnifiedEmStep& pre,Uniform& uniform){
     UnifiedEmLoss out;const auto lo=s.lo(),hi=s.hi();const auto& r=*lo.record;
     float mean=CARBON_EM_STEP_CACHE?s.mean(t,h,pre):s.mean(t,h),tau=t/r.mass,ratio=.51099891f/r.mass;
+    out.mean=mean;
     float tmax=2*.51099891f*tau*(tau+2)/(1+2*(tau+1)*ratio+ratio*ratio);
     float cut=std::min(s.cut(),tmax);float loss=mean;
     if(fluctuations && mean<t){
@@ -424,7 +427,7 @@ UnifiedEmLoss unified_em_explicit_loss(const UnifiedEmState& s,UnifiedEmClock& c
         }
         RestrictedFluctuationInput<float> input{t,r.mass,mean,s.mix(fluct_lo.dispersion,fluct_hi.dispersion)*h,s.mix(fluct_lo.universal_dispersion,fluct_hi.universal_dispersion)*h,cut,tmax,s.mix(r.excitation,hi.record->excitation),s.mix(r.e0,hi.record->e0)};
         RestrictedFluctuationSampler<float,Uniform> sampler(uniform);auto draw=sampler.sample(input,fluct_lo.ion_fluctuation,float(r.z));
-        if(!draw.valid)return out;
+        if(!draw.valid){out.failure_stage=1;return out;}
         loss=std::min(t,draw.loss);
     }
     if(t-loss<=r.lowest_kinetic)loss=t;
@@ -433,12 +436,20 @@ UnifiedEmLoss unified_em_explicit_loss(const UnifiedEmState& s,UnifiedEmClock& c
     const float delta0=s.mix(pre.lo.delta_stopping,pre.hi.delta_stopping);
     const float delta_slope=s.mix(pre.lo.delta_slope,pre.hi.delta_slope);
     const float delta_mean=std::max(0.f,delta0-.5f*(mean+delta0*h)*delta_slope)*h;
-    if(!(delta_mean>=0 && std::isfinite(delta_mean)))return out;
-    const float delta_variance=s.mix(pre.lo.delta_variance,pre.hi.delta_variance)*h;
+    out.delta_mean=delta_mean;
+    if(!(delta_mean>=0 && std::isfinite(delta_mean))){out.failure_stage=2;return out;}
+    // Loader guarantees every stored moment is >= 0, so a negative interpolated
+    // variance is pure fp32 rounding (non-FMA contraction rounds a mathematically
+    // non-negative mix below zero). Clamp as delta_mean already is; otherwise
+    // delta_moment_draw() rejects it as NaN and the dose is discarded.
+    const float delta_variance=std::max(0.f,s.mix(pre.lo.delta_variance,pre.hi.delta_variance)*h);
+    out.delta_variance=delta_variance;
     const float delta=fluctuations?delta_moment_draw(delta_mean,delta_variance,uniform):delta_mean;
-    if(!(delta>=0 && std::isfinite(delta)))return out;
+    if(!(delta>=0 && std::isfinite(delta))){out.failure_stage=3;return out;}
     out.delta=std::min(t-loss,delta);loss+=out.delta;
-    out.loss=loss;out.valid=std::isfinite(loss) && loss>=0 && loss<=t;return out;
+    out.loss=loss;out.valid=std::isfinite(loss) && loss>=0 && loss<=t;
+    if(!out.valid)out.failure_stage=4;
+    return out;
 }
 template<class Uniform>
 UnifiedEmLoss unified_em_loss(const UnifiedEmState& s,UnifiedEmClock& cache,float t,float h,float proposal_rate,float distance,bool fluctuations,const UnifiedEmStep& pre,Uniform& uniform){

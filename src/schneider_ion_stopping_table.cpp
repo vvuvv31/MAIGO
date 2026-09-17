@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstring>
 #include <fstream>
+#include <map>
 #include <stdexcept>
 #include <string>
 
@@ -17,18 +18,22 @@ struct JsonVal2 {
     bool bool_val{false};
     double num_val{0.0};
     std::string str_val{};
-    std::vector<std::pair<std::string, JsonVal2>> obj{};
-    std::vector<JsonVal2> arr{};
-    bool has(const std::string& k) const {
-        if (type != Type::Object) return false;
-        for (auto& p : obj) if (p.first == k) return true;
-        return false;
-    }
-    const JsonVal2& operator[](const std::string& k) const {
-        for (auto& p : obj) if (p.first == k) return p.second;
-        throw std::runtime_error("Missing JSON key: " + k);
-    }
+    std::map<std::string, JsonVal2> obj;
+    std::vector<JsonVal2> arr;
+    bool has(const std::string& k) const;
+    const JsonVal2& operator[](const std::string& k) const;
 };
+
+bool JsonVal2::has(const std::string& k) const {
+    if (type != Type::Object) return false;
+    return obj.find(k) != obj.end();
+}
+
+const JsonVal2& JsonVal2::operator[](const std::string& k) const {
+    auto it = obj.find(k);
+    if (it == obj.end()) throw std::runtime_error("Missing JSON key: " + k);
+    return it->second;
+}
 
 class JsonParser2 {
 public:
@@ -72,7 +77,7 @@ private:
             skip();
             if (peek() != ':') throw std::runtime_error("Expected ':'");
             ++pos_;
-            v.obj.emplace_back(k, value());
+            v.obj.emplace(k, value());
             skip();
             char c = peek();
             if (c == ',') { ++pos_; continue; }

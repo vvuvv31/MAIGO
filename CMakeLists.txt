@@ -221,6 +221,16 @@ option(CARBON_PRIMARY_PRODUCTION_SPECIALIZE
        OFF)
 target_compile_definitions(carbon_core PUBLIC
     CARBON_PRIMARY_PRODUCTION_SPECIALIZE=$<BOOL:${CARBON_PRIMARY_PRODUCTION_SPECIALIZE}>)
+option(CARBON_PRIMARY_CONTEXT_POINTER
+       "Pass immutable primary-kernel closures via a device context pointer (needed for Intel Arc 2048 B kernel-arg limit)"
+       OFF)
+target_compile_definitions(carbon_core PUBLIC
+    CARBON_PRIMARY_CONTEXT_POINTER=$<BOOL:${CARBON_PRIMARY_CONTEXT_POINTER}>)
+option(CARBON_PRIMARY_CONTEXT_MOVE_UNIFIED
+       "With CARBON_PRIMARY_CONTEXT_POINTER, also move the unified EM view out of the argument list"
+       ON)
+target_compile_definitions(carbon_core PUBLIC
+    CARBON_PRIMARY_CONTEXT_MOVE_UNIFIED=$<BOOL:${CARBON_PRIMARY_CONTEXT_MOVE_UNIFIED}>)
 
 set(CARBON_SECONDARY_SEGMENT_STEPS "16" CACHE STRING
     "Complete secondary iterations per continuation launch (8/16/32/64/128; production default 16)")
@@ -325,6 +335,9 @@ endif()
 
 add_executable(carbon_mc src/main.cpp)
 target_link_libraries(carbon_mc PRIVATE carbon_core)
+if(CARBON_ENABLE_SYCL)
+    target_compile_options(carbon_mc PRIVATE $<TARGET_PROPERTY:carbon_core,COMPILE_OPTIONS>)
+endif()
 
 if(BUILD_TESTING AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests")
     if(CARBON_ENABLE_SYCL)
