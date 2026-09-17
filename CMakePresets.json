@@ -90,7 +90,7 @@
     },
     {
       "name": "oneapi-intel-release",
-      "displayName": "oneAPI SYCL Intel SPIR-V only",
+      "displayName": "oneAPI SYCL Intel SPIR-V, Arc production FP32",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/oneapi-intel-release",
       "cacheVariables": {
@@ -98,7 +98,13 @@
         "CMAKE_CXX_COMPILER": "icpx",
         "CARBON_ENABLE_SYCL": "ON",
         "CARBON_SYCL_TARGETS": "spir64",
-        "CARBON_DOSE_FP32": "OFF"
+        "CARBON_DOSE_FP32": "ON",
+        "CARBON_DOSE_FP64": "OFF",
+        "CARBON_ENABLE_MINIBEAM": "OFF",
+        "CARBON_PRIMARY_CONTEXT_POINTER": "ON",
+        "CARBON_SECONDARY_CONTEXT_POINTER": "ON",
+        "CARBON_PRIMARY_PRODUCTION_SPECIALIZE": "ON",
+        "CARBON_SECONDARY_PRODUCTION_SPECIALIZE": "OFF"
       }
     }
   ],

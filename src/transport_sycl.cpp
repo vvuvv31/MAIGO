@@ -2627,11 +2627,43 @@ template<int EmMode>
         }
     }
 
-    const std::size_t local_size = is_cuda_backend ? 128U : (device.is_gpu() ? 256U : 128U);
+    std::size_t local_size = is_cuda_backend ? 128U : (device.is_gpu() ? 256U : 128U);
+    // Diagnostic/tuning override for the primary work-group size (non-CUDA
+    // backends). Must stay a positive multiple of the subgroup size.
+    if (!is_cuda_backend) {
+        if (const char* requested = std::getenv("CARBON_PRIMARY_LOCAL_SIZE")) {
+            const auto parsed = std::strtoul(requested, nullptr, 10);
+            if (parsed > 0) {
+                local_size = static_cast<std::size_t>(parsed);
+                std::cout << "[primary-local-size] override=" << local_size << "\n";
+            }
+        }
+    }
     std::size_t history_chunk = config.history_chunk_size;
     if (history_chunk == 0) {
-        history_chunk = is_cuda_backend ? (number_of_histories > 1000000 ? 16384 : 4096)
-                                        : (device.is_gpu() ? 8192 : number_of_histories);
+        if (is_cuda_backend) {
+            history_chunk = number_of_histories > 1000000 ? 34816 : 4096;
+        } else if (backend == sycl::backend::ext_oneapi_level_zero &&
+                   device.is_gpu()) {
+            // Arc B580 needs substantially more than one device-wide wave of
+            // primary work-groups per launch.  The former 34,816-history CT
+            // chunk produced 187 short kernels for RT07575; 1,114,112 reduces
+            // this to six launches without the slowdown seen for a single
+            // whole-shard kernel.
+            history_chunk = 1114112;
+        } else {
+            history_chunk = device.is_gpu() ? 8192 : number_of_histories;
+        }
+        std::cout << "[history-chunk-size] backend default=" << history_chunk
+                  << "\n";
+    }
+    if (const char* requested = std::getenv("CARBON_HISTORY_CHUNK_SIZE")) {
+        const auto parsed = std::strtoull(requested, nullptr, 10);
+        if (parsed == 0U)
+            throw std::invalid_argument(
+                "CARBON_HISTORY_CHUNK_SIZE must be a positive integer");
+        history_chunk = static_cast<std::size_t>(parsed);
+        std::cout << "[history-chunk-size] override=" << history_chunk << "\n";
     }
     history_chunk = std::max<std::size_t>(1, history_chunk);
 
@@ -2784,6 +2816,8 @@ template<int EmMode>
     }
 #endif
 
+    std::vector<sycl::event> primary_events;
+    primary_events.reserve((number_of_histories + history_chunk - 1) / history_chunk);
     for (std::size_t hist_offset = 0; hist_offset < number_of_histories;
          hist_offset += history_chunk) {
         const auto chunk_count =
@@ -4940,11 +4974,18 @@ template<int EmMode>
 #else
         auto kernel_event = launch_primary_chunk(std::false_type{});
 #endif
-        kernel_event.wait_and_throw();
-        primary_kernel_seconds += event_duration_seconds(kernel_event);
-        std::cout << "[progress] primary batch completed: "
-                  << (hist_offset + chunk_count) << "/" << number_of_histories
-                  << " histories" << std::endl;
+        primary_events.push_back(kernel_event);
+    }
+    // The queue is in order, so all primary chunks retain exactly the previous
+    // execution order.  Waiting once on the final event avoids a host/device
+    // round trip and a flushed progress line between every chunk.
+    if (!primary_events.empty()) {
+        primary_events.back().wait_and_throw();
+        for (const auto& event : primary_events)
+            primary_kernel_seconds += event_duration_seconds(event);
+        std::cout << "[progress] primary batches completed: "
+                  << number_of_histories << "/" << number_of_histories
+                  << " histories (" << primary_events.size() << " launches)\n";
     }
 
     double secondary_kernel_seconds = 0.0;
@@ -7398,11 +7439,10 @@ template<int EmMode>
                 submit_secondary_slice(std::false_type{},
                     std::integral_constant<int,-1>{},0,resume_active);
 #endif
-                // The queue is in_order, so the slices execute in submission
-                // order without an intervening host/device round trip. Wait on
-                // the last submitted slice and then read every profiling event.
-                for (unsigned s=0; s<slice_event_count; ++s)
-                    slice_events[s].wait_and_throw();
+                // The queue is in order, so waiting on the final slice also
+                // completes every earlier slice in this round.
+                if (slice_event_count != 0)
+                    slice_events[slice_event_count - 1].wait_and_throw();
                 for (unsigned s=0; s<slice_event_count; ++s)
                     round_seconds += event_duration_seconds(slice_events[s]);
                 secondary_kernel_seconds += round_seconds;
@@ -7428,7 +7468,7 @@ template<int EmMode>
                     const auto count=sycl::reduce_over_group(it.get_group(),flag,sycl::plus<unsigned>());
                     if(i<resume_active)ranks[i]=rank;
                     if(it.get_local_linear_id()==0)block_counts[it.get_group_linear_id()]=count;
-                }).wait_and_throw();
+                });
                 if constexpr(CARBON_SECONDARY_HOT_SPECIES_SPECIALIZE) {
                     // The compaction below is order-preserving, so the survivor
                     // counts before the old slice boundaries are exactly
@@ -7442,16 +7482,16 @@ template<int EmMode>
                         const unsigned d_end=species0_active+species1_active;
                         active_count[1]=(p_end==0u)?0u:((p_end>=resume_active)?sum:(block_offsets[p_end/256]+ranks[p_end]));
                         active_count[2]=(d_end==0u)?0u:((d_end>=resume_active)?sum:(block_offsets[d_end/256]+ranks[d_end]));
-                    }).wait_and_throw();
-                    queue.parallel_for(sycl::range<1>(resume_active),[=](sycl::id<1> id){const auto i=id[0];if(keep[i])next_order[block_offsets[i/256]+ranks[i]]=active_order[i];}).wait_and_throw();
+                    });
+                    queue.parallel_for(sycl::range<1>(resume_active),[=](sycl::id<1> id){const auto i=id[0];if(keep[i])next_order[block_offsets[i/256]+ranks[i]]=active_order[i];});
                     unsigned counts[3]{};
                     queue.copy(active_count,counts,3).wait_and_throw();
                     resume_active=counts[0];
                     species0_active=counts[1];
                     species1_active=counts[2]-counts[1];
                 } else {
-                    queue.single_task([=](){unsigned sum=0;for(unsigned i=0;i<resume_groups;++i){block_offsets[i]=sum;sum+=block_counts[i];}*active_count=sum;}).wait_and_throw();
-                    queue.parallel_for(sycl::range<1>(resume_active),[=](sycl::id<1> id){const auto i=id[0];if(keep[i])next_order[block_offsets[i/256]+ranks[i]]=active_order[i];}).wait_and_throw();
+                    queue.single_task([=](){unsigned sum=0;for(unsigned i=0;i<resume_groups;++i){block_offsets[i]=sum;sum+=block_counts[i];}*active_count=sum;});
+                    queue.parallel_for(sycl::range<1>(resume_active),[=](sycl::id<1> id){const auto i=id[0];if(keep[i])next_order[block_offsets[i/256]+ranks[i]]=active_order[i];});
                     queue.copy(active_count,&resume_active,1).wait_and_throw();
                 }
                 std::swap(active_order,next_order);

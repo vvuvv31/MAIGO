@@ -74,7 +74,9 @@ enable_energy_straggling: true
 enable_secondary_energy_straggling: true
 straggling_scale: 1.0
 ct_secondary_exact_faces: true
-history_chunk_size: 34816
+# Backend tuned: Intel Arc Level Zero currently selects 1,114,112; CUDA keeps
+# the validated 34,816-history chunk.
+history_chunk_size: 0
 
 # Species scheduling authorized; dose equivalence investigation remains open.
 enable_secondary_unified_em: true

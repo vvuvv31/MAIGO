@@ -121,8 +121,11 @@ python3 tools/verify_unified_em_data.py
 详见[接入验证](benchmark/benchmark20260915/delta_partition_production/README.md)。
 
 最近 RT07575 单片测试：4,861,226 粒子用时 **48.88 s**，程序吞吐 **103.0k/s**，
-采样显存峰值 **9,517 MiB**，零 overflow。把原发批量增至 131,072 未见明确收益，
-保留 `history_chunk_size=34816`；本次剩余任务目标上限为每片 490 万粒子。
+采样显存峰值 **9,517 MiB**，零 overflow。CUDA保留已验证的
+`history_chunk_size=34816`。Intel Arc B580的完整6,481,909-history分片显示旧批量只产生
+约136个256线程work-groups/launch，设备调度不足；Level Zero自动批量1,114,112将原发
+kernel从约16.2 s降至约11.8 s，端到端吞吐中位约160.9k histories/s。生产配置使用
+`history_chunk_size=0`按后端选择；本次剩余任务目标上限为每片490万粒子。
 次级队列固定 3,200 万条，原发全部完成后才处理次级；当前代续跑状态为 264 字节/条
 另加索引，不能以原发阶段约 4.4 GB 占用判断整片显存余量。该分片上限不是对任意病例的安全保证。
 
