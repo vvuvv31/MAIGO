@@ -31,6 +31,12 @@
 #ifndef CARBON_SECONDARY_NON_HE4_PROBE
 #define CARBON_SECONDARY_NON_HE4_PROBE 0
 #endif
+#ifndef CARBON_SECONDARY_EXACT_SPECIES_PROBE
+#define CARBON_SECONDARY_EXACT_SPECIES_PROBE -1
+#endif
+#ifndef CARBON_SECONDARY_HOT_SPECIES_SPECIALIZE
+#define CARBON_SECONDARY_HOT_SPECIES_SPECIALIZE 0
+#endif
 #if CARBON_SECONDARY_CONTEXT_POINTER
 #define CARBON_SECONDARY_CONTEXT_FIELD(name) secondary_transport_ctx->name
 #else
@@ -93,12 +99,14 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <string_view>
+#include <tuple>
 #include <vector>
 
 namespace carbon {
 template<int EmMode, bool ProductionPath = false>
 class CarbonPrimaryTransportKernel;
-template<int EmMode, bool ProductionPath = false>
+template<int EmMode, bool ProductionPath = false, int ExactSpecies = -1>
 class CarbonSecondaryTransportKernel;
 
 #include "detail/sycl_dose_atomic.inc"
@@ -1284,6 +1292,10 @@ template<int EmMode>
     const float* unified_node_energy_keys=nullptr;
     const float* unified_segment_lower_keys=nullptr;
     std::uint64_t* unified_audit=nullptr;
+    std::uint64_t* unified_empty_bucket_audit=nullptr;
+    UnifiedEmSearchAuditRecord* unified_search_audit_records=nullptr;
+    std::uint32_t* unified_search_audit_count=nullptr;
+    constexpr std::uint32_t kUnifiedSearchAuditCapacity=4000000;
     std::uint64_t* sec_step_profile_device=nullptr;
     if(CARBON_SECONDARY_STEP_PROFILE) {
         sec_step_profile_device=mem_tracker.allocate<std::uint64_t>(60);
@@ -1363,7 +1375,24 @@ template<int EmMode>
         }
         unified_audit=mem_tracker.allocate<std::uint64_t>(kUnifiedEmAuditCounters*kUnifiedEmAuditShards);if(!unified_audit)throw std::bad_alloc();
         queue.fill(unified_audit,std::uint64_t{0},kUnifiedEmAuditCounters*kUnifiedEmAuditShards).wait_and_throw();
-        unified_device={unified_materials,unified_species,unified_records,unified_nodes,unified_segments,static_cast<unsigned>(package.materials.size()),unified_sections,unified_energy_index,delta_mean_device,unified_node_energy_keys,unified_segment_lower_keys};
+        if constexpr(CARBON_EM_EMPTY_BUCKET_AUDIT) {
+            unified_empty_bucket_audit=mem_tracker.allocate<std::uint64_t>(10);
+            if(!unified_empty_bucket_audit)throw std::bad_alloc();
+            queue.fill(unified_empty_bucket_audit,std::uint64_t{0},10).wait_and_throw();
+        }
+        if constexpr(CARBON_EM_SEARCH_KEY_AUDIT) {
+            unified_search_audit_records=
+                mem_tracker.allocate<UnifiedEmSearchAuditRecord>(kUnifiedSearchAuditCapacity);
+            unified_search_audit_count=mem_tracker.allocate<std::uint32_t>(1);
+            if(!unified_search_audit_records || !unified_search_audit_count)
+                throw std::bad_alloc();
+            queue.fill(unified_search_audit_count,std::uint32_t{0},1).wait_and_throw();
+        }
+        unified_device={unified_materials,unified_species,unified_records,unified_nodes,unified_segments,static_cast<unsigned>(package.materials.size()),unified_sections,unified_energy_index,delta_mean_device,unified_node_energy_keys,unified_segment_lower_keys
+#if CARBON_EM_EMPTY_BUCKET_AUDIT
+            ,unified_empty_bucket_audit
+#endif
+        };
         t_em_device.finish();
         std::cout<<"[unified-em] all 18 charged ions; water + Schneider density nodes; native particle step parameters plus 1% combined mean-loss guard; local aggregate delta deposition; density cut-onset/patient accuracy validation pending\n";
     }
@@ -2673,7 +2702,7 @@ template<int EmMode>
     RuntimeScope runtime_steps("transport_loop_including_scoring_and_queue_transfers");
     double primary_kernel_seconds = 0.0;
 #if CARBON_PRIMARY_PRODUCTION_SPECIALIZE
-    const bool use_production_primary_path =
+    const bool primary_production_path_eligible =
         EmMode == 1 && enable_ct_grid && enable_voxel_scoring && enable_inelastic &&
         enable_multiple_scattering && enable_ct_material_mcs &&
         use_schneider_primary_xs && use_schneider_stopping &&
@@ -2681,6 +2710,19 @@ template<int EmMode>
         primary_loss_query_audit == nullptr &&
         !enable_primary_voxel_fluence && !enable_charged_origin_voxel_scoring &&
         !use_all_elastic;
+    bool use_production_primary_path = primary_production_path_eligible;
+    if(const char* requested=std::getenv("CARBON_PRIMARY_PATH_DIAGNOSTIC")) {
+        const std::string_view mode(requested);
+        if(mode=="generic")use_production_primary_path=false;
+        else if(mode=="specialized") {
+            if(!primary_production_path_eligible)
+                throw std::invalid_argument(
+                    "CARBON_PRIMARY_PATH_DIAGNOSTIC=specialized requested for an ineligible configuration");
+            use_production_primary_path=true;
+        } else throw std::invalid_argument(
+            "CARBON_PRIMARY_PATH_DIAGNOSTIC must be generic or specialized");
+        std::cout<<"[primary-path-diagnostic] same_binary="<<mode<<"\n";
+    }
 #endif
 
     for (std::size_t hist_offset = 0; hist_offset < number_of_histories;
@@ -4875,6 +4917,8 @@ template<int EmMode>
             std::uint32_t generation_end = secondary_count_host;
             while (generation_begin < generation_end) {
                 const auto batch_begin = generation_begin;
+                unsigned species0_initial_end = 0;
+                unsigned species1_initial_end = 0;
                 if (group_secondaries) {
                     const auto grouping_start = std::chrono::steady_clock::now();
                     queue.fill(secondary_group_counts, 0u,
@@ -4907,6 +4951,12 @@ template<int EmMode>
                                 cursor(secondary_group_cursors[bucket]);
                             secondary_order[cursor.fetch_add(1)] = index;
                         }).wait_and_throw();
+                    if constexpr(CARBON_SECONDARY_HOT_SPECIES_SPECIALIZE) {
+                        queue.copy(secondary_group_cursors + 15,
+                                   &species0_initial_end, 1).wait_and_throw();
+                        queue.copy(secondary_group_cursors + 31,
+                                   &species1_initial_end, 1).wait_and_throw();
+                    }
                     secondary_group_seconds += std::chrono::duration<double>(
                         std::chrono::steady_clock::now() - grouping_start).count();
                 }
@@ -4920,7 +4970,10 @@ template<int EmMode>
                 auto* ranks = mem_tracker.allocate<unsigned>(state_capacity);
                 auto* block_counts = mem_tracker.allocate<unsigned>((state_capacity + 255) / 256);
                 auto* block_offsets = mem_tracker.allocate<unsigned>((state_capacity + 255) / 256);
-                auto* active_count = mem_tracker.allocate<unsigned>(segment_secondaries ? 1 : 0);
+                constexpr unsigned kSecondaryActiveCountSlots =
+                    CARBON_SECONDARY_HOT_SPECIES_SPECIALIZE ? 3u : 1u;
+                auto* active_count = mem_tracker.allocate<unsigned>(
+                    segment_secondaries ? kSecondaryActiveCountSlots : 0);
                 if (segment_secondaries) {
                     if (!resume_states || !resume_ready || !active_order || !next_order ||
                         !keep || !ranks || !block_counts || !block_offsets || !active_count)
@@ -4934,6 +4987,8 @@ template<int EmMode>
                               << sizeof(SecondaryResumeState) << " capacity=" << resume_capacity << "\n";
                 }
                 unsigned resume_active = resume_capacity, segment_rounds = 0;
+                unsigned species0_active = species0_initial_end;
+                unsigned species1_active = species1_initial_end - species0_initial_end;
                 unsigned tail_rounds = 0;
                 double compact_seconds = 0, generation_kernel_seconds = 0, generation_tail_seconds = 0;
 #if CARBON_SECONDARY_CONTEXT_POINTER
@@ -5058,6 +5113,11 @@ template<int EmMode>
                     float voxel_size_y_mm;
                     float * escaped_device;
                     std::uint64_t * sec_step_profile_device;
+#if CARBON_EM_SEARCH_KEY_AUDIT
+                    UnifiedEmSearchAuditRecord * unified_search_audit_records;
+                    std::uint32_t * unified_search_audit_count;
+                    std::uint32_t unified_search_audit_capacity;
+#endif
                 };
                 static_assert(std::is_trivially_copyable_v<SecondaryTransportContext>);
                 const SecondaryTransportContext secondary_transport{
@@ -5181,6 +5241,12 @@ template<int EmMode>
                     voxel_size_y_mm,
                     escaped_device,
                     sec_step_profile_device
+#if CARBON_EM_SEARCH_KEY_AUDIT
+                    ,
+                    unified_search_audit_records,
+                    unified_search_audit_count,
+                    kUnifiedSearchAuditCapacity
+#endif
                 };
                 auto* secondary_transport_ctx =
                     mem_tracker.allocate<SecondaryTransportContext>(1);
@@ -5192,25 +5258,42 @@ template<int EmMode>
                 const bool use_production_secondary_path =
                     EmMode == 1 && enable_secondary_unified_em && enable_ct_grid &&
                     enable_voxel_scoring && ct_secondary_exact_faces &&
-                    ct_skip_homogeneous_face_clamp;
+                    ct_skip_homogeneous_face_clamp && !use_all_elastic &&
+                    !use_unified_water && !enable_charged_origin_voxel_scoring;
 #endif
                 while (resume_active) {
                 const bool finish_tail = !segment_secondaries || resume_active < secondary_tail_threshold;
-                const auto launch_secondary_round = [&](auto production_path_tag) {
+#if CARBON_EM_SEARCH_KEY_AUDIT
+                const std::uint64_t search_audit_launch_id =
+                    (static_cast<std::uint64_t>(batch_begin)<<32) | segment_rounds;
+#endif
+                const auto launch_secondary_round = [&](auto production_path_tag,
+                                                        auto exact_species_tag,
+                                                        unsigned active_begin,
+                                                        unsigned active_size) {
                 constexpr bool kProductionSecondaryPath =
                     decltype(production_path_tag)::value;
+                constexpr int kExactSpecies = decltype(exact_species_tag)::value;
                 constexpr bool kKnownSpeciesOnly =
-                    CARBON_SECONDARY_KNOWN_SPECIES_PROBE &&
-                    kProductionSecondaryPath;
+                    kProductionSecondaryPath &&
+                    (CARBON_SECONDARY_KNOWN_SPECIES_PROBE || kExactSpecies >= 0);
+                constexpr bool kExactSpeciesPath = kExactSpecies >= 0;
                 constexpr bool kNonHe4Only =
-                    CARBON_SECONDARY_NON_HE4_PROBE && kKnownSpeciesOnly;
+                    (CARBON_SECONDARY_NON_HE4_PROBE && kKnownSpeciesOnly) ||
+                    (kExactSpeciesPath && kExactSpecies != 4);
                 return queue.submit([&](sycl::handler& cgh) {
                 const auto secondary_kernel =
 #if CARBON_SECONDARY_CONTEXT_POINTER
                     [secondary_transport_ctx, resume_states, resume_ready, active_order,
                      keep, segment_secondaries, finish_tail
+#if CARBON_SECONDARY_HOT_SPECIES_SPECIALIZE
+                     , active_begin
+#endif
+#if CARBON_EM_SEARCH_KEY_AUDIT
+                     , search_audit_launch_id
+#endif
 #if CARBON_SECONDARY_EXPLICIT_ND_RANGE
-                     , resume_active
+                     , active_size
 #endif
                     ]
 #else
@@ -5219,29 +5302,44 @@ template<int EmMode>
 #if CARBON_SECONDARY_EXPLICIT_ND_RANGE
                     (sycl::nd_item<1> item) {
                         const auto item_id = item.get_global_id();
-                        if (item_id[0] >= resume_active) return;
+                        if (item_id[0] >= active_size) return;
 #else
                     (sycl::id<1> item_id) {
 #endif
-                        const unsigned state_idx = segment_secondaries ? active_order[item_id[0]] : item_id[0];
+#if CARBON_SECONDARY_HOT_SPECIES_SPECIALIZE
+                        const unsigned active_pos = active_begin + item_id[0];
+#else
+                        const unsigned active_pos = item_id[0];
+#endif
+                        const unsigned state_idx = segment_secondaries ? active_order[active_pos] : active_pos;
                         const bool resumed = segment_secondaries && resume_ready[state_idx] != 0;
-                        if (segment_secondaries) keep[item_id[0]] = 0;
+                        if (segment_secondaries) keep[active_pos] = 0;
                         const auto sec_idx = CARBON_SECONDARY_CONTEXT_FIELD(group_secondaries) ? CARBON_SECONDARY_CONTEXT_FIELD(secondary_order)[state_idx]
                             : CARBON_SECONDARY_CONTEXT_FIELD(generation_begin) + state_idx;
                         const auto frag = CARBON_SECONDARY_CONTEXT_FIELD(secondary_queue_device)[sec_idx];
-                        if (frag.z <= 0 || frag.a <= 0) return;
+                        const int transport_z = [&] {
+                            if constexpr(kExactSpeciesPath)
+                                return carbon::kChargedIons[kExactSpecies].z;
+                            return static_cast<int>(frag.z);
+                        }();
+                        const int transport_a = [&] {
+                            if constexpr(kExactSpeciesPath)
+                                return carbon::kChargedIons[kExactSpecies].a;
+                            return static_cast<int>(frag.a);
+                        }();
+                        if (transport_z <= 0 || transport_a <= 0) return;
                         const auto charged_origin_category =
                             charged_origin_category_from_fragment(
-                                charged_dose_category(frag.z, frag.a));
+                                charged_dose_category(transport_z, transport_a));
                         const auto charged_origin_voxel_offset =
                             charged_origin_category * CARBON_SECONDARY_CONTEXT_FIELD(number_of_voxels);
                         const auto be_isotope_category =
-                            be_isotope_origin_category(frag.z, frag.a);
+                            be_isotope_origin_category(transport_z, transport_a);
                         const auto he_isotope_category =
-                            he_isotope_origin_category(frag.z, frag.a);
+                            he_isotope_origin_category(transport_z, transport_a);
                         if (frag.energy_MeV <= CARBON_SECONDARY_CONTEXT_FIELD(energy_cutoff_MeV)) {
                             const auto ledger_species_idx = carbon::get_charged_species_idx(
-                                static_cast<int>(frag.z), static_cast<int>(frag.a));
+                                static_cast<int>(transport_z), static_cast<int>(transport_a));
                             cinel02_species_energy_add_device(
                                 CARBON_SECONDARY_CONTEXT_FIELD(cinel02_species_energy_device), ledger_species_idx, 5U,
                                 frag.energy_MeV);
@@ -5269,7 +5367,7 @@ template<int EmMode>
                                                      sycl::access::address_space::global_space>
                                         atomic_vox(CARBON_SECONDARY_CONTEXT_FIELD(voxel_dose_device)[cur_voxel]);
                                     atomic_vox.fetch_add(static_cast<DoseAtomicT>(frag.energy_MeV));
-                                    if (CARBON_SECONDARY_CONTEXT_FIELD(enable_charged_origin_voxel_scoring)) {
+                                    if ((kProductionSecondaryPath ? false : CARBON_SECONDARY_CONTEXT_FIELD(enable_charged_origin_voxel_scoring))) {
                                         sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
                                                          sycl::memory_scope::device,
                                                          sycl::access::address_space::global_space>
@@ -5332,11 +5430,14 @@ template<int EmMode>
                             return;
                         }
 
-                        const auto frag_a = static_cast<float>(frag.a);
+                        const auto frag_a = static_cast<float>(transport_a);
                         const auto frag_inv_a = 1.0F / frag_a;
-                        const auto charged_sp_idx = carbon::get_charged_species_idx(static_cast<int>(frag.z), static_cast<int>(frag.a));
+                        const auto charged_sp_idx = [&] {
+                            if constexpr(kExactSpeciesPath) return kExactSpecies;
+                            return carbon::get_charged_species_idx(transport_z, transport_a);
+                        }();
                         const auto ledger_species_idx = charged_sp_idx;
-                        const int recoil_sp_idx=CARBON_SECONDARY_CONTEXT_FIELD(use_all_elastic)?CARBON_SECONDARY_CONTEXT_FIELD(recoil_stopping).projectile(frag.z,frag.a):-1;
+                        const int recoil_sp_idx=(kProductionSecondaryPath ? false : CARBON_SECONDARY_CONTEXT_FIELD(use_all_elastic))?CARBON_SECONDARY_CONTEXT_FIELD(recoil_stopping).projectile(transport_z,transport_a):-1;
                         const bool generic_recoil=
                             !kKnownSpeciesOnly && charged_sp_idx<0 && recoil_sp_idx>=0;
                         if (charged_sp_idx < 0 && !generic_recoil) {
@@ -5376,9 +5477,22 @@ template<int EmMode>
                                         : EmMode == 1) &&
                             !generic_recoil &&
                             (kProductionSecondaryPath ? true : CARBON_SECONDARY_CONTEXT_FIELD(enable_secondary_unified_em));
-                        const int unified_secondary_species=unified_secondary?CARBON_SECONDARY_CONTEXT_FIELD(unified_device).species_index(frag.z,frag.a):-1;
+                        const int unified_secondary_species=unified_secondary
+                            ? ([&] {
+                                if constexpr(kExactSpeciesPath) return kExactSpecies;
+                                return CARBON_SECONDARY_CONTEXT_FIELD(unified_device).species_index(
+                                    transport_z,transport_a);
+                              }())
+                            : -1;
                         UnifiedEmClock unified_secondary_clock;
                         std::uint64_t unified_secondary_counter=0;
+#if CARBON_EM_SEARCH_KEY_AUDIT
+                        UnifiedEmSearchAuditState unified_search_audit{
+                            CARBON_SECONDARY_CONTEXT_FIELD(unified_search_audit_records),
+                            CARBON_SECONDARY_CONTEXT_FIELD(unified_search_audit_count),
+                            CARBON_SECONDARY_CONTEXT_FIELD(unified_search_audit_capacity),
+                            search_audit_launch_id,active_pos/32,0,0};
+#endif
                         // Diagnostic species profile: 20 slots x {steps,
                         // short-range steps, deposited uMeV}. Zero production
                         // impact (compiled out when profiling is off).
@@ -5386,6 +5500,9 @@ template<int EmMode>
                         if constexpr(CARBON_SECONDARY_STEP_PROFILE)
                             for(int sec_pi=0;sec_pi<60;++sec_pi)sec_prof[sec_pi]=0;
                         UnifiedEmState unified_secondary_state;
+#if CARBON_EM_SEARCH_KEY_AUDIT
+                        unified_secondary_state.search_audit=&unified_search_audit;
+#endif
 #if CARBON_EM_LOCAL_AUDIT
                         std::array<std::uint64_t,8> unified_secondary_audit{};
 #endif
@@ -5395,7 +5512,7 @@ template<int EmMode>
 #if CARBON_EM_LOCAL_AUDIT
                             unified_secondary_audit[index]+=count;
 #else
-                            sycl::atomic_ref<std::uint64_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space> a(CARBON_SECONDARY_CONTEXT_FIELD(unified_audit)[static_cast<std::size_t>(index)*kUnifiedEmAuditShards+item_id[0]%kUnifiedEmAuditShards]);a.fetch_add(count);
+                            sycl::atomic_ref<std::uint64_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space> a(CARBON_SECONDARY_CONTEXT_FIELD(unified_audit)[static_cast<std::size_t>(index)*kUnifiedEmAuditShards+active_pos%kUnifiedEmAuditShards]);a.fetch_add(count);
 #endif
                         };
                         uint32_t sec_steps = 0;
@@ -5406,7 +5523,7 @@ template<int EmMode>
                             secondary_projectile_lut_index_device(
                                       CARBON_SECONDARY_CONTEXT_FIELD(schneider_ct_device_ctx).sec_proj_keys,
                                       CARBON_SECONDARY_CONTEXT_FIELD(schneider_ct_device_ctx).sec_num_projectiles,
-                                      frag.z, frag.a);
+                                      transport_z, transport_a);
                         if(!resumed){
                         // A track that reaches the stepping loop has actually
                         // started charged transport: count it and itemize its
@@ -5433,7 +5550,7 @@ template<int EmMode>
                             schneider_diag_increment_device(
                                 CARBON_SECONDARY_CONTEXT_FIELD(schneider_diag_device),
                                 SchneiderDiagSlot::UnsupportedProjectileTracks);
-                            if (frag.z == 4 && frag.a == 6) {
+                            if (transport_z == 4 && transport_a == 6) {
                                 schneider_diag_increment_device(
                                     CARBON_SECONDARY_CONTEXT_FIELD(schneider_diag_device),
                                     SchneiderDiagSlot::UnsupportedBe6Tracks);
@@ -5446,7 +5563,7 @@ template<int EmMode>
                             schneider_log_unsupported_track_device(
                                 CARBON_SECONDARY_CONTEXT_FIELD(schneider_track_log_device), CARBON_SECONDARY_CONTEXT_FIELD(schneider_track_count_device),
                                 kSchneiderTrackLogCap,
-                                frag.z, frag.a, frag.generation,
+                                transport_z, transport_a, frag.generation,
                                 sycl::fmax(0.0F, frag.energy_MeV),
                                 frag.pos_x_mm, frag.pos_y_mm, frag.pos_z_mm);
                         }
@@ -5470,6 +5587,9 @@ template<int EmMode>
                             unified_secondary_counter=saved.unified_secondary_counter;
                             unified_secondary_state=saved.unified_secondary_state;
                             unified_secondary_state.tables=&CARBON_SECONDARY_CONTEXT_FIELD(unified_device);
+#if CARBON_EM_SEARCH_KEY_AUDIT
+                            unified_secondary_state.search_audit=&unified_search_audit;
+#endif
 #if CARBON_EM_LOCAL_AUDIT
                             unified_secondary_audit=saved.unified_secondary_audit;
 #endif
@@ -5485,6 +5605,10 @@ template<int EmMode>
                                sec_steps < kSecondaryMaxSteps) {
                             if(!finish_tail && segment_steps>=kSecondarySegmentSteps){segment_paused=true;break;}
                             ++segment_steps;
+#if CARBON_EM_SEARCH_KEY_AUDIT
+                            unified_search_audit.step=sec_steps;
+                            unified_search_audit.ordinal=0;
+#endif
                             const auto bin_z = static_cast<int>(sec_z * CARBON_SECONDARY_CONTEXT_FIELD(inverse_depth_bin_width_mm));
 
                             if (bin_z < 0 || bin_z >= static_cast<int>(CARBON_SECONDARY_CONTEXT_FIELD(number_of_bins))) break;
@@ -5549,8 +5673,8 @@ template<int EmMode>
                                         failures(*CARBON_SECONDARY_CONTEXT_FIELD(ion_stopping_failures));
                                     const auto failure_index = failures.fetch_add(1);
                                     if (failure_index == 0) {
-                                        CARBON_SECONDARY_CONTEXT_FIELD(ion_stopping_failures)[1] = frag.z;
-                                        CARBON_SECONDARY_CONTEXT_FIELD(ion_stopping_failures)[2] = frag.a;
+                                        CARBON_SECONDARY_CONTEXT_FIELD(ion_stopping_failures)[1] = transport_z;
+                                        CARBON_SECONDARY_CONTEXT_FIELD(ion_stopping_failures)[2] = transport_a;
                                         CARBON_SECONDARY_CONTEXT_FIELD(ion_stopping_failures)[3] = sec_ct_material;
                                         CARBON_SECONDARY_CONTEXT_FIELD(ion_stopping_failures)[4] = sycl::bit_cast<std::uint32_t>(energy_mevu);
                                         CARBON_SECONDARY_CONTEXT_FIELD(ion_stopping_failures)[5] = sycl::bit_cast<std::uint32_t>(sec_local_density_g_per_cm3);
@@ -5599,8 +5723,11 @@ template<int EmMode>
                                 if(!CARBON_EM_MATERIAL_CACHE || !unified_secondary_state.valid || unified_secondary_state.section!=section ||
                                    unified_secondary_state.density!=sec_local_density_g_per_cm3)
                                     unified_secondary_state=CARBON_SECONDARY_CONTEXT_FIELD(unified_device).select(section,sec_local_density_g_per_cm3,unified_secondary_species);
+#if CARBON_EM_SEARCH_KEY_AUDIT
+                                unified_secondary_state.search_audit=&unified_search_audit;
+#endif
                                 if(!unified_secondary_state.covers(sec_e)){
-                                    record_unified_em_failure(CARBON_SECONDARY_CONTEXT_FIELD(unified_failure_count),CARBON_SECONDARY_CONTEXT_FIELD(unified_failure_records),3,section,frag.z,frag.a,sec_e,sec_local_density_g_per_cm3,0);
+                                    record_unified_em_failure(CARBON_SECONDARY_CONTEXT_FIELD(unified_failure_count),CARBON_SECONDARY_CONTEXT_FIELD(unified_failure_records),3,section,transport_z,transport_a,sec_e,sec_local_density_g_per_cm3,0);
                                     unified_secondary_count(0);break;}
                                 unified_secondary_pre=unified_secondary_state.prepare(sec_e);
                                 sec_step_mm=sycl::fmin((CARBON_SECONDARY_CONTEXT_FIELD(em_secondary_step_scale)!=1.f?unified_secondary_state.research_step(sec_e,CARBON_EM_STEP_CACHE?unified_secondary_pre:unified_secondary_state.prepare(sec_e),CARBON_SECONDARY_CONTEXT_FIELD(em_secondary_step_scale)):(CARBON_EM_STEP_CACHE?unified_secondary_state.step(unified_secondary_pre):unified_secondary_state.step(sec_e))),unified_secondary_distance);
@@ -5661,7 +5788,7 @@ template<int EmMode>
                             float schneider_hazard_total_rate = 0.0F;
                             float schneider_hazard_step_mm = 0.0F;
                             std::uint8_t schneider_hazard_section = 255;
-                            if (CARBON_SECONDARY_CONTEXT_FIELD(schneider_ct_device_ctx).uses_cinel03() && (sec_in_ct || CARBON_SECONDARY_CONTEXT_FIELD(use_unified_water)) &&
+                            if (CARBON_SECONDARY_CONTEXT_FIELD(schneider_ct_device_ctx).uses_cinel03() && (sec_in_ct || (kProductionSecondaryPath ? false : CARBON_SECONDARY_CONTEXT_FIELD(use_unified_water))) &&
                                 frag.generation < CARBON_SECONDARY_CONTEXT_FIELD(cinel02_max_secondary_inelastic_generations)) {
                                 // Bundle-ordered registry LUT; no hardcoded isotope fallback.
                                 const int proj_idx =
@@ -5671,7 +5798,7 @@ template<int EmMode>
                                     secondary_projectile_lut_index_device(
                                               CARBON_SECONDARY_CONTEXT_FIELD(schneider_ct_device_ctx).sec_proj_keys,
                                               CARBON_SECONDARY_CONTEXT_FIELD(schneider_ct_device_ctx).sec_num_projectiles,
-                                              frag.z, frag.a);
+                                              transport_z, transport_a);
 #endif
                                 if (proj_idx < 0) {
                                     // Unsupported secondary projectile: explicit
@@ -5685,7 +5812,7 @@ template<int EmMode>
                                         CARBON_SECONDARY_CONTEXT_FIELD(schneider_diag_device),
                                         SchneiderDiagSlot::UnsupportedProjectileSteps);
                                 } else if (CARBON_SECONDARY_CONTEXT_FIELD(schneider_ct_device_ctx).sec_total_rates != nullptr) {
-                                    const std::size_t section_id = CARBON_SECONDARY_CONTEXT_FIELD(use_unified_water) ? 255U : static_cast<std::size_t>(
+                                    const std::size_t section_id = (kProductionSecondaryPath ? false : CARBON_SECONDARY_CONTEXT_FIELD(use_unified_water)) ? 255U : static_cast<std::size_t>(
                                         sycl::min(static_cast<std::uint32_t>(sec_ct_material), 24U));
                                     ++local_sec_rate_queries;
                                     // v3: single masked computation drives hazard
@@ -5714,7 +5841,7 @@ template<int EmMode>
                                                 sec_step_mm = collision_distance;
                                                 schneider_hazard_total_rate = sec_macro_xs;
                                                 schneider_hazard_step_mm = sec_step_mm;
-                                                schneider_hazard_section = CARBON_SECONDARY_CONTEXT_FIELD(use_unified_water) ? 255U : sec_ct_material;
+                                                schneider_hazard_section = (kProductionSecondaryPath ? false : CARBON_SECONDARY_CONTEXT_FIELD(use_unified_water)) ? 255U : sec_ct_material;
                                             }
                                         }
                                     }
@@ -5723,9 +5850,9 @@ template<int EmMode>
 
                             // Independent exponential elastic clock competes with the already
                             // sampled inelastic distance. Elastic is NOT generation-limited.
-                            if(CARBON_SECONDARY_CONTEXT_FIELD(use_all_elastic) && !generic_recoil && (sec_in_ct || CARBON_SECONDARY_CONTEXT_FIELD(use_unified_water))) {
-                                const int p=CARBON_SECONDARY_CONTEXT_FIELD(all_elastic).projectile(frag.z,frag.a);
-                                const float rate=CARBON_SECONDARY_CONTEXT_FIELD(all_elastic).rate(p,CARBON_SECONDARY_CONTEXT_FIELD(use_unified_water)?25:sec_ct_material,sec_e_u);
+                            if((kProductionSecondaryPath ? false : CARBON_SECONDARY_CONTEXT_FIELD(use_all_elastic)) && !generic_recoil && (sec_in_ct || (kProductionSecondaryPath ? false : CARBON_SECONDARY_CONTEXT_FIELD(use_unified_water)))) {
+                                const int p=CARBON_SECONDARY_CONTEXT_FIELD(all_elastic).projectile(transport_z,transport_a);
+                                const float rate=CARBON_SECONDARY_CONTEXT_FIELD(all_elastic).rate(p,(kProductionSecondaryPath ? false : CARBON_SECONDARY_CONTEXT_FIELD(use_unified_water))?25:sec_ct_material,sec_e_u);
                                 if(rate<0) {
                                     sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(CARBON_SECONDARY_CONTEXT_FIELD(elastic_audit)[2]).fetch_add(1);
                                     sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(CARBON_SECONDARY_CONTEXT_FIELD(elastic_audit)[7]).fetch_add(1);
@@ -5830,7 +5957,7 @@ template<int EmMode>
 
                             float dE = sycl::fmin(mid_sp * sec_step_mm, sec_e);
                             if (!unified_secondary && CARBON_SECONDARY_CONTEXT_FIELD(enable_secondary_energy_straggling) &&
-                                CARBON_SECONDARY_CONTEXT_FIELD(use_packaged_fluctuation) && frag.z == 6 && frag.a == 12) {
+                                CARBON_SECONDARY_CONTEXT_FIELD(use_packaged_fluctuation) && transport_z == 6 && transport_a == 12) {
                                 const auto u_loss = rng::uniform01(
                                     2026, frag.rng_stream, sec_steps, 2);
                                 const auto ratio = sample_energy_loss_ratio_from_grid(
@@ -5857,16 +5984,16 @@ template<int EmMode>
                             if(unified_secondary){
                                 auto draw=unified_em_loss(unified_secondary_state,unified_secondary_clock,sec_e,sec_step_mm,unified_secondary_rate,unified_secondary_distance,CARBON_SECONDARY_CONTEXT_FIELD(enable_secondary_energy_straggling),unified_secondary_pre,unified_secondary_uniform);
                                 if(!draw.valid){
-                                    record_unified_em_failure(CARBON_SECONDARY_CONTEXT_FIELD(unified_failure_count),CARBON_SECONDARY_CONTEXT_FIELD(unified_failure_records),4,unified_secondary_state.section,frag.z,frag.a,sec_e,sec_local_density_g_per_cm3,sec_step_mm);
+                                    record_unified_em_failure(CARBON_SECONDARY_CONTEXT_FIELD(unified_failure_count),CARBON_SECONDARY_CONTEXT_FIELD(unified_failure_records),4,unified_secondary_state.section,transport_z,transport_a,sec_e,sec_local_density_g_per_cm3,sec_step_mm);
                                     unified_secondary_count(0);unified_secondary_count(7);break;}
                                 dE=draw.loss;unified_secondary_count(2);unified_secondary_count(3,draw.proposed);unified_secondary_count(4,draw.accepted);
                                 unified_secondary_count(5,static_cast<std::uint64_t>(draw.continuous*1e6f));unified_secondary_count(6,static_cast<std::uint64_t>(draw.delta*1e6f));
                             }
                             const auto post_em_e = sycl::fmax(0.0F, sec_e - dE);
                             if constexpr (!kNonHe4Only) {
-                            if (CARBON_SECONDARY_CONTEXT_FIELD(he4_hazard_audit_device) && frag.z == 2 && frag.a == 4 &&
+                            if (CARBON_SECONDARY_CONTEXT_FIELD(he4_hazard_audit_device) && transport_z == 2 && transport_a == 4 &&
                                 frag.generation < CARBON_SECONDARY_CONTEXT_FIELD(cinel02_max_secondary_inelastic_generations) &&
-                                CARBON_SECONDARY_CONTEXT_FIELD(schneider_ct_device_ctx).uses_cinel03() && (sec_in_ct || CARBON_SECONDARY_CONTEXT_FIELD(use_unified_water))) {
+                                CARBON_SECONDARY_CONTEXT_FIELD(schneider_ct_device_ctx).uses_cinel03() && (sec_in_ct || (kProductionSecondaryPath ? false : CARBON_SECONDARY_CONTEXT_FIELD(use_unified_water)))) {
                                 const auto p =
 #if CARBON_SECONDARY_REUSE_PROJECTILE_INDEX
                                     schneider_reg_idx;
@@ -5875,7 +6002,7 @@ template<int EmMode>
                                     CARBON_SECONDARY_CONTEXT_FIELD(schneider_ct_device_ctx).sec_proj_keys,
                                     CARBON_SECONDARY_CONTEXT_FIELD(schneider_ct_device_ctx).sec_num_projectiles, 2, 4);
 #endif
-                                const auto section = CARBON_SECONDARY_CONTEXT_FIELD(use_unified_water) ? 255U : sec_ct_material;
+                                const auto section = (kProductionSecondaryPath ? false : CARBON_SECONDARY_CONTEXT_FIELD(use_unified_water)) ? 255U : sec_ct_material;
                                 const double start = schneider_hazard_total_rate;
                                 const double middle = sec_local_density_g_per_cm3 *
                                     CARBON_SECONDARY_CONTEXT_FIELD(schneider_ct_device_ctx).secondary_rates(p, section,
@@ -5962,7 +6089,7 @@ template<int EmMode>
                                         sycl::memory_scope::device,sycl::access::address_space::global_space>
                                         a(CARBON_SECONDARY_CONTEXT_FIELD(voxel_dose_device)[continuous_step_voxel]);
                                     a.fetch_add(static_cast<DoseAtomicT>(dE));
-                                    if (CARBON_SECONDARY_CONTEXT_FIELD(enable_charged_origin_voxel_scoring)) {
+                                    if ((kProductionSecondaryPath ? false : CARBON_SECONDARY_CONTEXT_FIELD(enable_charged_origin_voxel_scoring))) {
                                         sycl::atomic_ref<DoseAtomicT,sycl::memory_order::relaxed,
                                             sycl::memory_scope::device,sycl::access::address_space::global_space>
                                             origin(CARBON_SECONDARY_CONTEXT_FIELD(charged_origin_voxel_dose_device)[charged_origin_voxel_offset+continuous_step_voxel]);
@@ -5980,7 +6107,7 @@ template<int EmMode>
                                 // collision energy E_c (sec_e just updated),
                                 // so the replay-status record below and the
                                 // package query share one energy with the mask.
-                                if (CARBON_SECONDARY_CONTEXT_FIELD(schneider_ct_device_ctx).uses_cinel03() && (sec_in_ct || CARBON_SECONDARY_CONTEXT_FIELD(use_unified_water)) &&
+                                if (CARBON_SECONDARY_CONTEXT_FIELD(schneider_ct_device_ctx).uses_cinel03() && (sec_in_ct || (kProductionSecondaryPath ? false : CARBON_SECONDARY_CONTEXT_FIELD(use_unified_water))) &&
                                     sec_e > CARBON_SECONDARY_CONTEXT_FIELD(energy_cutoff_MeV) &&
                                     frag.generation <
                                         CARBON_SECONDARY_CONTEXT_FIELD(cinel02_max_secondary_inelastic_generations)) {
@@ -5992,9 +6119,9 @@ template<int EmMode>
                                         secondary_projectile_lut_index_device(
                                             CARBON_SECONDARY_CONTEXT_FIELD(schneider_ct_device_ctx).sec_proj_keys,
                                             CARBON_SECONDARY_CONTEXT_FIELD(schneider_ct_device_ctx).sec_num_projectiles,
-                                            frag.z, frag.a);
+                                            transport_z, transport_a);
 #endif
-                                    const std::size_t section_c = CARBON_SECONDARY_CONTEXT_FIELD(use_unified_water) ? 255U : static_cast<std::size_t>(
+                                    const std::size_t section_c = (kProductionSecondaryPath ? false : CARBON_SECONDARY_CONTEXT_FIELD(use_unified_water)) ? 255U : static_cast<std::size_t>(
                                         sycl::min(static_cast<std::uint32_t>(sec_ct_material), 24U));
                                     const auto sec_masked_c = CARBON_SECONDARY_CONTEXT_FIELD(schneider_ct_device_ctx).secondary_rates(
                                         proj_idx_c, section_c, sec_e_c);
@@ -6072,7 +6199,7 @@ template<int EmMode>
                                                          sycl::access::address_space::global_space>
                                             atomic_vox(CARBON_SECONDARY_CONTEXT_FIELD(voxel_dose_device)[pending_sec_voxel]);
                                         atomic_vox.fetch_add(static_cast<DoseAtomicT>(pending_sec_voxel_MeV));
-                                    if (CARBON_SECONDARY_CONTEXT_FIELD(enable_charged_origin_voxel_scoring)) {
+                                    if ((kProductionSecondaryPath ? false : CARBON_SECONDARY_CONTEXT_FIELD(enable_charged_origin_voxel_scoring))) {
                                         sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
                                                          sycl::memory_scope::device,
                                                          sycl::access::address_space::global_space>
@@ -6094,7 +6221,7 @@ template<int EmMode>
                                     pending_sec_voxel_MeV = 0.0F;
                                     pending_sec_voxel = cur_voxel;
                             if (secondary_inelastic && !(sec_e > CARBON_SECONDARY_CONTEXT_FIELD(energy_cutoff_MeV)) &&
-                                CARBON_SECONDARY_CONTEXT_FIELD(schneider_ct_device_ctx).uses_cinel03() && (sec_in_ct || CARBON_SECONDARY_CONTEXT_FIELD(use_unified_water)) &&
+                                CARBON_SECONDARY_CONTEXT_FIELD(schneider_ct_device_ctx).uses_cinel03() && (sec_in_ct || (kProductionSecondaryPath ? false : CARBON_SECONDARY_CONTEXT_FIELD(use_unified_water))) &&
                                 frag.generation < CARBON_SECONDARY_CONTEXT_FIELD(cinel02_max_secondary_inelastic_generations)) {
                                 // Sampled Schneider collision whose post-EM
                                 // energy is already below cutoff: continuous
@@ -6121,7 +6248,7 @@ template<int EmMode>
                                         CARBON_SECONDARY_CONTEXT_FIELD(schneider_ct_device_ctx).sec_event_offsets,
                                         CARBON_SECONDARY_CONTEXT_FIELD(schneider_ct_device_ctx).sec_event_indices,
                                         CARBON_SECONDARY_CONTEXT_FIELD(schneider_ct_device_ctx).sec_total_events,
-                                        frag.z, frag.a, secondary_target_z,
+                                        transport_z, transport_a, secondary_target_z,
                                         sec_e * frag_inv_a,
                                         sec_u_bracket, sec_u_event);
                                     schneider_record_lookup_device(
@@ -6368,7 +6495,7 @@ template<int EmMode>
                                         schneider_log_miss_device(
                                             CARBON_SECONDARY_CONTEXT_FIELD(schneider_miss_device), CARBON_SECONDARY_CONTEXT_FIELD(schneider_miss_count_device),
                                             kSchneiderMissLogCap, false,
-                                            frag.z, frag.a, secondary_target_z,
+                                            transport_z, transport_a, secondary_target_z,
                                             schneider_hazard_section,
                                             frag.generation > 255 ? 255
                                                                   : static_cast<std::uint8_t>(frag.generation),
@@ -6436,7 +6563,7 @@ template<int EmMode>
                                     CARBON_SECONDARY_CONTEXT_FIELD(cinel02_energy_nodes_device), CARBON_SECONDARY_CONTEXT_FIELD(cinel02_energy_node_count),
                                     CARBON_SECONDARY_CONTEXT_FIELD(cinel02_event_offsets_device), CARBON_SECONDARY_CONTEXT_FIELD(cinel02_event_indices_device),
                                     CARBON_SECONDARY_CONTEXT_FIELD(cinel02_interactions_device), CARBON_SECONDARY_CONTEXT_FIELD(cinel02_interaction_count),
-                                    frag.z, frag.a, secondary_target_z, secondary_target_a,
+                                    transport_z, transport_a, secondary_target_z, secondary_target_a,
                                     sec_e * frag_inv_a, 0.51F,
                                     rng::uniform01(2026, frag.rng_stream,
                                                    sec_steps, 14));
@@ -6457,12 +6584,12 @@ template<int EmMode>
                                         (event.parent_status == 0 ||
                                          event.parent_status == 2)) {
                                         secondary_replay_succeeded = true;
-                                        if (frag.z >= 1 && frag.z <= 6) {
+                                        if (transport_z >= 1 && transport_z <= 6) {
                                             const auto incident_keV =
                                                 static_cast<std::uint64_t>(sycl::fmax(
                                                     0.0F, sec_e) * 1000.0F + 0.5F);
                                         }
-                                        if (frag.z == 4) {
+                                        if (transport_z == 4) {
                                             const auto be_incident_slot =
                                                 cinel02_be_incident_diag_slot_device(
                                                     secondary_target_z, frag.generation,
@@ -6470,7 +6597,7 @@ template<int EmMode>
                                         }
                                         const auto parent_outcome_slot =
                                             cinel02_parent_outcome_diag_slot_device(
-                                                frag.z, event.parent_status,
+                                                transport_z, event.parent_status,
                                                 static_cast<std::uint32_t>(frag.generation));
                                         if (parent_outcome_slot !=
                                             std::numeric_limits<std::uint32_t>::max()) {
@@ -6541,14 +6668,14 @@ template<int EmMode>
                                             if (product.role == 0 && product.z == 4) {
                                                 const auto birth_slot =
                                                     cinel02_be_isotope_birth_diag_slot_device(
-                                                        frag.z, secondary_target_z,
+                                                        transport_z, secondary_target_z,
                                                         frag.generation + 1U, product.a);
                                                 if (birth_slot !=
                                                     std::numeric_limits<std::uint32_t>::max()) {
                                                 }
                                                 const auto be_channel_slot =
                                                     cinel02_be_channel_diag_slot_device(
-                                                        frag.z, secondary_target_z,
+                                                        transport_z, secondary_target_z,
                                                         frag.generation, sec_e * frag_inv_a);
                                                 if (be_channel_slot !=
                                                     std::numeric_limits<std::uint32_t>::max()) {
@@ -6557,7 +6684,7 @@ template<int EmMode>
                                             if (product.role == 0) {
                                                 const auto transition_slot =
                                                     cinel02_transition_diag_slot_device(
-                                                        frag.z, product.z,
+                                                        transport_z, product.z,
                                                         static_cast<std::uint32_t>(frag.generation));
                                                 if (transition_slot !=
                                                     std::numeric_limits<std::uint32_t>::max()) {
@@ -6772,8 +6899,8 @@ template<int EmMode>
                                             CARBON_SECONDARY_CONTEXT_FIELD(active_water_radiation_length)));
                                 {
                                     const auto theta_rms = highland_projected_rms_angle_device(
-                                        sec_e, static_cast<int>(frag.z),
-                                        static_cast<int>(frag.a), sec_step_mm,
+                                        sec_e, static_cast<int>(transport_z),
+                                        static_cast<int>(transport_a), sec_step_mm,
                                         sec_local_density_g_per_cm3,
                                         sec_radiation_length_g_per_cm2) * CARBON_SECONDARY_CONTEXT_FIELD(multiple_scattering_scale);
                                     const auto u_msc0 = sycl::fmax(rng::uniform01(
@@ -6802,13 +6929,13 @@ template<int EmMode>
                             // interval after EM loss. Treat the zero-rate endpoint as a
                             // null collision; retain post-EM energy, position and MCS.
                             if(secondary_elastic && sec_e>CARBON_SECONDARY_CONTEXT_FIELD(energy_cutoff_MeV) &&
-                               CARBON_SECONDARY_CONTEXT_FIELD(all_elastic).rate(CARBON_SECONDARY_CONTEXT_FIELD(all_elastic).projectile(frag.z,frag.a),CARBON_SECONDARY_CONTEXT_FIELD(use_unified_water)?25:sec_ct_material,sec_e*frag_inv_a)==0) {
+                               CARBON_SECONDARY_CONTEXT_FIELD(all_elastic).rate(CARBON_SECONDARY_CONTEXT_FIELD(all_elastic).projectile(transport_z,transport_a),(kProductionSecondaryPath ? false : CARBON_SECONDARY_CONTEXT_FIELD(use_unified_water))?25:sec_ct_material,sec_e*frag_inv_a)==0) {
                                 secondary_elastic=false;
                                 sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(CARBON_SECONDARY_CONTEXT_FIELD(elastic_audit)[9]).fetch_add(1);
                             }
                             if(secondary_elastic && sec_e>CARBON_SECONDARY_CONTEXT_FIELD(energy_cutoff_MeV)) {
-                                const int p=CARBON_SECONDARY_CONTEXT_FIELD(all_elastic).projectile(frag.z,frag.a);
-                                const auto draw=CARBON_SECONDARY_CONTEXT_FIELD(all_elastic).draw(p,CARBON_SECONDARY_CONTEXT_FIELD(use_unified_water)?25:sec_ct_material,
+                                const int p=CARBON_SECONDARY_CONTEXT_FIELD(all_elastic).projectile(transport_z,transport_a);
+                                const auto draw=CARBON_SECONDARY_CONTEXT_FIELD(all_elastic).draw(p,(kProductionSecondaryPath ? false : CARBON_SECONDARY_CONTEXT_FIELD(use_unified_water))?25:sec_ct_material,
                                     sec_e,sec_dx,sec_dy,sec_dz,
                                     rng::uniform01(2026,frag.rng_stream,sec_steps,71),rng::uniform01(2026,frag.rng_stream,sec_steps,72),
                                     rng::uniform01(2026,frag.rng_stream,sec_steps,73),rng::uniform01(2026,frag.rng_stream,sec_steps,74));
@@ -6899,7 +7026,7 @@ template<int EmMode>
                             if constexpr (!kNonHe4Only)
                                 for(int j=0;j<6;++j)saved.he4_audit[j]=he4_audit[j];
                             if constexpr(CARBON_SECONDARY_STEP_PROFILE)for(int j=0;j<60;++j)saved.sec_prof[j]=sec_prof[j];
-                            resume_states[state_idx]=saved;resume_ready[state_idx]=1;keep[item_id[0]]=1;
+                            resume_states[state_idx]=saved;resume_ready[state_idx]=1;keep[active_pos]=1;
                             return; // Suspend: no terminal scoring or audit flush.
                         }
 #if CARBON_EM_LOCAL_AUDIT
@@ -6912,7 +7039,7 @@ template<int EmMode>
                         }
                         // Small per-step deposits must not contend directly on
                         if constexpr (!kNonHe4Only) {
-                        if (CARBON_SECONDARY_CONTEXT_FIELD(he4_hazard_audit_device) && frag.z == 2 && frag.a == 4) {
+                        if (CARBON_SECONDARY_CONTEXT_FIELD(he4_hazard_audit_device) && transport_z == 2 && transport_a == 4) {
                             for (int i=0; i<6; ++i) {
                                 sycl::atomic_ref<double, sycl::memory_order::relaxed,
                                     sycl::memory_scope::device, sycl::access::address_space::global_space>
@@ -6999,7 +7126,7 @@ template<int EmMode>
                                                                  sycl::access::address_space::global_space>
                                                     atomic_vox(CARBON_SECONDARY_CONTEXT_FIELD(voxel_dose_device)[pending_sec_voxel]);
                                                 atomic_vox.fetch_add(static_cast<DoseAtomicT>(pending_sec_voxel_MeV));
-                                    if (CARBON_SECONDARY_CONTEXT_FIELD(enable_charged_origin_voxel_scoring)) {
+                                    if ((kProductionSecondaryPath ? false : CARBON_SECONDARY_CONTEXT_FIELD(enable_charged_origin_voxel_scoring))) {
                                         sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
                                                          sycl::memory_scope::device,
                                                          sycl::access::address_space::global_space>
@@ -7092,7 +7219,7 @@ template<int EmMode>
                                              sycl::access::address_space::global_space>
                                 atomic_vox(CARBON_SECONDARY_CONTEXT_FIELD(voxel_dose_device)[pending_sec_voxel]);
                             atomic_vox.fetch_add(static_cast<DoseAtomicT>(pending_sec_voxel_MeV));
-                            if (CARBON_SECONDARY_CONTEXT_FIELD(enable_charged_origin_voxel_scoring)) {
+                            if ((kProductionSecondaryPath ? false : CARBON_SECONDARY_CONTEXT_FIELD(enable_charged_origin_voxel_scoring))) {
                                 sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
                                                  sycl::memory_scope::device,
                                                  sycl::access::address_space::global_space>
@@ -7122,29 +7249,58 @@ template<int EmMode>
                 constexpr std::size_t secondary_local_size =
                     CARBON_SECONDARY_ND_RANGE_SIZE;
                 const auto secondary_global_size =
-                    ((static_cast<std::size_t>(resume_active) + secondary_local_size - 1) /
+                    ((static_cast<std::size_t>(active_size) + secondary_local_size - 1) /
                      secondary_local_size) * secondary_local_size;
                 cgh.parallel_for<CarbonSecondaryTransportKernel<EmMode,
-                                                                 kProductionSecondaryPath>>(
+                                                                 kProductionSecondaryPath,
+                                                                 kExactSpecies>>(
                     sycl::nd_range<1>{secondary_global_size, secondary_local_size},
                     secondary_kernel);
 #else
                 cgh.parallel_for<CarbonSecondaryTransportKernel<EmMode,
-                                                                 kProductionSecondaryPath>>(
-                    sycl::range<1>(resume_active), secondary_kernel);
+                                                                 kProductionSecondaryPath,
+                                                                 kExactSpecies>>(
+                    sycl::range<1>(active_size), secondary_kernel);
 #endif
             });
                 };
+                double round_seconds = 0.0;
+                const auto run_secondary_slice = [&](auto production_path_tag,
+                                                     auto exact_species_tag,
+                                                     unsigned active_begin,
+                                                     unsigned active_size) {
+                    if(active_size==0)return;
+                    auto event=launch_secondary_round(production_path_tag,
+                        exact_species_tag,active_begin,active_size);
+                    event.wait_and_throw();
+                    round_seconds+=event_duration_seconds(event);
+                };
 #if CARBON_SECONDARY_PRODUCTION_SPECIALIZE
-                auto sec_event = use_production_secondary_path
-                    ? launch_secondary_round(std::true_type{})
-                    : launch_secondary_round(std::false_type{});
-#else
-                auto sec_event =
-                    launch_secondary_round(std::false_type{});
+                if(use_production_secondary_path) {
+#if CARBON_SECONDARY_HOT_SPECIES_SPECIALIZE
+                    if(group_secondaries) {
+                        run_secondary_slice(std::true_type{},
+                            std::integral_constant<int,0>{},0,species0_active);
+                        run_secondary_slice(std::true_type{},
+                            std::integral_constant<int,1>{},species0_active,
+                            species1_active);
+                        const unsigned fallback_begin=species0_active+species1_active;
+                        run_secondary_slice(std::true_type{},
+                            std::integral_constant<int,-1>{},fallback_begin,
+                            resume_active-fallback_begin);
+                    } else
 #endif
-            sec_event.wait_and_throw();
-                const double round_seconds = event_duration_seconds(sec_event);
+                    run_secondary_slice(std::true_type{},
+                        std::integral_constant<int,CARBON_SECONDARY_EXACT_SPECIES_PROBE>{},
+                        0,resume_active);
+                } else {
+                    run_secondary_slice(std::false_type{},
+                        std::integral_constant<int,-1>{},0,resume_active);
+                }
+#else
+                run_secondary_slice(std::false_type{},
+                    std::integral_constant<int,-1>{},0,resume_active);
+#endif
                 secondary_kernel_seconds += round_seconds;
                 generation_kernel_seconds += round_seconds;
                 if (finish_tail) {
@@ -7171,7 +7327,30 @@ template<int EmMode>
                 }).wait_and_throw();
                 queue.single_task([=](){unsigned sum=0;for(unsigned i=0;i<resume_groups;++i){block_offsets[i]=sum;sum+=block_counts[i];}*active_count=sum;}).wait_and_throw();
                 queue.parallel_for(sycl::range<1>(resume_active),[=](sycl::id<1> id){const auto i=id[0];if(keep[i])next_order[block_offsets[i/256]+ranks[i]]=active_order[i];}).wait_and_throw();
-                queue.copy(active_count,&resume_active,1).wait_and_throw();std::swap(active_order,next_order);
+                if constexpr(CARBON_SECONDARY_HOT_SPECIES_SPECIALIZE) {
+                    queue.single_task([=](){
+                        const unsigned total=active_count[0];
+                        const auto lower_bound_state=[&](unsigned boundary){
+                            unsigned lo=0,hi=total;
+                            while(lo<hi){
+                                const unsigned mid=lo+(hi-lo)/2;
+                                if(next_order[mid]<boundary)lo=mid+1;
+                                else hi=mid;
+                            }
+                            return lo;
+                        };
+                        active_count[1]=lower_bound_state(species0_initial_end);
+                        active_count[2]=lower_bound_state(species1_initial_end);
+                    }).wait_and_throw();
+                    unsigned counts[3]{};
+                    queue.copy(active_count,counts,3).wait_and_throw();
+                    resume_active=counts[0];
+                    species0_active=counts[1];
+                    species1_active=counts[2]-counts[1];
+                } else {
+                    queue.copy(active_count,&resume_active,1).wait_and_throw();
+                }
+                std::swap(active_order,next_order);
                 compact_seconds+=std::chrono::duration<double>(std::chrono::steady_clock::now()-compact_start).count();
                 }
                 if (segment_secondaries) std::cout<<"[segmented-secondary] rounds="<<segment_rounds
@@ -7373,8 +7552,60 @@ template<int EmMode>
             for(int sec_si=0;sec_si<20;++sec_si)
                 std::cout<<"[secondary-step-profile] "<<sec_si<<" "<<secprof[sec_si]<<" "<<secprof[20+sec_si]<<" "<<(static_cast<double>(secprof[40+sec_si])*1e-6)<<"\n";
         }
+        if constexpr(CARBON_EM_EMPTY_BUCKET_AUDIT) {
+            std::uint64_t counts[10]{};
+            queue.copy(unified_empty_bucket_audit,counts,10).wait_and_throw();
+            constexpr const char* names[5]={"node","raw0","raw1","raw2","raw3"};
+            for(unsigned kind=0;kind<5;++kind) {
+                const auto total=counts[2*kind];
+                const auto empty=counts[2*kind+1];
+                const double fraction=total?static_cast<double>(empty)/static_cast<double>(total):0.0;
+                std::cout<<"[em-empty-bucket-audit] kind="<<names[kind]
+                         <<" total="<<total<<" empty="<<empty
+                         <<" fraction="<<fraction<<"\n";
+            }
+        }
+        if constexpr(CARBON_EM_SEARCH_KEY_AUDIT) {
+            std::uint32_t observed=0;
+            queue.copy(unified_search_audit_count,&observed,1).wait_and_throw();
+            const auto sampled=std::min(observed,kUnifiedSearchAuditCapacity);
+            std::vector<UnifiedEmSearchAuditRecord> records(sampled);
+            queue.copy(unified_search_audit_records,records.data(),sampled).wait_and_throw();
+            const auto group_key=[](const auto& r){
+                return std::tuple{r.kind,r.launch,r.warp,r.step,r.ordinal};
+            };
+            std::sort(records.begin(),records.end(),[&](const auto& a,const auto& b){
+                return std::tuple{group_key(a),a.key}<std::tuple{group_key(b),b.key};
+            });
+            std::uint64_t groups[5]{},lanes[5]{},unique[5]{},shared4[5]{};
+            for(std::size_t begin=0;begin<records.size();) {
+                std::size_t end=begin+1;
+                while(end<records.size() && group_key(records[end])==group_key(records[begin]))++end;
+                std::uint64_t u=1;
+                for(std::size_t i=begin+1;i<end;++i)if(records[i].key!=records[i-1].key)++u;
+                const auto kind=records[begin].kind;
+                ++groups[kind];lanes[kind]+=end-begin;unique[kind]+=u;
+                if(u<=4)++shared4[kind];
+                begin=end;
+            }
+            constexpr const char* names[5]={"node","raw0","raw1","raw2","raw3"};
+            std::cout<<"[em-search-key-audit] observed="<<observed
+                     <<" sampled="<<sampled<<"\n";
+            for(unsigned kind=0;kind<5;++kind) {
+                std::cout<<"[em-search-key-audit] kind="<<names[kind]
+                         <<" groups="<<groups[kind]<<" lanes="<<lanes[kind]
+                         <<" unique="<<unique[kind]
+                         <<" mean_unique="<<(groups[kind]?double(unique[kind])/groups[kind]:0.0)
+                         <<" groups_unique_le4="<<shared4[kind]<<"\n";
+            }
+        }
         mem_tracker.free(delta_mean_device);mem_tracker.free(unified_energy_index);mem_tracker.free(unified_sections);mem_tracker.free(unified_materials);mem_tracker.free(unified_species);mem_tracker.free(unified_records);
         mem_tracker.free(unified_nodes);mem_tracker.free(unified_segments);mem_tracker.free(unified_audit);
+        if constexpr(CARBON_EM_EMPTY_BUCKET_AUDIT) mem_tracker.free(unified_empty_bucket_audit);
+        if constexpr(CARBON_EM_SEARCH_KEY_AUDIT) {
+            mem_tracker.free(unified_search_audit_records);
+            mem_tracker.free(unified_search_audit_count);
+        }
         if constexpr(CARBON_SECONDARY_STEP_PROFILE) mem_tracker.free(sec_step_profile_device);
     }
     std::uint64_t schneider_inelastic_host = 0;

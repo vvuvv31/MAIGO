@@ -470,3 +470,42 @@ long-scoreboard、local-memory事务、block共驻或以此为目的的状态/li
   unknown/recoil的独立bucket范围调度，并逐粒子验证RNG/续跑/审计后，才可转成运行候选。
 - 证据：`docs/transport_occupancy_followup_20260916.md`，
   `benchmark/transport_occupancy_followup_20260916/analysis.json`。
+
+### 2026-09-17 `em_empty_bucket_fast_path`：真实输运零命中
+
+- 目标：当exact exponent index的`begin==end`时直接确定`cursor-1`区间，跳过dependent node/segment key load。
+- 正确性：82,741,572个GPU节点、边界及相邻浮点查询逐位失败为0。
+- 动态结果：完整RT07575中node/raw0/raw1/raw2分别执行7.163B/4.933B/4.933B/0.531B次bounds查询，空桶命中全部为0。
+- 结论：默认关闭，不计时、不进入组合。除非EM网格或指数索引构建改变并出现非零真实命中率，否则不重试。
+- 证据：`docs/transport_exact_species_followup_20260917.md`，`benchmark/transport_exact_species_followup_20260917/analysis.json`。
+
+### 2026-09-17 `secondary_hot_species_specialize`：低寄存器slice被多launch成本抵消
+
+- 结构结果：exact proton/deuteron实际wrapper为124/124 registers，跨过约128档；He-4为130，未进入专用调度。stable compaction后按有序state index恢复两个热点物种边界，粒子/RNG/resume身份不变。
+- 五次配对：secondary中位退化4.47%，Elapsed退化1.86%；三路launch和slice尾部成本超过低寄存器收益。
+- 正确性：3,240,963 histories、1,034,976,717 steps、1,344,312次核反应和八项整数审计一致，quality通过、overflow=0；候选3D剂量差也略超过本轮五次控制包络。
+- 结论：默认关闭，不进入组合。只有后端支持无额外launch的单kernel物种静态分派，或专用slice覆盖更高且launch成本显著下降时才可重试。
+- 证据：同上。
+
+### 2026-09-17 `subgroup_cooperative_em_search`：地址共享诊断未达实现门槛
+
+- 诊断：4,000,000条实际comparison地址中，node/raw0/raw1每warp查询组平均约18.4个unique address；约42k组中仅4–6组不超过4个unique。raw2平均7.72 unique，但动态占比较低。
+- 结论：没有实现leader load+broadcast。当前地址重复度不足以覆盖ballot、shuffle、分歧和额外live state成本。
+- 允许重试所需证据：新的排序使热点node/raw查询大多数warp稳定低至1–4个unique address。
+- 证据：同上。
+
+### 2026-09-17 `em_pair_prepare`：lo/hi提前物化筛选退化
+
+- 候选：在`UnifiedEmState::prepare`中先物化两个density endpoint，再调用两个独立prepare，尝试增加memory-level parallelism。
+- 资源：实际wrapper保持150 registers/thread、352 B stack。
+- 单次完整筛选：secondary 7.9114→8.1555 s，Elapsed 19.7554→20.0897 s，方向明显退化，未进入五次正式配对。
+- 结论：默认关闭。除非SASS证明后端能同时发出两个endpoint load且不增加等待/live state，否则不重试。
+- 证据：同上。
+
+### 2026-09-17 `primary_production_specialize`同一二进制复核
+
+- 同一binary内通过诊断环境变量交错选择generic与specialized，排除了不同链接产物作为剂量差来源。
+- 五次配对再次得到primary中位+13.76%、Elapsed +5.97%，但FP32 3D剂量最大差0.00005684%峰值，超过generic五次包络0.00004263%。
+- FP64 scorer机制诊断的generic/specialized输出逐位相同，说明FP32差异来自并发原子累加顺序；既定FP32包络门槛不豁免。
+- 结论：继续默认关闭，除非引入并验收确定性剂量归并或重新定义正式剂量统计门槛。
+- 证据：同上。

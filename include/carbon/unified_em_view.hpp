@@ -8,6 +8,10 @@
 #include <cmath>
 #include <bit>
 #include <limits>
+#include <cstdint>
+#ifdef CARBON_HAS_SYCL
+#include <sycl/sycl.hpp>
+#endif
 // Compile-time performance ablations; defaults preserve the validated fast path.
 #ifndef CARBON_EM_MATERIAL_CACHE
 #define CARBON_EM_MATERIAL_CACHE 1
@@ -20,6 +24,18 @@
 #endif
 #ifndef CARBON_EM_EXACT_INDEX
 #define CARBON_EM_EXACT_INDEX 0
+#endif
+#ifndef CARBON_EM_EMPTY_BUCKET_FAST_PATH
+#define CARBON_EM_EMPTY_BUCKET_FAST_PATH 0
+#endif
+#ifndef CARBON_EM_EMPTY_BUCKET_AUDIT
+#define CARBON_EM_EMPTY_BUCKET_AUDIT 0
+#endif
+#ifndef CARBON_EM_SEARCH_KEY_AUDIT
+#define CARBON_EM_SEARCH_KEY_AUDIT 0
+#endif
+#ifndef CARBON_EM_PAIR_PREPARE
+#define CARBON_EM_PAIR_PREPARE 0
 #endif
 // Candidate A: split the binary-search keys out of the 52 B node records and
 // 24 B segment records into contiguous float arrays so each cache line holds
@@ -58,6 +74,24 @@ struct UnifiedEmPointStep {
     float delta_stopping{},delta_variance{},stopping_slope{},delta_slope{},delta_partition_rate{};
 };
 struct UnifiedEmStep { UnifiedEmPointStep lo,hi; };
+struct UnifiedEmSearchAuditRecord {
+    std::uint64_t launch{};
+    std::uint64_t key{};
+    std::uint32_t warp{};
+    std::uint32_t step{};
+    std::uint16_t ordinal{};
+    std::uint8_t kind{};
+    std::uint8_t reserved{};
+};
+struct UnifiedEmSearchAuditState {
+    UnifiedEmSearchAuditRecord* records{};
+    std::uint32_t* count{};
+    std::uint32_t capacity{};
+    std::uint64_t launch{};
+    std::uint32_t warp{};
+    std::uint32_t step{};
+    std::uint16_t ordinal{};
+};
 struct UnifiedEmPoint {
     const UnifiedEmRecord* record{};
     const UnifiedEmNode* nodes{};
@@ -68,13 +102,59 @@ struct UnifiedEmPoint {
     // Candidate A search keys (global node index / global segment index).
     const float* node_energy_keys{};
     const float* segment_lower_keys{};
+#if CARBON_EM_EMPTY_BUCKET_AUDIT
+    std::uint64_t* empty_bucket_audit{};
+#endif
+#if CARBON_EM_SEARCH_KEY_AUDIT
+    UnifiedEmSearchAuditState* search_audit{};
+#endif
     void bounds(unsigned kind,float x,unsigned& lo,unsigned& hi)const {
         if constexpr(CARBON_EM_EXACT_INDEX) {
             if(index && x>0 && std::isfinite(x)) {
                 unsigned bucket=(std::bit_cast<unsigned>(x)>>23)&255;
                 const auto* v=index+kind*257;
-                lo=std::min(hi,v[bucket]>0?v[bucket]-1:0);
-                hi=std::min(hi,v[bucket+1]);
+                const unsigned begin=v[bucket];
+                const unsigned end=v[bucket+1];
+                lo=std::min(hi,begin>0?begin-1:0);
+                hi=std::min(hi,end);
+#if CARBON_EM_EMPTY_BUCKET_AUDIT && defined(CARBON_HAS_SYCL)
+                if(empty_bucket_audit) {
+                    sycl::atomic_ref<std::uint64_t,sycl::memory_order::relaxed,
+                        sycl::memory_scope::device,
+                        sycl::access::address_space::global_space>
+                        total(empty_bucket_audit[2*kind]);
+                    total.fetch_add(1);
+                    if(begin==end) {
+                        sycl::atomic_ref<std::uint64_t,sycl::memory_order::relaxed,
+                            sycl::memory_scope::device,
+                            sycl::access::address_space::global_space>
+                            empty(empty_bucket_audit[2*kind+1]);
+                        empty.fetch_add(1);
+                    }
+                }
+#endif
+                if constexpr(CARBON_EM_EMPTY_BUCKET_FAST_PATH) {
+                    if(begin==end)hi=lo;
+                }
+#if CARBON_EM_SEARCH_KEY_AUDIT && defined(CARBON_HAS_SYCL)
+                if(search_audit && lo<hi) {
+                    const unsigned m=(lo+hi+1)/2;
+                    const auto* key_address=kind==0
+                        ? static_cast<const void*>(nodes+m)
+                        : static_cast<const void*>(segments+record->offsets[kind-1]+m);
+                    sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,
+                        sycl::memory_scope::device,
+                        sycl::access::address_space::global_space>
+                        next(*search_audit->count);
+                    const auto slot=next.fetch_add(1);
+                    const auto ordinal=search_audit->ordinal++;
+                    if(slot<search_audit->capacity)search_audit->records[slot]={
+                        search_audit->launch,
+                        static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(key_address)),
+                        search_audit->warp,search_audit->step,ordinal,
+                        static_cast<std::uint8_t>(kind),0};
+                }
+#endif
             }
         }
     }
@@ -165,6 +245,9 @@ struct alignas(16) UnifiedEmState {
     float weight{}, density{}, lo_scale{1}, hi_scale{1};
     int section{-2};
     bool valid{false};
+#if CARBON_EM_SEARCH_KEY_AUDIT
+    UnifiedEmSearchAuditState* search_audit{};
+#endif
     UnifiedEmPoint lo() const;
     UnifiedEmPoint hi() const;
     const UnifiedEmRecord* record() const { return tables ? lo().record : host_record; }
@@ -172,7 +255,14 @@ struct alignas(16) UnifiedEmState {
     bool covers(float t)const{return valid && lo().covers(t) && hi().covers(t);}
     float range(float t)const{return mix(lo().range(t),hi().range(t));}
     float mean(float t,float h)const{return mix(lo().mean(t,h),hi().mean(t,h));}
-    UnifiedEmStep prepare(float t)const {return {lo().prepare(t),hi().prepare(t)};}
+    UnifiedEmStep prepare(float t)const {
+        if constexpr(CARBON_EM_PAIR_PREPARE) {
+            const auto low=lo();
+            const auto high=hi();
+            return {low.prepare(t),high.prepare(t)};
+        }
+        return {lo().prepare(t),hi().prepare(t)};
+    }
     float mean(float t,float h,const UnifiedEmStep& pre)const {
         return mix(lo().mean(t,h,pre.lo),hi().mean(t,h,pre.hi));
     }
@@ -208,17 +298,31 @@ struct UnifiedEmDevice {
     // Candidate A search keys (global arrays; null disables the split path).
     const float* node_energy_keys{};
     const float* segment_lower_keys{};
+#if CARBON_EM_EMPTY_BUCKET_AUDIT
+    std::uint64_t* empty_bucket_audit{};
+#endif
     int species_index(unsigned z,unsigned a)const {
         for(int i=0;i<18;++i)if(species[i].z==z && species[i].a==a)return i;
         return -1;
     }
-    UnifiedEmPoint point(unsigned material,int ion,float density_scale)const {
+    UnifiedEmPoint point(unsigned material,int ion,float density_scale
+#if CARBON_EM_SEARCH_KEY_AUDIT
+                         ,UnifiedEmSearchAuditState* search_audit=nullptr
+#endif
+                         )const {
         auto* r=records+material*18+ion;
         return {r,nodes+r->node_offset,segments,density_scale,
             energy_index?energy_index+(material*18+ion)*unified_em_index_stride:nullptr,
             delta_means?delta_means+2*r->node_offset:nullptr,
             node_energy_keys?node_energy_keys+r->node_offset:nullptr,
-            segment_lower_keys};
+            segment_lower_keys
+#if CARBON_EM_EMPTY_BUCKET_AUDIT
+            ,empty_bucket_audit
+#endif
+#if CARBON_EM_SEARCH_KEY_AUDIT
+            ,search_audit
+#endif
+            };
     }
     UnifiedEmState select(int section,float density,int ion)const {
         UnifiedEmState state;if(ion<0 || ion>=18 || section< -1 || section>24 || !(density>0))return state;
@@ -251,8 +355,20 @@ struct UnifiedEmDevice {
         state.weight=w;state.density=density;state.section=section;state.valid=true;return state;
     }
 };
-inline UnifiedEmPoint UnifiedEmState::lo() const { return tables?tables->point(lo_mat,ion,lo_scale):UnifiedEmPoint{}; }
-inline UnifiedEmPoint UnifiedEmState::hi() const { return tables?tables->point(hi_mat,ion,hi_scale):UnifiedEmPoint{}; }
+inline UnifiedEmPoint UnifiedEmState::lo() const {
+    return tables?tables->point(lo_mat,ion,lo_scale
+#if CARBON_EM_SEARCH_KEY_AUDIT
+        ,search_audit
+#endif
+        ):UnifiedEmPoint{};
+}
+inline UnifiedEmPoint UnifiedEmState::hi() const {
+    return tables?tables->point(hi_mat,ion,hi_scale
+#if CARBON_EM_SEARCH_KEY_AUDIT
+        ,search_audit
+#endif
+        ):UnifiedEmPoint{};
+}
 struct UnifiedEmClock {
     DiscreteDeltaClockCandidate<float> clock;
     float threshold=std::numeric_limits<float>::max(),rate0{},rate1{},last_density{};

@@ -71,6 +71,28 @@ add_library(carbon_core
 target_include_directories(carbon_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 option(CARBON_EM_EXACT_INDEX "Narrow EM searches with exact exponent buckets" ON)
 target_compile_definitions(carbon_core PUBLIC CARBON_EM_EXACT_INDEX=$<BOOL:${CARBON_EM_EXACT_INDEX}>)
+option(CARBON_EM_EMPTY_BUCKET_FAST_PATH
+       "Research: skip exact-index key loads for exponent buckets containing no knots"
+       OFF)
+option(CARBON_EM_EMPTY_BUCKET_AUDIT
+       "Diagnostic: count exact-index queries and empty exponent buckets by table kind"
+       OFF)
+option(CARBON_EM_SEARCH_KEY_AUDIT
+       "Diagnostic: sample actual exact-index comparison addresses for warp-sharing analysis"
+       OFF)
+option(CARBON_EM_PAIR_PREPARE
+       "Research: materialize both density endpoints before their independent EM prepare queries"
+       OFF)
+if((CARBON_EM_EMPTY_BUCKET_FAST_PATH OR CARBON_EM_EMPTY_BUCKET_AUDIT) AND
+   NOT CARBON_EM_EXACT_INDEX)
+    message(FATAL_ERROR
+        "CARBON_EM_EMPTY_BUCKET_FAST_PATH/AUDIT require CARBON_EM_EXACT_INDEX")
+endif()
+target_compile_definitions(carbon_core PUBLIC
+    CARBON_EM_EMPTY_BUCKET_FAST_PATH=$<BOOL:${CARBON_EM_EMPTY_BUCKET_FAST_PATH}>
+    CARBON_EM_EMPTY_BUCKET_AUDIT=$<BOOL:${CARBON_EM_EMPTY_BUCKET_AUDIT}>
+    CARBON_EM_SEARCH_KEY_AUDIT=$<BOOL:${CARBON_EM_SEARCH_KEY_AUDIT}>
+    CARBON_EM_PAIR_PREPARE=$<BOOL:${CARBON_EM_PAIR_PREPARE}>)
 option(CARBON_EM_SPECIALIZE "Specialize unified and legacy EM transport kernels" ON)
 target_compile_definitions(carbon_core PUBLIC CARBON_EM_SPECIALIZE=$<BOOL:${CARBON_EM_SPECIALIZE}>)
 option(CARBON_USE_OPENSSL_SHA256 "Use OpenSSL accelerated file SHA256 when available" ON)
@@ -159,6 +181,36 @@ if(CARBON_SECONDARY_NON_HE4_PROBE AND NOT CARBON_SECONDARY_KNOWN_SPECIES_PROBE)
 endif()
 target_compile_definitions(carbon_core PUBLIC
     CARBON_SECONDARY_NON_HE4_PROBE=$<BOOL:${CARBON_SECONDARY_NON_HE4_PROBE}>)
+set(CARBON_SECONDARY_EXACT_SPECIES_PROBE "-1" CACHE STRING
+    "Compile-only exact charged-species index probe (-1 disables, otherwise 0..17)"
+)
+if(NOT CARBON_SECONDARY_EXACT_SPECIES_PROBE MATCHES "^(-1|[0-9]|1[0-7])$")
+    message(FATAL_ERROR
+        "CARBON_SECONDARY_EXACT_SPECIES_PROBE must be -1 or a charged-species index 0..17")
+endif()
+if(NOT CARBON_SECONDARY_EXACT_SPECIES_PROBE STREQUAL "-1" AND
+   NOT CARBON_SECONDARY_KNOWN_SPECIES_PROBE)
+    message(FATAL_ERROR
+        "CARBON_SECONDARY_EXACT_SPECIES_PROBE requires CARBON_SECONDARY_KNOWN_SPECIES_PROBE")
+endif()
+target_compile_definitions(carbon_core PUBLIC
+    CARBON_SECONDARY_EXACT_SPECIES_PROBE=${CARBON_SECONDARY_EXACT_SPECIES_PROBE})
+option(CARBON_SECONDARY_HOT_SPECIES_SPECIALIZE
+       "Research: dispatch proton/deuteron continuation slices to exact-species kernels"
+       OFF)
+if(CARBON_SECONDARY_HOT_SPECIES_SPECIALIZE AND
+   NOT CARBON_SECONDARY_PRODUCTION_SPECIALIZE)
+    message(FATAL_ERROR
+        "CARBON_SECONDARY_HOT_SPECIES_SPECIALIZE requires CARBON_SECONDARY_PRODUCTION_SPECIALIZE")
+endif()
+if(CARBON_SECONDARY_HOT_SPECIES_SPECIALIZE AND
+   (CARBON_SECONDARY_KNOWN_SPECIES_PROBE OR
+    NOT CARBON_SECONDARY_EXACT_SPECIES_PROBE STREQUAL "-1"))
+    message(FATAL_ERROR
+        "CARBON_SECONDARY_HOT_SPECIES_SPECIALIZE cannot be combined with compile-only species probes")
+endif()
+target_compile_definitions(carbon_core PUBLIC
+    CARBON_SECONDARY_HOT_SPECIES_SPECIALIZE=$<BOOL:${CARBON_SECONDARY_HOT_SPECIES_SPECIALIZE}>)
 option(CARBON_PRIMARY_PRODUCTION_SPECIALIZE
        "Research: host-dispatch a primary kernel specialized for the validated CT production path"
        OFF)

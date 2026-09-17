@@ -1,0 +1,376 @@
+{
+  "schema": "maigo.transport_exact_species_followup.v1",
+  "date": "2026-09-17",
+  "base_commit": "dd2c6d0817024006c6f0ddd584ea5a5bd825d220",
+  "gpu": "NVIDIA GeForce RTX 2080 Ti",
+  "architecture": "sm_75",
+  "defaults_changed": false,
+  "hashes": {
+    "config_50k_yaml": "6d1896b34716e07eb92fc0dcbe0c6455f0148da95a47c7cd3aa704caa3ac8855",
+    "final_fixed_mode_binary": "5b4312f5df482c8f5a876eee7bcb5c754ba188556ec103e3cace17ae735b86c4",
+    "hot_species_binary": "3efe1ad2e82c8e22a6221a8a0b5b9aecfd5a2d7dae02c742ce57b117c03d6519",
+    "primary_same_binary": "1cc14abb2ba95311121b72a5e1062665057ee7b7aa444a8be5ec6604fd75336a",
+    "unified_em_package": "8c5d970b3b639bfca2f448730271bed4fc04721aba73100e2efbe09dffe44855",
+    "delta_moments": "c551bc52fa30ff7e3ea229c8b89792e8ecd2b0fb12f18fcad50d1c6f206bc7cc",
+    "source_files": {
+      "CMakeLists.txt": "d6be8b37a96475d55f2e1252c4118f29be102daac311cba457abed40c5de1fe1",
+      "include/carbon/unified_em_view.hpp": "77e41870b5a51f7c796e7c16f1548513dfa0219cfc1975eff038cea41ad0ee0f",
+      "src/transport_sycl.cpp": "da369656bcee3a84f984d2d83a63feb31540a7ef57770f2136705cd8512892a5",
+      "tools/run_transport_candidate_pairs.py": "58d968096954845d1b1e75ed27f3c757aaba01a88d73d71c5fac7ab77b31c019"
+    }
+  },
+  "empty_bucket": {
+    "runtime_counts": {
+      "node": {
+        "total": 7162724353,
+        "empty": 0
+      },
+      "raw0": {
+        "total": 4932618916,
+        "empty": 0
+      },
+      "raw1": {
+        "total": 4932618916,
+        "empty": 0
+      },
+      "raw2": {
+        "total": 530652722,
+        "empty": 0
+      },
+      "raw3": {
+        "total": 0,
+        "empty": 0
+      }
+    },
+    "gpu_bitwise_queries": 82741572,
+    "failures": 0,
+    "decision": "stop: zero dynamic hits; default off"
+  },
+  "species_steps": {
+    "proton_idx0": 557526724,
+    "he4_idx4": 364710654,
+    "deuteron_idx1": 281766834,
+    "all_slots": [
+      557526724,
+      281766834,
+      67188320,
+      78825347,
+      364710654,
+      2531275,
+      8261582,
+      6729883,
+      9381237,
+      1051264,
+      752398,
+      451083,
+      7692940,
+      13400765,
+      2097886,
+      17283121,
+      9314922,
+      0,
+      0,
+      0
+    ]
+  },
+  "exact_species_resources": {
+    "proton": {
+      "wrapper_registers": 125,
+      "final_combined_wrapper_registers": 124,
+      "stack_bytes": 352
+    },
+    "deuteron": {
+      "wrapper_registers": 123,
+      "final_combined_wrapper_registers": 124,
+      "stack_bytes": 352
+    },
+    "he4": {
+      "wrapper_registers": 130,
+      "stack_bytes": 352
+    },
+    "fallback_fixed_modes": {
+      "wrapper_registers": 150,
+      "stack_bytes": 352
+    }
+  },
+  "hot_species_scheduler": {
+    "protocol": {
+      "warmups": 2,
+      "formal_pairs": 5,
+      "improvement_definition": "control/candidate - 1"
+    },
+    "performance_improvement_percent": {
+      "wall_s": {
+        "values": [
+          -1.7893081925630994,
+          -0.8744323486609473,
+          -1.8633711033556044,
+          -1.5709371881827972,
+          -1.7148451623327787
+        ],
+        "median": -1.7148451623327787,
+        "minimum": -1.8633711033556044,
+        "maximum": -0.8744323486609473
+      },
+      "elapsed_s": {
+        "values": [
+          -1.927375302286205,
+          -1.0062609517890508,
+          -2.030893489025265,
+          -1.703147745213096,
+          -1.857507045213691
+        ],
+        "median": -1.857507045213691,
+        "minimum": -2.030893489025265,
+        "maximum": -1.0062609517890508
+      },
+      "primary_s": {
+        "values": [
+          0.15834217189254485,
+          0.5071795720062333,
+          -0.49792055738139274,
+          0.6018463050265321,
+          -0.1552803613024567
+        ],
+        "median": 0.15834217189254485,
+        "minimum": -0.49792055738139274,
+        "maximum": 0.6018463050265321
+      },
+      "secondary_s": {
+        "values": [
+          -4.6534668039732825,
+          -3.2443696596286875,
+          -4.26528832456664,
+          -4.470517629701609,
+          -4.466862984716813
+        ],
+        "median": -4.466862984716813,
+        "minimum": -4.6534668039732825,
+        "maximum": -3.2443696596286875
+      }
+    },
+    "correctness": {
+      "peak": 0.013108011335134506,
+      "baseline_repeat_envelope_abs": 5.122274160385132e-09,
+      "baseline_repeat_envelope_pct_peak": 3.9077431575417316e-05,
+      "candidate_max_abs": 6.05359673500061e-09,
+      "candidate_pct_peak": 4.6182419134584095e-05,
+      "pass": false
+    },
+    "audit_identical": true,
+    "quality_all": true,
+    "overflow_zero": true,
+    "decision": "failed: launch/slice overhead; default off"
+  },
+  "fixed_production_modes": {
+    "performance_improvement_percent": {
+      "wall_s": {
+        "values": [
+          1.6429610965289276,
+          2.155082872652958,
+          1.87155795581333,
+          1.9691154247974962,
+          1.8134872014394565
+        ],
+        "median": 1.87155795581333,
+        "minimum": 1.6429610965289276,
+        "maximum": 2.155082872652958
+      },
+      "elapsed_s": {
+        "values": [
+          1.7695808385086886,
+          2.345985921625471,
+          1.9525611293880862,
+          2.201416105080023,
+          1.925261759922492
+        ],
+        "median": 1.9525611293880862,
+        "minimum": 1.7695808385086886,
+        "maximum": 2.345985921625471
+      },
+      "primary_s": {
+        "values": [
+          0.3299556344443788,
+          0.7933853701949545,
+          0.43015742957681624,
+          0.7183014108169461,
+          0.37009739755224924
+        ],
+        "median": 0.43015742957681624,
+        "minimum": 0.3299556344443788,
+        "maximum": 0.7933853701949545
+      },
+      "secondary_s": {
+        "values": [
+          4.057966272150515,
+          5.0573979947633685,
+          4.205172225733733,
+          4.910514506491936,
+          4.459164130223869
+        ],
+        "median": 4.459164130223869,
+        "minimum": 4.057966272150515,
+        "maximum": 5.0573979947633685
+      }
+    },
+    "correctness": {
+      "peak": 0.013108011335134506,
+      "baseline_repeat_envelope_abs": 6.05359673500061e-09,
+      "baseline_repeat_envelope_pct_peak": 4.6182419134584095e-05,
+      "candidate_max_abs": 6.05359673500061e-09,
+      "candidate_pct_peak": 4.6182419134584095e-05,
+      "pass": true
+    },
+    "early_ncu": {
+      "block_size": "(32, 1, 1)",
+      "registers_per_thread": 150,
+      "active_warps_per_scheduler": 2.875679,
+      "active_warps_per_sm": 11.502716,
+      "eligible_warps_per_scheduler": 0.12406,
+      "ready_fraction": 0.04314111554175553,
+      "long_scoreboard_per_issue_active": 11.936343,
+      "l1_hit_pct": 68.158827,
+      "l2_hit_pct": 93.705698
+    },
+    "baseline_164_early_ncu": {
+      "active_warps_per_sm": 11.574388,
+      "eligible_warps_per_scheduler": 0.121833,
+      "ready_fraction": 0.04210434279548948,
+      "long_scoreboard_per_issue_active": 9.872142
+    },
+    "decision": "positive secondary throughput but below 5% end-to-end and long-scoreboard worsened; default off"
+  },
+  "search_key_audit": {
+    "observed": 481379052,
+    "sampled": 4000000,
+    "node": {
+      "groups": 42114,
+      "lanes": 1284344,
+      "unique": 774517,
+      "mean_unique": 18.391,
+      "groups_unique_le4": 5
+    },
+    "raw0": {
+      "groups": 42189,
+      "lanes": 1286642,
+      "unique": 776932,
+      "mean_unique": 18.4155,
+      "groups_unique_le4": 4
+    },
+    "raw1": {
+      "groups": 42242,
+      "lanes": 1288236,
+      "unique": 777993,
+      "mean_unique": 18.4175,
+      "groups_unique_le4": 6
+    },
+    "raw2": {
+      "groups": 15887,
+      "lanes": 140778,
+      "unique": 122608,
+      "mean_unique": 7.7175,
+      "groups_unique_le4": 2957
+    },
+    "decision": "no subgroup cooperative search"
+  },
+  "pair_prepare": {
+    "wrapper_registers": 150,
+    "screen": {
+      "control_elapsed_s": 19.755419,
+      "candidate_elapsed_s": 20.089674,
+      "control_secondary_s": 7.9114365,
+      "candidate_secondary_s": 8.1554854
+    },
+    "decision": "failed screen; default off"
+  },
+  "primary_same_binary": {
+    "performance_improvement_percent": {
+      "wall_s": {
+        "values": [
+          4.764746012464771,
+          5.671394164006438,
+          5.487414193807449,
+          5.617932250687163,
+          5.521364638531612
+        ],
+        "median": 5.521364638531612,
+        "minimum": 4.764746012464771,
+        "maximum": 5.671394164006438
+      },
+      "elapsed_s": {
+        "values": [
+          5.180779127496127,
+          6.208924794608239,
+          5.936474817495285,
+          6.055812451271314,
+          5.96592016421662
+        ],
+        "median": 5.96592016421662,
+        "minimum": 5.180779127496127,
+        "maximum": 6.208924794608239
+      },
+      "primary_s": {
+        "values": [
+          12.704952148903125,
+          13.800077396746557,
+          13.480033676770464,
+          14.237634228968087,
+          13.76064592298114
+        ],
+        "median": 13.76064592298114,
+        "minimum": 12.704952148903125,
+        "maximum": 14.237634228968087
+      },
+      "secondary_s": {
+        "values": [
+          0.2519814233729267,
+          1.6472556157117957,
+          1.4981720856233283,
+          0.6317071695575605,
+          0.86558983403493
+        ],
+        "median": 0.86558983403493,
+        "minimum": 0.2519814233729267,
+        "maximum": 1.6472556157117957
+      }
+    },
+    "correctness": {
+      "peak": 0.013108011335134506,
+      "baseline_repeat_envelope_abs": 5.587935447692871e-09,
+      "baseline_repeat_envelope_pct_peak": 4.26299253550007e-05,
+      "candidate_max_abs": 7.450580596923828e-09,
+      "candidate_pct_peak": 5.6839900473334274e-05,
+      "pass": false
+    },
+    "fp64_scoring_diagnostic": {
+      "generic_specialized_output_max_abs": 0.0,
+      "nonzero_voxels": 0,
+      "interpretation": "FP32 envelope failure is caused by changed atomic accumulation order, not a physics/RNG path difference"
+    },
+    "decision": "performance confirmed; strict FP32 dose envelope still fails; default off"
+  },
+  "fixed_shard": {
+    "histories": 3240963,
+    "steps": 1034976717,
+    "nuclear_interactions": 1344312,
+    "final_post_cleanup_validation": {
+      "elapsed_s": 19.723591,
+      "primary_s": 8.5435056,
+      "secondary_s": 7.8971377,
+      "quality_pass": true,
+      "queue_overflow_count": 0,
+      "queue_overflow_energy_MeV": 0,
+      "relative_energy_residual": 3.68331536447e-06
+    },
+    "unified_audit": [
+      0,
+      1036320939,
+      1429988519,
+      0,
+      0,
+      6897079514135703,
+      528848467657861,
+      0
+    ]
+  }
+}
