@@ -1,0 +1,24 @@
+# Electromagnetic carrier-dose diagnostic.  The ordinary total-dose scorer
+# comes from run_energy_scan.txt. ElectronCarrier and NonElectronCarrier are
+# an exact partition of that scorer. No physics process is changed.
+includeFile = run_energy_scan.txt
+
+s:Sc/ElectronCarrier/Quantity = "DoseToMedium"
+s:Sc/ElectronCarrier/Component = "Box"
+s:Sc/ElectronCarrier/OutputFile = "dose_electron_carrier"
+s:Sc/ElectronCarrier/OutputType = "binary"
+s:Sc/ElectronCarrier/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/ElectronCarrier/XBins = 1000
+i:Sc/ElectronCarrier/YBins = 1000
+i:Sc/ElectronCarrier/ZBins = 1
+sv:Sc/ElectronCarrier/OnlyIncludeParticlesNamed = 1 "e-"
+
+s:Sc/NonElectronCarrier/Quantity = "DoseToMedium"
+s:Sc/NonElectronCarrier/Component = "Box"
+s:Sc/NonElectronCarrier/OutputFile = "dose_non_electron_carrier"
+s:Sc/NonElectronCarrier/OutputType = "binary"
+s:Sc/NonElectronCarrier/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/NonElectronCarrier/XBins = 1000
+i:Sc/NonElectronCarrier/YBins = 1000
+i:Sc/NonElectronCarrier/ZBins = 1
+sv:Sc/NonElectronCarrier/OnlyIncludeParticlesNotNamed = 1 "e-"

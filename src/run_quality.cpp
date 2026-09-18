@@ -113,6 +113,10 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
         report.approximations.push_back({"all_ion_elastic_candidate",
             "Finite TOPAS elastic event bank; additional heavy recoil isotopes use total stopping and MCS with EM-only transport; patient gamma and bank convergence validation pending",1.,0.});
     }
+    if (config.enable_minibeam && config.minibeam_transport_mode == "copper_em") {
+        report.approximations.push_back({"minibeam_copper_candidate",
+            "Copper primary EM, MCS, general-ion elastic and C12 INCLXX are active; charged INCLXX products use charge-scaled C12 stopping in the remaining Copper, while neutral products are an explicit beamline energy sink. The 3 cm TOPAS comparison is an initial research validation, not a production neutral-dose model",1.,0.});
+    }
 
     if(!config.material_electron_response_index_file.empty()) {
         report.failures.push_back({"unvalidated_material_electron_response","Candidate main-kernel material response; patient accuracy and complete density coverage not validated",1.,0.});

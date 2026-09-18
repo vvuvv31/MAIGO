@@ -261,10 +261,8 @@ SecondaryRateTable SecondaryRateTable::from_binary(
             }
             const std::string expected_sha =
                 minjson::require_string(meta.at("data_sha256"), "data_sha256");
-            const std::string actual_sha = compute_file_sha256_hex(binary_path);
-            if (actual_sha != expected_sha) {
-                throw std::runtime_error("SecondaryRateTable: SHA-256 mismatch for " + binary_path.string() +
-                                         ": expected " + expected_sha + ", got " + actual_sha);
+            if (!file_sha256_matches(binary_path, expected_sha)) {
+                throw std::runtime_error("SecondaryRateTable: SHA-256 mismatch for " + binary_path.string());
             }
             const std::string magic = minjson::require_string(meta.at("binary_magic"), "binary_magic");
             if (magic != "SCHN2RAT") {

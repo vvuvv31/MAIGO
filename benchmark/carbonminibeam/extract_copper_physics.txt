@@ -1,0 +1,57 @@
+# Copper-only database extraction for the optional GPU minibeam path.
+# This is not a dose-validation geometry.
+i:Ts/Seed = 240917
+i:Ts/NumberOfThreads = 192
+i:Ts/ShowHistoryCountAtInterval = 10000
+b:Ts/ShowHistoryCountLessFrequentlyAsSimulationProgresses = "True"
+b:Gr/Enable = "False"
+
+s:Ge/World/Type = "TsBox"
+s:Ge/World/Material = "G4_Galactic"
+d:Ge/World/HLX = 100 mm
+d:Ge/World/HLY = 100 mm
+d:Ge/World/HLZ = 200 mm
+b:Ge/World/Invisible = "True"
+s:Ge/Copper/Parent = "World"
+s:Ge/Copper/Type = "TsBox"
+s:Ge/Copper/Material = "G4_Cu"
+d:Ge/Copper/HLX = 60 mm
+d:Ge/Copper/HLY = 60 mm
+d:Ge/Copper/HLZ = 100 mm
+d:Ge/Copper/MaxStepSize = 0.05 mm
+s:Ge/BeamPosition/Parent = "World"
+s:Ge/BeamPosition/Type = "Group"
+d:Ge/BeamPosition/TransZ = 100.001 mm
+
+s:So/CarbonBeam/Type = "Beam"
+s:So/CarbonBeam/Component = "BeamPosition"
+s:So/CarbonBeam/BeamParticle = "GenericIon(6,12,6)"
+d:So/CarbonBeam/BeamEnergy = 2150 MeV
+u:So/CarbonBeam/BeamEnergySpread = 0.0
+s:So/CarbonBeam/BeamPositionDistribution = "None"
+s:So/CarbonBeam/BeamAngularDistribution = "None"
+i:So/CarbonBeam/NumberOfHistoriesInRun = 256000
+
+s:Ph/ListName = "Default"
+s:Ph/Default/Type = "Geant4_Modular"
+sv:Ph/Default/Modules = 8 "g4em-standard_opt4" "g4h-phy_QGSP_BIC_HP" "g4decay" "g4ion-inclxx" "CarbonIonElasticPhysics" "g4h-elastic_HP" "g4stopping" "CarbonInelasticCapturePhysics"
+d:Ph/Default/CutForAllParticles = 0.05 mm
+
+s:Sc/CopperStopping/Quantity = "CarbonStoppingPowerNtuple"
+s:Sc/CopperStopping/Component = "Copper"
+s:Sc/CopperStopping/OutputFile = "c12_copper_stopping"
+s:Sc/CopperStopping/OutputType = "ASCII"
+s:Sc/CopperStopping/IfOutputFileAlreadyExists = "Overwrite"
+s:Sc/CopperInelasticRate/Quantity = "CarbonCrossSectionNtuple"
+s:Sc/CopperInelasticRate/Component = "Copper"
+s:Sc/CopperInelasticRate/OutputFile = "c12_copper_inelastic_rate"
+s:Sc/CopperInelasticRate/OutputType = "ASCII"
+s:Sc/CopperInelasticRate/IfOutputFileAlreadyExists = "Overwrite"
+
+s:Sc/CopperElastic/Quantity = "CarbonElasticNtuple"
+s:Sc/CopperElastic/Component = "Copper"
+s:Sc/CopperElastic/OutputFile = "c12_copper_elastic"
+s:Sc/CopperElastic/OutputType = "ASCII"
+s:Sc/CopperElastic/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/CopperElastic/ProjectileZ = 6
+i:Sc/CopperElastic/ProjectileA = 12

@@ -11,7 +11,7 @@
 namespace carbon {
 UnifiedEmPackage UnifiedEmPackage::load(const std::filesystem::path& path,const std::string& sha) {
     if(std::endian::native!=std::endian::little)throw std::runtime_error("EMJOINT1 requires little endian");
-    if(sha.size()!=64 || compute_file_sha256_hex(path)!=sha)throw std::runtime_error("Unified EM SHA256 mismatch");
+    if(sha.size()!=64 || !file_sha256_matches(path,sha))throw std::runtime_error("Unified EM SHA256 mismatch");
     std::ifstream in(path,std::ios::binary);
     char magic[8];std::uint32_t h[6];in.read(magic,8);in.read(reinterpret_cast<char*>(h),sizeof h);
     if(!in || std::memcmp(magic,"EMJOINT1",8) || h[0]!=1 || h[1]<26 || h[1]>256 || h[2]!=18 || h[3]!=h[1]*h[2])

@@ -114,8 +114,8 @@ SchneiderLongitudinalTable SchneiderLongitudinalTable::from_csv(
         "f42140bc6a99ca90ef9a7fc267c22be9a6d8002192644dbe45b7a40c4e10820b";
     const std::string metadata_sha =
         "32a37a8235d75954ea020685cd659be2ed6c7d766fad5725eaabdae91035339a";
-    if (compute_file_sha256_hex(path) != data_sha ||
-        compute_file_sha256_hex(metadata) != metadata_sha ||
+    if (!file_sha256_matches(path, data_sha) ||
+        !file_sha256_matches(metadata, metadata_sha) ||
         std::filesystem::file_size(path) != 128U) {
         throw std::invalid_argument("Longitudinal candidate CSV/metadata SHA or size mismatch");
     }

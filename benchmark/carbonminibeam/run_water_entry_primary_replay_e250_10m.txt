@@ -1,0 +1,20 @@
+# High-statistics downstream-isolation replay. The input contains only the
+# 1,202,572 parent-0 C12 tracks that reached the water entrance.
+includeFile = run_energy_scan.txt
+
+b:Gr/Enable = "False"
+b:Ge/CheckForOverlaps = "True"
+i:Ts/NumberOfThreads = 192
+b:Ts/PauseBeforeQuit = "False"
+
+s:So/CarbonPBS/Type = "PhaseSpace"
+s:So/CarbonPBS/Component = "World"
+s:So/CarbonPBS/PhaseSpaceFileName = "/mnt/sda/wuwei/minibeam_water_replay_e250_10m/input/water_entrance_primary_c12"
+b:So/CarbonPBS/PhaseSpaceIgnoreXPos = "False"
+b:So/CarbonPBS/PhaseSpaceIgnoreYPos = "False"
+b:So/CarbonPBS/PhaseSpaceIgnoreZPos = "False"
+b:So/CarbonPBS/PhaseSpaceInvertXAxis = "False"
+b:So/CarbonPBS/PhaseSpaceInvertYAxis = "False"
+b:So/CarbonPBS/PhaseSpaceInvertZAxis = "False"
+b:So/CarbonPBS/PhaseSpaceIncludeEmptyHistories = "False"
+i:So/CarbonPBS/PhaseSpaceMultipleUse = 1

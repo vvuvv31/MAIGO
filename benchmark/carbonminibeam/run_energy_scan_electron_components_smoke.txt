@@ -1,0 +1,6 @@
+includeFile = run_energy_scan_electron_components.txt
+
+# 2,560 histories for filter/partition validation before a high-statistics run.
+u:So/CarbonPBS/HistoriesScale = 0.0001
+i:Ts/NumberOfThreads = 192
+i:Ts/Seed = 20260918

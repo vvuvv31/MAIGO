@@ -1,0 +1,4 @@
+includeFile = run_energy_scan.txt
+u:So/CarbonPBS/HistoriesScale = 0.078125
+i:Ts/Seed = SEED_VALUE
+i:Ts/NumberOfThreads = 56

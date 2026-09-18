@@ -1,0 +1,7 @@
+# Process-isolation reference: identical to the ordinary phase-space run, but
+# without CarbonIonElasticPhysics. g4h-elastic_HP remains enabled for the
+# nucleon/HP sector. This is a diagnostic and not a dose reference.
+includeFile = run_phase_space_field3cm.txt
+
+sv:Ph/Default/Modules = 6 "g4em-standard_opt4" "g4h-phy_QGSP_BIC_HP" "g4decay" "g4ion-inclxx" "g4h-elastic_HP" "g4stopping"
+i:Ts/Seed = 202609251

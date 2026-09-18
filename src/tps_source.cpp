@@ -296,6 +296,30 @@ TpsSourcePose central_pose(const TransportConfig& config, const TpsSpot& spot) {
     return magnet_pose(u0, v0, w0, isocenter);
 }
 
+TpsSourcePose explicit_pose(const TpsSpot& spot) {
+    Vec3 w{spot.direction_x, spot.direction_y, spot.direction_z};
+    const auto w_norm = std::sqrt(w.x * w.x + w.y * w.y + w.z * w.z);
+    if (!(w_norm > 0.0) || !std::isfinite(w_norm)) {
+        throw std::invalid_argument("TPS explicit source direction must be finite and nonzero");
+    }
+    w = (1.0 / w_norm) * w;
+
+    // The transverse axes do not affect deterministic replay, but keeping a
+    // stable right-handed frame also makes explicit poses safe with emittance.
+    const Vec3 reference = std::abs(w.z) < 0.9 ? Vec3{0.0, 0.0, 1.0}
+                                                : Vec3{0.0, 1.0, 0.0};
+    Vec3 u{reference.y * w.z - reference.z * w.y,
+           reference.z * w.x - reference.x * w.z,
+           reference.x * w.y - reference.y * w.x};
+    const auto u_norm = std::sqrt(u.x * u.x + u.y * u.y + u.z * u.z);
+    u = (1.0 / u_norm) * u;
+    const Vec3 v{w.y * u.z - w.z * u.y,
+                 w.z * u.x - w.x * u.z,
+                 w.x * u.y - w.y * u.x};
+    return {spot.source_x_mm, spot.source_y_mm, spot.source_z_mm,
+            u.x, u.y, u.z, v.x, v.y, v.z, w.x, w.y, w.z};
+}
+
 double inherited(const double value, const double fallback) {
     return std::isfinite(value) ? value : fallback;
 }
@@ -357,6 +381,18 @@ TpsSourcePlan TpsSourcePlan::from_csv(const std::filesystem::path& path) {
     const auto has_y = columns.contains("y_mm") || columns.contains("y");
     const auto has_mu = columns.contains("mu_weight");
     const auto has_weight = columns.contains("weight");
+    constexpr std::array<const char*, 6> explicit_pose_columns{
+        "source_x_mm", "source_y_mm", "source_z_mm",
+        "direction_x", "direction_y", "direction_z"};
+    const auto explicit_pose_count = static_cast<std::size_t>(std::count_if(
+        explicit_pose_columns.begin(), explicit_pose_columns.end(),
+        [&](const char* name) { return columns.contains(name); }));
+    if (explicit_pose_count != 0 &&
+        explicit_pose_count != explicit_pose_columns.size()) {
+        throw std::runtime_error(
+            "TPS spots CSV explicit source pose requires source_x/y/z_mm and "
+            "direction_x/y/z together: " + path.string());
+    }
     if ((!has_energy_mevu && !has_energy_mev) || !has_x || !has_y ||
         (!has_mu && !has_weight)) {
         throw std::runtime_error(
@@ -417,6 +453,29 @@ TpsSourcePlan TpsSourcePlan::from_csv(const std::filesystem::path& path) {
             parse_optional(fields, columns, "couch_angle_deg");
         spot.collimator_angle_deg =
             parse_optional(fields, columns, "collimator_angle_deg");
+        if (explicit_pose_count != 0) {
+            spot.source_x_mm = parse_required(
+                fields, columns, "source_x_mm", path, line_number);
+            spot.source_y_mm = parse_required(
+                fields, columns, "source_y_mm", path, line_number);
+            spot.source_z_mm = parse_required(
+                fields, columns, "source_z_mm", path, line_number);
+            spot.direction_x = parse_required(
+                fields, columns, "direction_x", path, line_number);
+            spot.direction_y = parse_required(
+                fields, columns, "direction_y", path, line_number);
+            spot.direction_z = parse_required(
+                fields, columns, "direction_z", path, line_number);
+            const auto direction_norm = std::sqrt(
+                spot.direction_x * spot.direction_x +
+                spot.direction_y * spot.direction_y +
+                spot.direction_z * spot.direction_z);
+            if (!(direction_norm > 0.0) || !std::isfinite(direction_norm)) {
+                throw std::runtime_error(
+                    "TPS spot explicit source direction must be nonzero at " +
+                    path.string() + ":" + std::to_string(line_number));
+            }
+        }
         const auto energy_ok = std::isfinite(spot.energy_total_MeV)
                                    ? spot.energy_total_MeV > 0.0
                                    : spot.energy_MeVu > 0.0;
@@ -589,6 +648,9 @@ void TpsSourcePlan::apply_beam_model(const std::filesystem::path& path) {
 
 TpsSourcePose TpsSourcePlan::pose_for_spot(const TransportConfig& config,
                                            const TpsSpot& spot) const {
+    if (std::isfinite(spot.source_x_mm)) {
+        return explicit_pose(spot);
+    }
     return central_pose(config, spot);
 }
 
@@ -724,7 +786,7 @@ std::vector<PrimarySpotBatchEntry> TpsSourcePlan::make_primary_batch(
     std::vector<PrimarySpotBatchEntry> batch;
     std::optional<AirMomentTable> air_moments;
     if (config.spots_enable_upstream_air_mcs) {
-        if (compute_file_sha256_hex(config.spots_upstream_air_mcs_file)!=config.spots_upstream_air_mcs_sha256)
+        if (!file_sha256_matches(config.spots_upstream_air_mcs_file,config.spots_upstream_air_mcs_sha256))
             throw std::invalid_argument("Air moment table SHA mismatch");
         air_moments=AirMomentTable::read(config.spots_upstream_air_mcs_file);
     }

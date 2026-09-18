@@ -287,6 +287,7 @@ void accumulate_transport_result(carbon::TransportResult& total,
         part.electron_gamma_queue_overflow_energy_MeV;
     total.electromagnetic_generation_residual_MeV +=
         part.electromagnetic_generation_residual_MeV;
+    const auto minibeam_history_offset = total.minibeam.incident_histories;
     total.minibeam.enabled = total.minibeam.enabled || part.minibeam.enabled;
     total.minibeam.incident_histories += part.minibeam.incident_histories;
     total.minibeam.direct_air_slit_histories +=
@@ -333,6 +334,13 @@ void accumulate_transport_result(carbon::TransportResult& total,
     total.minibeam.direction_y_sum += part.minibeam.direction_y_sum;
     total.minibeam.direction_y_squared_sum +=
         part.minibeam.direction_y_squared_sum;
+    total.minibeam_phase_space_records.reserve(
+        total.minibeam_phase_space_records.size() +
+        part.minibeam_phase_space_records.size());
+    for (auto record : part.minibeam_phase_space_records) {
+        record.history += minibeam_history_offset;
+        total.minibeam_phase_space_records.push_back(record);
+    }
     total.total_steps += part.total_steps;
     total.elapsed_seconds += part.elapsed_seconds;
     total.primary_kernel_seconds += part.primary_kernel_seconds;

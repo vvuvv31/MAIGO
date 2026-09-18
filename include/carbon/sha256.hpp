@@ -239,4 +239,29 @@ inline std::string compute_file_sha256_hex(const std::filesystem::path& path) {
 #endif
 }
 
+inline constexpr bool file_integrity_checks_enabled =
+#if CARBON_DISABLE_INTEGRITY_CHECKS
+    false;
+#else
+    true;
+#endif
+
+inline bool file_sha256_matches(const std::filesystem::path& path,
+                                const std::string_view expected) {
+    if constexpr (!file_integrity_checks_enabled) {
+        (void)path;
+        (void)expected;
+        return true;
+    }
+    return compute_file_sha256_hex(path) == expected;
+}
+
+inline std::string file_sha256_for_report(const std::filesystem::path& path) {
+    if constexpr (!file_integrity_checks_enabled) {
+        (void)path;
+        return "disabled";
+    }
+    return compute_file_sha256_hex(path);
+}
+
 }  // namespace carbon

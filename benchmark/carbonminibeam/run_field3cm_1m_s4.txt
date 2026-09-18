@@ -1,0 +1,6 @@
+includeFile = run1.txt
+s:So/CarbonPBS/SpotPlanFile = "spots_3cm.csv"
+u:So/CarbonPBS/HistoriesScale = 0.04
+i:Ts/Seed = 20260921
+i:Ts/NumberOfThreads = 192
+b:Ts/PauseBeforeQuit = "False"

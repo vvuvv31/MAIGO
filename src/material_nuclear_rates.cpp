@@ -7,7 +7,7 @@
 
 namespace carbon {
 PureWaterMaterial PureWaterMaterial::from_probe(const std::filesystem::path& path,const std::string& expected) {
-    if(expected.size()!=64 || compute_file_sha256_hex(path)!=expected)
+    if(expected.size()!=64 || !file_sha256_matches(path,expected))
         throw std::invalid_argument("Pure-water material SHA mismatch");
     std::ifstream in(path);
     const std::string text((std::istreambuf_iterator<char>(in)),{});

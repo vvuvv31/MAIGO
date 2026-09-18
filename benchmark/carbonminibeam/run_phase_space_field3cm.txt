@@ -1,0 +1,66 @@
+# Three-plane phase-space diagnostic for the 3 cm x 3 cm PBS field.
+# The films sit 0.01 mm outside the Copper and water boundaries.
+includeFile = run_energy_scan.txt
+
+b:Gr/Enable = "False"
+b:Ge/CheckForOverlaps = "True"
+
+s:Ge/CollimatorEntranceFilm/Type = "TsBox"
+s:Ge/CollimatorEntranceFilm/Parent = "World"
+s:Ge/CollimatorEntranceFilm/Material = "Air"
+d:Ge/CollimatorEntranceFilm/HLX = 70.0 mm
+d:Ge/CollimatorEntranceFilm/HLY = 0.005 mm
+d:Ge/CollimatorEntranceFilm/HLZ = 70.0 mm
+d:Ge/CollimatorEntranceFilm/TransY = -60.015 mm
+
+s:Ge/CollimatorExitFilm/Type = "TsBox"
+s:Ge/CollimatorExitFilm/Parent = "World"
+s:Ge/CollimatorExitFilm/Material = "Air"
+d:Ge/CollimatorExitFilm/HLX = 70.0 mm
+d:Ge/CollimatorExitFilm/HLY = 0.005 mm
+d:Ge/CollimatorExitFilm/HLZ = 70.0 mm
+d:Ge/CollimatorExitFilm/TransY = 0.015 mm
+
+s:Ge/WaterEntranceFilm/Type = "TsBox"
+s:Ge/WaterEntranceFilm/Parent = "World"
+s:Ge/WaterEntranceFilm/Material = "Air"
+d:Ge/WaterEntranceFilm/HLX = 70.0 mm
+d:Ge/WaterEntranceFilm/HLY = 0.005 mm
+d:Ge/WaterEntranceFilm/HLZ = 70.0 mm
+d:Ge/WaterEntranceFilm/TransY = 59.985 mm
+
+s:Sc/AtCollimatorEntrance/Quantity = "PhaseSpace"
+s:Sc/AtCollimatorEntrance/Surface = "CollimatorEntranceFilm/YMinusSurface"
+s:Sc/AtCollimatorEntrance/OnlyIncludeParticlesGoing = "In"
+s:Sc/AtCollimatorEntrance/OutputType = "ASCII"
+s:Sc/AtCollimatorEntrance/OutputFile = "output/collimator_entrance"
+s:Sc/AtCollimatorEntrance/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/AtCollimatorEntrance/OutputBufferSize = 10000
+b:Sc/AtCollimatorEntrance/IncludeRunID = "True"
+b:Sc/AtCollimatorEntrance/IncludeEventID = "True"
+b:Sc/AtCollimatorEntrance/IncludeTrackID = "True"
+b:Sc/AtCollimatorEntrance/IncludeParentID = "True"
+
+s:Sc/AtCollimatorExit/Quantity = "PhaseSpace"
+s:Sc/AtCollimatorExit/Surface = "CollimatorExitFilm/YMinusSurface"
+s:Sc/AtCollimatorExit/OnlyIncludeParticlesGoing = "In"
+s:Sc/AtCollimatorExit/OutputType = "ASCII"
+s:Sc/AtCollimatorExit/OutputFile = "output/collimator_exit"
+s:Sc/AtCollimatorExit/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/AtCollimatorExit/OutputBufferSize = 10000
+b:Sc/AtCollimatorExit/IncludeRunID = "True"
+b:Sc/AtCollimatorExit/IncludeEventID = "True"
+b:Sc/AtCollimatorExit/IncludeTrackID = "True"
+b:Sc/AtCollimatorExit/IncludeParentID = "True"
+
+s:Sc/AtWaterEntrance/Quantity = "PhaseSpace"
+s:Sc/AtWaterEntrance/Surface = "WaterEntranceFilm/YMinusSurface"
+s:Sc/AtWaterEntrance/OnlyIncludeParticlesGoing = "In"
+s:Sc/AtWaterEntrance/OutputType = "ASCII"
+s:Sc/AtWaterEntrance/OutputFile = "output/water_entrance"
+s:Sc/AtWaterEntrance/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/AtWaterEntrance/OutputBufferSize = 10000
+b:Sc/AtWaterEntrance/IncludeRunID = "True"
+b:Sc/AtWaterEntrance/IncludeEventID = "True"
+b:Sc/AtWaterEntrance/IncludeTrackID = "True"
+b:Sc/AtWaterEntrance/IncludeParentID = "True"

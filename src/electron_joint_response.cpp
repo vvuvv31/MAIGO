@@ -12,8 +12,8 @@ namespace carbon {
 ElectronJointResponseTable ElectronJointResponseTable::from_csv(const std::filesystem::path& path,
     const std::string& data_pin,const std::string& meta_pin) {
     auto meta=path;meta.replace_extension(".metadata.json");
-    if(data_pin.size()!=64 || meta_pin.size()!=64 || compute_file_sha256_hex(path)!=data_pin ||
-       compute_file_sha256_hex(meta)!=meta_pin)throw std::invalid_argument("Electron joint response SHA mismatch/missing pin");
+    if(data_pin.size()!=64 || meta_pin.size()!=64 || !file_sha256_matches(path,data_pin) ||
+       !file_sha256_matches(meta,meta_pin))throw std::invalid_argument("Electron joint response SHA mismatch/missing pin");
     std::ifstream mf(meta);std::stringstream text;text<<mf.rdbuf();
     const auto m=minjson::Parser(text.str()).parse();
     auto number=[](const minjson::Value& v) {if(v.type!=minjson::Value::Type::Number || !std::isfinite(v.number))throw std::invalid_argument("Joint metadata number");return v.number;};
@@ -90,7 +90,7 @@ ElectronJointResponseTable ElectronJointResponseTable::from_csv(const std::files
             throw std::invalid_argument("Ordered path must be a companion filename");
         const auto binary=path.parent_path()/filename;
         out.path_sha256=m.at("ordered_path_sha256").str;
-        if(out.path_sha256.size()!=64 || compute_file_sha256_hex(binary)!=out.path_sha256 ||
+        if(out.path_sha256.size()!=64 || !file_sha256_matches(binary,out.path_sha256) ||
            number(m.at("ordered_path_size_bytes"))!=static_cast<double>(std::filesystem::file_size(binary)))
             throw std::invalid_argument("Ordered path SHA/size mismatch");
         std::ifstream f(binary,std::ios::binary);char magic[8];std::uint32_t version=0,ns=0,nv=0;

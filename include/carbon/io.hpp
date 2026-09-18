@@ -44,6 +44,9 @@ void write_fragment_birth_spectrum_csv(const std::filesystem::path& prefix,
                                        const TransportConfig& config,
                                        const TransportResult& result);
 
+void write_minibeam_phase_space_csv(const std::filesystem::path& path,
+                                    const TransportResult& result);
+
 // Fragment-species total dose (Gy), same bin mass as the depth dose scorer.
 void write_fragment_species_dose_Gy_csv(const std::filesystem::path& path,
                                         const TransportConfig& config,

@@ -1,0 +1,8 @@
+includeFile = run1.txt
+
+# Restrict the reference startup/process audit to one spot and ten histories.
+i:So/CarbonPBS/FirstSpot = 0
+i:So/CarbonPBS/LastSpot = 0
+u:So/CarbonPBS/HistoriesScale = 0.0001
+i:Ts/NumberOfThreads = 1
+b:Ts/PauseBeforeQuit = "False"

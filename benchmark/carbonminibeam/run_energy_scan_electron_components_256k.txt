@@ -1,0 +1,5 @@
+includeFile = run_energy_scan_electron_components.txt
+
+u:So/CarbonPBS/HistoriesScale = 0.01
+i:Ts/NumberOfThreads = 192
+i:Ts/Seed = 202609250

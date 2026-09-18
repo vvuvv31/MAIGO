@@ -5,7 +5,7 @@
 #include <stdexcept>
 namespace carbon {
 AllIonElasticTable AllIonElasticTable::load(const std::filesystem::path& path,const std::string& pin){
- if(pin.size()!=64||compute_file_sha256_hex(path)!=pin)throw std::runtime_error("Elastic bank SHA mismatch");
+ if(pin.size()!=64||!file_sha256_matches(path,pin))throw std::runtime_error("Elastic bank SHA mismatch");
  std::ifstream f(path,std::ios::binary);char magic[8];f.read(magic,8);
  std::uint32_t h[6];f.read(reinterpret_cast<char*>(h),sizeof(h));
  if(!f||std::memcmp(magic,"ELBANK01",8)||h[0]!=1||h[1]!=18||h[2]!=26||h[3]!=13||h[4]<2||h[4]>10000||h[5]<32||h[5]>65536)
@@ -29,7 +29,7 @@ AllIonElasticTable AllIonElasticTable::load(const std::filesystem::path& path,co
 }
 namespace carbon {
 ElasticRecoilStoppingTable ElasticRecoilStoppingTable::load(const std::filesystem::path& path,const std::string& pin){
- if(pin.size()!=64||compute_file_sha256_hex(path)!=pin)throw std::runtime_error("Recoil stopping SHA mismatch");
+ if(pin.size()!=64||!file_sha256_matches(path,pin))throw std::runtime_error("Recoil stopping SHA mismatch");
  std::ifstream f(path,std::ios::binary);char magic[8];f.read(magic,8);std::uint32_t h[3];f.read(reinterpret_cast<char*>(h),12);
  if(!f||std::memcmp(magic,"ELRSP001",8)||h[0]==0||h[0]>200||h[1]!=26||h[2]<2||h[2]>10000)throw std::runtime_error("Invalid recoil stopping schema");
  const std::uint64_t np=h[0],ne=h[2],nv=np*26*ne;

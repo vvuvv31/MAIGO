@@ -211,7 +211,7 @@ SchneiderIonStoppingTable SchneiderIonStoppingTable::from_binary(
         root["data_filename"].str_val != binary_path.filename().string())
         throw std::runtime_error("Metadata data_filename mismatch");
     if (!root.has("data_sha256") ||
-        root["data_sha256"].str_val != compute_file_sha256_hex(binary_path))
+        !file_sha256_matches(binary_path, root["data_sha256"].str_val))
         throw std::runtime_error("Metadata data_sha256 mismatch");
     if (strict_uint(root["sections_count"], "sections_count") != kSchneiderIonSections ||
         strict_uint(root["species_count"], "species_count") != kSchneiderIonSpecies ||

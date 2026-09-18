@@ -1,0 +1,33 @@
+# High-statistics water-entry phase space for isolating the downstream water
+# transport.  Restricting the scorer to C12 keeps the 10M-history ASCII output
+# manageable; prepare_water_entry_replay.py subsequently retains parent-ID 0.
+includeFile = run_energy_scan.txt
+
+u:So/CarbonPBS/HistoriesScale = 0.39063
+i:Ts/Seed = 2026092510
+i:Ts/NumberOfThreads = 192
+b:Gr/Enable = "False"
+b:Ge/CheckForOverlaps = "True"
+
+s:Ge/WaterEntranceFilm/Type = "TsBox"
+s:Ge/WaterEntranceFilm/Parent = "World"
+s:Ge/WaterEntranceFilm/Material = "Air"
+d:Ge/WaterEntranceFilm/HLX = 70.0 mm
+d:Ge/WaterEntranceFilm/HLY = 0.005 mm
+d:Ge/WaterEntranceFilm/HLZ = 70.0 mm
+d:Ge/WaterEntranceFilm/TransY = 59.985 mm
+
+s:Sc/AtWaterEntrance/Quantity = "PhaseSpace"
+s:Sc/AtWaterEntrance/Surface = "WaterEntranceFilm/YMinusSurface"
+s:Sc/AtWaterEntrance/OnlyIncludeParticlesGoing = "In"
+# Preserve every charge state of parent C12. Restricting this to charge 6
+# removes the low-energy, wide-angle C12 population after Copper.
+sv:Sc/AtWaterEntrance/OnlyIncludeParticlesNamed = 1 "GenericIon(6,12,*)"
+s:Sc/AtWaterEntrance/OutputType = "ASCII"
+s:Sc/AtWaterEntrance/OutputFile = "output/water_entrance"
+s:Sc/AtWaterEntrance/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/AtWaterEntrance/OutputBufferSize = 100000
+b:Sc/AtWaterEntrance/IncludeRunID = "True"
+b:Sc/AtWaterEntrance/IncludeEventID = "True"
+b:Sc/AtWaterEntrance/IncludeTrackID = "True"
+b:Sc/AtWaterEntrance/IncludeParentID = "True"

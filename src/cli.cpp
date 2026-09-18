@@ -13,6 +13,7 @@ void print_usage(const char* executable) {
                  " [--spots FILE] [--straggling-scale X] [--output FILE]"
                  " [--dose-output FILE] [--scorer-let|--no-scorer-let]"
                  " [--let-output FILE] [--write-canonical-config FILE]"
+                 " [--minibeam-phase-space-output FILE]"
                  " [--plan-manifest FILE] [--plan-only] [--plan-preflight]"
                  " [--sequential-spots]\n"
                  "  --plan-manifest FILE  Run each config listed in FILE sequentially in\n"
@@ -45,6 +46,7 @@ void print_usage(const char* executable) {
                  "  --no-scorer-let      Disable LET_d scoring (overrides YAML scorerLET)\n"
                  "  --let-output FILE    LET_d CSV including raw numerator/denominator\n"
                  "  --voxel-dose-mhd FILE  Override dense voxel dose MHD output\n";
+    std::cout << "  --minibeam-phase-space-output FILE  Write primary water-entry CSV\n";
 }
 
 void parse_config_and_help(int argc, char** argv, CliState& state) {
@@ -116,6 +118,9 @@ void apply_cli_overrides(int argc, char** argv, TransportConfig& config, CliStat
             config.let_output_file = argv[++index];
         } else if (argument == "--voxel-dose-mhd" && index + 1 < argc) {
             config.voxel_dose_mhd_output_file = argv[++index];
+        } else if (argument == "--minibeam-phase-space-output" &&
+                   index + 1 < argc) {
+            config.minibeam_phase_space_output_file = argv[++index];
         } else if (argument == "--plan-only") {
             state.plan_only = true;
         } else if (argument == "--plan-preflight") {

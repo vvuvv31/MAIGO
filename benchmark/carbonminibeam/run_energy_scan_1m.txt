@@ -1,0 +1,3 @@
+includeFile = run_energy_scan.txt
+u:So/CarbonPBS/HistoriesScale = 0.04
+i:Ts/Seed = 20260917

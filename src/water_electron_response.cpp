@@ -14,8 +14,8 @@ WaterElectronResponseTable WaterElectronResponseTable::load(const std::filesyste
     const std::string& data_pin,const std::string& metadata_pin,bool material_response) {
     auto metadata=path;metadata.replace_extension(".metadata.json");
     auto require=[](bool ok,const char* why) {if(!ok)throw std::invalid_argument(why);};
-    require(data_pin.size()==64 && metadata_pin.size()==64 && compute_file_sha256_hex(path)==data_pin &&
-        compute_file_sha256_hex(metadata)==metadata_pin,"Water electron data/metadata SHA mismatch");
+    require(data_pin.size()==64 && metadata_pin.size()==64 && file_sha256_matches(path,data_pin) &&
+        file_sha256_matches(metadata,metadata_pin),"Water electron data/metadata SHA mismatch");
     std::ifstream mf(metadata);std::stringstream text;text<<mf.rdbuf();
     const auto m=minjson::Parser(text.str()).parse();
     auto num=[&](const minjson::Value& v) {require(v.type==minjson::Value::Type::Number && std::isfinite(v.number),"Water response metadata number");return v.number;};
@@ -81,7 +81,7 @@ WaterElectronResponseTable WaterElectronResponseTable::load(const std::filesyste
     require(next==ns,"Unreferenced water samples");
     const auto filename=m.at("path_filename").str;const auto companion=path.parent_path()/filename;
     require(!filename.empty() && std::filesystem::path(filename).filename().string()==filename &&
-        compute_file_sha256_hex(companion)==m.at("path_sha256").str &&
+        file_sha256_matches(companion,m.at("path_sha256").str) &&
         std::filesystem::file_size(companion)==num(m.at("path_size_bytes")),"Water path graph SHA/size");
     std::ifstream p(companion,std::ios::binary);std::uint32_t count=0,nodes=0;
     p.read(magic,8);p.read(reinterpret_cast<char*>(&version),4);p.read(reinterpret_cast<char*>(&count),4);p.read(reinterpret_cast<char*>(&nodes),4);
@@ -108,7 +108,7 @@ WaterElectronResponseTable WaterElectronResponseTable::load(const std::filesyste
 }
 MaterialElectronResponseIndex MaterialElectronResponseIndex::load(const std::filesystem::path& path,
     const std::string& pin) {
-    if(pin.size()!=64 || compute_file_sha256_hex(path)!=pin)throw std::invalid_argument("Material response index SHA mismatch");
+    if(pin.size()!=64 || !file_sha256_matches(path,pin))throw std::invalid_argument("Material response index SHA mismatch");
     std::ifstream input(path);std::stringstream text;text<<input.rdbuf();
     const auto m=minjson::Parser(text.str()).parse();
     if(m.at("schema_version").number!=1 || m.at("status").str!="UNVALIDATED_MATERIAL_RESPONSE_BANK" ||
@@ -192,8 +192,8 @@ WaterElectronResponseTable MaterialElectronResponseIndex::load_table(std::size_t
 std::vector<unsigned char> MaterialElectronResponseIndex::load_state_references(std::size_t i,std::size_t byte_budget) const {
     const auto& file=files.at(i);
     auto metadata=file.state_reference_file;metadata.replace_extension(".metadata.json");
-    if(file.state_reference_file.empty() || compute_file_sha256_hex(metadata)!=file.state_reference_metadata_sha256 ||
-       compute_file_sha256_hex(file.state_reference_file)!=file.state_reference_sha256)
+    if(file.state_reference_file.empty() || !file_sha256_matches(metadata,file.state_reference_metadata_sha256) ||
+       !file_sha256_matches(file.state_reference_file,file.state_reference_sha256))
         throw std::invalid_argument("Missing or changed material state references");
     std::ifstream input(metadata);std::stringstream text;text<<input.rdbuf();
     const auto m=minjson::Parser(text.str()).parse();
@@ -219,7 +219,7 @@ std::vector<unsigned char> MaterialElectronResponseIndex::load_state_references(
 std::vector<std::vector<unsigned char>> MaterialElectronResponseIndex::load_state_sources(std::size_t i,std::size_t byte_budget) const {
     const auto& file=files.at(i);
     auto metadata=file.state_reference_file;metadata.replace_extension(".metadata.json");
-    if(file.state_reference_file.empty() || compute_file_sha256_hex(metadata)!=file.state_reference_metadata_sha256)
+    if(file.state_reference_file.empty() || !file_sha256_matches(metadata,file.state_reference_metadata_sha256))
         throw std::invalid_argument("Missing or changed state-source manifest");
     std::ifstream input(metadata);std::stringstream text;text<<input.rdbuf();
     const auto m=minjson::Parser(text.str()).parse();
@@ -233,7 +233,7 @@ std::vector<std::vector<unsigned char>> MaterialElectronResponseIndex::load_stat
         const auto rows=source.at("rows").number;
         if(!bytes || bytes>byte_budget || bytes%kElectronStateV4RecordBytes ||
            rows!=bytes/kElectronStateV4RecordBytes ||
-           compute_file_sha256_hex(path)!=source.at("sha256").str)
+           !file_sha256_matches(path,source.at("sha256").str))
             throw std::invalid_argument("State source exceeds budget or has wrong SHA/record count");
         std::vector<unsigned char> payload(static_cast<std::size_t>(bytes));
         std::ifstream raw(path,std::ios::binary);

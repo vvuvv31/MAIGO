@@ -36,6 +36,122 @@ inline bool minibeam_point_in_slit(
     return delta > -0.5F * slit_width_mm && delta < 0.5F * slit_width_mm;
 }
 
+// Rectangular equivalent used by the GPU minibeam path.  The outer body is a
+// box; the slit array is unchanged from TOPAS.  Strict boundary comparisons
+// deliberately assign shared solid boundaries to Copper.
+inline bool minibeam_point_in_rectangular_slit(
+    const float x_mm, const float y_mm,
+    const float cosine_angle, const float sine_angle,
+    const float block_width_mm, const float block_length_mm,
+    const int slit_count, const float slit_width_mm,
+    const float slit_pitch_mm, const float slit_length_mm,
+    const float slit_offset_mm, int& slit_index) noexcept {
+    const auto u_mm = cosine_angle * x_mm + sine_angle * y_mm;
+    const auto v_mm = -sine_angle * x_mm + cosine_angle * y_mm;
+    if (!(u_mm > -0.5F * block_width_mm && u_mm < 0.5F * block_width_mm &&
+          v_mm > -0.5F * block_length_mm && v_mm < 0.5F * block_length_mm &&
+          v_mm > -0.5F * slit_length_mm && v_mm < 0.5F * slit_length_mm)) {
+        return false;
+    }
+    const auto centered_u_mm = u_mm - slit_offset_mm;
+    slit_index = nearest_minibeam_slit(centered_u_mm, slit_pitch_mm);
+    const auto half_count = slit_count / 2;
+    if (slit_index < -half_count || slit_index > half_count) return false;
+    const auto slit_center_mm =
+        slit_offset_mm + static_cast<float>(slit_index) * slit_pitch_mm;
+    return u_mm > slit_center_mm - 0.5F * slit_width_mm &&
+           u_mm < slit_center_mm + 0.5F * slit_width_mm;
+}
+
+inline bool minibeam_point_in_rectangular_copper(
+    const float x_mm, const float y_mm,
+    const float cosine_angle, const float sine_angle,
+    const float block_width_mm, const float block_length_mm,
+    const int slit_count, const float slit_width_mm,
+    const float slit_pitch_mm, const float slit_length_mm,
+    const float slit_offset_mm) noexcept {
+    const auto u_mm = cosine_angle * x_mm + sine_angle * y_mm;
+    const auto v_mm = -sine_angle * x_mm + cosine_angle * y_mm;
+    if (!(u_mm > -0.5F * block_width_mm && u_mm < 0.5F * block_width_mm &&
+          v_mm > -0.5F * block_length_mm && v_mm < 0.5F * block_length_mm)) {
+        return false;
+    }
+    int slit = 0;
+    return !minibeam_point_in_rectangular_slit(
+        x_mm, y_mm, cosine_angle, sine_angle, block_width_mm, block_length_mm,
+        slit_count, slit_width_mm, slit_pitch_mm, slit_length_mm,
+        slit_offset_mm, slit);
+}
+
+// Returns true when a forward ray intersects the rectangular body and is not
+// wholly contained by one slit across the requested slit thickness.
+inline bool minibeam_ray_hits_rectangular_copper(
+    const float position_x_mm, const float position_y_mm,
+    const float position_z_mm, const float direction_x,
+    const float direction_y, const float direction_z,
+    const float cosine_angle, const float sine_angle,
+    const float block_width_mm, const float block_length_mm,
+    const float block_center_z_mm, const float block_thickness_mm,
+    const int slit_count, const float slit_width_mm,
+    const float slit_pitch_mm, const float slit_length_mm,
+    const float slit_thickness_mm, const float slit_offset_mm) noexcept {
+    if (direction_z <= 1.0e-8F) return true;
+    const auto slit_entrance_z = block_center_z_mm - 0.5F * slit_thickness_mm;
+    const auto slit_exit_z = block_center_z_mm + 0.5F * slit_thickness_mm;
+    const auto block_entrance_z = block_center_z_mm - 0.5F * block_thickness_mm;
+    const auto block_exit_z = block_center_z_mm + 0.5F * block_thickness_mm;
+    const auto block_t0 = (block_entrance_z - position_z_mm) / direction_z;
+    const auto block_t1 = (block_exit_z - position_z_mm) / direction_z;
+    if (block_t1 <= 0.0F || block_t1 <= block_t0) return false;
+
+    const auto slit_t0 = (slit_entrance_z - position_z_mm) / direction_z;
+    const auto slit_t1 = (slit_exit_z - position_z_mm) / direction_z;
+    if (slit_t0 < 0.0F || slit_t1 <= slit_t0) return true;
+    const auto x0 = position_x_mm + slit_t0 * direction_x;
+    const auto y0 = position_y_mm + slit_t0 * direction_y;
+    const auto x1 = position_x_mm + slit_t1 * direction_x;
+    const auto y1 = position_y_mm + slit_t1 * direction_y;
+    int slit0 = 0, slit1 = 0;
+    const auto through_one_slit =
+        minibeam_point_in_rectangular_slit(
+            x0, y0, cosine_angle, sine_angle, block_width_mm,
+            block_length_mm, slit_count, slit_width_mm, slit_pitch_mm,
+            slit_length_mm, slit_offset_mm, slit0) &&
+        minibeam_point_in_rectangular_slit(
+            x1, y1, cosine_angle, sine_angle, block_width_mm,
+            block_length_mm, slit_count, slit_width_mm, slit_pitch_mm,
+            slit_length_mm, slit_offset_mm, slit1) && slit0 == slit1;
+    if (through_one_slit && slit_thickness_mm >= block_thickness_mm) return false;
+
+    // Exact forward ray/box overlap, including rays that enter through a side
+    // even though both z-face points lie outside the box.
+    const auto origin_u = cosine_angle * position_x_mm + sine_angle * position_y_mm;
+    const auto origin_v = -sine_angle * position_x_mm + cosine_angle * position_y_mm;
+    const auto direction_u = cosine_angle * direction_x + sine_angle * direction_y;
+    const auto direction_v = -sine_angle * direction_x + cosine_angle * direction_y;
+    auto enter = block_t0 > 0.0F ? block_t0 : 0.0F;
+    auto leave = block_t1;
+    auto intersect_axis = [&](const float origin, const float direction,
+                              const float half_extent) {
+        if (direction > -1.0e-8F && direction < 1.0e-8F) {
+            if (origin <= -half_extent || origin >= half_extent) leave = -1.0F;
+            return;
+        }
+        auto first = (-half_extent - origin) / direction;
+        auto second = (half_extent - origin) / direction;
+        if (first > second) {
+            const auto temporary = first;
+            first = second;
+            second = temporary;
+        }
+        if (first > enter) enter = first;
+        if (second < leave) leave = second;
+    };
+    intersect_axis(origin_u, direction_u, 0.5F * block_width_mm);
+    intersect_axis(origin_v, direction_v, 0.5F * block_length_mm);
+    return leave > enter;
+}
+
 inline bool minibeam_point_in_copper(
     const float x_mm,
     const float y_mm,

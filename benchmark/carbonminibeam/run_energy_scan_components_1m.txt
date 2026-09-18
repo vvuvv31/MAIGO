@@ -1,0 +1,93 @@
+# One-run component-resolved dose diagnostic.  This layers ten origin scorers
+# onto the ordinary total DoseToMedium scorer from run_energy_scan_1m.txt.
+includeFile = run_energy_scan_1m.txt
+
+s:Sc/PrimaryC/Quantity = "ChargedOriginDoseToMedium"
+s:Sc/PrimaryC/OriginCategory = "primary_c"
+s:Sc/PrimaryC/OutputFile = "component_primary_c"
+s:Sc/PrimaryC/Component = "Box"
+s:Sc/PrimaryC/OutputType = "binary"
+i:Sc/PrimaryC/XBins = 1000
+i:Sc/PrimaryC/YBins = 1000
+i:Sc/PrimaryC/ZBins = 1
+
+s:Sc/SecondaryC/Quantity = "ChargedOriginDoseToMedium"
+s:Sc/SecondaryC/OriginCategory = "secondary_c"
+s:Sc/SecondaryC/OutputFile = "component_secondary_c"
+s:Sc/SecondaryC/Component = "Box"
+s:Sc/SecondaryC/OutputType = "binary"
+i:Sc/SecondaryC/XBins = 1000
+i:Sc/SecondaryC/YBins = 1000
+i:Sc/SecondaryC/ZBins = 1
+
+s:Sc/Boron/Quantity = "ChargedOriginDoseToMedium"
+s:Sc/Boron/OriginCategory = "boron"
+s:Sc/Boron/OutputFile = "component_boron"
+s:Sc/Boron/Component = "Box"
+s:Sc/Boron/OutputType = "binary"
+i:Sc/Boron/XBins = 1000
+i:Sc/Boron/YBins = 1000
+i:Sc/Boron/ZBins = 1
+
+s:Sc/Beryllium/Quantity = "ChargedOriginDoseToMedium"
+s:Sc/Beryllium/OriginCategory = "beryllium"
+s:Sc/Beryllium/OutputFile = "component_beryllium"
+s:Sc/Beryllium/Component = "Box"
+s:Sc/Beryllium/OutputType = "binary"
+i:Sc/Beryllium/XBins = 1000
+i:Sc/Beryllium/YBins = 1000
+i:Sc/Beryllium/ZBins = 1
+
+s:Sc/Lithium/Quantity = "ChargedOriginDoseToMedium"
+s:Sc/Lithium/OriginCategory = "lithium"
+s:Sc/Lithium/OutputFile = "component_lithium"
+s:Sc/Lithium/Component = "Box"
+s:Sc/Lithium/OutputType = "binary"
+i:Sc/Lithium/XBins = 1000
+i:Sc/Lithium/YBins = 1000
+i:Sc/Lithium/ZBins = 1
+
+s:Sc/Helium/Quantity = "ChargedOriginDoseToMedium"
+s:Sc/Helium/OriginCategory = "helium"
+s:Sc/Helium/OutputFile = "component_helium"
+s:Sc/Helium/Component = "Box"
+s:Sc/Helium/OutputType = "binary"
+i:Sc/Helium/XBins = 1000
+i:Sc/Helium/YBins = 1000
+i:Sc/Helium/ZBins = 1
+
+s:Sc/Z1/Quantity = "ChargedOriginDoseToMedium"
+s:Sc/Z1/OriginCategory = "z1"
+s:Sc/Z1/OutputFile = "component_z1"
+s:Sc/Z1/Component = "Box"
+s:Sc/Z1/OutputType = "binary"
+i:Sc/Z1/XBins = 1000
+i:Sc/Z1/YBins = 1000
+i:Sc/Z1/ZBins = 1
+
+s:Sc/OtherCharged/Quantity = "ChargedOriginDoseToMedium"
+s:Sc/OtherCharged/OriginCategory = "other_charged"
+s:Sc/OtherCharged/OutputFile = "component_other_charged"
+s:Sc/OtherCharged/Component = "Box"
+s:Sc/OtherCharged/OutputType = "binary"
+i:Sc/OtherCharged/XBins = 1000
+i:Sc/OtherCharged/YBins = 1000
+i:Sc/OtherCharged/ZBins = 1
+
+s:Sc/NeutralOrigin/Quantity = "ChargedOriginDoseToMedium"
+s:Sc/NeutralOrigin/OriginCategory = "neutral_origin"
+s:Sc/NeutralOrigin/OutputFile = "component_neutral_origin"
+s:Sc/NeutralOrigin/Component = "Box"
+s:Sc/NeutralOrigin/OutputType = "binary"
+i:Sc/NeutralOrigin/XBins = 1000
+i:Sc/NeutralOrigin/YBins = 1000
+i:Sc/NeutralOrigin/ZBins = 1
+
+s:Sc/Unclassified/Quantity = "ChargedOriginDoseToMedium"
+s:Sc/Unclassified/OriginCategory = "unclassified"
+s:Sc/Unclassified/OutputFile = "component_unclassified"
+s:Sc/Unclassified/Component = "Box"
+s:Sc/Unclassified/OutputType = "binary"
+i:Sc/Unclassified/XBins = 1000
+i:Sc/Unclassified/YBins = 1000
+i:Sc/Unclassified/ZBins = 1

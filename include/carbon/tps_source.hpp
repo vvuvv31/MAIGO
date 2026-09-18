@@ -57,6 +57,14 @@ struct TpsSpot {
     double gantry_angle_deg{std::numeric_limits<double>::quiet_NaN()};
     double couch_angle_deg{std::numeric_limits<double>::quiet_NaN()};
     double collimator_angle_deg{std::numeric_limits<double>::quiet_NaN()};
+    // Optional deterministic source pose. These six values are supplied
+    // together by phase-space replay CSVs and bypass the machine/TPS pose.
+    double source_x_mm{std::numeric_limits<double>::quiet_NaN()};
+    double source_y_mm{std::numeric_limits<double>::quiet_NaN()};
+    double source_z_mm{std::numeric_limits<double>::quiet_NaN()};
+    double direction_x{std::numeric_limits<double>::quiet_NaN()};
+    double direction_y{std::numeric_limits<double>::quiet_NaN()};
+    double direction_z{std::numeric_limits<double>::quiet_NaN()};
 };
 
 struct TpsSourcePose {

@@ -1,0 +1,119 @@
+# Data-driven water-MCS diagnostic for the matched high-statistics replay.
+# Five 0.01 mm water films record all C12 charge states; analysis retains
+# parent-ID zero. TransY values are local to the 250 mm water Box whose centre
+# is 125 mm downstream of its entrance.
+includeFile = run_water_entry_primary_replay_e250_10m.txt
+
+# The example's optional central display/scoring child is redundant here and
+# would overlap the full-width diagnostic planes.
+b:Ge/Box2/Include = "False"
+
+d:Ge/Plane040/HLX = 50 mm
+d:Ge/Plane040/HLY = 0.005 mm
+d:Ge/Plane040/HLZ = 50 mm
+s:Ge/Plane040/Type = "TsBox"
+s:Ge/Plane040/Parent = "Box"
+s:Ge/Plane040/Material = "G4_WATER"
+d:Ge/Plane040/TransY = -85 mm
+d:Ge/Plane040/MaxStepSize = 0.05 mm
+
+d:Ge/Plane080/HLX = 50 mm
+d:Ge/Plane080/HLY = 0.005 mm
+d:Ge/Plane080/HLZ = 50 mm
+s:Ge/Plane080/Type = "TsBox"
+s:Ge/Plane080/Parent = "Box"
+s:Ge/Plane080/Material = "G4_WATER"
+d:Ge/Plane080/TransY = -45 mm
+d:Ge/Plane080/MaxStepSize = 0.05 mm
+
+d:Ge/Plane100/HLX = 50 mm
+d:Ge/Plane100/HLY = 0.005 mm
+d:Ge/Plane100/HLZ = 50 mm
+s:Ge/Plane100/Type = "TsBox"
+s:Ge/Plane100/Parent = "Box"
+s:Ge/Plane100/Material = "G4_WATER"
+d:Ge/Plane100/TransY = -25 mm
+d:Ge/Plane100/MaxStepSize = 0.05 mm
+
+d:Ge/Plane115/HLX = 50 mm
+d:Ge/Plane115/HLY = 0.005 mm
+d:Ge/Plane115/HLZ = 50 mm
+s:Ge/Plane115/Type = "TsBox"
+s:Ge/Plane115/Parent = "Box"
+s:Ge/Plane115/Material = "G4_WATER"
+d:Ge/Plane115/TransY = -10 mm
+d:Ge/Plane115/MaxStepSize = 0.05 mm
+
+d:Ge/Plane124/HLX = 50 mm
+d:Ge/Plane124/HLY = 0.005 mm
+d:Ge/Plane124/HLZ = 50 mm
+s:Ge/Plane124/Type = "TsBox"
+s:Ge/Plane124/Parent = "Box"
+s:Ge/Plane124/Material = "G4_WATER"
+d:Ge/Plane124/TransY = -1 mm
+d:Ge/Plane124/MaxStepSize = 0.05 mm
+
+s:Sc/At040/Quantity = "PhaseSpace"
+s:Sc/At040/Surface = "Plane040/YMinusSurface"
+s:Sc/At040/OnlyIncludeParticlesGoing = "In"
+sv:Sc/At040/OnlyIncludeParticlesNamed = 1 "GenericIon(6,12,*)"
+s:Sc/At040/OutputType = "ASCII"
+s:Sc/At040/OutputFile = "output/primary_040"
+s:Sc/At040/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/At040/OutputBufferSize = 100000
+b:Sc/At040/IncludeRunID = "True"
+b:Sc/At040/IncludeEventID = "True"
+b:Sc/At040/IncludeTrackID = "True"
+b:Sc/At040/IncludeParentID = "True"
+
+s:Sc/At080/Quantity = "PhaseSpace"
+s:Sc/At080/Surface = "Plane080/YMinusSurface"
+s:Sc/At080/OnlyIncludeParticlesGoing = "In"
+sv:Sc/At080/OnlyIncludeParticlesNamed = 1 "GenericIon(6,12,*)"
+s:Sc/At080/OutputType = "ASCII"
+s:Sc/At080/OutputFile = "output/primary_080"
+s:Sc/At080/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/At080/OutputBufferSize = 100000
+b:Sc/At080/IncludeRunID = "True"
+b:Sc/At080/IncludeEventID = "True"
+b:Sc/At080/IncludeTrackID = "True"
+b:Sc/At080/IncludeParentID = "True"
+
+s:Sc/At100/Quantity = "PhaseSpace"
+s:Sc/At100/Surface = "Plane100/YMinusSurface"
+s:Sc/At100/OnlyIncludeParticlesGoing = "In"
+sv:Sc/At100/OnlyIncludeParticlesNamed = 1 "GenericIon(6,12,*)"
+s:Sc/At100/OutputType = "ASCII"
+s:Sc/At100/OutputFile = "output/primary_100"
+s:Sc/At100/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/At100/OutputBufferSize = 100000
+b:Sc/At100/IncludeRunID = "True"
+b:Sc/At100/IncludeEventID = "True"
+b:Sc/At100/IncludeTrackID = "True"
+b:Sc/At100/IncludeParentID = "True"
+
+s:Sc/At115/Quantity = "PhaseSpace"
+s:Sc/At115/Surface = "Plane115/YMinusSurface"
+s:Sc/At115/OnlyIncludeParticlesGoing = "In"
+sv:Sc/At115/OnlyIncludeParticlesNamed = 1 "GenericIon(6,12,*)"
+s:Sc/At115/OutputType = "ASCII"
+s:Sc/At115/OutputFile = "output/primary_115"
+s:Sc/At115/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/At115/OutputBufferSize = 100000
+b:Sc/At115/IncludeRunID = "True"
+b:Sc/At115/IncludeEventID = "True"
+b:Sc/At115/IncludeTrackID = "True"
+b:Sc/At115/IncludeParentID = "True"
+
+s:Sc/At124/Quantity = "PhaseSpace"
+s:Sc/At124/Surface = "Plane124/YMinusSurface"
+s:Sc/At124/OnlyIncludeParticlesGoing = "In"
+sv:Sc/At124/OnlyIncludeParticlesNamed = 1 "GenericIon(6,12,*)"
+s:Sc/At124/OutputType = "ASCII"
+s:Sc/At124/OutputFile = "output/primary_124"
+s:Sc/At124/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/At124/OutputBufferSize = 100000
+b:Sc/At124/IncludeRunID = "True"
+b:Sc/At124/IncludeEventID = "True"
+b:Sc/At124/IncludeTrackID = "True"
+b:Sc/At124/IncludeParentID = "True"

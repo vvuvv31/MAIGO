@@ -1133,8 +1133,14 @@ void TransportConfig::validate() const {
     if (voxel_bins_z != 0) {
         const auto scorer_z_extent_mm =
             static_cast<double>(voxel_bins_z) * voxel_size_z_mm;
+        // CCTG stores spacing and its derived extent as float.  For resampled
+        // grids whose spacing is not exactly representable, recomputing the
+        // extent in double can differ by a few ulps of the float extent.
+        const auto extent_tolerance_mm =
+            1.0e-6 * std::max(1.0, std::abs(phantom_length_mm));
         if (std::abs(voxel_size_z_mm - depth_bin_width_mm) > 1.0e-6 ||
-            std::abs(scorer_z_extent_mm - phantom_length_mm) > 1.0e-6) {
+            std::abs(scorer_z_extent_mm - phantom_length_mm) >
+                extent_tolerance_mm) {
             throw std::invalid_argument(
                 "voxel z geometry must match the legacy phantom z aliases");
         }
@@ -1315,12 +1321,19 @@ void TransportConfig::validate() const {
             throw std::invalid_argument(
                 "the current minibeam reference supports minibeam_material=Copper");
         }
-        if (!(minibeam_radius_mm > 0.0 && minibeam_thickness_mm > 0.0 &&
-              minibeam_exit_to_phantom_mm >= 0.0 &&
+        if (!(minibeam_collimator_center_to_isocenter_mm >= 0.0 &&
+              minibeam_collimator_width_mm > 0.0 &&
+              minibeam_collimator_length_mm > 0.0 &&
+              minibeam_collimator_thickness_mm > 0.0 &&
+              minibeam_slit_length_mm > 0.0 &&
+              minibeam_slit_thickness_mm > 0.0 &&
               minibeam_slit_width_mm > 0.0 && minibeam_slit_pitch_mm > 0.0 &&
-              minibeam_slit_half_length_mm > 0.0)) {
+              minibeam_slit_half_length_mm > 0.0 &&
+              minibeam_slit_length_mm <= minibeam_collimator_length_mm &&
+              minibeam_slit_thickness_mm <= minibeam_collimator_thickness_mm)) {
             throw std::invalid_argument(
-                "minibeam dimensions must be positive (exit gap may be zero)");
+                "minibeam rectangular dimensions must be positive and each slit "
+                "dimension must fit inside the Copper collimator");
         }
         if (minibeam_slit_count <= 0 || minibeam_slit_count % 2 == 0) {
             throw std::invalid_argument(
@@ -1354,6 +1367,16 @@ void TransportConfig::validate() const {
                     "minibeam Copper nuclear attenuation requires "
                     "minibeam_copper_cross_section_file");
             }
+            if (minibeam_copper_enable_nuclear_attenuation &&
+                minibeam_copper_inclxx_file.empty()) {
+                throw std::invalid_argument(
+                    "minibeam Copper INCLXX requires minibeam_copper_inclxx_file");
+            }
+            if (minibeam_copper_enable_elastic &&
+                minibeam_copper_elastic_file.empty()) {
+                throw std::invalid_argument(
+                    "minibeam copper_em requires minibeam_copper_elastic_file");
+            }
             if (!(minibeam_copper_density_g_per_cm3 > 0.0 &&
                   minibeam_copper_radiation_length_g_per_cm2 > 0.0 &&
                   minibeam_copper_max_step_mm > 0.0 &&
@@ -1368,6 +1391,13 @@ void TransportConfig::validate() const {
                   minibeam_water_primary_low_energy_mcs_scale <= 2.0 &&
                   minibeam_water_fragment_low_energy_mcs_scale > 0.0 &&
                   minibeam_water_fragment_low_energy_mcs_scale <= 2.0 &&
+                  minibeam_water_primary_mcs_tail_strength >= 0.0 &&
+                  minibeam_water_primary_mcs_tail_strength <= 10.0 &&
+                  minibeam_water_primary_mcs_tail_width >= 0.0 &&
+                  minibeam_water_primary_mcs_tail_strength *
+                          minibeam_water_primary_mcs_tail_width *
+                          minibeam_water_primary_mcs_tail_width <
+                      0.95 &&
                   minibeam_water_touched_primary_surface_boost >= 0.0 &&
                   minibeam_water_touched_primary_surface_boost <= 0.5 &&
                   minibeam_water_touched_primary_surface_sigma_mm > 0.0 &&
@@ -1387,6 +1417,10 @@ void TransportConfig::validate() const {
                     minibeam_water_primary_low_energy_mcs_scale) ||
                 !std::isfinite(
                     minibeam_water_fragment_low_energy_mcs_scale) ||
+                !std::isfinite(
+                    minibeam_water_primary_mcs_tail_strength) ||
+                !std::isfinite(
+                    minibeam_water_primary_mcs_tail_width) ||
                 !std::isfinite(
                     minibeam_water_touched_primary_surface_boost) ||
                 !std::isfinite(
@@ -1650,8 +1684,7 @@ void validate_schneider_physics_bundle(const TransportConfig& config) {
             throw std::runtime_error("Schneider CT startup failed: " + role +
                                      " missing: " + actual.string());
         }
-        const std::string actual_sha = compute_file_sha256_hex(actual);
-        if (actual_sha != pinned) {
+        if (!file_sha256_matches(actual, pinned)) {
             throw std::runtime_error("Schneider CT startup failed: " + role + " SHA mismatch: " +
                                      actual.string());
         }
@@ -1713,7 +1746,7 @@ void validate_schneider_physics_bundle(const TransportConfig& config) {
             throw std::runtime_error("Schneider CT startup failed: package channels sidecar missing: " +
                                      sidecar.string());
         }
-        if (compute_file_sha256_hex(sidecar) != pinned) {
+        if (!file_sha256_matches(sidecar, pinned)) {
             throw std::runtime_error("Schneider CT startup failed: package channels SHA mismatch: " +
                                      sidecar.string());
         }
@@ -1780,11 +1813,12 @@ void validate_schneider_physics_bundle(const TransportConfig& config) {
     const std::string schn_pinned =
         minjson::require_string(bundle.at("schneider_source").at("sha256"), "schneider.sha256");
     const std::filesystem::path schn_source("data/HUtoMaterialSchneider.txt");
-    if (std::filesystem::exists(schn_source) && compute_file_sha256_hex(schn_source) != schn_pinned) {
+    if (std::filesystem::exists(schn_source) && !file_sha256_matches(schn_source, schn_pinned)) {
         throw std::runtime_error("Schneider CT startup failed: Schneider source SHA != bundle pin");
     }
     std::cout << "[schneider-bundle] v2.1 bundle verified: "
-              << registry.arr.size() << " projectiles, 182+13 domains, 5 files SHA-pinned\n";
+              << registry.arr.size() << " projectiles, 182+13 domains, 5 file hashes "
+              << (file_integrity_checks_enabled ? "verified" : "disabled") << '\n';
 }
 
 void validate_schneider_ct_startup(const TransportConfig& config) {
@@ -1877,10 +1911,8 @@ void validate_schneider_ct_startup(const TransportConfig& config) {
                 const size_t end_pos = meta_content.find("\"", pos + search_key.length());
                 const std::string declared_sha256 = meta_content.substr(pos + search_key.length(), end_pos - (pos + search_key.length()));
 
-                const std::string actual_sha256 = compute_file_sha256_hex(path);
-                if (actual_sha256 != declared_sha256) {
-                    throw std::runtime_error("Schneider CT startup failed: SHA256 mismatch for " + path.string() +
-                                             " (actual=" + actual_sha256 + ", declared=" + declared_sha256 + ")");
+                if (!file_sha256_matches(path, declared_sha256)) {
+                    throw std::runtime_error("Schneider CT startup failed: SHA256 mismatch for " + path.string());
                 }
             }
         }
@@ -1888,9 +1920,8 @@ void validate_schneider_ct_startup(const TransportConfig& config) {
         // Verify Schneider source binding (data/HUtoMaterialSchneider.txt)
         const std::filesystem::path schn_source = "data/HUtoMaterialSchneider.txt";
         if (std::filesystem::exists(schn_source)) {
-            const std::string schn_sha = compute_file_sha256_hex(schn_source);
             constexpr const char* expected_schn_sha = "5022cd89617b28dbd8ee8bf8b095ea20cfd99f6405218693c0df238b3617a139";
-            if (schn_sha != expected_schn_sha) {
+            if (!file_sha256_matches(schn_source, expected_schn_sha)) {
                 throw std::runtime_error("Schneider CT startup failed: HUtoMaterialSchneider.txt SHA256 mismatch");
             }
         }
@@ -2693,6 +2724,23 @@ TransportConfig load_config(const std::filesystem::path& path) {
     }
     config.minibeam_radius_mm = parse_number(
         values, "minibeam_radius_mm", config.minibeam_radius_mm);
+    config.minibeam_collimator_center_to_isocenter_mm = parse_number(
+        values, "minibeam_collimator_center_to_isocenter_mm",
+        config.minibeam_collimator_center_to_isocenter_mm);
+    config.minibeam_collimator_width_mm = parse_number(
+        values, "minibeam_collimator_width_mm",
+        config.minibeam_collimator_width_mm);
+    config.minibeam_collimator_length_mm = parse_number(
+        values, "minibeam_collimator_length_mm",
+        config.minibeam_collimator_length_mm);
+    config.minibeam_collimator_thickness_mm = parse_number(
+        values, "minibeam_collimator_thickness_mm",
+        config.minibeam_collimator_thickness_mm);
+    config.minibeam_slit_length_mm = parse_number(
+        values, "minibeam_slit_length_mm", config.minibeam_slit_length_mm);
+    config.minibeam_slit_thickness_mm = parse_number(
+        values, "minibeam_slit_thickness_mm",
+        config.minibeam_slit_thickness_mm);
     config.minibeam_thickness_mm = parse_number(
         values, "minibeam_thickness_mm", config.minibeam_thickness_mm);
     config.minibeam_exit_to_phantom_mm = parse_number(
@@ -2731,6 +2779,9 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.minibeam_copper_enable_mcs = parse_bool(
         values, "minibeam_copper_enable_mcs",
         config.minibeam_copper_enable_mcs);
+    config.minibeam_copper_enable_elastic = parse_bool(
+        values, "minibeam_copper_enable_elastic",
+        config.minibeam_copper_enable_elastic);
     config.minibeam_copper_enable_energy_straggling = parse_bool(
         values, "minibeam_copper_enable_energy_straggling",
         config.minibeam_copper_enable_energy_straggling);
@@ -2771,6 +2822,12 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.minibeam_water_fragment_low_energy_mcs_scale = parse_number(
         values, "minibeam_water_fragment_low_energy_mcs_scale",
         config.minibeam_water_fragment_low_energy_mcs_scale);
+    config.minibeam_water_primary_mcs_tail_strength = parse_number(
+        values, "minibeam_water_primary_mcs_tail_strength",
+        config.minibeam_water_primary_mcs_tail_strength);
+    config.minibeam_water_primary_mcs_tail_width = parse_number(
+        values, "minibeam_water_primary_mcs_tail_width",
+        config.minibeam_water_primary_mcs_tail_width);
     config.minibeam_water_touched_primary_surface_boost = parse_number(
         values, "minibeam_water_touched_primary_surface_boost",
         config.minibeam_water_touched_primary_surface_boost);
@@ -2798,6 +2855,12 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.minibeam_copper_cross_section_file = parse_path(
         values, "minibeam_copper_cross_section_file",
         config.minibeam_copper_cross_section_file);
+    config.minibeam_copper_inclxx_file = parse_path(
+        values, "minibeam_copper_inclxx_file",
+        config.minibeam_copper_inclxx_file);
+    config.minibeam_copper_elastic_file = parse_path(
+        values, "minibeam_copper_elastic_file",
+        config.minibeam_copper_elastic_file);
     config.minibeam_copper_ion_stopping_power_file = parse_path(
         values, "minibeam_copper_ion_stopping_power_file",
         config.minibeam_copper_ion_stopping_power_file);
@@ -3114,6 +3177,9 @@ TransportConfig load_config(const std::filesystem::path& path) {
                                    : std::filesystem::path{it->second};
         }
     }
+    config.minibeam_phase_space_output_file = parse_path(
+        values, "minibeam_phase_space_output_file",
+        config.minibeam_phase_space_output_file);
     {
         const auto it = values.find("voxel_dose_output_file");
         if (it != values.end()) {

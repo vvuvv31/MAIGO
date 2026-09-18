@@ -58,7 +58,7 @@ inline void save_unified_em_dense(const UnifiedEmDenseTable& t,const std::filesy
     if(!f)throw std::runtime_error("Cannot write dense EM research attachment");
 }
 inline UnifiedEmDenseTable load_unified_em_dense(const std::filesystem::path& path,const std::string& sha,std::size_t count) {
-    if(sha.size()!=64 || compute_file_sha256_hex(path)!=sha)throw std::runtime_error("Dense EM attachment SHA mismatch");
+    if(sha.size()!=64 || !file_sha256_matches(path,sha))throw std::runtime_error("Dense EM attachment SHA mismatch");
     if(std::filesystem::file_size(path)!=80+count*17)throw std::runtime_error("Dense EM attachment size mismatch");
     std::ifstream f(path,std::ios::binary);char magic[8],source[64];std::uint64_t n=0;
     f.read(magic,8);f.read(source,64);f.read(reinterpret_cast<char*>(&n),8);

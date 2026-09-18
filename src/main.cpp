@@ -49,6 +49,7 @@ std::vector<std::filesystem::path> shard_output_paths(
     add(config.fragment_species_let_output_file);
     add(config.light_isotope_let_output_file);
     add(config.fragment_birth_spectrum_output_file);
+    add(config.minibeam_phase_space_output_file);
     add(config.let_voxel_mhd_output_file);
     if (config.enable_voxel_scoring) add(config.voxel_dose_output_file);
     if (config.enable_charged_origin_voxel_scoring) {
@@ -83,6 +84,9 @@ std::vector<std::filesystem::path> shard_output_paths(
 }  // namespace
 
 int main(int argc, char* argv[]) {
+#if CARBON_DISABLE_INTEGRITY_CHECKS
+    std::cerr << "[integrity-checks] DISABLED: file SHA256 content checks and provenance hashing are skipped\n";
+#endif
     carbon::RuntimeScope runtime_main("process_main");
     // Independent wall clock from process start to the point every result file
     // has been written. Unlike TransportResult::elapsed_seconds it includes
@@ -695,6 +699,10 @@ int main(int argc, char* argv[]) {
         if (!config.fragment_birth_spectrum_output_file.empty()) {
             carbon::write_fragment_birth_spectrum_csv(
                 config.fragment_birth_spectrum_output_file, config, result);
+        }
+        if (!config.minibeam_phase_space_output_file.empty()) {
+            carbon::write_minibeam_phase_space_csv(
+                config.minibeam_phase_space_output_file, result);
         }
         if (config.enable_let_scoring && config.enable_voxel_scoring &&
             !config.let_voxel_mhd_output_file.empty()) {

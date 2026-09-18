@@ -454,6 +454,18 @@ struct TransportConfig {
     bool enable_minibeam_diagnostics{true};
     std::string minibeam_transport_mode{"absorbing_geometry"};
     std::string minibeam_material{"Copper"};
+    // Rectangular GPU collimator.  The TOPAS reference uses a cylindrical
+    // outer body, but only the slit solid controls the accepted beam here.
+    // Distances are specified in the treatment-room convention: the
+    // collimator centre is upstream of isocentre and the water entrance is at
+    // minibeam_water_entrance_world_y_mm downstream of isocentre.
+    double minibeam_collimator_center_to_isocenter_mm{30.0};
+    double minibeam_collimator_width_mm{120.0};
+    double minibeam_collimator_length_mm{50.0};
+    double minibeam_collimator_thickness_mm{60.0};
+    double minibeam_slit_length_mm{50.0};
+    double minibeam_slit_thickness_mm{60.0};
+    // Deprecated cylindrical aliases retained for old input files.
     double minibeam_radius_mm{60.0};
     double minibeam_thickness_mm{60.0};
     double minibeam_exit_to_phantom_mm{60.0};
@@ -474,6 +486,9 @@ struct TransportConfig {
     double minibeam_copper_radiation_length_g_per_cm2{12.8628};
     double minibeam_copper_max_step_mm{0.05};
     bool minibeam_copper_enable_mcs{true};
+    // Extracted discrete General Ion Elastic interactions. Condensed Copper
+    // electromagnetic MCS remains independent of this switch.
+    bool minibeam_copper_enable_elastic{true};
     // Sample Bohr energy-loss fluctuations step-by-step in Copper.  This is
     // independent of downstream water straggling so legacy minibeam cases
     // remain reproducible unless explicitly enabled.
@@ -507,6 +522,12 @@ struct TransportConfig {
     double minibeam_water_low_energy_mcs_transition_MeVu{0.0};
     double minibeam_water_primary_low_energy_mcs_scale{1.0};
     double minibeam_water_fragment_low_energy_mcs_scale{1.0};
+    // Optional Moliere-like core/tail split for primary C-12 in downstream
+    // water. Tail probability is strength * step/X0, while tail width is in
+    // units of theta0/sqrt(step/X0). The core is narrowed to preserve the
+    // projected second moment. Zero strength preserves legacy Highland.
+    double minibeam_water_primary_mcs_tail_strength{0.0};
+    double minibeam_water_primary_mcs_tail_width{0.0};
     // Optional entrance response for primary ion histories that touched the
     // Copper collimator. The two smooth terms modify stopping (not scored dose),
     // so retained kinetic energy continues downstream. Zero amplitudes are
@@ -518,6 +539,9 @@ struct TransportConfig {
     double minibeam_water_touched_primary_deficit_sigma_mm{1.0};
     bool minibeam_copper_enable_nuclear_attenuation{false};
     std::filesystem::path minibeam_copper_cross_section_file{};
+    // Copper-only TOPAS banks, loaded only by CARBON_ENABLE_MINIBEAM builds.
+    std::filesystem::path minibeam_copper_inclxx_file{};
+    std::filesystem::path minibeam_copper_elastic_file{};
     std::filesystem::path minibeam_copper_ion_stopping_power_file{};
     std::filesystem::path minibeam_copper_ion_cross_section_file{};
     std::filesystem::path minibeam_copper_neutral_cross_section_file{};
@@ -744,6 +768,9 @@ struct TransportConfig {
     // Writes: <path>_summary.csv, <path>_mevu.csv, <path>_depth.csv,
     // <path>_costheta.csv, <path>_parent_mevu.csv, <path>_parent_z.csv
     std::filesystem::path fragment_birth_spectrum_output_file{};
+    // Optional primary C-12 water-entrance phase space. Empty disables the
+    // device/host buffers and leaves production transport unchanged.
+    std::filesystem::path minibeam_phase_space_output_file{};
     // Prefix/header path for dense primary and all-hadron 3D LET_d MHD maps.
     // Requires both scorerLET and enable_voxel_scoring.
     std::filesystem::path let_voxel_mhd_output_file{};

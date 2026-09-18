@@ -419,8 +419,11 @@ InelasticPackageV3Table InelasticPackageV3Table::from_binary(
         for (std::uint32_t p = 0; p < prod_count; ++p) {
             total_product_ke += table.products_[prod_start + p].kinetic_energy_MeV;
         }
+        // products_ contains supported and unsupported direct products.  The
+        // interaction's unsupported_product_energy_MeV is the subtotal of the
+        // latter, so adding it here would count those products twice.
         const double total_out = total_product_ke + ev.parent_energy_MeV +
-                                 ev.process_local_deposit_MeV + ev.unsupported_product_energy_MeV;
+                                 ev.process_local_deposit_MeV;
         // Conservative upper bound allowing target disintegration / nuclear release
         const double upper_bound = ev.collision_energy_MeV + std::max(200.0, 0.20 * ev.collision_energy_MeV);
         if (total_out > upper_bound) {
@@ -477,10 +480,8 @@ InelasticPackageV3Table InelasticPackageV3Table::from_binary(
                 const auto q2 = (q1 != std::string::npos) ? meta_content.find('"', q1 + 1) : std::string::npos;
                 if (q1 != std::string::npos && q2 != std::string::npos) {
                     const std::string expected_sha = meta_content.substr(q1 + 1, q2 - q1 - 1);
-                    const std::string actual_sha = compute_file_sha256_hex(path);
-                    if (actual_sha != expected_sha) {
-                        throw std::runtime_error("CINEL03 package SHA-256 mismatch for " + path.string() +
-                                                 ": expected " + expected_sha + ", got " + actual_sha);
+                    if (!file_sha256_matches(path, expected_sha)) {
+                        throw std::runtime_error("CINEL03 package SHA-256 mismatch for " + path.string());
                     }
                 }
             }

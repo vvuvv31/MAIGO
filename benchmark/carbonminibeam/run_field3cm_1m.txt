@@ -1,0 +1,8 @@
+includeFile = run1.txt
+
+# 16 x 16 spots, 4000 histories per spot: 1,024,000 total.
+s:So/CarbonPBS/SpotPlanFile = "spots_3cm.csv"
+u:So/CarbonPBS/HistoriesScale = 0.04
+i:Ts/Seed = 20260918
+i:Ts/NumberOfThreads = 192
+b:Ts/PauseBeforeQuit = "False"

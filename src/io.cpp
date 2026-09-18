@@ -735,6 +735,31 @@ void write_fragment_birth_spectrum_csv(const std::filesystem::path& prefix,
     }
 }
 
+void write_minibeam_phase_space_csv(const std::filesystem::path& path,
+                                    const TransportResult& result) {
+    ensure_parent_directory(path);
+    std::ofstream output(path, std::ios::binary);
+    if (!output) {
+        throw std::runtime_error(
+            "Cannot create minibeam phase-space output file: " + path.string());
+    }
+    output << "source_history,slit,copper_touched,copper_elastic,kinetic_energy_MeV,"
+              "x_mm,y_mm,direction_x,direction_y,direction_z\n"
+           << std::setprecision(17);
+    for (const auto& record : result.minibeam_phase_space_records) {
+        if (!record.valid) continue;
+        output << record.history << ',' << record.slit << ','
+               << static_cast<unsigned>(record.copper_touched) << ','
+               << static_cast<unsigned>(record.copper_elastic) << ','
+               << record.kinetic_energy_MeV << ',' << record.x_mm << ','
+               << record.y_mm << ',' << record.direction_x << ','
+               << record.direction_y << ',' << record.direction_z << '\n';
+    }
+    if (!output) {
+        throw std::runtime_error("Failed to write minibeam phase space");
+    }
+}
+
 void write_fragment_species_dose_Gy_csv(const std::filesystem::path& path,
                                         const TransportConfig& config,
                                         const TransportResult& result) {
@@ -1540,7 +1565,7 @@ std::string schneider_rate_provenance_json(const std::filesystem::path& path) {
         }
     }
     out << "{\"present\": true, \"path\": \"" << path.string() << "\", \"sha256\": \""
-        << compute_file_sha256_hex(path) << "\", \"binary_magic\": \"" << std::string(magic, 8)
+        << file_sha256_for_report(path) << "\", \"binary_magic\": \"" << std::string(magic, 8)
         << "\", \"binary_version\": " << version << ", \"num_projectiles\": " << np
         << ", \"projectiles\": [";
     if (is_sec) {
@@ -1567,12 +1592,12 @@ std::string schneider_package_provenance_json(const std::filesystem::path& path)
         return "{\"present\": false}";
     }
     out << "{\"present\": true, \"path\": \"" << path.string() << "\", \"sha256\": \""
-        << compute_file_sha256_hex(path) << "\"";
+        << file_sha256_for_report(path) << "\"";
     const std::filesystem::path sidecar =
         path.parent_path() / (path.stem().string() + ".channels.json");
     if (std::filesystem::exists(sidecar)) {
         out << ", \"channels_file\": \"" << sidecar.string() << "\", \"channels_sha256\": \""
-            << compute_file_sha256_hex(sidecar) << "\"";
+            << file_sha256_for_report(sidecar) << "\"";
     }
     out << "}";
     return out.str();
@@ -1856,9 +1881,9 @@ void write_energy_ledger_json(const std::filesystem::path& path,
                        : "homogeneous_reference_density_v1")
                << "\", \"kernel_density_g_cm3\": "
                << result.longitudinal_diagnostic_density_g_cm3
-               << ", \"data_sha256\": \"" << compute_file_sha256_hex(file)
-               << "\", \"metadata_sha256\": \"" << compute_file_sha256_hex(metadata)
-               << "\", \"manifest_sha256\": \"" << compute_file_sha256_hex(manifest)
+               << ", \"data_sha256\": \"" << file_sha256_for_report(file)
+               << "\", \"metadata_sha256\": \"" << file_sha256_for_report(metadata)
+               << "\", \"manifest_sha256\": \"" << file_sha256_for_report(manifest)
                << "\", \"out_of_domain_queries\": "
                << result.schneider_primary_delta_longitudinal_domain_queries
                << ", \"out_of_domain_local_energy_MeV\": "

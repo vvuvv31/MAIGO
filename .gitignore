@@ -25,7 +25,12 @@ codex-session-*.md
 # Local validation workspaces. They are not part of project commits while the
 # benchmark protocol and patient-dose validation are still under development.
 ct/
-benchmark/
+benchmark/*
+!benchmark/carbonminibeam/
+!benchmark/carbonminibeam/**
+benchmark/carbonminibeam/**/__pycache__/
+benchmark/carbonminibeam/**/*.pyc
+benchmark/carbonminibeam/**/*.orig
 validation/
 
 # Recoverable local archives; never include discarded data in Git.

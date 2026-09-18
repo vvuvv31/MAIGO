@@ -481,11 +481,9 @@ SchneiderStoppingTable SchneiderStoppingTable::from_binary(
     }
 
     // 2. Binary SHA256 match
-    const auto actual_bin_sha = compute_file_sha256_hex(binary_path);
-    if (!root.has("data_sha256") || root["data_sha256"].str_val != actual_bin_sha) {
-        throw std::runtime_error("Schneider stopping binary SHA256 mismatch: recorded=" +
-                                 (root.has("data_sha256") ? root["data_sha256"].str_val : "none") +
-                                 ", actual=" + actual_bin_sha);
+    if (!root.has("data_sha256") ||
+        !file_sha256_matches(binary_path, root["data_sha256"].str_val)) {
+        throw std::runtime_error("Schneider stopping binary SHA256 mismatch");
     }
 
     // 3. Projectile validation: GenericIon(6,12)

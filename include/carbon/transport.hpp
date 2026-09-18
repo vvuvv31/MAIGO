@@ -26,6 +26,22 @@ struct HeliumBirthRecord {
     double direction_x{}, direction_y{}, direction_z{}, weight{};
 };
 
+// Optional per-primary snapshot at the downstream water entrance.  This is
+// populated only when minibeam_phase_space_output_file is configured.
+struct MinibeamPhaseSpaceRecord {
+    std::uint64_t history{};
+    std::int32_t slit{};
+    std::uint8_t copper_touched{};
+    std::uint8_t copper_elastic{};
+    std::uint8_t valid{};
+    std::uint8_t pad{};
+    float kinetic_energy_MeV{};
+    float x_mm{}, y_mm{};
+    float direction_x{}, direction_y{}, direction_z{};
+};
+static_assert(sizeof(MinibeamPhaseSpaceRecord) == 40,
+              "minibeam phase-space record layout");
+
 struct MinibeamDiagnostics {
     static constexpr std::size_t slit_count = 15;
     static constexpr std::size_t touched_energy_bin_count = 12;
@@ -627,6 +643,7 @@ struct TransportResult {
     // Histograms are species × generation × bin (see birth_hist_index).
     std::vector<std::uint64_t> birth_counts_by_generation;  // cat * gen_bins
     std::vector<HeliumBirthRecord> helium_birth_records; // opt-in birth spectrum only
+    std::vector<MinibeamPhaseSpaceRecord> minibeam_phase_space_records;
     // Diagnostic only: tau(start), tau(Simpson), E*tau(Simpson), candidates,
     // candidate post-EM energy, actual path length. He4, generation eligible.
     std::array<double, 6> helium4_hazard_audit{};
