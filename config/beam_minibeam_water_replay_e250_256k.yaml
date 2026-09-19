@@ -58,7 +58,7 @@ minibeam_water_low_energy_mcs_transition_MeVu: 180.0
 minibeam_water_primary_low_energy_mcs_scale: 0.20
 minibeam_water_fragment_low_energy_mcs_scale: 1.00
 minibeam_water_primary_mcs_tail_strength: 0.5
-minibeam_water_primary_mcs_tail_width: 0.85
+minibeam_water_primary_mcs_tail_width: 0.90
 minibeam_water_primary_stopping_power_scale: 0.9958
 minibeam_copper_stopping_power_file: /mnt/sda/wuwei/minibeam_copper_extract_e250/compiled/c12_copper_stopping_geant4_11_3_2.csv
 minibeam_air_stopping_power_file: data/stopping_power_air_geant4_11_3_2.csv

@@ -41,6 +41,35 @@ inline constexpr std::size_t primary_charged_origin_category = 0;
 inline constexpr std::size_t be_isotope_origin_category_count = 4;
 inline constexpr std::size_t he_isotope_origin_category_count = 3;
 
+inline constexpr std::uint8_t minibeam_birth_region_copper = 1;
+inline constexpr std::uint8_t minibeam_birth_region_water = 2;
+inline constexpr std::size_t minibeam_component_species_count = 8;
+inline constexpr std::size_t minibeam_component_category_count =
+    1 + 2 * minibeam_component_species_count;
+inline constexpr std::size_t minibeam_primary_c12_component_category = 0;
+
+// Secondary component order: C12, p, d, t, He3, He4, heavier (Z>=3),
+// and all remaining charged ions. Category zero is reserved for primary C12;
+// Copper-born and water-born copies of these eight classes follow.
+constexpr std::size_t minibeam_component_species_category(
+    const int z, const int a) noexcept {
+    if (z == 6 && a == 12) return 0;
+    if (z == 1 && a == 1) return 1;
+    if (z == 1 && a == 2) return 2;
+    if (z == 1 && a == 3) return 3;
+    if (z == 2 && a == 3) return 4;
+    if (z == 2 && a == 4) return 5;
+    if (z >= 3) return 6;
+    return 7;
+}
+
+constexpr std::size_t minibeam_component_category(
+    const int z, const int a, const std::uint8_t birth_region) noexcept {
+    const auto source_offset = birth_region == minibeam_birth_region_copper
+        ? 0U : minibeam_component_species_count;
+    return 1U + source_offset + minibeam_component_species_category(z, a);
+}
+
 constexpr std::size_t he_isotope_origin_category(const int z, const int a) noexcept {
     if (z != 2) return he_isotope_origin_category_count;
     return a == 3 ? 0 : (a == 4 ? 1 : 2);

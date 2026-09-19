@@ -1,0 +1,114 @@
+# Identity-preserving primary-C12 planes for the pure-EM same-source replay.
+includeFile = run_water_entry_primary_replay_e250_12800k_em_only.txt
+
+b:Ge/Box2/Include = "False"
+
+d:Ge/Plane040/HLX = 50 mm
+d:Ge/Plane040/HLY = 0.005 mm
+d:Ge/Plane040/HLZ = 50 mm
+s:Ge/Plane040/Type = "TsBox"
+s:Ge/Plane040/Parent = "Box"
+s:Ge/Plane040/Material = "G4_WATER"
+d:Ge/Plane040/TransY = -85 mm
+d:Ge/Plane040/MaxStepSize = 0.05 mm
+
+d:Ge/Plane060/HLX = 50 mm
+d:Ge/Plane060/HLY = 0.005 mm
+d:Ge/Plane060/HLZ = 50 mm
+s:Ge/Plane060/Type = "TsBox"
+s:Ge/Plane060/Parent = "Box"
+s:Ge/Plane060/Material = "G4_WATER"
+d:Ge/Plane060/TransY = -65 mm
+d:Ge/Plane060/MaxStepSize = 0.05 mm
+
+d:Ge/Plane080/HLX = 50 mm
+d:Ge/Plane080/HLY = 0.005 mm
+d:Ge/Plane080/HLZ = 50 mm
+s:Ge/Plane080/Type = "TsBox"
+s:Ge/Plane080/Parent = "Box"
+s:Ge/Plane080/Material = "G4_WATER"
+d:Ge/Plane080/TransY = -45 mm
+d:Ge/Plane080/MaxStepSize = 0.05 mm
+
+d:Ge/Plane100/HLX = 50 mm
+d:Ge/Plane100/HLY = 0.005 mm
+d:Ge/Plane100/HLZ = 50 mm
+s:Ge/Plane100/Type = "TsBox"
+s:Ge/Plane100/Parent = "Box"
+s:Ge/Plane100/Material = "G4_WATER"
+d:Ge/Plane100/TransY = -25 mm
+d:Ge/Plane100/MaxStepSize = 0.05 mm
+
+d:Ge/Plane120/HLX = 50 mm
+d:Ge/Plane120/HLY = 0.005 mm
+d:Ge/Plane120/HLZ = 50 mm
+s:Ge/Plane120/Type = "TsBox"
+s:Ge/Plane120/Parent = "Box"
+s:Ge/Plane120/Material = "G4_WATER"
+d:Ge/Plane120/TransY = -5 mm
+d:Ge/Plane120/MaxStepSize = 0.05 mm
+
+s:Sc/At040/Quantity = "PhaseSpace"
+s:Sc/At040/Surface = "Plane040/YMinusSurface"
+s:Sc/At040/OnlyIncludeParticlesGoing = "In"
+sv:Sc/At040/OnlyIncludeParticlesNamed = 1 "GenericIon(6,12,*)"
+s:Sc/At040/OutputType = "ASCII"
+s:Sc/At040/OutputFile = "output/primary_040"
+s:Sc/At040/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/At040/OutputBufferSize = 100000
+b:Sc/At040/IncludeRunID = "True"
+b:Sc/At040/IncludeEventID = "True"
+b:Sc/At040/IncludeTrackID = "True"
+b:Sc/At040/IncludeParentID = "True"
+
+s:Sc/At060/Quantity = "PhaseSpace"
+s:Sc/At060/Surface = "Plane060/YMinusSurface"
+s:Sc/At060/OnlyIncludeParticlesGoing = "In"
+sv:Sc/At060/OnlyIncludeParticlesNamed = 1 "GenericIon(6,12,*)"
+s:Sc/At060/OutputType = "ASCII"
+s:Sc/At060/OutputFile = "output/primary_060"
+s:Sc/At060/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/At060/OutputBufferSize = 100000
+b:Sc/At060/IncludeRunID = "True"
+b:Sc/At060/IncludeEventID = "True"
+b:Sc/At060/IncludeTrackID = "True"
+b:Sc/At060/IncludeParentID = "True"
+
+s:Sc/At080/Quantity = "PhaseSpace"
+s:Sc/At080/Surface = "Plane080/YMinusSurface"
+s:Sc/At080/OnlyIncludeParticlesGoing = "In"
+sv:Sc/At080/OnlyIncludeParticlesNamed = 1 "GenericIon(6,12,*)"
+s:Sc/At080/OutputType = "ASCII"
+s:Sc/At080/OutputFile = "output/primary_080"
+s:Sc/At080/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/At080/OutputBufferSize = 100000
+b:Sc/At080/IncludeRunID = "True"
+b:Sc/At080/IncludeEventID = "True"
+b:Sc/At080/IncludeTrackID = "True"
+b:Sc/At080/IncludeParentID = "True"
+
+s:Sc/At100/Quantity = "PhaseSpace"
+s:Sc/At100/Surface = "Plane100/YMinusSurface"
+s:Sc/At100/OnlyIncludeParticlesGoing = "In"
+sv:Sc/At100/OnlyIncludeParticlesNamed = 1 "GenericIon(6,12,*)"
+s:Sc/At100/OutputType = "ASCII"
+s:Sc/At100/OutputFile = "output/primary_100"
+s:Sc/At100/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/At100/OutputBufferSize = 100000
+b:Sc/At100/IncludeRunID = "True"
+b:Sc/At100/IncludeEventID = "True"
+b:Sc/At100/IncludeTrackID = "True"
+b:Sc/At100/IncludeParentID = "True"
+
+s:Sc/At120/Quantity = "PhaseSpace"
+s:Sc/At120/Surface = "Plane120/YMinusSurface"
+s:Sc/At120/OnlyIncludeParticlesGoing = "In"
+sv:Sc/At120/OnlyIncludeParticlesNamed = 1 "GenericIon(6,12,*)"
+s:Sc/At120/OutputType = "ASCII"
+s:Sc/At120/OutputFile = "output/primary_120"
+s:Sc/At120/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/At120/OutputBufferSize = 100000
+b:Sc/At120/IncludeRunID = "True"
+b:Sc/At120/IncludeEventID = "True"
+b:Sc/At120/IncludeTrackID = "True"
+b:Sc/At120/IncludeParentID = "True"

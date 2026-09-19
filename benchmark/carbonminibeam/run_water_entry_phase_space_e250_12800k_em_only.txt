@@ -1,0 +1,35 @@
+# Pure-EM full-chain diagnostic using the exact 12.8M upstream PBS source.
+# The total/electron/non-electron dose scorers share the same histories as the
+# parent-0 C12 water-entry phase space used by both replay engines.
+includeFile = run_energy_scan_electron_components.txt
+
+u:So/CarbonPBS/HistoriesScale = 0.5
+i:Ts/Seed = 202609250
+i:Ts/NumberOfThreads = 192
+b:Ts/PauseBeforeQuit = "False"
+b:Gr/Enable = "False"
+b:Ge/CheckForOverlaps = "True"
+
+sv:Ph/Default/Modules = 2 "g4em-standard_opt4" "g4decay"
+d:Ph/Default/CutForAllParticles = 0.05 mm
+
+s:Ge/WaterEntranceFilm/Type = "TsBox"
+s:Ge/WaterEntranceFilm/Parent = "World"
+s:Ge/WaterEntranceFilm/Material = "Air"
+d:Ge/WaterEntranceFilm/HLX = 70.0 mm
+d:Ge/WaterEntranceFilm/HLY = 0.005 mm
+d:Ge/WaterEntranceFilm/HLZ = 70.0 mm
+d:Ge/WaterEntranceFilm/TransY = 59.985 mm
+
+s:Sc/AtWaterEntrance/Quantity = "PhaseSpace"
+s:Sc/AtWaterEntrance/Surface = "WaterEntranceFilm/YMinusSurface"
+s:Sc/AtWaterEntrance/OnlyIncludeParticlesGoing = "In"
+sv:Sc/AtWaterEntrance/OnlyIncludeParticlesNamed = 1 "GenericIon(6,12,*)"
+s:Sc/AtWaterEntrance/OutputType = "ASCII"
+s:Sc/AtWaterEntrance/OutputFile = "output/water_entrance"
+s:Sc/AtWaterEntrance/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/AtWaterEntrance/OutputBufferSize = 100000
+b:Sc/AtWaterEntrance/IncludeRunID = "True"
+b:Sc/AtWaterEntrance/IncludeEventID = "True"
+b:Sc/AtWaterEntrance/IncludeTrackID = "True"
+b:Sc/AtWaterEntrance/IncludeParentID = "True"

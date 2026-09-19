@@ -25,6 +25,7 @@ SLIT_PITCH_MM = 3.6
 SLIT_HALF_WIDTH_MM = 0.25
 COLLIMATOR_THICKNESS_MM = 60.0
 DEFAULT_STOPPING_POWER = Path("data/stopping_power_water_geant4_11_3_2.csv")
+SLIT_EDGE_BINS_MM = np.asarray([0.0, 0.25, 0.5, 0.9, 1.3, 1.55, 1.800001])
 
 
 def load_phsp(path: Path) -> np.ndarray:
@@ -131,6 +132,208 @@ def slit_microstructure(rows: np.ndarray, stopping: tuple[np.ndarray, np.ndarray
     }
 
 
+def slit_edge_conditional_summary(
+        rows: np.ndarray, stopping: tuple[np.ndarray, np.ndarray]) -> dict:
+    """Summarize the joint water-entry state versus folded slit position."""
+    if rows.size == 0:
+        return {"count": 0, "bins": []}
+    ux, uy, _ = directions(rows)
+    theta_x_mrad = np.arctan2(ux, uy) * 1.0e3
+    x_mm = rows[:, 0] * 10.0
+    residual_mm = x_mm - np.rint(x_mm / SLIT_PITCH_MM) * SLIT_PITCH_MM
+    abs_residual_mm = np.abs(residual_mm)
+    outward_theta_mrad = np.sign(residual_mm) * theta_x_mrad
+    energy_MeV = rows[:, 5]
+    stopping_power = np.interp(
+        energy_MeV / 12.0, stopping[0], stopping[1])
+    bins = []
+    for index, (low, high) in enumerate(zip(
+            SLIT_EDGE_BINS_MM[:-1], SLIT_EDGE_BINS_MM[1:])):
+        selected = ((abs_residual_mm >= low) &
+                    ((abs_residual_mm < high) if index + 2 < len(
+                        SLIT_EDGE_BINS_MM) else (abs_residual_mm <= high)))
+        count = int(np.count_nonzero(selected))
+        record = {
+            "abs_residual_low_mm": float(low),
+            "abs_residual_high_mm": float(min(high, 1.8)),
+            "count": count,
+            "fraction": float(count / rows.shape[0]),
+        }
+        if count:
+            absolute_theta = np.abs(theta_x_mrad[selected])
+            quantiles = np.quantile(absolute_theta, [0.68, 0.95, 0.99])
+            record.update({
+                "energy_mean_MeV": float(np.mean(energy_MeV[selected])),
+                "energy_std_MeV": float(np.std(energy_MeV[selected])),
+                "stopping_sum_MeV_per_mm": float(np.sum(stopping_power[selected])),
+                "stopping_mean_MeV_per_mm": float(np.mean(stopping_power[selected])),
+                "outward_theta_mean_mrad": float(np.mean(
+                    outward_theta_mrad[selected])),
+                "outward_theta_std_mrad": float(np.std(
+                    outward_theta_mrad[selected])),
+                "abs_theta_q68_mrad": float(quantiles[0]),
+                "abs_theta_q95_mrad": float(quantiles[1]),
+                "abs_theta_q99_mrad": float(quantiles[2]),
+                "abs_theta_gt20_fraction": float(np.mean(
+                    absolute_theta > 20.0)),
+                "abs_theta_gt40_fraction": float(np.mean(
+                    absolute_theta > 40.0)),
+                "correlation_energy_outward_theta": corr(
+                    energy_MeV[selected], outward_theta_mrad[selected]),
+            })
+        bins.append(record)
+    return {"count": int(rows.shape[0]), "bins": bins}
+
+
+def joint_histogram_comparison(
+        topas: np.ndarray, gpu: np.ndarray, nominal_energy_MeVu: float) -> dict:
+    """Coarse, yield-sensitive comparison of P(|x_fold|, E, theta_out)."""
+    energy_edges = np.asarray(
+        [-np.inf, 0.4, 0.7, 0.85, 0.93, 0.97, 1.01, np.inf])
+    theta_edges_mrad = np.asarray(
+        [-np.inf, -40, -20, -10, -5, -2, 0, 2, 5, 10, 20, 40, np.inf])
+
+    def coordinates(rows: np.ndarray) -> np.ndarray:
+        ux, uy, _ = directions(rows)
+        x_mm = rows[:, 0] * 10.0
+        residual = x_mm - np.rint(x_mm / SLIT_PITCH_MM) * SLIT_PITCH_MM
+        outward_theta = np.sign(residual) * np.arctan2(ux, uy) * 1.0e3
+        return np.column_stack((
+            np.abs(residual),
+            rows[:, 5] / (12.0 * nominal_energy_MeVu),
+            outward_theta,
+        ))
+
+    histogram_edges = (SLIT_EDGE_BINS_MM, energy_edges, theta_edges_mrad)
+    topas_hist, _ = np.histogramdd(coordinates(topas), bins=histogram_edges)
+    gpu_hist, _ = np.histogramdd(coordinates(gpu), bins=histogram_edges)
+    topas_total = float(np.sum(topas_hist))
+    gpu_total = float(np.sum(gpu_hist))
+    topas_shape = topas_hist / topas_total if topas_total else topas_hist
+    gpu_shape = gpu_hist / gpu_total if gpu_total else gpu_hist
+    return {
+        "topas_count": int(topas_total),
+        "gpu_count": int(gpu_total),
+        "yield_l1_over_topas": (
+            float(np.sum(np.abs(gpu_hist - topas_hist)) / topas_total)
+            if topas_total else None),
+        "shape_total_variation": (
+            float(0.5 * np.sum(np.abs(gpu_shape - topas_shape)))
+            if topas_total and gpu_total else None),
+        "binning": {
+            "abs_folded_x_mm": [float(value) for value in SLIT_EDGE_BINS_MM],
+            "energy_over_nominal": [
+                "-inf" if np.isneginf(value) else
+                "+inf" if np.isposinf(value) else float(value)
+                for value in energy_edges],
+            "outward_theta_mrad": [
+                "-inf" if np.isneginf(value) else
+                "+inf" if np.isposinf(value) else float(value)
+                for value in theta_edges_mrad],
+        },
+    }
+
+
+def weighted_quantile(values: np.ndarray, weights: np.ndarray,
+                      probability: float) -> float:
+    order = np.argsort(values)
+    ordered_values = values[order]
+    ordered_weights = weights[order]
+    cumulative = np.cumsum(ordered_weights)
+    if cumulative[-1] <= 0:
+        return float("nan")
+    index = np.searchsorted(
+        cumulative, probability * cumulative[-1], side="left")
+    return float(ordered_values[min(index, ordered_values.size - 1)])
+
+
+def conditional_bootstrap_comparison(
+        topas: np.ndarray, gpu: np.ndarray,
+        stopping: tuple[np.ndarray, np.ndarray], replicates: int,
+        seed: int) -> list[dict]:
+    """Independent Poisson bootstrap for sparse slit-edge conditional bins."""
+    rng = np.random.default_rng(seed)
+
+    def arrays(rows: np.ndarray) -> dict[str, np.ndarray]:
+        ux, uy, _ = directions(rows)
+        x_mm = rows[:, 0] * 10.0
+        residual = x_mm - np.rint(x_mm / SLIT_PITCH_MM) * SLIT_PITCH_MM
+        energy = rows[:, 5]
+        return {
+            "residual": np.abs(residual),
+            "energy": energy,
+            "stopping": np.interp(energy / 12.0, stopping[0], stopping[1]),
+            "theta": np.abs(np.arctan2(ux, uy) * 1.0e3),
+        }
+
+    topas_arrays = arrays(topas)
+    gpu_arrays = arrays(gpu)
+    result = []
+    for bin_index, (low, high) in enumerate(zip(
+            SLIT_EDGE_BINS_MM[:-1], SLIT_EDGE_BINS_MM[1:])):
+        def select(source: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
+            mask = ((source["residual"] >= low) &
+                    ((source["residual"] < high) if bin_index + 2 < len(
+                        SLIT_EDGE_BINS_MM) else (source["residual"] <= high)))
+            return {key: value[mask] for key, value in source.items()}
+
+        topas_bin = select(topas_arrays)
+        gpu_bin = select(gpu_arrays)
+        estimates = {key: [] for key in (
+            "count_gpu_over_topas", "energy_mean_gpu_over_topas",
+            "stopping_sum_gpu_over_topas", "q68_gpu_over_topas",
+            "q99_gpu_over_topas", "tail20_gpu_over_topas",
+            "tail40_gpu_over_topas")}
+        for _ in range(replicates):
+            topas_weights = rng.poisson(1.0, topas_bin["energy"].size)
+            gpu_weights = rng.poisson(1.0, gpu_bin["energy"].size)
+            topas_count = float(np.sum(topas_weights))
+            gpu_count = float(np.sum(gpu_weights))
+            if topas_count <= 0.0 or gpu_count <= 0.0:
+                continue
+            estimates["count_gpu_over_topas"].append(gpu_count / topas_count)
+            topas_energy = float(np.sum(
+                topas_weights * topas_bin["energy"]) / topas_count)
+            gpu_energy = float(np.sum(
+                gpu_weights * gpu_bin["energy"]) / gpu_count)
+            estimates["energy_mean_gpu_over_topas"].append(
+                gpu_energy / topas_energy)
+            estimates["stopping_sum_gpu_over_topas"].append(
+                float(np.sum(gpu_weights * gpu_bin["stopping"]) /
+                      np.sum(topas_weights * topas_bin["stopping"])))
+            for label, probability in (("q68", 0.68), ("q99", 0.99)):
+                topas_quantile = weighted_quantile(
+                    topas_bin["theta"], topas_weights, probability)
+                gpu_quantile = weighted_quantile(
+                    gpu_bin["theta"], gpu_weights, probability)
+                estimates[f"{label}_gpu_over_topas"].append(
+                    gpu_quantile / topas_quantile)
+            for label, threshold in (("tail20", 20.0), ("tail40", 40.0)):
+                topas_tail = float(np.sum(
+                    topas_weights * (topas_bin["theta"] > threshold)))
+                gpu_tail = float(np.sum(
+                    gpu_weights * (gpu_bin["theta"] > threshold)))
+                if topas_tail > 0.0:
+                    estimates[f"{label}_gpu_over_topas"].append(
+                        (gpu_tail / gpu_count) / (topas_tail / topas_count))
+        record = {
+            "abs_residual_low_mm": float(low),
+            "abs_residual_high_mm": float(min(high, 1.8)),
+            "topas_count": int(topas_bin["energy"].size),
+            "gpu_count": int(gpu_bin["energy"].size),
+        }
+        for key, values in estimates.items():
+            finite = np.asarray(values, dtype=float)
+            finite = finite[np.isfinite(finite)]
+            record[key] = {
+                "median": float(np.median(finite)) if finite.size else None,
+                "ci95": ([float(value) for value in np.quantile(
+                    finite, [0.025, 0.975])] if finite.size else None),
+            }
+        result.append(record)
+    return result
+
+
 def direct_event_ids(entrance: np.ndarray) -> set[int]:
     rows = primary_c12(entrance)
     ux, uy, _ = directions(rows)
@@ -174,19 +377,25 @@ def secondary_summary(data: np.ndarray) -> dict:
 
 def analyze_case(run_dir: Path, stopping: tuple[np.ndarray, np.ndarray]
                  ) -> tuple[dict, dict[str, np.ndarray]]:
-    entrance = load_phsp(run_dir / "output/collimator_entrance.phsp")
     water = load_phsp(run_dir / "output/water_entrance.phsp")
     water_primary = primary_c12(water)
-    direct_ids = direct_event_ids(entrance)
-    is_direct = np.fromiter(
-        (int(event) in direct_ids for event in water_primary[:, 11]),
-        dtype=bool,
-        count=water_primary.shape[0],
-    )
-    direct = water_primary[is_direct]
-    touched = water_primary[~is_direct]
+    entrance_path = run_dir / "output/collimator_entrance.phsp"
+    classification_available = entrance_path.is_file()
+    if classification_available:
+        direct_ids = direct_event_ids(load_phsp(entrance_path))
+        is_direct = np.fromiter(
+            (int(event) in direct_ids for event in water_primary[:, 11]),
+            dtype=bool,
+            count=water_primary.shape[0],
+        )
+        direct = water_primary[is_direct]
+        touched = water_primary[~is_direct]
+    else:
+        direct = water_primary[:0]
+        touched = water_primary[:0]
     summary = {
         "run_dir": str(run_dir),
+        "path_classification_available": classification_available,
         "water_primary_all": angle_summary(water_primary),
         "water_primary_direct": angle_summary(direct),
         "water_primary_copper_touched": angle_summary(touched),
@@ -296,6 +505,78 @@ def comparison_ratios(topas: dict, gpu: dict) -> dict:
     return result
 
 
+def conditional_comparison_ratios(topas: dict, gpu: dict) -> list[dict]:
+    def ratio(numerator: float | None, denominator: float | None) -> float | None:
+        if numerator is None or denominator is None or denominator == 0.0:
+            return None
+        return numerator / denominator
+
+    result = []
+    for topas_bin, gpu_bin in zip(topas["bins"], gpu["bins"]):
+        record = {
+            "abs_residual_low_mm": topas_bin["abs_residual_low_mm"],
+            "abs_residual_high_mm": topas_bin["abs_residual_high_mm"],
+            "topas_count": topas_bin["count"],
+            "gpu_count": gpu_bin["count"],
+            "count_gpu_over_topas": ratio(
+                gpu_bin["count"], topas_bin["count"]),
+            "fraction_gpu_over_topas": ratio(
+                gpu_bin["fraction"], topas_bin["fraction"]),
+        }
+        if topas_bin["count"] and gpu_bin["count"]:
+            for key in (
+                    "energy_mean_MeV", "energy_std_MeV",
+                    "stopping_sum_MeV_per_mm", "stopping_mean_MeV_per_mm",
+                    "outward_theta_std_mrad", "abs_theta_q68_mrad",
+                    "abs_theta_q95_mrad", "abs_theta_q99_mrad",
+                    "abs_theta_gt20_fraction", "abs_theta_gt40_fraction"):
+                record[f"{key}_gpu_over_topas"] = ratio(
+                    gpu_bin[key], topas_bin[key])
+            record["outward_theta_mean_mrad"] = {
+                "topas": topas_bin["outward_theta_mean_mrad"],
+                "gpu": gpu_bin["outward_theta_mean_mrad"],
+                "difference": (gpu_bin["outward_theta_mean_mrad"] -
+                               topas_bin["outward_theta_mean_mrad"]),
+            }
+            record["correlation_energy_outward_theta"] = {
+                "topas": topas_bin["correlation_energy_outward_theta"],
+                "gpu": gpu_bin["correlation_energy_outward_theta"],
+            }
+        result.append(record)
+    return result
+
+
+def plot_conditional_ratios(comparisons: dict[str, dict], output: Path) -> None:
+    metrics = (
+        ("fraction_gpu_over_topas", "fluence fraction"),
+        ("energy_mean_MeV_gpu_over_topas", "mean energy"),
+        ("stopping_sum_MeV_per_mm_gpu_over_topas", "stopping sum"),
+        ("abs_theta_q68_mrad_gpu_over_topas", "|theta x| q68"),
+        ("abs_theta_q99_mrad_gpu_over_topas", "|theta x| q99"),
+    )
+    fig, axes = plt.subplots(
+        len(comparisons), len(metrics), figsize=(16, 3.3 * len(comparisons)),
+        squeeze=False, constrained_layout=True)
+    for row, (energy, comparison) in enumerate(sorted(
+            comparisons.items(), key=lambda item: int(item[0]))):
+        bins = comparison["water_primary_copper_touched_conditional"]
+        centers = np.asarray([
+            0.5 * (entry["abs_residual_low_mm"] +
+                   entry["abs_residual_high_mm"])
+            for entry in bins])
+        for column, (key, title) in enumerate(metrics):
+            values = np.asarray([
+                entry.get(key, np.nan) for entry in bins], dtype=float)
+            axis = axes[row, column]
+            axis.plot(centers, values, marker="o")
+            axis.axhline(1.0, color="black", linestyle="--", linewidth=0.8)
+            axis.axvline(SLIT_HALF_WIDTH_MM, color="0.5", linestyle=":")
+            axis.set(xlabel="|folded x| at water entrance [mm]",
+                     ylabel="GPU / TOPAS", title=f"{energy} MeV/u: {title}")
+    fig.savefig(output, dpi=180)
+    plt.close(fig)
+
+
 def plot_diagnostics(samples: dict[int, dict[str, np.ndarray]], output: Path) -> None:
     colors = {150: "tab:blue", 250: "tab:orange", 300: "tab:green"}
     fig, axes = plt.subplots(2, 2, figsize=(11, 8.5))
@@ -342,7 +623,11 @@ def main() -> None:
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--stopping-power-file", type=Path,
                         default=DEFAULT_STOPPING_POWER)
+    parser.add_argument("--bootstrap-replicates", type=int, default=0)
+    parser.add_argument("--bootstrap-seed", type=int, default=20260919)
     args = parser.parse_args()
+    if args.bootstrap_replicates < 0:
+        raise ValueError("--bootstrap-replicates must be nonnegative")
     args.output_dir.mkdir(parents=True, exist_ok=True)
     stopping_data = np.loadtxt(
         args.stopping_power_file, delimiter=",", comments="#", skiprows=2)
@@ -353,22 +638,62 @@ def main() -> None:
         energy = int(energy_text)
         summaries[str(energy)], samples[energy] = analyze_case(
             Path(run_text), stopping)
+        for group in ("all", "direct", "touched"):
+            summaries[str(energy)][
+                f"water_primary_{'copper_touched' if group == 'touched' else group}_conditional"
+            ] = slit_edge_conditional_summary(samples[energy][group], stopping)
     with (args.output_dir / "phase_space_joint_summary.json").open("w") as stream:
         json.dump(summaries, stream, indent=2)
     plot_diagnostics(samples, args.output_dir / "phase_space_joint_diagnostics.png")
     if args.gpu_case:
-        gpu_summaries = {
-            str(int(energy)): analyze_gpu_case(Path(path), stopping)
-            for energy, path in args.gpu_case
-        }
+        gpu_summaries = {}
+        gpu_samples = {}
+        for energy_text, path in args.gpu_case:
+            energy = int(energy_text)
+            rows, touched, _ = gpu_rows(Path(path))
+            groups = {
+                "all": rows,
+                "direct": rows[~touched],
+                "touched": rows[touched],
+            }
+            gpu_samples[energy] = groups
+            summary = analyze_gpu_case(Path(path), stopping)
+            for group in ("all", "direct", "touched"):
+                summary[
+                    f"water_primary_{'copper_touched' if group == 'touched' else group}_conditional"
+                ] = slit_edge_conditional_summary(groups[group], stopping)
+            gpu_summaries[str(energy)] = summary
         comparisons = {
             energy: comparison_ratios(summaries[energy], gpu)
             for energy, gpu in gpu_summaries.items()
         }
+        for energy, comparison in comparisons.items():
+            numeric_energy = int(energy)
+            for group, label in (
+                    ("all", "water_primary_all"),
+                    ("direct", "water_primary_direct"),
+                    ("touched", "water_primary_copper_touched")):
+                conditional_key = f"{label}_conditional"
+                comparison[conditional_key] = conditional_comparison_ratios(
+                    summaries[energy][conditional_key],
+                    gpu_summaries[energy][conditional_key])
+                comparison[f"{label}_joint_histogram"] = (
+                    joint_histogram_comparison(
+                        samples[numeric_energy][group],
+                        gpu_samples[numeric_energy][group], numeric_energy))
+            if args.bootstrap_replicates:
+                comparison["water_primary_copper_touched_conditional_bootstrap"] = (
+                    conditional_bootstrap_comparison(
+                        samples[numeric_energy]["touched"],
+                        gpu_samples[numeric_energy]["touched"], stopping,
+                        args.bootstrap_replicates,
+                        args.bootstrap_seed + numeric_energy))
         with (args.output_dir / "gpu_phase_space_summary.json").open("w") as stream:
             json.dump(gpu_summaries, stream, indent=2)
         with (args.output_dir / "gpu_topas_phase_space_comparison.json").open("w") as stream:
             json.dump(comparisons, stream, indent=2)
+        plot_conditional_ratios(
+            comparisons, args.output_dir / "slit_edge_conditional_ratios.png")
 
 
 if __name__ == "__main__":

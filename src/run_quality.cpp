@@ -206,6 +206,10 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
                  result.secondary_queue_overflow_energy_MeV);
     add_overflow("cascade_queue_overflow", "cascade",
                  result.cascade_queue_overflow, 0.0);
+    add_overflow("minibeam_copper_cascade_queue_overflow",
+                 "minibeam Copper cascade",
+                 result.minibeam.copper_fragment_cascade_queue_overflows,
+                 0.0);
     add_overflow("neutral_queue_overflow", "neutral",
                  result.neutral_queue_overflow,
                  result.neutral_queue_overflow_energy_MeV);
@@ -357,6 +361,8 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
                  {"primary voxel fluence",
                   &result.primary_voxel_track_length_mm},
                  {"charged-origin dose", &result.charged_origin_voxel_deposited_energy_MeV},
+                 {"minibeam component dose",
+                  &result.minibeam_component_voxel_deposited_energy_MeV},
                  {"neutral-origin dose", &result.neutral_origin_voxel_deposited_energy_MeV},
                  {"primary dose", &result.primary_deposited_energy_MeV},
                  {"secondary carbon dose", &result.secondary_carbon_deposited_energy_MeV},

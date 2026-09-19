@@ -1,0 +1,12 @@
+# Full upstream 3 cm x 3 cm PBS beam: 256 spots x 4,000 histories = 1,024,000.
+# Only electromagnetic transport and decay are enabled throughout Copper, air,
+# and water. No hadronic inelastic, nuclear elastic, INCL++, BIC, HP elastic,
+# or stopping-at-rest module is loaded.
+includeFile = run_energy_scan.txt
+
+u:So/CarbonPBS/HistoriesScale = 0.04
+i:Ts/NumberOfThreads = 192
+b:Ts/PauseBeforeQuit = "False"
+
+sv:Ph/Default/Modules = 2 "g4em-standard_opt4" "g4decay"
+d:Ph/Default/CutForAllParticles = 0.05 mm

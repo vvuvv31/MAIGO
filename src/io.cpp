@@ -570,6 +570,21 @@ void write_fragment_birth_spectrum_csv(const std::filesystem::path& prefix,
         if (!output) throw std::runtime_error("Failed to write helium joint birth spectrum");
     }
     {
+        auto output = write_open("_c12_joint.csv");
+        output << "replay_particle_id,source_history,rng_stream,generation,birth_region,Z,A,kinetic_energy_MeV,weight,x_mm,y_mm,z_mm,direction_x,direction_y,direction_z\n"
+               << std::setprecision(17);
+        for (const auto& birth : result.c12_birth_records) {
+            output << birth.replay_particle_id << ',' << birth.history << ','
+                   << birth.rng_stream << ',' << birth.generation << ','
+                   << birth.birth_region << ",6,12,"
+                   << birth.kinetic_energy_MeV << ',' << birth.weight << ','
+                   << birth.x_mm << ',' << birth.y_mm << ',' << birth.z_mm << ','
+                   << birth.direction_x << ',' << birth.direction_y << ','
+                   << birth.direction_z << '\n';
+        }
+        if (!output) throw std::runtime_error("Failed to write C12 joint birth spectrum");
+    }
+    {
         auto output = write_open("_he4_hazard.csv");
         output << "tau_start,tau_simpson,energy_tau_simpson_MeV,candidates,candidate_energy_MeV,path_mm\n"
                << std::setprecision(17);
@@ -757,6 +772,58 @@ void write_minibeam_phase_space_csv(const std::filesystem::path& path,
     }
     if (!output) {
         throw std::runtime_error("Failed to write minibeam phase space");
+    }
+}
+
+void write_minibeam_water_primary_plane_csv(
+    const std::filesystem::path& path, const TransportResult& result) {
+    ensure_parent_directory(path);
+    std::ofstream output(path, std::ios::binary);
+    if (!output) {
+        throw std::runtime_error(
+            "Cannot create minibeam water-plane output file: " +
+            path.string());
+    }
+    output << "source_history,plane_index,depth_mm,kinetic_energy_MeV,"
+              "x_mm,y_mm,direction_x,direction_y,direction_z\n"
+           << std::setprecision(17);
+    for (const auto& record :
+         result.minibeam_water_primary_plane_records) {
+        if (!record.valid) continue;
+        output << record.history << ',' << record.plane_index << ','
+               << record.depth_mm << ',' << record.kinetic_energy_MeV << ','
+               << record.x_mm << ',' << record.y_mm << ','
+               << record.direction_x << ',' << record.direction_y << ','
+               << record.direction_z << '\n';
+    }
+    if (!output) {
+        throw std::runtime_error(
+            "Failed to write minibeam water-plane phase space");
+    }
+}
+
+void write_minibeam_fragment_phase_space_csv(
+    const std::filesystem::path& path, const TransportResult& result) {
+    ensure_parent_directory(path);
+    std::ofstream output(path, std::ios::binary);
+    if (!output) {
+        throw std::runtime_error(
+            "Cannot create minibeam fragment phase-space output file: " +
+            path.string());
+    }
+    output << "source_history,Z,A,kinetic_energy_MeV,x_mm,y_mm,"
+              "direction_x,direction_y,direction_z\n"
+           << std::setprecision(17);
+    for (const auto& record : result.minibeam_fragment_phase_space_records) {
+        output << record.history << ',' << record.atomic_number << ','
+               << record.mass_number << ',' << record.kinetic_energy_MeV << ','
+               << record.x_mm << ',' << record.y_mm << ','
+               << record.direction_x << ',' << record.direction_y << ','
+               << record.direction_z << '\n';
+    }
+    if (!output) {
+        throw std::runtime_error(
+            "Failed to write minibeam fragment phase space");
     }
 }
 
@@ -966,13 +1033,11 @@ void write_sparse_charged_origin_voxel_dose_csv(
             &result.secondary_other_charged_deposited_energy_MeV,
         };
     const auto bins = config.number_of_bins();
-    if (std::any_of(depth_categories.begin(), depth_categories.end(),
+    const auto have_depth_categories =
+        std::all_of(depth_categories.begin(), depth_categories.end(),
                     [bins](const auto* category) {
-                        return category->size() != bins;
-                    })) {
-        throw std::invalid_argument(
-            "Charged-origin depth category size does not match configuration");
-    }
+                        return category->size() == bins;
+                    });
 
     const auto histories = static_cast<double>(config.number_of_histories);
     const auto plane_size = config.voxel_bins_x * config.voxel_bins_y;
@@ -1011,8 +1076,9 @@ void write_sparse_charged_origin_voxel_dose_csv(
         }
 #endif
     }
-    for (std::size_t category = 0; category < charged_origin_category_count;
-         ++category) {
+    if (have_depth_categories) {
+      for (std::size_t category = 0; category < charged_origin_category_count;
+           ++category) {
         const auto category_offset = category * voxel_count;
         for (std::size_t z = 0; z < bins; ++z) {
             const auto begin =
@@ -1044,6 +1110,7 @@ void write_sparse_charged_origin_voxel_dose_csv(
             }
 #endif
         }
+      }
     }
 
     ensure_parent_directory(path);
@@ -1451,6 +1518,97 @@ void write_dense_charged_origin_voxel_dose_mhd(
                << "DoseUnits = Gy\n"
                << "DoseOriginCategory = " << labels[category] << '\n'
                << "ElementDataFile = " << raw_path.filename().string() << '\n';
+    }
+    if (!result.minibeam_component_voxel_deposited_energy_MeV.empty()) {
+        if (result.minibeam_component_voxel_deposited_energy_MeV.size() !=
+            minibeam_component_category_count * voxel_count) {
+            throw std::invalid_argument(
+                "Minibeam component voxel result size mismatch");
+        }
+        constexpr std::array<const char*, minibeam_component_category_count>
+            component_labels{
+                "primary_c12",
+                "copper_secondary_c12", "copper_p", "copper_d", "copper_t",
+                "copper_he3", "copper_he4", "copper_heavy", "copper_other",
+                "water_secondary_c12", "water_p", "water_d", "water_t",
+                "water_he3", "water_he4", "water_heavy", "water_other"};
+        const auto histories = static_cast<double>(config.number_of_histories);
+        for (std::size_t voxel = 0; voxel < voxel_count; ++voxel) {
+            double reconstructed = 0.0;
+            for (std::size_t category = 0;
+                 category < minibeam_component_category_count; ++category) {
+                reconstructed +=
+                    result.minibeam_component_voxel_deposited_energy_MeV[
+                        category * voxel_count + voxel];
+            }
+            const auto total = result.voxel_deposited_energy_MeV[voxel];
+            const auto scale = std::max(
+                {std::abs(reconstructed), std::abs(total), 1.0});
+#if defined(CARBON_DOSE_FP32)
+            const auto tolerance = std::max(1.0e-6 * histories, 5.0e-2 * scale);
+#else
+            const auto tolerance = std::max(1.0e-9 * histories, 5.0e-5 * scale);
+#endif
+            if (std::abs(reconstructed - total) > tolerance) {
+                throw std::runtime_error(
+                    "Minibeam component categories do not close at voxel " +
+                    std::to_string(voxel));
+            }
+        }
+        for (std::size_t category = 0; category < component_labels.size();
+             ++category) {
+            const auto header_path = base.parent_path() /
+                (base.filename().string() + "_component_" +
+                 component_labels[category] + ".mhd");
+            const auto raw_path = header_path.parent_path() /
+                (header_path.stem().string() + ".raw");
+            std::vector<float> raw(voxel_count, 0.0F);
+            const auto offset = category * voxel_count;
+            for (std::size_t voxel = 0; voxel < voxel_count; ++voxel) {
+                raw[voxel] = static_cast<float>(scored_dose_Gy(
+                    config,
+                    result.minibeam_component_voxel_deposited_energy_MeV[
+                        offset + voxel],
+                    masses_kg[voxel]));
+            }
+            {
+                std::ofstream output(raw_path, std::ios::binary);
+                if (!output) {
+                    throw std::runtime_error(
+                        "Cannot create minibeam component RAW file: " +
+                        raw_path.string());
+                }
+                output.write(reinterpret_cast<const char*>(raw.data()),
+                             static_cast<std::streamsize>(
+                                 raw.size() * sizeof(float)));
+            }
+            std::ofstream header(header_path, std::ios::binary);
+            if (!header) {
+                throw std::runtime_error(
+                    "Cannot create minibeam component MHD file: " +
+                    header_path.string());
+            }
+            header << std::setprecision(12)
+                   << "ObjectType = Image\n"
+                   << "NDims = 3\n"
+                   << "BinaryData = True\n"
+                   << "BinaryDataByteOrderMSB = False\n"
+                   << "CompressedData = False\n"
+                   << "TransformMatrix = 1 0 0 0 1 0 0 0 1\n"
+                   << "Offset = " << origin_x << ' ' << origin_y << ' '
+                   << origin_z << '\n'
+                   << "CenterOfRotation = 0 0 0\n"
+                   << "ElementSpacing = " << config.voxel_size_x_mm << ' '
+                   << config.voxel_size_y_mm << ' '
+                   << config.scorer_spacing_z_mm() << '\n'
+                   << "DimSize = " << nx << ' ' << ny << ' ' << nz << '\n'
+                   << "ElementType = MET_FLOAT\n"
+                   << "DoseUnits = Gy\n"
+                   << "MinibeamComponent = " << component_labels[category]
+                   << '\n'
+                   << "ElementDataFile = " << raw_path.filename().string()
+                   << '\n';
+        }
     }
     if (!result.be_isotope_origin_voxel_deposited_energy_MeV.empty()) {
     if (result.be_isotope_origin_voxel_deposited_energy_MeV.size() !=

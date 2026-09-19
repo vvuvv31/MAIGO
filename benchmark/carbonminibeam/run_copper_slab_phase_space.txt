@@ -1,0 +1,60 @@
+# Homogeneous Copper slab phase-space benchmark.  The Slurm driver replaces
+# the energy and geometry values below for each matrix point.
+i:Ts/Seed = 26091801
+i:Ts/NumberOfThreads = 16
+i:Ts/ShowHistoryCountAtInterval = 10000
+b:Ts/ShowHistoryCountLessFrequentlyAsSimulationProgresses = "True"
+b:Gr/Enable = "False"
+
+s:Ge/World/Type = "TsBox"
+s:Ge/World/Material = "G4_Galactic"
+d:Ge/World/HLX = 80 mm
+d:Ge/World/HLY = 80 mm
+d:Ge/World/HLZ = 100 mm
+b:Ge/World/Invisible = "True"
+
+s:Ge/Copper/Parent = "World"
+s:Ge/Copper/Type = "TsBox"
+s:Ge/Copper/Material = "G4_Cu"
+d:Ge/Copper/HLX = 60 mm
+d:Ge/Copper/HLY = 60 mm
+d:Ge/Copper/HLZ = 30 mm
+d:Ge/Copper/MaxStepSize = 0.05 mm
+
+s:Ge/BeamPosition/Parent = "World"
+s:Ge/BeamPosition/Type = "Group"
+d:Ge/BeamPosition/TransZ = 30.015 mm
+
+s:Ge/ExitFilm/Parent = "World"
+s:Ge/ExitFilm/Type = "TsBox"
+s:Ge/ExitFilm/Material = "G4_Galactic"
+d:Ge/ExitFilm/HLX = 70 mm
+d:Ge/ExitFilm/HLY = 70 mm
+d:Ge/ExitFilm/HLZ = 0.005 mm
+d:Ge/ExitFilm/TransZ = -30.015 mm
+
+s:So/CarbonBeam/Type = "Beam"
+s:So/CarbonBeam/Component = "BeamPosition"
+s:So/CarbonBeam/BeamParticle = "GenericIon(6,12,6)"
+d:So/CarbonBeam/BeamEnergy = 3000 MeV
+u:So/CarbonBeam/BeamEnergySpread = 0.0
+s:So/CarbonBeam/BeamPositionDistribution = "None"
+s:So/CarbonBeam/BeamAngularDistribution = "None"
+i:So/CarbonBeam/NumberOfHistoriesInRun = 256000
+
+s:Ph/ListName = "Default"
+s:Ph/Default/Type = "Geant4_Modular"
+sv:Ph/Default/Modules = 8 "g4em-standard_opt4" "g4h-phy_QGSP_BIC_HP" "g4decay" "g4ion-inclxx" "CarbonIonElasticPhysics" "g4h-elastic_HP" "g4stopping" "CarbonInelasticCapturePhysics"
+d:Ph/Default/CutForAllParticles = 0.05 mm
+
+s:Sc/SlabExit/Quantity = "PhaseSpace"
+s:Sc/SlabExit/Surface = "ExitFilm/ZPlusSurface"
+s:Sc/SlabExit/OnlyIncludeParticlesGoing = "In"
+s:Sc/SlabExit/OutputType = "ASCII"
+s:Sc/SlabExit/OutputFile = "output/slab_exit"
+s:Sc/SlabExit/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/SlabExit/OutputBufferSize = 10000
+b:Sc/SlabExit/IncludeRunID = "True"
+b:Sc/SlabExit/IncludeEventID = "True"
+b:Sc/SlabExit/IncludeTrackID = "True"
+b:Sc/SlabExit/IncludeParentID = "True"

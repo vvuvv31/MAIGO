@@ -53,8 +53,12 @@ void accumulate_transport_result(carbon::TransportResult& total,
     add_vector_in_place(total.voxel_deposited_energy_MeV, part.voxel_deposited_energy_MeV);
     add_vector_in_place(total.charged_origin_voxel_deposited_energy_MeV,
                         part.charged_origin_voxel_deposited_energy_MeV);
+    add_vector_in_place(total.minibeam_component_voxel_deposited_energy_MeV,
+                        part.minibeam_component_voxel_deposited_energy_MeV);
     add_vector_in_place(total.be_isotope_origin_voxel_deposited_energy_MeV,
                         part.be_isotope_origin_voxel_deposited_energy_MeV);
+    add_vector_in_place(total.he_isotope_origin_voxel_deposited_energy_MeV,
+                        part.he_isotope_origin_voxel_deposited_energy_MeV);
     add_vector_in_place(total.neutral_origin_voxel_deposited_energy_MeV,
                         part.neutral_origin_voxel_deposited_energy_MeV);
     add_vector_in_place(total.primary_deposited_energy_MeV,
@@ -308,6 +312,103 @@ void accumulate_transport_result(carbon::TransportResult& total,
         part.minibeam.copper_charged_survivor_energy_MeV;
     total.minibeam.copper_neutral_survivor_energy_MeV +=
         part.minibeam.copper_neutral_survivor_energy_MeV;
+    total.minibeam.copper_fragment_cascade_interactions +=
+        part.minibeam.copper_fragment_cascade_interactions;
+    total.minibeam.copper_fragment_cascade_lookup_hits +=
+        part.minibeam.copper_fragment_cascade_lookup_hits;
+    total.minibeam.copper_fragment_cascade_generated_charged +=
+        part.minibeam.copper_fragment_cascade_generated_charged;
+    total.minibeam.copper_fragment_cascade_generated_neutral +=
+        part.minibeam.copper_fragment_cascade_generated_neutral;
+    total.minibeam.copper_fragment_cascade_generated_unsupported +=
+        part.minibeam.copper_fragment_cascade_generated_unsupported;
+    total.minibeam.copper_fragment_cascade_queue_overflows +=
+        part.minibeam.copper_fragment_cascade_queue_overflows;
+    total.minibeam.copper_fragment_cascade_local_energy_MeV +=
+        part.minibeam.copper_fragment_cascade_local_energy_MeV;
+    total.minibeam.copper_fragment_cascade_untracked_energy_MeV +=
+        part.minibeam.copper_fragment_cascade_untracked_energy_MeV;
+    total.minibeam.copper_fragment_cascade_actual_input_energy_MeV +=
+        part.minibeam.copper_fragment_cascade_actual_input_energy_MeV;
+    total.minibeam.copper_fragment_cascade_selected_input_energy_MeV +=
+        part.minibeam.copper_fragment_cascade_selected_input_energy_MeV;
+    total.minibeam.copper_fragment_cascade_replay_output_energy_MeV +=
+        part.minibeam.copper_fragment_cascade_replay_output_energy_MeV;
+    total.minibeam.copper_fragment_cascade_selection_mismatch_MeV +=
+        part.minibeam.copper_fragment_cascade_selection_mismatch_MeV;
+    total.minibeam.copper_fragment_cascade_closure_mismatch_MeV +=
+        part.minibeam.copper_fragment_cascade_closure_mismatch_MeV;
+    total.minibeam.copper_fragment_cascade_mass_energy_mismatch_MeV +=
+        part.minibeam.copper_fragment_cascade_mass_energy_mismatch_MeV;
+    total.minibeam.copper_fragment_cascade_baryon_mismatch +=
+        part.minibeam.copper_fragment_cascade_baryon_mismatch;
+    for (std::size_t miss = 0;
+         miss < total.minibeam.copper_fragment_cascade_lookup_misses.size();
+         ++miss) {
+        total.minibeam.copper_fragment_cascade_lookup_misses[miss] +=
+            part.minibeam.copper_fragment_cascade_lookup_misses[miss];
+    }
+    for (std::size_t category = 0; category < 9; ++category) {
+        total.minibeam
+            .copper_fragment_ignored_nuclear_optical_depth_by_species[
+                category] +=
+            part.minibeam
+                .copper_fragment_ignored_nuclear_optical_depth_by_species[
+                    category];
+        total.minibeam
+            .copper_fragment_cascade_lookup_misses_by_species[category] +=
+            part.minibeam
+                .copper_fragment_cascade_lookup_misses_by_species[category];
+        total.minibeam.copper_fragment_terminal_tracks_by_species[category] +=
+            part.minibeam.copper_fragment_terminal_tracks_by_species[category];
+        total.minibeam
+            .copper_fragment_ignored_reaction_probability_by_species[category] +=
+            part.minibeam
+                .copper_fragment_ignored_reaction_probability_by_species[category];
+    }
+    for (std::size_t generation = 0;
+         generation < MinibeamDiagnostics::copper_cascade_generation_count;
+         ++generation) {
+        total.minibeam.copper_fragment_cascade_interactions_by_generation[
+            generation] +=
+            part.minibeam.copper_fragment_cascade_interactions_by_generation[
+                generation];
+        total.minibeam.copper_fragment_cascade_hits_by_generation[generation] +=
+            part.minibeam.copper_fragment_cascade_hits_by_generation[generation];
+        total.minibeam.copper_fragment_cascade_misses_by_generation[generation] +=
+            part.minibeam.copper_fragment_cascade_misses_by_generation[generation];
+    }
+    for (std::size_t bin = 0;
+         bin < MinibeamDiagnostics::fragment_lookup_energy_bin_count; ++bin) {
+        total.minibeam
+            .copper_fragment_cascade_lookup_misses_by_energy[bin] +=
+            part.minibeam
+                .copper_fragment_cascade_lookup_misses_by_energy[bin];
+    }
+    const auto merge_joint_miss = [](std::vector<std::uint64_t>& destination,
+                                     const std::vector<std::uint64_t>& source) {
+        if (source.empty()) return;
+        if (destination.empty()) destination.resize(source.size(), 0U);
+        if (destination.size() != source.size()) {
+            throw std::runtime_error(
+                "Inconsistent Copper fragment joint-miss diagnostic size");
+        }
+        for (std::size_t index = 0; index < source.size(); ++index) {
+            destination[index] += source[index];
+        }
+    };
+    merge_joint_miss(
+        total.minibeam.copper_fragment_miss_joint_counts,
+        part.minibeam.copper_fragment_miss_joint_counts);
+    merge_joint_miss(
+        total.minibeam.copper_fragment_miss_joint_input_energy_keV,
+        part.minibeam.copper_fragment_miss_joint_input_energy_keV);
+    merge_joint_miss(
+        total.minibeam.copper_fragment_miss_joint_collision_depth_um,
+        part.minibeam.copper_fragment_miss_joint_collision_depth_um);
+    merge_joint_miss(
+        total.minibeam.copper_fragment_miss_joint_remaining_copper_um,
+        part.minibeam.copper_fragment_miss_joint_remaining_copper_um);
     for (std::size_t category = 0;
          category <
          total.minibeam.copper_charged_survivors_by_species.size();
@@ -318,6 +419,18 @@ void accumulate_transport_result(carbon::TransportResult& total,
             .copper_charged_survivor_energy_by_species_MeV[category] +=
             part.minibeam
                 .copper_charged_survivor_energy_by_species_MeV[category];
+        total.minibeam.copper_fragment_absorptions_by_species[category] +=
+            part.minibeam.copper_fragment_absorptions_by_species[category];
+        total.minibeam
+            .copper_fragment_absorbed_energy_by_species_MeV[category] +=
+            part.minibeam
+                .copper_fragment_absorbed_energy_by_species_MeV[category];
+        total.minibeam
+            .copper_fragment_absorption_straight_copper_path_by_species_mm[
+                category] +=
+            part.minibeam
+                .copper_fragment_absorption_straight_copper_path_by_species_mm[
+                    category];
     }
     total.minibeam.water_entrance_primary +=
         part.minibeam.water_entrance_primary;
@@ -340,6 +453,29 @@ void accumulate_transport_result(carbon::TransportResult& total,
     for (auto record : part.minibeam_phase_space_records) {
         record.history += minibeam_history_offset;
         total.minibeam_phase_space_records.push_back(record);
+    }
+    total.minibeam_water_primary_plane_records.reserve(
+        total.minibeam_water_primary_plane_records.size() +
+        part.minibeam_water_primary_plane_records.size());
+    for (auto record : part.minibeam_water_primary_plane_records) {
+        record.history += minibeam_history_offset;
+        total.minibeam_water_primary_plane_records.push_back(record);
+    }
+    total.minibeam_fragment_phase_space_records.reserve(
+        total.minibeam_fragment_phase_space_records.size() +
+        part.minibeam_fragment_phase_space_records.size());
+    for (auto record : part.minibeam_fragment_phase_space_records) {
+        record.history += minibeam_history_offset;
+        total.minibeam_fragment_phase_space_records.push_back(record);
+    }
+    total.c12_birth_records.reserve(
+        total.c12_birth_records.size() + part.c12_birth_records.size());
+    for (auto record : part.c12_birth_records) {
+        record.history += minibeam_history_offset;
+        // Queue-slot ids are only unique inside one spot/shard result. The
+        // accumulated output contract requires a globally unique replay id.
+        record.replay_particle_id = total.c12_birth_records.size();
+        total.c12_birth_records.push_back(record);
     }
     total.total_steps += part.total_steps;
     total.elapsed_seconds += part.elapsed_seconds;

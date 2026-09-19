@@ -26,6 +26,16 @@ struct HeliumBirthRecord {
     double direction_x{}, direction_y{}, direction_z{}, weight{};
 };
 
+// Optional C12 queue-birth snapshot for true-position water replay.  The queue
+// slot is a unique replay-particle id; history remains the original incident
+// history used for normalization and ancestry diagnostics.
+struct C12BirthRecord {
+    std::uint64_t replay_particle_id{}, history{}, rng_stream{};
+    unsigned generation{}, birth_region{};
+    double kinetic_energy_MeV{}, x_mm{}, y_mm{}, z_mm{};
+    double direction_x{}, direction_y{}, direction_z{}, weight{};
+};
+
 // Optional per-primary snapshot at the downstream water entrance.  This is
 // populated only when minibeam_phase_space_output_file is configured.
 struct MinibeamPhaseSpaceRecord {
@@ -41,6 +51,33 @@ struct MinibeamPhaseSpaceRecord {
 };
 static_assert(sizeof(MinibeamPhaseSpaceRecord) == 40,
               "minibeam phase-space record layout");
+
+// Optional per-primary snapshots at diagnostic planes inside water. One slot
+// is reserved for every (history, configured plane), so no device-side queue
+// or atomic append is required.
+struct MinibeamWaterPrimaryPlaneRecord {
+    std::uint64_t history{};
+    std::uint32_t plane_index{};
+    std::uint8_t valid{};
+    std::uint8_t pad[3]{};
+    float depth_mm{};
+    float kinetic_energy_MeV{};
+    float x_mm{}, y_mm{};
+    float direction_x{}, direction_y{}, direction_z{};
+};
+static_assert(sizeof(MinibeamWaterPrimaryPlaneRecord) == 48,
+              "minibeam water-plane record layout");
+
+struct MinibeamFragmentPhaseSpaceRecord {
+    std::uint64_t history{};
+    std::int32_t atomic_number{};
+    std::int32_t mass_number{};
+    float kinetic_energy_MeV{};
+    float x_mm{}, y_mm{};
+    float direction_x{}, direction_y{}, direction_z{};
+};
+static_assert(sizeof(MinibeamFragmentPhaseSpaceRecord) == 40,
+              "minibeam fragment phase-space record layout");
 
 struct MinibeamDiagnostics {
     static constexpr std::size_t slit_count = 15;
@@ -63,6 +100,70 @@ struct MinibeamDiagnostics {
     // C, B, Be, Li, He, p, d, t, other.
     std::array<std::uint64_t, 9> copper_charged_survivors_by_species{};
     std::array<double, 9> copper_charged_survivor_energy_by_species_MeV{};
+    // Every direct-fragment Copper reinteraction, including reactions whose
+    // final-state lookup is disabled or misses its strict domain.
+    std::array<std::uint64_t, 9> copper_fragment_absorptions_by_species{};
+    std::array<double, 9> copper_fragment_absorbed_energy_by_species_MeV{};
+    // Straight-ahead Copper material length after the terminal interaction.
+    // Finite slit air and cylindrical side escape are excluded; subsequent
+    // stochastic scattering is intentionally not predicted by this audit.
+    std::array<double, 9>
+        copper_fragment_absorption_straight_copper_path_by_species_mm{};
+    std::uint64_t copper_fragment_cascade_interactions{0};
+    std::uint64_t copper_fragment_cascade_lookup_hits{0};
+    std::array<std::uint64_t, 6> copper_fragment_cascade_lookup_misses{};
+    static constexpr std::size_t copper_cascade_generation_count = 3;
+    std::array<std::uint64_t, copper_cascade_generation_count>
+        copper_fragment_cascade_interactions_by_generation{};
+    std::array<std::uint64_t, copper_cascade_generation_count>
+        copper_fragment_cascade_hits_by_generation{};
+    std::array<std::uint64_t, copper_cascade_generation_count>
+        copper_fragment_cascade_misses_by_generation{};
+    std::uint64_t copper_fragment_cascade_generated_charged{0};
+    std::uint64_t copper_fragment_cascade_generated_neutral{0};
+    std::uint64_t copper_fragment_cascade_generated_unsupported{0};
+    std::uint64_t copper_fragment_cascade_queue_overflows{0};
+    double copper_fragment_cascade_local_energy_MeV{0.0};
+    double copper_fragment_cascade_untracked_energy_MeV{0.0};
+    // C, B, Be, Li, He, p, d, t, other.  Optical depth is accumulated for
+    // products at the configured terminal Copper generation whose further
+    // reactions are deliberately suppressed by the convergence cap.
+    std::array<double, 9>
+        copper_fragment_ignored_nuclear_optical_depth_by_species{};
+    std::array<std::uint64_t, 9>
+        copper_fragment_terminal_tracks_by_species{};
+    // Sum over terminal tracks of 1-exp(-integrated optical depth).
+    std::array<double, 9>
+        copper_fragment_ignored_reaction_probability_by_species{};
+    std::array<std::uint64_t, 9>
+        copper_fragment_cascade_lookup_misses_by_species{};
+    static constexpr std::size_t fragment_lookup_energy_bin_count = 16;
+    static constexpr double fragment_lookup_energy_bin_width_MeVu = 25.0;
+    std::array<std::uint64_t, fragment_lookup_energy_bin_count>
+        copper_fragment_cascade_lookup_misses_by_energy{};
+    // Sparse joint miss audit.  Index order is
+    // [Copper generation][exact Z/A][lookup reason][5 MeV/u energy bin].
+    // The final Z/A slot is overflow (printed as Z=0,A=0); the final energy
+    // bin includes overflow. Fixed-point sums use keV and micrometres.
+    static constexpr std::size_t fragment_miss_za_a_count = 13;
+    static constexpr std::size_t fragment_miss_za_count = 7 * 13 + 1;
+    static constexpr std::size_t fragment_miss_reason_count = 6;
+    static constexpr std::size_t fragment_miss_joint_energy_bin_count = 128;
+    static constexpr double fragment_miss_joint_energy_bin_width_MeVu = 5.0;
+    static constexpr std::size_t fragment_miss_joint_cell_count =
+        copper_cascade_generation_count * fragment_miss_za_count *
+        fragment_miss_reason_count * fragment_miss_joint_energy_bin_count;
+    std::vector<std::uint64_t> copper_fragment_miss_joint_counts{};
+    std::vector<std::uint64_t> copper_fragment_miss_joint_input_energy_keV{};
+    std::vector<std::uint64_t> copper_fragment_miss_joint_collision_depth_um{};
+    std::vector<std::uint64_t> copper_fragment_miss_joint_remaining_copper_um{};
+    double copper_fragment_cascade_actual_input_energy_MeV{0.0};
+    double copper_fragment_cascade_selected_input_energy_MeV{0.0};
+    double copper_fragment_cascade_replay_output_energy_MeV{0.0};
+    double copper_fragment_cascade_selection_mismatch_MeV{0.0};
+    double copper_fragment_cascade_closure_mismatch_MeV{0.0};
+    double copper_fragment_cascade_mass_energy_mismatch_MeV{0.0};
+    std::uint64_t copper_fragment_cascade_baryon_mismatch{0};
     std::array<std::uint64_t, slit_count>
         water_entrance_primary_by_slit{};
     std::array<std::uint64_t, slit_count>
@@ -604,6 +705,9 @@ struct TransportResult {
     std::vector<double> in_fov_deposited_energy_MeV;
     // Category-major layout: category * number_of_voxels + voxel index.
     std::vector<double> charged_origin_voxel_deposited_energy_MeV;
+    // Optional minibeam-only voxel decomposition: primary C12 plus eight
+    // charged-secondary species classes split by immediate Copper/water birth.
+    std::vector<double> minibeam_component_voxel_deposited_energy_MeV;
     std::vector<double> be_isotope_origin_voxel_deposited_energy_MeV;
     std::vector<double> he_isotope_origin_voxel_deposited_energy_MeV;
     std::vector<double> neutral_origin_voxel_deposited_energy_MeV;
@@ -643,7 +747,12 @@ struct TransportResult {
     // Histograms are species × generation × bin (see birth_hist_index).
     std::vector<std::uint64_t> birth_counts_by_generation;  // cat * gen_bins
     std::vector<HeliumBirthRecord> helium_birth_records; // opt-in birth spectrum only
+    std::vector<C12BirthRecord> c12_birth_records; // opt-in birth spectrum only
     std::vector<MinibeamPhaseSpaceRecord> minibeam_phase_space_records;
+    std::vector<MinibeamWaterPrimaryPlaneRecord>
+        minibeam_water_primary_plane_records;
+    std::vector<MinibeamFragmentPhaseSpaceRecord>
+        minibeam_fragment_phase_space_records;
     // Diagnostic only: tau(start), tau(Simpson), E*tau(Simpson), candidates,
     // candidate post-EM energy, actual path length. He4, generation eligible.
     std::array<double, 6> helium4_hazard_audit{};

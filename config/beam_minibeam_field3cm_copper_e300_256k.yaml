@@ -46,6 +46,7 @@ minibeam_collimator_center_to_isocenter_mm: 30.0
 minibeam_collimator_width_mm: 120.0
 minibeam_collimator_length_mm: 50.0
 minibeam_collimator_thickness_mm: 60.0
+minibeam_radius_mm: 60.0
 minibeam_slit_count: 15
 minibeam_slit_width_mm: 0.5
 minibeam_slit_pitch_mm: 3.6
@@ -54,23 +55,31 @@ minibeam_slit_thickness_mm: 60.0
 minibeam_collimator_angle_deg: 0.0
 minibeam_water_entrance_world_y_mm: 60.0
 minibeam_copper_max_step_mm: 0.25
+minibeam_copper_exact_material_boundaries: true
 minibeam_copper_density_g_per_cm3: 8.96
 minibeam_copper_radiation_length_g_per_cm2: 12.8628
 minibeam_copper_enable_mcs: true
+minibeam_copper_mcs_model: fermi_eyges_tail
 minibeam_copper_enable_elastic: false
-minibeam_copper_mcs_scale: 0.785
-minibeam_copper_survivor_energy_loss_energies_MeVu: 150, 250, 300
-minibeam_copper_survivor_energy_loss_scales: 0.8663, 0.9430, 0.9647
+minibeam_copper_enable_energy_straggling: true
+minibeam_copper_straggling_scale: 1.0
+minibeam_copper_mcs_scale: 1.0
+minibeam_copper_fragment_mcs_scale: 0.785
+minibeam_copper_fragment_enable_energy_straggling: false
+minibeam_copper_fragment_straggling_scale: 1.0
+minibeam_copper_fragment_cascade_generations: 3
 minibeam_copper_enable_nuclear_attenuation: true
 minibeam_water_low_energy_mcs_transition_MeVu: 180.0
 minibeam_water_primary_low_energy_mcs_scale: 0.20
 minibeam_water_fragment_low_energy_mcs_scale: 1.00
+minibeam_water_primary_mcs_model: fermi_eyges_tail
+minibeam_water_primary_mcs_max_segment_mm: 0.1
 minibeam_water_primary_stopping_power_scale: 0.9958
 minibeam_copper_stopping_power_file: /mnt/sda/wuwei/minibeam_copper_extract_e300/compiled/c12_copper_stopping_geant4_11_3_2.csv
 minibeam_air_stopping_power_file: data/stopping_power_air_geant4_11_3_2.csv
 minibeam_copper_cross_section_file: /mnt/sda/wuwei/minibeam_copper_extract_e300/compiled/c12_copper_inelastic_rate_geant4_11_3_2.csv
 minibeam_copper_elastic_file: /mnt/sda/wuwei/minibeam_copper_extract_e300/compiled/c12_copper_general_ion_elastic.csv
-minibeam_copper_inclxx_file: /mnt/sda/wuwei/minibeam_copper_extract_e300/compiled/c12_copper_inclxx.cinpkg
+minibeam_copper_inclxx_file: /mnt/sda/wuwei/minibeam_copper_fragment_cascade_per_energy/e300/copper_fragment_cascade_gapfilled.cinpkg
 minibeam_copper_ion_stopping_power_file: data/ion_stopping_power_copper_geant4_11_3_2.csv
 minibeam_copper_ion_cross_section_file: data/ion_cross_sections_copper_geant4_11_3_2.csv
 

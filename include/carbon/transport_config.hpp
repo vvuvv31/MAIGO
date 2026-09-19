@@ -354,8 +354,9 @@ struct TransportConfig {
     bool enable_energy_straggling{false};
     // Smoke-only read-only primary query histogram; no RNG or physics changes.
     bool enable_primary_loss_query_audit{false};
-    // Smoke ablation: transport terminal-generation charged products with EM
-    // while retaining the existing cap on their nuclear interactions.
+    // Deprecated compatibility key. Terminal-generation charged products now
+    // always receive EM transport; the generation cap suppresses only further
+    // nuclear reactions. The parser accepts this field but its value is ignored.
     bool enable_terminal_generation_em_transport{false};
     // gaussian_clamped / legacy_calibrated: historical Gaussian + [0, 2μ] cap.
     // moment_matched: positive Gamma/Gaussian sampler that keeps mean/variance
@@ -454,8 +455,10 @@ struct TransportConfig {
     bool enable_minibeam_diagnostics{true};
     std::string minibeam_transport_mode{"absorbing_geometry"};
     std::string minibeam_material{"Copper"};
-    // Rectangular GPU collimator.  The TOPAS reference uses a cylindrical
-    // outer body, but only the slit solid controls the accepted beam here.
+    // Cylindrical Copper collimator matching the TOPAS reference.  The legacy
+    // width/length fields remain available for old rectangular-input files,
+    // but Copper transport uses minibeam_radius_mm for the outer body and
+    // minibeam_slit_length_mm for the finite parallel slits.
     // Distances are specified in the treatment-room convention: the
     // collimator centre is upstream of isocentre and the water entrance is at
     // minibeam_water_entrance_world_y_mm downstream of isocentre.
@@ -465,7 +468,8 @@ struct TransportConfig {
     double minibeam_collimator_thickness_mm{60.0};
     double minibeam_slit_length_mm{50.0};
     double minibeam_slit_thickness_mm{60.0};
-    // Deprecated cylindrical aliases retained for old input files.
+    // Radius is the production outer-body dimension.  Thickness and exit gap
+    // aliases are retained for old input files.
     double minibeam_radius_mm{60.0};
     double minibeam_thickness_mm{60.0};
     double minibeam_exit_to_phantom_mm{60.0};
@@ -485,7 +489,15 @@ struct TransportConfig {
     double minibeam_copper_density_g_per_cm3{8.96};
     double minibeam_copper_radiation_length_g_per_cm2{12.8628};
     double minibeam_copper_max_step_mm{0.05};
+    // Split condensed-history steps at the exact cylindrical/slit material
+    // boundary before applying Copper or air physics.
+    bool minibeam_copper_exact_material_boundaries{false};
     bool minibeam_copper_enable_mcs{true};
+    // `highland` preserves the historical end-of-step Gaussian kick.
+    // `fermi_eyges_tail` uses a local, step-invariant scattering power,
+    // correlated displacement, and a path-length Poisson tail constrained by
+    // the independent Geant4/Urban Copper-slab phase space.
+    std::string minibeam_copper_mcs_model{"highland"};
     // Extracted discrete General Ion Elastic interactions. Condensed Copper
     // electromagnetic MCS remains independent of this switch.
     bool minibeam_copper_enable_elastic{true};
@@ -494,18 +506,29 @@ struct TransportConfig {
     // remain reproducible unless explicitly enabled.
     bool minibeam_copper_enable_energy_straggling{false};
     double minibeam_copper_straggling_scale{1.0};
-    // Frozen against an independent 2150 MeV C-12 Copper-foil benchmark using
-    // the same TOPAS/Geant4 release. This scales the projected Highland core.
+    // Fragment loss fluctuations are separately gated until per-species
+    // Copper exit spectra have been validated.
+    bool minibeam_copper_fragment_enable_energy_straggling{false};
+    double minibeam_copper_fragment_straggling_scale{1.0};
+    // Amplitude scale for the selected Copper MCS model. The legacy Highland
+    // benchmark uses 0.785; the slab-constrained model uses 1.0.
     double minibeam_copper_mcs_scale{0.785};
-    // Residual accumulated Copper-loss correction for primary ion ions that
-    // survive to the collimator exit. It is frozen from an independent
-    // water-entrance phase-space comparison and deliberately does not alter
-    // nuclear interaction probability, survival, or angular transport.
+    // Copper fragments still use their independently controlled cumulative
+    // Highland path.  Do not inherit the primary Fermi--Eyges normalization.
+    double minibeam_copper_fragment_mcs_scale{0.785};
+    // Number of fragment+Cu reactions whose process-faithful correlated
+    // final states are replayed after the primary C12+Cu interaction. Zero
+    // preserves the historical terminal-absorption approximation. Copper and
+    // water generation counters are independent.
+    std::uint32_t minibeam_copper_fragment_cascade_generations{0};
+    // Legacy-named local Copper stopping correction.  It is now applied to
+    // dE/dx inside every Copper step, so MCS and nuclear transport see the same
+    // energy history.  Production configs keep this at 1 until a homogeneous
+    // slab benchmark supplies a material-local calibration.
     double minibeam_copper_survivor_energy_loss_scale{1.0};
-    // Optional piecewise-linear incident-energy calibration of the same
-    // accumulated-loss scale. Empty vectors preserve the scalar behavior.
-    // The values are constrained by Copper-touched primary ion phase space,
-    // independently of the downstream dose comparison.
+    // Optional piecewise-linear local-energy calibration of that stopping
+    // scale.  The historical survivor-only values are not valid here because
+    // they contain a selection bias from tracks stopped before the exit.
     std::vector<double>
         minibeam_copper_survivor_energy_loss_energies_MeVu{};
     std::vector<double>
@@ -522,6 +545,21 @@ struct TransportConfig {
     double minibeam_water_low_energy_mcs_transition_MeVu{0.0};
     double minibeam_water_primary_low_energy_mcs_scale{1.0};
     double minibeam_water_fragment_low_energy_mcs_scale{1.0};
+    // Optional C12+water development model. `fermi_eyges_tail` replaces (and
+    // never stacks with) the legacy per-step Highland, low-energy scale, and
+    // variance-preserving synthetic tail on the primary water path.
+    std::string minibeam_water_primary_mcs_model{"legacy_highland"};
+    double minibeam_water_primary_mcs_max_segment_mm{0.1};
+    // Development-only secondary C12 switch. Other fragments remain on the
+    // legacy species-dependent Highland path until independently validated.
+    std::string minibeam_water_secondary_c12_mcs_model{"legacy_highland"};
+    double minibeam_water_secondary_c12_mcs_max_segment_mm{0.1};
+    // Diagnostic-only: route water-borne secondary C12 through Unified EM
+    // without changing the EM path of any other secondary species.
+    bool minibeam_water_secondary_c12_enable_unified_em{false};
+    // Diagnostic-only replica of the primary minibeam post-sampling loss
+    // scaling. One is neutral; formal secondary transport leaves it neutral.
+    double minibeam_water_secondary_c12_post_sample_loss_scale{1.0};
     // Optional Moliere-like core/tail split for primary C-12 in downstream
     // water. Tail probability is strength * step/X0, while tail width is in
     // units of theta0/sqrt(step/X0). The core is narrowed to preserve the
@@ -771,6 +809,25 @@ struct TransportConfig {
     // Optional primary C-12 water-entrance phase space. Empty disables the
     // device/host buffers and leaves production transport unchanged.
     std::filesystem::path minibeam_phase_space_output_file{};
+    // Optional primary C-12 crossing snapshots at fixed water depths. Both
+    // fields must be configured; empty defaults have zero production cost.
+    std::filesystem::path minibeam_water_primary_plane_output_file{};
+    std::vector<double> minibeam_water_primary_plane_depths_mm{};
+    // Diagnostic fragment-only water-entry replay. Records tagged `fragment`
+    // are injected into the normal secondary transport queue at generation 0;
+    // no primary histories are launched. number_of_histories remains the
+    // original incident-history normalization denominator.
+    std::filesystem::path minibeam_water_entry_secondary_replay_file{};
+    // Diagnostic-only: route a parent-0 C12 entrance sample through the
+    // secondary queue for same-source primary/secondary pure-EM validation.
+    bool minibeam_water_entry_secondary_replay_allow_primary_c12{false};
+    // Diagnostic-only replay of charged products born inside water. Such
+    // records retain their true z and may initially travel backward.
+    bool minibeam_water_entry_secondary_replay_allow_internal_births{false};
+    // Optional charged fragments created in Copper and accepted into the
+    // water secondary queue.  Kept separate from the one-record-per-primary
+    // phase space because one source history can produce many fragments.
+    std::filesystem::path minibeam_fragment_phase_space_output_file{};
     // Prefix/header path for dense primary and all-hadron 3D LET_d MHD maps.
     // Requires both scorerLET and enable_voxel_scoring.
     std::filesystem::path let_voxel_mhd_output_file{};

@@ -1,0 +1,239 @@
+# Same-source secondary-C12 water validation (2026-09-19).
+# FP32 minibeam build; no TOPAS simulation is launched here.
+
+export LD_LIBRARY_PATH=/home/wuwei/sycl_workspace/llvm/build/install/lib:${LD_LIBRARY_PATH:-}
+export ONEAPI_DEVICE_SELECTOR=cuda:gpu
+binary=build/oneapi-nvidia-minibeam/carbon_mc
+root=/mnt/sda/wuwei/minibeam_secondary_c12_same_source_e250_20260919
+
+# B, C, and C05. Each config writes its own plane CSV.
+$binary --config config/beam_minibeam_water_secondary_c12_replay_e250_1622795_legacy.yaml \
+  --device cuda --output "$root/legacy/depth.csv" \
+  --voxel-dose-mhd "$root/legacy/dose.mhd" \
+  --write-canonical-config "$root/legacy/config.canonical.yaml"
+$binary --config config/beam_minibeam_water_secondary_c12_replay_e250_1622795_fe010.yaml \
+  --device cuda --output "$root/fe010/depth.csv" \
+  --voxel-dose-mhd "$root/fe010/dose.mhd" \
+  --write-canonical-config "$root/fe010/config.canonical.yaml"
+$binary --config config/beam_minibeam_water_secondary_c12_replay_e250_1622795_fe005.yaml \
+  --device cuda --output "$root/fe005/depth.csv" \
+  --voxel-dose-mhd "$root/fe005/dose.mhd" \
+  --write-canonical-config "$root/fe005/config.canonical.yaml"
+
+# Plane-scoring non-perturbation check.
+$binary --config config/beam_minibeam_water_secondary_c12_replay_e250_1622795_fe010_noplanes.yaml \
+  --device cuda --output "$root/fe010_noplanes/depth.csv" \
+  --voxel-dose-mhd "$root/fe010_noplanes/dose.mhd" \
+  --write-canonical-config "$root/fe010_noplanes/config.canonical.yaml"
+
+# For each B/C/C05 plane file, compare against the already existing TOPAS replay.
+python3 benchmark/carbonminibeam/compare_water_primary_phase_space.py \
+  --entrance /mnt/sda/wuwei/minibeam_water_replay_e250_em12800k/input/water_entrance_primary_c12.phsp \
+  --topas-dir /mnt/sda/wuwei/minibeam_water_planes_e250_em12800k/topas_6529 \
+  --gpu "$root/fe010/primary_planes.csv" \
+  --output-dir "$root/fe010/phase_comparison" \
+  --depths-mm 40 60 80 100 120 \
+  --bootstrap-replicates 64 --bootstrap-blocks 256
+
+python3 benchmark/carbonminibeam/summarize_secondary_c12_fe_validation.py \
+  --primary /mnt/sda/wuwei/minibeam_water_replay_e250_em12800k/gpu_fe_candidate \
+  --primary-phase-metrics /mnt/sda/wuwei/minibeam_water_replay_e250_em12800k/phase_comparison_fe_candidate_bridge_bootstrap/water_primary_phase_space_metrics.json \
+  --primary-dose-metrics /mnt/sda/wuwei/minibeam_water_replay_e250_em12800k/dose_comparison_fe_candidate/metrics.json \
+  --legacy "$root/legacy" --fe010 "$root/fe010" --fe005 "$root/fe005" \
+  --output-dir "$root/summary"
+
+# The analogous 150/300 MeV/u screening configs reuse existing 256k TOPAS
+# replay data and are named beam_minibeam_water_secondary_c12_replay_e{150,300}_*.yaml.
+
+# Controlled C12 energy-loss closure. Regenerate an entry-aligned identity
+# replay, then create all primary/secondary scale/straggling/FE cases.
+energy_root=/mnt/sda/wuwei/minibeam_secondary_c12_energy_path_e250_20260919
+python3 benchmark/carbonminibeam/prepare_water_entry_replay.py \
+  /mnt/sda/wuwei/minibeam_water_replay_e250_em12800k/input/water_entrance_primary_c12.phsp \
+  --header /mnt/sda/wuwei/minibeam_water_replay_e250_em12800k/input/water_entrance_primary_c12.header \
+  --output-dir "$energy_root/input_aligned" \
+  --water-entrance-mm 60 --gpu-entry-epsilon-mm 0.0001 \
+  --gpu-source-z-mm 0.0001 --selection primary-c12
+python3 benchmark/carbonminibeam/prepare_secondary_c12_energy_path_cases.py \
+  --output-root "$energy_root"
+
+energy_cases=(
+  primary_nostrag_scale1 secondary_nostrag_scale1
+  primary_strag_scale1 primary_strag_scale09958
+  secondary_strag_scale1 secondary_strag_scale09958
+  secondary_legacy_scale09958 secondary_fe010_scale09958
+  secondary_fe005_scale09958 secondary_legacy_scale09958_noplanes
+  secondary_fe010_scale09958_noplanes secondary_fe005_scale09958_noplanes
+)
+for case_name in "${energy_cases[@]}"; do
+  case_dir="$energy_root/$case_name"
+  "$binary" --config "$case_dir/config.yaml" --device cuda \
+    --output "$case_dir/depth.csv" --voxel-dose-mhd "$case_dir/dose.mhd" \
+    --write-canonical-config "$case_dir/config.canonical.yaml" \
+    >"$case_dir/run.log" 2>&1
+done
+
+python3 benchmark/carbonminibeam/analyze_secondary_c12_energy_path.py \
+  --root "$energy_root" --histories 1622795
+
+# Regenerate phase-space and dose comparisons for all three matched-scale
+# scattering paths. These reuse TOPAS job 6529 and launch no new TOPAS work.
+for case_name in secondary_legacy_scale09958 secondary_fe010_scale09958 secondary_fe005_scale09958; do
+  case_dir="$energy_root/$case_name"
+  python3 benchmark/carbonminibeam/compare_water_primary_phase_space.py \
+    --entrance "$energy_root/input_aligned/water_entrance_primary_c12.phsp" \
+    --topas-dir /mnt/sda/wuwei/minibeam_water_planes_e250_em12800k/topas_6529 \
+    --gpu "$case_dir/primary_planes.csv" \
+    --output-dir "$case_dir/phase_comparison" \
+    --depths-mm 40 60 80 100 120 \
+    --bootstrap-replicates 64 --bootstrap-blocks 256
+done
+
+for case_name in secondary_legacy_scale09958_noplanes secondary_fe010_scale09958_noplanes secondary_fe005_scale09958_noplanes; do
+  case_dir="$energy_root/$case_name"
+  python3 benchmark/carbonminibeam/compare_gpu_topas_dose.py \
+    --topas /mnt/sda/wuwei/minibeam_water_planes_e250_em12800k/topas_6529/dose.bin \
+    --topas-header /mnt/sda/wuwei/minibeam_water_planes_e250_em12800k/topas_6529/dose.binheader \
+    --gpu "$case_dir/dose.raw" --gpu-mhd "$case_dir/dose.mhd" \
+    --output-dir "$case_dir/dose_comparison" \
+    --lateral-spacing-mm 0.1 --depth-spacing-mm 0.25 \
+    --profile-depths-mm 40 60 80 100 120
+done
+
+# True water-born C12 export -> conversion -> internal pure-EM replay. The
+# replay uses 256k incident histories for normalization independently of the
+# 4,511 injected particles.
+birth_root=/mnt/sda/wuwei/minibeam_secondary_c12_birth_validation_e250_20260919
+python3 benchmark/carbonminibeam/prepare_secondary_c12_birth_validation.py \
+  --root "$birth_root"
+"$binary" --config "$birth_root/export/config.yaml" --device cuda \
+  --output "$birth_root/export/depth.csv" \
+  --voxel-dose-mhd "$birth_root/export/dose.mhd" \
+  --write-canonical-config "$birth_root/export/config.canonical.yaml" \
+  >"$birth_root/export/run.log" 2>&1
+python3 benchmark/carbonminibeam/prepare_secondary_c12_birth_replay.py \
+  "$birth_root/export/birth_c12_joint.csv" \
+  --output "$birth_root/replay/water_c12_identity.csv" --birth-region water
+python3 benchmark/carbonminibeam/prepare_secondary_c12_birth_validation.py \
+  --root "$birth_root"
+"$binary" --config "$birth_root/replay/config.yaml" --device cuda \
+  --output "$birth_root/replay/depth.csv" \
+  --voxel-dose-mhd "$birth_root/replay/dose.mhd" \
+  --write-canonical-config "$birth_root/replay/config.canonical.yaml" \
+  >"$birth_root/replay/run.log" 2>&1
+
+# Directed z-boundary regression: before/on/after one depth face, forward and
+# backward, through both the legacy and C12-only Unified-EM paths.
+boundary_root=/mnt/sda/wuwei/minibeam_secondary_depth_boundary_20260919
+python3 benchmark/carbonminibeam/validate_secondary_depth_boundaries.py \
+  --root "$boundary_root"
+for path_name in legacy unified; do
+  case_dir="$boundary_root/$path_name"
+  "$binary" --config "$case_dir/config.yaml" --device cuda \
+    --output "$case_dir/depth.csv" --voxel-dose-mhd "$case_dir/dose.mhd" \
+    --write-canonical-config "$case_dir/config.canonical.yaml" \
+    >"$case_dir/run.log" 2>&1
+done
+python3 benchmark/carbonminibeam/validate_secondary_depth_boundaries.py \
+  --root "$boundary_root" --analyze
+
+# Staged full-chain experiment. A->B changes only the secondary-C12 EM path,
+# B->C changes only the post-sampling loss scale, and C->D changes only MCS.
+ab_root=/mnt/sda/wuwei/minibeam_secondary_c12_fullchain_ab_e300_256k_20260919
+python3 benchmark/carbonminibeam/prepare_secondary_c12_fullchain_ab.py \
+  --energy 300 --root "$ab_root" --histories 256000 --seed 202609300 \
+  --component-scoring
+for case_name in A_formal_em_scale1_highland B_unified_scale1_highland \
+                 C_unified_scale09958_highland D_unified_scale09958_fe; do
+  case_dir="$ab_root/$case_name"
+  "$binary" --config "$case_dir/config.yaml" --device cuda \
+    --output "$case_dir/depth.csv" --voxel-dose-mhd "$case_dir/dose.mhd" \
+    --write-canonical-config "$case_dir/config.canonical.yaml" \
+    >"$case_dir/run.log" 2>&1
+done
+
+# For an unequal-statistics comparison, state both history counts explicitly;
+# this scales TOPAS to the GPU histories but never fits the dose.
+topas_300=/mnt/sda/wuwei/minibeam_energy_10m_combined/e300/dose.bin
+for case_name in A_formal_em_scale1_highland B_unified_scale1_highland \
+                 C_unified_scale09958_highland D_unified_scale09958_fe; do
+  case_dir="$ab_root/$case_name"
+  python3 benchmark/carbonminibeam/compare_gpu_topas_dose.py \
+    --topas "$topas_300" --topas-header "${topas_300}header" \
+    --topas-histories 10000128 --gpu-histories 256000 \
+    --gpu "$case_dir/dose.raw" --gpu-mhd "$case_dir/dose.mhd" \
+    --output-dir "$case_dir/dose_comparison" \
+    --lateral-spacing-mm 0.1 --depth-spacing-mm 0.25
+  python3 benchmark/carbonminibeam/analyze_minibeam_source_components.py \
+    --gpu-dir "$case_dir" --component-prefix component \
+    --gpu-histories 256000 --topas-total "$topas_300" \
+    --topas-total-histories 10000128 \
+    --output-dir "$case_dir/component_analysis"
+done
+python3 benchmark/carbonminibeam/summarize_secondary_c12_fullchain_ab.py \
+  --root "$ab_root"
+
+# The accepted high-statistics scope is only C<->D, repeated with two seeds.
+for seed in 202609300 202609301; do
+  root=/mnt/sda/wuwei/minibeam_secondary_c12_fullchain_cd_e300_10m_seed${seed}_20260919
+  python3 benchmark/carbonminibeam/prepare_secondary_c12_fullchain_ab.py \
+    --energy 300 --root "$root" --histories 10000128 --seed "$seed" \
+    --component-scoring
+  for case_name in C_unified_scale09958_highland D_unified_scale09958_fe; do
+    case_dir="$root/$case_name"
+    "$binary" --config "$case_dir/config.yaml" --device cuda \
+      --output "$case_dir/depth.csv" --voxel-dose-mhd "$case_dir/dose.mhd" \
+      --write-canonical-config "$case_dir/config.canonical.yaml" \
+      >"$case_dir/run.log" 2>&1
+    python3 benchmark/carbonminibeam/compare_gpu_topas_dose.py \
+      --topas "$topas_300" --topas-header "${topas_300}header" \
+      --topas-histories 10000128 --gpu-histories 10000128 \
+      --gpu "$case_dir/dose.raw" --gpu-mhd "$case_dir/dose.mhd" \
+      --output-dir "$case_dir/dose_comparison" \
+      --lateral-spacing-mm 0.1 --depth-spacing-mm 0.25
+    python3 benchmark/carbonminibeam/analyze_minibeam_source_components.py \
+      --gpu-dir "$case_dir" --component-prefix component \
+      --gpu-histories 10000128 --topas-total "$topas_300" \
+      --topas-total-histories 10000128 \
+      --output-dir "$case_dir/component_analysis"
+  done
+  python3 benchmark/carbonminibeam/summarize_secondary_c12_fullchain_ab.py \
+    --root "$root" \
+    --cases C_unified_scale09958_highland D_unified_scale09958_fe
+done
+
+# Low-statistics 150/250 MeV/u C<->D regression. These are safety screens,
+# not promotion evidence. They reuse the existing 10M TOPAS dose references.
+for energy in 150 250; do
+  if [[ "$energy" == 150 ]]; then
+    seed=202609150
+  else
+    seed=202609250
+  fi
+  root=/mnt/sda/wuwei/minibeam_secondary_c12_fullchain_cd_e${energy}_256k_20260919
+  topas=/mnt/sda/wuwei/minibeam_energy_10m_combined/e${energy}/dose.bin
+  python3 benchmark/carbonminibeam/prepare_secondary_c12_fullchain_ab.py \
+    --energy "$energy" --root "$root" --histories 256000 --seed "$seed" \
+    --component-scoring
+  for case_name in C_unified_scale09958_highland D_unified_scale09958_fe; do
+    case_dir="$root/$case_name"
+    "$binary" --config "$case_dir/config.yaml" --device cuda \
+      --output "$case_dir/depth.csv" --voxel-dose-mhd "$case_dir/dose.mhd" \
+      --write-canonical-config "$case_dir/config.canonical.yaml" \
+      >"$case_dir/run.log" 2>&1
+    python3 benchmark/carbonminibeam/compare_gpu_topas_dose.py \
+      --topas "$topas" --topas-header "${topas}header" \
+      --topas-histories 10000128 --gpu-histories 256000 \
+      --gpu "$case_dir/dose.raw" --gpu-mhd "$case_dir/dose.mhd" \
+      --output-dir "$case_dir/dose_comparison" \
+      --lateral-spacing-mm 0.1 --depth-spacing-mm 0.25
+    python3 benchmark/carbonminibeam/analyze_minibeam_source_components.py \
+      --gpu-dir "$case_dir" --component-prefix component \
+      --gpu-histories 256000 --topas-total "$topas" \
+      --topas-total-histories 10000128 \
+      --output-dir "$case_dir/component_analysis"
+  done
+  python3 benchmark/carbonminibeam/summarize_secondary_c12_fullchain_ab.py \
+    --root "$root" \
+    --cases C_unified_scale09958_highland D_unified_scale09958_fe
+done

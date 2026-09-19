@@ -118,15 +118,34 @@ def main() -> None:
         non_electron, x_mm, args.pitch_mm, slab_bins, total)
     total_idd = total.sum(axis=1)
     electron_idd = electron.sum(axis=1)
+    folded_x = (x_mm + 0.5 * args.pitch_mm) % args.pitch_mm - 0.5 * args.pitch_mm
+    central = np.abs(x_mm) <= 18.0
+    fixed_masks = {
+        "peak": central & (np.abs(folded_x) < 0.25),
+        "shoulder": central & (np.abs(folded_x) >= 0.25) &
+                    (np.abs(folded_x) < 0.9),
+        "valley": central & (np.abs(folded_x) >= 0.9) &
+                  (np.abs(folded_x) <= 1.8),
+    }
+    total_smoothed = uniform_filter1d(
+        total, size=slab_bins, axis=0, mode="nearest")
+    electron_smoothed = uniform_filter1d(
+        electron, size=slab_bins, axis=0, mode="nearest")
+    fixed_electron_fractions = {
+        name: safe_ratio(
+            electron_smoothed[:, mask].sum(axis=1),
+            total_smoothed[:, mask].sum(axis=1))
+        for name, mask in fixed_masks.items()
+    }
 
     bragg_mask = depth_mm >= 20.0
     bragg_index = np.flatnonzero(bragg_mask)[np.argmax(total_idd[bragg_mask])]
-    selected_depths = [0.5, 5.0, 0.5 * depth_mm[bragg_index],
+    selected_depths = [0.5, 5.0, 40.0, 60.0, 80.0, 100.0,
                        depth_mm[bragg_index]]
     selected = []
     for requested in selected_depths:
         index = int(np.argmin(np.abs(depth_mm - requested)))
-        selected.append({
+        row = {
             "depth_mm": float(depth_mm[index]),
             "electron_total_fraction": float(electron_idd[index] / total_idd[index]),
             "electron_peak_fraction": float(electron_peak[index] / total_peak[index]),
@@ -138,7 +157,10 @@ def main() -> None:
             "electron_pvdr_over_total": float(
                 electron_peak[index] * total_valley[index] /
                 (electron_valley[index] * total_peak[index])),
-        })
+        }
+        for name, fractions in fixed_electron_fractions.items():
+            row[f"fixed_{name}_electron_fraction"] = float(fractions[index])
+        selected.append(row)
     summary = {
         "grid": {
             "shape_depth_lateral": [depth_bins, lateral_bins],
@@ -166,6 +188,9 @@ def main() -> None:
     axes[0].legend()
     axes[1].plot(depth_mm, electron_peak_fraction, label="electron / peak")
     axes[1].plot(depth_mm, electron_valley_fraction, label="electron / valley")
+    for name, fractions in fixed_electron_fractions.items():
+        axes[1].plot(depth_mm, fractions, linestyle="--",
+                     label=f"fixed {name}")
     axes[1].set(xlabel="water depth [mm]", ylabel="electron dose fraction",
                 xlim=(0, min(100, depth_mm[-1])), ylim=(0, 1))
     axes[1].legend()

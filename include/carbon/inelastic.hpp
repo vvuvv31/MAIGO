@@ -19,6 +19,10 @@ struct SecondaryParticle {
     uint32_t parent_history{0};
     std::uint64_t rng_stream{0};
     uint16_t generation{0};
+    // Immediate birth material for optional minibeam component scoring.
+    // Defaults to water for the general transport path; Copper production
+    // sites override it explicitly before queue insertion.
+    std::uint8_t birth_region{2};
 };
 
 

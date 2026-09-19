@@ -50,6 +50,8 @@ std::vector<std::filesystem::path> shard_output_paths(
     add(config.light_isotope_let_output_file);
     add(config.fragment_birth_spectrum_output_file);
     add(config.minibeam_phase_space_output_file);
+    add(config.minibeam_water_primary_plane_output_file);
+    add(config.minibeam_fragment_phase_space_output_file);
     add(config.let_voxel_mhd_output_file);
     if (config.enable_voxel_scoring) add(config.voxel_dose_output_file);
     if (config.enable_charged_origin_voxel_scoring) {
@@ -704,6 +706,14 @@ int main(int argc, char* argv[]) {
             carbon::write_minibeam_phase_space_csv(
                 config.minibeam_phase_space_output_file, result);
         }
+        if (!config.minibeam_water_primary_plane_output_file.empty()) {
+            carbon::write_minibeam_water_primary_plane_csv(
+                config.minibeam_water_primary_plane_output_file, result);
+        }
+        if (!config.minibeam_fragment_phase_space_output_file.empty()) {
+            carbon::write_minibeam_fragment_phase_space_csv(
+                config.minibeam_fragment_phase_space_output_file, result);
+        }
         if (config.enable_let_scoring && config.enable_voxel_scoring &&
             !config.let_voxel_mhd_output_file.empty()) {
             carbon::write_dense_voxel_letd_mhd(
@@ -825,6 +835,180 @@ int main(int argc, char* argv[]) {
                 << result.minibeam.copper_charged_survivor_energy_MeV << '/'
                 << result.minibeam.copper_neutral_survivor_energy_MeV
                 << " MeV\n"
+                << "Minibeam fragment-Cu cascade reactions/hits/misses/"
+                   "charged-products/queue-overflow: "
+                << result.minibeam.copper_fragment_cascade_interactions << '/'
+                << result.minibeam.copper_fragment_cascade_lookup_hits << '/'
+                << std::accumulate(
+                       result.minibeam
+                           .copper_fragment_cascade_lookup_misses.begin(),
+                       result.minibeam
+                           .copper_fragment_cascade_lookup_misses.end(),
+                       std::uint64_t{0})
+                << '/'
+                << result.minibeam
+                       .copper_fragment_cascade_generated_charged
+                << '/'
+                << result.minibeam.copper_fragment_cascade_queue_overflows
+                << '\n'
+                << "Minibeam fragment-Cu lookup misses "
+                   "projectile/target/below/above/gap/empty: ";
+            for (std::size_t miss = 0;
+                 miss < result.minibeam
+                            .copper_fragment_cascade_lookup_misses.size();
+                 ++miss) {
+                std::cout
+                    << (miss == 0 ? "" : "/")
+                    << result.minibeam
+                           .copper_fragment_cascade_lookup_misses[miss];
+            }
+            std::cout
+                << '\n'
+                << "Minibeam fragment-Cu lookup misses by "
+                   "C/B/Be/Li/He/p/d/t/other: ";
+            for (std::size_t category = 0; category < 9; ++category) {
+                std::cout
+                    << (category == 0 ? "" : "/")
+                    << result.minibeam
+                           .copper_fragment_cascade_lookup_misses_by_species[
+                               category];
+            }
+            std::cout << '\n'
+                      << "Minibeam fragment-Cu generations "
+                         "interactions/hits/misses:";
+            for (std::size_t generation = 0;
+                 generation < carbon::MinibeamDiagnostics::copper_cascade_generation_count;
+                 ++generation) {
+                std::cout
+                    << " g" << generation + 1 << '='
+                    << result.minibeam
+                           .copper_fragment_cascade_interactions_by_generation[
+                               generation]
+                    << '/'
+                    << result.minibeam
+                           .copper_fragment_cascade_hits_by_generation[generation]
+                    << '/'
+                    << result.minibeam
+                           .copper_fragment_cascade_misses_by_generation[generation];
+            }
+            std::cout << '\n' << "Minibeam fragment-Cu lookup misses by "
+                                 "25 MeV/u bin:";
+            for (const auto count : result.minibeam
+                                        .copper_fragment_cascade_lookup_misses_by_energy) {
+                std::cout << ' ' << count;
+            }
+            if (!result.minibeam.copper_fragment_miss_joint_counts.empty()) {
+                constexpr const char* miss_reasons[] = {
+                    "projectile", "target", "below", "above", "gap", "empty"};
+                for (std::size_t index = 0;
+                     index < result.minibeam.copper_fragment_miss_joint_counts.size();
+                     ++index) {
+                    const auto count = result.minibeam
+                                           .copper_fragment_miss_joint_counts[index];
+                    if (count == 0) continue;
+                    auto decoded = index;
+                    const auto energy_bin = decoded %
+                        carbon::MinibeamDiagnostics::fragment_miss_joint_energy_bin_count;
+                    decoded /= carbon::MinibeamDiagnostics::fragment_miss_joint_energy_bin_count;
+                    const auto reason = decoded %
+                        carbon::MinibeamDiagnostics::fragment_miss_reason_count;
+                    decoded /= carbon::MinibeamDiagnostics::fragment_miss_reason_count;
+                    const auto za_index = decoded %
+                        carbon::MinibeamDiagnostics::fragment_miss_za_count;
+                    const auto generation = decoded /
+                        carbon::MinibeamDiagnostics::fragment_miss_za_count;
+                    const bool overflow_za = za_index + 1 ==
+                        carbon::MinibeamDiagnostics::fragment_miss_za_count;
+                    const auto z = overflow_za ? 0U : za_index / 13U;
+                    const auto a = overflow_za ? 0U : za_index % 13U;
+                    const auto energy_sum = result.minibeam
+                        .copper_fragment_miss_joint_input_energy_keV[index];
+                    const auto depth_sum = result.minibeam
+                        .copper_fragment_miss_joint_collision_depth_um[index];
+                    const auto remaining_sum = result.minibeam
+                        .copper_fragment_miss_joint_remaining_copper_um[index];
+                    const auto energy_low = energy_bin *
+                        carbon::MinibeamDiagnostics::fragment_miss_joint_energy_bin_width_MeVu;
+                    const bool energy_overflow = energy_bin + 1 ==
+                        carbon::MinibeamDiagnostics::fragment_miss_joint_energy_bin_count;
+                    std::cout << '\n'
+                              << "[fragment-cu-miss-joint] generation="
+                              << generation + 1 << " Z=" << z << " A=" << a
+                              << " reason=" << miss_reasons[reason]
+                              << " energy_bin_MeVu=[" << energy_low << ','
+                              << (energy_overflow
+                                      ? std::string{"inf"}
+                                      : std::to_string(
+                                            energy_low + carbon::MinibeamDiagnostics::fragment_miss_joint_energy_bin_width_MeVu))
+                              << ") energy_overflow=" << energy_overflow
+                              << " count=" << count
+                              << " input_energy_MeV="
+                              << static_cast<double>(energy_sum) / 1000.0
+                              << " mean_collision_depth_mm="
+                              << static_cast<double>(depth_sum) /
+                                     (1000.0 * static_cast<double>(count))
+                              << " mean_remaining_copper_path_along_current_direction_mm="
+                              << static_cast<double>(remaining_sum) /
+                                     (1000.0 * static_cast<double>(count));
+                }
+            }
+            std::cout
+                << '\n'
+                << "Minibeam fragment-Cu replay actual/selected/output/"
+                   "selection-|dE|/closure-|dE|: "
+                << result.minibeam
+                       .copper_fragment_cascade_actual_input_energy_MeV
+                << '/'
+                << result.minibeam
+                       .copper_fragment_cascade_selected_input_energy_MeV
+                << '/'
+                << result.minibeam
+                       .copper_fragment_cascade_replay_output_energy_MeV
+                << '/'
+                << result.minibeam
+                       .copper_fragment_cascade_selection_mismatch_MeV
+                << '/'
+                << result.minibeam
+                       .copper_fragment_cascade_closure_mismatch_MeV
+                << " MeV\n"
+                << "Minibeam fragment-Cu mass-energy-|dE|/"
+                   "baryon-mismatch: "
+                << result.minibeam
+                       .copper_fragment_cascade_mass_energy_mismatch_MeV
+                << '/'
+                << result.minibeam
+                       .copper_fragment_cascade_baryon_mismatch
+                << '\n'
+                << "Minibeam ignored next-Cu-reaction optical depth by "
+                   "C/B/Be/Li/He/p/d/t/other: ";
+            for (std::size_t category = 0; category < 9; ++category) {
+                std::cout
+                    << (category == 0 ? "" : "/")
+                    << result.minibeam
+                           .copper_fragment_ignored_nuclear_optical_depth_by_species[
+                               category];
+            }
+            std::cout << '\n'
+                      << "Minibeam terminal Copper tracks by "
+                         "C/B/Be/Li/He/p/d/t/other: ";
+            for (std::size_t category = 0; category < 9; ++category) {
+                std::cout
+                    << (category == 0 ? "" : "/")
+                    << result.minibeam
+                           .copper_fragment_terminal_tracks_by_species[category];
+            }
+            std::cout << '\n'
+                      << "Minibeam ignored next-Cu-reaction probability sum by "
+                         "C/B/Be/Li/He/p/d/t/other: ";
+            for (std::size_t category = 0; category < 9; ++category) {
+                std::cout
+                    << (category == 0 ? "" : "/")
+                    << result.minibeam
+                           .copper_fragment_ignored_reaction_probability_by_species[
+                               category];
+            }
+            std::cout
+                << '\n'
                 << "Minibeam water entrance primary energy mean/std: "
                 << energy_mean << '/' << energy_std << " MeV\n"
                 << "Minibeam water entrance x mean/std: "
@@ -914,6 +1098,28 @@ int main(int argc, char* argv[]) {
                     << "MeV";
             }
             std::cout << '\n';
+            if (!config.minibeam_fragment_phase_space_output_file.empty()) {
+                std::cout
+                    << "Minibeam Copper fragment terminal reinteractions by species:";
+                for (std::size_t category = 0;
+                     category < species_labels.size(); ++category) {
+                    const auto count = result.minibeam
+                        .copper_fragment_absorptions_by_species[category];
+                    const auto straight_copper_path_sum = result.minibeam
+                        .copper_fragment_absorption_straight_copper_path_by_species_mm[
+                            category];
+                    std::cout << ' ' << species_labels[category] << '=' << count
+                              << '/'
+                              << result.minibeam
+                                     .copper_fragment_absorbed_energy_by_species_MeV[
+                                         category]
+                              << "MeV/"
+                              << (count == 0 ? 0.0
+                                             : straight_copper_path_sum / count)
+                              << "mm-straight-Cu";
+                }
+                std::cout << '\n';
+            }
             const auto print_fragment_histogram =
                 [](const char* label, const auto& histogram) {
                     std::cout << "Minibeam water-entrance " << label

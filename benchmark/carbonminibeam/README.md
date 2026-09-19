@@ -1,13 +1,14 @@
 # Carbon minibeam reference
 
-The GPU geometry uses a rectangular Copper block.  Its outer shape is not
-intended to reproduce the visible TOPAS cylinder; the 15 air slits are the
-shared reference geometry.
+The GPU geometry now uses the same cylindrical Copper outer body as TOPAS.
+The 15 finite rectangular air slits are evaluated inside that cylinder; this
+matters for scattered primaries and charged fragments that leave the 50 mm
+slit length but remain inside the 60 mm Copper radius.
 
 | parameter | value |
 |---|---:|
 | collimator centre upstream of isocentre | 30 mm |
-| rectangular width × length × thickness | 120 × 50 × 60 mm |
+| cylindrical radius × thickness | 60 × 60 mm |
 | slit width × length × thickness | 0.5 × 50 × 60 mm |
 | slit centre spacing | 3.6 mm |
 | slit centres | -7 … +7 |
@@ -88,6 +89,55 @@ python3 benchmark/carbonminibeam/compare_gpu_topas_dose.py \
   --gpu out/beam_minibeam_field3cm_copper_256k/dose.raw \
   --output-dir out/beam_minibeam_field3cm_copper_256k/comparison_topas
 ```
+
+For Copper-fragment diagnostics, set
+`minibeam_fragment_phase_space_output_file` to write every charged INCL++
+product accepted into the water secondary queue.  The output is opt-in and
+contains source history, isotope, kinetic energy, transverse position, and
+direction.  Compare it with the mixed-species TOPAS water-entrance scorer via:
+
+```bash
+python3 benchmark/carbonminibeam/compare_fragment_phase_space.py \
+  --gpu out/minibeam_fragment_phase_diag_e250_256k/fragment_phase.csv \
+  --topas /mnt/sda/wuwei/minibeam_phase_scan_e250_6255_1/output/water_entrance.phsp \
+  --output out/minibeam_fragment_phase_diag_e250_256k/comparison_topas.json
+```
+
+The comparison defaults match the TOPAS scorer: GPU tracks are projected
+0.02 mm upstream from the water entrance and clipped to ±70 mm in both
+transverse coordinates. Radial angles use
+`atan2(p_transverse,p_longitudinal)` rather than treating direction cosines
+as small angles.
+
+Primary and fragment Copper MCS scales are intentionally separate.  The
+slab-constrained Fermi--Eyges/tail primary model uses
+`minibeam_copper_mcs_scale`, while fragments retain the independently
+controlled `minibeam_copper_fragment_mcs_scale`.  Fragment straggling is also
+separately gated and remains disabled until a per-species spectrum requires
+it.
+
+Fragment nuclear packages must preserve the actual reference-model selection.
+For the current TOPAS list, proton uses Binary Cascade from 0--6 GeV, while
+d/t/He and GenericIon use INCL++ below 3 GeV/u, with overlapping high-energy
+FTFP/QGSP transitions. `compile_copper_fragment_cascades.py` rejects raw
+campaigns whose recorded Geant4 `model_name` differs from the declared model
+before combining their projectile-indexed CINPKG04 nodes.
+
+Set `minibeam_copper_fragment_cascade_generations` to 1--3 and point
+`minibeam_copper_inclxx_file` at the combined package to replay real
+fragment+Cu final-state generations. Zero keeps terminal absorption. Products
+at the configured cap receive full EM transport through the remaining
+collimator but no further nuclear reaction. Runtime output reports both
+terminal integrated optical depth and the directly interpretable per-track
+sum `1-exp(-tau)` for generation-convergence checks.
+Copper queue generations are independent of water generations; survivors
+enter water at generation zero.  Reaching the configured water nuclear cap
+suppresses only later nuclear hazards and never converts an above-cutoff
+charged product into local dose: terminal EM transport remains active.
+Runtime output reports strict lookup misses in the order
+`projectile/target/below/above/gap/empty`; do not replace a missing domain with
+endpoint clamping.  `extract_copper_fragment_light_low_energy.sbatch` is the
+small p/d/t coverage job used after the broad pilot exposed low-energy gaps.
 
 Peak and valley curves use a 1 mm moving depth slab and the median of the
 central nine peaks/eight valleys. At 0.5, 35, and 70.25 mm, respectively, the
@@ -260,8 +310,13 @@ cannot explain that excess.  Reproducible analysis and plots are under
 
 ### Water-entry primary replay
 
-`prepare_water_entry_replay.py` filters parent-0 C12 tracks from a TOPAS water
-entrance phase space and writes matched TOPAS and GPU inputs.  The GPU CSV uses
+`prepare_water_entry_replay.py` defaults to filtering parent-0 C12 tracks from
+a TOPAS water entrance phase space and writes matched TOPAS and GPU inputs.
+`--selection charged-ions` instead emits one independently runnable GPU/TOPAS
+source pair per `(Z,A)` plus a normalization manifest; this is required because
+one GPU source run has a fixed projectile species. These isotope-split GPU runs
+currently use the primary kernel and are therefore diagnostic inputs, not yet
+a production-equivalent fragment replay through the secondary kernel. The GPU CSV uses
 the explicit per-row source pose supported by `TpsSourcePlan`; TOPAS and GPU
 are compared per surviving C12 history.  Do not ask multithreaded TOPAS to
 append the upstream empty histories: worker-local phase-space cycling can
@@ -398,3 +453,379 @@ silent 0.1 mm depth default from relabelling a 0.25 mm grid and changing the
 physical width of the peak/valley smoothing window.  Metrics generated before
 this check must be trusted for selected-depth quantities only when their
 stored grid reports `depth_spacing_mm: 0.25`.
+
+## Structural Copper transport follow-up
+
+The next transport revision removes three compensating approximations without
+retuning the water model:
+
+- the outer Copper body is the TOPAS cylinder (`R=60 mm`) rather than a
+  `120 x 50 mm` transverse box;
+- the primary nuclear clock is a persistent optical depth and a reaction is
+  placed inside the current step, so INCL++ products traverse the actual
+  remaining Copper thickness;
+- Copper stopping is applied on the energy history used by MCS and the nuclear
+  rate.  The old post-exit survivor energy rewrite has been removed.
+
+The historical survivor-only loss factors cannot be reused as local stopping
+factors.  Doing so at 150/250/300 MeV/u increased the Copper-touched survivor
+ratios to `1.030/1.101/1.095` relative to TOPAS by restoring too many very-low
+energy tracks.  With the extracted Geant4 table unscaled (`s(E)=1`), those
+ratios are `0.955/1.009/0.988`; at 250 MeV/u the touched angular-RMS, valley
+fluence, and valley stopping-proxy ratios are `1.015/0.983/1.024`.  The exact
+cylinder also brings the 250 MeV/u direct-primary count to `18785` versus
+TOPAS `18760`.
+
+The remaining touched-primary mean-energy ratios are `0.955/0.971/0.981`.
+The reduced homogeneous slab matrix (150/250/300 MeV/u at 1/10/60 mm) then
+showed that the unscaled table is already correct: where primary C12 exits,
+TOPAS mean energy differs from direct table integration by only
+`0.013--0.341 MeV`.  Therefore no local `s(E)` is retained.  The full-slit
+conditional-energy residual must be resolved through path length, scattering,
+and survival correlations rather than another stopping correction.
+
+The matrix was deliberately reduced to 48 CPUs/24 GB, with one failed case
+rerun alone on 16 CPUs/8 GB.  A low-cost RTX 2080 Ti solid-Cu check then used
+256k histories at 250 MeV/u.  For 1/10 mm Copper, primary survival was
+`0.99970/0.99933` and mean exit energy was `1.00006/1.00130`, while the
+GPU/TOPAS Fermi--Eyges moment ratios `(A0,A1,A2)` were
+`(0.491,0.555,0.730)/(0.700,0.706,0.724)`.  Radial-angle quantile ratios
+`q68/q95/q99/q99.9` were `0.910/0.854/0.765/0.538` at 1 mm and
+`0.874/0.853/0.824/0.688` at 10 mm.  Thus nuclear survival and stopping are
+already constrained, but the Copper MCS core is too narrow, its tail is too
+light, and the thin-slab displacement--angle correlation is missing.  A
+single rescale of the current `0.785` Highland width cannot repair all three
+moments and the tail simultaneously; the next candidate must use a
+step-invariant scattering power with correlated displacement and an
+independently constrained tail.
+
+The optional `fermi_eyges_tail` Copper model now implements that follow-up.
+At 250 MeV/u its GPU/TOPAS `(A0,A1,A2)` ratios are
+`(1.087,1.065,1.023)` for 1 mm and `(1.019,1.013,1.003)` for 10 mm; all
+q68--q99 ratios are within about 2%, and q99.9 is `0.997/1.000`.
+Changing the maximum step from 0.25 to 0.05 mm changes the 10 mm observables
+by at most 1.3%.  The legacy `highland` path remains the default rollback.
+
+Copper primary straggling is also wired into the kernel, using the Copper
+`Z/A` condensed-loss variance and midpoint stopping integration.  At
+250 MeV/u the 1/10 mm GPU exit mean/std values are
+`2913.873/1.744` and `2051.947/6.142 MeV`, versus TOPAS
+`2913.891/1.708` and `2052.384/6.001 MeV`.  The three formal 256k energy
+configs explicitly enable both new Copper options; fragment straggling is not
+yet implemented.
+
+## Identity-preserving water-entry replay
+
+`prepare_water_entry_replay.py --selection charged-ions` now advances every
+forward charged ion from the actual TOPAS scoring plane to the configured
+water boundary before changing coordinates.  In particular, the 250 MeV/u
+reference scorer is at world `Y=59.980 mm`; both transverse coordinates are
+drifted along the recorded direction to `Y=60.000 mm`.  TOPAS `+Y` becomes GPU
+depth `+Z`, while the signed third TOPAS direction cosine becomes GPU `+Y`.
+
+The converter writes a canonical identity CSV containing origin, run/event/
+track/parent IDs, PDG, `(Z,A)`, energy, weight, position, and direction.  Only
+parent-0 C12 is tagged `primary`; every other charged ion, including non-parent
+C12, is tagged `fragment`.  It also writes a fragment-only identity file for
+`minibeam_water_entry_secondary_replay_file`.  The 250 MeV/u input contains
+`30,878` primary C12 plus `57,685` fragments, including four fragment C12.
+
+Fragment replay is deliberately a separate component run.  It skips the
+primary kernel, injects records at water generation zero into the normal
+secondary queue, keeps one independent energy ledger per injected particle,
+and uses `number_of_histories` as the original-history normalization
+denominator.  Unit weights are currently required.  The primary-only replay
+continues to use the primary path and its output must be multiplied by the
+survival fraction before it is added to the already incident-normalized
+fragment dose.
+
+`config/beam_minibeam_water_fragment_replay_e250_256k.yaml` is the 250 MeV/u
+fragment input.  With nuclear transport enabled, all `57,685` input fragments
+ran on the RTX 2080 Ti with zero queue overflow and relative energy residual
+`1.28e-5`.  Setting `enable_inelastic: false` now remains runnable: the queue
+does not grow, both nuclear inelastic and elastic counts stay zero, and the
+relative residual is `3.12e-7`.  The latter run leaves `482.64 MeV` in the
+explicit untracked ledger, exactly the entrance kinetic energy of the few
+isotopes outside the current 18-ion EM table.
+
+These checks validate plane propagation, routing, normalization, pure-EM
+execution, and energy bookkeeping.  They do not yet constitute the required
+GPU-export replay closure or a GPU/TOPAS mixed-ion dose match.  The next
+comparison must use the same charged-ion list in TOPAS, exclude entrance
+electrons/photons/neutrons on both sides, and compare primary, fragment, and
+summed dose components at multiple depths.
+
+## Full-chain EM-only 1.024M reference
+
+`run_field3cm_em_only_e250_1024k.txt` is the upstream-field isolation run:
+the original 256 PBS spots each receive 4,000 histories, for exactly 1,024,000
+histories.  This is not a resampled water-entry replay.  The complete Copper,
+air-gap, and water geometry is retained, while TOPAS loads only
+`g4em-standard_opt4` and `g4decay`.  The matching GPU run disables Copper
+nuclear attenuation and water inelastic transport and uses FP32 dose scoring.
+
+The successful TOPAS run was Slurm job 6441 with 192 threads (307.157 s,
+about 2.92 GB MaxRSS). Jobs 6439 and 6440 failed before simulation because of
+source-file setup errors and are not physics trials. The RTX 2080 Ti GPU run
+took 9.504 s (107,745 histories/s), with zero nuclear events, zero queue
+overflow, and relative energy residual `1.63e-5`.
+
+The absolute-Gy comparison uses no fitted normalization and a 0.1 mm lateral
+by 0.25 mm depth grid. GPU/TOPAS total dose is `1.007995`; 2-D Pearson/L1 is
+`0.995510/8.8566%`, IDD Pearson/L1 is `0.999968/0.9257%`, and lateral-integral
+Pearson/L1 is `0.999281/3.2545%`. TOPAS/GPU Bragg depths are
+`124.375/124.625 mm`. Entrance peak/valley/PVDR ratios are
+`1.037/1.030/1.006`; at 99.875 mm they are `1.033/1.107/0.933`, and at the
+TOPAS Bragg depth they are `1.062/1.097/0.968`.
+
+The good IDD and entrance PVDR do not imply a complete dose match. From about
+80 to 100 mm, GPU valley dose is 8--11% high and PVDR is 4--7% low. Combined
+with the larger 2-D than IDD error, this EM-only result isolates the leading
+remaining discrepancy to lateral water EM/MCS phase-space evolution rather
+than a nuclear-cascade contribution. The output, metrics, and plots are under
+`/mnt/sda/wuwei/minibeam_field3cm_em_only_e250_1024k/`.
+
+The follow-up increases the same original source to 50,000 histories per spot,
+12.8M total. TOPAS job 6442 completed on 192 threads in 3822.14 s; the matching
+FP32 RTX 2080 Ti run took 55.80 s (229,387 histories/s), a 68.5x wall-time
+speedup. Total-dose ratio is `1.003424`; 2-D Pearson/L1 is
+`0.999564/2.8091%`, IDD L1 is `0.4887%`, and lateral-integral L1 is `1.1785%`.
+
+This higher-statistics result supersedes the 1.024M local-feature estimates.
+At depths 0.375/19.875/39.875/59.875/79.875/99.875/124.375 mm, the
+peak ratios are `1.036/1.012/1.010/0.997/1.005/0.995/1.004`, valley ratios
+are `0.950/0.988/1.018/1.028/1.109/1.167/1.033`, and PVDR ratios are
+`1.090/1.024/0.992/0.970/0.907/0.853/0.972`. Thus peak dose is close through
+most of the water path, while valley filling evolves too quickly in GPU water.
+The discrepancy changes sign with depth and cannot be corrected by one dose
+scale. Outputs are under
+`/mnt/sda/wuwei/minibeam_field3cm_em_only_e250_12800k/`; the comparison now
+also emits `dose_ratios_vs_depth.png`.
+
+## High-statistics same-source water replay
+
+The 12.8M pure-EM full-chain run also produced 1,622,795 parent-0 C12 states
+at the water boundary plus total/electron/non-electron dose in one pass. A
+single TOPAS replay (job 6529) scored dose and all 40/60/80/100/120 mm C12
+planes; the matching FP32 GPU replay took 10.153 s. Water-only total-dose ratio
+is `1.000019`, IDD L1 is `0.1719%`, and fixed-region valley ratios reach
+`1.028/1.039` at 80/100 mm. Thus the mid-depth valley excess survives an
+identical entrance and is primarily downstream water transport/scoring.
+
+`compare_water_primary_phase_space.py` intentionally does not map downstream
+TOPAS EventID to an entrance row: MT phase-space replay does not preserve that
+mapping across worker blocks. It reports only identity-free crossing, energy,
+angle, pitch-folded position/covariance, harmonic, and fixed-region metrics.
+At 100 mm the GPU angular core q68 is `0.937` of TOPAS but q99/q99.9 are
+`1.230/1.270`; fixed-valley C12 fluence is `1.046`. The present water model is
+therefore too leptokurtic rather than uniformly too broad. Corrected outputs
+are under
+`/mnt/sda/wuwei/minibeam_water_replay_e250_em12800k/phase_comparison_aggregate/`.
+
+The analyzer now also joins adjacent downstream planes by stable
+`(RunID,EventID,TrackID)` and writes interval angle/displacement/covariance,
+energy-group survival, quantile curves, stopping-weighted crossing proxies,
+and `water_interval_scattering_ratios.png`. Fixed regions are restricted to
+`|x|<=18 mm`, matching dose. Corrected legacy 80/100 mm valley-fluence ratios
+are `1.0486/1.0497`.
+
+An optional C12-water `fermi_eyges_tail` candidate uses local scattering power,
+correlated displacement, and an untruncated Poisson tail. It replaces all
+legacy water-MCS corrections when selected and is off by default. Same-source
+results are under
+`/mnt/sda/wuwei/minibeam_water_replay_e250_em12800k/phase_comparison_fe_candidate/`
+and `dose_comparison_fe_candidate/`. Fixed 40--100 mm valley dose is within
+about 1%, while 2-D/lateral L1 are `2.2834%/0.6793%`. Propagation-interval joint
+moments are close, but aggregate q99.9 remains low and energy-group uncertainty
+is nonuniform, so the model is not promoted to formal multi-energy configs.
+
+The plane scorer for this candidate uses an integrated-Brownian conditional
+bridge rather than linearly interpolating the full-step angle and displacement.
+Tail events enter a plane record only if their sampled path location is upstream
+of that plane; requesting a bridge does not change the transported endpoint.
+Both minibeam-enabled and minibeam-disabled SYCL builds are checked. Run the
+independent fixed-energy sampler regression with:
+
+```bash
+python3 benchmark/carbonminibeam/validate_water_mcs_sampler.py \
+  --output /tmp/water_mcs_sampler_validation.json
+```
+
+Interval tail uncertainty can be generated without another TOPAS run by adding
+`--bootstrap-replicates 64 --bootstrap-blocks 256` to
+`compare_water_primary_phase_space.py`. Stable identity blocks and common
+weights across planes preserve within-engine track correlation. The resulting
+intervals still share tracks and must not be described as statistically
+independent holdout samples. Frozen parameters and input hashes are recorded in
+`docs/minibeam_water_mcs_candidate_20260919.md`.
+
+## Optional minibeam source/species dose decomposition
+
+With `minibeam: true`, enabling `enable_charged_origin_voxel_scoring` and
+setting `charged_origin_voxel_mhd_output_prefix` also writes 17 minibeam
+component maps. They separate primary C12 and eight secondary-ion classes by
+immediate Copper/water birth material. The switch is diagnostic-only and is
+disabled in the formal configurations.
+
+Analyze a completed run with, for example:
+
+```bash
+python3 benchmark/carbonminibeam/analyze_minibeam_source_components.py \
+  --gpu-dir /path/to/gpu/run --gpu-histories 10000128 \
+  --topas-total /path/to/topas/dose.bin \
+  --topas-total-histories 10000128 \
+  --topas-component-dir /path/to/topas/component/run \
+  --topas-component-histories 1024000 \
+  --output-dir /path/to/gpu/run/analysis
+```
+
+The analyzer checks voxel/global closure, reports fixed peak/shoulder/valley
+fractions at Bragg, and compares only taxonomy-compatible TOPAS aggregates.
+The older TOPAS `secondary carbon` map contains every carbon isotope, so it is
+not presented as a C12-only comparison.
+
+The fixed-region masks are shared with `compare_gpu_topas_dose.py` and use the
+coordinates and spacing stored in the GPU MHD header. Peak owns
+`|folded x| < 0.25 mm`, shoulder owns `[0.25, 0.9) mm`, and valley owns
+`[0.9, 1.8] mm`, within `|x| <= 18 mm`. For TOPAS all-helium comparisons the
+analyzer uses the legacy all-Z=2 GPU map when it is available; the 17-way map
+keeps only He-3/He-4 explicit and places rarer helium isotopes in `other`.
+
+Low-cutoff charged nuclear products are deposited locally as before, but their
+diagnostic component dose is assigned to the child's `(Z,A)` and immediate
+water birth material rather than to the parent track. This changes labels
+only; a 300 MeV/u, 256k same-seed scorer A/B gave voxel-dose L1 `1.09e-8`,
+while the 17 component maps reconstructed the total with voxel L1 `2.48e-7`
+and global relative difference `1.10e-9`.
+
+`minibeam_water_secondary_c12_mcs_model: fermi_eyges_tail` is a default-off
+research switch. It lets secondary C12 reuse the validated C12-water
+correlated angle/displacement kernel in homogeneous water; p/d/t/He/heavier
+ions remain on legacy Highland. The switch has passed compile and 256k
+full-chain smoke checks.
+
+The same-source accuracy comparison is now available. It sends the exact same
+1,622,795 parent-0 C12 water-entry states through the primary path, secondary
+legacy Highland, and secondary FE with 0.10/0.05 mm internal segment caps. The
+input is a code-path diagnostic and is not described as a physical secondary
+birth sample. Nuclear inelastic and elastic transport are disabled.
+
+Across the four paired 20 mm water intervals, secondary legacy gives
+GPU/TOPAS angle-variance ratios `1.356--1.477`, displacement-variance ratios
+`1.379--1.445`, and q99 ratios `1.163--1.204`. Secondary FE reduces these to
+`0.984--1.013`, `1.015--1.018`, and `0.992--1.007`, respectively. Reducing the
+internal cap to 0.05 mm doubles the actual segment count and leaves the moments
+stable. Plane scoring on/off changes the FP32 voxel dose by only `6.25e-8` L1.
+
+The validation also exposes a separate longitudinal path difference: the
+primary minibeam path applies the frozen `0.9958` stopping scale after Unified
+EM, while the secondary path does not. Consequently the secondary replay Bragg
+peak is 0.75 mm upstream and its IDD L1 is about 1.89%, independent of whether
+legacy or FE scattering is selected. Do not compensate this with MCS tuning.
+The FE result is accepted for secondary-C12 scattering only and remains off in
+formal configs until true secondary-C12 birth spectra and common C12
+stopping/straggling semantics are isolated.
+
+Diagnostic configs are named
+`beam_minibeam_water_secondary_c12_replay_e*_*.yaml`; reproducible commands are
+in `run_secondary_c12_fe_validation.txt`. The combined 250 MeV/u plot and JSON
+are under
+`/mnt/sda/wuwei/minibeam_secondary_c12_same_source_e250_20260919/summary/`.
+Use `summarize_secondary_c12_fe_validation.py` to regenerate them. Existing
+150/300 MeV/u references also show near-unity FE angle/position moments, but
+their 26k/35k statistics are screening data rather than q99.9 acceptance data.
+
+The controlled longitudinal closure supersedes the earlier unscaled-secondary
+interpretation. `prepare_secondary_c12_energy_path_cases.py` explicitly routes
+both code paths through Unified EM and generates no-MCS/no-straggling,
+straggling, and matched post-sampling-scale cases. With the same 1,622,795
+entrance C12 states, primary versus secondary IDD L1 is `0.00827%` without
+straggling, `0.02993%` with straggling at scale 1, and `0.03137%` with both
+paths at scale `0.9958`. The secondary loss audit measures
+`scaled/raw=0.99579945`, confirming that this knob scales each sampled total
+loss, including its fluctuation, rather than only the mean stopping power.
+
+After that closure, the matched-scale secondary FE result gives interval
+angle-variance, displacement-variance, covariance, and q99 ratios of
+`0.969--0.988`, `0.995--1.017`, `0.990--1.012`, and `0.983--0.994` relative to
+the existing TOPAS reference. Legacy Highland gives `1.471--1.512`,
+`1.535--1.552`, `1.516--1.537`, and `1.202--1.221`. The FE 0.10/0.05 mm IDD
+L1 is `0.03095%`; fixed ROIs and interval moments are stable. A skipped
+positive z-boundary remainder below `1e-5 mm`, not intrinsic FE instability,
+caused the older periodic dose spikes. Formal secondary FE settings remain
+unchanged and default-off.
+
+True queued C12 births can now be exported by setting
+`fragment_birth_spectrum_output_file`; the additional
+`<prefix>_c12_joint.csv` retains unique replay-particle/source-history IDs,
+RNG stream, generation, immediate birth region, energy, weight, true position,
+and direction. Convert and replay real water births with
+`prepare_secondary_c12_birth_replay.py` and
+`prepare_secondary_c12_birth_validation.py`. Internal-birth replay is guarded
+by the default-off
+`minibeam_water_entry_secondary_replay_allow_internal_births` option and accepts
+positions anywhere inside water plus backward directions. It assigns a unique
+energy-ledger identity to every injected particle while keeping the configured
+incident-history normalization independent of replay record count.
+
+The 250 MeV/u 256k diagnostic exported 4,511 water-born C12 states, including
+644 backward states and 221 records sharing an incident history. Pure-EM
+replay completed all records with no queue growth, nuclear/elastic event,
+Unified-EM miss, or overflow. After preserving the exported RNG stream,
+generation and birth region in replay, the relative energy residual is
+`6.33e-8`.
+The separate Copper-exit file contains 58,116 charged particles; this sample
+contains 17 other carbon isotopes and no C12, so none were mixed into the
+water-born replay.
+This establishes implementation and coverage closure only: no matching TOPAS
+true-birth sample exists, so it is not a new physics-accuracy result. Outputs
+are under
+`/mnt/sda/wuwei/minibeam_secondary_c12_birth_validation_e250_20260919/`.
+
+### Directed secondary depth boundaries and full-chain C12 A/B
+
+Secondary depth-bin ownership is direction-aware. A particle exactly on a
+depth face belongs to the bin it is about to enter: the downstream bin while
+moving forward and the upstream bin while moving backward. The legacy path
+also preserves a real boundary-limited step below `1e-5 mm` instead of
+enlarging it with the generic minimum-step guard. The deterministic regression
+in `validate_secondary_depth_boundaries.py` covers before/on/after a depth
+face, both directions, and both legacy and C12-only Unified-EM paths. All 12
+start-bin checks pass; the legacy/Unified total-dose ratio is `0.999999921` and
+both energy residuals are below `7e-8`.
+
+`minibeam_water_secondary_c12_enable_unified_em` is a default-off diagnostic
+switch. It changes only C12 already travelling in the water secondary queue;
+other secondary species retain their formal EM paths. Together with the
+independent post-sampling loss scale and secondary-C12 MCS switch, it supports
+the staged full-chain comparison:
+
+| case | secondary-C12 EM | loss scale | MCS |
+|:---:|:---|---:|:---|
+| A | formal legacy | 1 | Highland |
+| B | Unified EM | 1 | Highland |
+| C | Unified EM | 0.9958 | Highland |
+| D | Unified EM | 0.9958 | FE |
+
+The 300 MeV/u, 256k same-seed screen found no resolvable benefit from A to B
+or B to C, so those comparisons were not expanded to high statistics. C and D
+were repeated with seeds `202609300` and `202609301`, each with `10,000,128`
+histories. FE changes the secondary-C12 component strongly (about `31%` voxel
+L1), but that component is only `0.55%` of total dose and about `0.97%` in the
+Bragg +/-2 mm slab. Consequently D/C total-dose ratios are
+`0.9999945/1.0000064`, and 2-D, IDD, lateral and fixed-region dose metrics show
+no consistent improvement across seeds. The 150/250 MeV/u 256k C/D screens
+show no large regression but are not promotion evidence.
+
+Therefore C12-only Unified EM, the secondary `0.9958` scale, and secondary FE
+remain disabled in all formal energy configurations. The validated FE path is
+retained for controlled diagnostics. Full reproduction commands are in
+`run_secondary_c12_fe_validation.txt`; results are under
+`/mnt/sda/wuwei/minibeam_secondary_c12_fullchain_ab_e300_256k_20260919/` and
+`/mnt/sda/wuwei/minibeam_secondary_c12_fullchain_cd_e300_10m_seed*_20260919/`.
+
+The true-birth replay CSV additionally preserves `rng_stream`, water
+`generation`, and `birth_region`. Accumulated spot/shard results merge birth
+records with offset source histories and globally unique replay-particle IDs.
+This preserves replay state but does not make independently replayed ancestors
+and descendants additive as a full-chain dose.

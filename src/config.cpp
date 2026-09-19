@@ -1006,9 +1006,6 @@ void TransportConfig::validate() const {
     if (enable_primary_loss_query_audit && run_mode != RunMode::smoke) {
         throw std::invalid_argument("enable_primary_loss_query_audit requires smoke mode");
     }
-    if (enable_terminal_generation_em_transport && run_mode != RunMode::smoke) {
-        throw std::invalid_argument("enable_terminal_generation_em_transport requires smoke mode");
-    }
     if ((energy_straggling_model == "packaged_fluctuation_fraction" ||
          energy_straggling_model == "packaged_fluctuation_fraction_hybrid") &&
         (run_mode != RunMode::smoke || enable_ct_grid ||
@@ -1297,6 +1294,50 @@ void TransportConfig::validate() const {
             "spots_geometry_mode must be topas, beam_plus_z, tps_90, "
             "tps_gantry_y, or minibeam_topas_y");
     }
+    if (!minibeam_water_entry_secondary_replay_file.empty() &&
+        !enable_minibeam) {
+        throw std::invalid_argument(
+            "minibeam_water_entry_secondary_replay_file requires minibeam=true");
+    }
+    if (minibeam_water_entry_secondary_replay_allow_primary_c12 &&
+        minibeam_water_entry_secondary_replay_file.empty()) {
+        throw std::invalid_argument(
+            "minibeam_water_entry_secondary_replay_allow_primary_c12 requires "
+            "minibeam_water_entry_secondary_replay_file");
+    }
+    if (minibeam_water_entry_secondary_replay_allow_internal_births &&
+        minibeam_water_entry_secondary_replay_file.empty()) {
+        throw std::invalid_argument(
+            "minibeam_water_entry_secondary_replay_allow_internal_births requires "
+            "minibeam_water_entry_secondary_replay_file");
+    }
+    if ((!minibeam_water_primary_plane_output_file.empty() ||
+         !minibeam_water_primary_plane_depths_mm.empty()) &&
+        !enable_minibeam) {
+        throw std::invalid_argument(
+            "minibeam water-plane diagnostics require minibeam=true");
+    }
+    if (minibeam_water_primary_plane_output_file.empty() !=
+        minibeam_water_primary_plane_depths_mm.empty()) {
+        throw std::invalid_argument(
+            "minibeam_water_primary_plane_output_file and "
+            "minibeam_water_primary_plane_depths_mm must be configured together");
+    }
+    if (minibeam_water_primary_plane_depths_mm.size() > 16) {
+        throw std::invalid_argument(
+            "minibeam water-plane diagnostics support at most 16 depths");
+    }
+    for (std::size_t index = 0;
+         index < minibeam_water_primary_plane_depths_mm.size(); ++index) {
+        const auto depth = minibeam_water_primary_plane_depths_mm[index];
+        if (!(depth > 0.0 && depth < phantom_length_mm) ||
+            (index != 0 &&
+             !(depth > minibeam_water_primary_plane_depths_mm[index - 1]))) {
+            throw std::invalid_argument(
+                "minibeam water-plane depths must be strictly increasing and "
+                "inside the water phantom");
+        }
+    }
     if (enable_minibeam) {
 #if !defined(CARBON_ENABLE_MINIBEAM)
         throw std::invalid_argument(
@@ -1312,6 +1353,32 @@ void TransportConfig::validate() const {
                 "minibeam=true is currently calibrated only for a C-12 primary; "
                 "disable minibeam for other configured ions");
         }
+        if (!minibeam_water_entry_secondary_replay_file.empty()) {
+            if (!enable_secondary_transport) {
+                throw std::invalid_argument(
+                    "minibeam_water_entry_secondary_replay_file requires "
+                    "enable_secondary_transport=true");
+            }
+            if (!std::filesystem::exists(
+                    minibeam_water_entry_secondary_replay_file)) {
+                throw std::invalid_argument(
+                    "minibeam water-entry secondary replay file does not exist: " +
+                    minibeam_water_entry_secondary_replay_file.string());
+            }
+            if (!topas_spots_file.empty() || !topas_spots_files.empty() ||
+                !tps_spots_file.empty() || enable_tps_source) {
+                throw std::invalid_argument(
+                    "secondary-queue water-entry replay cannot be combined with a "
+                    "primary spot/TPS source; run primary and fragment components "
+                    "separately and sum their dose");
+            }
+            if (number_of_histories >
+                std::numeric_limits<std::uint32_t>::max()) {
+                throw std::invalid_argument(
+                    "fragment-only water-entry replay requires "
+                    "number_of_histories <= uint32 max");
+            }
+        }
         if (minibeam_transport_mode != "absorbing_geometry" &&
             minibeam_transport_mode != "copper_em") {
             throw std::invalid_argument(
@@ -1324,6 +1391,7 @@ void TransportConfig::validate() const {
         if (!(minibeam_collimator_center_to_isocenter_mm >= 0.0 &&
               minibeam_collimator_width_mm > 0.0 &&
               minibeam_collimator_length_mm > 0.0 &&
+              minibeam_radius_mm > 0.0 &&
               minibeam_collimator_thickness_mm > 0.0 &&
               minibeam_slit_length_mm > 0.0 &&
               minibeam_slit_thickness_mm > 0.0 &&
@@ -1332,8 +1400,8 @@ void TransportConfig::validate() const {
               minibeam_slit_length_mm <= minibeam_collimator_length_mm &&
               minibeam_slit_thickness_mm <= minibeam_collimator_thickness_mm)) {
             throw std::invalid_argument(
-                "minibeam rectangular dimensions must be positive and each slit "
-                "dimension must fit inside the Copper collimator");
+                "minibeam dimensions must be positive and each slit dimension "
+                "must fit inside the Copper collimator");
         }
         if (minibeam_slit_count <= 0 || minibeam_slit_count % 2 == 0) {
             throw std::invalid_argument(
@@ -1381,7 +1449,10 @@ void TransportConfig::validate() const {
                   minibeam_copper_radiation_length_g_per_cm2 > 0.0 &&
                   minibeam_copper_max_step_mm > 0.0 &&
                   minibeam_copper_mcs_scale > 0.0 &&
+                  minibeam_copper_fragment_mcs_scale > 0.0 &&
+                  minibeam_copper_fragment_cascade_generations <= 3U &&
                   minibeam_copper_straggling_scale > 0.0 &&
+                  minibeam_copper_fragment_straggling_scale > 0.0 &&
                   minibeam_copper_survivor_energy_loss_scale > 0.0 &&
                   minibeam_copper_survivor_energy_loss_scale <= 2.0 &&
                   minibeam_water_primary_stopping_power_scale > 0.0 &&
@@ -1391,6 +1462,7 @@ void TransportConfig::validate() const {
                   minibeam_water_primary_low_energy_mcs_scale <= 2.0 &&
                   minibeam_water_fragment_low_energy_mcs_scale > 0.0 &&
                   minibeam_water_fragment_low_energy_mcs_scale <= 2.0 &&
+                  minibeam_water_primary_mcs_max_segment_mm > 0.0 &&
                   minibeam_water_primary_mcs_tail_strength >= 0.0 &&
                   minibeam_water_primary_mcs_tail_strength <= 10.0 &&
                   minibeam_water_primary_mcs_tail_width >= 0.0 &&
@@ -1406,7 +1478,9 @@ void TransportConfig::validate() const {
                   minibeam_water_touched_primary_deficit_center_mm >= 0.0 &&
                   minibeam_water_touched_primary_deficit_sigma_mm > 0.0) ||
                 !std::isfinite(minibeam_copper_mcs_scale) ||
+                !std::isfinite(minibeam_copper_fragment_mcs_scale) ||
                 !std::isfinite(minibeam_copper_straggling_scale) ||
+                !std::isfinite(minibeam_copper_fragment_straggling_scale) ||
                 !std::isfinite(
                     minibeam_copper_survivor_energy_loss_scale) ||
                 !std::isfinite(
@@ -1417,6 +1491,8 @@ void TransportConfig::validate() const {
                     minibeam_water_primary_low_energy_mcs_scale) ||
                 !std::isfinite(
                     minibeam_water_fragment_low_energy_mcs_scale) ||
+                !std::isfinite(
+                    minibeam_water_primary_mcs_max_segment_mm) ||
                 !std::isfinite(
                     minibeam_water_primary_mcs_tail_strength) ||
                 !std::isfinite(
@@ -1436,6 +1512,39 @@ void TransportConfig::validate() const {
                     "MCS/straggling scales must be finite/positive and survivor energy-loss "
                     "and water stopping/MCS scales must be finite and in (0, 2]; "
                     "the water low-energy MCS transition must be nonnegative");
+            }
+            if (minibeam_copper_mcs_model != "highland" &&
+                minibeam_copper_mcs_model != "fermi_eyges_tail") {
+                throw std::invalid_argument(
+                    "minibeam_copper_mcs_model must be highland or "
+                    "fermi_eyges_tail");
+            }
+            if (minibeam_water_primary_mcs_model != "legacy_highland" &&
+                minibeam_water_primary_mcs_model != "fermi_eyges_tail") {
+                throw std::invalid_argument(
+                    "minibeam_water_primary_mcs_model must be "
+                    "legacy_highland or fermi_eyges_tail");
+            }
+            if (minibeam_water_secondary_c12_mcs_model != "legacy_highland" &&
+                minibeam_water_secondary_c12_mcs_model != "fermi_eyges_tail") {
+                throw std::invalid_argument(
+                    "minibeam_water_secondary_c12_mcs_model must be "
+                    "legacy_highland or fermi_eyges_tail");
+            }
+            if (!(minibeam_water_secondary_c12_mcs_max_segment_mm > 0.0) ||
+                !std::isfinite(
+                    minibeam_water_secondary_c12_mcs_max_segment_mm)) {
+                throw std::invalid_argument(
+                    "minibeam_water_secondary_c12_mcs_max_segment_mm must be "
+                    "finite and positive");
+            }
+            if (!(minibeam_water_secondary_c12_post_sample_loss_scale > 0.0) ||
+                minibeam_water_secondary_c12_post_sample_loss_scale > 2.0 ||
+                !std::isfinite(
+                    minibeam_water_secondary_c12_post_sample_loss_scale)) {
+                throw std::invalid_argument(
+                    "minibeam_water_secondary_c12_post_sample_loss_scale "
+                    "must be finite and in (0, 2]");
             }
             const auto& calibration_energies =
                 minibeam_copper_survivor_energy_loss_energies_MeVu;
@@ -2776,9 +2885,22 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.minibeam_copper_max_step_mm = parse_number(
         values, "minibeam_copper_max_step_mm",
         config.minibeam_copper_max_step_mm);
+    config.minibeam_copper_exact_material_boundaries = parse_bool(
+        values, "minibeam_copper_exact_material_boundaries",
+        config.minibeam_copper_exact_material_boundaries);
     config.minibeam_copper_enable_mcs = parse_bool(
         values, "minibeam_copper_enable_mcs",
         config.minibeam_copper_enable_mcs);
+    if (const auto iterator = values.find("minibeam_copper_mcs_model");
+        iterator != values.end()) {
+        config.minibeam_copper_mcs_model = iterator->second;
+        std::transform(config.minibeam_copper_mcs_model.begin(),
+                       config.minibeam_copper_mcs_model.end(),
+                       config.minibeam_copper_mcs_model.begin(),
+                       [](unsigned char value) {
+                           return static_cast<char>(std::tolower(value));
+                       });
+    }
     config.minibeam_copper_enable_elastic = parse_bool(
         values, "minibeam_copper_enable_elastic",
         config.minibeam_copper_enable_elastic);
@@ -2788,9 +2910,21 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.minibeam_copper_straggling_scale = parse_number(
         values, "minibeam_copper_straggling_scale",
         config.minibeam_copper_straggling_scale);
+    config.minibeam_copper_fragment_enable_energy_straggling = parse_bool(
+        values, "minibeam_copper_fragment_enable_energy_straggling",
+        config.minibeam_copper_fragment_enable_energy_straggling);
+    config.minibeam_copper_fragment_straggling_scale = parse_number(
+        values, "minibeam_copper_fragment_straggling_scale",
+        config.minibeam_copper_fragment_straggling_scale);
     config.minibeam_copper_mcs_scale = parse_number(
         values, "minibeam_copper_mcs_scale",
         config.minibeam_copper_mcs_scale);
+    config.minibeam_copper_fragment_mcs_scale = parse_number(
+        values, "minibeam_copper_fragment_mcs_scale",
+        config.minibeam_copper_fragment_mcs_scale);
+    config.minibeam_copper_fragment_cascade_generations = parse_number(
+        values, "minibeam_copper_fragment_cascade_generations",
+        config.minibeam_copper_fragment_cascade_generations);
     config.minibeam_copper_survivor_energy_loss_scale = parse_number(
         values, "minibeam_copper_survivor_energy_loss_scale",
         config.minibeam_copper_survivor_energy_loss_scale);
@@ -2822,6 +2956,38 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.minibeam_water_fragment_low_energy_mcs_scale = parse_number(
         values, "minibeam_water_fragment_low_energy_mcs_scale",
         config.minibeam_water_fragment_low_energy_mcs_scale);
+    if (const auto iterator = values.find(
+            "minibeam_water_primary_mcs_model"); iterator != values.end()) {
+        config.minibeam_water_primary_mcs_model = iterator->second;
+        std::transform(config.minibeam_water_primary_mcs_model.begin(),
+                       config.minibeam_water_primary_mcs_model.end(),
+                       config.minibeam_water_primary_mcs_model.begin(),
+                       [](unsigned char value) {
+                           return static_cast<char>(std::tolower(value));
+                       });
+    }
+    config.minibeam_water_primary_mcs_max_segment_mm = parse_number(
+        values, "minibeam_water_primary_mcs_max_segment_mm",
+        config.minibeam_water_primary_mcs_max_segment_mm);
+    if (const auto iterator = values.find(
+            "minibeam_water_secondary_c12_mcs_model"); iterator != values.end()) {
+        config.minibeam_water_secondary_c12_mcs_model = iterator->second;
+        std::transform(config.minibeam_water_secondary_c12_mcs_model.begin(),
+                       config.minibeam_water_secondary_c12_mcs_model.end(),
+                       config.minibeam_water_secondary_c12_mcs_model.begin(),
+                       [](unsigned char value) {
+                           return static_cast<char>(std::tolower(value));
+                       });
+    }
+    config.minibeam_water_secondary_c12_mcs_max_segment_mm = parse_number(
+        values, "minibeam_water_secondary_c12_mcs_max_segment_mm",
+        config.minibeam_water_secondary_c12_mcs_max_segment_mm);
+    config.minibeam_water_secondary_c12_enable_unified_em = parse_bool(
+        values, "minibeam_water_secondary_c12_enable_unified_em",
+        config.minibeam_water_secondary_c12_enable_unified_em);
+    config.minibeam_water_secondary_c12_post_sample_loss_scale = parse_number(
+        values, "minibeam_water_secondary_c12_post_sample_loss_scale",
+        config.minibeam_water_secondary_c12_post_sample_loss_scale);
     config.minibeam_water_primary_mcs_tail_strength = parse_number(
         values, "minibeam_water_primary_mcs_tail_strength",
         config.minibeam_water_primary_mcs_tail_strength);
@@ -3180,6 +3346,34 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.minibeam_phase_space_output_file = parse_path(
         values, "minibeam_phase_space_output_file",
         config.minibeam_phase_space_output_file);
+    config.minibeam_water_primary_plane_output_file = parse_path(
+        values, "minibeam_water_primary_plane_output_file",
+        config.minibeam_water_primary_plane_output_file);
+    {
+        const auto it = values.find(
+            "minibeam_water_primary_plane_depths_mm");
+        if (it != values.end()) {
+            config.minibeam_water_primary_plane_depths_mm = parse_double_list(
+                it->second, "minibeam_water_primary_plane_depths_mm");
+        }
+    }
+    config.minibeam_water_entry_secondary_replay_file = parse_path(
+        values, "minibeam_water_entry_secondary_replay_file",
+        config.minibeam_water_entry_secondary_replay_file);
+    config.minibeam_water_entry_secondary_replay_allow_primary_c12 = parse_bool(
+        values, "minibeam_water_entry_secondary_replay_allow_primary_c12",
+        config.minibeam_water_entry_secondary_replay_allow_primary_c12);
+    config.minibeam_water_entry_secondary_replay_allow_internal_births = parse_bool(
+        values, "minibeam_water_entry_secondary_replay_allow_internal_births",
+        config.minibeam_water_entry_secondary_replay_allow_internal_births);
+    if (!config.minibeam_water_entry_secondary_replay_file.empty()) {
+        config.minibeam_water_entry_secondary_replay_file =
+            resolve_input_path_from_config(
+                config.minibeam_water_entry_secondary_replay_file, path);
+    }
+    config.minibeam_fragment_phase_space_output_file = parse_path(
+        values, "minibeam_fragment_phase_space_output_file",
+        config.minibeam_fragment_phase_space_output_file);
     {
         const auto it = values.find("voxel_dose_output_file");
         if (it != values.end()) {

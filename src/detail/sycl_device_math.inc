@@ -264,3 +264,360 @@ Direction3F scatter_direction(const Direction3F direction,
     const auto local_y = projected_rms_angle_rad * radius * sycl::sin(two_pi * uniform2);
     return rotate_local_direction(local_x, local_y, 1.0F, direction);
 }
+
+struct CorrelatedScatteringStep {
+    Direction3F direction;
+    Direction3F displacement_mm;
+    // Optional state at an interior path fraction.  This is sampled from the
+    // Gaussian bridge conditional on the already sampled end state, so asking
+    // for a diagnostic crossing cannot change the transported endpoint.  Tail
+    // events contribute only when their sampled location precedes the crossing.
+    Direction3F observation_direction{};
+    Direction3F observation_displacement_mm{};
+    bool observation_valid{false};
+};
+
+CorrelatedScatteringStep copper_fermi_eyges_tail_step(
+    const Direction3F direction, const float kinetic_energy_MeV,
+    const int atomic_number, const int mass_number, const float path_length_mm,
+    const float density_g_per_cm3, const float radiation_length_g_per_cm2,
+    const float amplitude_scale, const std::uint64_t seed,
+    const std::uint64_t history_id, const std::uint64_t step_index,
+    const std::uint32_t random_dimension) noexcept {
+    CorrelatedScatteringStep result{direction, Direction3F{0.0F, 0.0F, 0.0F}};
+    if (kinetic_energy_MeV <= 0.0F || atomic_number <= 0 || mass_number <= 0 ||
+        path_length_mm <= 0.0F || density_g_per_cm3 <= 0.0F ||
+        radiation_length_g_per_cm2 <= 0.0F || amplitude_scale <= 0.0F) {
+        return result;
+    }
+
+    const auto energy_per_u = kinetic_energy_MeV / static_cast<float>(mass_number);
+    const auto total_energy_per_u =
+        energy_per_u + static_cast<float>(nucleon_rest_mass_MeV);
+    const auto momentum_per_u = sycl::sqrt(
+        energy_per_u *
+        (energy_per_u + 2.0F * static_cast<float>(nucleon_rest_mass_MeV)));
+    const auto beta = momentum_per_u / total_energy_per_u;
+    const auto momentum = static_cast<float>(mass_number) * momentum_per_u;
+    const auto radiation_length_mm =
+        10.0F * radiation_length_g_per_cm2 / density_g_per_cm3;
+    if (!(beta > 0.0F && momentum > 0.0F && radiation_length_mm > 0.0F)) {
+        return result;
+    }
+
+    // Constrained by 150/250/300 MeV/u, 1/10 mm Geant4 11.3.2 UrbanMsc
+    // Copper slabs. This local scattering power has no step-length logarithm.
+    constexpr float scattering_energy_MeV = 13.0F;
+    constexpr float core_variance_fraction = 0.8076494F;
+    constexpr float tail_rate_per_mm = 0.1065470F;
+    constexpr float wide_tail_fraction = 0.01563534F;
+    constexpr float wide_tail_width_ratio = 4.522415F;
+    const auto scaled_scattering_energy = amplitude_scale * scattering_energy_MeV;
+    const auto charge = static_cast<float>(atomic_number);
+    const auto scattering_ratio =
+        scaled_scattering_energy * charge / (beta * momentum);
+    const auto total_scattering_power =
+        scattering_ratio * scattering_ratio / radiation_length_mm;
+    const auto core_power = core_variance_fraction * total_scattering_power;
+    const auto core_theta_sigma = sycl::sqrt(core_power * path_length_mm);
+
+    const auto normal_pair = [&](const std::uint32_t dimension) {
+        const auto u0 = sycl::fmax(
+            rng::uniform01(seed, history_id, step_index, dimension), 1.0e-12F);
+        const auto u1 = rng::uniform01(
+            seed, history_id, step_index, dimension + 1U);
+        constexpr float two_pi = 6.2831853071795864769F;
+        const auto radius = sycl::sqrt(-2.0F * sycl::log(u0));
+        return Direction3F{radius * sycl::cos(two_pi * u1),
+                           radius * sycl::sin(two_pi * u1), 0.0F};
+    };
+    const auto angle_normal = normal_pair(random_dimension);
+    const auto displacement_normal = normal_pair(random_dimension + 2U);
+    auto local_theta_x = core_theta_sigma * angle_normal.x;
+    auto local_theta_y = core_theta_sigma * angle_normal.y;
+    const auto independent_displacement_sigma = sycl::sqrt(
+        core_power * path_length_mm * path_length_mm * path_length_mm / 12.0F);
+    auto local_displacement_x =
+        0.5F * path_length_mm * local_theta_x +
+        independent_displacement_sigma * displacement_normal.x;
+    auto local_displacement_y =
+        0.5F * path_length_mm * local_theta_y +
+        independent_displacement_sigma * displacement_normal.y;
+
+    const auto tail_mean = tail_rate_per_mm * path_length_mm;
+    const auto zero_tail_probability = sycl::exp(-tail_mean);
+    const auto one_tail_probability = zero_tail_probability * tail_mean;
+    const auto count_uniform = rng::uniform01(
+        seed, history_id, step_index, random_dimension + 4U);
+    const auto tail_count = count_uniform < zero_tail_probability
+        ? 0U
+        : (count_uniform < zero_tail_probability + one_tail_probability ? 1U : 2U);
+    const auto width_variance_normalizer =
+        (1.0F - wide_tail_fraction) +
+        wide_tail_fraction * wide_tail_width_ratio * wide_tail_width_ratio;
+    const auto narrow_tail_sigma = sycl::sqrt(
+        (1.0F - core_variance_fraction) * total_scattering_power /
+        (tail_rate_per_mm * width_variance_normalizer));
+    for (std::uint32_t tail_index = 0; tail_index < tail_count; ++tail_index) {
+        const auto tail_dimension = random_dimension + 20U + 4U * tail_index;
+        const auto location_uniform = rng::uniform01(
+            seed, history_id, step_index, tail_dimension);
+        const auto width_uniform = rng::uniform01(
+            seed, history_id, step_index, tail_dimension + 1U);
+        const auto tail_normal = normal_pair(tail_dimension + 2U);
+        const auto tail_sigma = narrow_tail_sigma *
+            (width_uniform < wide_tail_fraction ? wide_tail_width_ratio : 1.0F);
+        const auto tail_theta_x = tail_sigma * tail_normal.x;
+        const auto tail_theta_y = tail_sigma * tail_normal.y;
+        const auto remaining_path = path_length_mm * (1.0F - location_uniform);
+        local_theta_x += tail_theta_x;
+        local_theta_y += tail_theta_y;
+        local_displacement_x += remaining_path * tail_theta_x;
+        local_displacement_y += remaining_path * tail_theta_y;
+    }
+
+    const auto parent_norm = sycl::sqrt(
+        direction.x * direction.x + direction.y * direction.y + direction.z * direction.z);
+    const auto inverse_parent_norm = parent_norm > 0.0F ? 1.0F / parent_norm : 1.0F;
+    const Direction3F w{direction.x * inverse_parent_norm,
+                        direction.y * inverse_parent_norm,
+                        parent_norm > 0.0F ? direction.z * inverse_parent_norm : 1.0F};
+    const Direction3F reference =
+        sycl::fabs(w.x) < 0.9F ? Direction3F{1.0F, 0.0F, 0.0F}
+                               : Direction3F{0.0F, 1.0F, 0.0F};
+    const auto projection = reference.x * w.x + reference.y * w.y + reference.z * w.z;
+    Direction3F u{reference.x - projection * w.x,
+                  reference.y - projection * w.y,
+                  reference.z - projection * w.z};
+    const auto inverse_u_norm = sycl::rsqrt(u.x * u.x + u.y * u.y + u.z * u.z);
+    u = Direction3F{u.x * inverse_u_norm, u.y * inverse_u_norm, u.z * inverse_u_norm};
+    const Direction3F v{w.y * u.z - w.z * u.y,
+                        w.z * u.x - w.x * u.z,
+                        w.x * u.y - w.y * u.x};
+    result.displacement_mm = Direction3F{
+        local_displacement_x * u.x + local_displacement_y * v.x,
+        local_displacement_x * u.y + local_displacement_y * v.y,
+        local_displacement_x * u.z + local_displacement_y * v.z};
+    result.direction = rotate_local_direction(
+        local_theta_x, local_theta_y, 1.0F, direction);
+    return result;
+}
+
+CorrelatedScatteringStep water_c12_fermi_eyges_tail_step(
+    const Direction3F direction, const float kinetic_energy_MeV,
+    const float path_length_mm, const float density_g_per_cm3,
+    const float radiation_length_g_per_cm2, const std::uint64_t seed,
+    const std::uint64_t history_id, const std::uint64_t step_index,
+    const std::uint32_t random_dimension,
+    const float observation_fraction = -1.0F) noexcept {
+    CorrelatedScatteringStep result{direction, Direction3F{0.0F, 0.0F, 0.0F}};
+    constexpr int atomic_number = 6;
+    constexpr int mass_number = 12;
+    if (kinetic_energy_MeV <= 0.0F || path_length_mm <= 0.0F ||
+        density_g_per_cm3 <= 0.0F || radiation_length_g_per_cm2 <= 0.0F) {
+        return result;
+    }
+
+    const auto energy_per_u = kinetic_energy_MeV / static_cast<float>(mass_number);
+    const auto total_energy_per_u =
+        energy_per_u + static_cast<float>(nucleon_rest_mass_MeV);
+    const auto momentum_per_u = sycl::sqrt(
+        energy_per_u *
+        (energy_per_u + 2.0F * static_cast<float>(nucleon_rest_mass_MeV)));
+    const auto beta = momentum_per_u / total_energy_per_u;
+    const auto momentum = static_cast<float>(mass_number) * momentum_per_u;
+    const auto radiation_length_mm =
+        10.0F * radiation_length_g_per_cm2 / density_g_per_cm3;
+    if (!(beta > 0.0F && momentum > 0.0F && radiation_length_mm > 0.0F)) {
+        return result;
+    }
+
+    // Initial C12+water candidate constrained only by the 40--60 mm interval
+    // energy groups of the 250 MeV/u same-source replay. The later intervals
+    // remain holdout data. Unlike Highland, this is a local scattering power
+    // without a step-length logarithm. The small Poisson tail is independent
+    // of the core normalization; these constants do not reuse Copper values.
+    constexpr float core_scattering_energy_MeV = 9.9F;
+    constexpr float tail_rate_per_mm = 0.0025F;
+    constexpr float tail_scattering_energy_MeV = 2.4F;
+    const auto charge_over_beta_momentum =
+        static_cast<float>(atomic_number) / (beta * momentum);
+    const auto core_ratio =
+        core_scattering_energy_MeV * charge_over_beta_momentum;
+    const auto core_power =
+        core_ratio * core_ratio / radiation_length_mm;
+    const auto core_theta_sigma = sycl::sqrt(core_power * path_length_mm);
+
+    const auto normal_pair = [&](const std::uint32_t dimension) {
+        const auto u0 = sycl::fmax(
+            rng::uniform01(seed, history_id, step_index, dimension), 1.0e-12F);
+        const auto u1 = rng::uniform01(
+            seed, history_id, step_index, dimension + 1U);
+        constexpr float two_pi = 6.2831853071795864769F;
+        const auto radius = sycl::sqrt(-2.0F * sycl::log(u0));
+        return Direction3F{radius * sycl::cos(two_pi * u1),
+                           radius * sycl::sin(two_pi * u1), 0.0F};
+    };
+    const auto angle_normal = normal_pair(random_dimension);
+    const auto displacement_normal = normal_pair(random_dimension + 2U);
+    auto local_theta_x = core_theta_sigma * angle_normal.x;
+    auto local_theta_y = core_theta_sigma * angle_normal.y;
+    const auto independent_displacement_sigma = sycl::sqrt(
+        core_power * path_length_mm * path_length_mm * path_length_mm / 12.0F);
+    auto local_displacement_x =
+        0.5F * path_length_mm * local_theta_x +
+        independent_displacement_sigma * displacement_normal.x;
+    auto local_displacement_y =
+        0.5F * path_length_mm * local_theta_y +
+        independent_displacement_sigma * displacement_normal.y;
+
+    const auto has_observation =
+        observation_fraction > 0.0F && observation_fraction < 1.0F;
+    auto observation_theta_x = 0.0F;
+    auto observation_theta_y = 0.0F;
+    auto observation_displacement_x = 0.0F;
+    auto observation_displacement_y = 0.0F;
+    if (has_observation) {
+        // Integrated Brownian-motion bridge for (theta(t), y(t)) conditional
+        // on the sampled (theta(L), y(L)).  Work in units where T=L=1;
+        // rescaling below restores sqrt(TL) and sqrt(TL^3).
+        const auto r = observation_fraction;
+        const auto r2 = r * r;
+        const auto r3 = r2 * r;
+        const auto c00 = r;
+        const auto c01 = r - 0.5F * r2;
+        const auto c10 = 0.5F * r2;
+        const auto c11 = 0.5F * r2 - r3 / 6.0F;
+        const auto k00 = 4.0F * c00 - 6.0F * c01;
+        const auto k01 = -6.0F * c00 + 12.0F * c01;
+        const auto k10 = 4.0F * c10 - 6.0F * c11;
+        const auto k11 = -6.0F * c10 + 12.0F * c11;
+        const auto conditional_var_theta = sycl::fmax(
+            0.0F, r - (k00 * c00 + k01 * c01));
+        const auto conditional_cov =
+            0.5F * r2 - (k00 * c10 + k01 * c11);
+        const auto conditional_var_displacement = sycl::fmax(
+            0.0F, r3 / 3.0F - (k10 * c10 + k11 * c11));
+        const auto bridge_normal0 = normal_pair(random_dimension + 8U);
+        const auto bridge_normal1 = normal_pair(random_dimension + 10U);
+        const auto l00 = sycl::sqrt(conditional_var_theta);
+        const auto l10 = l00 > 0.0F ? conditional_cov / l00 : 0.0F;
+        const auto l11 = sycl::sqrt(sycl::fmax(
+            0.0F, conditional_var_displacement - l10 * l10));
+        const auto theta_scale = core_theta_sigma;
+        const auto displacement_scale =
+            core_theta_sigma * path_length_mm;
+        const auto normalized_final_displacement_x =
+            local_displacement_x / displacement_scale;
+        const auto normalized_final_displacement_y =
+            local_displacement_y / displacement_scale;
+        const auto normalized_final_theta_x =
+            local_theta_x / theta_scale;
+        const auto normalized_final_theta_y =
+            local_theta_y / theta_scale;
+        const auto bridge_theta_x =
+            k00 * normalized_final_theta_x +
+            k01 * normalized_final_displacement_x +
+            l00 * bridge_normal0.x;
+        const auto bridge_theta_y =
+            k00 * normalized_final_theta_y +
+            k01 * normalized_final_displacement_y +
+            l00 * bridge_normal0.y;
+        const auto bridge_displacement_x =
+            k10 * normalized_final_theta_x +
+            k11 * normalized_final_displacement_x +
+            l10 * bridge_normal0.x + l11 * bridge_normal1.x;
+        const auto bridge_displacement_y =
+            k10 * normalized_final_theta_y +
+            k11 * normalized_final_displacement_y +
+            l10 * bridge_normal0.y + l11 * bridge_normal1.y;
+        observation_theta_x = theta_scale * bridge_theta_x;
+        observation_theta_y = theta_scale * bridge_theta_y;
+        observation_displacement_x =
+            displacement_scale * bridge_displacement_x;
+        observation_displacement_y =
+            displacement_scale * bridge_displacement_y;
+    }
+
+    // Knuth's exact Poisson draw has no event-count truncation. The configured
+    // mean is about 2.5e-4 per normal 0.1 mm step, so the expected loop cost is
+    // negligible. Conditional event locations are uniform along the step.
+    const auto tail_mean = tail_rate_per_mm * path_length_mm;
+    const auto poisson_limit = sycl::exp(-tail_mean);
+    auto poisson_product = 1.0F;
+    std::uint32_t tail_count = 0U;
+    while (true) {
+        poisson_product *= sycl::fmax(
+            rng::uniform01(seed, history_id, step_index,
+                           random_dimension + 4U + tail_count),
+            1.0e-12F);
+        if (poisson_product <= poisson_limit) break;
+        ++tail_count;
+    }
+    const auto tail_sigma =
+        tail_scattering_energy_MeV * charge_over_beta_momentum;
+    for (std::uint32_t tail_index = 0; tail_index < tail_count; ++tail_index) {
+        const auto dimension = random_dimension + 32U + 3U * tail_index;
+        const auto location = rng::uniform01(
+            seed, history_id, step_index, dimension);
+        const auto tail_normal = normal_pair(dimension + 1U);
+        const auto tail_theta_x = tail_sigma * tail_normal.x;
+        const auto tail_theta_y = tail_sigma * tail_normal.y;
+        const auto remaining_path = path_length_mm * (1.0F - location);
+        local_theta_x += tail_theta_x;
+        local_theta_y += tail_theta_y;
+        local_displacement_x += remaining_path * tail_theta_x;
+        local_displacement_y += remaining_path * tail_theta_y;
+        if (has_observation && location <= observation_fraction) {
+            observation_theta_x += tail_theta_x;
+            observation_theta_y += tail_theta_y;
+            const auto observation_remaining_path =
+                path_length_mm * (observation_fraction - location);
+            observation_displacement_x +=
+                observation_remaining_path * tail_theta_x;
+            observation_displacement_y +=
+                observation_remaining_path * tail_theta_y;
+        }
+    }
+
+    const auto parent_norm = sycl::sqrt(
+        direction.x * direction.x + direction.y * direction.y +
+        direction.z * direction.z);
+    const auto inverse_parent_norm =
+        parent_norm > 0.0F ? 1.0F / parent_norm : 1.0F;
+    const Direction3F w{direction.x * inverse_parent_norm,
+                        direction.y * inverse_parent_norm,
+                        parent_norm > 0.0F
+                            ? direction.z * inverse_parent_norm : 1.0F};
+    const Direction3F reference =
+        sycl::fabs(w.x) < 0.9F ? Direction3F{1.0F, 0.0F, 0.0F}
+                               : Direction3F{0.0F, 1.0F, 0.0F};
+    const auto projection =
+        reference.x * w.x + reference.y * w.y + reference.z * w.z;
+    Direction3F u{reference.x - projection * w.x,
+                  reference.y - projection * w.y,
+                  reference.z - projection * w.z};
+    const auto inverse_u_norm =
+        sycl::rsqrt(u.x * u.x + u.y * u.y + u.z * u.z);
+    u = Direction3F{u.x * inverse_u_norm, u.y * inverse_u_norm,
+                    u.z * inverse_u_norm};
+    const Direction3F v{w.y * u.z - w.z * u.y,
+                        w.z * u.x - w.x * u.z,
+                        w.x * u.y - w.y * u.x};
+    result.displacement_mm = Direction3F{
+        local_displacement_x * u.x + local_displacement_y * v.x,
+        local_displacement_x * u.y + local_displacement_y * v.y,
+        local_displacement_x * u.z + local_displacement_y * v.z};
+    result.direction = rotate_local_direction(
+        local_theta_x, local_theta_y, 1.0F, direction);
+    if (has_observation) {
+        result.observation_displacement_mm = Direction3F{
+            observation_displacement_x * u.x + observation_displacement_y * v.x,
+            observation_displacement_x * u.y + observation_displacement_y * v.y,
+            observation_displacement_x * u.z + observation_displacement_y * v.z};
+        result.observation_direction = rotate_local_direction(
+            observation_theta_x, observation_theta_y, 1.0F, direction);
+        result.observation_valid = true;
+    }
+    return result;
+}

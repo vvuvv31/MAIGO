@@ -2,8 +2,8 @@
 """Compare matched 2-D TOPAS and GPU Copper-minibeam dose planes.
 
 TOPAS scores X versus beam-depth Y and writes float64; the GPU MHD plane is
-depth Z versus X and writes float32.  No dose fitting or normalization is
-applied to metrics.
+depth Z versus X and writes float32. No dose fitting is applied. Optional
+history-count scaling supports otherwise identical unequal-statistics runs.
 """
 
 from __future__ import annotations
@@ -27,6 +27,8 @@ def arguments() -> argparse.Namespace:
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--gpu-mhd", type=Path)
     parser.add_argument("--topas-header", type=Path)
+    parser.add_argument("--topas-histories", type=int)
+    parser.add_argument("--gpu-histories", type=int)
     parser.add_argument("--bins", type=int)
     parser.add_argument("--lateral-spacing-mm", type=float)
     parser.add_argument("--depth-spacing-mm", type=float)
@@ -226,6 +228,25 @@ def slab_profile(
     return dose[lo:hi].mean(axis=0)
 
 
+def fixed_minibeam_region_masks(
+    x_mm: np.ndarray, pitch_mm: float, field_half_width_mm: float = 18.0
+) -> dict[str, np.ndarray]:
+    """Return the canonical fixed ROIs, including their boundary rule.
+
+    Coordinates must come from grid metadata. Peak owns |folded x| < 0.25 mm,
+    shoulder owns [0.25, 0.9), and valley owns [0.9, 1.8].
+    """
+    folded_x = (x_mm + 0.5 * pitch_mm) % pitch_mm - 0.5 * pitch_mm
+    central = np.abs(x_mm) <= field_half_width_mm
+    return {
+        "peak": central & (np.abs(folded_x) < 0.25),
+        "shoulder": central & (np.abs(folded_x) >= 0.25) &
+                    (np.abs(folded_x) < 0.9),
+        "valley": central & (np.abs(folded_x) >= 0.9) &
+                  (np.abs(folded_x) <= 1.8),
+    }
+
+
 def main() -> None:
     args = arguments()
     args.output_dir.mkdir(parents=True, exist_ok=True)
@@ -239,6 +260,14 @@ def main() -> None:
         raise ValueError(
             f"Expected {expected} values, got TOPAS={topas_flat.size}, GPU={gpu_flat.size}"
         )
+    if (args.topas_histories is None) != (args.gpu_histories is None):
+        raise ValueError(
+            "--topas-histories and --gpu-histories must be provided together"
+        )
+    if args.topas_histories is not None:
+        if args.topas_histories <= 0 or args.gpu_histories <= 0:
+            raise ValueError("history counts must be positive")
+        topas_flat *= args.gpu_histories / args.topas_histories
     topas = topas_flat.reshape(depth_bins, lateral_bins)
     gpu = gpu_flat.reshape(depth_bins, lateral_bins)
     lateral_spacing = grid["lateral_spacing_mm"]
@@ -271,6 +300,19 @@ def main() -> None:
     gpu_peak, gpu_valley, gpu_peak_x, gpu_valley_x = local_feature_depth_curves(
         gpu, x_mm, args.pitch_mm, slab_bins
     )
+    fixed_masks = fixed_minibeam_region_masks(x_mm, args.pitch_mm)
+    topas_smoothed = uniform_filter1d(
+        topas, size=slab_bins, axis=0, mode="nearest")
+    gpu_smoothed = uniform_filter1d(
+        gpu, size=slab_bins, axis=0, mode="nearest")
+    fixed_region_curves = {
+        name: {
+            "topas_integral_Gy": topas_smoothed[:, mask].sum(axis=1),
+            "gpu_integral_Gy": gpu_smoothed[:, mask].sum(axis=1),
+            "voxel_count": int(np.count_nonzero(mask)),
+        }
+        for name, mask in fixed_masks.items()
+    }
     with np.errstate(divide="ignore", invalid="ignore"):
         topas_pvdr = np.divide(topas_peak, topas_valley)
         gpu_pvdr = np.divide(gpu_peak, gpu_valley)
@@ -313,6 +355,13 @@ def main() -> None:
             np.median(np.abs(gpu_valley_x[high_depth] - topas_valley_x[high_depth]))
         ),
         "selected_depths": [],
+        "fixed_regions": {
+            "central_half_width_mm": 18.0,
+            "peak_abs_folded_x_mm": [0.0, 0.25],
+            "shoulder_abs_folded_x_mm": [0.25, 0.9],
+            "valley_abs_folded_x_mm": [0.9, 1.8],
+            "selected_depths": [],
+        },
     }
     selected_rows = []
     for requested_depth in args.profile_depths_mm:
@@ -351,6 +400,15 @@ def main() -> None:
         }
         selected_rows.append(row)
         metrics["selected_depths"].append(row)
+        fixed_row = {"depth_mm": float(depth_mm[index])}
+        for name, values in fixed_region_curves.items():
+            topas_value = float(values["topas_integral_Gy"][index])
+            gpu_value = float(values["gpu_integral_Gy"][index])
+            fixed_row[f"topas_{name}_integral_Gy"] = topas_value
+            fixed_row[f"gpu_{name}_integral_Gy"] = gpu_value
+            fixed_row[f"{name}_gpu_over_topas"] = (
+                gpu_value / topas_value if topas_value > 0.0 else None)
+        metrics["fixed_regions"]["selected_depths"].append(fixed_row)
     (args.output_dir / "metrics.json").write_text(
         json.dumps(metrics, indent=2, allow_nan=False) + "\n", encoding="utf-8"
     )
@@ -373,6 +431,24 @@ def main() -> None:
                 topas_valley, gpu_valley, topas_pvdr, gpu_pvdr,
             )
         )
+    with (args.output_dir / "fixed_region_curves.csv").open(
+            "w", newline="") as output:
+        writer = csv.writer(output)
+        writer.writerow([
+            "depth_mm",
+            "topas_peak_integral_Gy", "gpu_peak_integral_Gy",
+            "topas_shoulder_integral_Gy", "gpu_shoulder_integral_Gy",
+            "topas_valley_integral_Gy", "gpu_valley_integral_Gy",
+        ])
+        writer.writerows(zip(
+            depth_mm,
+            fixed_region_curves["peak"]["topas_integral_Gy"],
+            fixed_region_curves["peak"]["gpu_integral_Gy"],
+            fixed_region_curves["shoulder"]["topas_integral_Gy"],
+            fixed_region_curves["shoulder"]["gpu_integral_Gy"],
+            fixed_region_curves["valley"]["topas_integral_Gy"],
+            fixed_region_curves["valley"]["gpu_integral_Gy"],
+        ))
 
     plt.style.use("seaborn-v0_8-whitegrid")
     fig, axes = plt.subplots(2, 3, figsize=(16, 9), constrained_layout=True)
@@ -463,6 +539,40 @@ def main() -> None:
     axis.set_title("Depth-integrated lateral profile")
     axis.legend()
     fig.savefig(args.output_dir / "lateral_integral.png", dpi=180)
+    plt.close(fig)
+
+    ratio_mask = high_depth & (topas_peak > 0) & (topas_valley > 0)
+    ratio_depth = depth_mm[ratio_mask]
+    ratio_series = (
+        (gpu_idd[ratio_mask] / topas_idd[ratio_mask], "IDD"),
+        (gpu_peak[ratio_mask] / topas_peak[ratio_mask], "peak dose"),
+        (gpu_valley[ratio_mask] / topas_valley[ratio_mask], "valley dose"),
+        (gpu_pvdr[ratio_mask] / topas_pvdr[ratio_mask], "PVDR"),
+    )
+    fig, axes = plt.subplots(2, 2, figsize=(12, 7), constrained_layout=True)
+    for axis, (ratio, title) in zip(axes.ravel(), ratio_series):
+        axis.plot(ratio_depth, ratio, lw=1.5)
+        axis.axhline(1.0, color="black", lw=0.9, linestyle="--")
+        axis.set_xlim(0, displayed_depth)
+        axis.set_xlabel("water depth (mm)")
+        axis.set_ylabel("GPU / TOPAS")
+        axis.set_title(title)
+    fig.suptitle("Depth-dependent dose ratios (>1% TOPAS IDD)")
+    fig.savefig(args.output_dir / "dose_ratios_vs_depth.png", dpi=180)
+    plt.close(fig)
+
+    fig, axis = plt.subplots(figsize=(10, 5), constrained_layout=True)
+    for name, values in fixed_region_curves.items():
+        ratio = np.divide(
+            values["gpu_integral_Gy"], values["topas_integral_Gy"],
+            out=np.full_like(values["gpu_integral_Gy"], np.nan),
+            where=values["topas_integral_Gy"] > 0.0)
+        axis.plot(depth_mm[high_depth], ratio[high_depth], label=name)
+    axis.axhline(1.0, color="black", lw=0.9, linestyle="--")
+    axis.set(xlabel="water depth (mm)", ylabel="GPU / TOPAS",
+             title="Fixed folded-x region dose integrals (>1% TOPAS IDD)")
+    axis.legend()
+    fig.savefig(args.output_dir / "fixed_region_dose_ratios.png", dpi=180)
     plt.close(fig)
 
     print(json.dumps(metrics, indent=2))
