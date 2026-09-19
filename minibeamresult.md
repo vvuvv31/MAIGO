@@ -1224,3 +1224,414 @@ replay particle ID。该回放仍只用于隔离传播，不能把不同代祖�
 受该分量占比限制且未跨 seed 一致；正式三能量配置继续保持 C12-only Unified、
 `0.9958` secondary scale 和 secondary FE 全部关闭。高统计输出位于
 `/mnt/sda/wuwei/minibeam_secondary_c12_fullchain_cd_e300_10m_seed*_20260919/`。
+
+## 30. FE 先接入全部带电碎片（2026-09-19）
+
+按“先接入、再修正”的开发顺序，公共水中 FE kernel 已从 C12 推广到队列中的
+带电离子，并保留单一 YAML 回退开关：
+
+```yaml
+multiple_scattering_model: fermi_eyges  # 或 highland
+fermi_eyges_species: all_charged        # c12/c12_he4/c12_he4_pdt/all_charged
+fermi_eyges_max_segment_mm: 0.1
+```
+
+显式选择 `highland` 时也会关闭旧的 minibeam-only primary/secondary FE 路径，
+避免表面上选择 Highland、实际 primary 仍使用 FE。150/250/300 三份正式 minibeam
+配置现已选择 `fermi_eyges + all_charged`；这表示代码和配置已接入，不表示各碎片
+物种已完成 TOPAS 标定。旧 Highland kernel 未删除，可以通过上述一个公共选择器
+整体回退。
+
+当前非 C12 离子暂时复用 C12+water 约束得到的 FE core/tail 常数，但运动学使用
+各自 `(Z,A)`、beta 和动量。没有把 `0.9958` 扩展到这些路径；通用 secondary
+输运保持 loss scale=1。后续按 He-4、p/d/t、其他重碎片的顺序修正物种参数。
+
+minibeam ON/OFF 两种 FP32 构建均通过。minibeam-OFF 的 200 MeV/u、10k-history
+full-physics 分阶段 smoke 全部通过质量检查且 queue overflow 为 0。直接 MCS
+路由计数如下：
+
+| scope | C12 FE | He-4 FE | p/d/t FE | other FE | Highland | energy residual |
+|:---|---:|---:|---:|---:|---:|---:|
+| `c12` | 31,582 | 0 | 0 | 0 | 3,882,684 | `3.97e-6` |
+| `c12_he4` | 31,504 | 1,361,865 | 0 | 0 | 2,809,671 | `3.74e-6` |
+| `c12_he4_pdt` | 31,498 | 1,361,732 | 3,164,238 | 0 | 414,033 | `3.15e-6` |
+| `all_charged` | 31,790 | 1,363,806 | 3,160,107 | 476,537 | 0 | `2.92e-6` |
+
+独立 Highland full-physics smoke 的 FE 计数全为 0、Highland 为 3,910,765，
+能量残差 `4.59e-6`，证明回退路径仍可运行。不同 scope 改变轨迹、停止和后续核
+反应，因此总步数本来就不必相等；这些结果只验收接线、有限数、能量记账与质量
+门，不声明 He/p/d/t/重碎片的相空间已经匹配 TOPAS。本轮没有提交新 TOPAS 任务。
+
+另使用正式 250 MeV/u minibeam 配置完成同 seed、256k full-chain FE/Highland
+A/B。两组均 `accepted=true`、failures 为空、全部 overflow 为 0；由于配置本身为
+research 并带已声明的近似，状态仍为预期的 `non_production`。FE/Highland 的
+能量残差为 `1.72e-5/1.73e-5`，Bragg 最大值位于同一深度 bin。FE/Highland
+总剂量比为 `1.000106`，IDD L1 为 `0.1367%`，lateral L1 为 `3.7505%`，体素
+L1 为 `16.23%`。后两项说明全碎片 FE 已明显改变横向输运，不能把“运行稳定”
+误写成“物理已经匹配”；下一轮首先从 He-4 和 p/d/t 的分物种角分布检查这些
+C12-derived 参数是否过宽。FE/Highland 耗时为 `14.15/13.62 s`。
+
+同一 full-chain 工况随后完成了逐级 scope 消融。相对全 Highland：
+
+| scope | total ratio | IDD L1 | lateral L1 | voxel L1 | Bragg bin |
+|:---|---:|---:|---:|---:|---:|
+| `c12` | 1.000053 | 0.0704% | 3.6675% | 15.118% | 498 |
+| `c12_he4` | 1.000022 | 0.0977% | 3.7298% | 15.614% | 498 |
+| `c12_he4_pdt` | 1.000167 | 0.1317% | 3.7526% | 16.118% | 498 |
+| `all_charged` | 1.000106 | 0.1367% | 3.7505% | 16.231% | 498 |
+
+逐级增量的 lateral L1 为 He-4 `0.3583%`、p/d/t `0.1612%`、其余带电碎片
+`0.6480%`。因此本次 3.75% 总横向差异主要来自已经验证过的 primary/C12 FE，
+不是 p/d/t 的 1.46 亿个 FE 步引起的数值爆炸；非 C12 三组仍产生可测量但较小的
+空间重分配。256k 体素增量受统计噪声影响较大，不能据此拟合参数。下一步仍按
+He-4→p/d/t→其他碎片做同源相空间验证，但当前没有发现需要撤销接入的稳定性 bug。
+
+## 31. 250 MeV/u all-charged FE、10,000,640 histories full-physics 对照（2026-09-19）
+
+使用正式 `beam_minibeam_field3cm_copper_e250_256k.yaml` 物理设置，将本次 GPU
+histories 精确设为 `10,000,640`，与已有 TOPAS 五个 shard 的合计 histories 完全
+相同。比较使用绝对 Gy，不进行 history 缩放或剂量拟合；网格从元数据读取为横向
+`0.1 mm`、深度 `0.25 mm`，峰谷曲线使用 `1 mm` 深度平滑。运行后正式配置的
+`tps_histories_scale` 已恢复为 `0.01`。
+
+GPU 日志确认 `fermi_eyges + all_charged` 生效：全部 secondary MCS 步均进入 FE，
+Highland 步数为 0。运行耗时 `135.63 s`，吞吐率 `73,733 histories/s`，能量残差
+`1.72e-5`；所有 queue overflow 和 Unified-EM missing-domain 均为 0。质量报告
+`accepted=true`、`failures=[]`；由于正式配置仍声明 research approximation，状态为
+预期的 `non_production`。
+
+整体绝对剂量结果：
+
+| metric | result |
+|:---|---:|
+| GPU/TOPAS total dose | 0.995693 |
+| 2-D dose L1 / TOPAS | 3.2359% |
+| 2-D Pearson | 0.999453 |
+| IDD L1 / TOPAS | 0.5955% |
+| IDD Pearson | 0.999974 |
+| lateral-integral L1 / TOPAS | 1.1468% |
+| lateral-integral Pearson | 0.999913 |
+| TOPAS / GPU Bragg depth | 124.375 / 124.375 mm |
+
+分深度局部峰谷和 lateral 1-D 指标如下。比值均为 GPU/TOPAS；lateral L1 在
+`|x| <= 30 mm` 内计算。入口请求的 `0.5 mm` 对应最近网格中心 `0.375 mm`。
+
+| depth (mm) | peak ratio | valley ratio | PVDR ratio | lateral L1 | Pearson |
+|---:|---:|---:|---:|---:|---:|
+| 0.375 | 1.0222 | 0.9936 | 1.0288 | 3.0820% | 0.999649 |
+| 19.875 | 1.0045 | 1.0110 | 0.9935 | 2.4167% | 0.999642 |
+| 39.875 | 0.9892 | 1.0286 | 0.9618 | 2.4871% | 0.999509 |
+| 59.875 | 0.9917 | 0.9914 | 1.0003 | 2.5701% | 0.999458 |
+| 79.875 | 1.0057 | 1.0031 | 1.0027 | 2.5680% | 0.999323 |
+| 99.875 | 0.9964 | 0.9947 | 1.0018 | 2.8029% | 0.999093 |
+| 119.875 | 0.9726 | 1.0125 | 0.9607 | 3.0091% | 0.998855 |
+| 124.625 | 0.9841 | 0.9784 | 1.0058 | 3.4143% | 0.998515 |
+| 134.625 | 1.0211 | 0.9899 | 1.0315 | 4.4975% | 0.994003 |
+
+局部极值在 40 和 120 mm 附近仍显示约 4% 的 PVDR 低估，但固定 ROI 积分更接近：
+在 39.875 mm 的 peak/shoulder/valley 比为 `1.0065/0.9990/0.9769`，在
+99.875 mm 为 `0.9981/1.0006/0.9981`，在 124.625 mm 为
+`0.9931/1.0042/1.0052`。134.625 mm 已位于 distal 低剂量区，局部指标和 4.50%
+lateral L1 更易受统计波动影响，不能与 plateau/Bragg 指标等权解释。
+
+本次结果说明 all-charged FE 接入后，250 MeV/u full-physics 的绝对总剂量、IDD、
+Bragg 峰位和大部分固定区域剂量已经较好匹配；主要剩余差异仍是约 3.24% 的二维
+局部剂量 L1、部分深度的局部峰谷形状，以及尚未逐物种标定的 fragment FE 尾部。
+这是一组单 seed 高统计基线，不等同于三能量、多 seed 的最终验收。
+
+输出位于：
+
+```text
+/mnt/sda/wuwei/minibeam_e250_allcharged_fe_fullphysics_10000640_20260919/
+/mnt/sda/wuwei/minibeam_e250_allcharged_fe_fullphysics_10000640_20260919/comparison_topas/
+```
+
+## 32. Primary water loss scale 0.9958 / 1.0 单因素对照（2026-09-19）
+
+在第 31 节的 250 MeV/u、all-charged FE、full-physics 高统计工况上，使用同一
+binary、seed 和精确相同的 `10,000,640` histories，仅将
+`minibeam_water_primary_stopping_power_scale` 从 `0.9958` 改为 `1.0`。两组均与
+同一份 `10,000,640` histories TOPAS 绝对剂量比较，不做拟合。scale=1 运行同样
+`accepted=true`、`failures=[]`，所有 queue overflow 为 0；正式 YAML 在运行后已
+恢复为 `0.9958`。
+
+| metric | scale=0.9958 | scale=1.0 | better |
+|:---|---:|---:|:---|
+| GPU/TOPAS total dose | 0.995693 | 0.996131 | 1.0（仅总量） |
+| 2-D dose L1 | 3.2359% | 3.6509% | 0.9958 |
+| IDD L1 | 0.5955% | 1.1202% | 0.9958 |
+| lateral-integral L1 | 1.1468% | 1.2029% | 0.9958 |
+| GPU Bragg depth | 124.375 mm | 123.875 mm | 0.9958 |
+| TOPAS Bragg depth | 124.375 mm | 124.375 mm | — |
+
+scale=1 将 Bragg 峰提前两个深度体素（`0.5 mm`），说明该 `0.42%` 能损差异会沿
+完整射程积累，不能仅凭数值接近 1 而忽略。plateau 中 scale=1 偶尔改善单个局部
+指标，例如 79.875 mm lateral L1 从 `2.5680%` 降到 `2.4642%`；但纵向和二维全局
+指标一致支持 `0.9958`。119.875 mm 的 lateral L1 则从 `3.0091%` 恶化到
+`4.1718%`。Bragg 附近 124.625 mm 的固定 peak/shoulder/valley 比：
+
+```text
+scale=0.9958: 0.99315 / 1.00423 / 1.00518
+scale=1.0:    0.98634 / 0.99752 / 0.99658
+```
+
+因此在当前 Geant4 stopping table、能损采样和 TOPAS 参考下，保留 `0.9958` 的证据
+明显强于改回 `1.0`。这仍是一个经验校正；它改善的是完整水程中的纵向演化，不代表
+其微观能损均值和方差已经独立验证。
+
+scale=1 输出与图位于：
+
+```text
+/mnt/sda/wuwei/minibeam_e250_allcharged_fe_fullphysics_scale1_10000640_20260919/
+/mnt/sda/wuwei/minibeam_e250_allcharged_fe_fullphysics_scale1_10000640_20260919/comparison_topas/
+```
+
+## 33. 公共 FE 平面诊断修复与 scope 隔离（2026-09-19）
+
+修复了公共 `multiple_scattering_model: fermi_eyges` 绕过旧 minibeam 平面诊断的
+问题。公共多子段 FE helper 现在可接收步内观察路径，在包含交点的真实 FE 子段调用
+已有 integrated-Brownian 条件 Gaussian bridge；Poisson tail 仍按真实事件位置判断
+是否发生在观察平面上游。观察使用独立 RNG dimensions，不改变已采样的输运终态。
+primary 和 secondary 公共 FE 均使用同一接口，不再依赖整步位置/角度线性插值。
+
+水中平面 CSV 在保留原字段顺序的基础上追加：
+
+```text
+particle_id,rng_stream,atomic_number,mass_number,weight,transport_path
+```
+
+primary 的 `particle_id` 使用全局 history，secondary replay 使用唯一 RNG stream，
+`transport_path` 明确区分 primary kernel 与 secondary queue；多 shard 累加同时偏移
+primary 的 `source_history` 和 `particle_id`。诊断输出由此可以按粒子身份和 Z/A
+配对，不再只能假定所有记录都是 primary C12。
+
+使用正式 250 MeV/u full-chain、256k、all-charged FE 做平面计分 on/off 对照：
+
+| check | result |
+|:---|---:|
+| plane records | 121,603 |
+| counts at 20/40/60/80/100/120/124.375 mm | 26,988 / 23,441 / 20,152 / 17,107 / 14,166 / 11,014 / 8,735 |
+| duplicate `(particle_id, plane)` | 0 |
+| backward records / wrong depth | 0 / 0 |
+| scoring-on/off voxel dose L1 | `9.72e-9` |
+
+同一份 1,622,795 粒子 C12 secondary replay 使用公共 C12 FE 后输出 6,127,025 条
+平面记录；五个平面的计数为
+`1,432,245/1,341,262/1,244,093/1,131,275/978,150`。Z/A 全为 C12，唯一身份
+无冲突、无反向记录，平面计分 on/off 的 voxel dose L1 为 `6.00e-8`。两组质量
+状态均为预期的 `non_production`，能量账本和 overflow 检查通过。
+
+另用同源 30,878 粒子、纯 EM、无核反应的 primary-only replay 验证旧 minibeam FE
+和公共 C12 FE 的实现一致性。两者 total ratio 为 `1.00000000023`、IDD L1
+`3.97e-9`、lateral L1 `2.36e-9`、voxel L1 `3.28e-8`。此前显式选择
+`multiple_scattering_model: highland` 的测试会按设计同时关闭旧 primary FE，不能
+用作旧/新 FE 等价性对照；本次已依据 canonical 配置修正该口径。
+
+最后在同 seed 256k full-chain 中冻结 primary `0.9958`、secondary EM、Copper、
+package 和 slit，仅改变 secondary FE scope：
+
+| comparison | total ratio | IDD L1 | lateral L1 | voxel L1 |
+|:---|---:|---:|---:|---:|
+| 公共 C12 FE / 旧 primary FE + secondary Highland | 0.999993 | 0.0070% | 0.2281% | 0.6547% |
+| all-charged FE / 公共 C12 FE | 1.000053 | 0.1181% | 0.7799% | 6.6059% |
+
+因此公共 C12 接线和旧模型已闭合；当前候选相对 C12-only 的主要新增空间变化来自
+非 C12 碎片。上述是 GPU/GPU 单 seed 低统计隔离量，不代表 all-charged FE 更接近
+TOPAS，也不能据此调整 9.9/0.0025/2.4。下一步应从固定 ROI 剂量贡献最大的物种
+开始做同源纯 EM 相空间验证，首选 He-4，再检查 p/d/t 和其他重碎片。
+
+最终代码的 minibeam ON/OFF 两种 FP32 构建均通过；仓库当前没有注册 CTest，独立
+sampler 的 500k 样本检查仍满足解析 FE 矩、Poisson 事件率、bridge 半步矩和倾斜
+方向旋转检查。最终 256k 单平面 smoke 输出 26,988 条记录，身份与 path 标签检查
+全部通过。
+
+诊断输出：
+
+```text
+/mnt/sda/wuwei/minibeam_fe_plane_bridge_validation_20260919/
+/mnt/sda/wuwei/minibeam_fe_scope_isolation_20260919/
+```
+
+## 34. Secondary EM 闭合与分物种 FE minibeam A/B（2026-09-19）
+
+He-4 300 MeV/u、10 mm 水片的旧参考差异已定位为 TOPAS EM table 上限：默认
+600 MeV 小于 He-4 的 1200 MeV 总动能。用 10 GeV 上限重建 24-case 矩阵后，
+TOPAS/GPU 的平均能损为 `3.50323/3.52421 MeV/u`，出口能谱标准差为
+`0.174162/0.174193 MeV/u`。全矩阵最差平均能损误差 `0.765%`，最差谱宽误差
+`4.302%`，谱宽比中位数 `1.00314`。因此不增加 He-4 stopping scale；非 C12
+secondary 需要 Unified EM 才会真正采样能损涨落。
+
+水出口 GPU 计分改为精确端点的 step-start scorer，24 个 case 均从旧规避式
+`thickness-0.005 mm` 改为真实 `thickness`，每例记录 `250,000/250,000`；TOPAS
+下游 0.010 mm 真空漂移在分析中沿方向反投影回水面。逐 case 报告包含能损、谱宽、
+`Var(theta)`、`Var(x)`、`Cov(x,theta)`、q68/q95/q99/q99.9 与置信区间。
+
+随后以 250/300 MeV/u、同 seed、每组 256k histories 做三组 FP32 full-chain 筛查：
+
+| group | FE parameters | secondary EM |
+|:---|:---|:---|
+| A | shared C12 `9.9/0.0025/2.4` | legacy |
+| B | p/d/t/He-4 water fit | legacy |
+| C | p/d/t/He-4 water fit | Unified + straggling |
+
+所有组均 `accepted=true`、overflow=0，primary `0.9958`、Copper/slit/package/seed
+完全相同。A→B 仅改变 FE 参数，对目标剂量影响很小：250 MeV/u 的
+2-D/IDD L1 为 `13.162/0.6846% -> 13.177/0.6893%`，300 MeV/u 为
+`12.252/0.7158% -> 12.253/0.7098%`。B→C 隔离 secondary EM；300 MeV/u 的
+IDD/lateral L1 从 `0.7098/3.144%` 变为 `0.6983/3.097%`，但 256k 单 seed
+不足以把这个小变化认定为稳定收益。
+
+共享 ROI 口径的关键 C 组比值如下：
+
+| energy | depth | peak | shoulder | valley |
+|---:|---:|---:|---:|---:|
+| 250 | 39.875 mm | 1.0217 | 1.0125 | 0.9692 |
+| 250 | 119.875 mm | 0.9779 | 1.0445 | 0.9820 |
+| 250 | Bragg 124.375 mm | 0.9892 | 1.0315 | 1.0046 |
+| 300 | 39.875 mm | 1.0145 | 0.9995 | 0.9742 |
+| 300 | 119.875 mm | 1.0309 | 1.0053 | 1.0005 |
+| 300 | Bragg 168.625 mm | 0.9879 | 0.9910 | 1.0221 |
+
+300 MeV/u C 组 Bragg peak/shoulder/valley 中 primary C12 占
+`80.90/78.60/73.87%`，He-4 占 `7.13/7.89/9.88%`，p/d/t 合计约
+`4.50/5.08/6.55%`。250 MeV/u 对应 He-4 为 `4.42/5.20/9.04%`。新的
+p/d/t/He-4 FE 参数只改变这些次要分量的空间分配，解释了 A→B 对总剂量的效应很小。
+当前证据不支持为它启动无差别双 seed 10M A/B，也不支持开发 FE shoulder 或继续
+CT 标定。完整 JSON/CSV 与复现脚本位于：
+
+```text
+/mnt/sda/wuwei/fe_species_water_em10gev_20260919/
+/mnt/sda/wuwei/minibeam_species_fe_ab_20260919/
+benchmark/carbonminibeam/summarize_species_fe_minibeam_ab.py
+```
+
+为避免用出生能量或 step count 代替目标剂量贡献，另增加了默认关闭的轻量诊断
+`enable_minibeam_energy_band_roi_scoring`。它按实际沉积步的步首能量将 p/d/t/He-4
+剂量分为 `<50`、`50--300`、`>300 MeV/u`，并直接按共享固定 ROI 和深度累计。
+250/300 MeV/u C 组重跑均通过 quality、能量账本和 overflow 检查；该诊断与四物种
+component map 在所有入口/40/120/Bragg ROI 的最差闭合误差分别为 `0.052%/0.077%`。
+
+Bragg 处四物种合计的能区剂量比例为：
+
+| energy | ROI | <50 MeV/u | 50--300 MeV/u | >300 MeV/u |
+|---:|:---|---:|---:|---:|
+| 250 | peak | 53.30% | 46.52% | 0.18% |
+| 250 | shoulder | 52.01% | 47.81% | 0.18% |
+| 250 | valley | 47.45% | 52.35% | 0.20% |
+| 300 | peak | 42.72% | 56.72% | 0.56% |
+| 300 | shoulder | 42.58% | 56.81% | 0.61% |
+| 300 | valley | 42.83% | 56.59% | 0.58% |
+
+这说明 `>300 MeV/u` 外推区在 Bragg 目标 ROI 中小于 0.7%，不值得优先补高能节点；
+`<50 MeV/u` 却占约 43--53%，若后续分物种 A/B 显示可辨识偏差，应优先增加低能
+held-out 标定。诊断结果位于：
+
+```text
+/mnt/sda/wuwei/minibeam_species_fe_energybands_20260919/
+benchmark/carbonminibeam/analyze_minibeam_energy_band_roi.py
+```
+
+## 35. Valley 分物种绝对剂量残差归因（2026-09-19）
+
+暂停扩大 FE / CT 标定。primary `0.9958`、Copper、slit 和 CT 设置未改。
+点估计保留；没有 per-history ROI 矩或独立 shard，**不确定度标为 unknown**。
+不再使用 `|D|/√N` 或 “可分辨 1%” 标记。
+
+可比来源类是 TOPAS 带电核 origin 与 GPU 沉积离子 Z 图。`neutral_origin` 和
+`unclassified` 是尚未匹配的 TOPAS 计分，记为缺少对应计分的残差，不能解释为
+GPU 缺失物理剂量。各引擎内部 category-vs-total 闭合单独报告，不作为跨引擎
+映射验收。Bragg ±2 mm 使用未平滑数组；1 mm 平面继续平滑。
+
+当前 C 组 256k vs TOPAS 1.024M，固定 valley ROI：
+
+| 能量 | 深度 | window | GPU/TOPAS | Δ_total | 可比类 ΣΔ | unmatched 缺计分 | primary_c Δ |
+|---:|---|---|---:|---:|---:|---:|---:|
+| 250 | 40 mm | 1 mm 平滑 | 0.9639 | −3.608% | −2.785% | −0.822% | −2.659% |
+| 250 | Bragg | 1 mm 平滑 | 1.0072 | +0.718% | +0.988% | −0.270% | +1.228% |
+| 250 | Bragg ±2 mm | 未平滑 | 1.0098 | +0.977% | +1.257% | −0.280% | +1.273% |
+| 300 | 40 mm | 1 mm 平滑 | 0.9781 | −2.188% | −1.395% | −0.793% | −0.672% |
+| 300 | Bragg | 1 mm 平滑 | 1.0231 | +2.314% | +2.642% | −0.328% | +2.019% |
+| 300 | Bragg ±2 mm | 未平滑 | 1.0237 | +2.370% | +2.721% | −0.352% | +2.374% |
+
+较早 GPU 10M 分量运行只作 auxiliary，不与 C 组合并为同模型多 seed。
+
+```text
+/mnt/sda/wuwei/minibeam_valley_residual_20260919/
+benchmark/carbonminibeam/analyze_minibeam_residual_attribution.py
+```
+
+## 36. Primary-carbon 诊断与同源入口（2026-09-19）
+
+CINEL03 局部沉积补记后重跑 250/300 C 组 256k。quality accepted、overflow=0。
+诊断开关相对无开关 C 组剂量 L1 为 `1.1e-8` / `1.4e-8`。修复后能区 vs
+component 最差不闭合仍为 `0.052%` / `0.077%`；该量级现在是其余路径/FP32，
+不能再用旧 JSON 当修复证据。
+
+新增独立 primary-C12 ROI：局部离子能损、浓缩电子落地/跨 ROI/逃逸、轨迹长度。
+本配置水中未启用显式电子包，`delta_landed=0`，浓缩电子留在 `local_ion`。
+与 TOPAS 显式电子只能按 production-cut 映射比较。
+
+同源入口（同一 GPU 水核，256k 场的 C12 存活者，不按存活数再归一化）：
+
+| 能量 | valley | GPU-entry/TOPAS-entry | C12 穿越比 | 均能 MeV | rms θ mrad |
+|---:|---|---:|---:|---|---|
+| 250 | 40 mm | 0.997（−0.30%） | 1.016 | 1527.9 / 1528.4 | 21.16 / 21.37 |
+| 250 | Bragg | 1.013（+1.34%） | 1.015 | 355.5 / 356.3 | 23.91 / 24.06 |
+| 300 | Bragg | 1.002（+0.21%） | 0.993 | 429.9 / 429.6 | 22.56 / 22.27 |
+
+250 MeV/u 40 mm 全链 Δ_total=−3.61% 在换成 TOPAS 入口后并未消失。该处 C12
+穿越、能谱和角度已经接近，因此下一步不是改 primary MCS，而是 C12 局部能损
+空间分布与浓缩电子计分。300 MeV/u Bragg 全链 +2.3% 同样不是入口相空间主因。
+现有 TOPAS 回放 dose 的 original-history 约定与 GPU 不一致，未当作水核判决。
+不确定度仍为 unknown；尚未做 per-history ROI 矩。
+
+```text
+/mnt/sda/wuwei/minibeam_primary_c12_diag_20260919/
+/mnt/sda/wuwei/minibeam_homologous_entry_20260919/
+```
+
+## 37. 同源 C12 水输运：归一化、能损账本、空间计分（2026-09-19）
+
+物理参数冻结。未启用电子包，未改 primary MCS。failed.md 中经验电子展宽和
+MCS 扫描路线未恢复。
+
+### 归一化
+
+先前 GPU-entry vs TOPAS-entry 现称为**入口替换敏感性**，不是跨引擎同源。
+TOPAS 250 `topas_6363` 打开 empty histories（256000，末尾补 225122 空 history），
+DoseToMedium Sum 却是 30878-history 运行的 8.28 倍，不能用 survivor/incident
+去硬折。可比文件是 `topas_6364`：empty=false，发射 30878，weight=1，
+MultipleUse=1。GPU 同入口 30878 粒子总剂量比为 0.996。300 MeV/u 已有 EM-only
+同源（34557 粒子，empty=false）；空 history 约定与 250/6363 不同。不把 TOPAS
+多线程 EventID 当源行号。
+
+### 跨引擎同源（固定 valley ROI）
+
+| 设置 | 40 mm | Bragg / ±2 mm |
+|---|---|---|
+| 250 全物理，同 30878 C12 | GPU/TOPAS=0.9867（−1.33%） | 0.9922 / 1.0016 |
+| 300 EM-only，同 34557 C12 | 0.9761（−2.39%） | 1.0037 / 1.0061 |
+
+300 EM-only 40 mm valley 的 C12 穿越 4962/4926，均能 1888.6/1895.6 MeV，存活
+0.9057/0.9057，角方差一致。轨迹接近而剂量仍偏 −2.4%。250 全链 −3.61% 明显大于
+同源 C12+后代 −1.33%，入口替换敏感性只有 −0.30%。
+
+### 能损账本与空间审计
+
+`unified_em_loss` 同一次 draw 的 continuous/delta 在应用 0.9958 前后分别记录；
+RNG 和终态不变。250/40 mm valley：delta 占采样能损 6.95%，after_scale/sampled
+=0.99580。`local_total_deposit` 已更名；采样 continuous+delta 与缩放后局部沉积
+按 1/0.9958 闭合。本配置无显式电子包，delta 留在局部沉积。
+
+空间审计不改输运：peak/shoulder/valley 的直线跨界与 FE 终点跨界计数均为 0，
+整步归属没有把能量搬出 valley。逐 voxel 100% 跨步是索引约定问题，不能当成
+ROI 计分误差。能区剩余 0.052%/0.077% 的路径清单见
+`energy_band_gap_inventory.json`。剂量不确定度仍为 unknown。
+
+判断：不改 MCS、不启用电子包。300 EM-only 轨迹已接近，40 mm valley 剂量残差
+更指向能损分区/计分位置。下一步物理 A/B 只能在能损账本或空间归属上选一项。
+
+```text
+/mnt/sda/wuwei/minibeam_homologous_c12_20260919/
+/mnt/sda/wuwei/minibeam_primary_c12_ledger_20260919/
+```

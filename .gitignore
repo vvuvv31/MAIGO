@@ -31,6 +31,10 @@ benchmark/*
 benchmark/carbonminibeam/**/__pycache__/
 benchmark/carbonminibeam/**/*.pyc
 benchmark/carbonminibeam/**/*.orig
+!benchmark/fermi_eyges_species_water/
+!benchmark/fermi_eyges_species_water/**
+benchmark/fermi_eyges_species_water/**/__pycache__/
+benchmark/fermi_eyges_species_water/**/*.pyc
 validation/
 
 # Recoverable local archives; never include discarded data in Git.

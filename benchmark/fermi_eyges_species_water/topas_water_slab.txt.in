@@ -1,0 +1,61 @@
+# Pure-EM homogeneous-water phase-space reference for species-specific FE fits.
+i:Ts/Seed = @@SEED@@
+i:Ts/NumberOfThreads = 16
+i:Ts/ShowHistoryCountAtInterval = 50000
+b:Ts/ShowHistoryCountLessFrequentlyAsSimulationProgresses = "True"
+b:Gr/Enable = "False"
+
+s:Ge/World/Type = "TsBox"
+s:Ge/World/Material = "G4_Galactic"
+d:Ge/World/HLX = 100 mm
+d:Ge/World/HLY = 100 mm
+d:Ge/World/HLZ = 100 mm
+b:Ge/World/Invisible = "True"
+
+s:Ge/Water/Parent = "World"
+s:Ge/Water/Type = "TsBox"
+s:Ge/Water/Material = "G4_WATER"
+d:Ge/Water/HLX = 80 mm
+d:Ge/Water/HLY = 80 mm
+d:Ge/Water/HLZ = @@HALF_THICKNESS_MM@@ mm
+d:Ge/Water/MaxStepSize = 0.05 mm
+
+s:Ge/BeamPosition/Parent = "World"
+s:Ge/BeamPosition/Type = "Group"
+d:Ge/BeamPosition/TransZ = @@SOURCE_Z_MM@@ mm
+
+s:Ge/ExitFilm/Parent = "World"
+s:Ge/ExitFilm/Type = "TsBox"
+s:Ge/ExitFilm/Material = "G4_Galactic"
+d:Ge/ExitFilm/HLX = 90 mm
+d:Ge/ExitFilm/HLY = 90 mm
+d:Ge/ExitFilm/HLZ = 0.005 mm
+d:Ge/ExitFilm/TransZ = @@EXIT_Z_MM@@ mm
+
+s:So/IonBeam/Type = "Beam"
+s:So/IonBeam/Component = "BeamPosition"
+s:So/IonBeam/BeamParticle = "@@PARTICLE@@"
+d:So/IonBeam/BeamEnergy = @@TOTAL_ENERGY_MEV@@ MeV
+u:So/IonBeam/BeamEnergySpread = 0.0
+s:So/IonBeam/BeamPositionDistribution = "None"
+s:So/IonBeam/BeamAngularDistribution = "None"
+i:So/IonBeam/NumberOfHistoriesInRun = 250000
+
+s:Ph/ListName = "Default"
+s:Ph/Default/Type = "Geant4_Modular"
+sv:Ph/Default/Modules = 2 "g4em-standard_opt4" "g4decay"
+d:Ph/Default/EMRangeMax = 10 GeV
+d:Ph/Default/CutForAllParticles = 0.05 mm
+
+s:Sc/SlabExit/Quantity = "PhaseSpace"
+s:Sc/SlabExit/Surface = "ExitFilm/ZPlusSurface"
+s:Sc/SlabExit/OnlyIncludeParticlesGoing = "In"
+sv:Sc/SlabExit/OnlyIncludeParticlesNamed = 1 "@@PARTICLE@@"
+s:Sc/SlabExit/OutputType = "ASCII"
+s:Sc/SlabExit/OutputFile = "output/slab_exit"
+s:Sc/SlabExit/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/SlabExit/OutputBufferSize = 100000
+b:Sc/SlabExit/IncludeRunID = "True"
+b:Sc/SlabExit/IncludeEventID = "True"
+b:Sc/SlabExit/IncludeTrackID = "True"
+b:Sc/SlabExit/IncludeParentID = "True"

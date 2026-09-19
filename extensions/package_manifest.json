@@ -1,0 +1,24 @@
+{
+  "schema": 1,
+  "reference_stack": {
+    "topas": "4.2.p3",
+    "geant4": "11.3.2",
+    "generated_on": "2026-09-19"
+  },
+  "packages": [
+    {"path": "data/em/unified_em_v1.bin", "sha256": "8c5d970b3b639bfca2f448730271bed4fc04721aba73100e2efbe09dffe44855", "kind": "em"},
+    {"path": "data/em/unified_em_delta_moments_v2.bin", "sha256": "c551bc52fa30ff7e3ea229c8b89792e8ecd2b0fb12f18fcad50d1c6f206bc7cc", "kind": "em-derived"},
+    {"path": "data/schneider/schneider_inelastic_rates_v2_1.bin", "sha256": "086ef97dbf323dc2681d5f6c5257e78c87446050f6fb628f3b0f8b24211a8370", "kind": "inelastic-rate-primary"},
+    {"path": "data/schneider/secondary_inelastic_rates_v2_1.bin", "sha256": "6aa679ee162c7a47b82da715ea1333b21b4056b6480596d8d6243a96edb67258", "kind": "inelastic-rate-secondary"},
+    {"path": "data/schneider/cinel03_c12_targets_v2_1.bin", "sha256": "a690fb06ae97946bbc167501380fbcfa465b51e61cbedfaba7d3d373655a7ea2", "kind": "inelastic-final-state-primary"},
+    {"path": "data/schneider/cinel03_secondary_targets_v2_1_14p.bin", "sha256": "a0dc4259b856f0b0e7665672a64589ea4cd64ca304cae75fca16d6de50fc8006", "kind": "inelastic-final-state-secondary"},
+    {"path": "data/schneider/all_ion_elastic_v1.bin", "sha256": "30a861486a8b21718815d1954dd8440e4dbad44f5afa224e67970c57413159e9", "kind": "elastic"},
+    {"path": "data/schneider/elastic_recoil_stopping_v1.bin", "sha256": "96d48062b9a976caabb9774534ae486a079157e18ee37e4cbce261e5b2c3a4b2", "kind": "elastic-recoil-stopping"},
+    {"path": "data/schneider/schneider_ion_section_stopping_v1.bin", "sha256": "ef87ad19bd0b0552d846a6c4e23eb635746e375432a40f40fb79b202235dec20", "kind": "ion-stopping"}
+  ],
+  "external_minibeam_packages": [
+    {"energy_MeVu": 150, "path": "/mnt/sda/wuwei/minibeam_copper_fragment_cascade_per_energy/e150/copper_fragment_cascade_gapfilled.cinpkg", "sha256": "595ed99eb317f52b15a37212581112622a4dfefa35a51f2564a1091aed40939b"},
+    {"energy_MeVu": 250, "path": "/mnt/sda/wuwei/minibeam_copper_fragment_cascade_per_energy/e250/copper_fragment_cascade_gapfilled.cinpkg", "sha256": "a51626bc9382df308c824aa450767f95519b5fa31989f8a6db54430174ddd8de"},
+    {"energy_MeVu": 300, "path": "/mnt/sda/wuwei/minibeam_copper_fragment_cascade_per_energy/e300/copper_fragment_cascade_gapfilled.cinpkg", "sha256": "3a888762fcae76a03f2a44359ddfd46344e906677688ec7cf68ffe95ba372483"}
+  ]
+}

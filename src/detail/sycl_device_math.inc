@@ -403,17 +403,86 @@ CorrelatedScatteringStep copper_fermi_eyges_tail_step(
     return result;
 }
 
-CorrelatedScatteringStep water_c12_fermi_eyges_tail_step(
+struct WaterIonFermiEygesParameters {
+    float core_scattering_energy_MeV;
+    float tail_rate_per_water_mm;
+    float tail_scattering_energy_MeV;
+};
+
+float interpolate_water_fe_parameter(const float energy_per_u,
+                                     const float value_50,
+                                     const float value_150,
+                                     const float value_300) noexcept {
+    if (energy_per_u <= 50.0F) return value_50;
+    if (energy_per_u <= 150.0F) {
+        const auto fraction = (energy_per_u - 50.0F) / 100.0F;
+        return value_50 + fraction * (value_150 - value_50);
+    }
+    if (energy_per_u < 300.0F) {
+        const auto fraction = (energy_per_u - 150.0F) / 150.0F;
+        return value_150 + fraction * (value_300 - value_150);
+    }
+    return value_300;
+}
+
+WaterIonFermiEygesParameters water_ion_fermi_eyges_parameters(
+    const int atomic_number, const int mass_number,
+    const float energy_per_u,
+    const bool use_species_water_parameters = true) noexcept {
+    // Pure-EM G4_WATER slab fits at 50/150/300 MeV/u.  Each energy used
+    // independent 1 and 10 mm, 250k-history TOPAS references.  Keep C12 and
+    // uncalibrated ions on the previously validated C12-water candidate.
+    if (use_species_water_parameters && atomic_number == 1 && mass_number == 1) {
+        return WaterIonFermiEygesParameters{
+            interpolate_water_fe_parameter(
+                energy_per_u, 12.1250440F, 11.8620445F, 11.7235806F),
+            interpolate_water_fe_parameter(
+                energy_per_u, 0.002426742F, 0.002246132F, 0.001998740F),
+            interpolate_water_fe_parameter(
+                energy_per_u, 6.7809249F, 7.8095673F, 8.8033596F)};
+    }
+    if (use_species_water_parameters && atomic_number == 1 && mass_number == 2) {
+        return WaterIonFermiEygesParameters{
+            interpolate_water_fe_parameter(
+                energy_per_u, 10.7251611F, 10.5823527F, 10.4433029F),
+            interpolate_water_fe_parameter(
+                energy_per_u, 0.003069940F, 0.003104010F, 0.003273779F),
+            interpolate_water_fe_parameter(
+                energy_per_u, 3.2194970F, 3.0651926F, 2.7842157F)};
+    }
+    if (use_species_water_parameters && atomic_number == 1 && mass_number == 3) {
+        return WaterIonFermiEygesParameters{
+            interpolate_water_fe_parameter(
+                energy_per_u, 10.6735838F, 10.4564336F, 10.3058709F),
+            interpolate_water_fe_parameter(
+                energy_per_u, 0.003033585F, 0.003151119F, 0.003381651F),
+            interpolate_water_fe_parameter(
+                energy_per_u, 3.2822138F, 2.9271832F, 2.6076538F)};
+    }
+    if (use_species_water_parameters && atomic_number == 2 && mass_number == 4) {
+        return WaterIonFermiEygesParameters{
+            interpolate_water_fe_parameter(
+                energy_per_u, 10.3786895F, 10.3427338F, 10.2402913F),
+            interpolate_water_fe_parameter(
+                energy_per_u, 0.003159817F, 0.003491817F, 0.003435895F),
+            interpolate_water_fe_parameter(
+                energy_per_u, 3.0908322F, 2.6518513F, 2.5755165F)};
+    }
+    return WaterIonFermiEygesParameters{9.9F, 0.0025F, 2.4F};
+}
+
+CorrelatedScatteringStep water_ion_fermi_eyges_tail_step(
     const Direction3F direction, const float kinetic_energy_MeV,
+    const int atomic_number, const int mass_number,
     const float path_length_mm, const float density_g_per_cm3,
     const float radiation_length_g_per_cm2, const std::uint64_t seed,
     const std::uint64_t history_id, const std::uint64_t step_index,
     const std::uint32_t random_dimension,
-    const float observation_fraction = -1.0F) noexcept {
+    const float observation_fraction = -1.0F,
+    const bool use_species_water_parameters = true) noexcept {
     CorrelatedScatteringStep result{direction, Direction3F{0.0F, 0.0F, 0.0F}};
-    constexpr int atomic_number = 6;
-    constexpr int mass_number = 12;
-    if (kinetic_energy_MeV <= 0.0F || path_length_mm <= 0.0F ||
+    if (kinetic_energy_MeV <= 0.0F || atomic_number <= 0 || mass_number <= 0 ||
+        path_length_mm <= 0.0F ||
         density_g_per_cm3 <= 0.0F || radiation_length_g_per_cm2 <= 0.0F) {
         return result;
     }
@@ -432,18 +501,23 @@ CorrelatedScatteringStep water_c12_fermi_eyges_tail_step(
         return result;
     }
 
-    // Initial C12+water candidate constrained only by the 40--60 mm interval
-    // energy groups of the 250 MeV/u same-source replay. The later intervals
-    // remain holdout data. Unlike Highland, this is a local scattering power
-    // without a step-length logarithm. The small Poisson tail is independent
-    // of the core normalization; these constants do not reuse Copper values.
-    constexpr float core_scattering_energy_MeV = 9.9F;
-    constexpr float tail_rate_per_mm = 0.0025F;
-    constexpr float tail_scattering_energy_MeV = 2.4F;
+    // The core uses the current material's radiation length directly.  Tail
+    // rates are fitted per physical millimetre in water, then scaled by the
+    // ratio of water/current inverse radiation lengths for Schneider CT
+    // materials.  This preserves the water calibration without fitting CT
+    // dose and gives the same rate in native G4_WATER.
+    const auto parameters = water_ion_fermi_eyges_parameters(
+        atomic_number, mass_number, energy_per_u,
+        use_species_water_parameters);
+    constexpr float water_reference_radiation_length_mm = 360.8297746F;
+    const auto tail_material_scale =
+        water_reference_radiation_length_mm / radiation_length_mm;
+    const auto tail_rate_per_mm =
+        parameters.tail_rate_per_water_mm * tail_material_scale;
     const auto charge_over_beta_momentum =
         static_cast<float>(atomic_number) / (beta * momentum);
     const auto core_ratio =
-        core_scattering_energy_MeV * charge_over_beta_momentum;
+        parameters.core_scattering_energy_MeV * charge_over_beta_momentum;
     const auto core_power =
         core_ratio * core_ratio / radiation_length_mm;
     const auto core_theta_sigma = sycl::sqrt(core_power * path_length_mm);
@@ -555,7 +629,7 @@ CorrelatedScatteringStep water_c12_fermi_eyges_tail_step(
         ++tail_count;
     }
     const auto tail_sigma =
-        tail_scattering_energy_MeV * charge_over_beta_momentum;
+        parameters.tail_scattering_energy_MeV * charge_over_beta_momentum;
     for (std::uint32_t tail_index = 0; tail_index < tail_count; ++tail_index) {
         const auto dimension = random_dimension + 32U + 3U * tail_index;
         const auto location = rng::uniform01(
@@ -620,4 +694,130 @@ CorrelatedScatteringStep water_c12_fermi_eyges_tail_step(
         result.observation_valid = true;
     }
     return result;
+}
+
+CorrelatedScatteringStep water_c12_fermi_eyges_tail_step(
+    const Direction3F direction, const float kinetic_energy_MeV,
+    const float path_length_mm, const float density_g_per_cm3,
+    const float radiation_length_g_per_cm2, const std::uint64_t seed,
+    const std::uint64_t history_id, const std::uint64_t step_index,
+    const std::uint32_t random_dimension,
+    const float observation_fraction = -1.0F) noexcept {
+    return water_ion_fermi_eyges_tail_step(
+        direction, kinetic_energy_MeV, 6, 12, path_length_mm,
+        density_g_per_cm3, radiation_length_g_per_cm2, seed, history_id,
+        step_index, random_dimension, observation_fraction);
+}
+
+// Runtime scope levels mirror fermi_eyges_species in the YAML parser:
+// 0=C12, 1=+He4, 2=+p/d/t, 3=all supported charged ions.
+bool ion_uses_fermi_eyges(const int scope, const int atomic_number,
+                          const int mass_number) noexcept {
+    if (atomic_number == 6 && mass_number == 12) return true;
+    if (scope >= 1 && atomic_number == 2 && mass_number == 4) return true;
+    if (scope >= 2 && atomic_number == 1 &&
+        mass_number >= 1 && mass_number <= 3) return true;
+    return scope >= 3 && atomic_number > 0 && mass_number > 0;
+}
+
+// Advance one complete ion material step with the local FE process. This is
+// the common broad-beam/minibeam entry point. When an interior observation
+// path is supplied, the helper returns the conditional bridge state while the
+// caller remains responsible only for scorer storage. The returned endpoint
+// displacement is relative to a straight drift along the input direction.
+// p/d/t/He-4 use their independent water tables. C12 and other uncalibrated
+// ions retain the C12-water candidate, with charge/(beta*p) scaling.
+CorrelatedScatteringStep ion_fermi_eyges_transport_step(
+    const Direction3F direction, const float kinetic_energy_before_loss_MeV,
+    const int atomic_number, const int mass_number,
+    const float sampled_energy_loss_MeV, const float path_length_mm,
+    const float max_segment_mm, const float density_g_per_cm3,
+    const float radiation_length_g_per_cm2, const std::uint64_t seed,
+    const std::uint64_t history_id, const std::uint64_t transport_step_index,
+    const std::uint32_t random_dimension,
+    const float observation_path_mm = -1.0F,
+    const bool use_species_water_parameters = true) noexcept {
+    CorrelatedScatteringStep result{
+        direction, Direction3F{0.0F, 0.0F, 0.0F}};
+    if (!(path_length_mm > 0.0F && max_segment_mm > 0.0F)) return result;
+
+    auto segment_direction = direction;
+    auto total_offset = Direction3F{0.0F, 0.0F, 0.0F};
+    auto observation_total_offset = Direction3F{0.0F, 0.0F, 0.0F};
+    auto traversed_mm = 0.0F;
+    std::uint32_t segment_index = 0U;
+    while (traversed_mm < path_length_mm) {
+        const auto segment_mm = sycl::fmin(
+            max_segment_mm, path_length_mm - traversed_mm);
+        const auto energy_fraction =
+            (traversed_mm + 0.5F * segment_mm) / path_length_mm;
+        const auto segment_energy = sycl::fmax(
+            0.0F, kinetic_energy_before_loss_MeV -
+                      energy_fraction * sampled_energy_loss_MeV);
+        const auto observes_this_segment =
+            observation_path_mm >= traversed_mm &&
+            observation_path_mm <= traversed_mm + segment_mm;
+        const auto observation_fraction = observes_this_segment
+            ? sycl::clamp(
+                  (observation_path_mm - traversed_mm) / segment_mm,
+                  1.0e-6F, 1.0F - 1.0e-6F)
+            : -1.0F;
+        const auto segment = water_ion_fermi_eyges_tail_step(
+            segment_direction, segment_energy, atomic_number, mass_number,
+            segment_mm,
+            density_g_per_cm3, radiation_length_g_per_cm2, seed, history_id,
+            transport_step_index * 1024U + segment_index,
+            random_dimension, observation_fraction,
+            use_species_water_parameters);
+        if (segment.observation_valid) {
+            const auto local_path = observation_fraction * segment_mm;
+            observation_total_offset.x =
+                total_offset.x + segment_direction.x * local_path +
+                segment.observation_displacement_mm.x;
+            observation_total_offset.y =
+                total_offset.y + segment_direction.y * local_path +
+                segment.observation_displacement_mm.y;
+            observation_total_offset.z =
+                total_offset.z + segment_direction.z * local_path +
+                segment.observation_displacement_mm.z;
+            result.observation_direction = segment.observation_direction;
+            result.observation_valid = true;
+        }
+        total_offset.x += segment_direction.x * segment_mm +
+                          segment.displacement_mm.x;
+        total_offset.y += segment_direction.y * segment_mm +
+                          segment.displacement_mm.y;
+        total_offset.z += segment_direction.z * segment_mm +
+                          segment.displacement_mm.z;
+        segment_direction = segment.direction;
+        traversed_mm += segment_mm;
+        ++segment_index;
+    }
+    result.direction = segment_direction;
+    result.displacement_mm = Direction3F{
+        total_offset.x - direction.x * path_length_mm,
+        total_offset.y - direction.y * path_length_mm,
+        total_offset.z - direction.z * path_length_mm};
+    if (result.observation_valid) {
+        result.observation_displacement_mm = Direction3F{
+            observation_total_offset.x - direction.x * observation_path_mm,
+            observation_total_offset.y - direction.y * observation_path_mm,
+            observation_total_offset.z - direction.z * observation_path_mm};
+    }
+    return result;
+}
+
+CorrelatedScatteringStep c12_fermi_eyges_transport_step(
+    const Direction3F direction, const float kinetic_energy_before_loss_MeV,
+    const float sampled_energy_loss_MeV, const float path_length_mm,
+    const float max_segment_mm, const float density_g_per_cm3,
+    const float radiation_length_g_per_cm2, const std::uint64_t seed,
+    const std::uint64_t history_id, const std::uint64_t transport_step_index,
+    const std::uint32_t random_dimension,
+    const float observation_path_mm = -1.0F) noexcept {
+    return ion_fermi_eyges_transport_step(
+        direction, kinetic_energy_before_loss_MeV, 6, 12,
+        sampled_energy_loss_MeV, path_length_mm, max_segment_mm,
+        density_g_per_cm3, radiation_length_g_per_cm2, seed, history_id,
+        transport_step_index, random_dimension, observation_path_mm);
 }

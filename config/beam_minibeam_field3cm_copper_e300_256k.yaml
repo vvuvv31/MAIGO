@@ -97,6 +97,9 @@ ct_schneider_physics_bundle_file: data/schneider/schneider_physics_bundle_v2_1.j
 secondary_out_of_scope_nuclear_policy: em_only
 enable_energy_straggling: true
 enable_multiple_scattering: true
+multiple_scattering_model: fermi_eyges
+fermi_eyges_species: all_charged
+fermi_eyges_max_segment_mm: 0.1
 enable_inelastic: true
 cinel02_max_secondary_inelastic_generations: 2
 primary_stopping_power_file: data/stopping_power_water_geant4_11_3_2.csv

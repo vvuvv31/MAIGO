@@ -1,0 +1,37 @@
+includeFile = /mnt/sdb/wuwei/MAIGO/data/HUtoMaterialSchneider.txt
+
+s:Ge/World/Material = "Vacuum"
+d:Ge/World/HLX = 1.0 m
+d:Ge/World/HLY = 1.0 m
+d:Ge/World/HLZ = 1.0 m
+b:Ge/World/Invisible = "TRUE"
+
+s:Ge/Patient/Parent = "World"
+s:Ge/Patient/Material = "G4_WATER"
+s:Ge/Patient/Type = "TsDicomPatient"
+s:Ge/Patient/DicomDirectory = "/mnt/sda/wuwei/maigo-ct-schneider/step-03/DICOM_Box/DICOM_Box"
+b:Ge/Patient/PreLoadAllMaterials = "True"
+
+sv:Ph/Default/Modules = 7 "g4em-standard_opt4" "g4h-phy_QGSP_BIC_HP" "g4decay" "g4ion-inclxx" "g4h-elastic_HP" "g4stopping" "CarbonIonElasticPhysics"
+
+s:So/Demo/Type = "Beam"
+s:So/Demo/Component = "BeamPosition"
+s:So/Demo/BeamParticle = "GenericIon(6,12)"
+d:So/Demo/BeamEnergy = 200.0 MeV
+u:So/Demo/BeamEnergySpread = 0.0
+s:So/Demo/BeamPositionDistribution = "None"
+s:So/Demo/BeamAngularDistribution = "None"
+i:So/Demo/NumberOfHistoriesInRun = 1
+
+
+i:Ts/NumberOfThreads = 1
+i:Ts/Seed = 918721
+
+s:Sc/Elastic/Quantity = "AllIonElasticDump"
+s:Sc/Elastic/Component = "Patient"
+s:Sc/Elastic/OutputFile = "/mnt/sda/wuwei/all_ion_elastic_20260911/raw/recoil_stopping"
+i:Sc/Elastic/ProjectileZ = 1
+i:Sc/Elastic/ProjectileA = 1
+i:Sc/Elastic/SamplesPerNode = 512
+
+b:Sc/Elastic/RecoilStoppingOnly = "True"

@@ -1,0 +1,45 @@
+{
+  "schema": 1,
+  "status": "authoritative",
+  "date": "2026-09-19",
+  "purpose": "p/d/t/He-4 water Fermi-Eyges calibration and secondary Unified-EM closure",
+  "topas": {
+    "result_root": "/mnt/sda/wuwei/fe_species_water_em10gev_20260919",
+    "slurm_job": 7026,
+    "cases": 24,
+    "histories_per_case": 250000,
+    "physics": ["g4em-standard_opt4", "g4decay"],
+    "material": "G4_WATER",
+    "production_cut_mm": 0.05,
+    "maximum_step_mm": 0.05,
+    "em_table_max": "10 GeV",
+    "manifest_sha256": "e036a4c7c0cb497421402f881d2f6b411e533671ec5aae16f08d488cfecfa865"
+  },
+  "gpu": {
+    "dose_precision": "FP32",
+    "secondary_em": "Unified EM with native straggling",
+    "water_exit_scoring": "exact step-start endpoint",
+    "result_manifest_sha256": "0286b54b742f8bf89ea20ec18385707d22ad9786b5d1b28aa39c3355b138f2cb"
+  },
+  "source_hashes": {
+    "topas_water_slab_template_sha256": "c76ea33639ac6208f7ca8e8ff8dc5b942cbfe0c90c7993bd030c07469638e840",
+    "fit_script_sha256": "dbfd393aa8195b8c632871cbe95972c1da665b31b2fd454ef782a44469296c5a"
+  },
+  "result_hashes": {
+    "fit_json_sha256": "99a60ff3ba62345cb40d418ccfd7c3928cc53293d90da11e98e53eb5e553ebb2",
+    "audit_json_sha256": "595b8a6b00de01afeb2b3371c96704f4d5d2c5f8e4f66c54850fb366075f358e",
+    "audit_csv_sha256": "b1ec402dd058b89fd74e38f95a4412a33ea54a1c2b4746b9a2305990411234a1"
+  },
+  "fit_nodes_MeV_per_u": [50, 150, 300],
+  "parameters": {
+    "p": {"core_MeV": [12.1250440, 11.8620445, 11.7235806], "tail_rate_per_water_mm": [0.002426742, 0.002246132, 0.001998740], "tail_MeV": [6.7809249, 7.8095673, 8.8033596]},
+    "d": {"core_MeV": [10.7251611, 10.5823527, 10.4433029], "tail_rate_per_water_mm": [0.003069940, 0.003104010, 0.003273779], "tail_MeV": [3.2194970, 3.0651926, 2.7842157]},
+    "t": {"core_MeV": [10.6735838, 10.4564336, 10.3058709], "tail_rate_per_water_mm": [0.003033585, 0.003151119, 0.003381651], "tail_MeV": [3.2822138, 2.9271832, 2.6076538]},
+    "he4": {"core_MeV": [10.3786895, 10.3427338, 10.2402913], "tail_rate_per_water_mm": [0.003159817, 0.003491817, 0.003435895], "tail_MeV": [3.0908322, 2.6518513, 2.5755165]}
+  },
+  "known_limitations": [
+    "The 1 mm proton core/shoulder shape is not fully represented by one Gaussian core plus one Gaussian Poisson-tail family.",
+    "He-3 and heavier fragments still fall back to the C12 candidate parameters.",
+    "CT tail scaling is an unvalidated radiation-length extrapolation and was frozen for this task."
+  ]
+}

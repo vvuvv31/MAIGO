@@ -47,6 +47,27 @@ inline constexpr std::size_t minibeam_component_species_count = 8;
 inline constexpr std::size_t minibeam_component_category_count =
     1 + 2 * minibeam_component_species_count;
 inline constexpr std::size_t minibeam_primary_c12_component_category = 0;
+inline constexpr std::size_t minibeam_energy_band_species_count = 4;
+inline constexpr std::size_t minibeam_energy_band_count = 3;
+inline constexpr std::size_t minibeam_fixed_region_count = 3;
+inline constexpr std::size_t minibeam_c12_roi_kind_count = 6;
+inline constexpr std::size_t minibeam_c12_roi_local_total_deposit = 0;
+inline constexpr std::size_t minibeam_c12_roi_continuous_sampled = 1;
+inline constexpr std::size_t minibeam_c12_roi_delta_sampled = 2;
+inline constexpr std::size_t minibeam_c12_roi_continuous_after_scale = 3;
+inline constexpr std::size_t minibeam_c12_roi_delta_after_scale = 4;
+inline constexpr std::size_t minibeam_c12_roi_fluence = 5;
+inline constexpr std::size_t minibeam_spatial_audit_slot_count = 8;
+
+// Diagnostic order: p, d, t, He-4. The sentinel count means unsupported.
+constexpr std::size_t minibeam_energy_band_species_category(
+    const int z, const int a) noexcept {
+    if (z == 1 && a == 1) return 0;
+    if (z == 1 && a == 2) return 1;
+    if (z == 1 && a == 3) return 2;
+    if (z == 2 && a == 4) return 3;
+    return minibeam_energy_band_species_count;
+}
 
 // Secondary component order: C12, p, d, t, He3, He4, heavier (Z>=3),
 // and all remaining charged ions. Category zero is reserved for primary C12;

@@ -1086,14 +1086,47 @@ void TransportConfig::validate() const {
             }
         }
     }
-    if (multiple_scattering_model != "highland") {
-        throw std::invalid_argument("multiple_scattering_model must be highland");
+    if (multiple_scattering_model != "highland" &&
+        multiple_scattering_model != "fermi_eyges") {
+        throw std::invalid_argument(
+            "multiple_scattering_model must be highland or fermi_eyges");
+    }
+    if (fermi_eyges_species != "c12" &&
+        fermi_eyges_species != "c12_he4" &&
+        fermi_eyges_species != "c12_he4_pdt" &&
+        fermi_eyges_species != "all_charged") {
+        throw std::invalid_argument(
+            "fermi_eyges_species must be c12, c12_he4, "
+            "c12_he4_pdt, or all_charged");
+    }
+    if (fermi_eyges_parameter_set != "shared_c12" &&
+        fermi_eyges_parameter_set != "species_water") {
+        throw std::invalid_argument(
+            "fermi_eyges_parameter_set must be shared_c12 or species_water");
+    }
+    if (!std::isfinite(fermi_eyges_max_segment_mm) ||
+        fermi_eyges_max_segment_mm <= 0.0) {
+        throw std::invalid_argument(
+            "fermi_eyges_max_segment_mm must be finite and positive");
+    }
+    if (multiple_scattering_model == "fermi_eyges" &&
+        (primary_atomic_number != 6 || primary_mass_number != 12)) {
+        throw std::invalid_argument(
+            "multiple_scattering_model=fermi_eyges currently supports only "
+            "a C12 primary; secondary ion routing is controlled separately "
+            "by fermi_eyges_species");
     }
 
     if (!std::isfinite(multiple_scattering_scale) ||
         multiple_scattering_scale < 0.0 || multiple_scattering_scale > 3.0) {
         throw std::invalid_argument(
             "multiple_scattering_scale must be in [0, 3]");
+    }
+    if (multiple_scattering_model == "fermi_eyges" &&
+        multiple_scattering_scale != 1.0) {
+        throw std::invalid_argument(
+            "multiple_scattering_scale applies only to Highland; use 1.0 "
+            "with multiple_scattering_model=fermi_eyges");
     }
 
     if (!std::isfinite(spots_emittance_sigma_scale) ||
@@ -1148,6 +1181,20 @@ void TransportConfig::validate() const {
     if (enable_charged_origin_voxel_scoring && !enable_voxel_scoring) {
         throw std::invalid_argument(
             "enable_charged_origin_voxel_scoring requires enable_voxel_scoring=true");
+    }
+    if (enable_minibeam_energy_band_roi_scoring &&
+        (!enable_minibeam || !enable_voxel_scoring ||
+         !enable_charged_origin_voxel_scoring ||
+         charged_origin_voxel_mhd_output_prefix.empty())) {
+        throw std::invalid_argument(
+            "enable_minibeam_energy_band_roi_scoring requires minibeam, "
+            "voxel/component scoring and charged_origin_voxel_mhd_output_prefix");
+    }
+    if (enable_minibeam_primary_c12_roi_scoring &&
+        (!enable_minibeam || !enable_voxel_scoring)) {
+        throw std::invalid_argument(
+            "enable_minibeam_primary_c12_roi_scoring requires minibeam and "
+            "enable_voxel_scoring");
     }
     if (!charged_origin_voxel_mhd_output_prefix.empty() &&
         !enable_charged_origin_voxel_scoring) {
@@ -2466,6 +2513,12 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.enable_charged_origin_voxel_scoring = parse_bool(
         values, "enable_charged_origin_voxel_scoring",
         config.enable_charged_origin_voxel_scoring);
+    config.enable_minibeam_energy_band_roi_scoring = parse_bool(
+        values, "enable_minibeam_energy_band_roi_scoring",
+        config.enable_minibeam_energy_band_roi_scoring);
+    config.enable_minibeam_primary_c12_roi_scoring = parse_bool(
+        values, "enable_minibeam_primary_c12_roi_scoring",
+        config.enable_minibeam_primary_c12_roi_scoring);
     config.voxel_scorer_clamps_transport = parse_bool(
         values, "voxel_scorer_clamps_transport",
         config.voxel_scorer_clamps_transport);
@@ -2679,7 +2732,35 @@ TransportConfig load_config(const std::filesystem::path& path) {
                        config.multiple_scattering_model.begin(), [](unsigned char c) {
                            return static_cast<char>(std::tolower(c));
                        });
+        if (config.multiple_scattering_model == "fe") {
+            config.multiple_scattering_model = "fermi_eyges";
+        }
     }
+    if (const auto it = values.find("fermi_eyges_species");
+        it != values.end()) {
+        config.fermi_eyges_species = it->second;
+        std::transform(config.fermi_eyges_species.begin(),
+                       config.fermi_eyges_species.end(),
+                       config.fermi_eyges_species.begin(), [](unsigned char c) {
+                           return static_cast<char>(std::tolower(c));
+                       });
+        if (config.fermi_eyges_species == "all") {
+            config.fermi_eyges_species = "all_charged";
+        }
+    }
+    if (const auto it = values.find("fermi_eyges_parameter_set");
+        it != values.end()) {
+        config.fermi_eyges_parameter_set = it->second;
+        std::transform(config.fermi_eyges_parameter_set.begin(),
+                       config.fermi_eyges_parameter_set.end(),
+                       config.fermi_eyges_parameter_set.begin(),
+                       [](unsigned char c) {
+                           return static_cast<char>(std::tolower(c));
+                       });
+    }
+    config.fermi_eyges_max_segment_mm = parse_number(
+        values, "fermi_eyges_max_segment_mm",
+        config.fermi_eyges_max_segment_mm);
     config.multiple_scattering_scale = parse_number(
         values, "multiple_scattering_scale", config.multiple_scattering_scale);
     config.enable_ct_material_mcs =
@@ -3547,6 +3628,22 @@ TransportConfig load_config(const std::filesystem::path& path) {
             throw std::invalid_argument("All-ion elastic requires Schneider CT/unified-water nuclear transport, secondary transport and LET off");
         if(config.enable_ct_grid && (!config.ct_secondary_exact_faces||config.ct_schneider_stopping_power_file.empty()))
             throw std::invalid_argument("All-ion elastic requires Schneider stopping and secondary exact faces");
+    }
+    // The common selector is authoritative when it is explicitly present.
+    // This makes Highland/FE a true one-key choice for minibeam configs while
+    // preserving the legacy minibeam-only keys in older files that do not yet
+    // declare multiple_scattering_model.
+    if (values.contains("multiple_scattering_model") &&
+        config.multiple_scattering_model == "highland") {
+        config.minibeam_water_primary_mcs_model = "legacy_highland";
+        config.minibeam_water_secondary_c12_mcs_model = "legacy_highland";
+        if (values.contains("minibeam_water_primary_mcs_model")) {
+            values["minibeam_water_primary_mcs_model"] = "legacy_highland";
+        }
+        if (values.contains("minibeam_water_secondary_c12_mcs_model")) {
+            values["minibeam_water_secondary_c12_mcs_model"] =
+                "legacy_highland";
+        }
     }
     reject_unknown_config_keys(values, path);
     config.canonical_config_text = canonicalize_config(

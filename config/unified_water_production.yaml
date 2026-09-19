@@ -25,6 +25,9 @@ voxel_size_z_mm: 0.5
 depth_bin_width_mm: 0.5
 scorer_area_mm2: 16384
 enable_multiple_scattering: true
+multiple_scattering_model: highland
+fermi_eyges_species: c12
+fermi_eyges_max_segment_mm: 0.1
 enable_inelastic: true
 nuclear_model: geant4
 enable_secondary_transport: true

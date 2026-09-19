@@ -335,6 +335,14 @@ struct TransportConfig {
     double dose_output_scale{1.0};
     bool enable_voxel_scoring{false};
     bool enable_charged_origin_voxel_scoring{false};
+    // Lightweight minibeam diagnostic. Scores p/d/t/He-4 deposited energy by
+    // step-start MeV/u, canonical fixed peak/shoulder/valley ROI and depth.
+    // It is independent of the production dose and defaults off.
+    bool enable_minibeam_energy_band_roi_scoring{false};
+    // Independent primary-C12 ROI diagnostic: local ion deposit, condensed
+    // electron landing/cross-ROI/escape, and track-length fluence. Off by
+    // default and must not change production dose.
+    bool enable_minibeam_primary_c12_roi_scoring{false};
     // Historical mode stops every physics step at lateral scorer faces.
     // Disable to keep scoring resolution from changing MCS/transport; energy
     // is then assigned to the voxel containing the step start.
@@ -414,7 +422,19 @@ struct TransportConfig {
         "data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv"};
     bool enable_secondary_transport{true};
     bool enable_multiple_scattering{false};
+    // Multiple-scattering transport used by both broad-beam and minibeam
+    // paths. `highland` preserves the historical end-of-step angular kick;
+    // `fermi_eyges` (YAML alias `fe`) adds correlated lateral displacement
+    // and a path-length Poisson tail for the selected ion groups.
     std::string multiple_scattering_model{"highland"};
+    // Staged selector: c12, c12_he4, c12_he4_pdt, or all_charged.
+    // Non-C12 parameters currently reuse the generic charge/momentum scaling
+    // and remain explicitly provisional until species-isolated validation.
+    std::string fermi_eyges_species{"c12"};
+    // species_water selects independent p/d/t/He-4 water fits; shared_c12 is
+    // the pre-calibration all-ion candidate used for controlled A/B checks.
+    std::string fermi_eyges_parameter_set{"species_water"};
+    double fermi_eyges_max_segment_mm{0.1};
     // Multiplies Highland projected RMS angle for charged MCS (primary +
     // secondary). 1.0 is the historical default. Values >1 increase lateral
     // fill; keep ≤~1.5 without new validation. Not a per-patient fit.

@@ -69,6 +69,20 @@ Highland MCS 使用局部面密度和 X0。当前 CT primary 与 secondary 共�
 选择 25-section LUT；三病例 `enable_ct_material_mcs=true`。
 四分类和 water X0 不是当前 CT 模型。Highland 仍是近似，不是 Geant4 msc 算法复刻。
 
+GPU broad-beam C12 也可通过 YAML 选择通用相关散射路径：
+
+```yaml
+multiple_scattering_model: fermi_eyges  # 或 highland
+fermi_eyges_species: c12  # c12 / c12_he4 / c12_he4_pdt / all_charged
+fermi_eyges_max_segment_mm: 0.1
+```
+
+该选择覆盖 primary C12，并按 `fermi_eyges_species` 分阶段覆盖队列中的
+secondary C12、He-4、p/d/t 或全部带电离子；未选中的离子仍使用 Highland。
+默认值为 `highland`。当前 FE core 会使用局部材料 X0，但宽尾参数仍来自 C12+water
+约束，因此 CT/异质材料属于已接入、继续修正中的范围，详见
+[broad_beam_fermi_eyges.md](broad_beam_fermi_eyges.md)。
+
 能损涨落由 [straggling.hpp](../include/carbon/straggling.hpp)、
 [energy_loss_fluctuation.cpp](../src/energy_loss_fluctuation.cpp) 及运行开关共同确定；
 不要把全部可选 sampler 统称为 Vavilov 或 G4IonFluctuations。

@@ -722,6 +722,64 @@ inline void schneider_float_add_device(float* floats, SchneiderFloatSlot slot, f
     ref.fetch_add(value);
 }
 
+inline void score_minibeam_energy_band_roi_device(
+    DoseAtomicT* scores, const int z, const int a,
+    const float kinetic_energy_MeV, const int voxel,
+    const std::size_t number_of_depth_bins, const std::size_t voxel_bins_x,
+    const std::size_t voxel_bins_y, const std::uint8_t* region_by_x_bin,
+    const float deposited_energy_MeV) {
+    if (scores == nullptr || voxel < 0 || a <= 0 ||
+        !(deposited_energy_MeV > 0.0F)) return;
+    const auto species = minibeam_energy_band_species_category(z, a);
+    if (species >= minibeam_energy_band_species_count) return;
+    const auto plane = voxel_bins_x * voxel_bins_y;
+    const auto depth = static_cast<std::size_t>(voxel) / plane;
+    if (depth >= number_of_depth_bins) return;
+    const auto x_bin = static_cast<std::size_t>(voxel) % voxel_bins_x;
+    if (region_by_x_bin == nullptr) return;
+    const auto region = static_cast<std::size_t>(region_by_x_bin[x_bin]);
+    if (region >= minibeam_fixed_region_count) return;
+    const auto energy_per_u = kinetic_energy_MeV / static_cast<float>(a);
+    const std::size_t energy_band = energy_per_u < 50.0F ? 0U :
+        (energy_per_u <= 300.0F ? 1U : 2U);
+    const auto index =
+        (((species * minibeam_energy_band_count + energy_band) *
+           minibeam_fixed_region_count + region) * number_of_depth_bins) + depth;
+    sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
+                     sycl::memory_scope::device,
+                     sycl::access::address_space::global_space>
+        atomic(scores[index]);
+    atomic.fetch_add(static_cast<DoseAtomicT>(deposited_energy_MeV));
+}
+
+inline void score_minibeam_c12_roi_device(
+    DoseAtomicT* scores, const std::size_t kind,
+    const float kinetic_energy_MeV, const int voxel,
+    const std::size_t number_of_depth_bins, const std::size_t voxel_bins_x,
+    const std::size_t voxel_bins_y, const std::uint8_t* region_by_x_bin,
+    const float value) {
+    if (scores == nullptr || voxel < 0 || kind >= minibeam_c12_roi_kind_count ||
+        !(value > 0.0F)) return;
+    const auto plane = voxel_bins_x * voxel_bins_y;
+    const auto depth = static_cast<std::size_t>(voxel) / plane;
+    if (depth >= number_of_depth_bins) return;
+    const auto x_bin = static_cast<std::size_t>(voxel) % voxel_bins_x;
+    if (region_by_x_bin == nullptr) return;
+    const auto region = static_cast<std::size_t>(region_by_x_bin[x_bin]);
+    if (region >= minibeam_fixed_region_count) return;
+    const auto energy_per_u = kinetic_energy_MeV / 12.0F;
+    const std::size_t energy_band = energy_per_u < 50.0F ? 0U :
+        (energy_per_u <= 300.0F ? 1U : 2U);
+    const auto index =
+        (((kind * minibeam_energy_band_count + energy_band) *
+           minibeam_fixed_region_count + region) * number_of_depth_bins) + depth;
+    sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
+                     sycl::memory_scope::device,
+                     sycl::access::address_space::global_space>
+        atomic(scores[index]);
+    atomic.fetch_add(static_cast<DoseAtomicT>(value));
+}
+
 inline void schneider_energy_add_device(std::uint64_t* diag, SchneiderDiagSlot slot,
                                           float value_MeV) {
     if (diag == nullptr || !(value_MeV > 0.0F)) {
@@ -2920,6 +2978,10 @@ template<int EmMode>
         config.enable_charged_origin_voxel_scoring;
     const auto enable_minibeam_component_voxel_scoring =
         config.enable_minibeam && enable_charged_origin_voxel_scoring;
+    const auto enable_minibeam_energy_band_roi_scoring =
+        config.enable_minibeam_energy_band_roi_scoring;
+    const auto enable_minibeam_primary_c12_roi_scoring =
+        config.enable_minibeam_primary_c12_roi_scoring;
     auto* he4_hazard_audit_device = config.fragment_birth_spectrum_output_file.empty()
         ? nullptr : mem_tracker.allocate<double>(6);
     if (!config.fragment_birth_spectrum_output_file.empty()) {
@@ -2935,6 +2997,49 @@ template<int EmMode>
             ? mem_tracker.allocate<DoseAtomicT>(
                   minibeam_component_category_count * number_of_voxels)
             : nullptr;
+    const auto minibeam_energy_band_roi_value_count =
+        minibeam_energy_band_species_count * minibeam_energy_band_count *
+        minibeam_fixed_region_count * number_of_bins;
+    auto* minibeam_energy_band_roi_dose_device =
+        enable_minibeam_energy_band_roi_scoring
+            ? mem_tracker.allocate<DoseAtomicT>(
+                  minibeam_energy_band_roi_value_count)
+            : nullptr;
+    const auto minibeam_c12_roi_value_count =
+        minibeam_c12_roi_kind_count * minibeam_energy_band_count *
+        minibeam_fixed_region_count * number_of_bins;
+    auto* minibeam_c12_roi_dose_device =
+        enable_minibeam_primary_c12_roi_scoring
+            ? mem_tracker.allocate<DoseAtomicT>(minibeam_c12_roi_value_count)
+            : nullptr;
+    auto* minibeam_spatial_audit_device =
+        enable_minibeam_primary_c12_roi_scoring
+            ? mem_tracker.allocate<std::uint64_t>(minibeam_spatial_audit_slot_count)
+            : nullptr;
+    auto* minibeam_fixed_region_by_x_bin_device =
+        (enable_minibeam_energy_band_roi_scoring ||
+         enable_minibeam_primary_c12_roi_scoring)
+            ? mem_tracker.allocate<std::uint8_t>(voxel_bins_x)
+            : nullptr;
+    if ((enable_minibeam_energy_band_roi_scoring ||
+         enable_minibeam_primary_c12_roi_scoring) &&
+        minibeam_fixed_region_by_x_bin_device != nullptr) {
+        std::vector<std::uint8_t> regions(voxel_bins_x, 255U);
+        for (std::size_t ix = 0; ix < voxel_bins_x; ++ix) {
+            const auto x =
+                -0.5 * static_cast<double>(voxel_bins_x - 1U) *
+                    config.voxel_size_x_mm +
+                static_cast<double>(ix) * config.voxel_size_x_mm;
+            if (std::abs(x) > 18.0) continue;
+            auto folded = std::fmod(x + 1.8, 3.6);
+            if (folded < 0.0) folded += 3.6;
+            const auto absolute = std::abs(folded - 1.8);
+            regions[ix] = absolute < 0.25 ? 0U :
+                (absolute < 0.9 ? 1U : 2U);
+        }
+        queue.copy(regions.data(), minibeam_fixed_region_by_x_bin_device,
+                   voxel_bins_x).wait_and_throw();
+    }
     auto* be_isotope_origin_voxel_dose_device =
         enable_charged_origin_voxel_scoring
             ? mem_tracker.allocate<DoseAtomicT>(be_isotope_origin_category_count * number_of_voxels)
@@ -3402,6 +3507,13 @@ template<int EmMode>
           he_isotope_origin_voxel_dose_device == nullptr)) ||
         (enable_minibeam_component_voxel_scoring &&
          minibeam_component_voxel_dose_device == nullptr) ||
+        (enable_minibeam_energy_band_roi_scoring &&
+         (minibeam_energy_band_roi_dose_device == nullptr ||
+          minibeam_fixed_region_by_x_bin_device == nullptr)) ||
+        (enable_minibeam_primary_c12_roi_scoring &&
+         (minibeam_c12_roi_dose_device == nullptr ||
+          minibeam_fixed_region_by_x_bin_device == nullptr ||
+          minibeam_spatial_audit_device == nullptr)) ||
         (enable_let_scoring && let_moments_device == nullptr)) {
         throw std::bad_alloc();
     }
@@ -3464,6 +3576,18 @@ template<int EmMode>
         queue.memset(minibeam_component_voxel_dose_device, 0,
                      minibeam_component_category_count * number_of_voxels *
                          sizeof(DoseAtomicT));
+    }
+    if (enable_minibeam_energy_band_roi_scoring) {
+        queue.memset(minibeam_energy_band_roi_dose_device, 0,
+                     minibeam_energy_band_roi_value_count *
+                         sizeof(DoseAtomicT));
+    }
+    if (enable_minibeam_primary_c12_roi_scoring) {
+        queue.memset(minibeam_c12_roi_dose_device, 0,
+                     minibeam_c12_roi_value_count *
+                         sizeof(DoseAtomicT));
+        queue.memset(minibeam_spatial_audit_device, 0,
+                     minibeam_spatial_audit_slot_count * sizeof(std::uint64_t));
     }
     if (enable_let_scoring) {
         queue.memset(let_moments_device, 0, 4 * number_of_bins * sizeof(LetAtomicT));
@@ -3560,6 +3684,23 @@ template<int EmMode>
         ? schneider_ct_device_ctx.water_radiation_length_g_cm2 : water_radiation_length_g_per_cm2;
     const auto enable_multiple_scattering = config.enable_multiple_scattering;
     const auto enable_ct_material_mcs = config.enable_ct_material_mcs;
+    const auto c12_fermi_eyges =
+        config.multiple_scattering_model == "fermi_eyges";
+    const auto fermi_eyges_species_scope =
+        config.fermi_eyges_species == "all_charged" ? 3 :
+        (config.fermi_eyges_species == "c12_he4_pdt" ? 2 :
+         (config.fermi_eyges_species == "c12_he4" ? 1 : 0));
+    const auto fermi_eyges_use_species_water_parameters =
+        config.fermi_eyges_parameter_set == "species_water";
+    const auto c12_fermi_eyges_max_segment_mm =
+        static_cast<float>(config.fermi_eyges_max_segment_mm);
+    if (c12_fermi_eyges) {
+        std::cout << "[ion-mcs] model=fermi_eyges species="
+                  << config.fermi_eyges_species
+                  << " parameters=" << config.fermi_eyges_parameter_set
+                  << " unselected_species=highland max_segment_mm="
+                  << c12_fermi_eyges_max_segment_mm << '\n';
+    }
     const auto enable_tps_source = config.uses_fixed_patient_coordinates();
     const auto random_seed = config.random_seed;
     const auto enable_flat_source = config.enable_flat_source;
@@ -5770,6 +5911,8 @@ template<int EmMode>
                         }
                     }
 
+                    float em_continuous_sampled_MeV = 0.0F;
+                    float em_delta_sampled_MeV = 0.0F;
                     if(unified_em){
                         auto draw=unified_em_loss(unified_primary_state,unified_primary_clock,energy_MeV,step_mm,unified_primary_rate,unified_primary_distance,enable_energy_straggling,unified_primary_pre,unified_uniform);
                         if(!draw.valid){
@@ -5777,7 +5920,10 @@ template<int EmMode>
                             unified_count(0);break;}
                         deposited_MeV=draw.loss;unified_count(1);unified_count(3,draw.proposed);unified_count(4,draw.accepted);
                         unified_count(5,static_cast<std::uint64_t>(draw.continuous*1e6f));unified_count(6,static_cast<std::uint64_t>(draw.delta*1e6f));
+                        em_continuous_sampled_MeV = draw.continuous;
+                        em_delta_sampled_MeV = draw.delta;
                     }
+                    const float em_loss_before_scale_MeV = deposited_MeV;
 #if defined(CARBON_ENABLE_MINIBEAM)
                     if (enable_minibeam) {
                         deposited_MeV = sycl::fmin(
@@ -5785,6 +5931,13 @@ template<int EmMode>
                             deposited_MeV * minibeam_water_primary_stopping_power_scale);
                     }
 #endif
+                    const float em_scale_factor =
+                        em_loss_before_scale_MeV > 0.0F
+                            ? deposited_MeV / em_loss_before_scale_MeV : 0.0F;
+                    const float em_continuous_after_scale_MeV =
+                        em_continuous_sampled_MeV * em_scale_factor;
+                    const float em_delta_after_scale_MeV =
+                        em_delta_sampled_MeV * em_scale_factor;
                     auto local_voxel_deposit_MeV = deposited_MeV;
                     auto same_voxel_electron_packet_MeV = 0.0F;
                     auto delta_tail_escaped_scorer_MeV = 0.0F;
@@ -6480,6 +6633,27 @@ template<int EmMode>
                     if ((kProductionPrimaryPath || enable_voxel_scoring) && voxel_index >= 0) {
                         pending_primary_voxel_MeV += local_voxel_deposit_MeV;
                         pending_primary_voxel_MeV += same_voxel_electron_packet_MeV;
+                        if (enable_minibeam_primary_c12_roi_scoring) {
+                            const auto score_c12 = [&](std::size_t kind, float value) {
+                                score_minibeam_c12_roi_device(
+                                    minibeam_c12_roi_dose_device, kind, energy_MeV,
+                                    voxel_index, number_of_bins, voxel_bins_x,
+                                    voxel_bins_y, minibeam_fixed_region_by_x_bin_device,
+                                    value);
+                            };
+                            score_c12(minibeam_c12_roi_local_total_deposit,
+                                      local_voxel_deposit_MeV +
+                                          same_voxel_electron_packet_MeV);
+                            score_c12(minibeam_c12_roi_continuous_sampled,
+                                      em_continuous_sampled_MeV);
+                            score_c12(minibeam_c12_roi_delta_sampled,
+                                      em_delta_sampled_MeV);
+                            score_c12(minibeam_c12_roi_continuous_after_scale,
+                                      em_continuous_after_scale_MeV);
+                            score_c12(minibeam_c12_roi_delta_after_scale,
+                                      em_delta_after_scale_MeV);
+                            score_c12(minibeam_c12_roi_fluence, step_mm);
+                        }
                         if (in_fov_dose_device != nullptr && pending_primary_bin >= 0 &&
                             pending_primary_bin < static_cast<int>(number_of_bins)) {
                             sycl::atomic_ref<DepthAtomicT, sycl::memory_order::relaxed,
@@ -6544,8 +6718,120 @@ template<int EmMode>
                             radiation_length_g_per_cm2 =
                                 slab_radiation_lengths_device[layer_for_material];
                         }
+                        if (c12_fermi_eyges &&
+                            primary_atomic_number == 6 &&
+                            primary_mass_number == 12) {
+                            auto observation_path_mm = -1.0F;
 #if defined(CARBON_ENABLE_MINIBEAM)
-                        if (enable_minibeam &&
+                            auto observation_plane =
+                                minibeam_water_primary_plane_count;
+                            if (minibeam_water_primary_plane_records_device !=
+                                    nullptr &&
+                                seg_dir_z > 0.0F) {
+                                const auto straight_end_z =
+                                    position_z_mm + seg_dir_z * step_mm;
+                                for (std::size_t plane = 0;
+                                     plane < minibeam_water_primary_plane_count;
+                                     ++plane) {
+                                    auto& candidate =
+                                        minibeam_water_primary_plane_records_device[
+                                            global_history *
+                                                minibeam_water_primary_plane_count +
+                                            plane];
+                                    const auto plane_depth_mm =
+                                        minibeam_water_primary_plane_depths_device[
+                                            plane];
+                                    if (!candidate.valid &&
+                                        position_z_mm < plane_depth_mm &&
+                                        straight_end_z >= plane_depth_mm) {
+                                        observation_plane = plane;
+                                        observation_path_mm = sycl::clamp(
+                                            (plane_depth_mm - position_z_mm) /
+                                                seg_dir_z,
+                                            1.0e-6F,
+                                            step_mm - 1.0e-6F);
+                                        break;
+                                    }
+                                }
+                            }
+#endif
+                            const auto correlated =
+                                c12_fermi_eyges_transport_step(
+                                    Direction3F{direction_x, direction_y,
+                                                direction_z},
+                                    energy_MeV, deposited_MeV, step_mm,
+                                    c12_fermi_eyges_max_segment_mm,
+                                    local_density_g_per_cm3,
+                                    radiation_length_g_per_cm2, spot_seed,
+                                    rng_history,
+                                    static_cast<std::uint64_t>(steps), 40U,
+                                    observation_path_mm);
+#if defined(CARBON_ENABLE_MINIBEAM)
+                            if (correlated.observation_valid &&
+                                observation_plane <
+                                    minibeam_water_primary_plane_count) {
+                                const auto plane_depth_mm =
+                                    minibeam_water_primary_plane_depths_device[
+                                        observation_plane];
+                                auto crossing_x = position_x_mm +
+                                    seg_dir_x * observation_path_mm +
+                                    correlated.observation_displacement_mm.x;
+                                auto crossing_y = position_y_mm +
+                                    seg_dir_y * observation_path_mm +
+                                    correlated.observation_displacement_mm.y;
+                                const auto crossing_z = position_z_mm +
+                                    seg_dir_z * observation_path_mm +
+                                    correlated.observation_displacement_mm.z;
+                                if (correlated.observation_direction.z >
+                                    1.0e-6F) {
+                                    const auto residual_path =
+                                        (plane_depth_mm - crossing_z) /
+                                        correlated.observation_direction.z;
+                                    crossing_x += residual_path *
+                                        correlated.observation_direction.x;
+                                    crossing_y += residual_path *
+                                        correlated.observation_direction.y;
+                                }
+                                auto& record =
+                                    minibeam_water_primary_plane_records_device[
+                                        global_history *
+                                            minibeam_water_primary_plane_count +
+                                        observation_plane];
+                                const auto step_fraction = sycl::clamp(
+                                    observation_path_mm / step_mm, 0.0F, 1.0F);
+                                record.history = global_history;
+                                record.particle_id = global_history;
+                                record.rng_stream = rng_history;
+                                record.plane_index =
+                                    static_cast<std::uint32_t>(observation_plane);
+                                record.atomic_number = static_cast<std::int16_t>(
+                                    primary_atomic_number);
+                                record.mass_number = static_cast<std::int16_t>(
+                                    primary_mass_number);
+                                record.depth_mm = plane_depth_mm;
+                                record.kinetic_energy_MeV = sycl::fmax(
+                                    0.0F, energy_MeV -
+                                        step_fraction * deposited_MeV);
+                                record.weight = 1.0F;
+                                record.x_mm = crossing_x;
+                                record.y_mm = crossing_y;
+                                record.direction_x =
+                                    correlated.observation_direction.x;
+                                record.direction_y =
+                                    correlated.observation_direction.y;
+                                record.direction_z =
+                                    correlated.observation_direction.z;
+                                record.valid = 1U;
+                            }
+#endif
+                            direction_x = correlated.direction.x;
+                            direction_y = correlated.direction.y;
+                            direction_z = correlated.direction.z;
+                            water_scattering_displacement =
+                                correlated.displacement_mm;
+                        }
+#if defined(CARBON_ENABLE_MINIBEAM)
+                        else if (enable_minibeam &&
                             minibeam_water_primary_fermi_eyges_tail &&
                             !in_ct && !in_insert && slab_layer_count == 0) {
                             auto segment_direction = Direction3F{
@@ -6659,12 +6945,19 @@ template<int EmMode>
                                             step_mm,
                                         0.0F, 1.0F);
                                     record.history = global_history;
+                                    record.particle_id = global_history;
+                                    record.rng_stream = rng_history;
                                     record.plane_index = static_cast<std::uint32_t>(
                                         observation_plane);
+                                    record.atomic_number = static_cast<std::int16_t>(
+                                        primary_atomic_number);
+                                    record.mass_number = static_cast<std::int16_t>(
+                                        primary_mass_number);
                                     record.depth_mm = plane_depth_mm;
                                     record.kinetic_energy_MeV = sycl::fmax(
                                         0.0F, energy_MeV -
                                             step_fraction * deposited_MeV);
+                                    record.weight = 1.0F;
                                     record.x_mm = crossing_x;
                                     record.y_mm = crossing_y;
                                     record.direction_x =
@@ -6695,9 +6988,9 @@ template<int EmMode>
                                 segment_offset.x - seg_dir_x * step_mm,
                                 segment_offset.y - seg_dir_y * step_mm,
                                 segment_offset.z - seg_dir_z * step_mm};
-                        } else
+                        }
 #endif
-                        {
+                        else {
                             float theta_x = 0.0F;
                             float theta_y = 0.0F;
                             constexpr float two_pi = 6.2831853071795864769F;
@@ -6792,10 +7085,77 @@ template<int EmMode>
                         water_scattering_displacement.y;
                     position_z_mm += seg_dir_z * step_mm +
                         water_scattering_displacement.z;
+                    if (enable_minibeam_primary_c12_roi_scoring &&
+                        minibeam_spatial_audit_device != nullptr &&
+                        voxel_index >= 0 && step_mm > 0.0F) {
+                        const float x0 = position_x_mm - seg_dir_x * step_mm -
+                            water_scattering_displacement.x;
+                        const float y0 = position_y_mm - seg_dir_y * step_mm -
+                            water_scattering_displacement.y;
+                        const float z0 = position_z_mm - seg_dir_z * step_mm -
+                            water_scattering_displacement.z;
+                        auto voxel_at = [&](float x, float y, float z) {
+                            const int ix = static_cast<int>(sycl::floor(
+                                (x - voxel_min_x_mm) * inverse_voxel_size_x_mm));
+                            const int iy = static_cast<int>(sycl::floor(
+                                (y - voxel_min_y_mm) * inverse_voxel_size_y_mm));
+                            const int iz = static_cast<int>(
+                                sycl::floor(z / voxel_size_z_mm));
+                            if (ix < 0 || iy < 0 || iz < 0 ||
+                                ix >= static_cast<int>(voxel_bins_x) ||
+                                iy >= static_cast<int>(voxel_bins_y) ||
+                                iz >= static_cast<int>(number_of_bins)) {
+                                return -1;
+                            }
+                            return (iz * static_cast<int>(voxel_bins_y) + iy) *
+                                static_cast<int>(voxel_bins_x) + ix;
+                        };
+                        const int v_straight = voxel_at(
+                            x0 + seg_dir_x * step_mm,
+                            y0 + seg_dir_y * step_mm,
+                            z0 + seg_dir_z * step_mm);
+                        const int v_end = voxel_at(
+                            position_x_mm, position_y_mm, position_z_mm);
+                        auto roi_of = [&](int voxel) -> int {
+                            if (voxel < 0 ||
+                                minibeam_fixed_region_by_x_bin_device == nullptr) {
+                                return -1;
+                            }
+                            return static_cast<int>(
+                                minibeam_fixed_region_by_x_bin_device[
+                                    static_cast<std::size_t>(voxel) %
+                                    voxel_bins_x]);
+                        };
+                        const int roi0 = roi_of(voxel_index);
+                        const int roi_straight = roi_of(v_straight);
+                        const int roi_end = roi_of(v_end);
+                        auto add_slot = [&](std::size_t slot, std::uint64_t value) {
+                            sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
+                                             sycl::memory_scope::device,
+                                             sycl::access::address_space::global_space>
+                                a(minibeam_spatial_audit_device[slot]);
+                            a.fetch_add(value);
+                        };
+                        add_slot(0, 1);
+                        if (v_straight != voxel_index) add_slot(1, 1);
+                        if (roi_straight != roi0 && roi_straight >= 0 && roi0 >= 0)
+                            add_slot(2, 1);
+                        if (v_end != voxel_index) add_slot(3, 1);
+                        if (roi_end != roi0 && roi_end >= 0 && roi0 >= 0)
+                            add_slot(4, 1);
+                        const auto mev = static_cast<std::uint64_t>(
+                            deposited_MeV * 1.0e6f + 0.5f);
+                        add_slot(5, mev);
+                        if (roi_straight != roi0 && roi_straight >= 0 && roi0 >= 0)
+                            add_slot(6, mev);
+                        if (roi_end != roi0 && roi_end >= 0 && roi0 >= 0)
+                            add_slot(7, mev);
+                    }
 
 #if defined(CARBON_ENABLE_MINIBEAM)
                     if ((!(kProductionPrimaryPath || enable_multiple_scattering) ||
-                         !minibeam_water_primary_fermi_eyges_tail) &&
+                         (!c12_fermi_eyges &&
+                          !minibeam_water_primary_fermi_eyges_tail)) &&
                         minibeam_water_primary_plane_records_device != nullptr &&
                         seg_dir_z > 0.0F) {
                         const auto previous_z_mm = position_z_mm -
@@ -6827,8 +7187,14 @@ template<int EmMode>
                                     (position_z_mm - previous_z_mm),
                                 0.0F, 1.0F);
                             record.history = global_history;
+                            record.particle_id = global_history;
+                            record.rng_stream = rng_history;
                             record.plane_index =
                                 static_cast<std::uint32_t>(plane);
+                            record.atomic_number = static_cast<std::int16_t>(
+                                primary_atomic_number);
+                            record.mass_number = static_cast<std::int16_t>(
+                                primary_mass_number);
                             record.depth_mm = plane_depth_mm;
                             // The transport step moves along seg_dir and applies
                             // its angular kick at the end.  Keep every plane
@@ -6837,6 +7203,7 @@ template<int EmMode>
                             // post-kick direction and step-start energy.
                             record.kinetic_energy_MeV = sycl::fmax(
                                 0.0F, energy_MeV - fraction * deposited_MeV);
+                            record.weight = 1.0F;
                             record.x_mm = previous_x_mm +
                                 fraction * (seg_dir_x * step_mm +
                                             water_scattering_displacement.x);
@@ -8378,6 +8745,9 @@ template<int EmMode>
                     DoseAtomicT * charged_origin_voxel_dose_device;
                     bool enable_minibeam_component_voxel_scoring;
                     DoseAtomicT * minibeam_component_voxel_dose_device;
+                    bool enable_minibeam_energy_band_roi_scoring;
+                    DoseAtomicT * minibeam_energy_band_roi_dose_device;
+                    std::uint8_t * minibeam_fixed_region_by_x_bin_device;
                     DoseAtomicT * be_isotope_origin_voxel_dose_device;
                     DoseAtomicT * he_isotope_origin_voxel_dose_device;
                     DepthAtomicT * in_fov_dose_device;
@@ -8467,6 +8837,10 @@ template<int EmMode>
                     Cinel02DeviceProduct * cinel02_products_device;
                     bool enable_multiple_scattering;
                     bool ct_secondary_mcs_off;
+                    bool c12_fermi_eyges;
+                    int fermi_eyges_species_scope;
+                    bool fermi_eyges_use_species_water_parameters;
+                    float c12_fermi_eyges_max_segment_mm;
 #if defined(CARBON_ENABLE_MINIBEAM)
                     bool minibeam_water_secondary_c12_fermi_eyges_tail;
                     float minibeam_water_secondary_c12_mcs_max_segment_mm;
@@ -8520,6 +8894,9 @@ template<int EmMode>
                     charged_origin_voxel_dose_device,
                     enable_minibeam_component_voxel_scoring,
                     minibeam_component_voxel_dose_device,
+                    enable_minibeam_energy_band_roi_scoring,
+                    minibeam_energy_band_roi_dose_device,
+                    minibeam_fixed_region_by_x_bin_device,
                     be_isotope_origin_voxel_dose_device,
                     he_isotope_origin_voxel_dose_device,
                     in_fov_dose_device,
@@ -8609,6 +8986,10 @@ template<int EmMode>
                     cinel02_products_device,
                     enable_multiple_scattering,
                     ct_secondary_mcs_off,
+                    c12_fermi_eyges,
+                    fermi_eyges_species_scope,
+                    fermi_eyges_use_species_water_parameters,
+                    c12_fermi_eyges_max_segment_mm,
 #if defined(CARBON_ENABLE_MINIBEAM)
                     minibeam_water_secondary_c12_fermi_eyges_tail,
                     minibeam_water_secondary_c12_mcs_max_segment_mm,
@@ -8794,6 +9175,17 @@ template<int EmMode>
                                             component(CARBON_SECONDARY_CONTEXT_FIELD(minibeam_component_voxel_dose_device)[
                                                 minibeam_component_voxel_offset + cur_voxel]);
                                         component.fetch_add(static_cast<DoseAtomicT>(frag.energy_MeV));
+                                    }
+                                    if ((kProductionSecondaryPath ? false :
+                                         CARBON_SECONDARY_CONTEXT_FIELD(enable_minibeam_energy_band_roi_scoring))) {
+                                        score_minibeam_energy_band_roi_device(
+                                            CARBON_SECONDARY_CONTEXT_FIELD(minibeam_energy_band_roi_dose_device),
+                                            transport_z, transport_a, frag.energy_MeV,
+                                            cur_voxel, CARBON_SECONDARY_CONTEXT_FIELD(number_of_bins),
+                                            CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_x),
+                                            CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_y),
+                                            CARBON_SECONDARY_CONTEXT_FIELD(minibeam_fixed_region_by_x_bin_device),
+                                            frag.energy_MeV);
                                     }
                                     if (CARBON_SECONDARY_CONTEXT_FIELD(in_fov_dose_device) != nullptr) {
                                         sycl::atomic_ref<DepthAtomicT, sycl::memory_order::relaxed,
@@ -9053,6 +9445,67 @@ template<int EmMode>
                                                      inverse_depth_bin_width_mm)));
 
                             if (bin_z < 0 || bin_z >= static_cast<int>(CARBON_SECONDARY_CONTEXT_FIELD(number_of_bins))) break;
+
+#if defined(CARBON_ENABLE_MINIBEAM)
+                            // A requested plane may coincide with the current
+                            // step start (notably the water-exit endpoint after
+                            // an exactly truncated preceding step). Record that
+                            // state before the next EM/MCS draw instead of
+                            // requiring a strict interior crossing or moving
+                            // the diagnostic plane upstream by a few microns.
+                            if ((kProductionSecondaryPath ? false :
+                                 CARBON_SECONDARY_CONTEXT_FIELD(
+                                     water_entry_secondary_replay)) &&
+                                CARBON_SECONDARY_CONTEXT_FIELD(
+                                    minibeam_water_primary_plane_records_device) !=
+                                    nullptr &&
+                                sec_dz > 1.0e-6F) {
+                                for (std::size_t plane = 0;
+                                     plane < CARBON_SECONDARY_CONTEXT_FIELD(
+                                                 minibeam_water_primary_plane_count);
+                                     ++plane) {
+                                    auto& record = CARBON_SECONDARY_CONTEXT_FIELD(
+                                        minibeam_water_primary_plane_records_device)[
+                                        frag.parent_history *
+                                            CARBON_SECONDARY_CONTEXT_FIELD(
+                                                minibeam_water_primary_plane_count) +
+                                        plane];
+                                    if (record.valid) continue;
+                                    const auto plane_depth =
+                                        CARBON_SECONDARY_CONTEXT_FIELD(
+                                            minibeam_water_primary_plane_depths_device)[
+                                            plane];
+                                    const auto endpoint_tolerance =
+                                        8.0F * std::numeric_limits<float>::epsilon() *
+                                        sycl::fmax(1.0F, sycl::fabs(plane_depth));
+                                    if (sycl::fabs(sec_z - plane_depth) >
+                                        endpoint_tolerance) {
+                                        continue;
+                                    }
+                                    const auto residual_path =
+                                        (plane_depth - sec_z) / sec_dz;
+                                    record.history = frag.parent_history;
+                                    record.transport_path = 1U;
+                                    record.particle_id = frag.rng_stream;
+                                    record.rng_stream = frag.rng_stream;
+                                    record.plane_index =
+                                        static_cast<std::uint32_t>(plane);
+                                    record.atomic_number =
+                                        static_cast<std::int16_t>(transport_z);
+                                    record.mass_number =
+                                        static_cast<std::int16_t>(transport_a);
+                                    record.depth_mm = plane_depth;
+                                    record.kinetic_energy_MeV = sec_e;
+                                    record.weight = frag.weight;
+                                    record.x_mm = sec_x + residual_path * sec_dx;
+                                    record.y_mm = sec_y + residual_path * sec_dy;
+                                    record.direction_x = sec_dx;
+                                    record.direction_y = sec_dy;
+                                    record.direction_z = sec_dz;
+                                    record.valid = 1U;
+                                }
+                            }
+#endif
 
                             const auto secondary_rate_query_energy_MeV =
                                 sycl::fmax(0.0F, sec_e);
@@ -9603,6 +10056,17 @@ template<int EmMode>
                                                 minibeam_component_voxel_offset+continuous_step_voxel]);
                                         component.fetch_add(static_cast<DoseAtomicT>(dE));
                                     }
+                                    if ((kProductionSecondaryPath ? false :
+                                         CARBON_SECONDARY_CONTEXT_FIELD(enable_minibeam_energy_band_roi_scoring))) {
+                                        score_minibeam_energy_band_roi_device(
+                                            CARBON_SECONDARY_CONTEXT_FIELD(minibeam_energy_band_roi_dose_device),
+                                            transport_z, transport_a, sec_e,
+                                            continuous_step_voxel,
+                                            CARBON_SECONDARY_CONTEXT_FIELD(number_of_bins),
+                                            CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_x),
+                                            CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_y),
+                                            CARBON_SECONDARY_CONTEXT_FIELD(minibeam_fixed_region_by_x_bin_device), dE);
+                                    }
                                 }
                             }
                             if (secondary_inelastic) {
@@ -9803,6 +10267,23 @@ template<int EmMode>
                                         if ((kProductionSecondaryPath ? true : CARBON_SECONDARY_CONTEXT_FIELD(enable_voxel_scoring)) && cur_voxel >= 0) {
                                             pending_sec_voxel_MeV += local_deposit;
                                         }
+                                        // The break below skips the common-path
+                                        // energy-band scorer; local nuclear
+                                        // deposit must be recorded here or the
+                                        // ROI diagnostic will not close.
+                                        if ((kProductionSecondaryPath ? false :
+                                             CARBON_SECONDARY_CONTEXT_FIELD(enable_minibeam_energy_band_roi_scoring)) &&
+                                            cur_voxel >= 0) {
+                                            score_minibeam_energy_band_roi_device(
+                                                CARBON_SECONDARY_CONTEXT_FIELD(minibeam_energy_band_roi_dose_device),
+                                                transport_z, transport_a, sec_e,
+                                                cur_voxel,
+                                                CARBON_SECONDARY_CONTEXT_FIELD(number_of_bins),
+                                                CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_x),
+                                                CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_y),
+                                                CARBON_SECONDARY_CONTEXT_FIELD(minibeam_fixed_region_by_x_bin_device),
+                                                local_deposit);
+                                        }
                                         if (CARBON_SECONDARY_CONTEXT_FIELD(deposited_device) != nullptr) {
                                             sycl::atomic_ref<float, sycl::memory_order::relaxed,
                                                              sycl::memory_scope::device,
@@ -9990,6 +10471,19 @@ template<int EmMode>
                                                             minibeam_component_voxel_offset + cur_voxel])
                                                         .fetch_add(static_cast<DoseAtomicT>(
                                                             -product.kinetic_energy_MeV));
+                                                }
+                                                if ((kProductionSecondaryPath ? false :
+                                                     CARBON_SECONDARY_CONTEXT_FIELD(enable_minibeam_energy_band_roi_scoring)) &&
+                                                    cur_voxel >= 0) {
+                                                    score_minibeam_energy_band_roi_device(
+                                                        CARBON_SECONDARY_CONTEXT_FIELD(minibeam_energy_band_roi_dose_device),
+                                                        product.z, product.a,
+                                                        product.kinetic_energy_MeV, cur_voxel,
+                                                        CARBON_SECONDARY_CONTEXT_FIELD(number_of_bins),
+                                                        CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_x),
+                                                        CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_y),
+                                                        CARBON_SECONDARY_CONTEXT_FIELD(minibeam_fixed_region_by_x_bin_device),
+                                                        product.kinetic_energy_MeV);
                                                 }
                                                 if (CARBON_SECONDARY_CONTEXT_FIELD(deposited_device) != nullptr) {
                                                     sycl::atomic_ref<float, sycl::memory_order::relaxed,
@@ -10183,6 +10677,19 @@ template<int EmMode>
                                                 CARBON_SECONDARY_CONTEXT_FIELD(cinel02_species_energy_device), ledger_species_idx,
                                                 4U, local_deposit);
                                         }
+                                        if ((kProductionSecondaryPath ? false :
+                                             CARBON_SECONDARY_CONTEXT_FIELD(enable_minibeam_energy_band_roi_scoring)) &&
+                                            pending_sec_voxel >= 0) {
+                                            score_minibeam_energy_band_roi_device(
+                                                CARBON_SECONDARY_CONTEXT_FIELD(minibeam_energy_band_roi_dose_device),
+                                                transport_z, transport_a, sec_e,
+                                                pending_sec_voxel,
+                                                CARBON_SECONDARY_CONTEXT_FIELD(number_of_bins),
+                                                CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_x),
+                                                CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_y),
+                                                CARBON_SECONDARY_CONTEXT_FIELD(minibeam_fixed_region_by_x_bin_device),
+                                                local_deposit);
+                                        }
                                         if (CARBON_SECONDARY_CONTEXT_FIELD(deposited_device) != nullptr) {
                                             sycl::atomic_ref<
                                                 float, sycl::memory_order::relaxed,
@@ -10366,7 +10873,19 @@ template<int EmMode>
                                     pending_sec_voxel = cur_voxel;
                                 }
                                 if (cur_voxel >= 0) {
-                                    if (!source_voxel_continuous_loss) pending_sec_voxel_MeV += dE;
+                                    if (!source_voxel_continuous_loss) {
+                                        pending_sec_voxel_MeV += dE;
+                                        if ((kProductionSecondaryPath ? false :
+                                             CARBON_SECONDARY_CONTEXT_FIELD(enable_minibeam_energy_band_roi_scoring))) {
+                                            score_minibeam_energy_band_roi_device(
+                                                CARBON_SECONDARY_CONTEXT_FIELD(minibeam_energy_band_roi_dose_device),
+                                                transport_z, transport_a, sec_e, cur_voxel,
+                                                CARBON_SECONDARY_CONTEXT_FIELD(number_of_bins),
+                                                CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_x),
+                                                CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_y),
+                                                CARBON_SECONDARY_CONTEXT_FIELD(minibeam_fixed_region_by_x_bin_device), dE);
+                                        }
+                                    }
                                     if (CARBON_SECONDARY_CONTEXT_FIELD(in_fov_dose_device) != nullptr && pending_sec_bin >= 0 && pending_sec_bin < static_cast<int>(CARBON_SECONDARY_CONTEXT_FIELD(number_of_bins))) {
                                         sycl::atomic_ref<DepthAtomicT, sycl::memory_order::relaxed,
                                                          sycl::memory_scope::device,
@@ -10441,16 +10960,168 @@ template<int EmMode>
                                             static_cast<unsigned>(sec_ct_material),
                                             CARBON_SECONDARY_CONTEXT_FIELD(enable_ct_material_mcs),
                                             CARBON_SECONDARY_CONTEXT_FIELD(active_water_radiation_length)));
+                                const bool secondary_uses_fe =
+                                    CARBON_SECONDARY_CONTEXT_FIELD(
+                                        c12_fermi_eyges) &&
+                                    ion_uses_fermi_eyges(
+                                        CARBON_SECONDARY_CONTEXT_FIELD(
+                                            fermi_eyges_species_scope),
+                                        transport_z, transport_a);
+                                if (secondary_uses_fe) {
+                                    const auto route_slot =
+                                        transport_z == 6 && transport_a == 12
+                                            ? SchneiderDiagSlot::SecondaryFeC12Steps
+                                        : transport_z == 2 && transport_a == 4
+                                            ? SchneiderDiagSlot::SecondaryFeHe4Steps
+                                        : transport_z == 1 && transport_a >= 1 &&
+                                                  transport_a <= 3
+                                            ? SchneiderDiagSlot::SecondaryFePdtSteps
+                                            : SchneiderDiagSlot::SecondaryFeOtherChargedSteps;
+                                    schneider_diag_increment_device(
+                                        CARBON_SECONDARY_CONTEXT_FIELD(
+                                            schneider_diag_device),
+                                        route_slot);
+                                    auto observation_path_mm = -1.0F;
 #if defined(CARBON_ENABLE_MINIBEAM)
-                                const bool use_secondary_c12_fe =
+                                    const auto fe_start_x = post_em_x -
+                                        collision_input_dx * sec_step_mm;
+                                    const auto fe_start_y = post_em_y -
+                                        collision_input_dy * sec_step_mm;
+                                    const auto fe_start_z = post_em_z -
+                                        collision_input_dz * sec_step_mm;
+                                    auto observation_plane =
+                                        CARBON_SECONDARY_CONTEXT_FIELD(
+                                            minibeam_water_primary_plane_count);
+                                    if ((kProductionSecondaryPath ? false :
+                                         CARBON_SECONDARY_CONTEXT_FIELD(
+                                             water_entry_secondary_replay)) &&
+                                        CARBON_SECONDARY_CONTEXT_FIELD(
+                                            minibeam_water_primary_plane_records_device) != nullptr &&
+                                        collision_input_dz > 0.0F) {
+                                        for (std::size_t plane = 0;
+                                             plane < CARBON_SECONDARY_CONTEXT_FIELD(
+                                                 minibeam_water_primary_plane_count);
+                                             ++plane) {
+                                            auto& candidate =
+                                                CARBON_SECONDARY_CONTEXT_FIELD(
+                                                    minibeam_water_primary_plane_records_device)[
+                                                    frag.parent_history *
+                                                        CARBON_SECONDARY_CONTEXT_FIELD(
+                                                            minibeam_water_primary_plane_count) +
+                                                    plane];
+                                            const auto plane_depth =
+                                                CARBON_SECONDARY_CONTEXT_FIELD(
+                                                    minibeam_water_primary_plane_depths_device)[plane];
+                                            if (!candidate.valid &&
+                                                fe_start_z < plane_depth &&
+                                                post_em_z >= plane_depth) {
+                                                observation_plane = plane;
+                                                observation_path_mm = sycl::clamp(
+                                                    (plane_depth - fe_start_z) /
+                                                        collision_input_dz,
+                                                    1.0e-6F,
+                                                    sec_step_mm - 1.0e-6F);
+                                                break;
+                                            }
+                                        }
+                                    }
+#endif
+                                    const auto correlated =
+                                        ion_fermi_eyges_transport_step(
+                                            Direction3F{collision_input_dx,
+                                                        collision_input_dy,
+                                                        collision_input_dz},
+                                            sec_e + dE,
+                                            static_cast<int>(transport_z),
+                                            static_cast<int>(transport_a),
+                                            dE, sec_step_mm,
+                                            CARBON_SECONDARY_CONTEXT_FIELD(
+                                                c12_fermi_eyges_max_segment_mm),
+                                            sec_local_density_g_per_cm3,
+                                            sec_radiation_length_g_per_cm2,
+                                            2026, frag.rng_stream,
+                                            static_cast<std::uint64_t>(sec_steps),
+                                            100U, observation_path_mm,
+                                            CARBON_SECONDARY_CONTEXT_FIELD(
+                                                fermi_eyges_use_species_water_parameters));
+#if defined(CARBON_ENABLE_MINIBEAM)
+                                    if (correlated.observation_valid &&
+                                        observation_plane <
+                                            CARBON_SECONDARY_CONTEXT_FIELD(
+                                                minibeam_water_primary_plane_count)) {
+                                        const auto plane_depth =
+                                            CARBON_SECONDARY_CONTEXT_FIELD(
+                                                minibeam_water_primary_plane_depths_device)[
+                                                observation_plane];
+                                        auto crossing_x = fe_start_x +
+                                            collision_input_dx * observation_path_mm +
+                                            correlated.observation_displacement_mm.x;
+                                        auto crossing_y = fe_start_y +
+                                            collision_input_dy * observation_path_mm +
+                                            correlated.observation_displacement_mm.y;
+                                        const auto crossing_z = fe_start_z +
+                                            collision_input_dz * observation_path_mm +
+                                            correlated.observation_displacement_mm.z;
+                                        if (correlated.observation_direction.z >
+                                            1.0e-6F) {
+                                            const auto residual_path =
+                                                (plane_depth - crossing_z) /
+                                                correlated.observation_direction.z;
+                                            crossing_x += residual_path *
+                                                correlated.observation_direction.x;
+                                            crossing_y += residual_path *
+                                                correlated.observation_direction.y;
+                                        }
+                                        auto& record =
+                                            CARBON_SECONDARY_CONTEXT_FIELD(
+                                                minibeam_water_primary_plane_records_device)[
+                                                frag.parent_history *
+                                                    CARBON_SECONDARY_CONTEXT_FIELD(
+                                                        minibeam_water_primary_plane_count) +
+                                                observation_plane];
+                                        const auto step_fraction = sycl::clamp(
+                                            observation_path_mm / sec_step_mm,
+                                            0.0F, 1.0F);
+                                        record.history = frag.parent_history;
+                                        record.transport_path = 1U;
+                                        record.particle_id = frag.rng_stream;
+                                        record.rng_stream = frag.rng_stream;
+                                        record.plane_index =
+                                            static_cast<std::uint32_t>(observation_plane);
+                                        record.atomic_number = static_cast<std::int16_t>(transport_z);
+                                        record.mass_number = static_cast<std::int16_t>(transport_a);
+                                        record.depth_mm = plane_depth;
+                                        record.kinetic_energy_MeV = sycl::fmax(
+                                            0.0F,
+                                            sec_e + (1.0F - step_fraction) * dE);
+                                        record.weight = frag.weight;
+                                        record.x_mm = crossing_x;
+                                        record.y_mm = crossing_y;
+                                        record.direction_x =
+                                            correlated.observation_direction.x;
+                                        record.direction_y =
+                                            correlated.observation_direction.y;
+                                        record.direction_z =
+                                            correlated.observation_direction.z;
+                                        record.valid = 1U;
+                                    }
+#endif
+                                    sec_x += correlated.displacement_mm.x;
+                                    sec_y += correlated.displacement_mm.y;
+                                    sec_z += correlated.displacement_mm.z;
+                                    sec_dx = correlated.direction.x;
+                                    sec_dy = correlated.direction.y;
+                                    sec_dz = correlated.direction.z;
+                                }
+#if defined(CARBON_ENABLE_MINIBEAM)
+                                else if (
                                     (kProductionSecondaryPath ? false :
                                      CARBON_SECONDARY_CONTEXT_FIELD(
                                          minibeam_water_secondary_c12_fermi_eyges_tail)) &&
                                     transport_z == 6 && transport_a == 12 &&
                                     (kProductionSecondaryPath ? false :
                                      CARBON_SECONDARY_CONTEXT_FIELD(use_unified_water)) &&
-                                    !sec_in_ct;
-                                if (use_secondary_c12_fe) {
+                                    !sec_in_ct) {
                                     sycl::atomic_ref<std::uint64_t,
                                                      sycl::memory_order::relaxed,
                                                      sycl::memory_scope::device,
@@ -10577,8 +11248,13 @@ template<int EmMode>
                                                             minibeam_water_primary_plane_count) +
                                                     observation_plane];
                                             record.history = frag.parent_history;
+                                            record.transport_path = 1U;
+                                            record.particle_id = frag.rng_stream;
+                                            record.rng_stream = frag.rng_stream;
                                             record.plane_index = static_cast<std::uint32_t>(
                                                 observation_plane);
+                                            record.atomic_number = static_cast<std::int16_t>(transport_z);
+                                            record.mass_number = static_cast<std::int16_t>(transport_a);
                                             record.depth_mm = plane_depth;
                                             const auto total_fraction = sycl::clamp(
                                                 (traversed_mm + observation_path) /
@@ -10587,6 +11263,7 @@ template<int EmMode>
                                             record.kinetic_energy_MeV = sycl::fmax(
                                                 0.0F,
                                                 sec_e + (1.0F - total_fraction) * dE);
+                                            record.weight = frag.weight;
                                             record.x_mm = crossing_x;
                                             record.y_mm = crossing_y;
                                             record.direction_x =
@@ -10613,9 +11290,13 @@ template<int EmMode>
                                     sec_dx = segment_direction.x;
                                     sec_dy = segment_direction.y;
                                     sec_dz = segment_direction.z;
-                                } else
+                                }
 #endif
-                                {
+                                else {
+                                    schneider_diag_increment_device(
+                                        CARBON_SECONDARY_CONTEXT_FIELD(
+                                            schneider_diag_device),
+                                        SchneiderDiagSlot::SecondaryHighlandSteps);
                                     const auto theta_rms = highland_projected_rms_angle_device(
                                         sec_e, static_cast<int>(transport_z),
                                         static_cast<int>(transport_a), sec_step_mm,
@@ -10675,12 +11356,18 @@ template<int EmMode>
                                                     (post_em_z - start_z),
                                                 0.0F, 1.0F);
                                             record.history = frag.parent_history;
+                                            record.transport_path = 1U;
+                                            record.particle_id = frag.rng_stream;
+                                            record.rng_stream = frag.rng_stream;
                                             record.plane_index =
                                                 static_cast<std::uint32_t>(plane);
+                                            record.atomic_number = static_cast<std::int16_t>(transport_z);
+                                            record.mass_number = static_cast<std::int16_t>(transport_a);
                                             record.depth_mm = plane_depth;
                                             record.kinetic_energy_MeV = sycl::fmax(
                                                 0.0F,
                                                 sec_e + (1.0F - fraction) * dE);
+                                            record.weight = frag.weight;
                                             record.x_mm = start_x +
                                                 fraction * collision_input_dx *
                                                     sec_step_mm;
@@ -10731,11 +11418,17 @@ template<int EmMode>
                                             (post_em_z - start_z),
                                         0.0F, 1.0F);
                                     record.history = frag.parent_history;
+                                    record.transport_path = 1U;
+                                    record.particle_id = frag.rng_stream;
+                                    record.rng_stream = frag.rng_stream;
                                     record.plane_index =
                                         static_cast<std::uint32_t>(plane);
+                                    record.atomic_number = static_cast<std::int16_t>(transport_z);
+                                    record.mass_number = static_cast<std::int16_t>(transport_a);
                                     record.depth_mm = plane_depth;
                                     record.kinetic_energy_MeV = sycl::fmax(
                                         0.0F, sec_e + (1.0F - fraction) * dE);
+                                    record.weight = frag.weight;
                                     record.x_mm = start_x + fraction *
                                         collision_input_dx * sec_step_mm;
                                     record.y_mm = start_y + fraction *
@@ -11023,6 +11716,16 @@ template<int EmMode>
                                         }
                                         if (cur_voxel >= 0) {
                                             pending_sec_voxel_MeV += sec_e;
+                                            if ((kProductionSecondaryPath ? false :
+                                                 CARBON_SECONDARY_CONTEXT_FIELD(enable_minibeam_energy_band_roi_scoring))) {
+                                                score_minibeam_energy_band_roi_device(
+                                                    CARBON_SECONDARY_CONTEXT_FIELD(minibeam_energy_band_roi_dose_device),
+                                                    transport_z, transport_a, sec_e, cur_voxel,
+                                                    CARBON_SECONDARY_CONTEXT_FIELD(number_of_bins),
+                                                    CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_x),
+                                                    CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_y),
+                                                    CARBON_SECONDARY_CONTEXT_FIELD(minibeam_fixed_region_by_x_bin_device), sec_e);
+                                            }
                                             sec_terminal_scored = true;
                                             if (CARBON_SECONDARY_CONTEXT_FIELD(in_fov_dose_device) != nullptr) {
                                                 sycl::atomic_ref<DepthAtomicT, sycl::memory_order::relaxed,
@@ -11316,6 +12019,7 @@ template<int EmMode>
 
     std::vector<double> charged_origin_voxel_dose_host;
     std::vector<double> minibeam_component_voxel_dose_host;
+    std::vector<double> minibeam_energy_band_roi_dose_host;
     std::array<double, 6> he4_hazard_audit_host{};
     if (he4_hazard_audit_device)
         queue.copy(he4_hazard_audit_device, he4_hazard_audit_host.data(), 6).wait_and_throw();
@@ -11340,6 +12044,33 @@ template<int EmMode>
         std::transform(device_host.begin(), device_host.end(),
                        minibeam_component_voxel_dose_host.begin(),
                        [](DoseAtomicT val) { return static_cast<double>(val); });
+    }
+    if (enable_minibeam_energy_band_roi_scoring) {
+        std::vector<DoseAtomicT> device_host(
+            minibeam_energy_band_roi_value_count);
+        queue.copy(minibeam_energy_band_roi_dose_device, device_host.data(),
+                   minibeam_energy_band_roi_value_count).wait_and_throw();
+        minibeam_energy_band_roi_dose_host.resize(
+            minibeam_energy_band_roi_value_count);
+        std::transform(device_host.begin(), device_host.end(),
+                       minibeam_energy_band_roi_dose_host.begin(),
+                       [](DoseAtomicT val) { return static_cast<double>(val); });
+    }
+    std::vector<double> minibeam_c12_roi_dose_host;
+    if (enable_minibeam_primary_c12_roi_scoring) {
+        std::vector<DoseAtomicT> device_host(minibeam_c12_roi_value_count);
+        queue.copy(minibeam_c12_roi_dose_device, device_host.data(),
+                   minibeam_c12_roi_value_count).wait_and_throw();
+        minibeam_c12_roi_dose_host.resize(minibeam_c12_roi_value_count);
+        std::transform(device_host.begin(), device_host.end(),
+                       minibeam_c12_roi_dose_host.begin(),
+                       [](DoseAtomicT val) { return static_cast<double>(val); });
+    }
+    std::array<std::uint64_t, minibeam_spatial_audit_slot_count>
+        minibeam_spatial_audit_host{};
+    if (enable_minibeam_primary_c12_roi_scoring) {
+        queue.copy(minibeam_spatial_audit_device, minibeam_spatial_audit_host.data(),
+                   minibeam_spatial_audit_slot_count).wait_and_throw();
     }
 
     std::vector<double> be_isotope_origin_voxel_dose_host;
@@ -11630,8 +12361,9 @@ template<int EmMode>
         queue.copy(grid_deposited_in_device, &grid_deposited_in_host, 1);
     if (grid_deposited_out_device != nullptr)
         queue.copy(grid_deposited_out_device, &grid_deposited_out_host, 1);
-    std::array<std::uint64_t, 44> schneider_diag_host{};
-    static_assert(44 == static_cast<std::size_t>(SchneiderDiagSlot::Count),
+    std::array<std::uint64_t, kSchneiderDiagSlots> schneider_diag_host{};
+    static_assert(kSchneiderDiagSlots ==
+                      static_cast<std::size_t>(SchneiderDiagSlot::Count),
                   "Schneider host mirror must match the device schema");
     std::array<float, 12> schneider_float_host{};
     static_assert(12 == static_cast<std::size_t>(SchneiderFloatSlot::Count),
@@ -11765,6 +12497,10 @@ template<int EmMode>
     free_device(primary_voxel_track_length_device);
     free_device(charged_origin_voxel_dose_device);
     free_device(minibeam_component_voxel_dose_device);
+    free_device(minibeam_energy_band_roi_dose_device);
+    free_device(minibeam_c12_roi_dose_device);
+    free_device(minibeam_spatial_audit_device);
+    free_device(minibeam_fixed_region_by_x_bin_device);
     free_device(be_isotope_origin_voxel_dose_device);
     free_device(he4_hazard_audit_device);
     free_device(he_isotope_origin_voxel_dose_device);
@@ -11985,6 +12721,11 @@ template<int EmMode>
         std::move(charged_origin_voxel_dose_host);
     result.minibeam_component_voxel_deposited_energy_MeV =
         std::move(minibeam_component_voxel_dose_host);
+    result.minibeam_energy_band_roi_deposited_energy_MeV =
+        std::move(minibeam_energy_band_roi_dose_host);
+    result.minibeam_c12_roi_values =
+        std::move(minibeam_c12_roi_dose_host);
+    result.minibeam_spatial_audit_counts = minibeam_spatial_audit_host;
     result.be_isotope_origin_voxel_deposited_energy_MeV =
         std::move(be_isotope_origin_voxel_dose_host);
     result.he_isotope_origin_voxel_deposited_energy_MeV =
@@ -12381,6 +13122,13 @@ template<int EmMode>
         sch.primary_queue_overflows = slot(SchneiderDiagSlot::PrimaryQueueOverflows);
         sch.secondary_tracks_started = slot(SchneiderDiagSlot::SecondaryTracksStarted);
         sch.secondary_steps = slot(SchneiderDiagSlot::SecondarySteps);
+        sch.secondary_fe_c12_steps = slot(SchneiderDiagSlot::SecondaryFeC12Steps);
+        sch.secondary_fe_he4_steps = slot(SchneiderDiagSlot::SecondaryFeHe4Steps);
+        sch.secondary_fe_pdt_steps = slot(SchneiderDiagSlot::SecondaryFePdtSteps);
+        sch.secondary_fe_other_charged_steps =
+            slot(SchneiderDiagSlot::SecondaryFeOtherChargedSteps);
+        sch.secondary_highland_steps =
+            slot(SchneiderDiagSlot::SecondaryHighlandSteps);
         sch.secondary_rate_queries = slot(SchneiderDiagSlot::SecondaryRateQueries);
         sch.secondary_hazards = slot(SchneiderDiagSlot::SecondaryHazards);
         sch.secondary_exact_target_hits = slot(SchneiderDiagSlot::SecondaryExactTargetHits);

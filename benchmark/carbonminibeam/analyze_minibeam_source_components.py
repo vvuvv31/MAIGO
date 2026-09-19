@@ -49,6 +49,10 @@ TOPAS_COMPONENTS = {
 def arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--gpu-dir", type=Path, required=True)
+    parser.add_argument("--gpu-dose", type=Path,
+                        help="total GPU raw dose; defaults to GPU_DIR/dose.raw")
+    parser.add_argument("--gpu-mhd", type=Path,
+                        help="GPU dose header; defaults to GPU_DIR/dose.mhd")
     parser.add_argument("--component-prefix", default="components")
     parser.add_argument("--gpu-histories", type=int, required=True)
     parser.add_argument("--topas-total", type=Path)
@@ -79,7 +83,9 @@ def main() -> None:
     args = arguments()
     args.output_dir.mkdir(parents=True, exist_ok=True)
     bins = args.bins
-    gpu_total = read_grid(args.gpu_dir / "dose.raw", "<f4", bins)
+    gpu_total = read_grid(
+        args.gpu_dose if args.gpu_dose is not None else args.gpu_dir / "dose.raw",
+        "<f4", bins)
     gpu = {
         label: read_grid(
             args.gpu_dir /
@@ -108,7 +114,8 @@ def main() -> None:
     reconstructed = sum(gpu.values())
     difference = reconstructed - gpu_total
     nonzero = gpu_total != 0.0
-    mhd = parse_mhd(args.gpu_dir / "dose.mhd")
+    mhd = parse_mhd(
+        args.gpu_mhd if args.gpu_mhd is not None else args.gpu_dir / "dose.mhd")
     spacing = mhd["spacing_mm"]
     offset = mhd["offset_mm"]
     assert isinstance(spacing, list) and isinstance(offset, list)

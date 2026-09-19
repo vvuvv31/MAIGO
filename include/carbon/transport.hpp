@@ -1,6 +1,7 @@
 #pragma once
 
 #include "carbon/cross_section.hpp"
+#include "carbon/particle.hpp"
 #include "carbon/stopping_power.hpp"
 #include "carbon/transport_config.hpp"
 #include "carbon/transport_profile.hpp"
@@ -57,15 +58,21 @@ static_assert(sizeof(MinibeamPhaseSpaceRecord) == 40,
 // or atomic append is required.
 struct MinibeamWaterPrimaryPlaneRecord {
     std::uint64_t history{};
+    std::uint64_t particle_id{};
+    std::uint64_t rng_stream{};
     std::uint32_t plane_index{};
+    std::int16_t atomic_number{};
+    std::int16_t mass_number{};
     std::uint8_t valid{};
-    std::uint8_t pad[3]{};
+    std::uint8_t transport_path{};  // 0=primary kernel, 1=secondary queue
+    std::uint8_t pad[2]{};
     float depth_mm{};
     float kinetic_energy_MeV{};
+    float weight{};
     float x_mm{}, y_mm{};
     float direction_x{}, direction_y{}, direction_z{};
 };
-static_assert(sizeof(MinibeamWaterPrimaryPlaneRecord) == 48,
+static_assert(sizeof(MinibeamWaterPrimaryPlaneRecord) == 72,
               "minibeam water-plane record layout");
 
 struct MinibeamFragmentPhaseSpaceRecord {
@@ -444,6 +451,12 @@ struct SchneiderNuclearDiagnostics {
 
     std::uint64_t secondary_tracks_started{0};
     std::uint64_t secondary_steps{0};
+    // Diagnostic partition of secondary steps on which MCS was sampled.
+    std::uint64_t secondary_fe_c12_steps{0};
+    std::uint64_t secondary_fe_he4_steps{0};
+    std::uint64_t secondary_fe_pdt_steps{0};
+    std::uint64_t secondary_fe_other_charged_steps{0};
+    std::uint64_t secondary_highland_steps{0};
     std::uint64_t secondary_rate_queries{0};
     std::uint64_t secondary_hazards{0};
     std::uint64_t secondary_exact_target_hits{0};
@@ -582,7 +595,12 @@ enum class SchneiderDiagSlot : std::uint32_t {
     // Primary-side counterpart (hazard fired, slowing emptied all C12
     // channels before the collision point): same no-query continuation.
     PrimaryPostEmNullCollisions = 43,
-    Count = 44
+    SecondaryFeC12Steps = 44,
+    SecondaryFeHe4Steps = 45,
+    SecondaryFePdtSteps = 46,
+    SecondaryFeOtherChargedSteps = 47,
+    SecondaryHighlandSteps = 48,
+    Count = 49
 };
 
 // Device float accumulator slots paired with SchneiderDiagSlot. Sum slots
@@ -708,6 +726,14 @@ struct TransportResult {
     // Optional minibeam-only voxel decomposition: primary C12 plus eight
     // charged-secondary species classes split by immediate Copper/water birth.
     std::vector<double> minibeam_component_voxel_deposited_energy_MeV;
+    // Diagnostic p/d/t/He-4 deposited energy, indexed by
+    // species x (<50, 50--300, >300 MeV/u) x fixed lateral ROI x depth.
+    std::vector<double> minibeam_energy_band_roi_deposited_energy_MeV;
+    // Diagnostic primary-C12 ROI tallies: kind x energy-band x region x depth.
+    // Fluence kind is track length in mm; other kinds are MeV.
+    std::vector<double> minibeam_c12_roi_values;
+    std::array<std::uint64_t, minibeam_spatial_audit_slot_count>
+        minibeam_spatial_audit_counts{};
     std::vector<double> be_isotope_origin_voxel_deposited_energy_MeV;
     std::vector<double> he_isotope_origin_voxel_deposited_energy_MeV;
     std::vector<double> neutral_origin_voxel_deposited_energy_MeV;

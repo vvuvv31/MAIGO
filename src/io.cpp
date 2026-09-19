@@ -785,7 +785,8 @@ void write_minibeam_water_primary_plane_csv(
             path.string());
     }
     output << "source_history,plane_index,depth_mm,kinetic_energy_MeV,"
-              "x_mm,y_mm,direction_x,direction_y,direction_z\n"
+              "x_mm,y_mm,direction_x,direction_y,direction_z,particle_id,"
+              "rng_stream,atomic_number,mass_number,weight,transport_path\n"
            << std::setprecision(17);
     for (const auto& record :
          result.minibeam_water_primary_plane_records) {
@@ -794,7 +795,10 @@ void write_minibeam_water_primary_plane_csv(
                << record.depth_mm << ',' << record.kinetic_energy_MeV << ','
                << record.x_mm << ',' << record.y_mm << ','
                << record.direction_x << ',' << record.direction_y << ','
-               << record.direction_z << '\n';
+               << record.direction_z << ',' << record.particle_id << ','
+               << record.rng_stream << ',' << record.atomic_number << ','
+               << record.mass_number << ',' << record.weight << ','
+               << static_cast<unsigned>(record.transport_path) << '\n';
     }
     if (!output) {
         throw std::runtime_error(
@@ -1610,6 +1614,130 @@ void write_dense_charged_origin_voxel_dose_mhd(
                    << '\n';
         }
     }
+    if (!result.minibeam_energy_band_roi_deposited_energy_MeV.empty()) {
+        const auto expected = minibeam_energy_band_species_count *
+            minibeam_energy_band_count * minibeam_fixed_region_count * nz;
+        if (result.minibeam_energy_band_roi_deposited_energy_MeV.size() !=
+            expected) {
+            throw std::invalid_argument(
+                "Minibeam energy-band ROI result size mismatch");
+        }
+        constexpr std::array<const char*, minibeam_energy_band_species_count>
+            species_labels{"p", "d", "t", "he4"};
+        constexpr std::array<const char*, minibeam_energy_band_count>
+            energy_labels{"lt50", "50to300", "gt300"};
+        constexpr std::array<const char*, minibeam_fixed_region_count>
+            region_labels{"peak", "shoulder", "valley"};
+        const auto csv_path = base.parent_path() /
+            (base.filename().string() + "_energy_band_roi.csv");
+        std::ofstream output(csv_path);
+        if (!output) {
+            throw std::runtime_error(
+                "Cannot create minibeam energy-band ROI output: " +
+                csv_path.string());
+        }
+        output << "depth_mm,species,energy_band_MeV_per_u,region,"
+                  "deposited_energy_MeV,fraction_within_species_region_depth\n";
+        output << std::setprecision(12);
+        for (std::size_t species = 0;
+             species < minibeam_energy_band_species_count; ++species) {
+            for (std::size_t region = 0;
+                 region < minibeam_fixed_region_count; ++region) {
+                for (std::size_t depth = 0; depth < nz; ++depth) {
+                    double total = 0.0;
+                    for (std::size_t energy = 0;
+                         energy < minibeam_energy_band_count; ++energy) {
+                        const auto index =
+                            (((species * minibeam_energy_band_count + energy) *
+                               minibeam_fixed_region_count + region) * nz) +
+                            depth;
+                        total += result.minibeam_energy_band_roi_deposited_energy_MeV[
+                            index];
+                    }
+                    for (std::size_t energy = 0;
+                         energy < minibeam_energy_band_count; ++energy) {
+                        const auto index =
+                            (((species * minibeam_energy_band_count + energy) *
+                               minibeam_fixed_region_count + region) * nz) +
+                            depth;
+                        const auto value =
+                            result.minibeam_energy_band_roi_deposited_energy_MeV[
+                                index];
+                        output << origin_z + static_cast<double>(depth) *
+                                                config.scorer_spacing_z_mm()
+                               << ',' << species_labels[species] << ','
+                               << energy_labels[energy] << ','
+                               << region_labels[region] << ',' << value << ','
+                               << (total > 0.0 ? value / total : 0.0) << '\n';
+                    }
+                }
+            }
+        }
+    }
+    if (!result.minibeam_c12_roi_values.empty()) {
+        const auto expected = minibeam_c12_roi_kind_count *
+            minibeam_energy_band_count * minibeam_fixed_region_count * nz;
+        if (result.minibeam_c12_roi_values.size() != expected) {
+            throw std::invalid_argument(
+                "Minibeam primary-C12 ROI result size mismatch");
+        }
+        constexpr std::array<const char*, minibeam_c12_roi_kind_count>
+            kind_labels{"local_total_deposit_MeV", "continuous_sampled_MeV",
+                        "delta_sampled_MeV", "continuous_after_scale_MeV",
+                        "delta_after_scale_MeV", "fluence_mm"};
+        constexpr std::array<const char*, minibeam_energy_band_count>
+            energy_labels{"lt50", "50to300", "gt300"};
+        constexpr std::array<const char*, minibeam_fixed_region_count>
+            region_labels{"peak", "shoulder", "valley"};
+        const auto csv_path = base.parent_path() /
+            (base.filename().string() + "_primary_c12_roi.csv");
+        std::ofstream output(csv_path);
+        if (!output) {
+            throw std::runtime_error(
+                "Cannot create minibeam primary-C12 ROI output: " +
+                csv_path.string());
+        }
+        output << "depth_mm,kind,energy_band_MeV_per_u,region,value\n";
+        output << std::setprecision(12);
+        for (std::size_t kind = 0; kind < minibeam_c12_roi_kind_count; ++kind) {
+            for (std::size_t energy = 0; energy < minibeam_energy_band_count;
+                 ++energy) {
+                for (std::size_t region = 0;
+                     region < minibeam_fixed_region_count; ++region) {
+                    for (std::size_t depth = 0; depth < nz; ++depth) {
+                        const auto index =
+                            (((kind * minibeam_energy_band_count + energy) *
+                               minibeam_fixed_region_count + region) * nz) +
+                            depth;
+                        output << origin_z + static_cast<double>(depth) *
+                                                config.scorer_spacing_z_mm()
+                               << ',' << kind_labels[kind] << ','
+                               << energy_labels[energy] << ','
+                               << region_labels[region] << ','
+                               << result.minibeam_c12_roi_values[index]
+                               << '\n';
+                    }
+                }
+            }
+        }
+        const auto audit_path = base.parent_path() /
+            (base.filename().string() + "_spatial_audit.json");
+        std::ofstream audit(audit_path);
+        if (audit) {
+            const auto& a = result.minibeam_spatial_audit_counts;
+            audit << std::setprecision(12)
+                  << "{\n  \"n_steps\": " << a[0]
+                  << ",\n  \"n_straight_cross_voxel\": " << a[1]
+                  << ",\n  \"n_straight_cross_roi\": " << a[2]
+                  << ",\n  \"n_fe_end_cross_voxel\": " << a[3]
+                  << ",\n  \"n_fe_end_cross_roi\": " << a[4]
+                  << ",\n  \"deposited_MeV_whole_step\": " << (a[5] * 1.0e-6)
+                  << ",\n  \"deposited_MeV_straight_other_roi\": " << (a[6] * 1.0e-6)
+                  << ",\n  \"deposited_MeV_fe_end_other_roi\": " << (a[7] * 1.0e-6)
+                  << ",\n  \"note\": \"Diagnostic only; transport, nuclear "
+                     "collisions and RNG are unchanged.\"\n}\n";
+        }
+    }
     if (!result.be_isotope_origin_voxel_deposited_energy_MeV.empty()) {
     if (result.be_isotope_origin_voxel_deposited_energy_MeV.size() !=
         be_isotope_origin_category_count * voxel_count) {
@@ -2088,6 +2216,11 @@ void write_energy_ledger_json(const std::filesystem::path& path,
            << "    \"primary_queue_overflows\": " << result.schneider_diagnostics.primary_queue_overflows << ",\n"
            << "    \"secondary_tracks_started\": " << result.schneider_diagnostics.secondary_tracks_started << ",\n"
            << "    \"secondary_steps\": " << result.schneider_diagnostics.secondary_steps << ",\n"
+           << "    \"secondary_fe_c12_steps\": " << result.schneider_diagnostics.secondary_fe_c12_steps << ",\n"
+           << "    \"secondary_fe_he4_steps\": " << result.schneider_diagnostics.secondary_fe_he4_steps << ",\n"
+           << "    \"secondary_fe_pdt_steps\": " << result.schneider_diagnostics.secondary_fe_pdt_steps << ",\n"
+           << "    \"secondary_fe_other_charged_steps\": " << result.schneider_diagnostics.secondary_fe_other_charged_steps << ",\n"
+           << "    \"secondary_highland_steps\": " << result.schneider_diagnostics.secondary_highland_steps << ",\n"
            << "    \"secondary_rate_queries\": " << result.schneider_diagnostics.secondary_rate_queries << ",\n"
            << "    \"secondary_hazards\": " << result.schneider_diagnostics.secondary_hazards << ",\n"
            << "    \"secondary_exact_target_hits\": " << result.schneider_diagnostics.secondary_exact_target_hits << ",\n"

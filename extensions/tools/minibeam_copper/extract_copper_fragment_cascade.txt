@@ -1,0 +1,39 @@
+# Process-faithful fragment + Copper cascade extraction template.
+# The sbatch wrapper replaces the source particle, total kinetic energy,
+# history count, and thread count. This geometry is not a dose benchmark.
+i:Ts/Seed = 240918
+i:Ts/NumberOfThreads = 32
+i:Ts/ShowHistoryCountAtInterval = 5000
+b:Ts/ShowHistoryCountLessFrequentlyAsSimulationProgresses = "True"
+b:Gr/Enable = "False"
+
+s:Ge/World/Type = "TsBox"
+s:Ge/World/Material = "G4_Galactic"
+d:Ge/World/HLX = 100 mm
+d:Ge/World/HLY = 100 mm
+d:Ge/World/HLZ = 200 mm
+b:Ge/World/Invisible = "True"
+s:Ge/Copper/Parent = "World"
+s:Ge/Copper/Type = "TsBox"
+s:Ge/Copper/Material = "G4_Cu"
+d:Ge/Copper/HLX = 60 mm
+d:Ge/Copper/HLY = 60 mm
+d:Ge/Copper/HLZ = 100 mm
+d:Ge/Copper/MaxStepSize = 0.05 mm
+
+s:Ge/BeamPosition/Parent = "World"
+s:Ge/BeamPosition/Type = "Group"
+d:Ge/BeamPosition/TransZ = 100.001 mm
+s:So/FragmentBeam/Type = "Beam"
+s:So/FragmentBeam/Component = "BeamPosition"
+s:So/FragmentBeam/BeamParticle = "proton"
+d:So/FragmentBeam/BeamEnergy = 700 MeV
+u:So/FragmentBeam/BeamEnergySpread = 0.0
+s:So/FragmentBeam/BeamPositionDistribution = "None"
+s:So/FragmentBeam/BeamAngularDistribution = "None"
+i:So/FragmentBeam/NumberOfHistoriesInRun = 50000
+
+s:Ph/ListName = "Default"
+s:Ph/Default/Type = "Geant4_Modular"
+sv:Ph/Default/Modules = 8 "g4em-standard_opt4" "g4h-phy_QGSP_BIC_HP" "g4decay" "g4ion-inclxx" "CarbonIonElasticPhysics" "g4h-elastic_HP" "g4stopping" "CarbonInelasticCapturePhysics"
+d:Ph/Default/CutForAllParticles = 0.05 mm

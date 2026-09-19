@@ -55,6 +55,15 @@ void accumulate_transport_result(carbon::TransportResult& total,
                         part.charged_origin_voxel_deposited_energy_MeV);
     add_vector_in_place(total.minibeam_component_voxel_deposited_energy_MeV,
                         part.minibeam_component_voxel_deposited_energy_MeV);
+    add_vector_in_place(
+        total.minibeam_energy_band_roi_deposited_energy_MeV,
+        part.minibeam_energy_band_roi_deposited_energy_MeV);
+    add_vector_in_place(total.minibeam_c12_roi_values,
+                        part.minibeam_c12_roi_values);
+    for (std::size_t i = 0; i < carbon::minibeam_spatial_audit_slot_count; ++i) {
+        total.minibeam_spatial_audit_counts[i] +=
+            part.minibeam_spatial_audit_counts[i];
+    }
     add_vector_in_place(total.be_isotope_origin_voxel_deposited_energy_MeV,
                         part.be_isotope_origin_voxel_deposited_energy_MeV);
     add_vector_in_place(total.he_isotope_origin_voxel_deposited_energy_MeV,
@@ -132,6 +141,16 @@ void accumulate_transport_result(carbon::TransportResult& total,
     total.electron_joint_diagnostics.domain_retained_MeV += part.electron_joint_diagnostics.domain_retained_MeV;
     total.electron_joint_diagnostics.ordered_path_replays += part.electron_joint_diagnostics.ordered_path_replays;
     total.nuclear_interactions += part.nuclear_interactions;
+    total.schneider_diagnostics.secondary_fe_c12_steps +=
+        part.schneider_diagnostics.secondary_fe_c12_steps;
+    total.schneider_diagnostics.secondary_fe_he4_steps +=
+        part.schneider_diagnostics.secondary_fe_he4_steps;
+    total.schneider_diagnostics.secondary_fe_pdt_steps +=
+        part.schneider_diagnostics.secondary_fe_pdt_steps;
+    total.schneider_diagnostics.secondary_fe_other_charged_steps +=
+        part.schneider_diagnostics.secondary_fe_other_charged_steps;
+    total.schneider_diagnostics.secondary_highland_steps +=
+        part.schneider_diagnostics.secondary_highland_steps;
     for (std::size_t i = 0; i < total.cinel02_diagnostics.size(); ++i) {
         total.cinel02_diagnostics[i] += part.cinel02_diagnostics[i];
     }
@@ -459,6 +478,9 @@ void accumulate_transport_result(carbon::TransportResult& total,
         part.minibeam_water_primary_plane_records.size());
     for (auto record : part.minibeam_water_primary_plane_records) {
         record.history += minibeam_history_offset;
+        if (record.transport_path == 0U) {
+            record.particle_id += minibeam_history_offset;
+        }
         total.minibeam_water_primary_plane_records.push_back(record);
     }
     total.minibeam_fragment_phase_space_records.reserve(
