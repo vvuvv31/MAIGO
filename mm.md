@@ -274,6 +274,22 @@ water-slab campaign). A 600 MeV table is not a valid He-4 300 MeV/u reference.
 
 ### 3.3. Restricted fluctuations, delta aggregation and partition correction
 
+With a discrete delta clock, each hard collision cut the step and \(S_0\) was
+re-evaluated after the energy jump. After that clock was removed, one linear
+\(S_0 h\) uses only the step-start stopping for the whole \(h\) and would bias
+the restricted mean: both the continuous slowing and the mean delta energy still
+change \(T\) (and therefore \(S_0\)) along the step. The Poisson-partition
+correction is a first-order, constant-rate analytic fix for that bias. It has no
+TOPAS-fitted coefficient. It applies only to the linear branch in Section 3.2.1;
+range inversion already integrates \(S(T)\) and is not corrected again.
+
+Let \(x=\lambda_{\mathrm{native}} h\) be the expected number of hard collisions
+on the step. \(F(x)\) is 0 at \(x=0\) (one uncut Euler piece) and \(\to 1\) when
+many collisions would have subdivided the step. \(F\) scales **only** the
+continuous self-drift; the mean delta-jump term \(D_0\) is applied in full
+because that energy still leaves \(T\) during the step, even though it is now
+sampled as one Gamma aggregate.
+
 `S0` is restricted stopping, `D0=M1` is delta mean loss per length, and `lambda_native` is density-scaled native GetLambda. Restricted fluctuations retain the applicable IonFluc or Universal/Urban sampler. For the restricted linear branch:
 
 ```text
