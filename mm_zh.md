@@ -151,6 +151,13 @@ production-cut 映射，不是载体标签逐项相等。诊断 ROI 从同一次
 
 ### 3.4. 库仑多重散射
 
+两种模型都在**本步 Unified EM 能损抽完之后**才改方向/位置，核光学深度独立。
+它们共用同一套质量辐射长度 \(X_0\)：均匀水用 G4_WATER，CT 用 Schneider 25 分区表，
+再乘局部密度。实现见
+[multiple_scattering.hpp](include/carbon/multiple_scattering.hpp)、
+[sycl_device_math.inc](src/detail/sycl_device_math.inc)，
+调用在 [transport_sycl.cpp](src/transport_sycl.cpp)。
+
 两种实现共用一个 YAML 选择器（[宽束 FE](docs/broad_beam_fermi_eyges.md)）：
 
 ```yaml
@@ -165,7 +172,9 @@ fermi_eyges_max_segment_mm: 0.1
 Minibeam 场 YAML 当前选择 `fermi_eyges` 且 `all_charged`。只要出现
 `multiple_scattering_model`，它就是权威开关，并关闭旧的 minibeam-only FE 键。
 
-**Highland。** 分区辐射长度和局部密度：
+#### Highland：步末纯角度踢
+
+投影角 RMS：
 
 ```text
 t = rho × (h/10) / X0_mass
@@ -173,20 +182,74 @@ C = max(0, 1 + 0.038 ln(t Z²/beta²))
 theta0 = 13.6 MeV × Z/(beta p c) × sqrt(t) × C
 ```
 
-在局部横向坐标系抽取偏转，再旋转到粒子方向。散射 scale 默认 1.0，
-两个 CT/水生产配置没有调参。此近似不等于 Geant4 完整 msc，也不能替代强相互作用核弹性。
+再可乘 `multiple_scattering_scale`（生产默认 1.0）。Minibeam 水中原发 C12 还有低能过渡：
+\(E<180\,\mathrm{MeV/u}\) 时把 \(\theta_0\) 线性压到 0.20 倍。旧 minibeam Highland
+还可把一部分方差放到更宽的高斯 core/tail 混合里，那不是 FE。
 
-**Fermi–Eyges。** 相关角度与横向位移，加上路径长度 Poisson 尾，内部按
-`fermi_eyges_max_segment_mm`（0.1 mm）分段。`fermi_eyges_species` 之外的离子仍用 Highland。
-C12 使用受水 minibeam 约束的 core。p/d/t/He-4 使用 50/150/300 MeV/u 独立纯水 TOPAS 拟合，
-线性插值（[标定](benchmark/fermi_eyges_species_water/calibration_manifest.json)）；
+两个独立 Box–Muller 样本给出 \(\theta_x,\theta_y\sim\mathcal{N}(0,\theta_0^2)\)，
+转到粒子坐标系后**只改方向**。本步空间位移仍沿**散射前方向**直线走：
+
+```text
+position += direction_old × step
+```
+
+没有横向位移，也没有本步的 \(y\)–\(\theta\) 相关。几何上这一步是直线段，新方向从下一步才生效。
+这不是 Geant4 Urban/Wentzel 完整 msc，也不能替代强相互作用核弹性。
+
+#### Fermi–Eyges：相关位移 + Poisson 尾
+
+`ion_fermi_eyges_transport_step` 把物理步切成不超过
+`fermi_eyges_max_segment_mm`（0.1 mm）的内部段。段中点能量按本步已抽的 \(dE\) 线性插值：
+
+```text
+E(s) = E0 − (s + h/2)/L × dE
+```
+
+每段调用 `water_ion_fermi_eyges_tail_step`，下一段用新方向。返回的位移相对
+「沿入射方向直线漂移」。调用方随后：
+
+```text
+position += direction_old × L + displacement
+direction = new_direction
+```
+
+`fermi_eyges_species` 之外的离子仍用 Highland。C12 使用冻结水候选
+`(core, rate, tail) = (9.9 MeV, 0.0025 mm⁻¹, 2.4 MeV)`。p/d/t/He-4 使用
+50/150/300 MeV/u 独立纯水 TOPAS 拟合，线性插值
+（[标定](benchmark/fermi_eyges_species_water/calibration_manifest.json)）；
 区间外保持端点值。He-3 和更重碎片仍回退到 C12 常数。50–300 MeV/u 区间不覆盖
 主导部分 Bragg 碎片剂量的 `<50 MeV/u`。超出 `c12` 的范围仍属实验性，尤其在 Schneider 材料上。
 
-Minibeam 水中原发 C12 仍有低能 Highland core 过渡（`transition=180 MeV/u`、`scale=0.20`），
-除非显式用公共选择器回退到 Highland。Copper 使用独立的 `fermi_eyges_tail` MCS，scale 1.0；
-Copper 碎片保留 fragment MCS scale 0.785。已失败的 MCS/电子展宽路线列于
-[failed.md](failed.md)，不得恢复。
+**高斯 core。** 散射功率用当前材料 \(X_0\)：
+
+```text
+T = (Es × Z/(beta p))² / X0_mm
+Var(theta) = T L
+y = (L/2) theta + eta,   Var(eta) = T L³ / 12
+```
+
+因此 \(\mathrm{Cov}(y,\theta)=T L^2/2\)。\(\theta_x,\theta_y\) 与独立的
+\(\eta_x,\eta_y\) 均为 Box–Muller 高斯。`Es` 即 `core_MeV`。
+
+**Poisson 尾。** 事件数 \(N\sim\mathrm{Poisson}(\lambda L)\)。\(\lambda\) 按水中每毫米拟合，
+再按水/\(X_0\) 比缩放到当前材料。Knuth 抽样不截断事件数。每个事件在段内均匀，
+踢角 \(\mathcal{N}(0,(E_{\mathrm{tail}} Z/(\beta p))^2)\)，再用剩余路程把角变成额外位移。
+0.1 mm 水步上均值约 \(2.5\times10^{-4}\)，多数步 \(N=0\)。
+
+**诊断平面。** 若记分面落在本步内，在**已经抽好的段末态**上对 \((\theta(t),y(t))\)
+做 Brownian bridge，不用起终点线性插值；线性插值会把方差弄成 \(f^2 TL\) 而不是 \(fTL\)
+（[failed.md](failed.md)）。
+
+| | Highland | Fermi–Eyges |
+|---|---|---|
+| 本步横向位移 | 无 | 有，且与末态角相关 |
+| 角分布 | 单高斯 \(\theta_0\) | 窄 core + 稀有宽尾 |
+| 步内能量 | 整步用步首 \(E\) | 0.1 mm 段、段中点 \(E\) |
+| 位置更新 | \(\mathbf{r}+\hat n_{\mathrm{old}} L\) | \(\mathbf{r}+\hat n_{\mathrm{old}} L+\boldsymbol{\delta}\) |
+| 不是什么 | Geant4 完整 msc | Urban 肩部；1 mm 薄片分位数未完全拟合 |
+
+Minibeam Copper 走单独的 `fermi_eyges_tail` 入口（scale 1.0；碎片 MCS scale 0.785），
+过程同类。已失败的 MCS/电子展宽路线列于 [failed.md](failed.md)，不得恢复。
 
 见[MCS](include/carbon/multiple_scattering.hpp)。
 

@@ -174,6 +174,14 @@ same draw without changing RNG or the transport final state.
 
 ### 3.4. Coulomb multiple scattering
 
+Both models run **after** the Unified-EM energy-loss draw for the current step.
+Nuclear optical depth is independent. They share the same mass radiation length
+\(X_0\): G4_WATER in homogeneous water, Schneider 25-section LUT in CT, converted
+with local density. Implementation:
+[multiple_scattering.hpp](include/carbon/multiple_scattering.hpp),
+device helpers in [sycl_device_math.inc](src/detail/sycl_device_math.inc),
+applied in [transport_sycl.cpp](src/transport_sycl.cpp).
+
 Two implementations share one YAML selector
 ([broad-beam FE](docs/broad_beam_fermi_eyges.md)):
 
@@ -190,7 +198,9 @@ explicitly so older runs do not switch silently. Minibeam field YAML currently
 selects `fermi_eyges` with `all_charged`. When `multiple_scattering_model` is
 present it is authoritative and also disables older minibeam-only FE keys.
 
-**Highland.** Section radiation length and local density:
+#### Highland: end-of-step angular kick only
+
+Projected RMS angle:
 
 ```text
 t = rho × (h/10) / X0_mass
@@ -198,26 +208,89 @@ C = max(0, 1 + 0.038 ln(t Z²/beta²))
 theta0 = 13.6 MeV × Z/(beta p c) × sqrt(t) × C
 ```
 
-Deflections are generated in the local transverse frame and rotated into the track
-frame. The scale defaults to 1.0 and is not tuned in the two CT/water production
-presets. This is not Geant4's full msc implementation and does not replace hadronic elastic.
+Optionally multiplied by `multiple_scattering_scale` (production default 1.0).
+On the minibeam primary-C12 water path, a low-energy transition further scales
+`theta0` linearly down to 0.20 for \(E<180\,\mathrm{MeV/u}\). An older minibeam
+Highland option can mix a Gaussian core with a rarer wider Gaussian; that is
+not the FE model.
 
-**Fermi–Eyges.** Correlated angle and lateral displacement plus a path-length
-Poisson tail, internally segmented at `fermi_eyges_max_segment_mm` (0.1 mm).
-Ions outside `fermi_eyges_species` keep Highland. C12 uses the water-minibeam
-constrained core. Protons, deuterons, tritons and He-4 use independent pure-water
-TOPAS fits at 50/150/300 MeV/u with linear interpolation
+Two independent Box–Muller samples give \(\theta_x,\theta_y\sim\mathcal{N}(0,\theta_0^2)\).
+They are rotated into the track frame and **only the direction is updated**.
+The current step still advances along the **pre-scatter** direction:
+
+```text
+position += direction_old × step
+```
+
+There is no lateral displacement and no \(y\)–\(\theta\) correlation for that
+step. Geometrically the step is a straight segment; the new direction applies
+from the next step. This is not Geant4 Urban/Wentzel msc and does not replace
+hadronic elastic.
+
+#### Fermi–Eyges: correlated displacement plus Poisson tail
+
+`ion_fermi_eyges_transport_step` splits the physical step into internal
+segments of at most `fermi_eyges_max_segment_mm` (0.1 mm). Segment-midpoint
+energy interpolates the already-sampled step loss:
+
+```text
+E(s) = E0 − (s + h/2)/L × dE
+```
+
+Each segment calls `water_ion_fermi_eyges_tail_step`; the next segment uses the
+new direction. The returned displacement is relative to a straight drift along
+the input direction. The caller then does:
+
+```text
+position += direction_old × L + displacement
+direction = new_direction
+```
+
+Ions outside `fermi_eyges_species` keep Highland. C12 uses the frozen water
+candidate `(core, rate, tail) = (9.9 MeV, 0.0025 mm⁻¹, 2.4 MeV)`. Protons,
+deuterons, tritons and He-4 use independent pure-water TOPAS fits at
+50/150/300 MeV/u with linear interpolation
 ([calibration](benchmark/fermi_eyges_species_water/calibration_manifest.json));
-endpoint values are held outside that interval. He-3 and heavier fragments still
-fall back to C12 constants. The 50–300 MeV/u interval does not cover the
-`<50 MeV/u` fragments that dominate part of Bragg fragment dose. Selecting
+endpoint values are held outside that interval. He-3 and heavier fragments
+still fall back to the C12 constants. The 50–300 MeV/u interval does not cover
+the `<50 MeV/u` fragments that dominate part of Bragg fragment dose. Selecting
 scopes beyond `c12` remains experimental, especially on Schneider materials.
 
-Minibeam water still applies a low-energy Highland-core transition on primary C12
-(`transition=180 MeV/u`, `scale=0.20`) unless an explicit common-selector
-Highland rollback is chosen. Copper uses a separate `fermi_eyges_tail` MCS with
-scale 1.0; Copper fragments retain fragment MCS scale 0.785. Failed MCS/electron
-widening routes are listed in [failed.md](failed.md) and are not restored.
+**Gaussian core.** Scattering power uses the current material \(X_0\):
+
+```text
+T = (Es × Z/(beta p))² / X0_mm
+Var(theta) = T L
+y = (L/2) theta + eta,   Var(eta) = T L³ / 12
+```
+
+so \(\mathrm{Cov}(y,\theta)=T L^2/2\). \(\theta_x,\theta_y\) and the independent
+\(\eta_x,\eta_y\) are Box–Muller Gaussians. `Es` is `core_MeV`.
+
+**Poisson tail.** Event count \(N\sim\mathrm{Poisson}(\lambda L)\). \(\lambda\)
+is fitted per millimetre of water and scaled by the water/\(X_0\) ratio in
+other materials. Knuth sampling is untruncated. Each event is uniform along
+the segment, with kick \(\mathcal{N}(0,(E_{\mathrm{tail}} Z/(\beta p))^2)\);
+the remaining path converts the kick into extra displacement. On a typical
+0.1 mm water step the mean is about \(2.5\times10^{-4}\), so most steps have
+\(N=0\).
+
+**Diagnostic planes.** If a scoring plane falls inside the step, the code
+samples a Brownian bridge for \((\theta(t),y(t))\) **conditional on the already
+drawn segment endpoint**. Linear interpolation of start/end states is not used;
+it would give variance \(f^2 TL\) instead of \(fTL\) ([failed.md](failed.md)).
+
+| | Highland | Fermi–Eyges |
+|---|---|---|
+| Lateral displacement this step | none | yes, correlated with exit angle |
+| Angular law | single Gaussian \(\theta_0\) | narrow core + rare wide tail |
+| Energy inside the step | whole-step, start \(E\) | 0.1 mm segments, mid-segment \(E\) |
+| Position update | \(\mathbf{r}+\hat n_{\mathrm{old}} L\) | \(\mathbf{r}+\hat n_{\mathrm{old}} L+\boldsymbol{\delta}\) |
+| Not | Geant4 full msc | Urban shoulder; 1 mm thin-slab quantiles are not fully fit |
+
+Minibeam Copper uses a separate `fermi_eyges_tail` entry (scale 1.0; fragment
+MCS scale 0.785) with the same process class. Failed MCS/electron widening
+routes are listed in [failed.md](failed.md) and are not restored.
 
 See [MCS](include/carbon/multiple_scattering.hpp).
 
