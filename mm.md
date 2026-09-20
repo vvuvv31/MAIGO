@@ -30,8 +30,8 @@ Two configuration families are active:
 | Setting | Water / RT07575 production | Copper minibeam field presets |
 |---|---|---|
 | `em_model` | `g4_material_joint_v1` | `g4_material_joint_v1` |
-| `enable_secondary_unified_em` | `true` | enabled in current field YAML |
-| Primary / secondary fluctuations | Both enabled, `straggling_scale: 1.0` | Primary enabled; secondary Unified EM + straggling used in current field YAML |
+| `enable_secondary_unified_em` | `true` | omitted; defaults **false** |
+| Primary / secondary fluctuations | Both enabled, `straggling_scale: 1.0` | Primary enabled; secondary straggling omitted, defaults false |
 | `multiple_scattering_model` | explicit `highland` (code default) | `fermi_eyges`, `fermi_eyges_species: all_charged` |
 | `ct_secondary_exact_faces` | `true` (CT) | not a CT grid |
 | `secondary_species_grouping` | `true` | not the minibeam performance target |
@@ -178,21 +178,66 @@ energy at cutoff is scored in the current voxel.
 
 ### 3.2. Restricted mean energy loss and density
 
-Let `T` be total kinetic energy (MeV), `E=T/A` energy per nucleon, and `h` length (mm).
-The current package retains native restricted stopping, range and inverse-range
-spline segments. Each selected density node is evaluated with the actual/node
-density ratio; prepared quantities and mean losses are then interpolated between
-bracketing density nodes. This is more than a water stopping curve multiplied by density.
+Let `T` be total kinetic energy (MeV), not MeV/u; `E=T/A` is energy per nucleon;
+`h` is the already chosen step from Section 3.1.1 (mm). Continuous loss is the
+restricted ionization on that step, not a separate step-length formula.
 
-The geometric length `h` is Section 3.1.1. The package also supplies the
-linear-loss threshold used to choose the mean-loss branch below.
+#### 3.2.1. How primary and secondary continuous loss is formed
 
-For a sufficiently small estimated restricted loss, start from `S_restricted(T) × h` and apply Section 3.3.
-For larger losses, obtain the outgoing energy by inverse range, retaining the
-pre-step mass/charge scaling during inversion. The implemented ion correction
-uses an intermediate energy and includes a low-energy replacement. This is not
-the old predictor-midpoint total-stopping algorithm. Available kinetic energy
-bounds the result; the package's lowest kinetic energy can trigger final stopping.
+After `h` is fixed, ionization is split at the material electron production cut:
+
+- energy transfers **below** the cut → restricted / **continuous** (`draw.continuous`);
+- energy transfers **above** the cut → aggregate **delta** (`draw.delta`, Section 3.3).
+
+The two are sampled separately and added. Continuous loss is not
+\(S_{\mathrm{total}} h\), and it is not the YAML `maximum_relative_energy_loss`
+limiter from Section 3.1.1.
+
+**Unified EM** (`em_model: g4_material_joint_v1`) uses one restricted-mean then
+fluctuation sequence for a primary ion and for any secondary that has Unified EM
+enabled. The package stores native restricted stopping, range and inverse-range
+splines. Adjacent density nodes are evaluated at (actual density)/(node density)
+and interpolated; this is not a water stopping curve multiplied by
+\(\rho/(1\,\mathrm{g/cm^3})\). The package also supplies the native
+`linear_limit` used to pick the branch below.
+
+1. Look up restricted stopping \(S_0\), remaining restricted range \(R\), inverse
+   range and ion-correction terms at species, material, local density and \(T\).
+2. If the estimated restricted loss is small (\(S_0 h \le\) `linear_limit` \(\times T\)
+   and \(h<R\)), the mean starts from \(S_0 h\) and receives the Poisson-partition
+   correction in Section 3.3. If the estimated loss is larger, the outgoing energy
+   comes from inverse range at \(R-h\); that branch is not partition-corrected
+   again. Pre-step mass/charge scaling is kept during inversion.
+3. An ion correction is evaluated at an intermediate energy. That midpoint includes
+   mean delta loss, \(T_{\mathrm{mid}}=\max(0.5T,\,T_{\mathrm{mid}}-\tfrac12 D_0 h)\),
+   and a low-energy replacement for \(Z>2\). This is not the older
+   predictor-midpoint on **total** stopping.
+4. The mean is clipped to available kinetic energy; the package's lowest kinetic
+   energy can stop the track.
+5. If energy straggling is on, IonFluc or Universal/Urban is sampled around that
+   restricted mean (`straggling_scale: 1.0` on current production presets). The
+   sample is `draw.continuous`. If straggling is off, the mean is used as the
+   continuous loss.
+
+On the minibeam **primary C12 water** path only, the sampled total
+`continuous+delta` is then multiplied by the frozen 0.9958 and both parts are
+rescaled by `deposited/unscaled`. Secondary C12, fragments, Copper and the
+broad-beam production presets do not use this factor.
+
+**Which tracks use that sequence.**
+
+| Track | Continuous loss |
+|---|---|
+| Primary C12 in water or Schneider CT, Unified EM | Sequence above |
+| Secondary ions with `enable_secondary_unified_em: true` (water and RT07575 production YAML) | Same sequence |
+| Water secondaries on current minibeam **field** YAML | Switch omitted, defaults **false**. Midpoint on the particle-specific water table; homogeneous water is already absolute stopping and is **not** multiplied by density. Midpoint energy per nucleon is \(\max(0.01\,\mathrm{MeV/u},\,(T-\tfrac12 S h)/A)\). Packaged fluctuation, if secondary straggling is on, applies to secondary C12 only. `minibeam_water_secondary_c12_enable_unified_em` can put **C12 only** onto Unified EM; it is default-off. |
+| Copper collimator (primary C12 and fragments) | Not in the Unified package. Extracted Copper table, predictor then midpoint \(S\), optional condensed straggling. |
+| CT secondaries without Unified EM | Water table with the same mass-stopping factor or density scale at step start and midpoint. |
+| Unregistered heavy recoils | Dedicated recoil stopping; generic recoils also have a 5% relative-loss step cap. |
+
+Implementation: `mean` / `unified_em_loss` in
+[unified_em_view.hpp](include/carbon/unified_em_view.hpp); primary and secondary
+loops in [transport_sycl.cpp](src/transport_sycl.cpp).
 
 The older `ct_primary_midpoint_stopping` and material-secondary stopping paths remain
 for non-unified transport. Their tables store density-normalized total stopping:

@@ -25,8 +25,8 @@ ion-INCLXX、elastic、stopping 和衰变模块。模块名不等于每个 proje
 | 设置 | 水 / RT07575 生产 | Copper minibeam 场配置 |
 |---|---|---|
 | `em_model` | `g4_material_joint_v1` | `g4_material_joint_v1` |
-| `enable_secondary_unified_em` | `true` | 当前场 YAML 已开启 |
-| 原发 / 次级涨落 | 均开启，`straggling_scale: 1.0` | 原发开启；当前场 YAML 使用次级 Unified EM 与涨落 |
+| `enable_secondary_unified_em` | `true` | 未写，默认 **false** |
+| 原发 / 次级涨落 | 均开启，`straggling_scale: 1.0` | 原发开启；次级涨落未写，默认 false |
 | `multiple_scattering_model` | 显式 `highland`（代码默认） | `fermi_eyges`，`fermi_eyges_species: all_charged` |
 | `ct_secondary_exact_faces` | `true`（CT） | 非 CT 网格 |
 | `secondary_species_grouping` | `true` | 不是 minibeam 性能目标 |
@@ -147,16 +147,48 @@ cutoff 处残余能量记在当前体素。
 
 ### 3.2. 受限平均能损与密度
 
-令 `T` 为粒子总动能 MeV，`E=T/A` 为 MeV/u，`h` 为步长 mm。
-统一包保留原生受限 stopping、range 和 inverse-range 的 spline 段。
-每个选中的密度节点先按实际密度 / 节点密度计算，再在相邻密度节点之间插值准备量和平均能损；
-不能把当前模型概括成水 stopping 乘密度。
+令 `T` 为粒子**总动能**（MeV，不是 MeV/u），`E=T/A` 为每核子能量，`h` 为 3.1.1 节已经选定的步长（mm）。
+连续能损是这一步上的受限电离，不是另一套步长公式。
 
-几何步长 `h` 见 3.1.1 节。包还提供下面选择平均能损分支所用的线性能损阈值。
+#### 3.2.1. 原发 / 次级连续能损如何形成
 
-估计受限能损较小时以 `S_restricted(T) × h` 为基础，应用 3.3 节修正；较大时用 inverse range 求末端能量，
-反演期间保持步首质量 / 电荷缩放。离子修正在中间能量处查询，并含低能替换分支。
-这不是旧的总 stopping 预测中点算法。结果受可用动能限制，包内最低动能可触发最终停止。
+`h` 确定之后，电离按材料电子生产阈切开：
+
+- 阈**以下**的能量转移 → 受限 / **连续**（`draw.continuous`）；
+- 阈**以上**的能量转移 → 聚合 **δ**（`draw.delta`，3.3 节）。
+
+两块分开抽样再相加。连续损失不是 \(S_{\mathrm{total}} h\)，也不是 3.1.1 节 YAML 的 `maximum_relative_energy_loss`。
+
+**统一 EM**（`em_model: g4_material_joint_v1`）对原发离子、以及已打开统一 EM 的次级，用同一套「先受限均值、再涨落」：
+包内存原生受限 stopping、range 和 inverse-range 样条。相邻密度节点先按（实际密度 / 节点密度）求值再插值，
+**不能**写成水 stopping 乘 \(\rho/(1\,\mathrm{g/cm^3})\)。包还给出下面选支用的原生 `linear_limit`。
+
+1. 按物种、材料、局部密度和 \(T\) 查出受限 stopping \(S_0\)、剩余受限 range \(R\)、inverse range 和离子修正量。
+2. 估计受限损失较小（\(S_0 h \le\) `linear_limit` \(\times T\) 且 \(h<R\)）时，从 \(S_0 h\) 出发并加 3.3 节 Poisson 分步修正。
+   估计损失较大时，用 \(R-h\) 做 inverse range 得到末端能量；该支不再做分步修正。反演保持步首质量 / 电荷缩放。
+3. 离子修正在中间能量查询。该中点包含 δ 平均损失，
+   \(T_{\mathrm{mid}}=\max(0.5T,\,T_{\mathrm{mid}}-\tfrac12 D_0 h)\)，\(Z>2\) 还有低能替换。
+   这不是旧的**总** stopping 预测中点。
+4. 均值裁到可用动能；落到包最低动能可停止径迹。
+5. 若开启能损涨落，在该受限均值上抽 IonFluc 或 Universal/Urban（当前生产预设 `straggling_scale: 1.0`），得到 `draw.continuous`。
+   未开涨落则连续损失就是该均值。
+
+仅 minibeam **原发 C12 水路径**在抽完 `continuous+delta` 后乘冻结因子 0.9958，两块再按 `deposited/unscaled` 同比例缩放。
+次级 C12、碎片、Copper 和宽束生产预设不用这个因子。
+
+**哪些径迹走上面这一套。**
+
+| 径迹 | 连续能损 |
+|---|---|
+| 水或 Schneider CT 中的原发 C12，统一 EM | 上述流程 |
+| `enable_secondary_unified_em: true` 的次级（水和 RT07575 生产 YAML） | 同一套 |
+| 当前 minibeam **场** YAML 的水中次级 | 该键未写，默认 **false**。粒子特异水表中点；均匀水表已是绝对 stopping，**不再乘密度**。中点每核子能量为 \(\max(0.01\,\mathrm{MeV/u},\,(T-\tfrac12 S h)/A)\)。若开次级涨落，packaged 涨落只作用于次级 C12。`minibeam_water_secondary_c12_enable_unified_em` 可把**仅 C12**切到统一 EM，默认关。 |
+| Copper 准直器（原发 C12 与碎片） | 不在统一包内。提取的 Copper 表，先预测再中点 \(S\)，可选凝聚涨落。 |
+| 未开统一 EM 的 CT 次级 | 水表，步首与中点用同一套质量阻止本领因子或密度缩放。 |
+| 未注册重反冲 | 专用 recoil stopping；generic recoil 另有 5% 相对能损卡步。 |
+
+实现见 [unified_em_view.hpp](include/carbon/unified_em_view.hpp) 的 `mean` / `unified_em_loss`，
+以及 [transport_sycl.cpp](src/transport_sycl.cpp) 的原发 / 次级循环。
 
 旧 `ct_primary_midpoint_stopping` 与材料特异次级 stopping 仍供非统一路径使用，表中保存：
 
