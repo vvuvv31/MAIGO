@@ -90,7 +90,7 @@ CT sections.
 Following user acceptance on 2026-09-15, water and all 18 supported Schneider ions use two-moment Gamma delta aggregation with an analytic partition correction.
 
 1. Prepare species/material/density-specific restricted stopping/range, ion corrections, native fluctuations and delta moments.
-2. Limit distance by native StepFunction, exact voxel faces and nuclear collision distance. Only where delta stopping is positive, also require `h ≤ 0.01 T/(S0+D0)`.
+2. Choose the current step length as in Section 3.1.1.
 3. Correct the restricted linear-loss branch for Poisson partitioning as below; do not apply it again to range inversion. Retain native restricted fluctuations at scale 1.
 4. Sample one Gamma aggregate for the step's delta loss, debit energy and deposit locally. No individual electron collision or delta-clock step limit is sampled.
 5. Advance, apply configured MCS, resolve nuclear candidates and queue products. Nuclear optical depth remains a separate mechanism.
@@ -105,6 +105,77 @@ broad-beam production presets. A 250 MeV/u full-chain A/B against the current TO
 reference favoured 0.9958 over 1.0 on 2-D/IDD L1 and Bragg depth; it is a table/sampling
 correction relative to that reference, not a Geant4 stopping-table rewrite.
 
+#### 3.1.1. How the current step length is chosen
+
+The GPU first proposes an electromagnetic length, then shortens it for geometry
+and a possible nuclear collision. Energy loss and MCS use that final `h`.
+Implementation: `step_from_range` in
+[unified_em_view.hpp](include/carbon/unified_em_view.hpp) and the primary/secondary
+loops in [transport_sycl.cpp](src/transport_sycl.cpp).
+
+**Unified EM (water, RT07575 and current minibeam field YAML).** The YAML keys
+`maximum_step_mm` and `maximum_relative_energy_loss` are **replaced**, not
+combined with a min, by Geant4's native StepFunction. Remaining restricted
+CSDA range \(R\) comes from the package spline at the step-start energy and
+local density. Parameters are `f = dRoverRange` and
+`r_final = finalRange`, stored per ion as `step_fraction` and `final_range`:
+
+```text
+h_EM = f R + r_final (1 − f) (2 − r_final/R),  R > r_final
+h_EM = R,                                    otherwise
+```
+
+`f = 0.1` for every ion in the v1 package. `r_final` is species-dependent,
+read from `G4VEnergyLossProcess::finalRange` at extraction:
+
+| ion | `r_final` |
+|---|---|
+| p | 0.05 mm |
+| d, t, He-3, He-4 | 0.02 mm |
+| He-6 and \(Z\ge 3\), including C12 | 0.001 mm |
+
+Far from stopping, \(h_{\mathrm{EM}}\approx fR\) (about 10% of remaining range
+for C12, plus a ~0.002 mm offset). At \(R=r_{\mathrm{final}}\) the two branches
+match in value and first derivative (\(h=R\), \(h'=1\)), so the stepper does not
+jump. For \(R\le r_{\mathrm{final}}\) the proposal is the remaining range.
+This is a geometric EM proposal, not a fixed millimetre step and not the YAML
+relative-loss cap. High-energy C12 steps can be many millimetres; near stopping
+they become micrometres.
+
+If delta stopping is positive, also require
+
+```text
+h ≤ 0.01 T / (S0 + D0)
+```
+
+This bounds the **mean** combined restricted-plus-delta loss, not the sampled
+random loss.
+
+**Legacy EM only.** The proposal is
+`min(maximum_step_mm, maximum_relative_energy_loss × T / S)`. GPU production
+rejects `em_model: legacy`; serial/CPU backends still have that path.
+
+**Then shorten `h` by the minimum of:**
+
+- depth-bin faces of the 1-D scorer (present in water and minibeam; 0.25 mm
+  bins in current minibeam YAML);
+- exact CT voxel faces when the track is in the CT grid;
+- slab, insert, phantom and Copper material boundaries when those geometries
+  are active;
+- a nuclear collision inside this candidate step: remaining optical depth
+  \(\tau=-\ln U\) is consumed over `h`; if \(\Sigma h \ge \tau\), `h` is cut
+  to \(\tau/\Sigma\) and a collision is flagged. Otherwise \(\tau\) is reduced
+  and transport continues. The collision distance is not the only step limit
+  computed in advance.
+
+Lateral scoring voxels do **not** clamp transport in production
+(`voxel_scorer_clamps_transport` is off). Fermi–Eyges internal 0.1 mm segments
+split MCS inside an already chosen `h`; they do not replace StepFunction.
+
+**Transport stops** when kinetic energy falls to `energy_cutoff_MeV`, the track
+leaves the phantom, or the primary/secondary step cap is reached. Residual
+energy at cutoff is scored in the current voxel.
+
 ### 3.2. Restricted mean energy loss and density
 
 Let `T` be total kinetic energy (MeV), `E=T/A` energy per nucleon, and `h` length (mm).
@@ -113,16 +184,8 @@ spline segments. Each selected density node is evaluated with the actual/node
 density ratio; prepared quantities and mean losses are then interpolated between
 bracketing density nodes. This is more than a water stopping curve multiplied by density.
 
-For native StepFunction parameters `f` and `r_final`, with remaining range `R`:
-
-```text
-h_EM = f R + r_final (1 − f) (2 − r_final/R),  R > r_final
-h_EM = R,                                    otherwise
-```
-
-Parameters are read per ion from the package; the primary C12 data use
-`f=0.1`, `r_final=0.001 mm`. Do not assign these values to every species without
-checking its record. The package also supplies the linear-loss threshold.
+The geometric length `h` is Section 3.1.1. The package also supplies the
+linear-loss threshold used to choose the mean-loss branch below.
 
 For a sufficiently small estimated restricted loss, start from `S_restricted(T) × h` and apply Section 3.3.
 For larger losses, obtain the outgoing energy by inverse range, retaining the

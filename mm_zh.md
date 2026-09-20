@@ -75,7 +75,7 @@ Copper 密度 8.96 g/cm³、质量辐射长度 12.8628 g/cm² 为显式参数。
 2026-09-15 用户验收后，水和 Schneider 全部 18 种已支持离子采用两矩 Gamma δ 聚合与解析分步修正。
 
 1. 按物种、材料、密度和动能准备受限 stopping/range、离子修正、原生涨落与 δ 矩。
-2. 用原生 StepFunction、精确体素边界和核碰撞距离限制步长。仅在 δ stopping 大于零时，追加 `h ≤ 0.01 T/(S0+D0)` 的平均能损限制。
+2. 按 3.1.1 节选择当前步长。
 3. 计算受限平均能损，在线性分支加入下述 Poisson 分步修正；range 反演分支不重复修正。保留原生受限涨落，scale=1。
 4. 按本步 δ 总损失均值与方差抽一次 Gamma，扣除能量并局部沉积；不抽逐电子碰撞，也不使用 δ 时钟限制步长。
 5. 推进粒子、应用配置的 MCS，处理核候选并排入产物。核光学深度机制保持独立。
@@ -88,6 +88,63 @@ Copper 密度 8.96 g/cm³、质量辐射长度 12.8628 g/cm² 为显式参数。
 250 MeV/u 全链 A/B 在 2-D/IDD L1 和 Bragg 深度上支持 0.9958 优于 1.0；
 这是相对该参考的表/抽样修正，不是改写 Geant4 stopping 表。
 
+#### 3.1.1. 当前步长如何决定
+
+GPU 先提出电磁步长，再按几何和可能的核碰撞裁短。能损与 MCS 使用最终的 `h`。
+实现见 [unified_em_view.hpp](include/carbon/unified_em_view.hpp) 的 `step_from_range`
+以及 [transport_sycl.cpp](src/transport_sycl.cpp) 的原发/次级循环。
+
+**统一 EM（水、RT07575 和当前 minibeam 场 YAML）。** YAML 的 `maximum_step_mm` 和
+`maximum_relative_energy_loss` 被 Geant4 原生 StepFunction **替换**，不是再取 min。
+剩余受限 CSDA range \(R\) 来自包内样条，用步首能量和局部密度求值。参数为
+`f = dRoverRange`、`r_final = finalRange`，按离子存为 `step_fraction` 和 `final_range`：
+
+```text
+h_EM = f R + r_final (1 − f) (2 − r_final/R)，R > r_final
+h_EM = R，                                 其他情况
+```
+
+v1 包中全部离子 `f = 0.1`。`r_final` 随物种变化，提取自
+`G4VEnergyLossProcess::finalRange`：
+
+| 离子 | `r_final` |
+|---|---|
+| p | 0.05 mm |
+| d、t、He-3、He-4 | 0.02 mm |
+| He-6 及 \(Z\ge 3\)（含 C12） | 0.001 mm |
+
+远离停止时 \(h_{\mathrm{EM}}\approx fR\)（C12 约为剩余 range 的 10%，外加约 0.002 mm）。
+在 \(R=r_{\mathrm{final}}\) 两支的值和一阶导数连续（\(h=R\)，\(h'=1\)），步长不会跳变。
+\(R\le r_{\mathrm{final}}\) 时提议步等于剩余 range。这是电磁几何提议，不是固定毫米步，
+也不是 YAML 相对能损上限。高能 C12 步可以到许多毫米，近停止才变成微米量级。
+
+δ stopping 大于零时再要求
+
+```text
+h ≤ 0.01 T / (S0 + D0)
+```
+
+限制的是**平均**受限加 δ 总损失，不是抽到的随机损失。
+
+**仅 Legacy EM。** 提议步为
+`min(maximum_step_mm, maximum_relative_energy_loss × T / S)`。
+GPU 生产拒绝 `em_model: legacy`；serial/CPU 仍保留该路径。
+
+**随后将 `h` 取下列最小值：**
+
+- 一维记分深度面（水和 minibeam 都有；当前 minibeam YAML 为 0.25 mm 分箱）；
+- 轨迹在 CT 网格内时的精确 CT 体素面；
+- 启用时的 slab、insert、模体和 Copper 材料边界；
+- 本候选步内的核碰撞：剩余光学深度 \(\tau=-\ln U\) 在 `h` 上消耗；若 \(\Sigma h \ge \tau\)，
+  则把 `h` 收到 \(\tau/\Sigma\) 并标记碰撞，否则只减 \(\tau\) 继续走。
+  碰撞距离不是事先单独算出的唯一上限。
+
+横向记分体素在生产中**不**卡输运（`voxel_scorer_clamps_transport` 关闭）。
+Fermi–Eyges 内部 0.1 mm 分段是在已经选定的 `h` 里再切 MCS，不替代 StepFunction。
+
+**输运停止**于动能落到 `energy_cutoff_MeV`、飞出模体，或达到原发/次级最大步数。
+cutoff 处残余能量记在当前体素。
+
 ### 3.2. 受限平均能损与密度
 
 令 `T` 为粒子总动能 MeV，`E=T/A` 为 MeV/u，`h` 为步长 mm。
@@ -95,15 +152,7 @@ Copper 密度 8.96 g/cm³、质量辐射长度 12.8628 g/cm² 为显式参数。
 每个选中的密度节点先按实际密度 / 节点密度计算，再在相邻密度节点之间插值准备量和平均能损；
 不能把当前模型概括成水 stopping 乘密度。
 
-原生 StepFunction 参数为 `f`、`r_final`，剩余 range 为 `R`：
-
-```text
-h_EM = f R + r_final (1 − f) (2 − r_final/R)，R > r_final
-h_EM = R，                                 其他情况
-```
-
-参数由每种离子的包记录提供；原发 C12 数据使用 `f=0.1`、`r_final=0.001 mm`，
-不能未经核对套到全部物种。线性能损阈值同样来自包。
+几何步长 `h` 见 3.1.1 节。包还提供下面选择平均能损分支所用的线性能损阈值。
 
 估计受限能损较小时以 `S_restricted(T) × h` 为基础，应用 3.3 节修正；较大时用 inverse range 求末端能量，
 反演期间保持步首质量 / 电荷缩放。离子修正在中间能量处查询，并含低能替换分支。
