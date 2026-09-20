@@ -124,7 +124,7 @@ v1 包中全部离子 `f = 0.1`。`r_final` 随物种变化，提取自
 h ≤ 0.01 T / (S0 + D0)
 ```
 
-限制的是**平均**受限加 δ 总损失，不是抽到的随机损失。
+限制的是**平均**受限加 δ 总损失，不是抽到的随机损失。这是步长上限，不是后面选择连续均值分支的 `linear_limit`（3.2.1 节）。
 
 **仅 Legacy EM。** 提议步为
 `min(maximum_step_mm, maximum_relative_energy_loss × T / S)`。
@@ -161,11 +161,22 @@ cutoff 处残余能量记在当前体素。
 
 **统一 EM**（`em_model: g4_material_joint_v1`）对原发离子、以及已打开统一 EM 的次级，用同一套「先受限均值、再涨落」：
 包内存原生受限 stopping、range 和 inverse-range 样条。相邻密度节点先按（实际密度 / 节点密度）求值再插值，
-**不能**写成水 stopping 乘 \(\rho/(1\,\mathrm{g/cm^3})\)。包还给出下面选支用的原生 `linear_limit`。
+**不能**写成水 stopping 乘 \(\rho/(1\,\mathrm{g/cm^3})\)。包还给出 Geant4 原生 `linLossLimit`，按离子存为 `linear_limit`。
+从 `unified_em_v1.bin` 读出（3,150 条材料/离子记录；同一离子的 175 个密度节点共用一个值）：
+
+| 离子 | `linear_limit` |
+|---|---|
+| p、d、t（\(Z=1\)） | 0.01 |
+| He-3 及更重（含 C12） | 0.02 |
+
+这**不是**毫米步长。「小步 / 大步」指估计受限损失 \(S_0 h\) 占当前总动能 \(T\) 的比例大不大，
+也**不是** 3.1.1 节的 1% 步长上限 \(h\le 0.01\,T/(S_0+D_0)\)（那道用受限 **加** δ stopping，先限制 \(h\)）。
+C12 走线性支的条件是 \(S_0 h \le 0.02\,T\)。`primary_restricted_mean_candidate` 里的缺省 `0.02` 在统一路径上不会单独生效，调用传入的是 `r.linear_limit`。
 
 1. 按物种、材料、局部密度和 \(T\) 查出受限 stopping \(S_0\)、剩余受限 range \(R\)、inverse range 和离子修正量。
-2. 估计受限损失较小（\(S_0 h \le\) `linear_limit` \(\times T\) 且 \(h<R\)）时，从 \(S_0 h\) 出发并加 3.3 节 Poisson 分步修正。
-   估计损失较大时，用 \(R-h\) 做 inverse range 得到末端能量；该支不再做分步修正。反演保持步首质量 / 电荷缩放。
+2. **小步（线性支）：** \(h<R\) 且 \(S_0 h \le\) `linear_limit` \(\times T\)。受限均值从 \(S_0 h\) 出发，再加 3.3 节 Poisson 分步修正。
+   **大步（range 反演）：** 估计受限损失超过该比例，或 \(h\ge R\)。末端能量由 \(R-h\) 反演得到（\(h\ge R\) 则本步停掉，连续均值就是剩余 \(T\)）。
+   该支不再做分步修正。反演保持步首质量 / 电荷缩放。
 3. 离子修正在中间能量查询。该中点包含 δ 平均损失，
    \(T_{\mathrm{mid}}=\max(0.5T,\,T_{\mathrm{mid}}-\tfrac12 D_0 h)\)，\(Z>2\) 还有低能替换。
    这不是旧的**总** stopping 预测中点。

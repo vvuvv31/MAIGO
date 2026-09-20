@@ -149,7 +149,8 @@ h ≤ 0.01 T / (S0 + D0)
 ```
 
 This bounds the **mean** combined restricted-plus-delta loss, not the sampled
-random loss.
+random loss. It is a step-length cap, not the `linear_limit` that later chooses
+the continuous-mean branch (Section 3.2.1).
 
 **Legacy EM only.** The proposal is
 `min(maximum_step_mm, maximum_relative_energy_loss × T / S)`. GPU production
@@ -198,16 +199,32 @@ fluctuation sequence for a primary ion and for any secondary that has Unified EM
 enabled. The package stores native restricted stopping, range and inverse-range
 splines. Adjacent density nodes are evaluated at (actual density)/(node density)
 and interpolated; this is not a water stopping curve multiplied by
-\(\rho/(1\,\mathrm{g/cm^3})\). The package also supplies the native
-`linear_limit` used to pick the branch below.
+\(\rho/(1\,\mathrm{g/cm^3})\). The package also supplies Geant4's native
+`linLossLimit`, stored per ion as `linear_limit`. Read from `unified_em_v1.bin`
+(3,150 material/ion records; 175 density nodes share one value per ion):
+
+| ion | `linear_limit` |
+|---|---|
+| p, d, t (\(Z=1\)) | 0.01 |
+| He-3 and heavier, including C12 | 0.02 |
+
+This is **not** millimetre length. "Small" / "large" means whether the estimated
+restricted loss \(S_0 h\) is a small fraction of the current total kinetic energy
+\(T\). It is also **not** the 1% step guard \(h\le 0.01\,T/(S_0+D_0)\) in
+Section 3.1.1 (that cap uses restricted **plus** delta stopping and limits \(h\)
+before this branch). For C12 the linear branch is \(S_0 h \le 0.02\,T\). The
+`0.02` default in `primary_restricted_mean_candidate` is unused on the unified
+path; the call passes `r.linear_limit`.
 
 1. Look up restricted stopping \(S_0\), remaining restricted range \(R\), inverse
    range and ion-correction terms at species, material, local density and \(T\).
-2. If the estimated restricted loss is small (\(S_0 h \le\) `linear_limit` \(\times T\)
-   and \(h<R\)), the mean starts from \(S_0 h\) and receives the Poisson-partition
-   correction in Section 3.3. If the estimated loss is larger, the outgoing energy
-   comes from inverse range at \(R-h\); that branch is not partition-corrected
-   again. Pre-step mass/charge scaling is kept during inversion.
+2. **Small step (linear branch):** \(h<R\) and \(S_0 h \le\) `linear_limit` \(\times T\).
+   Restricted mean starts from \(S_0 h\) and receives the Poisson-partition
+   correction in Section 3.3. **Large step (range inversion):** estimated restricted
+   loss above that fraction, or \(h\ge R\). Outgoing energy comes from inverse range
+   at \(R-h\) (if \(h\ge R\), the track stops and the continuous mean is the remaining
+   \(T\)). The range branch is not partition-corrected again. Pre-step mass/charge
+   scaling is kept during inversion.
 3. An ion correction is evaluated at an intermediate energy. That midpoint includes
    mean delta loss, \(T_{\mathrm{mid}}=\max(0.5T,\,T_{\mathrm{mid}}-\tfrac12 D_0 h)\),
    and a low-energy replacement for \(Z>2\). This is not the older
