@@ -366,3 +366,30 @@ these conditional observables.
 | 4 finite slit | partial | split/energy/angle done; no signed-distance scan |
 | 5 full slit | done | direct/touched split and conditionals |
 | 6 downstream | not run | water/source/nuclear frozen by design |
+
+## 14. Gate 4 finite-slit scan attempt (2026-09-21)
+
+TOPAS runs locally (`/home/wuwei/topas/topas-build/topas`, 32 threads, ~1 min
+per 20k-history run). The cross setup was rerun with the PBS spot `x` offset at
+0/0.25/0.5/1.0/2.0 mm. The water-entry C12 yield is 2558/2501/2553/2571/2541,
+i.e. offset-independent. The `PencilBeamScanning` spot `x` is therefore not a
+transverse offset at the aperture plane; a correct finite-slit scan needs either
+an aperture transverse translation or a source position offset in the
+`BeamPosition` group. Gate 4 remains open: the direct/touched split and
+conditionals (section 12) are done, but the signed-distance `P(exit|d)` scan is
+not.
+
+No fabrication: the 5 offset runs exist under `/tmp/topas_gate4/out_x*` but do
+not constitute a valid scan.
+
+## 15. Final status
+
+| gate | status |
+|---|---|
+| 0 reference freeze | done (runtime log, configs, hashes) |
+| 1 component truth | done (sampler 2-8%) |
+| 2 slab 1/10 mm x 150/250/300 | done |
+| 3 matched step policy | done (slab + collimator) |
+| 4 finite slit | split/energy/angle done; signed-distance scan blocked by source-offset mechanism |
+| 5 full slit | done (split 0.1 pp, conditionals 1.5-4%) |
+| 6 downstream | not run (water/source/nuclear frozen by design) |
