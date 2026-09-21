@@ -99,6 +99,18 @@ The residual +2.3 pp at the very entrance is **not** an MSC model mismatch and
 **not** a step-length effect. Remaining candidates: dose-scoring convention
 (GPU voxel `dose_to_medium=mhd` vs TOPAS `DoseToMedium`) and the source/optics.
 
+> 2026-09-21 correction (this paragraph's exclusion was premature, do not use
+> it as a premise): the "not MSC / not step" verdict is INVALID until (a) the
+> 1 mm slab lateral-x ~100x discrepancy is resolved with a slab config that
+> reproduces the TOPAS box geometry (it was dismissed as "geometry-confounded"
+> without that control), (b) the production safety wiring defect is fixed
+> (`transport_sycl.cpp` passed `safety_mm=0.0F`, forcing every urban_v2
+> displacement to cancel; fixed this round to a real endpoint isotropic
+> safety), and (c) a signed-distance finite-slit scan with shared entry
+> records exists (the offset/translation attempts produced no valid scan).
+> The dose-scoring and source/optics candidates remain hypotheses, not
+> established exclusions of MSC/step effects.
+
 Production default remains `fermi_eyges_tail`; `urban` is an opt-in, validated
 candidate. Enable with:
 

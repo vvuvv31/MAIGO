@@ -759,7 +759,8 @@ void write_minibeam_phase_space_csv(const std::filesystem::path& path,
             "Cannot create minibeam phase-space output file: " + path.string());
     }
     output << "source_history,slit,copper_touched,copper_elastic,kinetic_energy_MeV,"
-              "x_mm,y_mm,direction_x,direction_y,direction_z\n"
+              "x_mm,y_mm,direction_x,direction_y,direction_z,"
+              "initial_ray_hits_copper,ever_in_copper,cumulative_cu_true_path_mm\n"
            << std::setprecision(17);
     for (const auto& record : result.minibeam_phase_space_records) {
         if (!record.valid) continue;
@@ -768,7 +769,10 @@ void write_minibeam_phase_space_csv(const std::filesystem::path& path,
                << static_cast<unsigned>(record.copper_elastic) << ','
                << record.kinetic_energy_MeV << ',' << record.x_mm << ','
                << record.y_mm << ',' << record.direction_x << ','
-               << record.direction_y << ',' << record.direction_z << '\n';
+               << record.direction_y << ',' << record.direction_z << ','
+               << static_cast<unsigned>(record.initial_ray_hits_copper) << ','
+               << static_cast<unsigned>(record.ever_in_copper) << ','
+               << record.cumulative_cu_true_path_mm << '\n';
     }
     if (!output) {
         throw std::runtime_error("Failed to write minibeam phase space");

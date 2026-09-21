@@ -39,6 +39,17 @@ struct C12BirthRecord {
 
 // Optional per-primary snapshot at the downstream water entrance.  This is
 // populated only when minibeam_phase_space_output_file is configured.
+// Touch-versioning (frozen semantics):
+//   copper_touched (legacy) = INITIAL-RAY hit flag from the source position
+//     (minibeam_ray_hits_cylindrical_copper).  Kept byte-identical for
+//     backward compatibility; it is NOT an in-transport touch.
+//   initial_ray_hits_copper = explicit copy of the same initial-ray decision.
+//   ever_in_copper = true when any transported segment midpoint was in Copper.
+//   cumulative_cu_true_path_mm = sum of final true-path lengths over segments
+//     whose midpoint was in Copper (urban_v2 uses final t; other models use
+//     the transported geometric length).  Actual touch MUST be determined
+//     from ever_in_copper/cumulative path, never from the initial ray or the
+//     exit energy.
 struct MinibeamPhaseSpaceRecord {
     std::uint64_t history{};
     std::int32_t slit{};
@@ -49,8 +60,12 @@ struct MinibeamPhaseSpaceRecord {
     float kinetic_energy_MeV{};
     float x_mm{}, y_mm{};
     float direction_x{}, direction_y{}, direction_z{};
+    std::uint8_t initial_ray_hits_copper{};
+    std::uint8_t ever_in_copper{};
+    std::uint8_t touch_pad[2]{};
+    float cumulative_cu_true_path_mm{};
 };
-static_assert(sizeof(MinibeamPhaseSpaceRecord) == 40,
+static_assert(sizeof(MinibeamPhaseSpaceRecord) == 48,
               "minibeam phase-space record layout");
 
 // Optional per-primary snapshots at diagnostic planes inside water. One slot

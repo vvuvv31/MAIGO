@@ -4101,6 +4101,12 @@ template<int EmMode>
                         minibeam_slit_thickness, minibeam_slit_offset);
                 auto minibeam_primary_elastic = false;
                 auto minibeam_source_slit = 0;
+                // Versioned touch state (history scope): flushed to the
+                // phase-space record after transport.  Legacy copper_touched
+                // keeps the initial-ray meaning; ever_in_copper and the Cu
+                // true-path accumulator below are the actual-touch observables.
+                auto beamline_ever_in_copper_hist = false;
+                auto beamline_cu_true_path_hist_mm = 0.0F;
                 if (enable_minibeam && direction_z > 1.0e-8F) {
                     const auto slit_entrance_distance =
                         (minibeam_block_entrance_z - position_z_mm) /
@@ -4134,6 +4140,8 @@ template<int EmMode>
                     std::uint64_t beamline_step = 0;
                     float copper_nuclear_tau_remaining = 0.0F;
                     bool copper_nuclear_tau_active = false;
+                    // (touch accumulators live at history scope:
+                    // beamline_ever_in_copper_hist / beamline_cu_true_path_hist_mm)
                     constexpr std::uint64_t maximum_beamline_steps = 100000;
                     while (energy_MeV > energy_cutoff_MeV &&
                            direction_z > 1.0e-8F &&
@@ -4231,11 +4239,32 @@ template<int EmMode>
                                 const auto copper_range_mm = stopping > 0.0F
                                     ? energy_MeV / stopping
                                     : 0.0F;
+                                // R1: real isotropic postSafety at the geometric
+                                // endpoint (position + g*direction), NOT the
+                                // along-ray boundary distance and NOT step-start
+                                // safety.  Never a constant; 0.0F would force
+                                // every displacement to cancel.
+                                const auto endpoint_x_mm =
+                                    position_x_mm + transport_path * direction_x;
+                                const auto endpoint_y_mm =
+                                    position_y_mm + transport_path * direction_y;
+                                const auto endpoint_z_mm =
+                                    position_z_mm + transport_path * direction_z;
+                                const auto urban_v2_safety_mm =
+                                    minibeam_isotropic_safety_at_point(
+                                        endpoint_x_mm, endpoint_y_mm,
+                                        endpoint_z_mm, minibeam_cos, minibeam_sin,
+                                        minibeam_block_radius, minibeam_slit_count,
+                                        minibeam_slit_width, minibeam_slit_pitch,
+                                        0.5F * minibeam_slit_length,
+                                        minibeam_slit_offset,
+                                        minibeam_block_entrance_z,
+                                        minibeam_block_exit_z);
                                 correlated_scattering = copper_urban_v2_msc_step(
                                     pre_scatter_direction, energy_MeV, 6, 12,
                                     transport_path, minibeam_copper_density,
                                     minibeam_copper_radiation_length,
-                                    copper_range_mm, stopping, 0.0F,
+                                    copper_range_mm, stopping, urban_v2_safety_mm,
                                     minibeam_copper_mcs_scale, spot_seed,
                                     rng_history, beamline_step, 50);
                             } else if (minibeam_copper_urban_msc) {
@@ -4257,13 +4286,27 @@ template<int EmMode>
                                     rng_history, beamline_step, 50);
                             }
                         }
-                        position_x_mm += transport_path * direction_x +
+                        // R4: explicit step proposal/finalization contract for
+                        // urban_v2 only (legacy/highland/FE/urban untouched).
+                        // Geometry consumes final g; loss/fluctuation and the
+                        // reaction path below consume final t.  No post-hoc
+                        // t/g rescaling of the ledger.
+                        const auto urban_v2_proposal =
+                            minibeam_copper_urban_v2_msc &&
+                            correlated_scattering.proposal_valid;
+                        const auto geom_advance_mm = urban_v2_proposal
+                            ? correlated_scattering.final_geom_path_mm
+                            : transport_path;
+                        const auto true_loss_path_mm = urban_v2_proposal
+                            ? correlated_scattering.final_true_path_mm
+                            : transport_path;
+                        position_x_mm += geom_advance_mm * direction_x +
                             correlated_scattering.displacement_mm.x;
-                        position_y_mm += transport_path * direction_y +
+                        position_y_mm += geom_advance_mm * direction_y +
                             correlated_scattering.displacement_mm.y;
-                        position_z_mm += transport_path * direction_z +
+                        position_z_mm += geom_advance_mm * direction_z +
                             correlated_scattering.displacement_mm.z;
-                        const auto predictor_loss = stopping * transport_path;
+                        const auto predictor_loss = stopping * true_loss_path_mm;
                         const auto midpoint_energy_u = sycl::fmax(
                             0.0F, (energy_MeV - 0.5F * predictor_loss) *
                                       inverse_mass_number);
@@ -4279,7 +4322,7 @@ template<int EmMode>
                                 minibeam_copper_sp_energies_device,
                                 minibeam_copper_sp_values_device,
                                 minibeam_copper_sp_count, midpoint_energy_u);
-                        const auto mean_loss = midpoint_stopping * transport_path;
+                        const auto mean_loss = midpoint_stopping * true_loss_path_mm;
                         auto proposed_loss = mean_loss;
                         if (minibeam_copper_enable_energy_straggling) {
                             constexpr float copper_z_over_a_rel_water =
@@ -4289,7 +4332,7 @@ template<int EmMode>
                             const auto variance =
                                 condensed_total_loss_variance_MeV2_device(
                                     midpoint_energy_u, 12, effective_charge,
-                                    transport_path, minibeam_copper_density,
+                                    true_loss_path_mm, minibeam_copper_density,
                                     copper_z_over_a_rel_water);
                             const auto gaussian_u0 = sycl::fmax(
                                 rng::uniform01(spot_seed, rng_history,
@@ -4317,7 +4360,11 @@ template<int EmMode>
                         if (rate_total > 0.0F && copper_nuclear_tau_active) {
                             copper_nuclear_tau_remaining = sycl::fmax(
                                 0.0F, copper_nuclear_tau_remaining -
-                                          rate_total * transport_path);
+                                           rate_total * true_loss_path_mm);
+                        }
+                        if (in_copper) {
+                            beamline_ever_in_copper_hist = true;
+                            beamline_cu_true_path_hist_mm += true_loss_path_mm;
                         }
                         const auto collision_energy_u = energy_MeV * inverse_mass_number;
                         const auto elastic_index = minibeam_elastic_nearest(
@@ -5371,6 +5418,14 @@ template<int EmMode>
                     record.copper_touched = minibeam_hits_copper ? 1U : 0U;
                     record.copper_elastic = minibeam_primary_elastic ? 1U : 0U;
                     record.valid = 1U;
+                    // Versioned touch: legacy field frozen as initial-ray;
+                    // actual-touch observables below.
+                    record.initial_ray_hits_copper =
+                        minibeam_hits_copper ? 1U : 0U;
+                    record.ever_in_copper =
+                        beamline_ever_in_copper_hist ? 1U : 0U;
+                    record.cumulative_cu_true_path_mm =
+                        beamline_cu_true_path_hist_mm;
                     record.kinetic_energy_MeV = energy_MeV;
                     record.x_mm = position_x_mm;
                     record.y_mm = position_y_mm;

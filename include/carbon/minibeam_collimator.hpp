@@ -374,4 +374,66 @@ inline bool minibeam_ray_hits_cylindrical_copper(
     return !through_one_slit;
 }
 
+// Isotropic safety at a point inside/near the collimator block: minimum
+// distance to any Copper/air material boundary (R1 fix supporting the real
+// production caller).  This is NOT the along-ray distance to the next
+// boundary and NOT the step-start safety.  The caller evaluates it at the
+// geometric endpoint (position + g*direction) before displacement.
+// Transverse part: outer circle + nearest finite-slit walls/ends.
+// Axial part: block entrance/exit planes.  Returns >= 0.
+inline float minibeam_isotropic_safety_at_point(
+    const float x_mm, const float y_mm, const float z_mm,
+    const float cosine_angle, const float sine_angle,
+    const float radius_mm, const int slit_count,
+    const float slit_width_mm, const float slit_pitch_mm,
+    const float slit_half_length_mm, const float slit_offset_mm,
+    const float block_entrance_z_mm, const float block_exit_z_mm) noexcept {
+    float safety = 1.0e30F;
+    const auto r = std::sqrt(x_mm * x_mm + y_mm * y_mm);
+    // Outer cylindrical wall (extruded along z while inside the block z range).
+    if (z_mm >= block_entrance_z_mm && z_mm <= block_exit_z_mm) {
+        const auto d_outer = radius_mm - r;
+        if (d_outer < safety) safety = d_outer;
+    }
+    // Axial planes.
+    {
+        const auto d_enter = z_mm - block_entrance_z_mm;
+        const auto d_exit = block_exit_z_mm - z_mm;
+        auto d_axial = d_enter < d_exit ? d_enter : d_exit;
+        if (d_axial < safety) safety = d_axial;
+    }
+    // Finite slit walls/ends around the nearest slits.
+    const auto u_mm = cosine_angle * x_mm + sine_angle * y_mm;
+    const auto v_mm = -sine_angle * x_mm + cosine_angle * y_mm;
+    const auto half_count = slit_count / 2;
+    const auto nearest_slit = nearest_minibeam_slit(
+        u_mm - slit_offset_mm, slit_pitch_mm);
+    for (int local_offset = -1; local_offset <= 1; ++local_offset) {
+        const auto slit = nearest_slit + local_offset;
+        if (slit < -half_count || slit > half_count) continue;
+        const auto center_u =
+            slit_offset_mm + static_cast<float>(slit) * slit_pitch_mm;
+        // Distance to the two side walls of this slit.
+        const auto d_wall = std::fabs(u_mm - center_u) - 0.5F * slit_width_mm;
+        // Inside-slit (air) points: distance to the nearest wall is -d_wall
+        // when d_wall < 0; inside-copper points: distance to wall is +d_wall
+        // when the v coordinate is within the finite slit length.
+        const bool v_inside = v_mm > -slit_half_length_mm &&
+                              v_mm < slit_half_length_mm;
+        if (v_inside) {
+            const auto candidate = std::fabs(d_wall);
+            if (candidate < safety) safety = candidate;
+        }
+        // Distance to the finite slit ends (only relevant near this slit in u).
+        if (std::fabs(u_mm - center_u) < 0.5F * slit_width_mm) {
+            const auto d_end =
+                std::fabs(std::fabs(v_mm) - slit_half_length_mm);
+            if (d_end < safety) safety = d_end;
+        }
+    }
+    if (!(safety >= 0.0F)) safety = 0.0F;
+    if (safety > 1.0e29F) safety = 0.0F;
+    return safety;
+}
+
 }  // namespace carbon

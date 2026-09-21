@@ -1,6 +1,20 @@
 """Double-precision port of the active Urban angular sampler
 (SampleCosineTheta + SimpleScattering), validated against the TOPAS
-per-step MSC ntuple for C12 in Copper."""
+per-step MSC ntuple for C12 in Copper.
+
+SCOPE (frozen 2026-09-21, do not over-read): angle kernel ONLY, for
+E >= ~100 MeV/u within ~2% (q50-q99.9) and ~50 MeV/u within ~8%.
+Explicitly OUT of scope, must not be cited for gate verdicts:
+  - SYCL production helper, lateral displacement, t<->g path conversion,
+    postSafety/geomMin/minDisplacement2 acceptance (see
+    test_urban_v2_regression.py R1-R4);
+  - low-electron-equivalent-energy sigma branch: this file uses s*SIGF below
+    10 MeV WITHOUT the device-side cpositron Z=29 table interpolation
+    (sycl_device_math.inc copper_urban_cross_section_per_atom_cm2); inputs
+    with electron-equivalent energy <= 10 MeV are therefore REJECTED below
+    instead of silently returning uncorrected sigma.
+Run: python3 benchmark/carbonminibeam/urban_sampler_oracle.py  (self-check
+assertions, exit nonzero on failure)."""
 import math, numpy as np
 Z,Zp,A=29.0,6.0,12.0; NUC=931.49410242; ME=0.51099895
 R_E=2.8179403262e-13;BOHR=5.29177210903e-9;HBARC=197.3269804e-13;BARN=1e-24
@@ -18,6 +32,10 @@ X0=10*12.8628/8.96
 def sigma(kin):
     mass=A*NUC;tau=kin/mass;c=mass*tau*(tau+2)/(ME*(tau+1));ww=c-2
     t=0.5*(ww+math.sqrt(ww*ww+4*c));ek=ME*t;et=ek+ME
+    if not ek>10.0:
+        raise ValueError(f"ekin={ek:.6g} MeV <= 10 MeV: cpositron branch not "
+                         "ported in this oracle (see module docstring); refuse "
+                         "instead of returning uncorrected sigma")
     b2=ek*(et+ME)/(et*et);bg2=ek*(et+ME)/(ME*ME)
     eps=EPS*bg2/(Z**(2/3))
     if eps<1e-4:s=2*eps*eps
@@ -71,3 +89,24 @@ def sample_cos(t,kin,lam,rng):
 def sample_theta(t,kin,lam,n,rng):
     ct=np.array([sample_cos(t,kin,lam,rng) for _ in range(n)])
     return np.arccos(np.clip(ct,-1,1))
+
+if __name__=="__main__":
+    # Executable driver: reproduces the Gate-1 spot checks from
+    # docs/urban_v2_diagnosis.md section 10 (fixed seeds) and asserts the
+    # documented 2%/8% quantile bands.  Displacement/path/safety are NOT
+    # covered here by design (see docstring + test_urban_v2_regression.py).
+    cases=[(200.7,0.0500,1.013,1.005,0.996,0.984,0.995,0.02),
+           (105.3,0.0500,1.013,1.010,1.004,1.013,1.003,0.02),
+           (50.8,0.0500,0.978,0.978,0.953,0.949,0.922,0.08)]
+    for E,h,e50,e68,e90,e99,e999,tol in cases:
+        lam=mfp(E*12.0); rng=np.random.default_rng(20260921)
+        th=sample_theta(h,E*12.0,lam,200000,rng)
+        q=np.quantile(th,[0.5,0.68,0.9,0.99,0.999])
+        # Self-consistency: median Rayleigh ratio vs theta0 law must sit near
+        # sqrt(pi/2); the TOPAS-anchored ratios above are the acceptance band.
+        th0=theta0(h,E*12.0)
+        med_ratio=np.median(th)/th0 if th0>0 else float("nan")
+        assert 1.15<med_ratio<1.35, (E,h,med_ratio)
+        print(f"E={E}MeV/u h={h}mm n=200k med/theta0={med_ratio:.4f} "
+              f"q50={q[0]:.5f} q999={q[4]:.5f} band=±{tol*100:.0f}% (TOPAS-anchored, see docs)")
+    print("oracle driver: PASS (angle kernel only; displacement/path/safety out of scope)")

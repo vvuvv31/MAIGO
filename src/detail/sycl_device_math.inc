@@ -275,7 +275,131 @@ struct CorrelatedScatteringStep {
     Direction3F observation_direction{};
     Direction3F observation_displacement_mm{};
     bool observation_valid{false};
+    // Explicit urban_v2 step proposal/finalization (R4).  Defaults keep the
+    // legacy highland/fermi_eyges/urban paths bit-identical: consumers that
+    // do not understand the contract must ignore these fields.
+    // proposed_t: MSC true-path proposal; final_t: resolved true length used
+    //   for loss/fluctuation/reaction paths; final_g: geometric length used
+    //   for position advance; delta: stable (t-g) saved on the conversion
+    //   branch (never float(t)-float(g) post-hoc).
+    // limit_reason: 0=none/unlimited, 1=range, 2=geometry, 3=collision, 4=stop.
+    // boundary_crossed: geometry truncated the proposal (final_g < proposed_g).
+    // one_minus_cth: 1-cos(theta) saved before rounding (cth~1 diagnostics).
+    float proposed_true_path_mm{0.0F};
+    float final_true_path_mm{0.0F};
+    float final_geom_path_mm{0.0F};
+    float stable_delta_mm{0.0F};
+    float one_minus_cth{0.0F};
+    int limit_reason{0};
+    bool boundary_crossed{false};
+    bool proposal_valid{false};
 };
+
+// Stable geometric->true conversion shared by host diagnostics and the device
+// sampler (R3).  Computes t and delta=(t-g) directly on the conversion branch
+// in double precision, then narrows.  Never forms float(t)-float(g).
+struct UrbanV2TruePath {
+    float true_path_mm;
+    float delta_mm;
+};
+
+inline UrbanV2TruePath copper_urban_v2_true_path_and_delta(
+    const float geom_path_mm, const float transport_mfp_mm,
+    const float range_mm) noexcept {
+    UrbanV2TruePath out{geom_path_mm, 0.0F};
+    constexpr double kTauSmall = 1.0e-16;
+    constexpr double kTLimitMinFix2 = 1.0e-6;  // mm
+    if (!(geom_path_mm > 0.0F) || !(transport_mfp_mm > 0.0F)) {
+        return out;
+    }
+    const double g = static_cast<double>(geom_path_mm);
+    const double lam = static_cast<double>(transport_mfp_mm);
+    if (!(g >= kTLimitMinFix2) || !(g > lam * kTauSmall)) {
+        return out;
+    }
+    const double ratio = g / lam;
+    double t;
+    double delta;
+    if (ratio < 1.0e-3) {
+        // Taylor of -lam*(log1p(-r)+r) = g*r*(1/2+r/3+r^2/4+...).
+        // Pure arithmetic: no log1p call, no cancellation, portable to
+        // device double without relying on a double log1p overload.
+        const double series =
+            0.5 + ratio * (1.0 / 3.0 + ratio * (0.25 + ratio * 0.2));
+        delta = g * ratio * series;
+        t = g + delta;
+    } else if (ratio < 1.0) {
+        // delta = -lam*(log1p(-r)+r) == t-g, evaluated without cancellation.
+        const double log_term =
+            static_cast<double>(sycl::log1p(static_cast<float>(-ratio)));
+        t = -lam * log_term;
+        delta = -lam * (log_term + ratio);
+        if (!(delta > 0.0)) delta = 0.0;
+    } else {
+        t = static_cast<double>(range_mm > 0.0F ? range_mm : geom_path_mm);
+        delta = t - g;
+        if (!(delta > 0.0)) delta = 0.0;
+    }
+    double t_clamped = t;
+    if (t_clamped < g) t_clamped = g;
+    if (range_mm > 0.0F && t_clamped > static_cast<double>(range_mm)) {
+        t_clamped = static_cast<double>(range_mm);
+        delta = t_clamped - g;
+        if (!(delta > 0.0)) delta = 0.0;
+    }
+    out.true_path_mm = static_cast<float>(t_clamped);
+    out.delta_mm = static_cast<float>(delta);
+    return out;
+}
+
+// Process-level displacement acceptance with DISTINCT reference thresholds
+// (R2).  geom_min_mm is the G4VMultipleScattering geometry tolerance;
+// min_displacement_mm is the separate physics displacement floor
+// (minDisplacement2 family).  They must not share the model geommin constant.
+// Values below are STRUCTURAL PLACEHOLDERS pending a real reference trace
+// (AlongStepDoIt postSafety/geomMin/minDisplacement2); the regression test
+// R2 (raw=1e-4, safety=1e-5 -> reduce) pins the required ordering.
+constexpr float kUrbanV2GeomMinMm = 1.0e-6F;       // UNVALIDATED placeholder
+constexpr float kUrbanV2MinDisplacementMm = 1.0e-7F;  // UNVALIDATED placeholder
+
+inline float copper_urban_v2_accept_displacement(
+    const float raw_x, const float raw_y, const float safety_mm,
+    const float geom_min_mm, const float min_displacement_mm,
+    float& accepted_x, float& accepted_y, int& branch) noexcept {
+    accepted_x = 0.0F;
+    accepted_y = 0.0F;
+    branch = 0;  // 0=zero, 1=accept, 2=reduce, 3=cancel
+    const double dx = static_cast<double>(raw_x);
+    const double dy = static_cast<double>(raw_y);
+    const double disp_r = sycl::sqrt(dx * dx + dy * dy);
+    if (!(disp_r > 0.0)) {
+        return 0.0F;
+    }
+    const double post =
+        0.99 * static_cast<double>(safety_mm > 0.0F ? safety_mm : 0.0F);
+    if (disp_r <= post) {
+        accepted_x = raw_x;
+        accepted_y = raw_y;
+        branch = 1;
+        return static_cast<float>(disp_r);
+    }
+    if (post > static_cast<double>(geom_min_mm)) {
+        const double scale = post / disp_r;
+        accepted_x = static_cast<float>(dx * scale);
+        accepted_y = static_cast<float>(dy * scale);
+        branch = 2;
+        return static_cast<float>(post);
+    }
+    if (post <= static_cast<double>(min_displacement_mm)) {
+        branch = 3;
+        return 0.0F;
+    }
+    const double scale = post / disp_r;
+    accepted_x = static_cast<float>(dx * scale);
+    accepted_y = static_cast<float>(dy * scale);
+    branch = 2;
+    return static_cast<float>(post);
+}
 
 CorrelatedScatteringStep copper_fermi_eyges_tail_step(
     const Direction3F direction, const float kinetic_energy_MeV,
@@ -821,7 +945,10 @@ CorrelatedScatteringStep copper_urban_v2_msc_step(
 
     constexpr float tausmall = 1.0e-16F;
     constexpr float tlimitminfix2 = 1.0e-6F;  // mm (1 nm)
-    constexpr float geommin = 1.0e-3F;        // mm
+    // NOTE: the legacy model geommin (1e-3 mm) must NOT gate the process
+    // displacement branch (R2).  Reduction uses kUrbanV2GeomMinMm and the
+    // physics floor kUrbanV2MinDisplacementMm (both UNVALIDATED placeholders
+    // pending a real AlongStepDoIt trace).
     constexpr float pi = 3.14159265358979323846F;
     constexpr float two_pi = 6.2831853071795864769F;
     constexpr float copper_zeffective = 29.0F;
@@ -834,23 +961,31 @@ CorrelatedScatteringStep copper_urban_v2_msc_step(
     }
     const auto coefficients = copper_urban_coefficients(copper_zeffective);
 
-    // D3: geometric -> true path (ComputeTrueStepLength, par1 < 0 branch),
-    // t = -lambda0*log(1 - z/lambda0), clamped to [z, range].
-    float true_path_mm = geom_path_mm;
-    if (geom_path_mm >= tlimitminfix2 &&
-        geom_path_mm > lambda0_mm * tausmall) {
-        const auto ratio = geom_path_mm / lambda0_mm;
-        if (ratio < 1.0F) {
-            true_path_mm = -lambda0_mm * sycl::log1p(-ratio);
-        } else {
-            true_path_mm = range_mm;
-        }
-        true_path_mm = sycl::fmax(true_path_mm, geom_path_mm);
-        true_path_mm = sycl::fmin(true_path_mm, range_mm);
-    }
-    const auto delta_path = sycl::fmax(0.0F, true_path_mm - geom_path_mm);
+    // D3/R3: geometric -> true path via the shared stable helper, which
+    // computes and saves delta on the conversion branch (no float(t)-float(g)).
+    const auto true_path_state = copper_urban_v2_true_path_and_delta(
+        geom_path_mm, lambda0_mm, range_mm);
+    float true_path_mm = true_path_state.true_path_mm;
+    const auto delta_path = true_path_state.delta_mm;
+    result.proposed_true_path_mm = true_path_mm;
+    result.final_true_path_mm = true_path_mm;
+    result.final_geom_path_mm = geom_path_mm;
+    result.stable_delta_mm = delta_path;
+    result.limit_reason = 0;
+    result.boundary_crossed = false;
+    result.proposal_valid = true;
+    // NOTE (open, R-range): range_mm here is still the caller placeholder
+    // energy/stopping.  GetRange->ionisation->theRangeTableForLoss provenance
+    // (material-cuts couple, restricted DEDX, inverse range, ion scaling)
+    // needs a reference table + extractor fixture; not faked here.
 
-    // D6: step-end energy prediction (SampleScattering).
+    // D6 (OPEN, structure only): step-end energy prediction (SampleScattering).
+    // Reference selects by t/range with GetEnergy(range-t) for large t/range,
+    // E-t*DEDX above 1% range, plus lambda1/effective-tau and pre/post energy
+    // combination in ComputeTheta0.  Without the restricted-loss range table
+    // + extractor fixture only the unconditional linear fallback below is
+    // available; it is NOT an equivalent implementation.  Real process
+    // ordering (no unconditional use of post-random-loss Epost) also open.
     const auto step_end_energy = sycl::fmax(
         0.0F, kinetic_energy_MeV - true_path_mm * dedx_MeV_per_mm);
     if (true_path_mm <= tlimitminfix2 || step_end_energy <= 1.0e-6F) {
@@ -975,13 +1110,17 @@ CorrelatedScatteringStep copper_urban_v2_msc_step(
         }
     }
     cth = sycl::clamp(cth, -1.0F, 1.0F);
+    // Save 1-cos(theta) BEFORE rounding-sensitive use (R3 angle part).  The
+    // sqrt below still guards, but diagnostics must use this value.
+    result.one_minus_cth = sycl::fmax(0.0F, 1.0F - cth);
 
     const auto sth = sycl::sqrt(sycl::fmax(0.0F, (1.0F - cth) * (1.0F + cth)));
     const auto phi = two_pi * rng::uniform01(
                                  seed, history_id, step_index,
                                  random_dimension + 3U);
 
-    // D1/D2: Alg96 SampleDisplacement.  rmax^2 = t^2 - z^2 = delta*(2t-delta).
+    // D1/D2: Alg96 SampleDisplacement.  rmax^2 = t^2 - z^2 = delta*(2t-delta),
+    // using the stable branch-saved delta (never recomputed as t-z).
     float local_displacement_x = 0.0F;
     float local_displacement_y = 0.0F;
     const auto rmax2 = delta_path * (2.0F * true_path_mm - delta_path);
@@ -997,19 +1136,16 @@ CorrelatedScatteringStep copper_urban_v2_msc_step(
         const auto phi_displacement = u1 < 0.5F ? phi + psi : phi - psi;
         auto disp_x = radius * sycl::cos(phi_displacement);
         auto disp_y = radius * sycl::sin(phi_displacement);
-        // D5: boundary-safe displacement (G4VMultipleScattering::AlongStepDoIt).
-        const auto disp_r = sycl::sqrt(disp_x * disp_x + disp_y * disp_y);
-        const auto post_safety = 0.99F * sycl::fmax(0.0F, safety_mm);
-        if (disp_r > 0.0F) {
-            if (disp_r <= post_safety) {
-                local_displacement_x = disp_x;
-                local_displacement_y = disp_y;
-            } else if (post_safety > geommin) {
-                const auto scale = post_safety / disp_r;
-                local_displacement_x = disp_x * scale;
-                local_displacement_y = disp_y * scale;
-            }
-        }
+        // D5/R2: process-level acceptance with distinct reference
+        // thresholds (shared helper; no model-geommin conflation).
+        float accepted_x = 0.0F;
+        float accepted_y = 0.0F;
+        int accept_branch = 0;
+        copper_urban_v2_accept_displacement(
+            disp_x, disp_y, safety_mm, kUrbanV2GeomMinMm,
+            kUrbanV2MinDisplacementMm, accepted_x, accepted_y, accept_branch);
+        local_displacement_x = accepted_x;
+        local_displacement_y = accepted_y;
     }
 
     const auto parent_norm = sycl::sqrt(

@@ -328,6 +328,25 @@ sampler matches TOPAS within 2-8% and the matched-step slab angle variance
 matches within 3%. The production `urban` model used the wrong displacement
 algorithm and an unmatched step, which are real inequivalences.
 
+> 2026-09-21 correction: "algorithmically correct" is WITHDRAWN as a premise.
+> At the time it was written the v2 production path still (a) passed
+> `safety_mm=0.0F` from `transport_sycl.cpp:4238`, cancelling every accepted
+> displacement (`test_urban_v2_regression.py` R1 reproduces恒零); (b) gated
+> process displacement reduction with the single model constant
+> `geommin=1e-3 mm`, conflating the `G4VMultipleScattering` geomMin and
+> minDisplacement2 families (R2: raw=1e-4/safety=1e-5 wrongly cancels);
+> (c) formed `delta=float(t)-float(g)`, which cancels to 0 or wrong sign for
+> the production g=0.03-0.10 mm steps (R3); (d) kept `true_path` inside the
+> sampler while the caller advanced position and energy loss with the
+> geometric length (R4). Items (a)-(d) are fixed structurally this round
+> (endpoint isotropic safety, distinct-threshold acceptance helper,
+> branch-saved stable delta, proposal/finalization contract), but the
+> geomMin/minDisplacement2 NUMERIC values remain UNVALIDATED placeholders
+> pending a real `AlongStepDoIt` reference trace, and the range provenance
+> (`GetRange->ionisation->theRangeTableForLoss`) plus the t/range energy
+> branches are still OPEN. No "done" label below may be reused as a premise
+> until those traces exist.
+
 `[INFERENCE]` The remaining single-spot collimator entry contrast residual
 (+2.3-2.9 pp) is not a Copper MSC amplitude error: it persists and grows when
 the physically correct 0.05 mm step is used, and the same-source water replay
@@ -367,6 +386,30 @@ these conditional observables.
 | 5 full slit | done | direct/touched split and conditionals |
 | 6 downstream | not run | water/source/nuclear frozen by design |
 
+> 2026-09-21 correction (replaces every "done" above as a premise):
+> Gate 1 INVALID_FIXTURE as a full-component claim: the oracle
+> (`urban_sampler_oracle.py`) is angle-only; it never exercises the SYCL
+> production helper, displacement/path/safety, or the missing low-energy
+> sigma `cpositron` branch (scope now documented in the oracle file's
+> successor `test_urban_v2_regression.py` R3).
+> Gate 2 FAIL (open): the 1 mm lateral-x ~100x gap was excluded as
+> "geometry-confounded" without the required TOPAS-box-geometry control slab.
+> Gate 3 FAIL (open): there is no real `fMinimal` limiter in the GPU path;
+> TOPAS user `MaxStepSize=0.05 mm` must NOT be read as "MSC limited to
+> 0.05 mm" (limiting process among user MaxStep / ionisation / MSC /
+> geometry / stopping is unconfirmed by trace). The D4 min/max statements in
+> section 1 are UNVERIFIED against `G4UrbanMscModel.cc:641-657` source.
+> Gate 4 NOT_RUN: sections 14/16/17 record three invalid scan attempts, not
+> evidence; the section-17 "pencil-like" inference from a single 0.05 mm
+> translation is INSUFFICIENT (no expanded-config/log/return-code/output
+> audit; navigation control `test_slit_navigation_control.cpp` now passes on
+> the host but shared entry records do not yet exist).
+> Gate 5 INVALID_FIXTURE: the TrackID-only TOPAS/GPU join contradicts the
+> 2026-09-19 failed.md entry (MT worker blocks reorder records); required
+> key is `(run,event,track)` + shard namespace. The 0.1 pp split and the
+> conditional energy/angle agreements are therefore NOT established.
+> Gate 6 NOT_RUN (unchanged).
+
 ## 14. Gate 4 finite-slit scan attempt (2026-09-21)
 
 TOPAS runs locally (`/home/wuwei/topas/topas-build/topas`, 32 threads, ~1 min
@@ -383,6 +426,9 @@ No fabrication: the 5 offset runs exist under `/tmp/topas_gate4/out_x*` but do
 not constitute a valid scan.
 
 ## 15. Final status
+
+> 2026-09-21: this table is SUPERSEDED by the correction under section 13.
+> Retained verbatim for history; do not cite as premise.
 
 | gate | status |
 |---|---|
