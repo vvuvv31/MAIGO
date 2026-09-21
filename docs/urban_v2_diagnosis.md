@@ -240,3 +240,45 @@ with depth, consistent with the water-dominated attribution in D10.
 - No finite-slit P(exit|d) scan (Gate 4) and no per-species Cu-touched split
   (Gate 5); those need new TOPAS runs with the MSC ntuple.
 - Gate 6 downstream dose is unchanged (production water/nuclear frozen).
+
+## 7. Gate 2/3 measured results (250 MeV/u Cu slab, 256k, TOPAS full list)
+
+Exit phase space, GPU/TOPAS. TOPAS Cu `MaxStepSize = 0.05 mm`.
+
+Angle-variance / tail ratios vs matched Copper step:
+
+| thickness | model | step 0.05 | step 0.10 | step 0.25 |
+|---:|---|---:|---:|---:|
+| 1 mm | urban | thvar 1.035, q999 1.072 | 1.105, 1.161 | 1.218, 1.344 |
+| 1 mm | urban_v2 | 1.037, 1.074 | 1.111, 1.164 | 1.234, 1.353 |
+| 10 mm | urban | 1.027, 1.076 | 1.089, 1.176 | 1.165, 1.313 |
+| 10 mm | urban_v2 | 1.031, 1.077 | 1.097, 1.181 | 1.186, 1.323 |
+
+`[FACT]` Matching the step policy (0.05 mm, TOPAS's `MaxStepSize`) collapses the
+angle variance to within 3% and q99.9 to within ~7%. At 0.25 mm the ratio is
+~1.17-1.22, which is exactly the Urban
+`(c1+c2*ln(h/X0))^2` ratio between h=0.25 (0.635) and h=0.05 (0.524), i.e.
+1.21. This is the missing `fMinimal` step limit (D4) and the `theta0`
+step-length dependence (D3/D6) manifesting as a slab error.
+
+`[INFERENCE]` The Copper Urban angular law is correct once the step is
+matched. The 0.25 mm production step over-scatters the slab by ~20%. The
+single-spot collimator entry contrast was *better* at 0.25 mm than at 0.03 mm,
+so that contrast gain is a compensating error, not evidence that 0.25 mm is
+the correct step. Production must not select the step by the dose contrast.
+
+`[FACT]` Lateral x-variance: at 1 mm TOPAS rms is 0.0021 mm vs GPU 0.021 mm
+(ratio ~100); at 10 mm 0.0745 vs 0.0810 mm (ratio 1.09). The GPU slab geometry
+uses the minibeam slit block, not the TOPAS 60x60xt box, so this x comparison
+is geometry-confounded and is not used for the Copper MSC verdict.
+
+`[FACT]` Energy spread ratio is 1.02-1.03 across all steps and models,
+consistent with the earlier straggling validation; the step policy does not
+affect it.
+
+## 8. Remaining open gates
+
+- Gate 4/5 (finite slit, Cu-touched split) still need TOPAS MSC-ntuple runs at
+  the matched step policy.
+- The 1 mm lateral x discrepancy above needs a slab config that reproduces the
+  TOPAS box geometry before it can be attributed.
