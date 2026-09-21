@@ -393,3 +393,12 @@ not constitute a valid scan.
 | 4 finite slit | split/energy/angle done; signed-distance scan blocked by source-offset mechanism |
 | 5 full slit | done (split 0.1 pp, conditionals 1.5-4%) |
 | 6 downstream | not run (water/source/nuclear frozen by design) |
+
+## 16. Gate 4 second attempt
+
+A `d:Ge/PBSBeamFrame/TransX` offset (0/0.25/0.5/1.0 mm) also leaves the
+water-entry yield unchanged (2558/2500/2560/2576), so the group translation is
+not applied to the source in this configuration either. A valid finite-slit
+scan must translate the `Aperture` component itself (or use a source that
+accepts an aperture-plane transverse offset). Gate 4's signed-distance scan
+remains open; no fabricated result is reported.
