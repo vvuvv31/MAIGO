@@ -293,6 +293,15 @@ struct CorrelatedScatteringStep {
     int limit_reason{0};
     bool boundary_crossed{false};
     bool proposal_valid{false};
+    // Urban raw vs process-accepted displacement accounting (diagnostic only).
+    // raw_displacement_r_mm: |Urban raw| before the AlongStepDoIt gate.
+    // displacement_branch: 0=zero, 1=r2<=minDisplacement2, 2=full accept,
+    //   3=reduced, 4=cancelled.
+    // cth_rounded_to_one: final float cth == 1.0F (information already lost
+    //   there; the pre-rounding small quantity is one_minus_cth).
+    float raw_displacement_r_mm{0.0F};
+    int displacement_branch{0};
+    bool cth_rounded_to_one{false};
 };
 
 // Stable geometric->true conversion shared by host diagnostics and the device
@@ -352,53 +361,87 @@ inline UrbanV2TruePath copper_urban_v2_true_path_and_delta(
     return out;
 }
 
-// Process-level displacement acceptance with DISTINCT reference thresholds
-// (R2).  geom_min_mm is the G4VMultipleScattering geometry tolerance;
-// min_displacement_mm is the separate physics displacement floor
-// (minDisplacement2 family).  They must not share the model geommin constant.
-// Values below are STRUCTURAL PLACEHOLDERS pending a real reference trace
-// (AlongStepDoIt postSafety/geomMin/minDisplacement2); the regression test
-// R2 (raw=1e-4, safety=1e-5 -> reduce) pins the required ordering.
-constexpr float kUrbanV2GeomMinMm = 1.0e-6F;       // UNVALIDATED placeholder
-constexpr float kUrbanV2MinDisplacementMm = 1.0e-7F;  // UNVALIDATED placeholder
+// Stable small-angle sample (Fix B).  one_minus_cth is computed DIRECTLY
+// from each sampling expression, never as 1-cth after the float cth has
+// rounded to 1.  Only the near-+1 branches need this; far-from-1 branches
+// carry the algebraically identical form for uniformity.
+// FP32 semantics closest to the Geant4 double reference:
+//   - direction uses sth = sqrt(omcth*(2-omcth)), exact in float even when
+//     cth has rounded to 1.0F;
+//   - the |cth|>=1 bad-angle protection (which in double zeroes the
+//     displacement) is evaluated on omcth: bad iff !(omcth>0)||!(omcth<2),
+//     i.e. only for a true zero/straight-back scatter, never for a merely
+//     rounded cth==1.0F.  Bypassing the protection to force nonzero
+//     displacement is forbidden; applying it to rounded floats would kill
+//     almost every small-angle displacement, which is equally wrong.
+struct UrbanV2AngularSample {
+    float cth;
+    float one_minus_cth;
+};
 
+// Process-level displacement acceptance: EXACT mirror of the
+// G4VMultipleScattering::AlongStepDoIt displacement gate (Geant4 11.3.2,
+// G4VMultipleScattering::G4VMultipleScattering ctor):
+//   geomMin = 0.05*CLHEP::nm = 5e-8 mm
+//   minDisplacement2 = geomMin*geomMin = 2.5e-15 mm^2
+// Gate (double precision):
+//   r2 = |raw|^2; if r2 <= minDisplacement2 -> no position change;
+//   else dispR = sqrt(r2), postSafety = 0.99*isotropicSafety(endpoint, dispR);
+//   if postSafety > 0 && dispR <= postSafety -> full accept;
+//   else if postSafety > geomMin -> reduce by postSafety/dispR;
+//   else -> cancel.
+// The two thresholds are NOT independent tunables: minDisplacement2 is the
+// SQUARE of the single geomMin constant. The earlier single 1e-3 mm model
+// geommin and the 1e-6/1e-7 placeholders are deleted, not kept as options.
+//
+// Ownership is explicit: G4UrbanMscModel::SampleScattering(oldDirection,
+// safety) does NOT use its safety argument in 11.3.2; boundary acceptance
+// belongs to G4VMultipleScattering::AlongStepDoIt. MAIGO fuses sampling +
+// process acceptance in one device helper for performance, but the comment
+// and the branch accounting below keep "Urban raw displacement" vs
+// "process-level accepted displacement" distinct. Do not claim the Urban
+// sampler itself uses safety.
+constexpr float kUrbanV2GeomMinMm = 5.0e-8F;  // 0.05 nm, G4 reference
+constexpr double kUrbanV2MinDisplacement2Mm2 =
+    2.5e-15;  // geomMin^2, G4 reference
+
+// Diagnostic-only branch ids (no RNG effect).
+// 0 = zero raw displacement, 1 = r2 <= minDisplacement2 (no position change),
+// 2 = full accept, 3 = reduced to postSafety, 4 = cancelled.
 inline float copper_urban_v2_accept_displacement(
     const float raw_x, const float raw_y, const float safety_mm,
-    const float geom_min_mm, const float min_displacement_mm,
     float& accepted_x, float& accepted_y, int& branch) noexcept {
     accepted_x = 0.0F;
     accepted_y = 0.0F;
-    branch = 0;  // 0=zero, 1=accept, 2=reduce, 3=cancel
+    branch = 0;
     const double dx = static_cast<double>(raw_x);
     const double dy = static_cast<double>(raw_y);
-    const double disp_r = sycl::sqrt(dx * dx + dy * dy);
-    if (!(disp_r > 0.0)) {
+    const double r2 = dx * dx + dy * dy;
+    if (!(r2 > 0.0)) {
         return 0.0F;
     }
+    if (r2 <= kUrbanV2MinDisplacement2Mm2) {
+        branch = 1;
+        return 0.0F;
+    }
+    const double disp_r = sycl::sqrt(r2);
     const double post =
         0.99 * static_cast<double>(safety_mm > 0.0F ? safety_mm : 0.0F);
-    if (disp_r <= post) {
+    if (post > 0.0 && disp_r <= post) {
         accepted_x = raw_x;
         accepted_y = raw_y;
-        branch = 1;
+        branch = 2;
         return static_cast<float>(disp_r);
     }
-    if (post > static_cast<double>(geom_min_mm)) {
+    if (post > static_cast<double>(kUrbanV2GeomMinMm)) {
         const double scale = post / disp_r;
         accepted_x = static_cast<float>(dx * scale);
         accepted_y = static_cast<float>(dy * scale);
-        branch = 2;
+        branch = 3;
         return static_cast<float>(post);
     }
-    if (post <= static_cast<double>(min_displacement_mm)) {
-        branch = 3;
-        return 0.0F;
-    }
-    const double scale = post / disp_r;
-    accepted_x = static_cast<float>(dx * scale);
-    accepted_y = static_cast<float>(dy * scale);
-    branch = 2;
-    return static_cast<float>(post);
+    branch = 4;
+    return 0.0F;
 }
 
 CorrelatedScatteringStep copper_fermi_eyges_tail_step(
@@ -1015,15 +1058,26 @@ CorrelatedScatteringStep copper_urban_v2_msc_step(
             rng::uniform01(seed, history_id, step_index, dimension), 1.0e-12F);
         const auto u1 = rng::uniform01(
             seed, history_id, step_index, dimension + 1U);
-        return u1 < probability
-                   ? -1.0F + 2.0F * sycl::exp(sycl::log(u0) / (a + 1.0F))
-                   : -1.0F + 2.0F * u0;
+        UrbanV2AngularSample out{};
+        if (u1 < probability) {
+            const auto e =
+                sycl::exp(sycl::log(u0) / (a + 1.0F));
+            out.cth = -1.0F + 2.0F * e;
+            out.one_minus_cth = 2.0F * (1.0F - e);
+        } else {
+            out.cth = -1.0F + 2.0F * u0;
+            out.one_minus_cth = 2.0F * (1.0F - u0);
+        }
+        return out;
     };
 
     float cth = 1.0F;
+    float omcth = 0.0F;  // branch-direct 1-cos(theta), pre-rounding
     if (tau >= 8.0F) {
-        cth = -1.0F + 2.0F * rng::uniform01(
-                             seed, history_id, step_index, random_dimension);
+        const auto u = rng::uniform01(
+            seed, history_id, step_index, random_dimension);
+        cth = -1.0F + 2.0F * u;
+        omcth = 2.0F * (1.0F - u);
     } else if (tau >= tausmall) {
         const auto theta0 = amplitude_scale * copper_urban_theta0(
             true_path_mm, step_end_energy, radiation_length_mm,
@@ -1031,7 +1085,9 @@ CorrelatedScatteringStep copper_urban_v2_msc_step(
         const auto theta2 = theta0 * theta0;
         if (theta2 >= tausmall) {
             if (theta0 > pi * one_sixth) {
-                cth = simple_scattering(random_dimension);
+                const auto sampled = simple_scattering(random_dimension);
+                cth = sampled.cth;
+                omcth = sampled.one_minus_cth;
             } else {
                 auto x = theta2 * (1.0F - theta2 * one_twelfth);
                 if (theta2 > num_lim) {
@@ -1059,7 +1115,9 @@ CorrelatedScatteringStep copper_urban_v2_msc_step(
                     1.0F - (1.0F - (1.0F + xsi) * ea) * x / eaa;
                 const auto x0 = 1.0F - xsi * x;
                 if (x_mean1 <= 0.999F * x_mean_th) {
-                    cth = simple_scattering(random_dimension);
+                    const auto sampled = simple_scattering(random_dimension);
+                    cth = sampled.cth;
+                    omcth = sampled.one_minus_cth;
                 } else {
                     const auto b = 1.0F + (c - xsi) * x;
                     const auto b1 = b + 1.0F;
@@ -1081,50 +1139,67 @@ CorrelatedScatteringStep copper_urban_v2_msc_step(
                         seed, history_id, step_index, random_dimension + 1U);
                     if (u0 < q_probability) {
                         if (u1 < probability) {
-                            cth = 1.0F + sycl::log(
-                                ea + rng::uniform01(
-                                         seed, history_id, step_index,
-                                         random_dimension + 2U) *
-                                         eaa) *
-                                             x;
+                            const auto u2 = rng::uniform01(
+                                seed, history_id, step_index,
+                                random_dimension + 2U);
+                            const auto log_arg = ea + u2 * eaa;
+                            const auto log_val = sycl::log(log_arg);
+                            cth = 1.0F + log_val * x;
+                            omcth = -log_val * x;
                         } else {
                             auto var = (1.0F - d) * rng::uniform01(
                                 seed, history_id, step_index,
                                 random_dimension + 2U);
                             if (var < num_lim * d) {
                                 var /= d * c1;
-                                cth = -1.0F + var * (1.0F - 0.5F * var * c) *
-                                                  (2.0F + (c - xsi) * x);
+                                const auto q = var * (1.0F - 0.5F * var * c) *
+                                               (2.0F + (c - xsi) * x);
+                                cth = -1.0F + q;
+                                omcth = 2.0F - q;
                             } else {
-                                cth = 1.0F + x * (c - xsi -
-                                                  c * sycl::exp(
-                                                          -sycl::log(var + d) /
-                                                          c1));
+                                const auto e = c * sycl::exp(
+                                    -sycl::log(var + d) / c1);
+                                const auto dq = x * (c - xsi - e);
+                                cth = 1.0F + dq;
+                                omcth = -dq;
                             }
                         }
                     } else {
                         cth = -1.0F + 2.0F * u1;
+                        omcth = 2.0F * (1.0F - u1);
                     }
                 }
             }
         }
     }
     cth = sycl::clamp(cth, -1.0F, 1.0F);
-    // Save 1-cos(theta) BEFORE rounding-sensitive use (R3 angle part).  The
-    // sqrt below still guards, but diagnostics must use this value.
-    result.one_minus_cth = sycl::fmax(0.0F, 1.0F - cth);
+    // Branch-direct small quantity (Fix B): omcth was computed from the
+    // sampling expression at every site above, NOT as 1-cth here.  If float
+    // cth already rounded to 1, that information is gone from cth but intact
+    // in omcth.
+    result.one_minus_cth = omcth;
+    result.cth_rounded_to_one = (cth == 1.0F);
 
-    const auto sth = sycl::sqrt(sycl::fmax(0.0F, (1.0F - cth) * (1.0F + cth)));
+    // Accurate FP32 polar sine from the small quantity: exact even when cth
+    // rounded to 1.  Clamp only guards float noise (omcth slightly outside
+    // [0,2] maps to the bad-angle protection below, not to a silent zero).
+    const auto sth = sycl::sqrt(
+        sycl::fmax(0.0F, omcth * (2.0F - omcth)));
     const auto phi = two_pi * rng::uniform01(
                                  seed, history_id, step_index,
                                  random_dimension + 3U);
 
     // D1/D2: Alg96 SampleDisplacement.  rmax^2 = t^2 - z^2 = delta*(2t-delta),
     // using the stable branch-saved delta (never recomputed as t-z).
+    // Geant4 |cth|>=1 protection, evaluated on omcth (double-closest
+    // semantics): a merely rounded cth==1.0F must NOT zero the displacement.
     float local_displacement_x = 0.0F;
     float local_displacement_y = 0.0F;
+    result.raw_displacement_r_mm = 0.0F;
+    result.displacement_branch = 0;
+    const auto bad_cth = !(omcth > 0.0F) || !(omcth < 2.0F);
     const auto rmax2 = delta_path * (2.0F * true_path_mm - delta_path);
-    if (rmax2 > 0.0F) {
+    if (!bad_cth && rmax2 > 0.0F) {
         constexpr float cbeta = 2.160F;
         const auto cbeta1 = 1.0F - sycl::exp(-cbeta * pi);
         const auto radius = 0.73F * sycl::sqrt(rmax2);
@@ -1134,18 +1209,21 @@ CorrelatedScatteringStep copper_urban_v2_msc_step(
             seed, history_id, step_index, random_dimension + 5U);
         const auto psi = -sycl::log1p(-u0 * cbeta1) / cbeta;
         const auto phi_displacement = u1 < 0.5F ? phi + psi : phi - psi;
-        auto disp_x = radius * sycl::cos(phi_displacement);
-        auto disp_y = radius * sycl::sin(phi_displacement);
-        // D5/R2: process-level acceptance with distinct reference
-        // thresholds (shared helper; no model-geommin conflation).
+        // Urban RAW displacement (no safety involved: SampleScattering in
+        // 11.3.2 ignores its safety argument).
+        const auto raw_x = radius * sycl::cos(phi_displacement);
+        const auto raw_y = radius * sycl::sin(phi_displacement);
+        result.raw_displacement_r_mm =
+            sycl::sqrt(raw_x * raw_x + raw_y * raw_y);
+        // Process-level acceptance (AlongStepDoIt gate, shared helper).
         float accepted_x = 0.0F;
         float accepted_y = 0.0F;
         int accept_branch = 0;
         copper_urban_v2_accept_displacement(
-            disp_x, disp_y, safety_mm, kUrbanV2GeomMinMm,
-            kUrbanV2MinDisplacementMm, accepted_x, accepted_y, accept_branch);
+            raw_x, raw_y, safety_mm, accepted_x, accepted_y, accept_branch);
         local_displacement_x = accepted_x;
         local_displacement_y = accepted_y;
+        result.displacement_branch = accept_branch;
     }
 
     const auto parent_norm = sycl::sqrt(

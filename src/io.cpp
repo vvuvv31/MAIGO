@@ -760,7 +760,10 @@ void write_minibeam_phase_space_csv(const std::filesystem::path& path,
     }
     output << "source_history,slit,copper_touched,copper_elastic,kinetic_energy_MeV,"
               "x_mm,y_mm,direction_x,direction_y,direction_z,"
-              "initial_ray_hits_copper,ever_in_copper,cumulative_cu_true_path_mm\n"
+              "initial_ray_hits_copper,ever_in_copper,cumulative_cu_true_path_mm,"
+              "cu_steps,disp_below_min,disp_accept,disp_reduce,disp_cancel,cth_eq_one,"
+              "cu_g_sum_mm,cu_t_sum_mm,cu_delta_sum_mm,"
+              "cu_raw_disp_sum2_mm2,cu_acc_disp_sum2_mm2\n"
            << std::setprecision(17);
     for (const auto& record : result.minibeam_phase_space_records) {
         if (!record.valid) continue;
@@ -772,7 +775,14 @@ void write_minibeam_phase_space_csv(const std::filesystem::path& path,
                << record.direction_y << ',' << record.direction_z << ','
                << static_cast<unsigned>(record.initial_ray_hits_copper) << ','
                << static_cast<unsigned>(record.ever_in_copper) << ','
-               << record.cumulative_cu_true_path_mm << '\n';
+               << record.cumulative_cu_true_path_mm << ','
+               << record.cu_steps << ',' << record.disp_below_min << ','
+               << record.disp_accept << ',' << record.disp_reduce << ','
+               << record.disp_cancel << ',' << record.cth_eq_one << ','
+               << record.cu_g_sum_mm << ',' << record.cu_t_sum_mm << ','
+               << record.cu_delta_sum_mm << ','
+               << record.cu_raw_disp_sum2_mm2 << ','
+               << record.cu_acc_disp_sum2_mm2 << '\n';
     }
     if (!output) {
         throw std::runtime_error("Failed to write minibeam phase space");

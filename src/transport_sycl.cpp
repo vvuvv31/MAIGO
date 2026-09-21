@@ -4107,6 +4107,18 @@ template<int EmMode>
                 // true-path accumulator below are the actual-touch observables.
                 auto beamline_ever_in_copper_hist = false;
                 auto beamline_cu_true_path_hist_mm = 0.0F;
+                // urban_v2 step diagnostics (research-only aggregates).
+                std::uint32_t beamline_cu_steps_hist = 0;
+                std::uint32_t beamline_disp_below_hist = 0;
+                std::uint32_t beamline_disp_accept_hist = 0;
+                std::uint32_t beamline_disp_reduce_hist = 0;
+                std::uint32_t beamline_disp_cancel_hist = 0;
+                std::uint32_t beamline_cth_one_hist = 0;
+                float beamline_g_sum_hist_mm = 0.0F;
+                float beamline_t_sum_hist_mm = 0.0F;
+                float beamline_delta_sum_hist_mm = 0.0F;
+                float beamline_raw2_sum_hist_mm2 = 0.0F;
+                float beamline_acc2_sum_hist_mm2 = 0.0F;
                 if (enable_minibeam && direction_z > 1.0e-8F) {
                     const auto slit_entrance_distance =
                         (minibeam_block_entrance_z - position_z_mm) /
@@ -4365,6 +4377,39 @@ template<int EmMode>
                         if (in_copper) {
                             beamline_ever_in_copper_hist = true;
                             beamline_cu_true_path_hist_mm += true_loss_path_mm;
+                            if (minibeam_copper_urban_v2_msc) {
+                                ++beamline_cu_steps_hist;
+                                const auto& sc = correlated_scattering;
+                                beamline_g_sum_hist_mm +=
+                                    sc.proposal_valid ? sc.final_geom_path_mm
+                                                      : transport_path;
+                                beamline_t_sum_hist_mm +=
+                                    sc.proposal_valid ? sc.final_true_path_mm
+                                                      : transport_path;
+                                beamline_delta_sum_hist_mm +=
+                                    sc.proposal_valid ? sc.stable_delta_mm
+                                                      : 0.0F;
+                                beamline_raw2_sum_hist_mm2 +=
+                                    sc.raw_displacement_r_mm *
+                                    sc.raw_displacement_r_mm;
+                                beamline_acc2_sum_hist_mm2 +=
+                                    sc.displacement_mm.x *
+                                        sc.displacement_mm.x +
+                                    sc.displacement_mm.y *
+                                        sc.displacement_mm.y +
+                                    sc.displacement_mm.z *
+                                        sc.displacement_mm.z;
+                                switch (sc.displacement_branch) {
+                                    case 1: ++beamline_disp_below_hist; break;
+                                    case 2: ++beamline_disp_accept_hist; break;
+                                    case 3: ++beamline_disp_reduce_hist; break;
+                                    case 4: ++beamline_disp_cancel_hist; break;
+                                    default: break;
+                                }
+                                if (sc.cth_rounded_to_one) {
+                                    ++beamline_cth_one_hist;
+                                }
+                            }
                         }
                         const auto collision_energy_u = energy_MeV * inverse_mass_number;
                         const auto elastic_index = minibeam_elastic_nearest(
@@ -5426,6 +5471,17 @@ template<int EmMode>
                         beamline_ever_in_copper_hist ? 1U : 0U;
                     record.cumulative_cu_true_path_mm =
                         beamline_cu_true_path_hist_mm;
+                    record.cu_steps = beamline_cu_steps_hist;
+                    record.disp_below_min = beamline_disp_below_hist;
+                    record.disp_accept = beamline_disp_accept_hist;
+                    record.disp_reduce = beamline_disp_reduce_hist;
+                    record.disp_cancel = beamline_disp_cancel_hist;
+                    record.cth_eq_one = beamline_cth_one_hist;
+                    record.cu_g_sum_mm = beamline_g_sum_hist_mm;
+                    record.cu_t_sum_mm = beamline_t_sum_hist_mm;
+                    record.cu_delta_sum_mm = beamline_delta_sum_hist_mm;
+                    record.cu_raw_disp_sum2_mm2 = beamline_raw2_sum_hist_mm2;
+                    record.cu_acc_disp_sum2_mm2 = beamline_acc2_sum_hist_mm2;
                     record.kinetic_energy_MeV = energy_MeV;
                     record.x_mm = position_x_mm;
                     record.y_mm = position_y_mm;

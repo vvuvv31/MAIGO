@@ -1,0 +1,72 @@
+# Fixed diagnostic edge: two Cu boxes (120x120x60 total) leaving ONE static
+# 0.5mm vacuum gap at x=0 (no mother/daughter nesting, no translations).
+# C12 250MeV/u pencil at x=@@ENTRYX@@, EM-only opt4+decay, MaxStep 0.05.
+i:Ts/Seed = @@SEED@@
+i:Ts/NumberOfThreads = 32
+i:Ts/ShowHistoryCountAtInterval = 10000
+b:Ts/ShowHistoryCountLessFrequentlyAsSimulationProgresses = "True"
+b:Gr/Enable = "False"
+
+s:Ge/World/Type = "TsBox"
+s:Ge/World/Material = "G4_Galactic"
+d:Ge/World/HLX = 80 mm
+d:Ge/World/HLY = 80 mm
+d:Ge/World/HLZ = 100 mm
+b:Ge/World/Invisible = "True"
+
+s:Ge/CuL/Parent = "World"
+s:Ge/CuL/Type = "TsBox"
+s:Ge/CuL/Material = "G4_Cu"
+d:Ge/CuL/HLX = 29.875 mm
+d:Ge/CuL/HLY = 60 mm
+d:Ge/CuL/HLZ = 30.0 mm
+d:Ge/CuL/TransX = -30.125 mm
+d:Ge/CuL/MaxStepSize = 0.05 mm
+
+s:Ge/CuR/Parent = "World"
+s:Ge/CuR/Type = "TsBox"
+s:Ge/CuR/Material = "G4_Cu"
+d:Ge/CuR/HLX = 29.875 mm
+d:Ge/CuR/HLY = 60 mm
+d:Ge/CuR/HLZ = 30.0 mm
+d:Ge/CuR/TransX = 30.125 mm
+d:Ge/CuR/MaxStepSize = 0.05 mm
+
+s:Ge/BeamPosition/Parent = "World"
+s:Ge/BeamPosition/Type = "Group"
+d:Ge/BeamPosition/TransX = @@ENTRYX@@ mm
+d:Ge/BeamPosition/TransZ = 30.015 mm
+
+s:Ge/ExitFilm/Parent = "World"
+s:Ge/ExitFilm/Type = "TsBox"
+s:Ge/ExitFilm/Material = "G4_Galactic"
+d:Ge/ExitFilm/HLX = 70 mm
+d:Ge/ExitFilm/HLY = 70 mm
+d:Ge/ExitFilm/HLZ = 0.005 mm
+d:Ge/ExitFilm/TransZ = -30.015 mm
+
+s:So/CarbonBeam/Type = "Beam"
+s:So/CarbonBeam/Component = "BeamPosition"
+s:So/CarbonBeam/BeamParticle = "GenericIon(6,12,6)"
+d:So/CarbonBeam/BeamEnergy = 3000 MeV
+u:So/CarbonBeam/BeamEnergySpread = 0.0
+s:So/CarbonBeam/BeamPositionDistribution = "None"
+s:So/CarbonBeam/BeamAngularDistribution = "None"
+i:So/CarbonBeam/NumberOfHistoriesInRun = 20000
+
+s:Ph/ListName = "Default"
+s:Ph/Default/Type = "Geant4_Modular"
+sv:Ph/Default/Modules = 2 "g4em-standard_opt4" "g4decay"
+d:Ph/Default/CutForAllParticles = 0.05 mm
+
+s:Sc/SlabExit/Quantity = "PhaseSpace"
+s:Sc/SlabExit/Surface = "ExitFilm/ZPlusSurface"
+s:Sc/SlabExit/OnlyIncludeParticlesGoing = "In"
+s:Sc/SlabExit/OutputType = "ASCII"
+s:Sc/SlabExit/OutputFile = "output/slab_exit"
+s:Sc/SlabExit/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/SlabExit/OutputBufferSize = 10000
+b:Sc/SlabExit/IncludeRunID = "True"
+b:Sc/SlabExit/IncludeEventID = "True"
+b:Sc/SlabExit/IncludeTrackID = "True"
+b:Sc/SlabExit/IncludeParentID = "True"

@@ -534,3 +534,25 @@ if(BUILD_TESTING AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests")
         TIMEOUT 300
         WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
 endif()
+
+# urban_v2 production regression: calls the shared helpers directly
+# (src/detail/sycl_device_math.inc + carbon/minibeam_collimator.hpp).
+# Outside the tests/ block on purpose: tests/ is not tracked on pristine.
+if(BUILD_TESTING AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/benchmark/carbonminibeam/test_urban_v2_helpers.cpp")
+    add_executable(urban_v2_helpers benchmark/carbonminibeam/test_urban_v2_helpers.cpp)
+    target_include_directories(urban_v2_helpers PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    target_link_libraries(urban_v2_helpers PRIVATE carbon_core)
+    if(CARBON_ENABLE_SYCL)
+        target_compile_options(urban_v2_helpers PRIVATE -fsycl)
+        if(CARBON_SYCL_TARGETS)
+            target_compile_options(urban_v2_helpers PRIVATE
+                -fsycl-targets=${CARBON_SYCL_TARGETS})
+        endif()
+    endif()
+    add_test(NAME urban_v2_helpers COMMAND urban_v2_helpers)
+    set_tests_properties(urban_v2_helpers PROPERTIES
+        TIMEOUT 600
+        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
+endif()

@@ -64,8 +64,23 @@ struct MinibeamPhaseSpaceRecord {
     std::uint8_t ever_in_copper{};
     std::uint8_t touch_pad[2]{};
     float cumulative_cu_true_path_mm{};
+    // urban_v2 step diagnostics (research-only; zero for other models and
+    // for histories that never enter Copper transport).  Branch ids:
+    // 0=zero raw, 1=r2<=minDisplacement2, 2=full accept, 3=reduced,
+    // 4=cancelled.  zero_raw = cu_steps-(below+accept+reduce+cancel).
+    std::uint32_t cu_steps{};
+    std::uint32_t disp_below_min{};
+    std::uint32_t disp_accept{};
+    std::uint32_t disp_reduce{};
+    std::uint32_t disp_cancel{};
+    std::uint32_t cth_eq_one{};
+    float cu_g_sum_mm{};
+    float cu_t_sum_mm{};
+    float cu_delta_sum_mm{};
+    float cu_raw_disp_sum2_mm2{};
+    float cu_acc_disp_sum2_mm2{};
 };
-static_assert(sizeof(MinibeamPhaseSpaceRecord) == 48,
+static_assert(sizeof(MinibeamPhaseSpaceRecord) == 96,
               "minibeam phase-space record layout");
 
 // Optional per-primary snapshots at diagnostic planes inside water. One slot
