@@ -3766,8 +3766,11 @@ template<int EmMode>
         config.minibeam_copper_mcs_model == "fermi_eyges_tail";
     const auto minibeam_copper_urban_msc =
         config.minibeam_copper_mcs_model == "urban";
+    const auto minibeam_copper_urban_v2_msc =
+        config.minibeam_copper_mcs_model == "urban_v2";
     const auto minibeam_copper_correlated_scattering =
-        minibeam_copper_fermi_eyges_tail || minibeam_copper_urban_msc;
+        minibeam_copper_fermi_eyges_tail || minibeam_copper_urban_msc ||
+        minibeam_copper_urban_v2_msc;
     const auto minibeam_copper_enable_mcs = config.minibeam_copper_enable_mcs;
     const auto minibeam_copper_enable_energy_straggling =
         config.minibeam_copper_enable_energy_straggling;
@@ -4224,7 +4227,18 @@ template<int EmMode>
                         if (minibeam_copper_enable_mcs &&
                             minibeam_copper_correlated_scattering &&
                             energy_MeV > energy_cutoff_MeV) {
-                            if (minibeam_copper_urban_msc) {
+                            if (minibeam_copper_urban_v2_msc) {
+                                const auto copper_range_mm = stopping > 0.0F
+                                    ? energy_MeV / stopping
+                                    : 0.0F;
+                                correlated_scattering = copper_urban_v2_msc_step(
+                                    pre_scatter_direction, energy_MeV, 6, 12,
+                                    transport_path, minibeam_copper_density,
+                                    minibeam_copper_radiation_length,
+                                    copper_range_mm, stopping, 0.0F,
+                                    minibeam_copper_mcs_scale, spot_seed,
+                                    rng_history, beamline_step, 50);
+                            } else if (minibeam_copper_urban_msc) {
                                 const auto copper_range_mm = stopping > 0.0F
                                     ? energy_MeV / stopping
                                     : 0.0F;

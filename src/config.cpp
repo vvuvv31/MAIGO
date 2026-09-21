@@ -1562,10 +1562,11 @@ void TransportConfig::validate() const {
             }
             if (minibeam_copper_mcs_model != "highland" &&
                 minibeam_copper_mcs_model != "fermi_eyges_tail" &&
-                minibeam_copper_mcs_model != "urban") {
+                minibeam_copper_mcs_model != "urban" &&
+                minibeam_copper_mcs_model != "urban_v2") {
                 throw std::invalid_argument(
                     "minibeam_copper_mcs_model must be highland, "
-                    "fermi_eyges_tail or urban");
+                    "fermi_eyges_tail, urban or urban_v2");
             }
             if (minibeam_water_primary_mcs_model != "legacy_highland" &&
                 minibeam_water_primary_mcs_model != "fermi_eyges_tail") {
