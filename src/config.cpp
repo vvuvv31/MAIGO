@@ -1492,6 +1492,13 @@ void TransportConfig::validate() const {
                 throw std::invalid_argument(
                     "minibeam copper_em requires minibeam_copper_elastic_file");
             }
+            if (minibeam_copper_mcs_model == "urban_v2" &&
+                minibeam_copper_loss_range_file.empty()) {
+                throw std::invalid_argument(
+                    "minibeam urban_v2 requires "
+                    "minibeam_copper_loss_range_file (restricted loss-range "
+                    "table); the legacy E/stopping range is never used");
+            }
             if (!(minibeam_copper_density_g_per_cm3 > 0.0 &&
                   minibeam_copper_radiation_length_g_per_cm2 > 0.0 &&
                   minibeam_copper_max_step_mm > 0.0 &&
@@ -2959,6 +2966,9 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.minibeam_air_stopping_power_file = parse_path(
         values, "minibeam_air_stopping_power_file",
         config.minibeam_air_stopping_power_file);
+    config.minibeam_copper_loss_range_file = parse_path(
+        values, "minibeam_copper_loss_range_file",
+        config.minibeam_copper_loss_range_file);
     config.minibeam_copper_density_g_per_cm3 = parse_number(
         values, "minibeam_copper_density_g_per_cm3",
         config.minibeam_copper_density_g_per_cm3);

@@ -79,8 +79,14 @@ struct MinibeamPhaseSpaceRecord {
     float cu_delta_sum_mm{};
     float cu_raw_disp_sum2_mm2{};
     float cu_acc_disp_sum2_mm2{};
+    // Binding-limit histogram (Phase 5): 1=user/external ceiling, 2=MSC
+    // fMinimal, 3=geometry truncation, 4=range/stopping (no scatter).
+    std::uint32_t limit_user{};
+    std::uint32_t limit_msc{};
+    std::uint32_t limit_geom{};
+    std::uint32_t limit_range{};
 };
-static_assert(sizeof(MinibeamPhaseSpaceRecord) == 96,
+static_assert(sizeof(MinibeamPhaseSpaceRecord) == 112,
               "minibeam phase-space record layout");
 
 // Optional per-primary snapshots at diagnostic planes inside water. One slot

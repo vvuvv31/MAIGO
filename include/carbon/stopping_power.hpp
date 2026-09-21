@@ -66,6 +66,33 @@ private:
     std::vector<double> cumulative_ranges_mm_;
 };
 
+// Restricted loss-range table for one ion/material/cuts couple
+// (theRangeTableForLoss semantics): total kinetic energy -> restricted-loss
+// range -> restricted dE/dx. Extracted from Geant4 via CarbonLossRangeNtuple.
+// Columns: energy_MeVu, energy_total_MeV, loss_range_mm, csda_range_mm,
+// restricted_dedx_MeV_per_mm, inverse_residual_MeV. Device lookup uses
+// E_total and R (both strictly increasing); CSDA + residual are metadata.
+class UrbanLossRangeTable {
+public:
+    UrbanLossRangeTable(std::vector<double> e_total_mev,
+                        std::vector<double> range_mm,
+                        std::vector<double> dedx_mev_per_mm,
+                        double max_inverse_residual_mev);
+
+    static UrbanLossRangeTable from_csv(const std::filesystem::path& path);
+
+    [[nodiscard]] const std::vector<double>& energies_total_mev() const noexcept;
+    [[nodiscard]] const std::vector<double>& ranges_mm() const noexcept;
+    [[nodiscard]] const std::vector<double>& dedx_values() const noexcept;
+    [[nodiscard]] double max_inverse_residual_mev() const noexcept;
+
+private:
+    std::vector<double> e_total_mev_;
+    std::vector<double> range_mm_;
+    std::vector<double> dedx_mev_per_mm_;
+    double max_inverse_residual_mev_{0.0};
+};
+
 // Flat-array CSDA helpers for future SYCL kernels. Arrays use the same contract
 // as StoppingPowerTable: energy is MeV/u, stopping power is total-ion MeV/mm,
 // cumulative range is A=1 mm, and mass_number supplies the overall A factor.

@@ -506,6 +506,11 @@ struct TransportConfig {
     // electronic dE/dx in MeV/mm at the native material density.
     std::filesystem::path minibeam_copper_stopping_power_file{};
     std::filesystem::path minibeam_air_stopping_power_file{};
+    // Restricted loss-range table for the Urban v2 C12/Cu couple
+    // (theRangeTableForLoss semantics: E_total -> loss range -> restricted
+    // dE/dx). Required when minibeam_copper_mcs_model == "urban_v2"; the
+    // legacy E/stopping range placeholder is then never used.
+    std::filesystem::path minibeam_copper_loss_range_file{};
     double minibeam_copper_density_g_per_cm3{8.96};
     double minibeam_copper_radiation_length_g_per_cm2{12.8628};
     double minibeam_copper_max_step_mm{0.05};

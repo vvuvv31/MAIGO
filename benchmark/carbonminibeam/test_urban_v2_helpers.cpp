@@ -16,6 +16,7 @@
 #include "carbon/minibeam_collimator.hpp"
 #include "carbon/multiple_scattering.hpp"
 #include "carbon/rng.hpp"
+#include "carbon/stopping_power.hpp"
 
 namespace carbon {
 namespace {
@@ -28,6 +29,8 @@ namespace carbon {
 namespace {
 
 int failures = 0;
+
+void test_propose_path();
 
 void check(bool cond, const char* label, double a = 0.0, double b = 0.0) {
     if (cond) {
@@ -194,11 +197,116 @@ void test_angular_small_quantity() {
     }
 }
 
+void test_loss_table_and_limiter() {
+    // Loads the REAL extraction CSV (fails honest if missing) and checks
+    // spot values against the TOPAS ntuple. Then drives the shared limiter
+    // + full propose_and_sample path (production code, host-called).
+    FILE* f = std::fopen(
+        "data/urban/c12_copper_loss_range_g4_11_3_2.csv", "r");
+    check(f != nullptr, "loss table: extraction CSV present");
+    if (f == nullptr) return;
+    std::fclose(f);
+    // Minimal CSV read here (the carbon_core loader is covered by the
+    // production config path); spot-check R(250MeV/u)=22.314mm.
+    double r250 = 0.0;
+    {
+        char line[256];
+        FILE* g = std::fopen(
+            "data/urban/c12_copper_loss_range_g4_11_3_2.csv", "r");
+        while (std::fgets(line, sizeof(line), g)) {
+            if (line[0] == '#' || (line[0] >= 'a' && line[0] <= 'z') ||
+                (line[0] >= 'A' && line[0] <= 'Z'))
+                continue;
+            double eu, et, r, d, res;
+            if (std::sscanf(line, "%lf,%lf,%lf,%lf,%lf", &eu, &et, &r, &d,
+                             &res) == 5 &&
+                std::fabs(eu - 250.01) < 0.06) {
+                r250 = r;
+            }
+        }
+        std::fclose(g);
+    }
+    check(std::fabs(r250 - 22.314) < 0.01, "loss table: R(250MeV/u)=22.3mm",
+          r250, 22.314);
+    test_propose_path();
+}
+
+void test_propose_path() {
+    // Full production step (propose_and_sample) with the REAL loss table
+    // and slit-block geometry ctx, host-called. C12 250MeV/u, Cu slab
+    // interior point, both external ceilings.
+    UrbanLossRangeTable host({{0.0, 1.0}}, {{0.0, 1.0}}, {{0.0, 1.0}}, 0.0);
+    try {
+        host = UrbanLossRangeTable::from_csv(
+            "data/urban/c12_copper_loss_range_g4_11_3_2.csv");
+    } catch (...) {
+        check(false, "propose: loss table loads via carbon_core");
+        return;
+    }
+    check(host.ranges_mm().size() == 4001, "propose: 4001 nodes",
+          double(host.ranges_mm().size()), 4001.0);
+    std::vector<float> e(host.energies_total_mev().begin(),
+                         host.energies_total_mev().end());
+    std::vector<float> r(host.ranges_mm().begin(), host.ranges_mm().end());
+    std::vector<float> d(host.dedx_values().begin(), host.dedx_values().end());
+    UrbanV2LossTable table{e.data(), r.data(), d.data(),
+                           static_cast<int>(e.size())};
+    UrbanV2GeomCtx geom{};
+    geom.cos_a = 1.0F;
+    geom.sin_a = 0.0F;
+    geom.radius_mm = 60.0F;
+    geom.slit_count = 1;
+    geom.slit_width_mm = 0.001F;
+    geom.slit_pitch_mm = 3.6F;
+    geom.slit_half_len_mm = 0.5F;
+    geom.slit_offset_mm = 100.0F;
+    geom.block_entrance_z_mm = -1.0F;
+    geom.block_exit_z_mm = 0.0F;
+    const Direction3F dir{0.0F, 0.0F, 1.0F};
+    // (ceiling, boundary, expected reason): truncation by the 0.05 boundary
+    // must report geometry(3); matched ceiling reports user(1).
+    for (const auto [ceiling, boundary, want] :
+         {std::tuple{0.25F, 0.05F, 3}, std::tuple{0.05F, 0.05F, 1}}) {
+        UrbanV2TrackState state{};
+        const auto s = copper_urban_v2_propose_and_sample(
+            dir, 3000.0F, 6, 12, ceiling, boundary, 0.0F, 0.0F, -0.5F, 0.0F,
+            0.0F, 1.0F, geom, true, state, table, 8.96F, 12.8628F, 1.0F,
+            4242ULL, 17ULL, 3ULL, 50);
+        char lab[160];
+        std::snprintf(lab, sizeof(lab),
+                      "propose: ceiling=%.2f valid reason=%d g=%.5f t=%.5f",
+                      double(ceiling), s.limit_reason,
+                      double(s.final_geom_path_mm),
+                      double(s.final_true_path_mm));
+        // Interior Cu step: scatters (reason 1 or 2), g<=ceiling, t>=g,
+        // state consumed first_step, deterministic on repeat.
+        const auto s2 = copper_urban_v2_propose_and_sample(
+            dir, 3000.0F, 6, 12, ceiling, boundary, 0.0F, 0.0F, -0.5F, 0.0F,
+            0.0F, 1.0F, geom, true, state, table, 8.96F, 12.8628F, 1.0F,
+            4242ULL, 17ULL, 3ULL, 50);
+        UrbanV2TrackState state0{};
+        const auto s0 = copper_urban_v2_propose_and_sample(
+            dir, 3000.0F, 6, 12, ceiling, boundary, 0.0F, 0.0F, -0.5F, 0.0F,
+            0.0F, 1.0F, geom, true, state0, table, 8.96F, 12.8628F, 1.0F,
+            4242ULL, 17ULL, 3ULL, 50);
+        check(s.proposal_valid && s0.proposal_valid &&
+                  s.limit_reason == want &&
+                  s.final_geom_path_mm <= ceiling &&
+                  s.final_true_path_mm >= s.final_geom_path_mm &&
+                  !state.first_step &&
+                  s.direction.x == s0.direction.x &&
+                  s.displacement_mm.x == s0.displacement_mm.x,
+              lab, double(s.limit_reason), 1.0);
+        (void)s2;
+    }
+}
+
 int run_urban_v2_helper_tests() {
     test_acceptance_gate();
     test_stable_delta();
     test_slit_navigation_and_safety();
     test_angular_small_quantity();
+    test_loss_table_and_limiter();
     if (failures == 0) {
         std::printf("urban_v2_helpers: ALL PASS\n");
         return 0;

@@ -1,0 +1,16 @@
+{
+  "source_phsp": "/tmp/opencode/lossrange/output/loss_range.phsp",
+  "physics": "g4em-standard_opt4 + g4decay, CutForAllParticles=0.05mm, default region couple, G4_Cu",
+  "projectile": {
+    "z": 6,
+    "a": 12
+  },
+  "nodes": 4001,
+  "energy_range_MeVu": [
+    0.01,
+    400.01
+  ],
+  "max_inverse_residual_MeV": 4.49265,
+  "sha256": "9bd2241ee6bab40590aeb58870969343613560b26899af6bf7bdff31a70094d4",
+  "note": "CSDA column is 0 in raw (CSDA tables disabled); omitted. R(E) is the restricted-loss range used as Urban currentRange; E(R) its inverse; DEDX is GetDEDX with the production couple."
+}

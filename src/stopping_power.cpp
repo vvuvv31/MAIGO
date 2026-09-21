@@ -575,4 +575,76 @@ std::vector<float> load_ion_species_stopping_power_lut(
     return lut;
 }
 
+UrbanLossRangeTable::UrbanLossRangeTable(std::vector<double> e_total_mev,
+                                         std::vector<double> range_mm,
+                                         std::vector<double> dedx_mev_per_mm,
+                                         double max_inverse_residual_mev)
+    : e_total_mev_(std::move(e_total_mev)),
+      range_mm_(std::move(range_mm)),
+      dedx_mev_per_mm_(std::move(dedx_mev_per_mm)),
+      max_inverse_residual_mev_(max_inverse_residual_mev) {}
+
+UrbanLossRangeTable UrbanLossRangeTable::from_csv(
+    const std::filesystem::path& path) {
+    std::ifstream input(path);
+    if (!input) {
+        throw std::runtime_error("Cannot open loss-range table: " + path.string());
+    }
+    std::vector<double> energies;
+    std::vector<double> ranges;
+    std::vector<double> dedx;
+    double max_residual = 0.0;
+    std::string line;
+    std::size_t line_number = 0;
+    while (std::getline(input, line)) {
+        ++line_number;
+        const auto first = line.find_first_not_of(" \t\r\n");
+        if (first == std::string::npos || line[first] == '#') {
+            continue;
+        }
+        if (std::isalpha(static_cast<unsigned char>(line[first]))) {
+            continue;
+        }
+        std::replace(line.begin(), line.end(), ',', ' ');
+        std::istringstream parser(line);
+        double e_u = 0.0, e_tot = 0.0, r = 0.0, d = 0.0, res = 0.0;
+        if (!(parser >> e_u >> e_tot >> r >> d >> res)) {
+            throw std::runtime_error("Invalid loss-range row at " + path.string() +
+                                     ":" + std::to_string(line_number));
+        }
+        (void)e_u;
+        energies.push_back(e_tot);
+        ranges.push_back(r);
+        dedx.push_back(d);
+        max_residual = std::max(max_residual, std::fabs(res));
+    }
+    if (energies.size() < 2) {
+        throw std::runtime_error("Loss-range table too short: " + path.string());
+    }
+    for (std::size_t i = 1; i < energies.size(); ++i) {
+        if (!(energies[i] > energies[i - 1]) || !(ranges[i] > ranges[i - 1])) {
+            throw std::runtime_error("Loss-range table not strictly increasing at row " +
+                                     std::to_string(i) + ": " + path.string());
+        }
+    }
+    return UrbanLossRangeTable(std::move(energies), std::move(ranges),
+                               std::move(dedx), max_residual);
+}
+
+const std::vector<double>& UrbanLossRangeTable::energies_total_mev() const noexcept {
+    return e_total_mev_;
+}
+
+const std::vector<double>& UrbanLossRangeTable::ranges_mm() const noexcept {
+    return range_mm_;
+}
+
+const std::vector<double>& UrbanLossRangeTable::dedx_values() const noexcept {
+    return dedx_mev_per_mm_;
+}
+
+double UrbanLossRangeTable::max_inverse_residual_mev() const noexcept {
+    return max_inverse_residual_mev_;
+}
+
 }  // namespace carbon

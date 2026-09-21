@@ -763,7 +763,8 @@ void write_minibeam_phase_space_csv(const std::filesystem::path& path,
               "initial_ray_hits_copper,ever_in_copper,cumulative_cu_true_path_mm,"
               "cu_steps,disp_below_min,disp_accept,disp_reduce,disp_cancel,cth_eq_one,"
               "cu_g_sum_mm,cu_t_sum_mm,cu_delta_sum_mm,"
-              "cu_raw_disp_sum2_mm2,cu_acc_disp_sum2_mm2\n"
+              "cu_raw_disp_sum2_mm2,cu_acc_disp_sum2_mm2,"
+              "limit_user,limit_msc,limit_geom,limit_range\n"
            << std::setprecision(17);
     for (const auto& record : result.minibeam_phase_space_records) {
         if (!record.valid) continue;
@@ -782,7 +783,9 @@ void write_minibeam_phase_space_csv(const std::filesystem::path& path,
                << record.cu_g_sum_mm << ',' << record.cu_t_sum_mm << ','
                << record.cu_delta_sum_mm << ','
                << record.cu_raw_disp_sum2_mm2 << ','
-               << record.cu_acc_disp_sum2_mm2 << '\n';
+               << record.cu_acc_disp_sum2_mm2 << ','
+               << record.limit_user << ',' << record.limit_msc << ','
+               << record.limit_geom << ',' << record.limit_range << '\n';
     }
     if (!output) {
         throw std::runtime_error("Failed to write minibeam phase space");

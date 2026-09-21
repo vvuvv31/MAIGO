@@ -2730,6 +2730,10 @@ template<int EmMode>
     float* minibeam_copper_sp_energies_device = nullptr;
     float* minibeam_copper_sp_values_device = nullptr;
     std::uint32_t minibeam_copper_sp_count = 0;
+    float* minibeam_copper_loss_e_device = nullptr;
+    float* minibeam_copper_loss_r_device = nullptr;
+    float* minibeam_copper_loss_d_device = nullptr;
+    std::uint32_t minibeam_copper_loss_count = 0;
     float* minibeam_air_sp_energies_device = nullptr;
     float* minibeam_air_sp_values_device = nullptr;
     std::uint32_t minibeam_air_sp_count = 0;
@@ -2800,6 +2804,24 @@ template<int EmMode>
                           minibeam_copper_sp_energies_device,
                           minibeam_copper_sp_values_device);
         minibeam_copper_sp_count = static_cast<std::uint32_t>(copper_sp.energies().size());
+        if (!config.minibeam_copper_loss_range_file.empty()) {
+            const auto loss_table = UrbanLossRangeTable::from_csv(
+                config.minibeam_copper_loss_range_file);
+            upload_float_pair(loss_table.energies_total_mev(),
+                              loss_table.ranges_mm(),
+                              minibeam_copper_loss_e_device,
+                              minibeam_copper_loss_r_device);
+            std::vector<float> d(loss_table.dedx_values().begin(),
+                                 loss_table.dedx_values().end());
+            minibeam_copper_loss_d_device = mem_tracker.allocate<float>(d.size());
+            if (!minibeam_copper_loss_d_device) throw std::bad_alloc();
+            queue.copy(d.data(), minibeam_copper_loss_d_device, d.size());
+            minibeam_copper_loss_count =
+                static_cast<std::uint32_t>(loss_table.energies_total_mev().size());
+            std::cout << "[minibeam-copper] loss-range nodes="
+                      << minibeam_copper_loss_count << " max-inverse-residual-MeV="
+                      << loss_table.max_inverse_residual_mev() << '\n';
+        }
         upload_float_pair(air_sp.energies(), air_sp.values(),
                           minibeam_air_sp_energies_device,
                           minibeam_air_sp_values_device);
@@ -4114,6 +4136,10 @@ template<int EmMode>
                 std::uint32_t beamline_disp_reduce_hist = 0;
                 std::uint32_t beamline_disp_cancel_hist = 0;
                 std::uint32_t beamline_cth_one_hist = 0;
+                std::uint32_t beamline_limit_user_hist = 0;
+                std::uint32_t beamline_limit_msc_hist = 0;
+                std::uint32_t beamline_limit_geom_hist = 0;
+                std::uint32_t beamline_limit_range_hist = 0;
                 float beamline_g_sum_hist_mm = 0.0F;
                 float beamline_t_sum_hist_mm = 0.0F;
                 float beamline_delta_sum_hist_mm = 0.0F;
@@ -4152,6 +4178,28 @@ template<int EmMode>
                     std::uint64_t beamline_step = 0;
                     float copper_nuclear_tau_remaining = 0.0F;
                     bool copper_nuclear_tau_active = false;
+                    // Urban v2 fMinimal state (Phase 2/5): persists across the
+                    // steps of one Cu traversal; at_boundary marks steps that
+                    // start at the block entrance or a material interface.
+                    UrbanV2TrackState urban_v2_state{};
+                    bool urban_v2_at_boundary = true;
+                    bool urban_v2_prev_in_cu = false;
+                    UrbanV2GeomCtx urban_v2_geom{};
+                    urban_v2_geom.cos_a = minibeam_cos;
+                    urban_v2_geom.sin_a = minibeam_sin;
+                    urban_v2_geom.radius_mm = minibeam_block_radius;
+                    urban_v2_geom.slit_count = minibeam_slit_count;
+                    urban_v2_geom.slit_width_mm = minibeam_slit_width;
+                    urban_v2_geom.slit_pitch_mm = minibeam_slit_pitch;
+                    urban_v2_geom.slit_half_len_mm = 0.5F * minibeam_slit_length;
+                    urban_v2_geom.slit_offset_mm = minibeam_slit_offset;
+                    urban_v2_geom.block_entrance_z_mm = minibeam_block_entrance_z;
+                    urban_v2_geom.block_exit_z_mm = minibeam_block_exit_z;
+                    UrbanV2LossTable urban_v2_loss_table{
+                        minibeam_copper_loss_e_device,
+                        minibeam_copper_loss_r_device,
+                        minibeam_copper_loss_d_device,
+                        static_cast<int>(minibeam_copper_loss_count)};
                     // (touch accumulators live at history scope:
                     // beamline_ever_in_copper_hist / beamline_cu_true_path_hist_mm)
                     constexpr std::uint64_t maximum_beamline_steps = 100000;
@@ -4201,6 +4249,7 @@ template<int EmMode>
                             energy_MeV -= air_loss;
                             beamline_air_loss_MeV += air_loss;
                             ++beamline_step;
+                            urban_v2_prev_in_cu = false;
                             continue;
                         }
                         const auto energy_u = energy_MeV * inverse_mass_number;
@@ -4248,37 +4297,33 @@ template<int EmMode>
                             minibeam_copper_correlated_scattering &&
                             energy_MeV > energy_cutoff_MeV) {
                             if (minibeam_copper_urban_v2_msc) {
-                                const auto copper_range_mm = stopping > 0.0F
-                                    ? energy_MeV / stopping
-                                    : 0.0F;
-                                // R1: real isotropic postSafety at the geometric
-                                // endpoint (position + g*direction), NOT the
-                                // along-ray boundary distance and NOT step-start
-                                // safety.  Never a constant; 0.0F would force
-                                // every displacement to cancel.
-                                const auto endpoint_x_mm =
-                                    position_x_mm + transport_path * direction_x;
-                                const auto endpoint_y_mm =
-                                    position_y_mm + transport_path * direction_y;
-                                const auto endpoint_z_mm =
-                                    position_z_mm + transport_path * direction_z;
-                                const auto urban_v2_safety_mm =
-                                    minibeam_isotropic_safety_at_point(
-                                        endpoint_x_mm, endpoint_y_mm,
-                                        endpoint_z_mm, minibeam_cos, minibeam_sin,
-                                        minibeam_block_radius, minibeam_slit_count,
-                                        minibeam_slit_width, minibeam_slit_pitch,
-                                        0.5F * minibeam_slit_length,
-                                        minibeam_slit_offset,
-                                        minibeam_block_entrance_z,
-                                        minibeam_block_exit_z);
-                                correlated_scattering = copper_urban_v2_msc_step(
-                                    pre_scatter_direction, energy_MeV, 6, 12,
-                                    transport_path, minibeam_copper_density,
-                                    minibeam_copper_radiation_length,
-                                    copper_range_mm, stopping, urban_v2_safety_mm,
-                                    minibeam_copper_mcs_scale, spot_seed,
-                                    rng_history, beamline_step, 50);
+                                // Re-entry after air also starts at a
+                                // geometry boundary (reference stepStatus).
+                                urban_v2_at_boundary = urban_v2_at_boundary ||
+                                    !urban_v2_prev_in_cu;
+                                // Phase 5: external TRUE candidate (user
+                                // ceiling) -> fMinimal limit -> true->geom ->
+                                // geometry truncation -> final true -> scatter.
+                                // boundary_path_mm is the geometry-reachable
+                                // length (exact material boundaries honored).
+                                // The legacy E/stopping range is never used;
+                                // currentRange comes from the loss table.
+                                correlated_scattering =
+                                    copper_urban_v2_propose_and_sample(
+                                        pre_scatter_direction, energy_MeV, 6, 12,
+                                        minibeam_copper_max_step, transport_path,
+                                        position_x_mm, position_y_mm,
+                                        position_z_mm, direction_x, direction_y,
+                                        direction_z, urban_v2_geom,
+                                        urban_v2_at_boundary, urban_v2_state,
+                                        urban_v2_loss_table,
+                                        minibeam_copper_density,
+                                        minibeam_copper_radiation_length,
+                                        minibeam_copper_mcs_scale, spot_seed,
+                                        rng_history, beamline_step, 50);
+                                urban_v2_at_boundary =
+                                    correlated_scattering.boundary_crossed;
+                                urban_v2_prev_in_cu = true;
                             } else if (minibeam_copper_urban_msc) {
                                 const auto copper_range_mm = stopping > 0.0F
                                     ? energy_MeV / stopping
@@ -4408,6 +4453,13 @@ template<int EmMode>
                                 }
                                 if (sc.cth_rounded_to_one) {
                                     ++beamline_cth_one_hist;
+                                }
+                                switch (sc.limit_reason) {
+                                    case 1: ++beamline_limit_user_hist; break;
+                                    case 2: ++beamline_limit_msc_hist; break;
+                                    case 3: ++beamline_limit_geom_hist; break;
+                                    case 4: ++beamline_limit_range_hist; break;
+                                    default: break;
                                 }
                             }
                         }
@@ -5482,6 +5534,10 @@ template<int EmMode>
                     record.cu_delta_sum_mm = beamline_delta_sum_hist_mm;
                     record.cu_raw_disp_sum2_mm2 = beamline_raw2_sum_hist_mm2;
                     record.cu_acc_disp_sum2_mm2 = beamline_acc2_sum_hist_mm2;
+                    record.limit_user = beamline_limit_user_hist;
+                    record.limit_msc = beamline_limit_msc_hist;
+                    record.limit_geom = beamline_limit_geom_hist;
+                    record.limit_range = beamline_limit_range_hist;
                     record.kinetic_energy_MeV = energy_MeV;
                     record.x_mm = position_x_mm;
                     record.y_mm = position_y_mm;
@@ -12685,6 +12741,9 @@ template<int EmMode>
     free_device(minibeam_fragment_miss_joint_remaining_device);
     free_device(minibeam_copper_sp_energies_device);
     free_device(minibeam_copper_sp_values_device);
+    free_device(minibeam_copper_loss_e_device);
+    free_device(minibeam_copper_loss_r_device);
+    free_device(minibeam_copper_loss_d_device);
     free_device(minibeam_air_sp_energies_device);
     free_device(minibeam_air_sp_values_device);
     free_device(minibeam_copper_xs_energies_device);
