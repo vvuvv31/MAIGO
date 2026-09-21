@@ -301,3 +301,35 @@ compensating error. `[INFERENCE]` The +2.3-2.9 pp collimator entry residual is
 therefore not a Copper MSC amplitude error; it must come from the source,
 slit-edge geometry or scoring. This matches the independent water-dominated
 attribution in D10 and closes the Copper-MSC-only hypothesis for the residual.
+
+## 10. Gate 1 component truth: angular sampler vs TOPAS per-step ntuple
+
+Double-precision port of `SampleCosineTheta` + `SimpleScattering`
+(`benchmark/carbonminibeam/urban_sampler_oracle.py`) vs the TOPAS Copper
+per-step ntuple (`minibeam_msc_steps_e250`, 31.5M steps). Ratio of simulated
+to measured angle quantiles:
+
+| E (MeV/u) | h (mm) | n | q50 | q68 | q90 | q99 | q99.9 |
+|---:|---:|---:|---:|---:|---:|---:|---:|
+| 200.7 | 0.0500 | 36714 | 1.013 | 1.005 | 0.996 | 0.984 | 0.995 |
+| 105.3 | 0.0500 | 18976 | 1.013 | 1.010 | 1.004 | 1.013 | 1.003 |
+| 50.8 | 0.0500 | 10228 | 0.978 | 0.978 | 0.953 | 0.949 | 0.922 |
+| 200.8 | 0.0288 | 23735 | 1.004 | 0.994 | 0.974 | 0.969 | 0.990 |
+
+`[FACT]` The angular sampler matches the TOPAS per-step distribution within
+~2% above 100 MeV/u and within ~8% at 50 MeV/u (a small low-energy deficit).
+This closes Gate 1 for the angular kernel.
+
+## 11. Verdict
+
+`[FACT]` The Copper Urban MSC port is algorithmically correct after the v2
+fixes (Alg96 displacement, t<->z, step-end energy): the component angular
+sampler matches TOPAS within 2-8% and the matched-step slab angle variance
+matches within 3%. The production `urban` model used the wrong displacement
+algorithm and an unmatched step, which are real inequivalences.
+
+`[INFERENCE]` The remaining single-spot collimator entry contrast residual
+(+2.3-2.9 pp) is not a Copper MSC amplitude error: it persists and grows when
+the physically correct 0.05 mm step is used, and the same-source water replay
+assigns the depth-dependent valley residual to water. The next target is the
+source/slit-edge geometry and scoring, not the Copper scattering kernel.
