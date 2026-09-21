@@ -2734,6 +2734,14 @@ template<int EmMode>
     float* minibeam_copper_loss_r_device = nullptr;
     float* minibeam_copper_loss_d_device = nullptr;
     std::uint32_t minibeam_copper_loss_count = 0;
+    float* minibeam_water_urban_loss_e_device = nullptr;
+    float* minibeam_water_urban_loss_r_device = nullptr;
+    float* minibeam_water_urban_loss_d_device = nullptr;
+    std::uint32_t minibeam_water_urban_loss_count = 0;
+    double minibeam_water_urban_zeff =
+        std::numeric_limits<double>::quiet_NaN();
+    double minibeam_water_urban_radlen_mm =
+        std::numeric_limits<double>::quiet_NaN();
     float* minibeam_air_sp_energies_device = nullptr;
     float* minibeam_air_sp_values_device = nullptr;
     std::uint32_t minibeam_air_sp_count = 0;
@@ -2821,6 +2829,28 @@ template<int EmMode>
             std::cout << "[minibeam-copper] loss-range nodes="
                       << minibeam_copper_loss_count << " max-inverse-residual-MeV="
                       << loss_table.max_inverse_residual_mev() << '\n';
+        }
+        if (!config.minibeam_water_urban_loss_range_file.empty()) {
+            const auto water_table = UrbanLossRangeTable::from_csv(
+                config.minibeam_water_urban_loss_range_file);
+            upload_float_pair(water_table.energies_total_mev(),
+                              water_table.ranges_mm(),
+                              minibeam_water_urban_loss_e_device,
+                              minibeam_water_urban_loss_r_device);
+            std::vector<float> wd(water_table.dedx_values().begin(),
+                                  water_table.dedx_values().end());
+            minibeam_water_urban_loss_d_device =
+                mem_tracker.allocate<float>(wd.size());
+            if (!minibeam_water_urban_loss_d_device) throw std::bad_alloc();
+            queue.copy(wd.data(), minibeam_water_urban_loss_d_device, wd.size());
+            minibeam_water_urban_loss_count =
+                static_cast<std::uint32_t>(water_table.energies_total_mev().size());
+            minibeam_water_urban_zeff = water_table.zeff();
+            minibeam_water_urban_radlen_mm = water_table.radlen_mm();
+            std::cout << "[minibeam-water] urban loss-range nodes="
+                      << minibeam_water_urban_loss_count << " zeff="
+                      << minibeam_water_urban_zeff << " radlen_mm="
+                      << minibeam_water_urban_radlen_mm << '\n';
         }
         upload_float_pair(air_sp.energies(), air_sp.values(),
                           minibeam_air_sp_energies_device,
@@ -3129,6 +3159,11 @@ template<int EmMode>
     auto* minibeam_event_counts_device = config.enable_minibeam
         ? mem_tracker.allocate<std::uint64_t>(minibeam_event_counter_count)
         : nullptr;
+    // Research-only diagnostic: total Water-Urban segments (one atomic per
+    // history that used the urban water path).
+    auto* water_urban_segment_count_device = config.enable_minibeam
+        ? mem_tracker.allocate<std::uint64_t>(1)
+        : nullptr;
     const bool enable_minibeam_fragment_miss_joint =
         config.enable_minibeam &&
         config.minibeam_copper_fragment_cascade_generations > 0;
@@ -3192,7 +3227,8 @@ template<int EmMode>
         free_device(beamline_removed_device);
         free_device(beamline_primary_survivor_device);
         free_device(beamline_air_loss_device);
-        free_device(minibeam_event_counts_device);
+    free_device(minibeam_event_counts_device);
+    free_device(water_urban_segment_count_device);
         free_device(minibeam_fragment_miss_joint_counts_device);
         free_device(minibeam_fragment_miss_joint_energy_device);
         free_device(minibeam_fragment_miss_joint_depth_device);
@@ -3214,6 +3250,9 @@ template<int EmMode>
         queue.fill(beamline_air_loss_device, 0.0F, number_of_histories);
         queue.fill(minibeam_event_counts_device, std::uint64_t{0},
                    minibeam_event_counter_count);
+        if (water_urban_segment_count_device != nullptr) {
+            queue.fill(water_urban_segment_count_device, std::uint64_t{0}, 1);
+        }
         if (minibeam_fragment_miss_joint_counts_device != nullptr) {
             queue.fill(minibeam_fragment_miss_joint_counts_device,
                        std::uint64_t{0},
@@ -3816,9 +3855,18 @@ template<int EmMode>
         config.minibeam_water_primary_mcs_tail_width);
     const auto minibeam_water_primary_fermi_eyges_tail =
         config.minibeam_water_primary_mcs_model == "fermi_eyges_tail";
+    const auto minibeam_water_primary_urban_v2 =
+        config.minibeam_water_primary_mcs_model == "urban_v2";
     const auto minibeam_water_primary_mcs_max_segment_mm =
         static_cast<float>(
             config.minibeam_water_primary_mcs_max_segment_mm);
+    const auto minibeam_water_primary_urban_max_step_mm =
+        static_cast<float>(
+            config.minibeam_water_primary_urban_max_step_mm);
+    const auto minibeam_water_urban_zeff_f =
+        static_cast<float>(minibeam_water_urban_zeff);
+    const auto minibeam_water_urban_radlen_mm_f =
+        static_cast<float>(minibeam_water_urban_radlen_mm);
     const auto minibeam_water_primary_stopping_power_scale = static_cast<float>(
         config.minibeam_water_primary_stopping_power_scale);
     const auto minibeam_copper_survivor_energy_loss_scale = static_cast<float>(
@@ -5552,6 +5600,11 @@ template<int EmMode>
                 auto history_water_electron_escaped_MeV=0.0F;
                 std::uint64_t local_schneider_rate_queries = 0;
                 std::uint32_t steps = 0;
+                // Research-only water Urban state (one fMinimal track per
+                // primary history; first water segment starts at a boundary).
+                UrbanV2TrackState water_urban_state{};
+                bool water_urban_seen_segment = false;
+                std::uint32_t water_urban_seg_hist = 0;
                 StepStableStragglingState<float> stable_straggling;
                 stable_straggling.initialize(straggling_sampling_length_mm);
 
@@ -6915,9 +6968,17 @@ template<int EmMode>
                             radiation_length_g_per_cm2 =
                                 slab_radiation_lengths_device[layer_for_material];
                         }
+                        // Generic C12 FE path. Yields to the minibeam water
+                        // branch below when a non-legacy minibeam primary
+                        // model is selected (FE-tail or Urban v2); otherwise
+                        // the minibeam branch would be dead code whenever the
+                        // generic fermi_eyges model is on.
                         if (c12_fermi_eyges &&
                             primary_atomic_number == 6 &&
-                            primary_mass_number == 12) {
+                            primary_mass_number == 12 &&
+                            !(enable_minibeam &&
+                              (minibeam_water_primary_fermi_eyges_tail ||
+                               minibeam_water_primary_urban_v2))) {
                             auto observation_path_mm = -1.0F;
 #if defined(CARBON_ENABLE_MINIBEAM)
                             auto observation_plane =
@@ -7178,6 +7239,179 @@ template<int EmMode>
                                 traversed_mm += segment_mm;
                                 ++segment_index;
                             }
+                            direction_x = segment_direction.x;
+                            direction_y = segment_direction.y;
+                            direction_z = segment_direction.z;
+                            water_scattering_displacement = Direction3F{
+                                segment_offset.x - seg_dir_x * step_mm,
+                                segment_offset.y - seg_dir_y * step_mm,
+                                segment_offset.z - seg_dir_z * step_mm};
+                        }
+                        else if (enable_minibeam &&
+                            minibeam_water_primary_urban_v2 &&
+                            !in_ct && !in_insert && slab_layer_count == 0) {
+                            // Research-only table-driven Geant4-11.3.2 Urban
+                            // for primary C12 in Water_75eV. Transport steps
+                            // are subdivided to the Urban max step (0.05 mm,
+                            // matching the TOPAS water MaxStepSize); loss and
+                            // straggling still use the full step_mm, so only
+                            // direction/displacement change vs FE-tail.
+                            // Plane records use endpoint projection and never
+                            // alter transport (observation-only); the bias vs
+                            // a true crossing is O(segment^2), ~1e-4 mm here.
+                            UrbanV2LossTable water_urban_table{
+                                minibeam_water_urban_loss_e_device,
+                                minibeam_water_urban_loss_r_device,
+                                minibeam_water_urban_loss_d_device,
+                                static_cast<int>(
+                                    minibeam_water_urban_loss_count)};
+                            auto segment_direction = Direction3F{
+                                direction_x, direction_y, direction_z};
+                            auto segment_offset = Direction3F{
+                                0.0F, 0.0F, 0.0F};
+                            auto traversed_mm = 0.0F;
+                            std::uint32_t segment_index = 0U;
+                            const bool first_water_segment =
+                                !water_urban_seen_segment;
+                            while (traversed_mm < step_mm) {
+                                ++water_urban_seg_hist;
+                                const auto segment_mm = sycl::fmin(
+                                    minibeam_water_primary_urban_max_step_mm,
+                                    step_mm - traversed_mm);
+                                const auto seg_start_x =
+                                    position_x_mm + segment_offset.x;
+                                const auto seg_start_y =
+                                    position_y_mm + segment_offset.y;
+                                const auto seg_start_z =
+                                    position_z_mm + segment_offset.z;
+                                const auto seg_e = sycl::fmax(
+                                    energy_cutoff_MeV,
+                                    energy_MeV - traversed_mm / step_mm *
+                                                     deposited_MeV);
+                                const auto urban_scatter =
+                                    water_urban_v2_propose_and_sample(
+                                        segment_direction, seg_e, 6, 12,
+                                        minibeam_water_primary_urban_max_step_mm,
+                                        segment_mm, seg_start_x, seg_start_y,
+                                        seg_start_z, segment_direction.x,
+                                        segment_direction.y,
+                                        segment_direction.z, voxel_min_x_mm,
+                                        voxel_max_x_mm, voxel_min_y_mm,
+                                        voxel_max_y_mm, 0.0F,
+                                        phantom_length_mm,
+                                        first_water_segment &&
+                                            segment_index == 0U,
+                                        water_urban_state, water_urban_table,
+                                        minibeam_water_urban_zeff_f,
+                                        minibeam_water_urban_radlen_mm_f, 1.0F,
+                                        spot_seed, rng_history,
+                                        static_cast<std::uint64_t>(steps) *
+                                                1024U +
+                                            segment_index,
+                                        70U);
+                                const auto seg_end_x =
+                                    seg_start_x +
+                                    urban_scatter.final_geom_path_mm *
+                                        segment_direction.x +
+                                    urban_scatter.displacement_mm.x;
+                                const auto seg_end_y =
+                                    seg_start_y +
+                                    urban_scatter.final_geom_path_mm *
+                                        segment_direction.y +
+                                    urban_scatter.displacement_mm.y;
+                                const auto seg_end_z =
+                                    seg_start_z +
+                                    urban_scatter.final_geom_path_mm *
+                                        segment_direction.z +
+                                    urban_scatter.displacement_mm.z;
+                                if (minibeam_water_primary_plane_records_device !=
+                                        nullptr &&
+                                    urban_scatter.direction.z > 0.0F) {
+                                    for (std::size_t plane = 0;
+                                         plane <
+                                         minibeam_water_primary_plane_count;
+                                         ++plane) {
+                                        auto& candidate_record =
+                                            minibeam_water_primary_plane_records_device[
+                                                global_history *
+                                                    minibeam_water_primary_plane_count +
+                                                plane];
+                                        const auto plane_depth_mm =
+                                            minibeam_water_primary_plane_depths_device[
+                                                plane];
+                                        if (!candidate_record.valid &&
+                                            seg_start_z < plane_depth_mm &&
+                                            seg_end_z >= plane_depth_mm) {
+                                            const auto residual_path =
+                                                (plane_depth_mm - seg_end_z) /
+                                                urban_scatter.direction.z;
+                                            const auto step_fraction =
+                                                sycl::clamp(
+                                                    (traversed_mm +
+                                                     urban_scatter
+                                                         .final_geom_path_mm) /
+                                                        step_mm,
+                                                    0.0F, 1.0F);
+                                            candidate_record.history =
+                                                global_history;
+                                            candidate_record.particle_id =
+                                                global_history;
+                                            candidate_record.rng_stream =
+                                                rng_history;
+                                            candidate_record.plane_index =
+                                                static_cast<std::uint32_t>(
+                                                    plane);
+                                            candidate_record.atomic_number =
+                                                static_cast<std::int16_t>(
+                                                    primary_atomic_number);
+                                            candidate_record.mass_number =
+                                                static_cast<std::int16_t>(
+                                                    primary_mass_number);
+                                            candidate_record.depth_mm =
+                                                plane_depth_mm;
+                                            candidate_record
+                                                .kinetic_energy_MeV = sycl::fmax(
+                                                0.0F, energy_MeV -
+                                                          step_fraction *
+                                                              deposited_MeV);
+                                            candidate_record.weight = 1.0F;
+                                            candidate_record.x_mm =
+                                                seg_end_x +
+                                                residual_path *
+                                                    urban_scatter.direction.x;
+                                            candidate_record.y_mm =
+                                                seg_end_y +
+                                                residual_path *
+                                                    urban_scatter.direction.y;
+                                            candidate_record.direction_x =
+                                                urban_scatter.direction.x;
+                                            candidate_record.direction_y =
+                                                urban_scatter.direction.y;
+                                            candidate_record.direction_z =
+                                                urban_scatter.direction.z;
+                                            candidate_record.valid = 1U;
+                                            break;
+                                        }
+                                    }
+                                }
+                                segment_offset.x +=
+                                    segment_direction.x *
+                                        urban_scatter.final_geom_path_mm +
+                                    urban_scatter.displacement_mm.x;
+                                segment_offset.y +=
+                                    segment_direction.y *
+                                        urban_scatter.final_geom_path_mm +
+                                    urban_scatter.displacement_mm.y;
+                                segment_offset.z +=
+                                    segment_direction.z *
+                                        urban_scatter.final_geom_path_mm +
+                                    urban_scatter.displacement_mm.z;
+                                segment_direction = urban_scatter.direction;
+                                traversed_mm +=
+                                    urban_scatter.final_geom_path_mm;
+                                ++segment_index;
+                            }
+                            water_urban_seen_segment = true;
                             direction_x = segment_direction.x;
                             direction_y = segment_direction.y;
                             direction_z = segment_direction.z;
@@ -7934,6 +8168,15 @@ template<int EmMode>
 
 
                     ++steps;
+                }
+
+                if (water_urban_seg_hist > 0 &&
+                    water_urban_segment_count_device != nullptr) {
+                    sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
+                                     sycl::memory_scope::device,
+                                     sycl::access::address_space::global_space>
+                        seg_count(water_urban_segment_count_device[0]);
+                    seg_count.fetch_add(water_urban_seg_hist);
                 }
 
                 if(unified_em && CARBON_EM_LOCAL_AUDIT)flush_unified_em_audit(unified_audit,unified_primary_audit);
@@ -12385,6 +12628,13 @@ template<int EmMode>
         queue.copy(minibeam_event_counts_device,
                    minibeam_event_counts_host.data(),
                    minibeam_event_counts_host.size());
+        if (water_urban_segment_count_device != nullptr) {
+            std::uint64_t water_urban_segments = 0;
+            queue.copy(water_urban_segment_count_device, &water_urban_segments,
+                       1);
+            std::cout << "[minibeam-water] urban segments total="
+                      << water_urban_segments << '\n';
+        }
         if (minibeam_fragment_miss_joint_counts_device != nullptr) {
             minibeam_fragment_miss_joint_counts_host.resize(
                 minibeam_fragment_miss_joint_cell_count);
@@ -12744,6 +12994,9 @@ template<int EmMode>
     free_device(minibeam_copper_loss_e_device);
     free_device(minibeam_copper_loss_r_device);
     free_device(minibeam_copper_loss_d_device);
+    free_device(minibeam_water_urban_loss_e_device);
+    free_device(minibeam_water_urban_loss_r_device);
+    free_device(minibeam_water_urban_loss_d_device);
     free_device(minibeam_air_sp_energies_device);
     free_device(minibeam_air_sp_values_device);
     free_device(minibeam_copper_xs_energies_device);

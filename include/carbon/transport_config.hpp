@@ -575,6 +575,12 @@ struct TransportConfig {
     // variance-preserving synthetic tail on the primary water path.
     std::string minibeam_water_primary_mcs_model{"legacy_highland"};
     double minibeam_water_primary_mcs_max_segment_mm{0.1};
+    // Research-only table-driven Geant4-11.3.2 Urban path for primary C12 in
+    // water (matches the TOPAS water MaxStepSize; NOT the FE max_segment).
+    double minibeam_water_primary_urban_max_step_mm{0.05};
+    // Restricted loss-range table for the Urban water couple (same schema as
+    // the copper table, plus # zeff / # radlen_mm / # density_g_per_cm3).
+    std::filesystem::path minibeam_water_urban_loss_range_file{};
     // Development-only secondary C12 switch. Other fragments remain on the
     // legacy species-dependent Highland path until independently validated.
     std::string minibeam_water_secondary_c12_mcs_model{"legacy_highland"};

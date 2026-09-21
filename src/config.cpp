@@ -1517,6 +1517,7 @@ void TransportConfig::validate() const {
                   minibeam_water_fragment_low_energy_mcs_scale > 0.0 &&
                   minibeam_water_fragment_low_energy_mcs_scale <= 2.0 &&
                   minibeam_water_primary_mcs_max_segment_mm > 0.0 &&
+                  minibeam_water_primary_urban_max_step_mm > 0.0 &&
                   minibeam_water_primary_mcs_tail_strength >= 0.0 &&
                   minibeam_water_primary_mcs_tail_strength <= 10.0 &&
                   minibeam_water_primary_mcs_tail_width >= 0.0 &&
@@ -1548,6 +1549,8 @@ void TransportConfig::validate() const {
                 !std::isfinite(
                     minibeam_water_primary_mcs_max_segment_mm) ||
                 !std::isfinite(
+                    minibeam_water_primary_urban_max_step_mm) ||
+                !std::isfinite(
                     minibeam_water_primary_mcs_tail_strength) ||
                 !std::isfinite(
                     minibeam_water_primary_mcs_tail_width) ||
@@ -1576,10 +1579,17 @@ void TransportConfig::validate() const {
                     "fermi_eyges_tail, urban or urban_v2");
             }
             if (minibeam_water_primary_mcs_model != "legacy_highland" &&
-                minibeam_water_primary_mcs_model != "fermi_eyges_tail") {
+                minibeam_water_primary_mcs_model != "fermi_eyges_tail" &&
+                minibeam_water_primary_mcs_model != "urban_v2") {
                 throw std::invalid_argument(
                     "minibeam_water_primary_mcs_model must be "
-                    "legacy_highland or fermi_eyges_tail");
+                    "legacy_highland, fermi_eyges_tail or urban_v2");
+            }
+            if (minibeam_water_primary_mcs_model == "urban_v2" &&
+                minibeam_water_urban_loss_range_file.empty()) {
+                throw std::invalid_argument(
+                    "minibeam water urban_v2 requires "
+                    "minibeam_water_urban_loss_range_file");
             }
             if (minibeam_water_secondary_c12_mcs_model != "legacy_highland" &&
                 minibeam_water_secondary_c12_mcs_model != "fermi_eyges_tail") {
@@ -3062,6 +3072,12 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.minibeam_water_primary_mcs_max_segment_mm = parse_number(
         values, "minibeam_water_primary_mcs_max_segment_mm",
         config.minibeam_water_primary_mcs_max_segment_mm);
+    config.minibeam_water_primary_urban_max_step_mm = parse_number(
+        values, "minibeam_water_primary_urban_max_step_mm",
+        config.minibeam_water_primary_urban_max_step_mm);
+    config.minibeam_water_urban_loss_range_file = parse_path(
+        values, "minibeam_water_urban_loss_range_file",
+        config.minibeam_water_urban_loss_range_file);
     if (const auto iterator = values.find(
             "minibeam_water_secondary_c12_mcs_model"); iterator != values.end()) {
         config.minibeam_water_secondary_c12_mcs_model = iterator->second;

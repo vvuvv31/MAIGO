@@ -1,0 +1,21 @@
+{
+  "source_phsp": "/tmp/opencode/lossrange_water/output/loss_range.phsp",
+  "projectile": {
+    "z": 6,
+    "a": 12
+  },
+  "material": "Water_75eV",
+  "density_g_per_cm3": 1.0,
+  "zeff": 3.3334,
+  "radlen_mm": 360.829,
+  "physics": "g4em-standard_opt4 + g4decay, CutForAllParticles=0.05mm",
+  "geant4": "11.3.2",
+  "topas": "4.2.p3",
+  "nodes": 4001,
+  "energy_range_MeVu": [
+    0.01,
+    400.01
+  ],
+  "max_inverse_residual_MeV": 3.22524,
+  "sha256": "534e8847b1508045c2cacc54e7e72673203ca3b3c34620b125feb364c6dab117"
+}

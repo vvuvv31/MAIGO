@@ -11,6 +11,7 @@
 #include "CarbonLossRangeNtuple.hh"
 
 #include "G4EmCalculator.hh"
+#include "G4IonisParamMat.hh"
 #include "G4Material.hh"
 #include "G4MaterialCutsCouple.hh"
 #include "G4ParticleDefinition.hh"
@@ -68,6 +69,15 @@ G4bool CarbonLossRangeNtuple::ProcessHits(G4Step* step, G4TouchableHistory*) {
     }
 
     const G4Material* material = step->GetPreStepPoint()->GetMaterial();
+    // Material identity for the metadata record (Zeffenters the Urban msc
+    // cache; radlen enters theta0). Printed once per run.
+    if (!filled_) {
+        G4cout << "CarbonLossRangeNtuple material=" << material->GetName()
+               << " density_g_per_cm3=" << material->GetDensity() / (g / cm3)
+               << " Zeff=" << material->GetIonisation()->GetZeffective()
+               << " radlen_mm=" << material->GetRadlen() / mm
+               << G4endl;
+    }
     // nullptr region = default-region couple = the production 0.05 mm cuts
     // couple for the Cu box (same couple the GPU loss table must reproduce).
     const G4Region* region = nullptr;

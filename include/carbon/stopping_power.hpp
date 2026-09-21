@@ -3,6 +3,7 @@
 #include <filesystem>
 #include <cstdint>
 #include <cmath>
+#include <limits>
 #include <vector>
 
 namespace carbon {
@@ -77,7 +78,11 @@ public:
     UrbanLossRangeTable(std::vector<double> e_total_mev,
                         std::vector<double> range_mm,
                         std::vector<double> dedx_mev_per_mm,
-                        double max_inverse_residual_mev);
+                        double max_inverse_residual_mev,
+                        double zeff = std::numeric_limits<double>::quiet_NaN(),
+                        double radlen_mm = std::numeric_limits<double>::quiet_NaN(),
+                        double density_g_per_cm3 =
+                            std::numeric_limits<double>::quiet_NaN());
 
     static UrbanLossRangeTable from_csv(const std::filesystem::path& path);
 
@@ -85,12 +90,19 @@ public:
     [[nodiscard]] const std::vector<double>& ranges_mm() const noexcept;
     [[nodiscard]] const std::vector<double>& dedx_values() const noexcept;
     [[nodiscard]] double max_inverse_residual_mev() const noexcept;
+    // Optional `# key value` header metadata (NaN when absent, e.g. Cu CSV).
+    [[nodiscard]] double zeff() const noexcept;
+    [[nodiscard]] double radlen_mm() const noexcept;
+    [[nodiscard]] double density_g_per_cm3() const noexcept;
 
 private:
     std::vector<double> e_total_mev_;
     std::vector<double> range_mm_;
     std::vector<double> dedx_mev_per_mm_;
     double max_inverse_residual_mev_{0.0};
+    double zeff_{std::numeric_limits<double>::quiet_NaN()};
+    double radlen_mm_{std::numeric_limits<double>::quiet_NaN()};
+    double density_g_per_cm3_{std::numeric_limits<double>::quiet_NaN()};
 };
 
 // Flat-array CSDA helpers for future SYCL kernels. Arrays use the same contract

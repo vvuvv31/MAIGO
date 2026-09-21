@@ -578,11 +578,16 @@ std::vector<float> load_ion_species_stopping_power_lut(
 UrbanLossRangeTable::UrbanLossRangeTable(std::vector<double> e_total_mev,
                                          std::vector<double> range_mm,
                                          std::vector<double> dedx_mev_per_mm,
-                                         double max_inverse_residual_mev)
+                                         double max_inverse_residual_mev,
+                                         double zeff, double radlen_mm,
+                                         double density_g_per_cm3)
     : e_total_mev_(std::move(e_total_mev)),
       range_mm_(std::move(range_mm)),
       dedx_mev_per_mm_(std::move(dedx_mev_per_mm)),
-      max_inverse_residual_mev_(max_inverse_residual_mev) {}
+      max_inverse_residual_mev_(max_inverse_residual_mev),
+      zeff_(zeff),
+      radlen_mm_(radlen_mm),
+      density_g_per_cm3_(density_g_per_cm3) {}
 
 UrbanLossRangeTable UrbanLossRangeTable::from_csv(
     const std::filesystem::path& path) {
@@ -594,12 +599,23 @@ UrbanLossRangeTable UrbanLossRangeTable::from_csv(
     std::vector<double> ranges;
     std::vector<double> dedx;
     double max_residual = 0.0;
+    double zeff = std::numeric_limits<double>::quiet_NaN();
+    double radlen = std::numeric_limits<double>::quiet_NaN();
+    double density = std::numeric_limits<double>::quiet_NaN();
     std::string line;
     std::size_t line_number = 0;
     while (std::getline(input, line)) {
         ++line_number;
         const auto first = line.find_first_not_of(" \t\r\n");
         if (first == std::string::npos || line[first] == '#') {
+            std::istringstream meta(line.substr(first + 1));
+            std::string key;
+            double value = 0.0;
+            if (meta >> key >> value) {
+                if (key == "zeff") zeff = value;
+                if (key == "radlen_mm") radlen = value;
+                if (key == "density_g_per_cm3") density = value;
+            }
             continue;
         }
         if (std::isalpha(static_cast<unsigned char>(line[first]))) {
@@ -628,7 +644,8 @@ UrbanLossRangeTable UrbanLossRangeTable::from_csv(
         }
     }
     return UrbanLossRangeTable(std::move(energies), std::move(ranges),
-                               std::move(dedx), max_residual);
+                               std::move(dedx), max_residual, zeff, radlen,
+                               density);
 }
 
 const std::vector<double>& UrbanLossRangeTable::energies_total_mev() const noexcept {
@@ -645,6 +662,18 @@ const std::vector<double>& UrbanLossRangeTable::dedx_values() const noexcept {
 
 double UrbanLossRangeTable::max_inverse_residual_mev() const noexcept {
     return max_inverse_residual_mev_;
+}
+
+double UrbanLossRangeTable::zeff() const noexcept {
+    return zeff_;
+}
+
+double UrbanLossRangeTable::radlen_mm() const noexcept {
+    return radlen_mm_;
+}
+
+double UrbanLossRangeTable::density_g_per_cm3() const noexcept {
+    return density_g_per_cm3_;
 }
 
 }  // namespace carbon

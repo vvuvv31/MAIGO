@@ -31,6 +31,7 @@ namespace {
 int failures = 0;
 
 void test_propose_path();
+void test_water_material();
 
 void check(bool cond, const char* label, double a = 0.0, double b = 0.0) {
     if (cond) {
@@ -229,6 +230,7 @@ void test_loss_table_and_limiter() {
     check(std::fabs(r250 - 22.314) < 0.01, "loss table: R(250MeV/u)=22.3mm",
           r250, 22.314);
     test_propose_path();
+    test_water_material();
 }
 
 void test_propose_path() {
@@ -299,6 +301,84 @@ void test_propose_path() {
               lab, double(s.limit_reason), 1.0);
         (void)s2;
     }
+}
+
+void test_water_material() {
+    // Water_75eV couple: Bragg-sum mfp sane, cache from extracted Zeff,
+    // box safety analytic, full propose smoke with the real water table.
+    const float lam_hi = urban_water_transport_mfp_mm(3000.0F, 6, 12);
+    const float lam_lo = urban_water_transport_mfp_mm(120.0F, 6, 12);
+    // Urban transport mfp is enormous by construction (validated Cu value at
+    // 250MeV/u is 1.97e6mm; water is ~30x larger by Z^2/volume scaling).
+    // Assert only positivity + correct energy trend here.
+    check(lam_hi > lam_lo && lam_lo > 0.0F, "water mfp: positive, falls",
+          lam_lo, lam_hi);
+    std::printf("  water mfp: 250MeV/u=%.3fmm 10MeV/u=%.4fmm\n",
+                double(lam_hi), double(lam_lo));
+    const auto cache = urban_v2_material_cache(3.3334F);
+    check(cache.doverrb > 1.1F && cache.doverrb < 1.2F, "water cache doverrb",
+          cache.doverrb, 1.147);
+    UrbanV2SafetyCtx box{};
+    box.kind = 1;
+    box.box_x0 = -50.0F;
+    box.box_x1 = 50.0F;
+    box.box_y0 = -50.0F;
+    box.box_y1 = 50.0F;
+    box.box_z0 = 0.0F;
+    box.box_z1 = 250.0F;
+    check(std::fabs(urban_v2_safety_at(0.0F, 0.0F, 40.0F, box) - 40.0F) <
+              1.0e-4F,
+          "water safety: axial bound == 40");
+    check(std::fabs(urban_v2_safety_at(0.0F, 0.0F, 249.0F, box) - 1.0F) <
+              1.0e-4F,
+          "water safety: near exit == 1");
+    FILE* f = std::fopen("data/urban/c12_water75ev_urban_g4_11_3_2.csv", "r");
+    check(f != nullptr, "water table: extraction CSV present");
+    if (f == nullptr) return;
+    std::fclose(f);
+    UrbanLossRangeTable host({{0.0, 1.0}}, {{0.0, 1.0}}, {{0.0, 1.0}}, 0.0);
+    try {
+        host = UrbanLossRangeTable::from_csv(
+            "data/urban/c12_water75ev_urban_g4_11_3_2.csv");
+    } catch (...) {
+        check(false, "water table: loads via carbon_core");
+        return;
+    }
+    check(host.ranges_mm().size() == 4001, "water table: 4001 nodes",
+          double(host.ranges_mm().size()), 4001.0);
+    check(std::fabs(host.zeff() - 3.3334) < 1.0e-3, "water table: zeff",
+          host.zeff(), 3.3334);
+    check(std::fabs(host.radlen_mm() - 360.829) < 1.0e-2, "water table: radlen",
+          host.radlen_mm(), 360.829);
+    std::vector<float> e(host.energies_total_mev().begin(),
+                         host.energies_total_mev().end());
+    std::vector<float> r(host.ranges_mm().begin(), host.ranges_mm().end());
+    std::vector<float> d(host.dedx_values().begin(), host.dedx_values().end());
+    UrbanV2LossTable table{e.data(), r.data(), d.data(),
+                           static_cast<int>(e.size())};
+    UrbanV2Material mat{};
+    mat.table = table;
+    mat.zeff = static_cast<float>(host.zeff());
+    mat.radlen_mm = static_cast<float>(host.radlen_mm());
+    mat.projectile_z = 6;
+    mat.projectile_a = 12;
+    mat.mass_mev = 12.0F * 931.49410242F;
+    mat.density_g_per_cm3 = 1.0F;
+    mat.mfp_kind = 1;
+    const Direction3F dir{0.0F, 0.0F, 1.0F};
+    UrbanV2TrackState state{};
+    const auto s = urban_v2_propose_and_sample(
+        dir, 3000.0F, 0.05F, 0.05F, 0.0F, 0.0F, 40.0F, 0.0F, 0.0F, 1.0F,
+        box, true, state, mat, 1.0F, 4242ULL, 17ULL, 3ULL, 70U);
+    char lab[160];
+    std::snprintf(lab, sizeof(lab),
+                  "water propose: valid reason=%d g=%.5f t=%.5f range=%.2f",
+                  s.limit_reason, double(s.final_geom_path_mm),
+                  double(s.final_true_path_mm), double(s.current_range_mm));
+    check(s.proposal_valid && s.final_geom_path_mm > 0.0F &&
+              s.current_range_mm > 100.0F &&
+              (s.limit_reason == 1 || s.limit_reason == 2),
+          lab, double(s.limit_reason), 1.0);
 }
 
 int run_urban_v2_helper_tests() {

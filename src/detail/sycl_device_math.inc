@@ -1046,6 +1046,257 @@ inline float urban_v2_loss_dedx(const UrbanV2LossTable& table,
     return d0 + sycl::clamp(f, 0.0F, 1.0F) * (d1 - d0);
 }
 
+// ---------------------------------------------------------------------------
+// Material-generic Urban layer (Water_75eV support). The validated Copper
+// path keeps calling the frozen copper_* helpers above (bit-identical by
+// construction: same function, same args). Water uses Bragg-additivity over
+// H/O with the verbatim reference Z-interpolation (including the Z=1
+// extrapolation branch). No effective-Z hack: copper_urban_transport_mfp_mm
+// is never called with a fake Z.
+// ---------------------------------------------------------------------------
+
+// Full Zdat/sig0/hecorr/cpositron/celectron tables from
+// G4UrbanMscModel::ComputeCrossSectionPerAtom (verbatim values).
+inline float urban_cross_section_per_atom_cm2(
+    const float kin_energy_MeV, const int projectile_charge,
+    const int mass_number, const float target_z) noexcept {
+    constexpr float electron_mass_MeV = 0.51099895F;
+    constexpr float nucleon_mass_MeV = 931.49410242F;
+    constexpr float bohr_radius_cm = 5.29177210903e-9F;
+    constexpr float hbarc_MeV_cm = 197.3269804e-13F;
+    constexpr float classic_electron_radius_cm = 2.8179403262e-13F;
+    constexpr float barn_cm2 = 1.0e-24F;
+    constexpr float low_energy_limit_MeV = 10.0F;
+    if (!(kin_energy_MeV > 0.0F) || projectile_charge <= 0 || mass_number <= 0 ||
+        !(target_z > 0.0F)) {
+        return 0.0F;
+    }
+    const auto charge = static_cast<float>(projectile_charge);
+    const auto mass = static_cast<float>(mass_number) * nucleon_mass_MeV;
+    const auto tau_ion = kin_energy_MeV / mass;
+    const auto c_ion = mass * tau_ion * (tau_ion + 2.0F) /
+                       (electron_mass_MeV * (tau_ion + 1.0F));
+    const auto w = c_ion - 2.0F;
+    const auto tau_e = 0.5F * (w + sycl::sqrt(w * w + 4.0F * c_ion));
+    const auto ekin = electron_mass_MeV * tau_e;
+    const auto etot = ekin + electron_mass_MeV;
+    const auto beta2 = ekin * (etot + electron_mass_MeV) / (etot * etot);
+    const auto bg2 = ekin * (etot + electron_mass_MeV) /
+                     (electron_mass_MeV * electron_mass_MeV);
+    const auto z23 = sycl::pow(target_z, 2.0F / 3.0F);
+    const auto epsfactor = 2.0F * electron_mass_MeV * electron_mass_MeV *
+                           bohr_radius_cm * bohr_radius_cm /
+                           (hbarc_MeV_cm * hbarc_MeV_cm);
+    const auto eps = epsfactor * bg2 / z23;
+    float sigma = 0.0F;
+    if (eps < 1.0e-4F) {
+        sigma = 2.0F * eps * eps;
+    } else if (eps < 1.0e10F) {
+        sigma = sycl::log(1.0F + 2.0F * eps) -
+                2.0F * eps / (1.0F + 2.0F * eps);
+    } else {
+        sigma = sycl::log(2.0F * eps) - 1.0F + 1.0F / eps;
+    }
+    sigma *= charge * charge * target_z * target_z / (beta2 * bg2);
+
+    constexpr float zdat[15] = {4.0F, 6.0F, 13.0F, 20.0F, 26.0F, 29.0F,
+                                32.0F, 38.0F, 47.0F, 50.0F, 56.0F, 64.0F,
+                                74.0F, 79.0F, 82.0F};
+    int iz = 14;
+    while (iz >= 0 && zdat[iz] >= target_z) {
+        --iz;
+    }
+    iz = sycl::clamp(iz, 0, 13);
+    const auto zz1 = zdat[iz];
+    const auto zz2 = zdat[iz + 1];
+    const auto ratz =
+        (target_z - zz1) * (target_z + zz1) / ((zz2 - zz1) * (zz2 + zz1));
+    constexpr float t_lim = low_energy_limit_MeV;
+    const auto beta2_lim =
+        t_lim * (t_lim + 2.0F * electron_mass_MeV) /
+        ((t_lim + electron_mass_MeV) * (t_lim + electron_mass_MeV));
+    const auto bg2_lim = t_lim * (t_lim + 2.0F * electron_mass_MeV) /
+                         (electron_mass_MeV * electron_mass_MeV);
+    constexpr float sigma_factor =
+        6.2831853071795864769F * classic_electron_radius_cm *
+        classic_electron_radius_cm;
+    if (ekin <= t_lim) {
+        constexpr float t_dat[22] = {
+            1.0e-4F, 2.0e-4F, 4.0e-4F, 7.0e-4F, 1.0e-3F, 2.0e-3F, 4.0e-3F,
+            7.0e-3F, 1.0e-2F, 2.0e-2F, 4.0e-2F, 7.0e-2F, 1.0e-1F, 2.0e-1F,
+            4.0e-1F, 7.0e-1F, 1.0F, 2.0F, 4.0F, 7.0F, 10.0F, 20.0F};
+        // cpositron rows needed here: Zdat index 0 (Z=4), 1 (Z=6), 2 (Z=13)
+        // for H/O interpolation. Full 15x22 tables stay in the reference;
+        // only the accessed rows are carried (H: rows 0,1; O: rows 1,2).
+        constexpr float cpos_4[22] = {
+            17.97F, 12.95F, 8.628F, 6.065F, 4.849F, 3.222F, 2.275F, 1.820F,
+            1.624F, 1.382F, 1.259F, 1.214F, 1.202F, 1.202F, 1.214F, 1.219F,
+            1.217F, 1.203F, 1.184F, 1.169F, 1.160F, 1.151F};
+        constexpr float cpos_6[22] = {
+            24.83F, 17.06F, 10.84F, 7.355F, 5.767F, 3.707F, 2.546F, 1.996F,
+            1.759F, 1.465F, 1.311F, 1.252F, 1.234F, 1.228F, 1.238F, 1.241F,
+            1.237F, 1.222F, 1.201F, 1.184F, 1.174F, 1.159F};
+        constexpr float cpos_13[22] = {
+            23.26F, 17.15F, 11.52F, 8.049F, 6.375F, 4.114F, 2.792F, 2.155F,
+            1.880F, 1.535F, 1.353F, 1.281F, 1.258F, 1.247F, 1.254F, 1.256F,
+            1.252F, 1.234F, 1.212F, 1.194F, 1.183F, 1.170F};
+        const float* cpos_lo = (iz == 0) ? cpos_4 : cpos_6;
+        const float* cpos_hi = (iz == 0) ? cpos_6 : cpos_13;
+        int i_t = 21;
+        while (i_t >= 0 && t_dat[i_t] >= ekin) {
+            --i_t;
+        }
+        i_t = sycl::clamp(i_t, 0, 20);
+        const auto t0 = t_dat[i_t];
+        const auto e0 = t0 + electron_mass_MeV;
+        const auto b2_small = t0 * (e0 + electron_mass_MeV) / (e0 * e0);
+        const auto t1 = t_dat[i_t + 1];
+        const auto e1 = t1 + electron_mass_MeV;
+        const auto b2_big = t1 * (e1 + electron_mass_MeV) / (e1 * e1);
+        const auto rat_b2 = (beta2 - b2_small) / (b2_big - b2_small);
+        const auto cc1 = cpos_lo[i_t] + ratz * (cpos_hi[i_t] - cpos_lo[i_t]);
+        const auto cc2 =
+            cpos_lo[i_t + 1] + ratz * (cpos_hi[i_t + 1] - cpos_lo[i_t + 1]);
+        sigma *= sigma_factor / (cc1 + rat_b2 * (cc2 - cc1));
+    } else {
+        constexpr float sig0[15] = {
+            0.2672F * barn_cm2, 0.5922F * barn_cm2, 2.653F * barn_cm2,
+            6.235F * barn_cm2, 11.69F * barn_cm2, 13.24F * barn_cm2,
+            16.12F * barn_cm2, 23.00F * barn_cm2, 35.13F * barn_cm2,
+            39.95F * barn_cm2, 50.85F * barn_cm2, 67.19F * barn_cm2,
+            91.15F * barn_cm2, 104.4F * barn_cm2, 113.1F * barn_cm2};
+        constexpr float hecorr[15] = {
+            120.70F, 117.50F, 105.00F, 92.92F, 79.23F, 74.510F, 68.29F,
+            57.39F, 41.97F, 36.14F, 24.53F, 10.21F, -7.855F, -16.84F, -22.30F};
+        const auto c1 = bg2_lim * sig0[iz] *
+            (1.0F + hecorr[iz] * (beta2 - beta2_lim)) / bg2;
+        const auto c2 = bg2_lim * sig0[iz + 1] *
+            (1.0F + hecorr[iz + 1] * (beta2 - beta2_lim)) / bg2;
+        if (target_z >= zz1 && target_z <= zz2) {
+            sigma = c1 + ratz * (c2 - c1);
+        } else if (target_z < zz1) {
+            sigma = target_z * target_z * c1 / (zz1 * zz1);
+        } else {
+            sigma = target_z * target_z * c2 / (zz2 * zz2);
+        }
+    }
+    sigma *= 1.0F + 0.30F / (1.0F + sycl::sqrt(1000.0F * ekin));
+    return sigma;
+}
+
+// Water_75eV transport MFP by Bragg additivity over H/O (reference
+// CrossSectionPerVolume compound sum). Composition from the TOPAS material
+// definition (H 0.111894 / O 0.888106 by mass, density 1.0 g/cm3).
+inline float urban_water_transport_mfp_mm(
+    const float kin_energy_MeV, const int projectile_charge,
+    const int mass_number) noexcept {
+    constexpr float avogadro = 6.02214076e23F;
+    constexpr float density = 1.0F;
+    // per cm^3; lambda_mm = 10/(n*sigma) with sigma in cm^2.
+    constexpr float n_h = avogadro * density * 0.111894F / 1.008F;
+    constexpr float n_o = avogadro * density * 0.888106F / 16.00F;
+    const auto s_h = urban_cross_section_per_atom_cm2(
+        kin_energy_MeV, projectile_charge, mass_number, 1.0F);
+    const auto s_o = urban_cross_section_per_atom_cm2(
+        kin_energy_MeV, projectile_charge, mass_number, 8.0F);
+    const auto rate = n_h * s_h + n_o * s_o;  // per cm
+    return rate > 0.0F ? 10.0F / rate : 0.0F;
+}
+
+// Material bundle for the generic core. Copper fills zeff=29,
+// mfp_kind=0 (frozen elemental helper); water fills extracted zeff,
+// mfp_kind=1 (Bragg sum), table from the Water_75eV extraction.
+struct UrbanV2Material {
+    UrbanV2LossTable table{};
+    float zeff{29.0F};
+    float radlen_mm{0.0F};  // must be set by the wrapper (guarded > 0)
+    int projectile_z{6};
+    int projectile_a{12};
+    float mass_mev{12.0F * 931.49410242F};
+    float density_g_per_cm3{8.96F};
+    int mfp_kind{0};
+};
+
+struct UrbanV2MaterialCache {
+    float doverrb{1.0F};
+    float factmin{0.001F};
+    float stepmina{1.0F};
+    float stepminb{1.0F};
+    float z23{1.0F};
+};
+
+inline UrbanV2MaterialCache urban_v2_material_cache(const float zeff) noexcept {
+    UrbanV2MaterialCache c{};
+    c.doverrb = 1.15F - 9.76e-4F * zeff;
+    c.factmin = 0.001F;  // dispAlg96 == true
+    c.stepmina = 27.725F / (1.0F + 0.203F * zeff);
+    c.stepminb = 6.152F / (1.0F + 0.111F * zeff);
+    c.z23 = sycl::pow(zeff, 2.0F / 3.0F);
+    return c;
+}
+
+inline float urban_v2_transport_mfp(const UrbanV2Material& mat,
+                                    const float kin_energy_MeV) noexcept {
+    if (mat.mfp_kind == 1) {
+        return urban_water_transport_mfp_mm(kin_energy_MeV, mat.projectile_z,
+                                            mat.projectile_a);
+    }
+    return copper_urban_transport_mfp_mm(kin_energy_MeV, mat.projectile_z,
+                                         mat.projectile_a,
+                                         mat.density_g_per_cm3);
+}
+
+struct UrbanV2GeomCtx {
+    float cos_a{1.0F};
+    float sin_a{0.0F};
+    float radius_mm{0.0F};
+    int slit_count{0};
+    float slit_width_mm{0.0F};
+    float slit_pitch_mm{0.0F};
+    float slit_half_len_mm{0.0F};
+    float slit_offset_mm{0.0F};
+    float block_entrance_z_mm{0.0F};
+    float block_exit_z_mm{0.0F};
+};
+
+// Safety context: kind 0 = Cu collimator (cylindrical + slit helper),
+// kind 1 = axis-aligned water box. Uniform per launch; no divergence cost.
+struct UrbanV2SafetyCtx {
+    int kind{0};
+    UrbanV2GeomCtx cu{};
+    float box_x0{0.0F};
+    float box_x1{0.0F};
+    float box_y0{0.0F};
+    float box_y1{0.0F};
+    float box_z0{0.0F};
+    float box_z1{0.0F};
+};
+
+inline float urban_v2_box_safety(const float x_mm, const float y_mm,
+                                 const float z_mm,
+                                 const UrbanV2SafetyCtx& ctx) noexcept {
+    float s = ctx.box_x1 - x_mm;
+    if (x_mm - ctx.box_x0 < s) s = x_mm - ctx.box_x0;
+    if (ctx.box_y1 - y_mm < s) s = ctx.box_y1 - y_mm;
+    if (y_mm - ctx.box_y0 < s) s = y_mm - ctx.box_y0;
+    if (ctx.box_z1 - z_mm < s) s = ctx.box_z1 - z_mm;
+    if (z_mm - ctx.box_z0 < s) s = z_mm - ctx.box_z0;
+    return s > 0.0F ? s : 0.0F;
+}
+
+inline float urban_v2_safety_at(const float x_mm, const float y_mm,
+                                const float z_mm,
+                                const UrbanV2SafetyCtx& ctx) noexcept {
+    if (ctx.kind == 1) {
+        return urban_v2_box_safety(x_mm, y_mm, z_mm, ctx);
+    }
+    return minibeam_isotropic_safety_at_point(
+        x_mm, y_mm, z_mm, ctx.cu.cos_a, ctx.cu.sin_a, ctx.cu.radius_mm,
+        ctx.cu.slit_count, ctx.cu.slit_width_mm, ctx.cu.slit_pitch_mm,
+        ctx.cu.slit_half_len_mm, ctx.cu.slit_offset_mm,
+        ctx.cu.block_entrance_z_mm, ctx.cu.block_exit_z_mm);
+}
+
 // Persistent per-track fMinimal state (Phase 2). Only the active branch's
 // cross-step state: tlimit (init 1e10 mm) and firstStep. Everything else
 // (range, lambda0, par1..3) is recomputed per step. Electron-only skin/
@@ -1089,9 +1340,7 @@ struct UrbanV2TrueToGeom {
 
 inline UrbanV2TrueToGeom copper_urban_v2_true_to_geom(
     const float t_mm, const float lambda0_mm, const float range_mm,
-    const float epre_mev, const int atomic_number, const int mass_number,
-    const float density_g_per_cm3, const float mass_mev,
-    const UrbanV2LossTable& table) noexcept {
+    const float epre_mev, const UrbanV2Material& mat) noexcept {
     // Float32 + sycl:: math (device-safe): relative error ~1e-7 on g, far
     // below any physics need; the reference double differs negligibly here.
     UrbanV2TrueToGeom out{};
@@ -1105,7 +1354,7 @@ inline UrbanV2TrueToGeom copper_urban_v2_true_to_geom(
     } else if (t_mm < range_mm * 0.05F) {
         z = (tau < 1.0e-6F) ? t_mm * (1.0F - 0.5F * tau)
                              : lambda0_mm * (1.0F - sycl::exp(-tau));
-    } else if (epre_mev < mass_mev || t_mm == range_mm) {
+    } else if (epre_mev < mat.mass_mev || t_mm == range_mm) {
         const float par1 = 1.0F / range_mm;
         const float par2 = range_mm / lambda0_mm;
         const float par3 = 1.0F + par2;
@@ -1119,11 +1368,9 @@ inline UrbanV2TrueToGeom copper_urban_v2_true_to_geom(
     } else {
         const float rfin =
             sycl::fmax(range_mm - t_mm, 0.01F * range_mm);
-        const float t1 = urban_v2_loss_energy(table, rfin);
-        const float lam1 = (t1 > 0.0F)
-            ? copper_urban_transport_mfp_mm(t1, atomic_number, mass_number,
-                                            density_g_per_cm3)
-            : 0.0F;
+        const float t1 = urban_v2_loss_energy(mat.table, rfin);
+        const float lam1 =
+            (t1 > 0.0F) ? urban_v2_transport_mfp(mat, t1) : 0.0F;
         const float par1 = (lambda0_mm - lam1) / (lambda0_mm * t_mm);
         if (!(par1 > 0.0F)) {
             // Documented guard: float quantization can give lambda1 >=
@@ -1168,20 +1415,16 @@ struct UrbanV2LimitProposal {
 
 inline UrbanV2LimitProposal copper_urban_v2_limit_step(
     const float t_input_true_mm, const float epre_mev,
-    const int atomic_number, const int mass_number,
-    const float density_g_per_cm3, const float safety_start_mm,
+    const UrbanV2Material& mat, const float safety_start_mm,
     const bool at_geom_boundary, UrbanV2TrackState& state,
-    const UrbanV2LossTable& table, const std::uint64_t seed,
-    const std::uint64_t history_id, const std::uint64_t step_index) noexcept {
+    const std::uint64_t seed, const std::uint64_t history_id,
+    const std::uint64_t step_index) noexcept {
     UrbanV2LimitProposal out{};
     if (!(t_input_true_mm > 0.0F) || !(epre_mev > 0.0F)) {
         return out;
     }
-    const float mass_mev =
-        static_cast<float>(mass_number) * static_cast<float>(nucleon_rest_mass_MeV);
-    const float range = urban_v2_loss_range(table, epre_mev);
-    const float lambda0 = copper_urban_transport_mfp_mm(
-        epre_mev, atomic_number, mass_number, density_g_per_cm3);
+    const float range = urban_v2_loss_range(mat.table, epre_mev);
+    const float lambda0 = urban_v2_transport_mfp(mat, epre_mev);
     if (!(range > 0.0F) || !(lambda0 > 0.0F)) {
         return out;
     }
@@ -1193,8 +1436,7 @@ inline UrbanV2LimitProposal copper_urban_v2_limit_step(
     // (early return skips it in the reference).
     if (t < kUrbanV2TlimitMinFix) {
         const auto conv = copper_urban_v2_true_to_geom(
-            t, lambda0, range, epre_mev, atomic_number, mass_number,
-            density_g_per_cm3, mass_mev, table);
+            t, lambda0, range, epre_mev, mat);
         out.t_msc_mm = t;
         out.g_msc_mm = conv.g_mm;
         out.no_displacement = true;
@@ -1211,8 +1453,7 @@ inline UrbanV2LimitProposal copper_urban_v2_limit_step(
     // Stop here if small step or range is less than safety.
     if ((t == range && t < presafety) || t < kUrbanV2TlimitMinFix) {
         const auto conv = copper_urban_v2_true_to_geom(
-            t, lambda0, range, epre_mev, atomic_number, mass_number,
-            density_g_per_cm3, mass_mev, table);
+            t, lambda0, range, epre_mev, mat);
         out.t_msc_mm = t;
         out.g_msc_mm = conv.g_mm;
         out.no_displacement = true;
@@ -1222,12 +1463,11 @@ inline UrbanV2LimitProposal copper_urban_v2_limit_step(
     }
 
     // Far from geometry boundary: no MSC limitation needed.
-    const auto cache = copper_urban_v2_cache();
+    const auto cache = urban_v2_material_cache(mat.zeff);
     const float distance = range * cache.doverrb;
     if (distance < presafety) {
         const auto conv = copper_urban_v2_true_to_geom(
-            t, lambda0, range, epre_mev, atomic_number, mass_number,
-            density_g_per_cm3, mass_mev, table);
+            t, lambda0, range, epre_mev, mat);
         out.t_msc_mm = t;
         out.g_msc_mm = conv.g_mm;
         out.no_displacement = true;
@@ -1270,8 +1510,7 @@ inline UrbanV2LimitProposal copper_urban_v2_limit_step(
         t = t_new;
     }
     const auto conv = copper_urban_v2_true_to_geom(
-        t, lambda0, range, epre_mev, atomic_number, mass_number,
-        density_g_per_cm3, mass_mev, table);
+        t, lambda0, range, epre_mev, mat);
     out.t_msc_mm = t;
     out.g_msc_mm = conv.g_mm;
     out.par1 = conv.par1;
@@ -1303,36 +1542,30 @@ inline UrbanV2LimitProposal copper_urban_v2_limit_step(
 // production path. RNG dimensions/order match the legacy core exactly.
 CorrelatedScatteringStep copper_urban_v2_sample_full(
     const Direction3F direction, const float epre_mev,
-    const int atomic_number, const int mass_number,
     const float t_final_mm, const float delta_final_mm,
-    const float density_g_per_cm3,
-    const float radiation_length_g_per_cm2, const float range_mm,
+    const UrbanV2Material& mat, const float range_mm,
     const float lambda0_mm, const float tlimitmin_mm,
-    const UrbanV2LossTable& table, const float safety_end_mm,
-    const float amplitude_scale, const bool allow_displacement,
+    const float safety_end_mm, const float amplitude_scale,
+    const bool allow_displacement,
     const std::uint64_t seed, const std::uint64_t history_id,
     const std::uint64_t step_index,
     const std::uint32_t random_dimension) noexcept {
     CorrelatedScatteringStep result{direction, Direction3F{0.0F, 0.0F, 0.0F}};
-    if (epre_mev <= 0.0F || atomic_number <= 0 || mass_number <= 0 ||
-        t_final_mm <= 0.0F || density_g_per_cm3 <= 0.0F ||
-        radiation_length_g_per_cm2 <= 0.0F || amplitude_scale <= 0.0F) {
+    if (epre_mev <= 0.0F || mat.projectile_z <= 0 || mat.projectile_a <= 0 ||
+        t_final_mm <= 0.0F || amplitude_scale <= 0.0F) {
         return result;
     }
     constexpr float tausmall = 1.0e-16F;
     constexpr float tlimitminfix = 1.0e-8F;
     constexpr float pi = 3.14159265358979323846F;
     constexpr float two_pi = 6.2831853071795864769F;
-    constexpr float copper_zeffective = 29.0F;
-    const float mass_mev =
-        static_cast<float>(mass_number) * static_cast<float>(nucleon_rest_mass_MeV);
-    const auto radiation_length_mm =
-        10.0F * radiation_length_g_per_cm2 / density_g_per_cm3;
+    const float mass_mev = mat.mass_mev;
+    const auto radiation_length_mm = mat.radlen_mm;
     if (!(radiation_length_mm > 0.0F && lambda0_mm > 0.0F &&
           range_mm > 0.0F)) {
         return result;
     }
-    const auto coefficients = copper_urban_coefficients(copper_zeffective);
+    const auto coefficients = copper_urban_coefficients(mat.zeff);
 
     // SampleScattering: no scattering at/over range.
     if (t_final_mm >= range_mm) {
@@ -1343,9 +1576,9 @@ CorrelatedScatteringStep copper_urban_v2_sample_full(
     // condensed-loss stopping and NOT post-straggling Epost (ordering kept).
     float kin_energy = epre_mev;
     if (t_final_mm > range_mm * kUrbanV2Dtrl) {
-        kin_energy = urban_v2_loss_energy(table, range_mm - t_final_mm);
+        kin_energy = urban_v2_loss_energy(mat.table, range_mm - t_final_mm);
     } else if (t_final_mm > range_mm * 0.01F) {
-        kin_energy -= t_final_mm * urban_v2_loss_dedx(table, epre_mev);
+        kin_energy -= t_final_mm * urban_v2_loss_dedx(mat.table, epre_mev);
     }
     if (kin_energy < 0.0F) kin_energy = 0.0F;
     if ((t_final_mm <= tlimitminfix) || (t_final_mm < tausmall * lambda0_mm) ||
@@ -1357,8 +1590,7 @@ CorrelatedScatteringStep copper_urban_v2_sample_full(
     float tau = t_final_mm / lambda0_mm;
     float lambdaeff = lambda0_mm;
     if (kin_energy != epre_mev) {
-        const float lambda1 = copper_urban_transport_mfp_mm(
-            kin_energy, atomic_number, mass_number, density_g_per_cm3);
+        const float lambda1 = urban_v2_transport_mfp(mat, kin_energy);
         if (lambda1 > 0.0F &&
             sycl::fabs(lambda1 - lambda0_mm) > lambda0_mm * 0.01F) {
             tau = t_final_mm * sycl::log(lambda0_mm / lambda1) /
@@ -1430,7 +1662,7 @@ CorrelatedScatteringStep copper_urban_v2_sample_full(
                                  (epre_mev * (epre_mev + 2.0F * mass_mev)));
             }
             const float y = use_t / radiation_length_mm;
-            float theta0 = 13.6F * static_cast<float>(atomic_number) *
+            float theta0 = 13.6F * static_cast<float>(mat.projectile_z) *
                 sycl::sqrt(y) * inv;
             theta0 *= (coefficients.coeffth1 +
                        coefficients.coeffth2 * sycl::log(y));
@@ -1607,19 +1839,6 @@ CorrelatedScatteringStep copper_urban_v2_sample_full(
     return result;
 }
 
-struct UrbanV2GeomCtx {
-    float cos_a{1.0F};
-    float sin_a{0.0F};
-    float radius_mm{0.0F};
-    int slit_count{0};
-    float slit_width_mm{0.0F};
-    float slit_pitch_mm{0.0F};
-    float slit_half_len_mm{0.0F};
-    float slit_offset_mm{0.0F};
-    float block_entrance_z_mm{0.0F};
-    float block_exit_z_mm{0.0F};
-};
-
 // ComputeTrueStepLength mirror for a geometry-truncated step: invert the
 // FINAL geometric length with the limiter's par set, clamped to
 // [g_final, t_msc]. Untruncated steps return t_msc untouched (the
@@ -1661,35 +1880,31 @@ inline float copper_urban_v2_finalize_true(
 // scatter sampled). min() commutes, so evaluating geometry reachability
 // before the limiter (our loop shape) yields the same minimum as the
 // reference order; the comment chain records the mapping.
-CorrelatedScatteringStep copper_urban_v2_propose_and_sample(
+// Generic GPIL+DoIt orchestration shared by Copper and Water (Phase 5).
+// Binding: 1=user/external, 2=msc, 3=geometry, 4=range (no scatter).
+CorrelatedScatteringStep urban_v2_propose_and_sample(
     const Direction3F direction, const float epre_mev,
-    const int atomic_number, const int mass_number,
     const float user_ceiling_mm, const float boundary_path_mm,
     const float pos_x_mm, const float pos_y_mm, const float pos_z_mm,
     const float dir_x, const float dir_y, const float dir_z,
-    const UrbanV2GeomCtx& geom, const bool at_boundary,
-    UrbanV2TrackState& state, const UrbanV2LossTable& table,
-    const float density_g_per_cm3, const float radiation_length_g_per_cm2,
+    const UrbanV2SafetyCtx& safety, const bool at_boundary,
+    UrbanV2TrackState& state, const UrbanV2Material& mat,
     const float amplitude_scale, const std::uint64_t seed,
     const std::uint64_t history_id, const std::uint64_t step_index,
     const std::uint32_t random_dimension) noexcept {
     CorrelatedScatteringStep result{direction, Direction3F{0.0F, 0.0F, 0.0F}};
     if (!(epre_mev > 0.0F) || !(user_ceiling_mm > 0.0F) ||
-        !(boundary_path_mm > 0.0F) || table.count < 2 ||
-        table.e_total_mev == nullptr) {
+        !(boundary_path_mm > 0.0F) || mat.table.count < 2 ||
+        mat.table.e_total_mev == nullptr) {
         return result;
     }
-    const float lambda0_now = copper_urban_transport_mfp_mm(
-        epre_mev, atomic_number, mass_number, density_g_per_cm3);
+    const float lambda0_now = urban_v2_transport_mfp(mat, epre_mev);
     if (!(lambda0_now > 0.0F)) {
         return result;
     }
     // Step-start safety for the limiter presafety (full isotropic, uncapped).
-    const float safety_start = minibeam_isotropic_safety_at_point(
-        pos_x_mm, pos_y_mm, pos_z_mm, geom.cos_a, geom.sin_a, geom.radius_mm,
-        geom.slit_count, geom.slit_width_mm, geom.slit_pitch_mm,
-        geom.slit_half_len_mm, geom.slit_offset_mm, geom.block_entrance_z_mm,
-        geom.block_exit_z_mm);
+    const float safety_start =
+        urban_v2_safety_at(pos_x_mm, pos_y_mm, pos_z_mm, safety);
     // External TRUE candidate from the user ceiling (par1<0 inversion;
     // ceiling 0.25 << lambda0 ~ 2e6 so the small-ratio branch is exact).
     const float t_ext =
@@ -1697,8 +1912,8 @@ CorrelatedScatteringStep copper_urban_v2_propose_and_sample(
                                             1.0e30F)
             .true_path_mm;
     auto limit = copper_urban_v2_limit_step(
-        t_ext, epre_mev, atomic_number, mass_number, density_g_per_cm3,
-        safety_start, at_boundary, state, table, seed, history_id, step_index);
+        t_ext, epre_mev, mat, safety_start, at_boundary, state, seed,
+        history_id, step_index);
     if (!limit.valid) {
         return result;
     }
@@ -1738,16 +1953,11 @@ CorrelatedScatteringStep copper_urban_v2_propose_and_sample(
     const float end_x = pos_x_mm + g_final * dir_x;
     const float end_y = pos_y_mm + g_final * dir_y;
     const float end_z = pos_z_mm + g_final * dir_z;
-    const float safety_end = minibeam_isotropic_safety_at_point(
-        end_x, end_y, end_z, geom.cos_a, geom.sin_a, geom.radius_mm,
-        geom.slit_count, geom.slit_width_mm, geom.slit_pitch_mm,
-        geom.slit_half_len_mm, geom.slit_offset_mm, geom.block_entrance_z_mm,
-        geom.block_exit_z_mm);
+    const float safety_end = urban_v2_safety_at(end_x, end_y, end_z, safety);
     result = copper_urban_v2_sample_full(
-        direction, epre_mev, atomic_number, mass_number, t_final,
-        static_cast<float>(delta_final > 0.0 ? delta_final : 0.0),
-        density_g_per_cm3, radiation_length_g_per_cm2, limit.range_mm,
-        limit.lambda0_mm, limit.tlimitmin_mm, table, safety_end,
+        direction, epre_mev, t_final,
+        static_cast<float>(delta_final > 0.0 ? delta_final : 0.0), mat,
+        limit.range_mm, limit.lambda0_mm, limit.tlimitmin_mm, safety_end,
         amplitude_scale, !limit.no_displacement, seed, history_id, step_index,
         random_dimension);
     result.proposed_true_path_mm = limit.t_msc_mm;
@@ -1768,6 +1978,81 @@ CorrelatedScatteringStep copper_urban_v2_propose_and_sample(
         result.limit_reason = 1;
     }
     return result;
+}
+
+// Copper wrapper: same signature as the c53f151 production call; builds the
+// Cu material (frozen elemental helper, Zeff=29) and kind-0 safety ctx, then
+// delegates to the shared generic core above. No copper physics lives here,
+// so the Cu path cannot drift from the Water path's core.
+inline CorrelatedScatteringStep copper_urban_v2_propose_and_sample(
+    const Direction3F direction, const float epre_mev,
+    const int atomic_number, const int mass_number,
+    const float user_ceiling_mm, const float boundary_path_mm,
+    const float pos_x_mm, const float pos_y_mm, const float pos_z_mm,
+    const float dir_x, const float dir_y, const float dir_z,
+    const UrbanV2GeomCtx& geom, const bool at_boundary,
+    UrbanV2TrackState& state, const UrbanV2LossTable& table,
+    const float density_g_per_cm3, const float radiation_length_g_per_cm2,
+    const float amplitude_scale, const std::uint64_t seed,
+    const std::uint64_t history_id, const std::uint64_t step_index,
+    const std::uint32_t random_dimension) noexcept {
+    UrbanV2Material mat{};
+    mat.table = table;
+    mat.zeff = kUrbanV2CopperZeff;
+    mat.radlen_mm = 10.0F * radiation_length_g_per_cm2 / density_g_per_cm3;
+    mat.projectile_z = atomic_number;
+    mat.projectile_a = mass_number;
+    mat.mass_mev = static_cast<float>(mass_number) *
+        static_cast<float>(nucleon_rest_mass_MeV);
+    mat.density_g_per_cm3 = density_g_per_cm3;
+    mat.mfp_kind = 0;
+    UrbanV2SafetyCtx safety{};
+    safety.kind = 0;
+    safety.cu = geom;
+    return urban_v2_propose_and_sample(
+        direction, epre_mev, user_ceiling_mm, boundary_path_mm, pos_x_mm,
+        pos_y_mm, pos_z_mm, dir_x, dir_y, dir_z, safety, at_boundary, state,
+        mat, amplitude_scale, seed, history_id, step_index, random_dimension);
+}
+
+// Water wrapper: same shared core, Water_75eV couple. mfp comes from the
+// Bragg sum (mfp_kind=1), cache from the extracted Zeff, radlen from the
+// extracted table metadata. No copper helper is called with a fake Z.
+inline CorrelatedScatteringStep water_urban_v2_propose_and_sample(
+    const Direction3F direction, const float epre_mev,
+    const int atomic_number, const int mass_number,
+    const float user_ceiling_mm, const float boundary_path_mm,
+    const float pos_x_mm, const float pos_y_mm, const float pos_z_mm,
+    const float dir_x, const float dir_y, const float dir_z,
+    const float box_x0_mm, const float box_x1_mm, const float box_y0_mm,
+    const float box_y1_mm, const float box_z0_mm, const float box_z1_mm,
+    const bool at_boundary, UrbanV2TrackState& state,
+    const UrbanV2LossTable& table, const float zeff, const float radlen_mm,
+    const float amplitude_scale, const std::uint64_t seed,
+    const std::uint64_t history_id, const std::uint64_t step_index,
+    const std::uint32_t random_dimension) noexcept {
+    UrbanV2Material mat{};
+    mat.table = table;
+    mat.zeff = zeff;
+    mat.radlen_mm = radlen_mm;
+    mat.projectile_z = atomic_number;
+    mat.projectile_a = mass_number;
+    mat.mass_mev = static_cast<float>(mass_number) *
+        static_cast<float>(nucleon_rest_mass_MeV);
+    mat.density_g_per_cm3 = 1.0F;  // unused by the Bragg-sum mfp branch
+    mat.mfp_kind = 1;
+    UrbanV2SafetyCtx safety{};
+    safety.kind = 1;
+    safety.box_x0 = box_x0_mm;
+    safety.box_x1 = box_x1_mm;
+    safety.box_y0 = box_y0_mm;
+    safety.box_y1 = box_y1_mm;
+    safety.box_z0 = box_z0_mm;
+    safety.box_z1 = box_z1_mm;
+    return urban_v2_propose_and_sample(
+        direction, epre_mev, user_ceiling_mm, boundary_path_mm, pos_x_mm,
+        pos_y_mm, pos_z_mm, dir_x, dir_y, dir_z, safety, at_boundary, state,
+        mat, amplitude_scale, seed, history_id, step_index, random_dimension);
 }
 
 CorrelatedScatteringStep copper_urban_v2_msc_step(
