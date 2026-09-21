@@ -282,3 +282,22 @@ affect it.
   the matched step policy.
 - The 1 mm lateral x discrepancy above needs a slab config that reproduces the
   TOPAS box geometry before it can be attributed.
+
+## 9. Gate 3 collimator step-policy matrix (single spot, 250 MeV/u, EM-only, 10M)
+
+Entry contrast error (GPU/TOPAS - 1, pp):
+
+| depth | U 0.25 | U 0.10 | U 0.05 | V2 0.25 | V2 0.10 | V2 0.05 |
+|---:|---:|---:|---:|---:|---:|---:|
+| 0.88 | 2.31 | 2.44 | 2.89 | 2.39 | 2.59 | 2.80 |
+| 9.88 | 0.40 | 1.01 | 1.61 | -0.47 | 0.04 | 1.75 |
+| 39.88 | 1.11 | 1.77 | 2.33 | -1.12 | 0.50 | 1.70 |
+| 119.88 | -1.79 | -1.40 | -1.21 | -3.64 | -2.23 | -1.63 |
+
+`[FACT]` The slab-correct step (0.05 mm) makes the collimator entry contrast
+*worse* (+2.89 pp at 1 mm vs +2.31 pp at 0.25 mm). Since the slab shows 0.05 mm
+is the physically correct Copper scattering, the 0.25 mm contrast gain is a
+compensating error. `[INFERENCE]` The +2.3-2.9 pp collimator entry residual is
+therefore not a Copper MSC amplitude error; it must come from the source,
+slit-edge geometry or scoring. This matches the independent water-dominated
+attribution in D10 and closes the Copper-MSC-only hypothesis for the residual.
