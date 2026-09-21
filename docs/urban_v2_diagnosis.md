@@ -402,3 +402,13 @@ not applied to the source in this configuration either. A valid finite-slit
 scan must translate the `Aperture` component itself (or use a source that
 accepts an aperture-plane transverse offset). Gate 4's signed-distance scan
 remains open; no fabricated result is reported.
+
+## 17. Gate 4 third attempt: aperture translation
+
+`d:Ge/Aperture/TransX` does change the yield: 0 mm -> 2558, but 0.05/0.10/
+0.15/0.20/0.25/0.30 mm all -> 0. The beam at the aperture is therefore an
+effectively pencil-like beam at x=0 (aperture half-width 0.25 mm); any
+translation kills it. A finite-slit `P(exit|d)` curve cannot be resolved with
+this source. A broad transverse beam at the aperture (or a scanned narrow beam
+sampled across d) is required. Gate 4 remains open; the direct/touched split
+and conditional phase space (section 12) are the available evidence.
