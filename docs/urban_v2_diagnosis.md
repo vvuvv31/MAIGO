@@ -333,3 +333,36 @@ algorithm and an unmatched step, which are real inequivalences.
 the physically correct 0.05 mm step is used, and the same-source water replay
 assigns the depth-dependent valley residual to water. The next target is the
 source/slit-edge geometry and scoring, not the Copper scattering kernel.
+
+## 12. Gate 5 full-slit: water-entry direct/touched split (250 MeV/u, EM-only)
+
+TOPAS cross run (`minibeam_slit_cross_e250`, 20k histories) flags
+Copper-touched tracks by TrackID via the per-step MSC ntuple; the GPU phase
+space carries `copper_touched`.
+
+| quantity | TOPAS | urban 0.25 | urban_v2 0.05 |
+|---|---:|---:|---:|
+| direct fraction | 0.5797 | 0.5796 | 0.5809 |
+| touched fraction | 0.4203 | 0.4204 | 0.4191 |
+| direct E mean / std (MeV) | 2993.2 / 35.57 | 2992.4 / 36.03 | 2992.4 / 36.03 |
+| touched E mean / std (MeV) | 1999.2 / 783.0 | 2029.5 / 767.3 | 2022.3 / 765.1 |
+| direct theta q50/q90/q99 (mrad) | 4.243/7.746/10.743 | 4.173/7.633/11.085 | 4.173/7.633/11.085 |
+| touched theta q50/q90/q99 (mrad) | 14.000/38.426/75.215 | 13.789/39.246/78.136 | 13.485/38.019/76.443 |
+
+`[FACT]` The direct/touched split matches to 0.1 pp, the conditional energy to
+~1.5%, and the conditional water-entry angles to ~2-4% for both urban and
+urban_v2. The water-entry conditional phase space is therefore already
+matched; the collimator entry contrast residual in section 9 is not visible in
+these conditional observables.
+
+## 13. Completed gate summary
+
+| gate | status | evidence |
+|---|---|---|
+| 0 reference freeze | done | runtime log, configs, hashes recorded |
+| 1 component truth | done | sampler q50-q99.9 within 2-8% |
+| 2 slab | done | 1/10 mm, 150/250/300 MeV/u |
+| 3 step policy | done | slab + collimator step matrix |
+| 4 finite slit | partial | split/energy/angle done; no signed-distance scan |
+| 5 full slit | done | direct/touched split and conditionals |
+| 6 downstream | not run | water/source/nuclear frozen by design |
