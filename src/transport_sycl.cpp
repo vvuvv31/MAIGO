@@ -3764,6 +3764,10 @@ template<int EmMode>
         config.minibeam_copper_fragment_cascade_generations;
     const auto minibeam_copper_fermi_eyges_tail =
         config.minibeam_copper_mcs_model == "fermi_eyges_tail";
+    const auto minibeam_copper_urban_msc =
+        config.minibeam_copper_mcs_model == "urban";
+    const auto minibeam_copper_correlated_scattering =
+        minibeam_copper_fermi_eyges_tail || minibeam_copper_urban_msc;
     const auto minibeam_copper_enable_mcs = config.minibeam_copper_enable_mcs;
     const auto minibeam_copper_enable_energy_straggling =
         config.minibeam_copper_enable_energy_straggling;
@@ -4218,14 +4222,26 @@ template<int EmMode>
                         auto correlated_scattering = CorrelatedScatteringStep{
                             pre_scatter_direction, Direction3F{0.0F, 0.0F, 0.0F}};
                         if (minibeam_copper_enable_mcs &&
-                            minibeam_copper_fermi_eyges_tail &&
+                            minibeam_copper_correlated_scattering &&
                             energy_MeV > energy_cutoff_MeV) {
-                            correlated_scattering = copper_fermi_eyges_tail_step(
-                                pre_scatter_direction, energy_MeV, 6, 12,
-                                transport_path, minibeam_copper_density,
-                                minibeam_copper_radiation_length,
-                                minibeam_copper_mcs_scale, spot_seed, rng_history,
-                                beamline_step, 50);
+                            if (minibeam_copper_urban_msc) {
+                                const auto copper_range_mm = stopping > 0.0F
+                                    ? energy_MeV / stopping
+                                    : 0.0F;
+                                correlated_scattering = copper_urban_msc_step(
+                                    pre_scatter_direction, energy_MeV, 6, 12,
+                                    transport_path, minibeam_copper_density,
+                                    minibeam_copper_radiation_length,
+                                    copper_range_mm, minibeam_copper_mcs_scale,
+                                    spot_seed, rng_history, beamline_step, 50);
+                            } else {
+                                correlated_scattering = copper_fermi_eyges_tail_step(
+                                    pre_scatter_direction, energy_MeV, 6, 12,
+                                    transport_path, minibeam_copper_density,
+                                    minibeam_copper_radiation_length,
+                                    minibeam_copper_mcs_scale, spot_seed,
+                                    rng_history, beamline_step, 50);
+                            }
                         }
                         position_x_mm += transport_path * direction_x +
                             correlated_scattering.displacement_mm.x;
@@ -4305,7 +4321,7 @@ template<int EmMode>
                             : 0.0F;
                         const auto total_nuclear_rate = elastic_rate + inelastic_rate;
                         if (minibeam_copper_enable_mcs &&
-                            !minibeam_copper_fermi_eyges_tail &&
+                            !minibeam_copper_correlated_scattering &&
                             energy_MeV > energy_cutoff_MeV) {
                             const auto theta = minibeam_copper_mcs_scale *
                                 highland_projected_rms_angle_device(
@@ -4319,7 +4335,7 @@ template<int EmMode>
                             direction_y = scattered.y;
                             direction_z = scattered.z;
                         } else if (minibeam_copper_enable_mcs &&
-                                   minibeam_copper_fermi_eyges_tail) {
+                                   minibeam_copper_correlated_scattering) {
                             direction_x = correlated_scattering.direction.x;
                             direction_y = correlated_scattering.direction.y;
                             direction_z = correlated_scattering.direction.z;

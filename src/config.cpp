@@ -1561,10 +1561,11 @@ void TransportConfig::validate() const {
                     "the water low-energy MCS transition must be nonnegative");
             }
             if (minibeam_copper_mcs_model != "highland" &&
-                minibeam_copper_mcs_model != "fermi_eyges_tail") {
+                minibeam_copper_mcs_model != "fermi_eyges_tail" &&
+                minibeam_copper_mcs_model != "urban") {
                 throw std::invalid_argument(
-                    "minibeam_copper_mcs_model must be highland or "
-                    "fermi_eyges_tail");
+                    "minibeam_copper_mcs_model must be highland, "
+                    "fermi_eyges_tail or urban");
             }
             if (minibeam_water_primary_mcs_model != "legacy_highland" &&
                 minibeam_water_primary_mcs_model != "fermi_eyges_tail") {

@@ -6,7 +6,7 @@ s:Ge/World/Color     = "white"
 
 s:Ge/Box/Type              = "TsBox"
 s:Ge/Box/Parent            = "World"
-s:Ge/Box/Material          = "G4_WATER"
+s:Ge/Box/Material          = "Water_75eV"
 d:Ge/Box/HLX               = 50.0 mm
 d:Ge/Box/HLY               = 50.0 mm
 d:Ge/Box/HLZ               = 50.0 mm
@@ -18,7 +18,7 @@ b:Ge/Box/IsVisible         = "True"
 
 s:Ge/Box2/Type              = "TsBox"
 s:Ge/Box2/Parent            = "Box"
-s:Ge/Box2/Material          = "G4_WATER"
+s:Ge/Box2/Material          = "Water_75eV"
 d:Ge/Box2/HLX               = 50.0 mm
 d:Ge/Box2/HLY               = 50.0 mm
 d:Ge/Box2/HLZ               = 10.0 mm

@@ -72,7 +72,7 @@ minibeam_water_primary_low_energy_mcs_scale: 0.20
 minibeam_water_fragment_low_energy_mcs_scale: 1.00
 minibeam_water_primary_mcs_model: fermi_eyges_tail
 minibeam_water_primary_mcs_max_segment_mm: 0.1
-minibeam_water_primary_stopping_power_scale: 0.9958
+minibeam_water_primary_stopping_power_scale: 1.0
 minibeam_copper_stopping_power_file: /mnt/sda/wuwei/minibeam_copper_extract_e150/compiled/c12_copper_stopping_geant4_11_3_2.csv
 minibeam_air_stopping_power_file: data/stopping_power_air_geant4_11_3_2.csv
 minibeam_copper_cross_section_file: /mnt/sda/wuwei/minibeam_copper_extract_e150/compiled/c12_copper_inelastic_rate_geant4_11_3_2.csv

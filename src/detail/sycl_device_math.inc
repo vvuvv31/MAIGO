@@ -312,6 +312,14 @@ CorrelatedScatteringStep copper_fermi_eyges_tail_step(
     constexpr float tail_rate_per_mm = 0.1065470F;
     constexpr float wide_tail_fraction = 0.01563534F;
     constexpr float wide_tail_width_ratio = 4.522415F;
+    // Extreme wide-angle tail component.  The 1/10 mm slab fit above matches the
+    // core and the q50-q95 angles but underproduces the >40 mrad tail at 60 mm
+    // collimator thickness (TOPAS/GPU: 0.950 at >40 mrad, 0.789 at >80 mrad,
+    // 0.518 at >160 mrad on the single-spot 250 MeV/u water-entrance phase
+    // space).  A third, rarer and much wider Poisson component restores the
+    // extreme tail while the normalizer keeps the total tail variance fixed.
+    constexpr float extreme_tail_fraction = 0.0F;
+    constexpr float extreme_tail_width_ratio = 10.0F;
     const auto scaled_scattering_energy = amplitude_scale * scattering_energy_MeV;
     const auto charge = static_cast<float>(atomic_number);
     const auto scattering_ratio =
@@ -353,8 +361,9 @@ CorrelatedScatteringStep copper_fermi_eyges_tail_step(
         ? 0U
         : (count_uniform < zero_tail_probability + one_tail_probability ? 1U : 2U);
     const auto width_variance_normalizer =
-        (1.0F - wide_tail_fraction) +
-        wide_tail_fraction * wide_tail_width_ratio * wide_tail_width_ratio;
+        (1.0F - wide_tail_fraction - extreme_tail_fraction) +
+        wide_tail_fraction * wide_tail_width_ratio * wide_tail_width_ratio +
+        extreme_tail_fraction * extreme_tail_width_ratio * extreme_tail_width_ratio;
     const auto narrow_tail_sigma = sycl::sqrt(
         (1.0F - core_variance_fraction) * total_scattering_power /
         (tail_rate_per_mm * width_variance_normalizer));
@@ -366,7 +375,11 @@ CorrelatedScatteringStep copper_fermi_eyges_tail_step(
             seed, history_id, step_index, tail_dimension + 1U);
         const auto tail_normal = normal_pair(tail_dimension + 2U);
         const auto tail_sigma = narrow_tail_sigma *
-            (width_uniform < wide_tail_fraction ? wide_tail_width_ratio : 1.0F);
+            (width_uniform < extreme_tail_fraction
+                 ? extreme_tail_width_ratio
+                 : (width_uniform < extreme_tail_fraction + wide_tail_fraction
+                        ? wide_tail_width_ratio
+                        : 1.0F));
         const auto tail_theta_x = tail_sigma * tail_normal.x;
         const auto tail_theta_y = tail_sigma * tail_normal.y;
         const auto remaining_path = path_length_mm * (1.0F - location_uniform);
@@ -400,6 +413,383 @@ CorrelatedScatteringStep copper_fermi_eyges_tail_step(
         local_displacement_x * u.z + local_displacement_y * v.z};
     result.direction = rotate_local_direction(
         local_theta_x, local_theta_y, 1.0F, direction);
+    return result;
+}
+
+// ---------------------------------------------------------------------------
+// Faithful port of Geant4 11.3.2 G4UrbanMscModel for the Copper minibeam
+// collimator (Zeff = 29, A = 63.546).  Implements ComputeCrossSectionPerAtom
+// -> lambda0, ComputeTheta0, SampleCosineTheta, SimpleScattering and
+// SampleDisplacementNew (dispAlg96 == false).  Step limitation is delegated to
+// the caller's transport step; the caller scales the result with mcs_scale.
+// ---------------------------------------------------------------------------
+
+inline float copper_urban_cross_section_per_atom_cm2(
+    const float kin_energy_MeV, const int projectile_charge,
+    const int mass_number) noexcept {
+    constexpr float electron_mass_MeV = 0.51099895F;
+    constexpr float nucleon_mass_MeV = 931.49410242F;
+    constexpr float bohr_radius_cm = 5.29177210903e-9F;
+    constexpr float hbarc_MeV_cm = 197.3269804e-13F;
+    constexpr float classic_electron_radius_cm = 2.8179403262e-13F;
+    constexpr float barn_cm2 = 1.0e-24F;
+    constexpr float low_energy_limit_MeV = 10.0F;
+    constexpr float copper_zeffective = 29.0F;
+    if (!(kin_energy_MeV > 0.0F) || projectile_charge <= 0 || mass_number <= 0) {
+        return 0.0F;
+    }
+
+    const auto charge = static_cast<float>(projectile_charge);
+    const auto mass = static_cast<float>(mass_number) * nucleon_mass_MeV;
+
+    // electron-equivalent kinetic energy of a heavy ion
+    const auto tau_ion = kin_energy_MeV / mass;
+    const auto c_ion = mass * tau_ion * (tau_ion + 2.0F) /
+                       (electron_mass_MeV * (tau_ion + 1.0F));
+    const auto w = c_ion - 2.0F;
+    const auto tau_e = 0.5F * (w + sycl::sqrt(w * w + 4.0F * c_ion));
+    const auto ekin = electron_mass_MeV * tau_e;
+    const auto etot = ekin + electron_mass_MeV;
+    const auto beta2 = ekin * (etot + electron_mass_MeV) / (etot * etot);
+    const auto bg2 = ekin * (etot + electron_mass_MeV) /
+                     (electron_mass_MeV * electron_mass_MeV);
+
+    const auto z23 = sycl::pow(copper_zeffective, 2.0F / 3.0F);
+    const auto epsfactor = 2.0F * electron_mass_MeV * electron_mass_MeV *
+                           bohr_radius_cm * bohr_radius_cm /
+                           (hbarc_MeV_cm * hbarc_MeV_cm);
+    const auto eps = epsfactor * bg2 / z23;
+
+    float sigma = 0.0F;
+    if (eps < 1.0e-4F) {
+        sigma = 2.0F * eps * eps;
+    } else if (eps < 1.0e10F) {
+        sigma = sycl::log(1.0F + 2.0F * eps) -
+                2.0F * eps / (1.0F + 2.0F * eps);
+    } else {
+        sigma = sycl::log(2.0F * eps) - 1.0F + 1.0F / eps;
+    }
+    sigma *= charge * charge * copper_zeffective * copper_zeffective /
+             (beta2 * bg2);
+
+    constexpr float t_lim = low_energy_limit_MeV;
+    const auto beta2_lim =
+        t_lim * (t_lim + 2.0F * electron_mass_MeV) /
+        ((t_lim + electron_mass_MeV) * (t_lim + electron_mass_MeV));
+    const auto bg2_lim = t_lim * (t_lim + 2.0F * electron_mass_MeV) /
+                         (electron_mass_MeV * electron_mass_MeV);
+    constexpr float sigma_factor =
+        6.2831853071795864769F * classic_electron_radius_cm *
+        classic_electron_radius_cm;
+
+    if (ekin <= t_lim) {
+        // Copper lies in Zdat[4]=26 .. Zdat[5]=29 with ratZ = 1, so the
+        // interpolated cpositron coefficient is exactly cpositron[5].
+        constexpr float cpositron_z29[22] = {
+            24.83F, 17.06F, 10.84F, 7.355F, 5.767F, 3.707F, 2.546F, 1.996F,
+            1.759F, 1.465F, 1.311F, 1.252F, 1.234F, 1.228F, 1.238F, 1.241F,
+            1.237F, 1.222F, 1.201F, 1.184F, 1.174F, 1.159F};
+        constexpr float t_dat[22] = {
+            1.0e-4F, 2.0e-4F, 4.0e-4F, 7.0e-4F, 1.0e-3F, 2.0e-3F, 4.0e-3F,
+            7.0e-3F, 1.0e-2F, 2.0e-2F, 4.0e-2F, 7.0e-2F, 1.0e-1F, 2.0e-1F,
+            4.0e-1F, 7.0e-1F, 1.0F, 2.0F, 4.0F, 7.0F, 10.0F, 20.0F};
+        int i_t = 21;
+        while (i_t >= 0 && t_dat[i_t] >= ekin) {
+            --i_t;
+        }
+        i_t = sycl::clamp(i_t, 0, 20);
+        const auto t0 = t_dat[i_t];
+        const auto e0 = t0 + electron_mass_MeV;
+        const auto b2_small = t0 * (e0 + electron_mass_MeV) / (e0 * e0);
+        const auto t1 = t_dat[i_t + 1];
+        const auto e1 = t1 + electron_mass_MeV;
+        const auto b2_big = t1 * (e1 + electron_mass_MeV) / (e1 * e1);
+        const auto rat_b2 = (beta2 - b2_small) / (b2_big - b2_small);
+        const auto cc1 = cpositron_z29[i_t];
+        const auto cc2 = cpositron_z29[i_t + 1];
+        sigma *= sigma_factor / (cc1 + rat_b2 * (cc2 - cc1));
+    } else {
+        constexpr float sig0_z29 = 13.24F * barn_cm2;  // Zdat[5]
+        constexpr float hecorr_z29 = 74.510F;
+        sigma = bg2_lim * sig0_z29 *
+                (1.0F + hecorr_z29 * (beta2 - beta2_lim)) / bg2;
+    }
+    sigma *= 1.0F + 0.30F / (1.0F + sycl::sqrt(1000.0F * ekin));
+    return sigma;
+}
+
+inline float copper_urban_transport_mfp_mm(
+    const float kin_energy_MeV, const int projectile_charge,
+    const int mass_number, const float density_g_per_cm3) noexcept {
+    if (!(density_g_per_cm3 > 0.0F)) {
+        return 0.0F;
+    }
+    const auto sigma = copper_urban_cross_section_per_atom_cm2(
+        kin_energy_MeV, projectile_charge, mass_number);
+    if (!(sigma > 0.0F)) {
+        return 0.0F;
+    }
+    constexpr float avogadro = 6.02214076e23F;
+    constexpr float copper_molar_mass = 63.546F;
+    const auto number_density =
+        avogadro * density_g_per_cm3 / copper_molar_mass;
+    return 10.0F / (number_density * sigma);
+}
+
+struct CopperUrbanCoefficients {
+    float coeffth1;
+    float coeffth2;
+    float coeffc1;
+    float coeffc2;
+    float coeffc3;
+    float coeffc4;
+};
+
+inline CopperUrbanCoefficients copper_urban_coefficients(
+    const float zeffective) noexcept {
+    const auto w = sycl::pow(zeffective, 1.0F / 6.0F);
+    const auto z13 = w * w;
+    const auto facz = 0.990395F + w * (-0.168386F + w * 0.093286F);
+    CopperUrbanCoefficients result{};
+    result.coeffth1 = facz * (1.0F - 8.7780e-2F / zeffective);
+    result.coeffth2 = facz * (4.0780e-2F + 1.7315e-4F * zeffective);
+    result.coeffc1 = 2.3785F - z13 * (4.1981e-1F - z13 * 6.3100e-2F);
+    result.coeffc2 = 4.7526e-1F + z13 * (1.7694F - z13 * 3.3885e-1F);
+    result.coeffc3 = 2.3683e-1F - z13 * (1.8111F - z13 * 3.2774e-1F);
+    result.coeffc4 = 1.7888e-2F + z13 * (1.9659e-2F - z13 * 2.6664e-3F);
+    return result;
+}
+
+inline float copper_urban_theta0(
+    const float path_length_mm, const float kin_energy_MeV,
+    const float radiation_length_mm, const int projectile_charge,
+    const int mass_number,
+    const CopperUrbanCoefficients& coefficients) noexcept {
+    const auto mass =
+        static_cast<float>(mass_number) * static_cast<float>(nucleon_rest_mass_MeV);
+    const auto invbetacp = (kin_energy_MeV + mass) /
+                           (kin_energy_MeV * (kin_energy_MeV + 2.0F * mass));
+    const auto y = path_length_mm / radiation_length_mm;
+    const auto theta0 = 13.6F * static_cast<float>(projectile_charge) *
+                        sycl::sqrt(y) * invbetacp;
+    return theta0 * (coefficients.coeffth1 +
+                     coefficients.coeffth2 * sycl::log(y));
+}
+
+CorrelatedScatteringStep copper_urban_msc_step(
+    const Direction3F direction, const float kinetic_energy_MeV,
+    const int atomic_number, const int mass_number, const float path_length_mm,
+    const float density_g_per_cm3, const float radiation_length_g_per_cm2,
+    const float range_mm, const float amplitude_scale, const std::uint64_t seed,
+    const std::uint64_t history_id, const std::uint64_t step_index,
+    const std::uint32_t random_dimension) noexcept {
+    CorrelatedScatteringStep result{direction, Direction3F{0.0F, 0.0F, 0.0F}};
+    if (kinetic_energy_MeV <= 0.0F || atomic_number <= 0 || mass_number <= 0 ||
+        path_length_mm <= 0.0F || density_g_per_cm3 <= 0.0F ||
+        radiation_length_g_per_cm2 <= 0.0F || amplitude_scale <= 0.0F) {
+        return result;
+    }
+
+    const auto radiation_length_mm =
+        10.0F * radiation_length_g_per_cm2 / density_g_per_cm3;
+    const auto lambda0_mm = copper_urban_transport_mfp_mm(
+        kinetic_energy_MeV, atomic_number, mass_number, density_g_per_cm3);
+    if (!(radiation_length_mm > 0.0F && lambda0_mm > 0.0F)) {
+        return result;
+    }
+
+    constexpr float copper_zeffective = 29.0F;
+    const auto coefficients = copper_urban_coefficients(copper_zeffective);
+    const auto tau = path_length_mm / lambda0_mm;
+    constexpr float tau_big = 8.0F;
+    constexpr float tau_small = 1.0e-16F;
+    constexpr float num_lim = 0.01F;
+    constexpr float one_third = 1.0F / 3.0F;
+    constexpr float one_sixth = 1.0F / 6.0F;
+    constexpr float one_twelfth = 1.0F / 12.0F;
+    constexpr float t_limit_min = 1.0e-7F;  // mm (10 * 0.01 nm)
+    constexpr float pi = 3.14159265358979323846F;
+    constexpr float two_pi = 6.2831853071795864769F;
+
+    float x_mean_th = 0.0F;
+    float x2_mean_th = 0.0F;
+    if (tau < num_lim) {
+        x_mean_th = 1.0F - tau * (1.0F - 0.5F * tau);
+        x2_mean_th = 1.0F - tau * (5.0F - 6.25F * tau) * one_third;
+    } else {
+        x_mean_th = sycl::exp(-tau);
+        x2_mean_th = (1.0F + 2.0F * sycl::exp(-2.5F * tau)) * one_third;
+    }
+    const auto simple_scattering = [&](const std::uint32_t dimension) {
+        const auto a = (2.0F * x_mean_th + 9.0F * x2_mean_th - 3.0F) /
+                       (2.0F * x_mean_th - 3.0F * x2_mean_th + 1.0F);
+        const auto probability = (a + 2.0F) * x_mean_th / a;
+        const auto u0 = sycl::fmax(
+            rng::uniform01(seed, history_id, step_index, dimension), 1.0e-12F);
+        const auto u1 = rng::uniform01(
+            seed, history_id, step_index, dimension + 1U);
+        return u1 < probability
+                   ? -1.0F + 2.0F * sycl::exp(sycl::log(u0) / (a + 1.0F))
+                   : -1.0F + 2.0F * u0;
+    };
+
+    float cth = 1.0F;
+    if (tau >= tau_big) {
+        cth = -1.0F + 2.0F * rng::uniform01(
+                             seed, history_id, step_index, random_dimension);
+    } else if (tau >= tau_small) {
+        float theta0;
+        if (path_length_mm > t_limit_min) {
+            theta0 = amplitude_scale * copper_urban_theta0(
+                path_length_mm, kinetic_energy_MeV, radiation_length_mm,
+                atomic_number, mass_number, coefficients);
+        } else {
+            theta0 = sycl::sqrt(path_length_mm / t_limit_min) *
+                     amplitude_scale * copper_urban_theta0(
+                         t_limit_min, kinetic_energy_MeV, radiation_length_mm,
+                         atomic_number, mass_number, coefficients);
+        }
+        const auto theta2 = theta0 * theta0;
+        if (theta2 < tau_small) {
+            return result;
+        }
+        if (theta0 > pi * one_sixth) {
+            cth = simple_scattering(random_dimension);
+        } else {
+            auto x = theta2 * (1.0F - theta2 * one_twelfth);
+            if (theta2 > num_lim) {
+                const auto sth = 2.0F * sycl::sin(0.5F * theta0);
+                x = sth * sth;
+            }
+            const auto ltau = sycl::log(tau);
+            const auto u = sycl::exp(ltau * one_sixth);
+            const auto xx = sycl::log(lambda0_mm / radiation_length_mm);
+            auto xsi = coefficients.coeffc1 +
+                       u * (coefficients.coeffc2 + coefficients.coeffc3 * u) +
+                       coefficients.coeffc4 * xx;
+            xsi = sycl::fmax(xsi, 1.9F);
+            auto c = xsi;
+            if (sycl::fabs(c - 3.0F) < 0.001F) {
+                c = 3.001F;
+            } else if (sycl::fabs(c - 2.0F) < 0.001F) {
+                c = 2.001F;
+            }
+            const auto c1 = c - 1.0F;
+            const auto ea = sycl::exp(-xsi);
+            const auto eaa = 1.0F - ea;
+            const auto x_mean1 = 1.0F - (1.0F - (1.0F + xsi) * ea) * x / eaa;
+            const auto x0 = 1.0F - xsi * x;
+            if (x_mean1 <= 0.999F * x_mean_th) {
+                cth = simple_scattering(random_dimension);
+            } else {
+                const auto b = 1.0F + (c - xsi) * x;
+                const auto b1 = b + 1.0F;
+                const auto bx = c * x;
+                const auto eb1 = sycl::exp(sycl::log(b1) * c1);
+                const auto ebx = sycl::exp(sycl::log(bx) * c1);
+                const auto d = ebx / eb1;
+                const auto x_mean2 =
+                    (x0 + d - (bx - b1 * d) / (c - 2.0F)) / (1.0F - d);
+                const auto f1x0 = ea / eaa;
+                const auto f2x0 = c1 / (c * (1.0F - d));
+                const auto probability = f2x0 / (f1x0 + f2x0);
+                const auto q_probability =
+                    x_mean_th / (probability * x_mean1 +
+                                 (1.0F - probability) * x_mean2);
+                const auto u0 = rng::uniform01(
+                    seed, history_id, step_index, random_dimension);
+                const auto u1 = rng::uniform01(
+                    seed, history_id, step_index, random_dimension + 1U);
+                if (u0 < q_probability) {
+                    if (u1 < probability) {
+                        cth = 1.0F + sycl::log(
+                            ea + rng::uniform01(seed, history_id, step_index,
+                                                random_dimension + 2U) *
+                                     eaa) *
+                                         x;
+                    } else {
+                        auto var = (1.0F - d) * rng::uniform01(
+                            seed, history_id, step_index, random_dimension + 2U);
+                        if (var < num_lim * d) {
+                            var /= d * c1;
+                            cth = -1.0F + var * (1.0F - 0.5F * var * c) *
+                                              (2.0F + (c - xsi) * x);
+                        } else {
+                            cth = 1.0F + x * (c - xsi -
+                                              c * sycl::exp(
+                                                      -sycl::log(var + d) / c1));
+                        }
+                    }
+                } else {
+                    cth = -1.0F + 2.0F * u1;
+                }
+            }
+        }
+    }
+    cth = sycl::clamp(cth, -1.0F, 1.0F);
+
+    // direction and lateral displacement in the local step frame
+    const auto sth = sycl::sqrt(sycl::fmax(0.0F, (1.0F - cth) * (1.0F + cth)));
+    const auto phi = two_pi * rng::uniform01(
+                                 seed, history_id, step_index,
+                                 random_dimension + 3U);
+    const auto r_max = path_length_mm * sth;
+    float radius = 0.73F * r_max;
+    float sqrt_x = 1.0F;
+    constexpr float displacement_eps = 1.0e-3F;
+    if (range_mm > 0.0F && r_max / range_mm >= displacement_eps) {
+        constexpr float x0 = 0.73F;
+        const auto alpha = sycl::log(7.33F) / x0;
+        const auto a1 = 1.0F - x0;
+        const auto a2 = 1.0F - sycl::exp(-alpha * x0);
+        const auto a3 = sycl::exp(alpha * x0) - 1.0F;
+        const auto w1 = 2.0F * a2 / (alpha * a1 + 2.0F * a2);
+        const auto u0 = rng::uniform01(
+            seed, history_id, step_index, random_dimension + 4U);
+        const auto u1 = rng::uniform01(
+            seed, history_id, step_index, random_dimension + 5U);
+        const auto x = u0 < w1 ? sycl::log(1.0F + a3 * u1) / alpha
+                               : 1.0F - a1 * sycl::sqrt(1.0F - u1);
+        sqrt_x = sycl::sqrt(sycl::fmax(0.0F, x));
+        radius = sqrt_x * r_max;
+    }
+    const auto sigma = 0.1F + 0.9F * sqrt_x;
+    const auto normal_u0 = sycl::fmax(
+        rng::uniform01(seed, history_id, step_index, random_dimension + 6U),
+        1.0e-12F);
+    const auto normal_u1 = rng::uniform01(
+        seed, history_id, step_index, random_dimension + 7U);
+    const auto psi = sigma * sycl::sqrt(-2.0F * sycl::log(normal_u0)) *
+                     sycl::cos(two_pi * normal_u1);
+    const auto phi_displacement = phi + psi;
+    const auto local_displacement_x = radius * sycl::cos(phi_displacement);
+    const auto local_displacement_y = radius * sycl::sin(phi_displacement);
+
+    const auto parent_norm = sycl::sqrt(
+        direction.x * direction.x + direction.y * direction.y +
+        direction.z * direction.z);
+    const auto inverse_parent_norm = parent_norm > 0.0F ? 1.0F / parent_norm : 1.0F;
+    const Direction3F w{direction.x * inverse_parent_norm,
+                        direction.y * inverse_parent_norm,
+                        parent_norm > 0.0F ? direction.z * inverse_parent_norm : 1.0F};
+    const Direction3F reference =
+        sycl::fabs(w.x) < 0.9F ? Direction3F{1.0F, 0.0F, 0.0F}
+                               : Direction3F{0.0F, 1.0F, 0.0F};
+    const auto projection = reference.x * w.x + reference.y * w.y + reference.z * w.z;
+    Direction3F u{reference.x - projection * w.x,
+                  reference.y - projection * w.y,
+                  reference.z - projection * w.z};
+    const auto inverse_u_norm = sycl::rsqrt(u.x * u.x + u.y * u.y + u.z * u.z);
+    u = Direction3F{u.x * inverse_u_norm, u.y * inverse_u_norm, u.z * inverse_u_norm};
+    const Direction3F v{w.y * u.z - w.z * u.y,
+                        w.z * u.x - w.x * u.z,
+                        w.x * u.y - w.y * u.x};
+    result.displacement_mm = Direction3F{
+        local_displacement_x * u.x + local_displacement_y * v.x,
+        local_displacement_x * u.y + local_displacement_y * v.y,
+        local_displacement_x * u.z + local_displacement_y * v.z};
+    result.direction = rotate_local_direction(
+        sth * sycl::cos(phi), sth * sycl::sin(phi), cth, direction);
     return result;
 }
 
