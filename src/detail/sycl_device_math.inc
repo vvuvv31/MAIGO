@@ -158,6 +158,82 @@ float highland_projected_rms_angle_with_mass_device(
            correction;
 }
 
+// --- Unified MSC transport model (Highland theta sampler -> MscTransportModel).
+// First implementation: Highland + lateral displacement placeholder.
+// A single MCS step returns BOTH the outgoing direction and the intra-step
+// lateral displacement, instead of only theta:
+//
+//   pre-step state -> true step -> energy loss -> apply_msc() -> post-step
+//
+// Highland mode is endpoint scattering by definition: displacement_mm = 0 and
+// the caller advances position along the pre-step direction:
+//   position += seg_dir * step + displacement (== seg_dir * step here).
+// Correlated models (Fermi-Eyges tail, Urban v2) fill a non-zero displacement
+// through their own CorrelatedScatteringStep paths; they are selected before
+// these Highland helpers are reached. Do NOT add a hinge/displacement to the
+// Highland helpers: failed.md 2026-09-18 shows per-step Fermi-Eyges
+// displacement retaining Highland angular variance worsens Bragg valley/PVDR,
+// with retry allowed only for validated step-invariant scattering power.
+// Urban angular sampling is NOT implemented here (MscModel::Urban reserved).
+enum class MscModel { Highland = 0, Urban = 1 };
+
+struct MscStepResult {
+    Direction3F direction;
+    Direction3F displacement_mm;
+};
+
+inline MscStepResult msc_highland_primary_step(
+    const Direction3F& entry_direction, const float sigma_rad,
+    const float u0, const float u1, const float u2,
+    const float u3) noexcept {
+    // Bit-identical to the legacy primary branch: two independent projected
+    // Gaussian angles via Box-Muller with cos (RNG dims 3,4,5,6 at caller).
+    // theta_x, theta_y ~ N(0, sigma^2); radial P ~ theta*exp(-theta^2/2s^2).
+    constexpr float two_pi = 6.2831853071795864769F;
+    const auto v0 = sycl::fmax(u0, 1.0e-12F);
+    const auto v2 = sycl::fmax(u2, 1.0e-12F);
+    const auto theta_x = sigma_rad * sycl::sqrt(-2.0F * sycl::log(v0)) *
+                         sycl::cos(two_pi * u1);
+    const auto theta_y = sigma_rad * sycl::sqrt(-2.0F * sycl::log(v2)) *
+                         sycl::cos(two_pi * u3);
+    const auto transverse_magnitude =
+        sycl::sqrt(theta_x * theta_x + theta_y * theta_y);
+    const auto local_direction_z =
+        sycl::cos(sycl::fmin(transverse_magnitude, 1.5707963F));
+    const auto transverse_scale =
+        transverse_magnitude > 0.0F
+            ? sycl::sin(sycl::fmin(transverse_magnitude, 1.5707963F)) /
+                  transverse_magnitude
+            : 1.0F;
+    const auto rotated = rotate_local_direction(theta_x * transverse_scale,
+                                                theta_y * transverse_scale,
+                                                local_direction_z,
+                                                entry_direction);
+    return MscStepResult{rotated, Direction3F{0.0F, 0.0F, 0.0F}};
+}
+
+inline MscStepResult msc_highland_secondary_step(
+    const Direction3F& entry_direction, const float theta_rms,
+    const float u0, const float u1) noexcept {
+    // Bit-identical to the legacy secondary branch: Rayleigh theta plus
+    // uniform phi (RNG dims 0,1 at caller). Mathematically the same 2-D
+    // Gaussian angular PDF as the primary Box-Muller form, but with a
+    // different RNG dimension allocation; kept separate so highland<->urban
+    // A/B attribution stays clean per path. Displacement is zero
+    // (endpoint scattering); caller advances along the pre-step direction.
+    constexpr float two_pi = 6.2831853071795864769F;
+    const auto v0 = sycl::fmax(u0, 1.0e-10F);
+    const auto theta_scat =
+        theta_rms * sycl::sqrt(-2.0F * sycl::log(v0));
+    const auto phi_scat = two_pi * u1;
+    const auto sin_scat = sycl::sin(theta_scat);
+    const auto cos_scat = sycl::cos(theta_scat);
+    const auto rotated = rotate_local_direction(
+        sin_scat * sycl::cos(phi_scat), sin_scat * sycl::sin(phi_scat),
+        cos_scat, entry_direction);
+    return MscStepResult{rotated, Direction3F{0.0F, 0.0F, 0.0F}};
+}
+
 inline float ion_effective_charge_device(const int atomic_number,
                                           const float energy_MeVu) noexcept {
     if (atomic_number <= 0 || energy_MeVu <= 0.0F) {
@@ -1126,20 +1202,23 @@ inline float urban_cross_section_per_atom_cm2(
             7.0e-3F, 1.0e-2F, 2.0e-2F, 4.0e-2F, 7.0e-2F, 1.0e-1F, 2.0e-1F,
             4.0e-1F, 7.0e-1F, 1.0F, 2.0F, 4.0F, 7.0F, 10.0F, 20.0F};
         // cpositron rows needed here: Zdat index 0 (Z=4), 1 (Z=6), 2 (Z=13)
-        // for H/O interpolation. Full 15x22 tables stay in the reference;
-        // only the accessed rows are carried (H: rows 0,1; O: rows 1,2).
+        // for H/O interpolation. VERBATIM Geant4 11.3.2 values (a previous
+        // revision wrongly carried the Z=26/29/32 rows here; fixed 2026-09-22
+        // by line-against-line check of cpositron[15][22]).
+        // NOTE: positive projectiles only (C12 water path); the celectron
+        // branch for charge<0 is not carried.
         constexpr float cpos_4[22] = {
-            17.97F, 12.95F, 8.628F, 6.065F, 4.849F, 3.222F, 2.275F, 1.820F,
-            1.624F, 1.382F, 1.259F, 1.214F, 1.202F, 1.202F, 1.214F, 1.219F,
-            1.217F, 1.203F, 1.184F, 1.169F, 1.160F, 1.151F};
+            2.589F, 2.044F, 1.658F, 1.446F, 1.347F, 1.217F, 1.144F, 1.110F,
+            1.097F, 1.083F, 1.080F, 1.086F, 1.092F, 1.108F, 1.123F, 1.131F,
+            1.131F, 1.126F, 1.117F, 1.108F, 1.103F, 1.100F};
         constexpr float cpos_6[22] = {
-            24.83F, 17.06F, 10.84F, 7.355F, 5.767F, 3.707F, 2.546F, 1.996F,
-            1.759F, 1.465F, 1.311F, 1.252F, 1.234F, 1.228F, 1.238F, 1.241F,
-            1.237F, 1.222F, 1.201F, 1.184F, 1.174F, 1.159F};
+            3.904F, 2.794F, 2.079F, 1.710F, 1.543F, 1.325F, 1.202F, 1.145F,
+            1.122F, 1.096F, 1.089F, 1.092F, 1.098F, 1.114F, 1.130F, 1.137F,
+            1.138F, 1.132F, 1.122F, 1.113F, 1.108F, 1.102F};
         constexpr float cpos_13[22] = {
-            23.26F, 17.15F, 11.52F, 8.049F, 6.375F, 4.114F, 2.792F, 2.155F,
-            1.880F, 1.535F, 1.353F, 1.281F, 1.258F, 1.247F, 1.254F, 1.256F,
-            1.252F, 1.234F, 1.212F, 1.194F, 1.183F, 1.170F};
+            7.970F, 6.080F, 4.442F, 3.398F, 2.872F, 2.127F, 1.672F, 1.451F,
+            1.357F, 1.246F, 1.194F, 1.179F, 1.178F, 1.188F, 1.201F, 1.205F,
+            1.203F, 1.190F, 1.173F, 1.159F, 1.151F, 1.145F};
         const float* cpos_lo = (iz == 0) ? cpos_4 : cpos_6;
         const float* cpos_hi = (iz == 0) ? cpos_6 : cpos_13;
         int i_t = 21;

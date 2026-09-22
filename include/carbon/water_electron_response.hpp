@@ -88,4 +88,85 @@ struct WaterElectronResponseTable {
     static WaterElectronResponseTable load(const std::filesystem::path&,const std::string&,const std::string&,
                                           bool material_response=false);
 };
+
+// Shared Unified-water delta relocation (Phase E). Used by the legacy
+// electron diagnostic site AND the primary Unified-EM research path so the
+// two cannot drift. Pure functions of explicit inputs (basis vectors
+// included): no RNG inside, no scoring, no transport feedback. Host- and
+// device-callable; unit-tested with synthetic channels (the physics content
+// of a real table is validated separately by its loader pins).
+// Two phases preserve the legacy RNG consumption order exactly (phi/birth
+// are drawn only when packet > 0):
+//   phase 1: draw + packet/unresolved from (u_chan, u_along);
+//   phase 2: basis + birth point + path status + ROIs.
+// ROI classes on the folded pitch: 0 peak (|u|<=0.6), 1 shoulder (<1.2),
+// 2 valley. Path status: 0 contained, 1 escaped/outside, 2 invalid.
+struct WaterDeltaPacket {
+    bool valid{false};
+    double packet_mev{0.0};
+    double unresolved_mev{0.0};
+    WaterElectronDraw draw{};
+};
+inline WaterDeltaPacket sample_water_delta_packet(
+    double deposited_mev, double energy_mevu, double u_chan, double u_along,
+    const WaterElectronChannel* channels, const WaterElectronSample* samples,
+    const std::uint32_t* heads, std::size_t channel_count) noexcept {
+    WaterDeltaPacket out;
+    if (!(deposited_mev > 0.0) || !std::isfinite(deposited_mev)) return out;
+    out.draw = sample_water_electron_response(energy_mevu, u_chan, u_along,
+                                              channels, samples, heads,
+                                              channel_count);
+    if (!out.draw.valid) return out;
+    out.packet_mev = deposited_mev * out.draw.fraction;
+    out.unresolved_mev = deposited_mev * out.draw.unresolved;
+    out.valid = true;
+    return out;
+}
+struct WaterDeltaPlacement {
+    bool valid{false};
+    double point_x{0.0}, point_y{0.0}, point_z{0.0};
+    int path_status{2};
+    int birth_roi{1}, deposit_roi{1};
+};
+inline int water_delta_roi(double folded_u_mm) noexcept {
+    const double a = folded_u_mm < 0 ? -folded_u_mm : folded_u_mm;
+    if (!(a >= 0.0)) return 1;
+    if (a <= 0.6) return 0;
+    if (a <= 1.2) return 1;
+    return 2;
+}
+inline WaterDeltaPlacement place_water_delta_packet(
+    const WaterDeltaPacket& packet, double px, double py, double pz,
+    double dx, double dy, double dz, double step_mm, double exx, double exy,
+    double exz, double eyx, double eyy, double eyz, double u_birth,
+    const WaterElectronPathNode* nodes, std::size_t node_count,
+    const double* prefix_radius, double phantom_len_mm,
+    double pitch_mm) noexcept {
+    WaterDeltaPlacement out;
+    if (!packet.valid) return out;
+    const double birth = u_birth;
+    if (!(birth >= 0.0) || !(birth <= 1.0)) return out;
+    const double bx = px + birth * step_mm * dx;
+    const double by = py + birth * step_mm * dy;
+    const double bz = pz + birth * step_mm * dz;
+    const double p0 = packet.draw.point[0], p1 = packet.draw.point[1],
+                 p2 = packet.draw.point[2];
+    out.point_x = bx + p0 * exx + p1 * eyx + p2 * dx;
+    out.point_y = by + p0 * exy + p1 * eyy + p2 * dy;
+    out.point_z = bz + p0 * exz + p1 * eyz + p2 * dz;
+    const WaterElectronPathStatus status = water_electron_path_in_slab(
+        packet.draw, bz, phantom_len_mm, {exz, eyz, dz}, nodes, node_count,
+        prefix_radius);
+    if (status == WaterElectronPathStatus::invalid) return out;
+    out.path_status = (status == WaterElectronPathStatus::contained) ? 0 : 1;
+    if (pitch_mm > 0.0) {
+        const double bu = bx - pitch_mm * std::floor(bx / pitch_mm + 0.5);
+        const double du = out.point_x -
+            pitch_mm * std::floor(out.point_x / pitch_mm + 0.5);
+        out.birth_roi = water_delta_roi(bu);
+        out.deposit_roi = water_delta_roi(du);
+    }
+    out.valid = true;
+    return out;
+}
 } // namespace carbon

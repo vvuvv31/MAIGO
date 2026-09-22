@@ -1635,3 +1635,62 @@ ROI 计分误差。能区剩余 0.052%/0.077% 的路径清单见
 /mnt/sda/wuwei/minibeam_homologous_c12_20260919/
 /mnt/sda/wuwei/minibeam_primary_c12_ledger_20260919/
 ```
+
+## 38. 单中心 10M EM/full 四向拆分：核分量归属（2026-09-22）
+
+正式模型（Cu FE-tail + 水 FE-tail + 全带电 FE）下，用现成 10M 数据做
+EM/full 拆分，不做新 MCS 调参。GPU EM 与 GPU full 同 seed（202609250，
+配对起点）；TOPAS EM（`topas_7374`）与 TOPAS full（Water_75eV
+`remote_full`）为不同 job（10M 各自，非配对）。绝对 Gy，无拟合归一。
+单 seed，不确定度标为 unknown。
+
+总量：TOPAS 核衰减 −2.29%，GPU −2.81%（GPU 多移出约 0.5pp）。
+
+| 深度 | EM peak | EM valley | EM PVDR | full peak | full valley | full PVDR |
+|---:|---:|---:|---:|---:|---:|---:|
+| 0.88 mm | 1.024 | 0.953 | 1.075 | 1.020 | 0.974 | 1.047 |
+| 19.88 mm | 1.019 | 0.969 | 1.052 | 1.012 | 0.992 | 1.020 |
+| 79.88 mm | 1.005 | 0.987 | 1.019 | 0.996 | 1.000 | 0.996 |
+| 119.88 mm | 1.038 | 1.047 | 0.991 | 0.985 | 1.006 | 0.979 |
+| 123.88 mm | 1.011 | 1.034 | 0.978 | 0.988 | 1.008 | 0.980 |
+
+均为 GPU/TOPAS。full 比 EM 更接近 1：核过程稀释了 EM 对比度误差，而非
+引入新误差。
+
+核分量（full−EM）GPU/TOPAS：peak（衰减主导，负值）约 1.03–1.25（4.88 mm
+处绝对值过小，1.90 不作数）；valley（碎片剂量主导，正值）约 1.12–1.68，
+119.88 mm 为 1.68。GPU valley 碎片剂量系统性高于 TOPAS（约一至七成），量级
+为 valley 总剂量的百分之几，与 full valley 残差同量级。
+
+判断：full valley 的一致部分依赖 GPU 偏高的碎片 valley 剂量，属于误差补偿
+嫌疑，不能用 MCS 继续调。下一步按 §35 口径做分物种（p/d/t/He/C11…）valley
+绝对剂量对照，用 Copper 出口相空间 + 水中输运分别定责；Urban 水模型保持
+research-only，不进入正式配置。
+
+## 39. MCS 目标完成度审计（2026-09-22）
+
+逐项对照证据；未达即记为 open，不按意图折算。
+
+| # | 要求 | 证据 | 状态 |
+|---|---|---|---|
+| 1 | 确认实际 minibeam 路径 | `copper_em` 解析（`src/config.cpp:1430`）与输运均活跃；旧“无 Copper kernel”说法只适用于旧 master，不适用于 `pristine` | 达成 |
+| 2 | Highland 公式干净 | `include/carbon/multiple_scattering.hpp:11,113`，E/A 与 p=A·pu 正确 | 达成 |
+| 3–5 | 主/次级 endpoint Highland | 两处 call site 经统一 `MscStepResult`（`sycl_device_math.inc:178`，`transport_sycl.cpp:7723,11974`）显式位移为零；相关位移只走 FE-tail/Urban-v2 | 达成（兼容模式） |
+| 6 | Highland 步长依赖 | plan2 记录 + Urban s0025 全链（119.88 mm −2.26→+7.67）+ Geant4 自身 slab 0.929 | 达成（现象建模，非消除） |
+| 7 | 不把 0.785 带入 Urban | cuwater 系列 scale 全 1.0（config 75,93 行） | 达成 |
+| 8 | 返回 Δr + u′ 的 API | `MscStepResult{direction, displacement_mm}`，FE-tail/Urban-v2 全路径填充 | 达成 |
+| 9 | 两处统一、可复用于 proton | 主/次级 Highland 已统一；次级 C12 Urban-v2 已实现（research-only，共享水表，RNG 110+，平面记录，步骤计数器；诊断 replay 验证与主路径同征兆，full-chain 流量 ~0 故剂量无影响 2.7e-8） | 达成（research-only；proton 仍 open） |
+| 10 | RNG 维数固定可比 | 主（3,4,5,6）/次级（0,1）Highland 形式 + Urban 专用维（58/59/70…）各自文档化；跨模型 A/B 配对 seed 完成多组 | 达成 |
+| 11A | 步长收敛 | Highland（plan2）+ Urban 0.05/0.025（§38 前文、slab） | 达成 |
+| 11B | hinge 因果分离 | `failed.md:139` 已否决 Highland+hinge；其诊断价值改由 FE-vs-Urban 配对实现（同相关位移、不同角 PDF：§38 前文区间表） | 替代达成 |
+| 11C | 薄水片相空间 | Cu slab（§10–11）+ 水 slab TOPAS 矩阵 + s0025 配对（0.929）+ interval 配对表 | 达成 |
+| 11D | Urban EM-only match | Cu+水 Urban-v2 10M：总量 0.999，深部改善，中部 valley 剩余为双模型共有（非水 PDF 主因） | 部分：match 不完全 |
+| 11E | 全物理核/EM 拆分 | §38 四向拆分（核 valley GPU 高 12–68%，补偿嫌疑） | 达成（拆分）；分物种定责 open |
+| 11F | proton 复用 | 仅 `config/proton_water_qgsp_bic_hp.yaml.template`，无 minibeam 源/参考 | Open |
+| 13 | 重构方案交付 | `MscModel/MscStepResult` + 两处改法 + RNG 文档 + 先 Highland 后 Urban 两阶段（urban.md） | 达成 |
+| 14 | 全物理不用 MCS 无限调 | §38 + §35 口径，不调参 | 达成（纪律项） |
+| FP32/75eV | 精度与材料纪律 | 全部运行 FP32、残差门槛通过；Water_75eV 表（zeff 3.3334），scale 1.0 | 达成 |
+
+结论：EM-only MCS 输运层已完成架构升级与证据闭环（含次级 C12 Urban-v2
+research-only 实现与验证）；剩余 open 为分物种 valley 定责、proton
+minibeam 两项，均不阻塞当前正式配置（FE-tail），Urban 保持 research-only。

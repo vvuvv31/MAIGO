@@ -578,11 +578,23 @@ struct TransportConfig {
     // Research-only table-driven Geant4-11.3.2 Urban path for primary C12 in
     // water (matches the TOPAS water MaxStepSize; NOT the FE max_segment).
     double minibeam_water_primary_urban_max_step_mm{0.05};
+    // Research-only Unified-water delta spatial response. `local` is the
+    // current aggregate local deposition (bit-identical default).
+    // `water_response_v1` redistributes the step loss through the shared
+    // WaterElectronResponse helper; transport (loss/MCS/steps/RNG) is
+    // untouched, only scoring locations change.
+    std::string minibeam_water_delta_response_model{"local"};
+    // Response table for water_response_v1 (WaterElectronResponse schema with
+    // sha pins, same keys as the diagnostic file it replaces here).
+    std::filesystem::path minibeam_water_delta_response_table_file{};
     // Restricted loss-range table for the Urban water couple (same schema as
     // the copper table, plus # zeff / # radlen_mm / # density_g_per_cm3).
     std::filesystem::path minibeam_water_urban_loss_range_file{};
     // Development-only secondary C12 switch. Other fragments remain on the
     // legacy species-dependent Highland path until independently validated.
+    // `urban_v2` routes water-borne secondary C12 through the shared
+    // Geant4-11.3.2 Urban sampler (same Water_75eV loss-range table as the
+    // primary path); research-only, default stays legacy_highland.
     std::string minibeam_water_secondary_c12_mcs_model{"legacy_highland"};
     double minibeam_water_secondary_c12_mcs_max_segment_mm{0.1};
     // Diagnostic-only: route water-borne secondary C12 through Unified EM

@@ -17,6 +17,7 @@
 #include "carbon/multiple_scattering.hpp"
 #include "carbon/rng.hpp"
 #include "carbon/stopping_power.hpp"
+#include "carbon/water_electron_response.hpp"
 
 namespace carbon {
 namespace {
@@ -32,6 +33,11 @@ int failures = 0;
 
 void test_propose_path();
 void test_water_material();
+void test_water_urban_segment_scaling();
+void test_water_urban_low_energy_proposal();
+void test_water_urban_subdivision_robustness();
+void test_water_xsec_table();
+void test_delta_relocation();
 
 void check(bool cond, const char* label, double a = 0.0, double b = 0.0) {
     if (cond) {
@@ -231,6 +237,29 @@ void test_loss_table_and_limiter() {
           r250, 22.314);
     test_propose_path();
     test_water_material();
+    test_water_urban_segment_scaling();
+    test_water_urban_low_energy_proposal();
+    test_water_urban_subdivision_robustness();
+    test_water_xsec_table();
+    test_delta_relocation();
+}
+
+void test_water_xsec_table() {
+    // Prints GPU H/O cross sections + Bragg mfp at fixed energies for
+    // diffing against urban_water_xsec_oracle.py (independent port).
+    // Asserts positivity + H-extrapolation/O-interpolation branch sanity.
+    for (const float eu : {0.1F, 0.2F, 0.5F, 1.0F, 10.0F, 50.0F, 250.0F}) {
+        const float tot = eu * 12.0F;
+        const float sh = urban_cross_section_per_atom_cm2(tot, 6, 12, 1.0F);
+        const float so = urban_cross_section_per_atom_cm2(tot, 6, 12, 8.0F);
+        const float mfp = urban_water_transport_mfp_mm(tot, 6, 12);
+        char lab[192];
+        std::snprintf(lab, sizeof(lab),
+                      "xsec: E/u=%.1f H=%.6e O=%.6e mfp=%.4fmm", double(eu),
+                      double(sh), double(so), double(mfp));
+        check(sh > 0.0F && so > 0.0F && mfp > 0.0F && so > sh, lab, so,
+              sh);
+    }
 }
 
 void test_propose_path() {
@@ -379,6 +408,274 @@ void test_water_material() {
               s.current_range_mm > 100.0F &&
               (s.limit_reason == 1 || s.limit_reason == 2),
           lab, double(s.limit_reason), 1.0);
+}
+
+void test_water_urban_segment_scaling() {
+    // Unit-level pin of the full-chain s0025 finding: fixed-subdivision
+    // Urban-v2 sampling is N-dependent. Compares per-unit-path sampled
+    // angular variance of 1x0.05mm vs 2x0.025mm consecutive segments (second
+    // segment reuses the persistent track state with first=false, exactly as
+    // transport_sycl.cpp does; fresh state + first=true otherwise).
+    // Metric is per-segment E[2(1-cos)] summed over the segments covering
+    // 0.05mm, so no rotation composition is needed. Urban per-segment
+    // variance scales ~(c1+c2*ln(h/X0))^2, hence the subdivided total is
+    // SMALLER; the port has no consecutive-step renormalization. This is a
+    // characterization pin (fast, deterministic), NOT an invariance
+    // assertion: Geant4 Urban is itself step-limit dependent, so 0.05mm must
+    // stay matched to the TOPAS water MaxStepSize.
+    UrbanLossRangeTable host({{0.0, 1.0}}, {{0.0, 1.0}}, {{0.0, 1.0}}, 0.0);
+    try {
+        host = UrbanLossRangeTable::from_csv(
+            "data/urban/c12_water75ev_urban_g4_11_3_2.csv");
+    } catch (...) {
+        check(false, "water scaling: loads table");
+        return;
+    }
+    std::vector<float> e(host.energies_total_mev().begin(),
+                         host.energies_total_mev().end());
+    std::vector<float> r(host.ranges_mm().begin(), host.ranges_mm().end());
+    std::vector<float> d(host.dedx_values().begin(), host.dedx_values().end());
+    UrbanV2LossTable table{e.data(), r.data(), d.data(),
+                           static_cast<int>(e.size())};
+    UrbanV2Material mat{};
+    mat.table = table;
+    mat.zeff = static_cast<float>(host.zeff());
+    mat.radlen_mm = static_cast<float>(host.radlen_mm());
+    mat.projectile_z = 6;
+    mat.projectile_a = 12;
+    mat.mass_mev = 12.0F * 931.49410242F;
+    mat.density_g_per_cm3 = 1.0F;
+    mat.mfp_kind = 1;
+    UrbanV2SafetyCtx box{};
+    box.kind = 1;
+    box.box_x0 = -50.0F;
+    box.box_x1 = 50.0F;
+    box.box_y0 = -50.0F;
+    box.box_y1 = 50.0F;
+    box.box_z0 = 0.0F;
+    box.box_z1 = 250.0F;
+    const Direction3F dir{0.0F, 0.0F, 1.0F};
+    constexpr std::uint64_t kSeed = 777001ULL;
+    constexpr int kSamples = 100000;
+    double sum_single = 0.0, sum_pair = 0.0;
+    long n_single = 0, n_pair = 0;
+    for (int i = 0; i < kSamples; ++i) {
+        const auto h = static_cast<std::uint64_t>(i);
+        UrbanV2TrackState st{};
+        const auto s = urban_v2_propose_and_sample(
+            dir, 3000.0F, 0.05F, 0.05F, 0.0F, 0.0F, 40.0F, 0.0F, 0.0F, 1.0F,
+            box, true, st, mat, 1.0F, kSeed, h, 0ULL, 70U);
+        if (s.proposal_valid) {
+            sum_single += 2.0 * (1.0 - double(s.direction.z));
+            ++n_single;
+        }
+        UrbanV2TrackState st2{};
+        const auto a = urban_v2_propose_and_sample(
+            dir, 3000.0F, 0.025F, 0.025F, 0.0F, 0.0F, 40.0F, 0.0F, 0.0F, 1.0F,
+            box, true, st2, mat, 1.0F, kSeed, h, 0ULL, 70U);
+        const auto b = urban_v2_propose_and_sample(
+            a.direction, 3000.0F, 0.025F, 0.025F, 0.0F, 0.0F, 40.0F,
+            a.direction.x, a.direction.y, a.direction.z, box, false, st2, mat,
+            1.0F, kSeed, h, 1ULL, 70U);
+        if (a.proposal_valid && b.proposal_valid) {
+            // Per-segment deflections about their own entry axes.
+            const double t1 = 2.0 * (1.0 - double(a.direction.z));
+            const double cosb =
+                double(a.direction.x * b.direction.x +
+                       a.direction.y * b.direction.y +
+                       a.direction.z * b.direction.z);
+            sum_pair += t1 + 2.0 * (1.0 - cosb);
+            ++n_pair;
+        }
+    }
+    const double m1 = sum_single / double(n_single);
+    const double m2 = sum_pair / double(n_pair);
+    const double ratio = m2 / m1;
+    std::printf("  water scaling: E[th2] 1x0.05=%.6e 2x0.025=%.6e ratio=%.4f "
+                "(n=%ld/%d)\n",
+                m1, m2, ratio, n_pair, kSamples);
+    check(n_single == kSamples && n_pair == kSamples,
+          "water scaling: all proposals valid", double(n_pair),
+          double(kSamples));
+    // Measured 0.284 on 2026-09-22 (FP32, deterministic streams): far below
+    // the Highland-like ~0.94 because Urban theta0 carries the
+    // (coeffth1 + coeffth2*ln(t/X0)) correction, which is steep at
+    // t/X0 ~ 1e-4. Band pins the behavior for regression; the exact value
+    // still awaits a Geant4 two-step-limit reference (TOPAS MaxStepSize
+    // 0.05 vs 0.025), so 0.05mm must stay matched to the TOPAS setting.
+    check(ratio > 0.20 && ratio < 0.38, "water scaling: subdivided total < whole",
+          ratio, 0.284);
+}
+
+void test_water_urban_low_energy_proposal() {
+    // Diagnostic for the stalled 1.6M urban_v2 water replay: the entrance
+    // file contains primaries down to 0.047 MeV total (table floor 0.12).
+    // Reports proposal validity and final geom path at/near/below the floor.
+    // A zero (or denormal-stalling) final path with valid=true would spin
+    // the transport subdivision loop forever, since it advances traversed_mm
+    // by final_geom_path_mm with no progress guard.
+    UrbanLossRangeTable host({{0.0, 1.0}}, {{0.0, 1.0}}, {{0.0, 1.0}}, 0.0);
+    try {
+        host = UrbanLossRangeTable::from_csv(
+            "data/urban/c12_water75ev_urban_g4_11_3_2.csv");
+    } catch (...) {
+        check(false, "water lowE: loads table");
+        return;
+    }
+    std::vector<float> e(host.energies_total_mev().begin(),
+                         host.energies_total_mev().end());
+    std::vector<float> r(host.ranges_mm().begin(), host.ranges_mm().end());
+    std::vector<float> d(host.dedx_values().begin(), host.dedx_values().end());
+    UrbanV2LossTable table{e.data(), r.data(), d.data(),
+                           static_cast<int>(e.size())};
+    UrbanV2Material mat{};
+    mat.table = table;
+    mat.zeff = static_cast<float>(host.zeff());
+    mat.radlen_mm = static_cast<float>(host.radlen_mm());
+    mat.projectile_z = 6;
+    mat.projectile_a = 12;
+    mat.mass_mev = 12.0F * 931.49410242F;
+    mat.density_g_per_cm3 = 1.0F;
+    mat.mfp_kind = 1;
+    UrbanV2SafetyCtx box{};
+    box.kind = 1;
+    box.box_x0 = -50.0F;
+    box.box_x1 = 50.0F;
+    box.box_y0 = -50.0F;
+    box.box_y1 = 50.0F;
+    box.box_z0 = 0.0F;
+    box.box_z1 = 250.0F;
+    const Direction3F dir{0.0F, 0.0F, 1.0F};
+    for (const float epre : {0.05F, 0.1F, 1.2F, 12.0F}) {
+        UrbanV2TrackState st{};
+        const auto s = urban_v2_propose_and_sample(
+            dir, epre, 0.05F, 0.05F, 0.0F, 0.0F, 40.0F, 0.0F, 0.0F, 1.0F,
+            box, true, st, mat, 1.0F, 999ULL, 7ULL, 0ULL, 70U);
+        std::printf("  water lowE: epre=%.3f valid=%d reason=%d g=%.6g t=%.6g\n",
+                    double(epre), int(s.proposal_valid), s.limit_reason,
+                    double(s.final_geom_path_mm), double(s.final_true_path_mm));
+    }
+    check(true, "water lowE: proposals reported");
+}
+
+void test_water_urban_subdivision_robustness() {
+    // Host mirror of the transport water-urban subdivision loop: cover a
+    // 0.1 mm transport step by repeated propose_and_sample calls with a
+    // persistent track state (first=true only on segment 0), advancing by
+    // final_geom_path_mm exactly as transport_sycl.cpp does. Reports the
+    // segment count and flags zero/negative progress, which would spin the
+    // device loop forever (no progress guard there). Sweep energies from the
+    // replay-entrance floor (0.05 MeV total) to 3000 MeV.
+    UrbanLossRangeTable host({{0.0, 1.0}}, {{0.0, 1.0}}, {{0.0, 1.0}}, 0.0);
+    try {
+        host = UrbanLossRangeTable::from_csv(
+            "data/urban/c12_water75ev_urban_g4_11_3_2.csv");
+    } catch (...) {
+        check(false, "water subdiv: loads table");
+        return;
+    }
+    std::vector<float> e(host.energies_total_mev().begin(),
+                         host.energies_total_mev().end());
+    std::vector<float> r(host.ranges_mm().begin(), host.ranges_mm().end());
+    std::vector<float> d(host.dedx_values().begin(), host.dedx_values().end());
+    UrbanV2LossTable table{e.data(), r.data(), d.data(),
+                           static_cast<int>(e.size())};
+    UrbanV2Material mat{};
+    mat.table = table;
+    mat.zeff = static_cast<float>(host.zeff());
+    mat.radlen_mm = static_cast<float>(host.radlen_mm());
+    mat.projectile_z = 6;
+    mat.projectile_a = 12;
+    mat.mass_mev = 12.0F * 931.49410242F;
+    mat.density_g_per_cm3 = 1.0F;
+    mat.mfp_kind = 1;
+    UrbanV2SafetyCtx box{};
+    box.kind = 1;
+    box.box_x0 = -50.0F;
+    box.box_x1 = 50.0F;
+    box.box_y0 = -50.0F;
+    box.box_y1 = 50.0F;
+    box.box_z0 = 0.0F;
+    box.box_z1 = 250.0F;
+    const Direction3F dir{0.0F, 0.0F, 1.0F};
+    bool all_ok = true;
+    for (const float epre : {0.05F, 0.1F, 1.0F, 12.0F, 120.0F, 3000.0F}) {
+        int worst_segs = 0, zero_runs = 0;
+        for (int h = 0; h < 200; ++h) {
+            UrbanV2TrackState st{};
+            Direction3F sd = dir;
+            float traversed = 0.0F;
+            int segs = 0;
+            bool stuck = false;
+            while (traversed < 0.1F && segs < 100000) {
+                const float segmm =
+                    0.05F < 0.1F - traversed ? 0.05F : 0.1F - traversed;
+                const auto s = urban_v2_propose_and_sample(
+                    sd, epre, 0.05F, segmm, 0.0F, 0.0F, 40.0F, sd.x, sd.y,
+                    sd.z, box, segs == 0, st, mat, 1.0F, 555ULL,
+                    std::uint64_t(h), std::uint64_t(segs), 70U);
+                if (!(s.final_geom_path_mm > 0.0F)) {
+                    stuck = true;
+                    break;
+                }
+                traversed += s.final_geom_path_mm;
+                sd = s.direction;
+                ++segs;
+            }
+            worst_segs = segs > worst_segs ? segs : worst_segs;
+            if (stuck || segs >= 100000) {
+                ++zero_runs;
+                all_ok = false;
+            }
+        }
+        std::printf("  water subdiv: epre=%.3f worst_segs=%d stuck=%d/200\n",
+                    double(epre), worst_segs, zero_runs);
+    }
+    check(all_ok, "water subdiv: always progresses");
+}
+
+void test_delta_relocation() {
+    // Shared-helper logic with SYNTHETIC channels (mechanics only, never
+    // physics): one channel, fraction 0.6, unresolved 0.1, single sample at
+    // local point (0.05,0,0.02), trivial path node at origin.
+    carbon::WaterElectronChannel ch{};
+    ch.low = 0.0;
+    ch.high = 400.0;
+    ch.fraction = 0.6;
+    ch.unresolved = 0.1;
+    ch.offset = 0;
+    ch.count = 1;
+    carbon::WaterElectronSample sm{};
+    sm.cdf = 1.0;
+    sm.pre = {0.0, 0.0, 0.0};
+    sm.post = {0.05, 0.0, 0.02};
+    std::uint32_t head = 0;
+    carbon::WaterElectronPathNode nd{};
+    nd.previous = carbon::kWaterPathNone;
+    nd.point = {0.0, 0.0, 0.0};
+    const auto pkt = carbon::sample_water_delta_packet(
+        10.0, 250.0, 0.3, 0.7, &ch, &sm, &head, 1);
+    check(pkt.valid && std::fabs(pkt.packet_mev - 6.0) < 1e-12 &&
+              std::fabs(pkt.unresolved_mev - 1.0) < 1e-12,
+          "relocate: phase-1 partition 6.0/1.0 of 10.0", pkt.packet_mev, 6.0);
+    // Orthonormal basis for +z: ex=(1,0,0), ey=(0,1,0).
+    const auto pl = carbon::place_water_delta_packet(
+        pkt, 0.0, 0.0, 40.0, 0.0, 0.0, 1.0, 0.05, 1, 0, 0, 0, 1, 0, 0.5, &nd,
+        1, nullptr, 250.0, 3.6);
+    check(pl.valid && pl.path_status == 0, "relocate: contained placement");
+    // draw.point = pre+0.7*(post-pre) = (0.035,0,0.014); birth=(0,0,40.025).
+    check(std::fabs(pl.point_x - 0.035) < 1e-12 &&
+              std::fabs(pl.point_z - 40.039) < 1e-12,
+          "relocate: world point", pl.point_x, 0.035);
+    check(pl.birth_roi == 0 && pl.deposit_roi == 0, "relocate: peak->peak");
+    // Invalid draw propagates without placement.
+    const auto bad = carbon::sample_water_delta_packet(
+        10.0, 5000.0, 0.3, 0.7, &ch, &sm, &head, 1);
+    check(!bad.valid, "relocate: out-of-domain energy rejected");
+    // Zero deposit refuses immediately.
+    const auto zero = carbon::sample_water_delta_packet(
+        0.0, 250.0, 0.3, 0.7, &ch, &sm, &head, 1);
+    check(!zero.valid, "relocate: zero deposit refused");
 }
 
 int run_urban_v2_helper_tests() {

@@ -812,6 +812,7 @@ void TransportConfig::validate() const {
         }
     }
     if (water_electron_response_diagnostic_file.empty() &&
+        minibeam_water_delta_response_table_file.empty() &&
         (!water_electron_response_sha256.empty() || !water_electron_response_metadata_sha256.empty()))
         throw std::invalid_argument("Water electron pins without data");
     if(water_electron_nuclear_diagnostic && (water_electron_response_diagnostic_file.empty() ||
@@ -1591,11 +1592,44 @@ void TransportConfig::validate() const {
                     "minibeam water urban_v2 requires "
                     "minibeam_water_urban_loss_range_file");
             }
+            if (minibeam_water_delta_response_model != "local" &&
+                minibeam_water_delta_response_model != "water_response_v1") {
+                throw std::invalid_argument(
+                    "minibeam_water_delta_response_model must be "
+                    "local or water_response_v1");
+            }
+            if (minibeam_water_delta_response_model == "water_response_v1") {
+                // Research-only Unified-water spatial response. Every
+                // condition below is required; production/default promotion
+                // is forbidden by construction here.
+                if (run_mode != RunMode::research ||
+                    em_model != "g4_material_joint_v1" ||
+                    primary_atomic_number != 6 || primary_mass_number != 12 ||
+                    water_density_g_per_cm3 != 1.0 || !enable_voxel_scoring ||
+                    enable_let_scoring || enable_inelastic ||
+                    minibeam_copper_enable_nuclear_attenuation ||
+                    minibeam_water_delta_response_table_file.empty() ||
+                    water_electron_response_sha256.size() != 64 ||
+                    water_electron_response_metadata_sha256.size() != 64) {
+                    throw std::invalid_argument(
+                        "water_response_v1 requires research run_mode, "
+                        "g4_material_joint_v1, C12, unit water density, voxel "
+                        "scoring, LET off, nuclear off, response table file "
+                        "and 64-char sha pins");
+                }
+            }
             if (minibeam_water_secondary_c12_mcs_model != "legacy_highland" &&
-                minibeam_water_secondary_c12_mcs_model != "fermi_eyges_tail") {
+                minibeam_water_secondary_c12_mcs_model != "fermi_eyges_tail" &&
+                minibeam_water_secondary_c12_mcs_model != "urban_v2") {
                 throw std::invalid_argument(
                     "minibeam_water_secondary_c12_mcs_model must be "
-                    "legacy_highland or fermi_eyges_tail");
+                    "legacy_highland, fermi_eyges_tail or urban_v2");
+            }
+            if (minibeam_water_secondary_c12_mcs_model == "urban_v2" &&
+                minibeam_water_urban_loss_range_file.empty()) {
+                throw std::invalid_argument(
+                    "minibeam water secondary urban_v2 requires "
+                    "minibeam_water_urban_loss_range_file");
             }
             if (!(minibeam_water_secondary_c12_mcs_max_segment_mm > 0.0) ||
                 !std::isfinite(
@@ -3078,6 +3112,19 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.minibeam_water_urban_loss_range_file = parse_path(
         values, "minibeam_water_urban_loss_range_file",
         config.minibeam_water_urban_loss_range_file);
+    if (const auto iterator = values.find(
+            "minibeam_water_delta_response_model"); iterator != values.end()) {
+        config.minibeam_water_delta_response_model = iterator->second;
+        std::transform(config.minibeam_water_delta_response_model.begin(),
+                       config.minibeam_water_delta_response_model.end(),
+                       config.minibeam_water_delta_response_model.begin(),
+                       [](unsigned char value) {
+                           return static_cast<char>(std::tolower(value));
+                       });
+    }
+    config.minibeam_water_delta_response_table_file = parse_path(
+        values, "minibeam_water_delta_response_table_file",
+        config.minibeam_water_delta_response_table_file);
     if (const auto iterator = values.find(
             "minibeam_water_secondary_c12_mcs_model"); iterator != values.end()) {
         config.minibeam_water_secondary_c12_mcs_model = iterator->second;
