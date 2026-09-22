@@ -1,0 +1,47 @@
+ANCHOR=0f2c0ca6bd25030a20c67154e9aa3c5920d2fb5e
+HEAD=0f2c0ca6bd25030a20c67154e9aa3c5920d2fb5e
+ M benchmark/carbonminibeam/test_urban_localize.cpp
+ M benchmark/carbonminibeam/test_urban_v2_helpers.cpp
+ M include/carbon/rng.hpp
+ M src/detail/sycl_device_math.inc
+ M src/transport_sycl.cpp
+---worktree diff files:
+benchmark/carbonminibeam/test_urban_localize.cpp
+benchmark/carbonminibeam/test_urban_v2_helpers.cpp
+include/carbon/rng.hpp
+src/detail/sycl_device_math.inc
+src/transport_sycl.cpp
+---binary:
+5aea9b1c21b5d5ac4fc9750a6be8970cfec7c5c310787279edcc40de83b775b8  build/oneapi-nvidia-minibeam/carbon_mc
+4242d6c89f4bd8b74b1ca56cfa73f5a3d35559d2c5de7f3a531c16dded899c1d  build/oneapi-nvidia-minibeam/urban_localize
+83f4a1501a7c1b1a41467764bbf27733276fe64ab7604b13c8691203ace4578d  build/oneapi-nvidia-minibeam/urban_v2_helpers
+---evidence files:
+eb0caa9e12537239d628de20778d71812c685dd54164f6f67139f41eaa57793f  evidence/urban_after_0f2c0ca_20260922/g4_conv.csv
+ff3a4c4f63702849c6be38dfa063ab9950f427627cbd3c83b8f25444b2eab363  evidence/urban_after_0f2c0ca_20260922/g4_conv_oracle.cc
+01baa93aac5ae6b101772a6927edf4d783a9b0c8bbdacf0e6cd09442ad104487  evidence/urban_after_0f2c0ca_20260922/acceptance.yaml
+---gpu:
+NVIDIA GeForce RTX 2080 Ti, 560.35.05
+---compiler:
+CMAKE_CXX_COMPILER:STRING=/home/wuwei/sycl_workspace/llvm/build/install/bin/icpx
+=== RUNS ===
+replay_C: 1622795 histories seed 202609250 -> planes/replay_primary_planes_C.csv (1.03GB) EXIT 0, all-zero quality
+cuwater_C_s1/s2/s3: 10M x3 seeds 202609251/2/3 -> out/cuwater_C_sN/dose.raw EXIT 0 x3, all-zero
+full_active_C: 10M seed 202609250 -> out/full_active_C/dose.raw EXIT 0, 2.3G urban segs, all-zero (nuclear effectively off per ledger)
+cuexit_C: 1284137 histories (histories flag not applied) -> cuexit_planes.csv EXIT 0, all-zero
+mini smokes: EXIT 0, all-zero (C2/C4 binaries)
+fault_inject: EXIT 1, fatal=2000 (1/history, stopped), seg1024 reason1, no dose/planes left
+CT rt07575: EXIT 0, sums identical 5490.062012 maxabs 1.2e-8
+=== G4 ORACLES ===
+g4_conv.csv: 169 rows (8E x 19t + 0.5/0.9/1.0/1.5/3.0 R probes) sha eb0caa9e
+cu10 slab: 10mm Cu 60k events maxstep 0.25 exitN=60000
+=== SCRIPTS (CLI+hash+JSON) ===
+evidence/urban_after_0f2c0ca_20260922/C6_verdict.md
+evidence/urban_after_0f2c0ca_20260922/cu_slab_gate.json
+evidence/urban_after_0f2c0ca_20260922/cu_slab_gate.py
+evidence/urban_after_0f2c0ca_20260922/dose_gate_C.json
+evidence/urban_after_0f2c0ca_20260922/dose_gate.py
+evidence/urban_after_0f2c0ca_20260922/replay_gate_C.json
+evidence/urban_after_0f2c0ca_20260922/replay_gate.py
+evidence/urban_after_0f2c0ca_20260922/replay_intervals_C.py
+evidence/urban_after_0f2c0ca_20260922/rng_audit.md
+evidence/urban_after_0f2c0ca_20260922/transport_contract.md

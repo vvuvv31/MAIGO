@@ -1,0 +1,11 @@
+gpu n=1284137 topas n=30895
+gpu: Emean=2582.5 Erms=691.1 th-rms=16.860 q999=107.45 x-rms=3.711
+   peakfrac=0.2304 valleyfrac=0.022066
+topas: Emean=2636.1 Erms=644.6 th-rms=14.845 q999=92.95 x-rms=9.468
+   peakfrac=0.1005 valleyfrac=0.000000
+=== central slit |x|<0.25mm ===
+gpu: n=295856 Emean=2905.0 Erms=319.0 th-rms=7.389 q999=68.72
+topas: n=3106 Emean=2790.4 Erms=482.7 th-rms=10.175 q999=66.26
+=== full array, normalized x profiles (0.5mm bins, |x|<10) ===
+gpu 0.0051 0.0070 0.0236 0.1728 0.1730 0.0238 0.0070 0.0052
+topas 0.0000 0.0000 0.0013 0.0973 0.0975 0.0007 0.0000 0.0000

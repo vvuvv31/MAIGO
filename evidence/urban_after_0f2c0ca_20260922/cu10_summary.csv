@@ -1,0 +1,7 @@
+# slab_mm=10.0000 maxstep_mm=0.2500 E_MeV_u=250.00
+# events,exitN,exitFrac
+60000,60000,1.000000
+# meanExitE_MeV,rmsExitE,varThx_mrad2,varThy_mrad2,varX_mm2,covXThx
+2055.008987,6.157536,2.404563e+02,2.386790e+02,6.414883e-03,1.034792e+00
+# steps,meanStep_mm,rmsStep_mm,meanPreE,meanPostE
+2460002,2.439272e-01,3.840814e-02,2544.9272,2521.8787

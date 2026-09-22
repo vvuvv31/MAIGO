@@ -1,0 +1,42 @@
+# Frozen acceptance gates for carbon EM-only (research thresholds, NOT clinical).
+# Source: task prompt §7.3 (engineering study starting points), frozen here
+# BEFORE the C-round comparisons. Do not widen after seeing results.
+# All relative errors are |GPU-REF|/|REF| (or stated absolute where the
+# reference is near zero). Uncertainties: batch/cluster SE on both sides;
+# equivalence requires the point estimate within the gate (CI support
+# reported, "no significant difference" alone does not pass).
+
+version: 1
+frozen_utc: "2026-09-23T00:00:00Z"
+
+carbon_em_only_dose: # single central spot, 250 MeV/u, 10M histories/seed
+  seeds_required: 3
+  total_deposit_rel: 0.005      # same-aperture integrated dose
+  peak_mean_rel: 0.02           # central-spot peak row average
+  valley_mean_rel: 0.03         # valley row average (with abs floor below)
+  valley_abs_floor_Gy_per_history: 1.0e-12  # near-zero valleys: abs gate
+  pvdr_rel: 0.03
+  fwhm_rel: 0.05                # resolvable by the 0.1 mm grid
+  r80_abs_mm: 0.5               # resolvable by the 0.25 mm depth grid
+  depths_mm: [20, 40, 60, 80, 100, 120]
+
+conditional_phase_space: # water replay, same entrance histories both sides
+  seeds_batches: 8              # history-chunk batches for SE (histories iid)
+  angvar_rel: 0.05              # E[th^2]-type angular moment per interval
+  disvar_rel: 0.05              # transverse second moment per interval
+  q999_rel: 0.05                # 99.9% space-angle quantile
+  tail_prob_abs: 0.002          # P(th > 100 mrad) absolute agreement
+  survival_rel: 0.01            # plane-to-plane survival fraction
+  intervals_mm: [[40, 60], [60, 80], [80, 100], [100, 120]]
+
+msc_transport_contract: # unit gates (host + GPU probe)
+  g_rel: 5.0e-7                 # vs executed G4 triple / long double
+  delta_smallt_rel: 1.0e-4
+  range_direct_envelope_factor: 4.0   # ulp(t) units, host+device libm spread
+  fallback_rmax_rel: 0.25
+  guard_trips: 0                # finalize-class faults in smoke
+  fatal: 0
+
+rng_domain:
+  legacy_bit_identical: true    # helpers suite pins legacy streams
+  fatal: 0

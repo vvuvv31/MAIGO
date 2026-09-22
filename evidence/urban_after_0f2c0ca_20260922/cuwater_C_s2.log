@@ -1,0 +1,79 @@
+[integrity-checks] DISABLED: file SHA256 content checks and provenance hashing are skipped
+[plan-shard] 1/1 config="/tmp/opencode/cuwater_C_s2.yaml"
+Primary ion: Z=6 A=12; rest mass=11177.9 MeV (A * nucleon mass)
+SYCL device: NVIDIA GeForce RTX 2080 Ti | NVIDIA Corporation | backend cuda | driver CUDA 12.6 | fp64=yes atomic64=yes
+Random seed: 202609252
+TPS source: /mnt/sdb/wuwei/MAIGO_pristine/benchmark/carbonminibeam/spots_single_center_e250_10m.csv
+  spots: 1/1 active; total histories: 10000000; total MU: 1e+07
+  beam/couch/collimator angle: 180/0/0 deg; SAD: 450 mm; patient: HFS; coordinates: iec61217; weight: histories
+  PBS virtual magnets: X=6228.28 mm Y=7007.64 mm; source plane D=450 mm
+  batched SYCL launch: 1 TPS spots, 10000000 histories
+[schneider-bundle] v2.1 bundle verified: 14 projectiles, 182+13 domains, 5 file hashes disabled
+[em-performance] material_cache=1 step_cache=1 local_audit=0 exact_index=1
+[physics-cache] unified_em=miss nodes=25872175
+[delta-moments] condensed_partition_v1; aggregate Gamma; no delta clock; nodes=25872175 SHA256=c551bc52fa30ff7e3ea229c8b89792e8ecd2b0fb12f18fcad50d1c6f206bc7cc
+[unified-em] all 18 charged ions; water + Schneider density nodes; native particle step parameters plus 1% combined mean-loss guard; local aggregate delta deposition; density cut-onset/patient accuracy validation pending
+[stopping-config] primary_midpoint=0 secondary_exact_faces=1 secondary_ion_section_file="" sha256=
+[minibeam-copper] loss-range nodes=4001 max-inverse-residual-MeV=4.49265
+[minibeam-copper] stopping=4001 inelastic-rate=400 elastic-events=61097 INCLXX-events/products=66612/1282853
+[minibeam-water] urban loss-range nodes=4001 zeff=3.3334 radlen_mm=360.829
+[physics-cache] schneider hits=0 misses=4
+[history-chunk-size] backend default=34816
+[ion-mcs] model=fermi_eyges species=all_charged parameters=species_water unselected_species=highland max_segment_mm=0.1
+[progress] primary batches completed: 10000000/10000000 histories (288 launches)
+[secondary-schedule] group=0; particle state and RNG identities preserved
+[minibeam-water] urban segments total=3105943569
+[minibeam-water] urban subdiv cap trips=0
+[minibeam-water] urban fatal proposals=0
+[minibeam-water] urban numeric-guard trips=0 subulp-drops=0
+URBAN_RUN_QUALITY {"fatal":0,"cap":0,"guard":0,"subulp":0,"first_failure_claim":0,"first_failure_history":0,"first_failure_outer_step":0,"first_failure_segment":0,"first_failure_reason":0}
+[minibeam-water] delta response steps=0 input_MeV=0 residual_MeV=0 relocated_MeV=0 escaped_MeV=0 invalid=0 delta_sum_MeV=0 loss_sum_MeV=0
+[minibeam-water] delta ROI rows birth->dep: 0/0/0 | 0/0/0 | 0/0/0
+[unified-em-audit] 0 692518953 0 0 0 3073315480635860 241198660785168 0
+Run mode: research
+Quality status: non_production
+Quality report: "out/cuwater_C_s2/quality_report.json"
+Backend: sycl-cuda+straggling+espread+spot-batch+tps-source+minibeam-copper+multiple-scattering+fp32-dose+voxel-scoring+scorer-decoupled
+Histories: 10000000
+Initial energy: 0 MeV/u = 0 MeV per primary ion
+Steps: 692518953
+Elapsed: 152.95086 s
+Throughput: 65380.478 histories/s
+Kernel time: primary=146.62449 s secondary=0 s neutral=0 s charged-after-neutral=0 s
+Energy balance error: 1.6073845e-05
+Nuclear interactions: 0
+Secondary elastic interactions: 0
+Primary elastic interactions: 0 (local=0 MeV, queued charged=0 MeV, queued neutral=0 MeV, overflow=0, overflow energy=0 MeV)
+Minibeam incident/direct/Copper-touched/Copper-nuclear/water-primary: 10000000/746509/9253491/0/1283171
+Minibeam beamline removed energy: 2.668586e+10 MeV
+Minibeam Copper products generated/charged-survivor/neutral-survivor: 0/0/0
+Minibeam Copper survivor charged/neutral energy: 0/0 MeV
+Minibeam fragment-Cu cascade reactions/hits/misses/charged-products/queue-overflow: 0/0/0/0/0
+Minibeam fragment-Cu lookup misses projectile/target/below/above/gap/empty: 0/0/0/0/0/0
+Minibeam fragment-Cu lookup misses by C/B/Be/Li/He/p/d/t/other: 0/0/0/0/0/0/0/0/0
+Minibeam fragment-Cu generations interactions/hits/misses: g1=0/0/0 g2=0/0/0 g3=0/0/0
+Minibeam fragment-Cu lookup misses by 25 MeV/u bin: 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+Minibeam fragment-Cu replay actual/selected/output/selection-|dE|/closure-|dE|: 0/0/0/0/0 MeV
+Minibeam fragment-Cu mass-energy-|dE|/baryon-mismatch: 0/0
+Minibeam ignored next-Cu-reaction optical depth by C/B/Be/Li/He/p/d/t/other: 0/0/0/0/0/0/0/0/0
+Minibeam terminal Copper tracks by C/B/Be/Li/He/p/d/t/other: 0/0/0/0/0/0/0/0/0
+Minibeam ignored next-Cu-reaction probability sum by C/B/Be/Li/He/p/d/t/other: 0/0/0/0/0/0/0/0/0
+Minibeam water entrance primary energy mean/std: 2583.1125/690.6348 MeV
+Minibeam water entrance x mean/std: 0/0 mm
+Minibeam water entrance y mean/std: 0/0 mm
+Minibeam water entrance dir-x mean/std: 0/0
+Minibeam water entrance dir-y mean/std: 0/0
+Minibeam water entrance primary ion by slit: 0/0/0/0/0/0/0/0/0/0/0/0/0/0/0
+Minibeam collimator entrance primary ion by slit: 0/0/0/0/0/0/0/0/0/0/0/0/0/0/0
+Minibeam direct-air primary ion by slit: 0/0/0/0/0/0/0/0/0/0/0/0/0/0/0
+Minibeam water entrance direct/touched primary energy mean: 2992.3965/2013.789 MeV
+Minibeam Copper-touched primary energy histogram (200 MeV bins): 5298/10574/14924/18500/21790/25316/28248/31020/34460/37831/42090/266611
+Minibeam Copper charged survivors by species: C=0/0MeV B=0/0MeV Be=0/0MeV Li=0/0MeV He=0/0MeV p=0/0MeV d=0/0MeV t=0/0MeV other=0/0MeV
+Minibeam water-entrance d energy histogram (50 MeV bins): 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+Minibeam water-entrance t energy histogram (50 MeV bins): 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+Minibeam water-entrance He energy histogram (50 MeV bins): 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+Untracked nuclear energy: 0 MeV
+MeV scorer output: 
+Voxel MeV scorer output: 
+Voxel dose MHD (Gy): out/cuwater_C_s2/dose.mhd
+[plan-shard-done] 1/1 config="/tmp/opencode/cuwater_C_s2.yaml" histories=10000000 quality=non_production

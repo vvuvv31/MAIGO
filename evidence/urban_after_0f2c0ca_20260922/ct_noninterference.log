@@ -1,0 +1,64 @@
+[integrity-checks] DISABLED: file SHA256 content checks and provenance hashing are skipped
+[material-indexing] mode: schneider-25
+[plan-shard] 1/1 config="config/rt07575_unified_em_production.yaml"
+Primary ion: Z=6 A=12; rest mass=11177.9 MeV (A * nucleon mass)
+SYCL device: NVIDIA GeForce RTX 2080 Ti | NVIDIA Corporation | backend cuda | driver CUDA 12.6 | fp64=yes atomic64=yes
+Random seed: 9000000000
+Patient CT (fixed DICOM LPS): DimSize=505x35x417 spacing=0.5x2x0.5 mm origin=(-126.25,-35,0) mm
+TPS source: /mnt/sda/wuwei/topas10x_threecase_20260905_r2/RT07575/shard_01/spots.csv
+  spots: 853/853 active; total histories: 6481909; total MU: 6.48191e+06
+  beam/couch/collimator angle: 0/0/0 deg; SAD: 450 mm; patient: HFS; coordinates: dicom_lps; weight: histories (+X left, +Y posterior, +Z superior; CT fixed)
+  PBS virtual magnets: X=6227.8 mm Y=7008.6 mm; source plane D=450 mm; beam model /mnt/sdb/wuwei/MAIGO/benchmark/topas10x/RT07575_pbs_s1/beam_model.csv
+  TOPAS patient placement: RotZ=90 deg then Trans=(-42.8515, -12.7636, 1.3617) mm; tps_90 packing ct_axis_min=-104.25 mm
+  batched SYCL launch: 853 TPS spots, 6481909 histories
+[schneider-bundle] v2.1 bundle verified: 14 projectiles, 182+13 domains, 5 file hashes disabled
+[em-performance] material_cache=1 step_cache=1 local_audit=0 exact_index=1
+[physics-cache] unified_em=miss nodes=25872175
+[delta-moments] condensed_partition_v1; aggregate Gamma; no delta clock; nodes=25872175 SHA256=c551bc52fa30ff7e3ea229c8b89792e8ecd2b0fb12f18fcad50d1c6f206bc7cc
+[unified-em] all 18 charged ions; water + Schneider density nodes; native particle step parameters plus 1% combined mean-loss guard; local aggregate delta deposition; density cut-onset/patient accuracy validation pending
+[stopping-config] primary_midpoint=1 secondary_exact_faces=1 secondary_ion_section_file="data/schneider/schneider_ion_section_stopping_v1.bin" sha256=ef87ad19bd0b0552d846a6c4e23eb635746e375432a40f40fb79b202235dec20
+[schneider-primary-xs] mode=primary-c12-masked-binary-v3 (no CSV)
+[schneider-ion-stopping] mode=section-ion-v1 sections=25 species=18 energies=60002 source="data/schneider/schneider_ion_section_stopping_v1.bin"
+[schneider-stopping-power] mode=exact-schneider-v1
+  sections=25
+  energies=4302
+  bytes=430200
+  E_min=0.01 MeV/u
+  E_max=430.11 MeV/u
+  inv_dE=10
+  source="/mnt/sdb/wuwei/MAIGO/data/schneider/schneider_stopping_v1.bin"
+  source_sha256=9786dba071f61e660fcc5940a844e8109c4e480ccb603d7929d2fcfaae152c2f
+[physics-cache] schneider hits=0 misses=6
+[history-chunk-size] backend default=34816
+[progress] primary batches completed: 6481909/6481909 histories (187 launches)
+[secondary-schedule] group=1; particle state and RNG identities preserved
+[segmented-secondary] step_limit=16 tail_threshold=8192 state_bytes=208 capacity=18675734
+[segmented-secondary] rounds=39 tail_rounds=1 tail_s=0.0125313 kernel_s=20.6494 compaction_s=0.0370295 begin=0 end=18675734
+[progress] secondary batch completed: [0, 18675734) particles; queued=26381097
+[segmented-secondary] step_limit=16 tail_threshold=8192 state_bytes=208 capacity=7705363
+[segmented-secondary] rounds=30 tail_rounds=1 tail_s=0.0179766 kernel_s=3.99937 compaction_s=0.00785084 begin=18675734 end=26381097
+[progress] secondary batch completed: [18675734, 26381097) particles; queued=27154393
+[segmented-secondary] step_limit=16 tail_threshold=8192 state_bytes=208 capacity=773296
+[segmented-secondary] rounds=20 tail_rounds=1 tail_s=0.0181563 kernel_s=0.321141 compaction_s=0.00133316 begin=26381097 end=27154393
+[progress] secondary batch completed: [26381097, 27154393) particles; queued=27154393
+[secondary-schedule] grouping_seconds=0.017481
+[unified-em-audit] 0 2072196345 2888585230 0 0 13806106474382548 1057862950847716 0
+Run mode: production
+Quality status: pass
+Quality report: "out/rt07575_unified_em_production/quality_report.json"
+Backend: sycl-cuda+straggling+espread+spot-batch+tps-source+multiple-scattering+ct-material-mcs+ct-grid-mass-sp-lut+ct-dda+fp32-dose+voxel-scoring+scorer-decoupled
+Histories: 6481909
+Initial energy: 0 MeV/u = 0 MeV per primary ion
+Steps: 2069507067
+Elapsed: 50.945513 s
+Throughput: 127232.19 histories/s
+Kernel time: primary=19.751525 s secondary=24.969898 s neutral=0 s charged-after-neutral=0 s
+Energy balance error: 3.6486599e-06
+Nuclear interactions: 2689452
+Secondary elastic interactions: 0
+Primary elastic interactions: 0 (local=0 MeV, queued charged=0 MeV, queued neutral=0 MeV, overflow=0, overflow energy=0 MeV)
+Untracked nuclear energy: 8.648144e+08 MeV
+MeV scorer output: 
+Voxel MeV scorer output: 
+Voxel dose MHD (Gy): out/rt07575_unified_em_production/dose.mhd
+[plan-shard-done] 1/1 config="config/rt07575_unified_em_production.yaml" histories=6481909 quality=pass

@@ -1,0 +1,1261 @@
+[E1] uniform01 raw-bit endpoint
+  E1 map: bits=         0 -> 0x1p-25 (2.98023224e-08)
+  E1 map: bits=         1 -> 0x1.8p-24 (8.94069672e-08)
+  E1 map: bits=   8388607 -> 0x1.fffffep-2 (0.49999997)
+  E1 map: bits=   8388608 -> 0x1p-1 (0.5)
+  E1 map: bits=   8388609 -> 0x1.000004p-1 (0.500000119)
+  E1 map: bits=  16777214 -> 0x1.fffffcp-1 (0.999999881)
+  E1 map: bits=  16777215 -> 0x1p+0 (1)
+PASS: E1: bits=2^24-1 maps to exactly 1.0f
+PASS: E1: bits=0 maps strictly inside
+  E1 reach: seed=20260922 hist=7 dim=70 ii=18823669 -> 0x1p+0
+PASS: E1: reached preimage returns 1.0f
+PASS: E1: u0==1, q==1 takes the else (isotropic) branch
+[E2] stable small-angle measurement
+PASS: E2: all proposals valid (ensemble)
+PASS: E2: all proposals valid (ensemble)
+PASS: E2: all proposals valid (ensemble)
+PASS: E2: all proposals valid (ensemble)
+PASS: E2: all proposals valid (ensemble)
+PASS: E2: all proposals valid (ensemble)
+PASS: E2: all proposals valid (ensemble)
+PASS: E2: all proposals valid (ensemble)
+  E2 ensemble (8x200k, MSC domain): mean=3.463618e-08 SE=2.643e-10
+    seed[0]=3.507387e-08
+    seed[1]=3.559530e-08
+    seed[2]=3.488476e-08
+    seed[3]=3.423647e-08
+    seed[4]=3.365064e-08
+    seed[5]=3.436545e-08
+    seed[6]=3.376591e-08
+    seed[7]=3.551699e-08
+  E2 n=200000: A[2(1-dz)]=1.495242e-08 B[2*omcth]=3.507387e-08 C[atan2^2]=3.507388e-08 D[slope^2]=3.507392e-08
+  E2: cth==1 fraction=0.8957 omcth>0-but-rounded=179144 B/A=2.346 C/B=1.0000 D/B=1.0000
+PASS: E2: all proposals valid
+PASS: E2: rounded cth==1 hides nonzero omcth
+PASS: E2: stable moment B exceeds lossy metric A
+PASS: E2: rotation preserves angle (C/B, D/B ~= 1)
+PASS: E2: old domain value inside new ensemble CI
+PASS: E2: ensemble-moment band
+[E3] fMinimal tlimitmin lifecycle
+PASS: B3: E=3000.0 path=3 tlimitmin==1e-7 (got 1e-07)
+PASS: B3: tsmall==1e-7
+PASS: B3: E=1000.0 path=3 tlimitmin==1e-7 (got 1e-07)
+PASS: B3: tsmall==1e-7
+PASS: B3: E=300.0 path=3 tlimitmin==1e-7 (got 1e-07)
+PASS: B3: tsmall==1e-7
+PASS: B3: E=100.0 path=3 tlimitmin==1e-7 (got 1e-07)
+PASS: B3: tsmall==1e-7
+PASS: B3: E=30.0 path=3 tlimitmin==1e-7 (got 1e-07)
+PASS: B3: tsmall==1e-7
+PASS: B3: E=10.0 path=3 tlimitmin==1e-7 (got 1e-07)
+PASS: B3: tsmall==1e-7
+PASS: B3: path-0 tlimitmin frozen
+PASS: B3: path-2 tlimitmin frozen
+[E4] MAIGO single-step theta writer (for G4-oracle compare)
+PASS: E4: output CSV opens
+  E4: wrote 200000 rows
+PASS: E4: all proposals valid
+[B1] strict-uniform regression
+PASS: B1: strict map bits=0 in (0,1)
+PASS: B1: strict map bits=1 in (0,1)
+PASS: B1: strict map bits=8388607 in (0,1)
+PASS: B1: strict map bits=8388608 in (0,1)
+PASS: B1: strict map bits=8388609 in (0,1)
+PASS: B1: strict map bits=16777214 in (0,1)
+PASS: B1: strict map bits=16777215 in (0,1)
+PASS: B1: preimage clamps below 1
+PASS: B1: strict == uniform01 off-endpoint
+PASS: B1: strict draws take the q>=1 mixture branch
+[B4] branch-consistent delta
+PASS: B4: small-t series delta
+PASS: B4: small-t rmax2 positive
+PASS: B4: range-end proposal valid
+PASS: B4: range branch taken
+PASS: B4: range-branch delta self-consistent
+PASS: B4: untruncated proposal
+PASS: B4: untruncated delta == limiter-branch delta
+PASS: B4: truncated proposal
+PASS: B4: truncated delta bounded
+PASS: B4: truncated delta deterministic
+[B5] failure detection
+PASS: B5: sane proposal valid
+PASS: B5: empty table -> invalid
+PASS: B5: NaN energy -> invalid
+PASS: B5: zero ceiling -> invalid
+PASS: B5: zero boundary -> invalid
+[C1] true<->geom conversion reference
+PASS: C1: no rounding fixup on tau grid
+PASS: C1: no rounding fixup on tau grid
+PASS: C1: no rounding fixup on tau grid
+PASS: C1: no rounding fixup on tau grid
+PASS: C1: no rounding fixup on tau grid
+PASS: C1: no rounding fixup on tau grid
+PASS: C1: no rounding fixup on tau grid
+PASS: C1: no rounding fixup on tau grid
+PASS: C1: no rounding fixup on tau grid
+PASS: C1: no rounding fixup on tau grid
+PASS: C1: no rounding fixup on tau grid
+PASS: C1: no rounding fixup on tau grid
+PASS: C1: no rounding fixup on tau grid
+PASS: C1: no rounding fixup on tau grid
+PASS: C1: no rounding fixup on tau grid
+PASS: C1: no rounding fixup on tau grid
+PASS: C1: no rounding fixup on tau grid
+  C1 tau-grid: max|g-gref|/g=1.06e-07 max|d-dref|/d=0.00e+00 max(g-t)/t=0.00e+00 (n_series=7 n_expm=10)
+PASS: C1: g matches long-double closed form
+PASS: C1: delta matches long-double closed form
+PASS: C1: no unexplained g>t
+PASS: C1: no pseudo-zero delta
+  C1 G4 rows: 168
+PASS: C1: G4 sub-nm g==t exit
+PASS: C1: G4 sub-nm g==t exit
+PASS: C1: G4 sub-nm g==t exit
+PASS: C1: G4 sub-nm g==t exit
+PASS: C1: G4 sub-nm g==t exit
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: G4 sub-nm g==t exit
+PASS: C1: G4 sub-nm g==t exit
+PASS: C1: G4 sub-nm g==t exit
+PASS: C1: G4 sub-nm g==t exit
+PASS: C1: G4 sub-nm g==t exit
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: G4 sub-nm g==t exit
+PASS: C1: G4 sub-nm g==t exit
+PASS: C1: G4 sub-nm g==t exit
+PASS: C1: G4 sub-nm g==t exit
+PASS: C1: G4 sub-nm g==t exit
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: G4 sub-nm g==t exit
+PASS: C1: G4 sub-nm g==t exit
+PASS: C1: G4 sub-nm g==t exit
+PASS: C1: G4 sub-nm g==t exit
+PASS: C1: G4 sub-nm g==t exit
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: G4 sub-nm g==t exit
+PASS: C1: G4 sub-nm g==t exit
+PASS: C1: G4 sub-nm g==t exit
+PASS: C1: G4 sub-nm g==t exit
+PASS: C1: G4 sub-nm g==t exit
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: G4 sub-nm g==t exit
+PASS: C1: G4 sub-nm g==t exit
+PASS: C1: G4 sub-nm g==t exit
+PASS: C1: G4 sub-nm g==t exit
+PASS: C1: G4 sub-nm g==t exit
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: G4 sub-nm g==t exit
+PASS: C1: G4 sub-nm g==t exit
+PASS: C1: G4 sub-nm g==t exit
+PASS: C1: G4 sub-nm g==t exit
+PASS: C1: G4 sub-nm g==t exit
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: G4 sub-nm g==t exit
+PASS: C1: G4 sub-nm g==t exit
+PASS: C1: G4 sub-nm g==t exit
+PASS: C1: G4 sub-nm g==t exit
+PASS: C1: G4 sub-nm g==t exit
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+PASS: C1: finalize truncation needs no guard
+PASS: C1: truncated inversion stays <= t_msc
+  C1 G4: n_small=119 n_range=49 subnm=40 max|g-gG4|/g=2.23e-07 small-t-vs-truth=4.76e-07 range-vs-G4=1.50e-02 G4-triple-noise=3.87e-01 max|t-tref|/t=3.04e-07 subulp_repairs=1
+PASS: C1: g matches executed G4 triple
+PASS: C1: small-t delta exact vs truth
+PASS: C1: range-branch delta bounded vs G4
+PASS: C1: truncated inversion matches log1p form
+  C1 reachable water: n=33 par1pos=13 subulp=0 bad=0 nfallback=7 tau_max=0.001 smallt=4.94e-08 range=1.09e-01 rangeenv=0.37 fbimpl=3.63e-08 fbrmax=8.41e-02
+PASS: C1: reachable triple contract holds
+PASS: C1: reachable small-t delta bounded
+PASS: C1: range-direct inside ulp envelope
+PASS: C1: fallback implementation exact
+PASS: C1: fallback rmax bounded
+  C1 production occupancy (water, MSC range): smallt=39 range=9 parpos=0 subnm=0
+  C1 reachable Cu: n=28 par1pos=12 subulp=0 bad=0 nfallback=1 tau_max=0.021 smallt=4.72e-08 range=4.75e-02 rangeenv=0.25 fbimpl=3.94e-08 fbrmax=1.88e-02
+PASS: C1: reachable triple contract holds
+PASS: C1: reachable small-t delta bounded
+PASS: C1: range-direct inside ulp envelope
+PASS: C1: fallback implementation exact
+PASS: C1: fallback rmax bounded
+  C1 production occupancy (Cu, MSC range): smallt=28 range=14 parpos=0 subnm=0
+  C1 table top E=4800.1 MeV (C12 mass=11177.9): else-branch dead in C12 production
+PASS: C1: else-branch dead for C12 production
+  C1 par-branch: npos=5 nneg=0 max|z-zalg|/z=1.95e-07 max|d-dalg|/d=1.86e-01
+PASS: C1: par1>0 formula exercised
+PASS: C1: par1>0 z precise
+PASS: C1: par1>0 delta bounded
+  C1 finalize calib: under=0 worst=0.00ulp over=0 worst=0.00ulp trips=0 (extreme-frac rows=2775)
+PASS: C1: finalize needs no guard on calib grid
+PASS: C1: sliver test takes range branch
+PASS: C1: old inversion rounds to 0
+PASS: C1: sliver inversion needs no guard
+PASS: C1: sliver inversion bracketed
+PASS: C1: old inversion rounds to 0
+PASS: C1: sliver inversion needs no guard
+PASS: C1: sliver inversion bracketed
+PASS: C1: old inversion rounds to 0
+PASS: C1: sliver inversion needs no guard
+PASS: C1: sliver inversion bracketed
+PASS: C1: sliver inversion needs no guard
+PASS: C1: sliver inversion bracketed
+PASS: C1: sliver inversion needs no guard
+PASS: C1: sliver inversion bracketed
+PASS: C1: sliver inversion needs no guard
+PASS: C1: sliver inversion bracketed
+PASS: C1: sliver inversion needs no guard
+PASS: C1: sliver inversion bracketed
+PASS: C1: sliver inversion needs no guard
+PASS: C1: sliver inversion bracketed
+PASS: C1: sliver inversion needs no guard
+PASS: C1: sliver inversion bracketed
+PASS: C1: sliver inversion needs no guard
+PASS: C1: sliver inversion bracketed
+  C1 slivers: n=10 worst|t-tref|/t=0.00e+00
+PASS: C1: sliver rows covered
+PASS: C1: sliver inversion accurate
+PASS: C1: bad-t gives empty conversion
+PASS: C1: bad-t gives empty conversion
+PASS: C1: bad-t gives empty conversion
+PASS: C1: bad-t gives empty conversion
+PASS: C1: bad-lambda gives empty conversion
+PASS: C1: bad-lambda gives empty conversion
+PASS: C1: bad-lambda gives empty conversion
+PASS: C1: bad-lambda gives empty conversion
+[B6] RNG addressing + boundary equivalence
+PASS: B6: addressing edges
+PASS: B6: addressing top
+PASS: B6: production segs << stride
+PASS: B6: 51.2mm bound == stride
+PASS: B6: composition strictly increases
+[C2] MSC domain separation + index guards
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: legacy word3 bit30 clear
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: MSC word3 bit30 set
+PASS: C2: known collision point separated
+PASS: C2: MSC draw deterministic
+PASS: C2: MSC draw segment-sensitive
+PASS: C2: MSC draw in open (0,1)
+PASS: C2: envelope top valid
+PASS: C2: segment==1024 rejected
+PASS: C2: outer==2^22 rejected
+PASS: C2: limiter rejects segment==1024
+[C3] q-audit upgrade
+PASS: C3: q straddle exact
+PASS: C3: prob straddle exact
+PASS: C3: q straddle exact
+PASS: C3: prob straddle exact
+PASS: C3: q straddle exact
+PASS: C3: prob straddle exact
+PASS: C3: q straddle exact
+PASS: C3: prob straddle exact
+PASS: C3: q straddle exact
+PASS: C3: prob straddle exact
+PASS: C3: q straddle exact
+PASS: C3: prob straddle exact
+PASS: C3: q straddle exact
+PASS: C3: prob straddle exact
+PASS: C3: q straddle exact
+PASS: C3: prob straddle exact
+PASS: C3: prob straddle exact
+PASS: C3: q straddle exact
+PASS: C3: prob straddle exact
+PASS: C3: q straddle exact
+PASS: C3: prob straddle exact
+PASS: C3: q straddle exact
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q straddle exact
+PASS: C3: prob straddle exact
+PASS: C3: q straddle exact
+PASS: C3: prob straddle exact
+PASS: C3: q straddle exact
+PASS: C3: prob straddle exact
+PASS: C3: q straddle exact
+PASS: C3: prob straddle exact
+PASS: C3: q straddle exact
+PASS: C3: prob straddle exact
+PASS: C3: q straddle exact
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q straddle exact
+PASS: C3: prob straddle exact
+PASS: C3: q straddle exact
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q straddle exact
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+PASS: C3: q>=1 takes mixture always
+PASS: C3: prob straddle exact
+  C3 domain: n=181 branches(id:count)=0:37 1:0 2:0 3:6 4:0 5:0 6:138 div=0
+  C3 trial rows: q in [0.93278, 1.00103] prob in [0.72924, 0.87292] gate_margin_min=7.26e-04
+  C3 precision vs long double: q=1.42e-07 prob=9.90e-08 x_mean1=2.85e-08 d=5.94e-06 x_mean_th=5.82e-08 tailW=5.97e-08
+PASS: C3: trial branch covered
+PASS: C3: no float/ld branch divergence
+PASS: C3: weights precise vs independent oracle
+PASS: C3: isotropic tail weight bounded
+  C3 decisions: q-straddles=20 prob-straddles=138 q>=1-rows=118 q<=0-rows=0
+PASS: C3: straddles covered
+PASS: C3: q>=1 always-mixture covered
+[C4] transport-contract determinism
+PASS: C4: both valid
+PASS: C4: same identity -> bitwise identical
+PASS: C4: order-independent identity
+PASS: C4: history identity separates streams
+PASS: C4: first limit valid
+PASS: C4: resumed limit valid
+PASS: C4: save/restore round-trips tlimit
+[C6Cu] Cu slab writer
+PASS: C6Cu: output CSV opens
+  C6Cu: exit 20000/20000
+PASS: C6Cu: majority exit slab (hang guard only)
+PASS: B6: both boundary modes valid
+PASS: B6: boundary flag inert at non-binding scale
+PASS: C4: newborn limits valid
+PASS: C4: newborn tlimit initialized
+PASS: C4: non-boundary keeps sentinel
+[B6cfg] RNG config guard
+PASS: B6cfg: config/beam_minibeam_single_center_em_only_e250_urban_v2_cuwater_10m.yaml parses, max_step=0.100<=51.2
+PASS: B6cfg: config/beam_minibeam_water_replay_e250_em12800k_urban_v2.yaml parses, max_step=0.100<=51.2
+PASS: B6cfg: config/beam_minibeam_single_center_em_only_e250_urban_v2_10m.yaml parses, max_step=0.100<=102.4
+[E7] slab composition 1mm
+PASS: E7: output CSV opens
+  E7 w1ms005: exit 20000/20000
+PASS: E7: majority exit slab (hang guard only)
+[E7] slab composition 10mm
+PASS: E7: output CSV opens
+  E7 w10ms005: exit 20000/20000
+PASS: E7: majority exit slab (hang guard only)
+urban_localize: ALL PASS

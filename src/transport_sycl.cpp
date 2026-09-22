@@ -391,7 +391,7 @@ WaterEntrySecondaryReplay load_water_entry_secondary_replay(
 #endif
 
 #if defined(CARBON_ENABLE_MINIBEAM)
-constexpr std::size_t minibeam_event_counter_count = 138;
+constexpr std::size_t minibeam_event_counter_count = 153;
 constexpr std::size_t minibeam_fragment_cascade_interactions_slot = 48;
 constexpr std::size_t minibeam_fragment_cascade_hits_slot = 49;
 constexpr std::size_t minibeam_fragment_cascade_miss_slot = 50;
@@ -433,6 +433,31 @@ constexpr std::size_t minibeam_water_secondary_c12_urban_step_slot = 136;
 // host): a partial space path with full-macro-step energy loss must never
 // pass as a successful dose. Structured record via the slot + throw message.
 constexpr std::size_t minibeam_water_urban_fatal_slot = 137;
+// Diagnostic: C1 finalize-class numeric-guard trips (t<g / t>t_msc clamp
+// repairs in finalize_true). These indicate real conversion inconsistency
+// and must be zero in smoke; the trips are counted but non-fatal (the
+// repair itself is rounding-only and safe). The limiter's sub-ulp chord
+// repair (~7% of production segments by FP32 granularity) is normal
+// reference-class protection with a proven <= 1 ulp bound and is
+// intentionally not counted here.
+constexpr std::size_t minibeam_urban_numeric_guard_slot = 138;
+// First-failure record (fix C2.3): 139 = claim flag (0/1), 140 = history id,
+// 141 = (outer_step<<32)|segment_index, 142 = reason code. Written once via
+// CAS by the first failing work-item; the host reports it and fails the run.
+constexpr std::size_t minibeam_urban_firstfail_claim_slot = 139;
+constexpr std::size_t minibeam_urban_firstfail_history_slot = 140;
+constexpr std::size_t minibeam_urban_firstfail_stepseg_slot = 141;
+constexpr std::size_t minibeam_urban_firstfail_reason_slot = 142;
+// Diagnostic: sub-ulp remainder completions (FP32 granularity, position
+// error < 2 ulp of the macro step; counted, non-fatal).
+constexpr std::size_t minibeam_urban_subulp_drop_slot = 143;
+// First numeric-guard evidence (fix C2.3 investigation): 144 = claim flag,
+// 145 = site tag (1 Cu, 2 water primary, 3 secondary), 146..151 = float
+// bits of (g_final, g_prop, t_msc, lambda0, range, par1), 152 = float bits
+// of par3. First trip only; lets the host reproduce the exact inputs.
+constexpr std::size_t minibeam_urban_guardev_claim_slot = 144;
+constexpr std::size_t minibeam_urban_guardev_base_slot = 145;
+constexpr std::size_t minibeam_urban_guardev_count = 8;
 #endif
 
 #if defined(CARBON_ENABLE_MINIBEAM)
@@ -649,6 +674,11 @@ struct alignas(16) SecondaryResumeState {
     uint32_t sec_steps{};
     std::uint64_t local_sec_rate_queries{};
     std::uint64_t local_sec_steps{};
+    // Persistent Urban fMinimal state (fix C4): tlimit survives macro steps
+    // and chunk suspend/resume (G4 semantics: computed at birth/boundary,
+    // persistent inside the volume); born marks the first Urban segment.
+    float sec_urban_tlimit_mm{};
+    bool sec_urban_born{};
     // Sparse inelastic tallies ([3],[4] of the device audit) are written
     // directly to the global device audit at event time and are not carried
     // across continuation launches.
@@ -702,6 +732,121 @@ inline void flush_unified_em_audit(std::uint64_t* global,
 }
 
 #include "detail/sycl_device_math.inc"
+
+// Fix C2.3: Urban accepted-step contract checks (device-side).
+// Reason codes (0 = accept): 1 invalid proposal (includes the RNG
+// outer/segment guard reject), 2 non-positive g, 3 non-finite t/g/delta,
+// 4 g > t, 5 delta outside [0, t], 6 FP32 stall (traversed+g == traversed)
+// with remainder above granularity dust, 7 geometric overshoot
+// (g beyond the segment allowance), 8 bad direction/displacement.
+// A stall with remainder <= 2 ulp of the macro step is NOT a fault: the
+// remainder is FP32 granularity dust (position error < 2 ulp); the caller
+// completes the macro step exactly and counts a sub-ulp drop instead.
+inline int urban_step_field_reason(const CorrelatedScatteringStep& s) noexcept {
+    if (!s.proposal_valid) return 1;
+    const float t = s.final_true_path_mm;
+    const float g = s.final_geom_path_mm;
+    const float d = s.stable_delta_mm;
+    if (!sycl::isfinite(t) || !sycl::isfinite(g) || !sycl::isfinite(d))
+        return 3;
+    if (!(g > 0.0F)) return 2;
+    if (g > t) return 4;
+    if (!(d >= 0.0F) || d > t) return 5;
+    const float dx = s.direction.x, dy = s.direction.y, dz = s.direction.z;
+    if (!sycl::isfinite(dx) || !sycl::isfinite(dy) || !sycl::isfinite(dz))
+        return 8;
+    const float n2 = dx * dx + dy * dy + dz * dz;
+    if (!sycl::isfinite(n2) || !(n2 > 0.25F) || !(n2 < 4.0F)) return 8;
+    const float ex = s.displacement_mm.x, ey = s.displacement_mm.y,
+                ez = s.displacement_mm.z;
+    if (!sycl::isfinite(ex) || !sycl::isfinite(ey) || !sycl::isfinite(ez))
+        return 8;
+    return 0;
+}
+
+// Returns 0 (accept: caller advances traversed by g), 6 (FP32 stall with
+// significant remainder: fault), 7 (overshoot: fault), or sets
+// subulp_complete (caller completes the macro step exactly + counts).
+inline int urban_step_progress_reason(const CorrelatedScatteringStep& s,
+                                      const float traversed_mm,
+                                      const float step_mm,
+                                      const float allowance_mm,
+                                      bool& subulp_complete) noexcept {
+    subulp_complete = false;
+    const float g = s.final_geom_path_mm;
+    const float allow_ulp = urban_ulp_above(allowance_mm);
+    if (g > allowance_mm + allow_ulp) return 7;
+    const float next = traversed_mm + g;
+    if (next > traversed_mm) {
+        const float step_ulp = urban_ulp_above(step_mm);
+        if (next > step_mm + step_ulp) return 7;
+        return 0;
+    }
+    const float rem = step_mm - traversed_mm;
+    const float step_ulp = urban_ulp_above(step_mm);
+    if (rem <= 2.0F * step_ulp) {
+        subulp_complete = true;
+        return 0;
+    }
+    return 6;
+}
+
+#if defined(CARBON_ENABLE_MINIBEAM)
+namespace {
+inline void urban_record_first_failure(std::uint64_t* counts,
+                                       const std::uint64_t history_id,
+                                       const std::uint64_t outer_step,
+                                       const std::uint32_t segment_index,
+                                       const int reason) noexcept {
+    if (counts == nullptr) return;
+    // Ticket dispenser (fetch_add is supported on the PTX backend;
+    // 64-bit compare_exchange is not). Ticket 0 wins and writes the record;
+    // the kernel completes before the host reads, so the plain writes are
+    // visible. Counts array is zero-filled on the host before launch.
+    sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
+                     sycl::memory_scope::device,
+                     sycl::access::address_space::global_space>
+        claim(counts[minibeam_urban_firstfail_claim_slot]);
+    if (claim.fetch_add(1ULL) == 0ULL) {
+        counts[minibeam_urban_firstfail_history_slot] = history_id;
+        counts[minibeam_urban_firstfail_stepseg_slot] =
+            (outer_step << 32U) | segment_index;
+        counts[minibeam_urban_firstfail_reason_slot] =
+            static_cast<std::uint64_t>(reason);
+    }
+    sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
+                     sycl::memory_scope::device,
+                     sycl::access::address_space::global_space>
+        fatal(counts[minibeam_water_urban_fatal_slot]);
+    fatal.fetch_add(1U);
+}
+}  // namespace
+#endif
+
+#if defined(CARBON_ENABLE_MINIBEAM)
+namespace {
+inline void urban_record_guard_evidence(std::uint64_t* counts,
+                                        const std::uint64_t site_tag,
+                                        const float epre_mev,
+                                        const float t_msc_mm,
+                                        const float g_final_mm) noexcept {
+    if (counts == nullptr) return;
+    sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
+                     sycl::memory_scope::device,
+                     sycl::access::address_space::global_space>
+        claim(counts[minibeam_urban_guardev_claim_slot]);
+    if (claim.fetch_add(1ULL) == 0ULL) {
+        counts[minibeam_urban_guardev_base_slot] = site_tag;
+        counts[minibeam_urban_guardev_base_slot + 1] =
+            sycl::bit_cast<std::uint32_t>(epre_mev);
+        counts[minibeam_urban_guardev_base_slot + 2] =
+            sycl::bit_cast<std::uint32_t>(t_msc_mm);
+        counts[minibeam_urban_guardev_base_slot + 3] =
+            sycl::bit_cast<std::uint32_t>(g_final_mm);
+    }
+}
+}  // namespace
+#endif
 #include "detail/sycl_score_device.inc"
 
 using carbon::detail::DeviceMemoryTracker;
@@ -4433,7 +4578,7 @@ template<int EmMode>
                                         minibeam_copper_density,
                                         minibeam_copper_radiation_length,
                                         minibeam_copper_mcs_scale, spot_seed,
-                                        rng_history, beamline_step, 50);
+                                        rng_history, beamline_step, 0U, 50);
                                 urban_v2_at_boundary =
                                     correlated_scattering.boundary_crossed;
                                 urban_v2_prev_in_cu = true;
@@ -4464,21 +4609,42 @@ template<int EmMode>
                         const auto urban_v2_proposal =
                             minibeam_copper_urban_v2_msc &&
                             correlated_scattering.proposal_valid;
-                        // Fix B5: an invalid Urban proposal must fail the
-                        // run, not silently advance the full path
-                        // unscattered (flag only; the host throws).
-                        if (minibeam_copper_urban_v2_msc &&
-                            !correlated_scattering.proposal_valid &&
-                            minibeam_event_counts_device != nullptr) {
-                            sycl::atomic_ref<
-                                std::uint64_t,
-                                sycl::memory_order::relaxed,
-                                sycl::memory_scope::device,
-                                sycl::access::address_space::global_space>(
-                                minibeam_event_counts_device
-                                    [minibeam_water_urban_fatal_slot])
-                                .fetch_add(1U);
+                        // Fix B5/C2.3: an invalid Urban proposal must fail the
+                        // run and stop this history (flag + record; the host
+                        // throws). The old code advanced the full path
+                        // unscattered; a failed proposal must never continue
+                        // as normal transport. Field contract reasons 1-5,8
+                        // (no segment loop here: single advance, so no
+                        // progress reasons; overshoot is structural).
+                        if (minibeam_copper_urban_v2_msc) {
+                            const int cu_reason = urban_step_field_reason(
+                                correlated_scattering);
+                            if (correlated_scattering.numeric_guard_tripped &&
+                                minibeam_event_counts_device != nullptr) {
+                                urban_record_guard_evidence(
+                                    minibeam_event_counts_device, 1ULL,
+                                    energy_MeV,
+                                    correlated_scattering
+                                        .proposed_true_path_mm,
+                                    correlated_scattering
+                                        .final_geom_path_mm);
+                                sycl::atomic_ref<
+                                    std::uint64_t,
+                                    sycl::memory_order::relaxed,
+                                    sycl::memory_scope::device,
+                                    sycl::access::address_space::global_space>(
+                                    minibeam_event_counts_device
+                                        [minibeam_urban_numeric_guard_slot])
+                                    .fetch_add(1U);
+                            }
+                            if (cu_reason != 0) {
+                                urban_record_first_failure(
+                                    minibeam_event_counts_device, rng_history,
+                                    beamline_step, 0U, cu_reason);
+                                break;
+                            }
                         }
+                        // (fatal++ is done inside urban_record_first_failure.)
                         const auto geom_advance_mm = urban_v2_proposal
                             ? correlated_scattering.final_geom_path_mm
                             : transport_path;
@@ -7560,6 +7726,7 @@ template<int EmMode>
                                                 [minibeam_water_urban_fatal_slot])
                                             .fetch_add(1U);
                                     }
+                                    energy_MeV = energy_cutoff_MeV;
                                     break;
                                 }
                                 ++water_urban_seg_hist;
@@ -7593,20 +7760,37 @@ template<int EmMode>
                                         minibeam_water_urban_zeff_f,
                                         minibeam_water_urban_radlen_mm_f, 1.0F,
                                         spot_seed, rng_history,
-                                        static_cast<std::uint64_t>(steps) *
-                                                1024U +
-                                            segment_index,
+                                        static_cast<std::uint64_t>(steps), segment_index,
                                         70U);
-                                // Fix B5: invalid proposal or zero progress
-                                // must not spin to the cap (burning 1M
-                                // iterations) nor continue silently. Raise
-                                // the fatal flag and stop this history's
-                                // water transport; the host fails the run.
-                                if (!urban_scatter.proposal_valid ||
-                                    !(urban_scatter.final_geom_path_mm >
-                                      0.0F)) {
-                                    if (minibeam_event_counts_device !=
-                                        nullptr) {
+                                // Fix B5/C2.3: full accepted-step contract.
+                                // Field checks (reason 1-5,8), progress
+                                // (6/7/sub-ulp), numeric-guard counting.
+                                // Any fault records first-failure + fatal and
+                                // stops this history; the host fails the run.
+                                // A sub-ulp stall completes the macro step
+                                // exactly (granularity dust, counted).
+                                {
+                                    int accept_reason =
+                                        urban_step_field_reason(
+                                            urban_scatter);
+                                    bool subulp_complete = false;
+                                    if (accept_reason == 0) {
+                                        accept_reason =
+                                            urban_step_progress_reason(
+                                                urban_scatter, traversed_mm,
+                                                step_mm, segment_mm,
+                                                subulp_complete);
+                                    }
+                                    if (urban_scatter.numeric_guard_tripped &&
+                                        minibeam_event_counts_device !=
+                                            nullptr) {
+                                        urban_record_guard_evidence(
+                                            minibeam_event_counts_device, 2ULL,
+                                            seg_e,
+                                            urban_scatter
+                                                .proposed_true_path_mm,
+                                            urban_scatter
+                                                .final_geom_path_mm);
                                         sycl::atomic_ref<
                                             std::uint64_t,
                                             sycl::memory_order::relaxed,
@@ -7614,10 +7798,40 @@ template<int EmMode>
                                             sycl::access::address_space::
                                                 global_space>(
                                             minibeam_event_counts_device
-                                                [minibeam_water_urban_fatal_slot])
+                                                [minibeam_urban_numeric_guard_slot])
                                             .fetch_add(1U);
                                     }
-                                    break;
+                                    if (accept_reason != 0) {
+                                        urban_record_first_failure(
+                                            minibeam_event_counts_device,
+                                            rng_history,
+                                            static_cast<std::uint64_t>(
+                                                steps),
+                                            segment_index, accept_reason);
+                                        // Fix C2.3: a failed proposal must
+                                        // not continue as normal transport.
+                                        // Kill the history energy so the
+                                        // outer steps loop exits after this
+                                        // iteration; the host still throws.
+                                        energy_MeV = energy_cutoff_MeV;
+                                        break;
+                                    }
+                                    if (subulp_complete) {
+                                        traversed_mm = step_mm;
+                                        if (minibeam_event_counts_device !=
+                                            nullptr) {
+                                            sycl::atomic_ref<
+                                                std::uint64_t,
+                                                sycl::memory_order::relaxed,
+                                                sycl::memory_scope::device,
+                                                sycl::access::address_space::
+                                                    global_space>(
+                                                minibeam_event_counts_device
+                                                    [minibeam_urban_subulp_drop_slot])
+                                                .fetch_add(1U);
+                                        }
+                                        break;
+                                    }
                                 }
                                 const auto seg_end_x =
                                     seg_start_x +
@@ -10086,6 +10300,12 @@ template<int EmMode>
                         };
                         uint32_t sec_steps = 0;
                         constexpr uint32_t kSecondaryMaxSteps = 30000U;
+                        // Fix C4: one fMinimal track per secondary (persists
+                        // across macro steps like the primary state; the old
+                        // per-macro-step rebuild pinned tlimit at 1e10, so
+                        // secondaries were never MSC-limited at low E).
+                        UrbanV2TrackState sec_urban_persist{};
+                        bool sec_urban_born = true;
                         std::uint64_t local_sec_rate_queries = 0;
                         std::uint64_t local_sec_steps = 0;
                         const int schneider_reg_idx =
@@ -10166,6 +10386,9 @@ template<int EmMode>
                             unified_secondary_audit=saved.unified_secondary_audit;
 #endif
                             sec_steps=saved.sec_steps;
+                            sec_urban_persist.tlimit_mm =
+                                saved.sec_urban_tlimit_mm;
+                            sec_urban_born = saved.sec_urban_born;
                             local_sec_rate_queries=saved.local_sec_rate_queries;
                             local_sec_steps=saved.local_sec_steps;
                             if constexpr (!kNonHe4Only)
@@ -12102,7 +12325,6 @@ template<int EmMode>
                                         collision_input_dz};
                                     auto traversed_mm = 0.0F;
                                     std::uint32_t segment_index = 0U;
-                                    UrbanV2TrackState sec_urban_state{};
                                     while (traversed_mm < sec_step_mm) {
                                         if (segment_index >= 1000000U) {
                                             // Fix B5: cap trip raises fatal
@@ -12131,6 +12353,8 @@ template<int EmMode>
                                                         [minibeam_water_urban_fatal_slot])
                                                     .fetch_add(1U);
                                             }
+                                            sec_e = CARBON_SECONDARY_CONTEXT_FIELD(
+                                                energy_cutoff_MeV);
                                             break;
                                         }
                                         const auto segment_mm = sycl::fmin(
@@ -12172,7 +12396,18 @@ template<int EmMode>
                                                 0.0F,
                                                 CARBON_SECONDARY_CONTEXT_FIELD(
                                                     phantom_length_mm),
-                                                false, sec_urban_state,
+                                                // Fix C4: newborn secondary
+                                                // in water starts at a
+                                                // boundary (G4 firstStep:
+                                                // fresh tlimit from current
+                                                // range/lambda); afterwards
+                                                // the state persists across
+                                                // macro steps and chunk
+                                                // resume (see sec_urban_
+                                                // persist plumbing).
+                                                sec_urban_born &&
+                                                    segment_index == 0U,
+                                                sec_urban_persist,
                                                 sec_urban_table,
                                                 CARBON_SECONDARY_CONTEXT_FIELD(
                                                     minibeam_water_urban_zeff_f),
@@ -12180,31 +12415,81 @@ template<int EmMode>
                                                     minibeam_water_urban_radlen_mm_f),
                                                 1.0F, 2026, frag.rng_stream,
                                                 static_cast<std::uint64_t>(
-                                                        sec_steps) *
-                                                        1024U +
+                                                        sec_steps),
                                                     segment_index,
                                                 110U);
-                                        // Fix B5: invalid/zero-progress ->
-                                        // fatal + stop (see primary branch).
-                                        if (!urban_scatter.proposal_valid ||
-                                            !(urban_scatter
-                                                  .final_geom_path_mm >
-                                              0.0F)) {
-                                            if (CARBON_SECONDARY_CONTEXT_FIELD(
-                                                    minibeam_event_counts_device) !=
-                                                nullptr) {
+                                        sec_urban_born = false;
+                                        // Fix B5/C2.3: full accepted-step
+                                        // contract (see primary branch).
+                                        {
+                                            int accept_reason =
+                                                urban_step_field_reason(
+                                                    urban_scatter);
+                                            bool subulp_complete = false;
+                                            if (accept_reason == 0) {
+                                                accept_reason =
+                                                    urban_step_progress_reason(
+                                                        urban_scatter,
+                                                        traversed_mm,
+                                                        sec_step_mm,
+                                                        segment_mm,
+                                                        subulp_complete);
+                                            }
+                                            auto* sec_counts =
+                                                CARBON_SECONDARY_CONTEXT_FIELD(
+                                                    minibeam_event_counts_device);
+                                            if (urban_scatter
+                                                    .numeric_guard_tripped &&
+                                                sec_counts != nullptr) {
+                                                urban_record_guard_evidence(
+                                                    sec_counts, 3ULL, sec_e,
+                                                    urban_scatter
+                                                        .proposed_true_path_mm,
+                                                    urban_scatter
+                                                        .final_geom_path_mm);
                                                 sycl::atomic_ref<
                                                     std::uint64_t,
                                                     sycl::memory_order::relaxed,
                                                     sycl::memory_scope::device,
                                                     sycl::access::address_space::
                                                         global_space>(
-                                                    CARBON_SECONDARY_CONTEXT_FIELD(
-                                                        minibeam_event_counts_device)
-                                                        [minibeam_water_urban_fatal_slot])
+                                                    sec_counts
+                                                        [minibeam_urban_numeric_guard_slot])
                                                     .fetch_add(1U);
                                             }
-                                            break;
+                                            if (accept_reason != 0) {
+                                                urban_record_first_failure(
+                                                    sec_counts,
+                                                    frag.rng_stream,
+                                                    static_cast<
+                                                        std::uint64_t>(
+                                                        sec_steps),
+                                                    segment_index,
+                                                    accept_reason);
+                                                // Fix C2.3: stop this
+                                                // secondary (see primary).
+                                                sec_e = CARBON_SECONDARY_CONTEXT_FIELD(
+                                                    energy_cutoff_MeV);
+                                                break;
+                                            }
+                                            if (subulp_complete) {
+                                                traversed_mm = sec_step_mm;
+                                                if (sec_counts != nullptr) {
+                                                    sycl::atomic_ref<
+                                                        std::uint64_t,
+                                                        sycl::memory_order::
+                                                            relaxed,
+                                                        sycl::memory_scope::
+                                                            device,
+                                                        sycl::access::
+                                                            address_space::
+                                                                global_space>(
+                                                        sec_counts
+                                                            [minibeam_urban_subulp_drop_slot])
+                                                        .fetch_add(1U);
+                                                }
+                                                break;
+                                            }
                                         }
                                         const auto seg_end_x = segment_x +
                                             segment_direction.x *
@@ -12612,6 +12897,9 @@ template<int EmMode>
                             saved.unified_secondary_audit=unified_secondary_audit;
 #endif
                             saved.sec_steps=sec_steps;
+                            saved.sec_urban_tlimit_mm =
+                                sec_urban_persist.tlimit_mm;
+                            saved.sec_urban_born = sec_urban_born;
                             saved.local_sec_rate_queries=local_sec_rate_queries;
                             saved.local_sec_steps=local_sec_steps;
                             if constexpr (!kNonHe4Only)
@@ -13238,13 +13526,73 @@ template<int EmMode>
                       << minibeam_event_counts_host
                              [minibeam_water_urban_subdiv_cap_slot]
                       << '\n';
-            // Fix B5 hard gate (§9.1): any invalid proposal, zero-progress
-            // segment, or cap trip fails the run. Structured record: the
-            // fatal slot count plus the cap-trip count above.
+            // Fix B5/C2.3 hard gate (§9.1): any invalid proposal,
+            // zero-progress segment, progress fault, or cap trip fails the
+            // run. Structured record: fatal count, cap trips, C1 numeric
+            // guard trips, sub-ulp drops, and the first-failure
+            // (history, outer step, segment, reason 1-8). A machine-readable
+            // line URBAN_RUN_QUALITY {...} follows for validation runners.
             const std::uint64_t urban_fatal =
                 minibeam_event_counts_host[minibeam_water_urban_fatal_slot];
             std::cout << "[minibeam-water] urban fatal proposals="
                       << urban_fatal << '\n';
+            const std::uint64_t urban_guard =
+                minibeam_event_counts_host[minibeam_urban_numeric_guard_slot];
+            const std::uint64_t urban_subulp =
+                minibeam_event_counts_host[minibeam_urban_subulp_drop_slot];
+            const std::uint64_t urban_cap =
+                minibeam_event_counts_host[minibeam_water_urban_subdiv_cap_slot];
+            const std::uint64_t ff_claim =
+                minibeam_event_counts_host[minibeam_urban_firstfail_claim_slot];
+            const std::uint64_t ff_hist =
+                minibeam_event_counts_host[minibeam_urban_firstfail_history_slot];
+            const std::uint64_t ff_stepseg =
+                minibeam_event_counts_host[minibeam_urban_firstfail_stepseg_slot];
+            const std::uint64_t ff_reason =
+                minibeam_event_counts_host[minibeam_urban_firstfail_reason_slot];
+            std::cout << "[minibeam-water] urban numeric-guard trips="
+                      << urban_guard << " subulp-drops=" << urban_subulp
+                      << '\n';
+            if (ff_claim > 0) {
+                std::cout << "[minibeam-water] urban first failure: history="
+                          << ff_hist << " outer_step=" << (ff_stepseg >> 32U)
+                          << " segment=" << (ff_stepseg & 0xFFFFFFFFULL)
+                          << " reason=" << ff_reason << '\n';
+            }
+            const std::uint64_t ge_claim =
+                minibeam_event_counts_host[minibeam_urban_guardev_claim_slot];
+            if (ge_claim > 0) {
+                const auto bits_to_float = [](std::uint64_t w) {
+                    std::uint32_t b = static_cast<std::uint32_t>(w);
+                    float f = 0.0F;
+                    static_assert(sizeof(f) == sizeof(b));
+                    std::memcpy(&f, &b, sizeof(f));
+                    return f;
+                };
+                std::cout << "[minibeam-water] urban first guard evidence:"
+                          << " site="
+                          << minibeam_event_counts_host
+                                 [minibeam_urban_guardev_base_slot]
+                          << " epre_MeV="
+                          << bits_to_float(minibeam_event_counts_host
+                                               [minibeam_urban_guardev_base_slot +
+                                                1]) << " t_msc_mm="
+                          << bits_to_float(minibeam_event_counts_host
+                                               [minibeam_urban_guardev_base_slot +
+                                                2]) << " g_final_mm="
+                          << bits_to_float(minibeam_event_counts_host
+                                               [minibeam_urban_guardev_base_slot +
+                                                3]) << '\n';
+            }
+            std::cout << "URBAN_RUN_QUALITY {\"fatal\":" << urban_fatal
+                      << ",\"cap\":" << urban_cap << ",\"guard\":"
+                      << urban_guard << ",\"subulp\":" << urban_subulp
+                      << ",\"first_failure_claim\":" << ff_claim
+                      << ",\"first_failure_history\":" << ff_hist
+                      << ",\"first_failure_outer_step\":"
+                      << (ff_stepseg >> 32U) << ",\"first_failure_segment\":"
+                      << (ff_stepseg & 0xFFFFFFFFULL)
+                      << ",\"first_failure_reason\":" << ff_reason << "}\n";
             if (urban_fatal > 0) {
                 throw std::runtime_error(
                     "Urban MSC fatal: " + std::to_string(urban_fatal) +
@@ -13253,6 +13601,11 @@ template<int EmMode>
                     "); cap trips=" +
                     std::to_string(minibeam_event_counts_host
                                        [minibeam_water_urban_subdiv_cap_slot]) +
+                    "; first failure history=" + std::to_string(ff_hist) +
+                    " outer_step=" +
+                    std::to_string(ff_stepseg >> 32U) + " segment=" +
+                    std::to_string(ff_stepseg & 0xFFFFFFFFULL) + " reason=" +
+                    std::to_string(ff_reason) +
                     ". Partial space paths with full-macro-step energy loss"
                     " must never pass as successful dose.");
             }

@@ -93,6 +93,61 @@ inline float uniform01(std::uint64_t seed,
     return (static_cast<float>(bits) + 0.5f) * inverse_two_to_24;
 }
 
+// MSC-dedicated domain draw (fix C2, versioned, research path).
+// Problem: Urban draws used (seed, history, steps*1024+segment, 70/71/...),
+// while all-ion elastic uses (seed, history, steps, 70/71) on the SAME
+// (seed, history) key. At outer_step = 0, segment = 0 the raw Philox
+// addresses coincide exactly (same counter words, same dim lane) — the same
+// "random" bits would steer two different physics decisions in full physics
+// (EM-only never runs elastic, which is why this never showed there).
+// Fix: MSC draws set bit 30 of Philox counter word 3. Proof of separation:
+//   - legacy counter[3] = (ii>>32) ^ (dim/4) with ii < 2^32 in every legacy
+//     consumer (outer step counts, fixed 0/indices) and dim any u32, so
+//     counter[3] <= 0x3FFFFFFF: bit 30 is ALWAYS clear;
+//   - MSC counter[3] = (ii>>32) ^ (dim/4) ^ 0x40000000 with ii < 2^32
+//     (enforced: outer < 2^22, segment < 1024): bit 30 is ALWAYS set.
+// The two counter SETS are disjoint; Philox with a fixed key is a bijection
+// over counters, so no MSC draw can ever equal a legacy draw. This is a
+// structural guarantee about the address sets, not a "vanishing collision
+// probability" claim, and it changes no legacy stream bit.
+// Callers must guarantee interaction_index < 2^32 (guarded at the Urban
+// call sites: outer_step < 2^22, segment_index < 1024); larger values would
+// break the proof and must fail before any draw.
+inline constexpr std::uint32_t msc_domain_tag = 0x40000000U;
+
+inline std::uint32_t msc_random_u32(std::uint64_t seed,
+                                    std::uint64_t history_id,
+                                    std::uint64_t interaction_index,
+                                    std::uint32_t random_dimension) noexcept {
+    const auto block = random_dimension / 4U;
+    PhiloxBlock counter{
+        static_cast<std::uint32_t>(history_id),
+        static_cast<std::uint32_t>(history_id >> 32U),
+        static_cast<std::uint32_t>(interaction_index),
+        static_cast<std::uint32_t>(interaction_index >> 32U) ^ block ^
+            msc_domain_tag,
+    };
+    const auto generated = philox4x32_10(
+        counter, static_cast<std::uint32_t>(seed),
+        static_cast<std::uint32_t>(seed >> 32U));
+    return generated[random_dimension % 4U];
+}
+
+// Strict-unit MSC draw: same endpoint clamp as urban_unit_strict, on the
+// MSC domain. All Urban consumers (sampler dims, limiter 58/59) must use
+// this; urban_unit_strict is kept for the regression tests only.
+inline float msc_unit_strict(std::uint64_t seed,
+                             std::uint64_t history_id,
+                             std::uint64_t interaction_index,
+                             std::uint32_t random_dimension) noexcept {
+    constexpr float inverse_two_to_24 = 5.9604644775390625e-8f;
+    constexpr float one_minus_ulp = 0x1.fffffep-1f;
+    const auto bits =
+        msc_random_u32(seed, history_id, interaction_index, random_dimension) >>
+        8U;
+    const float v = (static_cast<float>(bits) + 0.5f) * inverse_two_to_24;
+    return v < 1.0f ? v : one_minus_ulp;
+}
 // Urban-MSC-only strict unit draw (versioned, research path).
 // uniform01's mapping rounds bits=2^24-1 to exactly 1.0f in FP32, which
 // corrupts the Urban Bernoulli trial `u0 < q_probability` (a 2^-24-rate

@@ -483,3 +483,121 @@ not run — no frozen user baseline found in evidence); GLOBAL coverage
 (Cu/Water C12 only; CT/proton/fragment routing unverified) BLOCKED.
 Defaults untouched. See `evidence/urban_9618eb0_20260922/` for all
 artifacts, manifests, and scripts.
+
+## C-round: C1–C8 close-out (2026-09-23, anchor 0f2c0ca)
+
+Evidence: `evidence/urban_after_0f2c0ca_20260922/` (new dir; old dir
+untouched). Binary `build/oneapi-nvidia-minibeam/carbon_mc`
+(`6d79ecf7ad83192eb1fcb43b767449557f50407842fdb17e7c8c137f0b9e3508`
+final; earlier C-stage SHAs in `binsha_C2/C4.txt`). B1–B6 preserved
+(strict uniform, frozen tlimitmin, stable one_minus_cth, fatal
+propagation); C-round changed: conversion math, RNG domain, finalize
+inversion, secondary state, MSC range. Legacy streams bit-identical
+(helpers ALL PASS).
+
+### Errata to the B-round record (§1.2清算)
+
+- B2 "double chain": the unconditional-double sampler chain was measured
+  3-4x wall time and REMOVED; final state is float-only with series/expm1/
+  log1p stable forms (C1 extends this to every conversion branch). Any
+  "B2 keeps double" wording above is superseded.
+- B6 "collision-free addressing": WRONG in the dangerous direction. Real
+  collision found at (outer=0, seg=0, dim 70/71, primary key): all-ion
+  elastic `uniform01(steps=0)` shares raw Philox bits with old-Urban
+  `urban_unit_strict(0*1024+0)` whenever elastic runs (full physics, never
+  EM-only — hence never observed). Fixed by the MSC domain tag (C2), not
+  by the old 12.6M-partner argument (retired).
+- Binary SHAs: `binsha_FINAL.txt` (post-B2c) vs validation binary
+  (`0f0f7060` post-B2c? and `4d46c910` in §B-validation) are DIFFERENT
+  STAGE binaries (intermediate vs final-B), not a record error; C-round
+  binaries are hashed per stage in the new manifest.
+- `dose_compare_B.py` "pp": misnomer; it computed 100*(ratio-1), i.e.
+  RELATIVE percent. Renamed in `dose_gate.py`; old numbers unchanged.
+- B_s1/B_s2 dose "2 seeds": FALSE — same seed 202609250 (output dirs only).
+  C-round dose uses 3 independent seeds (202609251/2/3).
+- B verdict "CARBON_EM_ONLY PASS" used study criteria (bulk + deep);
+  the C-round froze prompt-§7.3 gates BEFORE measuring and the valley/PVDR
+  residual fails them. The C verdict below SUPERSEDES for any promotion
+  question; the B numbers stand as measurements.
+
+### C1 conversion (true<->geom)
+
+Executed triple oracle `g4_conv_oracle.cc` (real G4UrbanMscModel:
+Limit→Geom→TrueStepLength, 8 energies × 19 steps, Water_75eV):
+t≤1nm → g==t exactly; round-trip exact; t_lim caps at CSDA-R (→C4).
+Fixes: expm1 z + series/expm1 delta (killed the false "≥100 ulp" claim);
+log1p/expm1 par>=0 inversion (was t=0 on boundary slivers → 49 GPU guard
+trips → 0); keep-delta repairs; 8-ulp representability switch; finite
+guards. Bounds (independent long-double + G4): g ≤2.3e-7, small-t delta
+exact, range-direct inside 4-ulp envelope, fallback rmax ≤8.4%, par-branch
+z 2e-7, truncated inversion 3e-7, sub-nm exact. No g>t, no pseudo-zero.
+GPU helper probe: host/GPU spread ≤1 ulp (g), bitwise RNG/fix/trip.
+
+### C2 RNG + safety
+
+MSC domain tag (counter word-3 bit 30; disjoint sets + Philox bijectivity
+= structural proof; legacy bit-identical). Guards (outer<2^22, seg<1024)
+before any draw, host-injected. Full accept contract (reasons 1-8) +
+FP32-progress rule + sub-ulp completion + first-failure record (ticket
+election; PTX has no 64-bit CAS) + run-quality JSON + nonzero exit + no
+accepted dose. GPU fault injection (degenerate table): seg==1024 guard
+fires, 1 fault/history then stopped, exit 1, no dose. Normal smoke:
+all-zero. E2 ensemble (8×200k) confirms the domain change is
+distribution-neutral (old center inside new CI).
+
+### C3 q-audit
+
+Weight export + long-double recomputation: q/prob/x_mean1 ~1e-7,
+d ~6e-6, tail weight <1e-7; gate margin ≥7.3e-4; straddles exact by search
+(mapping merges at b≥2^23 documented, 2^-24 effect); q≥1→mixture pinned;
+fuzzy-zone error model replaces "identical". Domain: q∈[0.933,1.001].
+
+### C4 transport contract
+
+Secondary tlimit lifecycle fixed (was pinned 1e10 → never limited):
+per-track persistent state + born flag + chunk save/restore
+(`SecondaryResumeState.sec_urban_tlimit_mm/born`). MSC currentRange
+mirror (executed, cuts-independent, exact-linear): water E/7.2, Cu E/64.5
+— neither CSDA nor restricted. Old restricted range clamped low-E steps
+and killed scatter at end-of-range. Loss side keeps restricted tables
+(current_range_mm has no readers — verified). Geometry readout (§5.1) +
+remaining approximations A1–A6 in
+`evidence/urban_after_0f2c0ca_20260922/transport_contract.md`.
+Determinism + save/restore + newborn tests ALL PASS.
+
+### C5 hygiene
+
+E7 relabeled diagnostic + hang-guard (slab reference BLOCKED); test
+outputs to $CARBON_TEST_OUT_DIR/temp (frozen evidence never rewritten);
+host-vs-GPU probed (above); OFF build still broken for PRE-EXISTING
+missing MINIBEAM-off definitions (not Urban code — verified untouched).
+
+### C6 dose/phase-space (frozen acceptance.yaml)
+
+- Phase space vs real TOPAS .phsp (matched histories, exact space angle,
+  batch SEs, replay_gate_C.json): angVar 0.996–1.025, disVar 1.003–1.016,
+  q999 1.008–1.027, survival identical. PASS. (Two loader bugs caught and
+  fixed during the work: column shift, beam-axis mixup.)
+- Row fluence matched ~1% → residual is NOT water-MCS (C6.2 discriminator
+  with evidence). Stable B→C (+6.0%→+6.3%).
+- Dose (3 seeds) vs TOPAS dose.bin: totals +0.4–0.8%, peak ±0.7%, valley
+  +4–6% FAIL, PVDR −4–6% FAIL, FWHM PASS, R80 −0.500mm marginal FAIL.
+- Cu slab (10mm, 60k G4): ang 0.956, q999 0.90, dE +3.5% (loss-model side).
+  Cu tail is weak-side: wrong sign for the valley excess. Electrons
+  wrong-sign too. Scoring/sources match. → RESIDUAL_UNRESOLVED (C6_verdict.md).
+- Peak −0.26mm (C4 range fix improved B −0.50mm), height matched.
+
+### C7/C8 assessment
+
+- Active-Urban full line (Cu+water+secondary C12 → urban_v2, 10M):
+  2.3G urban segments, all-zero quality counters, routing logged
+  (config template in evidence; nuclear scope effectively off per ledger
+  — true full-physics validation needs nuclear-on scope + held-out).
+  Dose acceptance BLOCKED (C6 must pass first).
+- Broadbeam: CT non-interference RE-PROVEN with C binary (sums identical
+  5490.062012, maxabs 1.2e-8). Reference accuracy BLOCKED (no frozen
+  broadbeam reference). Perf NOT_RUN.
+
+Promotion verdict: SCOPED_URBAN_DEFAULT NOT_PROMOTED,
+GLOBAL_URBAN_DEFAULT NOT_PROMOTED. Defaults untouched. No commit/push
+(this round unauthorized).

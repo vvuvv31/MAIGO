@@ -307,7 +307,7 @@ void test_propose_path() {
         const auto s = copper_urban_v2_propose_and_sample(
             dir, 3000.0F, 6, 12, ceiling, boundary, 0.0F, 0.0F, -0.5F, 0.0F,
             0.0F, 1.0F, geom, true, state, table, 8.96F, 12.8628F, 1.0F,
-            4242ULL, 17ULL, 3ULL, 50);
+            4242ULL, 17ULL, 0ULL, 3U, 50);
         char lab[160];
         std::snprintf(lab, sizeof(lab),
                       "propose: ceiling=%.2f valid reason=%d g=%.5f t=%.5f",
@@ -319,12 +319,12 @@ void test_propose_path() {
         const auto s2 = copper_urban_v2_propose_and_sample(
             dir, 3000.0F, 6, 12, ceiling, boundary, 0.0F, 0.0F, -0.5F, 0.0F,
             0.0F, 1.0F, geom, true, state, table, 8.96F, 12.8628F, 1.0F,
-            4242ULL, 17ULL, 3ULL, 50);
+            4242ULL, 17ULL, 0ULL, 3U, 50);
         UrbanV2TrackState state0{};
         const auto s0 = copper_urban_v2_propose_and_sample(
             dir, 3000.0F, 6, 12, ceiling, boundary, 0.0F, 0.0F, -0.5F, 0.0F,
             0.0F, 1.0F, geom, true, state0, table, 8.96F, 12.8628F, 1.0F,
-            4242ULL, 17ULL, 3ULL, 50);
+            4242ULL, 17ULL, 0ULL, 3U, 50);
         check(s.proposal_valid && s0.proposal_valid &&
                   s.limit_reason == want &&
                   s.final_geom_path_mm <= ceiling &&
@@ -403,7 +403,7 @@ void test_water_material() {
     UrbanV2TrackState state{};
     const auto s = urban_v2_propose_and_sample(
         dir, 3000.0F, 0.05F, 0.05F, 0.0F, 0.0F, 40.0F, 0.0F, 0.0F, 1.0F,
-        box, true, state, mat, 1.0F, 4242ULL, 17ULL, 3ULL, 70U);
+        box, true, state, mat, 1.0F, 4242ULL, 17ULL, 0ULL, 3U, 70U);
     char lab[160];
     std::snprintf(lab, sizeof(lab),
                   "water propose: valid reason=%d g=%.5f t=%.5f range=%.2f",
@@ -469,7 +469,7 @@ void test_water_urban_segment_scaling() {
         UrbanV2TrackState st{};
         const auto s = urban_v2_propose_and_sample(
             dir, 3000.0F, 0.05F, 0.05F, 0.0F, 0.0F, 40.0F, 0.0F, 0.0F, 1.0F,
-            box, true, st, mat, 1.0F, kSeed, h, 0ULL, 70U);
+            box, true, st, mat, 1.0F, kSeed, h, 0ULL, 0U, 70U);
         if (s.proposal_valid) {
             sum_single += 2.0 * (1.0 - double(s.direction.z));
             ++n_single;
@@ -477,11 +477,11 @@ void test_water_urban_segment_scaling() {
         UrbanV2TrackState st2{};
         const auto a = urban_v2_propose_and_sample(
             dir, 3000.0F, 0.025F, 0.025F, 0.0F, 0.0F, 40.0F, 0.0F, 0.0F, 1.0F,
-            box, true, st2, mat, 1.0F, kSeed, h, 0ULL, 70U);
+            box, true, st2, mat, 1.0F, kSeed, h, 0ULL, 0U, 70U);
         const auto b = urban_v2_propose_and_sample(
             a.direction, 3000.0F, 0.025F, 0.025F, 0.0F, 0.0F, 40.0F,
             a.direction.x, a.direction.y, a.direction.z, box, false, st2, mat,
-            1.0F, kSeed, h, 1ULL, 70U);
+            1.0F, kSeed, h, 0ULL, 1U, 70U);
         if (a.proposal_valid && b.proposal_valid) {
             // Per-segment deflections about their own entry axes.
             const double t1 = 2.0 * (1.0 - double(a.direction.z));
@@ -555,7 +555,7 @@ void test_water_urban_low_energy_proposal() {
         UrbanV2TrackState st{};
         const auto s = urban_v2_propose_and_sample(
             dir, epre, 0.05F, 0.05F, 0.0F, 0.0F, 40.0F, 0.0F, 0.0F, 1.0F,
-            box, true, st, mat, 1.0F, 999ULL, 7ULL, 0ULL, 70U);
+            box, true, st, mat, 1.0F, 999ULL, 7ULL, 0ULL, 0U, 70U);
         std::printf("  water lowE: epre=%.3f valid=%d reason=%d g=%.6g t=%.6g\n",
                     double(epre), int(s.proposal_valid), s.limit_reason,
                     double(s.final_geom_path_mm), double(s.final_true_path_mm));
@@ -617,8 +617,7 @@ void test_water_urban_subdivision_robustness() {
                     0.05F < 0.1F - traversed ? 0.05F : 0.1F - traversed;
                 const auto s = urban_v2_propose_and_sample(
                     sd, epre, 0.05F, segmm, 0.0F, 0.0F, 40.0F, sd.x, sd.y,
-                    sd.z, box, segs == 0, st, mat, 1.0F, 555ULL,
-                    std::uint64_t(h), std::uint64_t(segs), 70U);
+                    sd.z, box, segs == 0, st, mat, 1.0F, 555ULL, std::uint64_t(h), 0ULL, static_cast<std::uint32_t>(segs), 70U);
                 if (!(s.final_geom_path_mm > 0.0F)) {
                     stuck = true;
                     break;

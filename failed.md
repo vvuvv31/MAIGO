@@ -190,3 +190,16 @@ overflow 仍必须通过。FP64 性能路线由 `AGENTS.md` 明确禁止。
 | 2026-09-22 “min() 可交换故 GPIL/DoIt 顺序可任意交换”注释 | `true/geometric` 变换、几何重求交与状态更新不是标量 min；注释会误导后续 transport 重构 | 已删除该断言，改为显式适用条件（固定 ceiling 细分 + limiter 非绑定；改变步进竞争结构必须重审 §2.6） |
 | 2026-09-22 无 dispR cap 的位移接受（“EXACT mirror”注释） | `G4SafetyHelper::ComputeSafety(fNewPosition, dispR)` 经 navigator maxLength 截断（`G4SafetyCalculator` + “not restricted by maxLength” 注释确认），故参考对远场位移恒做 0.99 缩减；旧代码远场全接受，系统性大 ~1% | 已加 cap + R2 期望改为 branch3/0.99。旧“safety=1 全接受”用例已更新，不得回退 |
 | 2026-09-22 全链 10M 和 replay 输出覆盖历史 `out/` 结果 | 首次 B 验证运行时直接复用历史 config stem，`--dose-output` 只重定向了 CSV 而 dose.raw/ledger/quality 仍写入 `out/<stem>/`，覆盖了 9618eb0 的 10M cuwater dose.raw（及 mini 输出）。属流程失误，非物理回归 | 已记录；被覆盖文件的数值结论保留在 urban.md 表格中。同一任务内改用 stem 不同的候选 config（`out/*_B_*/` 新目录）重跑 S1/S2 并归档，之后所有候选运行必须先确认输出隔离。只有输出路径机制改变（不再按 stem 落盘）时才重审此条 |
+
+## C-round entries (2026-09-23, anchor 0f2c0ca)
+
+| 路线 | 结果/失败原因 | 状态与允许重试条件 |
+|---|---|---|
+| 用 64-ulp 阈值切换 range-branch delta（C1 初版） | 阈值过于保守：在 direct 仍准确（误差 ~4%）时丢弃 dtrl 能量损失修正（最大 33%），fallback 反而更差。根源：阈值应设在 direct 误差与 fallback 误差的交叉点，而非随意大数 | 已改为 8-ulp（direct 误差 <~12% 处保留，之下 fallback）。reachable 网格验证。阈值不是剂量拟合，而是误差交叉点；改变采样器/转换公式必须重算交叉 |
+| 用 `(step<<32)\|segment` 思维检查 RNG（沿用 B 轮论证） | B 轮"12.6M 步外伙伴不可达"论证方向错误：真实碰撞在 (outer=0,seg=0,dim70/71) 首步即发生（elastic vs Urban 同 key），EM-only 因无 elastic 从未暴露 | 已废弃概率论证，改用 MSC 专属域标签（counter word3 bit30）的结构证明 + legacy bit-identical。dim 集合或 counter 布局改变时重审 |
+| 直接用 host helper ALL PASS 宣称 GPU transport 通过（C5 初衷） | GPU 探针发现 range 分支 host/device 差 2ulp（libm 实现差），small-t expm1 路逐位一致。host 测试对设备行为的覆盖不完整 | 已建立 GPU helper 探针（包络门 g≤4ulp/d≤4ulp(t)）+ host 包络测试，双门并行。容差放宽必须有探针数据支持 |
+| host `sycl::nextafter` 做 ulp 尺度（C1/C2 阈值） | 本工具链 host 实现步进 2ulp（device 正确）。阈值分析在 host 差 2 倍 | 已改用位运算 `urban_ulp_above`（host/device 精确一致）。凡用 libm/工具链语义做阈值，必须 host+device 双测 |
+| E7 当 slab 物理门（沿用旧标签） | 安全盒非 slab、末段先散射后反投影、无在库参考；`done>n/2` 只是 hang-guard | 已改标 diagnostic；slab 几何真参考对比 BLOCKED（G4 slab CSV 在库外且源设置不同）。引用 E7 做晋升依据前必须先建参考 |
+| dose_compare 的 B_s1/B_s2 "双种子" | 同一种子（仅输出目录不同），不确定度被低估 | C 轮 3 独立种子 + batch/seed SE + 等价性判定。旧双种子数值保留，结论以 C 门为准 |
+| 用 GPU segment==1024 守卫的"配置注入"验证（C2 计划） | config guard（max≤1024·umax）使标称段数恒 ≤1024，物理配置无法触达 1024（需 shortfall）；强行小步长会被 host 校验拒绝 | 改用退化 loss 表注入（R~1e-30 → 微步长累积），GPU 精确触发 segment==1024（reason 1）+ 首错记录 + exit 1 + 无剂量。物理配置下 1024 不可达是设计结论（backstop），不再尝试配置注入 |
+| OFF 预设构建验证 C-round 改动 | 仍失败：缺 MINIBEAM-off 的 config 面片与 device 符号（delta_diag、slit、urban_v2 flags），与 Urban 数学无关（diff 验证未动区域） | 保持 BLOCKED。最小隔离修复（off stub）是独立任务；Urban helper 本身在 .inc 层对 off-clean（localize/helpers 编译通过） |

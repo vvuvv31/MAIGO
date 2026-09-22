@@ -1,0 +1,4 @@
+[integrity-checks] DISABLED: file SHA256 content checks and provenance hashing are skipped
+[plan-shard] 1/1 config="config/beam_minibeam_water_replay_e250_em12800k_urban_v2_mini.yaml"
+Primary ion: Z=6 A=12; rest mass=11177.9 MeV (A * nucleon mass)
+SYCL device: carbon_mc: No SYCL CUDA/NVIDIA GPU found (set ONEAPI_DEVICE_SELECTOR or install the matching runtime). Underlying error: No device of requested type available.

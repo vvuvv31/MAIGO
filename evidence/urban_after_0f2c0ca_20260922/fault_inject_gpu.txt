@@ -1,0 +1,27 @@
+[integrity-checks] DISABLED: file SHA256 content checks and provenance hashing are skipped
+[plan-shard] 1/1 config="/tmp/opencode/fault_inject.yaml"
+Primary ion: Z=6 A=12; rest mass=11177.9 MeV (A * nucleon mass)
+SYCL device: NVIDIA GeForce RTX 2080 Ti | NVIDIA Corporation | backend cuda | driver CUDA 12.6 | fp64=yes atomic64=yes
+Random seed: 202609250
+TPS source: benchmark/carbonminibeam/water_entrance_primary_c12_smoke2k.csv
+  spots: 2000/2000 active; total histories: 2000; total MU: 2000
+  beam/couch/collimator angle: 0/0/0 deg; SAD: 1000 mm; patient: HFS; coordinates: iec61217; weight: histories
+  batched SYCL launch: 2000 TPS spots, 2000 histories
+[schneider-bundle] v2.1 bundle verified: 14 projectiles, 182+13 domains, 5 file hashes disabled
+[em-performance] material_cache=1 step_cache=1 local_audit=0 exact_index=1
+[physics-cache] unified_em=miss nodes=25872175
+[delta-moments] condensed_partition_v1; aggregate Gamma; no delta clock; nodes=25872175 SHA256=c551bc52fa30ff7e3ea229c8b89792e8ecd2b0fb12f18fcad50d1c6f206bc7cc
+[unified-em] all 18 charged ions; water + Schneider density nodes; native particle step parameters plus 1% combined mean-loss guard; local aggregate delta deposition; density cut-onset/patient accuracy validation pending
+[stopping-config] primary_midpoint=0 secondary_exact_faces=1 secondary_ion_section_file="" sha256=
+[minibeam-water] urban loss-range nodes=2 zeff=nan radlen_mm=nan
+[physics-cache] schneider hits=0 misses=4
+[history-chunk-size] backend default=4096
+[progress] primary batches completed: 2000/2000 histories (1 launches)
+[secondary-schedule] group=0; particle state and RNG identities preserved
+[minibeam-water] urban segments total=2050000
+[minibeam-water] urban subdiv cap trips=0
+[minibeam-water] urban fatal proposals=2000
+[minibeam-water] urban numeric-guard trips=0 subulp-drops=0
+[minibeam-water] urban first failure: history=0 outer_step=0 segment=1024 reason=1
+URBAN_RUN_QUALITY {"fatal":2000,"cap":0,"guard":0,"subulp":0,"first_failure_claim":2000,"first_failure_history":0,"first_failure_outer_step":0,"first_failure_segment":1024,"first_failure_reason":1}
+carbon_mc: Urban MSC fatal: 2000 invalid/zero-progress/capped proposals (slot 137); cap trips=0; first failure history=0 outer_step=0 segment=1024 reason=1. Partial space paths with full-macro-step energy loss must never pass as successful dose.
