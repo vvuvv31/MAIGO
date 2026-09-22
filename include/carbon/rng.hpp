@@ -93,4 +93,23 @@ inline float uniform01(std::uint64_t seed,
     return (static_cast<float>(bits) + 0.5f) * inverse_two_to_24;
 }
 
+// Urban-MSC-only strict unit draw (versioned, research path).
+// uniform01's mapping rounds bits=2^24-1 to exactly 1.0f in FP32, which
+// corrupts the Urban Bernoulli trial `u0 < q_probability` (a 2^-24-rate
+// spurious isotropic branch even when q >= 1, i.e. when the reference takes
+// the mixture branch with probability 1). This variant clamps only that
+// endpoint to the largest float below 1 (0x1.fffffep-1); every other draw is
+// bit-identical to uniform01, and all non-Urban consumers keep uniform01, so
+// no production baseline stream changes.
+inline float urban_unit_strict(std::uint64_t seed,
+                               std::uint64_t history_id,
+                               std::uint64_t interaction_index,
+                               std::uint32_t random_dimension) noexcept {
+    constexpr float inverse_two_to_24 = 5.9604644775390625e-8f;
+    constexpr float one_minus_ulp = 0x1.fffffep-1f;
+    const auto bits = random_u32(seed, history_id, interaction_index, random_dimension) >> 8U;
+    const float v = (static_cast<float>(bits) + 0.5f) * inverse_two_to_24;
+    return v < 1.0f ? v : one_minus_ulp;
+}
+
 }  // namespace carbon::rng

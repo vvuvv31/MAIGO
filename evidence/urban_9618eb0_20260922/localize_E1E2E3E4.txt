@@ -1,0 +1,32 @@
+[E1] uniform01 raw-bit endpoint
+  E1 map: bits=         0 -> 0x1p-25 (2.98023224e-08)
+  E1 map: bits=         1 -> 0x1.8p-24 (8.94069672e-08)
+  E1 map: bits=   8388607 -> 0x1.fffffep-2 (0.49999997)
+  E1 map: bits=   8388608 -> 0x1p-1 (0.5)
+  E1 map: bits=   8388609 -> 0x1.000004p-1 (0.500000119)
+  E1 map: bits=  16777214 -> 0x1.fffffcp-1 (0.999999881)
+  E1 map: bits=  16777215 -> 0x1p+0 (1)
+PASS: E1: bits=2^24-1 maps to exactly 1.0f
+PASS: E1: bits=0 maps strictly inside
+  E1 reach: seed=20260922 hist=7 dim=70 ii=18823669 -> 0x1p+0
+PASS: E1: reached preimage returns 1.0f
+PASS: E1: u0==1, q==1 takes the else (isotropic) branch
+[E2] stable small-angle measurement
+  E2 n=200000: A[2(1-dz)]=1.399398e-08 B[2*omcth]=3.413107e-08 C[atan2^2]=3.413108e-08 D[slope^2]=3.413112e-08
+  E2: cth==1 fraction=0.8958 omcth>0-but-rounded=179167 B/A=2.439 C/B=1.0000 D/B=1.0000
+PASS: E2: all proposals valid
+PASS: E2: rounded cth==1 hides nonzero omcth
+PASS: E2: stable moment B exceeds lossy metric A
+[E3] fMinimal tlimitmin lifecycle
+  E3 E=  3000.0 MeV: MAIGO tlimitmin=2.802e-03 (tsmall=2.802e-03, extreme=0) vs REF 1.0e-7 (tsmall=1.0e-7, extreme=0), ratio=2.80e+04
+  E3 E=  1000.0 MeV: MAIGO tlimitmin=3.215e-03 (tsmall=3.215e-03, extreme=0) vs REF 1.0e-7 (tsmall=1.0e-7, extreme=0), ratio=3.21e+04
+  E3 E=   300.0 MeV: MAIGO tlimitmin=3.376e-03 (tsmall=3.376e-03, extreme=0) vs REF 1.0e-7 (tsmall=1.0e-7, extreme=0), ratio=3.38e+04
+  E3 E=   100.0 MeV: MAIGO tlimitmin=3.355e-03 (tsmall=3.355e-03, extreme=0) vs REF 1.0e-7 (tsmall=1.0e-7, extreme=0), ratio=3.35e+04
+  E3 E=    30.0 MeV: MAIGO tlimitmin=3.134e-03 (tsmall=3.134e-03, extreme=0) vs REF 1.0e-7 (tsmall=1.0e-7, extreme=0), ratio=3.13e+04
+  E3 E=    10.0 MeV: MAIGO tlimitmin=2.715e-03 (tsmall=2.715e-03, extreme=0) vs REF 1.0e-7 (tsmall=1.0e-7, extreme=0), ratio=2.71e+04
+PASS: E3: MAIGO per-step tlimitmin diverges from frozen 1e-7 mm
+[E4] MAIGO single-step theta writer (for G4-oracle compare)
+PASS: E4: output CSV opens
+  E4: wrote 200000 rows
+PASS: E4: all proposals valid
+urban_localize: ALL PASS

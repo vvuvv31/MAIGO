@@ -1646,6 +1646,38 @@ void TransportConfig::validate() const {
                     "minibeam_water_secondary_c12_post_sample_loss_scale "
                     "must be finite and in (0, 2]");
             }
+            // Fix B6 (prompt §2.9): the water subdivision loops address RNG
+            // as steps*1024+segment_index, proven collision-free for
+            // segment_index < 1024 per macro step and < 4.19M macro steps
+            // per history (proof in the evidence branch map; partner steps
+            // sit at >= 12.6M given the Urban dim blocks). Macro steps are
+            // bounded by maximum_step_mm, so enforce the structural half
+            // here: 1024 subdivision ceilings per macro step.
+            const auto require_subdiv_rng_bound = [&](const char* which,
+                                                      const std::string& model,
+                                                      double max_segment_mm) {
+                if ((model == "fermi_eyges_tail" || model == "urban_v2") &&
+                    !(maximum_step_mm <= 1024.0 * max_segment_mm)) {
+                    throw std::invalid_argument(
+                        std::string(
+                            "minibeam water ") +
+                        which + " " + model +
+                        " needs maximum_step_mm <= 1024 * max_segment_mm"
+                        " (RNG substep addressing); got maximum_step_mm=" +
+                        std::to_string(maximum_step_mm) +
+                        " max_segment_mm=" + std::to_string(max_segment_mm));
+                }
+            };
+            require_subdiv_rng_bound(
+                "primary", minibeam_water_primary_mcs_model,
+                minibeam_water_primary_mcs_model == "urban_v2"
+                    ? minibeam_water_primary_urban_max_step_mm
+                    : minibeam_water_primary_mcs_max_segment_mm);
+            require_subdiv_rng_bound(
+                "secondary-C12", minibeam_water_secondary_c12_mcs_model,
+                minibeam_water_secondary_c12_mcs_model == "urban_v2"
+                    ? minibeam_water_primary_urban_max_step_mm
+                    : minibeam_water_secondary_c12_mcs_max_segment_mm);
             const auto& calibration_energies =
                 minibeam_copper_survivor_energy_loss_energies_MeVu;
             const auto& calibration_scales =

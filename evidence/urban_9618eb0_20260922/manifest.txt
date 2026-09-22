@@ -1,0 +1,29 @@
+HEAD=9618eb029b57d801ec08a7b61ddc7bf265dfef2c
+date_utc=2026-09-22T06:45:05Z
+gpu=NVIDIA GeForce RTX 2080 Ti, 560.35.05
+compiler=CMAKE_CXX_COMPILER:STRING=/home/wuwei/sycl_workspace/llvm/build/install/bin/icpx
+sycl_targets=CARBON_SYCL_TARGETS:STRING=nvptx64-nvidia-cuda
+build_type=CMAKE_BUILD_TYPE:STRING=Release
+fp32_dose=CARBON_DOSE_FP32:BOOL=ON
+370dbad0f850a897f255d3b43220c3c1ac66a9193960fc0428e7f7cb13cd74a9  build/oneapi-nvidia-minibeam/carbon_mc
+a9a854406a2ddd3ff48c36b4427177ce7fc223f82b8e91d04b39d3a33e69b905  build/oneapi-nvidia-minibeam/urban_v2_helpers
+534e8847b1508045c2cacc54e7e72673203ca3b3c34620b125feb364c6dab117  data/urban/c12_water75ev_urban_g4_11_3_2.csv
+7065b29fd0246bc79ebe2bf52d653194af195e235fefdcb269b811ca81aa1eb6  data/stopping_power_water_geant4_11_3_2.csv
+a55b3bf1a7c3dda988b71452852ce8499d2b460230ed7f535ae3fbf9bb40bdd0  data/ion_stopping_power_water_geant4_11_3_2.csv
+77b34fd0da1d255757c07bc13a0d02c7b5b3a56cce4d1656f9945e430ef1ff98  src/detail/sycl_device_math.inc
+f148f2f8c405fe9d4ce2eb59a4be927cb195d850b655d20277f586afe7362628  src/transport_sycl.cpp
+4c797d81894ffd7cd94f65482a83739099dc1640ffd4527f69e61af81e677750  include/carbon/rng.hpp
+d55d883e7c0762a3eed5ff932ac8cf9988a28c9cfd9dd3942d50508293ab267d  benchmark/carbonminibeam/test_urban_v2_helpers.cpp
+binary_postB2c=4d46c91047c4a551349aac28db068b8ae27222596a85b730852738908d9b2d29
+helpers_postB=fb001129d7862836d72283929ab10ab242560124876d0623d964a56fa3ac0bfa
+localize_postE7=0ef669a655c8f2de45c81edf814d57d84318ebc2fa62e5a0ccadb9135f8fdf99
+worktree_HEAD=9618eb029b57d801ec08a7b61ddc7bf265dfef2c
+worktree_dirty_tracked=8
+ M CMakeLists.txt
+ M benchmark/carbonminibeam/test_urban_v2_helpers.cpp
+ M failed.md
+ M include/carbon/rng.hpp
+ M src/config.cpp
+ M src/detail/sycl_device_math.inc
+ M src/transport_sycl.cpp
+ M urban.md

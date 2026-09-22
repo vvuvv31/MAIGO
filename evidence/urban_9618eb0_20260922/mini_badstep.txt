@@ -1,0 +1,2 @@
+[integrity-checks] DISABLED: file SHA256 content checks and provenance hashing are skipped
+carbon_mc: Unified water requires C12 native homogeneous water, 3D scoring, geant4 selector and CT step limits; legacy water routing is retired

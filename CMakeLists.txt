@@ -556,3 +556,25 @@ if(BUILD_TESTING AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/benchmark/carbonminibea
         TIMEOUT 600
         WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
 endif()
+
+# Urban localization experiments (E1/E2/E3): host-side, deterministic,
+# production code. Temporary diagnostic binary for the default-migration
+# task; not a permanent regression gate until Phase A pins tolerances.
+if(BUILD_TESTING AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/benchmark/carbonminibeam/test_urban_localize.cpp")
+    add_executable(urban_localize benchmark/carbonminibeam/test_urban_localize.cpp)
+    target_include_directories(urban_localize PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    target_link_libraries(urban_localize PRIVATE carbon_core)
+    if(CARBON_ENABLE_SYCL)
+        target_compile_options(urban_localize PRIVATE -fsycl)
+        if(CARBON_SYCL_TARGETS)
+            target_compile_options(urban_localize PRIVATE
+                -fsycl-targets=${CARBON_SYCL_TARGETS})
+        endif()
+    endif()
+    add_test(NAME urban_localize COMMAND urban_localize)
+    set_tests_properties(urban_localize PROPERTIES
+        TIMEOUT 900
+        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
+endif()

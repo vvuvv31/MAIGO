@@ -1,0 +1,77 @@
+[E1] uniform01 raw-bit endpoint
+  E1 map: bits=         0 -> 0x1p-25 (2.98023224e-08)
+  E1 map: bits=         1 -> 0x1.8p-24 (8.94069672e-08)
+  E1 map: bits=   8388607 -> 0x1.fffffep-2 (0.49999997)
+  E1 map: bits=   8388608 -> 0x1p-1 (0.5)
+  E1 map: bits=   8388609 -> 0x1.000004p-1 (0.500000119)
+  E1 map: bits=  16777214 -> 0x1.fffffcp-1 (0.999999881)
+  E1 map: bits=  16777215 -> 0x1p+0 (1)
+PASS: E1: bits=2^24-1 maps to exactly 1.0f
+PASS: E1: bits=0 maps strictly inside
+  E1 reach: seed=20260922 hist=7 dim=70 ii=18823669 -> 0x1p+0
+PASS: E1: reached preimage returns 1.0f
+PASS: E1: u0==1, q==1 takes the else (isotropic) branch
+[E2] stable small-angle measurement
+  E2 n=200000: A[2(1-dz)]=1.399398e-08 B[2*omcth]=3.413107e-08 C[atan2^2]=3.413108e-08 D[slope^2]=3.413112e-08
+  E2: cth==1 fraction=0.8958 omcth>0-but-rounded=179167 B/A=2.439 C/B=1.0000 D/B=1.0000
+PASS: E2: all proposals valid
+PASS: E2: rounded cth==1 hides nonzero omcth
+PASS: E2: stable moment B exceeds lossy metric A
+PASS: E2: rotation preserves angle (C/B, D/B ~= 1)
+PASS: E2: stable-moment band
+[E3] fMinimal tlimitmin lifecycle
+PASS: B3: E=3000.0 path=3 tlimitmin==1e-7 (got 1e-07)
+PASS: B3: tsmall==1e-7
+PASS: B3: E=1000.0 path=3 tlimitmin==1e-7 (got 1e-07)
+PASS: B3: tsmall==1e-7
+PASS: B3: E=300.0 path=3 tlimitmin==1e-7 (got 1e-07)
+PASS: B3: tsmall==1e-7
+PASS: B3: E=100.0 path=3 tlimitmin==1e-7 (got 1e-07)
+PASS: B3: tsmall==1e-7
+PASS: B3: E=30.0 path=3 tlimitmin==1e-7 (got 1e-07)
+PASS: B3: tsmall==1e-7
+PASS: B3: E=10.0 path=3 tlimitmin==1e-7 (got 1e-07)
+PASS: B3: tsmall==1e-7
+PASS: B3: path-0 tlimitmin frozen
+PASS: B3: path-2 tlimitmin frozen
+[E4] MAIGO single-step theta writer (for G4-oracle compare)
+PASS: E4: output CSV opens
+  E4: wrote 200000 rows
+PASS: E4: all proposals valid
+[B1] strict-uniform regression
+PASS: B1: strict map bits=0 in (0,1)
+PASS: B1: strict map bits=1 in (0,1)
+PASS: B1: strict map bits=8388607 in (0,1)
+PASS: B1: strict map bits=8388608 in (0,1)
+PASS: B1: strict map bits=8388609 in (0,1)
+PASS: B1: strict map bits=16777214 in (0,1)
+PASS: B1: strict map bits=16777215 in (0,1)
+PASS: B1: preimage clamps below 1
+PASS: B1: strict == uniform01 off-endpoint
+PASS: B1: strict draws take the q>=1 mixture branch
+[B4] branch-consistent delta
+PASS: B4: small-t series delta
+PASS: B4: small-t rmax2 positive
+PASS: B4: range-end proposal valid
+PASS: B4: range branch taken
+PASS: B4: range-branch delta self-consistent
+PASS: B4: untruncated proposal
+PASS: B4: untruncated delta == limiter-branch delta
+PASS: B4: truncated proposal
+PASS: B4: truncated delta bounded
+PASS: B4: truncated delta deterministic
+[B5] failure detection
+PASS: B5: sane proposal valid
+PASS: B5: empty table -> invalid
+PASS: B5: NaN energy -> invalid
+PASS: B5: zero ceiling -> invalid
+PASS: B5: zero boundary -> invalid
+[B6] RNG addressing + boundary equivalence
+PASS: B6: addressing edges
+PASS: B6: addressing top
+PASS: B6: production segs << stride
+PASS: B6: 51.2mm bound == stride
+PASS: B6: composition strictly increases
+PASS: B6: both boundary modes valid
+PASS: B6: boundary flag inert at non-binding scale
+urban_localize: ALL PASS

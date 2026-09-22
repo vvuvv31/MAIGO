@@ -391,7 +391,7 @@ WaterEntrySecondaryReplay load_water_entry_secondary_replay(
 #endif
 
 #if defined(CARBON_ENABLE_MINIBEAM)
-constexpr std::size_t minibeam_event_counter_count = 137;
+constexpr std::size_t minibeam_event_counter_count = 138;
 constexpr std::size_t minibeam_fragment_cascade_interactions_slot = 48;
 constexpr std::size_t minibeam_fragment_cascade_hits_slot = 49;
 constexpr std::size_t minibeam_fragment_cascade_miss_slot = 50;
@@ -428,6 +428,11 @@ constexpr std::size_t minibeam_water_urban_subdiv_cap_slot = 135;
 // Diagnostic: secondary-C12 Urban step entries (proves the research branch
 // executes; the cap slot above only fires on pathology).
 constexpr std::size_t minibeam_water_secondary_c12_urban_step_slot = 136;
+// Hard failure: invalid Urban proposal, zero-progress segment, or
+// subdivision-cap trip (fix B5). Any nonzero count fails the run (throw on
+// host): a partial space path with full-macro-step energy loss must never
+// pass as a successful dose. Structured record via the slot + throw message.
+constexpr std::size_t minibeam_water_urban_fatal_slot = 137;
 #endif
 
 #if defined(CARBON_ENABLE_MINIBEAM)
@@ -4459,6 +4464,21 @@ template<int EmMode>
                         const auto urban_v2_proposal =
                             minibeam_copper_urban_v2_msc &&
                             correlated_scattering.proposal_valid;
+                        // Fix B5: an invalid Urban proposal must fail the
+                        // run, not silently advance the full path
+                        // unscattered (flag only; the host throws).
+                        if (minibeam_copper_urban_v2_msc &&
+                            !correlated_scattering.proposal_valid &&
+                            minibeam_event_counts_device != nullptr) {
+                            sycl::atomic_ref<
+                                std::uint64_t,
+                                sycl::memory_order::relaxed,
+                                sycl::memory_scope::device,
+                                sycl::access::address_space::global_space>(
+                                minibeam_event_counts_device
+                                    [minibeam_water_urban_fatal_slot])
+                                .fetch_add(1U);
+                        }
                         const auto geom_advance_mm = urban_v2_proposal
                             ? correlated_scattering.final_geom_path_mm
                             : transport_path;
@@ -7514,6 +7534,11 @@ template<int EmMode>
                                     // (see test_water_urban_subdivision_
                                     // robustness), so the cap is 5000x clear
                                     // of physics.
+                                    // Fix B5: the cap trip ALSO raises the
+                                    // fatal flag (slot 137): breaking with a
+                                    // partial space path while the full macro
+                                    // step's energy was already scored must
+                                    // fail the run, never pass silently.
                                     if (minibeam_event_counts_device !=
                                         nullptr) {
                                         sycl::atomic_ref<
@@ -7524,6 +7549,15 @@ template<int EmMode>
                                                 global_space>(
                                             minibeam_event_counts_device
                                                 [minibeam_water_urban_subdiv_cap_slot])
+                                            .fetch_add(1U);
+                                        sycl::atomic_ref<
+                                            std::uint64_t,
+                                            sycl::memory_order::relaxed,
+                                            sycl::memory_scope::device,
+                                            sycl::access::address_space::
+                                                global_space>(
+                                            minibeam_event_counts_device
+                                                [minibeam_water_urban_fatal_slot])
                                             .fetch_add(1U);
                                     }
                                     break;
@@ -7563,6 +7597,28 @@ template<int EmMode>
                                                 1024U +
                                             segment_index,
                                         70U);
+                                // Fix B5: invalid proposal or zero progress
+                                // must not spin to the cap (burning 1M
+                                // iterations) nor continue silently. Raise
+                                // the fatal flag and stop this history's
+                                // water transport; the host fails the run.
+                                if (!urban_scatter.proposal_valid ||
+                                    !(urban_scatter.final_geom_path_mm >
+                                      0.0F)) {
+                                    if (minibeam_event_counts_device !=
+                                        nullptr) {
+                                        sycl::atomic_ref<
+                                            std::uint64_t,
+                                            sycl::memory_order::relaxed,
+                                            sycl::memory_scope::device,
+                                            sycl::access::address_space::
+                                                global_space>(
+                                            minibeam_event_counts_device
+                                                [minibeam_water_urban_fatal_slot])
+                                            .fetch_add(1U);
+                                    }
+                                    break;
+                                }
                                 const auto seg_end_x =
                                     seg_start_x +
                                     urban_scatter.final_geom_path_mm *
@@ -11995,21 +12051,22 @@ template<int EmMode>
                                     (kProductionSecondaryPath ? false :
                                      CARBON_SECONDARY_CONTEXT_FIELD(use_unified_water)) &&
                                     !sec_in_ct) {
-                                    // Research-only secondary-C12 Urban
-                                    // (Geant4-11.3.2, Water_75eV table shared
-                                    // with the primary path). Scope, RNG and
-                                    // stepping mirror the primary urban
-                                    // branch; differences are documented:
-                                    // - at_boundary is true on every step
-                                    //   (fresh per-step state): secondary
-                                    //   fragments carry no persistent MSC
-                                    //   state in their queue record, so the
-                                    //   tlimit is recomputed from the current
-                                    //   energy instead of persisting from
-                                    //   water entry. tlimit >> step except
-                                    //   near range end, hence equivalent in
-                                    //   practice; revisit if fragments show
-                                    //   end-of-range sensitivity.
+                                     // Research-only secondary-C12 Urban
+                                     // (Geant4-11.3.2, Water_75eV table shared
+                                     // with the primary path). Scope, RNG and
+                                     // stepping mirror the primary urban
+                                     // branch; differences are documented:
+                                     // - at_boundary is FALSE on every step
+                                     //   (fix B6): a newborn reference track
+                                     //   starts non-boundary, keeping
+                                     //   tlimit at its non-binding init
+                                     //   instead of recomputing 0.2*range
+                                     //   per macro step. Persistent
+                                     //   cross-resume MSC state in the queue
+                                     //   record remains a follow-up (tlimit
+                                     //   is non-binding except at range end;
+                                     //   revisit if end-of-range sensitivity
+                                     //   appears).
                                     // - RNG dims 110+ (FE uses 100+; primary
                                     //   urban uses 70+; 58/59 shared for the
                                     //   tlimit draw on independent streams).
@@ -12048,6 +12105,8 @@ template<int EmMode>
                                     UrbanV2TrackState sec_urban_state{};
                                     while (traversed_mm < sec_step_mm) {
                                         if (segment_index >= 1000000U) {
+                                            // Fix B5: cap trip raises fatal
+                                            // (see primary branch comment).
                                             if (CARBON_SECONDARY_CONTEXT_FIELD(
                                                     minibeam_event_counts_device) !=
                                                 nullptr) {
@@ -12061,6 +12120,16 @@ template<int EmMode>
                                                         minibeam_event_counts_device)
                                                         [minibeam_water_urban_subdiv_cap_slot])
                                                     .fetch_add(1U);
+                                                sycl::atomic_ref<
+                                                    std::uint64_t,
+                                                    sycl::memory_order::relaxed,
+                                                    sycl::memory_scope::device,
+                                                    sycl::access::address_space::
+                                                        global_space>(
+                                                    CARBON_SECONDARY_CONTEXT_FIELD(
+                                                        minibeam_event_counts_device)
+                                                        [minibeam_water_urban_fatal_slot])
+                                                    .fetch_add(1U);
                                             }
                                             break;
                                         }
@@ -12068,9 +12137,15 @@ template<int EmMode>
                                             CARBON_SECONDARY_CONTEXT_FIELD(
                                                 minibeam_water_primary_urban_max_step_mm),
                                             sec_step_mm - traversed_mm);
+                                        // Fix B6: segment-START energy (Epre
+                                        // semantics, mirroring the primary
+                                        // branch and the reference
+                                        // SampleScattering input). The old
+                                        // midpoint form double-counts the
+                                        // sampler's internal energy
+                                        // prediction.
                                         const auto energy_fraction =
-                                            (traversed_mm + 0.5F * segment_mm) /
-                                            sec_step_mm;
+                                            traversed_mm / sec_step_mm;
                                         const auto seg_e = sycl::fmax(
                                             CARBON_SECONDARY_CONTEXT_FIELD(
                                                 energy_cutoff_MeV),
@@ -12097,7 +12172,7 @@ template<int EmMode>
                                                 0.0F,
                                                 CARBON_SECONDARY_CONTEXT_FIELD(
                                                     phantom_length_mm),
-                                                true, sec_urban_state,
+                                                false, sec_urban_state,
                                                 sec_urban_table,
                                                 CARBON_SECONDARY_CONTEXT_FIELD(
                                                     minibeam_water_urban_zeff_f),
@@ -12109,6 +12184,28 @@ template<int EmMode>
                                                         1024U +
                                                     segment_index,
                                                 110U);
+                                        // Fix B5: invalid/zero-progress ->
+                                        // fatal + stop (see primary branch).
+                                        if (!urban_scatter.proposal_valid ||
+                                            !(urban_scatter
+                                                  .final_geom_path_mm >
+                                              0.0F)) {
+                                            if (CARBON_SECONDARY_CONTEXT_FIELD(
+                                                    minibeam_event_counts_device) !=
+                                                nullptr) {
+                                                sycl::atomic_ref<
+                                                    std::uint64_t,
+                                                    sycl::memory_order::relaxed,
+                                                    sycl::memory_scope::device,
+                                                    sycl::access::address_space::
+                                                        global_space>(
+                                                    CARBON_SECONDARY_CONTEXT_FIELD(
+                                                        minibeam_event_counts_device)
+                                                        [minibeam_water_urban_fatal_slot])
+                                                    .fetch_add(1U);
+                                            }
+                                            break;
+                                        }
                                         const auto seg_end_x = segment_x +
                                             segment_direction.x *
                                                 urban_scatter
@@ -13141,6 +13238,24 @@ template<int EmMode>
                       << minibeam_event_counts_host
                              [minibeam_water_urban_subdiv_cap_slot]
                       << '\n';
+            // Fix B5 hard gate (§9.1): any invalid proposal, zero-progress
+            // segment, or cap trip fails the run. Structured record: the
+            // fatal slot count plus the cap-trip count above.
+            const std::uint64_t urban_fatal =
+                minibeam_event_counts_host[minibeam_water_urban_fatal_slot];
+            std::cout << "[minibeam-water] urban fatal proposals="
+                      << urban_fatal << '\n';
+            if (urban_fatal > 0) {
+                throw std::runtime_error(
+                    "Urban MSC fatal: " + std::to_string(urban_fatal) +
+                    " invalid/zero-progress/capped proposals (slot " +
+                    std::to_string(minibeam_water_urban_fatal_slot) +
+                    "); cap trips=" +
+                    std::to_string(minibeam_event_counts_host
+                                       [minibeam_water_urban_subdiv_cap_slot]) +
+                    ". Partial space paths with full-macro-step energy loss"
+                    " must never pass as successful dose.");
+            }
         }
         if (minibeam_water_delta_diag_device != nullptr) {
             std::array<std::uint64_t, 17> water_delta_diag{};

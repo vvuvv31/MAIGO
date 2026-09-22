@@ -464,7 +464,10 @@ struct UrbanV2AngularSample {
 //   minDisplacement2 = geomMin*geomMin = 2.5e-15 mm^2
 // Gate (double precision):
 //   r2 = |raw|^2; if r2 <= minDisplacement2 -> no position change;
-//   else dispR = sqrt(r2), postSafety = 0.99*isotropicSafety(endpoint, dispR);
+//   else dispR = sqrt(r2),
+//        postSafety = 0.99*min(isotropicSafety(endpoint), dispR) — the
+//        navigator caps ComputeSafety at maxLength=dispR (fix B2), so the
+//        far-field accept is really a 0.99 reduction, not a full accept;
 //   if postSafety > 0 && dispR <= postSafety -> full accept;
 //   else if postSafety > geomMin -> reduce by postSafety/dispR;
 //   else -> cancel.
@@ -503,8 +506,16 @@ inline float copper_urban_v2_accept_displacement(
         return 0.0F;
     }
     const double disp_r = sycl::sqrt(r2);
-    const double post =
-        0.99 * static_cast<double>(safety_mm > 0.0F ? safety_mm : 0.0F);
+    // G4SafetyHelper::ComputeSafety(fNewPosition, dispR) caps the reported
+    // safety at dispR (navigator maxLength; fix B2). Without the cap the
+    // far-field branch wrongly fully accepts (reference scales EVERY
+    // accepted displacement by 0.99); with it, branch 2 is reachable only
+    // through the uncapped corner paths, exactly as in AlongStepDoIt.
+    const double capped_safety =
+        (safety_mm > 0.0F) ? sycl::fmin(static_cast<double>(safety_mm),
+                                         disp_r)
+                            : 0.0;
+    const double post = 0.99 * capped_safety;
     if (post > 0.0 && disp_r <= post) {
         accepted_x = raw_x;
         accepted_y = raw_y;
@@ -1382,6 +1393,12 @@ inline float urban_v2_safety_at(const float x_mm, const float y_mm,
 // smallstep/rangeinit state is deliberately NOT carried.
 struct UrbanV2TrackState {
     float tlimit_mm{1.0e10F};
+    // fMinimal NEVER recomputes tlimitmin (G4UrbanMscModel::StartTracking
+    // sets 10*tlimitminfix once; the fMinimal branch of
+    // ComputeTruePathLengthLimit has no ComputeStepmin/ComputeTlimitmin
+    // call). Frozen here at the reference value; the per-step recompute
+    // (E3: ~3e-3 mm, 3e4x too large) is removed as part of fix B3.
+    float tlimitmin_mm{1.0e-7F};
     bool first_step{true};
 };
 
@@ -1406,12 +1423,16 @@ inline UrbanV2CopperCache copper_urban_v2_cache() noexcept {
     return c;
 }
 
-// t -> g conversion WITH par capture (ComputeGeomPathLength mirror).
+// t -> g conversion WITH par capture (ComputeGeomPathLength mirror) AND the
+// stable branch-consistent delta (fix B4: delta belongs to the taken
+// conversion branch, computed in double from the same float inputs — never
+// float(t)-float(g) post-hoc, which is exactly 0 below the float ulp).
 // Needs the loss table + lambda1 only on the par1>0 branch
 // (t >= range*dtrl without E<mass or t==range); small production steps stay
 // on the par1<0 branch exactly like the previous implementation.
 struct UrbanV2TrueToGeom {
     float g_mm{0.0F};
+    float delta_mm{0.0F};
     float par1{-1.0F};
     float par2{0.0F};
     float par3{0.0F};
@@ -1427,12 +1448,27 @@ inline UrbanV2TrueToGeom copper_urban_v2_true_to_geom(
         return out;
     }
     const float tau = t_mm / lambda0_mm;
+    const double td = static_cast<double>(t_mm);
+    const double lamd = static_cast<double>(lambda0_mm);
+    const double taud = td / lamd;
     float z;
+    double delta = 0.0;
     if (tau <= 1.0e-16F) {
         z = t_mm < lambda0_mm ? t_mm : lambda0_mm;
+        delta = 0.0;  // tau<=1e-16 forces t<<lambda0 here; chord == path.
     } else if (t_mm < range_mm * 0.05F) {
         z = (tau < 1.0e-6F) ? t_mm * (1.0F - 0.5F * tau)
                              : lambda0_mm * (1.0F - sycl::exp(-tau));
+        // Stable small-tau form WITHOUT double transcendentals (fix B4/perf:
+        // a double exp here cost 2x wall time on sm_75): plain series below
+        // 1.2e-5 (relative error < 4e-6, no exp at all); at/above 1.2e-5 the
+        // delta is >= 100 float ulps, so plain float(t)-float(g) is accurate
+        // to < 1%.
+        if (taud < 1.2e-5) {
+            delta = td * td / (2.0 * lamd);
+        } else {
+            delta = static_cast<double>(t_mm) - static_cast<double>(z);
+        }
     } else if (epre_mev < mat.mass_mev || t_mm == range_mm) {
         const float par1 = 1.0F / range_mm;
         const float par2 = range_mm / lambda0_mm;
@@ -1444,6 +1480,7 @@ inline UrbanV2TrueToGeom copper_urban_v2_true_to_geom(
         out.par1 = par1;
         out.par2 = par2;
         out.par3 = par3;
+        delta = td - static_cast<double>(z);  // range-branch: sizable delta.
     } else {
         const float rfin =
             sycl::fmax(range_mm - t_mm, 0.01F * range_mm);
@@ -1457,6 +1494,11 @@ inline UrbanV2TrueToGeom copper_urban_v2_true_to_geom(
             // par1<0 branch rather than producing inf/NaN.
             z = (tau < 1.0e-6F) ? t_mm * (1.0F - 0.5F * tau)
                                  : lambda0_mm * (1.0F - sycl::exp(-tau));
+            if (taud < 1.2e-5) {
+                delta = td * td / (2.0 * lamd);
+            } else {
+                delta = static_cast<double>(t_mm) - static_cast<double>(z);
+            }
         } else {
             const float par2 = 1.0F / (par1 * lambda0_mm);
             const float par3 = 1.0F + par2;
@@ -1465,10 +1507,16 @@ inline UrbanV2TrueToGeom copper_urban_v2_true_to_geom(
             out.par1 = par1;
             out.par2 = par2;
             out.par3 = par3;
+            delta = td - static_cast<double>(z);
         }
     }
-    if (z > lambda0_mm) z = lambda0_mm;
+    if (z > lambda0_mm) {
+        z = lambda0_mm;
+        delta = td - lamd;  // clamped chord: delta follows the clamp.
+    }
+    if (!(delta > 0.0)) delta = 0.0;
     out.g_mm = z;
+    out.delta_mm = static_cast<float>(delta);
     return out;
 }
 
@@ -1479,6 +1527,8 @@ inline UrbanV2TrueToGeom copper_urban_v2_true_to_geom(
 struct UrbanV2LimitProposal {
     float t_msc_mm{0.0F};
     float g_msc_mm{0.0F};
+    // Stable delta of the (t_msc, g_msc) conversion branch (fix B4).
+    float delta_msc_mm{0.0F};
     float range_mm{0.0F};
     float lambda0_mm{0.0F};
     float tlimitmin_mm{0.0F};
@@ -1518,9 +1568,11 @@ inline UrbanV2LimitProposal copper_urban_v2_limit_step(
             t, lambda0, range, epre_mev, mat);
         out.t_msc_mm = t;
         out.g_msc_mm = conv.g_mm;
+        out.delta_msc_mm = conv.delta_mm;
         out.no_displacement = true;
         out.valid = true;
         out.exit_path = 0;
+        out.tlimitmin_mm = state.tlimitmin_mm;
         return out;
     }
 
@@ -1535,9 +1587,11 @@ inline UrbanV2LimitProposal copper_urban_v2_limit_step(
             t, lambda0, range, epre_mev, mat);
         out.t_msc_mm = t;
         out.g_msc_mm = conv.g_mm;
+        out.delta_msc_mm = conv.delta_mm;
         out.no_displacement = true;
         out.valid = true;
         out.exit_path = 1;
+        out.tlimitmin_mm = state.tlimitmin_mm;
         return out;
     }
 
@@ -1549,21 +1603,20 @@ inline UrbanV2LimitProposal copper_urban_v2_limit_step(
             t, lambda0, range, epre_mev, mat);
         out.t_msc_mm = t;
         out.g_msc_mm = conv.g_mm;
+        out.delta_msc_mm = conv.delta_mm;
         out.no_displacement = true;
         out.valid = true;
         out.exit_path = 2;
+        out.tlimitmin_mm = state.tlimitmin_mm;
         return out;
     }
 
     // fMinimal: persistent tlimit, recomputed ONLY at a geometry boundary
-    // as facrange*max(range, lambda0), floored by tlimitmin. (The earlier
-    // doc note claiming min() was wrong; the reference takes max().)
-    const float rat = epre_mev;  // total kinetic MeV, invmev == 1/MeV
-    const float stepmin = lambda0 * cache.factmin /
-        (0.002F + rat * (cache.stepmina + cache.stepminb * rat));
-    // tlow=5keV branch skipped: transport cutoff (0.1 MeV) >> tlow.
-    const float tlimitmin =
-        sycl::fmax(0.87F * cache.z23 * stepmin, kUrbanV2TlimitMinFix);
+    // as facrange*max(range, lambda0), floored by the FROZEN tlimitmin.
+    // (The earlier doc note claiming min() was wrong; the reference takes
+    // max().) No ComputeStepmin/ComputeTlimitmin call exists on this branch
+    // in the reference, so none is made here (fix B3).
+    const float tlimitmin = state.tlimitmin_mm;
     out.tlimitmin_mm = tlimitmin;
     float tlimit = state.tlimit_mm;
     if (at_geom_boundary) {
@@ -1577,8 +1630,8 @@ inline UrbanV2LimitProposal copper_urban_v2_limit_step(
         // Randomizetlimit: Gauss(tlimit, 0.1*(tlimit-tlimitmin)), floored.
         // Dedicated dims 58/59 (verified free in transport_sycl.cpp).
         const float u0 = sycl::fmax(
-            rng::uniform01(seed, history_id, step_index, 58U), 1.0e-12F);
-        const float u1 = rng::uniform01(seed, history_id, step_index, 59U);
+            rng::urban_unit_strict(seed, history_id, step_index, 58U), 1.0e-12F);
+        const float u1 = rng::urban_unit_strict(seed, history_id, step_index, 59U);
         constexpr float gauss_pi = 6.2831853071795864769F;
         const float gauss = sycl::sqrt(-2.0F * sycl::log(u0)) *
             sycl::cos(gauss_pi * u1);
@@ -1592,6 +1645,7 @@ inline UrbanV2LimitProposal copper_urban_v2_limit_step(
         t, lambda0, range, epre_mev, mat);
     out.t_msc_mm = t;
     out.g_msc_mm = conv.g_mm;
+        out.delta_msc_mm = conv.delta_mm;
     out.par1 = conv.par1;
     out.par2 = conv.par2;
     out.par3 = conv.par3;
@@ -1693,12 +1747,14 @@ CorrelatedScatteringStep copper_urban_v2_sample_full(
         x2_mean_th = (1.0F + 2.0F * sycl::exp(-2.5F * tau)) * one_third;
     }
     const auto simple_scattering = [&](const std::uint32_t dimension) {
+        // (B2 verdict: float trial; reachable-domain audit shows zero
+        // double-vs-float flips. Strict draws only.)
         const auto a = (2.0F * x_mean_th + 9.0F * x2_mean_th - 3.0F) /
                        (2.0F * x_mean_th - 3.0F * x2_mean_th + 1.0F);
         const auto probability = (a + 2.0F) * x_mean_th / a;
         const auto u0 = sycl::fmax(
-            rng::uniform01(seed, history_id, step_index, dimension), 1.0e-12F);
-        const auto u1 = rng::uniform01(
+            rng::urban_unit_strict(seed, history_id, step_index, dimension), 1.0e-12F);
+        const auto u1 = rng::urban_unit_strict(
             seed, history_id, step_index, dimension + 1U);
         UrbanV2AngularSample out{};
         if (u1 < probability) {
@@ -1716,7 +1772,7 @@ CorrelatedScatteringStep copper_urban_v2_sample_full(
     float cth = 1.0F;
     float omcth = 0.0F;
     if (tau >= kUrbanV2TauBig) {
-        const auto u = rng::uniform01(
+        const auto u = rng::urban_unit_strict(
             seed, history_id, step_index, random_dimension);
         cth = -1.0F + 2.0F * u;
         omcth = 2.0F * (1.0F - u);
@@ -1780,6 +1836,18 @@ CorrelatedScatteringStep copper_urban_v2_sample_full(
                     const auto c1 = c - 1.0F;
                     const auto ea = sycl::exp(-xsi);
                     const auto eaa = 1.0F - ea;
+                    // Fix B2 audit verdict (evidence q_audit.py, reachable
+                    // domain t<=min(0.05,range/2): 0 flips/20000 vs double
+                    // at every grid point; q in [0.99985, 1.00014]):
+                    // float trials are decision-identical to G4double on the
+                    // entire reachable sampling domain. The ~4e-4 FP32 drift
+                    // exists only at (t=0.05, E~1 MeV), which cannot sample
+                    // (t<range implies tau<=range/lambda0<3e-3 there), so no
+                    // double chain is carried: unconditional double cost
+                    // 3-4x wall time on sm_75 for zero reachable effect.
+                    // Kept exact and cheap: strict draws (B1), float 0.999
+                    // gate, omcth-based |cth| protection below, dispR-capped
+                    // postSafety in the acceptance helper.
                     const auto x_mean1 =
                         1.0F - (1.0F - (1.0F + xsi) * ea) * x / eaa;
                     const auto x0 = 1.0F - xsi * x;
@@ -1802,13 +1870,13 @@ CorrelatedScatteringStep copper_urban_v2_sample_full(
                         const auto q_probability =
                             x_mean_th / (probability * x_mean1 +
                                          (1.0F - probability) * x_mean2);
-                        const auto u0 = rng::uniform01(
+                        const auto u0 = rng::urban_unit_strict(
                             seed, history_id, step_index, random_dimension);
-                        const auto u1 = rng::uniform01(
+                        const auto u1 = rng::urban_unit_strict(
                             seed, history_id, step_index, random_dimension + 1U);
                         if (u0 < q_probability) {
                             if (u1 < probability) {
-                                const auto u2 = rng::uniform01(
+                                const auto u2 = rng::urban_unit_strict(
                                     seed, history_id, step_index,
                                     random_dimension + 2U);
                                 const auto log_arg = ea + u2 * eaa;
@@ -1816,7 +1884,7 @@ CorrelatedScatteringStep copper_urban_v2_sample_full(
                                 cth = 1.0F + log_val * x;
                                 omcth = -log_val * x;
                             } else {
-                                auto var = (1.0F - d) * rng::uniform01(
+                                auto var = (1.0F - d) * rng::urban_unit_strict(
                                     seed, history_id, step_index,
                                     random_dimension + 2U);
                                 if (var < num_lim * d) {
@@ -1842,13 +1910,23 @@ CorrelatedScatteringStep copper_urban_v2_sample_full(
             }
         }
     }
+    // B2: |cth| >= 1 on the stable pre-rounding measure returns unscattered
+    // (reference SampleScattering protection). A bare float clamp would
+    // either kill most small-angle updates (if applied to rounded cth==1)
+    // or rotate by a clamped angle the reference never proposes.
+    const auto bad_cth = !(omcth > 0.0F) || !(omcth < 2.0F);
+    if (bad_cth) {
+        result.one_minus_cth = 0.0F;
+        result.cth_rounded_to_one = false;
+        return result;
+    }
     cth = sycl::clamp(cth, -1.0F, 1.0F);
     result.one_minus_cth = omcth;
     result.cth_rounded_to_one = (cth == 1.0F);
 
     const auto sth = sycl::sqrt(
         sycl::fmax(0.0F, omcth * (2.0F - omcth)));
-    const auto phi = two_pi * rng::uniform01(
+    const auto phi = two_pi * rng::urban_unit_strict(
                                  seed, history_id, step_index,
                                  random_dimension + 3U);
 
@@ -1860,16 +1938,16 @@ CorrelatedScatteringStep copper_urban_v2_sample_full(
     result.raw_displacement_r_mm = 0.0F;
     result.displacement_branch = 0;
     result.stable_delta_mm = delta_final_mm;
-    const auto bad_cth = !(omcth > 0.0F) || !(omcth < 2.0F);
+    // (bad_cth defined above; rejected angles already returned.)
     const auto rmax2 = delta_final_mm * (2.0F * t_final_mm - delta_final_mm);
     if (!bad_cth && allow_displacement && current_tau >= tausmall &&
         rmax2 > 0.0F) {
         constexpr float cbeta = 2.160F;
         const auto cbeta1 = 1.0F - sycl::exp(-cbeta * pi);
         const auto radius = 0.73F * sycl::sqrt(rmax2);
-        const auto u0 = rng::uniform01(
+        const auto u0 = rng::urban_unit_strict(
             seed, history_id, step_index, random_dimension + 4U);
-        const auto u1 = rng::uniform01(
+        const auto u1 = rng::urban_unit_strict(
             seed, history_id, step_index, random_dimension + 5U);
         // -log1p(-u0*cbeta1): matches -log(1-u0*cbeta1) to float precision
         // with the same draws; dims rd+4/rd+5 consumed only when displacing,
@@ -1921,19 +1999,40 @@ CorrelatedScatteringStep copper_urban_v2_sample_full(
 // ComputeTrueStepLength mirror for a geometry-truncated step: invert the
 // FINAL geometric length with the limiter's par set, clamped to
 // [g_final, t_msc]. Untruncated steps return t_msc untouched (the
-// geomStepLength == zPathLength shortcut).
+// geomStepLength == zPathLength shortcut) with the proposal delta.
+// delta_out_mm is the stable (t-g) OF THE TAKEN BRANCH (fix B4): the
+// formula value for inverted steps, the proposal delta when untruncated
+// or clamped back to t_msc, 0 for slivers. Callers must NOT re-derive delta
+// by inverting g_final through a different branch.
 inline float copper_urban_v2_finalize_true(
     const float g_final_mm, const float g_prop_mm, const float t_msc_mm,
-    const float lambda0_mm, const float range_mm, const float par1,
-    const float par3) noexcept {
+    const float delta_msc_mm, const float lambda0_mm, const float range_mm,
+    const float par1, const float par3, float& delta_out_mm) noexcept {
     if (!(g_final_mm >= g_prop_mm)) {
         if (g_final_mm < 1.0e-6F) {
+            delta_out_mm = 0.0F;
             return g_final_mm;
         }
         if (g_final_mm > lambda0_mm * 1.0e-16F) {
             float t;
+            double delta;
+            const double gd = static_cast<double>(g_final_mm);
+            const double lamd = static_cast<double>(lambda0_mm);
             if (par1 < 0.0F) {
                 t = -lambda0_mm * sycl::log(1.0F - g_final_mm / lambda0_mm);
+                // Stable par1<0 inversion delta (same math as the tested
+                // true_path_and_delta helper, in double).
+                const double ratio = gd / lamd;
+                if (ratio < 1.0e-3) {
+                    const double series =
+                        0.5 + ratio * (1.0 / 3.0 + ratio * (0.25 + ratio * 0.2));
+                    delta = gd * ratio * series;
+                } else {
+                    const double log_term =
+                        static_cast<double>(sycl::log1p(
+                            static_cast<float>(-ratio)));
+                    delta = -lamd * (log_term + ratio);
+                }
             } else {
                 const float par4 = par1 * par3;
                 t = (par4 * g_final_mm < 1.0F)
@@ -1941,14 +2040,25 @@ inline float copper_urban_v2_finalize_true(
                                         par3)) /
                           par1
                     : range_mm;
+                delta = static_cast<double>(t) - gd;
             }
-            if (t < g_final_mm) t = g_final_mm;
-            if (t > t_msc_mm) t = t_msc_mm;
+            if (t < g_final_mm) {
+                t = g_final_mm;
+                delta = 0.0;
+            }
+            if (t > t_msc_mm) {
+                t = t_msc_mm;
+                delta = static_cast<double>(delta_msc_mm);
+            }
+            if (!(delta > 0.0)) delta = 0.0;
+            delta_out_mm = static_cast<float>(delta);
             return t;
         }
     } else {
+        delta_out_mm = delta_msc_mm;
         return t_msc_mm;
     }
+    delta_out_mm = 0.0F;
     return g_final_mm;
 }
 
@@ -1956,9 +2066,13 @@ inline float copper_urban_v2_finalize_true(
 //   external TRUE candidate (user ceiling) -> fMinimal limit -> true->geom
 //   -> geometry truncation -> geom->final-true -> scatter.
 // Binding (limit_reason): 1=user/external, 2=msc, 3=geometry, 4=range (no
-// scatter sampled). min() commutes, so evaluating geometry reachability
-// before the limiter (our loop shape) yields the same minimum as the
-// reference order; the comment chain records the mapping.
+// scatter sampled). NOTE: no claim is made that evaluating geometry
+// reachability before the limiter equals the reference order in general —
+// true/geometric conversion, re-intersection and state update are not scalar
+// min(). The loop shape is valid HERE because the caller subdivides to a
+// fixed ceiling and the limiter is non-binding inside it (tlimit >> ceiling
+// except at range end, where the DoIt gate takes over); any change to the
+// step-competition structure must re-audit this ordering (prompt §2.6).
 // Generic GPIL+DoIt orchestration shared by Copper and Water (Phase 5).
 // Binding: 1=user/external, 2=msc, 3=geometry, 4=range (no scatter).
 CorrelatedScatteringStep urban_v2_propose_and_sample(
@@ -2000,18 +2114,17 @@ CorrelatedScatteringStep urban_v2_propose_and_sample(
     const float g_final =
         g_prop < boundary_path_mm ? g_prop : boundary_path_mm;
     const bool truncated = (g_final < g_prop);
+    // Fix B4: (t, g, delta) come from ONE branch. finalize returns the
+    // branch-consistent delta; the old par1<0-only re-inversion of g_final
+    // (wrong on the range branch at Bragg end) is deleted. The old
+    // `t_final > t_ext` clamp is deleted too: t_final <= t_msc <= t_ext by
+    // construction (limiter takes min with the t_ext-derived input), so it
+    // was dead code with a wrong reference citation.
+    float delta_final = 0.0F;
     float t_final = copper_urban_v2_finalize_true(
-        g_final, g_prop, limit.t_msc_mm, limit.lambda0_mm, limit.range_mm,
-        limit.par1, limit.par3);
-    // AlongStepDoIt line 319: protection against wrong t->g->t conversion.
-    if (t_final > t_ext) t_final = t_ext;
-    // FP32 subtlety: t_final and g_final are bit-identical floats here
-    // (true delta ~6e-10 << ulp(0.05) ~3.7e-9), so double(t)-double(g) is
-    // EXACTLY zero and would kill rmax/displacement. The branch-correct
-    // series delta (same helper as the tested R3 path) carries the real
-    // small quantity; t/g fields coinciding is harmless (energy uses t).
-    const float delta_final = copper_urban_v2_true_path_and_delta(
-        g_final, limit.lambda0_mm, limit.range_mm).delta_mm;
+        g_final, g_prop, limit.t_msc_mm, limit.delta_msc_mm,
+        limit.lambda0_mm, limit.range_mm, limit.par1, limit.par3,
+        delta_final);
 
     result.proposed_true_path_mm = limit.t_msc_mm;
     result.final_true_path_mm = t_final;

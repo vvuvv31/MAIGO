@@ -19,9 +19,15 @@ G4hMultipleScattering::InitialiseProcess:
   if(nullptr == EmModel(0)) { SetEmModel( new G4UrbanMscModel() ); }
 ```
 
-`ConstructCharged`'s `isWVI = true` default only overrides muons and light
-hadrons; it does not set WVI on the ion `hmsc`, and `ConstructIonEmPhysics`
-does not either. So opt4 -> C12 ion MSC = Urban.
+`ConstructCharged` is called by opt4 as `ConstructCharged(hmsc, pnuc)` with
+the default `isWVI = false`, so no WentzelVI override is installed on the ion
+`hmsc` (the `isWVI = true` path only affects muons/light hadrons when
+explicitly requested); `ConstructIonEmPhysics` does not either. And the
+`G4EmModelActivator` only reconfigures explicitly registered regions, which
+TOPAS does not set. So opt4 -> C12 ion MSC = Urban. The executed-installation
+proof (2026-09-22, direct oracle against `/software/geant4-11.3.2`) prints
+`UrbanMsc, StepLim=Minimal, Rfact=0.2, DispFlag:1, Skin=3, Llim=1 mm` for
+GenericIon, matching the TOPAS reference log's EM dump.
 
 This was confirmed empirically from the TOPAS per-step MSC ntuple
 (`/mnt/sda/wuwei/minibeam_msc_steps_e250/output/msc_steps.phsp`, Copper steps).
@@ -35,9 +41,14 @@ prediction is constant across a 10x step-length range at ~200 MeV/u:
 | 0.0288 | 1.2362 |
 | 0.0500 | 1.2316 |
 
-The constant ~1.24 ~= sqrt(pi/2) = 1.253 is the Rayleigh median for a
-per-component Gaussian of width theta0, i.e. exactly the Urban
-`sqrt(h)*(c1 + c2*ln(h/X0))` step dependence.
+The constant ~1.24 sits between the Rayleigh median
+`sqrt(2*ln2) = 1.1776` and the Rayleigh mean `sqrt(pi/2) = 1.2531` for a
+per-component Gaussian of width theta0 (> 2026-09-22 correction: the original
+text mislabeled `sqrt(pi/2)` as the median; the median is `sqrt(2ln2)`. The
+measured 1.23-1.24 is consistent with Urban's `sqrt(h)*(c1 + c2*ln(h/X0))`
+step dependence at either statistic, but the median/mean distinction matters
+for moment-based fits and is now pinned: the host regression asserts the
+median ratio band, see `test_angular_small_quantity`).
 
 ## Implementation
 
@@ -345,3 +356,130 @@ Staged scope as delivered: (1) Highland + explicit zero-displacement API
 (bit-identical); (2) Urban-compatible transport with correlated displacement
 for primary C12 (copper + water) and secondary C12, each validated by
 paired slab/interval/dose benchmarks against TOPAS in the sections above.
+
+## Correctness fixes B1-B6 + direct-Geant4 oracle (2026-09-22)
+
+Prompt task: fix the Urban port against the EXECUTED Geant4 11.3.2 (not the
+tag text alone) and validate carbon minibeam EM-only/full-physics plus
+broadbeam before any default migration. No default changed; production
+defaults all bit-identical (Highland/FE/legacy paths untouched).
+
+Direct oracle (`evidence/urban_9618eb0_20260922/g4_oracle/g4_urban_oracle.cc`,
+links `/software/geant4-11.3.2`, version `11-03-patch-02`): model dump,
+per-atom C12 cross-section grid (installed lib == v11.3.2 tag to 6e-5;
+earlier "2.09x patch difference" was a probe bug — GenericIon mass used
+instead of real C12, recorded in `failed.md`), thin-slab exit/step
+aggregates with a TOPAS-like MaxStepSize limiter.
+
+Fixes (all in `src/detail/sycl_device_math.inc` /
+`src/transport_sycl.cpp` / `src/config.cpp` / `include/carbon/rng.hpp`;
+regression: `benchmark/carbonminibeam/test_urban_localize.cpp`, all PASS):
+
+- B1: `rng::urban_unit_strict` (Urban-only; global `uniform01` untouched):
+  the `bits=2^24-1 -> exactly 1.0f` endpoint (reached preimage on file)
+  spuriously took the isotropic branch at q>=1 with rate 2^-24/draw.
+- B2: mixture gate + both Bernoulli trials in double (q rounds to 1 in
+  FP32; ~4e-4 drift at Bragg-end E through the `1-d` denominator);
+  `|cth|>=1` returns unscattered on the stable `omcth` measure (a float
+  clamp would kill 89% of small-angle updates); postSafety caps safety at
+  dispR per `G4SafetyHelper::ComputeSafety` (far-field displacements scale
+  by 0.99, R2 test updated).
+- B3: tlimitmin frozen at the StartTracking value 1e-7 mm on ALL limiter
+  paths (was recomputed per step at ~3e-3 mm, 3e4x; Stepmin deleted —
+  reference fMinimal never calls ComputeStepmin/ComputeTlimitmin).
+- B4: branch-consistent `(t, g, delta)` — `true_to_geom` and `finalize`
+  return the delta of their taken branch (double); the par1<0-only
+  re-inversion and the dead `t_final > t_ext` clamp deleted; the
+  `min()-commutes` ordering claim removed.
+- B5: invalid/zero-progress/capped proposals raise slot-137 fatal and the
+  host throws (hard gate); copper invalid included.
+- B6: secondary `at_boundary=false` (newborn-track semantics) + segment-
+  START Epre (was midpoint, double-predicted); RNG `steps*1024+segment`
+  proven collision-free for seg<1024 (config guard:
+  `maximum_step_mm <= 1024*max_segment_mm`) and <4.19M steps/history
+  (partners at >=12.6M); naive `(step<<32)|seg` rejected (cross-dim
+  collision at steps 0 vs 3, see `failed.md`).
+
+Single-step validation (0.05 mm water, 250 MeV/u, 200k, direct libG4):
+q50-q999 ratios 1.0009/1.0035/1.0006/1.0001/1.0066/0.9980, E[th^2] 0.983 —
+IDENTICAL before and after B1-B6 (fixes inert at this point by design).
+Full branch map: `evidence/urban_9618eb0_20260922/branch_map.md`.
+
+Status of older inferences in this file: the 0.284 band is a legacy
+characterization artifact (E2: the `2*(1-dz)` metric reads 2.44x low;
+stable moment is `2*one_minus_cth`); "missing consecutive-step
+renormalization" is NOT an established Geant4 mechanism (no such logic in
+the fetched limiter/sampler; slab 0.929 shows reference step dependence is
+real) — kept as open modeling question, not a premise. The interval/dose
+gaps (angVar +24% shallow etc.) are therefore NOT sampler-numerics issues;
+transport-level re-validation with the fixed binary is next (Phase D).
+
+## B-candidate validation results (2026-09-22, fixed binary)
+
+Binary `build/oneapi-nvidia-minibeam/carbon_mc`
+(`0f0f7060343a9cc5b04ad7769b4488e8270d03546b81aa6b02bb2ae3f06cab5f`
+post-B2c; host tests ALL PASS). Candidate outputs (history-safe):
+`/mnt/sda/wuwei/urban_B_validation/` (planes/dose/logs) + `out/*_B_*/`
+(stem-distinct; historical `out/` untouched except one incident, see
+`failed.md`). All runs: subdiv cap trips 0, fatal proposals 0, queue
+overflow 0, FP32 dose.
+
+1. Water replay 1.6M EM-only, same entrance+seed (`..._urban_v2_B.yaml`):
+   per-interval pairing vs TOPAS job 6529 (N matched):
+
+   | interval | angVar B/T | disVar B/T | q999 B/T |
+   |---|---|---|---|
+   | 40->60 | 1.014 (was 1.241) | 1.011 (was 3.80) | 1.005 |
+   | 60->80 | 1.026 (was 1.120) | 1.019 (was 2.07) | 1.020 |
+   | 80->100 | 1.021 (was 1.062) | 1.017 (was 1.30) | 1.016 |
+   | 100->120 | 1.032 (was 1.032) | 1.028 (was 1.03) | 1.029 |
+
+   Far-tail triple check (40->60, |dth|>0.1/1.34M): TOPAS 24, B 35,
+   pristine 51 (>0.3: 3/2/19; max 0.60/0.39/0.97). B matches the reference
+   tail; pristine carried ~16-25 spurious radian kicks. Root cause: the
+   `uniform01` 2^-24 upper endpoint (E1 preimage on file) took the
+   isotropic branch at float-q == 1.0 (reference: q slightly >1, mixture
+   always). My interim "debunk" (u0=1<q-double) was wrong — the code
+   compares against float-q == 1.0. B1 strict uniform removes it; the 51
+   extra plane-0 histories in B are the previously ejected ones.
+   Deep intervals converge (kicked histories eject shallow; survivors match).
+2. Full-chain EM-only 10M x2 seeds (`..._cuwater_10m_B_s1/s2.yaml`):
+   totals 0.99904/0.99916; B_s2 vs pristine OLD_s2 (same seed) identical to
+   <=0.07pp at all depths (bulk dose insensitive to dozens of kicks, as
+   expected); seed spread ~1pp shallow. Deep improvement over FE retained
+   (119.88 mm -2.2/-2.5); mid-depth valley excess (-4..-6pp at 20-80mm)
+   UNCHANGED — documented non-MCS residual, not an MCS tuning target.
+3. Secondary-C12 replay: B/OLD angVar 0.893/0.907/0.958/0.994 shallow->deep
+   (same endpoint-fix shape); absolute moments track primary B closely.
+   Full-chain secondary traffic still ~nil (2.7e-8 voxel L1 A/B earlier).
+4. Host multi-step composition vs direct-G4 slabs (0.05 maxstep):
+   1mm: E[th^2] 1.052, q50/q99/q999 1.012/1.002/1.052, varX 0.994,
+   exit-E +0.04%; 10mm: E[th^2] 0.988, q 0.997/0.976/0.867, varX 0.970,
+   exit-E +0.6% (CSDA-linear vs G4 straggling; noted, not tuned).
+   G4's own step dependence (0.025/0.05): E[th^2] 0.960 (1mm) / 0.924
+   (10mm) — same direction as the port; 0.05 stays matched to TOPAS.
+5. CT RT07575 production, B vs pristine binary (same config+seed): dose
+   sums identical (5490.062), max abs diff 1.1e-8 (FP32 atomic noise) —
+   Urban code inactive in CT, non-interference proven.
+6. Full-physics 10M production (scale1_B): accepted, fatal 0, overflow 0;
+   dose sums identical to stored reference (207.4604, ratio 1.0), max abs
+   3.7e-9 — full-physics production paths unperturbed.
+7. Perf: B vs pristine full-replay wall 51s vs 38s / 122s vs 38s across runs
+   is CLOCK variance (SM 300 MHz P8 idle observed; no root to lock clocks),
+   not code: unconditional-double was measured 3-4x and REMOVED after the
+   reachable-domain audit justified float; hot-path delta vs pristine is a
+   few ALU ops. Controlled perf measurement (warmup + repeats + locked
+   clocks) is PENDING — no perf claim is made.
+
+Promotion verdict: SCOPED_URBAN_DEFAULT NOT_PROMOTED, GLOBAL NOT_PROMOTED.
+Gates status: NUMERICAL_ORACLE PASS (model/xsec/single-step/slab-composition
+vs executed G4); MSC_TRANSPORT PASS (branch map + determinism + failure
+propagation + RNG proof); CARBON_EM_ONLY PASS (intervals 1-3%, dose bulk +
+deep improvement, mid-depth residual documented non-MCS);
+CARBON_FULL_PHYSICS BLOCKED (species-split/fragment-slab/held-out campaigns
+not run; full-physics smoke only); BROADBEAM_REGRESSION PARTIAL (CT
+non-interference proven; water/broadbeam absolute references + Gamma gates
+not run — no frozen user baseline found in evidence); GLOBAL coverage
+(Cu/Water C12 only; CT/proton/fragment routing unverified) BLOCKED.
+Defaults untouched. See `evidence/urban_9618eb0_20260922/` for all
+artifacts, manifests, and scripts.

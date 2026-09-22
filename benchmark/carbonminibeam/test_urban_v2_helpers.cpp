@@ -66,10 +66,15 @@ void test_acceptance_gate() {
     const double acc3 = std::sqrt(double(ax) * ax + double(ay) * ay);
     check(branch == 3 && std::fabs(acc3 - 9.9e-6) < 1.0e-12, "accept: 0<post<raw -> reduce to postSafety",
           acc3, 9.9e-6);
-    // 4. postSafety >= raw_r -> full accept.
+    // 4. Far-field safety would fully accept WITHOUT the dispR cap, but
+    // G4SafetyHelper::ComputeSafety(fNewPosition, dispR) caps at dispR, so
+    // the reference scales every accepted displacement by 0.99 (fix B2):
+    // raw=1e-4, safety=1.0 -> reduce to 0.99e-4, branch 3, not branch 2.
     copper_urban_v2_accept_displacement(1.0e-4F, 0.0F, 1.0F, ax, ay, branch);
-    check(branch == 2 && std::fabs(double(ax) - 1.0e-4) < 1.0e-10 && ay == 0.0F,
-          "accept: post>=raw -> full accept");
+    const double acc4 = std::sqrt(double(ax) * ax + double(ay) * ay);
+    check(branch == 3 && std::fabs(acc4 - 9.9e-5) < 1.0e-10,
+          "accept: far-field safety -> 0.99 reduce (dispR cap)", acc4,
+          9.9e-5);
     // 5. constants are exactly the G4 reference, not placeholders.
     check(kUrbanV2GeomMinMm == 5.0e-8F, "accept: geomMin == 0.05nm");
     check(kUrbanV2MinDisplacement2Mm2 == 2.5e-15, "accept: minDisplacement2 == geomMin^2",
