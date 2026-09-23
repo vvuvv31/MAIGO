@@ -116,3 +116,5 @@ dose_to_medium_type: mhd
 dose_to_medium_name: dose
 scorerLET: false
 device: cuda
+
+minibeam_copper_loss_range_file: evidence/review_fix_20260923/active_copper005.csv

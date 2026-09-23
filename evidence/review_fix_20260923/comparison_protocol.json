@@ -1,0 +1,25 @@
+{
+  "purpose": "first corrected EM-only no-Cu matched-input comparison; not full-chain promotion",
+  "histories_per_seed": 20000,
+  "seeds": 3,
+  "particle": "C12",
+  "energy_total_MeV": 3000,
+  "source_width_mm": 0.5,
+  "source_y_mm": 0,
+  "source_depth_mm": 0.0001,
+  "material": "Water_75eV",
+  "cut_mm": 0.05,
+  "step_ceiling_mm": 0.05,
+  "grid_xyz": [
+    1000,
+    1,
+    600
+  ],
+  "spacing_xyz_mm": [
+    0.1,
+    100,
+    0.25
+  ],
+  "source_csv_sha256": "b00cbfbc62de3ed082823fcf769dde98ef6227044677d16ce49304de2a5a5334",
+  "source_phsp_sha256": "ad9ac7823d12c440231b28492822b8f814487a6686d86caf625f77db77bec6c3"
+}

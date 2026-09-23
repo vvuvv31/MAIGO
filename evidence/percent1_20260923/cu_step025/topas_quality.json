@@ -1,0 +1,29 @@
+[
+  {
+    "name": "topas_1m_s1",
+    "histories": 1000000,
+    "seed": 2026100401,
+    "threads": 128,
+    "wall_s": 442.296985124005,
+    "aperture_maxstep_overrides": 17,
+    "note": "Water max step unchanged at 0.05 mm; TOPAS uses independent seeds; source/seed pairing is used only for the GPU Cu0.05-to-0.025 contrast."
+  },
+  {
+    "name": "topas_1m_s2",
+    "histories": 1000000,
+    "seed": 2026100402,
+    "threads": 128,
+    "wall_s": 428.8194459739607,
+    "aperture_maxstep_overrides": 17,
+    "note": "Water max step unchanged at 0.05 mm; TOPAS uses independent seeds; source/seed pairing is used only for the GPU Cu0.05-to-0.025 contrast."
+  },
+  {
+    "name": "topas_1m_s3",
+    "histories": 1000000,
+    "seed": 2026100403,
+    "threads": 128,
+    "wall_s": 371.0189879089594,
+    "aperture_maxstep_overrides": 17,
+    "note": "Water max step unchanged at 0.05 mm; TOPAS uses independent seeds; source/seed pairing is used only for the GPU Cu0.05-to-0.025 contrast."
+  }
+]

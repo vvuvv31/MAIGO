@@ -1,0 +1,37 @@
+{
+  "schema": "maigo.dose-scorer-manifest.v1",
+  "role": "topas",
+  "runs": [
+    {
+      "effective_config": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/topas_water_s1/input.txt",
+      "config_sha256": "3620b6255f5fe38165556f1023f1418b47af3b7ff16c6e956e156489a5e4acb6",
+      "history_count": 20000,
+      "random_seed": 2026092401,
+      "normalization": "Gy_sum_over_histories",
+      "density_g_cm3": 1.0,
+      "dose_sha256": "f4c8cfccfc279578deef0bc2ceebc1abd1a83eb6c65594af5e548dccda14fdcb",
+      "geometry_axes": {
+        "transverse": "x",
+        "depth": "z",
+        "slab_thickness": "y"
+      },
+      "origin_centers_mm": [
+        -49.95,
+        0.125
+      ],
+      "shape_xz": [
+        1000,
+        600
+      ],
+      "spacing_xz_mm": [
+        0.1,
+        0.25
+      ],
+      "slab_thickness_mm": 100.0,
+      "dose_bin": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/topas_water_s1/dose.bin",
+      "dose_header": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/topas_water_s1/dose.binheader",
+      "header_sha256": "d82d2c7c2bc72628387a03483280a8181742670b314e86995daa9c7ae2968702",
+      "element_type": "float64"
+    }
+  ]
+}

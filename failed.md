@@ -203,3 +203,46 @@ overflow 仍必须通过。FP64 性能路线由 `AGENTS.md` 明确禁止。
 | dose_compare 的 B_s1/B_s2 "双种子" | 同一种子（仅输出目录不同），不确定度被低估 | C 轮 3 独立种子 + batch/seed SE + 等价性判定。旧双种子数值保留，结论以 C 门为准 |
 | 用 GPU segment==1024 守卫的"配置注入"验证（C2 计划） | config guard（max≤1024·umax）使标称段数恒 ≤1024，物理配置无法触达 1024（需 shortfall）；强行小步长会被 host 校验拒绝 | 改用退化 loss 表注入（R~1e-30 → 微步长累积），GPU 精确触发 segment==1024（reason 1）+ 首错记录 + exit 1 + 无剂量。物理配置下 1024 不可达是设计结论（backstop），不再尝试配置注入 |
 | OFF 预设构建验证 C-round 改动 | 仍失败：缺 MINIBEAM-off 的 config 面片与 device 符号（delta_diag、slit、urban_v2 flags），与 Urban 数学无关（diff 验证未动区域） | 保持 BLOCKED。最小隔离修复（off stub）是独立任务；Urban helper 本身在 .inc 层对 off-clean（localize/helpers 编译通过） |
+
+
+## 2026-09-23 review: after-run active-pointer oracle rejected
+
+Holding G4UrbanMscModel/ionIoni pointers and querying after BeamOn did not preserve the live C12 effective-charge context. Reversing event order returned the same bad range and did not validate the method. At 3000 MeV in Water_75eV/cut 0.05 mm it yielded about 5055.7 mm instead of the live restricted range about 140.44 mm. Do not reuse VALID_ACTIVE_C12_PROCESS_TRACKING tables. Capture within a real first step and independently validate the grid; the superseding evidence is evidence/review_fix_20260923/oracle_status.json and RESULTS.md. No stopping/MCS/tail normalization tuning was used.
+
+
+### 2026-09-23: Boundary alignment alone as the explanation for the water step response
+
+Rejected conclusion, not a rollback of the physical-geometry fix. With current
+voxel safety, boundary state and deterministic face navigation enabled, 20k x 3
+water runs still show 120 mm FWHM changing -3.86% at 0.05 -> 0.025 mm (TOPAS
+20k x 3: -0.19%). The full-chain 100 mm valley remains +14.81%. Runtime guards
+and energy checks pass, but dose gates fail. Do not claim this boundary change
+alone fixes the residual or retune Urban coefficients to compensate. Revisit
+attribution only with matched C12 phase-space/step diagnostics and separated
+electron deposition. Evidence: evidence/boundary_fix_20260923/RESULTS.md.
+
+
+### 2026-09-23: Treating Cu 0.25 mm as matched to TOPAS Cu 0.05 mm
+
+The reference aperture and slit MaxStepSize is 0.05 mm. GPU 0.25 mm therefore
+cannot be treated as the same configured step ceiling or used as a basis
+for fitting water Urban/valley corrections. Paired 1M x 3 runs reduce the
+100 mm valley difference +8.74% -> +2.12% at the matching 0.05 mm setting.
+Retain 0.25 mm only as an explicitly unmatched step-study branch; revisit
+its adequacy only after independent convergence/phase-space evidence.
+Evidence: evidence/valley_diagnosis_20260923/RESULTS.md.
+
+
+### 2026-09-23 Simple inverse-CDF water-response compression loses rare tails
+
+32768 equally weighted samples per energy channel without retaining far deposits changes spatial second moments by up to 414%; rejected before GPU use. Retry used exact retention of every original segment beyond 0.5 mm plus stratified near samples and exact ancestor closure; maximum moment error 0.09745%, diagnostic only. See evidence/percent1_20260923/delta_diagnostic_table and delta_tail_diagnostic_table.
+
+
+### 2026-09-23 Treating all residual valley error as noise or electron-local deposition
+
+GPU15M / TOPAS16M independent batches: 100 mm valley +1.838%, approximate 95% CI [0.671%,3.004%]. Pure zero-bias noise is not supported at that point, although a <1% bound remains unresolved. Three paired 1M delta-relocation runs shift that valley +0.066 pp, not downward. Do not normalize/scale MCS or promote the delta diagnostic as the valley fix. Investigate matched Cu step convergence and transport/loss distributions; no coefficient fitting.
+
+
+### 2026-09-23 Claiming 1% convergence by halving only the GPU Cu step
+
+Both engines respond when Cu/slit ceilings go 0.05 -> 0.025 mm. At 100 mm their 10 mm-window valleys both drop about 3.1 pp relative to the original reference. The finer matched single-layer result remains +3.63% at 80 mm and +1.99% at 120 mm with broad three-batch intervals. Do not compare finer GPU to unchanged TOPAS or select one favorable depth as a convergence proof. More independent statistics and a common-phase-space / boundary-step study are needed. Evidence: evidence/percent1_20260923/cu_step025/RESULTS.md.

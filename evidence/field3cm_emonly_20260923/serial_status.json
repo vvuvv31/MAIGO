@@ -1,0 +1,86 @@
+{
+  "status": "COMPLETE",
+  "started_at": "2026-09-23T12:24:47.502307+08:00",
+  "mode": "direct_serial",
+  "pid": 2213262,
+  "systemd_unit": "maigo-field3cm-20260923",
+  "cgroup": "/sys/fs/cgroup/user.slice/user-1001.slice/user@1001.service/app.slice/maigo-field3cm-20260923.service",
+  "memory_max_bytes": 29999996928,
+  "memory_high_bytes": 26999996416,
+  "memory_swap_max_bytes": 0,
+  "planned_stages": [
+    "preflight",
+    "topas_b1",
+    "gpu_b1",
+    "preview_b1",
+    "topas_b2",
+    "gpu_b2",
+    "topas_b3",
+    "gpu_b3",
+    "topas_b4",
+    "gpu_b4",
+    "final_comparison"
+  ],
+  "completed_stages": [
+    {
+      "name": "preflight",
+      "wall_s": 17.897328682942316,
+      "finished_at": "2026-09-23T12:25:05.399877+08:00"
+    },
+    {
+      "name": "topas_b1",
+      "wall_s": 900.3487478659954,
+      "finished_at": "2026-09-23T12:40:05.750499+08:00"
+    },
+    {
+      "name": "gpu_b1",
+      "wall_s": 134.7602407640079,
+      "finished_at": "2026-09-23T12:42:20.512558+08:00"
+    },
+    {
+      "name": "preview_b1",
+      "wall_s": 0.6652219840325415,
+      "finished_at": "2026-09-23T12:42:21.179584+08:00"
+    },
+    {
+      "name": "topas_b2",
+      "wall_s": 900.6918813609518,
+      "finished_at": "2026-09-23T12:57:21.873302+08:00"
+    },
+    {
+      "name": "gpu_b2",
+      "wall_s": 134.63246896502096,
+      "finished_at": "2026-09-23T12:59:36.507646+08:00"
+    },
+    {
+      "name": "topas_b3",
+      "wall_s": 898.2271191710606,
+      "finished_at": "2026-09-23T13:14:34.736622+08:00"
+    },
+    {
+      "name": "gpu_b3",
+      "wall_s": 135.09982649004087,
+      "finished_at": "2026-09-23T13:16:49.838464+08:00"
+    },
+    {
+      "name": "topas_b4",
+      "wall_s": 903.5016925999662,
+      "finished_at": "2026-09-23T13:31:53.342027+08:00"
+    },
+    {
+      "name": "gpu_b4",
+      "wall_s": 134.8598731099628,
+      "finished_at": "2026-09-23T13:34:08.202303+08:00"
+    },
+    {
+      "name": "final_comparison",
+      "wall_s": 2.4154435880482197,
+      "finished_at": "2026-09-23T13:34:10.619597+08:00"
+    }
+  ],
+  "current_stage": null,
+  "peak_memory_bytes": 2719322112,
+  "current_memory_bytes": 136224768,
+  "updated_at": "2026-09-23T13:34:10.619653+08:00",
+  "finished_at": "2026-09-23T13:34:10.619616+08:00"
+}

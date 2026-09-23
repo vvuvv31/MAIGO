@@ -1,0 +1,5 @@
+{
+  "status": "PASS_EXPECTED_REJECTION",
+  "exit_code": 1,
+  "config": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/config/boundary_reject_partial.yaml"
+}

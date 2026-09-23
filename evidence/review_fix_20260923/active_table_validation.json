@@ -1,0 +1,17 @@
+{
+  "water010": {
+    "range_interpolation_relative": 1.1701382629514256e-07,
+    "dedx_interpolation_relative": 6.616716352603191e-08,
+    "inverse_curve_relative": 1.572620218492915e-07
+  },
+  "water005": {
+    "range_interpolation_relative": 1.2344205457814894e-07,
+    "dedx_interpolation_relative": 7.005499513823565e-08,
+    "inverse_curve_relative": 1.572620218492915e-07
+  },
+  "copper005": {
+    "range_interpolation_relative": 1.116806165324391e-07,
+    "dedx_interpolation_relative": 6.832055876593301e-08,
+    "inverse_curve_relative": 1.95786245660301e-07
+  }
+}

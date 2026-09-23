@@ -1,0 +1,1855 @@
+{
+  "worktree": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923",
+  "head": "d51e599e8bf5c566a8e6e96580e7c000e1745e41",
+  "goal_1pct_certified": false,
+  "old_binary_sha256": "aee706d7e5cb9d7cc7ee80b7cf7fe5e168e2f6eab60f6d9827a9140f78d5b824",
+  "fixed_binary_sha256": "003249623e409d386c85c233c27286d57a8ffca15271acfd20aeede3050ab4f5",
+  "FP32_dose": true,
+  "FP64_dose": false,
+  "integrity_checks": true,
+  "files": [
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/PROCESS_DIAGNOSIS.md",
+      "archive": "PROCESS_DIAGNOSIS.md",
+      "size": 3903,
+      "sha256": "46008b991b4d64525a3cb49e0cbc136a9fcc0ee919eb01033a545321f3f89521"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/RESULTS.md",
+      "archive": "RESULTS.md",
+      "size": 5786,
+      "sha256": "c4942ce037209d1ab979e9313e9a42d886389e65f5863a82cdbd3f54673dde58"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/analyze.py",
+      "archive": "analyze.py",
+      "size": 6654,
+      "sha256": "be9565218c1014a1b09fd2f8b42cdd0c4f2f604a2f8ebbb418da85c82ebd24d8"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/build_delta_fix.log",
+      "archive": "build_delta_fix.log",
+      "size": 31779,
+      "sha256": "950188b97bd3cd2962c0d912400e43262bfb25af93460d13d67c8c22afb091ea"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/comparison.csv",
+      "archive": "comparison.csv",
+      "size": 1814,
+      "sha256": "9f3d1d567f572cb287d86827d8c7ef29dc9d2124bc134302832ca889fb57d3ee"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/comparison.json",
+      "archive": "comparison.json",
+      "size": 184846,
+      "sha256": "d009c93093ed5dbf5fc39e13fca626f098fe50bdd8f393129f47bf5bd7dc5817"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/config/percent1_cu0025_s1.yaml",
+      "archive": "config/percent1_cu0025_s1.yaml",
+      "size": 5393,
+      "sha256": "986ced352f3beb008ce8c2535dd70ac17cc59c15586f444853b5495f7db22425"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/config/percent1_cu0025_s2.yaml",
+      "archive": "config/percent1_cu0025_s2.yaml",
+      "size": 5393,
+      "sha256": "216c5089bf3161cbb840fb2818939f6c0e4c6c33dac7b678cc0d27ca70e73ae5"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/config/percent1_cu0025_s3.yaml",
+      "archive": "config/percent1_cu0025_s3.yaml",
+      "size": 5393,
+      "sha256": "ba54b2323c0915c09ffa83063beca509389cf12b3c4bc907f05933a4a8a67d72"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/config/percent1_delta_control_after.yaml",
+      "archive": "config/percent1_delta_control_after.yaml",
+      "size": 5434,
+      "sha256": "2f70d284a7e460d611589f860e2d87e9040622b6ce62bfcd1f50ea0a46d2ed95"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/config/percent1_delta_control_before.yaml",
+      "archive": "config/percent1_delta_control_before.yaml",
+      "size": 5434,
+      "sha256": "2f70d284a7e460d611589f860e2d87e9040622b6ce62bfcd1f50ea0a46d2ed95"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/config/percent1_delta_fixed_explicit.yaml",
+      "archive": "config/percent1_delta_fixed_explicit.yaml",
+      "size": 5838,
+      "sha256": "0438e8f9ab768b8f7dba677f69afe5a7bcf5842cfd839efb5ad40576e482f5b7"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/config/percent1_delta_fixed_s1.yaml",
+      "archive": "config/percent1_delta_fixed_s1.yaml",
+      "size": 5798,
+      "sha256": "9e9cae2d748ff392c53a28c444648adfa1235771026a33037e521c3d75b76558"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/config/percent1_delta_fixed_s2.yaml",
+      "archive": "config/percent1_delta_fixed_s2.yaml",
+      "size": 5798,
+      "sha256": "05ef48d2b82e1a3de3cff4836fdf53ae283ba0ca611059379dda1c075b78ebe0"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/config/percent1_delta_fixed_s3.yaml",
+      "archive": "config/percent1_delta_fixed_s3.yaml",
+      "size": 5798,
+      "sha256": "075860b3fdd5173373847d65954506dfdd76139deb0b0e602ab5b9ec6921d1aa"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/config/percent1_delta_fixed_smoke.yaml",
+      "archive": "config/percent1_delta_fixed_smoke.yaml",
+      "size": 5797,
+      "sha256": "d7f31fdbc801c6f420d211ada8186d95e1220cfdd235c28e7b7ac41b6961d884"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/config/percent1_delta_tail_smoke.yaml",
+      "archive": "config/percent1_delta_tail_smoke.yaml",
+      "size": 5797,
+      "sha256": "d7f31fdbc801c6f420d211ada8186d95e1220cfdd235c28e7b7ac41b6961d884"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/config/percent1_matched_s1.yaml",
+      "archive": "config/percent1_matched_s1.yaml",
+      "size": 5392,
+      "sha256": "d76c0e97d7821897c78b1d3f27d388b4bffedd09186e6acbad24f5921b6ea560"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/config/percent1_matched_s10.yaml",
+      "archive": "config/percent1_matched_s10.yaml",
+      "size": 5392,
+      "sha256": "6d83b07051ace820bc92bcbc9b4b44da24365f9cd153833a1db28497789dc2bb"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/config/percent1_matched_s11.yaml",
+      "archive": "config/percent1_matched_s11.yaml",
+      "size": 5392,
+      "sha256": "c3a3be2b4a4ec8a65c76c011e7854bfb72135d2e4c949fd868f9fd0a3a3043be"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/config/percent1_matched_s12.yaml",
+      "archive": "config/percent1_matched_s12.yaml",
+      "size": 5392,
+      "sha256": "f6e125056665ec6199aa4ac2f56106176cb7c6cdd421afba47be48293ab28d0c"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/config/percent1_matched_s2.yaml",
+      "archive": "config/percent1_matched_s2.yaml",
+      "size": 5392,
+      "sha256": "fded8e62153f0cb93ae9a8cc7b931435e3a7e507dcfd5f5bcc361eee70910bf5"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/config/percent1_matched_s3.yaml",
+      "archive": "config/percent1_matched_s3.yaml",
+      "size": 5392,
+      "sha256": "9c09c155447be24e80de1d3d643de61ee5c7a68923ff4b61f5df3e5e773f1d9b"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/config/percent1_matched_s4.yaml",
+      "archive": "config/percent1_matched_s4.yaml",
+      "size": 5392,
+      "sha256": "de95f5a2ad9e34cbb2e3415a57e7b800ecfe646ffd4f6e0b3a7775c6e1cc22dc"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/config/percent1_matched_s5.yaml",
+      "archive": "config/percent1_matched_s5.yaml",
+      "size": 5392,
+      "sha256": "52ec7cd33c7786a69b577733830b74482831b0a845b60c01ea3fb99d6a80de0a"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/config/percent1_matched_s6.yaml",
+      "archive": "config/percent1_matched_s6.yaml",
+      "size": 5392,
+      "sha256": "6db09bede2ac93ad6699de6c81de2c00d8139a261c168e5b605fb669111ee914"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/config/percent1_matched_s7.yaml",
+      "archive": "config/percent1_matched_s7.yaml",
+      "size": 5392,
+      "sha256": "19416f85af9ed1e9996fc99ae5cdab4af942c1638e7e6dacb082429dc88a6b38"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/config/percent1_matched_s8.yaml",
+      "archive": "config/percent1_matched_s8.yaml",
+      "size": 5392,
+      "sha256": "816b602e1d424d46a49c9fd134be471c45310d5d8a12e0120e032e3263876240"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/config/percent1_matched_s9.yaml",
+      "archive": "config/percent1_matched_s9.yaml",
+      "size": 5392,
+      "sha256": "09e6b55acd1b20761cd7f018e645c65d3e4d82ff3842f9e1a62847f165b57178"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/config/review_fullchain_delta_response_diagnostic_1m.yaml",
+      "archive": "config/review_fullchain_delta_response_diagnostic_1m.yaml",
+      "size": 5864,
+      "sha256": "e6d6dea3d08dcea5f60c018e2d3fc27e72532852797bc5f2ddda99475b096c95"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/config/review_fullchain_topas_matched_1m.yaml",
+      "archive": "config/review_fullchain_topas_matched_1m.yaml",
+      "size": 5514,
+      "sha256": "149e69a676fb190c51c5ff7a56d32e5fb094de805a591176025e3eeb8362d26b"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/convergence.png",
+      "archive": "convergence.png",
+      "size": 217765,
+      "sha256": "476c37f886a4366fb758e4390399a4f8765890001e2972be90ca8831bada7ca5"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/convergence.py",
+      "archive": "convergence.py",
+      "size": 1111,
+      "sha256": "37ed78d25b159a90ded3ef113515cd343f7006c4cb958efb1987d289bb8c20f3"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/cu_analyze.py",
+      "archive": "cu_analyze.py",
+      "size": 3802,
+      "sha256": "62ee44dcaa6e550bfc5aac7c338fd4a14cc3ae6856d573b51e325f29a823a661"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/cu_step025/RESULTS.md",
+      "archive": "cu_step025/RESULTS.md",
+      "size": 1172,
+      "sha256": "7f6d46eb4238132f661871ed2c87f5c39e04f9c9f7da75182727996ddc4395cc"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/cu_step025/comparison.json",
+      "archive": "cu_step025/comparison.json",
+      "size": 30238,
+      "sha256": "3f9351b868e9180cfda7f47dd49247b79b6ef6b4c72ab5f9e7e2f40dbbe50803"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/cu_step025/gpu_quality.json",
+      "archive": "cu_step025/gpu_quality.json",
+      "size": 8774,
+      "sha256": "f01bfbfacaab45a64a053f5db599da1863d19a9207816c2c69dc47657a03b3fb"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/cu_step025/mean_loss_step_check.json",
+      "archive": "cu_step025/mean_loss_step_check.json",
+      "size": 1167,
+      "sha256": "be0b0471c263bcad1a5d43ca19bfb6cf6e8203c96463bb407e5fd86cdd951292"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/cu_step025/percent1_cu0025_s1.log",
+      "archive": "cu_step025/percent1_cu0025_s1.log",
+      "size": 5879,
+      "sha256": "f09f685772aae192da499897276f47d83aa4de3464c1b67cc2f7b5b459f4e44c"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/cu_step025/percent1_cu0025_s2.log",
+      "archive": "cu_step025/percent1_cu0025_s2.log",
+      "size": 5879,
+      "sha256": "05cfa147e7b3888f324bd296523caaf0f29357f8acd46741956d4255d3b86c73"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/cu_step025/percent1_cu0025_s3.log",
+      "archive": "cu_step025/percent1_cu0025_s3.log",
+      "size": 5880,
+      "sha256": "826021f09b96683c290e1f61c9a9deed83b82f150a8d27b1769090ca1b48d31b"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/cu_step025/topas_1m_s1/aperture.txt",
+      "archive": "cu_step025/topas_1m_s1/aperture.txt",
+      "size": 11869,
+      "sha256": "82183f0ad24be6fa56bf3798670af8de83ae727ec7bbec4c37296d741ef53b9d"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/cu_step025/topas_1m_s1/beam_model_single_center_e250.csv",
+      "archive": "cu_step025/topas_1m_s1/beam_model_single_center_e250.csv",
+      "size": 142,
+      "sha256": "4ed9be761f9b2dd164a8e9cf5487d26f10dc56826aa8439d42ca84cb9c8949b7"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/cu_step025/topas_1m_s1/dose.binheader",
+      "archive": "cu_step025/topas_1m_s1/dose.binheader",
+      "size": 249,
+      "sha256": "5e7c3e6bf4755bbd6c1f7d2c5cf9cf887803dbea64eafdc360e1f3359c156afb"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/cu_step025/topas_1m_s1/quality.json",
+      "archive": "cu_step025/topas_1m_s1/quality.json",
+      "size": 309,
+      "sha256": "5fae3b57ff44d0d9ff5ca39be7320120517e9966f48aee63a83f5be4ea6ace84"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/cu_step025/topas_1m_s1/run.log",
+      "archive": "cu_step025/topas_1m_s1/run.log",
+      "size": 50514,
+      "sha256": "5e3ce21e409d0fac2c9dd3b425b34fad5185a687117a1327b760dbb41a6d1863"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/cu_step025/topas_1m_s1/run.txt",
+      "archive": "cu_step025/topas_1m_s1/run.txt",
+      "size": 1025,
+      "sha256": "ff5f2a12536cfc0476ccaf7d2f2b6dbd01f1c94dea646028230ceca3b975ecd3"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/cu_step025/topas_1m_s1/run1.txt",
+      "archive": "cu_step025/topas_1m_s1/run1.txt",
+      "size": 3427,
+      "sha256": "a23e6a5dad4b4359d924189c73cb9ecec5687c3595d98aacdd7476f9ebf929aa"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/cu_step025/topas_1m_s1/run_energy_scan.txt",
+      "archive": "cu_step025/topas_1m_s1/run_energy_scan.txt",
+      "size": 506,
+      "sha256": "05d185d6912cacbb462a2b64a1633fb7e35e428908bba4764423844945f575af"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/cu_step025/topas_1m_s1/spots_single_center.csv",
+      "archive": "cu_step025/topas_1m_s1/spots_single_center.csv",
+      "size": 45,
+      "sha256": "dedf48d15b7a8dd7e44eba6ea74c726b916dc102e1f58b1846bfd28eee529d94"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/cu_step025/topas_1m_s2/aperture.txt",
+      "archive": "cu_step025/topas_1m_s2/aperture.txt",
+      "size": 11869,
+      "sha256": "82183f0ad24be6fa56bf3798670af8de83ae727ec7bbec4c37296d741ef53b9d"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/cu_step025/topas_1m_s2/beam_model_single_center_e250.csv",
+      "archive": "cu_step025/topas_1m_s2/beam_model_single_center_e250.csv",
+      "size": 142,
+      "sha256": "4ed9be761f9b2dd164a8e9cf5487d26f10dc56826aa8439d42ca84cb9c8949b7"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/cu_step025/topas_1m_s2/dose.binheader",
+      "archive": "cu_step025/topas_1m_s2/dose.binheader",
+      "size": 249,
+      "sha256": "5e7c3e6bf4755bbd6c1f7d2c5cf9cf887803dbea64eafdc360e1f3359c156afb"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/cu_step025/topas_1m_s2/quality.json",
+      "archive": "cu_step025/topas_1m_s2/quality.json",
+      "size": 310,
+      "sha256": "a95ed2e44d0cbddbc27b0db64d8970490453b8d6888a0eca15ef272596fb9dc9"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/cu_step025/topas_1m_s2/run.log",
+      "archive": "cu_step025/topas_1m_s2/run.log",
+      "size": 50524,
+      "sha256": "f2b100d80c678b0fa1aede441d91ded704e1a1c47c83c6f4e6f280c1a33b2a98"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/cu_step025/topas_1m_s2/run.txt",
+      "archive": "cu_step025/topas_1m_s2/run.txt",
+      "size": 1025,
+      "sha256": "5d9c19d767b72ccb4742f293819fcd3603160892feff57e1494d277bad2ab939"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/cu_step025/topas_1m_s2/run1.txt",
+      "archive": "cu_step025/topas_1m_s2/run1.txt",
+      "size": 3427,
+      "sha256": "a23e6a5dad4b4359d924189c73cb9ecec5687c3595d98aacdd7476f9ebf929aa"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/cu_step025/topas_1m_s2/run_energy_scan.txt",
+      "archive": "cu_step025/topas_1m_s2/run_energy_scan.txt",
+      "size": 506,
+      "sha256": "05d185d6912cacbb462a2b64a1633fb7e35e428908bba4764423844945f575af"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/cu_step025/topas_1m_s2/spots_single_center.csv",
+      "archive": "cu_step025/topas_1m_s2/spots_single_center.csv",
+      "size": 45,
+      "sha256": "dedf48d15b7a8dd7e44eba6ea74c726b916dc102e1f58b1846bfd28eee529d94"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/cu_step025/topas_1m_s3/aperture.txt",
+      "archive": "cu_step025/topas_1m_s3/aperture.txt",
+      "size": 11869,
+      "sha256": "82183f0ad24be6fa56bf3798670af8de83ae727ec7bbec4c37296d741ef53b9d"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/cu_step025/topas_1m_s3/beam_model_single_center_e250.csv",
+      "archive": "cu_step025/topas_1m_s3/beam_model_single_center_e250.csv",
+      "size": 142,
+      "sha256": "4ed9be761f9b2dd164a8e9cf5487d26f10dc56826aa8439d42ca84cb9c8949b7"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/cu_step025/topas_1m_s3/dose.binheader",
+      "archive": "cu_step025/topas_1m_s3/dose.binheader",
+      "size": 249,
+      "sha256": "5e7c3e6bf4755bbd6c1f7d2c5cf9cf887803dbea64eafdc360e1f3359c156afb"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/cu_step025/topas_1m_s3/quality.json",
+      "archive": "cu_step025/topas_1m_s3/quality.json",
+      "size": 310,
+      "sha256": "71d88da0011173d5d9a90d8ee8ff44f0ab2269e3d3c47a584718b1e526e468f0"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/cu_step025/topas_1m_s3/run.log",
+      "archive": "cu_step025/topas_1m_s3/run.log",
+      "size": 50517,
+      "sha256": "8c01f995157296123228b0e23932745e79cacd842e8e6dca0f14e012247397a8"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/cu_step025/topas_1m_s3/run.txt",
+      "archive": "cu_step025/topas_1m_s3/run.txt",
+      "size": 1025,
+      "sha256": "0fee2bee0fd7cf82fb9d7b9eb9c1a32fb7388335f9499fcea7a940756e1ab324"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/cu_step025/topas_1m_s3/run1.txt",
+      "archive": "cu_step025/topas_1m_s3/run1.txt",
+      "size": 3427,
+      "sha256": "a23e6a5dad4b4359d924189c73cb9ecec5687c3595d98aacdd7476f9ebf929aa"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/cu_step025/topas_1m_s3/run_energy_scan.txt",
+      "archive": "cu_step025/topas_1m_s3/run_energy_scan.txt",
+      "size": 506,
+      "sha256": "05d185d6912cacbb462a2b64a1633fb7e35e428908bba4764423844945f575af"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/cu_step025/topas_1m_s3/spots_single_center.csv",
+      "archive": "cu_step025/topas_1m_s3/spots_single_center.csv",
+      "size": 45,
+      "sha256": "dedf48d15b7a8dd7e44eba6ea74c726b916dc102e1f58b1846bfd28eee529d94"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/cu_step025/topas_quality.json",
+      "archive": "cu_step025/topas_quality.json",
+      "size": 989,
+      "sha256": "b53e14f03b947bd2200c676a21ef82586ba6d50c455054121a242dd8c7d70661"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/cu_sweep.py",
+      "archive": "cu_sweep.py",
+      "size": 3848,
+      "sha256": "3b50aa3dc2a7d30b7d95a0d8f2683a8f99f450c5c320dcecaa83c7970fa0256a"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/delta_analyze.py",
+      "archive": "delta_analyze.py",
+      "size": 2122,
+      "sha256": "c9b4a381032e92b26c54f4a3f0d6c174705d3d310d5dd0b8976002cd0d056221"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/delta_comparison.json",
+      "archive": "delta_comparison.json",
+      "size": 16512,
+      "sha256": "afa1738d9650d1363a74f27edab0433df6747708ddd4dfc2c783f0b7100904ed"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/delta_diagnostic.py",
+      "archive": "delta_diagnostic.py",
+      "size": 5938,
+      "sha256": "8319b7c037e145c35e87c907b553a009329745ab9d2eb2959d57fe9c6f52e9b7"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/delta_diagnostic_table/table.metadata.json",
+      "archive": "delta_diagnostic_table/table.metadata.json",
+      "size": 60610,
+      "sha256": "b83d22a72338318e1214614683e90d0bf751f29e0cc44cddfe2aa923d57c31e2"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/delta_fixed_quality.json",
+      "archive": "delta_fixed_quality.json",
+      "size": 22388,
+      "sha256": "ef786c559cf6e170571b6974669344d60fe8d793a3e406fec8c1ab52ff2a13d7"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/delta_fixed_run.py",
+      "archive": "delta_fixed_run.py",
+      "size": 3008,
+      "sha256": "b18b4ea8466de5214b4b1c00b638dc05065e095f213b7adfcb314746d8101b0f"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/delta_scoring_fix.patch",
+      "archive": "delta_scoring_fix.patch",
+      "size": 3318,
+      "sha256": "fc2129b185fd5a1b4c21588939911957c793ebda03c23f449dfc0aa7bacb420c"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/delta_source_20000.csv",
+      "archive": "delta_source_20000.csv",
+      "size": 43,
+      "sha256": "e06adfb6de7cd05ac5a88c62e012326f91c85d2b65050100dad9884322ede59b"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/delta_tail_diagnostic.py",
+      "archive": "delta_tail_diagnostic.py",
+      "size": 6521,
+      "sha256": "42ecc8c3e5dad1a62622c388411c071eead557f414aea0645ff53e6d75bee95e"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/delta_tail_diagnostic_table/table.metadata.json",
+      "archive": "delta_tail_diagnostic_table/table.metadata.json",
+      "size": 60692,
+      "sha256": "d63f08e15f857de1c5119fcdc741305da2ab8713a190db4ac8a3d7133364db8d"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/diagnosis_report.py",
+      "archive": "diagnosis_report.py",
+      "size": 6782,
+      "sha256": "0d44e80399208a2f94213a0aaa948c54b57fb8c9c4db885c931aeaecbd332667"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/entrance_comparison.json",
+      "archive": "entrance_comparison.json",
+      "size": 4441,
+      "sha256": "75df96469c9e95ff9b0684786ac4b008646bd93f9a80aed17b59e438920571a1"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/entrance_comparison.png",
+      "archive": "entrance_comparison.png",
+      "size": 95953,
+      "sha256": "9d6fbee1b06cfa5e8b583404b246ae7bac08cecbcce08600104cf87b1e6417e9"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/finalize.py",
+      "archive": "finalize.py",
+      "size": 7171,
+      "sha256": "c6c330928e7222ee2c1d2edcbf52cc1527a2b62433b58bdb154101e4d0fadf4c"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/gpu_quality.json",
+      "archive": "gpu_quality.json",
+      "size": 7749,
+      "sha256": "e96d5f094ae6cf8eefce996a7fd7e8490e89f1857aa02b62d3334c23da011066"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/patch.py",
+      "archive": "patch.py",
+      "size": 3974,
+      "sha256": "83c69a91920edd0125f7832a941ddfe8cc4d837ec13f119f7741b03b18aa8e7f"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/percent1_delta_control_after.log",
+      "archive": "percent1_delta_control_after.log",
+      "size": 5862,
+      "sha256": "761dd98e90150f2b1bff3bea5355b988d85a416316e999cadf5352f5c6981d6d"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/percent1_delta_control_before.log",
+      "archive": "percent1_delta_control_before.log",
+      "size": 5867,
+      "sha256": "6fd0d955aac1bef9f5e74c6f18cd3b4af56979393bcc545429ef7fa58759174f"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/percent1_delta_fixed_explicit.log",
+      "archive": "percent1_delta_fixed_explicit.log",
+      "size": 5970,
+      "sha256": "8fc71afda4ef433746229e9afe3403dbef8adb9c18075a4439408a6f2848bb73"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/percent1_delta_fixed_s1.log",
+      "archive": "percent1_delta_fixed_s1.log",
+      "size": 6023,
+      "sha256": "d18bf50e7e62900a7f493553e982f01540de528de5274a22dd6a485b8ffe66fe"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/percent1_delta_fixed_s2.log",
+      "archive": "percent1_delta_fixed_s2.log",
+      "size": 6024,
+      "sha256": "da02e570c5a7459ad829034bc361341ec5ba9814baaf86d13f91f082be9a8706"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/percent1_delta_fixed_s3.log",
+      "archive": "percent1_delta_fixed_s3.log",
+      "size": 6027,
+      "sha256": "7103b81d68b66c91830da6c1debdc0bc89871cf762e3bb8a421a9c12876a6200"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/percent1_delta_fixed_smoke.log",
+      "archive": "percent1_delta_fixed_smoke.log",
+      "size": 5959,
+      "sha256": "dd108cd3c102c0b99bc15ec599de519f9d2c376a0bc123f3d0cbfc45eb13ec36"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/percent1_delta_tail_smoke.log",
+      "archive": "percent1_delta_tail_smoke.log",
+      "size": 5924,
+      "sha256": "2a2fd02cea8ba57a68c6e7358ec70bb208f5714b0f562bcafd3c7f612c0f5dc2"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/percent1_matched_s1.log",
+      "archive": "percent1_matched_s1.log",
+      "size": 5884,
+      "sha256": "8e04c1301468b71cb8fb47acdf2a1cc0f7d0d9405a337adb3ac77cbe6bb08ac5"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/percent1_matched_s10.log",
+      "archive": "percent1_matched_s10.log",
+      "size": 5889,
+      "sha256": "3e6cb00efe5f60b04b26ecab35d7aa2436c816f9f878c691d87f94e09375d2ad"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/percent1_matched_s11.log",
+      "archive": "percent1_matched_s11.log",
+      "size": 5888,
+      "sha256": "38227b543ceb07a740765f71c5277f4457145e6eebd765bdbf96a0f565594eff"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/percent1_matched_s12.log",
+      "archive": "percent1_matched_s12.log",
+      "size": 5889,
+      "sha256": "d775fb12e7766589b6965f480a5c757f1d4adbcb11fd8c96e2dfe3ea8060f4ec"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/percent1_matched_s2.log",
+      "archive": "percent1_matched_s2.log",
+      "size": 5883,
+      "sha256": "93ca6efffc1e0b9c2687eec8dfcbddcf09abb3f152903fdb18cf644d48211ea1"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/percent1_matched_s3.log",
+      "archive": "percent1_matched_s3.log",
+      "size": 5881,
+      "sha256": "909c86cb594598b3991f46f4dd15b1741ca881fda355422a79daddb5f4a55480"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/percent1_matched_s4.log",
+      "archive": "percent1_matched_s4.log",
+      "size": 5885,
+      "sha256": "b8fbae8ea32c2eef877fd9b6679df38f658c36a0a01327a486745d4676a2ba98"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/percent1_matched_s5.log",
+      "archive": "percent1_matched_s5.log",
+      "size": 5884,
+      "sha256": "2e342e8d10a30516c68df507023438e467cfcc7fb879c5fc893ce943c279665a"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/percent1_matched_s6.log",
+      "archive": "percent1_matched_s6.log",
+      "size": 5883,
+      "sha256": "b8585252a23df36f60fefd980c6839cac68c28a081643bdd7659bf2ce1b7a068"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/percent1_matched_s7.log",
+      "archive": "percent1_matched_s7.log",
+      "size": 5885,
+      "sha256": "251b054dde1f5d40fedf586731b0df31a763891b27142cfc62518b94cbd92378"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/percent1_matched_s8.log",
+      "archive": "percent1_matched_s8.log",
+      "size": 5885,
+      "sha256": "6471e273b46fe93c4ffb886ef514abac4d2c27e3023537cbe2afe03721883533"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/percent1_matched_s9.log",
+      "archive": "percent1_matched_s9.log",
+      "size": 5885,
+      "sha256": "77c3a934ca6457887e2f6c02c845523c1821eb7ed9d4d17e81be082e0055389e"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/phase_analyze.py",
+      "archive": "phase_analyze.py",
+      "size": 2993,
+      "sha256": "3b825c47ac5b65e63ceb186a3461d56d4a7f24392c4a39f55ff35022262215b2"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/phase_run.py",
+      "archive": "phase_run.py",
+      "size": 2496,
+      "sha256": "eeccfc48810fd19f12d0de9c45cd62f811fcf8884149fa030adb88a23e38e2a1"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/phase_smoke/aperture.txt",
+      "archive": "phase_smoke/aperture.txt",
+      "size": 11852,
+      "sha256": "2be715bfd0003bbff6c95cc1f3895f4eb1d2bb835d472cc50cbda2bc560596aa"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/phase_smoke/beam_model_single_center_e250.csv",
+      "archive": "phase_smoke/beam_model_single_center_e250.csv",
+      "size": 142,
+      "sha256": "4ed9be761f9b2dd164a8e9cf5487d26f10dc56826aa8439d42ca84cb9c8949b7"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/phase_smoke/dose.binheader",
+      "archive": "phase_smoke/dose.binheader",
+      "size": 249,
+      "sha256": "5e7c3e6bf4755bbd6c1f7d2c5cf9cf887803dbea64eafdc360e1f3359c156afb"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/phase_smoke/quality.json",
+      "archive": "phase_smoke/quality.json",
+      "size": 291,
+      "sha256": "8fa0d81354a1b7619d2ec6bfa23679fbb6ef8908bf514cd5e663829d954d1cb2"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/phase_smoke/run.log",
+      "archive": "phase_smoke/run.log",
+      "size": 31870,
+      "sha256": "5e2190b7831608d48a00ce550d02beda323ba860f4c0810a63f85b72a602a325"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/phase_smoke/run.txt",
+      "archive": "phase_smoke/run.txt",
+      "size": 1672,
+      "sha256": "f232758dafb9a8ba576971247aff02c45258c55e2fcb818cb9441d3989cc1834"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/phase_smoke/run1.txt",
+      "archive": "phase_smoke/run1.txt",
+      "size": 3427,
+      "sha256": "a23e6a5dad4b4359d924189c73cb9ecec5687c3595d98aacdd7476f9ebf929aa"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/phase_smoke/run_energy_scan.txt",
+      "archive": "phase_smoke/run_energy_scan.txt",
+      "size": 506,
+      "sha256": "05d185d6912cacbb462a2b64a1633fb7e35e428908bba4764423844945f575af"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/phase_smoke/spots_single_center.csv",
+      "archive": "phase_smoke/spots_single_center.csv",
+      "size": 42,
+      "sha256": "9e54126475d0901859ec7167cb37cd891833b5b777909efb5d4898adf7f53981"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/phase_smoke/water_entrance.header",
+      "archive": "phase_smoke/water_entrance.header",
+      "size": 668,
+      "sha256": "ed4ffed27c3b212de18a7c2b9e2e3d1f81b3e5c12d921c3f9ed34b23146e18a3"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/report.py",
+      "archive": "report.py",
+      "size": 5163,
+      "sha256": "e598a576ec46ad55b14cbe12b6c7235b80dab99718bdc5fa56e86996dda105cd"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/AGENTS.md",
+      "archive": "repository_notes/AGENTS.md",
+      "size": 1987,
+      "sha256": "c5cfb1227f389a7bdc5791c938808ef5ffb2d455b2114288a4a4724273f5030e"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/failed.md",
+      "archive": "repository_notes/failed.md",
+      "size": 63800,
+      "sha256": "3fbe2053c7d2904ff70c7ebb1f5593be9b48846e805635ff43843c65b696a4c1"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/urban.md",
+      "archive": "repository_notes/urban.md",
+      "size": 36869,
+      "sha256": "edfeb3685fd1020ce9ee1f293981a8d8549409532fdecdc524e795d59f72fb2b"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/run.py",
+      "archive": "run.py",
+      "size": 5080,
+      "sha256": "c01597c625eab8698d7147b5176932e48c71cfd3c7ea8f50b184b17d9be33435"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/transport_sycl.before_delta_fix.cpp",
+      "archive": "source/transport_sycl.before_delta_fix.cpp",
+      "size": 995786,
+      "sha256": "6d681037962d99d43d161f170793ec88aa037fae41bf85cd138dd0903ad61699"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/src/transport_sycl.cpp",
+      "archive": "source/transport_sycl.cpp",
+      "size": 996556,
+      "sha256": "0d3fba297a31303b9f5f069b09e4917b2eac0b89e7899e5121a0e284964d9f74"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/statistics.png",
+      "archive": "statistics.png",
+      "size": 115536,
+      "sha256": "ae7de10d67a6c3d901275f969cc0f7fa9380fa9b922760cb65db4f11206ecea0"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/topas_2m_s1/aperture.txt",
+      "archive": "topas_2m_s1/aperture.txt",
+      "size": 11852,
+      "sha256": "2be715bfd0003bbff6c95cc1f3895f4eb1d2bb835d472cc50cbda2bc560596aa"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/topas_2m_s1/beam_model_single_center_e250.csv",
+      "archive": "topas_2m_s1/beam_model_single_center_e250.csv",
+      "size": 142,
+      "sha256": "4ed9be761f9b2dd164a8e9cf5487d26f10dc56826aa8439d42ca84cb9c8949b7"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/topas_2m_s1/dose.binheader",
+      "archive": "topas_2m_s1/dose.binheader",
+      "size": 249,
+      "sha256": "5e7c3e6bf4755bbd6c1f7d2c5cf9cf887803dbea64eafdc360e1f3359c156afb"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/topas_2m_s1/dose_electron_carrier.binheader",
+      "archive": "topas_2m_s1/dose_electron_carrier.binheader",
+      "size": 317,
+      "sha256": "dedfc953d9665cce0a5485a4a866d4a907e287b89920e944faa4505ee455df26"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/topas_2m_s1/dose_non_electron_carrier.binheader",
+      "archive": "topas_2m_s1/dose_non_electron_carrier.binheader",
+      "size": 327,
+      "sha256": "e363ef2401c51b476ab4bbb6bac653cffd1d827fd640fc68554310bb694b50dc"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/topas_2m_s1/quality.json",
+      "archive": "topas_2m_s1/quality.json",
+      "size": 201,
+      "sha256": "f254a112e6ba8b4fe6b5cb6c21648bf60e357c9796d55e59ffbf635db964f68f"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/topas_2m_s1/run.log",
+      "archive": "topas_2m_s1/run.log",
+      "size": 56310,
+      "sha256": "e3eaf2c3bed66032409e770b473129fc83042ef18e730d70ef3bdf6753964442"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/topas_2m_s1/run.txt",
+      "archive": "topas_2m_s1/run.txt",
+      "size": 1859,
+      "sha256": "f48a69b7dc81ce37687cfa75801e842505d4fb9cdf209d0a0928ebcc7b9d6b30"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/topas_2m_s1/run1.txt",
+      "archive": "topas_2m_s1/run1.txt",
+      "size": 3427,
+      "sha256": "a23e6a5dad4b4359d924189c73cb9ecec5687c3595d98aacdd7476f9ebf929aa"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/topas_2m_s1/run_energy_scan.txt",
+      "archive": "topas_2m_s1/run_energy_scan.txt",
+      "size": 506,
+      "sha256": "05d185d6912cacbb462a2b64a1633fb7e35e428908bba4764423844945f575af"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/topas_2m_s1/spots_single_center.csv",
+      "archive": "topas_2m_s1/spots_single_center.csv",
+      "size": 45,
+      "sha256": "c5ef3ad3aeb5afbed15e35a2fdfc76573cc33203ad67ed896e79cce4bdc3fe4e"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/topas_2m_s2/aperture.txt",
+      "archive": "topas_2m_s2/aperture.txt",
+      "size": 11852,
+      "sha256": "2be715bfd0003bbff6c95cc1f3895f4eb1d2bb835d472cc50cbda2bc560596aa"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/topas_2m_s2/beam_model_single_center_e250.csv",
+      "archive": "topas_2m_s2/beam_model_single_center_e250.csv",
+      "size": 142,
+      "sha256": "4ed9be761f9b2dd164a8e9cf5487d26f10dc56826aa8439d42ca84cb9c8949b7"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/topas_2m_s2/dose.binheader",
+      "archive": "topas_2m_s2/dose.binheader",
+      "size": 249,
+      "sha256": "5e7c3e6bf4755bbd6c1f7d2c5cf9cf887803dbea64eafdc360e1f3359c156afb"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/topas_2m_s2/dose_electron_carrier.binheader",
+      "archive": "topas_2m_s2/dose_electron_carrier.binheader",
+      "size": 317,
+      "sha256": "dedfc953d9665cce0a5485a4a866d4a907e287b89920e944faa4505ee455df26"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/topas_2m_s2/dose_non_electron_carrier.binheader",
+      "archive": "topas_2m_s2/dose_non_electron_carrier.binheader",
+      "size": 327,
+      "sha256": "e363ef2401c51b476ab4bbb6bac653cffd1d827fd640fc68554310bb694b50dc"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/topas_2m_s2/quality.json",
+      "archive": "topas_2m_s2/quality.json",
+      "size": 202,
+      "sha256": "a822a3695610759f9acc866fedc3a6aa4b77285da9482e892ef35c2858f2b94e"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/topas_2m_s2/run.log",
+      "archive": "topas_2m_s2/run.log",
+      "size": 56333,
+      "sha256": "fca8c23474eb53e7a65dd5af73b92054745790730d51dee8353676820b859620"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/topas_2m_s2/run.txt",
+      "archive": "topas_2m_s2/run.txt",
+      "size": 1859,
+      "sha256": "db293b0037caa4b98e754d1bd482d89ba0935f39ea37ce7bb364e2f8772021a7"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/topas_2m_s2/run1.txt",
+      "archive": "topas_2m_s2/run1.txt",
+      "size": 3427,
+      "sha256": "a23e6a5dad4b4359d924189c73cb9ecec5687c3595d98aacdd7476f9ebf929aa"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/topas_2m_s2/run_energy_scan.txt",
+      "archive": "topas_2m_s2/run_energy_scan.txt",
+      "size": 506,
+      "sha256": "05d185d6912cacbb462a2b64a1633fb7e35e428908bba4764423844945f575af"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/topas_2m_s2/spots_single_center.csv",
+      "archive": "topas_2m_s2/spots_single_center.csv",
+      "size": 45,
+      "sha256": "c5ef3ad3aeb5afbed15e35a2fdfc76573cc33203ad67ed896e79cce4bdc3fe4e"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/topas_2m_s3/aperture.txt",
+      "archive": "topas_2m_s3/aperture.txt",
+      "size": 11852,
+      "sha256": "2be715bfd0003bbff6c95cc1f3895f4eb1d2bb835d472cc50cbda2bc560596aa"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/topas_2m_s3/beam_model_single_center_e250.csv",
+      "archive": "topas_2m_s3/beam_model_single_center_e250.csv",
+      "size": 142,
+      "sha256": "4ed9be761f9b2dd164a8e9cf5487d26f10dc56826aa8439d42ca84cb9c8949b7"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/topas_2m_s3/dose.binheader",
+      "archive": "topas_2m_s3/dose.binheader",
+      "size": 249,
+      "sha256": "5e7c3e6bf4755bbd6c1f7d2c5cf9cf887803dbea64eafdc360e1f3359c156afb"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/topas_2m_s3/dose_electron_carrier.binheader",
+      "archive": "topas_2m_s3/dose_electron_carrier.binheader",
+      "size": 317,
+      "sha256": "dedfc953d9665cce0a5485a4a866d4a907e287b89920e944faa4505ee455df26"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/topas_2m_s3/dose_non_electron_carrier.binheader",
+      "archive": "topas_2m_s3/dose_non_electron_carrier.binheader",
+      "size": 327,
+      "sha256": "e363ef2401c51b476ab4bbb6bac653cffd1d827fd640fc68554310bb694b50dc"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/topas_2m_s3/quality.json",
+      "archive": "topas_2m_s3/quality.json",
+      "size": 201,
+      "sha256": "a3e4064946bde24eed9c039cd21c50c6229cccfc7f5208cf155f0f41953e3d7b"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/topas_2m_s3/run.log",
+      "archive": "topas_2m_s3/run.log",
+      "size": 56322,
+      "sha256": "cce0e9b2d6df12559e9dff2213c90a58689e0493e460c5563a773f73fcbe7608"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/topas_2m_s3/run.txt",
+      "archive": "topas_2m_s3/run.txt",
+      "size": 1859,
+      "sha256": "c4222e89dc6880a12f47362f453b4b55cc67bc88bc162f537617e69724f56944"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/topas_2m_s3/run1.txt",
+      "archive": "topas_2m_s3/run1.txt",
+      "size": 3427,
+      "sha256": "a23e6a5dad4b4359d924189c73cb9ecec5687c3595d98aacdd7476f9ebf929aa"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/topas_2m_s3/run_energy_scan.txt",
+      "archive": "topas_2m_s3/run_energy_scan.txt",
+      "size": 506,
+      "sha256": "05d185d6912cacbb462a2b64a1633fb7e35e428908bba4764423844945f575af"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/topas_2m_s3/spots_single_center.csv",
+      "archive": "topas_2m_s3/spots_single_center.csv",
+      "size": 45,
+      "sha256": "c5ef3ad3aeb5afbed15e35a2fdfc76573cc33203ad67ed896e79cce4bdc3fe4e"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/topas_phase_2m/aperture.txt",
+      "archive": "topas_phase_2m/aperture.txt",
+      "size": 11852,
+      "sha256": "2be715bfd0003bbff6c95cc1f3895f4eb1d2bb835d472cc50cbda2bc560596aa"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/topas_phase_2m/beam_model_single_center_e250.csv",
+      "archive": "topas_phase_2m/beam_model_single_center_e250.csv",
+      "size": 142,
+      "sha256": "4ed9be761f9b2dd164a8e9cf5487d26f10dc56826aa8439d42ca84cb9c8949b7"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/topas_phase_2m/dose.binheader",
+      "archive": "topas_phase_2m/dose.binheader",
+      "size": 249,
+      "sha256": "5e7c3e6bf4755bbd6c1f7d2c5cf9cf887803dbea64eafdc360e1f3359c156afb"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/topas_phase_2m/quality.json",
+      "archive": "topas_phase_2m/quality.json",
+      "size": 297,
+      "sha256": "02f3117b5ff3727cb402a4d8e0ffac50952fc1b97d7c19b7e422a46fcd59fdc6"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/topas_phase_2m/run.log",
+      "archive": "topas_phase_2m/run.log",
+      "size": 56445,
+      "sha256": "ca958e76fad0b927f07eba9aa7abab4a931370b7f685937d058c3144ef106b6f"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/topas_phase_2m/run.txt",
+      "archive": "topas_phase_2m/run.txt",
+      "size": 1673,
+      "sha256": "1802cf6cad7ee413d5266019bff58e0fb6290babbc18e4daac221ce2da584b23"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/topas_phase_2m/run1.txt",
+      "archive": "topas_phase_2m/run1.txt",
+      "size": 3427,
+      "sha256": "a23e6a5dad4b4359d924189c73cb9ecec5687c3595d98aacdd7476f9ebf929aa"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/topas_phase_2m/run_energy_scan.txt",
+      "archive": "topas_phase_2m/run_energy_scan.txt",
+      "size": 506,
+      "sha256": "05d185d6912cacbb462a2b64a1633fb7e35e428908bba4764423844945f575af"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/topas_phase_2m/spots_single_center.csv",
+      "archive": "topas_phase_2m/spots_single_center.csv",
+      "size": 45,
+      "sha256": "c5ef3ad3aeb5afbed15e35a2fdfc76573cc33203ad67ed896e79cce4bdc3fe4e"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/topas_phase_2m/water_entrance.header",
+      "archive": "topas_phase_2m/water_entrance.header",
+      "size": 681,
+      "sha256": "064c4c3b7a7be09aa82c22e3d15fc4a468fe4902c4711feaf1275cf29e9c122c"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/topas_quality.json",
+      "archive": "topas_quality.json",
+      "size": 664,
+      "sha256": "ae73c0a84588d44b8580947e7441cab335b58ef4b246a1116890ef7b482212f9"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/topas_smoke/aperture.txt",
+      "archive": "topas_smoke/aperture.txt",
+      "size": 11852,
+      "sha256": "2be715bfd0003bbff6c95cc1f3895f4eb1d2bb835d472cc50cbda2bc560596aa"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/topas_smoke/beam_model_single_center_e250.csv",
+      "archive": "topas_smoke/beam_model_single_center_e250.csv",
+      "size": 142,
+      "sha256": "4ed9be761f9b2dd164a8e9cf5487d26f10dc56826aa8439d42ca84cb9c8949b7"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/topas_smoke/dose.binheader",
+      "archive": "topas_smoke/dose.binheader",
+      "size": 249,
+      "sha256": "5e7c3e6bf4755bbd6c1f7d2c5cf9cf887803dbea64eafdc360e1f3359c156afb"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/topas_smoke/dose_electron_carrier.binheader",
+      "archive": "topas_smoke/dose_electron_carrier.binheader",
+      "size": 317,
+      "sha256": "dedfc953d9665cce0a5485a4a866d4a907e287b89920e944faa4505ee455df26"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/topas_smoke/dose_non_electron_carrier.binheader",
+      "archive": "topas_smoke/dose_non_electron_carrier.binheader",
+      "size": 327,
+      "sha256": "e363ef2401c51b476ab4bbb6bac653cffd1d827fd640fc68554310bb694b50dc"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/topas_smoke/run.log",
+      "archive": "topas_smoke/run.log",
+      "size": 37658,
+      "sha256": "01ce72f1fb7e742167f31dce059205649858c42b3543e5b520c9d0b375274b74"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/topas_smoke/run.txt",
+      "archive": "topas_smoke/run.txt",
+      "size": 1858,
+      "sha256": "27c1accbbce626c5f8c4280ffee88202187c59c11fc8b641d3ffbc9023266450"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/topas_smoke/run1.txt",
+      "archive": "topas_smoke/run1.txt",
+      "size": 3427,
+      "sha256": "a23e6a5dad4b4359d924189c73cb9ecec5687c3595d98aacdd7476f9ebf929aa"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/topas_smoke/run_energy_scan.txt",
+      "archive": "topas_smoke/run_energy_scan.txt",
+      "size": 506,
+      "sha256": "05d185d6912cacbb462a2b64a1633fb7e35e428908bba4764423844945f575af"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/topas_smoke/spots_single_center.csv",
+      "archive": "topas_smoke/spots_single_center.csv",
+      "size": 43,
+      "sha256": "e06adfb6de7cd05ac5a88c62e012326f91c85d2b65050100dad9884322ede59b"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/topas_smoke_ok.json",
+      "archive": "topas_smoke_ok.json",
+      "size": 312,
+      "sha256": "097fcd77add653007fd20a8518529c18e7eb291fc5dca42e863b8423aa8d0b61"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/unit_delta_fix.log",
+      "archive": "unit_delta_fix.log",
+      "size": 371,
+      "sha256": "574cfc7d292b0a85e4a55f83652f5c27beba69908a2c02451cb8b90b9f7c1872"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/unit_delta_fix/maigo_cu10ms025.csv",
+      "archive": "unit_delta_fix/maigo_cu10ms025.csv",
+      "size": 775585,
+      "sha256": "31dd1a0329f27c2dce3a2a406991456a4612a16a5de5e099c2c929c997b24ce1"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/unit_delta_fix/maigo_slab_w10ms005.csv",
+      "archive": "unit_delta_fix/maigo_slab_w10ms005.csv",
+      "size": 760124,
+      "sha256": "9d037b3e0e13d8eb212a9e4300ab99f253483e729313215de7cd2b9e8d5e647b"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/unit_delta_fix/maigo_slab_w1ms005.csv",
+      "archive": "unit_delta_fix/maigo_slab_w1ms005.csv",
+      "size": 760063,
+      "sha256": "b1df1f33f0ade61bf0cd07fd7aa12c735e5f594c6cbc12ffc7d70b47cda1bc65"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/unit_delta_fix/maigo_step_theta.csv",
+      "archive": "unit_delta_fix/maigo_step_theta.csv",
+      "size": 8200538,
+      "sha256": "30cdd3ace39d74cd5f3fffd982700be3cf204f3614ea88faf6384af66098cbb8"
+    }
+  ],
+  "external_evidence": [
+    {
+      "path": "/mnt/sda/wuwei/minibeam_copper_extract_e250/compiled/c12_copper_stopping_geant4_11_3_2.csv",
+      "size": 58528,
+      "sha256": "73dd731c4dbb24044a0428c6fb77cb742fe0de48d0fead576fd9618944a0a142"
+    },
+    {
+      "path": "/mnt/sda/wuwei/minibeam_single_center_em_only_water75ev_e250_10m/topas_7378/aperture.txt",
+      "size": 11852,
+      "sha256": "2be715bfd0003bbff6c95cc1f3895f4eb1d2bb835d472cc50cbda2bc560596aa"
+    },
+    {
+      "path": "/mnt/sda/wuwei/minibeam_single_center_em_only_water75ev_e250_10m/topas_7378/beam_model_single_center_e250.csv",
+      "size": 142,
+      "sha256": "4ed9be761f9b2dd164a8e9cf5487d26f10dc56826aa8439d42ca84cb9c8949b7"
+    },
+    {
+      "path": "/mnt/sda/wuwei/minibeam_single_center_em_only_water75ev_e250_10m/topas_7378/dose.bin",
+      "size": 8000000,
+      "sha256": "004657bf559bab0acfcbc5b079223f86cc5c03ea38f5a09fbde2b479763d2ddd"
+    },
+    {
+      "path": "/mnt/sda/wuwei/minibeam_single_center_em_only_water75ev_e250_10m/topas_7378/dose.binheader",
+      "size": 290,
+      "sha256": "7ce5098d6bcbedbd80aa81745ff59675c4730b31714d32fa7c1e3bdea7cfd5c1"
+    },
+    {
+      "path": "/mnt/sda/wuwei/minibeam_single_center_em_only_water75ev_e250_10m/topas_7378/run1.txt",
+      "size": 3427,
+      "sha256": "a23e6a5dad4b4359d924189c73cb9ecec5687c3595d98aacdd7476f9ebf929aa"
+    },
+    {
+      "path": "/mnt/sda/wuwei/minibeam_single_center_em_only_water75ev_e250_10m/topas_7378/run_energy_scan.txt",
+      "size": 506,
+      "sha256": "05d185d6912cacbb462a2b64a1633fb7e35e428908bba4764423844945f575af"
+    },
+    {
+      "path": "/mnt/sda/wuwei/minibeam_single_center_em_only_water75ev_e250_10m/topas_7378/run_single_center_em_only_water75ev_e250_10m.txt",
+      "size": 955,
+      "sha256": "9c3ca39a187efdeef4a2aba134e4308dd58d3a30d140d109c0b43600b0a57273"
+    },
+    {
+      "path": "/mnt/sda/wuwei/minibeam_single_center_em_only_water75ev_e250_10m/topas_7378/spots_single_center_e250_10m.csv",
+      "size": 48,
+      "sha256": "8e6a3b28d16bdf41744d692ee6d97e81962a682c653da85ba9ae0f21b428d745"
+    },
+    {
+      "path": "/mnt/sda/wuwei/water75ev_c12_response_20260922/table.bin",
+      "size": 2100070068,
+      "sha256": "c76c2b953facf8184e22fc0ea35b926f28af62f10f560542b5864d3f0eb9642a"
+    },
+    {
+      "path": "/mnt/sda/wuwei/water75ev_c12_response_20260922/table.metadata.json",
+      "size": 37445,
+      "sha256": "a57abde58df91b29814d1cb1a1edd531ba6e05df0e3edfb0fa714be067f8f67e"
+    },
+    {
+      "path": "/mnt/sda/wuwei/water75ev_c12_response_20260922/table.paths.bin",
+      "size": 1533829428,
+      "sha256": "b23704c55bacd1cee1dc94a651349216be3457eb634472543989549b3858e3e2"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/build/oneapi-nvidia-minibeam/carbon_mc",
+      "size": 9480416,
+      "sha256": "003249623e409d386c85c233c27286d57a8ffca15271acfd20aeede3050ab4f5"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/carbon_mc_before_delta_fix",
+      "size": 9476320,
+      "sha256": "aee706d7e5cb9d7cc7ee80b7cf7fe5e168e2f6eab60f6d9827a9140f78d5b824"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/cu_step025/topas_1m_s1/dose.bin",
+      "size": 8000000,
+      "sha256": "d0d9e0b31c47674a42d3a46e76640475983e3e6883c23026dc19547454817321"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/cu_step025/topas_1m_s2/dose.bin",
+      "size": 8000000,
+      "sha256": "56a6e96f413325d2b270650e0496b22e2b087f4e529f9f3b4ca1a30c37db6b6c"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/cu_step025/topas_1m_s3/dose.bin",
+      "size": 8000000,
+      "sha256": "559e97f19cc9c90daf760f4af64f71b81245821bcd77c49e6d8db0329c92bf66"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/delta_diagnostic_table/table.bin",
+      "size": 100927860,
+      "sha256": "88e016805f3532b91362147ec47ca3d326ed67ae8edb7bcdf4a23b0d2f941902"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/delta_diagnostic_table/table.paths.bin",
+      "size": 252485108,
+      "sha256": "fa224a0347b78fe30d2931a76057a61b1d01c28e4234805e8755b6241a915a2d"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/delta_tail_diagnostic_table/table.bin",
+      "size": 205841340,
+      "sha256": "851be31d5ea2d63b3180f4331f62c3c0a0d04bf293a5790247e92e1e117e1d28"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/delta_tail_diagnostic_table/table.paths.bin",
+      "size": 323400848,
+      "sha256": "9d86a4f59e827dd991bed6d422d39adbbc7aca68e8a65080f7fdf410638b2a4c"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/phase_smoke/dose.bin",
+      "size": 8000000,
+      "sha256": "b481310b596ef3811574ced32296624f8f41c4ea00134b9b087a36942e0ef89d"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/phase_smoke/water_entrance.phsp",
+      "size": 22331,
+      "sha256": "78b7792164b3ca568c7e1eed664272a8ad1b70dfd2c4b22b94ab0f93033e368e"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/topas_2m_s1/dose.bin",
+      "size": 8000000,
+      "sha256": "bb0f0c2ae3fa4b45742694c532757be8892b2c4a3189f5b88e912111436edcf3"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/topas_2m_s1/dose_electron_carrier.bin",
+      "size": 8000000,
+      "sha256": "330129cde71f99631cd7c0c53e96988bb4a7b6294c74600c1e22335a5aceb4b3"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/topas_2m_s1/dose_non_electron_carrier.bin",
+      "size": 8000000,
+      "sha256": "505ac4394a14004daf033574cd1d4c5791d99d5552d41ccf8822fbf3596e428a"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/topas_2m_s2/dose.bin",
+      "size": 8000000,
+      "sha256": "4d9cd50e0a72d6efeb716e71b37666603ae23dc9ada1a220bdf607b92fc1ec8a"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/topas_2m_s2/dose_electron_carrier.bin",
+      "size": 8000000,
+      "sha256": "6465661554fcb551a34b9c8c56f14266be975096f432f39854c7f3759fa5cd6f"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/topas_2m_s2/dose_non_electron_carrier.bin",
+      "size": 8000000,
+      "sha256": "9e22431034ac4dddaf8ab35e3a3a41ff877bb2bc5f862ca38253db09bd2e7938"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/topas_2m_s3/dose.bin",
+      "size": 8000000,
+      "sha256": "84a34933f8e81ec197ba397fdd36dddfac7096c140b11c35336716f15787a7ac"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/topas_2m_s3/dose_electron_carrier.bin",
+      "size": 8000000,
+      "sha256": "859af3fae52154eae1bfc43ec259fde96f83edc55a95f7f9663755409732f858"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/topas_2m_s3/dose_non_electron_carrier.bin",
+      "size": 8000000,
+      "sha256": "4f2003f56bb39f7d8ccf36dc3ffe6940090ddfac064d8b1b016b87eddc09e044"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/topas_phase_2m/dose.bin",
+      "size": 8000000,
+      "sha256": "b668ad9024aeb7c0e5e650d58b119cc3014c9e8b92bab01a733000112ad0b4d3"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/topas_phase_2m/water_entrance.phsp",
+      "size": 41906159,
+      "sha256": "e3c5d8913607ee7eb613eefd6fb83c99e7ce9fb6e6903a9838d306169b64563b"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/topas_smoke/dose.bin",
+      "size": 8000000,
+      "sha256": "4d016bcdb2d87eef216dea2e2035346f123bdff4c0883cdf4d58126d84c34459"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/topas_smoke/dose_electron_carrier.bin",
+      "size": 8000000,
+      "sha256": "d64004b88113d4a6edb4237b0f6b4f70b7cd806fd18bb01d5e75e170e8be43ed"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/percent1_20260923/topas_smoke/dose_non_electron_carrier.bin",
+      "size": 8000000,
+      "sha256": "502f249a645d441d8d94f0d1a92141b9398230f809152b2b568ec8721a56b1e2"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/active_copper005.csv",
+      "size": 4066528,
+      "sha256": "f9e9079557197459276795a052adb49f5e2a2b0edb9800de5d198e06f78ea86d"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/active_water005.csv",
+      "size": 4044186,
+      "sha256": "621e4f91045374fd143cbbf13c2e3dc8fd79e78963532a330854d1056eaac94a"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/valley_diagnosis_20260923/entrance_cu005_s1.csv",
+      "size": 28381786,
+      "sha256": "9cd4a931a79966d5b5637334b249336811a24ce673382c39329153a0324a2e9f"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/valley_diagnosis_20260923/source_1m.csv",
+      "size": 47,
+      "sha256": "e6ccf288b3d5d57e24957ec6f28701f183a896d5c7c6ba1d01f43573fa63f4a0"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_cu0025_s1/dose.mhd",
+      "size": 304,
+      "sha256": "e76aaecbe21638dbfc852ea78ed2256a634bf981066b5ea37bd373cc96cfe7b9"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_cu0025_s1/dose.raw",
+      "size": 4000000,
+      "sha256": "a5253c8d3e64a9e81cf3b00322d7f9a7758dd13f16fcb2e68419e402fa7d508a"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_cu0025_s1/energy_ledger.json",
+      "size": 563462,
+      "sha256": "411e7ebb90e8f608ca42ec022a0e8ff3853d5128e020a25e4eb397dbb2c54152"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_cu0025_s1/quality_report.json",
+      "size": 2046,
+      "sha256": "473cca28e6485e197def9d010e9310bbe22f34c142542ecbacc4069034f0937c"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_cu0025_s2/dose.mhd",
+      "size": 304,
+      "sha256": "e76aaecbe21638dbfc852ea78ed2256a634bf981066b5ea37bd373cc96cfe7b9"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_cu0025_s2/dose.raw",
+      "size": 4000000,
+      "sha256": "6d63717b7faa5414da924ef4da0ed7e328e03246cfa9b279e01347ad79087dd4"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_cu0025_s2/energy_ledger.json",
+      "size": 563463,
+      "sha256": "cf45fc1fce5bce4590102bbc8a296b212ecd27565ffd00e483fba8fd10f7f29c"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_cu0025_s2/quality_report.json",
+      "size": 2050,
+      "sha256": "17167d8680f95250fb07f4c1b196fd510392f00b8b6d5cd980a3c24d1bc122cd"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_cu0025_s3/dose.mhd",
+      "size": 304,
+      "sha256": "e76aaecbe21638dbfc852ea78ed2256a634bf981066b5ea37bd373cc96cfe7b9"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_cu0025_s3/dose.raw",
+      "size": 4000000,
+      "sha256": "a15057d1b042892bcf9b8f439c23b0a5dfa23bc177332f8c088ac819529d5317"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_cu0025_s3/energy_ledger.json",
+      "size": 563465,
+      "sha256": "8d7883a3253a76590560b020956b285daf2662469d09aea2867a6e7f08d6e9d9"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_cu0025_s3/quality_report.json",
+      "size": 2053,
+      "sha256": "97bcc9f340204891e9afa3513434d2041e053c87da36f7ec98105e10c1d9faa0"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_delta_control_after/dose.mhd",
+      "size": 304,
+      "sha256": "e76aaecbe21638dbfc852ea78ed2256a634bf981066b5ea37bd373cc96cfe7b9"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_delta_control_after/dose.raw",
+      "size": 4000000,
+      "sha256": "4c0b7fb0d5463933446bc0da50ca715ea4f515eac9ad80657580dac1f2ebea9a"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_delta_control_after/energy_ledger.json",
+      "size": 563463,
+      "sha256": "91796e648cdbae88e25bb492d0ddf6d95ade82623010d3be4b93b44676e9fbdf"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_delta_control_after/quality_report.json",
+      "size": 2054,
+      "sha256": "ef46a0449afb139a3e458d856ccb4ad7082963ea85ebadbd52783c9330dd09d3"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_delta_control_before/dose.mhd",
+      "size": 304,
+      "sha256": "e76aaecbe21638dbfc852ea78ed2256a634bf981066b5ea37bd373cc96cfe7b9"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_delta_control_before/dose.raw",
+      "size": 4000000,
+      "sha256": "74e90ed17a45f16fac5a4d808720ddf84dc3262d4d860ab75c47ffc7d8b0752a"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_delta_control_before/energy_ledger.json",
+      "size": 563463,
+      "sha256": "7a853e8ffdb902e6445f4939104433f0c4774dbc27ccb34eb3c9e56c71f7525f"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_delta_control_before/quality_report.json",
+      "size": 2052,
+      "sha256": "311207b246f53be639f6d616220c4643ee985f310d4ac93112971dfb470c473e"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_delta_fixed_explicit/dose.mhd",
+      "size": 304,
+      "sha256": "e76aaecbe21638dbfc852ea78ed2256a634bf981066b5ea37bd373cc96cfe7b9"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_delta_fixed_explicit/dose.raw",
+      "size": 4000000,
+      "sha256": "c2d5dda10dfbdaa1bbc7968aa7c42d21271346b9b35741475641f29dbd070103"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_delta_fixed_explicit/energy_ledger.json",
+      "size": 563463,
+      "sha256": "274dbb8ffbf4f538c4c75a2bd1bf208c944717efd34d2778846ca235afd62158"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_delta_fixed_explicit/quality_report.json",
+      "size": 2054,
+      "sha256": "b4a48020f94ae25d9e73b7f52634df84959fdb52378cb8c0fd964f668f14d55c"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_delta_fixed_s1/dose.mhd",
+      "size": 304,
+      "sha256": "e76aaecbe21638dbfc852ea78ed2256a634bf981066b5ea37bd373cc96cfe7b9"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_delta_fixed_s1/dose.raw",
+      "size": 4000000,
+      "sha256": "19e30ec661986e054a192404c05e9de2e198d0ae456d250ab1843b0760e7b00c"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_delta_fixed_s1/energy_ledger.json",
+      "size": 563465,
+      "sha256": "94cb7a3b3f6e05f49db1d3168ca29b65333da595e8b010d2273865022ceb1a3a"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_delta_fixed_s1/quality_report.json",
+      "size": 2055,
+      "sha256": "b0e1dcb5373e320ed040724cabb803b882450dd2bedab059be203ad67a98f176"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_delta_fixed_s2/dose.mhd",
+      "size": 304,
+      "sha256": "e76aaecbe21638dbfc852ea78ed2256a634bf981066b5ea37bd373cc96cfe7b9"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_delta_fixed_s2/dose.raw",
+      "size": 4000000,
+      "sha256": "680a5fe387aaeaed74e9c63852b9fecd3ebd4ebf5c7b116676a8208b37e48a93"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_delta_fixed_s2/energy_ledger.json",
+      "size": 563465,
+      "sha256": "a7ccd2472a24b8bdb60a76120b595dd688339480da328e020a49b1123dc1b378"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_delta_fixed_s2/quality_report.json",
+      "size": 2050,
+      "sha256": "5b7573322c7c922bce20ccce7bbaf461becba299b7304ad3ebe1607d8cf76020"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_delta_fixed_s3/dose.mhd",
+      "size": 304,
+      "sha256": "e76aaecbe21638dbfc852ea78ed2256a634bf981066b5ea37bd373cc96cfe7b9"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_delta_fixed_s3/dose.raw",
+      "size": 4000000,
+      "sha256": "d8ef5d8a3a9eb424f624dc8685bdd01fef7895f8c0c64597e724602e1cadc4d6"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_delta_fixed_s3/energy_ledger.json",
+      "size": 563463,
+      "sha256": "eec88d5caafb31a0534043228e6fb5980cc02ed8859f2bb0b9c5338fcd0ed432"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_delta_fixed_s3/quality_report.json",
+      "size": 2053,
+      "sha256": "fed21e6d40cdce1ae57caab1b7a92ab6a956adaddb9a6a4ec4496b1437111d32"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_delta_fixed_smoke/dose.mhd",
+      "size": 304,
+      "sha256": "e76aaecbe21638dbfc852ea78ed2256a634bf981066b5ea37bd373cc96cfe7b9"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_delta_fixed_smoke/dose.raw",
+      "size": 4000000,
+      "sha256": "c791114a17575627eeab21e4031064eed39d9f3f027d1e812132f69a4f8b1891"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_delta_fixed_smoke/energy_ledger.json",
+      "size": 563461,
+      "sha256": "c71726d37af59f557d7afde826b3442d2c2b388c056633f53dd14bc0b5713794"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_delta_fixed_smoke/quality_report.json",
+      "size": 2054,
+      "sha256": "c705e5607c04efd11c84ebccfd027cf9a4f152ed9d2b6d6ca6a5ba7b77c57e48"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_delta_tail_smoke/dose.mhd",
+      "size": 304,
+      "sha256": "e76aaecbe21638dbfc852ea78ed2256a634bf981066b5ea37bd373cc96cfe7b9"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_delta_tail_smoke/dose.raw",
+      "size": 4000000,
+      "sha256": "38ed24c4ff3cd9abb7d75c46b011b6ed2555187f1e58d6c7cdf7f59ef1e4119e"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_delta_tail_smoke/energy_ledger.json",
+      "size": 563473,
+      "sha256": "7d281f4810d526937677d11006097d3fce8e98ec0b91f0fc9de22595b6641bf3"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_delta_tail_smoke/quality_report.json",
+      "size": 2541,
+      "sha256": "8855971dc4b6e12aaaa9ef41c1a6800adc6294ce5bf5eb31d031efa95df3e750"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_matched_s1/dose.mhd",
+      "size": 304,
+      "sha256": "e76aaecbe21638dbfc852ea78ed2256a634bf981066b5ea37bd373cc96cfe7b9"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_matched_s1/dose.raw",
+      "size": 4000000,
+      "sha256": "642303413145a4f22e97ed19c5ce5c9c83ff402afe4a3b02d826ff56d5c2e82f"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_matched_s1/energy_ledger.json",
+      "size": 563464,
+      "sha256": "09d3740d2d2d260b32ddfe8de4452bb6a0b0353895b1691b0dd239de4a84cc2a"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_matched_s1/quality_report.json",
+      "size": 2053,
+      "sha256": "29a4a35864e0dbf9eb31ce2e0ac889d7369c2cd1cc8c75526f3ff3b734a2a0a7"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_matched_s10/dose.mhd",
+      "size": 304,
+      "sha256": "e76aaecbe21638dbfc852ea78ed2256a634bf981066b5ea37bd373cc96cfe7b9"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_matched_s10/dose.raw",
+      "size": 4000000,
+      "sha256": "10c978fb08a686921709f2747712860222fa072b75baa53862f4b3325fd057ce"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_matched_s10/energy_ledger.json",
+      "size": 563463,
+      "sha256": "51e50a32dc3b280e4e972343660af0fb848ed2e843ac9ae77346840dea4a209b"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_matched_s10/quality_report.json",
+      "size": 2054,
+      "sha256": "5b6ea5e2fbc4ac036ccae61971637aed4a58201691e3a068bb14934caa2c1c50"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_matched_s11/dose.mhd",
+      "size": 304,
+      "sha256": "e76aaecbe21638dbfc852ea78ed2256a634bf981066b5ea37bd373cc96cfe7b9"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_matched_s11/dose.raw",
+      "size": 4000000,
+      "sha256": "4fecb5df7ef02b9a6efa0138a0b04097611844783fead9b31c4006cb149b6828"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_matched_s11/energy_ledger.json",
+      "size": 563465,
+      "sha256": "d1ac7ce2d516651d99df5a5db757bdfc6939955930c808cc51f08647b72a3cbb"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_matched_s11/quality_report.json",
+      "size": 2053,
+      "sha256": "d3911c31bf6da36cd95cefe58fc3defbc5a222e4c894aa8d7032f611eeda2740"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_matched_s12/dose.mhd",
+      "size": 304,
+      "sha256": "e76aaecbe21638dbfc852ea78ed2256a634bf981066b5ea37bd373cc96cfe7b9"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_matched_s12/dose.raw",
+      "size": 4000000,
+      "sha256": "d11b73d795c44ee2bdbc6a39abf33273f269918ba272b25ff9f47331a7d4e834"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_matched_s12/energy_ledger.json",
+      "size": 563465,
+      "sha256": "f71809ca223d56295b1d64da2f7917a2cca6267b5d9ea8065e03fa4231d4171c"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_matched_s12/quality_report.json",
+      "size": 2053,
+      "sha256": "2f5df9c14aa0e32054e6ea966a2b64bde76bdff82e00f81ab58f602ad2e197b1"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_matched_s2/dose.mhd",
+      "size": 304,
+      "sha256": "e76aaecbe21638dbfc852ea78ed2256a634bf981066b5ea37bd373cc96cfe7b9"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_matched_s2/dose.raw",
+      "size": 4000000,
+      "sha256": "b518787095f1794e4db5bb2ac451f48ff2476ddbe7676c529df7bdf2bf366deb"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_matched_s2/energy_ledger.json",
+      "size": 563464,
+      "sha256": "4654c609e5058e25bef873be15a3d98d1fd194ab3ba2a7a67e434a6eb802bb5d"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_matched_s2/quality_report.json",
+      "size": 2052,
+      "sha256": "d537972ccd51f5713acf3c92f2fc8f727549c76d5b524f9df581ff903f598ff3"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_matched_s3/dose.mhd",
+      "size": 304,
+      "sha256": "e76aaecbe21638dbfc852ea78ed2256a634bf981066b5ea37bd373cc96cfe7b9"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_matched_s3/dose.raw",
+      "size": 4000000,
+      "sha256": "451ca5788fab1c131a7a653e5bd42bbdc10fdf7b32b742270cb1f31e7227414e"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_matched_s3/energy_ledger.json",
+      "size": 563464,
+      "sha256": "b2f8f135a00751ba59cbc9d92ba7f81f2e4375b9134f70fee96859d6379f0226"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_matched_s3/quality_report.json",
+      "size": 2054,
+      "sha256": "d870131e71884e1cdc9fca5351d5bc4bf9d12468615f485d4f30682e6b4cdca8"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_matched_s4/dose.mhd",
+      "size": 304,
+      "sha256": "e76aaecbe21638dbfc852ea78ed2256a634bf981066b5ea37bd373cc96cfe7b9"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_matched_s4/dose.raw",
+      "size": 4000000,
+      "sha256": "39322092aa249c4c6dc463ef603d2200ce2af02a20a75d6477000c9fdb27b6a7"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_matched_s4/energy_ledger.json",
+      "size": 563462,
+      "sha256": "aee672eb4d49b91375012046d5c95b94dbe7bd0239ad6deaa3c4942b6c909d97"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_matched_s4/quality_report.json",
+      "size": 2053,
+      "sha256": "b012708012a2c96a7214c7164d84e3050ad4e3bcf620fbdd4017e6eba99b2692"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_matched_s5/dose.mhd",
+      "size": 304,
+      "sha256": "e76aaecbe21638dbfc852ea78ed2256a634bf981066b5ea37bd373cc96cfe7b9"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_matched_s5/dose.raw",
+      "size": 4000000,
+      "sha256": "bb1e444616bae74223a633035a17ef5d0a5c659c8a7ff89f4e74a8bb7c976010"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_matched_s5/energy_ledger.json",
+      "size": 563464,
+      "sha256": "ed7b5fc8ef03baf876f264acfcf4ff5f09f8db92819c9cf1d66587363742eccf"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_matched_s5/quality_report.json",
+      "size": 2052,
+      "sha256": "bcce06e43d872705dcdb39f621e98d69e40de1ddf6b46770efa049268b3398e5"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_matched_s6/dose.mhd",
+      "size": 304,
+      "sha256": "e76aaecbe21638dbfc852ea78ed2256a634bf981066b5ea37bd373cc96cfe7b9"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_matched_s6/dose.raw",
+      "size": 4000000,
+      "sha256": "c90478c26405a5f3b436209aa0571997afc179a1e322b9988514e0deed1a8a26"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_matched_s6/energy_ledger.json",
+      "size": 563464,
+      "sha256": "b853f3e8bc9e30bae60571205b7a9738f2a13ac5c74f876a6237fc032f1646ee"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_matched_s6/quality_report.json",
+      "size": 2053,
+      "sha256": "2dac59c59487ea7297048997efc45b615cbd196c4926053640a188f20c3f8b4a"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_matched_s7/dose.mhd",
+      "size": 304,
+      "sha256": "e76aaecbe21638dbfc852ea78ed2256a634bf981066b5ea37bd373cc96cfe7b9"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_matched_s7/dose.raw",
+      "size": 4000000,
+      "sha256": "573cf9e9a45826ce4ea501ca41d3da68287384b8aa76fad868649c90446d77ba"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_matched_s7/energy_ledger.json",
+      "size": 563465,
+      "sha256": "e3c05732fb2ef38d76fbedfe5469828a376773da40df987183f754844f647282"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_matched_s7/quality_report.json",
+      "size": 2053,
+      "sha256": "497cf71de75a7be999ba763200270631924f0b23b11f25034da544a0129111c7"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_matched_s8/dose.mhd",
+      "size": 304,
+      "sha256": "e76aaecbe21638dbfc852ea78ed2256a634bf981066b5ea37bd373cc96cfe7b9"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_matched_s8/dose.raw",
+      "size": 4000000,
+      "sha256": "3c6b06bc255ebe3ff4f7dc3695c27a06d5de31e296bec8f4c172d1a886570a1b"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_matched_s8/energy_ledger.json",
+      "size": 563463,
+      "sha256": "6a071164648a0acc0fe0afc01fcd00817ef42fa5cfebc0da741bd69e83886dfc"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_matched_s8/quality_report.json",
+      "size": 2053,
+      "sha256": "fd9db0e051f18cd3e285ed6987634b25ea6704c0aff26c7c16f487b1af413c5e"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_matched_s9/dose.mhd",
+      "size": 304,
+      "sha256": "e76aaecbe21638dbfc852ea78ed2256a634bf981066b5ea37bd373cc96cfe7b9"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_matched_s9/dose.raw",
+      "size": 4000000,
+      "sha256": "02a1dc92bbfe7b713a142f1e4098f5cb40e7e3c1c01d84d48206e4e1f51ba07a"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_matched_s9/energy_ledger.json",
+      "size": 563462,
+      "sha256": "ac2695cad8ba41cd821411de1e174ee1013571c701bb22bba172730ef55f4514"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/percent1_matched_s9/quality_report.json",
+      "size": 2050,
+      "sha256": "f1065b5072e7ae3f7f6a2e86b7c28328b33fd5913afa4fd346ca214a57e1b49d"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/valley_cu0051m_s1/dose.mhd",
+      "size": 304,
+      "sha256": "e76aaecbe21638dbfc852ea78ed2256a634bf981066b5ea37bd373cc96cfe7b9"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/valley_cu0051m_s1/dose.raw",
+      "size": 4000000,
+      "sha256": "65916dbcb276dc6f436e5e162d4db27e361b6548f3bd35869e22fad8de88aecd"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/valley_cu0051m_s1/energy_ledger.json",
+      "size": 563465,
+      "sha256": "19424fba6b8a91f6d9ffc8fea6d445fd237f950fcdcdc6b1ab5bb6df8b8b6d2b"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/valley_cu0051m_s1/quality_report.json",
+      "size": 2048,
+      "sha256": "265b206e34a56144ec0f0908e28ba29b8d5ef05bf2168e1bc3e64623fac5e700"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/valley_cu0051m_s2/dose.mhd",
+      "size": 304,
+      "sha256": "e76aaecbe21638dbfc852ea78ed2256a634bf981066b5ea37bd373cc96cfe7b9"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/valley_cu0051m_s2/dose.raw",
+      "size": 4000000,
+      "sha256": "9a65e240680bb0d548a14359a218a55b2042d8f15ee349942614147650cf8de9"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/valley_cu0051m_s2/energy_ledger.json",
+      "size": 563464,
+      "sha256": "02afcdb53569b2be9d48ea33213338084a4dd57887720a93db1ef6213d71b962"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/valley_cu0051m_s2/quality_report.json",
+      "size": 2052,
+      "sha256": "287d7bb67ce8d5d853db6573a985ba6b384b05ea77bd0aa9b130520b2c4b5a48"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/valley_cu0051m_s3/dose.mhd",
+      "size": 304,
+      "sha256": "e76aaecbe21638dbfc852ea78ed2256a634bf981066b5ea37bd373cc96cfe7b9"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/valley_cu0051m_s3/dose.raw",
+      "size": 4000000,
+      "sha256": "5fd680ef59a7215d7043c8d39b022757fcef4ef8660510fc8bb197a62facbddf"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/valley_cu0051m_s3/energy_ledger.json",
+      "size": 563465,
+      "sha256": "1c5f735076097f862f09bda270472fcc1781dd690750fec05dcc7e81603cbf54"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/valley_cu0051m_s3/quality_report.json",
+      "size": 2047,
+      "sha256": "2b92a8e5ae62d9cb0bd0b13aac37664665ac23a5fc14d3c1e06abea518dd50e6"
+    }
+  ]
+}

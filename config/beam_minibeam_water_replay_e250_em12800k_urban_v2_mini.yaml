@@ -73,7 +73,7 @@ minibeam_water_primary_plane_depths_mm: 39.995, 59.995, 79.995, 99.995, 119.995
 minibeam_water_primary_plane_output_file: /tmp/mini_urban_planes.csv
 minibeam_water_primary_stopping_power_scale: 0.9958
 minibeam_water_primary_urban_max_step_mm: 0.05
-minibeam_water_urban_loss_range_file: data/urban/c12_water75ev_urban_g4_11_3_2.csv
+minibeam_water_urban_loss_range_file: evidence/review_fix_20260923/active_water005.csv
 number_of_histories: 2000
 particle_stopping_power_file: data/ion_stopping_power_water_geant4_11_3_2.csv
 phantom_length_mm: 250.0

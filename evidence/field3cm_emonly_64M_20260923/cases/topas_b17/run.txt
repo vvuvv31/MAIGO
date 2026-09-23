@@ -1,0 +1,16 @@
+includeFile = run_energy_scan.txt
+s:Ge/Box/Material = "Water_75eV"
+sv:Ph/Default/Modules = 2 "g4em-standard_opt4" "g4decay"
+d:Ph/Default/CutForAllParticles = 0.05 mm
+d:Ph/Default/EMRangeMax = 6 GeV
+b:Ts/PauseBeforeQuit = "False"
+b:So/CarbonPBS/DijMode = "False"
+s:So/CarbonPBS/WeightMode = "Histories"
+s:So/CarbonPBS/SpotCoordinateConvention = "TPS"
+s:Sc/DoseAtPhantomP/IfOutputFileAlreadyExists = "Exit"
+i:Ts/ShowHistoryCountAtInterval = 1000000
+s:So/CarbonPBS/SpotPlanFile = "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_20260923/inputs/spots_3cm.csv"
+s:So/CarbonPBS/BeamModelFile = "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_20260923/inputs/beam_model.csv"
+u:So/CarbonPBS/HistoriesScale = 0.125
+i:Ts/Seed = 2026101017
+i:Ts/NumberOfThreads = 128

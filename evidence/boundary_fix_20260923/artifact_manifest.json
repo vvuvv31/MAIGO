@@ -1,0 +1,885 @@
+{
+  "repo": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923",
+  "head": "d51e599e8bf5c566a8e6e96580e7c000e1745e41",
+  "binary_sha256": "aee706d7e5cb9d7cc7ee80b7cf7fe5e168e2f6eab60f6d9827a9140f78d5b824",
+  "files": {
+    "AGENTS.md": {
+      "sha256": "c5cfb1227f389a7bdc5791c938808ef5ffb2d455b2114288a4a4724273f5030e",
+      "bytes": 1987
+    },
+    "CMakeLists.txt": {
+      "sha256": "165d8218d7c9c4bff67c1d32f8a124c8a1a6c689d65a66d31f981d64b897ad15",
+      "bytes": 29832
+    },
+    "benchmark/carbonminibeam/test_urban_localize.cpp": {
+      "sha256": "66119e27b8ed7879e6fbac6c3a4a7336c9b18b7ca24983e3e63f5448b5ddc78f",
+      "bytes": 116497
+    },
+    "build/oneapi-nvidia-minibeam/CMakeCache.txt": {
+      "sha256": "cb35e02df7c37964e11bfced513b270307bc09d9847aa4048e2f126781c2f165",
+      "bytes": 22762
+    },
+    "build/oneapi-nvidia-minibeam/carbon_mc": {
+      "sha256": "aee706d7e5cb9d7cc7ee80b7cf7fe5e168e2f6eab60f6d9827a9140f78d5b824",
+      "bytes": 9476320
+    },
+    "build/oneapi-nvidia-minibeam/urban_localize": {
+      "sha256": "62623d936638323c9780bc4cd75c626db6f0a0e9e596b1cef3080def749f7354",
+      "bytes": 803048
+    },
+    "config/boundary_final_fullchain_s1.yaml": {
+      "sha256": "ca4db87c50d62a02668eb3bbba79dfebc182079e6a6da7f425f688be327732b8",
+      "bytes": 5394
+    },
+    "config/boundary_final_fullchain_s2.yaml": {
+      "sha256": "e8c958bb8dfc430ec6d23e9b46ab7a60c2427bda6312ebea0ccb3c25a2df6f8f",
+      "bytes": 5394
+    },
+    "config/boundary_final_fullchain_s3.yaml": {
+      "sha256": "84e7ef671e2821d3e10f709e663c5217fcc22e1c4303e685f4e7c88a38ab0017",
+      "bytes": 5394
+    },
+    "config/boundary_final_navigation.yaml": {
+      "sha256": "69c4c31add214b9fa7477f4c5cf02f21ee7a154fb30bfe88b094d4d96439fcea",
+      "bytes": 4643
+    },
+    "config/boundary_final_terminal.yaml": {
+      "sha256": "f8fbb914cea388f5164ac5791bccf0bdacc9d7bc3e17f51b32db8a92eb2a4a66",
+      "bytes": 4639
+    },
+    "config/boundary_final_water_s1.yaml": {
+      "sha256": "f1e747e7bda08e05fe391310678ab762d6fdf50bc9cdeb056570e48714a5e892",
+      "bytes": 4646
+    },
+    "config/boundary_final_water_s2.yaml": {
+      "sha256": "6014651538e73c61c2021d2dfc0934c316e1919f2dd9bc70334f7cb5204d4898",
+      "bytes": 4646
+    },
+    "config/boundary_final_water_s3.yaml": {
+      "sha256": "01a85a6a53ce08f56302778f0f61aacf9ada6616c3162a3b3bd0c0555f86709d",
+      "bytes": 4646
+    },
+    "config/boundary_final_water_step025_s1.yaml": {
+      "sha256": "d1f99f345b6d12ba2eed487a065a97c2067f020a2499819f7cfbc4c41d00bf1a",
+      "bytes": 4648
+    },
+    "config/boundary_final_water_step025_s2.yaml": {
+      "sha256": "55153b9a519dc008c38b00033fc69fe7705cba4389d01c601f44dedda7d5ffcd",
+      "bytes": 4648
+    },
+    "config/boundary_final_water_step025_s3.yaml": {
+      "sha256": "e3541d26488a8045e4ca4a00ba87e9629f0619a106345291c6793f5912288e03",
+      "bytes": 4648
+    },
+    "config/boundary_reject_partial.yaml": {
+      "sha256": "1d50b23f7cac01a020ef5778c75b25238f7ab328bb743c530eede9f1eb00777e",
+      "bytes": 4646
+    },
+    "config/review_fullchain_s1.yaml": {
+      "sha256": "939f5e165dc4622b0130dfa80b2a61361645e448aa263c81e150787150aad32e",
+      "bytes": 5358
+    },
+    "config/review_fullchain_s2.yaml": {
+      "sha256": "345715ae9bc9e3cdc6c91dbc31d632c10f577467ae0082049de25692687b63e2",
+      "bytes": 5358
+    },
+    "config/review_fullchain_s3.yaml": {
+      "sha256": "347f9403b64ddaf63756786bcdbdebbab05d3852fdef411a0e17636cb5ff1173",
+      "bytes": 5358
+    },
+    "config/review_water_fixed_s1.yaml": {
+      "sha256": "16d3d5ee92509a8655f103a16c0c7cdb6c8809983efd2cafdb6c3bda3e66bb7c",
+      "bytes": 4610
+    },
+    "config/review_water_fixed_s2.yaml": {
+      "sha256": "1059359bfb1b4799656d66863ce326832b67bcdc67ce958938648285add1d2c2",
+      "bytes": 4610
+    },
+    "config/review_water_fixed_s3.yaml": {
+      "sha256": "8a48eeac279bb056b1b19bf026d9b4ebc5ee59db5d70bc8122c22ed88a305c4d",
+      "bytes": 4610
+    },
+    "config/review_water_step025_s1.yaml": {
+      "sha256": "4099a9760114ebab1e62579db35eedf1b12a730d8b9cbfd6c29d5c8573540c8a",
+      "bytes": 4612
+    },
+    "config/review_water_step025_s2.yaml": {
+      "sha256": "33dd321a2b9611aa63af3b9d9bc28317f2776c96f13ac28e11da401b724461e1",
+      "bytes": 4612
+    },
+    "config/review_water_step025_s3.yaml": {
+      "sha256": "967370495b10025f7cc9f53717c29dd0be6a7d595a88487acb3be08e24db163a",
+      "bytes": 4612
+    },
+    "evidence/boundary_fix_20260923/RESULTS.md": {
+      "sha256": "99aaa421c9226c28cc0df9e45480b6d18f81a625ae8cf02949a1a116d7de06b3",
+      "bytes": 6220
+    },
+    "evidence/boundary_fix_20260923/analysis.log": {
+      "sha256": "2cd6063d726d838cbe7b87143c4b99756f46a91069442e24206383753b08d556",
+      "bytes": 3604
+    },
+    "evidence/boundary_fix_20260923/analyze_final.py": {
+      "sha256": "2aa6d330b1d8866a885eff9ed4e20bac30efaee8c171f2de84d907e2e2c2b0eb",
+      "bytes": 9435
+    },
+    "evidence/boundary_fix_20260923/boundary_incremental.patch": {
+      "sha256": "02e863112b8f67f635cbef9cae593393038f52df166dfc8bd1cf9c03cf4381b3",
+      "bytes": 23832
+    },
+    "evidence/boundary_fix_20260923/build.log": {
+      "sha256": "b6d9844c94946e945220075c61f05f00a94b0d094d822d489e164ee48ba57ce7",
+      "bytes": 31886
+    },
+    "evidence/boundary_fix_20260923/build_final.log": {
+      "sha256": "c426e6312743f67a4831ee0de8ebbf95f451aa17c238a212d4c1a79417367151",
+      "bytes": 33306
+    },
+    "evidence/boundary_fix_20260923/build_final_upstream.log": {
+      "sha256": "eefcf21e92200733c7e0a218ce6bf2526f1ebcadc35ec122fab231b7f50d691a",
+      "bytes": 31886
+    },
+    "evidence/boundary_fix_20260923/comparison.json": {
+      "sha256": "ebd1e33d1522d9e56fba78e78c38760f43a8a8e0ff13a7049d5242ec056d800b",
+      "bytes": 137560
+    },
+    "evidence/boundary_fix_20260923/final_run_quality.json": {
+      "sha256": "0406acfc01bebb508f923c3afa1df537f74a4cb3e1df98d782b40b2c21e539fe",
+      "bytes": 8339
+    },
+    "evidence/boundary_fix_20260923/finalize.py": {
+      "sha256": "e6cbe6d77ff01f7577fb0842c60d8f5e5e7c87b50413424dc5551126720cb101",
+      "bytes": 12335
+    },
+    "evidence/boundary_fix_20260923/fullchain_comparison.csv": {
+      "sha256": "c6a522e9ca4039526d17a1f15367c50d4867abfc9f95dee7472c4e4ce10d5910",
+      "bytes": 1003
+    },
+    "evidence/boundary_fix_20260923/fullchain_comparison.png": {
+      "sha256": "6f82646ffe894cdc59c53eebe456cf384e5eabd6d5bb3bb1973b0bbdd1aecf43",
+      "bytes": 384397
+    },
+    "evidence/boundary_fix_20260923/gpu_final_fullchain_s1.log": {
+      "sha256": "005dccba845daffb340180e94564119b67d621e044a1f7b8e440abf665c126d8",
+      "bytes": 5897
+    },
+    "evidence/boundary_fix_20260923/gpu_final_fullchain_s2.log": {
+      "sha256": "04430ca7e1df23f18b40c09c7ddac68011ff21bcb23c9cc864d8cecc4575de3a",
+      "bytes": 5897
+    },
+    "evidence/boundary_fix_20260923/gpu_final_fullchain_s3.log": {
+      "sha256": "f80219be0e3aca9d084e118f9359f1922fa1fb66a7e7160b5862718eb196bf9e",
+      "bytes": 5896
+    },
+    "evidence/boundary_fix_20260923/gpu_final_navigation.log": {
+      "sha256": "bb9cad9f9d7bc0287bc2db433300670ca45f473b3f38c5657f62e8f5efabf28a",
+      "bytes": 5411
+    },
+    "evidence/boundary_fix_20260923/gpu_final_terminal.log": {
+      "sha256": "cad8efff71551bb8d1ad3d1738cc7bfae78d899cbd0aa0c82501105bf18242fb",
+      "bytes": 5410
+    },
+    "evidence/boundary_fix_20260923/gpu_final_water_s1.log": {
+      "sha256": "7914ccca08a5f50298a1a573645be1bd71fdb8399f4a23efd616ed90b3e13612",
+      "bytes": 5433
+    },
+    "evidence/boundary_fix_20260923/gpu_final_water_s2.log": {
+      "sha256": "551860c3c3c8b2c148616b9b4cdbb266b515df65253bbd07f488885a784eba8d",
+      "bytes": 5433
+    },
+    "evidence/boundary_fix_20260923/gpu_final_water_s3.log": {
+      "sha256": "abacf9ad06899095ee772dcd78f1f765cccab79a4f311bd36f9c7a16420c8cfe",
+      "bytes": 5431
+    },
+    "evidence/boundary_fix_20260923/gpu_final_water_step025_s1.log": {
+      "sha256": "9069c0c6ed4428e92af22780cf6dd4daa5921a8716026b9a170ccb37a28f9a0e",
+      "bytes": 5467
+    },
+    "evidence/boundary_fix_20260923/gpu_final_water_step025_s2.log": {
+      "sha256": "d779957c180ed42f1a090aa083b18316dce59a1d54a9a8cc03190a280c588b67",
+      "bytes": 5466
+    },
+    "evidence/boundary_fix_20260923/gpu_final_water_step025_s3.log": {
+      "sha256": "9a5f8b0a9d9bbf1e30592b3c8bd196fbdfb3fbcba255b1cd5ee22cb7a8df5d82",
+      "bytes": 5467
+    },
+    "evidence/boundary_fix_20260923/gpu_navigation.log": {
+      "sha256": "d2f7a0eefe6820ba803657bab774653ce22a85589a2c02b832d4b5838bd62e94",
+      "bytes": 5304
+    },
+    "evidence/boundary_fix_20260923/gpu_terminal.log": {
+      "sha256": "8dfc1f94b2a61ed2a0c99fdeb8bd53bb315e775e66add18b4db8b001c9752faf",
+      "bytes": 5304
+    },
+    "evidence/boundary_fix_20260923/gpu_water_s1.log": {
+      "sha256": "d05486ba4a21d2a5d42040d953640589d379a0b629c8ac9cdadd3b3e4520bc8c",
+      "bytes": 5327
+    },
+    "evidence/boundary_fix_20260923/implementation_files.json": {
+      "sha256": "eb253af7320ec8f2f97f7468b1b1d5db89126fd1139184b71fccf72fe6a8731c",
+      "bytes": 326
+    },
+    "evidence/boundary_fix_20260923/localize.log": {
+      "sha256": "f4eead56cad4b1f807e68c13ac02f5dee0aa2eb930bc4242ccdff5cd4a562354",
+      "bytes": 217331
+    },
+    "evidence/boundary_fix_20260923/localize_final/maigo_cu10ms025.csv": {
+      "sha256": "31dd1a0329f27c2dce3a2a406991456a4612a16a5de5e099c2c929c997b24ce1",
+      "bytes": 775585
+    },
+    "evidence/boundary_fix_20260923/localize_final/maigo_slab_w10ms005.csv": {
+      "sha256": "9d037b3e0e13d8eb212a9e4300ab99f253483e729313215de7cd2b9e8d5e647b",
+      "bytes": 760124
+    },
+    "evidence/boundary_fix_20260923/localize_final/maigo_slab_w1ms005.csv": {
+      "sha256": "b1df1f33f0ade61bf0cd07fd7aa12c735e5f594c6cbc12ffc7d70b47cda1bc65",
+      "bytes": 760063
+    },
+    "evidence/boundary_fix_20260923/localize_final/maigo_step_theta.csv": {
+      "sha256": "30cdd3ace39d74cd5f3fffd982700be3cf204f3614ea88faf6384af66098cbb8",
+      "bytes": 8200538
+    },
+    "evidence/boundary_fix_20260923/localize_final.log": {
+      "sha256": "2a2da0b4fc69cabd566ed4f4a2922325586f20af354930c9e9bf7c07cb4a694a",
+      "bytes": 217370
+    },
+    "evidence/boundary_fix_20260923/localize_missing_output_dir.log": {
+      "sha256": "d638ac6afe3f29b1a3fd07eedb6ae2fff62dd909e1ea55e837dd520531f7e0fb",
+      "bytes": 217112
+    },
+    "evidence/boundary_fix_20260923/navigation_source.csv": {
+      "sha256": "2ff9feb7d1e1ff2e67e53b27baa506395fde65fd5c3549473336249f8a85c1c6",
+      "bytes": 10251
+    },
+    "evidence/boundary_fix_20260923/partial_grid_rejection.json": {
+      "sha256": "fc1a1282c84a34135ba33fbfd0733d69d9f6dc5f076ba8a9b053ae5f26dfd717",
+      "bytes": 152
+    },
+    "evidence/boundary_fix_20260923/partial_grid_rejection.log": {
+      "sha256": "db3844cbfa56e43fbc33667c10ab69b433e25b53e9216f42ffd4a36484018f17",
+      "bytes": 1431
+    },
+    "evidence/boundary_fix_20260923/run_final.py": {
+      "sha256": "0d73343a02c9c2dd1b54585eb4d48a9bdd362cd57b6521e1d2f87c3600f78530",
+      "bytes": 2689
+    },
+    "evidence/boundary_fix_20260923/step_response.png": {
+      "sha256": "47ba73cc00afa2b1d75d4891ac59f53a1a9a32bf3652b5bc6c779bf2153656ec",
+      "bytes": 105114
+    },
+    "evidence/boundary_fix_20260923/topas_step025_s1/dose.bin": {
+      "sha256": "72393b217fdece7abc65ec34a6ce1381ce9bb773c8fd45e7f31572148e86e6ea",
+      "bytes": 4800000
+    },
+    "evidence/boundary_fix_20260923/topas_step025_s1/dose.binheader": {
+      "sha256": "0d4bbadeabde4033c2b99dfed00802fef28635782f2dbba5e891a4b5d5d20560",
+      "bytes": 420
+    },
+    "evidence/boundary_fix_20260923/topas_step025_s1/input.txt": {
+      "sha256": "ee3c1de347271b34f22ec72627fc25ad8c8531b54df59cd62dfea49d949803b1",
+      "bytes": 1460
+    },
+    "evidence/boundary_fix_20260923/topas_step025_s1/run.log": {
+      "sha256": "aba9ba3427af7d719ff2fde5875466a12f008cd41288f4cda7851bf00b39e2f3",
+      "bytes": 28973
+    },
+    "evidence/boundary_fix_20260923/topas_step025_s2/dose.bin": {
+      "sha256": "64f0cd30e10afdefbfca35aa26243e20f2e3cd436c436e7d346e351ef95810c0",
+      "bytes": 4800000
+    },
+    "evidence/boundary_fix_20260923/topas_step025_s2/dose.binheader": {
+      "sha256": "7d35a0c4fe0b562aa56c09f3c54783fd38ddfa9ebec91255d9c6295a56a3604f",
+      "bytes": 420
+    },
+    "evidence/boundary_fix_20260923/topas_step025_s2/input.txt": {
+      "sha256": "616ffbc462c19a2c24698d0f5cbd8088ea484fd15a002d34f377c06add5dad36",
+      "bytes": 1460
+    },
+    "evidence/boundary_fix_20260923/topas_step025_s2/run.log": {
+      "sha256": "27aa6e087f8ecc8a8303b258fde8bf66a167eae5fab78d37022f1ddee8ea72d1",
+      "bytes": 28973
+    },
+    "evidence/boundary_fix_20260923/topas_step025_s3/dose.bin": {
+      "sha256": "8caa39f2aa72738cb7ea6e80eafb3a54ea638cbaf0aa6d7ddf45cfba9e5a47c9",
+      "bytes": 4800000
+    },
+    "evidence/boundary_fix_20260923/topas_step025_s3/dose.binheader": {
+      "sha256": "326fb06856a754074bd6efbd3cac8d3dd5f0cd7e478b6255019684d27685ee0b",
+      "bytes": 420
+    },
+    "evidence/boundary_fix_20260923/topas_step025_s3/input.txt": {
+      "sha256": "f09e89ba6d21b45912732d20ef0c053ce036087be8166b362cf2056614dada0e",
+      "bytes": 1460
+    },
+    "evidence/boundary_fix_20260923/topas_step025_s3/run.log": {
+      "sha256": "e43bb3653e9d93127370b7869c2f6d6fdf57d01b619e30cd7f3324a6aa3b0104",
+      "bytes": 28972
+    },
+    "evidence/boundary_fix_20260923/topas_step_response.json": {
+      "sha256": "d80ec428e03f87dfd30ba2638205bba47f91968ee1aff9273ddb251c4e6bfd31",
+      "bytes": 3883
+    },
+    "evidence/boundary_fix_20260923/tracked_changes.patch": {
+      "sha256": "88874896892dda7b36c4d943a5b169c1a2c0f3c69d62704539a67e993fdb6cf2",
+      "bytes": 154695
+    },
+    "evidence/boundary_fix_20260923/water025_comparison.csv": {
+      "sha256": "f6c429097a099da52c41ee2d44ed89ea7c302fd9f8976f3b73f207e51747461a",
+      "bytes": 1031
+    },
+    "evidence/boundary_fix_20260923/water025_comparison.png": {
+      "sha256": "cb42c5f3b8b67ca174f3af3a8b9959501e586118a69d5aa2c52920fbdd576222",
+      "bytes": 294715
+    },
+    "evidence/boundary_fix_20260923/water025_dose_gate.json": {
+      "sha256": "78b892d514df7091562db6b7b9b2317b72168c985d6ace88c0ed754e3471b9ec",
+      "bytes": 34188
+    },
+    "evidence/boundary_fix_20260923/water025_dose_gate.log": {
+      "sha256": "259b75607fa64eda3a7ccab7e78b42aad475f49ec285c27ed8247c6f00b4e04c",
+      "bytes": 121
+    },
+    "evidence/boundary_fix_20260923/water025_gpu_manifest.json": {
+      "sha256": "0ae349d356873c306b98c7e2425fda4896db1f90219503845108f612fe11b7a2",
+      "bytes": 3240
+    },
+    "evidence/boundary_fix_20260923/water025_topas_manifest.json": {
+      "sha256": "300c6a816b127744fb5d9b772c35286d98f83df6e58c5e867fb2e7ef4932815b",
+      "bytes": 3563
+    },
+    "evidence/boundary_fix_20260923/water050_comparison.csv": {
+      "sha256": "d465a5710b5fc3284324365f081ab9b2cc8a9d8272693fe0b329bf41d0a32355",
+      "bytes": 1034
+    },
+    "evidence/boundary_fix_20260923/water050_comparison.png": {
+      "sha256": "44afd5fd59f51f07c328d336b57d6d8387e70c3b91950f121bfb85b04b22c914",
+      "bytes": 286831
+    },
+    "evidence/boundary_fix_20260923/water050_dose_gate.json": {
+      "sha256": "6f2ace410ce157998e1e706c6fb5b54ff5a7f26563d279e2bce0a8bf8ce01479",
+      "bytes": 34115
+    },
+    "evidence/boundary_fix_20260923/water050_dose_gate.log": {
+      "sha256": "8254c7b4f689007eb985293012c507ad7ecfa7d98d623e5fe0104d676a7b174f",
+      "bytes": 121
+    },
+    "evidence/boundary_fix_20260923/water050_gpu_manifest.json": {
+      "sha256": "662addebc84811d7ba707d1489c70405505c3f0399d1770c87f1ac5dc7fedf54",
+      "bytes": 3192
+    },
+    "evidence/boundary_fix_20260923/water050_topas_manifest.json": {
+      "sha256": "b16b04eea0dacfc2b225e6cd493af7c138fa0d50c32ce84e8b39944ae7abf3db",
+      "bytes": 3527
+    },
+    "evidence/review_fix_20260923/active_copper005.csv": {
+      "sha256": "f9e9079557197459276795a052adb49f5e2a2b0edb9800de5d198e06f78ea86d",
+      "bytes": 4066528
+    },
+    "evidence/review_fix_20260923/active_water005.csv": {
+      "sha256": "621e4f91045374fd143cbbf13c2e3dc8fd79e78963532a330854d1056eaac94a",
+      "bytes": 4044186
+    },
+    "evidence/review_fix_20260923/single_center_250k.csv": {
+      "sha256": "7435f1ea63935d7cf5a0565d4a8f9e067a0a41b8ae37b2bb9d49768b1fb169df",
+      "bytes": 46
+    },
+    "evidence/review_fix_20260923/terminal_source.csv": {
+      "sha256": "52bac1c5692cb47c93e9071d6f4b0c747470f9e475249ae6743deaa81dc533ec",
+      "bytes": 9401
+    },
+    "evidence/review_fix_20260923/topas_water_s1/dose.bin": {
+      "sha256": "f4c8cfccfc279578deef0bc2ceebc1abd1a83eb6c65594af5e548dccda14fdcb",
+      "bytes": 4800000
+    },
+    "evidence/review_fix_20260923/topas_water_s1/dose.binheader": {
+      "sha256": "d82d2c7c2bc72628387a03483280a8181742670b314e86995daa9c7ae2968702",
+      "bytes": 371
+    },
+    "evidence/review_fix_20260923/topas_water_s1/input.txt": {
+      "sha256": "3620b6255f5fe38165556f1023f1418b47af3b7ff16c6e956e156489a5e4acb6",
+      "bytes": 1455
+    },
+    "evidence/review_fix_20260923/topas_water_s1/run.log": {
+      "sha256": "6cf536c932a8ab46830b0ec3fb938a03fe30e74668d5117541fb77ede058704e",
+      "bytes": 28921
+    },
+    "evidence/review_fix_20260923/topas_water_s2/dose.bin": {
+      "sha256": "34667ff60b2cd668e46c8eb286f203e47999d047cd6f9dde1c28c3bd2b8b3614",
+      "bytes": 4800000
+    },
+    "evidence/review_fix_20260923/topas_water_s2/dose.binheader": {
+      "sha256": "074ddca6c1922751cea717f07e003a603cbbd43b8478512d3a39ab31c4f03afe",
+      "bytes": 371
+    },
+    "evidence/review_fix_20260923/topas_water_s2/input.txt": {
+      "sha256": "0f954d096c7de1d211be57f1570a4a7b5f6995e0c2d86534ee135ffe61f3140f",
+      "bytes": 1455
+    },
+    "evidence/review_fix_20260923/topas_water_s2/run.log": {
+      "sha256": "9210b2ba6e878af67c2d296a3eebc9f855a547b7ca46b26a4742b7fa9e12d296",
+      "bytes": 28919
+    },
+    "evidence/review_fix_20260923/topas_water_s3/dose.bin": {
+      "sha256": "32ae21741a432c0e53e27f89b83175cd585299e194a714366f22d58a4362ef76",
+      "bytes": 4800000
+    },
+    "evidence/review_fix_20260923/topas_water_s3/dose.binheader": {
+      "sha256": "7cad5d7f5eae177560df90f8f9b91d2e015b2b05ad5d8ca0cedd02c013c812c2",
+      "bytes": 371
+    },
+    "evidence/review_fix_20260923/topas_water_s3/input.txt": {
+      "sha256": "e0a404a3c5e1437e5cabde0b50f40f23a9a0df17a2dc08423759ace3f4d85d98",
+      "bytes": 1455
+    },
+    "evidence/review_fix_20260923/topas_water_s3/run.log": {
+      "sha256": "0c17db4ac811ba92dc851794ae4993d5a226f7a920b67abff9b508e7dbcd4df7",
+      "bytes": 28920
+    },
+    "evidence/review_fix_20260923/water_beamlet_source.csv": {
+      "sha256": "b00cbfbc62de3ed082823fcf769dde98ef6227044677d16ce49304de2a5a5334",
+      "bytes": 1337876
+    },
+    "evidence/review_fix_20260923/water_beamlet_source.header": {
+      "sha256": "3c46a4dad3581ae2079682fd8d13e27a9fdeb58f6feb2d947e432dbc2b29ef28",
+      "bytes": 514
+    },
+    "evidence/review_fix_20260923/water_beamlet_source.phsp": {
+      "sha256": "ad9ac7823d12c440231b28492822b8f814487a6686d86caf625f77db77bec6c3",
+      "bytes": 1116433
+    },
+    "evidence/urban_after_0f2c0ca_20260922/acceptance.yaml": {
+      "sha256": "01baa93aac5ae6b101772a6927edf4d783a9b0c8bbdacf0e6cd09442ad104487",
+      "bytes": 2105
+    },
+    "evidence/urban_d51e599_20260923/dose_gate.py": {
+      "sha256": "a5a4b411e6f6076a9480f4c155319690e1c6171f4eb79f6c74b1711b2fd60335",
+      "bytes": 23762
+    },
+    "failed.md": {
+      "sha256": "3c78f1dd308e134935092c26430cfbe94773e76f20a1b2ff03c9bcced24d46a3",
+      "bytes": 61601
+    },
+    "include/carbon/transport_config.hpp": {
+      "sha256": "e48a8d324077cbd3934d5eb1b43bf11d351888f9606c7da05b7593d34257dc5f",
+      "bytes": 58948
+    },
+    "out/boundary_final_fullchain_s1/dose.mhd": {
+      "sha256": "e76aaecbe21638dbfc852ea78ed2256a634bf981066b5ea37bd373cc96cfe7b9",
+      "bytes": 304
+    },
+    "out/boundary_final_fullchain_s1/dose.raw": {
+      "sha256": "dfc32d102753457d975a3e16701fb22d368815feb68b493cb006422d01e308e1",
+      "bytes": 4000000
+    },
+    "out/boundary_final_fullchain_s1/energy_ledger.json": {
+      "sha256": "960dbdec827893ee3336e515bba47379c51b22bc6da60bc995fcf841d23ad378",
+      "bytes": 563464
+    },
+    "out/boundary_final_fullchain_s1/quality_report.json": {
+      "sha256": "0874a4727ade0516ca0f4ac84cdd13235579d1290e82b806c43b8da1842ee5fc",
+      "bytes": 2052
+    },
+    "out/boundary_final_fullchain_s2/dose.mhd": {
+      "sha256": "e76aaecbe21638dbfc852ea78ed2256a634bf981066b5ea37bd373cc96cfe7b9",
+      "bytes": 304
+    },
+    "out/boundary_final_fullchain_s2/dose.raw": {
+      "sha256": "4443343a0d082b0a2054bab3a3b5a986c95783441a277fca0643c372de99c9f6",
+      "bytes": 4000000
+    },
+    "out/boundary_final_fullchain_s2/energy_ledger.json": {
+      "sha256": "ce8c10312519a32a34cb09d585e4bb84846184e174e0c41153d90328852eda33",
+      "bytes": 563464
+    },
+    "out/boundary_final_fullchain_s2/quality_report.json": {
+      "sha256": "876cf34f6163616de3430696672c48e8cae5e50c4b304ce1dbc6d9eb01742357",
+      "bytes": 2053
+    },
+    "out/boundary_final_fullchain_s3/dose.mhd": {
+      "sha256": "e76aaecbe21638dbfc852ea78ed2256a634bf981066b5ea37bd373cc96cfe7b9",
+      "bytes": 304
+    },
+    "out/boundary_final_fullchain_s3/dose.raw": {
+      "sha256": "3f136210d60a1366ce2993f3915bf6e762ec611bb1933b9e08afe7acaef822ea",
+      "bytes": 4000000
+    },
+    "out/boundary_final_fullchain_s3/energy_ledger.json": {
+      "sha256": "7230a2d9db003035b7f950f9c921776bec2032187b17568d9ea1cc8d56fc5a94",
+      "bytes": 563462
+    },
+    "out/boundary_final_fullchain_s3/quality_report.json": {
+      "sha256": "2343cfbf69fa048a28c21b05c4ce75801fc1a1f9235970791c3328f3931d5c84",
+      "bytes": 2050
+    },
+    "out/boundary_final_navigation/dose.mhd": {
+      "sha256": "173c2c75ddaf6067f90ebf3f1f21ee5ad734fde45f2191a2970b9d050436f766",
+      "bytes": 303
+    },
+    "out/boundary_final_navigation/dose.raw": {
+      "sha256": "be6e676caa692d6872dbf4002c46536657cceb92e86073c44b6c0e66a8a2d01b",
+      "bytes": 2400000
+    },
+    "out/boundary_final_navigation/energy_ledger.json": {
+      "sha256": "f4b7639fc4daccee78e7767c406d9ef2658a470408b69c5f593bb29a88ce633e",
+      "bytes": 563446
+    },
+    "out/boundary_final_navigation/quality_report.json": {
+      "sha256": "a1f1351682da95e662de62a42bff02fd4d41b5b0c862dc8d79efd8e4def7c297",
+      "bytes": 1668
+    },
+    "out/boundary_final_terminal/dose.mhd": {
+      "sha256": "173c2c75ddaf6067f90ebf3f1f21ee5ad734fde45f2191a2970b9d050436f766",
+      "bytes": 303
+    },
+    "out/boundary_final_terminal/dose.raw": {
+      "sha256": "a7e193c0d0dbf412b71d9f2b9f955055f0ee7cc3e15cb9e0cbd8040d28ac6622",
+      "bytes": 2400000
+    },
+    "out/boundary_final_terminal/energy_ledger.json": {
+      "sha256": "db0d503f496612940cc21382c62ebf876c8b0e53e473538dc41934ba8bc47cbd",
+      "bytes": 563449
+    },
+    "out/boundary_final_terminal/quality_report.json": {
+      "sha256": "8ab1c6415e4fe17470c2bc2183f97e34e17d5e6b5233136ec00139a233bbbb52",
+      "bytes": 1663
+    },
+    "out/boundary_final_water_s1/dose.mhd": {
+      "sha256": "173c2c75ddaf6067f90ebf3f1f21ee5ad734fde45f2191a2970b9d050436f766",
+      "bytes": 303
+    },
+    "out/boundary_final_water_s1/dose.raw": {
+      "sha256": "f595b97f520d5ee94e16e9e0143da1a75d6ccdcc6fc35b1574eaec4bbd5d8385",
+      "bytes": 2400000
+    },
+    "out/boundary_final_water_s1/energy_ledger.json": {
+      "sha256": "df819eb6e6a718d22598802478f4b855fb4120785cd448f37a5f8332c833839d",
+      "bytes": 563434
+    },
+    "out/boundary_final_water_s1/quality_report.json": {
+      "sha256": "ed30e68a39d6177a157428fe9ac83ddb746fbb32957feb8c19ade17ec1b78277",
+      "bytes": 1664
+    },
+    "out/boundary_final_water_s2/dose.mhd": {
+      "sha256": "173c2c75ddaf6067f90ebf3f1f21ee5ad734fde45f2191a2970b9d050436f766",
+      "bytes": 303
+    },
+    "out/boundary_final_water_s2/dose.raw": {
+      "sha256": "83eb616c4936a44b2f8906677414c868ccf4eda9a90be360361d2cce3cda3f6b",
+      "bytes": 2400000
+    },
+    "out/boundary_final_water_s2/energy_ledger.json": {
+      "sha256": "1f8ec2d45afdd5c0eaf4d390722a03ae12203e42f0e2b9badba463b7512016b7",
+      "bytes": 563428
+    },
+    "out/boundary_final_water_s2/quality_report.json": {
+      "sha256": "70f1e6d7409253b0a245289afff5b49190601202b9b850de20c5b55ffd3ef339",
+      "bytes": 1661
+    },
+    "out/boundary_final_water_s3/dose.mhd": {
+      "sha256": "173c2c75ddaf6067f90ebf3f1f21ee5ad734fde45f2191a2970b9d050436f766",
+      "bytes": 303
+    },
+    "out/boundary_final_water_s3/dose.raw": {
+      "sha256": "a0cf34e03f07ef071a8827a3891577cf9ce08ce3a0eaba555aa29827a9ea2ba5",
+      "bytes": 2400000
+    },
+    "out/boundary_final_water_s3/energy_ledger.json": {
+      "sha256": "4805341f3d9e4680c5487a4164e8228d53fe48374defc03016427a1b8c2ba1f1",
+      "bytes": 563434
+    },
+    "out/boundary_final_water_s3/quality_report.json": {
+      "sha256": "ac4aa5822fcea5c9ef02c454bfc41576a00b1a2fd0db6dc7b7527af9edd2bb4b",
+      "bytes": 1664
+    },
+    "out/boundary_final_water_step025_s1/dose.mhd": {
+      "sha256": "173c2c75ddaf6067f90ebf3f1f21ee5ad734fde45f2191a2970b9d050436f766",
+      "bytes": 303
+    },
+    "out/boundary_final_water_step025_s1/dose.raw": {
+      "sha256": "10e9fc10a2bc1d2d4707889243204d3c599dfc8f5e89311521073bc4c3190a73",
+      "bytes": 2400000
+    },
+    "out/boundary_final_water_step025_s1/energy_ledger.json": {
+      "sha256": "5282810298bd53e942f6613d77af4d14df4bb9e157ed44e7185e8ed0dff46bba",
+      "bytes": 563433
+    },
+    "out/boundary_final_water_step025_s1/quality_report.json": {
+      "sha256": "ccad14f933c7ddd5e889d9ee680065686aa8dec666e4fb56076cad1d3231cf9e",
+      "bytes": 1662
+    },
+    "out/boundary_final_water_step025_s2/dose.mhd": {
+      "sha256": "173c2c75ddaf6067f90ebf3f1f21ee5ad734fde45f2191a2970b9d050436f766",
+      "bytes": 303
+    },
+    "out/boundary_final_water_step025_s2/dose.raw": {
+      "sha256": "c7f814a033ce50364476667d6390b87733f4ccaa455d919e394edec13b53e8af",
+      "bytes": 2400000
+    },
+    "out/boundary_final_water_step025_s2/energy_ledger.json": {
+      "sha256": "91f6442ca3a41fd9cdd446d863d9692b477840878ffd1f0c9b761ba3d00c2dd0",
+      "bytes": 563434
+    },
+    "out/boundary_final_water_step025_s2/quality_report.json": {
+      "sha256": "2a0c6c08a2ee733ff13110b70f7ba6b135654ea6c35459809396cc9520611ac2",
+      "bytes": 1663
+    },
+    "out/boundary_final_water_step025_s3/dose.mhd": {
+      "sha256": "173c2c75ddaf6067f90ebf3f1f21ee5ad734fde45f2191a2970b9d050436f766",
+      "bytes": 303
+    },
+    "out/boundary_final_water_step025_s3/dose.raw": {
+      "sha256": "20023ed40cbe7c61f26dc3dcfad887ca1453a7594e946d5616bdf1ea2b98ae8e",
+      "bytes": 2400000
+    },
+    "out/boundary_final_water_step025_s3/energy_ledger.json": {
+      "sha256": "698c45a7c07171155863c11c80f7ac1e0ba88844eb4db40c628df96e116e2f1a",
+      "bytes": 563434
+    },
+    "out/boundary_final_water_step025_s3/quality_report.json": {
+      "sha256": "e8c78a280e287b1601f98893adafeb28d30f6574a59b501a1bd4f7495871d652",
+      "bytes": 1664
+    },
+    "out/review_fullchain_s1/dose.mhd": {
+      "sha256": "e76aaecbe21638dbfc852ea78ed2256a634bf981066b5ea37bd373cc96cfe7b9",
+      "bytes": 304
+    },
+    "out/review_fullchain_s1/dose.raw": {
+      "sha256": "d334999edaa21e1f99a38452df64e0ed576a21e20c6fe078acbfb6396bd15877",
+      "bytes": 4000000
+    },
+    "out/review_fullchain_s1/energy_ledger.json": {
+      "sha256": "7be3a4b785d50bb6619b3da77fe8cd7f052f12efad50046aa3f96bb56b24fb47",
+      "bytes": 563462
+    },
+    "out/review_fullchain_s1/quality_report.json": {
+      "sha256": "c903c3edab4724261ae616d164bede00048458cf957f094dd1a5e25142dfc625",
+      "bytes": 2050
+    },
+    "out/review_fullchain_s2/dose.mhd": {
+      "sha256": "e76aaecbe21638dbfc852ea78ed2256a634bf981066b5ea37bd373cc96cfe7b9",
+      "bytes": 304
+    },
+    "out/review_fullchain_s2/dose.raw": {
+      "sha256": "7390aa78668123d827f47fc4f4cc6e196829859cdc17dfb9e3189e1d8a9b0c3d",
+      "bytes": 4000000
+    },
+    "out/review_fullchain_s2/energy_ledger.json": {
+      "sha256": "7fb61e8066b4806834a2a856b1b5b3a868c53678b110526873c885a9f924281c",
+      "bytes": 563464
+    },
+    "out/review_fullchain_s2/quality_report.json": {
+      "sha256": "262d8c96e775704d567d1a333c7764eb486db54a3cb559355b844c6390eba83f",
+      "bytes": 2054
+    },
+    "out/review_fullchain_s3/dose.mhd": {
+      "sha256": "e76aaecbe21638dbfc852ea78ed2256a634bf981066b5ea37bd373cc96cfe7b9",
+      "bytes": 304
+    },
+    "out/review_fullchain_s3/dose.raw": {
+      "sha256": "7565dca27706065d6365ba11088ffcea2042b6f67a0ece81ea841202d336c188",
+      "bytes": 4000000
+    },
+    "out/review_fullchain_s3/energy_ledger.json": {
+      "sha256": "681c3299dc5be3d3bce9d9294de40eaf618778c90f7b361ba2d3e231ae809bc4",
+      "bytes": 563464
+    },
+    "out/review_fullchain_s3/quality_report.json": {
+      "sha256": "bb79c3b1d462c2d795395b56cc36be5f5717cfcb7d9a73fb7e583916e9244a67",
+      "bytes": 2053
+    },
+    "out/review_water_fixed_s1/dose.mhd": {
+      "sha256": "173c2c75ddaf6067f90ebf3f1f21ee5ad734fde45f2191a2970b9d050436f766",
+      "bytes": 303
+    },
+    "out/review_water_fixed_s1/dose.raw": {
+      "sha256": "1a47ce82c5d6ef5462d8daba52267df7969c79272edec3ec9d37e490ffce5d83",
+      "bytes": 2400000
+    },
+    "out/review_water_fixed_s1/energy_ledger.json": {
+      "sha256": "607541163a6ccd6fddc1e16dfbe4ce710f927f20c666c637d59027bf6bb85bfe",
+      "bytes": 563433
+    },
+    "out/review_water_fixed_s1/quality_report.json": {
+      "sha256": "2466c2afa4724bfa8a9317f53e4142caa0b6b2c838241fcb15251889408d85a8",
+      "bytes": 1664
+    },
+    "out/review_water_fixed_s2/dose.mhd": {
+      "sha256": "173c2c75ddaf6067f90ebf3f1f21ee5ad734fde45f2191a2970b9d050436f766",
+      "bytes": 303
+    },
+    "out/review_water_fixed_s2/dose.raw": {
+      "sha256": "ef41c2d230bcb575d45c2177ee6c26b73a2716dd2af1e7ffc52a83d22a790acc",
+      "bytes": 2400000
+    },
+    "out/review_water_fixed_s2/energy_ledger.json": {
+      "sha256": "90d20f07ed1b28d6481bbb051f96a7fd8636462efd891c4354bf01ad053a1e7c",
+      "bytes": 563434
+    },
+    "out/review_water_fixed_s2/quality_report.json": {
+      "sha256": "ee8811a3bbee18624896f903417e5d329b84d40946fa584b84fc7f1e0e511844",
+      "bytes": 1662
+    },
+    "out/review_water_fixed_s3/dose.mhd": {
+      "sha256": "173c2c75ddaf6067f90ebf3f1f21ee5ad734fde45f2191a2970b9d050436f766",
+      "bytes": 303
+    },
+    "out/review_water_fixed_s3/dose.raw": {
+      "sha256": "3c4ed18ac50ca6fc371122964076951b7b598ddbcc12a979dd512aa163809574",
+      "bytes": 2400000
+    },
+    "out/review_water_fixed_s3/energy_ledger.json": {
+      "sha256": "45466cd3e60eef06b3357a3b9ab24d6232dbaeaa24faa695c156762134d1627e",
+      "bytes": 563434
+    },
+    "out/review_water_fixed_s3/quality_report.json": {
+      "sha256": "896655220ee58bff644597f5644595bdb218bb4600a265c97dadca92f74c6daf",
+      "bytes": 1663
+    },
+    "out/review_water_step025_s1/dose.mhd": {
+      "sha256": "173c2c75ddaf6067f90ebf3f1f21ee5ad734fde45f2191a2970b9d050436f766",
+      "bytes": 303
+    },
+    "out/review_water_step025_s1/dose.raw": {
+      "sha256": "8d33e502fbf16b123318947238c5df17325e169f6c706fb92ab5843d9460c8f4",
+      "bytes": 2400000
+    },
+    "out/review_water_step025_s1/energy_ledger.json": {
+      "sha256": "ecae7657c8b2c969663ed83738c35f12997402d61387c740ca1099274dc3a4ca",
+      "bytes": 563434
+    },
+    "out/review_water_step025_s1/quality_report.json": {
+      "sha256": "6c190d7b9782b43726db6ca3876023e448b2b11a1b5180b50dff1a9792db6b49",
+      "bytes": 1663
+    },
+    "out/review_water_step025_s2/dose.mhd": {
+      "sha256": "173c2c75ddaf6067f90ebf3f1f21ee5ad734fde45f2191a2970b9d050436f766",
+      "bytes": 303
+    },
+    "out/review_water_step025_s2/dose.raw": {
+      "sha256": "438b3c1c5e450354147b4d4404ebe648af1bf8b044a877ab045d2563b719b5e3",
+      "bytes": 2400000
+    },
+    "out/review_water_step025_s2/energy_ledger.json": {
+      "sha256": "c10d4a0bdbc2927387fbd25204a6d7526e1dec97fda258c7416a1a6613fca772",
+      "bytes": 563432
+    },
+    "out/review_water_step025_s2/quality_report.json": {
+      "sha256": "e3e54bb8c0b92fb8d3aa6a4c4ee0818b184ad0af42111ad34da4346e490367e1",
+      "bytes": 1658
+    },
+    "out/review_water_step025_s3/dose.mhd": {
+      "sha256": "173c2c75ddaf6067f90ebf3f1f21ee5ad734fde45f2191a2970b9d050436f766",
+      "bytes": 303
+    },
+    "out/review_water_step025_s3/dose.raw": {
+      "sha256": "1bad581b5de4cdca71afd2973d46349de6bf6d90ff8f02f24b5654c7b02728cd",
+      "bytes": 2400000
+    },
+    "out/review_water_step025_s3/energy_ledger.json": {
+      "sha256": "340e42c68183d096ac71e46f2e3b3aaaa283935f38131497ac24c16d97d9d837",
+      "bytes": 563434
+    },
+    "out/review_water_step025_s3/quality_report.json": {
+      "sha256": "a0b7916646faeec76c89b414cb04345ff54838cd46d95ae3d4cf062f79553ac9",
+      "bytes": 1664
+    },
+    "src/detail/sycl_device_math.inc": {
+      "sha256": "573a008d536ccc7c26e5edf812ee51d032f9874d16c6d69b3b4561c39b5a3140",
+      "bytes": 165327
+    },
+    "src/transport_sycl.cpp": {
+      "sha256": "6d681037962d99d43d161f170793ec88aa037fae41bf85cd138dd0903ad61699",
+      "bytes": 995786
+    },
+    "urban.md": {
+      "sha256": "ef89ccbf3a0a6c831c4c4158cb6aef3b4d4639f9ed0cf85ad27d3ed3eb3a807a",
+      "bytes": 35153
+    }
+  },
+  "external_references": {
+    "/mnt/sda/wuwei/minibeam_copper_extract_e250/compiled/c12_copper_general_ion_elastic.csv": {
+      "sha256": "168375a4e7963491b78e8a0314caa6fcd4d29f31c8d61d4b6a9b18e5532a9827",
+      "bytes": 3482508
+    },
+    "/mnt/sda/wuwei/minibeam_copper_extract_e250/compiled/c12_copper_inclxx.cinpkg": {
+      "sha256": "780fa75efe756468822d3d95c602a658c4865ce71be0e9becfebdf128319dc8f",
+      "bytes": 125942796
+    },
+    "/mnt/sda/wuwei/minibeam_copper_extract_e250/compiled/c12_copper_inelastic_rate_geant4_11_3_2.csv": {
+      "sha256": "6fc3b970f3355a3be722625b941383f2ed172f98b1bde53f8f9cb669c0ebb9d0",
+      "bytes": 6303
+    },
+    "/mnt/sda/wuwei/minibeam_copper_extract_e250/compiled/c12_copper_stopping_geant4_11_3_2.csv": {
+      "sha256": "73dd731c4dbb24044a0428c6fb77cb742fe0de48d0fead576fd9618944a0a142",
+      "bytes": 58528
+    },
+    "/mnt/sda/wuwei/minibeam_single_center_em_only_water75ev_e250_10m/topas_7378/dose.bin": {
+      "sha256": "004657bf559bab0acfcbc5b079223f86cc5c03ea38f5a09fbde2b479763d2ddd",
+      "bytes": 8000000
+    },
+    "/mnt/sda/wuwei/minibeam_single_center_em_only_water75ev_e250_10m/topas_7378/dose.binheader": {
+      "sha256": "7ce5098d6bcbedbd80aa81745ff59675c4730b31714d32fa7c1e3bdea7cfd5c1",
+      "bytes": 290
+    },
+    "/mnt/sda/wuwei/minibeam_single_center_em_only_water75ev_e250_10m/topas_7378/run_single_center_em_only_water75ev_e250_10m.txt": {
+      "sha256": "9c3ca39a187efdeef4a2aba134e4308dd58d3a30d140d109c0b43600b0a57273",
+      "bytes": 955
+    },
+    "/mnt/sda/wuwei/minibeam_single_center_em_only_water75ev_e250_10m/topas_7378.log": {
+      "sha256": "afbafa17e7d07eb8beeea56c911956d74882b07edb34a9be436c428c27129ab5",
+      "bytes": 84523
+    },
+    "/mnt/sdb/wuwei/MAIGO/data/em/unified_em_v1.bin": {
+      "sha256": "8c5d970b3b639bfca2f448730271bed4fc04721aba73100e2efbe09dffe44855",
+      "bytes": 1386682652
+    },
+    "/mnt/sdb/wuwei/MAIGO/data/schneider/cinel03_c12_targets_v2_1.bin": {
+      "sha256": "a690fb06ae97946bbc167501380fbcfa465b51e61cbedfaba7d3d373655a7ea2",
+      "bytes": 46254396
+    },
+    "/mnt/sdb/wuwei/MAIGO/data/schneider/cinel03_secondary_targets_v2_1_14p.bin": {
+      "sha256": "a0dc4259b856f0b0e7665672a64589ea4cd64ca304cae75fca16d6de50fc8006",
+      "bytes": 487366212
+    },
+    "/mnt/sdb/wuwei/MAIGO/data/schneider/schneider_inelastic_rates_v2_1.bin": {
+      "sha256": "086ef97dbf323dc2681d5f6c5257e78c87446050f6fb628f3b0f8b24211a8370",
+      "bytes": 2579212
+    },
+    "/mnt/sdb/wuwei/MAIGO/data/schneider/secondary_inelastic_rates_v2_1.bin": {
+      "sha256": "6aa679ee162c7a47b82da715ea1333b21b4056b6480596d8d6243a96edb67258",
+      "bytes": 36107784
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/data/ion_cross_sections_copper_geant4_11_3_2.csv": {
+      "sha256": "dd6c5e3b1ac14cce5d8b233c53ce9f5decaf230315fe663b9577384aff23b51c",
+      "bytes": 367159
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/data/ion_stopping_power_copper_geant4_11_3_2.csv": {
+      "sha256": "84d64ad89bd29dff5d23e9f50a86b3a5442f4db8f193f2a90c0a7a1f8ad3a55f",
+      "bytes": 6826481
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/data/ion_stopping_power_water_geant4_11_3_2.csv": {
+      "sha256": "a55b3bf1a7c3dda988b71452852ce8499d2b460230ed7f535ae3fbf9bb40bdd0",
+      "bytes": 10821284
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/data/schneider/schneider_physics_bundle_v2_1.json": {
+      "sha256": "0aeeca78628dd394fa2b043657a123739dddbc3402bfb9432b65d4c15f074587",
+      "bytes": 2320
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/data/schneider/schneider_stopping_v1.bin": {
+      "sha256": "9786dba071f61e660fcc5940a844e8109c4e480ccb603d7929d2fcfaae152c2f",
+      "bytes": 1721044
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/data/stopping_power_air_geant4_11_3_2.csv": {
+      "sha256": "547ad4f002f7aa11f48f4e42da261f96068f611b5a0f33bf16808a95bbb2ecb1",
+      "bytes": 66496
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/data/stopping_power_water_geant4_11_3_2.csv": {
+      "sha256": "7065b29fd0246bc79ebe2bf52d653194af195e235fefdcb269b811ca81aa1eb6",
+      "bytes": 58619
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/data/water_unified/g4_water_material.json": {
+      "sha256": "60be17929880fe18f1758edc02350b3fa7140b817ab0d21cb75bd87dbc891f31",
+      "bytes": 389
+    }
+  }
+}

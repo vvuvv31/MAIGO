@@ -1,0 +1,18 @@
+{
+  "active_water010.csv": {
+    "same_sha256": true,
+    "sha256": "8f675dead08fbcad7476e2f479f4174dadebfb0c8274c4f513d093bbd4d53788"
+  },
+  "active_water005.csv": {
+    "same_sha256": true,
+    "sha256": "621e4f91045374fd143cbbf13c2e3dc8fd79e78963532a330854d1056eaac94a"
+  },
+  "active_copper005.csv": {
+    "same_sha256": true,
+    "sha256": "f9e9079557197459276795a052adb49f5e2a2b0edb9800de5d198e06f78ea86d"
+  },
+  "active_step_trace.csv": {
+    "same_sha256": true,
+    "sha256": "d12195b8207d52a783368ea16583177c22495a8a903aac66491c902af757d531"
+  }
+}

@@ -1,0 +1,736 @@
+{
+  "status": "COMPLETE",
+  "method": "Four independent batches per engine; delta-method Welch-t 95% intervals. Each depth/space ROI is reduced inside each batch first, preserving correlations between depth voxels. Extra windows do not replace original 0.25 mm depth results.",
+  "whole_volume": {
+    "difference_percent": 0.0627095421495305,
+    "CI95_low_percent": -0.3618700181580014,
+    "CI95_high_percent": 0.4872891024570624,
+    "CI95_half_width_pp": 0.4245795603075319,
+    "difference_SE_pp": 0.14554134454558965,
+    "welch_df": 3.559774265808189,
+    "gpu_batch_values": [
+      2.0967695173846305e-05,
+      2.0956522978145677e-05,
+      2.088628613686003e-05,
+      2.0845520465273026e-05
+    ],
+    "topas_batch_values": [
+      2.0908898251965648e-05,
+      2.0881803244016042e-05,
+      2.089121929826655e-05,
+      2.0921676526776242e-05
+    ]
+  },
+  "depth_windows": [
+    {
+      "label": "20 mm center, 10 mm window",
+      "depth_lower_mm": 15,
+      "depth_upper_mm": 25,
+      "depth_bins": 40,
+      "rois": {
+        "peak": {
+          "difference_percent": 0.5385766715179985,
+          "CI95_low_percent": -0.4954681834665364,
+          "CI95_high_percent": 1.5726215265025334,
+          "CI95_half_width_pp": 1.034044854984535,
+          "difference_SE_pp": 0.42119942179996517,
+          "welch_df": 5.919500326623074,
+          "gpu_batch_values": [
+            2.9926233810329004e-10,
+            3.0107922930255893e-10,
+            3.0181063573309047e-10,
+            2.9763284112505044e-10
+          ],
+          "topas_batch_values": [
+            2.977357277131888e-10,
+            3.005120597663335e-10,
+            2.985462108426873e-10,
+            2.965638987006969e-10
+          ]
+        },
+        "valley": {
+          "difference_percent": 0.4208711372938323,
+          "CI95_low_percent": -3.412034610468622,
+          "CI95_high_percent": 4.253776885056286,
+          "CI95_half_width_pp": 3.8329057477624544,
+          "difference_SE_pp": 1.5579795885782188,
+          "welch_df": 5.869336976457465,
+          "gpu_batch_values": [
+            3.067493362323149e-11,
+            2.9371988256343726e-11,
+            3.063621320791297e-11,
+            3.0990624324545036e-11
+          ],
+          "topas_batch_values": [
+            3.023439242326727e-11,
+            3.084152832002473e-11,
+            3.0635151443902943e-11,
+            2.945274369494652e-11
+          ]
+        },
+        "inner_field_peaks": {
+          "difference_percent": 0.9019371142801713,
+          "CI95_low_percent": 0.3728962464915301,
+          "CI95_high_percent": 1.4309779820688124,
+          "CI95_half_width_pp": 0.5290408677886412,
+          "difference_SE_pp": 0.1960990620245633,
+          "welch_df": 4.317155471845169,
+          "gpu_batch_values": [
+            2.8381062477766297e-10,
+            2.8439256099024073e-10,
+            2.8206410508894734e-10,
+            2.832621999406158e-10
+          ],
+          "topas_batch_values": [
+            2.807947435565653e-10,
+            2.8021959000772543e-10,
+            2.8105374691650087e-10,
+            2.813290744357158e-10
+          ]
+        },
+        "inner_field_valleys": {
+          "difference_percent": -0.10256316869895477,
+          "CI95_low_percent": -2.2422258382052624,
+          "CI95_high_percent": 2.037099500807353,
+          "CI95_half_width_pp": 2.1396626695063077,
+          "difference_SE_pp": 0.7333521315763716,
+          "welch_df": 3.558694681071132,
+          "gpu_batch_values": [
+            2.997538489384827e-11,
+            2.9037652819010035e-11,
+            2.9835429507506346e-11,
+            2.971686131592863e-11
+          ],
+          "topas_batch_values": [
+            2.970724172626061e-11,
+            2.974974232209334e-11,
+            2.9747543404962674e-11,
+            2.9482530290234016e-11
+          ]
+        }
+      }
+    },
+    {
+      "label": "40 mm center, 10 mm window",
+      "depth_lower_mm": 35,
+      "depth_upper_mm": 45,
+      "depth_bins": 40,
+      "rois": {
+        "peak": {
+          "difference_percent": 0.2441816346714587,
+          "CI95_low_percent": -1.227339707348106,
+          "CI95_high_percent": 1.7157029766910235,
+          "CI95_half_width_pp": 1.4715213420195647,
+          "difference_SE_pp": 0.6003817519195065,
+          "welch_df": 5.959224052384864,
+          "gpu_batch_values": [
+            2.7273770376723406e-10,
+            2.7627331587609666e-10,
+            2.74524446126634e-10,
+            2.706498303268744e-10
+          ],
+          "topas_batch_values": [
+            2.7071143745160945e-10,
+            2.7582034397255474e-10,
+            2.7322021139752926e-10,
+            2.7176801188488737e-10
+          ]
+        },
+        "valley": {
+          "difference_percent": -0.25917425067101263,
+          "CI95_low_percent": -3.3053092305228096,
+          "CI95_high_percent": 2.7869607291807843,
+          "CI95_half_width_pp": 3.046134979851797,
+          "difference_SE_pp": 1.2373171908257234,
+          "welch_df": 5.852993265622106,
+          "gpu_batch_values": [
+            3.0622382922729245e-11,
+            3.035324965310337e-11,
+            3.1481276178624326e-11,
+            3.1485119458807274e-11
+          ],
+          "topas_batch_values": [
+            3.0562306551473704e-11,
+            3.139572669965673e-11,
+            3.158449243301219e-11,
+            3.0721563049951346e-11
+          ]
+        },
+        "inner_field_peaks": {
+          "difference_percent": 0.68646919220956,
+          "CI95_low_percent": 0.12570164081481094,
+          "CI95_high_percent": 1.2472367436043093,
+          "CI95_half_width_pp": 0.5607675513947491,
+          "difference_SE_pp": 0.21027429051444277,
+          "welch_df": 4.461152244577126,
+          "gpu_batch_values": [
+            2.593656135345289e-10,
+            2.6003019631977703e-10,
+            2.5774111021051164e-10,
+            2.58913232234109e-10
+          ],
+          "topas_batch_values": [
+            2.5718387552628604e-10,
+            2.567057281874654e-10,
+            2.572049509795118e-10,
+            2.578919224480856e-10
+          ]
+        },
+        "inner_field_valleys": {
+          "difference_percent": -0.24255347762166535,
+          "CI95_low_percent": -1.879764512466466,
+          "CI95_high_percent": 1.3946575572231352,
+          "CI95_half_width_pp": 1.6372110348448006,
+          "difference_SE_pp": 0.6558031728407495,
+          "welch_df": 5.544322306571391,
+          "gpu_batch_values": [
+            2.9866027457753974e-11,
+            2.942944754038394e-11,
+            3.016430514224812e-11,
+            3.000024159721054e-11
+          ],
+          "topas_batch_values": [
+            2.975841630885678e-11,
+            2.9916002878954485e-11,
+            3.027576049892857e-11,
+            2.980030100624623e-11
+          ]
+        }
+      }
+    },
+    {
+      "label": "60 mm center, 10 mm window",
+      "depth_lower_mm": 55,
+      "depth_upper_mm": 65,
+      "depth_bins": 40,
+      "rois": {
+        "peak": {
+          "difference_percent": 0.25000366910579164,
+          "CI95_low_percent": -1.2171578322268748,
+          "CI95_high_percent": 1.717165170438458,
+          "CI95_half_width_pp": 1.4671615013326664,
+          "difference_SE_pp": 0.5180857117395032,
+          "welch_df": 3.8100720348132184,
+          "gpu_batch_values": [
+            2.549013997850123e-10,
+            2.5864481949611214e-10,
+            2.5826782371041204e-10,
+            2.536163473223495e-10
+          ],
+          "topas_batch_values": [
+            2.5544994343817955e-10,
+            2.5646172628057686e-10,
+            2.5642860327934604e-10,
+            2.5453289686083747e-10
+          ]
+        },
+        "valley": {
+          "difference_percent": -2.37890903684268,
+          "CI95_low_percent": -5.508019698710615,
+          "CI95_high_percent": 0.7502016250252543,
+          "CI95_half_width_pp": 3.1291106618679345,
+          "difference_SE_pp": 1.0525106076678434,
+          "welch_df": 3.4185105804427978,
+          "gpu_batch_values": [
+            3.343798339301431e-11,
+            3.27012957967554e-11,
+            3.323297460440244e-11,
+            3.43721140154685e-11
+          ],
+          "topas_batch_values": [
+            3.407858187358664e-11,
+            3.421027412287003e-11,
+            3.4520418242323093e-11,
+            3.419428358881759e-11
+          ]
+        },
+        "inner_field_peaks": {
+          "difference_percent": 0.5539620558517644,
+          "CI95_low_percent": 0.10659645389499378,
+          "CI95_high_percent": 1.001327657808535,
+          "CI95_half_width_pp": 0.4473656019567706,
+          "difference_SE_pp": 0.16965250534550183,
+          "welch_df": 4.612301845714245,
+          "gpu_batch_values": [
+            2.421547309736257e-10,
+            2.4291837609566485e-10,
+            2.4206580800476826e-10,
+            2.425154167908394e-10
+          ],
+          "topas_batch_values": [
+            2.417886968728184e-10,
+            2.401025708422825e-10,
+            2.413612459055438e-10,
+            2.4105989340943605e-10
+          ]
+        },
+        "inner_field_valleys": {
+          "difference_percent": -0.19244857790107206,
+          "CI95_low_percent": -2.0817820005335186,
+          "CI95_high_percent": 1.6968848447313747,
+          "CI95_half_width_pp": 1.8893334226324467,
+          "difference_SE_pp": 0.637428728722892,
+          "welch_df": 3.4402933659511334,
+          "gpu_batch_values": [
+            3.299126451060558e-11,
+            3.222249215658234e-11,
+            3.280211518164874e-11,
+            3.3146936192241316e-11
+          ],
+          "topas_batch_values": [
+            3.2694947539842655e-11,
+            3.2895101944169e-11,
+            3.287825111055162e-11,
+            3.2947415122550815e-11
+          ]
+        }
+      }
+    },
+    {
+      "label": "80 mm center, 10 mm window",
+      "depth_lower_mm": 75,
+      "depth_upper_mm": 85,
+      "depth_bins": 40,
+      "rois": {
+        "peak": {
+          "difference_percent": 0.3877281387540732,
+          "CI95_low_percent": -1.9853153261463503,
+          "CI95_high_percent": 2.7607716036544967,
+          "CI95_half_width_pp": 2.3730434649004235,
+          "difference_SE_pp": 0.8361963509732484,
+          "welch_df": 3.790885792209611,
+          "gpu_batch_values": [
+            2.4446598297345195e-10,
+            2.529762482481601e-10,
+            2.4671854305324825e-10,
+            2.45219118028217e-10
+          ],
+          "topas_batch_values": [
+            2.4475524753597715e-10,
+            2.458793078403688e-10,
+            2.468502973442809e-10,
+            2.480737515497821e-10
+          ]
+        },
+        "valley": {
+          "difference_percent": -0.2545087115821021,
+          "CI95_low_percent": -3.4604113981621243,
+          "CI95_high_percent": 2.95139397499792,
+          "CI95_half_width_pp": 3.205902686580022,
+          "difference_SE_pp": 1.307273138550012,
+          "welch_df": 5.945504750263335,
+          "gpu_batch_values": [
+            3.865033106080773e-11,
+            3.740610185900553e-11,
+            3.7877943680086895e-11,
+            3.8850330065542965e-11
+          ],
+          "topas_batch_values": [
+            3.8115071438937774e-11,
+            3.7407999587912874e-11,
+            3.919552567026583e-11,
+            3.845595254006187e-11
+          ]
+        },
+        "inner_field_peaks": {
+          "difference_percent": 0.45939469934381805,
+          "CI95_low_percent": -0.20959683907189208,
+          "CI95_high_percent": 1.1283862377595282,
+          "CI95_half_width_pp": 0.6689915384157101,
+          "difference_SE_pp": 0.2658846822239759,
+          "welch_df": 5.386389500592667,
+          "gpu_batch_values": [
+            2.3396940741804457e-10,
+            2.360504227935422e-10,
+            2.338475025199466e-10,
+            2.348215610468557e-10
+          ],
+          "topas_batch_values": [
+            2.340171463535679e-10,
+            2.327730124119729e-10,
+            2.3434113601230397e-10,
+            2.3326503180535777e-10
+          ]
+        },
+        "inner_field_valleys": {
+          "difference_percent": -0.2606634765984217,
+          "CI95_low_percent": -1.8756522652784615,
+          "CI95_high_percent": 1.354325312081618,
+          "CI95_half_width_pp": 1.6149887886800398,
+          "difference_SE_pp": 0.6237314442094353,
+          "welch_df": 4.882884826558705,
+          "gpu_batch_values": [
+            3.681606922769893e-11,
+            3.661602450169657e-11,
+            3.650480036614884e-11,
+            3.703807688545432e-11
+          ],
+          "topas_batch_values": [
+            3.656293454325894e-11,
+            3.648137672064004e-11,
+            3.7336176035296365e-11,
+            3.697859498877866e-11
+          ]
+        }
+      }
+    },
+    {
+      "label": "100 mm center, 10 mm window",
+      "depth_lower_mm": 95,
+      "depth_upper_mm": 105,
+      "depth_bins": 40,
+      "rois": {
+        "peak": {
+          "difference_percent": 0.8245476673156782,
+          "CI95_low_percent": -1.5788073944644707,
+          "CI95_high_percent": 3.227902729095827,
+          "CI95_half_width_pp": 2.403355061780149,
+          "difference_SE_pp": 0.9376188826134766,
+          "welch_df": 5.0479578444021955,
+          "gpu_batch_values": [
+            2.568119714396744e-10,
+            2.635799257859617e-10,
+            2.5703179494485076e-10,
+            2.5398950276667163e-10
+          ],
+          "topas_batch_values": [
+            2.5423479439723444e-10,
+            2.5815868207246244e-10,
+            2.529812186367053e-10,
+            2.576035565198254e-10
+          ]
+        },
+        "valley": {
+          "difference_percent": 0.48541033200224515,
+          "CI95_low_percent": -2.4834307545146,
+          "CI95_high_percent": 3.4542514185190902,
+          "CI95_half_width_pp": 2.968841086516845,
+          "difference_SE_pp": 0.9697155065182221,
+          "welch_df": 3.222742890561499,
+          "gpu_batch_values": [
+            4.743723195019804e-11,
+            4.775142184882955e-11,
+            4.594981093362092e-11,
+            4.6220206252201035e-11
+          ],
+          "topas_batch_values": [
+            4.6774423509532444e-11,
+            4.639719464876182e-11,
+            4.672111003856113e-11,
+            4.6560877720480686e-11
+          ]
+        },
+        "inner_field_peaks": {
+          "difference_percent": 0.1528110692716078,
+          "CI95_low_percent": -0.6039933545103034,
+          "CI95_high_percent": 0.9096154930535191,
+          "CI95_half_width_pp": 0.7568044237819113,
+          "difference_SE_pp": 0.29906562997736597,
+          "welch_df": 5.276695629701934,
+          "gpu_batch_values": [
+            2.4462809274690017e-10,
+            2.4554458940763356e-10,
+            2.4368163991204997e-10,
+            2.4400911566397773e-10
+          ],
+          "topas_batch_values": [
+            2.455261635665969e-10,
+            2.4389997692838646e-10,
+            2.4434066699541324e-10,
+            2.4260462661165084e-10
+          ]
+        },
+        "inner_field_valleys": {
+          "difference_percent": 0.25393207761741365,
+          "CI95_low_percent": -1.5540454021893677,
+          "CI95_high_percent": 2.061909557424195,
+          "CI95_half_width_pp": 1.8079774798067814,
+          "difference_SE_pp": 0.6167228386086238,
+          "welch_df": 3.5219214387614883,
+          "gpu_batch_values": [
+            4.5469380128056286e-11,
+            4.4654414160226575e-11,
+            4.419558981091412e-11,
+            4.470126642714864e-11
+          ],
+          "topas_batch_values": [
+            4.4574292387635566e-11,
+            4.445347116715041e-11,
+            4.476024321530973e-11,
+            4.47792043271672e-11
+          ]
+        }
+      }
+    },
+    {
+      "label": "120 mm center, 10 mm window",
+      "depth_lower_mm": 115,
+      "depth_upper_mm": 125,
+      "depth_bins": 40,
+      "rois": {
+        "peak": {
+          "difference_percent": 0.37505723045974104,
+          "CI95_low_percent": -2.3608740285210716,
+          "CI95_high_percent": 3.1109884894405537,
+          "CI95_half_width_pp": 2.7359312589808127,
+          "difference_SE_pp": 1.109266431295981,
+          "welch_df": 5.8100690174432685,
+          "gpu_batch_values": [
+            3.8715367406894074e-10,
+            3.923171966562223e-10,
+            3.979769820716683e-10,
+            3.8584171704769674e-10
+          ],
+          "topas_batch_values": [
+            3.879009763068098e-10,
+            3.883741163690502e-10,
+            3.826787677780886e-10,
+            3.984943871273572e-10
+          ]
+        },
+        "valley": {
+          "difference_percent": -0.6987204066127073,
+          "CI95_low_percent": -3.7307446925205765,
+          "CI95_high_percent": 2.333303879295162,
+          "CI95_half_width_pp": 3.032024285907869,
+          "difference_SE_pp": 1.2110076266190384,
+          "welch_df": 5.484811317013778,
+          "gpu_batch_values": [
+            9.346076703309319e-11,
+            9.036126405703738e-11,
+            9.21483615570652e-11,
+            9.128228415420383e-11
+          ],
+          "topas_batch_values": [
+            9.354522480862234e-11,
+            9.050291846506298e-11,
+            9.44078086888567e-11,
+            9.138085004565264e-11
+          ]
+        },
+        "inner_field_peaks": {
+          "difference_percent": -0.07279971109601657,
+          "CI95_low_percent": -0.9118045209127288,
+          "CI95_high_percent": 0.7662050987206956,
+          "CI95_half_width_pp": 0.8390048098167122,
+          "difference_SE_pp": 0.31891794853102273,
+          "welch_df": 4.645138827645618,
+          "gpu_batch_values": [
+            3.69459771785413e-10,
+            3.720117114800603e-10,
+            3.713526777894859e-10,
+            3.716354805392797e-10
+          ],
+          "topas_batch_values": [
+            3.7386817956865016e-10,
+            3.68933150652725e-10,
+            3.707360622363066e-10,
+            3.7200371877374614e-10
+          ]
+        },
+        "inner_field_valleys": {
+          "difference_percent": -0.1354053824895618,
+          "CI95_low_percent": -1.2899599971886606,
+          "CI95_high_percent": 1.019149232209537,
+          "CI95_half_width_pp": 1.1545546146990988,
+          "difference_SE_pp": 0.46331178750746255,
+          "welch_df": 5.582523651289879,
+          "gpu_batch_values": [
+            8.790127410689067e-11,
+            8.690112487017733e-11,
+            8.663264347529989e-11,
+            8.646175857999577e-11
+          ],
+          "topas_batch_values": [
+            8.770971435170505e-11,
+            8.651826973012559e-11,
+            8.707193900489892e-11,
+            8.706858766008398e-11
+          ]
+        }
+      }
+    },
+    {
+      "label": "20-120 mm depth average",
+      "depth_lower_mm": 20,
+      "depth_upper_mm": 120,
+      "depth_bins": 400,
+      "rois": {
+        "peak": {
+          "difference_percent": 0.5312596161798133,
+          "CI95_low_percent": -1.0991312571198255,
+          "CI95_high_percent": 2.1616504894794524,
+          "CI95_half_width_pp": 1.6303908732996388,
+          "difference_SE_pp": 0.5855546347560545,
+          "welch_df": 3.971382943686424,
+          "gpu_batch_values": [
+            2.671089028581265e-10,
+            2.7237202726837443e-10,
+            2.6946489798547216e-10,
+            2.657677832075934e-10
+          ],
+          "topas_batch_values": [
+            2.660250795884168e-10,
+            2.685941234631172e-10,
+            2.665603996433675e-10,
+            2.678546612969512e-10
+          ]
+        },
+        "valley": {
+          "difference_percent": -0.43311700202397496,
+          "CI95_low_percent": -1.9517214817226913,
+          "CI95_high_percent": 1.0854874776747414,
+          "CI95_half_width_pp": 1.5186044796987164,
+          "difference_SE_pp": 0.6145321784855287,
+          "welch_df": 5.766279643275444,
+          "gpu_batch_values": [
+            4.012621880320927e-11,
+            3.950355075062364e-11,
+            3.973963028641958e-11,
+            4.0141295550028987e-11
+          ],
+          "topas_batch_values": [
+            3.992601566807268e-11,
+            3.9813231673804086e-11,
+            4.062144011555799e-11,
+            3.9843881157537355e-11
+          ]
+        },
+        "inner_field_peaks": {
+          "difference_percent": 0.43409478037461646,
+          "CI95_low_percent": -0.024198317661657087,
+          "CI95_high_percent": 0.8923878784108901,
+          "CI95_half_width_pp": 0.45829309803627355,
+          "difference_SE_pp": 0.18648559831978254,
+          "welch_df": 5.894904630180665,
+          "gpu_batch_values": [
+            2.541106216580471e-10,
+            2.5531465266393537e-10,
+            2.5363199264414596e-10,
+            2.542196796612742e-10
+          ],
+          "topas_batch_values": [
+            2.5393289028991654e-10,
+            2.525104623319908e-10,
+            2.5348070043277935e-10,
+            2.529560339834296e-10
+          ]
+        },
+        "inner_field_valleys": {
+          "difference_percent": -0.10259428746713928,
+          "CI95_low_percent": -1.0019760284746375,
+          "CI95_high_percent": 0.796787453540359,
+          "CI95_half_width_pp": 0.8993817410074982,
+          "difference_SE_pp": 0.3581477516111113,
+          "welch_df": 5.424782390709978,
+          "gpu_batch_values": [
+            3.852565725755612e-11,
+            3.801804967517252e-11,
+            3.823282318649025e-11,
+            3.84226078465501e-11
+          ],
+          "topas_batch_values": [
+            3.820000026598339e-11,
+            3.823759198042951e-11,
+            3.855385662116405e-11,
+            3.836502407889622e-11
+          ]
+        }
+      }
+    }
+  ],
+  "entrance_first_layer": {
+    "peak": {
+      "depth_mm": 0.125,
+      "difference_percent": 5.17767548503083,
+      "CI95_low_percent": 4.414307251786089,
+      "CI95_high_percent": 5.941043718275572
+    },
+    "valley": {
+      "depth_mm": 0.125,
+      "difference_percent": -2.2595375409628526,
+      "CI95_low_percent": -5.244154542880562,
+      "CI95_high_percent": 0.7250794609548562
+    },
+    "inner_field_peaks": {
+      "depth_mm": 0.125,
+      "difference_percent": 4.895809352275315,
+      "CI95_low_percent": 4.273511646512028,
+      "CI95_high_percent": 5.518107058038603
+    },
+    "inner_field_valleys": {
+      "depth_mm": 0.125,
+      "difference_percent": -3.821381675661395,
+      "CI95_low_percent": -5.847404484150414,
+      "CI95_high_percent": -1.795358867172376
+    }
+  },
+  "integrated_depth_dose_R80_mm": {
+    "gpu": 126.35938992841717,
+    "topas": 126.35373300968065
+  },
+  "wall_minutes": 69.38499740970049,
+  "simulation_wall_s": {
+    "topas": 3602.769440997974,
+    "gpu": 539.3524093290325
+  },
+  "peak_memory_bytes": 2719322112,
+  "dose_files": [
+    {
+      "batch": 1,
+      "engine": "TOPAS",
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_20260923/cases/topas_b1/dose.bin",
+      "bytes": 8000000,
+      "sha256": "4879cc91a35a545ff376b325c09485f2947afe817e630e9ecbc9dce56a9fb98e"
+    },
+    {
+      "batch": 1,
+      "engine": "GPU",
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/field3cm_emonly_b1/dose.raw",
+      "bytes": 4000000,
+      "sha256": "61db868a9c4b1d68af31b8ecb433581df357ff10464deec2b3a7da6584b45ecb"
+    },
+    {
+      "batch": 2,
+      "engine": "TOPAS",
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_20260923/cases/topas_b2/dose.bin",
+      "bytes": 8000000,
+      "sha256": "05a110a3f74a743c1fce3b4070dc60f6501e51c7e7acfe6d9e83ef886feb8274"
+    },
+    {
+      "batch": 2,
+      "engine": "GPU",
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/field3cm_emonly_b2/dose.raw",
+      "bytes": 4000000,
+      "sha256": "f99b95929d93d91529e1a0242b8a50d8c5f913644f031a1b343a3c9d45cad104"
+    },
+    {
+      "batch": 3,
+      "engine": "TOPAS",
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_20260923/cases/topas_b3/dose.bin",
+      "bytes": 8000000,
+      "sha256": "dd0a37837cc940ced272328c04101c86a6413fffb9b147837be069bdf154fe02"
+    },
+    {
+      "batch": 3,
+      "engine": "GPU",
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/field3cm_emonly_b3/dose.raw",
+      "bytes": 4000000,
+      "sha256": "e42a7a9963eab463b97e9219470d5010f5fdef2b2f2034fa88f71d9e9c8eba2a"
+    },
+    {
+      "batch": 4,
+      "engine": "TOPAS",
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_20260923/cases/topas_b4/dose.bin",
+      "bytes": 8000000,
+      "sha256": "4f7699d7c6c638bafc69652c076f0c7b83b18513aea47bae972e9474283421ef"
+    },
+    {
+      "batch": 4,
+      "engine": "GPU",
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/field3cm_emonly_b4/dose.raw",
+      "bytes": 4000000,
+      "sha256": "5e88629f80cc5a3b1327abab17bd0a1d1ee695818dc68ccf281aaaa32a7ce9e3"
+    }
+  ]
+}

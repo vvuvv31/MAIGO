@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <cmath>
 #include <limits>
+#include <string>
 #include <vector>
 
 namespace carbon {
@@ -82,6 +83,15 @@ public:
                         double zeff = std::numeric_limits<double>::quiet_NaN(),
                         double radlen_mm = std::numeric_limits<double>::quiet_NaN(),
                         double density_g_per_cm3 =
+                            std::numeric_limits<double>::quiet_NaN(),
+                        std::string oracle_status = {},
+                        std::string physics_list = {},
+                        std::string particle = {},
+                        std::string material = {},
+                        std::string range_source = {},
+                        std::string inverse_source = {},
+                        std::string dedx_source = {},
+                        double production_cut_mm =
                             std::numeric_limits<double>::quiet_NaN());
 
     static UrbanLossRangeTable from_csv(const std::filesystem::path& path);
@@ -94,6 +104,16 @@ public:
     [[nodiscard]] double zeff() const noexcept;
     [[nodiscard]] double radlen_mm() const noexcept;
     [[nodiscard]] double density_g_per_cm3() const noexcept;
+    [[nodiscard]] const std::string& oracle_status() const noexcept;
+    [[nodiscard]] const std::string& physics_list() const noexcept;
+    [[nodiscard]] const std::string& particle() const noexcept;
+    [[nodiscard]] const std::string& material() const noexcept;
+    [[nodiscard]] const std::string& range_source() const noexcept;
+    [[nodiscard]] const std::string& inverse_source() const noexcept;
+    [[nodiscard]] const std::string& dedx_source() const noexcept;
+    [[nodiscard]] double production_cut_mm() const noexcept;
+    [[nodiscard]] bool is_active_c12_reference(const std::string& expected_material,
+                                               double expected_cut_mm) const noexcept;
 
 private:
     std::vector<double> e_total_mev_;
@@ -103,6 +123,14 @@ private:
     double zeff_{std::numeric_limits<double>::quiet_NaN()};
     double radlen_mm_{std::numeric_limits<double>::quiet_NaN()};
     double density_g_per_cm3_{std::numeric_limits<double>::quiet_NaN()};
+    std::string oracle_status_;
+    std::string physics_list_;
+    std::string particle_;
+    std::string material_;
+    std::string range_source_;
+    std::string inverse_source_;
+    std::string dedx_source_;
+    double production_cut_mm_{std::numeric_limits<double>::quiet_NaN()};
 };
 
 // Flat-array CSDA helpers for future SYCL kernels. Arrays use the same contract

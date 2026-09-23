@@ -1,0 +1,282 @@
+{
+  "binary_sha256": "aee706d7e5cb9d7cc7ee80b7cf7fe5e168e2f6eab60f6d9827a9140f78d5b824",
+  "histories_per_run": 1000000,
+  "runs": {
+    "percent1_matched_s1": {
+      "seed": 2026093001,
+      "wall_s": 75.51742790197022,
+      "accepted": true,
+      "relative_energy_residual": 1.61046424207e-05,
+      "urban": {
+        "fatal": 0,
+        "cap": 0,
+        "guard": 0,
+        "subulp": 0,
+        "first_failure_claim": 0,
+        "first_failure_history": 0,
+        "first_failure_outer_step": 0,
+        "first_failure_segment": 0,
+        "first_failure_reason": 0
+      },
+      "energy_MeV": {
+        "E_in_MeV": 3000059912.84,
+        "E_dep_MeV": 331843361.597,
+        "E_esc_MeV": 1842.0657151,
+        "E_beamline_MeV": 2668263024.07
+      }
+    },
+    "percent1_matched_s2": {
+      "seed": 2026093002,
+      "wall_s": 77.00892648799345,
+      "accepted": true,
+      "relative_energy_residual": 1.61783213669e-05,
+      "urban": {
+        "fatal": 0,
+        "cap": 0,
+        "guard": 0,
+        "subulp": 0,
+        "first_failure_claim": 0,
+        "first_failure_history": 0,
+        "first_failure_outer_step": 0,
+        "first_failure_segment": 0,
+        "first_failure_reason": 0
+      },
+      "energy_MeV": {
+        "E_in_MeV": 3000021057.32,
+        "E_dep_MeV": 332918918.256,
+        "E_esc_MeV": 3754.59962235,
+        "E_beamline_MeV": 2667146919.77
+      }
+    },
+    "percent1_matched_s3": {
+      "seed": 2026093003,
+      "wall_s": 78.21196752099786,
+      "accepted": true,
+      "relative_energy_residual": 1.60441188248e-05,
+      "urban": {
+        "fatal": 0,
+        "cap": 0,
+        "guard": 0,
+        "subulp": 0,
+        "first_failure_claim": 0,
+        "first_failure_history": 0,
+        "first_failure_outer_step": 0,
+        "first_failure_segment": 0,
+        "first_failure_reason": 0
+      },
+      "energy_MeV": {
+        "E_in_MeV": 2999995519.87,
+        "E_dep_MeV": 332310139.777,
+        "E_esc_MeV": 1709.6065266,
+        "E_beamline_MeV": 2667731802.77
+      }
+    },
+    "percent1_matched_s4": {
+      "seed": 2026093004,
+      "wall_s": 78.48508969706018,
+      "accepted": true,
+      "relative_energy_residual": 1.61240417705e-05,
+      "urban": {
+        "fatal": 0,
+        "cap": 0,
+        "guard": 0,
+        "subulp": 0,
+        "first_failure_claim": 0,
+        "first_failure_history": 0,
+        "first_failure_outer_step": 0,
+        "first_failure_segment": 0,
+        "first_failure_reason": 0
+      },
+      "energy_MeV": {
+        "E_in_MeV": 2999999124.54,
+        "E_dep_MeV": 332845758.994,
+        "E_esc_MeV": 1326.66037751,
+        "E_beamline_MeV": 2667200411
+      }
+    },
+    "percent1_matched_s5": {
+      "seed": 2026093005,
+      "wall_s": 78.21745514892973,
+      "accepted": true,
+      "relative_energy_residual": 1.60515245757e-05,
+      "urban": {
+        "fatal": 0,
+        "cap": 0,
+        "guard": 0,
+        "subulp": 0,
+        "first_failure_claim": 0,
+        "first_failure_history": 0,
+        "first_failure_outer_step": 0,
+        "first_failure_segment": 0,
+        "first_failure_reason": 0
+      },
+      "energy_MeV": {
+        "E_in_MeV": 2999943836.47,
+        "E_dep_MeV": 332255314.754,
+        "E_esc_MeV": 6146.6218491,
+        "E_beamline_MeV": 2667730528.76
+      }
+    },
+    "percent1_matched_s6": {
+      "seed": 2026093006,
+      "wall_s": 78.63201795495115,
+      "accepted": true,
+      "relative_energy_residual": 1.62075695233e-05,
+      "urban": {
+        "fatal": 0,
+        "cap": 0,
+        "guard": 0,
+        "subulp": 0,
+        "first_failure_claim": 0,
+        "first_failure_history": 0,
+        "first_failure_outer_step": 0,
+        "first_failure_segment": 0,
+        "first_failure_reason": 0
+      },
+      "energy_MeV": {
+        "E_in_MeV": 3000012670.94,
+        "E_dep_MeV": 332931518.65,
+        "E_esc_MeV": 1791.98797343,
+        "E_beamline_MeV": 2667127983.22
+      }
+    },
+    "percent1_matched_s7": {
+      "seed": 2026093007,
+      "wall_s": 80.05673634097911,
+      "accepted": true,
+      "relative_energy_residual": 1.60623234403e-05,
+      "urban": {
+        "fatal": 0,
+        "cap": 0,
+        "guard": 0,
+        "subulp": 0,
+        "first_failure_claim": 0,
+        "first_failure_history": 0,
+        "first_failure_outer_step": 0,
+        "first_failure_segment": 0,
+        "first_failure_reason": 0
+      },
+      "energy_MeV": {
+        "E_in_MeV": 2999942374.72,
+        "E_dep_MeV": 332195890.021,
+        "E_esc_MeV": 3915.88769577,
+        "E_beamline_MeV": 2667790754.86
+      }
+    },
+    "percent1_matched_s8": {
+      "seed": 2026093008,
+      "wall_s": 80.29873624595348,
+      "accepted": true,
+      "relative_energy_residual": 1.61691791412e-05,
+      "urban": {
+        "fatal": 0,
+        "cap": 0,
+        "guard": 0,
+        "subulp": 0,
+        "first_failure_claim": 0,
+        "first_failure_history": 0,
+        "first_failure_outer_step": 0,
+        "first_failure_segment": 0,
+        "first_failure_reason": 0
+      },
+      "energy_MeV": {
+        "E_in_MeV": 2999926163.7,
+        "E_dep_MeV": 333976168.215,
+        "E_esc_MeV": 1272.0561749,
+        "E_beamline_MeV": 2665997229.77
+      }
+    },
+    "percent1_matched_s9": {
+      "seed": 2026093009,
+      "wall_s": 80.32118647906464,
+      "accepted": true,
+      "relative_energy_residual": 1.59591454423e-05,
+      "urban": {
+        "fatal": 0,
+        "cap": 0,
+        "guard": 0,
+        "subulp": 0,
+        "first_failure_claim": 0,
+        "first_failure_history": 0,
+        "first_failure_outer_step": 0,
+        "first_failure_segment": 0,
+        "first_failure_reason": 0
+      },
+      "energy_MeV": {
+        "E_in_MeV": 2999935865,
+        "E_dep_MeV": 333079928.246,
+        "E_esc_MeV": 4346.88257413,
+        "E_beamline_MeV": 2666899466.28
+      }
+    },
+    "percent1_matched_s10": {
+      "seed": 2026093010,
+      "wall_s": 80.35506540699862,
+      "accepted": true,
+      "relative_energy_residual": 1.60773857139e-05,
+      "urban": {
+        "fatal": 0,
+        "cap": 0,
+        "guard": 0,
+        "subulp": 0,
+        "first_failure_claim": 0,
+        "first_failure_history": 0,
+        "first_failure_outer_step": 0,
+        "first_failure_segment": 0,
+        "first_failure_reason": 0
+      },
+      "energy_MeV": {
+        "E_in_MeV": 2999988606.45,
+        "E_dep_MeV": 332781338.706,
+        "E_esc_MeV": 2090.76364795,
+        "E_beamline_MeV": 2667253408.95
+      }
+    },
+    "percent1_matched_s11": {
+      "seed": 2026093011,
+      "wall_s": 80.09771053201985,
+      "accepted": true,
+      "relative_energy_residual": 1.60316141753e-05,
+      "urban": {
+        "fatal": 0,
+        "cap": 0,
+        "guard": 0,
+        "subulp": 0,
+        "first_failure_claim": 0,
+        "first_failure_history": 0,
+        "first_failure_outer_step": 0,
+        "first_failure_segment": 0,
+        "first_failure_reason": 0
+      },
+      "energy_MeV": {
+        "E_in_MeV": 3000026275.03,
+        "E_dep_MeV": 332377722.318,
+        "E_esc_MeV": 1509.12831615,
+        "E_beamline_MeV": 2667695138.85
+      }
+    },
+    "percent1_matched_s12": {
+      "seed": 2026093012,
+      "wall_s": 78.81864964799024,
+      "accepted": true,
+      "relative_energy_residual": 1.61353650985e-05,
+      "urban": {
+        "fatal": 0,
+        "cap": 0,
+        "guard": 0,
+        "subulp": 0,
+        "first_failure_claim": 0,
+        "first_failure_history": 0,
+        "first_failure_outer_step": 0,
+        "first_failure_segment": 0,
+        "first_failure_reason": 0
+      },
+      "energy_MeV": {
+        "E_in_MeV": 3000000155.44,
+        "E_dep_MeV": 333036313.802,
+        "E_esc_MeV": 2186.69197014,
+        "E_beamline_MeV": 2667010061.04
+      }
+    }
+  }
+}

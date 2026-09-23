@@ -1,0 +1,9 @@
+{
+  "name": "topas_smoke",
+  "histories": 20000,
+  "seed": 2026100100,
+  "threads": 64,
+  "wall_s": 12.8046,
+  "carrier_max_residual_over_peak": 6.491366164714589e-08,
+  "note": "Completed; resumed after overstrict 1e-10 closure threshold. 1e-6 matches FP32 accumulation rounding; integral residual 3.21e-11."
+}

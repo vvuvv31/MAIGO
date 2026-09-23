@@ -1,0 +1,7 @@
+{
+  "status": "PASSED",
+  "checked_at": "2026-09-23T14:39:16.759356+08:00",
+  "exact_baseline_ROI_results": true,
+  "all_depth_curves_match": true,
+  "all_four_gamma_pass_rates_match": true
+}

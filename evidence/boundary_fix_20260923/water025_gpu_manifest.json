@@ -1,0 +1,96 @@
+{
+  "schema": "maigo.dose-scorer-manifest.v1",
+  "role": "gpu",
+  "runs": [
+    {
+      "effective_config": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/config/boundary_final_water_step025_s1.yaml",
+      "config_sha256": "d1f99f345b6d12ba2eed487a065a97c2067f020a2499819f7cfbc4c41d00bf1a",
+      "history_count": 20000,
+      "random_seed": 2026092301,
+      "normalization": "Gy_sum_over_histories",
+      "density_g_cm3": 1.0,
+      "dose_sha256": "173c2c75ddaf6067f90ebf3f1f21ee5ad734fde45f2191a2970b9d050436f766",
+      "geometry_axes": {
+        "transverse": "x",
+        "depth": "z",
+        "slab_thickness": "y"
+      },
+      "origin_centers_mm": [
+        -49.95,
+        0.125
+      ],
+      "shape_xz": [
+        1000,
+        600
+      ],
+      "spacing_xz_mm": [
+        0.1,
+        0.25
+      ],
+      "slab_thickness_mm": 100.0,
+      "mhd": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/boundary_final_water_step025_s1/dose.mhd",
+      "mhd_sha256": "173c2c75ddaf6067f90ebf3f1f21ee5ad734fde45f2191a2970b9d050436f766",
+      "raw_sha256": "10e9fc10a2bc1d2d4707889243204d3c599dfc8f5e89311521073bc4c3190a73"
+    },
+    {
+      "effective_config": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/config/boundary_final_water_step025_s2.yaml",
+      "config_sha256": "55153b9a519dc008c38b00033fc69fe7705cba4389d01c601f44dedda7d5ffcd",
+      "history_count": 20000,
+      "random_seed": 2026092302,
+      "normalization": "Gy_sum_over_histories",
+      "density_g_cm3": 1.0,
+      "dose_sha256": "173c2c75ddaf6067f90ebf3f1f21ee5ad734fde45f2191a2970b9d050436f766",
+      "geometry_axes": {
+        "transverse": "x",
+        "depth": "z",
+        "slab_thickness": "y"
+      },
+      "origin_centers_mm": [
+        -49.95,
+        0.125
+      ],
+      "shape_xz": [
+        1000,
+        600
+      ],
+      "spacing_xz_mm": [
+        0.1,
+        0.25
+      ],
+      "slab_thickness_mm": 100.0,
+      "mhd": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/boundary_final_water_step025_s2/dose.mhd",
+      "mhd_sha256": "173c2c75ddaf6067f90ebf3f1f21ee5ad734fde45f2191a2970b9d050436f766",
+      "raw_sha256": "c7f814a033ce50364476667d6390b87733f4ccaa455d919e394edec13b53e8af"
+    },
+    {
+      "effective_config": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/config/boundary_final_water_step025_s3.yaml",
+      "config_sha256": "e3541d26488a8045e4ca4a00ba87e9629f0619a106345291c6793f5912288e03",
+      "history_count": 20000,
+      "random_seed": 2026092303,
+      "normalization": "Gy_sum_over_histories",
+      "density_g_cm3": 1.0,
+      "dose_sha256": "173c2c75ddaf6067f90ebf3f1f21ee5ad734fde45f2191a2970b9d050436f766",
+      "geometry_axes": {
+        "transverse": "x",
+        "depth": "z",
+        "slab_thickness": "y"
+      },
+      "origin_centers_mm": [
+        -49.95,
+        0.125
+      ],
+      "shape_xz": [
+        1000,
+        600
+      ],
+      "spacing_xz_mm": [
+        0.1,
+        0.25
+      ],
+      "slab_thickness_mm": 100.0,
+      "mhd": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/boundary_final_water_step025_s3/dose.mhd",
+      "mhd_sha256": "173c2c75ddaf6067f90ebf3f1f21ee5ad734fde45f2191a2970b9d050436f766",
+      "raw_sha256": "20023ed40cbe7c61f26dc3dcfad887ca1453a7594e946d5616bdf1ea2b98ae8e"
+    }
+  ]
+}

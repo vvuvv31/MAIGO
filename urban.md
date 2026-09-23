@@ -601,3 +601,44 @@ missing MINIBEAM-off definitions (not Urban code — verified untouched).
 Promotion verdict: SCOPED_URBAN_DEFAULT NOT_PROMOTED,
 GLOBAL_URBAN_DEFAULT NOT_PROMOTED. Defaults untouched. No commit/push
 (this round unauthorized).
+
+
+## 2026-09-23 independent review fix and comparison
+
+See [review results](evidence/review_fix_20260923/RESULTS.md). This evidence supersedes validity claims for after-BeamOn loss-table extraction: only the new real-step VALID_ACTIVE_C12_STEP_CONTEXT tables passed the context audit. The fixed one-sample-per-transport-step implementation and FP32 build passed localize/energy guards. Water dose gate remains FAIL; Cu->water comparison has only one TOPAS reference seed and remains exploratory. R80/integral agreement does not establish peak/valley or step convergence. Do not promote the default or fit stopping/tail scales to these plots.
+
+
+## 2026-09-23 physical water voxel boundary follow-up
+
+Primary water Urban can now use physical voxel safety and boundary state when
+`voxel_scorer_clamps_transport=true` in a homogeneous research water run.
+Direction-owned shared faces replace the legacy nudges on this path; interior
+navigation faults are fatal, transverse/upstream exits are accounted as escape.
+Evidence: `evidence/boundary_fix_20260923/RESULTS.md` and hash manifest.
+
+All 11 final GPU runs passed runtime quality checks; both water dose gates FAIL.
+The 120 mm FWHM step response remains -3.86% (TOPAS -0.19%); boundary alignment
+alone does not remove this discrepancy. Full-chain 100 mm valley remains +14.81%;
+TOPAS has one seed, so full-chain statistical acceptance is not established.
+No Urban scattering coefficient, tail, stopping scale or default was retuned.
+
+
+## 2026-09-23 Cu step ceiling and valley diagnosis
+
+The matched TOPAS full-chain aperture uses 0.05 mm max steps; the previous
+GPU comparison used 0.25 mm. Paired 1M x 3 tests give the central 100 mm
+valley difference +8.74% -> +2.12% when matching the copper step.
+Use config/review_fullchain_topas_matched_1m.yaml for the new research baseline.
+No coefficient retuning. Full statistical acceptance remains unestablished
+because the TOPAS full-chain reference has one seed. See
+evidence/valley_diagnosis_20260923/RESULTS.md for limitations and raw provenance.
+
+
+## 2026-09-23 Independent batches and delta scoring integration fix
+
+Main Cu0.05 comparison now pools GPU15M and TOPAS16M. Fixed 100 mm valley is +1.838% with approximate 95% CI [0.671%,3.004%]; 4/6 point estimates, no full 95% interval, are within +/-1%. Experimental delta response now resolves legacy z geometry, credits physical escape once, and updates enabled component scores. Seven runtime checks and urban_localize pass; default local dose regression <2e-7 of peak. Delta relocation shifts 100 mm valley +0.066 pp, so it is not a correction for that positive residual. See evidence/percent1_20260923/RESULTS.md and PROCESS_DIAGNOSIS.md. No default physics promotion.
+
+
+## 2026-09-23 Cu/slit 0.025 mm convergence check
+
+Both engines were rerun at Cu/slit 0.025 mm, water 0.05 mm (3 x 1M each). At 100 mm, GPU paired valley shift is -4.24 +/-1.49 pp, TOPAS shift -3.12 pp; their 10 mm-window shifts are -3.11 and -3.03 pp. The finer matched result has wider statistics and does not establish 1% across depths. Keep the 0.05 mm main preset; no coefficient tuning or default promotion. Evidence: evidence/percent1_20260923/cu_step025/RESULTS.md.

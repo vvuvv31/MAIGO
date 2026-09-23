@@ -1,0 +1,7 @@
+{
+  "schema": "maigo.dose-gate.v2",
+  "state": "INCONCLUSIVE",
+  "issues": [
+    "TOPAS scorer header missing/hash mismatch"
+  ]
+}

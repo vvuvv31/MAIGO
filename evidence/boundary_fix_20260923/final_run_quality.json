@@ -1,0 +1,291 @@
+{
+  "binary_sha256": "aee706d7e5cb9d7cc7ee80b7cf7fe5e168e2f6eab60f6d9827a9140f78d5b824",
+  "runs": {
+    "navigation": {
+      "exit_code": 0,
+      "wall_s": 4.556943979114294,
+      "accepted": true,
+      "failures": [],
+      "energy_residual_relative": 4.90315755208e-08,
+      "energy_MeV": {
+        "E_in_MeV": 600000,
+        "E_dep_MeV": 138903.888916,
+        "E_esc_MeV": 161096.140503,
+        "E_beamline_MeV": 300000,
+        "E_untracked_MeV": 0
+      },
+      "urban": {
+        "fatal": 0,
+        "cap": 0,
+        "guard": 0,
+        "subulp": 0,
+        "first_failure_claim": 0,
+        "first_failure_history": 0,
+        "first_failure_outer_step": 0,
+        "first_failure_segment": 0,
+        "first_failure_reason": 0
+      },
+      "config_sha256": "69c4c31add214b9fa7477f4c5cf02f21ee7a154fb30bfe88b094d4d96439fcea"
+    },
+    "terminal": {
+      "exit_code": 0,
+      "wall_s": 4.483096349053085,
+      "accepted": true,
+      "failures": [],
+      "energy_residual_relative": 9.24144665027e-07,
+      "energy_MeV": {
+        "E_in_MeV": 187504.402002,
+        "E_dep_MeV": 128146.124356,
+        "E_esc_MeV": 59358.4509277,
+        "E_beamline_MeV": 0,
+        "E_untracked_MeV": 0
+      },
+      "urban": {
+        "fatal": 0,
+        "cap": 0,
+        "guard": 0,
+        "subulp": 0,
+        "first_failure_claim": 0,
+        "first_failure_history": 0,
+        "first_failure_outer_step": 0,
+        "first_failure_segment": 0,
+        "first_failure_reason": 0
+      },
+      "config_sha256": "f8fbb914cea388f5164ac5791bccf0bdacc9d7bc3e17f51b32db8a92eb2a4a66"
+    },
+    "water_s1": {
+      "exit_code": 0,
+      "wall_s": 5.2653423950541764,
+      "accepted": true,
+      "failures": [],
+      "energy_residual_relative": 1.44299723307e-06,
+      "energy_MeV": {
+        "E_in_MeV": 60000000,
+        "E_dep_MeV": 60000086.5798,
+        "E_esc_MeV": 0,
+        "E_beamline_MeV": 0,
+        "E_untracked_MeV": 0
+      },
+      "urban": {
+        "fatal": 0,
+        "cap": 0,
+        "guard": 0,
+        "subulp": 0,
+        "first_failure_claim": 0,
+        "first_failure_history": 0,
+        "first_failure_outer_step": 0,
+        "first_failure_segment": 0,
+        "first_failure_reason": 0
+      },
+      "config_sha256": "f1e747e7bda08e05fe391310678ab762d6fdf50bc9cdeb056570e48714a5e892"
+    },
+    "water_s2": {
+      "exit_code": 0,
+      "wall_s": 5.244019874022342,
+      "accepted": true,
+      "failures": [],
+      "energy_residual_relative": 1.44177246094e-06,
+      "energy_MeV": {
+        "E_in_MeV": 60000000,
+        "E_dep_MeV": 60000086.5063,
+        "E_esc_MeV": 0,
+        "E_beamline_MeV": 0,
+        "E_untracked_MeV": 0
+      },
+      "urban": {
+        "fatal": 0,
+        "cap": 0,
+        "guard": 0,
+        "subulp": 0,
+        "first_failure_claim": 0,
+        "first_failure_history": 0,
+        "first_failure_outer_step": 0,
+        "first_failure_segment": 0,
+        "first_failure_reason": 0
+      },
+      "config_sha256": "6014651538e73c61c2021d2dfc0934c316e1919f2dd9bc70334f7cb5204d4898"
+    },
+    "water_s3": {
+      "exit_code": 0,
+      "wall_s": 5.239613133016974,
+      "accepted": true,
+      "failures": [],
+      "energy_residual_relative": 1.44659016927e-06,
+      "energy_MeV": {
+        "E_in_MeV": 60000000,
+        "E_dep_MeV": 60000086.7954,
+        "E_esc_MeV": 0,
+        "E_beamline_MeV": 0,
+        "E_untracked_MeV": 0
+      },
+      "urban": {
+        "fatal": 0,
+        "cap": 0,
+        "guard": 0,
+        "subulp": 0,
+        "first_failure_claim": 0,
+        "first_failure_history": 0,
+        "first_failure_outer_step": 0,
+        "first_failure_segment": 0,
+        "first_failure_reason": 0
+      },
+      "config_sha256": "01a85a6a53ce08f56302778f0f61aacf9ada6616c3162a3b3bd0c0555f86709d"
+    },
+    "water_step025_s1": {
+      "exit_code": 0,
+      "wall_s": 5.911530217039399,
+      "accepted": true,
+      "failures": [],
+      "energy_residual_relative": 7.82450358073e-07,
+      "energy_MeV": {
+        "E_in_MeV": 60000000,
+        "E_dep_MeV": 60000046.947,
+        "E_esc_MeV": 0,
+        "E_beamline_MeV": 0,
+        "E_untracked_MeV": 0
+      },
+      "urban": {
+        "fatal": 0,
+        "cap": 0,
+        "guard": 0,
+        "subulp": 0,
+        "first_failure_claim": 0,
+        "first_failure_history": 0,
+        "first_failure_outer_step": 0,
+        "first_failure_segment": 0,
+        "first_failure_reason": 0
+      },
+      "config_sha256": "d1f99f345b6d12ba2eed487a065a97c2067f020a2499819f7cfbc4c41d00bf1a"
+    },
+    "water_step025_s2": {
+      "exit_code": 0,
+      "wall_s": 5.973730754107237,
+      "accepted": true,
+      "failures": [],
+      "energy_residual_relative": 7.90580240885e-07,
+      "energy_MeV": {
+        "E_in_MeV": 60000000,
+        "E_dep_MeV": 60000047.4348,
+        "E_esc_MeV": 0,
+        "E_beamline_MeV": 0,
+        "E_untracked_MeV": 0
+      },
+      "urban": {
+        "fatal": 0,
+        "cap": 0,
+        "guard": 0,
+        "subulp": 0,
+        "first_failure_claim": 0,
+        "first_failure_history": 0,
+        "first_failure_outer_step": 0,
+        "first_failure_segment": 0,
+        "first_failure_reason": 0
+      },
+      "config_sha256": "55153b9a519dc008c38b00033fc69fe7705cba4389d01c601f44dedda7d5ffcd"
+    },
+    "water_step025_s3": {
+      "exit_code": 0,
+      "wall_s": 5.940720377955586,
+      "accepted": true,
+      "failures": [],
+      "energy_residual_relative": 7.91589355469e-07,
+      "energy_MeV": {
+        "E_in_MeV": 60000000,
+        "E_dep_MeV": 60000047.4954,
+        "E_esc_MeV": 0,
+        "E_beamline_MeV": 0,
+        "E_untracked_MeV": 0
+      },
+      "urban": {
+        "fatal": 0,
+        "cap": 0,
+        "guard": 0,
+        "subulp": 0,
+        "first_failure_claim": 0,
+        "first_failure_history": 0,
+        "first_failure_outer_step": 0,
+        "first_failure_segment": 0,
+        "first_failure_reason": 0
+      },
+      "config_sha256": "e3541d26488a8045e4ca4a00ba87e9629f0619a106345291c6793f5912288e03"
+    },
+    "fullchain_s1": {
+      "exit_code": 0,
+      "wall_s": 17.744243395049125,
+      "accepted": true,
+      "failures": [],
+      "energy_residual_relative": 1.61226254406e-05,
+      "energy_MeV": {
+        "E_in_MeV": 750016764.204,
+        "E_dep_MeV": 83094325.0195,
+        "E_esc_MeV": 302.595458984,
+        "E_beamline_MeV": 666934228.828,
+        "E_untracked_MeV": 0
+      },
+      "urban": {
+        "fatal": 0,
+        "cap": 0,
+        "guard": 0,
+        "subulp": 0,
+        "first_failure_claim": 0,
+        "first_failure_history": 0,
+        "first_failure_outer_step": 0,
+        "first_failure_segment": 0,
+        "first_failure_reason": 0
+      },
+      "config_sha256": "ca4db87c50d62a02668eb3bbba79dfebc182079e6a6da7f425f688be327732b8"
+    },
+    "fullchain_s2": {
+      "exit_code": 0,
+      "wall_s": 17.798892308957875,
+      "accepted": true,
+      "failures": [],
+      "energy_residual_relative": 1.61525391391e-05,
+      "energy_MeV": {
+        "E_in_MeV": 749967781.642,
+        "E_dep_MeV": 82385826.1374,
+        "E_esc_MeV": 345.560506433,
+        "E_beamline_MeV": 667593723.828,
+        "E_untracked_MeV": 0
+      },
+      "urban": {
+        "fatal": 0,
+        "cap": 0,
+        "guard": 0,
+        "subulp": 0,
+        "first_failure_claim": 0,
+        "first_failure_history": 0,
+        "first_failure_outer_step": 0,
+        "first_failure_segment": 0,
+        "first_failure_reason": 0
+      },
+      "config_sha256": "e8c958bb8dfc430ec6d23e9b46ab7a60c2427bda6312ebea0ccb3c25a2df6f8f"
+    },
+    "fullchain_s3": {
+      "exit_code": 0,
+      "wall_s": 17.729978880961426,
+      "accepted": true,
+      "failures": [],
+      "energy_residual_relative": 1.5947994474e-05,
+      "energy_MeV": {
+        "E_in_MeV": 749994161.708,
+        "E_dep_MeV": 83428042.6326,
+        "E_esc_MeV": 1557.05361938,
+        "E_beamline_MeV": 666576522.924,
+        "E_untracked_MeV": 0
+      },
+      "urban": {
+        "fatal": 0,
+        "cap": 0,
+        "guard": 0,
+        "subulp": 0,
+        "first_failure_claim": 0,
+        "first_failure_history": 0,
+        "first_failure_outer_step": 0,
+        "first_failure_segment": 0,
+        "first_failure_reason": 0
+      },
+      "config_sha256": "84e7ef671e2821d3e10f709e663c5217fcc22e1c4303e685f4e7c88a38ab0017"
+    }
+  }
+}

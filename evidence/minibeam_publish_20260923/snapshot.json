@@ -1,0 +1,40 @@
+{
+  "created_at": "2026-09-23T14:58:18.147904+08:00",
+  "branch": "minibeam",
+  "parent_commit": "d51e599e8bf5c566a8e6e96580e7c000e1745e41",
+  "source_files": [
+    {
+      "path": "CMakeLists.txt",
+      "sha256": "165d8218d7c9c4bff67c1d32f8a124c8a1a6c689d65a66d31f981d64b897ad15"
+    },
+    {
+      "path": "benchmark/carbonminibeam/test_urban_localize.cpp",
+      "sha256": "66119e27b8ed7879e6fbac6c3a4a7336c9b18b7ca24983e3e63f5448b5ddc78f"
+    },
+    {
+      "path": "include/carbon/stopping_power.hpp",
+      "sha256": "a3d0a2c483ca268e27de9c5e30f7cf9ac0f3407ab8b94a0cd9eb87e686a1a324"
+    },
+    {
+      "path": "include/carbon/transport_config.hpp",
+      "sha256": "e48a8d324077cbd3934d5eb1b43bf11d351888f9606c7da05b7593d34257dc5f"
+    },
+    {
+      "path": "src/detail/sycl_device_math.inc",
+      "sha256": "573a008d536ccc7c26e5edf812ee51d032f9874d16c6d69b3b4561c39b5a3140"
+    },
+    {
+      "path": "src/stopping_power.cpp",
+      "sha256": "ff4fdef73c1a0cea6622b3b01f9e678ab95c4080246cbe527ab0e0373758b16c"
+    },
+    {
+      "path": "src/transport_sycl.cpp",
+      "sha256": "0d3fba297a31303b9f5f069b09e4917b2eac0b89e7899e5121a0e284964d9f74"
+    }
+  ],
+  "binary_sha256": "003249623e409d386c85c233c27286d57a8ffca15271acfd20aeede3050ab4f5",
+  "regression": "urban_localize: ALL PASS",
+  "completed_histories_per_engine": 12800000,
+  "extension_histories_per_engine": 64000000,
+  "extension_status_at_commit": "RUNNING; no 64M result claimed"
+}

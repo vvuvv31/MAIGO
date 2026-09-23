@@ -369,6 +369,12 @@ struct CorrelatedScatteringStep {
     int limit_reason{0};
     bool boundary_crossed{false};
     bool proposal_valid{false};
+    // True only when the accepted true path exhausted the same pre-step
+    // active-loss range carried by current_range_mm.
+    bool range_terminal{false};
+    bool energy_prediction_valid{true};
+    float pre_step_energy_mev{0.0F};
+    float predicted_internal_energy_mev{0.0F};
     // Fix C1: set when any numeric guard repaired a conversion result
     // (g>t rounding fixup, finalize clamp trips). Counted by the transport
     // kernel into a diagnostic slot; reachable-domain tests assert zero.
@@ -1364,7 +1370,96 @@ struct UrbanV2SafetyCtx {
     float box_y1{0.0F};
     float box_z0{0.0F};
     float box_z1{0.0F};
+    // Physical voxel face distance, negative for legacy whole-box/Cu contexts.
+    float box_boundary_path_mm{-1.0F};
 };
+
+
+// A physical voxel face is owned by the outgoing direction at an exact tie.
+// Correct the quotient estimate against representable face coordinates: the
+// quotient alone loses low x bits when (x - grid_min) has a large offset.
+struct UrbanVoxelAxis {
+    int index{-1};
+    float lo{0.0F}, hi{0.0F};
+    bool valid{false};
+};
+inline float urban_voxel_face(const int i, const int count,
+                              const float lo, const float hi,
+                              const float pitch) noexcept {
+    // Centre anchoring preserves the exact x=0 face in the symmetric TOPAS
+    // grid. Adjacent cells call this same expression for their shared face.
+    return sycl::fma(static_cast<float>(i) - 0.5F * count, pitch,
+                     0.5F * (lo + hi));
+}
+inline UrbanVoxelAxis urban_voxel_axis(const float p, const float d,
+                                       const float lo, const float hi,
+                                       const float pitch, const int count) noexcept {
+    UrbanVoxelAxis a{};
+    if (!(pitch > 0.0F) || count < 1 || !sycl::isfinite(p) ||
+        p < lo || p > hi || (p == lo && d < 0.0F) ||
+        (p == hi && d >= 0.0F)) return a;
+    int i = sycl::clamp(static_cast<int>(sycl::floor((p-lo)/pitch)), 0, count-1);
+    for (int correction = 0; correction < 3; ++correction) {
+        if (i < 0 || i >= count) return a;
+        const float l = urban_voxel_face(i, count, lo, hi, pitch);
+        const float h = urban_voxel_face(i+1, count, lo, hi, pitch);
+        if (p < l || (p == l && d < 0.0F)) { --i; continue; }
+        if (p > h || (p == h && d >= 0.0F)) { ++i; continue; }
+        a.index=i; a.lo=l; a.hi=h; a.valid=true; return a;
+    }
+    return a;
+}
+inline bool urban_reaches_voxel_face(const float path, const float distance) noexcept {
+    return distance > 0.0F && sycl::isfinite(distance) &&
+        (path >= distance || distance-path <=
+             2.0F * 1.1920928955078125e-7F * sycl::fabs(distance));
+}
+struct UrbanVoxelCell {
+    UrbanV2SafetyCtx safety{};
+    int ix{-1}, iy{-1}, iz{-1};
+    float face_distance{0.0F};
+    Direction3F face_position{};
+    unsigned face_mask{0U};
+    bool valid{false};
+};
+inline UrbanVoxelCell urban_voxel_cell(
+    const Direction3F p, const Direction3F d,
+    const Direction3F lo, const Direction3F hi,
+    const Direction3F pitch, const int nx, const int ny, const int nz) noexcept {
+    UrbanVoxelCell c{};
+    const auto x=urban_voxel_axis(p.x,d.x,lo.x,hi.x,pitch.x,nx);
+    const auto y=urban_voxel_axis(p.y,d.y,lo.y,hi.y,pitch.y,ny);
+    const auto z=urban_voxel_axis(p.z,d.z,lo.z,hi.z,pitch.z,nz);
+    if (!(x.valid && y.valid && z.valid)) return c;
+    c.ix=x.index; c.iy=y.index; c.iz=z.index;
+    c.safety.kind=1;
+    c.safety.box_x0=x.lo; c.safety.box_x1=x.hi;
+    c.safety.box_y0=y.lo; c.safety.box_y1=y.hi;
+    c.safety.box_z0=z.lo; c.safety.box_z1=z.hi;
+    constexpr float inf=std::numeric_limits<float>::infinity();
+    c.face_position={d.x<0.0F?x.lo:x.hi,d.y<0.0F?y.lo:y.hi,d.z<0.0F?z.lo:z.hi};
+    const float dx=d.x==0.0F?inf:(c.face_position.x-p.x)/d.x;
+    const float dy=d.y==0.0F?inf:(c.face_position.y-p.y)/d.y;
+    const float dz=d.z==0.0F?inf:(c.face_position.z-p.z)/d.z;
+    c.face_distance=sycl::fmin(dx,sycl::fmin(dy,dz));
+    if (!(c.face_distance>0.0F) || !sycl::isfinite(c.face_distance)) return c;
+    if (urban_reaches_voxel_face(c.face_distance,dx)) c.face_mask|=1U;
+    if (urban_reaches_voxel_face(c.face_distance,dy)) c.face_mask|=2U;
+    if (urban_reaches_voxel_face(c.face_distance,dz)) c.face_mask|=4U;
+    c.safety.box_boundary_path_mm=c.face_distance;
+    c.valid=true;
+    return c;
+}
+inline Direction3F urban_voxel_snap_endpoint(const UrbanVoxelCell& c,
+                                              const float path,
+                                              Direction3F p) noexcept {
+    if (urban_reaches_voxel_face(path,c.face_distance)) {
+        if (c.face_mask&1U) p.x=c.face_position.x;
+        if (c.face_mask&2U) p.y=c.face_position.y;
+        if (c.face_mask&4U) p.z=c.face_position.z;
+    }
+    return p;
+}
 
 inline float urban_v2_box_safety(const float x_mm, const float y_mm,
                                  const float z_mm,
@@ -1440,6 +1535,7 @@ struct UrbanV2TrueToGeom {
     float par1{-1.0F};
     float par2{0.0F};
     float par3{0.0F};
+    bool range_power_branch{false};
     // Set when the g>t rounding guard below fires (<= 1 ulp repair with the
     // delta kept: normal reference-class protection, expected whenever
     // delta < ulp(t)/2; accuracy is asserted per-row by tests).
@@ -1465,10 +1561,10 @@ inline float urban_ulp_above(const float x) noexcept {
     return sycl::bit_cast<float>(b) - x;
 }
 
-// Constant-lambda (t, delta) pair, shared by the small-t branch, the
-// par1<=0 fallback, and the sub-ulp fallback of the range branches (fix
-// C1). Cancellation-free: series below tau = 1e-2 (truncation < ~1.4e-8),
-// lambda*(tau + expm1(-tau)) above. Split is pure error analysis.
+// Constant-lambda (t, delta) pair for Geant4's explicit small-t branch.
+// Range-law branches keep their own exponent and never switch physics at an
+// FP32 representability boundary. Cancellation-free: series below tau=1e-2,
+// lambda*(tau+expm1(-tau)) above.
 inline double urban_v2_const_lambda_delta_mm(const double td,
                                              const double lamd,
                                              const double taud,
@@ -1478,6 +1574,108 @@ inline double urban_v2_const_lambda_delta_mm(const double td,
         return td * td / (2.0 * lamd) * series;
     }
     return lamd * (taud + static_cast<double>(expm1_neg_tau));
+}
+
+// Stable delta for the Geant4 range branch. The branch condition guarantees
+// u=t/R >= 0.05. For small a, expand only exp(a*log1p(-u)) in a; this is the
+// same range-law function and avoids subtracting two O(a*u) terms to recover
+// the O(a*u^2) delta. It does not switch to the constant-lambda law.
+inline double urban_v2_range_branch_delta_mm(const double range_mm,
+                                             const double lambda0_mm,
+                                             const double t_mm) noexcept {
+    if (!(range_mm > 0.0) || !(lambda0_mm > 0.0) || !(t_mm > 0.0) ||
+        t_mm > range_mm) {
+        return std::numeric_limits<double>::quiet_NaN();
+    }
+    if (t_mm == range_mm) {
+        const double a = range_mm / lambda0_mm;
+        return range_mm * a / (1.0 + a);
+    }
+    const double a = range_mm / lambda0_mm;
+    const double u = t_mm / range_mm;
+    if (!(u >= 0.05) || !(u < 1.0) || !(a > 0.0) || !sycl::isfinite(a)) {
+        return std::numeric_limits<double>::quiet_NaN();
+    }
+    const double q = 1.0 - u;
+    const double log1mu = sycl::log1p(-u);
+    double bracket;
+    const double al = a * log1mu;
+    if (a < 1.0e-3 && sycl::fabs(al) < 0.1) {
+        // a*u + q*expm1(a*l), expanding expm1 through order 10. With
+        // |a*l|<0.1, the first omitted term is below 4e-25 absolute.
+        double term = al;
+        double em1 = term;
+        for (int n = 2; n <= 10; ++n) {
+            term *= al / static_cast<double>(n);
+            em1 += term;
+        }
+        bracket = a * u + q * em1;
+    } else {
+        bracket = a * u + q * sycl::expm1(al);
+    }
+    return range_mm / (1.0 + a) * bracket;
+}
+
+inline double urban_v2_parameter_branch_delta_mm(const double par1,
+                                                  const double par3,
+                                                  const double t_mm) noexcept {
+    if (!(par1 > 0.0) || !(par3 > 1.0) || !(t_mm > 0.0)) {
+        return std::numeric_limits<double>::quiet_NaN();
+    }
+    const double u = par1 * t_mm;
+    if (!(u > 0.0) || u > 1.0) {
+        return std::numeric_limits<double>::quiet_NaN();
+    }
+    if (u == 1.0) {
+        return t_mm * (par3 - 1.0) / par3;
+    }
+    const double bracket = par3 * u + sycl::expm1(par3 * sycl::log1p(-u));
+    return bracket / (par1 * par3);
+}
+
+inline double urban_v2_inverse_power_delta_mm(const double par1,
+                                               const double par3,
+                                               const double geom_mm,
+                                               const double range_mm,
+                                               const double range_ratio_a = 0.0) noexcept {
+    const bool range_power = range_ratio_a > 0.0;
+    if (!(par1 > 0.0) || !(geom_mm > 0.0) ||
+        (!range_power && !(par3 > 1.0)) ||
+        (range_power && (!(range_mm > 0.0) ||
+                         !sycl::isfinite(range_ratio_a))) ||
+        !sycl::isfinite(par1 + par3 + geom_mm)) {
+        return std::numeric_limits<double>::quiet_NaN();
+    }
+    const double c = range_power ? range_ratio_a / (1.0 + range_ratio_a)
+                                 : 1.0 - 1.0 / par3;
+    const double ratio = range_power ? geom_mm / range_mm : par1 * geom_mm;
+    const double x = range_power ? ratio + range_ratio_a * ratio
+                                 : par3 * ratio;
+    const double b = range_power ? 1.0 - c : 1.0 / par3;
+    if (x > 1.0) return std::numeric_limits<double>::quiet_NaN();
+    if (x == 1.0) return c / par1;
+    if (!(x > 0.0)) return std::numeric_limits<double>::quiet_NaN();
+    if (x < 1.0e-4) {
+        // Binomial delta series, accumulated from its positive x^2 term so
+        // the a*x^2 scale survives even when t and g share the same FP32 ulp.
+        double coefficient = b * c / 2.0;
+        double x_power = x * x;
+        double sum = coefficient * x_power;
+        for (int n = 3; n <= 10; ++n) {
+            const double factor = range_power
+                ? (static_cast<double>(n - 2) + c) / static_cast<double>(n)
+                : (static_cast<double>(n - 1) - b) / static_cast<double>(n);
+            coefficient *= factor;
+            x_power *= x;
+            sum += coefficient * x_power;
+        }
+        return sum / par1;
+    }
+    // Algebraically identical to [1-(1-x)^b-b*x]/par1, rewritten as
+    // c*x - (1-x)*expm1(-c*log1p(-x)). This removes the O(x) subtraction
+    // and remains the same inverse power law, including c -> 0 limits.
+    const double q = 1.0 - x;
+    return (c * x - q * sycl::expm1(-c * sycl::log1p(-x))) / par1;
 }
 
 inline UrbanV2TrueToGeom copper_urban_v2_true_to_geom(
@@ -1493,9 +1691,9 @@ inline UrbanV2TrueToGeom copper_urban_v2_true_to_geom(
         !sycl::isfinite(range_mm + epre_mev)) {
         return out;
     }
-    // Executed-reference mirror (g4_conv.csv, G4 11.3.2 Urban, Water_75eV):
-    // t <= 1 nm converts to g == t exactly at every probed energy
-    // (1e-7..1e-6 mm rows); the first conversion appears at 2e-6 mm.
+    // Geant4 11.3.2 source boundary: ComputeGeomPathLength bypasses the
+    // conversion for t <= 1 nm. The old g4_conv.csv was collected with an
+    // unbound model and is invalid as a production loss/transport oracle.
     if (t_mm <= 1.0e-6F) {
         out.g_mm = t_mm;
         out.delta_mm = 0.0F;
@@ -1526,32 +1724,22 @@ inline UrbanV2TrueToGeom copper_urban_v2_true_to_geom(
         const float par1 = 1.0F / range_mm;
         const float par2 = range_mm / lambda0_mm;
         const float par3 = 1.0F + par2;
-        // expm1 form (fix C1): the old 1-exp(p3*log(...)) subtraction is
-        // exact-looking but carries the full chain error into z; z itself
-        // stays accurate to a few ulp either way (verified vs G4).
-        const float plog = (t_mm < range_mm)
-            ? par3 * sycl::log(1.0F - t_mm / range_mm)
-            : -30.0F;  // t == range: exp(-30) == 0, z = 1/(par1*par3).
-        z = -sycl::expm1(plog) / (par1 * par3);
+        const double a = static_cast<double>(range_mm) / lamd;
+        const double u = td / static_cast<double>(range_mm);
+        const double range_chord = t_mm == range_mm
+            ? static_cast<double>(range_mm) / (1.0 + a)
+            : -static_cast<double>(range_mm) *
+                  sycl::expm1((1.0 + a) * sycl::log1p(-u)) / (1.0 + a);
+        z = static_cast<float>(range_chord);
         out.par1 = par1;
         out.par2 = par2;
         out.par3 = par3;
-        // Range-branch delta (fix C1): t-z is noise whenever delta is a
-        // few ulp(t) (z's own ~1 ulp error exceeds delta). The direct
-        // difference carries the dtrl energy-loss correction, so it is kept
-        // wherever it is meaningful: above 8 ulp(t) its relative error is
-        // < ~12%. Below, the constant-lambda helper is used; there the step
-        // is straight to 8 ulp and the helper matches the range algebra to
-        // ~30% worst-case on the reachable grid (rmax impact is half that,
-        // on sub-micron displacements). 8 ulp is the error-crossover point,
-        // not a dose-tuned boundary.
-        const double direct = td - static_cast<double>(z);
-        if (direct > 8.0 * static_cast<double>(urban_ulp_above(t_mm))) {
-            delta = direct;
-        } else {
-            const float e = sycl::expm1(-tau);
-            delta = urban_v2_const_lambda_delta_mm(td, lamd, taud, e);
-        }
+        out.range_power_branch = true;
+        // Preserve this branch's range law even when t and g round to the
+        // same FP32 value. A representability threshold must not select a
+        // different physical formula.
+        delta = urban_v2_range_branch_delta_mm(
+            static_cast<double>(range_mm), lamd, td);
     } else {
         const float rfin =
             sycl::fmax(range_mm - t_mm, 0.01F * range_mm);
@@ -1560,29 +1748,25 @@ inline UrbanV2TrueToGeom copper_urban_v2_true_to_geom(
             (t1 > 0.0F) ? urban_v2_transport_mfp(mat, t1) : 0.0F;
         const float par1 = (lambda0_mm - lam1) / (lambda0_mm * t_mm);
         if (!(par1 > 0.0F)) {
-            // Documented guard: float quantization can give lambda1 >=
-            // lambda0 (reference double never hits this); fall back to the
-            // stable constant-lambda conversion above.
-            const float e = sycl::expm1(-tau);
-            z = -lambda0_mm * e;
-            delta = urban_v2_const_lambda_delta_mm(td, lamd, taud, e);
+            // A non-positive parameter means the post-step loss context did
+            // not reduce the transport mean free path as required here.
+            // Preserve the failure for the accepted-step gate to report.
+            out.g_mm = std::numeric_limits<float>::quiet_NaN();
+            out.delta_mm = std::numeric_limits<float>::quiet_NaN();
+            return out;
         } else {
             const float par2 = 1.0F / (par1 * lambda0_mm);
             const float par3 = 1.0F + par2;
-            // expm1 form (fix C1, same class as above): the old
-            // 1-exp(par3*log(lam1/lam0)) cancels exactly when lam1 ~= lam0.
-            z = -sycl::expm1(par3 * sycl::log(lam1 / lambda0_mm)) /
-                (par1 * par3);
+            const double p1d = static_cast<double>(par1);
+            const double p3d = static_cast<double>(par3);
+            const double u = p1d * td;
+            z = static_cast<float>(
+                -sycl::expm1(p3d * sycl::log1p(-u)) / (p1d * p3d));
             out.par1 = par1;
             out.par2 = par2;
             out.par3 = par3;
-            const double direct = td - static_cast<double>(z);
-            if (direct > 8.0 * static_cast<double>(urban_ulp_above(t_mm))) {
-                delta = direct;
-            } else {
-                const float e = sycl::expm1(-tau);
-                delta = urban_v2_const_lambda_delta_mm(td, lamd, taud, e);
-            }
+            delta = urban_v2_parameter_branch_delta_mm(
+                static_cast<double>(par1), static_cast<double>(par3), td);
         }
     }
     if (z > lambda0_mm) {
@@ -1602,7 +1786,11 @@ inline UrbanV2TrueToGeom copper_urban_v2_true_to_geom(
         z = t_mm;
         out.rounding_fixup = true;
     }
-    if (!(delta > 0.0)) delta = 0.0;
+    if (!sycl::isfinite(delta) || delta < 0.0) {
+        out.g_mm = std::numeric_limits<float>::quiet_NaN();
+        out.delta_mm = std::numeric_limits<float>::quiet_NaN();
+        return out;
+    }
     out.g_mm = z;
     out.delta_mm = static_cast<float>(delta);
     return out;
@@ -1624,6 +1812,7 @@ struct UrbanV2LimitProposal {
     float par1{-1.0F};
     float par2{0.0F};
     float par3{0.0F};
+    bool range_power_branch{false};
     bool limited_by_msc{false};
     bool no_displacement{false};
     bool valid{false};
@@ -1633,43 +1822,30 @@ struct UrbanV2LimitProposal {
     int exit_path{-1};
 };
 
-// MSC currentRange mirror (fix C4). Executed reference (g4_conv.csv +
-// cuts probe, G4 11.3.2 Urban, opt4/ver0): ComputeTruePathLengthLimit caps
-// the true step at EXACTLY GetRange (t_lim/R = 1.0000 on 16 over-range
-// probes), and GetRange is cuts-independent and EXACTLY linear in energy:
-//   water (Water_75eV): R = E_total / 7.2   (0.12..4800 MeV probed)
-//   Cu (G4_Cu, 8.96 g/cm3): R = E_total / 64.5 (same span probed)
-// (Per unit mass both are 7.2 (MeV/mm)/(g/cm3); the mechanism inside G4 is
-// not asserted — the numbers are.) This is NOT the CSDA range (3.3x
-// smaller at 250 MeV/u) and NOT the restricted loss-table range (66x
-// smaller at 60 MeV/u in water): it is the MSC model's own currentRange.
-// Consequence of the old restricted range: at E < ~35 MeV the limiter
-// clamped production 0.05 mm steps to the restricted residual and the DoIt
-// gate killed scatter, while the reference keeps scattering to keV scale.
-// The loss/ledger side keeps the restricted table untouched; currentRange
-// is not consumed there (verified: current_range_mm has no readers).
-// Scope: C12 only (the only urban_v2 projectile); unknown materials fail
-// the limiter (fail fast, no silent fallback).
-inline float urban_v2_msc_range_mm(const UrbanV2Material& mat,
-                                   const float epre_mev,
-                                   bool& supported) noexcept {
+// One active C12 loss context supplies R(E), E(R), and restricted DEDX.
+// The old E/7.2 and E/64.5 values came from an unbound G4VMscModel fallback
+// and are not production data. All Urban range consumers use this same table.
+inline float urban_v2_current_range_mm(const UrbanV2Material& mat,
+                                       const float epre_mev,
+                                       bool& supported) noexcept {
     supported = false;
-    if (!(epre_mev > 0.0F) || !sycl::isfinite(epre_mev)) return 0.0F;
-    if (mat.mfp_kind == 1) {
-        supported = true;
-        return epre_mev / 7.2F;  // Water_75eV executed mirror.
+    if (!(epre_mev > 0.0F) || !sycl::isfinite(epre_mev) ||
+        mat.table.count < 2 || mat.table.e_total_mev == nullptr ||
+        epre_mev < mat.table.e_total_mev[0] ||
+        epre_mev > mat.table.e_total_mev[mat.table.count - 1]) {
+        return 0.0F;
     }
-    if (mat.mfp_kind == 0 && mat.zeff == kUrbanV2CopperZeff) {
-        supported = true;
-        return epre_mev / 64.5F;  // G4_Cu executed mirror.
-    }
-    return 0.0F;
+    const float range = urban_v2_loss_range(mat.table, epre_mev);
+    if (!(range > 0.0F) || !sycl::isfinite(range)) return 0.0F;
+    supported = true;
+    return range;
 }
 
-inline UrbanV2LimitProposal copper_urban_v2_limit_step(
+inline UrbanV2LimitProposal copper_urban_v2_limit_step_with_range(
     const float t_input_true_mm, const float epre_mev,
     const UrbanV2Material& mat, const float safety_start_mm,
     const bool at_geom_boundary, UrbanV2TrackState& state,
+    const float pre_step_range_mm,
     const std::uint64_t seed, const std::uint64_t history_id,
     const std::uint64_t outer_step,
     const std::uint32_t segment_index) noexcept {
@@ -1685,32 +1861,30 @@ inline UrbanV2LimitProposal copper_urban_v2_limit_step(
     if (!(t_input_true_mm > 0.0F) || !(epre_mev > 0.0F)) {
         return out;
     }
-    const float range = urban_v2_loss_range(mat.table, epre_mev);
+    bool range_supported = false;
+    const float table_range = urban_v2_current_range_mm(
+        mat, epre_mev, range_supported);
+    const float range = pre_step_range_mm;
     const float lambda0 = urban_v2_transport_mfp(mat, epre_mev);
-    if (!(range > 0.0F) || !(lambda0 > 0.0F)) {
-        return out;
-    }
-    // Fix C4: the MSC currentRange is the executed mirror (E/7.2 water,
-    // E/64.5 Cu), NOT the restricted loss-table residual. The table range
-    // above only gates table validity now.
-    bool msc_supported = false;
-    const float msc_range = urban_v2_msc_range_mm(mat, epre_mev,
-                                                  msc_supported);
-    if (!msc_supported || !(msc_range > 0.0F)) {
+    const float range_tolerance = 4.0F * urban_ulp_above(table_range);
+    if (!range_supported || !(range > 0.0F) || !sycl::isfinite(range) ||
+        sycl::fabs(range - table_range) > range_tolerance ||
+        !(lambda0 > 0.0F)) {
         return out;  // unsupported material: fail fast, no fallback.
     }
-    out.range_mm = msc_range;
+    out.range_mm = range;
     out.lambda0_mm = lambda0;
-    float t = sycl::fmin(t_input_true_mm, msc_range);
+    float t = sycl::fmin(t_input_true_mm, range);
 
     // Extreme small step: no displacement, convert, firstStep NOT cleared
     // (early return skips it in the reference).
     if (t < kUrbanV2TlimitMinFix) {
         const auto conv = copper_urban_v2_true_to_geom(
-            t, lambda0, msc_range, epre_mev, mat);
+            t, lambda0, range, epre_mev, mat);
         out.t_msc_mm = t;
         out.g_msc_mm = conv.g_mm;
         out.delta_msc_mm = conv.delta_mm;
+        out.range_power_branch = conv.range_power_branch;
         out.conv_rounding_fixup =
             out.conv_rounding_fixup || conv.rounding_fixup;
         out.no_displacement = true;
@@ -1726,12 +1900,13 @@ inline UrbanV2LimitProposal copper_urban_v2_limit_step(
     const float presafety = safety_start_mm;
 
     // Stop here if small step or range is less than safety.
-    if ((t == msc_range && t < presafety) || t < kUrbanV2TlimitMinFix) {
+    if ((t == range && t < presafety) || t < kUrbanV2TlimitMinFix) {
         const auto conv = copper_urban_v2_true_to_geom(
-            t, lambda0, msc_range, epre_mev, mat);
+            t, lambda0, range, epre_mev, mat);
         out.t_msc_mm = t;
         out.g_msc_mm = conv.g_mm;
         out.delta_msc_mm = conv.delta_mm;
+        out.range_power_branch = conv.range_power_branch;
         out.conv_rounding_fixup =
             out.conv_rounding_fixup || conv.rounding_fixup;
         out.no_displacement = true;
@@ -1743,13 +1918,14 @@ inline UrbanV2LimitProposal copper_urban_v2_limit_step(
 
     // Far from geometry boundary: no MSC limitation needed.
     const auto cache = urban_v2_material_cache(mat.zeff);
-    const float distance = msc_range * cache.doverrb;
+    const float distance = range * cache.doverrb;
     if (distance < presafety) {
         const auto conv = copper_urban_v2_true_to_geom(
-            t, lambda0, msc_range, epre_mev, mat);
+            t, lambda0, range, epre_mev, mat);
         out.t_msc_mm = t;
         out.g_msc_mm = conv.g_mm;
         out.delta_msc_mm = conv.delta_mm;
+        out.range_power_branch = conv.range_power_branch;
         out.conv_rounding_fixup =
             out.conv_rounding_fixup || conv.rounding_fixup;
         out.no_displacement = true;
@@ -1769,7 +1945,7 @@ inline UrbanV2LimitProposal copper_urban_v2_limit_step(
     float tlimit = state.tlimit_mm;
     if (at_geom_boundary) {
         tlimit = kUrbanV2FacRange *
-            sycl::fmax(msc_range, lambda0);
+            sycl::fmax(range, lambda0);
         tlimit = sycl::fmax(tlimit, tlimitmin);
         state.tlimit_mm = tlimit;
     }
@@ -1799,10 +1975,27 @@ inline UrbanV2LimitProposal copper_urban_v2_limit_step(
     out.par1 = conv.par1;
     out.par2 = conv.par2;
     out.par3 = conv.par3;
+    out.range_power_branch = conv.range_power_branch;
     out.valid = true;
     out.exit_path = 3;
     state.first_step = false;
     return out;
+}
+
+inline UrbanV2LimitProposal copper_urban_v2_limit_step(
+    const float t_input_true_mm, const float epre_mev,
+    const UrbanV2Material& mat, const float safety_start_mm,
+    const bool at_geom_boundary, UrbanV2TrackState& state,
+    const std::uint64_t seed, const std::uint64_t history_id,
+    const std::uint64_t outer_step,
+    const std::uint32_t segment_index) noexcept {
+    bool range_supported = false;
+    const float range = urban_v2_current_range_mm(
+        mat, epre_mev, range_supported);
+    if (!range_supported) return {};
+    return copper_urban_v2_limit_step_with_range(
+        t_input_true_mm, epre_mev, mat, safety_start_mm, at_geom_boundary,
+        state, range, seed, history_id, outer_step, segment_index);
 }
 
 // Research-only Urban v2 for the Copper collimator.  Fixes the confirmed
@@ -1884,7 +2077,12 @@ CorrelatedScatteringStep copper_urban_v2_sample_full(
     } else if (t_final_mm > range_mm * 0.01F) {
         kin_energy -= t_final_mm * urban_v2_loss_dedx(mat.table, epre_mev);
     }
-    if (kin_energy < 0.0F) kin_energy = 0.0F;
+    result.predicted_internal_energy_mev = kin_energy;
+    if (!sycl::isfinite(kin_energy) || kin_energy < 0.0F ||
+        kin_energy > epre_mev) {
+        result.energy_prediction_valid = false;
+        return result;
+    }
     if ((t_final_mm <= tlimitminfix) || (t_final_mm < tausmall * lambda0_mm) ||
         (kin_energy <= 1.0e-6F)) {
         return result;
@@ -2221,7 +2419,8 @@ inline float copper_urban_v2_finalize_true(
     const float g_final_mm, const float g_prop_mm, const float t_msc_mm,
     const float delta_msc_mm, const float lambda0_mm, const float range_mm,
     const float par1, const float par3, float& delta_out_mm,
-    bool& guard_tripped) noexcept {
+    bool& guard_tripped,
+    const bool range_power_branch = false) noexcept {
     guard_tripped = false;
     if (!(g_final_mm >= g_prop_mm)) {
         if (g_final_mm < 1.0e-6F) {
@@ -2252,35 +2451,27 @@ inline float copper_urban_v2_finalize_true(
                 }
                 t = static_cast<float>(gd + delta);
             } else {
-                // Fix C1: log1p/expm1 form. The old
-                // t = (1-exp(log(1-par4*g)/par3))/par1 rounds to t = 0 on
-                // extreme truncations (boundary slivers with par4*g < ~6e-8:
-                // 1-x == 1 in float), tripping the t<g guard on every
-                // end-of-range sliver. Limit check: t -> g as g -> 0.
-                const float par4 = par1 * par3;
-                float t_raw;
-                if (par4 * g_final_mm < 1.0F) {
-                    const float y =
-                        sycl::log1p(-(par4 * g_final_mm)) / par3;
-                    t_raw = -sycl::expm1(y) / par1;
+                // Geometry-truncated inverse of the same power-law branch.
+                // For C12 (E < rest mass), p1=1/R and p3=1+R/lambda;
+                // retain R/lambda in double when FP32 would round p3 to 1.
+                const double p1d = static_cast<double>(par1);
+                const double p3d = range_power_branch
+                    ? 1.0 + static_cast<double>(range_mm) / lamd
+                    : static_cast<double>(par3);
+                const double inverse_p1 = range_power_branch
+                    ? 1.0 / static_cast<double>(range_mm)
+                    : p1d;
+                delta = urban_v2_inverse_power_delta_mm(
+                    inverse_p1, p3d, gd,
+                    static_cast<double>(range_mm),
+                    range_power_branch
+                        ? static_cast<double>(range_mm) / lamd
+                        : 0.0);
+                if (!sycl::isfinite(delta) || delta < 0.0) {
+                    guard_tripped = true;
+                    delta_out_mm = std::numeric_limits<float>::quiet_NaN();
+                    return std::numeric_limits<float>::quiet_NaN();
                 } else {
-                    t_raw = range_mm;
-                }
-                const double draw = static_cast<double>(t_raw) - gd;
-                // Representability gate (same 8-ulp rule as the forward
-                // range branches): below it the subtraction is noise and
-                // the constant-lambda fallback is used; t is then
-                // constructed as g + delta (never a pseudo-clamp).
-                const double ulp_g =
-                    static_cast<double>(urban_ulp_above(g_final_mm));
-                if (draw > 8.0 * ulp_g) {
-                    t = t_raw;
-                    delta = draw;
-                } else {
-                    const float tau_g = g_final_mm / lambda0_mm;
-                    const float e_g = sycl::expm1(-tau_g);
-                    delta = urban_v2_const_lambda_delta_mm(
-                        gd, lamd, gd / lamd, e_g);
                     t = static_cast<float>(gd + delta);
                 }
             }
@@ -2362,13 +2553,17 @@ CorrelatedScatteringStep urban_v2_propose_and_sample(
         urban_v2_safety_at(pos_x_mm, pos_y_mm, pos_z_mm, safety);
     // External TRUE candidate from the user ceiling (par1<0 inversion;
     // ceiling 0.25 << lambda0 ~ 2e6 so the small-ratio branch is exact).
+    bool range_supported = false;
+    const float pre_step_range =
+        urban_v2_current_range_mm(mat, epre_mev, range_supported);
+    if (!range_supported) return result;
     const float t_ext =
         copper_urban_v2_true_path_and_delta(user_ceiling_mm, lambda0_now,
-                                            1.0e30F)
+                                            pre_step_range)
             .true_path_mm;
-    auto limit = copper_urban_v2_limit_step(
-        t_ext, epre_mev, mat, safety_start, at_boundary, state, seed,
-        history_id, outer_step, segment_index);
+    auto limit = copper_urban_v2_limit_step_with_range(
+        t_ext, epre_mev, mat, safety_start, at_boundary, state,
+        pre_step_range, seed, history_id, outer_step, segment_index);
     if (!limit.valid) {
         return result;
     }
@@ -2387,7 +2582,7 @@ CorrelatedScatteringStep urban_v2_propose_and_sample(
     float t_final = copper_urban_v2_finalize_true(
         g_final, g_prop, limit.t_msc_mm, limit.delta_msc_mm,
         limit.lambda0_mm, limit.range_mm, limit.par1, limit.par3,
-        delta_final, finalize_guard);
+        delta_final, finalize_guard, limit.range_power_branch);
 
     result.proposed_true_path_mm = limit.t_msc_mm;
     result.final_true_path_mm = t_final;
@@ -2397,6 +2592,9 @@ CorrelatedScatteringStep urban_v2_propose_and_sample(
     result.boundary_crossed = truncated;
     result.proposal_valid = true;
     result.current_range_mm = limit.range_mm;
+    result.pre_step_energy_mev = epre_mev;
+    result.range_terminal =
+        t_ext >= limit.range_mm && t_final >= limit.range_mm;
     // Fix C2.3 counting: ONLY finalize-class trips (t<g / t>t_msc clamp
     // repairs, which indicate real inconsistency) set the numeric-guard
     // flag. The limiter's sub-ulp chord repair (z snapped to t with delta
@@ -2416,7 +2614,11 @@ CorrelatedScatteringStep urban_v2_propose_and_sample(
     const float end_x = pos_x_mm + g_final * dir_x;
     const float end_y = pos_y_mm + g_final * dir_y;
     const float end_z = pos_z_mm + g_final * dir_z;
-    const float safety_end = urban_v2_safety_at(end_x, end_y, end_z, safety);
+    // Navigation ended on a physical face: its post-safety is zero even
+    // if FP32 endpoint arithmetic leaves a sub-ulp gap to the same face.
+    const float safety_end = urban_reaches_voxel_face(
+        g_final, safety.box_boundary_path_mm) ? 0.0F :
+        urban_v2_safety_at(end_x, end_y, end_z, safety);
     result = copper_urban_v2_sample_full(
         direction, epre_mev, t_final,
         static_cast<float>(delta_final > 0.0 ? delta_final : 0.0), mat,
@@ -2431,6 +2633,9 @@ CorrelatedScatteringStep urban_v2_propose_and_sample(
     result.boundary_crossed = truncated;
     result.proposal_valid = true;
     result.current_range_mm = limit.range_mm;
+    result.pre_step_energy_mev = epre_mev;
+    result.range_terminal =
+        t_ext >= limit.range_mm && t_final >= limit.range_mm;
     // Fix C2.3 counting: ONLY finalize-class trips (t<g / t>t_msc clamp
     // repairs, which indicate real inconsistency) set the numeric-guard
     // flag. The limiter's sub-ulp chord repair (z snapped to t with delta
@@ -2504,7 +2709,8 @@ inline CorrelatedScatteringStep water_urban_v2_propose_and_sample(
     const float amplitude_scale, const std::uint64_t seed,
     const std::uint64_t history_id, const std::uint64_t outer_step,
     const std::uint32_t segment_index,
-    const std::uint32_t random_dimension) noexcept {
+    const std::uint32_t random_dimension,
+    const float physical_face_distance_mm = -1.0F) noexcept {
     UrbanV2Material mat{};
     mat.table = table;
     mat.zeff = zeff;
@@ -2523,6 +2729,7 @@ inline CorrelatedScatteringStep water_urban_v2_propose_and_sample(
     safety.box_y1 = box_y1_mm;
     safety.box_z0 = box_z0_mm;
     safety.box_z1 = box_z1_mm;
+    safety.box_boundary_path_mm = physical_face_distance_mm;
     return urban_v2_propose_and_sample(
         direction, epre_mev, user_ceiling_mm, boundary_path_mm, pos_x_mm,
         pos_y_mm, pos_z_mm, dir_x, dir_y, dir_z, safety, at_boundary, state,

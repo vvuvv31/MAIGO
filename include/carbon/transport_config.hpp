@@ -346,6 +346,7 @@ struct TransportConfig {
     // Historical mode stops every physics step at lateral scorer faces.
     // Disable to keep scoring resolution from changing MCS/transport; energy
     // is then assigned to the voxel containing the step start.
+    // Primary water Urban also uses physical voxel safety/boundary state when enabled.
     bool voxel_scorer_clamps_transport{false};
     // Dense scorer geometry in patient coordinates. X-Y is the axial plane;
     // Z is the inferior-superior slice direction. For CT runs these values are

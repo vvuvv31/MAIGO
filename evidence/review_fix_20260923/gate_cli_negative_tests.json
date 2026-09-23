@@ -1,0 +1,32 @@
+{
+  "one_topas_seed": {
+    "exit_code": 2,
+    "result": {
+      "schema": "maigo.dose-gate.v2",
+      "state": "INCONCLUSIVE",
+      "issues": [
+        "TOPAS requires at least three independent, uniquely seeded reference batches"
+      ]
+    }
+  },
+  "duplicate_gpu_seed": {
+    "exit_code": 2,
+    "result": {
+      "schema": "maigo.dose-gate.v2",
+      "state": "INCONCLUSIVE",
+      "issues": [
+        "GPU runs must use independent unique seeds"
+      ]
+    }
+  },
+  "wrong_header_hash": {
+    "exit_code": 2,
+    "result": {
+      "schema": "maigo.dose-gate.v2",
+      "state": "INCONCLUSIVE",
+      "issues": [
+        "TOPAS scorer header missing/hash mismatch"
+      ]
+    }
+  }
+}

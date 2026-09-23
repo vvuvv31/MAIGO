@@ -18,6 +18,7 @@
 #include <limits>
 #include <vector>
 
+
 #include "carbon/minibeam_collimator.hpp"
 #include "carbon/multiple_scattering.hpp"
 #include "carbon/rng.hpp"
@@ -108,7 +109,7 @@ void experiment_stable_small_angle() {
     UrbanLossRangeTable host({{0.0, 1.0}}, {{0.0, 1.0}}, {{0.0, 1.0}}, 0.0);
     try {
         host = UrbanLossRangeTable::from_csv(
-            "data/urban/c12_water75ev_urban_g4_11_3_2.csv");
+            "evidence/review_fix_20260923/active_water005.csv");
     } catch (...) {
         check(false, "E2: water loss table loads");
         return;
@@ -243,7 +244,7 @@ void experiment_tlimitmin_lifecycle() {
     UrbanLossRangeTable host({{0.0, 1.0}}, {{0.0, 1.0}}, {{0.0, 1.0}}, 0.0);
     try {
         host = UrbanLossRangeTable::from_csv(
-            "data/urban/c12_water75ev_urban_g4_11_3_2.csv");
+            "evidence/review_fix_20260923/active_water005.csv");
     } catch (...) {
         check(false, "E3: water loss table loads");
         return;
@@ -322,7 +323,7 @@ void experiment_maigo_single_step() {
     UrbanLossRangeTable host({{0.0, 1.0}}, {{0.0, 1.0}}, {{0.0, 1.0}}, 0.0);
     try {
         host = UrbanLossRangeTable::from_csv(
-            "data/urban/c12_water75ev_urban_g4_11_3_2.csv");
+            "evidence/review_fix_20260923/active_water005.csv");
     } catch (...) {
         check(false, "E4: water loss table loads");
         return;
@@ -437,7 +438,7 @@ void test_branch_delta() {
     UrbanLossRangeTable host({{0.0, 1.0}}, {{0.0, 1.0}}, {{0.0, 1.0}}, 0.0);
     try {
         host = UrbanLossRangeTable::from_csv(
-            "data/urban/c12_water75ev_urban_g4_11_3_2.csv");
+            "evidence/review_fix_20260923/active_water005.csv");
     } catch (...) {
         check(false, "B4: water loss table loads");
         return;
@@ -495,25 +496,23 @@ void test_branch_delta() {
                                                        lim.range_mm, 12.0F,
                                                        mat);
         check(conv.par1 > 0.0F, "B4: range branch taken", conv.par1, 0.0);
-        // C1 contract: delta == t-g exactly where that difference is
-        // representable (> 8 ulp); below, the constant-lambda fallback
-        // (validated independently in C1 Part 3) replaces the noise.
-        const double direct = double(t) - double(conv.g_mm);
-        const double ulp_t = double(std::nextafter(t, 1.0e30F)) - double(t);
-        if (direct > 8.0 * ulp_t) {
-            const double rel =
-                std::fabs(double(conv.delta_mm) - direct) / direct;
-            check(conv.delta_mm > 0.0F && rel < 1.0e-6,
-                  "B4: range-branch delta self-consistent", rel, 1.0e-6);
-        } else {
-            const float lam0 = urban_v2_transport_mfp(mat, 12.0F);
-            const double ref = double(t) * double(t) /
-                (2.0 * double(lam0));
-            const double rel =
-                std::fabs(double(conv.delta_mm) - ref) / ref;
-            check(conv.delta_mm > 0.0F && rel < 0.35,
-                  "B4: range-branch fallback delta bounded", rel, 0.35);
-        }
+        // Keep the range-law function even when t and g round to the same
+        // FP32 value. Compare its separately carried delta with long double.
+        const long double Rref = static_cast<long double>(lim.range_mm);
+        const long double lambdaref =
+            static_cast<long double>(lim.lambda0_mm);
+        const long double tref = static_cast<long double>(t);
+        const long double aref = Rref / lambdaref;
+        const long double uref = tref / Rref;
+        const long double d_ref = Rref / (1.0L + aref) *
+            (aref * uref + (1.0L - uref) *
+                expm1l(aref * log1pl(-uref)));
+        const double rel = std::fabs(static_cast<double>(conv.delta_mm) -
+                                     static_cast<double>(d_ref)) /
+                           static_cast<double>(d_ref);
+        check(conv.delta_mm > 0.0F && rel < 3.0e-6,
+              "B4: range-law delta matches long-double reference", rel,
+              3.0e-6);
     }
     // 3. Untruncated proposal exposes the limiter conversion delta.
     {
@@ -530,6 +529,16 @@ void test_branch_delta() {
         check(s.stable_delta_mm == conv.delta_mm,
               "B4: untruncated delta == limiter-branch delta",
               double(s.stable_delta_mm), double(conv.delta_mm));
+        check(s.final_geom_path_mm >= 0.0F &&
+                  s.final_geom_path_mm <= s.final_true_path_mm &&
+                  s.final_true_path_mm <= s.proposed_true_path_mm &&
+                  s.proposed_true_path_mm <= s.current_range_mm +
+                      4.0F * urban_ulp_above(s.current_range_mm) &&
+                  s.energy_prediction_valid &&
+                  s.predicted_internal_energy_mev >= 0.0F &&
+                  s.predicted_internal_energy_mev <= s.pre_step_energy_mev +
+                      4.0F * urban_ulp_above(s.pre_step_energy_mev),
+              "R1: accepted path and internal energy share one range context");
     }
     // 4. Truncated proposal: 0 <= delta <= t_final, deterministic.
     {
@@ -549,6 +558,27 @@ void test_branch_delta() {
         check(s2.stable_delta_mm == s.stable_delta_mm,
               "B4: truncated delta deterministic");
     }
+    // Exhausting the same active range is a legal terminal stop. The sampler
+    // returns without requesting another angular sample for this path.
+    {
+        bool supported = false;
+        const float E = 12.0F;
+        const float R = urban_v2_current_range_mm(mat, E, supported);
+        UrbanV2TrackState st{};
+        const auto stop = urban_v2_propose_and_sample(
+            dir, E, 2.0F * R, 2.0F * R, 0.0F, 0.0F, 40.0F,
+            0.0F, 0.0F, 1.0F, box, true, st, mat, 1.0F,
+            4242ULL, 17ULL, 0ULL, 0U, 70U);
+        check(supported && stop.proposal_valid && stop.range_terminal &&
+                  stop.limit_reason == 4 && stop.final_true_path_mm <= R +
+                      4.0F * urban_ulp_above(R) &&
+                  stop.direction.x == dir.x && stop.direction.y == dir.y &&
+                  stop.direction.z == dir.z &&
+                  stop.displacement_mm.x == 0.0F &&
+                  stop.displacement_mm.y == 0.0F &&
+                  stop.displacement_mm.z == 0.0F,
+              "R1: active-range exhaustion terminates without resampling");
+    }
 }
 
 // --- B5: failure detection (host fault injection) --------------------------------
@@ -559,7 +589,7 @@ void test_failure_detection() {
     UrbanLossRangeTable host({{0.0, 1.0}}, {{0.0, 1.0}}, {{0.0, 1.0}}, 0.0);
     try {
         host = UrbanLossRangeTable::from_csv(
-            "data/urban/c12_water75ev_urban_g4_11_3_2.csv");
+            "evidence/review_fix_20260923/active_water005.csv");
     } catch (...) {
         check(false, "B5: water loss table loads");
         return;
@@ -697,7 +727,7 @@ void test_rng_index_guards() {
     UrbanLossRangeTable host({{0.0, 1.0}}, {{0.0, 1.0}}, {{0.0, 1.0}}, 0.0);
     try {
         host = UrbanLossRangeTable::from_csv(
-            "data/urban/c12_water75ev_urban_g4_11_3_2.csv");
+            "evidence/review_fix_20260923/active_water005.csv");
     } catch (...) {
         check(false, "C2: water loss table loads");
         return;
@@ -800,7 +830,7 @@ void test_secondary_boundary_equivalence() {
     UrbanLossRangeTable host({{0.0, 1.0}}, {{0.0, 1.0}}, {{0.0, 1.0}}, 0.0);
     try {
         host = UrbanLossRangeTable::from_csv(
-            "data/urban/c12_water75ev_urban_g4_11_3_2.csv");
+            "evidence/review_fix_20260923/active_water005.csv");
     } catch (...) {
         check(false, "B6: water loss table loads");
         return;
@@ -856,8 +886,12 @@ void test_secondary_boundary_equivalence() {
             0.05F, 6.0F, mat, 1.0e-6F, false, st2, 4242ULL, 17ULL, 0ULL, 3U);
         check(lim_true.valid && lim_false.valid, "C4: newborn limits valid");
         const float lam0 = urban_v2_transport_mfp(mat, 6.0F);
-        // MSC mirror range at 6 MeV (E/7.2), facrange 0.2 (Rfact).
-        const float r_msc = 6.0F / 7.2F;
+        // Active process range from the lifecycle-validated Water_75eV
+        // C12 table, with fMinimal facrange 0.2 (Rfact).
+        bool range_supported = false;
+        const float r_msc = urban_v2_current_range_mm(
+            mat, 6.0F, range_supported);
+        check(range_supported, "C4: active process range available");
         const float expect =
             0.2F * (r_msc > lam0 ? r_msc : lam0);
         check(std::fabs(lim_true.tlimit_used_mm - expect) / expect < 1.0e-5,
@@ -933,7 +967,7 @@ void experiment_slab_composition(double slab_mm, int n, const char* tag) {
     UrbanLossRangeTable host({{0.0, 1.0}}, {{0.0, 1.0}}, {{0.0, 1.0}}, 0.0);
     try {
         host = UrbanLossRangeTable::from_csv(
-            "data/urban/c12_water75ev_urban_g4_11_3_2.csv");
+            "evidence/review_fix_20260923/active_water005.csv");
     } catch (...) {
         check(false, "E7: water loss table loads");
         return;
@@ -1025,187 +1059,282 @@ void experiment_slab_composition(double slab_mm, int n, const char* tag) {
 
 
 // --- C1: true<->geom conversion vs independent references -----------------
-// Independent long-double closed forms (NOT the production float code, NOT a
-// rewrite of it): small-t branch g = -L*expm1(-t/L),
-// delta = L*(t/L + expm1(-t/L)); inversion t = -L*log1p(-g/L).
-// Plus the EXECUTED G4 reference evidence/.../g4_conv.csv
-// (ComputeTruePathLengthLimit -> ComputeGeomPathLength ->
-// ComputeTrueStepLength on the real G4 11.3.2 Urban model in Water_75eV).
+// Independent long-double math references (not production-helper copies):
+// small-t and range-law forward/inverse conversions. The historical
+// g4_conv.csv came from an unbound model lifecycle and is invalid as a
+// production transport or loss oracle.
 namespace {
-struct C1Row {
-    double E, tq, tl, g, ti, lam, R;
-};
-bool c1_parse_conv(std::vector<C1Row>& rows) {
-    FILE* f = std::fopen(
-        "evidence/urban_after_0f2c0ca_20260922/g4_conv.csv", "r");
-    if (!f) return false;
-    char line[512];
-    while (std::fgets(line, sizeof(line), f)) {
-        if (line[0] == '#') continue;
-        C1Row r{};
-        if (std::sscanf(line, "%lf,%lf,%lf,%lf,%lf,%lf,%lf", &r.E, &r.tq,
-                         &r.tl, &r.g, &r.ti, &r.lam, &r.R) == 7)
-            rows.push_back(r);
+long double range_delta_reference(long double range_mm,
+                                   long double lambda_mm,
+                                   long double t_mm) {
+    if (t_mm == range_mm) {
+        const long double a = range_mm / lambda_mm;
+        return range_mm * a / (1.0L + a);
     }
-    std::fclose(f);
-    return !rows.empty();
+    const long double a = range_mm / lambda_mm;
+    const long double u = t_mm / range_mm;
+    return range_mm / (1.0L + a) *
+        (a * u + (1.0L - u) * expm1l(a * log1pl(-u)));
+}
+
+long double inverse_power_delta_reference(long double range_mm,
+                                          long double a,
+                                          long double geom_mm) {
+    const long double x = (1.0L + a) * geom_mm / range_mm;
+    const long double b = 1.0L / (1.0L + a);
+    if (x < 0.5L) {
+        // Binomial series for 1-(1-x)^b-b*x. The reference accumulates the
+        // positive delta directly in long double, avoiding t-g cancellation.
+        long double term = b * (1.0L-b) * x * x / 2.0L;
+        long double sum = term;
+        for (int k = 3; k < 1024; ++k) {
+            term *= (static_cast<long double>(k-1)-b) /
+                    static_cast<long double>(k) * x;
+            sum += term;
+            if (std::fabs(term) < std::fabs(sum) * 1.0e-22L) break;
+        }
+        return range_mm * sum;
+    }
+    return range_mm * (-expm1l(b * log1pl(-x)) - b*x);
 }
 }  // namespace
 
 void experiment_c1_conversion_reference() {
     constexpr float kC12Mass = 12.0F * 931.49410242F;
-    // -- Part 1: long-double sweep over tau (R=huge forces the small-t
-    // branch; no table is touched there). --
     UrbanV2Material bare{};
     bare.mass_mev = kC12Mass;
     bare.projectile_z = 6;
     bare.projectile_a = 12;
-    const double kLamA = 2500.0;  // prompt's artificial-counterexample scale
+
+    // Pin the source's strict <= boundaries for the 1 nm bypass and tausmall.
+    // These are mathematical conversion tests, independent of an extracted
+    // loss table.
+    {
+        const float one_nm = 1.0e-6F;
+        const float below = std::nextafter(one_nm, 0.0F);
+        const float above = std::nextafter(
+            one_nm, std::numeric_limits<float>::infinity());
+        const auto c_below = copper_urban_v2_true_to_geom(
+            below, 1.0F, 1.0e30F, 20000.0F, bare);
+        const auto c_equal = copper_urban_v2_true_to_geom(
+            one_nm, 1.0F, 1.0e30F, 20000.0F, bare);
+        const auto c_above = copper_urban_v2_true_to_geom(
+            above, 1.0F, 1.0e30F, 20000.0F, bare);
+        check(c_below.g_mm == below && c_below.delta_mm == 0.0F &&
+                  c_equal.g_mm == one_nm && c_equal.delta_mm == 0.0F &&
+                  c_above.delta_mm > 0.0F,
+              "R2: 1 nm bypass uses strict <= boundary");
+
+        const float lambda_below_tau = std::nextafter(
+            1.0e16F, std::numeric_limits<float>::infinity());
+        const float lambda_above_tau = std::nextafter(1.0e16F, 0.0F);
+        const auto c_tau_below = copper_urban_v2_true_to_geom(
+            1.0F, lambda_below_tau, 1.0e30F, 20000.0F, bare);
+        const auto c_tau_equal = copper_urban_v2_true_to_geom(
+            1.0F, 1.0e16F, 1.0e30F, 20000.0F, bare);
+        const auto c_tau_above = copper_urban_v2_true_to_geom(
+            1.0F, lambda_above_tau, 1.0e30F, 20000.0F, bare);
+        check(c_tau_below.delta_mm == 0.0F &&
+                  c_tau_equal.delta_mm == 0.0F &&
+                  c_tau_above.delta_mm > 0.0F,
+              "R2: tausmall uses strict <= boundary");
+    }
+
+    // Independent small-t conversion sweep, kept separate from any G4 range
+    // extraction. This is a mathematical conversion oracle only.
     const double taus[] = {
         0.5e-16, 1.0e-16, 2.0e-16, 1.0e-12, 1.0e-9, 1.0e-6, 1.0e-3,
         std::nextafter(1.0e-2, 0.0), 1.0e-2, std::nextafter(1.0e-2, 1.0),
         0.05, 0.5, 2.0};
     double max_g_rel = 0.0, max_d_rel = 0.0, max_g_over_t = 0.0;
-    long n_series = 0, n_expm = 0, pseudo_zero = 0;
+    long n_series = 0, n_expm = 0;
     for (double tau : taus) {
-        for (double lam : {kLamA, 1.873}) {
+        for (double lam : {2500.0, 1.873}) {
             const double t = tau * lam;
             if (!(t > 1.0e-6) || !(t < 0.05 * 1.0e30)) continue;
             const float tf = static_cast<float>(t);
             const float lamf = static_cast<float>(lam);
             const auto c = copper_urban_v2_true_to_geom(
                 tf, lamf, 1.0e30F, 100.0F, bare);
-            const long double taul = (long double)t / (long double)lam;
-            const long double g_ref =
-                -(long double)lam * expm1l(-taul);
-            const long double d_ref =
-                (long double)lam * (taul + expm1l(-taul));
-            const double g_rel =
+            const long double taul = static_cast<long double>(tf) / lamf;
+            const long double g_ref = -static_cast<long double>(lamf) *
+                                      expm1l(-taul);
+            const long double d_ref = static_cast<long double>(lamf) *
+                                      (taul + expm1l(-taul));
+            max_g_rel = std::fmax(max_g_rel,
                 std::fabs((double)c.g_mm - (double)g_ref) /
-                std::fabs((double)g_ref);
-            max_g_rel = std::fmax(max_g_rel, g_rel);
+                std::fabs((double)g_ref));
+            if (d_ref > 0.0L) {
+                max_d_rel = std::fmax(max_d_rel,
+                    std::fabs((double)c.delta_mm - (double)d_ref) /
+                    (double)d_ref);
+            }
             if (c.g_mm > tf)
                 max_g_over_t = std::fmax(
                     max_g_over_t, (double)(c.g_mm - tf) / (double)tf);
-            if (tau < 1.0e-2)
-                ++n_series;
-            else
-                ++n_expm;
-            check(!c.rounding_fixup, "C1: no rounding fixup on tau grid");
+            if (tau < 1.0e-2) ++n_series;
+            else ++n_expm;
         }
     }
-    std::printf("  C1 tau-grid: max|g-gref|/g=%.2e max|d-dref|/d=%.2e "
-                "max(g-t)/t=%.2e (n_series=%ld n_expm=%ld)\n",
+    std::printf("  R2 small-t math: g_rel=%.2e delta_rel=%.2e g_over_t=%.2e "
+                "(series=%ld expm1=%ld)\n",
                 max_g_rel, max_d_rel, max_g_over_t, n_series, n_expm);
-    check(max_g_rel < 3.0e-7, "C1: g matches long-double closed form",
+    check(max_g_rel < 3.0e-7, "R2: small-t g matches long-double reference",
           max_g_rel, 3.0e-7);
-    check(max_d_rel < 1.0e-4, "C1: delta matches long-double closed form",
+    check(max_d_rel < 1.0e-4,
+          "R2: small-t delta matches long-double reference",
           max_d_rel, 1.0e-4);
-    check(max_g_over_t == 0.0, "C1: no unexplained g>t", max_g_over_t, 0.0);
-    check(pseudo_zero == 0, "C1: no pseudo-zero delta", pseudo_zero, 0);
+    check(max_g_over_t == 0.0, "R2: no unexplained g>t", max_g_over_t, 0.0);
 
-    // -- Part 2: executed G4 triples. Feed the helper G4's own (lambda0,
-    // range) so table error cannot leak into conversion-math error. --
-    std::vector<C1Row> rows;
-    if (!c1_parse_conv(rows)) {
-        check(false, "C1: g4_conv.csv MISSING - gate BLOCKED");
-        return;
-    }
-    std::printf("  C1 G4 rows: %lu\n", (unsigned long)rows.size());
-    double gmax = 0.0, dmax_small = 0.0, dmax_range = 0.0, timax = 0.0;
-    double g4noise = 0.0;
-    long n_small = 0, n_range = 0, guard_trips = 0, nm_below = 0;
-    for (const auto& r : rows) {
-        const float tf = static_cast<float>(r.tl);
-        const float lamf = static_cast<float>(r.lam);
-        const float Rf = static_cast<float>(r.R);
-        const float Ef = static_cast<float>(r.E);
-        const auto c = copper_urban_v2_true_to_geom(tf, lamf, Rf, Ef, bare);
-        const bool small = r.tl < 0.05 * r.R;
-        if (small)
-            ++n_small;
-        else
-            ++n_range;
-        if (r.tl <= 1.0e-6) {
-            // Executed 1nm exit: g == t exactly.
-            ++nm_below;
-            check(c.g_mm == tf && c.delta_mm == 0.0F,
-                  "C1: G4 sub-nm g==t exit", double(c.g_mm), double(tf));
-            continue;
-        }
-        const double gr = std::fabs((double)c.g_mm - r.g) / r.g;
-        gmax = std::fmax(gmax, gr);
-        const double dref = r.ti - r.g;  // G4's own (t-g), double triple
-        if (small) {
-            // Small-t rows vs LONG-DOUBLE truth with G4's own (lambda0):
-            // exact math both sides approximate. G4's executed (t-g) is
-            // reported separately: below ~1e-16 absolute it carries G4's
-            // internal double rounding (same E, different t imply
-            // different lambda by up to 9% there), so it is NOT asserted.
-            const long double taul =
-                (long double)tf / (long double)lamf;
-            const long double d_true = (long double)lamf *
-                (taul + expm1l(-taul));
-            if (d_true > 0) {
-                const double dr = std::fabs((double)c.delta_mm -
-                                            (double)d_true) / (double)d_true;
-                dmax_small = std::fmax(dmax_small, dr);
+    // Sweep a=R/lambda from 1e-12 to 1 and u=t/R from the range-branch
+    // boundary to the last representable point before one. Compare the
+    // production helper against an independent long-double formula.
+    double max_range_delta_rel = 0.0;
+    double max_range_chord_rel = 0.0;
+    long n_range_math = 0;
+    for (int ia = 0; ia <= 48; ++ia) {
+        const double a = std::pow(10.0, -12.0 + 12.0 * ia / 48.0);
+        for (int iu = 0; iu <= 96; ++iu) {
+            const double u = iu == 96
+                ? std::nextafter(1.0, 0.0)
+                : 0.05 + 0.95 * iu / 96.0;
+            const float Rf = 0.1F;
+            const float lambdaf = static_cast<float>(
+                static_cast<double>(Rf) / a);
+            const float tf = iu == 0
+                ? Rf * 0.05F
+                : static_cast<float>(static_cast<double>(Rf) * u);
+            const double R = static_cast<double>(Rf);
+            const double lambda = static_cast<double>(lambdaf);
+            const double t = static_cast<double>(tf);
+            const double a_effective = R / lambda;
+            const double u_effective = t / R;
+            const auto c = copper_urban_v2_true_to_geom(
+                tf, lambdaf, Rf, 3000.0F, bare);
+            const long double d_ref = range_delta_reference(
+                static_cast<long double>(R), static_cast<long double>(lambda),
+                static_cast<long double>(t));
+            const long double g_ref = static_cast<long double>(R) /
+                (1.0L + static_cast<long double>(a_effective)) *
+                (1.0L - powl(1.0L - static_cast<long double>(u_effective),
+                             1.0L + static_cast<long double>(a_effective)));
+            if (!c.range_power_branch) {
+                // At the immediately-below boundary, the source intentionally
+                // takes the constant-lambda branch. It is tested against that
+                // branch's independent small-t expression elsewhere.
+                ++n_range_math;
+                continue;
             }
-            if (dref > 0 && d_true > 0) {
-                const double g4n = std::fabs(dref - (double)d_true) /
-                    (double)d_true;
-                g4noise = std::fmax(g4noise, g4n);
+            if (d_ref > 0.0L) {
+                max_range_delta_rel = std::fmax(max_range_delta_rel,
+                    std::fabs((double)c.delta_mm - (double)d_ref) /
+                    (double)d_ref);
             }
-        } else if (dref > 0) {
-            // Range-formula rows: same formula both sides (ours float vs
-            // G4 double); the t-z subtraction amplifies z's few-ulp
-            // error (measured ~7e-3 on the grid).
-            const double dr =
-                std::fabs((double)c.delta_mm - dref) / dref;
-            dmax_range = std::fmax(dmax_range, dr);
-        }
-        if (c.rounding_fixup) ++guard_trips;
-        // finalize with synthetic 2:1 truncation on small-t rows (par1<0):
-        // compare against the independent log1p closed form.
-        if (small && r.tl > 1.0e-6) {
-            const float gf = static_cast<float>(0.5 * r.g);
-            float d_out = 0.0F;
-            bool trip = false;
-            const float t_out = copper_urban_v2_finalize_true(
-                gf, static_cast<float>(r.g), tf, c.delta_mm, lamf, Rf,
-                -1.0F, 0.0F, d_out, trip);
-            const long double rl = (long double)(0.5 * r.g) / (long double)r.lam;
-            const long double t_ref =
-                -(long double)r.lam * log1pl(-rl);
-            const double tr = std::fabs((double)t_out - (double)t_ref) /
-                (double)t_ref;
-            timax = std::fmax(timax, tr);
-            if (trip) ++guard_trips;
-            check(!trip, "C1: finalize truncation needs no guard");
-            check(t_out <= tf, "C1: truncated inversion stays <= t_msc",
-                  double(t_out), double(tf));
+            if (g_ref > 0.0L) {
+                max_range_chord_rel = std::fmax(max_range_chord_rel,
+                    std::fabs((double)c.g_mm - (double)g_ref) /
+                    (double)g_ref);
+            }
+            check(c.delta_mm >= 0.0F && c.g_mm <= tf,
+                  "R2: range-law path/chord domain");
+            ++n_range_math;
         }
     }
-    std::printf("  C1 G4: n_small=%ld n_range=%ld subnm=%ld max|g-gG4|/g=%.2e "
-                "small-t-vs-truth=%.2e range-vs-G4=%.2e G4-triple-noise=%.2e "
-                "max|t-tref|/t=%.2e subulp_repairs=%ld\n",
-                n_small, n_range, nm_below, gmax, dmax_small, dmax_range,
-                g4noise, timax, guard_trips);
-    check(gmax < 2.0e-6, "C1: g matches executed G4 triple", gmax, 2.0e-6);
-    check(dmax_small < 1.0e-4, "C1: small-t delta exact vs truth",
-          dmax_small, 1.0e-4);
-    check(dmax_range < 2.0e-2, "C1: range-branch delta bounded vs G4",
-          dmax_range, 2.0e-2);
-    check(timax < 5.0e-6, "C1: truncated inversion matches log1p form",
-          timax, 5.0e-6);
-    // (finalize-class trips are asserted per-row above; sub-ulp chord
-    // repairs are normal protection with per-row accuracy asserted.)
+    constexpr double Rfixture = 0.1;
+    constexpr double afixture = 1.0e-8;
+    constexpr double ufixture = 0.9;
+    const double warning_ref = static_cast<double>(range_delta_reference(
+        Rfixture, Rfixture / afixture, Rfixture * ufixture));
+    const double warning_const_lambda = Rfixture * afixture *
+        ufixture * ufixture / 2.0;
+    const double warning_rel = std::fabs(warning_const_lambda - warning_ref) /
+                               warning_ref;
+    const double warning_actual = urban_v2_range_branch_delta_mm(
+        Rfixture, Rfixture / afixture, Rfixture * ufixture);
+    std::printf("  R2 range math: n=%ld max_delta_rel=%.2e max_g_rel=%.2e "
+                "counterexample_delta=%.12e constant_lambda_rel=%.4f\n",
+                n_range_math, max_range_delta_rel, max_range_chord_rel,
+                warning_actual, warning_rel);
+    check(max_range_delta_rel < 3.0e-6,
+          "R2: range delta matches independent long double",
+          max_range_delta_rel, 3.0e-6);
+    check(max_range_chord_rel < 3.0e-6,
+          "R2: range chord matches independent long double",
+          max_range_chord_rel, 3.0e-6);
+    check(std::fabs(warning_actual - warning_ref) / warning_ref < 1.0e-12,
+          "R2: a=1e-8 u=0.9 counterexample matches long double",
+          warning_actual, warning_ref);
+    check(warning_rel > 0.39,
+          "R2: constant-lambda counterexample is distinguishable",
+          warning_rel, 0.39);
+
+    {
+        const float R = 0.1F;
+        const float threshold = R * 0.05F;
+        const float below = std::nextafter(threshold, 0.0F);
+        const float above = std::nextafter(
+            threshold, std::numeric_limits<float>::infinity());
+        const auto c_below = copper_urban_v2_true_to_geom(
+            below, 0.2F, R, 3000.0F, bare);
+        const auto c_equal = copper_urban_v2_true_to_geom(
+            threshold, 0.2F, R, 3000.0F, bare);
+        const auto c_above = copper_urban_v2_true_to_geom(
+            above, 0.2F, R, 3000.0F, bare);
+        check(!c_below.range_power_branch && c_equal.range_power_branch &&
+                  c_above.range_power_branch,
+              "R2: range branch retains strict < boundary");
+    }
+
+    // Test the geometry-truncated inverse power law at small and near-terminal
+    // chords, independently of any transport probe.
+    double max_inverse_delta_rel = 0.0;
+    double worst_inverse_a = 0.0, worst_inverse_x = 0.0;
+    for (int ia = 0; ia <= 48; ++ia) {
+        const long double a = powl(10.0L, -12.0L + 12.0L * ia / 48.0L);
+        for (long double x : {1.0e-12L, 1.0e-8L, 1.0e-4L, 0.05L,
+                              0.5L, 0.999999L}) {
+            const long double R = 0.1L;
+            const long double g = R * x / (1.0L + a);
+            const double got = urban_v2_inverse_power_delta_mm(
+                1.0 / static_cast<double>(R),
+                static_cast<double>(1.0L + a), static_cast<double>(g),
+                static_cast<double>(R), static_cast<double>(a));
+            const long double ref = inverse_power_delta_reference(R, a, g);
+            if (ref > 0.0L) {
+                const double rel = std::fabs(got - static_cast<double>(ref)) /
+                                   static_cast<double>(ref);
+                if (rel > max_inverse_delta_rel) {
+                    max_inverse_delta_rel = rel;
+                    worst_inverse_a = static_cast<double>(a);
+                    worst_inverse_x = static_cast<double>(x);
+                }
+            }
+        }
+    }
+    std::printf("  R2 inverse range math: max_rel=%.3e at a=%.3e x=%.6f\n",
+                max_inverse_delta_rel, worst_inverse_a, worst_inverse_x);
+    check(max_inverse_delta_rel < 2.0e-6,
+          "R2: inverse range-law delta matches independent long double",
+          max_inverse_delta_rel, 2.0e-6);
+    {
+        const double R = 0.1;
+        const double a = 1.0e-12;
+        const double g_terminal = R / (1.0 + a);
+        const double d_terminal = urban_v2_inverse_power_delta_mm(
+            1.0/R, 1.0+a, g_terminal, R, a);
+        const double terminal_ref = R * a / (1.0+a);
+        const double invalid = urban_v2_inverse_power_delta_mm(
+            1.0/R, 1.0+a, g_terminal * (1.0 + 1.0e-8), R, a);
+        check(std::fabs(d_terminal-terminal_ref) <=
+                  2.0e-6*terminal_ref && !std::isfinite(invalid),
+              "R2: inverse range terminal is stable and overshoot is rejected");
+    }
 
     // -- Part 3: reachable-domain scan with the REAL water + Cu tables. --
     for (int m = 0; m < 2; ++m) {
         const char* path = m == 0
-            ? "data/urban/c12_water75ev_urban_g4_11_3_2.csv"
-            : "data/urban/c12_copper_loss_range_g4_11_3_2.csv";
+            ? "evidence/review_fix_20260923/active_water005.csv"
+            : "evidence/review_fix_20260923/active_copper005.csv";
         UrbanLossRangeTable host({{0.0, 1.0}}, {{0.0, 1.0}}, {{0.0, 1.0}},
                                  0.0);
         try {
@@ -1231,129 +1360,128 @@ void experiment_c1_conversion_reference() {
         mat.mass_mev = kC12Mass;
         mat.density_g_per_cm3 = m == 0 ? 1.0F : 8.96F;
         mat.mfp_kind = m == 0 ? 1 : 0;
+        double max_range_roundtrip_rel = 0.0;
+        for (int i = 0; i < table.count - 1; ++i) {
+            for (float E : {table.e_total_mev[i],
+                            0.5F * (table.e_total_mev[i] +
+                                    table.e_total_mev[i + 1]),
+                            table.e_total_mev[i + 1]}) {
+                const float R = urban_v2_loss_range(table, E);
+                const float recovered = urban_v2_loss_energy(table, R);
+                const double rel = std::fabs(double(recovered) - double(E)) /
+                                   std::max(double(E), 1.0e-30);
+                max_range_roundtrip_rel = std::fmax(
+                    max_range_roundtrip_rel, rel);
+            }
+        }
+        std::printf("  R1 E(R(E)) %s: max_rel=%.3e nodes=%d\n",
+                    m == 0 ? "water" : "Cu", max_range_roundtrip_rel,
+                    table.count);
+        check(max_range_roundtrip_rel < 2.0e-6,
+              "R1: active range and inverse energy are mutually consistent",
+              max_range_roundtrip_rel, 2.0e-6);
         const float esteps[] = {2.0F, 6.0F, 12.0F, 60.0F, 120.0F, 360.0F,
                                 1200.0F, 3000.0F};
         const float tsteps[] = {0.001F, 0.01F, 0.025F, 0.05F, 0.1F, 0.25F};
-        long ntot = 0, nparpos = 0, nfix = 0, nbad = 0, n_fallback = 0;
-        double taumax = 0.0, worst = 0.0, worst_range = 0.0;
-        double worst_fb_impl = 0.0, worst_fb_rmax = 0.0;
-        double worst_range_env = 0.0;
+        long ntot = 0, nparpos = 0, nfix = 0, nbad = 0;
+        double taumax = 0.0, worst_small_delta = 0.0, worst_range_delta = 0.0;
+        double worst_inverse_delta = 0.0;
+        long n_terminal = 0;
         for (float E : esteps) {
-            const float R = urban_v2_loss_range(table, E);
+            bool supported = false;
+            const float R = urban_v2_current_range_mm(mat, E, supported);
             const float lam = urban_v2_transport_mfp(mat, E);
-            if (!(R > 0.0F) || !(lam > 0.0F)) continue;
+            if (!supported || !(R > 0.0F) || !(lam > 0.0F)) continue;
             for (float t : tsteps) {
-                if (!(t < R)) continue;  // limiter clamps t to range first
+                if (!(t < R)) continue;
                 ++ntot;
                 const auto c = copper_urban_v2_true_to_geom(t, lam, R, E,
                                                             mat);
                 taumax = std::fmax(taumax, (double)t / (double)lam);
                 if (c.par1 > 0.0F) ++nparpos;
                 if (c.rounding_fixup) ++nfix;
-                // Triple contract: 0 <= g <= t, 0 <= delta <= t.
                 if (!(c.g_mm >= 0.0F) || !(c.g_mm <= t) ||
-                    !(c.delta_mm >= 0.0F) || !(c.delta_mm <= t))
+                    !(c.delta_mm >= 0.0F) || !(c.delta_mm <= t)) {
                     ++nbad;
-                // Small-t rows re-checked against long double.
-                if (t < 0.05F * R) {
-                    const long double taul =
-                        (long double)t / (long double)lam;
-                    const long double d_ref = (long double)lam *
-                        (taul + expm1l(-taul));
-                    if (d_ref > 0) {
-                        const double dr = std::fabs((double)c.delta_mm -
-                                                    (double)d_ref) /
-                            (double)d_ref;
-                        worst = std::fmax(worst, dr);
-                    }
-                } else if (E < kC12Mass && R > 0.0F) {
-                    // Range-formula rows vs long-double algebra.
-                    const long double p1 = 1.0L / (long double)R;
-                    const long double p2 = (long double)R / (long double)lam;
-                    const long double p3 = 1.0L + p2;
-                    const long double zr =
-                        (1.0L - expl(p3 * logl(1.0L - (long double)t /
-                                                     (long double)R))) /
-                        (p1 * p3);
-                    const long double dr_ = (long double)t - zr;
-                    // Regime split mirrors production (8 ulp representability).
-                    const double ulp_t =
-                        (double)std::nextafter(t, 1.0e30F) - (double)t;
-                    const bool fallback =
-                        !(dr_ > 8.0L * (long double)ulp_t);
-                    if (fallback) ++n_fallback;
-                    if (dr_ > 0) {
-                        if (!fallback) {
-                            // Direct regime: float t-z vs algebra. Error
-                            // provably bounded by z's rounding envelope:
-                            // rel < k*ulp(t)/direct. Track the worst
-                            // envelope ratio (must stay < 1).
-                            const double drr =
-                                std::fabs((double)c.delta_mm -
-                                          (double)dr_) / (double)dr_;
-                            const double env =
-                                drr / (4.0 * ulp_t / (double)dr_ + 1.0e-9);
-                            worst_range = std::fmax(worst_range, drr);
-                            worst_range_env =
-                                std::fmax(worst_range_env, env);
-                        } else {
-                            // Fallback regime: (a) implementation exactness
-                            // vs small-t algebra (same math); (b) rmax vs
-                            // range algebra (discriminating: garbage/zero
-                            // deltas fail with ~100% rmax error).
-                            const long double taul =
-                                (long double)t / (long double)lam;
-                            const long double d_small =
-                                (long double)lam *
-                                (taul + expm1l(-taul));
-                            if (d_small > 0) {
-                                const double dfi =
-                                    std::fabs((double)c.delta_mm -
-                                              (double)d_small) /
-                                    (double)d_small;
-                                worst_fb_impl =
-                                    std::fmax(worst_fb_impl, dfi);
-                            }
-                            const long double r_a =
-                                (double)dr_ * ((double)t + (double)zr);
-                            const long double r_o =
-                                (double)c.delta_mm *
-                                ((double)t + (double)c.g_mm);
-                            if (r_a > 0) {
-                                const double rrel = std::fabs(
-                                    (double)r_o - (double)r_a) / (double)r_a;
-                                worst_fb_rmax =
-                                    std::fmax(worst_fb_rmax, rrel);
+                    continue;
+                }
+                const long double d_ref = t < 0.05F * R
+                    ? static_cast<long double>(lam) *
+                        (static_cast<long double>(t) / lam +
+                         expm1l(-static_cast<long double>(t) / lam))
+                    : range_delta_reference(
+                        static_cast<long double>(R),
+                        static_cast<long double>(lam),
+                        static_cast<long double>(t));
+                if (d_ref > 0.0L) {
+                    const double rel = std::fabs(
+                        static_cast<double>(c.delta_mm) -
+                        static_cast<double>(d_ref)) /
+                        static_cast<double>(d_ref);
+                    if (t < 0.05F * R) {
+                        worst_small_delta = std::fmax(worst_small_delta, rel);
+                    } else {
+                        worst_range_delta = std::fmax(worst_range_delta, rel);
+                        if (c.range_power_branch) {
+                            for (double gfraction : {0.01, 0.5, 0.99}) {
+                                const float gf = static_cast<float>(
+                                    static_cast<double>(c.g_mm) * gfraction);
+                                if (!(gf > 1.0e-6F) || !(gf < c.g_mm)) continue;
+                                float d_out = 0.0F;
+                                bool trip = false;
+                                const float t_out =
+                                    copper_urban_v2_finalize_true(
+                                        gf, c.g_mm, t, c.delta_mm, lam, R,
+                                        c.par1, c.par3, d_out, trip,
+                                        c.range_power_branch);
+                                if (t_out >= t) ++n_terminal;
+                                const long double inverse_ref =
+                                    inverse_power_delta_reference(
+                                        static_cast<long double>(R),
+                                        static_cast<long double>(R) / lam,
+                                        static_cast<long double>(gf));
+                                if (inverse_ref > 0.0L) {
+                                    const double inv_rel = std::fabs(
+                                        static_cast<double>(d_out) -
+                                        static_cast<double>(inverse_ref)) /
+                                        static_cast<double>(inverse_ref);
+                                    worst_inverse_delta = std::fmax(
+                                        worst_inverse_delta, inv_rel);
+                                }
+                                if (trip || !(gf <= t_out) || !(t_out <= t) ||
+                                    !(d_out >= 0.0F) || d_out > t_out) {
+                                    ++nbad;
+                                }
                             }
                         }
                     }
                 }
             }
         }
-        std::printf("  C1 reachable %s: n=%ld par1pos=%ld subulp=%ld bad=%ld "
-                    "nfallback=%ld tau_max=%.3f smallt=%.2e range=%.2e "
-                    "rangeenv=%.2f fbimpl=%.2e fbrmax=%.2e\n",
+        std::printf("  R1/R2 reachable %s: n=%ld par1pos=%ld subulp=%ld "
+                    "bad=%ld small_delta=%.2e range_delta=%.2e "
+                    "inverse_delta=%.2e tau_max=%.3f\n",
                     m == 0 ? "water" : "Cu", ntot, nparpos, nfix, nbad,
-                    n_fallback, taumax, worst, worst_range, worst_range_env,
-                    worst_fb_impl, worst_fb_rmax);
-        check(nbad == 0, "C1: reachable triple contract holds", nbad, 0);
-        check(worst < 1.0e-4, "C1: reachable small-t delta bounded", worst,
+                    worst_small_delta, worst_range_delta,
+                    worst_inverse_delta, taumax);
+        check(nbad == 0, "R1/R2: reachable table paths satisfy contract", nbad, 0);
+        check(worst_small_delta < 1.0e-4,
+              "R2: reachable small-t delta reference", worst_small_delta,
               1.0e-4);
-        check(worst_range_env < 1.0, "C1: range-direct inside ulp envelope",
-              worst_range_env, 1.0);
-        check(worst_fb_impl < 1.0e-4, "C1: fallback implementation exact",
-              worst_fb_impl, 1.0e-4);
-        check(worst_fb_rmax < 0.25, "C1: fallback rmax bounded",
-              worst_fb_rmax, 0.25);
-        // Production branch occupancy with the MSC currentRange (fix C4):
-        // small-t must dominate; the range branch (and its fallback
-        // regime) survives only at end-of-range.
+        check(worst_range_delta < 3.0e-6,
+              "R2: reachable range delta reference", worst_range_delta,
+              3.0e-6);
+        check(worst_inverse_delta < 3.0e-6,
+              "R2: reachable range inverse delta reference",
+              worst_inverse_delta, 3.0e-6);
+        // Production branch occupancy with the lifecycle-validated active
+        // process range: the table range can enter the conversion branches.
         {
             long o_small = 0, o_range = 0, o_par = 0, o_subnm = 0;
             for (float E : esteps) {
                 bool sup = false;
                 const float Rm =
-                    urban_v2_msc_range_mm(mat, E, sup);
+                    urban_v2_current_range_mm(mat, E, sup);
                 if (!sup || !(Rm > 0.0F)) continue;
                 const float lam = urban_v2_transport_mfp(mat, E);
                 if (!(lam > 0.0F)) continue;
@@ -1375,7 +1503,7 @@ void experiment_c1_conversion_reference() {
                     }
                 }
             }
-            std::printf("  C1 production occupancy (%s, MSC range): "
+            std::printf("  R1 production occupancy (%s, active loss range): "
                         "smallt=%ld range=%ld parpos=%ld subnm=%ld\n",
                         m == 0 ? "water" : "Cu", o_small, o_range, o_par,
                         o_subnm);
@@ -1392,7 +1520,7 @@ void experiment_c1_conversion_reference() {
                                  0.0);
         try {
             host = UrbanLossRangeTable::from_csv(
-                "data/urban/c12_water75ev_urban_g4_11_3_2.csv");
+                "evidence/review_fix_20260923/active_water005.csv");
         } catch (...) {
             check(false, "C1: par-table loads");
         }
@@ -1479,7 +1607,7 @@ void experiment_c1_conversion_reference() {
                                  0.0);
         try {
             host = UrbanLossRangeTable::from_csv(
-                "data/urban/c12_water75ev_urban_g4_11_3_2.csv");
+                "evidence/review_fix_20260923/active_water005.csv");
         } catch (...) {
         }
         std::vector<float> e(host.energies_total_mev().begin(),
@@ -1848,8 +1976,8 @@ void experiment_c3_q_audit() {
     const Direction3F dir{0.0F, 0.0F, 1.0F};
     for (int m = 0; m < 2; ++m) {
         const char* path = m == 0
-            ? "data/urban/c12_water75ev_urban_g4_11_3_2.csv"
-            : "data/urban/c12_copper_loss_range_g4_11_3_2.csv";
+            ? "evidence/review_fix_20260923/active_water005.csv"
+            : "evidence/review_fix_20260923/active_copper005.csv";
         UrbanLossRangeTable host({{0.0, 1.0}}, {{0.0, 1.0}}, {{0.0, 1.0}},
                                  0.0);
         try {
@@ -2041,7 +2169,7 @@ void test_c4_transport_contract() {
     UrbanLossRangeTable host({{0.0, 1.0}}, {{0.0, 1.0}}, {{0.0, 1.0}}, 0.0);
     try {
         host = UrbanLossRangeTable::from_csv(
-            "data/urban/c12_water75ev_urban_g4_11_3_2.csv");
+            "evidence/review_fix_20260923/active_water005.csv");
     } catch (...) {
         check(false, "C4: water loss table loads");
         return;
@@ -2151,7 +2279,7 @@ void experiment_cu_slab() {
     UrbanLossRangeTable host({{0.0, 1.0}}, {{0.0, 1.0}}, {{0.0, 1.0}}, 0.0);
     try {
         host = UrbanLossRangeTable::from_csv(
-            "data/urban/c12_copper_loss_range_g4_11_3_2.csv");
+            "evidence/review_fix_20260923/active_copper005.csv");
     } catch (...) {
         check(false, "C6Cu: Cu loss table loads");
         return;
@@ -2237,7 +2365,52 @@ void experiment_cu_slab() {
           double(done), double(kN) / 2.0);
 }
 
+
+void test_physical_voxel_navigation() {
+    const Direction3F lo{-50.0F,-50.0F,0.0F}, hi{50.0F,50.0F,150.0F};
+    const Direction3F pitch{0.1F,100.0F,0.25F};
+    const auto pos=urban_voxel_cell({0.0F,0.0F,10.125F},{1.0F,0.0F,0.0F},lo,hi,pitch,1000,1,600);
+    const auto neg=urban_voxel_cell({0.0F,0.0F,10.125F},{-1.0F,0.0F,0.0F},lo,hi,pitch,1000,1,600);
+    check(pos.valid && neg.valid && pos.ix==500 && neg.ix==499,
+          "V1: exact central face belongs to the outgoing direction");
+    check(pos.face_distance==0.1F && neg.face_distance==0.1F,
+          "V1: face start takes a full positive cell step without a nudge");
+    const auto body=urban_voxel_cell({0.05F,0.0F,10.125F},{0.0F,0.0F,1.0F},lo,hi,pitch,1000,1,600);
+    check(body.valid && std::abs(urban_v2_box_safety(0.05F,0.0F,10.125F,body.safety)-0.05F)<1e-7F,
+          "V1: safety measures the current voxel, not the phantom");
+    check(body.face_distance==0.125F && body.face_mask==4U,
+          "V1: z face and geometric distance");
+    const auto endpoint=urban_voxel_snap_endpoint(body,0.125F,{0.05F,0.0F,10.249999F});
+    check(endpoint.z==10.25F,"V1: accepted face endpoint snaps to the shared plane");
+    const auto next=urban_voxel_cell(endpoint,{0.0F,0.0F,1.0F},lo,hi,pitch,1000,1,600);
+    const auto back=urban_voxel_cell(endpoint,{0.0F,0.0F,-1.0F},lo,hi,pitch,1000,1,600);
+    check(next.valid && back.valid && next.iz==41 && back.iz==40,
+          "V1: boundary reversal changes ownership without a zero step");
+    check(next.face_distance==0.25F && back.face_distance==0.25F,
+          "V1: positive progress after forward and reverse crossing");
+    const auto untouched=urban_voxel_snap_endpoint(body,0.05F,{0.05F,0.0F,10.175F});
+    check(untouched.z==10.175F,"V1: interior endpoint is never advanced to a face");
+    const auto outside=urban_voxel_cell({50.0F,0.0F,10.0F},{1.0F,0.0F,0.0F},lo,hi,pitch,1000,1,600);
+    const auto inward=urban_voxel_cell({50.0F,0.0F,10.0F},{-1.0F,0.0F,0.0F},lo,hi,pitch,1000,1,600);
+    check(!outside.valid && inward.valid,"V1: transverse phantom exit vs re-entry");
+    const auto upstream=urban_voxel_cell({0.05F,0.0F,0.0F},{0.0F,0.0F,-1.0F},lo,hi,pitch,1000,1,600);
+    const auto entering=urban_voxel_cell({0.05F,0.0F,0.0F},{0.0F,0.0F,1.0F},lo,hi,pitch,1000,1,600);
+    check(!upstream.valid && entering.valid,"V1: upstream exit vs water entry");
+    const auto corner=urban_voxel_cell({0.05F,0.0F,0.05F},{1.0F,0.0F,1.0F},
+        {-1.0F,-1.0F,-1.0F},{1.0F,1.0F,1.0F},{0.1F,2.0F,0.1F},20,1,20);
+    check(corner.valid && corner.face_mask==5U,"V1: simultaneous x/z corner faces");
+    int bad=0;
+    for(int i=1;i<1000;++i) {
+        const float face=urban_voxel_face(i,1000,-50.0F,50.0F,0.1F);
+        const auto a=urban_voxel_axis(face,1.0F,-50.0F,50.0F,0.1F,1000);
+        const auto b=urban_voxel_axis(face,-1.0F,-50.0F,50.0F,0.1F,1000);
+        bad+=!(a.valid&&b.valid&&a.index==i&&b.index==i-1);
+    }
+    check(bad==0,"V1: every lateral face has deterministic two-sided ownership",bad,0);
+}
+
 int run_localize() {
+    test_physical_voxel_navigation();
     std::printf("[E1] uniform01 raw-bit endpoint\n");
     experiment_uniform01_endpoint();
     std::printf("[E2] stable small-angle measurement\n");

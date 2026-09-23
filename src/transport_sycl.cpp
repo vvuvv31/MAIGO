@@ -738,7 +738,9 @@ inline void flush_unified_em_audit(std::uint64_t* global,
 // outer/segment guard reject), 2 non-positive g, 3 non-finite t/g/delta,
 // 4 g > t, 5 delta outside [0, t], 6 FP32 stall (traversed+g == traversed)
 // with remainder above granularity dust, 7 geometric overshoot
-// (g beyond the segment allowance), 8 bad direction/displacement.
+// (g beyond the segment allowance), 8 bad direction/displacement,
+// 9 invalid range-context ordering or internal-energy prediction,
+// 10 accepted-path mismatch, 11 invalid physical-voxel navigation.
 // A stall with remainder <= 2 ulp of the macro step is NOT a fault: the
 // remainder is FP32 granularity dust (position error < 2 ulp); the caller
 // completes the macro step exactly and counts a sub-ulp drop instead.
@@ -752,6 +754,20 @@ inline int urban_step_field_reason(const CorrelatedScatteringStep& s) noexcept {
     if (!(g > 0.0F)) return 2;
     if (g > t) return 4;
     if (!(d >= 0.0F) || d > t) return 5;
+    if (!s.energy_prediction_valid ||
+        !(s.current_range_mm > 0.0F) ||
+        !(s.proposed_true_path_mm > 0.0F) ||
+        t > s.proposed_true_path_mm +
+                4.0F * urban_ulp_above(s.proposed_true_path_mm) ||
+        s.proposed_true_path_mm > s.current_range_mm +
+                4.0F * urban_ulp_above(s.current_range_mm) ||
+        !sycl::isfinite(s.pre_step_energy_mev) ||
+        !sycl::isfinite(s.predicted_internal_energy_mev) ||
+        s.predicted_internal_energy_mev < 0.0F ||
+        s.predicted_internal_energy_mev > s.pre_step_energy_mev +
+                4.0F * urban_ulp_above(s.pre_step_energy_mev)) {
+        return 9;
+    }
     const float dx = s.direction.x, dy = s.direction.y, dz = s.direction.z;
     if (!sycl::isfinite(dx) || !sycl::isfinite(dy) || !sycl::isfinite(dz))
         return 8;
@@ -2985,6 +3001,14 @@ template<int EmMode>
         if (!config.minibeam_copper_loss_range_file.empty()) {
             const auto loss_table = UrbanLossRangeTable::from_csv(
                 config.minibeam_copper_loss_range_file);
+            if (config.minibeam_copper_mcs_model == "urban_v2" &&
+                !loss_table.is_active_c12_reference("G4_Cu", 0.05)) {
+                throw std::runtime_error(
+                    "copper urban_v2 requires a lifecycle-validated active "
+                    "C12 Urban/ionIoni table for G4_Cu with a 0.05 mm cuts "
+                    "couple; the configured table is not a production oracle: " +
+                    config.minibeam_copper_loss_range_file.string());
+            }
             upload_float_pair(loss_table.energies_total_mev(),
                               loss_table.ranges_mm(),
                               minibeam_copper_loss_e_device,
@@ -3090,8 +3114,23 @@ template<int EmMode>
     // minibeam is on and the file is configured.
     if (config.enable_minibeam &&
         !config.minibeam_water_urban_loss_range_file.empty()) {
+        if (config.minibeam_water_primary_mcs_model == "urban_v2" &&
+            config.voxel_scorer_clamps_transport &&
+            std::fabs(static_cast<double>(number_of_bins) * config.depth_bin_width_mm -
+                      config.phantom_length_mm) > 1.0e-7) {
+            throw std::runtime_error(
+                "physical water Urban voxels require an integral number of depth bins");
+        }
         const auto water_table = UrbanLossRangeTable::from_csv(
             config.minibeam_water_urban_loss_range_file);
+        if (config.minibeam_water_primary_mcs_model == "urban_v2" &&
+            !water_table.is_active_c12_reference("Water_75eV", 0.05)) {
+            throw std::runtime_error(
+                "water urban_v2 requires a lifecycle-validated active "
+                "C12 Urban/ionIoni table for Water_75eV with a 0.05 mm cuts "
+                "couple; the configured table is not a production oracle: " +
+                config.minibeam_water_urban_loss_range_file.string());
+        }
         upload_float_pair(water_table.energies_total_mev(),
                           water_table.ranges_mm(),
                           minibeam_water_urban_loss_e_device,
@@ -3164,10 +3203,13 @@ template<int EmMode>
     const auto voxel_scorer_clamps_transport = config.voxel_scorer_clamps_transport;
     const auto voxel_bins_x = config.voxel_bins_x;
     const auto voxel_bins_y = config.voxel_bins_y;
-    const auto voxel_bins_z = config.voxel_bins_z;
+    // Resolve the legacy water grid exactly as its allocation/header do.
+    // Raw voxel_bins_z/voxel_size_z_mm can both be zero when the grid is
+    // defined by phantom_length_mm and depth_bin_width_mm.
+    const auto voxel_bins_z = number_of_bins;
     const auto voxel_size_x_mm = static_cast<float>(config.voxel_size_x_mm);
     const auto voxel_size_y_mm = static_cast<float>(config.voxel_size_y_mm);
-    const auto voxel_size_z_mm = static_cast<float>(config.voxel_size_z_mm);
+    const auto voxel_size_z_mm = static_cast<float>(config.scorer_spacing_z_mm());
     const auto voxel_plane_size = voxel_bins_x * voxel_bins_y;
     float voxel_min_x_mm =
         -0.5F * static_cast<float>(voxel_bins_x) * voxel_size_x_mm;
@@ -5850,6 +5892,16 @@ template<int EmMode>
                 // primary history; first water segment starts at a boundary).
                 UrbanV2TrackState water_urban_state{};
                 bool water_urban_seen_segment = false;
+                bool water_urban_at_boundary = true;
+                bool water_urban_escaped_geometry = false;
+                // This existing opt-in flag denotes actual scoring voxels,
+                // matching TOPAS TsBox replicas, rather than a virtual mesh.
+                const bool water_urban_voxel_geometry =
+                    enable_minibeam && minibeam_water_primary_urban_v2 &&
+                    (kProductionPrimaryPath || enable_multiple_scattering) &&
+                    !kProductionPrimaryPath && voxel_scorer_clamps_transport &&
+                    enable_voxel_scoring && !enable_ct_grid &&
+                    !enable_hetero_insert && slab_layer_count == 0;
                 std::uint32_t water_urban_seg_hist = 0;
                 StepStableStragglingState<float> stable_straggling;
                 stable_straggling.initialize(straggling_sampling_length_mm);
@@ -5896,12 +5948,43 @@ template<int EmMode>
                     const auto absolute_direction_x = sycl::fabs(direction_x);
                     const auto absolute_direction_y = sycl::fabs(direction_y);
                     const auto absolute_direction_z = sycl::fabs(direction_z);
+                    UrbanVoxelCell water_voxel{};
+                    if (water_urban_voxel_geometry) {
+                        water_voxel = urban_voxel_cell(
+                            {position_x_mm, position_y_mm, position_z_mm},
+                            {direction_x, direction_y, direction_z},
+                            {voxel_min_x_mm, voxel_min_y_mm, 0.0F},
+                            {voxel_max_x_mm, voxel_max_y_mm, phantom_length_mm},
+                            {voxel_size_x_mm, voxel_size_y_mm, depth_bin_width_mm},
+                            static_cast<int>(voxel_bins_x), static_cast<int>(voxel_bins_y),
+                            static_cast<int>(number_of_bins));
+                        if (!water_voxel.valid) {
+                            const bool outside =
+                                (position_z_mm == 0.0F && direction_z < 0.0F) ||
+                                position_x_mm < voxel_min_x_mm ||
+                                position_x_mm > voxel_max_x_mm ||
+                                position_y_mm < voxel_min_y_mm ||
+                                position_y_mm > voxel_max_y_mm ||
+                                (position_x_mm == voxel_min_x_mm && direction_x < 0.0F) ||
+                                (position_x_mm == voxel_max_x_mm && direction_x >= 0.0F) ||
+                                (position_y_mm == voxel_min_y_mm && direction_y < 0.0F) ||
+                                (position_y_mm == voxel_max_y_mm && direction_y >= 0.0F);
+                            if (outside) {
+                                water_urban_escaped_geometry = true;
+                            } else {
+                                urban_record_first_failure(minibeam_event_counts_device,
+                                    rng_history, static_cast<std::uint64_t>(steps), 0U, 11);
+                            }
+                            break;
+                        }
+                    }
                     auto bin = direction_z < 0.0F
                                    ? static_cast<int>(
                                          sycl::ceil(position_z_mm / depth_bin_width_mm)) - 1
                                    : static_cast<int>(
                                          sycl::floor(position_z_mm / depth_bin_width_mm));
                     bin = sycl::max(0, sycl::min(bin, static_cast<int>(number_of_bins) - 1));
+                    if (water_urban_voxel_geometry) bin = water_voxel.iz;
                     if (primary_survival_device != nullptr && bin != last_survival_bin) {
                         sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
                                          sycl::memory_scope::device,
@@ -5928,6 +6011,9 @@ template<int EmMode>
                             0, sycl::min(voxel_x, static_cast<int>(voxel_bins_x) - 1));
                         voxel_y = sycl::max(
                             0, sycl::min(voxel_y, static_cast<int>(voxel_bins_y) - 1));
+                    }
+                    if (water_urban_voxel_geometry) {
+                        voxel_x = water_voxel.ix; voxel_y = water_voxel.iy;
                     }
                     const auto voxel_index = static_cast<std::size_t>(bin) * voxel_plane_size +
                                              static_cast<std::size_t>(voxel_y) * voxel_bins_x +
@@ -6071,7 +6157,7 @@ template<int EmMode>
                         if(delta_sp>0) step_mm=sycl::fmin(step_mm,.01f*energy_MeV/sycl::fmax(1e-12f,delta_sp+unified_primary_state.mix(unified_primary_pre.lo.stopping,unified_primary_pre.hi.stopping)));
                     }
 
-                    if (absolute_direction_z >= 1.0e-6F) {
+                    if (!water_urban_voxel_geometry && absolute_direction_z >= 1.0e-6F) {
                         const auto boundary_z_mm =
                             direction_z < 0.0F
                                 ? static_cast<float>(bin) * depth_bin_width_mm
@@ -6107,7 +6193,7 @@ template<int EmMode>
                             ct_spacing_z, ct_nx, ct_ny, ct_nz);
                         step_mm = ct_clamp_res.step_mm;
                     }
-                    if ((kProductionPrimaryPath || enable_voxel_scoring) && (!kProductionPrimaryPath && voxel_scorer_clamps_transport) &&
+                    if ((kProductionPrimaryPath || enable_voxel_scoring) && (!kProductionPrimaryPath && voxel_scorer_clamps_transport && !water_urban_voxel_geometry) &&
                         absolute_direction_x >= 1.0e-6F) {
                         const auto boundary_x_mm =
                             voxel_min_x_mm +
@@ -6118,7 +6204,7 @@ template<int EmMode>
                             step_mm = sycl::fmin(step_mm, dx_step);
                         }
                     }
-                    if ((kProductionPrimaryPath || enable_voxel_scoring) && (!kProductionPrimaryPath && voxel_scorer_clamps_transport) &&
+                    if ((kProductionPrimaryPath || enable_voxel_scoring) && (!kProductionPrimaryPath && voxel_scorer_clamps_transport && !water_urban_voxel_geometry) &&
                         absolute_direction_y >= 1.0e-6F) {
                         const auto boundary_y_mm =
                             voxel_min_y_mm +
@@ -6130,9 +6216,89 @@ template<int EmMode>
                         }
                     }
 
+                    if (water_urban_voxel_geometry) {
+                        step_mm = sycl::fmin(step_mm, water_voxel.face_distance);
+                    }
+                    const float macro_geom_ceiling_mm = step_mm;
+                    float urban_true_path_mm = step_mm;
+                    float urban_geom_path_mm = step_mm;
+                    float accepted_loss_path_mm = step_mm;
+                    float urban_macro_range_mm = 0.0F;
+                    bool urban_preflight_valid = false;
+                    bool urban_range_limited = false;
+                    UrbanV2LossTable water_urban_preflight_table{};
+                    CorrelatedScatteringStep water_urban_accepted_step{};
+                    auto water_urban_proposed_state = water_urban_state;
+                    if (enable_minibeam && minibeam_water_primary_urban_v2 &&
+                        (kProductionPrimaryPath || enable_multiple_scattering) &&
+                        !in_ct && !in_insert && slab_layer_count == 0) {
+                        water_urban_preflight_table = UrbanV2LossTable{
+                            minibeam_water_urban_loss_e_device,
+                            minibeam_water_urban_loss_r_device,
+                            minibeam_water_urban_loss_d_device,
+                            static_cast<int>(minibeam_water_urban_loss_count)};
+                        // One accepted Urban step is one actual transport/loss
+                        // step. Sample once using the pre-step energy, cache the
+                        // result, then commit it after loss succeeds. Subsequent
+                        // steps use the actual post-loss energy, including
+                        // fluctuations, rather than a residual-range predictor.
+                        const float requested_geom = sycl::fmin(
+                            minibeam_water_primary_urban_max_step_mm, step_mm);
+                        water_urban_accepted_step =
+                            water_urban_v2_propose_and_sample(
+                                Direction3F{direction_x, direction_y, direction_z},
+                                energy_MeV, 6, 12,
+                                minibeam_water_primary_urban_max_step_mm,
+                                requested_geom, position_x_mm, position_y_mm,
+                                position_z_mm, direction_x, direction_y, direction_z,
+                                water_urban_voxel_geometry ? water_voxel.safety.box_x0 : voxel_min_x_mm,
+                                water_urban_voxel_geometry ? water_voxel.safety.box_x1 : voxel_max_x_mm,
+                                water_urban_voxel_geometry ? water_voxel.safety.box_y0 : voxel_min_y_mm,
+                                water_urban_voxel_geometry ? water_voxel.safety.box_y1 : voxel_max_y_mm,
+                                water_urban_voxel_geometry ? water_voxel.safety.box_z0 : 0.0F,
+                                water_urban_voxel_geometry ? water_voxel.safety.box_z1 : phantom_length_mm,
+                                !water_urban_seen_segment ||
+                                    (water_urban_voxel_geometry && water_urban_at_boundary),
+                                water_urban_proposed_state,
+                                water_urban_preflight_table,
+                                minibeam_water_urban_zeff_f,
+                                minibeam_water_urban_radlen_mm_f, 1.0F,
+                                spot_seed, rng_history,
+                                static_cast<std::uint64_t>(steps), 0U, 70U,
+                                water_urban_voxel_geometry ? water_voxel.face_distance : -1.0F);
+                        int reason = urban_step_field_reason(
+                            water_urban_accepted_step);
+                        bool dust_complete = false;
+                        if (reason == 0) {
+                            reason = urban_step_progress_reason(
+                                water_urban_accepted_step, 0.0F, step_mm,
+                                requested_geom, dust_complete);
+                        }
+                        if (reason != 0 || dust_complete) {
+                            urban_record_first_failure(
+                                minibeam_event_counts_device, rng_history,
+                                static_cast<std::uint64_t>(steps), 0U,
+                                reason != 0 ? reason : 6);
+                            break; // fail before any loss/scoring; never use the old macro step
+                        }
+                        urban_macro_range_mm =
+                            water_urban_accepted_step.current_range_mm;
+                        urban_true_path_mm =
+                            water_urban_accepted_step.final_true_path_mm;
+                        urban_geom_path_mm =
+                            water_urban_accepted_step.final_geom_path_mm;
+                        // Match G4VEnergyLossProcess::AlongStepDoIt: reaching
+                        // the active range consumes all remaining kinetic energy
+                        // before fluctuation sampling.
+                        urban_range_limited = water_urban_accepted_step.range_terminal;
+                        urban_preflight_valid = true;
+                        accepted_loss_path_mm = urban_true_path_mm;
+                        step_mm = urban_geom_path_mm;
+                    }
                     if (enable_energy_straggling && enable_step_stable_straggling) {
                         stable_straggling.prepare_step(
-                            step_mm, phantom_length_mm - position_z_mm);
+                            accepted_loss_path_mm,
+                            phantom_length_mm - position_z_mm);
                     }
 
                     bool inelastic_this_step = false;
@@ -6210,7 +6376,8 @@ template<int EmMode>
                                         spot_seed, rng_history, nuclear_tau_rng_step++, 8);
                                 }
                                 const bool collision = consume_schneider_optical_depth_segment(
-                                    nuclear_tau_remaining, nuclear_tau_active, step_mm, macro_tot, u_nuc);
+                                    nuclear_tau_remaining, nuclear_tau_active,
+                                    accepted_loss_path_mm, macro_tot, u_nuc);
                                 bool elastic_branch = false;
                                 if (collision && elastic_armed && macro_tot > 0.0F) {
                                     const float u_br_el = rng::uniform01(
@@ -6259,7 +6426,7 @@ template<int EmMode>
                             atomic_track_length(
                                 primary_voxel_track_length_device[voxel_index]);
                         atomic_track_length.fetch_add(
-                            static_cast<DoseAtomicT>(step_mm));
+                            static_cast<DoseAtomicT>(accepted_loss_path_mm));
                     }
 
                     float mean_loss_MeV = 0.0F;
@@ -6267,9 +6434,11 @@ template<int EmMode>
                         // The unified loss sampler computes the physical mean below.
                         // This separate query is needed only by the optional audit.
                         if ((kProductionPrimaryPath ? nullptr : primary_loss_query_audit))
-                            mean_loss_MeV=unified_primary_state.mean(energy_MeV,step_mm);
+                            mean_loss_MeV=unified_primary_state.mean(
+                                energy_MeV, accepted_loss_path_mm);
                     } else if (ct_primary_midpoint_stopping && (kProductionPrimaryPath || use_schneider_stopping) && in_ct) {
-                        mean_loss_MeV=midpoint_continuous_energy_loss(energy_MeV,step_mm,
+                        mean_loss_MeV=midpoint_continuous_energy_loss(
+                            energy_MeV, accepted_loss_path_mm,
                             stopping_power_MeV_per_mm,[&](float mid_energy) {
                                 const float f=(mid_energy*inverse_mass_number-schneider_sp_e_min)*schneider_sp_inv_dE;
                                 const int i=sycl::clamp(static_cast<int>(sycl::floor(f)),0,static_cast<int>(schneider_sp_energies)-2);
@@ -6283,7 +6452,8 @@ template<int EmMode>
                         const auto end_energy_MeVu = csda_energy_after_distance_device(
                             primary_csda_energy_grid_device, primary_water_sp_device,
                             primary_csda_a1_device,
-                            table_size, energy_MeVu, step_mm, primary_mass_number);
+                            table_size, energy_MeVu, accepted_loss_path_mm,
+                            primary_mass_number);
                         mean_loss_MeV = sycl::clamp(
                             energy_MeV -
                                 static_cast<float>(primary_mass_number) * end_energy_MeVu,
@@ -6292,7 +6462,8 @@ template<int EmMode>
                                (!use_ct_mass_sp || !in_ct)) {
                         const auto mid_energy_MeV = sycl::fmax(
                             minimum_table_energy * static_cast<float>(primary_mass_number),
-                            energy_MeV - 0.5F * stopping_power_MeV_per_mm * step_mm);
+                            energy_MeV - 0.5F * stopping_power_MeV_per_mm *
+                                             accepted_loss_path_mm);
                         const auto mid_energy_MeVu = mid_energy_MeV * inverse_mass_number;
                         const auto mid_floating_index =
                             (mid_energy_MeVu - minimum_table_energy) * inverse_table_step;
@@ -6308,9 +6479,10 @@ template<int EmMode>
                              mid_fraction * (primary_water_sp_device[mid_index + 1] -
                                              primary_water_sp_device[mid_index])) *
                             sycl::fmax(local_density_g_per_cm3, 1.0e-6F);
-                        mean_loss_MeV = mid_sp * step_mm;
+                        mean_loss_MeV = mid_sp * accepted_loss_path_mm;
                     } else {
-                        mean_loss_MeV = stopping_power_MeV_per_mm * step_mm;
+                        mean_loss_MeV = stopping_power_MeV_per_mm *
+                                        accepted_loss_path_mm;
                     }
                     auto deposited_MeV = sycl::fmin(mean_loss_MeV, energy_MeV);
 
@@ -6328,7 +6500,7 @@ template<int EmMode>
                         energy_sum.fetch_add(static_cast<std::uint64_t>(mean_loss_MeV*1.0e6F+0.5F));
                     }
 
-                    if (enable_energy_straggling && !unified_em) {
+                    if (enable_energy_straggling && !unified_em && !urban_range_limited) {
                         // Explicit smoke hybrid: retain the existing Gaussian
                         // only for f<1e-4; never substitute it for missing energy
                         // coverage or other out-of-domain package queries.
@@ -6336,7 +6508,8 @@ template<int EmMode>
                             (!fluct_fraction_hybrid || mean_loss_MeV / energy_MeV >= 1.0e-4F)) {
                             const auto fluct_coordinate = fluct_fraction_axis
                                 ? mean_loss_MeV / energy_MeV
-                                : local_density_g_per_cm3 * step_mm / 10.0F;
+                                : local_density_g_per_cm3 *
+                                      accepted_loss_path_mm / 10.0F;
                             if (fluct_fraction_axis && mean_loss_MeV > 0 &&
                                 (energy_MeVu < fluct_energy_device[0] ||
                                  energy_MeVu > fluct_energy_device[fluct_energy_count-1] ||
@@ -6371,7 +6544,8 @@ template<int EmMode>
                             ion_effective_charge_device(primary_atomic_number, energy_MeVu);
                         const auto variance_MeV2 =
                             condensed_total_loss_variance_with_mass_MeV2_device(
-                                energy_MeV, primary_rest_mass_MeV, effective_charge, step_mm,
+                                energy_MeV, primary_rest_mass_MeV,
+                                effective_charge, accepted_loss_path_mm,
                                 local_density_g_per_cm3);
                         if (enable_step_stable_straggling) {
                             if (!stable_straggling.block_active) {
@@ -6387,10 +6561,12 @@ template<int EmMode>
                                 const auto gauss =
                                     sycl::sqrt(-2.0F * sycl::log(u0)) * sycl::cos(two_pi * u1);
                                 stable_straggling.begin_block(
-                                    mean_loss_MeV, variance_MeV2, step_mm, local_scale, gauss,
+                                    mean_loss_MeV, variance_MeV2,
+                                    accepted_loss_path_mm, local_scale, gauss,
                                     energy_MeV, u2, straggling_sampler);
                             }
-                            deposited_MeV = stable_straggling.consume_loss(step_mm, energy_MeV);
+                            deposited_MeV = stable_straggling.consume_loss(
+                                accepted_loss_path_mm, energy_MeV);
                         } else {
                             const auto u0 = sycl::fmax(
                                 rng::uniform01(spot_seed, rng_history, steps, 0), 1.0e-12F);
@@ -6407,12 +6583,26 @@ template<int EmMode>
                         }
                     }
 
-                    float em_continuous_sampled_MeV = 0.0F;
+                    if (urban_range_limited) deposited_MeV = energy_MeV;
+                    float em_continuous_sampled_MeV =
+                        urban_range_limited ? energy_MeV : 0.0F;
                     float em_delta_sampled_MeV = 0.0F;
-                    if(unified_em){
-                        auto draw=unified_em_loss(unified_primary_state,unified_primary_clock,energy_MeV,step_mm,unified_primary_rate,unified_primary_distance,enable_energy_straggling,unified_primary_pre,unified_uniform);
+                    if(unified_em && !urban_range_limited){
+                        auto draw=unified_em_loss(
+                            unified_primary_state, unified_primary_clock,
+                            energy_MeV, accepted_loss_path_mm,
+                            unified_primary_rate, unified_primary_distance,
+                            enable_energy_straggling, unified_primary_pre,
+                            unified_uniform);
                         if(!draw.valid){
-                            record_unified_em_failure(unified_failure_count,unified_failure_records,20+static_cast<int>(draw.failure_stage),unified_primary_state.section,primary_atomic_number,primary_mass_number,energy_MeV,local_density_g_per_cm3,step_mm,draw.mean,draw.delta_mean,draw.delta_variance);
+                            record_unified_em_failure(
+                                unified_failure_count, unified_failure_records,
+                                20 + static_cast<int>(draw.failure_stage),
+                                unified_primary_state.section,
+                                primary_atomic_number, primary_mass_number,
+                                energy_MeV, local_density_g_per_cm3,
+                                accepted_loss_path_mm, draw.mean,
+                                draw.delta_mean, draw.delta_variance);
                             unified_count(0);break;}
                         deposited_MeV=draw.loss;unified_count(1);unified_count(3,draw.proposed);unified_count(4,draw.accepted);
                         unified_count(5,static_cast<std::uint64_t>(draw.continuous*1e6f));unified_count(6,static_cast<std::uint64_t>(draw.delta*1e6f));
@@ -6573,6 +6763,10 @@ template<int EmMode>
                                                 static_cast<T>(relocated));
                                         };
                                         add_delta(voxel_dose_device + target);
+                                        if ((!kProductionPrimaryPath && enable_charged_origin_voxel_scoring))
+                                            add_delta(charged_origin_voxel_dose_device + target);
+                                        if ((!kProductionPrimaryPath && enable_minibeam_component_voxel_scoring))
+                                            add_delta(minibeam_component_voxel_dose_device + target);
                                         if (dz >= 0 &&
                                             dz < static_cast<int>(
                                                      number_of_bins)) {
@@ -6583,16 +6777,17 @@ template<int EmMode>
                                             }
                                         }
                                     } else {
-                                        delta_tail_escaped_scorer_MeV +=
-                                            relocated;
                                         water_physical_escape_MeV += relocated;
                                     }
                                 } else {
-                                    delta_tail_escaped_scorer_MeV += relocated;
                                     water_physical_escape_MeV += relocated;
                                 }
                             }
                         }
+                        // Escaping packet/photon energy is absent from deposition
+                        // and must be returned through the history escape ledger.
+                        // Count it once; physical escape is not an outside-grid deposit.
+                        history_water_electron_escaped_MeV += water_physical_escape_MeV;
                     }
                     if(use_material_ct && in_ct && deposited_MeV>0) {
                         auto count=[&](int slot,std::uint64_t value) {
@@ -7667,26 +7862,23 @@ template<int EmMode>
                         else if (enable_minibeam &&
                             minibeam_water_primary_urban_v2 &&
                             !in_ct && !in_insert && slab_layer_count == 0) {
-                            // Research-only table-driven Geant4-11.3.2 Urban
-                            // for primary C12 in Water_75eV. Transport steps
-                            // are subdivided to the Urban max step (0.05 mm,
-                            // matching the TOPAS water MaxStepSize); loss and
-                            // straggling still use the full step_mm, so only
-                            // direction/displacement change vs FE-tail.
+                            // Table-driven Geant4-11.3.2 Urban for primary
+                            // C12 in Water_75eV. Loss/rate consumers use the
+                            // accepted true path; positions use accepted g.
                             // Plane records use endpoint projection and never
                             // alter transport (observation-only); the bias vs
                             // a true crossing is O(segment^2), ~1e-4 mm here.
-                            UrbanV2LossTable water_urban_table{
-                                minibeam_water_urban_loss_e_device,
-                                minibeam_water_urban_loss_r_device,
-                                minibeam_water_urban_loss_d_device,
-                                static_cast<int>(
-                                    minibeam_water_urban_loss_count)};
+                            const UrbanV2LossTable water_urban_table =
+                                water_urban_preflight_table;
                             auto segment_direction = Direction3F{
                                 direction_x, direction_y, direction_z};
                             auto segment_offset = Direction3F{
                                 0.0F, 0.0F, 0.0F};
                             auto traversed_mm = 0.0F;
+                            auto traversed_true_mm = 0.0F;
+                            auto actual_true_path_mm = 0.0F;
+                            auto actual_geom_path_mm = 0.0F;
+                            bool actual_range_terminal = false;
                             std::uint32_t segment_index = 0U;
                             const bool first_water_segment =
                                 !water_urban_seen_segment;
@@ -7739,29 +7931,9 @@ template<int EmMode>
                                     position_y_mm + segment_offset.y;
                                 const auto seg_start_z =
                                     position_z_mm + segment_offset.z;
-                                const auto seg_e = sycl::fmax(
-                                    energy_cutoff_MeV,
-                                    energy_MeV - traversed_mm / step_mm *
-                                                     deposited_MeV);
-                                const auto urban_scatter =
-                                    water_urban_v2_propose_and_sample(
-                                        segment_direction, seg_e, 6, 12,
-                                        minibeam_water_primary_urban_max_step_mm,
-                                        segment_mm, seg_start_x, seg_start_y,
-                                        seg_start_z, segment_direction.x,
-                                        segment_direction.y,
-                                        segment_direction.z, voxel_min_x_mm,
-                                        voxel_max_x_mm, voxel_min_y_mm,
-                                        voxel_max_y_mm, 0.0F,
-                                        phantom_length_mm,
-                                        first_water_segment &&
-                                            segment_index == 0U,
-                                        water_urban_state, water_urban_table,
-                                        minibeam_water_urban_zeff_f,
-                                        minibeam_water_urban_radlen_mm_f, 1.0F,
-                                        spot_seed, rng_history,
-                                        static_cast<std::uint64_t>(steps), segment_index,
-                                        70U);
+                                const auto seg_e = energy_MeV;
+                                const auto urban_scatter = water_urban_accepted_step;
+                                water_urban_state = water_urban_proposed_state;
                                 // Fix B5/C2.3: full accepted-step contract.
                                 // Field checks (reason 1-5,8), progress
                                 // (6/7/sub-ulp), numeric-guard counting.
@@ -7817,6 +7989,10 @@ template<int EmMode>
                                         break;
                                     }
                                     if (subulp_complete) {
+                                        actual_true_path_mm =
+                                            accepted_loss_path_mm;
+                                        actual_geom_path_mm =
+                                            macro_geom_ceiling_mm;
                                         traversed_mm = step_mm;
                                         if (minibeam_event_counts_device !=
                                             nullptr) {
@@ -7869,13 +8045,13 @@ template<int EmMode>
                                             const auto residual_path =
                                                 (plane_depth_mm - seg_end_z) /
                                                 urban_scatter.direction.z;
-                                            const auto step_fraction =
-                                                sycl::clamp(
-                                                    (traversed_mm +
-                                                     urban_scatter
-                                                         .final_geom_path_mm) /
-                                                        step_mm,
-                                                    0.0F, 1.0F);
+                                            const float crossing_fraction = sycl::clamp(
+                                                (plane_depth_mm - seg_start_z) /
+                                                    (seg_end_z - seg_start_z),
+                                                0.0F, 1.0F);
+                                            const auto energy_at_crossing = sycl::fmax(
+                                                0.0F, energy_MeV -
+                                                    crossing_fraction * deposited_MeV);
                                             candidate_record.history =
                                                 global_history;
                                             candidate_record.particle_id =
@@ -7894,10 +8070,8 @@ template<int EmMode>
                                             candidate_record.depth_mm =
                                                 plane_depth_mm;
                                             candidate_record
-                                                .kinetic_energy_MeV = sycl::fmax(
-                                                0.0F, energy_MeV -
-                                                          step_fraction *
-                                                              deposited_MeV);
+                                                .kinetic_energy_MeV =
+                                                energy_at_crossing;
                                             candidate_record.weight = 1.0F;
                                             candidate_record.x_mm =
                                                 seg_end_x +
@@ -7930,19 +8104,73 @@ template<int EmMode>
                                     segment_direction.z *
                                         urban_scatter.final_geom_path_mm +
                                     urban_scatter.displacement_mm.z;
+                                actual_true_path_mm +=
+                                    urban_scatter.final_true_path_mm;
+                                actual_geom_path_mm +=
+                                    urban_scatter.final_geom_path_mm;
+                                traversed_true_mm +=
+                                    urban_scatter.final_true_path_mm;
                                 segment_direction = urban_scatter.direction;
                                 traversed_mm +=
                                     urban_scatter.final_geom_path_mm;
                                 ++segment_index;
+                                if (urban_scatter.range_terminal) {
+                                    actual_range_terminal = true;
+                                    break;
+                                }
                             }
                             water_urban_seen_segment = true;
                             direction_x = segment_direction.x;
                             direction_y = segment_direction.y;
                             direction_z = segment_direction.z;
+                            if (urban_preflight_valid) {
+                                const float true_tolerance = sycl::fmax(
+                                    8.0F * urban_ulp_above(
+                                        urban_true_path_mm),
+                                    1.0e-6F * urban_true_path_mm);
+                                const float geom_tolerance = sycl::fmax(
+                                    8.0F * urban_ulp_above(
+                                        urban_geom_path_mm),
+                                    1.0e-6F * urban_geom_path_mm);
+                                if (sycl::fabs(actual_true_path_mm -
+                                               urban_true_path_mm) >
+                                        true_tolerance ||
+                                    sycl::fabs(actual_geom_path_mm -
+                                               urban_geom_path_mm) >
+                                        geom_tolerance ||
+                                    actual_range_terminal !=
+                                        urban_range_limited) {
+                                    urban_record_first_failure(
+                                        minibeam_event_counts_device,
+                                        rng_history,
+                                        static_cast<std::uint64_t>(steps),
+                                        segment_index, 10);
+                                    energy_MeV = energy_cutoff_MeV;
+                                } else {
+                                    accepted_loss_path_mm =
+                                        actual_true_path_mm;
+                                    urban_true_path_mm =
+                                        actual_true_path_mm;
+                                    urban_geom_path_mm =
+                                        actual_geom_path_mm;
+                                    urban_range_limited =
+                                        actual_range_terminal;
+                                    step_mm = urban_geom_path_mm;
+                                }
+                            }
                             water_scattering_displacement = Direction3F{
-                                segment_offset.x - seg_dir_x * step_mm,
-                                segment_offset.y - seg_dir_y * step_mm,
-                                segment_offset.z - seg_dir_z * step_mm};
+                                segment_offset.x - seg_dir_x *
+                                    (urban_preflight_valid
+                                         ? urban_geom_path_mm
+                                         : step_mm),
+                                segment_offset.y - seg_dir_y *
+                                    (urban_preflight_valid
+                                         ? urban_geom_path_mm
+                                         : step_mm),
+                                segment_offset.z - seg_dir_z *
+                                    (urban_preflight_valid
+                                         ? urban_geom_path_mm
+                                         : step_mm)};
                         }
 #endif
                         else {
@@ -8024,6 +8252,13 @@ template<int EmMode>
                         water_scattering_displacement.y;
                     position_z_mm += seg_dir_z * step_mm +
                         water_scattering_displacement.z;
+                    if (water_urban_voxel_geometry) {
+                        water_urban_at_boundary = urban_reaches_voxel_face(
+                            step_mm, water_voxel.face_distance);
+                        const auto p = urban_voxel_snap_endpoint(water_voxel, step_mm,
+                            {position_x_mm, position_y_mm, position_z_mm});
+                        position_x_mm=p.x; position_y_mm=p.y; position_z_mm=p.z;
+                    }
                     if (enable_minibeam_primary_c12_roi_scoring &&
                         minibeam_spatial_audit_device != nullptr &&
                         voxel_index >= 0 && step_mm > 0.0F) {
@@ -8180,7 +8415,7 @@ template<int EmMode>
                         }
                     }
 
-                    if (absolute_direction_z >= 1.0e-6F) {
+                    if (!water_urban_voxel_geometry && absolute_direction_z >= 1.0e-6F) {
                         const auto boundary_z_mm =
                             direction_z < 0.0F
                                 ? static_cast<float>(bin) * depth_bin_width_mm
@@ -8191,7 +8426,7 @@ template<int EmMode>
                                 direction_z > 0.0F ? 1.0e30F : -1.0e30F);
                         }
                     }
-                    if ((kProductionPrimaryPath || enable_voxel_scoring) && (!kProductionPrimaryPath && voxel_scorer_clamps_transport) &&
+                    if ((kProductionPrimaryPath || enable_voxel_scoring) && (!kProductionPrimaryPath && voxel_scorer_clamps_transport && !water_urban_voxel_geometry) &&
                         absolute_direction_x >= 1.0e-6F) {
                         const auto boundary_x_mm =
                             voxel_min_x_mm +
@@ -8203,7 +8438,7 @@ template<int EmMode>
                                 direction_x > 0.0F ? 1.0e30F : -1.0e30F);
                         }
                     }
-                    if ((kProductionPrimaryPath || enable_voxel_scoring) && (!kProductionPrimaryPath && voxel_scorer_clamps_transport) &&
+                    if ((kProductionPrimaryPath || enable_voxel_scoring) && (!kProductionPrimaryPath && voxel_scorer_clamps_transport && !water_urban_voxel_geometry) &&
                         absolute_direction_y >= 1.0e-6F) {
                         const auto boundary_y_mm =
                             voxel_min_y_mm +
@@ -8689,7 +8924,9 @@ template<int EmMode>
 
                 if(unified_em && CARBON_EM_LOCAL_AUDIT)flush_unified_em_audit(unified_audit,unified_primary_audit);
 
-                const bool inside_phantom = !unified_primary_escaped_ct && (position_z_mm >= 0.0F && position_z_mm < phantom_length_mm);
+                const bool inside_phantom = !unified_primary_escaped_ct &&
+                    !water_urban_escaped_geometry &&
+                    (position_z_mm >= 0.0F && position_z_mm < phantom_length_mm);
 
                 if (energy_MeV > 0.0F && energy_MeV <= energy_cutoff_MeV && inside_phantom) {
                     const auto cutoff_energy_MeV = energy_MeV;

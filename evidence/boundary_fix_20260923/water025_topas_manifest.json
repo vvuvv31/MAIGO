@@ -1,0 +1,99 @@
+{
+  "schema": "maigo.dose-scorer-manifest.v1",
+  "role": "topas",
+  "runs": [
+    {
+      "effective_config": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/boundary_fix_20260923/topas_step025_s1/input.txt",
+      "config_sha256": "ee3c1de347271b34f22ec72627fc25ad8c8531b54df59cd62dfea49d949803b1",
+      "history_count": 20000,
+      "random_seed": 2026092401,
+      "normalization": "Gy_sum_over_histories",
+      "density_g_cm3": 1.0,
+      "dose_sha256": "72393b217fdece7abc65ec34a6ce1381ce9bb773c8fd45e7f31572148e86e6ea",
+      "geometry_axes": {
+        "transverse": "x",
+        "depth": "z",
+        "slab_thickness": "y"
+      },
+      "origin_centers_mm": [
+        -49.95,
+        0.125
+      ],
+      "shape_xz": [
+        1000,
+        600
+      ],
+      "spacing_xz_mm": [
+        0.1,
+        0.25
+      ],
+      "slab_thickness_mm": 100.0,
+      "dose_bin": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/boundary_fix_20260923/topas_step025_s1/dose.bin",
+      "dose_header": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/boundary_fix_20260923/topas_step025_s1/dose.binheader",
+      "header_sha256": "0d4bbadeabde4033c2b99dfed00802fef28635782f2dbba5e891a4b5d5d20560",
+      "element_type": "float64"
+    },
+    {
+      "effective_config": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/boundary_fix_20260923/topas_step025_s2/input.txt",
+      "config_sha256": "616ffbc462c19a2c24698d0f5cbd8088ea484fd15a002d34f377c06add5dad36",
+      "history_count": 20000,
+      "random_seed": 2026092402,
+      "normalization": "Gy_sum_over_histories",
+      "density_g_cm3": 1.0,
+      "dose_sha256": "64f0cd30e10afdefbfca35aa26243e20f2e3cd436c436e7d346e351ef95810c0",
+      "geometry_axes": {
+        "transverse": "x",
+        "depth": "z",
+        "slab_thickness": "y"
+      },
+      "origin_centers_mm": [
+        -49.95,
+        0.125
+      ],
+      "shape_xz": [
+        1000,
+        600
+      ],
+      "spacing_xz_mm": [
+        0.1,
+        0.25
+      ],
+      "slab_thickness_mm": 100.0,
+      "dose_bin": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/boundary_fix_20260923/topas_step025_s2/dose.bin",
+      "dose_header": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/boundary_fix_20260923/topas_step025_s2/dose.binheader",
+      "header_sha256": "7d35a0c4fe0b562aa56c09f3c54783fd38ddfa9ebec91255d9c6295a56a3604f",
+      "element_type": "float64"
+    },
+    {
+      "effective_config": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/boundary_fix_20260923/topas_step025_s3/input.txt",
+      "config_sha256": "f09e89ba6d21b45912732d20ef0c053ce036087be8166b362cf2056614dada0e",
+      "history_count": 20000,
+      "random_seed": 2026092403,
+      "normalization": "Gy_sum_over_histories",
+      "density_g_cm3": 1.0,
+      "dose_sha256": "8caa39f2aa72738cb7ea6e80eafb3a54ea638cbaf0aa6d7ddf45cfba9e5a47c9",
+      "geometry_axes": {
+        "transverse": "x",
+        "depth": "z",
+        "slab_thickness": "y"
+      },
+      "origin_centers_mm": [
+        -49.95,
+        0.125
+      ],
+      "shape_xz": [
+        1000,
+        600
+      ],
+      "spacing_xz_mm": [
+        0.1,
+        0.25
+      ],
+      "slab_thickness_mm": 100.0,
+      "dose_bin": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/boundary_fix_20260923/topas_step025_s3/dose.bin",
+      "dose_header": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/boundary_fix_20260923/topas_step025_s3/dose.binheader",
+      "header_sha256": "326fb06856a754074bd6efbd3cac8d3dd5f0cd7e478b6255019684d27685ee0b",
+      "element_type": "float64"
+    }
+  ]
+}

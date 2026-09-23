@@ -1,0 +1,12 @@
+{
+  "source": "/mnt/sdb/wuwei/MAIGO_pristine",
+  "head": "d51e599e8bf5c566a8e6e96580e7c000e1745e41",
+  "overlaid_tracked_files": [
+    "benchmark/carbonminibeam/test_urban_localize.cpp",
+    "include/carbon/stopping_power.hpp",
+    "src/detail/sycl_device_math.inc",
+    "src/stopping_power.cpp",
+    "src/transport_sycl.cpp",
+    ""
+  ]
+}

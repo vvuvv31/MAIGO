@@ -1,0 +1,200 @@
+{
+  "binary_sha256": "003249623e409d386c85c233c27286d57a8ffca15271acfd20aeede3050ab4f5",
+  "runs": [
+    {
+      "name": "percent1_cu0025_s1",
+      "histories": 1000000,
+      "seed": 2026092801,
+      "wall_s": 104.4952977700159,
+      "quality": {
+        "schema_version": 3,
+        "status": "non_production",
+        "run_mode": "research",
+        "accepted": true,
+        "absolute_physical_energy_residual_MeV": 45221.252553,
+        "physical_relative_energy_residual": 1.5073539898e-05,
+        "absolute_accounting_energy_residual_MeV": 45221.252553,
+        "accounting_relative_energy_residual": 1.5073539898e-05,
+        "absolute_energy_residual_MeV": 45221.252553,
+        "relative_energy_residual": 1.5073539898e-05,
+        "topas_reference_energy_sink_active": false,
+        "queue_overflow_count": 0,
+        "queue_overflow_energy_MeV": 0,
+        "voxel_scored_energy_MeV": 331103223.893,
+        "in_grid_deposited_energy_MeV": 331103222.35,
+        "outside_grid_deposited_energy_MeV": 0,
+        "grid_split_closure_ratio": 1.00000008638,
+        "voxel_to_ingrid_ratio": 1.00000000466,
+        "voxel_to_total_deposited_ratio": 1.00000009104,
+        "failures": [],
+        "approximations": [
+          {
+            "code": "condensed_delta_partition_v1",
+            "message": "User-authorized 2026-09-15: aggregate Gamma delta loss from pinned first/second moments, analytic Poisson partition mean correction, no discrete delta clock; local deposition, 1% combined mean-loss guard; higher spectrum moments and patient BODY Gamma not validated",
+            "value": 1,
+            "limit": 0
+          },
+          {
+            "code": "unified_material_em_accuracy_pending",
+            "message": "Unified water/Schneider EM for all 18 charged ions; local delta deposition; production execution authorized, density cut-onset and patient Gamma accuracy gates remain pending",
+            "value": 1,
+            "limit": 0
+          },
+          {
+            "code": "minibeam_copper_candidate",
+            "message": "Copper primary EM, MCS, general-ion elastic and C12 INCLXX are active; charged INCLXX products use charge-scaled C12 stopping in the remaining Copper, while neutral products are an explicit beamline energy sink. The 3 cm TOPAS comparison is an initial research validation, not a production neutral-dose model",
+            "value": 1,
+            "limit": 0
+          },
+          {
+            "code": "water_topas_match_pending",
+            "message": "Shared CINEL03 framework enabled for production; water TOPAS accuracy validation remains incomplete",
+            "value": 1,
+            "limit": 0
+          }
+        ]
+      },
+      "urban": {
+        "fatal": 0,
+        "cap": 0,
+        "guard": 0,
+        "subulp": 0,
+        "first_failure_claim": 0,
+        "first_failure_history": 0,
+        "first_failure_outer_step": 0,
+        "first_failure_segment": 0,
+        "first_failure_reason": 0
+      }
+    },
+    {
+      "name": "percent1_cu0025_s2",
+      "histories": 1000000,
+      "seed": 2026092802,
+      "wall_s": 103.95954939699732,
+      "quality": {
+        "schema_version": 3,
+        "status": "non_production",
+        "run_mode": "research",
+        "accepted": true,
+        "absolute_physical_energy_residual_MeV": 45267.9120803,
+        "physical_relative_energy_residual": 1.5089262024e-05,
+        "absolute_accounting_energy_residual_MeV": 45267.9120803,
+        "accounting_relative_energy_residual": 1.5089262024e-05,
+        "absolute_energy_residual_MeV": 45267.9120803,
+        "relative_energy_residual": 1.5089262024e-05,
+        "topas_reference_energy_sink_active": false,
+        "queue_overflow_count": 0,
+        "queue_overflow_energy_MeV": 0,
+        "voxel_scored_energy_MeV": 332372723.659,
+        "in_grid_deposited_energy_MeV": 332372722.741,
+        "outside_grid_deposited_energy_MeV": 0,
+        "grid_split_closure_ratio": 1.00000008968,
+        "voxel_to_ingrid_ratio": 1.00000000276,
+        "voxel_to_total_deposited_ratio": 1.00000009244,
+        "failures": [],
+        "approximations": [
+          {
+            "code": "condensed_delta_partition_v1",
+            "message": "User-authorized 2026-09-15: aggregate Gamma delta loss from pinned first/second moments, analytic Poisson partition mean correction, no discrete delta clock; local deposition, 1% combined mean-loss guard; higher spectrum moments and patient BODY Gamma not validated",
+            "value": 1,
+            "limit": 0
+          },
+          {
+            "code": "unified_material_em_accuracy_pending",
+            "message": "Unified water/Schneider EM for all 18 charged ions; local delta deposition; production execution authorized, density cut-onset and patient Gamma accuracy gates remain pending",
+            "value": 1,
+            "limit": 0
+          },
+          {
+            "code": "minibeam_copper_candidate",
+            "message": "Copper primary EM, MCS, general-ion elastic and C12 INCLXX are active; charged INCLXX products use charge-scaled C12 stopping in the remaining Copper, while neutral products are an explicit beamline energy sink. The 3 cm TOPAS comparison is an initial research validation, not a production neutral-dose model",
+            "value": 1,
+            "limit": 0
+          },
+          {
+            "code": "water_topas_match_pending",
+            "message": "Shared CINEL03 framework enabled for production; water TOPAS accuracy validation remains incomplete",
+            "value": 1,
+            "limit": 0
+          }
+        ]
+      },
+      "urban": {
+        "fatal": 0,
+        "cap": 0,
+        "guard": 0,
+        "subulp": 0,
+        "first_failure_claim": 0,
+        "first_failure_history": 0,
+        "first_failure_outer_step": 0,
+        "first_failure_segment": 0,
+        "first_failure_reason": 0
+      }
+    },
+    {
+      "name": "percent1_cu0025_s3",
+      "histories": 1000000,
+      "seed": 2026092803,
+      "wall_s": 104.12900465202983,
+      "quality": {
+        "schema_version": 3,
+        "status": "non_production",
+        "run_mode": "research",
+        "accepted": true,
+        "absolute_physical_energy_residual_MeV": 45634.8355513,
+        "physical_relative_energy_residual": 1.52115518777e-05,
+        "absolute_accounting_energy_residual_MeV": 45634.8355513,
+        "accounting_relative_energy_residual": 1.52115518777e-05,
+        "absolute_energy_residual_MeV": 45634.8355513,
+        "relative_energy_residual": 1.52115518777e-05,
+        "topas_reference_energy_sink_active": false,
+        "queue_overflow_count": 0,
+        "queue_overflow_energy_MeV": 0,
+        "voxel_scored_energy_MeV": 335115773.006,
+        "in_grid_deposited_energy_MeV": 335115771.258,
+        "outside_grid_deposited_energy_MeV": 0,
+        "grid_split_closure_ratio": 1.00000008863,
+        "voxel_to_ingrid_ratio": 1.00000000522,
+        "voxel_to_total_deposited_ratio": 1.00000009384,
+        "failures": [],
+        "approximations": [
+          {
+            "code": "condensed_delta_partition_v1",
+            "message": "User-authorized 2026-09-15: aggregate Gamma delta loss from pinned first/second moments, analytic Poisson partition mean correction, no discrete delta clock; local deposition, 1% combined mean-loss guard; higher spectrum moments and patient BODY Gamma not validated",
+            "value": 1,
+            "limit": 0
+          },
+          {
+            "code": "unified_material_em_accuracy_pending",
+            "message": "Unified water/Schneider EM for all 18 charged ions; local delta deposition; production execution authorized, density cut-onset and patient Gamma accuracy gates remain pending",
+            "value": 1,
+            "limit": 0
+          },
+          {
+            "code": "minibeam_copper_candidate",
+            "message": "Copper primary EM, MCS, general-ion elastic and C12 INCLXX are active; charged INCLXX products use charge-scaled C12 stopping in the remaining Copper, while neutral products are an explicit beamline energy sink. The 3 cm TOPAS comparison is an initial research validation, not a production neutral-dose model",
+            "value": 1,
+            "limit": 0
+          },
+          {
+            "code": "water_topas_match_pending",
+            "message": "Shared CINEL03 framework enabled for production; water TOPAS accuracy validation remains incomplete",
+            "value": 1,
+            "limit": 0
+          }
+        ]
+      },
+      "urban": {
+        "fatal": 0,
+        "cap": 0,
+        "guard": 0,
+        "subulp": 0,
+        "first_failure_claim": 0,
+        "first_failure_history": 0,
+        "first_failure_outer_step": 0,
+        "first_failure_segment": 0,
+        "first_failure_reason": 0
+      }
+    }
+  ]
+}

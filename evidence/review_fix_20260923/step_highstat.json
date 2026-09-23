@@ -1,0 +1,297 @@
+{
+  "scope": "GPU step 0.05 -> 0.025 mm, 3 x 20000, same source records and seeds; rerandomized trajectories per step",
+  "rows": [
+    {
+      "depth_mm": 19.875,
+      "fwhm_mm": {
+        "fixed": {
+          "mean": 0.5052058958485744,
+          "se": 0.0015981961724462084,
+          "values": [
+            0.5076367544104972,
+            0.5057879336760216,
+            0.5021929994592046
+          ]
+        },
+        "step025": {
+          "mean": 0.5050406085777038,
+          "se": 0.0016982381135479197,
+          "values": [
+            0.5077768926372455,
+            0.5054150509017143,
+            0.5019298821941515
+          ]
+        }
+      },
+      "relative_change": -0.0003271681352668976
+    },
+    {
+      "depth_mm": 39.875,
+      "fwhm_mm": {
+        "fixed": {
+          "mean": 0.5059664578149632,
+          "se": 0.003673901545309454,
+          "values": [
+            0.5095181487117042,
+            0.509761229614653,
+            0.4986199951185324
+          ]
+        },
+        "step025": {
+          "mean": 0.5010030785050731,
+          "se": 0.0037543315111004806,
+          "values": [
+            0.5051242440691821,
+            0.5043782119665903,
+            0.4935067794794471
+          ]
+        }
+      },
+      "relative_change": -0.009809700293819223
+    },
+    {
+      "depth_mm": 59.875,
+      "fwhm_mm": {
+        "fixed": {
+          "mean": 0.5678812731394686,
+          "se": 0.00428734918705285,
+          "values": [
+            0.5711613352476614,
+            0.5731023632459381,
+            0.5593801209248062
+          ]
+        },
+        "step025": {
+          "mean": 0.5608951529218222,
+          "se": 0.006407727840944234,
+          "values": [
+            0.5737081837756115,
+            0.5547045275264669,
+            0.5542727474633882
+          ]
+        }
+      },
+      "relative_change": -0.012302078881778145
+    },
+    {
+      "depth_mm": 79.875,
+      "fwhm_mm": {
+        "fixed": {
+          "mean": 0.7183830839211108,
+          "se": 0.004011396736523216,
+          "values": [
+            0.7263455509133765,
+            0.715252292005087,
+            0.7135514088448692
+          ]
+        },
+        "step025": {
+          "mean": 0.705984679447799,
+          "se": 0.0017592802163884406,
+          "values": [
+            0.7093102131790745,
+            0.7033265133200864,
+            0.7053173118442363
+          ]
+        }
+      },
+      "relative_change": -0.017258764509930136
+    },
+    {
+      "depth_mm": 99.875,
+      "fwhm_mm": {
+        "fixed": {
+          "mean": 0.988975501215069,
+          "se": 0.00961470918003377,
+          "values": [
+            0.9772203606722428,
+            1.008032236898741,
+            0.9816739060742237
+          ]
+        },
+        "step025": {
+          "mean": 0.9517689335469344,
+          "se": 0.010168578162656362,
+          "values": [
+            0.9314326801654433,
+            0.962103025152651,
+            0.9617710953227088
+          ]
+        }
+      },
+      "relative_change": -0.03762132390784423
+    },
+    {
+      "depth_mm": 119.875,
+      "fwhm_mm": {
+        "fixed": {
+          "mean": 1.310900735390452,
+          "se": 0.005815098372968284,
+          "values": [
+            1.3012020797865573,
+            1.3101914512370927,
+            1.321308675147706
+          ]
+        },
+        "step025": {
+          "mean": 1.260342624523088,
+          "se": 0.010347737762737508,
+          "values": [
+            1.2763130898686974,
+            1.2637563044257294,
+            1.240958479274837
+          ]
+        }
+      },
+      "relative_change": -0.03856745938303663
+    }
+  ],
+  "R80": {
+    "fixed": {
+      "mean": 126.93530401264672,
+      "se": 0.002037308062356223,
+      "values": [
+        126.93444934739576,
+        126.93228112311931,
+        126.93918156742512
+      ]
+    },
+    "step025": {
+      "mean": 126.92922348773044,
+      "se": 0.0011652398178052354,
+      "values": [
+        126.92996201865226,
+        126.92693999120795,
+        126.93076845333111
+      ]
+    }
+  },
+  "quality": [
+    {
+      "schema_version": 3,
+      "status": "non_production",
+      "run_mode": "research",
+      "accepted": true,
+      "absolute_physical_energy_residual_MeV": 1.27856445312,
+      "physical_relative_energy_residual": 2.13094075521e-08,
+      "absolute_accounting_energy_residual_MeV": 1.27856445312,
+      "accounting_relative_energy_residual": 2.13094075521e-08,
+      "absolute_energy_residual_MeV": 1.27856445312,
+      "relative_energy_residual": 2.13094075521e-08,
+      "topas_reference_energy_sink_active": false,
+      "queue_overflow_count": 0,
+      "queue_overflow_energy_MeV": 0,
+      "voxel_scored_energy_MeV": 60000004.0835,
+      "in_grid_deposited_energy_MeV": 60000003.4199,
+      "outside_grid_deposited_energy_MeV": 0,
+      "grid_split_closure_ratio": 1.00000003569,
+      "voxel_to_ingrid_ratio": 1.00000001106,
+      "voxel_to_total_deposited_ratio": 1.00000004675,
+      "failures": [],
+      "approximations": [
+        {
+          "code": "condensed_delta_partition_v1",
+          "message": "User-authorized 2026-09-15: aggregate Gamma delta loss from pinned first/second moments, analytic Poisson partition mean correction, no discrete delta clock; local deposition, 1% combined mean-loss guard; higher spectrum moments and patient BODY Gamma not validated",
+          "value": 1,
+          "limit": 0
+        },
+        {
+          "code": "unified_material_em_accuracy_pending",
+          "message": "Unified water/Schneider EM for all 18 charged ions; local delta deposition; production execution authorized, density cut-onset and patient Gamma accuracy gates remain pending",
+          "value": 1,
+          "limit": 0
+        },
+        {
+          "code": "water_topas_match_pending",
+          "message": "Shared CINEL03 framework enabled for production; water TOPAS accuracy validation remains incomplete",
+          "value": 1,
+          "limit": 0
+        }
+      ]
+    },
+    {
+      "schema_version": 3,
+      "status": "non_production",
+      "run_mode": "research",
+      "accepted": true,
+      "absolute_physical_energy_residual_MeV": 0.09814453125,
+      "physical_relative_energy_residual": 1.6357421875e-09,
+      "absolute_accounting_energy_residual_MeV": 0.09814453125,
+      "accounting_relative_energy_residual": 1.6357421875e-09,
+      "absolute_energy_residual_MeV": 0.09814453125,
+      "relative_energy_residual": 1.6357421875e-09,
+      "topas_reference_energy_sink_active": false,
+      "queue_overflow_count": 0,
+      "queue_overflow_energy_MeV": 0,
+      "voxel_scored_energy_MeV": 60000001.966,
+      "in_grid_deposited_energy_MeV": 60000001.6483,
+      "outside_grid_deposited_energy_MeV": 0,
+      "grid_split_closure_ratio": 1.00000002911,
+      "voxel_to_ingrid_ratio": 1.00000000529,
+      "voxel_to_total_deposited_ratio": 1.0000000344,
+      "failures": [],
+      "approximations": [
+        {
+          "code": "condensed_delta_partition_v1",
+          "message": "User-authorized 2026-09-15: aggregate Gamma delta loss from pinned first/second moments, analytic Poisson partition mean correction, no discrete delta clock; local deposition, 1% combined mean-loss guard; higher spectrum moments and patient BODY Gamma not validated",
+          "value": 1,
+          "limit": 0
+        },
+        {
+          "code": "unified_material_em_accuracy_pending",
+          "message": "Unified water/Schneider EM for all 18 charged ions; local delta deposition; production execution authorized, density cut-onset and patient Gamma accuracy gates remain pending",
+          "value": 1,
+          "limit": 0
+        },
+        {
+          "code": "water_topas_match_pending",
+          "message": "Shared CINEL03 framework enabled for production; water TOPAS accuracy validation remains incomplete",
+          "value": 1,
+          "limit": 0
+        }
+      ]
+    },
+    {
+      "schema_version": 3,
+      "status": "non_production",
+      "run_mode": "research",
+      "accepted": true,
+      "absolute_physical_energy_residual_MeV": 1.21508789062,
+      "physical_relative_energy_residual": 2.02514648437e-08,
+      "absolute_accounting_energy_residual_MeV": 1.21508789062,
+      "accounting_relative_energy_residual": 2.02514648437e-08,
+      "absolute_energy_residual_MeV": 1.21508789062,
+      "relative_energy_residual": 2.02514648437e-08,
+      "topas_reference_energy_sink_active": false,
+      "queue_overflow_count": 0,
+      "queue_overflow_energy_MeV": 0,
+      "voxel_scored_energy_MeV": 60000002.6782,
+      "in_grid_deposited_energy_MeV": 60000002.8475,
+      "outside_grid_deposited_energy_MeV": 0,
+      "grid_split_closure_ratio": 1.00000002721,
+      "voxel_to_ingrid_ratio": 0.999999997178,
+      "voxel_to_total_deposited_ratio": 1.00000002439,
+      "failures": [],
+      "approximations": [
+        {
+          "code": "condensed_delta_partition_v1",
+          "message": "User-authorized 2026-09-15: aggregate Gamma delta loss from pinned first/second moments, analytic Poisson partition mean correction, no discrete delta clock; local deposition, 1% combined mean-loss guard; higher spectrum moments and patient BODY Gamma not validated",
+          "value": 1,
+          "limit": 0
+        },
+        {
+          "code": "unified_material_em_accuracy_pending",
+          "message": "Unified water/Schneider EM for all 18 charged ions; local delta deposition; production execution authorized, density cut-onset and patient Gamma accuracy gates remain pending",
+          "value": 1,
+          "limit": 0
+        },
+        {
+          "code": "water_topas_match_pending",
+          "message": "Shared CINEL03 framework enabled for production; water TOPAS accuracy validation remains incomplete",
+          "value": 1,
+          "limit": 0
+        }
+      ]
+    }
+  ]
+}

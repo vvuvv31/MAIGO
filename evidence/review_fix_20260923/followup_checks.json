@@ -1,0 +1,211 @@
+{
+  "scope": "Small smoke checks; 2000 histories at each step ceiling is not a precision convergence certificate",
+  "runs": {
+    "terminal": {
+      "histories": 200,
+      "quality_accepted": true,
+      "failures": [],
+      "energy_residual_relative": 1.32471153438e-07,
+      "energy_MeV": {
+        "E_in_MeV": 187504.402002,
+        "E_dep_MeV": 128143.357017,
+        "E_esc_MeV": 59361.0698242,
+        "E_beamline_MeV": 0,
+        "E_untracked_MeV": 0
+      },
+      "urban": {
+        "fatal": 0,
+        "cap": 0,
+        "guard": 0,
+        "subulp": 0,
+        "first_failure_claim": 0,
+        "first_failure_history": 0,
+        "first_failure_outer_step": 0,
+        "first_failure_segment": 0,
+        "first_failure_reason": 0
+      }
+    },
+    "step050": {
+      "histories": 2000,
+      "quality_accepted": true,
+      "failures": [],
+      "energy_residual_relative": 5.94482421875e-08,
+      "energy_MeV": {
+        "E_in_MeV": 6000000,
+        "E_dep_MeV": 5999999.64331,
+        "E_esc_MeV": 0,
+        "E_beamline_MeV": 0,
+        "E_untracked_MeV": 0
+      },
+      "urban": {
+        "fatal": 0,
+        "cap": 0,
+        "guard": 0,
+        "subulp": 0,
+        "first_failure_claim": 0,
+        "first_failure_history": 0,
+        "first_failure_outer_step": 0,
+        "first_failure_segment": 0,
+        "first_failure_reason": 0
+      }
+    },
+    "step025": {
+      "histories": 2000,
+      "quality_accepted": true,
+      "failures": [],
+      "energy_residual_relative": 3.85335286458e-08,
+      "energy_MeV": {
+        "E_in_MeV": 6000000,
+        "E_dep_MeV": 6000000.2312,
+        "E_esc_MeV": 0,
+        "E_beamline_MeV": 0,
+        "E_untracked_MeV": 0
+      },
+      "urban": {
+        "fatal": 0,
+        "cap": 0,
+        "guard": 0,
+        "subulp": 0,
+        "first_failure_claim": 0,
+        "first_failure_history": 0,
+        "first_failure_outer_step": 0,
+        "first_failure_segment": 0,
+        "first_failure_reason": 0
+      }
+    },
+    "fullchain_s1": {
+      "histories": 250000,
+      "quality_accepted": true,
+      "failures": [],
+      "energy_residual_relative": 1.5999161996e-05,
+      "energy_MeV": {
+        "E_in_MeV": 750016764.204,
+        "E_dep_MeV": 83094232.4198,
+        "E_esc_MeV": 302.595458984,
+        "E_beamline_MeV": 666934228.828,
+        "E_untracked_MeV": 0
+      },
+      "urban": {
+        "fatal": 0,
+        "cap": 0,
+        "guard": 0,
+        "subulp": 0,
+        "first_failure_claim": 0,
+        "first_failure_history": 0,
+        "first_failure_outer_step": 0,
+        "first_failure_segment": 0,
+        "first_failure_reason": 0
+      }
+    },
+    "fullchain_s2": {
+      "histories": 250000,
+      "quality_accepted": true,
+      "failures": [],
+      "energy_residual_relative": 1.60320967653e-05,
+      "energy_MeV": {
+        "E_in_MeV": 749967781.642,
+        "E_dep_MeV": 82385735.8095,
+        "E_esc_MeV": 345.560506433,
+        "E_beamline_MeV": 667593723.828,
+        "E_untracked_MeV": 0
+      },
+      "urban": {
+        "fatal": 0,
+        "cap": 0,
+        "guard": 0,
+        "subulp": 0,
+        "first_failure_claim": 0,
+        "first_failure_history": 0,
+        "first_failure_outer_step": 0,
+        "first_failure_segment": 0,
+        "first_failure_reason": 0
+      }
+    },
+    "fullchain_s3": {
+      "histories": 250000,
+      "quality_accepted": true,
+      "failures": [],
+      "energy_residual_relative": 1.58246387749e-05,
+      "energy_MeV": {
+        "E_in_MeV": 749994161.708,
+        "E_dep_MeV": 83427950.1165,
+        "E_esc_MeV": 1557.05361938,
+        "E_beamline_MeV": 666576522.924,
+        "E_untracked_MeV": 0
+      },
+      "urban": {
+        "fatal": 0,
+        "cap": 0,
+        "guard": 0,
+        "subulp": 0,
+        "first_failure_claim": 0,
+        "first_failure_history": 0,
+        "first_failure_outer_step": 0,
+        "first_failure_segment": 0,
+        "first_failure_reason": 0
+      }
+    }
+  },
+  "step_comparison": {
+    "gpu": {
+      "runs": [
+        {
+          "step_mm": 0.05,
+          "R80_mm": 126.92482615574825,
+          "energy_MeV_per_primary": 3000.0000903974383,
+          "fwhm_mm": [
+            0.4812741923295241,
+            0.7398683611490486,
+            1.2671196166924157
+          ]
+        },
+        {
+          "step_mm": 0.025,
+          "R80_mm": 126.92727991842776,
+          "energy_MeV_per_primary": 3000.000232106934,
+          "fwhm_mm": [
+            0.4857699403238613,
+            0.7587120571020518,
+            1.0414421493111317
+          ]
+        }
+      ],
+      "R80_change_mm": 0.0024537626795080314,
+      "FWHM_change_relative": [
+        0.009341344426918585,
+        0.02546898467686609,
+        -0.17810273348176375
+      ]
+    },
+    "topas": {
+      "runs": [
+        {
+          "step_mm": 0.05,
+          "R80_mm": 126.9238145422838,
+          "energy_MeV_per_primary": 2999.929396904715,
+          "fwhm_mm": [
+            0.49217688049422537,
+            0.7400944047664504,
+            1.1478472023025823
+          ]
+        },
+        {
+          "step_mm": 0.025,
+          "R80_mm": 126.89929436407014,
+          "energy_MeV_per_primary": 2999.9290056088635,
+          "fwhm_mm": [
+            0.48959289061672473,
+            0.7421254387591021,
+            1.1626977868692259
+          ]
+        }
+      ],
+      "R80_change_mm": -0.024520178213649046,
+      "FWHM_change_relative": [
+        -0.005250124457097383,
+        0.0027442904304790794,
+        0.012937771279011079
+      ]
+    }
+  }
+}

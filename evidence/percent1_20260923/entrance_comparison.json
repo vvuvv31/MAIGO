@@ -1,0 +1,131 @@
+{
+  "scope": "Matched Cu 0.05 mm, same input physics/geometry; TOPAS 2M entrance-only run and GPU matched 1M s1. No cross-engine history joins. S(E)/abs(dz) is an unrestricted C12 diagnostic proxy, not scored total dose. Statistical errors here are independent-history approximations.",
+  "regions": {
+    "all": {
+      "TOPAS": {
+        "count": 257093,
+        "fluence_per_source": 0.1285465,
+        "fluence_SE": 0.00023666674601404187,
+        "mean_MeVu": 215.49715571766023,
+        "mean_MeVu_SE": 0.11300237907180753,
+        "quantiles_MeVu": [
+          30.34408,
+          119.17033333333333,
+          246.39416666666668,
+          252.21083333333334,
+          255.7458333333333
+        ],
+        "theta_x_mrad_RMS": 10.691048886005094,
+        "S_over_dz_per_source": 2.275867885836764,
+        "S_over_dz_SE": 0.005665270666936181
+      },
+      "GPU": {
+        "count": 128543,
+        "fluence_per_source": 0.128543,
+        "fluence_SE": 0.00033469343756787343,
+        "mean_MeVu": 215.15717451089242,
+        "mean_MeVu_SE": 0.16084815951229883,
+        "quantiles_MeVu": [
+          30.13499277750651,
+          117.86567382812501,
+          246.372802734375,
+          252.21766764322916,
+          255.7244930013021
+        ],
+        "theta_x_mrad_RMS": 10.74163960303339,
+        "S_over_dz_per_source": 2.2877037257108075,
+        "S_over_dz_SE": 0.008147483985094246
+      },
+      "GPU_vs_TOPAS": {
+        "fluence_difference_percent": -0.002722750133232754,
+        "mean_energy_difference_MeVu": -0.33998120676781696,
+        "mean_energy_difference_SE": 0.19657484094965566,
+        "proxy_difference_percent": 0.5200583016132354
+      }
+    },
+    "peak": {
+      "TOPAS": {
+        "count": 59491,
+        "fluence_per_source": 0.0297455,
+        "fluence_SE": 0.00012012640265518234,
+        "mean_MeVu": 242.47038040754063,
+        "mean_MeVu_SE": 0.104478524345669,
+        "quantiles_MeVu": [
+          99.55000000000001,
+          234.34416666666667,
+          248.61249999999998,
+          252.90083333333334,
+          256.17008333333337
+        ],
+        "theta_x_mrad_RMS": 3.139440435773518,
+        "S_over_dz_per_source": 0.43569284021251536,
+        "S_over_dz_SE": 0.0018832941593345347
+      },
+      "GPU": {
+        "count": 29677,
+        "fluence_per_source": 0.029677,
+        "fluence_SE": 0.00016969465422045563,
+        "mean_MeVu": 242.54273973276938,
+        "mean_MeVu_SE": 0.1462142311141278,
+        "quantiles_MeVu": [
+          104.45372314453125,
+          234.33409830729167,
+          248.64518229166666,
+          252.9087890625,
+          256.14029215494793
+        ],
+        "theta_x_mrad_RMS": 3.1387545979003604,
+        "S_over_dz_per_source": 0.4354889398565609,
+        "S_over_dz_SE": 0.002774815759468993
+      },
+      "GPU_vs_TOPAS": {
+        "fluence_difference_percent": -0.2302869341581193,
+        "mean_energy_difference_MeVu": 0.07235932522874577,
+        "mean_energy_difference_SE": 0.1797063255140011,
+        "proxy_difference_percent": -0.04679910641979257
+      }
+    },
+    "valley": {
+      "TOPAS": {
+        "count": 4624,
+        "fluence_per_source": 0.002312,
+        "fluence_SE": 3.396067325598831e-05,
+        "mean_MeVu": 105.64262786188006,
+        "mean_MeVu_SE": 0.7671953499886524,
+        "quantiles_MeVu": [
+          9.631595,
+          37.419625,
+          104.06791666666666,
+          177.48791666666668,
+          217.04704166666625
+        ],
+        "theta_x_mrad_RMS": 26.608609026296705,
+        "S_over_dz_per_source": 0.08024111676939347,
+        "S_over_dz_SE": 0.001639636914466302
+      },
+      "GPU": {
+        "count": 2394,
+        "fluence_per_source": 0.002394,
+        "fluence_SE": 4.88699167586768e-05,
+        "mean_MeVu": 104.7427154941766,
+        "mean_MeVu_SE": 1.0634862728964192,
+        "quantiles_MeVu": [
+          10.848267409006754,
+          36.21486892700195,
+          101.22746276855469,
+          177.55300292968752,
+          217.54191914876301
+        ],
+        "theta_x_mrad_RMS": 26.619707269782577,
+        "S_over_dz_per_source": 0.08238849274053436,
+        "S_over_dz_SE": 0.002194143887293248
+      },
+      "GPU_vs_TOPAS": {
+        "fluence_difference_percent": 3.5467128027681705,
+        "mean_energy_difference_MeVu": -0.8999123677034646,
+        "mean_energy_difference_SE": 1.311332054699849,
+        "proxy_difference_percent": 2.676154143407894
+      }
+    }
+  }
+}

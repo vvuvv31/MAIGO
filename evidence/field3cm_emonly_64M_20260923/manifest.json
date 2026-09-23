@@ -1,0 +1,1128 @@
+{
+  "extension_commit": "4654e68a57cee4ab3737797a2707c5e54ba39d47",
+  "gpu_binary_sha256": "003249623e409d386c85c233c27286d57a8ffca15271acfd20aeede3050ab4f5",
+  "topas_version": "4.2.3",
+  "geant4_version": "11.3.2",
+  "cases": {
+    "topas_b1": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_20260923/cases/topas_b1",
+    "gpu_b1": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_20260923/cases/field3cm_emonly_b1/field3cm_emonly_b1.yaml",
+    "topas_b2": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_20260923/cases/topas_b2",
+    "gpu_b2": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_20260923/cases/field3cm_emonly_b2/field3cm_emonly_b2.yaml",
+    "topas_b3": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_20260923/cases/topas_b3",
+    "gpu_b3": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_20260923/cases/field3cm_emonly_b3/field3cm_emonly_b3.yaml",
+    "topas_b4": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_20260923/cases/topas_b4",
+    "gpu_b4": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_20260923/cases/field3cm_emonly_b4/field3cm_emonly_b4.yaml",
+    "topas_b5": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b5",
+    "gpu_b5": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/field3cm_emonly_64m_b5/field3cm_emonly_64m_b5.yaml",
+    "topas_b6": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b6",
+    "gpu_b6": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/field3cm_emonly_64m_b6/field3cm_emonly_64m_b6.yaml",
+    "topas_b7": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b7",
+    "gpu_b7": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/field3cm_emonly_64m_b7/field3cm_emonly_64m_b7.yaml",
+    "topas_b8": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b8",
+    "gpu_b8": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/field3cm_emonly_64m_b8/field3cm_emonly_64m_b8.yaml",
+    "topas_b9": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b9",
+    "gpu_b9": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/field3cm_emonly_64m_b9/field3cm_emonly_64m_b9.yaml",
+    "topas_b10": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b10",
+    "gpu_b10": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/field3cm_emonly_64m_b10/field3cm_emonly_64m_b10.yaml",
+    "topas_b11": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b11",
+    "gpu_b11": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/field3cm_emonly_64m_b11/field3cm_emonly_64m_b11.yaml",
+    "topas_b12": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b12",
+    "gpu_b12": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/field3cm_emonly_64m_b12/field3cm_emonly_64m_b12.yaml",
+    "topas_b13": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b13",
+    "gpu_b13": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/field3cm_emonly_64m_b13/field3cm_emonly_64m_b13.yaml",
+    "topas_b14": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b14",
+    "gpu_b14": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/field3cm_emonly_64m_b14/field3cm_emonly_64m_b14.yaml",
+    "topas_b15": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b15",
+    "gpu_b15": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/field3cm_emonly_64m_b15/field3cm_emonly_64m_b15.yaml",
+    "topas_b16": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b16",
+    "gpu_b16": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/field3cm_emonly_64m_b16/field3cm_emonly_64m_b16.yaml",
+    "topas_b17": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b17",
+    "gpu_b17": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/field3cm_emonly_64m_b17/field3cm_emonly_64m_b17.yaml",
+    "topas_b18": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b18",
+    "gpu_b18": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/field3cm_emonly_64m_b18/field3cm_emonly_64m_b18.yaml",
+    "topas_b19": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b19",
+    "gpu_b19": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/field3cm_emonly_64m_b19/field3cm_emonly_64m_b19.yaml",
+    "topas_b20": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b20",
+    "gpu_b20": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/field3cm_emonly_64m_b20/field3cm_emonly_64m_b20.yaml"
+  },
+  "histories_per_batch": 3200000,
+  "batches": 20,
+  "histories_per_engine": 64000000,
+  "plan": {
+    "spots": 256,
+    "axis_centers_mm": [
+      -15,
+      -13,
+      -11,
+      -9,
+      -7,
+      -5,
+      -3,
+      -1,
+      1,
+      3,
+      5,
+      7,
+      9,
+      11,
+      13,
+      15
+    ],
+    "spacing_mm": 2,
+    "energy_MeVu": 250,
+    "energy_total_MeV": 3000,
+    "per_spot_histories_per_batch": 12500,
+    "per_spot_histories_total": 250000
+  },
+  "source_audit": {
+    "histories": 27118,
+    "weights": [
+      100,
+      101,
+      102,
+      103,
+      104,
+      105,
+      106,
+      107,
+      108,
+      109,
+      110,
+      111,
+      112,
+      100,
+      101,
+      102,
+      103,
+      104,
+      105,
+      106,
+      107,
+      108,
+      109,
+      110,
+      111,
+      112,
+      100,
+      101,
+      102,
+      103,
+      104,
+      105,
+      106,
+      107,
+      108,
+      109,
+      110,
+      111,
+      112,
+      100,
+      101,
+      102,
+      103,
+      104,
+      105,
+      106,
+      107,
+      108,
+      109,
+      110,
+      111,
+      112,
+      100,
+      101,
+      102,
+      103,
+      104,
+      105,
+      106,
+      107,
+      108,
+      109,
+      110,
+      111,
+      112,
+      100,
+      101,
+      102,
+      103,
+      104,
+      105,
+      106,
+      107,
+      108,
+      109,
+      110,
+      111,
+      112,
+      100,
+      101,
+      102,
+      103,
+      104,
+      105,
+      106,
+      107,
+      108,
+      109,
+      110,
+      111,
+      112,
+      100,
+      101,
+      102,
+      103,
+      104,
+      105,
+      106,
+      107,
+      108,
+      109,
+      110,
+      111,
+      112,
+      100,
+      101,
+      102,
+      103,
+      104,
+      105,
+      106,
+      107,
+      108,
+      109,
+      110,
+      111,
+      112,
+      100,
+      101,
+      102,
+      103,
+      104,
+      105,
+      106,
+      107,
+      108,
+      109,
+      110,
+      111,
+      112,
+      100,
+      101,
+      102,
+      103,
+      104,
+      105,
+      106,
+      107,
+      108,
+      109,
+      110,
+      111,
+      112,
+      100,
+      101,
+      102,
+      103,
+      104,
+      105,
+      106,
+      107,
+      108,
+      109,
+      110,
+      111,
+      112,
+      100,
+      101,
+      102,
+      103,
+      104,
+      105,
+      106,
+      107,
+      108,
+      109,
+      110,
+      111,
+      112,
+      100,
+      101,
+      102,
+      103,
+      104,
+      105,
+      106,
+      107,
+      108,
+      109,
+      110,
+      111,
+      112,
+      100,
+      101,
+      102,
+      103,
+      104,
+      105,
+      106,
+      107,
+      108,
+      109,
+      110,
+      111,
+      112,
+      100,
+      101,
+      102,
+      103,
+      104,
+      105,
+      106,
+      107,
+      108,
+      109,
+      110,
+      111,
+      112,
+      100,
+      101,
+      102,
+      103,
+      104,
+      105,
+      106,
+      107,
+      108,
+      109,
+      110,
+      111,
+      112,
+      100,
+      101,
+      102,
+      103,
+      104,
+      105,
+      106,
+      107,
+      108,
+      109,
+      110,
+      111,
+      112,
+      100,
+      101,
+      102,
+      103,
+      104,
+      105,
+      106,
+      107,
+      108,
+      109,
+      110,
+      111,
+      112,
+      100,
+      101,
+      102,
+      103,
+      104,
+      105,
+      106,
+      107,
+      108
+    ],
+    "threads": 128,
+    "plane_world_y_mm": -449.1
+  },
+  "matched": {
+    "materials": [
+      "Copper",
+      "Air",
+      "Water_75eV"
+    ],
+    "water_I_eV": 75,
+    "nuclear_reactions": false,
+    "copper_max_step_mm": 0.05,
+    "water_urban_max_step_mm": 0.05,
+    "production_cut_mm": 0.05,
+    "water_dimensions_mm": [
+      100,
+      100,
+      250
+    ],
+    "water_internal_daughter_volumes": false,
+    "grid_shape_depth_y_x": [
+      1000,
+      1,
+      1000
+    ],
+    "grid_spacing_x_y_depth_mm": [
+      0.1,
+      100,
+      0.25
+    ],
+    "beam_optics": {
+      "energy": "3000",
+      "sigma_x_mm": "2.5061",
+      "sigma_xp_rad": "0.0051",
+      "corr_x": "0.4177",
+      "sigma_y_mm": "2.4669",
+      "sigma_yp_rad": "0.0041",
+      "corr_y": "0.8069",
+      "energy_spread_percent": "1.2"
+    },
+    "source_to_isocenter_mm": 450,
+    "virtual_magnets_mm": [
+      6228.28,
+      7007.64
+    ],
+    "slit_width_mm": 0.5,
+    "slit_pitch_mm": 3.6,
+    "slits": 15,
+    "copper_thickness_mm": 60,
+    "copper_radius_mm": 60,
+    "water_entrance_world_y_mm": 60,
+    "physical_dose_normalization": "Gy per original source history"
+  },
+  "implementation_limits": [
+    "GPU local electron deposition remains the established main comparison mode; TOPAS transports electrons explicitly.",
+    "GPU upstream/slit air uses mean energy loss without air MSC.",
+    "GPU terminal tracking cutoff is 0.1 MeV total; TOPAS has no identical total-ion cutoff in this input.",
+    "Same physical input parameters do not imply identical approximate transport algorithms; this run measures that discrepancy."
+  ],
+  "files": [
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_20260923/cases/field3cm_emonly_b1/field3cm_emonly_b1.yaml",
+      "sha256": "8264518f74499032dedadd15f728d35a42a20b7d0ffc8b48b5bfd058f48c6866"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_20260923/cases/field3cm_emonly_b2/field3cm_emonly_b2.yaml",
+      "sha256": "30b31540f46df66017107a474af261efc6739528153d6d4ac1fb097a9ae0947b"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_20260923/cases/field3cm_emonly_b3/field3cm_emonly_b3.yaml",
+      "sha256": "c4438eb07a49c807a5f34a01feab2f95a77032bd255c4a92a47713ef727a091b"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_20260923/cases/field3cm_emonly_b4/field3cm_emonly_b4.yaml",
+      "sha256": "88a77cd6ded215adc1954ae7a3ab17352aa0ddda99329427aee1653f330f6350"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_20260923/cases/field3cm_emonly_smoke/field3cm_emonly_smoke.yaml",
+      "sha256": "46bee7f6dc8ab15cda4de43c35d2eaaba6903037f787bc581561bc66c917a865"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_20260923/cases/source_audit/aperture.txt",
+      "sha256": "2be715bfd0003bbff6c95cc1f3895f4eb1d2bb835d472cc50cbda2bc560596aa"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_20260923/cases/source_audit/run.txt",
+      "sha256": "94d52762b878c6654d43e232f15570a925453516e3e9b3a3ea47cd3556bdc5b2"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_20260923/cases/source_audit/run1.txt",
+      "sha256": "11e4bf2dec2b665083e130be83a92903490760e55c2d991effd445d840a3bc04"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_20260923/cases/source_audit/run_energy_scan.txt",
+      "sha256": "05d185d6912cacbb462a2b64a1633fb7e35e428908bba4764423844945f575af"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_20260923/cases/topas_b1/aperture.txt",
+      "sha256": "2be715bfd0003bbff6c95cc1f3895f4eb1d2bb835d472cc50cbda2bc560596aa"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_20260923/cases/topas_b1/run.txt",
+      "sha256": "c6835a325d7bc25f78adee349787faa5d4d48f551994cb0d2d48a6045899f316"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_20260923/cases/topas_b1/run1.txt",
+      "sha256": "11e4bf2dec2b665083e130be83a92903490760e55c2d991effd445d840a3bc04"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_20260923/cases/topas_b1/run_energy_scan.txt",
+      "sha256": "05d185d6912cacbb462a2b64a1633fb7e35e428908bba4764423844945f575af"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_20260923/cases/topas_b2/aperture.txt",
+      "sha256": "2be715bfd0003bbff6c95cc1f3895f4eb1d2bb835d472cc50cbda2bc560596aa"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_20260923/cases/topas_b2/run.txt",
+      "sha256": "2ea5ea2793582d4a50df82461a6e3e8add734cc9301b84acbda3e9e9b4529280"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_20260923/cases/topas_b2/run1.txt",
+      "sha256": "11e4bf2dec2b665083e130be83a92903490760e55c2d991effd445d840a3bc04"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_20260923/cases/topas_b2/run_energy_scan.txt",
+      "sha256": "05d185d6912cacbb462a2b64a1633fb7e35e428908bba4764423844945f575af"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_20260923/cases/topas_b3/aperture.txt",
+      "sha256": "2be715bfd0003bbff6c95cc1f3895f4eb1d2bb835d472cc50cbda2bc560596aa"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_20260923/cases/topas_b3/run.txt",
+      "sha256": "6a407d943537c12eeb812c09ba334bc3838cedae1fac1fe5d21a33df538fe43f"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_20260923/cases/topas_b3/run1.txt",
+      "sha256": "11e4bf2dec2b665083e130be83a92903490760e55c2d991effd445d840a3bc04"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_20260923/cases/topas_b3/run_energy_scan.txt",
+      "sha256": "05d185d6912cacbb462a2b64a1633fb7e35e428908bba4764423844945f575af"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_20260923/cases/topas_b4/aperture.txt",
+      "sha256": "2be715bfd0003bbff6c95cc1f3895f4eb1d2bb835d472cc50cbda2bc560596aa"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_20260923/cases/topas_b4/run.txt",
+      "sha256": "22e85ff174b264ba16b54717cbc111ca5681f3f3eb690fd75392646a8b0d5714"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_20260923/cases/topas_b4/run1.txt",
+      "sha256": "11e4bf2dec2b665083e130be83a92903490760e55c2d991effd445d840a3bc04"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_20260923/cases/topas_b4/run_energy_scan.txt",
+      "sha256": "05d185d6912cacbb462a2b64a1633fb7e35e428908bba4764423844945f575af"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_20260923/cases/topas_smoke/aperture.txt",
+      "sha256": "2be715bfd0003bbff6c95cc1f3895f4eb1d2bb835d472cc50cbda2bc560596aa"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_20260923/cases/topas_smoke/run.txt",
+      "sha256": "b7d09cfafd1d088e0f1f0663a7498efd5e4f98e29bf87481d13e48ce6f6b67fc"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_20260923/cases/topas_smoke/run1.txt",
+      "sha256": "11e4bf2dec2b665083e130be83a92903490760e55c2d991effd445d840a3bc04"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_20260923/cases/topas_smoke/run_energy_scan.txt",
+      "sha256": "05d185d6912cacbb462a2b64a1633fb7e35e428908bba4764423844945f575af"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_20260923/inputs/beam_model.csv",
+      "sha256": "4ed9be761f9b2dd164a8e9cf5487d26f10dc56826aa8439d42ca84cb9c8949b7"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_20260923/inputs/source_audit_beam.csv",
+      "sha256": "644326a7f451a1fd9f919ae5027dfb7f7c7b4ae4d4a532d9ea02d541cc3e9c07"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_20260923/inputs/source_audit_spots.csv",
+      "sha256": "4b78c2961398f52ca162c56067e73558b710fe59de382660d71a65a8917ccfc8"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_20260923/inputs/spots_3cm.csv",
+      "sha256": "b35700845c876a40cdab2853b615bfed1f22f163899c20425fffe325528decd7"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b5/run_energy_scan.txt",
+      "sha256": "05d185d6912cacbb462a2b64a1633fb7e35e428908bba4764423844945f575af"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b5/aperture.txt",
+      "sha256": "2be715bfd0003bbff6c95cc1f3895f4eb1d2bb835d472cc50cbda2bc560596aa"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b5/run.txt",
+      "sha256": "bd0ee1d95ae2b42e4e863a9878ae1613704ecc42567b4b5321e2074e7cf585e6"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b5/run1.txt",
+      "sha256": "11e4bf2dec2b665083e130be83a92903490760e55c2d991effd445d840a3bc04"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/field3cm_emonly_64m_b5/field3cm_emonly_64m_b5.yaml",
+      "sha256": "6995ce0525b699b264b2f30f2b6ce70dbebc1e231cc2a4537ef841a74e65bfec"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b6/run_energy_scan.txt",
+      "sha256": "05d185d6912cacbb462a2b64a1633fb7e35e428908bba4764423844945f575af"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b6/aperture.txt",
+      "sha256": "2be715bfd0003bbff6c95cc1f3895f4eb1d2bb835d472cc50cbda2bc560596aa"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b6/run.txt",
+      "sha256": "4a321cf9ceff706ea3f22c286f608c3c4abe31ed937306efd9471bb9ab07fd3c"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b6/run1.txt",
+      "sha256": "11e4bf2dec2b665083e130be83a92903490760e55c2d991effd445d840a3bc04"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/field3cm_emonly_64m_b6/field3cm_emonly_64m_b6.yaml",
+      "sha256": "642ac141e97c7e5b041ced10d04ce8cd491933950a4b58321dce9465ad4fff3e"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b7/run_energy_scan.txt",
+      "sha256": "05d185d6912cacbb462a2b64a1633fb7e35e428908bba4764423844945f575af"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b7/aperture.txt",
+      "sha256": "2be715bfd0003bbff6c95cc1f3895f4eb1d2bb835d472cc50cbda2bc560596aa"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b7/run.txt",
+      "sha256": "171b698944552ecedb758f9b173d59eea96bddf58b0f96c5e5ea0739e8def151"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b7/run1.txt",
+      "sha256": "11e4bf2dec2b665083e130be83a92903490760e55c2d991effd445d840a3bc04"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/field3cm_emonly_64m_b7/field3cm_emonly_64m_b7.yaml",
+      "sha256": "0740ee284de69e7af5575818b0eafdb950f71a10c60a031eeefa23495254347f"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b8/run_energy_scan.txt",
+      "sha256": "05d185d6912cacbb462a2b64a1633fb7e35e428908bba4764423844945f575af"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b8/aperture.txt",
+      "sha256": "2be715bfd0003bbff6c95cc1f3895f4eb1d2bb835d472cc50cbda2bc560596aa"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b8/run.txt",
+      "sha256": "8f225637ae834076253cea5037137645e3267b7e1e599b620fb2ea90b1efab0d"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b8/run1.txt",
+      "sha256": "11e4bf2dec2b665083e130be83a92903490760e55c2d991effd445d840a3bc04"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/field3cm_emonly_64m_b8/field3cm_emonly_64m_b8.yaml",
+      "sha256": "6426f6ac6c869de870fa6fcae4851cc27d710c3682543f48c42ee9ff6660b45c"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b9/run_energy_scan.txt",
+      "sha256": "05d185d6912cacbb462a2b64a1633fb7e35e428908bba4764423844945f575af"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b9/aperture.txt",
+      "sha256": "2be715bfd0003bbff6c95cc1f3895f4eb1d2bb835d472cc50cbda2bc560596aa"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b9/run.txt",
+      "sha256": "0e98dd62c83a252acb64aea29392ffbe278c1de46d73159392505dcd68162a12"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b9/run1.txt",
+      "sha256": "11e4bf2dec2b665083e130be83a92903490760e55c2d991effd445d840a3bc04"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/field3cm_emonly_64m_b9/field3cm_emonly_64m_b9.yaml",
+      "sha256": "77b0a8bd316acee583e81b1afd3cbe00e86217e46f65a5894438d6d21fec2a8f"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b10/run_energy_scan.txt",
+      "sha256": "05d185d6912cacbb462a2b64a1633fb7e35e428908bba4764423844945f575af"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b10/aperture.txt",
+      "sha256": "2be715bfd0003bbff6c95cc1f3895f4eb1d2bb835d472cc50cbda2bc560596aa"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b10/run.txt",
+      "sha256": "6a2e8bcff3eb465d2771d1bb81d963f97a835e57de2aa2fd0b4b6ef09f6bdf1d"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b10/run1.txt",
+      "sha256": "11e4bf2dec2b665083e130be83a92903490760e55c2d991effd445d840a3bc04"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/field3cm_emonly_64m_b10/field3cm_emonly_64m_b10.yaml",
+      "sha256": "9b9477310c8301d27190b5c00f077f0db6a258f7e63eedd4889d0cd3dfc738fe"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b11/run_energy_scan.txt",
+      "sha256": "05d185d6912cacbb462a2b64a1633fb7e35e428908bba4764423844945f575af"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b11/aperture.txt",
+      "sha256": "2be715bfd0003bbff6c95cc1f3895f4eb1d2bb835d472cc50cbda2bc560596aa"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b11/run.txt",
+      "sha256": "fbc02e43459c103fd96a2b5c8e1227287c2a32f91a78dbf4a9b8662a126e7c8b"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b11/run1.txt",
+      "sha256": "11e4bf2dec2b665083e130be83a92903490760e55c2d991effd445d840a3bc04"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/field3cm_emonly_64m_b11/field3cm_emonly_64m_b11.yaml",
+      "sha256": "13b4220ef51e08ae517af2aac5f8108647044fde54939239da8a0005b39a7e3a"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b12/run_energy_scan.txt",
+      "sha256": "05d185d6912cacbb462a2b64a1633fb7e35e428908bba4764423844945f575af"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b12/aperture.txt",
+      "sha256": "2be715bfd0003bbff6c95cc1f3895f4eb1d2bb835d472cc50cbda2bc560596aa"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b12/run.txt",
+      "sha256": "9a90fce9784d7245e92c288573adab617487dc50411372d3fe56582da6912f4e"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b12/run1.txt",
+      "sha256": "11e4bf2dec2b665083e130be83a92903490760e55c2d991effd445d840a3bc04"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/field3cm_emonly_64m_b12/field3cm_emonly_64m_b12.yaml",
+      "sha256": "36c87e052be8ae8a7fdff1c5f10e12f14e46a0e535ffd7dd125feae99b632d86"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b13/run_energy_scan.txt",
+      "sha256": "05d185d6912cacbb462a2b64a1633fb7e35e428908bba4764423844945f575af"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b13/aperture.txt",
+      "sha256": "2be715bfd0003bbff6c95cc1f3895f4eb1d2bb835d472cc50cbda2bc560596aa"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b13/run.txt",
+      "sha256": "44aaa3c4d61c2061204b2fc3818b89f1f22249f276e44f38e4da3a860cc30125"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b13/run1.txt",
+      "sha256": "11e4bf2dec2b665083e130be83a92903490760e55c2d991effd445d840a3bc04"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/field3cm_emonly_64m_b13/field3cm_emonly_64m_b13.yaml",
+      "sha256": "e423ab042375181556b1354d09e0225a5e8150797edf774265426b66c3880b66"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b14/run_energy_scan.txt",
+      "sha256": "05d185d6912cacbb462a2b64a1633fb7e35e428908bba4764423844945f575af"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b14/aperture.txt",
+      "sha256": "2be715bfd0003bbff6c95cc1f3895f4eb1d2bb835d472cc50cbda2bc560596aa"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b14/run.txt",
+      "sha256": "b8ba6cae6fd13634e92eea149fafd47b4e9768ca03a22f1545726147c86e1968"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b14/run1.txt",
+      "sha256": "11e4bf2dec2b665083e130be83a92903490760e55c2d991effd445d840a3bc04"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/field3cm_emonly_64m_b14/field3cm_emonly_64m_b14.yaml",
+      "sha256": "2b99bc2fc03477f55b0e15c8b4900c951bce3629716860c128a75a81b7a66733"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b15/run_energy_scan.txt",
+      "sha256": "05d185d6912cacbb462a2b64a1633fb7e35e428908bba4764423844945f575af"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b15/aperture.txt",
+      "sha256": "2be715bfd0003bbff6c95cc1f3895f4eb1d2bb835d472cc50cbda2bc560596aa"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b15/run.txt",
+      "sha256": "cf4794839cd6d772e01a5e32e7433f0dfc3dda09b4a1e002c723766f4cd3f89c"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b15/run1.txt",
+      "sha256": "11e4bf2dec2b665083e130be83a92903490760e55c2d991effd445d840a3bc04"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/field3cm_emonly_64m_b15/field3cm_emonly_64m_b15.yaml",
+      "sha256": "b0b8ccd89cbed67ca99c6f014711efa38064f99faee3ff1b4c4be4d3c167d4aa"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b16/run_energy_scan.txt",
+      "sha256": "05d185d6912cacbb462a2b64a1633fb7e35e428908bba4764423844945f575af"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b16/aperture.txt",
+      "sha256": "2be715bfd0003bbff6c95cc1f3895f4eb1d2bb835d472cc50cbda2bc560596aa"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b16/run.txt",
+      "sha256": "b9b818a2b9f42f901ef61721c36783a96caae35ea96dfb8a366439f0289629d8"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b16/run1.txt",
+      "sha256": "11e4bf2dec2b665083e130be83a92903490760e55c2d991effd445d840a3bc04"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/field3cm_emonly_64m_b16/field3cm_emonly_64m_b16.yaml",
+      "sha256": "088dcaaf452d0066631755161500db847f6e48843335502b37d645206a951316"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b17/run_energy_scan.txt",
+      "sha256": "05d185d6912cacbb462a2b64a1633fb7e35e428908bba4764423844945f575af"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b17/aperture.txt",
+      "sha256": "2be715bfd0003bbff6c95cc1f3895f4eb1d2bb835d472cc50cbda2bc560596aa"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b17/run.txt",
+      "sha256": "e0511bf42686289d3002a6e0cd34eac42e18c5cb23985a67ced1a0e737a64e90"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b17/run1.txt",
+      "sha256": "11e4bf2dec2b665083e130be83a92903490760e55c2d991effd445d840a3bc04"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/field3cm_emonly_64m_b17/field3cm_emonly_64m_b17.yaml",
+      "sha256": "804ded058eba6bca65b74ce4c6a63d8f20b7a8589e6face7d9e2e1f610fc69d6"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b18/run_energy_scan.txt",
+      "sha256": "05d185d6912cacbb462a2b64a1633fb7e35e428908bba4764423844945f575af"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b18/aperture.txt",
+      "sha256": "2be715bfd0003bbff6c95cc1f3895f4eb1d2bb835d472cc50cbda2bc560596aa"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b18/run.txt",
+      "sha256": "d55bebb3d815c27055dc35a2863fe13f1c0dfff7868f54b84b3458a564f9d3fe"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b18/run1.txt",
+      "sha256": "11e4bf2dec2b665083e130be83a92903490760e55c2d991effd445d840a3bc04"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/field3cm_emonly_64m_b18/field3cm_emonly_64m_b18.yaml",
+      "sha256": "33dab3dbe0ddadd357258728546b1f008320deeffd1dfd6fb55da3f4cb5461ea"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b19/run_energy_scan.txt",
+      "sha256": "05d185d6912cacbb462a2b64a1633fb7e35e428908bba4764423844945f575af"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b19/aperture.txt",
+      "sha256": "2be715bfd0003bbff6c95cc1f3895f4eb1d2bb835d472cc50cbda2bc560596aa"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b19/run.txt",
+      "sha256": "00ed6727ff2e5dfd89470f944437f3b567aa7e53e07c8c5ff9f574f5e3a00a85"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b19/run1.txt",
+      "sha256": "11e4bf2dec2b665083e130be83a92903490760e55c2d991effd445d840a3bc04"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/field3cm_emonly_64m_b19/field3cm_emonly_64m_b19.yaml",
+      "sha256": "bf6000eb4d3e36fcdb757ba15fba9551b4f0a14955fe5df148147d3ec4584415"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b20/run_energy_scan.txt",
+      "sha256": "05d185d6912cacbb462a2b64a1633fb7e35e428908bba4764423844945f575af"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b20/aperture.txt",
+      "sha256": "2be715bfd0003bbff6c95cc1f3895f4eb1d2bb835d472cc50cbda2bc560596aa"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b20/run.txt",
+      "sha256": "ca9adc9dcda799ff8d70e0f0052647999765f2b278694f0c08b96ce3545cfaab"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/topas_b20/run1.txt",
+      "sha256": "11e4bf2dec2b665083e130be83a92903490760e55c2d991effd445d840a3bc04"
+    },
+    {
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_64M_20260923/cases/field3cm_emonly_64m_b20/field3cm_emonly_64m_b20.yaml",
+      "sha256": "62c76d4f37234780f053747012d0abe7ae80673d72b90b5474d52c95a73448c3"
+    }
+  ],
+  "base_evidence": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_20260923",
+  "reused_batches": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "new_batches": [
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20
+  ],
+  "additional_histories_per_engine": 51200000,
+  "mode": "direct_serial",
+  "memory_max_bytes": 30000000000,
+  "reused_dose_files": [
+    {
+      "batch": 1,
+      "engine": "TOPAS",
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_20260923/cases/topas_b1/dose.bin",
+      "bytes": 8000000,
+      "sha256": "4879cc91a35a545ff376b325c09485f2947afe817e630e9ecbc9dce56a9fb98e"
+    },
+    {
+      "batch": 1,
+      "engine": "GPU",
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/field3cm_emonly_b1/dose.raw",
+      "bytes": 4000000,
+      "sha256": "61db868a9c4b1d68af31b8ecb433581df357ff10464deec2b3a7da6584b45ecb"
+    },
+    {
+      "batch": 2,
+      "engine": "TOPAS",
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_20260923/cases/topas_b2/dose.bin",
+      "bytes": 8000000,
+      "sha256": "05a110a3f74a743c1fce3b4070dc60f6501e51c7e7acfe6d9e83ef886feb8274"
+    },
+    {
+      "batch": 2,
+      "engine": "GPU",
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/field3cm_emonly_b2/dose.raw",
+      "bytes": 4000000,
+      "sha256": "f99b95929d93d91529e1a0242b8a50d8c5f913644f031a1b343a3c9d45cad104"
+    },
+    {
+      "batch": 3,
+      "engine": "TOPAS",
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_20260923/cases/topas_b3/dose.bin",
+      "bytes": 8000000,
+      "sha256": "dd0a37837cc940ced272328c04101c86a6413fffb9b147837be069bdf154fe02"
+    },
+    {
+      "batch": 3,
+      "engine": "GPU",
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/field3cm_emonly_b3/dose.raw",
+      "bytes": 4000000,
+      "sha256": "e42a7a9963eab463b97e9219470d5010f5fdef2b2f2034fa88f71d9e9c8eba2a"
+    },
+    {
+      "batch": 4,
+      "engine": "TOPAS",
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_20260923/cases/topas_b4/dose.bin",
+      "bytes": 8000000,
+      "sha256": "4f7699d7c6c638bafc69652c076f0c7b83b18513aea47bae972e9474283421ef"
+    },
+    {
+      "batch": 4,
+      "engine": "GPU",
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/field3cm_emonly_b4/dose.raw",
+      "bytes": 4000000,
+      "sha256": "5e88629f80cc5a3b1327abab17bd0a1d1ee695818dc68ccf281aaaa32a7ce9e3"
+    }
+  ],
+  "runtime_dependencies": [
+    {
+      "config_key": "tps_spots_file",
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_20260923/inputs/spots_3cm.csv",
+      "sha256": "b35700845c876a40cdab2853b615bfed1f22f163899c20425fffe325528decd7",
+      "bytes": 6253,
+      "mtime_ns": 1789646507184674326
+    },
+    {
+      "config_key": "minibeam_water_urban_loss_range_file",
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/active_water005.csv",
+      "sha256": "621e4f91045374fd143cbbf13c2e3dc8fd79e78963532a330854d1056eaac94a",
+      "bytes": 4044186,
+      "mtime_ns": 1790125710778133551
+    },
+    {
+      "config_key": "minibeam_copper_stopping_power_file",
+      "path": "/mnt/sda/wuwei/minibeam_copper_extract_e250/compiled/c12_copper_stopping_geant4_11_3_2.csv",
+      "sha256": "73dd731c4dbb24044a0428c6fb77cb742fe0de48d0fead576fd9618944a0a142",
+      "bytes": 58528,
+      "mtime_ns": 1789646645848661047
+    },
+    {
+      "config_key": "minibeam_copper_loss_range_file",
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/active_copper005.csv",
+      "sha256": "f9e9079557197459276795a052adb49f5e2a2b0edb9800de5d198e06f78ea86d",
+      "bytes": 4066528,
+      "mtime_ns": 1790125710824134134
+    },
+    {
+      "config_key": "minibeam_air_stopping_power_file",
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/data/stopping_power_air_geant4_11_3_2.csv",
+      "sha256": "547ad4f002f7aa11f48f4e42da261f96068f611b5a0f33bf16808a95bbb2ecb1",
+      "bytes": 66496,
+      "mtime_ns": 1790124362997046189
+    },
+    {
+      "config_key": "minibeam_copper_cross_section_file",
+      "path": "/mnt/sda/wuwei/minibeam_copper_extract_e250/compiled/c12_copper_inelastic_rate_geant4_11_3_2.csv",
+      "sha256": "6fc3b970f3355a3be722625b941383f2ed172f98b1bde53f8f9cb669c0ebb9d0",
+      "bytes": 6303,
+      "mtime_ns": 1789646645937661681
+    },
+    {
+      "config_key": "minibeam_copper_elastic_file",
+      "path": "/mnt/sda/wuwei/minibeam_copper_extract_e250/compiled/c12_copper_general_ion_elastic.csv",
+      "sha256": "168375a4e7963491b78e8a0314caa6fcd4d29f31c8d61d4b6a9b18e5532a9827",
+      "bytes": 3482508,
+      "mtime_ns": 1789646646263664000
+    },
+    {
+      "config_key": "minibeam_copper_inclxx_file",
+      "path": "/mnt/sda/wuwei/minibeam_copper_extract_e250/compiled/c12_copper_inclxx.cinpkg",
+      "sha256": "780fa75efe756468822d3d95c602a658c4865ce71be0e9becfebdf128319dc8f",
+      "bytes": 125942796,
+      "mtime_ns": 1789646651080698278
+    },
+    {
+      "config_key": "minibeam_copper_ion_stopping_power_file",
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/data/ion_stopping_power_copper_geant4_11_3_2.csv",
+      "sha256": "84d64ad89bd29dff5d23e9f50a86b3a5442f4db8f193f2a90c0a7a1f8ad3a55f",
+      "bytes": 6826481,
+      "mtime_ns": 1790124362946045542
+    },
+    {
+      "config_key": "minibeam_copper_ion_cross_section_file",
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/data/ion_cross_sections_copper_geant4_11_3_2.csv",
+      "sha256": "dd6c5e3b1ac14cce5d8b233c53ce9f5decaf230315fe663b9577384aff23b51c",
+      "bytes": 367159,
+      "mtime_ns": 1790124362923045250
+    },
+    {
+      "config_key": "em_package_file",
+      "path": "/mnt/sdb/wuwei/MAIGO/data/em/unified_em_v1.bin",
+      "sha256": "8c5d970b3b639bfca2f448730271bed4fc04721aba73100e2efbe09dffe44855",
+      "bytes": 1386682652,
+      "mtime_ns": 1789295659820472411
+    },
+    {
+      "config_key": "unified_water_material_file",
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/data/water_unified/g4_water_material.json",
+      "sha256": "60be17929880fe18f1758edc02350b3fa7140b817ab0d21cb75bd87dbc891f31",
+      "bytes": 389,
+      "mtime_ns": 1790124363024046532
+    },
+    {
+      "config_key": "ct_schneider_primary_rate_file",
+      "path": "/mnt/sdb/wuwei/MAIGO/data/schneider/schneider_inelastic_rates_v2_1.bin",
+      "sha256": "086ef97dbf323dc2681d5f6c5257e78c87446050f6fb628f3b0f8b24211a8370",
+      "bytes": 2579212,
+      "mtime_ns": 1788482639071107592
+    },
+    {
+      "config_key": "ct_schneider_c12_cinel03_file",
+      "path": "/mnt/sdb/wuwei/MAIGO/data/schneider/cinel03_c12_targets_v2_1.bin",
+      "sha256": "a690fb06ae97946bbc167501380fbcfa465b51e61cbedfaba7d3d373655a7ea2",
+      "bytes": 46254396,
+      "mtime_ns": 1788479241899913816
+    },
+    {
+      "config_key": "ct_schneider_secondary_rate_file",
+      "path": "/mnt/sdb/wuwei/MAIGO/data/schneider/secondary_inelastic_rates_v2_1.bin",
+      "sha256": "6aa679ee162c7a47b82da715ea1333b21b4056b6480596d8d6243a96edb67258",
+      "bytes": 36107784,
+      "mtime_ns": 1788482610040778154
+    },
+    {
+      "config_key": "ct_schneider_secondary_cinel03_file",
+      "path": "/mnt/sdb/wuwei/MAIGO/data/schneider/cinel03_secondary_targets_v2_1_14p.bin",
+      "sha256": "a0dc4259b856f0b0e7665672a64589ea4cd64ca304cae75fca16d6de50fc8006",
+      "bytes": 487366212,
+      "mtime_ns": 1788481724292753971
+    },
+    {
+      "config_key": "ct_schneider_stopping_power_file",
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/data/schneider/schneider_stopping_v1.bin",
+      "sha256": "9786dba071f61e660fcc5940a844e8109c4e480ccb603d7929d2fcfaae152c2f",
+      "bytes": 1721044,
+      "mtime_ns": 1790124362997046189
+    },
+    {
+      "config_key": "ct_schneider_physics_bundle_file",
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/data/schneider/schneider_physics_bundle_v2_1.json",
+      "sha256": "0aeeca78628dd394fa2b043657a123739dddbc3402bfb9432b65d4c15f074587",
+      "bytes": 2320,
+      "mtime_ns": 1790124362990046100
+    },
+    {
+      "config_key": "primary_stopping_power_file",
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/data/stopping_power_water_geant4_11_3_2.csv",
+      "sha256": "7065b29fd0246bc79ebe2bf52d653194af195e235fefdcb269b811ca81aa1eb6",
+      "bytes": 58619,
+      "mtime_ns": 1790124362997046189
+    },
+    {
+      "config_key": "particle_stopping_power_file",
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/data/ion_stopping_power_water_geant4_11_3_2.csv",
+      "sha256": "a55b3bf1a7c3dda988b71452852ce8499d2b460230ed7f535ae3fbf9bb40bdd0",
+      "bytes": 10821284,
+      "mtime_ns": 1790124362982045999
+    }
+  ],
+  "random_seeds": {
+    "TOPAS": [
+      2026101001,
+      2026101002,
+      2026101003,
+      2026101004,
+      2026101005,
+      2026101006,
+      2026101007,
+      2026101008,
+      2026101009,
+      2026101010,
+      2026101011,
+      2026101012,
+      2026101013,
+      2026101014,
+      2026101015,
+      2026101016,
+      2026101017,
+      2026101018,
+      2026101019,
+      2026101020
+    ],
+    "GPU": [
+      2026102001,
+      2026102002,
+      2026102003,
+      2026102004,
+      2026102005,
+      2026102006,
+      2026102007,
+      2026102008,
+      2026102009,
+      2026102010,
+      2026102011,
+      2026102012,
+      2026102013,
+      2026102014,
+      2026102015,
+      2026102016,
+      2026102017,
+      2026102018,
+      2026102019,
+      2026102020
+    ]
+  },
+  "baseline_batch_wall_s": {
+    "topas": 900.6923602494935,
+    "gpu": 134.83810233225813
+  }
+}

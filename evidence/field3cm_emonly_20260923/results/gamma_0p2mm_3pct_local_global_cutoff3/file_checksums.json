@@ -1,0 +1,32 @@
+[
+  {
+    "path": "results/gamma_0p2mm_3pct_local_global_cutoff3/GAMMA_RESULT_zh.md",
+    "bytes": 2586,
+    "sha256": "ba51852855e04d799215cfc595f2a88006976dc7e255831e24c0ab4807e1a117"
+  },
+  {
+    "path": "results/gamma_0p2mm_3pct_local_global_cutoff3/gamma_by_depth.csv",
+    "bytes": 31122,
+    "sha256": "debb7c5fccf95a6ef924389990a2cc54014cb828c42e5b3415df0899764d9a02"
+  },
+  {
+    "path": "results/gamma_0p2mm_3pct_local_global_cutoff3/gamma_local_global.png",
+    "bytes": 2015053,
+    "sha256": "32de993f6dfd13b78f9a2f4f41a452225c8d6c73aacab30d62b8fdd99df5328a"
+  },
+  {
+    "path": "results/gamma_0p2mm_3pct_local_global_cutoff3/gamma_maps.npz",
+    "bytes": 3100782,
+    "sha256": "64e7e6170f0fb239e5e34f8b0e03c5d08f5419f49bb261f635091fa2031b56bc"
+  },
+  {
+    "path": "results/gamma_0p2mm_3pct_local_global_cutoff3/gamma_summary.json",
+    "bytes": 7459,
+    "sha256": "7c847f6774b70ce168672f9301a90b759990688a70f0fdefb8748999870f3ee2"
+  },
+  {
+    "path": "gamma_spatial_local_global.py",
+    "bytes": 12262,
+    "sha256": "c2ac8d44864afd3e26c7ed0cb2a750939777a0f1bda14f6148187cfea0b16cdd"
+  }
+]

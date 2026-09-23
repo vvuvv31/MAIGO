@@ -101,11 +101,13 @@ target_compile_definitions(carbon_core PUBLIC
 option(CARBON_EM_SPECIALIZE "Specialize unified and legacy EM transport kernels" ON)
 target_compile_definitions(carbon_core PUBLIC CARBON_EM_SPECIALIZE=$<BOOL:${CARBON_EM_SPECIALIZE}>)
 option(CARBON_USE_OPENSSL_SHA256 "Use OpenSSL accelerated file SHA256 when available" ON)
-set(CARBON_DISABLE_INTEGRITY_CHECKS ON CACHE BOOL
-    "Skip file SHA256 content checks and provenance hashing" FORCE)
+option(CARBON_DISABLE_INTEGRITY_CHECKS
+    "Skip file SHA256 content checks and provenance hashing" OFF)
 target_compile_definitions(carbon_core PUBLIC
     CARBON_DISABLE_INTEGRITY_CHECKS=$<BOOL:${CARBON_DISABLE_INTEGRITY_CHECKS}>)
-message(WARNING "CARBON_DISABLE_INTEGRITY_CHECKS=ON (forced): file content hashes are not verified")
+if(CARBON_DISABLE_INTEGRITY_CHECKS)
+    message(WARNING "CARBON_DISABLE_INTEGRITY_CHECKS=ON: file content hashes are not verified")
+endif()
 if(CARBON_USE_OPENSSL_SHA256)
     find_package(OpenSSL QUIET COMPONENTS Crypto)
     if(OpenSSL_FOUND)

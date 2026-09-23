@@ -6,3 +6,6 @@ ct/grid/*.bin filter=lfs diff=lfs merge=lfs -text
 validation/topas/output/sobp_water_3cm_5_10cm_3mm_dose3d_development.csv filter=lfs diff=lfs merge=lfs -text
 out/sobp_benchmark/*.raw filter=lfs diff=lfs merge=lfs -text
 data/packages/**/*.bin filter=lfs diff=lfs merge=lfs -text
+
+# Preserve SHA-pinned study inputs and reports, including CSV CRLF records.
+/evidence/** -text whitespace=cr-at-eol

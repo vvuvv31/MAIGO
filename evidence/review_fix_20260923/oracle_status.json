@@ -1,0 +1,13 @@
+{
+  "historical_after_run_extractor": "INVALID_LOSS_CHARGE_CONTEXT",
+  "reason": "Holding active ionIoni pointers after BeamOn does not preserve effective-charge/material state. Event-order reversal gave the same invalid table and is not a validity proof.",
+  "superseding_extractor": "oracle_dense_active_step.cc",
+  "status": "VALID_ACTIVE_C12_STEP_CONTEXT",
+  "table_files": [
+    "active_water010.csv",
+    "active_water005.csv",
+    "active_copper005.csv"
+  ],
+  "validation": "active_table_validation.json; oracle_reproducibility.json",
+  "scope": "First-step active C12 range/dEdx context only; not a full-trajectory equivalence or dose promotion certificate"
+}

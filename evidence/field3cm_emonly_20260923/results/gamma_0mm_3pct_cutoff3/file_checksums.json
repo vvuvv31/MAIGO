@@ -1,0 +1,32 @@
+[
+  {
+    "path": "results/gamma_0mm_3pct_cutoff3/gamma_by_depth.csv",
+    "bytes": 21087,
+    "sha256": "cdbb86cb2b568294d72be5386055c2ae16939a0cd922a2156ca319ff10ca2228"
+  },
+  {
+    "path": "results/gamma_0mm_3pct_cutoff3/gamma_map.npz",
+    "bytes": 1565319,
+    "sha256": "222252091003b9670fc8b16889cfa8c1bf36eda856f90a2cc0aece659782925a"
+  },
+  {
+    "path": "results/gamma_0mm_3pct_cutoff3/gamma_summary.json",
+    "bytes": 4531,
+    "sha256": "90f4575addd161eccaed0684899c6ad5fc91b4dd0a808655b6df904904f3bf6e"
+  },
+  {
+    "path": "results/gamma_0mm_3pct_cutoff3/gamma_0mm_3pct_cutoff3.png",
+    "bytes": 1045033,
+    "sha256": "91de3782667a66448ac382cd06f4d7a66bda6270d61900326e5e5dbe1f5a2106"
+  },
+  {
+    "path": "results/gamma_0mm_3pct_cutoff3/GAMMA_RESULT_zh.md",
+    "bytes": 1381,
+    "sha256": "7278734f6c8c587b1657038815672f4cdbf80a3491d853e1883211e351990f86"
+  },
+  {
+    "path": "gamma_zero_3pct.py",
+    "bytes": 10254,
+    "sha256": "6206ed7063ba510bc747de2e51f828b6214000bd8094ad9236e6893ac9408ef0"
+  }
+]

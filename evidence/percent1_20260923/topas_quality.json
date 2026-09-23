@@ -1,0 +1,29 @@
+[
+  {
+    "name": "topas_2m_s2",
+    "histories": 2000000,
+    "seed": 2026100102,
+    "threads": 128,
+    "wall_s": 871.0786006849958,
+    "returncode": 0,
+    "carrier_max_residual_over_peak": 1.0115296032365495e-07
+  },
+  {
+    "name": "topas_2m_s1",
+    "histories": 2000000,
+    "seed": 2026100101,
+    "threads": 128,
+    "wall_s": 928.9012207660126,
+    "returncode": 0,
+    "carrier_max_residual_over_peak": 9.749260906878233e-08
+  },
+  {
+    "name": "topas_2m_s3",
+    "histories": 2000000,
+    "seed": 2026100103,
+    "threads": 128,
+    "wall_s": 943.2000793729676,
+    "returncode": 0,
+    "carrier_max_residual_over_peak": 9.104443016303508e-08
+  }
+]

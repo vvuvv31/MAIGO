@@ -1,0 +1,764 @@
+{
+  "schema": "maigo.review-fix-artifacts.v1",
+  "created_utc": "2026-09-23T01:28:57.974395+00:00",
+  "base_head": "d51e599e8bf5c566a8e6e96580e7c000e1745e41",
+  "worktree": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923",
+  "files": {
+    "/mnt/sda/wuwei/minibeam_single_center_em_only_water75ev_e250_10m/topas_7378/aperture.txt": {
+      "sha256": "2be715bfd0003bbff6c95cc1f3895f4eb1d2bb835d472cc50cbda2bc560596aa",
+      "bytes": 11852
+    },
+    "/mnt/sda/wuwei/minibeam_single_center_em_only_water75ev_e250_10m/topas_7378/beam_model_single_center_e250.csv": {
+      "sha256": "4ed9be761f9b2dd164a8e9cf5487d26f10dc56826aa8439d42ca84cb9c8949b7",
+      "bytes": 142
+    },
+    "/mnt/sda/wuwei/minibeam_single_center_em_only_water75ev_e250_10m/topas_7378/dose.bin": {
+      "sha256": "004657bf559bab0acfcbc5b079223f86cc5c03ea38f5a09fbde2b479763d2ddd",
+      "bytes": 8000000
+    },
+    "/mnt/sda/wuwei/minibeam_single_center_em_only_water75ev_e250_10m/topas_7378/dose.binheader": {
+      "sha256": "7ce5098d6bcbedbd80aa81745ff59675c4730b31714d32fa7c1e3bdea7cfd5c1",
+      "bytes": 290
+    },
+    "/mnt/sda/wuwei/minibeam_single_center_em_only_water75ev_e250_10m/topas_7378/run1.txt": {
+      "sha256": "a23e6a5dad4b4359d924189c73cb9ecec5687c3595d98aacdd7476f9ebf929aa",
+      "bytes": 3427
+    },
+    "/mnt/sda/wuwei/minibeam_single_center_em_only_water75ev_e250_10m/topas_7378/run_energy_scan.txt": {
+      "sha256": "05d185d6912cacbb462a2b64a1633fb7e35e428908bba4764423844945f575af",
+      "bytes": 506
+    },
+    "/mnt/sda/wuwei/minibeam_single_center_em_only_water75ev_e250_10m/topas_7378/run_single_center_em_only_water75ev_e250_10m.txt": {
+      "sha256": "9c3ca39a187efdeef4a2aba134e4308dd58d3a30d140d109c0b43600b0a57273",
+      "bytes": 955
+    },
+    "/mnt/sda/wuwei/minibeam_single_center_em_only_water75ev_e250_10m/topas_7378/spots_single_center_e250_10m.csv": {
+      "sha256": "8e6a3b28d16bdf41744d692ee6d97e81962a682c653da85ba9ae0f21b428d745",
+      "bytes": 48
+    },
+    "/mnt/sda/wuwei/minibeam_single_center_em_only_water75ev_e250_10m/topas_7378.log": {
+      "sha256": "afbafa17e7d07eb8beeea56c911956d74882b07edb34a9be436c428c27129ab5",
+      "bytes": 84523
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/CMakeLists.txt": {
+      "sha256": "165d8218d7c9c4bff67c1d32f8a124c8a1a6c689d65a66d31f981d64b897ad15",
+      "bytes": 29832
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/benchmark/carbonminibeam/test_urban_localize.cpp": {
+      "sha256": "a03e1892c025698b4205102526f3296e54b8c10d85ebf62427625c31eec02270",
+      "bytes": 113433
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/build/oneapi-nvidia-minibeam/carbon_mc": {
+      "sha256": "6652a53e198c441264bcf1798c2fb5978173453f85278ee56697599aa5a269ed",
+      "bytes": 9459400
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/build/oneapi-nvidia-minibeam/urban_localize": {
+      "sha256": "d67e628527728814cd438421592c23254fe2575dffc6143e2872056364d7ba78",
+      "bytes": 794424
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/config/beam_minibeam_single_center_em_only_e250_urban_v2.yaml": {
+      "sha256": "184801dafec7164d1aa1295cd45d82f428294139022a4dca23d29a85c237ff32",
+      "bytes": 5390
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/config/beam_minibeam_single_center_em_only_e250_urban_v2_10m.yaml": {
+      "sha256": "ccb235bec0c0fbc0b4ad63a3d3af36e540c063e09e5e8fc17d02279d43c8baae",
+      "bytes": 5424
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/config/beam_minibeam_single_center_em_only_e250_urban_v2_10m_c005.yaml": {
+      "sha256": "f66016ff3f2981ada15ce66a947ceb2ca2f83eb1b066e591bd1cfac4c286206d",
+      "bytes": 5424
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/config/beam_minibeam_single_center_em_only_e250_urban_v2_cuwater_10m.yaml": {
+      "sha256": "e45d9c466bf5756e6fbab67ab1076da98d2fe127d67dabcd1b3d0621f0d760e4",
+      "bytes": 6224
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/config/beam_minibeam_single_center_em_only_e250_urban_v2_cuwater_10m_B_s1.yaml": {
+      "sha256": "9228903aadbc6bca407e84831d8f5d8a3b72196321e2027babc1bd3826a44d34",
+      "bytes": 6569
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/config/beam_minibeam_single_center_em_only_e250_urban_v2_cuwater_10m_B_s2.yaml": {
+      "sha256": "c26976eddb4e8189a7d9dec321b9dc15d60e7c4397804a3aec5730ec555a7e3a",
+      "bytes": 6569
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/config/beam_minibeam_single_center_em_only_e250_urban_v2_cuwater_10m_s0025.yaml": {
+      "sha256": "d1b34bfc3e9da18088711d0f092d3f5f62eeff3f1360fddf78bb82e3d4c550a0",
+      "bytes": 6413
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/config/beam_minibeam_water_replay_e250_em12800k_urban_v2.yaml": {
+      "sha256": "39794cfe83617775ce2533ff4992d7277d66f4736465cdc246e0bd3cfab1cc96",
+      "bytes": 4822
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/config/beam_minibeam_water_replay_e250_em12800k_urban_v2_B.yaml": {
+      "sha256": "7af4ec79db82d1067ccb85e771697b711bbd13639f16381dbe5c8ae034d331ba",
+      "bytes": 4806
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/config/beam_minibeam_water_replay_e250_em12800k_urban_v2_mini.yaml": {
+      "sha256": "691c692c06b877a9a9554b00d1f85e277657ef6cc60d2ef4e6131f5664b64fb6",
+      "bytes": 4853
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/config/review_fullchain_s1.yaml": {
+      "sha256": "939f5e165dc4622b0130dfa80b2a61361645e448aa263c81e150787150aad32e",
+      "bytes": 5358
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/config/review_fullchain_s2.yaml": {
+      "sha256": "345715ae9bc9e3cdc6c91dbc31d632c10f577467ae0082049de25692687b63e2",
+      "bytes": 5358
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/config/review_fullchain_s3.yaml": {
+      "sha256": "347f9403b64ddaf63756786bcdbdebbab05d3852fdef411a0e17636cb5ff1173",
+      "bytes": 5358
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/config/review_step025.yaml": {
+      "sha256": "32a6d509b11685ad60a29be305cd07223721ef0b1f8790d5c71c8ff301dad2db",
+      "bytes": 4605
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/config/review_step050.yaml": {
+      "sha256": "b68c30f14352cdc5d6c44f35f2621548b7ce4f0de4296967517924c52c6489f7",
+      "bytes": 4603
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/config/review_terminal.yaml": {
+      "sha256": "cbce284f0d2744d6e11386ead268c7bd26f69f1602643a1ebb1def63c91559df",
+      "bytes": 4603
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/config/review_water_beamlet_s1.yaml": {
+      "sha256": "939b2dc1a17ce09f05bc851d59f95be47e015a3c0b8cda23d0dc77985a6cc8b1",
+      "bytes": 4622
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/config/review_water_beamlet_s2.yaml": {
+      "sha256": "ac4a9b8d7c874e0d140ce0f060cb09ea768d1415faba10bb1d2db0d29f8217e0",
+      "bytes": 4622
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/config/review_water_beamlet_s3.yaml": {
+      "sha256": "2e947f37bfc1be64f33f0b4f75a3212dd20d582bb7e1179982ef7ecc9a1ddc46",
+      "bytes": 4622
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/config/review_water_fixed_s1.yaml": {
+      "sha256": "16d3d5ee92509a8655f103a16c0c7cdb6c8809983efd2cafdb6c3bda3e66bb7c",
+      "bytes": 4610
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/config/review_water_fixed_s2.yaml": {
+      "sha256": "1059359bfb1b4799656d66863ce326832b67bcdc67ce958938648285add1d2c2",
+      "bytes": 4610
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/config/review_water_fixed_s3.yaml": {
+      "sha256": "8a48eeac279bb056b1b19bf026d9b4ebc5ee59db5d70bc8122c22ed88a305c4d",
+      "bytes": 4610
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/config/review_water_step025_s1.yaml": {
+      "sha256": "4099a9760114ebab1e62579db35eedf1b12a730d8b9cbfd6c29d5c8573540c8a",
+      "bytes": 4612
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/config/review_water_step025_s2.yaml": {
+      "sha256": "33dd321a2b9611aa63af3b9d9bc28317f2776c96f13ac28e11da401b724461e1",
+      "bytes": 4612
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/config/review_water_step025_s3.yaml": {
+      "sha256": "967370495b10025f7cc9f53717c29dd0be6a7d595a88487acb3be08e24db163a",
+      "bytes": 4612
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/RESULTS.md": {
+      "sha256": "fd8a7d889dd4abdaf44230ee2af92a7203d71997932f1ba8fa2baf303dd617a2",
+      "bytes": 7877
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/active_copper005.csv": {
+      "sha256": "f9e9079557197459276795a052adb49f5e2a2b0edb9800de5d198e06f78ea86d",
+      "bytes": 4066528
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/active_step_trace.csv": {
+      "sha256": "d12195b8207d52a783368ea16583177c22495a8a903aac66491c902af757d531",
+      "bytes": 12915852
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/active_table_validation.json": {
+      "sha256": "b10a336e2e057b9b410bf6abdd2cbd16ca02b3fb76569fb46051c7b8b63716e7",
+      "bytes": 575
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/active_water005.csv": {
+      "sha256": "621e4f91045374fd143cbbf13c2e3dc8fd79e78963532a330854d1056eaac94a",
+      "bytes": 4044186
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/active_water010.csv": {
+      "sha256": "8f675dead08fbcad7476e2f479f4174dadebfb0c8274c4f513d093bbd4d53788",
+      "bytes": 4044428
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/baseline.json": {
+      "sha256": "245764b70ba0bcb4ebd667c8e525abecd0bfe009858bfddbc5cd0e371f558b3d",
+      "bytes": 340
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/build.log": {
+      "sha256": "48c5be2d89117d2fffceea87861534f7433f7243b4110eaccae98c1fa9126056",
+      "bytes": 32824
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/build_accepted_step.log": {
+      "sha256": "b554a2845b6e553f87766b5ea5de137176a83403105ba85f27a68cba7be85f97",
+      "bytes": 31735
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/build_active_context.log": {
+      "sha256": "d118750c0ea420dba5e57109e46306b33ab684e4919b9598e6b068e90130942a",
+      "bytes": 31964
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/build_integrity.log": {
+      "sha256": "c8760dd9be2dcf4e1b3ff31634274545a704714d854924fbd6add2a01992d56e",
+      "bytes": 35012
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/check_copper005.csv": {
+      "sha256": "1e38cc38f8d6780bc3eba4a7f3c946d2b4433b078680ad734ebe8be37deb0544",
+      "bytes": 26906
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/check_step_trace.csv": {
+      "sha256": "807b1717ccfbe4ba52311d8821cc24191e179d17ca7f966acbe26a184316d58a",
+      "bytes": 81345
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/check_water005.csv": {
+      "sha256": "6afe19834dbee8baeddaf1c6eb50884137ce2bcdf75d62f7573592d5184988cf",
+      "bytes": 26802
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/check_water010.csv": {
+      "sha256": "dfbf09ce8bfc7d5776f84f83cbbec81b7bd98e3f75b4e256e2d6340e7d2e208a",
+      "bytes": 26799
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/comparison.csv": {
+      "sha256": "0a34a0b7e4d725bf9f5dac5bb812584f178b6baeeac9b4e6d1475ee40a2e9df1",
+      "bytes": 854
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/comparison.json": {
+      "sha256": "8782da4b41bc0b42ade9f162530f23af360a13788d3001700674e1ba7a68e74c",
+      "bytes": 58441
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/comparison_protocol.json": {
+      "sha256": "df9d3fcf802e5fd76ab952148961e5dd7207e0cce50ef59165bfabfe530475c6",
+      "bytes": 625
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/config_pointer_updates.json": {
+      "sha256": "b3355f1ce6f5dfa3c42958c6e2901341310dd068acf9374bd771160c9612e574",
+      "bytes": 974
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/configure.log": {
+      "sha256": "027edf17258c32994aeb66b8b512032a0b997b83ea0fe74c1fb06d99ccc2c0bd",
+      "bytes": 941
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/configure_integrity.log": {
+      "sha256": "eb3b2b4af7112848e598037b7880a936ce82636c7c349495d0670e2620cb5191",
+      "bytes": 503
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/duplicate_gpu_seed_gpu.json": {
+      "sha256": "3f9c751848b0eed83a842092271e25124dc2de0bb3e71a56149f561650aebc03",
+      "bytes": 3180
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/duplicate_gpu_seed_result.json": {
+      "sha256": "6f83912309026ce73cc9ecfceae298ba1a149b75c9d1f4d65700b207d49db781",
+      "bytes": 132
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/duplicate_gpu_seed_topas.json": {
+      "sha256": "b16b04eea0dacfc2b225e6cd493af7c138fa0d50c32ce84e8b39944ae7abf3db",
+      "bytes": 3527
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/followup_checks.json": {
+      "sha256": "2cbc14e22a6970ab8b8ab6a65bde431c4d357f49102d068a32831a5a2716d52e",
+      "bytes": 5526
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/fullchain_comparison.csv": {
+      "sha256": "a031ce18524117f04e9f41ad7ce71f36bd06e70c0f494eac3337c3401f07cc82",
+      "bytes": 1025
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/fullchain_comparison.json": {
+      "sha256": "452813cd54b3762862bfc2209860b94e9d340f44cf572d01e00dc627c03b8901",
+      "bytes": 18193
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/gate_cli_negative_tests.json": {
+      "sha256": "9b75e5518f4e7e191ad4799b954ef06ebcc92ce904d51e6adcc5d9bf6300109a",
+      "bytes": 694
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/gate_regressions.json": {
+      "sha256": "19f2673f388826c923c233d74aeda2aa025f8d14c7b1c98e285fc05cd5cf2149",
+      "bytes": 270
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/gpu_fullchain_s1.log": {
+      "sha256": "fa124958e90a410299c70e1b3756db4e6bfd55894eff646f7d37ee82babaa520",
+      "bytes": 5799
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/gpu_fullchain_s2.log": {
+      "sha256": "8369ed70535b6fb970e39f818e58de2e0014c669c3fdb35ac2dd1052223bb4fb",
+      "bytes": 5800
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/gpu_fullchain_s3.log": {
+      "sha256": "1571ccd32969db1e617ecf08d638fa27cad09b11a119b72cb78b702792146e1a",
+      "bytes": 5799
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/gpu_manifest.json": {
+      "sha256": "8ee63112a225cc5a296848c1f730cc6b1931a28d7655cb711f14adad1ba87a31",
+      "bytes": 3180
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/gpu_step025.log": {
+      "sha256": "011f27db94f9bad86b52ca08c0838fd1ea10925b3365e91d47a36f926009b84a",
+      "bytes": 5310
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/gpu_step050.log": {
+      "sha256": "585b73df3f5c5383d64cbe87dcb1c375ab536eccf6dc021bd58967915f8b78bb",
+      "bytes": 5307
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/gpu_terminal.log": {
+      "sha256": "a037323a2f5984caab8a2a9d0f4515ce7ef273db0f73f1a7475424b68b1bf689",
+      "bytes": 5313
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/gpu_water_fixed_s1.log": {
+      "sha256": "44368c575e117085dc88a81302ce4683912808c81e75d0e3b16e4fe7cd429e94",
+      "bytes": 5358
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/gpu_water_fixed_s2.log": {
+      "sha256": "c65983a0f2ce06ce46a997b62a741159c0c0aef8d41bc2fe2c57d6ca4b04cde3",
+      "bytes": 5360
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/gpu_water_fixed_s3.log": {
+      "sha256": "2b99183024cd9cfc09c936934ef60c4887a68ad238f97c318c94e2abf7973ce0",
+      "bytes": 5359
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/gpu_water_s1.log": {
+      "sha256": "70c1644897dd1da2ef3b54cf8b390ca6c66835bb015076764949f3797c71baf1",
+      "bytes": 5459
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/gpu_water_s2.log": {
+      "sha256": "1e379fdfa9a6d7a3c55d5e39c7c1e8e07cf644a2a58c6f585e78455d00b1ffa6",
+      "bytes": 5459
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/gpu_water_s3.log": {
+      "sha256": "643c8822768ba059005354778ad7aab3068b12fc7ffbd9b9f3d686a8930d2f0b",
+      "bytes": 5458
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/gpu_water_step025_s1.log": {
+      "sha256": "6370bd4b86d6e939e63077c9559dcf07737615907f41e081a96ebbc43a79724e",
+      "bytes": 5451
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/gpu_water_step025_s2.log": {
+      "sha256": "ab161221db3ac7760b8c5ce13d90aff112c329bd4346ee2855cb3409895a3222",
+      "bytes": 5452
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/gpu_water_step025_s3.log": {
+      "sha256": "adb86d6232df8be0572ac116d7ce2e9dddc694867a7022ec243c6bf5963c9cdd",
+      "bytes": 5448
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/maigo_analyze_followup.py": {
+      "sha256": "c2880bbf5939b074df1bfe1fef1f9c300c60cbcaa7eab63e5acf6d037f774eb8",
+      "bytes": 6687
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/maigo_build_active_oracle.py": {
+      "sha256": "9cd22b2ba302ff7386ca9649ffa71becfac1cb26617383e09d61c4bc091d8a57",
+      "bytes": 5791
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/maigo_compare_results.py": {
+      "sha256": "5de2122d9f9b123de0e19a0590c34f0a77b7446ad986d4c56b8cf964736e6730",
+      "bytes": 6573
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/maigo_finalize_review.py": {
+      "sha256": "b22696a78b20e5ffbc6ef4e830290279f68a55f5437d16fe4ca55aec839eb316",
+      "bytes": 14364
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/maigo_fix_tests.py": {
+      "sha256": "452e84f341ef73471c7423b40375d189a8c1f1af3546103b374bc8f6c1fb2109",
+      "bytes": 2766
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/maigo_fix_transport.py": {
+      "sha256": "302e375d8ab27f7d33e14277f4e7d019dfba3e220cf1433606de19efebe8637b",
+      "bytes": 6413
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/maigo_prepare_compare.py": {
+      "sha256": "653fa77bfd50c9874384832f0f58db8d4fe58668c0d6b7c73c4adc1ecc396c5e",
+      "bytes": 4704
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/maigo_prepare_followup.py": {
+      "sha256": "4037eb15d1c9cdbbb1d88d8e4dbaf2beac6ac8b62116bdf16b7cebaa6649e5ef",
+      "bytes": 2754
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/one_topas_seed_gpu.json": {
+      "sha256": "8ee63112a225cc5a296848c1f730cc6b1931a28d7655cb711f14adad1ba87a31",
+      "bytes": 3180
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/one_topas_seed_result.json": {
+      "sha256": "9eb894328f46ba11b71774e3518e43d874252feab5e83f2bb9df82bbbef3da8c",
+      "bytes": 166
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/one_topas_seed_topas.json": {
+      "sha256": "8fa5bd14e0e80824efc6942dfe3d0f865f8449362e73ec648f577484b0404bf4",
+      "bytes": 1231
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/oracle_active_build.log": {
+      "sha256": "677f8eb49a41438f769111688231b832ee750c4186330e3d896ea19d0d6019c4",
+      "bytes": 543
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/oracle_active_step.cc": {
+      "sha256": "b3cac4a600ba33530fab78bb7b6dc4ab83873a190c2c06bc774367e6e03b4cde",
+      "bytes": 25517
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/oracle_active_step.log": {
+      "sha256": "da6e9321eaae5a63de07790af9a34090fe2ba24777c3730d4b4277571b80b148",
+      "bytes": 4641
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/oracle_dense_active.log": {
+      "sha256": "1b0b2ab537568935ee55d181bc0250c94fbe17abcd5c675a958e5549acc05070",
+      "bytes": 1411
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/oracle_dense_active_step": {
+      "sha256": "27a3c448b4da70cbd067623cd81c9793906a4cd52490494706f356f0d12ce066",
+      "bytes": 75752
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/oracle_dense_active_step.cc": {
+      "sha256": "d3fe727b7b2385f3274caf202b5741ad9caf32828dd533af909f63bee3f75690",
+      "bytes": 17397
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/oracle_dense_build.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/oracle_dense_build_final.log": {
+      "sha256": "70f81d8f6025a3317a7ffa91bc8169dbc5743922f4247f5a6d020cb6015d5d2d",
+      "bytes": 1048
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/oracle_dense_final.log": {
+      "sha256": "a66082fb8414c67f81d4561b0310e45c435c25e6766a9ed7e2e8e760ea0e3c15",
+      "bytes": 1534
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/oracle_order_build.log": {
+      "sha256": "019d1abc6dd437ad7bc17cdacabdf0b87cf6886b13a063d23599f888d712dad6",
+      "bytes": 547
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/oracle_order_comparison.json": {
+      "sha256": "ff6cfd4708b03f6d76970026404bbf7bd071ff7c876252579ec9c2e1e82c710c",
+      "bytes": 222
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/oracle_order_reverse.cc": {
+      "sha256": "e2cbe5c5af93849810ce827755e30f6f02de62f7a194b277dd432fa14f5d7bc8",
+      "bytes": 24928
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/oracle_order_reverse.log": {
+      "sha256": "47fa79e3de00f93c4166d55bd1624a9e653c5947991ae6266af0bfe709e68e31",
+      "bytes": 1710
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/oracle_reproducibility.json": {
+      "sha256": "1f882327a49862a918f23203d97b8b88a0e39db423f93454d3bcef965c45fa94",
+      "bytes": 558
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/oracle_status.json": {
+      "sha256": "0544b6264d9191eceb497073faa123013c211b7cb5a3c2b1ce3da26872cf579f",
+      "bytes": 669
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/oracle_validation.log": {
+      "sha256": "22626372c3737043237678ad75f613fcae629798ff69fce8d4a6075cad2c668f",
+      "bytes": 1342
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/oracle_validation_build.log": {
+      "sha256": "069b5dbfae537617c9b8e359dc9f3f84dad98ba06a18ff815c67b72b46660e3d",
+      "bytes": 1040
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/oracle_validation_grid": {
+      "sha256": "f4146a81bb94936db8b3ea5823132b8a2a2c7f1f8ff664c599f38e37b70332c1",
+      "bytes": 79800
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/oracle_validation_grid.cc": {
+      "sha256": "26f2ca975e1f2f19be6582e35185fcac9d58558c982445ebff9cfacc080905ee",
+      "bytes": 17395
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/single_center_250k.csv": {
+      "sha256": "7435f1ea63935d7cf5a0565d4a8f9e067a0a41b8ae37b2bb9d49768b1fb169df",
+      "bytes": 46
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/step_highstat.json": {
+      "sha256": "77c61cb39dda7d1a5cfa76c6ee874e5437c7d8642d449191b79e41f73c1b73cc",
+      "bytes": 9830
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/step_source_2k.csv": {
+      "sha256": "0936cc072a56edc38cda632de4722eed5a6707aba377b2ae68de39166f71d599",
+      "bytes": 130001
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/step_source_2k.header": {
+      "sha256": "6d6c8a7ff81ce764b4d6229011e1b53eac2dc4394d41e6b5df7995cb93006f6b",
+      "bytes": 511
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/step_source_2k.phsp": {
+      "sha256": "4a1c4ef104b399bbb45433ec91e49ea5135a4f81f2dce19292ebcec37fd26e52",
+      "bytes": 111676
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/terminal_source.csv": {
+      "sha256": "52bac1c5692cb47c93e9071d6f4b0c747470f9e475249ae6743deaa81dc533ec",
+      "bytes": 9401
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/topas_gpu_fullchain_comparison.png": {
+      "sha256": "01496ac67041173162bcb83be23341fb58debab5deca34d91f21fe7c54ae42e8",
+      "bytes": 388903
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/topas_gpu_water_comparison.png": {
+      "sha256": "4f95dea6986e55e0404668a6863a5e48495cf9a0964f0ce71a77583535bacf37",
+      "bytes": 306320
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/topas_manifest.json": {
+      "sha256": "b16b04eea0dacfc2b225e6cd493af7c138fa0d50c32ce84e8b39944ae7abf3db",
+      "bytes": 3527
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/topas_step025/dose.bin": {
+      "sha256": "983f56246d891de5d08d2e0b088c5b8c71164ecad231493d693c53da8e36a994",
+      "bytes": 4800000
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/topas_step025/dose.binheader": {
+      "sha256": "025c0ab62cc1ccb4d2e9225c5fd2525306b76e0af8f22fc63bdadad554da15ca",
+      "bytes": 369
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/topas_step025/input.txt": {
+      "sha256": "9f73500fd7ed14456182a9a4853e66d98166fc593b9361bd9d20a19c34a4fe4e",
+      "bytes": 1449
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/topas_step025/run.log": {
+      "sha256": "7849e58886c386fac76ec7d3065394c5441cd8a4a9809198da95b2611f3b0944",
+      "bytes": 28751
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/topas_step050/dose.bin": {
+      "sha256": "5d35f333c29e8861ae35890d802db8bb231dcd924162d500e7a7df12f2574131",
+      "bytes": 4800000
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/topas_step050/dose.binheader": {
+      "sha256": "cceda2f00f8594bef24a658a82255b2a57be10a94b8c3362950263e3b913d5dd",
+      "bytes": 369
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/topas_step050/input.txt": {
+      "sha256": "063e7ce1ca216e103587a1eea04fecb6c10161d1a1648588d5116d2324d15463",
+      "bytes": 1448
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/topas_step050/run.log": {
+      "sha256": "0fe69ebf77c31eae6efea0abf168ab38b666d5b6a578e3e38ecc752facb28535",
+      "bytes": 28751
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/topas_water_s1/dose.bin": {
+      "sha256": "f4c8cfccfc279578deef0bc2ceebc1abd1a83eb6c65594af5e548dccda14fdcb",
+      "bytes": 4800000
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/topas_water_s1/dose.binheader": {
+      "sha256": "d82d2c7c2bc72628387a03483280a8181742670b314e86995daa9c7ae2968702",
+      "bytes": 371
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/topas_water_s1/input.txt": {
+      "sha256": "3620b6255f5fe38165556f1023f1418b47af3b7ff16c6e956e156489a5e4acb6",
+      "bytes": 1455
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/topas_water_s1/run.log": {
+      "sha256": "6cf536c932a8ab46830b0ec3fb938a03fe30e74668d5117541fb77ede058704e",
+      "bytes": 28921
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/topas_water_s2/dose.bin": {
+      "sha256": "34667ff60b2cd668e46c8eb286f203e47999d047cd6f9dde1c28c3bd2b8b3614",
+      "bytes": 4800000
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/topas_water_s2/dose.binheader": {
+      "sha256": "074ddca6c1922751cea717f07e003a603cbbd43b8478512d3a39ab31c4f03afe",
+      "bytes": 371
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/topas_water_s2/input.txt": {
+      "sha256": "0f954d096c7de1d211be57f1570a4a7b5f6995e0c2d86534ee135ffe61f3140f",
+      "bytes": 1455
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/topas_water_s2/run.log": {
+      "sha256": "9210b2ba6e878af67c2d296a3eebc9f855a547b7ca46b26a4742b7fa9e12d296",
+      "bytes": 28919
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/topas_water_s3/dose.bin": {
+      "sha256": "32ae21741a432c0e53e27f89b83175cd585299e194a714366f22d58a4362ef76",
+      "bytes": 4800000
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/topas_water_s3/dose.binheader": {
+      "sha256": "7cad5d7f5eae177560df90f8f9b91d2e015b2b05ad5d8ca0cedd02c013c812c2",
+      "bytes": 371
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/topas_water_s3/input.txt": {
+      "sha256": "e0a404a3c5e1437e5cabde0b50f40f23a9a0df17a2dc08423759ace3f4d85d98",
+      "bytes": 1455
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/topas_water_s3/run.log": {
+      "sha256": "0c17db4ac811ba92dc851794ae4993d5a226f7a920b67abff9b508e7dbcd4df7",
+      "bytes": 28920
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/tracked_changes.patch": {
+      "sha256": "5c9083a4ae00ba2d2689d653508a7962a36041cc96604271b46925c7d68e3b0f",
+      "bytes": 131308
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/urban_localize.log": {
+      "sha256": "269cfdc4b2e3cffa2080571c016fe101df452434c402c86e479a85db78cb7995",
+      "bytes": 217685
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/urban_localize_corrected.log": {
+      "sha256": "4799d67b2de93fec61b39cf568ba3be395153bfbf3c564406be5206d99ad2b65",
+      "bytes": 216701
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/water_beamlet_source.csv": {
+      "sha256": "b00cbfbc62de3ed082823fcf769dde98ef6227044677d16ce49304de2a5a5334",
+      "bytes": 1337876
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/water_beamlet_source.header": {
+      "sha256": "3c46a4dad3581ae2079682fd8d13e27a9fdeb58f6feb2d947e432dbc2b29ef28",
+      "bytes": 514
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/water_beamlet_source.phsp": {
+      "sha256": "ad9ac7823d12c440231b28492822b8f814487a6686d86caf625f77db77bec6c3",
+      "bytes": 1116433
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/water_dose_gate.json": {
+      "sha256": "70542bd2233f8bd4d35d55ece88209a25ddfeb3c87cfca5e92f6a28cc9864924",
+      "bytes": 34082
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/water_dose_gate.log": {
+      "sha256": "33293d404ec44dae96d4228d1bef16ad787de29da492326e91909c6590f22ef8",
+      "bytes": 116
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/wrong_header_hash_gpu.json": {
+      "sha256": "8ee63112a225cc5a296848c1f730cc6b1931a28d7655cb711f14adad1ba87a31",
+      "bytes": 3180
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/wrong_header_hash_result.json": {
+      "sha256": "156edf1ea85b60c6a15064a4e34c43e2c2a6ec0dc0e3089033e17bfe855c742b",
+      "bytes": 131
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/wrong_header_hash_topas.json": {
+      "sha256": "feda1f0e718b407d0dc4a6bffc43a5eb3196e4f2f4fde45deb18075cd806fa90",
+      "bytes": 3527
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/urban_after_0f2c0ca_20260922/acceptance.yaml": {
+      "sha256": "01baa93aac5ae6b101772a6927edf4d783a9b0c8bbdacf0e6cd09442ad104487",
+      "bytes": 2105
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/urban_d51e599_20260923/dose_gate.py": {
+      "sha256": "a5a4b411e6f6076a9480f4c155319690e1c6171f4eb79f6c74b1711b2fd60335",
+      "bytes": 23762
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/urban_d51e599_20260923/replay_gate.py": {
+      "sha256": "0b8641743185b1796fa575729df4148f4199c7973f24433eec9e3318c5e7b4fa",
+      "bytes": 27703
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/failed.md": {
+      "sha256": "984991561196df6cb0c7efe9e61fce1eab181cf285b55c34b1c28f2b63030b61",
+      "bytes": 60888
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/include/carbon/stopping_power.hpp": {
+      "sha256": "a3d0a2c483ca268e27de9c5e30f7cf9ac0f3407ab8b94a0cd9eb87e686a1a324",
+      "bytes": 12172
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/review_fullchain_s1/dose.mhd": {
+      "sha256": "e76aaecbe21638dbfc852ea78ed2256a634bf981066b5ea37bd373cc96cfe7b9",
+      "bytes": 304
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/review_fullchain_s1/dose.raw": {
+      "sha256": "d334999edaa21e1f99a38452df64e0ed576a21e20c6fe078acbfb6396bd15877",
+      "bytes": 4000000
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/review_fullchain_s1/quality_report.json": {
+      "sha256": "c903c3edab4724261ae616d164bede00048458cf957f094dd1a5e25142dfc625",
+      "bytes": 2050
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/review_fullchain_s2/dose.mhd": {
+      "sha256": "e76aaecbe21638dbfc852ea78ed2256a634bf981066b5ea37bd373cc96cfe7b9",
+      "bytes": 304
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/review_fullchain_s2/dose.raw": {
+      "sha256": "7390aa78668123d827f47fc4f4cc6e196829859cdc17dfb9e3189e1d8a9b0c3d",
+      "bytes": 4000000
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/review_fullchain_s2/quality_report.json": {
+      "sha256": "262d8c96e775704d567d1a333c7764eb486db54a3cb559355b844c6390eba83f",
+      "bytes": 2054
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/review_fullchain_s3/dose.mhd": {
+      "sha256": "e76aaecbe21638dbfc852ea78ed2256a634bf981066b5ea37bd373cc96cfe7b9",
+      "bytes": 304
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/review_fullchain_s3/dose.raw": {
+      "sha256": "7565dca27706065d6365ba11088ffcea2042b6f67a0ece81ea841202d336c188",
+      "bytes": 4000000
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/review_fullchain_s3/quality_report.json": {
+      "sha256": "bb79c3b1d462c2d795395b56cc36be5f5717cfcb7d9a73fb7e583916e9244a67",
+      "bytes": 2053
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/review_water_fixed_s1/dose.mhd": {
+      "sha256": "173c2c75ddaf6067f90ebf3f1f21ee5ad734fde45f2191a2970b9d050436f766",
+      "bytes": 303
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/review_water_fixed_s1/dose.raw": {
+      "sha256": "1a47ce82c5d6ef5462d8daba52267df7969c79272edec3ec9d37e490ffce5d83",
+      "bytes": 2400000
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/review_water_fixed_s1/quality_report.json": {
+      "sha256": "2466c2afa4724bfa8a9317f53e4142caa0b6b2c838241fcb15251889408d85a8",
+      "bytes": 1664
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/review_water_fixed_s2/dose.mhd": {
+      "sha256": "173c2c75ddaf6067f90ebf3f1f21ee5ad734fde45f2191a2970b9d050436f766",
+      "bytes": 303
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/review_water_fixed_s2/dose.raw": {
+      "sha256": "ef41c2d230bcb575d45c2177ee6c26b73a2716dd2af1e7ffc52a83d22a790acc",
+      "bytes": 2400000
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/review_water_fixed_s2/quality_report.json": {
+      "sha256": "ee8811a3bbee18624896f903417e5d329b84d40946fa584b84fc7f1e0e511844",
+      "bytes": 1662
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/review_water_fixed_s3/dose.mhd": {
+      "sha256": "173c2c75ddaf6067f90ebf3f1f21ee5ad734fde45f2191a2970b9d050436f766",
+      "bytes": 303
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/review_water_fixed_s3/dose.raw": {
+      "sha256": "3c4ed18ac50ca6fc371122964076951b7b598ddbcc12a979dd512aa163809574",
+      "bytes": 2400000
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/review_water_fixed_s3/quality_report.json": {
+      "sha256": "896655220ee58bff644597f5644595bdb218bb4600a265c97dadca92f74c6daf",
+      "bytes": 1663
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/review_water_step025_s1/dose.mhd": {
+      "sha256": "173c2c75ddaf6067f90ebf3f1f21ee5ad734fde45f2191a2970b9d050436f766",
+      "bytes": 303
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/review_water_step025_s1/dose.raw": {
+      "sha256": "8d33e502fbf16b123318947238c5df17325e169f6c706fb92ab5843d9460c8f4",
+      "bytes": 2400000
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/review_water_step025_s1/quality_report.json": {
+      "sha256": "6c190d7b9782b43726db6ca3876023e448b2b11a1b5180b50dff1a9792db6b49",
+      "bytes": 1663
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/review_water_step025_s2/dose.mhd": {
+      "sha256": "173c2c75ddaf6067f90ebf3f1f21ee5ad734fde45f2191a2970b9d050436f766",
+      "bytes": 303
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/review_water_step025_s2/dose.raw": {
+      "sha256": "438b3c1c5e450354147b4d4404ebe648af1bf8b044a877ab045d2563b719b5e3",
+      "bytes": 2400000
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/review_water_step025_s2/quality_report.json": {
+      "sha256": "e3e54bb8c0b92fb8d3aa6a4c4ee0818b184ad0af42111ad34da4346e490367e1",
+      "bytes": 1658
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/review_water_step025_s3/dose.mhd": {
+      "sha256": "173c2c75ddaf6067f90ebf3f1f21ee5ad734fde45f2191a2970b9d050436f766",
+      "bytes": 303
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/review_water_step025_s3/dose.raw": {
+      "sha256": "1bad581b5de4cdca71afd2973d46349de6bf6d90ff8f02f24b5654c7b02728cd",
+      "bytes": 2400000
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/review_water_step025_s3/quality_report.json": {
+      "sha256": "a0b7916646faeec76c89b414cb04345ff54838cd46d95ae3d4cf062f79553ac9",
+      "bytes": 1664
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/src/detail/sycl_device_math.inc": {
+      "sha256": "d6942965b3d3e18ddb9450d799ea77706d3f314e56452586e490c645773d6789",
+      "bytes": 160787
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/src/stopping_power.cpp": {
+      "sha256": "ff4fdef73c1a0cea6622b3b01f9e678ab95c4080246cbe527ab0e0373758b16c",
+      "bytes": 32299
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/src/transport_sycl.cpp": {
+      "sha256": "c1da7562af03a2963613bf5749961b33b88457be0dd654710e5e04c4ae2fcc49",
+      "bytes": 990918
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/urban.md": {
+      "sha256": "2c1231f1ca7c1aa8e7a822f3d02b37bd13c6936369f6fd4d75b72feb5c0ad037",
+      "bytes": 34314
+    }
+  }
+}

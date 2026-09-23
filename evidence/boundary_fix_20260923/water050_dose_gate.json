@@ -1,0 +1,1129 @@
+{
+  "schema": "maigo.dose-gate.v2",
+  "state": "FAIL",
+  "acceptance": {
+    "seeds_required": 3,
+    "total_deposit_rel": 0.005,
+    "peak_mean_rel": 0.02,
+    "valley_mean_rel": 0.03,
+    "valley_abs_floor_Gy_per_history": 1e-12,
+    "pvdr_rel": 0.03,
+    "fwhm_rel": 0.05,
+    "r80_abs_mm": 0.5,
+    "depths_mm": [
+      20,
+      40,
+      60,
+      80,
+      100,
+      120
+    ]
+  },
+  "acceptance_sha256": "01baa93aac5ae6b101772a6927edf4d783a9b0c8bbdacf0e6cd09442ad104487",
+  "gpu_manifest": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/boundary_fix_20260923/water050_gpu_manifest.json",
+  "gpu_manifest_sha256": "662addebc84811d7ba707d1489c70405505c3f0399d1770c87f1ac5dc7fedf54",
+  "topas_manifest": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/boundary_fix_20260923/water050_topas_manifest.json",
+  "topas_manifest_sha256": "b16b04eea0dacfc2b225e6cd493af7c138fa0d50c32ce84e8b39944ae7abf3db",
+  "gpu_runs": [
+    {
+      "nx": 1000,
+      "nz": 600,
+      "dx_mm": 0.1,
+      "dz_mm": 0.25,
+      "dy_mm": 100.0,
+      "x0_center_mm": -49.95,
+      "z0_center_mm": 0.125,
+      "density_g_cm3": 1.0,
+      "voxel_mass_kg": 2.5e-06,
+      "config": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/config/boundary_final_water_s1.yaml",
+      "seed": 2026092301,
+      "histories": 20000,
+      "dose_file": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/boundary_final_water_s1/dose.raw"
+    },
+    {
+      "nx": 1000,
+      "nz": 600,
+      "dx_mm": 0.1,
+      "dz_mm": 0.25,
+      "dy_mm": 100.0,
+      "x0_center_mm": -49.95,
+      "z0_center_mm": 0.125,
+      "density_g_cm3": 1.0,
+      "voxel_mass_kg": 2.5e-06,
+      "config": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/config/boundary_final_water_s2.yaml",
+      "seed": 2026092302,
+      "histories": 20000,
+      "dose_file": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/boundary_final_water_s2/dose.raw"
+    },
+    {
+      "nx": 1000,
+      "nz": 600,
+      "dx_mm": 0.1,
+      "dz_mm": 0.25,
+      "dy_mm": 100.0,
+      "x0_center_mm": -49.95,
+      "z0_center_mm": 0.125,
+      "density_g_cm3": 1.0,
+      "voxel_mass_kg": 2.5e-06,
+      "config": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/config/boundary_final_water_s3.yaml",
+      "seed": 2026092303,
+      "histories": 20000,
+      "dose_file": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/boundary_final_water_s3/dose.raw"
+    }
+  ],
+  "topas_runs": [
+    {
+      "nx": 1000,
+      "nz": 600,
+      "dx_mm": 0.1,
+      "dz_mm": 0.25,
+      "dy_mm": 100.0,
+      "x0_center_mm": -49.95,
+      "z0_center_mm": 0.125,
+      "density_g_cm3": 1.0,
+      "voxel_mass_kg": 2.5e-06,
+      "config": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/topas_water_s1/input.txt",
+      "seed": 2026092401,
+      "histories": 20000,
+      "dose_file": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/topas_water_s1/dose.bin",
+      "header_sha256": "d82d2c7c2bc72628387a03483280a8181742670b314e86995daa9c7ae2968702"
+    },
+    {
+      "nx": 1000,
+      "nz": 600,
+      "dx_mm": 0.1,
+      "dz_mm": 0.25,
+      "dy_mm": 100.0,
+      "x0_center_mm": -49.95,
+      "z0_center_mm": 0.125,
+      "density_g_cm3": 1.0,
+      "voxel_mass_kg": 2.5e-06,
+      "config": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/topas_water_s2/input.txt",
+      "seed": 2026092402,
+      "histories": 20000,
+      "dose_file": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/topas_water_s2/dose.bin",
+      "header_sha256": "074ddca6c1922751cea717f07e003a603cbbd43b8478512d3a39ab31c4f03afe"
+    },
+    {
+      "nx": 1000,
+      "nz": 600,
+      "dx_mm": 0.1,
+      "dz_mm": 0.25,
+      "dy_mm": 100.0,
+      "x0_center_mm": -49.95,
+      "z0_center_mm": 0.125,
+      "density_g_cm3": 1.0,
+      "voxel_mass_kg": 2.5e-06,
+      "config": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/topas_water_s3/input.txt",
+      "seed": 2026092403,
+      "histories": 20000,
+      "dose_file": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/topas_water_s3/dose.bin",
+      "header_sha256": "7cad5d7f5eae177560df90f8f9b91d2e015b2b05ad5d8ca0cedd02c013c812c2"
+    }
+  ],
+  "depth_rows": [
+    {
+      "depth_mm": 20.0,
+      "scorer_z_bin_center_mm": 19.875,
+      "plane_energy_J_per_primary_gpu": {
+        "mean": 5.978217380110766e-13,
+        "se": 9.35668423116401e-17,
+        "n_independent_runs": 3,
+        "values": [
+          5.980088567980602e-13,
+          5.977302235158356e-13,
+          5.977261337193341e-13
+        ]
+      },
+      "plane_energy_J_per_primary_topas": {
+        "mean": 5.979730654732052e-13,
+        "se": 5.769683841597473e-17,
+        "n_independent_runs": 3,
+        "values": [
+          5.980159845934977e-13,
+          5.9785884149464e-13,
+          5.980443703314777e-13
+        ]
+      },
+      "gates": {
+        "transverse_row_sum": {
+          "status": "PASS",
+          "ratio": 0.9997469326448526,
+          "ratio_se": 0.00018381785496352973,
+          "threshold": 0.005,
+          "equivalence_margin_2se": 0.0006207030650744667,
+          "gpu": {
+            "mean": 2.391286952044306e-07,
+            "se": 3.7426736924652736e-11,
+            "n_independent_runs": 3,
+            "values": [
+              2.3920354271922405e-07,
+              2.390920894063342e-07,
+              2.390904534877336e-07
+            ]
+          },
+          "topas": {
+            "mean": 2.3918922618928207e-07,
+            "se": 2.3078735366391277e-11,
+            "n_independent_runs": 3,
+            "values": [
+              2.3920639383739903e-07,
+              2.39143536597856e-07,
+              2.392177481325911e-07
+            ]
+          }
+        },
+        "peak_roi_mean": {
+          "status": "FAIL",
+          "ratio": 1.0196446943295,
+          "ratio_se": 0.0031061847253583104,
+          "threshold": 0.02,
+          "equivalence_margin_2se": 0.02585706378021651,
+          "gpu": {
+            "mean": 4.732170855277218e-08,
+            "se": 1.1555248255592001e-10,
+            "n_independent_runs": 3,
+            "values": [
+              4.713588423328474e-08,
+              4.72956286102999e-08,
+              4.753361281473189e-08
+            ]
+          },
+          "topas": {
+            "mean": 4.6409998321905736e-08,
+            "se": 8.453197480890163e-11,
+            "n_independent_runs": 3,
+            "values": [
+              4.627101370715537e-08,
+              4.639612743631006e-08,
+              4.656285382225178e-08
+            ]
+          }
+        },
+        "pvdr": {
+          "status": "INCONCLUSIVE",
+          "reason": "zero valley: PVDR undefined"
+        },
+        "valley_roi_mean": {
+          "status": "PASS",
+          "difference": -6.425516744518422e-13,
+          "difference_se": 5.987299698085479e-14,
+          "threshold": 1e-12,
+          "equivalence_margin_2se": 7.622976684135517e-13,
+          "gpu": {
+            "mean": 0.0,
+            "se": 0.0,
+            "n_independent_runs": 3,
+            "values": [
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "topas": {
+            "mean": 6.425516744518422e-13,
+            "se": 5.987299698085479e-14,
+            "n_independent_runs": 3,
+            "values": [
+              7.468194565193874e-13,
+              6.414128765099002e-13,
+              5.394226903262385e-13
+            ]
+          }
+        },
+        "transverse_beamlet_fwhm": {
+          "status": "PASS",
+          "ratio": 0.9964299916895855,
+          "ratio_se": 0.005748890258841437,
+          "threshold": 0.05,
+          "equivalence_margin_2se": 0.015067788828097416,
+          "gpu": {
+            "mean": 0.5065571797569347,
+            "se": 0.0022588971089716643,
+            "n_independent_runs": 3,
+            "values": [
+              0.5102854508369448,
+              0.5069027601516669,
+              0.5024833282821923
+            ]
+          },
+          "topas": {
+            "mean": 0.5083720722797561,
+            "se": 0.001861052224563896,
+            "n_independent_runs": 3,
+            "values": [
+              0.5119438121333477,
+              0.5074931488570946,
+              0.5056792558488259
+            ]
+          },
+          "definition": "D(x, fixed depth), linearly interpolated half-height crossings"
+        }
+      },
+      "status": "FAIL"
+    },
+    {
+      "depth_mm": 40.0,
+      "scorer_z_bin_center_mm": 39.875,
+      "plane_energy_J_per_primary_gpu": {
+        "mean": 6.45539326947109e-13,
+        "se": 2.962433820965457e-16,
+        "n_independent_runs": 3,
+        "values": [
+          6.450861702589351e-13,
+          6.460964611658684e-13,
+          6.454353494165235e-13
+        ]
+      },
+      "plane_energy_J_per_primary_topas": {
+        "mean": 6.455060535206537e-13,
+        "se": 7.9228108815684e-17,
+        "n_independent_runs": 3,
+        "values": [
+          6.454708304670494e-13,
+          6.453898712432248e-13,
+          6.456574588516869e-13
+        ]
+      },
+      "gates": {
+        "transverse_row_sum": {
+          "status": "PASS",
+          "ratio": 1.00005154626556,
+          "ratio_se": 0.0004750628825937149,
+          "threshold": 0.005,
+          "equivalence_margin_2se": 0.0010016720307473507,
+          "gpu": {
+            "mean": 2.582157307788436e-07,
+            "se": 1.1849735283861326e-10,
+            "n_independent_runs": 3,
+            "values": [
+              2.58034468103574e-07,
+              2.584385844663473e-07,
+              2.5817413976660936e-07
+            ]
+          },
+          "topas": {
+            "mean": 2.582024214082615e-07,
+            "se": 3.169124352626723e-11,
+            "n_independent_runs": 3,
+            "values": [
+              2.5818833218681973e-07,
+              2.581559484972899e-07,
+              2.5826298354067474e-07
+            ]
+          }
+        },
+        "peak_roi_mean": {
+          "status": "FAIL",
+          "ratio": 1.0159142916066064,
+          "ratio_se": 0.005094361973378096,
+          "threshold": 0.02,
+          "equivalence_margin_2se": 0.026103015553362592,
+          "gpu": {
+            "mean": 4.7374823043355724e-08,
+            "se": 1.5324896331003305e-10,
+            "n_independent_runs": 3,
+            "values": [
+              4.72309664473869e-08,
+              4.72123698273208e-08,
+              4.768113285535947e-08
+            ]
+          },
+          "topas": {
+            "mean": 4.6632696709518016e-08,
+            "se": 1.7868142868978955e-10,
+            "n_independent_runs": 3,
+            "values": [
+              4.664687439799309e-08,
+              4.6316366206156093e-08,
+              4.693484952440486e-08
+            ]
+          }
+        },
+        "pvdr": {
+          "status": "INCONCLUSIVE",
+          "reason": "zero valley: PVDR undefined"
+        },
+        "valley_roi_mean": {
+          "status": "PASS",
+          "difference": 1.4103090296430272e-14,
+          "difference_se": 2.3020940519450895e-13,
+          "threshold": 1e-12,
+          "equivalence_margin_2se": 4.745219006854481e-13,
+          "gpu": {
+            "mean": 2.2063527893578791e-13,
+            "se": 2.2063527893578794e-13,
+            "n_independent_runs": 3,
+            "values": [
+              0.0,
+              6.619058368073637e-13,
+              0.0
+            ]
+          },
+          "topas": {
+            "mean": 2.0653218863935764e-13,
+            "se": 6.569964938214396e-14,
+            "n_independent_runs": 3,
+            "values": [
+              2.2039820752077154e-13,
+              3.1275894204346734e-13,
+              8.6439416353834e-14
+            ]
+          }
+        },
+        "transverse_beamlet_fwhm": {
+          "status": "PASS",
+          "ratio": 0.9928907934103123,
+          "ratio_se": 0.0015499872151495087,
+          "threshold": 0.05,
+          "equivalence_margin_2se": 0.01020918101998674,
+          "gpu": {
+            "mean": 0.5064490690378612,
+            "se": 0.0006356358306759618,
+            "n_independent_runs": 3,
+            "values": [
+              0.5051819155471933,
+              0.5071711909752346,
+              0.506994100591156
+            ]
+          },
+          "topas": {
+            "mean": 0.5100752997198666,
+            "se": 0.00047350619910620386,
+            "n_independent_runs": 3,
+            "values": [
+              0.5095480172917894,
+              0.5110201929376137,
+              0.5096576889301968
+            ]
+          },
+          "definition": "D(x, fixed depth), linearly interpolated half-height crossings"
+        }
+      },
+      "status": "FAIL"
+    },
+    {
+      "depth_mm": 60.0,
+      "scorer_z_bin_center_mm": 59.875,
+      "plane_energy_J_per_primary_gpu": {
+        "mean": 7.130325627109359e-13,
+        "se": 8.185524846372866e-17,
+        "n_independent_runs": 3,
+        "values": [
+          7.131717973791753e-13,
+          7.130375183308503e-13,
+          7.128883724227821e-13
+        ]
+      },
+      "plane_energy_J_per_primary_topas": {
+        "mean": 7.126366637361671e-13,
+        "se": 2.5779497330358996e-16,
+        "n_independent_runs": 3,
+        "values": [
+          7.129483711942141e-13,
+          7.121251365751442e-13,
+          7.128364834391428e-13
+        ]
+      },
+      "gates": {
+        "transverse_row_sum": {
+          "status": "PASS",
+          "ratio": 1.000555541126236,
+          "ratio_se": 0.0003797374632924947,
+          "threshold": 0.005,
+          "equivalence_margin_2se": 0.0013150160528208926,
+          "gpu": {
+            "mean": 2.8521302508437434e-07,
+            "se": 3.274209938548884e-11,
+            "n_independent_runs": 3,
+            "values": [
+              2.8526871895167007e-07,
+              2.852150073323401e-07,
+              2.851553489691128e-07
+            ]
+          },
+          "topas": {
+            "mean": 2.8505466549446677e-07,
+            "se": 1.0311798932143936e-10,
+            "n_independent_runs": 3,
+            "values": [
+              2.851793484776856e-07,
+              2.848500546300576e-07,
+              2.851345933756571e-07
+            ]
+          }
+        },
+        "peak_roi_mean": {
+          "status": "PASS",
+          "ratio": 1.0042663613733471,
+          "ratio_se": 0.004397742604605073,
+          "threshold": 0.02,
+          "equivalence_margin_2se": 0.013061846582557273,
+          "gpu": {
+            "mean": 4.400390146959884e-08,
+            "se": 1.4875475162886772e-10,
+            "n_independent_runs": 3,
+            "values": [
+              4.381668550195172e-08,
+              4.3897268187720334e-08,
+              4.429775071912446e-08
+            ]
+          },
+          "topas": {
+            "mean": 4.3816962473404903e-08,
+            "se": 1.2196908597942571e-10,
+            "n_independent_runs": 3,
+            "values": [
+              4.398217424750328e-08,
+              4.357892757980153e-08,
+              4.38897855929099e-08
+            ]
+          }
+        },
+        "pvdr": {
+          "status": "INCONCLUSIVE",
+          "reason": "zero valley: PVDR undefined"
+        },
+        "valley_roi_mean": {
+          "status": "PASS",
+          "difference": -1.4765981829328404e-13,
+          "difference_se": 1.5795811728834715e-14,
+          "threshold": 1e-12,
+          "equivalence_margin_2se": 1.7925144175095346e-13,
+          "gpu": {
+            "mean": 0.0,
+            "se": 0.0,
+            "n_independent_runs": 3,
+            "values": [
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "topas": {
+            "mean": 1.4765981829328404e-13,
+            "se": 1.5795811728834715e-14,
+            "n_independent_runs": 3,
+            "values": [
+              1.3073917285583162e-13,
+              1.792240762396591e-13,
+              1.3301620578436146e-13
+            ]
+          }
+        },
+        "transverse_beamlet_fwhm": {
+          "status": "PASS",
+          "ratio": 1.0063567829503464,
+          "ratio_se": 0.0064340300110611644,
+          "threshold": 0.05,
+          "equivalence_margin_2se": 0.01922484297246869,
+          "gpu": {
+            "mean": 0.5705412114636808,
+            "se": 0.003043191928293957,
+            "n_independent_runs": 3,
+            "values": [
+              0.5758801290940557,
+              0.5704025667940509,
+              0.5653409385029358
+            ]
+          },
+          "topas": {
+            "mean": 0.5669373140120537,
+            "se": 0.0019984248795146256,
+            "n_independent_runs": 3,
+            "values": [
+              0.5700340974293718,
+              0.5675771991018955,
+              0.5632006455048939
+            ]
+          },
+          "definition": "D(x, fixed depth), linearly interpolated half-height crossings"
+        }
+      },
+      "status": "INCONCLUSIVE"
+    },
+    {
+      "depth_mm": 80.0,
+      "scorer_z_bin_center_mm": 79.875,
+      "plane_energy_J_per_primary_gpu": {
+        "mean": 8.195598307156142e-13,
+        "se": 2.985234599068898e-16,
+        "n_independent_runs": 3,
+        "values": [
+          8.197681983155292e-13,
+          8.18971099729282e-13,
+          8.199401941020313e-13
+        ]
+      },
+      "plane_energy_J_per_primary_topas": {
+        "mean": 8.193432439852042e-13,
+        "se": 9.397379216967737e-17,
+        "n_independent_runs": 3,
+        "values": [
+          8.19490948892195e-13,
+          8.19370042742245e-13,
+          8.191687403211727e-13
+        ]
+      },
+      "gates": {
+        "transverse_row_sum": {
+          "status": "PASS",
+          "ratio": 1.0002643418762527,
+          "ratio_se": 0.00038198013259837203,
+          "threshold": 0.005,
+          "equivalence_margin_2se": 0.0010283021414494269,
+          "gpu": {
+            "mean": 3.278239322862457e-07,
+            "se": 1.194093839627533e-10,
+            "n_independent_runs": 3,
+            "values": [
+              3.2790727932621166e-07,
+              3.275884398917128e-07,
+              3.279760776408125e-07
+            ]
+          },
+          "topas": {
+            "mean": 3.277372975940817e-07,
+            "se": 3.758951686786993e-11,
+            "n_independent_runs": 3,
+            "values": [
+              3.2779637955687795e-07,
+              3.27748017096898e-07,
+              3.2766749612846905e-07
+            ]
+          }
+        },
+        "peak_roi_mean": {
+          "status": "PASS",
+          "ratio": 0.997702049091625,
+          "ratio_se": 0.005624708425157336,
+          "threshold": 0.02,
+          "equivalence_margin_2se": 0.013547367758689708,
+          "gpu": {
+            "mean": 3.969236810614045e-08,
+            "se": 8.623808528173148e-11,
+            "n_independent_runs": 3,
+            "values": [
+              3.9526091859443123e-08,
+              3.9735817699693145e-08,
+              3.981519475928508e-08
+            ]
+          },
+          "topas": {
+            "mean": 3.978378930090306e-08,
+            "se": 2.0696287049431914e-10,
+            "n_independent_runs": 3,
+            "values": [
+              3.9888115134090186e-08,
+              3.938472873414867e-08,
+              4.007852403447033e-08
+            ]
+          }
+        },
+        "pvdr": {
+          "status": "FAIL",
+          "ratio": 0.26581840506291454,
+          "ratio_se": 0.26622594367442093,
+          "threshold": 0.03,
+          "equivalence_margin_2se": 1.2666334822859273,
+          "gpu": {
+            "mean": 25457.34777875843,
+            "se": 12981.043794068264,
+            "n_independent_runs": 3,
+            "values": [
+              51148.66890412095,
+              9372.936210568896,
+              15850.438221585455
+            ]
+          },
+          "topas": {
+            "mean": 95769.69575426173,
+            "se": 82554.19584620924,
+            "n_independent_runs": 3,
+            "values": [
+              5403.698314364408,
+              260623.3911190539,
+              21281.997829366854
+            ]
+          }
+        },
+        "valley_roi_mean": {
+          "status": "FAIL",
+          "ratio": 0.7990812954827512,
+          "ratio_se": 0.63999469869094,
+          "threshold": 0.03,
+          "equivalence_margin_2se": 1.4809081018991286,
+          "gpu": {
+            "mean": 2.50803980842799e-12,
+            "se": 1.0007380504328282e-12,
+            "n_independent_runs": 3,
+            "values": [
+              7.727687290071117e-13,
+              4.2394204768925186e-12,
+              2.5119302193843398e-12
+            ]
+          },
+          "topas": {
+            "mean": 3.1386541301943515e-12,
+            "se": 2.179616745845018e-12,
+            "n_independent_runs": 3,
+            "values": [
+              7.381632506769929e-12,
+              1.5111739803952422e-13,
+              1.8832124857736008e-12
+            ]
+          }
+        },
+        "transverse_beamlet_fwhm": {
+          "status": "FAIL",
+          "ratio": 1.016943845728899,
+          "ratio_se": 0.016913962323540817,
+          "threshold": 0.05,
+          "equivalence_margin_2se": 0.0507717703759807,
+          "gpu": {
+            "mean": 0.7361470084561094,
+            "se": 0.006322830111815307,
+            "n_independent_runs": 3,
+            "values": [
+              0.7487379593120607,
+              0.7288339332659979,
+              0.7308691327902694
+            ]
+          },
+          "topas": {
+            "mean": 0.7238816691284194,
+            "se": 0.010310067568989004,
+            "n_independent_runs": 3,
+            "values": [
+              0.7184863562435558,
+              0.7438147666440347,
+              0.709343884497668
+            ]
+          },
+          "definition": "D(x, fixed depth), linearly interpolated half-height crossings"
+        }
+      },
+      "status": "FAIL"
+    },
+    {
+      "depth_mm": 100.0,
+      "scorer_z_bin_center_mm": 99.875,
+      "plane_energy_J_per_primary_gpu": {
+        "mean": 1.027584877681657e-12,
+        "se": 9.97543954822877e-17,
+        "n_independent_runs": 3,
+        "values": [
+          1.0277746916003142e-12,
+          1.0274367652201023e-12,
+          1.0275431762245548e-12
+        ]
+      },
+      "plane_energy_J_per_primary_topas": {
+        "mean": 1.0274252219497007e-12,
+        "se": 1.4624096773126126e-16,
+        "n_independent_runs": 3,
+        "values": [
+          1.0276964297186249e-12,
+          1.0271947812502071e-12,
+          1.0273844548802702e-12
+        ]
+      },
+      "gates": {
+        "transverse_row_sum": {
+          "status": "PASS",
+          "ratio": 1.0001553940165624,
+          "ratio_se": 0.0001723165680789835,
+          "threshold": 0.005,
+          "equivalence_margin_2se": 0.0005000271527203606,
+          "gpu": {
+            "mean": 4.1103395107266276e-07,
+            "se": 3.9901758192918287e-11,
+            "n_independent_runs": 3,
+            "values": [
+              4.111098766401256e-07,
+              4.109747060880409e-07,
+              4.110172704898219e-07
+            ]
+          },
+          "topas": {
+            "mean": 4.1097008877988026e-07,
+            "se": 5.849638709248676e-11,
+            "n_independent_runs": 3,
+            "values": [
+              4.1107857188744987e-07,
+              4.1087791250008283e-07,
+              4.109537819521081e-07
+            ]
+          }
+        },
+        "peak_roi_mean": {
+          "status": "FAIL",
+          "ratio": 0.993304650660466,
+          "ratio_se": 0.008800646563209018,
+          "threshold": 0.02,
+          "equivalence_margin_2se": 0.02429664246595201,
+          "gpu": {
+            "mean": 3.770106559386477e-08,
+            "se": 1.31738012574903e-10,
+            "n_independent_runs": 3,
+            "values": [
+              3.763341082958504e-08,
+              3.751436670427211e-08,
+              3.7955419247737155e-08
+            ]
+          },
+          "topas": {
+            "mean": 3.7955188842412705e-08,
+            "se": 3.090238598505366e-10,
+            "n_independent_runs": 3,
+            "values": [
+              3.825366875389591e-08,
+              3.733725970960222e-08,
+              3.8274638063739984e-08
+            ]
+          }
+        },
+        "pvdr": {
+          "status": "FAIL",
+          "ratio": 0.7913541414134213,
+          "ratio_se": 0.07453328780292476,
+          "threshold": 0.03,
+          "equivalence_margin_2se": 0.3577124341924282,
+          "gpu": {
+            "mean": 726.8718621371439,
+            "se": 41.82749472793675,
+            "n_independent_runs": 3,
+            "values": [
+              647.880949493668,
+              742.5147560082809,
+              790.2198809094825
+            ]
+          },
+          "topas": {
+            "mean": 918.5165327357649,
+            "se": 68.48553376201389,
+            "n_independent_runs": 3,
+            "values": [
+              985.169494437668,
+              988.8184361541694,
+              781.5616676154574
+            ]
+          }
+        },
+        "valley_roi_mean": {
+          "status": "FAIL",
+          "ratio": 1.2475353362461707,
+          "ratio_se": 0.12867593269022692,
+          "threshold": 0.03,
+          "equivalence_margin_2se": 0.5048872016266246,
+          "gpu": {
+            "mean": 5.2213928138182084e-11,
+            "se": 3.0233248735289454e-12,
+            "n_independent_runs": 3,
+            "values": [
+              5.808692300490747e-11,
+              5.0523395529467065e-11,
+              4.80314658801717e-11
+            ]
+          },
+          "topas": {
+            "mean": 4.18536666827359e-11,
+            "se": 3.572546264553811e-12,
+            "n_independent_runs": 3,
+            "values": [
+              3.882953031927871e-11,
+              3.7759469630055386e-11,
+              4.897200009887359e-11
+            ]
+          }
+        },
+        "transverse_beamlet_fwhm": {
+          "status": "PASS",
+          "ratio": 1.0016814503062268,
+          "ratio_se": 0.014749009714682624,
+          "threshold": 0.05,
+          "equivalence_margin_2se": 0.031179469735592043,
+          "gpu": {
+            "mean": 0.9763494100562405,
+            "se": 0.0032953742301796807,
+            "n_independent_runs": 3,
+            "values": [
+              0.9824457338088761,
+              0.971132238848895,
+              0.9754702575109506
+            ]
+          },
+          "topas": {
+            "mean": 0.9747104828164265,
+            "se": 0.013969733880085069,
+            "n_independent_runs": 3,
+            "values": [
+              0.9469006565594446,
+              0.9909436069981824,
+              0.9862871848916528
+            ]
+          },
+          "definition": "D(x, fixed depth), linearly interpolated half-height crossings"
+        }
+      },
+      "status": "FAIL"
+    },
+    {
+      "depth_mm": 120.0,
+      "scorer_z_bin_center_mm": 119.875,
+      "plane_energy_J_per_primary_gpu": {
+        "mean": 1.8332203280718716e-12,
+        "se": 7.092583208089522e-17,
+        "n_independent_runs": 3,
+        "values": [
+          1.8330805899395843e-12,
+          1.8333113244132227e-12,
+          1.8332690698628087e-12
+        ]
+      },
+      "plane_energy_J_per_primary_topas": {
+        "mean": 1.8332813096867163e-12,
+        "se": 4.123825695063752e-17,
+        "n_independent_runs": 3,
+        "values": [
+          1.833355797452442e-12,
+          1.833213398866007e-12,
+          1.8332747327417e-12
+        ]
+      },
+      "gates": {
+        "transverse_row_sum": {
+          "status": "PASS",
+          "ratio": 0.9999667363570873,
+          "ratio_se": 4.4751666443076735e-05,
+          "threshold": 0.005,
+          "equivalence_margin_2se": 0.00012276697579882663,
+          "gpu": {
+            "mean": 7.332881312287488e-07,
+            "se": 2.8370332832348138e-11,
+            "n_independent_runs": 3,
+            "values": [
+              7.332322359758337e-07,
+              7.33324529765289e-07,
+              7.333076279451235e-07
+            ]
+          },
+          "topas": {
+            "mean": 7.333125238746864e-07,
+            "se": 1.6495302780259726e-11,
+            "n_independent_runs": 3,
+            "values": [
+              7.333423189809766e-07,
+              7.332853595464026e-07,
+              7.333098930966798e-07
+            ]
+          }
+        },
+        "peak_roi_mean": {
+          "status": "FAIL",
+          "ratio": 0.975455097485793,
+          "ratio_se": 0.0109892481780968,
+          "threshold": 0.02,
+          "equivalence_margin_2se": 0.04652339887040065,
+          "gpu": {
+            "mean": 5.046226457731487e-08,
+            "se": 3.473783215555397e-10,
+            "n_independent_runs": 3,
+            "values": [
+              5.0730363727780064e-08,
+              4.977314092684537e-08,
+              5.08832890773192e-08
+            ]
+          },
+          "topas": {
+            "mean": 5.1732022014524177e-08,
+            "se": 4.6134139741651447e-10,
+            "n_independent_runs": 3,
+            "values": [
+              5.2369947661645716e-08,
+              5.0835741421906283e-08,
+              5.199037696002052e-08
+            ]
+          }
+        },
+        "pvdr": {
+          "status": "FAIL",
+          "ratio": 0.9209269482072744,
+          "ratio_se": 0.043379753302106173,
+          "threshold": 0.03,
+          "equivalence_margin_2se": 0.16583255839693795,
+          "gpu": {
+            "mean": 63.891083106168985,
+            "se": 1.0849511719353524,
+            "n_independent_runs": 3,
+            "values": [
+              66.04117474062741,
+              63.069388051767895,
+              62.56268652611164
+            ]
+          },
+          "topas": {
+            "mean": 69.37692857239414,
+            "se": 3.048218524342024,
+            "n_independent_runs": 3,
+            "values": [
+              73.93613458001329,
+              63.592309313059815,
+              70.60234182410927
+            ]
+          }
+        },
+        "valley_roi_mean": {
+          "status": "FAIL",
+          "ratio": 1.0563981465236245,
+          "ratio_se": 0.04184199767967727,
+          "threshold": 0.03,
+          "equivalence_margin_2se": 0.14008214188297907,
+          "gpu": {
+            "mean": 7.902200614277415e-10,
+            "se": 1.3045260256440088e-11,
+            "n_independent_runs": 3,
+            "values": [
+              7.681626489386416e-10,
+              7.891806542659198e-10,
+              8.133168810786629e-10
+            ]
+          },
+          "topas": {
+            "mean": 7.480324194321839e-10,
+            "se": 2.693207847739003e-11,
+            "n_independent_runs": 3,
+            "values": [
+              7.083133025431731e-10,
+              7.994007761480405e-10,
+              7.363831796053379e-10
+            ]
+          }
+        },
+        "transverse_beamlet_fwhm": {
+          "status": "FAIL",
+          "ratio": 1.0204624748143376,
+          "ratio_se": 0.01996344933073658,
+          "threshold": 0.05,
+          "equivalence_margin_2se": 0.06038937347581077,
+          "gpu": {
+            "mean": 1.3168316817211672,
+            "se": 0.025146562226193967,
+            "n_independent_runs": 3,
+            "values": [
+              1.2766980599303221,
+              1.3631476464477057,
+              1.3106493387854736
+            ]
+          },
+          "topas": {
+            "mean": 1.2904263647330596,
+            "se": 0.005482293365948217,
+            "n_independent_runs": 3,
+            "values": [
+              1.2953416596360254,
+              1.2964567399408078,
+              1.2794806946223458
+            ]
+          },
+          "definition": "D(x, fixed depth), linearly interpolated half-height crossings"
+        }
+      },
+      "status": "FAIL"
+    }
+  ],
+  "whole_scored_volume_energy_J_per_primary": {
+    "status": "PASS",
+    "ratio": 1.000025329196035,
+    "ratio_se": 1.2378973776950698e-07,
+    "threshold": 0.005,
+    "equivalence_margin_2se": 2.557677551057893e-05,
+    "gpu": {
+      "mean": 4.806537259585187e-10,
+      "se": 1.921115354411932e-18,
+      "n_independent_runs": 3,
+      "values": [
+        4.806537292531302e-10,
+        4.806537260232891e-10,
+        4.806537225991371e-10
+      ]
+    },
+    "topas": {
+      "mean": 4.806415516944333e-10,
+      "se": 5.946596239329993e-17,
+      "n_independent_runs": 3,
+      "values": [
+        4.806415661611914e-10,
+        4.806414422278075e-10,
+        4.806416466943009e-10
+      ]
+    }
+  },
+  "longitudinal_depth_profile_fwhm": {
+    "gpu_mm": [
+      2.4412587995055475,
+      2.256473981459635,
+      2.2091782693291435
+    ],
+    "topas_mm": [
+      2.315168052692755,
+      2.4513491484737955,
+      2.42087881837827
+    ],
+    "definition": "central-axis D(z) depth-profile width; diagnostic only",
+    "gpu_stats": {
+      "mean": 2.302303683431442,
+      "se": 0.0708063422509092,
+      "n_independent_runs": 3,
+      "values": [
+        2.4412587995055475,
+        2.256473981459635,
+        2.2091782693291435
+      ]
+    },
+    "topas_stats": {
+      "mean": 2.395798673181607,
+      "se": 0.04126371680764883,
+      "n_independent_runs": 3,
+      "values": [
+        2.315168052692755,
+        2.4513491484737955,
+        2.42087881837827
+      ]
+    }
+  },
+  "r80": {
+    "status": "PASS",
+    "gpu_mm": {
+      "mean": 126.93680445164595,
+      "se": 0.012268291830267971,
+      "n_independent_runs": 3,
+      "values": [
+        126.95854300349541,
+        126.91608076168922,
+        126.93578958975321
+      ]
+    },
+    "topas_mm": {
+      "mean": 126.9338881891825,
+      "se": 0.0026604517466214984,
+      "n_independent_runs": 3,
+      "values": [
+        126.93405780198452,
+        126.93840907861507,
+        126.92919768694793
+      ]
+    },
+    "difference_mm": 0.002916262463457997,
+    "combined_run_se_mm": 0.012553445261310588,
+    "bin_resolution_uncertainty_mm": 0.10206207261596577,
+    "equivalence_margin": 0.13008522560204494,
+    "threshold_mm": 0.5,
+    "definition": "distal 80% crossing of central-axis D(z), linearly interpolated"
+  },
+  "roi": {
+    "peak": "abs(x_mm) < 0.25",
+    "valley": "abs(abs(x_mm)-1.8) < 0.45",
+    "registration": "no shift; exact scorer coordinate centers"
+  }
+}

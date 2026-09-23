@@ -1,0 +1,37 @@
+[
+  {
+    "path": "results/mc_noise_12p8M/MC_NOISE_zh.md",
+    "bytes": 3557,
+    "sha256": "4c2dc8d12deb40cc46b952f4aac87481832c8a308cdf91f6faf056bb14b66407"
+  },
+  {
+    "path": "results/mc_noise_12p8M/mc_noise.png",
+    "bytes": 2488447,
+    "sha256": "29d32c016a3ba5577b9144d127f78eab75f7c52f0511eac85df87cf71cbac095"
+  },
+  {
+    "path": "results/mc_noise_12p8M/noise_by_depth.csv",
+    "bytes": 251252,
+    "sha256": "907121c22ea09577e6be626e8052f8c2c01625a3576bf95fffaae513e665b73f"
+  },
+  {
+    "path": "results/mc_noise_12p8M/noise_maps.npz",
+    "bytes": 2204067,
+    "sha256": "cc029fce955b2122b2264fdf3b745348b3ac0e5156381f1e1bfe7f8112ad961c"
+  },
+  {
+    "path": "results/mc_noise_12p8M/noise_summary.json",
+    "bytes": 54115,
+    "sha256": "07eb3324fa4b6fd1d1520233e74482930eeb058bb7ed452013b5d64e90b0ee63"
+  },
+  {
+    "path": "results/mc_noise_12p8M/selected_depth_ROIs.csv",
+    "bytes": 6463,
+    "sha256": "1e97bffebe4cd8ce13f0a0a756c696efb544b6d250b35d90b1a9be27572cbb9c"
+  },
+  {
+    "path": "analyze_mc_noise.py",
+    "bytes": 19227,
+    "sha256": "9882056d76e986ddbf9b12703edd3af1e24c6d16ebf956fe3cc8bca22964226e"
+  }
+]

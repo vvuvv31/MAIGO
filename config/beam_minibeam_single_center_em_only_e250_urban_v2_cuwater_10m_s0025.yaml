@@ -91,11 +91,11 @@ minibeam_water_fragment_low_energy_mcs_scale: 1.00
 minibeam_water_primary_mcs_model: urban_v2
 minibeam_water_primary_mcs_max_segment_mm: 0.1
 minibeam_water_primary_urban_max_step_mm: 0.025
-minibeam_water_urban_loss_range_file: data/urban/c12_water75ev_urban_g4_11_3_2.csv
+minibeam_water_urban_loss_range_file: evidence/review_fix_20260923/active_water005.csv
 # Requested: raw unified-EM stopping, no empirical 0.9958 correction.
 minibeam_water_primary_stopping_power_scale: 1.0
 minibeam_copper_stopping_power_file: /mnt/sda/wuwei/minibeam_copper_extract_e250/compiled/c12_copper_stopping_geant4_11_3_2.csv
-minibeam_copper_loss_range_file: data/urban/c12_copper_loss_range_g4_11_3_2.csv
+minibeam_copper_loss_range_file: evidence/review_fix_20260923/active_copper005.csv
 minibeam_air_stopping_power_file: data/stopping_power_air_geant4_11_3_2.csv
 minibeam_copper_cross_section_file: /mnt/sda/wuwei/minibeam_copper_extract_e250/compiled/c12_copper_inelastic_rate_geant4_11_3_2.csv
 minibeam_copper_elastic_file: /mnt/sda/wuwei/minibeam_copper_extract_e250/compiled/c12_copper_general_ion_elastic.csv

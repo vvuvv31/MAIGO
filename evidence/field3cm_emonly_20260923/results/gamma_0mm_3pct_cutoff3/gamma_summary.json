@@ -1,0 +1,105 @@
+{
+  "status": "COMPLETE",
+  "completed_at": "2026-09-23T14:01:43.222702+08:00",
+  "pymedphys_version": "0.41.0",
+  "numpy_version": "2.5.2",
+  "scipy_version": "1.18.1",
+  "reference": "TOPAS",
+  "evaluation": "GPU",
+  "histories_per_engine": 12800000,
+  "distance_criterion_mm": 0.0,
+  "dose_difference_criterion_percent": 3.0,
+  "normalisation": "global TOPAS maximum; no fitted rescaling",
+  "lower_reference_dose_cutoff_percent": 3.0,
+  "reference_max_dose_Gy_per_source": 4.893832192465197e-10,
+  "reference_max_location_mm": {
+    "depth": 124.125,
+    "x": 7.350000000000001
+  },
+  "absolute_dose_difference_tolerance_Gy_per_source": 1.4681496577395593e-11,
+  "reference_dose_cutoff_Gy_per_source": 1.4681496577395593e-11,
+  "total_grid_voxels": 1000000,
+  "evaluated_voxels": 201625,
+  "excluded_voxels": 798375,
+  "passing_voxels": 200925,
+  "failing_voxels": 700,
+  "pass_rate_percent": 99.65282083075016,
+  "pass_condition": "gamma <= 1; reference dose >= 0.03 * reference maximum",
+  "gamma_statistics": {
+    "mean": 0.15934670209543628,
+    "median": 0.11865837534888171,
+    "p95": 0.4382850816902557,
+    "p99": 0.735836860022754,
+    "maximum": 2.777563642931067
+  },
+  "calculation_wall_s": 0.02872305701021105,
+  "memory_max_bytes": 29999996928,
+  "memory_peak_bytes": 163123200,
+  "implementation": {
+    "public_zero_distance_error": "PyMedPhys 0.41.0 gamma(..., distance_mm_threshold=0) raises ValueError: Number of samples must be non-negative.",
+    "method": "PyMedPhys GammaInternalFixedOptions + gamma_loop with maximum_test_distance=0; only the same coordinate is evaluated.",
+    "maximum_test_distance_mm": 0.0,
+    "internal_spatial_denominator_mm": 1.0,
+    "spatial_denominator_note": "At the only searched distance, zero, the spatial term is exactly zero. The denominator does not permit any displacement.",
+    "interpolation": "scipy RegularGridInterpolator at identical grid coordinates",
+    "random_subset": null,
+    "output_gamma_clipped": false,
+    "analytic_formula": "abs(GPU - TOPAS) / (0.03 * TOPAS.max())",
+    "max_abs_difference_vs_analytic": 4.440892098500626e-16,
+    "classification_mismatches_vs_analytic": 0,
+    "tiny_grid_verification_passed": true,
+    "source_sha256": "5735a376c8a76324a32041766031ee87495407a499a506e082c0a9514f49401b"
+  },
+  "scoring_scope": "2D x-depth map averaged across the original 100 mm vertical bin; 0.1 mm x and 0.25 mm depth spacing.",
+  "monte_carlo_uncertainty_note": "Pass rate is calculated from the four-batch averaged dose maps; no confidence interval for the pass rate is estimated here.",
+  "inputs": [
+    {
+      "engine": "TOPAS",
+      "batch": 1,
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_20260923/cases/topas_b1/dose.bin",
+      "sha256": "4879cc91a35a545ff376b325c09485f2947afe817e630e9ecbc9dce56a9fb98e"
+    },
+    {
+      "engine": "GPU",
+      "batch": 1,
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/field3cm_emonly_b1/dose.raw",
+      "sha256": "61db868a9c4b1d68af31b8ecb433581df357ff10464deec2b3a7da6584b45ecb"
+    },
+    {
+      "engine": "TOPAS",
+      "batch": 2,
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_20260923/cases/topas_b2/dose.bin",
+      "sha256": "05a110a3f74a743c1fce3b4070dc60f6501e51c7e7acfe6d9e83ef886feb8274"
+    },
+    {
+      "engine": "GPU",
+      "batch": 2,
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/field3cm_emonly_b2/dose.raw",
+      "sha256": "f99b95929d93d91529e1a0242b8a50d8c5f913644f031a1b343a3c9d45cad104"
+    },
+    {
+      "engine": "TOPAS",
+      "batch": 3,
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_20260923/cases/topas_b3/dose.bin",
+      "sha256": "dd0a37837cc940ced272328c04101c86a6413fffb9b147837be069bdf154fe02"
+    },
+    {
+      "engine": "GPU",
+      "batch": 3,
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/field3cm_emonly_b3/dose.raw",
+      "sha256": "e42a7a9963eab463b97e9219470d5010f5fdef2b2f2034fa88f71d9e9c8eba2a"
+    },
+    {
+      "engine": "TOPAS",
+      "batch": 4,
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_20260923/cases/topas_b4/dose.bin",
+      "sha256": "4f7699d7c6c638bafc69652c076f0c7b83b18513aea47bae972e9474283421ef"
+    },
+    {
+      "engine": "GPU",
+      "batch": 4,
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/field3cm_emonly_b4/dose.raw",
+      "sha256": "5e88629f80cc5a3b1327abab17bd0a1d1ee695818dc68ccf281aaaa32a7ce9e3"
+    }
+  ]
+}

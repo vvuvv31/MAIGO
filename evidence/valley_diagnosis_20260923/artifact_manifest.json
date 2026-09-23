@@ -1,0 +1,425 @@
+{
+  "repo": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923",
+  "head": "d51e599e8bf5c566a8e6e96580e7c000e1745e41",
+  "binary_sha256": "aee706d7e5cb9d7cc7ee80b7cf7fe5e168e2f6eab60f6d9827a9140f78d5b824",
+  "files": {
+    "config/review_fullchain_topas_matched_1m.yaml": {
+      "sha256": "149e69a676fb190c51c5ff7a56d32e5fb094de805a591176025e3eeb8362d26b",
+      "bytes": 5514
+    },
+    "config/valley_1m_s1.yaml": {
+      "sha256": "5a82a7c20cfba5c881b5beffbae8a02b01f8c3af2ad0bb259eab533acc3cb713",
+      "bytes": 5759
+    },
+    "config/valley_cu0051m_s1.yaml": {
+      "sha256": "73570374b4bebb2acec1182f4adc9cdea099863d8c89233308719ff477e9636f",
+      "bytes": 5761
+    },
+    "config/valley_cu0051m_s2.yaml": {
+      "sha256": "efc1943b02807f6941abd8265d717412c03ee4d9e143f1fea48f5d533145e115",
+      "bytes": 5392
+    },
+    "config/valley_cu0051m_s3.yaml": {
+      "sha256": "fa5f9332829f7117907a27406c2328d030dfd9198f4710fc79004c923aa9d855",
+      "bytes": 5392
+    },
+    "config/valley_cu005_s1.yaml": {
+      "sha256": "5a54e9741f55377914ab53e396f9136463ede8b528e725b7acb7c9272da73eff",
+      "bytes": 5394
+    },
+    "config/valley_cu005_s2.yaml": {
+      "sha256": "e2f870203ebe092a418698104a2ced2e2cf5985012d5cd8ab34a320deaffdb86",
+      "bytes": 5394
+    },
+    "config/valley_cu005_s3.yaml": {
+      "sha256": "f2bff90769736745d17baaf0ab73848a3c0dab548a0828dab40a1e1feed6f136",
+      "bytes": 5394
+    },
+    "config/valley_stats1m_s1.yaml": {
+      "sha256": "ca2420b000ec45e7559f9e4534353db0867d92433d63467210ae18a3e0414b58",
+      "bytes": 5749
+    },
+    "config/valley_stats1m_s2.yaml": {
+      "sha256": "1667d8b3b8013ac46b096413af32bc0eb94c6d717c67db90e5b73d51e0c57a76",
+      "bytes": 5392
+    },
+    "config/valley_stats1m_s3.yaml": {
+      "sha256": "b972e286ac46da3226ffa166d938fd14d53c3348c7f193db30ff34ddede9452f",
+      "bytes": 5392
+    },
+    "evidence/valley_diagnosis_20260923/RESULTS.md": {
+      "sha256": "7706df646b0d144d2b0c8578011c8a081a4565bf967ccbfe10c6fd6badef5139",
+      "bytes": 5627
+    },
+    "evidence/valley_diagnosis_20260923/analysis.log": {
+      "sha256": "f6ca821de9412cef6d4161f9c00747cb966c215d9b1069a3fac035d2c7385b7c",
+      "bytes": 4075
+    },
+    "evidence/valley_diagnosis_20260923/analyze.py": {
+      "sha256": "0b64f041a36ef5cb1ec1a3c69d36c286c126953155b0c0cf6157be70ac61c2dc",
+      "bytes": 5973
+    },
+    "evidence/valley_diagnosis_20260923/comparison.json": {
+      "sha256": "2ffb774e58c92879f12191d6bfeed10381a2c9be36e9c3bb8d0d47d3ce9c56d8",
+      "bytes": 224482
+    },
+    "evidence/valley_diagnosis_20260923/finalize.py": {
+      "sha256": "1e87fcf13232fc34bd97be4006c512d6c8c365cf9bc5580fafb85a3c614c3977",
+      "bytes": 11225
+    },
+    "evidence/valley_diagnosis_20260923/phase.log": {
+      "sha256": "e3baec23deab72d9cd64435bc2cdb0fda6183bf68f6db8c7d3df9760b0a29d63",
+      "bytes": 4308
+    },
+    "evidence/valley_diagnosis_20260923/phase.py": {
+      "sha256": "025c5b316a271b9aeaa046144208b180c00178a2d1053fd28daf92fb0e4f069b",
+      "bytes": 2664
+    },
+    "evidence/valley_diagnosis_20260923/phase_attribution.json": {
+      "sha256": "c5d8cedfe5ef6037fd0ad17d220146029e08a2ce7d3d15f26712870be6532055",
+      "bytes": 8787
+    },
+    "evidence/valley_diagnosis_20260923/phase_attribution_cu005.json": {
+      "sha256": "a160bb365ea6e244241ba229a72ce96d95a45e657b1f674520c6876d3cac9ec7",
+      "bytes": 8788
+    },
+    "evidence/valley_diagnosis_20260923/phase_cu005.log": {
+      "sha256": "350a5b4b6b42d14aab6a6a8a157c15ae0d9da1b4e6edf4a4ae4d4a1c5234ba2d",
+      "bytes": 4307
+    },
+    "evidence/valley_diagnosis_20260923/phase_cu005.py": {
+      "sha256": "8ac9873f1fe48932fa2d4b89b3fd1dfe74e44893e0f094b6698cd14c56edf68b",
+      "bytes": 2682
+    },
+    "evidence/valley_diagnosis_20260923/run.py": {
+      "sha256": "4ee4cebc7f5520ddeee0784b4cee760bab5b43df455d8ccadefdeb07783442fa",
+      "bytes": 2443
+    },
+    "evidence/valley_diagnosis_20260923/run_matched.py": {
+      "sha256": "83bf9ce5f4d07f62f4478d1d2995949fbd743eee2487360fe579cab9315f64c2",
+      "bytes": 2385
+    },
+    "evidence/valley_diagnosis_20260923/run_quality.json": {
+      "sha256": "e2e4d6ed14e03359660035178a5a8b2104a2b1cb61b5e93d25186ee122e18904",
+      "bytes": 5558
+    },
+    "evidence/valley_diagnosis_20260923/source_1m.csv": {
+      "sha256": "e6ccf288b3d5d57e24957ec6f28701f183a896d5c7c6ba1d01f43573fa63f4a0",
+      "bytes": 47
+    },
+    "evidence/valley_diagnosis_20260923/valley_1m_s1.log": {
+      "sha256": "01ccb05c7c3c3143b8c45cf4ffe4fe07fe3a4d61d71b5f5bb3bbc4474f2dac38",
+      "bytes": 106
+    },
+    "evidence/valley_diagnosis_20260923/valley_comparison.csv": {
+      "sha256": "80c756ee0e4c316bb094f3c6921df8d8497d5315c258bea31660e1558cdc975d",
+      "bytes": 8813
+    },
+    "evidence/valley_diagnosis_20260923/valley_cu0051m_s1.log": {
+      "sha256": "0a1fce0aea3b24ff206541891c43a36f391bfc3f17f9e5c2c3bc2d4f78249324",
+      "bytes": 5957
+    },
+    "evidence/valley_diagnosis_20260923/valley_cu0051m_s2.log": {
+      "sha256": "345790b92a14268af120c87c65734ea1b113ef9d2fa8c0c331aacd7aa5f9423b",
+      "bytes": 5875
+    },
+    "evidence/valley_diagnosis_20260923/valley_cu0051m_s3.log": {
+      "sha256": "c2f6e2f7dbbedb3b8eba8ebd93475a36ddcbe753dc8d854a2b88148b2337fa86",
+      "bytes": 5877
+    },
+    "evidence/valley_diagnosis_20260923/valley_cu005_s1.log": {
+      "sha256": "0854b0fedaa0b514bab38fbd99e359477cb2f21aba28493e7f3dfcb5d79c2aa8",
+      "bytes": 5849
+    },
+    "evidence/valley_diagnosis_20260923/valley_cu005_s2.log": {
+      "sha256": "6709cca4748b9d87ce57c34ec9021163730f87a142f787a7db6e015c5e8b6a95",
+      "bytes": 5849
+    },
+    "evidence/valley_diagnosis_20260923/valley_cu005_s3.log": {
+      "sha256": "c8b2760e47e135d8cae44055a2437cebd9afb2803e0c15313be1c123e25da8d1",
+      "bytes": 5848
+    },
+    "evidence/valley_diagnosis_20260923/valley_diagnosis.png": {
+      "sha256": "20897c6243783b23874234f921dbb908fcfbc43f2eedf8de81a740178adf8239",
+      "bytes": 394308
+    },
+    "evidence/valley_diagnosis_20260923/valley_stats1m_s1.log": {
+      "sha256": "aafc407923ebf2954921f8135d93607af86b3820202e9ff91ed414e50b065081",
+      "bytes": 5960
+    },
+    "evidence/valley_diagnosis_20260923/valley_stats1m_s2.log": {
+      "sha256": "90c142685f5cfa3ebe668a7522deb3b321976daaf246aaddc871ed6b58454f17",
+      "bytes": 5877
+    },
+    "evidence/valley_diagnosis_20260923/valley_stats1m_s3.log": {
+      "sha256": "15da06e8f9dfec45676ae2ee38a5c9a8d7913ef1e7d984832b8ab27cb1469c55",
+      "bytes": 5876
+    },
+    "failed.md": {
+      "sha256": "abbb0f0847b8de33868cae6296c79a5a9bd52f4ebd2ddd3c00904cd0bd640166",
+      "bytes": 62172
+    },
+    "urban.md": {
+      "sha256": "9493fd938231cc3664ef89f309d6fb2314d381f6c30614eb4b9d39c754ea3d58",
+      "bytes": 35716
+    }
+  },
+  "external_evidence": {
+    "/mnt/sda/wuwei/minibeam_single_center_em_only_water75ev_e250_10m/topas_7378/aperture.txt": {
+      "sha256": "2be715bfd0003bbff6c95cc1f3895f4eb1d2bb835d472cc50cbda2bc560596aa",
+      "bytes": 11852
+    },
+    "/mnt/sda/wuwei/minibeam_single_center_em_only_water75ev_e250_10m/topas_7378/dose.bin": {
+      "sha256": "004657bf559bab0acfcbc5b079223f86cc5c03ea38f5a09fbde2b479763d2ddd",
+      "bytes": 8000000
+    },
+    "/mnt/sda/wuwei/minibeam_single_center_em_only_water75ev_e250_10m/topas_7378/dose.binheader": {
+      "sha256": "7ce5098d6bcbedbd80aa81745ff59675c4730b31714d32fa7c1e3bdea7cfd5c1",
+      "bytes": 290
+    },
+    "/mnt/sda/wuwei/minibeam_single_center_em_only_water75ev_e250_10m/topas_7378/run1.txt": {
+      "sha256": "a23e6a5dad4b4359d924189c73cb9ecec5687c3595d98aacdd7476f9ebf929aa",
+      "bytes": 3427
+    },
+    "/mnt/sda/wuwei/minibeam_single_center_em_only_water75ev_e250_10m/topas_7378/run_energy_scan.txt": {
+      "sha256": "05d185d6912cacbb462a2b64a1633fb7e35e428908bba4764423844945f575af",
+      "bytes": 506
+    },
+    "/mnt/sda/wuwei/minibeam_single_center_em_only_water75ev_e250_10m/topas_7378/run_single_center_em_only_water75ev_e250_10m.txt": {
+      "sha256": "9c3ca39a187efdeef4a2aba134e4308dd58d3a30d140d109c0b43600b0a57273",
+      "bytes": 955
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/build/oneapi-nvidia-minibeam/carbon_mc": {
+      "sha256": "aee706d7e5cb9d7cc7ee80b7cf7fe5e168e2f6eab60f6d9827a9140f78d5b824",
+      "bytes": 9476320
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/data/stopping_power_water_geant4_11_3_2.csv": {
+      "sha256": "7065b29fd0246bc79ebe2bf52d653194af195e235fefdcb269b811ca81aa1eb6",
+      "bytes": 58619
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/active_copper005.csv": {
+      "sha256": "f9e9079557197459276795a052adb49f5e2a2b0edb9800de5d198e06f78ea86d",
+      "bytes": 4066528
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/review_fix_20260923/active_water005.csv": {
+      "sha256": "621e4f91045374fd143cbbf13c2e3dc8fd79e78963532a330854d1056eaac94a",
+      "bytes": 4044186
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/valley_diagnosis_20260923/entrance_cu005_s1.csv": {
+      "sha256": "9cd4a931a79966d5b5637334b249336811a24ce673382c39329153a0324a2e9f",
+      "bytes": 28381786
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/valley_diagnosis_20260923/entrance_s1.csv": {
+      "sha256": "4c01be30f6ff72f950696580881dfce9371eade94b930fca8a3c9d8cfabb1af8",
+      "bytes": 27824667
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/valley_diagnosis_20260923/planes_cu005_s1.csv": {
+      "sha256": "03e434908bb6a583dca001d4d3dc0f50afa76a8fa890270041e189b5911129e0",
+      "bytes": 45405462
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/valley_diagnosis_20260923/planes_s1.csv": {
+      "sha256": "84cd31d0f9d559747dee20250ab26ac9b7a23c2a56f6f7c4545381bd0443d430",
+      "bytes": 45192944
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/boundary_final_fullchain_s1/dose.mhd": {
+      "sha256": "e76aaecbe21638dbfc852ea78ed2256a634bf981066b5ea37bd373cc96cfe7b9",
+      "bytes": 304
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/boundary_final_fullchain_s1/dose.raw": {
+      "sha256": "dfc32d102753457d975a3e16701fb22d368815feb68b493cb006422d01e308e1",
+      "bytes": 4000000
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/boundary_final_fullchain_s1/energy_ledger.json": {
+      "sha256": "960dbdec827893ee3336e515bba47379c51b22bc6da60bc995fcf841d23ad378",
+      "bytes": 563464
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/boundary_final_fullchain_s1/quality_report.json": {
+      "sha256": "0874a4727ade0516ca0f4ac84cdd13235579d1290e82b806c43b8da1842ee5fc",
+      "bytes": 2052
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/boundary_final_fullchain_s2/dose.mhd": {
+      "sha256": "e76aaecbe21638dbfc852ea78ed2256a634bf981066b5ea37bd373cc96cfe7b9",
+      "bytes": 304
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/boundary_final_fullchain_s2/dose.raw": {
+      "sha256": "4443343a0d082b0a2054bab3a3b5a986c95783441a277fca0643c372de99c9f6",
+      "bytes": 4000000
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/boundary_final_fullchain_s2/energy_ledger.json": {
+      "sha256": "ce8c10312519a32a34cb09d585e4bb84846184e174e0c41153d90328852eda33",
+      "bytes": 563464
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/boundary_final_fullchain_s2/quality_report.json": {
+      "sha256": "876cf34f6163616de3430696672c48e8cae5e50c4b304ce1dbc6d9eb01742357",
+      "bytes": 2053
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/boundary_final_fullchain_s3/dose.mhd": {
+      "sha256": "e76aaecbe21638dbfc852ea78ed2256a634bf981066b5ea37bd373cc96cfe7b9",
+      "bytes": 304
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/boundary_final_fullchain_s3/dose.raw": {
+      "sha256": "3f136210d60a1366ce2993f3915bf6e762ec611bb1933b9e08afe7acaef822ea",
+      "bytes": 4000000
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/boundary_final_fullchain_s3/energy_ledger.json": {
+      "sha256": "7230a2d9db003035b7f950f9c921776bec2032187b17568d9ea1cc8d56fc5a94",
+      "bytes": 563462
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/boundary_final_fullchain_s3/quality_report.json": {
+      "sha256": "2343cfbf69fa048a28c21b05c4ce75801fc1a1f9235970791c3328f3931d5c84",
+      "bytes": 2050
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/valley_cu0051m_s1/dose.mhd": {
+      "sha256": "e76aaecbe21638dbfc852ea78ed2256a634bf981066b5ea37bd373cc96cfe7b9",
+      "bytes": 304
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/valley_cu0051m_s1/dose.raw": {
+      "sha256": "65916dbcb276dc6f436e5e162d4db27e361b6548f3bd35869e22fad8de88aecd",
+      "bytes": 4000000
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/valley_cu0051m_s1/energy_ledger.json": {
+      "sha256": "19424fba6b8a91f6d9ffc8fea6d445fd237f950fcdcdc6b1ab5bb6df8b8b6d2b",
+      "bytes": 563465
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/valley_cu0051m_s1/quality_report.json": {
+      "sha256": "265b206e34a56144ec0f0908e28ba29b8d5ef05bf2168e1bc3e64623fac5e700",
+      "bytes": 2048
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/valley_cu0051m_s2/dose.mhd": {
+      "sha256": "e76aaecbe21638dbfc852ea78ed2256a634bf981066b5ea37bd373cc96cfe7b9",
+      "bytes": 304
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/valley_cu0051m_s2/dose.raw": {
+      "sha256": "9a65e240680bb0d548a14359a218a55b2042d8f15ee349942614147650cf8de9",
+      "bytes": 4000000
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/valley_cu0051m_s2/energy_ledger.json": {
+      "sha256": "02afcdb53569b2be9d48ea33213338084a4dd57887720a93db1ef6213d71b962",
+      "bytes": 563464
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/valley_cu0051m_s2/quality_report.json": {
+      "sha256": "287d7bb67ce8d5d853db6573a985ba6b384b05ea77bd0aa9b130520b2c4b5a48",
+      "bytes": 2052
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/valley_cu0051m_s3/dose.mhd": {
+      "sha256": "e76aaecbe21638dbfc852ea78ed2256a634bf981066b5ea37bd373cc96cfe7b9",
+      "bytes": 304
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/valley_cu0051m_s3/dose.raw": {
+      "sha256": "5fd680ef59a7215d7043c8d39b022757fcef4ef8660510fc8bb197a62facbddf",
+      "bytes": 4000000
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/valley_cu0051m_s3/energy_ledger.json": {
+      "sha256": "1c5f735076097f862f09bda270472fcc1781dd690750fec05dcc7e81603cbf54",
+      "bytes": 563465
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/valley_cu0051m_s3/quality_report.json": {
+      "sha256": "2b92a8e5ae62d9cb0bd0b13aac37664665ac23a5fc14d3c1e06abea518dd50e6",
+      "bytes": 2047
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/valley_cu005_s1/dose.mhd": {
+      "sha256": "e76aaecbe21638dbfc852ea78ed2256a634bf981066b5ea37bd373cc96cfe7b9",
+      "bytes": 304
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/valley_cu005_s1/dose.raw": {
+      "sha256": "266708adb51885ce43873373fc3a1b18726bc41b670acc91d9f43dd871b7093b",
+      "bytes": 4000000
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/valley_cu005_s1/energy_ledger.json": {
+      "sha256": "9414884279fc70e991c4a4f76f6055b163b52660ed56796ca9f003933da307e3",
+      "bytes": 563464
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/valley_cu005_s1/quality_report.json": {
+      "sha256": "61e4aacd194c3e64d8c014bb6ade58887ca6143e229c7dbada2d13e78b01cd74",
+      "bytes": 2053
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/valley_cu005_s2/dose.mhd": {
+      "sha256": "e76aaecbe21638dbfc852ea78ed2256a634bf981066b5ea37bd373cc96cfe7b9",
+      "bytes": 304
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/valley_cu005_s2/dose.raw": {
+      "sha256": "c17108d2ed117a9b4fc504d5f010865cfdac6263698ac03273a0f9512c892ef9",
+      "bytes": 4000000
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/valley_cu005_s2/energy_ledger.json": {
+      "sha256": "7e5b463125af8e7009d36e4883441a8f24272d622c6db5b12a01fbd17bbce7ec",
+      "bytes": 563463
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/valley_cu005_s2/quality_report.json": {
+      "sha256": "233508e8b87a55ac0f8c7da8e70f53dd33a431ec9468dbf30a7eb4bb552c86ff",
+      "bytes": 2054
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/valley_cu005_s3/dose.mhd": {
+      "sha256": "e76aaecbe21638dbfc852ea78ed2256a634bf981066b5ea37bd373cc96cfe7b9",
+      "bytes": 304
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/valley_cu005_s3/dose.raw": {
+      "sha256": "690f58676074c79fd46be66ccda3efc77a5b151a333078ebab23d5db41ced733",
+      "bytes": 4000000
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/valley_cu005_s3/energy_ledger.json": {
+      "sha256": "04b146d3d044739fd5374505a859f03ace7b6b3358aa3dd8189aa999deab5d81",
+      "bytes": 563460
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/valley_cu005_s3/quality_report.json": {
+      "sha256": "ab99d77b01638ed65e884a596ef1291164753cd64f5abbda4717580036683272",
+      "bytes": 2053
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/valley_stats1m_s1/dose.mhd": {
+      "sha256": "e76aaecbe21638dbfc852ea78ed2256a634bf981066b5ea37bd373cc96cfe7b9",
+      "bytes": 304
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/valley_stats1m_s1/dose.raw": {
+      "sha256": "005dfed1daaff1cf394a55da4efb1998c48d1e28696b2dfb75d31f82dc75d97a",
+      "bytes": 4000000
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/valley_stats1m_s1/energy_ledger.json": {
+      "sha256": "58363b2968a9944a4405cbebf403899c99739454a1d57be5c0c77880c856f3e3",
+      "bytes": 563465
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/valley_stats1m_s1/quality_report.json": {
+      "sha256": "9fa51737f5f66811260b1e2f8eed017ac630a8d9c8d9612da94036d09921d1b5",
+      "bytes": 2052
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/valley_stats1m_s2/dose.mhd": {
+      "sha256": "e76aaecbe21638dbfc852ea78ed2256a634bf981066b5ea37bd373cc96cfe7b9",
+      "bytes": 304
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/valley_stats1m_s2/dose.raw": {
+      "sha256": "2db0429d963ef602ac78eb1e419eb3f9cee6513404db58815431b4f644ce5ec4",
+      "bytes": 4000000
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/valley_stats1m_s2/energy_ledger.json": {
+      "sha256": "72963c53e4a67095c4c646de5adb1239dc1477ccd09859206e836c390612bab4",
+      "bytes": 563463
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/valley_stats1m_s2/quality_report.json": {
+      "sha256": "88fd3f0ec4f8adecf51156d7653b47dfa9ab5c843d5acfe71cb4aafb662d464a",
+      "bytes": 2052
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/valley_stats1m_s3/dose.mhd": {
+      "sha256": "e76aaecbe21638dbfc852ea78ed2256a634bf981066b5ea37bd373cc96cfe7b9",
+      "bytes": 304
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/valley_stats1m_s3/dose.raw": {
+      "sha256": "55d8fa7c910e08880af024f0cbb4ae2b9e6d0c2326cdcb4553b05e4c05ddce19",
+      "bytes": 4000000
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/valley_stats1m_s3/energy_ledger.json": {
+      "sha256": "42dfdb58ca13ae0ed972206e91642778f744afa89ec2ec6c39977f6cb360939f",
+      "bytes": 563465
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/valley_stats1m_s3/quality_report.json": {
+      "sha256": "ed02ed692a2e7e3932a4798c749beff145dc603aa0331c357a11bc4a1e8e2aea",
+      "bytes": 2053
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/src/detail/sycl_device_math.inc": {
+      "sha256": "573a008d536ccc7c26e5edf812ee51d032f9874d16c6d69b3b4561c39b5a3140",
+      "bytes": 165327
+    },
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/src/transport_sycl.cpp": {
+      "sha256": "6d681037962d99d43d161f170793ec88aa037fae41bf85cd138dd0903ad61699",
+      "bytes": 995786
+    }
+  }
+}

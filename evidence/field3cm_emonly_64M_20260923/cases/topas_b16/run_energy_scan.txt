@@ -1,0 +1,14 @@
+includeFile = run1.txt
+
+# Common 250 mm water phantom for the 150/250/300 MeV/u scan.  Its entrance
+# remains at world Y=60 mm, matching the 100 mm reference geometry.
+d:Ge/Box/HLY = 125.0 mm
+d:Ge/Box/TransY = 185.0 mm
+i:Sc/DoseAtPhantomP/XBins = 1000
+i:Sc/DoseAtPhantomP/YBins = 1000
+s:So/CarbonPBS/SpotPlanFile = "spots_3cm.csv"
+s:So/CarbonPBS/BeamModelFile = "beam_model.csv"
+u:So/CarbonPBS/HistoriesScale = 0.01
+i:Ts/NumberOfThreads = 192
+b:Ts/PauseBeforeQuit = "False"
+d:Ph/Default/EMRangeMax = 6 GeV

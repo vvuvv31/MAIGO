@@ -1,0 +1,96 @@
+{
+  "schema": "maigo.dose-scorer-manifest.v1",
+  "role": "gpu",
+  "runs": [
+    {
+      "effective_config": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/config/review_water_fixed_s1.yaml",
+      "config_sha256": "16d3d5ee92509a8655f103a16c0c7cdb6c8809983efd2cafdb6c3bda3e66bb7c",
+      "history_count": 20000,
+      "random_seed": 2026092301,
+      "normalization": "Gy_sum_over_histories",
+      "density_g_cm3": 1.0,
+      "dose_sha256": "173c2c75ddaf6067f90ebf3f1f21ee5ad734fde45f2191a2970b9d050436f766",
+      "geometry_axes": {
+        "transverse": "x",
+        "depth": "z",
+        "slab_thickness": "y"
+      },
+      "origin_centers_mm": [
+        -49.95,
+        0.125
+      ],
+      "shape_xz": [
+        1000,
+        600
+      ],
+      "spacing_xz_mm": [
+        0.1,
+        0.25
+      ],
+      "slab_thickness_mm": 100.0,
+      "mhd": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/review_water_fixed_s1/dose.mhd",
+      "mhd_sha256": "173c2c75ddaf6067f90ebf3f1f21ee5ad734fde45f2191a2970b9d050436f766",
+      "raw_sha256": "1a47ce82c5d6ef5462d8daba52267df7969c79272edec3ec9d37e490ffce5d83"
+    },
+    {
+      "effective_config": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/config/review_water_fixed_s2.yaml",
+      "config_sha256": "1059359bfb1b4799656d66863ce326832b67bcdc67ce958938648285add1d2c2",
+      "history_count": 20000,
+      "random_seed": 2026092302,
+      "normalization": "Gy_sum_over_histories",
+      "density_g_cm3": 1.0,
+      "dose_sha256": "173c2c75ddaf6067f90ebf3f1f21ee5ad734fde45f2191a2970b9d050436f766",
+      "geometry_axes": {
+        "transverse": "x",
+        "depth": "z",
+        "slab_thickness": "y"
+      },
+      "origin_centers_mm": [
+        -49.95,
+        0.125
+      ],
+      "shape_xz": [
+        1000,
+        600
+      ],
+      "spacing_xz_mm": [
+        0.1,
+        0.25
+      ],
+      "slab_thickness_mm": 100.0,
+      "mhd": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/review_water_fixed_s2/dose.mhd",
+      "mhd_sha256": "173c2c75ddaf6067f90ebf3f1f21ee5ad734fde45f2191a2970b9d050436f766",
+      "raw_sha256": "ef41c2d230bcb575d45c2177ee6c26b73a2716dd2af1e7ffc52a83d22a790acc"
+    },
+    {
+      "effective_config": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/config/review_water_fixed_s3.yaml",
+      "config_sha256": "8a48eeac279bb056b1b19bf026d9b4ebc5ee59db5d70bc8122c22ed88a305c4d",
+      "history_count": 20000,
+      "random_seed": 2026092303,
+      "normalization": "Gy_sum_over_histories",
+      "density_g_cm3": 1.0,
+      "dose_sha256": "173c2c75ddaf6067f90ebf3f1f21ee5ad734fde45f2191a2970b9d050436f766",
+      "geometry_axes": {
+        "transverse": "x",
+        "depth": "z",
+        "slab_thickness": "y"
+      },
+      "origin_centers_mm": [
+        -49.95,
+        0.125
+      ],
+      "shape_xz": [
+        1000,
+        600
+      ],
+      "spacing_xz_mm": [
+        0.1,
+        0.25
+      ],
+      "slab_thickness_mm": 100.0,
+      "mhd": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/review_water_fixed_s3/dose.mhd",
+      "mhd_sha256": "173c2c75ddaf6067f90ebf3f1f21ee5ad734fde45f2191a2970b9d050436f766",
+      "raw_sha256": "3c4ed18ac50ca6fc371122964076951b7b598ddbcc12a979dd512aa163809574"
+    }
+  ]
+}

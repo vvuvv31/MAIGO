@@ -1,0 +1,230 @@
+{
+  "scope": "GPU Cu 0.25 mm, seed 2026092801, 1M source primaries; actual same-run source_history join only",
+  "dose_proxy_definition": "Unrestricted stopping S(E)/abs(direction_z) weighted plane crossings. Diagnostic approximation, not a separate dose tally and not a TOPAS comparison.",
+  "depths": {
+    "0": {
+      "all": {
+        "count": 128066,
+        "weight": 128066.0,
+        "ever_copper_fluence_fraction": 0.42038480158668184,
+        "ever_copper_local_dose_proxy_fraction": 0.5433075934736253,
+        "energy_MeVu_mean": 215.22893801888856,
+        "energy_MeVu_quantiles": [
+          118.84830220540366,
+          246.3358357747396,
+          252.2189432779948
+        ],
+        "x_mm_mean": -0.002023019676638291,
+        "theta_x_mrad_rms": 11.208189113624993,
+        "copper_path_mean_mm": 3.920530269821107,
+        "copper_energy_MeVu_mean": 168.1482099710773,
+        "never_copper_energy_MeVu_mean": 249.37576952557757,
+        "Ebelow100MeVu_fluence_fraction": 0.0751643683725579
+      },
+      "central_peak": {
+        "count": 29291,
+        "weight": 29291.0,
+        "ever_copper_fluence_fraction": 0.17688027039022225,
+        "ever_copper_local_dose_proxy_fraction": 0.21539741545206637,
+        "energy_MeVu_mean": 242.1289630858034,
+        "energy_MeVu_quantiles": [
+          233.50484212239584,
+          248.65435791015625,
+          252.9222208658854
+        ],
+        "x_mm_mean": 0.00023520300043961012,
+        "theta_x_mrad_rms": 3.2203443384256194,
+        "copper_path_mean_mm": 0.8713357467156003,
+        "copper_energy_MeVu_mean": 208.25545855330233,
+        "never_copper_energy_MeVu_mean": 249.40804342520147,
+        "Ebelow100MeVu_fluence_fraction": 0.011880782492915912
+      },
+      "central_valleys": {
+        "count": 2509,
+        "weight": 2509.0,
+        "ever_copper_fluence_fraction": 1.0,
+        "ever_copper_local_dose_proxy_fraction": 1.0,
+        "energy_MeVu_mean": 109.41804007551372,
+        "energy_MeVu_quantiles": [
+          39.04679667154949,
+          107.0692647298177,
+          182.02012939453127
+        ],
+        "x_mm_mean": 0.03310093365612615,
+        "theta_x_mrad_rms": 27.169463386658514,
+        "copper_path_mean_mm": 15.193231437157806,
+        "copper_energy_MeVu_mean": 109.41804007551372,
+        "never_copper_energy_MeVu_mean": null,
+        "Ebelow100MeVu_fluence_fraction": 0.4400159426066162
+      }
+    },
+    "20": {
+      "all": {
+        "count": 120528,
+        "weight": 120528.0,
+        "ever_copper_fluence_fraction": 0.3841348068498606,
+        "ever_copper_local_dose_proxy_fraction": 0.4956391495039754,
+        "energy_MeVu_mean": 197.9087835319191,
+        "energy_MeVu_quantiles": [
+          117.82891031901043,
+          222.5572509765625,
+          228.38031005859375
+        ],
+        "x_mm_mean": -0.0034070839223646274,
+        "theta_x_mrad_rms": 9.242866385107112,
+        "copper_path_mean_mm": 2.9504350140641167,
+        "copper_energy_MeVu_mean": 154.13331677516848,
+        "never_copper_energy_MeVu_mean": 225.21294141321616,
+        "Ebelow100MeVu_fluence_fraction": 0.07495353776715784
+      },
+      "central_peak": {
+        "count": 25265,
+        "weight": 25265.0,
+        "ever_copper_fluence_fraction": 0.15313675044528002,
+        "ever_copper_local_dose_proxy_fraction": 0.1781964161622961,
+        "energy_MeVu_mean": 220.09614021464336,
+        "energy_MeVu_quantiles": [
+          214.22307942708332,
+          224.5615030924479,
+          229.07264811197916
+        ],
+        "x_mm_mean": 2.758622064386884e-05,
+        "theta_x_mrad_rms": 3.46107169957252,
+        "copper_path_mean_mm": 0.5905339747814023,
+        "copper_energy_MeVu_mean": 191.58821067685167,
+        "never_copper_energy_MeVu_mean": 225.25117757591255,
+        "Ebelow100MeVu_fluence_fraction": 0.00815357213536513
+      },
+      "central_valleys": {
+        "count": 2460,
+        "weight": 2460.0,
+        "ever_copper_fluence_fraction": 1.0,
+        "ever_copper_local_dose_proxy_fraction": 1.0,
+        "energy_MeVu_mean": 110.75746503987611,
+        "energy_MeVu_quantiles": [
+          42.68273900349935,
+          110.94498189290364,
+          177.61338907877604
+        ],
+        "x_mm_mean": 0.028150848450699473,
+        "theta_x_mrad_rms": 21.02803815344304,
+        "copper_path_mean_mm": 11.797639886126285,
+        "copper_energy_MeVu_mean": 110.75746503987611,
+        "never_copper_energy_MeVu_mean": null,
+        "Ebelow100MeVu_fluence_fraction": 0.42520325203252035
+      }
+    },
+    "100": {
+      "all": {
+        "count": 90257,
+        "weight": 90257.0,
+        "ever_copper_fluence_fraction": 0.1777147478865905,
+        "ever_copper_local_dose_proxy_fraction": 0.26971780293284775,
+        "energy_MeVu_mean": 94.85308490417337,
+        "energy_MeVu_quantiles": [
+          75.03941141764324,
+          99.70180257161458,
+          107.54005330403646
+        ],
+        "x_mm_mean": -0.0034623287534462643,
+        "theta_x_mrad_rms": 10.036083745732249,
+        "copper_path_mean_mm": 0.3774495393949221,
+        "copper_energy_MeVu_mean": 66.38147669385573,
+        "never_copper_energy_MeVu_mean": 101.00645402032593,
+        "Ebelow100MeVu_fluence_fraction": 0.5171565640338146
+      },
+      "central_peak": {
+        "count": 12671,
+        "weight": 12671.0,
+        "ever_copper_fluence_fraction": 0.09943966537763396,
+        "ever_copper_local_dose_proxy_fraction": 0.13744999647389952,
+        "energy_MeVu_mean": 98.34679187876716,
+        "energy_MeVu_quantiles": [
+          90.46182250976562,
+          100.37392171223958,
+          107.84397379557292
+        ],
+        "x_mm_mean": 0.0015851871889628925,
+        "theta_x_mrad_rms": 6.962947064311349,
+        "copper_path_mean_mm": 0.16874141131081796,
+        "copper_energy_MeVu_mean": 74.2655523194207,
+        "never_copper_energy_MeVu_mean": 101.00583682178501,
+        "Ebelow100MeVu_fluence_fraction": 0.4743903401467919
+      },
+      "central_valleys": {
+        "count": 2659,
+        "weight": 2659.0,
+        "ever_copper_fluence_fraction": 0.6227905227529146,
+        "ever_copper_local_dose_proxy_fraction": 0.7683875968934276,
+        "energy_MeVu_mean": 73.91049113949992,
+        "energy_MeVu_quantiles": [
+          30.442661539713544,
+          80.69242350260417,
+          104.11171671549481
+        ],
+        "x_mm_mean": 0.019334458865452278,
+        "theta_x_mrad_rms": 17.60060674098354,
+        "copper_path_mean_mm": 1.6106340034019682,
+        "copper_energy_MeVu_mean": 57.85828453640719,
+        "never_copper_energy_MeVu_mean": 100.41343643832501,
+        "Ebelow100MeVu_fluence_fraction": 0.7935314027830012
+      }
+    },
+    "120": {
+      "all": {
+        "count": 77619,
+        "weight": 77619.0,
+        "ever_copper_fluence_fraction": 0.05010371172006854,
+        "ever_copper_local_dose_proxy_fraction": 0.08259720419622191,
+        "energy_MeVu_mean": 44.21695829717529,
+        "energy_MeVu_quantiles": [
+          29.329344177246092,
+          45.38049825032552,
+          57.6247568766276
+        ],
+        "x_mm_mean": -0.010597826488824307,
+        "theta_x_mrad_rms": 13.429767894323358,
+        "copper_path_mean_mm": 0.03477594498392631,
+        "copper_energy_MeVu_mean": 29.492055072971123,
+        "never_copper_energy_MeVu_mean": 44.99364551593197,
+        "Ebelow100MeVu_fluence_fraction": 1.0
+      },
+      "central_peak": {
+        "count": 9775,
+        "weight": 9775.0,
+        "ever_copper_fluence_fraction": 0.03948849104859335,
+        "ever_copper_local_dose_proxy_fraction": 0.06240037204869623,
+        "energy_MeVu_mean": 44.526433339049845,
+        "energy_MeVu_quantiles": [
+          30.07772369384766,
+          45.55945841471354,
+          57.93684387207031
+        ],
+        "x_mm_mean": 0.0017902921854673437,
+        "theta_x_mrad_rms": 10.259914194768967,
+        "copper_path_mean_mm": 0.026470608591957167,
+        "copper_energy_MeVu_mean": 29.87523510357259,
+        "never_copper_energy_MeVu_mean": 45.12877251456314,
+        "Ebelow100MeVu_fluence_fraction": 1.0
+      },
+      "central_valleys": {
+        "count": 3049,
+        "weight": 3049.0,
+        "ever_copper_fluence_fraction": 0.11249590029517875,
+        "ever_copper_local_dose_proxy_fraction": 0.1768385854761221,
+        "energy_MeVu_mean": 42.21941662932714,
+        "energy_MeVu_quantiles": [
+          24.977507019042967,
+          43.4937744140625,
+          56.99279174804689
+        ],
+        "x_mm_mean": -0.02972022620683109,
+        "theta_x_mrad_rms": 21.32323889102336,
+        "copper_path_mean_mm": 0.08618183605184747,
+        "copper_energy_MeVu_mean": 28.036925241539386,
+        "never_copper_energy_MeVu_mean": 44.01712340907999,
+        "Ebelow100MeVu_fluence_fraction": 1.0
+      }
+    }
+  }
+}

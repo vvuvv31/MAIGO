@@ -580,14 +580,30 @@ UrbanLossRangeTable::UrbanLossRangeTable(std::vector<double> e_total_mev,
                                          std::vector<double> dedx_mev_per_mm,
                                          double max_inverse_residual_mev,
                                          double zeff, double radlen_mm,
-                                         double density_g_per_cm3)
+                                         double density_g_per_cm3,
+                                         std::string oracle_status,
+                                         std::string physics_list,
+                                         std::string particle,
+                                         std::string material,
+                                         std::string range_source,
+                                         std::string inverse_source,
+                                         std::string dedx_source,
+                                         double production_cut_mm)
     : e_total_mev_(std::move(e_total_mev)),
       range_mm_(std::move(range_mm)),
       dedx_mev_per_mm_(std::move(dedx_mev_per_mm)),
       max_inverse_residual_mev_(max_inverse_residual_mev),
       zeff_(zeff),
       radlen_mm_(radlen_mm),
-      density_g_per_cm3_(density_g_per_cm3) {}
+      density_g_per_cm3_(density_g_per_cm3),
+      oracle_status_(std::move(oracle_status)),
+      physics_list_(std::move(physics_list)),
+      particle_(std::move(particle)),
+      material_(std::move(material)),
+      range_source_(std::move(range_source)),
+      inverse_source_(std::move(inverse_source)),
+      dedx_source_(std::move(dedx_source)),
+      production_cut_mm_(production_cut_mm) {}
 
 UrbanLossRangeTable UrbanLossRangeTable::from_csv(
     const std::filesystem::path& path) {
@@ -602,19 +618,45 @@ UrbanLossRangeTable UrbanLossRangeTable::from_csv(
     double zeff = std::numeric_limits<double>::quiet_NaN();
     double radlen = std::numeric_limits<double>::quiet_NaN();
     double density = std::numeric_limits<double>::quiet_NaN();
+    double production_cut = std::numeric_limits<double>::quiet_NaN();
+    std::string oracle_status;
+    std::string physics_list;
+    std::string particle;
+    std::string material;
+    std::string range_source;
+    std::string inverse_source;
+    std::string dedx_source;
     std::string line;
     std::size_t line_number = 0;
     while (std::getline(input, line)) {
         ++line_number;
         const auto first = line.find_first_not_of(" \t\r\n");
         if (first == std::string::npos || line[first] == '#') {
-            std::istringstream meta(line.substr(first + 1));
+            const auto metadata_line = first == std::string::npos
+                                           ? std::string{}
+                                           : line.substr(first + 1);
+            std::istringstream meta(metadata_line);
             std::string key;
-            double value = 0.0;
-            if (meta >> key >> value) {
-                if (key == "zeff") zeff = value;
-                if (key == "radlen_mm") radlen = value;
-                if (key == "density_g_per_cm3") density = value;
+            if (meta >> key) {
+                std::string value;
+                std::getline(meta, value);
+                const auto value_first = value.find_first_not_of(" \t");
+                if (value_first != std::string::npos) {
+                    value.erase(0, value_first);
+                } else {
+                    value.clear();
+                }
+                if (key == "ORACLE_STATUS") oracle_status = value;
+                if (key == "physics_list") physics_list = value;
+                if (key == "particle") particle = value;
+                if (key == "material") material = value;
+                if (key == "range_source") range_source = value;
+                if (key == "inverse_source") inverse_source = value;
+                if (key == "dedx_source") dedx_source = value;
+                if (key == "zeff") zeff = std::stod(value);
+                if (key == "radlen_mm") radlen = std::stod(value);
+                if (key == "density_g_per_cm3") density = std::stod(value);
+                if (key == "production_cut_mm") production_cut = std::stod(value);
             }
             continue;
         }
@@ -645,7 +687,11 @@ UrbanLossRangeTable UrbanLossRangeTable::from_csv(
     }
     return UrbanLossRangeTable(std::move(energies), std::move(ranges),
                                std::move(dedx), max_residual, zeff, radlen,
-                               density);
+                               density, std::move(oracle_status),
+                               std::move(physics_list), std::move(particle),
+                               std::move(material), std::move(range_source),
+                               std::move(inverse_source), std::move(dedx_source),
+                               production_cut);
 }
 
 const std::vector<double>& UrbanLossRangeTable::energies_total_mev() const noexcept {
@@ -674,6 +720,55 @@ double UrbanLossRangeTable::radlen_mm() const noexcept {
 
 double UrbanLossRangeTable::density_g_per_cm3() const noexcept {
     return density_g_per_cm3_;
+}
+
+const std::string& UrbanLossRangeTable::oracle_status() const noexcept {
+    return oracle_status_;
+}
+
+const std::string& UrbanLossRangeTable::physics_list() const noexcept {
+    return physics_list_;
+}
+
+const std::string& UrbanLossRangeTable::particle() const noexcept {
+    return particle_;
+}
+
+const std::string& UrbanLossRangeTable::material() const noexcept {
+    return material_;
+}
+
+const std::string& UrbanLossRangeTable::range_source() const noexcept {
+    return range_source_;
+}
+
+const std::string& UrbanLossRangeTable::inverse_source() const noexcept {
+    return inverse_source_;
+}
+
+const std::string& UrbanLossRangeTable::dedx_source() const noexcept {
+    return dedx_source_;
+}
+
+double UrbanLossRangeTable::production_cut_mm() const noexcept {
+    return production_cut_mm_;
+}
+
+bool UrbanLossRangeTable::is_active_c12_reference(
+    const std::string& expected_material, const double expected_cut_mm) const noexcept {
+    constexpr double cut_tolerance_mm = 1.0e-9;
+    return oracle_status_ == "VALID_ACTIVE_C12_STEP_CONTEXT" &&
+           physics_list_ == "G4EmStandardPhysics_option4" &&
+           particle_ == "C12_Z6_A12_charge6" &&
+           material_ == expected_material &&
+           range_source_ ==
+               "active_UrbanMsc_GetRange_bound_ionIoni_GetRange" &&
+           inverse_source_ ==
+               "active_UrbanMsc_GetEnergy_and_ionIoni_GetKineticEnergy" &&
+           dedx_source_ ==
+               "active_UrbanMsc_GetDEDX_bound_ionIoni_GetDEDX_restricted" &&
+           std::isfinite(production_cut_mm_) &&
+           std::fabs(production_cut_mm_ - expected_cut_mm) <= cut_tolerance_mm;
 }
 
 }  // namespace carbon

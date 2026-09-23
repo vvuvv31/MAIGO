@@ -1,0 +1,682 @@
+{
+  "scope": "Cu collimator -> 60 mm air gap -> Water_75eV, carbon EM only, 250 MeV/u, central TPS spot; same configured distributions, independent source samples",
+  "status": "EXPLORATORY_REFERENCE_SE_MISSING",
+  "gpu_histories_per_seed": 250000,
+  "gpu_seeds": [
+    2026092601,
+    2026092602,
+    2026092603
+  ],
+  "topas_histories": 10000000,
+  "topas_independent_runs": 1,
+  "reference": "/mnt/sda/wuwei/minibeam_single_center_em_only_water75ev_e250_10m/topas_7378",
+  "normalization": "Gy per source primary; no fitted normalization",
+  "energy_MeV_per_primary": {
+    "gpu": {
+      "mean": 331.8772499658483,
+      "se": 1.2291087277882762,
+      "values": [
+        332.3769562067562,
+        329.5429676552384,
+        333.7118260355503
+      ]
+    },
+    "topas": {
+      "mean": 332.238206943894,
+      "se": null,
+      "values": [
+        332.238206943894
+      ]
+    },
+    "relative_difference": -0.0010864403024744007,
+    "combined_ratio_se": null
+  },
+  "rows": [
+    {
+      "depth_mm": 19.875,
+      "row_energy": {
+        "gpu": {
+          "mean": 3.54371579347925e-08,
+          "se": 9.567954383073528e-11,
+          "values": [
+            3.5558716547257065e-08,
+            3.524838896833432e-08,
+            3.550436828878611e-08
+          ]
+        },
+        "topas": {
+          "mean": 3.5398634263784854e-08,
+          "se": null,
+          "values": [
+            3.5398634263784854e-08
+          ]
+        },
+        "relative_difference": 0.001088281280022585,
+        "combined_ratio_se": null
+      },
+      "peak": {
+        "gpu": {
+          "mean": 1.278513411913688e-09,
+          "se": 1.0996647997949933e-11,
+          "values": [
+            1.2766075087711215e-09,
+            1.2604912626557052e-09,
+            1.2984414643142374e-09
+          ]
+        },
+        "topas": {
+          "mean": 1.293792063370347e-09,
+          "se": null,
+          "values": [
+            1.293792063370347e-09
+          ]
+        },
+        "relative_difference": -0.01180920171735933,
+        "combined_ratio_se": null
+      },
+      "valley": {
+        "gpu": {
+          "mean": 6.959988895687275e-11,
+          "se": 2.245211743099612e-12,
+          "values": [
+            6.654999742750078e-11,
+            7.397905064863153e-11,
+            6.827061879448592e-11
+          ]
+        },
+        "topas": {
+          "mean": 6.702358194161207e-11,
+          "se": null,
+          "values": [
+            6.702358194161207e-11
+          ]
+        },
+        "relative_difference": 0.03843881422966988,
+        "combined_ratio_se": null
+      },
+      "pvdr": {
+        "gpu": {
+          "mean": 18.41340331388831,
+          "se": 0.689078219451539,
+          "values": [
+            19.182683067145888,
+            17.038489296686073,
+            19.019037577832968
+          ]
+        },
+        "topas": {
+          "mean": 19.303535052743683,
+          "se": null,
+          "values": [
+            19.303535052743683
+          ]
+        },
+        "relative_difference": -0.046112369388468855,
+        "combined_ratio_se": null
+      },
+      "fwhm_mm": {
+        "gpu": {
+          "mean": 0.825122506685064,
+          "se": 0.003981117874723057,
+          "values": [
+            0.8297049482932886,
+            0.8284703301508374,
+            0.8171922416110664
+          ]
+        },
+        "topas": {
+          "mean": 0.8215422649874382,
+          "se": null,
+          "values": [
+            0.8215422649874382
+          ]
+        },
+        "relative_difference": 0.004357951927988157,
+        "combined_ratio_se": null
+      }
+    },
+    {
+      "depth_mm": 39.875,
+      "row_energy": {
+        "gpu": {
+          "mean": 3.5179234844880136e-08,
+          "se": 3.3915137852187286e-11,
+          "values": [
+            3.52255165669817e-08,
+            3.5113149701601284e-08,
+            3.519903826605741e-08
+          ]
+        },
+        "topas": {
+          "mean": 3.534993979466909e-08,
+          "se": null,
+          "values": [
+            3.534993979466909e-08
+          ]
+        },
+        "relative_difference": -0.004829002560697404,
+        "combined_ratio_se": null
+      },
+      "peak": {
+        "gpu": {
+          "mean": 1.1995193781331182e-09,
+          "se": 1.1840245076899512e-11,
+          "values": [
+            1.1917053780052812e-09,
+            1.1840671359095723e-09,
+            1.2227856204845012e-09
+          ]
+        },
+        "topas": {
+          "mean": 1.2042736168950796e-09,
+          "se": null,
+          "values": [
+            1.2042736168950796e-09
+          ]
+        },
+        "relative_difference": -0.0039478061258362285,
+        "combined_ratio_se": null
+      },
+      "valley": {
+        "gpu": {
+          "mean": 7.315002440009266e-11,
+          "se": 9.264197377641257e-13,
+          "values": [
+            7.400191843771607e-11,
+            7.129913246899377e-11,
+            7.414902229356812e-11
+          ]
+        },
+        "topas": {
+          "mean": 7.05444603227079e-11,
+          "se": null,
+          "values": [
+            7.05444603227079e-11
+          ]
+        },
+        "relative_difference": 0.03693506287333581,
+        "combined_ratio_se": null
+      },
+      "pvdr": {
+        "gpu": {
+          "mean": 16.400554618437052,
+          "se": 0.1521605432146992,
+          "values": [
+            16.10370924381215,
+            16.60703426404934,
+            16.490920347449663
+          ]
+        },
+        "topas": {
+          "mean": 17.071129488922182,
+          "se": null,
+          "values": [
+            17.071129488922182
+          ]
+        },
+        "relative_difference": -0.03928122453293326,
+        "combined_ratio_se": null
+      },
+      "fwhm_mm": {
+        "gpu": {
+          "mean": 0.8977587819287299,
+          "se": 0.004729013625257892,
+          "values": [
+            0.9007403754287046,
+            0.8884947435927435,
+            0.9040412267647417
+          ]
+        },
+        "topas": {
+          "mean": 0.9363079528899566,
+          "se": null,
+          "values": [
+            0.9363079528899566
+          ]
+        },
+        "relative_difference": -0.04117146590738974,
+        "combined_ratio_se": null
+      }
+    },
+    {
+      "depth_mm": 59.875,
+      "row_energy": {
+        "gpu": {
+          "mean": 3.604943192059788e-08,
+          "se": 3.282448486839273e-11,
+          "values": [
+            3.602286062096027e-08,
+            3.6010728966402895e-08,
+            3.611470617443047e-08
+          ]
+        },
+        "topas": {
+          "mean": 3.593801690533207e-08,
+          "se": null,
+          "values": [
+            3.593801690533207e-08
+          ]
+        },
+        "relative_difference": 0.0031001993114785353,
+        "combined_ratio_se": null
+      },
+      "peak": {
+        "gpu": {
+          "mean": 1.111045537982136e-09,
+          "se": 1.2274717171370243e-11,
+          "values": [
+            1.1103844153694809e-09,
+            1.090123376343399e-09,
+            1.132628822233528e-09
+          ]
+        },
+        "topas": {
+          "mean": 1.1303837411105633e-09,
+          "se": null,
+          "values": [
+            1.1303837411105633e-09
+          ]
+        },
+        "relative_difference": -0.017107644444202874,
+        "combined_ratio_se": null
+      },
+      "valley": {
+        "gpu": {
+          "mean": 8.25287312788229e-11,
+          "se": 4.211450800556373e-12,
+          "values": [
+            8.840349855745443e-11,
+            8.481861132167979e-11,
+            7.436408395733451e-11
+          ]
+        },
+        "topas": {
+          "mean": 7.819204067345709e-11,
+          "se": null,
+          "values": [
+            7.819204067345709e-11
+          ]
+        },
+        "relative_difference": 0.05546204662283394,
+        "combined_ratio_se": null
+      },
+      "pvdr": {
+        "gpu": {
+          "mean": 13.547892858007158,
+          "se": 0.8456939351489898,
+          "values": [
+            12.560412579688004,
+            12.852407736422837,
+            15.230858257910635
+          ]
+        },
+        "topas": {
+          "mean": 14.45650645992516,
+          "se": null,
+          "values": [
+            14.45650645992516
+          ]
+        },
+        "relative_difference": -0.06285153362859608,
+        "combined_ratio_se": null
+      },
+      "fwhm_mm": {
+        "gpu": {
+          "mean": 1.105129806123706,
+          "se": 0.0019686363552575475,
+          "values": [
+            1.1088628091230317,
+            1.1021792825979781,
+            1.104347326650108
+          ]
+        },
+        "topas": {
+          "mean": 1.0855961399641925,
+          "se": null,
+          "values": [
+            1.0855961399641925
+          ]
+        },
+        "relative_difference": 0.017993492644656772,
+        "combined_ratio_se": null
+      }
+    },
+    {
+      "depth_mm": 79.875,
+      "row_energy": {
+        "gpu": {
+          "mean": 3.7626242691805954e-08,
+          "se": 2.3689535123438756e-10,
+          "values": [
+            3.781282179959333e-08,
+            3.715579349039899e-08,
+            3.791011278542556e-08
+          ]
+        },
+        "topas": {
+          "mean": 3.775844695855592e-08,
+          "se": null,
+          "values": [
+            3.775844695855592e-08
+          ]
+        },
+        "relative_difference": -0.003501316325194126,
+        "combined_ratio_se": null
+      },
+      "peak": {
+        "gpu": {
+          "mean": 1.0716803371906281e-09,
+          "se": 1.3538055191530376e-11,
+          "values": [
+            1.0924946109298617e-09,
+            1.046276156557724e-09,
+            1.0762702440842984e-09
+          ]
+        },
+        "topas": {
+          "mean": 1.0884891962632538e-09,
+          "se": null,
+          "values": [
+            1.0884891962632538e-09
+          ]
+        },
+        "relative_difference": -0.015442375661908203,
+        "combined_ratio_se": null
+      },
+      "valley": {
+        "gpu": {
+          "mean": 9.004494968394283e-11,
+          "se": 3.017746398659252e-12,
+          "values": [
+            9.346229671791658e-11,
+            9.26446035009576e-11,
+            8.40279488329543e-11
+          ]
+        },
+        "topas": {
+          "mean": 8.510678570019081e-11,
+          "se": null,
+          "values": [
+            8.510678570019081e-11
+          ]
+        },
+        "relative_difference": 0.05802315224485022,
+        "combined_ratio_se": null
+      },
+      "pvdr": {
+        "gpu": {
+          "mean": 11.9303553304485,
+          "se": 0.4536785666832678,
+          "values": [
+            11.689147916268059,
+            11.293438765129038,
+            12.808479309948405
+          ]
+        },
+        "topas": {
+          "mean": 12.78968753558288,
+          "se": null,
+          "values": [
+            12.78968753558288
+          ]
+        },
+        "relative_difference": -0.06718946047302454,
+        "combined_ratio_se": null
+      },
+      "fwhm_mm": {
+        "gpu": {
+          "mean": 1.2918608000607463,
+          "se": 0.023245524481560982,
+          "values": [
+            1.263529830729623,
+            1.3379493227684143,
+            1.2741032466842017
+          ]
+        },
+        "topas": {
+          "mean": 1.2762158357067308,
+          "se": null,
+          "values": [
+            1.2762158357067308
+          ]
+        },
+        "relative_difference": 0.012258870260257959,
+        "combined_ratio_se": null
+      }
+    },
+    {
+      "depth_mm": 99.875,
+      "row_energy": {
+        "gpu": {
+          "mean": 4.239069253947984e-08,
+          "se": 1.9325680918957294e-10,
+          "values": [
+            4.252083587857669e-08,
+            4.201043581895192e-08,
+            4.264080592091091e-08
+          ]
+        },
+        "topas": {
+          "mean": 4.225469119869194e-08,
+          "se": null,
+          "values": [
+            4.225469119869194e-08
+          ]
+        },
+        "relative_difference": 0.0032186092698769375,
+        "combined_ratio_se": null
+      },
+      "peak": {
+        "gpu": {
+          "mean": 1.1019541901381067e-09,
+          "se": 1.0507038198243124e-11,
+          "values": [
+            1.1062519042752683e-09,
+            1.0819912713486702e-09,
+            1.1176193947903813e-09
+          ]
+        },
+        "topas": {
+          "mean": 1.1256362311542034e-09,
+          "se": null,
+          "values": [
+            1.1256362311542034e-09
+          ]
+        },
+        "relative_difference": -0.021038804864883964,
+        "combined_ratio_se": null
+      },
+      "valley": {
+        "gpu": {
+          "mean": 1.0610575288107308e-10,
+          "se": 4.2661799987527654e-12,
+          "values": [
+            1.0503214489290259e-10,
+            1.1397306843718978e-10,
+            9.931204531312687e-11
+          ]
+        },
+        "topas": {
+          "mean": 9.288484492572026e-11,
+          "se": null,
+          "values": [
+            9.288484492572026e-11
+          ]
+        },
+        "relative_difference": 0.14233654549270702,
+        "combined_ratio_se": null
+      },
+      "pvdr": {
+        "gpu": {
+          "mean": 10.426505310199737,
+          "se": 0.51088830204161,
+          "values": [
+            10.532507980326143,
+            9.493394239402727,
+            11.253613710870342
+          ]
+        },
+        "topas": {
+          "mean": 12.118620987679652,
+          "se": null,
+          "values": [
+            12.118620987679652
+          ]
+        },
+        "relative_difference": -0.13962939176001943,
+        "combined_ratio_se": null
+      },
+      "fwhm_mm": {
+        "gpu": {
+          "mean": 1.4826776740928251,
+          "se": 0.03625146814009671,
+          "values": [
+            1.4135797017444114,
+            1.4982106278222576,
+            1.5362426927118067
+          ]
+        },
+        "topas": {
+          "mean": 1.517760809158596,
+          "se": null,
+          "values": [
+            1.517760809158596
+          ]
+        },
+        "relative_difference": -0.023115061908351553,
+        "combined_ratio_se": null
+      }
+    },
+    {
+      "depth_mm": 119.875,
+      "row_energy": {
+        "gpu": {
+          "mean": 6.668016545440499e-08,
+          "se": 3.785549582943396e-10,
+          "values": [
+            6.662761181996757e-08,
+            6.605234735803833e-08,
+            6.736053718520907e-08
+          ]
+        },
+        "topas": {
+          "mean": 6.688083605948854e-08,
+          "se": null,
+          "values": [
+            6.688083605948854e-08
+          ]
+        },
+        "relative_difference": -0.0030004201039751655,
+        "combined_ratio_se": null
+      },
+      "peak": {
+        "gpu": {
+          "mean": 1.6815613586610804e-09,
+          "se": 1.9806555046278754e-11,
+          "values": [
+            1.701639237580821e-09,
+            1.6419494932051746e-09,
+            1.7010953451972454e-09
+          ]
+        },
+        "topas": {
+          "mean": 1.690603466704488e-09,
+          "se": null,
+          "values": [
+            1.690603466704488e-09
+          ]
+        },
+        "relative_difference": -0.00534844995972561,
+        "combined_ratio_se": null
+      },
+      "valley": {
+        "gpu": {
+          "mean": 1.6049663657516552e-10,
+          "se": 4.7262209161598034e-12,
+          "values": [
+            1.512401820946252e-10,
+            1.6678318534104617e-10,
+            1.6346654228982515e-10
+          ]
+        },
+        "topas": {
+          "mean": 1.5432856074767188e-10,
+          "se": null,
+          "values": [
+            1.5432856074767188e-10
+          ]
+        },
+        "relative_difference": 0.03996717002744865,
+        "combined_ratio_se": null
+      },
+      "pvdr": {
+        "gpu": {
+          "mean": 10.500811467781206,
+          "se": 0.40873557403860744,
+          "values": [
+            11.251237693671715,
+            9.844814330938927,
+            10.406382378732976
+          ]
+        },
+        "topas": {
+          "mean": 10.954572883425218,
+          "se": null,
+          "values": [
+            10.954572883425218
+          ]
+        },
+        "relative_difference": -0.04142210020169512,
+        "combined_ratio_se": null
+      },
+      "fwhm_mm": {
+        "gpu": {
+          "mean": 1.7076184169375275,
+          "se": 0.04524703396885555,
+          "values": [
+            1.642273814269081,
+            1.794507361708185,
+            1.6860740748353171
+          ]
+        },
+        "topas": {
+          "mean": 1.7554362378996968,
+          "se": null,
+          "values": [
+            1.7554362378996968
+          ]
+        },
+        "relative_difference": -0.02723985065921919,
+        "combined_ratio_se": null
+      }
+    }
+  ],
+  "integrated_depth_R80_mm": {
+    "gpu": {
+      "mean": 126.3581909609298,
+      "se": 0.006673777602810459,
+      "values": [
+        126.35186557270615,
+        126.37153255578485,
+        126.35117475429841
+      ]
+    },
+    "topas": {
+      "mean": 126.35130427321833,
+      "se": null,
+      "values": [
+        126.35130427321833
+      ]
+    },
+    "difference_mm": 0.006886687711471495
+  },
+  "provenance": {
+    "/mnt/sda/wuwei/minibeam_single_center_em_only_water75ev_e250_10m/topas_7378/dose.bin": "004657bf559bab0acfcbc5b079223f86cc5c03ea38f5a09fbde2b479763d2ddd",
+    "/mnt/sda/wuwei/minibeam_single_center_em_only_water75ev_e250_10m/topas_7378/dose.binheader": "7ce5098d6bcbedbd80aa81745ff59675c4730b31714d32fa7c1e3bdea7cfd5c1",
+    "/mnt/sda/wuwei/minibeam_single_center_em_only_water75ev_e250_10m/topas_7378/run_single_center_em_only_water75ev_e250_10m.txt": "9c3ca39a187efdeef4a2aba134e4308dd58d3a30d140d109c0b43600b0a57273",
+    "/mnt/sda/wuwei/minibeam_single_center_em_only_water75ev_e250_10m/topas_7378.log": "afbafa17e7d07eb8beeea56c911956d74882b07edb34a9be436c428c27129ab5",
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/config/review_fullchain_s1.yaml": "939f5e165dc4622b0130dfa80b2a61361645e448aa263c81e150787150aad32e",
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/config/review_fullchain_s2.yaml": "345715ae9bc9e3cdc6c91dbc31d632c10f577467ae0082049de25692687b63e2",
+    "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/config/review_fullchain_s3.yaml": "347f9403b64ddaf63756786bcdbdebbab05d3852fdef411a0e17636cb5ff1173"
+  }
+}

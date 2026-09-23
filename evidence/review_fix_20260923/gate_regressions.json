@@ -1,0 +1,13 @@
+{
+  "sparse_ids": "PASS",
+  "statistical_weights": "PASS",
+  "weighted_survival": "PASS",
+  "zero_gpu_ratio": "PASS",
+  "undefined_fwhm": "PASS",
+  "identical_dose": "PASS",
+  "full_volume_only_failure": {
+    "state": "FAIL",
+    "exit_code": 1,
+    "ratio": 1.1
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "schema": "maigo.dose-gate.v2",
+  "state": "INCONCLUSIVE",
+  "issues": [
+    "TOPAS requires at least three independent, uniquely seeded reference batches"
+  ]
+}

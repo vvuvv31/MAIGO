@@ -1,0 +1,86 @@
+s:Ge/World/Material  = "Air" #"Vacuum"
+d:Ge/World/HLX       = 2.0 m
+d:Ge/World/HLY       = 2.0 m
+d:Ge/World/HLZ       = 2.0 m
+s:Ge/World/Color     = "white"
+
+s:Ge/Box/Type              = "TsBox"
+s:Ge/Box/Parent            = "World"
+s:Ge/Box/Material          = "G4_WATER"
+d:Ge/Box/HLX               = 50.0 mm
+d:Ge/Box/HLY               = 50.0 mm
+d:Ge/Box/HLZ               = 50.0 mm
+d:Ge/Box/TransX            = 0.0 mm
+d:Ge/Box/TransY            = 110.0 mm
+d:Ge/Box/TransZ            = 0.0 mm
+s:Ge/Box/Color             = "yellow"
+b:Ge/Box/IsVisible         = "True"
+
+
+d:Ge/Box/MaxStepSize = 0.05 mm
+
+
+# scoring
+s:Sc/DoseAtPhantomP/OutputFile = "dose"
+s:Sc/DoseAtPhantomP/OutputType = "binary"
+b:Sc/DoseAtPhantomP/OutputAfterRun = "FALSE"
+s:Sc/DoseAtPhantomP/Quantity                  = "DoseToMedium"
+s:Sc/DoseAtPhantomP/Component                 = "Box"
+b:Sc/DoseAtPhantomP/OutputToConsole           = "FALSE"
+s:Sc/DoseAtPhantomP/IfOutputFileAlreadyExists = "Overwrite"
+i:Sc/DoseAtPhantomP/XBins       = 1000
+i:Sc/DoseAtPhantomP/YBins       = 1000
+i:Sc/DoseAtPhantomP/ZBins       = 1
+
+# 引入光阑准直器几何
+includeFile = aperture.txt
+
+# 物理过程配置
+sv:Ph/Default/Modules = 2 "g4em-standard_opt4" "g4decay"
+d:Ph/Default/CutForAllParticles = 0.05 mm
+
+# 线程设置 (PencilBeamScanning 使用顺序调度，单进程设为 1)
+i:Ts/NumberOfThreads = 100
+
+# ====================================================
+# IEC 坐标系与机架 (TPS 0 度)
+# ====================================================
+s:Ge/IEC_F/Parent = "World"
+s:Ge/IEC_F/Type   = "Group"
+
+s:Ge/IEC_G/Parent = "IEC_F"
+s:Ge/IEC_G/Type   = "Group"
+d:Ge/IEC_G/RotX   = 0. deg
+d:Ge/IEC_G/RotY   = 0. deg
+d:Ge/IEC_G/RotZ   = 0. deg
+
+s:Ge/PBSBeamFrame/Parent = "IEC_G"
+s:Ge/PBSBeamFrame/Type   = "Group"
+
+# ====================================================
+# PencilBeamScanning 粒子源配置
+# ====================================================
+s:So/CarbonPBS/Type              = "PencilBeamScanning"
+s:So/CarbonPBS/Component         = "PBSBeamFrame"
+s:So/CarbonPBS/BeamParticle      = "GenericIon(6,12,6)"
+
+s:So/CarbonPBS/SpotPlanFile      = "spots.csv"
+s:So/CarbonPBS/BeamModelFile     = "beam_model.csv"
+
+# 扫描磁铁虚拟源距与等中心源距
+d:So/CarbonPBS/VirtualScanningMagneticX        = 6228.28 mm
+d:So/CarbonPBS/VirtualScanningMagneticY        = 7007.64 mm
+d:So/CarbonPBS/VirtualSourceToIsocenterDistance = 450.0 mm
+
+# 束斑与权重控制
+b:So/CarbonPBS/SkipZeroWeightSpots  = "True"
+s:So/CarbonPBS/WeightMode           = "Histories"
+u:So/CarbonPBS/HistoriesScale       = 1.0
+b:So/CarbonPBS/InterpolateBeamModel = "False"
+i:So/CarbonPBS/FirstSpot            = 0
+i:So/CarbonPBS/LastSpot             = -1
+
+# 坐标系转换约定 (默认 TPS，束流自 Y = -450 mm 沿 +Y 方向入射)
+s:So/CarbonPBS/SpotCoordinateConvention = "TPS"
+
+i:Ts/ShowHistoryCountAtInterval = 10000

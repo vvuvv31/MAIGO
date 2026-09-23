@@ -62,3 +62,20 @@ scripts/run_windows_*.cmd
 /data/schneider/schneider_ion_section_stopping_v1.bin
 /data/schneider/elratev1_*/
 /data/ct/
+
+# Generated minibeam study artifacts; source, small inputs and reports are selected explicitly.
+/evidence/**/analysis_venv/
+/evidence/**/OpenTOPAS-*/
+/evidence/**/topas_build/
+/evidence/**/topas_tps_source_extension/
+/evidence/**/bin/
+/evidence/**/baseline/
+/evidence/**/*.bin
+/evidence/**/*.binheader
+/evidence/**/*.raw
+/evidence/**/*.phsp
+/evidence/**/*.npz
+/evidence/**/*.tar.gz
+/evidence/**/serial.lock
+/evidence/**/memory_usage.tsv
+/evidence/field3cm_emonly_64M_20260923/serial_status.json

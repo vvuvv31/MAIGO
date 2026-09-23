@@ -1,0 +1,12 @@
+{
+  "water75": {
+    "max_range_relative": 0.0,
+    "max_dedx_relative": 0.0,
+    "range_ratio_first": 1.0
+  },
+  "copper": {
+    "max_range_relative": 0.0,
+    "max_dedx_relative": 0.0,
+    "range_ratio_first": 1.0
+  }
+}

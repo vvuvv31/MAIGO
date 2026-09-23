@@ -1,0 +1,197 @@
+{
+  "status": "COMPLETE",
+  "completed_at": "2026-09-23T14:17:25.374460+08:00",
+  "pymedphys_version": "0.41.0",
+  "numpy_version": "2.5.2",
+  "scipy_version": "1.18.1",
+  "reference": "TOPAS",
+  "evaluation": "GPU",
+  "histories_per_engine": 12800000,
+  "distance_criterion_mm": 0.2,
+  "dose_difference_criterion_percent": 3.0,
+  "lower_reference_dose_cutoff_percent": 3.0,
+  "search_step_mm": 0.02,
+  "interp_fraction": 10,
+  "cutoff_definition": "Both modes use the identical reference mask: TOPAS >= 0.03 * TOPAS.max()",
+  "reference_max_dose_Gy_per_source": 4.893832192465197e-10,
+  "reference_dose_cutoff_Gy_per_source": 1.4681496577395593e-11,
+  "global_absolute_dose_tolerance_Gy_per_source": 1.4681496577395593e-11,
+  "local_absolute_tolerance_range_Gy_per_source": [
+    4.404518477940655e-13,
+    1.4681496577395593e-11
+  ],
+  "total_grid_voxels": 1000000,
+  "evaluated_voxels": 201625,
+  "excluded_voxels": 798375,
+  "results": {
+    "global": {
+      "local_gamma": false,
+      "evaluated_voxels": 201625,
+      "passing_voxels": 201624,
+      "failing_voxels": 1,
+      "pass_rate_percent": 99.99950402975821,
+      "calculation_wall_s": 0.45051522902213037,
+      "gamma_statistics": {
+        "mean": 0.10565378682533454,
+        "median": 0.10077839319144433,
+        "p95": 0.23491376232735592,
+        "p99": 0.3581736911359052,
+        "maximum": 1.1162773316348724
+      },
+      "zero_distance_comparison": {
+        "pass_rate_percent": 99.65282083075016,
+        "passing_voxels": 200925,
+        "newly_passing_voxels": 699,
+        "pass_rate_increase_percentage_points": 0.3466831990080595,
+        "previously_failing_now_passing_percent": 99.85714285714286,
+        "previously_passing_now_failing_voxels": 0,
+        "all_gamma_values_no_larger_than_zero_distance": true
+      },
+      "denominator": "0.03 * TOPAS global maximum dose",
+      "rois": {
+        "central_peak": {
+          "evaluated_voxels": 2115,
+          "passing_voxels": 2115,
+          "failing_voxels": 0,
+          "pass_rate_percent": 100.0
+        },
+        "adjacent_valleys": {
+          "evaluated_voxels": 10457,
+          "passing_voxels": 10457,
+          "failing_voxels": 0,
+          "pass_rate_percent": 100.0
+        },
+        "inner_field_peaks": {
+          "evaluated_voxels": 17976,
+          "passing_voxels": 17975,
+          "failing_voxels": 1,
+          "pass_rate_percent": 99.99443702714731
+        },
+        "inner_field_valleys": {
+          "evaluated_voxels": 28215,
+          "passing_voxels": 28215,
+          "failing_voxels": 0,
+          "pass_rate_percent": 100.0
+        }
+      }
+    },
+    "local": {
+      "local_gamma": true,
+      "evaluated_voxels": 201625,
+      "passing_voxels": 196581,
+      "failing_voxels": 5044,
+      "pass_rate_percent": 97.49832610043397,
+      "calculation_wall_s": 0.9658646829193458,
+      "gamma_statistics": {
+        "mean": 0.28167616977199794,
+        "median": 0.21233295098845023,
+        "p95": 0.710872132337393,
+        "p99": 1.438441053085104,
+        "maximum": 2.0
+      },
+      "zero_distance_comparison": {
+        "pass_rate_percent": 58.544823310601366,
+        "passing_voxels": 118041,
+        "newly_passing_voxels": 78540,
+        "pass_rate_increase_percentage_points": 38.95350278983261,
+        "previously_failing_now_passing_percent": 93.96535222052067,
+        "previously_passing_now_failing_voxels": 0,
+        "all_gamma_values_no_larger_than_zero_distance": true
+      },
+      "denominator": "0.03 * TOPAS dose at the same voxel",
+      "rois": {
+        "central_peak": {
+          "evaluated_voxels": 2115,
+          "passing_voxels": 2114,
+          "failing_voxels": 1,
+          "pass_rate_percent": 99.95271867612293
+        },
+        "adjacent_valleys": {
+          "evaluated_voxels": 10457,
+          "passing_voxels": 9875,
+          "failing_voxels": 582,
+          "pass_rate_percent": 94.43435019604092
+        },
+        "inner_field_peaks": {
+          "evaluated_voxels": 17976,
+          "passing_voxels": 17956,
+          "failing_voxels": 20,
+          "pass_rate_percent": 99.88874054294615
+        },
+        "inner_field_valleys": {
+          "evaluated_voxels": 28215,
+          "passing_voxels": 26340,
+          "failing_voxels": 1875,
+          "pass_rate_percent": 93.35459861775651
+        }
+      }
+    }
+  },
+  "implementation": {
+    "method": "Public pymedphys.gamma; 2D Euclidean distance in transverse x and water depth.",
+    "maximum_search_radius_mm": 0.4,
+    "max_gamma": 2.0,
+    "search_step_note": "distance_mm_threshold / interp_fraction = 0.2 / 10 = 0.02 mm; maximum radius 0.4 mm keeps the adaptive radial step at 0.02 mm. Angular spacing is selected by PyMedPhys, not a Cartesian search grid.",
+    "interpolation": "scipy multilinear interpolation",
+    "all_voxels_checked": true,
+    "gamma_output_clipped": true,
+    "clipping_note": "Gamma values above 2 are capped at 2; this does not change classification at gamma <= 1. Reported moments are for capped values.",
+    "local_passing_is_subset_of_global": true,
+    "all_previous_passing_voxels_still_pass": true,
+    "input_sha256_matches_completed_mc_run": true
+  },
+  "memory_max_bytes": 29999996928,
+  "memory_peak_bytes": 330928128,
+  "scoring_scope": "Original 0.1 x 100 x 0.25 mm grid, averaged across the 100 mm vertical dimension.",
+  "monte_carlo_uncertainty_note": "Gamma of the four-batch averaged dose. Monte Carlo noise is retained; no pass-rate confidence interval is estimated.",
+  "inputs": [
+    {
+      "engine": "TOPAS",
+      "batch": 1,
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_20260923/cases/topas_b1/dose.bin",
+      "sha256": "4879cc91a35a545ff376b325c09485f2947afe817e630e9ecbc9dce56a9fb98e"
+    },
+    {
+      "engine": "GPU",
+      "batch": 1,
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/field3cm_emonly_b1/dose.raw",
+      "sha256": "61db868a9c4b1d68af31b8ecb433581df357ff10464deec2b3a7da6584b45ecb"
+    },
+    {
+      "engine": "TOPAS",
+      "batch": 2,
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_20260923/cases/topas_b2/dose.bin",
+      "sha256": "05a110a3f74a743c1fce3b4070dc60f6501e51c7e7acfe6d9e83ef886feb8274"
+    },
+    {
+      "engine": "GPU",
+      "batch": 2,
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/field3cm_emonly_b2/dose.raw",
+      "sha256": "f99b95929d93d91529e1a0242b8a50d8c5f913644f031a1b343a3c9d45cad104"
+    },
+    {
+      "engine": "TOPAS",
+      "batch": 3,
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_20260923/cases/topas_b3/dose.bin",
+      "sha256": "dd0a37837cc940ced272328c04101c86a6413fffb9b147837be069bdf154fe02"
+    },
+    {
+      "engine": "GPU",
+      "batch": 3,
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/field3cm_emonly_b3/dose.raw",
+      "sha256": "e42a7a9963eab463b97e9219470d5010f5fdef2b2f2034fa88f71d9e9c8eba2a"
+    },
+    {
+      "engine": "TOPAS",
+      "batch": 4,
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/evidence/field3cm_emonly_20260923/cases/topas_b4/dose.bin",
+      "sha256": "4f7699d7c6c638bafc69652c076f0c7b83b18513aea47bae972e9474283421ef"
+    },
+    {
+      "engine": "GPU",
+      "batch": 4,
+      "path": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/out/field3cm_emonly_b4/dose.raw",
+      "sha256": "5e88629f80cc5a3b1327abab17bd0a1d1ee695818dc68ccf281aaaa32a7ce9e3"
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "changes": [
+    "config/beam_minibeam_single_center_em_only_e250_urban_v2.yaml",
+    "config/beam_minibeam_single_center_em_only_e250_urban_v2_10m.yaml",
+    "config/beam_minibeam_single_center_em_only_e250_urban_v2_10m_c005.yaml",
+    "config/beam_minibeam_single_center_em_only_e250_urban_v2_cuwater_10m.yaml",
+    "config/beam_minibeam_single_center_em_only_e250_urban_v2_cuwater_10m_B_s1.yaml",
+    "config/beam_minibeam_single_center_em_only_e250_urban_v2_cuwater_10m_B_s2.yaml",
+    "config/beam_minibeam_single_center_em_only_e250_urban_v2_cuwater_10m_s0025.yaml",
+    "config/beam_minibeam_water_replay_e250_em12800k_urban_v2.yaml",
+    "config/beam_minibeam_water_replay_e250_em12800k_urban_v2_B.yaml",
+    "config/beam_minibeam_water_replay_e250_em12800k_urban_v2_mini.yaml"
+  ],
+  "scope": "Existing opt-in primary/Cu Urban benchmark configs now point to corrected active-step tables; secondary-only replay configs were not part of this transport repair."
+}

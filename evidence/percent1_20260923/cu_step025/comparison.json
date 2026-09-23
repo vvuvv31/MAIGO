@@ -1,0 +1,881 @@
+{
+  "scope": "Cu/slit ceilings halved to 0.025 mm in both engines, water remains 0.05 mm. Three 1M batches each. GPU paired source/seeds against previous three Cu0.05 runs; TOPAS independent seeds. Step study only; not a high-stat replacement for main benchmark.",
+  "rows": [
+    {
+      "depth_mm": 20,
+      "window_width_mm": 0.25,
+      "valley": {
+        "GPU_paired_step_change": 0.00516291799701217,
+        "GPU_paired_step_change_SE": 0.017300031164825626,
+        "TOPAS_step_change": -0.008631746637425608,
+        "TOPAS_step_change_SE": 0.0127137734051182,
+        "GPU_vs_TOPAS_relative_difference": -0.005258358636888616,
+        "combined_SE": 0.02739985896180464,
+        "CI95_approx": [
+          -0.09460863779867984,
+          0.08409192052490261
+        ],
+        "GPU_values": [
+          6.633228076680099e-11,
+          6.271128113439773e-11,
+          6.82858422806021e-11
+        ],
+        "TOPAS_values": [
+          6.755063714081187e-11,
+          6.599457774427718e-11,
+          6.482730314019136e-11
+        ],
+        "GPU_15M_baseline_plus_paired_shift_vs_new_TOPAS": 0.003950051916739472
+      },
+      "peak": {
+        "GPU_paired_step_change": -0.0022128819779852153,
+        "GPU_paired_step_change_SE": 0.0017345476781324672,
+        "TOPAS_step_change": 0.0017966310390933327,
+        "TOPAS_step_change_SE": 0.0032777031251797106,
+        "GPU_vs_TOPAS_relative_difference": 0.009704921475382822,
+        "combined_SE": 0.008272113792256558,
+        "CI95_approx": [
+          -0.019803861064491703,
+          0.039213704015257346
+        ],
+        "GPU_values": [
+          1.3000461622141302e-09,
+          1.2964949128217996e-09,
+          1.3283774605952203e-09
+        ],
+        "TOPAS_values": [
+          1.2947780778631568e-09,
+          1.290049433009699e-09,
+          1.3023661158513278e-09
+        ],
+        "GPU_15M_baseline_plus_paired_shift_vs_new_TOPAS": 0.00991170186440038
+      },
+      "row_mean": {
+        "GPU_paired_step_change": 0.00024117149951262127,
+        "GPU_paired_step_change_SE": 0.0017808741932894329,
+        "TOPAS_step_change": 0.0002923078932686174,
+        "TOPAS_step_change_SE": 0.0025512296828784685,
+        "GPU_vs_TOPAS_relative_difference": 0.003473123575772341,
+        "combined_SE": 0.004366867679740575,
+        "CI95_approx": [
+          -0.009213853836029174,
+          0.016160100987573856
+        ],
+        "GPU_values": [
+          3.527838773555911e-11,
+          3.5597020272636116e-11,
+          3.569777511114579e-11
+        ],
+        "TOPAS_values": [
+          3.5528569287564674e-11,
+          3.523071062625831e-11,
+          3.5445042469599215e-11
+        ],
+        "GPU_15M_baseline_plus_paired_shift_vs_new_TOPAS": 0.0018704973908680866
+      }
+    },
+    {
+      "depth_mm": 20,
+      "window_width_mm": 10,
+      "valley": {
+        "GPU_paired_step_change": -0.028710430568992872,
+        "GPU_paired_step_change_SE": 0.003050793075073905,
+        "TOPAS_step_change": -0.015059555985652007,
+        "TOPAS_step_change_SE": 0.009888813946082119,
+        "GPU_vs_TOPAS_relative_difference": -0.015681964591275466,
+        "combined_SE": 0.01691420021842274,
+        "CI95_approx": [
+          -0.06863458101892977,
+          0.037270651836378836
+        ],
+        "GPU_values": [
+          6.399340285952339e-11,
+          6.347186389575657e-11,
+          6.662679324563207e-11
+        ],
+        "TOPAS_values": [
+          6.609958285025633e-11,
+          6.642074270075686e-11,
+          6.466397161602795e-11
+        ],
+        "GPU_15M_baseline_plus_paired_shift_vs_new_TOPAS": -0.015500983725332707
+      },
+      "peak": {
+        "GPU_paired_step_change": -0.001509488017176183,
+        "GPU_paired_step_change_SE": 0.0018083402945033252,
+        "TOPAS_step_change": 0.0020290089577230663,
+        "TOPAS_step_change_SE": 0.003658354408683952,
+        "GPU_vs_TOPAS_relative_difference": 0.011528024406036952,
+        "combined_SE": 0.007642559613571147,
+        "CI95_approx": [
+          -0.013400312301263033,
+          0.03645636111333694
+        ],
+        "GPU_values": [
+          1.301555090321926e-09,
+          1.3011430120968725e-09,
+          1.328119729441824e-09
+        ],
+        "TOPAS_values": [
+          1.2958847837580832e-09,
+          1.2877455919806379e-09,
+          1.3023893261561165e-09
+        ],
+        "GPU_15M_baseline_plus_paired_shift_vs_new_TOPAS": 0.010925353825956163
+      },
+      "row_mean": {
+        "GPU_paired_step_change": -0.000849637410458055,
+        "GPU_paired_step_change_SE": 0.0018255144871280392,
+        "TOPAS_step_change": 0.00018995828110712765,
+        "TOPAS_step_change_SE": 0.0013669995147741407,
+        "GPU_vs_TOPAS_relative_difference": 0.0024612556552097153,
+        "combined_SE": 0.0033328958031484464,
+        "CI95_approx": [
+          -0.009114757506688649,
+          0.01403726881710808
+        ],
+        "GPU_values": [
+          3.5293682644299355e-11,
+          3.554714242832601e-11,
+          3.566614078565589e-11
+        ],
+        "TOPAS_values": [
+          3.547289891343474e-11,
+          3.5330780745758685e-11,
+          3.544178893866098e-11
+        ],
+        "GPU_15M_baseline_plus_paired_shift_vs_new_TOPAS": 0.0007199326582054688
+      }
+    },
+    {
+      "depth_mm": 40,
+      "window_width_mm": 0.25,
+      "valley": {
+        "GPU_paired_step_change": -0.05561837958994359,
+        "GPU_paired_step_change_SE": 0.026300320996183277,
+        "TOPAS_step_change": -0.0028991076347147926,
+        "TOPAS_step_change_SE": 0.022022182596873406,
+        "GPU_vs_TOPAS_relative_difference": -0.01184788825140648,
+        "combined_SE": 0.03680972614401186,
+        "CI95_approx": [
+          -0.12069761532098074,
+          0.09700183881816778
+        ],
+        "GPU_values": [
+          6.700376616208813e-11,
+          6.659937262156746e-11,
+          7.322957899305039e-11
+        ],
+        "TOPAS_values": [
+          7.00307004080969e-11,
+          6.717780324834164e-11,
+          7.210412677522981e-11
+        ],
+        "GPU_15M_baseline_plus_paired_shift_vs_new_TOPAS": -0.03573345984786902
+      },
+      "peak": {
+        "GPU_paired_step_change": 4.246264876073847e-05,
+        "GPU_paired_step_change_SE": 0.0016557300170380311,
+        "TOPAS_step_change": -0.0017759460776430869,
+        "TOPAS_step_change_SE": 0.006490644442720197,
+        "GPU_vs_TOPAS_relative_difference": 0.01343924320902512,
+        "combined_SE": 0.00915790453783081,
+        "CI95_approx": [
+          -0.011994053430725838,
+          0.038872539848776075
+        ],
+        "GPU_values": [
+          1.2050477671436964e-09,
+          1.2155360891483724e-09,
+          1.2321210233494639e-09
+        ],
+        "TOPAS_values": [
+          1.2133566197007894e-09,
+          1.1873712355736643e-09,
+          1.2035384133923799e-09
+        ],
+        "GPU_15M_baseline_plus_paired_shift_vs_new_TOPAS": 0.011380963072793682
+      },
+      "row_mean": {
+        "GPU_paired_step_change": -0.0010175672588603505,
+        "GPU_paired_step_change_SE": 0.0017815041860334275,
+        "TOPAS_step_change": 0.002670895896404346,
+        "TOPAS_step_change_SE": 0.0017222512798156955,
+        "GPU_vs_TOPAS_relative_difference": -0.0001933784688102902,
+        "combined_SE": 0.0025496122477255373,
+        "CI95_approx": [
+          -0.00784166024329843,
+          0.007454903305677849
+        ],
+        "GPU_values": [
+          3.532229778002362e-11,
+          3.5318184313907927e-11,
+          3.554984056376041e-11
+        ],
+        "TOPAS_values": [
+          3.5433148968679746e-11,
+          3.531001414488638e-11,
+          3.54676984379037e-11
+        ],
+        "GPU_15M_baseline_plus_paired_shift_vs_new_TOPAS": -0.0012113573903955732
+      }
+    },
+    {
+      "depth_mm": 40,
+      "window_width_mm": 10,
+      "valley": {
+        "GPU_paired_step_change": -0.0485320076643369,
+        "GPU_paired_step_change_SE": 0.014923732776817878,
+        "TOPAS_step_change": -0.010647402611481671,
+        "TOPAS_step_change_SE": 0.012044288919672685,
+        "GPU_vs_TOPAS_relative_difference": -0.011240409367552662,
+        "combined_SE": 0.022924788195598816,
+        "CI95_approx": [
+          -0.08617030337203906,
+          0.06368948463693373
+        ],
+        "GPU_values": [
+          6.706323254093142e-11,
+          6.774172280074702e-11,
+          7.168324189024129e-11
+        ],
+        "TOPAS_values": [
+          7.004539825175013e-11,
+          6.825136822953936e-11,
+          7.05388283267894e-11
+        ],
+        "GPU_15M_baseline_plus_paired_shift_vs_new_TOPAS": -0.0278803412540799
+      },
+      "peak": {
+        "GPU_paired_step_change": -0.0006806522023277292,
+        "GPU_paired_step_change_SE": 0.0015830058905421465,
+        "TOPAS_step_change": -0.0009637737021668258,
+        "TOPAS_step_change_SE": 0.005402662143265478,
+        "GPU_vs_TOPAS_relative_difference": 0.010619283102100807,
+        "combined_SE": 0.009116211798046225,
+        "CI95_approx": [
+          -0.01596831836197791,
+          0.03720688456617953
+        ],
+        "GPU_values": [
+          1.2001935421722005e-09,
+          1.2117459657019932e-09,
+          1.2310544829233542e-09
+        ],
+        "TOPAS_values": [
+          1.2090867967344814e-09,
+          1.1893261544173584e-09,
+          1.2063015557941983e-09
+        ],
+        "GPU_15M_baseline_plus_paired_shift_vs_new_TOPAS": 0.009778981906272133
+      },
+      "row_mean": {
+        "GPU_paired_step_change": -0.0008454118257061504,
+        "GPU_paired_step_change_SE": 0.000743988421786879,
+        "TOPAS_step_change": 0.0020980487366601963,
+        "TOPAS_step_change_SE": 0.001606684612695308,
+        "GPU_vs_TOPAS_relative_difference": 0.0006271770390493536,
+        "combined_SE": 0.003035998351456825,
+        "CI95_approx": [
+          -0.009127550284173197,
+          0.010381904362271904
+        ],
+        "GPU_values": [
+          3.5242331300849215e-11,
+          3.538655997890211e-11,
+          3.557383409527145e-11
+        ],
+        "TOPAS_values": [
+          3.53912706294911e-11,
+          3.528964498945152e-11,
+          3.5455243594008886e-11
+        ],
+        "GPU_15M_baseline_plus_paired_shift_vs_new_TOPAS": -0.00033521214269960353
+      }
+    },
+    {
+      "depth_mm": 60,
+      "window_width_mm": 0.25,
+      "valley": {
+        "GPU_paired_step_change": -0.04289587368880224,
+        "GPU_paired_step_change_SE": 0.02074321686500519,
+        "TOPAS_step_change": -0.012078939292545776,
+        "TOPAS_step_change_SE": 0.019866916432712087,
+        "GPU_vs_TOPAS_relative_difference": -0.0037969421882394494,
+        "combined_SE": 0.02241467663759989,
+        "CI95_approx": [
+          -0.07095869004305061,
+          0.06336480566657171
+        ],
+        "GPU_values": [
+          7.874595066823531e-11,
+          7.823167707101674e-11,
+          7.574134942842647e-11
+        ],
+        "TOPAS_values": [
+          8.043045327212893e-11,
+          7.788580678607105e-11,
+          7.52897054553614e-11
+        ],
+        "GPU_15M_baseline_plus_paired_shift_vs_new_TOPAS": -0.023319800327686435
+      },
+      "peak": {
+        "GPU_paired_step_change": -0.001338514666729597,
+        "GPU_paired_step_change_SE": 0.0053486129049720955,
+        "TOPAS_step_change": 0.0048205381016397375,
+        "TOPAS_step_change_SE": 0.003537239422241036,
+        "GPU_vs_TOPAS_relative_difference": -0.0004075121421720507,
+        "combined_SE": 0.01145933376346254,
+        "CI95_approx": [
+          -0.04328128562879322,
+          0.04246626134444912
+        ],
+        "GPU_values": [
+          1.1121183051727712e-09,
+          1.1401626979932188e-09,
+          1.15462631219998e-09
+        ],
+        "TOPAS_values": [
+          1.1415316839702427e-09,
+          1.1289923277217896e-09,
+          1.1377722257748246e-09
+        ],
+        "GPU_15M_baseline_plus_paired_shift_vs_new_TOPAS": 0.00020848588638555654
+      },
+      "row_mean": {
+        "GPU_paired_step_change": -0.0027414763445207393,
+        "GPU_paired_step_change_SE": 0.0017494746086377697,
+        "TOPAS_step_change": 0.0034083154645001557,
+        "TOPAS_step_change_SE": 0.0023827631895569808,
+        "GPU_vs_TOPAS_relative_difference": -0.0007772229178206747,
+        "combined_SE": 0.0032426101553960063,
+        "CI95_approx": [
+          -0.009780322026127103,
+          0.008225876190485754
+        ],
+        "GPU_values": [
+          3.598383468997212e-11,
+          3.590424096769591e-11,
+          3.618135239366892e-11
+        ],
+        "TOPAS_values": [
+          3.6211042356258596e-11,
+          3.600996721113963e-11,
+          3.593247785300408e-11
+        ],
+        "GPU_15M_baseline_plus_paired_shift_vs_new_TOPAS": -0.002349835493175023
+      }
+    },
+    {
+      "depth_mm": 60,
+      "window_width_mm": 10,
+      "valley": {
+        "GPU_paired_step_change": -0.032814186494015025,
+        "GPU_paired_step_change_SE": 0.00031255287564551645,
+        "TOPAS_step_change": -0.02235737095074153,
+        "TOPAS_step_change_SE": 0.01266513954297867,
+        "GPU_vs_TOPAS_relative_difference": 0.00526028030177117,
+        "combined_SE": 0.012701598724812316,
+        "CI95_approx": [
+          -0.04297636989270707,
+          0.05349693049624941
+        ],
+        "GPU_values": [
+          7.779496809234844e-11,
+          7.78212726299898e-11,
+          7.702125463310954e-11
+        ],
+        "TOPAS_values": [
+          7.899990609075758e-11,
+          7.643658278539071e-11,
+          7.598367156788304e-11
+        ],
+        "GPU_15M_baseline_plus_paired_shift_vs_new_TOPAS": -0.006923224712644727
+      },
+      "peak": {
+        "GPU_paired_step_change": -0.0006591082173288489,
+        "GPU_paired_step_change_SE": 0.003301630532158572,
+        "TOPAS_step_change": 0.004399329235930782,
+        "TOPAS_step_change_SE": 0.004556823871947458,
+        "GPU_vs_TOPAS_relative_difference": 0.0005172995091866639,
+        "combined_SE": 0.010686693288840612,
+        "CI95_approx": [
+          -0.035623870651988084,
+          0.03665846967036141
+        ],
+        "GPU_values": [
+          1.1151872487971567e-09,
+          1.1398638562241096e-09,
+          1.1532633980095855e-09
+        ],
+        "TOPAS_values": [
+          1.1438155423093117e-09,
+          1.1272442607150878e-09,
+          1.1354924921761264e-09
+        ],
+        "GPU_15M_baseline_plus_paired_shift_vs_new_TOPAS": 0.0012430755305576913
+      },
+      "row_mean": {
+        "GPU_paired_step_change": -0.002493261082056794,
+        "GPU_paired_step_change_SE": 0.001146417268188143,
+        "TOPAS_step_change": 0.0021788666613893337,
+        "TOPAS_step_change_SE": 0.0014320933949260011,
+        "GPU_vs_TOPAS_relative_difference": 0.0002480976932368595,
+        "combined_SE": 0.0028788319561601,
+        "CI95_approx": [
+          -0.0091694391932311,
+          0.009665634579704818
+        ],
+        "GPU_values": [
+          3.592096791507322e-11,
+          3.602145494042634e-11,
+          3.623855158843862e-11
+        ],
+        "TOPAS_values": [
+          3.613998181282696e-11,
+          3.601579331097643e-11,
+          3.599836652707722e-11
+        ],
+        "GPU_15M_baseline_plus_paired_shift_vs_new_TOPAS": -0.0016794892634890424
+      }
+    },
+    {
+      "depth_mm": 80,
+      "window_width_mm": 0.25,
+      "valley": {
+        "GPU_paired_step_change": -0.021540708007584047,
+        "GPU_paired_step_change_SE": 0.007435791407805586,
+        "TOPAS_step_change": -0.055550192027651324,
+        "TOPAS_step_change_SE": 0.020531867494229125,
+        "GPU_vs_TOPAS_relative_difference": 0.03632106470619223,
+        "combined_SE": 0.022207786383361114,
+        "CI95_approx": [
+          -0.03965869358418546,
+          0.11230082299656992
+        ],
+        "GPU_values": [
+          8.516621055605355e-11,
+          8.278458335553297e-11,
+          8.40541335492162e-11
+        ],
+        "TOPAS_values": [
+          7.872257829149022e-11,
+          8.031706311157904e-11,
+          8.413299692620056e-11
+        ],
+        "GPU_15M_baseline_plus_paired_shift_vs_new_TOPAS": 0.037845890440247
+      },
+      "peak": {
+        "GPU_paired_step_change": -0.00035173122337705604,
+        "GPU_paired_step_change_SE": 0.00014212562179899592,
+        "TOPAS_step_change": 0.009925976793415447,
+        "TOPAS_step_change_SE": 0.006050082289866837,
+        "GPU_vs_TOPAS_relative_difference": -0.005045819619874159,
+        "combined_SE": 0.008492825522467433,
+        "CI95_approx": [
+          -0.028827517617293612,
+          0.018735878377545295
+        ],
+        "GPU_values": [
+          1.0809607920236884e-09,
+          1.0910322598647326e-09,
+          1.1053010821342467e-09
+        ],
+        "TOPAS_values": [
+          1.0992809548042715e-09,
+          1.0867752425838262e-09,
+          1.1078584357164802e-09
+        ],
+        "GPU_15M_baseline_plus_paired_shift_vs_new_TOPAS": -0.004806372119256941
+      },
+      "row_mean": {
+        "GPU_paired_step_change": -0.0010125509940070716,
+        "GPU_paired_step_change_SE": 0.0012708818842386668,
+        "TOPAS_step_change": 0.0013680370091897487,
+        "TOPAS_step_change_SE": 0.001266386244786369,
+        "GPU_vs_TOPAS_relative_difference": 0.003401894709243347,
+        "combined_SE": 0.0030533511680203755,
+        "CI95_approx": [
+          -0.009673046090276482,
+          0.016476835508763176
+        ],
+        "GPU_values": [
+          3.771269370644068e-11,
+          3.788302395444275e-11,
+          3.8110369183385726e-11
+        ],
+        "TOPAS_values": [
+          3.7775464487829375e-11,
+          3.776274849515593e-11,
+          3.778236917240104e-11
+        ],
+        "GPU_15M_baseline_plus_paired_shift_vs_new_TOPAS": 0.0012851742509605302
+      }
+    },
+    {
+      "depth_mm": 80,
+      "window_width_mm": 10,
+      "valley": {
+        "GPU_paired_step_change": -0.015852452494765638,
+        "GPU_paired_step_change_SE": 0.0081152015255696,
+        "TOPAS_step_change": -0.04093919222500497,
+        "TOPAS_step_change_SE": 0.010392796016711375,
+        "GPU_vs_TOPAS_relative_difference": 0.02518658658630124,
+        "combined_SE": 0.012415240592165673,
+        "CI95_approx": [
+          -0.009456064047152851,
+          0.05982923721975533
+        ],
+        "GPU_values": [
+          8.582834736444046e-11,
+          8.358375864190754e-11,
+          8.350636293471328e-11
+        ],
+        "TOPAS_values": [
+          8.169594833816516e-11,
+          8.14543939713985e-11,
+          8.35544744040818e-11
+        ],
+        "GPU_15M_baseline_plus_paired_shift_vs_new_TOPAS": 0.02834635020284093
+      },
+      "peak": {
+        "GPU_paired_step_change": 0.0007647205188768908,
+        "GPU_paired_step_change_SE": 0.0014241055712856188,
+        "TOPAS_step_change": 0.008852510935584812,
+        "TOPAS_step_change_SE": 0.0046620123567745935,
+        "GPU_vs_TOPAS_relative_difference": -0.002997322719546669,
+        "combined_SE": 0.008833535208754054,
+        "CI95_approx": [
+          -0.03093938737315954,
+          0.024944741934066202
+        ],
+        "GPU_values": [
+          1.0804609431943385e-09,
+          1.092914856417338e-09,
+          1.110050926945405e-09
+        ],
+        "TOPAS_values": [
+          1.0994955475325692e-09,
+          1.0891867452301085e-09,
+          1.1046155101212205e-09
+        ],
+        "GPU_15M_baseline_plus_paired_shift_vs_new_TOPAS": -0.0019518724963808465
+      },
+      "row_mean": {
+        "GPU_paired_step_change": -0.0011625455880271461,
+        "GPU_paired_step_change_SE": 0.0007612886996471664,
+        "TOPAS_step_change": 0.0007942802200466836,
+        "TOPAS_step_change_SE": 0.001348964208143043,
+        "GPU_vs_TOPAS_relative_difference": 0.0028237659861267694,
+        "combined_SE": 0.0031266678365575278,
+        "CI95_approx": [
+          -0.008654870222814037,
+          0.014302402195067575
+        ],
+        "GPU_values": [
+          3.774908481563368e-11,
+          3.790175169147375e-11,
+          3.8136141752454614e-11
+        ],
+        "TOPAS_values": [
+          3.789428924262918e-11,
+          3.778125284456366e-11,
+          3.779103311674602e-11
+        ],
+        "GPU_15M_baseline_plus_paired_shift_vs_new_TOPAS": 0.0011950447817787868
+      }
+    },
+    {
+      "depth_mm": 100,
+      "window_width_mm": 0.25,
+      "valley": {
+        "GPU_paired_step_change": -0.04241645087164122,
+        "GPU_paired_step_change_SE": 0.014925087373008227,
+        "TOPAS_step_change": -0.031186717108389495,
+        "TOPAS_step_change_SE": 0.009662534468206394,
+        "GPU_vs_TOPAS_relative_difference": 0.011926970700643524,
+        "combined_SE": 0.02894971912177955,
+        "CI95_approx": [
+          -0.09166249967067742,
+          0.11551644107196447
+        ],
+        "GPU_values": [
+          9.475572041992566e-11,
+          8.635810754640263e-11,
+          9.164397451968399e-11
+        ],
+        "TOPAS_values": [
+          9.008869928948115e-11,
+          9.12022285774583e-11,
+          8.825204349705017e-11
+        ],
+        "GPU_15M_baseline_plus_paired_shift_vs_new_TOPAS": 0.007376834591608761
+      },
+      "peak": {
+        "GPU_paired_step_change": 0.003539792996159917,
+        "GPU_paired_step_change_SE": 0.0023447112989875515,
+        "TOPAS_step_change": 0.014346172961151371,
+        "TOPAS_step_change_SE": 0.00427007612742188,
+        "GPU_vs_TOPAS_relative_difference": -0.003370220804562285,
+        "combined_SE": 0.007439007662821055,
+        "CI95_approx": [
+          -0.026279374182942485,
+          0.019538932573817915
+        ],
+        "GPU_values": [
+          1.1264944332651794e-09,
+          1.134126476245001e-09,
+          1.1513929930515588e-09
+        ],
+        "TOPAS_values": [
+          1.141612825449556e-09,
+          1.1336410243529828e-09,
+          1.148298179032281e-09
+        ],
+        "GPU_15M_baseline_plus_paired_shift_vs_new_TOPAS": -0.0027360840323926716
+      },
+      "row_mean": {
+        "GPU_paired_step_change": -0.0014140150477916936,
+        "GPU_paired_step_change_SE": 8.778889123849825e-05,
+        "TOPAS_step_change": 0.0018655260629474313,
+        "TOPAS_step_change_SE": 0.0016087165232065038,
+        "GPU_vs_TOPAS_relative_difference": 0.0026058041408481003,
+        "combined_SE": 0.0036960291039847162,
+        "CI95_approx": [
+          -0.010807048061780924,
+          0.016018656343477124
+        ],
+        "GPU_values": [
+          4.222592398664914e-11,
+          4.2249986960086973e-11,
+          4.2681674765020715e-11
+        ],
+        "TOPAS_values": [
+          4.2359690186752623e-11,
+          4.227997530694876e-11,
+          4.2187433637966385e-11
+        ],
+        "GPU_15M_baseline_plus_paired_shift_vs_new_TOPAS": 0.0004348869714523307
+      }
+    },
+    {
+      "depth_mm": 100,
+      "window_width_mm": 10,
+      "valley": {
+        "GPU_paired_step_change": -0.031114672941834714,
+        "GPU_paired_step_change_SE": 0.006183558870559984,
+        "TOPAS_step_change": -0.03032951657548444,
+        "TOPAS_step_change_SE": 0.0023118607846024405,
+        "GPU_vs_TOPAS_relative_difference": 0.00917682636905659,
+        "combined_SE": 0.02289499082775559,
+        "CI95_approx": [
+          -0.08899283825982933,
+          0.10734649099794251
+        ],
+        "GPU_values": [
+          9.397888527473693e-11,
+          8.729050432066284e-11,
+          9.288498269597779e-11
+        ],
+        "TOPAS_values": [
+          9.041985615112943e-11,
+          9.052376502040714e-11,
+          9.071776177734128e-11
+        ],
+        "GPU_15M_baseline_plus_paired_shift_vs_new_TOPAS": 0.013398289201976388
+      },
+      "peak": {
+        "GPU_paired_step_change": 0.003074339914710452,
+        "GPU_paired_step_change_SE": 0.0021589953562298684,
+        "TOPAS_step_change": 0.013315613611003974,
+        "TOPAS_step_change_SE": 0.004321614333826365,
+        "GPU_vs_TOPAS_relative_difference": -0.006602447263370226,
+        "combined_SE": 0.008077734910492414,
+        "CI95_approx": [
+          -0.0322699310865783,
+          0.019065036559837854
+        ],
+        "GPU_values": [
+          1.1223633766348936e-09,
+          1.1377070986782197e-09,
+          1.150744669575943e-09
+        ],
+        "TOPAS_values": [
+          1.142664054350462e-09,
+          1.1381437121599445e-09,
+          1.1526767790201118e-09
+        ],
+        "GPU_15M_baseline_plus_paired_shift_vs_new_TOPAS": -0.0030478505064455153
+      },
+      "row_mean": {
+        "GPU_paired_step_change": -0.001481353136383608,
+        "GPU_paired_step_change_SE": 0.0003504473672879424,
+        "TOPAS_step_change": 0.001406829787657049,
+        "TOPAS_step_change_SE": 0.0013351055943439333,
+        "GPU_vs_TOPAS_relative_difference": 0.0019012774124063103,
+        "combined_SE": 0.0040075899915213535,
+        "CI95_approx": [
+          -0.01374314259405316,
+          0.01754569741886578
+        ],
+        "GPU_values": [
+          4.2280915397540055e-11,
+          4.233428822470842e-11,
+          4.2800990987364144e-11
+        ],
+        "TOPAS_values": [
+          4.246278098615935e-11,
+          4.238575567751641e-11,
+          4.2325864130270996e-11
+        ],
+        "GPU_15M_baseline_plus_paired_shift_vs_new_TOPAS": 0.0007739371295363284
+      }
+    },
+    {
+      "depth_mm": 120,
+      "window_width_mm": 0.25,
+      "valley": {
+        "GPU_paired_step_change": -0.007354470009280939,
+        "GPU_paired_step_change_SE": 0.006798530359138109,
+        "TOPAS_step_change": -0.01888677194751942,
+        "TOPAS_step_change_SE": 0.0069641003108114165,
+        "GPU_vs_TOPAS_relative_difference": 0.01987725459971612,
+        "combined_SE": 0.009774904673023346,
+        "CI95_approx": [
+          -0.011313464767810283,
+          0.051067973967242525
+        ],
+        "GPU_values": [
+          1.5358170458057434e-10,
+          1.5134439236135224e-10,
+          1.558809737616684e-10
+        ],
+        "TOPAS_values": [
+          1.498729867307702e-10,
+          1.5192426835710647e-10,
+          1.500287549788482e-10
+        ],
+        "GPU_15M_baseline_plus_paired_shift_vs_new_TOPAS": 0.016116583687245445
+      },
+      "peak": {
+        "GPU_paired_step_change": 0.009249873466155259,
+        "GPU_paired_step_change_SE": 0.0047621607264106474,
+        "TOPAS_step_change": 0.004459293952825183,
+        "TOPAS_step_change_SE": 0.002500027184017071,
+        "GPU_vs_TOPAS_relative_difference": 0.008007037374637482,
+        "combined_SE": 0.013346481683949226,
+        "CI95_approx": [
+          -0.04590988962846187,
+          0.06192396437773683
+        ],
+        "GPU_values": [
+          1.6703412984497846e-09,
+          1.7192861996591091e-09,
+          1.7464727570768446e-09
+        ],
+        "TOPAS_values": [
+          1.6927125107031317e-09,
+          1.6960328503046184e-09,
+          1.7065566207747905e-09
+        ],
+        "GPU_15M_baseline_plus_paired_shift_vs_new_TOPAS": 0.009146898592607977
+      },
+      "row_mean": {
+        "GPU_paired_step_change": -0.00024742891180814435,
+        "GPU_paired_step_change_SE": 0.0014071563195929143,
+        "TOPAS_step_change": 0.0003713928088788787,
+        "TOPAS_step_change_SE": 0.0011890874041028583,
+        "GPU_vs_TOPAS_relative_difference": 0.0014986988836216408,
+        "combined_SE": 0.005396945113212392,
+        "CI95_approx": [
+          -0.020716515123234917,
+          0.0237139128904782
+        ],
+        "GPU_values": [
+          6.634544922735592e-11,
+          6.692797969981257e-11,
+          6.757962456072165e-11
+        ],
+        "TOPAS_values": [
+          6.696182182182107e-11,
+          6.680212040908327e-11,
+          6.678854347055745e-11
+        ],
+        "GPU_15M_baseline_plus_paired_shift_vs_new_TOPAS": 0.002094907155932857
+      }
+    },
+    {
+      "depth_mm": 120,
+      "window_width_mm": 10,
+      "valley": {
+        "GPU_paired_step_change": -0.006991029600560444,
+        "GPU_paired_step_change_SE": 0.0035003755584612395,
+        "TOPAS_step_change": -0.00552390405305947,
+        "TOPAS_step_change_SE": 0.006705152320553826,
+        "GPU_vs_TOPAS_relative_difference": 0.006733424004553568,
+        "combined_SE": 0.012463848342711541,
+        "CI95_approx": [
+          -0.036738701333247484,
+          0.05020554934235462
+        ],
+        "GPU_values": [
+          1.6222163078055012e-10,
+          1.5975478624113732e-10,
+          1.6620170081296244e-10
+        ],
+        "TOPAS_values": [
+          1.6097190775326454e-10,
+          1.6308453903548079e-10,
+          1.6085654625840097e-10
+        ],
+        "GPU_15M_baseline_plus_paired_shift_vs_new_TOPAS": 0.00502992791982515
+      },
+      "peak": {
+        "GPU_paired_step_change": 0.007894227174181132,
+        "GPU_paired_step_change_SE": 0.002249473263594518,
+        "TOPAS_step_change": 0.006396452650601736,
+        "TOPAS_step_change_SE": 0.0010389508611682366,
+        "GPU_vs_TOPAS_relative_difference": 0.004270537152413434,
+        "combined_SE": 0.011513908303126227,
+        "CI95_approx": [
+          -0.04481104642972725,
+          0.053352120734554115
+        ],
+        "GPU_values": [
+          1.7232565129233984e-09,
+          1.7667354579316461e-09,
+          1.7922383442055435e-09
+        ],
+        "TOPAS_values": [
+          1.7540898021252357e-09,
+          1.750515271123732e-09,
+          1.755163205962163e-09
+        ],
+        "GPU_15M_baseline_plus_paired_shift_vs_new_TOPAS": 0.006038639711262839
+      },
+      "row_mean": {
+        "GPU_paired_step_change": -0.00071923912692479,
+        "GPU_paired_step_change_SE": 0.0010629829614804051,
+        "TOPAS_step_change": 0.0016003853098196519,
+        "TOPAS_step_change_SE": 0.0015517762380847192,
+        "GPU_vs_TOPAS_relative_difference": 0.0006030344464993398,
+        "combined_SE": 0.005430244848239815,
+        "CI95_approx": [
+          -0.020388088891964015,
+          0.021594157784962695
+        ],
+        "GPU_values": [
+          6.872202175914129e-11,
+          6.930043432188228e-11,
+          6.998392080187985e-11
+        ],
+        "TOPAS_values": [
+          6.947262284228649e-11,
+          6.924540117169198e-11,
+          6.916299345461804e-11
+        ],
+        "GPU_15M_baseline_plus_paired_shift_vs_new_TOPAS": 0.0007287993667328685
+      }
+    }
+  ]
+}
